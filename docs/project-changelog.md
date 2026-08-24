@@ -14,20 +14,26 @@ evidence boundary on this host:
 - New `app-init` `hypervisor-min` feature: brings up only VFS + the hypervisor
   cell (no host shell — its `sys_read(0)` loop races the hypervisor for guest
   console keystrokes), selected via `HV_INIT_MIN=1` in both
-  `make-hypervisor-fs*.sh` scripts. This also sidesteps an unrelated full-
-  bring-up stall (init hangs spawning cells after config; see TODO) that
-  blocked all service spawns on this host.
-- x86 hv image now ships `/bin/shell` (host interactive console pre-GUI, per
-  user direction); the UART RX race remains a documented known limitation and
-  `hypervisor-min` still excludes the shell so VM gates run shell-less.
+  `make-hypervisor-fs*.sh` scripts. Follow-up full-profile tracing found the
+  apparent IPC stall was a `ReadDir` EOF contract violation: the kernel
+  discarded `file_readdir`'s zero-byte EOF result and returned the caller's
+  buffer length, so missing `/bin/*` probes looped forever over zeroed entries.
+  `Syscall::ReadDir` now returns the actual byte count and copies only initialized
+  bytes.
+- x86 hv image ships `/bin/shell` (host interactive console pre-GUI, per user
+  direction). Full-profile QEMU boot now reaches `Cellos >`; the new
+  `HV_SMOKE_MODE=host-shell` regression gate locks the missing-entry EOF path.
+  The UART RX race remains a known limitation, and `hypervisor-min` still
+  excludes the shell so VM gates run shell-less.
 - `fetch-alpine-x86.sh` now pins the versioned `netboot-3.21.7` directory
   (Linux 6.12.81-0-virt — the artifact set recorded as booting in commit
   `1827b8f3`) with fixed SHA256 defaults; the previous moving `netboot` URL
   silently drifted across Alpine point releases. Also fixed `python` → probed
   `python3` interpreter selection in `make-hypervisor-fs.sh` /
   `format-disk-hv-arm.sh`.
-- New `scripts/qemu-hypervisor-smoke-x86.sh` (machinery/boot modes) and SVM
-  triple-fault diagnostics (`SvmVcpu::shutdown_diagnostics`, logged as
+- `scripts/qemu-hypervisor-smoke-x86.sh` now provides machinery, boot, and
+  host-shell modes. SVM triple-fault diagnostics remain
+  (`SvmVcpu::shutdown_diagnostics`, logged as
   `[hv-x86] guest triple-fault: rip=… rflags=… cr0=…`).
 
 x86 guest boot itself is BLOCKED on this host: registered as

@@ -3001,9 +3001,12 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             let mut kbuf = alloc::vec::Vec::new();
             kbuf.try_reserve_exact(buf_len).map_err(|_| SyscallError::OutOfMemory)?;
             kbuf.resize(buf_len, 0);
-            super::file_readdir(fd, &mut kbuf).map_err(|_| SyscallError::Unknown)?;
-            write_user_slice(caller_id, buf_ptr, &kbuf, MAX_USER_BUF)?;
-            Ok(buf_len)
+            let read_bytes =
+                super::file_readdir(fd, &mut kbuf).map_err(|_| SyscallError::Unknown)?;
+            if read_bytes > 0 {
+                write_user_slice(caller_id, buf_ptr, &kbuf[..read_bytes], MAX_USER_BUF)?;
+            }
+            Ok(read_bytes)
         }
         Syscall::FStat { fd, stat_ptr } => {
             if stat_ptr == 0 {

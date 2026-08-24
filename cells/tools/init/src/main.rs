@@ -38,6 +38,7 @@ use ostd::io::println;
 enum Policy {
     /// Always restart — critical services that must always be up (vfs, shell, …).
     Permanent,
+    #[cfg(not(feature = "hypervisor-min"))]
     /// Restart only on ABNORMAL exit (fault / watchdog kill); a clean exit (reason 0)
     /// is treated as final. Uses the exit reason delivered as the death-notify payload.
     Transient,
@@ -324,6 +325,7 @@ fn cell_main() {
                 continue;
             }
         };
+        #[cfg(not(feature = "hypervisor-min"))]
         let reason = u64::from_le_bytes([
             buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7],
         ]);
@@ -354,6 +356,7 @@ fn cell_main() {
         // 1. Restart policy: decide whether this exit warrants a restart at all.
         let should_restart = match policy[i] {
             Policy::Temporary => false,
+            #[cfg(not(feature = "hypervisor-min"))]
             Policy::Transient => reason != 0, // restart only on abnormal exit
             Policy::Permanent => true,
         };

@@ -16,7 +16,12 @@
 #   HV_SMOKE_MODE=boot — strict assertion: the Alpine guest must reach its
 #     "/ #" prompt within BOOT_WINDOW.
 #
-# Both modes run under QEMU-TCG with `-cpu qemu64,+pdpe1gb,+svm`. Nested SVM
+#   HV_SMOKE_MODE=host-shell — regression gate for the full init profile:
+#     asserts that probes for absent optional `/bin` entries terminate and the
+#     packaged x86 shell reaches its `Cellos >` prompt. Guest SVM failure after
+#     the prompt is outside this mode's contract.
+#
+# All modes run under QEMU-TCG with `-cpu qemu64,+pdpe1gb,+svm`. Nested SVM
 # through host KVM is Intel-host-incompatible (KVM exposes VT-x, not AMD-V), so
 # unlike the ARM lane there is no KVM fast path here; TCG emulation of SVM makes
 # the runs slow — give BOOT_WINDOW generous headroom.
@@ -26,8 +31,8 @@
 #   iso  default: build/vicell-x86-hv.iso
 #
 # Environment:
-#   HV_SMOKE_MODE  machinery (default) | boot
-#   BOOT_WINDOW    seconds to wait (default: 900)
+#   HV_SMOKE_MODE  machinery (default) | boot | host-shell
+#   BOOT_WINDOW    seconds to wait (default: 900; host-shell: 60)
 #   LOG_TAIL       lines of qemu-hv-x86.log printed on any failure (default 200)
 #
 # Exit codes:
@@ -37,11 +42,15 @@
 set -euo pipefail
 
 ISO="${1:-build/vicell-x86-hv.iso}"
-BOOT_WINDOW="${BOOT_WINDOW:-900}"
 HV_SMOKE_MODE="${HV_SMOKE_MODE:-machinery}"
+if [[ "$HV_SMOKE_MODE" == "host-shell" ]]; then
+    BOOT_WINDOW="${BOOT_WINDOW:-60}"
+else
+    BOOT_WINDOW="${BOOT_WINDOW:-900}"
+fi
 
-if [[ "$HV_SMOKE_MODE" != "machinery" && "$HV_SMOKE_MODE" != "boot" ]]; then
-    echo "FAIL: HV_SMOKE_MODE must be 'machinery' or 'boot' (got '$HV_SMOKE_MODE')" >&2
+if [[ "$HV_SMOKE_MODE" != "machinery" && "$HV_SMOKE_MODE" != "boot" && "$HV_SMOKE_MODE" != "host-shell" ]]; then
+    echo "FAIL: HV_SMOKE_MODE must be 'machinery', 'boot', or 'host-shell' (got '$HV_SMOKE_MODE')" >&2
     exit 1
 fi
 
@@ -89,7 +98,17 @@ if grep -qia "KERNEL PANIC\|\[fault\] Cell" qemu-hv-x86.log; then
     exit 1
 fi
 
-# Hypervisor-cell failures are fatal in both modes.
+if [[ "$HV_SMOKE_MODE" == "host-shell" ]]; then
+    if grep -qF "Cellos > " qemu-hv-x86.log; then
+        echo "PASS: x86 host shell reached the 'Cellos >' prompt"
+        exit 0
+    fi
+    echo "FAIL: x86 host shell prompt not seen within ${BOOT_WINDOW}s" >&2
+    dump_log
+    exit 1
+fi
+
+# Hypervisor-cell failures are fatal in both guest modes.
 if grep -qi "\[hv-x86\] .*fail\|\[hv-x86\] .*error\|\[hv-x86\] unhandled\|\[hv-x86\] unexpected\|\[hv-x86\] guest exited" qemu-hv-x86.log; then
     echo "FAIL: hypervisor cell error before/during guest boot" >&2
     grep -i "\[hv-x86\]" qemu-hv-x86.log | tail -20 >&2
