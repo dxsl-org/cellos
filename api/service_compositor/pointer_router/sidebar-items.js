@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["hit_test","send_local","send_position","target_for_cap"],"struct":["PointerRouter","PointerTarget"]};
