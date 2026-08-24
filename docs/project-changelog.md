@@ -2,6 +2,30 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-24] RV64 desktop pointer path and visible VirtIO GPU scanout verified
+
+The RV64 QEMU desktop path now reaches a visible, interactive ViUI surface:
+
+- `compositor::connect_to_input` no longer waits for a `SetFocus` reply. Input
+  service focus changes are explicitly fire-and-forget; the stale receive had
+  parked the compositor before its cursor setup and main loop.
+- Mouse frames now route through compositor hit-testing to the topmost
+  Grant-backed surface in surface-local coordinates. Left press captures its
+  target through release and selects the keyboard owner; bounded compositor
+  input messages are retained while an app is between receive calls.
+- `ostd::input::poll_events` accepts pointer frames from the compositor while
+  retaining keyboard input from the input service. The `robot-dashboard` uses
+  the path for real STOP/START controls and a FlexBox layout that keeps those
+  controls reachable in its 800×480 surface.
+- Kernel GPU flush/cursor notifications now use the `AppContext` envelope
+  required by the VirtIO GPU driver. The previous raw opcode `0x10` was
+  interpreted as an input event and discarded; QMP `screendump` now captures
+  rendered dashboard pixels rather than an all-black scanout.
+- Verified with
+  `cargo test --manifest-path tests/integration/Cargo.toml --target x86_64-unknown-linux-gnu --test compositor-cursor -- --nocapture`:
+  QMP tablet move, non-black pre/post-click scanout, surface-local press/release,
+  dashboard `STOP clicked` marker, and a changed post-click frame.
+
 ## [2026-08-24] Tier 3 VM-boot lanes: ARM64 machinery and x86 Linux shell verified
 
 The "Boot Linux VM tối thiểu trên ARM64/x86" TODO item was worked to a clean

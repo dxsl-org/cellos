@@ -1916,6 +1916,14 @@ pub(crate) fn wake_sender_token(
         }
     }
 }
+fn is_trusted_input_sender(caller_id: usize) -> bool {
+    let input_tid = crate::task::drivers::driver_cell::INPUT_CELL_TID
+        .load(core::sync::atomic::Ordering::Acquire);
+    let compositor_tid =
+        crate::cell::service_registry::lookup(api::syscall::service::COMPOSITOR).unwrap_or(0);
+    (caller_id == input_tid && input_tid != 0)
+        || (caller_id == compositor_tid && compositor_tid != 0)
+}
 
 pub fn ipc_try_send(
     caller_id: usize,
@@ -1924,14 +1932,16 @@ pub fn ipc_try_send(
     msg_len: usize,
 ) -> core::result::Result<(), ()> {
     enum TrySendAction {
-        Publish { caller_view: copy_glue::TaskCopyView, is_input_mailbox_sender: bool },
+        Publish(copy_glue::TaskCopyView),
         Reject,
     }
 
     let action = {
         let guard = SCHEDULER.lock();
         let sched = guard.as_ref().ok_or(())?;
-        if !sched.tasks.contains_key(&target_id) || paused_target_rejects(sched, caller_id, target_id) {
+        if !sched.tasks.contains_key(&target_id)
+            || paused_target_rejects(sched, caller_id, target_id)
+        {
             return Err(());
         }
         if msg_len > ipc_wire::MAX_IPC_WIRE_PAYLOAD {
@@ -1942,30 +1952,27 @@ pub fn ipc_try_send(
             .get(&target_id)
             .map(|t| matches!(t.state, TaskState::Recv { mask, .. } if mask == 0 || mask == caller_id))
             .unwrap_or(false);
-        let input_tid = crate::task::drivers::driver_cell::INPUT_CELL_TID
-            .load(core::sync::atomic::Ordering::Relaxed);
-        let is_input_mailbox_sender = caller_id == input_tid && input_tid != 0;
-        if target_ready || is_input_mailbox_sender {
+        if target_ready || is_trusted_input_sender(caller_id) {
             let caller_view = sched
                 .tasks
                 .get(&caller_id)
                 .map(|t| copy_glue::TaskCopyView::of(t))
                 .ok_or(())?;
-            TrySendAction::Publish { caller_view, is_input_mailbox_sender }
+            TrySendAction::Publish(caller_view)
         } else {
             TrySendAction::Reject
         }
     };
 
-    let TrySendAction::Publish { caller_view, is_input_mailbox_sender, .. } = action else {
+    let TrySendAction::Publish(caller_view) = action else {
         return Err(());
     };
     let msg_bytes = caller_view.read_bytes(msg_ptr, msg_len).map_err(|_| ())?;
     let mut guard = SCHEDULER.lock();
     let sched = guard.as_mut().ok_or(())?;
     // Revalidate under the second lock: phase-1 target state is stale once
-    // released. A non-input-mailbox sender that raced a target leaving Recv
-    // must be rejected; the input mailbox path queues regardless of state.
+    // released. A sender outside the trusted input route that raced a target
+    // leaving Recv must be rejected; trusted input-route senders queue regardless.
     if !sched.tasks.contains_key(&target_id) || paused_target_rejects(sched, caller_id, target_id) {
         return Err(());
     }

@@ -170,6 +170,20 @@ Routing any new idea: (1) uses SAS/LBI → **Tier 1 native**; (2) trusted librar
 └─────────────────────────────────────────┘
 ```
 
+### RV64 Desktop Input and Scanout
+
+The input service owns device translation and sends pointer frames only to the
+compositor. The compositor owns cursor state, surface hit-testing, left-button
+capture, z-order, and screen-to-surface coordinate translation; it forwards
+pointer frames to the selected surface owner and keys to its selected keyboard
+owner. Application Cells consume those pointer frames through `ostd::input`
+alongside input-service keyboard frames, then render into Grant-backed
+`ViSurface`s. `GpuFlush` and `GpuCursor` cross the kernel-to-GPU-driver boundary
+inside the `AppContext` message envelope; the GPU Cell owns the VirtIO framebuffer
+and scanout. This is a surface protocol, not a compositor-managed window
+manager: titlebars, drag/resize policy, shell, and taskbar remain application or
+future desktop policy.
+
 ---
 
 ## Board Descriptors (`boards/`)

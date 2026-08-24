@@ -108,35 +108,57 @@ pub fn drain_pending_input_events() {
 
 /// Non-blocking drain of pending input events (up to `max` events).
 ///
-/// Calls `sys_try_recv` in a loop; stops when the queue is empty or `max` is
-/// reached. Messages from senders other than the input service are discarded.
-/// Safe to call every frame — returns an empty `Vec` during the boot race when
-/// the input service is not yet registered.
+/// Keyboard events are accepted from the registered input service. Pointer
+/// events are also accepted from the registered compositor, which performs
+/// surface hit-testing and screen-to-local coordinate translation. Messages
+/// from all other senders remain queued for their owning protocol.
 pub fn poll_events(max: usize) -> Vec<InputEvent> {
     let Some(input_tid) = sys_lookup_service(service::INPUT) else {
         return Vec::new();
     };
-
+    let compositor_tid = sys_lookup_service(service::COMPOSITOR);
     let mut events = Vec::with_capacity(max.min(16));
-    while events.len() < max {
-        let mut buf = [0u8; 65];
-        // Mask on the input service TID: matches both the Sending-scan and the
-        // pending_msgs drain in the kernel's TryRecv handler, and — crucially —
-        // leaves non-input IPC (e.g. compositor replies) queued rather than
-        // consuming and discarding it. A wildcard mask (0 or usize::MAX) would
-        // either eat unrelated messages or match nothing queued.
-        match sys_try_recv(input_tid, &mut buf) {
-            SyscallResult::Ok(0) => break, // queue empty
-            SyscallResult::Ok(sender) if sender == input_tid => {
-                if let Some(ev) = parse_frame(&buf) {
-                    events.push(ev);
-                }
-            }
-            SyscallResult::Ok(_) => {} // unexpected sender — discard
-            SyscallResult::Err(_) => break,
+
+    for _ in 0..max {
+        let (input_received, input_event) = try_receive_event(input_tid);
+        if let Some(event) = input_event {
+            events.push(event);
+        }
+        if events.len() == max {
+            break;
+        }
+
+        let (compositor_received, compositor_event) = compositor_tid
+            .filter(|tid| *tid != input_tid)
+            .map(try_receive_event)
+            .unwrap_or((false, None));
+        if let Some(event) = compositor_event.filter(is_pointer_event) {
+            events.push(event);
+        }
+        if events.len() == max || (!input_received && !compositor_received) {
+            break;
         }
     }
     events
+}
+
+fn try_receive_event(source_tid: usize) -> (bool, Option<InputEvent>) {
+    let mut buf = [0u8; 65];
+    match sys_try_recv(source_tid, &mut buf) {
+        SyscallResult::Ok(0) => (false, None),
+        SyscallResult::Ok(sender) if sender == source_tid => (true, parse_frame(&buf)),
+        SyscallResult::Ok(_) => (true, None),
+        SyscallResult::Err(_) => (false, None),
+    }
+}
+
+fn is_pointer_event(event: &InputEvent) -> bool {
+    matches!(
+        event,
+        InputEvent::MouseMove { .. }
+            | InputEvent::MouseButton { .. }
+            | InputEvent::MouseScroll { .. }
+    )
 }
 
 /// Decode a 65-byte input-service IPC message into an `InputEvent`.

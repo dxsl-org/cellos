@@ -1,6 +1,6 @@
 # Current Focus
 
-**Last updated**: 2026-08-23
+**Last updated**: 2026-08-24
 
 ## Active Stage
 
@@ -58,6 +58,11 @@ without treating QEMU or compile-only checks as board qualification.
   unregistration, and SMP UART timing were resolved. Production admission remains
   disabled, SAS remains default, and no Manifest v3 or ledger qualification claims
   are made.
+- RV64 QEMU desktop now has a verified end-to-end path from VirtIO tablet
+  events through input, compositor hit-testing and surface-local routing to a
+  ViUI dashboard control. QMP captures prove non-black GPU scanout before and
+  after a STOP click. This is a bounded surface interaction slice, not a claim
+  of a window manager, desktop shell, drag/resize policy, or G2 qualification.
 
 ## Current Documentation Corrections
 

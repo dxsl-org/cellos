@@ -17,6 +17,9 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
+pub mod ppm;
+pub use ppm::{pixel_region, read_ppm_frame};
+
 /// Announce a skip on the real stderr, bypassing libtest's output capture.
 ///
 /// libtest captures both stdout and stderr unless `--nocapture`, so a plain
@@ -1434,45 +1437,12 @@ impl QemuRunner {
     /// Inject an absolute mouse-pointer event into the guest via QMP.
     ///
     /// `x` and `y` are logical QEMU coordinates in the range 0..=32767.
-    /// QEMU maps these to the display resolution, so the guest's reported
-    /// screen pixel depends on the display size (1024×768 in the default setup).
+    /// Both axes are sent in one event batch so the tablet emits one report.
     ///
-    /// Both axes are sent in one `input-send-event` call so QEMU coalesces
-    /// them into a single EV_ABS report to the VirtIO tablet device.
-    ///
-    /// Precondition: this `QemuRunner` must have been created by
-    /// `boot_with_pointer`; returns immediately (no-op) if `monitor` is `None`.
+    /// Requires a runner created by [`Self::boot_with_pointer`]. A missing QMP
+    /// connection is reported and the event is dropped.
     pub fn send_qemu_mouse_abs(&mut self, x: u32, y: u32) {
-        let Some(m) = self.monitor.as_mut() else {
-            eprintln!("[test] WARNING: QMP monitor is None — send_qemu_mouse_abs({x},{y}) dropped");
-            return;
-        };
-
-        // QMP handshake: drain the greeting then negotiate capabilities.
-        // Idempotent — QEMU ignores duplicate qmp_capabilities.
-        m.set_read_timeout(Some(Duration::from_millis(300))).ok();
-        let mut buf = vec![0u8; 4096];
-        loop {
-            match m.read(&mut buf) {
-                Ok(0) | Err(_) => break,
-                Ok(_) => {}
-            }
-        }
-        m.set_read_timeout(None).ok();
-        let _ = m.write_all(b"{\"execute\":\"qmp_capabilities\"}\n");
-        let _ = m.flush();
-        // Drain the {"return": {}} ack.
-        m.set_read_timeout(Some(Duration::from_millis(300))).ok();
-        loop {
-            match m.read(&mut buf) {
-                Ok(0) | Err(_) => break,
-                Ok(_) => {}
-            }
-        }
-
-        // Send both X and Y absolute axes in a single input-send-event so QEMU
-        // coalesces them into one VirtIO EV_SYN report to the tablet device.
-        let cmd = format!(
+        let command = format!(
             concat!(
                 r#"{{"execute":"input-send-event","arguments":{{"events":["#,
                 r#"{{"type":"abs","data":{{"axis":"x","value":{x}}}}},"#,
@@ -1483,22 +1453,111 @@ impl QemuRunner {
             y = y,
         );
         eprintln!("[test] QMP input-send-event abs x={x} y={y}");
-        let _ = m.write_all(cmd.as_bytes());
-        let _ = m.write_all(b"\n");
-        let _ = m.flush();
-
-        // Read response for diagnostics.
-        m.set_read_timeout(Some(Duration::from_millis(500))).ok();
-        let mut resp = vec![0u8; 1024];
-        match m.read(&mut resp) {
-            Ok(n) if n > 0 => eprintln!(
-                "[test] QMP response: {:?}",
-                String::from_utf8_lossy(&resp[..n])
-            ),
-            Ok(_) => eprintln!("[test] QMP response: empty"),
-            Err(e) => eprintln!("[test] QMP read error: {e}"),
+        if !self.send_qmp_command(&command) {
+            eprintln!("[test] WARNING: QMP monitor is None — send_qemu_mouse_abs({x},{y}) dropped");
         }
-        m.set_read_timeout(None).ok();
+    }
+
+    /// Inject one left-button press/release pair through the VirtIO tablet.
+    ///
+    /// Requires a runner created by [`Self::boot_with_pointer`]. The pointer
+    /// position must be set separately with [`Self::send_qemu_mouse_abs`].
+    pub fn send_qemu_mouse_click(&mut self) {
+        for down in [true, false] {
+            let command = format!(
+                concat!(
+                    r#"{{"execute":"input-send-event","arguments":{{"events":["#,
+                    r#"{{"type":"btn","data":{{"down":{down},"button":"left"}}}}"#,
+                    r#"]}}}}"#,
+                ),
+                down = down,
+            );
+            eprintln!("[test] QMP input-send-event left down={down}");
+            if !self.send_qmp_command(&command) {
+                eprintln!("[test] WARNING: QMP monitor is None — mouse click dropped");
+                return;
+            }
+        }
+    }
+
+    /// Save the active guest display as a new PPM image through QMP.
+    ///
+    /// Returns `false` if the runner has no QMP connection, QEMU rejects the
+    /// command, or the image cannot be removed before the command. `path` is
+    /// resolved by the host QEMU process and must be writable by that process.
+    pub fn capture_qemu_screen(&mut self, path: &str) -> bool {
+        match std::fs::remove_file(path) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                eprintln!("[test] cannot remove stale QMP capture {path}: {error}");
+                return false;
+            }
+        }
+        let command = format!(
+            r#"{{"execute":"screendump","arguments":{{"filename":{path:?},"format":"ppm"}}}}"#
+        );
+        self.send_qmp_command(&command) && Path::new(path).is_file()
+    }
+
+    fn send_qmp_command(&mut self, command: &str) -> bool {
+        let Some(monitor) = self.monitor.as_mut() else {
+            return false;
+        };
+
+        // Drain the greeting, then negotiate capabilities. Repeating the
+        // negotiation is accepted by QEMU and keeps each helper independent.
+        monitor
+            .set_read_timeout(Some(Duration::from_millis(300)))
+            .ok();
+        let mut buffer = vec![0u8; 4096];
+        loop {
+            match monitor.read(&mut buffer) {
+                Ok(0) | Err(_) => break,
+                Ok(_) => {}
+            }
+        }
+        monitor.set_read_timeout(None).ok();
+        if monitor
+            .write_all(b"{\"execute\":\"qmp_capabilities\"}\n")
+            .and_then(|()| monitor.flush())
+            .is_err()
+        {
+            return false;
+        }
+        monitor
+            .set_read_timeout(Some(Duration::from_millis(300)))
+            .ok();
+        loop {
+            match monitor.read(&mut buffer) {
+                Ok(0) | Err(_) => break,
+                Ok(_) => {}
+            }
+        }
+
+        if monitor
+            .write_all(command.as_bytes())
+            .and_then(|()| monitor.write_all(b"\n"))
+            .and_then(|()| monitor.flush())
+            .is_err()
+        {
+            return false;
+        }
+        monitor
+            .set_read_timeout(Some(Duration::from_millis(500)))
+            .ok();
+        let mut response = Vec::new();
+        loop {
+            match monitor.read(&mut buffer) {
+                Ok(0) | Err(_) => break,
+                Ok(n) => response.extend_from_slice(&buffer[..n]),
+            }
+        }
+        monitor.set_read_timeout(None).ok();
+
+        let response = String::from_utf8_lossy(&response);
+        eprintln!("[test] QMP response: {response:?}");
+        response.contains(r#""return""#) && !response.contains(r#""error""#)
     }
 
     /// Block until any captured line contains `pattern`, or `timeout_secs`

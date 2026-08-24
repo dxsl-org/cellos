@@ -17,7 +17,7 @@
 //! `src/display.rs` uses `unsafe` for the `virtio_drivers::Hal` impl and MMIO
 //! probe reads.  All other modules forbid unsafe code.
 //!
-//! # IPC message format (from kernel GpuFlush forward)
+//! # IPC message payload (after the AppContext `[0xAC, 0x00]` envelope)
 //! ```text
 //! [0]      = 0x10  (OP_FLUSH)
 //! [1..5]   = xy    (u32 LE: x<<16 | y)
@@ -47,7 +47,7 @@ use ostd::syscall::sys_register_gpu_driver;
 
 // ─── Kernel→Cell IPC opcodes ──────────────────────────────────────────────────
 
-const OP_FLUSH: u8 = 0x10; // GpuFlush forward: flush rect
+const OP_FLUSH: u8 = 0x10; // GpuFlush payload after AppContext framing
 const OP_CUR_SET: u8 = 0x11; // GpuCursor op=0: set sprite + initial position
 const OP_CUR_MOVE: u8 = 0x12; // GpuCursor op=1: move cursor (no sprite re-upload)
 
@@ -76,9 +76,11 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
         }
 
         AppEvent::Message {
-            sender_tid: _,
+            sender_tid: 0,
             data,
         } => {
+            // Only the kernel may issue GPU operations. A Cell can form the
+            // AppContext envelope but must never gain scanout control that way.
             dispatch(data.as_ref());
         }
 

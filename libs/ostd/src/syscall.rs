@@ -944,10 +944,11 @@ pub fn sys_send(target: usize, msg: &[u8]) -> SyscallResult {
     }
 }
 
-/// Non-blocking send: deliver to `target` if it is in `Recv`, otherwise drop.
+/// Non-blocking send with bounded input-route queueing.
 ///
-/// Returns `Ok(0)` on delivery, `Ok(usize::MAX)` if the target was not ready
-/// (busy or exited). Never blocks the caller.
+/// Messages from the registered input service or compositor are retained in the
+/// target's bounded input mailbox while it is busy. Other senders deliver only
+/// when the target is receiving and otherwise get `Ok(usize::MAX)`.
 pub fn sys_try_send(target: usize, msg: &[u8]) -> SyscallResult {
     // SAFETY: msg is a valid slice; kernel copies before returning.
     let ret = unsafe {

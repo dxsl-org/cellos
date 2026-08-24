@@ -55,8 +55,8 @@ use viui::{
     event::Event,
     node::ViNode,
     node_widgets::{
-        button::Button, column::Column, label::Label, list_view::ListView,
-        progress_bar::ProgressBar, row::Row, slider::Slider,
+        button::Button, column::Column, flex_box::FlexBox, label::Label, list_view::ListView,
+        progress_bar::ProgressBar, slider::Slider,
     },
     renderer::FramebufferRenderer,
     signal::{Signal, SubscriptionHandle},
@@ -210,6 +210,7 @@ fn cell_main() {
     // focused viui app) reached this cell. Logged once so it never spams the
     // shared console on subsequent keystrokes (see input dispatcher's no-spam note).
     let mut input_event_logged = false;
+    let mut pointer_press_logged = false;
 
     loop {
         // Heartbeat: disable hung-detector (0 = no deadline).
@@ -248,6 +249,14 @@ fn cell_main() {
             if !input_event_logged && !collected.is_empty() {
                 input_event_logged = true;
                 ostd::io::println("[robot-dashboard] input event received");
+            }
+            if !pointer_press_logged
+                && collected
+                    .iter()
+                    .any(|event| matches!(event, Event::MousePress { .. }))
+            {
+                pointer_press_logged = true;
+                ostd::io::println("[robot-dashboard] pointer press received");
             }
             pending_events.extend(collected);
         }
@@ -300,31 +309,27 @@ fn build_layout(
     .with_padding(8.0);
 
     // ── Controls column ───────────────────────────────────────────────────────
-    let speed_row = Row::new(vec![
-        Box::new(Label::new(Signal::new(String::from("Speed")))) as Box<dyn ViNode>,
-        Box::new(Slider::new(speed_sig)),
-        Box::new(Label::new(speed_text)),
-    ])
-    .with_spacing(8.0);
+    let speed_row = FlexBox::row()
+        .gap(8.0)
+        .child(Label::new(Signal::new(String::from("Speed"))))
+        .flex_child(Slider::new(speed_sig), 1.0)
+        .child(Label::new(speed_text));
 
-    let gain_row = Row::new(vec![
-        Box::new(Label::new(Signal::new(String::from("Gain")))) as Box<dyn ViNode>,
-        Box::new(Slider::new(gain_sig)),
-        Box::new(Label::new(gain_text)),
-    ])
-    .with_spacing(8.0);
+    let gain_row = FlexBox::row()
+        .gap(8.0)
+        .child(Label::new(Signal::new(String::from("Gain"))))
+        .flex_child(Slider::new(gain_sig), 1.0)
+        .child(Label::new(gain_text));
 
     let btn_stop = Button::new("STOP", move || {
         running_stop.set(false);
+        ostd::io::println("[robot-dashboard] STOP clicked");
     });
     let btn_start = Button::new("START", move || {
         running_start.set(true);
+        ostd::io::println("[robot-dashboard] START clicked");
     });
-    let btn_row = Row::new(vec![
-        Box::new(btn_stop) as Box<dyn ViNode>,
-        Box::new(btn_start),
-    ])
-    .with_spacing(12.0);
+    let btn_row = FlexBox::row().gap(12.0).child(btn_stop).child(btn_start);
 
     let controls = Column::new(vec![
         Box::new(Label::new(Signal::new(String::from("CONTROLS")))) as Box<dyn ViNode>,
@@ -337,12 +342,11 @@ fn build_layout(
     .with_padding(8.0);
 
     // ── Top row: sensors | controls ───────────────────────────────────────────
-    let top_row = Row::new(vec![
-        Box::new(sensors) as Box<dyn ViNode>,
-        Box::new(controls),
-    ])
-    .with_spacing(16.0)
-    .with_padding(8.0);
+    let top_row = FlexBox::row()
+        .gap(16.0)
+        .padding(8.0)
+        .flex_child(sensors, 1.0)
+        .flex_child(controls, 1.0);
 
     // ── Event log section ─────────────────────────────────────────────────────
     let log_section = Column::new(vec![

@@ -3889,12 +3889,15 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 use core::sync::atomic::Ordering;
                 let gpu_cell = GPU_DRIVER_CELL.load(Ordering::Acquire);
                 if gpu_cell != 0 {
-                    let mut msg = [0u8; 21];
-                    msg[0] = 0x10; // OP_FLUSH
-                    msg[1..5].copy_from_slice(&(xy as u32).to_le_bytes());
-                    msg[5..9].copy_from_slice(&(wh as u32).to_le_bytes());
-                    msg[9..17].copy_from_slice(&(data_ptr as u64).to_le_bytes());
-                    msg[17..21].copy_from_slice(&(data_len as u32).to_le_bytes());
+                    // AppContext message envelope [0xAC, 0x00] followed by GPU payload.
+                    let mut msg = [0u8; 23];
+                    msg[0] = 0xAC;
+                    msg[1] = 0x00;
+                    msg[2] = 0x10; // OP_FLUSH
+                    msg[3..7].copy_from_slice(&(xy as u32).to_le_bytes());
+                    msg[7..11].copy_from_slice(&(wh as u32).to_le_bytes());
+                    msg[11..19].copy_from_slice(&(data_ptr as u64).to_le_bytes());
+                    msg[19..23].copy_from_slice(&(data_len as u32).to_le_bytes());
                     let _ = super::ipc_post_nonblock(0, gpu_cell, &msg);
                     return Ok(0);
                 }
@@ -3925,19 +3928,23 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 if gpu_cell != 0 {
                     match op {
                         0 => {
-                            // OP_CUR_SET: data_ptr=sprite, xy=position, hot=hotspot
-                            let mut msg = [0u8; 17];
-                            msg[0] = 0x11;
-                            msg[1..9].copy_from_slice(&(data_ptr as u64).to_le_bytes());
-                            msg[9..13].copy_from_slice(&(xy as u32).to_le_bytes());
-                            msg[13..17].copy_from_slice(&(hot as u32).to_le_bytes());
+                            // AppContext envelope + OP_CUR_SET payload.
+                            let mut msg = [0u8; 19];
+                            msg[0] = 0xAC;
+                            msg[1] = 0x00;
+                            msg[2] = 0x11;
+                            msg[3..11].copy_from_slice(&(data_ptr as u64).to_le_bytes());
+                            msg[11..15].copy_from_slice(&(xy as u32).to_le_bytes());
+                            msg[15..19].copy_from_slice(&(hot as u32).to_le_bytes());
                             let _ = super::ipc_post_nonblock(0, gpu_cell, &msg);
                         }
                         1 => {
-                            // OP_CUR_MOVE: xy=new position
-                            let mut msg = [0u8; 5];
-                            msg[0] = 0x12;
-                            msg[1..5].copy_from_slice(&(xy as u32).to_le_bytes());
+                            // AppContext envelope + OP_CUR_MOVE payload.
+                            let mut msg = [0u8; 7];
+                            msg[0] = 0xAC;
+                            msg[1] = 0x00;
+                            msg[2] = 0x12;
+                            msg[3..7].copy_from_slice(&(xy as u32).to_le_bytes());
                             let _ = super::ipc_post_nonblock(0, gpu_cell, &msg);
                         }
                         _ => return Err(SyscallError::InvalidInput),

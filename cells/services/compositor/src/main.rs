@@ -17,6 +17,7 @@ extern crate alloc;
 
 mod cursor_sprite;
 mod input_handler;
+mod pointer_router;
 mod render;
 mod surface_table;
 mod z_order;
