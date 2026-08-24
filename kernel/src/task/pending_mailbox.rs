@@ -47,6 +47,12 @@ impl PendingMsgData {
         })
     }
 
+    /// Return an empty inline sentinel. Wire-backed records store this in
+    /// `data`; all payload reads must go through `PendingMsg::payload()`.
+    pub fn empty() -> Self {
+        Self::Inline { len: 0, bytes: [0; INLINE_MESSAGE_BYTES] }
+    }
+
     /// Number of payload bytes.
     pub fn len(&self) -> usize {
         self.as_slice().len()
@@ -90,10 +96,30 @@ impl Drop for PendingMsgData {
 }
 
 /// A message buffered until the receiver resumes in its own syscall context.
+///
+/// Interrupt producers use `data` (inline, allocation-free). Cross-task IPC
+/// senders publish a kernel-owned `wire` message carrying scalar sender
+/// identity/generation so queue records never alias peer memory.
 pub struct PendingMsg {
     pub sender_tid: usize,
     pub data: PendingMsgData,
+    pub wire: Option<super::ipc_wire::IpcWireMessage>,
     pub enqueued_tick: u64,
+}
+
+impl PendingMsg {
+    /// Payload bytes, preferring the kernel-owned wire buffer.
+    pub fn payload(&self) -> &[u8] {
+        match &self.wire {
+            Some(message) => message.as_slice(),
+            None => self.data.as_slice(),
+        }
+    }
+
+    /// Scalar sender identity carried by the wire header, if published via IPC.
+    pub fn wire_header(&self) -> Option<super::ipc_wire::IpcWireHeader> {
+        self.wire.as_ref().map(|message| message.header)
+    }
 }
 
 /// Kernel-owned mailbox container; payload allocations remain receiver-owned.

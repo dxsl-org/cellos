@@ -721,22 +721,26 @@ fn vfs_owner_watch() -> bool {
         }
     }
     set_recv_waiting(VFS_WORKER_TID, CLIENT_WORKER_TID);
-    let initial_delivery = handle_syscall(
+    let initial_delivery = super::ipc_send(
         CLIENT_WORKER_TID,
-        Syscall::Send {
-            target: VFS_WORKER_TID,
-            msg_ptr: message.as_ptr() as usize,
-            msg_len: message.len(),
+        VFS_WORKER_TID,
+        message.as_ptr() as usize,
+        message.len(),
+    );
+    let initial_recv = handle_syscall(
+        VFS_WORKER_TID,
+        Syscall::Recv {
+            mask: 0,
+            buf_ptr: 0,
+            buf_len: 0,
+            attest_caller: false,
         },
     );
-    set_recv_waiting(VFS_WORKER_TID, OTHER_TID);
-    let nested_delivery = handle_syscall(
+    let nested_delivery = super::ipc_send(
         OTHER_TID,
-        Syscall::Send {
-            target: VFS_WORKER_TID,
-            msg_ptr: message.as_ptr() as usize,
-            msg_len: message.len(),
-        },
+        VFS_WORKER_TID,
+        message.as_ptr() as usize,
+        message.len(),
     );
     let outer_context_preserved = super::SCHEDULER.lock().as_ref().is_some_and(|sched| {
         sched.tasks.get(&VFS_WORKER_TID).is_some_and(|task| {
@@ -823,7 +827,7 @@ fn vfs_owner_watch() -> bool {
     remove(CLIENT_WORKER_TID);
     remove(OTHER_TID);
 
-    if initial_delivery != Ok(0) || nested_delivery != Ok(0) {
+    if initial_delivery != Ok(0) || initial_recv != Ok(CLIENT_WORKER_TID) || nested_delivery != Ok(1) {
         return fail("watch", "nested IPC delivery setup failed");
     }
     if !outer_context_preserved {

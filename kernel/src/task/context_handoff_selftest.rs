@@ -42,7 +42,12 @@ fn spawn_handoff_task(
 ) -> Result<usize, types::ViError> {
     let kernel_stack = super::stack::Stack::new_kernel(1)?;
     let user_stack = super::stack::Stack::new_user(1)?;
-    Ok(scheduler.spawn_with_stacks(name, cell_id, vec![], kernel_stack, user_stack))
+    let tid = scheduler.spawn_with_stacks(name, cell_id, vec![], kernel_stack, user_stack);
+    if let Some(task) = scheduler.tasks.get(&tid) {
+        let owner = api::cell_owner::CellOwner::new(cell_id.0, task.cell_generation, tid as u64);
+        scheduler.publish_live_cell_owner(owner);
+    }
+    Ok(tid)
 }
 
 /// Called from the incoming Context after its assembly prologue has saved the

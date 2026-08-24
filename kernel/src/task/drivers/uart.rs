@@ -124,8 +124,11 @@ fn write_rpi3_console_byte(byte: u8) {
 /// kernel's `log::max_level` — it is application output, not kernel debug chatter.
 /// Routing it through `log::info!` (as `print_user_log` once did) meant lowering
 /// the kernel log level to silence boot spam also silenced the shell prompt.
+static LOG_LOCK: Spinlock<()> = Spinlock::new(());
+
 pub fn write_console(s: &str) {
     use fmt::Write;
+    let _guard = LOG_LOCK.lock();
     let _ = DirectWriter.write_str(s);
 }
 
@@ -140,6 +143,7 @@ impl log::Log for SimpleLogger {
     fn log(&self, record: &log::Record) {
         if self.enabled(record.metadata()) {
             use fmt::Write;
+            let _guard = LOG_LOCK.lock();
             let mut writer = DirectWriter;
             let _ = writeln!(writer, "[{:>5}] {}", record.level(), record.args());
         }

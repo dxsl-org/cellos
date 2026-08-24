@@ -37,12 +37,12 @@ pub enum TaskState {
     Sleeping {
         until: usize,
     },
-    /// Blocked waiting to send a message to `target_id`.
-    /// Stores the message pointer and length temporarily.
+    /// Blocked waiting for the receiver to consume the message published
+    /// under `delivery_id`. The payload lives in the receiver's kernel-owned
+    /// mailbox; this variant holds only the delivery token.
     Sending {
         target: usize,
-        msg_ptr: VAddr,
-        msg_len: usize,
+        delivery_id: u64,
     },
     /// Blocked waiting to receive a message.
     ///

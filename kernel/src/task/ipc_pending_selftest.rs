@@ -44,11 +44,8 @@ fn verify_delivery(expected: &[u8]) -> bool {
     if task.state != TaskState::Ready {
         return fail("delivery did not wake the receiver");
     }
-    if task.current_caller != Some(SENDER) {
-        return fail("delivery lost the sender identity");
-    }
     match task.pending_msgs.as_slice() {
-        [msg] if msg.sender_tid == SENDER && msg.data.as_slice() == expected => true,
+        [msg] if msg.sender_tid == SENDER && msg.payload() == expected => true,
         _ => fail("delivery did not leave exactly one owned mailbox message"),
     }
 }
@@ -202,6 +199,7 @@ fn pending_drain_keeps_sender_context_without_relocking() -> bool {
             sender_tid: SENDER,
             data: super::pending_mailbox::PendingMsgData::try_copy(payload, TEST_CELL as usize)
                 .expect("inline payload copy must fit"),
+            wire: None,
             enqueued_tick: 0,
         })
     };

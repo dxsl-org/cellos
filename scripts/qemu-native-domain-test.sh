@@ -60,7 +60,7 @@ declare -A seen=()
 for case_id in "${REQUESTED_CASES[@]}"; do
     [[ -n "$case_id" ]] || { echo "FAIL: empty case in --case" >&2; exit 2; }
     case "$case_id" in
-        switch|sas-fastpath|migration|user-copy|user-copy-race) ;;
+        switch|sas-fastpath|migration|user-copy|user-copy-race|ipc-copy|ipc-copy-race) ;;
         *) echo "FAIL: unknown native-domain case: $case_id" >&2; exit 2 ;;
     esac
     [[ -z "${seen[$case_id]:-}" ]] || { echo "FAIL: duplicate native-domain case: $case_id" >&2; exit 2; }
@@ -71,6 +71,10 @@ for case_id in "${REQUESTED_CASES[@]}"; do
     fi
     if [[ "$case_id" == "user-copy-race" && "$HARTS" != "2" ]]; then
         echo "FAIL: user-copy-race requires --harts 2" >&2
+        exit 2
+    fi
+    if [[ "$case_id" == "ipc-copy-race" && "$HARTS" != "2" ]]; then
+        echo "FAIL: ipc-copy-race requires --harts 2" >&2
         exit 2
     fi
 done
@@ -91,6 +95,8 @@ marker_for() {
         sas-fastpath) printf 'S22-RV64-SAS-FASTPATH: PASS roots=0 flushes=0 harts=%s' "$HARTS" ;;
         user-copy) printf 'S22-RV64-COPY: PASS harts=%s' "$HARTS" ;;
         user-copy-race) printf 'S22-RV64-COPY-RACE: PASS harts=2' ;;
+        ipc-copy) printf 'S22-RV64-IPC-COPY: PASS harts=%s' "$HARTS" ;;
+        ipc-copy-race) printf 'S22-RV64-IPC-COPY-RACE: PASS harts=2' ;;
     esac
 }
 terminal_pattern_for() {
@@ -100,6 +106,8 @@ terminal_pattern_for() {
         sas-fastpath) printf '(^|\\] )S22-RV64-SAS-FASTPATH: PASS roots=0 flushes=0 harts=%s$' "$HARTS" ;;
         user-copy) printf '(^|\\] )S22-RV64-COPY: PASS harts=%s$' "$HARTS" ;;
         user-copy-race) printf '(^|\\] )S22-RV64-COPY-RACE: PASS harts=2$' ;;
+        ipc-copy) printf '(^|\\] )S22-RV64-IPC-COPY: PASS harts=%s$' "$HARTS" ;;
+        ipc-copy-race) printf '(^|\\] )S22-RV64-IPC-COPY-RACE: PASS harts=2$' ;;
     esac
 }
 assert_runtime_hart_count() {
@@ -166,7 +174,8 @@ terminal_min_for() {
     fi
     while IFS= read -r fault_line; do
         [[ -z "$fault_line" ]] && continue
-        if [[ ! "$fault_line" =~ ^\[ERROR\]\ \[fault\]\ Cell\ 254\ \(task\ [0-9]+\ generation\ [0-9]+\)\ terminated:\ cause=0xf\ pc=0x[0-9a-f]+\ addr=0x[0-9a-f]+$ ]]; then
+        if [[ ! "$fault_line" =~ ^\[ERROR\]\ \[fault\]\ Cell\ 254\ \(task\ [0-9]+\ generation\ [0-9]+\)\ terminated:\ cause=0xf\ pc=0x[0-9a-f]+\ addr=0x[0-9a-f]+$ ]] \
+            && [[ ! "$fault_line" =~ ^\[ERROR\]\ \[fault\]\ Cell\ 63\ \(task\ 6\ generation\ 99\)\ terminated:\ cause=0xdead\ pc=0x0\ addr=0x0$ ]]; then
             echo "FAIL: unclassified cell fault for case=$case_id: $fault_line; see $normalized_log" >&2
             exit 1
         fi

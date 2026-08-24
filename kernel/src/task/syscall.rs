@@ -733,47 +733,153 @@ fn read_cell_owner_request(
 }
 
 
-/// Delivery selected when a blocked receive resumes.
-pub(super) enum ResumeDelivery {
-    Death { sender_tid: usize, reason: usize },
-    Message(super::tcb::PendingMsg),
+
+/// Non-owning peek at the next delivery event. Payload bytes are copied into
+/// kernel memory; the original record is NOT removed. Call `commit_resume`
+/// after a successful copy-out to remove exactly the same event.
+pub(super) enum ResumeSnapshot {
+    /// A peer died or an exit reason was synthesised. `is_owner_death` flags
+    /// which record to commit: owner-deaths queue vs. `pending_exit_reason`.
+    Death {
+        sender_tid: usize,
+        reason: usize,
+        is_owner_death: bool,
+    },
+    /// A queued message. Payload already staged; commit key is `delivery_id`
+    /// (wire) or `sender_tid` (inline) — whichever is `Some`/applicable.
+    Message {
+        sender_tid: usize,
+        wire_header: Option<super::ipc_wire::IpcWireHeader>,
+        delivery_id: Option<u64>,
+        sender_cell_id: u64,
+        sender_generation: u64,
+        payload: alloc::vec::Vec<u8>,
+    },
+    /// Woken with no pending message (timeout, manual wake, or 0-return).
     Wake { sender_tid: usize },
 }
 
-/// Consume the wake-owned event before any later queued message.
+/// Peek at the next delivery event matching `mask` without removing anything.
+/// Returns `Err(())` on allocation failure (OOM staging payload bytes).
+pub(super) fn snapshot_resume(
+    task: &super::Task,
+    mask: usize,
+) -> Result<ResumeSnapshot, ()> {
+    // Owner-death events take priority (same order as take_resume_delivery).
+    if super::Task::owner_death_matches_receive_mask(mask) {
+        if let Some((_, root_tid, reason)) = task.pending_owner_deaths.first().copied() {
+            return Ok(ResumeSnapshot::Death {
+                sender_tid: root_tid,
+                reason,
+                is_owner_death: true,
+            });
+        }
+    }
+    if let Some(reason) = task.pending_exit_reason {
+        return Ok(ResumeSnapshot::Death {
+            sender_tid: task.current_caller.unwrap_or(0),
+            reason,
+            is_owner_death: false,
+        });
+    }
+    if let Some(index) = task
+        .pending_msgs
+        .iter()
+        .position(|m| mask == 0 || m.sender_tid == mask)
+    {
+        let msg = &task.pending_msgs.as_slice()[index];
+        let wire_header = msg.wire_header();
+        let delivery_id = wire_header.as_ref().map(|h| h.delivery_id);
+        let (sender_cell_id, sender_generation) = match &wire_header {
+            Some(h) => (h.sender_cell_id, h.sender_generation),
+            None => (0, 0),
+        };
+        let mut payload = alloc::vec::Vec::new();
+        payload.try_reserve_exact(msg.payload().len()).map_err(|_| ())?;
+        payload.extend_from_slice(msg.payload());
+        return Ok(ResumeSnapshot::Message {
+            sender_tid: msg.sender_tid,
+            wire_header,
+            delivery_id,
+            sender_cell_id,
+            sender_generation,
+            payload,
+        });
+    }
+    Ok(ResumeSnapshot::Wake {
+        sender_tid: task.current_caller.unwrap_or(0),
+    })
+}
+
+/// Commit the exact event that was peeked by `snapshot_resume`.
+/// Must be called under the scheduler lock with the same `task`.
+pub(super) fn commit_resume(task: &mut super::Task, snap: &ResumeSnapshot) {
+    match snap {
+        ResumeSnapshot::Death { sender_tid, is_owner_death: true, .. } => {
+            // Remove the first owner-death with matching root_tid.
+            if let Some(pos) = task
+                .pending_owner_deaths
+                .iter()
+                .position(|(_, tid, _)| tid == sender_tid)
+            {
+                task.pending_owner_deaths.remove(pos);
+            }
+        }
+        ResumeSnapshot::Death { is_owner_death: false, .. } => {
+            task.pending_exit_reason.take();
+        }
+        ResumeSnapshot::Message { delivery_id: Some(did), .. } => {
+            if let Some(pos) = task
+                .pending_msgs
+                .iter()
+                .position(|m| m.wire_header().is_some_and(|h| h.delivery_id == *did))
+            {
+                task.pending_msgs.remove(pos);
+            }
+        }
+        ResumeSnapshot::Message { sender_tid, delivery_id: None, .. } => {
+            if let Some(pos) = task.pending_msgs.iter().position(|m| m.sender_tid == *sender_tid) {
+                task.pending_msgs.remove(pos);
+            }
+        }
+        ResumeSnapshot::Wake { .. } => {}
+    }
+}
+
+/// Legacy owned-removal delivery enum; used by selftests that consume the
+/// event and immediately inspect it. Production paths use `snapshot_resume` +
+/// `commit_resume` instead. Do not add new callers.
+#[allow(dead_code)]
+pub(super) enum ResumeDelivery {
+    Death { sender_tid: usize, reason: usize },
+    Message(super::tcb::PendingMsg),
+    Wake,
+}
+
+/// Consume the next matching delivery event and return it. Selftest-only;
+/// production callers use `snapshot_resume` + `commit_resume`.
 pub(super) fn take_resume_delivery(task: &mut super::Task, mask: usize) -> ResumeDelivery {
-    // Owner-watch events are capability-tokenized internally and are visible
-    // only to VFS's wildcard public receive. A masked backend receive must
-    // leave them queued for the outer request loop.
+    // Snapshot without allocation — Death and Wake carry no payload.
+    // For Message we need to remove the record, so we take it directly.
     if super::Task::owner_death_matches_receive_mask(mask) {
         if let Some((_, root_tid, reason)) = task.pending_owner_deaths.first().copied() {
             task.pending_owner_deaths.remove(0);
-            return ResumeDelivery::Death {
-                sender_tid: root_tid,
-                reason,
-            };
+            return ResumeDelivery::Death { sender_tid: root_tid, reason };
         }
     }
     if let Some(reason) = task.pending_exit_reason.take() {
-        return ResumeDelivery::Death {
-            sender_tid: task.current_caller.unwrap_or(0),
-            reason,
-        };
+        return ResumeDelivery::Death { sender_tid: task.current_caller.unwrap_or(0), reason };
     }
-
-    let slot = task
+    if let Some(index) = task
         .pending_msgs
         .iter()
-        .position(|message| mask == 0 || message.sender_tid == mask);
-    if let Some(index) = slot {
-        let message = task.pending_msgs.remove(index);
-        return ResumeDelivery::Message(message);
+        .position(|m| mask == 0 || m.sender_tid == mask)
+    {
+        return ResumeDelivery::Message(task.pending_msgs.remove(index));
     }
-
-    ResumeDelivery::Wake {
-        sender_tid: task.current_caller.unwrap_or(0),
-    }
+    ResumeDelivery::Wake
 }
+
 
 /// Look up the attested identity of `sender_tid`.
 ///
@@ -810,14 +916,6 @@ pub(super) enum VfsGrantLookup {
     Active(VfsGrantContext),
 }
 
-fn sender_cell_context(sender_tid: usize) -> (u64, u64) {
-    let sched_guard = super::SCHEDULER.lock();
-    sched_guard
-        .as_ref()
-        .and_then(|sched| sched.tasks.get(&sender_tid))
-        .map(|task| (task.cell_id.0, task.cell_generation))
-        .unwrap_or((0, 0))
-}
 
 fn sender_cell_context_in_sched(
     sched: &super::scheduler::Scheduler,
@@ -1829,92 +1927,147 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             }
 
             // Hot-swap pending-message drain — guaranteed delivery path.
-            let pending_msg_info = {
+            // Payload snapshot is fallible (never an infallible Vec::from);
+            // wire records carry scalar identity and gate the sender wake.
+            let pending_msg_info: Result<Option<_>, ()> = {
                 let mut guard = super::SCHEDULER.lock();
-                guard.as_mut().and_then(|sched| {
-                    let (pos, sender_tid, caller_view, data) = {
-                        let t = sched.tasks.get_mut(&caller_id)?;
-                        let pos = t
-                            .pending_msgs
-                            .iter()
-                            .position(|m| mask == 0 || m.sender_tid == mask)?;
-                        let msg = &t.pending_msgs.as_slice()[pos];
-                        let sender_tid = msg.sender_tid;
-                        let caller_view = TaskCopyView::of(t);
-                        let data = alloc::vec::Vec::from(msg.data.as_slice());
-                        (pos, sender_tid, caller_view, data)
+                guard.as_mut().map_or(Ok(None), |sched| {
+                    let Some(t) = sched.tasks.get_mut(&caller_id) else {
+                        return Ok(None);
                     };
-                    let (sender_cell_id, sender_generation) =
-                        sender_cell_context_in_sched(sched, sender_tid);
-                    Some((pos, sender_tid, sender_cell_id, sender_generation, caller_view, data))
+                    let Some(pos) = t
+                        .pending_msgs
+                        .iter()
+                        .position(|m| mask == 0 || m.sender_tid == mask)
+                    else {
+                        return Ok(None);
+                    };
+                    let msg = &t.pending_msgs.as_slice()[pos];
+                    let sender_tid = msg.sender_tid;
+                    let wire_header = msg.wire_header();
+                    // Allocation failure is a real error, not "no message":
+                    // encoding it as None would block despite queued data.
+                    let mut data = alloc::vec::Vec::new();
+                    if data.try_reserve_exact(msg.payload().len()).is_err() {
+                        return Err(());
+                    }
+                    data.extend_from_slice(msg.payload());
+                    let caller_view = TaskCopyView::of(t);
+                    let (sender_cell_id, sender_generation) = match wire_header {
+                        Some(header) => (header.sender_cell_id, header.sender_generation),
+                        None => sender_cell_context_in_sched(sched, sender_tid),
+                    };
+                    Ok(Some((pos, sender_tid, sender_cell_id, sender_generation, wire_header, caller_view, data)))
                 })
             };
-            if let Some((pos, sender_tid, sender_cell_id, sender_generation, caller_view, data)) = pending_msg_info {
-                let copy_len = core::cmp::min(data.len(), buf_len);
-                if copy_len > 0 {
-                    validate_user_buf(buf_ptr, copy_len, MAX_USER_BUF)?;
-                    caller_view
-                        .write_bytes(buf_ptr, &data[..copy_len])
-                        .map_err(|_| SyscallError::InvalidInput)?;
-                }
-                if let Some(sched) = super::SCHEDULER.lock().as_mut() {
-                    if let Some(t) = sched.tasks.get_mut(&caller_id) {
-                        if pos < t.pending_msgs.len() && t.pending_msgs.as_slice()[pos].sender_tid == sender_tid {
-                            t.pending_msgs.remove(pos);
+            let (pos, sender_tid, sender_cell_id, sender_generation, wire_header, caller_view, data) =
+                match pending_msg_info {
+                    Err(()) => return Err(SyscallError::OutOfMemory),
+                    Ok(None) => {
+                        let res = super::ipc_recv(caller_id, mask, buf_ptr, buf_len);
+                        match res {
+                            Ok(0) => {
+                                super::yield_cpu();
+                                // Peek the next event without removing it,
+                                // copy payload, then commit the exact record.
+                                let snap = {
+                                    let guard = super::SCHEDULER.lock();
+                                    guard.as_ref().map_or(
+                                        Ok(ResumeSnapshot::Wake { sender_tid: 0 }),
+                                        |sched| {
+                                            sched
+                                                .tasks
+                                                .get(&caller_id)
+                                                .map_or(
+                                                    Ok(ResumeSnapshot::Wake { sender_tid: 0 }),
+                                                    |task| snapshot_resume(task, mask),
+                                                )
+                                        },
+                                    )
+                                };
+                                let snap = match snap {
+                                    Err(()) => return Err(SyscallError::OutOfMemory),
+                                    Ok(s) => s,
+                                };
+                                // Copy-out before any commit.
+                                let sender = match &snap {
+                                    ResumeSnapshot::Death { sender_tid, reason, .. } => {
+                                        if buf_len >= core::mem::size_of::<u64>() {
+                                            validate_user_buf(buf_ptr, core::mem::size_of::<u64>(), MAX_USER_BUF)?;
+                                            let reason_bytes = (*reason as u64).to_ne_bytes();
+                                            let view = caller_copy_view(caller_id)?;
+                                            view.write_bytes(buf_ptr, &reason_bytes)
+                                                .map_err(|_| SyscallError::InvalidInput)?;
+                                        }
+                                        *sender_tid
+                                    }
+                                    ResumeSnapshot::Message { sender_tid, payload, .. } => {
+                                        let copy_len = core::cmp::min(payload.len(), buf_len);
+                                        if copy_len > 0 {
+                                            validate_user_buf(buf_ptr, copy_len, MAX_USER_BUF)?;
+                                            let view = caller_copy_view(caller_id)?;
+                                            view.write_bytes(buf_ptr, &payload[..copy_len])
+                                                .map_err(|_| SyscallError::InvalidInput)?;
+                                        }
+                                        *sender_tid
+                                    }
+                                    ResumeSnapshot::Wake { sender_tid } => *sender_tid,
+                                };
+                                // Copy succeeded: commit the exact record.
+                                if let Some(sched) = super::SCHEDULER.lock().as_mut() {
+                                    if let Some(task) = sched.tasks.get_mut(&caller_id) {
+                                        commit_resume(task, &snap);
+                                        if let ResumeSnapshot::Message {
+                                            sender_tid,
+                                            sender_cell_id,
+                                            sender_generation,
+                                            ..
+                                        } = &snap {
+                                            task.set_received_caller_context(
+                                                *sender_tid,
+                                                *sender_cell_id,
+                                                *sender_generation,
+                                            );
+                                        }
+                                    }
+                                    if let ResumeSnapshot::Message { sender_tid, wire_header: Some(header), .. } = snap {
+                                        super::wake_sender_token(sched, sender_tid, caller_id, header);
+                                    }
+                                }
+                                attest(sender);
+                                return Ok(sender);
+                            }
+                            Ok(id) => {
+                                attest(id);
+                                return Ok(id);
+                            }
+                            Err(_) => return Err(SyscallError::InvalidCommand),
                         }
-                        t.set_received_caller_context(sender_tid, sender_cell_id, sender_generation);
                     }
-                }
-                attest(sender_tid);
-                return Ok(sender_tid);
+                    Ok(Some(snapshot)) => snapshot,
+                };
+            let copy_len = core::cmp::min(data.len(), buf_len);
+            if copy_len > 0 {
+                validate_user_buf(buf_ptr, copy_len, MAX_USER_BUF)?;
+                caller_view
+                    .write_bytes(buf_ptr, &data[..copy_len])
+                    .map_err(|_| SyscallError::InvalidInput)?;
             }
-
-            let res = super::ipc_recv(caller_id, mask, buf_ptr, buf_len);
-            match res {
-                Ok(0) => {
-                    super::yield_cpu();
-                    let delivery = super::SCHEDULER
-                        .lock()
-                        .as_mut()
-                        .and_then(|sched| sched.tasks.get_mut(&caller_id))
-                        .map(|task| take_resume_delivery(task, mask))
-                        .unwrap_or(ResumeDelivery::Wake { sender_tid: 0 });
-                    let sender = match delivery {
-                        ResumeDelivery::Death { sender_tid, reason } => {
-                            if buf_len >= core::mem::size_of::<u64>() {
-                                validate_user_buf(
-                                    buf_ptr,
-                                    core::mem::size_of::<u64>(),
-                                    MAX_USER_BUF,
-                                )?;
-                                let reason_bytes = (reason as u64).to_ne_bytes();
-                                let view = caller_copy_view(caller_id)?;
-                                view.write_bytes(buf_ptr, &reason_bytes)
-                                    .map_err(|_| SyscallError::InvalidInput)?;
-                            }
-                            sender_tid
-                        }
-                        ResumeDelivery::Message(message) => {
-                            let copy_len = core::cmp::min(message.data.len(), buf_len);
-                            if copy_len > 0 {
-                                validate_user_buf(buf_ptr, copy_len, MAX_USER_BUF)?;
-                                let view = caller_copy_view(caller_id)?;
-                                view.write_bytes(buf_ptr, &message.data.as_slice()[..copy_len])
-                                    .map_err(|_| SyscallError::InvalidInput)?;
-                            }
-                            message.sender_tid
-                        }
-                        ResumeDelivery::Wake { sender_tid } => sender_tid,
-                    };
-                    attest(sender);
-                    Ok(sender)
+            if let Some(sched) = super::SCHEDULER.lock().as_mut() {
+                if let Some(t) = sched.tasks.get_mut(&caller_id) {
+                    if pos < t.pending_msgs.len()
+                        && t.pending_msgs.as_slice()[pos].sender_tid == sender_tid
+                    {
+                        t.pending_msgs.remove(pos);
+                    }
+                    t.set_received_caller_context(sender_tid, sender_cell_id, sender_generation);
                 }
-                Ok(id) => {
-                    attest(id);
-                    Ok(id)
+                if let Some(header) = wire_header {
+                    super::wake_sender_token(sched, sender_tid, caller_id, header);
                 }
-                Err(_) => Err(SyscallError::InvalidCommand),
             }
+            attest(sender_tid);
+            Ok(sender_tid)
         }
         // ── Scatter/gather IPC ────────────────────────────────────────────────
         Syscall::SendGather {
@@ -1991,36 +2144,67 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 }
                 iovec_entries.push((ptr, len));
             }
-            let mut tmp = alloc::vec::Vec::new();
-            tmp.try_reserve_exact(total)
-                .map_err(|_| SyscallError::OutOfMemory)?;
-            tmp.resize(total, 0);
-            let mut drained_msg = None;
+            // Multi-range receive transaction: snapshot/stage the message
+            // payload in kernel memory, then stage and commit all destination
+            // ranges via the copy boundary's atomic scatter write.
+            // No destination is touched and no message is consumed if ANY
+            // iovec range is invalid, unmapped, or lacks write permissions.
+            let drained: Result<Option<_>, ()> = {
+                let mut guard = super::SCHEDULER.lock();
+                guard.as_mut().map_or(Ok(None), |sched| {
+                    let Some(t) = sched.tasks.get_mut(&caller_id) else {
+                        return Ok(None);
+                    };
+                    let Some(pos) = t
+                        .pending_msgs
+                        .iter()
+                        .position(|m| mask == 0 || m.sender_tid == mask)
+                    else {
+                        return Ok(None);
+                    };
+                    let record = &t.pending_msgs.as_slice()[pos];
+                    let sender_tid = record.sender_tid;
+                    let wire_header = record.wire_header();
+                    let mut tmp = alloc::vec::Vec::new();
+                    if tmp.try_reserve_exact(record.payload().len()).is_err() {
+                        return Err(());
+                    }
+                    tmp.extend_from_slice(record.payload());
+                    Ok(Some((pos, sender_tid, wire_header, tmp)))
+                })
+            };
+            let (pos, sender_tid, wire_header, tmp) = match drained {
+                Err(()) => return Err(SyscallError::OutOfMemory),
+                Ok(None) => return Err(SyscallError::TryAgain),
+                Ok(Some(snapshot)) => snapshot,
+            };
+            let copy_total = core::cmp::min(tmp.len(), total);
+            caller_view
+                .write_scatter(&iovec_entries, &tmp[..copy_total])
+                .map_err(|_| SyscallError::InvalidInput)?;
             if let Some(sched) = super::SCHEDULER.lock().as_mut() {
                 if let Some(t) = sched.tasks.get_mut(&caller_id) {
-                    if let Some(pos) = t.pending_msgs.iter().position(|m| mask == 0 || m.sender_tid == mask) {
-                        drained_msg = Some(t.pending_msgs.remove(pos));
+                    if pos < t.pending_msgs.len()
+                        && t.pending_msgs.as_slice()[pos].sender_tid == sender_tid
+                    {
+                        t.pending_msgs.remove(pos);
+                    }
+                    if let Some(header) = wire_header {
+                        // Commit caller context together with removal so a
+                        // reply after scatter carries the delivered sender's
+                        // identity and request generation.
+                        t.set_received_caller_context(
+                            sender_tid,
+                            header.sender_cell_id,
+                            header.sender_generation,
+                        );
                     }
                 }
-            }
-            let sender = if let Some(msg) = drained_msg {
-                let copy_len = core::cmp::min(msg.data.len(), total);
-                tmp[..copy_len].copy_from_slice(&msg.data.as_slice()[..copy_len]);
-                msg.sender_tid
-            } else {
-                return Err(SyscallError::TryAgain);
-            };
-            let mut pos = 0;
-            for (ptr, len) in iovec_entries {
-                let copy_len = len.min(total.saturating_sub(pos));
-                if copy_len > 0 {
-                    caller_view
-                        .write_bytes(ptr, &tmp[pos..pos + copy_len])
-                        .map_err(|_| SyscallError::InvalidInput)?;
-                    pos += copy_len;
+                if let Some(header) = wire_header {
+                    super::wake_sender_token(sched, sender_tid, caller_id, header);
                 }
             }
-            Ok(sender)
+            Ok(sender_tid)
         }
         Syscall::RecvTimeout {
             mask,
@@ -2029,114 +2213,149 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             deadline,
         } => {
             let mut vfs_context_drop = None;
-            let pending_msg_info = {
+            let pending_msg_info: Result<Option<_>, ()> = {
                 let mut guard = super::SCHEDULER.lock();
-                guard.as_mut().and_then(|sched| {
-                    let (pos, sender_tid, caller_view, data) = {
-                        let t = sched.tasks.get_mut(&caller_id)?;
-                        vfs_context_drop = t.begin_receive_context(mask);
-                        let pos = t
-                            .pending_msgs
-                            .iter()
-                            .position(|m| mask == 0 || m.sender_tid == mask)?;
-                        let msg = &t.pending_msgs.as_slice()[pos];
-                        let sender_tid = msg.sender_tid;
-                        let caller_view = TaskCopyView::of(t);
-                        let data = alloc::vec::Vec::from(msg.data.as_slice());
-                        (pos, sender_tid, caller_view, data)
+                guard.as_mut().map_or(Ok(None), |sched| {
+                    let Some(t) = sched.tasks.get_mut(&caller_id) else {
+                        return Ok(None);
                     };
-                    let (sender_cell_id, sender_generation) =
-                        sender_cell_context_in_sched(sched, sender_tid);
-                    Some((pos, sender_tid, sender_cell_id, sender_generation, caller_view, data))
+                    vfs_context_drop = t.begin_receive_context(mask);
+                    let Some(pos) = t
+                        .pending_msgs
+                        .iter()
+                        .position(|m| mask == 0 || m.sender_tid == mask)
+                    else {
+                        return Ok(None);
+                    };
+                    let record = &t.pending_msgs.as_slice()[pos];
+                    let sender_tid = record.sender_tid;
+                    let wire_header = record.wire_header();
+                    // Fallible snapshot: allocation failure must not be
+                    // mistaken for "no message" (the receiver would block
+                    // despite queued data).
+                    let mut data = alloc::vec::Vec::new();
+                    if data.try_reserve_exact(record.payload().len()).is_err() {
+                        return Err(());
+                    }
+                    data.extend_from_slice(record.payload());
+                    let caller_view = TaskCopyView::of(t);
+                    let (sender_cell_id, sender_generation) = match wire_header {
+                        Some(header) => (header.sender_cell_id, header.sender_generation),
+                        None => sender_cell_context_in_sched(sched, sender_tid),
+                    };
+                    Ok(Some((pos, sender_tid, sender_cell_id, sender_generation, wire_header, caller_view, data)))
                 })
             };
             finish_vfs_context_drop(caller_id, vfs_context_drop);
 
-            if let Some((pos, sender_tid, sender_cell_id, sender_generation, caller_view, data)) = pending_msg_info {
-                let copy_len = core::cmp::min(data.len(), buf_len);
-                if copy_len > 0 {
-                    validate_user_buf(buf_ptr, copy_len, MAX_USER_BUF)?;
-                    caller_view
-                        .write_bytes(buf_ptr, &data[..copy_len])
-                        .map_err(|_| SyscallError::InvalidInput)?;
-                }
-                if let Some(sched) = super::SCHEDULER.lock().as_mut() {
-                    if let Some(t) = sched.tasks.get_mut(&caller_id) {
-                        if pos < t.pending_msgs.len() && t.pending_msgs.as_slice()[pos].sender_tid == sender_tid {
-                            t.pending_msgs.remove(pos);
-                        }
-                        t.set_received_caller_context(sender_tid, sender_cell_id, sender_generation);
-                    }
-                }
-                return Ok(sender_tid);
-            }
-
-            // Fast path: check for a pending message immediately.
-            let res = super::ipc_recv(caller_id, mask, buf_ptr, buf_len);
-            match res {
-                Ok(0) => {
-                    // Blocked with deadline:None — install the absolute deadline.
-                    if let Some(sched) = super::SCHEDULER.lock().as_mut() {
-                        if let Some(task) = sched.tasks.get_mut(&caller_id) {
-                            if let super::tcb::TaskState::Recv {
-                                deadline: ref mut d,
-                                ..
-                            } = task.state
-                            {
-                                *d = Some(deadline);
-                            }
-                        }
-                    }
-                    // Yield so the scheduler runs other tasks and can fire the timeout.
-                    super::yield_cpu();
-                    let delivery = super::SCHEDULER
-                        .lock()
-                        .as_mut()
-                        .and_then(|sched| sched.tasks.get_mut(&caller_id))
-                        .map(|task| take_resume_delivery(task, mask))
-                        .unwrap_or(ResumeDelivery::Wake { sender_tid: 0 });
-                    match delivery {
-                        ResumeDelivery::Death { sender_tid, reason } => {
-                            if buf_len >= core::mem::size_of::<u64>() {
-                                validate_user_buf(
-                                    buf_ptr,
-                                    core::mem::size_of::<u64>(),
-                                    MAX_USER_BUF,
-                                )?;
-                                let reason_bytes = (reason as u64).to_ne_bytes();
-                                let view = caller_copy_view(caller_id)?;
-                                view.write_bytes(buf_ptr, &reason_bytes)
-                                    .map_err(|_| SyscallError::InvalidInput)?;
-                            }
-                            Ok(sender_tid)
-                        }
-                        ResumeDelivery::Message(message) => {
-                            let (sender_cell_id, sender_generation) =
-                                sender_cell_context(message.sender_tid);
-                            if let Some(sched) = super::SCHEDULER.lock().as_mut() {
-                                if let Some(task) = sched.tasks.get_mut(&caller_id) {
-                                    task.set_received_caller_context(
-                                        message.sender_tid,
-                                        sender_cell_id,
-                                        sender_generation,
-                                    );
+            let (pos, sender_tid, sender_cell_id, sender_generation, wire_header, caller_view, data) =
+                match pending_msg_info {
+                    Err(()) => return Err(SyscallError::OutOfMemory),
+                    Ok(None) => {
+                        // Fast path: check for a pending message immediately.
+                        let res = super::ipc_recv(caller_id, mask, buf_ptr, buf_len);
+                        match res {
+                            Ok(0) => {
+                                // Blocked with deadline:None — install the absolute deadline.
+                                if let Some(sched) = super::SCHEDULER.lock().as_mut() {
+                                    if let Some(task) = sched.tasks.get_mut(&caller_id) {
+                                        if let super::tcb::TaskState::Recv {
+                                            deadline: ref mut d,
+                                            ..
+                                        } = task.state
+                                        {
+                                            *d = Some(deadline);
+                                        }
+                                    }
                                 }
+                                // Yield so the scheduler runs other tasks and can fire the timeout.
+                                super::yield_cpu();
+                                let snap = {
+                                    let guard = super::SCHEDULER.lock();
+                                    guard.as_ref().map_or(
+                                        Ok(ResumeSnapshot::Wake { sender_tid: 0 }),
+                                        |sched| {
+                                            sched.tasks.get(&caller_id).map_or(
+                                                Ok(ResumeSnapshot::Wake { sender_tid: 0 }),
+                                                |task| snapshot_resume(task, mask),
+                                            )
+                                        },
+                                    )
+                                };
+                                let snap = match snap {
+                                    Err(()) => return Err(SyscallError::OutOfMemory),
+                                    Ok(s) => s,
+                                };
+                                let sender = match &snap {
+                                    ResumeSnapshot::Death { sender_tid, reason, .. } => {
+                                        if buf_len >= core::mem::size_of::<u64>() {
+                                            validate_user_buf(buf_ptr, core::mem::size_of::<u64>(), MAX_USER_BUF)?;
+                                            let reason_bytes = (*reason as u64).to_ne_bytes();
+                                            let view = caller_copy_view(caller_id)?;
+                                            view.write_bytes(buf_ptr, &reason_bytes)
+                                                .map_err(|_| SyscallError::InvalidInput)?;
+                                        }
+                                        *sender_tid
+                                    }
+                                    ResumeSnapshot::Message { sender_tid, payload, .. } => {
+                                        let copy_len = core::cmp::min(payload.len(), buf_len);
+                                        if copy_len > 0 {
+                                            validate_user_buf(buf_ptr, copy_len, MAX_USER_BUF)?;
+                                            let view = caller_copy_view(caller_id)?;
+                                            view.write_bytes(buf_ptr, &payload[..copy_len])
+                                                .map_err(|_| SyscallError::InvalidInput)?;
+                                        }
+                                        *sender_tid
+                                    }
+                                    ResumeSnapshot::Wake { sender_tid } => *sender_tid,
+                                };
+                                if let Some(sched) = super::SCHEDULER.lock().as_mut() {
+                                    if let Some(task) = sched.tasks.get_mut(&caller_id) {
+                                        commit_resume(task, &snap);
+                                        if let ResumeSnapshot::Message {
+                                            sender_tid,
+                                            sender_cell_id,
+                                            sender_generation,
+                                            ..
+                                        } = &snap {
+                                            task.set_received_caller_context(
+                                                *sender_tid, *sender_cell_id, *sender_generation,
+                                            );
+                                        }
+                                    }
+                                    if let ResumeSnapshot::Message {
+                                        sender_tid, wire_header: Some(header), ..
+                                    } = snap {
+                                        super::wake_sender_token(sched, sender_tid, caller_id, header);
+                                    }
+                                }
+                                return Ok(sender);
                             }
-                            let copy_len = core::cmp::min(message.data.len(), buf_len);
-                            if copy_len > 0 {
-                                validate_user_buf(buf_ptr, copy_len, MAX_USER_BUF)?;
-                                let view = caller_copy_view(caller_id)?;
-                                view.write_bytes(buf_ptr, &message.data.as_slice()[..copy_len])
-                                    .map_err(|_| SyscallError::InvalidInput)?;
-                            }
-                            Ok(message.sender_tid)
+                            Ok(id) => return Ok(id),
+                            Err(_) => return Err(SyscallError::InvalidCommand),
                         }
-                        ResumeDelivery::Wake { sender_tid } => Ok(sender_tid),
                     }
-                }
-                Ok(id) => Ok(id),
-                Err(_) => Err(SyscallError::InvalidCommand),
+                    Ok(Some(snapshot)) => snapshot,
+                };
+            let copy_len = core::cmp::min(data.len(), buf_len);
+            if copy_len > 0 {
+                validate_user_buf(buf_ptr, copy_len, MAX_USER_BUF)?;
+                caller_view
+                    .write_bytes(buf_ptr, &data[..copy_len])
+                    .map_err(|_| SyscallError::InvalidInput)?;
             }
+            if let Some(sched) = super::SCHEDULER.lock().as_mut() {
+                if let Some(t) = sched.tasks.get_mut(&caller_id) {
+                    if pos < t.pending_msgs.len() && t.pending_msgs.as_slice()[pos].sender_tid == sender_tid {
+                        t.pending_msgs.remove(pos);
+                    }
+                    t.set_received_caller_context(sender_tid, sender_cell_id, sender_generation);
+                }
+                if let Some(header) = wire_header {
+                    super::wake_sender_token(sched, sender_tid, caller_id, header);
+                }
+            }
+            Ok(sender_tid)
         }
         Syscall::TryRecv {
             mask,
@@ -2144,30 +2363,49 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             buf_len,
         } => {
             let mut vfs_context_drop = None;
-            let pending_msg_info = {
+            let pending_msg_info: Result<Option<_>, ()> = {
                 let mut guard = super::SCHEDULER.lock();
-                guard.as_mut().and_then(|sched| {
-                    let (pos, sender_tid, caller_view, data) = {
-                        let t = sched.tasks.get_mut(&caller_id)?;
-                        vfs_context_drop = t.begin_receive_context(mask);
-                        let pos = t
-                            .pending_msgs
-                            .iter()
-                            .position(|m| mask == 0 || m.sender_tid == mask)?;
-                        let msg = &t.pending_msgs.as_slice()[pos];
-                        let sender_tid = msg.sender_tid;
-                        let caller_view = TaskCopyView::of(t);
-                        let data = alloc::vec::Vec::from(msg.data.as_slice());
-                        (pos, sender_tid, caller_view, data)
+                guard.as_mut().map_or(Ok(None), |sched| {
+                    let Some(t) = sched.tasks.get_mut(&caller_id) else {
+                        return Ok(None);
                     };
-                    let (sender_cell_id, sender_generation) =
-                        sender_cell_context_in_sched(sched, sender_tid);
-                    Some((pos, sender_tid, sender_cell_id, sender_generation, caller_view, data))
+                    vfs_context_drop = t.begin_receive_context(mask);
+                    let Some(pos) = t
+                        .pending_msgs
+                        .iter()
+                        .position(|m| mask == 0 || m.sender_tid == mask)
+                    else {
+                        return Ok(None);
+                    };
+                    let msg = &t.pending_msgs.as_slice()[pos];
+                    let sender_tid = msg.sender_tid;
+                    let wire_header = msg.wire_header();
+                    let delivery_id = wire_header.as_ref().map(|h| h.delivery_id);
+                    // Extract cell context before dropping t to avoid
+                    // holding a mutable borrow of sched.tasks while calling
+                    // sender_cell_context_in_sched (which borrows sched immutably).
+                    let inline_cell_context =
+                        wire_header.as_ref().map(|h| (h.sender_cell_id, h.sender_generation));
+                    let caller_view = TaskCopyView::of(t);
+                    let mut data = alloc::vec::Vec::new();
+                    if data.try_reserve_exact(msg.payload().len()).is_err() {
+                        return Err(());
+                    }
+                    data.extend_from_slice(msg.payload());
+                    // t is no longer borrowed here.
+                    let (sender_cell_id, sender_generation) = inline_cell_context
+                        .unwrap_or_else(|| sender_cell_context_in_sched(sched, sender_tid));
+                    Ok(Some((pos, sender_tid, sender_cell_id, sender_generation, wire_header, delivery_id, caller_view, data)))
                 })
             };
             finish_vfs_context_drop(caller_id, vfs_context_drop);
 
-            if let Some((pos, sender_tid, sender_cell_id, sender_generation, caller_view, data)) = pending_msg_info {
+            if let Some((pos, sender_tid, sender_cell_id, sender_generation, wire_header, delivery_id, caller_view, data)) =
+                match pending_msg_info {
+                    Err(()) => return Err(SyscallError::OutOfMemory),
+                    Ok(v) => v,
+                }
+            {
                 let copy_len = core::cmp::min(data.len(), buf_len);
                 if copy_len > 0 {
                     validate_user_buf(buf_ptr, copy_len, MAX_USER_BUF)?;
@@ -2177,10 +2415,22 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 }
                 if let Some(sched) = super::SCHEDULER.lock().as_mut() {
                     if let Some(t) = sched.tasks.get_mut(&caller_id) {
-                        if pos < t.pending_msgs.len() && t.pending_msgs.as_slice()[pos].sender_tid == sender_tid {
+                        // Commit by delivery_id (wire) or position+sender_tid (inline).
+                        if let Some(did) = delivery_id {
+                            if let Some(p) = t.pending_msgs.iter().position(|m| {
+                                m.wire_header().is_some_and(|h| h.delivery_id == did)
+                            }) {
+                                t.pending_msgs.remove(p);
+                            }
+                        } else if pos < t.pending_msgs.len()
+                            && t.pending_msgs.as_slice()[pos].sender_tid == sender_tid
+                        {
                             t.pending_msgs.remove(pos);
                         }
                         t.set_received_caller_context(sender_tid, sender_cell_id, sender_generation);
+                    }
+                    if let Some(header) = wire_header {
+                        super::wake_sender_token(sched, sender_tid, caller_id, header);
                     }
                 }
                 return Ok(sender_tid);

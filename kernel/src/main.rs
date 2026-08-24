@@ -857,11 +857,13 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         feature = "native-domains",
         feature = "test-hooks"
     ))]
-    task::user_copy_tests::run_primary();
+    {
+        task::user_copy_tests::run_primary();
+        task::ipc_wire_selftest::run_primary(task::smp::online_hart_count());
+    }
 
     // 8. Spawn Embedded Init
     // RV32 Nano bring-up: no init binary — boot to idle loop.
-    // x86_64 now included (Phase 04): embedded init ELF at embedded-x86_64/init.
     #[cfg(any(
         target_arch = "riscv64",
         target_arch = "aarch64",

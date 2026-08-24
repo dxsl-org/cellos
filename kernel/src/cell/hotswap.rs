@@ -375,9 +375,14 @@ pub(crate) fn commit_hotswap_barrier(
         let copied = {
             let source = sched.tasks.get(&source_tid).ok_or(ViError::NotFound)?;
             let message = &source.pending_msgs.as_slice()[index];
-            PendingMsgData::try_copy(message.data.as_slice(), target_cell).map(|data| PendingMsg {
+            let wire = match &message.wire {
+                Some(w) => w.try_clone().ok(),
+                None => None,
+            };
+            PendingMsgData::try_copy(message.payload(), target_cell).map(|data| PendingMsg {
                 sender_tid: message.sender_tid,
                 data,
+                wire,
                 enqueued_tick: message.enqueued_tick,
             })
         };

@@ -121,11 +121,10 @@ fn test_task_state_transitions() {
     // Initial state
     assert_eq!(task.state, TaskState::Ready);
 
-    // Transition to Sending
+    // Transition to Sending (delivery token only; payload lives in mailbox)
     task.state = TaskState::Sending {
         target: 2,
-        msg_ptr: 0x1000,
-        msg_len: 64,
+        delivery_id: super::next_delivery_id(),
     };
 
     match task.state {
@@ -285,8 +284,7 @@ fn test_blocked_then_ready_transition() {
     if let Some(task) = sched.tasks.get_mut(&id) {
         task.state = TaskState::Sending {
             target: 99,
-            msg_ptr: 0x1000,
-            msg_len: 16,
+            delivery_id: super::next_delivery_id(),
         };
     }
     // Task should be removed from the ready queue.

@@ -4,8 +4,8 @@ mode: interactive
 started: 2026-08-23
 phases_cap: 15
 tool_call_cap: 400
-phases_run: 3
-tool_calls_est: 95
+phases_run: 4
+tool_calls_est: 340
 baseline_signal: exit-code
 ---
 
@@ -29,3 +29,4 @@ baseline_signal: exit-code
 | 1 | RV64 private-root substrate | fast | ✅ done | phase-01-result.md | RV64 AddressSpace verified in QEMU | low |
 | 2 | Scheduler domain transitions | thinking | ✅ done | phase-02-result.md | SAS fast-path, SMP migration verified in QEMU | low |
 | 3 | Domain-aware user copy | thinking | ✅ done | phase-03-result.md | Checked boundary, trap guard, race verified in QEMU | low |
+| 4 | Copied IPC (phase-04) | thinking | ✅ done | phase-04-result.md | Bounded wire buffer, atomic scatter, 1/2-hart QEMU suites PASS | low |

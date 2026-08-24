@@ -42,13 +42,12 @@ fn recv_scatter_stays_mailbox_isolated() -> bool {
             .and_then(|sched| sched.tasks.get(&RECEIVER))
             .is_some_and(|receiver| {
                 receiver.state == TaskState::Ready
-                    && receiver.current_caller == Some(SENDER)
                     && receiver.completion.is_none()
                     && matches!(
                         receiver.pending_msgs.as_slice(),
                         [msg]
                             if msg.sender_tid == SENDER
-                                && msg.data.as_slice() == payload
+                                && msg.payload() == payload
                     )
             })
     };
@@ -68,8 +67,7 @@ fn dead_peer_unblocks_sender() -> bool {
             let setup = if let Some(sender) = sched.tasks.get_mut(&SENDER) {
                 sender.state = TaskState::Sending {
                     target: DEAD_PEER,
-                    msg_ptr: INVALID_RECV_PTR,
-                    msg_len: 1,
+                    delivery_id: super::next_delivery_id(),
                 };
                 true
             } else {
@@ -104,7 +102,8 @@ fn dead_peer_unblocks_sender() -> bool {
     drop(reaped);
     super::hart_local::ready::remove_from_all(SENDER);
     insert(RECEIVER, TEST_CELL + 2);
-    let followup = super::ipc_send(SENDER, RECEIVER, INVALID_RECV_PTR, 1) == Ok(1)
+    let payload = [0u8; 1];
+    let followup = super::ipc_send(SENDER, RECEIVER, payload.as_ptr() as usize, 1) == Ok(1)
         && super::SCHEDULER
             .lock()
             .as_ref()

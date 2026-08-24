@@ -45,20 +45,20 @@ const GPIO_IRQ_NOTIFY: u8 = 0xA0;
 /// Called as `vi_gpio_notify_irq` (extern "Rust") from `vi_aarch64_irq_handler`
 /// in `hal/arch/arm/src/aarch64/trap.rs` when GIC ID 39 (GPIO SPI 7) fires.
 ///
-/// Safe to call from IRQ context: does not acquire SCHEDULER; `ipc_send` uses
-/// its own internal lock.  Fire-and-forget: if the owner cell is not in `Recv`
-/// state the event is dropped (the cell re-polls GPIOMIS on its next recv).
+/// Uses `ipc_post_nonblock` (kernel wire-post) so TID 0 is never looked up
+/// as a task: the payload is already in kernel memory and no `TaskCopyView`
+/// is needed. Fire-and-forget: if the owner is not in Recv the event is
+/// dropped and the cell re-polls GPIOMIS on its next recv.
 #[no_mangle]
 pub extern "Rust" fn vi_gpio_notify_irq() {
     let Some(tid) = crate::resource_registry::lookup_mmio_owner(GPIO_MMIO_BASE) else {
-        return; // No cell currently owns GPIO — drop the interrupt.
+        return;
     };
     log::info!("[gpio-irq] IRQ fired — notifying GPIO owner tid={}", tid);
     let msg = [GPIO_IRQ_NOTIFY, 0x00, 0x00, 0x00];
-    // SAFETY: ipc_send copies 4 bytes from a stack buffer to the target cell's
-    // recv page.  On AArch64 EL1 can access EL0 pages in ViCell's SAS layout
-    // (no PAN on cortex-a57/a72 default).
-    let _ = crate::task::ipc_send(0, tid, msg.as_ptr() as usize, 4);
+    // Kernel-origin sender: use TID 0 as the producer identity. The receiver
+    // sees sender_tid=0 which its IRQ handler already expects.
+    let _ = crate::task::ipc_post_nonblock(0, tid, &msg);
 }
 
 #[cfg(target_arch = "aarch64")]
