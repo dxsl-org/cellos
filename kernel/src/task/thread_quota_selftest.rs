@@ -37,12 +37,14 @@ fn stack_charge_bytes() -> usize {
 }
 
 fn insert_parent() {
-    let parent = alloc::boxed::Box::new(Task::new(
+    let mut parent = alloc::boxed::Box::new(Task::new(
         PARENT_TID,
         CellId(QUOTA_CELL),
         "selftest",
         alloc::vec::Vec::new(),
     ));
+    parent.cell_generation = 1;
+    parent.root_tid = PARENT_TID;
     if let Some(sched) = super::SCHEDULER.lock().as_mut() {
         if (QUOTA_CELL as usize) < crate::memory::cell_quota::MAX_CELLS {
             let owner = api::cell_owner::CellOwner::new(QUOTA_CELL, 1, PARENT_TID as u64);

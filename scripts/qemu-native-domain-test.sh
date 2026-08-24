@@ -18,7 +18,7 @@ usage() {
     cat <<'USAGE'
 Usage: scripts/qemu-native-domain-test.sh --harts {1|2} --case <csv>
 
-Cases: switch, sas-fastpath, migration
+Cases: switch, sas-fastpath, migration, user-copy, user-copy-race
 
 Each requested case gets a separate fresh QEMU log directory. `migration`
 requires two harts; it asserts the domain-switch terminal from the cross-hart
@@ -60,13 +60,17 @@ declare -A seen=()
 for case_id in "${REQUESTED_CASES[@]}"; do
     [[ -n "$case_id" ]] || { echo "FAIL: empty case in --case" >&2; exit 2; }
     case "$case_id" in
-        switch|sas-fastpath|migration) ;;
+        switch|sas-fastpath|migration|user-copy|user-copy-race) ;;
         *) echo "FAIL: unknown native-domain case: $case_id" >&2; exit 2 ;;
     esac
     [[ -z "${seen[$case_id]:-}" ]] || { echo "FAIL: duplicate native-domain case: $case_id" >&2; exit 2; }
     seen[$case_id]=1
     if [[ "$case_id" == "migration" && "$HARTS" != "2" ]]; then
         echo "FAIL: migration requires --harts 2" >&2
+        exit 2
+    fi
+    if [[ "$case_id" == "user-copy-race" && "$HARTS" != "2" ]]; then
+        echo "FAIL: user-copy-race requires --harts 2" >&2
         exit 2
     fi
 done
@@ -85,6 +89,8 @@ marker_for() {
         switch) printf 'S22-RV64-SWITCH: PASS harts=%s' "$HARTS" ;;
         migration) printf 'S22-RV64-MIGRATION: PASS harts=2' ;;
         sas-fastpath) printf 'S22-RV64-SAS-FASTPATH: PASS roots=0 flushes=0 harts=%s' "$HARTS" ;;
+        user-copy) printf 'S22-RV64-COPY: PASS harts=%s' "$HARTS" ;;
+        user-copy-race) printf 'S22-RV64-COPY-RACE: PASS harts=2' ;;
     esac
 }
 terminal_pattern_for() {
@@ -92,6 +98,8 @@ terminal_pattern_for() {
         switch) printf '(^|\\] )S22-RV64-SWITCH: PASS harts=%s$' "$HARTS" ;;
         migration) printf '(^|\\] )S22-RV64-MIGRATION: PASS harts=2$' ;;
         sas-fastpath) printf '(^|\\] )S22-RV64-SAS-FASTPATH: PASS roots=0 flushes=0 harts=%s$' "$HARTS" ;;
+        user-copy) printf '(^|\\] )S22-RV64-COPY: PASS harts=%s$' "$HARTS" ;;
+        user-copy-race) printf '(^|\\] )S22-RV64-COPY-RACE: PASS harts=2$' ;;
     esac
 }
 assert_runtime_hart_count() {

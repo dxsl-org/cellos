@@ -45,12 +45,15 @@ const TEST_PKU_VALUE: u32 = 0xABCD_1234;
 /// Build a bare task with the given tid/cell and no caps. Only the fields this
 /// test reads/writes need to be meaningful; the task is never scheduled.
 fn mk_task(tid: usize, cell: u64) -> alloc::boxed::Box<Task> {
-    alloc::boxed::Box::new(Task::new(
+    let mut task = alloc::boxed::Box::new(Task::new(
         tid,
         CellId(cell),
         "selftest",
         alloc::vec::Vec::new(),
-    ))
+    ));
+    task.cell_generation = 1;
+    task.root_tid = tid;
+    task
 }
 
 /// Insert a task into the scheduler map (no ready-queue push — never scheduled).

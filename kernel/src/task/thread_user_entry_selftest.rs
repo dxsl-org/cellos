@@ -19,8 +19,7 @@ use crate::memory::{cell_quota, frame::FRAME_ALLOCATOR, paging};
 #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
 const PARENT_TID: usize = 9202;
 #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
-const TEST_CELL_ID: u64 = 1022;
-
+const TEST_CELL_ID: u64 = (crate::memory::cell_quota::MAX_CELLS - 5) as u64;
 #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
 const ENTRY: usize = 0x0001_4000;
 #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
@@ -30,13 +29,18 @@ const MSG: &[u8] = b"[selftest] THREAD-ENTRY arg=ok\n";
 
 #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
 fn insert_parent() {
-    let parent = Box::new(Task::new(
+    let mut parent = Box::new(Task::new(
         PARENT_TID,
         CellId(TEST_CELL_ID),
         "selftest",
         Vec::new(),
     ));
+    parent.cell_generation = 1;
+    parent.root_tid = PARENT_TID;
+    parent.spawn_cap = Some(super::cap::SpawnCap::new());
     if let Some(sched) = super::SCHEDULER.lock().as_mut() {
+        let owner = api::cell_owner::CellOwner::new(TEST_CELL_ID, 1, PARENT_TID as u64);
+        sched.publish_live_cell_owner(owner);
         sched.tasks.insert(PARENT_TID, parent);
     }
 }
@@ -44,11 +48,19 @@ fn insert_parent() {
 #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
 fn remove(tid: usize) {
     if let Some(sched) = super::SCHEDULER.lock().as_mut() {
-        sched.tasks.remove(&tid);
+        if let Some(task) = sched.tasks.remove(&tid) {
+            if (task.cell_id.0 as usize) < crate::memory::cell_quota::MAX_CELLS {
+                let owner = api::cell_owner::CellOwner::new(
+                    task.cell_id.0,
+                    task.cell_generation,
+                    task.root_tid as u64,
+                );
+                sched.clear_live_cell_owner_for_test(owner);
+            }
+        }
     }
     super::hart_local::ready::remove_from_all(tid);
 }
-
 #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
 fn reap() {
     let dead = super::SCHEDULER

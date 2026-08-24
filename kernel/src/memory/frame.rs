@@ -256,6 +256,12 @@ impl FrameAllocator {
     pub const fn page_size(&self) -> usize {
         PAGE_SIZE
     }
+    /// Byte range (start, end) occupied by the frame allocator bitmap storage.
+    pub fn bitmap_range(&self) -> (usize, usize) {
+        let start = self.bitmap.as_ptr() as usize;
+        let end = start + core::mem::size_of_val(self.bitmap);
+        (start, (end + PAGE_SIZE - 1) & !(PAGE_SIZE - 1))
+    }
     /// Returns `true` if frame `idx` is currently allocated (in use).
     ///
     /// Used by the snapshot serializer to enumerate only the allocated frames,

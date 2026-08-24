@@ -23,7 +23,7 @@ pub(crate) fn run_primary() -> bool {
         || !contains_shared_kind(SupervisorRangeKind::StaticText)
         || !contains_shared_kind(SupervisorRangeKind::StaticReadOnly)
         || !contains_shared_kind(SupervisorRangeKind::StaticWritable)
-        || shared_snapshot().len() != 4
+        || shared_snapshot().len() < 4
     {
         log::error!("S22-RV64-REGISTRY: FAIL");
         return false;

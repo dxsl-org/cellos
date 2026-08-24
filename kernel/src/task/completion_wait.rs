@@ -145,14 +145,15 @@ pub fn wait_completion(
         // wake request for a task that is not parked, and that request would
         // still be outstanding to cancel the *next* park.
         if queue.release(slot) {
-            return Ok(write_completion(
+            return write_completion(
+                caller_id,
                 out_ptr,
                 Completion {
                     slot,
                     source: api::completion::source::NET_RX,
                     result: mask as isize,
                 },
-            ));
+            );
         }
     }
 
@@ -162,7 +163,7 @@ pub fn wait_completion(
         if !is_net_rx {
             let _ = queue.release(slot);
         }
-        return Ok(write_completion(out_ptr, done));
+        return write_completion(caller_id, out_ptr, done);
     }
 
     loop {
@@ -183,7 +184,7 @@ pub fn wait_completion(
             if !is_net_rx {
                 let _ = queue.release(slot);
             }
-            return Ok(write_completion(out_ptr, done));
+            return write_completion(caller_id, out_ptr, done);
         }
 
         if !is_net_rx {
@@ -196,14 +197,15 @@ pub fn wait_completion(
                 .map(|at| super::system_ticks() as u64 >= at)
                 .unwrap_or(false);
             if expired && queue.release(slot) {
-                return Ok(write_completion(
+                return write_completion(
+                    caller_id,
                     out_ptr,
                     Completion {
                         slot,
                         source: api::completion::source::TIMER,
                         result: 0,
                     },
-                ));
+                );
             }
             continue;
         }
@@ -222,13 +224,13 @@ pub fn wait_completion(
             // leaving the Completing state.
             _ => {
                 return match queue.drain() {
-                    Some(done) => Ok(write_completion(out_ptr, done)),
+                    Some(done) => write_completion(caller_id, out_ptr, done),
                     None => Ok(0),
                 };
             }
         }
         if let Some(done) = queue.drain() {
-            return Ok(write_completion(out_ptr, done));
+            return write_completion(caller_id, out_ptr, done);
         }
     }
 }
@@ -237,17 +239,16 @@ pub fn wait_completion(
 ///
 /// Precondition: `out_ptr` has been through `validate_user_buf` for
 /// [`COMPLETION_LEN`] bytes in this call.
-fn write_completion(out_ptr: usize, done: Completion) -> usize {
+fn write_completion(caller_id: usize, out_ptr: usize, done: Completion) -> Result<usize, SyscallError> {
     let record = ViCompletion {
         slot: done.slot.index() as u32,
         source: done.source,
         result: done.result as i64,
     }
     .to_bytes();
-    // SAFETY: `out_ptr` is a non-null caller buffer validated for exactly
-    // COMPLETION_LEN bytes at entry to `wait_completion`, and `record` is a
-    // distinct kernel stack array of that same length, so the two cannot
-    // overlap. A byte copy has no alignment requirement.
-    unsafe { core::ptr::copy_nonoverlapping(record.as_ptr(), out_ptr as *mut u8, COMPLETION_LEN) };
-    1
+    let view = super::copy_glue::TaskCopyView::for_task(caller_id)
+        .ok_or(SyscallError::InvalidInput)?;
+    view.write_bytes(out_ptr, &record)
+        .map_err(|_| SyscallError::InvalidInput)?;
+    Ok(1)
 }

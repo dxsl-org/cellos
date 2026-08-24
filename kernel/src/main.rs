@@ -813,14 +813,51 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         feature = "test-hooks"
     ))]
     memory::domain_supervisor_registry::register(
-        heap_start,
-        heap_start
+        heap_virt,
+        heap_virt
             .checked_add(heap_size)
             .expect("kernel heap range overflow"),
         memory::domain_supervisor_registry::SupervisorRangeKind::KernelHeap,
         memory::domain_supervisor_registry::SupervisorRangeOwner::SharedKernel,
     )
     .expect("kernel heap registration must be unique");
+    #[cfg(all(
+        target_arch = "riscv64",
+        feature = "native-domains",
+        feature = "test-hooks"
+    ))]
+    if let Some(guard) = memory::frame::FRAME_ALLOCATOR.lock().as_ref() {
+        let (bm_start, bm_end) = guard.bitmap_range();
+        memory::domain_supervisor_registry::register(
+            bm_start,
+            bm_end,
+            memory::domain_supervisor_registry::SupervisorRangeKind::StaticWritable,
+            memory::domain_supervisor_registry::SupervisorRangeOwner::SharedKernel,
+        )
+        .expect("frame allocator bitmap registration must succeed");
+    }
+    #[cfg(all(
+        target_arch = "riscv64",
+        feature = "native-domains",
+        feature = "test-hooks"
+    ))]
+    if !task::domain_switch_tests::run_primary() {
+        log::error!("native-domain SAS scheduler fixture failed");
+    }
+    #[cfg(all(
+        target_arch = "riscv64",
+        feature = "native-domains",
+        feature = "test-hooks"
+    ))]
+    task::context_handoff_selftest::run_primary();
+    #[cfg(all(target_arch = "riscv64", feature = "test-hooks"))]
+    task::retirement_selftest::run_primary();
+    #[cfg(all(
+        target_arch = "riscv64",
+        feature = "native-domains",
+        feature = "test-hooks"
+    ))]
+    task::user_copy_tests::run_primary();
 
     // 8. Spawn Embedded Init
     // RV32 Nano bring-up: no init binary — boot to idle loop.
@@ -833,12 +870,6 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     {
         log_info("Spawning Embedded Init...");
 
-        // Enable SUM (Supervisor User Memory access) bit in sstatus (RISC-V only).
-        // ARM64 EL1 can always access EL0 pages — no equivalent bit needed.
-        #[cfg(target_arch = "riscv64")]
-        unsafe {
-            core::arch::asm!("csrs sstatus, {0}", in(reg) 0x40000);
-        }
 
         // Power-on self-test of the Ed25519 verify primitive (RFC 8032 TEST 1 +
         // tamper-negative) before it is trusted to authenticate the signed
@@ -965,22 +996,6 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             }
         }
     }
-    #[cfg(all(
-        target_arch = "riscv64",
-        feature = "native-domains",
-        feature = "test-hooks"
-    ))]
-    if !task::domain_switch_tests::run_primary() {
-        log::error!("native-domain SAS scheduler fixture failed");
-    }
-    #[cfg(all(
-        target_arch = "riscv64",
-        feature = "native-domains",
-        feature = "test-hooks"
-    ))]
-    task::context_handoff_selftest::run_primary();
-    #[cfg(all(target_arch = "riscv64", feature = "test-hooks"))]
-    task::retirement_selftest::run_primary();
 
     // Ring-3 smoke test: spawn a minimal U-mode task that logs and exits.
     // RISC-V only — task writes RISC-V machine code directly.

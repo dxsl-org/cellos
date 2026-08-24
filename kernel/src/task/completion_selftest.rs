@@ -35,12 +35,14 @@ const CELL_TWO: u64 = 9402;
 /// Put a synthetic task in the table. Shared with the NET_RX self-test, which
 /// needs the same scaffolding to reach a real queue.
 pub(super) fn insert(tid: usize, cell: u64) {
-    let task = alloc::boxed::Box::new(Task::new(
+    let mut task = alloc::boxed::Box::new(Task::new(
         tid,
         CellId(cell),
         "cq-selftest",
         alloc::vec::Vec::new(),
     ));
+    task.cell_generation = 1;
+    task.root_tid = tid;
     if let Some(sched) = super::SCHEDULER.lock().as_mut() {
         if (cell as usize) < crate::memory::cell_quota::MAX_CELLS {
             let owner = api::cell_owner::CellOwner::new(cell, 1, tid as u64);

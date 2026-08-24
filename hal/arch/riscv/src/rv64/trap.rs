@@ -6,7 +6,7 @@ pub use hal_arch_trait::ViTrapFrame;
 use hal_arch_trait::{
     vi_current_cell_id, vi_handle_riscv_external_irq, vi_riscv_plic_context,
     vi_terminate_on_user_trap_fault, vi_timer_tick, vi_tlb_shootdown_test_fault,
-    ViCell_syscall_dispatch,
+    vi_user_copy_guard_fault, ViCell_syscall_dispatch,
 };
 
 // External assembly functions
@@ -125,7 +125,18 @@ pub extern "C" fn vi_trap_handler(frame: &mut ViTrapFrame) {
                 frame.sepc += 4;
             }
             _ => {
-                // Illegal instruction, page faults, or other unhandled exception.
+                // Recoverable user-copy guard faults come FIRST: kernel code
+                // inside an armed copy window takes load/store page faults on
+                // purpose-tested or racing user mappings, and the hook rewrites
+                // sepc to the copy helper's error landing pad. Everything that
+                // the hook does not claim keeps its existing classification.
+                #[cfg(target_arch = "riscv64")]
+                if matches!(code, 12 | 13 | 15)
+                    && (frame.sstatus & 0x100) != 0
+                    && unsafe { vi_user_copy_guard_fault(frame) }
+                {
+                    return;
+                }
                 //
                 // Distinguish U-mode Cell faults from S-mode kernel faults using SPP
                 // (sstatus bit 8): SPP=0 means the trap came from U-mode (a Cell).

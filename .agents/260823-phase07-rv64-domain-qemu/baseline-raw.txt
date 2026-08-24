@@ -1,0 +1,993 @@
+   Compiling hal-arch-trait v0.1.0 (/home/dmin/cellos/hal/traits/arch)
+   Compiling cellos-boards v0.2.0 (/home/dmin/cellos/boards)
+   Compiling api v0.1.0 (/home/dmin/cellos/libs/api)
+   Compiling cellos-kernel v0.2.1 (/home/dmin/cellos/kernel)
+   Compiling hal-riscv v0.2.0 (/home/dmin/cellos/hal/arch/riscv)
+   Compiling hal-core v0.2.0 (/home/dmin/cellos/hal/core)
+warning: cellos-kernel@0.2.1: Could not strip init (tool unavailable or failed); retained unstripped input
+warning: cellos-kernel@0.2.1: Could not strip kernel_fs.img (tool unavailable or failed); retained unstripped input
+error[E0463]: can't find crate for `test`
+   --> kernel/src/cell/hotswap.rs:468:5
+    |
+467 |       #[test]
+    |       ------- in this attribute macro expansion
+468 | /     fn stale_reservation_cannot_restore_a_new_freeze() {
+469 | |         const TID: usize = usize::MAX - 1;
+470 | |         let old = CapSet {
+471 | |             spawn: true,
+...   |
+513 | |         ));
+514 | |     }
+    | |_____^ can't find crate
+
+error[E0463]: can't find crate for `test`
+   --> kernel/src/cell/service_registry.rs:161:5
+    |
+160 |       #[test]
+    |       ------- in this attribute macro expansion
+161 | /     fn register_then_lookup() {
+162 | |         assert!(register(api::syscall::service::VFS, 4));
+163 | |         assert_eq!(lookup(api::syscall::service::VFS), Some(4));
+164 | |     }
+    | |_____^ can't find crate
+
+error[E0463]: can't find crate for `test`
+   --> kernel/src/cell/service_registry.rs:167:5
+    |
+166 |       #[test]
+    |       ------- in this attribute macro expansion
+167 | /     fn reject_zero_tid() {
+168 | |         assert!(!register(api::syscall::service::NET, 0));
+169 | |         assert_eq!(lookup(api::syscall::service::NET), None);
+170 | |     }
+    | |_____^ can't find crate
+
+error[E0463]: can't find crate for `test`
+   --> kernel/src/cell/service_registry.rs:173:5
+    |
+172 |       #[test]
+    |       ------- in this attribute macro expansion
+173 | /     fn reregister_updates_tid() {
+174 | |         register(api::syscall::service::INPUT, 7);
+175 | |         register(api::syscall::service::INPUT, 9);
+176 | |         assert_eq!(lookup(api::syscall::service::INPUT), Some(9));
+177 | |     }
+    | |_____^ can't find crate
+
+error[E0463]: can't find crate for `test`
+   --> kernel/src/cell/service_registry.rs:180:5
+    |
+179 |       #[test]
+    |       ------- in this attribute macro expansion
+180 | /     fn clear_tid_removes_dead_provider() {
+181 | |         register(api::syscall::service::CONFIG, 12);
+182 | |         clear_tid(12);
+183 | |         assert_eq!(lookup(api::syscall::service::CONFIG), None);
+184 | |     }
+    | |_____^ can't find crate
+
+error[E0463]: can't find crate for `test`
+   --> kernel/src/cell/service_registry.rs:187:5
+    |
+186 |       #[test]
+    |       ------- in this attribute macro expansion
+187 | /     fn pause_hides_only_the_expected_provider() {
+188 | |         const TEST_SERVICE: u16 = 60_000;
+189 | |         register(TEST_SERVICE, 21);
+190 | |         assert!(!pause(TEST_SERVICE, 20));
+...   |
+196 | |         assert!(is_paused_tid(21));
+197 | |     }
+    | |_____^ can't find crate
+
+error[E0463]: can't find crate for `test`
+   --> kernel/src/cell/service_registry.rs:200:5
+    |
+199 |       #[test]
+    |       ------- in this attribute macro expansion
+200 | /     fn register_reactivates_a_paused_service() {
+201 | |         const TEST_SERVICE: u16 = 60_001;
+202 | |         register(TEST_SERVICE, 31);
+203 | |         assert!(pause(TEST_SERVICE, 31));
+204 | |         assert!(register(TEST_SERVICE, 31));
+205 | |         assert_eq!(lookup(TEST_SERVICE), Some(31));
+206 | |     }
+    | |_____^ can't find crate
+
+error[E0463]: can't find crate for `test`
+   --> kernel/src/cell/service_registry.rs:209:5
+    |
+208 |       #[test]
+    |       ------- in this attribute macro expansion
+209 | /     fn commit_requires_exact_paused_provider() {
+210 | |         const TEST_SERVICE: u16 = 60_002;
+211 | |         register(TEST_SERVICE, 41);
+212 | |         assert!(!commit_paused(TEST_SERVICE, 40, 42));
+...   |
+217 | |         assert_eq!(lookup(TEST_SERVICE), Some(42));
+218 | |     }
+    | |_____^ can't find crate
+
+error[E0463]: can't find crate for `test`
+   --> kernel/src/cell/state_stash.rs:115:5
+    |
+114 |       #[test]
+    |       ------- in this attribute macro expansion
+115 | /     fn stash_restore_round_trip() {
+116 | |         let key = 42u64;
+117 | |         let data = [1u8, 2, 3, 4, 5];
+118 | |         assert_eq!(stash(key, &data), 5);
+...   |
+121 | |         assert_eq!(out, data);
+122 | |     }
+    | |_____^ can't find crate
+
+error[E0463]: can't find crate for `test`
+   --> kernel/src/cell/state_stash.rs:125:5
+    |
+124 |       #[test]
+    |       ------- in this attribute macro expansion
+125 | /     fn restore_missing_key_returns_zero() {
+126 | |         let mut out = [0u8; 8];
+127 | |         assert_eq!(restore(0xDEAD_0000_0000_0001, &mut out), 0);
+128 | |     }
+    | |_____^ can't find crate
+
+error[E0463]: can't find crate for `test`
+   --> kernel/src/cell/state_stash.rs:131:5
+    |
+130 |       #[test]
+    |       ------- in this attribute macro expansion
+131 | /     fn stash_overwrites_previous() {
+132 | |         let key = 7u64;
+133 | |         stash(key, &[9u8; 4]);
+134 | |         stash(key, &[1u8, 2]);
+...   |
+137 | |         assert_eq!(&out[..2], &[1u8, 2]);
+138 | |     }
+    | |_____^ can't find crate
+
+error[E0463]: can't find crate for `test`
+  --> kernel/src/loader/launch_profile/tests.rs:19:1
+   |
+18 |   #[test]
+   |   ------- in this attribute macro expansion
+19 | / fn shell_has_no_mem_launch_edge() {
+20 | |     assert!(
+21 | |         authorize(caller("shell", false, false), LaunchRoute::Mem, "/mem/demo").is_none(),
+22 | |         "shell mem launches must fail closed"
+23 | |     );
+24 | | }
+   | |_^ can't find crate
+
+error[E0463]: can't find crate for `test`
+  --> kernel/src/loader/launch_profile/tests.rs:27:1
+   |
+26 |   #[test]
+   |   ------- in this attribute macro expansion
+27 | / fn shell_service_ipc_tool_edge_is_capability_free() {
+28 | |     assert_eq!(
+29 | |         shell_edge(LaunchRoute::Path, "/bin/httpd").child_ceiling,
+30 | |         CapSet::EMPTY
+...  |
+55 | |     );
+56 | | }
+   | |_^ can't find crate
+
+error[E0463]: can't find crate for `test`
+  --> kernel/src/loader/launch_profile/tests.rs:59:1
+   |
+58 |   #[test]
+   |   ------- in this attribute macro expansion
+59 | / fn hardware_bus_demo_edges_are_class_scoped() {
+60 | |     let sensor = shell_edge(LaunchRoute::Path, "/bin/sensor-demo");
+61 | |     let spi = shell_edge(LaunchRoute::Path, "/bin/spi-demo");
+62 | |     assert_eq!(
+...  |
+77 | |     );
+78 | | }
+   | |_^ can't find crate
+
+error[E0463]: can't find crate for `test`
+  --> kernel/src/loader/launch_profile/tests.rs:81:1
+   |
+80 |   #[test]
+   |   ------- in this attribute macro expansion
+81 | / fn hotswap_cli_is_shell_only() {
+82 | |     for route in [LaunchRoute::Path, LaunchRoute::Elf] {
+83 | |         assert!(
+84 | |             authorize(caller("tool-spawn", true, false), route, "/bin/hotswap").is_none(),
+...  |
+96 | | }
+   | |_^ can't find crate
+
+error[E0463]: can't find crate for `test`
+   --> kernel/src/loader/launch_profile/tests.rs:99:1
+    |
+ 98 |   #[test]
+    |   ------- in this attribute macro expansion
+ 99 | / fn capability_bearing_elf_route_requires_lifecycle_authority() {
+100 | |     assert_eq!(
+101 | |         authorize(caller("init", true, false), LaunchRoute::Elf, "/bin/vfs")
+102 | |             .expect("init lifecycle authority keeps the boot-service edge")
+...   |
+114 | |     );
+115 | | }
+    | |_^ can't find crate
+
+error[E0463]: can't find crate for `test`
+   --> kernel/src/loader/launch_profile/tests.rs:118:1
+    |
+117 |   #[test]
+    |   ------- in this attribute macro expansion
+118 | / fn init_edge_reuses_boot_ceiling_for_boot_services() {
+119 | |     let profile = authorize(caller("init", true, false), LaunchRoute::Path, "/bin/vfs")
+120 | |         .expect("init vfs edge exists");
+121 | |     assert_eq!(
+...   |
+127 | |     assert_eq!(kms.child_ceiling, CapSet::EMPTY);
+128 | | }
+    | |_^ can't find crate
+
+error[E0463]: can't find crate for `test`
+   --> kernel/src/loader/launch_profile/tests.rs:131:1
+    |
+130 |   #[test]
+    |   ------- in this attribute macro expansion
+131 | / fn hypha_fixed_edges_remain_exact() {
+132 | |     let hypha = caller("hypha", true, false);
+133 | |     assert!(authorize(hypha, LaunchRoute::Path, "/bin/llm-gateway").is_some());
+134 | |     assert!(authorize(hypha, LaunchRoute::Path, "/bin/tool-fs").is_some());
+...   |
+137 | |     assert!(authorize(hypha, LaunchRoute::Path, "/bin/vfs").is_none());
+138 | | }
+    | |_^ can't find crate
+
+error[E0463]: can't find crate for `test`
+   --> kernel/src/loader/launch_profile/tests.rs:141:1
+    |
+140 |   #[test]
+    |   ------- in this attribute macro expansion
+141 | / fn supervisor_requires_supervisor_cap_for_hotswap_route() {
+142 | |     assert!(
+143 | |         authorize(
+144 | |             caller("supervisor", true, false),
+...   |
+156 | |     .is_some());
+157 | | }
+    | |_^ can't find crate
+
+error[E0463]: can't find crate for `test`
+   --> kernel/src/loader/spawn_request.rs:83:5
+    |
+ 82 |       #[test]
+    |       ------- in this attribute macro expansion
+ 83 | /     fn caller_authority_and_child_ceiling_are_independent() {
+ 84 | |         let caller_authority = CapSet {
+ 85 | |             spawn: true,
+ 86 | |             network: true,
+...   |
+102 | |         );
+103 | |     }
+    | |_____^ can't find crate
+
+error[E0463]: can't find crate for `test`
+   --> kernel/src/memory/address_space_tests.rs:128:5
+    |
+127 |       #[test]
+    |       ------- in this attribute macro expansion
+128 | /     fn user_mapping_rejects_kernel_and_write_execute_pages() {
+129 | |         assert_eq!(
+130 | |             validate_user_mapping(USER_LIMIT, flags()),
+131 | |             Err(AddressSpaceError::InvalidMapping)
+...   |
+139 | |         );
+140 | |     }
+    | |_____^ can't find crate
+
+error[E0463]: can't find crate for `test`
+   --> kernel/src/memory/frame.rs:397:5
+    |
+396 |       #[test]
+    |       ------- in this attribute macro expansion
+397 | /     fn accounting_changes_only_on_bitmap_transitions() {
+398 | |         let mut allocator = allocator(32);
+399 | |         let frame = allocator.allocate_frame().expect("single frame");
+400 | |         assert_eq!(allocator.used_frames(), 1);
+...   |
+413 | |         assert_eq!(allocator.total_frames(), allocator.free_frames());
+414 | |     }
+    | |_____^ can't find crate
+
+error[E0463]: can't find crate for `test`
+   --> kernel/src/memory/frame.rs:417:5
+    |
+416 |       #[test]
+    |       ------- in this attribute macro expansion
+417 | /     fn contiguous_and_aligned_allocations_account_exactly() {
+418 | |         let mut allocator = allocator(32);
+419 | |         allocator.allocate_contiguous(3).expect("contiguous run");
+420 | |         assert_eq!(allocator.used_frames(), 3);
+...   |
+429 | |         );
+430 | |     }
+    | |_____^ can't find crate
+
+error[E0463]: can't find crate for `test`
+  --> kernel/src/memory/pin_tests.rs:15:1
+   |
+14 |   #[test]
+   |   ------- in this attribute macro expansion
+15 | / fn refuses_an_empty_or_overflowing_range() {
+16 | |     assert_eq!(pin(arena(0), 0, 900), Err(PinError::InvalidRange));
+17 | |     assert_eq!(pin(usize::MAX - 8, 64, 900), Err(PinError::InvalidRange));
+18 | | }
+   | |_^ can't find crate
+
+error[E0463]: can't find crate for `test`
+  --> kernel/src/memory/pin_tests.rs:21:1
+   |
+20 |   #[test]
+   |   ------- in this attribute macro expansion
+21 | / fn a_pinned_region_reports_its_holder() {
+22 | |     let base = arena(1);
+23 | |     assert_eq!(pin(base, PAGE_SIZE, 901), Ok(()));
+24 | |     let held = holder_of(base, PAGE_SIZE).expect("region must report as pinned");
+...  |
+29 | |     assert!(holder_of(base, PAGE_SIZE).is_none());
+30 | | }
+   | |_^ can't find crate
+
+error[E0463]: can't find crate for `test`
+  --> kernel/src/memory/pin_tests.rs:33:1
+   |
+32 |   #[test]
+   |   ------- in this attribute macro expansion
+33 | / fn a_partial_overlap_still_counts_as_pinned() {
+34 | |     let base = arena(2);
+...  |
+40 | |     acknowledge(902);
+41 | | }
+   | |_^ can't find crate
+
+error[E0463]: can't find crate for `test`
+  --> kernel/src/memory/pin_tests.rs:44:1
+   |
+43 |   #[test]
+   |   ------- in this attribute macro expansion
+44 | / fn an_unaligned_range_pins_every_page_it_touches() {
+45 | |     let base = arena(3);
+46 | |     assert_eq!(pin(base + 8, 16, 903), Ok(()));
+47 | |     let held = holder_of(base, PAGE_SIZE).expect("head page must be covered");
+...  |
+50 | |     acknowledge(903);
+51 | | }
+   | |_^ can't find crate
+
+error[E0463]: can't find crate for `test`
+  --> kernel/src/memory/pin_tests.rs:54:1
+   |
+53 |   #[test]
+   |   ------- in this attribute macro expansion
+54 | / fn repinning_the_same_range_reuses_the_slot() {
+55 | |     let base = arena(4);
+56 | |     assert_eq!(pin(base, PAGE_SIZE, 904), Ok(()));
+57 | |     assert_eq!(pin(base, PAGE_SIZE, 904), Ok(()));
+...  |
+61 | |     assert!(holder_of(base, PAGE_SIZE).is_none());
+62 | | }
+   | |_^ can't find crate
+
+error[E0463]: can't find crate for `test`
+  --> kernel/src/memory/pin_tests.rs:65:1
+   |
+64 |   #[test]
+   |   ------- in this attribute macro expansion
+65 | / fn a_single_owner_cannot_exhaust_the_table() {
+66 | |     let base = arena(5);
+67 | |     for i in 0..MAX_PINS_PER_TASK {
+68 | |         assert_eq!(pin(base + i * PAGE_SIZE, PAGE_SIZE, 905), Ok(()));
+...  |
+75 | |     assert!(holder_of(base, PAGE_SIZE).is_none());
+76 | | }
+   | |_^ can't find crate
+
+error[E0463]: can't find crate for `test`
+  --> kernel/src/memory/pin_tests.rs:79:1
+   |
+78 |   #[test]
+   |   ------- in this attribute macro expansion
+79 | / fn death_quarantines_rather_than_releases() {
+80 | |     let base = arena(6);
+81 | |     assert_eq!(pin(base, 2 * PAGE_SIZE, 906), Ok(()));
+82 | |     assert_eq!(quarantine_task(906), 1);
+...  |
+94 | |     assert_eq!(quarantined_pages(), before);
+95 | | }
+   | |_^ can't find crate
+
+error[E0463]: can't find crate for `test`
+   --> kernel/src/memory/pin_tests.rs:98:1
+    |
+ 97 |   #[test]
+    |   ------- in this attribute macro expansion
+ 98 | / fn an_acknowledgement_before_death_leaves_nothing_to_quarantine() {
+ 99 | |     let base = arena(7);
+100 | |     assert_eq!(pin(base, PAGE_SIZE, 907), Ok(()));
+101 | |     assert!(acknowledge(907).is_empty());
+...   |
+104 | |     assert!(holder_of(base, PAGE_SIZE).is_none());
+105 | | }
+    | |_^ can't find crate
+
+error[E0463]: can't find crate for `test`
+   --> kernel/src/memory/pin_tests.rs:108:1
+    |
+107 |   #[test]
+    |   ------- in this attribute macro expansion
+108 | / fn only_frames_the_reaper_withheld_are_ever_released() {
+109 | |     // A range pinned but never handed to the quarantine — an MMIO window a
+110 | |     // driver authorised for DMA, say — must not come back as frames to free.
+111 | |     let base = arena(8);
+...   |
+115 | |     assert!(holder_of(base, PAGE_SIZE).is_none());
+116 | | }
+    | |_^ can't find crate
+
+error[E0463]: can't find crate for `test`
+   --> kernel/src/memory/pin_tests.rs:119:1
+    |
+118 |   #[test]
+    |   ------- in this attribute macro expansion
+119 | / fn quarantine_and_acknowledgement_are_per_owner() {
+120 | |     let mine = arena(9);
+121 | |     let theirs = arena(10);
+122 | |     assert_eq!(pin(mine, PAGE_SIZE, 909), Ok(()));
+...   |
+129 | |     assert_eq!(acknowledge(910), alloc::vec![(theirs, 1)]);
+130 | | }
+    | |_^ can't find crate
+
+error[E0463]: can't find crate for `test`
+   --> kernel/src/memory/pin_tests.rs:133:1
+    |
+132 |   #[test]
+    |   ------- in this attribute macro expansion
+133 | / fn frames_are_charged_to_the_pin_holder_not_the_dead_owner() {
+134 | |     // A driver cell authorises DMA against another cell's buffer. When that
+135 | |     // other cell dies, the driver's acknowledgement is the one that counts.
+136 | |     let base = arena(11);
+...   |
+144 | |     assert_eq!(acknowledge(driver), alloc::vec![(base, 1)]);
+145 | | }
+    | |_^ can't find crate
+
+error[E0463]: can't find crate for `test`
+   --> kernel/src/memory/pin_tests.rs:148:1
+    |
+147 |   #[test]
+    |   ------- in this attribute macro expansion
+148 | / fn vfs_release_is_exact_to_the_request_and_target() {
+149 | |     let base = arena(12);
+150 | |     assert_eq!(pin_vfs_lease(base, PAGE_SIZE, 912, 301, 7, 1), Ok(()));
+151 | |     assert_eq!(release_vfs_lease(301, 913, 1), alloc::vec![]);
+...   |
+156 | |     assert!(holder_of(base, PAGE_SIZE).is_none());
+157 | | }
+    | |_^ can't find crate
+
+error[E0463]: can't find crate for `test`
+   --> kernel/src/memory/pin_tests.rs:160:1
+    |
+159 |   #[test]
+    |   ------- in this attribute macro expansion
+160 | / fn owner_death_pending_revokes_until_the_matching_vfs_release() {
+161 | |     let base = arena(13);
+162 | |     assert_eq!(pin_vfs_lease(base, PAGE_SIZE, 913, 302, 8, 9), Ok(()));
+163 | |     assert!(mark_vfs_lease_pending_revoke(302, 913, 9));
+...   |
+173 | |     assert_eq!(quarantined_pages(), before);
+174 | | }
+    | |_^ can't find crate
+
+error[E0463]: can't find crate for `test`
+   --> kernel/src/memory/pin_tests.rs:177:1
+    |
+176 |   #[test]
+    |   ------- in this attribute macro expansion
+177 | / fn smp_vfs_holder_release_before_reaper_transfer_leaves_no_orphan() {
+...   |
+193 | |     assert!(holder_of(base, PAGE_SIZE).is_none());
+194 | | }
+    | |_^ can't find crate
+
+error[E0463]: can't find crate for `test`
+   --> kernel/src/memory/pin_tests.rs:197:1
+    |
+196 |   #[test]
+    |   ------- in this attribute macro expansion
+197 | / fn dead_vfs_holder_releases_every_quarantined_lease_it_held() {
+198 | |     let first = arena(14);
+199 | |     let second = arena(15);
+200 | |     assert_eq!(pin_vfs_lease(first, PAGE_SIZE, 914, 303, 9, 1), Ok(()));
+...   |
+209 | |     assert!(holder_of(second, PAGE_SIZE).is_none());
+210 | | }
+    | |_^ can't find crate
+
+error[E0463]: can't find crate for `test`
+   --> kernel/src/memory/pin_tests.rs:213:1
+    |
+212 |   #[test]
+    |   ------- in this attribute macro expansion
+213 | / fn vfs_owner_query_filters_by_overlapping_owner() {
+214 | |     let first = arena(16);
+215 | |     let second = arena(17);
+216 | |     assert_eq!(pin_vfs_lease(first, PAGE_SIZE, 916, 304, 11, 1), Ok(()));
+...   |
+224 | |     assert_eq!(release_vfs_lease(305, 917, 2), alloc::vec![]);
+225 | | }
+    | |_^ can't find crate
+
+error[E0463]: can't find crate for `test`
+  --> kernel/src/resource_registry_tests.rs:13:1
+   |
+12 |   #[test]
+   |   ------- in this attribute macro expansion
+13 | / fn mmio_ranges_reject_zero_length_and_overflow() {
+14 | |     assert_eq!(checked_mmio_end(0x1000, 0), Err(ViError::InvalidInput));
+15 | |     assert_eq!(checked_mmio_end(usize::MAX, 2), Err(ViError::InvalidInput));
+16 | |     assert_eq!(checked_mmio_end(0x1000, 0x1000), Ok(0x2000));
+17 | | }
+   | |_^ can't find crate
+
+error[E0463]: can't find crate for `test`
+  --> kernel/src/resource_registry_tests.rs:20:1
+   |
+19 |   #[test]
+   |   ------- in this attribute macro expansion
+20 | / fn controller_classes_only_authorize_their_own_window() {
+21 | |     assert!(static_range_allowed(
+22 | |         BCM_WINDOWS,
+23 | |         0x3F80_4000,
+...  |
+44 | |     ));
+45 | | }
+   | |_^ can't find crate
+
+error[E0463]: can't find crate for `test`
+  --> kernel/src/resource_registry_tests.rs:48:1
+   |
+47 |   #[test]
+   |   ------- in this attribute macro expansion
+48 | / fn controller_grants_cannot_escape_or_reuse_gpio_authority() {
+49 | |     assert!(!static_range_allowed(
+50 | |         BCM_WINDOWS,
+51 | |         0x3F80_4000,
+...  |
+60 | |     ));
+61 | | }
+   | |_^ can't find crate
+
+error[E0463]: can't find crate for `test`
+  --> kernel/src/resource_registry_tests.rs:64:1
+   |
+63 |   #[test]
+   |   ------- in this attribute macro expansion
+64 | / fn pcie_bar_windows_reject_unbounded_or_misaligned_authority() {
+65 | |     assert!(valid_pcie_bar_window(0xF000_0000, 0x20_000));
+66 | |     assert!(!valid_pcie_bar_window(0, 0x4000));
+67 | |     assert!(!valid_pcie_bar_window(0xF000_0000, 0));
+...  |
+71 | |     assert!(!valid_pcie_bar_window(usize::MAX - 0xFFF, 0x1000));
+72 | | }
+   | |_^ can't find crate
+
+error[E0463]: can't find crate for `test`
+   --> kernel/src/sha256.rs:184:5
+    |
+183 |       #[test]
+    |       ------- in this attribute macro expansion
+184 | /     fn nist_empty() {
+185 | |         // SHA-256("") — FIPS 180-4 test vector.
+186 | |         assert_eq!(
+187 | |             hex(&sha256(b"")),
+188 | |             "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+189 | |         );
+190 | |     }
+    | |_____^ can't find crate
+
+error[E0463]: can't find crate for `test`
+   --> kernel/src/sha256.rs:193:5
+    |
+192 |       #[test]
+    |       ------- in this attribute macro expansion
+193 | /     fn nist_abc() {
+194 | |         // SHA-256("abc") — FIPS 180-4 test vector.
+195 | |         assert_eq!(
+196 | |             hex(&sha256(b"abc")),
+197 | |             "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+198 | |         );
+199 | |     }
+    | |_____^ can't find crate
+
+error[E0463]: can't find crate for `test`
+   --> kernel/src/sha256.rs:202:5
+    |
+201 |       #[test]
+    |       ------- in this attribute macro expansion
+202 | /     fn nist_two_block() {
+203 | |         // 56 bytes — forces the two-block padding path (rem.len() >= 56).
+204 | |         let msg = b"abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq";
+205 | |         assert_eq!(
+...   |
+208 | |         );
+209 | |     }
+    | |_____^ can't find crate
+
+error[E0463]: can't find crate for `test`
+   --> kernel/src/snapshot.rs:414:5
+    |
+413 |       #[test]
+    |       ------- in this attribute macro expansion
+414 | /     fn snapshot_header_round_trips() {
+415 | |         let h = valid_header();
+416 | |         assert_eq!(core::mem::size_of::<SnapshotHeader>(), 40);
+417 | |         let bytes = unsafe {
+...   |
+424 | |         assert!(validate_header(&h));
+425 | |     }
+    | |_____^ can't find crate
+
+error[E0463]: can't find crate for `test`
+   --> kernel/src/snapshot.rs:428:5
+    |
+427 |       #[test]
+    |       ------- in this attribute macro expansion
+428 | /     fn snapshot_invalidation_on_hash_mismatch() {
+429 | |         let mut h = valid_header();
+430 | |         h.kernel_hash = h.kernel_hash.wrapping_add(1);
+431 | |         assert!(!validate_header(&h));
+432 | |     }
+    | |_____^ can't find crate
+
+error[E0463]: can't find crate for `test`
+   --> kernel/src/snapshot.rs:435:5
+    |
+434 |       #[test]
+    |       ------- in this attribute macro expansion
+435 | /     fn snapshot_invalidation_on_magic_mismatch() {
+436 | |         let mut h = valid_header();
+437 | |         h.magic = 0xDEAD_BEEF;
+438 | |         assert!(!validate_header(&h));
+439 | |     }
+    | |_____^ can't find crate
+
+error[E0463]: can't find crate for `test`
+   --> kernel/src/snapshot.rs:442:5
+    |
+441 |       #[test]
+    |       ------- in this attribute macro expansion
+442 | /     fn snapshot_invalidation_on_version_mismatch() {
+443 | |         let mut h = valid_header();
+444 | |         h.version = h.version.wrapping_add(1);
+445 | |         assert!(!validate_header(&h));
+446 | |     }
+    | |_____^ can't find crate
+
+error[E0463]: can't find crate for `test`
+   --> kernel/src/task/cap.rs:452:5
+    |
+451 |       #[test]
+    |       ------- in this attribute macro expansion
+452 | /     fn manifest_maps_i2c_and_spi_to_distinct_mmio_classes() {
+453 | |         let i2c = api::manifest::CellManifest::with_all(
+454 | |             false,
+455 | |             false,
+...   |
+490 | |         );
+491 | |     }
+    | |_____^ can't find crate
+
+error[E0463]: can't find crate for `test`
+   --> kernel/src/task/cap.rs:494:5
+    |
+493 |       #[test]
+    |       ------- in this attribute macro expansion
+494 | /     fn intersect_is_monotonic_downgrade() {
+495 | |         let spawner = CapSet {
+496 | |             block_io: false,
+497 | |             network: true,
+...   |
+519 | |         assert_eq!(g.block_regions, 0b010);
+520 | |     }
+    | |_____^ can't find crate
+
+error[E0463]: can't find crate for `test`
+   --> kernel/src/task/cap.rs:523:5
+    |
+522 |       #[test]
+    |       ------- in this attribute macro expansion
+523 | /     fn all_intersect_child_is_child() {
+524 | |         let child = CapSet {
+525 | |             block_io: true,
+526 | |             network: false,
+...   |
+534 | |         assert_eq!(child.intersect(CapSet::ALL), child);
+535 | |     }
+    | |_____^ can't find crate
+
+error[E0463]: can't find crate for `test`
+   --> kernel/src/task/cap.rs:538:5
+    |
+537 |       #[test]
+    |       ------- in this attribute macro expansion
+538 | /     fn vfs_path_request_adds_cell_store_region() {
+539 | |         let requested = CapSet {
+540 | |             block_io: true,
+541 | |             block_regions: 0b111,
+...   |
+545 | |         assert_eq!(requested.block_regions, 0b1111);
+546 | |     }
+    | |_____^ can't find crate
+
+error[E0463]: can't find crate for `test`
+   --> kernel/src/task/cap.rs:549:5
+    |
+548 |       #[test]
+    |       ------- in this attribute macro expansion
+549 | /     fn privileged_path_cap_bounded_by_ceiling() {
+...   |
+568 | |         );
+569 | |     }
+    | |_____^ can't find crate
+
+error[E0463]: can't find crate for `test`
+   --> kernel/src/task/cap.rs:572:5
+    |
+571 |       #[test]
+    |       ------- in this attribute macro expansion
+572 | /     fn granted_protection_class_matches_legacy_tier_semantics() {
+573 | |         let untrusted_caps = CapSet::EMPTY;
+574 | |         let trusted_caps = CapSet {
+575 | |             block_io: true,
+...   |
+596 | |         );
+597 | |     }
+    | |_____^ can't find crate
+
+error[E0463]: can't find crate for `test`
+   --> kernel/src/task/hart_local.rs:406:5
+    |
+405 |       #[test]
+    |       ------- in this attribute macro expansion
+406 | /     fn kernel_panic_with_cell_attribution_cannot_enter_deferred_retirement() {
+407 | |         // Model a kernel panic while SCHEDULER is held for Cell 71: attribution
+408 | |         // must not be mistaken for a U-mode execution proof.
+409 | |         assert!(DeferredFault::from_origin(FaultOrigin::KernelPanic, 9, 71, 3, 0, 0, 0).is_none());
+410 | |     }
+    | |_____^ can't find crate
+
+error[E0463]: can't find crate for `test`
+   --> kernel/src/task/hart_local.rs:413:5
+    |
+412 |       #[test]
+    |       ------- in this attribute macro expansion
+413 | /     fn trap_proven_user_fault_remains_recoverable() {
+414 | |         let fault = DeferredFault::from_origin(FaultOrigin::TrapProvenUser, 9, 71, 3, 0xf, 0, 0)
+415 | |             .expect("U-mode trap provenance must enter deferred retirement");
+416 | |         assert!(fault.is_trap_proven_user_fault());
+417 | |     }
+    | |_____^ can't find crate
+
+error[E0463]: can't find crate for `test`
+    --> kernel/src/task/syscall.rs:5676:5
+     |
+5675 |       #[test]
+     |       ------- in this attribute macro expansion
+5676 | /     fn get_procs2_maps_args_and_dispatch_variant() {
+5677 | |         let syscall = map_syscall(ViSyscall::GetProcs2 as usize, 0x1000, 7, 0, 0)
+5678 | |             .expect("GetProcs2 must decode");
+5679 | |         match syscall {
+...    |
+5686 | |         assert_eq!(syscall_to_vi(&syscall), Some(ViSyscall::GetProcs2));
+5687 | |     }
+     | |_____^ can't find crate
+
+error[E0463]: can't find crate for `test`
+    --> kernel/src/task/syscall.rs:5690:5
+     |
+5689 |       #[test]
+     |       ------- in this attribute macro expansion
+5690 | /     fn get_procs2_allowlist_denies_without_bit_55() {
+5691 | |         with_scheduler_task(0, |tid| {
+5692 | |             assert_eq!(
+5693 | |                 check_allowlist(ViSyscall::GetProcs2 as usize, tid),
+...    |
+5696 | |         });
+5697 | |     }
+     | |_____^ can't find crate
+
+error[E0463]: can't find crate for `test`
+    --> kernel/src/task/syscall.rs:5700:5
+     |
+5699 |       #[test]
+     |       ------- in this attribute macro expansion
+5700 | /     fn get_procs2_allowlist_allows_with_bit_55() {
+5701 | |         with_scheduler_task(1u64 << 55, |tid| {
+5702 | |             assert_eq!(check_allowlist(ViSyscall::GetProcs2 as usize, tid), Ok(()));
+5703 | |         });
+5704 | |     }
+     | |_____^ can't find crate
+
+error[E0463]: can't find crate for `test`
+    --> kernel/src/task/syscall.rs:5707:5
+     |
+5706 |       #[test]
+     |       ------- in this attribute macro expansion
+5707 | /     fn syscall_result_encoding_preserves_generic_and_additive_oom_codes() {
+5708 | |         assert_eq!(encode_syscall_result(Ok(9), usize::MAX, false), 9);
+5709 | |         assert_eq!(
+5710 | |             encode_syscall_result(Err(SyscallError::InvalidInput), usize::MAX, true),
+...    |
+5732 | |         }));
+5733 | |     }
+     | |_____^ can't find crate
+
+error[E0463]: can't find crate for `test`
+    --> kernel/src/task/syscall.rs:5736:5
+     |
+5735 |       #[test]
+     |       ------- in this attribute macro expansion
+5736 | /     fn mem_info_maps_args_and_requires_bit_56() {
+5737 | |         let syscall = map_syscall(ViSyscall::MemInfo as usize, 0x2000, 32, 0, 0)
+5738 | |             .expect("MemInfo must decode");
+5739 | |         match syscall {
+...    |
+5755 | |         });
+5756 | |     }
+     | |_____^ can't find crate
+
+error[E0463]: can't find crate for `test`
+    --> kernel/src/task/syscall.rs:5759:5
+     |
+5758 |       #[test]
+     |       ------- in this attribute macro expansion
+5759 | /     fn vfs_holder_release_before_reap_frees_without_orphaning_quarantine() {
+5760 | |         const BASE: usize = 0x4f00_0000;
+5761 | |         const HOLDER: usize = 30_601;
+5762 | |         const OWNER: usize = 30_602;
+...    |
+5780 | |         assert!(crate::memory::pin::holder_of(BASE, 4096).is_none());
+5781 | |     }
+     | |_____^ can't find crate
+
+error[E0463]: can't find crate for `test`
+   --> kernel/src/task/drivers/driver_cell.rs:183:5
+    |
+182 |       #[test]
+    |       ------- in this attribute macro expansion
+183 | /     fn deregister_all_for_respects_tid_matches_and_clears_stale_nic_irq_cache() {
+184 | |         reset_roles();
+185 | |         seed_roles(41, 29);
+...   |
+214 | |         reset_roles();
+215 | |     }
+    | |_____^ can't find crate
+
+error[E0463]: can't find crate for `test`
+    --> kernel/src/task/scheduler.rs:1863:5
+     |
+1862 |       #[test]
+     |       ------- in this attribute macro expansion
+1863 | /     fn remote_root_retirement_waits_for_zombie_worker_switch_before_slot_reuse() {
+1864 | |         const ROOT_TID: usize = 60_001;
+1865 | |         const WORKER_TID: usize = 60_002;
+1866 | |         const CELL_RAW: u64 = 63;
+...    |
+1954 | |         super::super::hart_local::ready::set_selected_task_id(remote_hart, old_selected);
+1955 | |     }
+     | |_____^ can't find crate
+
+error[E0463]: can't find crate for `test`
+    --> kernel/src/task/scheduler.rs:1958:5
+     |
+1957 |       #[test]
+     |       ------- in this attribute macro expansion
+1958 | /     fn matching_zombie_deferred_fault_is_idempotent() {
+1959 | |         const TID: usize = 60_003;
+1960 | |         const CELL_RAW: u64 = 62;
+1961 | |         const GENERATION: u64 = 9;
+...    |
+1984 | |         assert_eq!(scheduler.zombies[0].id, TID);
+1985 | |     }
+     | |_____^ can't find crate
+
+error[E0463]: can't find crate for `test`
+    --> kernel/src/task/scheduler.rs:1988:5
+     |
+1987 |       #[test]
+     |       ------- in this attribute macro expansion
+1988 | /     fn owner_watch_tokens_stop_before_the_signed_return_boundary() {
+1989 | |         let mut scheduler = Scheduler::new();
+1990 | |         scheduler.next_cell_owner_watch = MAX_RETURNABLE_OWNER_WATCH_TOKEN;
+...    |
+2001 | |         assert!(scheduler.cell_owner_watches.is_empty());
+2002 | |     }
+     | |_____^ can't find crate
+
+error[E0463]: can't find crate for `test`
+   --> kernel/src/task/user_out.rs:111:5
+    |
+110 |       #[test]
+    |       ------- in this attribute macro expansion
+111 | /     fn accepts_aligned_slot_inside_usable_stack() {
+112 | |         let ptr = fake_stack().usable_start();
+113 | |         assert_eq!(
+114 | |             validate_stack_usize_slot(&fake_stack(), ptr).unwrap() as usize,
+115 | |             ptr
+116 | |         );
+117 | |     }
+    | |_____^ can't find crate
+
+error[E0463]: can't find crate for `test`
+   --> kernel/src/task/user_out.rs:120:5
+    |
+119 |       #[test]
+    |       ------- in this attribute macro expansion
+120 | /     fn rejects_null_misaligned_guard_and_past_top_slots() {
+121 | |         let stack = fake_stack();
+122 | |         let usable_start = stack.usable_start();
+123 | |         assert_eq!(
+...   |
+139 | |         );
+140 | |     }
+    | |_____^ can't find crate
+
+error[E0463]: can't find crate for `test`
+   --> kernel/src/task/user_out.rs:143:5
+    |
+142 |       #[test]
+    |       ------- in this attribute macro expansion
+143 | /     fn rejects_missing_task_and_missing_stack() {
+144 | |         let mut scheduler = SchedulerTestGuard::new();
+145 | |         scheduler.set(Scheduler::new());
+146 | |         assert_eq!(
+...   |
+161 | |         );
+162 | |     }
+    | |_____^ can't find crate
+
+error[E0463]: can't find crate for `test`
+  --> kernel/src/platform/boot_once.rs:58:5
+   |
+57 |       #[test]
+   |       ------- in this attribute macro expansion
+58 | /     fn publishes_one_immutable_value() {
+59 | |         let value = BootOnce::new();
+60 | |         assert!(value.get().is_none());
+...  |
+66 | |         assert_eq!(value.get(), Some(&42));
+67 | |     }
+   | |_____^ can't find crate
+
+error[E0463]: can't find crate for `test`
+  --> kernel/src/platform/boot_once.rs:71:5
+   |
+69 |       #[test]
+   |       ------- in this attribute macro expansion
+70 |       #[should_panic(expected = "boot value initialized more than once")]
+71 | /     fn rejects_reinitialization() {
+72 | |         let value = BootOnce::new();
+73 | |         // SAFETY: both calls are single-threaded; the second must panic before writing.
+74 | |         unsafe { value.initialize(1_u64) };
+75 | |         unsafe { value.initialize(2_u64) };
+76 | |     }
+   | |_____^ can't find crate
+
+error[E0463]: can't find crate for `test`
+
+For more information about this error, try `rustc --explain E0463`.
+warning: cellos-kernel@0.2.1: Could not strip init (tool unavailable or failed); retained unstripped input
+warning: cellos-kernel@0.2.1: Could not strip kernel_fs.img (tool unavailable or failed); retained unstripped input
+error: could not compile `cellos-kernel` (bin "cellos-kernel" test) due to 74 previous errors

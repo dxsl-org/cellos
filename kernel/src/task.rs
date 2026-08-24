@@ -7,6 +7,7 @@ pub mod cap;
 pub mod completion;
 pub mod completion_selftest;
 pub mod completion_wait;
+pub(crate) mod copy_glue;
 pub mod dir_inherit;
 #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
 pub(crate) mod domain_switch;
@@ -49,6 +50,14 @@ pub mod stack_overflow_probe;
 #[cfg(feature = "test-hooks")]
 pub mod user_hello;
 pub mod user_out;
+#[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+pub(crate) mod user_copy;
+#[cfg(all(
+    feature = "native-domains",
+    feature = "test-hooks",
+    target_arch = "riscv64"
+))]
+pub(crate) mod user_copy_tests;
 #[cfg(feature = "test-hooks")]
 pub mod vfs_lifecycle_selftest;
 pub mod waker;
@@ -256,6 +265,39 @@ pub extern "Rust" fn vi_tlb_shootdown_test_fault(
 
 #[cfg(target_arch = "riscv64")]
 const _: crate::hal::TlbShootdownTestFault = vi_tlb_shootdown_test_fault;
+
+#[cfg(target_arch = "riscv64")]
+#[no_mangle]
+pub extern "Rust" fn vi_user_copy_guard_fault(
+    frame: &mut crate::hal::arch::ViTrapFrame,
+) -> bool {
+    #[cfg(feature = "native-domains")]
+    {
+        let hart = unsafe { hart_local::current_hart() };
+        if hart.user_copy_guard_active.load(core::sync::atomic::Ordering::Acquire) != 0 {
+            let fault_addr = frame.stval;
+            let lo = hart.user_copy_guard_start.load(core::sync::atomic::Ordering::Acquire);
+            let hi = hart.user_copy_guard_end.load(core::sync::atomic::Ordering::Acquire);
+            if fault_addr >= lo && fault_addr < hi {
+                let resume_pc =
+                    hart.user_copy_guard_resume_pc.load(core::sync::atomic::Ordering::Acquire);
+                if resume_pc != 0 {
+                    frame.sepc = resume_pc;
+                    return true;
+                }
+            }
+        }
+        false
+    }
+    #[cfg(not(feature = "native-domains"))]
+    {
+        let _ = frame;
+        false
+    }
+}
+
+#[cfg(target_arch = "riscv64")]
+const _: crate::hal::UserCopyGuardFault = vi_user_copy_guard_fault;
 
 // Global Scheduler Instance
 pub(crate) static SCHEDULER: Spinlock<Option<Scheduler>> = Spinlock::new(None);
@@ -739,6 +781,7 @@ pub extern "C" fn vi_context_switch_complete() {
         if let Some(space) = hart_local::take_staged_execution_release() {
             let _ = space.set_current_hart(hart, false);
         }
+        user_copy::clear_guard_for_context_switch();
     }
     #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
     context_handoff_selftest::observe_origin_ownership_release(hart);
@@ -1048,6 +1091,16 @@ pub fn yield_cpu() {
     #[cfg(all(
         feature = "test-hooks",
         target_arch = "riscv64",
+        feature = "native-domains"
+    ))]
+    if let Some(ref plan) = switch_info {
+        if plan.incoming.is_null() {
+            retirement_selftest::observe_heartbeat_terminal_current();
+        }
+    }
+    #[cfg(all(
+        feature = "test-hooks",
+        target_arch = "riscv64",
         not(feature = "native-domains")
     ))]
     if let Some((_, next)) = switch_info {
@@ -1093,6 +1146,8 @@ pub fn yield_cpu() {
             if !plan.incoming.is_null() {
                 crate::hal::arch::set_kernel_stack((&*plan.incoming).sp);
             }
+            #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+            retirement_selftest::hold_after_selection_before_switch(hart_id);
             let (root_ppn, asid) = plan.root_switch();
             crate::hal::arch::Context::switch_with_saved_sstatus(
                 final_curr,
@@ -1519,39 +1574,68 @@ pub fn ipc_send(
     msg_ptr: VAddr,
     msg_len: usize,
 ) -> core::result::Result<usize, IpcSendError> {
-    if let Some(sched) = SCHEDULER.lock().as_mut() {
+    enum SendAction {
+        Frozen(copy_glue::TaskCopyView),
+        Immediate(copy_glue::TaskCopyView),
+        Block,
+    }
+
+    let action = {
+        let mut guard = SCHEDULER.lock();
+        let sched = guard.as_mut().ok_or(IpcSendError::TargetGone)?;
         if !sched.tasks.contains_key(&target_id) {
-            // Expected: caller sends to a cell that already exited (e.g. input service
-            // dispatching to a focused cell that called sys_exit).  Not a system error.
             log::debug!("IPC: Target Task {} not found (cell exited)", target_id);
             return Err(IpcSendError::TargetGone);
         }
         if paused_target_rejects(sched, caller_id, target_id) {
             return Err(IpcSendError::Backpressure);
         }
+        let target = sched.tasks.get(&target_id).ok_or(IpcSendError::TargetGone)?;
+        if matches!(target.state, TaskState::Frozen { .. }) {
+            let caller_view = sched
+                .tasks
+                .get(&caller_id)
+                .map(|t| copy_glue::TaskCopyView::of(t))
+                .ok_or(IpcSendError::TargetGone)?;
+            SendAction::Frozen(caller_view)
+        } else if matches!(target.state, TaskState::Recv { mask, .. } if mask == 0 || mask == caller_id) {
+            let caller_view = sched
+                .tasks
+                .get(&caller_id)
+                .map(|t| copy_glue::TaskCopyView::of(t))
+                .ok_or(IpcSendError::TargetGone)?;
+            SendAction::Immediate(caller_view)
+        } else {
+            arm_ipc_block_handoff(caller_id);
+            if let Some(caller) = sched.tasks.get_mut(&caller_id) {
+                caller.reply_value = None;
+                caller.state = TaskState::Sending {
+                    target: target_id,
+                    msg_ptr,
+                    msg_len,
+                };
+            }
+            SendAction::Block
+        }
+    };
 
-        // ── Hot-swap queue: buffer messages to Frozen cells ─────────────────
-        // Check the target's state directly under the existing SCHEDULER lock —
-        // this avoids acquiring FROZEN separately (which would risk a double-lock
-        // if the caller context already holds FROZEN).
-        //
-        // Postcondition: if we queue the message here we return Ok(0) so the
-        // caller is NOT put into `Sending` state — it continues as if delivered.
-        // The new cell drains this queue in Step 5 (UNFREEZE).
-        if let Some(target) = sched.tasks.get_mut(&target_id) {
-            if matches!(target.state, TaskState::Frozen { .. }) {
-                // SAFETY: msg_ptr is valid for this syscall's duration; the caller
-                // cannot resume or free it while the kernel copies these bytes.
-                let msg = unsafe { core::slice::from_raw_parts(msg_ptr as *const u8, msg_len) };
-                if queue_pending_msg(target, caller_id, msg, tcb::HOTSWAP_MSG_QUEUE_DEPTH).is_err()
+    match action {
+        SendAction::Block => Ok(1),
+        SendAction::Frozen(caller_view) => {
+            let msg_bytes = caller_view
+                .read_bytes(msg_ptr, msg_len)
+                .map_err(|_| IpcSendError::Backpressure)?;
+            let mut guard = SCHEDULER.lock();
+            let sched = guard.as_mut().ok_or(IpcSendError::TargetGone)?;
+            if let Some(target) = sched.tasks.get_mut(&target_id) {
+                if queue_pending_msg(target, caller_id, &msg_bytes, tcb::HOTSWAP_MSG_QUEUE_DEPTH)
+                    .is_err()
                 {
-                    // Queue saturated — tell caller to back off and retry.
                     log::warn!(
                         "[hotswap] cannot queue msg for frozen tid={} (caller={})",
                         target_id,
                         caller_id
                     );
-                    // Return Err(()) so the syscall layer maps this to TryAgain.
                     return Err(IpcSendError::Backpressure);
                 }
                 log::debug!(
@@ -1560,63 +1644,47 @@ pub fn ipc_send(
                     caller_id,
                     target_id
                 );
-                // Return Ok(0): immediate "delivery" from caller's perspective;
-                // do NOT put caller in Sending state.
-                return Ok(0);
+                Ok(0)
+            } else {
+                Err(IpcSendError::TargetGone)
             }
         }
-
-        let target_ready = if let Some(target) = sched.tasks.get(&target_id) {
-            match target.state {
-                // G18 fix: honour the mask — only deliver if mask==0 (wildcard) or mask==caller_id.
-                TaskState::Recv { mask, .. } if mask == 0 || mask == caller_id => true,
-                _ => false,
+        SendAction::Immediate(caller_view) => {
+            let msg_bytes = caller_view
+                .read_bytes(msg_ptr, msg_len)
+                .map_err(|_| IpcSendError::Backpressure)?;
+            let mut guard = SCHEDULER.lock();
+            let sched = guard.as_mut().ok_or(IpcSendError::TargetGone)?;
+            let is_still_recv = sched
+                .tasks
+                .get(&target_id)
+                .map(|t| matches!(t.state, TaskState::Recv { mask, .. } if mask == 0 || mask == caller_id))
+                .unwrap_or(false);
+            if is_still_recv {
+                let (sender_cell_id, sender_generation) = sender_context(sched, caller_id);
+                if let Some(target) = sched.tasks.get_mut(&target_id) {
+                    queue_pending_msg(target, caller_id, &msg_bytes, tcb::HOTSWAP_MSG_QUEUE_DEPTH)
+                        .map_err(|_| IpcSendError::Backpressure)?;
+                    target.state = TaskState::Ready;
+                    target.set_received_caller_context(caller_id, sender_cell_id, sender_generation);
+                }
+                let prio = sched.push_ready(target_id);
+                sched.pend_preempt_if_needed(prio);
+                Ok(0)
+            } else {
+                arm_ipc_block_handoff(caller_id);
+                if let Some(caller) = sched.tasks.get_mut(&caller_id) {
+                    caller.reply_value = None;
+                    caller.state = TaskState::Sending {
+                        target: target_id,
+                        msg_ptr,
+                        msg_len,
+                    };
+                }
+                Ok(1)
             }
-        } else {
-            false
-        };
-
-        if target_ready {
-            let (sender_cell_id, sender_generation) = sender_context(sched, caller_id);
-            if let Some(target) = sched.tasks.get_mut(&target_id) {
-                // SAFETY: msg_ptr remains owned by the blocked-in-kernel caller until
-                // this syscall returns, so it is valid for the immediate owned copy.
-                let msg = unsafe { core::slice::from_raw_parts(msg_ptr as *const u8, msg_len) };
-                queue_pending_msg(target, caller_id, msg, tcb::HOTSWAP_MSG_QUEUE_DEPTH)
-                    .map_err(|_| IpcSendError::Backpressure)?;
-                target.state = TaskState::Ready;
-                target.set_received_caller_context(caller_id, sender_cell_id, sender_generation);
-            }
-            let prio = sched.push_ready(target_id);
-            sched.pend_preempt_if_needed(prio);
-
-            // Message was immediately delivered — caller stays runnable.
-            // Do NOT set Sending here: the Send handler returns Ok(0) without
-            // calling yield_cpu(), so the task goes back to userspace still in
-            // Running state.  Setting Sending here causes the scheduler's
-            // pick_next to skip the task on the next timer tick (it only
-            // requeues Running tasks), permanently deadlocking the caller.
-            return Ok(0);
-        } else {
-            // Publish the Context handoff before `Sending` makes this task
-            // discoverable by a peer's `ipc_recv`. The peer may wake and queue
-            // us while this syscall still runs on the old stack.
-            arm_ipc_block_handoff(caller_id);
-            if let Some(caller) = sched.tasks.get_mut(&caller_id) {
-                // A prior dead-peer wake leaves an error in reply_value. Each new
-                // blocking send owns its resume result, so stale state must not
-                // leak into this syscall when the next peer accepts the message.
-                caller.reply_value = None;
-                caller.state = TaskState::Sending {
-                    target: target_id,
-                    msg_ptr,
-                    msg_len,
-                };
-            }
-            return Ok(1);
         }
     }
-    Err(IpcSendError::TargetGone)
 }
 
 /// Post a message to `target_id` without blocking the caller.
@@ -1674,8 +1742,21 @@ pub fn ipc_recv(
     buf_ptr: VAddr,
     buf_len: usize,
 ) -> core::result::Result<usize, ()> {
-    if let Some(sched) = SCHEDULER.lock().as_mut() {
-        let mut found_sender = None;
+    enum RecvAction {
+        Found {
+            sender_id: usize,
+            src_ptr: usize,
+            copy_len: usize,
+            sender_view: copy_glue::TaskCopyView,
+            receiver_view: copy_glue::TaskCopyView,
+        },
+        Block,
+    }
+
+    let action = {
+        let mut guard = SCHEDULER.lock();
+        let sched = guard.as_mut().ok_or(())?;
+        let mut found = None;
         for (tid, task) in sched.tasks.iter() {
             if let TaskState::Sending {
                 target,
@@ -1683,55 +1764,83 @@ pub fn ipc_recv(
                 msg_len,
             } = task.state
             {
-                // G18 fix: honour the mask — mask==0 accepts any sender,
-                // mask!=0 accepts only that specific sender TID.
                 if target == caller_id && (mask == 0 || *tid == mask) {
-                    found_sender = Some((*tid, msg_ptr, msg_len));
+                    found = Some((*tid, msg_ptr, msg_len));
                     break;
                 }
             }
         }
-
-        if let Some((sender_id, src_ptr, src_len)) = found_sender {
-            let app_src = src_ptr as *const u8;
-            let app_dst = buf_ptr as *mut u8;
+        if let Some((sender_id, src_ptr, src_len)) = found {
+            let sender_view = sched
+                .tasks
+                .get(&sender_id)
+                .map(|t| copy_glue::TaskCopyView::of(t))
+                .ok_or(())?;
+            let receiver_view = sched
+                .tasks
+                .get(&caller_id)
+                .map(|t| copy_glue::TaskCopyView::of(t))
+                .ok_or(())?;
             let copy_len = core::cmp::min(src_len, buf_len);
-            unsafe {
-                core::ptr::copy_nonoverlapping(app_src, app_dst, copy_len);
+            RecvAction::Found {
+                sender_id,
+                src_ptr,
+                copy_len,
+                sender_view,
+                receiver_view,
             }
-
-            // Wake the sender so it can proceed (call sys_recv for the reply,
-            // or continue execution if it didn't need a reply).
-            // Without this, the sender stays blocked in Sending state forever
-            // after we copy its message — the IPC protocol has no other
-            // mechanism to unblock it unless ipc_reply is used.
-            if let Some(sender_task) = sched.tasks.get_mut(&sender_id) {
-                sender_task.state = TaskState::Ready;
-                sched.push_ready(sender_id);
-            }
-
-            let (sender_cell_id, sender_generation) = sender_context(sched, sender_id);
-            if let Some(caller) = sched.tasks.get_mut(&caller_id) {
-                caller.set_received_caller_context(sender_id, sender_cell_id, sender_generation);
-            }
-            return Ok(sender_id);
         } else {
-            // `Recv` is externally wakeable as soon as it is published. Arm
-            // first so an immediate sender cannot select this still-running
-            // Context on another hart before the syscall yields.
             arm_ipc_block_handoff(caller_id);
             if let Some(caller) = sched.tasks.get_mut(&caller_id) {
                 caller.state = TaskState::Recv {
                     mask,
                     buf_ptr,
                     buf_len,
-                    deadline: None, // no timeout by default; RecvTimeout sets this
+                    deadline: None,
                 };
             }
-            return Ok(0);
+            RecvAction::Block
+        }
+    };
+
+    match action {
+        RecvAction::Block => Ok(0),
+        RecvAction::Found {
+            sender_id,
+            src_ptr,
+            copy_len,
+            sender_view,
+            receiver_view,
+        } => {
+            let msg_bytes = if copy_len > 0 {
+                sender_view.read_bytes(src_ptr, copy_len)?
+            } else {
+                alloc::vec::Vec::new()
+            };
+            if copy_len > 0 {
+                receiver_view.write_bytes(buf_ptr, &msg_bytes)?;
+            }
+            let mut guard = SCHEDULER.lock();
+            let sched = guard.as_mut().ok_or(())?;
+            let is_still_sending = sched
+                .tasks
+                .get(&sender_id)
+                .map(|t| matches!(t.state, TaskState::Sending { target, msg_ptr: p, .. } if target == caller_id && p == src_ptr))
+                .unwrap_or(false);
+            if !is_still_sending {
+                return Err(());
+            }
+            if let Some(sender_task) = sched.tasks.get_mut(&sender_id) {
+                sender_task.state = TaskState::Ready;
+                sched.push_ready(sender_id);
+            }
+            let (sender_cell_id, sender_generation) = sender_context(sched, sender_id);
+            if let Some(caller) = sched.tasks.get_mut(&caller_id) {
+                caller.set_received_caller_context(sender_id, sender_cell_id, sender_generation);
+            }
+            Ok(sender_id)
         }
     }
-    Err(())
 }
 
 pub fn ipc_try_recv(
@@ -1740,8 +1849,21 @@ pub fn ipc_try_recv(
     buf_ptr: VAddr,
     buf_len: usize,
 ) -> core::result::Result<usize, ()> {
-    if let Some(sched) = SCHEDULER.lock().as_mut() {
-        let mut found_sender = None;
+    enum TryRecvAction {
+        Found {
+            sender_id: usize,
+            src_ptr: usize,
+            copy_len: usize,
+            sender_view: copy_glue::TaskCopyView,
+            receiver_view: copy_glue::TaskCopyView,
+        },
+        None,
+    }
+
+    let action = {
+        let guard = SCHEDULER.lock();
+        let sched = guard.as_ref().ok_or(())?;
+        let mut found = None;
         for (tid, task) in sched.tasks.iter() {
             if let TaskState::Sending {
                 target,
@@ -1749,109 +1871,148 @@ pub fn ipc_try_recv(
                 msg_len,
             } = task.state
             {
-                // G18 fix: same mask semantics as ipc_recv.
                 if target == caller_id && (mask == 0 || *tid == mask) {
-                    found_sender = Some((*tid, msg_ptr, msg_len));
+                    found = Some((*tid, msg_ptr, msg_len));
                     break;
                 }
             }
         }
-
-        if let Some((sender_id, src_ptr, src_len)) = found_sender {
-            let app_src = src_ptr as *const u8;
-            let app_dst = buf_ptr as *mut u8;
+        if let Some((sender_id, src_ptr, src_len)) = found {
+            let sender_view = sched
+                .tasks
+                .get(&sender_id)
+                .map(|t| copy_glue::TaskCopyView::of(t))
+                .ok_or(())?;
+            let receiver_view = sched
+                .tasks
+                .get(&caller_id)
+                .map(|t| copy_glue::TaskCopyView::of(t))
+                .ok_or(())?;
             let copy_len = core::cmp::min(src_len, buf_len);
-            unsafe {
-                core::ptr::copy_nonoverlapping(app_src, app_dst, copy_len);
+            TryRecvAction::Found {
+                sender_id,
+                src_ptr,
+                copy_len,
+                sender_view,
+                receiver_view,
             }
+        } else {
+            TryRecvAction::None
+        }
+    };
 
-            // Wake the sender so it can call sys_recv to receive our reply.
-            // Without this, the sender stays in Sending state — when we call
-            // sys_send(sender, reply) the sender is not in Recv state and the
-            // reply send blocks, creating a deadlock.
+    match action {
+        TryRecvAction::None => Ok(0),
+        TryRecvAction::Found {
+            sender_id,
+            src_ptr,
+            copy_len,
+            sender_view,
+            receiver_view,
+        } => {
+            let msg_bytes = if copy_len > 0 {
+                sender_view.read_bytes(src_ptr, copy_len)?
+            } else {
+                alloc::vec::Vec::new()
+            };
+            if copy_len > 0 {
+                receiver_view.write_bytes(buf_ptr, &msg_bytes)?;
+            }
+            let mut guard = SCHEDULER.lock();
+            let sched = guard.as_mut().ok_or(())?;
+            let is_still_sending = sched
+                .tasks
+                .get(&sender_id)
+                .map(|t| matches!(t.state, TaskState::Sending { target, msg_ptr: p, .. } if target == caller_id && p == src_ptr))
+                .unwrap_or(false);
+            if !is_still_sending {
+                return Err(());
+            }
             if let Some(sender_task) = sched.tasks.get_mut(&sender_id) {
                 sender_task.state = TaskState::Ready;
                 sched.push_ready(sender_id);
             }
-
             let (sender_cell_id, sender_generation) = sender_context(sched, sender_id);
             if let Some(caller) = sched.tasks.get_mut(&caller_id) {
                 caller.set_received_caller_context(sender_id, sender_cell_id, sender_generation);
             }
-            return Ok(sender_id);
-        } else {
-            return Ok(0);
+            Ok(sender_id)
         }
     }
-    Err(())
 }
 
-/// Non-blocking IPC send: deliver to target if it is in `Recv` state with a
-/// matching mask; otherwise return `Err(())` without blocking the caller.
-///
-/// For most callers, "not ready" still means drop immediately. The input
-/// service is the one exception: if the focused receiver is not in `Recv`, the
-/// kernel may enqueue the event into that receiver's bounded pending mailbox
-/// instead of blocking the sender. The mailbox is capped at
-/// `INPUT_EVENT_QUEUE_DEPTH` input events;
-/// once full, this call drops again with `Err(())`.
 pub fn ipc_try_send(
     caller_id: usize,
     target_id: usize,
     msg_ptr: VAddr,
     msg_len: usize,
 ) -> core::result::Result<(), ()> {
-    if let Some(sched) = SCHEDULER.lock().as_mut() {
-        if !sched.tasks.contains_key(&target_id) {
+    enum TrySendAction {
+        Direct(copy_glue::TaskCopyView),
+        Mailbox(copy_glue::TaskCopyView),
+    }
+
+    let action = {
+        let guard = SCHEDULER.lock();
+        let sched = guard.as_ref().ok_or(())?;
+        if !sched.tasks.contains_key(&target_id) || paused_target_rejects(sched, caller_id, target_id) {
             return Err(());
         }
-        if paused_target_rejects(sched, caller_id, target_id) {
-            return Err(());
-        }
-        let target_ready = if let Some(target) = sched.tasks.get(&target_id) {
-            matches!(
-                target.state,
-                TaskState::Recv { mask, .. } if mask == 0 || mask == caller_id
-            )
-        } else {
-            false
-        };
+        let target_ready = sched
+            .tasks
+            .get(&target_id)
+            .map(|t| matches!(t.state, TaskState::Recv { mask, .. } if mask == 0 || mask == caller_id))
+            .unwrap_or(false);
         if target_ready {
+            let caller_view = sched
+                .tasks
+                .get(&caller_id)
+                .map(|t| copy_glue::TaskCopyView::of(t))
+                .ok_or(())?;
+            TrySendAction::Direct(caller_view)
+        } else {
+            let input_tid = crate::task::drivers::driver_cell::INPUT_CELL_TID
+                .load(core::sync::atomic::Ordering::Relaxed);
+            if caller_id == input_tid && input_tid != 0 {
+                let caller_view = sched
+                    .tasks
+                    .get(&caller_id)
+                    .map(|t| copy_glue::TaskCopyView::of(t))
+                    .ok_or(())?;
+                TrySendAction::Mailbox(caller_view)
+            } else {
+                return Err(());
+            }
+        }
+    };
+
+    match action {
+        TrySendAction::Direct(caller_view) => {
+            let msg_bytes = caller_view.read_bytes(msg_ptr, msg_len).map_err(|_| ())?;
+            let mut guard = SCHEDULER.lock();
+            let sched = guard.as_mut().ok_or(())?;
             let (sender_cell_id, sender_generation) = sender_context(sched, caller_id);
             if let Some(target) = sched.tasks.get_mut(&target_id) {
-                // SAFETY: msg_ptr remains valid while the caller is in this syscall;
-                // queue_pending_msg copies it into owned storage before return.
-                let msg = unsafe { core::slice::from_raw_parts(msg_ptr as *const u8, msg_len) };
-                queue_pending_msg(target, caller_id, msg, tcb::INPUT_EVENT_QUEUE_DEPTH)?;
+                queue_pending_msg(target, caller_id, &msg_bytes, tcb::INPUT_EVENT_QUEUE_DEPTH)?;
                 target.state = TaskState::Ready;
                 target.set_received_caller_context(caller_id, sender_cell_id, sender_generation);
             }
             let prio = sched.push_ready(target_id);
             sched.pend_preempt_if_needed(prio);
-            return Ok(());
+            Ok(())
         }
-        // Target not in Recv. The input service alone may fall back to the
-        // receiver's bounded pending mailbox so short bursts of translated key
-        // events survive while the focused cell re-enters its next recv. That
-        // mailbox is capped at INPUT_EVENT_QUEUE_DEPTH queued input events; once
-        // full, we drop as before. All other try_send callers keep strict
-        // drop-if-not-ready
-        // semantics.
-        let input_tid = crate::task::drivers::driver_cell::INPUT_CELL_TID
-            .load(core::sync::atomic::Ordering::Relaxed);
-        if caller_id == input_tid && input_tid != 0 {
+        TrySendAction::Mailbox(caller_view) => {
+            let msg_bytes = caller_view.read_bytes(msg_ptr, msg_len).map_err(|_| ())?;
+            let mut guard = SCHEDULER.lock();
+            let sched = guard.as_mut().ok_or(())?;
             if let Some(t) = sched.tasks.get_mut(&target_id) {
-                // SAFETY: msg_ptr is valid for the duration of this syscall and is
-                // copied into owned storage before the caller resumes.
-                let msg = unsafe { core::slice::from_raw_parts(msg_ptr as *const u8, msg_len) };
-                queue_pending_msg(t, caller_id, msg, tcb::INPUT_EVENT_QUEUE_DEPTH)?;
-                return Ok(());
+                queue_pending_msg(t, caller_id, &msg_bytes, tcb::INPUT_EVENT_QUEUE_DEPTH)?;
+                Ok(())
+            } else {
+                Err(())
             }
         }
-        // Non-input caller, or queue full — drop event without blocking.
-        return Err(());
     }
-    Err(())
 }
 
 pub fn ipc_reply(caller_id: usize, result: usize) -> core::result::Result<usize, ()> {

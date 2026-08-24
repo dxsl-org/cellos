@@ -23,7 +23,7 @@ const MIGRATED_AFTER_SAVE: u8 = 7;
 
 static PHASE: AtomicU8 = AtomicU8::new(IDLE);
 static ROOT_TID: AtomicUsize = AtomicUsize::new(0);
-static MESSAGE: u8 = 0;
+const CTX_USER_PAGE: usize = 0x0600_0000;
 static WORKER_TID: AtomicUsize = AtomicUsize::new(0);
 static WORKER_ORIGIN: AtomicUsize = AtomicUsize::new(0);
 
@@ -127,7 +127,8 @@ extern "C" fn blocked_worker_entry() -> ! {
             core::hint::spin_loop();
         }
     }
-    if super::ipc_send(worker_tid, root_tid, &raw const MESSAGE as usize, 1) != Ok(1)
+
+    if super::ipc_send(worker_tid, root_tid, CTX_USER_PAGE, 1) != Ok(1)
         || super::hart_local::ready::outgoing_context_save_task_id_for(origin) != worker_tid
     {
         log::error!(
@@ -204,6 +205,20 @@ pub fn run_primary() {
 
     PHASE.store(IDLE, Ordering::Release);
     WORKER_ORIGIN.store(0, Ordering::Release);
+    let test_frame = {
+        let mut guard = crate::memory::frame::FRAME_ALLOCATOR.lock();
+        let alloc = guard.as_mut().expect("frame allocator");
+        let frame = alloc.allocate_frame().expect("allocate frame for ctx test");
+        let flags = crate::memory::paging::Flags::from_bits(
+            crate::memory::paging::Flags::VALID
+                | crate::memory::paging::Flags::USER
+                | crate::memory::paging::Flags::READ
+                | crate::memory::paging::Flags::WRITE,
+        );
+        crate::memory::paging::map_page(alloc, CTX_USER_PAGE, frame, flags).expect("map ctx user page");
+        crate::hal::paging::flush_tlb_page(CTX_USER_PAGE);
+        frame
+    };
     let (root_tid, worker_tid) = {
         let mut guard = super::SCHEDULER.lock();
         let Some(scheduler) = guard.as_mut() else {
@@ -247,8 +262,19 @@ pub fn run_primary() {
                     .ok_or(crate::memory::address_space::AddressSpaceError::InvalidMapping)?;
                 let mut builder = crate::memory::address_space::AddressSpaceBuilder::new();
                 builder.map_registered_execution(kernel_stack);
-                worker.bind_address_space_for_test(builder.build()?);
-                Ok::<(), crate::memory::address_space::AddressSpaceError>(())
+                builder.map_user_page(
+                    CTX_USER_PAGE,
+                    crate::memory::address_space::MappingKind::Private,
+                    crate::memory::paging::Flags::from_bits(
+                        crate::memory::paging::Flags::VALID
+                            | crate::memory::paging::Flags::USER
+                            | crate::memory::paging::Flags::READ
+                            | crate::memory::paging::Flags::WRITE,
+                    ),
+                )?;
+                let space = builder.build()?;
+                worker.bind_address_space_for_test(space.clone());
+                Ok::<alloc::sync::Arc<crate::memory::address_space::AddressSpace>, crate::memory::address_space::AddressSpaceError>(space)
             })();
             if let Err(error) = binding {
                 log::error!(
@@ -302,8 +328,7 @@ pub fn run_primary() {
         );
         return;
     }
-    let mut received = 0u8;
-    if super::ipc_recv(root_tid, 0, &raw mut received as usize, 1) != Ok(worker_tid) {
+    if super::ipc_recv(root_tid, 0, CTX_USER_PAGE + 16, 1) != Ok(worker_tid) {
         log::error!("[selftest] SMP-CONTEXT-HANDOFF: FAIL marker=CTX-HANDOFF-01 wake");
         return;
     }
@@ -351,6 +376,11 @@ pub fn run_primary() {
     log::info!("[selftest] SMP-CONTEXT-HANDOFF: PASS aggregate=CTX00-03");
     if let Some(scheduler) = super::SCHEDULER.lock().as_mut() {
         scheduler.exit_task(root_tid, 0);
+    }
+    let _ = crate::memory::paging::unmap_page(CTX_USER_PAGE);
+    crate::hal::paging::flush_tlb_page(CTX_USER_PAGE);
+    if let Some(alloc) = crate::memory::frame::FRAME_ALLOCATOR.lock().as_mut() {
+        alloc.deallocate_frame(test_frame);
     }
     super::yield_cpu();
 }

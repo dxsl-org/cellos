@@ -317,6 +317,15 @@ impl AddressSpace {
     pub fn copy_reader_count(&self) -> usize {
         self.copy_readers.load(Ordering::Acquire)
     }
+    /// Ledger record (flags + physical frame) for one mapped page base,
+    /// without cloning the whole ledger. Used by the user-copy probe pass;
+    /// the caller still confirms the live PTE before moving bytes.
+    pub(crate) fn page_proof_for(&self, virtual_address: VAddr) -> Option<(Flags, PhysAddr)> {
+        self.ledger.lock().iter().find_map(|entry| {
+            (entry.virtual_address == virtual_address)
+                .then_some((entry.flags, entry.physical_address))
+        })
+    }
     /// Records a hart executing this root; clearing remains available after retirement for Phase 06 acknowledgement.
     pub fn set_current_hart(&self, hart: usize, current: bool) -> Result<(), AddressSpaceError> {
         if hart >= usize::BITS as usize {
@@ -419,6 +428,56 @@ impl AddressSpace {
         table
             .unmap(virtual_address)
             .map_err(|_| AddressSpaceError::NotFound)?;
+        table.prune_empty(virtual_address, &mut |physical_address| {
+            if let Some(index) = table_frames
+                .iter()
+                .position(|frame| frame.physical_address() == physical_address)
+            {
+                table_frames.remove(index);
+            }
+        });
+        let index = frames
+            .iter()
+            .position(|frame| frame.physical_address() == entry.physical_address)
+            .ok_or(AddressSpaceError::NotFound)?;
+        frames.remove(index);
+        Ok(())
+    }
+    /// TEST-ONLY protocol-violation injection for the user-copy fixtures.
+    ///
+    /// Performs exactly what [`Self::unmap_private_page`] does — ledger
+    /// removal, PTE teardown, table pruning, frame release — but skips the
+    /// copy-reader drain spin and flushes the local TLB entry so an in-flight
+    /// guarded copy is genuinely left with a dangling mapping. The public API
+    /// can never produce this interleaving; that is precisely what the
+    /// forced-fault fixture proves.
+    #[cfg(feature = "test-hooks")]
+    pub fn force_unmap_without_drain_for_test(
+        &self,
+        virtual_address: VAddr,
+    ) -> Result<(), AddressSpaceError> {
+        let entry = {
+            let mut ledger = self.ledger.lock();
+            let position = ledger
+                .iter()
+                .position(|entry| entry.virtual_address == virtual_address)
+                .ok_or(AddressSpaceError::NotFound)?;
+            ledger.remove(position)
+        };
+        let mut table_frames = self.table_frames.lock();
+        let mut frames = self.frames.lock();
+        // SAFETY: only this address space owns and mutates its root.
+        let table =
+            unsafe { &mut *(phys_to_virt(self.root.physical_address()) as *mut hal::PageTable) };
+        table
+            .unmap(virtual_address)
+            .map_err(|_| AddressSpaceError::NotFound)?;
+        #[cfg(target_arch = "riscv64")]
+        // SAFETY: sfence.vma on a single virtual address is a pure TLB
+        // invalidation from S-mode.
+        unsafe {
+            core::arch::asm!("sfence.vma zero, {va}", va = in(reg) virtual_address);
+        }
         table.prune_empty(virtual_address, &mut |physical_address| {
             if let Some(index) = table_frames
                 .iter()

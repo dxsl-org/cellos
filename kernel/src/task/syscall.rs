@@ -11,6 +11,7 @@ use alloc::vec::Vec;
 use api::syscall::ViSpawnArgs;
 // use log::info;
 use types::*;
+use super::copy_glue::TaskCopyView;
 
 /// Set of physical frames currently issued via `ShmAlloc`.
 /// `ShmMap` accepts only handles that appear here, preventing a malicious
@@ -662,8 +663,60 @@ pub(super) fn validate_user_buf(ptr: usize, len: usize, max: usize) -> Result<()
     Ok(())
 }
 
-/// Decode the additive fixed-record owner lookup request used on RV32.
+/// Derive the phase-03 recoverable copy view for a live caller task.
+///
+/// Acquires SCHEDULER, clones the view, and releases the lock. Returns
+/// `TaskCopyView::sas()` as a safe fallback when the task record is not found
+/// (the subsequent copy will then surface a proper `InvalidInput` if the
+/// pointer is bad, rather than a kernel panic).
+fn caller_copy_view(caller_id: usize) -> Result<TaskCopyView, SyscallError> {
+    TaskCopyView::for_task(caller_id).ok_or(SyscallError::InvalidInput)
+}
+fn read_user_string(
+    caller_id: usize,
+    ptr: usize,
+    len: usize,
+    max: usize,
+) -> Result<alloc::string::String, SyscallError> {
+    if len == 0 || len > max {
+        return Err(SyscallError::InvalidInput);
+    }
+    validate_user_buf(ptr, len, max)?;
+    let view = caller_copy_view(caller_id)?;
+    let bytes = view.read_bytes(ptr, len).map_err(|_| SyscallError::InvalidInput)?;
+    alloc::string::String::from_utf8(bytes).map_err(|_| SyscallError::InvalidInput)
+}
+
+fn read_user_slice(
+    caller_id: usize,
+    ptr: usize,
+    len: usize,
+    max: usize,
+) -> Result<alloc::vec::Vec<u8>, SyscallError> {
+    if len > max {
+        return Err(SyscallError::BufferTooSmall);
+    }
+    validate_user_buf(ptr, len, max)?;
+    let view = caller_copy_view(caller_id)?;
+    view.read_bytes(ptr, len).map_err(|_| SyscallError::InvalidInput)
+}
+
+fn write_user_slice(
+    caller_id: usize,
+    ptr: usize,
+    bytes: &[u8],
+    max: usize,
+) -> Result<(), SyscallError> {
+    if bytes.len() > max {
+        return Err(SyscallError::BufferTooSmall);
+    }
+    validate_user_buf(ptr, bytes.len(), max)?;
+    let view = caller_copy_view(caller_id)?;
+    view.write_bytes(ptr, bytes).map_err(|_| SyscallError::InvalidInput)
+}
+
 fn read_cell_owner_request(
+    caller_id: usize,
     request_ptr: usize,
     request_len: usize,
 ) -> Result<api::cell_owner::CellOwnerRequest, SyscallError> {
@@ -673,13 +726,12 @@ fn read_cell_owner_request(
     }
     validate_user_buf(request_ptr, len, MAX_USER_BUF)?;
     let mut bytes = [0u8; api::cell_owner::CELL_OWNER_REQUEST_LEN];
-    // SAFETY: the request range was validated as a caller-owned readable
-    // buffer. Copy into kernel storage before taking SCHEDULER.
-    unsafe {
-        core::ptr::copy_nonoverlapping(request_ptr as *const u8, bytes.as_mut_ptr(), len);
-    }
+    let view = caller_copy_view(caller_id)?;
+    view.read_into(request_ptr, &mut bytes)
+        .map_err(|_| SyscallError::InvalidInput)?;
     api::cell_owner::CellOwnerRequest::from_bytes(&bytes).ok_or(SyscallError::InvalidInput)
 }
+
 
 /// Delivery selected when a blocked receive resumes.
 pub(super) enum ResumeDelivery {
@@ -922,12 +974,9 @@ fn write_caller_identity(buf_ptr: usize, buf_len: usize, sender_tid: usize) {
     let trailer = attested_identity_of(sender_tid)
         .map(|id| id.to_trailer())
         .unwrap_or([0u8; api::caller_identity::CALLER_IDENTITY_LEN]);
-    // SAFETY: `dst..dst+len` was validated as this caller's own user buffer, and
-    // we run in that caller's syscall context, so the write is exclusive in the
-    // single address space (the sender is parked or already resumed past its send).
-    unsafe {
-        core::ptr::copy_nonoverlapping(trailer.as_ptr(), dst as *mut u8, len);
-    }
+    TaskCopyView::sas()
+        .write_bytes(dst, &trailer)
+        .ok(); // best-effort: if the write fails (bad ptr), receiver sees zeroed trailer → deny
 }
 
 /// May `caller_id` read the kernel's provenance record for `target_cell`?
@@ -1735,114 +1784,87 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 }
             };
 
-            // A NotifyOnExit death that arrived while we were busy (not parked in
-            // Recv) was queued; deliver it now without blocking. The dead tid is
-            // returned as the "sender" so a supervisor never misses a child death.
-            let mut queued_death = None;
             let mut vfs_context_drop = None;
-            if let Some(sched) = super::SCHEDULER.lock().as_mut() {
-                if let Some(t) = sched.tasks.get_mut(&caller_id) {
-                    // Keep VFS caller-context maintenance inside the receive path's
-                    // existing critical section. UART input performs one receive per
-                    // event, so a separate scheduler lock here starves its tiny FIFO.
+            let death_info = {
+                let mut guard = super::SCHEDULER.lock();
+                guard.as_mut().and_then(|sched| {
+                    let t = sched.tasks.get_mut(&caller_id)?;
                     vfs_context_drop = t.begin_receive_context(mask);
-                    // Owner death is a VFS public-plane event. Preserve it while
-                    // a nested backend `Recv(mask != 0)` is waiting for its reply.
                     let owner_death = super::Task::owner_death_matches_receive_mask(mask)
                         .then(|| t.pending_owner_deaths.first().copied())
                         .flatten()
-                        .map(|(_, dead_tid, reason)| {
-                            t.pending_owner_deaths.remove(0);
-                            (dead_tid, reason)
-                        });
+                        .map(|(_, dead_tid, reason)| (true, dead_tid, reason));
                     let death = owner_death.or_else(|| {
-                        (!t.pending_deaths.is_empty()).then(|| t.pending_deaths.remove(0))
+                        t.pending_deaths.first().copied().map(|(dead_tid, reason)| (false, dead_tid, reason))
                     });
-                    if let Some((dead_tid, reason)) = death {
-                        // Deliver the exit reason as the recv payload (NotifyOnExit
-                        // contract) so a supervisor can apply a restart policy.
-                        if buf_len >= core::mem::size_of::<u64>()
-                            && validate_user_buf(buf_ptr, core::mem::size_of::<u64>(), MAX_USER_BUF)
-                                .is_ok()
-                        {
-                            // SAFETY: buf_ptr is validated as this caller's user buffer;
-                            // the caller is mid-syscall so the write is exclusive in the SAS.
-                            unsafe {
-                                core::ptr::write_unaligned(buf_ptr as *mut u64, reason as u64);
+                    death.map(|(is_owner, dead_tid, reason)| {
+                        let caller_view = TaskCopyView::of(t);
+                        (is_owner, dead_tid, reason, caller_view)
+                    })
+                })
+            };
+            finish_vfs_context_drop(caller_id, vfs_context_drop);
+
+            if let Some((is_owner, dead_tid, reason, caller_view)) = death_info {
+                if buf_len >= core::mem::size_of::<u64>() {
+                    validate_user_buf(buf_ptr, core::mem::size_of::<u64>(), MAX_USER_BUF)?;
+                    let reason_bytes = (reason as u64).to_ne_bytes();
+                    caller_view
+                        .write_bytes(buf_ptr, &reason_bytes)
+                        .map_err(|_| SyscallError::InvalidInput)?;
+                }
+                if let Some(sched) = super::SCHEDULER.lock().as_mut() {
+                    if let Some(t) = sched.tasks.get_mut(&caller_id) {
+                        if is_owner {
+                            if !t.pending_owner_deaths.is_empty() {
+                                t.pending_owner_deaths.remove(0);
                             }
+                        } else if !t.pending_deaths.is_empty() {
+                            t.pending_deaths.remove(0);
                         }
-                        queued_death = Some(dead_tid);
                     }
                 }
-            }
-            finish_vfs_context_drop(caller_id, vfs_context_drop);
-            if let Some(dead_tid) = queued_death {
                 attest(dead_tid);
                 return Ok(dead_tid);
             }
 
             // Hot-swap pending-message drain — guaranteed delivery path.
-            //
-            // The supervisor cutover path can mark a replacement ready before it
-            // has re-entered TaskState::Recv, so buffered delivery races with that
-            // first user-space receive transition.
-            //
-            // This path is the guaranteed fallback: when the new cell finally calls
-            // sys_recv for the first time (returning from the Restore handler through its
-            // app_entry loop), any messages that slipped through the cutover are delivered here
-            // before blocking.  FIFO order matches the original sender queue order.
-            //
-            // Invariants:
-            // - Lock is held for the entire drain + delivery so no concurrent send can
-            //   observe a partially-drained queue.
-            // - We copy from msg.data (owned message storage) before releasing the lock,
-            //   avoiding any lifetime dependency on the task struct.
-            // - current_caller is set so the cell sees the original sender's TID,
-            //   preserving the IPC identity contract.
-            let mut drained_sender = None;
-            if let Some(sched) = super::SCHEDULER.lock().as_mut() {
-                // The drain MUST honour the recv mask: a masked recv (e.g. the
-                // shell awaiting a VFS reply) must NOT consume a queued input
-                // key event — that poisoned every VFS request/reply pair after
-                // the input-queue change (the shell decoded a keystroke as the
-                // VFS reply → "vwrite failed", and the real reply desynced the
-                // next conversation). Non-matching messages stay queued for the
-                // wildcard read loop that wants them.
-                let drained = sched.tasks.get_mut(&caller_id).and_then(|t| {
-                    let slot = t
-                        .pending_msgs
-                        .iter()
-                        .position(|m| mask == 0 || m.sender_tid == mask)?;
-                    Some(t.pending_msgs.remove(slot))
-                });
-                if let Some(msg) = drained {
-                    let sender_tid = msg.sender_tid;
+            let pending_msg_info = {
+                let mut guard = super::SCHEDULER.lock();
+                guard.as_mut().and_then(|sched| {
+                    let (pos, sender_tid, caller_view, data) = {
+                        let t = sched.tasks.get_mut(&caller_id)?;
+                        let pos = t
+                            .pending_msgs
+                            .iter()
+                            .position(|m| mask == 0 || m.sender_tid == mask)?;
+                        let msg = &t.pending_msgs.as_slice()[pos];
+                        let sender_tid = msg.sender_tid;
+                        let caller_view = TaskCopyView::of(t);
+                        let data = alloc::vec::Vec::from(msg.data.as_slice());
+                        (pos, sender_tid, caller_view, data)
+                    };
                     let (sender_cell_id, sender_generation) =
                         sender_cell_context_in_sched(sched, sender_tid);
-                    let copy_len = core::cmp::min(msg.data.len(), buf_len);
-                    if copy_len > 0 && validate_user_buf(buf_ptr, copy_len, MAX_USER_BUF).is_ok() {
-                        // SAFETY: buf_ptr is the caller's recv buffer, validated above;
-                        // msg.data is an owned heap allocation from the Frozen intercept;
-                        // both are exclusive at this point (cell is mid-syscall).
-                        unsafe {
-                            core::ptr::copy_nonoverlapping(
-                                msg.data.as_ptr(),
-                                buf_ptr as *mut u8,
-                                copy_len,
-                            );
-                        }
-                    }
-                    if let Some(t) = sched.tasks.get_mut(&caller_id) {
-                        t.set_received_caller_context(
-                            sender_tid,
-                            sender_cell_id,
-                            sender_generation,
-                        );
-                    }
-                    drained_sender = Some(sender_tid);
+                    Some((pos, sender_tid, sender_cell_id, sender_generation, caller_view, data))
+                })
+            };
+            if let Some((pos, sender_tid, sender_cell_id, sender_generation, caller_view, data)) = pending_msg_info {
+                let copy_len = core::cmp::min(data.len(), buf_len);
+                if copy_len > 0 {
+                    validate_user_buf(buf_ptr, copy_len, MAX_USER_BUF)?;
+                    caller_view
+                        .write_bytes(buf_ptr, &data[..copy_len])
+                        .map_err(|_| SyscallError::InvalidInput)?;
                 }
-            }
-            if let Some(sender_tid) = drained_sender {
+                if let Some(sched) = super::SCHEDULER.lock().as_mut() {
+                    if let Some(t) = sched.tasks.get_mut(&caller_id) {
+                        if pos < t.pending_msgs.len() && t.pending_msgs.as_slice()[pos].sender_tid == sender_tid {
+                            t.pending_msgs.remove(pos);
+                        }
+                        t.set_received_caller_context(sender_tid, sender_cell_id, sender_generation);
+                    }
+                }
                 attest(sender_tid);
                 return Ok(sender_tid);
             }
@@ -1850,12 +1872,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             let res = super::ipc_recv(caller_id, mask, buf_ptr, buf_len);
             match res {
                 Ok(0) => {
-                    // Blocked
                     super::yield_cpu();
-                    // A matched sender now leaves owned bytes in pending_msgs before waking us.
-                    // Drain them before interpreting the wake as a timeout, death, or spurious
-                    // scheduler event; the receiver is the only context allowed to write its
-                    // user buffer.
                     let delivery = super::SCHEDULER
                         .lock()
                         .as_mut()
@@ -1864,35 +1881,26 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                         .unwrap_or(ResumeDelivery::Wake { sender_tid: 0 });
                     let sender = match delivery {
                         ResumeDelivery::Death { sender_tid, reason } => {
-                            if buf_len >= core::mem::size_of::<u64>()
-                                && validate_user_buf(
+                            if buf_len >= core::mem::size_of::<u64>() {
+                                validate_user_buf(
                                     buf_ptr,
                                     core::mem::size_of::<u64>(),
                                     MAX_USER_BUF,
-                                )
-                                .is_ok()
-                            {
-                                // SAFETY: the resumed caller owns this validated receive buffer.
-                                unsafe {
-                                    core::ptr::write_unaligned(buf_ptr as *mut u64, reason as u64);
-                                }
+                                )?;
+                                let reason_bytes = (reason as u64).to_ne_bytes();
+                                let view = caller_copy_view(caller_id)?;
+                                view.write_bytes(buf_ptr, &reason_bytes)
+                                    .map_err(|_| SyscallError::InvalidInput)?;
                             }
                             sender_tid
                         }
                         ResumeDelivery::Message(message) => {
                             let copy_len = core::cmp::min(message.data.len(), buf_len);
-                            if copy_len > 0
-                                && validate_user_buf(buf_ptr, copy_len, MAX_USER_BUF).is_ok()
-                            {
-                                // SAFETY: the resumed caller owns this validated receive buffer;
-                                // the removed mailbox message owns the source bytes.
-                                unsafe {
-                                    core::ptr::copy_nonoverlapping(
-                                        message.data.as_ptr(),
-                                        buf_ptr as *mut u8,
-                                        copy_len,
-                                    );
-                                }
+                            if copy_len > 0 {
+                                validate_user_buf(buf_ptr, copy_len, MAX_USER_BUF)?;
+                                let view = caller_copy_view(caller_id)?;
+                                view.write_bytes(buf_ptr, &message.data.as_slice()[..copy_len])
+                                    .map_err(|_| SyscallError::InvalidInput)?;
                             }
                             message.sender_tid
                         }
@@ -1902,7 +1910,6 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     Ok(sender)
                 }
                 Ok(id) => {
-                    // Got message instantly — ipc_recv already copied the payload.
                     attest(id);
                     Ok(id)
                 }
@@ -1915,113 +1922,101 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             iovec_ptr,
             iovec_count,
         } => {
-            // Concatenate all segments into a contiguous kernel buffer, then
-            // deliver as a single IPC message to `target`.
             const MAX_IOVEC: usize = 8;
             const IOVEC_ENTRY: usize = core::mem::size_of::<usize>() * 2;
             if iovec_count == 0 || iovec_count > MAX_IOVEC {
                 return Err(SyscallError::InvalidInput);
             }
-            // Allocate a temporary gather buffer.
+            let caller_view = caller_copy_view(caller_id)?;
+            let mut iovec_entries = alloc::vec::Vec::with_capacity(iovec_count);
             let mut total = 0usize;
             for i in 0..iovec_count {
-                // SAFETY: iovec_ptr is a valid user-space array of [ptr,len] pairs;
-                // iovec_count is bounded by MAX_IOVEC; each element is 2×sizeof(usize).
-                let len = unsafe {
-                    core::ptr::read_unaligned(
-                        (iovec_ptr + i * IOVEC_ENTRY + core::mem::size_of::<usize>())
-                            as *const usize,
-                    )
-                };
-                total = total.saturating_add(len);
-            }
-            if total > MAX_USER_BUF {
-                return Err(SyscallError::BufferTooSmall);
-            }
-            let mut gathered: alloc::vec::Vec<u8> = alloc::vec![0u8; total];
-            let mut pos = 0;
-            for i in 0..iovec_count {
-                // SAFETY: bounds validated above; ptr/len come from user-validated iovec.
-                let (ptr, len) = unsafe {
-                    let base = iovec_ptr + i * IOVEC_ENTRY;
-                    let p = core::ptr::read_unaligned(base as *const usize);
-                    let l = core::ptr::read_unaligned(
-                        (base + core::mem::size_of::<usize>()) as *const usize,
-                    );
-                    (p, l)
-                };
-                // SAFETY: ptr is a valid user-space pointer; len validated against MAX_USER_BUF.
-                unsafe {
-                    core::ptr::copy_nonoverlapping(
-                        ptr as *const u8,
-                        gathered[pos..].as_mut_ptr(),
-                        len,
-                    );
+                let base = iovec_ptr + i * IOVEC_ENTRY;
+                let mut entry_bytes = [0u8; IOVEC_ENTRY];
+                caller_view
+                    .read_into(base, &mut entry_bytes)
+                    .map_err(|_| SyscallError::InvalidInput)?;
+                let ptr = usize::from_ne_bytes(entry_bytes[..core::mem::size_of::<usize>()].try_into().unwrap());
+                let len = usize::from_ne_bytes(entry_bytes[core::mem::size_of::<usize>()..].try_into().unwrap());
+                validate_user_buf(ptr, len, MAX_USER_BUF)?;
+                total = total.checked_add(len).ok_or(SyscallError::BufferTooSmall)?;
+                if total > MAX_USER_BUF {
+                    return Err(SyscallError::BufferTooSmall);
                 }
-                pos += len;
+                iovec_entries.push((ptr, len));
             }
-            let msg_ptr = gathered.as_ptr() as usize;
-            super::ipc_send(caller_id, target, msg_ptr, total).map_err(|error| match error {
-                super::IpcSendError::Backpressure => SyscallError::TryAgain,
-                super::IpcSendError::TargetGone => SyscallError::InvalidCommand,
-            })
+            let mut gathered = alloc::vec::Vec::new();
+            gathered
+                .try_reserve_exact(total)
+                .map_err(|_| SyscallError::OutOfMemory)?;
+            gathered.resize(total, 0);
+            let mut pos = 0;
+            for (ptr, len) in iovec_entries {
+                if len > 0 {
+                    caller_view
+                        .read_into(ptr, &mut gathered[pos..pos + len])
+                        .map_err(|_| SyscallError::InvalidInput)?;
+                    pos += len;
+                }
+            }
+            super::ipc_post_nonblock(caller_id, target, &gathered)
+                .map_err(|_| SyscallError::TryAgain)?;
+            Ok(0)
         }
         Syscall::RecvScatter {
             mask,
             iovec_ptr,
             iovec_count,
         } => {
-            // Known pre-existing defect (2026-07-31 Recv buffer-pinning audit):
-            // ipc_recv may park with this temporary buffer, but this handler does
-            // not yield before scattering and returning. Producer-side mailbox
-            // delivery prevents a foreign write through the retained pointer;
-            // functional repair requires a separate blocking/lifecycle change.
-            // Receive a single IPC message and scatter it across the iovec buffers.
-            // For v1.0: receive into one temp buffer then scatter.
             const MAX_IOVEC: usize = 8;
             const IOVEC_ENTRY: usize = core::mem::size_of::<usize>() * 2;
             if iovec_count == 0 || iovec_count > MAX_IOVEC {
                 return Err(SyscallError::InvalidInput);
             }
+            let caller_view = caller_copy_view(caller_id)?;
+            let mut iovec_entries = alloc::vec::Vec::with_capacity(iovec_count);
             let mut total = 0usize;
             for i in 0..iovec_count {
-                // SAFETY: iovec_ptr valid user-space array; bounds checked.
-                let len = unsafe {
-                    core::ptr::read_unaligned(
-                        (iovec_ptr + i * IOVEC_ENTRY + core::mem::size_of::<usize>())
-                            as *const usize,
-                    )
-                };
-                total = total.saturating_add(len);
+                let base = iovec_ptr + i * IOVEC_ENTRY;
+                let mut entry_bytes = [0u8; IOVEC_ENTRY];
+                caller_view
+                    .read_into(base, &mut entry_bytes)
+                    .map_err(|_| SyscallError::InvalidInput)?;
+                let ptr = usize::from_ne_bytes(entry_bytes[..core::mem::size_of::<usize>()].try_into().unwrap());
+                let len = usize::from_ne_bytes(entry_bytes[core::mem::size_of::<usize>()..].try_into().unwrap());
+                validate_user_buf(ptr, len, MAX_USER_BUF)?;
+                total = total.checked_add(len).ok_or(SyscallError::BufferTooSmall)?;
+                if total > MAX_USER_BUF {
+                    return Err(SyscallError::BufferTooSmall);
+                }
+                iovec_entries.push((ptr, len));
             }
-            if total > MAX_USER_BUF {
-                return Err(SyscallError::BufferTooSmall);
+            let mut tmp = alloc::vec::Vec::new();
+            tmp.try_reserve_exact(total)
+                .map_err(|_| SyscallError::OutOfMemory)?;
+            tmp.resize(total, 0);
+            let mut drained_msg = None;
+            if let Some(sched) = super::SCHEDULER.lock().as_mut() {
+                if let Some(t) = sched.tasks.get_mut(&caller_id) {
+                    if let Some(pos) = t.pending_msgs.iter().position(|m| mask == 0 || m.sender_tid == mask) {
+                        drained_msg = Some(t.pending_msgs.remove(pos));
+                    }
+                }
             }
-            let mut tmp: alloc::vec::Vec<u8> = alloc::vec![0u8; total];
-            let sender = super::ipc_recv(caller_id, mask, tmp.as_mut_ptr() as usize, total)
-                .map_err(|_| SyscallError::InvalidCommand)?;
-            // Scatter from tmp into the user's iovec buffers.
+            let sender = if let Some(msg) = drained_msg {
+                let copy_len = core::cmp::min(msg.data.len(), total);
+                tmp[..copy_len].copy_from_slice(&msg.data.as_slice()[..copy_len]);
+                msg.sender_tid
+            } else {
+                return Err(SyscallError::TryAgain);
+            };
             let mut pos = 0;
-            for i in 0..iovec_count {
-                // SAFETY: iovec_ptr is a valid user-space array; ptr/len validated.
-                let (ptr, len) = unsafe {
-                    let base = iovec_ptr + i * IOVEC_ENTRY;
-                    let p = core::ptr::read_unaligned(base as *const usize);
-                    let l = core::ptr::read_unaligned(
-                        (base + core::mem::size_of::<usize>()) as *const usize,
-                    );
-                    (p, l)
-                };
+            for (ptr, len) in iovec_entries {
                 let copy_len = len.min(total.saturating_sub(pos));
                 if copy_len > 0 {
-                    // SAFETY: ptr is a valid user-space mutable buffer; copy_len ≤ len.
-                    unsafe {
-                        core::ptr::copy_nonoverlapping(
-                            tmp[pos..].as_ptr(),
-                            ptr as *mut u8,
-                            copy_len,
-                        );
-                    }
+                    caller_view
+                        .write_bytes(ptr, &tmp[pos..pos + copy_len])
+                        .map_err(|_| SyscallError::InvalidInput)?;
                     pos += copy_len;
                 }
             }
@@ -2033,53 +2028,46 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             buf_len,
             deadline,
         } => {
-            // Drain pending_msgs first (same as Recv). ipc_post_nonblock queues
-            // bytes here when the target is busy (e.g. UART burst fills pending_msgs
-            // while input service is mid-dispatch). Without this drain, RecvTimeout
-            // would call ipc_recv which only sees TaskState::Sending tasks, missing
-            // anything queued via ipc_post_nonblock.
             let mut vfs_context_drop = None;
-            let mut immediate_sender = None;
-            if let Some(sched) = super::SCHEDULER.lock().as_mut() {
-                // Honour the recv mask in the drain — same contract as Recv
-                // above: a masked RecvTimeout must not consume queued input
-                // events meant for the wildcard read loop.
-                let drained = sched.tasks.get_mut(&caller_id).and_then(|t| {
-                    vfs_context_drop = t.begin_receive_context(mask);
-                    let slot = t
-                        .pending_msgs
-                        .iter()
-                        .position(|m| mask == 0 || m.sender_tid == mask)?;
-                    Some(t.pending_msgs.remove(slot))
-                });
-                if let Some(msg) = drained {
-                    let sender_tid = msg.sender_tid;
+            let pending_msg_info = {
+                let mut guard = super::SCHEDULER.lock();
+                guard.as_mut().and_then(|sched| {
+                    let (pos, sender_tid, caller_view, data) = {
+                        let t = sched.tasks.get_mut(&caller_id)?;
+                        vfs_context_drop = t.begin_receive_context(mask);
+                        let pos = t
+                            .pending_msgs
+                            .iter()
+                            .position(|m| mask == 0 || m.sender_tid == mask)?;
+                        let msg = &t.pending_msgs.as_slice()[pos];
+                        let sender_tid = msg.sender_tid;
+                        let caller_view = TaskCopyView::of(t);
+                        let data = alloc::vec::Vec::from(msg.data.as_slice());
+                        (pos, sender_tid, caller_view, data)
+                    };
                     let (sender_cell_id, sender_generation) =
                         sender_cell_context_in_sched(sched, sender_tid);
-                    let copy_len = core::cmp::min(msg.data.len(), buf_len);
-                    if copy_len > 0 && validate_user_buf(buf_ptr, copy_len, MAX_USER_BUF).is_ok() {
-                        // SAFETY: buf_ptr is the caller's recv buffer (validated above);
-                        // msg.data is an owned heap allocation; both are exclusive here.
-                        unsafe {
-                            core::ptr::copy_nonoverlapping(
-                                msg.data.as_ptr(),
-                                buf_ptr as *mut u8,
-                                copy_len,
-                            );
-                        }
-                    }
-                    if let Some(t) = sched.tasks.get_mut(&caller_id) {
-                        t.set_received_caller_context(
-                            sender_tid,
-                            sender_cell_id,
-                            sender_generation,
-                        );
-                    }
-                    immediate_sender = Some(sender_tid);
-                }
-            }
+                    Some((pos, sender_tid, sender_cell_id, sender_generation, caller_view, data))
+                })
+            };
             finish_vfs_context_drop(caller_id, vfs_context_drop);
-            if let Some(sender_tid) = immediate_sender {
+
+            if let Some((pos, sender_tid, sender_cell_id, sender_generation, caller_view, data)) = pending_msg_info {
+                let copy_len = core::cmp::min(data.len(), buf_len);
+                if copy_len > 0 {
+                    validate_user_buf(buf_ptr, copy_len, MAX_USER_BUF)?;
+                    caller_view
+                        .write_bytes(buf_ptr, &data[..copy_len])
+                        .map_err(|_| SyscallError::InvalidInput)?;
+                }
+                if let Some(sched) = super::SCHEDULER.lock().as_mut() {
+                    if let Some(t) = sched.tasks.get_mut(&caller_id) {
+                        if pos < t.pending_msgs.len() && t.pending_msgs.as_slice()[pos].sender_tid == sender_tid {
+                            t.pending_msgs.remove(pos);
+                        }
+                        t.set_received_caller_context(sender_tid, sender_cell_id, sender_generation);
+                    }
+                }
                 return Ok(sender_tid);
             }
 
@@ -2109,18 +2097,16 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                         .unwrap_or(ResumeDelivery::Wake { sender_tid: 0 });
                     match delivery {
                         ResumeDelivery::Death { sender_tid, reason } => {
-                            if buf_len >= core::mem::size_of::<u64>()
-                                && validate_user_buf(
+                            if buf_len >= core::mem::size_of::<u64>() {
+                                validate_user_buf(
                                     buf_ptr,
                                     core::mem::size_of::<u64>(),
                                     MAX_USER_BUF,
-                                )
-                                .is_ok()
-                            {
-                                // SAFETY: the resumed caller owns this validated receive buffer.
-                                unsafe {
-                                    core::ptr::write_unaligned(buf_ptr as *mut u64, reason as u64);
-                                }
+                                )?;
+                                let reason_bytes = (reason as u64).to_ne_bytes();
+                                let view = caller_copy_view(caller_id)?;
+                                view.write_bytes(buf_ptr, &reason_bytes)
+                                    .map_err(|_| SyscallError::InvalidInput)?;
                             }
                             Ok(sender_tid)
                         }
@@ -2137,18 +2123,11 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                                 }
                             }
                             let copy_len = core::cmp::min(message.data.len(), buf_len);
-                            if copy_len > 0
-                                && validate_user_buf(buf_ptr, copy_len, MAX_USER_BUF).is_ok()
-                            {
-                                // SAFETY: the resumed caller owns this validated receive buffer;
-                                // the removed mailbox message owns the source bytes.
-                                unsafe {
-                                    core::ptr::copy_nonoverlapping(
-                                        message.data.as_ptr(),
-                                        buf_ptr as *mut u8,
-                                        copy_len,
-                                    );
-                                }
+                            if copy_len > 0 {
+                                validate_user_buf(buf_ptr, copy_len, MAX_USER_BUF)?;
+                                let view = caller_copy_view(caller_id)?;
+                                view.write_bytes(buf_ptr, &message.data.as_slice()[..copy_len])
+                                    .map_err(|_| SyscallError::InvalidInput)?;
                             }
                             Ok(message.sender_tid)
                         }
@@ -2164,57 +2143,53 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             buf_ptr,
             buf_len,
         } => {
-            // Drain pending_msgs first (same as Recv / RecvTimeout). ipc_try_send
-            // queues input events here when the focused cell is busy-polling (not
-            // in Recv). Without this drain a cell that receives via sys_try_recv —
-            // every viui app polling through ostd::input::poll_events — would never
-            // see queued key/mouse events (ipc_try_recv only scans Sending tasks).
-            // Honour the recv mask exactly like the blocking paths.
             let mut vfs_context_drop = None;
-            let mut immediate_sender = None;
-            if let Some(sched) = super::SCHEDULER.lock().as_mut() {
-                let drained = sched.tasks.get_mut(&caller_id).and_then(|t| {
-                    vfs_context_drop = t.begin_receive_context(mask);
-                    let slot = t
-                        .pending_msgs
-                        .iter()
-                        .position(|m| mask == 0 || m.sender_tid == mask)?;
-                    Some(t.pending_msgs.remove(slot))
-                });
-                if let Some(msg) = drained {
-                    let sender_tid = msg.sender_tid;
+            let pending_msg_info = {
+                let mut guard = super::SCHEDULER.lock();
+                guard.as_mut().and_then(|sched| {
+                    let (pos, sender_tid, caller_view, data) = {
+                        let t = sched.tasks.get_mut(&caller_id)?;
+                        vfs_context_drop = t.begin_receive_context(mask);
+                        let pos = t
+                            .pending_msgs
+                            .iter()
+                            .position(|m| mask == 0 || m.sender_tid == mask)?;
+                        let msg = &t.pending_msgs.as_slice()[pos];
+                        let sender_tid = msg.sender_tid;
+                        let caller_view = TaskCopyView::of(t);
+                        let data = alloc::vec::Vec::from(msg.data.as_slice());
+                        (pos, sender_tid, caller_view, data)
+                    };
                     let (sender_cell_id, sender_generation) =
                         sender_cell_context_in_sched(sched, sender_tid);
-                    let copy_len = core::cmp::min(msg.data.len(), buf_len);
-                    if copy_len > 0 && validate_user_buf(buf_ptr, copy_len, MAX_USER_BUF).is_ok() {
-                        // SAFETY: buf_ptr is the caller's recv buffer (validated above);
-                        // msg.data is an owned heap allocation; both are exclusive here.
-                        unsafe {
-                            core::ptr::copy_nonoverlapping(
-                                msg.data.as_ptr(),
-                                buf_ptr as *mut u8,
-                                copy_len,
-                            );
-                        }
-                    }
-                    if let Some(t) = sched.tasks.get_mut(&caller_id) {
-                        t.set_received_caller_context(
-                            sender_tid,
-                            sender_cell_id,
-                            sender_generation,
-                        );
-                    }
-                    immediate_sender = Some(sender_tid);
-                }
-            }
+                    Some((pos, sender_tid, sender_cell_id, sender_generation, caller_view, data))
+                })
+            };
             finish_vfs_context_drop(caller_id, vfs_context_drop);
-            if let Some(sender_tid) = immediate_sender {
+
+            if let Some((pos, sender_tid, sender_cell_id, sender_generation, caller_view, data)) = pending_msg_info {
+                let copy_len = core::cmp::min(data.len(), buf_len);
+                if copy_len > 0 {
+                    validate_user_buf(buf_ptr, copy_len, MAX_USER_BUF)?;
+                    caller_view
+                        .write_bytes(buf_ptr, &data[..copy_len])
+                        .map_err(|_| SyscallError::InvalidInput)?;
+                }
+                if let Some(sched) = super::SCHEDULER.lock().as_mut() {
+                    if let Some(t) = sched.tasks.get_mut(&caller_id) {
+                        if pos < t.pending_msgs.len() && t.pending_msgs.as_slice()[pos].sender_tid == sender_tid {
+                            t.pending_msgs.remove(pos);
+                        }
+                        t.set_received_caller_context(sender_tid, sender_cell_id, sender_generation);
+                    }
+                }
                 return Ok(sender_tid);
             }
+
             // Non-blocking Recv (scan Sending tasks)
             let res = super::ipc_try_recv(caller_id, mask, buf_ptr, buf_len);
             match res {
-                Ok(id) => Ok(id), // 0 = No message, >0 = Sender ID
+                Ok(id) => Ok(id),
                 Err(_) => Err(SyscallError::InvalidCommand),
             }
         }
@@ -2369,15 +2344,8 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             }
         }
         Syscall::Log { msg_ptr, msg_len } => {
-            // Reject NULL, oversize, or overflowing buffers. The kernel
-            // print path holds locks with interrupts disabled, so a
-            // multi-MB log message effectively hangs the system.
-            validate_user_buf(msg_ptr, msg_len, MAX_LOG_MSG)?;
-            unsafe {
-                let slice = core::slice::from_raw_parts(msg_ptr as *const u8, msg_len);
-                if let Ok(msg) = core::str::from_utf8(slice) {
-                    crate::task::print_user_log(msg);
-                }
+            if let Ok(msg) = read_user_string(caller_id, msg_ptr, msg_len, MAX_LOG_MSG) {
+                crate::task::print_user_log(&msg);
             }
             Ok(0)
         }
@@ -2726,18 +2694,8 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             Ok(0)
         }
         Syscall::ServiceLookup { name_ptr, name_len } => {
-            validate_user_buf(name_ptr, name_len, MAX_LOG_MSG)?;
-            // SAFETY: validate_user_buf checked the pointer and length above.
-            let name = unsafe {
-                core::str::from_utf8(core::slice::from_raw_parts(name_ptr as *const u8, name_len))
-                    .map_err(|_| SyscallError::InvalidInput)?
-            };
-            // Hardcoded spawn-order lookup. The kernel spawns init (ID 1) and a
-            // user_hello smoke-test task (ID 2) before the init binary runs.
-            // Init then spawns in sequence: vfs=3, config=4, input=5, net=6,
-            // compositor=7, shell=8. Verified from QEMU serial log.
-            // Replace with a dynamic registry in v0.3.
-            let id: usize = match name {
+            let name = read_user_string(caller_id, name_ptr, name_len, MAX_LOG_MSG)?;
+            let id: usize = match name.as_str() {
                 "vfs" => 3,
                 "config" => 4,
                 "input" => 5,
@@ -2749,14 +2707,9 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             Ok(id)
         }
         Syscall::Open { path_ptr, path_len } => {
-            validate_user_buf(path_ptr, path_len, MAX_LOG_MSG)?;
-            unsafe {
-                let slice = core::slice::from_raw_parts(path_ptr as *const u8, path_len);
-                if let Ok(path) = core::str::from_utf8(slice) {
-                    if let Ok(fd) = super::file_open(path) {
-                        return Ok(fd);
-                    }
-                }
+            let path = read_user_string(caller_id, path_ptr, path_len, MAX_LOG_MSG)?;
+            if let Ok(fd) = super::file_open(&path) {
+                return Ok(fd);
             }
             Err(SyscallError::FileNotFound)
         }
@@ -2766,11 +2719,14 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             buf_len,
         } => {
             validate_user_buf(buf_ptr, buf_len, MAX_USER_BUF)?;
-            unsafe {
-                let slice = core::slice::from_raw_parts_mut(buf_ptr as *mut u8, buf_len);
-                let read_bytes = super::file_read(fd, slice);
-                Ok(read_bytes)
+            let mut kbuf = alloc::vec::Vec::new();
+            kbuf.try_reserve_exact(buf_len).map_err(|_| SyscallError::OutOfMemory)?;
+            kbuf.resize(buf_len, 0);
+            let read_bytes = super::file_read(fd, &mut kbuf);
+            if read_bytes > 0 {
+                write_user_slice(caller_id, buf_ptr, &kbuf[..read_bytes], MAX_USER_BUF)?;
             }
+            Ok(read_bytes)
         }
         Syscall::Close { fd } => {
             super::file_close(fd);
@@ -2782,10 +2738,12 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             buf_len,
         } => {
             validate_user_buf(buf_ptr, buf_len, MAX_USER_BUF)?;
-            unsafe {
-                let slice = core::slice::from_raw_parts_mut(buf_ptr as *mut u8, buf_len);
-                super::file_readdir(fd, slice).map_err(|_| SyscallError::Unknown)
-            }
+            let mut kbuf = alloc::vec::Vec::new();
+            kbuf.try_reserve_exact(buf_len).map_err(|_| SyscallError::OutOfMemory)?;
+            kbuf.resize(buf_len, 0);
+            super::file_readdir(fd, &mut kbuf).map_err(|_| SyscallError::Unknown)?;
+            write_user_slice(caller_id, buf_ptr, &kbuf, MAX_USER_BUF)?;
+            Ok(buf_len)
         }
         Syscall::FStat { fd, stat_ptr } => {
             if stat_ptr == 0 {
@@ -2795,24 +2753,20 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         }
         // Syscall::Remove removed
         Syscall::ChDir { path_ptr, path_len } => {
-            validate_user_buf(path_ptr, path_len, MAX_LOG_MSG)?;
-            unsafe {
-                let slice = core::slice::from_raw_parts(path_ptr as *const u8, path_len);
-                if let Ok(path) = core::str::from_utf8(slice) {
-                    if super::file_chdir(path).is_ok() {
-                        return Ok(0);
-                    }
-                }
+            let path = read_user_string(caller_id, path_ptr, path_len, MAX_LOG_MSG)?;
+            if super::file_chdir(&path).is_ok() {
+                return Ok(0);
             }
             Err(SyscallError::FileNotFound)
         }
         Syscall::GetCwd { buf_ptr, buf_len } => {
             validate_user_buf(buf_ptr, buf_len, MAX_USER_BUF)?;
-            unsafe {
-                let slice = core::slice::from_raw_parts_mut(buf_ptr as *mut u8, buf_len);
-                if let Ok(len) = super::file_getcwd(slice) {
-                    return Ok(len);
-                }
+            let mut kbuf = alloc::vec::Vec::new();
+            kbuf.try_reserve_exact(buf_len).map_err(|_| SyscallError::OutOfMemory)?;
+            kbuf.resize(buf_len, 0);
+            if let Ok(len) = super::file_getcwd(&mut kbuf) {
+                write_user_slice(caller_id, buf_ptr, &kbuf[..len], MAX_USER_BUF)?;
+                return Ok(len);
             }
             Err(SyscallError::BufferTooSmall)
         }
@@ -2821,61 +2775,32 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             buf_ptr,
             buf_len,
         } => {
-            validate_user_buf(buf_ptr, buf_len, MAX_USER_BUF)?;
-            unsafe {
-                let slice = core::slice::from_raw_parts(buf_ptr as *const u8, buf_len);
-                let written = super::file_write(fd, slice);
-                Ok(written)
-            }
+            let bytes = read_user_slice(caller_id, buf_ptr, buf_len, MAX_USER_BUF)?;
+            let written = super::file_write(fd, &bytes);
+            Ok(written)
         }
         Syscall::MkDir { path_ptr, path_len } => {
-            validate_user_buf(path_ptr, path_len, MAX_LOG_MSG)?;
-            unsafe {
-                let path_slice = core::slice::from_raw_parts(path_ptr as *const u8, path_len);
-                // Use checked UTF-8 conversion: passing invalid UTF-8 to a
-                // future file_mkdir impl could panic. Reject early.
-                if core::str::from_utf8(path_slice).is_err() {
-                    return Err(SyscallError::InvalidInput);
-                }
-                // let res = super::file_mkdir(path_str);  // FIXME: not implemented
-            }
+            let _path = read_user_string(caller_id, path_ptr, path_len, MAX_LOG_MSG)?;
             Err(SyscallError::PermissionDenied)
         }
         Syscall::Exec { path_ptr, path_len } => {
-            validate_user_buf(path_ptr, path_len, MAX_LOG_MSG)?;
-            unsafe {
-                let slice = core::slice::from_raw_parts(path_ptr as *const u8, path_len);
-                if core::str::from_utf8(slice).is_ok() {
-                    // Legacy Exec support removed/deprecated; use SpawnFromMem.
-                    Err(SyscallError::NotSupported)
-                } else {
-                    Err(SyscallError::InvalidCommand)
-                }
-            }
+            let _path = read_user_string(caller_id, path_ptr, path_len, MAX_LOG_MSG)?;
+            Err(SyscallError::NotSupported)
         }
         Syscall::SpawnFromPath { path_ptr, path_len } => {
-            // Reject empty or over-long paths at the trust boundary.
-            if path_len == 0 || path_len > crate::loader::disk_layout::MAX_CELL_PATH {
-                return Err(SyscallError::InvalidInput);
-            }
-            validate_user_buf(
+            let path_str = read_user_string(
+                caller_id,
                 path_ptr,
                 path_len,
                 crate::loader::disk_layout::MAX_CELL_PATH,
             )?;
-            // SAFETY: path_ptr is a valid user buffer (validated above); SUM=1
-            // lets S-mode read U-mode pages.  Slice lives only in this frame.
-            let path_str = unsafe {
-                let slice = core::slice::from_raw_parts(path_ptr as *const u8, path_len);
-                core::str::from_utf8(slice).map_err(|_| SyscallError::InvalidInput)?
-            };
             if !path_str.starts_with('/') {
                 return Err(SyscallError::InvalidInput);
             }
             let profile = authorize_launch_edge(
                 caller_id,
                 crate::loader::launch_profile::LaunchRoute::Path,
-                path_str,
+                &path_str,
             )?;
             let request = match governed_spawn_request(
                 caller_id,
@@ -2888,7 +2813,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     return Err(error);
                 }
             };
-            let spawned = crate::loader::spawn_from_path(path_str, request);
+            let spawned = crate::loader::spawn_from_path(&path_str, request);
             // A successful spawn consumed any staged directory-handle set inside
             // task creation. Clearing unconditionally covers the failure paths:
             // a set left staged by a spawn that never produced a child would be
@@ -2910,9 +2835,6 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         }
 
         Syscall::SpawnSetDirs { carrier_ptr } => {
-            // The same authority every spawn entry point demands. A cell that
-            // cannot spawn has no child to hand handles to, so accepting a set
-            // from one would only build state nothing can consume.
             if !caller_has_spawn(caller_id) {
                 return Err(SyscallError::PermissionDenied);
             }
@@ -2921,19 +2843,10 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 return Ok(0);
             }
             let carrier_size = core::mem::size_of::<api::dir_handles::ViSpawnDirHandles>();
-            validate_user_buf(carrier_ptr, carrier_size, MAX_USER_BUF)?;
-            // SAFETY: `carrier_ptr` was validated above as a caller-owned range
-            // of at least the carrier's size. The carrier is `#[repr(C)]` plain
-            // integer data with no invalid bit patterns, so any bytes there are
-            // a well-formed value, and `read_unaligned` tolerates a caller that
-            // supplied an unaligned pointer. SUM=1 permits the S-mode read. The
-            // value is copied out before it is inspected, so nothing can change
-            // between the check and the use.
+            let bytes = read_user_slice(caller_id, carrier_ptr, carrier_size, MAX_USER_BUF)?;
             let carrier = unsafe {
-                core::ptr::read_unaligned(carrier_ptr as *const api::dir_handles::ViSpawnDirHandles)
+                core::ptr::read_unaligned(bytes.as_ptr() as *const api::dir_handles::ViSpawnDirHandles)
             };
-            // Refused whole, never trimmed: a set the caller cannot tell was
-            // narrowed is the failure this mechanism exists to prevent.
             let set = api::dir_handles::DirHandleSet::from_carrier(&carrier).map_err(|e| {
                 log::warn!(
                     "[dirs] tid {} named an invalid directory handle set: {:?}",
@@ -2958,13 +2871,10 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             if buf_len < len {
                 return Err(SyscallError::BufferTooSmall);
             }
-            validate_user_buf(buf_ptr, len, MAX_USER_BUF)?;
             let record = crate::task::dir_inherit::attestation_for(cell_id)
                 .ok_or(SyscallError::InvalidInput)?
                 .to_bytes();
-            unsafe {
-                core::ptr::copy_nonoverlapping(record.as_ptr(), buf_ptr as *mut u8, len);
-            }
+            write_user_slice(caller_id, buf_ptr, &record, MAX_USER_BUF)?;
             Ok(len)
         }
 
@@ -2978,7 +2888,6 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             if out_len < len {
                 return Err(SyscallError::BufferTooSmall);
             }
-            validate_user_buf(out_ptr, len, MAX_USER_BUF)?;
             let owner = {
                 let guard = super::SCHEDULER.lock();
                 let sched = guard.as_ref().ok_or(SyscallError::PermissionDenied)?;
@@ -2995,7 +2904,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     .ok_or(SyscallError::PermissionDenied)?
             };
             let bytes = owner.to_bytes();
-            unsafe { core::ptr::copy_nonoverlapping(bytes.as_ptr(), out_ptr as *mut u8, len) };
+            write_user_slice(caller_id, out_ptr, &bytes, MAX_USER_BUF)?;
             Ok(len)
         }
 
@@ -3009,7 +2918,6 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             if out_len < len {
                 return Err(SyscallError::BufferTooSmall);
             }
-            validate_user_buf(out_ptr, len, MAX_USER_BUF)?;
             let (owner, token) = super::SCHEDULER
                 .lock()
                 .as_mut()
@@ -3018,7 +2926,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 })
                 .ok_or(SyscallError::PermissionDenied)?;
             let bytes = owner.to_bytes();
-            unsafe { core::ptr::copy_nonoverlapping(bytes.as_ptr(), out_ptr as *mut u8, len) };
+            write_user_slice(caller_id, out_ptr, &bytes, MAX_USER_BUF)?;
             usize::try_from(token).map_err(|_| SyscallError::PermissionDenied)
         }
 
@@ -3028,12 +2936,11 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             out_ptr,
             out_len,
         } => {
-            let request = read_cell_owner_request(request_ptr, request_len)?;
+            let request = read_cell_owner_request(caller_id, request_ptr, request_len)?;
             let len = api::cell_owner::CELL_OWNER_LEN;
             if out_len < len {
                 return Err(SyscallError::BufferTooSmall);
             }
-            validate_user_buf(out_ptr, len, MAX_USER_BUF)?;
             let owner = {
                 let guard = super::SCHEDULER.lock();
                 let sched = guard.as_ref().ok_or(SyscallError::PermissionDenied)?;
@@ -3050,7 +2957,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     .ok_or(SyscallError::PermissionDenied)?
             };
             let bytes = owner.to_bytes();
-            unsafe { core::ptr::copy_nonoverlapping(bytes.as_ptr(), out_ptr as *mut u8, len) };
+            write_user_slice(caller_id, out_ptr, &bytes, MAX_USER_BUF)?;
             Ok(len)
         }
 
@@ -3060,12 +2967,11 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             out_ptr,
             out_len,
         } => {
-            let request = read_cell_owner_request(request_ptr, request_len)?;
+            let request = read_cell_owner_request(caller_id, request_ptr, request_len)?;
             let len = api::cell_owner::CELL_OWNER_LEN;
             if out_len < len {
                 return Err(SyscallError::BufferTooSmall);
             }
-            validate_user_buf(out_ptr, len, MAX_USER_BUF)?;
             let (owner, token) = super::SCHEDULER
                 .lock()
                 .as_mut()
@@ -3078,7 +2984,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 })
                 .ok_or(SyscallError::PermissionDenied)?;
             let bytes = owner.to_bytes();
-            unsafe { core::ptr::copy_nonoverlapping(bytes.as_ptr(), out_ptr as *mut u8, len) };
+            write_user_slice(caller_id, out_ptr, &bytes, MAX_USER_BUF)?;
             usize::try_from(token).map_err(|_| SyscallError::PermissionDenied)
         }
 
@@ -3098,10 +3004,6 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             if len == 0 {
                 return Err(SyscallError::InvalidInput);
             }
-            if path_len == 0 || path_len > crate::loader::disk_layout::MAX_CELL_PATH {
-                return Err(SyscallError::InvalidInput);
-            }
-            // Resolve the caller-owned grant → identity-mapped base; bound `len`.
             let base = {
                 let guard = grant_table_lock().lock();
                 let table = guard.as_ref().ok_or(SyscallError::InvalidInput)?;
@@ -3114,39 +3016,25 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 }
                 g.base
             };
-            validate_user_buf(
+            let path_str = read_user_string(
+                caller_id,
                 path_ptr,
                 path_len,
                 crate::loader::disk_layout::MAX_CELL_PATH,
             )?;
-            // SAFETY: path_ptr validated above; SUM=1 lets S-mode read the U-mode
-            // path. Slice lives only in this frame.
-            let path_str = unsafe {
-                let slice = core::slice::from_raw_parts(path_ptr as *const u8, path_len);
-                core::str::from_utf8(slice).map_err(|_| SyscallError::InvalidInput)?
-            };
             if !path_str.starts_with('/') {
                 return Err(SyscallError::InvalidInput);
             }
             let profile = authorize_launch_edge(
                 caller_id,
                 crate::loader::launch_profile::LaunchRoute::Elf,
-                path_str,
+                &path_str,
             )?;
-            // Runtime evidence (G2 loader redesign phase 04): this spawn's ELF came
-            // from a userspace VFS read, not the kernel disk reader. info! now that
-            // the migration is verified across arches — per-spawn, so it would be
-            // noise; suppressed by the post-boot log-level drop (main.rs) during
-            // normal operation, still visible under a debug/verbose level.
             log::info!(
                 "[loader] SpawnFromElf: {} ({} bytes from grant)",
                 path_str,
                 len
             );
-            // SAFETY: `base` is a kernel-allocated, identity-mapped grant page owned
-            // by the caller (validated above); `len <= g.size`. The caller is blocked
-            // in this syscall, so it cannot free the grant before spawn_gated copies
-            // the ELF segments into fresh frames.
             let elf_bytes = unsafe { core::slice::from_raw_parts(base as *const u8, len) };
             let request = match governed_spawn_request(
                 caller_id,
@@ -3159,9 +3047,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     return Err(error);
                 }
             };
-            let spawned = crate::loader::spawn_gated(elf_bytes, path_str, request);
-            // See `SpawnFromPath`: consumed on success, cleared here so a failed
-            // spawn cannot leave its set for an unrelated later child.
+            let spawned = crate::loader::spawn_gated(elf_bytes, &path_str, request);
             crate::task::dir_inherit::clear_staged(caller_id);
             let task_id = spawned.map_err(|e| match e {
                 types::ViError::NotFound => SyscallError::FileNotFound,
@@ -3186,31 +3072,22 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             priority,
             core_id,
         } => {
-            // On single-core builds only core 0 exists.  Return NotSupported for
-            // any other core_id so callers can detect SMP unavailability.
             if core_id != 0 {
                 return Err(SyscallError::NotSupported);
             }
-            if path_len == 0 || path_len > crate::loader::disk_layout::MAX_CELL_PATH {
-                return Err(SyscallError::InvalidInput);
-            }
-            validate_user_buf(
+            let path_str = read_user_string(
+                caller_id,
                 path_ptr,
                 path_len,
                 crate::loader::disk_layout::MAX_CELL_PATH,
             )?;
-            // SAFETY: validated above; SUM=1.
-            let path_str = unsafe {
-                let slice = core::slice::from_raw_parts(path_ptr as *const u8, path_len);
-                core::str::from_utf8(slice).map_err(|_| SyscallError::InvalidInput)?
-            };
             if !path_str.starts_with('/') {
                 return Err(SyscallError::InvalidInput);
             }
             let profile = authorize_launch_edge(
                 caller_id,
                 crate::loader::launch_profile::LaunchRoute::Pinned,
-                path_str,
+                &path_str,
             )?;
             let request = match governed_spawn_request(caller_id, profile.child_ceiling, priority) {
                 Ok(request) => request,
@@ -3219,9 +3096,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     return Err(error);
                 }
             };
-            let spawned = crate::loader::spawn_from_path(path_str, request);
-            // See `SpawnFromPath`: consumed on success, cleared here so a failed
-            // spawn cannot leave its set for an unrelated later child.
+            let spawned = crate::loader::spawn_from_path(&path_str, request);
             crate::task::dir_inherit::clear_staged(caller_id);
             let task_id = spawned.map_err(|e| match e {
                 types::ViError::NotFound => SyscallError::FileNotFound,
@@ -3238,32 +3113,17 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             Ok(task_id)
         }
 
-        // ── Capability-based file I/O ────────────────────────────────────────
         Syscall::OpenCap { path_ptr, path_len } => {
-            if path_len == 0 || path_len > 256 {
-                return Err(SyscallError::InvalidInput);
-            }
-            validate_user_buf(path_ptr, path_len, 256)?;
-            // SAFETY: validated above; SUM=1.
-            let path_str = unsafe {
-                let s = core::slice::from_raw_parts(path_ptr as *const u8, path_len);
-                core::str::from_utf8(s).map_err(|_| SyscallError::InvalidInput)?
-            };
-
-            // Open via kernel-internal FS in read-write mode so that both
-            // ReadCap and WriteCap syscalls work on the same capability.
-            // Read-only filesystems (BootFS) return Err from ViFile::write() naturally.
+            let path_str = read_user_string(caller_id, path_ptr, path_len, 256)?;
             use crate::fs::VIFS1;
             let file = {
                 let mut guard = VIFS1.lock();
                 guard
                     .as_mut()
                     .ok_or(SyscallError::FileNotFound)?
-                    .open(path_str, api::fs::OpenMode::ReadWrite)
+                    .open(&path_str, api::fs::OpenMode::ReadWrite)
                     .map_err(|_| SyscallError::FileNotFound)?
             };
-
-            // Resolve the cell ID of the calling task (distinct from task ID).
             let cell_id = if let Some(sched) = super::SCHEDULER.lock().as_ref() {
                 sched
                     .tasks
@@ -3273,8 +3133,6 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             } else {
                 types::CellId(0)
             };
-
-            // Allocate capability with full read-write-seek permissions.
             let cap_id = crate::cell::cap_registry::CAP_TABLE.lock().alloc(
                 cell_id,
                 crate::cell::cap_registry::CapResource::File { file: Some(file) },
@@ -3292,8 +3150,6 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 return Ok(0);
             }
             validate_user_buf(buf_ptr, buf_len, MAX_USER_BUF)?;
-
-            // Resolve caller's cell_id.
             let cell_id = if let Some(sched) = super::SCHEDULER.lock().as_ref() {
                 sched
                     .tasks
@@ -3303,29 +3159,25 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             } else {
                 types::CellId(0)
             };
-
-            // Park the file Box (releases the cap-table lock so other caps are unblocked).
             let mut boxed_file = crate::cell::cap_registry::CAP_TABLE
                 .lock()
                 .park_file(crate::cell::cap_registry::CapId(cap_id as u64), cell_id)
                 .map_err(|_| SyscallError::PermissionDenied)?;
-
-            // Perform I/O outside the cap-table lock.
-            // SAFETY: buf_ptr validated; SUM=1 allows S-mode writes to U-mode pages.
-            let read_result = unsafe {
-                let buf = core::slice::from_raw_parts_mut(buf_ptr as *mut u8, buf_len);
-                boxed_file.read(buf)
-            };
-
-            // Return the file Box (unpark). No-op if the cap was revoked during I/O.
+            let mut kbuf = alloc::vec::Vec::new();
+            kbuf.try_reserve_exact(buf_len).map_err(|_| SyscallError::OutOfMemory)?;
+            kbuf.resize(buf_len, 0);
+            let read_result = boxed_file.read(&mut kbuf);
             crate::cell::cap_registry::CAP_TABLE
                 .lock()
                 .unpark_file(crate::cell::cap_registry::CapId(cap_id as u64), boxed_file);
-
-            // Return bytes_read, or usize::MAX on I/O error (distinguishable from 0 = EOF).
             match read_result {
-                Ok(n) => Ok(n),
-                Err(_) => Err(SyscallError::Unknown), // maps to usize::MAX at ABI level
+                Ok(n) => {
+                    if n > 0 {
+                        write_user_slice(caller_id, buf_ptr, &kbuf[..n], MAX_USER_BUF)?;
+                    }
+                    Ok(n)
+                }
+                Err(_) => Err(SyscallError::Unknown),
             }
         }
 
@@ -3340,7 +3192,6 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 2 => api::fs::SeekFrom::End(offset as isize as i64),
                 _ => return Err(SyscallError::InvalidInput),
             };
-
             let cell_id = if let Some(sched) = super::SCHEDULER.lock().as_ref() {
                 sched
                     .tasks
@@ -3350,19 +3201,14 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             } else {
                 types::CellId(0)
             };
-
-            // Park → seek outside lock → unpark (same pattern as ReadCap).
             let mut boxed_file = crate::cell::cap_registry::CAP_TABLE
                 .lock()
                 .park_file(crate::cell::cap_registry::CapId(cap_id as u64), cell_id)
                 .map_err(|_| SyscallError::PermissionDenied)?;
-
             let seek_result = boxed_file.seek(pos);
-
             crate::cell::cap_registry::CAP_TABLE
                 .lock()
                 .unpark_file(crate::cell::cap_registry::CapId(cap_id as u64), boxed_file);
-
             match seek_result {
                 Ok(new_pos) => Ok(new_pos as usize),
                 Err(_) => Err(SyscallError::Unknown),
@@ -3377,8 +3223,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             if buf_len == 0 {
                 return Ok(0);
             }
-            validate_user_buf(buf_ptr, buf_len, MAX_USER_BUF)?;
-
+            let bytes = read_user_slice(caller_id, buf_ptr, buf_len, MAX_USER_BUF)?;
             let cell_id = if let Some(sched) = super::SCHEDULER.lock().as_ref() {
                 sched
                     .tasks
@@ -3388,22 +3233,14 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             } else {
                 types::CellId(0)
             };
-
             let mut boxed_file = crate::cell::cap_registry::CAP_TABLE
                 .lock()
                 .park_file(crate::cell::cap_registry::CapId(cap_id as u64), cell_id)
                 .map_err(|_| SyscallError::PermissionDenied)?;
-
-            // SAFETY: buf_ptr validated; SUM=1 allows S-mode reads from U-mode pages.
-            let write_result = unsafe {
-                let buf = core::slice::from_raw_parts(buf_ptr as *const u8, buf_len);
-                boxed_file.write(buf)
-            };
-
+            let write_result = boxed_file.write(&bytes);
             crate::cell::cap_registry::CAP_TABLE
                 .lock()
                 .unpark_file(crate::cell::cap_registry::CapId(cap_id as u64), boxed_file);
-
             match write_result {
                 Ok(n) => Ok(n),
                 Err(_) => Err(SyscallError::Unknown),
@@ -3476,15 +3313,12 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         }
 
         Syscall::GrantDma { bdf, phys, size } => {
-            // Alignment check: both phys and size must be page-aligned.
             if phys & 0xFFF != 0 || size & 0xFFF != 0 || size == 0 {
                 return Err(SyscallError::InvalidInput);
             }
-            // Overflow check: prevents u64 wraparound exploitation.
             if phys.checked_add(size as u64).is_none() {
                 return Err(SyscallError::InvalidInput);
             }
-            // BDF ownership check: caller must own this PCIe device.
             let bdf_owner = crate::resource_registry::owner_of_bdf(bdf);
             let cell_id_raw = {
                 super::SCHEDULER
@@ -3498,7 +3332,6 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                            caller_id, cell_id_raw, bdf, bdf_owner);
                 return Err(SyscallError::PermissionDenied);
             }
-            // DMA quota: total DMA mapped must not exceed 1× memory quota.
             if !crate::memory::cell_quota::can_map_dma(cell_id_raw, size) {
                 log::warn!(
                     "[iommu] Cell {} DMA quota exceeded (size={})",
@@ -3507,17 +3340,12 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 );
                 return Err(SyscallError::PermissionDenied);
             }
-            // Pin BEFORE the mapping exists. Once a device can address these
-            // frames, only an IOMMU teardown can stop it — a later GrantFree
-            // would hand them to the next allocation while DMA is still live.
-            // Fail closed: no pin, no mapping.
             if let Err(e) = crate::memory::pin::pin(phys as usize, size, caller_id) {
                 log::warn!(
                     "[iommu] Cell {caller_id} DMA grant denied: cannot pin {phys:#x}+{size} ({e:?})"
                 );
                 return Err(SyscallError::PermissionDenied);
             }
-            // Map into IOMMU.
             super::drivers::iommu::map_dma_for_cell(caller_id as u64, bdf, phys, size);
             crate::memory::cell_quota::record_dma_mapped(cell_id_raw, size);
             log::info!(
@@ -3529,7 +3357,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 phys,
                 size
             );
-            Ok(phys as usize) // IOVA == phys in SAS identity mapping
+            Ok(phys as usize)
         }
 
         Syscall::CloseCap { cap_id } => {
@@ -3554,29 +3382,22 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             if args_ptr == 0 {
                 return Err(SyscallError::InvalidInput);
             }
-            // Validate the args descriptor itself before reading it.
-            validate_user_buf(args_ptr, core::mem::size_of::<ViSpawnArgs>(), MAX_LOG_MSG)?;
-            // SAFETY: `args_ptr` was validated above as a caller-owned range of at
-            // least `size_of::<ViSpawnArgs>()` bytes, and each pointer inside the
-            // struct is validated before it is dereferenced. SUM=1 lets S-mode read
-            // U-mode memory; the caller is blocked in this syscall, so the buffers
-            // stay mapped until the gate has copied the ELF into fresh frames.
-            let (elf_bytes, name) = unsafe {
-                let args = &*(args_ptr as *const ViSpawnArgs);
-
-                // Validate every pointer inside the args struct.
-                validate_user_buf(args.buffer_addr, args.buffer_size, MAX_USER_BUF)?;
-                validate_user_buf(args.name_ptr, args.name_len, MAX_LOG_MSG)?;
-
-                let elf_bytes =
-                    core::slice::from_raw_parts(args.buffer_addr as *const u8, args.buffer_size);
-                let name_slice =
-                    core::slice::from_raw_parts(args.name_ptr as *const u8, args.name_len);
-                (
-                    elf_bytes,
-                    core::str::from_utf8(name_slice).unwrap_or("unknown"),
-                )
+            let view = caller_copy_view(caller_id)?;
+            let mut args_bytes = [0u8; core::mem::size_of::<ViSpawnArgs>()];
+            view.read_into(args_ptr, &mut args_bytes)
+                .map_err(|_| SyscallError::InvalidInput)?;
+            let args = unsafe {
+                core::ptr::read_unaligned(args_bytes.as_ptr() as *const ViSpawnArgs)
             };
+            validate_user_buf(args.buffer_addr, args.buffer_size, MAX_USER_BUF)?;
+            validate_user_buf(args.name_ptr, args.name_len, MAX_LOG_MSG)?;
+            let elf_bytes = view
+                .read_bytes(args.buffer_addr, args.buffer_size)
+                .map_err(|_| SyscallError::InvalidInput)?;
+            let name_bytes = view
+                .read_bytes(args.name_ptr, args.name_len)
+                .map_err(|_| SyscallError::InvalidInput)?;
+            let name = core::str::from_utf8(&name_bytes).unwrap_or("unknown");
             let profile = authorize_launch_edge(
                 caller_id,
                 crate::loader::launch_profile::LaunchRoute::Mem,
@@ -3593,13 +3414,8 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     return Err(error);
                 }
             };
-
-            // The untrusted name is reduced to a neutral `/mem/` label before
-            // governed admission; it cannot select install-path authority.
             let spawned =
-                crate::loader::mem_spawn_gate::spawn_from_mem_gated(elf_bytes, name, request);
-            // See `SpawnFromPath`: consumed on success, cleared here so a failed
-            // spawn cannot leave its set for an unrelated later child.
+                crate::loader::mem_spawn_gate::spawn_from_mem_gated(&elf_bytes, name, request);
             crate::task::dir_inherit::clear_staged(caller_id);
             spawned.map_err(|e| match e {
                 types::ViError::PermissionDenied => SyscallError::PermissionDenied,
@@ -3615,15 +3431,9 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 _ => SyscallError::InvalidInput,
             })
         }
+
         Syscall::Create { path_ptr, path_len } => {
-            validate_user_buf(path_ptr, path_len, MAX_LOG_MSG)?;
-            unsafe {
-                let path_slice = core::slice::from_raw_parts(path_ptr as *const u8, path_len);
-                if core::str::from_utf8(path_slice).is_err() {
-                    return Err(SyscallError::InvalidInput);
-                }
-                // let res = super::file_create(path_str);  // FIXME: not implemented
-            }
+            let _path = read_user_string(caller_id, path_ptr, path_len, MAX_LOG_MSG)?;
             Err(SyscallError::PermissionDenied)
         }
         Syscall::SetTimer { deadline } => {
@@ -3643,42 +3453,38 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         }
 
         Syscall::GetProcs { buf_ptr, buf_len } => {
-            let bytes = buf_len
+            let bytes_len = buf_len
                 .checked_mul(core::mem::size_of::<api::syscall::ProcessInfo>())
                 .ok_or(SyscallError::InvalidInput)?;
-            validate_user_buf(buf_ptr, bytes, MAX_USER_BUF)?;
+            validate_user_buf(buf_ptr, bytes_len, MAX_USER_BUF)?;
 
             let rows = collect_process_rows(buf_len, snapshot_process_info);
-            // SAFETY: the destination buffer size/overflow was validated above and
-            // `rows.len() <= buf_len`, so the copy stays within the caller-owned range.
-            unsafe {
-                core::ptr::copy_nonoverlapping(
-                    rows.as_ptr(),
-                    buf_ptr as *mut api::syscall::ProcessInfo,
-                    rows.len(),
-                );
-            }
+            let raw_bytes = unsafe {
+                core::slice::from_raw_parts(
+                    rows.as_ptr() as *const u8,
+                    rows.len() * core::mem::size_of::<api::syscall::ProcessInfo>(),
+                )
+            };
+            write_user_slice(caller_id, buf_ptr, raw_bytes, MAX_USER_BUF)?;
             Ok(rows.len())
         }
 
         Syscall::GetProcs2 { buf_ptr, buf_len } => {
-            let bytes = buf_len
+            let bytes_len = buf_len
                 .checked_mul(core::mem::size_of::<api::syscall::ProcessInfoV2>())
                 .ok_or(SyscallError::InvalidInput)?;
-            validate_user_buf(buf_ptr, bytes, MAX_USER_BUF)?;
+            validate_user_buf(buf_ptr, bytes_len, MAX_USER_BUF)?;
 
             let sample_ticks = super::system_ticks() as u64;
             let rows =
                 collect_process_rows(buf_len, |task| snapshot_process_info_v2(task, sample_ticks));
-            // SAFETY: the destination buffer size/overflow was validated above and
-            // `rows.len() <= buf_len`, so the copy stays within the caller-owned range.
-            unsafe {
-                core::ptr::copy_nonoverlapping(
-                    rows.as_ptr(),
-                    buf_ptr as *mut api::syscall::ProcessInfoV2,
-                    rows.len(),
-                );
-            }
+            let raw_bytes = unsafe {
+                core::slice::from_raw_parts(
+                    rows.as_ptr() as *const u8,
+                    rows.len() * core::mem::size_of::<api::syscall::ProcessInfoV2>(),
+                )
+            };
+            write_user_slice(caller_id, buf_ptr, raw_bytes, MAX_USER_BUF)?;
             Ok(rows.len())
         }
 
@@ -3698,15 +3504,13 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     page_size: allocator.page_size() as u64,
                 }
             };
-            // SAFETY: the exact destination range was validated and `info` is a
-            // fixed-width byte-stable ABI value owned by this stack frame.
-            unsafe {
-                core::ptr::copy_nonoverlapping(
+            let raw_bytes = unsafe {
+                core::slice::from_raw_parts(
                     &info as *const api::syscall::ViMemInfoV1 as *const u8,
-                    out_ptr as *mut u8,
                     len,
-                );
-            }
+                )
+            };
+            write_user_slice(caller_id, out_ptr, raw_bytes, MAX_USER_BUF)?;
             Ok(len)
         }
 
@@ -3717,15 +3521,8 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         Syscall::FileOp { op, arg1, arg2 } => {
             match op {
                 0 => {
-                    // Remove(path_ptr, path_len)
-                    unsafe {
-                        let slice = core::slice::from_raw_parts(arg1 as *const u8, arg2);
-                        if let Ok(path) = core::str::from_utf8(slice) {
-                            return super::file_remove(path)
-                                .map_err(|_| SyscallError::PermissionDenied);
-                        }
-                        Err(SyscallError::InvalidInput)
-                    }
+                    let path = read_user_string(caller_id, arg1, arg2, MAX_LOG_MSG)?;
+                    super::file_remove(&path).map_err(|_| SyscallError::PermissionDenied)
                 }
                 1 => {
                     // Rename - Stub
@@ -3920,11 +3717,8 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 crate::audit::AuditEvent::NetTx,
                 &crate::audit::encode_u32x2(caller_id as u32, frame_len as u32),
             );
-            validate_user_buf(frame_ptr, frame_len, MAX_USER_BUF)?;
-            // SAFETY: validated above — frame_ptr/frame_len is a readable user buffer
-            // in the shared address space; we only read `frame_len` bytes from it.
-            let frame = unsafe { core::slice::from_raw_parts(frame_ptr as *const u8, frame_len) };
-            let ok = crate::task::drivers::nic::send_frame(frame);
+            let frame = read_user_slice(caller_id, frame_ptr, frame_len, MAX_USER_BUF)?;
+            let ok = crate::task::drivers::nic::send_frame(&frame);
             Ok(if ok { 1 } else { 0 })
         }
         Syscall::NetRx { buf_ptr, buf_len } => {
@@ -3932,10 +3726,13 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 return Err(SyscallError::PermissionDenied);
             }
             validate_user_buf(buf_ptr, buf_len, MAX_USER_BUF)?;
-            // SAFETY: validated above — buf_ptr/buf_len is a writable user buffer;
-            // recv_frame writes at most `buf_len` bytes and returns the count.
-            let buf = unsafe { core::slice::from_raw_parts_mut(buf_ptr as *mut u8, buf_len) };
-            let n = crate::task::drivers::nic::recv_frame(buf);
+            let mut kbuf = alloc::vec::Vec::new();
+            kbuf.try_reserve_exact(buf_len).map_err(|_| SyscallError::OutOfMemory)?;
+            kbuf.resize(buf_len, 0);
+            let n = crate::task::drivers::nic::recv_frame(&mut kbuf);
+            if n > 0 {
+                write_user_slice(caller_id, buf_ptr, &kbuf[..n], MAX_USER_BUF)?;
+            }
             Ok(n)
         }
         Syscall::StateStash {
@@ -3943,7 +3740,6 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             buf_ptr,
             buf_len,
         } => {
-            validate_user_buf(buf_ptr, buf_len, crate::cell::state_stash::MAX_STASH_LEN)?;
             let raw_key = key as u64;
             let is_shell =
                 caller_launch_state(caller_id).is_some_and(|(name, _, _)| name.as_str() == "shell");
@@ -3955,9 +3751,8 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             } else {
                 raw_key
             };
-            // SAFETY: validated above — readable user buffer of exactly buf_len bytes.
-            let bytes = unsafe { core::slice::from_raw_parts(buf_ptr as *const u8, buf_len) };
-            Ok(crate::cell::state_stash::stash(stash_key, bytes))
+            let bytes = read_user_slice(caller_id, buf_ptr, buf_len, crate::cell::state_stash::MAX_STASH_LEN)?;
+            Ok(crate::cell::state_stash::stash(stash_key, &bytes))
         }
         Syscall::StateRestore {
             key,
@@ -3965,21 +3760,23 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             buf_len,
         } => {
             validate_user_buf(buf_ptr, buf_len, crate::cell::state_stash::MAX_STASH_LEN)?;
-            // SAFETY: validated above — writable user buffer of exactly buf_len bytes.
-            let buf = unsafe { core::slice::from_raw_parts_mut(buf_ptr as *mut u8, buf_len) };
-            // For ARGV_STASH_KEY: serve the caller's personal slot (populated by
-            // SpawnFromPath) first so rapid back-to-back spawns can't race.
-            // The personal entry is consumed on read (one-shot) so it never
-            // accumulates toward the MAX_ENTRIES cap.
+            let mut kbuf = alloc::vec::Vec::new();
+            kbuf.try_reserve_exact(buf_len).map_err(|_| SyscallError::OutOfMemory)?;
+            kbuf.resize(buf_len, 0);
             if key as u64 == SPAWN_ARGV_KEY {
                 let personal_key = spawn_argv_slot(caller_id);
-                let n = crate::cell::state_stash::restore(personal_key, buf);
+                let n = crate::cell::state_stash::restore(personal_key, &mut kbuf);
                 if n > 0 {
                     crate::cell::state_stash::remove(personal_key);
+                    write_user_slice(caller_id, buf_ptr, &kbuf[..n], crate::cell::state_stash::MAX_STASH_LEN)?;
                 }
                 return Ok(n);
             }
-            Ok(crate::cell::state_stash::restore(key as u64, buf))
+            let n = crate::cell::state_stash::restore(key as u64, &mut kbuf);
+            if n > 0 {
+                write_user_slice(caller_id, buf_ptr, &kbuf[..n], crate::cell::state_stash::MAX_STASH_LEN)?;
+            }
+            Ok(n)
         }
         // 412: StateStashClear — delete the stash entry for `key`, freeing its slot.
         // No-op when the key is absent (idempotent). Returns 0 always.
@@ -4131,24 +3928,19 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             {
                 return Err(SyscallError::InvalidInput);
             }
-            validate_user_buf(
+            let path_str = read_user_string(
+                caller_id,
                 path_ptr,
                 path_len,
                 crate::loader::disk_layout::MAX_CELL_PATH,
             )?;
-            // SAFETY: `path_ptr..path_ptr+path_len` was validated above as a
-            // caller-owned user buffer; SUM=1 permits the S-mode read here.
-            let path_str = unsafe {
-                let slice = core::slice::from_raw_parts(path_ptr as *const u8, path_len);
-                core::str::from_utf8(slice).map_err(|_| SyscallError::InvalidInput)?
-            };
             if !path_str.starts_with('/') {
                 return Err(SyscallError::InvalidInput);
             }
             let profile = authorize_launch_edge(
                 caller_id,
                 crate::loader::launch_profile::LaunchRoute::Path,
-                path_str,
+                &path_str,
             )?;
             let replacement = crate::cell::hotswap::reserve_frozen_replacement(old_tid)
                 .ok_or(SyscallError::PermissionDenied)?;
@@ -4160,7 +3952,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                         return Err(error);
                     }
                 };
-            let spawned = crate::loader::spawn_from_path(path_str, request);
+            let spawned = crate::loader::spawn_from_path(&path_str, request);
             // Mirror the regular spawn contract: a successful replacement spawn
             // consumes any staged directory set, and a failed one must clear it
             // so it cannot attach to an unrelated later child.
@@ -4237,12 +4029,12 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     // SAFETY: SAS — caller's virtual address == kernel's virtual address.
                     // The cell is responsible for passing a valid, writeable pointer.
                     if out_ptr != 0 {
-                        unsafe {
-                            core::ptr::write_volatile(out_ptr as *mut u32, bdf);
-                            core::ptr::write_volatile((out_ptr + 4) as *mut u32, 1u32); // found
-                            core::ptr::write_volatile((out_ptr + 8) as *mut u64, bar0_base);
-                            core::ptr::write_volatile((out_ptr + 16) as *mut u64, bar0_len);
-                        }
+                        let mut dev_bytes = [0u8; 24];
+                        dev_bytes[0..4].copy_from_slice(&bdf.to_ne_bytes());
+                        dev_bytes[4..8].copy_from_slice(&1u32.to_ne_bytes());
+                        dev_bytes[8..16].copy_from_slice(&bar0_base.to_ne_bytes());
+                        dev_bytes[16..24].copy_from_slice(&bar0_len.to_ne_bytes());
+                        write_user_slice(caller_id, out_ptr, &dev_bytes, MAX_USER_BUF)?;
                     }
                     Ok(1)
                 }
@@ -4314,18 +4106,17 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             if max == 0 {
                 return Ok(0);
             }
-            // Safety: the allowlist gate above verified the cell has ReadLog permission.
-            // We validate buf_ptr + max are within the cell's address space by writing
-            // through phys_to_virt — SAS means the VA is the same in kernel context.
-            let buf_ptr = buf_ptr as *mut u8;
-            if buf_ptr.is_null() {
+            if buf_ptr == 0 {
                 return Err(SyscallError::InvalidInput);
             }
-            // Cap to 4 KiB per call to bound lock hold time.
             let max = max.min(4096);
-            // SAFETY: The cell provided a writable VA in the SAS; max is capped above.
-            let out = unsafe { core::slice::from_raw_parts_mut(buf_ptr, max) };
-            let n = crate::task::read_log_ring(out);
+            let mut kbuf = alloc::vec::Vec::new();
+            kbuf.try_reserve_exact(max).map_err(|_| SyscallError::OutOfMemory)?;
+            kbuf.resize(max, 0);
+            let n = crate::task::read_log_ring(&mut kbuf);
+            if n > 0 {
+                write_user_slice(caller_id, buf_ptr, &kbuf[..n], MAX_USER_BUF)?;
+            }
             Ok(n)
         }
 
@@ -4412,10 +4203,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             let mut bounce = [0u8; 512];
             match crate::task::drivers::block::read_sector(sector, &mut bounce) {
                 Ok(()) => {
-                    // SAFETY: buf_ptr is a validated 512-byte user buffer; SUM=1
-                    // (set by ViCell_syscall_dispatch) allows S-mode to write it.
-                    let buf = unsafe { core::slice::from_raw_parts_mut(buf_ptr as *mut u8, 512) };
-                    buf.copy_from_slice(&bounce);
+                    write_user_slice(caller_id, buf_ptr, &bounce, MAX_USER_BUF)?;
                     Ok(1)
                 }
                 Err(_) => Ok(0),
@@ -4434,14 +4222,9 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             if !check_block_access(caller_id, sector, 1) {
                 return Ok(0);
             }
-            validate_user_buf(buf_ptr, 512, MAX_USER_BUF)?;
-
-            // Bounce buffer for the same identity-map reason as BlkRead above.
-            // SAFETY: buf_ptr is a validated 512-byte user buffer; SUM=1 allows
-            // S-mode to read it.
-            let user = unsafe { core::slice::from_raw_parts(buf_ptr as *const u8, 512) };
+            let user = read_user_slice(caller_id, buf_ptr, 512, MAX_USER_BUF)?;
             let mut bounce = [0u8; 512];
-            bounce.copy_from_slice(user);
+            bounce.copy_from_slice(&user);
             match crate::task::drivers::block::write_sector(sector, &bounce) {
                 Ok(()) => Ok(1),
                 Err(_) => Ok(0),
@@ -4804,48 +4587,44 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         }
 
         Syscall::GetRandom { buf_ptr, len } => {
-            // Cap at 64 bytes per call (one VirtIO-RNG descriptor).
             let capped = len.min(64);
             if capped == 0 {
                 return Ok(0);
             }
-            // SAFETY: SUM is enabled by the caller (ViCell_syscall_dispatch). buf_ptr is
-            // a user-space pointer in the same SAS; we write exactly `capped` bytes.
-            let buf = unsafe { core::slice::from_raw_parts_mut(buf_ptr as *mut u8, capped) };
-            let written = crate::task::drivers::virtio_rng::get_random(buf);
-            if written > 0 {
-                return Ok(written);
-            }
-            // No true entropy source. Fail-closed by default: return 0 bytes so
-            // crypto callers (TLS ViRng / net-broker BrokerRng) hit their absent-
-            // device guard and panic instead of keying from predictable bytes.
-            // The xorshift32 fallback exists ONLY behind `dev-weak-rng` (G1 dev/
-            // QEMU posture, in default features) and warns once at first use.
-            #[cfg(feature = "dev-weak-rng")]
-            {
-                static WEAK_RNG_WARNED: core::sync::atomic::AtomicBool =
-                    core::sync::atomic::AtomicBool::new(false);
-                if !WEAK_RNG_WARNED.swap(true, core::sync::atomic::Ordering::Relaxed) {
-                    log::warn!(
-                        "[kernel] GetRandom: no VirtIO-RNG — serving WEAK xorshift32 \
-                         (dev-weak-rng). NOT cryptographically secure; never ship this."
-                    );
+            validate_user_buf(buf_ptr, capped, MAX_USER_BUF)?;
+            let mut kbuf = [0u8; 64];
+            let written = crate::task::drivers::virtio_rng::get_random(&mut kbuf[..capped]);
+            let n = if written > 0 {
+                written
+            } else {
+                #[cfg(feature = "dev-weak-rng")]
+                {
+                    static WEAK_RNG_WARNED: core::sync::atomic::AtomicBool =
+                        core::sync::atomic::AtomicBool::new(false);
+                    if !WEAK_RNG_WARNED.swap(true, core::sync::atomic::Ordering::Relaxed) {
+                        log::warn!(
+                            "[kernel] GetRandom: no VirtIO-RNG — serving WEAK xorshift32 \
+                             (dev-weak-rng). NOT cryptographically secure; never ship this."
+                        );
+                    }
+                    let seed =
+                        super::system_ticks() as u32 ^ (caller_id as u32).wrapping_mul(0x9e37_79b9);
+                    let mut state = if seed == 0 { 1 } else { seed };
+                    for byte in kbuf[..capped].iter_mut() {
+                        state ^= state << 13;
+                        state ^= state >> 17;
+                        state ^= state << 5;
+                        *byte = state as u8;
+                    }
+                    capped
                 }
-                let seed =
-                    super::system_ticks() as u32 ^ (caller_id as u32).wrapping_mul(0x9e37_79b9);
-                let mut state = if seed == 0 { 1 } else { seed };
-                for byte in buf.iter_mut() {
-                    state ^= state << 13;
-                    state ^= state >> 17;
-                    state ^= state << 5;
-                    *byte = state as u8;
-                }
-                Ok(capped)
+                #[cfg(not(feature = "dev-weak-rng"))]
+                0
+            };
+            if n > 0 {
+                write_user_slice(caller_id, buf_ptr, &kbuf[..n], MAX_USER_BUF)?;
             }
-            #[cfg(not(feature = "dev-weak-rng"))]
-            {
-                Ok(0)
-            }
+            Ok(n)
         }
 
         Syscall::BlkReadAsync { sector, grant_id } => {

@@ -87,6 +87,22 @@ pub struct ViHartLocal {
     /// under `SCHEDULER`, consumed exactly once per completed transition away.
     #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
     staged_domain_release: execution_pin::HartOwnedSlot,
+    /// Recoverable user-copy fault guard (RV64). Armed by `task::user_copy`
+    /// around exactly one guarded byte-copy window and read by the trap
+    /// handler through `vi_user_copy_guard_fault`. Hart-owned: only the
+    /// executing hart touches its own slot, so plain atomics need no locks.
+    /// Zero resume PC means "no landing pad"; the active flag is the gate.
+    #[cfg(target_arch = "riscv64")]
+    pub user_copy_guard_active: AtomicUsize,
+    #[cfg(target_arch = "riscv64")]
+    pub user_copy_guard_resume_pc: AtomicUsize,
+    /// Inclusive start of the user range covered by the armed guard. The
+    /// trap hook rejects faults whose `stval` falls outside [start, end).
+    #[cfg(target_arch = "riscv64")]
+    pub user_copy_guard_start: AtomicUsize,
+    /// Exclusive end of the guarded user range.
+    #[cfg(target_arch = "riscv64")]
+    pub user_copy_guard_end: AtomicUsize,
 }
 
 /// Static array of per-hart local state, one entry per supported hart.
@@ -130,6 +146,14 @@ pub static HART_LOCALS: [ViHartLocal; MAX_HARTS] = {
         pinned_domain: execution_pin::HartOwnedSlot(core::cell::UnsafeCell::new(None)),
         #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
         staged_domain_release: execution_pin::HartOwnedSlot(core::cell::UnsafeCell::new(None)),
+        #[cfg(target_arch = "riscv64")]
+        user_copy_guard_active: AtomicUsize::new(0),
+        #[cfg(target_arch = "riscv64")]
+        user_copy_guard_resume_pc: AtomicUsize::new(0),
+        #[cfg(target_arch = "riscv64")]
+        user_copy_guard_start: AtomicUsize::new(0),
+        #[cfg(target_arch = "riscv64")]
+        user_copy_guard_end: AtomicUsize::new(0),
     };
     [ZERO; MAX_HARTS]
 };
