@@ -38,8 +38,8 @@
 <a href=#38 id=38 data-nosnippet>38</a><span class="kw">use </span>crate::{ViError, ViResult};
 <a href=#39 id=39 data-nosnippet>39</a>
 <a href=#40 id=40 data-nosnippet>40</a><span class="doccomment">/// Max bytes accepted by a single [`tls_write`] IPC call (mirrors the cap in
-<a href=#41 id=41 data-nosnippet>41</a>/// `tls.rs`: 512-byte IPC buffer minus the 9-byte `[op][cap]` header).
-<a href=#42 id=42 data-nosnippet>42</a></span><span class="kw">const </span>MAX_TLS_WRITE: usize = <span class="number">503</span>;
+<a href=#41 id=41 data-nosnippet>41</a>/// `tls.rs`: 512-byte IPC buffer minus the 11-byte `[op][cap][len]` header).
+<a href=#42 id=42 data-nosnippet>42</a></span><span class="kw">const </span>MAX_TLS_WRITE: usize = <span class="number">501</span>;
 <a href=#43 id=43 data-nosnippet>43</a>
 <a href=#44 id=44 data-nosnippet>44</a><span class="doccomment">/// Number of consecutive 0-byte reads tolerated before [`Read::read`] gives up.
 <a href=#45 id=45 data-nosnippet>45</a>///
