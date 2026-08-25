@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["INPUT_FRAME_LEN"],"fn":["connect_to_input","cursor_rect","forward_key","handle_input_event","update_cursor","wait_for_service"],"struct":["InputState"]};
+window.SIDEBAR_ITEMS = {"constant":["INPUT_FRAME_LEN"],"fn":["connect_to_input","cursor_rect","forward_key","handle_input_event","queue_dirty","route_pointer","set_input_focus","update_cursor","wait_for_service"],"struct":["InputState"]};
