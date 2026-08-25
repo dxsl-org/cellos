@@ -14,14 +14,7 @@ use driver_wasm::imports::register_vi_imports;
 use driver_wasm::{HostState, WasmConfig, WasmRuntime};
 use loader::load_wasm_bytes;
 
-api::declare_syscalls![
-    Send,
-    Recv,
-    Log,
-    Heartbeat,
-    LookupService,
-    StateRestore
-];
+api::declare_syscalls![Send, Recv, Log, Heartbeat, LookupService, StateRestore];
 
 #[no_mangle]
 pub fn main() {
