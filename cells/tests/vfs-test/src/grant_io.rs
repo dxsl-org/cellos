@@ -1,5 +1,8 @@
 use api::ipc::{VfsRequest, VfsResponse};
+use ostd::grant::GrantHandle;
 use ostd::syscall::{sys_grant_alloc, sys_grant_copy_to_slice, sys_grant_free, sys_grant_share};
+
+const WRITE_ONLY_GRANT: u8 = 1;
 const READ_WRITE_GRANT: u8 = 2;
 const UNKNOWN_CAP_ID: u64 = 0;
 
@@ -17,6 +20,12 @@ impl GrantRegion {
         Ok(Self { id, len })
     }
 
+    pub fn alloc_copy_from(data: &[u8]) -> Result<Self, &'static str> {
+        let handle = GrantHandle::alloc_copy_from_slice(data).ok_or("GrantAlloc failed")?;
+        let (id, len) = handle.into_raw();
+        Ok(Self { id, len })
+    }
+
     pub fn id(&self) -> usize {
         self.id
     }
@@ -30,6 +39,14 @@ impl GrantRegion {
             Ok(())
         } else {
             Err("GrantShare to VFS failed")
+        }
+    }
+
+    pub fn share_write_with_vfs(&self) -> Result<(), &'static str> {
+        if sys_grant_share(self.id, crate::vfs_tid(), WRITE_ONLY_GRANT) {
+            Ok(())
+        } else {
+            Err("GrantShare WriteOnly to VFS failed")
         }
     }
 }

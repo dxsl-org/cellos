@@ -328,24 +328,27 @@ pub fn read_all(cap_id: u64, buf: &mut [u8], vfs_tid: usize) -> ViResult<usize> 
     }
 }
 
-/// Write `data` to a file cap using the optimal I/O path.
+/// Write `data` through a VFS-issued file-handle ID.
 ///
-/// - `data.len() < 4096`: kernel WriteGrant IPC path (no Grant overhead; caller
-///   uses existing `VfsRequest::Write` via IPC — stub, returns 0 for now)
-/// - `data.len() >= 4096`: zero-copy Grant path
+/// Every write uses the same VFS `WriteGrant` authority path. Data is sent in
+/// contiguous 4 KiB grant chunks, each acknowledged only after its commit.
+/// A failure can therefore leave earlier chunks visible, just like the existing
+/// append helper's chunked writes.
 ///
 /// # F14 contract
-/// The caller waits for `GrantDone` before freeing the grant, so VFS finishes
-/// writing to disk before the frames are returned to the allocator.
+/// The caller waits for `GrantDone` before freeing each grant, so VFS finishes
+/// writing that chunk before its frames are returned to the allocator.
 pub fn write_all(cap_id: u64, data: &[u8], vfs_tid: usize) -> ViResult<usize> {
-    if data.len() < 4096 {
-        // Small writes: caller uses existing VfsRequest::Write IPC directly.
-        // This wrapper covers the large-file case only; return 0 to signal fallback.
-        let _ = (cap_id, vfs_tid);
-        Ok(0)
-    } else {
-        grant_write(cap_id, data, vfs_tid)
+    let mut total = 0usize;
+    for chunk in data.chunks(4096) {
+        let offset = u64::try_from(total).map_err(|_| ViError::IO)?;
+        let written = grant_write(cap_id, offset, chunk, vfs_tid)?;
+        if written != chunk.len() {
+            return Err(ViError::IO);
+        }
+        total = total.checked_add(written).ok_or(ViError::IO)?;
     }
+    Ok(total)
 }
 
 fn grant_read(cap_id: u64, buf: &mut [u8], vfs_tid: usize) -> ViResult<usize> {
@@ -388,8 +391,11 @@ fn grant_read(cap_id: u64, buf: &mut [u8], vfs_tid: usize) -> ViResult<usize> {
     Ok(bytes)
 }
 
-fn grant_write(cap_id: u64, data: &[u8], vfs_tid: usize) -> ViResult<usize> {
-    let bytes = data.len().min(4096);
+fn grant_write(cap_id: u64, offset: u64, data: &[u8], vfs_tid: usize) -> ViResult<usize> {
+    let bytes = data.len();
+    if bytes == 0 || bytes > 4096 {
+        return Err(ViError::IO);
+    }
     let grant_id = syscall::sys_grant_alloc(bytes).ok_or(ViError::OutOfMemory)?;
 
     // Fill grant buffer BEFORE sharing — we own it exclusively here.
@@ -405,7 +411,7 @@ fn grant_write(cap_id: u64, data: &[u8], vfs_tid: usize) -> ViResult<usize> {
 
     let req = VfsRequest::WriteGrant {
         cap: cap_id,
-        offset: 0,
+        offset,
         grant: grant_id,
         bytes,
     };
@@ -417,7 +423,7 @@ fn grant_write(cap_id: u64, data: &[u8], vfs_tid: usize) -> ViResult<usize> {
 
     syscall::sys_grant_free(grant_id);
     match resp {
-        VfsResponse::GrantDone { bytes: written } => Ok(written),
+        VfsResponse::GrantDone { bytes: written } if written == bytes => Ok(written),
         _ => Err(ViError::IO),
     }
 }

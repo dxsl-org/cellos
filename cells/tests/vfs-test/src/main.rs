@@ -250,11 +250,9 @@ fn test_access_control() {
         "rmdir_recursive under / → PermissionDenied (before subtree walk)"
     );
 
-    // `WriteGrant` is fail-closed until cap→path routing exists: it cannot resolve
-    // a path, so it cannot authorize, so it refuses. It used to drain the grant,
-    // drop the bytes, and reply GrantDone — success for a write that never landed.
-    // grant id 0 is never valid; pre-change this reached sys_grant_slice and
-    // returned Err(1), so Err(3) proves the refusal happens first.
+    // Unknown and wrong-owner service file handles are intentionally the same
+    // denial. The invalid grant must stay untouched because cap resolution
+    // fails before grant access.
     assert_err!(
         api::ipc::VfsRequest::WriteGrant {
             cap: 0,
@@ -263,7 +261,7 @@ fn test_access_control() {
             bytes: 1
         },
         3,
-        "WriteGrant is fail-closed (no cap→path routing yet)"
+        "grant-write: unknown handle is denied before grant access"
     );
 
     match grant_io::unknown_cap_read_grant_returns_zero(5, 4) {
@@ -280,7 +278,165 @@ fn test_access_control() {
     }
 }
 
-/// 4. Async read protocol: ReadAsync → PendingHandle → Poll → Data.
+/// 4. Grant-backed writes: capability routing, range checks, and commit reply.
+fn test_grant_write() {
+    const PATH: &str = "/tmp/grant-write.txt";
+    const INITIAL: &[u8] = b"prefix";
+    const APPEND: &[u8] = b"grant!";
+    const EXPECTED: &[u8] = b"prefixgrant!";
+
+    assert_ok!(
+        api::ipc::VfsRequest::Write {
+            path: PATH,
+            content: INITIAL
+        },
+        "grant-write: create writable target"
+    );
+    let dir = match vfs_req(&api::ipc::VfsRequest::OpenRootDir { path: "/tmp" }) {
+        api::ipc::VfsResponse::DirHandle(dir) => dir,
+        _ => {
+            fail("grant-write: open /tmp directory capability");
+            return;
+        }
+    };
+    let file = match vfs_req(&api::ipc::VfsRequest::OpenFileAt {
+        dir,
+        name: "grant-write.txt",
+    }) {
+        api::ipc::VfsResponse::FileHandle(file) => file,
+        _ => {
+            fail("grant-write: open service file handle");
+            return;
+        }
+    };
+    match ostd::fs::write_all(file.0, INITIAL, vfs_tid()) {
+        Ok(bytes) if bytes == INITIAL.len() => {
+            pass("grant-write: helper returns committed byte count")
+        }
+        _ => fail("grant-write: helper returns committed byte count"),
+    }
+    let grant = match grant_io::GrantRegion::alloc_copy_from(APPEND)
+        .and_then(|grant| {
+            grant.share_write_with_vfs()?;
+            Ok(grant)
+        }) {
+        Ok(grant) => grant,
+        Err(_) => {
+            fail("grant-write: allocate and share source grant");
+            return;
+        }
+    };
+    match vfs_req(&api::ipc::VfsRequest::WriteGrant {
+        cap: file.0,
+        offset: INITIAL.len() as u64,
+        grant: grant.id(),
+        bytes: APPEND.len(),
+    }) {
+        api::ipc::VfsResponse::GrantDone { bytes } if bytes == APPEND.len() => {
+            pass("grant-write: commits exact bytes before acknowledgement")
+        }
+        _ => fail("grant-write: commits exact bytes before acknowledgement"),
+    }
+
+    assert_err!(
+        api::ipc::VfsRequest::WriteGrant {
+            cap: file.0,
+            offset: EXPECTED.len() as u64 + 1,
+            grant: 0,
+            bytes: 1,
+        },
+        1,
+        "grant-write: invalid offset is refused before grant access"
+    );
+    let short_grant = match grant_io::GrantRegion::alloc_copy_from(b"bad")
+        .and_then(|grant| {
+            grant.share_write_with_vfs()?;
+            Ok(grant)
+        }) {
+        Ok(grant) => grant,
+        Err(_) => {
+            fail("grant-write: allocate short grant");
+            return;
+        }
+    };
+    assert_err!(
+        api::ipc::VfsRequest::WriteGrant {
+            cap: file.0,
+            offset: 0,
+            grant: short_grant.id(),
+            bytes: 4,
+        },
+        1,
+        "grant-write: short grant is refused without mutation"
+    );
+    match grant_io::read_file_into_grant(PATH) {
+        Ok((grant, bytes))
+            if bytes == EXPECTED.len() && grant_io::grant_prefix_equals(&grant, EXPECTED) =>
+        {
+            pass("grant-write: failed writes leave committed bytes unchanged")
+        }
+        _ => fail("grant-write: failed writes leave committed bytes unchanged"),
+    }
+
+    let root = match vfs_req(&api::ipc::VfsRequest::OpenRootDir { path: "/" }) {
+        api::ipc::VfsResponse::DirHandle(root) => root,
+        _ => {
+            fail("grant-write: open read-only root capability");
+            return;
+        }
+    };
+    let read_only = match vfs_req(&api::ipc::VfsRequest::OpenFileAt {
+        dir: root,
+        name: "readme.txt",
+    }) {
+        api::ipc::VfsResponse::FileHandle(file) => file,
+        _ => {
+            fail("grant-write: open read-only file handle");
+            return;
+        }
+    };
+    assert_err!(
+        api::ipc::VfsRequest::WriteGrant {
+            cap: read_only.0,
+            offset: 0,
+            grant: 0,
+            bytes: 1,
+        },
+        3,
+        "grant-write: write authorization precedes grant access"
+    );
+    let _ = vfs_req(&api::ipc::VfsRequest::CloseFile { file: read_only });
+    let _ = vfs_req(&api::ipc::VfsRequest::CloseDir { dir: root });
+
+    #[cfg(feature = "test-hooks")]
+    {
+        assert_err!(
+            api::ipc::VfsRequest::WriteGrant {
+                cap: file.0,
+                offset: 0,
+                grant: 0,
+                bytes: 2200,
+            },
+            2,
+            "grant-write: quota overflow is refused before grant access"
+        );
+        match vfs_req(&api::ipc::VfsRequest::Stat(PATH)) {
+            api::ipc::VfsResponse::Stat {
+                size,
+                is_dir: false,
+            } if size == EXPECTED.len() as u64 => {
+                pass("grant-write: quota refusal leaves committed bytes unchanged")
+            }
+            _ => fail("grant-write: quota refusal leaves committed bytes unchanged"),
+        }
+    }
+
+    let _ = vfs_req(&api::ipc::VfsRequest::CloseFile { file });
+    let _ = vfs_req(&api::ipc::VfsRequest::CloseDir { dir });
+    let _ = vfs_req(&api::ipc::VfsRequest::Unlink(PATH));
+}
+
+/// 5. Async read protocol: ReadAsync → PendingHandle → Poll → Data.
 fn test_async_read() {
     assert_ok!(
         api::ipc::VfsRequest::Write {
@@ -325,7 +481,7 @@ fn test_async_read() {
     let _ = vfs_req(&api::ipc::VfsRequest::Unlink("/tmp/async_test.txt"));
 }
 
-/// 5. RamFS (/tmp) volatile write and stat.
+/// 6. RamFS (/tmp) volatile write and stat.
 fn test_ramfs() {
     assert_ok!(
         api::ipc::VfsRequest::Write {
@@ -349,7 +505,7 @@ fn test_ramfs() {
     }
 }
 
-/// 6. Stat on /tmp root directory.
+/// 7. Stat on /tmp root directory.
 fn test_stat_dir() {
     match vfs_req(&api::ipc::VfsRequest::Stat("/tmp")) {
         api::ipc::VfsResponse::Stat { is_dir: true, .. } => pass("stat /tmp is_dir=true"),
@@ -357,7 +513,7 @@ fn test_stat_dir() {
     }
 }
 
-/// 7. Edge cases: nonexistent path stat and listdir.
+/// 8. Edge cases: nonexistent path stat and listdir.
 fn test_edge_cases() {
     match vfs_req(&api::ipc::VfsRequest::Stat("/tmp/does_not_exist_xyz.txt")) {
         api::ipc::VfsResponse::Err(_) => pass("stat nonexistent returns Err"),
@@ -371,7 +527,7 @@ fn test_edge_cases() {
     }
 }
 
-/// 8. Quota enforcement (Err 2). Only built with `test-hooks`, where the VFS
+/// 9. Quota enforcement (Err 2). Only built with `test-hooks`, where the VFS
 /// uses a 1.1 KiB quota.  All paths use /tmp (RamFS) so no block device is needed.
 /// The QuotaTracker in dispatch.rs charges every successful write regardless of
 /// which backend path is used.
@@ -427,7 +583,7 @@ fn test_quota_limit() {
     let _ = vfs_req(&api::ipc::VfsRequest::Unlink("/tmp/q3.bin"));
 }
 
-/// 9. RmdirRecursive releases quota (test-hooks only, 1.1 KiB quota).
+/// 10. RmdirRecursive releases quota (test-hooks only, 1.1 KiB quota).
 /// After test_quota_limit cleanup: 8 B used (volatile.txt).
 /// 8 + 400 = 408 ≤ 1100  ✓
 /// 408 + 400 = 808 ≤ 1100  ✓
@@ -488,6 +644,7 @@ fn cell_main() {
     test_file_lifecycle();
     test_directory_ops();
     test_access_control();
+    test_grant_write();
     test_async_read();
     test_ramfs();
     test_stat_dir();

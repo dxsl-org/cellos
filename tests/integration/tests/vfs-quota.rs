@@ -170,6 +170,42 @@ fn riscv64_vfs_quota_all_pass() {
     wait_for_or_dump(&runner, "[PASS] grant: ReadFileGrant copies nonzero bytes");
     wait_for_or_dump(
         &runner,
+        "[PASS] grant-write: unknown handle is denied before grant access",
+    );
+    wait_for_or_dump(
+        &runner,
+        "[PASS] grant-write: helper returns committed byte count",
+    );
+    wait_for_or_dump(
+        &runner,
+        "[PASS] grant-write: commits exact bytes before acknowledgement",
+    );
+    wait_for_or_dump(
+        &runner,
+        "[PASS] grant-write: invalid offset is refused before grant access",
+    );
+    wait_for_or_dump(
+        &runner,
+        "[PASS] grant-write: short grant is refused without mutation",
+    );
+    wait_for_or_dump(
+        &runner,
+        "[PASS] grant-write: failed writes leave committed bytes unchanged",
+    );
+    wait_for_or_dump(
+        &runner,
+        "[PASS] grant-write: write authorization precedes grant access",
+    );
+    wait_for_or_dump(
+        &runner,
+        "[PASS] grant-write: quota overflow is refused before grant access",
+    );
+    wait_for_or_dump(
+        &runner,
+        "[PASS] grant-write: quota refusal leaves committed bytes unchanged",
+    );
+    wait_for_or_dump(
+        &runner,
         "[PASS] grant: ReadFileGrant is refused after sealing",
     );
     wait_for_or_dump(
@@ -182,6 +218,11 @@ fn riscv64_vfs_quota_all_pass() {
     let serial = runner.dump();
     assert!(
         !serial.contains("[FAIL] grant:"),
+        "--- serial output ---\n{}\n---",
+        serial
+    );
+    assert!(
+        !serial.contains("[FAIL] grant-write:"),
         "--- serial output ---\n{}\n---",
         serial
     );

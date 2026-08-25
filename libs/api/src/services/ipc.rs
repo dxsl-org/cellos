@@ -60,8 +60,9 @@ pub enum VfsRequest<'a> {
         grant: usize,
     },
     /// Zero-copy large write: VFS reads `bytes` bytes from the caller's grant
-    /// buffer and writes them to `cap` at `offset`.  GrantDone is sent only
-    /// after the write commits (write-through on FAT32) — F14 invariant.
+    /// buffer and writes them at `offset` through a VFS-issued file-handle ID in
+    /// `cap`. GrantDone is sent only after the write commits (write-through on
+    /// FAT32) — F14 invariant.
     WriteGrant {
         cap: u64,
         offset: u64,

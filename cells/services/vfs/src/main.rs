@@ -30,6 +30,7 @@ mod dispatch;
 mod dispatch_dirs;
 mod dispatch_file_handles;
 mod file_handles;
+mod grant_write;
 mod handle_table;
 #[cfg(all(feature = "littlefs", target_arch = "x86_64"))]
 mod lfs_string_shim;

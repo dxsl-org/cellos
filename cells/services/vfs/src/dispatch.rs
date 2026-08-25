@@ -269,25 +269,7 @@ pub fn handle_request<'a>(
             offset,
             grant,
             bytes,
-        } => {
-            // FAIL-CLOSED until cap→path routing exists.
-            //
-            // This arm cannot resolve the target path from `cap`, so it cannot run
-            // `access.can_write` — and an unauthorizable write must be refused, not
-            // performed.  It previously drained the grant, dropped the bytes, and
-            // replied `GrantDone { bytes }`: a success report for a write that never
-            // happened, with no authorization check anywhere on the path.  Reporting
-            // success for a discarded write is worse than refusing: a caller cannot
-            // distinguish it from a real write, and wiring the routing later would
-            // silently turn the same unchecked path into real disk writes.
-            //
-            // Refuse before touching the grant — nothing is read, so there is no
-            // F14 drain obligation and no `unsafe` needed here.  When cap→path
-            // routing lands, authorize with `can_write` (and charge quota with the
-            // net-delta pattern from the `Write` arm) BEFORE writing anything.
-            let _ = (cap, offset, grant, bytes);
-            api::ipc::VfsResponse::Err(ERR_DENIED)
-        }
+        } => crate::grant_write::write(vfs, caller, cap, offset, grant, bytes),
 
         api::ipc::VfsRequest::ReadFileGrant { path, grant, max } => {
             // Authorize BEFORE the grant is even resolved: this arm copies a whole

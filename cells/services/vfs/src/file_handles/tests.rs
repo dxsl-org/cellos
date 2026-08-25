@@ -30,6 +30,17 @@ fn begin_and_finish_sync_read_restore_the_open_state() {
 }
 
 #[test]
+fn path_lookup_hides_unknown_and_wrong_owner_handles() {
+    let mut table = FileHandleTable::new();
+    let handle = table.insert(CELL_B, "/tmp/b", 7).expect("file handle");
+    assert_eq!(table.path_of(CELL_B, handle), Some("/tmp/b"));
+    assert_eq!(table.path_of(CELL_A, handle), None);
+    assert_eq!(table.path_of(CELL_A, ViVfsFileHandle(u64::MAX)), None);
+    assert!(table.close(CELL_B, handle));
+    assert_eq!(table.path_of(CELL_B, handle), None);
+}
+
+#[test]
 fn parent_dir_revocation_reaps_cross_owner_entries() {
     let mut table = FileHandleTable::new();
     let keep = table.insert(CELL_A, "/tmp/a", 1).expect("keep");

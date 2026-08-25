@@ -81,6 +81,16 @@ impl FileHandleTable {
         Ok(ViVfsFileHandle(id))
     }
 
+    /// Resolve an open file handle for its owner without exposing entries held
+    /// by another caller. Grant writes use this to recover the authorized path
+    /// before resolving caller-controlled grant memory.
+    pub fn path_of(&self, caller: Caller, file: ViVfsFileHandle) -> Option<&str> {
+        self.entries
+            .get(&file.0)
+            .filter(|entry| entry.owner == caller && entry.state == FileState::Open)
+            .map(|entry| entry.path.as_str())
+    }
+
     pub fn begin_sync_read(
         &mut self,
         caller: Caller,

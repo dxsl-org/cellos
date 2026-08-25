@@ -1,4 +1,4 @@
-//! Service-local file handles for bounded inline reads.
+//! Service-local file handles for bounded inline reads and grant writes.
 //!
 //! Every entry is owned by one attested caller generation and anchored to the
 //! exact directory handle used to open it. The ids are opaque but not secret;
