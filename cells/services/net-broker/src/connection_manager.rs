@@ -1,19 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
-//! ConnectionManager — multi-path peer connection with relay fallback.
+//! ConnectionManager — direct peer connections.
 //!
-//! Connection strategy per peer:
-//!   1. Try direct TCP (LAN address from ticket.addrs[0])       — 2s timeout
-//!   2. Try direct TCP (STUN reflexive, ticket.addrs[1])        — 2s timeout
-//!   3. Fall back: route through relay (ticket.relay_ip:port)
-//!
-//! The caller (dispatch loop) does not need to know which path is active.
-//! All paths end in a Noise KKpsk0 session in the ConnectionPool.
+//! Each configured direct address is attempted with a bounded timeout. A
+//! successful path ends in a Noise KKpsk0 session in the ConnectionPool.
+//! Relay fallback is unavailable until service-net provides an mTLS client
+//! capability backed by the protected certificate identity.
 
-// reason: implements the multi-path (direct TCP / STUN / relay-fallback)
-// peer connection manager for the net-broker robot-swarm feature; not yet
-// constructed from main.rs — the dispatch loop currently only polls
-// `relay_client.is_connected()` directly and has no routing/connection
-// wiring (P06/P08 TODOs).
+// reason: the direct Noise connection path is not yet constructed from main.rs;
+// it remains available for future authenticated routing integration.
 #![allow(dead_code)]
 
 use api::cluster::{CellNetId, PeerTicket};
@@ -22,7 +16,6 @@ use ostd::service::NetRef;
 use ostd::syscall::sys_heartbeat;
 use ostd::{ViError, ViResult};
 
-use crate::relay::RelayClient;
 use crate::rng::BrokerRng;
 use crate::transport::{ConnectionPool, NoiseSession, StaticKeypair};
 use service_net_broker::identity::BrokerIdentity;
@@ -33,26 +26,16 @@ const CONNECT_TIMEOUT_MS: u32 = 2000;
 /// Manages peer connections: direct TCP preferred, relay fallback.
 pub struct ConnectionManager<'a> {
     pool: &'a mut ConnectionPool,
-    relay: &'a mut RelayClient,
     identity: &'a BrokerIdentity,
 }
 
 impl<'a> ConnectionManager<'a> {
-    pub fn new(
-        pool: &'a mut ConnectionPool,
-        relay: &'a mut RelayClient,
-        identity: &'a BrokerIdentity,
-    ) -> Self {
-        Self {
-            pool,
-            relay,
-            identity,
-        }
+    pub fn new(pool: &'a mut ConnectionPool, identity: &'a BrokerIdentity) -> Self {
+        Self { pool, identity }
     }
 
-    /// Ensure a Noise session exists for `peer`. Returns the pool slot index.
+    /// Ensure a direct Noise session exists for `peer`.
     ///
-    /// Tries direct TCP paths first (up to 2 addrs), then relay.
     /// `psk` is the K1 cluster PSK. `rng` is the broker's PRNG.
     pub fn ensure_connected(
         &mut self,
@@ -80,16 +63,8 @@ impl<'a> ConnectionManager<'a> {
             }
         }
 
-        // Relay path: connect relay if not already connected.
-        if !self.relay.is_connected() {
-            self.relay.connect(net)?;
-        }
-
-        // For relay path we don't have a Noise session yet — the relay just forwards
-        // raw frames. The Noise handshake happens over the relay channel.
-        // Return a sentinel slot that indicates relay-only mode.
-        // TODO: implement relay-mediated Noise handshake (requires signaling peer to initiate).
-        Err(ViError::NotFound)
+        // The external relay is mTLS-only. No raw TCP fallback is permitted.
+        Err(ViError::NotSupported)
     }
 
     /// Find an existing session by node_id. Returns pool slot or None.

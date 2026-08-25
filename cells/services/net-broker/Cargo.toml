@@ -19,6 +19,7 @@ clatter          = { version = "2.2", default-features = false, features = ["all
 chacha20poly1305 = { version = "0.10", default-features = false, features = ["alloc"] }
 rand_core        = { version = "0.6",  default-features = false }
 rand_chacha      = { version = "0.3",  default-features = false }
+sha2             = { version = "0.10", default-features = false }
 
 [target.'cfg(target_os = "none")'.dependencies]
 ostd = { path = "../../../libs/ostd", version = "0.2.0" }

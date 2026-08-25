@@ -58,7 +58,6 @@ api::declare_syscalls![
 
 mod connection_manager;
 mod local_runtime;
-mod relay;
 mod rng;
 mod stun;
 mod transport;
@@ -70,11 +69,10 @@ mod lease;
 mod routing;
 
 use ostd::io::{print, println};
-use relay::RelayClient;
 use rng::BrokerRng;
 use service_net_broker::export_registry::RemoteDisabledReason;
 use service_net_broker::identity::BrokerIdentity;
-use transport::StaticKeypair;
+use transport::{ClusterKeySource, StaticKeypair, VfsFileKeySource};
 
 fn print_hex_byte(b: u8) {
     const HEX: &[u8] = b"0123456789abcdef";
@@ -97,6 +95,14 @@ fn cell_main() {
     // Fail-closed entropy gate — panics if VirtIO-RNG is absent.
     let mut rng = BrokerRng::new_seeded();
     println("[net-broker] VirtIO-RNG entropy gate passed.");
+
+    // K1 is the prerequisite for every broker network path. Do not construct a
+    // beacon socket until the bounded VFS read has yielded it.
+    let k1 = VfsFileKeySource {
+        path: "/etc/cellos/cluster.key",
+    }
+    .load()
+    .unwrap_or_else(|_| panic!("[net-broker] cluster K1 unavailable or invalid"));
 
     // Generate per-run X25519 static keypair. Public half = G1 CellNetId.
     let static_kp = StaticKeypair::generate(&mut rng);
@@ -126,16 +132,13 @@ fn cell_main() {
     }
     println("...");
 
-    // TODO: load K1 PSK from /etc/cellos/cluster.key via VfsFileKeySource.
-    // TODO P05: bind UDP multicast socket for LAN beacon.
+    // Both the socket and multicast membership are mandatory. Initialization
+    // fails closed before runtime roles exist, leaving no channel to consume.
 
-    // Build a relay client from the first peer's relay config (G1 = 1 relay server).
-    let relay_config = identity.get_peer(0).map(|p| (p.relay_ip, p.relay_port));
-    let relay_ip = relay_config.map(|(ip, _)| ip).unwrap_or([0; 4]);
-    let relay_port = relay_config.map(|(_, pt)| pt).unwrap_or(0);
-    let relay_client = RelayClient::new(identity.node_id, relay_ip, relay_port);
+    let network = local_runtime::BrokerNetworkState::initialize(&k1, identity, static_kp, rng)
+        .unwrap_or_else(|| panic!("[net-broker] authenticated beacon setup failed"));
 
-    local_runtime::init(relay_client);
+    local_runtime::init(network);
     println("[net-broker] local runtime roles ready");
 
     loop {

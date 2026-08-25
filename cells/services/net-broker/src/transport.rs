@@ -88,10 +88,9 @@ where
     Ok(key)
 }
 
-// ── StaticKeypair ─────────────────────────────────────────────────────────────
-
 /// X25519 static keypair generated at broker Init via BrokerRng.
-/// Held in broker RAM only; public half broadcast via P05 beacon.
+/// Held in broker RAM only until a separately authenticated key exchange can
+/// associate it with a peer; the current beacon frame carries no static key.
 pub struct StaticKeypair {
     inner: KeyPair<<X25519 as Dh>::PubKey, <X25519 as Dh>::PrivateKey>,
 }

@@ -1,7 +1,6 @@
-// reason: this module implements the SwarmBeacon LAN-multicast discovery wire
-// protocol (P05) for the net-broker robot-swarm feature. `main.rs` only declares
-// `mod beacon;` (main.rs:62) and never references `beacon::` — the dispatch loop's
-// beacon-timer and try_recv calls are still TODOs (main.rs:134-135). Not wired yet.
+// SwarmBeacon LAN-multicast discovery for net-broker.
+// The runtime creates its channel only after K1-derived gossip setup succeeds;
+// receive polling runs in the broker's dedicated network role.
 #![allow(dead_code)]
 
 /// SwarmBeacon — XChaCha20-Poly1305 UDP multicast discovery for net-broker.
@@ -16,18 +15,18 @@
 extern crate alloc;
 
 use alloc::vec::Vec;
+use api::cluster::CellNetId;
 use api::ipc::{NetRequest, NetResponse};
 use chacha20poly1305::{
     aead::{Aead, KeyInit, Payload},
     XChaCha20Poly1305, XNonce,
 };
 use ostd::service::NetRef;
-use ostd::syscall::{sys_get_time, sys_heartbeat};
+use ostd::syscall::{sys_get_time_ms, sys_heartbeat};
 use rand_core::RngCore;
+use sha2::{Digest, Sha256};
 
 use crate::rng::BrokerRng;
-
-// ── Constants ─────────────────────────────────────────────────────────────────
 
 const MAGIC: [u8; 4] = *b"VCLS";
 const VERSION: u8 = 1;
@@ -39,8 +38,12 @@ const PLAIN_LEN: usize = 40;
 const NONCE_LEN: usize = 24;
 pub const WIRE_LEN: usize = NONCE_LEN + PLAIN_LEN + 16; // 80B
 
-const HEARTBEAT_MS: u64 = 500;
+const UDP_SOURCE_HEADER_LEN: usize = 6;
+const UDP_RESPONSE_LEN: usize = UDP_SOURCE_HEADER_LEN + WIRE_LEN;
 
+const HEARTBEAT_MS: u64 = 500;
+/// Spec 14 `BEACON_INTERVAL_MS`; broker timer deadlines are monotonic.
+pub const BEACON_INTERVAL_MS: u64 = 1_000;
 // ── Gossip key derivation ─────────────────────────────────────────────────────
 
 /// Derive gossip AEAD key from K1 (XOR domain separator; gossip key ≠ raw Noise PSK K1).
@@ -51,6 +54,42 @@ pub fn derive_gossip_key(k1: &[u8; 32]) -> [u8; 32] {
         k[i] = k1[i] ^ DOM[i];
     }
     k
+}
+
+const MACHINE_ID_DOMAIN: &[u8] = b"cellos-machine-id-v1";
+
+/// Derive the only accepted wire machine ID for a configured Noise identity.
+pub fn derive_machine_id(node_id: &CellNetId) -> u64 {
+    let mut hasher = Sha256::new();
+    hasher.update(MACHINE_ID_DOMAIN);
+    hasher.update(node_id.as_bytes());
+    let digest = hasher.finalize();
+    u64::from_le_bytes(digest[..8].try_into().expect("SHA-256 digest length"))
+}
+
+pub const fn beacon_due(now_ms: u64, deadline_ms: u64) -> bool {
+    now_ms >= deadline_ms
+}
+
+pub const fn next_beacon_deadline(now_ms: u64) -> u64 {
+    now_ms.saturating_add(BEACON_INTERVAL_MS)
+}
+
+/// Reject authenticated frames that are not routable to this configured broker.
+/// The caller supplies the configured-peer lookup because beacons intentionally
+/// carry no unauthenticated static public key.
+pub fn accepts_peer_beacon<F>(
+    plain: &BeaconPlain,
+    cluster_id: u64,
+    local_machine_id: u64,
+    mut is_configured_machine_id: F,
+) -> bool
+where
+    F: FnMut(u64) -> bool,
+{
+    plain.cluster_id == cluster_id
+        && plain.machine_id != local_machine_id
+        && is_configured_machine_id(plain.machine_id)
 }
 
 // ── BeaconPlain ───────────────────────────────────────────────────────────────
@@ -71,6 +110,24 @@ pub struct BeaconPlain {
 const _SIZE_CHECK: () = assert!(core::mem::size_of::<BeaconPlain>() == PLAIN_LEN);
 
 impl BeaconPlain {
+    pub const fn local(
+        cluster_id: u64,
+        machine_id: u64,
+        boot_epoch: u64,
+        mono_counter: u64,
+    ) -> Self {
+        Self {
+            magic: MAGIC,
+            version: VERSION,
+            mode: 0,
+            pad: [0; 2],
+            cluster_id,
+            machine_id,
+            boot_epoch,
+            mono_counter,
+        }
+    }
+
     pub fn encode(&self) -> [u8; PLAIN_LEN] {
         let mut b = [0u8; PLAIN_LEN];
         b[..4].copy_from_slice(&self.magic);
@@ -154,7 +211,6 @@ pub struct BeaconChannel {
 }
 
 impl BeaconChannel {
-    /// Create, bind, and join multicast. Call at Init; first RECV goes in dispatch loop.
     pub fn init(net: &mut NetRef) -> Option<Self> {
         let mut resp = [0u8; api::ipc::IPC_BUF_SIZE];
         let cap_id = match net
@@ -164,27 +220,37 @@ impl BeaconChannel {
             NetResponse::CapId(id) => id,
             _ => return None,
         };
-        let _ = net.call::<NetRequest, NetResponse>(
-            &NetRequest::UdpBind {
-                cap_id,
-                port: BEACON_PORT,
-            },
-            &mut resp,
-        );
-        let _ = net.call::<NetRequest, NetResponse>(
-            &NetRequest::MulticastJoin {
-                cap_id,
-                group: MULTICAST_GROUP,
-            },
-            &mut resp,
-        );
+        let bind = net
+            .call::<NetRequest, NetResponse>(
+                &NetRequest::UdpBind {
+                    cap_id,
+                    port: BEACON_PORT,
+                },
+                &mut resp,
+            )
+            .ok()?;
+        if !response_is_ok(bind) {
+            return None;
+        }
+        let join = net
+            .call::<NetRequest, NetResponse>(
+                &NetRequest::MulticastJoin {
+                    cap_id,
+                    group: MULTICAST_GROUP,
+                },
+                &mut resp,
+            )
+            .ok()?;
+        if !response_is_ok(join) {
+            return None;
+        }
         Some(Self { cap_id })
     }
 
-    pub fn send_frame(&self, net: &mut NetRef, frame: &[u8; WIRE_LEN]) {
+    pub fn send_frame(&self, net: &mut NetRef, frame: &[u8; WIRE_LEN]) -> bool {
         let mut resp = [0u8; api::ipc::IPC_BUF_SIZE];
         sys_heartbeat(HEARTBEAT_MS);
-        let _ = net.call::<NetRequest, NetResponse>(
+        let response = match net.call::<NetRequest, NetResponse>(
             &NetRequest::UdpSend {
                 cap_id: self.cap_id,
                 addr: MULTICAST_GROUP,
@@ -192,26 +258,60 @@ impl BeaconChannel {
                 data: frame,
             },
             &mut resp,
-        );
+        ) {
+            Ok(response) => response,
+            Err(_) => return false,
+        };
+        response_sent_full_frame(response)
     }
 
-    /// Non-blocking: returns None if no frame is available.
     pub fn try_recv_frame(&self, net: &mut NetRef) -> Option<[u8; WIRE_LEN]> {
         let mut resp = [0u8; api::ipc::IPC_BUF_SIZE];
         match net
             .call::<NetRequest, NetResponse>(
                 &NetRequest::UdpRecv {
                     cap_id: self.cap_id,
+                    // The net cell adds the source envelope to its response, not this
+                    // receive capacity. Preserve the exact bounded wire-frame read.
                     buf_len: WIRE_LEN as u32,
                 },
                 &mut resp,
             )
             .ok()?
         {
-            NetResponse::Data(d) if d.len() == WIRE_LEN => d.try_into().ok(),
+            NetResponse::Data(data) => decode_udp_frame(data),
             _ => None,
         }
     }
+}
+fn response_is_ok(response: NetResponse<'_>) -> bool {
+    matches!(response, NetResponse::Ok)
+}
+
+fn response_sent_full_frame(response: NetResponse<'_>) -> bool {
+    matches!(
+        response,
+        NetResponse::Data(data)
+            if data == (WIRE_LEN as u32).to_le_bytes().as_slice()
+    )
+}
+
+fn decode_udp_frame(data: &[u8]) -> Option<[u8; WIRE_LEN]> {
+    if data.len() != UDP_RESPONSE_LEN {
+        return None;
+    }
+    data[UDP_SOURCE_HEADER_LEN..].try_into().ok()
+}
+
+/// A reboot is authenticated by the beacon AEAD but starts its monotonic
+/// counter over. Only a strictly higher boot epoch may reset that counter.
+fn is_fresh_beacon(
+    boot_epoch: u64,
+    mono_counter: u64,
+    last_epoch: u64,
+    last_counter: u64,
+) -> bool {
+    boot_epoch > last_epoch || (boot_epoch == last_epoch && mono_counter > last_counter)
 }
 
 // ── PeerTable ─────────────────────────────────────────────────────────────────
@@ -239,11 +339,22 @@ impl PeerTable {
 
     /// Update from a verified beacon. Returns true if this is a NEW peer.
     pub fn update(&mut self, plain: &BeaconPlain) -> bool {
-        let now = sys_get_time();
+        let Some(now) = sys_get_time_ms() else {
+            return false;
+        };
+        self.update_at(plain, now)
+    }
+
+    fn update_at(&mut self, plain: &BeaconPlain, now: u64) -> bool {
         for e in self.entries.iter_mut().flatten() {
             if e.machine_id == plain.machine_id {
-                if plain.boot_epoch == e.last_epoch && plain.mono_counter <= e.last_counter {
-                    return false; // anti-replay: reject non-increasing counter
+                if !is_fresh_beacon(
+                    plain.boot_epoch,
+                    plain.mono_counter,
+                    e.last_epoch,
+                    e.last_counter,
+                ) {
+                    return false;
                 }
                 e.last_epoch = plain.boot_epoch;
                 e.last_counter = plain.mono_counter;
@@ -268,11 +379,137 @@ impl PeerTable {
     }
 
     pub fn timed_out_count(&self, timeout_ms: u64) -> usize {
-        let now = sys_get_time();
+        let Some(now) = sys_get_time_ms() else {
+            return 0;
+        };
         self.entries
             .iter()
             .flatten()
             .filter(|e| now.wrapping_sub(e.last_heard_mono) > timeout_ms)
             .count()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn machine_id_uses_the_specified_sha256_domain_separation() {
+        let node_id = CellNetId::from_bytes([0; 32]);
+        assert_eq!(derive_machine_id(&node_id), 0x956c_1784_7227_82e2);
+    }
+
+    #[test]
+    fn local_beacon_has_specified_identity_and_monotonic_schedule() {
+        let plain = BeaconPlain::local(7, 11, 13, 17);
+        assert_eq!(plain.magic, MAGIC);
+        assert_eq!(plain.version, VERSION);
+        assert_eq!(plain.cluster_id, 7);
+        assert_eq!(plain.machine_id, 11);
+        assert_eq!(plain.boot_epoch, 13);
+        assert_eq!(plain.mono_counter, 17);
+        assert!(beacon_due(1_000, 1_000));
+        assert!(!beacon_due(999, 1_000));
+        assert_eq!(next_beacon_deadline(1_000), 2_000);
+        assert_eq!(next_beacon_deadline(u64::MAX), u64::MAX);
+    }
+
+    #[test]
+    fn peer_beacon_requires_cluster_and_configured_machine_identity() {
+        let plain = BeaconPlain::local(7, 11, 1, 0);
+        assert!(accepts_peer_beacon(&plain, 7, 12, |machine_id| machine_id == 11));
+        assert!(!accepts_peer_beacon(&plain, 8, 12, |_| true));
+        assert!(!accepts_peer_beacon(&plain, 7, 11, |_| true));
+        assert!(!accepts_peer_beacon(&plain, 7, 12, |_| false));
+    }
+    #[test]
+    fn prefixed_valid_datagram_decrypts_after_envelope_removal() {
+        let key = derive_gossip_key(&[0x11; 32]);
+        let plain = BeaconPlain {
+            magic: MAGIC,
+            version: VERSION,
+            mode: 0,
+            pad: [0; 2],
+            cluster_id: 42,
+            machine_id: 7,
+            boot_epoch: 3,
+            mono_counter: 1,
+        };
+        let nonce = [0x22; NONCE_LEN];
+        let cipher = XChaCha20Poly1305::new_from_slice(&key).unwrap();
+        let ciphertext = cipher
+            .encrypt(
+                XNonce::from_slice(&nonce),
+                Payload {
+                    msg: &plain.encode(),
+                    aad: b"",
+                },
+            )
+            .unwrap();
+        let mut response = [0u8; UDP_RESPONSE_LEN];
+        response[..UDP_SOURCE_HEADER_LEN].copy_from_slice(&[192, 0, 2, 1, 0x7f, 0x23]);
+        response[UDP_SOURCE_HEADER_LEN..UDP_SOURCE_HEADER_LEN + NONCE_LEN]
+            .copy_from_slice(&nonce);
+        response[UDP_SOURCE_HEADER_LEN + NONCE_LEN..].copy_from_slice(&ciphertext);
+
+        let frame = decode_udp_frame(&response).expect("bounded frame");
+        let decrypted = decrypt_beacon(&key, &frame).expect("authenticated beacon");
+        assert_eq!(decrypted.machine_id, plain.machine_id);
+        assert_eq!(decrypted.boot_epoch, plain.boot_epoch);
+        assert_eq!(decrypted.mono_counter, plain.mono_counter);
+    }
+
+    #[test]
+    fn udp_envelope_extracts_only_the_bounded_wire_frame() {
+        let mut response = [0u8; UDP_RESPONSE_LEN];
+        response[..UDP_SOURCE_HEADER_LEN].copy_from_slice(&[192, 0, 2, 1, 0x7f, 0x23]);
+        response[UDP_SOURCE_HEADER_LEN..].fill(0xa5);
+
+        assert_eq!(decode_udp_frame(&response), Some([0xa5; WIRE_LEN]));
+        assert_eq!(decode_udp_frame(&response[..UDP_RESPONSE_LEN - 1]), None);
+        assert_eq!(decode_udp_frame(&[0; UDP_RESPONSE_LEN + 1]), None);
+    }
+
+    #[test]
+    fn channel_setup_and_send_require_explicit_success_responses() {
+        assert!(response_is_ok(NetResponse::Ok));
+        assert!(!response_is_ok(NetResponse::Err(0xff)));
+        assert!(!response_is_ok(NetResponse::CapId(1)));
+
+        let sent = (WIRE_LEN as u32).to_le_bytes();
+        assert!(response_sent_full_frame(NetResponse::Data(&sent)));
+        assert!(!response_sent_full_frame(NetResponse::Data(&[0; 4])));
+        assert!(!response_sent_full_frame(NetResponse::Ok));
+    }
+
+    #[test]
+    fn higher_boot_epoch_rebaselines_the_replay_counter() {
+        let mut peers = PeerTable::new();
+        let mut plain = BeaconPlain {
+            magic: MAGIC,
+            version: VERSION,
+            mode: 0,
+            pad: [0; 2],
+            cluster_id: 42,
+            machine_id: 7,
+            boot_epoch: 7,
+            mono_counter: u64::MAX,
+        };
+        assert!(peers.update_at(&plain, 10));
+
+        plain.boot_epoch = 8;
+        plain.mono_counter = 0;
+        assert!(!peers.update_at(&plain, 11));
+        let peer = peers.entries[0].as_ref().expect("known peer");
+        assert_eq!(peer.last_epoch, 8);
+        assert_eq!(peer.last_counter, 0);
+
+        plain.boot_epoch = 7;
+        plain.mono_counter = u64::MAX;
+        assert!(!peers.update_at(&plain, 12));
+        let peer = peers.entries[0].as_ref().expect("known peer");
+        assert_eq!(peer.last_epoch, 8);
+        assert_eq!(peer.last_counter, 0);
     }
 }

@@ -1,9 +1,14 @@
-use crate::relay::RelayClient;
+use crate::beacon::{self, BeaconChannel, BeaconPlain, PeerTable};
+use crate::rng::BrokerRng;
+use crate::transport::StaticKeypair;
+use api::cluster::ClusterId;
+use ostd::service::NetRef;
 use ostd::sync::{Mutex, MutexGuard};
 use ostd::syscall::{
     sys_get_time, sys_get_time_ms, sys_recv_attested, sys_spawn, sys_try_send, SyscallResult,
 };
 use service_net_broker::bench_oracle;
+use service_net_broker::identity::BrokerIdentity;
 use service_net_broker::local_ingress::parse_request;
 use service_net_broker::local_queue::{
     BrokerState, CompletionError, IngressDecision, QueuedReply, REPLY_TRY_SEND_BUDGET,
@@ -26,12 +31,118 @@ const IPC_BUF_SIZE: usize = api::ipc::IPC_BUF_SIZE;
 // scheduler margin; it does not relax the kernel's global heartbeat policy.
 const NETWORK_HEARTBEAT_TICKS: u64 = 1_000;
 
-static BROKER_STATE: Mutex<BrokerState> = Mutex::new(BrokerState::new());
-static RELAY_CLIENT: Mutex<Option<RelayClient>> = Mutex::new(None);
+struct RuntimeState {
+    broker: BrokerState,
+    network: Option<BrokerNetworkState>,
+}
 
-fn lock_broker_state(rearm_heartbeat: bool) -> MutexGuard<'static, BrokerState> {
+impl RuntimeState {
+    const fn new() -> Self {
+        Self {
+            broker: BrokerState::new(),
+            network: None,
+        }
+    }
+}
+
+pub struct BrokerNetworkState {
+    gossip_key: [u8; 32],
+    identity: BrokerIdentity,
+    _static_keypair: StaticKeypair,
+    rng: BrokerRng,
+    cluster_id: u64,
+    machine_id: u64,
+    boot_epoch: u64,
+    beacon_counter: u64,
+    next_beacon_at: u64,
+    channel: BeaconChannel,
+    net: NetRef,
+    peers: PeerTable,
+}
+
+impl BrokerNetworkState {
+    pub fn initialize(
+        k1: &[u8; 32],
+        identity: BrokerIdentity,
+        static_keypair: StaticKeypair,
+        rng: BrokerRng,
+    ) -> Option<Self> {
+        let gossip_key = beacon::derive_gossip_key(k1);
+        let cluster_id = ClusterId::from_name("robots").0;
+        let machine_id = beacon::derive_machine_id(&identity.node_id);
+        let boot_epoch = sys_get_time_ms()?;
+        let mut net = NetRef::new();
+        let channel = BeaconChannel::init(&mut net)?;
+        Some(Self {
+            gossip_key,
+            identity,
+            _static_keypair: static_keypair,
+            rng,
+            cluster_id,
+            machine_id,
+            boot_epoch,
+            beacon_counter: 0,
+            next_beacon_at: boot_epoch,
+            channel,
+            net,
+            peers: PeerTable::new(),
+        })
+    }
+
+    fn poll_beacon(&mut self) {
+        let Some(now) = sys_get_time_ms() else {
+            return;
+        };
+        if beacon::beacon_due(now, self.next_beacon_at) {
+            self.next_beacon_at = beacon::next_beacon_deadline(now);
+            if self.beacon_counter != u64::MAX {
+                let plain = BeaconPlain::local(
+                    self.cluster_id,
+                    self.machine_id,
+                    self.boot_epoch,
+                    self.beacon_counter,
+                );
+                let frame = beacon::encrypt_beacon(&self.gossip_key, &plain, &mut self.rng);
+                if self.channel.send_frame(&mut self.net, &frame) {
+                    self.beacon_counter += 1;
+                }
+            }
+        }
+
+        let Some(frame) = self.channel.try_recv_frame(&mut self.net) else {
+            return;
+        };
+        let Some(plain) = beacon::decrypt_beacon(&self.gossip_key, &frame) else {
+            return;
+        };
+        if !self.accepts_beacon(&plain) {
+            return;
+        }
+        self.peers.update(&plain);
+    }
+
+    fn accepts_beacon(&self, plain: &BeaconPlain) -> bool {
+        beacon::accepts_peer_beacon(
+            plain,
+            self.cluster_id,
+            self.machine_id,
+            |machine_id| {
+                (0..self.identity.peer_count()).any(|index| {
+                    self.identity
+                        .get_peer(index)
+                        .map(|peer| beacon::derive_machine_id(&peer.node_id) == machine_id)
+                        .unwrap_or(false)
+                })
+            },
+        )
+    }
+}
+
+static RUNTIME_STATE: Mutex<RuntimeState> = Mutex::new(RuntimeState::new());
+
+fn lock_runtime_state(rearm_heartbeat: bool) -> MutexGuard<'static, RuntimeState> {
     loop {
-        if let Some(state) = BROKER_STATE.try_lock() {
+        if let Some(state) = RUNTIME_STATE.try_lock() {
             return state;
         }
         if rearm_heartbeat {
@@ -41,8 +152,8 @@ fn lock_broker_state(rearm_heartbeat: bool) -> MutexGuard<'static, BrokerState> 
     }
 }
 
-pub fn init(relay_client: RelayClient) {
-    *RELAY_CLIENT.lock() = Some(relay_client);
+pub fn init(network: BrokerNetworkState) {
+    lock_runtime_state(false).network = Some(network);
     start_runtime_threads();
 }
 
@@ -57,8 +168,8 @@ pub fn receive_once() {
                 restart_oracle::shutdown();
             }
             let immediate = {
-                let mut state = lock_broker_state(false);
-                state.handle_ingress(sender, identity, parsed)
+                let mut state = lock_runtime_state(false);
+                state.broker.handle_ingress(sender, identity, parsed)
             };
             if let IngressDecision::Immediate(reply) = immediate {
                 send_or_queue(reply, false);
@@ -82,14 +193,14 @@ extern "C" fn worker_entry(_arg: usize) {
         #[cfg(feature = "restart-oracle")]
         restart_oracle::exit_role_if_requested();
         ostd::syscall::sys_heartbeat(WORKER_HEARTBEAT_TICKS);
-        let next = { lock_broker_state(true).take_next_request() };
+        let next = { lock_runtime_state(true).broker.take_next_request() };
         match next {
             Some(request) => {
                 let reply = process_request(&request);
                 loop {
                     let completion = {
-                        let mut state = lock_broker_state(true);
-                        state.complete_request(&request, reply)
+                        let mut state = lock_runtime_state(true);
+                        state.broker.complete_request(&request, reply)
                     };
                     match completion {
                         Ok(()) => break,
@@ -121,13 +232,18 @@ extern "C" fn network_entry(_arg: usize) {
         ostd::syscall::sys_heartbeat(NETWORK_HEARTBEAT_TICKS);
         let now_ms = sys_get_time_ms();
         if heartbeat_gap_miss(last_poll_ms, now_ms) {
-            lock_broker_state(true).note_heartbeat_miss();
+            lock_runtime_state(true).broker.note_heartbeat_miss();
         }
         last_poll_ms = now_ms;
-        if let Some(relay_client) = RELAY_CLIENT.lock().as_ref() {
-            let _ = relay_client.is_connected();
+
+        // NetRef::call waits for a service response. Move the complete beacon
+        // state out first so ingress and worker roles never wait on network IPC.
+        let network = { lock_runtime_state(true).network.take() };
+        if let Some(mut network) = network {
+            network.poll_beacon();
+            lock_runtime_state(true).network = Some(network);
         }
-        lock_broker_state(true).note_network_poll();
+        lock_runtime_state(true).broker.note_network_poll();
         ostd::task::yield_now();
     }
 }
@@ -149,8 +265,8 @@ fn send_or_queue(mut reply: QueuedReply, rearm_heartbeat: bool) {
             return;
         }
         let retention = {
-            let mut state = lock_broker_state(rearm_heartbeat);
-            retain_busy_reply(&mut state, reply)
+            let mut state = lock_runtime_state(rearm_heartbeat);
+            retain_busy_reply(&mut state.broker, reply)
         };
         match retention {
             RetainBusyResult::Queued | RetainBusyResult::Exhausted => return,
@@ -164,7 +280,7 @@ fn send_or_queue(mut reply: QueuedReply, rearm_heartbeat: bool) {
 
 fn pump_reply_turn() {
     for _ in 0..REPLY_TRY_SEND_BUDGET {
-        let next = { lock_broker_state(true).take_next_reply() };
+        let next = { lock_runtime_state(true).broker.take_next_reply() };
         let Some(reply) = next else {
             break;
         };

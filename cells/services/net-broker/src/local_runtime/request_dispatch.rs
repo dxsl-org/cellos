@@ -1,4 +1,4 @@
-use super::lock_broker_state;
+use super::lock_runtime_state;
 use ostd::syscall::sys_get_time;
 use service_net_broker::bench_oracle::{
     self, encode_hold_command, encode_snapshot_payload, OracleCommand, STATIC_FOOTPRINT_BYTES,
@@ -18,7 +18,7 @@ pub(super) fn process_request(request: &WorkerRequest) -> QueuedReply {
         Ok(OracleCommand::Snapshot) => {
             let mut payload = [0u8; MAX_REPLY_BODY];
             let mut snapshot = [0u8; bench_oracle::SNAPSHOT_BYTES];
-            let counters = lock_broker_state(true).counters;
+            let counters = lock_runtime_state(true).broker.counters;
             encode_snapshot_payload(&counters, STATIC_FOOTPRINT_BYTES as u64, &mut snapshot);
             payload[..snapshot.len()].copy_from_slice(&snapshot);
             reply_with_payload(request, ReplyStatus::Success, &payload[..snapshot.len()])
