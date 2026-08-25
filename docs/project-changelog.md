@@ -2,6 +2,30 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-25] SDK networking, VFS, ViUI, and compositor completion slice
+
+- Net-broker now loads K1 before network initialization and drives authenticated
+  LAN beacons with checked multicast setup, the existing UDP source envelope,
+  monotonic-ms scheduling, configured-peer identity validation, and reboot-aware
+  replay handling. The obsolete raw relay client, registration, runtime polling,
+  and fallback callsites are removed; direct-path exhaustion fails closed.
+- The external relay server now requires TLS 1.3 mutual authentication. Routing
+  identities are SHA-256 P-256 SPKI digests bound by a required certificate
+  extension and `clientAuth` EKU; a mandatory denylist is applied before
+  registration. Duplicate identities cancel stale generations, cancelled
+  backpressured sends close their destination buffer, output is serialized and
+  deadline-bounded, and authenticated sessions are capped. Bootstrap accepts
+  only a strict mounted manifest; separate credential CLI fallbacks are removed.
+- VFS `WriteGrant` uses owner-bound file handles, authorization/range/quota
+  checks before grant access, and commit-before-acknowledgement. OSTD writes all
+  chunks through the same VFS authority and returns the committed byte count.
+- ViUI documentation and focused Signal, ViApp, widget, and headless-renderer
+  contracts now match reactive-v2. Compositor surface copies are clipped to the
+  dirty scanout intersection.
+- Verification: 23 focused relay tests, 9 focused ViUI tests, 3 compositor
+  framebuffer tests, the broker RV64 target build, and the regenerated-image
+  VFS QEMU route all pass. The QEMU route reports 2 passed tests.
+
 ## [2026-08-25] RV64 compositor window-manager policy
 
 - Interactive `ViSurface`s can set bounded titles, poll typed lifecycle events,

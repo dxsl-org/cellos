@@ -83,6 +83,10 @@ Cellos is being shaped around product stages, not only phase numbers:
   remains; the separate compositor-cursor scenario retains cursor coverage.
   This remains compositor policy, not a desktop shell: no taskbar, snapping,
   persistence, or live resize preview is supplied.
+- The compositor's damage-driven scanout path now clips each intersecting
+  surface copy to the dirty region before decoration, cursor composition, and
+  GPU flush. This preserves the bounded window-policy contract while avoiding
+  whole-surface copies for local damage.
 
 ## Immediate Open Gates
 
@@ -145,9 +149,20 @@ Cellos is being shaped around product stages, not only phase numbers:
   does not alter the ledger's Phase 03 `PLANNED` status or unblock production
   work. Production admission remains disabled pending qualified and approved
   external-floor and owner-record gates.
-- Net-broker has implemented pieces for Noise/identity/routing, but `main.rs`
-  still marks K1 loading, beacon sockets, relay dispatch, leases, and enrollment
-  as TODO wiring.
+- Net-broker now fails closed on bounded K1 loading before network setup and
+  owns an authenticated LAN beacon channel: bind/join responses are checked,
+  the current UDP source envelope is parsed, beacons are periodically
+  transmitted from monotonic-ms state, and replay/liveness updates validate
+  configured peer identity. The external relay server now requires TLS 1.3
+  mutual authentication, certificate-bound SPKI identities, pre-registration
+  revocation checks, generation-safe duplicate handling, and bounded sessions,
+  frames, and I/O. It starts only from a strict mounted manifest. The obsolete
+  Cellos raw `RelayClient`, `TcpConnect` registration, runtime polling, and
+  fallback callsites are removed; exhausting direct Noise paths returns
+  `NotSupported`. The mTLS client remains blocked on a production KMS/Silo
+  signing-root lifecycle, attested service-net authorization, client-certificate
+  issuance/provisioning, and a TLS client-auth profile. Lease and enrollment
+  wiring remain unavailable.
 
 ## Update Rule
 
