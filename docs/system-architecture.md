@@ -1229,11 +1229,18 @@ Routing (cross-machine): Private→Public ✓ · Public→Private ✗ · Private
 |-------|-----------|----------|
 | **Native Cell↔Cell, G1** | **Noise KKpsk0** (p2p) + **XChaCha20-Poly1305** (gossip) | **K1** PSK (baked, fleet-shared) |
 | **Native Cell↔Cell, G2** | **same Noise core** (identity upgrade, not a transport swap) | **K3** per-node static key + DICE attestation; revocation via KMS Cell |
-| **Interop / external / HTTPS-serving** | **full mTLS (X.509)** — from Tier 3 Linux VM or external LB | CA-rooted PKI |
+| **Interop / external relay / HTTPS-serving** | **TLS 1.3 mTLS (X.509)** at the external boundary; relayed Cell payload remains opaque Noise ciphertext | CA-rooted PKI; relay NodeId is `SHA-256(SPKI DER)` |
 
 **Hard rules (architectural invariants):**
-- Native Tier-1 Cells **never speak mTLS** — Noise is the lingua franca at every stage; G1→G2 is an *identity* upgrade (K1→K3), not a transport swap.
-- mTLS lives **only at the Tier-3/interop boundary**, sourced from the Tier 3 Linux VM (rustls/OpenSSL native) or an external LB — **never build X.509 PKI inside the Cellos kernel**. The parked local `.agents/260623-1500-tls-server-accept/` plan is an edge-only fallback for nodes that cannot terminate TLS externally.
+- Native Cell-to-Cell traffic **never replaces Noise with mTLS**. Noise is the
+  lingua franca at every stage; G1→G2 is an identity upgrade (K1→K3), not a
+  transport swap.
+- mTLS terminates only at an external/interop boundary. A native `net-broker`
+  may act as the mTLS client for an external relay, but it must preserve Noise
+  end-to-end, validate the relay CA and hostname, and sign through an attested,
+  service-net-authorized Silo/KMS key without exposing private-key bytes. X.509
+  PKI remains outside the Cellos kernel. See
+  [ADR-0005](decisions/0005-mutual-tls-relay-identity.md).
 - **Profile-specific entropy and output-buffer gate**: the current default
   development/QEMU tuple enables `dev-weak-rng`. Because the current VirtIO RNG
   source returns zero bytes, `GetRandom` substitutes predictable xorshift bytes

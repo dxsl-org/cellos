@@ -25,11 +25,13 @@
 //!   `embedded_io::ErrorKind::Other`) rather than an unbounded loop.
 //!
 //! # Security posture
-//! `TlsStream` inherits the net cell's current TLS verifier — today that is
-//! embedded-tls `UnsecureProvider` with **no certificate verification**.
-//! `HttpClient<TlsStream>` is therefore only as trustworthy as the net cell;
-//! hardening cert verification is a separate net-cell workstream. Do not treat
-//! this as authenticated HTTPS.
+//! `TlsStream` inherits service-net's selected TLS build profile. The default
+//! `tls-roots-embedded` profile validates the server certificate chain,
+//! validity period, and SNI hostname against its build-selected CA anchor.
+//! `tls-insecure` remains an explicit development-only profile with no server
+//! authentication. Neither profile supplies a client certificate or signer, so
+//! this API is server-authenticated TLS only and cannot connect to the
+//! mutual-TLS relay.
 
 extern crate alloc;
 
