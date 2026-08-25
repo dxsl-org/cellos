@@ -292,28 +292,30 @@
 <a href=#292 id=292 data-nosnippet>292</a>    <span class="kw">let </span>identity = api::caller_identity::CallerIdentity::from_recv_buf(<span class="kw-2">&amp;</span>recv_buf);
 <a href=#293 id=293 data-nosnippet>293</a>    <span class="kw">let </span>attested_ok = <span class="macro">matches!</span>(delivered, <span class="prelude-val">Ok</span>(id) <span class="kw">if </span>id == SENDER)
 <a href=#294 id=294 data-nosnippet>294</a>        &amp;&amp; recv_buf[..payload.len()] == <span class="kw-2">*</span>payload
-<a href=#295 id=295 data-nosnippet>295</a>        &amp;&amp; identity == <span class="prelude-val">Some</span>(api::caller_identity::CallerIdentity {
-<a href=#296 id=296 data-nosnippet>296</a>            cell_id: TEST_CELL,
-<a href=#297 id=297 data-nosnippet>297</a>            generation: sender_generation,
-<a href=#298 id=298 data-nosnippet>298</a>            sender_tid: SENDER <span class="kw">as </span>u64,
-<a href=#299 id=299 data-nosnippet>299</a>        });
-<a href=#300 id=300 data-nosnippet>300</a>
-<a href=#301 id=301 data-nosnippet>301</a>    reset();
-<a href=#302 id=302 data-nosnippet>302</a>    attested_ok || fail(<span class="string">"try_recv with attest_caller=true did not write valid CallerIdentity trailer"</span>)
-<a href=#303 id=303 data-nosnippet>303</a>}
-<a href=#304 id=304 data-nosnippet>304</a>
-<a href=#305 id=305 data-nosnippet>305</a><span class="doccomment">/// Returns true iff all IPC producers defer foreign writes and fail safely.
-<a href=#306 id=306 data-nosnippet>306</a></span><span class="kw">pub fn </span>self_test() -&gt; bool {
-<a href=#307 id=307 data-nosnippet>307</a>    <span class="kw">let </span>ok = all_producers_defer_foreign_writes()
-<a href=#308 id=308 data-nosnippet>308</a>        &amp; full_mailbox_refuses_without_wake()
-<a href=#309 id=309 data-nosnippet>309</a>        &amp; quota_failure_is_fallible()
-<a href=#310 id=310 data-nosnippet>310</a>        &amp; heap_payload_refunds_receiver_quota()
-<a href=#311 id=311 data-nosnippet>311</a>        &amp; death_wake_precedes_later_message()
-<a href=#312 id=312 data-nosnippet>312</a>        &amp; pending_drain_keeps_sender_context_without_relocking()
-<a href=#313 id=313 data-nosnippet>313</a>        &amp; try_recv_attestation_writes_identity_trailer();
-<a href=#314 id=314 data-nosnippet>314</a>    <span class="kw">if </span>ok {
-<a href=#315 id=315 data-nosnippet>315</a>        <span class="macro">log::info!</span>(<span class="string">"[selftest] IPC-PENDING: PASS (deferred, bounded, quota-safe)"</span>);
-<a href=#316 id=316 data-nosnippet>316</a>    }
-<a href=#317 id=317 data-nosnippet>317</a>    ok
-<a href=#318 id=318 data-nosnippet>318</a>}
+<a href=#295 id=295 data-nosnippet>295</a>        &amp;&amp; identity
+<a href=#296 id=296 data-nosnippet>296</a>            == <span class="prelude-val">Some</span>(api::caller_identity::CallerIdentity {
+<a href=#297 id=297 data-nosnippet>297</a>                cell_id: TEST_CELL,
+<a href=#298 id=298 data-nosnippet>298</a>                generation: sender_generation,
+<a href=#299 id=299 data-nosnippet>299</a>                sender_tid: SENDER <span class="kw">as </span>u64,
+<a href=#300 id=300 data-nosnippet>300</a>            });
+<a href=#301 id=301 data-nosnippet>301</a>
+<a href=#302 id=302 data-nosnippet>302</a>    reset();
+<a href=#303 id=303 data-nosnippet>303</a>    attested_ok
+<a href=#304 id=304 data-nosnippet>304</a>        || fail(<span class="string">"try_recv with attest_caller=true did not write valid CallerIdentity trailer"</span>)
+<a href=#305 id=305 data-nosnippet>305</a>}
+<a href=#306 id=306 data-nosnippet>306</a>
+<a href=#307 id=307 data-nosnippet>307</a><span class="doccomment">/// Returns true iff all IPC producers defer foreign writes and fail safely.
+<a href=#308 id=308 data-nosnippet>308</a></span><span class="kw">pub fn </span>self_test() -&gt; bool {
+<a href=#309 id=309 data-nosnippet>309</a>    <span class="kw">let </span>ok = all_producers_defer_foreign_writes()
+<a href=#310 id=310 data-nosnippet>310</a>        &amp; full_mailbox_refuses_without_wake()
+<a href=#311 id=311 data-nosnippet>311</a>        &amp; quota_failure_is_fallible()
+<a href=#312 id=312 data-nosnippet>312</a>        &amp; heap_payload_refunds_receiver_quota()
+<a href=#313 id=313 data-nosnippet>313</a>        &amp; death_wake_precedes_later_message()
+<a href=#314 id=314 data-nosnippet>314</a>        &amp; pending_drain_keeps_sender_context_without_relocking()
+<a href=#315 id=315 data-nosnippet>315</a>        &amp; try_recv_attestation_writes_identity_trailer();
+<a href=#316 id=316 data-nosnippet>316</a>    <span class="kw">if </span>ok {
+<a href=#317 id=317 data-nosnippet>317</a>        <span class="macro">log::info!</span>(<span class="string">"[selftest] IPC-PENDING: PASS (deferred, bounded, quota-safe)"</span>);
+<a href=#318 id=318 data-nosnippet>318</a>    }
+<a href=#319 id=319 data-nosnippet>319</a>    ok
+<a href=#320 id=320 data-nosnippet>320</a>}
 </code></pre></div></section></main></body></html>

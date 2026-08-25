@@ -1587,10 +1587,10 @@
 <a href=#1587 id=1587 data-nosnippet>1587</a>        // legal and drain-safe; the switch plan must proceed.
 <a href=#1588 id=1588 data-nosnippet>1588</a>        </span><span class="attr">#[cfg(all(feature = <span class="string">"native-domains"</span>, target_arch = <span class="string">"riscv64"</span>))]
 <a href=#1589 id=1589 data-nosnippet>1589</a>        </span><span class="kw">let </span>next_id = next_id.filter(|id| {
-<a href=#1590 id=1590 data-nosnippet>1590</a>            <span class="kw">let </span>selected =
-<a href=#1591 id=1591 data-nosnippet>1591</a>                <span class="self">self</span>.tasks
-<a href=#1592 id=1592 data-nosnippet>1592</a>                    .get(id)
-<a href=#1593 id=1593 data-nosnippet>1593</a>                    .is_some_and(|task| task.begin_execution(hart_id).is_ok());
+<a href=#1590 id=1590 data-nosnippet>1590</a>            <span class="kw">let </span>selected = <span class="self">self
+<a href=#1591 id=1591 data-nosnippet>1591</a>                </span>.tasks
+<a href=#1592 id=1592 data-nosnippet>1592</a>                .get(id)
+<a href=#1593 id=1593 data-nosnippet>1593</a>                .is_some_and(|task| task.begin_execution(hart_id).is_ok());
 <a href=#1594 id=1594 data-nosnippet>1594</a>            <span class="kw">if </span>selected {
 <a href=#1595 id=1595 data-nosnippet>1595</a>                <span class="kw">return </span><span class="bool-val">true</span>;
 <a href=#1596 id=1596 data-nosnippet>1596</a>            }
