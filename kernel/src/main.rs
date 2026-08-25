@@ -15,6 +15,18 @@ compile_error!(
     "Conflicting AArch64 board features: `board-rpi3` and `board-rpi4` cannot be enabled together."
 );
 
+#[cfg(all(
+    feature = "production-relay-image",
+    any(
+        feature = "dev-policy-key",
+        feature = "dev-signing-key",
+        feature = "dev-weak-rng",
+        feature = "test-hooks",
+        feature = "maintenance-mode"
+    )
+))]
+compile_error!("production relay kernel excludes development, test, and recovery features");
+
 extern crate alloc;
 
 use core::panic::PanicInfo;

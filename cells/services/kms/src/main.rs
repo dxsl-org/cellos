@@ -26,6 +26,7 @@ fn cell_main() {
                 let registry = ServiceRegistrySnapshot {
                     net_broker_tid: ostd::syscall::sys_lookup_service(service::NET_BROKER),
                     supervisor_tid: ostd::syscall::sys_lookup_service(service::SUPERVISOR),
+                    net_tid: ostd::syscall::sys_lookup_service(service::NET),
                 };
                 if let Some(response) =
                     service_state.handle(&buffer[..KMS_MESSAGE_LEN], sender, caller, registry)

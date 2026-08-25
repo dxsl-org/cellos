@@ -1,10 +1,14 @@
 use api::caller_identity::CallerIdentity;
-use types::kms::{BindingEpoch, BrokerBindingPayload, KmsErrorCode};
+use types::kms::{
+    BindingEpoch, BrokerBindingPayload, KmsErrorCode, ServiceNetBindingEpoch,
+    ServiceNetBindingPayload,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ServiceRegistrySnapshot {
     pub net_broker_tid: Option<usize>,
     pub supervisor_tid: Option<usize>,
+    pub net_tid: Option<usize>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -42,6 +46,41 @@ impl BrokerBinding {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ServiceNetBinding {
+    pub epoch: ServiceNetBindingEpoch,
+    pub cell_id: u64,
+    pub generation: u64,
+    pub service_tid: usize,
+}
+
+impl ServiceNetBinding {
+    pub fn payload(self) -> ServiceNetBindingPayload {
+        ServiceNetBindingPayload {
+            binding_epoch: self.epoch,
+            bound_cell_id: self.cell_id,
+            bound_generation: self.generation,
+            bound_service_tid: self.service_tid as u64,
+        }
+    }
+
+    pub fn authorizes(
+        self,
+        sender: usize,
+        caller: Option<CallerIdentity>,
+        live_net_tid: Option<usize>,
+    ) -> Result<(), KmsErrorCode> {
+        let caller = validated_caller(sender, caller)?;
+        if live_net_tid != Some(self.service_tid) {
+            return Err(KmsErrorCode::ServiceBindingStale);
+        }
+        if caller.cell_id != self.cell_id || caller.generation != self.generation {
+            return Err(KmsErrorCode::PermissionDenied);
+        }
+        Ok(())
+    }
+}
+
 pub fn register_broker(
     epoch: BindingEpoch,
     sender: usize,
@@ -53,6 +92,24 @@ pub fn register_broker(
         return Err(KmsErrorCode::PermissionDenied);
     }
     Ok(BrokerBinding {
+        epoch,
+        cell_id: caller.cell_id,
+        generation: caller.generation,
+        service_tid: sender,
+    })
+}
+
+pub fn register_service_net(
+    epoch: ServiceNetBindingEpoch,
+    sender: usize,
+    caller: Option<CallerIdentity>,
+    live_net_tid: Option<usize>,
+) -> Result<ServiceNetBinding, KmsErrorCode> {
+    let caller = validated_caller(sender, caller)?;
+    if live_net_tid != Some(sender) {
+        return Err(KmsErrorCode::PermissionDenied);
+    }
+    Ok(ServiceNetBinding {
         epoch,
         cell_id: caller.cell_id,
         generation: caller.generation,

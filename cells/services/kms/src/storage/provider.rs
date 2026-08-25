@@ -1,9 +1,18 @@
-use types::kms::{KmsProviderKind, RotateNodeIdentityReason};
-
-use super::record::JournalRecord;
+#[cfg(test)]
+mod c2c;
+mod relay;
 
 #[cfg(test)]
-use core::sync::atomic::{AtomicUsize, Ordering};
+pub(crate) use c2c::FixtureRootProvider;
+pub(crate) use relay::ProviderSlot;
+
+use types::kms::{
+    KmsCapabilityReadiness, KmsKeyAlgorithm, KmsProviderKind, RelayProviderAssessment,
+    RotateNodeIdentityReason,
+};
+
+use super::record::JournalRecord;
+use super::C2cX25519Status;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct ProviderEpoch(pub u64);
@@ -46,9 +55,37 @@ pub(crate) enum ProviderOpenResult {
 }
 
 #[cfg_attr(test, allow(dead_code))]
-pub(crate) trait RootProvider {
+pub(crate) trait C2cProvider {
     fn kind(&self) -> KmsProviderKind;
     fn assess(&self) -> ProviderAssessment;
+    fn c2c_x25519_status(&self) -> C2cX25519Status {
+        let assessment = self.assess();
+        let provider = self.kind();
+        C2cX25519Status {
+            algorithm: KmsKeyAlgorithm::C2cX25519,
+            generation: self.seal_epoch().0,
+            policy_epoch: assessment.current_epoch,
+            provider,
+            assessment: if assessment.production_capable {
+                RelayProviderAssessment::ProductionQualified
+            } else if provider == KmsProviderKind::TestHooks {
+                RelayProviderAssessment::DevelopmentReference
+            } else {
+                RelayProviderAssessment::QualificationTest
+            },
+            readiness: if provider == KmsProviderKind::None {
+                KmsCapabilityReadiness::Unavailable
+            } else if assessment.production_capable
+                && assessment.measurement_ok
+                && assessment.device_binding_ok
+            {
+                KmsCapabilityReadiness::Ready
+            } else {
+                KmsCapabilityReadiness::PolicyMismatch
+            },
+        }
+    }
+
     fn open_or_provision(&self, record: Option<&JournalRecord>) -> ProviderOpenResult;
     fn seal_epoch(&self) -> ProviderEpoch;
     fn rotate(
@@ -58,88 +95,4 @@ pub(crate) trait RootProvider {
     ) -> ProviderOpenResult;
 }
 
-#[derive(Debug, Default, Clone, Copy)]
-pub(crate) struct UnavailableRootProvider;
 
-impl RootProvider for UnavailableRootProvider {
-    fn kind(&self) -> KmsProviderKind {
-        KmsProviderKind::None
-    }
-
-    fn assess(&self) -> ProviderAssessment {
-        ProviderAssessment::unavailable()
-    }
-
-    fn open_or_provision(&self, _record: Option<&JournalRecord>) -> ProviderOpenResult {
-        ProviderOpenResult::Unavailable
-    }
-
-    fn seal_epoch(&self) -> ProviderEpoch {
-        ProviderEpoch(0)
-    }
-
-    fn rotate(
-        &self,
-        _reason: RotateNodeIdentityReason,
-        _expected_blob_revision: u64,
-    ) -> ProviderOpenResult {
-        ProviderOpenResult::Unavailable
-    }
-}
-
-#[cfg(test)]
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct FixtureRootProvider {
-    pub(crate) kind: KmsProviderKind,
-    pub(crate) assessment: ProviderAssessment,
-    pub(crate) open_result: ProviderOpenResult,
-    pub(crate) open_calls: Option<&'static AtomicUsize>,
-}
-
-#[cfg(test)]
-impl FixtureRootProvider {
-    pub(crate) const fn non_production() -> Self {
-        Self {
-            kind: KmsProviderKind::TestHooks,
-            assessment: ProviderAssessment {
-                anti_rollback_capable: false,
-                current_epoch: 0,
-                measurement_ok: true,
-                device_binding_ok: true,
-                production_capable: false,
-            },
-            open_result: ProviderOpenResult::Unavailable,
-            open_calls: None,
-        }
-    }
-}
-
-#[cfg(test)]
-impl RootProvider for FixtureRootProvider {
-    fn kind(&self) -> KmsProviderKind {
-        self.kind
-    }
-
-    fn assess(&self) -> ProviderAssessment {
-        self.assessment
-    }
-
-    fn open_or_provision(&self, _record: Option<&JournalRecord>) -> ProviderOpenResult {
-        if let Some(counter) = self.open_calls {
-            counter.fetch_add(1, Ordering::Relaxed);
-        }
-        self.open_result
-    }
-
-    fn seal_epoch(&self) -> ProviderEpoch {
-        ProviderEpoch(self.assessment.current_epoch)
-    }
-
-    fn rotate(
-        &self,
-        _reason: RotateNodeIdentityReason,
-        _expected_blob_revision: u64,
-    ) -> ProviderOpenResult {
-        self.open_result
-    }
-}

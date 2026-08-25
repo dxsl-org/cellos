@@ -9,6 +9,7 @@ mod root;
 mod root_invariants;
 mod root_sequence;
 mod storage;
+mod tls_signing;
 
 fn caller(cell_id: u64, generation: u64, sender_tid: usize) -> CallerIdentity {
     CallerIdentity {
@@ -22,6 +23,15 @@ fn registry(broker: Option<usize>, supervisor: Option<usize>) -> ServiceRegistry
     ServiceRegistrySnapshot {
         net_broker_tid: broker,
         supervisor_tid: supervisor,
+        net_tid: None,
+    }
+}
+
+fn net_registry(net: Option<usize>) -> ServiceRegistrySnapshot {
+    ServiceRegistrySnapshot {
+        net_broker_tid: None,
+        supervisor_tid: Some(8),
+        net_tid: net,
     }
 }
 

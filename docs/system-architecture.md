@@ -3,7 +3,7 @@
 **Audience**: Developers new to Cellos
 **Level**: High-level (conceptual + key components)
 **Version**: 0.2.1-dev (Mycelium Era)
-**Last Updated**: 2026-08-25 (RV64 compositor titlebar, frame/control hit testing, drag/resize, staged configure, close response, and managed visibility policy are implemented; the QEMU `window-policy` scenario is the executable evidence.)
+**Last Updated**: 2026-08-25 (RV64 compositor titlebar, frame/control hit testing, drag/resize, staged configure, close response, and managed visibility policy are implemented; the QEMU `window-policy` scenario is the executable evidence. KMS TLS-signing Phase 1 is implemented and verified as a fixture-backed, non-production boundary.)
 
 > **Status refresh 2026-08-21**: [Spec 23 Native SDK contract](specs/23-native-sdk-contract.md)
 > is ratified as the normative contract for the single Native SDK family. It
@@ -1241,6 +1241,7 @@ Routing (cross-machine): Private→Public ✓ · Public→Private ✗ · Private
   service-net-authorized Silo/KMS key without exposing private-key bytes. X.509
   PKI remains outside the Cellos kernel. See
   [ADR-0005](decisions/0005-mutual-tls-relay-identity.md).
+
 - **Profile-specific entropy and output-buffer gate**: the current default
   development/QEMU tuple enables `dev-weak-rng`. Because the current VirtIO RNG
   source returns zero bytes, `GetRandom` substitutes predictable xorshift bytes
@@ -1255,6 +1256,42 @@ Routing (cross-machine): Private→Public ✓ · Public→Private ✗ · Private
   disposable test identities; it is never fleet credential, release-signature,
   production Noise-key, PAL support, or promotion evidence.
 - `ClusterId` is routing-only; the PSK/Noise handshake is the sole authenticator. Multicast gossip is ~G1-only (cloud VPCs block multicast → G2 discovery shifts to a registry).
+
+### KMS TLS signer boundary (Phase 1, 2026-08-25)
+
+KMS v1 remains a fixed-frame, append-only ABI. Phase 1 adds distinct operations
+to bind the live service-net instance, read Relay P-256 status, and sign only a
+TLS 1.3 client `CertificateVerify` transcript. Existing broker and C2C
+operations are unchanged. The request carries typed protocol state rather than
+a generic digest, raw message, caller-selected key, or private-key material, so
+the interface cannot be repurposed as a general signing oracle.
+
+Authorization is bound to the service registry's live service-net TID and to
+the caller cell ID and generation; a stale or restarted instance is denied
+before provider access. One protected-root provider boundary owns two
+independent typed leaves, C2C X25519 and Relay P-256. Each leaf has its own
+algorithm, generation, policy epoch, provider assessment, and readiness, and
+one leaf's state cannot authorize or stand in for the other.
+
+For Relay P-256 signing, the nonzero request ID must advance monotonically.
+KMS checks relay generation and the active profile digest, reconstructs the
+exact TLS 1.3 client `CertificateVerify` input, validates provider scalars,
+normalizes the signature to low-S, and self-verifies it before advancing replay
+state or returning the signature. Authorization, replay rejection, profile
+binding, and self-verification therefore remain inside KMS rather than the TLS
+client.
+
+The current provider is a test fixture, not protected hardware. Unsafe Cargo
+feature combinations fail at compile time, and the artifact checker rejects
+development, insecure, raw-relay, and K1-fallback paths. The nominal
+`hardware-relay-provider` is intentionally compile-blocked until Phases 6–7
+select and implement the production root; production image checking/building
+remains intentionally blocked until Phase 8 supplies physical qualification
+and authenticated build provenance. This phase does not provide
+client-certificate issuance, production TLS-client integration, a production
+artifact, or hardware-backed signing. The external-boundary identity and key
+non-exposure constraints remain governed by
+[ADR-0005](decisions/0005-mutual-tls-relay-identity.md).
 
 ### Robot swarm (G1) vs server cluster (G2/G3)
 

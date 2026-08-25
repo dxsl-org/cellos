@@ -35,6 +35,12 @@ wire_enum!(
         NoiseStaticDh = 4,
         /// Rotate identity under live supervisor authority.
         RotateNodeIdentity = 5,
+        /// Bind TLS signing authority to the live service-net generation.
+        RegisterServiceNetInstance = 6,
+        /// Read independent Relay P-256 readiness and protected metadata.
+        GetRelayP256Status = 7,
+        /// Sign a TLS 1.3 client CertificateVerify transcript.
+        SignTls13ClientCertificateVerify = 8,
     }
 );
 wire_enum!(
@@ -49,6 +55,8 @@ wire_enum!(
         SiloWrapped = 2,
         DiceSealed = 3,
         HardwareSealed = 4,
+        /// Hardware relay signing capability.
+        HardwareRelay = 5,
     }
 );
 wire_enum!(
@@ -73,6 +81,32 @@ wire_enum!(
     }
 );
 wire_enum!(
+    /// Cryptographic algorithm owned by one provider capability leaf.
+    pub enum KmsKeyAlgorithm: u8 {
+        C2cX25519 = 1,
+        RelayP256Sha256 = 2,
+    }
+);
+wire_enum!(
+    /// Independent readiness for one provider capability leaf.
+    pub enum KmsCapabilityReadiness: u8 {
+        Unavailable = 0,
+        Ready = 1,
+        RemoteDisabled = 2,
+        ProviderError = 3,
+        PolicyMismatch = 4,
+    }
+);
+wire_enum!(
+    /// Protected qualification state of the relay signing provider.
+    pub enum RelayProviderAssessment: u8 {
+        Unassessed = 0,
+        DevelopmentReference = 1,
+        QualificationTest = 2,
+        ProductionQualified = 3,
+    }
+);
+wire_enum!(
     /// Stable numeric service errors; responses never contain free-form secrets.
     pub enum KmsErrorCode: u16 {
         CallerUnattested = 1,
@@ -88,6 +122,14 @@ wire_enum!(
         PersistFailed = 11,
         ProviderFailure = 12,
         Busy = 13,
+        ServiceBindingRequired = 14,
+        ServiceBindingStale = 15,
+        RelayUnavailable = 16,
+        RelayGenerationMismatch = 17,
+        ActiveProfileMismatch = 18,
+        InvalidSignature = 19,
+        QualificationRequired = 20,
+        InvalidRequest = 21,
     }
 );
 
@@ -115,3 +157,8 @@ pub struct NodeIdentityHandle(pub u32);
 #[repr(transparent)]
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct BindingEpoch(pub u64);
+
+/// KMS-issued service-net binding generation. Zero is never authorized.
+#[repr(transparent)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ServiceNetBindingEpoch(pub u64);

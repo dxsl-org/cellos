@@ -84,6 +84,8 @@ policy-required = []
 # Fleet-secure posture for cell signing: a cell with NO __ViCell_sig section is
 # denied at spawn (same as a tampered signature). Off in G1 (dev-permissive default).
 signing-required = []
+# Named fail-closed kernel posture selected by the production relay image owner.
+production-relay-image = ["policy-required", "signing-required"]
 # Field-recovery: bypass policy narrowing entirely (trusted core always boots).
 # Gated build flag for a headless maintenance image.
 maintenance-mode = []

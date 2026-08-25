@@ -8,6 +8,15 @@
 //! (`api::ipc::NetRequest`/`NetResponse`).  Legacy TLS raw opcodes (0x30–0x32)
 //! from `ostd::tls` are handled by the raw fallback in `handlers`.
 
+#[cfg(all(
+    feature = "verified-tls",
+    any(feature = "tls-insecure", feature = "raw-relay", feature = "k1-fallback")
+))]
+compile_error!("service-net: verified TLS excludes insecure, raw relay, and K1 fallback paths");
+
+#[cfg(all(feature = "verified-tls", not(feature = "tls-roots-embedded")))]
+compile_error!("service-net: verified TLS requires tls-roots-embedded");
+
 extern crate alloc;
 
 // Declares network capability; the kernel grants NetworkCap at spawn.

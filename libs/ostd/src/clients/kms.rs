@@ -1,12 +1,14 @@
 //! Raw fixed-frame client for the key-management service.
 
+mod relay;
+
 use crate::{syscall, task};
 use types::kms::{
     AcquireNodeIdentityPayload, BindingEpoch, BrokerBindingPayload, KmsErrorCode, KmsOpcode,
     KmsRequestV1, KmsResponseV1, KmsWireError, NodeIdentityHandle, NodeIdentityStatusPayload,
-    NoiseStaticDhRequestPayload, NoiseStaticDhResponsePayload, RotateNodeIdentityReason,
-    RotateNodeIdentityRequestPayload, RotateNodeIdentityResponsePayload, KMS_MESSAGE_LEN,
-    KMS_NODE_KEY_ID_C2C,
+    NoiseStaticDhRequestPayload, NoiseStaticDhResponsePayload, RelayP256StatusPayload,
+    RotateNodeIdentityReason, RotateNodeIdentityRequestPayload, RotateNodeIdentityResponsePayload,
+    ServiceNetBindingPayload, KMS_MESSAGE_LEN, KMS_NODE_KEY_ID_C2C,
 };
 
 const REQUEST_ID: u32 = 1;
@@ -45,6 +47,19 @@ impl KmsClient {
         let response = self.call_opcode(KmsOpcode::RegisterBrokerInstance, &[])?;
         self.decode_payload(&response, BrokerBindingPayload::decode)
     }
+
+    /// Bind relay authority to this live supervised service-net generation.
+    pub fn register_service_net_instance(&self) -> Result<ServiceNetBindingPayload, KmsClientError> {
+        let response = self.call_opcode(KmsOpcode::RegisterServiceNetInstance, &[])?;
+        self.decode_payload(&response, ServiceNetBindingPayload::decode)
+    }
+
+    /// Read independent Relay P-256 readiness and protected metadata.
+    pub fn get_relay_p256_status(&self) -> Result<RelayP256StatusPayload, KmsClientError> {
+        let response = self.call_opcode(KmsOpcode::GetRelayP256Status, &[])?;
+        self.decode_payload(&response, RelayP256StatusPayload::decode)
+    }
+
 
     /// Read fail-closed readiness and public node-identity metadata.
     pub fn get_node_identity_status(&self) -> Result<NodeIdentityStatusPayload, KmsClientError> {
@@ -153,3 +168,4 @@ impl KmsClient {
         decode(body).ok_or(KmsClientError::InvalidPayload)
     }
 }
+

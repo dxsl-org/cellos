@@ -3,7 +3,7 @@
 **Scope**: Rust code across kernel, HAL, libraries, and Cells  
 **Edition**: 2021  
 **Nightly**: Required for `no_std` bare-metal features  
-**Last Updated**: 2026-08-21
+**Last Updated**: 2026-08-25
 
 ---
 
@@ -19,6 +19,24 @@
   - Keep public trait method signatures additive and document wire/layout assumptions explicitly
   - Document trait contract in doc comments
   - Preserve method signatures when extending traits
+
+#### Security-Sensitive KMS ABI
+
+- The fixed-frame KMS v1 wire contract is append-only. Never renumber, remove,
+  or reinterpret an existing opcode, error, field, or encoding; add a distinct
+  purpose-specific operation and preserve canonical zeroed reserved bytes.
+- A signing operation must accept typed protocol state only. Do not expose a
+  generic prehash/raw-message signer, caller-selected key or algorithm, or
+  private-key material.
+- Authorize the live caller generation and registered service TID before any
+  provider access. Replay identifiers must be nonzero and monotonic, and replay
+  state advances only after a signature has passed all checks.
+- Keep one protected-root provider boundary with independent, typed capability
+  leaves. C2C X25519 readiness, generation, assessment, rotation, or failure
+  must never authorize or substitute for Relay P-256 state, or vice versa.
+- KMS must reconstruct the purpose-specific signing input, validate provider
+  output, normalize ECDSA output to low-S, and self-verify before returning it.
+  Provider failure never falls back to another key, provider, or weaker path.
 
 ### Law 2: Owned Buffers for Async (SAS Safety)
 
@@ -505,6 +523,13 @@ riscv64 = []  # Primary target
 arm64 = []
 x86_64 = []
 ```
+
+Production-relay feature selection is deny-by-default. The named production
+image checker must accept exactly one approved hardware provider with verified
+TLS and reject fixture/Silo/test hooks, development keys or RNG, insecure/raw
+relay paths, and K1 fallback. The image builder must not bypass a blocked
+checker or turn a missing provider, qualification record, or provenance input
+into a development artifact.
 
 **Conditional Code**:
 ```rust

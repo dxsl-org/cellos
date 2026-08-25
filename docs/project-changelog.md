@@ -2,6 +2,36 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-25] KMS TLS signing Phase 1 ships as a non-production vertical slice
+
+- The append-only KMS v1 fixed-frame ABI adds only purpose-specific operations
+  for live service-net binding, Relay P-256 status, and TLS 1.3 client
+  `CertificateVerify` signing. Existing broker/C2C operations remain intact,
+  and no generic prehash, raw-message signing, key-selection, or private-key
+  interface is exposed.
+- Authorization is tied to the currently registered service-net cell ID,
+  generation, and service TID before provider access. One provider boundary
+  exposes independent C2C X25519 and Relay P-256 capability leaves, so the
+  readiness, assessment, generation, rotation, or failure of one cannot
+  authorize the other.
+- The signer accepts only the typed transcript hash, relay generation, active
+  profile digest, and a nonzero monotonically increasing request ID. KMS
+  reconstructs the exact TLS 1.3 client `CertificateVerify` input, rejects
+  replay before provider access, normalizes provider output to low-S, and
+  verifies the resulting signature before returning it.
+- Cargo feature guards and the production image checker reject mixed,
+  development, insecure, raw-relay, and K1-fallback tuples. The fixture-backed
+  path is the only implemented signer: `hardware-relay-provider` remains
+  intentionally compile-blocked pending Phases 6–7, while production
+  checker/builder candidates remain blocked through Phase 8 qualification and
+  authenticated build provenance. No production artifact or hardware-backed
+  signing claim is made. This preserves the boundary established by
+  [ADR-0005](decisions/0005-mutual-tls-relay-identity.md).
+- Focused verification passed 59/59 tests (40 KMS and 19 KMS wire types), all
+  10 unsafe Cargo matrices and 18 unsafe artifact-checker probes were rejected,
+  and both code and security reviews reported no residual Critical or High
+  findings.
+
 ## [2026-08-25] SDK networking, VFS, ViUI, and compositor completion slice
 
 - Net-broker now loads K1 before network initialization and drives authenticated

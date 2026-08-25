@@ -9,6 +9,28 @@ fn fixed_layouts_match_the_frozen_wire_contract() {
         core::mem::size_of::<RotateNodeIdentityResponsePayload>(),
         48
     );
+    assert_eq!(core::mem::size_of::<ServiceNetBindingPayload>(), 32);
+    assert_eq!(core::mem::size_of::<RelayP256StatusPayload>(), 104);
+    assert_eq!(
+        core::mem::size_of::<Tls13ClientCertificateVerifyRequestPayload>(),
+        80
+    );
+    assert_eq!(
+        core::mem::size_of::<Tls13ClientCertificateVerifyResponsePayload>(),
+        64
+    );
+}
+
+#[test]
+fn opcode_values_are_append_only() {
+    assert_eq!(KmsOpcode::RegisterBrokerInstance as u8, 1);
+    assert_eq!(KmsOpcode::GetNodeIdentityStatus as u8, 2);
+    assert_eq!(KmsOpcode::AcquireNodeIdentity as u8, 3);
+    assert_eq!(KmsOpcode::NoiseStaticDh as u8, 4);
+    assert_eq!(KmsOpcode::RotateNodeIdentity as u8, 5);
+    assert_eq!(KmsOpcode::RegisterServiceNetInstance as u8, 6);
+    assert_eq!(KmsOpcode::GetRelayP256Status as u8, 7);
+    assert_eq!(KmsOpcode::SignTls13ClientCertificateVerify as u8, 8);
 }
 
 #[test]
@@ -149,4 +171,41 @@ fn status_payload_rejects_noncanonical_alignment_bytes() {
     let mut encoded = status.encode();
     encoded[4] = 1;
     assert_eq!(NodeIdentityStatusPayload::decode(&encoded), None);
+}
+
+#[test]
+fn relay_payload_vectors_are_canonical() {
+    let request = Tls13ClientCertificateVerifyRequestPayload {
+        transcript_hash: [0x11; 32],
+        relay_generation: 0x0807_0605_0403_0201,
+        active_profile_digest: [0x22; 32],
+        request_id: 0x1817_1615_1413_1211,
+    };
+    let encoded = request.encode();
+    assert_eq!(&encoded[..32], &[0x11; 32]);
+    assert_eq!(&encoded[32..40], &[1, 2, 3, 4, 5, 6, 7, 8]);
+    assert_eq!(&encoded[40..72], &[0x22; 32]);
+    assert_eq!(&encoded[72..80], &[0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18]);
+    assert_eq!(
+        Tls13ClientCertificateVerifyRequestPayload::decode(&encoded),
+        Some(request)
+    );
+
+    let status = RelayP256StatusPayload {
+        algorithm: KmsKeyAlgorithm::RelayP256Sha256,
+        readiness: KmsCapabilityReadiness::Ready,
+        provider: KmsProviderKind::HardwareRelay,
+        assessment: RelayProviderAssessment::ProductionQualified,
+        reserved: 0,
+        relay_generation: 7,
+        policy_epoch: 8,
+        authenticated_time_floor: 9,
+        qualification_epoch: 10,
+        active_profile_digest: [0x33; 32],
+        qualification_record_digest: [0x44; 32],
+    };
+    assert_eq!(RelayP256StatusPayload::decode(&status.encode()), Some(status));
+    let mut noncanonical = status.encode();
+    noncanonical[4] = 1;
+    assert_eq!(RelayP256StatusPayload::decode(&noncanonical), None);
 }

@@ -1,10 +1,18 @@
 mod binding;
 mod noise;
 mod rotate;
+mod relay;
+mod service_net;
+mod tls;
 
 pub use binding::{AcquireNodeIdentityPayload, BrokerBindingPayload, NodeIdentityStatusPayload};
 pub use noise::{NoiseStaticDhRequestPayload, NoiseStaticDhResponsePayload};
 pub use rotate::{RotateNodeIdentityRequestPayload, RotateNodeIdentityResponsePayload};
+pub use relay::RelayP256StatusPayload;
+pub use service_net::ServiceNetBindingPayload;
+pub use tls::{
+    Tls13ClientCertificateVerifyRequestPayload, Tls13ClientCertificateVerifyResponsePayload,
+};
 
 fn read_32(bytes: &[u8], at: usize) -> [u8; 32] {
     let mut out = [0u8; 32];

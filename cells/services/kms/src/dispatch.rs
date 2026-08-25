@@ -1,17 +1,27 @@
+mod node_identity;
+mod relay;
+
 use api::caller_identity::CallerIdentity;
 use types::kms::{
     BindingEpoch, KmsErrorCode, KmsOpcode, KmsRequestV1, KmsResponseV1,
-    NoiseStaticDhRequestPayload, RotateNodeIdentityRequestPayload, KMS_NODE_KEY_ID_C2C,
+    ServiceNetBindingEpoch,
 };
 
-use crate::auth::{authorize_supervisor, register_broker, BrokerBinding, ServiceRegistrySnapshot};
+use crate::auth::{
+    register_broker, register_service_net, BrokerBinding, ServiceNetBinding,
+    ServiceRegistrySnapshot,
+};
 use crate::reply::SuccessPayload;
-use crate::storage::{runtime_root, RootAssessment};
+use crate::storage::{runtime_root, ProviderSlot, RootAssessment};
 
 pub struct KmsService {
     binding: Option<BrokerBinding>,
+    service_net_binding: Option<ServiceNetBinding>,
+    provider: ProviderSlot,
     root: RootAssessment,
     next_binding_epoch: u64,
+    next_service_binding_epoch: u64,
+    last_tls_request_id: u64,
 }
 
 impl Default for KmsService {
@@ -22,11 +32,24 @@ impl Default for KmsService {
 
 impl KmsService {
     pub fn new() -> Self {
+        Self::from_provider(ProviderSlot::Unavailable)
+    }
+
+    fn from_provider(provider: ProviderSlot) -> Self {
         Self {
             binding: None,
-            root: runtime_root(),
+            service_net_binding: None,
+            root: runtime_root(&provider),
+            provider,
             next_binding_epoch: 1,
+            next_service_binding_epoch: 1,
+            last_tls_request_id: 0,
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_provider_fixture(provider: crate::storage::FixtureRelayProvider) -> Self {
+        Self::from_provider(ProviderSlot::Fixture(provider))
     }
 
     /// Handle one canonical frame. Malformed envelopes are dropped fail-closed.
@@ -47,6 +70,15 @@ impl KmsService {
             }
             KmsOpcode::NoiseStaticDh => self.noise_dh(&request, sender, caller, registry),
             KmsOpcode::RotateNodeIdentity => self.rotate(&request, sender, caller, registry),
+            KmsOpcode::RegisterServiceNetInstance => {
+                self.register_service_net(&request, sender, caller, registry)
+            }
+            KmsOpcode::GetRelayP256Status => {
+                self.relay_status(&request, sender, caller, registry)
+            }
+            KmsOpcode::SignTls13ClientCertificateVerify => {
+                self.sign_tls13(&request, sender, caller, registry)
+            }
         };
         Some(match result {
             Ok(payload) => {
@@ -72,100 +104,31 @@ impl KmsService {
             .filter(|next| *next != 0)
             .ok_or(KmsErrorCode::Busy)?;
         self.binding = Some(binding);
-        Ok(SuccessPayload::new(&binding.payload().encode()))
+        SuccessPayload::new(&binding.payload().encode())
     }
 
-    fn status(
-        &self,
+    fn register_service_net(
+        &mut self,
         request: &KmsRequestV1,
         sender: usize,
         caller: Option<CallerIdentity>,
         registry: ServiceRegistrySnapshot,
     ) -> Result<SuccessPayload, KmsErrorCode> {
         require_empty(request)?;
-        let broker_authorized = self.binding.is_some_and(|binding| {
-            binding
-                .authorizes(sender, caller, registry.net_broker_tid)
-                .is_ok()
-        });
-        if !broker_authorized {
-            authorize_supervisor(sender, caller, registry.supervisor_tid)?;
-        }
-        let binding_epoch = self
-            .binding
-            .map_or(BindingEpoch(0), |binding| binding.epoch);
-        Ok(SuccessPayload::new(
-            &self.root.status_payload(binding_epoch).encode(),
-        ))
+        let epoch = ServiceNetBindingEpoch(self.next_service_binding_epoch);
+        let binding = register_service_net(epoch, sender, caller, registry.net_tid)?;
+        let next_epoch = self
+            .next_service_binding_epoch
+            .checked_add(1)
+            .filter(|next| *next != 0)
+            .ok_or(KmsErrorCode::Busy)?;
+        let response = SuccessPayload::new(&binding.payload().encode())?;
+        self.next_service_binding_epoch = next_epoch;
+        self.service_net_binding = Some(binding);
+        self.last_tls_request_id = 0;
+        Ok(response)
     }
 
-    fn require_bound(
-        &self,
-        request: &KmsRequestV1,
-        sender: usize,
-        caller: Option<CallerIdentity>,
-        registry: ServiceRegistrySnapshot,
-    ) -> Result<SuccessPayload, KmsErrorCode> {
-        require_empty(request)?;
-        self.authorize_bound(sender, caller, registry)?;
-        Err(KmsErrorCode::SecureRootRequired)
-    }
-
-    fn noise_dh(
-        &self,
-        request: &KmsRequestV1,
-        sender: usize,
-        caller: Option<CallerIdentity>,
-        registry: ServiceRegistrySnapshot,
-    ) -> Result<SuccessPayload, KmsErrorCode> {
-        self.authorize_bound(sender, caller, registry)?;
-        let payload = NoiseStaticDhRequestPayload::decode(
-            request
-                .payload()
-                .map_err(|_| KmsErrorCode::InvalidPeerKey)?,
-        )
-        .ok_or(KmsErrorCode::InvalidPeerKey)?;
-        let binding = self.binding.ok_or(KmsErrorCode::BindingRequired)?;
-        if payload.handle.0 == 0 {
-            return Err(KmsErrorCode::InvalidHandle);
-        }
-        if payload.key_id != KMS_NODE_KEY_ID_C2C
-            || payload.binding_epoch != binding.epoch
-            || payload.peer_public_key.iter().all(|byte| *byte == 0)
-        {
-            return Err(KmsErrorCode::InvalidPeerKey);
-        }
-        Err(KmsErrorCode::SecureRootRequired)
-    }
-
-    fn rotate(
-        &self,
-        request: &KmsRequestV1,
-        sender: usize,
-        caller: Option<CallerIdentity>,
-        registry: ServiceRegistrySnapshot,
-    ) -> Result<SuccessPayload, KmsErrorCode> {
-        authorize_supervisor(sender, caller, registry.supervisor_tid)?;
-        RotateNodeIdentityRequestPayload::decode(
-            request
-                .payload()
-                .map_err(|_| KmsErrorCode::ProviderFailure)?,
-        )
-        .filter(|payload| payload.flags == 0)
-        .ok_or(KmsErrorCode::ProviderFailure)?;
-        Err(KmsErrorCode::SecureRootRequired)
-    }
-
-    fn authorize_bound(
-        &self,
-        sender: usize,
-        caller: Option<CallerIdentity>,
-        registry: ServiceRegistrySnapshot,
-    ) -> Result<(), KmsErrorCode> {
-        self.binding
-            .ok_or(KmsErrorCode::BindingRequired)?
-            .authorizes(sender, caller, registry.net_broker_tid)
-    }
 }
 
 fn require_empty(request: &KmsRequestV1) -> Result<(), KmsErrorCode> {
@@ -176,3 +139,4 @@ fn require_empty(request: &KmsRequestV1) -> Result<(), KmsErrorCode> {
         .map(|_| ())
         .ok_or(KmsErrorCode::ProviderFailure)
 }
+

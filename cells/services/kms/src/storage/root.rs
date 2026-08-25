@@ -1,7 +1,7 @@
 use types::kms::{BindingEpoch, KmsProviderKind, NodeIdentityState, NodeIdentityStatusPayload};
 
 use super::{
-    ready::ready_or_mismatch, JournalRecord, JournalState, ProviderOpenResult, RootProvider,
+    ready::ready_or_mismatch, C2cProvider, JournalRecord, JournalState, ProviderOpenResult,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -25,13 +25,17 @@ impl RootAssessment {
         )
     }
 
-    pub(crate) fn from_provider(provider: &impl RootProvider, journal: &JournalState) -> Self {
+    pub(crate) fn from_provider(provider: &impl C2cProvider, journal: &JournalState) -> Self {
         let assessment = provider.assess();
-        let provider_kind = provider.kind();
+        let c2c = provider.c2c_x25519_status();
+        let provider_kind = c2c.provider;
         if provider_kind == KmsProviderKind::None {
             return Self::unavailable();
         }
-        if provider.seal_epoch().0 != assessment.current_epoch {
+        if c2c.generation != assessment.current_epoch
+            || c2c.policy_epoch != assessment.current_epoch
+            || c2c.algorithm != types::kms::KmsKeyAlgorithm::C2cX25519
+        {
             return fail_closed(
                 NodeIdentityState::ProviderUnavailable,
                 provider_kind,

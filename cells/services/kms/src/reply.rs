@@ -1,16 +1,21 @@
+use types::kms::{KmsErrorCode, KMS_PAYLOAD_LEN};
+
 pub(crate) struct SuccessPayload {
-    bytes: [u8; 64],
+    bytes: [u8; KMS_PAYLOAD_LEN],
     len: usize,
 }
 
 impl SuccessPayload {
-    pub(crate) fn new(bytes: &[u8]) -> Self {
-        let mut payload = [0; 64];
+    pub(crate) fn new(bytes: &[u8]) -> Result<Self, KmsErrorCode> {
+        if bytes.len() > KMS_PAYLOAD_LEN {
+            return Err(KmsErrorCode::ProviderFailure);
+        }
+        let mut payload = [0; KMS_PAYLOAD_LEN];
         payload[..bytes.len()].copy_from_slice(bytes);
-        Self {
+        Ok(Self {
             bytes: payload,
             len: bytes.len(),
-        }
+        })
     }
 
     pub(crate) fn as_slice(&self) -> &[u8] {

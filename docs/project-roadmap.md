@@ -159,10 +159,23 @@ Cellos is being shaped around product stages, not only phase numbers:
   frames, and I/O. It starts only from a strict mounted manifest. The obsolete
   Cellos raw `RelayClient`, `TcpConnect` registration, runtime polling, and
   fallback callsites are removed; exhausting direct Noise paths returns
-  `NotSupported`. The mTLS client remains blocked on a production KMS/Silo
-  signing-root lifecycle, attested service-net authorization, client-certificate
-  issuance/provisioning, and a TLS client-auth profile. Lease and enrollment
-  wiring remain unavailable.
+  `NotSupported`.
+- KMS TLS-signing Phase 1 is verified as a fixture-backed, non-production
+  vertical slice. The append-only KMS v1 ABI binds signing authority to the
+  live service-net cell generation and TID, keeps C2C X25519 and Relay P-256 as
+  independent capability leaves behind one provider boundary, rejects replayed
+  request IDs monotonically, and returns only low-S signatures that KMS verifies
+  against the exact TLS 1.3 client `CertificateVerify` input. No generic signing
+  operation or private-key export was added. See
+  [ADR-0005](decisions/0005-mutual-tls-relay-identity.md).
+- **PRODUCTION RELAY SIGNING BLOCKED:** the implemented relay signer is
+  fixture-only. Cargo rejects unsafe provider/downgrade feature combinations,
+  `hardware-relay-provider` is intentionally compile-blocked until Phases 6–7
+  select and implement one production root, and the production image
+  checker/builder intentionally remain blocked through Phase 8 hardware
+  qualification and authenticated build provenance. Client-certificate
+  issuance/provisioning and the TLS client-auth integration remain unavailable;
+  Phase 1 is not hardware-backed signing or a production relay artifact.
 
 ## Update Rule
 

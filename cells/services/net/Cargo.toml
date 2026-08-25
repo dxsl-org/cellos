@@ -21,6 +21,9 @@ default = ["tls-roots-embedded", "tls-ca-private"]
 tls-roots-embedded = []
 tls-roots-full     = []   # deps wired in P04
 tls-insecure       = []
+verified-tls       = []
+raw-relay          = []
+k1-fallback        = []
 
 # CA selectors — map to embedded-tls crypto features per spike-00 size table
 tls-ca-private      = ["embedded-tls/rustpki"]   # ECDSA P-256, +21 KB (reuses handshake crates)
