@@ -1,7 +1,7 @@
 //! Non-blocking compositor bridge for the VMM-owned scanout Grant.
 
 use super::{command, resource::ResourceTable};
-use api::display::{compositor_ops, AttachGrant, DamageNotify, PixelFormat, Rect};
+use api::display::{compositor_ops, AttachGrant, DamageNotify, PixelFormat, Rect, SurfaceRole};
 use ostd::io::println;
 use ostd::syscall::{sys_grant_share, sys_recv_timeout, sys_try_send, sys_yield, SyscallResult};
 pub struct ScanoutBridge {
@@ -49,10 +49,11 @@ impl ScanoutBridge {
             return;
         }
 
-        let mut create = [0u8; 9];
+        let mut create = [0u8; 10];
         create[0] = compositor_ops::CREATE_SURFACE;
         create[1..5].copy_from_slice(&self.width.to_le_bytes());
         create[5..9].copy_from_slice(&self.height.to_le_bytes());
+        create[9] = SurfaceRole::Background as u8;
         let Some(reply) = self.request(&create) else {
             return;
         };

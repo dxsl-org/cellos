@@ -12,7 +12,7 @@ use api::display::Rect;
 use api::input::{decode_event, InputEvent, INPUT_EVENT_IPC_SIZE, INPUT_EVENT_OPCODE};
 use api::ipc::{InputRequest, IPC_BUF_SIZE};
 use api::syscall::service;
-use ostd::syscall::{sys_gpu_cursor, sys_lookup_service, sys_send};
+use ostd::syscall::{sys_gpu_cursor, sys_lookup_service, sys_send, sys_try_send};
 
 use crate::cursor_sprite::{CURSOR_H, CURSOR_W};
 use crate::pointer_router::PointerRouter;
@@ -26,6 +26,8 @@ const INPUT_FRAME_LEN: usize = 1 + INPUT_EVENT_IPC_SIZE;
 pub struct InputState {
     /// TID of the input service cell (0 = not yet connected).
     pub input_tid: usize,
+    /// Registered TID for the compositor's input endpoint.
+    compositor_tid: usize,
     /// Logical mouse cursor position (updated from MouseMove events).
     pub mouse_x: i32,
     pub mouse_y: i32,
@@ -40,6 +42,7 @@ impl InputState {
     pub fn new() -> Self {
         Self {
             input_tid: 0,
+            compositor_tid: 0,
             mouse_x: 0,
             mouse_y: 0,
             pointer: PointerRouter::new(),
@@ -64,17 +67,29 @@ fn wait_for_service(id: u16) -> usize {
 /// TID are registered in the service table (init does both before yielding).
 pub fn connect_to_input(state: &mut InputState) {
     let input_tid = wait_for_service(service::INPUT);
-    let own_tid = wait_for_service(service::COMPOSITOR);
+    let compositor_tid = wait_for_service(service::COMPOSITOR);
     state.input_tid = input_tid;
+    state.compositor_tid = compositor_tid;
+    set_input_focus(input_tid, compositor_tid);
+}
 
+fn set_input_focus(input_tid: usize, compositor_tid: usize) {
     let mut req_buf = [0u8; IPC_BUF_SIZE];
     let req = InputRequest::SetFocus {
-        cell_tid: own_tid as u32,
+        cell_tid: compositor_tid as u32,
     };
     if let Ok(encoded) = api::ipc::encode(&req, &mut req_buf) {
-        sys_send(input_tid, encoded);
-        // SetFocus is fire-and-forget; the input service intentionally sends no reply.
+        // Input can synchronously send a key to this compositor. Never wait for
+        // its receive loop here, or click activation can form a two-way IPC wait.
+        let _ = sys_try_send(input_tid, encoded);
     }
+}
+
+fn queue_dirty(pending_dirty: &mut Option<Rect>, dirty: Rect) {
+    *pending_dirty = Some(match pending_dirty.take() {
+        Some(previous) => previous.union(&dirty),
+        None => dirty,
+    });
 }
 
 /// Dispatch a raw IPC buffer received from the input service.
@@ -85,7 +100,7 @@ pub fn handle_input_event(
     buf: &[u8; 512],
     state: &mut InputState,
     table: &SurfaceTable,
-    z_order: &ZOrder,
+    z_order: &mut ZOrder,
     pending_dirty: &mut Option<Rect>,
 ) {
     if buf[0] != INPUT_EVENT_OPCODE {
@@ -98,23 +113,40 @@ pub fn handle_input_event(
         InputEvent::Key(_) => forward_key(buf, state),
         InputEvent::MouseMove { x, y, .. } => {
             update_cursor(x, y, state, pending_dirty);
-            state
-                .pointer
-                .route(event, state.mouse_x, state.mouse_y, table, z_order);
+            route_pointer(event, state, table, z_order, pending_dirty);
         }
         InputEvent::MouseButton { .. } | InputEvent::MouseScroll { .. } => {
-            state
-                .pointer
-                .route(event, state.mouse_x, state.mouse_y, table, z_order);
+            route_pointer(event, state, table, z_order, pending_dirty);
         }
     }
+}
+
+fn route_pointer(
+    event: InputEvent,
+    state: &mut InputState,
+    table: &SurfaceTable,
+    z_order: &mut ZOrder,
+    pending_dirty: &mut Option<Rect>,
+) {
+    let (input_tid, compositor_tid) = (state.input_tid, state.compositor_tid);
+    state.pointer.route(
+        event,
+        state.mouse_x,
+        state.mouse_y,
+        table,
+        z_order,
+        |dirty| {
+            queue_dirty(pending_dirty, dirty);
+            set_input_focus(input_tid, compositor_tid);
+        },
+    );
 }
 
 /// Re-send the key-event frame to the focused surface owner.
 fn forward_key(buf: &[u8; 512], state: &InputState) {
     let owner = state.pointer.focused_owner();
     if owner != 0 {
-        sys_send(owner, &buf[..INPUT_FRAME_LEN]);
+        let _ = sys_send(owner, &buf[..INPUT_FRAME_LEN]);
     }
 }
 

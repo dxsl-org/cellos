@@ -1048,6 +1048,14 @@ jobs:
             bench_all_pass input_keyboard_e2e input_bare_cell \
             posix_shim_getentropy posix_shim_net
 
+      - name: Run compositor window-policy evidence
+        env:
+          CARGO_BUILD_TARGET: x86_64-unknown-linux-gnu
+        run: |
+          cd tests/integration
+          cargo test --test window-policy -- --test-threads=1 \
+            clicking_exposed_surface_raises_and_focuses_its_owner
+
   security:
     name: Security Scan
     runs-on: ubuntu-24.04

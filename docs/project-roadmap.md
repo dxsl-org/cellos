@@ -3,7 +3,7 @@
 **Project**: Cellos (Jarvis Hybrid OS)
 **Current version**: 0.2.1-dev (Mycelium Era)
 **Current phase**: Phase 1 - Core Stability; active product stage G1 Robot & Embedded
-**Last updated**: 2026-08-24
+**Last updated**: 2026-08-25
 This file is the roadmap entrypoint. The previous all-in-one roadmap is
 preserved as a read-only content snapshot at
 [project-roadmap-legacy.md](project-roadmap-legacy.md). Use it only when a
@@ -65,6 +65,14 @@ Cellos is being shaped around product stages, not only phase numbers:
   Linux 6.12.81 `/bin/sh` BusyBox prompt under QEMU-TCG 10.2.0 at both 1 GiB
   and 2 GiB. Ubuntu 24.04's QEMU-TCG 8.2.2 remains an explicit compatibility
   risk; physical x86 qualification remains hardware-gated.
+- RV64 QEMU desktop has a bounded verified interaction slice: two interactive
+  surfaces can be selected, raised, and keyboard-focused by a click; captured
+  pointer motion/release remains with the selected owner. `SurfaceRole::Background`
+  excludes full-screen console and VM scanout surfaces from hit testing and
+  explicit raise. QMP evidence samples the real scanout and rejects input to
+  the nonselected and background probes. This is implementation evidence only,
+  not a desktop-shell, decoration, drag/resize, close-lifecycle, or G2
+  qualification claim.
 
 ## Immediate Open Gates
 

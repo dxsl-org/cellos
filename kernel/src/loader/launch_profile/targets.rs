@@ -16,6 +16,7 @@ pub(super) fn reviewed_user_target_ceiling(target: &str) -> Option<CapSet> {
         | "/bin/gpio-test-rv"
         | "/bin/http-smoke"
         | "/bin/input-test"
+        | "/bin/window-policy-probe"
         | "/bin/ls"
         | "/bin/posix-shim-test"
         | "/bin/ps"

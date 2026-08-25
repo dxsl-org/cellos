@@ -60,6 +60,10 @@ name = "compositor-cursor"
 path = "tests/compositor-cursor.rs"
 
 [[test]]
+name = "window-policy"
+path = "tests/window-policy.rs"
+
+[[test]]
 name = "periph-i2c-spi"
 path = "tests/periph-i2c-spi.rs"
 

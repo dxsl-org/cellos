@@ -44,8 +44,12 @@ fn cell_main() {
     let height = height as usize;
 
     let comp = wait_for_compositor();
-    let mut surf = match ViSurface::create(comp, width as u32, height as u32, PixelFormat::Bgra8888)
-    {
+    let mut surf = match ViSurface::create_background(
+        comp,
+        width as u32,
+        height as u32,
+        PixelFormat::Bgra8888,
+    ) {
         Ok(s) => s,
         Err(_) => {
             sys_exit(1);

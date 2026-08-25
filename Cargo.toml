@@ -146,6 +146,7 @@ members = [
     "cells/tests/mlibc-smoke",
     "cells/tests/test-isolation",
     "cells/tests/input-test",
+    "cells/tests/window-policy-probe",
     "cells/tests/silo-test",
     "cells/tests/wx-test",
 

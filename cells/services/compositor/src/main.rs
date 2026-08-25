@@ -22,7 +22,7 @@ mod render;
 mod surface_table;
 mod z_order;
 
-use api::display::{compositor_ops, AttachGrant, DamageNotify, PixelFormat, Rect};
+use api::display::{compositor_ops, AttachGrant, DamageNotify, PixelFormat, Rect, SurfaceRole};
 use api::syscall::service;
 use input_handler::{connect_to_input, handle_input_event, InputState};
 use ostd::io::println;
@@ -93,13 +93,18 @@ pub fn main() {
     let mut last_res_check_ms: u64 = 0;
 
     loop {
+        // A legacy nine-byte CREATE_SURFACE leaves byte 9 untouched in the
+        // reusable receive buffer; default it before receive so it remains
+        // interactive rather than inheriting a prior message's role.
+        buf[9] = SurfaceRole::Interactive as u8;
+
         match sys_recv(0, &mut buf) {
             SyscallResult::Ok(sender) if sender > 0 => {
                 if input.input_tid != 0 && sender == input.input_tid && buf[0] == INPUT_EVENT_OPCODE
                 {
                     // On MouseMove, update_cursor sets pending_dirty = union(old, new)
                     // so the frame is repainted at the interval tick.
-                    handle_input_event(&buf, &mut input, &table, &z_order, &mut pending_dirty);
+                    handle_input_event(&buf, &mut input, &table, &mut z_order, &mut pending_dirty);
                 } else if buf[0] == OWNER_EXITED_OPCODE
                     && sender == sys_lookup_service(service::SUPERVISOR).unwrap_or(0)
                 {
@@ -192,12 +197,13 @@ fn handle_message(
     #[allow(deprecated)] // WRITE_PIXELS kept for legacy clients; new code uses ATTACH_GRANT
     match buf[0] {
         compositor_ops::CREATE_SURFACE => {
-            if buf.len() < 9 {
+            if buf.len() < 10 {
                 return;
             }
             let sw = u32::from_le_bytes([buf[1], buf[2], buf[3], buf[4]]);
             let sh = u32::from_le_bytes([buf[5], buf[6], buf[7], buf[8]]);
-            match table.create(0, 0, sw, sh, sender) {
+            let role = SurfaceRole::from_u8(buf[9]);
+            match table.create(0, 0, sw, sh, sender, role) {
                 Ok(cap) => {
                     z_order.push(cap);
                     sys_send(sender, &cap.to_le_bytes());
@@ -270,7 +276,10 @@ fn handle_message(
             let cap = u64::from_le_bytes([
                 buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7], buf[8],
             ]);
-            if !table.get(cap).is_some_and(|s| s.owner == sender) {
+            if !table
+                .get(cap)
+                .is_some_and(|s| s.owner == sender && s.role == SurfaceRole::Interactive)
+            {
                 return;
             }
             z_order.raise(cap);

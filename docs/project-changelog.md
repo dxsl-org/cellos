@@ -2,6 +2,29 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-25] RV64 compositor click-to-raise and keyboard-focus policy verified
+
+- `SurfaceRole::{Interactive,Background}` is explicit in the create-surface
+  wire contract. Legacy nine-byte create payloads default to interactive;
+  `fb-console` and the VMM scanout use Background, which compositor excludes
+  from pointer hit testing and explicit raises.
+- An interactive left press now atomically selects/captures the owner, raises
+  and damages its surface, and nonblockingly reasserts the compositor as the
+  input endpoint. Later keys are forwarded to that owner.
+- `ostd::input::poll_events` accepts authenticated compositor keyboard frames,
+  in addition to direct input-service frames. This completes selected-surface
+  key delivery without allowing arbitrary senders.
+- New `window-policy-probe` QEMU evidence creates two interactive and one
+  background surface. It proves initial/front and post-click/back overlap
+  colors, captured cross-boundary motion/release, selected-owner key delivery,
+  and no front/background pointer or keyboard delivery.
+- Verified with `cargo check -p service-compositor -p service-hypervisor -p
+  ostd -p window-policy-probe`, packaging/signing through `gen_disk.ps1`, and
+  the `window-policy` plus `compositor-cursor` RV64 QEMU integration tests.
+  CI `boot-suite` now runs the same named `window-policy` test after its disk
+  build. The optional Lua Tetris cell remains omitted because the RV64 C
+  toolchain is absent.
+
 ## [2026-08-24] RV64 desktop pointer path and visible VirtIO GPU scanout verified
 
 The RV64 QEMU desktop path now reaches a visible, interactive ViUI surface:

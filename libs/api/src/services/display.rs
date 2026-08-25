@@ -88,6 +88,26 @@ impl PixelFormat {
     }
 }
 
+/// Input behavior assigned when a surface is created.
+///
+/// `Background` is compositor-enforced: it remains visible but cannot be a
+/// pointer target, capture target, or keyboard-focus owner.
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SurfaceRole {
+    Interactive = 0,
+    Background = 1,
+}
+
+impl SurfaceRole {
+    pub const fn from_u8(value: u8) -> Self {
+        match value {
+            1 => Self::Background,
+            _ => Self::Interactive,
+        }
+    }
+}
+
 // ─── Surface capability ───────────────────────────────────────────────────────
 
 /// An opaque handle to a compositor surface (backed by a kernel capability).
@@ -220,8 +240,10 @@ impl AttachGrant {
 
 /// Opcodes for messages from cells to the compositor cell.
 pub mod compositor_ops {
-    /// Request a new surface of `(w: u32, h: u32)` pixels.
-    /// Payload: `[w: u32 LE, h: u32 LE]`  Reply: cap (u32 LE, zero-padded to 8 bytes)
+    /// Request a new surface of `(w: u32, h: u32)` pixels and a `SurfaceRole`.
+    /// Payload: `[w: u32 LE, h: u32 LE, role: u8]`; the legacy nine-byte form
+    /// defaults to `SurfaceRole::Interactive`; reply: cap (u32 LE, zero-padded
+    /// to 8 bytes).
     pub const CREATE_SURFACE: u8 = 0x01;
 
     /// Write pixels into a surface (DEPRECATED — use `ATTACH_GRANT` + `DAMAGE_NOTIFY`).

@@ -3,7 +3,7 @@
 **Audience**: Developers new to Cellos
 **Level**: High-level (conceptual + key components)
 **Version**: 0.2.1-dev (Mycelium Era)
-**Last Updated**: 2026-08-22 (VFS SMP owner-lifetime lifecycle closure is verified; RV32 runtime remains a non-blocking host-firmware evidence gap; Tier 1 admission prequalification catalog and strict test parser land without admissible evidence or production wiring; Spec 22 accepted the Tier 2 native-domain implementation gate; Manifest-v2 tri-state loader classification and tooling completed without ABI change, while three pre-existing loader-security risks still block production readiness; application tier taxonomy normalized; Phase 05 q35 PCIe storage/network QEMU lane passes; Phase 04 QEMU and physical RPi3 boot/storage/input baselines pass; Phase 03 BCM GPIO/I2C/SPI hardware gate also passes on the current RPi3 head)
+**Last Updated**: 2026-08-25 (RV64 compositor click-to-raise, pointer capture, background-surface exclusion, and compositor-mediated keyboard focus have QEMU evidence; desktop-shell and general window-management policy remain out of scope.)
 
 > **Status refresh 2026-08-21**: [Spec 23 Native SDK contract](specs/23-native-sdk-contract.md)
 > is ratified as the normative contract for the single Native SDK family. It
@@ -174,15 +174,17 @@ Routing any new idea: (1) uses SAS/LBI → **Tier 1 native**; (2) trusted librar
 
 The input service owns device translation and sends pointer frames only to the
 compositor. The compositor owns cursor state, surface hit-testing, left-button
-capture, z-order, and screen-to-surface coordinate translation; it forwards
-pointer frames to the selected surface owner and keys to its selected keyboard
-owner. Application Cells consume those pointer frames through `ostd::input`
-alongside input-service keyboard frames, then render into Grant-backed
-`ViSurface`s. `GpuFlush` and `GpuCursor` cross the kernel-to-GPU-driver boundary
-inside the `AppContext` message envelope; the GPU Cell owns the VirtIO framebuffer
-and scanout. This is a surface protocol, not a compositor-managed window
-manager: titlebars, drag/resize policy, shell, and taskbar remain application or
-future desktop policy.
+capture, z-order, and screen-to-surface coordinate translation. An interactive
+left press selects its owner, raises the surface, reasserts compositor keyboard
+focus without reciprocal blocking IPC, and routes later keys only to that owner.
+`SurfaceRole::Background` surfaces remain visible but cannot hit-test or raise;
+the full-screen console and VMM scanout use this role. Application Cells consume
+direct input-service frames and trusted compositor frames through `ostd::input`,
+then render into Grant-backed `ViSurface`s. `GpuFlush` and `GpuCursor` cross the
+kernel-to-GPU-driver boundary inside the `AppContext` message envelope; the GPU
+Cell owns the VirtIO framebuffer and scanout. This is a bounded surface policy,
+not a compositor-managed window manager: titlebars, drag/resize policy, shell,
+taskbar, and close lifecycle remain application or future desktop policy.
 
 ---
 

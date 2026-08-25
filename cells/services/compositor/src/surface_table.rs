@@ -10,7 +10,7 @@
 extern crate alloc;
 
 use alloc::{boxed::Box, collections::BTreeMap};
-use api::display::{PixelFormat, Rect};
+use api::display::{PixelFormat, Rect, SurfaceRole};
 use types::ViError;
 
 /// Maximum number of simultaneous surfaces.
@@ -52,6 +52,8 @@ pub struct SurfaceState {
     pub damage: Option<Rect>,
     /// TID of the cell that created this surface (input routing + ownership checks).
     pub owner: usize,
+    /// Whether the compositor may select this surface for desktop input.
+    pub role: SurfaceRole,
 }
 
 impl SurfaceState {
@@ -59,12 +61,10 @@ impl SurfaceState {
     ///
     /// Used by `CREATE_SURFACE` before the app attaches a Grant.  Preserves
     /// compatibility with the legacy `WRITE_PIXELS` path.
-    pub fn new(x: i32, y: i32, w: u32, h: u32, owner: usize) -> Self {
-        // No eager pixel buffer. The Grant path (attach_grant) is the standard flow
-        // and replaces `source` immediately after CREATE_SURFACE, so pre-allocating
-        // w*h*4 here is wasted — and for a full-screen surface (3 MiB at 1024×768) it
-        // would briefly sit on top of the compositor's own framebuffers and OOM its
-        // 8 MiB cell heap. The legacy WRITE_PIXELS path grows the buffer lazily.
+    pub fn new(x: i32, y: i32, w: u32, h: u32, owner: usize, role: SurfaceRole) -> Self {
+        // No eager pixel buffer. The Grant path is the standard flow and replaces
+        // `source` immediately after CREATE_SURFACE. A full-screen eager buffer
+        // would briefly exceed the compositor's bounded heap.
         Self {
             x,
             y,
@@ -74,6 +74,7 @@ impl SurfaceState {
             source: PixelSource::Owned(alloc::vec::Vec::new().into_boxed_slice()),
             damage: None,
             owner,
+            role,
         }
     }
 
@@ -210,14 +211,22 @@ impl SurfaceTable {
     ///
     /// # Errors
     /// Returns `OutOfMemory` if `MAX_SURFACES` is already reached.
-    pub fn create(&mut self, x: i32, y: i32, w: u32, h: u32, owner: usize) -> Result<u64, ViError> {
+    pub fn create(
+        &mut self,
+        x: i32,
+        y: i32,
+        w: u32,
+        h: u32,
+        owner: usize,
+        role: SurfaceRole,
+    ) -> Result<u64, ViError> {
         if self.entries.len() >= MAX_SURFACES {
             return Err(ViError::OutOfMemory);
         }
         let cap = self.next_cap;
         self.next_cap += 1;
         self.entries
-            .insert(cap, SurfaceState::new(x, y, w, h, owner));
+            .insert(cap, SurfaceState::new(x, y, w, h, owner, role));
         Ok(cap)
     }
 

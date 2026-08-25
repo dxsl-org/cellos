@@ -108,9 +108,9 @@ pub fn drain_pending_input_events() {
 
 /// Non-blocking drain of pending input events (up to `max` events).
 ///
-/// Keyboard events are accepted from the registered input service. Pointer
-/// events are also accepted from the registered compositor, which performs
-/// surface hit-testing and screen-to-local coordinate translation. Messages
+/// Input-service events originate from direct keyboard focus. Compositor events
+/// originate from the selected interactive surface after trusted hit-testing,
+/// so they may include both pointer input and forwarded keyboard input. Messages
 /// from all other senders remain queued for their owning protocol.
 pub fn poll_events(max: usize) -> Vec<InputEvent> {
     let Some(input_tid) = sys_lookup_service(service::INPUT) else {
@@ -132,7 +132,7 @@ pub fn poll_events(max: usize) -> Vec<InputEvent> {
             .filter(|tid| *tid != input_tid)
             .map(try_receive_event)
             .unwrap_or((false, None));
-        if let Some(event) = compositor_event.filter(is_pointer_event) {
+        if let Some(event) = compositor_event {
             events.push(event);
         }
         if events.len() == max || (!input_received && !compositor_received) {
@@ -152,16 +152,7 @@ fn try_receive_event(source_tid: usize) -> (bool, Option<InputEvent>) {
     }
 }
 
-fn is_pointer_event(event: &InputEvent) -> bool {
-    matches!(
-        event,
-        InputEvent::MouseMove { .. }
-            | InputEvent::MouseButton { .. }
-            | InputEvent::MouseScroll { .. }
-    )
-}
-
-/// Decode a 65-byte input-service IPC message into an `InputEvent`.
+/// Decode an IPC input event frame from the input service or compositor.
 ///
 /// Returns `None` for messages with a wrong opcode or unsupported discriminant.
 /// Exposed as `pub(crate)` so `ostd::app` can reuse it without re-exporting.

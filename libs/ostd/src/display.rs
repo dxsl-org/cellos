@@ -11,7 +11,7 @@
 
 extern crate alloc;
 
-use api::display::{compositor_ops, AttachGrant, DamageNotify, PixelFormat, Rect};
+use api::display::{compositor_ops, AttachGrant, DamageNotify, PixelFormat, Rect, SurfaceRole};
 use api::syscall::service;
 use types::{ViError, ViResult};
 
@@ -57,8 +57,7 @@ pub struct ViSurface {
 }
 
 impl ViSurface {
-    /// Create a new surface of `(width × height)` pixels, attaching it to the
-    /// running compositor at `comp_tid`.
+    /// Create an interactive surface of `(width × height)` pixels.
     ///
     /// Allocates a persistent Grant buffer, shares it read-only with the compositor,
     /// and sends `CREATE_SURFACE` + `ATTACH_GRANT` IPC.
@@ -67,6 +66,26 @@ impl ViSurface {
     /// - `OutOfMemory` if `sys_grant_register` fails.
     /// - `IO` if the compositor rejects `ATTACH_GRANT` (e.g. too many surfaces).
     pub fn create(comp_tid: usize, width: u32, height: u32, fmt: PixelFormat) -> ViResult<Self> {
+        Self::create_with_role(comp_tid, width, height, fmt, SurfaceRole::Interactive)
+    }
+
+    /// Create a visible surface that cannot receive desktop pointer or keyboard focus.
+    pub fn create_background(
+        comp_tid: usize,
+        width: u32,
+        height: u32,
+        fmt: PixelFormat,
+    ) -> ViResult<Self> {
+        Self::create_with_role(comp_tid, width, height, fmt, SurfaceRole::Background)
+    }
+
+    fn create_with_role(
+        comp_tid: usize,
+        width: u32,
+        height: u32,
+        fmt: PixelFormat,
+        role: SurfaceRole,
+    ) -> ViResult<Self> {
         let size = (width * height * fmt.bpp()) as usize;
 
         // 1. Allocate a persistent physical Grant buffer (lives until we call unregister).
@@ -82,7 +101,7 @@ impl ViSurface {
         })?;
 
         // 4. Ask compositor to create a surface slot → get cap.
-        let cap = ipc_create_surface(comp_tid, width, height).inspect_err(|_e| {
+        let cap = ipc_create_surface(comp_tid, width, height, role).inspect_err(|_e| {
             sys_grant_unregister(reg_id);
         })?;
 
@@ -204,12 +223,12 @@ impl Drop for ViSurface {
 
 // ─── Private IPC helpers ──────────────────────────────────────────────────────
 
-/// Send `CREATE_SURFACE` and return the cap (u32).
-fn ipc_create_surface(comp_tid: usize, w: u32, h: u32) -> ViResult<u32> {
-    let mut req = [0u8; 9];
+fn ipc_create_surface(comp_tid: usize, w: u32, h: u32, role: SurfaceRole) -> ViResult<u32> {
+    let mut req = [0u8; 10];
     req[0] = compositor_ops::CREATE_SURFACE;
     req[1..5].copy_from_slice(&w.to_le_bytes());
     req[5..9].copy_from_slice(&h.to_le_bytes());
+    req[9] = role as u8;
     sys_send(comp_tid, &req);
 
     let mut resp = [0u8; 8];

@@ -41,14 +41,17 @@ impl PointerRouter {
     /// Moves follow the captured surface while the left button is held; otherwise
     /// they target the topmost surface under the cursor. Coordinates sent to the
     /// owner are translated into that surface's local coordinate system.
-    pub fn route(
+    pub fn route<F>(
         &mut self,
         event: InputEvent,
         screen_x: i32,
         screen_y: i32,
         table: &SurfaceTable,
-        z_order: &ZOrder,
-    ) {
+        z_order: &mut ZOrder,
+        mut activate: F,
+    ) where
+        F: FnMut(api::display::Rect),
+    {
         match event {
             InputEvent::MouseMove { .. } => {
                 let target = match self.capture {
@@ -60,7 +63,16 @@ impl PointerRouter {
                 }
             }
             InputEvent::MouseButton { button, state } => {
-                self.route_button(button, state, event, screen_x, screen_y, table, z_order);
+                self.route_button(
+                    button,
+                    state,
+                    event,
+                    screen_x,
+                    screen_y,
+                    table,
+                    z_order,
+                    &mut activate,
+                );
             }
             InputEvent::MouseScroll { .. } => {
                 if let Some(target) = hit_test(screen_x, screen_y, table, z_order) {
@@ -72,7 +84,7 @@ impl PointerRouter {
         }
     }
 
-    fn route_button(
+    fn route_button<F>(
         &mut self,
         button: MouseButton,
         state: KeyState,
@@ -80,8 +92,11 @@ impl PointerRouter {
         screen_x: i32,
         screen_y: i32,
         table: &SurfaceTable,
-        z_order: &ZOrder,
-    ) {
+        z_order: &mut ZOrder,
+        activate: &mut F,
+    ) where
+        F: FnMut(api::display::Rect),
+    {
         let left = button == MouseButton::Left;
         let target = if left && state == KeyState::Released {
             self.capture.and_then(|cap| target_for_cap(cap, table))
@@ -93,6 +108,10 @@ impl PointerRouter {
             self.capture = target.map(|target| target.cap);
             if let Some(target) = target {
                 self.focused_owner = target.owner;
+                z_order.raise(target.cap);
+                if let Some(surface) = table.get(target.cap) {
+                    activate(surface.screen_rect());
+                }
             }
         }
         if let Some(target) = target {
@@ -117,6 +136,9 @@ fn target_for_cap(cap: u64, table: &SurfaceTable) -> Option<PointerTarget> {
 fn hit_test(x: i32, y: i32, table: &SurfaceTable, z_order: &ZOrder) -> Option<PointerTarget> {
     z_order.iter_top_to_bottom().find_map(|cap| {
         let surface = table.get(cap)?;
+        if surface.role != api::display::SurfaceRole::Interactive {
+            return None;
+        }
         let rect = surface.screen_rect();
         (x >= rect.x && x < rect.x + rect.w as i32 && y >= rect.y && y < rect.y + rect.h as i32)
             .then_some(PointerTarget {
