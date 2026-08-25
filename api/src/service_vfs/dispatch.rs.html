@@ -269,70 +269,52 @@
 <a href=#269 id=269 data-nosnippet>269</a>            offset,
 <a href=#270 id=270 data-nosnippet>270</a>            grant,
 <a href=#271 id=271 data-nosnippet>271</a>            bytes,
-<a href=#272 id=272 data-nosnippet>272</a>        } =&gt; {
-<a href=#273 id=273 data-nosnippet>273</a>            <span class="comment">// FAIL-CLOSED until cap→path routing exists.
-<a href=#274 id=274 data-nosnippet>274</a>            //
-<a href=#275 id=275 data-nosnippet>275</a>            // This arm cannot resolve the target path from `cap`, so it cannot run
-<a href=#276 id=276 data-nosnippet>276</a>            // `access.can_write` — and an unauthorizable write must be refused, not
-<a href=#277 id=277 data-nosnippet>277</a>            // performed.  It previously drained the grant, dropped the bytes, and
-<a href=#278 id=278 data-nosnippet>278</a>            // replied `GrantDone { bytes }`: a success report for a write that never
-<a href=#279 id=279 data-nosnippet>279</a>            // happened, with no authorization check anywhere on the path.  Reporting
-<a href=#280 id=280 data-nosnippet>280</a>            // success for a discarded write is worse than refusing: a caller cannot
-<a href=#281 id=281 data-nosnippet>281</a>            // distinguish it from a real write, and wiring the routing later would
-<a href=#282 id=282 data-nosnippet>282</a>            // silently turn the same unchecked path into real disk writes.
-<a href=#283 id=283 data-nosnippet>283</a>            //
-<a href=#284 id=284 data-nosnippet>284</a>            // Refuse before touching the grant — nothing is read, so there is no
-<a href=#285 id=285 data-nosnippet>285</a>            // F14 drain obligation and no `unsafe` needed here.  When cap→path
-<a href=#286 id=286 data-nosnippet>286</a>            // routing lands, authorize with `can_write` (and charge quota with the
-<a href=#287 id=287 data-nosnippet>287</a>            // net-delta pattern from the `Write` arm) BEFORE writing anything.
-<a href=#288 id=288 data-nosnippet>288</a>            </span><span class="kw">let _ </span>= (cap, offset, grant, bytes);
-<a href=#289 id=289 data-nosnippet>289</a>            api::ipc::VfsResponse::Err(ERR_DENIED)
-<a href=#290 id=290 data-nosnippet>290</a>        }
-<a href=#291 id=291 data-nosnippet>291</a>
-<a href=#292 id=292 data-nosnippet>292</a>        api::ipc::VfsRequest::ReadFileGrant { path, grant, max } =&gt; {
-<a href=#293 id=293 data-nosnippet>293</a>            <span class="comment">// Authorize BEFORE the grant is even resolved: this arm copies a whole
-<a href=#294 id=294 data-nosnippet>294</a>            // file, so it is the widest read in the interface.
-<a href=#295 id=295 data-nosnippet>295</a>            </span><span class="kw">if </span>!vfs.access.can_read(caller, path) {
-<a href=#296 id=296 data-nosnippet>296</a>                <span class="kw">return </span>api::ipc::VfsResponse::Err(ERR_DENIED);
-<a href=#297 id=297 data-nosnippet>297</a>            }
-<a href=#298 id=298 data-nosnippet>298</a>            <span class="kw">match </span>ostd::syscall::sys_grant_slice_with_len(grant) {
-<a href=#299 id=299 data-nosnippet>299</a>                <span class="prelude-val">None </span>=&gt; api::ipc::VfsResponse::Err(ERR_IO), <span class="comment">// grant not shared to VFS
-<a href=#300 id=300 data-nosnippet>300</a>                </span><span class="prelude-val">Some</span>((ptr, grant_len)) =&gt; {
-<a href=#301 id=301 data-nosnippet>301</a>                    <span class="comment">// Resolve via the mount table (BinOverlay → cell-store for /bin),
-<a href=#302 id=302 data-nosnippet>302</a>                    // then copy the WHOLE file into the caller's grant in one shot.
-<a href=#303 id=303 data-nosnippet>303</a>                    </span><span class="kw">let </span>data = vfs.read_to_vec(path);
-<a href=#304 id=304 data-nosnippet>304</a>                    <span class="kw">let </span>n = data.len().min(max).min(grant_len);
-<a href=#305 id=305 data-nosnippet>305</a>                    <span class="comment">// SAFETY: ptr is the caller's identity-mapped grant, GrantShare'd
-<a href=#306 id=306 data-nosnippet>306</a>                    // RW and `n` is capped by the kernel-registered Grant length;
-<a href=#307 id=307 data-nosnippet>307</a>                    // `data` is a fresh owned Vec. The caller's ipc_call blocks until
-<a href=#308 id=308 data-nosnippet>308</a>                    // we reply, so it cannot free the grant before this copy completes.
-<a href=#309 id=309 data-nosnippet>309</a>                    </span><span class="kw">unsafe </span>{
-<a href=#310 id=310 data-nosnippet>310</a>                        core::ptr::copy_nonoverlapping(data.as_ptr(), ptr, n);
-<a href=#311 id=311 data-nosnippet>311</a>                    }
-<a href=#312 id=312 data-nosnippet>312</a>                    api::ipc::VfsResponse::GrantDone { bytes: n }
-<a href=#313 id=313 data-nosnippet>313</a>                }
-<a href=#314 id=314 data-nosnippet>314</a>            }
-<a href=#315 id=315 data-nosnippet>315</a>        }
-<a href=#316 id=316 data-nosnippet>316</a>
-<a href=#317 id=317 data-nosnippet>317</a>        <span class="comment">// ── Directory capabilities ──────────────────────────────────────────
-<a href=#318 id=318 data-nosnippet>318</a>        // Grouped and delegated: these arms share a resolution step that has no
-<a href=#319 id=319 data-nosnippet>319</a>        // counterpart above, and interleaving them would put the two addressing
-<a href=#320 id=320 data-nosnippet>320</a>        // models in one match where a reader has to check which one each arm is
-<a href=#321 id=321 data-nosnippet>321</a>        // in.
-<a href=#322 id=322 data-nosnippet>322</a>        </span>api::ipc::VfsRequest::OpenRootDir { .. }
-<a href=#323 id=323 data-nosnippet>323</a>        | api::ipc::VfsRequest::OpenDir { .. }
-<a href=#324 id=324 data-nosnippet>324</a>        | api::ipc::VfsRequest::ReadAt { .. }
-<a href=#325 id=325 data-nosnippet>325</a>        | api::ipc::VfsRequest::WriteAt { .. }
-<a href=#326 id=326 data-nosnippet>326</a>        | api::ipc::VfsRequest::StatAt { .. }
-<a href=#327 id=327 data-nosnippet>327</a>        | api::ipc::VfsRequest::ListAt { .. }
-<a href=#328 id=328 data-nosnippet>328</a>        | api::ipc::VfsRequest::UnlinkAt { .. }
-<a href=#329 id=329 data-nosnippet>329</a>        | api::ipc::VfsRequest::CloseDir { .. }
-<a href=#330 id=330 data-nosnippet>330</a>        | api::ipc::VfsRequest::SealPaths
-<a href=#331 id=331 data-nosnippet>331</a>        | api::ipc::VfsRequest::OpenFileAt { .. }
-<a href=#332 id=332 data-nosnippet>332</a>        | api::ipc::VfsRequest::ReadFileHandle { .. }
-<a href=#333 id=333 data-nosnippet>333</a>        | api::ipc::VfsRequest::CloseFile { .. } =&gt; {
-<a href=#334 id=334 data-nosnippet>334</a>            <span class="kw">crate</span>::dispatch_dirs::handle(vfs, caller, <span class="kw-2">&amp;</span>req, resp_buf)
-<a href=#335 id=335 data-nosnippet>335</a>        }
-<a href=#336 id=336 data-nosnippet>336</a>    }
-<a href=#337 id=337 data-nosnippet>337</a>}
+<a href=#272 id=272 data-nosnippet>272</a>        } =&gt; <span class="kw">crate</span>::grant_write::write(vfs, caller, cap, offset, grant, bytes),
+<a href=#273 id=273 data-nosnippet>273</a>
+<a href=#274 id=274 data-nosnippet>274</a>        api::ipc::VfsRequest::ReadFileGrant { path, grant, max } =&gt; {
+<a href=#275 id=275 data-nosnippet>275</a>            <span class="comment">// Authorize BEFORE the grant is even resolved: this arm copies a whole
+<a href=#276 id=276 data-nosnippet>276</a>            // file, so it is the widest read in the interface.
+<a href=#277 id=277 data-nosnippet>277</a>            </span><span class="kw">if </span>!vfs.access.can_read(caller, path) {
+<a href=#278 id=278 data-nosnippet>278</a>                <span class="kw">return </span>api::ipc::VfsResponse::Err(ERR_DENIED);
+<a href=#279 id=279 data-nosnippet>279</a>            }
+<a href=#280 id=280 data-nosnippet>280</a>            <span class="kw">match </span>ostd::syscall::sys_grant_slice_with_len(grant) {
+<a href=#281 id=281 data-nosnippet>281</a>                <span class="prelude-val">None </span>=&gt; api::ipc::VfsResponse::Err(ERR_IO), <span class="comment">// grant not shared to VFS
+<a href=#282 id=282 data-nosnippet>282</a>                </span><span class="prelude-val">Some</span>((ptr, grant_len)) =&gt; {
+<a href=#283 id=283 data-nosnippet>283</a>                    <span class="comment">// Resolve via the mount table (BinOverlay → cell-store for /bin),
+<a href=#284 id=284 data-nosnippet>284</a>                    // then copy the WHOLE file into the caller's grant in one shot.
+<a href=#285 id=285 data-nosnippet>285</a>                    </span><span class="kw">let </span>data = vfs.read_to_vec(path);
+<a href=#286 id=286 data-nosnippet>286</a>                    <span class="kw">let </span>n = data.len().min(max).min(grant_len);
+<a href=#287 id=287 data-nosnippet>287</a>                    <span class="comment">// SAFETY: ptr is the caller's identity-mapped grant, GrantShare'd
+<a href=#288 id=288 data-nosnippet>288</a>                    // RW and `n` is capped by the kernel-registered Grant length;
+<a href=#289 id=289 data-nosnippet>289</a>                    // `data` is a fresh owned Vec. The caller's ipc_call blocks until
+<a href=#290 id=290 data-nosnippet>290</a>                    // we reply, so it cannot free the grant before this copy completes.
+<a href=#291 id=291 data-nosnippet>291</a>                    </span><span class="kw">unsafe </span>{
+<a href=#292 id=292 data-nosnippet>292</a>                        core::ptr::copy_nonoverlapping(data.as_ptr(), ptr, n);
+<a href=#293 id=293 data-nosnippet>293</a>                    }
+<a href=#294 id=294 data-nosnippet>294</a>                    api::ipc::VfsResponse::GrantDone { bytes: n }
+<a href=#295 id=295 data-nosnippet>295</a>                }
+<a href=#296 id=296 data-nosnippet>296</a>            }
+<a href=#297 id=297 data-nosnippet>297</a>        }
+<a href=#298 id=298 data-nosnippet>298</a>
+<a href=#299 id=299 data-nosnippet>299</a>        <span class="comment">// ── Directory capabilities ──────────────────────────────────────────
+<a href=#300 id=300 data-nosnippet>300</a>        // Grouped and delegated: these arms share a resolution step that has no
+<a href=#301 id=301 data-nosnippet>301</a>        // counterpart above, and interleaving them would put the two addressing
+<a href=#302 id=302 data-nosnippet>302</a>        // models in one match where a reader has to check which one each arm is
+<a href=#303 id=303 data-nosnippet>303</a>        // in.
+<a href=#304 id=304 data-nosnippet>304</a>        </span>api::ipc::VfsRequest::OpenRootDir { .. }
+<a href=#305 id=305 data-nosnippet>305</a>        | api::ipc::VfsRequest::OpenDir { .. }
+<a href=#306 id=306 data-nosnippet>306</a>        | api::ipc::VfsRequest::ReadAt { .. }
+<a href=#307 id=307 data-nosnippet>307</a>        | api::ipc::VfsRequest::WriteAt { .. }
+<a href=#308 id=308 data-nosnippet>308</a>        | api::ipc::VfsRequest::StatAt { .. }
+<a href=#309 id=309 data-nosnippet>309</a>        | api::ipc::VfsRequest::ListAt { .. }
+<a href=#310 id=310 data-nosnippet>310</a>        | api::ipc::VfsRequest::UnlinkAt { .. }
+<a href=#311 id=311 data-nosnippet>311</a>        | api::ipc::VfsRequest::CloseDir { .. }
+<a href=#312 id=312 data-nosnippet>312</a>        | api::ipc::VfsRequest::SealPaths
+<a href=#313 id=313 data-nosnippet>313</a>        | api::ipc::VfsRequest::OpenFileAt { .. }
+<a href=#314 id=314 data-nosnippet>314</a>        | api::ipc::VfsRequest::ReadFileHandle { .. }
+<a href=#315 id=315 data-nosnippet>315</a>        | api::ipc::VfsRequest::CloseFile { .. } =&gt; {
+<a href=#316 id=316 data-nosnippet>316</a>            <span class="kw">crate</span>::dispatch_dirs::handle(vfs, caller, <span class="kw-2">&amp;</span>req, resp_buf)
+<a href=#317 id=317 data-nosnippet>317</a>        }
+<a href=#318 id=318 data-nosnippet>318</a>    }
+<a href=#319 id=319 data-nosnippet>319</a>}
 </code></pre></div></section></main></body></html>

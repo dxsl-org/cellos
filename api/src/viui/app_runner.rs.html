@@ -637,4 +637,128 @@
 <a href=#637 id=637 data-nosnippet>637</a>        <span class="self">self</span>.layout_dirty = <span class="bool-val">true</span>;
 <a href=#638 id=638 data-nosnippet>638</a>    }
 <a href=#639 id=639 data-nosnippet>639</a>}
+<a href=#640 id=640 data-nosnippet>640</a>
+<a href=#641 id=641 data-nosnippet>641</a><span class="attr">#[cfg(test)]
+<a href=#642 id=642 data-nosnippet>642</a></span><span class="kw">mod </span>tests {
+<a href=#643 id=643 data-nosnippet>643</a>    <span class="kw">extern crate </span>alloc;
+<a href=#644 id=644 data-nosnippet>644</a>
+<a href=#645 id=645 data-nosnippet>645</a>    <span class="kw">use </span><span class="kw">super</span>::ViApp;
+<a href=#646 id=646 data-nosnippet>646</a>    <span class="kw">use </span>alloc::{boxed::Box, rc::Rc, vec::Vec};
+<a href=#647 id=647 data-nosnippet>647</a>    <span class="kw">use </span>core::cell::Cell;
+<a href=#648 id=648 data-nosnippet>648</a>
+<a href=#649 id=649 data-nosnippet>649</a>    <span class="kw">use </span><span class="kw">crate</span>::dirty::DirtyRegion;
+<a href=#650 id=650 data-nosnippet>650</a>    <span class="kw">use </span><span class="kw">crate</span>::event::Event;
+<a href=#651 id=651 data-nosnippet>651</a>    <span class="kw">use </span><span class="kw">crate</span>::layout::{Constraints, Rect, Size};
+<a href=#652 id=652 data-nosnippet>652</a>    <span class="kw">use </span><span class="kw">crate</span>::node::ViNode;
+<a href=#653 id=653 data-nosnippet>653</a>    <span class="kw">use </span><span class="kw">crate</span>::render_ctx::RenderCtx;
+<a href=#654 id=654 data-nosnippet>654</a>    <span class="kw">use </span><span class="kw">crate</span>::signal::{Signal, SubscriptionHandle};
+<a href=#655 id=655 data-nosnippet>655</a>    <span class="kw">use </span><span class="kw">crate</span>::surface_renderer::ViSurfaceRenderer;
+<a href=#656 id=656 data-nosnippet>656</a>
+<a href=#657 id=657 data-nosnippet>657</a>    <span class="kw">struct </span>ProbeStats {
+<a href=#658 id=658 data-nosnippet>658</a>        layouts: Cell&lt;u32&gt;,
+<a href=#659 id=659 data-nosnippet>659</a>        paints: Cell&lt;u32&gt;,
+<a href=#660 id=660 data-nosnippet>660</a>        events: Cell&lt;u32&gt;,
+<a href=#661 id=661 data-nosnippet>661</a>    }
+<a href=#662 id=662 data-nosnippet>662</a>
+<a href=#663 id=663 data-nosnippet>663</a>    <span class="kw">struct </span>ProbeNode {
+<a href=#664 id=664 data-nosnippet>664</a>        signal: Signal&lt;u8&gt;,
+<a href=#665 id=665 data-nosnippet>665</a>        stats: Rc&lt;ProbeStats&gt;,
+<a href=#666 id=666 data-nosnippet>666</a>        bounds: Rect,
+<a href=#667 id=667 data-nosnippet>667</a>        consumes_events: bool,
+<a href=#668 id=668 data-nosnippet>668</a>    }
+<a href=#669 id=669 data-nosnippet>669</a>
+<a href=#670 id=670 data-nosnippet>670</a>    <span class="kw">impl </span>ProbeNode {
+<a href=#671 id=671 data-nosnippet>671</a>        <span class="kw">fn </span>new(signal: Signal&lt;u8&gt;, stats: Rc&lt;ProbeStats&gt;, consumes_events: bool) -&gt; <span class="self">Self </span>{
+<a href=#672 id=672 data-nosnippet>672</a>            <span class="self">Self </span>{
+<a href=#673 id=673 data-nosnippet>673</a>                signal,
+<a href=#674 id=674 data-nosnippet>674</a>                stats,
+<a href=#675 id=675 data-nosnippet>675</a>                bounds: Rect::ZERO,
+<a href=#676 id=676 data-nosnippet>676</a>                consumes_events,
+<a href=#677 id=677 data-nosnippet>677</a>            }
+<a href=#678 id=678 data-nosnippet>678</a>        }
+<a href=#679 id=679 data-nosnippet>679</a>    }
+<a href=#680 id=680 data-nosnippet>680</a>
+<a href=#681 id=681 data-nosnippet>681</a>    <span class="kw">impl </span>ViNode <span class="kw">for </span>ProbeNode {
+<a href=#682 id=682 data-nosnippet>682</a>        <span class="kw">fn </span>layout(<span class="kw-2">&amp;mut </span><span class="self">self</span>, constraints: Constraints) -&gt; Size {
+<a href=#683 id=683 data-nosnippet>683</a>            <span class="self">self</span>.stats.layouts.set(<span class="self">self</span>.stats.layouts.get() + <span class="number">1</span>);
+<a href=#684 id=684 data-nosnippet>684</a>            <span class="self">self</span>.bounds = Rect::from_origin_size(constraints.origin, constraints.max);
+<a href=#685 id=685 data-nosnippet>685</a>            constraints.max
+<a href=#686 id=686 data-nosnippet>686</a>        }
+<a href=#687 id=687 data-nosnippet>687</a>
+<a href=#688 id=688 data-nosnippet>688</a>        <span class="kw">fn </span>bounds(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Rect {
+<a href=#689 id=689 data-nosnippet>689</a>            <span class="self">self</span>.bounds
+<a href=#690 id=690 data-nosnippet>690</a>        }
+<a href=#691 id=691 data-nosnippet>691</a>
+<a href=#692 id=692 data-nosnippet>692</a>        <span class="kw">fn </span>paint(<span class="kw-2">&amp;</span><span class="self">self</span>, _cx: <span class="kw-2">&amp;mut </span>RenderCtx&lt;<span class="lifetime">'_</span>&gt;) {
+<a href=#693 id=693 data-nosnippet>693</a>            <span class="self">self</span>.stats.paints.set(<span class="self">self</span>.stats.paints.get() + <span class="number">1</span>);
+<a href=#694 id=694 data-nosnippet>694</a>        }
+<a href=#695 id=695 data-nosnippet>695</a>
+<a href=#696 id=696 data-nosnippet>696</a>        <span class="kw">fn </span>event(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _event: <span class="kw-2">&amp;</span>Event) -&gt; bool {
+<a href=#697 id=697 data-nosnippet>697</a>            <span class="self">self</span>.stats.events.set(<span class="self">self</span>.stats.events.get() + <span class="number">1</span>);
+<a href=#698 id=698 data-nosnippet>698</a>            <span class="self">self</span>.consumes_events
+<a href=#699 id=699 data-nosnippet>699</a>        }
+<a href=#700 id=700 data-nosnippet>700</a>
+<a href=#701 id=701 data-nosnippet>701</a>        <span class="kw">fn </span>collect_dirty_handles(<span class="kw-2">&amp;mut </span><span class="self">self</span>, region: DirtyRegion) -&gt; Vec&lt;SubscriptionHandle&gt; {
+<a href=#702 id=702 data-nosnippet>702</a>            <span class="kw">let </span>bounds = <span class="self">self</span>.bounds;
+<a href=#703 id=703 data-nosnippet>703</a>            <span class="macro">alloc::vec!</span>[<span class="self">self</span>.signal.subscribe(<span class="kw">move </span>|| region.borrow_mut().mark(bounds))]
+<a href=#704 id=704 data-nosnippet>704</a>        }
+<a href=#705 id=705 data-nosnippet>705</a>    }
+<a href=#706 id=706 data-nosnippet>706</a>
+<a href=#707 id=707 data-nosnippet>707</a>    <span class="kw">fn </span>stats() -&gt; Rc&lt;ProbeStats&gt; {
+<a href=#708 id=708 data-nosnippet>708</a>        Rc::new(ProbeStats {
+<a href=#709 id=709 data-nosnippet>709</a>            layouts: Cell::new(<span class="number">0</span>),
+<a href=#710 id=710 data-nosnippet>710</a>            paints: Cell::new(<span class="number">0</span>),
+<a href=#711 id=711 data-nosnippet>711</a>            events: Cell::new(<span class="number">0</span>),
+<a href=#712 id=712 data-nosnippet>712</a>        })
+<a href=#713 id=713 data-nosnippet>713</a>    }
+<a href=#714 id=714 data-nosnippet>714</a>
+<a href=#715 id=715 data-nosnippet>715</a>    <span class="kw">fn </span>app_with_probe(signal: Signal&lt;u8&gt;, stats: Rc&lt;ProbeStats&gt;, consumes_events: bool) -&gt; ViApp {
+<a href=#716 id=716 data-nosnippet>716</a>        ViApp::new(
+<a href=#717 id=717 data-nosnippet>717</a>            Box::new(ProbeNode::new(signal, stats, consumes_events)),
+<a href=#718 id=718 data-nosnippet>718</a>            Box::new(ViSurfaceRenderer::new(<span class="number">32</span>, <span class="number">24</span>)),
+<a href=#719 id=719 data-nosnippet>719</a>        )
+<a href=#720 id=720 data-nosnippet>720</a>    }
+<a href=#721 id=721 data-nosnippet>721</a>
+<a href=#722 id=722 data-nosnippet>722</a>    <span class="attr">#[test]
+<a href=#723 id=723 data-nosnippet>723</a>    </span><span class="kw">fn </span>initial_tick_renders_once_and_idle_tick_skips_work() {
+<a href=#724 id=724 data-nosnippet>724</a>        <span class="kw">let </span>signal = Signal::new(<span class="number">0</span>);
+<a href=#725 id=725 data-nosnippet>725</a>        <span class="kw">let </span>stats = stats();
+<a href=#726 id=726 data-nosnippet>726</a>        <span class="kw">let </span><span class="kw-2">mut </span>app = app_with_probe(signal, Rc::clone(<span class="kw-2">&amp;</span>stats), <span class="bool-val">false</span>);
+<a href=#727 id=727 data-nosnippet>727</a>
+<a href=#728 id=728 data-nosnippet>728</a>        <span class="macro">assert!</span>(app.tick(<span class="kw-2">&amp;</span>[]));
+<a href=#729 id=729 data-nosnippet>729</a>        <span class="macro">assert_eq!</span>(stats.layouts.get(), <span class="number">1</span>);
+<a href=#730 id=730 data-nosnippet>730</a>        <span class="macro">assert_eq!</span>(stats.paints.get(), <span class="number">1</span>);
+<a href=#731 id=731 data-nosnippet>731</a>
+<a href=#732 id=732 data-nosnippet>732</a>        <span class="macro">assert!</span>(!app.tick(<span class="kw-2">&amp;</span>[]));
+<a href=#733 id=733 data-nosnippet>733</a>        <span class="macro">assert_eq!</span>(stats.layouts.get(), <span class="number">1</span>);
+<a href=#734 id=734 data-nosnippet>734</a>        <span class="macro">assert_eq!</span>(stats.paints.get(), <span class="number">1</span>);
+<a href=#735 id=735 data-nosnippet>735</a>    }
+<a href=#736 id=736 data-nosnippet>736</a>
+<a href=#737 id=737 data-nosnippet>737</a>    <span class="attr">#[test]
+<a href=#738 id=738 data-nosnippet>738</a>    </span><span class="kw">fn </span>consumed_event_relayouts_and_repaints_the_headless_app() {
+<a href=#739 id=739 data-nosnippet>739</a>        <span class="kw">let </span>signal = Signal::new(<span class="number">0</span>);
+<a href=#740 id=740 data-nosnippet>740</a>        <span class="kw">let </span>stats = stats();
+<a href=#741 id=741 data-nosnippet>741</a>        <span class="kw">let </span><span class="kw-2">mut </span>app = app_with_probe(signal, Rc::clone(<span class="kw-2">&amp;</span>stats), <span class="bool-val">true</span>);
+<a href=#742 id=742 data-nosnippet>742</a>        app.tick(<span class="kw-2">&amp;</span>[]);
+<a href=#743 id=743 data-nosnippet>743</a>
+<a href=#744 id=744 data-nosnippet>744</a>        <span class="macro">assert!</span>(app.tick(<span class="kw-2">&amp;</span>[Event::Char(<span class="string">'x'</span>)]));
+<a href=#745 id=745 data-nosnippet>745</a>        <span class="macro">assert_eq!</span>(stats.events.get(), <span class="number">1</span>);
+<a href=#746 id=746 data-nosnippet>746</a>        <span class="macro">assert_eq!</span>(stats.layouts.get(), <span class="number">2</span>);
+<a href=#747 id=747 data-nosnippet>747</a>        <span class="macro">assert_eq!</span>(stats.paints.get(), <span class="number">2</span>);
+<a href=#748 id=748 data-nosnippet>748</a>    }
+<a href=#749 id=749 data-nosnippet>749</a>
+<a href=#750 id=750 data-nosnippet>750</a>    <span class="attr">#[test]
+<a href=#751 id=751 data-nosnippet>751</a>    </span><span class="kw">fn </span>signal_update_repaints_cached_layout_without_relayout() {
+<a href=#752 id=752 data-nosnippet>752</a>        <span class="kw">let </span>signal = Signal::new(<span class="number">0</span>);
+<a href=#753 id=753 data-nosnippet>753</a>        <span class="kw">let </span>stats = stats();
+<a href=#754 id=754 data-nosnippet>754</a>        <span class="kw">let </span><span class="kw-2">mut </span>app = app_with_probe(signal.clone(), Rc::clone(<span class="kw-2">&amp;</span>stats), <span class="bool-val">false</span>);
+<a href=#755 id=755 data-nosnippet>755</a>        app.tick(<span class="kw-2">&amp;</span>[]);
+<a href=#756 id=756 data-nosnippet>756</a>
+<a href=#757 id=757 data-nosnippet>757</a>        signal.set(<span class="number">1</span>);
+<a href=#758 id=758 data-nosnippet>758</a>
+<a href=#759 id=759 data-nosnippet>759</a>        <span class="macro">assert!</span>(app.tick(<span class="kw-2">&amp;</span>[]));
+<a href=#760 id=760 data-nosnippet>760</a>        <span class="macro">assert_eq!</span>(stats.layouts.get(), <span class="number">1</span>);
+<a href=#761 id=761 data-nosnippet>761</a>        <span class="macro">assert_eq!</span>(stats.paints.get(), <span class="number">2</span>);
+<a href=#762 id=762 data-nosnippet>762</a>    }
+<a href=#763 id=763 data-nosnippet>763</a>}
 </code></pre></div></section></main></body></html>

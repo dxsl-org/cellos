@@ -328,97 +328,103 @@
 <a href=#328 id=328 data-nosnippet>328</a>    }
 <a href=#329 id=329 data-nosnippet>329</a>}
 <a href=#330 id=330 data-nosnippet>330</a>
-<a href=#331 id=331 data-nosnippet>331</a><span class="doccomment">/// Write `data` to a file cap using the optimal I/O path.
+<a href=#331 id=331 data-nosnippet>331</a><span class="doccomment">/// Write `data` through a VFS-issued file-handle ID.
 <a href=#332 id=332 data-nosnippet>332</a>///
-<a href=#333 id=333 data-nosnippet>333</a>/// - `data.len() &lt; 4096`: kernel WriteGrant IPC path (no Grant overhead; caller
-<a href=#334 id=334 data-nosnippet>334</a>///   uses existing `VfsRequest::Write` via IPC — stub, returns 0 for now)
-<a href=#335 id=335 data-nosnippet>335</a>/// - `data.len() &gt;= 4096`: zero-copy Grant path
-<a href=#336 id=336 data-nosnippet>336</a>///
-<a href=#337 id=337 data-nosnippet>337</a>/// # F14 contract
-<a href=#338 id=338 data-nosnippet>338</a>/// The caller waits for `GrantDone` before freeing the grant, so VFS finishes
-<a href=#339 id=339 data-nosnippet>339</a>/// writing to disk before the frames are returned to the allocator.
-<a href=#340 id=340 data-nosnippet>340</a></span><span class="kw">pub fn </span>write_all(cap_id: u64, data: <span class="kw-2">&amp;</span>[u8], vfs_tid: usize) -&gt; ViResult&lt;usize&gt; {
-<a href=#341 id=341 data-nosnippet>341</a>    <span class="kw">if </span>data.len() &lt; <span class="number">4096 </span>{
-<a href=#342 id=342 data-nosnippet>342</a>        <span class="comment">// Small writes: caller uses existing VfsRequest::Write IPC directly.
-<a href=#343 id=343 data-nosnippet>343</a>        // This wrapper covers the large-file case only; return 0 to signal fallback.
-<a href=#344 id=344 data-nosnippet>344</a>        </span><span class="kw">let _ </span>= (cap_id, vfs_tid);
-<a href=#345 id=345 data-nosnippet>345</a>        <span class="prelude-val">Ok</span>(<span class="number">0</span>)
-<a href=#346 id=346 data-nosnippet>346</a>    } <span class="kw">else </span>{
-<a href=#347 id=347 data-nosnippet>347</a>        grant_write(cap_id, data, vfs_tid)
-<a href=#348 id=348 data-nosnippet>348</a>    }
-<a href=#349 id=349 data-nosnippet>349</a>}
-<a href=#350 id=350 data-nosnippet>350</a>
-<a href=#351 id=351 data-nosnippet>351</a><span class="kw">fn </span>grant_read(cap_id: u64, buf: <span class="kw-2">&amp;mut </span>[u8], vfs_tid: usize) -&gt; ViResult&lt;usize&gt; {
-<a href=#352 id=352 data-nosnippet>352</a>    <span class="kw">let </span>size = buf.len().min(<span class="number">4096</span>);
-<a href=#353 id=353 data-nosnippet>353</a>    <span class="kw">let </span>grant_id = syscall::sys_grant_alloc(size).ok_or(ViError::OutOfMemory)<span class="question-mark">?</span>;
-<a href=#354 id=354 data-nosnippet>354</a>    <span class="comment">// Share RW with VFS so it can fill the grant buffer.
-<a href=#355 id=355 data-nosnippet>355</a>    </span>syscall::sys_grant_share(grant_id, vfs_tid, <span class="number">2 </span><span class="comment">/* ReadWrite */</span>);
-<a href=#356 id=356 data-nosnippet>356</a>
-<a href=#357 id=357 data-nosnippet>357</a>    <span class="comment">// Control message fits in 512B IPC buffer.
-<a href=#358 id=358 data-nosnippet>358</a>    </span><span class="kw">let </span>req = VfsRequest::ReadGrant {
-<a href=#359 id=359 data-nosnippet>359</a>        cap: cap_id,
-<a href=#360 id=360 data-nosnippet>360</a>        offset: <span class="number">0</span>,
-<a href=#361 id=361 data-nosnippet>361</a>        size,
-<a href=#362 id=362 data-nosnippet>362</a>        grant: grant_id,
-<a href=#363 id=363 data-nosnippet>363</a>    };
-<a href=#364 id=364 data-nosnippet>364</a>    <span class="kw">let </span><span class="kw-2">mut </span>resp_buf = [<span class="number">0u8</span>; <span class="number">512</span>];
-<a href=#365 id=365 data-nosnippet>365</a>    <span class="kw">let </span>resp = vfs_call(vfs_tid, <span class="kw-2">&amp;</span>req, <span class="kw-2">&amp;mut </span>resp_buf).inspect_err(|_e| {
-<a href=#366 id=366 data-nosnippet>366</a>        syscall::sys_grant_free(grant_id);
-<a href=#367 id=367 data-nosnippet>367</a>    })<span class="question-mark">?</span>;
-<a href=#368 id=368 data-nosnippet>368</a>
-<a href=#369 id=369 data-nosnippet>369</a>    <span class="kw">let </span>bytes = <span class="kw">match </span>resp {
-<a href=#370 id=370 data-nosnippet>370</a>        <span class="comment">// F14: GrantDone arrives only AFTER VFS has filled the grant buffer.
-<a href=#371 id=371 data-nosnippet>371</a>        </span>VfsResponse::GrantDone { bytes } =&gt; bytes,
-<a href=#372 id=372 data-nosnippet>372</a>        <span class="kw">_ </span>=&gt; {
-<a href=#373 id=373 data-nosnippet>373</a>            syscall::sys_grant_free(grant_id);
-<a href=#374 id=374 data-nosnippet>374</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(ViError::IO);
-<a href=#375 id=375 data-nosnippet>375</a>        }
-<a href=#376 id=376 data-nosnippet>376</a>    };
-<a href=#377 id=377 data-nosnippet>377</a>
-<a href=#378 id=378 data-nosnippet>378</a>    <span class="comment">// SAFETY: grant was allocated with `size` bytes; VFS filled `bytes` of it.
-<a href=#379 id=379 data-nosnippet>379</a>    </span><span class="kw">let </span>ptr = syscall::sys_grant_slice(grant_id).ok_or_else(|| {
-<a href=#380 id=380 data-nosnippet>380</a>        syscall::sys_grant_free(grant_id);
-<a href=#381 id=381 data-nosnippet>381</a>        ViError::IO
-<a href=#382 id=382 data-nosnippet>382</a>    })<span class="question-mark">?</span>;
-<a href=#383 id=383 data-nosnippet>383</a>    <span class="kw">let </span>src = <span class="kw">unsafe </span>{ core::slice::from_raw_parts(ptr <span class="kw">as </span><span class="kw-2">*const </span>u8, bytes) };
-<a href=#384 id=384 data-nosnippet>384</a>    buf[..bytes].copy_from_slice(src);
-<a href=#385 id=385 data-nosnippet>385</a>
-<a href=#386 id=386 data-nosnippet>386</a>    <span class="comment">// F14: safe to free — GrantDone already received above.
-<a href=#387 id=387 data-nosnippet>387</a>    </span>syscall::sys_grant_free(grant_id);
-<a href=#388 id=388 data-nosnippet>388</a>    <span class="prelude-val">Ok</span>(bytes)
-<a href=#389 id=389 data-nosnippet>389</a>}
-<a href=#390 id=390 data-nosnippet>390</a>
-<a href=#391 id=391 data-nosnippet>391</a><span class="kw">fn </span>grant_write(cap_id: u64, data: <span class="kw-2">&amp;</span>[u8], vfs_tid: usize) -&gt; ViResult&lt;usize&gt; {
-<a href=#392 id=392 data-nosnippet>392</a>    <span class="kw">let </span>bytes = data.len().min(<span class="number">4096</span>);
-<a href=#393 id=393 data-nosnippet>393</a>    <span class="kw">let </span>grant_id = syscall::sys_grant_alloc(bytes).ok_or(ViError::OutOfMemory)<span class="question-mark">?</span>;
-<a href=#394 id=394 data-nosnippet>394</a>
-<a href=#395 id=395 data-nosnippet>395</a>    <span class="comment">// Fill grant buffer BEFORE sharing — we own it exclusively here.
-<a href=#396 id=396 data-nosnippet>396</a>    // SAFETY: grant was allocated for `bytes`; ptr is valid for that range.
-<a href=#397 id=397 data-nosnippet>397</a>    </span><span class="kw">let </span>ptr = syscall::sys_grant_slice(grant_id).ok_or_else(|| {
-<a href=#398 id=398 data-nosnippet>398</a>        syscall::sys_grant_free(grant_id);
-<a href=#399 id=399 data-nosnippet>399</a>        ViError::IO
-<a href=#400 id=400 data-nosnippet>400</a>    })<span class="question-mark">?</span>;
-<a href=#401 id=401 data-nosnippet>401</a>    <span class="kw">unsafe </span>{ core::ptr::copy_nonoverlapping(data.as_ptr(), ptr, bytes) };
-<a href=#402 id=402 data-nosnippet>402</a>
-<a href=#403 id=403 data-nosnippet>403</a>    <span class="comment">// Share WriteOnly (VFS reads, can't modify).
-<a href=#404 id=404 data-nosnippet>404</a>    </span>syscall::sys_grant_share(grant_id, vfs_tid, <span class="number">1 </span><span class="comment">/* WriteOnly */</span>);
-<a href=#405 id=405 data-nosnippet>405</a>
-<a href=#406 id=406 data-nosnippet>406</a>    <span class="kw">let </span>req = VfsRequest::WriteGrant {
-<a href=#407 id=407 data-nosnippet>407</a>        cap: cap_id,
-<a href=#408 id=408 data-nosnippet>408</a>        offset: <span class="number">0</span>,
-<a href=#409 id=409 data-nosnippet>409</a>        grant: grant_id,
-<a href=#410 id=410 data-nosnippet>410</a>        bytes,
-<a href=#411 id=411 data-nosnippet>411</a>    };
-<a href=#412 id=412 data-nosnippet>412</a>    <span class="kw">let </span><span class="kw-2">mut </span>resp_buf = [<span class="number">0u8</span>; <span class="number">512</span>];
-<a href=#413 id=413 data-nosnippet>413</a>    <span class="comment">// ipc_call blocks until VFS replies — F14 guarantees VFS drained the grant.
-<a href=#414 id=414 data-nosnippet>414</a>    </span><span class="kw">let </span>resp = vfs_call(vfs_tid, <span class="kw-2">&amp;</span>req, <span class="kw-2">&amp;mut </span>resp_buf).inspect_err(|_e| {
-<a href=#415 id=415 data-nosnippet>415</a>        syscall::sys_grant_free(grant_id);
-<a href=#416 id=416 data-nosnippet>416</a>    })<span class="question-mark">?</span>;
-<a href=#417 id=417 data-nosnippet>417</a>
-<a href=#418 id=418 data-nosnippet>418</a>    syscall::sys_grant_free(grant_id);
-<a href=#419 id=419 data-nosnippet>419</a>    <span class="kw">match </span>resp {
-<a href=#420 id=420 data-nosnippet>420</a>        VfsResponse::GrantDone { bytes: written } =&gt; <span class="prelude-val">Ok</span>(written),
-<a href=#421 id=421 data-nosnippet>421</a>        <span class="kw">_ </span>=&gt; <span class="prelude-val">Err</span>(ViError::IO),
-<a href=#422 id=422 data-nosnippet>422</a>    }
-<a href=#423 id=423 data-nosnippet>423</a>}
+<a href=#333 id=333 data-nosnippet>333</a>/// Every write uses the same VFS `WriteGrant` authority path. Data is sent in
+<a href=#334 id=334 data-nosnippet>334</a>/// contiguous 4 KiB grant chunks, each acknowledged only after its commit.
+<a href=#335 id=335 data-nosnippet>335</a>/// A failure can therefore leave earlier chunks visible, just like the existing
+<a href=#336 id=336 data-nosnippet>336</a>/// append helper's chunked writes.
+<a href=#337 id=337 data-nosnippet>337</a>///
+<a href=#338 id=338 data-nosnippet>338</a>/// # F14 contract
+<a href=#339 id=339 data-nosnippet>339</a>/// The caller waits for `GrantDone` before freeing each grant, so VFS finishes
+<a href=#340 id=340 data-nosnippet>340</a>/// writing that chunk before its frames are returned to the allocator.
+<a href=#341 id=341 data-nosnippet>341</a></span><span class="kw">pub fn </span>write_all(cap_id: u64, data: <span class="kw-2">&amp;</span>[u8], vfs_tid: usize) -&gt; ViResult&lt;usize&gt; {
+<a href=#342 id=342 data-nosnippet>342</a>    <span class="kw">let </span><span class="kw-2">mut </span>total = <span class="number">0usize</span>;
+<a href=#343 id=343 data-nosnippet>343</a>    <span class="kw">for </span>chunk <span class="kw">in </span>data.chunks(<span class="number">4096</span>) {
+<a href=#344 id=344 data-nosnippet>344</a>        <span class="kw">let </span>offset = u64::try_from(total).map_err(|<span class="kw">_</span>| ViError::IO)<span class="question-mark">?</span>;
+<a href=#345 id=345 data-nosnippet>345</a>        <span class="kw">let </span>written = grant_write(cap_id, offset, chunk, vfs_tid)<span class="question-mark">?</span>;
+<a href=#346 id=346 data-nosnippet>346</a>        <span class="kw">if </span>written != chunk.len() {
+<a href=#347 id=347 data-nosnippet>347</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(ViError::IO);
+<a href=#348 id=348 data-nosnippet>348</a>        }
+<a href=#349 id=349 data-nosnippet>349</a>        total = total.checked_add(written).ok_or(ViError::IO)<span class="question-mark">?</span>;
+<a href=#350 id=350 data-nosnippet>350</a>    }
+<a href=#351 id=351 data-nosnippet>351</a>    <span class="prelude-val">Ok</span>(total)
+<a href=#352 id=352 data-nosnippet>352</a>}
+<a href=#353 id=353 data-nosnippet>353</a>
+<a href=#354 id=354 data-nosnippet>354</a><span class="kw">fn </span>grant_read(cap_id: u64, buf: <span class="kw-2">&amp;mut </span>[u8], vfs_tid: usize) -&gt; ViResult&lt;usize&gt; {
+<a href=#355 id=355 data-nosnippet>355</a>    <span class="kw">let </span>size = buf.len().min(<span class="number">4096</span>);
+<a href=#356 id=356 data-nosnippet>356</a>    <span class="kw">let </span>grant_id = syscall::sys_grant_alloc(size).ok_or(ViError::OutOfMemory)<span class="question-mark">?</span>;
+<a href=#357 id=357 data-nosnippet>357</a>    <span class="comment">// Share RW with VFS so it can fill the grant buffer.
+<a href=#358 id=358 data-nosnippet>358</a>    </span>syscall::sys_grant_share(grant_id, vfs_tid, <span class="number">2 </span><span class="comment">/* ReadWrite */</span>);
+<a href=#359 id=359 data-nosnippet>359</a>
+<a href=#360 id=360 data-nosnippet>360</a>    <span class="comment">// Control message fits in 512B IPC buffer.
+<a href=#361 id=361 data-nosnippet>361</a>    </span><span class="kw">let </span>req = VfsRequest::ReadGrant {
+<a href=#362 id=362 data-nosnippet>362</a>        cap: cap_id,
+<a href=#363 id=363 data-nosnippet>363</a>        offset: <span class="number">0</span>,
+<a href=#364 id=364 data-nosnippet>364</a>        size,
+<a href=#365 id=365 data-nosnippet>365</a>        grant: grant_id,
+<a href=#366 id=366 data-nosnippet>366</a>    };
+<a href=#367 id=367 data-nosnippet>367</a>    <span class="kw">let </span><span class="kw-2">mut </span>resp_buf = [<span class="number">0u8</span>; <span class="number">512</span>];
+<a href=#368 id=368 data-nosnippet>368</a>    <span class="kw">let </span>resp = vfs_call(vfs_tid, <span class="kw-2">&amp;</span>req, <span class="kw-2">&amp;mut </span>resp_buf).inspect_err(|_e| {
+<a href=#369 id=369 data-nosnippet>369</a>        syscall::sys_grant_free(grant_id);
+<a href=#370 id=370 data-nosnippet>370</a>    })<span class="question-mark">?</span>;
+<a href=#371 id=371 data-nosnippet>371</a>
+<a href=#372 id=372 data-nosnippet>372</a>    <span class="kw">let </span>bytes = <span class="kw">match </span>resp {
+<a href=#373 id=373 data-nosnippet>373</a>        <span class="comment">// F14: GrantDone arrives only AFTER VFS has filled the grant buffer.
+<a href=#374 id=374 data-nosnippet>374</a>        </span>VfsResponse::GrantDone { bytes } =&gt; bytes,
+<a href=#375 id=375 data-nosnippet>375</a>        <span class="kw">_ </span>=&gt; {
+<a href=#376 id=376 data-nosnippet>376</a>            syscall::sys_grant_free(grant_id);
+<a href=#377 id=377 data-nosnippet>377</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(ViError::IO);
+<a href=#378 id=378 data-nosnippet>378</a>        }
+<a href=#379 id=379 data-nosnippet>379</a>    };
+<a href=#380 id=380 data-nosnippet>380</a>
+<a href=#381 id=381 data-nosnippet>381</a>    <span class="comment">// SAFETY: grant was allocated with `size` bytes; VFS filled `bytes` of it.
+<a href=#382 id=382 data-nosnippet>382</a>    </span><span class="kw">let </span>ptr = syscall::sys_grant_slice(grant_id).ok_or_else(|| {
+<a href=#383 id=383 data-nosnippet>383</a>        syscall::sys_grant_free(grant_id);
+<a href=#384 id=384 data-nosnippet>384</a>        ViError::IO
+<a href=#385 id=385 data-nosnippet>385</a>    })<span class="question-mark">?</span>;
+<a href=#386 id=386 data-nosnippet>386</a>    <span class="kw">let </span>src = <span class="kw">unsafe </span>{ core::slice::from_raw_parts(ptr <span class="kw">as </span><span class="kw-2">*const </span>u8, bytes) };
+<a href=#387 id=387 data-nosnippet>387</a>    buf[..bytes].copy_from_slice(src);
+<a href=#388 id=388 data-nosnippet>388</a>
+<a href=#389 id=389 data-nosnippet>389</a>    <span class="comment">// F14: safe to free — GrantDone already received above.
+<a href=#390 id=390 data-nosnippet>390</a>    </span>syscall::sys_grant_free(grant_id);
+<a href=#391 id=391 data-nosnippet>391</a>    <span class="prelude-val">Ok</span>(bytes)
+<a href=#392 id=392 data-nosnippet>392</a>}
+<a href=#393 id=393 data-nosnippet>393</a>
+<a href=#394 id=394 data-nosnippet>394</a><span class="kw">fn </span>grant_write(cap_id: u64, offset: u64, data: <span class="kw-2">&amp;</span>[u8], vfs_tid: usize) -&gt; ViResult&lt;usize&gt; {
+<a href=#395 id=395 data-nosnippet>395</a>    <span class="kw">let </span>bytes = data.len();
+<a href=#396 id=396 data-nosnippet>396</a>    <span class="kw">if </span>bytes == <span class="number">0 </span>|| bytes &gt; <span class="number">4096 </span>{
+<a href=#397 id=397 data-nosnippet>397</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(ViError::IO);
+<a href=#398 id=398 data-nosnippet>398</a>    }
+<a href=#399 id=399 data-nosnippet>399</a>    <span class="kw">let </span>grant_id = syscall::sys_grant_alloc(bytes).ok_or(ViError::OutOfMemory)<span class="question-mark">?</span>;
+<a href=#400 id=400 data-nosnippet>400</a>
+<a href=#401 id=401 data-nosnippet>401</a>    <span class="comment">// Fill grant buffer BEFORE sharing — we own it exclusively here.
+<a href=#402 id=402 data-nosnippet>402</a>    // SAFETY: grant was allocated for `bytes`; ptr is valid for that range.
+<a href=#403 id=403 data-nosnippet>403</a>    </span><span class="kw">let </span>ptr = syscall::sys_grant_slice(grant_id).ok_or_else(|| {
+<a href=#404 id=404 data-nosnippet>404</a>        syscall::sys_grant_free(grant_id);
+<a href=#405 id=405 data-nosnippet>405</a>        ViError::IO
+<a href=#406 id=406 data-nosnippet>406</a>    })<span class="question-mark">?</span>;
+<a href=#407 id=407 data-nosnippet>407</a>    <span class="kw">unsafe </span>{ core::ptr::copy_nonoverlapping(data.as_ptr(), ptr, bytes) };
+<a href=#408 id=408 data-nosnippet>408</a>
+<a href=#409 id=409 data-nosnippet>409</a>    <span class="comment">// Share WriteOnly (VFS reads, can't modify).
+<a href=#410 id=410 data-nosnippet>410</a>    </span>syscall::sys_grant_share(grant_id, vfs_tid, <span class="number">1 </span><span class="comment">/* WriteOnly */</span>);
+<a href=#411 id=411 data-nosnippet>411</a>
+<a href=#412 id=412 data-nosnippet>412</a>    <span class="kw">let </span>req = VfsRequest::WriteGrant {
+<a href=#413 id=413 data-nosnippet>413</a>        cap: cap_id,
+<a href=#414 id=414 data-nosnippet>414</a>        offset,
+<a href=#415 id=415 data-nosnippet>415</a>        grant: grant_id,
+<a href=#416 id=416 data-nosnippet>416</a>        bytes,
+<a href=#417 id=417 data-nosnippet>417</a>    };
+<a href=#418 id=418 data-nosnippet>418</a>    <span class="kw">let </span><span class="kw-2">mut </span>resp_buf = [<span class="number">0u8</span>; <span class="number">512</span>];
+<a href=#419 id=419 data-nosnippet>419</a>    <span class="comment">// ipc_call blocks until VFS replies — F14 guarantees VFS drained the grant.
+<a href=#420 id=420 data-nosnippet>420</a>    </span><span class="kw">let </span>resp = vfs_call(vfs_tid, <span class="kw-2">&amp;</span>req, <span class="kw-2">&amp;mut </span>resp_buf).inspect_err(|_e| {
+<a href=#421 id=421 data-nosnippet>421</a>        syscall::sys_grant_free(grant_id);
+<a href=#422 id=422 data-nosnippet>422</a>    })<span class="question-mark">?</span>;
+<a href=#423 id=423 data-nosnippet>423</a>
+<a href=#424 id=424 data-nosnippet>424</a>    syscall::sys_grant_free(grant_id);
+<a href=#425 id=425 data-nosnippet>425</a>    <span class="kw">match </span>resp {
+<a href=#426 id=426 data-nosnippet>426</a>        VfsResponse::GrantDone { bytes: written } <span class="kw">if </span>written == bytes =&gt; <span class="prelude-val">Ok</span>(written),
+<a href=#427 id=427 data-nosnippet>427</a>        <span class="kw">_ </span>=&gt; <span class="prelude-val">Err</span>(ViError::IO),
+<a href=#428 id=428 data-nosnippet>428</a>    }
+<a href=#429 id=429 data-nosnippet>429</a>}
 </code></pre></div></section></main></body></html>
