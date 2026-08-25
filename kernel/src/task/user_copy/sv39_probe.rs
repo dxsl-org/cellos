@@ -7,7 +7,6 @@ use super::range::{CopyError, Direction};
 use crate::memory::address_space::AddressSpace;
 use crate::memory::paging::{Flags, PAGE_SIZE};
 
-
 pub(super) const SV39_VALID: usize = 1 << 0;
 pub(super) const SV39_READ: usize = 1 << 1;
 pub(super) const SV39_WRITE: usize = 1 << 2;
@@ -25,7 +24,7 @@ pub(crate) fn sv39_leaf(root_pa: usize, va: usize) -> Option<(usize, usize)> {
         // kernel linear alias.
         let pte = unsafe {
             core::ptr::read_volatile(
-                crate::memory::frame::phys_to_virt(table_pa + index * 8) as *const u64,
+                crate::memory::frame::phys_to_virt(table_pa + index * 8) as *const u64
             )
         } as usize;
         if pte & SV39_VALID == 0 {
@@ -92,8 +91,7 @@ pub(super) fn stage_domain<'a>(
     let satp_is_domain = current_satp_root() == Some(root_pa);
     while page < end {
         let (ledger_flags, ledger_pa) =
-            arc.page_proof_for(page)
-                .ok_or(CopyError::InvalidAddress)?;
+            arc.page_proof_for(page).ok_or(CopyError::InvalidAddress)?;
         // Strict U + R/W contract for private roots.
         if ledger_flags.bits() & (Flags::USER | need_flag) != Flags::USER | need_flag {
             return Err(CopyError::InvalidAddress);

@@ -294,7 +294,11 @@ fn test_reloc_relative_patches_memory() {
     let patched: usize = unsafe { core::ptr::read_unaligned(base as *const usize) };
     let expected = base + 0x400;
     assert_eq!(patched, expected, "R_RISCV_RELATIVE patch value mismatch");
-    log::info!("  [ok] R_RISCV_RELATIVE patched 0x{:X} → 0x{:X}", base, expected);
+    log::info!(
+        "  [ok] R_RISCV_RELATIVE patched 0x{:X} → 0x{:X}",
+        base,
+        expected
+    );
 }
 
 fn test_reloc_target_outside_owned_pages_rejected() {
@@ -311,7 +315,10 @@ fn test_reloc_target_outside_owned_pages_rejected() {
 fn test_reloc_target_hole_rejected() {
     let base = 0x20_000usize;
     let page = crate::memory::paging::PAGE_SIZE;
-    let owned = [owned_relocation_page(base), owned_relocation_page(base + 2 * page)];
+    let owned = [
+        owned_relocation_page(base),
+        owned_relocation_page(base + 2 * page),
+    ];
     let entry = make_rela(page as u64, 3, 0);
     assert_eq!(
         crate::loader::reloc::apply_relocations(base, &owned, &entry),
@@ -323,7 +330,10 @@ fn test_reloc_target_hole_rejected() {
 fn test_reloc_target_cross_page_rejected() {
     let base = 0x30_000usize;
     let page = crate::memory::paging::PAGE_SIZE;
-    let owned = [owned_relocation_page(base), owned_relocation_page(base + page)];
+    let owned = [
+        owned_relocation_page(base),
+        owned_relocation_page(base + page),
+    ];
     let offset = page - core::mem::size_of::<usize>() + 1;
     let entry = make_rela(offset as u64, 3, 0);
     assert_eq!(

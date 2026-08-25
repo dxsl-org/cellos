@@ -52,9 +52,7 @@ fn prerequisites_ok() -> bool {
         eprintln!("SKIP periph-i2c-spi: kernel not built ({})", kernel_path());
     }
     if !disk_exists {
-        eprintln!(
-            "SKIP periph-i2c-spi: disk_arm_virt.img missing — run .\\format-disk-arm.ps1"
-        );
+        eprintln!("SKIP periph-i2c-spi: disk_arm_virt.img missing — run .\\format-disk-arm.ps1");
     }
     if !qemu_ok {
         eprintln!("SKIP periph-i2c-spi: qemu-system-aarch64 not on PATH");

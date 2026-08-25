@@ -39,11 +39,11 @@ mod scatter;
 mod sv39_probe;
 
 pub(crate) use copy::{copy_from_user, copy_to_user};
-pub(crate) use scatter::copy_to_user_scatter;
 pub(crate) use guard::clear_guard_for_context_switch;
-pub(crate) use range::{CopyError, CopyView, UserReadSlice, UserWriteSlice};
-pub(crate) use sv39_probe::{current_satp_root, sv39_leaf};
 #[cfg(feature = "test-hooks")]
 pub(crate) use guard::forced_guard_fault_recovers_for_test;
+pub(crate) use range::{CopyError, CopyView, UserReadSlice, UserWriteSlice};
+pub(crate) use scatter::copy_to_user_scatter;
 #[cfg(feature = "test-hooks")]
 pub(crate) use sv39_probe::stage_domain_for_test;
+pub(crate) use sv39_probe::{current_satp_root, sv39_leaf};

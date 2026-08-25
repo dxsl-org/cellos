@@ -8,7 +8,9 @@ use smoltcp::{
 
 use super::{make_tcp, send_typed, tcp_state_byte, try_promote};
 use crate::{
-    next_ephemeral_port, socket_state::SocketState, socket_table::{SocketOwner, SocketTable},
+    next_ephemeral_port,
+    socket_state::SocketState,
+    socket_table::{SocketOwner, SocketTable},
     tls::socket::TlsSocketEntry,
 };
 
@@ -55,7 +57,11 @@ pub(crate) fn handle_tcp_request(
             try_promote(table, sockets, cap, owner);
             let n = if let Some(h) = table.get(cap, owner) {
                 let s = sockets.get_mut::<tcp::Socket>(h);
-                if s.can_send() { s.send_slice(data).unwrap_or(0) } else { 0 }
+                if s.can_send() {
+                    s.send_slice(data).unwrap_or(0)
+                } else {
+                    0
+                }
             } else {
                 0
             };
@@ -105,7 +111,11 @@ pub(crate) fn handle_tcp_request(
                     return true;
                 }
             };
-            if sockets.get_mut::<tcp::Socket>(handle).listen(*port).is_err() {
+            if sockets
+                .get_mut::<tcp::Socket>(handle)
+                .listen(*port)
+                .is_err()
+            {
                 table.remove_internal(cap);
                 sockets.remove(handle);
                 send_typed(sender, R::Err(0xFF));
@@ -118,7 +128,9 @@ pub(crate) fn handle_tcp_request(
         }
         NetRequest::TcpAccept { cap_id } => {
             let cap = *cap_id as u64;
-            if table.is_udp(cap, owner) || table.get_state(cap, owner) != Some(SocketState::Listening) {
+            if table.is_udp(cap, owner)
+                || table.get_state(cap, owner) != Some(SocketState::Listening)
+            {
                 send_typed(sender, R::Err(0xFF));
                 return true;
             }

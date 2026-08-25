@@ -169,7 +169,8 @@ pub fn main() {
         buf.fill(0);
         match sys_try_recv_attested(0, &mut buf) {
             SyscallResult::Ok(sender) if sender > 0 => {
-                let Some(identity) = api::caller_identity::CallerIdentity::from_recv_buf(&buf) else {
+                let Some(identity) = api::caller_identity::CallerIdentity::from_recv_buf(&buf)
+                else {
                     continue;
                 };
                 if identity.cell_id == 0 || identity.generation == 0 {

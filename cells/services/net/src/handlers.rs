@@ -3,9 +3,9 @@
 extern crate alloc;
 
 mod tcp;
-mod udp;
 #[cfg(test)]
 mod tests;
+mod udp;
 
 use alloc::collections::BTreeMap;
 use api::ipc::{self, NetRequest, NetResponse, IPC_BUF_SIZE};
@@ -17,9 +17,13 @@ use smoltcp::{
 };
 
 use crate::{
-    interface::VirtioNetDevice, now_instant, socket_state::SocketState,
-    socket_table::{SocketOwner, SocketTable}, tls::socket::TlsSocketEntry,
-    tls_handler::handle_tls_raw, tls_wire::TLS_CLOSE_OP,
+    interface::VirtioNetDevice,
+    now_instant,
+    socket_state::SocketState,
+    socket_table::{SocketOwner, SocketTable},
+    tls::socket::TlsSocketEntry,
+    tls_handler::handle_tls_raw,
+    tls_wire::TLS_CLOSE_OP,
 };
 
 pub(crate) fn tcp_state_byte(s: smoltcp_tcp::State) -> u8 {
@@ -45,10 +49,16 @@ pub(crate) fn send_typed(sender: usize, resp: NetResponse<'_>) {
     }
 }
 
-pub(crate) fn try_promote(table: &mut SocketTable, sockets: &mut SocketSet<'_>, cap: u64, owner: SocketOwner) {
+pub(crate) fn try_promote(
+    table: &mut SocketTable,
+    sockets: &mut SocketSet<'_>,
+    cap: u64,
+    owner: SocketOwner,
+) {
     if table.get_state(cap, owner) == Some(SocketState::Connecting) {
         if let Some(h) = table.get(cap, owner) {
-            if sockets.get_mut::<smoltcp_tcp::Socket>(h).state() == smoltcp_tcp::State::Established {
+            if sockets.get_mut::<smoltcp_tcp::Socket>(h).state() == smoltcp_tcp::State::Established
+            {
                 table.set_state(cap, SocketState::Connected);
             }
         }
@@ -131,7 +141,9 @@ pub(crate) fn handle_typed(
         }
         NetRequest::MulticastLeave { cap_id: _, group } => {
             let g = IpAddress::v4(group[0], group[1], group[2], group[3]);
-            let ok = iface.leave_multicast_group(device, g, now_instant()).is_ok();
+            let ok = iface
+                .leave_multicast_group(device, g, now_instant())
+                .is_ok();
             send_typed(sender, if ok { R::Ok } else { R::Err(0xFF) });
         }
         NetRequest::Resolve { .. } => send_typed(sender, R::Err(0xFF)),

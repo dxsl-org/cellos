@@ -43,21 +43,28 @@ fn kernel_path() -> String {
 }
 
 fn disk_path() -> String {
-    repo_root().join("disk_arm_virt.img").to_string_lossy().into_owned()
+    repo_root()
+        .join("disk_arm_virt.img")
+        .to_string_lossy()
+        .into_owned()
 }
 
 fn prerequisites_ok() -> bool {
     let kernel_ok = PathBuf::from(kernel_path()).exists();
-    let disk_ok   = PathBuf::from(disk_path()).exists();
-    let qemu_ok   = std::process::Command::new(qemu_binary_aarch64())
+    let disk_ok = PathBuf::from(disk_path()).exists();
+    let qemu_ok = std::process::Command::new(qemu_binary_aarch64())
         .arg("--version")
         .output()
         .is_ok();
 
     if !kernel_ok {
         eprintln!("SKIP cluster-boot: kernel not built ({})", kernel_path());
-        eprintln!("  Run: RUSTFLAGS=\"-C relocation-model=pic -C target-feature=+bti,+paca,+pacg\"");
-        eprintln!("       cargo build --release -p cellos-kernel --target aarch64-unknown-none-softfloat");
+        eprintln!(
+            "  Run: RUSTFLAGS=\"-C relocation-model=pic -C target-feature=+bti,+paca,+pacg\""
+        );
+        eprintln!(
+            "       cargo build --release -p cellos-kernel --target aarch64-unknown-none-softfloat"
+        );
     }
     if !disk_ok {
         eprintln!("SKIP cluster-boot: disk_arm_virt.img missing");
@@ -84,22 +91,29 @@ fn prerequisites_ok() -> bool {
 ///     seeding but before keygen. Likely a clatter API mismatch.
 #[test]
 fn cluster_broker_entropy_gate_passes() {
-    if !prerequisites_ok() { return; }
+    if !prerequisites_ok() {
+        return;
+    }
 
     let qemu = QemuRunner::boot_aarch64_with_disk(&kernel_path(), &disk_path());
 
     // Wait for full boot first — init must start before the broker is spawned.
-    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
-        .unwrap_or_else(|e| panic!(
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT).unwrap_or_else(|e| {
+        panic!(
             "P07 GATE FAIL: shell prompt not reached within {BOOT_TIMEOUT}s: {e}\n\
              The broker cannot start before init completes service registration.\n\
              --- serial output ---\n{}",
             qemu.dump()
-        ));
+        )
+    });
 
     // The broker starts as part of init's supervised services — verify startup.
-    qemu.wait_for("[net-broker] VirtIO-RNG entropy gate passed", BROKER_TIMEOUT)
-        .unwrap_or_else(|e| panic!(
+    qemu.wait_for(
+        "[net-broker] VirtIO-RNG entropy gate passed",
+        BROKER_TIMEOUT,
+    )
+    .unwrap_or_else(|e| {
+        panic!(
             "P07 GATE FAIL: broker entropy gate not confirmed within {BROKER_TIMEOUT}s: {e}\n\
              Expected: \"[net-broker] VirtIO-RNG entropy gate passed\"\n\
              Possible causes:\n\
@@ -109,16 +123,19 @@ fn cluster_broker_entropy_gate_passes() {
                4. Broker crashed before entropy gate — check for panic in serial output\n\
              --- serial output ---\n{}",
             qemu.dump()
-        ));
+        )
+    });
 
     qemu.wait_for("[net-broker] static keypair ready", BROKER_TIMEOUT)
-        .unwrap_or_else(|e| panic!(
-            "P07 GATE FAIL: broker keypair not ready within {BROKER_TIMEOUT}s: {e}\n\
+        .unwrap_or_else(|e| {
+            panic!(
+                "P07 GATE FAIL: broker keypair not ready within {BROKER_TIMEOUT}s: {e}\n\
              Entropy gate passed but X25519 keygen failed.\n\
              Check clatter/x25519-dalek no_std compatibility.\n\
              --- serial output ---\n{}",
-            qemu.dump()
-        ));
+                qemu.dump()
+            )
+        });
 }
 
 /// P07 GATE — net-broker service lookup (NET_BROKER = 8) succeeds.
@@ -132,7 +149,9 @@ fn cluster_broker_entropy_gate_passes() {
 #[test]
 #[ignore = "lssvc shell command not yet implemented; P07 specification placeholder"]
 fn cluster_broker_service_registered() {
-    if !prerequisites_ok() { return; }
+    if !prerequisites_ok() {
+        return;
+    }
 
     let mut qemu = QemuRunner::boot_aarch64_with_disk(&kernel_path(), &disk_path());
     qemu.wait_for("Cellos >", BOOT_TIMEOUT)
@@ -142,8 +161,10 @@ fn cluster_broker_service_registered() {
     qemu.send_line("lssvc");
 
     // Once lssvc exists: assert service id=8 is registered as NET_BROKER.
-    qemu.wait_for("8 net-broker", 10)
-        .unwrap_or_else(|e| panic!(
-            "NET_BROKER (id=8) not in service table: {e}\n--- output ---\n{}", qemu.dump()
-        ));
+    qemu.wait_for("8 net-broker", 10).unwrap_or_else(|e| {
+        panic!(
+            "NET_BROKER (id=8) not in service table: {e}\n--- output ---\n{}",
+            qemu.dump()
+        )
+    });
 }

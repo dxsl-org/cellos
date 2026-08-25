@@ -17,8 +17,8 @@
 
 use std::path::PathBuf;
 use vicell_integration_tests::{
-    qemu_binary, qemu_binary_aarch64, qemu_binary_arm32, qemu_binary_i386,
-    qemu_binary_rv32, qemu_binary_x86, QemuRunner,
+    qemu_binary, qemu_binary_aarch64, qemu_binary_arm32, qemu_binary_i386, qemu_binary_rv32,
+    qemu_binary_x86, QemuRunner,
 };
 
 /// Timeout for the handoff phase — must complete well before cells are spawned.

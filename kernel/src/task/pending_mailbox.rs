@@ -50,7 +50,10 @@ impl PendingMsgData {
     /// Return an empty inline sentinel. Wire-backed records store this in
     /// `data`; all payload reads must go through `PendingMsg::payload()`.
     pub fn empty() -> Self {
-        Self::Inline { len: 0, bytes: [0; INLINE_MESSAGE_BYTES] }
+        Self::Inline {
+            len: 0,
+            bytes: [0; INLINE_MESSAGE_BYTES],
+        }
     }
 
     /// Number of payload bytes.

@@ -16,7 +16,7 @@ use std::path::PathBuf;
 use vicell_integration_tests::{qemu_binary_x86, QemuRunner};
 
 const BOOT_TIMEOUT: u64 = 45;
-const CMD_TIMEOUT: u64  = 10;
+const CMD_TIMEOUT: u64 = 10;
 
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -63,7 +63,12 @@ fn x86_kernel_banner() {
     }
     let qemu = QemuRunner::boot_x86_bios(&iso_path());
     qemu.wait_for("[Cellos] kernel boot v", 15)
-        .unwrap_or_else(|e| panic!("x86_64 kernel banner missing: {e}\n--- output ---\n{}", qemu.dump()));
+        .unwrap_or_else(|e| {
+            panic!(
+                "x86_64 kernel banner missing: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
 }
 
 /// The task scheduler must report it is ready before any cell is spawned.
@@ -77,7 +82,12 @@ fn x86_scheduler_initializes() {
     }
     let qemu = QemuRunner::boot_x86_bios(&iso_path());
     qemu.wait_for("Scheduler initialized", 20)
-        .unwrap_or_else(|e| panic!("x86_64 scheduler init not seen: {e}\n--- output ---\n{}", qemu.dump()));
+        .unwrap_or_else(|e| {
+            panic!(
+                "x86_64 scheduler init not seen: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
 }
 
 /// The embedded init ELF must be spawned successfully from the kernel ramdisk.
@@ -92,7 +102,12 @@ fn x86_init_spawns() {
     }
     let qemu = QemuRunner::boot_x86_bios(&iso_path());
     qemu.wait_for("Successfully spawned init", 25)
-        .unwrap_or_else(|e| panic!("x86_64 init spawn not seen: {e}\n--- output ---\n{}", qemu.dump()));
+        .unwrap_or_else(|e| {
+            panic!(
+                "x86_64 init spawn not seen: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
 }
 
 /// The kernel must boot through init → config → shell and reach the
@@ -103,8 +118,12 @@ fn x86_boots_to_shell_prompt() {
         return;
     }
     let qemu = QemuRunner::boot_x86_bios(&iso_path());
-    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
-        .unwrap_or_else(|e| panic!("x86_64 shell prompt not reached: {e}\n--- output ---\n{}", qemu.dump()));
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT).unwrap_or_else(|e| {
+        panic!(
+            "x86_64 shell prompt not reached: {e}\n--- output ---\n{}",
+            qemu.dump()
+        )
+    });
 }
 
 /// The shell must execute an interactive command over COM1.
@@ -118,12 +137,20 @@ fn x86_echo_command() {
         return;
     }
     let mut qemu = QemuRunner::boot_x86_bios(&iso_path());
-    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
-        .unwrap_or_else(|e| panic!("x86_64 shell prompt not reached: {e}\n--- output ---\n{}", qemu.dump()));
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT).unwrap_or_else(|e| {
+        panic!(
+            "x86_64 shell prompt not reached: {e}\n--- output ---\n{}",
+            qemu.dump()
+        )
+    });
     std::thread::sleep(std::time::Duration::from_millis(500));
     qemu.send_line("echo x86-ok");
-    qemu.wait_for("x86-ok", CMD_TIMEOUT)
-        .unwrap_or_else(|e| panic!("x86_64 echo did not respond: {e}\n--- output ---\n{}", qemu.dump()));
+    qemu.wait_for("x86-ok", CMD_TIMEOUT).unwrap_or_else(|e| {
+        panic!(
+            "x86_64 echo did not respond: {e}\n--- output ---\n{}",
+            qemu.dump()
+        )
+    });
 }
 
 /// The `ls /bin` command must return at least one entry over COM1.
@@ -136,13 +163,21 @@ fn x86_ls_command() {
         return;
     }
     let mut qemu = QemuRunner::boot_x86_bios(&iso_path());
-    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
-        .unwrap_or_else(|e| panic!("x86_64 shell prompt not reached: {e}\n--- output ---\n{}", qemu.dump()));
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT).unwrap_or_else(|e| {
+        panic!(
+            "x86_64 shell prompt not reached: {e}\n--- output ---\n{}",
+            qemu.dump()
+        )
+    });
     std::thread::sleep(std::time::Duration::from_millis(500));
     qemu.send_line("ls /bin");
     // Any one of the expected binaries appearing proves readdir is working.
-    qemu.wait_for("shell", CMD_TIMEOUT)
-        .unwrap_or_else(|e| panic!("x86_64 ls /bin did not respond: {e}\n--- output ---\n{}", qemu.dump()));
+    qemu.wait_for("shell", CMD_TIMEOUT).unwrap_or_else(|e| {
+        panic!(
+            "x86_64 ls /bin did not respond: {e}\n--- output ---\n{}",
+            qemu.dump()
+        )
+    });
 }
 
 /// The `ps` command must list at least the init and shell tasks.
@@ -156,11 +191,19 @@ fn x86_ps_command() {
         return;
     }
     let mut qemu = QemuRunner::boot_x86_bios(&iso_path());
-    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
-        .unwrap_or_else(|e| panic!("x86_64 shell prompt not reached: {e}\n--- output ---\n{}", qemu.dump()));
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT).unwrap_or_else(|e| {
+        panic!(
+            "x86_64 shell prompt not reached: {e}\n--- output ---\n{}",
+            qemu.dump()
+        )
+    });
     std::thread::sleep(std::time::Duration::from_millis(500));
     qemu.send_line("ps");
     // ps prints a task table; any numeric PID appearing proves the syscall worked.
-    qemu.wait_for("init", CMD_TIMEOUT)
-        .unwrap_or_else(|e| panic!("x86_64 ps did not respond: {e}\n--- output ---\n{}", qemu.dump()));
+    qemu.wait_for("init", CMD_TIMEOUT).unwrap_or_else(|e| {
+        panic!(
+            "x86_64 ps did not respond: {e}\n--- output ---\n{}",
+            qemu.dump()
+        )
+    });
 }

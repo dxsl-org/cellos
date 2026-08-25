@@ -1,14 +1,14 @@
 //! Case C: Syscall::RecvScatter valid-first / invalid-later atomicity regression test.
 
-use super::{cleanup_task, fill_page, read_page, RECEIVER_CELL, RECEIVER_TID, RECEIVER_VA, SENDER_CELL, SENDER_TID};
+use super::{
+    cleanup_task, fill_page, read_page, RECEIVER_CELL, RECEIVER_TID, RECEIVER_VA, SENDER_CELL,
+    SENDER_TID,
+};
 use crate::memory::address_space::AddressSpace;
 use crate::memory::frame::phys_to_virt;
 use crate::task::syscall::{handle_syscall, Syscall, SyscallError};
 
-pub(super) fn run_scatter_case(
-    harts: usize,
-    receiver_space: &AddressSpace,
-) -> bool {
+pub(super) fn run_scatter_case(harts: usize, receiver_space: &AddressSpace) -> bool {
     const SCATTER_MSG_LEN: usize = 64;
     const IOVEC_ARRAY_OFFSET: usize = 2048;
     const SENTINEL_VAL: u8 = 0xA5;
@@ -67,7 +67,9 @@ pub(super) fn run_scatter_case(
     // 3. Message must STILL be queued in receiver's pending_msgs.
     let msg_retained = crate::task::SCHEDULER.lock().as_ref().is_some_and(|sched| {
         sched.tasks.get(&RECEIVER_TID).is_some_and(|t| {
-            t.pending_msgs.iter().any(|m| m.sender_tid == SENDER_TID && m.payload() == msg)
+            t.pending_msgs
+                .iter()
+                .any(|m| m.sender_tid == SENDER_TID && m.payload() == msg)
         })
     });
 
@@ -104,7 +106,10 @@ pub(super) fn run_scatter_case(
     let first_chunk_ok = read_page(receiver_space, RECEIVER_VA, 0x42, 32);
     let second_chunk_ok = read_page(receiver_space, RECEIVER_VA + 64, 0x42, 32);
     let queue_drained = crate::task::SCHEDULER.lock().as_ref().is_some_and(|sched| {
-        sched.tasks.get(&RECEIVER_TID).is_some_and(|t| t.pending_msgs.is_empty())
+        sched
+            .tasks
+            .get(&RECEIVER_TID)
+            .is_some_and(|t| t.pending_msgs.is_empty())
     });
 
     if !scatter_res_ok || !first_chunk_ok || !second_chunk_ok || !queue_drained {

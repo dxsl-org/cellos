@@ -1,6 +1,9 @@
 //! Case A: publish->dequeue through production ipc_send/ipc_recv with exact payload assertion.
 
-use super::{cleanup_task, fill_page, read_page, RECEIVER_CELL, RECEIVER_TID, RECEIVER_VA, SENDER_CELL, SENDER_TID, SENDER_VA};
+use super::{
+    cleanup_task, fill_page, read_page, RECEIVER_CELL, RECEIVER_TID, RECEIVER_VA, SENDER_CELL,
+    SENDER_TID, SENDER_VA,
+};
 use crate::memory::address_space::AddressSpace;
 use crate::task::tcb::TaskState;
 
@@ -31,7 +34,10 @@ pub(super) fn run_copy_case(
     let recv_res = crate::task::ipc_recv(RECEIVER_TID, 0, RECEIVER_VA, COPY_LEN);
     let payload_ok = read_page(receiver_space, RECEIVER_VA, 0x5a, COPY_LEN);
     let sender_ready = crate::task::SCHEDULER.lock().as_ref().is_some_and(|sched| {
-        sched.tasks.get(&SENDER_TID).is_some_and(|t| t.state == TaskState::Ready)
+        sched
+            .tasks
+            .get(&SENDER_TID)
+            .is_some_and(|t| t.state == TaskState::Ready)
     });
     match (send_res, recv_res) {
         (Ok(0), Ok(sender)) if sender == SENDER_TID && payload_ok && sender_ready => {

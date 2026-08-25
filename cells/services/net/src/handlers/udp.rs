@@ -8,7 +8,9 @@ use smoltcp::{
 
 use super::send_typed;
 use crate::{
-    interface::VirtioNetDevice, next_ephemeral_port, now_instant, socket_state::SocketState,
+    interface::VirtioNetDevice,
+    next_ephemeral_port, now_instant,
+    socket_state::SocketState,
     socket_table::{SocketOwner, SocketTable},
 };
 
@@ -25,8 +27,14 @@ pub(crate) fn handle_udp_request(
     match req {
         NetRequest::UdpCreate => {
             let handle = sockets.add(udp::Socket::new(
-                udp::PacketBuffer::new(alloc::vec![udp::PacketMetadata::EMPTY; 4], alloc::vec![0u8; 1024]),
-                udp::PacketBuffer::new(alloc::vec![udp::PacketMetadata::EMPTY; 4], alloc::vec![0u8; 1024]),
+                udp::PacketBuffer::new(
+                    alloc::vec![udp::PacketMetadata::EMPTY; 4],
+                    alloc::vec![0u8; 1024],
+                ),
+                udp::PacketBuffer::new(
+                    alloc::vec![udp::PacketMetadata::EMPTY; 4],
+                    alloc::vec![0u8; 1024],
+                ),
             ));
             match table.insert(handle, owner) {
                 Ok(cap) => {
@@ -42,7 +50,11 @@ pub(crate) fn handle_udp_request(
         }
         NetRequest::UdpBind { cap_id, port } => {
             let cap = *cap_id as u64;
-            let port = if *port == 0 { next_ephemeral_port() } else { *port };
+            let port = if *port == 0 {
+                next_ephemeral_port()
+            } else {
+                *port
+            };
             let ok = if let Some(h) = table.get(cap, owner) {
                 sockets.get_mut::<udp::Socket>(h).bind(port).is_ok()
             } else {
@@ -56,11 +68,20 @@ pub(crate) fn handle_udp_request(
             }
             true
         }
-        NetRequest::UdpSend { cap_id, addr, port, data } => {
+        NetRequest::UdpSend {
+            cap_id,
+            addr,
+            port,
+            data,
+        } => {
             let cap = *cap_id as u64;
             let ep = IpEndpoint::new(IpAddress::v4(addr[0], addr[1], addr[2], addr[3]), *port);
             let n = if let Some(h) = table.get(cap, owner) {
-                if sockets.get_mut::<udp::Socket>(h).send_slice(data, ep).is_ok() {
+                if sockets
+                    .get_mut::<udp::Socket>(h)
+                    .send_slice(data, ep)
+                    .is_ok()
+                {
                     iface.poll(now_instant(), device, sockets);
                     data.len()
                 } else {

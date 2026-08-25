@@ -98,10 +98,7 @@ fn riscv64_redoxfs_srv_basic() {
         .expect("create temp disk");
     std::fs::copy(srv_disk(), tmp.path()).expect("copy srv disk");
 
-    let runner = QemuRunner::boot_rv64_with_disk(
-        &srv_test_kernel(),
-        tmp.path().to_str().unwrap(),
-    );
+    let runner = QemuRunner::boot_rv64_with_disk(&srv_test_kernel(), tmp.path().to_str().unwrap());
 
     runner
         .wait_for("[srv-test] ALL TESTS PASSED", 120)

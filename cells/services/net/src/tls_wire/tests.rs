@@ -5,7 +5,10 @@ fn parse_close_exact() {
     let mut buf = [0u8; 9];
     buf[0] = TLS_CLOSE_OP;
     buf[1..9].copy_from_slice(&42u64.to_le_bytes());
-    assert_eq!(parse_raw_tls_request(&buf), Ok(RawTlsRequest::Close { cap: 42 }));
+    assert_eq!(
+        parse_raw_tls_request(&buf),
+        Ok(RawTlsRequest::Close { cap: 42 })
+    );
 }
 
 #[test]
@@ -27,7 +30,10 @@ fn parse_connect_exact_and_negative() {
     );
 
     // Truncated buffer
-    assert_eq!(parse_raw_tls_request(&buf[..16]), Err(RawTlsError::BufferTooShort));
+    assert_eq!(
+        parse_raw_tls_request(&buf[..16]),
+        Err(RawTlsError::BufferTooShort)
+    );
 
     // Declared length exceeding buffer
     buf[15..17].copy_from_slice(&50u16.to_le_bytes());
@@ -35,7 +41,10 @@ fn parse_connect_exact_and_negative() {
 
     // Oversize hostname (> 495)
     buf[15..17].copy_from_slice(&500u16.to_le_bytes());
-    assert_eq!(parse_raw_tls_request(&buf), Err(RawTlsError::OversizePayload(500)));
+    assert_eq!(
+        parse_raw_tls_request(&buf),
+        Err(RawTlsError::OversizePayload(500))
+    );
 }
 
 #[test]
@@ -60,19 +69,28 @@ fn parse_send_preserves_binary_trailing_zeros() {
 fn parse_send_negative_cases() {
     // Buffer < 11
     let short = [TLS_SEND_OP, 1, 2, 3, 4, 5, 6, 7, 8, 0];
-    assert_eq!(parse_raw_tls_request(&short), Err(RawTlsError::BufferTooShort));
+    assert_eq!(
+        parse_raw_tls_request(&short),
+        Err(RawTlsError::BufferTooShort)
+    );
 
     // Declared length > buffer available
     let mut bad_len = [0u8; 15];
     bad_len[0] = TLS_SEND_OP;
     bad_len[9..11].copy_from_slice(&100u16.to_le_bytes());
-    assert_eq!(parse_raw_tls_request(&bad_len), Err(RawTlsError::InvalidLength));
+    assert_eq!(
+        parse_raw_tls_request(&bad_len),
+        Err(RawTlsError::InvalidLength)
+    );
 
     // Oversize payload (> 501)
     let mut oversize = alloc::vec![0u8; 600];
     oversize[0] = TLS_SEND_OP;
     oversize[9..11].copy_from_slice(&550u16.to_le_bytes());
-    assert_eq!(parse_raw_tls_request(&oversize), Err(RawTlsError::OversizePayload(550)));
+    assert_eq!(
+        parse_raw_tls_request(&oversize),
+        Err(RawTlsError::OversizePayload(550))
+    );
 }
 
 #[test]
@@ -101,7 +119,10 @@ fn parse_recv_exact_and_negative() {
     );
 
     // Buffer < 13
-    assert_eq!(parse_raw_tls_request(&buf[..12]), Err(RawTlsError::BufferTooShort));
+    assert_eq!(
+        parse_raw_tls_request(&buf[..12]),
+        Err(RawTlsError::BufferTooShort)
+    );
 }
 
 #[test]

@@ -10,8 +10,8 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use api::syscall::ViSpawnArgs;
 // use log::info;
-use types::*;
 use super::copy_glue::TaskCopyView;
+use types::*;
 
 /// Set of physical frames currently issued via `ShmAlloc`.
 /// `ShmMap` accepts only handles that appear here, preventing a malicious
@@ -683,7 +683,9 @@ fn read_user_string(
     }
     validate_user_buf(ptr, len, max)?;
     let view = caller_copy_view(caller_id)?;
-    let bytes = view.read_bytes(ptr, len).map_err(|_| SyscallError::InvalidInput)?;
+    let bytes = view
+        .read_bytes(ptr, len)
+        .map_err(|_| SyscallError::InvalidInput)?;
     alloc::string::String::from_utf8(bytes).map_err(|_| SyscallError::InvalidInput)
 }
 
@@ -698,7 +700,8 @@ fn read_user_slice(
     }
     validate_user_buf(ptr, len, max)?;
     let view = caller_copy_view(caller_id)?;
-    view.read_bytes(ptr, len).map_err(|_| SyscallError::InvalidInput)
+    view.read_bytes(ptr, len)
+        .map_err(|_| SyscallError::InvalidInput)
 }
 
 fn write_user_slice(
@@ -712,7 +715,8 @@ fn write_user_slice(
     }
     validate_user_buf(ptr, bytes.len(), max)?;
     let view = caller_copy_view(caller_id)?;
-    view.write_bytes(ptr, bytes).map_err(|_| SyscallError::InvalidInput)
+    view.write_bytes(ptr, bytes)
+        .map_err(|_| SyscallError::InvalidInput)
 }
 
 fn read_cell_owner_request(
@@ -731,8 +735,6 @@ fn read_cell_owner_request(
         .map_err(|_| SyscallError::InvalidInput)?;
     api::cell_owner::CellOwnerRequest::from_bytes(&bytes).ok_or(SyscallError::InvalidInput)
 }
-
-
 
 /// Non-owning peek at the next delivery event. Payload bytes are copied into
 /// kernel memory; the original record is NOT removed. Call `commit_resume`
@@ -761,10 +763,7 @@ pub(super) enum ResumeSnapshot {
 
 /// Peek at the next delivery event matching `mask` without removing anything.
 /// Returns `Err(())` on allocation failure (OOM staging payload bytes).
-pub(super) fn snapshot_resume(
-    task: &super::Task,
-    mask: usize,
-) -> Result<ResumeSnapshot, ()> {
+pub(super) fn snapshot_resume(task: &super::Task, mask: usize) -> Result<ResumeSnapshot, ()> {
     // Owner-death events take priority (same order as take_resume_delivery).
     if super::Task::owner_death_matches_receive_mask(mask) {
         if let Some((_, root_tid, reason)) = task.pending_owner_deaths.first().copied() {
@@ -795,7 +794,9 @@ pub(super) fn snapshot_resume(
             None => (0, 0),
         };
         let mut payload = alloc::vec::Vec::new();
-        payload.try_reserve_exact(msg.payload().len()).map_err(|_| ())?;
+        payload
+            .try_reserve_exact(msg.payload().len())
+            .map_err(|_| ())?;
         payload.extend_from_slice(msg.payload());
         return Ok(ResumeSnapshot::Message {
             sender_tid: msg.sender_tid,
@@ -815,7 +816,11 @@ pub(super) fn snapshot_resume(
 /// Must be called under the scheduler lock with the same `task`.
 pub(super) fn commit_resume(task: &mut super::Task, snap: &ResumeSnapshot) {
     match snap {
-        ResumeSnapshot::Death { sender_tid, is_owner_death: true, .. } => {
+        ResumeSnapshot::Death {
+            sender_tid,
+            is_owner_death: true,
+            ..
+        } => {
             // Remove the first owner-death with matching root_tid.
             if let Some(pos) = task
                 .pending_owner_deaths
@@ -825,10 +830,16 @@ pub(super) fn commit_resume(task: &mut super::Task, snap: &ResumeSnapshot) {
                 task.pending_owner_deaths.remove(pos);
             }
         }
-        ResumeSnapshot::Death { is_owner_death: false, .. } => {
+        ResumeSnapshot::Death {
+            is_owner_death: false,
+            ..
+        } => {
             task.pending_exit_reason.take();
         }
-        ResumeSnapshot::Message { delivery_id: Some(did), .. } => {
+        ResumeSnapshot::Message {
+            delivery_id: Some(did),
+            ..
+        } => {
             if let Some(pos) = task
                 .pending_msgs
                 .iter()
@@ -837,8 +848,16 @@ pub(super) fn commit_resume(task: &mut super::Task, snap: &ResumeSnapshot) {
                 task.pending_msgs.remove(pos);
             }
         }
-        ResumeSnapshot::Message { sender_tid, delivery_id: None, .. } => {
-            if let Some(pos) = task.pending_msgs.iter().position(|m| m.sender_tid == *sender_tid) {
+        ResumeSnapshot::Message {
+            sender_tid,
+            delivery_id: None,
+            ..
+        } => {
+            if let Some(pos) = task
+                .pending_msgs
+                .iter()
+                .position(|m| m.sender_tid == *sender_tid)
+            {
                 task.pending_msgs.remove(pos);
             }
         }
@@ -864,11 +883,17 @@ pub(super) fn take_resume_delivery(task: &mut super::Task, mask: usize) -> Resum
     if super::Task::owner_death_matches_receive_mask(mask) {
         if let Some((_, root_tid, reason)) = task.pending_owner_deaths.first().copied() {
             task.pending_owner_deaths.remove(0);
-            return ResumeDelivery::Death { sender_tid: root_tid, reason };
+            return ResumeDelivery::Death {
+                sender_tid: root_tid,
+                reason,
+            };
         }
     }
     if let Some(reason) = task.pending_exit_reason.take() {
-        return ResumeDelivery::Death { sender_tid: task.current_caller.unwrap_or(0), reason };
+        return ResumeDelivery::Death {
+            sender_tid: task.current_caller.unwrap_or(0),
+            reason,
+        };
     }
     if let Some(index) = task
         .pending_msgs
@@ -879,7 +904,6 @@ pub(super) fn take_resume_delivery(task: &mut super::Task, mask: usize) -> Resum
     }
     ResumeDelivery::Wake
 }
-
 
 /// Look up the attested identity of `sender_tid`.
 ///
@@ -915,7 +939,6 @@ pub(super) enum VfsGrantLookup {
     MissingContext,
     Active(VfsGrantContext),
 }
-
 
 fn sender_cell_context_in_sched(
     sched: &super::scheduler::Scheduler,
@@ -1072,9 +1095,7 @@ fn write_caller_identity(buf_ptr: usize, buf_len: usize, sender_tid: usize) {
     let trailer = attested_identity_of(sender_tid)
         .map(|id| id.to_trailer())
         .unwrap_or([0u8; api::caller_identity::CALLER_IDENTITY_LEN]);
-    TaskCopyView::sas()
-        .write_bytes(dst, &trailer)
-        .ok(); // best-effort: if the write fails (bad ptr), receiver sees zeroed trailer → deny
+    TaskCopyView::sas().write_bytes(dst, &trailer).ok(); // best-effort: if the write fails (bad ptr), receiver sees zeroed trailer → deny
 }
 
 /// May `caller_id` read the kernel's provenance record for `target_cell`?
@@ -1894,7 +1915,10 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                         .flatten()
                         .map(|(_, dead_tid, reason)| (true, dead_tid, reason));
                     let death = owner_death.or_else(|| {
-                        t.pending_deaths.first().copied().map(|(dead_tid, reason)| (false, dead_tid, reason))
+                        t.pending_deaths
+                            .first()
+                            .copied()
+                            .map(|(dead_tid, reason)| (false, dead_tid, reason))
                     });
                     death.map(|(is_owner, dead_tid, reason)| {
                         let caller_view = TaskCopyView::of(t);
@@ -1958,95 +1982,123 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                         Some(header) => (header.sender_cell_id, header.sender_generation),
                         None => sender_cell_context_in_sched(sched, sender_tid),
                     };
-                    Ok(Some((pos, sender_tid, sender_cell_id, sender_generation, wire_header, caller_view, data)))
+                    Ok(Some((
+                        pos,
+                        sender_tid,
+                        sender_cell_id,
+                        sender_generation,
+                        wire_header,
+                        caller_view,
+                        data,
+                    )))
                 })
             };
-            let (pos, sender_tid, sender_cell_id, sender_generation, wire_header, caller_view, data) =
-                match pending_msg_info {
-                    Err(()) => return Err(SyscallError::OutOfMemory),
-                    Ok(None) => {
-                        let res = super::ipc_recv(caller_id, mask, buf_ptr, buf_len);
-                        match res {
-                            Ok(0) => {
-                                super::yield_cpu();
-                                // Peek the next event without removing it,
-                                // copy payload, then commit the exact record.
-                                let snap = {
-                                    let guard = super::SCHEDULER.lock();
-                                    guard.as_ref().map_or(
-                                        Ok(ResumeSnapshot::Wake { sender_tid: 0 }),
-                                        |sched| {
-                                            sched
-                                                .tasks
-                                                .get(&caller_id)
-                                                .map_or(
-                                                    Ok(ResumeSnapshot::Wake { sender_tid: 0 }),
-                                                    |task| snapshot_resume(task, mask),
-                                                )
-                                        },
-                                    )
-                                };
-                                let snap = match snap {
-                                    Err(()) => return Err(SyscallError::OutOfMemory),
-                                    Ok(s) => s,
-                                };
-                                // Copy-out before any commit.
-                                let sender = match &snap {
-                                    ResumeSnapshot::Death { sender_tid, reason, .. } => {
-                                        if buf_len >= core::mem::size_of::<u64>() {
-                                            validate_user_buf(buf_ptr, core::mem::size_of::<u64>(), MAX_USER_BUF)?;
-                                            let reason_bytes = (*reason as u64).to_ne_bytes();
-                                            let view = caller_copy_view(caller_id)?;
-                                            view.write_bytes(buf_ptr, &reason_bytes)
-                                                .map_err(|_| SyscallError::InvalidInput)?;
-                                        }
-                                        *sender_tid
+            let (
+                pos,
+                sender_tid,
+                sender_cell_id,
+                sender_generation,
+                wire_header,
+                caller_view,
+                data,
+            ) = match pending_msg_info {
+                Err(()) => return Err(SyscallError::OutOfMemory),
+                Ok(None) => {
+                    let res = super::ipc_recv(caller_id, mask, buf_ptr, buf_len);
+                    match res {
+                        Ok(0) => {
+                            super::yield_cpu();
+                            // Peek the next event without removing it,
+                            // copy payload, then commit the exact record.
+                            let snap = {
+                                let guard = super::SCHEDULER.lock();
+                                guard.as_ref().map_or(
+                                    Ok(ResumeSnapshot::Wake { sender_tid: 0 }),
+                                    |sched| {
+                                        sched.tasks.get(&caller_id).map_or(
+                                            Ok(ResumeSnapshot::Wake { sender_tid: 0 }),
+                                            |task| snapshot_resume(task, mask),
+                                        )
+                                    },
+                                )
+                            };
+                            let snap = match snap {
+                                Err(()) => return Err(SyscallError::OutOfMemory),
+                                Ok(s) => s,
+                            };
+                            // Copy-out before any commit.
+                            let sender = match &snap {
+                                ResumeSnapshot::Death {
+                                    sender_tid, reason, ..
+                                } => {
+                                    if buf_len >= core::mem::size_of::<u64>() {
+                                        validate_user_buf(
+                                            buf_ptr,
+                                            core::mem::size_of::<u64>(),
+                                            MAX_USER_BUF,
+                                        )?;
+                                        let reason_bytes = (*reason as u64).to_ne_bytes();
+                                        let view = caller_copy_view(caller_id)?;
+                                        view.write_bytes(buf_ptr, &reason_bytes)
+                                            .map_err(|_| SyscallError::InvalidInput)?;
                                     }
-                                    ResumeSnapshot::Message { sender_tid, payload, .. } => {
-                                        let copy_len = core::cmp::min(payload.len(), buf_len);
-                                        if copy_len > 0 {
-                                            validate_user_buf(buf_ptr, copy_len, MAX_USER_BUF)?;
-                                            let view = caller_copy_view(caller_id)?;
-                                            view.write_bytes(buf_ptr, &payload[..copy_len])
-                                                .map_err(|_| SyscallError::InvalidInput)?;
-                                        }
-                                        *sender_tid
+                                    *sender_tid
+                                }
+                                ResumeSnapshot::Message {
+                                    sender_tid,
+                                    payload,
+                                    ..
+                                } => {
+                                    let copy_len = core::cmp::min(payload.len(), buf_len);
+                                    if copy_len > 0 {
+                                        validate_user_buf(buf_ptr, copy_len, MAX_USER_BUF)?;
+                                        let view = caller_copy_view(caller_id)?;
+                                        view.write_bytes(buf_ptr, &payload[..copy_len])
+                                            .map_err(|_| SyscallError::InvalidInput)?;
                                     }
-                                    ResumeSnapshot::Wake { sender_tid } => *sender_tid,
-                                };
-                                // Copy succeeded: commit the exact record.
-                                if let Some(sched) = super::SCHEDULER.lock().as_mut() {
-                                    if let Some(task) = sched.tasks.get_mut(&caller_id) {
-                                        commit_resume(task, &snap);
-                                        if let ResumeSnapshot::Message {
-                                            sender_tid,
-                                            sender_cell_id,
-                                            sender_generation,
-                                            ..
-                                        } = &snap {
-                                            task.set_received_caller_context(
-                                                *sender_tid,
-                                                *sender_cell_id,
-                                                *sender_generation,
-                                            );
-                                        }
-                                    }
-                                    if let ResumeSnapshot::Message { sender_tid, wire_header: Some(header), .. } = snap {
-                                        super::wake_sender_token(sched, sender_tid, caller_id, header);
+                                    *sender_tid
+                                }
+                                ResumeSnapshot::Wake { sender_tid } => *sender_tid,
+                            };
+                            // Copy succeeded: commit the exact record.
+                            if let Some(sched) = super::SCHEDULER.lock().as_mut() {
+                                if let Some(task) = sched.tasks.get_mut(&caller_id) {
+                                    commit_resume(task, &snap);
+                                    if let ResumeSnapshot::Message {
+                                        sender_tid,
+                                        sender_cell_id,
+                                        sender_generation,
+                                        ..
+                                    } = &snap
+                                    {
+                                        task.set_received_caller_context(
+                                            *sender_tid,
+                                            *sender_cell_id,
+                                            *sender_generation,
+                                        );
                                     }
                                 }
-                                attest(sender);
-                                return Ok(sender);
+                                if let ResumeSnapshot::Message {
+                                    sender_tid,
+                                    wire_header: Some(header),
+                                    ..
+                                } = snap
+                                {
+                                    super::wake_sender_token(sched, sender_tid, caller_id, header);
+                                }
                             }
-                            Ok(id) => {
-                                attest(id);
-                                return Ok(id);
-                            }
-                            Err(_) => return Err(SyscallError::InvalidCommand),
+                            attest(sender);
+                            return Ok(sender);
                         }
+                        Ok(id) => {
+                            attest(id);
+                            return Ok(id);
+                        }
+                        Err(_) => return Err(SyscallError::InvalidCommand),
                     }
-                    Ok(Some(snapshot)) => snapshot,
-                };
+                }
+                Ok(Some(snapshot)) => snapshot,
+            };
             let copy_len = core::cmp::min(data.len(), buf_len);
             if copy_len > 0 {
                 validate_user_buf(buf_ptr, copy_len, MAX_USER_BUF)?;
@@ -2090,8 +2142,16 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 caller_view
                     .read_into(base, &mut entry_bytes)
                     .map_err(|_| SyscallError::InvalidInput)?;
-                let ptr = usize::from_ne_bytes(entry_bytes[..core::mem::size_of::<usize>()].try_into().unwrap());
-                let len = usize::from_ne_bytes(entry_bytes[core::mem::size_of::<usize>()..].try_into().unwrap());
+                let ptr = usize::from_ne_bytes(
+                    entry_bytes[..core::mem::size_of::<usize>()]
+                        .try_into()
+                        .unwrap(),
+                );
+                let len = usize::from_ne_bytes(
+                    entry_bytes[core::mem::size_of::<usize>()..]
+                        .try_into()
+                        .unwrap(),
+                );
                 validate_user_buf(ptr, len, MAX_USER_BUF)?;
                 total = total.checked_add(len).ok_or(SyscallError::BufferTooSmall)?;
                 if total > MAX_USER_BUF {
@@ -2136,8 +2196,16 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 caller_view
                     .read_into(base, &mut entry_bytes)
                     .map_err(|_| SyscallError::InvalidInput)?;
-                let ptr = usize::from_ne_bytes(entry_bytes[..core::mem::size_of::<usize>()].try_into().unwrap());
-                let len = usize::from_ne_bytes(entry_bytes[core::mem::size_of::<usize>()..].try_into().unwrap());
+                let ptr = usize::from_ne_bytes(
+                    entry_bytes[..core::mem::size_of::<usize>()]
+                        .try_into()
+                        .unwrap(),
+                );
+                let len = usize::from_ne_bytes(
+                    entry_bytes[core::mem::size_of::<usize>()..]
+                        .try_into()
+                        .unwrap(),
+                );
                 validate_user_buf(ptr, len, MAX_USER_BUF)?;
                 total = total.checked_add(len).ok_or(SyscallError::BufferTooSmall)?;
                 if total > MAX_USER_BUF {
@@ -2244,100 +2312,131 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                         Some(header) => (header.sender_cell_id, header.sender_generation),
                         None => sender_cell_context_in_sched(sched, sender_tid),
                     };
-                    Ok(Some((pos, sender_tid, sender_cell_id, sender_generation, wire_header, caller_view, data)))
+                    Ok(Some((
+                        pos,
+                        sender_tid,
+                        sender_cell_id,
+                        sender_generation,
+                        wire_header,
+                        caller_view,
+                        data,
+                    )))
                 })
             };
             finish_vfs_context_drop(caller_id, vfs_context_drop);
 
-            let (pos, sender_tid, sender_cell_id, sender_generation, wire_header, caller_view, data) =
-                match pending_msg_info {
-                    Err(()) => return Err(SyscallError::OutOfMemory),
-                    Ok(None) => {
-                        // Fast path: check for a pending message immediately.
-                        let res = super::ipc_recv(caller_id, mask, buf_ptr, buf_len);
-                        match res {
-                            Ok(0) => {
-                                // Blocked with deadline:None — install the absolute deadline.
-                                if let Some(sched) = super::SCHEDULER.lock().as_mut() {
-                                    if let Some(task) = sched.tasks.get_mut(&caller_id) {
-                                        if let super::tcb::TaskState::Recv {
-                                            deadline: ref mut d,
-                                            ..
-                                        } = task.state
-                                        {
-                                            *d = Some(deadline);
-                                        }
+            let (
+                pos,
+                sender_tid,
+                sender_cell_id,
+                sender_generation,
+                wire_header,
+                caller_view,
+                data,
+            ) = match pending_msg_info {
+                Err(()) => return Err(SyscallError::OutOfMemory),
+                Ok(None) => {
+                    // Fast path: check for a pending message immediately.
+                    let res = super::ipc_recv(caller_id, mask, buf_ptr, buf_len);
+                    match res {
+                        Ok(0) => {
+                            // Blocked with deadline:None — install the absolute deadline.
+                            if let Some(sched) = super::SCHEDULER.lock().as_mut() {
+                                if let Some(task) = sched.tasks.get_mut(&caller_id) {
+                                    if let super::tcb::TaskState::Recv {
+                                        deadline: ref mut d,
+                                        ..
+                                    } = task.state
+                                    {
+                                        *d = Some(deadline);
                                     }
                                 }
-                                // Yield so the scheduler runs other tasks and can fire the timeout.
-                                super::yield_cpu();
-                                let snap = {
-                                    let guard = super::SCHEDULER.lock();
-                                    guard.as_ref().map_or(
-                                        Ok(ResumeSnapshot::Wake { sender_tid: 0 }),
-                                        |sched| {
-                                            sched.tasks.get(&caller_id).map_or(
-                                                Ok(ResumeSnapshot::Wake { sender_tid: 0 }),
-                                                |task| snapshot_resume(task, mask),
-                                            )
-                                        },
-                                    )
-                                };
-                                let snap = match snap {
-                                    Err(()) => return Err(SyscallError::OutOfMemory),
-                                    Ok(s) => s,
-                                };
-                                let sender = match &snap {
-                                    ResumeSnapshot::Death { sender_tid, reason, .. } => {
-                                        if buf_len >= core::mem::size_of::<u64>() {
-                                            validate_user_buf(buf_ptr, core::mem::size_of::<u64>(), MAX_USER_BUF)?;
-                                            let reason_bytes = (*reason as u64).to_ne_bytes();
-                                            let view = caller_copy_view(caller_id)?;
-                                            view.write_bytes(buf_ptr, &reason_bytes)
-                                                .map_err(|_| SyscallError::InvalidInput)?;
-                                        }
-                                        *sender_tid
-                                    }
-                                    ResumeSnapshot::Message { sender_tid, payload, .. } => {
-                                        let copy_len = core::cmp::min(payload.len(), buf_len);
-                                        if copy_len > 0 {
-                                            validate_user_buf(buf_ptr, copy_len, MAX_USER_BUF)?;
-                                            let view = caller_copy_view(caller_id)?;
-                                            view.write_bytes(buf_ptr, &payload[..copy_len])
-                                                .map_err(|_| SyscallError::InvalidInput)?;
-                                        }
-                                        *sender_tid
-                                    }
-                                    ResumeSnapshot::Wake { sender_tid } => *sender_tid,
-                                };
-                                if let Some(sched) = super::SCHEDULER.lock().as_mut() {
-                                    if let Some(task) = sched.tasks.get_mut(&caller_id) {
-                                        commit_resume(task, &snap);
-                                        if let ResumeSnapshot::Message {
-                                            sender_tid,
-                                            sender_cell_id,
-                                            sender_generation,
-                                            ..
-                                        } = &snap {
-                                            task.set_received_caller_context(
-                                                *sender_tid, *sender_cell_id, *sender_generation,
-                                            );
-                                        }
-                                    }
-                                    if let ResumeSnapshot::Message {
-                                        sender_tid, wire_header: Some(header), ..
-                                    } = snap {
-                                        super::wake_sender_token(sched, sender_tid, caller_id, header);
-                                    }
-                                }
-                                return Ok(sender);
                             }
-                            Ok(id) => return Ok(id),
-                            Err(_) => return Err(SyscallError::InvalidCommand),
+                            // Yield so the scheduler runs other tasks and can fire the timeout.
+                            super::yield_cpu();
+                            let snap = {
+                                let guard = super::SCHEDULER.lock();
+                                guard.as_ref().map_or(
+                                    Ok(ResumeSnapshot::Wake { sender_tid: 0 }),
+                                    |sched| {
+                                        sched.tasks.get(&caller_id).map_or(
+                                            Ok(ResumeSnapshot::Wake { sender_tid: 0 }),
+                                            |task| snapshot_resume(task, mask),
+                                        )
+                                    },
+                                )
+                            };
+                            let snap = match snap {
+                                Err(()) => return Err(SyscallError::OutOfMemory),
+                                Ok(s) => s,
+                            };
+                            let sender = match &snap {
+                                ResumeSnapshot::Death {
+                                    sender_tid, reason, ..
+                                } => {
+                                    if buf_len >= core::mem::size_of::<u64>() {
+                                        validate_user_buf(
+                                            buf_ptr,
+                                            core::mem::size_of::<u64>(),
+                                            MAX_USER_BUF,
+                                        )?;
+                                        let reason_bytes = (*reason as u64).to_ne_bytes();
+                                        let view = caller_copy_view(caller_id)?;
+                                        view.write_bytes(buf_ptr, &reason_bytes)
+                                            .map_err(|_| SyscallError::InvalidInput)?;
+                                    }
+                                    *sender_tid
+                                }
+                                ResumeSnapshot::Message {
+                                    sender_tid,
+                                    payload,
+                                    ..
+                                } => {
+                                    let copy_len = core::cmp::min(payload.len(), buf_len);
+                                    if copy_len > 0 {
+                                        validate_user_buf(buf_ptr, copy_len, MAX_USER_BUF)?;
+                                        let view = caller_copy_view(caller_id)?;
+                                        view.write_bytes(buf_ptr, &payload[..copy_len])
+                                            .map_err(|_| SyscallError::InvalidInput)?;
+                                    }
+                                    *sender_tid
+                                }
+                                ResumeSnapshot::Wake { sender_tid } => *sender_tid,
+                            };
+                            if let Some(sched) = super::SCHEDULER.lock().as_mut() {
+                                if let Some(task) = sched.tasks.get_mut(&caller_id) {
+                                    commit_resume(task, &snap);
+                                    if let ResumeSnapshot::Message {
+                                        sender_tid,
+                                        sender_cell_id,
+                                        sender_generation,
+                                        ..
+                                    } = &snap
+                                    {
+                                        task.set_received_caller_context(
+                                            *sender_tid,
+                                            *sender_cell_id,
+                                            *sender_generation,
+                                        );
+                                    }
+                                }
+                                if let ResumeSnapshot::Message {
+                                    sender_tid,
+                                    wire_header: Some(header),
+                                    ..
+                                } = snap
+                                {
+                                    super::wake_sender_token(sched, sender_tid, caller_id, header);
+                                }
+                            }
+                            return Ok(sender);
                         }
+                        Ok(id) => return Ok(id),
+                        Err(_) => return Err(SyscallError::InvalidCommand),
                     }
-                    Ok(Some(snapshot)) => snapshot,
-                };
+                }
+                Ok(Some(snapshot)) => snapshot,
+            };
             let copy_len = core::cmp::min(data.len(), buf_len);
             if copy_len > 0 {
                 validate_user_buf(buf_ptr, copy_len, MAX_USER_BUF)?;
@@ -2347,7 +2446,9 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             }
             if let Some(sched) = super::SCHEDULER.lock().as_mut() {
                 if let Some(t) = sched.tasks.get_mut(&caller_id) {
-                    if pos < t.pending_msgs.len() && t.pending_msgs.as_slice()[pos].sender_tid == sender_tid {
+                    if pos < t.pending_msgs.len()
+                        && t.pending_msgs.as_slice()[pos].sender_tid == sender_tid
+                    {
                         t.pending_msgs.remove(pos);
                     }
                     t.set_received_caller_context(sender_tid, sender_cell_id, sender_generation);
@@ -2386,8 +2487,9 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     // Extract cell context before dropping t to avoid
                     // holding a mutable borrow of sched.tasks while calling
                     // sender_cell_context_in_sched (which borrows sched immutably).
-                    let inline_cell_context =
-                        wire_header.as_ref().map(|h| (h.sender_cell_id, h.sender_generation));
+                    let inline_cell_context = wire_header
+                        .as_ref()
+                        .map(|h| (h.sender_cell_id, h.sender_generation));
                     let caller_view = TaskCopyView::of(t);
                     let mut data = alloc::vec::Vec::new();
                     if data.try_reserve_exact(msg.payload().len()).is_err() {
@@ -2397,17 +2499,33 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     // t is no longer borrowed here.
                     let (sender_cell_id, sender_generation) = inline_cell_context
                         .unwrap_or_else(|| sender_cell_context_in_sched(sched, sender_tid));
-                    Ok(Some((pos, sender_tid, sender_cell_id, sender_generation, wire_header, delivery_id, caller_view, data)))
+                    Ok(Some((
+                        pos,
+                        sender_tid,
+                        sender_cell_id,
+                        sender_generation,
+                        wire_header,
+                        delivery_id,
+                        caller_view,
+                        data,
+                    )))
                 })
             };
             finish_vfs_context_drop(caller_id, vfs_context_drop);
 
-            if let Some((pos, sender_tid, sender_cell_id, sender_generation, wire_header, delivery_id, caller_view, data)) =
-                match pending_msg_info {
-                    Err(()) => return Err(SyscallError::OutOfMemory),
-                    Ok(v) => v,
-                }
-            {
+            if let Some((
+                pos,
+                sender_tid,
+                sender_cell_id,
+                sender_generation,
+                wire_header,
+                delivery_id,
+                caller_view,
+                data,
+            )) = match pending_msg_info {
+                Err(()) => return Err(SyscallError::OutOfMemory),
+                Ok(v) => v,
+            } {
                 let copy_len = core::cmp::min(data.len(), buf_len);
                 if copy_len > 0 {
                     validate_user_buf(buf_ptr, copy_len, MAX_USER_BUF)?;
@@ -2422,9 +2540,11 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     if let Some(t) = sched.tasks.get_mut(&caller_id) {
                         // Commit by delivery_id (wire) or position+sender_tid (inline).
                         if let Some(did) = delivery_id {
-                            if let Some(p) = t.pending_msgs.iter().position(|m| {
-                                m.wire_header().is_some_and(|h| h.delivery_id == did)
-                            }) {
+                            if let Some(p) = t
+                                .pending_msgs
+                                .iter()
+                                .position(|m| m.wire_header().is_some_and(|h| h.delivery_id == did))
+                            {
                                 t.pending_msgs.remove(p);
                             }
                         } else if pos < t.pending_msgs.len()
@@ -2432,7 +2552,11 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                         {
                             t.pending_msgs.remove(pos);
                         }
-                        t.set_received_caller_context(sender_tid, sender_cell_id, sender_generation);
+                        t.set_received_caller_context(
+                            sender_tid,
+                            sender_cell_id,
+                            sender_generation,
+                        );
                     }
                     if let Some(header) = wire_header {
                         super::wake_sender_token(sched, sender_tid, caller_id, header);
@@ -2980,7 +3104,8 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         } => {
             validate_user_buf(buf_ptr, buf_len, MAX_USER_BUF)?;
             let mut kbuf = alloc::vec::Vec::new();
-            kbuf.try_reserve_exact(buf_len).map_err(|_| SyscallError::OutOfMemory)?;
+            kbuf.try_reserve_exact(buf_len)
+                .map_err(|_| SyscallError::OutOfMemory)?;
             kbuf.resize(buf_len, 0);
             let read_bytes = super::file_read(fd, &mut kbuf);
             if read_bytes > 0 {
@@ -2999,7 +3124,8 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         } => {
             validate_user_buf(buf_ptr, buf_len, MAX_USER_BUF)?;
             let mut kbuf = alloc::vec::Vec::new();
-            kbuf.try_reserve_exact(buf_len).map_err(|_| SyscallError::OutOfMemory)?;
+            kbuf.try_reserve_exact(buf_len)
+                .map_err(|_| SyscallError::OutOfMemory)?;
             kbuf.resize(buf_len, 0);
             let read_bytes =
                 super::file_readdir(fd, &mut kbuf).map_err(|_| SyscallError::Unknown)?;
@@ -3025,7 +3151,8 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         Syscall::GetCwd { buf_ptr, buf_len } => {
             validate_user_buf(buf_ptr, buf_len, MAX_USER_BUF)?;
             let mut kbuf = alloc::vec::Vec::new();
-            kbuf.try_reserve_exact(buf_len).map_err(|_| SyscallError::OutOfMemory)?;
+            kbuf.try_reserve_exact(buf_len)
+                .map_err(|_| SyscallError::OutOfMemory)?;
             kbuf.resize(buf_len, 0);
             if let Ok(len) = super::file_getcwd(&mut kbuf) {
                 write_user_slice(caller_id, buf_ptr, &kbuf[..len], MAX_USER_BUF)?;
@@ -3108,7 +3235,9 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             let carrier_size = core::mem::size_of::<api::dir_handles::ViSpawnDirHandles>();
             let bytes = read_user_slice(caller_id, carrier_ptr, carrier_size, MAX_USER_BUF)?;
             let carrier = unsafe {
-                core::ptr::read_unaligned(bytes.as_ptr() as *const api::dir_handles::ViSpawnDirHandles)
+                core::ptr::read_unaligned(
+                    bytes.as_ptr() as *const api::dir_handles::ViSpawnDirHandles
+                )
             };
             let set = api::dir_handles::DirHandleSet::from_carrier(&carrier).map_err(|e| {
                 log::warn!(
@@ -3427,7 +3556,8 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 .park_file(crate::cell::cap_registry::CapId(cap_id as u64), cell_id)
                 .map_err(|_| SyscallError::PermissionDenied)?;
             let mut kbuf = alloc::vec::Vec::new();
-            kbuf.try_reserve_exact(buf_len).map_err(|_| SyscallError::OutOfMemory)?;
+            kbuf.try_reserve_exact(buf_len)
+                .map_err(|_| SyscallError::OutOfMemory)?;
             kbuf.resize(buf_len, 0);
             let read_result = boxed_file.read(&mut kbuf);
             crate::cell::cap_registry::CAP_TABLE
@@ -3649,9 +3779,8 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             let mut args_bytes = [0u8; core::mem::size_of::<ViSpawnArgs>()];
             view.read_into(args_ptr, &mut args_bytes)
                 .map_err(|_| SyscallError::InvalidInput)?;
-            let args = unsafe {
-                core::ptr::read_unaligned(args_bytes.as_ptr() as *const ViSpawnArgs)
-            };
+            let args =
+                unsafe { core::ptr::read_unaligned(args_bytes.as_ptr() as *const ViSpawnArgs) };
             validate_user_buf(args.buffer_addr, args.buffer_size, MAX_USER_BUF)?;
             validate_user_buf(args.name_ptr, args.name_len, MAX_LOG_MSG)?;
             let elf_bytes = view
@@ -3997,7 +4126,8 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             }
             validate_user_buf(buf_ptr, buf_len, MAX_USER_BUF)?;
             let mut kbuf = alloc::vec::Vec::new();
-            kbuf.try_reserve_exact(buf_len).map_err(|_| SyscallError::OutOfMemory)?;
+            kbuf.try_reserve_exact(buf_len)
+                .map_err(|_| SyscallError::OutOfMemory)?;
             kbuf.resize(buf_len, 0);
             let n = crate::task::drivers::nic::recv_frame(&mut kbuf);
             if n > 0 {
@@ -4021,7 +4151,12 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             } else {
                 raw_key
             };
-            let bytes = read_user_slice(caller_id, buf_ptr, buf_len, crate::cell::state_stash::MAX_STASH_LEN)?;
+            let bytes = read_user_slice(
+                caller_id,
+                buf_ptr,
+                buf_len,
+                crate::cell::state_stash::MAX_STASH_LEN,
+            )?;
             Ok(crate::cell::state_stash::stash(stash_key, &bytes))
         }
         Syscall::StateRestore {
@@ -4031,20 +4166,31 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         } => {
             validate_user_buf(buf_ptr, buf_len, crate::cell::state_stash::MAX_STASH_LEN)?;
             let mut kbuf = alloc::vec::Vec::new();
-            kbuf.try_reserve_exact(buf_len).map_err(|_| SyscallError::OutOfMemory)?;
+            kbuf.try_reserve_exact(buf_len)
+                .map_err(|_| SyscallError::OutOfMemory)?;
             kbuf.resize(buf_len, 0);
             if key as u64 == SPAWN_ARGV_KEY {
                 let personal_key = spawn_argv_slot(caller_id);
                 let n = crate::cell::state_stash::restore(personal_key, &mut kbuf);
                 if n > 0 {
                     crate::cell::state_stash::remove(personal_key);
-                    write_user_slice(caller_id, buf_ptr, &kbuf[..n], crate::cell::state_stash::MAX_STASH_LEN)?;
+                    write_user_slice(
+                        caller_id,
+                        buf_ptr,
+                        &kbuf[..n],
+                        crate::cell::state_stash::MAX_STASH_LEN,
+                    )?;
                 }
                 return Ok(n);
             }
             let n = crate::cell::state_stash::restore(key as u64, &mut kbuf);
             if n > 0 {
-                write_user_slice(caller_id, buf_ptr, &kbuf[..n], crate::cell::state_stash::MAX_STASH_LEN)?;
+                write_user_slice(
+                    caller_id,
+                    buf_ptr,
+                    &kbuf[..n],
+                    crate::cell::state_stash::MAX_STASH_LEN,
+                )?;
             }
             Ok(n)
         }
@@ -4381,7 +4527,8 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             }
             let max = max.min(4096);
             let mut kbuf = alloc::vec::Vec::new();
-            kbuf.try_reserve_exact(max).map_err(|_| SyscallError::OutOfMemory)?;
+            kbuf.try_reserve_exact(max)
+                .map_err(|_| SyscallError::OutOfMemory)?;
             kbuf.resize(max, 0);
             let n = crate::task::read_log_ring(&mut kbuf);
             if n > 0 {

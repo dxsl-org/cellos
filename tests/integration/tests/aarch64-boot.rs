@@ -67,8 +67,12 @@ fn aarch64_boots_to_shell_prompt() {
         return;
     }
     let qemu = QemuRunner::boot_aarch64_with_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
-        .unwrap_or_else(|e| panic!("aarch64 shell prompt not reached: {e}\n--- output ---\n{}", qemu.dump()));
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT).unwrap_or_else(|e| {
+        panic!(
+            "aarch64 shell prompt not reached: {e}\n--- output ---\n{}",
+            qemu.dump()
+        )
+    });
 }
 
 /// The kernel must emit its boot banner (`[ViCell] kernel boot v`) on AArch64.
@@ -82,7 +86,12 @@ fn aarch64_kernel_banner() {
     }
     let qemu = QemuRunner::boot_aarch64_with_disk(&kernel_path(), &disk_path());
     qemu.wait_for("[Cellos] kernel boot v", 15)
-        .unwrap_or_else(|e| panic!("aarch64 kernel banner missing: {e}\n--- output ---\n{}", qemu.dump()));
+        .unwrap_or_else(|e| {
+            panic!(
+                "aarch64 kernel banner missing: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
 }
 
 /// The task scheduler must report it is ready before any cell is spawned.
@@ -96,7 +105,12 @@ fn aarch64_scheduler_initializes() {
     }
     let qemu = QemuRunner::boot_aarch64_with_disk(&kernel_path(), &disk_path());
     qemu.wait_for("Scheduler initialized", 20)
-        .unwrap_or_else(|e| panic!("aarch64 scheduler init not seen: {e}\n--- output ---\n{}", qemu.dump()));
+        .unwrap_or_else(|e| {
+            panic!(
+                "aarch64 scheduler init not seen: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
 }
 
 /// The embedded init ELF must be spawned successfully from the kernel ramdisk.
@@ -111,7 +125,12 @@ fn aarch64_init_spawns() {
     }
     let qemu = QemuRunner::boot_aarch64_with_disk(&kernel_path(), &disk_path());
     qemu.wait_for("Successfully spawned init", 20)
-        .unwrap_or_else(|e| panic!("aarch64 init spawn not seen: {e}\n--- output ---\n{}", qemu.dump()));
+        .unwrap_or_else(|e| {
+            panic!(
+                "aarch64 init spawn not seen: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
 }
 
 /// The shell must execute an interactive command.
@@ -125,12 +144,21 @@ fn aarch64_echo_command() {
         return;
     }
     let mut qemu = QemuRunner::boot_aarch64_with_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
-        .unwrap_or_else(|e| panic!("aarch64 shell prompt not reached: {e}\n--- output ---\n{}", qemu.dump()));
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT).unwrap_or_else(|e| {
+        panic!(
+            "aarch64 shell prompt not reached: {e}\n--- output ---\n{}",
+            qemu.dump()
+        )
+    });
     std::thread::sleep(std::time::Duration::from_millis(500));
     qemu.send_line("echo aarch64-ok");
     qemu.wait_for("aarch64-ok", CMD_TIMEOUT)
-        .unwrap_or_else(|e| panic!("aarch64 echo did not respond: {e}\n--- output ---\n{}", qemu.dump()));
+        .unwrap_or_else(|e| {
+            panic!(
+                "aarch64 echo did not respond: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
 }
 
 /// The periph-demo cell must open GPIO PL061 and UART PL011 on AArch64.
@@ -155,13 +183,39 @@ fn aarch64_periph_demo_gpio() {
 
     qemu.send_line("periph-demo &");
     qemu.wait_for("[periph-demo] GPIO PL061 opened", 30)
-        .unwrap_or_else(|e| panic!("periph-demo GPIO not seen: {e}\n--- output ---\n{}", qemu.dump()));
+        .unwrap_or_else(|e| {
+            panic!(
+                "periph-demo GPIO not seen: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
     qemu.wait_for("[periph-demo] UART PL011 opened", CMD_TIMEOUT)
-        .unwrap_or_else(|e| panic!("periph-demo UART not seen: {e}\n--- output ---\n{}", qemu.dump()));
-    qemu.wait_for("[periph-demo] spawning pinned-poll cell on hart 0", CMD_TIMEOUT)
-        .unwrap_or_else(|e| panic!("periph-demo pinned spawn not seen: {e}\n--- output ---\n{}", qemu.dump()));
-    qemu.wait_for("[periph-demo] pinned-poll worker active on hart 0", CMD_TIMEOUT)
-        .unwrap_or_else(|e| panic!("periph-demo pinned worker not seen: {e}\n--- output ---\n{}", qemu.dump()));
+        .unwrap_or_else(|e| {
+            panic!(
+                "periph-demo UART not seen: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
+    qemu.wait_for(
+        "[periph-demo] spawning pinned-poll cell on hart 0",
+        CMD_TIMEOUT,
+    )
+    .unwrap_or_else(|e| {
+        panic!(
+            "periph-demo pinned spawn not seen: {e}\n--- output ---\n{}",
+            qemu.dump()
+        )
+    });
+    qemu.wait_for(
+        "[periph-demo] pinned-poll worker active on hart 0",
+        CMD_TIMEOUT,
+    )
+    .unwrap_or_else(|e| {
+        panic!(
+            "periph-demo pinned worker not seen: {e}\n--- output ---\n{}",
+            qemu.dump()
+        )
+    });
 }
 
 /// UART → input-service → app delivery on AArch64.
@@ -195,10 +249,12 @@ fn aarch64_uart_input_delivery() {
     // Wait for input-test to acquire focus (retries in a yield loop until the
     // input service is registered and grants focus).
     qemu.wait_for("[input-test] focus granted", 30)
-        .unwrap_or_else(|e| panic!(
-            "input-test did not claim focus: {e}\n--- output ---\n{}",
-            qemu.dump()
-        ));
+        .unwrap_or_else(|e| {
+            panic!(
+                "input-test did not claim focus: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
 
     // Settle: let input-test's AppContext event loop park in sys_recv before
     // we inject.  Mirrors the 300ms pause used in `input_bare_cell`.
@@ -211,8 +267,10 @@ fn aarch64_uart_input_delivery() {
     // Assert the app received the event (UART relay → input service →
     // dispatcher → input-test).
     qemu.wait_for("[input-test] input ok", 15)
-        .unwrap_or_else(|e| panic!(
-            "input-test did not receive key: {e}\n--- output ---\n{}",
-            qemu.dump()
-        ));
+        .unwrap_or_else(|e| {
+            panic!(
+                "input-test did not receive key: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
 }

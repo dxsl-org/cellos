@@ -220,7 +220,8 @@ pub fn run_primary() {
                 | crate::memory::paging::Flags::READ
                 | crate::memory::paging::Flags::WRITE,
         );
-        crate::memory::paging::map_page(alloc, CTX_USER_PAGE, frame, flags).expect("map ctx user page");
+        crate::memory::paging::map_page(alloc, CTX_USER_PAGE, frame, flags)
+            .expect("map ctx user page");
         crate::hal::paging::flush_tlb_page(CTX_USER_PAGE);
         frame
     };
@@ -279,7 +280,10 @@ pub fn run_primary() {
                 )?;
                 let space = builder.build()?;
                 worker.bind_address_space_for_test(space.clone());
-                Ok::<alloc::sync::Arc<crate::memory::address_space::AddressSpace>, crate::memory::address_space::AddressSpaceError>(space)
+                Ok::<
+                    alloc::sync::Arc<crate::memory::address_space::AddressSpace>,
+                    crate::memory::address_space::AddressSpaceError,
+                >(space)
             })();
             if let Err(error) = binding {
                 log::error!(

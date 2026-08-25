@@ -46,7 +46,19 @@ impl<'a> ElfSections<'a> {
             ELFDATA2MSB => false,
             _ => return None,
         };
-        let (header_size, phoff_at, phentsize_at, phnum_at, shoff_at, ehsize_at, shentsize_at, shnum_at, shstrndx_at, expected_phent, expected_shent) = match class {
+        let (
+            header_size,
+            phoff_at,
+            phentsize_at,
+            phnum_at,
+            shoff_at,
+            ehsize_at,
+            shentsize_at,
+            shnum_at,
+            shstrndx_at,
+            expected_phent,
+            expected_shent,
+        ) = match class {
             ELFCLASS32 => (52, 28, 42, 44, 32, 40, 46, 48, 50, 32, 40),
             ELFCLASS64 => (64, 32, 54, 56, 40, 52, 58, 60, 62, 56, 64),
             _ => return None,
@@ -72,7 +84,11 @@ impl<'a> ElfSections<'a> {
             checked_range(data, phoff, phentsize.checked_mul(phnum)?)?;
             for index in 0..phnum {
                 let base = phoff.checked_add(phentsize.checked_mul(index)?)?;
-                let (offset_at, size_at) = if class == ELFCLASS32 { (4, 16) } else { (8, 32) };
+                let (offset_at, size_at) = if class == ELFCLASS32 {
+                    (4, 16)
+                } else {
+                    (8, 32)
+                };
                 let kind = read(data, base, 4, little)?;
                 let offset = to_usize(read(data, base.checked_add(offset_at)?, width, little)?)?;
                 let size = to_usize(read(data, base.checked_add(size_at)?, width, little)?)?;
@@ -100,7 +116,11 @@ impl<'a> ElfSections<'a> {
         {
             return None;
         }
-        checked_range(data, header.shoff, header.shentsize.checked_mul(header.shnum)?)?;
+        checked_range(
+            data,
+            header.shoff,
+            header.shentsize.checked_mul(header.shnum)?,
+        )?;
         Some(Self { data, header })
     }
 
@@ -124,8 +144,18 @@ impl<'a> ElfSections<'a> {
         Some(Section {
             name: to_usize(read(self.data, base, 4, self.header.little)?)?,
             kind: read(self.data, base.checked_add(4)?, 4, self.header.little)?,
-            offset: to_usize(read(self.data, base.checked_add(offset_at)?, width, self.header.little)?)?,
-            size: to_usize(read(self.data, base.checked_add(size_at)?, width, self.header.little)?)?,
+            offset: to_usize(read(
+                self.data,
+                base.checked_add(offset_at)?,
+                width,
+                self.header.little,
+            )?)?,
+            size: to_usize(read(
+                self.data,
+                base.checked_add(size_at)?,
+                width,
+                self.header.little,
+            )?)?,
         })
     }
 

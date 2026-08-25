@@ -45,7 +45,11 @@ pub fn parse_raw_tls_request(buf: &[u8]) -> Result<RawTlsRequest<'_>, RawTlsErro
         return Err(RawTlsError::BufferTooShort);
     }
     let opcode = buf[0];
-    let cap = u64::from_le_bytes(buf[1..9].try_into().map_err(|_| RawTlsError::BufferTooShort)?);
+    let cap = u64::from_le_bytes(
+        buf[1..9]
+            .try_into()
+            .map_err(|_| RawTlsError::BufferTooShort)?,
+    );
 
     match opcode {
         TLS_CLOSE_OP => Ok(RawTlsRequest::Close { cap }),
@@ -90,7 +94,11 @@ pub fn parse_raw_tls_request(buf: &[u8]) -> Result<RawTlsRequest<'_>, RawTlsErro
             if buf.len() < 13 {
                 return Err(RawTlsError::BufferTooShort);
             }
-            let want = u32::from_le_bytes(buf[9..13].try_into().map_err(|_| RawTlsError::BufferTooShort)?) as usize;
+            let want = u32::from_le_bytes(
+                buf[9..13]
+                    .try_into()
+                    .map_err(|_| RawTlsError::BufferTooShort)?,
+            ) as usize;
             Ok(RawTlsRequest::Recv {
                 cap,
                 buf_len: want.min(MAX_TLS_RECV_DATA),

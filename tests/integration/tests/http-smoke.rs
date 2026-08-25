@@ -46,7 +46,10 @@ fn kernel_path() -> String {
 }
 
 fn disk_path() -> String {
-    repo_root().join("disk_v3.img").to_string_lossy().into_owned()
+    repo_root()
+        .join("disk_v3.img")
+        .to_string_lossy()
+        .into_owned()
 }
 
 fn mock_script_path() -> PathBuf {
@@ -107,7 +110,10 @@ fn prerequisites_ok() -> bool {
         eprintln!("SKIP http-smoke: python / python3 not on PATH");
     }
     if !mock_ok {
-        eprintln!("SKIP http-smoke: mock_proxy.py not found at {}", mock_script_path().display());
+        eprintln!(
+            "SKIP http-smoke: mock_proxy.py not found at {}",
+            mock_script_path().display()
+        );
     }
     if !smoke_ok {
         eprintln!(
@@ -115,7 +121,9 @@ fn prerequisites_ok() -> bool {
         );
     }
 
-    vicell_integration_tests::ci_guard(kernel_ok && disk_ok && qemu_ok && python_ok && mock_ok && smoke_ok)
+    vicell_integration_tests::ci_guard(
+        kernel_ok && disk_ok && qemu_ok && python_ok && mock_ok && smoke_ok,
+    )
 }
 
 /// Spawn the mock proxy on the host and wait until it accepts TCP connections.
@@ -191,12 +199,13 @@ fn http_smoke_e2e() {
     qemu.send_line("http-smoke");
 
     // Wait until the smoke cell prints its final line.
-    qemu.wait_for("[http-smoke] done", SMOKE_TIMEOUT).unwrap_or_else(|e| {
-        panic!(
-            "http-smoke did not complete within {SMOKE_TIMEOUT}s: {e}\n--- output ---\n{}",
-            qemu.dump()
-        )
-    });
+    qemu.wait_for("[http-smoke] done", SMOKE_TIMEOUT)
+        .unwrap_or_else(|e| {
+            panic!(
+                "http-smoke did not complete within {SMOKE_TIMEOUT}s: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
 
     let output = qemu.dump();
 

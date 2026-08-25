@@ -61,7 +61,12 @@ pub(crate) fn copy_to_user_scatter(
             // 2. Commit all writes.
             for (dst, src) in writes {
                 if dst.len() > 0 {
-                    commit_sas(Direction::ToUser, dst.ptr(), src.as_ptr().cast_mut(), dst.len())?;
+                    commit_sas(
+                        Direction::ToUser,
+                        dst.ptr(),
+                        src.as_ptr().cast_mut(),
+                        dst.len(),
+                    )?;
                 }
             }
             Ok(())

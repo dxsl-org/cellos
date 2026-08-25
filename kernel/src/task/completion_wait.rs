@@ -239,15 +239,19 @@ pub fn wait_completion(
 ///
 /// Precondition: `out_ptr` has been through `validate_user_buf` for
 /// [`COMPLETION_LEN`] bytes in this call.
-fn write_completion(caller_id: usize, out_ptr: usize, done: Completion) -> Result<usize, SyscallError> {
+fn write_completion(
+    caller_id: usize,
+    out_ptr: usize,
+    done: Completion,
+) -> Result<usize, SyscallError> {
     let record = ViCompletion {
         slot: done.slot.index() as u32,
         source: done.source,
         result: done.result as i64,
     }
     .to_bytes();
-    let view = super::copy_glue::TaskCopyView::for_task(caller_id)
-        .ok_or(SyscallError::InvalidInput)?;
+    let view =
+        super::copy_glue::TaskCopyView::for_task(caller_id).ok_or(SyscallError::InvalidInput)?;
     view.write_bytes(out_ptr, &record)
         .map_err(|_| SyscallError::InvalidInput)?;
     Ok(1)

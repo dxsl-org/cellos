@@ -21,7 +21,6 @@ const VFS_LIFECYCLE_SELFTEST: &str =
     include_str!("../../../kernel/src/task/vfs_lifecycle_selftest.rs");
 const VFS_LIFETIME_PASS_PREFIX: &str = "[selftest] VFS-LIFETIME: PASS";
 
-
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("..")
@@ -101,7 +100,6 @@ fn vfs_lifecycle_selftest_covers_required_stages() {
     );
 }
 
-
 #[test]
 fn riscv64_vfs_quota_all_pass() {
     if !prerequisites_ok() {
@@ -142,7 +140,10 @@ fn riscv64_vfs_quota_all_pass() {
         "[vfs-file-handle] wrong-owner-read-close-preserves-entry PASS",
     );
     wait_for_or_dump(&runner, "[vfs-file-handle] quota-32-per-owner PASS");
-    wait_for_or_dump(&runner, "[vfs-file-handle] nonreuse-and-u64-exhaustion PASS");
+    wait_for_or_dump(
+        &runner,
+        "[vfs-file-handle] nonreuse-and-u64-exhaustion PASS",
+    );
     wait_for_or_dump(&runner, "[vfs-file-handle] exact-generation-purge PASS");
     wait_for_or_dump(
         &runner,
@@ -154,15 +155,27 @@ fn riscv64_vfs_quota_all_pass() {
     );
     wait_for_or_dump(&runner, "[vfs-file-handle] higher-generation-cleanup PASS");
     wait_for_or_dump(&runner, VFS_LIFETIME_PASS_PREFIX);
-    wait_for_or_dump(&runner, "[PASS] dircap: GetFile returns a nonempty pointer before sealing");
+    wait_for_or_dump(
+        &runner,
+        "[PASS] dircap: GetFile returns a nonempty pointer before sealing",
+    );
     wait_for_or_dump(
         &runner,
         "[PASS] dircap: revoking a parent dir reaps file handles opened below it",
     );
-    wait_for_or_dump(&runner, "[PASS] grant: ReadFileGrant clamps to grant length");
+    wait_for_or_dump(
+        &runner,
+        "[PASS] grant: ReadFileGrant clamps to grant length",
+    );
     wait_for_or_dump(&runner, "[PASS] grant: ReadFileGrant copies nonzero bytes");
-    wait_for_or_dump(&runner, "[PASS] grant: ReadFileGrant is refused after sealing");
-    wait_for_or_dump(&runner, "[PASS] dircap: ReadFileHandle still works after sealing");
+    wait_for_or_dump(
+        &runner,
+        "[PASS] grant: ReadFileGrant is refused after sealing",
+    );
+    wait_for_or_dump(
+        &runner,
+        "[PASS] dircap: ReadFileHandle still works after sealing",
+    );
     wait_for_or_dump(&runner, "[vfs-test] ALL TESTS PASSED");
     wait_for_or_dump(&runner, "[stack-baseline] name=vfs-test phase=exit ");
 

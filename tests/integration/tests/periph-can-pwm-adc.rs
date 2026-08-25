@@ -46,7 +46,10 @@ fn prerequisites_ok() -> bool {
         .output()
         .is_ok();
     if !kernel_exists {
-        eprintln!("SKIP periph-can-pwm-adc: kernel not built ({})", kernel_path());
+        eprintln!(
+            "SKIP periph-can-pwm-adc: kernel not built ({})",
+            kernel_path()
+        );
     }
     if !disk_exists {
         eprintln!(

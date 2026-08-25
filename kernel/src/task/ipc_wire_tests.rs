@@ -10,7 +10,8 @@ fn wire_message_bounds() {
         sender_generation: 1,
     };
     let small_payload = [0xabu8; 128];
-    let msg = IpcWireMessage::try_new(header, &small_payload).expect("should allocate small payload");
+    let msg =
+        IpcWireMessage::try_new(header, &small_payload).expect("should allocate small payload");
     assert_eq!(msg.len(), 128);
     assert_eq!(msg.as_slice(), &small_payload[..]);
     assert_eq!(msg.header.sender_tid, 1);

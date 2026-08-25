@@ -19,10 +19,10 @@
 use std::path::PathBuf;
 use vicell_integration_tests::{qemu_binary, QemuRunner};
 
-const BOOT_TIMEOUT:   u64 = 60;
-const SPAWN_TIMEOUT:  u64 = 30;
+const BOOT_TIMEOUT: u64 = 60;
+const SPAWN_TIMEOUT: u64 = 30;
 const PROMPT_TIMEOUT: u64 = 20;
-const EXIT_TIMEOUT:   u64 = 10;
+const EXIT_TIMEOUT: u64 = 10;
 
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -40,13 +40,16 @@ fn kernel_path() -> String {
 }
 
 fn disk_path() -> String {
-    repo_root().join("disk_v3.img").to_string_lossy().into_owned()
+    repo_root()
+        .join("disk_v3.img")
+        .to_string_lossy()
+        .into_owned()
 }
 
 fn prerequisites_ok() -> bool {
     let kernel_ok = PathBuf::from(kernel_path()).exists();
-    let disk_ok   = PathBuf::from(disk_path()).exists();
-    let qemu_ok   = std::process::Command::new(qemu_binary())
+    let disk_ok = PathBuf::from(disk_path()).exists();
+    let qemu_ok = std::process::Command::new(qemu_binary())
         .arg("--version")
         .output()
         .is_ok();
@@ -82,7 +85,10 @@ fn hypha_p3_tool_cells_spawn() {
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
 
     qemu.wait_for("Cellos >", BOOT_TIMEOUT).unwrap_or_else(|e| {
-        panic!("shell prompt not reached within {BOOT_TIMEOUT}s: {e}\n--- output ---\n{}", qemu.dump())
+        panic!(
+            "shell prompt not reached within {BOOT_TIMEOUT}s: {e}\n--- output ---\n{}",
+            qemu.dump()
+        )
     });
 
     // Use UART (send_line) to launch hypha — the UART relay path is tested here,
@@ -92,36 +98,40 @@ fn hypha_p3_tool_cells_spawn() {
     qemu.send_line("hypha");
 
     // gateway must start before core prints its prompt
-    qemu.wait_for("[hypha/llm-gateway] service ready", SPAWN_TIMEOUT).unwrap_or_else(|e| {
-        panic!(
+    qemu.wait_for("[hypha/llm-gateway] service ready", SPAWN_TIMEOUT)
+        .unwrap_or_else(|e| {
+            panic!(
             "llm-gateway ready banner not seen within {SPAWN_TIMEOUT}s: {e}\n--- output ---\n{}",
             qemu.dump()
         )
-    });
+        });
 
     // tool-fs (P2)
-    qemu.wait_for("[tool-fs] ready", SPAWN_TIMEOUT).unwrap_or_else(|e| {
-        panic!(
-            "[tool-fs] ready not seen within {SPAWN_TIMEOUT}s: {e}\n--- output ---\n{}",
-            qemu.dump()
-        )
-    });
+    qemu.wait_for("[tool-fs] ready", SPAWN_TIMEOUT)
+        .unwrap_or_else(|e| {
+            panic!(
+                "[tool-fs] ready not seen within {SPAWN_TIMEOUT}s: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
 
     // tool-sys (P3)
-    qemu.wait_for("[tool-sys] ready", SPAWN_TIMEOUT).unwrap_or_else(|e| {
-        panic!(
-            "[tool-sys] ready not seen within {SPAWN_TIMEOUT}s: {e}\n--- output ---\n{}",
-            qemu.dump()
-        )
-    });
+    qemu.wait_for("[tool-sys] ready", SPAWN_TIMEOUT)
+        .unwrap_or_else(|e| {
+            panic!(
+                "[tool-sys] ready not seen within {SPAWN_TIMEOUT}s: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
 
     // tool-spawn (P3)
-    qemu.wait_for("[tool-spawn] ready", SPAWN_TIMEOUT).unwrap_or_else(|e| {
-        panic!(
-            "[tool-spawn] ready not seen within {SPAWN_TIMEOUT}s: {e}\n--- output ---\n{}",
-            qemu.dump()
-        )
-    });
+    qemu.wait_for("[tool-spawn] ready", SPAWN_TIMEOUT)
+        .unwrap_or_else(|e| {
+            panic!(
+                "[tool-spawn] ready not seen within {SPAWN_TIMEOUT}s: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
 
     // interactive prompt
     qemu.wait_for("you>", PROMPT_TIMEOUT).unwrap_or_else(|e| {
@@ -133,10 +143,11 @@ fn hypha_p3_tool_cells_spawn() {
 
     qemu.send_line("exit");
 
-    qemu.wait_for("[hypha] bye", EXIT_TIMEOUT).unwrap_or_else(|e| {
-        panic!(
-            "Hypha did not exit cleanly within {EXIT_TIMEOUT}s: {e}\n--- output ---\n{}",
-            qemu.dump()
-        )
-    });
+    qemu.wait_for("[hypha] bye", EXIT_TIMEOUT)
+        .unwrap_or_else(|e| {
+            panic!(
+                "Hypha did not exit cleanly within {EXIT_TIMEOUT}s: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
 }

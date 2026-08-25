@@ -19,14 +19,23 @@ fn display_info_is_full_sized_and_echoes_fence() {
     };
     let response = wire::display_info(header, 1280, 720);
     assert_eq!(response.len(), 408);
-    assert_eq!(u32::from_le_bytes(response[0..4].try_into().unwrap()), wire::OK_DISPLAY_INFO);
+    assert_eq!(
+        u32::from_le_bytes(response[0..4].try_into().unwrap()),
+        wire::OK_DISPLAY_INFO
+    );
     assert_eq!(u32::from_le_bytes(response[4..8].try_into().unwrap()), 1);
     assert_eq!(
         u64::from_le_bytes(response[8..16].try_into().unwrap()),
         header.fence_id
     );
-    assert_eq!(u32::from_le_bytes(response[32..36].try_into().unwrap()), 1280);
-    assert_eq!(u32::from_le_bytes(response[36..40].try_into().unwrap()), 720);
+    assert_eq!(
+        u32::from_le_bytes(response[32..36].try_into().unwrap()),
+        1280
+    );
+    assert_eq!(
+        u32::from_le_bytes(response[36..40].try_into().unwrap()),
+        720
+    );
     assert_eq!(u32::from_le_bytes(response[40..44].try_into().unwrap()), 1);
 }
 
@@ -73,5 +82,8 @@ fn cursor_and_resource_codecs_reject_short_messages() {
     put_u32(&mut cursor, wire::CTRL_HDR_LEN + 24, 3);
     let parsed = wire::parse_cursor(&cursor, true).unwrap();
     assert_eq!(parsed.resource_id, 4);
-    assert_eq!((parsed.x, parsed.y, parsed.hot_x, parsed.hot_y), (15, 20, 2, 3));
+    assert_eq!(
+        (parsed.x, parsed.y, parsed.hot_x, parsed.hot_y),
+        (15, 20, 2, 3)
+    );
 }

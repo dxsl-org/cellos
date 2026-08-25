@@ -37,9 +37,7 @@ fn rv64_rfence_blocks_the_remote_stale_write() {
     for iteration in 1..=5 {
         let qemu = QemuRunner::boot_rv64_smp(kernel.to_str().expect("UTF-8 kernel path"), 2);
         if let Err(error) = qemu.wait_for("[smp] hart 1 online", BOOT_TIMEOUT) {
-            skip_notice(
-                "RUNTIME-GATED: QEMU/OpenSBI did not provide an HSM-startable remote hart",
-            );
+            skip_notice("RUNTIME-GATED: QEMU/OpenSBI did not provide an HSM-startable remote hart");
             if std::env::var_os("CI").is_some() {
                 panic!(
                     "RV64 -smp 2 iteration {iteration} did not bring logical hart 1 online: {error}\n{}",

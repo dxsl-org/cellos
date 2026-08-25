@@ -64,8 +64,8 @@ fn qemu_riscv_iommu_available() -> bool {
 
 fn prerequisites_ok() -> bool {
     let kernel_ok = PathBuf::from(riscv_kernel_path()).exists();
-    let disk_ok   = PathBuf::from(disk_path()).exists();
-    let qemu_ok   = std::process::Command::new(qemu_binary())
+    let disk_ok = PathBuf::from(disk_path()).exists();
+    let qemu_ok = std::process::Command::new(qemu_binary())
         .arg("--version")
         .output()
         .is_ok();
@@ -104,11 +104,16 @@ fn nic_riscv_iommu_bare() {
 
     let qemu = QemuRunner::boot_riscv_with_iommu(&riscv_kernel_path(), &disk_path());
 
-    qemu.wait_for("[iommu] RISC-V IOMMU: bare passthrough enabled", BOOT_TIMEOUT)
-        .unwrap_or_else(|e| panic!(
+    qemu.wait_for(
+        "[iommu] RISC-V IOMMU: bare passthrough enabled",
+        BOOT_TIMEOUT,
+    )
+    .unwrap_or_else(|e| {
+        panic!(
             "RISC-V IOMMU not detected within {BOOT_TIMEOUT}s: {e}\n\
              Hint: pcie_ecam::find_class(0x08, 0x06, 0x00) must find the device.\n\
              --- serial output ---\n{}",
             qemu.dump()
-        ));
+        )
+    });
 }

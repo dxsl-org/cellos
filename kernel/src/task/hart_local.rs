@@ -520,9 +520,9 @@ pub(crate) fn mark_safe_root_pending() {
 #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
 mod execution_pin {
     use super::current_hart;
+    use crate::memory::address_space::AddressSpace;
     use alloc::sync::Arc;
     use core::cell::UnsafeCell;
-    use crate::memory::address_space::AddressSpace;
 
     /// Hart-owned slot. `HART_LOCALS` is shared across harts as a static, so
     /// the wrapper carries `Sync`; soundness rests on the single-owner rule

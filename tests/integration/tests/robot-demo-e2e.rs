@@ -62,9 +62,7 @@ fn prerequisites_ok() -> bool {
         eprintln!("SKIP robot-demo-e2e: kernel not built ({})", kernel_path());
     }
     if !disk_exists {
-        eprintln!(
-            "SKIP robot-demo-e2e: disk_arm_virt.img missing — run .\\format-disk-arm.ps1"
-        );
+        eprintln!("SKIP robot-demo-e2e: disk_arm_virt.img missing — run .\\format-disk-arm.ps1");
     }
     if !qemu_ok {
         eprintln!("SKIP robot-demo-e2e: qemu-system-aarch64 not on PATH");

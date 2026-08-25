@@ -90,7 +90,8 @@ fn setup_task(tid: usize, cell: u64, name: &'static str, va: usize) -> Option<Ar
 pub(super) fn cleanup_task(tid: usize, cell: u64) {
     if let Some(sched) = super::SCHEDULER.lock().as_mut() {
         if let Some(task) = sched.tasks.remove(&tid) {
-            let owner = api::cell_owner::CellOwner::new(cell, task.cell_generation, task.root_tid as u64);
+            let owner =
+                api::cell_owner::CellOwner::new(cell, task.cell_generation, task.root_tid as u64);
             sched.clear_live_cell_owner_for_test(owner);
         }
     }
@@ -104,7 +105,8 @@ pub fn run_primary(harts: usize) {
         log::error!("S22-RV64-IPC-COPY: FAIL fixture-setup sender");
         return;
     };
-    let Some(receiver_space) = setup_task(RECEIVER_TID, RECEIVER_CELL, "ipc-receiver", RECEIVER_VA) else {
+    let Some(receiver_space) = setup_task(RECEIVER_TID, RECEIVER_CELL, "ipc-receiver", RECEIVER_VA)
+    else {
         log::error!("S22-RV64-IPC-COPY: FAIL fixture-setup receiver");
         cleanup_task(SENDER_TID, SENDER_CELL);
         return;

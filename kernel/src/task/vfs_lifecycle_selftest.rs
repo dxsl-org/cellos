@@ -827,7 +827,10 @@ fn vfs_owner_watch() -> bool {
     remove(CLIENT_WORKER_TID);
     remove(OTHER_TID);
 
-    if initial_delivery != Ok(0) || initial_recv != Ok(CLIENT_WORKER_TID) || nested_delivery != Ok(1) {
+    if initial_delivery != Ok(0)
+        || initial_recv != Ok(CLIENT_WORKER_TID)
+        || nested_delivery != Ok(1)
+    {
         return fail("watch", "nested IPC delivery setup failed");
     }
     if !outer_context_preserved {

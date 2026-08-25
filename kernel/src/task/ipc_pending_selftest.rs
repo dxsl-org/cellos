@@ -292,14 +292,16 @@ fn try_recv_attestation_writes_identity_trailer() -> bool {
     let identity = api::caller_identity::CallerIdentity::from_recv_buf(&recv_buf);
     let attested_ok = matches!(delivered, Ok(id) if id == SENDER)
         && recv_buf[..payload.len()] == *payload
-        && identity == Some(api::caller_identity::CallerIdentity {
-            cell_id: TEST_CELL,
-            generation: sender_generation,
-            sender_tid: SENDER as u64,
-        });
+        && identity
+            == Some(api::caller_identity::CallerIdentity {
+                cell_id: TEST_CELL,
+                generation: sender_generation,
+                sender_tid: SENDER as u64,
+            });
 
     reset();
-    attested_ok || fail("try_recv with attest_caller=true did not write valid CallerIdentity trailer")
+    attested_ok
+        || fail("try_recv with attest_caller=true did not write valid CallerIdentity trailer")
 }
 
 /// Returns true iff all IPC producers defer foreign writes and fail safely.

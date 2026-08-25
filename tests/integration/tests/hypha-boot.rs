@@ -39,7 +39,10 @@ fn kernel_path() -> String {
 }
 
 fn disk_path() -> String {
-    repo_root().join("disk_v3.img").to_string_lossy().into_owned()
+    repo_root()
+        .join("disk_v3.img")
+        .to_string_lossy()
+        .into_owned()
 }
 
 fn prerequisites_ok() -> bool {
@@ -79,7 +82,10 @@ fn hypha_banner_and_prompt() {
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
 
     qemu.wait_for("Cellos >", BOOT_TIMEOUT).unwrap_or_else(|e| {
-        panic!("shell prompt not reached within {BOOT_TIMEOUT}s: {e}\n--- output ---\n{}", qemu.dump())
+        panic!(
+            "shell prompt not reached within {BOOT_TIMEOUT}s: {e}\n--- output ---\n{}",
+            qemu.dump()
+        )
     });
 
     // Wait a moment for the console to settle (mirrors boot-console pattern).
@@ -102,10 +108,11 @@ fn hypha_banner_and_prompt() {
 
     qemu.send_line("exit");
 
-    qemu.wait_for("[hypha] bye", EXIT_TIMEOUT).unwrap_or_else(|e| {
-        panic!(
-            "Hypha did not exit cleanly within {EXIT_TIMEOUT}s: {e}\n--- output ---\n{}",
-            qemu.dump()
-        )
-    });
+    qemu.wait_for("[hypha] bye", EXIT_TIMEOUT)
+        .unwrap_or_else(|e| {
+            panic!(
+                "Hypha did not exit cleanly within {EXIT_TIMEOUT}s: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
 }

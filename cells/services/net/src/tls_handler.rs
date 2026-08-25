@@ -11,8 +11,11 @@ use smoltcp::{
 };
 
 use crate::{
-    interface::VirtioNetDevice, next_ephemeral_port, now_instant, socket_state::SocketState,
-    socket_table::{SocketOwner, SocketTable}, tls::socket::TlsSocketEntry,
+    interface::VirtioNetDevice,
+    next_ephemeral_port, now_instant,
+    socket_state::SocketState,
+    socket_table::{SocketOwner, SocketTable},
+    tls::socket::TlsSocketEntry,
     tls_wire::{encode_tls_recv_reply, parse_raw_tls_request, RawTlsRequest},
 };
 
@@ -149,16 +152,14 @@ pub fn handle_tls_raw(
             let sockets_ptr = sockets as *mut SocketSet<'_> as *mut ();
             // SAFETY: Net cell is single-threaded; iface, device, and sockets live for the
             // duration of send; entry.send flushes and completes before returning.
-            let result = tls_table
-                .get_mut(&cap)
-                .map(|entry| unsafe {
-                    entry.send(
-                        data,
-                        iface as *mut Interface,
-                        device as *mut VirtioNetDevice,
-                        sockets_ptr,
-                    )
-                });
+            let result = tls_table.get_mut(&cap).map(|entry| unsafe {
+                entry.send(
+                    data,
+                    iface as *mut Interface,
+                    device as *mut VirtioNetDevice,
+                    sockets_ptr,
+                )
+            });
             match result {
                 Some(Ok(n)) => sys_send(sender, &(n as u32).to_le_bytes()),
                 _ => sys_send(sender, &0u32.to_le_bytes()),

@@ -31,10 +31,8 @@ fn meminfo_denial_and_typed_spawn_oom_are_runtime_visible() {
         .expect("qemu-system-riscv64 must be available for this runtime gate");
     assert!(qemu_version.status.success(), "QEMU version probe failed");
 
-    let mut qemu = QemuRunner::boot_with_fresh_disk(
-        &kernel.to_string_lossy(),
-        &disk.to_string_lossy(),
-    );
+    let mut qemu =
+        QemuRunner::boot_with_fresh_disk(&kernel.to_string_lossy(), &disk.to_string_lossy());
     qemu.wait_for("=== Cellos shell ready", 45)
         .unwrap_or_else(|error| panic!("shell: {error}\n{}", qemu.dump()));
     std::thread::sleep(Duration::from_secs(1));

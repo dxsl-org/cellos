@@ -3,7 +3,9 @@
 
 use super::guard::commit_guarded;
 use super::range::{CopyError, CopyView, Direction, UserReadSlice, UserWriteSlice};
-use super::sv39_probe::{probe_sas, stage_domain, sv39_leaf, SV39_READ, SV39_USER, SV39_VALID, SV39_WRITE};
+use super::sv39_probe::{
+    probe_sas, stage_domain, sv39_leaf, SV39_READ, SV39_USER, SV39_VALID, SV39_WRITE,
+};
 use crate::memory::address_space::{AddressSpace, CopyReader};
 use crate::memory::frame::phys_to_virt;
 use crate::memory::paging::PAGE_SIZE;

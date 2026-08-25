@@ -3,8 +3,8 @@
 //! guard-owned page faults here by rewinding `sepc` to the landing pad
 //! published in `user_copy_guard_resume_pc`.
 
-use crate::task::hart_local;
 use super::range::CopyError;
+use crate::task::hart_local;
 use core::sync::atomic::Ordering;
 
 /// Run one byte-copy chunk inside the per-hart recoverable fault window.

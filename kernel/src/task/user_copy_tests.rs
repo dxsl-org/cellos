@@ -11,7 +11,10 @@
 
 use super::{
     smp,
-    user_copy::{copy_to_user_scatter, stage_domain_for_test, CopyError, CopyView, UserReadSlice, UserWriteSlice},
+    user_copy::{
+        copy_to_user_scatter, stage_domain_for_test, CopyError, CopyView, UserReadSlice,
+        UserWriteSlice,
+    },
 };
 use crate::memory::address_space::{AddressSpace, AddressSpaceBuilder, MappingKind};
 use crate::memory::frame::phys_to_virt;
@@ -74,7 +77,9 @@ fn fill_page(space: &AddressSpace, va: usize, seed: usize) {
 fn peek_byte(space: &AddressSpace, va: usize, offset_in_page: usize) -> Option<u8> {
     let (_, pa) = space.page_proof_for(va & !(PAGE_SIZE - 1))?;
     // SAFETY: exclusive fixture ownership as above.
-    Some(unsafe { (phys_to_virt(pa + (va & (PAGE_SIZE - 1)) + offset_in_page) as *const u8).read_volatile() })
+    Some(unsafe {
+        (phys_to_virt(pa + (va & (PAGE_SIZE - 1)) + offset_in_page) as *const u8).read_volatile()
+    })
 }
 
 fn sentinel_dst() -> Vec<u8> {
@@ -88,9 +93,7 @@ fn dst_is_sentinel(dst: &[u8]) -> bool {
 /// Hostile pointers, permission edges, cross-page movement, output atomicity,
 /// forced-fault recovery. Single-hart safe.
 fn run_copy_fixture() -> bool {
-    let Some(space) =
-        build_domain_space(&[(VA_A, true), (VA_B, true), (VA_RO, false)])
-    else {
+    let Some(space) = build_domain_space(&[(VA_A, true), (VA_B, true), (VA_RO, false)]) else {
         log::error!("S22-RV64-COPY: FAIL fixture-setup space");
         return false;
     };
@@ -119,8 +122,7 @@ fn run_copy_fixture() -> bool {
         log::error!("S22-RV64-COPY: FAIL fixture-setup hole-slice");
         return false;
     };
-    if super::user_copy::copy_from_user(&view, slice, &mut dst)
-        != Err(CopyError::InvalidAddress)
+    if super::user_copy::copy_from_user(&view, slice, &mut dst) != Err(CopyError::InvalidAddress)
         || !dst_is_sentinel(&dst)
     {
         log::error!("S22-RV64-COPY: FAIL unmapped-read");
@@ -303,8 +305,7 @@ fn run_copy_fixture() -> bool {
     // ABI error. The public API cannot produce this interleaving because the
     // reader pin blocks revocation; the injection bypasses the revoke
     // protocol deliberately. ──
-    let fault_space =
-        build_domain_space(&[(VA_A, true)]).expect("forced-fault fixture space");
+    let fault_space = build_domain_space(&[(VA_A, true)]).expect("forced-fault fixture space");
     fill_page(&fault_space, VA_A, 0x4000);
     let mut ff_dst = sentinel_dst();
     let Ok(staged) = stage_domain_for_test(&fault_space, VA_A, 64, false) else {
@@ -367,7 +368,8 @@ fn run_copy_fixture() -> bool {
         let alloc = guard.as_mut().expect("frame allocator");
         let frame = alloc.allocate_frame().expect("allocate frame for sas test");
         let flags = Flags::from_bits(Flags::VALID | Flags::USER | Flags::READ | Flags::WRITE);
-        crate::memory::paging::map_page(alloc, SAS_USER_VA, frame, flags).expect("map sas user page");
+        crate::memory::paging::map_page(alloc, SAS_USER_VA, frame, flags)
+            .expect("map sas user page");
         crate::hal::paging::flush_tlb_page(SAS_USER_VA);
         frame
     };
@@ -639,7 +641,10 @@ pub(crate) fn run_primary() {
             super::smp::online_hart_count()
         );
     } else {
-        log::error!("S22-RV64-COPY: FAIL harts={}", super::smp::online_hart_count());
+        log::error!(
+            "S22-RV64-COPY: FAIL harts={}",
+            super::smp::online_hart_count()
+        );
     }
     let race_ok = run_race_fixture();
     if race_ok && smp::is_rt_hart_online() {

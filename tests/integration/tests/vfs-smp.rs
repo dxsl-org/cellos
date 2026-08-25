@@ -14,13 +14,11 @@ const RV64_CONTEXT: &str = include_str!("../../../hal/arch/riscv/src/rv64/contex
 const KERNEL_TASK: &str = include_str!("../../../kernel/src/task.rs");
 const SCHEDULER: &str = include_str!("../../../kernel/src/task/scheduler.rs");
 const HART_LOCAL: &str = include_str!("../../../kernel/src/task/hart_local.rs");
-const RETIREMENT_SELFTEST: &str =
-    include_str!("../../../kernel/src/task/retirement_selftest.rs");
+const RETIREMENT_SELFTEST: &str = include_str!("../../../kernel/src/task/retirement_selftest.rs");
 const CONTEXT_HANDOFF_SELFTEST: &str =
     include_str!("../../../kernel/src/task/context_handoff_selftest.rs");
 const ATOMIC_PUBLICATION_CASES: &str =
     include_str!("../../../kernel/src/loader/atomic_publication_tests/cases.rs");
-
 
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -174,7 +172,9 @@ fn rv64_task_to_idle_retains_identity_until_boot_switch_completion() {
         .map(|offset| clear_task + offset)
         .expect("boot completion clears CellId attribution");
     assert!(
-        boot_switch < complete_selected && complete_selected < clear_task && clear_task < clear_cell,
+        boot_switch < complete_selected
+            && complete_selected < clear_task
+            && clear_task < clear_cell,
         "only the proven incoming boot completion may clear the identity tuple"
     );
 
@@ -214,7 +214,9 @@ fn rv64_remote_cell_fault_waits_for_scheduler_owned_retirement() {
         .expect("trap-proven Cell fault funnel has a bounded source region");
     let source = &KERNEL_TASK[trap_entry..fault_funnel_end];
     assert!(
-        source.contains("const _: crate::hal::TerminateOnUserTrapFault = vi_terminate_on_user_trap_fault;"),
+        source.contains(
+            "const _: crate::hal::TerminateOnUserTrapFault = vi_terminate_on_user_trap_fault;"
+        ),
         "the RISC-V trap ABI must bind only to the exported trap-proven fault entry"
     );
     assert!(
@@ -387,10 +389,7 @@ fn rv64_ipc_block_before_yield_wake_handoff_is_marked_and_gated() {
             "CTX00",
             "stage=blocked-before-yield hart={} marker=CTX-HANDOFF-00",
         ),
-        (
-            "CTX01",
-            "stage=remote-wake-deferred marker=CTX-HANDOFF-01",
-        ),
+        ("CTX01", "stage=remote-wake-deferred marker=CTX-HANDOFF-01"),
         (
             "CTX02",
             "stage=origin-context-saved hart={} marker=CTX-HANDOFF-02",
@@ -401,9 +400,9 @@ fn rv64_ipc_block_before_yield_wake_handoff_is_marked_and_gated() {
         .find("SMP-CONTEXT-HANDOFF: PASS aggregate=CTX00-03")
         .expect("deterministic two-hart handoff regression must retain its aggregate PASS");
     for (stage, marker) in stages {
-        let position = CONTEXT_HANDOFF_SELFTEST
-            .find(marker)
-            .unwrap_or_else(|| panic!("deterministic two-hart handoff regression must retain {stage}"));
+        let position = CONTEXT_HANDOFF_SELFTEST.find(marker).unwrap_or_else(|| {
+            panic!("deterministic two-hart handoff regression must retain {stage}")
+        });
         assert!(
             position < aggregate,
             "{stage} source stage must precede the stable aggregate PASS"
@@ -473,7 +472,6 @@ fn riscv64_vfs_smp_all_pass() {
     // VFS/config launch sequence before the VFS client exercises the service.
     wait_for_or_dump(&runner, "Init: services spawned.");
     wait_for_or_dump(&runner, "Init: service registry verified.");
-
 
     for marker in [
         "ATOMIC_PUBLICATION_AP-00: PASS",

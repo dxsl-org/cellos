@@ -16,9 +16,9 @@ mod scatter;
 use super::tcb::Task;
 #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
 use super::tcb::TaskAddressSpace;
-use alloc::vec::Vec;
 #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 
 /// Execution view for byte movement performed on behalf of one task.
 ///
@@ -47,7 +47,9 @@ impl TaskCopyView {
         let repr = match &task.address_space {
             TaskAddressSpace::Sas if task.user_stack.is_none() => TaskCopyRepr::KernelDirect,
             TaskAddressSpace::Sas => TaskCopyRepr::Boundary(CopyView::Sas),
-            TaskAddressSpace::Domain(space) => TaskCopyRepr::Boundary(CopyView::Domain(Arc::clone(space))),
+            TaskAddressSpace::Domain(space) => {
+                TaskCopyRepr::Boundary(CopyView::Domain(Arc::clone(space)))
+            }
         };
         Self(repr)
     }
@@ -107,7 +109,8 @@ impl TaskCopyView {
                 TaskCopyRepr::KernelDirect => {
                     validate_kernel_range(ptr, dst.len(), false)?;
                     if !dst.is_empty() {
-                        let src = unsafe { core::slice::from_raw_parts(ptr as *const u8, dst.len()) };
+                        let src =
+                            unsafe { core::slice::from_raw_parts(ptr as *const u8, dst.len()) };
                         dst.copy_from_slice(src);
                     }
                     Ok(())
@@ -139,7 +142,13 @@ impl TaskCopyView {
                 TaskCopyRepr::KernelDirect => {
                     validate_kernel_range(ptr, bytes.len(), true)?;
                     if !bytes.is_empty() {
-                        unsafe { core::ptr::copy_nonoverlapping(bytes.as_ptr(), ptr as *mut u8, bytes.len()) };
+                        unsafe {
+                            core::ptr::copy_nonoverlapping(
+                                bytes.as_ptr(),
+                                ptr as *mut u8,
+                                bytes.len(),
+                            )
+                        };
                     }
                     Ok(())
                 }

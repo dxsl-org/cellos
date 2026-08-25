@@ -89,7 +89,9 @@ fn make_nvme_disk() -> PathBuf {
 /// queue-pair creation.
 #[test]
 fn nvme_driver_cell_registers_x86() {
-    if !prerequisites_ok() { return; }
+    if !prerequisites_ok() {
+        return;
+    }
 
     let disk = make_nvme_disk();
     let qemu = QemuRunner::boot_x86_bios_with_nic(&iso_path(), &disk.to_string_lossy());
@@ -122,9 +124,13 @@ fn nvme_driver_cell_registers_x86() {
 /// PATH — the FAT32 formatter is a Python tool.
 #[test]
 fn nvme_fat32_mount_x86() {
-    if !prerequisites_ok() { return; }
+    if !prerequisites_ok() {
+        return;
+    }
     let Some(python) = python_binary() else {
-        eprintln!("SKIP nvme_fat32_mount_x86: Python 3 not on PATH (needed for mkfat32_inplace.py)");
+        eprintln!(
+            "SKIP nvme_fat32_mount_x86: Python 3 not on PATH (needed for mkfat32_inplace.py)"
+        );
         return;
     };
 
@@ -134,13 +140,19 @@ fn nvme_fat32_mount_x86() {
     let fat_img = std::env::temp_dir().join(format!(
         "vicell_fat32_{}_{}.img",
         std::process::id(),
-        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().subsec_nanos()
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .subsec_nanos()
     ));
     {
         let f = std::fs::OpenOptions::new()
-            .write(true).create(true).open(&fat_img)
+            .write(true)
+            .create(true)
+            .open(&fat_img)
             .expect("create FAT32 scratch image");
-        f.set_len(FAT_SECTORS * 512).expect("size FAT32 scratch image");
+        f.set_len(FAT_SECTORS * 512)
+            .expect("size FAT32 scratch image");
     }
     let mkfat = repo_root().join("tools/mkfat32_inplace.py");
     let status = std::process::Command::new(python)
@@ -157,11 +169,13 @@ fn nvme_fat32_mount_x86() {
         use std::io::{Seek, SeekFrom, Write};
         let fat_bytes = std::fs::read(&fat_img).expect("read FAT32 image");
         let mut d = std::fs::OpenOptions::new()
-            .write(true).open(&disk)
+            .write(true)
+            .open(&disk)
             .expect("open NVMe disk for splice");
         d.set_len(FAT_BASE_OFFSET + FAT_SECTORS * 512 + 1024 * 1024)
             .expect("grow NVMe disk");
-        d.seek(SeekFrom::Start(FAT_BASE_OFFSET)).expect("seek to partition base");
+        d.seek(SeekFrom::Start(FAT_BASE_OFFSET))
+            .expect("seek to partition base");
         d.write_all(&fat_bytes).expect("write FAT32 volume");
     }
     let _ = std::fs::remove_file(&fat_img);
@@ -200,19 +214,20 @@ fn nvme_fat32_mount_x86() {
 /// shell — the Driver Cell path must not hang or fault the boot.
 #[test]
 fn nvme_boot_reaches_shell_x86() {
-    if !prerequisites_ok() { return; }
+    if !prerequisites_ok() {
+        return;
+    }
 
     let disk = make_nvme_disk();
     let qemu = QemuRunner::boot_x86_bios_with_nic(&iso_path(), &disk.to_string_lossy());
 
-    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
-        .unwrap_or_else(|e| {
-            let _ = std::fs::remove_file(&disk);
-            panic!(
-                "shell prompt not reached with NVMe attached: {e}\n--- serial output ---\n{}",
-                qemu.dump()
-            )
-        });
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT).unwrap_or_else(|e| {
+        let _ = std::fs::remove_file(&disk);
+        panic!(
+            "shell prompt not reached with NVMe attached: {e}\n--- serial output ---\n{}",
+            qemu.dump()
+        )
+    });
 
     let _ = std::fs::remove_file(&disk);
 }

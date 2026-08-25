@@ -41,7 +41,10 @@ fn kernel_path() -> String {
 }
 
 fn disk_path() -> String {
-    repo_root().join("disk_v3.img").to_string_lossy().into_owned()
+    repo_root()
+        .join("disk_v3.img")
+        .to_string_lossy()
+        .into_owned()
 }
 
 fn prerequisites_ok() -> bool {
@@ -85,19 +88,23 @@ fn tls_gate_default_rejects_public_cert() {
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
 
     qemu.wait_for("Cellos >", BOOT_TIMEOUT).unwrap_or_else(|e| {
-        panic!("shell prompt not reached within {BOOT_TIMEOUT}s: {e}\n--- output ---\n{}", qemu.dump())
+        panic!(
+            "shell prompt not reached within {BOOT_TIMEOUT}s: {e}\n--- output ---\n{}",
+            qemu.dump()
+        )
     });
 
     // Run https-demo: connects to example.com:443 via TLS 1.3.
     qemu.send_line("https-demo");
 
     // Wait until the demo completes. Both success and failure print a marker.
-    qemu.wait_for("[https-demo]", TLS_TIMEOUT).unwrap_or_else(|e| {
-        panic!(
-            "https-demo produced no output within {TLS_TIMEOUT}s: {e}\n--- output ---\n{}",
-            qemu.dump()
-        )
-    });
+    qemu.wait_for("[https-demo]", TLS_TIMEOUT)
+        .unwrap_or_else(|e| {
+            panic!(
+                "https-demo produced no output within {TLS_TIMEOUT}s: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
 
     let output = qemu.dump();
 

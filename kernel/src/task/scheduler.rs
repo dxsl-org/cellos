@@ -1587,10 +1587,10 @@ impl Scheduler {
         // legal and drain-safe; the switch plan must proceed.
         #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
         let next_id = next_id.filter(|id| {
-            let selected =
-                self.tasks
-                    .get(id)
-                    .is_some_and(|task| task.begin_execution(hart_id).is_ok());
+            let selected = self
+                .tasks
+                .get(id)
+                .is_some_and(|task| task.begin_execution(hart_id).is_ok());
             if selected {
                 return true;
             }

@@ -87,7 +87,9 @@ fn make_nvme_disk() -> PathBuf {
 /// `sys_register_nic_driver`.
 #[test]
 fn nic_x86_e1000_init() {
-    if !prerequisites_ok() { return; }
+    if !prerequisites_ok() {
+        return;
+    }
 
     let disk = make_nvme_disk();
     let qemu = QemuRunner::boot_x86_bios_with_nic(&iso_path(), &disk.to_string_lossy());
@@ -114,7 +116,9 @@ fn nic_x86_e1000_init() {
 /// e1000 Driver Cell still registers with translation enabled.
 #[test]
 fn nic_x86_vtd_enabled() {
-    if !prerequisites_ok() { return; }
+    if !prerequisites_ok() {
+        return;
+    }
 
     let disk = make_nvme_disk();
     let qemu = QemuRunner::boot_x86_bios_with_vtd(&iso_path(), &disk.to_string_lossy());
