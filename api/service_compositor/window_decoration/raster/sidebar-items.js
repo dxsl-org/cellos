@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["CLOSE","FRAME_COLOR","MAXIMIZE","MINIMIZE","SYMBOL","TITLE_ACTIVE","TITLE_INACTIVE"],"fn":["intersect","paint","paint_rect","paint_symbol"]};

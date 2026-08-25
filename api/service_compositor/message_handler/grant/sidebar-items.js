@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["attach_grant","damage_notify","detach_grant","detach_replaced_grant","handle","screen_size"]};

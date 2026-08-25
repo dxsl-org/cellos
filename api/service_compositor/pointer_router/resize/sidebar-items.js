@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_CONTENT","MIN_CONTENT_H","MIN_CONTENT_W"],"fn":["end","propose","rect_for"]};

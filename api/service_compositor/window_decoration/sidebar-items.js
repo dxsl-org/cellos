@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["CONTROL","FRAME","INSET","TITLE"],"enum":["Control","Hit","ResizeEdge"],"fn":["bounds","clip_to_screen","contains","control_rect","end","hit_test","paint"],"mod":["raster"]};

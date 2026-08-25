@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["destroy_surface","handle","mark_dirty","move_surface","raise_surface"]};

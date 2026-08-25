@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["SIZE"],"fn":["cell_main","main","parse_role"],"struct":["ProbeRole"]};
+window.SIDEBAR_ITEMS = {"constant":["RESTORE_DELAY_TICKS","SIZE"],"enum":["ClosePolicy"],"fn":["cell_main","main","parse_role"],"struct":["ProbeRole"]};

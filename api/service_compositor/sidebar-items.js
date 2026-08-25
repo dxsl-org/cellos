@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["INPUT_EVENT_OPCODE","OWNER_EXITED_OPCODE"],"fn":["build_hw_cursor_sprite","cleanup_owner","handle_message","main"],"mod":["cursor_sprite","input_handler","pointer_router","render","surface_table","z_order"]};
+window.SIDEBAR_ITEMS = {"constant":["INPUT_EVENT_OPCODE"],"fn":["build_hw_cursor_sprite","main"],"mod":["cursor_sprite","cursor_state","framebuffer","input_handler","message_handler","pointer_router","render","surface_table","window_decoration","z_order"]};

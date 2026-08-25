@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["acknowledge_configure","close_response","handle","mark_dirty","request_state","set_title"]};

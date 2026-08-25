@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["MAX_SURFACES"],"enum":["PixelSource"],"struct":["SurfaceState","SurfaceTable"]};
+window.SIDEBAR_ITEMS = {"constant":["MAX_SURFACES"],"mod":["configure","lifecycle","pixels","state","storage"]};

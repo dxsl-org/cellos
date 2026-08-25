@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["hit_test","send_local","send_position","target_for_cap"],"struct":["PointerRouter","PointerTarget"]};
+window.SIDEBAR_ITEMS = {"enum":["Capture"],"fn":["capture_cap"],"mod":["control","input","resize","target"],"struct":["PointerRouter"]};

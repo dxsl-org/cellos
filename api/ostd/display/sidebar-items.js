@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["wait_for_compositor"],"struct":["ViSurface"]};
+window.SIDEBAR_ITEMS = {"constant":["MAX_SURFACE_EVENTS","MAX_SURFACE_EVENT_CAPS"],"enum":["SurfaceEvent"],"fn":["poll_surface_events","wait_for_compositor"],"struct":["ViSurface"]};

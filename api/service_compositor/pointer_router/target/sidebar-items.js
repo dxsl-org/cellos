@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["at","for_cap","send_local","send_position"],"struct":["PointerTarget"]};
