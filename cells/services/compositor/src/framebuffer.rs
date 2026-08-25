@@ -29,20 +29,51 @@ impl ScreenFb {
         }
     }
 
+    /// Blit the visible part of a surface over the entire screen.
     pub fn blit_surface(&mut self, s: &SurfaceState) {
-        let sx = s.x.max(0) as u32;
-        let sy = s.y.max(0) as u32;
-        let clip_x = (-s.x).max(0) as u32;
-        let clip_y = (-s.y).max(0) as u32;
-        let w = (s.w.saturating_sub(clip_x)).min(self.width.saturating_sub(sx));
-        let h = (s.h.saturating_sub(clip_y)).min(self.height.saturating_sub(sy));
+        self.blit_surface_clipped(
+            s,
+            Rect {
+                x: 0,
+                y: 0,
+                w: self.width,
+                h: self.height,
+            },
+        );
+    }
+
+    /// Blit only the part of a surface that intersects both `dirty` and scanout.
+    ///
+    /// Coordinates are intersected in screen space before deriving the matching
+    /// source offset, so clipped and negatively-positioned surfaces stay aligned.
+    pub(crate) fn blit_surface_clipped(&mut self, s: &SurfaceState, dirty: Rect) {
+        let surface_left = i64::from(s.x);
+        let surface_top = i64::from(s.y);
+        let left = surface_left.max(i64::from(dirty.x)).max(0);
+        let top = surface_top.max(i64::from(dirty.y)).max(0);
+        let right = (surface_left + i64::from(s.w))
+            .min(i64::from(dirty.x) + i64::from(dirty.w))
+            .min(i64::from(self.width));
+        let bottom = (surface_top + i64::from(s.h))
+            .min(i64::from(dirty.y) + i64::from(dirty.h))
+            .min(i64::from(self.height));
+        if left >= right || top >= bottom {
+            return;
+        }
+
+        let dst_x = left as usize;
+        let dst_y = top as usize;
+        let src_x = (left - surface_left) as usize;
+        let src_y = (top - surface_top) as usize;
+        let w = (right - left) as usize;
+        let h = (bottom - top) as usize;
         let screen_stride = self.width as usize * 4;
         let surf_stride = s.w as usize * 4;
         let src_pixels = s.pixels();
-        for row in 0..h as usize {
-            let dst = (sy as usize + row) * screen_stride + sx as usize * 4;
-            let src = (clip_y as usize + row) * surf_stride + clip_x as usize * 4;
-            let len = w as usize * 4;
+        for row in 0..h {
+            let dst = (dst_y + row) * screen_stride + dst_x * 4;
+            let src = (src_y + row) * surf_stride + src_x * 4;
+            let len = w * 4;
             if dst + len <= self.pixels.len() && src + len <= src_pixels.len() {
                 self.pixels[dst..dst + len].copy_from_slice(&src_pixels[src..src + len]);
             }
@@ -130,3 +161,7 @@ impl ScreenFb {
 pub fn default_screen_size() -> (u32, u32) {
     sys_get_resolution()
 }
+
+#[cfg(test)]
+mod tests;
+

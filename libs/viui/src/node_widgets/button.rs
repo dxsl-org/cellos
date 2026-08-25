@@ -130,3 +130,46 @@ impl ViNode for Button {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    extern crate alloc;
+
+    use super::Button;
+    use alloc::rc::Rc;
+    use core::cell::Cell;
+
+    use crate::event::{Event, MouseButton};
+    use crate::layout::{Constraints, Point, Size};
+    use crate::node::ViNode;
+
+    #[test]
+    fn callback_requires_a_completed_left_click_inside_bounds() {
+        let calls = Rc::new(Cell::new(0u32));
+        let callback_calls = Rc::clone(&calls);
+        let mut button = Button::new("Apply", move || {
+            callback_calls.set(callback_calls.get() + 1);
+        });
+        button.layout(Constraints::root(Size::new(100.0, 40.0)));
+
+        assert!(button.event(&Event::MousePress {
+            pos: Point::new(1.0, 1.0),
+            button: MouseButton::Left,
+        }));
+        assert!(!button.event(&Event::MouseRelease {
+            pos: Point::new(99.0, 39.0),
+            button: MouseButton::Left,
+        }));
+        assert_eq!(calls.get(), 0);
+
+        assert!(button.event(&Event::MousePress {
+            pos: Point::new(1.0, 1.0),
+            button: MouseButton::Left,
+        }));
+        assert!(button.event(&Event::MouseRelease {
+            pos: Point::new(1.0, 1.0),
+            button: MouseButton::Left,
+        }));
+        assert_eq!(calls.get(), 1);
+    }
+}

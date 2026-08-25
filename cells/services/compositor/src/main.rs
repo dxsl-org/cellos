@@ -1,5 +1,5 @@
 #![no_std]
-#![no_main]
+#![cfg_attr(not(test), no_main)]
 // #[no_mangle] on main() requires removing global forbid — all submodules stay unsafe-free.
 
 //! Compositor Service Cell.
@@ -57,6 +57,7 @@ fn build_hw_cursor_sprite() -> [u8; 64 * 64 * 4] {
     buf
 }
 
+#[cfg(not(test))]
 #[no_mangle]
 pub fn main() {
     println("[compositor] Compositor v0.2: software blending, VirtIO GPU, input routing");

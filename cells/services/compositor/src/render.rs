@@ -52,7 +52,7 @@ pub fn render_frame(
             continue;
         }
         if surface.screen_rect().intersects(&dirty) {
-            fb.blit_surface(surface);
+            fb.blit_surface_clipped(surface, dirty);
         }
         if surface.is_window_managed() {
             fb.paint_window_decoration(surface.screen_rect(), dirty, Some(cap) == selected_cap);

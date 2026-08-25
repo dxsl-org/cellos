@@ -637,3 +637,127 @@ impl ViApp {
         self.layout_dirty = true;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    extern crate alloc;
+
+    use super::ViApp;
+    use alloc::{boxed::Box, rc::Rc, vec::Vec};
+    use core::cell::Cell;
+
+    use crate::dirty::DirtyRegion;
+    use crate::event::Event;
+    use crate::layout::{Constraints, Rect, Size};
+    use crate::node::ViNode;
+    use crate::render_ctx::RenderCtx;
+    use crate::signal::{Signal, SubscriptionHandle};
+    use crate::surface_renderer::ViSurfaceRenderer;
+
+    struct ProbeStats {
+        layouts: Cell<u32>,
+        paints: Cell<u32>,
+        events: Cell<u32>,
+    }
+
+    struct ProbeNode {
+        signal: Signal<u8>,
+        stats: Rc<ProbeStats>,
+        bounds: Rect,
+        consumes_events: bool,
+    }
+
+    impl ProbeNode {
+        fn new(signal: Signal<u8>, stats: Rc<ProbeStats>, consumes_events: bool) -> Self {
+            Self {
+                signal,
+                stats,
+                bounds: Rect::ZERO,
+                consumes_events,
+            }
+        }
+    }
+
+    impl ViNode for ProbeNode {
+        fn layout(&mut self, constraints: Constraints) -> Size {
+            self.stats.layouts.set(self.stats.layouts.get() + 1);
+            self.bounds = Rect::from_origin_size(constraints.origin, constraints.max);
+            constraints.max
+        }
+
+        fn bounds(&self) -> Rect {
+            self.bounds
+        }
+
+        fn paint(&self, _cx: &mut RenderCtx<'_>) {
+            self.stats.paints.set(self.stats.paints.get() + 1);
+        }
+
+        fn event(&mut self, _event: &Event) -> bool {
+            self.stats.events.set(self.stats.events.get() + 1);
+            self.consumes_events
+        }
+
+        fn collect_dirty_handles(&mut self, region: DirtyRegion) -> Vec<SubscriptionHandle> {
+            let bounds = self.bounds;
+            alloc::vec![self.signal.subscribe(move || region.borrow_mut().mark(bounds))]
+        }
+    }
+
+    fn stats() -> Rc<ProbeStats> {
+        Rc::new(ProbeStats {
+            layouts: Cell::new(0),
+            paints: Cell::new(0),
+            events: Cell::new(0),
+        })
+    }
+
+    fn app_with_probe(signal: Signal<u8>, stats: Rc<ProbeStats>, consumes_events: bool) -> ViApp {
+        ViApp::new(
+            Box::new(ProbeNode::new(signal, stats, consumes_events)),
+            Box::new(ViSurfaceRenderer::new(32, 24)),
+        )
+    }
+
+    #[test]
+    fn initial_tick_renders_once_and_idle_tick_skips_work() {
+        let signal = Signal::new(0);
+        let stats = stats();
+        let mut app = app_with_probe(signal, Rc::clone(&stats), false);
+
+        assert!(app.tick(&[]));
+        assert_eq!(stats.layouts.get(), 1);
+        assert_eq!(stats.paints.get(), 1);
+
+        assert!(!app.tick(&[]));
+        assert_eq!(stats.layouts.get(), 1);
+        assert_eq!(stats.paints.get(), 1);
+    }
+
+    #[test]
+    fn consumed_event_relayouts_and_repaints_the_headless_app() {
+        let signal = Signal::new(0);
+        let stats = stats();
+        let mut app = app_with_probe(signal, Rc::clone(&stats), true);
+        app.tick(&[]);
+
+        assert!(app.tick(&[Event::Char('x')]));
+        assert_eq!(stats.events.get(), 1);
+        assert_eq!(stats.layouts.get(), 2);
+        assert_eq!(stats.paints.get(), 2);
+    }
+
+    #[test]
+    fn signal_update_repaints_cached_layout_without_relayout() {
+        let signal = Signal::new(0);
+        let stats = stats();
+        let mut app = app_with_probe(signal.clone(), Rc::clone(&stats), false);
+        app.tick(&[]);
+
+        signal.set(1);
+
+        assert!(app.tick(&[]));
+        assert_eq!(stats.layouts.get(), 1);
+        assert_eq!(stats.paints.get(), 2);
+    }
+}

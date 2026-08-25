@@ -90,3 +90,24 @@ impl ViRenderer for ViSurfaceRenderer {
         (self.width, self.height)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::ViSurfaceRenderer;
+    use crate::canvas::{Color, ViCanvas};
+    use crate::layout::Rect;
+    use crate::renderer::ViRenderer;
+
+    #[test]
+    fn render_writes_bgra_pixels_into_the_owned_headless_surface() {
+        let mut renderer = ViSurfaceRenderer::new(2, 1);
+        renderer.render(
+            None,
+            &mut |canvas| {
+                canvas.fill_rect(Rect::new(0.0, 0.0, 1.0, 1.0), Color::bgra(1, 2, 3, 255));
+            },
+        );
+
+        assert_eq!(renderer.pixels(), &[1, 2, 3, 255, 0, 0, 0, 0]);
+    }
+}

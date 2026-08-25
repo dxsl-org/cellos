@@ -197,15 +197,21 @@ mod tests {
     }
 
     #[test]
-    fn dropped_handle_stops_notification() {
+    fn dropped_handle_stops_only_its_subscription() {
         let sig = Signal::new(0i32);
-        let fired = Rc::new(Cell::new(false));
-        let fired2 = Rc::clone(&fired);
-        let h = sig.subscribe(move || fired2.set(true));
-        drop(h);
+        let retained_calls = Rc::new(Cell::new(0u32));
+        let retired_calls = Rc::new(Cell::new(0u32));
+        let retained = Rc::clone(&retained_calls);
+        let retired = Rc::clone(&retired_calls);
+        let _retained_handle = sig.subscribe(move || retained.set(retained.get() + 1));
+        let retired_handle = sig.subscribe(move || retired.set(retired.get() + 1));
+
         sig.set(1);
-        // handle was dropped → subscriber pruned → not called
-        assert!(!fired.get());
+        drop(retired_handle);
+        sig.update(|value| *value += 1);
+
+        assert_eq!(retained_calls.get(), 2);
+        assert_eq!(retired_calls.get(), 1);
     }
 
     #[test]
@@ -218,15 +224,25 @@ mod tests {
     }
 
     #[test]
-    fn reentrancy_does_not_loop() {
+    fn reentrant_set_updates_value_without_recursively_notifying() {
         let sig = Signal::<i32>::new(0);
-        let sig2 = sig.clone();
-        // Subscriber calls set() on the same signal → must not recurse
-        let _h = sig.subscribe(move || {
-            sig2.set(99);
+        let writer = sig.clone();
+        let observed_value = Rc::new(Cell::new(0));
+        let reader_calls = Rc::new(Cell::new(0u32));
+        let observed_value_in_callback = Rc::clone(&observed_value);
+        let reader_calls_in_callback = Rc::clone(&reader_calls);
+        let reader = sig.clone();
+        let _writer_handle = sig.subscribe(move || writer.set(99));
+        let _reader_handle = sig.subscribe(move || {
+            reader_calls_in_callback.set(reader_calls_in_callback.get() + 1);
+            observed_value_in_callback.set(*reader.get());
         });
-        sig.set(1); // should return without hanging
-        assert_eq!(*sig.get(), 99); // second set took effect after first notify
+
+        sig.set(1);
+
+        assert_eq!(*sig.get(), 99);
+        assert_eq!(reader_calls.get(), 1);
+        assert_eq!(observed_value.get(), 99);
     }
 
     #[test]

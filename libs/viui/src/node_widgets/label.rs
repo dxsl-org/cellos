@@ -80,3 +80,30 @@ impl ViNode for Label {
         alloc::vec![h]
     }
 }
+
+#[cfg(test)]
+mod tests {
+    extern crate alloc;
+
+    use super::Label;
+    use alloc::rc::Rc;
+    use core::cell::RefCell;
+
+    use crate::dirty::DirtyRect;
+    use crate::layout::{Constraints, Size};
+    use crate::node::ViNode;
+    use crate::signal::Signal;
+
+    #[test]
+    fn signal_update_marks_the_label_bounds_dirty() {
+        let text = Signal::new(alloc::string::String::from("idle"));
+        let mut label = Label::new(text.clone());
+        label.layout(Constraints::root(Size::new(80.0, 24.0)));
+        let dirty = Rc::new(RefCell::new(DirtyRect::new()));
+        let _handles = label.collect_dirty_handles(Rc::clone(&dirty));
+
+        text.set(alloc::string::String::from("ready"));
+
+        assert_eq!(dirty.borrow_mut().take(), Some(label.bounds()));
+    }
+}
