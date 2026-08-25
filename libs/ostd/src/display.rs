@@ -545,17 +545,21 @@ impl ViSurface {
         // An IPC error is ambiguous; retain this mapping until the compositor
         // explicitly confirms that it has detached the staged Grant.
         self.staged_reg_id = Some(new_reg_id);
-        if ipc_attach_grant(
+        match ipc_stage_grant(
             self.comp_tid,
             self.cap,
             new_reg_id,
             configure.rect.w,
             configure.rect.h,
             self.fmt,
-        )
-        .is_err()
-        {
-            return Err(ViError::IO);
+        ) {
+            AttachGrantResult::Attached => {}
+            AttachGrantResult::Rejected => {
+                self.staged_reg_id = None;
+                sys_grant_unregister(new_reg_id);
+                return Err(ViError::IO);
+            }
+            AttachGrantResult::AmbiguousFailure => return Err(ViError::IO),
         }
         // The acknowledged attachment remains staged until its configure ACK.
         if ipc_configure_ack(self.comp_tid, self.cap, configure.serial).is_err() {
@@ -730,15 +734,21 @@ fn ipc_detach_replaced_grant(comp_tid: usize, cap: u32, old_reg_id: usize) -> Vi
     ipc_receive_status(comp_tid, 0x01)
 }
 
-/// Send `ATTACH_GRANT` and verify the compositor accepted it.
-fn ipc_attach_grant(
+enum AttachGrantResult {
+    Attached,
+    Rejected,
+    AmbiguousFailure,
+}
+
+/// Send `ATTACH_GRANT` and distinguish an explicit rejection from transport loss.
+fn ipc_stage_grant(
     comp_tid: usize,
     cap: u32,
     reg_id: usize,
     w: u32,
     h: u32,
     fmt: PixelFormat,
-) -> ViResult<()> {
+) -> AttachGrantResult {
     let ag = AttachGrant {
         opcode: compositor_ops::ATTACH_GRANT,
         fmt: fmt as u8,
@@ -748,9 +758,38 @@ fn ipc_attach_grant(
         width: w,
         height: h,
     };
-    sys_send(comp_tid, &ag.encode());
+    if !matches!(sys_send(comp_tid, &ag.encode()), SyscallResult::Ok(_)) {
+        return AttachGrantResult::AmbiguousFailure;
+    }
+    loop {
+        let mut frame = [0u8; 72];
+        match sys_recv(comp_tid, &mut frame) {
+            SyscallResult::Ok(sender) if sender == comp_tid => match frame[0] {
+                api::input::INPUT_EVENT_OPCODE
+                | compositor_events::WINDOW_CONFIGURE
+                | compositor_events::WINDOW_CLOSE_REQUEST
+                | compositor_events::WINDOW_STATE_CHANGED => route_compositor_frame(&frame),
+                0x01 => return AttachGrantResult::Attached,
+                0x00 => return AttachGrantResult::Rejected,
+                _ => return AttachGrantResult::AmbiguousFailure,
+            },
+            _ => return AttachGrantResult::AmbiguousFailure,
+        }
+    }
+}
 
-    ipc_receive_status(comp_tid, 0x01)
+fn ipc_attach_grant(
+    comp_tid: usize,
+    cap: u32,
+    reg_id: usize,
+    w: u32,
+    h: u32,
+    fmt: PixelFormat,
+) -> ViResult<()> {
+    match ipc_stage_grant(comp_tid, cap, reg_id, w, h, fmt) {
+        AttachGrantResult::Attached => Ok(()),
+        AttachGrantResult::Rejected | AttachGrantResult::AmbiguousFailure => Err(ViError::IO),
+    }
 }
 
 /// Send `DESTROY_SURFACE` (best-effort; errors silently ignored on Drop path).

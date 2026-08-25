@@ -279,15 +279,15 @@ date = "2026-07-30"
 path = "cells/services/compositor/src/surface_table/state.rs"
 class = "legacy-raw-ptr"
 reason = "Raw Grant pointer is Send only because compositor access is serialized; ownership and detach protocol prevent concurrent use."
-approver = "cellos-maintainers"
-date = "2026-07-14"
+approver = "lungmat8"
+date = "2026-08-25"
 
 [[file]]
 path = "cells/services/compositor/src/surface_table/pixels.rs"
 class = "legacy-raw-ptr"
 reason = "Reads the active shared Grant through a raw pointer while the ownership and detach protocol keeps that mapping live."
-approver = "cellos-maintainers"
-date = "2026-07-14"
+approver = "lungmat8"
+date = "2026-08-25"
 
 [[file]]
 path = "cells/services/net/src/tls_handler.rs"

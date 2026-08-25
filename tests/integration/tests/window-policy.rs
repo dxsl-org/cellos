@@ -232,6 +232,16 @@ fn clicking_exposed_surface_raises_and_focuses_its_owner() {
     qemu.send_qemu_mouse_button(false);
     qemu.wait_for("[window-policy-probe wm-primary] configure Resize", 15)
         .unwrap_or_else(|error| panic!("resize configure missing: {error}\n{}", qemu.dump()));
+    qemu.wait_for(
+        "[window-policy-probe wm-primary] attach rejected serial",
+        15,
+    )
+    .unwrap_or_else(|error| {
+        panic!(
+            "attach rejection was not recovered: {error}\n{}",
+            qemu.dump()
+        )
+    });
     qemu.wait_for("[window-policy-probe wm-primary] configured serial", 15)
         .unwrap_or_else(|error| panic!("resize did not commit: {error}\n{}", qemu.dump()));
 
