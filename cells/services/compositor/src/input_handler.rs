@@ -12,9 +12,9 @@ use api::display::Rect;
 use api::input::{decode_event, InputEvent, INPUT_EVENT_IPC_SIZE, INPUT_EVENT_OPCODE};
 use api::ipc::{InputRequest, IPC_BUF_SIZE};
 use api::syscall::service;
-use ostd::syscall::{sys_gpu_cursor, sys_lookup_service, sys_send, sys_try_send};
+use ostd::syscall::{sys_lookup_service, sys_send, sys_try_send};
 
-use crate::cursor_sprite::{CURSOR_H, CURSOR_W};
+use crate::cursor_state;
 use crate::pointer_router::PointerRouter;
 use crate::surface_table::SurfaceTable;
 use crate::z_order::ZOrder;
@@ -48,6 +48,19 @@ impl InputState {
             pointer: PointerRouter::new(),
             hw_cursor: false,
         }
+    }
+
+    pub const fn selected_cap(&self) -> Option<u64> {
+        self.pointer.selected_cap()
+    }
+
+    pub fn remove_surface(&mut self, cap: u64) {
+        self.pointer.forget(cap);
+    }
+
+    /// Remove a surface that remains allocated but must no longer receive input.
+    pub fn deactivate_surface(&mut self, cap: u64) {
+        self.pointer.disable(cap);
     }
 }
 
@@ -99,7 +112,8 @@ fn queue_dirty(pending_dirty: &mut Option<Rect>, dirty: Rect) {
 pub fn handle_input_event(
     buf: &[u8; 512],
     state: &mut InputState,
-    table: &SurfaceTable,
+    maximum: Rect,
+    table: &mut SurfaceTable,
     z_order: &mut ZOrder,
     pending_dirty: &mut Option<Rect>,
 ) {
@@ -112,11 +126,18 @@ pub fn handle_input_event(
     match event {
         InputEvent::Key(_) => forward_key(buf, state),
         InputEvent::MouseMove { x, y, .. } => {
-            update_cursor(x, y, state, pending_dirty);
-            route_pointer(event, state, table, z_order, pending_dirty);
+            cursor_state::update(
+                x,
+                y,
+                state.hw_cursor,
+                &mut state.mouse_x,
+                &mut state.mouse_y,
+                pending_dirty,
+            );
+            route_pointer(event, state, maximum, table, z_order, pending_dirty);
         }
         InputEvent::MouseButton { .. } | InputEvent::MouseScroll { .. } => {
-            route_pointer(event, state, table, z_order, pending_dirty);
+            route_pointer(event, state, maximum, table, z_order, pending_dirty);
         }
     }
 }
@@ -124,19 +145,29 @@ pub fn handle_input_event(
 fn route_pointer(
     event: InputEvent,
     state: &mut InputState,
-    table: &SurfaceTable,
+    maximum: Rect,
+    table: &mut SurfaceTable,
     z_order: &mut ZOrder,
     pending_dirty: &mut Option<Rect>,
 ) {
     let (input_tid, compositor_tid) = (state.input_tid, state.compositor_tid);
+    let old_decoration = state
+        .pointer
+        .selected_cap()
+        .and_then(|cap| table.get(cap))
+        .map(|surface| crate::window_decoration::bounds(surface.screen_rect()));
     state.pointer.route(
         event,
         state.mouse_x,
         state.mouse_y,
+        maximum,
         table,
         z_order,
-        |dirty| {
-            queue_dirty(pending_dirty, dirty);
+        |decoration| {
+            queue_dirty(
+                pending_dirty,
+                old_decoration.map_or(decoration, |old| old.union(&decoration)),
+            );
             set_input_focus(input_tid, compositor_tid);
         },
     );
@@ -147,56 +178,5 @@ fn forward_key(buf: &[u8; 512], state: &InputState) {
     let owner = state.pointer.focused_owner();
     if owner != 0 {
         let _ = sys_send(owner, &buf[..INPUT_FRAME_LEN]);
-    }
-}
-
-/// Build a screen-space rect covering the cursor sprite at `(x, y)`.
-#[inline]
-fn cursor_rect(x: i32, y: i32) -> Rect {
-    Rect {
-        x,
-        y,
-        w: CURSOR_W,
-        h: CURSOR_H,
-    }
-}
-
-/// Update the logical cursor position and schedule its repaint.
-///
-/// When `state.hw_cursor` is true, the position is forwarded to the VirtIO GPU
-/// hardware cursor. Otherwise, the old and new software cursor rectangles are
-/// accumulated in `pending_dirty`.
-fn update_cursor(x: i32, y: i32, state: &mut InputState, pending_dirty: &mut Option<Rect>) {
-    let old_rect = cursor_rect(state.mouse_x, state.mouse_y);
-
-    state.mouse_x = x;
-    state.mouse_y = y;
-
-    // One-line probe consumed by the Phase 04 integration test.
-    ostd::io::println(&alloc::format!(
-        "[compositor] cursor at {},{}",
-        state.mouse_x,
-        state.mouse_y
-    ));
-
-    if state.hw_cursor {
-        // Hardware cursor: issue GpuCursor(move) — GPU scans out the cursor at
-        // the new position without a full framebuffer repaint.
-        let _ = sys_gpu_cursor(
-            1,
-            core::ptr::null(),
-            state.mouse_x as u32,
-            state.mouse_y as u32,
-            0,
-            0,
-        );
-    } else {
-        // Software fallback: repaint the cursor area.
-        let new_rect = cursor_rect(state.mouse_x, state.mouse_y);
-        let combined = old_rect.union(&new_rect);
-        *pending_dirty = Some(match pending_dirty.take() {
-            Some(acc) => acc.union(&combined),
-            None => combined,
-        });
     }
 }

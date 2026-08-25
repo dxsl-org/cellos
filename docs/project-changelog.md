@@ -2,6 +2,39 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-25] RV64 compositor window-manager policy
+
+- Interactive `ViSurface`s can set bounded titles, poll typed lifecycle events,
+  apply a `WindowConfigure` through replacement-Grant attachment plus matching
+  acknowledgement, and explicitly answer close requests.
+- The compositor owns clipped frames, titlebars, and minimize/maximize/close
+  controls outside client pixels. Decoration hit testing consumes controls,
+  titlebar drags, and resize edges/corners while retaining content raise,
+  capture, focus, and background exclusion.
+- Managed transitions now cover committed resize, minimize/restore,
+  maximize/restore, and close rejection/acceptance. The lifecycle-aware
+  `window-policy-probe` redraws its replacement Grant only after a successful
+  configure application and deterministically rejects then accepts close.
+- The `window-policy` RV64 QEMU scenario retains the legacy
+  background/capture/keyboard checks and adds QMP tablet plus PPM assertions
+  for frame/control/title/client pixels, drag relocation, resize, visibility,
+  and close transitions.
+
+## [2026-08-25] Historical RV64 focus-decoration baseline
+
+Superseded later that day by the compositor-owned window-manager policy above:
+the former implementation owned only a clipped, opaque-yellow, one-pixel BGRA
+border outside the selected interactive surface and had no title, drag/resize,
+or close-control API.
+- Focus transfer, selected-surface movement, explicit raise, destroy, and
+  owner-exit cleanup dirty the border's previous and current exterior bounds.
+  Destroyed surfaces also release pointer capture and selection without changing
+  keyboard-owner policy.
+- `window-policy` QEMU evidence samples the real scanout: no initial border,
+  yellow border after selecting the back surface, removal at its former
+  location, and a new yellow border around the front surface. The existing
+  pointer-capture and hardware-cursor scenarios still pass.
+
 ## [2026-08-25] RV64 compositor click-to-raise and keyboard-focus policy verified
 
 - `SurfaceRole::{Interactive,Background}` is explicit in the create-surface

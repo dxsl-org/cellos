@@ -65,14 +65,24 @@ Cellos is being shaped around product stages, not only phase numbers:
   Linux 6.12.81 `/bin/sh` BusyBox prompt under QEMU-TCG 10.2.0 at both 1 GiB
   and 2 GiB. Ubuntu 24.04's QEMU-TCG 8.2.2 remains an explicit compatibility
   risk; physical x86 qualification remains hardware-gated.
-- RV64 QEMU desktop has a bounded verified interaction slice: two interactive
-  surfaces can be selected, raised, and keyboard-focused by a click; captured
-  pointer motion/release remains with the selected owner. `SurfaceRole::Background`
-  excludes full-screen console and VM scanout surfaces from hit testing and
-  explicit raise. QMP evidence samples the real scanout and rejects input to
-  the nonselected and background probes. This is implementation evidence only,
-  not a desktop-shell, decoration, drag/resize, close-lifecycle, or G2
-  qualification claim.
+- RV64 QEMU desktop now has a bounded compositor-owned window-policy slice.
+  Interactive surfaces carry bounded titles and receive typed lifecycle events
+  without losing normal forwarded input. The compositor paints clipped
+  frame/title/control decoration outside immutable client coordinates, consumes
+  decoration input, and preserves content click-to-raise, capture, keyboard
+  focus, and background exclusion.
+- A titlebar drag relocates the window. Edge/corner resize, maximize, and
+  restore use a staged `WindowConfigure` transaction: the owner applies a
+  replacement Grant and acknowledges the matching serial before geometry
+  commits. Minimize removes the surface from paint/hit testing until restore;
+  close requests require an explicit owner rejection or acceptance.
+- The `window-policy` QEMU scenario drives real tablet input and samples real
+  scanout for frames, controls, titlebars, client pixels, drag relocation,
+  resize commits, minimize/restore, maximize/restore, and close
+  reject/accept. Its existing background, capture, and keyboard-focus coverage
+  remains; the separate compositor-cursor scenario retains cursor coverage.
+  This remains compositor policy, not a desktop shell: no taskbar, snapping,
+  persistence, or live resize preview is supplied.
 
 ## Immediate Open Gates
 

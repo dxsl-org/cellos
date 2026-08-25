@@ -9,28 +9,29 @@
 //! `GpuFlush` kernel syscall.
 //!
 //! Input routing: on startup the compositor registers as the input service's
-//! focus endpoint.  All `InputEvent` IPC frames are dispatched to
+//! focus endpoint. All `InputEvent` IPC frames are dispatched to
 //! `input_handler`, which forwards keyboard events to the focused surface
 //! owner and updates the cursor position on mouse move.
 
 extern crate alloc;
 
 mod cursor_sprite;
+mod cursor_state;
+mod framebuffer;
 mod input_handler;
+mod message_handler;
 mod pointer_router;
 mod render;
 mod surface_table;
+mod window_decoration;
 mod z_order;
 
-use api::display::{compositor_ops, AttachGrant, DamageNotify, PixelFormat, Rect, SurfaceRole};
-use api::syscall::service;
+use api::display::Rect;
+use framebuffer::ScreenFb;
 use input_handler::{connect_to_input, handle_input_event, InputState};
 use ostd::io::println;
-use ostd::syscall::{
-    sys_get_resolution, sys_get_time, sys_gpu_cursor, sys_grant_slice_with_len,
-    sys_grant_unregister, sys_lookup_service, sys_recv, sys_send, SyscallResult,
-};
-use render::{render_frame, ScreenFb};
+use ostd::syscall::{sys_get_resolution, sys_get_time, sys_gpu_cursor, sys_recv, SyscallResult};
+use render::render_frame;
 use surface_table::SurfaceTable;
 use z_order::ZOrder;
 
@@ -41,7 +42,7 @@ const INPUT_EVENT_OPCODE: u8 = 0x10;
 /// Build a 64×64 BGRA8888 sprite for the VirtIO GPU hardware cursor.
 ///
 /// Stamps the 16×16 software cursor into the top-left corner; all other pixels
-/// are transparent (0x00_00_00_00).  The 64×64 size is fixed by the VirtIO GPU
+/// are transparent (0x00_00_00_00). The 64×64 size is fixed by the VirtIO GPU
 /// spec (`CURSOR_RECT` in virtio-drivers `gpu.rs:145-148`).
 fn build_hw_cursor_sprite() -> [u8; 64 * 64 * 4] {
     let mut buf = [0u8; 64 * 64 * 4];
@@ -60,7 +61,7 @@ fn build_hw_cursor_sprite() -> [u8; 64 * 64 * 4] {
 pub fn main() {
     println("[compositor] Compositor v0.2: software blending, VirtIO GPU, input routing");
 
-    let (w, h) = render::default_screen_size();
+    let (w, h) = framebuffer::default_screen_size();
     let mut fb = ScreenFb::new(w, h);
     let mut table = SurfaceTable::new();
     let mut z_order = ZOrder::new();
@@ -93,10 +94,9 @@ pub fn main() {
     let mut last_res_check_ms: u64 = 0;
 
     loop {
-        // A legacy nine-byte CREATE_SURFACE leaves byte 9 untouched in the
-        // reusable receive buffer; default it before receive so it remains
-        // interactive rather than inheriting a prior message's role.
-        buf[9] = SurfaceRole::Interactive as u8;
+        // The receive syscall only writes the payload; clear its reusable tail so
+        // fixed-frame decoders never inspect bytes from an earlier sender.
+        buf.fill(0);
 
         match sys_recv(0, &mut buf) {
             SyscallResult::Ok(sender) if sender > 0 => {
@@ -104,23 +104,37 @@ pub fn main() {
                 {
                     // On MouseMove, update_cursor sets pending_dirty = union(old, new)
                     // so the frame is repainted at the interval tick.
-                    handle_input_event(&buf, &mut input, &table, &mut z_order, &mut pending_dirty);
-                } else if buf[0] == OWNER_EXITED_OPCODE
-                    && sender == sys_lookup_service(service::SUPERVISOR).unwrap_or(0)
-                {
-                    let dead_tid = usize::from_le_bytes(
-                        buf[1..1 + core::mem::size_of::<usize>()]
-                            .try_into()
-                            .unwrap_or([0; core::mem::size_of::<usize>()]),
+                    handle_input_event(
+                        &buf,
+                        &mut input,
+                        Rect {
+                            x: window_decoration::FRAME,
+                            y: window_decoration::FRAME + window_decoration::TITLE,
+                            w: fb
+                                .width
+                                .saturating_sub((window_decoration::FRAME * 2) as u32),
+                            h: fb.height.saturating_sub(
+                                (window_decoration::FRAME * 2 + window_decoration::TITLE) as u32,
+                            ),
+                        },
+                        &mut table,
+                        &mut z_order,
+                        &mut pending_dirty,
                     );
-                    cleanup_owner(dead_tid, &mut table, &mut z_order, &mut pending_dirty);
                 } else {
-                    handle_message(&buf, sender, &mut table, &mut z_order, &mut pending_dirty);
+                    message_handler::handle_message(
+                        &buf,
+                        sender,
+                        fb.width,
+                        fb.height,
+                        &mut input,
+                        &mut table,
+                        &mut z_order,
+                        &mut pending_dirty,
+                    );
                 }
             }
-            _ => {
-                ostd::task::yield_now();
-            }
+            _ => ostd::task::yield_now(),
         }
 
         // Damage-driven: render when a surface reports damage or cursor/compositor dirty.
@@ -130,6 +144,7 @@ pub fn main() {
                 &mut table,
                 &z_order,
                 pending_dirty.take(),
+                input.selected_cap(),
                 input.mouse_x,
                 input.mouse_y,
             );
@@ -145,268 +160,13 @@ pub fn main() {
                 println("[compositor] resolution changed — rebuilding framebuffer");
                 fb = ScreenFb::new(new_w, new_h);
                 // Repaint entire screen so all surfaces are composited at the new size.
-                let full = api::display::Rect {
+                pending_dirty = Some(Rect {
                     x: 0,
                     y: 0,
                     w: new_w,
                     h: new_h,
-                };
-                pending_dirty = Some(full);
-            }
-        }
-    }
-}
-
-const OWNER_EXITED_OPCODE: u8 = 0xE2;
-
-fn cleanup_owner(
-    dead_tid: usize,
-    table: &mut SurfaceTable,
-    z_order: &mut ZOrder,
-    pending_dirty: &mut Option<Rect>,
-) {
-    for cap in table.caps_owned_by(dead_tid) {
-        let Some(surface) = table.get(cap) else {
-            continue;
-        };
-        let freed_rect = surface.screen_rect();
-        let grant_id = surface.grant_id();
-        z_order.remove(cap);
-        let _ = table.remove(cap);
-        if let Some(reg_id) = grant_id {
-            let _ = sys_grant_unregister(reg_id);
-        }
-        *pending_dirty = Some(match pending_dirty.take() {
-            Some(acc) => acc.union(&freed_rect),
-            None => freed_rect,
-        });
-    }
-}
-
-/// Dispatch one IPC message from a consumer cell.
-fn handle_message(
-    buf: &[u8; 512],
-    sender: usize,
-    table: &mut SurfaceTable,
-    z_order: &mut ZOrder,
-    pending_dirty: &mut Option<api::display::Rect>,
-) {
-    if buf.is_empty() {
-        return;
-    }
-    #[allow(deprecated)] // WRITE_PIXELS kept for legacy clients; new code uses ATTACH_GRANT
-    match buf[0] {
-        compositor_ops::CREATE_SURFACE => {
-            if buf.len() < 10 {
-                return;
-            }
-            let sw = u32::from_le_bytes([buf[1], buf[2], buf[3], buf[4]]);
-            let sh = u32::from_le_bytes([buf[5], buf[6], buf[7], buf[8]]);
-            let role = SurfaceRole::from_u8(buf[9]);
-            match table.create(0, 0, sw, sh, sender, role) {
-                Ok(cap) => {
-                    z_order.push(cap);
-                    sys_send(sender, &cap.to_le_bytes());
-                }
-                Err(_) => {
-                    sys_send(sender, &0u64.to_le_bytes());
-                }
-            }
-        }
-        compositor_ops::WRITE_PIXELS => {
-            if buf.len() < 25 {
-                return;
-            }
-            let cap = u64::from_le_bytes([
-                buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7], buf[8],
-            ]);
-            let x = i32::from_le_bytes([buf[9], buf[10], buf[11], buf[12]]);
-            let y = i32::from_le_bytes([buf[13], buf[14], buf[15], buf[16]]);
-            let pw = u32::from_le_bytes([buf[17], buf[18], buf[19], buf[20]]);
-            let ph = u32::from_le_bytes([buf[21], buf[22], buf[23], buf[24]]);
-            if let Some(s) = table.get_mut(cap).filter(|s| s.owner == sender) {
-                s.write_pixels(x, y, pw, ph, &buf[25..]);
-            }
-        }
-        compositor_ops::DAMAGE_SURFACE => {
-            if buf.len() < 25 {
-                return;
-            }
-            let cap = u64::from_le_bytes([
-                buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7], buf[8],
-            ]);
-            let x = i32::from_le_bytes([buf[9], buf[10], buf[11], buf[12]]);
-            let y = i32::from_le_bytes([buf[13], buf[14], buf[15], buf[16]]);
-            let dw = u32::from_le_bytes([buf[17], buf[18], buf[19], buf[20]]);
-            let dh = u32::from_le_bytes([buf[21], buf[22], buf[23], buf[24]]);
-            if let Some(s) = table.get_mut(cap).filter(|s| s.owner == sender) {
-                use api::display::Rect;
-                let new_dmg = Rect { x, y, w: dw, h: dh };
-                s.damage = Some(match s.damage {
-                    Some(d) => d.union(&new_dmg),
-                    None => new_dmg,
                 });
             }
         }
-        compositor_ops::MOVE_SURFACE => {
-            if buf.len() < 17 {
-                return;
-            }
-            let cap = u64::from_le_bytes([
-                buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7], buf[8],
-            ]);
-            let x = i32::from_le_bytes([buf[9], buf[10], buf[11], buf[12]]);
-            let y = i32::from_le_bytes([buf[13], buf[14], buf[15], buf[16]]);
-            if let Some(s) = table.get_mut(cap).filter(|s| s.owner == sender) {
-                s.x = x;
-                s.y = y;
-                let (sw, sh) = (s.w, s.h);
-                s.damage = Some(api::display::Rect {
-                    x: 0,
-                    y: 0,
-                    w: sw,
-                    h: sh,
-                });
-            }
-        }
-        compositor_ops::RAISE_SURFACE => {
-            if buf.len() < 9 {
-                return;
-            }
-            let cap = u64::from_le_bytes([
-                buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7], buf[8],
-            ]);
-            if !table
-                .get(cap)
-                .is_some_and(|s| s.owner == sender && s.role == SurfaceRole::Interactive)
-            {
-                return;
-            }
-            z_order.raise(cap);
-            // Mark full-surface damage so the new z-order is visible on the next render.
-            if let Some(s) = table.get_mut(cap) {
-                let (sw, sh) = (s.w, s.h);
-                let full = api::display::Rect {
-                    x: 0,
-                    y: 0,
-                    w: sw,
-                    h: sh,
-                };
-                s.damage = Some(match s.damage {
-                    Some(d) => d.union(&full),
-                    None => full,
-                });
-            }
-        }
-        compositor_ops::DESTROY_SURFACE => {
-            if buf.len() < 9 {
-                return;
-            }
-            let cap = u64::from_le_bytes([
-                buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7], buf[8],
-            ]);
-            if !table.get(cap).is_some_and(|s| s.owner == sender) {
-                sys_send(sender, b"\x01");
-                return;
-            }
-            // Save the screen rect before removal so we can repaint the uncovered area.
-            let freed_rect = table.get(cap).map(|s| s.screen_rect());
-            z_order.remove(cap);
-            let _ = table.remove(cap);
-            sys_send(sender, b"\x00");
-            // Queue the freed area as compositor-owned dirty so surfaces beneath
-            // are re-blended even if they haven't sent a DamageNotify.
-            if let Some(r) = freed_rect {
-                *pending_dirty = Some(match pending_dirty.take() {
-                    Some(acc) => acc.union(&r),
-                    None => r,
-                });
-            }
-        }
-        compositor_ops::ATTACH_GRANT => {
-            // Wire format: AttachGrant (24 bytes).
-            // App must have called sys_grant_share(reg_id, comp_tid, 0 /*ReadOnly*/) first.
-            if buf.len() < 24 {
-                return;
-            }
-            let Ok(b24) = <&[u8; 24]>::try_from(&buf[..24]) else {
-                return;
-            };
-            let ag = AttachGrant::decode(b24);
-            let cap = ag.cap as u64;
-            // Ownership check: only the surface creator may attach a Grant.
-            if let Some(s) = table.get_mut(cap) {
-                if s.owner != sender {
-                    sys_send(sender, b"\x00");
-                    return;
-                }
-                match sys_grant_slice_with_len(ag.reg_id as usize) {
-                    Some((ptr, grant_len))
-                        if (ag.width as usize)
-                            .checked_mul(ag.height as usize)
-                            .and_then(|pixels| {
-                                pixels.checked_mul(PixelFormat::from_u8(ag.fmt).bpp() as usize)
-                            })
-                            .is_some_and(|required| required <= grant_len) =>
-                    {
-                        s.attach_grant(
-                            ptr as *const u8,
-                            ag.reg_id as usize,
-                            ag.width,
-                            ag.height,
-                            PixelFormat::from_u8(ag.fmt),
-                        );
-                        sys_send(sender, b"\x01"); // OK
-                    }
-                    _ => {
-                        sys_send(sender, b"\x00"); // bad grant, permissions, or dimensions
-                    }
-                }
-            } else {
-                sys_send(sender, b"\x00");
-            }
-        }
-        compositor_ops::DAMAGE_NOTIFY => {
-            // Wire format: DamageNotify (24 bytes).  Fire-and-forget — no reply.
-            if buf.len() < 24 {
-                return;
-            }
-            let Ok(b24) = <&[u8; 24]>::try_from(&buf[..24]) else {
-                return;
-            };
-            let dn = DamageNotify::decode(b24);
-            let cap = dn.cap as u64;
-            if let Some(s) = table.get_mut(cap) {
-                if s.owner == sender {
-                    s.damage = Some(match s.damage {
-                        Some(d) => d.union(&dn.rect),
-                        None => dn.rect,
-                    });
-                }
-            }
-        }
-        compositor_ops::DETACH_GRANT => {
-            // Payload: [opcode: u8, cap: u64 LE] — app about to free the Grant.
-            if buf.len() < 9 {
-                return;
-            }
-            let cap = u64::from_le_bytes([
-                buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7], buf[8],
-            ]);
-            if let Some(s) = table.get_mut(cap) {
-                if s.owner == sender {
-                    s.detach_grant();
-                }
-            }
-            sys_send(sender, b"\x01");
-        }
-        compositor_ops::GET_SCREEN_SIZE => {
-            let (sw, sh) = render::default_screen_size();
-            let mut reply = [0u8; 8];
-            reply[0..4].copy_from_slice(&sw.to_le_bytes());
-            reply[4..8].copy_from_slice(&sh.to_le_bytes());
-            sys_send(sender, &reply);
-        }
-        _ => {}
     }
 }

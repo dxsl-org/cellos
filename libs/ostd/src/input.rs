@@ -110,17 +110,26 @@ pub fn drain_pending_input_events() {
 ///
 /// Input-service events originate from direct keyboard focus. Compositor events
 /// originate from the selected interactive surface after trusted hit-testing,
-/// so they may include both pointer input and forwarded keyboard input. Messages
+/// so they may include both pointer input and forwarded keyboard input.
+/// Lifecycle frames from the compositor are retained for
+/// [`crate::display::poll_surface_events`] instead of being discarded. Messages
 /// from all other senders remain queued for their owning protocol.
 pub fn poll_events(max: usize) -> Vec<InputEvent> {
-    let Some(input_tid) = sys_lookup_service(service::INPUT) else {
-        return Vec::new();
-    };
+    let input_tid = sys_lookup_service(service::INPUT);
     let compositor_tid = sys_lookup_service(service::COMPOSITOR);
-    let mut events = Vec::with_capacity(max.min(16));
+    if input_tid.is_none() && compositor_tid.is_none() {
+        return Vec::new();
+    }
 
+    let mut events = Vec::with_capacity(max.min(16));
     for _ in 0..max {
-        let (input_received, input_event) = try_receive_event(input_tid);
+        if let Some(event) = crate::display::take_forwarded_input_event() {
+            events.push(event);
+            continue;
+        }
+
+        let (input_received, input_event) =
+            input_tid.map(try_receive_event).unwrap_or((false, None));
         if let Some(event) = input_event {
             events.push(event);
         }
@@ -128,11 +137,11 @@ pub fn poll_events(max: usize) -> Vec<InputEvent> {
             break;
         }
 
-        let (compositor_received, compositor_event) = compositor_tid
-            .filter(|tid| *tid != input_tid)
-            .map(try_receive_event)
-            .unwrap_or((false, None));
-        if let Some(event) = compositor_event {
+        let compositor_received = compositor_tid
+            .filter(|tid| Some(*tid) != input_tid)
+            .map(crate::display::drain_compositor_once)
+            .unwrap_or(false);
+        if let Some(event) = crate::display::take_forwarded_input_event() {
             events.push(event);
         }
         if events.len() == max || (!input_received && !compositor_received) {

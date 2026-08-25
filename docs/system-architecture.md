@@ -3,7 +3,7 @@
 **Audience**: Developers new to Cellos
 **Level**: High-level (conceptual + key components)
 **Version**: 0.2.1-dev (Mycelium Era)
-**Last Updated**: 2026-08-25 (RV64 compositor click-to-raise, pointer capture, background-surface exclusion, and compositor-mediated keyboard focus have QEMU evidence; desktop-shell and general window-management policy remain out of scope.)
+**Last Updated**: 2026-08-25 (RV64 compositor titlebar, frame/control hit testing, drag/resize, staged configure, close response, and managed visibility policy are implemented; the QEMU `window-policy` scenario is the executable evidence.)
 
 > **Status refresh 2026-08-21**: [Spec 23 Native SDK contract](specs/23-native-sdk-contract.md)
 > is ratified as the normative contract for the single Native SDK family. It
@@ -170,21 +170,31 @@ Routing any new idea: (1) uses SAS/LBI → **Tier 1 native**; (2) trusted librar
 └─────────────────────────────────────────┘
 ```
 
-### RV64 Desktop Input and Scanout
+### RV64 Desktop Input, Decoration, and Scanout
 
 The input service owns device translation and sends pointer frames only to the
-compositor. The compositor owns cursor state, surface hit-testing, left-button
-capture, z-order, and screen-to-surface coordinate translation. An interactive
-left press selects its owner, raises the surface, reasserts compositor keyboard
-focus without reciprocal blocking IPC, and routes later keys only to that owner.
-`SurfaceRole::Background` surfaces remain visible but cannot hit-test or raise;
-the full-screen console and VMM scanout use this role. Application Cells consume
-direct input-service frames and trusted compositor frames through `ostd::input`,
-then render into Grant-backed `ViSurface`s. `GpuFlush` and `GpuCursor` cross the
-kernel-to-GPU-driver boundary inside the `AppContext` message envelope; the GPU
-Cell owns the VirtIO framebuffer and scanout. This is a bounded surface policy,
-not a compositor-managed window manager: titlebars, drag/resize policy, shell,
-taskbar, and close lifecycle remain application or future desktop policy.
+compositor. The compositor owns cursor state, surface hit-testing, z-order,
+keyboard focus, and mode-tagged left-button capture. Interactive content clicks
+select, raise, and forward surface-local input; compositor-owned titlebars,
+frame edges/corners, and controls consume their own input. A titlebar drag
+relocates its content rectangle, while an edge/corner drag proposes a bounded
+`WindowConfigure`.
+
+Each interactive `ViSurface` can set a bounded title and polls typed
+`SurfaceEvent::{Configure,CloseRequest,StateChanged}` frames alongside normal
+forwarded input. `apply_configure` allocates and attaches a replacement Grant,
+acknowledges the matching serial, swaps local dimensions only on success, and
+lets the compositor commit the staged content rectangle atomically. The
+compositor owns all frame/title/control pixels outside client coordinates and
+reblends old and new decoration bounds.
+
+Minimized surfaces are excluded from paint and hit testing until restored.
+Maximize and restore use the same configure transaction. A close control first
+requests an owner decision; rejection restores visibility, while acceptance
+removes the surface when the owner destroys it. `SurfaceRole::Background`
+surfaces remain visible but cannot hit-test, raise, or acquire decoration
+controls. There is intentionally no taskbar, snapping, or live stretched
+resize preview.
 
 ---
 

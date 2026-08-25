@@ -65,7 +65,14 @@ byte[1..] = opcode-specific payload
 | `0x04` | `MOVE_SURFACE` | `cap: u64, x: i32, y: i32` | — |
 | `0x05` | `RAISE_SURFACE` | `cap: u64` | — |
 | `0x06` | `DESTROY_SURFACE` | `cap: u64` | `0x00` ok |
+| `0x0A` | `SET_TITLE` | bounded UTF-8 title, `cap: u32` | — |
+| `0x0B` | `CONFIGURE_ACK` | `cap: u32, serial: u32` | — |
+| `0x0C` | `CLOSE_RESPONSE` | `cap: u32, serial: u32, accept: u8` | — |
+| `0x0D` | `MINIMIZE` | `cap: u32` | — |
+| `0x0E` | `MAXIMIZE` | `cap: u32` | — |
+| `0x0F` | `RESTORE` | `cap: u32` | — |
 | `0x10` | `GET_SCREEN_SIZE` | — | `w: u32, h: u32` |
+| `0x11` | `DETACH_REPLACED_GRANT` | `cap: u32, old_reg_id: u64` | success/failure |
 | `0xFE` | `DUMP_FB` | — | raw BGRA pixels (debug only) |
 
 ### Notes
@@ -92,6 +99,21 @@ CREATE_SURFACE(w, h) → CapId N
        │
        └─ DESTROY_SURFACE(N)                 ← CapId freed
 ```
+
+### Window-policy lifecycle
+
+Interactive `ViSurface`s use `set_title`, `minimize`, `maximize`, `restore`,
+and `respond_close` for owner-authorized lifecycle requests. Owners consume
+trusted `SurfaceEvent::{Configure,CloseRequest,StateChanged}` frames through
+`poll_surface_events` without consuming normal forwarded input frames.
+A `WindowConfigure` is a proposal, not a live resize. Call
+`ViSurface::apply_configure(configure)` to allocate/attach the replacement
+Grant and acknowledge its matching serial; only that successful transaction
+swaps the client's local pixel buffer and allows the compositor to commit the
+new content geometry. It then detaches the identified old Grant, never the new
+active Grant. Frame, titlebar, and controls remain compositor-owned outside the
+client coordinate system. Background surfaces remain visible but cannot
+participate in this policy.
 
 ---
 

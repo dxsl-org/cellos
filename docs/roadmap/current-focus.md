@@ -58,14 +58,22 @@ without treating QEMU or compile-only checks as board qualification.
   unregistration, and SMP UART timing were resolved. Production admission remains
   disabled, SAS remains default, and no Manifest v3 or ledger qualification claims
   are made.
-- RV64 QEMU desktop has a verified bounded window-policy slice. A click on an
-  exposed interactive surface raises it, keeps its captured motion/release, and
-  sends subsequent keyboard frames only to that selected owner through the
-  compositor. `SurfaceRole::Background` prevents `fb-console` and VM scanout
-  surfaces from hit-testing or explicit raising. QMP screen/input evidence
-  rejects input delivered to the front or background probes. This is not a
-  desktop shell, decoration, drag/resize, close lifecycle, or G2 qualification
-  claim.
+- RV64 QEMU desktop has an implemented bounded window-policy scenario.
+  Interactive surfaces set bounded titles and poll typed lifecycle events beside
+  their captured pointer and selected-owner keyboard input. The compositor owns
+  clipped frame/title/control decoration, titlebar drag, edge/corner resize,
+  minimize/maximize/restore controls, and explicit close negotiation; client
+  content coordinates remain unchanged.
+- Resize, maximize, and restore commit only after the owner applies a
+  replacement Grant and acknowledges the matching configure serial. Minimized
+  surfaces are not paintable or hit-testable until restored; an accepted close
+  is removed when its owner destroys the surface. `SurfaceRole::Background`
+  remains visible but cannot hit-test, raise, or use decoration controls.
+  The `window-policy` scenario retains QMP/PPM background, capture, and
+  keyboard-focus coverage while adding lifecycle paths; the separate
+  compositor-cursor scenario retains cursor coverage. This is still not a
+  desktop shell or G2 qualification: taskbar, snapping, persistence, and live
+  resize preview remain absent.
 
 ## Current Documentation Corrections
 
