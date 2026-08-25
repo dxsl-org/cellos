@@ -10,6 +10,8 @@ pub mod completion_wait;
 pub(crate) mod copy_glue;
 pub mod dir_inherit;
 #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+pub(crate) mod domain_grant;
+#[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
 pub(crate) mod domain_switch;
 #[cfg(all(
     feature = "native-domains",
@@ -34,14 +36,14 @@ pub use launch::{
     publish_prepared, CallerLaunchAuthority, LaunchRoutes, StagedMeasurement, TaskLaunchState,
 };
 pub mod ipc_wire;
-#[cfg(test)]
-mod ipc_wire_tests;
 #[cfg(all(
     feature = "native-domains",
     feature = "test-hooks",
     target_arch = "riscv64"
 ))]
 pub mod ipc_wire_selftest;
+#[cfg(test)]
+mod ipc_wire_tests;
 pub use tcb::Task;
 #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
 pub mod context_handoff_selftest;
@@ -56,9 +58,6 @@ pub mod scheduler;
 pub mod stack;
 #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
 pub mod stack_overflow_probe;
-#[cfg(feature = "test-hooks")]
-pub mod user_hello;
-pub mod user_out;
 #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
 pub(crate) mod user_copy;
 #[cfg(all(
@@ -67,6 +66,9 @@ pub(crate) mod user_copy;
     target_arch = "riscv64"
 ))]
 pub(crate) mod user_copy_tests;
+#[cfg(feature = "test-hooks")]
+pub mod user_hello;
+pub mod user_out;
 #[cfg(feature = "test-hooks")]
 pub mod vfs_lifecycle_selftest;
 pub mod waker;
@@ -312,19 +314,26 @@ const _: crate::hal::TlbShootdownTestFault = vi_tlb_shootdown_test_fault;
 
 #[cfg(target_arch = "riscv64")]
 #[no_mangle]
-pub extern "Rust" fn vi_user_copy_guard_fault(
-    frame: &mut crate::hal::arch::ViTrapFrame,
-) -> bool {
+pub extern "Rust" fn vi_user_copy_guard_fault(frame: &mut crate::hal::arch::ViTrapFrame) -> bool {
     #[cfg(feature = "native-domains")]
     {
         let hart = unsafe { hart_local::current_hart() };
-        if hart.user_copy_guard_active.load(core::sync::atomic::Ordering::Acquire) != 0 {
+        if hart
+            .user_copy_guard_active
+            .load(core::sync::atomic::Ordering::Acquire)
+            != 0
+        {
             let fault_addr = frame.stval;
-            let lo = hart.user_copy_guard_start.load(core::sync::atomic::Ordering::Acquire);
-            let hi = hart.user_copy_guard_end.load(core::sync::atomic::Ordering::Acquire);
+            let lo = hart
+                .user_copy_guard_start
+                .load(core::sync::atomic::Ordering::Acquire);
+            let hi = hart
+                .user_copy_guard_end
+                .load(core::sync::atomic::Ordering::Acquire);
             if fault_addr >= lo && fault_addr < hi {
-                let resume_pc =
-                    hart.user_copy_guard_resume_pc.load(core::sync::atomic::Ordering::Acquire);
+                let resume_pc = hart
+                    .user_copy_guard_resume_pc
+                    .load(core::sync::atomic::Ordering::Acquire);
                 if resume_pc != 0 {
                     frame.sepc = resume_pc;
                     return true;
@@ -1632,7 +1641,10 @@ pub fn ipc_send(
         if paused_target_rejects(sched, caller_id, target_id) {
             return Err(IpcSendError::Backpressure);
         }
-        let caller = sched.tasks.get(&caller_id).ok_or(IpcSendError::TargetGone)?;
+        let caller = sched
+            .tasks
+            .get(&caller_id)
+            .ok_or(IpcSendError::TargetGone)?;
         let caller_view = copy_glue::TaskCopyView::of(caller);
         let (sender_cell_id, sender_generation) = sender_context(sched, caller_id);
         let header = ipc_wire::IpcWireHeader {
@@ -1659,7 +1671,10 @@ pub fn ipc_send(
         return Err(IpcSendError::Backpressure);
     }
 
-    let target = sched.tasks.get(&target_id).ok_or(IpcSendError::TargetGone)?;
+    let target = sched
+        .tasks
+        .get(&target_id)
+        .ok_or(IpcSendError::TargetGone)?;
     let target_ready =
         matches!(target.state, TaskState::Recv { mask, .. } if mask == 0 || mask == caller_id);
     let target_frozen = matches!(target.state, TaskState::Frozen { .. });
@@ -1816,17 +1831,21 @@ pub fn ipc_recv(
     let mut guard = SCHEDULER.lock();
     let sched = guard.as_mut().ok_or(())?;
     if let Some(receiver_task) = sched.tasks.get_mut(&caller_id) {
-        let pos = receiver_task
-            .pending_msgs
-            .iter()
-            .position(|message| {
-                message.sender_tid == sender_id
-                    && message.wire.as_ref().is_some_and(|w| w.header.delivery_id == header.delivery_id)
-            });
+        let pos = receiver_task.pending_msgs.iter().position(|message| {
+            message.sender_tid == sender_id
+                && message
+                    .wire
+                    .as_ref()
+                    .is_some_and(|w| w.header.delivery_id == header.delivery_id)
+        });
         if let Some(index) = pos {
             receiver_task.pending_msgs.remove(index);
         }
-        receiver_task.set_received_caller_context(sender_id, header.sender_cell_id, header.sender_generation);
+        receiver_task.set_received_caller_context(
+            sender_id,
+            header.sender_cell_id,
+            header.sender_generation,
+        );
     }
     wake_sender_token(sched, sender_id, caller_id, header);
     Ok(sender_id)
@@ -1873,17 +1892,21 @@ pub fn ipc_try_recv(
     let mut guard = SCHEDULER.lock();
     let sched = guard.as_mut().ok_or(())?;
     if let Some(receiver_task) = sched.tasks.get_mut(&caller_id) {
-        let pos = receiver_task
-            .pending_msgs
-            .iter()
-            .position(|message| {
-                message.sender_tid == sender_id
-                    && message.wire.as_ref().is_some_and(|w| w.header.delivery_id == header.delivery_id)
-            });
+        let pos = receiver_task.pending_msgs.iter().position(|message| {
+            message.sender_tid == sender_id
+                && message
+                    .wire
+                    .as_ref()
+                    .is_some_and(|w| w.header.delivery_id == header.delivery_id)
+        });
         if let Some(index) = pos {
             receiver_task.pending_msgs.remove(index);
         }
-        receiver_task.set_received_caller_context(sender_id, header.sender_cell_id, header.sender_generation);
+        receiver_task.set_received_caller_context(
+            sender_id,
+            header.sender_cell_id,
+            header.sender_generation,
+        );
     }
     wake_sender_token(sched, sender_id, caller_id, header);
     Ok(sender_id)
@@ -1981,7 +2004,7 @@ pub fn ipc_try_send(
         .get(&target_id)
         .map(|t| matches!(t.state, TaskState::Recv { mask, .. } if mask == 0 || mask == caller_id))
         .unwrap_or(false);
-    if !target_ready && !is_input_mailbox_sender {
+    if !target_ready && !is_trusted_input_sender(caller_id) {
         return Err(());
     }
     let (sender_cell_id, sender_generation) = sender_context(sched, caller_id);

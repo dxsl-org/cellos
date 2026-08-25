@@ -553,6 +553,8 @@ impl AddressSpace {
                 table_frames.remove(index);
             }
         });
+        drop(table_frames);
+        crate::memory::tlb_shootdown::flush_page(virtual_address);
         let _ = entry;
         Ok(())
     }

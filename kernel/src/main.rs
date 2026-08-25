@@ -860,6 +860,8 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     {
         task::user_copy_tests::run_primary();
         task::ipc_wire_selftest::run_primary(task::smp::online_hart_count());
+        crate::loader::domain_admission::run_selftest();
+        task::domain_grant::run_selftest();
     }
 
     // 8. Spawn Embedded Init
@@ -871,7 +873,6 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     ))]
     {
         log_info("Spawning Embedded Init...");
-
 
         // Power-on self-test of the Ed25519 verify primitive (RFC 8032 TEST 1 +
         // tamper-negative) before it is trusted to authenticate the signed

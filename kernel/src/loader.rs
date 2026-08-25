@@ -15,6 +15,9 @@ pub(crate) mod aligned_elf;
 pub mod atomic_publication_tests;
 pub mod boot_ceiling;
 pub mod disk_layout;
+/// Internal, default-off RV64 domain-admission policy. It has no loader route.
+#[cfg(feature = "native-domains")]
+pub(crate) mod domain_admission;
 pub mod early;
 pub mod elf;
 pub(crate) mod elf_section;
@@ -25,8 +28,8 @@ mod manifest_section;
 mod manifest_section_tests;
 /// Admission of caller-supplied in-memory ELF images (`Syscall::SpawnFromMem`).
 pub mod mem_spawn_gate;
-mod reloc_target;
 pub mod reloc;
+mod reloc_target;
 mod spawn_request;
 pub use spawn_request::SpawnRequest;
 pub mod va_alloc;

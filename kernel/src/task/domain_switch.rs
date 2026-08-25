@@ -22,8 +22,16 @@ impl DomainRef {
         }
     }
 
-    fn tuple(&self) -> (u64, u64) {
+    pub(crate) fn tuple(&self) -> (u64, u64) {
         (self.0.identity().raw(), self.0.generation())
+    }
+
+    pub(crate) fn from_address_space(space: &Arc<AddressSpace>) -> Self {
+        Self(Arc::clone(space))
+    }
+
+    pub(crate) fn address_space(&self) -> &Arc<AddressSpace> {
+        &self.0
     }
 }
 
