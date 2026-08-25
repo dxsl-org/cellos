@@ -5,18 +5,18 @@
 #
 # Requires:
 #   - python3 with `cryptography` package installed
-#   - riscv-none-elf-objcopy (or $OBJCOPY override) in PATH
+#   - riscv64-unknown-elf-objcopy (or $OBJCOPY override) in PATH
 #   - A pre-built app-shell or app-init ELF in the release dir
 #
 # Usage:
 #   bash scripts/test-cell-signing.sh
-#   OBJCOPY=riscv-none-elf-objcopy bash scripts/test-cell-signing.sh
+#   OBJCOPY=riscv64-unknown-elf-objcopy bash scripts/test-cell-signing.sh
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 SIGN="$SCRIPT_DIR/sign-cell.py"
-OBJCOPY="${OBJCOPY:-riscv-none-elf-objcopy}"
+OBJCOPY="${OBJCOPY:-riscv64-unknown-elf-objcopy}"
 
 REL_DIR="$REPO_ROOT/target/riscv64gc-unknown-none-elf/release"
 # Prefer app-shell; fall back to app-init; skip if neither is built.
@@ -37,8 +37,9 @@ fi
 TMP_DIR="$REPO_ROOT/target"
 TMP_SIGNED="$TMP_DIR/test-signing-signed.elf"
 TMP_TAMPERED="$TMP_DIR/test-signing-tampered.elf"
+TMP_METADATA_TAMPERED="$TMP_DIR/test-signing-metadata-tampered.elf"
 
-cleanup() { rm -f "$TMP_SIGNED" "$TMP_TAMPERED"; }
+cleanup() { rm -f "$TMP_SIGNED" "$TMP_TAMPERED" "$TMP_METADATA_TAMPERED"; }
 trap cleanup EXIT
 
 echo "--- test-cell-signing ---"
@@ -115,6 +116,31 @@ if OBJCOPY="$OBJCOPY" python3 "$SIGN" --verify --in "$TMP_TAMPERED" 2>/dev/null;
     exit 1
 fi
 echo "PASS: verify (tampered cell correctly rejected)"
+
+# ── Step 4: Section metadata is part of the signed envelope ──────────────────
+cp "$TMP_SIGNED" "$TMP_METADATA_TAMPERED"
+python3 - "$TMP_METADATA_TAMPERED" <<'PYEOF'
+import struct
+import sys
+
+with open(sys.argv[1], "r+b") as f:
+    data = bytearray(f.read())
+if data[:5] != b"\x7fELF\x02":
+    raise SystemExit("ERROR: expected ELF64")
+
+# e_flags is load-affecting ELF header metadata but does not move the section
+# table, so this proves the verifier checks metadata rather than merely failing
+# to parse a deliberately corrupted file.
+flags = struct.unpack_from("<I", data, 48)[0]
+struct.pack_into("<I", data, 48, flags ^ 1)
+with open(sys.argv[1], "wb") as f:
+    f.write(data)
+PYEOF
+if OBJCOPY="$OBJCOPY" python3 "$SIGN" --verify --in "$TMP_METADATA_TAMPERED" 2>/dev/null; then
+    echo "FAIL: modified ELF metadata should NOT verify"
+    exit 1
+fi
+echo "PASS: verify (metadata correctly rejected)"
 
 echo
 echo "--- test-cell-signing: ALL PASS ---"
