@@ -14,6 +14,9 @@ pub mod lexer;
 pub mod parser;
 pub mod token;
 
+#[path = "widget-properties.rs"]
+mod widget_properties;
+
 /// One-shot: tokenize + parse a `.vi` source string → AST.
 pub fn compile_str(src: &str) -> Result<ast::ViFile, error::ParseError> {
     let tokens = lexer::tokenize(src)?;

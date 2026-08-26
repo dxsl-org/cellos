@@ -20,6 +20,7 @@ use crate::eval::{
     compile_expr, eval_binding, eval_callback, eval_property, AugOp, ExprCtx, InterpolPart,
     TypedExpr,
 };
+use crate::widget_properties::supported_properties;
 use std::prelude::v1::*;
 
 // ─── Element → Widget mapping ────────────────────────────────────────────────
@@ -97,22 +98,41 @@ fn widget_ctor_style(rust_type: &str) -> CtorStyle {
     }
 }
 
-/// Emit a builder-method chain call for a known widget property.
+/// Emit a builder-method chain call for a validated widget property.
 ///
-/// Returns `Some(".method(expr)")` for known properties that map to a builder
-/// method, `None` for properties consumed by the constructor or unknown ones.
-/// Unknown properties are silently skipped (a future P10 pass will warn).
-fn emit_builder_call(prop: &str, expr: &str) -> Option<String> {
-    match prop {
-        // These are consumed by the constructor — not builder calls.
-        "text" | "value" | "items" | "checked" => None,
-        // Known builder methods.
-        "color" => Some(format!(".color({})", expr)),
-        "item_height" => Some(format!(".item_height({}f32)", expr)),
-        // padding / spacing handled by layout containers directly.
-        "padding" | "spacing" => None,
-        // Unknown property — silently skip (no builder method known).
+/// Validation happens before dispatch, so this helper only maps methods that
+/// belong to the selected widget and cannot leak across widget types.
+fn emit_builder_call(widget: &str, binding: &Binding) -> Option<String> {
+    match (widget, binding.property.as_str()) {
+        ("ProgressBar", "color") => Some(format!(
+            ".color({})",
+            color_binding_to_rust(&binding.value, widget)
+        )),
+        ("ListView", "item_height") => Some(format!(
+            ".item_height({})",
+            f32_binding_to_rust(&binding.value, "item_height", widget)
+        )),
         _ => None,
+    }
+}
+
+fn color_binding_to_rust(expr: &Expr, widget: &str) -> String {
+    match expr {
+        Expr::Raw(raw) => color_typed_to_rust(&eval_binding(&raw.text, "color", widget)),
+        other => compile_expr(other, ExprCtx::BuildFn),
+    }
+}
+
+fn f32_binding_to_rust(expr: &Expr, property: &str, widget: &str) -> String {
+    match expr {
+        Expr::Literal(crate::ast::Literal::Int(value)) => format!("{}_f32", value),
+        Expr::Literal(crate::ast::Literal::Float(value)) => format!("{}_f32", value),
+        Expr::Raw(raw) => match eval_binding(&raw.text, property, widget) {
+            TypedExpr::IntLit(value) => format!("{}_f32", value),
+            TypedExpr::LengthLit(value) => format!("{}f32", value),
+            other => typed_expr_raw(&other),
+        },
+        other => compile_expr(other, ExprCtx::BuildFn),
     }
 }
 
@@ -472,6 +492,17 @@ impl CodeGen {
         let mut stmts: Vec<String> = Vec::new();
         let mut subs: Vec<String> = Vec::new();
 
+        if let Some(properties) = supported_properties(&elem.name) {
+            for binding in &elem.bindings {
+                if !properties.contains(&binding.property.as_str()) {
+                    stmts.push(format!(
+                        "        compile_error!(\"vi-compiler: unknown property '{}' on widget '{}' at line {}\");",
+                        binding.property, elem.name, binding.span.line
+                    ));
+                }
+            }
+        }
+
         match elem.name.as_str() {
             "VerticalLayout" | "VBox" | "Column" | "HorizontalLayout" | "HBox" | "Row" => {
                 let is_vertical =
@@ -719,8 +750,7 @@ impl CodeGen {
                     if b.property == signal_prop {
                         continue;
                     }
-                    let expr_str = expr_as_raw_text(&b.value);
-                    if let Some(chain) = emit_builder_call(&b.property, &expr_str) {
+                    if let Some(chain) = emit_builder_call(rust_ty, b) {
                         init.push_str(&chain);
                     }
                 }
@@ -789,8 +819,7 @@ impl CodeGen {
                     if b.property == "items" {
                         continue;
                     }
-                    let expr_str = expr_as_raw_text(&b.value);
-                    if let Some(chain) = emit_builder_call(&b.property, &expr_str) {
+                    if let Some(chain) = emit_builder_call("ListView", b) {
                         init.push_str(&chain);
                     }
                 }
