@@ -215,10 +215,10 @@ pub enum ViSyscall {
     /// supervisor can wait-any across many children with a single recv loop.
     /// Requires `SpawnCap`. ABI: a0 = watched_tid → 0 on success, usize::MAX on error.
     NotifyOnExit = 204,
-    /// Register `tid` as the current provider of well-known `service_id`. SpawnCap-gated:
-    /// the supervisor owns the service namespace (prevents a cell from hijacking, say, the
-    /// VFS endpoint). On respawn the supervisor re-registers the new tid, so clients
-    /// reconnect transparently. ABI: a0 = service_id (u16), a1 = tid → 0 / usize::MAX.
+    /// Register `tid` as the current provider of well-known `service_id`. SpawnCap
+    /// owns the namespace. Narrow kernel-only exceptions may authorize one fixed
+    /// service ID and `tid=0` self-registration; they grant no general registration
+    /// authority. ABI: a0 = service_id (u16), a1 = tid → 0 / usize::MAX.
     RegisterService = 205,
     /// Resolve a well-known `service_id` to its current provider tid. Open to all cells so
     /// any client can reconnect after a service restart. ABI: a0 = service_id (u16) →
@@ -759,8 +759,9 @@ impl ViSyscall {
             // Yield, Exit, and ForceExit are always permitted — a Cell must be able
             // to yield the CPU, exit cleanly, and force-terminate unresponsive tasks
             // regardless of its allowlist.  SpawnCap is the authority gate for ForceExit.
-            // NotifyOnExit, RegisterService, and CapRevoke are privileged (SpawnCap-gated),
-            // so they are always permitted past the allowlist — SpawnCap is the gate at dispatch.
+            // NotifyOnExit, RegisterService, and CapRevoke are always permitted past
+            // the allowlist; dispatch applies SpawnCap or a narrower operation-specific
+            // capability gate.
             // SpawnSetDirs (SpawnCap) and QueryDirHandles (VFS-provider or self)
             // join them: giving them bits would silently deny every cell whose
             // `__ViCell_syscalls` section was generated before those bits existed,
@@ -923,6 +924,8 @@ pub mod service {
     pub const CONFIG: u16 = 4;
     /// Display compositor service (`/bin/compositor`).
     pub const COMPOSITOR: u16 = 5;
+    /// Development-only AArch64 Silo provider; it accepts only the live KMS cell.
+    pub const SILO: u16 = 6;
     /// Hot-swap demo cell — used by the hotswap integration demo only.
     /// Not a production service; registered at demo spawn time.
     pub const HOTSWAP_DEMO: u16 = 7;

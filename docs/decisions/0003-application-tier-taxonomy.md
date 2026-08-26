@@ -122,8 +122,10 @@ application tiers.
 - Tier 2 remains tied to its actual mechanism: private page tables and explicit
   cross-domain sharing.
 - The SDK can grow by named modules without inventing SDK tiers.
-- Silo is documented as a Tier-1-facing hardware-backed capability, not a VM
-  tier.
+- The later relay-identity boundary supersedes only the original Silo
+  consequence: Silo is now a KMS-internal, AArch64-QEMU `DEV_REFERENCE`
+  provider, not a Tier-1-facing API or hardware-backed capability. See
+  [ADR-0005](0005-mutual-tls-relay-identity.md).
 
 ### Negative / Risks
 

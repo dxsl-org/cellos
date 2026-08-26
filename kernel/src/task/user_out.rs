@@ -22,10 +22,13 @@ fn validate_stack_usize_slot(stack: &Stack, ptr: usize) -> Result<*mut usize, Sy
     Ok(ptr as *mut usize)
 }
 
-fn resolve_current_task_usize_slot(
+pub(super) fn resolve_optional_usize_slot(
     caller_id: usize,
     ptr: usize,
-) -> Result<*mut usize, SyscallError> {
+) -> Result<Option<*mut usize>, SyscallError> {
+    if ptr == 0 {
+        return Ok(None);
+    }
     let guard = SCHEDULER.lock();
     let sched = guard.as_ref().ok_or(SyscallError::PermissionDenied)?;
     let task = sched
@@ -36,34 +39,25 @@ fn resolve_current_task_usize_slot(
         .user_stack
         .as_ref()
         .ok_or(SyscallError::PermissionDenied)?;
-    validate_stack_usize_slot(stack, ptr)
+    validate_stack_usize_slot(stack, ptr).map(Some)
 }
 
-/// Write an optional `usize` out-param into the caller's own user stack.
+/// Write a slot already validated by [`resolve_optional_usize_slot`].
 ///
-/// Null is accepted. Non-null pointers must be `usize`-aligned and the entire
-/// slot must lie within the caller's usable user stack; segment memory and
-/// arbitrary user mappings are intentionally rejected.
-pub(super) fn write_optional_usize(
-    caller_id: usize,
-    ptr: usize,
-    value: usize,
-) -> Result<(), SyscallError> {
-    if ptr == 0 {
-        return Ok(());
+/// The syscall runs in the caller's own context, so its stack mapping remains
+/// live between resolution and this write.
+pub(super) fn write_resolved_optional_usize(slot: Option<*mut usize>, value: usize) {
+    if let Some(slot) = slot {
+        // SAFETY: the resolver accepted the whole aligned slot in the current
+        // caller's usable user stack.
+        unsafe { slot.write(value) };
     }
-    let slot = resolve_current_task_usize_slot(caller_id, ptr)?;
-    // SAFETY: `slot` was validated as a whole aligned `usize` in the current
-    // caller's usable user stack while holding SCHEDULER. The lock is dropped
-    // before the write, and the syscall runs in the caller's own context.
-    unsafe { slot.write(value) };
-    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sync::{SpinLockGuard, Spinlock};
+    use crate::sync::{Spinlock, SpinlockGuard};
     use crate::task::{scheduler::Scheduler, tcb::Task};
     use alloc::boxed::Box;
     use alloc::vec::Vec;
@@ -72,7 +66,7 @@ mod tests {
     static TEST_LOCK: Spinlock<()> = Spinlock::new(());
 
     struct SchedulerTestGuard {
-        _guard: SpinLockGuard<'static, ()>,
+        _guard: SpinlockGuard<'static, ()>,
         saved: Option<Scheduler>,
     }
 
@@ -144,7 +138,7 @@ mod tests {
         let mut scheduler = SchedulerTestGuard::new();
         scheduler.set(Scheduler::new());
         assert_eq!(
-            resolve_current_task_usize_slot(99, fake_stack().usable_start()).unwrap_err(),
+            resolve_optional_usize_slot(99, fake_stack().usable_start()).unwrap_err(),
             SyscallError::PermissionDenied
         );
 
@@ -156,7 +150,7 @@ mod tests {
             sched.tasks.insert(7, task);
         }
         assert_eq!(
-            resolve_current_task_usize_slot(7, fake_stack().usable_start()).unwrap_err(),
+            resolve_optional_usize_slot(7, fake_stack().usable_start()).unwrap_err(),
             SyscallError::PermissionDenied
         );
     }

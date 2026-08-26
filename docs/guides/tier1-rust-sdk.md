@@ -215,7 +215,7 @@ See [cells/demos/sdk-demo/src/main.rs](../../cells/demos/sdk-demo/src/main.rs) �
 ✅ Most user applications
 
 ❌ Complex UIs → use Tier 1 + ViUI
-❌ Cryptographic keys → use Tier 1 Silo API (G2+)
+❌ Protected relay keys → use the purpose-specific KMS client; Silo is not a public API
 ❌ C/C++ interop → use Tier 1 `ffi-posix` profile
 
 ---
@@ -233,6 +233,6 @@ See [cells/demos/sdk-demo/src/main.rs](../../cells/demos/sdk-demo/src/main.rs) �
 ## Next Steps
 
 - Building a UI? → [Tier 1 + ViUI](viui-guide.md)
-- Need cryptographic isolation? → [Tier 1 Silo API](tier1-silo.md)
+- Need the development custody boundary? → [KMS-mediated Silo `DEV_REFERENCE`](tier1-silo.md)
 - Have existing C code? → [Tier 1 `ffi-posix` profile](tier1b-c-zig.md)
 - See [api-reference.md](../api-reference.md) for syscall details.

@@ -1,8 +1,8 @@
 /* Linker script for the ViCell silo guest binary.
  *
  * Load address: 0x4000_0000 (Stage-2 fenced region, mapped by VMM).
- * Mailbox page: 0x4000_3000 (pre-mapped by VMM — not in this binary).
- * Stack:        4 KiB immediately after .bss, top = _stack_top.
+ * Mailbox page: 0x4000_F000 (final page of the 64 KiB VM mapping).
+ * Stack:        4 KiB immediately after .bss, bounded below the mailbox.
  */
 
 ENTRY(_start)
@@ -11,6 +11,7 @@ OUTPUT_ARCH(aarch64)
 SECTIONS
 {
     . = 0x40000000;
+    __mailbox_ipa = 0x4000F000;
 
     .text : {
         *(.text.entry)          /* _start must be at load base */
@@ -41,6 +42,7 @@ SECTIONS
     /* 4 KiB stack placed directly after .bss */
     . = ALIGN(4096);
     _stack_top = . + 0x1000;
+    ASSERT(_stack_top <= __mailbox_ipa, "silo guest text/data/stack overlaps mailbox")
 
     /DISCARD/ : {
         *(.comment)

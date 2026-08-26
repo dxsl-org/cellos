@@ -10,6 +10,12 @@ set -euo pipefail
 KERNEL="${1:-target/aarch64-unknown-none-softfloat/release/cellos-kernel-test-hooks}"
 DISK="${2:-disk_arm_virt.img}"
 BOOT_WINDOW="${BOOT_WINDOW:-35}"
+DEVELOPMENT_SILO="${CELLOS_AARCH64_TEST_HOOKS_DEVELOPMENT_SILO:-0}"
+if [[ "$DEVELOPMENT_SILO" != "0" && "$DEVELOPMENT_SILO" != "1" ]]; then
+    echo "FAIL: CELLOS_AARCH64_TEST_HOOKS_DEVELOPMENT_SILO must be exactly 0 or 1" >&2
+    exit 1
+fi
+
 
 if ! command -v qemu-system-aarch64 &>/dev/null; then
     echo "FAIL: qemu-system-aarch64 not found on PATH" >&2
@@ -29,10 +35,15 @@ if [[ ! -f "$DISK" ]]; then
     fi
 fi
 
-echo "[qemu-aarch64-test-hooks] Booting kernel=$KERNEL (window=${BOOT_WINDOW}s, semihosting enabled)"
+MACHINE="virt"
+if [[ "$DEVELOPMENT_SILO" == "1" ]]; then
+    MACHINE="virt,virtualization=on"
+fi
+
+echo "[qemu-aarch64-test-hooks] Booting kernel=$KERNEL (window=${BOOT_WINDOW}s, semihosting enabled, machine=$MACHINE)"
 
 QEMU_ARGS=(
-    -machine virt
+    -machine "$MACHINE"
     -cpu cortex-a57
     -m 256M
     -nographic
@@ -66,6 +77,13 @@ if grep -qia "KERNEL PANIC\|\[fault\] Cell" qemu-aarch64-test-hooks.log; then
     grep -ai "fault\|PANIC" qemu-aarch64-test-hooks.log | head -20
     exit 1
 fi
+if [[ "$DEVELOPMENT_SILO" == "1" ]] \
+    && grep -qia "\[silo\].*failed\|\[silo\].*fault\|\[silo\].*reset" qemu-aarch64-test-hooks.log; then
+    echo "FAIL: development Silo fault detected during aarch64 test-hooks boot" >&2
+    grep -ai "\[silo\].*failed\|\[silo\].*fault\|\[silo\].*reset" qemu-aarch64-test-hooks.log | head -20
+    exit 1
+fi
+
 
 # Verify core test-hooks markers
 REQUIRED_MARKERS=(
@@ -77,6 +95,15 @@ REQUIRED_MARKERS=(
     "ATOMIC_PUBLICATION_AP-15: armed for trusted init"
     "[vfs-test] ALL TESTS PASSED"
 )
+if [[ "$DEVELOPMENT_SILO" == "1" ]]; then
+    REQUIRED_MARKERS+=(
+        "[silo] DEV_REFERENCE ready and registered; accepting only live KMS"
+        "[kms] DEV_REFERENCE Silo TLS signature self-verified"
+        "[silo-test] PASS: direct live Silo purpose frame denied"
+        "[silo-test] PASS: no direct Silo or unbound KMS signing path remains"
+    )
+fi
+
 
 ALL_PASSED=1
 for marker in "${REQUIRED_MARKERS[@]}"; do

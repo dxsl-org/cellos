@@ -2,6 +2,59 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-26] KMS/Silo Phase 2 contains the development provider
+
+- The former all-caller Silo prototype is cleanly cut over to an optional,
+  KMS-internal `development-silo-provider`. Public/general connection,
+  initialization, digest/message signing, ECDH, raw-command, and private-key
+  interfaces are removed with no compatibility shim. The private protocol
+  admits only the live KMS instance and only the TLS 1.3 client
+  `CertificateVerify` purpose already governed and self-verified by KMS.
+- Silo readiness is now exact-instance and fail-closed. The governed `/bin/silo`
+  root task alone receives a `test-hooks`-only, non-manifestable,
+  non-delegable registration authority limited to `service::SILO`; it publishes
+  only after artifact admission, VM load, one-time development initialization,
+  guest readiness, and public-metadata validation. Init and the supervisor wait
+  for the registry to contain the exact spawned TID before KMS starts or
+  restarts.
+- The standalone AArch64 guest builds through its own locked package. Admission
+  rejects empty, oversized, or digest-mismatched images before VM creation. The
+  verified artifact is 33,888/61,440 bytes with exact SHA-256
+  `fea5cd2b9c36bb158e1e74b9e2c60209c133e0057292f0b9b4bc5f3e830838e4`.
+  Guest/VMM faults, malformed or stale responses, and reset permanently latch
+  the current instance unavailable; there is no retry or in-process fallback.
+- Verification passed 75 focused host tests (23 wire types, 40 KMS, 12 Silo)
+  with zero new KMS/Silo warnings and seven unchanged OSTD baseline warnings.
+  The production checker passed 2/2 and the unsafe feature matrix rejected 9/9
+  combinations.
+- The exact signed 12-cell AArch64 virtualized-QEMU image passed registered Silo
+  readiness, KMS signature self-verification, direct/unbound denials, VFS
+  PAGE+REG grant lifecycle, and `vfs-test` 96 passed / 0 failed. Code review
+  returned PASS 9.6/10, security review returned GO, no residual
+  Critical/High/Medium findings remained, and artifact finalization reported
+  `status: ok`.
+- This is explicitly `DEV_REFERENCE`, AArch64-QEMU-only software-custody
+  evidence. The Cellos EL2 host creates and loads the guest and supplies its
+  disposable development seed, so Stage-2 is not independent hardware custody
+  or production qualification. Production remains
+  `BLOCKED_PENDING_PHASE_6_7_8`; the overall plan remains in progress, Phases
+  3–8 remain pending/unapproved, and Phase 3 requires explicit approval.
+
+## [2026-08-26] High Grant lookup-to-lease race closed
+
+- Signing-lane review found a High CWE-416 race in the existing VFS grant
+  bridge: `GrantSlice` copied PAGE/REG grant fields, released the table lock,
+  and only then published the VFS lease. Concurrent `GrantFree` or
+  `GrantUnregister` could remove and recycle those frames in the gap.
+- The ABI-stable correction holds the matching grant-table lock through
+  authorization and exact lease publication. Teardown checks the pin registry
+  and removes the entry within the same critical section, so lookup-to-pin and
+  free/unregister now have one atomic ordering.
+- VFS grant writes no longer construct a service-local raw slice. They copy
+  through the safe bounded OSTD adapter, require the full requested count before
+  backend mutation, and retain commit-before-acknowledgement. This is a VFS
+  lifetime security fix, not part of the Silo architecture.
+
 ## [2026-08-25] KMS TLS signing Phase 1 ships as a non-production vertical slice
 
 - The append-only KMS v1 fixed-frame ABI adds only purpose-specific operations
@@ -3224,56 +3277,28 @@ Shipped the Cellos App SDK (L1 platform layer) — the foundational framework un
 
 ---
 
-## [2026-06-16] Tier 3a Security Silo — 4/4 phases complete (G1-optional key isolation)
+## [2026-06-16] Tier 3a Security Silo prototype — historical, superseded
 
-### Summary
-Completed Tier 3a Security Silo implementation — a bare-metal Rust `no_std` guest running in Stage-2 fenced memory. Provides cryptographic key isolation at the hardware level: even if the Cellos kernel is compromised, private keys stored in the Silo remain inaccessible due to ARM64 Stage-2 page tables. First practical application: robot TLS handshakes with embedded private keys. All phases (P01–P04) shipped, including integration tests; Phase 3B (Net Cell HsmCryptoProvider) deferred pending TLS plan Phase 03 completion.
+### Historical record
 
-### Changes
-- **Phase P01** — Guest binary (`cells/guests/silo-guest/`):
-  - aarch64-unknown-none-softfloat bare-metal binary
-  - p256 ECDSA signing + ECDH key agreement (no_alloc, ~8KB with symbols)
-  - Mailbox-based command protocol (Init/Sign/Ecdh/GetPub)
-  - Linker script 0x4000_0000 IPA layout (8KB .text + .rodata, 4KB .bss + stack, 4KB mailbox)
+The original prototype demonstrated an AArch64 Stage-2 guest and a general
+application-facing cryptographic interface. Its then-current completion and
+hardware-isolation claims are superseded by the 2026-08-26 KMS/Silo Phase 2
+clean cutover above.
 
-- **Phase P02** — Silo service cell (`cells/services/silo/`):
-  - VMM-lite entry point: `sys_create_vm(8)` → 32KB guest RAM
-  - Guest binary embedded via `include_bytes!`, loaded into Stage-2 guest address space
-  - Run loop: `run_vcpu` blocks until HVC trap (SILO_READY, SILO_DONE, SILO_FAULT)
-  - IPC handlers for Sign/Ecdh/GetPub requests from any Cell
-  - Registered as `service::SILO` (ID 6) in init namespace
+The general public Silo handle and its initialization, digest-signing, ECDH,
+public-key, raw-command, and all-caller wire surfaces no longer exist. The
+prototype test cell and its direct-call T1–T6 contract were retired rather than
+retained as compatibility behavior.
 
-- **Phase P03A** — ostd SiloHandle API (`libs/ostd/src/silo.rs`):
-  - Stable userspace API: `SiloHandle::connect()`, `init_key()`, `sign()`, `ecdh()`, `get_public_key()`
-  - Wire format: `SiloRequest`/`SiloResponse` structs in `libs/types/src/silo.rs`
-  - IPC abstraction: 128-byte message fits in Cellos IPC buffer
-  - Zero knowledge of Stage-2, VMs, or kernel hypervisor implementation
-
-- **Phase P03B** — HsmCryptoProvider: DEFERRED
-  - Requires embedded-tls 0.19 `CryptoProvider` trait finalization
-  - Gate: waiting on TLS plan Phase 03 (smoltcp↔embedded-tls bridge)
-  - Will forward `sign(msg)` to `SiloHandle::sign(sha256(msg))` once TLS integration lands
-
-- **Phase P04** — Integration test cell (`cells/apps/silo-test/`):
-  - 6 end-to-end test cases (T1–T6), all passing
-  - T1: Service lookup via `sys_lookup_service(service::SILO)`
-  - T2: Key initialization + public key retrieval
-  - T3: ECDSA sign round-trip (host verifies with p256)
-  - T4: ECDH shared secret agreement (matches ephemeral key computation)
-  - T5: Fault recovery (silo remains operational after bad command)
-  - T6: Capability isolation (CreateVm syscall fails without HypervisorCap)
-  - CI output format: `[silo-test] T1 PASS ... [silo-test] ALL TESTS PASSED (6/6)`
-
-### Impact
-- **G1-optional workload unlocked**: Robots can now perform TLS handshakes with private keys protected by hardware Stage-2 fence
-- **Zero API breakage**: Uses existing `hypervisor = true` manifest flag, syscalls 220–227 (frozen), service registry
-- **Kernel compromise mitigation**: Private key isolation verified at hardware level (not just privilege separation)
-- **Foundation for future**: Network isolation (mTLS with Silo as HSM) ready once TLS plan Phase 03 lands
-
-### Known Limitations
-- Phase 3B (Net Cell HsmCryptoProvider) deferred until TLS plan Phase 03 completion
-- Single guest (no multi-instance ECDH oracle); deterministic test seed in silo-test (production uses `sys_get_random`)
-- Guest fault → silo service must be manually respawned; auto-recovery deferred (acceptable for Phase 1)
+The surviving implementation is a KMS-internal `DEV_REFERENCE` provider for the
+signed AArch64 virtualized-QEMU `test-hooks` lane. It accepts only the live KMS
+instance and the exact TLS 1.3 client `CertificateVerify` purpose, permanently
+fails a faulted/reset instance closed, and cannot appear in a production image.
+Because the Cellos EL2 host creates and loads the guest and supplies its
+development seed, Stage-2 does not provide independent hardware custody or
+kernel-compromise-resistant key storage. Production remains
+`BLOCKED_PENDING_PHASE_6_7_8`.
 
 ---
 

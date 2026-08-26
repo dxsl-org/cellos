@@ -4,17 +4,7 @@
 
 extern crate ostd;
 
-// Declares spawn capability; the kernel grants SpawnCap at spawn.
 api::declare_manifest!(block_io = false, network = false, spawn = true);
-
-// Narrow syscall allowlist — kernel enforces this at dispatch (Phase 27).
-// ForceExit, NotifyOnExit, RegisterService are always-permitted (SpawnCap-gated).
-// GrantAlloc: sys_spawn_from_path's VFS-Grant route (read_full_via_grant) needs
-// GrantAlloc/Share/Free — the whole Grant family shares bit 39, so declaring
-// one covers all six (Alloc/Share/Slice/Free/Register/Unregister).
-// Required for the restart-on-crash loop, which re-spawns services well after
-// VFS registers (unlike the early-boot spawns, which fall back to the raw
-// bootstrap syscall before VFS is looked up).
 api::declare_syscalls![
     Send,
     Recv,
@@ -31,371 +21,85 @@ api::declare_syscalls![
     GrantAlloc,
 ];
 
+mod boot;
+mod service_table;
+mod supervisor;
+
 use ostd::io::println;
-
-/// Per-service restart policy (OTP-style).
-#[derive(Clone, Copy, PartialEq)]
-enum Policy {
-    /// Always restart — critical services that must always be up (vfs, shell, …).
-    Permanent,
-    #[cfg(not(feature = "hypervisor-min"))]
-    /// Restart only on ABNORMAL exit (fault / watchdog kill); a clean exit (reason 0)
-    /// is treated as final. Uses the exit reason delivered as the death-notify payload.
-    Transient,
-    /// Never restart — one-shot tasks that are expected to run once and stop.
-    ///
-    /// No service in the current supervised table (`policy` below) uses this
-    /// variant yet, but the `should_restart` match on `policy[i]` is exhaustive
-    /// over `Policy`, so removing this would require reworking that match.
-    /// Reserved for future one-shot cells (see the "Restart policy" doc above).
-    #[allow(dead_code)]
-    Temporary,
-}
-
-/// Restart intensity: at most this many restarts of ONE service within
-/// `RESTART_WINDOW_TICKS`. Exceeding it is a crash storm → escalate (give up on that
-/// service) instead of spin-respawning forever, which would burn CPU and never recover.
-/// Ticks are 10 ms scheduler ticks, so 1000 ≈ 10 s.
-const MAX_RESTARTS_PER_WINDOW: u32 = 5;
-const RESTART_WINDOW_TICKS: u64 = 1000;
+use ostd::syscall::{sys_lookup_service, sys_notify_on_exit};
 
 ostd::cell_main!(extern "C" cell_main);
 
-/// Kernel spawns init from its embedded ELF.  Init's job is to bring up the
-/// rest of the system by loading cell ELFs from the bootstrap disk table.
-///
-/// Boot sequence:
-///   1. Spawn VFS service — serves `/bin/*` once running.
-///   2. Spawn Config service — configuration KV store.
-///   3. Spawn Shell — interactive REPL.
 fn cell_main() {
-    use api::syscall::service;
-    use ostd::syscall::{
-        sys_get_time, sys_lookup_service, sys_notify_on_exit, sys_recv, sys_register_service,
-        sys_send, sys_spawn_from_path, SyscallResult,
-    };
     println("Init: Starting Cellos Orchestrator...");
+    let mut services = service_table::configured();
 
-    // Supervised services in bring-up order — VFS first (it serves /bin/*).
-    // tids[i] is the current live tid of paths[i] (None when down).
-    // robot-demo and robot-dashboard are Temporary (run-once) and use GPIO.
-    // They are spawned after periph-demo in the unsupervised section below so
-    // that periph-demo can complete its GPIO IRQ self-test before robot-demo
-    // claims the PL061 MMIO region.
-    #[cfg(feature = "hypervisor-min")]
-    const NSVC: usize = 1;
-    #[cfg(not(feature = "hypervisor-min"))]
-    const NSVC: usize = 10;
-    // Unused by the hypervisor-min table below (no shell row there).
-    #[cfg(not(feature = "hypervisor-min"))]
-    const SHELL_INDEX: usize = NSVC - 1;
-    // hypervisor-min: Tier-3 VM boot profile — VFS only. The hypervisor cell reads
-    // the guest kernel/initramfs through VFS. No host shell row: the host shell's
-    // sys_read(0) loop races the hypervisor for guest-console keystrokes, so the
-    // guest's own `/ #` is the only shell this profile brings up. Drivers and
-    // optional cells are likewise skipped so the VM gate does not depend on the
-    // full robot bring-up or on binaries absent from a given filesystem image.
-    #[cfg(feature = "hypervisor-min")]
-    let paths: [&str; NSVC] = ["/bin/vfs"];
-    #[cfg(not(feature = "hypervisor-min"))]
-    let paths: [&str; NSVC] = [
-        "/bin/vfs",
-        "/bin/config",
-        "/bin/input",
-        "/bin/net",
-        "/bin/compositor",
-        "/bin/silo",       // Security Silo — P-256 key isolation (Tier 3a)
-        "/bin/kms",        // Node-identity KMS — fail-closed until production root is ready
-        "/bin/net-broker", // Cluster net-broker — cross-machine p2p (spawned AFTER net)
-        "/bin/supervisor", // Supervisor Cell — live hotswap orchestration (spawned before shell)
-        "/bin/shell",
-    ];
-    let mut tids: [Option<usize>; NSVC] = [None; NSVC];
-
-    // Well-known service ID per path (None = not a looked-up service, e.g. shell).
-    // The supervisor registers each service's CURRENT tid here so clients resolve it
-    // via sys_lookup_service and reconnect transparently across a respawn.
-    #[cfg(feature = "hypervisor-min")]
-    let svc_ids: [Option<u16>; NSVC] = [Some(service::VFS)];
-    #[cfg(not(feature = "hypervisor-min"))]
-    let svc_ids: [Option<u16>; NSVC] = [
-        Some(service::VFS),
-        Some(service::CONFIG),
-        Some(service::INPUT),
-        Some(service::NET),
-        Some(service::COMPOSITOR),
-        Some(types::silo::SILO_SERVICE_ID), // SILO = 6
-        Some(service::KMS),                 // KMS = 13
-        Some(service::NET_BROKER),          // NET_BROKER = 8
-        Some(service::SUPERVISOR),          // SUPERVISOR = 11
-        None,                               // shell is not a registered service
-    ];
-
-    // Restart policy per service. All current services are Permanent (a robot must keep
-    // them up); the machinery supports Transient (restart only on abnormal exit) and
-    // Temporary (never restart) for future one-shot/optional cells.
-    #[cfg(feature = "hypervisor-min")]
-    let policy: [Policy; NSVC] = [Policy::Permanent];
-    #[cfg(not(feature = "hypervisor-min"))]
-    let policy: [Policy; NSVC] = [
-        Policy::Permanent, // vfs
-        Policy::Permanent, // config
-        Policy::Permanent, // input
-        Policy::Permanent, // net
-        Policy::Permanent, // compositor
-        Policy::Permanent, // silo — key service, must stay up
-        Policy::Permanent, // kms — node identity authority, must stay up
-        Policy::Permanent, // net-broker — cluster trust anchor, must stay up
-        Policy::Permanent, // supervisor — frozen cells need it; must restart quickly
-        Policy::Transient, // shell: restart on crash, but a clean `exit` is final
-    ];
-    // Per-service restart-intensity state (sliding window).
-    let mut restart_count: [u32; NSVC] = [0; NSVC];
-    let mut window_start: [u64; NSVC] = [0; NSVC];
-
-    // Block Driver Cells — spawned before VFS. The kernel relinquished the disk
-    // (G2 loader redesign phase 05): /bin/block owns the VirtIO block device
-    // (RISC-V/AArch64), /bin/nvme owns the PCIe NVMe controller (x86_64); the
-    // active one serves service::BLOCK_DRIVER and VFS routes ALL sector I/O to
-    // it. VFS caches the BLOCK_DRIVER lookup on its first block access (at
-    // mount), so the winning Block Cell MUST register before VFS spawns — wait
-    // (bounded) for it here. Each cell exits cleanly when its device is absent,
-    // so spawning both costs nothing on either platform.
-    #[cfg(not(feature = "hypervisor-min"))]
-    {
-        let _ = sys_spawn_from_path("/bin/block");
-        let _ = sys_spawn_from_path("/bin/nvme");
-        for _ in 0..400 {
-            if sys_lookup_service(service::BLOCK_DRIVER).is_some() {
-                break;
-            }
-            ostd::task::yield_now();
-        }
-    }
-
-    for i in 0..NSVC {
-        // Shell is spawned LAST (see below) so its prompt is the final line on the
-        // shared UART console — services bring-up + net DHCP all print before it.
-        if paths[i] == "/bin/shell" {
+    boot::start_block_drivers();
+    for service in &mut services {
+        if service.path == "/bin/shell" {
             continue;
         }
-
-        // Driver Cells must register BEFORE the net service's first pump_rx_split()
-        // call.  sys_heartbeat is non-blocking, so net immediately probes e1000_tid()
-        // on its first loop iteration; any ABSENT result is cached permanently.
-        // VFS (index 0) is already up at this point (extra yield at i==0 below).
-        if paths[i] == "/bin/net" {
-            // Platform Cell was already spawned by the kernel before init — no second spawn.
-            let _ = sys_spawn_from_path("/bin/virtio-net"); // RISC-V/AArch64 VirtIO NIC
-            let _ = sys_spawn_from_path("/bin/e1000"); // PCIe e1000 NIC (x86_64)
-                                                       // /bin/nvme retry — ONLY if no block driver registered yet. The pre-VFS
-                                                       // spawn covers x86 (nvme lives in VIFS1); on cell-store platforms that
-                                                       // path fails before VFS is up, so retry here where VFS can serve /bin.
-                                                       // The lookup gate prevents a second instance from stealing the live
-                                                       // cell's BDF ownership via sys_find_pcie_device.
-            if sys_lookup_service(service::BLOCK_DRIVER).is_none() {
-                let _ = sys_spawn_from_path("/bin/nvme");
-            }
-            // Give driver cells enough quanta to load ELF, probe hardware, and
-            // call sys_register_nic_driver before net starts its first Rx poll.
-            for _ in 0..4 {
-                ostd::task::yield_now();
-            }
-        }
-
-        // GPU Driver Cell must register BEFORE compositor's first GpuFlush call.
-        if paths[i] == "/bin/compositor" {
-            let _ = sys_spawn_from_path("/bin/virtio-gpu"); // VirtIO GPU — RISC-V + AArch64
-                                                            // Give the GPU Cell time to probe VirtIO, init framebuffer, and register
-                                                            // before the compositor sends its first GpuFlush on startup.
-            for _ in 0..4 {
-                ostd::task::yield_now();
-            }
-        }
-
-        match sys_spawn_from_path(paths[i]) {
-            SyscallResult::Ok(tid) => {
-                tids[i] = Some(tid);
-                if let Some(sid) = svc_ids[i] {
-                    let _ = sys_register_service(sid, tid);
+        boot::prepare_service(service.path);
+        let tid = match service_table::spawn(service) {
+            Some(tid) => tid,
+            None => {
+                #[cfg(feature = "development-silo-provider")]
+                if matches!(
+                    service.registration,
+                    service_table::Registration::SelfReady(api::syscall::service::SILO)
+                ) {
+                    println("Init: Silo spawn failed — KMS not started.");
+                    return;
                 }
-            }
-            // Non-fatal: input/net/compositor may be absent (no device/binary on VF2).
-            _ => {
                 println("Init: cell not found — skipping:");
-                println(paths[i]);
+                println(service.path);
+                ostd::task::yield_now();
+                continue;
             }
+        };
+        #[cfg(feature = "development-silo-provider")]
+        if matches!(
+            service.registration,
+            service_table::Registration::SelfReady(api::syscall::service::SILO)
+        ) && !service_table::wait_for_exact_registration(api::syscall::service::SILO, tid)
+        {
+            println("Init: Silo readiness registration failed — KMS not started.");
+            return;
         }
-        // Let each service initialise before the next; VFS gets an extra beat to
-        // register /bin/* before the others try to load from it.
         ostd::task::yield_now();
-        if i == 0 {
+        if service.path == "/bin/vfs" {
             ostd::task::yield_now();
         }
     }
     println("Init: services spawned.");
 
-    // Service-registry round-trip self-check (observable boot proof): every registered
-    // service must resolve via sys_lookup_service to the tid we recorded at spawn.
-    let mut ok = true;
-    for i in 0..NSVC {
-        if let (Some(sid), Some(tid)) = (svc_ids[i], tids[i]) {
-            if sys_lookup_service(sid) != Some(tid) {
-                ok = false;
-            }
-        }
-    }
-    if ok {
+    if services.iter().all(|service| match (service.service_id(), service.tid) {
+        (Some(service_id), Some(tid)) => sys_lookup_service(service_id) == Some(tid),
+        _ => true,
+    }) {
         println("Init: service registry verified.");
     } else {
         println("Init: WARN service registry mismatch.");
     }
 
-    // ── Optional system services (auto-start when binary is present) ──────────
-    // fb-console: mirrors kernel user-log to HDMI display (background surface).
-    // Spawned after compositor is up (index 4 in the supervised list).
-    #[cfg(not(feature = "hypervisor-min"))]
-    let _ = sys_spawn_from_path("/bin/fb-console");
 
-    // Hypervisor: AArch64 + virtualization=on kernel builds only. Keep a death
-    // watch even though it is not part of the ordinary service restart table;
-    // the compositor must release any shared scanout Grants before those pages
-    // can be reused by a replacement cell.
-    let mut hypervisor_tid = match sys_spawn_from_path("/bin/hypervisor") {
-        SyscallResult::Ok(tid) => {
-            let _ = sys_notify_on_exit(tid);
-            Some(tid)
-        }
-        _ => None,
-    };
+    let hypervisor_tid = boot::spawn_optional_services();
 
-    // ── CI / test-image-only cells (not present in normal disk images) ────────
-    // bench is intentionally NOT auto-started — run '/bin/bench' from the shell.
-    // Auto-spawning floods the terminal for ~270 s and obscures the shell prompt.
     #[cfg(not(feature = "hypervisor-min"))]
     {
-        let _ = sys_spawn_from_path("/bin/silo-test"); // Security Silo end-to-end tests
-        let _ = sys_spawn_from_path("/bin/vfs-test"); // VFS integration test suite
-        let _ = sys_spawn_from_path("/bin/srv-test"); // RedoxFS /srv integration suite
-    }
-
-    // ── Demos: all run on-demand from the shell ───────────────────────────────
-    // Philosophy: demos should not pollute boot output or steal focus.
-    // Run any of these from the shell prompt:
-    //   periph-demo   robot-demo    robot-dashboard
-    //   sensor-demo   spi-demo      pwm-demo
-    //   adc-demo      can-demo      audio-demo
-    //   doom          tetris-c      input-test
-
-    // ── Shell LAST ──────────────────────────────────────────────────────────
-    // Spawn the interactive shell only after every other boot message has printed.
-    // On the shared UART console whoever prints last "owns" the bottom line; if the
-    // shell spawned during service bring-up its prompt would be buried under
-    // "Init:"/loader/"[net]" messages and look like a dead shell.
-    #[cfg(not(feature = "hypervisor-min"))]
-    {
-        if paths[SHELL_INDEX] != "/bin/shell" {
+        let shell = services.last_mut().expect("service table is nonempty");
+        if shell.path != "/bin/shell" {
             println("Init: invalid service table — shell must remain last.");
             return;
         }
-        match sys_spawn_from_path(paths[SHELL_INDEX]) {
-            SyscallResult::Ok(tid) => tids[SHELL_INDEX] = Some(tid),
-            _ => println("Init: shell spawn failed."),
+        if service_table::spawn(shell).is_none() {
+            println("Init: shell spawn failed.");
         }
     }
 
-    // Register a death notification for every live service. A single recv loop
-    // below now supervises ALL of them (wait-any): when any service exits or
-    // faults, sys_recv returns its tid and we respawn it. This is the full
-    // supervisor tree built on NotifyOnExit (Law 1 syscall 204).
-    for t in tids.iter().flatten() {
-        let _ = sys_notify_on_exit(*t);
+    for tid in services.iter().filter_map(|service| service.tid) {
+        let _ = sys_notify_on_exit(tid);
     }
     println("Init: supervising services (auto-restart on crash)...");
-
-    // Death notifications: sys_recv returns the dead tid; the kernel writes the exit
-    // reason (NotifyOnExit payload) into the first 8 bytes of buf (0 = clean exit,
-    // usize::MAX = fault / watchdog kill). The policy below uses it.
-    let mut buf = [0u8; 16];
-    loop {
-        let dead = match sys_recv(0, &mut buf) {
-            SyscallResult::Ok(d) => d,
-            _ => {
-                ostd::task::yield_now();
-                continue;
-            }
-        };
-        #[cfg(not(feature = "hypervisor-min"))]
-        let reason = u64::from_le_bytes([
-            buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7],
-        ]);
-        if hypervisor_tid == Some(dead) {
-            let mut relay = [0u8; 1 + core::mem::size_of::<usize>()];
-            relay[0] = 0xE1;
-            relay[1..].copy_from_slice(&dead.to_le_bytes());
-            if let Some(supervisor) = sys_lookup_service(service::SUPERVISOR) {
-                let _ = sys_send(supervisor, &relay);
-            }
-            hypervisor_tid = None;
-            println("Init: hypervisor exited — scanout cleanup relayed.");
-            continue;
-        }
-        // Which supervised service died? (Ignore notifications for unknown tids.)
-        let mut which = None;
-        for (i, t) in tids.iter().enumerate() {
-            if *t == Some(dead) {
-                which = Some(i);
-                break;
-            }
-        }
-        let i = match which {
-            Some(i) => i,
-            None => continue,
-        };
-
-        // 1. Restart policy: decide whether this exit warrants a restart at all.
-        let should_restart = match policy[i] {
-            Policy::Temporary => false,
-            #[cfg(not(feature = "hypervisor-min"))]
-            Policy::Transient => reason != 0, // restart only on abnormal exit
-            Policy::Permanent => true,
-        };
-        if !should_restart {
-            println("Init: service exited cleanly — policy says no restart.");
-            tids[i] = None;
-            continue;
-        }
-
-        // 2. Restart intensity: bound restarts per sliding window; a crash storm escalates
-        //    (give up on this one service) instead of spin-respawning forever.
-        let now = sys_get_time();
-        if now.wrapping_sub(window_start[i]) > RESTART_WINDOW_TICKS {
-            window_start[i] = now;
-            restart_count[i] = 0;
-        }
-        if restart_count[i] >= MAX_RESTARTS_PER_WINDOW {
-            println("Init: restart storm — giving up on this service (escalate).");
-            tids[i] = None;
-            continue;
-        }
-        restart_count[i] += 1;
-
-        println("Init: service died — restarting...");
-        match sys_spawn_from_path(paths[i]) {
-            SyscallResult::Ok(newt) => {
-                tids[i] = Some(newt);
-                let _ = sys_notify_on_exit(newt); // re-arm for the new instance
-                if let Some(sid) = svc_ids[i] {
-                    // Re-point the service registry at the new instance so clients that
-                    // resolve via sys_lookup_service reconnect to the restarted service.
-                    let _ = sys_register_service(sid, newt);
-                }
-                println("Init: service restarted.");
-            }
-            _ => {
-                tids[i] = None;
-                println("Init: service restart FAILED.");
-            }
-        }
-    }
+    supervisor::run(&mut services, hypervisor_tid)
 }

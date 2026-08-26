@@ -261,6 +261,10 @@ pub struct Task {
     /// RISC-V H-extension CSR access for VMM cells.
     /// Granted when manifest declares `hypervisor = true` AND the firmware reported H-ext.
     pub hypervisor_cap: Option<super::cap::HypervisorCap>,
+    /// Test-hooks-only, exact-path authority to self-register `service::SILO`.
+    #[cfg(feature = "test-hooks")]
+    pub development_silo_registration_cap:
+        Option<super::cap::DevelopmentSiloRegistrationCap>,
     /// Supervisor authority: sys_freeze_cell / sys_resume_cell / sys_kill_cell.
     /// Set ONLY by kernel init (direct TCB write). Never propagated through CapSet.
     pub supervisor_cap: Option<super::cap::SupervisorCap>,
@@ -510,6 +514,8 @@ impl Task {
             network_cap: None,
             spawn_cap: None,
             hypervisor_cap: None,
+            #[cfg(feature = "test-hooks")]
+            development_silo_registration_cap: None,
             supervisor_cap: None,
             pcie_driver_cap: None,
             platform_cap: None,

@@ -252,7 +252,7 @@ cargo build --release --target riscv64gc-unknown-none-elf
 
 - Need to write unsafe code? → Keep it behind the trusted Tier 1 `ffi-posix` boundary.
 - Need UIs in Rust? → [Tier 1 + ViUI](viui-guide.md)
-- Need cryptographic keys? → [Tier 1 Silo API](tier1-silo.md)
+- Need a protected relay key? → use the purpose-specific KMS client; the [development Silo provider](tier1-silo.md) is not an app API.
 - See [mlibc-build.md](../mlibc-build.md) for mlibc compilation details.
 - Want to write a cell in Zig? → See **Pure Zig Cells** section below.
 

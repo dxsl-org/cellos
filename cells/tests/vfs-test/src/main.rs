@@ -284,6 +284,8 @@ fn test_grant_write() {
     const INITIAL: &[u8] = b"prefix";
     const APPEND: &[u8] = b"grant!";
     const EXPECTED: &[u8] = b"prefixgrant!";
+    const PATCH: &[u8] = b"XX";
+    const PATCHED: &[u8] = b"prXXixgrant!";
 
     assert_ok!(
         api::ipc::VfsRequest::Write {
@@ -369,6 +371,23 @@ fn test_grant_write() {
         1,
         "grant-write: short grant is refused without mutation"
     );
+    let unshared_grant = match grant_io::GrantRegion::alloc_copy_from(b"deny") {
+        Ok(grant) => grant,
+        Err(_) => {
+            fail("grant-write: allocate unshared grant");
+            return;
+        }
+    };
+    assert_err!(
+        api::ipc::VfsRequest::WriteGrant {
+            cap: file.0,
+            offset: 0,
+            grant: unshared_grant.id(),
+            bytes: 4,
+        },
+        1,
+        "grant-write: grant copy denial propagates as I/O error"
+    );
     match grant_io::read_file_into_grant(PATH) {
         Ok((grant, bytes))
             if bytes == EXPECTED.len() && grant_io::grant_prefix_equals(&grant, EXPECTED) =>
@@ -376,6 +395,36 @@ fn test_grant_write() {
             pass("grant-write: failed writes leave committed bytes unchanged")
         }
         _ => fail("grant-write: failed writes leave committed bytes unchanged"),
+    }
+    let patch_grant = match grant_io::GrantRegion::alloc_copy_from(PATCH)
+        .and_then(|grant| {
+            grant.share_write_with_vfs()?;
+            Ok(grant)
+        }) {
+        Ok(grant) => grant,
+        Err(_) => {
+            fail("grant-write: allocate bounded patch grant");
+            return;
+        }
+    };
+    match vfs_req(&api::ipc::VfsRequest::WriteGrant {
+        cap: file.0,
+        offset: 2,
+        grant: patch_grant.id(),
+        bytes: PATCH.len(),
+    }) {
+        api::ipc::VfsResponse::GrantDone { bytes } if bytes == PATCH.len() => {
+            pass("grant-write: copies into exact bounded destination range")
+        }
+        _ => fail("grant-write: copies into exact bounded destination range"),
+    }
+    match grant_io::read_file_into_grant(PATH) {
+        Ok((grant, bytes))
+            if bytes == PATCHED.len() && grant_io::grant_prefix_equals(&grant, PATCHED) =>
+        {
+            pass("grant-write: bounded copy preserves prefix and suffix")
+        }
+        _ => fail("grant-write: bounded copy preserves prefix and suffix"),
     }
 
     let root = match vfs_req(&api::ipc::VfsRequest::OpenRootDir { path: "/" }) {

@@ -24,7 +24,7 @@ This plan supersedes the production assumptions in `.agents/260712-1902-dice-att
 | Phase | Name | Status | Depends on |
 |---|---|---|---|
 | 1 | [KMS TLS Signing Vertical Slice](./phase-01-kms-tls-signing-vertical-slice.md) | completed | — |
-| 2 | [Contain Development Silo Provider](./phase-02-contain-development-silo-provider.md) | pending | 1 |
+| 2 | [Contain Development Silo Provider](./phase-02-contain-development-silo-provider.md) | completed | 1 |
 | 3 | [Certificate Activation and Provisioning](./phase-03-certificate-activation-and-provisioning.md) | pending | 1 |
 | 4 | [Service-Net Mutual TLS Integration](./phase-04-service-net-mutual-tls-integration.md) | pending | 1, 3 |
 | 5 | [QEMU Relay Software Evidence](./phase-05-qemu-relay-software-evidence.md) | pending | 2, 4 |
@@ -34,8 +34,8 @@ This plan supersedes the production assumptions in `.agents/260712-1902-dice-att
 
 ## Progress
 
-Phase 1 is complete. Phases 2–8 remain pending and unapproved; Phase 2 is the
-next implementation phase and requires explicit approval before work begins.
+Phases 1–2 are complete. Phases 3–8 remain pending and unapproved; Phase 3 is
+next and requires explicit approval before implementation begins.
 
 ## Dependency Graph
 
@@ -85,6 +85,23 @@ P2 and P6 may run in parallel after P1. P5 is never production evidence. P7 cann
   `reports/harness/execution-evidence.json`,
   `reports/harness/adversarial-validation.json`,
   `reports/harness/review-decision.json`).
+- 2026-08-26 Phase 2 completion: 75 focused host tests passed (23 types,
+  40 KMS, 12 Silo), with zero new KMS/Silo warnings and seven baseline OSTD
+  warnings. The production checker passed 2/2 and the unsafe feature matrix
+  rejected 9/9 combinations. The locked guest measured 33,888/61,440 bytes
+  with exact SHA-256
+  `fea5cd2b9c36bb158e1e74b9e2c60209c133e0057292f0b9b4bc5f3e830838e4`.
+  The exact signed 12-cell AArch64 virtualized QEMU lane passed registered
+  Silo readiness, KMS self-verification, direct/unbound denials, VFS PAGE+REG
+  lifecycle, and `vfs-test` 96/0. Code and security reviews returned PASS
+  9.6/10 and GO with zero residual Critical/High/Medium findings; adversarial
+  validation passed and artifact finalization reported `status: ok`
+  (`reports/harness/verification.json`,
+  `reports/harness/execution-evidence.json`,
+  `reports/harness/adversarial-validation.json`,
+  `reports/harness/review-decision.json`). This is `DEV_REFERENCE`
+  AArch64-QEMU-only evidence, not hardware custody or production
+  qualification; production remains `BLOCKED_PENDING_PHASE_6_7_8`.
 
 ## Evidence
 

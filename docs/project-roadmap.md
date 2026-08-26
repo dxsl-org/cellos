@@ -3,7 +3,7 @@
 **Project**: Cellos (Jarvis Hybrid OS)
 **Current version**: 0.2.1-dev (Mycelium Era)
 **Current phase**: Phase 1 - Core Stability; active product stage G1 Robot & Embedded
-**Last updated**: 2026-08-25
+**Last updated**: 2026-08-26
 This file is the roadmap entrypoint. The previous all-in-one roadmap is
 preserved as a read-only content snapshot at
 [project-roadmap-legacy.md](project-roadmap-legacy.md). Use it only when a
@@ -168,14 +168,37 @@ Cellos is being shaped around product stages, not only phase numbers:
   against the exact TLS 1.3 client `CertificateVerify` input. No generic signing
   operation or private-key export was added. See
   [ADR-0005](decisions/0005-mutual-tls-relay-identity.md).
-- **PRODUCTION RELAY SIGNING BLOCKED:** the implemented relay signer is
-  fixture-only. Cargo rejects unsafe provider/downgrade feature combinations,
-  `hardware-relay-provider` is intentionally compile-blocked until Phases 6–7
-  select and implement one production root, and the production image
-  checker/builder intentionally remain blocked through Phase 8 hardware
-  qualification and authenticated build provenance. Client-certificate
-  issuance/provisioning and the TLS client-auth integration remain unavailable;
-  Phase 1 is not hardware-backed signing or a production relay artifact.
+- KMS/Silo Phase 2 is complete as a clean-cutover `DEV_REFERENCE`,
+  AArch64-virtualized-QEMU-only provider. The public/general Silo handle,
+  initialization, signing, ECDH, and raw-command surfaces are removed. Only the
+  live KMS instance may reach the private, TLS 1.3 client
+  `CertificateVerify`-purpose protocol; direct and unbound callers fail closed.
+- Silo publishes readiness only after admission, VM load, one-time development
+  initialization, guest readiness, and public-metadata validation. Its exact
+  `/bin/silo` self-registration authority is test-hooks-only,
+  non-manifestable, non-delegable, and limited to `service::SILO`. The locked
+  guest is digest-admitted before launch (33,888/61,440 bytes; SHA-256
+  `fea5cd2b9c36bb158e1e74b9e2c60209c133e0057292f0b9b4bc5f3e830838e4`);
+  faults or resets permanently fail the instance closed with no retry or
+  fallback.
+- The exact signed 12-cell AArch64 QEMU lane passed registered readiness, KMS
+  self-verification, direct/unbound denials, VFS PAGE+REG grant lifecycle, and
+  `vfs-test` 96/0. This proves software custody/containment only. Because the
+  same Cellos EL2 host constructs and loads the guest and supplies the
+  disposable development seed, Stage-2 is not an independent hardware root or
+  production qualification.
+- **PRODUCTION RELAY SIGNING BLOCKED:** fixture and development Silo providers
+  are non-production. Cargo rejects unsafe provider/downgrade combinations,
+  production artifacts exclude the development Silo, and
+  `hardware-relay-provider` remains compile-blocked until Phases 6–7 select and
+  implement one exact product and trust chain. Phase 8 still requires physical
+  qualification and authenticated build provenance. Production remains
+  `BLOCKED_PENDING_PHASE_6_7_8`; no Phase 1 or Phase 2 result is hardware-backed
+  signing or a production relay artifact.
+- The KMS/Silo protected relay identity plan remains in progress. Phases 1–2
+  are complete; Phases 3–8 remain pending and unapproved. Phase 3,
+  Certificate Activation and Provisioning, is next and requires explicit
+  approval before implementation.
 
 ## Update Rule
 

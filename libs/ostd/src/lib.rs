@@ -71,8 +71,6 @@ pub mod executor;
 /// TLS 1.3 client helpers for app cells.
 pub mod tls;
 
-/// Security Silo client handle — P-256 key isolation via Stage-2 VM.
-pub mod silo;
 
 /// Platform mtime frequency: ticks per millisecond at the assumed 10 MHz mtime clock.
 ///

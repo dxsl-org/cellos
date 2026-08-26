@@ -2,7 +2,7 @@
  *
  * The VMM drops the CPU in EL1 (or EL2 if H-ext is active) with the PC
  * pointing at 0x4000_0000 (_start).  MMU is off; Stage-2 translation is
- * managed by the host VMM which pre-maps the mailbox at IPA 0x4000_3000.
+ * managed by the host VMM which pre-maps the mailbox at IPA 0x4000_F000.
  *
  * Sequence:
  *   1. Set stack pointer to _stack_top (label emitted by linker script).

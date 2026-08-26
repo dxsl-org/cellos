@@ -174,6 +174,8 @@ pub(super) fn spawn_gated(
         crate::task::LaunchRoutes {
             block_io: granted.block_io,
             input: path.ends_with("/bin/input"),
+            #[cfg(feature = "test-hooks")]
+            development_silo: path == "/bin/silo" && granted.hypervisor,
         },
         Some(crate::task::StagedMeasurement {
             path: path.to_string(),
@@ -204,6 +206,8 @@ pub(super) fn spawn_trusted_init(elf: &[u8]) -> ViResult<usize> {
         crate::task::LaunchRoutes {
             block_io: false,
             input: false,
+            #[cfg(feature = "test-hooks")]
+            development_silo: false,
         },
         Some(crate::task::StagedMeasurement {
             path: "/bin/init".to_string(),

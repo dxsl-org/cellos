@@ -7,7 +7,7 @@ license.workspace = true
 [features]
 default = []
 hardware-relay-provider = []
-silo-provider = []
+development-silo-provider = []
 fixture-provider = []
 test-hooks = []
 raw-relay-provider = []

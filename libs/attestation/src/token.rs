@@ -51,8 +51,8 @@ pub struct AttestBody {
     /// The DICE measurement aggregate this token attests to (public: a hash of
     /// public ELF bytes, never the CDI itself).
     pub measurement_aggregate: [u8; AGGREGATE_LEN],
-    /// The alias key derived from the final CDI — SEC1 uncompressed P-256 point
-    /// (`04 || X || Y`), the same 65-byte shape `SiloHandle` already produces.
+    /// The alias key derived from the final CDI as a 65-byte SEC1 uncompressed
+    /// P-256 point (`04 || X || Y`).
     pub alias_pubkey: [u8; ALIAS_PUBKEY_LEN],
     /// Anti-replay / freshness nonce (caller-supplied; not interpreted here).
     pub nonce: [u8; NONCE_LEN],

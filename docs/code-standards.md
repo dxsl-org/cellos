@@ -3,7 +3,7 @@
 **Scope**: Rust code across kernel, HAL, libraries, and Cells  
 **Edition**: 2021  
 **Nightly**: Required for `no_std` bare-metal features  
-**Last Updated**: 2026-08-25
+**Last Updated**: 2026-08-26
 
 ---
 
@@ -38,6 +38,34 @@
   output, normalize ECDSA output to low-S, and self-verify before returning it.
   Provider failure never falls back to another key, provider, or weaker path.
 
+#### Development Silo Provider Boundary
+
+- Silo is not a public SDK or general cryptographic API. Do not add direct
+  connect, key initialization, generic digest/message signing, ECDH,
+  caller-selected command, or raw-opcode surfaces. The only implemented guest
+  signing purpose is the KMS-mediated TLS 1.3 client `CertificateVerify`
+  operation.
+- `development-silo-provider` is `DEV_REFERENCE`, AArch64-QEMU-only, and
+  non-production. It must remain incompatible with production builds and must
+  report `production_capable=false`. Stage-2 under the same Cellos EL2 host is
+  software containment evidence, not independent hardware custody.
+- Package the standalone guest through its locked build, then reject empty,
+  oversized, or digest-mismatched bytes before VM creation. The VM must execute
+  exactly the admitted bytes.
+- Publish Silo readiness only after artifact admission, VM load, one-time
+  development initialization, guest readiness, and public-metadata validation.
+  The registration authority must remain `test-hooks`-only, exact to the
+  governed `/bin/silo` root task and `service::SILO`, non-manifestable, and
+  non-delegable.
+- Authenticate the live KMS instance before decoding the private command.
+  Guest/protocol/VMM faults, malformed or stale responses, and reset permanently
+  fail the current instance closed. Never retry within the instance or fall
+  back to an in-process key.
+- Fatal VM-exit diagnostics must redact arbitrary guest registers. Preserve HVC
+  x0/x1 only when x0 is a recognized private Silo function identifier; unknown
+  HVC values retain only non-register metadata such as the instruction immediate.
+
+
 ### Law 2: Owned Buffers for Async (SAS Safety)
 
 **Forbidden**:
@@ -51,6 +79,23 @@ async fn process(data: Box<[u8]>) -> Box<[u8]> { }  // ✅ OWNED
 ```
 
 **Why**: Single Address Space (SAS) means no process boundaries for cleanup. Owned buffers ensure deterministic drop semantics across async boundaries.
+
+#### Grant Lookup and Lease Linearization
+
+- Any operation that returns a Grant mapping whose use is protected by a VFS
+  lease must resolve the PAGE or REG entry and publish the exact lease while
+  still holding that matching grant-table lock. Lookup, copied fields, and a
+  later lease publication are not equivalent and create a free/reuse TOCTOU.
+- Validate every fallible output before publishing the lease. After
+  publication, returning the mapping and its registered length must be
+  infallible so a failed lookup cannot strand a pin.
+- `GrantFree` and `GrantUnregister` must check the pin registry and remove the
+  entry in the same grant-table critical section. A live lease refuses teardown;
+  owner death quarantines frames until the exact holder/request release.
+- VFS must copy grant bytes through the safe bounded OSTD adapter. The copy is
+  capped by the destination and registered grant lengths, permits overlap, and
+  must match the requested byte count before backend mutation or commit
+  acknowledgement. Do not construct a service-local raw slice for this path.
 
 **Pattern**:
 - Input: `Box<[u8]>` or `Vec<u8>` (caller owns until call)

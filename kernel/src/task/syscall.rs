@@ -521,6 +521,13 @@ fn caller_has_network(caller_id: usize) -> bool {
 fn caller_has_hypervisor(caller_id: usize) -> bool {
     caller_has_cap(caller_id, |t| t.hypervisor_cap.is_some())
 }
+#[cfg(feature = "test-hooks")]
+fn caller_has_development_silo_registration(caller_id: usize) -> bool {
+    caller_has_cap(caller_id, |task| {
+        task.root_tid == caller_id && task.development_silo_registration_cap.is_some()
+    })
+}
+
 
 fn caller_has_spawn(caller_id: usize) -> bool {
     caller_has_cap(caller_id, |t| t.spawn_cap.is_some())
@@ -1010,14 +1017,14 @@ fn finish_vfs_context_drop(caller_id: usize, dropped: Option<(usize, u64)>) {
     }
 }
 
-/// Install a VFS lease only while the scheduler still attests the snapshot.
+/// Install the exact VFS request lease while its scheduler context is live.
 ///
-/// `exit_task` takes `SCHEDULER` before it either tombstones this context or
-/// marks an existing exact lease pending-revoke. Taking the same lock here
-/// makes the context/lease pair one transaction: exit wins and this denies, or
-/// install wins and exit observes the lease to pending-revoke. The raw pointer
-/// is returned only after this transaction completes.
-pub(super) fn install_vfs_lease_if_context_live(
+/// Production callers hold the matching grant-table lock. The complete order is
+/// therefore `PAGE_GRANT_TABLE` or `REG_GRANT_TABLE` → `SCHEDULER` → pin
+/// `REGISTRY` (a leaf). Task exit holds `SCHEDULER` only while marking
+/// `REGISTRY`, and grant teardown never takes `SCHEDULER`, so no inverse edge
+/// exists.
+fn install_vfs_lease_if_context_live(
     caller_id: usize,
     context: VfsGrantContext,
     base: usize,
@@ -1058,21 +1065,99 @@ pub(super) fn install_vfs_lease_if_context_live(
     .is_ok()
 }
 
-fn grant_is_sliceable(
+#[cfg(feature = "test-hooks")]
+pub(super) fn test_install_vfs_lease_if_context_live(
+    caller_id: usize,
+    context: VfsGrantContext,
+    base: usize,
+    size: usize,
+    grant_id: usize,
+) -> bool {
+    install_vfs_lease_if_context_live(caller_id, context, base, size, grant_id)
+}
+
+struct GrantSliceAccess {
+    base: usize,
+    size: usize,
+    size_out: Option<*mut usize>,
+}
+
+fn authorize_grant_slice_locked(
     caller_id: usize,
     grant_owner: usize,
     shared_to_tid: Option<usize>,
     base: usize,
     size: usize,
     grant_id: usize,
+    size_out_ptr: usize,
     vfs_context: Option<VfsGrantContext>,
-) -> bool {
-    if let Some(context) = vfs_context {
-        return grant_owner == context.grant_owner
-            && shared_to_tid == Some(caller_id)
-            && install_vfs_lease_if_context_live(caller_id, context, base, size, grant_id);
+) -> Result<Option<GrantSliceAccess>, SyscallError> {
+    let authorized = if let Some(context) = vfs_context {
+        grant_owner == context.grant_owner && shared_to_tid == Some(caller_id)
+    } else {
+        grant_owner == caller_id || shared_to_tid == Some(caller_id)
+    };
+    if !authorized {
+        return Ok(None);
     }
-    grant_owner == caller_id || shared_to_tid == Some(caller_id)
+
+    // Validate every fallible output before publishing a lease. Once the lease
+    // is installed, returning the raw mapping and writing this slot are
+    // infallible, so a failed GrantSlice cannot strand a pin.
+    let size_out = super::user_out::resolve_optional_usize_slot(caller_id, size_out_ptr)?;
+    if vfs_context.is_some_and(|context| {
+        !install_vfs_lease_if_context_live(caller_id, context, base, size, grant_id)
+    }) {
+        return Ok(None);
+    }
+    Ok(Some(GrantSliceAccess {
+        base,
+        size,
+        size_out,
+    }))
+}
+
+/// Resolve a grant and publish its matching VFS lease in one table transaction.
+///
+/// This is the GrantSlice/free linearization point. If teardown removes the
+/// entry first, neither table can resolve it. If this lookup wins, a VFS lease
+/// reaches the pin registry before the table lock is released, so GrantFree or
+/// GrantUnregister observes the pin and refuses.
+fn resolve_and_lease_grant(
+    caller_id: usize,
+    grant_id: usize,
+    size_out_ptr: usize,
+    vfs_context: Option<VfsGrantContext>,
+) -> Result<Option<GrantSliceAccess>, SyscallError> {
+    {
+        let tbl = grant_table_lock().lock();
+        if let Some(grant) = tbl.as_ref().and_then(|map| map.get(&grant_id)) {
+            return authorize_grant_slice_locked(
+                caller_id,
+                grant.owner,
+                grant.shared_to.as_ref().map(|(tid, _)| *tid),
+                grant.base,
+                grant.size,
+                grant_id,
+                size_out_ptr,
+                vfs_context,
+            );
+        }
+    }
+    let tbl = reg_grant_table_lock().lock();
+    let Some(grant) = tbl.as_ref().and_then(|map| map.get(&grant_id)) else {
+        return Ok(None);
+    };
+    authorize_grant_slice_locked(
+        caller_id,
+        grant.owner,
+        grant.shared_to.as_ref().map(|(tid, _)| *tid),
+        grant.base,
+        grant.size,
+        grant_id,
+        size_out_ptr,
+        vfs_context,
+    )
 }
 
 /// Write the caller-identity trailer into the last bytes of a receiver's buffer.
@@ -1309,8 +1394,8 @@ pub enum Syscall {
     ForceExit { tid: usize },
     /// 204: NotifyOnExit — register the caller to be notified when `watched` dies.
     NotifyOnExit { watched: usize },
-    /// 205: RegisterService — register `tid` as the current provider of `service_id`
-    /// (SpawnCap-gated; the supervisor owns the namespace).
+    /// 205: RegisterService — register `tid` as the current provider of `service_id`.
+    /// SpawnCap owns the namespace; fixed-ID self-registration uses narrower caps.
     RegisterService { service_id: u16, tid: usize },
     /// 206: LookupService — resolve `service_id` to its live provider tid (open; 0 = none).
     LookupService { service_id: u16 },
@@ -2983,6 +3068,21 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         }
 
         Syscall::RegisterService { service_id, tid } => {
+            // Development Silo readiness is self-published only after artifact,
+            // VM, entropy, guest READY, and public-key validation. The dedicated
+            // non-delegable cap is minted solely for the governed `/bin/silo`
+            // root task in test-hooks kernels; HypervisorCap alone is insufficient.
+            #[cfg(feature = "test-hooks")]
+            if service_id == api::syscall::service::SILO
+                && tid == 0
+                && caller_has_development_silo_registration(caller_id)
+            {
+                return if crate::cell::service_registry::register(service_id, caller_id) {
+                    Ok(0)
+                } else {
+                    Err(SyscallError::InvalidInput)
+                };
+            }
             // The state-transfer demo owns one non-production service ID and may
             // self-register (`tid=0`) so QEMU can exercise the real Supervisor path.
             if service_id == api::syscall::service::HOTSWAP_DEMO
@@ -4747,67 +4847,20 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 VfsGrantLookup::Active(context) if context.pending_revoke => return Ok(usize::MAX),
                 VfsGrantLookup::Active(context) => Some(context),
             };
-            // Check PAGE_GRANT_TABLE first.
-            let page_grant = {
-                let tbl = grant_table_lock().lock();
-                tbl.as_ref().and_then(|m| m.get(&grant_id)).map(|grant| {
-                    (
-                        grant.owner,
-                        grant.shared_to.as_ref().map(|(tid, _)| *tid),
-                        grant.base,
-                        grant.size,
-                    )
-                })
-            };
-            if let Some((grant_owner, shared_to_tid, base, size)) = page_grant {
-                if grant_is_sliceable(
-                    caller_id,
-                    grant_owner,
-                    shared_to_tid,
-                    base,
-                    size,
-                    grant_id,
-                    vfs_context,
-                ) {
-                    super::user_out::write_optional_usize(caller_id, size_out_ptr, size)?;
-                    return Ok(base);
-                }
+            let Some(access) =
+                resolve_and_lease_grant(caller_id, grant_id, size_out_ptr, vfs_context)?
+            else {
                 return Ok(usize::MAX);
-            }
-            // Fall back to REG_GRANT_TABLE.
-            let reg_grant = {
-                let rtbl = reg_grant_table_lock().lock();
-                rtbl.as_ref().and_then(|m| m.get(&grant_id)).map(|grant| {
-                    (
-                        grant.owner,
-                        grant.shared_to.as_ref().map(|(tid, _)| *tid),
-                        grant.base,
-                        grant.size,
-                    )
-                })
             };
-            if let Some((grant_owner, shared_to_tid, base, size)) = reg_grant {
-                if grant_is_sliceable(
-                    caller_id,
-                    grant_owner,
-                    shared_to_tid,
-                    base,
-                    size,
-                    grant_id,
-                    vfs_context,
-                ) {
-                    super::user_out::write_optional_usize(caller_id, size_out_ptr, size)?;
-                    return Ok(base);
-                }
-            }
-            Ok(usize::MAX)
+            super::user_out::write_resolved_optional_usize(access.size_out, access.size);
+            Ok(access.base)
         }
 
         Syscall::GrantFree { grant_id } => {
             // Owner-only, and only while no in-flight operation holds the region.
             // The pin check runs inside the table lock (order: PAGE_GRANT_TABLE →
-            // PIN_TABLE, a leaf) so a concurrent GrantDma on another hart cannot
-            // pin the region between the check and the removal.
+            // pin REGISTRY, a leaf), so a concurrent VFS GrantSlice or GrantDma
+            // cannot publish a pin between the check and removal.
             let entry = {
                 let mut tbl = grant_table_lock().lock();
                 let owned = tbl
@@ -4861,7 +4914,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
 
         Syscall::GrantUnregister { reg_id } => {
             // Same contract as GrantFree: owner-only, and refused outright while
-            // the region is pinned. Lock order: REG_GRANT_TABLE → PIN_TABLE (leaf).
+            // pinned. Lock order: REG_GRANT_TABLE → pin REGISTRY (leaf).
             let entry = {
                 let mut tbl = reg_grant_table_lock().lock();
                 let owned = tbl

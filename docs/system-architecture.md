@@ -3,7 +3,7 @@
 **Audience**: Developers new to Cellos
 **Level**: High-level (conceptual + key components)
 **Version**: 0.2.1-dev (Mycelium Era)
-**Last Updated**: 2026-08-25 (RV64 compositor titlebar, frame/control hit testing, drag/resize, staged configure, close response, and managed visibility policy are implemented; the QEMU `window-policy` scenario is the executable evidence. KMS TLS-signing Phase 1 is implemented and verified as a fixture-backed, non-production boundary.)
+**Last Updated**: 2026-08-26 (KMS/Silo Phase 2 is complete as a KMS-mediated `DEV_REFERENCE` AArch64-QEMU lane; the public/general Silo API is removed, Stage-2 is not hardware custody, and production remains blocked.)
 
 > **Status refresh 2026-08-21**: [Spec 23 Native SDK contract](specs/23-native-sdk-contract.md)
 > is ratified as the normative contract for the single Native SDK family. It
@@ -402,6 +402,17 @@ struct Task {
 > `NullBlock` reports snapshot unavailability on the emulated path, and real MMC save/restore
 > remains host-gated. The snapshot format, kernel serializer, and warm-boot restore code are
 > otherwise unchanged.
+
+> **Grant lookup/lease linearization**: `GrantSlice` resolves a PAGE or REG
+> grant and publishes the exact VFS lease while the matching grant-table lock is
+> still held. This is the linearization point against `GrantFree` and
+> `GrantUnregister`: teardown checks the pin registry and removes the entry in
+> the same table-lock critical section, so lookup cannot win and then expose
+> recycled frames before its lease exists. Owner death quarantines leased frames
+> until the matching holder/request release. VFS copies only through the safe
+> bounded OSTD adapter and requires the exact requested count before backend
+> mutation. This ABI-stable correction closes the former High CWE-416
+> lookup-to-pin race without a wire or syscall change.
 
 | Syscall | Purpose |
 |---------|---------|
@@ -854,7 +865,7 @@ cells/services/compositor/  — Software blending + z-order + Grant surfaces
 cells/services/input/     — Input event routing + focus system
 cells/services/net/       — smoltcp TCP/IP + DHCP + TLS 1.3 (✅ typed postcard IPC)
 cells/services/hypervisor/ — ARM64 EL2 VMM (Alpine Linux) (✅ minimal VMM)
-cells/services/silo/      — Security Silo (Hardware key isolation, Stage-2 fence) (✅ complete)
+cells/services/silo/      — KMS-internal development Silo (`test-hooks`, AArch64 QEMU `DEV_REFERENCE`; not production/hardware custody)
 cells/services/httpd/     — HTTP web server (shell builtin)
 cells/services/power/     — Power management (stub)
 ```
@@ -878,13 +889,13 @@ cells/tests/mlibc-smoke/     — mlibc profile integration (Rust + libc.a)
 cells/tests/zig-hello/       — Zig raw-syscall smoke test (no mlibc)
 cells/tests/zig-mlibc-smoke/ — Zig mlibc profile smoke test (links mlibc libc.a)
 cells/tests/input-test/      — Input service focus & event tests
-cells/tests/silo-test/       — Security Silo (6 end-to-end test cases)
+cells/tests/silo-test/       — development containment probe (KMS denials/readiness; AArch64 QEMU `test-hooks`)
 cells/tests/test-isolation/  — Cell fault isolation tests
 ```
 
 **Guests**: Hypervisor guests (Tier 3)
 ```
-cells/guests/silo-guest/  — aarch64-unknown-none bare-metal (p256 ECDSA signing, secure enclave)
+cells/guests/silo-guest/  — locked AArch64 development P-256 guest (KMS purpose-bound `DEV_REFERENCE`, not a secure enclave)
 ```
 
 **UI Library** (`libs/viui/`): no_std UI toolkit for GUI app Cells
@@ -1170,8 +1181,9 @@ inner-shareable `tlbi vaae1is` (plus `vae2is` when EL2 is active) bracketed by `
 `dsb ish` / `isb`, but multi-PE runtime proof remains gated. The repo therefore does not
 claim D7 complete.
 
-LBI, CFI, DMA isolation, the Tier 1 Silo capability, and Tier 3 VM protection complement this delivery model but
-do not change its Layer A/B/C ownership or turn MTE/MPK into a side-channel guarantee.
+LBI, CFI, DMA isolation, the KMS-internal development Silo containment lane,
+and Tier 3 VM protection complement this delivery model but do not change its
+Layer A/B/C ownership or turn MTE/MPK into a side-channel guarantee.
 
 **Hardware Security Implementations by Architecture:**
 
@@ -1238,8 +1250,8 @@ Routing (cross-machine): Private→Public ✓ · Public→Private ✗ · Private
 - mTLS terminates only at an external/interop boundary. A native `net-broker`
   may act as the mTLS client for an external relay, but it must preserve Noise
   end-to-end, validate the relay CA and hostname, and sign through an attested,
-  service-net-authorized Silo/KMS key without exposing private-key bytes. X.509
-  PKI remains outside the Cellos kernel. See
+  service-net-authorized KMS relay key without exposing private-key bytes.
+  X.509 PKI remains outside the Cellos kernel. See
   [ADR-0005](decisions/0005-mutual-tls-relay-identity.md).
 
 - **Profile-specific entropy and output-buffer gate**: the current default
@@ -1281,17 +1293,61 @@ state or returning the signature. Authorization, replay rejection, profile
 binding, and self-verification therefore remain inside KMS rather than the TLS
 client.
 
-The current provider is a test fixture, not protected hardware. Unsafe Cargo
-feature combinations fail at compile time, and the artifact checker rejects
-development, insecure, raw-relay, and K1-fallback paths. The nominal
-`hardware-relay-provider` is intentionally compile-blocked until Phases 6–7
-select and implement the production root; production image checking/building
-remains intentionally blocked until Phase 8 supplies physical qualification
-and authenticated build provenance. This phase does not provide
-client-certificate issuance, production TLS-client integration, a production
-artifact, or hardware-backed signing. The external-boundary identity and key
-non-exposure constraints remain governed by
+The implemented Relay P-256 providers are the Phase 1 fixture and the optional
+Phase 2 development Silo; neither is protected production hardware. Unsafe
+Cargo feature combinations fail at compile time, and the artifact checker
+rejects development, fixture, insecure, raw-relay, and K1-fallback paths from
+production. The nominal `hardware-relay-provider` is intentionally
+compile-blocked until Phases 6–7 select and implement the production root;
+production image checking/building remains intentionally blocked until Phase 8
+supplies physical qualification and authenticated build provenance. These
+phases do not provide client-certificate issuance, production TLS-client
+integration, a production artifact, or hardware-backed signing. The
+external-boundary identity and key non-exposure constraints remain governed by
 [ADR-0005](decisions/0005-mutual-tls-relay-identity.md).
+
+### Development Silo provider boundary (Phase 2, 2026-08-26)
+
+Phase 2 cleanly removes the public/general Silo boundary. There is no supported
+application handle, direct initialization, generic sign/digest operation, ECDH,
+raw opcode, or private-key export. The only implemented Silo signing purpose is
+the private KMS-provider operation corresponding to the existing TLS 1.3 client
+`CertificateVerify` contract. The live KMS instance is authenticated before
+private-protocol decode; direct, unbound, forged, stale, and post-fault callers
+are denied without guest mutation.
+
+Readiness is exact-instance rather than timing-based. The Silo service admits
+and loads the guest, performs one-time development initialization, observes guest
+readiness, and validates public metadata before it registers itself. A
+`DevelopmentSiloRegistrationCap` exists only with `test-hooks`, is minted only
+for the governed exact `/bin/silo` root task, cannot be requested through a
+manifest or delegated through `CapSet`, and authorizes only
+`RegisterService(SILO, tid=0)`. Init and the supervisor require the registry to
+contain the exact spawned TID before KMS starts or restarts; `HypervisorCap`
+alone carries no readiness authority.
+
+The standalone guest is built through its locked package and admitted before VM
+creation by non-empty, maximum-size, and exact SHA-256 checks. The verified image
+is 33,888 of 61,440 available bytes with digest
+`fea5cd2b9c36bb158e1e74b9e2c60209c133e0057292f0b9b4bc5f3e830838e4`.
+Guest protocol/crypto faults, VMM faults, malformed or stale responses, and
+reset permanently latch the current instance unavailable. There is no retry or
+in-process fallback; a governed permanent-service restart creates and admits a
+new exact instance.
+
+This lane is explicitly `DEV_REFERENCE` and AArch64 virtualized-QEMU-only.
+Stage-2 supplies useful address-space and fault containment, but the Cellos EL2
+host still creates the VM, loads the guest, and supplies its disposable
+development seed. It is therefore software-custody evidence, not an independent
+hardware root, hardware-backed Silo, kernel-compromise-resistant custody, or
+production qualification.
+
+The exact signed 12-cell QEMU image passed registered readiness, KMS
+self-verification, direct/unbound denials, VFS PAGE+REG lifecycle checks, and
+`vfs-test` 96/0. This does not alter the production gate:
+`BLOCKED_PENDING_PHASE_6_7_8`. Phases 6–7 must select and implement one exact
+hardware product/trust chain, and Phase 8 requires physical qualification and
+authenticated build provenance.
 
 ### Robot swarm (G1) vs server cluster (G2/G3)
 
@@ -1379,7 +1435,7 @@ Same foundation, **opposite coordination semantics** → two separate problems:
   execution. Neither x86 path is production hardware-qualified. RISC-V H-extension
   remains unsupported on the current board set.
 - **Cell-signing mechanism + hot migration** — ✅ MECHANISMS COMPLETE 2026-06-23; Phase 00 public syscall landing is complete 2026-08-07: `PauseService` 422 is SupervisorCap-gated with bit 49, rejects cached-TID ingress and waits for accepted sender/mailbox work to drain before Snapshot; legacy `HotSwap` 400 is retired/reserved, `HotSwapReady`/`Snapshot` keep bit 32, `SpawnReplacement` 421 is additive and allowlist bit 57, `SupervisorCap` gates Freeze/Resume/Kill/QueryHotswapReady/SpawnReplacement, the kernel consumes one live frozen-task ceiling under `SCHEDULER -> SWAP_CEILINGS`, and resume / all scheduler exits clear the ceiling. Phase 01 supervisory atomic cutover is complete: compare-and-commit barrier, cached sender FIFO proof, old-TID rejection, and `supervisor_hotswap_preserves_demo_state` passed with `[hotswap-cached-sender] PASS` and `[hotswap-demo-v2] SpawnCap retained`. Phase 02 supervisory hotswap closure is complete: the `hotswap` CLI uses Supervisor IPC, the exact shell-only `/bin/hotswap` edge stays capability-free, unauthorized senders receive `0xFD`, and the final QEMU hotswap-smoke suite passed 15/15 zero skip; fleet signed-only admission remains planned.
-- **Hardware Key Isolation (Silo)** — ✅ COMPLETE 2026-06-16 (SiloHandle API; reclassified Tier 3a → Tier 1 hardware capability, G2 ARM64/x86).
+- **Development Silo provider** — ✅ PHASE 2 `DEV_REFERENCE` COMPLETE 2026-08-26: the former public/general Silo API is removed; the signed AArch64 virtualized-QEMU lane is KMS-mediated and test-hooks-only. Stage-2 is software containment, not hardware custody, and production remains `BLOCKED_PENDING_PHASE_6_7_8`.
 
 ### 🚧 In Progress / Partial
 - **MQTT binary** (skeleton added; full implementation deferred)

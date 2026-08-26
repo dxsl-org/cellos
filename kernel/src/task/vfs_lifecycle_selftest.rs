@@ -442,6 +442,204 @@ fn registered_grant_without_lease_keeps_legacy_transfer() -> bool {
     true
 }
 
+#[derive(Clone, Copy)]
+enum GrantRaceKind {
+    Page,
+    Registered,
+}
+
+fn allocate_race_grant(kind: GrantRaceKind) -> Option<usize> {
+    let syscall = match kind {
+        GrantRaceKind::Page => Syscall::GrantAlloc { size: PAGE_SIZE },
+        GrantRaceKind::Registered => Syscall::GrantRegister { size: PAGE_SIZE },
+    };
+    match handle_syscall(CLIENT_WORKER_TID, syscall) {
+        Ok(id) if id != 0 => Some(id),
+        _ => None,
+    }
+}
+
+fn teardown_race_grant(kind: GrantRaceKind, grant_id: usize) -> super::syscall::SyscallResult {
+    handle_syscall(
+        CLIENT_WORKER_TID,
+        match kind {
+            GrantRaceKind::Page => Syscall::GrantFree { grant_id },
+            GrantRaceKind::Registered => Syscall::GrantUnregister { reg_id: grant_id },
+        },
+    )
+}
+
+fn renew_vfs_grant_context() -> Option<u64> {
+    super::SCHEDULER.lock().as_mut().and_then(|sched| {
+        let owner_generation = sched
+            .tasks
+            .get(&CLIENT_WORKER_TID)
+            .map(|task| task.cell_generation)?;
+        let holder = sched.tasks.get_mut(&VFS_WORKER_TID)?;
+        holder.clear_current_caller_context();
+        holder.set_current_caller_context(
+            CLIENT_WORKER_TID,
+            CLIENT_CELL_ID,
+            owner_generation,
+        );
+        Some(holder.current_caller_request_generation)
+    })
+}
+
+/// Exercise both outcomes around the grant-table linearization point.
+///
+/// The lease-first half proves teardown observes the pin published by
+/// GrantSlice. The teardown-first half proves a removed entry cannot publish a
+/// lease from stale grant fields.
+fn grant_slice_and_teardown_are_linearized(kind: GrantRaceKind) -> bool {
+    insert(mk_task(
+        VFS_WORKER_TID,
+        VFS_OWNER_TID as u64,
+        "vfs-worker-grant-race-selftest",
+    ));
+    insert(mk_task(
+        CLIENT_WORKER_TID,
+        CLIENT_CELL_ID,
+        "client-worker-grant-race-selftest",
+    ));
+    crate::fast_ipc::set_vfs_handler_cell(VFS_OWNER_TID);
+
+    let lease_generation = renew_vfs_grant_context();
+    let leased = allocate_race_grant(kind);
+    let shared = leased.is_some_and(|grant_id| {
+        handle_syscall(
+            CLIENT_WORKER_TID,
+            Syscall::GrantShare {
+                grant_id,
+                target_cell: VFS_WORKER_TID,
+                perm: 0,
+            },
+        ) == Ok(0)
+    });
+    let slice = leased.map(|grant_id| {
+        handle_syscall(
+            VFS_WORKER_TID,
+            Syscall::GrantSlice {
+                grant_id,
+                size_out_ptr: 0,
+            },
+        )
+    });
+    let teardown_refused = leased.is_some_and(|grant_id| {
+        teardown_race_grant(kind, grant_id) == Err(super::syscall::SyscallError::PermissionDenied)
+    });
+    let lease_visible = leased.is_some_and(|grant_id| {
+        crate::memory::pin::holder_of(grant_id, PAGE_SIZE).is_some()
+            && slice == Some(Ok(grant_id))
+    });
+    if let Some(request_generation) = lease_generation {
+        let _ = crate::memory::pin::release_vfs_lease(
+            VFS_WORKER_TID,
+            CLIENT_WORKER_TID,
+            request_generation,
+        );
+    }
+    let leased_cleanup =
+        leased.is_some_and(|grant_id| teardown_race_grant(kind, grant_id) == Ok(0));
+
+    let free_generation = renew_vfs_grant_context();
+    let freed = allocate_race_grant(kind);
+    let free_shared = freed.is_some_and(|grant_id| {
+        handle_syscall(
+            CLIENT_WORKER_TID,
+            Syscall::GrantShare {
+                grant_id,
+                target_cell: VFS_WORKER_TID,
+                perm: 0,
+            },
+        ) == Ok(0)
+    });
+    let teardown_won =
+        freed.is_some_and(|grant_id| teardown_race_grant(kind, grant_id) == Ok(0));
+    let stale_slice_denied = freed.is_some_and(|grant_id| {
+        handle_syscall(
+            VFS_WORKER_TID,
+            Syscall::GrantSlice {
+                grant_id,
+                size_out_ptr: 0,
+            },
+        ) == Ok(usize::MAX)
+            && free_generation.is_some_and(|request_generation| {
+                crate::memory::pin::find_vfs_lease(
+                    VFS_WORKER_TID,
+                    CLIENT_WORKER_TID,
+                    request_generation,
+                )
+                .is_none()
+            })
+    });
+    let invalid_generation = renew_vfs_grant_context();
+    let invalid = allocate_race_grant(kind);
+    let invalid_shared = invalid.is_some_and(|grant_id| {
+        handle_syscall(
+            CLIENT_WORKER_TID,
+            Syscall::GrantShare {
+                grant_id,
+                target_cell: VFS_WORKER_TID,
+                perm: 0,
+            },
+        ) == Ok(0)
+    });
+    let invalid_slice = invalid.map(|grant_id| {
+        handle_syscall(
+            VFS_WORKER_TID,
+            Syscall::GrantSlice {
+                grant_id,
+                size_out_ptr: 1,
+            },
+        )
+    });
+    let invalid_lease_absent = invalid_generation.is_some_and(|request_generation| {
+        crate::memory::pin::find_vfs_lease(
+            VFS_WORKER_TID,
+            CLIENT_WORKER_TID,
+            request_generation,
+        )
+        .is_none()
+    });
+    if let Some(request_generation) = invalid_generation {
+        let _ = crate::memory::pin::release_vfs_lease(
+            VFS_WORKER_TID,
+            CLIENT_WORKER_TID,
+            request_generation,
+        );
+    }
+    let invalid_cleanup =
+        invalid.is_some_and(|grant_id| teardown_race_grant(kind, grant_id) == Ok(0));
+    let invalid_slice_leak_free =
+        invalid_slice.is_some_and(|result| result.is_err()) && invalid_lease_absent;
+
+    crate::fast_ipc::clear_vfs_if_cell(VFS_OWNER_TID);
+    remove(VFS_WORKER_TID);
+    remove(CLIENT_WORKER_TID);
+
+    if lease_generation.is_none()
+        || !shared
+        || !lease_visible
+        || !teardown_refused
+        || !leased_cleanup
+        || free_generation.is_none()
+        || !free_shared
+        || !teardown_won
+        || !stale_slice_denied
+        || invalid_generation.is_none()
+        || !invalid_shared
+        || !invalid_slice_leak_free
+        || !invalid_cleanup
+    {
+        return fail(
+            "grant-table-race",
+            "GrantSlice and grant teardown did not produce exactly one winning state",
+        );
+    }
+    true
+}
+
 /// Deterministically interleave the two SMP contenders at their scheduler
 /// linearization point: snapshot a valid VFS context, retire the owner, then
 /// attempt every slot's worth of stale installs. None may create a lease.
@@ -491,7 +689,7 @@ fn stale_context_install_is_denied_without_capacity_loss() -> bool {
     }
 
     let stale_install_succeeded = (0..crate::memory::pin::MAX_VFS_LEASES).any(|slot| {
-        super::syscall::install_vfs_lease_if_context_live(
+        super::syscall::test_install_vfs_lease_if_context_live(
             VFS_WORKER_TID,
             snapshot,
             arena(20 + slot),
@@ -870,6 +1068,8 @@ pub fn self_test() -> bool {
     let ok = exact_lease_release()
         & quarantine_waits_for_exact_release()
         & holder_death_is_selective()
+        & grant_slice_and_teardown_are_linearized(GrantRaceKind::Page)
+        & grant_slice_and_teardown_are_linearized(GrantRaceKind::Registered)
         & stale_context_install_is_denied_without_capacity_loss()
         & vfs_owner_watch()
         & vfs_send_release_is_exact()
@@ -877,7 +1077,7 @@ pub fn self_test() -> bool {
         & registered_grant_without_lease_keeps_legacy_transfer();
     if ok {
         log::info!(
-            "[selftest] VFS-LIFETIME: PASS (exact lease + quarantine + owner watch + SMP stale-install denial)"
+            "[selftest] VFS-LIFETIME: PASS (atomic grant-table lease + teardown orders + exact quarantine + owner watch)"
         );
     } else {
         log::error!("[selftest] VFS-LIFETIME: FAIL");

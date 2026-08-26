@@ -2,7 +2,8 @@
 //!
 //! The wire carries an opaque `u64`, but only an entry in `FileHandleTable`
 //! gives it a path and an owner. Resolve that authority and re-check policy
-//! before resolving the caller's grant, then commit before acknowledging it.
+//! before copying through the leased GrantSlice adapter, then commit before
+//! acknowledging it.
 
 use alloc::string::ToString;
 
@@ -64,13 +65,6 @@ pub(crate) fn write<'a>(
         return VfsResponse::GrantDone { bytes: 0 };
     }
 
-    let Some((grant_ptr, grant_len)) = ostd::syscall::sys_grant_slice_with_len(grant) else {
-        return VfsResponse::Err(ERR_IO);
-    };
-    if bytes > grant_len {
-        return VfsResponse::Err(ERR_IO);
-    }
-
     let old = vfs.read_to_vec(&path);
     if old.len() != file_len {
         return VfsResponse::Err(ERR_IO);
@@ -78,10 +72,11 @@ pub(crate) fn write<'a>(
     let mut committed = Vec::with_capacity(new_len);
     committed.extend_from_slice(&old);
     committed.resize(new_len, 0);
-    // SAFETY: `grant_ptr` is kernel-validated for `grant_len` bytes and `bytes`
-    // is capped by it above. `committed[offset..end]` is within its new length.
-    unsafe {
-        core::ptr::copy_nonoverlapping(grant_ptr, committed[offset..end].as_mut_ptr(), bytes);
+    // GrantSlice resolution and VFS lease publication are one kernel grant-table
+    // transaction. Copy into only the requested file range; a missing or short
+    // grant is an I/O error and the backend remains untouched.
+    if ostd::syscall::sys_grant_copy_to_slice(grant, &mut committed[offset..end]) != Some(bytes) {
+        return VfsResponse::Err(ERR_IO);
     }
 
     if !vfs.write(&path, &committed) {

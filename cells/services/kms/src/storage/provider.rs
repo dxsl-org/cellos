@@ -1,6 +1,8 @@
 #[cfg(test)]
 mod c2c;
 mod relay;
+#[cfg(all(feature = "development-silo-provider", target_arch = "aarch64", target_os = "none"))]
+mod silo;
 
 #[cfg(test)]
 pub(crate) use c2c::FixtureRootProvider;

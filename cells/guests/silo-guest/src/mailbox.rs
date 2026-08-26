@@ -1,114 +1,131 @@
 // SPDX-License-Identifier: MPL-2.0
-// Mailbox protocol types for the silo guest.
-//
-// This is the guest-side mirror of `libs/types/src/silo.rs`.  It is
-// duplicated here because the guest is a bare-metal binary that cannot depend
-// on the ViCell `libs/` tree (different target, no syscalls).
-//
-// Invariant: constants and layout must stay byte-for-byte in sync with the
-// host-side `silo.rs`.
+//! Private host-to-guest mailbox for the development Silo.
 
-#![allow(dead_code)]
+use core::sync::atomic::{compiler_fence, Ordering};
 
-/// IPA of the 4 KiB mailbox page pre-mapped by the VMM at guest boot.
-///
-/// The guest must never store a local copy of this pointer — always call
-/// `read_mailbox()` to get a stack snapshot (TOCTOU guard).
-pub const MAILBOX_IPA: *mut MailboxPage = 0x4000_3000usize as *mut MailboxPage;
+use crate::layout::{
+    COMMAND_INITIALIZE, COMMAND_OFFSET, COMMAND_SIGN_TLS, DATA_OFFSET, INPUT_LEN, MAILBOX_IPA,
+    PAGE_LEN, REQUEST_SEQ_OFFSET, RESERVED_OFFSET, RESPONSE_SEQ_OFFSET, STATUS_OFFSET,
+};
+pub use crate::layout::{HVC_SILO_DONE, HVC_SILO_FAULT, HVC_SILO_READY};
 
-// ── HVC function IDs ─────────────────────────────────────────────────────────
+const MAILBOX: *mut u8 = MAILBOX_IPA as usize as *mut u8;
 
-pub const HVC_SILO_READY: u64 = 0xC600_0080;
-pub const HVC_SILO_DONE: u64 = 0xC600_0081;
-pub const HVC_SILO_FAULT: u64 = 0xC600_0082;
-
-// ── Mailbox command discriminants ────────────────────────────────────────────
-
-/// Commands the host sends to the guest.
-#[repr(u8)]
+/// Purpose-restricted guest commands; initialization is host-internal only.
 #[derive(Copy, Clone, PartialEq, Eq)]
-pub enum SiloCmd {
-    Init = 0,
-    Sign = 1,
-    Ecdh = 2,
-    GetPub = 3,
-    /// Catch-all for unrecognised bytes — guest responds with Fault.
-    Unknown = 0xFF,
+pub enum SiloCommand {
+    Initialize,
+    SignTls13ClientCertificateVerify,
+    Unknown,
 }
 
-impl From<u8> for SiloCmd {
-    fn from(v: u8) -> Self {
-        match v {
-            0 => Self::Init,
-            1 => Self::Sign,
-            2 => Self::Ecdh,
-            3 => Self::GetPub,
+impl From<u8> for SiloCommand {
+    fn from(value: u8) -> Self {
+        match value {
+            COMMAND_INITIALIZE => Self::Initialize,
+            COMMAND_SIGN_TLS => Self::SignTls13ClientCertificateVerify,
             _ => Self::Unknown,
         }
     }
 }
 
-// ── Mailbox page layout ──────────────────────────────────────────────────────
-
-/// 4 KiB shared-memory page at `MAILBOX_IPA`.
-///
-/// Layout contract (must match host `MailboxPage`):
-/// - Bytes 0..3   : `seq` (u32 LE)
-/// - Byte 4       : `cmd`
-/// - Byte 5       : `resp`
-/// - Bytes 6..7   : padding
-/// - Bytes 8..4095: `data`
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub struct MailboxPage {
-    pub seq: u32,
-    pub cmd: u8,
-    pub resp: u8,
-    pub _pad: [u8; 2],
-    pub data: [u8; 4088],
+/// Bounded request snapshot; the 4 KiB shared page is never copied to the stack.
+pub struct MailboxRequest {
+    pub request_seq: u64,
+    pub response_seq: u64,
+    pub command: u8,
+    pub status: u8,
+    pub reserved_zero: bool,
+    pub canonical_data: bool,
+    pub input: [u8; INPUT_LEN],
 }
 
-// Compile-time layout check.
-const _: () = assert!(core::mem::size_of::<MailboxPage>() == 4096);
+const _: () = assert!(core::mem::size_of::<MailboxRequest>() <= 56);
 
-// ── Mailbox accessors ────────────────────────────────────────────────────────
-
-/// Copy the mailbox page to the stack.
+/// Snapshot the request fields while checking every canonical padding byte.
 ///
 /// # Safety
-/// The caller must ensure the VMM has resumed the guest before this is called
-/// (i.e. the host has completed its write to the IPA).  The volatile copy
-/// prevents the compiler from caching a stale value.
-pub unsafe fn read_mailbox() -> MailboxPage {
-    // SAFETY: MAILBOX_IPA is a valid 4KiB page pre-mapped by the VMM.
-    // volatile ensures we see the host's latest write.
-    core::ptr::read_volatile(MAILBOX_IPA)
+/// The VMM must keep the guest as the sole mailbox reader while it runs.
+pub unsafe fn read_request() -> MailboxRequest {
+    compiler_fence(Ordering::Acquire);
+    let request_seq = read_word(REQUEST_SEQ_OFFSET);
+    let response_seq = read_word(RESPONSE_SEQ_OFFSET);
+    let command = read_byte(COMMAND_OFFSET);
+    let status = read_byte(STATUS_OFFSET);
+    let mut reserved_zero = true;
+    for offset in RESERVED_OFFSET..DATA_OFFSET {
+        reserved_zero &= read_byte(offset) == 0;
+    }
+    let mut input = [0u8; INPUT_LEN];
+    for (index, byte) in input.iter_mut().enumerate() {
+        *byte = read_byte(DATA_OFFSET + index);
+    }
+    let mut canonical_data = true;
+    for offset in DATA_OFFSET + INPUT_LEN..PAGE_LEN {
+        canonical_data &= read_byte(offset) == 0;
+    }
+    MailboxRequest {
+        request_seq,
+        response_seq,
+        command,
+        status,
+        reserved_zero,
+        canonical_data,
+        input,
+    }
 }
 
-/// Write the response page back to the mailbox IPA.
+/// Zero the shared request and publish one canonical response in place.
 ///
 /// # Safety
-/// Must be called exactly once per request, before firing the HVC signal.
-pub unsafe fn write_mailbox(page: &MailboxPage) {
-    // SAFETY: same region as read_mailbox; volatile prevents store elision.
-    core::ptr::write_volatile(MAILBOX_IPA, *page);
+/// The guest must hold exclusive mailbox access until the following HVC.
+pub unsafe fn publish_response(
+    request_seq: u64,
+    command: u8,
+    status: u8,
+    output: &[u8],
+) {
+    for offset in (0..PAGE_LEN).step_by(core::mem::size_of::<u64>()) {
+        write_word(offset, 0);
+    }
+    write_word(REQUEST_SEQ_OFFSET, request_seq);
+    write_word(RESPONSE_SEQ_OFFSET, request_seq);
+    write_byte(COMMAND_OFFSET, command);
+    write_byte(STATUS_OFFSET, status);
+    for (index, byte) in output.iter().enumerate() {
+        write_byte(DATA_OFFSET + index, *byte);
+    }
+    compiler_fence(Ordering::Release);
 }
 
-/// Fire an HVC to signal the host.
+/// Exit to the host only after the canonical response is fully published.
 ///
-/// `func_id` must be one of `HVC_SILO_*`.  The host VMM intercepts the trap
-/// and inspects `func_id` to determine the outcome.
+/// x0 carries the private Silo function ID. x1 carries a bounded fault code and
+/// is zero for successful READY/DONE signals.
 ///
 /// # Safety
-/// Must only be called after `write_mailbox` has flushed the response.
-pub unsafe fn hvc_signal(func_id: u64) {
-    // SAFETY: HVC is an intentional guest→host exit; x0 is the SMCCC function
-    // identifier; x0 is clobbered by the host's return value (ignored here).
+/// `function_id` must be one of the declared Silo HVC identifiers.
+pub unsafe fn hvc_signal(function_id: u64, detail_code: u64) {
     core::arch::asm!(
-        "mov x0, {fid}",
         "hvc #0",
-        fid = in(reg) func_id,
-        out("x0") _,
+        inlateout("x0") function_id => _,
+        inlateout("x1") detail_code => _,
         options(nostack),
     );
+}
+
+unsafe fn read_byte(offset: usize) -> u8 {
+    core::ptr::read_volatile(MAILBOX.add(offset))
+}
+
+unsafe fn read_word(offset: usize) -> u64 {
+    u64::from_le(core::ptr::read_volatile(MAILBOX.add(offset).cast::<u64>()))
+}
+
+unsafe fn write_byte(offset: usize, value: u8) {
+    core::ptr::write_volatile(MAILBOX.add(offset), value);
+}
+
+unsafe fn write_word(offset: usize, value: u64) {
+    core::ptr::write_volatile(MAILBOX.add(offset).cast::<u64>(), value.to_le());
 }

@@ -58,6 +58,21 @@ impl HypervisorCap {
         Self(())
     }
 }
+/// Test-hooks-only authority to publish the caller as `service::SILO`.
+///
+/// Minted only by the exact governed `/bin/silo` launch route. It is neither
+/// manifest-requestable nor included in `CapSet`, so it cannot be delegated.
+#[cfg(feature = "test-hooks")]
+#[derive(Copy, Clone, Debug)]
+pub struct DevelopmentSiloRegistrationCap(());
+
+#[cfg(feature = "test-hooks")]
+impl DevelopmentSiloRegistrationCap {
+    pub(crate) fn new() -> Self {
+        Self(())
+    }
+}
+
 
 /// Permits `sys_freeze_cell`, `sys_resume_cell`, `sys_kill_cell`.
 ///

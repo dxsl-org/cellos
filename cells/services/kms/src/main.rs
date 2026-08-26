@@ -10,7 +10,7 @@ use service_kms::{boot_probe_store, KmsService, ServiceRegistrySnapshot};
 use types::kms::KMS_MESSAGE_LEN;
 
 api::declare_manifest!(block_io = false, network = false, spawn = false);
-api::declare_syscalls![Send, Recv, Log, LookupService];
+api::declare_syscalls![Send, Recv, RecvTimeout, Log, LookupService];
 
 ostd::cell_main!(cell_main);
 
@@ -18,6 +18,12 @@ fn cell_main() {
     ostd::io::println("[kms] fail-closed node identity service starting");
     boot_probe_store();
     let mut service_state = KmsService::new();
+    #[cfg(feature = "development-silo-provider")]
+    if service_state.development_silo_boot_probe() {
+        ostd::io::println("[kms] DEV_REFERENCE Silo TLS signature self-verified");
+    } else {
+        ostd::io::println("[kms] development Silo unavailable; relay remains fail-closed");
+    }
     loop {
         let mut buffer = [0u8; api::ipc::IPC_BUF_SIZE];
         match ostd::syscall::sys_recv_attested(0, &mut buffer) {

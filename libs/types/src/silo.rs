@@ -1,108 +1,198 @@
 // SPDX-License-Identifier: MPL-2.0
-// Host-side protocol types for the Tier 3a Security Silo.
-//
-// The silo is a bare-metal AArch64 guest that holds a P-256 private key in
-// Stage-2 fenced memory. The host communicates through a shared mailbox page
-// mapped at IPA 0x4000_3000.  All constants here must stay byte-for-byte
-// consistent with the guest-side `mailbox.rs`.
+//! Purpose-specific wire contract for the development AArch64 Silo provider.
+//!
+//! This is not a general signing interface. The only accepted operation is the
+//! Phase 1 TLS 1.3 client CertificateVerify operation, plus public status.
 
-/// IPA of the 4 KiB mailbox page pre-mapped by the VMM before guest boot.
-pub const MAILBOX_IPA: u64 = 0x4000_3000;
+/// Fixed IPC frame length for KMS-to-Silo messages.
+pub const DEVELOPMENT_SILO_FRAME_LEN: usize = 192;
+/// Development relay generation exposed by the reference provider.
+pub const DEVELOPMENT_RELAY_GENERATION: u64 = 1;
+/// Development profile bound into every reference-provider request.
+pub const DEVELOPMENT_PROFILE_DIGEST: [u8; 32] = [0x53; 32];
 
-// ── HVC function IDs (SMCCC-style vendor range 0xC600_0080..0xC600_00FF) ──
+const MAGIC: [u8; 4] = *b"DSLO";
+const VERSION: u8 = 1;
+const PAYLOAD: usize = 24;
 
-/// Guest signals: key initialisation complete; response data = uncompressed pub key.
-pub const HVC_SILO_READY: u64 = 0xC600_0080;
-/// Guest signals: operation finished; response data in mailbox.
-pub const HVC_SILO_DONE: u64 = 0xC600_0081;
-/// Guest signals: unrecoverable error; mailbox data[0] = error code.
-pub const HVC_SILO_FAULT: u64 = 0xC600_0082;
+/// Typed, canonical request accepted by the development Silo service.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DevelopmentSiloRequest {
+    /// Return the relay P-256 public key.
+    RelayStatus { request_seq: u64 },
+    /// Sign exactly one TLS 1.3 client CertificateVerify transcript.
+    SignTls13ClientCertificateVerify {
+        request_seq: u64,
+        transcript_hash: [u8; 32],
+        relay_generation: u64,
+        active_profile_digest: [u8; 32],
+        request_id: u64,
+    },
+}
 
-// ── Mailbox protocol ──────────────────────────────────────────────────────
-
-/// Commands the host can send to the silo guest.
+/// Bounded failures returned by the development Silo boundary.
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SiloCmd {
-    /// Key initialisation: `data[0..32]` = 32-byte entropy seed.
-    Init = 0,
-    /// Sign a pre-hashed digest: `data[0..32]` = SHA-256 digest.
-    Sign = 1,
-    /// Static-static ECDH: `data[0..65]` = peer uncompressed public key.
-    Ecdh = 2,
-    /// Return own public key; no input data required.
-    GetPub = 3,
+pub enum DevelopmentSiloError {
+    /// Kernel-attested caller is not the live KMS instance.
+    Unauthorized = 1,
+    /// Request or response sequence is zero, stale, or replayed.
+    Sequence = 2,
+    /// Frame or mailbox bytes are non-canonical.
+    Malformed = 3,
+    /// Guest artifact or VM is unavailable.
+    Unavailable = 4,
+    /// Guest reset or execution faulted; the service is fail-closed.
+    GuestFault = 5,
+    /// Relay generation does not match the development lane.
+    GenerationMismatch = 6,
+    /// Active relay profile does not match the development lane.
+    ProfileMismatch = 7,
 }
 
-/// Response codes the silo guest writes back to the mailbox.
-#[repr(u8)]
+impl DevelopmentSiloError {
+    fn from_byte(value: u8) -> Option<Self> {
+        Some(match value {
+            1 => Self::Unauthorized,
+            2 => Self::Sequence,
+            3 => Self::Malformed,
+            4 => Self::Unavailable,
+            5 => Self::GuestFault,
+            6 => Self::GenerationMismatch,
+            7 => Self::ProfileMismatch,
+            _ => return None,
+        })
+    }
+}
+
+/// Typed response emitted by the development Silo service.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SiloRespCode {
-    /// Init succeeded: `data[0..65]` = uncompressed public key.
-    Ready = 0,
-    /// Sign succeeded: `data[0]` = DER length, `data[1..=len]` = DER signature.
-    Signature = 1,
-    /// ECDH succeeded: `data[0..32]` = raw shared secret.
-    Secret = 2,
-    /// GetPub succeeded: `data[0..65]` = uncompressed public key.
-    PubKey = 3,
-    /// Operation failed: `data[0]` = error code.
-    Fault = 0xFF,
+pub enum DevelopmentSiloResponse {
+    /// Relay public status; private or seed material is never returned.
+    RelayStatus {
+        request_seq: u64,
+        response_seq: u64,
+        verifying_key_sec1: [u8; 65],
+    },
+    /// Fixed-width normalized P-256 signature (`r || s`).
+    Tls13ClientCertificateVerify {
+        request_seq: u64,
+        response_seq: u64,
+        signature: [u8; 64],
+    },
+    /// A typed bounded failure.
+    Error {
+        request_seq: u64,
+        response_seq: u64,
+        error: DevelopmentSiloError,
+    },
 }
 
-/// 4 KiB shared-memory page at `MAILBOX_IPA`.
-///
-/// The host writes `seq`, `cmd`, and `data`; then resumes the guest.
-/// The guest reads the snapshot, processes it, writes `resp` + `data`, then
-/// fires an HVC to signal completion.  The host must never touch the page
-/// between guest resume and the HVC callback.
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub struct MailboxPage {
-    /// Sequence number: host increments before each request; guest echoes it.
-    pub seq: u32,
-    /// Command discriminant — cast from `SiloCmd`.
-    pub cmd: u8,
-    /// Response code discriminant — written by guest, cast from `SiloRespCode`.
-    pub resp: u8,
-    pub _pad: [u8; 2],
-    /// Payload: input data (host→guest) / output data (guest→host).
-    pub data: [u8; 4088],
+impl DevelopmentSiloRequest {
+    /// Encode this request into its canonical fixed-size frame.
+    pub fn encode(self) -> [u8; DEVELOPMENT_SILO_FRAME_LEN] {
+        let mut out = header(self.request_seq(), 0);
+        match self {
+            Self::RelayStatus { .. } => out[5] = 1,
+            Self::SignTls13ClientCertificateVerify {
+                transcript_hash,
+                relay_generation,
+                active_profile_digest,
+                request_id,
+                ..
+            } => {
+                out[5] = 2;
+                out[PAYLOAD..PAYLOAD + 32].copy_from_slice(&transcript_hash);
+                out[56..64].copy_from_slice(&relay_generation.to_le_bytes());
+                out[64..96].copy_from_slice(&active_profile_digest);
+                out[96..104].copy_from_slice(&request_id.to_le_bytes());
+            }
+        }
+        out
+    }
+
+    /// Decode a canonical request, rejecting padding, unknown operations, and zero sequences.
+    pub fn decode(bytes: &[u8]) -> Option<Self> {
+        let (opcode, status, request_seq, response_seq) = parse_header(bytes)?;
+        if status != 0 || request_seq == 0 || response_seq != 0 {
+            return None;
+        }
+        match opcode {
+            1 if zero(&bytes[PAYLOAD..]) => Some(Self::RelayStatus { request_seq }),
+            2 if zero(&bytes[104..]) => Some(Self::SignTls13ClientCertificateVerify {
+                request_seq,
+                transcript_hash: array(bytes, PAYLOAD),
+                relay_generation: word(bytes, 56),
+                active_profile_digest: array(bytes, 64),
+                request_id: word(bytes, 96),
+            }),
+            _ => None,
+        }
+    }
+
+    /// Return the nonzero protocol request sequence.
+    pub const fn request_seq(self) -> u64 {
+        match self {
+            Self::RelayStatus { request_seq } | Self::SignTls13ClientCertificateVerify { request_seq, .. } => request_seq,
+        }
+    }
 }
 
-const _MAILBOX_SIZE_CHECK: () = assert!(core::mem::size_of::<MailboxPage>() == 4096);
+impl DevelopmentSiloResponse {
+    /// Encode this response into its canonical fixed-size frame.
+    pub fn encode(self) -> [u8; DEVELOPMENT_SILO_FRAME_LEN] {
+        let (opcode, request_seq, response_seq, status) = match self {
+            Self::RelayStatus { request_seq, response_seq, .. } => (1, request_seq, response_seq, 1),
+            Self::Tls13ClientCertificateVerify { request_seq, response_seq, .. } => (2, request_seq, response_seq, 1),
+            Self::Error { request_seq, response_seq, error } => (0, request_seq, response_seq, error as u8 + 1),
+        };
+        let mut out = header(request_seq, response_seq);
+        out[5] = opcode;
+        out[6] = status;
+        match self {
+            Self::RelayStatus { verifying_key_sec1, .. } => out[PAYLOAD..89].copy_from_slice(&verifying_key_sec1),
+            Self::Tls13ClientCertificateVerify { signature, .. } => out[PAYLOAD..88].copy_from_slice(&signature),
+            Self::Error { .. } => {}
+        }
+        out
+    }
 
-// ── IPC wire format (host cell ↔ silo service cell) ──────────────────────
-
-/// IPC request from a caller cell to the silo service cell (128 bytes total).
-///
-/// Fits in a single ViCell IPC message (≤ 4096 bytes; this is intentionally
-/// small so it routes through the fast-path without a grant).
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub struct SiloRequest {
-    /// Operation code — cast from `SiloCmd`.
-    pub opcode: u8,
-    pub _pad: [u8; 31],
-    /// Payload: up to 65 bytes for an uncompressed P-256 public key (ECDH).
-    pub data: [u8; 96],
+    /// Decode a canonical response and reject malformed padding or sequences.
+    pub fn decode(bytes: &[u8]) -> Option<Self> {
+        let (opcode, status, request_seq, response_seq) = parse_header(bytes)?;
+        if request_seq == 0 || response_seq == 0 || status == 0 {
+            return None;
+        }
+        if opcode == 1 && status == 1 && zero(&bytes[89..]) {
+            return Some(Self::RelayStatus { request_seq, response_seq, verifying_key_sec1: array(bytes, PAYLOAD) });
+        }
+        if opcode == 2 && status == 1 && zero(&bytes[88..]) {
+            return Some(Self::Tls13ClientCertificateVerify { request_seq, response_seq, signature: array(bytes, PAYLOAD) });
+        }
+        if opcode != 0 {
+            return None;
+        }
+        let error = status.checked_sub(1).and_then(DevelopmentSiloError::from_byte)?;
+        zero(&bytes[PAYLOAD..]).then_some(Self::Error { request_seq, response_seq, error })
+    }
 }
 
-/// IPC response from the silo service cell to the caller (128 bytes total).
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub struct SiloResponse {
-    /// `0` = success, `0xFF` = fault.
-    pub status: u8,
-    /// Number of valid bytes in `data`.
-    pub len: u8,
-    pub _pad: [u8; 2],
-    /// Result bytes: DER signature (≤ 72 B), shared secret (32 B), or pub key (65 B).
-    pub data: [u8; 124],
+fn header(request_seq: u64, response_seq: u64) -> [u8; DEVELOPMENT_SILO_FRAME_LEN] {
+    let mut out = [0; DEVELOPMENT_SILO_FRAME_LEN];
+    out[..4].copy_from_slice(&MAGIC);
+    out[4] = VERSION;
+    out[8..16].copy_from_slice(&request_seq.to_le_bytes());
+    out[16..24].copy_from_slice(&response_seq.to_le_bytes());
+    out
 }
 
-const _SILO_REQ_SIZE_CHECK: () = assert!(core::mem::size_of::<SiloRequest>() == 128);
-const _SILO_RESP_SIZE_CHECK: () = assert!(core::mem::size_of::<SiloResponse>() == 128);
+fn parse_header(bytes: &[u8]) -> Option<(u8, u8, u64, u64)> {
+    (bytes.len() == DEVELOPMENT_SILO_FRAME_LEN && bytes[..4] == MAGIC && bytes[4] == VERSION && bytes[7] == 0)
+        .then(|| (bytes[5], bytes[6], word(bytes, 8), word(bytes, 16)))
+}
+fn word(bytes: &[u8], at: usize) -> u64 { u64::from_le_bytes(array(bytes, at)) }
+fn array<const N: usize>(bytes: &[u8], at: usize) -> [u8; N] { bytes[at..at + N].try_into().ok().unwrap() }
+fn zero(bytes: &[u8]) -> bool { bytes.iter().all(|byte| *byte == 0) }
 
-/// Service registry ID for the silo service cell.
-pub const SILO_SERVICE_ID: u16 = 6;
+#[cfg(test)]
+mod tests;

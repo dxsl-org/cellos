@@ -27,12 +27,12 @@ pub fn lookup(service_id: u16) -> Option<usize> {
 
 /// Register the calling cell as the live provider of `service_id`.
 ///
-/// Requires `SpawnCap` — intended for the supervisor (`init`), which registers
-/// each service after spawning it. Normal service cells do NOT call this directly;
-/// `init` registers them on their behalf.
+/// Requires `SpawnCap` except for kernel-defined, operation-specific self-registration
+/// capabilities. The development/test-hooks Silo route is one such exception and can
+/// publish only `service::SILO` with `tid=0`; it cannot register any other endpoint.
 ///
 /// # Errors
-/// Returns `ViError::PermissionDenied` when the caller lacks `SpawnCap`, or
+/// Returns `ViError::PermissionDenied` when the caller lacks matching authority, or
 /// `ViError::Unknown` if the registry is full.
 pub fn register(service_id: u16, tid: usize) -> ViResult<()> {
     match syscall::sys_register_service(service_id, tid) {

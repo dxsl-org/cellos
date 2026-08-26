@@ -681,10 +681,10 @@ pub fn sys_notify_on_exit(tid: usize) -> SyscallResult {
 /// Register `tid` as the current provider of a well-known `service_id`
 /// (see [`api::syscall::service`]).
 ///
-/// Requires `SpawnCap` — intended for the supervisor (init), which registers each
-/// service after spawning it and re-registers the new tid after a respawn so clients
-/// reconnect transparently. Returns `Ok(0)` on success, `Err` if the caller lacks
-/// `SpawnCap` or the registry is full.
+/// SpawnCap owns general registration. A kernel-defined narrow capability may
+/// instead authorize one fixed service ID with `tid=0` self-registration.
+/// Returns `Ok(0)` on success and `Err` when authority is absent, the target is
+/// invalid, or the registry is full.
 pub fn sys_register_service(service_id: u16, tid: usize) -> SyscallResult {
     unsafe {
         let ret = syscall(ViSyscall::RegisterService, service_id as usize, tid, 0, 0);
@@ -1493,8 +1493,10 @@ pub fn sys_grant_share(grant_id: usize, target_tid: usize, perm: u8) -> bool {
 
 /// Return the user-space pointer for a Grant the caller owns or holds.
 ///
-/// In SAS the pointer equals the physical base (identity-map). Returns `None`
-/// when `grant_id` is not found or the caller lacks access.
+/// In SAS the pointer equals the physical base (identity-map). For the VFS
+/// request holder, the kernel publishes the matching request lease in the same
+/// grant-table transaction as this lookup, before returning the pointer.
+/// Returns `None` when `grant_id` is not found or the caller lacks access.
 pub fn sys_grant_slice(grant_id: usize) -> Option<*mut u8> {
     // SAFETY: register-only; kernel validates ownership before returning a pointer.
     let ret = unsafe { syscall(ViSyscall::GrantSlice, grant_id, 0, 0, 0) };
@@ -1509,10 +1511,10 @@ pub fn sys_grant_slice(grant_id: usize) -> Option<*mut u8> {
 
 /// Return the accessible Grant pointer and its kernel-registered byte length.
 ///
-/// The kernel writes the length through an internal `size_out` pointer that
-/// obeys the `GrantSlice` ABI contract: null is allowed, but any non-null
-/// pointer must name one aligned `usize` slot fully inside the caller's own
-/// user stack.
+/// The VFS lease guarantee is identical to [`sys_grant_slice`]. The kernel
+/// writes the length through an internal `size_out` pointer that obeys the
+/// `GrantSlice` ABI contract: null is allowed, but any non-null pointer must
+/// name one aligned `usize` slot fully inside the caller's own user stack.
 pub fn sys_grant_slice_with_len(grant_id: usize) -> Option<(*mut u8, usize)> {
     let mut len = 0usize;
     // SAFETY: `len` is a live writable stack slot for the duration of the call.
@@ -1550,11 +1552,12 @@ pub fn sys_grant_slice_with_len(grant_id: usize) -> Option<(*mut u8, usize)> {
 pub fn sys_grant_copy_to_slice(grant_id: usize, dst: &mut [u8]) -> Option<usize> {
     let (ptr, len) = sys_grant_slice_with_len(grant_id)?;
     let n = dst.len().min(len);
-    // SAFETY: `sys_grant_slice_with_len` validated that the caller can access
-    // this Grant and returned its registered byte length; `dst` is an exclusive
-    // mutable slice owned by this caller for the duration of the copy.
+    // SAFETY: GrantSlice validation and VFS lease publication are atomic in the
+    // kernel; `len` is the registered bound and `dst` is exclusive. `copy`
+    // deliberately permits overlap so this safe facade cannot invoke undefined
+    // behavior even if an owned destination aliases the SAS Grant mapping.
     unsafe {
-        core::ptr::copy_nonoverlapping(ptr as *const u8, dst.as_mut_ptr(), n);
+        core::ptr::copy(ptr as *const u8, dst.as_mut_ptr(), n);
     }
     Some(n)
 }

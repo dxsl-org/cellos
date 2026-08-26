@@ -378,13 +378,15 @@ fn grant_read(cap_id: u64, buf: &mut [u8], vfs_tid: usize) -> ViResult<usize> {
         }
     };
 
-    // SAFETY: grant was allocated with `size` bytes; VFS filled `bytes` of it.
-    let ptr = syscall::sys_grant_slice(grant_id).ok_or_else(|| {
+    // Copy only the byte count acknowledged after VFS released its request
+    // lease. A malformed oversized acknowledgement fails without constructing a
+    // raw slice beyond the registered Grant.
+    if bytes > size
+        || syscall::sys_grant_copy_to_slice(grant_id, &mut buf[..bytes]) != Some(bytes)
+    {
         syscall::sys_grant_free(grant_id);
-        ViError::IO
-    })?;
-    let src = unsafe { core::slice::from_raw_parts(ptr as *const u8, bytes) };
-    buf[..bytes].copy_from_slice(src);
+        return Err(ViError::IO);
+    }
 
     // F14: safe to free — GrantDone already received above.
     syscall::sys_grant_free(grant_id);

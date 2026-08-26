@@ -1,6 +1,6 @@
 # Cellos Architecture: Application Tiers
 **Version**: 1.0 (canonical tier/runtime/SDK taxonomy)
-**Status**: Definitive — updated 2026-08-20 (ADR 0003)
+**Status**: Definitive — updated 2026-08-26 (ADR 0003; Silo API correction)
 
 ---
 
@@ -43,30 +43,35 @@ Dành cho kernel, drivers, services, RT control — bất cứ thứ gì cần h
 - Runtime profile mặc định hiện tại: `rust-no-std`; `rust-std` là G4 và phải đi
   qua pure-Rust PAL/custom target, không đi qua mlibc.
 
-### 2.1 Tier 1 Hardware Extensions (G2 ARM64/x86)
+### 2.1 Hardware-Assisted Infrastructure Used by Tier 1 Services
 
-Một số capabilities yêu cầu hardware support nhưng vẫn là **Tier 1 API** —
-không biến application thành Tier 3. Backend có thể dùng hypervisor hardware.
+Some trusted services may use a hypervisor mechanism without changing the
+application-tier taxonomy. That mechanism is not automatically a public Tier 1
+API or a production isolation claim.
 
-#### Hardware Key Isolation (Silo)
+#### Development Silo Provider
 
-```
-Layer: ostd::silo::SiloHandle (Tier 1 API)
-Hardware: ARM64 Stage-2 / x86 VT-x (G2 only — not RISC-V)
-Purpose: TLS private keys an toàn ngay cả khi Cellos kernel bị compromise
-```
+The former public `ostd::silo` interface has been removed. Applications cannot
+initialize Silo keys, request generic signing or ECDH, select raw commands, or
+connect directly to the Silo service.
 
-Silo không phải là một VM tier. Nó là một Tier 1 Rust API consume một hardware fence:
+The current Silo is an optional KMS-internal `DEV_REFERENCE` provider restricted
+to the signed AArch64 virtualized-QEMU `test-hooks` lane. Its private protocol
+implements only one-time development initialization and the exact TLS 1.3
+client `CertificateVerify` purpose already governed by KMS. Only the live KMS
+instance is authorized; readiness registration is exact-instance and
+test-hooks-only.
 
-```rust
-// cells/tests/silo-test/src/main.rs
-let handle = ostd::silo::SiloHandle::connect()?;
-handle.init_key(&entropy)?;
-let sig = handle.sign(&sha256_digest)?;        // P-256 ECDSA
-let (our_pub, shared) = handle.ecdh(&peer_pub)?;  // ECDH key agreement
-```
+The locked guest is size- and SHA-256-admitted before launch, and faults or
+resets permanently fail the current instance closed. Stage-2 proves a useful
+software containment path, but the Cellos EL2 host still constructs and loads
+the guest and supplies its disposable development seed. This is therefore not
+hardware custody, kernel-compromise-resistant storage, an HSM, or production
+qualification. Production remains `BLOCKED_PENDING_PHASE_6_7_8`.
 
-Implementation: `silo-guest` binary (~10KB bare-metal AArch64 no_std) chạy trong Stage-2 fenced memory, dispatch bằng mailbox page. Đây là **kernel infrastructure firmware**, không phải app tier.
+This backend is infrastructure behind KMS, not an application tier or App SDK
+module. See the [development Silo guide](../guides/tier1-silo.md) for the exact
+boundary.
 
 #### Hardware Isolation Layers
 
@@ -179,7 +184,7 @@ Tier 1 native profiles tốt cho code tin cậy nhưng thiếu ecosystem. G2 tar
 
 Analogy: WSL2 trên Windows — chạy Windows + Linux side-by-side, Linux disk/net nối vào Windows.
 
-> **Note**: Security Silo đã được reclassify sang §2.1 (Tier 1 Hardware Extensions). Silo KHÔNG phải Tier 3 — nó là Tier 1 API backed by a hardware fence, không phải app/VM tier.
+> **Note**: The development Silo described in §2.1 is infrastructure behind KMS, not Tier 1 or Tier 3 application API. Its AArch64 QEMU Stage-2 lane is `DEV_REFERENCE` software containment, not a hardware fence or production custody claim.
 
 ### 4.2 Tier 3 `linux-guest` profile (legacy alias: Tier 3b) [G2]
 

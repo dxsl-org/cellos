@@ -58,7 +58,7 @@ The SDK is one family, not a numbered set of tiers:
 │  ├─ "Building a UI or dashboard?"
 │  │  └─ Use Tier 1 + ViUI
 │  ├─ "Handling cryptographic keys?"
-│  │  └─ Use Tier 1 + Silo API (G2+ hardware capability)
+│  │  └─ Use a purpose-specific KMS client; the Silo backend is not a public API.
 │  └─ "Just syscalls and linked libraries?"
 │     └─ Use Tier 1 rust-no-std profile
 │
@@ -79,7 +79,7 @@ The SDK is one family, not a numbered set of tiers:
 - **[Tier 1 Rust (Bare)](guides/tier1-rust-bare.md)** — Minimal entry point, syscall allowlists, manifest declaration.
 - **[Tier 1 Rust + SDK modules](guides/tier1-rust-sdk.md)** — AppContext, VFS/network clients, service discovery.
 - **[Tier 1 Rust + ViUI](guides/viui-guide.md)** — Signal API, .vi DSL, compositor surfaces (see `system-architecture.md` §6).
-- **[Tier 1 + Silo API](guides/tier1-silo.md)** — SiloHandle, cryptographic isolation, ARM64/x86 only.
+- **[Development Silo provider](guides/tier1-silo.md)** — KMS-mediated `DEV_REFERENCE` AArch64 QEMU evidence only; no public Silo API or production/hardware custody claim.
 - **[Tier 1 FFI/POSIX profile](guides/tier1b-c-zig.md)** — legacy `Tier 1b` guide: POSIX shim vs mlibc.
 - **[Tier 1 Lua profile](guides/tier1b-lua.md)** — legacy `Tier 1b` guide: interpreter cell, VFS bindings, restricted stdlib.
 - **[Tier 3 Linux guest profile](guides/tier3b-linux-vm.md)** — legacy `Tier 3b` guide: full kernel in hypervisor.
@@ -118,7 +118,7 @@ For multi-arch builds (ARM64, x86), see [getting-started.md](getting-started.md)
 - **Tier 1 bare**: `cells/demos/hello-cell/src/main.rs`
 - **Tier 1 + SDK service clients**: `cells/demos/sdk-demo/src/main.rs`
 - **Tier 1 + ViUI**: `cells/apps/robot-dashboard/src/main.rs`
-- **Tier 1 Silo API**: `cells/tests/silo-test/src/main.rs`
+- **Development Silo evidence**: `cells/tests/silo-test/src/main.rs` (KMS-mediated, `DEV_REFERENCE`, AArch64 QEMU only)
 - **Tier 1 ffi-posix profile (mlibc)**: `cells/tests/mlibc-smoke/src/main.rs`
 - **Tier 1 ffi-posix profile (POSIX shim)**: `cells/tests/posix-shim-test/src/main.rs`
 - **Tier 1 lua profile**: `cells/runtimes/lua/src/main.rs`

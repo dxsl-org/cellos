@@ -32,7 +32,7 @@ impl Default for KmsService {
 
 impl KmsService {
     pub fn new() -> Self {
-        Self::from_provider(ProviderSlot::Unavailable)
+        Self::from_provider(ProviderSlot::development_runtime())
     }
 
     fn from_provider(provider: ProviderSlot) -> Self {
@@ -50,6 +50,43 @@ impl KmsService {
     #[cfg(test)]
     pub(crate) fn with_provider_fixture(provider: crate::storage::FixtureRelayProvider) -> Self {
         Self::from_provider(ProviderSlot::Fixture(provider))
+    }
+
+    /// Exercise the development Silo through the single relay provider seam.
+    ///
+    /// This boot-only probe is compiled only for the AArch64 reference lane and
+    /// succeeds only for a self-verified, already-low-S TLS signature.
+    #[cfg(all(
+        feature = "development-silo-provider",
+        target_arch = "aarch64",
+        target_os = "none"
+    ))]
+    pub fn development_silo_boot_probe(&mut self) -> bool {
+        let status = self.provider.relay_p256_status();
+        if status.metadata.provider != types::kms::KmsProviderKind::SiloWrapped
+            || status.metadata.assessment
+                != types::kms::RelayProviderAssessment::DevelopmentReference
+            || status.metadata.readiness != types::kms::KmsCapabilityReadiness::Ready
+        {
+            return false;
+        }
+        let transcript_hash = [0x5a; 32];
+        let Ok(signature) = self.provider.sign_tls13_client_certificate_verify(
+            transcript_hash,
+            status.metadata.relay_generation,
+            status.metadata.active_profile_digest,
+            1,
+        ) else {
+            return false;
+        };
+        matches!(
+            crate::storage::normalize_and_verify_tls13_signature(
+                transcript_hash,
+                &status.verifying_key_sec1,
+                signature,
+            ),
+            Ok(verified) if verified == signature
+        )
     }
 
     /// Handle one canonical frame. Malformed envelopes are dropped fail-closed.

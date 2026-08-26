@@ -14,6 +14,8 @@ pub struct CallerLaunchAuthority {
 pub struct LaunchRoutes {
     pub block_io: bool,
     pub input: bool,
+    #[cfg(feature = "test-hooks")]
+    pub development_silo: bool,
 }
 
 pub struct StagedMeasurement {
@@ -152,6 +154,13 @@ pub fn publish_prepared(
     task.root_tid = tid;
     let owner = api::cell_owner::CellOwner::new(cell_id.0, task.cell_generation, tid as u64);
     state.granted.apply_to(&mut task);
+    #[cfg(feature = "test-hooks")]
+    {
+        task.development_silo_registration_cap = state
+            .routes
+            .development_silo
+            .then(super::cap::DevelopmentSiloRegistrationCap::new);
+    }
     if let Some(platform) = state.platform.take() {
         platform.commit_into(&mut task);
     }

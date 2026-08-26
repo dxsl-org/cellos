@@ -17,10 +17,12 @@ Noise remains the end-to-end protection for forwarded payloads. Mutual TLS is
 limited to this external boundary; it does not replace native Cell-to-Cell
 Noise.
 
-A secure Cellos client path does not yet exist. It is blocked on production
-Silo/KMS protected signing, attested service-net authorization, certificate
-issuance and provisioning, and an mTLS client-auth profile. The system must fail
-closed until all prerequisites exist.
+A secure Cellos client path does not yet exist. It is blocked on a KMS signer
+backed by separately selected, implemented, and qualified production hardware
+through Phases 6–8, attested service-net authorization, certificate issuance
+and provisioning, and an mTLS client-auth profile. The system must fail closed
+until all prerequisites exist. The KMS-internal AArch64-QEMU Silo provider is
+`DEV_REFERENCE` evidence only and cannot satisfy this production gate.
 
 ## Decision Drivers
 
@@ -57,7 +59,7 @@ closed until all prerequisites exist.
 
 - **Pro**: Works with conventional TLS tooling at low integration cost.
 - **Con**: Filesystem key bytes are extractable and copyable.
-- **Con**: It bypasses Silo/KMS custody and attested signing authorization.
+- **Con**: It bypasses KMS custody and attested signing authorization.
 - **Rejected because**: Possession of an exportable file cannot serve as the
   protected device identity.
 
@@ -67,7 +69,7 @@ closed until all prerequisites exist.
   auditable trust anchors.
 - **Pro**: A certificate-derived NodeId cannot be chosen independently by the
   client.
-- **Pro**: The private key can remain non-extractable behind Silo/KMS.
+- **Pro**: The private key can remain non-extractable behind KMS and a separately qualified production hardware provider.
 - **Con**: Requires CA operation, certificate profiles, secure provisioning,
   rotation, revocation, protected signing, and trust overlap.
 - **Chosen because**: It alone combines authenticated routing identity,
@@ -94,8 +96,11 @@ mismatch fails before route registration.
 
 The Cellos client must validate the relay server's CA chain and hostname and
 produce TLS `CertificateVerify` signatures through an attested,
-service-net-authorized Silo/KMS P-256 signer. Private-key bytes must never be
-provisioned to the filesystem or returned to the caller.
+service-net-authorized KMS P-256 signer. Its production provider must be the
+hardware product selected, implemented, and physically qualified through Phases
+6–8; the KMS-internal AArch64-QEMU Silo provider is `DEV_REFERENCE` only.
+Private-key bytes must never be provisioned to the filesystem or returned to
+the caller.
 
 The server starts only from a mandatory mounted manifest defining its TLS
 material, client trust roots, NodeId denylist, and limits. Before registration
@@ -128,7 +133,8 @@ external relay hop; it does not terminate or replace Noise.
 
 ### Blocked prerequisites and non-goals
 
-- A durable production P-256 key and signing-root lifecycle in Silo/KMS.
+- A durable production P-256 key and KMS signing-root lifecycle backed by the
+  hardware provider selected, implemented, and qualified through Phases 6–8.
 - Attested authorization limiting identity-signing requests to service-net.
 - Managed-CA certificate issuance, provisioning, rotation, trust anchors, and
   the private NodeId extension profile.
@@ -164,7 +170,8 @@ Acceptance evidence must show that:
 - startup fails without a valid mounted manifest, limits hold, and stale cleanup
   cannot remove a replacement session;
 - the Cellos client validates server CA/hostname and signs only through the
-  authorized protected Silo/KMS path without exposing key bytes; and
+  authorized protected KMS path and its qualified production hardware provider,
+  without exposing key bytes; and
 - a two-node exercise preserves opaque end-to-end Noise traffic and fails closed
   without raw fallback.
 

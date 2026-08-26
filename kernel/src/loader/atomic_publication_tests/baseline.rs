@@ -142,6 +142,7 @@ impl SharedStateBaseline {
             crate::task::LaunchRoutes {
                 block_io: true,
                 input: false,
+                development_silo: false,
             },
         );
         crate::fast_ipc::register_vfs(fixture_vfs_handler);

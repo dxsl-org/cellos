@@ -13,7 +13,7 @@ use super::{require_empty, KmsService};
 
 impl KmsService {
     pub(super) fn relay_status(
-        &self,
+        &mut self,
         request: &KmsRequestV1,
         sender: usize,
         caller: Option<CallerIdentity>,
@@ -48,7 +48,10 @@ impl KmsService {
         if status.metadata.readiness != KmsCapabilityReadiness::Ready {
             return Err(KmsErrorCode::RelayUnavailable);
         }
-        if status.metadata.assessment != RelayProviderAssessment::ProductionQualified {
+        if !assessment_authorizes_signing(
+            status.metadata.provider,
+            status.metadata.assessment,
+        ) {
             return Err(KmsErrorCode::QualificationRequired);
         }
         if payload.relay_generation != status.metadata.relay_generation {
@@ -88,6 +91,18 @@ impl KmsService {
         self.service_net_binding
             .ok_or(KmsErrorCode::ServiceBindingRequired)?
             .authorizes(sender, caller, registry.net_tid)
+    }
+}
+
+fn assessment_authorizes_signing(
+    provider: KmsProviderKind,
+    assessment: RelayProviderAssessment,
+) -> bool {
+    match (provider, assessment) {
+        (_, RelayProviderAssessment::ProductionQualified) => true,
+        #[cfg(feature = "development-silo-provider")]
+        (KmsProviderKind::SiloWrapped, RelayProviderAssessment::DevelopmentReference) => true,
+        _ => false,
     }
 }
 

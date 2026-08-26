@@ -1,283 +1,168 @@
-# Tier 1 Silo API — Hardware-Backed Key Isolation
+# Development Silo Provider — KMS-Mediated AArch64 QEMU Reference
 
-> Cryptographic keys and security-sensitive operations through a Tier 1 API
-> backed by a hardware fence. Silo is not an application execution tier.
-
----
-
-## What is a Silo?
-
-A **Silo** is a lightweight hardware-isolated micro-VM running on ARM64 and x86 (not RISC-V). It provides:
-
-- **Exclusive access** to ECDSA/ECDH keys (they never leave)
-- **Fault isolation** — a guest fault (invalid instruction) doesn't crash the main kernel
-- **Service Cell pattern** — sign/derive operations via IPC
-
-**Platform support**: ARM64 (EL2) and x86 (VMX) only. RISC-V uses Tier 1 Rust (no Silo).
+> **Status**: `DEV_REFERENCE`, AArch64 virtualized QEMU with `test-hooks` only.
+> This is software-custody and containment evidence, not hardware custody,
+> hardware-backed key storage, or production qualification.
 
 ---
 
-## Architecture
+## What Silo Is Now
 
-```
-┌─────────────────┐
-│  App Cell       │
-│                 │
-│ SiloHandle::    │
-│  sign()         │  ← RPC to Silo service
-│  ecdh()         │
-│  init_key()     │
-└────────┬────────┘
-         │ IPC (Send/Recv)
-         ▼
-    ┌─────────────┐
-    │ Silo Service│
-    │ (hypervisor)│  ← Guard hardware isolation
-    │             │
-    │ P-256 ops   │
-    └─────────────┘
+The development Silo is a bounded P-256 guest used behind the KMS relay-provider
+seam. It exists to exercise the already purpose-bound KMS TLS 1.3 client
+`CertificateVerify` path across an AArch64 Stage-2 guest boundary.
+
+```text
+live service-net instance
+        │ typed KMS v1 request
+        ▼
+KMS policy and authorization
+        │ private, purpose-bound development protocol
+        ▼
+Silo service
+        │ admitted mailbox command
+        ▼
+locked, digest-admitted silo-guest
 ```
 
-The Silo runs guest firmware (`silo-guest`) that implements ECDSA/ECDH. Keys are stored in guest memory and never exposed to the main kernel.
+KMS remains authoritative for the live service-net identity, relay generation,
+active profile digest, nonzero monotonic request ID, low-S normalization, and
+signature self-verification. The Silo protocol accepts initialization plus one
+TLS 1.3 client `CertificateVerify` purpose; it is not a general signing or key
+agreement interface.
+
+Silo is infrastructure behind KMS, not an application execution tier and not an
+App SDK module.
 
 ---
 
-## SiloHandle API
+## Removed Public API
 
-```rust
-use ostd::silo::{SiloHandle, SiloError};
+The former public/general Silo API was removed in the Phase 2 clean cutover.
+Applications cannot connect directly to Silo, initialize a key, submit a raw
+digest or message, request ECDH, select an opcode, or export private-key
+material.
 
-// Connect to the Silo service
-let mut handle = SiloHandle::connect()?;
-    // → Result<SiloHandle, SiloError>
+There is deliberately no compatibility shim. Existing applications must use the
+typed KMS/service-net protocol appropriate to their purpose; callers outside the
+live authorized path are denied before guest mutation.
 
-// Initialize a key from a seed (32 bytes)
-let seed = [0x42u8; 32];
-let pub_key = handle.init_key(&seed)?;
-    // → Result<[u8; 65], SiloError>
-    // Returns uncompressed P-256 public key (0x04 prefix)
+---
 
-// Get public key (after init)
-let pub_key = handle.get_public_key()?;
-    // → Result<[u8; 65], SiloError>
+## Readiness and Caller Authority
 
-// Sign a message (pre-hashed SHA-256)
-use sha2::{Sha256, Digest};
-let mut hasher = Sha256::new();
-hasher.update(b"my message");
-let digest: [u8; 32] = hasher.finalize().into();
+Readiness is exact-instance and fail-closed:
 
-let sig = handle.sign(&digest)?;
-    // → Result<SiloSignature, SiloError>
-    // sig.bytes[..sig.len] is DER-encoded signature
+1. The governed `test-hooks` launch route starts the exact `/bin/silo` root
+   task.
+2. The service admits the packaged guest, creates and loads the VM, performs its
+   one-time development initialization, waits for guest readiness, and validates
+   public metadata.
+3. Only then may that root task self-register `service::SILO` with `tid=0`.
+4. Init and the supervisor wait for the registry to contain the exact spawned
+   TID before starting or restarting KMS.
 
-// ECDH with peer public key (65 bytes, uncompressed)
-let peer_pub = [0x04u8; 65];  // peer's public key
-let shared_secret = handle.ecdh(&peer_pub)?;
-    // → Result<[u8; 32], SiloError>
+The kernel authority for step 3 is
+`DevelopmentSiloRegistrationCap`. It exists only with `test-hooks`, is minted
+only by the governed exact `/bin/silo` launch, is absent from manifests and
+`CapSet`, cannot be delegated to threads or children, and authorizes no service
+ID other than `service::SILO`. `HypervisorCap` alone cannot register Silo or any
+other service.
 
-// Send raw command (advanced)
-let result = handle.send_raw(opcode, &arg_data)?;
-    // → Result<Vec<u8>, SiloError>
+At runtime, the private protocol authenticates the live KMS instance before
+decoding or executing a command. Direct, unbound, forged, stale, or post-fault
+callers receive a typed denial and cannot mutate guest state.
+
+---
+
+## Guest Admission
+
+The standalone AArch64 guest is built with its own lockfile through the locked
+packaging path. Before VM creation, admission rejects an empty image, an image
+larger than the 61,440-byte pre-mailbox limit, or any SHA-256 mismatch.
+
+The verified Phase 2 guest is exactly:
+
+- size: **33,888 / 61,440 bytes**
+- SHA-256:
+  `fea5cd2b9c36bb158e1e74b9e2c60209c133e0057292f0b9b4bc5f3e830838e4`
+- layout: 64 KiB guest RAM, with the final 4 KiB page reserved for the mailbox
+
+The loaded bytes are the admitted bytes. The mailbox and host/service layout use
+one shared source so their offsets, commands, HVC values, and bounds cannot drift
+independently.
+
+---
+
+## Failure and Reset Contract
+
+Initialization is one-shot. Guest protocol/crypto faults, VMM faults, malformed
+mailbox responses, stale sequences, or a guest reset permanently latch the
+current service instance unavailable. The failed instance neither retries nor
+falls back to an in-process key.
+
+A governed permanent-service restart creates a new Silo instance, which repeats
+artifact admission and initialization and publishes readiness only after the new
+exact instance is ready. An already failed KMS instance also has no runtime
+fallback.
+
+---
+
+## Stage-2 Limitation
+
+Stage-2 separates the guest address space from ordinary Cells, and the signed
+QEMU lane proves the intended fault and protocol containment behavior. It does
+**not** establish an independent protected root: the Cellos EL2 host constructs
+the VM, loads the admitted guest, and supplies the disposable development seed.
+A host compromise is therefore outside the custody guarantee of this phase.
+
+Do not describe this backend as a hardware security module, hardware-backed
+Silo, kernel-compromise-resistant key custody, secure-element equivalent, or
+production root of trust.
+
+---
+
+## Build and Evidence Boundary
+
+The only supported lane opts the development provider into the canonical signed
+AArch64 `test-hooks` image with:
+
+```text
+CELLOS_AARCH64_TEST_HOOKS_DEVELOPMENT_SILO=1
 ```
 
----
+The feature is named `development-silo-provider`. It is restricted to AArch64
+bare-metal QEMU builds, rejects any set `CELLOS_PRODUCTION` value, and is absent
+from production images.
 
-## Error Handling
+Phase 2 evidence records:
 
-```rust
-use ostd::silo::SiloError;
+- 75 focused host tests: 23 wire types, 40 KMS, and 12 Silo
+- zero new KMS/Silo warnings; seven unchanged OSTD baseline warnings
+- production checker 2/2 and unsafe feature matrix 9/9
+- exact signed 12-cell AArch64 virtualized QEMU PASS
+- registered exact-instance readiness and KMS signature self-verification
+- direct and unbound Silo denials
+- VFS PAGE and REG grant lifecycle PASS, with `vfs-test` 96 passed / 0 failed
+- code review PASS 9.6/10 and security review GO, with no residual
+  Critical/High/Medium findings
+- finalized evidence artifact status `ok`
 
-match handle.init_key(&seed) {
-    Ok(pk) => { /* use pk */ }
-    Err(SiloError::ServiceNotFound) => {
-        println("Silo not available (RISC-V / single-cell boot)");
-    }
-    Err(SiloError::GuestFault) => {
-        println("Invalid guest operation — key may be corrupted");
-    }
-    Err(SiloError::Timeout) => {
-        println("Silo IPC timeout");
-    }
-    Err(SiloError::InvalidResponse) => {
-        println("Silo returned unexpected format");
-    }
-}
-```
+These results are `DEV_REFERENCE` evidence only.
 
 ---
 
-## Manifest & Syscalls
+## Production Gate and Next Phase
 
-Silo access requires no manifest flag (it's a service). Declare:
+Production remains `BLOCKED_PENDING_PHASE_6_7_8`. Phases 6–7 must select and
+implement one exact secure-hardware product and trust chain; Phase 8 must supply
+physical qualification and authenticated build provenance. No QEMU result can
+satisfy those gates.
 
-```rust
-api::declare_manifest!(block_io = false, network = false, spawn = false);
-api::declare_syscalls![Send, Recv, Log, Exit, LookupService];
-```
+The overall KMS/Silo plan remains in progress. Phase 3, Certificate Activation
+and Provisioning, is next and requires explicit approval before implementation.
 
-The Silo service is discovered via `sys_lookup_service()` (wrapped by `SiloHandle::connect()`).
-
----
-
-## Example: Sign and Verify
-
-```rust
-extern crate alloc;
-use sha2::{Sha256, Digest};
-use p256::ecdsa::{VerifyingKey, DerSignature};
-use p256::ecdsa::signature::hazmat::PrehashVerifier;
-
-fn sign_and_verify() -> Result<(), Box<dyn core::fmt::Debug>> {
-    let mut handle = ostd::silo::SiloHandle::connect()?;
-
-    // Initialize with a deterministic seed
-    let seed = [0x99u8; 32];
-    let pub_key = handle.init_key(&seed)?;
-
-    // Create message digest
-    let mut hasher = Sha256::new();
-    hasher.update(b"Important transaction");
-    let digest: [u8; 32] = hasher.finalize().into();
-
-    // Sign in Silo
-    let sig = handle.sign(&digest)?;
-
-    // Verify locally using p256 crate
-    let sig_slice = &sig.bytes[..sig.len as usize];
-    let der_sig = DerSignature::try_from(sig_slice)?;
-    let vk = VerifyingKey::from_sec1_bytes(&pub_key)?;
-    vk.verify_prehash(&digest, &der_sig)?;
-
-    println("Signature verified!");
-    Ok(())
-}
-```
-
----
-
-## Example: Key Derivation via ECDH
-
-```rust
-use p256::{SecretKey, EncodedPoint};
-
-fn ecdh_derive() -> Result<(), Box<dyn core::fmt::Debug>> {
-    let mut handle = ostd::silo::SiloHandle::connect()?;
-
-    // Server (Silo) generates long-term key
-    let server_seed = [0xAAu8; 32];
-    let server_pub = handle.init_key(&server_seed)?;
-
-    // Client generates ephemeral key
-    let client_secret = SecretKey::random(&mut rand::thread_rng());
-    let client_pub_point = client_secret.public_key().to_encoded_point(false);
-    let client_pub_bytes: [u8; 65] = client_pub_point
-        .as_bytes()
-        .try_into()?;
-
-    // Server (in Silo) performs ECDH
-    let shared_secret = handle.ecdh(&client_pub_bytes)?;
-    // shared_secret is now a 32-byte session key
-
-    println("Derived {} bytes", shared_secret.len());
-    Ok(())
-}
-```
-
----
-
-## Platform-Specific Notes
-
-### ARM64 (EL2 hypervisor)
-
-- Requires ARM64 board with virtualization extensions (EL2)
-- QEMU ARM64 supports it; real boards (RK3588, etc.) have EL2
-- Silo firmware boots in secure isolated EL2 context
-
-### x86 (VMX hypervisor)
-
-- Requires x86 CPU with VMX (Intel) or SVM (AMD)
-- QEMU x86 with `-enable-kvm` or TCG simulation
-- Silo firmware boots as VM with isolated memory
-
-### RISC-V
-
-- **Not supported**. No Silo on RISC-V.
-- H-ext (hypervisor extension) too new; adoption uncertain.
-- For cryptographic keys, use Tier 1 Rust + ostd's p256 crate locally (keys stay in Rust cell memory).
-
----
-
-## Security Model
-
-1. **Keys never leave the Silo**: ECDSA/ECDH operations happen in guest; only derived data (public key, signature, shared secret) crosses the boundary.
-2. **Fault isolation**: if guest code faults (invalid opcode), it returns `SiloError::GuestFault` without crashing the kernel.
-3. **IPC authenticity**: the calling Cell's TID is validated by the kernel; only authenticated requests are forwarded.
-
----
-
-## When to Use Tier 1 Silo API
-
-✅ Storing private keys (long-term or session)
-✅ ECDSA signing (blockchain, auth, etc.)
-✅ ECDH key exchange (TLS, protocols)
-✅ Containing faults inside the dedicated key-isolation backend
-
-❌ General-purpose apps → use Tier 1 Rust + SDK service clients
-❌ Untrusted application code → use Tier 3 today; Tier 2 once native domains exist
-❌ Network I/O in Silo → not supported (isolated)
-❌ RISC-V → use Tier 1 Rust locally
-
----
-
-## Canonical Example
-
-See [cells/tests/silo-test/src/main.rs](../../cells/tests/silo-test/src/main.rs) — comprehensive test suite covering:
-- T1: Service discovery
-- T2: Key init + public key export
-- T3: Sign and verify (p256 crate)
-- T4: ECDH with ephemeral key
-- T5: Fault recovery
-- T6: Capability isolation
-
----
-
-## Build & Run (ARM64 QEMU)
-
-```bash
-# QEMU ARM64 with Silo support (auto-enabled)
-./run-arm64.ps1
-
-# On shell:
-silo-test
-```
-
-Output:
-```
-[silo-test] starting T1–T6
-[silo-test] T1 PASS: silo service found, tid=...
-[silo-test] T2 PASS: pub_key[0..4]=04 ...
-...
-[silo-test] ALL TESTS PASSED (6/6)
-```
-
----
-
-## Troubleshooting
-
-**SiloError::ServiceNotFound?**
-→ Silo not available: running on RISC-V, single-cell boot, or VM not launched. Use Tier 1 Rust locally.
-
-**GuestFault on init_key?**
-→ Seed data corrupted or invalid. Try a different seed.
-
-**Signature verification fails?**
-→ Check that the digest is exactly 32 bytes (SHA-256) and DER-decoded correctly.
-
----
-
-## Next Steps
-
-- See **Hardware Key Isolation (Silo)** in the [system architecture](../system-architecture.md) for implementation status.
-- For TLS placement and trust boundaries, see the [security model](../security-model.md).
-- For cryptographic libraries: `p256`, `sha2`, `aes-gcm` all work in Rust Cells.
+See the [system architecture](../system-architecture.md) for the durable boundary,
+the [project roadmap](../project-roadmap.md) for current gates, and
+[ADR-0005](../decisions/0005-mutual-tls-relay-identity.md) for relay identity
+placement.

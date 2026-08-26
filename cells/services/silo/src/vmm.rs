@@ -14,6 +14,7 @@ use api::syscall::ViSyscall;
 pub const SCHED_TICK_BUDGET_NS: u64 = 10_000_000; // 10ms in nanoseconds
 
 /// Error sentinel returned by VMM syscalls on failure.
+#[cfg(not(target_arch = "aarch64"))]
 const ERR: usize = usize::MAX;
 
 // SAFETY: inline asm uses the ViCell ARM64 SVC ABI (x0=syscall_nr, x1-x4=args).
@@ -100,6 +101,19 @@ pub fn run_vcpu(vm_id: usize, vcpu_id: usize, exit: &mut ViVmExit) -> usize {
             vcpu_id,
             SCHED_TICK_BUDGET_NS as usize,
             exit as *mut ViVmExit as usize,
+        )
+    }
+}
+
+/// Read vCPU x0-x30 plus the current guest PC into `regs`.
+pub fn read_vcpu_regs(vm_id: usize, vcpu_id: usize, regs: &mut [u64; 32]) -> usize {
+    unsafe {
+        syscall4(
+            ViSyscall::VcpuRegs,
+            vm_id,
+            vcpu_id,
+            regs.as_mut_ptr() as usize,
+            0,
         )
     }
 }

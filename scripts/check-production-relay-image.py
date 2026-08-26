@@ -7,9 +7,13 @@ import argparse
 from pathlib import Path
 import sys
 
-PROVIDERS = {"hardware-relay-provider", "silo-provider", "fixture-provider"}
+PROVIDERS = {
+    "hardware-relay-provider",
+    "development-silo-provider",
+    "fixture-provider",
+}
 KMS_FORBIDDEN = {
-    "silo-provider",
+    "development-silo-provider",
     "fixture-provider",
     "test-hooks",
     "raw-relay-provider",

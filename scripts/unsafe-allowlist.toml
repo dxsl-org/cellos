@@ -247,12 +247,6 @@ reason = "Hypervisor world switch: guest register save/restore and stage-2 mappe
 approver = "cellos-maintainers"
 date = "2026-07-14"
 
-[[file]]
-path = "cells/tests/silo-test/src/main.rs"
-class = "hypervisor"
-reason = "Hypervisor world switch: guest register save/restore and stage-2 mapped mailboxes have no safe representation — the guest owns the memory on the other side of every one of these accesses."
-approver = "cellos-maintainers"
-date = "2026-07-14"
 
 [[file]]
 path = "cells/demos/audio-demo/src/main.rs"
@@ -478,12 +472,6 @@ class = "driver-mmio"
 reason = "Owns allowlisted unsafe under cells/drivers/bcm-display/ — see the [[file]] entries of class \"driver-mmio\" for the justification."
 approver = "cellos-maintainers"
 date = "2026-08-23"
-[[crate]]
-name = "app-silo-test"
-class = "hypervisor"
-reason = "Owns allowlisted unsafe under cells/tests/silo-test/ — see the [[file]] entries of class \"hypervisor\" for the justification."
-approver = "cellos-maintainers"
-date = "2026-07-14"
 
 [[crate]]
 name = "hypervisor-test"
