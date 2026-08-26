@@ -33,7 +33,7 @@ This supersedes `.agents/260712-1902-dice-attestation-identity/phase-02-*` and `
 ## Progress
 
 Phases 1–3 are complete; Phase 6 completed its specified NO-GO branch with no product or irreversible action approved. The overall plan remains **in progress**.
-Phase 4's three entry-gate contracts are approved in [`spec.md`](./spec.md), but the phase remains blocked until a real protected authority and signed-time source evidence AC-001 through AC-011. Product selection is not its dependency.
+Phase 4's entry contract is approved in [`spec.md`](./spec.md); deep research selects a VF2 UART-root-stream plus STM32H573/SLB9672/AWS composition, but all three gates remain NO-GO until AC-001 through AC-011 are evidenced. Product selection is not its dependency.
 Production remains `BLOCKED_BY_ADR_0006` until one ADR-0006 vendor-signed evidence package passes review and a superseding GO ADR names an exact product.
 
 ## Dependency Graph
@@ -75,4 +75,4 @@ P4 is software-only and product-independent. P5 is `DEV_REFERENCE` only; P7–P8
 
 - `reports/phase-03-deviation-log.md`; `reports/harness/verification.json`; `reports/harness/execution-evidence.json`
 - `reports/harness/adversarial-validation.json`; `reports/harness/risk-gate.json`; `reports/harness/review-decision.json`
-- `docs/decisions/0006-block-production-root-pending-exact-product-evidence.md`; `research/phase-06-production-root-kill-gate.md`; [`spec.md`](./spec.md)
+- `docs/decisions/0006-block-production-root-pending-exact-product-evidence.md`; `research/phase-06-production-root-kill-gate.md`; [`spec.md`](./spec.md); [`DEV_REFERENCE research`](../reports/research-260826-1605-phase4-dev-reference-lane.md)

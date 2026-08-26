@@ -18,12 +18,17 @@ tier: thinking
 - `reports/security-judge.json` findings KMS-ARCH-001, 005, 006
 - `docs/decisions/0006-block-production-root-pending-exact-product-evidence.md`
 - [Approved Phase 4 entry-gate contract](./spec.md)
+- [Concrete DEV_REFERENCE lane research](../reports/research-260826-1605-phase4-dev-reference-lane.md)
 
 ## Overview
 Add a privileged service-net relay mTLS profile backed by KMS and reconnect net-broker’s relay path without exposing the device identity through generic `TlsStream`. This software-only phase is independent of production-root product selection, but implementation remains blocked on its three entry gates.
 
 ## Key Insights
 `embedded-tls` 0.19 supports client certificates and an external `SignerMut`, but its client CertificateVerify path currently calls infallible `sign()` and unwraps output. The generic TLS IPC is server-auth only and should remain so.
+The selected research candidate is VisionFive 2 v1.3B UART-root-stream boot
+with an STM32H573I-DK, an authority-private OPTIGA TPM SLB 9672, and a
+project-operated AWS signed-time service. This is an unimplemented candidate,
+not entry-gate evidence; all three gates remain NO-GO.
 
 ## Requirements
 - Before implementation, evidence all requirements and acceptance criteria in
@@ -133,8 +138,15 @@ A broad “mTLS flags” extension to generic TLS would expose the device identi
 KMS creates the exact CertificateVerify signature; service-net must not prehash arbitrary caller data. Noise remains the end-to-end application security boundary.
 
 ## Next Steps
-Phase 5 may prove this software path only as `DEV_REFERENCE`. ADR-0006 independently blocks Phases 7–8 pending vendor evidence and a superseding GO ADR; it does not block Phase 4 once the software entry gates pass.
+Do not begin Phase 4 Build. First implement and evidence the selected
+DEV_REFERENCE candidate in
+`../reports/research-260826-1605-phase4-dev-reference-lane.md`, including the
+JH7110 SRAM loader feasibility gate, protected state fault matrix, signed-time
+deployment, and AC-001 through AC-011 review. Phase 5 may prove the resulting
+software path only as `DEV_REFERENCE`. ADR-0006 independently blocks Phases
+7–8 pending vendor evidence and a superseding GO ADR.
 
 ## Deviation Log
 2026-08-26 — ADR-0006 clarified that Phase 4 is product-independent, retained the protected-persistence and authenticated-time gates, added a distinct reviewed pending-key binding under frozen opcodes 9–14, and approved no KMS ABI change.
 2026-08-26 — Approved `spec.md` selects a root-owned Protected Relay Authority while preserving public KMS opcodes 9–14. Approval fixes the three entry-gate contracts but leaves Phase 4 blocked until AC-001 through AC-011 are evidenced.
+2026-08-26 — Deep research selected the VF2 UART-root-stream plus STM32H573/SLB9672/AWS signed-time composition as the only concrete DEV_REFERENCE candidate worth implementing. The research remains NO-GO evidence: no hardware, firmware, endpoint, fault matrix, or AC-001 through AC-011 result exists, so Phase 4 stays blocked.
