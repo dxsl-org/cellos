@@ -1,9 +1,11 @@
 //! Typed operation payloads; no opaque generic operation exists.
 
+mod bounds;
+pub use bounds::max_payload_len;
 mod response;
 pub use response::*;
 
-use crate::{constant_time_eq, AuthorityFault, Bounded, FrameHeader, Operation, FRAME_MAX_PAYLOAD};
+use crate::{constant_time_eq, AuthorityFault, Bounded, FrameHeader, Operation};
 
 pub const ID_LEN: usize = 32;
 pub const DIGEST_LEN: usize = 32;
@@ -184,20 +186,3 @@ request_types! {
 }
 
 pub const REQUEST_CONTEXT_WIRE_LEN: usize = 185;
-
-/// Maximum canonical request payload for an operation.
-pub const fn max_payload_len(operation: Operation) -> usize {
-    match operation {
-        Operation::ValidateAndStageRelayProfile => {
-            REQUEST_CONTEXT_WIRE_LEN + 8 + 8 + 1 + (DIGEST_LEN * 3) + 2 + PROFILE_MAX
-        }
-        Operation::AcceptSignedTime => {
-            REQUEST_CONTEXT_WIRE_LEN + 16 + 1 + 32 + DIGEST_LEN + 2 + TLS_SIGNATURE_MAX
-        }
-        Operation::BeginRelayEnrollment => REQUEST_CONTEXT_WIRE_LEN + 2 + HOSTNAME_MAX,
-        _ => REQUEST_CONTEXT_WIRE_LEN + 160,
-    }
-}
-
-const _: () =
-    assert!(max_payload_len(Operation::ValidateAndStageRelayProfile) <= FRAME_MAX_PAYLOAD);
