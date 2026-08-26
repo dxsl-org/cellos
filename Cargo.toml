@@ -28,6 +28,7 @@ members = [
     "libs/text-engine",
     "libs/mlibc-shim",
     "libs/agent-proto",
+    "libs/authority-protocol",
     "libs/viui",
     "libs/viui-macros",
     

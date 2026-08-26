@@ -1,0 +1,99 @@
+use super::ProtectedAuthorityRecord;
+use crate::{
+    AuthorityMode, BootState, ProviderCasReceipt, RelayIntent, RelayProfileState, TimeState,
+};
+
+impl ProtectedAuthorityRecord {
+    pub(super) fn invariants_hold(&self) -> bool {
+        if !mode_boot_valid(self.mode, self.boot)
+            || matches!(self.boot, BootState::Open { epoch } if epoch != self.boot_floor)
+            || (matches!(self.boot, BootState::Open { .. })
+                && self.approved_loader_digest == [0; 32])
+            || (self.pending_time.is_some() && self.time != TimeState::Unavailable)
+        {
+            return false;
+        }
+        if let TimeState::Valid {
+            source_epoch,
+            sequence,
+            expires_at,
+            ..
+        } = self.time
+        {
+            if self.mode != AuthorityMode::Serving
+                || source_epoch != self.time_floors.source_epoch
+                || sequence != self.time_floors.source_sequence
+                || expires_at <= self.time_floors.unix_seconds
+            {
+                return false;
+            }
+        }
+        let in_flight = matches!(
+            self.relay,
+            RelayProfileState::Pending { .. }
+                | RelayProfileState::Staged(_)
+                | RelayProfileState::ReceiptConsumed(_)
+                | RelayProfileState::Prepared(_)
+                | RelayProfileState::Promoted { .. }
+        );
+        if let Some(intent) = self.previous_active {
+            if !in_flight
+                || !self.intent_valid(&intent)
+                || intent.generation >= self.generation_floor
+            {
+                return false;
+            }
+        }
+        match self.relay {
+            RelayProfileState::Empty => self.previous_active.is_none(),
+            RelayProfileState::Pending {
+                generation,
+                csr_handle,
+            } => generation != 0 && generation == csr_handle && generation == self.generation_floor,
+            RelayProfileState::Staged(intent)
+            | RelayProfileState::ReceiptConsumed(intent)
+            | RelayProfileState::Prepared(intent) => self.current_intent_valid(&intent),
+            RelayProfileState::Promoted { intent, receipt } => {
+                self.current_intent_valid(&intent) && receipt_matches(&intent, &receipt)
+            }
+            RelayProfileState::Active(intent) => {
+                self.previous_active.is_none() && self.intent_valid(&intent)
+            }
+        }
+    }
+
+    fn current_intent_valid(&self, intent: &RelayIntent) -> bool {
+        self.intent_valid(intent) && intent.generation == self.generation_floor
+    }
+
+    fn intent_valid(&self, intent: &RelayIntent) -> bool {
+        intent.device_id == self.device_id
+            && intent.authority_id == self.authority_id
+            && intent.authority_epoch == self.authority_epoch
+            && intent.generation != 0
+            && intent.generation <= self.generation_floor
+            && intent.pending_slot <= 1
+            && intent.boot_epoch <= self.boot_floor
+    }
+}
+
+fn mode_boot_valid(mode: AuthorityMode, boot: BootState) -> bool {
+    match mode {
+        AuthorityMode::Ready => boot == BootState::Closed,
+        AuthorityMode::Serving => matches!(boot, BootState::Open { .. }),
+        AuthorityMode::Sealed => true,
+    }
+}
+
+fn receipt_matches(intent: &RelayIntent, receipt: &ProviderCasReceipt) -> bool {
+    intent.device_id == receipt.device_id
+        && intent.authority_id == receipt.authority_id
+        && intent.authority_epoch == receipt.authority_epoch
+        && intent.generation == receipt.generation
+        && intent.policy_epoch == receipt.policy_epoch
+        && intent.pending_slot == receipt.pending_slot
+        && intent.pending_spki_digest == receipt.pending_spki_digest
+        && intent.profile_digest == receipt.profile_digest
+        && intent.boot_epoch == receipt.boot_epoch
+        && intent.validation_request_id == receipt.validation_request_id
+}
