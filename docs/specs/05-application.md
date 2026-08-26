@@ -1,6 +1,6 @@
 # Cellos Architecture: Application Tiers
 **Version**: 1.0 (canonical tier/runtime/SDK taxonomy)
-**Status**: Definitive — updated 2026-08-26 (ADR 0003; Silo API correction)
+**Status**: Definitive — updated 2026-08-26 (ADR 0003; Silo API and ADR-0006 production gate)
 
 ---
 
@@ -67,7 +67,18 @@ resets permanently fail the current instance closed. Stage-2 proves a useful
 software containment path, but the Cellos EL2 host still constructs and loads
 the guest and supplies its disposable development seed. This is therefore not
 hardware custody, kernel-compromise-resistant storage, an HSM, or production
-qualification. Production remains `BLOCKED_PENDING_PHASE_6_7_8`.
+qualification.
+
+Production is `BLOCKED_BY_ADR_0006`.
+[ADR-0006](../decisions/0006-block-production-root-pending-exact-product-evidence.md)
+closed Phase 6 NO-GO and selected no production root product. No exact product,
+procurement path, OTP/provisioning plan, or board/AP integration is approved.
+Phase 4 remains product-independent and blocked only on real protected
+persistence, authenticated time, and a distinct reviewed pending-key binding
+under the frozen KMS ABI. Phase 5 is `DEV_REFERENCE`; Phases 7–8 remain blocked.
+Reopening requires one vendor-signed package binding all eight ADR-0006 criteria
+to one proposed deployment; receipt permits review, not approval, and every item
+must pass without inference before a superseding GO ADR selects the product.
 
 This backend is infrastructure behind KMS, not an application tier or App SDK
 module. See the [development Silo guide](../guides/tier1-silo.md) for the exact

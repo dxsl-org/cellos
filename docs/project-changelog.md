@@ -2,6 +2,27 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-26] KMS/Silo Phase 6 closes NO-GO with no production root selected
+
+- [ADR-0006](decisions/0006-block-production-root-pending-exact-product-evidence.md)
+  is accepted after final security and consistency re-reviews returned GO with
+  zero residual findings. Cellos selects no production root product, and the
+  current production status is `BLOCKED_BY_ADR_0006`.
+- No exact product, MPN, package, revision, production firmware baseline, or
+  support contract is selected. Procurement, OTP/provisioning, and board/AP
+  integration are not approved; generic design, family, development-board, or
+  deployment evidence cannot supply those product-specific facts.
+- Reopening requires one vendor-signed evidence package that contractually binds
+  all eight ADR-0006 criteria to the same proposed deployment. Receipt permits
+  new architecture, security, procurement, and board review but is not approval:
+  a GO requires every item to pass without inference and a superseding ADR to
+  select the exact product before production implementation resumes.
+- Phase 4 remains product-independent and blocked only on real protected
+  persistence, authenticated time, and a distinct reviewed pending-key binding
+  under the frozen KMS ABI. Phase 5 remains `DEV_REFERENCE`. Production Phases
+  7–8 remain blocked; Phase 7 requires the superseding GO ADR, and Phase 8 still
+  requires physical qualification and authenticated build provenance.
+
 ## [2026-08-26] KMS/Silo Phase 3 completes constrained certificate provisioning
 
 - The append-only KMS v1 ABI now carries the supervisor-only relay enrollment

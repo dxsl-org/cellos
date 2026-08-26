@@ -152,17 +152,29 @@ These results are `DEV_REFERENCE` evidence only.
 
 ---
 
-## Production Gate and Next Phase
+## Production Gate and Current Phases
 
-Production remains `BLOCKED_PENDING_PHASE_6_7_8`. Phases 6–7 must select and
-implement one exact secure-hardware product and trust chain; Phase 8 must supply
-physical qualification and authenticated build provenance. No QEMU result can
-satisfy those gates.
+Production is `BLOCKED_BY_ADR_0006`.
+[ADR-0006](../decisions/0006-block-production-root-pending-exact-product-evidence.md)
+closed Phase 6 NO-GO and selected no production root product. No exact product,
+procurement path, OTP/provisioning plan, or board/AP integration is approved.
+The QEMU Silo remains `DEV_REFERENCE`; no result in this guide can satisfy a
+production hardware gate.
 
-The overall KMS/Silo plan remains in progress. Phase 3, Certificate Activation
-and Provisioning, is next and requires explicit approval before implementation.
+Phase 4 is product-independent and blocked only on real protected persistence,
+authenticated time, and a distinct reviewed pending-key binding under the
+frozen KMS ABI. Phase 5 is `DEV_REFERENCE`. Phases 7–8 remain blocked: only a
+superseding GO ADR may authorize Phase 7 to implement one exact product and
+trust chain, and Phase 8 still requires physical qualification and authenticated
+build provenance.
 
-See the [system architecture](../system-architecture.md) for the durable boundary,
-the [project roadmap](../project-roadmap.md) for current gates, and
+Reopening requires one vendor-signed evidence package that contractually binds
+all eight ADR-0006 criteria to the same proposed deployment. Receipt permits
+architecture, security, procurement, and board review but is not approval.
+Every item must pass without inference, and a superseding ADR must select the
+exact product before production implementation resumes.
+
+See the [system architecture](../system-architecture.md) for the durable
+boundary, the [project roadmap](../project-roadmap.md) for current gates, and
 [ADR-0005](../decisions/0005-mutual-tls-relay-identity.md) for relay identity
 placement.

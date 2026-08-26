@@ -181,6 +181,7 @@ two-node TLS/Noise exercise remain blocked by the prerequisites above.
 
 ## Links
 
+- [ADR-0006](./0006-block-production-root-pending-exact-product-evidence.md) — no production root is selected; exact vendor product, firmware, boot, state, time, and board evidence gate the client path.
 - `.agents/260825-sdk-delivery/phase-02-relay.md` — relay direction,
   prerequisites, acceptance conditions, and server-only/client-blocked status.
 - `tools/relay-enroll/mtls-mount-manifest.template.toml` — provisioning

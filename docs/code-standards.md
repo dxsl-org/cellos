@@ -99,6 +99,15 @@
   manifest NodeId values. This active-key check must not authorize pending
   profile staging.
 
+#### Production Protected-Root Evidence
+
+- Never infer an exact product identity, configuration, capability, lifecycle,
+  support contract, or production suitability from a generic architecture,
+  reference design, masked family, design release, development board, emulator,
+  or deployment announcement.
+- Classify a required product-specific fact as `UNVERIFIED` when exact
+  vendor-backed evidence is absent. Absence is never a pass and must not be
+  filled by architectural similarity or generic design capability.
 
 ### Law 2: Owned Buffers for Async (SAS Safety)
 

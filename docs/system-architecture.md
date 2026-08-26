@@ -3,7 +3,7 @@
 **Audience**: Developers new to Cellos
 **Level**: High-level (conceptual + key components)
 **Version**: 0.2.1-dev (Mycelium Era)
-**Last Updated**: 2026-08-26 (KMS/Silo Phase 3 completes constrained certificate provisioning; the default runtime remains sealed without protected persistence/authenticated time, pending-key precommit binding is unavailable, and production remains blocked pending Phases 6–8.)
+**Last Updated**: 2026-08-26 (KMS/Silo Phase 6 closes NO-GO with no product selected; Phase 4 remains blocked only on protected persistence, authenticated time, and pending-key precommit binding; production is `BLOCKED_BY_ADR_0006`.)
 
 > **Status refresh 2026-08-21**: [Spec 23 Native SDK contract](specs/23-native-sdk-contract.md)
 > is ratified as the normative contract for the single Native SDK family. It
@@ -1297,13 +1297,30 @@ The implemented Relay P-256 providers are the Phase 1 fixture and the optional
 Phase 2 development Silo; neither is protected production hardware. Unsafe
 Cargo feature combinations fail at compile time, and the artifact checker
 rejects development, fixture, insecure, raw-relay, and K1-fallback paths from
-production. The nominal `hardware-relay-provider` is intentionally
-compile-blocked until Phases 6–7 select and implement the production root;
-production image checking/building remains intentionally blocked until Phase 8
-supplies physical qualification and authenticated build provenance. These
-phases do not provide client-certificate issuance, production TLS-client
-integration, a production artifact, or hardware-backed signing. The
-external-boundary identity and key non-exposure constraints remain governed by
+production.
+
+[ADR-0006](decisions/0006-block-production-root-pending-exact-product-evidence.md)
+closed Phase 6 NO-GO and selected no production root product. No exact product,
+procurement path, OTP/provisioning plan, or board/AP integration is approved,
+and `hardware-relay-provider` remains compile-blocked. Production is
+`BLOCKED_BY_ADR_0006`.
+
+Phase 4 is product-independent and remains blocked only on real protected
+persistence, authenticated time, and a distinct reviewed pending-key binding
+under the frozen KMS ABI. Phase 5 is `DEV_REFERENCE`. Phases 7–8 remain blocked:
+Phase 7 may implement one exact product and trust chain only after a superseding
+GO ADR, and Phase 8 still requires physical qualification and authenticated
+build provenance.
+
+The decision may be reopened only after one vendor-signed evidence package
+contractually binds all eight ADR-0006 criteria to the same proposed deployment.
+Receipt permits new architecture, security, procurement, and board review; it
+is not approval. Every item must pass without inference and the selected product
+must be recorded by a superseding ADR before production implementation resumes.
+Current Phase 1–3 and Phase 6 evidence does not provide client-certificate
+issuance, production TLS-client integration, a production artifact, or
+hardware-backed signing. The external-boundary identity and key non-exposure
+constraints remain governed by
 [ADR-0005](decisions/0005-mutual-tls-relay-identity.md).
 
 ### Development Silo provider boundary (Phase 2, 2026-08-26)
@@ -1345,9 +1362,9 @@ production qualification.
 The exact signed 12-cell QEMU image passed registered readiness, KMS
 self-verification, direct/unbound denials, VFS PAGE+REG lifecycle checks, and
 `vfs-test` 96/0. This does not alter the production gate:
-`BLOCKED_PENDING_PHASE_6_7_8`. Phases 6–7 must select and implement one exact
-hardware product/trust chain, and Phase 8 requires physical qualification and
-authenticated build provenance.
+`BLOCKED_BY_ADR_0006`. Phase 6 closed NO-GO with no product selected; only a
+superseding GO ADR may unblock Phase 7, and Phase 8 still requires physical
+qualification and authenticated build provenance.
 
 ### Relay certificate activation and provisioning boundary (Phase 3, 2026-08-26)
 
@@ -1398,7 +1415,7 @@ and renewal therefore remain fail-closed until an authenticated pending-key
 binding is available without reinterpreting the frozen opcode. Phase 3 does not
 claim that binding, protected production persistence, authenticated production
 time, hardware custody, or a production relay artifact. Production remains
-`BLOCKED_PENDING_PHASE_6_7_8`.
+`BLOCKED_BY_ADR_0006`.
 
 ### Robot swarm (G1) vs server cluster (G2/G3)
 
@@ -1486,7 +1503,7 @@ Same foundation, **opposite coordination semantics** → two separate problems:
   execution. Neither x86 path is production hardware-qualified. RISC-V H-extension
   remains unsupported on the current board set.
 - **Cell-signing mechanism + hot migration** — ✅ MECHANISMS COMPLETE 2026-06-23; Phase 00 public syscall landing is complete 2026-08-07: `PauseService` 422 is SupervisorCap-gated with bit 49, rejects cached-TID ingress and waits for accepted sender/mailbox work to drain before Snapshot; legacy `HotSwap` 400 is retired/reserved, `HotSwapReady`/`Snapshot` keep bit 32, `SpawnReplacement` 421 is additive and allowlist bit 57, `SupervisorCap` gates Freeze/Resume/Kill/QueryHotswapReady/SpawnReplacement, the kernel consumes one live frozen-task ceiling under `SCHEDULER -> SWAP_CEILINGS`, and resume / all scheduler exits clear the ceiling. Phase 01 supervisory atomic cutover is complete: compare-and-commit barrier, cached sender FIFO proof, old-TID rejection, and `supervisor_hotswap_preserves_demo_state` passed with `[hotswap-cached-sender] PASS` and `[hotswap-demo-v2] SpawnCap retained`. Phase 02 supervisory hotswap closure is complete: the `hotswap` CLI uses Supervisor IPC, the exact shell-only `/bin/hotswap` edge stays capability-free, unauthorized senders receive `0xFD`, and the final QEMU hotswap-smoke suite passed 15/15 zero skip; fleet signed-only admission remains planned.
-- **Development Silo provider** — ✅ PHASE 2 `DEV_REFERENCE` COMPLETE 2026-08-26: the former public/general Silo API is removed; the signed AArch64 virtualized-QEMU lane is KMS-mediated and test-hooks-only. Stage-2 is software containment, not hardware custody, and production remains `BLOCKED_PENDING_PHASE_6_7_8`.
+- **Development Silo provider** — ✅ PHASE 2 `DEV_REFERENCE` COMPLETE 2026-08-26: the former public/general Silo API is removed; the signed AArch64 virtualized-QEMU lane is KMS-mediated and test-hooks-only. Stage-2 is software containment, not hardware custody; the Phase 6 NO-GO leaves production `BLOCKED_BY_ADR_0006`.
 
 ### 🚧 In Progress / Partial
 - **MQTT binary** (skeleton added; full implementation deferred)

@@ -204,15 +204,23 @@ Cellos is being shaped around product stages, not only phase numbers:
 - **PRODUCTION RELAY SIGNING BLOCKED:** fixture and development Silo providers
   are non-production. Cargo rejects unsafe provider/downgrade combinations,
   production artifacts exclude the development Silo, and
-  `hardware-relay-provider` remains compile-blocked until Phases 6–7 select and
-  implement one exact product and trust chain. Phase 8 still requires physical
-  qualification and authenticated build provenance. Production remains
-  `BLOCKED_PENDING_PHASE_6_7_8`; no Phase 1–3 result is hardware-backed
-  signing or a production relay artifact.
+  `hardware-relay-provider` remains compile-blocked because
+  [ADR-0006](decisions/0006-block-production-root-pending-exact-product-evidence.md)
+  selected no product. Production is `BLOCKED_BY_ADR_0006`; no Phase 1–3
+  result is hardware-backed signing or a production relay artifact.
+- Phase 6 closed NO-GO. No exact product, procurement path, OTP/provisioning
+  plan, or board/AP integration is approved. Reopening requires one
+  vendor-signed package binding all eight ADR-0006 criteria to the same proposed
+  deployment; receipt permits review, not approval. Every item must pass without
+  inference and a superseding GO ADR must select the exact product before
+  production implementation resumes.
 - The KMS/Silo protected relay identity plan remains in progress. Phases 1–3
-  are complete; Phases 4–8 remain pending and unapproved. Phase 3 adds no
-  hardware custody or production relay artifact, and production remains
-  blocked pending Phases 6–8.
+  and the Phase 6 NO-GO branch are complete. Phase 4 is product-independent and
+  blocked only on real protected persistence, authenticated time, and a
+  distinct reviewed pending-key binding under the frozen KMS ABI. Phase 5 is
+  `DEV_REFERENCE`. Phases 7–8 remain blocked: only the superseding GO ADR may
+  authorize Phase 7 to implement one exact product and trust chain, and Phase 8
+  still requires physical qualification and authenticated build provenance.
 
 ## Update Rule
 
