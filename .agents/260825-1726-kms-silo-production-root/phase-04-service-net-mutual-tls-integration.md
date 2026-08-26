@@ -19,6 +19,7 @@ tier: thinking
 - `docs/decisions/0006-block-production-root-pending-exact-product-evidence.md`
 - [Approved Phase 4 entry-gate contract](./spec.md)
 - [Concrete DEV_REFERENCE lane research](../reports/research-260826-1605-phase4-dev-reference-lane.md)
+- [DEV_REFERENCE execution plan](../260826-1605-phase4-dev-reference-authority/plan.md)
 
 ## Overview
 Add a privileged service-net relay mTLS profile backed by KMS and reconnect net-broker’s relay path without exposing the device identity through generic `TlsStream`. This software-only phase is independent of production-root product selection, but implementation remains blocked on its three entry gates.
@@ -139,14 +140,16 @@ KMS creates the exact CertificateVerify signature; service-net must not prehash 
 
 ## Next Steps
 Do not begin Phase 4 Build. First implement and evidence the selected
-DEV_REFERENCE candidate in
-`../reports/research-260826-1605-phase4-dev-reference-lane.md`, including the
-JH7110 SRAM loader feasibility gate, protected state fault matrix, signed-time
-deployment, and AC-001 through AC-011 review. Phase 5 may prove the resulting
-software path only as `DEV_REFERENCE`. ADR-0006 independently blocks Phases
-7–8 pending vendor evidence and a superseding GO ADR.
+DEV_REFERENCE candidate via
+[its execution plan](../260826-1605-phase4-dev-reference-authority/plan.md):
+the JH7110 SRAM loader feasibility gate, protected state fault matrix,
+signed-time deployment, and AC-001 through AC-011 review; its Phase 8 GO alone
+may open this phase's Build. Phase 5 may prove the resulting software path only
+as `DEV_REFERENCE`. ADR-0006 independently blocks Phases 7–8 pending vendor
+evidence and a superseding GO ADR.
 
 ## Deviation Log
 2026-08-26 — ADR-0006 clarified that Phase 4 is product-independent, retained the protected-persistence and authenticated-time gates, added a distinct reviewed pending-key binding under frozen opcodes 9–14, and approved no KMS ABI change.
 2026-08-26 — Approved `spec.md` selects a root-owned Protected Relay Authority while preserving public KMS opcodes 9–14. Approval fixes the three entry-gate contracts but leaves Phase 4 blocked until AC-001 through AC-011 are evidenced.
 2026-08-26 — Deep research selected the VF2 UART-root-stream plus STM32H573/SLB9672/AWS signed-time composition as the only concrete DEV_REFERENCE candidate worth implementing. The research remains NO-GO evidence: no hardware, firmware, endpoint, fault matrix, or AC-001 through AC-011 result exists, so Phase 4 stays blocked.
+2026-08-26 — Created the DEV_REFERENCE execution plan with red-team corrections applied; its Phase 8 GO is now the sole opener for Phase 4 Build, so Next Steps link to it directly.

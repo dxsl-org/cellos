@@ -1,0 +1,70 @@
+---
+title: "Phase 4 DEV_REFERENCE Authority Execution"
+description: "Build and evidence the approved VF2 UART-root-stream, STM32H573/SLB9672 authority, and AWS signed-time candidate without changing KMS opcodes 9–14."
+status: blocked
+priority: P1
+effort: "not estimated"
+branch: main
+tags: [security, kms, dev-reference, visionfive2, stm32h5, tpm, signed-time]
+blockedBy: [hardware-assets, aws-dev-account]
+blocks: [260825-1726-kms-silo-production-root-phase-4]
+created: 2026-08-26
+---
+
+# Phase 4 DEV_REFERENCE Authority Execution
+
+## Objective
+
+Produce real AC-001 through AC-011 evidence for the approved Phase 4 entry contract. This plan builds prerequisite authority infrastructure; it does not begin service-net Phase 4 Build, select a production root, or weaken ADR-0006.
+
+## Entry State
+
+- Candidate architecture approved: VF2 v1.3B UART-root-stream boot, STM32H573I-DK, authority-private OPTIGA TPM SLB 9672, and one-region AWS signed-time service.
+- Execution is blocked until exact hardware is physically available and a dedicated AWS DEV account/region is named.
+- Procurement, OTP, lifecycle closure, debug lockdown, KMS key creation, and cloud deployment require explicit operator authorization at their phase checkpoints.
+
+## Phases
+
+| Phase | Name | Status | Depends on |
+|---|---|---|---|
+| 1 | [Admission and Asset Baseline](./phase-01-admission-and-asset-baseline.md) | blocked | hardware, AWS account |
+| 2 | [Private Protocol and DEV Separation](./phase-02-private-protocol-and-dev-separation.md) | pending | 1 |
+| 3 | [VF2 UART Root-Stream Boot](./phase-03-vf2-uart-root-stream-boot.md) | pending | 2 |
+| 4 | [STM32 and TPM Protected Authority](./phase-04-stm32-tpm-protected-authority.md) | pending | 2 |
+| 5 | [Nonce-Bound Signed-Time Service](./phase-05-nonce-bound-signed-time-service.md) | pending | 2 |
+| 6 | [Frozen-ABI KMS Authority Integration](./phase-06-frozen-abi-kms-authority-integration.md) | pending | 3, 4, 5 |
+| 7 | [Relay Enrollment and mTLS Integration](./phase-07-relay-enrollment-and-mtls-integration.md) | pending | 6 |
+| 8 | [Fault Evidence and Entry-Gate Review](./phase-08-fault-evidence-and-entry-gate-review.md) | pending | 7 |
+
+Phases 3, 4, and 5 may execute in parallel after Phase 2. Any hard-stop result blocks Phases 6–8; no fallback lane is permitted.
+
+## Locked Contracts
+
+- Public KMS opcodes and payloads 9–14 remain byte-for-byte unchanged; opcode 14 remains active-only.
+- STM32 is the sole authority and TPM bus master. AP callers receive typed operations only; no generic sign, digest, TPM, NV, time, or profile assertion surface exists.
+- JH7110 BootROM UART mode must receive the first mutable AP stage solely from the authority. No SD, QSPI, eMMC, USB, network, or AP-measurement fallback.
+- The exact SRAM-loader bytes and manifest-verification key are bound into the STiRoT-approved STM32 image/policy; the approved-loader digest is verified before any XMODEM byte and persisted in PERSIST-003 tuples and the OpenBoot fact. Substituted, rolled-back, or truncated loaders never execute.
+- Authority state is bound to a stable TPM identity and non-regressing NV counter; every torn or mismatched state recovers the exact tuple or seals.
+- Signed time binds device, authority, boot, request, purpose, nonce, source epoch/sequence, Unix floor, and expiry. Outage seals.
+- Every artifact remains `DEV_REFERENCE`; production checks retain exact `BLOCKED_BY_ADR_0006` behavior.
+- Relay sessions bind to their accepted time fact with hard teardown at a deadline ≤ its `expires_at`; renewal requires fresh purpose-bound reauthorization; expiry, reset, or failed renewal tears down even mid-traffic. Proven live in Phase 7's standalone probe; production enforcement lands in parent Phase 4 after Phase 8 GO.
+- Ownership: BootROM/XMODEM boot-stream framing is a separate pre-runtime protocol owned by Phase 3, outside the Phase 2 closed operation set. Root `Cargo.toml` workspace registration has exactly one serialized owner (Phase 6). Production-checker code stays owned by Phase 2; phases 3–5 hand off marker names only. Phase 7 is restricted to the standalone managed-CA/authority/KMS probe; all service-net, net-broker, ostd, and `embedded-tls` changes wait for parent Phase 4 after Phase 8 GO.
+
+## Evidence Gate
+
+Phase 8 may mark this plan complete only after actual hardware/cloud traces and an independent security review pass AC-001 through AC-011. Simulator, QEMU, fixture, compile, or unit evidence cannot substitute for the named physical tests.
+
+## Red-Team Verdicts (2026-08-26)
+
+Security red-team (PLAN-BOOT-001, PLAN-TIME-002/003/004, PLAN-EVIDENCE-005) and simplicity reviews both returned NO-GO. Resolutions are applied in the affected phase files and recorded in each Deviation Log without weakening any hard stop, evidence requirement, or frozen contract. Parent Phase 4 remains blocked until Phase 8 returns GO.
+
+## Source Context
+
+- [Approved entry contract](../260825-1726-kms-silo-production-root/spec.md)
+- [Candidate research](../reports/research-260826-1605-phase4-dev-reference-lane.md)
+- [Codebase scout](./scout-report.md)
+- [Parent Phase 4](../260825-1726-kms-silo-production-root/phase-04-service-net-mutual-tls-integration.md)
+
+## Cook Handoff
+
+After Phase 1 becomes unblocked: `/hc-cook .agents/260826-1605-phase4-dev-reference-authority/plan.md`.
