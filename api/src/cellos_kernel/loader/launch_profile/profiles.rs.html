@@ -15,11 +15,11 @@
 <a href=#15 id=15 data-nosnippet>15</a>        <span class="kw">return </span><span class="prelude-val">None</span>;
 <a href=#16 id=16 data-nosnippet>16</a>    }
 <a href=#17 id=17 data-nosnippet>17</a>    <span class="kw">match </span>target {
-<a href=#18 id=18 data-nosnippet>18</a>        <span class="string">"/bin/block" </span>| <span class="string">"/bin/compositor" </span>| <span class="string">"/bin/config" </span>| <span class="string">"/bin/e1000" </span>| <span class="string">"/bin/fb-console"
-<a href=#19 id=19 data-nosnippet>19</a>        </span>| <span class="string">"/bin/hypervisor" </span>| <span class="string">"/bin/input" </span>| <span class="string">"/bin/kms" </span>| <span class="string">"/bin/net" </span>| <span class="string">"/bin/net-broker"
-<a href=#20 id=20 data-nosnippet>20</a>        </span>| <span class="string">"/bin/nvme" </span>| <span class="string">"/bin/shell" </span>| <span class="string">"/bin/silo" </span>| <span class="string">"/bin/silo-test" </span>| <span class="string">"/bin/srv-test"
-<a href=#21 id=21 data-nosnippet>21</a>        </span>| <span class="string">"/bin/supervisor" </span>| <span class="string">"/bin/vfs" </span>| <span class="string">"/bin/vfs-test" </span>| <span class="string">"/bin/virtio-gpu"
-<a href=#22 id=22 data-nosnippet>22</a>        </span>| <span class="string">"/bin/virtio-net" </span>=&gt; <span class="prelude-val">Some</span>(LaunchProfile::new(
+<a href=#18 id=18 data-nosnippet>18</a>        <span class="string">"/bin/bcm-display" </span>| <span class="string">"/bin/block" </span>| <span class="string">"/bin/compositor" </span>| <span class="string">"/bin/config" </span>| <span class="string">"/bin/e1000"
+<a href=#19 id=19 data-nosnippet>19</a>        </span>| <span class="string">"/bin/fb-console" </span>| <span class="string">"/bin/hypervisor" </span>| <span class="string">"/bin/input" </span>| <span class="string">"/bin/kms" </span>| <span class="string">"/bin/net"
+<a href=#20 id=20 data-nosnippet>20</a>        </span>| <span class="string">"/bin/net-broker" </span>| <span class="string">"/bin/nvme" </span>| <span class="string">"/bin/shell" </span>| <span class="string">"/bin/silo" </span>| <span class="string">"/bin/silo-test"
+<a href=#21 id=21 data-nosnippet>21</a>        </span>| <span class="string">"/bin/srv-test" </span>| <span class="string">"/bin/supervisor" </span>| <span class="string">"/bin/vfs" </span>| <span class="string">"/bin/vfs-test"
+<a href=#22 id=22 data-nosnippet>22</a>        </span>| <span class="string">"/bin/virtio-gpu" </span>| <span class="string">"/bin/virtio-net" </span>=&gt; <span class="prelude-val">Some</span>(LaunchProfile::new(
 <a href=#23 id=23 data-nosnippet>23</a>            boot_ceiling::boot_ceiling(target),
 <a href=#24 id=24 data-nosnippet>24</a>            <span class="string">"init-launch-edge"</span>,
 <a href=#25 id=25 data-nosnippet>25</a>            <span class="bool-val">true</span>,

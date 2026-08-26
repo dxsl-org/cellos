@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["CHUNK","MAX_IDLE","MAX_RESPONSE"],"fn":["plain","roundtrip","tls"]};

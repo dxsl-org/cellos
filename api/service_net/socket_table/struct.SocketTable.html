@@ -15,7 +15,7 @@ wrong-type handle.</p>
     &amp;mut self,
     handle: SocketHandle,
     owner: <a class="struct" href="struct.SocketOwner.html" title="struct service_net::socket_table::SocketOwner">SocketOwner</a>,
-) -&gt; Result&lt;u64, <a class="enum" href="../../types/enum.ViError.html" title="enum types::ViError">ViError</a>&gt;</h4></section></summary><div class="docblock"><p>Allocate a new <code>CapId</code> and associate it with <code>handle</code> and attested <code>owner</code>.</p>
+) -&gt; Result&lt;u64, ViError&gt;</h4></section></summary><div class="docblock"><p>Allocate a new <code>CapId</code> and associate it with <code>handle</code> and attested <code>owner</code>.</p>
 <h5 id="errors"><a class="doc-anchor" href="#errors">§</a>Errors</h5>
 <p>Returns <code>ViError::OutOfMemory</code> if <code>MAX_SOCKETS</code> is already reached.</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.insert_with_state" class="method"><a class="src rightside" href="../../src/service_net/socket_table.rs.html#76-91">Source</a><h4 class="code-header">pub fn <a href="#method.insert_with_state" class="fn">insert_with_state</a>(
@@ -23,7 +23,7 @@ wrong-type handle.</p>
     handle: SocketHandle,
     state: <a class="enum" href="../socket_state/enum.SocketState.html" title="enum service_net::socket_state::SocketState">SocketState</a>,
     owner: <a class="struct" href="struct.SocketOwner.html" title="struct service_net::socket_table::SocketOwner">SocketOwner</a>,
-) -&gt; Result&lt;u64, <a class="enum" href="../../types/enum.ViError.html" title="enum types::ViError">ViError</a>&gt;</h4></section></summary><div class="docblock"><p>Allocate a new <code>CapId</code> for <code>handle</code> with an explicit initial state and attested owner.</p>
+) -&gt; Result&lt;u64, ViError&gt;</h4></section></summary><div class="docblock"><p>Allocate a new <code>CapId</code> for <code>handle</code> with an explicit initial state and attested owner.</p>
 <p>Unlike <code>insert</code> (which defaults to <code>Created</code>), this sets <code>state</code> directly.
 Only call from ACCEPT — the handle is already Established and must be
 surfaced as <code>Connected</code> to the consumer.</p>

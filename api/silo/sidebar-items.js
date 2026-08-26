@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["GUEST_ENTRY_PC","GUEST_IPA_BASE","GUEST_RAM_BYTES","GUEST_RAM_PAGES"],"fn":["main"],"mod":["ipc","run_loop","vmm"],"static":["GUEST_BIN","VICELL_MANIFEST","VICELL_SYSCALLS"]};
+window.SIDEBAR_ITEMS = {"fn":["main"],"mod":["guest","ipc","run_loop","vmm"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS"]};

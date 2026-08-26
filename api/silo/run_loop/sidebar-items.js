@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["SiloRunResult"],"fn":["run_until_done"]};
+window.SIDEBAR_ITEMS = {"constant":["MAX_EXITS_PER_OPERATION"],"enum":["SiloRunResult","SiloUnexpectedExit","SiloVmmFault"],"fn":["diagnose_unexpected_exit","run_until_done"]};

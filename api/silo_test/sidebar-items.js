@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["main"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS"]};
+window.SIDEBAR_ITEMS = {"fn":["cell_main","direct_silo_denied","main","report"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS"]};

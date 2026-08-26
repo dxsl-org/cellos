@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["HVC_SILO_DONE","HVC_SILO_FAULT","HVC_SILO_READY","MAILBOX_IPA","SILO_SERVICE_ID"],"enum":["SiloCmd","SiloRespCode"],"struct":["MailboxPage","SiloRequest","SiloResponse"]};
+window.SIDEBAR_ITEMS = {"constant":["DEVELOPMENT_PROFILE_DIGEST","DEVELOPMENT_RELAY_GENERATION","DEVELOPMENT_SILO_FRAME_LEN"],"enum":["DevelopmentSiloError","DevelopmentSiloRequest","DevelopmentSiloResponse"]};

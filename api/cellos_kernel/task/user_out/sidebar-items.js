@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["resolve_current_task_usize_slot","usable_stack_bounds","validate_stack_usize_slot","write_optional_usize"]};
+window.SIDEBAR_ITEMS = {"fn":["resolve_optional_usize_slot","usable_stack_bounds","validate_stack_usize_slot","write_resolved_optional_usize"]};

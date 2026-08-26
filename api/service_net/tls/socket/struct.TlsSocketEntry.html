@@ -5,7 +5,7 @@
 <p>After construction the TLS handshake has already completed.  Before calling
 <code>write()</code> or <code>read()</code> the caller must call <code>set_tls_context()</code> so the embedded
 transport can drive smoltcp.</p>
-</div></details><h2 id="fields" class="fields section-header">Fields<a href="#fields" class="anchor">§</a></h2><span id="structfield.conn" class="structfield section-header"><a href="#structfield.conn" class="anchor field">§</a><code>conn: TlsConnection&lt;'static, <a class="struct" href="../transport/struct.SmoltcpTlsTransport.html" title="struct service_net::tls::transport::SmoltcpTlsTransport">SmoltcpTlsTransport</a>, Aes128GcmSha256&gt;</code></span><span id="structfield.handle" class="structfield section-header"><a href="#structfield.handle" class="anchor field">§</a><code>handle: SocketHandle</code></span><h2 id="implementations" class="section-header">Implementations<a href="#implementations" class="anchor">§</a></h2><div id="implementations-list"><details class="toggle implementors-toggle" open><summary><section id="impl-TlsSocketEntry" class="impl"><a class="src rightside" href="../../../src/service_net/tls/socket.rs.html#55-159">Source</a><a href="#impl-TlsSocketEntry" class="anchor">§</a><h3 class="code-header">impl <a class="struct" href="struct.TlsSocketEntry.html" title="struct service_net::tls::socket::TlsSocketEntry">TlsSocketEntry</a></h3></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.handshake" class="method"><a class="src rightside" href="../../../src/service_net/tls/socket.rs.html#66-121">Source</a><h4 class="code-header">pub unsafe fn <a href="#method.handshake" class="fn">handshake</a>(
+</div></details><h2 id="fields" class="fields section-header">Fields<a href="#fields" class="anchor">§</a></h2><span id="structfield.conn" class="structfield section-header"><a href="#structfield.conn" class="anchor field">§</a><code>conn: TlsConnection&lt;'static, <a class="struct" href="../transport/struct.SmoltcpTlsTransport.html" title="struct service_net::tls::transport::SmoltcpTlsTransport">SmoltcpTlsTransport</a>, Aes128GcmSha256&gt;</code></span><span id="structfield.handle" class="structfield section-header"><a href="#structfield.handle" class="anchor field">§</a><code>handle: SocketHandle</code></span><h2 id="implementations" class="section-header">Implementations<a href="#implementations" class="anchor">§</a></h2><div id="implementations-list"><details class="toggle implementors-toggle" open><summary><section id="impl-TlsSocketEntry" class="impl"><a class="src rightside" href="../../../src/service_net/tls/socket.rs.html#55-166">Source</a><a href="#impl-TlsSocketEntry" class="anchor">§</a><h3 class="code-header">impl <a class="struct" href="struct.TlsSocketEntry.html" title="struct service_net::tls::socket::TlsSocketEntry">TlsSocketEntry</a></h3></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.handshake" class="method"><a class="src rightside" href="../../../src/service_net/tls/socket.rs.html#66-128">Source</a><h4 class="code-header">pub unsafe fn <a href="#method.handshake" class="fn">handshake</a>(
     handle: SocketHandle,
     hostname: &amp;str,
 ) -&gt; Result&lt;Self, TlsError&gt;</h4></section></summary><div class="docblock"><p>Perform the TLS 1.3 handshake over <code>handle</code> and return a live entry.</p>
@@ -15,7 +15,7 @@ handshake completes or times out.</p>
 <code>open()</code> to produce a clear error rather than a silent SAN mismatch.</p>
 <h5 id="safety"><a class="doc-anchor" href="#safety">§</a>Safety</h5>
 <p><code>set_tls_context()</code> must have been called with valid pointers before this.</p>
-</div></details><details class="toggle method-toggle" open><summary><section id="method.send" class="method"><a class="src rightside" href="../../../src/service_net/tls/socket.rs.html#127-143">Source</a><h4 class="code-header">pub unsafe fn <a href="#method.send" class="fn">send</a>(
+</div></details><details class="toggle method-toggle" open><summary><section id="method.send" class="method"><a class="src rightside" href="../../../src/service_net/tls/socket.rs.html#134-150">Source</a><h4 class="code-header">pub unsafe fn <a href="#method.send" class="fn">send</a>(
     &amp;mut self,
     data: &amp;[u8],
     iface: *mut Interface,
@@ -24,7 +24,7 @@ handshake completes or times out.</p>
 ) -&gt; Result&lt;usize, TlsError&gt;</h4></section></summary><div class="docblock"><p>Convenience: set TLS context and write data.</p>
 <h5 id="safety-1"><a class="doc-anchor" href="#safety-1">§</a>Safety</h5>
 <p>Same as <code>set_tls_context</code>.</p>
-</div></details><details class="toggle method-toggle" open><summary><section id="method.recv" class="method"><a class="src rightside" href="../../../src/service_net/tls/socket.rs.html#149-158">Source</a><h4 class="code-header">pub unsafe fn <a href="#method.recv" class="fn">recv</a>(
+</div></details><details class="toggle method-toggle" open><summary><section id="method.recv" class="method"><a class="src rightside" href="../../../src/service_net/tls/socket.rs.html#156-165">Source</a><h4 class="code-header">pub unsafe fn <a href="#method.recv" class="fn">recv</a>(
     &amp;mut self,
     buf: &amp;mut [u8],
     iface: *mut Interface,

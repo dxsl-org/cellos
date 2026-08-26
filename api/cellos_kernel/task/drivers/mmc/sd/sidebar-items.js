@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["SdBlock"]};
+window.SIDEBAR_ITEMS = {"fn":["single_block_transfer_mode"],"struct":["SdBlock"]};

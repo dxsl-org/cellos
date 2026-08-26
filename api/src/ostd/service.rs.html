@@ -27,12 +27,12 @@
 <a href=#27 id=27 data-nosnippet>27</a>
 <a href=#28 id=28 data-nosnippet>28</a><span class="doccomment">/// Register the calling cell as the live provider of `service_id`.
 <a href=#29 id=29 data-nosnippet>29</a>///
-<a href=#30 id=30 data-nosnippet>30</a>/// Requires `SpawnCap` — intended for the supervisor (`init`), which registers
-<a href=#31 id=31 data-nosnippet>31</a>/// each service after spawning it. Normal service cells do NOT call this directly;
-<a href=#32 id=32 data-nosnippet>32</a>/// `init` registers them on their behalf.
+<a href=#30 id=30 data-nosnippet>30</a>/// Requires `SpawnCap` except for kernel-defined, operation-specific self-registration
+<a href=#31 id=31 data-nosnippet>31</a>/// capabilities. The development/test-hooks Silo route is one such exception and can
+<a href=#32 id=32 data-nosnippet>32</a>/// publish only `service::SILO` with `tid=0`; it cannot register any other endpoint.
 <a href=#33 id=33 data-nosnippet>33</a>///
 <a href=#34 id=34 data-nosnippet>34</a>/// # Errors
-<a href=#35 id=35 data-nosnippet>35</a>/// Returns `ViError::PermissionDenied` when the caller lacks `SpawnCap`, or
+<a href=#35 id=35 data-nosnippet>35</a>/// Returns `ViError::PermissionDenied` when the caller lacks matching authority, or
 <a href=#36 id=36 data-nosnippet>36</a>/// `ViError::Unknown` if the registry is full.
 <a href=#37 id=37 data-nosnippet>37</a></span><span class="kw">pub fn </span>register(service_id: u16, tid: usize) -&gt; ViResult&lt;()&gt; {
 <a href=#38 id=38 data-nosnippet>38</a>    <span class="kw">match </span>syscall::sys_register_service(service_id, tid) {

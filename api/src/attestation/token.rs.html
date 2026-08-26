@@ -51,8 +51,8 @@
 <a href=#51 id=51 data-nosnippet>51</a>    <span class="doccomment">/// The DICE measurement aggregate this token attests to (public: a hash of
 <a href=#52 id=52 data-nosnippet>52</a>    /// public ELF bytes, never the CDI itself).
 <a href=#53 id=53 data-nosnippet>53</a>    </span><span class="kw">pub </span>measurement_aggregate: [u8; AGGREGATE_LEN],
-<a href=#54 id=54 data-nosnippet>54</a>    <span class="doccomment">/// The alias key derived from the final CDI — SEC1 uncompressed P-256 point
-<a href=#55 id=55 data-nosnippet>55</a>    /// (`04 || X || Y`), the same 65-byte shape `SiloHandle` already produces.
+<a href=#54 id=54 data-nosnippet>54</a>    <span class="doccomment">/// The alias key derived from the final CDI as a 65-byte SEC1 uncompressed
+<a href=#55 id=55 data-nosnippet>55</a>    /// P-256 point (`04 || X || Y`).
 <a href=#56 id=56 data-nosnippet>56</a>    </span><span class="kw">pub </span>alias_pubkey: [u8; ALIAS_PUBKEY_LEN],
 <a href=#57 id=57 data-nosnippet>57</a>    <span class="doccomment">/// Anti-replay / freshness nonce (caller-supplied; not interpreted here).
 <a href=#58 id=58 data-nosnippet>58</a>    </span><span class="kw">pub </span>nonce: [u8; NONCE_LEN],

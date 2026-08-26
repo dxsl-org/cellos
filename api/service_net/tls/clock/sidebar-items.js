@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["VICELL_MIN_UNIX"],"struct":["ViTlsClock"]};
+window.SIDEBAR_ITEMS = {"fn":["observe","reject_untrusted_time"],"struct":["ViTlsClock"]};

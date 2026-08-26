@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["SERVICE_COUNT"],"enum":["Registration","RestartPolicy"],"fn":["configured","spawn"],"struct":["Service"]};
