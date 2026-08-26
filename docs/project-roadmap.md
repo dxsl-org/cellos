@@ -214,13 +214,20 @@ Cellos is being shaped around product stages, not only phase numbers:
   deployment; receipt permits review, not approval. Every item must pass without
   inference and a superseding GO ADR must select the exact product before
   production implementation resumes.
-- The KMS/Silo protected relay identity plan remains in progress. Phases 1–3
-  and the Phase 6 NO-GO branch are complete. Phase 4 is product-independent and
-  blocked only on real protected persistence, authenticated time, and a
-  distinct reviewed pending-key binding under the frozen KMS ABI. Phase 5 is
-  `DEV_REFERENCE`. Phases 7–8 remain blocked: only the superseding GO ADR may
-  authorize Phase 7 to implement one exact product and trust chain, and Phase 8
-  still requires physical qualification and authenticated build provenance.
+- The KMS/Silo protected relay identity plan remains blocked on hardware assets
+  and a named AWS DEV account/region. Its authorized software track has
+  completed the Phase 2 `SOFTWARE_HARNESS`: a closed `no_std`, no-allocation
+  authority protocol and protected-state model, literal private/public wire
+  fixtures, and production-marker rejection. These host results satisfy no
+  physical or live-cloud acceptance criterion and do not unblock Phases 3–5
+  while Phase 1 admission remains blocked.
+- Phase 1 admission validates the locked hardware inventory and AWS
+  identity/account/region evidence but stays fail-closed: its currently
+  authorized AWS commands cannot prove read-only permissions. Revising that
+  evidence contract requires operator approval. Phases 3–5 physical work,
+  Phases 6–8 integration/evidence, and production use remain blocked; only a
+  superseding GO ADR may authorize the exact production product and trust
+  chain.
 
 ## Update Rule
 
