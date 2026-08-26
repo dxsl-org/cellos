@@ -44,6 +44,9 @@ mod tests {
         (246, ViSyscall::CancelCellOwnerWatch),
         (247, ViSyscall::ResolveCellOwnerRecord),
         (248, ViSyscall::WatchCellOwnerRecord),
+        (249, ViSyscall::GrantCacheSyncBegin),
+        (250, ViSyscall::GrantCacheSyncComplete),
+        (251, ViSyscall::RegisterDisplayFramebuffer),
         (20, ViSyscall::ShmAlloc),
         (21, ViSyscall::ShmMap),
         (30, ViSyscall::GetProcs),
@@ -151,7 +154,9 @@ mod tests {
         }
         // Previously unmapped ids must still decode as Unknown, so nothing that
         // used to be rejected is now silently accepted as a new opcode.
-        assert_eq!(ViSyscall::from(249), ViSyscall::Unknown);
+        assert_eq!(ViSyscall::GrantCacheSyncBegin as usize, 249);
+        assert_eq!(ViSyscall::GrantCacheSyncComplete as usize, 250);
+        assert_eq!(ViSyscall::RegisterDisplayFramebuffer as usize, 251);
         assert_eq!(ViSyscall::from(400), ViSyscall::Unknown);
         assert_eq!(ViSyscall::from(423), ViSyscall::Unknown);
     }
@@ -160,6 +165,18 @@ mod tests {
     fn hotswap_ready_and_snapshot_preserve_legacy_bit_32() {
         assert_eq!(ViSyscall::HotSwapReady.allowlist_bit(), Some(32));
         assert_eq!(ViSyscall::Snapshot.allowlist_bit(), Some(32));
+    }
+
+    #[test]
+    fn display_cache_operations_use_new_disjoint_allowlist_bits() {
+        assert_eq!(ViSyscall::GrantCacheSyncBegin.allowlist_bit(), Some(58));
+        assert_eq!(ViSyscall::GrantCacheSyncComplete.allowlist_bit(), Some(58));
+        assert_eq!(
+            ViSyscall::RegisterDisplayFramebuffer.allowlist_bit(),
+            Some(59)
+        );
+        assert_ne!(ViSyscall::ReadLog.allowlist_bit(), Some(58));
+        assert_ne!(ViSyscall::SpawnReplacement.allowlist_bit(), Some(58));
     }
 
     /// `WaitCompletion` parks on the same authority as `WaitForEvent` and shares

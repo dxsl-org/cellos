@@ -73,7 +73,6 @@ impl DevelopmentSiloRegistrationCap {
     }
 }
 
-
 /// Permits `sys_freeze_cell`, `sys_resume_cell`, `sys_kill_cell`.
 ///
 /// Carried in `CapSet` (P-TRUST) and gated by the spawn-time ceiling: the
@@ -233,7 +232,8 @@ impl CapSet {
             | crate::resource_registry::DEV_CAN
             | crate::resource_registry::DEV_ADC
             | crate::resource_registry::DEV_I2C
-            | crate::resource_registry::DEV_SPI,
+            | crate::resource_registry::DEV_SPI
+            | crate::resource_registry::DEV_DISPLAY,
         block_regions: 0b1111,
         pcie_driver: true,
         platform: true,
@@ -323,9 +323,11 @@ impl CapSet {
                 | "/bin/block"
                 | "/bin/input"
                 | "/bin/virtio-gpu"
-                | "/bin/bcm-display"
         ) {
             self.pcie_driver = true;
+            self.mmio_devices |= crate::resource_registry::DEV_DISPLAY;
+        }
+        if path == "/bin/bcm-display" {
             self.mmio_devices |= crate::resource_registry::DEV_DISPLAY;
         }
         // NOTE: /bin/dwc2-usb and /bin/lan9514 intentionally receive NO path-triggered

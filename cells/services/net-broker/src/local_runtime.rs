@@ -122,19 +122,14 @@ impl BrokerNetworkState {
     }
 
     fn accepts_beacon(&self, plain: &BeaconPlain) -> bool {
-        beacon::accepts_peer_beacon(
-            plain,
-            self.cluster_id,
-            self.machine_id,
-            |machine_id| {
-                (0..self.identity.peer_count()).any(|index| {
-                    self.identity
-                        .get_peer(index)
-                        .map(|peer| beacon::derive_machine_id(&peer.node_id) == machine_id)
-                        .unwrap_or(false)
-                })
-            },
-        )
+        beacon::accepts_peer_beacon(plain, self.cluster_id, self.machine_id, |machine_id| {
+            (0..self.identity.peer_count()).any(|index| {
+                self.identity
+                    .get_peer(index)
+                    .map(|peer| beacon::derive_machine_id(&peer.node_id) == machine_id)
+                    .unwrap_or(false)
+            })
+        })
     }
 }
 

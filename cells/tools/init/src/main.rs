@@ -73,15 +73,17 @@ fn cell_main() {
     }
     println("Init: services spawned.");
 
-    if services.iter().all(|service| match (service.service_id(), service.tid) {
-        (Some(service_id), Some(tid)) => sys_lookup_service(service_id) == Some(tid),
-        _ => true,
-    }) {
+    if services
+        .iter()
+        .all(|service| match (service.service_id(), service.tid) {
+            (Some(service_id), Some(tid)) => sys_lookup_service(service_id) == Some(tid),
+            _ => true,
+        })
+    {
         println("Init: service registry verified.");
     } else {
         println("Init: WARN service registry mismatch.");
     }
-
 
     let hypervisor_tid = boot::spawn_optional_services();
 

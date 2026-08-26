@@ -528,7 +528,6 @@ fn caller_has_development_silo_registration(caller_id: usize) -> bool {
     })
 }
 
-
 fn caller_has_spawn(caller_id: usize) -> bool {
     caller_has_cap(caller_id, |t| t.spawn_cap.is_some())
 }
@@ -4772,7 +4771,10 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             bounce.copy_from_slice(&user);
             match crate::task::drivers::block::write_sector(sector, &bounce) {
                 Ok(()) => Ok(1),
-                Err(_) => Ok(0),
+                Err(error) => {
+                    log::warn!("[blk] write LBA={} failed: {:?}", sector, error);
+                    Ok(0)
+                }
             }
         }
         Syscall::HotSwapReady => {

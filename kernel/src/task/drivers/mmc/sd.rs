@@ -4,6 +4,10 @@ use super::sdhci::SdhciAccessPolicy;
 use hal_traits_mmc::{CardType, ViMmcHost};
 use types::{ViError, ViResult};
 
+fn single_block_transfer_mode(is_read: bool) -> u16 {
+    TM_BLKCNT_EN | if is_read { TM_DATA_READ } else { 0 }
+}
+
 /// SD card block device (SDHC/SDXC block-addressed, or SDSC byte-addressed).
 /// State is owned here; caller must hold a `Spinlock` guard (via `MMC_DEVICE`)
 /// before calling `read_sector` / `write_sector`.
@@ -48,7 +52,9 @@ impl SdBlock {
 
     pub fn read_sector(&mut self, sector: u64, buf: &mut [u8]) -> ViResult<()> {
         let arg = self.cmd_arg(sector);
-        self.core.host.setup_data_transfer(0x0200, 1, TM_DATA_READ);
+        self.core
+            .host
+            .setup_data_transfer(0x0200, 1, single_block_transfer_mode(true));
         let cmd = hal_traits_mmc::MmcCmd {
             index: 17,
             arg,
@@ -61,7 +67,9 @@ impl SdBlock {
 
     pub fn write_sector(&mut self, sector: u64, buf: &[u8]) -> ViResult<()> {
         let arg = self.cmd_arg(sector);
-        self.core.host.setup_data_transfer(0x0200, 1, 0x0000);
+        self.core
+            .host
+            .setup_data_transfer(0x0200, 1, single_block_transfer_mode(false));
         let cmd = hal_traits_mmc::MmcCmd {
             index: 24,
             arg,
@@ -84,5 +92,26 @@ impl SdBlock {
 impl Drop for SdBlock {
     fn drop(&mut self) {
         // SdhciController::drop powers off the card slot on teardown.
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn single_block_read_enables_block_count_and_direction() {
+        let mode = single_block_transfer_mode(true);
+
+        assert_eq!(mode, TM_BLKCNT_EN | TM_DATA_READ);
+        assert_eq!(mode & (TM_DMA_EN | TM_MULTI_BLK), 0);
+    }
+
+    #[test]
+    fn single_block_write_enables_block_count_without_read_direction() {
+        let mode = single_block_transfer_mode(false);
+
+        assert_eq!(mode, TM_BLKCNT_EN);
+        assert_eq!(mode & (TM_DMA_EN | TM_DATA_READ | TM_MULTI_BLK), 0);
     }
 }

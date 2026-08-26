@@ -128,6 +128,23 @@ fn init_edge_reuses_boot_ceiling_for_boot_services() {
 }
 
 #[test]
+fn init_can_launch_bcm_display_with_its_boot_ceiling() {
+    for route in [LaunchRoute::Path, LaunchRoute::Elf] {
+        let profile = authorize(caller("init", true, false), route, "/bin/bcm-display")
+            .expect("RPi3 init must be authorized to launch the BCM display driver");
+        assert_eq!(
+            profile.child_ceiling,
+            boot_ceiling::boot_ceiling("/bin/bcm-display")
+        );
+        assert_eq!(
+            profile.child_ceiling.mmio_devices,
+            crate::resource_registry::DEV_DISPLAY
+        );
+        assert!(!profile.child_ceiling.pcie_driver);
+    }
+}
+
+#[test]
 fn hypha_fixed_edges_remain_exact() {
     let hypha = caller("hypha", true, false);
     assert!(authorize(hypha, LaunchRoute::Path, "/bin/llm-gateway").is_some());

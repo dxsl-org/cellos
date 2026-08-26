@@ -107,8 +107,13 @@ pub fn lookup(path: &str) -> Option<CapSet> {
         // `pcie_driver` + `DEV_DISPLAY` are set here; `with_path_caps` adds them
         // to the request before the ceiling intersection.
         "/bin/block" | "/bin/nvme" | "/bin/e1000" | "/bin/virtio-net" | "/bin/virtio-gpu"
-        | "/bin/bcm-display" | "/bin/input" => CapSet {
+        | "/bin/input" => CapSet {
             pcie_driver: true,
+            mmio_devices: DEV_DISPLAY,
+            ..CapSet::EMPTY
+        },
+        // BCM uses the statically allowlisted VideoCore mailbox, never PCIe.
+        "/bin/bcm-display" => CapSet {
             mmio_devices: DEV_DISPLAY,
             ..CapSet::EMPTY
         },

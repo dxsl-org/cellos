@@ -37,9 +37,7 @@ pub(crate) fn run(services: &mut [Service], mut hypervisor_tid: Option<usize>) -
                 .iter()
                 .find(|candidate| candidate.path == "/bin/silo")
                 .and_then(|silo| silo.tid)
-                .is_some_and(|tid| {
-                    service_table::wait_for_exact_registration(service::SILO, tid)
-                });
+                .is_some_and(|tid| service_table::wait_for_exact_registration(service::SILO, tid));
             if !silo_ready {
                 if let Some(kms) = services
                     .iter_mut()
@@ -52,7 +50,10 @@ pub(crate) fn run(services: &mut [Service], mut hypervisor_tid: Option<usize>) -
             }
         }
 
-        let Some(service) = services.iter_mut().find(|service| service.tid == Some(dead)) else {
+        let Some(service) = services
+            .iter_mut()
+            .find(|service| service.tid == Some(dead))
+        else {
             continue;
         };
         let should_restart = match service.policy {

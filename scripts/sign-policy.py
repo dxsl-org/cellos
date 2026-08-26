@@ -61,7 +61,8 @@ DEV_CAN = 1 << 3
 DEV_ADC = 1 << 4
 DEV_I2C = 1 << 5
 DEV_SPI = 1 << 6
-MMIO_MASK = DEV_UART | DEV_GPIO | DEV_PCIE | DEV_CAN | DEV_ADC | DEV_I2C | DEV_SPI
+DEV_DISPLAY = 1 << 7
+MMIO_MASK = DEV_UART | DEV_GPIO | DEV_PCIE | DEV_CAN | DEV_ADC | DEV_I2C | DEV_SPI | DEV_DISPLAY
 REGION_MASK = 0b1111   # P1=1 | P4=2 | SRV=4 | /bin/vfs cell-store=8
 
 # Operator policy: the CEILING each path may hold. It intersects the manifest
@@ -82,7 +83,7 @@ DEV_POLICY = [
     # today. It stays maximal on purpose: init's own caps are the CEILING for
     # every cell it spawns, so a narrow entry here would starve its children if
     # that exemption is ever removed.
-    ("/bin/init",        1, 1, 1, 0, DEV_UART | DEV_GPIO | DEV_I2C | DEV_SPI, 0b111, 1, 1, 1),
+    ("/bin/init",        1, 1, 1, 0, DEV_UART | DEV_GPIO | DEV_I2C | DEV_SPI | DEV_DISPLAY, 0b111, 1, 1, 1),
     # Kernel-spawned (Root, exempt); listed so the intent is reviewable.
     ("/bin/platform",    0, 0, 0, 0, 0, 0,     0, 1, 0),
     # ── core services ─────────────────────────────────────────────────────────
@@ -101,7 +102,7 @@ DEV_POLICY = [
     ("/bin/virtio-net",  0, 0, 0, 0, 0, 0,     1, 0, 0),
     ("/bin/e1000",       0, 0, 0, 0, 0, 0,     1, 0, 0),
     ("/bin/virtio-gpu",  0, 0, 0, 0, 0, 0,     1, 0, 0),
-    ("/bin/bcm-display", 0, 0, 0, 0, 0, 0,     1, 0, 0),
+    ("/bin/bcm-display", 0, 0, 0, 0, DEV_DISPLAY, 0,     0, 0, 0),
     # ── shell-launched cells that need MMIO or spawn ──────────────────────────
     ("/bin/periph-demo", 0, 0, 0, 0, 3, 0,     0, 0, 0),
     ("/bin/periph-test", 0, 0, 0, 0, 3, 0,     0, 0, 0),
@@ -246,6 +247,18 @@ def assert_vfs_regions_folded(entries):
     sys.exit("/bin/vfs missing from policy table")
 
 
+def assert_bcm_display_authority(entries):
+    """Require the baked BCM row to retain its mailbox and driver authority."""
+    for entry in entries:
+        if entry[0] == "/bin/bcm-display":
+            if entry[5] != DEV_DISPLAY or entry[7] != 0:
+                sys.exit(
+                    "/bin/bcm-display must retain DEV_DISPLAY MMIO without pcie_driver authority"
+                )
+            return
+    sys.exit("/bin/bcm-display missing from policy table")
+
+
 CAP_SOURCE = Path(__file__).resolve().parent.parent / "kernel" / "src" / "task" / "cap.rs"
 
 
@@ -334,6 +347,7 @@ def main():
     assert_round_trip(body, DEV_POLICY, flags)
     _, decoded = decode_body(body)
     assert_vfs_regions_folded(decoded)
+    assert_bcm_display_authority(decoded)
     # Unconditional, like the round-trip: the gate has to hold for every blob that
     # gets built, not only when someone remembers a flag.
     assert_ptrust_covered(DEV_POLICY)

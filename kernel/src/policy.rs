@@ -21,7 +21,9 @@
 //! - **Domain validation:** parsed cap bytes are masked to known bits; unknown
 //!   bits → `Invalid` (a signed-but-malformed policy is still rejected).
 
-use crate::resource_registry::{DEV_ADC, DEV_CAN, DEV_GPIO, DEV_I2C, DEV_PCIE, DEV_SPI, DEV_UART};
+use crate::resource_registry::{
+    DEV_ADC, DEV_CAN, DEV_DISPLAY, DEV_GPIO, DEV_I2C, DEV_PCIE, DEV_SPI, DEV_UART,
+};
 use crate::sync::Spinlock;
 use crate::task::cap::CapSet;
 use alloc::string::String;
@@ -61,11 +63,12 @@ const fn cap_bytes_for(version: u8) -> Option<usize> {
 /// Both masks must cover every bit the kernel is capable of minting, or a policy
 /// that names a legitimate device/partition is rejected as malformed → `DenyAll`
 /// for the whole fleet. `CapSet::from_manifest` mints CAN, ADC, I2C, and SPI
-/// device classes from the manifest, and the block-region encoding carries a
-/// 4th bit for the cell-store region, so all belong in the accepted domain.
+/// device classes from the manifest, while path policy mints display authority,
+/// and the block-region encoding carries a 4th bit for the cell-store region.
 /// Widening a mask cannot grant authority: a `Permit` intersects the request,
 /// so a bit the manifest never asked for stays off.
-const MMIO_MASK: u8 = DEV_GPIO | DEV_UART | DEV_PCIE | DEV_CAN | DEV_ADC | DEV_I2C | DEV_SPI;
+const MMIO_MASK: u8 =
+    DEV_GPIO | DEV_UART | DEV_PCIE | DEV_CAN | DEV_ADC | DEV_I2C | DEV_SPI | DEV_DISPLAY;
 const REGION_MASK: u8 = 0b1111;
 
 /// Dev fleet Ed25519 **public** key — derived from the fixed dev seed in
@@ -477,22 +480,15 @@ fn v2_parse_cases() -> bool {
     if parse(&bad_priv).is_some() {
         return false;
     }
-    // mmio outside MMIO_MASK → Invalid (pre-existing rule, re-checked under v2).
-    let mut bad_mmio = V2;
-    bad_mmio[21] = 0xF0;
-    if parse(&bad_mmio).is_some() {
-        return false;
-    }
-    // Manifest-backed device bits are inside the domain: `from_manifest` mints
-    // them, so a policy that names a controller cell must not be read as malformed
-    // (which would be `DenyAll` for every path, not just that one).
+    // Every u8 device-class bit is assigned, including path-minted display
+    // authority, so a policy naming any controller must remain parseable.
     let mut manifest_mmio = V2;
-    manifest_mmio[21] = DEV_CAN | DEV_ADC | DEV_I2C | DEV_SPI;
+    manifest_mmio[21] = MMIO_MASK;
     match parse(&manifest_mmio)
         .as_ref()
         .and_then(|p| p.entries.first())
     {
-        Some(e) if e.caps.mmio_devices == (DEV_CAN | DEV_ADC | DEV_I2C | DEV_SPI) => {}
+        Some(e) if e.caps.mmio_devices == MMIO_MASK => {}
         _ => return false,
     }
     // The 4-bit block-region encoding is inside the domain: the `/bin/vfs`

@@ -477,11 +477,7 @@ fn renew_vfs_grant_context() -> Option<u64> {
             .map(|task| task.cell_generation)?;
         let holder = sched.tasks.get_mut(&VFS_WORKER_TID)?;
         holder.clear_current_caller_context();
-        holder.set_current_caller_context(
-            CLIENT_WORKER_TID,
-            CLIENT_CELL_ID,
-            owner_generation,
-        );
+        holder.set_current_caller_context(CLIENT_WORKER_TID, CLIENT_CELL_ID, owner_generation);
         Some(holder.current_caller_request_generation)
     })
 }
@@ -529,8 +525,7 @@ fn grant_slice_and_teardown_are_linearized(kind: GrantRaceKind) -> bool {
         teardown_race_grant(kind, grant_id) == Err(super::syscall::SyscallError::PermissionDenied)
     });
     let lease_visible = leased.is_some_and(|grant_id| {
-        crate::memory::pin::holder_of(grant_id, PAGE_SIZE).is_some()
-            && slice == Some(Ok(grant_id))
+        crate::memory::pin::holder_of(grant_id, PAGE_SIZE).is_some() && slice == Some(Ok(grant_id))
     });
     if let Some(request_generation) = lease_generation {
         let _ = crate::memory::pin::release_vfs_lease(
@@ -554,8 +549,7 @@ fn grant_slice_and_teardown_are_linearized(kind: GrantRaceKind) -> bool {
             },
         ) == Ok(0)
     });
-    let teardown_won =
-        freed.is_some_and(|grant_id| teardown_race_grant(kind, grant_id) == Ok(0));
+    let teardown_won = freed.is_some_and(|grant_id| teardown_race_grant(kind, grant_id) == Ok(0));
     let stale_slice_denied = freed.is_some_and(|grant_id| {
         handle_syscall(
             VFS_WORKER_TID,
@@ -595,12 +589,8 @@ fn grant_slice_and_teardown_are_linearized(kind: GrantRaceKind) -> bool {
         )
     });
     let invalid_lease_absent = invalid_generation.is_some_and(|request_generation| {
-        crate::memory::pin::find_vfs_lease(
-            VFS_WORKER_TID,
-            CLIENT_WORKER_TID,
-            request_generation,
-        )
-        .is_none()
+        crate::memory::pin::find_vfs_lease(VFS_WORKER_TID, CLIENT_WORKER_TID, request_generation)
+            .is_none()
     });
     if let Some(request_generation) = invalid_generation {
         let _ = crate::memory::pin::release_vfs_lease(

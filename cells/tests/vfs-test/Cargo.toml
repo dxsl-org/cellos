@@ -9,6 +9,8 @@ license.workspace = true
 # built with its own `test-hooks` feature (2 KiB quota). The integration-test
 # kernel builds both crates with test-hooks.
 test-hooks = []
+# Enables the physical RPi3 FAT/littlefs/RedoxFS persistence gate.
+rpi3-storage-test = []
 
 [[bin]]
 name = "vfs-test"

@@ -29,7 +29,10 @@ pub(crate) fn write<'a>(
     // This lookup makes an unknown cap and one held by another caller exactly
     // the same failure. It also rejects a handle concurrently being closed or
     // read through; no stale authority reaches grant memory.
-    let Some(path) = vfs.files.path_of(caller, ViVfsFileHandle(cap)).map(ToString::to_string)
+    let Some(path) = vfs
+        .files
+        .path_of(caller, ViVfsFileHandle(cap))
+        .map(ToString::to_string)
     else {
         return VfsResponse::Err(ERR_DENIED);
     };

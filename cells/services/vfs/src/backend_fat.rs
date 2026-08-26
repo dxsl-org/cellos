@@ -283,14 +283,30 @@ impl FsBackend for FatBackend {
         }
         let dir = match ensure_dir_chain(fs.root_dir(), parent) {
             Ok(d) => d,
-            Err(()) => return false,
+            Err(()) => {
+                println("[vfs-fat] write failed while preparing parent directories");
+                return false;
+            }
         };
         let _ = dir.remove(name);
         let mut file = match dir.create_file(name) {
             Ok(f) => f,
-            Err(_) => return false,
+            Err(error) => {
+                println(&alloc::format!(
+                    "[vfs-fat] write failed while creating file: {error:?}"
+                ));
+                return false;
+            }
         };
-        file.write_all(content).is_ok()
+        match file.write_all(content) {
+            Ok(()) => true,
+            Err(error) => {
+                println(&alloc::format!(
+                    "[vfs-fat] write failed while writing file data: {error:?}"
+                ));
+                false
+            }
+        }
     }
 
     /// Append; creates the file (and parents) if absent — first append behaves

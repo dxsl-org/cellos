@@ -31,7 +31,10 @@ fn cell_main() {
     let kms = match KmsClient::connect() {
         Ok(client) => client,
         Err(error) => {
-            println(&alloc::format!("[silo-test] FAIL: KMS unavailable: {:?}", error));
+            println(&alloc::format!(
+                "[silo-test] FAIL: KMS unavailable: {:?}",
+                error
+            ));
             return;
         }
     };
@@ -46,7 +49,9 @@ fn cell_main() {
 
     let status_denied = matches!(
         kms.get_relay_p256_status(),
-        Err(KmsClientError::Service(KmsErrorCode::ServiceBindingRequired))
+        Err(KmsClientError::Service(
+            KmsErrorCode::ServiceBindingRequired
+        ))
     );
     report("direct relay status denied", status_denied);
 
@@ -57,9 +62,14 @@ fn cell_main() {
             &DEVELOPMENT_PROFILE_DIGEST,
             1,
         ),
-        Err(KmsClientError::Service(KmsErrorCode::ServiceBindingRequired))
+        Err(KmsClientError::Service(
+            KmsErrorCode::ServiceBindingRequired
+        ))
     );
-    report("direct TLS signing denied before provider access", sign_denied);
+    report(
+        "direct TLS signing denied before provider access",
+        sign_denied,
+    );
 
     if silo_denied && registration_denied && status_denied && sign_denied {
         println("[silo-test] PASS: no direct Silo or unbound KMS signing path remains");
@@ -96,7 +106,6 @@ fn direct_silo_denied() -> bool {
         })
     )
 }
-
 
 fn report(name: &str, passed: bool) {
     println(&alloc::format!(

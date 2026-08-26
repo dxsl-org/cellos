@@ -305,12 +305,7 @@ fn decode_udp_frame(data: &[u8]) -> Option<[u8; WIRE_LEN]> {
 
 /// A reboot is authenticated by the beacon AEAD but starts its monotonic
 /// counter over. Only a strictly higher boot epoch may reset that counter.
-fn is_fresh_beacon(
-    boot_epoch: u64,
-    mono_counter: u64,
-    last_epoch: u64,
-    last_counter: u64,
-) -> bool {
+fn is_fresh_beacon(boot_epoch: u64, mono_counter: u64, last_epoch: u64, last_counter: u64) -> bool {
     boot_epoch > last_epoch || (boot_epoch == last_epoch && mono_counter > last_counter)
 }
 
@@ -449,8 +444,7 @@ mod tests {
             .unwrap();
         let mut response = [0u8; UDP_RESPONSE_LEN];
         response[..UDP_SOURCE_HEADER_LEN].copy_from_slice(&[192, 0, 2, 1, 0x7f, 0x23]);
-        response[UDP_SOURCE_HEADER_LEN..UDP_SOURCE_HEADER_LEN + NONCE_LEN]
-            .copy_from_slice(&nonce);
+        response[UDP_SOURCE_HEADER_LEN..UDP_SOURCE_HEADER_LEN + NONCE_LEN].copy_from_slice(&nonce);
         response[UDP_SOURCE_HEADER_LEN + NONCE_LEN..].copy_from_slice(&ciphertext);
 
         let frame = decode_udp_frame(&response).expect("bounded frame");

@@ -89,8 +89,28 @@ if ($cellBuildSource -notmatch "Assert-CellBuild 'service-vfs'" -or
 if ($cellBuildSource -notmatch 'Resolve-Path \(Join-Path \$PSScriptRoot ''\.\.''\)\)\.ProviderPath') {
     throw 'AArch64 cell build must resolve a native UNC path for clang includes'
 }
-if ($cellBuildSource -notmatch 'target\\rpi3-embedded') {
+if ($cellBuildSource -notmatch "Join-Path 'target' 'rpi3-embedded'") {
     throw 'RPi3 cells must use a separate embedded-artifact directory'
+}
+if ($cellBuildSource -notmatch '--features app-init/board-rpi3' -or
+    $cellBuildSource -notmatch 'driver-bcm-display' -or
+    $cellBuildSource -notmatch 'service-compositor' -or
+    $cellBuildSource -notmatch 'fb-console' -or
+    $cellBuildSource -notmatch "LFN 'bcm-display'" -or
+    $cellBuildSource -notmatch "LFN 'compositor'" -or
+    $cellBuildSource -notmatch "LFN 'fb-console'") {
+    throw 'RPi3 image must build and verify the mailbox display stack'
+}
+$initManifestSource = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot '..\..\cells\tools\init\Cargo.toml')
+$initBootSource = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot '..\..\cells\tools\init\src\boot.rs')
+$bcmDisplayBuildSource = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot '..\..\cells\drivers\bcm-display\build.rs')
+if ($initManifestSource -notmatch '(?m)^board-rpi3 = \[\]$' -or
+    $initBootSource -notmatch '(?s)cfg\(feature = "board-rpi3"\).*?DISPLAY_DRIVER_PATH: &str = "/bin/bcm-display"' -or
+    $initBootSource -notmatch 'sys_spawn_from_path\(DISPLAY_DRIVER_PATH\)') {
+    throw 'RPi3 init must select the BCM mailbox display driver before compositor startup'
+}
+if ($bcmDisplayBuildSource -notmatch '(?s)^\s*fn main\(\) \{\s*cell_build::emit_linker_script\(\);\s*\}\s*$') {
+    throw 'BCM display must be linked as a relocatable cell'
 }
 $manifestSource = Get-Content -Raw -LiteralPath $inputManifest
 if ($manifestSource -notmatch '(?m)^default = \["virtio-mmio"\]$') {

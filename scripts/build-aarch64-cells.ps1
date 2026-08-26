@@ -8,7 +8,8 @@
 # Run from the Cellos root directory.
 
 param(
-    [switch]$BoardRpi3
+    [switch]$BoardRpi3,
+    [switch]$StorageTest
 )
 
 Set-StrictMode -Version Latest
@@ -117,6 +118,14 @@ Write-Host "Building input-test (aarch64_uart_input_delivery gate)..."
 cargo build --release -p input-test --target $target 2>&1 | Select-Object -Last 5
 Assert-CellBuild 'input-test' $LASTEXITCODE
 
+if ($StorageTest) {
+    if (-not $BoardRpi3) { throw 'StorageTest requires BoardRpi3' }
+    Write-Host "Building vfs-test (RPi3 physical storage gate)..."
+    cargo build --release -p app-vfs-test --features rpi3-storage-test --target $target `
+        --target-dir $rpi3TargetDir 2>&1 | Select-Object -Last 5
+    Assert-CellBuild 'app-vfs-test' $LASTEXITCODE
+}
+
 Write-Host "Building periph-demo (aarch64_periph_demo_gpio gate)..."
 cargo build --release -p periph-demo --target $target 2>&1 | Select-Object -Last 5
 Assert-CellBuild 'periph-demo' $LASTEXITCODE
@@ -185,12 +194,15 @@ if ($BoardRpi3) {
         @{ Bin = "fb-console";          Dst = "/bin/fb-console"  }
     )
 }
+if ($StorageTest) {
+    $cells += @(@{ Bin = "vfs-test"; Dst = "/bin/vfs-test" })
+}
 
 $imagePath = Join-Path $embeddedDir 'kernel_fs.img'
 $imgArgs = @($imagePath)
 $found   = @()
 foreach ($c in $cells) {
-    $src = if ($BoardRpi3 -and $c.Bin -in @('service-input', 'driver-bcm-display', 'service-compositor', 'fb-console')) {
+    $src = if ($BoardRpi3 -and $c.Bin -in @('service-input', 'driver-bcm-display', 'service-compositor', 'fb-console', 'vfs-test')) {
         Join-Path $rpi3BuildDir $c.Bin
     } else {
         Join-Path $buildDir $c.Bin
@@ -254,6 +266,9 @@ $layout = & $python @pythonArgs (Join-Path 'tools' 'inspect_fat.py') $imagePath 
 $requiredMarkers = @('SFN POLICY.BIN', "LFN 'vfs'", "LFN 'input'", "LFN 'periph-demo'", "LFN 'sensor-demo'", "LFN 'spi-demo'")
 if ($BoardRpi3) {
     $requiredMarkers += @("LFN 'bcm-display'", "LFN 'compositor'", "LFN 'fb-console'")
+}
+if ($StorageTest) {
+    $requiredMarkers += @("LFN 'vfs-test'")
 }
 foreach ($requiredMarker in $requiredMarkers) {
     if (($layout | Select-String -Quiet -SimpleMatch $requiredMarker) -eq $false) {

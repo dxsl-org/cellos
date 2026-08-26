@@ -700,7 +700,9 @@ mod tests {
 
         fn collect_dirty_handles(&mut self, region: DirtyRegion) -> Vec<SubscriptionHandle> {
             let bounds = self.bounds;
-            alloc::vec![self.signal.subscribe(move || region.borrow_mut().mark(bounds))]
+            alloc::vec![self
+                .signal
+                .subscribe(move || region.borrow_mut().mark(bounds))]
         }
     }
 

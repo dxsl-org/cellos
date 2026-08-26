@@ -263,8 +263,7 @@ pub struct Task {
     pub hypervisor_cap: Option<super::cap::HypervisorCap>,
     /// Test-hooks-only, exact-path authority to self-register `service::SILO`.
     #[cfg(feature = "test-hooks")]
-    pub development_silo_registration_cap:
-        Option<super::cap::DevelopmentSiloRegistrationCap>,
+    pub development_silo_registration_cap: Option<super::cap::DevelopmentSiloRegistrationCap>,
     /// Supervisor authority: sys_freeze_cell / sys_resume_cell / sys_kill_cell.
     /// Set ONLY by kernel init (direct TCB write). Never propagated through CapSet.
     pub supervisor_cap: Option<super::cap::SupervisorCap>,

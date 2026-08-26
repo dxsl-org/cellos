@@ -2,8 +2,29 @@ use super::regs::*;
 use hal_traits_mmc::{BusWidth, MmcCmd, MmcResponse, RespType, ViMmcHost};
 use types::{ViError, ViResult};
 
-/// Polling timeout for CMD_COMPLETE and DAT transfers (~500 ms at 1 iteration/µs).
-const POLL_TIMEOUT_US: u32 = 500_000;
+/// Legacy iteration limit for short command and register polls.
+const POLL_ITERATION_LIMIT: u32 = 500_000;
+/// Maximum elapsed time for the write FIFO to become ready.
+const BUFFER_READY_TIMEOUT_US: u64 = 500_000;
+/// Maximum elapsed time for the card to finish a data transfer.
+const DATA_TRANSFER_TIMEOUT_US: u64 = 10_000_000;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum DataEventState {
+    Pending,
+    Ready,
+    Error,
+}
+
+fn data_event_state(status: u32, event: u32) -> DataEventState {
+    if status & INT_ERROR != 0 {
+        DataEventState::Error
+    } else if status & event != 0 {
+        DataEventState::Ready
+    } else {
+        DataEventState::Pending
+    }
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct SdhciAccessPolicy {
@@ -128,17 +149,23 @@ impl SdhciController {
         }
     }
 
+    #[cfg(target_arch = "aarch64")]
+    fn controller_timer_frequency() -> u64 {
+        let frequency: u64;
+        // SAFETY: CNTFRQ_EL0 is a read-only architectural frequency register.
+        unsafe {
+            core::arch::asm!("mrs {}, cntfrq_el0", out(reg) frequency, options(nomem, nostack));
+        }
+        frequency
+    }
+
     fn space_controller_write(&self, off: usize) {
         #[cfg(target_arch = "aarch64")]
         if off != SDHCI_BUFFER
             && self.last_write_ticks != 0
             && self.policy.minimum_write_spacing_us != 0
         {
-            let frequency: u64;
-            // SAFETY: CNTFRQ_EL0 is a read-only architectural frequency register.
-            unsafe {
-                core::arch::asm!("mrs {}, cntfrq_el0", out(reg) frequency, options(nomem, nostack));
-            }
+            let frequency = Self::controller_timer_frequency();
             // BCM2835 Arasan may drop writes less than two 400 kHz SD-clock cycles apart.
             let spacing_us = u64::from(self.policy.minimum_write_spacing_us);
             let minimum_ticks = frequency.saturating_mul(spacing_us).div_ceil(1_000_000);
@@ -152,25 +179,24 @@ impl SdhciController {
         let _ = off;
     }
 
-    /// Spin until `(read32(off) & mask) == 0`, or return `Err(Timeout)`.
-    fn poll_clear32(&self, off: usize, mask: u32, timeout_us: u32) -> ViResult<()> {
+    /// Spin until `(read32(off) & mask) == 0`, up to `iteration_limit` polls.
+    fn poll_clear32(&self, off: usize, mask: u32, iteration_limit: u32) -> ViResult<()> {
         let mut i = 0u32;
         while self.read32(off) & mask != 0 {
-            if i >= timeout_us {
+            if i >= iteration_limit {
                 return Err(ViError::WouldBlock);
             }
             i += 1;
-            // Single iteration ≈ 1 µs on a 1 GHz core with one memory-mapped read.
             core::hint::spin_loop();
         }
         Ok(())
     }
 
-    /// Spin until `(read8(off) & mask) == 0`, or return `Err(Timeout)`.
-    fn poll_clear8(&self, off: usize, mask: u8, timeout_us: u32) -> ViResult<()> {
+    /// Spin until `(read8(off) & mask) == 0`, up to `iteration_limit` polls.
+    fn poll_clear8(&self, off: usize, mask: u8, iteration_limit: u32) -> ViResult<()> {
         let mut i = 0u32;
         while self.read8(off) & mask != 0 {
-            if i >= timeout_us {
+            if i >= iteration_limit {
                 return Err(ViError::WouldBlock);
             }
             i += 1;
@@ -179,11 +205,11 @@ impl SdhciController {
         Ok(())
     }
 
-    /// Spin until `(read32(off) & mask) != 0`, or return `Err(Timeout)`.
-    fn poll_set32(&self, off: usize, mask: u32, timeout_us: u32) -> ViResult<()> {
+    /// Spin until `(read32(off) & mask) != 0`, up to `iteration_limit` polls.
+    fn poll_set32(&self, off: usize, mask: u32, iteration_limit: u32) -> ViResult<()> {
         let mut i = 0u32;
         while self.read32(off) & mask == 0 {
-            if i >= timeout_us {
+            if i >= iteration_limit {
                 return Err(ViError::WouldBlock);
             }
             i += 1;
@@ -192,11 +218,82 @@ impl SdhciController {
         Ok(())
     }
 
-    /// Spin until `(read16(off) & mask) != 0`, or return `Err(Timeout)`.
-    fn poll_set16(&self, off: usize, mask: u16, timeout_us: u32) -> ViResult<()> {
+    /// Wait for one SDHCI data event while preserving controller error state.
+    fn wait_data_event(
+        &mut self,
+        stage: &str,
+        event: u32,
+        _timeout_us: u64,
+        _fallback_iteration_limit: u64,
+    ) -> ViResult<()> {
+        #[cfg(target_arch = "aarch64")]
+        let started = Self::controller_timer_ticks();
+        #[cfg(target_arch = "aarch64")]
+        let timeout_ticks = Self::controller_timer_frequency()
+            .saturating_mul(_timeout_us)
+            .div_ceil(1_000_000);
+        #[cfg(not(target_arch = "aarch64"))]
+        let mut iterations = 0u64;
+
+        loop {
+            let status = self.read32(SDHCI_INT_STATUS);
+            if data_event_state(status, event) == DataEventState::Error {
+                log::warn!(
+                    "[sdhci] {} error: INT_STATUS=0x{:08x} PRESENT_STATE=0x{:08x}",
+                    stage,
+                    status,
+                    self.read32(SDHCI_PRESENT_STATE)
+                );
+                self.clear_int(INT_ALL_ERROR | event);
+                self.write8(SDHCI_SOFT_RESET, RESET_DAT);
+                if self
+                    .poll_clear8(SDHCI_SOFT_RESET, RESET_DAT, POLL_ITERATION_LIMIT)
+                    .is_err()
+                {
+                    log::warn!("[sdhci] {} DAT-line recovery timed out", stage);
+                }
+                return Err(ViError::IO);
+            }
+            if data_event_state(status, event) == DataEventState::Ready {
+                return Ok(());
+            }
+            #[cfg(target_arch = "aarch64")]
+            let timed_out = Self::controller_timer_ticks().wrapping_sub(started) >= timeout_ticks;
+            #[cfg(not(target_arch = "aarch64"))]
+            let timed_out = iterations >= _fallback_iteration_limit;
+
+            if timed_out {
+                #[cfg(target_arch = "aarch64")]
+                log::warn!(
+                    "[sdhci] {} timeout after {} us: INT_STATUS=0x{:08x} PRESENT_STATE=0x{:08x}",
+                    stage,
+                    _timeout_us,
+                    status,
+                    self.read32(SDHCI_PRESENT_STATE)
+                );
+                #[cfg(not(target_arch = "aarch64"))]
+                log::warn!(
+                    "[sdhci] {} timeout after {} polls: INT_STATUS=0x{:08x} PRESENT_STATE=0x{:08x}",
+                    stage,
+                    _fallback_iteration_limit,
+                    status,
+                    self.read32(SDHCI_PRESENT_STATE)
+                );
+                return Err(ViError::WouldBlock);
+            }
+            #[cfg(not(target_arch = "aarch64"))]
+            {
+                iterations += 1;
+            }
+            core::hint::spin_loop();
+        }
+    }
+
+    /// Spin until `(read16(off) & mask) != 0`, up to `iteration_limit` polls.
+    fn poll_set16(&self, off: usize, mask: u16, iteration_limit: u32) -> ViResult<()> {
         let mut i = 0u32;
         while self.read16(off) & mask == 0 {
-            if i >= timeout_us {
+            if i >= iteration_limit {
                 return Err(ViError::WouldBlock);
             }
             i += 1;
@@ -229,7 +326,7 @@ impl SdhciController {
     /// Reset the controller (all lines).
     pub fn reset_all(&mut self) -> ViResult<()> {
         self.write8(SDHCI_SOFT_RESET, RESET_ALL);
-        self.poll_clear8(SDHCI_SOFT_RESET, RESET_ALL, POLL_TIMEOUT_US)?;
+        self.poll_clear8(SDHCI_SOFT_RESET, RESET_ALL, POLL_ITERATION_LIMIT)?;
         Ok(())
     }
 
@@ -257,7 +354,7 @@ impl SdhciController {
 
         self.write16(SDHCI_CLOCK_CONTROL, clk);
         // Wait for internal clock to stabilise.
-        let _ = self.poll_set16(SDHCI_CLOCK_CONTROL, CLK_INT_STABLE, POLL_TIMEOUT_US);
+        let _ = self.poll_set16(SDHCI_CLOCK_CONTROL, CLK_INT_STABLE, POLL_ITERATION_LIMIT);
         // Enable SD clock to card.
         self.write16(SDHCI_CLOCK_CONTROL, clk | CLK_SD_EN);
     }
@@ -274,7 +371,32 @@ impl SdhciController {
         } else {
             PS_CMD_INHIBIT
         };
-        self.poll_clear32(SDHCI_PRESENT_STATE, mask, POLL_TIMEOUT_US)
+        self.poll_clear32(SDHCI_PRESENT_STATE, mask, POLL_ITERATION_LIMIT)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn data_event_reports_error_before_ready() {
+        assert_eq!(
+            data_event_state(INT_ERROR | INT_BUF_WRITE_READY, INT_BUF_WRITE_READY),
+            DataEventState::Error
+        );
+    }
+
+    #[test]
+    fn data_event_distinguishes_pending_and_ready() {
+        assert_eq!(
+            data_event_state(0, INT_XFER_COMPLETE),
+            DataEventState::Pending
+        );
+        assert_eq!(
+            data_event_state(INT_XFER_COMPLETE, INT_XFER_COMPLETE),
+            DataEventState::Ready
+        );
     }
 }
 
@@ -313,7 +435,7 @@ impl ViMmcHost for SdhciController {
         self.poll_set32(
             SDHCI_INT_STATUS,
             INT_CMD_COMPLETE | INT_ERROR,
-            POLL_TIMEOUT_US,
+            POLL_ITERATION_LIMIT,
         )?;
 
         let status = self.read32(SDHCI_INT_STATUS);
@@ -345,7 +467,7 @@ impl ViMmcHost for SdhciController {
         }
 
         // Wait for BUFFER_READ_READY (data available in FIFO).
-        self.poll_set32(SDHCI_INT_STATUS, INT_BUF_READ_READY, POLL_TIMEOUT_US)?;
+        self.poll_set32(SDHCI_INT_STATUS, INT_BUF_READ_READY, POLL_ITERATION_LIMIT)?;
         self.clear_int(INT_BUF_READ_READY);
 
         // Read 4 bytes at a time from the BUFFER port.
@@ -360,7 +482,7 @@ impl ViMmcHost for SdhciController {
         }
 
         // Wait for TRANSFER_COMPLETE.
-        self.poll_set32(SDHCI_INT_STATUS, INT_XFER_COMPLETE, POLL_TIMEOUT_US)?;
+        self.poll_set32(SDHCI_INT_STATUS, INT_XFER_COMPLETE, POLL_ITERATION_LIMIT)?;
         self.clear_int(INT_XFER_COMPLETE);
         Ok(())
     }
@@ -371,7 +493,12 @@ impl ViMmcHost for SdhciController {
         }
 
         // Wait for BUFFER_WRITE_READY (FIFO has space).
-        self.poll_set32(SDHCI_INT_STATUS, INT_BUF_WRITE_READY, POLL_TIMEOUT_US)?;
+        self.wait_data_event(
+            "buffer-write-ready",
+            INT_BUF_WRITE_READY,
+            BUFFER_READY_TIMEOUT_US,
+            u64::from(POLL_ITERATION_LIMIT),
+        )?;
         self.clear_int(INT_BUF_WRITE_READY);
 
         let chunks = buf.len() / 4;
@@ -384,7 +511,12 @@ impl ViMmcHost for SdhciController {
             self.write32(SDHCI_BUFFER, word);
         }
 
-        self.poll_set32(SDHCI_INT_STATUS, INT_XFER_COMPLETE, POLL_TIMEOUT_US)?;
+        self.wait_data_event(
+            "write-transfer-complete",
+            INT_XFER_COMPLETE,
+            DATA_TRANSFER_TIMEOUT_US,
+            u64::from(POLL_ITERATION_LIMIT),
+        )?;
         self.clear_int(INT_XFER_COMPLETE);
         Ok(())
     }

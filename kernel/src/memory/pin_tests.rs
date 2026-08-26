@@ -62,6 +62,56 @@ fn repinning_the_same_range_reuses_the_slot() {
 }
 
 #[test]
+fn cache_sync_completion_releases_only_its_exact_token() {
+    let first = arena(19);
+    let second = arena(20);
+    let owner = 919;
+    let first_token = begin_cache_sync(first, PAGE_SIZE, owner).expect("first token");
+    let second_token = begin_cache_sync(second + 17, 19, owner).expect("second token");
+    assert_ne!(first_token, second_token);
+    assert!(begin_cache_sync_completion(second_token, owner + 1).is_none());
+    assert!(holder_of(first, PAGE_SIZE).is_some());
+    assert_eq!(
+        begin_cache_sync_completion(second_token, owner),
+        Some((second + 17, 19))
+    );
+    assert!(complete_cache_sync(second_token, owner));
+    assert!(holder_of(first, PAGE_SIZE).is_some());
+    assert!(holder_of(second, PAGE_SIZE).is_none());
+    assert!(begin_cache_sync_completion(first_token, owner).is_some());
+    assert!(complete_cache_sync(first_token, owner));
+}
+
+#[test]
+fn cache_sync_quarantine_cannot_be_released_by_owner_acknowledgement() {
+    let base = arena(21);
+    let owner = 920;
+    let before = quarantined_pages();
+    let token = begin_cache_sync(base + 32, 64, owner).expect("cache token");
+    assert_eq!(quarantine_task(owner), 1);
+    assert_eq!(withhold_pinned_frames(base, 1), FrameTransfer::Withheld);
+    assert!(acknowledge(owner).is_empty());
+    assert_eq!(quarantined_pages(), before + 1);
+    assert!(holder_of(base, PAGE_SIZE).is_some());
+    assert!(begin_cache_sync_completion(token, owner).is_some());
+    assert!(complete_cache_sync(token, owner));
+    assert!(holder_of(base, PAGE_SIZE).is_none());
+    assert_eq!(quarantined_pages(), before + 1);
+}
+
+#[test]
+fn cache_sync_acknowledgement_before_reap_does_not_drop_the_hold() {
+    let base = arena(22);
+    let owner = 921;
+    let _token = begin_cache_sync(base, PAGE_SIZE, owner).expect("cache token");
+    assert!(acknowledge(owner).is_empty());
+    assert_eq!(quarantine_task(owner), 1);
+    assert_eq!(withhold_pinned_frames(base, 1), FrameTransfer::Withheld);
+    assert!(acknowledge(owner).is_empty());
+    assert!(holder_of(base, PAGE_SIZE).is_some());
+}
+
+#[test]
 fn a_single_owner_cannot_exhaust_the_table() {
     let base = arena(5);
     for i in 0..MAX_PINS_PER_TASK {

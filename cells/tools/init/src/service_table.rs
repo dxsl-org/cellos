@@ -28,11 +28,7 @@ pub(crate) struct Service {
 }
 
 impl Service {
-    const fn new(
-        path: &'static str,
-        registration: Registration,
-        policy: RestartPolicy,
-    ) -> Self {
+    const fn new(path: &'static str, registration: Registration, policy: RestartPolicy) -> Self {
         Self {
             path,
             registration,
@@ -57,7 +53,10 @@ impl Service {
 pub(crate) const SERVICE_COUNT: usize = 1;
 #[cfg(all(not(feature = "hypervisor-min"), feature = "development-silo-provider"))]
 pub(crate) const SERVICE_COUNT: usize = 10;
-#[cfg(all(not(feature = "hypervisor-min"), not(feature = "development-silo-provider")))]
+#[cfg(all(
+    not(feature = "hypervisor-min"),
+    not(feature = "development-silo-provider")
+))]
 pub(crate) const SERVICE_COUNT: usize = 9;
 
 pub(crate) fn configured() -> [Service; SERVICE_COUNT] {
@@ -70,16 +69,52 @@ pub(crate) fn configured() -> [Service; SERVICE_COUNT] {
 
     #[cfg(not(feature = "hypervisor-min"))]
     [
-        Service::new("/bin/vfs", Registration::Init(service::VFS), RestartPolicy::Permanent),
-        Service::new("/bin/config", Registration::Init(service::CONFIG), RestartPolicy::Permanent),
-        Service::new("/bin/input", Registration::Init(service::INPUT), RestartPolicy::Permanent),
-        Service::new("/bin/net", Registration::Init(service::NET), RestartPolicy::Permanent),
-        Service::new("/bin/compositor", Registration::Init(service::COMPOSITOR), RestartPolicy::Permanent),
+        Service::new(
+            "/bin/vfs",
+            Registration::Init(service::VFS),
+            RestartPolicy::Permanent,
+        ),
+        Service::new(
+            "/bin/config",
+            Registration::Init(service::CONFIG),
+            RestartPolicy::Permanent,
+        ),
+        Service::new(
+            "/bin/input",
+            Registration::Init(service::INPUT),
+            RestartPolicy::Permanent,
+        ),
+        Service::new(
+            "/bin/net",
+            Registration::Init(service::NET),
+            RestartPolicy::Permanent,
+        ),
+        Service::new(
+            "/bin/compositor",
+            Registration::Init(service::COMPOSITOR),
+            RestartPolicy::Permanent,
+        ),
         #[cfg(feature = "development-silo-provider")]
-        Service::new("/bin/silo", Registration::SelfReady(service::SILO), RestartPolicy::Permanent),
-        Service::new("/bin/kms", Registration::Init(service::KMS), RestartPolicy::Permanent),
-        Service::new("/bin/net-broker", Registration::Init(service::NET_BROKER), RestartPolicy::Permanent),
-        Service::new("/bin/supervisor", Registration::Init(service::SUPERVISOR), RestartPolicy::Permanent),
+        Service::new(
+            "/bin/silo",
+            Registration::SelfReady(service::SILO),
+            RestartPolicy::Permanent,
+        ),
+        Service::new(
+            "/bin/kms",
+            Registration::Init(service::KMS),
+            RestartPolicy::Permanent,
+        ),
+        Service::new(
+            "/bin/net-broker",
+            Registration::Init(service::NET_BROKER),
+            RestartPolicy::Permanent,
+        ),
+        Service::new(
+            "/bin/supervisor",
+            Registration::Init(service::SUPERVISOR),
+            RestartPolicy::Permanent,
+        ),
         Service::new("/bin/shell", Registration::None, RestartPolicy::Transient),
     ]
 }
@@ -105,10 +140,7 @@ pub(crate) fn wait_for_exact_registration(service_id: u16, expected_tid: usize) 
     loop {
         match ostd::syscall::sys_lookup_service(service_id) {
             Some(tid) => return tid == expected_tid,
-            None
-                if ostd::syscall::sys_get_time().wrapping_sub(started)
-                    >= READY_TIMEOUT_TICKS =>
-            {
+            None if ostd::syscall::sys_get_time().wrapping_sub(started) >= READY_TIMEOUT_TICKS => {
                 return false;
             }
             None => ostd::task::yield_now(),

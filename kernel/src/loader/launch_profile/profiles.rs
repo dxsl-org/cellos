@@ -15,11 +15,11 @@ pub(super) fn init_profile(route: LaunchRoute, target: &str) -> Option<LaunchPro
         return None;
     }
     match target {
-        "/bin/block" | "/bin/compositor" | "/bin/config" | "/bin/e1000" | "/bin/fb-console"
-        | "/bin/hypervisor" | "/bin/input" | "/bin/kms" | "/bin/net" | "/bin/net-broker"
-        | "/bin/nvme" | "/bin/shell" | "/bin/silo" | "/bin/silo-test" | "/bin/srv-test"
-        | "/bin/supervisor" | "/bin/vfs" | "/bin/vfs-test" | "/bin/virtio-gpu"
-        | "/bin/virtio-net" => Some(LaunchProfile::new(
+        "/bin/bcm-display" | "/bin/block" | "/bin/compositor" | "/bin/config" | "/bin/e1000"
+        | "/bin/fb-console" | "/bin/hypervisor" | "/bin/input" | "/bin/kms" | "/bin/net"
+        | "/bin/net-broker" | "/bin/nvme" | "/bin/shell" | "/bin/silo" | "/bin/silo-test"
+        | "/bin/srv-test" | "/bin/supervisor" | "/bin/vfs" | "/bin/vfs-test"
+        | "/bin/virtio-gpu" | "/bin/virtio-net" => Some(LaunchProfile::new(
             boot_ceiling::boot_ceiling(target),
             "init-launch-edge",
             true,

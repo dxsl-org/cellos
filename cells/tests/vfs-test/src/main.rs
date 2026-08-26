@@ -18,6 +18,8 @@ use core::sync::atomic::{AtomicU32, Ordering};
 
 mod dircap;
 mod grant_io;
+#[cfg(feature = "rpi3-storage-test")]
+mod rpi3_storage;
 
 // Declare the syscall allowlist and manifest so the kernel enforces a minimal
 // capability set for this test cell.
@@ -317,11 +319,10 @@ fn test_grant_write() {
         }
         _ => fail("grant-write: helper returns committed byte count"),
     }
-    let grant = match grant_io::GrantRegion::alloc_copy_from(APPEND)
-        .and_then(|grant| {
-            grant.share_write_with_vfs()?;
-            Ok(grant)
-        }) {
+    let grant = match grant_io::GrantRegion::alloc_copy_from(APPEND).and_then(|grant| {
+        grant.share_write_with_vfs()?;
+        Ok(grant)
+    }) {
         Ok(grant) => grant,
         Err(_) => {
             fail("grant-write: allocate and share source grant");
@@ -350,11 +351,10 @@ fn test_grant_write() {
         1,
         "grant-write: invalid offset is refused before grant access"
     );
-    let short_grant = match grant_io::GrantRegion::alloc_copy_from(b"bad")
-        .and_then(|grant| {
-            grant.share_write_with_vfs()?;
-            Ok(grant)
-        }) {
+    let short_grant = match grant_io::GrantRegion::alloc_copy_from(b"bad").and_then(|grant| {
+        grant.share_write_with_vfs()?;
+        Ok(grant)
+    }) {
         Ok(grant) => grant,
         Err(_) => {
             fail("grant-write: allocate short grant");
@@ -396,11 +396,10 @@ fn test_grant_write() {
         }
         _ => fail("grant-write: failed writes leave committed bytes unchanged"),
     }
-    let patch_grant = match grant_io::GrantRegion::alloc_copy_from(PATCH)
-        .and_then(|grant| {
-            grant.share_write_with_vfs()?;
-            Ok(grant)
-        }) {
+    let patch_grant = match grant_io::GrantRegion::alloc_copy_from(PATCH).and_then(|grant| {
+        grant.share_write_with_vfs()?;
+        Ok(grant)
+    }) {
         Ok(grant) => grant,
         Err(_) => {
             fail("grant-write: allocate bounded patch grant");
@@ -702,6 +701,8 @@ fn cell_main() {
     test_quota_limit();
     #[cfg(feature = "test-hooks")]
     test_rmdir_recursive_quota();
+    #[cfg(feature = "rpi3-storage-test")]
+    rpi3_storage::run();
     // Last: it ends by giving up path strings for good, so nothing above it
     // could run afterwards.
     dircap::run();
