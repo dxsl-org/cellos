@@ -18,11 +18,11 @@
 extern crate alloc;
 extern crate ostd;
 
-mod http;
 mod transport;
 
 use agent_proto::{LlmReply, LlmRequest};
 use alloc::string::String;
+use hypha_llm_gateway::http;
 use ostd::app::{AppContext, AppEvent};
 use ostd::io::{print, print_usize, println};
 use ostd::runtime::CellRuntime;

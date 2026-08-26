@@ -1,10 +1,6 @@
-//! Minimal HTTP/1.0 + JSON helpers for P0/P2.
-//!
-//! Hand-rolled on purpose (os-gaps **G1** no HTTP lib, **G4** no_std JSON):
-//! good enough to prove the LLM round-trip. Promote to `ostd::http` +
-//! `serde-json-core` once a second consumer appears or parsing needs to be
-//! robust against arbitrary provider responses.
+//! Minimal HTTP/1.0 helpers and strict JSON extraction for the LLM gateway.
 
+use crate::json_validation::parse_unique;
 use agent_proto::ToolCall;
 use alloc::format;
 use alloc::string::String;
@@ -63,120 +59,36 @@ pub fn http_body(resp: &[u8]) -> Option<&[u8]> {
 pub fn extract_tool_call(content: &str) -> Option<ToolCall> {
     let s = content.trim_start_matches([' ', '\t', '\n', '\r']);
     let rest = s.strip_prefix("TOOL_CALL:")?;
-    let json = rest.trim_start_matches([' ', '\t']);
-    let name = json_extract_str(json, "name")?;
-    let args_json = json_extract_obj(json, "args").unwrap_or("{}");
+    let value = parse_unique(rest.as_bytes())?;
+    let object = value.as_object()?;
+    let name = object.get("name")?.as_str()?;
+    let args_json = match object.get("args") {
+        Some(args) if args.is_object() => ostd::json::to_string(args).ok()?,
+        Some(_) => return None,
+        None => String::from("{}"),
+    };
     Some(ToolCall {
         name: String::from(name),
-        args_json: String::from(args_json),
+        args_json,
     })
 }
 
-/// Extract a plain JSON string field from a flat JSON object: `"key": "value"`.
-/// Does not handle nested objects inside the value, but handles `\"` escapes.
-fn json_extract_str<'a>(json: &'a str, key: &str) -> Option<&'a str> {
-    let search = format!("\"{}\"", key);
-    let mut idx = json.find(search.as_str())? + search.len();
-    let bytes = json.as_bytes();
-    while idx < bytes.len() && matches!(bytes[idx], b' ' | b'\t' | b':') {
-        idx += 1;
-    }
-    if idx >= bytes.len() || bytes[idx] != b'"' {
-        return None;
-    }
-    idx += 1; // skip opening quote
-    let start = idx;
-    while idx < bytes.len() && bytes[idx] != b'"' {
-        if bytes[idx] == b'\\' {
-            idx += 1; // skip escaped character
-        }
-        idx += 1;
-    }
-    Some(&json[start..idx])
-}
-
-/// Extract a JSON object value `{...}` for a given key using brace counting.
-/// Handles nested objects and quoted strings containing braces.
-fn json_extract_obj<'a>(json: &'a str, key: &str) -> Option<&'a str> {
-    let search = format!("\"{}\"", key);
-    let mut idx = json.find(search.as_str())? + search.len();
-    let bytes = json.as_bytes();
-    while idx < bytes.len() && matches!(bytes[idx], b' ' | b'\t' | b':') {
-        idx += 1;
-    }
-    if idx >= bytes.len() || bytes[idx] != b'{' {
-        return None;
-    }
-    let start = idx;
-    let mut depth = 0usize;
-    while idx < bytes.len() {
-        match bytes[idx] {
-            b'{' => depth += 1,
-            b'}' => {
-                depth -= 1;
-                if depth == 0 {
-                    return Some(&json[start..=idx]);
-                }
-            }
-            b'"' => {
-                idx += 1;
-                while idx < bytes.len() && bytes[idx] != b'"' {
-                    if bytes[idx] == b'\\' {
-                        idx += 1;
-                    }
-                    idx += 1;
-                }
-            }
-            _ => {}
-        }
-        idx += 1;
-    }
-    None
-}
-
-/// Extract the first `"content": "..."` string value from a JSON body and
-/// unescape it. P0-grade: finds the key then reads the following JSON string.
-/// Replace with a real parser (os-gap G4) for nested/duplicate-key safety.
+/// Extract `choices[0].message.content` from a complete provider response.
+///
+/// Malformed input, duplicate keys, trailing data, and non-string content are
+/// rejected so ambiguous provider responses fail closed.
 pub fn extract_content(body: &[u8]) -> Option<String> {
-    let s = core::str::from_utf8(body).ok()?;
-    let key = "\"content\"";
-    let mut idx = s.find(key)? + key.len();
-    let bytes = s.as_bytes();
-    while idx < bytes.len() && (bytes[idx] == b' ' || bytes[idx] == b':') {
-        idx += 1;
-    }
-    if idx >= bytes.len() || bytes[idx] != b'"' {
-        return None;
-    }
-    idx += 1; // past the opening quote
-
-    let mut out = String::new();
-    let mut chars = s[idx..].chars();
-    while let Some(c) = chars.next() {
-        match c {
-            '"' => return Some(out),
-            '\\' => match chars.next()? {
-                'n' => out.push('\n'),
-                'r' => out.push('\r'),
-                't' => out.push('\t'),
-                'b' => out.push('\u{0008}'),
-                'f' => out.push('\u{000C}'),
-                '"' => out.push('"'),
-                '\\' => out.push('\\'),
-                '/' => out.push('/'),
-                'u' => {
-                    let mut code = 0u32;
-                    for _ in 0..4 {
-                        code = code * 16 + chars.next()?.to_digit(16)?;
-                    }
-                    if let Some(ch) = char::from_u32(code) {
-                        out.push(ch);
-                    }
-                }
-                other => out.push(other),
-            },
-            c => out.push(c),
-        }
-    }
-    None
+    let value = parse_unique(body)?;
+    let content = value
+        .get("choices")?
+        .as_array()?
+        .first()?
+        .get("message")?
+        .get("content")?
+        .as_str()?;
+    Some(String::from(content))
 }
+
+#[cfg(test)]
+#[path = "http-tests.rs"]
+mod tests;

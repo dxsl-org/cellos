@@ -9,8 +9,14 @@ license = "MPL-2.0"
 # P0/P1), POSTs a chat-completion, and replies `LlmReply`. TLS runs in the net
 # service, so this cell needs NO network capability — only IPC to the net cell.
 
+[[bin]]
+name = "hypha-llm-gateway"
+path = "src/main.rs"
+test = false
+doc = false
+
 [dependencies]
-ostd        = { path = "../../../../libs/ostd", version = "0.2.0" }
+ostd        = { path = "../../../../libs/ostd", version = "0.2.0", features = ["json"] }
 api         = { path = "../../../../libs/api", version = "0.1.0" }
 agent-proto = { path = "../../../../libs/agent-proto", version = "0.1.0" }
 postcard    = { version = "1", default-features = false, features = ["alloc"] }
