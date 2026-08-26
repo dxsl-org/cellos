@@ -19,14 +19,34 @@ struct KmsBinding {
     generation: u64,
 }
 
+/// Purpose-bound guest surface. Each method maps to exactly one guest
+/// command; there is deliberately no generic signing or digest operation.
 pub trait PurposeGuest {
     type Error;
+    /// Classify a destroy miss separately from execution/transport failure.
+    fn classify_destroy_error(error: &Self::Error) -> DevelopmentSiloError;
 
     fn public_key(&self) -> [u8; 65];
     fn sign_tls13_client_certificate_verify(
         &mut self,
         transcript_hash: [u8; 32],
     ) -> Result<[u8; 64], Self::Error>;
+    /// Create the fresh per-enrollment key; `nonce` is fresh admitted entropy.
+    fn create_enrollment_key(
+        &mut self,
+        pending_generation: u64,
+        nonce: &[u8; 32],
+    ) -> Result<[u8; 65], Self::Error>;
+    /// Reconstruct the canonical CRI independently and sign it raw.
+    fn sign_enrollment_cri(
+        &mut self,
+        pending_generation: u64,
+        hostname: &[u8],
+    ) -> Result<[u8; 64], Self::Error>;
+    /// Destroy the pending generation key explicitly.
+    fn destroy_enrollment_key(&mut self, pending_generation: u64) -> Result<(), Self::Error>;
+    /// Promote the pending key to the active signer for (generation, digest).
+    fn promote_enrollment_key(&mut self, pending_generation: u64) -> Result<[u8; 65], Self::Error>;
 }
 
 pub struct ProtocolState {
@@ -34,6 +54,10 @@ pub struct ProtocolState {
     last_request_seq: u64,
     next_response_seq: u64,
     guest_available: bool,
+    /// Dynamic serving tuple; promotion updates both, TLS requests must
+    /// match them instead of compile-time constants.
+    active_relay_generation: u64,
+    active_profile_digest: [u8; 32],
 }
 
 impl ProtocolState {
@@ -43,6 +67,8 @@ impl ProtocolState {
             last_request_seq: 0,
             next_response_seq: 1,
             guest_available: true,
+            active_relay_generation: DEVELOPMENT_RELAY_GENERATION,
+            active_profile_digest: DEVELOPMENT_PROFILE_DIGEST,
         }
     }
 
@@ -58,7 +84,9 @@ impl ProtocolState {
         if !self.authorize(sender, live_kms_tid, peer) {
             return Some(error(1, 1, DevelopmentSiloError::Unauthorized));
         }
-        let request = match DevelopmentSiloRequest::decode(frame) {
+        let request = match DevelopmentSiloRequest::decode(frame)
+            .and_then(DevelopmentSiloRequest::validate_enrollment)
+        {
             Some(request) => request,
             None => return self.failure(1, DevelopmentSiloError::Malformed),
         };
@@ -78,9 +106,7 @@ impl ProtocolState {
         peer: Option<PeerIdentity>,
     ) -> bool {
         let Some(identity) = peer else { return false };
-        if live_kms_tid != Some(sender)
-            || identity.sender_tid != sender
-            || identity.generation == 0
+        if live_kms_tid != Some(sender) || identity.sender_tid != sender || identity.generation == 0
         {
             return false;
         }
@@ -120,11 +146,19 @@ impl ProtocolState {
                 request_id,
                 ..
             } => {
-                if relay_generation != DEVELOPMENT_RELAY_GENERATION {
-                    return error(request_seq, response_seq, DevelopmentSiloError::GenerationMismatch);
+                if relay_generation != self.active_relay_generation {
+                    return error(
+                        request_seq,
+                        response_seq,
+                        DevelopmentSiloError::GenerationMismatch,
+                    );
                 }
-                if active_profile_digest != DEVELOPMENT_PROFILE_DIGEST {
-                    return error(request_seq, response_seq, DevelopmentSiloError::ProfileMismatch);
+                if active_profile_digest != self.active_profile_digest {
+                    return error(
+                        request_seq,
+                        response_seq,
+                        DevelopmentSiloError::ProfileMismatch,
+                    );
                 }
                 if request_id == 0 {
                     return error(request_seq, response_seq, DevelopmentSiloError::Malformed);
@@ -141,6 +175,86 @@ impl ProtocolState {
                     }
                 }
             }
+            DevelopmentSiloRequest::CreateEnrollmentKey {
+                pending_generation,
+                nonce,
+                ..
+            } => match guest.create_enrollment_key(pending_generation, &nonce) {
+                Ok(verifying_key_sec1) => DevelopmentSiloResponse::EnrollmentKeyCreated {
+                    request_seq,
+                    response_seq,
+                    verifying_key_sec1,
+                },
+                Err(_) => {
+                    self.guest_available = false;
+                    error(request_seq, response_seq, DevelopmentSiloError::GuestFault)
+                }
+            },
+            DevelopmentSiloRequest::SignEnrollmentCri {
+                pending_generation,
+                hostname_len,
+                hostname,
+                ..
+            } => {
+                let len = hostname_len as usize;
+                if len == 0 || len > 64 {
+                    return error(request_seq, response_seq, DevelopmentSiloError::Malformed);
+                }
+                match guest.sign_enrollment_cri(pending_generation, &hostname[..len]) {
+                    Ok(signature) => DevelopmentSiloResponse::EnrollmentCriSigned {
+                        request_seq,
+                        response_seq,
+                        signature,
+                    },
+                    Err(_) => {
+                        self.guest_available = false;
+                        error(request_seq, response_seq, DevelopmentSiloError::GuestFault)
+                    }
+                }
+            }
+            DevelopmentSiloRequest::PromoteEnrollmentKey {
+                pending_generation,
+                active_profile_digest,
+                ..
+            } => {
+                match guest.promote_enrollment_key(pending_generation) {
+                    Ok(verifying_key_sec1) => {
+                        // Promotion is atomic in the guest: adopt the new
+                        // tuple only after the guest acknowledged it.
+                        self.active_relay_generation = pending_generation;
+                        self.active_profile_digest = active_profile_digest;
+                        DevelopmentSiloResponse::EnrollmentKeyPromoted {
+                            request_seq,
+                            response_seq,
+                            verifying_key_sec1,
+                        }
+                    }
+                    Err(_) => {
+                        // State changes only after guest acknowledgement, so
+                        // failed promotion leaves the prior tuple serving.
+                        error(
+                            request_seq,
+                            response_seq,
+                            DevelopmentSiloError::NoEnrollmentKey,
+                        )
+                    }
+                }
+            }
+            DevelopmentSiloRequest::DestroyEnrollmentKey {
+                pending_generation, ..
+            } => match guest.destroy_enrollment_key(pending_generation) {
+                Ok(()) => DevelopmentSiloResponse::EnrollmentKeyDestroyed {
+                    request_seq,
+                    response_seq,
+                },
+                Err(guest_error) => {
+                    let failure = G::classify_destroy_error(&guest_error);
+                    if failure != DevelopmentSiloError::NoEnrollmentKey {
+                        self.guest_available = false;
+                    }
+                    error(request_seq, response_seq, failure)
+                }
+            },
         }
     }
 
@@ -164,7 +278,9 @@ impl ProtocolState {
 }
 
 impl Default for ProtocolState {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 fn error(
@@ -172,7 +288,11 @@ fn error(
     response_seq: u64,
     failure: DevelopmentSiloError,
 ) -> DevelopmentSiloResponse {
-    DevelopmentSiloResponse::Error { request_seq, response_seq, error: failure }
+    DevelopmentSiloResponse::Error {
+        request_seq,
+        response_seq,
+        error: failure,
+    }
 }
 
 #[cfg(test)]

@@ -13,7 +13,6 @@ pub(crate) struct C2cX25519Status {
     pub(crate) readiness: KmsCapabilityReadiness,
 }
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct RelayP256Status {
     pub(crate) metadata: RelayP256StatusPayload,
@@ -41,6 +40,14 @@ impl RelayP256Status {
     }
 }
 
+/// Provider-confirmed result of a pending enrollment-key destruction.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum EnrollmentKeyDestroyConfirmation {
+    Deleted,
+    #[cfg_attr(test, allow(dead_code))]
+    AlreadyAbsent,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum RelaySignError {
     Unavailable,
@@ -49,4 +56,6 @@ pub(crate) enum RelaySignError {
     QualificationRequired,
     InvalidRequest,
     Failure,
+    #[cfg_attr(test, allow(dead_code))]
+    CleanupFailed,
 }

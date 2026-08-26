@@ -41,6 +41,18 @@ wire_enum!(
         GetRelayP256Status = 7,
         /// Sign a TLS 1.3 client CertificateVerify transcript.
         SignTls13ClientCertificateVerify = 8,
+        /// Open a supervisor-only relay enrollment and publish its CSR handle.
+        BeginRelayEnrollment = 9,
+        /// Read the next ordered chunk of the pending canonical relay CSR.
+        ReadRelayCsrChunk = 10,
+        /// Atomically activate the pending relay generation.
+        CommitRelayGeneration = 11,
+        /// Destroy the pending relay generation without activating it.
+        AbortRelayEnrollment = 12,
+        /// Bind a validated service-net profile digest to the pending slot.
+        StageRelayProfile = 13,
+        /// Read the active generation's public SPKI and its SHA-256.
+        GetRelayActivePublicKey = 14,
     }
 );
 wire_enum!(
@@ -130,6 +142,16 @@ wire_enum!(
         InvalidSignature = 19,
         QualificationRequired = 20,
         InvalidRequest = 21,
+        /// A relay enrollment is already pending.
+        EnrollmentPendingExists = 22,
+        /// CSR handle is stale, foreign, or already consumed.
+        CsrHandleInvalid = 23,
+        /// CSR chunks must be read strictly in order.
+        CsrOrderInvalid = 24,
+        /// Authenticated time is missing or rolled back below a protected floor.
+        TimeUntrusted = 25,
+        /// Policy epoch moved backward against the protected monotonic floor.
+        PolicyEpochRegressed = 26,
     }
 );
 

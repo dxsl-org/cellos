@@ -1,10 +1,10 @@
+mod enrollment;
 mod node_identity;
 mod relay;
 
 use api::caller_identity::CallerIdentity;
 use types::kms::{
-    BindingEpoch, KmsErrorCode, KmsOpcode, KmsRequestV1, KmsResponseV1,
-    ServiceNetBindingEpoch,
+    BindingEpoch, KmsErrorCode, KmsOpcode, KmsRequestV1, KmsResponseV1, ServiceNetBindingEpoch,
 };
 
 use crate::auth::{
@@ -22,6 +22,9 @@ pub struct KmsService {
     next_binding_epoch: u64,
     next_service_binding_epoch: u64,
     last_tls_request_id: u64,
+    pub(super) lifecycle: crate::lifecycle::RelayLifecycle,
+    #[cfg(test)]
+    protected_lifecycle: Option<crate::lifecycle::ProtectedRelayState>,
 }
 
 impl Default for KmsService {
@@ -40,16 +43,76 @@ impl KmsService {
             binding: None,
             service_net_binding: None,
             root: runtime_root(&provider),
+            lifecycle: boot_lifecycle(),
             provider,
             next_binding_epoch: 1,
             next_service_binding_epoch: 1,
             last_tls_request_id: 0,
+            #[cfg(test)]
+            protected_lifecycle: None,
         }
     }
 
     #[cfg(test)]
     pub(crate) fn with_provider_fixture(provider: crate::storage::FixtureRelayProvider) -> Self {
-        Self::from_provider(ProviderSlot::Fixture(provider))
+        static RESTARTS: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(1);
+        let restart_epoch = RESTARTS.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+        let mut service = Self::from_provider(ProviderSlot::Fixture(provider));
+        service.lifecycle = crate::lifecycle::RelayLifecycle::with_entropy(restart_epoch);
+        // The fixture lane starts serving the pinned development generation.
+        service
+            .lifecycle
+            .activate_for_tests(crate::lifecycle::ActiveRelayGeneration {
+                generation: crate::storage::FIXTURE_RELAY_GENERATION,
+                policy_epoch: 11,
+                profile_digest: crate::storage::FIXTURE_PROFILE_DIGEST,
+                revoked: false,
+            });
+        service.protected_lifecycle = service.lifecycle.protected_state().ok();
+        service
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_recovered_provider_fixture(
+        provider: crate::storage::FixtureRelayProvider,
+        protected: crate::lifecycle::ProtectedRelayState,
+        restart_epoch: u64,
+    ) -> Result<Self, KmsErrorCode> {
+        if let Some(active) = protected.active {
+            provider.active_generation.set(active.generation);
+            provider.active_profile_digest.set(active.profile_digest);
+            provider
+                .authenticated_time_floor
+                .set(protected.authenticated_time_floor);
+        }
+        let mut service = Self::from_provider(ProviderSlot::Fixture(provider));
+        service.lifecycle = crate::lifecycle::RelayLifecycle::recover(restart_epoch, protected)?;
+        service.protected_lifecycle = Some(service.lifecycle.protected_state()?);
+        Ok(service)
+    }
+
+    pub(super) fn persist_protected_lifecycle(&mut self) -> Result<(), KmsErrorCode> {
+        #[cfg(test)]
+        {
+            self.protected_lifecycle = Some(self.lifecycle.protected_state()?);
+            Ok(())
+        }
+        #[cfg(not(test))]
+        {
+            let protected = self.lifecycle.protected_state()?;
+            if crate::storage::persist_runtime_protected_relay_state(protected).is_err() {
+                self.lifecycle.seal();
+                return Err(KmsErrorCode::RelayUnavailable);
+            }
+            Ok(())
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn protected_lifecycle_for_tests(
+        &self,
+    ) -> Option<crate::lifecycle::ProtectedRelayState> {
+        self.protected_lifecycle
     }
 
     /// Exercise the development Silo through the single relay provider seam.
@@ -110,11 +173,27 @@ impl KmsService {
             KmsOpcode::RegisterServiceNetInstance => {
                 self.register_service_net(&request, sender, caller, registry)
             }
-            KmsOpcode::GetRelayP256Status => {
-                self.relay_status(&request, sender, caller, registry)
-            }
+            KmsOpcode::GetRelayP256Status => self.relay_status(&request, sender, caller, registry),
             KmsOpcode::SignTls13ClientCertificateVerify => {
                 self.sign_tls13(&request, sender, caller, registry)
+            }
+            KmsOpcode::BeginRelayEnrollment => {
+                self.begin_enrollment(&request, sender, caller, registry)
+            }
+            KmsOpcode::ReadRelayCsrChunk => {
+                self.read_relay_csr_chunk(&request, sender, caller, registry)
+            }
+            KmsOpcode::CommitRelayGeneration => {
+                self.commit_relay_generation(&request, sender, caller, registry)
+            }
+            KmsOpcode::AbortRelayEnrollment => {
+                self.abort_relay_enrollment(&request, sender, caller, registry)
+            }
+            KmsOpcode::StageRelayProfile => {
+                self.stage_relay_profile(&request, sender, caller, registry)
+            }
+            KmsOpcode::GetRelayActivePublicKey => {
+                self.get_relay_active_public_key(&request, sender, caller, registry)
             }
         };
         Some(match result {
@@ -165,7 +244,6 @@ impl KmsService {
         self.last_tls_request_id = 0;
         Ok(response)
     }
-
 }
 
 fn require_empty(request: &KmsRequestV1) -> Result<(), KmsErrorCode> {
@@ -177,3 +255,22 @@ fn require_empty(request: &KmsRequestV1) -> Result<(), KmsErrorCode> {
         .ok_or(KmsErrorCode::ProviderFailure)
 }
 
+/// Boot only from authenticated protected lifecycle state and a strictly
+/// newer protected restart epoch. Unavailable, torn, or regressed state seals
+/// enrollment and serving; no process-local counter substitutes for it.
+fn boot_lifecycle() -> crate::lifecycle::RelayLifecycle {
+    #[cfg(not(test))]
+    {
+        match crate::storage::load_runtime_protected_relay_state() {
+            Ok((restart_epoch, protected)) => {
+                crate::lifecycle::RelayLifecycle::recover(restart_epoch, protected)
+                    .unwrap_or_else(|_| crate::lifecycle::RelayLifecycle::sealed())
+            }
+            Err(_) => crate::lifecycle::RelayLifecycle::sealed(),
+        }
+    }
+    #[cfg(test)]
+    {
+        crate::lifecycle::RelayLifecycle::sealed()
+    }
+}

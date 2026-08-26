@@ -1,3 +1,5 @@
+mod enroll;
+
 use ostd::syscall::{sys_lookup_service, sys_recv_timeout, sys_send, SyscallResult};
 use types::kms::{
     KmsCapabilityReadiness, KmsKeyAlgorithm, KmsProviderKind, RelayP256StatusPayload,
@@ -5,8 +7,7 @@ use types::kms::{
 };
 use types::silo::{
     DevelopmentSiloError, DevelopmentSiloRequest, DevelopmentSiloResponse,
-    DEVELOPMENT_PROFILE_DIGEST, DEVELOPMENT_RELAY_GENERATION,
-    DEVELOPMENT_SILO_FRAME_LEN,
+    DEVELOPMENT_PROFILE_DIGEST, DEVELOPMENT_RELAY_GENERATION, DEVELOPMENT_SILO_FRAME_LEN,
 };
 
 use super::super::capability::{RelayP256Status, RelaySignError};
@@ -16,6 +17,8 @@ use super::super::capability::{RelayP256Status, RelaySignError};
 pub(crate) struct DevelopmentSiloProvider {
     next_request_seq: u64,
     last_response_seq: u64,
+    active_relay_generation: u64,
+    active_profile_digest: [u8; 32],
     failed_closed: bool,
 }
 
@@ -24,6 +27,8 @@ impl DevelopmentSiloProvider {
         Self {
             next_request_seq: 1,
             last_response_seq: 0,
+            active_relay_generation: DEVELOPMENT_RELAY_GENERATION,
+            active_profile_digest: DEVELOPMENT_PROFILE_DIGEST,
             failed_closed: false,
         }
     }
@@ -35,7 +40,9 @@ impl DevelopmentSiloProvider {
         };
         let request = DevelopmentSiloRequest::RelayStatus { request_seq };
         let verifying_key_sec1 = match self.call(request) {
-            Ok(DevelopmentSiloResponse::RelayStatus { verifying_key_sec1, .. }) => verifying_key_sec1,
+            Ok(DevelopmentSiloResponse::RelayStatus {
+                verifying_key_sec1, ..
+            }) => verifying_key_sec1,
             _ => return RelayP256Status::unavailable(),
         };
         RelayP256Status {
@@ -45,11 +52,11 @@ impl DevelopmentSiloProvider {
                 provider: KmsProviderKind::SiloWrapped,
                 assessment: RelayProviderAssessment::DevelopmentReference,
                 reserved: 0,
-                relay_generation: DEVELOPMENT_RELAY_GENERATION,
+                relay_generation: self.active_relay_generation,
                 policy_epoch: 1,
                 authenticated_time_floor: 0,
                 qualification_epoch: 0,
-                active_profile_digest: DEVELOPMENT_PROFILE_DIGEST,
+                active_profile_digest: self.active_profile_digest,
                 qualification_record_digest: [0; 32],
             },
             verifying_key_sec1,
@@ -72,7 +79,9 @@ impl DevelopmentSiloProvider {
             request_id,
         };
         match self.call(request)? {
-            DevelopmentSiloResponse::Tls13ClientCertificateVerify { signature, .. } => Ok(signature),
+            DevelopmentSiloResponse::Tls13ClientCertificateVerify { signature, .. } => {
+                Ok(signature)
+            }
             DevelopmentSiloResponse::Error { error, .. } => Err(map_error(error)),
             _ => self.fail(RelaySignError::Failure),
         }
@@ -83,14 +92,30 @@ impl DevelopmentSiloProvider {
             return Err(RelaySignError::Unavailable);
         }
         let current = self.next_request_seq;
-        self.next_request_seq = current.checked_add(1).filter(|seq| *seq != 0)
+        self.next_request_seq = current
+            .checked_add(1)
+            .filter(|seq| *seq != 0)
             .ok_or(RelaySignError::Unavailable)?;
         Ok(current)
     }
 
-    fn call(&mut self, request: DevelopmentSiloRequest) -> Result<DevelopmentSiloResponse, RelaySignError> {
-        let silo_tid = sys_lookup_service(api::syscall::service::SILO)
+    /// Cleanup must remain retryable even after an earlier protocol failure
+    /// sealed normal provider operations.
+    fn take_cleanup_request_seq(&mut self) -> Result<u64, RelaySignError> {
+        let current = self.next_request_seq;
+        self.next_request_seq = current
+            .checked_add(1)
+            .filter(|seq| *seq != 0)
             .ok_or(RelaySignError::Unavailable)?;
+        Ok(current)
+    }
+
+    fn call(
+        &mut self,
+        request: DevelopmentSiloRequest,
+    ) -> Result<DevelopmentSiloResponse, RelaySignError> {
+        let silo_tid =
+            sys_lookup_service(api::syscall::service::SILO).ok_or(RelaySignError::Unavailable)?;
         match sys_send(silo_tid, &request.encode()) {
             SyscallResult::Ok(_) => {}
             _ => return self.fail(RelaySignError::Unavailable),
@@ -120,9 +145,40 @@ impl DevelopmentSiloProvider {
 
 fn response_sequences(response: DevelopmentSiloResponse) -> (u64, u64) {
     match response {
-        DevelopmentSiloResponse::RelayStatus { request_seq, response_seq, .. }
-        | DevelopmentSiloResponse::Tls13ClientCertificateVerify { request_seq, response_seq, .. }
-        | DevelopmentSiloResponse::Error { request_seq, response_seq, .. } => (request_seq, response_seq),
+        DevelopmentSiloResponse::RelayStatus {
+            request_seq,
+            response_seq,
+            ..
+        }
+        | DevelopmentSiloResponse::Tls13ClientCertificateVerify {
+            request_seq,
+            response_seq,
+            ..
+        }
+        | DevelopmentSiloResponse::EnrollmentKeyCreated {
+            request_seq,
+            response_seq,
+            ..
+        }
+        | DevelopmentSiloResponse::EnrollmentCriSigned {
+            request_seq,
+            response_seq,
+            ..
+        }
+        | DevelopmentSiloResponse::EnrollmentKeyDestroyed {
+            request_seq,
+            response_seq,
+        }
+        | DevelopmentSiloResponse::EnrollmentKeyPromoted {
+            request_seq,
+            response_seq,
+            ..
+        }
+        | DevelopmentSiloResponse::Error {
+            request_seq,
+            response_seq,
+            ..
+        } => (request_seq, response_seq),
     }
 }
 
@@ -130,8 +186,13 @@ fn map_error(error: DevelopmentSiloError) -> RelaySignError {
     match error {
         DevelopmentSiloError::GenerationMismatch => RelaySignError::GenerationMismatch,
         DevelopmentSiloError::ProfileMismatch => RelaySignError::ProfileMismatch,
-        DevelopmentSiloError::Malformed | DevelopmentSiloError::Sequence => RelaySignError::InvalidRequest,
-        DevelopmentSiloError::Unauthorized | DevelopmentSiloError::GuestFault => RelaySignError::Failure,
+        DevelopmentSiloError::Malformed | DevelopmentSiloError::Sequence => {
+            RelaySignError::InvalidRequest
+        }
+        DevelopmentSiloError::NoEnrollmentKey => RelaySignError::InvalidRequest,
+        DevelopmentSiloError::Unauthorized | DevelopmentSiloError::GuestFault => {
+            RelaySignError::Failure
+        }
         DevelopmentSiloError::Unavailable => RelaySignError::Unavailable,
     }
 }

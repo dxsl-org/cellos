@@ -65,6 +65,40 @@
   x0/x1 only when x0 is a recognized private Silo function identifier; unknown
   HVC values retain only non-register metadata such as the instruction immediate.
 
+#### Relay Certificate Provisioning Boundary
+
+- Keep opcodes 9–14 purpose-specific and append-only. Opcode 14 exposes only
+  the active generation's public key; never reinterpret it as pending-key
+  proof. Any future authenticated precommit binding requires a distinct
+  reviewed contract.
+- Enrollment begin and ordered CSR reads require the exact live supervisor;
+  profile staging and active-key inspection require the exact live
+  service-net instance. Authorize before provider access or lifecycle mutation.
+- Build the frozen bounded CSR inside KMS. The provider must create a fresh
+  non-exportable key, independently reconstruct and sign the canonical
+  `CertificationRequestInfo`, and return only public proof. KMS must validate
+  the point, normalize to low-S, self-verify, and publish the CSR only through
+  its one-shot restart-bound ordered handle.
+- Permit one pending generation and enforce
+  `Prepared -> CsrIssued -> Staged -> committed`. A stale, foreign, repeated,
+  or out-of-order handle use must invalidate the flow. Do not commit until all
+  CSR chunks are consumed and the exact generation, policy epoch, and profile
+  digest are staged.
+- Every abort and post-creation failure must destroy the provider's pending key
+  or retain a cleanup tombstone until deletion/absence is confirmed. Provider
+  promotion, lifecycle activation, and persistence failure must never leave a
+  mixed tuple able to serve; seal on disagreement.
+- Persist only committed lifecycle facts and protected monotonic floors.
+  Missing, torn, unavailable, or regressed protected persistence or
+  authenticated time must seal enrollment and serving; volatile state is never
+  a substitute.
+- Relay manifests must use an explicit allowlist, canonical bounded mount
+  paths, and no client private-key field. Mounted certificate chains must obey
+  the frozen count/size and strict DER bounds, require clientAuth without
+  serverAuth, and bind the active leaf SPKI to opcode 14 plus both KMS and
+  manifest NodeId values. This active-key check must not authorize pending
+  profile staging.
+
 
 ### Law 2: Owned Buffers for Async (SAS Safety)
 

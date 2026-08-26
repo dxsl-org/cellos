@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: MPL-2.0
 //! Purpose-specific wire contract for the development AArch64 Silo provider.
 //!
-//! This is not a general signing interface. The only accepted operation is the
-//! Phase 1 TLS 1.3 client CertificateVerify operation, plus public status.
+//! This is not a general signing interface. The accepted operations are the
+//! Phase 1 TLS 1.3 client CertificateVerify operation, public status, and the
+//! Phase 3 purpose-bound enrollment triple (create/sign-CRI/destroy) over one
+//! pending generation key that never leaves the guest.
 
 /// Fixed IPC frame length for KMS-to-Silo messages.
 pub const DEVELOPMENT_SILO_FRAME_LEN: usize = 192;
@@ -28,6 +30,36 @@ pub enum DevelopmentSiloRequest {
         active_profile_digest: [u8; 32],
         request_id: u64,
     },
+    /// Create the fresh non-exportable key for one pending generation.
+    ///
+    /// The nonce is fresh admitted entropy per call so a destroyed key can
+    /// never be regenerated from generation facts alone.
+    CreateEnrollmentKey {
+        request_seq: u64,
+        pending_generation: u64,
+        nonce: [u8; 32],
+    },
+    /// Reconstruct the canonical CRI independently and sign it raw.
+    SignEnrollmentCri {
+        request_seq: u64,
+        pending_generation: u64,
+        hostname_len: u8,
+        hostname: [u8; 64],
+    },
+    /// Explicitly destroy the pending generation key.
+    DestroyEnrollmentKey {
+        request_seq: u64,
+        pending_generation: u64,
+    },
+    /// Atomically promote the pending key to the active TLS signer and
+    /// retire the previous active key inside the guest. The new serving
+    /// (generation, policy/profile digest) tuple is bound into promotion so
+    /// status and TLS authorization follow the promoted key dynamically.
+    PromoteEnrollmentKey {
+        request_seq: u64,
+        pending_generation: u64,
+        active_profile_digest: [u8; 32],
+    },
 }
 
 /// Bounded failures returned by the development Silo boundary.
@@ -36,7 +68,7 @@ pub enum DevelopmentSiloRequest {
 pub enum DevelopmentSiloError {
     /// Kernel-attested caller is not the live KMS instance.
     Unauthorized = 1,
-    /// Request or response sequence is zero, stale, or replayed.
+    /// Sequence is zero, stale, or replayed.
     Sequence = 2,
     /// Frame or mailbox bytes are non-canonical.
     Malformed = 3,
@@ -48,6 +80,8 @@ pub enum DevelopmentSiloError {
     GenerationMismatch = 6,
     /// Active relay profile does not match the development lane.
     ProfileMismatch = 7,
+    /// No pending enrollment key exists for the requested generation.
+    NoEnrollmentKey = 8,
 }
 
 impl DevelopmentSiloError {
@@ -60,6 +94,7 @@ impl DevelopmentSiloError {
             5 => Self::GuestFault,
             6 => Self::GenerationMismatch,
             7 => Self::ProfileMismatch,
+            8 => Self::NoEnrollmentKey,
             _ => return None,
         })
     }
@@ -80,101 +115,32 @@ pub enum DevelopmentSiloResponse {
         response_seq: u64,
         signature: [u8; 64],
     },
+    /// Public point of the freshly created enrollment key.
+    EnrollmentKeyCreated {
+        request_seq: u64,
+        response_seq: u64,
+        verifying_key_sec1: [u8; 65],
+    },
+    /// Signature over the independently reconstructed canonical CRI.
+    EnrollmentCriSigned {
+        request_seq: u64,
+        response_seq: u64,
+        signature: [u8; 64],
+    },
+    /// Destruction acknowledged; no key material or handle remains.
+    EnrollmentKeyDestroyed { request_seq: u64, response_seq: u64 },
+    /// Promotion acknowledged; the new active signer's public point follows.
+    EnrollmentKeyPromoted {
+        request_seq: u64,
+        response_seq: u64,
+        verifying_key_sec1: [u8; 65],
+    },
     /// A typed bounded failure.
     Error {
         request_seq: u64,
         response_seq: u64,
         error: DevelopmentSiloError,
     },
-}
-
-impl DevelopmentSiloRequest {
-    /// Encode this request into its canonical fixed-size frame.
-    pub fn encode(self) -> [u8; DEVELOPMENT_SILO_FRAME_LEN] {
-        let mut out = header(self.request_seq(), 0);
-        match self {
-            Self::RelayStatus { .. } => out[5] = 1,
-            Self::SignTls13ClientCertificateVerify {
-                transcript_hash,
-                relay_generation,
-                active_profile_digest,
-                request_id,
-                ..
-            } => {
-                out[5] = 2;
-                out[PAYLOAD..PAYLOAD + 32].copy_from_slice(&transcript_hash);
-                out[56..64].copy_from_slice(&relay_generation.to_le_bytes());
-                out[64..96].copy_from_slice(&active_profile_digest);
-                out[96..104].copy_from_slice(&request_id.to_le_bytes());
-            }
-        }
-        out
-    }
-
-    /// Decode a canonical request, rejecting padding, unknown operations, and zero sequences.
-    pub fn decode(bytes: &[u8]) -> Option<Self> {
-        let (opcode, status, request_seq, response_seq) = parse_header(bytes)?;
-        if status != 0 || request_seq == 0 || response_seq != 0 {
-            return None;
-        }
-        match opcode {
-            1 if zero(&bytes[PAYLOAD..]) => Some(Self::RelayStatus { request_seq }),
-            2 if zero(&bytes[104..]) => Some(Self::SignTls13ClientCertificateVerify {
-                request_seq,
-                transcript_hash: array(bytes, PAYLOAD),
-                relay_generation: word(bytes, 56),
-                active_profile_digest: array(bytes, 64),
-                request_id: word(bytes, 96),
-            }),
-            _ => None,
-        }
-    }
-
-    /// Return the nonzero protocol request sequence.
-    pub const fn request_seq(self) -> u64 {
-        match self {
-            Self::RelayStatus { request_seq } | Self::SignTls13ClientCertificateVerify { request_seq, .. } => request_seq,
-        }
-    }
-}
-
-impl DevelopmentSiloResponse {
-    /// Encode this response into its canonical fixed-size frame.
-    pub fn encode(self) -> [u8; DEVELOPMENT_SILO_FRAME_LEN] {
-        let (opcode, request_seq, response_seq, status) = match self {
-            Self::RelayStatus { request_seq, response_seq, .. } => (1, request_seq, response_seq, 1),
-            Self::Tls13ClientCertificateVerify { request_seq, response_seq, .. } => (2, request_seq, response_seq, 1),
-            Self::Error { request_seq, response_seq, error } => (0, request_seq, response_seq, error as u8 + 1),
-        };
-        let mut out = header(request_seq, response_seq);
-        out[5] = opcode;
-        out[6] = status;
-        match self {
-            Self::RelayStatus { verifying_key_sec1, .. } => out[PAYLOAD..89].copy_from_slice(&verifying_key_sec1),
-            Self::Tls13ClientCertificateVerify { signature, .. } => out[PAYLOAD..88].copy_from_slice(&signature),
-            Self::Error { .. } => {}
-        }
-        out
-    }
-
-    /// Decode a canonical response and reject malformed padding or sequences.
-    pub fn decode(bytes: &[u8]) -> Option<Self> {
-        let (opcode, status, request_seq, response_seq) = parse_header(bytes)?;
-        if request_seq == 0 || response_seq == 0 || status == 0 {
-            return None;
-        }
-        if opcode == 1 && status == 1 && zero(&bytes[89..]) {
-            return Some(Self::RelayStatus { request_seq, response_seq, verifying_key_sec1: array(bytes, PAYLOAD) });
-        }
-        if opcode == 2 && status == 1 && zero(&bytes[88..]) {
-            return Some(Self::Tls13ClientCertificateVerify { request_seq, response_seq, signature: array(bytes, PAYLOAD) });
-        }
-        if opcode != 0 {
-            return None;
-        }
-        let error = status.checked_sub(1).and_then(DevelopmentSiloError::from_byte)?;
-        zero(&bytes[PAYLOAD..]).then_some(Self::Error { request_seq, response_seq, error })
-    }
 }
 
 fn header(request_seq: u64, response_seq: u64) -> [u8; DEVELOPMENT_SILO_FRAME_LEN] {
@@ -187,12 +153,23 @@ fn header(request_seq: u64, response_seq: u64) -> [u8; DEVELOPMENT_SILO_FRAME_LE
 }
 
 fn parse_header(bytes: &[u8]) -> Option<(u8, u8, u64, u64)> {
-    (bytes.len() == DEVELOPMENT_SILO_FRAME_LEN && bytes[..4] == MAGIC && bytes[4] == VERSION && bytes[7] == 0)
+    (bytes.len() == DEVELOPMENT_SILO_FRAME_LEN
+        && bytes[..4] == MAGIC
+        && bytes[4] == VERSION
+        && bytes[7] == 0)
         .then(|| (bytes[5], bytes[6], word(bytes, 8), word(bytes, 16)))
 }
-fn word(bytes: &[u8], at: usize) -> u64 { u64::from_le_bytes(array(bytes, at)) }
-fn array<const N: usize>(bytes: &[u8], at: usize) -> [u8; N] { bytes[at..at + N].try_into().ok().unwrap() }
-fn zero(bytes: &[u8]) -> bool { bytes.iter().all(|byte| *byte == 0) }
+fn word(bytes: &[u8], at: usize) -> u64 {
+    u64::from_le_bytes(array(bytes, at))
+}
+fn array<const N: usize>(bytes: &[u8], at: usize) -> [u8; N] {
+    bytes[at..at + N].try_into().ok().unwrap()
+}
+fn zero(bytes: &[u8]) -> bool {
+    bytes.iter().all(|byte| *byte == 0)
+}
+
+mod wire;
 
 #[cfg(test)]
 mod tests;

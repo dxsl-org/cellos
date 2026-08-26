@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import ipaddress
 import re
 import tomllib
 from dataclasses import dataclass
@@ -19,7 +18,12 @@ _SERVER_FIELDS = frozenset(
 _AUTHORIZATION_FIELDS = frozenset(
     {"net_service_identity", "policy_handle", "relay_denylist"}
 )
-_ROOT_FIELDS = frozenset({"relay", "trust", "client", "server", "authorization"})
+_ENROLLMENT_FIELDS = frozenset({"pending_generation", "policy_epoch"})
+_U64_MAX = (1 << 64) - 1
+_HOSTNAME_MAX_BYTES = 64
+_ROOT_FIELDS = frozenset(
+    {"relay", "trust", "client", "server", "authorization", "enrollment"}
+)
 
 
 class ManifestError(ValueError):
@@ -49,6 +53,9 @@ def load_server_manifest(path: str | Path) -> RelayServerConfig:
     authorization = _table(
         document, "authorization", {"relay_denylist"}, _AUTHORIZATION_FIELDS
     )
+    enrollment = _table(
+        document, "enrollment", _ENROLLMENT_FIELDS, _ENROLLMENT_FIELDS
+    )
 
     bind_host = _string(relay, "bind_host")
     if not bind_host or bind_host != bind_host.strip():
@@ -60,6 +67,8 @@ def load_server_manifest(path: str | Path) -> RelayServerConfig:
     tls_version = _string(relay, "min_tls_version")
     if tls_version != "1.3":
         raise ManifestError("relay.min_tls_version must be exactly '1.3'")
+    _u64(enrollment, "pending_generation")
+    _u64(enrollment, "policy_epoch")
 
     certificate = _regular_file(server, "certificate_pem")
     private_key = _regular_file(server, "private_key_pem")
@@ -90,7 +99,10 @@ def _load_toml(path: Path) -> dict[str, Any]:
 
 
 def _table(
-    document: dict[str, Any], name: str, required: set[str] | frozenset[str], allowed: frozenset[str]
+    document: dict[str, Any],
+    name: str,
+    required: set[str] | frozenset[str],
+    allowed: frozenset[str],
 ) -> dict[str, Any]:
     value = document.get(name)
     if not isinstance(value, dict):
@@ -111,6 +123,15 @@ def _string(table: dict[str, Any], field: str) -> str:
     return value
 
 
+def _u64(table: dict[str, Any], field: str) -> int:
+    value = table[field]
+    if type(value) is not int or not 1 <= value <= _U64_MAX:
+        raise ManifestError(
+            f"enrollment.{field} must be an integer from 1 through {_U64_MAX}"
+        )
+    return value
+
+
 def _regular_file(table: dict[str, Any], field: str) -> Path:
     path = Path(_string(table, field))
     if not path.is_absolute():
@@ -122,18 +143,26 @@ def _regular_file(table: dict[str, Any], field: str) -> Path:
 
 def _hostname(value: str) -> str:
     try:
-        hostname = value.encode("idna").decode("ascii").lower()
-        ipaddress.ip_address(hostname)
-    except ValueError:
-        pass
-    except UnicodeError as exc:
-        raise ManifestError("relay.hostname must be a valid DNS name") from exc
-    else:
-        raise ManifestError("relay.hostname must be a DNS name, not an IP address")
-    labels = hostname.split(".")
-    if len(hostname) > 253 or any(not _LABEL.fullmatch(label) for label in labels):
-        raise ManifestError("relay.hostname must be a valid DNS name")
-    return hostname
+        encoded = value.encode("ascii")
+    except UnicodeEncodeError as exc:
+        raise ManifestError(
+            "relay.hostname must match the frozen lowercase DNS profile"
+        ) from exc
+    labels = value.split(".")
+    if (
+        not value
+        or len(encoded) > _HOSTNAME_MAX_BYTES
+        or any(
+            not label
+            or len(label) > 63
+            or not _LABEL.fullmatch(label)
+            for label in labels
+        )
+    ):
+        raise ManifestError(
+            "relay.hostname must match the frozen lowercase DNS profile"
+        )
+    return value
 
 
 def _require_dns_san(certificate_path: Path, hostname: str) -> None:

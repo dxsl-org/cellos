@@ -5,14 +5,20 @@ use api::hypervisor::ViVmExit;
 use service_silo::layout::{HVC_SILO_DONE, HVC_SILO_FAULT, HVC_SILO_READY};
 use service_silo::vm_exit::{diagnose_hvc, UnexpectedHvc};
 
-
 const MAX_EXITS_PER_OPERATION: usize = 64;
 
 /// Non-secret diagnostic fields for an unexpected, always-fatal VM exit.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SiloUnexpectedExit {
-    MmioRead { ipa: u64, size: u8, reg: u8 },
-    MmioWrite { ipa: u64, size: u8 },
+    MmioRead {
+        ipa: u64,
+        size: u8,
+        reg: u8,
+    },
+    MmioWrite {
+        ipa: u64,
+        size: u8,
+    },
     Hvc(UnexpectedHvc),
     SysReg {
         op0: u8,
@@ -24,11 +30,25 @@ pub enum SiloUnexpectedExit {
         is_write: bool,
     },
     Shutdown,
-    Unknown { ec: u32, iss: u32, pc: Option<u64> },
-    PortIn { port: u16, size: u8, reg: u8 },
-    PortOut { port: u16, size: u8 },
+    Unknown {
+        ec: u32,
+        iss: u32,
+        pc: Option<u64>,
+    },
+    PortIn {
+        port: u16,
+        size: u8,
+        reg: u8,
+    },
+    PortOut {
+        port: u16,
+        size: u8,
+    },
     Hlt,
-    Msr { index: u32, is_write: bool },
+    Msr {
+        index: u32,
+        is_write: bool,
+    },
 }
 
 /// A bounded VMM-side failure, distinct from a guest-declared Silo fault.
@@ -75,15 +95,9 @@ pub fn run_until_done(vm_id: usize, vcpu_id: usize) -> SiloRunResult {
     SiloRunResult::VmmFault(SiloVmmFault::ExitBudgetExceeded)
 }
 
-fn diagnose_unexpected_exit(
-    vm_id: usize,
-    vcpu_id: usize,
-    exit: ViVmExit,
-) -> SiloUnexpectedExit {
+fn diagnose_unexpected_exit(vm_id: usize, vcpu_id: usize, exit: ViVmExit) -> SiloUnexpectedExit {
     match exit {
-        ViVmExit::MmioRead { ipa, size, reg } => {
-            SiloUnexpectedExit::MmioRead { ipa, size, reg }
-        }
+        ViVmExit::MmioRead { ipa, size, reg } => SiloUnexpectedExit::MmioRead { ipa, size, reg },
         ViVmExit::MmioWrite { ipa, size, .. } => SiloUnexpectedExit::MmioWrite { ipa, size },
         ViVmExit::Hvc { imm, regs } => SiloUnexpectedExit::Hvc(diagnose_hvc(imm, regs)),
         ViVmExit::SysReg {
@@ -115,9 +129,7 @@ fn diagnose_unexpected_exit(
             core::hint::black_box(&regs);
             SiloUnexpectedExit::Unknown { ec, iss, pc }
         }
-        ViVmExit::PortIn { port, size, reg } => {
-            SiloUnexpectedExit::PortIn { port, size, reg }
-        }
+        ViVmExit::PortIn { port, size, reg } => SiloUnexpectedExit::PortIn { port, size, reg },
         ViVmExit::PortOut { port, size, .. } => SiloUnexpectedExit::PortOut { port, size },
         ViVmExit::Hlt => SiloUnexpectedExit::Hlt,
         ViVmExit::Msr {

@@ -64,6 +64,13 @@ impl TlsSocketEntry {
     /// # Safety
     /// `set_tls_context()` must have been called with valid pointers before this.
     pub unsafe fn handshake(handle: SocketHandle, hostname: &str) -> Result<Self, TlsError> {
+        // embedded-tls treats `TlsClock::None` as "skip validity checks".
+        // Refuse before allocating connection state or calling `open()` so
+        // unavailable/default/rolled-back authenticated time can never weaken
+        // certificate verification.
+        if crate::tls::clock::observe().is_none() {
+            return Err(TlsError::InvalidCertificate);
+        }
         // Leak 32 KiB for TLS record buffers — intentional, documented cost.
         let read_buf: &'static mut [u8] = Box::leak(Box::new([0u8; TLS_BUF]));
         let write_buf: &'static mut [u8] = Box::leak(Box::new([0u8; TLS_BUF]));

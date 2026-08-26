@@ -13,6 +13,7 @@ const _: () = assert!(
 use core::arch::global_asm;
 use crypto::{CryptoResult, SiloState};
 use mailbox::{MailboxRequest, SiloCommand, HVC_SILO_DONE, HVC_SILO_FAULT, HVC_SILO_READY};
+use layout::INPUT_LEN;
 
 global_asm!(include_str!("arch/entry.s"));
 
@@ -40,6 +41,8 @@ pub extern "C" fn silo_main() -> ! {
         let (status, signal, detail_code, output): (u8, u64, u64, &[u8]) = match &result {
             CryptoResult::Ready(public) => (1, HVC_SILO_READY, 0, public),
             CryptoResult::Signature(signature) => (2, HVC_SILO_DONE, 0, signature),
+            CryptoResult::Ack => (3, HVC_SILO_DONE, 0, &[]),
+            CryptoResult::Absent => (4, HVC_SILO_DONE, 0, &[]),
             CryptoResult::Fault(code) => (
                 0xff,
                 HVC_SILO_FAULT,
@@ -78,12 +81,70 @@ fn dispatch(
         return CryptoResult::Fault(0x41);
     }
     match command {
-        SiloCommand::Initialize => state.initialize_once(&mut request.input),
+        SiloCommand::Initialize => state.initialize_once(&mut request.input[..32].try_into().expect("seed")),
         SiloCommand::SignTls13ClientCertificateVerify => {
-            state.sign_tls13_client_certificate_verify(request.input)
+            state.sign_tls13_client_certificate_verify(
+                request.input[..32].try_into().expect("hash"),
+            )
+        }
+        SiloCommand::CreateEnrollmentKey => {
+            let parsed = enrollment_input(&request.input);
+            request.input[8..40].fill(0);
+            core::hint::black_box(&request.input);
+            match parsed {
+                Ok((generation, mut nonce)) => {
+                    state.create_enrollment_key(generation, &mut nonce)
+                }
+                Err(fault) => fault,
+            }
+        }
+        SiloCommand::SignEnrollmentCri => {
+            let len = request.input[8] as usize;
+            if len > 64 || request.input[9 + len..].iter().any(|byte| *byte != 0) {
+                return CryptoResult::Fault(0x27);
+            }
+            let generation =
+                u64::from_le_bytes(request.input[..8].try_into().expect("generation"));
+            state.sign_enrollment_cri(generation, &request.input[9..9 + len])
+        }
+        SiloCommand::DestroyEnrollmentKey => {
+            match generation_input(&request.input) {
+                Ok(generation) => state.destroy_enrollment_key(generation),
+                Err(fault) => fault,
+            }
+        }
+        SiloCommand::PromoteEnrollmentKey => {
+            match generation_input(&request.input) {
+                Ok(generation) => state.promote_enrollment_key(generation),
+                Err(fault) => fault,
+            }
         }
         SiloCommand::Unknown => CryptoResult::Fault(0x42),
     }
+}
+
+fn generation_input(input: &[u8; INPUT_LEN]) -> Result<u64, CryptoResult> {
+    if input[8..].iter().any(|byte| *byte != 0) {
+        return Err(CryptoResult::Fault(0x27));
+    }
+    let generation = u64::from_le_bytes(input[..8].try_into().expect("generation"));
+    if generation == 0 {
+        return Err(CryptoResult::Fault(0x27));
+    }
+    Ok(generation)
+}
+
+/// Command 3 carries one LE u64 generation and a required 32-byte nonce.
+fn enrollment_input(input: &[u8; INPUT_LEN]) -> Result<(u64, [u8; 32]), CryptoResult> {
+    if input[40..].iter().any(|byte| *byte != 0) {
+        return Err(CryptoResult::Fault(0x27));
+    }
+    let generation = u64::from_le_bytes(input[..8].try_into().expect("generation"));
+    let nonce: [u8; 32] = input[8..40].try_into().expect("nonce");
+    if generation == 0 || nonce.iter().all(|byte| *byte == 0) {
+        return Err(CryptoResult::Fault(0x27));
+    }
+    Ok((generation, nonce))
 }
 
 fn halt() -> ! {

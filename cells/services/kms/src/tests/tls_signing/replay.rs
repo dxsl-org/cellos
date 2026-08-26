@@ -3,11 +3,7 @@ use super::*;
 fn submit(service: &mut KmsService, request_id: u64) -> types::kms::KmsResponseV1 {
     service
         .handle(
-            &sign_request(
-                FIXTURE_PROFILE_DIGEST,
-                FIXTURE_RELAY_GENERATION,
-                request_id,
-            ),
+            &sign_request(FIXTURE_PROFILE_DIGEST, FIXTURE_RELAY_GENERATION, request_id),
             7,
             Some(caller(50, 4, 7)),
             net_registry(Some(7)),

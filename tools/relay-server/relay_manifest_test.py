@@ -53,6 +53,10 @@ client_issuing_ca_pem = {quote(str(certificates.ca_cert))}
 net_service_identity = "service-net"
 policy_handle = "policy:test"
 relay_denylist = {quote(str(self.denylist))}
+
+[enrollment]
+pending_generation = 1
+policy_epoch = 1
 """
 
     def _write(self, text: str) -> Path:
@@ -131,6 +135,50 @@ relay_denylist = {quote(str(self.denylist))}
                     with self.assertRaises(ManifestError):
                         load_server_manifest(manifest)
 
+    def test_enrollment_must_be_a_table(self) -> None:
+        before_enrollment, separator, _ = self._text().partition("[enrollment]\n")
+        self.assertTrue(separator)
+        manifest = self._write("enrollment = 1\n\n" + before_enrollment)
+        with self.assertRaisesRegex(ManifestError, r"\[enrollment\] must be a table"):
+            load_server_manifest(manifest)
+
+    def test_unknown_enrollment_field_is_rejected(self) -> None:
+        manifest = self._write(
+            self._text().replace(
+                "policy_epoch = 1", "policy_epoch = 1\npolicy_epcoh = 1"
+            )
+        )
+        with self.assertRaisesRegex(
+            ManifestError, r"unexpected enrollment\.policy_epcoh"
+        ):
+            load_server_manifest(manifest)
+
+    def test_missing_required_enrollment_fields_are_rejected(self) -> None:
+        for field in ("pending_generation", "policy_epoch"):
+            with self.subTest(field=field):
+                manifest = self._write(
+                    self._text().replace(f"{field} = 1\n", "")
+                )
+                with self.assertRaisesRegex(
+                    ManifestError, rf"missing enrollment\.{field}"
+                ):
+                    load_server_manifest(manifest)
+
+    def test_enrollment_fields_are_positive_u64_integers(self) -> None:
+        invalid_values = ("true", "0", str(1 << 64))
+        for field in ("pending_generation", "policy_epoch"):
+            for invalid in invalid_values:
+                with self.subTest(field=field, value=invalid):
+                    manifest = self._write(
+                        self._text().replace(
+                            f"{field} = 1", f"{field} = {invalid}"
+                        )
+                    )
+                    with self.assertRaisesRegex(
+                        ManifestError, rf"enrollment\.{field} must be an integer"
+                    ):
+                        load_server_manifest(manifest)
+
     def test_tls_version_other_than_exactly_13_is_rejected(self) -> None:
         manifest = self._write(
             self._text().replace('min_tls_version = "1.3"', 'min_tls_version = "1.2"')
@@ -152,6 +200,10 @@ relay_denylist = {quote(str(self.denylist))}
             self._text().replace('hostname = "localhost"', 'hostname = "127.0.0.1"'),
             self._text().replace('hostname = "localhost"', 'hostname = "bad_name"'),
             self._text().replace("port = 443", "port = 443\nunexpected = true"),
+            self._text().replace('hostname = "localhost"', 'hostname = "Relay"'),
+            self._text().replace(
+                'hostname = "localhost"', f'hostname = "{"a" * 65}"'
+            ),
         )
         for document in invalid_documents:
             with self.subTest(document=document[-30:]):

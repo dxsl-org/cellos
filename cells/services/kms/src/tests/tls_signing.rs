@@ -28,7 +28,7 @@ fn bind_net(service: &mut KmsService, tid: usize, generation: u64) -> ServiceNet
     ServiceNetBindingPayload::decode(response.payload().unwrap()).unwrap()
 }
 
-fn sign_request(profile: [u8; 32], generation: u64, request_id: u64) -> [u8; 128] {
+pub(super) fn sign_request(profile: [u8; 32], generation: u64, request_id: u64) -> [u8; 128] {
     request(
         KmsOpcode::SignTls13ClientCertificateVerify,
         &Tls13ClientCertificateVerifyRequestPayload {
@@ -95,7 +95,10 @@ fn relay_readiness_is_independent_from_c2c_readiness() {
         )
         .unwrap();
     let c2c = types::kms::NodeIdentityStatusPayload::decode(c2c.payload().unwrap()).unwrap();
-    assert_eq!(c2c.state, types::kms::NodeIdentityState::ProviderUnavailable);
+    assert_eq!(
+        c2c.state,
+        types::kms::NodeIdentityState::ProviderUnavailable
+    );
     assert_eq!(CALLS.load(Ordering::Relaxed), 0);
 
     let relay = service
@@ -160,3 +163,38 @@ fn profile_generation_and_qualification_mismatches_fail_closed() {
     assert_error(response, KmsErrorCode::QualificationRequired);
 }
 
+#[test]
+fn authenticated_time_unavailable_or_regressed_refuses_signing() {
+    for floor in [0, 1_699_999_999] {
+        let provider = FixtureRelayProvider::production();
+        provider.authenticated_time_floor.set(floor);
+        let mut service = KmsService::with_provider_fixture(provider);
+        bind_net(&mut service, 7, 4);
+        let response = service
+            .handle(
+                &sign_request(FIXTURE_PROFILE_DIGEST, FIXTURE_RELAY_GENERATION, 99),
+                7,
+                Some(caller(50, 4, 7)),
+                net_registry(Some(7)),
+            )
+            .unwrap();
+        assert_error(response, KmsErrorCode::TimeUntrusted);
+    }
+}
+
+#[test]
+fn retired_generation_unavailable_precedes_untrusted_time() {
+    let provider = FixtureRelayProvider::production();
+    provider.authenticated_time_floor.set(0);
+    let mut service = KmsService::with_provider_fixture(provider);
+    bind_net(&mut service, 7, 4);
+    let response = service
+        .handle(
+            &sign_request(FIXTURE_PROFILE_DIGEST, FIXTURE_RELAY_GENERATION - 1, 99),
+            7,
+            Some(caller(50, 4, 7)),
+            net_registry(Some(7)),
+        )
+        .unwrap();
+    assert_error(response, KmsErrorCode::RelayUnavailable);
+}

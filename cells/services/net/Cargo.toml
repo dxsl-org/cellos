@@ -33,6 +33,8 @@ tls-ca-rsa          = ["embedded-tls/rsa"]       # RSA heavyweight opt-in, +135 
 
 [dependencies]
 types  = { path = "../../../libs/types", version = "0.1.0" }
+sha2   = { version = "0.10", default-features = false }
+heapless = { version = "0.8", default-features = false }
 api    = { path = "../../../libs/api", version = "0.1.0" }
 ostd   = { path = "../../../libs/ostd", version = "0.2.0" }
 embedded-tls      = { version = "0.19", default-features = false, features = ["alloc"] }

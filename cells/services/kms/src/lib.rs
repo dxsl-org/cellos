@@ -7,7 +7,10 @@
 //! service lifecycle, attested authorization, and wire dispatch while making
 //! `Ready` impossible without the later production root backend.
 #[cfg(any(
-    all(feature = "hardware-relay-provider", feature = "development-silo-provider"),
+    all(
+        feature = "hardware-relay-provider",
+        feature = "development-silo-provider"
+    ),
     all(feature = "hardware-relay-provider", feature = "fixture-provider"),
     all(feature = "development-silo-provider", feature = "fixture-provider"),
 ))]
@@ -37,9 +40,12 @@ compile_error!(
     "service-kms: development-silo-provider is restricted to the AArch64 bare-metal QEMU lane"
 );
 
+#[cfg(test)]
+extern crate std;
 
 mod auth;
 mod dispatch;
+mod lifecycle;
 mod reply;
 mod storage;
 

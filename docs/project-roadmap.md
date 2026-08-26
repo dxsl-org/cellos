@@ -187,18 +187,32 @@ Cellos is being shaped around product stages, not only phase numbers:
   same Cellos EL2 host constructs and loads the guest and supplies the
   disposable development seed, Stage-2 is not an independent hardware root or
   production qualification.
+- KMS/Silo Phase 3 is complete as a constrained, non-production certificate
+  provisioning slice. The supervisor-only lifecycle admits one pending
+  generation, publishes a canonical bounded CSR through an ordered one-shot
+  handle, requires live service-net profile staging, and activates only the
+  exact staged generation/policy/profile tuple.
+- The fresh nonce-bound pending P-256 key remains inside Silo. Abort, invalid
+  CSR access, proof failure, and commit failure require confirmed cleanup or
+  leave a fail-closed tombstone; persistence or activation disagreement seals
+  serving rather than exposing mixed state. Service-net validates only
+  allowlisted mounted profiles and bounded client-only certificate chains.
+- Phase 3 deliberately does not claim an end-to-end default-runtime enrollment:
+  runtime KMS remains sealed until protected persistence and authenticated time
+  exist, and frozen opcode 14 exposes only the active key, not the pending key
+  needed for authenticated precommit certificate binding.
 - **PRODUCTION RELAY SIGNING BLOCKED:** fixture and development Silo providers
   are non-production. Cargo rejects unsafe provider/downgrade combinations,
   production artifacts exclude the development Silo, and
   `hardware-relay-provider` remains compile-blocked until Phases 6–7 select and
   implement one exact product and trust chain. Phase 8 still requires physical
   qualification and authenticated build provenance. Production remains
-  `BLOCKED_PENDING_PHASE_6_7_8`; no Phase 1 or Phase 2 result is hardware-backed
+  `BLOCKED_PENDING_PHASE_6_7_8`; no Phase 1–3 result is hardware-backed
   signing or a production relay artifact.
-- The KMS/Silo protected relay identity plan remains in progress. Phases 1–2
-  are complete; Phases 3–8 remain pending and unapproved. Phase 3,
-  Certificate Activation and Provisioning, is next and requires explicit
-  approval before implementation.
+- The KMS/Silo protected relay identity plan remains in progress. Phases 1–3
+  are complete; Phases 4–8 remain pending and unapproved. Phase 3 adds no
+  hardware custody or production relay artifact, and production remains
+  blocked pending Phases 6–8.
 
 ## Update Rule
 

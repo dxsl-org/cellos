@@ -1,8 +1,7 @@
 use api::caller_identity::CallerIdentity;
 use types::kms::{
-    KmsCapabilityReadiness, KmsErrorCode, KmsProviderKind, KmsRequestV1,
-    RelayProviderAssessment, Tls13ClientCertificateVerifyRequestPayload,
-    Tls13ClientCertificateVerifyResponsePayload,
+    KmsCapabilityReadiness, KmsErrorCode, KmsProviderKind, KmsRequestV1, RelayProviderAssessment,
+    Tls13ClientCertificateVerifyRequestPayload, Tls13ClientCertificateVerifyResponsePayload,
 };
 
 use crate::auth::ServiceRegistrySnapshot;
@@ -21,11 +20,24 @@ impl KmsService {
     ) -> Result<SuccessPayload, KmsErrorCode> {
         require_empty(request)?;
         self.authorize_service_net(sender, caller, registry)?;
-        let status = self.provider.relay_p256_status();
-        if status.metadata.provider == KmsProviderKind::None {
+        let mut metadata = self.provider.relay_p256_status().metadata;
+        if metadata.provider == KmsProviderKind::None {
             return Err(KmsErrorCode::RelayUnavailable);
         }
-        SuccessPayload::new(&status.metadata.encode())
+        // The protected lifecycle is authoritative for serving identity.
+        match self.lifecycle.serving() {
+            Some(active) => {
+                metadata.relay_generation = active.generation;
+                metadata.policy_epoch = active.policy_epoch;
+                metadata.active_profile_digest = active.profile_digest;
+            }
+            None => {
+                metadata.readiness = KmsCapabilityReadiness::Unavailable;
+                metadata.relay_generation = 0;
+                metadata.active_profile_digest = [0; 32];
+            }
+        }
+        SuccessPayload::new(&metadata.encode())
     }
 
     pub(super) fn sign_tls13(
@@ -37,7 +49,9 @@ impl KmsService {
     ) -> Result<SuccessPayload, KmsErrorCode> {
         self.authorize_service_net(sender, caller, registry)?;
         let payload = Tls13ClientCertificateVerifyRequestPayload::decode(
-            request.payload().map_err(|_| KmsErrorCode::InvalidRequest)?,
+            request
+                .payload()
+                .map_err(|_| KmsErrorCode::InvalidRequest)?,
         )
         .filter(|payload| payload.request_id != 0)
         .ok_or(KmsErrorCode::InvalidRequest)?;
@@ -48,11 +62,24 @@ impl KmsService {
         if status.metadata.readiness != KmsCapabilityReadiness::Ready {
             return Err(KmsErrorCode::RelayUnavailable);
         }
-        if !assessment_authorizes_signing(
-            status.metadata.provider,
-            status.metadata.assessment,
-        ) {
+        if !assessment_authorizes_signing(status.metadata.provider, status.metadata.assessment) {
             return Err(KmsErrorCode::QualificationRequired);
+        }
+        // The protected lifecycle must be actively serving this exact tuple;
+        // revoked or missing state never signs. A generation older than the
+        // serving one is retired (key destroyed): unavailable. A newer,
+        // never-committed generation is a mismatch.
+        let Some(active) = self.lifecycle.serving() else {
+            return Err(KmsErrorCode::RelayUnavailable);
+        };
+        if active.generation == payload.relay_generation {
+            if active.profile_digest != payload.active_profile_digest {
+                return Err(KmsErrorCode::ActiveProfileMismatch);
+            }
+        } else if payload.relay_generation < active.generation {
+            return Err(KmsErrorCode::RelayUnavailable);
+        } else {
+            return Err(KmsErrorCode::RelayGenerationMismatch);
         }
         if payload.relay_generation != status.metadata.relay_generation {
             return Err(KmsErrorCode::RelayGenerationMismatch);
@@ -60,6 +87,9 @@ impl KmsService {
         if payload.active_profile_digest != status.metadata.active_profile_digest {
             return Err(KmsErrorCode::ActiveProfileMismatch);
         }
+        self.lifecycle
+            .observe_authenticated_time(status.metadata.authenticated_time_floor)?;
+        self.persist_protected_lifecycle()?;
         let signature = self
             .provider
             .sign_tls13_client_certificate_verify(
@@ -82,7 +112,7 @@ impl KmsService {
         Ok(response)
     }
 
-    fn authorize_service_net(
+    pub(super) fn authorize_service_net(
         &self,
         sender: usize,
         caller: Option<CallerIdentity>,
@@ -106,7 +136,7 @@ fn assessment_authorizes_signing(
     }
 }
 
-fn map_relay_error(error: RelaySignError) -> KmsErrorCode {
+pub(super) fn map_relay_error(error: RelaySignError) -> KmsErrorCode {
     match error {
         RelaySignError::Unavailable => KmsErrorCode::RelayUnavailable,
         RelaySignError::GenerationMismatch => KmsErrorCode::RelayGenerationMismatch,
@@ -114,5 +144,6 @@ fn map_relay_error(error: RelaySignError) -> KmsErrorCode {
         RelaySignError::QualificationRequired => KmsErrorCode::QualificationRequired,
         RelaySignError::InvalidRequest => KmsErrorCode::InvalidRequest,
         RelaySignError::Failure => KmsErrorCode::InvalidSignature,
+        RelaySignError::CleanupFailed => KmsErrorCode::RelayUnavailable,
     }
 }

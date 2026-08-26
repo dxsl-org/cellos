@@ -4,8 +4,10 @@ use crate::{run_loop, vmm};
 use ostd::syscall::sys_get_random;
 use service_silo::{
     layout::{
-        decode_fault_response, FaultResponseMetadata, COMMAND_INITIALIZE, COMMAND_OFFSET,
-        COMMAND_SIGN_TLS, DATA_OFFSET, MAILBOX_IPA, PAGE_LEN, REQUEST_SEQ_OFFSET, STATUS_OFFSET,
+        decode_fault_response, FaultResponseMetadata, COMMAND_CREATE_ENROLLMENT_KEY,
+        COMMAND_DESTROY_ENROLLMENT_KEY, COMMAND_INITIALIZE, COMMAND_OFFSET,
+        COMMAND_PROMOTE_ENROLLMENT_KEY, COMMAND_SIGN_ENROLLMENT_CRI, COMMAND_SIGN_TLS, DATA_OFFSET,
+        INPUT_LEN, MAILBOX_IPA, PAGE_LEN, REQUEST_SEQ_OFFSET, STATUS_OFFSET,
     },
     mailbox,
     protocol::PurposeGuest,
@@ -26,6 +28,7 @@ pub enum GuestError {
     MailboxRead,
     MalformedResponse,
     GuestFault(GuestFault),
+    EnrollmentKeyAbsent,
     VmmFault(run_loop::SiloVmmFault),
     Reset,
 }
@@ -82,7 +85,7 @@ impl GuestSession {
         Ok(session)
     }
 
-    /// Return the public P-256 point captured at one-time initialization.
+    /// Return the current active P-256 public point.
     pub const fn public_key(&self) -> [u8; 65] {
         self.public_key
     }
@@ -104,12 +107,106 @@ impl GuestSession {
         Ok(signature)
     }
 
+    /// Create the fresh non-exportable key for one pending generation.
+    ///
+    /// The 32-byte nonce is fresh admitted entropy per call and is zeroized
+    /// on the host side right after the mailbox write.
+    pub fn create_enrollment_key(
+        &mut self,
+        pending_generation: u64,
+        nonce: &[u8; 32],
+    ) -> Result<[u8; 65], GuestError> {
+        let mut input = [0u8; INPUT_LEN];
+        input[..8].copy_from_slice(&pending_generation.to_le_bytes());
+        input[8..40].copy_from_slice(nonce);
+        let response = self.exchange(COMMAND_CREATE_ENROLLMENT_KEY, &input);
+        input[8..40].fill(0);
+        core::hint::black_box(&input);
+        let response = response?;
+        if response[STATUS_OFFSET] != 1
+            || response[DATA_OFFSET + 65..].iter().any(|byte| *byte != 0)
+        {
+            self.faulted = true;
+            return Err(GuestError::MalformedResponse);
+        }
+        let mut sec1 = [0u8; 65];
+        sec1.copy_from_slice(&response[DATA_OFFSET..DATA_OFFSET + 65]);
+        Ok(sec1)
+    }
+
+    /// Reconstruct the canonical CRI inside the guest and sign it raw.
+    pub fn sign_enrollment_cri(
+        &mut self,
+        pending_generation: u64,
+        hostname: &[u8],
+    ) -> Result<[u8; 64], GuestError> {
+        if hostname.is_empty() || hostname.len() > 64 {
+            return Err(GuestError::MalformedResponse);
+        }
+        let mut input = [0u8; INPUT_LEN];
+        input[..8].copy_from_slice(&pending_generation.to_le_bytes());
+        input[8] = hostname.len() as u8;
+        input[9..9 + hostname.len()].copy_from_slice(hostname);
+        let response = self.exchange(COMMAND_SIGN_ENROLLMENT_CRI, &input)?;
+        if response[STATUS_OFFSET] != 2
+            || response[DATA_OFFSET + 64..].iter().any(|byte| *byte != 0)
+        {
+            self.faulted = true;
+            return Err(GuestError::MalformedResponse);
+        }
+        let mut signature = [0u8; 64];
+        signature.copy_from_slice(&response[DATA_OFFSET..DATA_OFFSET + 64]);
+        Ok(signature)
+    }
+
+    /// Atomically promote the pending key to the active TLS signer; the
+    /// guest retires the previous active key and returns its new public
+    /// point, which becomes the session's cached status key.
+    pub fn promote_enrollment_key(
+        &mut self,
+        pending_generation: u64,
+    ) -> Result<[u8; 65], GuestError> {
+        let mut input = [0u8; INPUT_LEN];
+        input[..8].copy_from_slice(&pending_generation.to_le_bytes());
+        let response = self.exchange(COMMAND_PROMOTE_ENROLLMENT_KEY, &input)?;
+        if response[STATUS_OFFSET] != 1
+            || response[DATA_OFFSET + 65..].iter().any(|byte| *byte != 0)
+        {
+            self.faulted = true;
+            return Err(GuestError::MalformedResponse);
+        }
+        let mut sec1 = [0u8; 65];
+        sec1.copy_from_slice(&response[DATA_OFFSET..DATA_OFFSET + 65]);
+        if sec1[0] != 4 {
+            return Err(GuestError::MalformedResponse);
+        }
+        self.public_key = sec1;
+        Ok(sec1)
+    }
+
+    /// Destroy the pending generation key explicitly inside the guest.
+    pub fn destroy_enrollment_key(&mut self, pending_generation: u64) -> Result<(), GuestError> {
+        let mut input = [0u8; INPUT_LEN];
+        input[..8].copy_from_slice(&pending_generation.to_le_bytes());
+        let response = self.exchange(COMMAND_DESTROY_ENROLLMENT_KEY, &input)?;
+        match response[STATUS_OFFSET] {
+            3 => Ok(()),
+            4 => Err(GuestError::EnrollmentKeyAbsent),
+            _ => {
+                self.faulted = true;
+                Err(GuestError::MalformedResponse)
+            }
+        }
+    }
+
     fn exchange(&mut self, command: u8, input: &[u8]) -> Result<[u8; PAGE_LEN], GuestError> {
         if self.faulted {
             return Err(GuestError::Reset);
         }
         let request_seq = self.next_request_seq;
-        self.next_request_seq = request_seq.checked_add(1).filter(|seq| *seq != 0)
+        self.next_request_seq = request_seq
+            .checked_add(1)
+            .filter(|seq| *seq != 0)
             .ok_or(GuestError::Reset)?;
         let mut page = [0u8; PAGE_LEN];
         page[REQUEST_SEQ_OFFSET..REQUEST_SEQ_OFFSET + 8]
@@ -146,12 +243,9 @@ impl GuestSession {
             self.faulted = true;
             return Err(GuestError::MailboxRead);
         }
-        let Some(response_seq) = mailbox::validate_response(
-            &page,
-            request_seq,
-            command,
-            self.last_response_seq,
-        ) else {
+        let Some(response_seq) =
+            mailbox::validate_response(&page, request_seq, command, self.last_response_seq)
+        else {
             self.faulted = true;
             return Err(GuestError::MalformedResponse);
         };
@@ -162,6 +256,20 @@ impl GuestSession {
 
 impl PurposeGuest for GuestSession {
     type Error = GuestError;
+    fn classify_destroy_error(error: &Self::Error) -> types::silo::DevelopmentSiloError {
+        use types::silo::DevelopmentSiloError;
+        match error {
+            GuestError::EnrollmentKeyAbsent => DevelopmentSiloError::NoEnrollmentKey,
+            GuestError::GuestFault(_) | GuestError::MalformedResponse => {
+                DevelopmentSiloError::GuestFault
+            }
+            GuestError::EntropyUnavailable
+            | GuestError::MailboxWrite
+            | GuestError::MailboxRead
+            | GuestError::VmmFault(_)
+            | GuestError::Reset => DevelopmentSiloError::Unavailable,
+        }
+    }
 
     fn public_key(&self) -> [u8; 65] {
         GuestSession::public_key(self)
@@ -173,5 +281,28 @@ impl PurposeGuest for GuestSession {
     ) -> Result<[u8; 64], Self::Error> {
         GuestSession::sign_tls13_client_certificate_verify(self, transcript_hash)
     }
-}
 
+    fn create_enrollment_key(
+        &mut self,
+        pending_generation: u64,
+        nonce: &[u8; 32],
+    ) -> Result<[u8; 65], Self::Error> {
+        GuestSession::create_enrollment_key(self, pending_generation, nonce)
+    }
+
+    fn sign_enrollment_cri(
+        &mut self,
+        pending_generation: u64,
+        hostname: &[u8],
+    ) -> Result<[u8; 64], Self::Error> {
+        GuestSession::sign_enrollment_cri(self, pending_generation, hostname)
+    }
+
+    fn destroy_enrollment_key(&mut self, pending_generation: u64) -> Result<(), Self::Error> {
+        GuestSession::destroy_enrollment_key(self, pending_generation)
+    }
+
+    fn promote_enrollment_key(&mut self, pending_generation: u64) -> Result<[u8; 65], Self::Error> {
+        GuestSession::promote_enrollment_key(self, pending_generation)
+    }
+}

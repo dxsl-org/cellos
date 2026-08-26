@@ -3,9 +3,12 @@ use super::*;
 #[test]
 fn valid_and_high_s_provider_outputs_return_the_same_verified_low_s_signature() {
     let mut outputs = [[0u8; 64]; 2];
-    for (index, behavior) in [FixtureSignatureBehavior::Valid, FixtureSignatureBehavior::HighS]
-        .into_iter()
-        .enumerate()
+    for (index, behavior) in [
+        FixtureSignatureBehavior::Valid,
+        FixtureSignatureBehavior::HighS,
+    ]
+    .into_iter()
+    .enumerate()
     {
         let provider = FixtureRelayProvider {
             behavior,
@@ -21,10 +24,9 @@ fn valid_and_high_s_provider_outputs_return_the_same_verified_low_s_signature() 
                 net_registry(Some(7)),
             )
             .unwrap();
-        let payload = Tls13ClientCertificateVerifyResponsePayload::decode(
-            response.payload().unwrap(),
-        )
-        .unwrap();
+        let payload =
+            Tls13ClientCertificateVerifyResponsePayload::decode(response.payload().unwrap())
+                .unwrap();
         outputs[index] = payload.signature;
     }
     assert_eq!(outputs[0], outputs[1]);

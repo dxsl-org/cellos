@@ -71,6 +71,12 @@ pub fn handle_tls_raw(
             port,
             hostname,
         } => {
+            // Fail before opening TCP: embedded-tls interprets a missing clock
+            // as permission to skip certificate validity checks.
+            if crate::tls::clock::observe().is_none() {
+                sys_send(sender, &[0u8; 8]);
+                return;
+            }
             let (handle, cap_id) = match make_tcp(sockets, table, owner) {
                 Ok(t) => t,
                 Err(_) => {

@@ -1,8 +1,7 @@
 //! Pure mailbox response validation shared with the runtime guest session.
 
 use crate::layout::{
-    COMMAND_OFFSET, DATA_OFFSET, PAGE_LEN, REQUEST_SEQ_OFFSET, RESERVED_OFFSET,
-    RESPONSE_SEQ_OFFSET,
+    COMMAND_OFFSET, DATA_OFFSET, PAGE_LEN, REQUEST_SEQ_OFFSET, RESERVED_OFFSET, RESPONSE_SEQ_OFFSET,
 };
 
 /// Validate the common canonical response envelope and return its fresh sequence.

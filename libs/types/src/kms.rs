@@ -4,12 +4,18 @@
 //! KMS owns the C2C X25519 private key. The contract exposes only public
 //! identity metadata, opaque handles, and policy-gated static-DH output.
 
+mod csr;
 mod frame;
 mod model;
 mod payload;
 #[cfg(test)]
 mod tests;
 
+pub use csr::{
+    assemble_relay_csr, canonical_relay_cri, der_ecdsa_signature, p256_spki_der, validate_hostname,
+    CRI_MAX_LEN, NODE_ID_OID_CONTENT, RELAY_CHAIN_MAX_CERTS, RELAY_CHAIN_MAX_LEN,
+    RELAY_CSR_CHUNK_LEN, RELAY_CSR_MAX_LEN, RELAY_HOSTNAME_MAX,
+};
 pub use frame::{KmsRequestV1, KmsResponseV1};
 pub use model::*;
 pub use payload::*;

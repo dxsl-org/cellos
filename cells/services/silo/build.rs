@@ -18,10 +18,19 @@ fn main() {
     require_development_target();
     let manifest_dir = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").unwrap());
     let guest_dir = manifest_dir.join("../../guests/silo-guest");
-    println!("cargo:rerun-if-changed={}", guest_dir.join("Cargo.toml").display());
-    println!("cargo:rerun-if-changed={}", guest_dir.join("Cargo.lock").display());
+    println!(
+        "cargo:rerun-if-changed={}",
+        guest_dir.join("Cargo.toml").display()
+    );
+    println!(
+        "cargo:rerun-if-changed={}",
+        guest_dir.join("Cargo.lock").display()
+    );
     println!("cargo:rerun-if-changed={}", guest_dir.join("src").display());
-    println!("cargo:rerun-if-changed={}", guest_dir.join("aarch64-silo.ld").display());
+    println!(
+        "cargo:rerun-if-changed={}",
+        guest_dir.join("aarch64-silo.ld").display()
+    );
     package_guest(&guest_dir, &PathBuf::from(env::var_os("OUT_DIR").unwrap()));
 }
 
@@ -39,7 +48,14 @@ fn require_development_target() {
 fn package_guest(guest_dir: &Path, out_dir: &Path) {
     let target_dir = out_dir.join("guest-target");
     let status = Command::new(env::var_os("CARGO").unwrap_or_else(|| "cargo".into()))
-        .args(["build", "--locked", "--release", "--target", TARGET, "--manifest-path"])
+        .args([
+            "build",
+            "--locked",
+            "--release",
+            "--target",
+            TARGET,
+            "--manifest-path",
+        ])
         .arg(guest_dir.join("Cargo.toml"))
         .arg("--target-dir")
         .arg(&target_dir)

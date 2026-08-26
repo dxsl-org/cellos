@@ -4,6 +4,7 @@ use types::kms::{BrokerBindingPayload, KmsErrorCode, KmsOpcode, KmsRequestV1, Km
 use super::*;
 
 mod authorization;
+mod enrollment;
 mod operations;
 mod root;
 mod root_invariants;

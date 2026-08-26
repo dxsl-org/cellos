@@ -183,7 +183,7 @@ two-node TLS/Noise exercise remain blocked by the prerequisites above.
 
 - `.agents/260825-sdk-delivery/phase-02-relay.md` — relay direction,
   prerequisites, acceptance conditions, and server-only/client-blocked status.
-- `.agents/260825-sdk-delivery/mtls-mount-manifest.template.toml` — provisioning
+- `tools/relay-enroll/mtls-mount-manifest.template.toml` — provisioning
   inputs without private-key bytes.
 - `docs/project-roadmap.md` — current relay status and client blockers.
 - `docs/system-architecture.md` — Noise for native transport and mTLS at the

@@ -1,0 +1,45 @@
+# Deployment-owned template. Store no private key bytes in this repository.
+# The deployer mounts this file and all referenced materials read-only.
+
+[relay]
+bind_host = "0.0.0.0"
+hostname = "REQUIRED: DNS name in relay server certificate SAN"
+port = 443
+min_tls_version = "1.3"
+
+[trust]
+# DER-encoded issuing/root CA used to verify the relay server certificate.
+relay_ca_der = "REQUIRED: mounted read-only path"
+# SHA-256 fingerprints, hex, used during controlled CA rotation.
+active_ca_sha256 = "REQUIRED: 64 lowercase hex characters"
+next_ca_sha256 = "OPTIONAL: 64 lowercase hex characters during overlap"
+
+[client]
+# Public DER certificate chain. Private key never appears in this manifest.
+certificate_chain_der = "REQUIRED: mounted read-only path"
+# Opaque persistent P-256 signing key reference owned by Silo/KMS.
+key_handle = "REQUIRED: attested Silo/KMS handle, not a filesystem path"
+# SHA-256(SPKI DER) of the client public key; the relay derives and verifies it.
+node_id_sha256 = "REQUIRED: 64 lowercase hex characters"
+
+[server]
+# Host-only relay-server deployment paths; Cellos Cells never read these.
+certificate_pem = "REQUIRED: mounted read-only path"
+private_key_pem = "REQUIRED: mounted read-only path"
+client_issuing_ca_pem = "REQUIRED: mounted read-only path"
+
+[authorization]
+# Only this attested service identity may ask Silo/KMS to sign TLS CertificateVerify.
+net_service_identity = "REQUIRED: measured service-net identity"
+policy_handle = "REQUIRED: attested authorization-policy handle"
+# Revoked client certificate serials/NodeIds are rejected by relay before registration.
+relay_denylist = "REQUIRED: mounted read-only path"
+
+[enrollment]
+# Phase 3 supervisor enrollment facts. The supervisor drives opcodes 9-12
+# only; staging (13) and active-key reads (14) belong to the live
+# service-net binding and are never configured here.
+# Positive unsigned 64-bit integers; replace these initial examples with the
+# generation and protected policy epoch assigned for this enrollment.
+pending_generation = 1
+policy_epoch = 1

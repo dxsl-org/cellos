@@ -15,10 +15,18 @@ pub const COMMAND_OFFSET: usize = 16;
 pub const STATUS_OFFSET: usize = 17;
 pub const RESERVED_OFFSET: usize = 18;
 pub const DATA_OFFSET: usize = 24;
-pub const INPUT_LEN: usize = 32;
+pub const INPUT_LEN: usize = 96;
 
 pub const COMMAND_INITIALIZE: u8 = 1;
 pub const COMMAND_SIGN_TLS: u8 = 2;
+/// Phase 3 enrollment extension: fresh per-generation key creation.
+pub const COMMAND_CREATE_ENROLLMENT_KEY: u8 = 3;
+/// Phase 3 enrollment extension: independent CRI reconstruction and signing.
+pub const COMMAND_SIGN_ENROLLMENT_CRI: u8 = 4;
+/// Phase 3 enrollment extension: explicit key destruction.
+pub const COMMAND_DESTROY_ENROLLMENT_KEY: u8 = 5;
+/// Phase 3 enrollment extension: atomic promotion to active signer.
+pub const COMMAND_PROMOTE_ENROLLMENT_KEY: u8 = 6;
 
 pub const HVC_SILO_READY: u64 = 0xC600_0080;
 pub const HVC_SILO_DONE: u64 = 0xC600_0081;

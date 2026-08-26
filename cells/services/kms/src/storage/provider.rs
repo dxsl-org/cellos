@@ -1,12 +1,16 @@
 #[cfg(test)]
 mod c2c;
 mod relay;
-#[cfg(all(feature = "development-silo-provider", target_arch = "aarch64", target_os = "none"))]
+#[cfg(all(
+    feature = "development-silo-provider",
+    target_arch = "aarch64",
+    target_os = "none"
+))]
 mod silo;
 
 #[cfg(test)]
 pub(crate) use c2c::FixtureRootProvider;
-pub(crate) use relay::ProviderSlot;
+pub(crate) use relay::{EnrollmentKeyProof, ProviderSlot};
 
 use types::kms::{
     KmsCapabilityReadiness, KmsKeyAlgorithm, KmsProviderKind, RelayProviderAssessment,
@@ -96,5 +100,3 @@ pub(crate) trait C2cProvider {
         expected_blob_revision: u64,
     ) -> ProviderOpenResult;
 }
-
-

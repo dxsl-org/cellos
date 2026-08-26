@@ -381,8 +381,7 @@ fn grant_read(cap_id: u64, buf: &mut [u8], vfs_tid: usize) -> ViResult<usize> {
     // Copy only the byte count acknowledged after VFS released its request
     // lease. A malformed oversized acknowledgement fails without constructing a
     // raw slice beyond the registered Grant.
-    if bytes > size
-        || syscall::sys_grant_copy_to_slice(grant_id, &mut buf[..bytes]) != Some(bytes)
+    if bytes > size || syscall::sys_grant_copy_to_slice(grant_id, &mut buf[..bytes]) != Some(bytes)
     {
         syscall::sys_grant_free(grant_id);
         return Err(ViError::IO);

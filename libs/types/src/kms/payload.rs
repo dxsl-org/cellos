@@ -1,14 +1,21 @@
 mod binding;
+mod enroll;
 mod noise;
-mod rotate;
 mod relay;
+mod rotate;
 mod service_net;
 mod tls;
 
 pub use binding::{AcquireNodeIdentityPayload, BrokerBindingPayload, NodeIdentityStatusPayload};
+pub use enroll::{
+    RelayActivePublicKeyPayload, RelayCsrChunkRequestPayload, RelayCsrChunkResponsePayload,
+    RelayEnrollmentAbortRequestPayload, RelayEnrollmentBeginRequestPayload,
+    RelayEnrollmentBeginResponsePayload, RelayGenerationCommitRequestPayload,
+    RelayGenerationCommitResponsePayload, RelayStageProfileRequestPayload,
+};
 pub use noise::{NoiseStaticDhRequestPayload, NoiseStaticDhResponsePayload};
-pub use rotate::{RotateNodeIdentityRequestPayload, RotateNodeIdentityResponsePayload};
 pub use relay::RelayP256StatusPayload;
+pub use rotate::{RotateNodeIdentityRequestPayload, RotateNodeIdentityResponsePayload};
 pub use service_net::ServiceNetBindingPayload;
 pub use tls::{
     Tls13ClientCertificateVerifyRequestPayload, Tls13ClientCertificateVerifyResponsePayload,

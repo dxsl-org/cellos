@@ -2,6 +2,7 @@
 
 use super::backend::{StoreError, StoreIo};
 use super::record::{JournalKey, JournalRecord, SlotId, SLOT_A_PATH, SLOT_B_PATH, STORE_DIR};
+use crate::lifecycle::ProtectedRelayState;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum JournalLoad {
@@ -74,6 +75,65 @@ impl JournalState {
         let record = JournalRecord::placeholder(next_slot, blob_revision, policy_epoch, previous);
         let path = slot_path(next_slot);
         let bytes = record.encode(key);
+        io.write_file(path, &bytes)?;
+        let readback = io
+            .read_file(path, JournalRecord::ENCODED_LEN)?
+            .ok_or(StoreError::ReadbackMismatch)?;
+        if readback != bytes {
+            return Err(StoreError::ReadbackMismatch);
+        }
+        let active = ActiveSlot {
+            slot: next_slot,
+            record,
+        };
+        self.load = JournalLoad::Loaded;
+        self.active = Some(active.clone());
+        Ok(active)
+    }
+
+    pub(crate) fn protected_relay_state(&self) -> Option<ProtectedRelayState> {
+        let active = self.active.as_ref()?;
+        if active.record.payload_len as usize != ProtectedRelayState::ENCODED_LEN {
+            return None;
+        }
+        ProtectedRelayState::decode(&active.record.sealed_leaf)
+    }
+
+    pub(crate) fn persist_relay_state(
+        &mut self,
+        io: &mut impl StoreIo,
+        key: &JournalKey,
+        protected: ProtectedRelayState,
+    ) -> Result<ActiveSlot, StoreError> {
+        io.ensure_dir(STORE_DIR)?;
+        let next_slot = self
+            .active
+            .as_ref()
+            .map_or(SlotId::A, |active| active.slot.inactive());
+        let blob_revision = self
+            .active
+            .as_ref()
+            .map_or(1, |active| active.record.blob_revision.saturating_add(1));
+        let previous = self
+            .active
+            .as_ref()
+            .map_or([0; 32], |active| active.record.digest(key));
+        let policy_epoch = protected.active.map_or(0, |active| active.policy_epoch);
+        let mut record = self
+            .active
+            .as_ref()
+            .map(|active| active.record.clone())
+            .unwrap_or_else(|| {
+                JournalRecord::placeholder(next_slot, blob_revision, policy_epoch, previous)
+            });
+        record.slot = next_slot;
+        record.blob_revision = blob_revision;
+        record.policy_epoch = policy_epoch;
+        record.payload_len = ProtectedRelayState::ENCODED_LEN as u16;
+        record.sealed_leaf = protected.encode();
+        record.previous_slot_digest = previous;
+        let bytes = record.encode(key);
+        let path = slot_path(next_slot);
         io.write_file(path, &bytes)?;
         let readback = io
             .read_file(path, JournalRecord::ENCODED_LEN)?

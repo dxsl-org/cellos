@@ -13,8 +13,8 @@ pub(crate) fn normalize_and_verify_tls13_signature(
 ) -> Result<[u8; 64], RelaySignError> {
     let signature = Signature::from_slice(&raw_signature).map_err(|_| RelaySignError::Failure)?;
     let normalized = signature.normalize_s().unwrap_or(signature);
-    let verifying_key = VerifyingKey::from_sec1_bytes(verifying_key_sec1)
-        .map_err(|_| RelaySignError::Failure)?;
+    let verifying_key =
+        VerifyingKey::from_sec1_bytes(verifying_key_sec1).map_err(|_| RelaySignError::Failure)?;
     let digest = kms_tls_digest(transcript_hash);
     verifying_key
         .verify_prehash(&digest, &normalized)

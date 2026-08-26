@@ -2,6 +2,44 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-26] KMS/Silo Phase 3 completes constrained certificate provisioning
+
+- The append-only KMS v1 ABI now carries the supervisor-only relay enrollment
+  lifecycle as purpose-specific opcodes 9–14. KMS creates a single pending
+  generation, emits only a canonical bounded PKCS#10 CSR through a
+  restart-bound one-shot ordered handle, requires live service-net staging, and
+  promotes the provider key before exposing the matching generation/profile as
+  active.
+- The pending P-256 enrollment key is created and retained inside Silo from a
+  fresh nonce and pending generation. Its scalar never crosses the guest
+  boundary. KMS and Silo independently reconstruct the frozen CSR information,
+  and KMS verifies the Silo signature before publishing any CSR bytes.
+- Lifecycle failures are fail-closed: out-of-order or stale CSR reads poison
+  the pending slot, abort and error paths require confirmed provider cleanup,
+  commit is accepted only from the exact staged tuple, and failed persistence
+  or a provider/lifecycle mismatch seals serving instead of exposing mixed
+  state.
+- Service-net adds strict relay-profile and mounted-certificate validation:
+  allowlisted manifest keys, canonical bounded paths, no client private-key
+  field, bounded DER framing, clientAuth-only leaf usage, and active
+  certificate/SPKI/NodeId agreement. The host enrollment and manifest tools
+  enforce the same bounded, ordered, fail-closed inputs.
+- Verification passed 41 host wire-type tests, 58 KMS tests, 17 Silo tests, and
+  24 net tests. The exact out-of-order lifecycle test and full KMS suite passed;
+  RV64 and AArch64 KMS checks were clean; and the current-tree AArch64
+  development-Silo lane was clean with `LLVM_OBJCOPY` after its cleanup fixes.
+  Python verification passed relay-enroll 10/10 and relay-manifest 11/11, the
+  production checker passed 2/2 with its CLI failing closed, and OpenSSL
+  accepted the CSR self-signature. Final code and security re-reviews returned
+  GO.
+- Phase 3 does not make the default runtime provisionable: it remains sealed
+  until protected persistence and authenticated time are available. Frozen
+  opcode 14 exposes only the active key, so service-net cannot authenticate a
+  pending key before commit and initial enrollment/renewal remains fail-closed;
+  no precommit pending-key binding is claimed. This is still `DEV_REFERENCE`,
+  not hardware custody or a production relay artifact. Production remains
+  `BLOCKED_PENDING_PHASE_6_7_8`.
+
 ## [2026-08-26] KMS/Silo Phase 2 contains the development provider
 
 - The former all-caller Silo prototype is cleanly cut over to an optional,
@@ -37,8 +75,9 @@
   evidence. The Cellos EL2 host creates and loads the guest and supplies its
   disposable development seed, so Stage-2 is not independent hardware custody
   or production qualification. Production remains
-  `BLOCKED_PENDING_PHASE_6_7_8`; the overall plan remains in progress, Phases
-  3–8 remain pending/unapproved, and Phase 3 requires explicit approval.
+  `BLOCKED_PENDING_PHASE_6_7_8`; at Phase 2 delivery, the overall plan remained
+  in progress, Phases 3–8 were pending/unapproved, and Phase 3 awaited explicit
+  approval.
 
 ## [2026-08-26] High Grant lookup-to-lease race closed
 

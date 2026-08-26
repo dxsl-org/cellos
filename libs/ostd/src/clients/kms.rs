@@ -1,8 +1,10 @@
 //! Raw fixed-frame client for the key-management service.
 
 mod relay;
+mod relay_enroll;
 
 use crate::{syscall, task};
+use core::sync::atomic::{AtomicU32, Ordering};
 use types::kms::{
     AcquireNodeIdentityPayload, BindingEpoch, BrokerBindingPayload, KmsErrorCode, KmsOpcode,
     KmsRequestV1, KmsResponseV1, KmsWireError, NodeIdentityHandle, NodeIdentityStatusPayload,
@@ -11,7 +13,7 @@ use types::kms::{
     ServiceNetBindingPayload, KMS_MESSAGE_LEN, KMS_NODE_KEY_ID_C2C,
 };
 
-const REQUEST_ID: u32 = 1;
+const FIRST_REQUEST_ID: u32 = 1;
 
 /// Failure returned by a KMS IPC round trip.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -28,6 +30,7 @@ pub enum KmsClientError {
 /// Synchronous client for opaque node-identity operations.
 pub struct KmsClient {
     tid: usize,
+    next_request_id: AtomicU32,
 }
 
 impl KmsClient {
@@ -35,7 +38,10 @@ impl KmsClient {
     pub fn connect() -> Result<Self, KmsClientError> {
         for _ in 0..8 {
             if let Some(tid) = syscall::sys_lookup_service(api::syscall::service::KMS) {
-                return Ok(Self { tid });
+                return Ok(Self {
+                    tid,
+                    next_request_id: AtomicU32::new(FIRST_REQUEST_ID),
+                });
             }
             task::yield_now();
         }
@@ -49,7 +55,9 @@ impl KmsClient {
     }
 
     /// Bind relay authority to this live supervised service-net generation.
-    pub fn register_service_net_instance(&self) -> Result<ServiceNetBindingPayload, KmsClientError> {
+    pub fn register_service_net_instance(
+        &self,
+    ) -> Result<ServiceNetBindingPayload, KmsClientError> {
         let response = self.call_opcode(KmsOpcode::RegisterServiceNetInstance, &[])?;
         self.decode_payload(&response, ServiceNetBindingPayload::decode)
     }
@@ -59,7 +67,6 @@ impl KmsClient {
         let response = self.call_opcode(KmsOpcode::GetRelayP256Status, &[])?;
         self.decode_payload(&response, RelayP256StatusPayload::decode)
     }
-
 
     /// Read fail-closed readiness and public node-identity metadata.
     pub fn get_node_identity_status(&self) -> Result<NodeIdentityStatusPayload, KmsClientError> {
@@ -126,8 +133,14 @@ impl KmsClient {
         opcode: KmsOpcode,
         payload: &[u8],
     ) -> Result<KmsResponseV1, KmsClientError> {
+        let request_id = self
+            .next_request_id
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
+                current.checked_add(1).filter(|next| *next != 0)
+            })
+            .map_err(|_| KmsClientError::InvalidPayload)?;
         let request =
-            KmsRequestV1::new(opcode, REQUEST_ID, payload).map_err(KmsClientError::Wire)?;
+            KmsRequestV1::new(opcode, request_id, payload).map_err(KmsClientError::Wire)?;
         self.call(&request)
     }
 
@@ -167,5 +180,14 @@ impl KmsClient {
         let body = response.payload().map_err(KmsClientError::Wire)?;
         decode(body).ok_or(KmsClientError::InvalidPayload)
     }
-}
 
+    /// Require an empty success payload (opcodes 12 and 13).
+    fn expect_empty(&self, response: &KmsResponseV1) -> Result<(), KmsClientError> {
+        let body = response.payload().map_err(KmsClientError::Wire)?;
+        if body.is_empty() {
+            Ok(())
+        } else {
+            Err(KmsClientError::InvalidPayload)
+        }
+    }
+}

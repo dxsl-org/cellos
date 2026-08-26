@@ -3,7 +3,7 @@
 **Audience**: Developers new to Cellos
 **Level**: High-level (conceptual + key components)
 **Version**: 0.2.1-dev (Mycelium Era)
-**Last Updated**: 2026-08-26 (KMS/Silo Phase 2 is complete as a KMS-mediated `DEV_REFERENCE` AArch64-QEMU lane; the public/general Silo API is removed, Stage-2 is not hardware custody, and production remains blocked.)
+**Last Updated**: 2026-08-26 (KMS/Silo Phase 3 completes constrained certificate provisioning; the default runtime remains sealed without protected persistence/authenticated time, pending-key precommit binding is unavailable, and production remains blocked pending Phases 6–8.)
 
 > **Status refresh 2026-08-21**: [Spec 23 Native SDK contract](specs/23-native-sdk-contract.md)
 > is ratified as the normative contract for the single Native SDK family. It
@@ -1348,6 +1348,57 @@ self-verification, direct/unbound denials, VFS PAGE+REG lifecycle checks, and
 `BLOCKED_PENDING_PHASE_6_7_8`. Phases 6–7 must select and implement one exact
 hardware product/trust chain, and Phase 8 requires physical qualification and
 authenticated build provenance.
+
+### Relay certificate activation and provisioning boundary (Phase 3, 2026-08-26)
+
+Phase 3 extends the append-only KMS v1 contract with purpose-specific opcodes
+9–14 for enrollment begin, ordered CSR reads, atomic generation commit, abort,
+service-net profile staging, and active public-key inspection. Enrollment begin
+is restricted to the live supervisor identity; profile staging and active-key
+inspection are restricted to the live service-net identity. Neither surface
+accepts caller-supplied private-key material, CSR bodies, or arbitrary digests.
+
+KMS permits one volatile pending generation and enforces
+`Prepared -> CsrIssued -> Staged`. The CSR handle is bound to the generation,
+policy epoch, restart epoch, request, and exact supervisor identity, and its
+bounded 104-byte chunks must be consumed once in strict order. Any stale,
+foreign, repeated, or out-of-order access invalidates the pending flow. Commit
+requires the exact staged generation, policy epoch, and profile digest; abort
+and invalidation retain a cleanup tombstone until the provider confirms that
+the pending key is deleted or already absent.
+
+The development provider creates the fresh P-256 enrollment key inside Silo
+from a nonce and pending generation. The scalar is never exported. Silo and KMS
+independently reconstruct the frozen RFC 2986
+`CertificationRequestInfo`; KMS validates the returned point and signature,
+normalizes it to low-S, verifies it, and only then assembles and publishes the
+bounded canonical CSR. Commit promotes the pending key inside the provider
+between lifecycle validation and activation. If provider promotion cannot be
+matched by lifecycle activation or protected persistence, KMS seals serving
+rather than expose a mixed active tuple.
+
+Only the committed generation/profile and monotonic restart and authenticated
+time floors are recoverable; pending enrollment material is intentionally not
+persisted. Missing, torn, unavailable, or regressed protected state seals both
+enrollment and serving. The default runtime therefore remains sealed until
+protected persistence and authenticated time are supplied; process-local
+counters or volatile entropy are not substitutes.
+
+Service-net's mounted profile boundary is schema-allowlisted and rejects
+unknown/duplicate fields, non-canonical or oversized paths, and any client
+private-key field. Certificate chains are bounded to three certificates and
+12 KiB, use strict DER framing, require a clientAuth leaf without serverAuth,
+and, for an active chain, require the leaf SPKI, opcode-14 SPKI digest, KMS
+NodeId, and manifest NodeId to agree.
+
+Opcode 14 deliberately returns only the active generation's public key. It
+cannot authenticate the pending enrollment key before commit, so the
+active-chain validator must not authorize opcode-13 staging. Initial enrollment
+and renewal therefore remain fail-closed until an authenticated pending-key
+binding is available without reinterpreting the frozen opcode. Phase 3 does not
+claim that binding, protected production persistence, authenticated production
+time, hardware custody, or a production relay artifact. Production remains
+`BLOCKED_PENDING_PHASE_6_7_8`.
 
 ### Robot swarm (G1) vs server cluster (G2/G3)
 

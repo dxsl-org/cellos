@@ -1,8 +1,6 @@
 use types::kms::{KmsProviderKind, RotateNodeIdentityReason};
 
-use super::{
-    C2cProvider, JournalRecord, ProviderAssessment, ProviderEpoch, ProviderOpenResult,
-};
+use super::{C2cProvider, JournalRecord, ProviderAssessment, ProviderEpoch, ProviderOpenResult};
 
 #[cfg(test)]
 use core::sync::atomic::{AtomicUsize, Ordering};

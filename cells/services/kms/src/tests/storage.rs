@@ -4,9 +4,11 @@ use alloc::collections::BTreeMap;
 use alloc::vec;
 use alloc::vec::Vec;
 
+use crate::lifecycle::{ActiveRelayGeneration, ProtectedRelayState, RelayLifecycle};
 use crate::storage::{
-    load_for_tests, persist_placeholder_for_tests, JournalKey, JournalLoad, JournalRecord, SlotId,
-    StoreError, StoreIo, SLOT_A_PATH, SLOT_B_PATH, STORE_DIR,
+    load_for_tests, persist_placeholder_for_tests, persist_relay_state_for_tests,
+    protected_relay_state_for_tests, JournalKey, JournalLoad, JournalRecord, SlotId, StoreError,
+    StoreIo, SLOT_A_PATH, SLOT_B_PATH, STORE_DIR,
 };
 
 const TEST_KEY: JournalKey = *b"cellos-kms-test-auth-key-v1-0000";
@@ -179,4 +181,36 @@ fn known_provider_kind_decodes_without_expanding_unknown_values() {
     store.files.insert(SLOT_A_PATH, encoded.to_vec());
     let state = load_for_tests(&mut store, &TEST_KEY);
     assert_eq!(state.load, JournalLoad::Empty);
+}
+
+#[test]
+fn protected_relay_lifecycle_round_trips_and_rejects_restart_regression() {
+    let protected = ProtectedRelayState {
+        active: Some(ActiveRelayGeneration {
+            generation: 9,
+            policy_epoch: 14,
+            profile_digest: [0x6a; 32],
+            revoked: false,
+        }),
+        authenticated_time_floor: 1_800_000_000,
+        restart_epoch_floor: 41,
+    };
+    let mut store = FakeStore::default();
+    let mut journal = load_for_tests(&mut store, &TEST_KEY);
+    persist_relay_state_for_tests(&mut journal, &mut store, &TEST_KEY, protected).unwrap();
+    let loaded = load_for_tests(&mut store, &TEST_KEY);
+    assert_eq!(protected_relay_state_for_tests(&loaded), Some(protected));
+    let recovered = RelayLifecycle::recover(42, protected).unwrap();
+    assert_eq!(recovered.serving(), protected.active);
+    assert!(matches!(
+        RelayLifecycle::recover(41, protected),
+        Err(types::kms::KmsErrorCode::PolicyEpochRegressed)
+    ));
+
+    // An authenticated slot with a torn lifecycle payload never recovers.
+    let mut torn = loaded.active.unwrap().record;
+    torn.sealed_leaf[16..48].fill(0);
+    store.put_record(SLOT_A_PATH, torn);
+    let torn = load_for_tests(&mut store, &TEST_KEY);
+    assert!(protected_relay_state_for_tests(&torn).is_none());
 }

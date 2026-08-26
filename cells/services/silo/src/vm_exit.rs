@@ -43,7 +43,13 @@ mod tests {
     fn unknown_hvc_discards_guest_registers() {
         let first = diagnose_hvc(7, [0x1111; 8]);
         let second = diagnose_hvc(7, [0x2222; 8]);
-        assert_eq!(first, UnexpectedHvc { imm: 7, recognized: None });
+        assert_eq!(
+            first,
+            UnexpectedHvc {
+                imm: 7,
+                recognized: None
+            }
+        );
         assert_eq!(first, second);
     }
 

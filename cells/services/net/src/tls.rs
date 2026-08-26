@@ -6,7 +6,7 @@
 //!   tls-insecure       — UnsecureProvider, no verification (dev/lab only)
 //!
 //! Module layout:
-//!   clock    — ViTlsClock (TlsClock impl over sys_get_wall_secs + clamp)
+//!   clock    — ViTlsClock (fail-closed pending protected authenticated time)
 //!   roots    — ca_cert() single trust anchor, cfg-selected by tls-ca-* feature
 //!   provider — ViTlsProvider (CryptoProvider with infallible verifier())
 //!   rng      — ViRng (VirtIO-RNG-backed ChaCha20)
@@ -17,6 +17,8 @@
 pub mod block_on;
 pub mod clock;
 pub mod provider;
+pub mod relay_certificate;
+pub mod relay_profile;
 pub mod rng;
 pub mod roots;
 pub mod socket;

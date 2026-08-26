@@ -10,7 +10,11 @@
 
 #[cfg(all(
     feature = "verified-tls",
-    any(feature = "tls-insecure", feature = "raw-relay", feature = "k1-fallback")
+    any(
+        feature = "tls-insecure",
+        feature = "raw-relay",
+        feature = "k1-fallback"
+    )
 ))]
 compile_error!("service-net: verified TLS excludes insecure, raw relay, and K1 fallback paths");
 

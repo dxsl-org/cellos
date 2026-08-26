@@ -4,8 +4,10 @@
 use core::sync::atomic::{compiler_fence, Ordering};
 
 use crate::layout::{
-    COMMAND_INITIALIZE, COMMAND_OFFSET, COMMAND_SIGN_TLS, DATA_OFFSET, INPUT_LEN, MAILBOX_IPA,
-    PAGE_LEN, REQUEST_SEQ_OFFSET, RESERVED_OFFSET, RESPONSE_SEQ_OFFSET, STATUS_OFFSET,
+    COMMAND_CREATE_ENROLLMENT_KEY, COMMAND_DESTROY_ENROLLMENT_KEY, COMMAND_INITIALIZE,
+    COMMAND_OFFSET, COMMAND_PROMOTE_ENROLLMENT_KEY, COMMAND_SIGN_ENROLLMENT_CRI,
+    COMMAND_SIGN_TLS, DATA_OFFSET, INPUT_LEN, MAILBOX_IPA, PAGE_LEN, REQUEST_SEQ_OFFSET,
+    RESERVED_OFFSET, RESPONSE_SEQ_OFFSET, STATUS_OFFSET,
 };
 pub use crate::layout::{HVC_SILO_DONE, HVC_SILO_FAULT, HVC_SILO_READY};
 
@@ -16,6 +18,10 @@ const MAILBOX: *mut u8 = MAILBOX_IPA as usize as *mut u8;
 pub enum SiloCommand {
     Initialize,
     SignTls13ClientCertificateVerify,
+    CreateEnrollmentKey,
+    SignEnrollmentCri,
+    DestroyEnrollmentKey,
+    PromoteEnrollmentKey,
     Unknown,
 }
 
@@ -24,6 +30,10 @@ impl From<u8> for SiloCommand {
         match value {
             COMMAND_INITIALIZE => Self::Initialize,
             COMMAND_SIGN_TLS => Self::SignTls13ClientCertificateVerify,
+            COMMAND_CREATE_ENROLLMENT_KEY => Self::CreateEnrollmentKey,
+            COMMAND_SIGN_ENROLLMENT_CRI => Self::SignEnrollmentCri,
+            COMMAND_DESTROY_ENROLLMENT_KEY => Self::DestroyEnrollmentKey,
+            COMMAND_PROMOTE_ENROLLMENT_KEY => Self::PromoteEnrollmentKey,
             _ => Self::Unknown,
         }
     }
@@ -40,7 +50,8 @@ pub struct MailboxRequest {
     pub input: [u8; INPUT_LEN],
 }
 
-const _: () = assert!(core::mem::size_of::<MailboxRequest>() <= 56);
+const _: () = assert!(core::mem::size_of::<MailboxRequest>() <= 128);
+
 
 /// Snapshot the request fields while checking every canonical padding byte.
 ///

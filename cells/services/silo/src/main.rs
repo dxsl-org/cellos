@@ -50,7 +50,10 @@ pub fn main() {
     let guest_binary = match artifact::admitted_guest() {
         Ok(bytes) => bytes,
         Err(error) => {
-            println(&alloc::format!("[silo] guest artifact rejected: {:?}", error));
+            println(&alloc::format!(
+                "[silo] guest artifact rejected: {:?}",
+                error
+            ));
             return;
         }
     };
@@ -77,7 +80,10 @@ pub fn main() {
     let session = match guest::GuestSession::initialize(vm_id, vcpu_id) {
         Ok(session) => session,
         Err(guest::GuestError::GuestFault(fault)) => {
-            match (fault.response, fault.response.and_then(|response| response.mailbox_code)) {
+            match (
+                fault.response,
+                fault.response.and_then(|response| response.mailbox_code),
+            ) {
                 (Some(response), Some(mailbox_code)) => println(&alloc::format!(
                     "[silo] one-time initialization guest fault: hvc_code=0x{:02x} \
                      mailbox_code=0x{:02x} request_seq={} response_seq={} status=0x{:02x}",
@@ -103,23 +109,22 @@ pub fn main() {
             }
             return;
         }
-        Err(guest::GuestError::VmmFault(
-            run_loop::SiloVmmFault::UnexpectedExit(run_loop::SiloUnexpectedExit::Unknown {
-                ec,
-                iss,
-                pc,
-            }),
-        )) => {
+        Err(guest::GuestError::VmmFault(run_loop::SiloVmmFault::UnexpectedExit(
+            run_loop::SiloUnexpectedExit::Unknown { ec, iss, pc },
+        ))) => {
             match pc {
                 Some(pc) => println(&alloc::format!(
                     "[silo] one-time initialization VMM fault: \
                      UnexpectedExit::Unknown ec=0x{:02x} iss=0x{:08x} pc=0x{:016x}",
-                    ec, iss, pc,
+                    ec,
+                    iss,
+                    pc,
                 )),
                 None => println(&alloc::format!(
                     "[silo] one-time initialization VMM fault: \
                      UnexpectedExit::Unknown ec=0x{:02x} iss=0x{:08x} pc=unavailable",
-                    ec, iss,
+                    ec,
+                    iss,
                 )),
             }
             return;
@@ -132,7 +137,10 @@ pub fn main() {
             return;
         }
         Err(error) => {
-            println(&alloc::format!("[silo] one-time initialization failed: {:?}", error));
+            println(&alloc::format!(
+                "[silo] one-time initialization failed: {:?}",
+                error
+            ));
             return;
         }
     };

@@ -71,7 +71,6 @@ pub mod executor;
 /// TLS 1.3 client helpers for app cells.
 pub mod tls;
 
-
 /// Platform mtime frequency: ticks per millisecond at the assumed 10 MHz mtime clock.
 ///
 /// Matches `hal::arch::riscv::common::timer::TICKS_PER_10MS / 10`.
