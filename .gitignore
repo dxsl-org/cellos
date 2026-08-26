@@ -114,3 +114,8 @@ cells/apps/vove/
 # repomix whole-repo dump for LLM context (/hc-scout --pack). Regenerated on demand
 # and stale the moment any source file changes, so a committed copy is worse than none.
 /repomix-output.*
+
+# Local agent diagnostics, generated repository packs, and boot images.
+/.agents/debug/
+/.agents/**/pack.json
+/build/*.iso
