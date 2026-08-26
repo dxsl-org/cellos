@@ -39,5 +39,5 @@ case "$CA_FEATURE" in
         ;;
 esac
 
-echo "BLOCKED_PENDING_PHASE_6_7_8: production relay images require a selected and implemented hardware provider, hardware qualification, and authenticated build provenance" >&2
+echo "BLOCKED_BY_ADR_0006: production relay images require a superseding GO ADR, an implemented hardware provider, hardware qualification, and authenticated build provenance" >&2
 exit 3

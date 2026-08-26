@@ -22,6 +22,9 @@
   under the frozen KMS ABI. Phase 5 remains `DEV_REFERENCE`. Production Phases
   7–8 remain blocked; Phase 7 requires the superseding GO ADR, and Phase 8 still
   requires physical qualification and authenticated build provenance.
+- Both live production entry points now emit the same
+  `BLOCKED_BY_ADR_0006` token after input validation. Exact-output regression
+  tests cover the checker and builder; the production gate suite passes 4/4.
 
 ## [2026-08-26] KMS/Silo Phase 3 completes constrained certificate provisioning
 

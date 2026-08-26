@@ -111,8 +111,8 @@ def main() -> int:
             print(f"FAIL: {error}", file=sys.stderr)
         return 1
     print(
-        "BLOCKED_PENDING_PHASE_6_7_8: production relay images require a "
-        "selected and implemented hardware provider, hardware qualification, "
+        "BLOCKED_BY_ADR_0006: production relay images require a superseding "
+        "GO ADR, an implemented hardware provider, hardware qualification, "
         "and authenticated build provenance",
         file=sys.stderr,
     )
