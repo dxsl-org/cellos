@@ -136,3 +136,4 @@ Only after these criteria and raw evidence exist may Phase 7 wire opaque enrollm
 Why: red-team finding F — shared files were claimed by concurrent phases.
 Impact: `plan.md` ownership; no contract change.
 Revert: restore per-phase checker/workspace edits (rejected).
+- Decision: software track authorized; fixture-simulator integration and unit/fault tests may proceed pre-admission. Step 9 (physical probe matrix) and all AC credit stay hardware-gated; simulator output is regression proof only.

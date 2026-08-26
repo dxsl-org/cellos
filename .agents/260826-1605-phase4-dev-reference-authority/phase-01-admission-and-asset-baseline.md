@@ -108,4 +108,5 @@ After signed `READY_FOR_PHASE_02`, begin Phase 2 only. Purchases or irreversible
 
 ## Deviation Log
 - 2026-08-26 — Decision: the red-team simplicity review required upstream time-source facts at admission rather than discovery during Phase 5. Resolution applied pre-execution: the admission schema now pins endpoint, protocol, authentication pin, interval, maximum sample age, and maximum uncertainty bound, all gating `READY_FOR_PHASE_02`; no existing stop or evidence requirement weakened.
+- 2026-08-26 — Surprise: the Step 4 identity/region captures prove account, caller, and region but cannot prove the profile has no write permissions. The validator therefore remains `BLOCKED` on `aws-read-only-identity`; collecting IAM policy/simulation evidence requires an explicit operator-approved revision to the “perform no other AWS command” contract. No extra AWS command is authorized or implied.
 - Append Decision/Deviation/Surprise entries during execution with reason, impact, and revert; escalate every irreversible or contract-breaking divergence.

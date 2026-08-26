@@ -37,6 +37,24 @@ FORBIDDEN_MARKERS = tuple(
     marker.encode("ascii")
     for marker in sorted(KMS_FORBIDDEN | NET_FORBIDDEN | KERNEL_FORBIDDEN)
 )
+FROZEN_DEV_MARKERS = [
+    "AWS_DEV_SIGNED_TIME",
+    "DEV_REFERENCE",
+    "SLB9672",
+    "STM32H573I-DK",
+    "TPM9672FW1523PCEBTOBO1",
+    "aws-dev-signed-time",
+    "cellos-dev-time-v1",
+    "dev-reference",
+    "dev-reference.toml",
+    "development-stm32-authority",
+    "root-stream",
+    "slb9672-dev-anchor",
+    "stm32h573i-dk-dev-authority",
+    "vf2-root-stream",
+]
+DEV_MARKER_NAMES = frozenset(FROZEN_DEV_MARKERS)
+DEV_MARKERS = tuple(marker.encode("ascii") for marker in FROZEN_DEV_MARKERS)
 
 
 def feature_set(value: str) -> set[str]:
@@ -63,24 +81,33 @@ def require_exact_posture(arguments: argparse.Namespace) -> list[str]:
         errors.append("kernel must select production-relay-image")
     if forbidden := kernel & KERNEL_FORBIDDEN:
         errors.append(f"kernel forbidden features: {','.join(sorted(forbidden))}")
+    for label, selected in (("KMS", kms), ("net", net), ("kernel", kernel)):
+        if hits := sorted(selected & DEV_MARKER_NAMES):
+            errors.append(f"{label} forbidden DEV marker: {','.join(hits)}")
     return errors
 
 
 def scan_artifact(path: Path) -> list[str]:
     if not path.is_file() or path.stat().st_size == 0:
         return [f"missing or empty artifact: {path}"]
+    all_markers = FORBIDDEN_MARKERS + DEV_MARKERS
+    overlap = max(map(len, all_markers)) - 1
     found: set[bytes] = set()
-    overlap = max(map(len, FORBIDDEN_MARKERS)) - 1
     previous = b""
     with path.open("rb") as artifact:
         while chunk := artifact.read(64 * 1024):
             window = previous + chunk
-            found.update(marker for marker in FORBIDDEN_MARKERS if marker in window)
+            found.update(marker for marker in all_markers if marker in window)
             previous = window[-overlap:]
-    return [
+    errors = [
         f"{path} contains forbidden marker: {marker.decode('ascii')}"
-        for marker in sorted(found)
+        for marker in sorted(found & set(FORBIDDEN_MARKERS))
     ]
+    errors.extend(
+        f"{path} contains forbidden DEV marker: {marker.decode('ascii')}"
+        for marker in sorted(found & set(DEV_MARKERS))
+    )
+    return errors
 
 
 def parse_args() -> argparse.Namespace:

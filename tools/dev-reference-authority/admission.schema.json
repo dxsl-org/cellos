@@ -1,0 +1,215 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "cellos/dev-reference-authority/admission-inventory-v1",
+  "title": "DEV_REFERENCE admission inventory (closed)",
+  "description": "Closed schema for the Phase 1 admission record of the DEV_REFERENCE lane. Unknown fields, aliases, alternate revisions/OPNs, non-on-hand presence, shared AWS classifications, unpinned upstream time sources, and any action other than not-authorized are rejected.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "classification", "assets", "aws_dev_account", "upstream_time_sources", "actions"],
+  "properties": {
+    "schema": {"const": "cellos-dev-admission-v1"},
+    "classification": {"const": "DEV_REFERENCE"},
+    "assets": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "oneOf": [
+          {"$ref": "#/$defs/asset-visionfive2"},
+          {"$ref": "#/$defs/asset-stm32h573i-dk"},
+          {"$ref": "#/$defs/asset-slb9672-kit"},
+          {"$ref": "#/$defs/asset-power-reset-isolation"},
+          {"$ref": "#/$defs/asset-logic-analysis"}
+        ]
+      }
+    },
+    "aws_dev_account": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["account_alias", "account_id", "region", "cli_profile", "classification", "identity_evidence"],
+      "properties": {
+        "account_alias": {"type": "string", "minLength": 1},
+        "account_id": {"type": "string", "pattern": "^[0-9]{12}$"},
+        "region": {"type": "string", "pattern": "^[a-z]{2}(-gov)?-[a-z]+-[0-9]$"},
+        "cli_profile": {"type": "string", "minLength": 1},
+        "classification": {"const": "dedicated-dev"},
+        "identity_evidence": {"$ref": "#/$defs/attachment-hash"}
+      }
+    },
+    "upstream_time_sources": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1,
+      "items": {"$ref": "#/$defs/time-source"}
+    },
+    "actions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["purchase", "otp", "lifecycle", "debug", "key_creation", "cloud_deployment"],
+      "properties": {
+        "purchase": {"const": "not-authorized"},
+        "otp": {"const": "not-authorized"},
+        "lifecycle": {"const": "not-authorized"},
+        "debug": {"const": "not-authorized"},
+        "key_creation": {"const": "not-authorized"},
+        "cloud_deployment": {"const": "not-authorized"}
+      }
+    }
+  },
+  "$defs": {
+    "attachment-hash": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "sha256"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "asset-base": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["asset_kind", "exact_id", "manufacturer", "model_revision", "serial_or_asset_id", "custodian", "storage_location", "inspected_at", "presence_status", "attachment_hashes"],
+      "properties": {
+        "asset_kind": {"type": "string", "minLength": 1},
+        "exact_id": {"type": "string", "minLength": 1},
+        "manufacturer": {"type": "string", "minLength": 1},
+        "model_revision": {"type": "string", "minLength": 1},
+        "serial_or_asset_id": {"type": "string", "minLength": 1},
+        "firmware_version": {"type": "string"},
+        "custodian": {"type": "string", "minLength": 1},
+        "storage_location": {"type": "string", "minLength": 1},
+        "inspected_at": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"},
+        "presence_status": {"enum": ["on-hand"]},
+        "attachment_hashes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/attachment-hash"}
+        },
+        "revision": {"type": "string"},
+        "mcu_part_number": {"type": "string"},
+        "opn": {"type": "string"},
+        "marker": {"type": "string"},
+        "capabilities": {"type": "object"}
+      }
+    },
+    "asset-visionfive2": {
+      "allOf": [
+        {"$ref": "#/$defs/asset-base"},
+        {
+          "type": "object",
+          "required": ["revision"],
+          "properties": {
+            "asset_kind": {"const": "visionfive2-board"},
+            "exact_id": {"const": "StarFive VisionFive 2 v1.3B"},
+            "manufacturer": {"const": "StarFive"},
+            "revision": {"const": "v1.3B"}
+          }
+        }
+      ]
+    },
+    "asset-stm32h573i-dk": {
+      "allOf": [
+        {"$ref": "#/$defs/asset-base"},
+        {
+          "type": "object",
+          "required": ["mcu_part_number", "marker"],
+          "properties": {
+            "asset_kind": {"const": "stm32h573i-dk"},
+            "exact_id": {"const": "STM32H573I-DK"},
+            "manufacturer": {"const": "STMicroelectronics"},
+            "mcu_part_number": {"const": "STM32H573IIK3Q"},
+            "marker": {"const": "development-stm32-authority"}
+          }
+        }
+      ]
+    },
+    "asset-slb9672-kit": {
+      "allOf": [
+        {"$ref": "#/$defs/asset-base"},
+        {
+          "type": "object",
+          "required": ["opn"],
+          "properties": {
+            "asset_kind": {"const": "slb9672-kit"},
+            "exact_id": {"const": "Infineon OPTIGA TPM SLB 9672 evaluation kit"},
+            "manufacturer": {"const": "Infineon"},
+            "opn": {"const": "TPM9672FW1523PCEBTOBO1"}
+          }
+        }
+      ]
+    },
+    "asset-power-reset-isolation": {
+      "allOf": [
+        {"$ref": "#/$defs/asset-base"},
+        {
+          "type": "object",
+          "required": ["capabilities"],
+          "properties": {
+            "asset_kind": {"const": "power-reset-isolation"},
+            "capabilities": {"$ref": "#/$defs/power-reset-capabilities"}
+          }
+        }
+      ]
+    },
+    "asset-logic-analysis": {
+      "allOf": [
+        {"$ref": "#/$defs/asset-base"},
+        {
+          "type": "object",
+          "required": ["capabilities"],
+          "properties": {
+            "asset_kind": {"const": "logic-analysis"},
+            "capabilities": {"$ref": "#/$defs/logic-analysis-capabilities"}
+          }
+        }
+      ]
+    },
+    "power-reset-capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bench_supply", "load_switch_or_reset_supervisor", "level_shifting_isolation_cabling", "competing_uart0_tx_disconnect"],
+      "properties": {
+        "bench_supply": {"const": true},
+        "load_switch_or_reset_supervisor": {"const": true},
+        "level_shifting_isolation_cabling": {"const": true},
+        "competing_uart0_tx_disconnect": {"const": true}
+      }
+    },
+    "logic-analysis-capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["simultaneous_uart0_strap_power_reset_capture", "voltage_compatible", "sample_rate_mhz", "bandwidth_mhz", "capture_toolchain_version"],
+      "properties": {
+        "simultaneous_uart0_strap_power_reset_capture": {"const": true},
+        "voltage_compatible": {"const": true},
+        "sample_rate_mhz": {"type": "number", "minimum": 1},
+        "bandwidth_mhz": {"type": "number", "minimum": 1},
+        "capture_toolchain_version": {"type": "string", "minLength": 1}
+      }
+    },
+    "auth-pin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "value"],
+      "properties": {
+        "kind": {"enum": ["spki-sha256", "certificate-digest"]},
+        "value": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "time-source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["endpoint", "protocol", "auth_pin", "interval_seconds", "max_sample_age_seconds", "max_uncertainty_milliseconds", "pinned", "marker"],
+      "properties": {
+        "endpoint": {"type": "string", "minLength": 1},
+        "protocol": {"type": "string", "minLength": 1},
+        "auth_pin": {"$ref": "#/$defs/auth-pin"},
+        "interval_seconds": {"type": "integer", "minimum": 1},
+        "max_sample_age_seconds": {"type": "integer", "minimum": 1},
+        "max_uncertainty_milliseconds": {"type": "integer", "minimum": 1},
+        "pinned": {"const": true},
+        "marker": {"const": "cellos-dev-time-v1"}
+      }
+    }
+  }
+}

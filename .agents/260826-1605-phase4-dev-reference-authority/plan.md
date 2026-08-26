@@ -28,7 +28,7 @@ Produce real AC-001 through AC-011 evidence for the approved Phase 4 entry contr
 | Phase | Name | Status | Depends on |
 |---|---|---|---|
 | 1 | [Admission and Asset Baseline](./phase-01-admission-and-asset-baseline.md) | blocked | hardware, AWS account |
-| 2 | [Private Protocol and DEV Separation](./phase-02-private-protocol-and-dev-separation.md) | pending | 1 |
+| 2 | [Private Protocol and DEV Separation](./phase-02-private-protocol-and-dev-separation.md) | blocked; SOFTWARE_HARNESS complete | 1 |
 | 3 | [VF2 UART Root-Stream Boot](./phase-03-vf2-uart-root-stream-boot.md) | pending | 2 |
 | 4 | [STM32 and TPM Protected Authority](./phase-04-stm32-tpm-protected-authority.md) | pending | 2 |
 | 5 | [Nonce-Bound Signed-Time Service](./phase-05-nonce-bound-signed-time-service.md) | pending | 2 |
@@ -54,6 +54,10 @@ Phases 3, 4, and 5 may execute in parallel after Phase 2. Any hard-stop result b
 
 Phase 8 may mark this plan complete only after actual hardware/cloud traces and an independent security review pass AC-001 through AC-011. Simulator, QEMU, fixture, compile, or unit evidence cannot substitute for the named physical tests.
 
+## Software Track (authorized 2026-08-26)
+
+While hardware is on order, operator-approved software-only work may run in parallel with Phase 1: the Phase 1 admission tooling plus the host-verifiable deliverables of Phases 2–6 (`SOFTWARE_HARNESS`, fixture, simulator, and code artifacts only). This authorization changes no acceptance criterion: every physical/live-cloud scenario, provisioning step, deployment, and admission signature stays gated exactly as written, fixture/simulator output never counts toward any AC, and any acquired-revision divergence requires rework of the affected driver layer — logged per phase.
+
 ## Red-Team Verdicts (2026-08-26)
 
 Security red-team (PLAN-BOOT-001, PLAN-TIME-002/003/004, PLAN-EVIDENCE-005) and simplicity reviews both returned NO-GO. Resolutions are applied in the affected phase files and recorded in each Deviation Log without weakening any hard stop, evidence requirement, or frozen contract. Parent Phase 4 remains blocked until Phase 8 returns GO.
@@ -68,3 +72,5 @@ Security red-team (PLAN-BOOT-001, PLAN-TIME-002/003/004, PLAN-EVIDENCE-005) and 
 ## Cook Handoff
 
 After Phase 1 becomes unblocked: `/hc-cook .agents/260826-1605-phase4-dev-reference-authority/plan.md`.
+
+Software track runs until Phase 1 admission signs `READY_FOR_PHASE_02`; hardware-gated steps then proceed in the normal phase order.

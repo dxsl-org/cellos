@@ -85,18 +85,18 @@ Define the sole private AP↔STM32 authority contract as a `no_std`, no-allocati
 
 ## Todo List
 
-- [ ] Private codec, message/fault/state models, bounds, and authentication bindings are frozen.
-- [ ] Literal public KMS 9–14 and private-protocol fixtures pass byte-for-byte.
-- [ ] Forbidden generic operation search and malformed-frame/state-transition scenarios pass.
-- [ ] Production candidates reject every DEV feature/marker and retain the exact ADR-0006 block.
+- [x] Private codec, message/fault/state models, bounds, and authentication bindings are frozen.
+- [x] Literal public KMS 9–14 and private-protocol fixtures pass byte-for-byte.
+- [x] Forbidden generic operation search and malformed-frame/state-transition scenarios pass.
+- [x] Production candidates reject every DEV feature/marker and retain the exact ADR-0006 block.
 
 ## Success Criteria
 
-- [ ] The crate builds as `no_std` without `alloc`; maximum encoded sizes are compile-time asserted and all decoders consume exactly one bounded frame.
-- [ ] Public opcode/payload fixtures 9–14 are byte-identical to the pre-phase vectors, and opcode 14 represents active state only.
-- [ ] No AP-visible generic sign, digest, TPM, NV, time, profile assertion, update, provisioning, unseal, or arbitrary execution request exists.
-- [ ] Replay, mismatch, malformed length, unknown/reserved values, illegal transitions, missing/consumed receipts, and split-brain produce typed fail-closed faults; ambiguous protected state seals.
-- [ ] Every synthetic production artifact carrying any DEV marker exits `1`; an otherwise-valid marker-free candidate still exits `3` with exact `BLOCKED_BY_ADR_0006` text.
+- [x] The crate builds as `no_std` without `alloc`; maximum encoded sizes are compile-time asserted and all decoders consume exactly one bounded frame.
+- [x] Public opcode/payload fixtures 9–14 are byte-identical to the pre-phase vectors, and opcode 14 represents active state only.
+- [x] No AP-visible generic sign, digest, TPM, NV, time, profile assertion, update, provisioning, unseal, or arbitrary execution request exists.
+- [x] Replay, mismatch, malformed length, unknown/reserved values, illegal transitions, missing/consumed receipts, and split-brain produce typed fail-closed faults; ambiguous protected state seals.
+- [x] Every synthetic production artifact carrying any DEV marker exits `1`; an otherwise-valid marker-free candidate still exits `3` with exact `BLOCKED_BY_ADR_0006` text.
 - [ ] Only Phases 3/4/5 become eligible; parent Phase 4 stays blocked until real AC-001..AC-011 hardware/cloud evidence and independent review.
 
 ## Risk Assessment
@@ -118,3 +118,5 @@ After all criteria pass, Phases 3, 4, and 5 may consume `authority_protocol` in 
 - 2026-08-26 — Decision: the red-team simplicity review found Phases 3–5 planning parallel modifications of the production checker, risking marker-set drift. Resolution applied pre-execution: checker ownership is solely Phase 2; downstream phases deliver closed marker names through reviewed manifests only, merged into the frozen marker set here. No DEV-rejection behavior or exit-code contract changed.
 
 - Append Decision/Deviation/Surprise entries during execution with reason, impact, and revert; escalate irreversible, generic-surface, frozen-ABI, or production-separation changes.
+- 2026-08-26 — Decision: operator approved the software track, so this phase's host-verifiable deliverables (authority-protocol crate, fixtures, checker) may start before Phase 1 admission signs. All success criteria remain host-only; nothing here claims hardware or AC evidence.
+- 2026-08-26 — Result: the authorized SOFTWARE_HARNESS slice is complete and host-verified. The phase remains blocked on Phase 1 and claims no hardware/cloud acceptance evidence.

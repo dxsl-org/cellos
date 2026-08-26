@@ -46,6 +46,86 @@ class UnsafeFeatureMatrixTests(unittest.TestCase):
         )
 
 
+class DevMarkerRejectionTests(unittest.TestCase):
+    CHUNK = 64 * 1024
+
+    def run_checker(self, kms_features: str, artifact_payloads: list[bytes]):
+        root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as directory:
+            names = ("kms", "net", "kernel")
+            artifacts = [Path(directory) / name for name in names]
+            for artifact, payload in zip(artifacts, artifact_payloads):
+                artifact.write_bytes(payload)
+            return subprocess.run(
+                [
+                    sys.executable,
+                    str(MODULE_PATH),
+                    "--kms-features",
+                    kms_features,
+                    "--net-features",
+                    "verified-tls,tls-roots-embedded,tls-ca-private",
+                    "--kernel-features",
+                    "production-relay-image",
+                    "--kms-artifact",
+                    str(artifacts[0]),
+                    "--net-artifact",
+                    str(artifacts[1]),
+                    "--kernel-artifact",
+                    str(artifacts[2]),
+                ],
+                cwd=root,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+    def test_each_dev_marker_in_features_exits_one_naming_it(self) -> None:
+        clean = b"qualified-candidate"
+        for marker in CHECKER.FROZEN_DEV_MARKERS:
+            with self.subTest(marker=marker):
+                completed = self.run_checker(
+                    f"hardware-relay-provider,{marker}",
+                    [clean, clean, clean],
+                )
+                self.assertEqual(completed.returncode, 1)
+                self.assertIn(
+                    f"FAIL: KMS forbidden DEV marker: {marker}",
+                    completed.stderr,
+                )
+
+    def test_each_dev_marker_in_artifact_content_exits_one_naming_it(self) -> None:
+        clean = b"qualified-candidate"
+        for marker in CHECKER.FROZEN_DEV_MARKERS:
+            with self.subTest(marker=marker):
+                payload = b"qualified-candidate " + marker.encode("ascii")
+                completed = self.run_checker(
+                    "hardware-relay-provider",
+                    [payload, clean, clean],
+                )
+                self.assertEqual(completed.returncode, 1)
+                self.assertIn(
+                    f"contains forbidden DEV marker: {marker}",
+                    completed.stderr,
+                )
+
+    def test_dev_marker_split_across_chunk_boundary_is_detected(self) -> None:
+        clean = b"qualified-candidate"
+        for marker in CHECKER.FROZEN_DEV_MARKERS:
+            encoded = marker.encode("ascii")
+            with self.subTest(marker=marker):
+                filler = b"\0" * (self.CHUNK - len(encoded) + 1)
+                payload = filler + encoded
+                completed = self.run_checker(
+                    "hardware-relay-provider",
+                    [clean, payload, clean],
+                )
+                self.assertEqual(completed.returncode, 1)
+                self.assertIn(
+                    f"contains forbidden DEV marker: {marker}",
+                    completed.stderr,
+                )
+
+
 class ProductionBlockReasonTests(unittest.TestCase):
     def test_checker_reports_the_adr_block_after_validating_inputs(self) -> None:
         root = Path(__file__).resolve().parents[1]
