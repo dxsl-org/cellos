@@ -1,0 +1,9 @@
+[package]
+name = "a2a3-runtime-probe"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+vicell-integration-tests = { path = "../../../tests/integration" }
+
+[workspace]

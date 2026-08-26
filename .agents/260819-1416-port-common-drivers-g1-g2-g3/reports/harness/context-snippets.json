@@ -1,0 +1,31 @@
+{
+  "skill": "hc-cook",
+  "mode": "interactive",
+  "task": "Execute Phase 06 as a hardware-gated G3 accelerator readiness envelope without freezing a public ABI.",
+  "acceptanceCriteria": [
+    "RK3588 is the first evidence target and X390 remains a second implementation gated on available hardware and software.",
+    "Vendor SDK and source imports remain blocked until exact license, redistribution, firmware, and export-control evidence exists.",
+    "The current Grant and pinning substrate is audited with its real bounds and missing RK3588 NPU DMA lifecycle identified.",
+    "No ViAccelerator trait shape, TensorBuffer type, accelerator syscall, probe crate, or kernel NPU scheduler lands.",
+    "Phase 06 remains BLOCKED until real inference, P99, fault, DMA, and restart evidence exists."
+  ],
+  "touchpoints": [
+    "docs/research/g3-accelerator-evidence.md",
+    "docs/roadmap/product-stages.md",
+    "docs/specs/04-hardware.md",
+    "docs/project-changelog.md"
+  ],
+  "publicContracts": [
+    "No changes to libs/api or libs/types.",
+    "Probe vocabulary is observational and does not define a stable message or syscall contract.",
+    "Documentation evidence is not promoted as hardware or runtime proof."
+  ],
+  "blastRadius": [
+    "G3 target ordering",
+    "vendor-license provenance gate",
+    "accelerator ABI timing",
+    "future NPU DMA and Grant lifecycle qualification"
+  ],
+  "scoutSummary": "The local reference set contains no RKNN or X390 implementation. Existing Grants provide bounded contiguous buffers, single-grantee sharing, reaping, pinning, and quarantine, but no proven RK3588 NPU/SMMU lifecycle.",
+  "evidence": "expected"
+}

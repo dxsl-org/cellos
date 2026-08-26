@@ -1,0 +1,89 @@
+{
+  "commands": [
+    {
+      "command": "cargo fmt --all -- --check",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-18",
+      "summary": "Workspace formatting passed on the final RISC-V SoC profile diff."
+    },
+    {
+      "command": "cargo test -p hal-soc-riscv --target x86_64-unknown-linux-gnu",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-18",
+      "summary": "SoC profile unit tests passed on the host lane."
+    },
+    {
+      "command": "cargo test -p cellos-boards --target x86_64-unknown-linux-gnu",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-18",
+      "summary": "Board descriptor tests stayed green while the SoC slice landed."
+    },
+    {
+      "command": "cargo check -p cellos-kernel --target riscv64gc-unknown-none-elf",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-18",
+      "summary": "Default RV64 kernel typecheck passed."
+    },
+    {
+      "command": "cargo check -p cellos-kernel --target riscv64gc-unknown-none-elf --features board-vf2",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-18",
+      "summary": "VF2 RV64 compile gate passed."
+    },
+    {
+      "command": "cargo check -p cellos-kernel --target riscv64gc-unknown-none-elf --features board-pioneer",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-18",
+      "summary": "Pioneer RV64 compile gate passed."
+    },
+    {
+      "command": "cargo check -p cellos-kernel --target riscv64gc-unknown-none-elf --features 'board-vf2 board-pioneer'",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-18",
+      "summary": "Combined feature overlap compiled with Pioneer precedence."
+    },
+    {
+      "command": "cargo check -p cellos-kernel --target aarch64-unknown-none-softfloat",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-18",
+      "summary": "AArch64 default regression lane stayed green."
+    },
+    {
+      "command": "cargo check -p cellos-kernel --target aarch64-unknown-none-softfloat --features board-rpi3",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-18",
+      "summary": "RPi3 compile regression lane stayed green with pre-existing HAL dead-code warnings."
+    },
+    {
+      "command": "cargo build --release -p cellos-kernel --target riscv64gc-unknown-none-elf -Z build-std=core,alloc",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-18",
+      "summary": "Release RV64 kernel build passed."
+    },
+    {
+      "command": "bash scripts/qemu-boot-test.sh target/riscv64gc-unknown-none-elf/release/cellos-kernel",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-18",
+      "summary": "QEMU boot proof passed with FAT16 mounted."
+    }
+  ],
+  "artifactValidator": {
+    "status": "absent",
+    "detail": "No repository validator entrypoint was present in this checkout, so the harness was checked manually and the limitation is recorded instead of claiming validator PASS."
+  },
+  "beforeAfter": {
+    "before": "SoC-compatible lists and access policies were duplicated or embedded in the kernel platform path.",
+    "after": "hal/soc/riscv owns immutable SoC profile facts, and the kernel platform path consumes those facts while keeping fail-closed SG2042 access policy."
+  }
+}

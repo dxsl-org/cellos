@@ -1,0 +1,16 @@
+{
+  "verdict": "pass",
+  "decision": "Accept the platform-safe input artifact split",
+  "reasons": [
+    "RPi3 does not probe QEMU-only VirtIO MMIO",
+    "default QEMU builds retain direct VirtIO probing",
+    "RPi3 target and embedded outputs are isolated from generic AArch64 outputs",
+    "the build fails closed instead of packaging a stale input binary",
+    "the exact real-board fault did not recur"
+  ],
+  "remainingLimits": [
+    "This proves the ARM64 boot and runtime regression lane, not full G1 device coverage",
+    "UART trace-marker noise remains outside this fix",
+    "persistent SD-backed volumes remain outside this netboot lane"
+  ]
+}

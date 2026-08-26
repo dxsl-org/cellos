@@ -1,0 +1,9 @@
+{
+  "highRisk": true,
+  "reasons": [
+    "Additive changes touch the public Manifest API and kernel protection-class selection path."
+  ],
+  "autoStopRequired": false,
+  "humanApproved": true,
+  "largeDiff": true
+}

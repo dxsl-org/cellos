@@ -1,0 +1,19 @@
+{
+  "verdict": "PASS_WITH_RISK",
+  "target": "origin/main...HEAD",
+  "branch": "refactor/hal-kernel-rust-abi-dco",
+  "blocking_findings": 0,
+  "informational_findings": 2,
+  "positive_findings": 2,
+  "residual_risks": [
+    {
+      "scope": "riscv32",
+      "status": "baseline_failure",
+      "evidence": "origin/main and branch both fail cargo check -p cellos-kernel --target riscv32imac-unknown-none-elf with the same five compile errors"
+    }
+  ],
+  "required_before_merge": [],
+  "artifacts": {
+    "human_report": ".agents/reports/260819-1830-hal-kernel-rust-abi-prelanding-review.md"
+  }
+}

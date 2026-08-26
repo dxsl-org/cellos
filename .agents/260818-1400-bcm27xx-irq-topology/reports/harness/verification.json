@@ -1,0 +1,19 @@
+{
+  "verdict": "PASS",
+  "gatesPassed": 11,
+  "gatesTotal": 11,
+  "unitTests": {
+    "bcm27xx": "5/5",
+    "boards": "9/9",
+    "riscvSoc": "3/3"
+  },
+  "compileGates": [
+    "hal-arm aarch64 default",
+    "hal-arm aarch64 board-rpi3",
+    "kernel aarch64 default",
+    "kernel aarch64 board-rpi3",
+    "kernel rv64 default check",
+    "kernel rv64 release build"
+  ],
+  "runtimeGate": "PASS: FAT16 mounted — kernel booted (no disk)"
+}

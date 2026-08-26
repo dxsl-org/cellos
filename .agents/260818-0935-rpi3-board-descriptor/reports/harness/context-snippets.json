@@ -1,0 +1,29 @@
+{
+  "skill": "hc-cook",
+  "mode": "interactive",
+  "task": "Add and consume a Raspberry Pi 3 Model B board descriptor without moving SoC facts or duplicating drivers.",
+  "acceptanceCriteria": [
+    "root boards catalog contains QEMU RV64 and Raspberry Pi 3 Model B",
+    "UART stays mandatory while PLIC, CLINT, and RTC may be absent",
+    "RPi3 identity, VideoCore contract, fallback memory, wiring, and enabled drivers are board-owned",
+    "kernel platform and fallback boot paths consume the descriptor",
+    "hal/soc/bcm27xx retains immutable SoC facts and shared drivers remain single-copy"
+  ],
+  "touchpoints": [
+    "boards/src/descriptor.rs",
+    "boards/raspberry-pi/3-model-b",
+    "kernel/src/board.rs",
+    "kernel/src/platform.rs",
+    "kernel/src/boot.rs"
+  ],
+  "publicContracts": [
+    "no libs/api or libs/types changes",
+    "RISC-V consumers fail closed when required controller data is missing",
+    "no physical Raspberry Pi 3 runtime claim"
+  ],
+  "blastRadius": [
+    "board descriptor validation",
+    "RV64 platform fallback selection",
+    "AArch64 Raspberry Pi 3 fallback memory"
+  ]
+}

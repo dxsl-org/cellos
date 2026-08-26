@@ -1,0 +1,29 @@
+{
+  "skill": "hc-fix",
+  "mode": "interactive",
+  "task": "Restore the real RPi3 external SD read path through the Arasan controller",
+  "acceptanceCriteria": [
+    "external SD is routed to Arasan only for board-rpi3",
+    "BCM2835 SDHCI accesses retain aligned RMW, command shadowing, and write spacing",
+    "SD CMD9 reads CSD in Standby before CMD7 selects the card",
+    "data commands program TIMEOUT_CONTROL before transfer registers",
+    "real RPi3 reads the MBR, mounts SD-backed filesystems, and reaches the Cellos shell"
+  ],
+  "touchpoints": [
+    "kernel/src/task/drivers/mmc.rs",
+    "kernel/src/task/drivers/mmc/pinmux_rpi3.rs",
+    "kernel/src/task/drivers/mmc/core.rs",
+    "kernel/src/task/drivers/mmc/regs.rs",
+    "kernel/src/task/drivers/mmc/sdhci.rs",
+    "tools/rpi3-netboot/test-netboot-scripts.ps1"
+  ],
+  "publicContracts": [
+    "non-RPi targets keep their existing MMC behavior",
+    "the RPi3 block interface still exposes 512-byte logical sectors"
+  ],
+  "blastRadius": [
+    "board-rpi3 GPIO34-39 and GPIO48-53 pin functions",
+    "board-rpi3 Arasan command and PIO data transfers"
+  ],
+  "scoutSummary": "The firmware/U-Boot topology proved the external slot was on GPIO48-53 while Cellos probed Arasan without routing those pins; subsequent real-board failures exposed SD state ordering and an unprogrammed SDHCI data-timeout exponent."
+}

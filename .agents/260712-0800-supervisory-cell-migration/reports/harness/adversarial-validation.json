@@ -1,0 +1,16 @@
+{
+  "decision": "PASS_WITH_RISK",
+  "disprovenClaims": [],
+  "unverifiedClaims": [
+    "Fresh x86 and AArch64 QEMU boot after the ABI retirement could not be executed because the host bridge failed before packaging fresh artifacts."
+  ],
+  "missingProof": [
+    "A host/API coverage threshold cannot be met by the bare-metal kernel paths in the current lane."
+  ],
+  "reachableRegressions": [],
+  "mitigations": [
+    "Release kernels compiled for all three supported architectures.",
+    "Fresh RV64 payloads and QEMU hotswap/snapshot authority integration evidence passed.",
+    "The deferred boot lanes are explicitly documented rather than represented as successful."
+  ]
+}

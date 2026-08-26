@@ -1,0 +1,45 @@
+{
+  "verdict": "PASS_WITH_RISK",
+  "target": ".agents/260819-1409-cell-to-cell-anywhere-core/plan.md",
+  "date": "2026-08-19",
+  "blocking_for_plan_approval": false,
+  "blocking_for_implementation_start": true,
+  "blocking_for_complete_status": true,
+  "findings": [
+    {
+      "severity": "HIGH",
+      "file": "tools/relay-server/relay.py",
+      "line": 63,
+      "category": "authn",
+      "summary": "Relay registration lacks NodeId ownership proof."
+    },
+    {
+      "severity": "HIGH",
+      "file": "cells/services/net-broker/src/main.rs",
+      "line": 104,
+      "category": "identity",
+      "summary": "Broker identity is per-run, not stable."
+    },
+    {
+      "severity": "HIGH",
+      "file": "cells/services/net-broker/src/main.rs",
+      "line": 141,
+      "category": "authz",
+      "summary": "Broker ingress currently uses non-attested TryRecv."
+    },
+    {
+      "severity": "MED",
+      "file": "cells/services/net-broker/src/main.rs",
+      "line": 153,
+      "category": "runtime",
+      "summary": "Remote dispatch is still empty."
+    },
+    {
+      "severity": "MED",
+      "file": "libs/ostd/src/cluster.rs",
+      "line": 86,
+      "category": "concurrency",
+      "summary": "Raw broker request/reply path can mis-associate responses."
+    }
+  ]
+}

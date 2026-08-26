@@ -1,0 +1,36 @@
+{
+  "commands": [
+    {
+      "command": "cargo test -p api --lib --target x86_64-unknown-linux-gnu",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-20T15:55:00.000Z",
+      "summary": "All 82 API library tests passed, including legacy/new manifest alias and 16-byte layout coverage."
+    },
+    {
+      "command": "cargo check -p cellos-kernel --target x86_64-unknown-none",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-20T15:55:00.000Z",
+      "summary": "The bare-metal x86_64 kernel target compiled successfully."
+    },
+    {
+      "command": "cargo check -p cellos-kernel --target riscv64gc-unknown-none-elf",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-20T15:55:00.000Z",
+      "summary": "The bare-metal RISC-V kernel target compiled successfully."
+    },
+    {
+      "command": "git diff --check",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-20T15:55:00.000Z",
+      "summary": "No whitespace errors were found in the final diff."
+    }
+  ],
+  "beforeAfter": {
+    "before": "The API lane was green; host kernel/ostd test harnesses had pre-existing std panic and allocator-handler conflicts.",
+    "after": "The API lane remains green with 82 tests, two bare-metal kernel targets compile, terminology grep passes, and the unchanged host-harness limitations introduced no new regression."
+  }
+}

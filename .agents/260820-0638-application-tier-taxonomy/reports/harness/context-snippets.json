@@ -1,0 +1,35 @@
+{
+  "skill": "hc-cook",
+  "mode": "interactive",
+  "task": "Execute Phase 2: add non-breaking protection-class terminology aliases for Manifest v2.",
+  "acceptanceCriteria": [
+    "Existing TIER_* constants, tier field/accessor, and tier macro forms compile unchanged.",
+    "New Rust code can use PROTECTION_CLASS_* constants and protection_class().",
+    "The loader exposes granted_protection_class while granted_tier remains compatible.",
+    "Manifest v2 remains 16 bytes and v1 upcast behavior remains unchanged.",
+    "The Zig manifest remains compatible with its intentional v1 8-byte contract."
+  ],
+  "touchpoints": [
+    "libs/api/src/abi/manifest_flags.rs",
+    "libs/api/src/abi/manifest.rs",
+    "libs/api/src/abi/manifest_macro.rs",
+    "libs/api/src/abi/manifest_parse.rs",
+    "libs/ostd/src/runtime.rs",
+    "kernel/src/task/cap.rs",
+    "kernel/src/loader.rs",
+    "kernel/src/task/manifest_v2_selftest.rs",
+    "kernel/src/loader/elf_tests.rs",
+    "libs/zig-syscall/src/manifest.zig"
+  ],
+  "publicContracts": [
+    "CellManifest v2 wire layout stays 16 bytes with the tier byte at offset 5.",
+    "Legacy Rust names and macro tier = forms remain available.",
+    "Zig v1 manifests remain 8 bytes and are upcast by the Rust parser."
+  ],
+  "blastRadius": [
+    "Manifest-producing Rust cells",
+    "Kernel ELF manifest parsing and PKU floor selection",
+    "Zig cells emitting legacy v1 manifests"
+  ],
+  "scoutSummary": "The existing field named tier is a PKU protection-class request. Rust uses Manifest v2 while Zig intentionally emits Manifest v1; compatibility aliases can be additive without layout changes."
+}

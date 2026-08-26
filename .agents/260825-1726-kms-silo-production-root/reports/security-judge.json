@@ -1,0 +1,563 @@
+{
+  "findings": [
+    {
+      "rule_id": "KMS-ARCH-001",
+      "title": "A raw prehash signer would become a generic identity-key signing oracle",
+      "summary": "Authorizing service-net while accepting a caller-chosen 32-byte digest does not constrain key use: compromised or confused service-net code could obtain arbitrary protocol signatures under the durable relay identity. KMS and the protected root must construct the exact TLS 1.3 client CertificateVerify input from a typed request.",
+      "severity": "high",
+      "confidence": "high",
+      "category": "Authorization / confused deputy",
+      "locations": [
+        {
+          "path": "docs/decisions/0005-mutual-tls-relay-identity.md",
+          "start_line": 98,
+          "end_line": 103,
+          "role": "CertificateVerify-only requirement"
+        },
+        {
+          "path": "libs/ostd/src/silo.rs",
+          "start_line": 158,
+          "end_line": 172,
+          "role": "Current generic sign-prehash API"
+        },
+        {
+          "path": "cells/guests/silo-guest/src/main.rs",
+          "start_line": 88,
+          "end_line": 95,
+          "role": "Caller-selected digest reaches signer"
+        }
+      ],
+      "cwe": [
+        "CWE-441",
+        "CWE-749"
+      ],
+      "evidence": [
+        {
+          "label": "Dangerous sink",
+          "explanation": "The current reference API signs any supplied prehash.",
+          "excerpt": "pub fn sign(&self, digest: &[u8; 32]) -> Result<SigDer, SiloError>"
+        },
+        {
+          "label": "Broken control",
+          "explanation": "Caller identity limits who invokes the method, not what is signed."
+        },
+        {
+          "label": "Required change",
+          "explanation": "Use a typed TLS13ClientCertificateVerify request containing active certificate/key generation, fixed ECDSA_P256_SHA256 scheme, client role, and transcript hash. KMS/provider constructs and hashes the standard TLS context internally. Expose no generic sign, raw key-id selection, or generic SPI signing command."
+        }
+      ],
+      "optionalProperties": {
+        "phase_gate": "Contract gate fails unless cross-protocol and malformed role/scheme/generation vectors deny, and the returned signature is self-verified against the active key."
+      }
+    },
+    {
+      "rule_id": "KMS-ARCH-002",
+      "title": "Local caller identity is not hardware attestation; AP-to-RoT trust is otherwise circular",
+      "summary": "The kernel trailer proves local scheduler origin assuming a trusted kernel; it carries no code measurement or secure-boot proof. A SPI signer that accepts the AP's assertion of attested KMS lets a compromised AP authorize itself, while a substituted bus endpoint can bypass local KMS policy.",
+      "severity": "high",
+      "confidence": "high",
+      "category": "Attestation / trust boundary",
+      "locations": [
+        {
+          "path": "libs/api/src/abi/caller_identity.rs",
+          "start_line": 64,
+          "end_line": 67,
+          "role": "Trailer limitation"
+        },
+        {
+          "path": "libs/api/src/abi/caller_identity.rs",
+          "start_line": 84,
+          "end_line": 104,
+          "role": "Only cell, generation, and sender task are attested"
+        },
+        {
+          "path": "docs/decisions/0005-mutual-tls-relay-identity.md",
+          "start_line": 98,
+          "end_line": 103,
+          "role": "Attested authorization requirement"
+        }
+      ],
+      "cwe": [
+        "CWE-345",
+        "CWE-346"
+      ],
+      "evidence": [
+        {
+          "label": "Control scope",
+          "explanation": "CallerIdentity establishes local origin/lifetime, not measured software identity or device boot state."
+        },
+        {
+          "label": "Execution path",
+          "explanation": "A compromised or substituted AP can issue the same narrow sign command unless the RoT independently authenticates a board-bound measured AP endpoint."
+        },
+        {
+          "label": "Required change",
+          "explanation": "Separate kernel-attested service authorization from RoT-verified platform authorization. Define immutable AP boot measurement, device-pair binding/authenticated channel, accepted measurement/policy epochs, lifecycle, debug, and RMA behavior. Never trust an AP self-asserted attested=true bit."
+        }
+      ],
+      "optionalProperties": {
+        "phase_gate": "Board design must establish a non-circular AP boot-to-RoT chain before production-provider qualification; SPI connectivity and CallerIdentity alone never pass."
+      }
+    },
+    {
+      "rule_id": "KMS-ARCH-003",
+      "title": "Anti-rollback readiness compares consistent assertions rather than a protected monotonic fact",
+      "summary": "Readiness compares provider-reported booleans/epoch with a MACed two-slot host journal. Replaying an old journal together with an old or unauthenticated provider assessment keeps values consistent and may yield Ready. A lone valid slot is accepted, and journal-key custody is unspecified.",
+      "severity": "high",
+      "confidence": "high",
+      "category": "Rollback / lifecycle integrity",
+      "locations": [
+        {
+          "path": "cells/services/kms/src/storage/provider.rs",
+          "start_line": 9,
+          "end_line": 20,
+          "role": "Provider self-reported security assessment"
+        },
+        {
+          "path": "cells/services/kms/src/storage/root.rs",
+          "start_line": 28,
+          "end_line": 99,
+          "role": "Readiness equality checks"
+        },
+        {
+          "path": "cells/services/kms/src/storage/journal.rs",
+          "start_line": 29,
+          "end_line": 51,
+          "role": "Single slot and coherent pair acceptance"
+        },
+        {
+          "path": "cells/services/kms/src/storage/record.rs",
+          "start_line": 12,
+          "end_line": 16,
+          "role": "Filesystem journal and unbound JournalKey"
+        }
+      ],
+      "cwe": [
+        "CWE-345",
+        "CWE-664"
+      ],
+      "evidence": [
+        {
+          "label": "Broken control",
+          "explanation": "Epoch equality detects rollback only if the provider value is fresh, authenticated, and rooted in monotonic protected state."
+        },
+        {
+          "label": "Authorization impact",
+          "explanation": "A false Ready state sets remote_allowed and permits relay identity use."
+        },
+        {
+          "label": "Required change",
+          "explanation": "Specify protected monotonic authorities, journal-key derivation, fresh authenticated health, atomic commit order, power-loss recovery, endurance/exhaustion, firmware/policy minima, key generation, and RMA. Do not reuse the OpenTitan lifecycle transition-attempt counter as the application epoch."
+        }
+      ],
+      "optionalProperties": {
+        "phase_gate": "Lifecycle cannot report Ready until replay of one/both slots and health replies, old firmware, torn writes, resets, clones, exhaustion, and RMA outcomes all fail closed against independent protected state."
+      }
+    },
+    {
+      "rule_id": "KMS-ARCH-004",
+      "title": "Certificate issuance and atomic key/certificate rotation are missing as a phase",
+      "summary": "ADR-0005 makes a managed-CA certificate and exact SPKI-derived NodeId part of authorization, but the proposed sequence jumps to service-net mTLS without explicit enrollment/binding. Key activation, CSR issuance, certificate installation, NodeId change, old-certificate revocation, and rollback state require a staged atomic lifecycle.",
+      "severity": "high",
+      "confidence": "high",
+      "category": "Certificate and key lifecycle",
+      "locations": [
+        {
+          "path": "docs/decisions/0005-mutual-tls-relay-identity.md",
+          "start_line": 83,
+          "end_line": 103,
+          "role": "Certificate and NodeId contract"
+        },
+        {
+          "path": "docs/decisions/0005-mutual-tls-relay-identity.md",
+          "start_line": 126,
+          "end_line": 141,
+          "role": "Issuance/provisioning blocker"
+        },
+        {
+          "path": "libs/types/src/kms/payload/binding.rs",
+          "start_line": 34,
+          "end_line": 78,
+          "role": "Current status lacks certificate binding"
+        },
+        {
+          "path": "cells/services/kms/src/dispatch.rs",
+          "start_line": 138,
+          "end_line": 153,
+          "role": "Rotation lacks staged certificate lifecycle"
+        }
+      ],
+      "cwe": [
+        "CWE-295",
+        "CWE-320"
+      ],
+      "evidence": [
+        {
+          "label": "Missing prerequisite",
+          "explanation": "Current KMS metadata cannot represent P-256 SPKI/NodeId, certificate serial/chain reference, active key generation, or enrollment state."
+        },
+        {
+          "label": "Unsafe intermediate state",
+          "explanation": "Activating a key before its certificate causes outage; retaining generations without typed binding can select the wrong identity."
+        },
+        {
+          "label": "Required change",
+          "explanation": "Add protected-key CSR proof-of-possession, CA profile validation, exact SPKI DER/NodeId check, atomic staged-to-active tuple, renewal overlap, revocation distribution, crash recovery, and RMA replacement. Private scalar import remains forbidden."
+        }
+      ],
+      "optionalProperties": {
+        "phase_gate": "mTLS integration waits until the leaf validates under the configured client CA, its P-256 SPKI matches the provider key, its extension equals SHA-256(SPKI DER), and signing names that active generation."
+      }
+    },
+    {
+      "rule_id": "KMS-ARCH-005",
+      "title": "Production selection must cover the whole artifact, not a provider boolean",
+      "summary": "KMS currently trusts provider-reported production_capable and does not intrinsically reject SiloWrapped; service-net separately accepts a tls-insecure build. Provider-only compile-time separation cannot prove that a product image lacks all development and downgrade paths.",
+      "severity": "high",
+      "confidence": "high",
+      "category": "Provider selection / downgrade",
+      "locations": [
+        {
+          "path": "cells/services/kms/src/storage/root.rs",
+          "start_line": 55,
+          "end_line": 63,
+          "role": "Production capability is self-reported"
+        },
+        {
+          "path": "libs/types/src/kms/model.rs",
+          "start_line": 38,
+          "end_line": 46,
+          "role": "SiloWrapped is an ordinary kind"
+        },
+        {
+          "path": "cells/services/net/Cargo.toml",
+          "start_line": 17,
+          "end_line": 24,
+          "role": "Insecure TLS is selectable"
+        },
+        {
+          "path": "cells/services/net/build.rs",
+          "start_line": 56,
+          "end_line": 78,
+          "role": "Insecure TLS counts as usable"
+        }
+      ],
+      "cwe": [
+        "CWE-16",
+        "CWE-757"
+      ],
+      "evidence": [
+        {
+          "label": "Provider downgrade",
+          "explanation": "A SiloWrapped adapter reporting production_capable=true is not hard-rejected by RootAssessment."
+        },
+        {
+          "label": "TLS downgrade",
+          "explanation": "The feature guard rejects conflicts but deliberately accepts tls-insecure alone."
+        },
+        {
+          "label": "Required change",
+          "explanation": "One production product profile must compile-error on DEV_REFERENCE/Silo/TestHooks/software signing, tls-insecure, raw/K1 relay, both/neither provider, or unverified TLS; runtime must fail on absent hardware or trust material."
+        }
+      ],
+      "optionalProperties": {
+        "phase_gate": "Pass only when artifact-level evidence shows exactly one hardware provider and verified TLS flavor, no forbidden symbols/manifests/routes, and no fallback under provider/credential failure."
+      }
+    },
+    {
+      "rule_id": "KMS-ARCH-006",
+      "title": "Service-net authorization must bind the live cell generation, not only the service name or TID",
+      "summary": "The current durable broker pattern stores cell_id, generation, and service TID and checks them against the live registry. By contrast, the simpler supervisor authorization only validates caller presence and live TID. A signing path modeled on the latter can accept an old queued request after restart/TID reuse because the trailer's generation is never compared. Identity signing needs its own live service-net binding and invalidation semantics.",
+      "severity": "high",
+      "confidence": "high",
+      "category": "Authorization lifecycle",
+      "locations": [
+        {
+          "path": "cells/services/kms/src/auth.rs",
+          "start_line": 13,
+          "end_line": 43,
+          "role": "Correct generation-bound broker pattern"
+        },
+        {
+          "path": "cells/services/kms/src/auth.rs",
+          "start_line": 59,
+          "end_line": 70,
+          "role": "TID-only supervisor pattern unsuitable for signing"
+        },
+        {
+          "path": "cells/services/kms/src/main.rs",
+          "start_line": 23,
+          "end_line": 35,
+          "role": "Registry currently omits service-net"
+        },
+        {
+          "path": "libs/api/src/abi/caller_identity.rs",
+          "start_line": 89,
+          "end_line": 96,
+          "role": "Generation exists specifically to distinguish respawns"
+        }
+      ],
+      "cwe": [
+        "CWE-613",
+        "CWE-863"
+      ],
+      "evidence": [
+        {
+          "label": "Attacker-controlled source",
+          "explanation": "A request queued by a prior service-net generation retains the old kernel-attested generation and possibly a later-reused numeric TID."
+        },
+        {
+          "label": "Broken control",
+          "explanation": "Checking only sender against sys_lookup_service(NET) ignores the generation evidence intended to prevent authority inheritance."
+        },
+        {
+          "label": "Required change",
+          "explanation": "Add explicit service-net registration/binding that records cell_id, generation, service TID, binding epoch, active identity generation, and policy epoch. Revalidate the live NET registry and all stored fields on every sign request; invalidate outstanding requests and responses on restart, rotation, or policy change."
+        }
+      ],
+      "optionalProperties": {
+        "phase_gate": "Authorization tests must deny no/forged trailer, broker, supervisor signing, arbitrary cell, stale generation, reused TID, stale binding epoch, post-rotation request, and delayed response; only the current service-net generation may request the typed TLS signature."
+      }
+    },
+    {
+      "rule_id": "KMS-ARCH-007",
+      "title": "Repairing Silo before removing its direct public API creates an alternate signing boundary",
+      "summary": "The existing Silo service accepts requests from any sender, and the public handle exposes init_key, generic sign, ECDH, and raw opcodes. Merely making the guest boot would activate a path that bypasses KMS policy and contradicts the sole-service-net-caller architecture. It would also contaminate QEMU evidence because successful signing would not prove policy mediation.",
+      "severity": "high",
+      "confidence": "high",
+      "category": "Alternate authorization path",
+      "locations": [
+        {
+          "path": "cells/services/silo/src/ipc.rs",
+          "start_line": 57,
+          "end_line": 71,
+          "role": "Accept-all IPC receive"
+        },
+        {
+          "path": "libs/ostd/src/silo.rs",
+          "start_line": 120,
+          "end_line": 172,
+          "role": "Public seed and generic sign operations"
+        },
+        {
+          "path": "libs/ostd/src/silo.rs",
+          "start_line": 200,
+          "end_line": 221,
+          "role": "Public raw opcode path"
+        },
+        {
+          "path": "cells/tests/silo-test/src/main.rs",
+          "start_line": 1,
+          "end_line": 58,
+          "role": "Arbitrary non-hypervisor cell initializes the key"
+        }
+      ],
+      "cwe": [
+        "CWE-862",
+        "CWE-749"
+      ],
+      "evidence": [
+        {
+          "label": "Attacker-controlled source",
+          "explanation": "Any cell can resolve Silo and send raw requests because sys_recv(0) accepts all senders."
+        },
+        {
+          "label": "Dangerous sink",
+          "explanation": "Those requests reach protected P-256 signing and caller-provided key initialization without KMS authorization."
+        },
+        {
+          "label": "Required change",
+          "explanation": "The reference repair must make KMS the only attested Silo caller, delete production/public SiloHandle methods and raw opcode exposure, eliminate caller-supplied production seeds, and exclude the entire service from production artifacts. A reference-only deterministic seed may exist only behind an unmistakable DEV_REFERENCE build and cannot count as custody evidence."
+        }
+      ],
+      "optionalProperties": {
+        "phase_gate": "Reference-Silo phase fails until direct calls from the test cell, service-net, broker, supervisor, and arbitrary cells deny; the only successful route is service-net → attested KMS policy → DEV_REFERENCE adapter, and evidence is labeled non-hardware-qualified."
+      }
+    },
+    {
+      "rule_id": "KMS-ARCH-008",
+      "title": "The SPI command profile lacks a specified freshness, reset, and response-correlation contract",
+      "summary": "A narrow opcode set is not replay protection. On a physical SPI boundary, captured commands/responses, delayed frames, device resets, AP resets, and concurrent requests can replay stale health/epoch/public-key state or misassociate a signature. The current Silo mailbox increments a sequence and the guest echoes it, but the host does not validate the echoed sequence, illustrating why a field without enforced semantics is insufficient.",
+      "severity": "medium",
+      "confidence": "high",
+      "category": "Replay / transport protocol",
+      "locations": [
+        {
+          "path": "cells/services/silo/src/ipc.rs",
+          "start_line": 78,
+          "end_line": 89,
+          "role": "Sequence is generated and allowed to wrap"
+        },
+        {
+          "path": "cells/services/silo/src/ipc.rs",
+          "start_line": 101,
+          "end_line": 119,
+          "role": "Response is consumed without checking echoed sequence"
+        },
+        {
+          "path": "cells/guests/silo-guest/src/main.rs",
+          "start_line": 58,
+          "end_line": 66,
+          "role": "Guest echoes request sequence"
+        },
+        {
+          "path": ".agents/260825-1726-kms-silo-production-root/research/protected-root-report.json",
+          "start_line": 2,
+          "role": "Research identifies SPI replay, substitution, reset, and narrow-profile requirements"
+        }
+      ],
+      "cwe": [
+        "CWE-294",
+        "CWE-345"
+      ],
+      "evidence": [
+        {
+          "label": "Broken control",
+          "explanation": "A monotonically changing or echoed identifier gives no freshness if the verifier does not enforce uniqueness, boot-session scope, command binding, and authenticated integrity."
+        },
+        {
+          "label": "Impact",
+          "explanation": "Replayed health/epoch material can feed readiness; mismatched signatures cause availability failures; replayed commands can consume finite signer/entropy/transport resources."
+        },
+        {
+          "label": "Required change",
+          "explanation": "Freeze canonical request/response framing with version, exact opcode, identity generation, policy epoch, AP/RoT boot-session nonces, monotonic request ID, request digest, status, length, and authenticated integrity. Bind each response to the full request, self-verify signatures, reject duplicates/out-of-window frames, and force re-attestation after either side resets."
+        }
+      ],
+      "optionalProperties": {
+        "phase_gate": "Simulation/FPGA gate must inject duplicate, reordered, truncated, bit-flipped, delayed, cross-reset, wraparound, timeout, cancellation, and concurrent frames; every case fails closed without stale readiness or misassociated signature."
+      }
+    },
+    {
+      "rule_id": "KMS-ARCH-009",
+      "title": "The existing root ABI conflates a 32-byte X25519 node identity with the new P-256 certificate identity",
+      "summary": "The one-provider-seam direction is sound, but the current seam and public status are shaped around a single 32-byte key and static X25519 DH, while ADR-0005 requires a P-256 SPKI/certificate and P-256 signing. Simply evolving the trait risks generic key IDs, wrong-purpose key selection, or falsely treating a P-256-only OpenTitan signer as satisfying the existing C2C identity lifecycle.",
+      "severity": "medium",
+      "confidence": "high",
+      "category": "API boundary / key-purpose separation",
+      "locations": [
+        {
+          "path": "cells/services/kms/src/storage/provider.rs",
+          "start_line": 22,
+          "end_line": 48,
+          "role": "Single 32-byte OpenedRoot and untyped root operations"
+        },
+        {
+          "path": "libs/types/src/kms/model.rs",
+          "start_line": 20,
+          "end_line": 35,
+          "role": "Existing ABI is acquire plus X25519 DH"
+        },
+        {
+          "path": "libs/types/src/kms/payload/binding.rs",
+          "start_line": 34,
+          "end_line": 78,
+          "role": "Status publishes only one 32-byte public key"
+        },
+        {
+          "path": "cells/services/kms/src/dispatch.rs",
+          "start_line": 104,
+          "end_line": 132,
+          "role": "Existing DH is fixed to KMS_NODE_KEY_ID_C2C"
+        }
+      ],
+      "cwe": [],
+      "evidence": [
+        {
+          "label": "Incompatible contracts",
+          "explanation": "A P-256 uncompressed SEC1 public key is 65 bytes and ADR identity is the complete SPKI DER hash; neither fits the current [u8; 32] field."
+        },
+        {
+          "label": "Security risk",
+          "explanation": "Caller-selected generic handles/key IDs encourage cross-purpose use; a coarse provider-ready state can authorize TLS even when only the unrelated C2C key is healthy, or vice versa."
+        },
+        {
+          "label": "Required change",
+          "explanation": "Keep one ProtectedRootProvider implementation boundary but expose typed leaf capabilities and independent readiness: C2C X25519 and relay TLS P-256 must have fixed algorithms, purposes, handles/generations, public encodings, and authorization policies. The SPI profile should implement only the production-required P-256 TLS capability and must not pretend to support X25519."
+        }
+      ],
+      "optionalProperties": {
+        "phase_gate": "Contract gate must decide and version the ABI before callers migrate; tests reject cross-purpose handles, algorithms, generations, public-key encodings, and readiness substitution."
+      }
+    },
+    {
+      "rule_id": "KMS-ARCH-010",
+      "title": "The phase order freezes contracts before two feasibility decisions that can change them",
+      "summary": "The proposed order starts with contracts and repairs Silo before proving that embedded-tls 0.19 supports an external protected client-auth signer, and postpones the concrete OpenTitan silicon/firmware/transport/secure-NVM/board trust decision. If either assumption fails, the frozen API and lifecycle model will be wrong; the prohibited escape hatches are filesystem PEM or a software signer.",
+      "severity": "medium",
+      "confidence": "high",
+      "category": "Phase ordering / missing prerequisites",
+      "locations": [
+        {
+          "path": "cells/services/net/src/tls/provider.rs",
+          "start_line": 47,
+          "end_line": 65,
+          "role": "Current provider has no client certificate or signer"
+        },
+        {
+          "path": "cells/services/net/Cargo.toml",
+          "start_line": 31,
+          "end_line": 37,
+          "role": "Pinned embedded-tls 0.19 dependency"
+        },
+        {
+          "path": "docs/decisions/0005-mutual-tls-relay-identity.md",
+          "start_line": 126,
+          "end_line": 141,
+          "role": "mTLS profile and lifecycle are blocked prerequisites"
+        },
+        {
+          "path": ".agents/260825-1726-kms-silo-production-root/research/protected-root-report.json",
+          "start_line": 2,
+          "role": "Concrete production release, SPI profile, board binding, and rollback design remain selections"
+        }
+      ],
+      "cwe": [],
+      "evidence": [
+        {
+          "label": "TLS feasibility risk",
+          "explanation": "Current CryptoProvider explicitly keeps default signer/client_cert behavior; no demonstrated asynchronous/external CertificateVerify hook exists in the reviewed code."
+        },
+        {
+          "label": "Hardware feasibility risk",
+          "explanation": "OpenTitan master/reference APIs, FPGA evidence, and stock boards do not identify a purchasable qualified product, pinned firmware ABI, monotonic storage design, provisioning service, or AP boot binding."
+        },
+        {
+          "label": "Required change",
+          "explanation": "Add a Phase -1 decision gate: prove the TLS library can drive TLS 1.3 client auth through the typed callback without key bytes, and select/pin the production RoT part, firmware release, one SPI profile, protected NVM strategy, provisioning/lifecycle support, and board threat model. Then freeze contracts."
+        }
+      ],
+      "optionalProperties": {
+        "phase_gate": "No contract freeze or Silo repair until both throwaway feasibility proofs pass. Failure requires an explicit TLS provider or hardware architecture decision, never PEM/software fallback or scope reduction."
+      }
+    }
+  ],
+  "reviewed_paths": [
+    ".agents/260825-1726-kms-silo-production-root/research/codebase-report.json",
+    ".agents/260825-1726-kms-silo-production-root/research/protected-root-report.json",
+    "docs/decisions/0005-mutual-tls-relay-identity.md",
+    "docs/project-roadmap.md",
+    "cells/services/kms/src/main.rs",
+    "cells/services/kms/src/auth.rs",
+    "cells/services/kms/src/dispatch.rs",
+    "cells/services/kms/src/storage.rs",
+    "cells/services/kms/src/storage/provider.rs",
+    "cells/services/kms/src/storage/root.rs",
+    "cells/services/kms/src/storage/journal.rs",
+    "cells/services/kms/src/storage/record.rs",
+    "libs/types/src/kms/model.rs",
+    "libs/types/src/kms/payload/binding.rs",
+    "libs/ostd/src/clients/kms.rs",
+    "libs/api/src/abi/caller_identity.rs",
+    "cells/services/net/src/tls/provider.rs",
+    "cells/services/net/Cargo.toml",
+    "cells/services/net/build.rs",
+    "cells/services/net-broker/src/connection_manager.rs",
+    "cells/services/silo/src/main.rs",
+    "cells/services/silo/src/ipc.rs",
+    "libs/ostd/src/silo.rs",
+    "cells/guests/silo-guest/src/main.rs",
+    "cells/tests/silo-test/src/main.rs"
+  ],
+  "coverage_summary": "VERDICT: CONDITIONAL NO-GO. The architectural direction—one KMS-owned ProtectedRootProvider, service-net-only TLS signing, DEV_REFERENCE-only QEMU Silo, and a hardware-gated OpenTitan-compatible P-256 provider—is sound, and the current tree remains fail-closed because runtime KMS uses UnavailableRootProvider and broker relay exhaustion returns NotSupported. The proposed sequence is not yet safe or plan-ready: 7 High and 3 Medium design findings survive. Required phase order/gates: (0) threat-model and feasibility gate: prove embedded-tls external TLS 1.3 client-auth signing without key bytes; select and pin actual RoT silicon/firmware, exactly one SPI profile, protected-NVM strategy, provisioning support, AP boot-binding design, and board threat model; (1) contract/product gate: version typed C2C-vs-TLS capabilities, freeze a TLS CertificateVerify-only envelope, service-net generation binding, canonical/authenticated SPI framing, and a whole-artifact production profile that excludes Silo/TestHooks/software signing/tls-insecure/raw/K1; (2) KMS policy/lifecycle gate: implement independently protected monotonic state, fresh authenticated health, journal-key custody, atomic power-fail-safe lifecycle, key-purpose separation, audit/error precedence, rotation/RMA/exhaustion behavior, with signing still disabled; (3) DEV_REFERENCE Silo gate: repair artifact/init only behind KMS, remove direct/raw/public Silo signing and caller-supplied production seed paths, enforce freshness/correlation, and label all evidence software-only; (4) certificate enrollment/binding gate: protected-key CSR proof-of-possession, managed-CA profile, exact P-256 SPKI and NodeId extension binding, staged activation/renewal/revocation/recovery; (5) service-net mTLS gate: CA/hostname validation, typed protected signer, bounded timeout/cancellation/concurrency, no private bytes or fallback; (6) QEMU relay evidence gate: complete negative authorization, stale-generation, mismatch, outage, and downgrade cases plus two-node opaque Noise evidence, explicitly non-production; (7) OpenTitan simulation/FPGA gate: hardware-backed/sideloaded P-256, authenticated freshness/reset protocol, rollback fault injection, pinned firmware ABI; (8) board design/provisioning gate: production part, schematic, AP-to-RoT measured boot binding, reset/power/bus/entropy/debug/lifecycle/manufacturing controls; (9) production hardware qualification gate: physical non-extractability, rollback, clone, update/RMA, latency/load and artifact-selection evidence; only then (10) production two-node ADR-0005 qualification. Current RPi3/EL1 is excluded from Silo production evidence, and QEMU/FPGA results may never clear hardware gates. No code, tests, builds, network calls, or edits were performed, as required."
+}

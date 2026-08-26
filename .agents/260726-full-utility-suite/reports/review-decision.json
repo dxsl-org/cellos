@@ -1,0 +1,12 @@
+{
+  "verdict": "PASS_WITH_RISK",
+  "blocking": false,
+  "findings": [
+    {"severity":"HIGH","file":".agents/260726-full-utility-suite/phase-04-awk-mini-language.md","line":70,"summary":"AWK field references conflict with current shell expansion."},
+    {"severity":"HIGH","file":".agents/260726-full-utility-suite/phase-05-getprocs2-and-top.md","line":36,"summary":"GetProcs2 explicit telemetry gate can drift if added to spawn defaults."},
+    {"severity":"MED","file":".agents/260726-full-utility-suite/phase-05-getprocs2-and-top.md","line":31,"summary":"ProcessInfoV2 ABI layout needs fixed-width fields and size/alignment tests."},
+    {"severity":"MED","file":".agents/260726-full-utility-suite/phase-05-getprocs2-and-top.md","line":25,"summary":"top CPU percent denominator is underspecified for multi-hart scheduling."},
+    {"severity":"MED","file":".agents/260726-full-utility-suite/phase-01-argv-and-pattern-engine.md","line":33,"summary":"ERE-lite linear-time promise lacks concrete state/depth/repetition caps."},
+    {"severity":"LOW","file":".agents/260726-full-utility-suite/phase-01-argv-and-pattern-engine.md","line":54,"summary":"Utility status 0/1/2 plumbing should explicitly replace ViResult-only dispatch."}
+  ]
+}

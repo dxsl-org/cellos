@@ -1,0 +1,14 @@
+{
+  "decision": "PASS_WITH_BOUNDARY",
+  "disprovenClaims": [],
+  "unverifiedClaims": [
+    "physical RPi3 runtime behavior for this refactor"
+  ],
+  "missingProof": [
+    "fresh physical RPi3 boot and MMC log"
+  ],
+  "reachableRegressions": [],
+  "resolvedFindings": [
+    "RPi3 SDHCI SoC dependency reference now matches the AArch64 target guard"
+  ]
+}

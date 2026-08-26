@@ -1,0 +1,30 @@
+{
+  "skill": "hc-fix",
+  "mode": "interactive",
+  "task": "Prevent Raspberry Pi 3 mini UART RX FIFO overrun during serial bursts",
+  "acceptanceCriteria": [
+    "an unpaced COM4 write of echo 123456789 followed by CR is received in full",
+    "an unpaced echo board-rpi3 pipe wc command returns 1 1 11 and the shell prompt",
+    "generic AArch64 and board-rpi3 builds remain green"
+  ],
+  "touchpoints": [
+    "hal/arch/arm/src/aarch64/uart_bcm_mini.rs",
+    "hal/arch/arm/src/aarch64/bcm2835_legacy_irq.rs",
+    "hal/arch/arm/src/aarch64/trap.rs",
+    "kernel/src/task/drivers/uart.rs",
+    "kernel/src/task/drivers/console_drv.rs",
+    "kernel/src/main.rs",
+    "kernel/src/task/syscall.rs",
+    "tools/rpi3-netboot/test-netboot-scripts.ps1"
+  ],
+  "publicContracts": [
+    "board-rpi3 serial console remains 115200 8N1",
+    "QEMU AArch64 continues using PL011 polling"
+  ],
+  "blastRadius": [
+    "RPi3 UART interrupt dispatch",
+    "console input relay",
+    "shell automation and paste input"
+  ],
+  "scoutSummary": "RPi3 mini UART RX is polled from the 10 ms timer path with AUX interrupts disabled; two real-board bursts truncate at the eight-byte FIFO boundary."
+}

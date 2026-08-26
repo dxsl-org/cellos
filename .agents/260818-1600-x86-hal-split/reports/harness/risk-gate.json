@@ -1,0 +1,10 @@
+{
+  "highRisk": true,
+  "reasons": [
+    "early boot hardware configuration changed",
+    "CI board matrix changed"
+  ],
+  "autoStopRequired": false,
+  "humanApproved": true,
+  "largeDiff": false
+}

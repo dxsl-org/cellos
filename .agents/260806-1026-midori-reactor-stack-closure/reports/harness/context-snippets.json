@@ -1,0 +1,32 @@
+{
+  "skill": "hc-cook",
+  "mode": "interactive",
+  "task": "Execute the Midori reactor and stack closure plan in dependency order, stopping for the Law 1 gate before public ABI or semantic changes.",
+  "acceptanceCriteria": [
+    "A real NIC-owned RX interrupt feeds the existing NET_RX completion path without changing libs/api or libs/types.",
+    "The NET_RX producer is fail-closed to the registered NIC MMIO owner and preserves nonblocking OP_RX behavior.",
+    "QEMU runtime evidence shows the IRQ-to-completion producer marker and existing DHCP/TCP behavior remains functional.",
+    "Recv, RecvTimeout, peer-death delivery, and VFS blocking grant invariants remain unchanged before the Law 1 gate.",
+    "No Phase 04 or later public ABI or semantic work starts without two explicit Law 1 confirmations."
+  ],
+  "touchpoints": [
+    "kernel/src/task/drivers/driver_cell.rs",
+    "kernel/src/task/drivers/virtio_common.rs",
+    "kernel/src/task/waker.rs",
+    "cells/services/net/src/main.rs",
+    "tests/integration/tests/boot.rs"
+  ],
+  "publicContracts": [
+    "libs/api and libs/types remain byte-for-byte untouched through Phase 02.",
+    "WaitCompletion(NET_RX) keeps its existing mask and completion result semantics.",
+    "VirtIO-net OP_RX remains nonblocking and RecvTimeout shell input remains on TaskState::Recv."
+  ],
+  "blastRadius": [
+    "VirtIO MMIO IRQ dispatch and ownership tracking",
+    "NET_RX completion wakeup latency and lost-wakeup behavior",
+    "net service DHCP and TCP polling",
+    "driver-cell restart and deregistration"
+  ],
+  "scoutSummary": "The kernel-owned CQ and NET_RX consumer are present, but no production signal_net_rx producer exists. VirtIO-net claims MMIO before RegisterNicDriver; the resource registry can bind the claimed slot to the registering TID without an ABI change.",
+  "evidence": "expected"
+}

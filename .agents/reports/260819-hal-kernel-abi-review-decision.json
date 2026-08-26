@@ -1,0 +1,60 @@
+{
+  "verdict": "PASS_WITH_RISK",
+  "target": "origin/main...HEAD on refactor/hal-kernel-rust-abi",
+  "base": "origin/main",
+  "head": "79c91353",
+  "date": "2026-08-19",
+  "findings": [
+    {
+      "severity": "LOW",
+      "file": "kernel/src/memory/paging.rs",
+      "line": 912,
+      "category": "docs-accuracy",
+      "summary": "Page-fault hook docs still reference the retired local x86 IDT extern declaration instead of the new shared kernel_abi source."
+    }
+  ],
+  "verification": [
+    {
+      "command": "git diff --check origin/main...HEAD",
+      "status": "passed"
+    },
+    {
+      "command": "cargo fmt --all --check",
+      "status": "passed"
+    },
+    {
+      "command": "cargo check -p hal-arch-trait",
+      "status": "passed"
+    },
+    {
+      "command": "bash scripts/check-hal-boundaries.sh",
+      "status": "passed"
+    },
+    {
+      "command": "cargo check -p cellos-kernel --target x86_64-unknown-none",
+      "status": "passed"
+    },
+    {
+      "command": "RUSTFLAGS=\"-C relocation-model=pic\" cargo check -p cellos-kernel --target riscv64gc-unknown-none-elf --features board-vf2",
+      "status": "passed"
+    },
+    {
+      "command": "RUSTFLAGS=\"-C relocation-model=pic -C target-feature=+bti,+paca,+pacg\" cargo check -p cellos-kernel --target aarch64-unknown-none-softfloat --features board-rpi3",
+      "status": "passed"
+    },
+    {
+      "command": "cargo check -p hal-core --target riscv32imac-unknown-none-elf --no-default-features --features riscv32",
+      "status": "passed"
+    },
+    {
+      "command": "cargo +nightly check -p hal-arch-trait --target x86_64-unknown-linux-gnu",
+      "status": "transport_lost",
+      "evidence": "WSL session ended with Wsl/Service/WSAETIMEDOUT before Cargo result was available"
+    },
+    {
+      "command": "cargo +nightly check -p cellos-kernel --target x86_64-unknown-none -Z build-std=core,alloc",
+      "status": "transport_lost",
+      "evidence": "WSL session ended with Wsl/Service/E_UNEXPECTED before Cargo result was available"
+    }
+  ]
+}

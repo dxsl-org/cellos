@@ -1,0 +1,28 @@
+{
+  "skill": "hc-fix",
+  "mode": "interactive",
+  "task": "Fix consecutive real Raspberry Pi 3 early-boot faults before paging activation",
+  "acceptanceCriteria": [
+    "platform initialization performs no exclusive atomic operation before MMU activation",
+    "MTE capability logging uses the Raspberry Pi mini-UART instead of the QEMU PL011",
+    "board-rpi3 kernel emits its normal boot banner on real hardware at 115200 baud",
+    "RPi3 image generation packages a raw AArch64 kernel rather than an ELF file"
+  ],
+  "touchpoints": [
+    "kernel/src/platform.rs",
+    "hal/arch/arm/src/aarch64/mte.rs",
+    "tools/rpi3-firmware/config.txt",
+    "gen_disk_rpi3.ps1"
+  ],
+  "publicContracts": [
+    "platform::init must complete before platform::with and paging initialization",
+    "kernel8.img must be a raw AArch64 image loaded at 0x80000"
+  ],
+  "blastRadius": [
+    "AArch64 and RV64 early platform discovery",
+    "pre-MMU page-table construction",
+    "AArch64 CFI and MTE early-hardening initialization",
+    "RPi3 UART and SD boot packaging"
+  ],
+  "scoutSummary": "The platform Spinlock fault is fixed on real hardware. The next reproducible stop occurs after both CFI lines when mte::init logs through QEMU PL011 0x09000000 on board-rpi3; the prior ID-register read already succeeded, isolating the invalid UART MMIO access."
+}

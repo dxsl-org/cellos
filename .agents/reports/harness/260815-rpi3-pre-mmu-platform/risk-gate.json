@@ -1,0 +1,9 @@
+{
+  "highRisk": true,
+  "reasons": [
+    "kernel early-boot synchronization and board boot configuration are modified"
+  ],
+  "autoStopRequired": false,
+  "humanApproved": true,
+  "largeDiff": false
+}

@@ -1,0 +1,11 @@
+{
+  "highRisk": true,
+  "reasons": [
+    "public ABI anchoring risk",
+    "vendor SDK license and redistribution risk",
+    "future accelerator DMA isolation risk"
+  ],
+  "autoStopRequired": false,
+  "humanApproved": true,
+  "largeDiff": false
+}

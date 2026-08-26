@@ -1,0 +1,13 @@
+{
+  "directExecution": true,
+  "results": [
+    "BCM27xx topology tests passed with exact values and invalid-topology cases.",
+    "ARM HAL and kernel compiled for the board-rpi3 feature.",
+    "RV64 QEMU reached the FAT16 boot witness."
+  ],
+  "knownWarnings": [
+    "TICKS_PER_QUANTUM_QEMU is unused",
+    "ticks_per_quantum is unused",
+    "vi_handle_virtio_irq is unused"
+  ]
+}

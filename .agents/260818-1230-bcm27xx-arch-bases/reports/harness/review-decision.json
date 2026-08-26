@@ -1,0 +1,11 @@
+{
+  "decision": "PASS",
+  "criticalCount": 0,
+  "acceptanceCoverage": [
+    "optional dependency is board-rpi3-only",
+    "controller bases are SoC-owned",
+    "register offsets remain in ARM HAL",
+    "IRQ and timer contracts are unchanged"
+  ],
+  "blockingReasons": []
+}

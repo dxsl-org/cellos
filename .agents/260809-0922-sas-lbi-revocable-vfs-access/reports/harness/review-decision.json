@@ -1,0 +1,21 @@
+{
+  "decision": "PASS",
+  "score": 9.4,
+  "criticalCount": 0,
+  "acceptanceCoverage": [
+    "exact append-only ABI mapped to API tests",
+    "owner authorization and bounded read mapped to RV64 QEMU and code review",
+    "parent owner-death and generation cleanup mapped to seven VFS selftest markers",
+    "fast IPC exclusion mapped to source and adversarial review",
+    "three architecture compile gates passed"
+  ],
+  "regressionProof": [
+    "API and types host suites passed",
+    "service-vfs host check passed",
+    "RV64 QEMU vfs-quota lane passed",
+    "RV64 AArch64 and x86_64 production builds passed",
+    "standard production review returned PASS"
+  ],
+  "contractStatus": "OK",
+  "blockingReasons": []
+}

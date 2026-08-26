@@ -1,0 +1,11 @@
+{
+  "highRisk": true,
+  "reasons": [
+    "bare-metal MMIO addresses",
+    "SDHCI access constraints",
+    "cross-target feature gating"
+  ],
+  "autoStopRequired": false,
+  "humanApproved": true,
+  "largeDiff": false
+}

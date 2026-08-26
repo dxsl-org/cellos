@@ -1,0 +1,407 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "base_revision": {
+      "const": "2d61a4728834a0dd23ce63b6e09e5b735246c41a"
+    },
+    "baseline_tuple": {
+      "additionalProperties": false,
+      "properties": {
+        "artifact_binding": {
+          "const": "same-final-elf"
+        },
+        "expected_result": {
+          "const": "preserve-existing-v1v2-policy"
+        },
+        "manifest_version_class": {
+          "const": "v2"
+        },
+        "owner_generation_state": {
+          "const": "equals-authenticated-floor"
+        },
+        "publisher_epoch_state": {
+          "const": "current"
+        },
+        "publisher_identity_binding": {
+          "const": "matching"
+        },
+        "route_state": {
+          "const": "existing-policy-route"
+        },
+        "signature_state": {
+          "const": "valid-current"
+        }
+      },
+      "required": [
+        "publisher_epoch_state",
+        "owner_generation_state",
+        "manifest_version_class",
+        "route_state",
+        "publisher_identity_binding",
+        "artifact_binding",
+        "signature_state",
+        "expected_result"
+      ],
+      "type": "object"
+    },
+    "derived_source_state": {
+      "additionalProperties": false,
+      "properties": {
+        "derived_source_state_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "hash_algorithm": {
+          "const": "sha256"
+        },
+        "inputs": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "path",
+              "sha256"
+            ],
+            "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "hash_algorithm",
+        "inputs",
+        "derived_source_state_sha256"
+      ],
+      "type": "object"
+    },
+    "dimensions": {
+      "additionalProperties": false,
+      "properties": {
+        "manifest_version_class": {
+          "const": [
+            "absent",
+            "v1",
+            "v2",
+            "unsupported-byte",
+            "future-symbolic"
+          ]
+        },
+        "owner_generation_state": {
+          "const": [
+            "equals-authenticated-floor",
+            "stale-below-floor",
+            "ahead-or-conflicting",
+            "floor-unavailable-or-invalid"
+          ]
+        },
+        "publisher_epoch_state": {
+          "const": [
+            "current",
+            "stale",
+            "unknown-or-ahead"
+          ]
+        },
+        "route_state": {
+          "const": [
+            "existing-policy-route",
+            "exact-required-route-enforceable",
+            "substituted-weaker-route",
+            "required-route-unavailable-or-disabled"
+          ]
+        }
+      },
+      "required": [
+        "publisher_epoch_state",
+        "owner_generation_state",
+        "manifest_version_class",
+        "route_state"
+      ],
+      "type": "object"
+    },
+    "mandatory_hostile_tuples": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "artifact_binding": {
+            "enum": [
+              "same-final-elf",
+              "different-final-elf",
+              "manifest-tampered",
+              "provenance-digest-mismatch",
+              "owner-digest-mismatch"
+            ]
+          },
+          "evidence_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "expected_result": {
+            "enum": [
+              "preserve-existing-v1v2-policy",
+              "deny-before-publication",
+              "recovery-required-no-publication",
+              "decision-required-phase08-blocked"
+            ]
+          },
+          "invariant_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "manifest_version_class": {
+            "enum": [
+              "absent",
+              "v1",
+              "v2",
+              "unsupported-byte",
+              "future-symbolic"
+            ]
+          },
+          "owner_generation_state": {
+            "enum": [
+              "equals-authenticated-floor",
+              "stale-below-floor",
+              "ahead-or-conflicting",
+              "floor-unavailable-or-invalid"
+            ]
+          },
+          "owner_phase": {
+            "enum": [
+              "03",
+              "05",
+              "07",
+              "08-predesign"
+            ]
+          },
+          "publisher_epoch_state": {
+            "enum": [
+              "current",
+              "stale",
+              "unknown-or-ahead"
+            ]
+          },
+          "publisher_identity_binding": {
+            "enum": [
+              "matching",
+              "wrong-key",
+              "rotated-without-authorized-continuity",
+              "missing"
+            ]
+          },
+          "rationale": {
+            "type": "string"
+          },
+          "route_state": {
+            "enum": [
+              "existing-policy-route",
+              "exact-required-route-enforceable",
+              "substituted-weaker-route",
+              "required-route-unavailable-or-disabled"
+            ]
+          },
+          "scenario": {
+            "type": "string"
+          },
+          "signature_state": {
+            "enum": [
+              "valid-current",
+              "valid-replayed",
+              "invalid",
+              "missing"
+            ]
+          },
+          "threat_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "scenario",
+          "threat_id",
+          "publisher_epoch_state",
+          "owner_generation_state",
+          "manifest_version_class",
+          "route_state",
+          "publisher_identity_binding",
+          "artifact_binding",
+          "signature_state",
+          "expected_result",
+          "invariant_ids",
+          "rationale",
+          "owner_phase",
+          "evidence_refs"
+        ],
+        "type": "object"
+      },
+      "maxItems": 13,
+      "minItems": 13,
+      "type": "array"
+    },
+    "matrix_id": {
+      "const": "cellos-phase08-downgrade-predesign"
+    },
+    "matrix_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "rows": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "artifact_binding": {
+            "enum": [
+              "same-final-elf",
+              "different-final-elf",
+              "manifest-tampered",
+              "provenance-digest-mismatch",
+              "owner-digest-mismatch"
+            ]
+          },
+          "evidence_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "expected_result": {
+            "enum": [
+              "preserve-existing-v1v2-policy",
+              "deny-before-publication",
+              "recovery-required-no-publication",
+              "decision-required-phase08-blocked"
+            ]
+          },
+          "invariant_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "manifest_version_class": {
+            "enum": [
+              "absent",
+              "v1",
+              "v2",
+              "unsupported-byte",
+              "future-symbolic"
+            ]
+          },
+          "owner_generation_state": {
+            "enum": [
+              "equals-authenticated-floor",
+              "stale-below-floor",
+              "ahead-or-conflicting",
+              "floor-unavailable-or-invalid"
+            ]
+          },
+          "owner_phase": {
+            "enum": [
+              "03",
+              "05",
+              "07",
+              "08-predesign"
+            ]
+          },
+          "publisher_epoch_state": {
+            "enum": [
+              "current",
+              "stale",
+              "unknown-or-ahead"
+            ]
+          },
+          "publisher_identity_binding": {
+            "enum": [
+              "matching",
+              "wrong-key",
+              "rotated-without-authorized-continuity",
+              "missing"
+            ]
+          },
+          "rationale": {
+            "type": "string"
+          },
+          "route_state": {
+            "enum": [
+              "existing-policy-route",
+              "exact-required-route-enforceable",
+              "substituted-weaker-route",
+              "required-route-unavailable-or-disabled"
+            ]
+          },
+          "signature_state": {
+            "enum": [
+              "valid-current",
+              "valid-replayed",
+              "invalid",
+              "missing"
+            ]
+          },
+          "threat_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "threat_id",
+          "publisher_epoch_state",
+          "owner_generation_state",
+          "manifest_version_class",
+          "route_state",
+          "publisher_identity_binding",
+          "artifact_binding",
+          "signature_state",
+          "expected_result",
+          "invariant_ids",
+          "rationale",
+          "owner_phase",
+          "evidence_refs"
+        ],
+        "type": "object"
+      },
+      "maxItems": 240,
+      "minItems": 240,
+      "type": "array"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "unresolved_decision_ids": {
+      "const": [
+        "DQ-01",
+        "DQ-02",
+        "DQ-03",
+        "DQ-04",
+        "DQ-05",
+        "DQ-06",
+        "DQ-07",
+        "DQ-08",
+        "DQ-09"
+      ]
+    }
+  },
+  "required": [
+    "schema_version",
+    "matrix_id",
+    "base_revision",
+    "derived_source_state",
+    "dimensions",
+    "baseline_tuple",
+    "rows",
+    "mandatory_hostile_tuples",
+    "unresolved_decision_ids",
+    "matrix_sha256"
+  ],
+  "title": "Cellos Manifest downgrade predesign matrix",
+  "type": "object"
+}

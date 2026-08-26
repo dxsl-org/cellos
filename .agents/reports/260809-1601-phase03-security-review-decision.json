@@ -1,0 +1,38 @@
+{
+  "verdict": "BLOCKED",
+  "target": "pending Phase03 diff",
+  "base": "HEAD",
+  "head": "working-tree",
+  "findings": [
+    {
+      "severity": "HIGH",
+      "file": "kernel/src/task/syscall.rs",
+      "line": 2466,
+      "summary": "NotifyOnExit has a liveness-to-subscribe race that can miss owner death and leave VFS-owned state stale.",
+      "fix": "Subscribe while holding SCHEDULER or recheck liveness atomically inside subscribe_death."
+    },
+    {
+      "severity": "HIGH",
+      "file": "kernel/src/task/syscall.rs",
+      "line": 1509,
+      "summary": "VFS send completion releases leases but leaves current_caller context active for later stale GrantSlice authorization.",
+      "fix": "Clear the VFS task caller context after the send/release terminal point and add a post-reply denial regression."
+    }
+  ],
+  "verification": [
+    {
+      "command": "cargo check -p vicell-kernel",
+      "status": "passed"
+    },
+    {
+      "command": "cargo test -p service-vfs --target x86_64-unknown-linux-gnu",
+      "status": "not_valid_for_lane",
+      "evidence": "unwinding panics are not supported without std"
+    },
+    {
+      "command": "cargo test -p vicell-kernel pin --target x86_64-unknown-linux-gnu",
+      "status": "not_valid_for_lane",
+      "evidence": "duplicate lang item panic_impl"
+    }
+  ]
+}

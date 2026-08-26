@@ -1,0 +1,66 @@
+{
+  "verdict": "BLOCKED",
+  "target": "Phase04 VFS file-handle bounded reads",
+  "mode": "domain-risk-adversarial",
+  "findings": [
+    {
+      "severity": "CRITICAL",
+      "file": "kernel/src/task/syscall.rs",
+      "line": 705,
+      "category": "scope/trust-boundary",
+      "status": "accepted",
+      "summary": "Kernel syscall and VFS grant-lease lifecycle expansion exceeds the Law1 Phase 04 delta."
+    },
+    {
+      "severity": "HIGH",
+      "file": "cells/tools/shell/src/cmd_fs.rs",
+      "line": 359,
+      "category": "scope/api-migration",
+      "status": "accepted",
+      "summary": "Shell caller migration uses Stat plus ReadFileGrant in Phase 04 even though caller migration is assigned to Phase 05."
+    },
+    {
+      "severity": "MED",
+      "file": "libs/api/src/services/ipc.rs",
+      "line": 155,
+      "category": "api-contract",
+      "status": "accepted",
+      "summary": "New public VFS wire variants have no matching docs/specs update."
+    },
+    {
+      "severity": "LOW",
+      "file": "cells/services/vfs/src/file_handles.rs",
+      "line": 12,
+      "category": "build-hygiene",
+      "status": "accepted",
+      "summary": "Test-hooks rebuild emits unused import warnings for file handle state re-exports."
+    }
+  ],
+  "verification": [
+    {
+      "command": "git diff --check",
+      "result": "passed"
+    },
+    {
+      "command": "cargo test -p api --target x86_64-unknown-linux-gnu",
+      "result": "passed"
+    },
+    {
+      "command": "cargo check -p vicell-kernel",
+      "result": "passed"
+    },
+    {
+      "command": "bash scripts/build-test-hooks-ci.sh",
+      "result": "passed_with_warnings"
+    },
+    {
+      "command": "cargo test --manifest-path tests/integration/Cargo.toml --target x86_64-unknown-linux-gnu --test vfs-quota riscv64_vfs_quota_all_pass -- --nocapture",
+      "result": "passed"
+    },
+    {
+      "command": "cargo test -p service-vfs --target x86_64-unknown-linux-gnu",
+      "result": "blocked",
+      "reason": "driver-disk host test target reports unwinding panics are not supported without std"
+    }
+  ]
+}

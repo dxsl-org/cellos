@@ -1,0 +1,11 @@
+{
+  "highRisk": true,
+  "reasons": [
+    "peer-death scheduler wake and notification semantics",
+    "single-address-space foreign grant-copy lifetime",
+    "runtime proof required before generic reactor work"
+  ],
+  "autoStopRequired": true,
+  "humanApproved": true,
+  "largeDiff": true
+}

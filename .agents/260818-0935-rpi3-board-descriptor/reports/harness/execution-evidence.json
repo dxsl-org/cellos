@@ -1,0 +1,23 @@
+{
+  "phase": "rpi3-board-descriptor",
+  "criteria": [
+    {
+      "criterion": "board catalog and optional controller validation remain consistent",
+      "command": "cargo test -p cellos-boards --target x86_64-unknown-linux-gnu",
+      "evidenceRef": "9 passed",
+      "pass": true
+    },
+    {
+      "criterion": "Raspberry Pi 3 consumers compile from descriptor data",
+      "command": "cargo check -p cellos-kernel --target aarch64-unknown-none-softfloat -Z build-std=core,alloc --features board-rpi3",
+      "evidenceRef": "passed with five existing hal-arm dead-code warnings",
+      "pass": true
+    },
+    {
+      "criterion": "existing RV64 runtime remains operational",
+      "command": "scripts/qemu-boot-test.sh target/riscv64gc-unknown-none-elf/release/cellos-kernel",
+      "evidenceRef": "PASS: FAT16 mounted - kernel booted (no disk)",
+      "pass": true
+    }
+  ]
+}

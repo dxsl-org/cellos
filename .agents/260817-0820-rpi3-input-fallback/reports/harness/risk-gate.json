@@ -1,0 +1,9 @@
+{
+  "highRisk": false,
+  "reasons": [
+    "platform-specific bare-metal runtime fix with no ABI or persistent-device change"
+  ],
+  "autoStopRequired": false,
+  "humanApproved": true,
+  "largeDiff": false
+}

@@ -1,0 +1,54 @@
+{
+  "commands": [
+    {
+      "command": "pwsh tools/rpi3-netboot/test-netboot-scripts.ps1",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-17T15:12:00+07:00",
+      "summary": "Static guards enforce 400 kHz identification, CMD9-before-CMD7, BCM2835 RMW/write spacing, RPi3 Arasan pinmux, and timeout-write ordering."
+    },
+    {
+      "command": "cargo fmt --all -- --check and git diff --check",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-17T15:19:00+07:00",
+      "summary": "Formatting and whitespace checks passed for the dirty working tree."
+    },
+    {
+      "command": "cargo check -p cellos-kernel --release --features board-rpi3 --target aarch64-unknown-none-softfloat",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-17T15:19:00+07:00",
+      "summary": "RPi3 kernel check passed with pre-existing hal-arm dead-code warnings only."
+    },
+    {
+      "command": "EMBEDDED_OVERRIDE=target/rpi3-embedded cargo build --release -p cellos-kernel --features board-rpi3 --target aarch64-unknown-none-softfloat",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-17T15:11:00+07:00",
+      "summary": "RPi3 release kernel built with the board-specific embedded Cellos bundle."
+    },
+    {
+      "command": "deploy-rpi3-kernel.ps1",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-17T15:12:00+07:00",
+      "summary": "Published uImage SHA256 409CE418C9C2F0E7A005CB5F0BAF0D07D2DE30CF0B56205B08DEAABB2F8B00C5 with payload SHA256 75B09ABF1F9BC976E345468C359B341166C048DF24409121A1C20BC1DA3F6EA6."
+    },
+    {
+      "command": "real-board RPi3 COM4/TFTP boot",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-17T15:17:00+07:00",
+      "summary": "The 16 GB SD reported 30318592 sectors; Cellos read MBR partitions P1-P4, mounted FAT16 plus FAT32 /mnt/sd and /bin, and reached Cellos >."
+    }
+  ],
+  "beforeAfter": {
+    "before": "The external SD probe progressed only after pinmux and CMD9 fixes, then the first CMD17 failed with INT_STATUS=0x00108000 (data timeout).",
+    "after": "The same board and card complete CMD17-backed MBR/filesystem reads and boot the Cellos user space to its shell."
+  },
+  "hardwareEvidence": {
+    "path": ".agents/debug/rpi3-cmd17-timeout-fixed-hardware.raw",
+    "sha256": "1655E27864A8B8ED305F82E9C6527E26AEDD6EE8C87A28B8CA7EA486A8054FA3"
+  }
+}

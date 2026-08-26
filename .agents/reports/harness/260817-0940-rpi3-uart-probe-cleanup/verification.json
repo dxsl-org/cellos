@@ -1,0 +1,64 @@
+{
+  "commands": [
+    {
+      "command": "pre-fix marker guard evaluation",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-17T09:43:00+07:00",
+      "summary": "The regression guard detects T, M, A, and N probe_put calls in the pre-fix HEAD sources."
+    },
+    {
+      "command": "pwsh tools/rpi3-netboot/test-netboot-scripts.ps1",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-17T09:43:00+07:00",
+      "summary": "Current sources contain no hot-path raw probes and retain fault-only diagnostics."
+    },
+    {
+      "command": "cargo fmt --all -- --check and git diff --check",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-17T09:43:00+07:00",
+      "summary": "Formatting and whitespace checks passed."
+    },
+    {
+      "command": "cargo check -p vicell-kernel --target aarch64-unknown-none-softfloat",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-17T09:44:00+07:00",
+      "summary": "Generic AArch64 kernel check passed."
+    },
+    {
+      "command": "EMBEDDED_OVERRIDE=target/rpi3-embedded cargo build --release -p vicell-kernel --features board-rpi3 --target aarch64-unknown-none-softfloat",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-17T09:44:00+07:00",
+      "summary": "RPi3 release kernel built successfully."
+    },
+    {
+      "command": "deploy-rpi3-kernel.ps1",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-17T09:45:00+07:00",
+      "summary": "Published a verified uImage with payload SHA256 A16F292AB2FAB8D51D4C8E6848618ADBF2E697D44864107641FA73614910CC2D."
+    },
+    {
+      "command": "real-board 30-second clean-console reproduction",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-17T09:50:00+07:00",
+      "summary": "RPi3 reached shell and init supervision with zero T15, AT15, MAT15, or ANM markers; capture size fell from about 78 KB to 15 KB."
+    },
+    {
+      "command": "real-board COM4 help reproduction after probe cleanup",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-17T09:52:00+07:00",
+      "summary": "Shell echoed help, printed all command groups, and returned the ViCell prompt with zero removed markers."
+    }
+  ],
+  "beforeAfter": {
+    "before": "A 30-second RPi3 capture contained 14596 T15 markers plus interleaved ANM sequences.",
+    "after": "RPi3 boots and accepts shell input with zero T15 or ANM noise while fault-only diagnostics remain compiled."
+  }
+}

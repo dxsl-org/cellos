@@ -1,0 +1,9 @@
+{
+  "highRisk": true,
+  "reasons": [
+    "low-level MMIO semantics affect SD-card command delivery on real hardware"
+  ],
+  "autoStopRequired": false,
+  "humanApproved": true,
+  "largeDiff": false
+}

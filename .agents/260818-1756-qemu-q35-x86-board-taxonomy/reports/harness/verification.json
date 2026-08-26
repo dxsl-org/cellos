@@ -1,0 +1,36 @@
+{
+  "commands": [
+    {
+      "command": "cargo fmt --all -- --check && git diff --check",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-18T18:35:00+07:00",
+      "summary": "Formatting and whitespace checks passed."
+    },
+    {
+      "command": "cargo test -p cellos-boards -p hal-soc-riscv -p hal-soc-arm-virt -p hal-soc-bcm27xx -p hal-soc-x86 --target x86_64-unknown-linux-gnu",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-18T18:35:00+07:00",
+      "summary": "All 27 host tests passed."
+    },
+    {
+      "command": "bash scripts/check-hal-boundaries.sh && bash scripts/check-board-configs.sh",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-18T18:42:00+07:00",
+      "summary": "HAL ownership, seven active board lanes, placeholder isolation, and expected conflict lanes passed."
+    },
+    {
+      "command": "cargo build --release -p cellos-kernel --target x86_64-unknown-none -Z build-std=core,alloc",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-18T18:40:00+07:00",
+      "summary": "The x86_64 release kernel built successfully with existing target-feature warnings."
+    }
+  ],
+  "beforeAfter": {
+    "before": "The only active x86 descriptor claimed a generic PC-compatible identity.",
+    "after": "The active x86 descriptor is scoped to QEMU q35; three 32-bit machine directories are documentation-only placeholders."
+  }
+}

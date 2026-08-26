@@ -1,0 +1,36 @@
+{
+  "commands": [
+    {
+      "command": "cargo fmt --all --check && git diff --check",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-19T16:33:52+07:00",
+      "summary": "Formatting and whitespace checks passed."
+    },
+    {
+      "command": "cargo +nightly check -p cellos-kernel --target riscv64gc-unknown-none-elf -Z build-std=core,alloc",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-19T16:33:52+07:00",
+      "summary": "RV64 kernel ABI lane passed with pre-existing warnings only."
+    },
+    {
+      "command": "cargo +nightly check -p cellos-kernel --target aarch64-unknown-none-softfloat -Z build-std=core,alloc",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-19T16:33:52+07:00",
+      "summary": "AArch64 kernel ABI lane passed with pre-existing warnings only."
+    },
+    {
+      "command": "cargo +nightly check -p cellos-kernel --target x86_64-unknown-none -Z build-std=core,alloc",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-19T16:33:52+07:00",
+      "summary": "x86_64 lane passed; the prior safe-versus-unsafe function mismatch no longer reproduces."
+    }
+  ],
+  "beforeAfter": {
+    "before": "x86_64 expected a safe SyscallDispatch function pointer but the extern-block item was unsafe",
+    "after": "cfg-matched safe extern declarations and kernel export assertions compile on all required lanes"
+  }
+}

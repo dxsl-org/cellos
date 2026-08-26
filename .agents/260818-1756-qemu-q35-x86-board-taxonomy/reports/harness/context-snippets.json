@@ -1,0 +1,33 @@
+{
+  "skill": "hc-cook",
+  "mode": "interactive",
+  "task": "Scope the active x86 board to QEMU q35 and add documentation-only 32-bit QEMU placeholders",
+  "acceptanceCriteria": [
+    "the active x86 descriptor is QEMU q35 x86_64, not a generic or physical PC",
+    "the x86 SoC profile keeps COM1, IRQ4, firmware windows, and fail-closed ACPI discovery unchanged",
+    "q35-i686, virt-riscv32, and virt-aarch32 contain README.md only",
+    "32-bit placeholders are absent from Cargo, catalog, kernel, HAL, CI, and supported board count",
+    "all board and HAL verification remains green",
+    "QEMU q35 still boots through BIOS and UEFI"
+  ],
+  "touchpoints": [
+    "boards/qemu/q35-x86_64",
+    "boards/src",
+    "hal/soc/x86",
+    "kernel/src/board.rs",
+    "scripts/check-board-configs.sh",
+    "scripts/check-hal-boundaries.sh"
+  ],
+  "publicContracts": [
+    "QEMU_Q35_X86_64 uses slug qemu-q35-x86_64, vendor qemu, model q35, and SocId::QemuX86Q35",
+    "32-bit placeholder directories expose no Rust or build contract"
+  ],
+  "blastRadius": [
+    "board descriptor catalog and tests",
+    "x86 early board and SoC selection",
+    "board build matrix and HAL ownership gates",
+    "living architecture documentation"
+  ],
+  "scoutSummary": "Current runtime evidence targets qemu-system-x86_64 -machine q35; physical x86 boards remain separate and hardware-gated.",
+  "evidence": "expected"
+}

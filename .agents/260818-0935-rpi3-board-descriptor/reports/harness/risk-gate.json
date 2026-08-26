@@ -1,0 +1,11 @@
+{
+  "highRisk": true,
+  "reasons": [
+    "bare-metal fallback memory boundaries",
+    "early boot descriptor consumption",
+    "cross-target optional controller data"
+  ],
+  "autoStopRequired": false,
+  "humanApproved": true,
+  "largeDiff": false
+}

@@ -1,0 +1,20 @@
+{
+  "skill": "hc-cook",
+  "mode": "interactive",
+  "task": "Reuse the ARM HAL mini-UART byte writer in the RPi3 TrapFrame diagnostic.",
+  "acceptanceCriteria": [
+    "The task diagnostic contains no private mini-UART polling or write implementation.",
+    "Every diagnostic byte is emitted through uart_bcm_mini::probe_put.",
+    "Cfg gating, formatting, labels, volatile read, and task setup order remain unchanged."
+  ],
+  "touchpoints": [
+    "kernel/src/task.rs"
+  ],
+  "publicContracts": [
+    "No public API changes."
+  ],
+  "blastRadius": [
+    "RPi3 TrapFrame debug output during task setup"
+  ],
+  "scoutSummary": "The debug block duplicated the FIFO-safe byte writer already provided by ARM HAL."
+}

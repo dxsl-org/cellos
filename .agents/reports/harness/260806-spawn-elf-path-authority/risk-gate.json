@@ -1,0 +1,7 @@
+{
+  "highRisk": true,
+  "reasons": ["kernel capability authorization and pre-merge shipping"],
+  "autoStopRequired": true,
+  "humanApproved": true,
+  "largeDiff": false
+}

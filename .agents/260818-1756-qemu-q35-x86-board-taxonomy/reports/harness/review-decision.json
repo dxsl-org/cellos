@@ -1,0 +1,19 @@
+{
+  "decision": "PASS",
+  "score": 9.4,
+  "criticalCount": 0,
+  "acceptanceCoverage": [
+    "q35 identity mapped to board catalog assertions",
+    "x86 SoC invariants mapped to hal-soc-x86 tests and boundary gate",
+    "placeholder isolation mapped to exact README-only and registration checks",
+    "BIOS and UEFI runtime criteria mapped to execution-evidence.json"
+  ],
+  "regressionProof": [
+    "27 host tests passed",
+    "seven-board configuration matrix passed",
+    "x86 release kernel built",
+    "BIOS and UEFI q35 booted"
+  ],
+  "contractStatus": "OK",
+  "blockingReasons": []
+}

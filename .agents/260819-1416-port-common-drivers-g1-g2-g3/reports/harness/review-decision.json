@@ -1,0 +1,20 @@
+{
+  "decision": "PASS",
+  "score": 9.5,
+  "criticalCount": 0,
+  "acceptanceCoverage": [
+    "RK3588-first and X390-second ordering mapped to product-stages and hardware spec",
+    "vendor license and redistribution gate mapped to G3 evidence envelope",
+    "Grant bounds and missing NPU DMA lifecycle mapped to substrate audit table",
+    "no public ABI or concrete accelerator interface mapped to tester surface scan",
+    "BLOCKED status mapped to plan ledger and evidence verdict"
+  ],
+  "regressionProof": [
+    "cargo fmt passed",
+    "cellos-kernel x86_64 check passed",
+    "final docs diff and links passed",
+    "standard and Law 1/license reviewers returned PASS"
+  ],
+  "contractStatus": "OK",
+  "blockingReasons": []
+}

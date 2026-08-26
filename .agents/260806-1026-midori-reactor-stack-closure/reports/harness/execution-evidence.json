@@ -1,0 +1,35 @@
+{
+  "phase": "phase-02-recv-peer-death-guardrails",
+  "criteria": [
+    {
+      "criterion": "A raw hypha newline burst sent immediately after the shell-ready banner reaches the parser without a dropped byte or hang.",
+      "command": "cargo test --test boot shell_ready_hypha_burst_is_lossless -- --exact --test-threads=1",
+      "evidenceRef": "The test observed the complete policy-denial diagnostic `shell: command not found: hypha`; a truncated command would produce a different token.",
+      "pass": true
+    },
+    {
+      "criterion": "Peer death wakes a blocked sender with an error and makes it runnable.",
+      "command": "cargo test --test hotswap-smoke peer_death_guardrail_is_bounded -- --exact --test-threads=1",
+      "evidenceRef": "The boot selftest asserted Ready state, reply_value and trap return error sentinels, and exact sender presence in a hart-local ready queue.",
+      "pass": true
+    },
+    {
+      "criterion": "Real cell death returns an error to a blocked sender and also covers ForceExit queued notification delivery.",
+      "command": "cargo test --test hotswap-smoke peer_death_guardrail_is_bounded -- --exact --test-threads=1",
+      "evidenceRef": "QEMU observed `[peer-death-runtime] PASS (blocked-send error + ForceExit notification)` after a heartbeat watchdog killed the busy peer.",
+      "pass": true
+    },
+    {
+      "criterion": "RecvScatter remains isolated to owned mailbox delivery and is not silently converted to completion-queue behavior.",
+      "source": "kernel/src/task/ipc_guardrail_selftest.rs",
+      "evidenceRef": "The boot selftest used an invalid retained Recv pointer, required owned pending bytes, and asserted no completion queue was created.",
+      "pass": true
+    },
+    {
+      "criterion": "Unsafe VFS foreign-grant copies remain documented as blocking-caller invariants before Phase 04.",
+      "source": ".agents/260806-1026-midori-reactor-stack-closure/reports/phase-02-vfs-grant-audit.md",
+      "evidenceRef": "The audit lists ReadGrant and ReadFileGrant service-side copies and excludes fail-closed WriteGrant and caller-owned pre-share copy.",
+      "pass": true
+    }
+  ]
+}

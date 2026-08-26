@@ -1,0 +1,32 @@
+{
+  "skill": "hc-cook",
+  "mode": "interactive",
+  "task": "Close the RISC-V SoC profile slice for the Cellos HAL split and keep the scope to SoC facts, kernel platform consumption, and docs handoff.",
+  "acceptanceCriteria": [
+    "hal/soc/riscv carries immutable RISC-V SoC profile facts only.",
+    "kernel/src/platform.rs consumes the profiles without changing PlatformInfo shape.",
+    "Docs and tracking files distinguish QEMU and compile evidence from deferred hardware runtime proof."
+  ],
+  "touchpoints": [
+    "Cargo.toml",
+    "kernel/Cargo.toml",
+    "kernel/src/platform.rs",
+    "hal/soc/riscv/Cargo.toml",
+    "hal/soc/riscv/src/lib.rs",
+    "docs/project-roadmap.md",
+    "docs/project-changelog.md",
+    "docs/system-architecture.md"
+  ],
+  "publicContracts": [
+    "PlatformInfo remains unchanged.",
+    "Shared drivers stay under cells/drivers/.",
+    "boards/ remains the board descriptor owner."
+  ],
+  "blastRadius": [
+    "RV64 platform discovery",
+    "board-vf2 / board-pioneer feature selection",
+    "documentation ownership lines"
+  ],
+  "scoutSummary": "The new crate is data-only; the kernel still owns DTB parsing, driver publication, and fallback handling. PLIC IRQ policy, boot fallback memory migration, and board descriptors remain out of scope.",
+  "evidence": "expected"
+}

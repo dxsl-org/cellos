@@ -1,0 +1,36 @@
+{
+  "commands": [
+    {
+      "command": "cargo fmt --all --check",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-20T09:10:00+07:00",
+      "summary": "Workspace formatting remained clean before and after the docs-only Phase 06 slice."
+    },
+    {
+      "command": "cargo check -p cellos-kernel --target x86_64-unknown-none",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-20T09:10:00+07:00",
+      "summary": "Kernel compile check passed; only the pre-existing strip-tool environment warning remained."
+    },
+    {
+      "command": "git diff --check",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-20T09:25:00+07:00",
+      "summary": "Final four-file documentation diff has no whitespace errors or conflict markers."
+    },
+    {
+      "command": "local Markdown link and public-surface scan",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-20T09:25:00+07:00",
+      "summary": "Introduced local links resolve and no code, public ABI, probe crate, or concrete accelerator interface was added."
+    }
+  ],
+  "beforeAfter": {
+    "before": "Maintained specs contained stale X390 availability timing and a concrete draft accelerator trait shape.",
+    "after": "Maintained docs use evidence categories only, keep X390 hardware-gated, and record Phase 06 as blocked."
+  }
+}

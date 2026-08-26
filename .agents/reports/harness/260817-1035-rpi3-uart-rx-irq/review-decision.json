@@ -1,0 +1,16 @@
+{
+  "decision": "PASS",
+  "score": 9.7,
+  "criticalCount": 0,
+  "acceptanceCoverage": [
+    "original two burst reproductions pass on Raspberry Pi 3 hardware",
+    "100-command burst stress gate passes",
+    "generic and board-specific build paths pass"
+  ],
+  "regressionProof": [
+    "real-board burst gate passed 100 of 100",
+    "static guard requires AUX IRQ29 dispatch and rejects per-log-syscall warning"
+  ],
+  "contractStatus": "OK",
+  "blockingReasons": []
+}

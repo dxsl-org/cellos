@@ -1,0 +1,78 @@
+{
+  "commands": [
+    {
+      "command": "cargo fmt --all --check",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-06T20:20:22+07:00",
+      "summary": "Workspace formatting passed on the final Phase 02 diff."
+    },
+    {
+      "command": "cargo check -p vicell-kernel --target riscv64gc-unknown-none-elf -Z build-std=core,alloc",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-06T20:20:22+07:00",
+      "summary": "RV64 kernel typecheck passed with the IPC guardrail selftest."
+    },
+    {
+      "command": "cargo check -p app-bench -Z build-std=core,alloc && cargo build -p app-bench --release -Z build-std=core,alloc",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-06T20:20:22+07:00",
+      "summary": "The dedicated peer-death bench role compiled for RV64 in dev and release profiles."
+    },
+    {
+      "command": "bash scripts/build-test-hooks-ci.sh",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-06T20:20:22+07:00",
+      "summary": "Test-hooks cells, signed image, and RV64 kernel built successfully."
+    },
+    {
+      "command": "cargo test --test boot --test hotswap-smoke --no-run",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-06T20:20:22+07:00",
+      "summary": "Both host integration harnesses compiled."
+    },
+    {
+      "command": "cargo test --test boot shell_ready_hypha_burst_is_lossless -- --exact --test-threads=1",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-06T20:20:22+07:00",
+      "summary": "The raw first-command burst reached the full hypha token and returned the intentional launch-policy denial."
+    },
+    {
+      "command": "cargo test --test hotswap-smoke peer_death_guardrail_is_bounded -- --exact --test-threads=1",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-06T20:20:22+07:00",
+      "summary": "Synthetic sender requeue plus real heartbeat-killed blocked send and ForceExit notification paths passed in QEMU."
+    },
+    {
+      "command": "cargo test --test boot input_keyboard_e2e|input_bare_cell|console_long_line_with_backspace_no_stall -- --exact --test-threads=1",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-06T20:20:22+07:00",
+      "summary": "All three required input and RecvTimeout regression tests passed sequentially."
+    },
+    {
+      "command": "BOOT_WINDOW=120 bash scripts/qemu-boot-test.sh target/riscv64gc-unknown-none-elf/release/vicell-kernel disk_v3.img",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-06T20:20:22+07:00",
+      "summary": "The 120-second boot window reached the shell prompt without a reported trap or restart loop."
+    },
+    {
+      "command": "git diff --check && git diff -- libs/api libs/types",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-06T20:20:22+07:00",
+      "summary": "No whitespace errors and no public ABI/type diff."
+    }
+  ],
+  "beforeAfter": {
+    "before": "Shell burst, peer-death wake, RecvScatter isolation, and VFS grant-copy assumptions were not frozen by dedicated runtime guards.",
+    "after": "QEMU proves the raw shell burst, sender requeue, caller-visible error after a heartbeat-killed peer, ForceExit death notification, and RecvScatter mailbox-only boundary; the VFS grant-copy audit records the remaining blocking invariant."
+  }
+}

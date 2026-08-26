@@ -1,0 +1,4 @@
+{
+  "phase": "phase-06-g3-accelerator-readiness-envelope",
+  "noRuntimeSurface": "Documentation-only readiness envelope; real accelerator execution is explicitly blocked until hardware, SDK/license, and DMA prerequisites exist."
+}

@@ -1,0 +1,29 @@
+{
+  "commands": [
+    {
+      "command": "cargo fmt --all --check",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-06T00:00:00+07:00",
+      "summary": "Formatting passed."
+    },
+    {
+      "command": "cargo check -p vicell-kernel --target riscv64gc-unknown-none-elf -Z build-std=core,alloc",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-06T00:00:00+07:00",
+      "summary": "RV64 kernel check passed."
+    },
+    {
+      "command": "cargo test --manifest-path tests/integration/Cargo.toml --target x86_64-unknown-linux-gnu --test launch-profile -- --nocapture",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-06T00:00:00+07:00",
+      "summary": "QEMU launch-profile test passed 1 of 1."
+    }
+  ],
+  "beforeAfter": {
+    "before": "Shell SpawnFromElf could select a capability-bearing target profile using caller-owned bytes.",
+    "after": "Capability-bearing Elf profiles require lifecycle authority; capability-free shell launch remains functional."
+  }
+}

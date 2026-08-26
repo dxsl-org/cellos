@@ -1,0 +1,34 @@
+{
+  "skill": "hc-cook",
+  "mode": "interactive",
+  "task": "Move RISC-V PLIC context and IRQ routing policy out of shared HAL mechanism into SoC and runtime platform data.",
+  "acceptanceCriteria": [
+    "shared PLIC register access accepts a selected context and a bounded IRQ list",
+    "SoC profiles map physical harts to S-mode PLIC contexts with checked arithmetic",
+    "RV64 UART and VirtIO IRQ dispatch derives ownership from PlatformInfo",
+    "PLIC completion uses the exact claimed context and IRQ after the device handler",
+    "malformed duplicate IRQ ownership fails closed",
+    "PlatformInfo and shared driver public contracts remain unchanged"
+  ],
+  "touchpoints": [
+    "hal/soc/riscv/src/plic_policy.rs",
+    "hal/arch/riscv/src/common/plic.rs",
+    "hal/arch/riscv/src/rv64/trap.rs",
+    "kernel/src/platform.rs",
+    "kernel/src/task/drivers/irq_dispatch.rs",
+    "kernel/src/task/drivers/virtio_common.rs"
+  ],
+  "publicContracts": [
+    "PlatformInfo field layout is unchanged",
+    "board descriptors remain data-only in root boards",
+    "UART and VirtIO implementations remain single-copy shared drivers"
+  ],
+  "blastRadius": [
+    "RV64 external-interrupt initialization",
+    "PLIC claim-dispatch-complete ordering",
+    "VF2 and Pioneer compile-time SoC selection",
+    "snapshot restore PLIC reinitialization"
+  ],
+  "scoutSummary": "The shared PLIC and RV64 trap path encoded QEMU context 1, IRQs 1-8, UART IRQ 10, and a fixed VirtIO base formula.",
+  "evidence": "verified"
+}

@@ -1,0 +1,17 @@
+{
+  "phase": "phase-03-enforce-and-verify",
+  "criteria": [
+    {
+      "criterion": "fresh BIOS ISO reaches the interactive shell",
+      "command": "BOOT_WINDOW=90 bash scripts/qemu-x86_64-test.sh build/vicell-x86.iso",
+      "evidenceRef": "PASS: x86_64 shell prompt reached - full boot successful",
+      "pass": true
+    },
+    {
+      "criterion": "fresh UEFI ISO reaches scheduler initialization",
+      "command": "bounded qemu-system-x86_64 with OVMF_CODE_4M.fd",
+      "evidenceRef": "UEFI_QEMU_READY",
+      "pass": true
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "decision": "PASS_WITH_BOUNDARY",
+  "disprovenClaims": [],
+  "unverifiedClaims": [
+    "physical Raspberry Pi 3 MMIO behavior for this refactor"
+  ],
+  "missingProof": [
+    "fresh serial boot evidence from Raspberry Pi 3 hardware"
+  ],
+  "reachableRegressions": [],
+  "resolvedFindings": [
+    "host-target BCM27xx unit tests pass 3/3"
+  ]
+}

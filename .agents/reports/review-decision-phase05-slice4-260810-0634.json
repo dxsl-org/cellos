@@ -1,0 +1,64 @@
+{
+  "verdict": "PASS_WITH_RISK",
+  "target": "Phase05 Slice4 Lua and WASM VFS handle-read migration",
+  "mode": "production-readiness-review",
+  "scope": [
+    "cells/runtimes/lua/src/bindings_vfs.rs",
+    "cells/runtimes/lua/src/bindings_vfs_handle_read.rs",
+    "cells/runtimes/lua/src/bindings_vfs_handle_read_tests.rs",
+    "cells/tools/wasm/src/main.rs",
+    "cells/tools/wasm/src/lib.rs",
+    "cells/tools/wasm/src/loader.rs",
+    "libs/ostd/src/clients/vfs.rs",
+    "libs/ostd/src/clients/vfs/read_file.rs",
+    "libs/ostd/src/clients/vfs/read_file/path.rs",
+    "libs/ostd/src/clients/vfs/read_file/session.rs",
+    "libs/ostd/src/clients/vfs/read_file/wire.rs",
+    "libs/ostd/src/service.rs"
+  ],
+  "findings": [
+    {
+      "severity": "MED",
+      "file": "cells/services/vfs/src/dispatch_file_handles.rs",
+      "line": 29,
+      "summary": "OpenFileAt returns ERR_IO for absent files, but new callers branch on ViError::NotFound that live VFS will not produce for missing paths.",
+      "fix": "Align the VFS wire contract by returning a distinct missing-path code or remove unreachable NotFound caller branches/tests."
+    }
+  ],
+  "residualRisks": [
+    {
+      "severity": "INFO",
+      "summary": "Lua vfs.read continues to collapse empty, missing, oversize, and transport errors to nil through the existing outward API shape."
+    },
+    {
+      "severity": "INFO",
+      "summary": "Plain host app-wasm tests remain unavailable in this checkout because the no-std bin target conflicts with std test harness handlers; lib-only test execution also failed in host ld.so after building."
+    },
+    {
+      "severity": "INFO",
+      "summary": "Masked blocking service calls depend on the existing kernel Recv behavior for service-death handling; no dead-service runtime oracle was run in this review."
+    }
+  ],
+  "verification": [
+    {
+      "command": "git diff --check",
+      "result": "passed"
+    },
+    {
+      "command": "cargo check -p app-wasm --target riscv64gc-unknown-none-elf -Z build-std=core,alloc",
+      "result": "passed"
+    },
+    {
+      "command": "cargo test -p app-wasm --target x86_64-unknown-linux-gnu",
+      "result": "blocked: no-std ostd panic/alloc handlers conflict with std test harness"
+    },
+    {
+      "command": "cargo test -p app-wasm --lib --target x86_64-unknown-linux-gnu",
+      "result": "blocked: test binary built, host ld.so failed before running tests"
+    },
+    {
+      "command": "tester evidence from task prompt: fmt/diff/ostd/app-wasm host+RV64, Lua compile blocker, static grep",
+      "result": "accepted"
+    }
+  ]
+}

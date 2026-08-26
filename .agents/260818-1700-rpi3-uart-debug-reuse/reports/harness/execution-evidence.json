@@ -1,0 +1,17 @@
+{
+  "phase": "phase-02-verify-parity",
+  "criteria": [
+    {
+      "criterion": "All established regression gates pass after driver reuse.",
+      "command": "11-gate Cellos HAL matrix",
+      "evidenceRef": "11/11 passed; QEMU reported FAT16 mounted and kernel booted.",
+      "pass": true
+    },
+    {
+      "criterion": "The scoped kernel probe no longer implements raw mini-UART output.",
+      "command": "scoped task.rs duplication guard",
+      "evidenceRef": "No removed address, poll, write, or macro pattern matched.",
+      "pass": true
+    }
+  ]
+}

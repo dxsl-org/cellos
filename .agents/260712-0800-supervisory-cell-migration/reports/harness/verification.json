@@ -1,0 +1,70 @@
+{
+  "commands": [
+    {
+      "command": "cargo fmt --all -- --check && git diff --check",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-08T10:49:00+07:00",
+      "summary": "The Phase 04 working tree is formatted and has no diff whitespace errors."
+    },
+    {
+      "command": "cargo test -p api --lib --target x86_64-unknown-linux-gnu -- --nocapture",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-08T10:49:00+07:00",
+      "summary": "All 75 host API tests passed, including the retired-400 decode and bit-32 compatibility proof."
+    },
+    {
+      "command": "cargo check -p vicell-kernel -p api -p ostd --target riscv64gc-unknown-none-elf; release kernel builds for riscv64, aarch64, and x86_64",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-08T10:49:00+07:00",
+      "summary": "The affected libraries and all supported release-kernel targets compiled."
+    },
+    {
+      "command": "pwsh -File ./gen_disk.ps1",
+      "status": "pass-with-optional-omission",
+      "exitCode": 0,
+      "timestamp": "2026-08-08T10:49:00+07:00",
+      "summary": "Fresh release cells, 42 signed cells, kernel_fs.img, and disk_v3.img were rebuilt; optional tetris-lua was omitted and the tracked embedded init ELF was refreshed from app-init."
+    },
+    {
+      "command": "cargo test --manifest-path tests/integration/Cargo.toml --test hotswap-smoke --target x86_64-unknown-linux-gnu -- --nocapture",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-08T10:49:00+07:00",
+      "summary": "All 15 hotswap integration cases passed, including FIFO cutover, SpawnCap retention, state preservation, and unauthorized direct sender denial."
+    },
+    {
+      "command": "cargo test --manifest-path tests/integration/Cargo.toml --test launch-profile --target x86_64-unknown-linux-gnu -- --nocapture",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-08T10:49:00+07:00",
+      "summary": "The launch-profile integration case passed and retained the Supervisor-routed snapshot authority proof."
+    },
+    {
+      "command": "x86 and AArch64 fresh-boot QEMU gates",
+      "status": "host-gated",
+      "exitCode": null,
+      "timestamp": "2026-08-08T10:49:00+07:00",
+      "summary": "Windows/WSL path conversion prevented fresh x86 ISO and AArch64 disk packaging; neither boot lane is claimed as passed."
+    },
+    {
+      "command": "cargo llvm-cov API host lane",
+      "status": "gap",
+      "exitCode": 0,
+      "timestamp": "2026-08-08T10:49:00+07:00",
+      "summary": "The lane executed 75 tests but measured 33.26 percent line and 0 percent branch coverage; bare-metal kernel paths remain covered by QEMU integration evidence rather than this host metric."
+    }
+  ],
+  "totals": {
+    "reachableLanes": 10,
+    "passed": 10,
+    "failed": 0,
+    "hostGated": 2
+  },
+  "beforeAfter": {
+    "before": "SpawnCap callers could invoke the legacy kernel HotSwap syscall 400 and the kernel owned a duplicated whole-sequence orchestrator.",
+    "after": "Opcode 400 is reserved and decodes Unknown; Supervisor IPC is the sole hotswap orchestrator while kernel mechanisms remain available behind their existing authority gates."
+  }
+}

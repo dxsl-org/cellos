@@ -1,0 +1,32 @@
+{
+  "verdict": "PASS_WITH_RISK",
+  "target": "staged HAL split on codex/hal-split-fixed",
+  "base": "origin/main",
+  "head": "working-tree-staged",
+  "findings": [],
+  "verification": [
+    {
+      "command": "git diff --cached --check",
+      "status": "passed"
+    },
+    {
+      "command": "bash scripts/check-hal-boundaries.sh",
+      "status": "passed"
+    },
+    {
+      "command": "cargo test -p cellos-boards -p hal-soc-x86 --target x86_64-pc-windows-msvc",
+      "status": "passed",
+      "evidence": "12 cellos-boards tests and 2 hal-soc-x86 tests passed"
+    },
+    {
+      "command": "cargo test -p hal-soc-arm-virt -p hal-soc-bcm27xx -p hal-soc-riscv --target x86_64-pc-windows-msvc",
+      "status": "passed",
+      "evidence": "2 hal-soc-arm-virt tests, 6 hal-soc-bcm27xx tests, and 5 hal-soc-riscv tests passed"
+    },
+    {
+      "command": "full WSL target matrix / QEMU gates",
+      "status": "not_run_by_reviewer",
+      "evidence": "WSL returned Wsl/Service/E_UNEXPECTED / WSAETIMEDOUT during review"
+    }
+  ]
+}

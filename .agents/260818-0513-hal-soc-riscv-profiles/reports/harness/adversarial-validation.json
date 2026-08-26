@@ -1,0 +1,15 @@
+{
+  "decision": "PASS",
+  "disprovenClaims": [],
+  "unverifiedClaims": [
+    "Fresh VF2, Pioneer, and RPi3 runtime proof was not executed in this slice.",
+    "BCM27xx/MMC extraction remains deferred to a later slice.",
+    "PLIC IRQ policy remains in hal/arch/riscv and is intentionally outside this slice."
+  ],
+  "missingProof": [
+    "Hardware runtime evidence for VF2, Pioneer, and RPi3.",
+    "BCM27xx/MMC follow-on implementation.",
+    "PLIC IRQ policy migration."
+  ],
+  "reachableRegressions": []
+}

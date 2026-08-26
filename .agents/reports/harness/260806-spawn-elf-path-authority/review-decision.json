@@ -1,0 +1,9 @@
+{
+  "decision": "PASS",
+  "score": 9.5,
+  "criticalCount": 0,
+  "acceptanceCoverage": ["central profile gate", "unit policy cases", "boot selftest", "QEMU launch profile"],
+  "regressionProof": ["launch-profile QEMU passed"],
+  "contractStatus": "OK",
+  "blockingReasons": []
+}

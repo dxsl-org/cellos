@@ -1,0 +1,24 @@
+{
+  "verdict": "PASS",
+  "blocking_findings": 0,
+  "report": ".agents\\reports\\phase01-security-trust-review-260805-1938.md",
+  "findings": [],
+  "target": "Phase 01 docs diff: admission/consent ADR and Spec 18/19/changelog updates",
+  "positives": [
+    {
+      "file": "docs/specs/18b-cell-admission-consent-adr.md",
+      "note": "Accepted design, NOT implemented",
+      "line": 3
+    },
+    {
+      "file": "docs/specs/18b-cell-admission-consent-adr.md",
+      "note": "Admission requires publisher signature and owner record",
+      "line": 112
+    },
+    {
+      "file": "docs/specs/18-cell-trust-tiers.md",
+      "note": "Spec 18 mirrors narrow-never-widen invariant",
+      "line": 73
+    }
+  ]
+}

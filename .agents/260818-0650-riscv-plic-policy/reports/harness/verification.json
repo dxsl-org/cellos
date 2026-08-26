@@ -1,0 +1,58 @@
+{
+  "commands": [
+    {
+      "command": "cargo fmt --all -- --check",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-18T07:30:00+07:00",
+      "summary": "Workspace formatting passed."
+    },
+    {
+      "command": "cargo test -p hal-soc-riscv --target x86_64-unknown-linux-gnu",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-18T07:30:00+07:00",
+      "summary": "All 3 SoC profile and checked PLIC context tests passed."
+    },
+    {
+      "command": "cargo test -p cellos-boards --target x86_64-unknown-linux-gnu",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-18T07:30:00+07:00",
+      "summary": "All 8 board descriptor tests passed."
+    },
+    {
+      "command": "four RV64 cargo check lanes: default, board-vf2, board-pioneer, and combined",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-18T07:30:00+07:00",
+      "summary": "All RV64 compile lanes passed."
+    },
+    {
+      "command": "two AArch64 cargo check lanes: default and board-rpi3",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-18T07:30:00+07:00",
+      "summary": "Both AArch64 regression lanes passed with five existing hal-arm dead-code warnings."
+    },
+    {
+      "command": "cargo build --release -p cellos-kernel --target riscv64gc-unknown-none-elf -Z build-std=core,alloc",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-18T07:30:00+07:00",
+      "summary": "RV64 release kernel built successfully; existing strip-tool warnings remain."
+    },
+    {
+      "command": "scripts/qemu-boot-test.sh target/riscv64gc-unknown-none-elf/release/cellos-kernel",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-18T07:31:00+07:00",
+      "summary": "PASS: FAT16 mounted - kernel booted (no disk)."
+    }
+  ],
+  "beforeAfter": {
+    "before": "Shared RV64 HAL assumed PLIC context 1, QEMU IRQ ranges, and a fixed VirtIO MMIO formula.",
+    "after": "SoC profiles select checked physical-hart contexts while PlatformInfo supplies bounded, unambiguous device IRQ and MMIO routing data."
+  },
+  "evidenceBoundary": "QEMU RV64 runtime verified. VF2, Pioneer, and RPi3 are compile-only; physical-board runtime remains gated."
+}

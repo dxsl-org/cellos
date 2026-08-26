@@ -1,0 +1,35 @@
+{
+  "verdict": "BLOCKED",
+  "target": "uncommitted Phase00 supervisory migration diff",
+  "findings": [
+    {
+      "severity": "HIGH",
+      "file": "kernel/src/cell/hotswap.rs",
+      "line": 196,
+      "summary": "Freeze state and ceiling record are not published atomically, allowing a resume gap to leave a ceiling for a runnable task."
+    },
+    {
+      "severity": "HIGH",
+      "file": "kernel/src/task/syscall.rs",
+      "line": 3677,
+      "summary": "SpawnReplacement trusts a stale ceiling record without validating old_tid still exists and is frozen; general exit paths do not clear the record."
+    },
+    {
+      "severity": "HIGH",
+      "file": "kernel/src/task/syscall.rs",
+      "line": 3679,
+      "summary": "SpawnReplacement bypasses the exact supervisor launch-edge authorization used by ordinary SpawnFromPath."
+    },
+    {
+      "severity": "MED",
+      "file": "cells/services/supervisor/src/hotswap.rs",
+      "line": 151,
+      "summary": "Supervisor hotswap hard-freezes before Snapshot, so state transfer cannot run and E2E hotswap remains unproven."
+    }
+  ],
+  "runtime_e2e": {
+    "spawn_replacement_qemu": "unverified",
+    "code_complete_boundary": "acceptable_if_documented_as_stale_image_and_preexisting_gen_disk_blocked",
+    "release_boundary": "blocker_for_state_preserving_hotswap_claims"
+  }
+}

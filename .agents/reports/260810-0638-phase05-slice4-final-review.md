@@ -1,0 +1,11 @@
+**VERDICT:** PASS — the ERR_IO missing-path contract is now reflected in the Slice4 callers/tests, and no remaining Lua/WASM/VFS raw-pointer or wildcard-recv blocker was observed.
+
+[POSITIVE] cells/services/net-broker/src/identity.rs:64 — net-broker config loading now treats every bounded-read failure as "no peers configured", matching the live VFS `ERR_IO` missing-path contract without an unreachable `NotFound` branch.
+[POSITIVE] cells/runtimes/lua/src/bindings_vfs_handle_read_tests.rs:64 — Lua handle-read tests now model live missing-file behavior as `ERR_IO -> ViError::IO`.
+[POSITIVE] cells/tools/wasm/src/lib.rs:13 — WASM loader error shape now keeps only `TooLarge` and `Unavailable`, so missing-file `ERR_IO` exits through the same outward failure path as other unavailable reads.
+[POSITIVE] libs/ostd/src/service.rs:117 — shared service calls remain on `service_call_typed`, so VFS facade/Lua/WASM reads receive from the resolved service tid instead of wildcard `sys_recv(0)`.
+[POSITIVE] libs/ostd/src/clients/vfs/read_file/session.rs:53 — handle-read cleanup still closes any opened file and all opened directories on success and failure.
+[POSITIVE] cells/runtimes/lua/src/bindings_vfs.rs:47 — Lua VFS reads still use bounded handle reads via `VfsRef`, with no fixed VFS tid or raw `DataPtr` fallback.
+[POSITIVE] cells/tools/wasm/src/loader.rs:8 — WASM modules load through `VfsClient::read_file_bounded` with the 64 KiB cap and no raw-pointer fallback.
+
+Verification: `git diff --check` on scoped Slice4 files passed; static grep found no `GetFile`, `DataPtr`, fixed `VFS_ENDPOINT`, wildcard `sys_recv(0)`, `LoadWasmError::Missing`, or missing-path `ViError::NotFound` in the Slice4 surfaces except stale-handle/service-lookup mappings. Local compile gates passed: `cargo check -p app-wasm --target riscv64gc-unknown-none-elf -Z build-std=core,alloc`, `cargo check -p service-net-broker --target riscv64gc-unknown-none-elf -Z build-std=core,alloc`, `cargo check -p app-wasm --target x86_64-unknown-linux-gnu`, and `cargo check -p service-net-broker --target x86_64-unknown-linux-gnu`. Accepted tester evidence from prompt: fmt/diff, ostd/app-wasm host+RV64 pass, Lua compile unavailable due preexisting host signedness and C sysroot header gaps.

@@ -1,0 +1,14 @@
+%% Cell-to-Cell Anywhere v1 architecture
+flowchart LR
+    Caller[Caller Cell] --> Endpoint[Typed Endpoint]
+    Endpoint --> Local{LocalAddr?}
+    Local -->|yes| Kernel[Kernel IPC]
+    Kernel --> LocalSvc[Local Service]
+    Local -->|no| Broker[net-broker]
+    Broker --> Export[Export Policy]
+    Export --> Path[Path Manager]
+    Path --> Direct[LAN TCP plus Noise]
+    Path --> Relay[Self-hosted Relay]
+    Direct --> RemoteBroker[Remote net-broker]
+    Relay --> RemoteBroker
+    RemoteBroker --> RemoteSvc[Exported Service]

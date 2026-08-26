@@ -1,0 +1,9 @@
+**VERDICT:** PASS_WITH_RISK — Lua/WASM/VFS callers are off raw DataPtr and fixed VFS tid paths, but live VFS missing-path errors still do not match the typed `NotFound` branches added in this slice.
+
+[MED] cells/services/vfs/src/dispatch_file_handles.rs:29 — `OpenFileAt` returns `ERR_IO` for absent files, while the new facade maps only `ERR_HANDLE=4` to `ViError::NotFound` and callers/tests now branch on `NotFound`; align the live VFS wire contract by returning a distinct missing-path code or remove the unreachable `NotFound` caller branches/tests.
+[POSITIVE] libs/ostd/src/service.rs:117 — shared service calls now use `service_call_typed`, so VFS facade reads inherit masked request/reply behavior instead of wildcard `sys_recv(0)`.
+[POSITIVE] libs/ostd/src/clients/vfs/read_file/session.rs:53 — handle-read cleanup closes the file first and then every opened directory, including after read and close-file errors.
+[POSITIVE] cells/runtimes/lua/src/bindings_vfs.rs:47 — Lua VFS reads now go through `VfsRef` plus bounded handle reads and no longer hardcode VFS task `3` or decode `DataPtr`.
+[POSITIVE] cells/tools/wasm/src/loader.rs:8 — WASM loading uses `VfsClient::read_file_bounded` with the 64 KiB module cap and no raw-pointer fallback.
+
+Verification: local `git diff --check` passed; local `cargo check -p app-wasm --target riscv64gc-unknown-none-elf -Z build-std=core,alloc` passed. Host `cargo test -p app-wasm --target x86_64-unknown-linux-gnu` is blocked by the repo's no-std/bin test harness conflict (`ostd` panic/alloc handlers conflict with `std`); `cargo test -p app-wasm --lib --target x86_64-unknown-linux-gnu` built but the runner failed in host `ld.so`, so I did not count it as passing. Accepted tester evidence from prompt: fmt/diff/ostd/app-wasm host+RV64 pass; Lua compile unavailable due preexisting host signedness and C sysroot header gaps; static grep clean.

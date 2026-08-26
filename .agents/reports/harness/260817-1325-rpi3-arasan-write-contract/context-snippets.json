@@ -1,0 +1,26 @@
+{
+  "skill": "hc-fix",
+  "mode": "interactive",
+  "task": "Restore Raspberry Pi 3 SD-card command delivery through the BCM2835 Arasan SDHCI controller",
+  "acceptanceCriteria": [
+    "CMD8 no longer ends with INT_STATUS 0x00018040 or 0x00018000 on the real RPi3",
+    "the SD-card probe advances beyond the previous no-card failure",
+    "generic targets retain their native SDHCI byte and halfword access path"
+  ],
+  "touchpoints": [
+    "kernel/src/task/drivers/mmc/sdhci.rs",
+    "kernel/src/task/drivers/mmc/core.rs",
+    "tools/rpi3-netboot/test-netboot-scripts.ps1"
+  ],
+  "publicContracts": [
+    "RPi3 identification clock remains 400 kHz",
+    "BCM2835 non-buffer register writes are separated by at least six microseconds",
+    "BCM2835 byte and halfword accesses use aligned 32-bit operations"
+  ],
+  "blastRadius": [
+    "RPi3 SDHCI register access",
+    "RPi3 SD and eMMC discovery",
+    "RPi3 filesystem mounting"
+  ],
+  "scoutSummary": "The card, mapping, power, stable clock, and present-state bits are valid. CMD8 times out identically at 400 kHz and 100 kHz. U-Boot's working BCM2835 driver uses aligned 32-bit access, a transfer-mode shadow, and spacing between non-buffer writes."
+}

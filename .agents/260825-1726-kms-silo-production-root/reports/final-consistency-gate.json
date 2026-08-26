@@ -1,0 +1,25 @@
+{
+  "findings": [
+    {
+      "title": "Freeze one KMS TLS signing request schema",
+      "body": "Phase 1 defines `sign_tls13_client_certificate_verify(transcript_hash, generation, profile_digest)`, while this requirement says service-net supplies only the transcript hash and generation and step 6 later adds the profile digest, qualification state, and authenticated-time proof. Implementing the fixed KMS ABI from the requirement omits the protected-profile binding; implementing step 6 invents fields absent from the provider seam and makes it unclear which values are protected rather than caller assertions. Define one exact request payload across Phases 1 and 4, and state which qualification/time values the KMS and provider read from protected state instead of accepting from service-net.",
+      "priority": 1,
+      "confidence": 0.99,
+      "file_path": ".agents/260825-1726-kms-silo-production-root/phase-04-service-net-mutual-tls-integration.md",
+      "line_start": 35,
+      "line_end": 36
+    },
+    {
+      "title": "Assign DER encoding for the constrained CSR",
+      "body": "The plan declares that every provider/KMS signature is fixed-width `r || s` and that DER encoding occurs only in service-net, but Phase 3 requires KMS to publish a complete RFC 2986 CSR through `ReadRelayCsrChunk`. That CSR must contain an ASN.1-encoded ECDSA signature, and service-net is explicitly outside the supervisor-only enrollment path, so no component is permitted to produce the required CSR bytes. Limit the service-net-only DER rule to TLS CertificateVerify and specify that KMS assembles the canonical CSR by self-verifying/normalizing the provider's raw proof and DER-encoding it for the bounded CSR reader (or assign the complete canonical CSR to the protected provider).",
+      "priority": 1,
+      "confidence": 0.98,
+      "file_path": ".agents/260825-1726-kms-silo-production-root/phase-01-kms-tls-signing-vertical-slice.md",
+      "line_start": 39,
+      "line_end": 41
+    }
+  ],
+  "overall_correctness": "incorrect",
+  "explanation": "NO-GO. The revised plan closes the nine intended security themes and correctly gates Phases 7–8 behind Phase 6, but two High cross-phase API contradictions remain: the TLS signing request has three incompatible field sets, and the CSR path has no permitted owner for its required DER signature encoding.",
+  "confidence": 0.99
+}

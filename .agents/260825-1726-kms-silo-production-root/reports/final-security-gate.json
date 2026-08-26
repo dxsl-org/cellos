@@ -1,0 +1,139 @@
+{
+  "coverage_summary": "NO-GO. Two residual High blockers remain; no Critical blocker found. The other contract items are explicit. Phase 6 does prevent premature hardware implementation: the master limits the current cook handoff to Phases 1–5, Phase 7 is explicitly BLOCKED_PENDING_PHASE_6, and Phase 6 must rewrite exact Phase 7/8 paths/procedures and rerun deep validation/red-team before hardware cook.",
+  "findings": [
+    {
+      "rule_id": "KMS-PLAN-GATE-001",
+      "title": "Certificate and relay-verifier rollback binding remains incomplete",
+      "summary": "The protected profile does not explicitly bind the exact transmitted client chain or its client-issuer trust material, while relay CA/verifier and denylist state are only external versioned manifests. Replaying previously valid client and relay-side trust/revocation inputs can therefore restore retired or revoked authorization without violating the protected fields currently enumerated.",
+      "severity": "high",
+      "confidence": "high",
+      "category": "Rollback protection / trust configuration",
+      "locations": [
+        {
+          "path": ".agents/260825-1726-kms-silo-production-root/phase-03-certificate-activation-and-provisioning.md",
+          "start_line": 35,
+          "end_line": 49,
+          "role": "Mounted chain is outside KMS and omitted from the enumerated protected profile fields"
+        },
+        {
+          "path": ".agents/260825-1726-kms-silo-production-root/phase-03-certificate-activation-and-provisioning.md",
+          "start_line": 92,
+          "end_line": 100,
+          "role": "Canonical profile/floor steps do not add exact chain and issuer binding"
+        },
+        {
+          "path": ".agents/260825-1726-kms-silo-production-root/phase-08-qualify-production-relay-identity.md",
+          "start_line": 45,
+          "end_line": 45,
+          "role": "Relay verifier and denylist are merely external versioned manifests"
+        },
+        {
+          "path": ".agents/260825-1726-kms-silo-production-root/phase-08-qualify-production-relay-identity.md",
+          "start_line": 73,
+          "end_line": 76,
+          "role": "Negative injection omits old relay-verifier/denylist manifest replay"
+        }
+      ],
+      "cwe": [
+        "CWE-345",
+        "CWE-294"
+      ],
+      "evidence": [
+        {
+          "label": "Execution path",
+          "explanation": "Mounted client-chain inputs and external relay manifests are replayable configuration sources; the signer and relay can each accept an older mutually compatible state."
+        },
+        {
+          "label": "Broken control",
+          "explanation": "A protected denylist version does not prove which verifier/denylist version the external relay enforces, and SPKI/serial/NodeId do not uniquely bind the exact leaf-first chain."
+        },
+        {
+          "label": "Minimal correction",
+          "explanation": "Bind hashes/count/order of every exact client-chain DER entry and client-issuer profile into the protected active-profile digest. Require signed relay verifier/denylist manifests with an independently persisted monotonic version/digest floor, atomic fail-closed activation/recovery, enforced-version binding during registration, and explicit old-manifest replay tests on both sides."
+        }
+      ],
+      "optionalProperties": {
+        "prior_finding": "KMS-PLAN-RT-004 only partially closed"
+      }
+    },
+    {
+      "rule_id": "KMS-PLAN-GATE-002",
+      "title": "Production qualification is not bound to the exact qualified runtime tuple",
+      "summary": "The plan adds a separate protected ProductionQualified latch, but the signed qualification record has no frozen schema or requirement to bind and continuously match the exact silicon/board, RoT firmware, AP measurement, KMS/provider/image, policy, and production profile. A prior record or retained latch can survive a bound-component change and authorize a configuration reviewers never qualified.",
+      "severity": "high",
+      "confidence": "high",
+      "category": "Qualification authorization / stale security decision",
+      "locations": [
+        {
+          "path": ".agents/260825-1726-kms-silo-production-root/phase-01-kms-tls-signing-vertical-slice.md",
+          "start_line": 47,
+          "end_line": 52,
+          "role": "Qualification is an enum/latch without a qualified tuple"
+        },
+        {
+          "path": ".agents/260825-1726-kms-silo-production-root/phase-06-select-production-root-product.md",
+          "start_line": 33,
+          "end_line": 35,
+          "role": "Firmware, profile, and latch are separate protected fields without binding semantics"
+        },
+        {
+          "path": ".agents/260825-1726-kms-silo-production-root/phase-08-qualify-production-relay-identity.md",
+          "start_line": 42,
+          "end_line": 43,
+          "role": "Signed record lacks schema, trust root, freshness, and tuple binding"
+        },
+        {
+          "path": ".agents/260825-1726-kms-silo-production-root/phase-08-qualify-production-relay-identity.md",
+          "start_line": 58,
+          "end_line": 60,
+          "role": "Runtime provenance is only recorded as evidence"
+        },
+        {
+          "path": ".agents/260825-1726-kms-silo-production-root/phase-08-qualify-production-relay-identity.md",
+          "start_line": 77,
+          "end_line": 79,
+          "role": "Activation does not require protected equality checks against all live tuple values"
+        }
+      ],
+      "cwe": [
+        "CWE-345",
+        "CWE-613",
+        "CWE-863"
+      ],
+      "evidence": [
+        {
+          "label": "Dangerous sink",
+          "explanation": "ProductionQualified directly enables the durable production signing path."
+        },
+        {
+          "label": "Broken control",
+          "explanation": "Independent signing and protected activation do not state what is signed, which protected key verifies it, or that every qualified-component change invalidates the latch."
+        },
+        {
+          "label": "Minimal correction",
+          "explanation": "Freeze a canonical qualification record and protected reviewer trust root in Phase 6. Bind product/silicon/board identity, lifecycle, RoT firmware, AP measurement, KMS/provider and image hashes, protocol/policy/key generations, exact active profile digest, and a monotonic qualification epoch. Require protected verification against live values before every production sign, replay rejection, and automatic reversion to QualificationTest after any bound value changes."
+        }
+      ],
+      "optionalProperties": {
+        "prior_finding": "KMS-PLAN-RT-006 only partially closed"
+      }
+    }
+  ],
+  "reviewed_paths": [
+    ".agents/260825-1726-kms-silo-production-root/plan.md",
+    ".agents/260825-1726-kms-silo-production-root/phase-01-kms-tls-signing-vertical-slice.md",
+    ".agents/260825-1726-kms-silo-production-root/phase-02-contain-development-silo-provider.md",
+    ".agents/260825-1726-kms-silo-production-root/phase-03-certificate-activation-and-provisioning.md",
+    ".agents/260825-1726-kms-silo-production-root/phase-04-service-net-mutual-tls-integration.md",
+    ".agents/260825-1726-kms-silo-production-root/phase-05-qemu-relay-software-evidence.md",
+    ".agents/260825-1726-kms-silo-production-root/phase-06-select-production-root-product.md",
+    ".agents/260825-1726-kms-silo-production-root/phase-07-implement-selected-hardware-provider.md",
+    ".agents/260825-1726-kms-silo-production-root/phase-08-qualify-production-relay-identity.md",
+    ".agents/260825-1726-kms-silo-production-root/reports/final-red-team-draft.json",
+    ".agents/260825-1726-kms-silo-production-root/reports/final-validator-draft.json",
+    ".agents/260825-1726-kms-silo-production-root/reports/scout-report.md",
+    ".agents/260825-1726-kms-silo-production-root/reports/security-judge.json",
+    ".agents/260825-1726-kms-silo-production-root/reports/simplicity-judge.json"
+  ],
+  "deferred": []
+}

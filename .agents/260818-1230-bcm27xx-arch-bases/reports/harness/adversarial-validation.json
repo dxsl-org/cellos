@@ -1,0 +1,14 @@
+{
+  "decision": "PASS_WITH_BOUNDARY",
+  "disprovenClaims": [],
+  "unverifiedClaims": [
+    "physical Raspberry Pi 3 register behavior for this refactor"
+  ],
+  "missingProof": [
+    "fresh serial boot evidence from Raspberry Pi 3 hardware"
+  ],
+  "reachableRegressions": [],
+  "resolvedFindings": [
+    "default AArch64 dependency graph excludes hal-soc-bcm27xx"
+  ]
+}

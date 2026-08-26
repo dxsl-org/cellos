@@ -1,0 +1,76 @@
+{
+  "verdict": "PASS",
+  "head": "9427482f",
+  "mutated_git": false,
+  "checks": [
+    {
+      "axis": "dtb_zero",
+      "result": "PASS",
+      "evidence": [
+        "kernel/src/platform.rs:83 selects the active RISC-V profile before DTB handling.",
+        "kernel/src/platform.rs:85 applies profile access policy after from_dtb returns.",
+        "kernel/src/platform.rs:231-235 returns qemu_defaults for dtb_ptr == 0, so SG2042 fallback is still cleared before publish."
+      ]
+    },
+    {
+      "axis": "dtb_invalid",
+      "result": "PASS",
+      "evidence": [
+        "kernel/src/platform.rs:239-244 returns qemu_defaults on FDT parse error.",
+        "kernel/src/platform.rs:190-216 clears SG2042 UART, RTC, and VirtIO after fallback construction."
+      ]
+    },
+    {
+      "axis": "dtb_valid",
+      "result": "PASS",
+      "evidence": [
+        "kernel/src/platform.rs:248-268 uses profile compatible arrays for UART, PLIC, CLINT, VirtIO, and RTC discovery.",
+        "hal/soc/riscv/src/catalog.rs:3-6 preserves ns16550, T-Head PLIC/CLINT, and Goldfish RTC compatible strings."
+      ]
+    },
+    {
+      "axis": "sg2042_access_widening",
+      "result": "PASS",
+      "evidence": [
+        "hal/soc/riscv/src/catalog.rs:28-36 sets SG2042 to SbiDbcnOnly, Unavailable RTC, and Absent VirtIO.",
+        "kernel/src/platform.rs:196-213 converts those policies to uart_base=0, uart_irq=0, rtc_base=0, and empty VirtIO slots before publish.",
+        "kernel/src/task/drivers/uart.rs:45-50 skips MMIO init when base is zero; kernel/src/task/drivers/virtio_common.rs:46-55 enumerates only published slots."
+      ]
+    },
+    {
+      "axis": "feature_overlap",
+      "result": "PASS",
+      "evidence": [
+        "kernel/src/platform.rs:175-185 gives board-pioneer precedence over board-vf2.",
+        ".agents/260818-0513-hal-soc-riscv-profiles/reports/qa-2026-08-18-verification.md records PASS for combined board-vf2 board-pioneer check."
+      ]
+    },
+    {
+      "axis": "non_rv64_regression",
+      "result": "PASS",
+      "evidence": [
+        "kernel/Cargo.toml:33-38 scopes hal-soc-riscv to target_arch = riscv64.",
+        "kernel/src/platform.rs:101-162 keeps AArch64 and non-RV64 init paths separate.",
+        ".agents/260818-0513-hal-soc-riscv-profiles/reports/qa-2026-08-18-verification.md records PASS for AArch64 default and board-rpi3 checks."
+      ]
+    },
+    {
+      "axis": "ownership_and_duplication",
+      "result": "PASS",
+      "evidence": [
+        "hal/soc/riscv/src/lib.rs:1-6 declares a no_std data-only crate with no board wiring, memory maps, or driver code.",
+        "git diff --name-only HEAD -- cells/drivers boards hal/arch hal/core libs/api libs/types produced no changed paths.",
+        "docs/system-architecture.md:50-62 documents boards, hal/soc/riscv, and cells/drivers ownership."
+      ]
+    },
+    {
+      "axis": "docs_accuracy",
+      "result": "PASS",
+      "evidence": [
+        "docs/project-changelog.md:17-22 lists the exact passed commands and does not claim VF2, Pioneer, or RPi3 hardware execution.",
+        "docs/project-roadmap.md:29-36 records the same scope and keeps AArch64/RPi3/SDHCI extraction deferred."
+      ]
+    }
+  ],
+  "blockers": []
+}

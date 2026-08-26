@@ -1,0 +1,18 @@
+{
+  "decision": "BLOCKED",
+  "score": 7.2,
+  "criticalCount": 1,
+  "informationalCount": 2,
+  "acceptanceCoverage": [
+    "Reviewed final diff origin/main...HEAD plus unstaged formatting changes",
+    "Focused on kernel loader/W^X, F1/F5 signing, completion queue, VFS directory capabilities, ABI, build/CI"
+  ],
+  "regressionProof": [
+    "python3 scripts/test_cellos_sign.py passed: 35 tests",
+    "cargo test -p api --target x86_64-unknown-linux-gnu passed: 69 unit tests plus contract tests"
+  ],
+  "contractStatus": "BLOCKED",
+  "blockingReasons": [
+    "kernel/src/task/completion_wait.rs:65 leaves stale completion waiters that can wake unrelated parked task states"
+  ]
+}

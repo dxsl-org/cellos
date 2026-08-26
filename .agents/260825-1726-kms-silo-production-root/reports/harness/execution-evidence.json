@@ -1,0 +1,47 @@
+{
+  "phase": "phase-03-certificate-activation-and-provisioning",
+  "criteria": [
+    {
+      "criterion": "CSR proof is canonical, constrained, and not a generic signing oracle",
+      "command": "cargo test -p types --target x86_64-unknown-linux-gnu; cargo test -p service-kms --target x86_64-unknown-linux-gnu; openssl req -inform DER -in /tmp/cellos-relay.csr -noout -verify",
+      "evidenceRef": "Types passed 41/41 and KMS 58/58. KMS self-verifies provider proof over its canonical CRI, and OpenSSL independently reported Certificate request self-signature verify OK.",
+      "pass": true
+    },
+    {
+      "criterion": "one-shot enrollment lifecycle binds the exact supervisor and stages or cleans up atomically",
+      "command": "cargo test -p service-kms --target x86_64-unknown-linux-gnu tests::enrollment::out_of_order_chunk_rejects_and_invalidates -- --exact",
+      "evidenceRef": "The exact wrong-order regression passed. Full KMS coverage also passed supervisor transfer poisoning, exhaustion, restart mismatch, commit-from-Staged-only, cleanup tombstones, and provider-confirmed destruction.",
+      "pass": true
+    },
+    {
+      "criterion": "the development enrollment key stays Silo-contained and nonce-bound",
+      "command": "cargo test -p service-silo --target x86_64-unknown-linux-gnu; LLVM_OBJCOPY=/home/dmin/.rustup/toolchains/nightly-2026-05-01-x86_64-unknown-linux-gnu/lib/rustlib/x86_64-unknown-linux-gnu/bin/llvm-objcopy cargo check -p service-silo --features development-silo-provider --target aarch64-unknown-none-softfloat",
+      "evidenceRef": "Silo passed 17/17. The exact AArch64 guest/package lane completed clean; purpose-bound create/sign/destroy/promote frames carry a fresh nonce and no export or generic signing command.",
+      "pass": true
+    },
+    {
+      "criterion": "service-net accepts only strict active certificate/profile/manifest bindings",
+      "command": "cargo test -p service-net --target x86_64-unknown-linux-gnu; (cd tools/relay-enroll && python3 -m unittest relay_enroll_test); (cd tools/relay-server && python3 -m unittest relay_manifest_test)",
+      "evidenceRef": "Net passed 24/24, relay-enroll 10/10, and relay-manifest 11/11. Bounded structural DER, clientAuth-only EKU, canonical SPKI/NodeId, TLS 1.3, chain, path, and closed-schema checks reject malformed or ambiguous inputs.",
+      "pass": true
+    },
+    {
+      "criterion": "recovery and authenticated-time dependencies fail closed",
+      "source": "full KMS/net suites and current-tree final security re-review",
+      "evidenceRef": "Authenticated journal state covers lifecycle and restart/time floors. Production load/persist and authenticated-time providers remain unavailable, so KMS and net seal or refuse relay mTLS rather than resetting floors or accepting raw/default time.",
+      "pass": true
+    },
+    {
+      "criterion": "bare-metal KMS and development-Silo compile lanes remain clean",
+      "command": "cargo check -p service-kms --target riscv64gc-unknown-none-elf; cargo check -p service-kms --target aarch64-unknown-none-softfloat; LLVM_OBJCOPY=/home/dmin/.rustup/toolchains/nightly-2026-05-01-x86_64-unknown-linux-gnu/lib/rustlib/x86_64-unknown-linux-gnu/bin/llvm-objcopy cargo check -p service-silo --features development-silo-provider --target aarch64-unknown-none-softfloat",
+      "evidenceRef": "RV64 KMS, AArch64 KMS, and the exact current-tree AArch64 development-Silo lane completed clean.",
+      "pass": true
+    },
+    {
+      "criterion": "unqualified production candidates cannot produce an image",
+      "command": "python3 scripts/test_check_production_relay_image.py; direct checker invocation with unqualified inputs",
+      "evidenceRef": "Checker tests passed 2/2. The direct checker invocation exited 1 fail-closed, builder/checker paths produced no image, and production remains BLOCKED_PENDING_PHASE_6_7_8.",
+      "pass": true
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "commands": [
+    {
+      "command": "12-gate format, unit, cross-target compile, release, and QEMU matrix",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-18T09:05:00+07:00",
+      "summary": "2 BCM tests, 3 RISC-V SoC tests, 8 board tests, six compile lanes, release build, and QEMU boot passed after the review fix."
+    }
+  ],
+  "beforeAfter": {
+    "before": "BCM2837 controller addresses and SDHCI constraints were embedded in kernel platform and driver files.",
+    "after": "A no_std BCM27xx profile owns immutable SoC facts while existing board-selected shared mechanisms consume them."
+  },
+  "evidenceBoundary": "QEMU RV64 runtime verified; RPi3, VF2, and Pioneer compile-only for this slice."
+}

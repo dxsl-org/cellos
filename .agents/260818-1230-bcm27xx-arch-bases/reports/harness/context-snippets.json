@@ -1,0 +1,21 @@
+{
+  "skill": "hc-cook",
+  "mode": "interactive",
+  "task": "Source BCM2837 controller bases from SoC data while keeping ARM HAL mechanisms unchanged.",
+  "acceptanceCriteria": [
+    "system-timer and legacy-IRQ bases are SoC-owned",
+    "board-rpi3 alone activates the optional SoC dependency",
+    "ARM HAL consumers retain existing register offsets",
+    "IRQ numbers, timer period, and mechanisms do not move"
+  ],
+  "touchpoints": [
+    "hal/soc/bcm27xx",
+    "hal/arch/arm/Cargo.toml",
+    "hal/arch/arm/src/aarch64"
+  ],
+  "publicContracts": [
+    "no kernel or board descriptor changes",
+    "no default AArch64 dependency leakage",
+    "no physical-board claim"
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "highRisk": true,
+  "reasons": [
+    "bare-metal page-table bounds",
+    "USER versus kernel-only MMIO permissions",
+    "capability-scoped resource allowlist"
+  ],
+  "autoStopRequired": false,
+  "humanApproved": true,
+  "largeDiff": false
+}

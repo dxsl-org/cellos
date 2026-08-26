@@ -1,0 +1,10 @@
+{
+  "highRisk": true,
+  "reasons": [
+    "changes board-rpi3 SD controller pin routing and low-level SDHCI command/data setup",
+    "a regression could prevent access to all SD-backed Cellos filesystems"
+  ],
+  "autoStopRequired": false,
+  "humanApproved": true,
+  "largeDiff": false
+}

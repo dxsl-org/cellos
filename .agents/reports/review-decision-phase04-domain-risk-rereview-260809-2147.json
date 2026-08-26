@@ -1,0 +1,72 @@
+{
+  "verdict": "RISKS_NOTED",
+  "target": "Phase04 VFS file-handle bounded reads",
+  "mode": "domain-risk-adversarial-rereview",
+  "scope": [
+    "libs/api/src/services.rs",
+    "libs/api/src/services/ipc.rs",
+    "libs/api/src/services/vfs_file_handles.rs",
+    "libs/api/src/services/dir_name_tests.rs",
+    "cells/services/vfs/src/file_handles.rs",
+    "cells/services/vfs/src/file_handles/",
+    "cells/services/vfs/src/main.rs",
+    "cells/services/vfs/src/manager.rs",
+    "cells/services/vfs/src/dispatch.rs",
+    "cells/services/vfs/src/dispatch_dirs.rs",
+    "cells/services/vfs/src/dir_admission.rs",
+    "cells/services/vfs/src/dirs.rs",
+    "cells/services/vfs/src/dirs/lifecycle.rs",
+    "cells/services/vfs/src/pending.rs",
+    "cells/services/vfs/src/handle_table.rs",
+    "cells/tests/vfs-test/src/dircap.rs",
+    "tests/integration/tests/vfs-quota.rs",
+    "docs/specs/17-ipc-wire-contract.md",
+    "docs/specs/09-vfs.md",
+    "docs/project-roadmap.md",
+    "docs/project-changelog.md",
+    "docs/TODO.md"
+  ],
+  "reclassifiedFalsePositives": [
+    {
+      "previousSeverity": "CRITICAL",
+      "file": "kernel/src/task/syscall.rs",
+      "line": 705,
+      "reason": "Approved completed Phase03 dirty state, excluded from Phase04 scope."
+    },
+    {
+      "previousSeverity": "HIGH",
+      "file": "cells/tools/shell/src/cmd_fs.rs",
+      "line": 359,
+      "reason": "Approved completed Phase02 dirty state, excluded from Phase04 scope."
+    }
+  ],
+  "findings": [],
+  "residualRisks": [
+    {
+      "severity": "INFO",
+      "summary": "service-vfs host unit test lane is unavailable; substituted with RISC-V service build and RV64 QEMU integration evidence."
+    }
+  ],
+  "verification": [
+    {
+      "command": "cargo test -p api --target x86_64-unknown-linux-gnu",
+      "result": "passed"
+    },
+    {
+      "command": "cargo fmt --all --check",
+      "result": "passed"
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed"
+    },
+    {
+      "command": "cargo build --release -p service-vfs --target riscv64gc-unknown-none-elf --features test-hooks",
+      "result": "passed"
+    },
+    {
+      "command": "cargo test --manifest-path tests/integration/Cargo.toml --target x86_64-unknown-linux-gnu --test vfs-quota riscv64_vfs_quota_all_pass -- --nocapture",
+      "result": "passed"
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "commands": [
+    {
+      "command": "11-gate format, unit, dependency, cross-target compile, release, and QEMU matrix",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-18T13:15:00+07:00",
+      "summary": "3 BCM tests, 9 board tests, 3 RISC-V SoC tests, four AArch64 HAL/kernel lanes, RV64 default/release, and QEMU boot passed."
+    }
+  ],
+  "evidenceBoundary": "QEMU RV64 runtime verified; Raspberry Pi 3 compile-only for this slice."
+}

@@ -1,0 +1,64 @@
+{
+  "verdict": "PASS_WITH_RISK",
+  "target": "Phase 04 ABI retirement and hotswap authority domain-risk review of scoped uncommitted diff",
+  "scope": [
+    "kernel/src/cell/hotswap.rs",
+    "kernel/src/embedded/init",
+    "kernel/src/task.rs",
+    "kernel/src/task/syscall.rs",
+    "libs/api/src/abi/manifest_flags.rs",
+    "libs/api/src/abi/syscall.rs",
+    "libs/api/src/abi/syscall_tests.rs",
+    "libs/ostd/src/cap.rs",
+    "libs/ostd/src/runtime.rs",
+    "libs/ostd/src/syscall.rs"
+  ],
+  "blocking_findings": 0,
+  "findings": [
+    {
+      "severity": "LOW",
+      "file": ".agents/260712-0800-supervisory-cell-migration/phase-04-kernel-cleanup.md",
+      "line": 146,
+      "summary": "x86 and AArch64 QEMU boot gates are host-gated, not runtime-proven in this evidence set."
+    }
+  ],
+  "accepted_gaps": [
+    "x86 and AArch64 QEMU boot gates are deferred due host tooling; release-kernel builds are separate evidence and are not treated as boot proof.",
+    "Real MMC snapshot save/restore remains host-gated; QEMU evidence covers Supervisor-routed NullBlock/unavailable behavior, not successful hardware persistence.",
+    "API host coverage is recorded as 33.26 percent line and 0 percent branch in the phase notes; affected runtime paths have QEMU evidence."
+  ],
+  "positives": [
+    {
+      "file": "libs/api/src/abi/syscall.rs",
+      "line": 840,
+      "summary": "400 is omitted from public numeric decode and falls through to Unknown."
+    },
+    {
+      "file": "kernel/src/task/syscall.rs",
+      "line": 4918,
+      "summary": "Raw fallback mapping does not include 400."
+    },
+    {
+      "file": "libs/api/src/abi/syscall_tests.rs",
+      "line": 132,
+      "summary": "ABI tests assert 400 remains Unknown and bit 32 remains stable for HotSwapReady/Snapshot."
+    },
+    {
+      "file": "kernel/src/cell/hotswap.rs",
+      "line": 184,
+      "summary": "Commit path requires frozen source, ready bound replacement, and paused service compare."
+    },
+    {
+      "file": "kernel/src/task/syscall.rs",
+      "line": 3717,
+      "summary": "SpawnReplacement remains SupervisorCap, launch-profile, and frozen-ceiling gated."
+    }
+  ],
+  "verification": [
+    "Ran git diff --check HEAD: clean.",
+    "Ran git grep over tracked kernel/libs/cells/tests/docs for live HotSwap=400 symbols; source/test scope contains no ViSyscall::HotSwap, Syscall::HotSwap, sys_hotswap wrapper, 400 decode, or HotSwap=400 enum.",
+    "Ran cargo test -p api --target x86_64-unknown-linux-gnu syscall: 17 passed, 58 filtered.",
+    "Ran cargo check -p vicell-kernel: passed.",
+    "Did not rerun hotswap-smoke, launch-profile, release-kernel builds, or QEMU boot lanes in this review turn; Phase 04 evidence records hotswap 15/15, launch-profile 1/1, release-kernel builds green, and x86/AArch64 QEMU boot lanes host-gated."
+  ]
+}

@@ -1,0 +1,6 @@
+**VERDICT:** PASS_WITH_RISK — shared HAL<->kernel Rust ABI signatures compile on x86_64, RV64, and RPi3 AArch64, with RV32 still blocked by pre-existing mainline compile failures; DCO-clean branch is `refactor/hal-kernel-rust-abi-dco`.
+
+[LOW] hal/traits/arch/src/kernel_abi.rs:55 — RV32/RV64 frame size assertions cover total size but not per-field offsets; assembly restores by fixed offsets, so future field reordering could compile until runtime. Add `offset_of!` assertions for `regs`, `sstatus`, `sepc`, `stval`, and `scause`.
+[LOW] cargo check -p cellos-kernel --target riscv32imac-unknown-none-elf — RV32 remains unshippable on both branch and `origin/main` due `hal::paging`, `AtomicU64`, and `u32`/`usize` errors; this branch does not introduce the failure, but RV32 cannot be claimed green. Track separately before RV32 hardware work.
+[POSITIVE] hal/traits/arch/src/kernel_abi.rs:105 — arch HALs now import a single hook declaration source, removing hand-rolled `extern "Rust"` drift across trap/syscall paths.
+[POSITIVE] scripts/check-hal-boundaries.sh:62 — boundary guard now rejects new local `extern "Rust"` blocks under `hal/arch`, making the ABI centralization mechanically enforceable.

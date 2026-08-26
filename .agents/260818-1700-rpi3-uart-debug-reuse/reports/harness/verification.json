@@ -1,0 +1,50 @@
+{
+  "commands": [
+    {
+      "command": "cargo fmt --all -- --check",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-18T17:30:00+07:00",
+      "summary": "Formatting passed."
+    },
+    {
+      "command": "cargo test host profile crates",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-18T17:30:00+07:00",
+      "summary": "BCM27xx 5/5, boards 9/9, and RISC-V SoC 3/3 passed."
+    },
+    {
+      "command": "cargo check AArch64 HAL and kernel default plus board-rpi3",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-18T17:30:00+07:00",
+      "summary": "All four AArch64 compile gates passed."
+    },
+    {
+      "command": "cargo check and release build cellos-kernel for RV64",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-18T17:30:00+07:00",
+      "summary": "RV64 check and release build passed."
+    },
+    {
+      "command": "scripts/qemu-boot-test.sh release kernel",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-18T17:30:00+07:00",
+      "summary": "QEMU reached the FAT16 kernel-boot witness."
+    },
+    {
+      "command": "scoped raw mini-UART duplication guard",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-18T17:30:00+07:00",
+      "summary": "No private LSR/IO address, polling, write, or fifo_put implementation remains in the probe."
+    }
+  ],
+  "beforeAfter": {
+    "before": "The kernel diagnostic directly polled and wrote BCM mini-UART registers.",
+    "after": "The diagnostic retains its byte sequence while ARM HAL owns all UART MMIO."
+  }
+}

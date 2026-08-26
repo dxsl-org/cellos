@@ -1,0 +1,47 @@
+{
+  "skill": "hc-cook",
+  "mode": "interactive",
+  "task": "Phase 04 retire HotSwap syscall 400 and delete the legacy kernel hotswap orchestrator",
+  "acceptanceCriteria": [
+    "syscall number 400 is retired and ViSyscall::from(400) returns Unknown",
+    "HotSwapReady and all SupervisorCap hotswap mechanisms remain ABI-stable and operational",
+    "the Supervisor IPC flow remains the only hotswap orchestration path",
+    "kernel hotswap code retains only the mechanisms consumed by 401, 413-415, 419, and 421",
+    "fresh-image QEMU hotswap and snapshot-authority regression lanes remain green without false MMC success claims",
+    "documentation no longer describes a usable direct kernel HotSwap syscall"
+  ],
+  "touchpoints": [
+    "libs/api/src/abi/syscall.rs",
+    "libs/api/src/abi/syscall_tests.rs",
+    "libs/api/src/abi/manifest_flags.rs",
+    "libs/ostd/src/syscall.rs",
+    "libs/ostd/src/runtime.rs",
+    "libs/ostd/src/cap.rs",
+    "kernel/src/task/syscall.rs",
+    "kernel/src/cell/hotswap.rs",
+    "kernel/src/task.rs",
+    "kernel/src/embedded/init",
+    "docs/specs/15-kernel-boundary.md",
+    "docs/hotswap-guide.md",
+    "docs/codebase-summary.md",
+    "docs/specs/12-reliability.md",
+    "docs/system-architecture.md",
+    "docs/project-roadmap.md",
+    "docs/project-changelog.md"
+  ],
+  "publicContracts": [
+    "HotSwap syscall 400 is reserved and decodes to Unknown",
+    "HotSwapReady 401, state transfer 410-412, FreezeCell 413, ResumeCell 414, KillCell 415, QueryHotswapReady 419, Snapshot 420, SpawnReplacement 421, and PauseService 422 retain their ABI",
+    "Supervisor IPC is the sole supported hotswap orchestration entry point",
+    "the snapshot format and boot restore path are unchanged"
+  ],
+  "blastRadius": [
+    "all cells using spawn=true runtime defaults",
+    "kernel syscall decode and dispatch",
+    "Supervisor hotswap sequencing and capability ceilings",
+    "fresh embedded images and QEMU integration tests",
+    "boundary-law and operator documentation"
+  ],
+  "scoutSummary": "Phase 04 audit confirmed the legacy HotSwap=400 dispatch and in-kernel orchestrator remain live, while the CLI already uses Supervisor IPC. Removing the variant must preserve bit 32 through HotSwapReady and Snapshot, delete only kernel policy helpers, and prove 400 becomes Unknown. The pre-build baseline passed API 16/16, hotswap 15/15, and launch-profile 1/1; gen_disk has a pre-existing PowerShell Zig-script resolution failure and real MMC proof remains host-gated.",
+  "evidence": "expected"
+}

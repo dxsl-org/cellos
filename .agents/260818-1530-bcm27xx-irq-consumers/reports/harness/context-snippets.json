@@ -1,0 +1,25 @@
+{
+  "skill": "hc-cook",
+  "mode": "interactive",
+  "task": "Route remaining scoped BCM IRQ consumers through the centralized BCM2837 SoC topology.",
+  "acceptanceCriteria": [
+    "GPIO pending-bank masks derive from public IRQ aliases.",
+    "RPi3 CNTP routing uses the exported local timer source mask.",
+    "Kernel RPi3 diagnostic derives controller bases and IRQ masks from BCM2837.",
+    "Offsets, public constants, C1 acknowledgement, timer policy, and diagnostic bytes remain unchanged."
+  ],
+  "touchpoints": [
+    "hal/arch/arm/src/aarch64/bcm2835_legacy_irq.rs",
+    "hal/arch/arm/src/aarch64/timer.rs",
+    "kernel/src/main.rs"
+  ],
+  "publicContracts": [
+    "BCM ARM HAL public IRQ constants retain their names and values."
+  ],
+  "blastRadius": [
+    "BCM2835 GPIO pending identification",
+    "RPi3 CNTP routing",
+    "RPi3 post-enable diagnostic"
+  ],
+  "scoutSummary": "Three consumers repeated facts already owned by hal/soc/bcm27xx."
+}

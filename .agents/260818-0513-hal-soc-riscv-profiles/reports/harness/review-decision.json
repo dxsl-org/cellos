@@ -1,0 +1,29 @@
+{
+  "decision": "PASS",
+  "score": 9.1,
+  "criticalCount": 0,
+  "acceptanceCoverage": [
+    "hal/soc/riscv is no_std and data-only, with compatible-string lists and access policies only.",
+    "kernel/src/platform.rs selects the SoC profile before DTB parsing and preserves PlatformInfo shape.",
+    "SG2042 still zeroes UART, RTC, and VirtIO before publish, so fail-closed behavior remains intact.",
+    "Docs record the verification matrix without claiming fresh VF2, Pioneer, or RPi3 hardware runtime proof.",
+    "Shared drivers remain in cells/drivers/ and boards/ remains the descriptor owner."
+  ],
+  "regressionProof": [
+    "cargo fmt --all -- --check passed during verification.",
+    "cargo test -p hal-soc-riscv --target x86_64-unknown-linux-gnu passed during verification.",
+    "cargo test -p cellos-boards --target x86_64-unknown-linux-gnu passed during verification.",
+    "cargo check -p cellos-kernel --target riscv64gc-unknown-none-elf passed during verification.",
+    "cargo check -p cellos-kernel --target riscv64gc-unknown-none-elf --features board-vf2 passed during verification.",
+    "cargo check -p cellos-kernel --target riscv64gc-unknown-none-elf --features board-pioneer passed during verification.",
+    "cargo check -p cellos-kernel --target riscv64gc-unknown-none-elf --features 'board-vf2 board-pioneer' passed during verification.",
+    "cargo check -p cellos-kernel --target aarch64-unknown-none-softfloat passed during verification.",
+    "cargo check -p cellos-kernel --target aarch64-unknown-none-softfloat --features board-rpi3 passed during verification.",
+    "cargo build --release -p cellos-kernel --target riscv64gc-unknown-none-elf -Z build-std=core,alloc passed during verification.",
+    "bash scripts/qemu-boot-test.sh target/riscv64gc-unknown-none-elf/release/cellos-kernel passed during verification.",
+    "No repository artifact validator was present; manual JSON validation was used instead."
+  ],
+  "contractStatus": "OK",
+  "blockingReasons": [],
+  "findings": []
+}

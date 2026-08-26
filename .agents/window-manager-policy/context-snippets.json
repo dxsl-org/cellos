@@ -1,0 +1,21 @@
+{
+  "task": "Add the missing window-manager policy: titlebars, drag/resize, close lifecycle, minimize, and maximize/restore.",
+  "acceptanceCriteria": [
+    "Compositor owns clipped titlebars, frame, controls, hit-testing, capture, and painting without changing client pixel coordinates.",
+    "Resize is a staged Configure/Grant replacement/ConfigureAck transaction; active content remains unchanged until matching commit.",
+    "Close uses a client-visible request/response lifecycle; minimize/maximize/restore have explicit state transitions.",
+    "Existing background, focus, capture, cursor, Grant, and legacy surface behavior remains compatible.",
+    "RV64 QEMU evidence covers the complete policy and prior window-policy/cursor behavior."
+  ],
+  "touchpoints": [
+    "libs/api/src/services/display.rs",
+    "libs/ostd/src/display.rs",
+    "libs/ostd/src/input.rs",
+    "cells/services/compositor/src",
+    "cells/tests/window-policy-probe/src/main.rs",
+    "tests/integration/tests/window-policy.rs",
+    "docs/"
+  ],
+  "blastRadius": "Additive display ABI plus compositor input/render/lifecycle paths. Existing opcodes, ViSurface methods, SurfaceRole, input forwarding, grants, and public client coordinate origin must remain valid.",
+  "publicContracts": "The user explicitly confirmed the additive public ABI change twice. New messages must use documented little-endian layouts, bounded title data, ownership checks, serial validation, and compatibility with existing clients."
+}

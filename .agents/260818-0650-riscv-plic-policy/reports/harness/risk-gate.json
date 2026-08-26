@@ -1,0 +1,12 @@
+{
+  "highRisk": true,
+  "reasons": [
+    "kernel interrupt path",
+    "SoC-specific PLIC context numbering",
+    "claim-dispatch-complete ordering",
+    "cross-board compile surface"
+  ],
+  "autoStopRequired": false,
+  "humanApproved": true,
+  "largeDiff": true
+}

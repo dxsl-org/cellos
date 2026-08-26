@@ -1,0 +1,24 @@
+{
+  "decision": "PASS",
+  "score": 9.6,
+  "criticalCount": 0,
+  "acceptanceCoverage": [
+    "PROTECTION_CLASS_* constants remain exact aliases of the five retained TIER_* constants, and protection_class() returns the unchanged public tier byte.",
+    "granted_protection_class() preserves the prior floor calculation while deprecated granted_tier() remains as a direct compatibility wrapper.",
+    "The production x86_64 loader now uses protection_class(), PROTECTION_CLASS_LEGACY, and granted_protection_class(); no production granted_tier() or tier() call remains.",
+    "CellManifest retains #[repr(C)], the same field order, the public tier field, and a tested 16-byte v2 size; parser bounds remain 8 bytes for v1 and 16 bytes for v2.",
+    "The v1 parser still upcasts flags and assigns PROTECTION_CLASS_LEGACY; the Zig producer intentionally remains version 1 with a compile-time 8-byte size assertion.",
+    "Legacy tier(), TIER_* symbols, and declare_manifest! tier = arms remain present; active docs contain no SDK L1 and retain Tier 2 only as an unimplemented native-domain concept."
+  ],
+  "regressionProof": [
+    "Final host API lane passed 84 tests; four documentation tests remain intentionally ignored.",
+    "Final x86_64 and RISC-V bare-metal kernel checks passed.",
+    "Loader search confirms no production granted_tier() or tier() calls remain; legacy wrappers and test compatibility coverage remain present.",
+    "Final terminology grep and git diff --check passed.",
+    "The canonical loader migration is name-only: requested and granted values still flow into the same PKU key and pkru_for_key mapping."
+  ],
+  "contractStatus": "OK",
+  "blockingReasons": [],
+  "acceptedRisk": null,
+  "findings": []
+}

@@ -1,0 +1,14 @@
+{
+  "risk": "high",
+  "reasons": [
+    "Bare-metal interrupt routing can fail silently when a number or mask drifts.",
+    "Public IRQ aliases are consumed outside the profile module.",
+    "Timer pending and acknowledgement paths must retain distinct bit semantics."
+  ],
+  "requiredEvidence": [
+    "Exact-value and invariant unit tests",
+    "AArch64 default and board-rpi3 compile gates",
+    "RV64 regression build and QEMU boot",
+    "Focused code review"
+  ]
+}

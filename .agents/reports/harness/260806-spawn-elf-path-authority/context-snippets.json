@@ -1,0 +1,18 @@
+{
+  "skill": "hc-fix",
+  "mode": "interactive",
+  "task": "Prevent caller-owned ELF bytes from borrowing capability-bearing path authority",
+  "acceptanceCriteria": [
+    "shell and other non-lifecycle callers cannot mint capabilities through SpawnFromElf path hints",
+    "capability-free shell SpawnFromElf remains functional",
+    "init and supervisor lifecycle launch edges remain functional"
+  ],
+  "touchpoints": [
+    "kernel/src/loader/launch_profile/mod.rs",
+    "kernel/src/loader/launch_profile/tests.rs",
+    "kernel/src/loader/boot_ceiling/selftest.rs"
+  ],
+  "publicContracts": ["No public ABI change"],
+  "blastRadius": ["SpawnFromElf launch-profile authorization"],
+  "scoutSummary": "Only shell currently invokes SpawnFromElf; init also reaches the route during boot. Capability-bearing non-lifecycle profiles were the vulnerable boundary."
+}

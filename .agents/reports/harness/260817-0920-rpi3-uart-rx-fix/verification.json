@@ -1,0 +1,57 @@
+{
+  "commands": [
+    {
+      "command": "pre-fix source guard evaluation",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-17T09:22:00+07:00",
+      "summary": "The regression guard correctly evaluates false against the pre-fix console source."
+    },
+    {
+      "command": "pwsh tools/rpi3-netboot/test-netboot-scripts.ps1",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-17T09:22:00+07:00",
+      "summary": "Static netboot, RPi3 mini-UART RX, and generic AArch64 PL011 guards passed."
+    },
+    {
+      "command": "cargo fmt --all -- --check and git diff --check",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-17T09:22:00+07:00",
+      "summary": "Formatting and whitespace checks passed."
+    },
+    {
+      "command": "cargo check -p vicell-kernel --target aarch64-unknown-none-softfloat",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-17T09:23:00+07:00",
+      "summary": "Generic AArch64 configuration retained and compiled the PL011 path."
+    },
+    {
+      "command": "EMBEDDED_OVERRIDE=target/rpi3-embedded cargo build --release -p vicell-kernel --features board-rpi3 --target aarch64-unknown-none-softfloat",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-17T09:24:00+07:00",
+      "summary": "RPi3 release kernel compiled with the BCM mini-UART path."
+    },
+    {
+      "command": "deploy-rpi3-kernel.ps1",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-17T09:24:00+07:00",
+      "summary": "Published a verified 9564224-byte uImage with payload SHA256 500FEB682ABB69E9D585414437D1A56BD6672792A195844BB1A3B34F0E1DEA67."
+    },
+    {
+      "command": "real-board COM4 help reproduction",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-17T09:32:00+07:00",
+      "summary": "RPi3 echoed help, printed the shell command listing, and returned the ViCell prompt through the BCM mini-UART input path."
+    }
+  ],
+  "beforeAfter": {
+    "before": "RPi3 shell produced no echo or help response because AArch64 console RX polled the QEMU PL011.",
+    "after": "Static guards, both AArch64 builds, and the exact real-board help reproduction pass."
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "decision": "PASS",
+  "disprovenClaims": [],
+  "unverifiedClaims": [
+    "Physical Raspberry Pi 3 serial timing was not tested."
+  ],
+  "missingProof": [],
+  "reachableRegressions": []
+}

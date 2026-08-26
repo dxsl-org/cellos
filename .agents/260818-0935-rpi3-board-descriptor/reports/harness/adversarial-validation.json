@@ -1,0 +1,14 @@
+{
+  "decision": "PASS_WITH_BOUNDARY",
+  "disprovenClaims": [],
+  "unverifiedClaims": [
+    "physical Raspberry Pi 3 VideoCore firmware and peripheral handoff"
+  ],
+  "missingProof": [
+    "fresh serial boot evidence from Raspberry Pi 3 hardware"
+  ],
+  "reachableRegressions": [],
+  "resolvedFindings": [
+    "fallback usable RAM now ends at 0x3F000000 instead of overlapping 16 MiB of BCM2837 MMIO"
+  ]
+}

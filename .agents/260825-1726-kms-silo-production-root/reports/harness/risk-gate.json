@@ -1,0 +1,13 @@
+{
+  "highRisk": true,
+  "reasons": [
+    "canonical CSR construction and non-exportable-key proof of possession",
+    "supervisor-bound one-shot enrollment and atomic active/pending lifecycle",
+    "nonce-bound development Silo enrollment-key custody and cleanup",
+    "strict certificate, profile, and manifest identity binding",
+    "authenticated recovery/time floors with intentionally unavailable production providers"
+  ],
+  "autoStopRequired": true,
+  "humanApproved": true,
+  "largeDiff": true
+}

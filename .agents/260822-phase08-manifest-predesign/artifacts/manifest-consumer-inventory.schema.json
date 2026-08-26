@@ -1,0 +1,469 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "base_revision": {
+      "const": "2d61a4728834a0dd23ce63b6e09e5b735246c41a"
+    },
+    "derived_source_state": {
+      "additionalProperties": false,
+      "properties": {
+        "derived_source_state_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "hash_algorithm": {
+          "const": "sha256"
+        },
+        "inputs": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "path",
+              "sha256"
+            ],
+            "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "hash_algorithm",
+        "inputs",
+        "derived_source_state_sha256"
+      ],
+      "type": "object"
+    },
+    "discovery_contract": {
+      "additionalProperties": false,
+      "properties": {
+        "exclusions": {
+          "const": [
+            "docs/**",
+            ".agents/**",
+            ".git/**",
+            "target/**",
+            "vendor/**",
+            "generated image artifacts",
+            "scripts/validate-manifest-abi-predesign.py",
+            "scripts/manifest_abi_predesign/__init__.py",
+            "scripts/manifest_abi_predesign/cli.py",
+            "scripts/manifest_abi_predesign/common.py",
+            "scripts/manifest_abi_predesign/corpus.py",
+            "scripts/manifest_abi_predesign/elf.py",
+            "scripts/manifest_abi_predesign/inventory.py",
+            "scripts/manifest_abi_predesign/matrix.py",
+            "scripts/manifest_abi_predesign/report.py",
+            "scripts/manifest_abi_predesign/schema.py",
+            "scripts/manifest_abi_predesign/state.py",
+            "tests/manifest-abi-predesign/test_validator.py",
+            "tests/manifest-abi-predesign/test_validator_corpus.py",
+            "tests/manifest-abi-predesign/test_validator_inventory.py",
+            "tests/manifest-abi-predesign/validator_test_support.py"
+          ]
+        },
+        "filename_suffixes": {
+          "const": [
+            ".S",
+            ".c",
+            ".h",
+            ".in",
+            ".ld",
+            ".py",
+            ".rs",
+            ".sh",
+            ".toml",
+            ".zig"
+          ]
+        },
+        "required_manual_paths": {
+          "const": [
+            "kernel/Cargo.toml",
+            "kernel/src/main.rs",
+            "kernel/src/policy.rs",
+            "kernel/src/resource_registry.rs",
+            "kernel/src/task/scheduler.rs",
+            "kernel/src/task/syscall.rs",
+            "libs/api/src/abi.rs",
+            "libs/api/src/lib.rs",
+            "libs/zig-syscall/src/root.zig",
+            "scripts/build-boot-ramdisk-ci.sh",
+            "scripts/build-shell-test-ci.sh",
+            "scripts/build-srv-test-ci.sh",
+            "scripts/build-test-hooks-ci.sh",
+            "scripts/cellos-sign",
+            "scripts/cellos_sign/signing.py",
+            "scripts/lib-sign-cells.sh",
+            "scripts/test-cell-signing.sh",
+            "scripts/test_cellos_sign.py",
+            "scripts/validate-manifest-abi-predesign.py",
+            "tests/manifest-abi-predesign/test_validator.py",
+            "tools/check_elf.py"
+          ]
+        },
+        "required_manual_paths_sha256": {
+          "const": "b80301c4282fa1e6787373b1a23af3c9388952065f99e4605fd19c2a3ee32707"
+        },
+        "required_match_count": {
+          "const": 754
+        },
+        "required_match_sha256": {
+          "const": "f39931d75e26ceb1513aa709db56d0ab50903c6089877a0ca464772e75e59cfb"
+        },
+        "roots": {
+          "const": [
+            "cells",
+            "kernel",
+            "libs",
+            "scripts",
+            "tools",
+            "tests"
+          ]
+        },
+        "source_scan_repin": {
+          "const": {
+            "change_classification": {
+              "added": [
+                {
+                  "classification": "phase07-atomic-publication-probe",
+                  "path": "cells/tests/atomic-publication-probe/src/main.rs",
+                  "roles": [
+                    "behavior-test",
+                    "writer"
+                  ]
+                }
+              ],
+              "changed": [
+                {
+                  "classification": "phase07-loader-route-delegation",
+                  "path": "kernel/src/loader.rs",
+                  "roles": [
+                    "acceptance-validator",
+                    "reader",
+                    "route-consumer"
+                  ]
+                }
+              ],
+              "removed": []
+            },
+            "invalidated_match_count": 133,
+            "invalidated_match_sha256": "abe2fdfb61bc8d7a4886ff5f3d7c285a6067531f0cbfb4fe795e8673ed7c6030",
+            "invalidated_record_format": "path-token-set-v1",
+            "invalidation_reason": "Phase07 atomic-publication probe and loader governed-route changes invalidated the Phase05 path/token pin; the repin now preserves each token occurrence, stable line symbol, and source-content digest without changing the frozen Manifest v1/v2 ABI.",
+            "repinned_match_count": 754,
+            "repinned_match_sha256": "f39931d75e26ceb1513aa709db56d0ab50903c6089877a0ca464772e75e59cfb",
+            "repinned_record_format": "occurrence-symbol-source-v2"
+          }
+        },
+        "tokens": {
+          "const": [
+            "CellManifest",
+            "MANIFEST_FLAGS_MASK",
+            "MANIFEST_FLAG_",
+            "MANIFEST_MAGIC",
+            "MANIFEST_SECTION",
+            "MANIFEST_VERSION",
+            "ManifestSection",
+            "PROTECTION_CLASS_",
+            "TIER_",
+            "TIER_LEGACY",
+            "VICELL_MANIFEST",
+            "__ViCell_manifest",
+            "__ViCell_sig",
+            "app_entry!",
+            "declare_manifest",
+            "from_manifest",
+            "granted_protection_class",
+            "legacy_path_caps",
+            "manifest.declare",
+            "manifest_bytes",
+            "manifest_section",
+            "service_entry!"
+          ]
+        }
+      },
+      "required": [
+        "roots",
+        "filename_suffixes",
+        "tokens",
+        "exclusions",
+        "required_match_count",
+        "required_match_sha256",
+        "source_scan_repin",
+        "required_manual_paths",
+        "required_manual_paths_sha256"
+      ],
+      "type": "object"
+    },
+    "entries": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "absent_behavior": {
+            "type": "string"
+          },
+          "accepted_version_classes": {
+            "items": {
+              "enum": [
+                "absent",
+                "v1",
+                "v2",
+                "unsupported-denied"
+              ]
+            },
+            "type": "array",
+            "uniqueItems": true
+          },
+          "classified_occurrences": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "classification": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "consumer_id": {
+                      "type": "string"
+                    },
+                    "operation": {
+                      "enum": [
+                        "read",
+                        "emit-v1",
+                        "emit-v2",
+                        "retain",
+                        "sign-raw-section",
+                        "verify-raw-section",
+                        "display",
+                        "validate",
+                        "route",
+                        "test"
+                      ]
+                    },
+                    "roles": {
+                      "items": {
+                        "enum": [
+                          "acceptance-validator",
+                          "behavior-test",
+                          "fixture-generator",
+                          "inspector",
+                          "linker-retainer",
+                          "reader",
+                          "route-consumer",
+                          "signer",
+                          "verifier",
+                          "writer"
+                        ]
+                      },
+                      "minItems": 1,
+                      "type": "array",
+                      "uniqueItems": true
+                    }
+                  },
+                  "required": [
+                    "consumer_id",
+                    "operation",
+                    "roles"
+                  ],
+                  "type": "object"
+                },
+                "line": {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "symbol": {
+                  "type": "string"
+                },
+                "token": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "line",
+                "symbol",
+                "token",
+                "classification"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "consumer_id": {
+            "type": "string"
+          },
+          "emitted_version_class": {
+            "enum": [
+              "none",
+              "v1",
+              "v2"
+            ]
+          },
+          "evidence_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "language": {
+            "type": "string"
+          },
+          "malformed_behavior": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "operation": {
+            "enum": [
+              "read",
+              "emit-v1",
+              "emit-v2",
+              "retain",
+              "sign-raw-section",
+              "verify-raw-section",
+              "display",
+              "validate",
+              "route",
+              "test"
+            ]
+          },
+          "owner_phase": {
+            "enum": [
+              "03",
+              "05",
+              "07",
+              "08-predesign",
+              "shared-compatibility"
+            ]
+          },
+          "path": {
+            "type": "string"
+          },
+          "phase08_disposition": {
+            "enum": [
+              "freeze",
+              "future-design-input",
+              "must-remain-unchanged",
+              "out-of-scope-with-rationale"
+            ]
+          },
+          "roles": {
+            "items": {
+              "enum": [
+                "acceptance-validator",
+                "behavior-test",
+                "fixture-generator",
+                "inspector",
+                "linker-retainer",
+                "reader",
+                "route-consumer",
+                "signer",
+                "verifier",
+                "writer"
+              ]
+            },
+            "minItems": 1,
+            "type": "array",
+            "uniqueItems": true
+          },
+          "route_effect": {
+            "enum": [
+              "none",
+              "capability-request",
+              "protection-class",
+              "legacy-absence-policy",
+              "admission-gate",
+              "tooling-only"
+            ]
+          },
+          "signature_relation": {
+            "enum": [
+              "none",
+              "covered-as-raw-section",
+              "constructs-signed-payload",
+              "verifies-signed-payload",
+              "coverage-consumer"
+            ]
+          },
+          "source_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "symbol": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "consumer_id",
+          "path",
+          "symbol",
+          "language",
+          "roles",
+          "operation",
+          "accepted_version_classes",
+          "emitted_version_class",
+          "absent_behavior",
+          "malformed_behavior",
+          "signature_relation",
+          "route_effect",
+          "owner_phase",
+          "phase08_disposition",
+          "evidence_refs",
+          "notes",
+          "source_sha256",
+          "classified_occurrences"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "inventory_id": {
+      "const": "cellos-manifest-consumers-phase08-predesign"
+    },
+    "inventory_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "role_vocabulary": {
+      "const": [
+        "acceptance-validator",
+        "behavior-test",
+        "fixture-generator",
+        "inspector",
+        "linker-retainer",
+        "reader",
+        "route-consumer",
+        "signer",
+        "verifier",
+        "writer"
+      ]
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "unclassified_matches": {
+      "const": []
+    }
+  },
+  "required": [
+    "schema_version",
+    "inventory_id",
+    "base_revision",
+    "derived_source_state",
+    "discovery_contract",
+    "role_vocabulary",
+    "entries",
+    "unclassified_matches",
+    "inventory_sha256"
+  ],
+  "title": "Cellos Manifest consumer inventory",
+  "type": "object"
+}

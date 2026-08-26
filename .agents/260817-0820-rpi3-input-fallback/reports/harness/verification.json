@@ -1,0 +1,32 @@
+{
+  "verdict": "pass",
+  "staticChecks": [
+    "PowerShell netboot guards passed",
+    "Python TFTP and uImage tests passed 5/5",
+    "cargo fmt passed",
+    "git diff --check passed",
+    "default and board-rpi3 input builds passed",
+    "RPi3 kernel and uImage verification passed"
+  ],
+  "artifact": {
+    "path": "tools/rpi3-netboot/root/cellos.uimg",
+    "sha256": "171D908A46027437ABFA91AC72C00E3E4996C69EE927396F3558049F20816337",
+    "bytes": 9564224
+  },
+  "realBoard": {
+    "board": "Raspberry Pi 3 Model B v1.2",
+    "transport": "static TFTP from 192.168.42.1 to 192.168.42.2",
+    "transfer": "TFTP RRQ and DONE for cellos.uimg",
+    "positiveMarkers": [
+      "registered input service TID 4",
+      "No VirtIO input device; relying on kernel push",
+      "Init: service registry verified"
+    ],
+    "negativeMarkerCounts": {
+      "EC=0x24": 0,
+      "FAR=0x0A000000": 0,
+      "service died": 0,
+      "service restarted": 0
+    }
+  }
+}

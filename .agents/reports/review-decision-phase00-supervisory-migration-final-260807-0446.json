@@ -1,0 +1,36 @@
+{
+  "verdict": "PASS_WITH_RISK",
+  "approval": "APPROVE",
+  "target": "uncommitted Phase00 supervisory migration final diff",
+  "blocking_findings": [],
+  "residual_findings": [
+    {
+      "severity": "MED",
+      "file": "cells/services/supervisor/src/hotswap.rs",
+      "line": 151,
+      "summary": "Supervisor hotswap hard-freezes before Snapshot; this pre-existing runtime gap blocks state-preserving hotswap release claims but not Phase00 cap-ceiling code landing."
+    }
+  ],
+  "verified_prior_high_fixes": [
+    {
+      "finding": "freeze publication atomicity",
+      "status": "fixed",
+      "evidence": "kernel/src/cell/hotswap.rs:193"
+    },
+    {
+      "finding": "stale ceiling record and one-shot consume",
+      "status": "fixed",
+      "evidence": "kernel/src/cell/hotswap.rs:125, kernel/src/task/scheduler.rs:487"
+    },
+    {
+      "finding": "SpawnReplacement launch-edge bypass",
+      "status": "fixed",
+      "evidence": "kernel/src/task/syscall.rs:3677"
+    }
+  ],
+  "runtime_e2e": {
+    "spawn_replacement_qemu": "unverified",
+    "code_complete_boundary": "acceptable_due_to_preexisting_gen_disk_packaging_blocker",
+    "release_boundary": "blocker_for_state_preserving_hotswap_claims"
+  }
+}

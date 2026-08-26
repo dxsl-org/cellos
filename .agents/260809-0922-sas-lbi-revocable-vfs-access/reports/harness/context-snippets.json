@@ -1,0 +1,34 @@
+{
+  "skill": "hc-cook",
+  "mode": "interactive",
+  "task": "Implement approved Phase 04 service-local revocable VFS file handles and bounded inline reads.",
+  "evidence": "expected",
+  "acceptanceCriteria": [
+    "append exact request variants 23 through 25 and response variant 9 without changing prior discriminants",
+    "open read and close enforce Caller cell plus generation ownership and current VFS authorization",
+    "CloseDir owner death and higher-generation replacement revoke transitively anchored file handles",
+    "inline reads copy at most 4000 service-owned bytes and expose no pointer grant DMA or cancellation lifetime",
+    "fast IPC has no file-handle route and cross-cell handle guessing fails closed"
+  ],
+  "touchpoints": [
+    "libs/api/src/services/ipc.rs",
+    "libs/api/src/services/vfs_file_handles.rs",
+    "cells/services/vfs/src/file_handles.rs",
+    "cells/services/vfs/src/dispatch_dirs.rs",
+    "cells/services/vfs/src/dirs/lifecycle.rs",
+    "cells/services/vfs/src/manager.rs"
+  ],
+  "publicContracts": [
+    "VfsRequest discriminants 0 through 22 remain unchanged",
+    "VfsResponse discriminants 0 through 8 remain unchanged",
+    "OpenFileAt is 23 ReadFileHandle is 24 CloseFile is 25 and FileHandle is 9",
+    "no syscall number manifest libs/types or fast IPC expansion"
+  ],
+  "blastRadius": [
+    "VFS directory revocation and generation cleanup",
+    "VFS owner-death watch registration",
+    "postcard VFS wire encoding",
+    "RV64 VFS integration runtime"
+  ],
+  "scoutSummary": "Phase 04 exact checkpoint and adversarial review passed; normal VFS dispatch is serialized by GLOBAL_VFS and new operations remain message-path only."
+}

@@ -1,0 +1,22 @@
+{
+  "decision": "PASS",
+  "score": 9.3,
+  "criticalCount": 0,
+  "acceptanceCoverage": [
+    "Producer foreign-write removal -> IPC boot self-test passed",
+    "Resume-side mailbox delivery -> IPC boot self-test passed",
+    "IRQ allocation safety and bounded burst -> UART near-depth burst test passed",
+    "Receiver quota charge/refund -> IPC boot self-test passed",
+    "Death wake priority and fallible exhaustion -> IPC boot self-test passed",
+    "Request/reply and input regressions -> VFS and keyboard QEMU tests passed",
+    "RecvScatter stale-pointer safety -> all producer paths tested against an invalid retained Recv pointer"
+  ],
+  "regressionProof": [
+    "three kernel architecture checks passed",
+    "integration test target compiled",
+    "release RISC-V build passed",
+    "five focused QEMU runtime tests passed"
+  ],
+  "contractStatus": "OK",
+  "blockingReasons": []
+}

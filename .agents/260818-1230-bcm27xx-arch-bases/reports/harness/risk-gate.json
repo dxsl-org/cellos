@@ -1,0 +1,11 @@
+{
+  "highRisk": true,
+  "reasons": [
+    "bare-metal UART and interrupt MMIO",
+    "target-specific optional dependency",
+    "early timer diagnostics"
+  ],
+  "autoStopRequired": false,
+  "humanApproved": true,
+  "largeDiff": false
+}

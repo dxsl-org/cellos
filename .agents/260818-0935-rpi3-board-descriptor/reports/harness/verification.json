@@ -1,0 +1,16 @@
+{
+  "commands": [
+    {
+      "command": "12-gate format, unit, cross-target compile, release, and QEMU matrix",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-18T10:15:00+07:00",
+      "summary": "9 board tests, 2 BCM tests, 3 RISC-V SoC tests, six compile lanes, RV64 release build, and QEMU boot passed."
+    }
+  ],
+  "beforeAfter": {
+    "before": "Raspberry Pi 3 board identity and fallback policy were embedded in kernel paths and the descriptor shape required RISC-V-only controllers.",
+    "after": "A root board descriptor owns Raspberry Pi 3 integration data while kernel consumers reuse shared mechanisms and BCM27xx SoC facts."
+  },
+  "evidenceBoundary": "QEMU RV64 runtime verified; Raspberry Pi 3, VF2, and Pioneer compile-only for this slice."
+}

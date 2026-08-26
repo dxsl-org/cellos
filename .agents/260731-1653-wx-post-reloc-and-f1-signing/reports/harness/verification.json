@@ -1,0 +1,50 @@
+{
+  "commands": [
+    {
+      "command": "cargo check -p vicell-kernel --target riscv64gc-unknown-none-elf",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-07-31T20:57:22.5500267+07:00",
+      "summary": "RISC-V kernel check passed."
+    },
+    {
+      "command": "cargo check -p vicell-kernel --target aarch64-unknown-none-softfloat",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-07-31T20:57:22.5500267+07:00",
+      "summary": "AArch64 kernel check passed."
+    },
+    {
+      "command": "cargo check -p vicell-kernel --target x86_64-unknown-none",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-07-31T20:57:22.5500267+07:00",
+      "summary": "x86_64 kernel check passed with pre-existing target-feature warnings."
+    },
+    {
+      "command": "cargo test --test boot --no-run --target x86_64-unknown-linux-gnu",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-07-31T20:57:22.5500267+07:00",
+      "summary": "Integration boot test target compiled."
+    },
+    {
+      "command": "cargo build --release -p vicell-kernel --target riscv64gc-unknown-none-elf",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-07-31T20:57:22.5500267+07:00",
+      "summary": "Release RISC-V kernel built successfully."
+    },
+    {
+      "command": "five focused QEMU boot tests",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-07-31T20:57:22.5500267+07:00",
+      "summary": "IPC self-test, UART near-depth burst, long-line backspace, FAT16 VFS round trip, and keyboard E2E each passed."
+    }
+  ],
+  "beforeAfter": {
+    "before": "Producer contexts wrote directly through retained foreign Recv buffer pointers; heap payload quota followed the current producer/drop context.",
+    "after": "Producers enqueue receiver-owned bytes, receiver syscalls perform the user-buffer copy, IRQ payloads stay inline, and heap allocation refunds follow the recorded receiver cell."
+  }
+}

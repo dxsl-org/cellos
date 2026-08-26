@@ -1,0 +1,18 @@
+{
+  "decision": "PASS",
+  "score": 10.0,
+  "criticalCount": 0,
+  "acceptanceCoverage": [
+    "static guard rejects T, M, A, and N hot-path probe writes",
+    "fault-only diagnostics and one-shot boot markers remain",
+    "generic and board-rpi3 builds pass",
+    "real RPi3 boot and help input contain zero removed markers"
+  ],
+  "regressionProof": [
+    "tester passed both AArch64 lanes and verified the uImage payload",
+    "reviewer confirmed control flow is unchanged",
+    "real-board before/after marker counts passed"
+  ],
+  "contractStatus": "OK",
+  "blockingReasons": []
+}

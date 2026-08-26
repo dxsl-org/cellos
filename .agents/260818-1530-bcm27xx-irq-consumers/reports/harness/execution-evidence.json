@@ -1,0 +1,17 @@
+{
+  "phase": "phase-03-verify-review-document",
+  "criteria": [
+    {
+      "criterion": "All established regression gates pass after consumer migration.",
+      "command": "11-gate Cellos HAL matrix",
+      "evidenceRef": "11/11 passed; QEMU reported FAT16 mounted and kernel booted.",
+      "pass": true
+    },
+    {
+      "criterion": "Scoped duplicate literals are absent.",
+      "command": "git grep scoped old BCM IRQ/address patterns",
+      "evidenceRef": "No old scoped consumer pattern matched.",
+      "pass": true
+    }
+  ]
+}

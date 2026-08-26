@@ -1,0 +1,70 @@
+{
+  "overall_correctness": "incorrect",
+  "explanation": "The direction is sound—one KMS-owned provider boundary, service-net-only signing, and compile-time exclusion of development providers—but the proposed sequencing and provider surface carry avoidable coupling. The maintainable plan is a narrow KMS-to-mTLS vertical slice, an optional Silo/QEMU evidence lane, and hardware work gated on one exact product and board trust design.",
+  "confidence": 0.96,
+  "findings": [
+    {
+      "title": "Build the KMS signing contract as one vertical slice",
+      "body": "The proposal separates ABI/provider work from service-net authorization and lifecycle, so a new cross-boundary signing operation can exist before its consuming dispatch and caller policy are proven. Merge the fixed KMS opcode/payload, `KmsClient` method, dispatcher branch, direct service-net authorization, fixture-provider behavior, and production-provider exclusion into one independently verifiable phase; reuse `libs/types/src/kms/tests.rs`, `cells/services/kms/src/tests/authorization.rs`, `operations.rs`, and `root_invariants.rs`. Split durable key rotation, rollback storage, enrollment, and recovery back into the selected hardware phase rather than designing hardware-neutral lifecycle machinery up front.",
+      "priority": 1,
+      "confidence": 0.97,
+      "file_path": ".agents/260825-1726-kms-silo-production-root/research/codebase-report.json",
+      "line_start": 65,
+      "line_end": 65
+    },
+    {
+      "title": "Preserve broker binding and authorize service-net per operation",
+      "body": "Phase 2 says to replace the broker-only binding policy and have service-net register, but the existing binding is still required by `AcquireNodeIdentity` and `NoiseStaticDh`; replacing it couples relay signing to the C2C identity flow and can strand the existing broker operations. Keep `BrokerBinding` unchanged, add the live NET service TID to `ServiceRegistrySnapshot`, and authorize the TLS-sign opcode directly with the attested caller plus current service lookup, as `authorize_supervisor` already does. A second registration epoch or generalized caller registry is unnecessary because the live TID and kernel-written generation already identify the current service-net instance.",
+      "priority": 1,
+      "confidence": 0.98,
+      "file_path": ".agents/260825-1726-kms-silo-production-root/research/codebase-report.json",
+      "line_start": 65,
+      "line_end": 65
+    },
+    {
+      "title": "Replace generic prehash signing with a TLS-specific command",
+      "body": "The proposed `sign_prehash(digest32, authorization_context)` remains a generic signing oracle despite caller policy, and the separate custom domain-separated envelope risks changing the bytes required by TLS `CertificateVerify`. Define one typed operation that accepts the TLS 1.3 client transcript hash and key identity, reconstructs the standard `64 spaces || \"TLS 1.3, client CertificateVerify\\0\" || transcript_hash` input, hashes it with SHA-256, and invokes a provider method dedicated to that operation; authorization epoch and freshness remain command metadata rather than extra signed bytes. The same typed command should be the sole SPI signing profile, with fixed raw `(r,s)` or DER output chosen once.",
+      "priority": 1,
+      "confidence": 0.98,
+      "file_path": ".agents/260825-1726-kms-silo-production-root/research/protected-root-report.json",
+      "line_start": 2,
+      "line_end": 2
+    },
+    {
+      "title": "Keep certificate-chain transport out of the KMS ABI",
+      "body": "The architecture has KMS return a public certificate and handle, but the frozen KMS response has only 112 payload bytes while a normal client leaf or chain is larger; carrying certificates would introduce chunking, reassembly, and new lifecycle protocol state. Provision the public client chain to service-net through the product manifest/configuration path, and have KMS expose only fixed-size signer metadata such as the P-256 public point or SPKI hash, key ID, and epoch so service-net can fail startup on a certificate/key mismatch. KMS remains the private signing-policy boundary without becoming a certificate store or transport.",
+      "priority": 2,
+      "confidence": 0.96,
+      "file_path": ".agents/260825-1726-kms-silo-production-root/research/codebase-report.json",
+      "line_start": 65,
+      "line_end": 65
+    },
+    {
+      "title": "Make Silo an optional evidence lane and retire its public API",
+      "body": "Putting “repair reference Silo” before service-net mTLS makes the critical path depend on a zero-byte guest artifact, a broken initialization sequence, EL2-only machinery, and a second raw protocol that production will never use. First verify mTLS against the existing KMS fixture/conformance seams; if QEMU runtime evidence is still valuable, merge Silo repair with the relay-QEMU evidence phase and keep only internal GetPublicKey/TLS-sign commands callable by attested KMS. Retire `ostd::SiloHandle`, public `init_key`, `ecdh`, `sign`, `send_raw`, the all-caller IPC contract, and the deterministic T1–T6 caller test, replacing them with the same KMS wire/auth/provider-conformance cases used by hardware; otherwise delete the reference Silo rather than maintaining a parallel API.",
+      "priority": 1,
+      "confidence": 0.99,
+      "file_path": ".agents/260825-1726-kms-silo-production-root/research/codebase-report.json",
+      "line_start": 65,
+      "line_end": 65
+    },
+    {
+      "title": "Extend the existing provider seam without duplicating lifecycle APIs",
+      "body": "The proposed provider requirements add `public_key()` and `health()` alongside the existing `open_or_provision`, `assess`, `seal_epoch`, and `rotate` responsibilities, creating overlapping sources of readiness and identity truth. Keep one renamed-or-retained `RootProvider` trait, reuse `ProviderAssessment` and the existing root/journal invariants, and add only typed relay-identity retrieval plus the TLS-specific signing method; use distinct return types for the existing 32-byte X25519 identity and the P-256 relay signer so `OpenedRoot.public_key` never becomes ambiguous. Transport parsing belongs in one provider-specific module, policy in `auth.rs`/root state, opcode routing in `dispatch.rs`, and the embedded-TLS adapter in service-net.",
+      "priority": 2,
+      "confidence": 0.95,
+      "file_path": ".agents/260825-1726-kms-silo-production-root/research/protected-root-report.json",
+      "line_start": 2,
+      "line_end": 2
+    },
+    {
+      "title": "Gate OpenTitan implementation on one exact hardware product",
+      "body": "“OpenTitan-compatible” plus simulation, FPGA, rollback modeling, DICE/measurement binding, board work, and production qualification is too broad before a purchasable part, supported firmware baseline, provisioning service, and AP-to-RoT trust path are selected. Split out a no-code kill gate that chooses the exact silicon/firmware, one SPI command profile, manufacturing flow, board wiring, and authenticated boot-measurement source; only then implement and qualify that adapter. Do not implement the unused `DiceSealed` path, a generic DICE framework, both TPM and custom SPI profiles, or an abstract monotonic store unless the selected product requires them. The smallest production-capable path is: KMS TLS-sign vertical slice → service-net mTLS/relay behavior with test fixtures → exact hardware and board selection gate → one hardware provider with its real lifecycle/provisioning rules → two production nodes exercising ADR-0005; Silo, QEMU, FPGA, and generic DICE work are optional risk-reduction evidence, not prerequisites.",
+      "priority": 1,
+      "confidence": 0.97,
+      "file_path": ".agents/260825-1726-kms-silo-production-root/research/codebase-report.json",
+      "line_start": 65,
+      "line_end": 65
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "skill": "hc-cook",
+  "mode": "interactive",
+  "task": "Continue the HAL separation for x86",
+  "acceptanceCriteria": [
+    "generic x86 ACPI PC is present in the root board catalog",
+    "static PC facts live in hal/soc/x86 while ACPI MMIO remains fail-closed",
+    "the kernel consumes typed board and SoC policy without duplicating x86 drivers",
+    "all seven board build lanes and fresh BIOS/UEFI QEMU witnesses pass"
+  ],
+  "touchpoints": [
+    "boards/generic/x86_64-pc/board.rs",
+    "hal/soc/x86/src/lib.rs",
+    "hal/arch/x86/src/x86_64/uart_16550.rs",
+    "kernel/src/board.rs",
+    "kernel/src/main.rs"
+  ],
+  "publicContracts": [
+    "boot order remains boot -> COM1 -> ACPI -> timer -> SMP -> PCIe -> NVMe",
+    "invalid firmware leaves timer, interrupt, and PCIe gates closed",
+    "shared drivers remain single-copy"
+  ],
+  "blastRadius": [
+    "board descriptor enums and validation",
+    "x86 early UART and ACPI firmware mapping",
+    "board configuration CI matrix"
+  ],
+  "scoutSummary": "The prior x86 lane was merged but had no root board descriptor or SoC profile; static COM1 and legacy firmware-window facts were embedded in arch/kernel integration.",
+  "evidence": "expected"
+}

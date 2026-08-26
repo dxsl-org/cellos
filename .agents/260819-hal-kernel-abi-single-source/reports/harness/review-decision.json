@@ -1,0 +1,17 @@
+{
+  "decision": "PASS",
+  "score": 9.5,
+  "criticalCount": 0,
+  "acceptanceCoverage": [
+    "shared aliases cover native and RV32 frames",
+    "import and export assertions cover syscall dispatch",
+    "three required kernel target checks pass"
+  ],
+  "regressionProof": [
+    "exact x86_64 failing command passes",
+    "RV64 and AArch64 checks pass",
+    "RV32 HAL trait and HAL RISC-V checks pass"
+  ],
+  "contractStatus": "OK",
+  "blockingReasons": []
+}

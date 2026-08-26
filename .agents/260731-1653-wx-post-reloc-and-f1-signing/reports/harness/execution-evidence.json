@@ -1,0 +1,35 @@
+{
+  "phase": "ipc-pending-mailbox-resolution",
+  "criteria": [
+    {
+      "criterion": "producer delivery defers foreign user-buffer writes",
+      "command": "cargo test --test boot --target x86_64-unknown-linux-gnu ipc_pending_delivery_selftest_passes -- --exact --nocapture --test-threads=1",
+      "evidenceRef": "1 passed; boot log reported IPC-PENDING PASS",
+      "pass": true
+    },
+    {
+      "criterion": "near-depth UART burst remains lossless without IRQ heap allocation",
+      "command": "cargo test --test boot --target x86_64-unknown-linux-gnu console_near_depth_burst_is_lossless -- --exact --nocapture --test-threads=1",
+      "evidenceRef": "1 passed",
+      "pass": true
+    },
+    {
+      "criterion": "long console input remains responsive",
+      "command": "cargo test --test boot --target x86_64-unknown-linux-gnu console_long_line_with_backspace_no_stall -- --exact --nocapture --test-threads=1",
+      "evidenceRef": "1 passed",
+      "pass": true
+    },
+    {
+      "criterion": "ipc_reply-style VFS request/reply remains operational",
+      "command": "cargo test --test boot --target x86_64-unknown-linux-gnu vfs_fat16_write_read -- --exact --nocapture --test-threads=1",
+      "evidenceRef": "1 passed",
+      "pass": true
+    },
+    {
+      "criterion": "keyboard input delivery remains operational",
+      "command": "cargo test --test boot --target x86_64-unknown-linux-gnu input_keyboard_e2e -- --exact --nocapture --test-threads=1",
+      "evidenceRef": "1 passed",
+      "pass": true
+    }
+  ]
+}

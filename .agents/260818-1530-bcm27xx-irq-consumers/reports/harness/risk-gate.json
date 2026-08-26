@@ -1,0 +1,9 @@
+{
+  "highRisk": false,
+  "reasons": [
+    "Bare-metal interrupt consumers are behavior-sensitive, but this slice preserves numeric values and mechanisms."
+  ],
+  "autoStopRequired": false,
+  "humanApproved": true,
+  "largeDiff": false
+}

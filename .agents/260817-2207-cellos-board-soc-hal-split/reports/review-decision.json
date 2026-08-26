@@ -1,0 +1,13 @@
+{
+  "verdict": "PASS",
+  "target": "hal-board-split-pending",
+  "report": ".agents/260817-2207-cellos-board-soc-hal-split/reports/review-2026-08-17-hal-board-split.md",
+  "findings": [],
+  "verification": {
+    "cellos_boards_tests": "pass",
+    "rv64_qemu_virt_1g_check": "pass",
+    "qa_report_main_gates": "pass",
+    "dtc_check": "skipped: dtc not installed"
+  },
+  "blockingReasons": []
+}

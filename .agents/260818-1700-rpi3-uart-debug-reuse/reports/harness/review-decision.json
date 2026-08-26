@@ -1,0 +1,17 @@
+{
+  "decision": "PASS",
+  "score": 9.6,
+  "criticalCount": 0,
+  "acceptanceCoverage": [
+    "Raw UART duplication is removed from task setup.",
+    "Cfg gating and exact formatting sequence are preserved.",
+    "The volatile stack read remains localized and documented.",
+    "Baseline and final regression matrices passed."
+  ],
+  "regressionProof": [
+    "Baseline and final 11/11 matrices passed.",
+    "Scoped duplication guard passed."
+  ],
+  "contractStatus": "OK",
+  "blockingReasons": []
+}

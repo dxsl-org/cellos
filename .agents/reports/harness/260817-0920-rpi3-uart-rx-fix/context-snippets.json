@@ -1,0 +1,21 @@
+{
+  "skill": "hc-fix",
+  "mode": "interactive",
+  "task": "Route Raspberry Pi 3 console RX through the BCM mini UART",
+  "acceptanceCriteria": [
+    "board-rpi3 polls uart_bcm_mini for console input",
+    "generic AArch64 retains uart_pl011 console input",
+    "a real RPi3 accepts help over UART and prints the shell help header"
+  ],
+  "touchpoints": [
+    "kernel/src/task/drivers/console_drv.rs",
+    "tools/rpi3-netboot/test-netboot-scripts.ps1"
+  ],
+  "publicContracts": [
+    "UART bytes continue through the existing EV_ASCII input-service relay"
+  ],
+  "blastRadius": [
+    "AArch64 console RX polling on RPi3 and QEMU virt"
+  ],
+  "scoutSummary": "The AArch64 console path unconditionally polled PL011 although board-rpi3 already exports a non-blocking BCM mini-UART poll_rx implementation."
+}

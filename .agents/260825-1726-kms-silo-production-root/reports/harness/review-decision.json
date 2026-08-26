@@ -1,0 +1,30 @@
+{
+  "decision": "PASS",
+  "codeReview": "GO",
+  "securityReview": "GO",
+  "score": 9,
+  "criticalCount": 0,
+  "highCount": 0,
+  "mediumCount": 0,
+  "acceptanceCoverage": [
+    "constrained canonical CSR → KMS/provider reconstruction, KMS self-verification, 41 types and 58 KMS tests, independent OpenSSL verification",
+    "supervisor lifecycle → exact wrong-order regression, identity poisoning, cleanup tombstones, authenticated recovery state, commit-from-Staged-only",
+    "Silo enrollment custody → fresh nonce plus generation derivation, purpose-bound commands, 17 tests, clean exact AArch64 lane",
+    "strict activation inputs → 24 net tests, relay-enroll 10/10, relay-manifest 11/11",
+    "fail-closed dependencies → unavailable protected persistence/time and active-only opcode 14 keep activation and relay mTLS sealed",
+    "production exclusion → checker 2/2, direct unqualified invocation rejected, no production image"
+  ],
+  "regressionProof": [
+    "140/140 focused host tests passed: types 41, KMS 58, Silo 17, net 24",
+    "RV64 and AArch64 KMS checks passed clean; exact AArch64 development-Silo check passed clean with LLVM_OBJCOPY",
+    "OpenSSL reported Certificate request self-signature verify OK",
+    "final code and security re-reviews reported no residual findings"
+  ],
+  "contractStatus": "CHANGED",
+  "blockingReasons": [],
+  "deferred": [
+    "Phase 4: protected persistence, authenticated time integration, and authenticated pending-key precommit binding",
+    "Phases 6-8: exact hardware product/trust chain selection, provider implementation, physical qualification, and build provenance",
+    "production remains BLOCKED_PENDING_PHASE_6_7_8"
+  ]
+}

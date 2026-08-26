@@ -1,0 +1,40 @@
+{
+  "target": "pending changes",
+  "phase": "03-warm-broker-baseline",
+  "decision": "PASS_WITH_RISK",
+  "verdict": "PASS_WITH_RISK",
+  "contractStatus": "OK_WITH_NONBLOCKING_STANDARDS_ISSUE",
+  "criticalFindings": 0,
+  "highFindings": 0,
+  "mediumFindings": 0,
+  "lowFindings": 1,
+  "blocking": false,
+  "reviewReport": "reports/phase-03-warm-baseline-review.md",
+  "verification": [
+    {
+      "command": "cargo fmt --all -- --check",
+      "status": "pass"
+    },
+    {
+      "command": "cargo test -p service-net-broker --lib --target x86_64-unknown-linux-gnu",
+      "status": "pass",
+      "evidence": "54 tests passed"
+    },
+    {
+      "command": "RUSTFLAGS=\"-D warnings\" cargo check -p service-net-broker --target riscv64gc-unknown-none-elf",
+      "status": "pass"
+    },
+    {
+      "command": "RUSTFLAGS=\"-D warnings\" cargo check -p app-bench --target riscv64gc-unknown-none-elf",
+      "status": "pass"
+    },
+    {
+      "command": "git diff --check",
+      "status": "pass"
+    }
+  ],
+  "scopeNotes": [
+    "Generated tracked binaries kernel/src/embedded-test-hooks/init and kernel/src/embedded/init remain dirty and should not be staged with this review slice.",
+    "Retained QEMU logs are supporting evidence for the current warm baseline behavior; QEMU is not hardware evidence."
+  ]
+}

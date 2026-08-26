@@ -1,0 +1,27 @@
+{
+  "skill": "hc-fix",
+  "mode": "interactive",
+  "task": "Complete and commit the shared HAL kernel ABI contract on main",
+  "acceptanceCriteria": [
+    "RV64, AArch64, and x86_64 kernel compile lanes pass",
+    "HAL syscall imports and kernel exports match one shared signature",
+    "RPi3 fix branch is removed only after merge ancestry is proven"
+  ],
+  "touchpoints": [
+    "hal/traits/arch/src/kernel_abi.rs",
+    "hal/arch/arm/src/aarch64/trap.rs",
+    "hal/arch/riscv/src/rv32/trap.rs",
+    "hal/arch/riscv/src/rv64/trap.rs",
+    "hal/arch/x86/src/x86_64/syscall.rs",
+    "kernel/src/task/syscall.rs"
+  ],
+  "publicContracts": [
+    "extern Rust ViCell_syscall_dispatch signature and ViTrapFrame layouts"
+  ],
+  "blastRadius": [
+    "RV32 and RV64 syscall trap entry",
+    "AArch64 SVC bridge",
+    "x86_64 SYSCALL dispatch"
+  ],
+  "scoutSummary": "The centralized alias was safe while extern-block items defaulted to unsafe. Rustc reproduced the mismatch at the x86 import assertion; cfg-matched import and export assertions now enforce the safe signature."
+}

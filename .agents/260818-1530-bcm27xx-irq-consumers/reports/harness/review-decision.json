@@ -1,0 +1,17 @@
+{
+  "decision": "PASS",
+  "score": 9.5,
+  "criticalCount": 0,
+  "acceptanceCoverage": [
+    "GPIO pending masks derive from topology aliases.",
+    "CNTP route uses the exported local-source mask.",
+    "Kernel diagnostic derives controller bases and masks from BCM2837.",
+    "Compile and QEMU regression proof preserves behavior."
+  ],
+  "regressionProof": [
+    "Baseline and final 11/11 matrices passed.",
+    "Scoped old-literal guard passed."
+  ],
+  "contractStatus": "OK",
+  "blockingReasons": []
+}

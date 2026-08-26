@@ -1,0 +1,54 @@
+{
+  "verdict": "BLOCKED",
+  "target": "Phase03 final pending diff",
+  "report": ".agents/reports/phase03-final-review-260820.md",
+  "blocking_findings": 2,
+  "findings": [
+    {
+      "severity": "HIGH",
+      "file": "kernel/src/loader/early.rs",
+      "line": 195,
+      "problem": "Development cells marked VIFS1-first still fall back to the block table on VIFS1 miss, and the aarch64 image verifier does not require periph-demo, so stale removable-media periph-demo can still execute.",
+      "fix": "Fail closed for development-cell VIFS1 misses or require all three VIFS1-first demos in the packaging verifier.",
+      "rollback": "Remove the demos from EMBEDDED_DEVELOPMENT_CELLS until the packaging gate is fail-closed; hardware evidence collected through fallback cannot be made authoritative after the fact."
+    },
+    {
+      "severity": "HIGH",
+      "file": "cells/demos/periph-demo/src/main.rs",
+      "line": 143,
+      "problem": "The RPi3 BCM GPIO success path returns before UART and spawn-pinned sentinel coverage, and the retained hardware transcript lacks those markers.",
+      "fix": "Continue through the UART and spawn-pinned regressions after the BCM GPIO gate, or split the BCM gate into a dedicated cell.",
+      "rollback": "Remove the early return after a handled BCM GPIO gate; no irreversible external state."
+    },
+    {
+      "severity": "MED",
+      "file": "cells/demos/periph-demo/src/bcm-gpio-gate.rs",
+      "line": 41,
+      "problem": "A partial arm/toggle failure can leave the BCM GPIO interrupt enabled or uncleared for later cells.",
+      "fix": "Add a cleanup path or guard after partial IRQ arm attempts."
+    }
+  ],
+  "positives": [
+    {
+      "file": "kernel/src/task/syscall.rs",
+      "line": 4544,
+      "summary": "MMIO denial logging captures enough context to debug capability/range mismatches without changing the syscall result contract."
+    },
+    {
+      "file": "cells/demos/periph-demo/src/main.rs",
+      "line": 38,
+      "summary": "The pinned-worker argv sentinel bounds the self-spawn path when that code is reached."
+    }
+  ],
+  "verification": {
+    "diff_check": "pass",
+    "demo_cargo_check": "pass",
+    "kernel_board_rpi3_cargo_check": "pass",
+    "hardware_evidence": "pass_for_gpio_i2c_spi_markers_only",
+    "incomplete_checks": [
+      "WSL-native Cargo unavailable: cargo command not found",
+      "Hardware transcript does not contain UART or pinned-worker markers after periph-demo"
+    ],
+    "product_code_edited": false
+  }
+}

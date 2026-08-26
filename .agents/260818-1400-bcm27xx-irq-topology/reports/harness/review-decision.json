@@ -1,0 +1,10 @@
+{
+  "verdict": "PASS",
+  "blockingFindings": 0,
+  "confirmed": [
+    "Legacy IRQ ranges and uniqueness are validated.",
+    "Local source masks are one-hot and disjoint.",
+    "Public aliases preserve numeric compatibility.",
+    "C1 status and acknowledgement plus the 10 ms period remain mechanism-owned by ARM HAL."
+  ]
+}

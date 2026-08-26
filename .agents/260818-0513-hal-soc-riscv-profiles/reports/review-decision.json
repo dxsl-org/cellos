@@ -1,0 +1,41 @@
+{
+  "verdict": "PASS",
+  "source_verdict": "PASS",
+  "overall_follow_up": "None.",
+  "head": "9427482f",
+  "blocking_findings": 0,
+  "findings": [],
+  "resolved_findings": [
+    {
+      "severity": "LOW",
+      "file": "kernel/src/platform.rs",
+      "line": 220,
+      "summary": "VirtIO Absent policy now skips DTB VirtIO discovery and returns empty slots directly."
+    },
+    {
+      "severity": "LOW",
+      "file": "hal/soc/riscv/src/tests.rs",
+      "line": 16,
+      "summary": "SG2042 tests now assert T-Head PLIC and CLINT compatible strings."
+    },
+    {
+      "severity": "MED",
+      "file": "docs/project-changelog.md",
+      "line": 17,
+      "summary": "Documentation handoff now records the verification matrix without overstating hardware evidence."
+    }
+  ],
+  "verification": {
+    "cargo_fmt": "pass",
+    "hal_soc_riscv_tests": "pass",
+    "cellos_boards_tests": "pass",
+    "rv64_default_check": "pass",
+    "rv64_board_vf2_check": "pass",
+    "rv64_board_pioneer_check": "pass",
+    "rv64_combined_features_check": "pass",
+    "aarch64_default_check": "pass",
+    "aarch64_board_rpi3_check": "pass",
+    "rv64_release_build": "pass",
+    "qemu_boot": "pass"
+  }
+}

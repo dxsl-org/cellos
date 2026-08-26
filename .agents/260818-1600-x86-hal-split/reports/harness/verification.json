@@ -1,0 +1,36 @@
+{
+  "commands": [
+    {
+      "command": "cargo test -p cellos-boards -p hal-soc-riscv -p hal-soc-arm-virt -p hal-soc-bcm27xx -p hal-soc-x86 --target x86_64-unknown-linux-gnu",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-18T16:00:00+07:00",
+      "summary": "All 27 host tests passed."
+    },
+    {
+      "command": "bash scripts/check-board-configs.sh",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-18T16:00:00+07:00",
+      "summary": "Seven positive board lanes and two expected feature-conflict lanes passed."
+    },
+    {
+      "command": "cargo build --release -p cellos-kernel --target x86_64-unknown-none -Z build-std=core,alloc",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-18T16:00:00+07:00",
+      "summary": "The final x86_64 kernel built successfully."
+    },
+    {
+      "command": "fresh ISO BIOS and OVMF smoke",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-18T16:00:00+07:00",
+      "summary": "BIOS reached the shell and UEFI reached Scheduler initialized."
+    }
+  ],
+  "beforeAfter": {
+    "before": "x86 code was merged but absent from the board catalog and static PC facts were hard-coded in arch/kernel integration",
+    "after": "generic x86 is selected through a validated board descriptor and hal/soc/x86 profile with ACPI MMIO still fail-closed"
+  }
+}

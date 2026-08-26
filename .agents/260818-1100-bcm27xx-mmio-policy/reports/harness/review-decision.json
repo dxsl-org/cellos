@@ -1,0 +1,11 @@
+{
+  "decision": "PASS",
+  "criticalCount": 0,
+  "acceptanceCoverage": [
+    "overflow-safe mapping ends",
+    "unchanged peripheral USER flags",
+    "unchanged local-controller kernel flags",
+    "unchanged GPIO and AUX allowlist widths"
+  ],
+  "blockingReasons": []
+}

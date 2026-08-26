@@ -1,0 +1,36 @@
+{
+  "commands": [
+    {
+      "command": "cargo fmt --all --check",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-17T10:38:00+07:00",
+      "summary": "Rust formatting passed."
+    },
+    {
+      "command": "tools/rpi3-netboot/test-netboot-scripts.ps1",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-17T10:47:00+07:00",
+      "summary": "Static TFTP, raw boot, UART IRQ, and clean-log guards passed."
+    },
+    {
+      "command": "cargo check/build for generic AArch64, board-rpi3, RV64, and x86_64",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-17T10:47:00+07:00",
+      "summary": "All affected kernel target checks passed; board-rpi3 release image built with dedicated embedded cells."
+    },
+    {
+      "command": "real-board raw COM4 burst regressions",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-17T10:54:00+07:00",
+      "summary": "Both original unpaced commands passed and 100 of 100 unpaced burst commands returned exact output and prompt."
+    }
+  ],
+  "beforeAfter": {
+    "before": "One serial write was truncated at exactly eight received bytes and omitted CR.",
+    "after": "Unpaced 15-byte and 21-byte commands completed; 100 of 100 repeated bursts passed in 1658 ms."
+  }
+}

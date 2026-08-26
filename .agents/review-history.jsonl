@@ -1,0 +1,2 @@
+{"date":"2026-08-06","finding":"caller-owned SpawnFromElf bytes could borrow capability-bearing path authority","severity":"critical","decision":"accepted-fixed","files":["kernel/src/loader/launch_profile/mod.rs","kernel/src/loader/launch_profile/tests.rs","kernel/src/loader/boot_ceiling/selftest.rs"]}
+{"date":"2026-08-17","finding":"RPi3 AUX RX dispatch depended on an unreliable CORE0_IRQ_SOURCE GPU bit","severity":"medium","decision":"accepted-fixed","files":["hal/arch/arm/src/aarch64/trap.rs"]}

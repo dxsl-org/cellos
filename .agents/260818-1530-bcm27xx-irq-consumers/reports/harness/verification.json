@@ -1,0 +1,43 @@
+{
+  "commands": [
+    {
+      "command": "cargo fmt --all -- --check",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-18T15:45:00+07:00",
+      "summary": "Formatting passed."
+    },
+    {
+      "command": "cargo test host profile crates",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-18T15:45:00+07:00",
+      "summary": "BCM27xx 5/5, boards 9/9, and RISC-V SoC 3/3 passed."
+    },
+    {
+      "command": "cargo check AArch64 HAL and kernel default plus board-rpi3",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-18T15:45:00+07:00",
+      "summary": "All four AArch64 compile gates passed."
+    },
+    {
+      "command": "cargo check and release build cellos-kernel for RV64",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-18T15:45:00+07:00",
+      "summary": "RV64 default check and release build passed."
+    },
+    {
+      "command": "scripts/qemu-boot-test.sh release kernel",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-18T15:45:00+07:00",
+      "summary": "QEMU reached the FAT16 kernel-boot witness."
+    }
+  ],
+  "beforeAfter": {
+    "before": "Three IRQ consumers repeated BCM controller addresses or source-bit literals.",
+    "after": "Those consumers derive the same values from the BCM2837 topology; behavior remains unchanged."
+  }
+}

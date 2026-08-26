@@ -1,0 +1,17 @@
+{
+  "decision": "PASS_WITH_RISK",
+  "criticalCount": 0,
+  "acceptanceCoverage": [
+    "optional controller data matches board reality",
+    "Raspberry Pi 3 descriptor owns board integration facts",
+    "fallback RAM ends at the BCM2837 peripheral base",
+    "RISC-V consumers fail closed"
+  ],
+  "regressionProof": [
+    "final 12-gate matrix passed",
+    "QEMU boot passed",
+    "AArch64 Raspberry Pi 3 compile passed"
+  ],
+  "contractStatus": "OK_WITH_HARDWARE_BOUNDARY",
+  "blockingReasons": []
+}

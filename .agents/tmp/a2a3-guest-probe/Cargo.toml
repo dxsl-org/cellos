@@ -1,0 +1,13 @@
+[package]
+name = "a2a3-guest-probe"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+api = { path = "../../../libs/api" }
+ostd = { path = "../../../libs/ostd" }
+
+[build-dependencies]
+cell-build = { path = "../../../libs/cell-build" }
+
+[workspace]

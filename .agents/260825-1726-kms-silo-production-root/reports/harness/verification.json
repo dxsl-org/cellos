@@ -1,0 +1,99 @@
+{
+  "commands": [
+    {
+      "command": "cargo test -p types --target x86_64-unknown-linux-gnu",
+      "timestamp": "2026-08-26T05:40:56Z",
+      "status": "pass",
+      "exitCode": 0,
+      "summary": "41/41 passed, including byte-exact CSR signature-algorithm and minimal-DER structure coverage."
+    },
+    {
+      "command": "cargo test -p service-kms --target x86_64-unknown-linux-gnu tests::enrollment::out_of_order_chunk_rejects_and_invalidates -- --exact",
+      "timestamp": "2026-08-26T05:41:03Z",
+      "status": "pass",
+      "exitCode": 0,
+      "summary": "The exact lifecycle regression passed; an out-of-order chunk returns CsrOrderInvalid and invalidates the one-shot handle."
+    },
+    {
+      "command": "cargo test -p service-kms --target x86_64-unknown-linux-gnu",
+      "timestamp": "2026-08-26T05:41:08Z",
+      "status": "pass",
+      "exitCode": 0,
+      "summary": "The full focused KMS suite passed 58/58."
+    },
+    {
+      "command": "cargo test -p service-silo --target x86_64-unknown-linux-gnu",
+      "timestamp": "2026-08-26T05:41:15Z",
+      "status": "pass",
+      "exitCode": 0,
+      "summary": "17/17 passed, including enrollment cleanup result classification."
+    },
+    {
+      "command": "cargo test -p service-net --target x86_64-unknown-linux-gnu",
+      "timestamp": "2026-08-26T05:41:21Z",
+      "status": "pass",
+      "exitCode": 0,
+      "summary": "24/24 passed, covering strict profile, certificate, and unavailable-time behavior."
+    },
+    {
+      "command": "cargo check -p service-kms --target riscv64gc-unknown-none-elf",
+      "timestamp": "2026-08-26T05:42:10Z",
+      "status": "pass",
+      "exitCode": 0,
+      "summary": "The RV64 bare-metal KMS lane completed clean."
+    },
+    {
+      "command": "cargo check -p service-kms --target aarch64-unknown-none-softfloat",
+      "timestamp": "2026-08-26T05:41:48Z",
+      "status": "pass",
+      "exitCode": 0,
+      "summary": "The AArch64 bare-metal KMS lane completed clean."
+    },
+    {
+      "command": "LLVM_OBJCOPY=/home/dmin/.rustup/toolchains/nightly-2026-05-01-x86_64-unknown-linux-gnu/lib/rustlib/x86_64-unknown-linux-gnu/bin/llvm-objcopy cargo check -p service-silo --features development-silo-provider --target aarch64-unknown-none-softfloat",
+      "timestamp": "2026-08-26T05:42:08Z",
+      "status": "pass",
+      "exitCode": 0,
+      "summary": "The exact current-tree development-Silo AArch64 lane, including guest packaging, completed with zero errors and zero warnings."
+    },
+    {
+      "command": "cd tools/relay-enroll && python3 -m unittest relay_enroll_test",
+      "timestamp": "2026-08-26T05:51:14Z",
+      "status": "pass",
+      "exitCode": 0,
+      "summary": "10/10 relay-enrollment planning, schema, and fail-closed cases passed."
+    },
+    {
+      "command": "cd tools/relay-server && python3 -m unittest relay_manifest_test",
+      "timestamp": "2026-08-26T05:42:28Z",
+      "status": "pass",
+      "exitCode": 0,
+      "summary": "11/11 strict relay-manifest regression cases passed."
+    },
+    {
+      "command": "openssl req -inform DER -in /tmp/cellos-relay.csr -noout -verify",
+      "timestamp": "2026-08-26T05:42:36Z",
+      "status": "pass",
+      "exitCode": 0,
+      "summary": "OpenSSL reported: Certificate request self-signature verify OK."
+    },
+    {
+      "command": "python3 scripts/test_check_production_relay_image.py",
+      "timestamp": "2026-08-26T05:42:46Z",
+      "status": "pass",
+      "exitCode": 0,
+      "summary": "2/2 production-posture checker tests passed."
+    },
+    {
+      "command": "python3 scripts/check-production-relay-image.py --kms-features development-silo-provider --net-features '' --kernel-features '' --kms-artifact /tmp/missing-kms --net-artifact /tmp/missing-net --kernel-artifact /tmp/missing-kernel",
+      "timestamp": "2026-08-26T05:43:02Z",
+      "status": "pass",
+      "exitCode": 1,
+      "summary": "The checker rejected the unqualified candidate fail-closed; the production builder/checker produced no image."
+    }
+  ],
+  "beforeAfter": {
+    "before": "Phase 2 had a purpose-bound development Silo TLS signer but no constrained CSR, supervisor enrollment lifecycle, atomic profile activation, or strict certificate/manifest contract.",
+    "after": "Phase 3 provides constrained CSR proof, supervisor-bound lifecycle and cleanup, nonce-bound Silo enrollment-key custody, and strict profile/certificate/manifest validation while sealed runtime, authenticated time, pending-key precommit binding, and production hardware qualification remain unavailable."
+  }
+}

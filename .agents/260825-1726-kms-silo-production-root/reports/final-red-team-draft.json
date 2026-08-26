@@ -1,0 +1,500 @@
+{
+  "coverage_summary": "VERDICT: NO-GO FOR IMPLEMENTATION HANDOFF. Reviewed plan.md, all eight phase files, ADR-0005, both judge reports, both saved research reports, the scout report, and the pinned embedded-tls 0.19 client-certificate API. Phase 5 is correctly software-only and Phases 6–8 are correctly hardware-gated; dependencies are mostly transitively coherent. No Critical defect survives because the plan is pending and the current relay remains fail-closed. Seven High and two Medium defects remain, so it is not possible to state that no Critical/High remains. Revise and re-red-team before implementation.",
+  "findings": [
+    {
+      "rule_id": "KMS-PLAN-RT-001",
+      "title": "Relay readiness remains coupled to the existing C2C root lifecycle",
+      "summary": "Phase 1 creates a distinct P-256 identity but reuses existing assessment/epoch/rotation primitives, while Phase 7 is relay-P-256-only. A coarse Ready result can authorize the wrong capability or force a relay-only provider to pretend it satisfies X25519.",
+      "severity": "high",
+      "confidence": "high",
+      "category": "Key-purpose isolation / authorization state",
+      "locations": [
+        {
+          "path": ".agents/260825-1726-kms-silo-production-root/phase-01-kms-tls-signing-vertical-slice.md",
+          "start_line": 28,
+          "end_line": 31,
+          "role": "Existing C2C and relay contracts"
+        },
+        {
+          "path": ".agents/260825-1726-kms-silo-production-root/phase-01-kms-tls-signing-vertical-slice.md",
+          "start_line": 52,
+          "end_line": 56,
+          "role": "Separate type but shared lifecycle"
+        },
+        {
+          "path": ".agents/260825-1726-kms-silo-production-root/phase-07-implement-selected-hardware-provider.md",
+          "start_line": 31,
+          "end_line": 35,
+          "role": "Single readiness wording"
+        }
+      ],
+      "cwe": [
+        "CWE-863",
+        "CWE-704"
+      ],
+      "evidence": [
+        {
+          "label": "Broken control",
+          "explanation": "A distinct public-key type does not stop shared readiness state from substituting one purpose for another.",
+          "excerpt": "reuse assessment/epoch/rotation primitives"
+        },
+        {
+          "label": "Required revision",
+          "explanation": "Freeze independent C2cX25519Status and RelayP256Status with separate algorithm, generation, policy epoch, provider identity and readiness. Permit Phase 7 to implement relay only; add cross-purpose readiness/rotation/error-precedence tests."
+        }
+      ],
+      "optionalProperties": {
+        "release_gate": "Neither capability becomes Ready because the other is healthy."
+      }
+    },
+    {
+      "rule_id": "KMS-PLAN-RT-002",
+      "title": "The CSR/TPM lane can recreate a generic P-256 signing oracle",
+      "summary": "Phase 3 constrains CSR construction only in KMS, Phase 6 permits a TPM profile, and Phase 7 never requires the protected device to reconstruct or validate the exact CertificationRequestInfo. A compromised provisioner, KMS, AP, or generic TPM signing route can feed an attacker-chosen digest to the durable relay key.",
+      "severity": "high",
+      "confidence": "high",
+      "category": "Signing oracle / confused deputy",
+      "locations": [
+        {
+          "path": ".agents/260825-1726-kms-silo-production-root/phase-03-certificate-activation-and-provisioning.md",
+          "start_line": 36,
+          "end_line": 42,
+          "role": "KMS-only CSR construction and ambiguous enrollment authority"
+        },
+        {
+          "path": ".agents/260825-1726-kms-silo-production-root/phase-03-certificate-activation-and-provisioning.md",
+          "start_line": 75,
+          "end_line": 80,
+          "role": "Canonicalization above protected boundary"
+        },
+        {
+          "path": ".agents/260825-1726-kms-silo-production-root/phase-06-select-production-root-product.md",
+          "start_line": 50,
+          "end_line": 54,
+          "role": "TPM/custom choice lacks content-enforcement gate"
+        },
+        {
+          "path": ".agents/260825-1726-kms-silo-production-root/phase-07-implement-selected-hardware-provider.md",
+          "start_line": 52,
+          "end_line": 55,
+          "role": "Protected CSR semantics undefined"
+        }
+      ],
+      "cwe": [
+        "CWE-441",
+        "CWE-749",
+        "CWE-863"
+      ],
+      "evidence": [
+        {
+          "label": "Broken control",
+          "explanation": "KMS canonicalization protects an honest KMS from hostile IPC; it does not constrain the RoT when KMS/AP is compromised."
+        },
+        {
+          "label": "Required revision",
+          "explanation": "The protected root must construct the frozen CRI from a profile ID and RoT-derived fields, or enforce every field before signing. Reject arbitrary TPM2_Sign/digest routes. Define one generation-bound enrollment capability; bind and bound the one-shot handle; test raw digest, changed profile, stale handle and caller restart."
+        }
+      ],
+      "optionalProperties": {
+        "release_gate": "A compromised AP/KMS obtains only exact TLS CertificateVerify and frozen relay-CSR signatures."
+      }
+    },
+    {
+      "rule_id": "KMS-PLAN-RT-003",
+      "title": "The certificate state machine cannot represent safe renewal overlap",
+      "summary": "One linear Unprovisioned→Pending→Active→Retiring/Revoked state plus CSR denial in Active cannot represent an active generation and pending successor. The torn-update result permits the old profile without defining when revocation overrides availability.",
+      "severity": "high",
+      "confidence": "high",
+      "category": "Certificate lifecycle / unsafe intermediate state",
+      "locations": [
+        {
+          "path": ".agents/260825-1726-kms-silo-production-root/phase-03-certificate-activation-and-provisioning.md",
+          "start_line": 39,
+          "end_line": 50,
+          "role": "Conflicting lifecycle requirements"
+        },
+        {
+          "path": ".agents/260825-1726-kms-silo-production-root/phase-03-certificate-activation-and-provisioning.md",
+          "start_line": 89,
+          "end_line": 94,
+          "role": "Activation order deferred"
+        },
+        {
+          "path": ".agents/260825-1726-kms-silo-production-root/phase-03-certificate-activation-and-provisioning.md",
+          "start_line": 104,
+          "end_line": 112,
+          "role": "Ambiguous old-profile outcome"
+        }
+      ],
+      "cwe": [
+        "CWE-664",
+        "CWE-613"
+      ],
+      "evidence": [
+        {
+          "label": "Broken control",
+          "explanation": "A single state cannot express Active(g)+Pending(g+1), and 'old valid profile or fail closed' does not say whether a revoked generation can survive."
+        },
+        {
+          "label": "Required revision",
+          "explanation": "Specify a per-generation two-slot state machine with Active, Pending, optional Retiring, revoked floor/set, CA version, manifest digest and commit marker. Freeze actors, transition and write order, successor-CSR rules, overlap deadline, recovery at every crash point, and make revocation beat availability."
+        }
+      ],
+      "optionalProperties": {
+        "release_gate": "An old profile is usable only if explicitly authorized and above all protected floors."
+      }
+    },
+    {
+      "rule_id": "KMS-PLAN-RT-004",
+      "title": "Mounted relay trust and revocation state has no authenticated anti-rollback binding",
+      "summary": "External client trust and relay denylist manifests are versioned but not bound to protected monotonic state. Phase 6 omits endpoint/hostname, server CA set, overlap window, full profile digest and relay denylist version, so replay can restore a compromised CA or revoked NodeId.",
+      "severity": "high",
+      "confidence": "high",
+      "category": "Rollback / trust configuration",
+      "locations": [
+        {
+          "path": ".agents/260825-1726-kms-silo-production-root/phase-03-certificate-activation-and-provisioning.md",
+          "start_line": 32,
+          "end_line": 35,
+          "role": "External trust inputs"
+        },
+        {
+          "path": ".agents/260825-1726-kms-silo-production-root/phase-03-certificate-activation-and-provisioning.md",
+          "start_line": 55,
+          "end_line": 57,
+          "role": "Immutable but not monotonic generation"
+        },
+        {
+          "path": ".agents/260825-1726-kms-silo-production-root/phase-06-select-production-root-product.md",
+          "start_line": 29,
+          "end_line": 32,
+          "role": "Incomplete rollback inventory"
+        },
+        {
+          "path": ".agents/260825-1726-kms-silo-production-root/phase-08-qualify-production-relay-identity.md",
+          "start_line": 35,
+          "end_line": 36,
+          "role": "External manifests"
+        },
+        {
+          "path": ".agents/260825-1726-kms-silo-production-root/phase-08-qualify-production-relay-identity.md",
+          "start_line": 55,
+          "end_line": 59,
+          "role": "External rollback omitted"
+        }
+      ],
+      "cwe": [
+        "CWE-345",
+        "CWE-294"
+      ],
+      "evidence": [
+        {
+          "label": "Execution path",
+          "explanation": "An older valid manifest can match KMS key metadata while regressing relay trust or denylist policy."
+        },
+        {
+          "label": "Required revision",
+          "explanation": "Use canonical signed manifests and protected monotonic floors/digests for the full client profile and relay-side CA/denylist state. Bind client profile digest into signer readiness; specify signer authority, atomic swap, staleness/offline/recovery rules, and inject old versions on both sides."
+        }
+      ],
+      "optionalProperties": {
+        "release_gate": "No old manifest restores a CA, endpoint, certificate or NodeId below the protected floor."
+      }
+    },
+    {
+      "rule_id": "KMS-PLAN-RT-005",
+      "title": "Certificate validity checks have no trusted time source or rollback policy",
+      "summary": "Phases 3 and 4 require expired/future and server-validity rejection, but no plan file defines authenticated time, boot-without-time behavior, or clock rollback protection. A reset or controlled clock can revalidate expired or not-yet-valid certificates.",
+      "severity": "high",
+      "confidence": "high",
+      "category": "Certificate validation / time rollback",
+      "locations": [
+        {
+          "path": ".agents/260825-1726-kms-silo-production-root/phase-03-certificate-activation-and-provisioning.md",
+          "start_line": 87,
+          "end_line": 94,
+          "role": "Validity fixtures without time authority"
+        },
+        {
+          "path": ".agents/260825-1726-kms-silo-production-root/phase-04-service-net-mutual-tls-integration.md",
+          "start_line": 27,
+          "end_line": 33,
+          "role": "Validity without clock contract"
+        },
+        {
+          "path": ".agents/260825-1726-kms-silo-production-root/phase-04-service-net-mutual-tls-integration.md",
+          "start_line": 68,
+          "end_line": 74,
+          "role": "Unverifiable time test"
+        },
+        {
+          "path": ".agents/260825-1726-kms-silo-production-root/phase-08-qualify-production-relay-identity.md",
+          "start_line": 55,
+          "end_line": 59,
+          "role": "Clock rollback omitted"
+        }
+      ],
+      "cwe": [
+        "CWE-295",
+        "CWE-346"
+      ],
+      "evidence": [
+        {
+          "label": "Broken control",
+          "explanation": "The plan names validity checks but no trusted clock, last-known-good state, skew or fail-closed startup behavior."
+        },
+        {
+          "label": "Required revision",
+          "explanation": "Before Phase 3, select the production time authority and define trust path, protected last-known-good state, rollback/forward-jump limits, boot/offline behavior and CA-overlap interaction. QEMU uses an injected clock. Test no-time, reboot, clock jumps, stale signed time and expiry during handshake."
+        }
+      ],
+      "optionalProperties": {
+        "release_gate": "No validity check uses a default epoch, unchecked wall clock or ignore-time mode."
+      }
+    },
+    {
+      "rule_id": "KMS-PLAN-RT-006",
+      "title": "A provisioned Phase 7 image can enable relay before Phase 8 qualification",
+      "summary": "Phase 4 restores broker relay fallback; Phase 7 permits provisioned hardware readiness; Phase 8 only says default enablement happens afterward. No enforced qualification latch keeps production signing/routing disabled between implementation and physical approval.",
+      "severity": "high",
+      "confidence": "high",
+      "category": "Unsafe sequencing / production enablement",
+      "locations": [
+        {
+          "path": ".agents/260825-1726-kms-silo-production-root/phase-04-service-net-mutual-tls-integration.md",
+          "start_line": 53,
+          "end_line": 59,
+          "role": "Fallback restored"
+        },
+        {
+          "path": ".agents/260825-1726-kms-silo-production-root/phase-07-implement-selected-hardware-provider.md",
+          "start_line": 30,
+          "end_line": 32,
+          "role": "Readiness controls availability"
+        },
+        {
+          "path": ".agents/260825-1726-kms-silo-production-root/phase-07-implement-selected-hardware-provider.md",
+          "start_line": 69,
+          "end_line": 84,
+          "role": "Device becomes ready pre-qualification"
+        },
+        {
+          "path": ".agents/260825-1726-kms-silo-production-root/phase-08-qualify-production-relay-identity.md",
+          "start_line": 94,
+          "end_line": 95,
+          "role": "Only prose/default gate"
+        }
+      ],
+      "cwe": [
+        "CWE-16",
+        "CWE-757"
+      ],
+      "evidence": [
+        {
+          "label": "Unsafe intermediate state",
+          "explanation": "A production-shaped Phase 7 image can have healthy hardware before Phase 8 evidence passes."
+        },
+        {
+          "label": "Required revision",
+          "explanation": "Add independent qualification state. Phase 7 forces remote signing and broker fallback unavailable even with healthy hardware. Phase 8 produces an independently signed product/board/firmware/AP-image/profile tuple; only a later explicit release-manifest change enables it, with protected rollback prevention. Test provisioned-but-unqualified denial."
+        }
+      ],
+      "optionalProperties": {
+        "release_gate": "Provider readiness never implies qualification readiness."
+      }
+    },
+    {
+      "rule_id": "KMS-PLAN-RT-007",
+      "title": "Pinned embedded-tls cannot transmit the certificate chain the plan requires",
+      "summary": "Phase 3 freezes a bounded DER chain, but embedded-tls 0.19 returns one client Certificate and adds one list entry. Phase 4 patches only fallible signing. A leaf-plus-intermediate managed-CA chain cannot execute without another dependency change or an explicit direct-root decision.",
+      "severity": "high",
+      "confidence": "high",
+      "category": "Dependency feasibility / certificate chain",
+      "locations": [
+        {
+          "path": ".agents/260825-1726-kms-silo-production-root/phase-03-certificate-activation-and-provisioning.md",
+          "start_line": 32,
+          "end_line": 33,
+          "role": "Chain requirement"
+        },
+        {
+          "path": ".agents/260825-1726-kms-silo-production-root/phase-03-certificate-activation-and-provisioning.md",
+          "start_line": 75,
+          "end_line": 76,
+          "role": "Bounded chain count"
+        },
+        {
+          "path": ".agents/260825-1726-kms-silo-production-root/phase-04-service-net-mutual-tls-integration.md",
+          "start_line": 23,
+          "end_line": 27,
+          "role": "Analysis limited to signer errors"
+        },
+        {
+          "path": ".agents/260825-1726-kms-silo-production-root/phase-04-service-net-mutual-tls-integration.md",
+          "start_line": 38,
+          "end_line": 45,
+          "role": "Incomplete feasibility assumption"
+        },
+        {
+          "path": ".agents/260825-1726-kms-silo-production-root/phase-04-service-net-mutual-tls-integration.md",
+          "start_line": 53,
+          "end_line": 54,
+          "role": "Patch omits chain encoding"
+        }
+      ],
+      "cwe": [
+        "CWE-295"
+      ],
+      "evidence": [
+        {
+          "label": "Pinned API evidence",
+          "explanation": "Reviewed embedded-tls 0.19 defines client_cert() -> Option<Certificate<...>> and calls certificate.add(...) once."
+        },
+        {
+          "label": "Required revision",
+          "explanation": "Add a preflight and pinned API/patch for an ordered bounded certificate list plus fallible signing. Test leaf-only, intermediates, order, missing/duplicate/oversized/truncated chains against the relay. If direct-root issuance is intended, make it an explicit reviewed CA-profile decision."
+        }
+      ],
+      "optionalProperties": {
+        "release_gate": "The exact managed-CA chain completes TLS 1.3 client auth without omission or relaxed validation."
+      }
+    },
+    {
+      "rule_id": "KMS-PLAN-RT-008",
+      "title": "The production cryptographic contract is incomplete and partly unverifiable",
+      "summary": "Phase 1 does not freeze raw/DER or low-S details; Phase 7 references an absent frozen high-S rule. Phase 8 measures entropy failure without a nonce/TRNG/DRBG pass/fail contract, while absolute non-exportability claims exceed readback evidence.",
+      "severity": "medium",
+      "confidence": "high",
+      "category": "Cryptographic acceptance criteria",
+      "locations": [
+        {
+          "path": ".agents/260825-1726-kms-silo-production-root/phase-01-kms-tls-signing-vertical-slice.md",
+          "start_line": 30,
+          "end_line": 31,
+          "role": "Incomplete signature freeze"
+        },
+        {
+          "path": ".agents/260825-1726-kms-silo-production-root/phase-07-implement-selected-hardware-provider.md",
+          "start_line": 54,
+          "end_line": 55,
+          "role": "Absent high-S rule referenced"
+        },
+        {
+          "path": ".agents/260825-1726-kms-silo-production-root/phase-07-implement-selected-hardware-provider.md",
+          "start_line": 80,
+          "end_line": 83,
+          "role": "Absolute non-exposure criterion"
+        },
+        {
+          "path": ".agents/260825-1726-kms-silo-production-root/phase-08-qualify-production-relay-identity.md",
+          "start_line": 57,
+          "end_line": 58,
+          "role": "Entropy lacks pass/fail contract"
+        },
+        {
+          "path": ".agents/260825-1726-kms-silo-production-root/phase-08-qualify-production-relay-identity.md",
+          "start_line": 81,
+          "end_line": 85,
+          "role": "Unverifiable wording"
+        }
+      ],
+      "cwe": [
+        "CWE-326",
+        "CWE-338"
+      ],
+      "evidence": [
+        {
+          "label": "Risk",
+          "explanation": "Biased or repeated ECDSA nonces can recover the durable key even without an export API."
+        },
+        {
+          "label": "Required revision",
+          "explanation": "Freeze wire/DER boundary, scalar bounds, low-S policy and vectors in Phase 1. Phase 6 selects approved nonce/TRNG/DRBG behavior. Phases 7–8 require refusal on health failure and KAT, repeated-message, reset/reseed and fault cases. Express non-exportability as scoped architectural, vendor, artifact, memory/transport and readback evidence."
+        }
+      ],
+      "optionalProperties": {
+        "release_gate": "No signature is emitted when nonce/entropy health or canonical-output checks fail."
+      }
+    },
+    {
+      "rule_id": "KMS-PLAN-RT-009",
+      "title": "The hardware phases are placeholders rather than executable handoff units",
+      "summary": "Phase 6 mentions refining Phase 7 but does not require saved Phase 7/8 files to be rewritten/revalidated. Phase 7 uses unnamed modules/tools/firmware and combines transport, firmware, provisioning, update, rollback, rotation, revocation, RMA and physical tests in one unestimated phase. Every effort field is unestimated.",
+      "severity": "medium",
+      "confidence": "high",
+      "category": "Plan executability / verification gates",
+      "locations": [
+        {
+          "path": ".agents/260825-1726-kms-silo-production-root/plan.md",
+          "start_line": 5,
+          "end_line": 6,
+          "role": "Missing total estimate"
+        },
+        {
+          "path": ".agents/260825-1726-kms-silo-production-root/phase-06-select-production-root-product.md",
+          "start_line": 42,
+          "end_line": 57,
+          "role": "Refinement not blocking"
+        },
+        {
+          "path": ".agents/260825-1726-kms-silo-production-root/phase-06-select-production-root-product.md",
+          "start_line": 76,
+          "end_line": 89,
+          "role": "No saved-plan revalidation"
+        },
+        {
+          "path": ".agents/260825-1726-kms-silo-production-root/phase-07-implement-selected-hardware-provider.md",
+          "start_line": 5,
+          "end_line": 6,
+          "role": "Unestimated"
+        },
+        {
+          "path": ".agents/260825-1726-kms-silo-production-root/phase-07-implement-selected-hardware-provider.md",
+          "start_line": 40,
+          "end_line": 59,
+          "role": "Placeholder inventory/oversized scope"
+        },
+        {
+          "path": ".agents/260825-1726-kms-silo-production-root/phase-08-qualify-production-relay-identity.md",
+          "start_line": 42,
+          "end_line": 60,
+          "role": "Unnamed artifacts"
+        }
+      ],
+      "cwe": [],
+      "evidence": [
+        {
+          "label": "Missing gate",
+          "explanation": "Phase 6 can finish with an ADR while checked-in Phase 7/8 remain generic, letting implementation invent protocol and evidence details."
+        },
+        {
+          "label": "Required revision",
+          "explanation": "Make Phase 6 completion conditional on rewriting/splitting Phase 7/8 with exact repos, commits, APIs, paths, owners, state machines, irreversible procedures, harnesses, evidence and estimates; independently re-review the saved revision. Estimate/split over-one-day phases and replace vague software inventories with exact paths."
+        }
+      ],
+      "optionalProperties": {
+        "release_gate": "Phase 7 stays blocked until a saved product-specific plan has no unresolved security/file/evidence choice and passes review."
+      }
+    }
+  ],
+  "reviewed_paths": [
+    ".agents/260825-1726-kms-silo-production-root/plan.md",
+    ".agents/260825-1726-kms-silo-production-root/phase-01-kms-tls-signing-vertical-slice.md",
+    ".agents/260825-1726-kms-silo-production-root/phase-02-contain-development-silo-provider.md",
+    ".agents/260825-1726-kms-silo-production-root/phase-03-certificate-activation-and-provisioning.md",
+    ".agents/260825-1726-kms-silo-production-root/phase-04-service-net-mutual-tls-integration.md",
+    ".agents/260825-1726-kms-silo-production-root/phase-05-qemu-relay-software-evidence.md",
+    ".agents/260825-1726-kms-silo-production-root/phase-06-select-production-root-product.md",
+    ".agents/260825-1726-kms-silo-production-root/phase-07-implement-selected-hardware-provider.md",
+    ".agents/260825-1726-kms-silo-production-root/phase-08-qualify-production-relay-identity.md",
+    ".agents/260825-1726-kms-silo-production-root/reports/scout-report.md",
+    ".agents/260825-1726-kms-silo-production-root/reports/security-judge.json",
+    ".agents/260825-1726-kms-silo-production-root/reports/simplicity-judge.json",
+    ".agents/260825-1726-kms-silo-production-root/research/codebase-report.json",
+    ".agents/260825-1726-kms-silo-production-root/research/protected-root-report.json",
+    "docs/decisions/0005-mutual-tls-relay-identity.md",
+    "cells/services/net/src/tls/provider.rs",
+    "/home/dmin/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/embedded-tls-0.19.0/src/config.rs",
+    "/home/dmin/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/embedded-tls-0.19.0/src/connection.rs"
+  ]
+}

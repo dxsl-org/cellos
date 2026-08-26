@@ -1,0 +1,41 @@
+{
+  "phase": "riscv-soc-profile-handoff",
+  "criteria": [
+    {
+      "criterion": "hal/soc/riscv remains data-only and does not duplicate shared driver code.",
+      "command": "git diff --name-only HEAD -- Cargo.toml kernel/Cargo.toml kernel/src/platform.rs hal/soc/riscv docs/project-roadmap.md docs/project-changelog.md docs/system-architecture.md",
+      "evidenceRef": "The tracked diff stays inside the HAL profile slice and the docs handoff; no cells/drivers or board descriptor files were changed.",
+      "pass": true
+    },
+    {
+      "criterion": "Default RV64, board-vf2, and board-pioneer compile gates pass.",
+      "command": "cargo check -p cellos-kernel --target riscv64gc-unknown-none-elf && cargo check -p cellos-kernel --target riscv64gc-unknown-none-elf --features board-vf2 && cargo check -p cellos-kernel --target riscv64gc-unknown-none-elf --features board-pioneer",
+      "evidenceRef": "The verification report records PASS for the default, VF2, and Pioneer RV64 checks.",
+      "pass": true
+    },
+    {
+      "criterion": "Combined board feature selection keeps Pioneer precedence.",
+      "command": "cargo check -p cellos-kernel --target riscv64gc-unknown-none-elf --features 'board-vf2 board-pioneer'",
+      "evidenceRef": "The verification report records PASS for the combined feature lane, and the review decision notes explicit Pioneer precedence.",
+      "pass": true
+    },
+    {
+      "criterion": "AArch64 regression lanes remain unchanged.",
+      "command": "cargo check -p cellos-kernel --target aarch64-unknown-none-softfloat && cargo check -p cellos-kernel --target aarch64-unknown-none-softfloat --features board-rpi3",
+      "evidenceRef": "The verification report records PASS for both AArch64 lanes and calls out only pre-existing HAL dead-code warnings.",
+      "pass": true
+    },
+    {
+      "criterion": "RV64 release boot still reaches QEMU and mounts the disk image.",
+      "command": "cargo build --release -p cellos-kernel --target riscv64gc-unknown-none-elf -Z build-std=core,alloc && bash scripts/qemu-boot-test.sh target/riscv64gc-unknown-none-elf/release/cellos-kernel",
+      "evidenceRef": "The verification report records PASS for the release build and QEMU boot proof with FAT16 mounted.",
+      "pass": true
+    },
+    {
+      "criterion": "Artifact validator absence is recorded instead of inventing PASS.",
+      "command": "search checkout for a harness validator entrypoint",
+      "evidenceRef": "No repository validator entrypoint was present; the limitation is recorded in verification.json and the harness uses manual JSON validation.",
+      "pass": true
+    }
+  ]
+}

@@ -2,6 +2,17 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-26] RPi3 SD/VFS persistence gate passes
+
+- SDHCI write completion now uses the architectural counter and `CNTFRQ_EL0`
+  for a real elapsed timeout, while short controller polls retain an iteration
+  limit. Single-block SD reads and writes enable the block-count transfer mode
+  explicitly.
+- The opt-in `rpi3-storage-test` harness exercises same-boot write/readback and
+  power-cycle persistence for FAT, littlefs, and RedoxFS. The physical RPi3
+  run completed with `89 PASS, 0 FAIL` and reported all three markers persisted
+  across reboot.
+
 ## [2026-08-26] KMS/Silo Phase 6 closes NO-GO with no production root selected
 
 - [ADR-0006](decisions/0006-block-production-root-pending-exact-product-evidence.md)

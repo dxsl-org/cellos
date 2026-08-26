@@ -1,0 +1,27 @@
+{
+  "decision": "PASS_WITH_RISK",
+  "score": 8.7,
+  "criticalCount": 0,
+  "acceptanceCoverage": [
+    "Retired ABI -> API test pins 400 to Unknown and validates live neighboring opcodes",
+    "Allowlist compatibility -> API test locks shared bit 32 for HotSwapReady and Snapshot",
+    "Kernel boundary -> static grep confirms no HotSwap enum, wrapper, dispatch, or orchestrator remains in owned code",
+    "Supervisor flow -> hotswap-smoke 15 of 15 proves the service-owned sequencing, FIFO, capability, state, and authorization witnesses",
+    "Snapshot regression -> launch-profile 1 of 1 preserves Supervisor-routed unavailable and direct-denial behavior",
+    "Fresh source evidence -> gen_disk rebuilt signed RV64 payloads and the tracked embedded init artifact"
+  ],
+  "regressionProof": [
+    "75 host API tests passed",
+    "riscv64, aarch64, and x86_64 release-kernel builds passed",
+    "hotswap-smoke passed 15 of 15",
+    "launch-profile passed 1 of 1",
+    "production review found no blocking source defect",
+    "independent ABI and authority review found no source or test defect"
+  ],
+  "contractStatus": "OK",
+  "blockingReasons": [],
+  "acceptedRisks": [
+    "x86 and AArch64 QEMU boot gates are host-path-gated and not runtime-proven in this checkout.",
+    "Host API coverage is 33.26 percent line and 0 percent branch; affected bare-metal behavior is instead covered by QEMU integration."
+  ]
+}

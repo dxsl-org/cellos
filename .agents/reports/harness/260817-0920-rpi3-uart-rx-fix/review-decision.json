@@ -1,0 +1,16 @@
+{
+  "decision": "PASS",
+  "score": 10.0,
+  "criticalCount": 0,
+  "acceptanceCoverage": [
+    "board-rpi3 mini-UART RX selected by code, build, static guard, and real-board command response",
+    "generic AArch64 PL011 path retained by code, build, and static guard"
+  ],
+  "regressionProof": [
+    "tester passed generic and board-rpi3 builds",
+    "reviewer found no actionable issue",
+    "real RPi3 returned the shell help listing"
+  ],
+  "contractStatus": "OK",
+  "blockingReasons": []
+}

@@ -1,0 +1,19 @@
+{
+  "decision": "PASS_WITH_RISK",
+  "disprovenClaims": [],
+  "unverifiedClaims": [
+    "physical VF2 and Pioneer interrupt delivery",
+    "JH7110 secondary-hart external interrupt delivery"
+  ],
+  "missingProof": [
+    "physical-board runtime logs",
+    "DTB-derived JH7110 S-mode hart topology"
+  ],
+  "reachableRegressions": [
+    "existing JH7110 boot-hart XOR mapping can select physical hart 0 for a logical secondary; PLIC context resolution then fails closed"
+  ],
+  "resolvedFindings": [
+    "duplicate UART and VirtIO IRQ ownership is rejected by the enable and dispatch paths",
+    "stale context-1 and direct-VirtIO documentation was corrected"
+  ]
+}

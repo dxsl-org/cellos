@@ -1,0 +1,13 @@
+{
+  "task": "Move immutable BCM2837 IRQ numbers and BCM2836 Core0 source masks into SoC data without changing interrupt behavior.",
+  "acceptanceCriteria": [
+    "The BCM27xx profile owns immutable IRQ topology values.",
+    "Existing ARM HAL public IRQ constants remain compatible aliases.",
+    "System-timer enable and pending masks consume the SoC IRQ value.",
+    "C1 acknowledgement, timer period, dispatch, and register offsets remain ARM HAL mechanisms."
+  ],
+  "touchpoints": [
+    "hal/soc/bcm27xx",
+    "hal/arch/arm/src/aarch64"
+  ]
+}

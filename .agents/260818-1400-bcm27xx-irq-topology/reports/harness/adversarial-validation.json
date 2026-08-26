@@ -1,0 +1,9 @@
+{
+  "verdict": "PASS_WITH_HARDWARE_GATE",
+  "checks": [
+    "Duplicate and out-of-range legacy IRQ values are rejected.",
+    "Overlapping or non-one-hot local source masks are rejected.",
+    "Timer channel status bit is not conflated with the routed legacy IRQ number."
+  ],
+  "deferred": "Physical Raspberry Pi 3 interrupt delivery remains unverified."
+}

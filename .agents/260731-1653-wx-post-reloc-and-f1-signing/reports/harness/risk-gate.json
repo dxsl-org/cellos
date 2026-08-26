@@ -1,0 +1,12 @@
+{
+  "highRisk": true,
+  "reasons": [
+    "kernel memory-safety path",
+    "scheduler wake ordering",
+    "per-cell quota accounting",
+    "interrupt-context producer"
+  ],
+  "autoStopRequired": false,
+  "humanApproved": true,
+  "largeDiff": false
+}

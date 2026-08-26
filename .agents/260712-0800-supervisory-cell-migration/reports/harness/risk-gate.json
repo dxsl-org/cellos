@@ -1,0 +1,11 @@
+{
+  "highRisk": true,
+  "reasons": [
+    "The phase retires the public HotSwap=400 ABI and changes runtime default grants.",
+    "The phase deletes legacy kernel orchestration while retaining capability-sensitive freeze and replacement mechanisms.",
+    "Fresh-image QEMU evidence and multi-architecture boot checks are required to avoid stale-image false positives."
+  ],
+  "autoStopRequired": true,
+  "humanApproved": true,
+  "largeDiff": false
+}

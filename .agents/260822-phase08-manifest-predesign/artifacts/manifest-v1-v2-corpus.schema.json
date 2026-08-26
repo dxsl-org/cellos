@@ -1,0 +1,513 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "abi_invariants": {
+      "additionalProperties": false,
+      "properties": {
+        "capability_mask_u16": {
+          "const": 4095
+        },
+        "exact_record_lengths": {
+          "additionalProperties": false,
+          "properties": {
+            "v1": {
+              "const": 8
+            },
+            "v2": {
+              "const": 16
+            }
+          },
+          "required": [
+            "v1",
+            "v2"
+          ],
+          "type": "object"
+        },
+        "legacy_aliases": {
+          "additionalProperties": false,
+          "properties": {
+            "TIER_LEGACY": {
+              "const": 255
+            },
+            "TIER_STANDARD": {
+              "const": 1
+            },
+            "TIER_TIER1B_FFI": {
+              "const": 2
+            },
+            "TIER_TRUSTED_CORE": {
+              "const": 0
+            },
+            "TIER_UNTRUSTED": {
+              "const": 3
+            }
+          },
+          "required": [
+            "TIER_TRUSTED_CORE",
+            "TIER_STANDARD",
+            "TIER_TIER1B_FFI",
+            "TIER_UNTRUSTED",
+            "TIER_LEGACY"
+          ],
+          "type": "object"
+        },
+        "magic_little_endian_hex": {
+          "const": "45434956"
+        },
+        "magic_u32": {
+          "const": 1447641925
+        },
+        "protection_classes": {
+          "additionalProperties": false,
+          "properties": {
+            "ffi": {
+              "const": 2
+            },
+            "legacy": {
+              "const": 255
+            },
+            "standard": {
+              "const": 1
+            },
+            "trusted-core": {
+              "const": 0
+            },
+            "untrusted": {
+              "const": 3
+            }
+          },
+          "required": [
+            "trusted-core",
+            "standard",
+            "ffi",
+            "untrusted",
+            "legacy"
+          ],
+          "type": "object"
+        },
+        "rust_default_writer": {
+          "const": "v2-byte-identical"
+        },
+        "v1_upcast": {
+          "additionalProperties": false,
+          "properties": {
+            "flags_width_bits": {
+              "const": 8
+            },
+            "in_memory_version": {
+              "const": 2
+            },
+            "input_version": {
+              "const": 1
+            },
+            "padding_must_be_zero": {
+              "const": true
+            },
+            "protection_class": {
+              "const": 255
+            }
+          },
+          "required": [
+            "input_version",
+            "in_memory_version",
+            "protection_class",
+            "flags_width_bits",
+            "padding_must_be_zero"
+          ],
+          "type": "object"
+        },
+        "v2_offsets": {
+          "additionalProperties": false,
+          "properties": {
+            "cap_args_off": {
+              "const": 8
+            },
+            "flags": {
+              "const": 6
+            },
+            "magic": {
+              "const": 0
+            },
+            "protection_class": {
+              "const": 5
+            },
+            "reserved": {
+              "const": 12
+            },
+            "version": {
+              "const": 4
+            }
+          },
+          "required": [
+            "magic",
+            "version",
+            "protection_class",
+            "flags",
+            "cap_args_off",
+            "reserved"
+          ],
+          "type": "object"
+        },
+        "v2_reserved_zero_ranges": {
+          "const": [
+            [
+              8,
+              12
+            ],
+            [
+              12,
+              16
+            ]
+          ]
+        },
+        "zig_writer": {
+          "const": "v1-intentional"
+        }
+      },
+      "required": [
+        "magic_u32",
+        "magic_little_endian_hex",
+        "exact_record_lengths",
+        "v1_upcast",
+        "v2_offsets",
+        "v2_reserved_zero_ranges",
+        "protection_classes",
+        "legacy_aliases",
+        "capability_mask_u16",
+        "rust_default_writer",
+        "zig_writer"
+      ],
+      "type": "object"
+    },
+    "base_revision": {
+      "const": "2d61a4728834a0dd23ce63b6e09e5b735246c41a"
+    },
+    "canonical_json": {
+      "const": "python-json-sort-keys-compact-utf8"
+    },
+    "corpus_id": {
+      "const": "cellos-manifest-v1-v2-phase05-freeze"
+    },
+    "corpus_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "derived_source_state": {
+      "additionalProperties": false,
+      "properties": {
+        "derived_source_state_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "hash_algorithm": {
+          "const": "sha256"
+        },
+        "inputs": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "path",
+              "sha256"
+            ],
+            "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "hash_algorithm",
+        "inputs",
+        "derived_source_state_sha256"
+      ],
+      "type": "object"
+    },
+    "fixtures": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "artifact_kind": {
+            "enum": [
+              "record",
+              "elf32",
+              "elf64"
+            ]
+          },
+          "bytes_hex": {
+            "pattern": "^(?:[0-9a-f]{2})*$",
+            "type": "string"
+          },
+          "evidence_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "expected_canonical": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "flags": {
+                    "maximum": 4095,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "in_memory_version": {
+                    "const": 2
+                  },
+                  "protection_class": {
+                    "enum": [
+                      0,
+                      1,
+                      2,
+                      3,
+                      255
+                    ],
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "protection_class",
+                  "flags",
+                  "in_memory_version"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "expected_policy_effect": {
+            "enum": [
+              "existing-absent-policy",
+              "continue-validation",
+              "deny-before-task-publication"
+            ]
+          },
+          "expected_tri_state": {
+            "enum": [
+              "Absent",
+              "ValidV1",
+              "ValidV2",
+              "Malformed"
+            ]
+          },
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "mutation_family": {
+            "enum": [
+              "canonical",
+              "length-boundary",
+              "one-bit",
+              "reserved",
+              "unknown-flag",
+              "unknown-class",
+              "unsupported-version-byte",
+              "duplicate-section",
+              "nobits-section",
+              "elf-metadata",
+              "absence"
+            ]
+          },
+          "mutation_index": {
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "origin": {
+            "additionalProperties": false,
+            "properties": {
+              "anchor": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "path": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "path",
+              "anchor"
+            ],
+            "type": "object"
+          },
+          "record_version_class": {
+            "enum": [
+              "absent",
+              "v1",
+              "v2",
+              "unsupported-byte",
+              "not-decodable"
+            ]
+          },
+          "sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "size_bytes": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "origin",
+          "artifact_kind",
+          "bytes_hex",
+          "size_bytes",
+          "sha256",
+          "record_version_class",
+          "expected_tri_state",
+          "expected_canonical",
+          "expected_policy_effect",
+          "mutation_family",
+          "mutation_index",
+          "evidence_refs"
+        ],
+        "type": "object"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "frozen_phase": {
+      "const": "05"
+    },
+    "hash_algorithm": {
+      "const": "sha256"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "source_tests": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "anchors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "anchors"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "tri_state_contract": {
+      "additionalProperties": false,
+      "properties": {
+        "Absent": {
+          "additionalProperties": false,
+          "properties": {
+            "meaning": {
+              "const": "unique manifest section is absent from a structurally valid ELF"
+            },
+            "policy_effect": {
+              "const": "existing-absent-policy"
+            }
+          },
+          "required": [
+            "meaning",
+            "policy_effect"
+          ],
+          "type": "object"
+        },
+        "Malformed": {
+          "additionalProperties": false,
+          "properties": {
+            "meaning": {
+              "const": "ELF metadata or manifest uniqueness, bytes, length, version, flags, class, or reserved data is invalid"
+            },
+            "policy_effect": {
+              "const": "deny-before-task-publication"
+            }
+          },
+          "required": [
+            "meaning",
+            "policy_effect"
+          ],
+          "type": "object"
+        },
+        "ValidV1": {
+          "additionalProperties": false,
+          "properties": {
+            "meaning": {
+              "const": "exact 8-byte v1 record upcast to in-memory v2 with legacy protection class"
+            },
+            "policy_effect": {
+              "const": "continue-validation"
+            }
+          },
+          "required": [
+            "meaning",
+            "policy_effect"
+          ],
+          "type": "object"
+        },
+        "ValidV2": {
+          "additionalProperties": false,
+          "properties": {
+            "meaning": {
+              "const": "exact 16-byte v2 record satisfying class, flag, and reserved-zero rules"
+            },
+            "policy_effect": {
+              "const": "continue-validation"
+            }
+          },
+          "required": [
+            "meaning",
+            "policy_effect"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "Absent",
+        "ValidV1",
+        "ValidV2",
+        "Malformed"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema_version",
+    "corpus_id",
+    "base_revision",
+    "derived_source_state",
+    "frozen_phase",
+    "hash_algorithm",
+    "canonical_json",
+    "abi_invariants",
+    "tri_state_contract",
+    "fixtures",
+    "source_tests",
+    "corpus_sha256"
+  ],
+  "title": "Cellos frozen Manifest v1/v2 corpus",
+  "type": "object"
+}

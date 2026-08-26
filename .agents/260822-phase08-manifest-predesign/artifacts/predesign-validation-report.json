@@ -1,0 +1,40 @@
+{
+  "approval_claims": [],
+  "artifact_sha256": {
+    "manifest-consumer-inventory.json": "b6493d655691741569bf77185428bc33edb8642b79461c492edc33a1570fe0c7",
+    "manifest-consumer-inventory.schema.json": "d3abae5080e4075f1c9372f15b20c6f9807d199229dbbd8f7c30c4c1cda3f998",
+    "manifest-downgrade-matrix.json": "2099119aaa7b79205bbe7912b202b95da9b801659b0bc3fbe56ee518579601a7",
+    "manifest-downgrade-matrix.schema.json": "d8e1c77972c35ec598bb23f30e801309564a19dda2ec285c32e822f90044534d",
+    "manifest-v1-v2-corpus.json": "2fafb814ec18967ae687b61d275d757a9f6548df1d46b39826a5b0b68bd51d8e",
+    "manifest-v1-v2-corpus.schema.json": "458e28384615a39b6f3032d002f25bc646d5d20485ff7d3f46ab76afd69386bb"
+  },
+  "base_revision": "2d61a4728834a0dd23ce63b6e09e5b735246c41a",
+  "content_digests": {
+    "corpus_sha256": "668a23a5a9f7831d113eda5c9a683c90dab1fc38b122f8f1cfa5f6751f83766c",
+    "inventory_sha256": "e21624735bc33b05cb3e9ec44fb2efd9eca2f430527c123d6659e80479c945cc",
+    "matrix_sha256": "17f19d2cd3f1a25642e44f9e166d1caf83f7cb3173a748070edf2a635f149c1c",
+    "source_occurrence_sha256": "f39931d75e26ceb1513aa709db56d0ab50903c6089877a0ca464772e75e59cfb"
+  },
+  "counts": {
+    "consumers": 151,
+    "fixtures": 574,
+    "hostile_tuples": 13,
+    "matrix_rows": 240
+  },
+  "derived_source_state_digests": {
+    "corpus": "d9a3952ee7913d89a5911bcb09ef72cd36a19d3886ade68768c0e8232e4b87d6",
+    "inventory": "02d5fef42c5e7b7716f5968cb268739962e4967b65a7929f8d47a23626f8cf9b",
+    "matrix": "d48d9d3fbfe1440562318ec5e6356b604c008e329fed589f1278ceb516f1a0e9"
+  },
+  "phase08_readiness": false,
+  "report_id": "cellos-manifest-abi-predesign-report",
+  "required_dependencies": [
+    "03",
+    "05",
+    "07"
+  ],
+  "schema_version": 1,
+  "terminal_state": "PREDESIGN_COMPLETE / PHASE08_BLOCKED",
+  "validation_command": "python3 scripts/validate-manifest-abi-predesign.py",
+  "validation_execution_required": true
+}

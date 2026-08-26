@@ -1,0 +1,29 @@
+{
+  "skill": "hc-cook",
+  "mode": "interactive",
+  "task": "Add data-only BCM2837 SoC facts and rewire existing RPi3 consumers without moving board wiring or drivers.",
+  "acceptanceCriteria": [
+    "hal/soc/bcm27xx is no_std and contains immutable SoC data only",
+    "existing RPi3 platform and MMC paths consume the profile",
+    "SDHCI remains one shared mechanism",
+    "board identity, boot, fallback memory, pinmux selection, and PHY wiring remain outside hal/soc",
+    "all final compile, unit, release, QEMU, and review gates pass"
+  ],
+  "touchpoints": [
+    "hal/soc/bcm27xx",
+    "kernel/src/platform.rs",
+    "kernel/src/task/drivers/mmc.rs",
+    "kernel/src/task/drivers/mmc/pinmux_rpi3.rs",
+    "kernel/src/task/drivers/mmc/sdhci.rs"
+  ],
+  "publicContracts": [
+    "no libs/api or libs/types changes",
+    "board-rpi3 feature behavior remains compile-time selected",
+    "no new driver copy or physical-board claim"
+  ],
+  "blastRadius": [
+    "AArch64 RPi3 platform defaults",
+    "RPi3 SDHCI register-access policy",
+    "workspace dependency graph"
+  ]
+}

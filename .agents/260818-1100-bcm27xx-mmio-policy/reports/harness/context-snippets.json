@@ -1,0 +1,22 @@
+{
+  "skill": "hc-cook",
+  "mode": "interactive",
+  "task": "Centralize BCM2837 MMIO spans and grant widths without changing permissions or mechanisms.",
+  "acceptanceCriteria": [
+    "BCM27xx profile owns exact peripheral and local-controller spans",
+    "BCM27xx profile owns exact GPIO and AUX grant widths",
+    "paging, resource allowlist, and GPIO IRQ lookup consume profile facts",
+    "page permissions and MMIO authority remain unchanged"
+  ],
+  "touchpoints": [
+    "hal/soc/bcm27xx",
+    "kernel/src/memory/paging.rs",
+    "kernel/src/resource_registry.rs",
+    "kernel/src/task/drivers/gpio_irq.rs"
+  ],
+  "publicContracts": [
+    "no driver or IRQ/timer mechanism relocation",
+    "no board descriptor change",
+    "no new physical-board claim"
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "decision": "PASS",
+  "score": 10.0,
+  "criticalCount": 0,
+  "acceptanceCoverage": [
+    "review confirmed timeout byte 0x0E and its RPi3 aligned RMW path",
+    "the strengthened static guard enforces timeout programming before all transfer registers",
+    "tester passed static, formatting, board build, and raw artifact hash gates",
+    "real-board evidence proves complete SD-backed boot rather than probe-only progress"
+  ],
+  "regressionProof": [
+    "board-specific cfg limits pinmux and write-spacing behavior to board-rpi3",
+    "generic AArch64 and board-rpi3 cargo checks passed",
+    "the real RPi3 mounted both SD FAT32 consumers and reached the shell"
+  ],
+  "contractStatus": "OK",
+  "blockingReasons": []
+}

@@ -1,0 +1,33 @@
+{
+  "phase": "phase-04-kernel-cleanup",
+  "criteria": [
+    {
+      "criterion": "Retired syscall 400 fails closed while all live neighboring opcodes retain their ABI",
+      "command": "host API syscall tests",
+      "evidenceRef": "75 tests passed; explicit assertions lock ViSyscall::from(400) to Unknown and keep HotSwapReady and Snapshot on bit 32.",
+      "pass": true
+    },
+    {
+      "criterion": "Supervisor IPC remains the executable hotswap orchestration path after kernel orchestrator deletion",
+      "command": "full serial hotswap-smoke suite",
+      "evidenceRef": "All 15 cases passed, including FIFO cutover, SpawnCap retention, state 5 to 6, and direct unauthorized sender denial.",
+      "pass": true
+    },
+    {
+      "criterion": "Snapshot authority regression remains intact",
+      "command": "launch-profile integration suite",
+      "evidenceRef": "The 1 of 1 test passed with the Supervisor-routed NullBlock unavailable and non-supervisor denial proof.",
+      "pass": true
+    },
+    {
+      "criterion": "Fresh RV64 build artifacts match the changed source",
+      "command": "pwsh -File ./gen_disk.ps1",
+      "evidenceRef": "Fresh release cells and 42 signatures were built; kernel/src/embedded/init was refreshed from app-init and only optional tetris-lua was omitted.",
+      "pass": true
+    }
+  ],
+  "deferred": [
+    "Fresh x86 and AArch64 QEMU boot requires a host path bridge that produces matching fresh artifacts.",
+    "Real MMC snapshot save and restore remains host-gated."
+  ]
+}

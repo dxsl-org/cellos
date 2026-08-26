@@ -1,0 +1,50 @@
+{
+  "commands": [
+    {
+      "command": "cargo test -p types -p api --target x86_64-unknown-linux-gnu",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-09T00:00:00.000Z",
+      "summary": "78 API unit tests, 2 API contract tests, and 10 types tests passed."
+    },
+    {
+      "command": "cargo check -p service-vfs --target x86_64-unknown-linux-gnu --no-default-features",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-09T00:00:00.000Z",
+      "summary": "The final service-local handle implementation compiled cleanly for the host check lane."
+    },
+    {
+      "command": "bash scripts/build-test-hooks-ci.sh",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-09T00:00:00.000Z",
+      "summary": "The RV64 test-hooks image rebuilt with Phase 04 VFS selftests enabled."
+    },
+    {
+      "command": "cargo test --manifest-path tests/integration/Cargo.toml --target x86_64-unknown-linux-gnu --test vfs-quota riscv64_vfs_quota_all_pass -- --nocapture",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-09T00:00:00.000Z",
+      "summary": "RV64 QEMU observed all seven file-handle lifecycle markers, parent revoke, sealed-handle reads, and the final VFS test completion marker."
+    },
+    {
+      "command": "production vicell-kernel release builds for riscv64gc-unknown-none-elf, aarch64-unknown-none-softfloat, and x86_64-unknown-none",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-09T00:00:00.000Z",
+      "summary": "All three architecture compile gates passed; no non-RV64 runtime or hardware claim is made."
+    },
+    {
+      "command": "cargo fmt --all --check && git diff --check",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-09T00:00:00.000Z",
+      "summary": "Formatting and whitespace checks passed on the final combined dirty tree."
+    }
+  ],
+  "beforeAfter": {
+    "before": "VFS had no durable service-issued file handle and legacy service unit tests could not execute on the no_std host lane.",
+    "after": "The exact append-only handle ABI is live with owner-scoped bounded reads and RV64 QEMU test-hooks execute the security table and lifecycle invariants; the no_std host unit-test limitation remains documented."
+  }
+}

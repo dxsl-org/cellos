@@ -1,0 +1,25 @@
+{
+  "verdict": "pass",
+  "hypothesesChecked": [
+    {
+      "hypothesis": "The input service still dereferences 0x0A000000 on RPi3",
+      "result": "rejected",
+      "evidence": "No EC=0x24 or FAR=0x0A000000 marker appeared during the verified boot"
+    },
+    {
+      "hypothesis": "The fallback merely hides a crash behind service restart",
+      "result": "rejected",
+      "evidence": "No service death or restart marker appeared after input registration"
+    },
+    {
+      "hypothesis": "Disabling the probe also removes the QEMU input path",
+      "result": "rejected",
+      "evidence": "The default-feature artifact retains VirtIO probe constants while the RPi3 artifact contains none"
+    },
+    {
+      "hypothesis": "The board booted an older TFTP payload",
+      "result": "rejected",
+      "evidence": "The server logged RRQ and DONE for the newly published 9564224-byte cellos.uimg"
+    }
+  ]
+}

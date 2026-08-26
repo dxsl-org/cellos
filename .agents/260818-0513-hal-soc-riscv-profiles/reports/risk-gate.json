@@ -1,0 +1,28 @@
+{
+  "verdict": "CLEAR",
+  "head": "9427482f",
+  "mutated_git": false,
+  "blockers": [],
+  "residual_risks": [
+    {
+      "risk": "VF2, Pioneer, and RPi3 hardware behavior remains compile-checked or pre-existing evidence only for this slice.",
+      "severity": "accepted",
+      "evidence": "docs/project-changelog.md:17-22 and docs/project-roadmap.md:29-36 avoid claiming fresh hardware execution."
+    },
+    {
+      "risk": "PLIC IRQ policy remains in hal/arch/riscv and is intentionally outside this slice.",
+      "severity": "accepted",
+      "evidence": ".agents/260818-0513-hal-soc-riscv-profiles/plan.md:60-63 records the deferred PLIC policy finding."
+    }
+  ],
+  "gates": {
+    "dtb_valid_invalid_zero": "PASS",
+    "sg2042_fail_closed": "PASS",
+    "feature_overlap": "PASS",
+    "non_rv64_regression": "PASS",
+    "ownership_no_driver_duplication": "PASS",
+    "docs_handoff": "PASS",
+    "qa_matrix": "PASS"
+  },
+  "qa_reference": ".agents/260818-0513-hal-soc-riscv-profiles/reports/qa-2026-08-18-verification.md"
+}

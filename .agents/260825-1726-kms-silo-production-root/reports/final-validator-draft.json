@@ -1,0 +1,70 @@
+{
+  "findings": [
+    {
+      "title": "Separate relay readiness from the C2C root state",
+      "body": "Critical question: what state authorizes relay signing when the selected production device implements only P-256 while the existing `RootProvider`/`RootAssessment` represents one 32-byte C2C key and one `remote_allowed` bit? The plan says to reuse that assessment/epoch/rotation machinery, so an implementor must either let C2C readiness authorize the unrelated relay key or make the P-256 adapter fabricate the existing X25519 capability; both violate the stated key-purpose isolation. Revise Phase 1 to define one provider boundary with two typed leaf capabilities and independent readiness/generation state: existing `C2cX25519` operations consult only the unchanged C2C leaf, while relay metadata/CSR/TLS operations consult only `RelayP256`; require cross-readiness substitution tests and state explicitly that the Phase 7 provider may implement the relay leaf without claiming X25519 readiness.",
+      "priority": 1,
+      "confidence": 0.98,
+      "file_path": ".agents/260825-1726-kms-silo-production-root/phase-01-kms-tls-signing-vertical-slice.md",
+      "line_start": 44,
+      "line_end": 46
+    },
+    {
+      "title": "Model active and pending certificate generations concurrently",
+      "body": "Critical question: how does an already `Active` device obtain and stage its renewal certificate? The plan forbids CSR creation outside `Unprovisioned`/`Pending` and defines a linear `Unprovisioned → Pending → Active → Retiring/Revoked` state, yet also requires renewal, overlap, and retaining the old active profile until atomic swap. That model cannot represent `Active(current) + Pending(next)`, so an implementation must either disable the working identity to enroll the next one or invent unstated transition semantics. Revise Phase 3 to make lifecycle state generation-scoped, define the simultaneous current/next tuple, allow constrained CSR creation for the authorized next generation while current remains active, and freeze prepare/validate/commit/abort, restart recovery, revocation precedence, and old-generation destruction transitions with power-loss tests at each commit point.",
+      "priority": 1,
+      "confidence": 0.99,
+      "file_path": ".agents/260825-1726-kms-silo-production-root/phase-03-certificate-activation-and-provisioning.md",
+      "line_start": 39,
+      "line_end": 49
+    },
+    {
+      "title": "Choose and bind the enrollment authority",
+      "body": "Critical question: is `CreateRelayCsr` callable by the existing supervisor or by a new provisioner cell? `supervisor/provisioner-authorized` leaves an authorization-boundary and public-API choice to the implementor, while the listed inventory omits the consuming KMS dispatch branches, client, and the principal to which one-shot CSR handles are bound. The grounded KISS answer is to reuse the existing supervisor service unless product scope explicitly requires a provisioner: record and revalidate its kernel-written cell ID, generation, and live TID; bind every CSR handle and chunk read to that principal plus relay generation/policy epoch; deny service-net, broker, stale generations, and transferred handles. Revise Phase 3 to name the sole principal and exact `KmsOpcode`/payload, `KmsService::handle` branches, client/tool call path, lifecycle transitions, and negative authorization matrix.",
+      "priority": 1,
+      "confidence": 0.98,
+      "file_path": ".agents/260825-1726-kms-silo-production-root/phase-03-certificate-activation-and-provisioning.md",
+      "line_start": 36,
+      "line_end": 43
+    },
+    {
+      "title": "Teach embedded-tls to send the bounded client chain",
+      "body": "Critical question: how is the Phase 3 DER chain placed on the TLS wire? In embedded-tls 0.19, `CryptoProvider::client_cert()` returns one `Certificate`, and `connection::client_cert` adds exactly one certificate entry; Phase 4 patches only fallible signing but then assumes `RelayMtlsProvider` can supply an active chain. Any managed-CA topology requiring an intermediate will send only the leaf and fail server validation. Revise the dependency feasibility/pin step to add and test a bounded multi-entry client-chain API and exact chain-count/byte limits, or explicitly constrain the certificate profile to a directly root-signed leaf and remove chain/overlap claims that require intermediates; the former matches the existing plan and ADR.",
+      "priority": 1,
+      "confidence": 0.99,
+      "file_path": ".agents/260825-1726-kms-silo-production-root/phase-04-service-net-mutual-tls-integration.md",
+      "line_start": 48,
+      "line_end": 53
+    },
+    {
+      "title": "Freeze the signature encoding before implementation",
+      "body": "Critical question: what bytes cross the provider and KMS ABIs, and what happens to high-S output? `fixed signature representation chosen once` and Phase 7's `per frozen rule` defer a public wire and conformance decision to the cook implementor. The grounded answer from the 112-byte KMS payload and embedded-tls interface is fixed-width 64-byte big-endian `r || s` at the provider/KMS boundaries, strict scalar range and canonical low-S enforcement, self-verification in KMS, and DER encoding only in the service-net TLS adapter. Revise Phase 1 to state that contract, exact response length/error behavior, and whether high-S is rejected or normalized; carry the identical rule into CSR proof, Silo commands, hardware protocol, and conformance vectors.",
+      "priority": 2,
+      "confidence": 0.97,
+      "file_path": ".agents/260825-1726-kms-silo-production-root/phase-01-kms-tls-signing-vertical-slice.md",
+      "line_start": 28,
+      "line_end": 39
+    },
+    {
+      "title": "Own the production profile at the image boundary",
+      "body": "Critical question: which named build command proves the complete shipped image excludes every downgrade? Phase 1 assigns this to unspecified `KMS Cargo/profile configuration`, but the current `tls-insecure` feature is independently accepted by service-net and no named production image profile exists; KMS-local guards therefore cannot establish the plan's whole-artifact guarantee. Revise Phase 1's inventory and steps to name the top-level production feature tuple/build manifest and image-assembly script, make both/neither hardware-provider and verified-TLS selection a build error there, exclude Silo/fixtures/test hooks/raw/K1 routes from image membership, and define the symbol/configuration scan used again in Phases 2, 5, 7, and 8. Until that owner and command are explicit, the production-exclusion success criterion is not executable.",
+      "priority": 1,
+      "confidence": 0.98,
+      "file_path": ".agents/260825-1726-kms-silo-production-root/phase-01-kms-tls-signing-vertical-slice.md",
+      "line_start": 30,
+      "line_end": 31
+    },
+    {
+      "title": "Complete the deep-plan handoff metadata",
+      "body": "The plan is not hydratable under the project plan contract: every phase and the master leave effort unestimated, so the one-day split guard and total cannot be checked; the deep-plan inventories omit estimated sizes and several software phases use labels such as `service-net configuration/manifest loader`, `integration/QEMU harness`, and `KMS Cargo/profile configuration` rather than owned paths; per-phase dependency maps and the required Validation Log/consistency result are absent. Revise Phases 1–5 with exact create/modify/delete paths, estimated sizes/efforts, phase-local dependency inputs/outputs, named verification commands, and a recorded validation result; keep Phase 7's file list explicitly `BLOCKED_PENDING_PHASE_6` and require Phase 6 to replace it with exact product paths before a second cook handoff. This makes P1–P5 cookable while preserving the deliberate hardware gate rather than inviting implementation guesses.",
+      "priority": 2,
+      "confidence": 0.99,
+      "file_path": ".agents/260825-1726-kms-silo-production-root/plan.md",
+      "line_start": 3,
+      "line_end": 10
+    }
+  ],
+  "overall_correctness": "incorrect",
+  "explanation": "FAIL. The high-level split is sound—Phases 1–5 form a software-only lane and Phases 6–8 remain correctly hardware-gated—but the plan is not cook-ready because relay-vs-C2C readiness, enrollment authority, concurrent certificate rotation, full client-chain transport, whole-image production exclusion, and required handoff metadata are not executable without security-relevant invention. Apply the exact revisions in the findings, re-run plan validation, and hand off Phases 1–5 only; Phase 7 must be re-planned from the Phase 6 product ADR before any hardware cook begins.",
+  "confidence": 0.99
+}

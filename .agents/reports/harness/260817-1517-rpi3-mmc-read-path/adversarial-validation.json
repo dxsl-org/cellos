@@ -1,0 +1,11 @@
+{
+  "decision": "PASS",
+  "disprovenClaims": [
+    "The SD card or power supply was the cause of the first-sector read failure.",
+    "CMD16 or four-bit bus setup was required for this SDHC card.",
+    "The CMD17 failure was a command framing error rather than a data timeout."
+  ],
+  "unverifiedClaims": [],
+  "missingProof": [],
+  "reachableRegressions": []
+}

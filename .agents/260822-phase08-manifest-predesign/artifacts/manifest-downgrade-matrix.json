@@ -1,0 +1,4908 @@
+{
+  "base_revision": "2d61a4728834a0dd23ce63b6e09e5b735246c41a",
+  "baseline_tuple": {
+    "artifact_binding": "same-final-elf",
+    "expected_result": "preserve-existing-v1v2-policy",
+    "manifest_version_class": "v2",
+    "owner_generation_state": "equals-authenticated-floor",
+    "publisher_epoch_state": "current",
+    "publisher_identity_binding": "matching",
+    "route_state": "existing-policy-route",
+    "signature_state": "valid-current"
+  },
+  "derived_source_state": {
+    "derived_source_state_sha256": "d48d9d3fbfe1440562318ec5e6356b604c008e329fed589f1278ceb516f1a0e9",
+    "hash_algorithm": "sha256",
+    "inputs": [
+      {
+        "path": ".agents/260821-0642-app-tiers-completion/phase-08-manifest-v3-abi.md",
+        "sha256": "14d011fafb71fae077bb402d2cab9466d79752f112f0d8821fc420d3955aa0c7"
+      },
+      {
+        "path": ".agents/260821-0642-app-tiers-completion/plan.md",
+        "sha256": "6797d638c9837eab2d3f57c4059c205d6009887bc8714ddf68cbcdef9fc86975"
+      },
+      {
+        "path": ".agents/260822-phase08-manifest-predesign/plan.md",
+        "sha256": "8ebd543466ec6ac958670e0119c65b25da5779d9bfc6bf2300e35fa3d63c3a6c"
+      },
+      {
+        "path": "kernel/src/loader.rs",
+        "sha256": "750a435f41f6793d0e614d402f605f3b5dd3da8111ac20503be58721b62fd9ac"
+      },
+      {
+        "path": "kernel/src/signing.rs",
+        "sha256": "2d8f3ae6065827c58632a00312e4fb76f8a1d2b6c29fd334d801017eb656804f"
+      },
+      {
+        "path": "libs/api/src/abi/manifest_parse.rs",
+        "sha256": "b8cc1e65e8d0ec0d01d17a942603ddbe45a63c99f1c06a5572c6f4774db65c36"
+      }
+    ]
+  },
+  "dimensions": {
+    "manifest_version_class": [
+      "absent",
+      "v1",
+      "v2",
+      "unsupported-byte",
+      "future-symbolic"
+    ],
+    "owner_generation_state": [
+      "equals-authenticated-floor",
+      "stale-below-floor",
+      "ahead-or-conflicting",
+      "floor-unavailable-or-invalid"
+    ],
+    "publisher_epoch_state": [
+      "current",
+      "stale",
+      "unknown-or-ahead"
+    ],
+    "route_state": [
+      "existing-policy-route",
+      "exact-required-route-enforceable",
+      "substituted-weaker-route",
+      "required-route-unavailable-or-disabled"
+    ]
+  },
+  "mandatory_hostile_tuples": [
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:267-280"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Publisher provenance, artifact identity, owner authorization, and route qualification are separate conjunctive requirements.",
+      "route_state": "exact-required-route-enforceable",
+      "scenario": "Same final ELF re-signed under stale publisher epoch with current owner generation.",
+      "signature_state": "valid-replayed",
+      "threat_id": "hostile-01-stale-resign"
+    },
+    {
+      "artifact_binding": "owner-digest-mismatch",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:267-280"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-CONJUNCTIVE-AUTH"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Publisher provenance, artifact identity, owner authorization, and route qualification are separate conjunctive requirements.",
+      "route_state": "exact-required-route-enforceable",
+      "scenario": "The same final ELF reuses an owner digest that authorizes a different artifact under the same publisher identity and epoch.",
+      "signature_state": "valid-replayed",
+      "threat_id": "hostile-02-owner-digest-replay"
+    },
+    {
+      "artifact_binding": "provenance-digest-mismatch",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:267-280"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-CONJUNCTIVE-AUTH"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Publisher provenance, artifact identity, owner authorization, and route qualification are separate conjunctive requirements.",
+      "route_state": "exact-required-route-enforceable",
+      "scenario": "Current publisher envelope paired with owner record naming an older provenance digest.",
+      "signature_state": "valid-current",
+      "threat_id": "hostile-03-old-provenance-digest"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:267-280"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-CONJUNCTIVE-AUTH"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "rotated-without-authorized-continuity",
+      "rationale": "Publisher provenance, artifact identity, owner authorization, and route qualification are separate conjunctive requirements.",
+      "route_state": "exact-required-route-enforceable",
+      "scenario": "Current owner record paired with a rotated publisher key lacking authorized continuity.",
+      "signature_state": "valid-current",
+      "threat_id": "hostile-04-unauthorized-key-rotation"
+    },
+    {
+      "artifact_binding": "manifest-tampered",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:267-280"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-CONJUNCTIVE-AUTH"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Publisher provenance, artifact identity, owner authorization, and route qualification are separate conjunctive requirements.",
+      "route_state": "exact-required-route-enforceable",
+      "scenario": "Raw manifest or routing bytes changed after publisher signing.",
+      "signature_state": "invalid",
+      "threat_id": "hostile-05-routing-byte-tamper"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:267-280"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-OWNER-FLOOR"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Publisher provenance, artifact identity, owner authorization, and route qualification are separate conjunctive requirements.",
+      "route_state": "exact-required-route-enforceable",
+      "scenario": "Both otherwise-valid owner slots replay below the authenticated floor.",
+      "signature_state": "valid-replayed",
+      "threat_id": "hostile-06-both-owner-slots-stale"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:267-280"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Publisher provenance, artifact identity, owner authorization, and route qualification are separate conjunctive requirements.",
+      "route_state": "exact-required-route-enforceable",
+      "scenario": "Owner slot is ahead of the floor while publisher state is current.",
+      "signature_state": "valid-current",
+      "threat_id": "hostile-07-owner-ahead"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:267-280"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Publisher provenance, artifact identity, owner authorization, and route qualification are separate conjunctive requirements.",
+      "route_state": "exact-required-route-enforceable",
+      "scenario": "Publisher is current while the authenticated owner floor is unavailable.",
+      "signature_state": "valid-current",
+      "threat_id": "hostile-08-floor-unavailable"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:267-280"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-ROUTE-FAIL-CLOSED"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "07",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Publisher provenance, artifact identity, owner authorization, and route qualification are separate conjunctive requirements.",
+      "route_state": "substituted-weaker-route",
+      "scenario": "Existing v1/v2 artifact attempts a weaker-route substitution.",
+      "signature_state": "valid-current",
+      "threat_id": "hostile-09-weaker-route-substitution"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:267-280"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-ROUTE-FAIL-CLOSED"
+      ],
+      "manifest_version_class": "future-symbolic",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "07",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Publisher provenance, artifact identity, owner authorization, and route qualification are separate conjunctive requirements.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "scenario": "Symbolic future route is required but unavailable with attempted weaker fallback.",
+      "signature_state": "valid-current",
+      "threat_id": "hostile-10-symbolic-route-disabled"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:267-280"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-UNSUPPORTED-BYTE"
+      ],
+      "manifest_version_class": "unsupported-byte",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "05",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Publisher provenance, artifact identity, owner authorization, and route qualification are separate conjunctive requirements.",
+      "route_state": "exact-required-route-enforceable",
+      "scenario": "Unsupported version byte 03 is presented with otherwise current publisher and owner state.",
+      "signature_state": "valid-current",
+      "threat_id": "hostile-11-unsupported-version-byte-03"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:267-280"
+      ],
+      "expected_result": "preserve-existing-v1v2-policy",
+      "invariant_ids": [
+        "INV-LEGACY-PRESERVATION"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "07",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Publisher provenance, artifact identity, owner authorization, and route qualification are separate conjunctive requirements.",
+      "route_state": "existing-policy-route",
+      "scenario": "Rollback disables symbolic future intake while explicitly permitted v1/v2 identities retain existing behavior.",
+      "signature_state": "valid-current",
+      "threat_id": "hostile-12-rollback-legacy-preservation"
+    },
+    {
+      "artifact_binding": "different-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:257-285"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-FINAL-ELF-BINDING",
+        "INV-CONJUNCTIVE-AUTH"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "A current valid publisher signature cannot authorize a different final ELF than the separately owner-digest-pinned artifact.",
+      "route_state": "exact-required-route-enforceable",
+      "scenario": "A current correctly signed publisher envelope names a different final ELF under otherwise matching publisher, owner, version, and enforceable-route state.",
+      "signature_state": "valid-current",
+      "threat_id": "hostile-13-different-final-elf"
+    }
+  ],
+  "matrix_id": "cellos-phase08-downgrade-predesign",
+  "matrix_sha256": "17f19d2cd3f1a25642e44f9e166d1caf83f7cb3173a748070edf2a635f149c1c",
+  "rows": [
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "absent",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-03589040131360d6"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "absent",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-437ff48a9c077b54"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "absent",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-8aaef2dc3be609e7"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "absent",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-06c3449a5a3bf2ac"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "future-symbolic",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-fce183688cf04108"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "future-symbolic",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-528e761d6f2705d8"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "future-symbolic",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-0c5c1fafd8597da6"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "future-symbolic",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-398da37d00ac26dc"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "unsupported-byte",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-adedada4dd90c5a8"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "unsupported-byte",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-7b43447f3cc40b76"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "unsupported-byte",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-b06fcbbdde28fb9c"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "unsupported-byte",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-976cae3b35ce3ca2"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "v1",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-4ed74fdee89f8e42"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "v1",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-e35957f37f04df04"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "v1",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-902f465db335b4bc"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "v1",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-61aa9610527bde51"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-855610c876b51a00"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-cdbe5b78d1388f83"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-10c4fbfcd7bd0c88"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-2849b43814dedfbd"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "preserve-existing-v1v2-policy",
+      "invariant_ids": [
+        "INV-LEGACY-PRESERVATION"
+      ],
+      "manifest_version_class": "absent",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "05",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Current authenticated state preserves only the existing absent/v1/v2 policy.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-2b47303fdd5b659a"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "preserve-existing-v1v2-policy",
+      "invariant_ids": [
+        "INV-LEGACY-PRESERVATION"
+      ],
+      "manifest_version_class": "absent",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "05",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Current authenticated state preserves only the existing absent/v1/v2 policy.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-3af454eea0c29c5c"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-ROUTE-FAIL-CLOSED"
+      ],
+      "manifest_version_class": "absent",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "07",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Unavailable or weaker routes never substitute for the required route.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-8e41c1114311617c"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-ROUTE-FAIL-CLOSED"
+      ],
+      "manifest_version_class": "absent",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "07",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Unavailable or weaker routes never substitute for the required route.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-d9fec29eaacb501a"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "decision-required-phase08-blocked",
+      "invariant_ids": [
+        "INV-NO-FUTURE-DESIGN"
+      ],
+      "manifest_version_class": "future-symbolic",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "08-predesign",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Symbolic future format has no encoding and remains decision-blocked.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-dbea970a757fddf7"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "decision-required-phase08-blocked",
+      "invariant_ids": [
+        "INV-NO-FUTURE-DESIGN"
+      ],
+      "manifest_version_class": "future-symbolic",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "08-predesign",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Symbolic future format has no encoding and remains decision-blocked.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-2d0bf3064e890ebb"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-ROUTE-FAIL-CLOSED"
+      ],
+      "manifest_version_class": "future-symbolic",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "07",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Unavailable or weaker routes never substitute for the required route.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-f88275f04adce85a"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-ROUTE-FAIL-CLOSED"
+      ],
+      "manifest_version_class": "future-symbolic",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "07",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Unavailable or weaker routes never substitute for the required route.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-a3d702f4cbec3f23"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-UNSUPPORTED-BYTE"
+      ],
+      "manifest_version_class": "unsupported-byte",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "05",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Unsupported version bytes remain malformed hostile input.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-ac3cde22a84ffab5"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-UNSUPPORTED-BYTE"
+      ],
+      "manifest_version_class": "unsupported-byte",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "05",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Unsupported version bytes remain malformed hostile input.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-cf99574ecd2d1f9c"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-UNSUPPORTED-BYTE"
+      ],
+      "manifest_version_class": "unsupported-byte",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "05",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Unsupported version bytes remain malformed hostile input.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-af94bc94bb2d8fb0"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-UNSUPPORTED-BYTE"
+      ],
+      "manifest_version_class": "unsupported-byte",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "05",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Unsupported version bytes remain malformed hostile input.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-517fe66187c61762"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "preserve-existing-v1v2-policy",
+      "invariant_ids": [
+        "INV-LEGACY-PRESERVATION"
+      ],
+      "manifest_version_class": "v1",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "05",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Current authenticated state preserves only the existing absent/v1/v2 policy.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-e78ae16a562eda74"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "preserve-existing-v1v2-policy",
+      "invariant_ids": [
+        "INV-LEGACY-PRESERVATION"
+      ],
+      "manifest_version_class": "v1",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "05",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Current authenticated state preserves only the existing absent/v1/v2 policy.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-aa1032d7e26c1045"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-ROUTE-FAIL-CLOSED"
+      ],
+      "manifest_version_class": "v1",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "07",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Unavailable or weaker routes never substitute for the required route.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-75cce5810aa2a6c3"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-ROUTE-FAIL-CLOSED"
+      ],
+      "manifest_version_class": "v1",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "07",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Unavailable or weaker routes never substitute for the required route.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-ebcafdaa0a94999f"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "preserve-existing-v1v2-policy",
+      "invariant_ids": [
+        "INV-LEGACY-PRESERVATION"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "05",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Current authenticated state preserves only the existing absent/v1/v2 policy.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-9ace1aaf8fd2f9b3"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "preserve-existing-v1v2-policy",
+      "invariant_ids": [
+        "INV-LEGACY-PRESERVATION"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "05",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Current authenticated state preserves only the existing absent/v1/v2 policy.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-1e461ace35156740"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-ROUTE-FAIL-CLOSED"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "07",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Unavailable or weaker routes never substitute for the required route.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-00de7fe4e6e19e59"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-ROUTE-FAIL-CLOSED"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "07",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Unavailable or weaker routes never substitute for the required route.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-4e5348c210a23973"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "absent",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-41973c0406093d4f"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "absent",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-673dea513101f113"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "absent",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-94409730fe82d542"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "absent",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-4fbd31af2b3750fb"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "future-symbolic",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-96b91b8be909974e"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "future-symbolic",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-c8a1058955bd320d"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "future-symbolic",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-006bdbcd39839d12"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "future-symbolic",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-86ddaea78439dfce"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "unsupported-byte",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-8792fb439560ba92"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "unsupported-byte",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-e30108e633e09b22"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "unsupported-byte",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-74c2793bdcc08cc0"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "unsupported-byte",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-5ace611b7d3653b8"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "v1",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-3880bb57c0f38441"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "v1",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-aea157ad07cd49a7"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "v1",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-fe3227811166f277"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "v1",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-6df32374edc2601b"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-ad0cf8a7bcf6e70d"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-2633435255d62ca3"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-820328a3a55a4479"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-56896d8d515721f2"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-OWNER-FLOOR"
+      ],
+      "manifest_version_class": "absent",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner generation below the authenticated floor is replay.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-d631029c62d9c442"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-OWNER-FLOOR"
+      ],
+      "manifest_version_class": "absent",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner generation below the authenticated floor is replay.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-54b946f1d1bd5e45"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-OWNER-FLOOR"
+      ],
+      "manifest_version_class": "absent",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner generation below the authenticated floor is replay.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-52b1100264f6fb81"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-OWNER-FLOOR"
+      ],
+      "manifest_version_class": "absent",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner generation below the authenticated floor is replay.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-d2bed09d4e234914"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-OWNER-FLOOR"
+      ],
+      "manifest_version_class": "future-symbolic",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner generation below the authenticated floor is replay.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-55a6a654ebe75ae8"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-OWNER-FLOOR"
+      ],
+      "manifest_version_class": "future-symbolic",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner generation below the authenticated floor is replay.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-4cdad50f718d1f55"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-OWNER-FLOOR"
+      ],
+      "manifest_version_class": "future-symbolic",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner generation below the authenticated floor is replay.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-49453813c74d5fdb"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-OWNER-FLOOR"
+      ],
+      "manifest_version_class": "future-symbolic",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner generation below the authenticated floor is replay.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-4a2140ffd47bd7d4"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-OWNER-FLOOR"
+      ],
+      "manifest_version_class": "unsupported-byte",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner generation below the authenticated floor is replay.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-0efe606dd505b1ff"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-OWNER-FLOOR"
+      ],
+      "manifest_version_class": "unsupported-byte",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner generation below the authenticated floor is replay.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-7114ec38c5fc8dc6"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-OWNER-FLOOR"
+      ],
+      "manifest_version_class": "unsupported-byte",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner generation below the authenticated floor is replay.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-1bb288906e35f036"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-OWNER-FLOOR"
+      ],
+      "manifest_version_class": "unsupported-byte",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner generation below the authenticated floor is replay.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-060068ce35ab56fb"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-OWNER-FLOOR"
+      ],
+      "manifest_version_class": "v1",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner generation below the authenticated floor is replay.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-f6b2690a44115535"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-OWNER-FLOOR"
+      ],
+      "manifest_version_class": "v1",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner generation below the authenticated floor is replay.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-1750f21b27d4df9e"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-OWNER-FLOOR"
+      ],
+      "manifest_version_class": "v1",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner generation below the authenticated floor is replay.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-34657d85a69a5a4b"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-OWNER-FLOOR"
+      ],
+      "manifest_version_class": "v1",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner generation below the authenticated floor is replay.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-9685389ce89d9ce7"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-OWNER-FLOOR"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner generation below the authenticated floor is replay.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-d673dea1d3247983"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-OWNER-FLOOR"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner generation below the authenticated floor is replay.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-ad53069b47c03da4"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-OWNER-FLOOR"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner generation below the authenticated floor is replay.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-723276391217a148"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-OWNER-FLOOR"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "current",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner generation below the authenticated floor is replay.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-7c4cd9318c27f90b"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "absent",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-a8b67483b14da472"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "absent",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-40125151065fb1a7"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "absent",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-614bbe42b4a33f48"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "absent",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-fa8a44d1551fdc7d"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "future-symbolic",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-abb2b249fa9ff5a7"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "future-symbolic",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-aee0361546c5e1a2"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "future-symbolic",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-bb174ef126232e7e"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "future-symbolic",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-f49b03a6bb1d8dba"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "unsupported-byte",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-7e12720bb3188c5a"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "unsupported-byte",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-d28ab4dec8012ffb"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "unsupported-byte",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-85280bc87fdd0e57"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "unsupported-byte",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-35eab2338cf5f535"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "v1",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-6cce6d53598a46dc"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "v1",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-4c0d8344a130683a"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "v1",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-88dd6aa20a0ef48c"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "v1",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-f8241bc99694ac64"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-2a27b942536a25ff"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-6c2dd469f1eb14ec"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-e45a2d7ad8ab08c3"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-6d157588ec698c4a"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "absent",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-e9fd019ea3fb07b7"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "absent",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-e5442f321c24b09c"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "absent",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-20658512f4392715"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "absent",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-349e64014735b0c0"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "future-symbolic",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-6d1cd033d09b0ae3"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "future-symbolic",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-513fd2ca29ca5453"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "future-symbolic",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-e56647fad1a0e6e0"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "future-symbolic",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-3c8230da8342b0c8"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "unsupported-byte",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-eef38b8fcb95e41f"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "unsupported-byte",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-4ae5fcbbb3420b79"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "unsupported-byte",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-a81b35bb93efaac5"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "unsupported-byte",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-7734eca4a6f84f23"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "v1",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-6f6874167c95e391"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "v1",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-f2916923d9285b5e"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "v1",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-5841be5816def894"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "v1",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-d40032e514038685"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-66f5097b50c199e3"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-ecc464a477d7714e"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-a4e9e9b79013edcd"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-328f14a5f58f215b"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "absent",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-88de3cbf7c4acad2"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "absent",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-862fb5f33bd7d694"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "absent",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-0b4d186158f128aa"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "absent",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-01cd75683224ae6a"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "future-symbolic",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-cd3583e1b4cb1759"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "future-symbolic",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-c63583c141d3fb20"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "future-symbolic",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-5c80b75d6651abf4"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "future-symbolic",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-1433c5d4f02ba1c4"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "unsupported-byte",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-c928882f2c0e3c1a"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "unsupported-byte",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-2f9297690b508523"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "unsupported-byte",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-65246353fb262496"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "unsupported-byte",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-eeffc24cff82ea3f"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "v1",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-70b1a34b29674875"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "v1",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-c4ffa179490f987a"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "v1",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-3bb2dee2e950c0c5"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "v1",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-46b89817827e0ff0"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-aa5217dd030d560a"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-3c38758d299d0f79"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-581771ccdf5b154c"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-200ba419065509d0"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "absent",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-229c0532fc671216"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "absent",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-5ef85aabda903019"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "absent",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-fbfeddf2e064f328"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "absent",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-f30b58bb1b6d883e"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "future-symbolic",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-01f80630585f9396"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "future-symbolic",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-a29ff4d8c388f471"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "future-symbolic",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-1c6b816f842a4a0e"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "future-symbolic",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-13511cece3107c57"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "unsupported-byte",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-52146e96d33ff353"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "unsupported-byte",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-e3dea54bda825b5a"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "unsupported-byte",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-833b58976e825b4d"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "unsupported-byte",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-a1f3e0bde328b194"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "v1",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-eed915796023b059"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "v1",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-6743cb2776baddd4"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "v1",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-ad94b557920aa3ee"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "v1",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-ba4df69fed1a8d3d"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-9262959e0136198c"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-98e74a4291ea24c1"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-105c73313903efd7"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "stale",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-50f516b0a2e67410"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "absent",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-60f0062563448193"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "absent",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-98c785d465d47ae4"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "absent",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-9ca8545374eab03f"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "absent",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-f4a63f38ef50d4cb"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "future-symbolic",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-6bbbee4125f0ebbd"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "future-symbolic",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-f32b090df0151f56"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "future-symbolic",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-dd39775045e8bc92"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "future-symbolic",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-3ed39c50c25b029d"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "unsupported-byte",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-7eb905cd2f0316a0"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "unsupported-byte",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-a5a721a5823d3389"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "unsupported-byte",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-647a57a05f5b24c5"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "unsupported-byte",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-136bf558f82679a9"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "v1",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-ebb186310987cbfb"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "v1",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-97ecb8ba7372fe27"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "v1",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-566d08c3361b606d"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "v1",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-e5bf538619409efb"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-c37135546f3d214f"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-cc668798458d0dac"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-570a47dd8b916aa4"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "ahead-or-conflicting",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-fb3f562164a2e391"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "absent",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-ea6b9ea9a46defbb"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "absent",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-bf29ae9d658ae1b7"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "absent",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-7537a902c0bf0534"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "absent",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-7548cec43ccde76c"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "future-symbolic",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-f228cc88a96e2d15"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "future-symbolic",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-c7717c5e313cc74e"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "future-symbolic",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-735ddb07fd64d087"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "future-symbolic",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-1bfa42e0fa7aae42"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "unsupported-byte",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-2a289fe49a2833be"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "unsupported-byte",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-940de56b12fec60c"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "unsupported-byte",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-01ea0ca05eb9b9de"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "unsupported-byte",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-7ffd9081125e6e60"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "v1",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-0685c46e18df24f8"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "v1",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-2d48f8a102c8fb7e"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "v1",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-d3f3129ba44bbc03"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "v1",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-50ed3588c851963b"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-b5602e49dbf6d2be"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-056c244744008e8b"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-c7cc3a157e7026a1"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "equals-authenticated-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-8c1fe4e2469ba851"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "absent",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-5b5828a9e4cda457"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "absent",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-ffaeb2e2c39b7162"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "absent",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-c5de9974bcb972a8"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "absent",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-7e4ab3fca7bbb59a"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "future-symbolic",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-528eafdd50f7d334"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "future-symbolic",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-6e4a0b779b6d2ce6"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "future-symbolic",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-711de4850c66c9a3"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "future-symbolic",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-505030302c59c429"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "unsupported-byte",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-f44d66df5e4a80ef"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "unsupported-byte",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-5bab07f1c2fc9179"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "unsupported-byte",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-100781992dc08eb2"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "unsupported-byte",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-cb774ef9c738844c"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "v1",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-a63ff1caa3edcc33"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "v1",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-2df8dc213ec9b978"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "v1",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-7ce408ea98527a6c"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "v1",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-33a19db4ec4d110c"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-0c6f7dd02c34453b"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-5fb7f3c54c040f96"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-ed13298defe94887"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "recovery-required-no-publication",
+      "invariant_ids": [
+        "INV-OWNER-RECOVERY"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "floor-unavailable-or-invalid",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Owner state cannot be selected or advanced without authenticated floor recovery.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-f792dd9e540edef5"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "absent",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-4a3788f458870884"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "absent",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-efd685be1114da39"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "absent",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-f7780f1e2d4843d2"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "absent",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-b123f58a3df0fb09"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "future-symbolic",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-0aab6de581ba5b28"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "future-symbolic",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-4ef671304f890140"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "future-symbolic",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-e2925aa0cf4a3348"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "future-symbolic",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-0ed723652be4b7af"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "unsupported-byte",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-08d2d6365201162a"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "unsupported-byte",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-320d019e4ca227d7"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "unsupported-byte",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-e23918afd24dcf7f"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "unsupported-byte",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-1cfbd90d19c2c009"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "v1",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-69766407a0615d58"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "v1",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-bc5e40b0e525bc5d"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "v1",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-e908063955749f7c"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "v1",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-d31a5d16c32fec79"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "exact-required-route-enforceable",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-331226f5a3205fa2"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "existing-policy-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-c7448810959f75a0"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "required-route-unavailable-or-disabled",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-5c943b26cb3ab5ba"
+    },
+    {
+      "artifact_binding": "same-final-elf",
+      "evidence_refs": [
+        ".agents/260822-phase08-manifest-predesign/plan.md:256-265"
+      ],
+      "expected_result": "deny-before-publication",
+      "invariant_ids": [
+        "INV-PUBLISHER-EPOCH"
+      ],
+      "manifest_version_class": "v2",
+      "owner_generation_state": "stale-below-floor",
+      "owner_phase": "03",
+      "publisher_epoch_state": "unknown-or-ahead",
+      "publisher_identity_binding": "matching",
+      "rationale": "Stale or unknown publisher epoch cannot be made current by another claim.",
+      "route_state": "substituted-weaker-route",
+      "signature_state": "valid-current",
+      "threat_id": "matrix-dd11ce185f9979f7"
+    }
+  ],
+  "schema_version": 1,
+  "unresolved_decision_ids": [
+    "DQ-01",
+    "DQ-02",
+    "DQ-03",
+    "DQ-04",
+    "DQ-05",
+    "DQ-06",
+    "DQ-07",
+    "DQ-08",
+    "DQ-09"
+  ]
+}

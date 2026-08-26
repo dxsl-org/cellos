@@ -1,0 +1,36 @@
+{
+  "skill": "hc-cook",
+  "mode": "interactive",
+  "task": "Resolve the Recv buffer-pinning hazard through receiver-owned pending mailbox delivery.",
+  "acceptanceCriteria": [
+    "ipc_send, ipc_post_nonblock, and ipc_try_send never write a foreign Recv buffer",
+    "parked Recv and RecvTimeout tasks drain owned messages after wake",
+    "IRQ UART messages avoid heap allocation and mailbox backpressure is fallible",
+    "heap payload quota is charged and refunded to the receiver cell",
+    "death-owned wakes precede later queued messages and ipc_send backpressure returns TryAgain",
+    "shell input, burst input, request/reply VFS, and keyboard flows remain operational"
+  ],
+  "touchpoints": [
+    "kernel/src/task/pending_mailbox.rs",
+    "kernel/src/task.rs",
+    "kernel/src/task/tcb.rs",
+    "kernel/src/task/syscall.rs",
+    "kernel/src/task/ipc_pending_selftest.rs",
+    "kernel/src/task/drivers/console_drv.rs",
+    "kernel/src/cell/hotswap.rs",
+    "tests/integration/tests/boot.rs"
+  ],
+  "publicContracts": [
+    "Recv sender identity and truncation semantics remain unchanged",
+    "ipc_send reports mailbox backpressure as SyscallError::TryAgain",
+    "RecvScatter remains behaviorally deferred while foreign writes are removed"
+  ],
+  "blastRadius": [
+    "IPC send/receive wake paths",
+    "timer-driven UART delivery",
+    "hot-swap buffered message transfer",
+    "per-cell heap quota accounting"
+  ],
+  "scoutSummary": "The three producer paths retained raw Recv pointers across suspension; deferred owned delivery closes that hazard while keeping the existing task-state protocol.",
+  "evidence": "expected"
+}

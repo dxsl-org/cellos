@@ -1,0 +1,11 @@
+{
+  "highRisk": true,
+  "reasons": [
+    "public libs/api wire contract",
+    "filesystem authorization and revocation",
+    "owner death and generation cleanup"
+  ],
+  "autoStopRequired": true,
+  "humanApproved": true,
+  "largeDiff": true
+}

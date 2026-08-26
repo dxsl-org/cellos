@@ -1,0 +1,18 @@
+{
+  "decision": "PASS",
+  "score": 9.3,
+  "criticalCount": 0,
+  "acceptanceCoverage": [
+    "generic x86 descriptor -> boards catalog tests and seven-board matrix",
+    "SoC ownership -> boundary guard and hal-soc-x86 tests",
+    "typed runtime selection -> x86 check, release build, and fresh QEMU boots",
+    "fail-closed ACPI -> no SoC fallback fields and existing zero-gate behavior retained"
+  ],
+  "regressionProof": [
+    "27 host tests passed",
+    "all non-x86 board target checks passed",
+    "BIOS shell and UEFI scheduler witnesses passed on the final source"
+  ],
+  "contractStatus": "OK",
+  "blockingReasons": []
+}

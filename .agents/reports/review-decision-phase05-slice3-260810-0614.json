@@ -1,0 +1,51 @@
+{
+  "verdict": "RISKS_NOTED",
+  "target": "Phase05 Slice3 shell handle-read migration",
+  "mode": "production-readiness-review",
+  "scope": [
+    "cells/tools/shell/src/cmd_fs.rs",
+    "cells/tools/shell/src/shell_test.rs",
+    "libs/ostd/src/clients/vfs.rs",
+    "libs/ostd/src/clients/vfs/read_file.rs",
+    "libs/ostd/src/clients/vfs/read_file/path.rs",
+    "libs/ostd/src/clients/vfs/read_file/session.rs",
+    "libs/ostd/src/clients/vfs/read_file/wire.rs",
+    "libs/ostd/src/clients/vfs/read_file/tests/bounds.rs",
+    "libs/ostd/src/clients/vfs/read_file/tests/path.rs",
+    "libs/ostd/src/clients/vfs/read_file/tests/support.rs",
+    "libs/ostd/src/service.rs",
+    "tests/integration/tests/shell-utils.rs"
+  ],
+  "findings": [
+    {
+      "severity": "LOW",
+      "file": "libs/ostd/src/clients/vfs.rs",
+      "line": 94,
+      "summary": "Shared VFS stat facade still maps VFS-local ERR_IO through the generic ViError mapper, requiring a shell-side InvalidArgument-to-IO shim."
+    }
+  ],
+  "residualRisks": [
+    {
+      "severity": "INFO",
+      "summary": "The handle reader is intentionally weakly consistent across chunks; same-size concurrent writes can produce mixed content, but shell exact-size behavior rejects growth/shrinkage."
+    },
+    {
+      "severity": "INFO",
+      "summary": "ostd host unit harness remains unavailable; runtime confidence comes from RV64 shell-utils evidence and source review."
+    }
+  ],
+  "verification": [
+    {
+      "command": "git diff --check -- scoped Phase05 Slice3 files",
+      "result": "passed"
+    },
+    {
+      "command": "tester evidence: fmt/diff, RV64 compile, build-shell-test, QEMU shell-utils",
+      "result": "passed"
+    },
+    {
+      "command": "ostd unit harness",
+      "result": "known unavailable"
+    }
+  ]
+}

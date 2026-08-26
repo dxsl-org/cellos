@@ -1,0 +1,9 @@
+{
+  "highRisk": false,
+  "reasons": [
+    "board-specific interrupt and console path; no public API or persistent data change"
+  ],
+  "autoStopRequired": false,
+  "humanApproved": true,
+  "largeDiff": false
+}

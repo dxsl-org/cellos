@@ -1,0 +1,20 @@
+{
+  "reconEnvelope": {
+    "freshness": "observed",
+    "complete": true,
+    "coveredPaths": [
+      "kernel", "hal", "boards", "cells/apps", "cells/demos",
+      "cells/runtimes", "cells/tools", "tools", "libs", "tests",
+      "fuzz", "docs", ".agents"
+    ],
+    "ownedPaths": [
+      "cells/services/kms", "cells/services/silo", "cells/guests/silo-guest",
+      "libs/types/src/kms.rs", "libs/types/src/kms", "libs/types/src/silo.rs"
+    ],
+    "gaps": [
+      "Whether the active KMS session will proceed into Phase 3 or Phase 4",
+      "Physical hardware availability",
+      "Runtime reproduction of the fuzz dependency mismatch"
+    ]
+  }
+}

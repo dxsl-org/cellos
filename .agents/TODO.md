@@ -1,0 +1,147 @@
+# TODO
+1. Cập nhật docs:
+    - `.agents/260825-1726-kms-silo-production-root/plan.md` — Phases 1-2 recorded complete; Phases 3-8 pending; Phase 6 may run in parallel and Phase 3 requires explicit approval.
+    - `.agents/260825-sdk-delivery/plan.md` — Phase 06 is partial, but its remaining relay/client closure depends on the KMS/Silo identity lifecycle.
+    - `.agents/260823-rpi3-hardware-completion/plan.md` — SD, sensor, and HDMI lanes are recorded in progress and are independent of KMS, but physical evidence is required.
+    - open-risk-register.md đang có ít nhất hai mục đã lỗi thời: socket đã owner-bind bằng SocketOwner, Lua/WASM đã khai báo LookupService và StateRestore
+
+2. MQTT packet boundary tests: Tách/test remaining-length encoding, topic/payload oversize trong cells/demos/robot-demo/src/mqtt.rs.
+
+3. RPi3:
+    - Test board thật SD Storage, HDMI, I2C/SPI [in-progress]
+    - Phase 05: Gỡ nghẽn USB Policy v3 & Level IRQ 9
+    - cần sensor như SHT3x hoặc MPU6050
+4. RISC-V/x86 Board: Bringup thực tế trên VF2, Pioneer, MiniPC
+5. SDK [in-progress]:
+    - Hoàn thiện net-broker: K1 PSK, LAN Beacon, Relay
+    - Native SDK Core & ViUI Toolkit Widgets, Signals
+    - Mở rộng VFS & Nâng cấp Desktop Compositor
+ 
+6. [blocked] App Tiers completion: cần phần cứng (RPi4b + secure controller riêng hoặc secure boot + remote CAS service)
+    - Tier 1 baseline
+    - Tier 1 rust std: PAL-019, PAL-031
+    - Tier 3
+
+7. Chuẩn hóa manifest và tooling phía người phát triển. Về lâu dài cần tách rõ:
+    - execution_tier: Tier 1/2/3.
+    - runtime_profile: Rust, FFI/POSIX, Lua, Linux guest.
+    - protection_class: trường tương thích hiện dùng cho PKU/floor.
+    - capabilities: quyền thực tế.
+    - admission evidence: chữ ký, provenance, owner authorization.
+
+Manifest v2 chỉ nên nhận alias tương thích. Việc đổi field vật lý nên chờ Manifest v3 và phê duyệt ABI riêng.
+
+8. Xây acceptance matrix chung. Mỗi tổ hợp cần trạng thái PASS, BLOCKED, PLANNED:
+    - Tier × runtime profile.
+    - Kiến trúc CPU.
+    - QEMU/KVM/phần cứng thật.
+    - Signed/unsigned/admission mode.
+    - IPC/grant/MMIO/DMA.
+    - SDK module.
+    - Build, boot, restart và security-negative tests.
+
+9. Cổng hoàn tất cuối cùng, App tiers chỉ nên được coi là hoàn thiện khi:
+    - Không còn dùng Tier 1b, Tier 3b, SDK L1/L2 ngoài compatibility/historical text.
+    - Manifest terminology không còn đụng với application tier.
+    - Tier 1 có baseline và production admission rõ ràng.
+    - Tier 3 có ít nhất một lane hardware-qualified.
+    - Tier 2 chỉ được công bố khi private-domain containment đã có negative evidence.
+    - SDK có module/profile matrix và examples khớp code.
+
+10. AI inference server demo (HTTP → NPU cell → response, P99 bound) = G2 Level A, chính là bước cần board RK3588 — đây là mắt xích nối G2 sang G3.
+
+11. Desktop compositor & ViUI [in-progress]:
+
+12. Test board thật: RISC-V và mini pc x86 (Dell)
+
+13. Phần cứng (StarFive VisionFive 2 v1.3B, STM32H573I-DK Discovery Kit của STMicroelectronics, Infineon OPTIGA™ TPM 2.0 SLB9672 kit) và AWS DEV account/region để unlock KMS Silo
+
+### App Layers
+1. **Tier 1** - Trusted Native SAS Cell
+**Profile:**
+    - Rust no-std: hiện đã hoạt động, dùng core + alloc + ostd.
+    - Rust std: mục tiêu G4 tương lai, vẫn là Tier 1; dùng pure-Rust PAL
+    - FFI: C/C++ freestanding, Zig native, POSIX shim, mlibc, Rust có FFI, Lua VM viết bằng C, Vendor SDK như RKNN/Hailo/codec libraries.
+    - Lua
+**Lưu ý:**
+    - C/FFI không được Rust LBI bảo vệ. Vì nó vẫn chạy trong SAS nên code này phải được tin cậy. PKU/MTE nếu có chỉ là defense-in-depth, không biến nó thành sandbox portable trên mọi kiến trúc.
+    - mlibc chưa hoàn tất: Checkout hiện không có third_party/mlibc/build*/libc.a. Thiếu malloc, printf, free, clock_gettime.
+
+2. **Tier 2** - Native Domain Cell
+    - unsigned/unverify/untrusted tier 1
+    - arbitrary native ELF
+
+3. **Tier 3** - Virtual Machine - VM
+    - Gate “nginx chạy thật trong Linux VM” chưa được xác minh
+    - Storage hiện là RAM disk nhỏ, volatile: VFS scale (ext4/large disk)
+    - Intel VMX chưa có VMCS/world-switch hoàn chỉnh.
+    - RunVcpu cần enforcement budget đáng tin cậy trước khi gọi workload bên thứ ba là production-safe.
+    - Boot-to-shell ARM64 nghiêm ngặt vẫn cần KVM/real hardware; QEMU TCG chỉ là machinery evidence.
+    - x86 host shell pre-GUI: PASS trên QEMU-TCG (`HV_SMOKE_MODE=host-shell`, follow-up của `9d8e5eab`); lỗi `ReadDir` EOF làm kẹt probe `/bin/*` đã được sửa.
+    - x86 Linux guest strict boot: PASS trên QEMU-TCG 10.2.0 ở 1 GiB và 2 GiB (`Linux 6.12.81` → `/bin/sh` → `~ #`); QEMU-TCG 8.2.2 vẫn BLOCKED bởi `CELLOS-HV-X86-TCG-001`.
+    - Dùng ARM64 làm đường ngắn nhất để đóng gate: Alpine → nginx → HTTP request/response có log.
+    - x86 hiện boot bằng initramfs nhưng personality chưa nối VirtIO MMIO/block/network dùng chung; các module đó vẫn chỉ bật cho AArch64
+    - persistent disk, Ubuntu/glibc và các lane AMD/Intel hardware
+
+4. Cellos **Native SDK**:
+    - Tier 1 và Tier 2 nên dùng cùng API nguồn càng nhiều càng tốt. Khác biệt nằm ở target/deployment profile:
+    - Tier 1 cho phép SAS zero-copy grants.
+    - Tier 2 dùng domain-safe IPC và explicit mapped grants.
+    - SDK có thể từ chối API không hợp lệ theo target profile tại compile time.
+    - family chia theo module/layer và target profile:
+```
+Cellos Native SDK
+├── Native SDK Core
+│   ├── ABI, manifest, lifecycle
+│   ├── capabilities
+│   ├── IPC, Grant
+│   └── low-level surface/display client
+│
+├── Cellos Middleware
+│   ├── VFS, network, service discovery
+│   ├── AppContext
+│   └── UI / ViUI
+│       ├── Signal
+│       ├── widgets
+│       ├── layout
+│       ├── navigation
+│       └── rendering facade
+│
+├── Developer Tooling
+│   ├── build/package/signing
+│   ├── templates
+│   ├── manifest validation
+│   └── .vi compiler/code generation
+│
+└── Operations / Observability
+    ├── logging
+    ├── metrics and frame timing
+    ├── tracing
+    ├── health/watchdog
+    └── crash and UI diagnostics
+```
+
+| SDK module | rust-no-std | rust-std | ffi-posix | Lua |
+|---|---:|---:|---:|---:|
+| Core ABI/IPC | Có | Dự kiến | Qua C ABI | Qua binding |
+| VFS/network | Có | Dự kiến | POSIX mapping | Binding hạn chế |
+| ViUI | Có | Dự kiến dùng lại | Không ưu tiên | Có thể binding |
+| `.vi` tooling | Có | Có thể dùng lại | Không trực tiếp | Không trực tiếp |
+| Observability | Có | Dự kiến | Qua ABI | Qua runtime |
+
+ 
+### Cách đặt tên
+    - **Tier**: cấp thực thi/cô lập ứng dụng — khác nhau về trust boundary, page table, IPC và chi phí.
+    - **Profile**: ngôn ngữ hoặc runtime trong một tier — Rust no_std, Rust std, C/POSIX, Lua…
+    - **Layer**: lớp cấu trúc phần mềm — SDK Core, Service Clients, Middleware, Tooling; hoặc Hardware Isolation Layer A/B/C.
+    - **Stage G1–G5**: giai đoạn sản phẩm/roadmap, hoàn toàn độc lập với app tier.
+
+
+# BLOCKERS
+1. Port Drivers - phase 06:
+    - cần board RK3588 (SoC ARM của Rockchip: 4× Cortex-A76 + 4× Cortex-A55, GPU Mali-G610 và NPU 3 lõi khoảng 6 TOPS. Board Radxa ROCK 5B 8 GB hoặc 16 GB) để boot và giữ lại UART log 
+    - chốt phiên bản RKNN SDK/runtime, giấy phép và quyền phân phối firmware/binary.
+    - Chưa chạy inference thật: load model → input → run → output → cleanup và các đường lỗi.
+    - Chưa chứng minh buffer/DMA/cache lifecycle, đặc biệt quyền sở hữu IOMMU/SMMU của NPU.
+    - Chưa có P50/P95/P99, memory-pressure, restart/fault-injection và kiểm tra stale DMA.
+    - Chưa có phần cứng X390 (SiFive Intelligence X390 Gen 2 là RISC-V processor IP có vector engine RVV 1.0 512-bit, có thể ghép accelerator qua SSCI/VCIX) để làm implementation thứ hai, bảo đảm ABI chung không bị đóng khung theo RKNN.

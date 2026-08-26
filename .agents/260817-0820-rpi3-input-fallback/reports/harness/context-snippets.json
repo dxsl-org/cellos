@@ -1,0 +1,25 @@
+{
+  "skill": "hc-fix",
+  "mode": "interactive",
+  "task": "Stop the RPi3 input service from probing QEMU VirtIO MMIO",
+  "acceptanceCriteria": [
+    "RPi3 input artifact contains no QEMU 0x0A000000 probe",
+    "default QEMU input artifact retains VirtIO MMIO probing",
+    "RPi3 kernel embeds the separate input artifact and boots through init"
+  ],
+  "touchpoints": [
+    "cells/services/input/Cargo.toml",
+    "cells/services/input/src/virtio_device.rs",
+    "scripts/build-aarch64-cells.ps1",
+    "tools/rpi3-netboot/test-netboot-scripts.ps1"
+  ],
+  "publicContracts": [
+    "service-input continues to consume kernel-pushed input when no direct VirtIO devices are owned"
+  ],
+  "blastRadius": [
+    "AArch64 and RISC-V QEMU input direct-device path",
+    "RPi3 embedded bootstrap filesystem",
+    "RPi3 TFTP boot payload"
+  ],
+  "scoutSummary": "The Cell binary is built separately from the board-featured kernel. The kernel already exposes zero VirtIO slots on board-rpi3, while service-input previously selected slots from target_arch alone."
+}

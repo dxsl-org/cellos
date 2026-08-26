@@ -1,0 +1,19 @@
+{
+  "verdict": "BLOCKED",
+  "target": "origin/main..HEAD",
+  "critical": 1,
+  "informational": 1,
+  "blocking_findings": [
+    {
+      "severity": "CRITICAL",
+      "file": "kernel/src/task/syscall.rs",
+      "line": 2673,
+      "category": "trust-boundary",
+      "summary": "SpawnFromElf authorizes caps from an unbound user-supplied path hint while loading caller-owned ELF bytes."
+    }
+  ],
+  "verification": {
+    "git_diff_check": "pass",
+    "scout": ".agents/260805-1833-midori-closure-execution/reports/scout-report.md"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "highRisk": true,
+  "reasons": [
+    "cross-architecture kernel ABI contract"
+  ],
+  "autoStopRequired": true,
+  "humanApproved": true,
+  "largeDiff": false
+}

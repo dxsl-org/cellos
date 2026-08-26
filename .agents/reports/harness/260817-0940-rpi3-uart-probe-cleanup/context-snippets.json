@@ -1,0 +1,23 @@
+{
+  "skill": "hc-fix",
+  "mode": "interactive",
+  "task": "Remove high-frequency raw RPi3 UART bring-up probes",
+  "acceptanceCriteria": [
+    "RPi3 trap and scheduler hot paths emit no T, M, A, or N raw markers",
+    "fault-only FS diagnostics and one-shot boot probes remain",
+    "generic AArch64 and board-rpi3 builds pass",
+    "real RPi3 boots with zero T15 and ANM noise and still accepts help"
+  ],
+  "touchpoints": [
+    "hal/arch/arm/src/aarch64/trap.rs",
+    "kernel/src/task.rs",
+    "tools/rpi3-netboot/test-netboot-scripts.ps1"
+  ],
+  "publicContracts": [
+    "trap dispatch, timer acknowledgement, scheduler selection, context switching, and UART shell input remain unchanged"
+  ],
+  "blastRadius": [
+    "board-rpi3 synchronous trap, timer interrupt, and scheduler hot paths"
+  ],
+  "scoutSummary": "Legacy bring-up probes synchronously wrote raw bytes for every syscall, timer IRQ, scheduler miss, and context switch; no test or parser consumes them."
+}

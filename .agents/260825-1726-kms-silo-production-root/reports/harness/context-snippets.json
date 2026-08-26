@@ -1,0 +1,45 @@
+{
+  "skill": "hc-cook",
+  "mode": "interactive",
+  "task": "Implement Phase 3 certificate activation and provisioning",
+  "acceptanceCriteria": [
+    "KMS emits a constrained canonical relay CSR and never exposes a generic signing oracle",
+    "one-shot enrollment handles bind the exact live supervisor and invalidate on replay, transfer, wrong order, or restart mismatch",
+    "active and pending lifecycle state stages and commits atomically while cleanup and recovery fail closed",
+    "the development enrollment key remains Silo-contained and is derived with a fresh nonce bound to its generation",
+    "service-net validates bounded TLS 1.3 profiles, manifests, certificate DER, clientAuth EKU, NodeId, SPKI, chain order, and duplicates",
+    "missing protected persistence, authenticated time, or authenticated pending-key binding keeps relay mTLS unavailable",
+    "production tooling remains fail-closed until Phases 6-8 select, implement, and qualify an exact hardware provider",
+    "independent OpenSSL verification and final code/security re-reviews return GO for the Phase 3 software contract"
+  ],
+  "touchpoints": [
+    "libs/types/src/kms",
+    "libs/ostd/src/clients/kms.rs",
+    "libs/ostd/src/clients/kms/relay_enroll.rs",
+    "cells/services/kms/src/dispatch",
+    "cells/services/kms/src/lifecycle",
+    "cells/services/kms/src/storage",
+    "cells/services/silo",
+    "cells/guests/silo-guest",
+    "cells/services/net/src/tls",
+    "tools/relay-enroll",
+    "tools/relay-server",
+    "scripts/check-production-relay-image.py"
+  ],
+  "publicContracts": [
+    "append-only KMS opcodes 9-14 and errors 22-26 retain their frozen numeric values",
+    "certificate chains and private key material never cross KMS frames",
+    "CSR input is a frozen profile reconstructed by KMS and provider, not a caller body or digest",
+    "opcode 14 exposes only active public metadata and cannot authorize precommit pending-key activation",
+    "production runtime stays sealed without protected persistence and authenticated time"
+  ],
+  "blastRadius": [
+    "supervisor enrollment and CSR retrieval",
+    "KMS lifecycle recovery and provider cleanup",
+    "development Silo enrollment-key custody",
+    "service-net certificate/profile activation",
+    "relay manifest tooling and production exclusion"
+  ],
+  "scoutSummary": "Phase 3 closes the constrained CSR, lifecycle, Silo enrollment-key, and strict validation software seams while preserving unavailable runtime and production states where protected dependencies do not exist.",
+  "evidence": "complete"
+}

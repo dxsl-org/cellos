@@ -1,0 +1,17 @@
+{
+  "phase": "phase-04-verify-runtime-and-cleanup",
+  "criteria": [
+    {
+      "criterion": "QEMU q35 BIOS reaches the interactive shell",
+      "command": "BOOT_WINDOW=90 timeout 100s bash scripts/qemu-x86_64-test.sh build/vicell-x86.iso",
+      "evidenceRef": "PASS: x86_64 shell prompt reached - full boot successful",
+      "pass": true
+    },
+    {
+      "criterion": "QEMU q35 OVMF reaches scheduler initialization",
+      "command": "timeout 60s qemu-system-x86_64 -machine q35 with OVMF_CODE_4M.fd and build/vicell-x86.iso",
+      "evidenceRef": "x86_64 timers initialized from ACPI; Scheduler initialized; USER: Cellos >",
+      "pass": true
+    }
+  ]
+}

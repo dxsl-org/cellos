@@ -1,0 +1,17 @@
+{
+  "decision": "PASS",
+  "disprovenClaims": [],
+  "unverifiedClaims": [],
+  "missingProof": [],
+  "reachableRegressions": [],
+  "resolvedFindings": [
+    "The production loader now calls CellManifest::protection_class() and granted_protection_class() directly, removing the prior deprecated-wrapper warning without changing key selection (kernel/src/loader.rs:335, kernel/src/loader.rs:339).",
+    "The public 16-byte #[repr(C)] manifest retains its tier field and tier() accessor, while protection_class() reads the same byte (libs/api/src/abi/manifest.rs:45, libs/api/src/abi/manifest.rs:55, libs/api/src/abi/manifest.rs:217, libs/api/src/abi/manifest.rs:223).",
+    "All PROTECTION_CLASS_* values are aliases of the legacy TIER_* constants, including the 0xFF legacy sentinel (libs/api/src/abi/manifest_flags.rs:26, libs/api/src/abi/manifest_flags.rs:48).",
+    "The parser still accepts 8-byte v1 records by upcasting them with PROTECTION_CLASS_LEGACY and still validates native v2 as a 16-byte record with the unchanged byte positions and reserved-field checks (libs/api/src/abi/manifest_parse.rs:22, libs/api/src/abi/manifest_parse.rs:39, libs/api/src/abi/manifest_parse.rs:48, libs/api/src/abi/manifest_parse.rs:67).",
+    "PKU floor semantics remain legacy-equivalent: authoritative cells floor at key 0, other cells floor at key 1, explicit self-restriction uses max(), and the legacy sentinel resolves exactly to the derived floor (kernel/src/task/cap.rs:375, kernel/src/task/cap.rs:379, kernel/src/task/cap.rs:385).",
+    "The Zig producer remains an 8-byte version-1 manifest with a compile-time size assertion and is therefore still handled by the v1 upcast path (libs/zig-syscall/src/manifest.zig:21, libs/zig-syscall/src/manifest.zig:25, libs/zig-syscall/src/manifest.zig:29).",
+    "No Tier 2 admission, page-table, address-space, or native-domain behavior was added; the only added Tier 2 text remains taxonomy documentation (docs/decisions/0003-application-tier-taxonomy.md:39).",
+    "Fresh validation passed 82/82 API tests plus x86_64 and RISC-V bare-metal kernel checks."
+  ]
+}

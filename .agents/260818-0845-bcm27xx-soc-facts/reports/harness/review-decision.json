@@ -1,0 +1,17 @@
+{
+  "decision": "PASS",
+  "criticalCount": 0,
+  "acceptanceCoverage": [
+    "data-only no_std SoC crate",
+    "single-copy SDHCI mechanism",
+    "board wiring remains outside hal/soc",
+    "target-scoped dependency and caller guards match"
+  ],
+  "regressionProof": [
+    "final 12-gate matrix passed after review fix",
+    "QEMU boot passed",
+    "review re-check passed"
+  ],
+  "contractStatus": "OK",
+  "blockingReasons": []
+}

@@ -1,0 +1,35 @@
+{
+  "phase": "phase-04-file-handle-bounded-reads",
+  "criteria": [
+    {
+      "criterion": "append exact request variants 23 through 25 and response variant 9 without changing prior discriminants",
+      "command": "cargo test -p types -p api --target x86_64-unknown-linux-gnu",
+      "evidenceRef": "API discriminant, round-trip, path classification, and 4000-byte envelope tests passed.",
+      "pass": true
+    },
+    {
+      "criterion": "open read and close enforce Caller cell plus generation ownership and current VFS authorization",
+      "command": "RV64 vfs-quota QEMU lane",
+      "evidenceRef": "Wrong-owner preservation, exact-generation purge, sealed-handle read, close, and stale-handle markers were observed.",
+      "pass": true
+    },
+    {
+      "criterion": "CloseDir owner death and higher-generation replacement revoke transitively anchored file handles",
+      "command": "RV64 vfs-quota QEMU lane",
+      "evidenceRef": "Parent cross-owner revoke, owner-watch cleanup, higher-generation cleanup, and parent CloseDir markers were observed.",
+      "pass": true
+    },
+    {
+      "criterion": "inline reads copy at most 4000 service-owned bytes and expose no pointer grant DMA or cancellation lifetime",
+      "command": "API envelope test plus source and domain review",
+      "evidenceRef": "4000-byte Data encoded in one IPC frame and reviews found no surviving caller-memory lifetime in the new path.",
+      "pass": true
+    },
+    {
+      "criterion": "fast IPC has no file-handle route and cross-cell handle guessing fails closed",
+      "command": "RV64 test-hooks plus source review",
+      "evidenceRef": "Wrong-owner read and close preserve the real entry; fast handler remains GetFile-only and domain review found no bypass.",
+      "pass": true
+    }
+  ]
+}

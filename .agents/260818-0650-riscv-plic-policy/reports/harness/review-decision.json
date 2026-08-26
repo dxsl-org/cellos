@@ -1,0 +1,21 @@
+{
+  "decision": "PASS_WITH_RISK",
+  "score": 9.0,
+  "criticalCount": 0,
+  "acceptanceCoverage": [
+    "PLIC mechanism no longer owns context or IRQ policy",
+    "SoC profiles own checked physical-hart context mapping",
+    "PlatformInfo owns device IRQ and VirtIO MMIO routing",
+    "duplicate IRQ ownership fails closed",
+    "trap completion follows the handler and preserves exact context/IRQ"
+  ],
+  "regressionProof": [
+    "format and 11 host unit tests passed",
+    "six cross-board kernel compile lanes passed",
+    "RV64 release build passed",
+    "QEMU storage-mount boot passed"
+  ],
+  "contractStatus": "OK",
+  "blockingReasons": [],
+  "acceptedRisk": "JH7110 secondary-hart discovery still uses an existing boot-hart XOR mapping; the new PLIC policy fails closed for physical hart 0 and this slice makes no secondary external-IRQ runtime claim."
+}

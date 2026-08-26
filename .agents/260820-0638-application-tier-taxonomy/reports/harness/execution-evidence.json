@@ -1,0 +1,4 @@
+{
+  "phase": "phase-02-code-protection-class-aliases-and-phase-03-verification-gates",
+  "noRuntimeSurface": "The change is an additive source-compatibility terminology migration with no new runtime flow; compile, parser, layout, and compatibility tests provide the observable proof."
+}

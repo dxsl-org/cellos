@@ -1,0 +1,11 @@
+{
+  "highRisk": true,
+  "reasons": [
+    "A profile regression can silently widen UART, RTC, or VirtIO access on SG2042 if fail-closed policy slips.",
+    "Combined board features need explicit precedence so Pioneer keeps the fail-closed contract.",
+    "Hardware proof for VF2, Pioneer, and RPi3 is still deferred; only compile/QEMU evidence is available here."
+  ],
+  "autoStopRequired": true,
+  "humanApproved": true,
+  "largeDiff": true
+}
