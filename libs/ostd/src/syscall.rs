@@ -1572,6 +1572,47 @@ pub fn sys_grant_free(grant_id: usize) -> bool {
     ret == 0
 }
 
+/// Make an owned Grant subrange coherent with a non-coherent device.
+///
+/// The returned token must be completed exactly once after the device confirms
+/// it no longer accesses the range. If device completion is uncertain, do not
+/// call [`sys_grant_cache_sync_complete`]; task teardown quarantines the pin.
+pub fn sys_grant_cache_sync_begin(grant_id: usize, offset: usize, len: usize) -> Option<usize> {
+    // SAFETY: register-only syscall; the kernel validates grant ownership and bounds.
+    let ret = unsafe { syscall(ViSyscall::GrantCacheSyncBegin, grant_id, offset, len, 0) };
+    (ret > 0).then_some(ret as usize)
+}
+
+/// Complete the exact cache-sync request identified by `token`.
+///
+/// Returns `true` only after the kernel invalidates the stored range and drops
+/// that precise pin.
+pub fn sys_grant_cache_sync_complete(token: usize) -> bool {
+    // SAFETY: register-only syscall; the kernel authenticates token ownership.
+    unsafe { syscall(ViSyscall::GrantCacheSyncComplete, token, 0, 0, 0) == 0 }
+}
+
+/// Ask the kernel to validate and expose a firmware-owned framebuffer.
+///
+/// `packed_dimensions` stores width in bits 16..31 and height in bits 0..15.
+pub fn sys_register_display_framebuffer(
+    base: usize,
+    size: usize,
+    packed_dimensions: usize,
+    pitch: usize,
+) -> bool {
+    // SAFETY: register-only syscall; the kernel validates the range and authority.
+    unsafe {
+        syscall(
+            ViSyscall::RegisterDisplayFramebuffer,
+            base,
+            size,
+            packed_dimensions,
+            pitch,
+        ) == 0
+    }
+}
+
 /// Allocate a persistent pre-pinned Grant buffer that lives until the cell exits or
 /// calls `sys_grant_unregister`.
 ///

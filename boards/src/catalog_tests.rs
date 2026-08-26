@@ -31,10 +31,10 @@ fn rpi3_descriptor_matches_current_fallback_contract() {
     assert_eq!(board.fallback_memory[0].base, 0x0008_0000);
     assert_eq!(board.fallback_memory[0].size, 0x0100_0000);
     assert_eq!(board.fallback_memory[1].base, 0x0108_0000);
-    assert_eq!(board.fallback_memory[1].size, 0x3DF8_0000);
+    assert_eq!(board.fallback_memory[1].size, 0x39F8_0000);
     assert_eq!(
         board.fallback_memory[1].base + board.fallback_memory[1].size,
-        0x3F00_0000
+        0x3B00_0000
     );
     assert!(board.has_driver(DriverId::I2cBcmBsc));
     assert!(board.has_driver(DriverId::SpiBcm0));

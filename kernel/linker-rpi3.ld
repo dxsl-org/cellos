@@ -4,7 +4,7 @@ ENTRY(_start)
 SECTIONS {
     /*
      * VideoCore firmware loads kernel8.img at physical 0x80000.
-     * RAM starts at 0x00000000; GPU reserves the top 64 MiB (0x3C000000+).
+     * RAM starts at 0x00000000; GPU reserves the top 64 MiB below 0x3F000000.
      * Stack grows downward from below the load address — safe because
      * VideoCore uses only the first 0x1000 bytes for its own vectors.
      */

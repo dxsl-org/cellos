@@ -11,7 +11,10 @@
 //! let phys = buf.phys();                         // program into NVMe/e1000 regs
 //! ```
 
-use crate::syscall::{sys_grant_alloc, sys_grant_dma, sys_grant_free, SyscallError};
+use crate::syscall::{
+    sys_grant_alloc, sys_grant_cache_sync_begin, sys_grant_cache_sync_complete, sys_grant_dma,
+    sys_grant_free, SyscallError,
+};
 
 /// A physically-contiguous, page-aligned DMA buffer backed by a Grant region.
 ///
@@ -57,6 +60,16 @@ impl DmaBuf {
     /// Returns `Ok(iova)` on success (`iova == phys` in SAS).
     pub fn authorize(&self, bdf: u32) -> Result<u64, SyscallError> {
         sys_grant_dma(bdf, self.grant_id as u64, self.size())
+    }
+
+    /// Begin a cache-coherent device operation over a bounded subrange.
+    pub fn begin_cache_sync(&self, offset: usize, len: usize) -> Option<usize> {
+        sys_grant_cache_sync_begin(self.grant_id, offset, len)
+    }
+
+    /// Complete a previously started cache synchronization operation.
+    pub fn complete_cache_sync(&self, token: usize) -> bool {
+        sys_grant_cache_sync_complete(token)
     }
 
     /// Release the Grant region and return frames to the kernel.

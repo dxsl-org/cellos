@@ -60,15 +60,20 @@ pub fn clean_data_cache_range(start: usize, len: usize) {
     if len == 0 {
         return;
     }
-    let dline = 64usize;
-    let end = start + len;
+    let Some(end) = start.checked_add(len) else {
+        return;
+    };
+    let dline = data_cache_line_size();
     let mut line = start & !(dline - 1);
     while line < end {
+        // SAFETY: the kernel validated this live Grant range before selecting
+        // its cache lines; `dc cvac` performs maintenance only.
         unsafe {
             core::arch::asm!("dc cvac, {line}", line = in(reg) line, options(nostack));
         }
         line += dline;
     }
+    // SAFETY: DSB orders the preceding cache-maintenance instructions.
     unsafe {
         core::arch::asm!("dsb sy", options(nostack));
     }
@@ -81,15 +86,20 @@ pub fn invalidate_data_cache_range(start: usize, len: usize) {
     if len == 0 {
         return;
     }
-    let dline = 64usize;
-    let end = start + len;
+    let Some(end) = start.checked_add(len) else {
+        return;
+    };
+    let dline = data_cache_line_size();
     let mut line = start & !(dline - 1);
     while line < end {
+        // SAFETY: the kernel validated this live Grant range before selecting
+        // its cache lines; `dc ivac` performs maintenance only.
         unsafe {
             core::arch::asm!("dc ivac, {line}", line = in(reg) line, options(nostack));
         }
         line += dline;
     }
+    // SAFETY: DSB completes invalidation before the caller reads the response.
     unsafe {
         core::arch::asm!("dsb sy", options(nostack));
     }
@@ -100,16 +110,30 @@ pub fn clean_invalidate_data_cache_range(start: usize, len: usize) {
     if len == 0 {
         return;
     }
-    let dline = 64usize;
-    let end = start + len;
+    let Some(end) = start.checked_add(len) else {
+        return;
+    };
+    let dline = data_cache_line_size();
     let mut line = start & !(dline - 1);
     while line < end {
+        // SAFETY: the kernel validated this live Grant range before selecting
+        // its cache lines; `dc civac` performs maintenance only.
         unsafe {
             core::arch::asm!("dc civac, {line}", line = in(reg) line, options(nostack));
         }
         line += dline;
     }
+    // SAFETY: DSB completes the bidirectional PoC operation.
     unsafe {
         core::arch::asm!("dsb sy", options(nostack));
     }
+}
+
+fn data_cache_line_size() -> usize {
+    let ctr: u64;
+    // SAFETY: CTR_EL0 is readable at EL1 and reports cache geometry only.
+    unsafe {
+        core::arch::asm!("mrs {ctr}, ctr_el0", ctr = out(reg) ctr, options(nomem, nostack));
+    }
+    4usize << ((ctr >> 16) & 0xF)
 }

@@ -1,7 +1,10 @@
 use api::syscall::service;
-use ostd::syscall::{
-    sys_lookup_service, sys_notify_on_exit, sys_spawn_from_path, SyscallResult,
-};
+use ostd::syscall::{sys_lookup_service, sys_notify_on_exit, sys_spawn_from_path, SyscallResult};
+
+#[cfg(feature = "board-rpi3")]
+const DISPLAY_DRIVER_PATH: &str = "/bin/bcm-display";
+#[cfg(not(feature = "board-rpi3"))]
+const DISPLAY_DRIVER_PATH: &str = "/bin/virtio-gpu";
 
 #[cfg(not(feature = "hypervisor-min"))]
 pub(crate) fn start_block_drivers() {
@@ -30,7 +33,7 @@ pub(crate) fn prepare_service(path: &str) {
         }
     }
     if path == "/bin/compositor" {
-        let _ = sys_spawn_from_path("/bin/virtio-gpu");
+        let _ = sys_spawn_from_path(DISPLAY_DRIVER_PATH);
         for _ in 0..4 {
             ostd::task::yield_now();
         }
@@ -39,7 +42,10 @@ pub(crate) fn prepare_service(path: &str) {
 
 pub(crate) fn spawn_optional_services() -> Option<usize> {
     #[cfg(not(feature = "hypervisor-min"))]
-    let _ = sys_spawn_from_path("/bin/fb-console");
+    match sys_spawn_from_path("/bin/fb-console") {
+        SyscallResult::Ok(_) => ostd::io::println("Init: fb-console spawned."),
+        SyscallResult::Err(_) => ostd::io::println("Init: fb-console spawn failed."),
+    }
 
     let hypervisor_tid = match sys_spawn_from_path("/bin/hypervisor") {
         SyscallResult::Ok(tid) => {

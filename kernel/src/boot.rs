@@ -16,7 +16,10 @@ use cellos_boards::MemoryRangeKind;
 ))]
 use core::sync::atomic::{AtomicUsize, Ordering};
 
-#[cfg(target_arch = "riscv64")]
+#[cfg(any(
+    target_arch = "riscv64",
+    all(target_arch = "aarch64", feature = "board-rpi3")
+))]
 mod dtb_memory;
 
 pub mod limine;
@@ -300,13 +303,19 @@ pub static FALLBACK_BOOT_INFO: SimpleBootInfo = SimpleBootInfo {
     hhdm_offset: 0x0,
 };
 
-#[cfg(target_arch = "riscv64")]
+#[cfg(any(
+    target_arch = "riscv64",
+    all(target_arch = "aarch64", feature = "board-rpi3")
+))]
 static mut DTB_MEMORY_MAP: [MemoryMapEntry; MAX_MEMORY_MAP_ENTRIES] = [MemoryMapEntry {
     base: 0,
     length: 0,
     ty: MemoryType::Reserved,
 }; MAX_MEMORY_MAP_ENTRIES];
-#[cfg(target_arch = "riscv64")]
+#[cfg(any(
+    target_arch = "riscv64",
+    all(target_arch = "aarch64", feature = "board-rpi3")
+))]
 static mut DTB_BOOT_INFO: SimpleBootInfo = SimpleBootInfo {
     memory_map: &[],
     kernel_phys_base: 0,
@@ -341,8 +350,8 @@ pub static FALLBACK_BOOT_INFO: SimpleBootInfo = SimpleBootInfo {
 };
 
 // AArch64 RPi 3 (BCM2837): kernel at 0x80000, RAM below 0x3F000000 MMIO.
-// VideoCore firmware loads kernel8.img at 0x80000; GPU reserves top 64 MiB but
-// on QEMU raspi3b with -m 1G the full range below the peripheral base is usable.
+// VideoCore firmware loads kernel8.img at 0x80000 and owns the current GPU
+// split above the firmware DTB's ARM-visible memory range.
 #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
 const DEFAULT_RPI3_BOARD: &cellos_boards::BoardDescriptor = crate::board::default_rpi3_board();
 #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
@@ -575,6 +584,54 @@ pub fn fallback_boot_info(dtb: usize) -> &'static SimpleBootInfo {
     &FALLBACK_BOOT_INFO
 }
 
+/// Build the RPi3 allocator map from the firmware-adjusted DTB memory node.
+///
+/// VideoCore owns RAM above the ARM-visible range and allocates framebuffers
+/// there. The static board map remains a conservative recovery fallback only;
+/// a valid firmware DTB is authoritative for the current GPU memory split.
+#[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+pub fn fallback_boot_info(dtb: usize) -> &'static SimpleBootInfo {
+    use core::ptr::{addr_of, addr_of_mut};
+    extern "C" {
+        static __stack_top: u8;
+    }
+
+    if dtb != 0 {
+        // SAFETY: VideoCore/U-Boot supplies a mapped FDT pointer; the parser
+        // validates its header before traversing memory nodes.
+        if let Ok(tree) = unsafe { fdt::Fdt::from_ptr(dtb as *const u8) } {
+            let kernel_base = FALLBACK_BOOT_INFO.kernel_phys_base as usize;
+            let kernel_end = addr_of!(__stack_top) as usize;
+            // SAFETY: early single-hart boot publishes these statics once,
+            // before the allocator or any secondary execution context exists.
+            let result = unsafe {
+                dtb_memory::build(
+                    &tree,
+                    kernel_base,
+                    kernel_end,
+                    &mut *addr_of_mut!(DTB_MEMORY_MAP),
+                )
+            };
+            match result {
+                Ok(count) => unsafe {
+                    (*addr_of_mut!(DTB_BOOT_INFO)).memory_map = core::slice::from_raw_parts(
+                        addr_of!(DTB_MEMORY_MAP) as *const MemoryMapEntry,
+                        count,
+                    );
+                    (*addr_of_mut!(DTB_BOOT_INFO)).kernel_phys_base = kernel_base as u64;
+                    return &*addr_of!(DTB_BOOT_INFO);
+                },
+                Err(error) => log::warn!("[boot] RPi3 DTB memory map rejected: {:?}", error),
+            }
+        } else {
+            log::warn!("[boot] invalid RPi3 DTB memory map; using conservative fallback");
+        }
+    } else {
+        log::warn!("[boot] no RPi3 DTB memory map; using conservative fallback");
+    }
+    &FALLBACK_BOOT_INFO
+}
+
 #[cfg(not(any(
     target_arch = "riscv64",
     all(
@@ -582,7 +639,8 @@ pub fn fallback_boot_info(dtb: usize) -> &'static SimpleBootInfo {
         not(feature = "board-rpi3"),
         not(feature = "board-rpi4")
     ),
-    all(target_arch = "aarch64", feature = "board-rpi4")
+    all(target_arch = "aarch64", feature = "board-rpi4"),
+    all(target_arch = "aarch64", feature = "board-rpi3")
 )))]
 pub fn fallback_boot_info(_dtb: usize) -> &'static SimpleBootInfo {
     &FALLBACK_BOOT_INFO

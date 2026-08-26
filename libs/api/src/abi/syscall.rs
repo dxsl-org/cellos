@@ -492,6 +492,21 @@ pub enum ViSyscall {
     /// Uses the same fixed request and owner response records as 247. Its
     /// positive token result remains bounded to `isize::MAX`.
     WatchCellOwnerRecord = 248,
+    /// Begin cache synchronization for an owned Grant subrange.
+    ///
+    /// ABI: a0 = grant_id, a1 = byte offset, a2 = byte length → non-zero
+    /// operation token. The matching [`Self::GrantCacheSyncComplete`] is the
+    /// only operation that can release the pin established here.
+    GrantCacheSyncBegin = 249,
+    /// Complete one exact cache synchronization operation.
+    ///
+    /// ABI: a0 = token → 0. Foreign, stale, and duplicate tokens fail closed.
+    GrantCacheSyncComplete = 250,
+    /// Register the VideoCore-owned scanout allocation for the display cell.
+    ///
+    /// ABI: a0 = physical base, a1 = byte size, a2 = `(width << 16) | height`,
+    /// a3 = pitch. The kernel validates the reserved range before mapping it.
+    RegisterDisplayFramebuffer = 251,
 }
 
 /// Bit constants for the `cap_mask` argument of `ViSyscall::CapRevoke`.
@@ -756,6 +771,13 @@ impl ViSyscall {
             // kernel-recorded frozen-cell ceiling. This stays separate from bit 49
             // so older supervisor-op allowlists do not silently gain it.
             Self::SpawnReplacement => Some(57),
+            // Cache synchronization is one authority split into an exact
+            // begin/complete lifecycle. A caller that cannot complete must
+            // leave the grant quarantined until task death/reboot.
+            Self::GrantCacheSyncBegin | Self::GrantCacheSyncComplete => Some(58),
+            // A firmware framebuffer is distinct from peripheral MMIO and
+            // therefore receives a dedicated, opt-in authority bit.
+            Self::RegisterDisplayFramebuffer => Some(59),
             // Yield, Exit, and ForceExit are always permitted — a Cell must be able
             // to yield the CPU, exit cleanly, and force-terminate unresponsive tasks
             // regardless of its allowlist.  SpawnCap is the authority gate for ForceExit.
@@ -867,6 +889,9 @@ impl From<usize> for ViSyscall {
             246 => ViSyscall::CancelCellOwnerWatch,
             247 => ViSyscall::ResolveCellOwnerRecord,
             248 => ViSyscall::WatchCellOwnerRecord,
+            249 => ViSyscall::GrantCacheSyncBegin,
+            250 => ViSyscall::GrantCacheSyncComplete,
+            251 => ViSyscall::RegisterDisplayFramebuffer,
             300 => ViSyscall::GpuFlush,
             301 => ViSyscall::GpuCursor,
             302 => ViSyscall::GpuGetResolution,

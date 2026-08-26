@@ -4,6 +4,7 @@ extern crate alloc;
 
 use alloc::vec;
 use api::display::Rect;
+use core::sync::atomic::{AtomicBool, Ordering};
 use ostd::syscall::{sys_get_resolution, sys_gpu_flush};
 
 use crate::cursor_sprite::{cursor_pixel, CURSOR_H, CURSOR_W};
@@ -148,6 +149,10 @@ impl ScreenFb {
             self.staging[dst..dst + rect.w as usize * 4]
                 .copy_from_slice(&self.pixels[src..src + rect.w as usize * 4]);
         }
+        static FIRST_FLUSH: AtomicBool = AtomicBool::new(false);
+        if !FIRST_FLUSH.swap(true, Ordering::Relaxed) {
+            ostd::io::println("[compositor] first scanout flush submitted");
+        }
         let _ = sys_gpu_flush(
             &self.staging[..len],
             rect.x as u32,
@@ -164,4 +169,3 @@ pub fn default_screen_size() -> (u32, u32) {
 
 #[cfg(test)]
 mod tests;
-

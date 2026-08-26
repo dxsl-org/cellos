@@ -39,11 +39,13 @@ const BG: [u8; 4] = [0x00, 0x00, 0x00, 0xFF]; // black
 ostd::cell_main!(cell_main);
 
 fn cell_main() {
+    ostd::io::println("[fb-console] starting");
     let (width, height) = ostd::syscall::sys_get_resolution();
     let width = width as usize;
     let height = height as usize;
 
     let comp = wait_for_compositor();
+    ostd::io::println("[fb-console] compositor found");
     let mut surf = match ViSurface::create_background(
         comp,
         width as u32,
@@ -55,6 +57,7 @@ fn cell_main() {
             sys_exit(1);
         }
     };
+    ostd::io::println("[fb-console] background surface created");
 
     // Clear to background.
     let px = surf.pixels_mut();
@@ -62,6 +65,7 @@ fn cell_main() {
         chunk.copy_from_slice(&BG);
     }
     surf.damage_all();
+    ostd::io::println("[fb-console] initial damage submitted");
 
     let cols = width / font::WIDTH;
     let rows = height / font::HEIGHT;
@@ -69,12 +73,17 @@ fn cell_main() {
     let mut col: usize = 0;
     let mut row: usize = 0;
     let mut buf = [0u8; 256];
+    let mut first_log_batch = true;
 
     loop {
         let n = sys_read_log(&mut buf);
         if n == 0 {
             sys_yield();
             continue;
+        }
+        if first_log_batch {
+            first_log_batch = false;
+            ostd::io::println("[fb-console] first log batch received");
         }
 
         let mut dirty = false;

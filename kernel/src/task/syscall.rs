@@ -643,6 +643,10 @@ fn caller_has_pcie_driver(caller_id: usize) -> bool {
     caller_has_cap(caller_id, |t| t.pcie_driver_cap.is_some())
 }
 
+fn caller_has_mmio_device(caller_id: usize, device: u8) -> bool {
+    caller_has_cap(caller_id, |t| t.mmio_devices & device != 0)
+}
+
 fn caller_has_platform(caller_id: usize) -> bool {
     caller_has_cap(caller_id, |t| t.platform_cap.is_some())
 }
@@ -1677,6 +1681,21 @@ pub enum Syscall {
     /// 217: WaitForEvent — block until `mask` bits fire or `deadline` ticks pass.
     /// `deadline = None` means block indefinitely.
     WaitForEvent { mask: u32, deadline: Option<u64> },
+    /// 249: synchronize an owned Grant subrange before device submission.
+    GrantCacheSyncBegin {
+        grant_id: usize,
+        offset: usize,
+        len: usize,
+    },
+    /// 250: synchronize device output and release one exact Grant pin.
+    GrantCacheSyncComplete { token: usize },
+    /// 251: validate and expose a firmware-owned display framebuffer.
+    RegisterDisplayFramebuffer {
+        base: usize,
+        size: usize,
+        packed_dimensions: usize,
+        pitch: usize,
+    },
     /// 242: WaitCompletion — reserve a slot on the caller's completion queue for
     /// the source named by `mask`, wait for it to be filled, and write the
     /// result to `out_ptr`. `deadline = None` waits indefinitely.
@@ -1857,6 +1876,9 @@ fn syscall_to_vi(syscall: &Syscall) -> Option<api::syscall::ViSyscall> {
         Syscall::GrantRegister { .. } => V::GrantRegister,
         Syscall::GrantUnregister { .. } => V::GrantUnregister,
         Syscall::WaitForEvent { .. } => V::WaitForEvent,
+        Syscall::GrantCacheSyncBegin { .. } => V::GrantCacheSyncBegin,
+        Syscall::GrantCacheSyncComplete { .. } => V::GrantCacheSyncComplete,
+        Syscall::RegisterDisplayFramebuffer { .. } => V::RegisterDisplayFramebuffer,
         Syscall::WaitCompletion { .. } => V::WaitCompletion,
         Syscall::CreateVm { .. } => V::CreateVm,
         Syscall::CreateVcpu { .. } => V::CreateVcpu,
@@ -3092,10 +3114,10 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 crate::cell::service_registry::register(service_id, caller_id);
                 return Ok(0);
             }
-            // Driver Cell self-registration path: PcieDriverCap + GPU_DRIVER + tid=0.
-            // tid=0 means "register me (the caller)". No SpawnCap needed — PcieDriverCap
-            // is the authority gate for driver namespace IDs.
-            if caller_has_pcie_driver(caller_id)
+            // Driver Cell self-registration path: a PCIe GPU driver or the
+            // display-only BCM mailbox driver may register itself with tid=0.
+            if (caller_has_pcie_driver(caller_id)
+                || caller_has_mmio_device(caller_id, crate::resource_registry::DEV_DISPLAY))
                 && tid == 0
                 && service_id == api::syscall::service::GPU_DRIVER
             {
@@ -4192,12 +4214,18 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             Err(SyscallError::Unknown)
         }
         Syscall::GpuGetResolution => {
-            // Resolution is owned by the GPU Driver Cell (Phase 08).
-            // Return the default until the Cell registers a query IPC path.
+            // Firmware scanout registration is authoritative when present;
+            // generic VirtIO retains the legacy fallback before its driver
+            // publishes a query IPC path.
             // Packed as (width << 32) | height, which only fits a 64-bit
             // register; RV32 Nano has no GPU cell so this path never fires there.
             #[cfg(not(target_arch = "riscv32"))]
             {
+                if let Some((width, height)) =
+                    crate::resource_registry::display_framebuffer_resolution()
+                {
+                    return Ok(((width as usize) << 32) | height as usize);
+                }
                 Ok(((1280usize) << 32) | 800usize)
             }
             #[cfg(target_arch = "riscv32")]
@@ -4884,6 +4912,159 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             Ok(0)
         }
 
+        Syscall::GrantCacheSyncBegin {
+            grant_id,
+            offset,
+            len,
+        } => {
+            let (token, base) = {
+                let table = grant_table_lock().lock();
+                let grant = table
+                    .as_ref()
+                    .and_then(|entries| entries.get(&grant_id))
+                    .ok_or(SyscallError::InvalidInput)?;
+                if grant.owner != caller_id {
+                    return Err(SyscallError::PermissionDenied);
+                }
+                if len == 0 || offset > grant.size || len > grant.size.saturating_sub(offset) {
+                    return Err(SyscallError::InvalidInput);
+                }
+                let base = grant
+                    .base
+                    .checked_add(offset)
+                    .ok_or(SyscallError::InvalidInput)?;
+                let token = crate::memory::pin::begin_cache_sync(base, len, caller_id)
+                    .map_err(|_| SyscallError::InvalidInput)?;
+                (token, base)
+            };
+            #[cfg(target_arch = "aarch64")]
+            hal::cache::clean_invalidate_data_cache_range(base, len);
+            #[cfg(not(target_arch = "aarch64"))]
+            {
+                let _ = crate::memory::pin::cancel_cache_sync(token, caller_id);
+                return Err(SyscallError::Unknown);
+            }
+            Ok(token)
+        }
+
+        Syscall::GrantCacheSyncComplete { token } => {
+            let (base, len) = crate::memory::pin::begin_cache_sync_completion(token, caller_id)
+                .ok_or(SyscallError::PermissionDenied)?;
+            #[cfg(target_arch = "aarch64")]
+            hal::cache::invalidate_data_cache_range(base, len);
+            #[cfg(not(target_arch = "aarch64"))]
+            return Err(SyscallError::Unknown);
+            if !crate::memory::pin::complete_cache_sync(token, caller_id) {
+                return Err(SyscallError::PermissionDenied);
+            }
+            Ok(0)
+        }
+
+        Syscall::RegisterDisplayFramebuffer {
+            base,
+            size,
+            packed_dimensions,
+            pitch,
+        } => {
+            #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+            {
+                const MAX_DIMENSION: usize = 8192;
+                const PAGE_SIZE: usize = 4096;
+                if !caller_has_mmio_device(caller_id, crate::resource_registry::DEV_DISPLAY) {
+                    return Err(SyscallError::PermissionDenied);
+                }
+                let mmio = hal_soc_bcm27xx::BCM2837.mmio;
+                if !crate::resource_registry::owns_exact_mmio(
+                    types::CellId(caller_id as u64),
+                    mmio.mailbox_base,
+                    mmio.mailbox_grant_size,
+                ) {
+                    return Err(SyscallError::PermissionDenied);
+                }
+                if base == 0
+                    || size == 0
+                    || base & (PAGE_SIZE - 1) != 0
+                    || packed_dimensions > u32::MAX as usize
+                {
+                    return Err(SyscallError::InvalidInput);
+                }
+                let width = (packed_dimensions >> 16) as usize;
+                let height = (packed_dimensions & 0xffff) as usize;
+                if width == 0 || height == 0 || width > MAX_DIMENSION || height > MAX_DIMENSION {
+                    return Err(SyscallError::InvalidInput);
+                }
+                let minimum_pitch = width.checked_mul(4).ok_or(SyscallError::InvalidInput)?;
+                if pitch < minimum_pitch || pitch & 3 != 0 {
+                    return Err(SyscallError::InvalidInput);
+                }
+                let covered = pitch
+                    .checked_mul(height)
+                    .ok_or(SyscallError::InvalidInput)?;
+                let end = base.checked_add(size).ok_or(SyscallError::InvalidInput)?;
+                if covered > size || end > mmio.peripheral_base {
+                    return Err(SyscallError::InvalidInput);
+                }
+                let allocator_end = crate::memory::frame::FRAME_ALLOCATOR
+                    .lock()
+                    .as_ref()
+                    .map(|allocator| allocator.memory_end())
+                    .ok_or(SyscallError::Unknown)?;
+                if base < allocator_end {
+                    return Err(SyscallError::InvalidInput);
+                }
+                let rounded = size
+                    .checked_add(PAGE_SIZE - 1)
+                    .ok_or(SyscallError::InvalidInput)?
+                    & !(PAGE_SIZE - 1);
+                let pages = rounded / PAGE_SIZE;
+                let owner = types::CellId(caller_id as u64);
+                match crate::resource_registry::reserve_display_framebuffer(
+                    owner,
+                    base,
+                    size,
+                    width as u16,
+                    height as u16,
+                    pitch,
+                ) {
+                    Ok(crate::resource_registry::DisplayFramebufferReservation::ActiveReplay) => {
+                        return Ok(0);
+                    }
+                    Err(()) => return Err(SyscallError::PermissionDenied),
+                    Ok(crate::resource_registry::DisplayFramebufferReservation::Reserved) => {}
+                }
+                if crate::memory::paging::map_display_framebuffer_user(base, pages).is_err() {
+                    crate::resource_registry::cancel_display_framebuffer(
+                        owner,
+                        base,
+                        size,
+                        width as u16,
+                        height as u16,
+                        pitch,
+                    );
+                    return Err(SyscallError::Unknown);
+                }
+                if crate::resource_registry::activate_display_framebuffer(
+                    owner,
+                    base,
+                    size,
+                    width as u16,
+                    height as u16,
+                    pitch,
+                ) {
+                    Ok(0)
+                } else {
+                    // This cannot be recovered safely: pages are firmware-owned
+                    // and remain mapped until reboot, so display stays fail-stop.
+                    Err(SyscallError::Unknown)
+                }
+            }
+            #[cfg(not(all(target_arch = "aarch64", feature = "board-rpi3")))]
+            {
+                let _ = (base, size, packed_dimensions, pitch);
+                Err(SyscallError::Unknown)
+            }
+        }
+
         Syscall::GrantRegister { size } => {
             const PAGE_SIZE: usize = 4096;
             if size == 0 || size > MAX_GRANT_PAGES * PAGE_SIZE {
@@ -5548,6 +5729,18 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
             size_out_ptr: a1,
         },
         ViSyscall::GrantFree => Syscall::GrantFree { grant_id: a0 },
+        ViSyscall::GrantCacheSyncBegin => Syscall::GrantCacheSyncBegin {
+            grant_id: a0,
+            offset: a1,
+            len: a2,
+        },
+        ViSyscall::GrantCacheSyncComplete => Syscall::GrantCacheSyncComplete { token: a0 },
+        ViSyscall::RegisterDisplayFramebuffer => Syscall::RegisterDisplayFramebuffer {
+            base: a0,
+            size: a1,
+            packed_dimensions: a2,
+            pitch: a3,
+        },
         ViSyscall::BlkReadAsync => Syscall::BlkReadAsync {
             sector: a0 as u64,
             grant_id: a1,

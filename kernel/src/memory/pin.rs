@@ -119,6 +119,25 @@ struct PinEntry {
     quarantined: bool,
 }
 
+/// One exact cache-maintenance operation submitted by a device driver.
+///
+/// Unlike broad [`PinEntry`] acknowledgements, this entry is released only by
+/// its opaque token. A driver that loses completion evidence leaves the entry
+/// live so task teardown quarantines the underlying Grant frames.
+#[derive(Clone, Copy)]
+struct CacheSyncEntry {
+    /// Exact byte range the device was submitted against.
+    operation_base: usize,
+    operation_len: usize,
+    /// Page coverage used only for GrantFree/reaper protection.
+    base: usize,
+    pages: usize,
+    owner: usize,
+    token: usize,
+    completing: bool,
+    quarantined: bool,
+}
+
 #[derive(Clone, Copy)]
 struct VfsLeaseEntry {
     base: usize,
@@ -147,6 +166,9 @@ struct FrameHold {
 enum ReleaseKey {
     None,
     Owner(usize),
+    /// A VideoCore mailbox request may complete after its cell dies. It has no
+    /// IOMMU completion acknowledgement, so its frames are boot-lifetime.
+    CacheSyncBootLifetime,
     VfsLease {
         holder_tid: usize,
         grant_owner: usize,
@@ -174,6 +196,17 @@ const EMPTY_PIN: PinEntry = PinEntry {
     quarantined: false,
 };
 
+const EMPTY_CACHE_SYNC: CacheSyncEntry = CacheSyncEntry {
+    operation_base: 0,
+    operation_len: 0,
+    base: 0,
+    pages: 0,
+    owner: 0,
+    token: 0,
+    completing: false,
+    quarantined: false,
+};
+
 const EMPTY_HOLD: FrameHold = FrameHold {
     base: 0,
     pages: 0,
@@ -193,6 +226,8 @@ const EMPTY_VFS_LEASE: VfsLeaseEntry = VfsLeaseEntry {
 
 struct Registry {
     pins: [PinEntry; MAX_PINNED_REGIONS],
+    cache_sync: [CacheSyncEntry; MAX_PINNED_REGIONS],
+    next_cache_token: usize,
     vfs_leases: [VfsLeaseEntry; MAX_VFS_LEASES],
     quarantine: [FrameHold; MAX_QUARANTINED_REGIONS],
 }
@@ -201,6 +236,8 @@ struct Registry {
 /// single leaf lock removes any ordering question between them.
 static REGISTRY: Spinlock<Registry> = Spinlock::new(Registry {
     pins: [EMPTY_PIN; MAX_PINNED_REGIONS],
+    cache_sync: [EMPTY_CACHE_SYNC; MAX_PINNED_REGIONS],
+    next_cache_token: 1,
     vfs_leases: [EMPTY_VFS_LEASE; MAX_VFS_LEASES],
     quarantine: [EMPTY_HOLD; MAX_QUARANTINED_REGIONS],
 });
@@ -229,6 +266,19 @@ fn pin_holder_from_pin(entry: &PinEntry) -> PinHolder {
         pending_revoke: false,
         request_generation: 0,
         holder_tid: 0,
+    }
+}
+
+fn pin_holder_from_cache_sync(entry: &CacheSyncEntry) -> PinHolder {
+    PinHolder {
+        base: entry.base,
+        pages: entry.pages,
+        owner: entry.owner,
+        holds: 1,
+        quarantined: entry.quarantined,
+        pending_revoke: false,
+        request_generation: entry.token as u64,
+        holder_tid: entry.owner,
     }
 }
 
@@ -344,6 +394,101 @@ pub fn pin(base: usize, len: usize, owner: usize) -> Result<(), PinError> {
     Ok(())
 }
 
+/// Reserve one exact cache synchronization pin and return its non-zero token.
+///
+/// The caller must prove Grant ownership and logical byte bounds before calling
+/// this leaf function. `complete_cache_sync` is the only normal release path.
+pub fn begin_cache_sync(base: usize, len: usize, owner: usize) -> Result<usize, PinError> {
+    let (start, pages) = span(base, len).ok_or(PinError::InvalidRange)?;
+    let mut reg = REGISTRY.lock();
+    let owned = reg
+        .pins
+        .iter()
+        .filter(|entry| entry.pages != 0 && entry.owner == owner)
+        .count()
+        + reg
+            .cache_sync
+            .iter()
+            .filter(|entry| entry.pages != 0 && entry.owner == owner)
+            .count();
+    if owned >= MAX_PINS_PER_TASK {
+        return Err(PinError::TaskLimit);
+    }
+    let slot = reg
+        .cache_sync
+        .iter()
+        .position(|entry| entry.pages == 0)
+        .ok_or(PinError::TableFull)?;
+    let mut token = reg.next_cache_token;
+    if token == 0 {
+        token = 1;
+    }
+    reg.next_cache_token = token.wrapping_add(1);
+    if reg.next_cache_token == 0 {
+        reg.next_cache_token = 1;
+    }
+    reg.cache_sync[slot] = CacheSyncEntry {
+        operation_base: base,
+        operation_len: len,
+        base: start,
+        pages,
+        owner,
+        token,
+        completing: false,
+        quarantined: false,
+    };
+    Ok(token)
+}
+
+/// Return the exact owned cache-sync span for `token` without releasing it.
+pub fn begin_cache_sync_completion(token: usize, owner: usize) -> Option<(usize, usize)> {
+    if token == 0 {
+        return None;
+    }
+    let mut reg = REGISTRY.lock();
+    reg.cache_sync
+        .iter_mut()
+        .find(|entry| {
+            entry.pages != 0 && entry.owner == owner && entry.token == token && !entry.completing
+        })
+        .and_then(|entry| {
+            entry.completing = true;
+            Some((entry.operation_base, entry.operation_len))
+        })
+}
+
+/// Drop only the cache-sync operation authenticated by `(owner, token)`.
+pub fn complete_cache_sync(token: usize, owner: usize) -> bool {
+    if token == 0 {
+        return false;
+    }
+    let mut reg = REGISTRY.lock();
+    let Some(entry) = reg.cache_sync.iter_mut().find(|entry| {
+        entry.pages != 0 && entry.owner == owner && entry.token == token && entry.completing
+    }) else {
+        return false;
+    };
+    *entry = EMPTY_CACHE_SYNC;
+    true
+}
+
+/// Roll back a pre-submit cache pin when the platform has no cache primitive.
+pub fn cancel_cache_sync(token: usize, owner: usize) -> bool {
+    if token == 0 {
+        return false;
+    }
+    let mut reg = REGISTRY.lock();
+    let Some(entry) = reg
+        .cache_sync
+        .iter_mut()
+        .find(|entry| entry.pages != 0 && entry.owner == owner && entry.token == token)
+    else {
+        return false;
+    };
+    *entry = EMPTY_CACHE_SYNC;
+    true
+}
+
 /// The first pin overlapping `[base, base + len)`, if any.
 ///
 /// Teardown paths call this to decide whether frames may be released.
@@ -354,6 +499,12 @@ pub fn holder_of(base: usize, len: usize) -> Option<PinHolder> {
         .iter()
         .find(|e| e.pages != 0 && overlaps(probe, (e.base, e.pages)))
         .map(pin_holder_from_pin)
+        .or_else(|| {
+            reg.cache_sync
+                .iter()
+                .find(|entry| entry.pages != 0 && overlaps(probe, (entry.base, entry.pages)))
+                .map(pin_holder_from_cache_sync)
+        })
         .or_else(|| {
             reg.vfs_leases
                 .iter()
@@ -393,6 +544,12 @@ pub fn quarantine_task(tid: usize) -> usize {
     for e in reg.pins.iter_mut() {
         if e.pages != 0 && e.owner == tid {
             e.quarantined = true;
+            marked += 1;
+        }
+    }
+    for entry in reg.cache_sync.iter_mut() {
+        if entry.pages != 0 && entry.owner == tid {
+            entry.quarantined = true;
             marked += 1;
         }
     }
@@ -481,6 +638,19 @@ pub(crate) fn withhold_pinned_frames(base: usize, pages: usize) -> FrameTransfer
         };
     }
 
+    if reg
+        .cache_sync
+        .iter()
+        .any(|entry| entry.pages != 0 && overlaps(probe, (entry.base, entry.pages)))
+    {
+        return if hold_quarantined_frames(&mut reg, base, pages, ReleaseKey::CacheSyncBootLifetime)
+        {
+            FrameTransfer::Withheld
+        } else {
+            FrameTransfer::Full
+        };
+    }
+
     let Some(entry) = reg
         .vfs_leases
         .iter()
@@ -500,12 +670,14 @@ pub(crate) fn withhold_pinned_frames(base: usize, pages: usize) -> FrameTransfer
     }
 }
 
-/// Driver acknowledgement for `tid`: drop its pins and hand back the
+/// IOMMU-driver acknowledgement for `tid`: drop its ordinary pins and hand back the
 /// `(base, pages)` frame ranges the reaper placed in quarantine on its behalf.
 ///
 /// The caller returns those frames to the allocator. Safe to call before the
 /// reaper as well as after — an acknowledgement that arrives first simply drops
-/// the pins, and the reaper then frees the frames itself.
+/// ordinary pins, and the reaper then frees the frames itself. Cache-sync pins
+/// deliberately do not participate: a VideoCore response has no trustworthy
+/// driver acknowledgement and remains boot-lifetime after task death.
 pub fn acknowledge(tid: usize) -> Vec<(usize, usize)> {
     let mut reg = REGISTRY.lock();
     for e in reg.pins.iter_mut() {

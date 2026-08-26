@@ -150,6 +150,30 @@ const ALLOWED: &[(usize, usize, u8)] = &[];
 /// Maps MMIO base address → (len, owner CellId).
 static REGISTRY: Spinlock<BTreeMap<usize, (usize, CellId)>> = Spinlock::new(BTreeMap::new());
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct DisplayFramebuffer {
+    owner: CellId,
+    base: usize,
+    size: usize,
+    width: u16,
+    height: u16,
+    pitch: usize,
+}
+
+/// Firmware scanout metadata for the current boot.
+///
+/// The mapping remains shared among trusted Tier-1 cells by architecture; this
+/// record is an authority and geometry guard, not per-cell MMU isolation.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum DisplayFramebufferState {
+    Empty,
+    Pending(DisplayFramebuffer),
+    Active(DisplayFramebuffer),
+}
+
+static DISPLAY_FRAMEBUFFER: Spinlock<DisplayFramebufferState> =
+    Spinlock::new(DisplayFramebufferState::Empty);
+
 /// Dynamically discovered PCIe BAR windows (base → len).
 /// Populated by `pcie_ecam::init()` after the ECAM scan; consumed by
 /// `request_mmio` when the caller holds `PcieDriverCap` (DEV_PCIE).
@@ -181,6 +205,7 @@ fn static_range_allowed(
 /// disabled.  Force-unlocking an already-free Spinlock is a no-op.
 pub unsafe fn force_unlock_locks() {
     REGISTRY.force_unlock();
+    DISPLAY_FRAMEBUFFER.force_unlock();
     // SAFETY: same contract as REGISTRY above.
     unsafe {
         PCIE_BARS.force_unlock();
@@ -377,6 +402,9 @@ pub fn release_for(cell_id: CellId) {
     REGISTRY
         .lock()
         .retain(|_base, &mut (_len, owner)| owner != cell_id);
+    // A VideoCore allocation and its USER mapping remain valid until reboot.
+    // Do not clear Active metadata or permit a restarted cell to replace it:
+    // restart is fail-stop for display after registration.
 }
 
 /// Return the task ID (TID) of the cell that currently owns the MMIO region
@@ -391,9 +419,156 @@ pub fn lookup_mmio_owner(base: usize) -> Option<usize> {
         .map(|&(_len, cell_id)| cell_id.0 as usize)
 }
 
+/// Return whether `cell_id` owns exactly `[base, base + len)`.
+///
+/// Display registration uses this rather than an overlap query: the VideoCore
+/// mailbox authority is one fixed capability, so a subrange cannot be confused
+/// with an independently granted peripheral window.
+pub fn owns_exact_mmio(cell_id: CellId, base: usize, len: usize) -> bool {
+    REGISTRY
+        .lock()
+        .get(&base)
+        .is_some_and(|&(owned_len, owner)| owned_len == len && owner == cell_id)
+}
+
+/// Outcome of atomically reserving one framebuffer mapping transaction.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum DisplayFramebufferReservation {
+    Reserved,
+    ActiveReplay,
+}
+
+fn display_framebuffer_candidate(
+    owner: CellId,
+    base: usize,
+    size: usize,
+    width: u16,
+    height: u16,
+    pitch: usize,
+) -> DisplayFramebuffer {
+    DisplayFramebuffer {
+        owner,
+        base,
+        size,
+        width,
+        height,
+        pitch,
+    }
+}
+
+/// Reserve one framebuffer mapping before page-table mutation.
+///
+/// A reservation serializes preflight/map/activation. Only an identical Active
+/// replay is accepted; a pending or different active request fails closed.
+pub fn reserve_display_framebuffer(
+    owner: CellId,
+    base: usize,
+    size: usize,
+    width: u16,
+    height: u16,
+    pitch: usize,
+) -> Result<DisplayFramebufferReservation, ()> {
+    let candidate = display_framebuffer_candidate(owner, base, size, width, height, pitch);
+    let mut framebuffer = DISPLAY_FRAMEBUFFER.lock();
+    match *framebuffer {
+        DisplayFramebufferState::Empty => {
+            *framebuffer = DisplayFramebufferState::Pending(candidate);
+            Ok(DisplayFramebufferReservation::Reserved)
+        }
+        DisplayFramebufferState::Active(existing) if existing == candidate => {
+            Ok(DisplayFramebufferReservation::ActiveReplay)
+        }
+        DisplayFramebufferState::Pending(_) | DisplayFramebufferState::Active(_) => Err(()),
+    }
+}
+
+/// Commit a previously reserved mapping after every page was installed.
+pub fn activate_display_framebuffer(
+    owner: CellId,
+    base: usize,
+    size: usize,
+    width: u16,
+    height: u16,
+    pitch: usize,
+) -> bool {
+    let candidate = display_framebuffer_candidate(owner, base, size, width, height, pitch);
+    let mut framebuffer = DISPLAY_FRAMEBUFFER.lock();
+    if *framebuffer == DisplayFramebufferState::Pending(candidate) {
+        *framebuffer = DisplayFramebufferState::Active(candidate);
+        true
+    } else {
+        false
+    }
+}
+
+/// Cancel a reservation when preflight or mapping fails before activation.
+pub fn cancel_display_framebuffer(
+    owner: CellId,
+    base: usize,
+    size: usize,
+    width: u16,
+    height: u16,
+    pitch: usize,
+) {
+    let candidate = display_framebuffer_candidate(owner, base, size, width, height, pitch);
+    let mut framebuffer = DISPLAY_FRAMEBUFFER.lock();
+    if *framebuffer == DisplayFramebufferState::Pending(candidate) {
+        *framebuffer = DisplayFramebufferState::Empty;
+    }
+}
+
+/// Return the active firmware scanout geometry, if registered.
+pub fn display_framebuffer_resolution() -> Option<(u16, u16)> {
+    match *DISPLAY_FRAMEBUFFER.lock() {
+        DisplayFramebufferState::Active(framebuffer) => {
+            Some((framebuffer.width, framebuffer.height))
+        }
+        DisplayFramebufferState::Empty | DisplayFramebufferState::Pending(_) => None,
+    }
+}
+
 /// Current number of registered regions (diagnostics).
 pub fn region_count() -> usize {
     REGISTRY.lock().len()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn display_registration_is_fail_stop_after_activation() {
+        let owner = CellId(0x7d01);
+        assert_eq!(
+            reserve_display_framebuffer(owner, 0x3e00_0000, 0x1000, 800, 480, 3200,),
+            Ok(DisplayFramebufferReservation::Reserved)
+        );
+        cancel_display_framebuffer(owner, 0x3e00_0000, 0x1000, 800, 480, 3200);
+        assert_eq!(display_framebuffer_resolution(), None);
+        assert_eq!(
+            reserve_display_framebuffer(owner, 0x3e00_0000, 0x1000, 800, 480, 3200,),
+            Ok(DisplayFramebufferReservation::Reserved)
+        );
+        assert!(activate_display_framebuffer(
+            owner,
+            0x3e00_0000,
+            0x1000,
+            800,
+            480,
+            3200,
+        ));
+        assert_eq!(
+            reserve_display_framebuffer(owner, 0x3e00_0000, 0x1000, 800, 480, 3200,),
+            Ok(DisplayFramebufferReservation::ActiveReplay)
+        );
+        assert!(
+            reserve_display_framebuffer(CellId(0x7d02), 0x3e00_0000, 0x1000, 800, 480, 3200,)
+                .is_err()
+        );
+        assert_eq!(display_framebuffer_resolution(), Some((800, 480)));
+        release_for(owner);
+        assert_eq!(display_framebuffer_resolution(), Some((800, 480)));
+    }
 }
 
 // ---------------------------------------------------------------------------

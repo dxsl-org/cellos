@@ -130,14 +130,33 @@ cargo build --release -p spi-demo --target $target 2>&1 | Select-Object -Last 5
 Assert-CellBuild 'spi-demo' $LASTEXITCODE
 
 Write-Host "Building app-init..."
-cargo build --release -p app-init --target $target 2>&1 | Select-Object -Last 5
-Assert-CellBuild 'app-init' $LASTEXITCODE
+if ($BoardRpi3) {
+    foreach ($artifact in @('app-init', 'driver-bcm-display', 'service-compositor', 'fb-console')) {
+        Remove-Item -LiteralPath (Join-Path $rpi3BuildDir $artifact) -Force -ErrorAction SilentlyContinue
+    }
+    cargo build --release -p app-init -p driver-bcm-display -p service-compositor -p fb-console `
+        --features app-init/board-rpi3 --target $target --target-dir $rpi3TargetDir `
+        2>&1 | Select-Object -Last 8
+    $displayBuildExitCode = $LASTEXITCODE
+    foreach ($artifact in @('app-init', 'driver-bcm-display', 'service-compositor', 'fb-console')) {
+        if ($displayBuildExitCode -ne 0 -or -not (Test-Path -LiteralPath (Join-Path $rpi3BuildDir $artifact))) {
+            throw "RPi3 $artifact build failed; refusing to package a stale artifact"
+        }
+    }
+} else {
+    cargo build --release -p app-init --target $target 2>&1 | Select-Object -Last 5
+    Assert-CellBuild 'app-init' $LASTEXITCODE
+}
 } finally {
     $env:RUSTFLAGS = $previousRustflags
 }
 
 # Refresh the separately-embedded init ELF (kernel spawns it from embedded bytes).
-$initSrc = Join-Path $buildDir 'app-init'
+$initSrc = if ($BoardRpi3) {
+    Join-Path $rpi3BuildDir 'app-init'
+} else {
+    Join-Path $buildDir 'app-init'
+}
 if (Test-Path $initSrc) {
     New-Item -ItemType Directory -Path $embeddedDir -Force | Out-Null
     Copy-Item $initSrc (Join-Path $embeddedDir 'init') -Force
@@ -159,12 +178,19 @@ $cells = @(
     @{ Bin = "ps";             Dst = "/bin/ps"          },
     @{ Bin = "kill";           Dst = "/bin/kill"        }
 )
+if ($BoardRpi3) {
+    $cells += @(
+        @{ Bin = "driver-bcm-display"; Dst = "/bin/bcm-display" },
+        @{ Bin = "service-compositor"; Dst = "/bin/compositor"  },
+        @{ Bin = "fb-console";          Dst = "/bin/fb-console"  }
+    )
+}
 
 $imagePath = Join-Path $embeddedDir 'kernel_fs.img'
 $imgArgs = @($imagePath)
 $found   = @()
 foreach ($c in $cells) {
-    $src = if ($BoardRpi3 -and $c.Bin -eq 'service-input') {
+    $src = if ($BoardRpi3 -and $c.Bin -in @('service-input', 'driver-bcm-display', 'service-compositor', 'fb-console')) {
         Join-Path $rpi3BuildDir $c.Bin
     } else {
         Join-Path $buildDir $c.Bin
@@ -183,6 +209,13 @@ foreach ($c in $cells) {
 foreach ($required in @('app-shell', 'service-vfs', 'service-config', 'service-input', 'periph-demo', 'sensor-demo', 'spi-demo')) {
     if ($required -notin $found) {
         throw "Required aarch64 cell missing from image inputs: $required"
+    }
+}
+if ($BoardRpi3) {
+    foreach ($required in @('driver-bcm-display', 'service-compositor', 'fb-console')) {
+        if ($required -notin $found) {
+            throw "Required RPi3 display cell missing from image inputs: $required"
+        }
     }
 }
 
@@ -218,7 +251,11 @@ Remove-Item $policyTmp -Force -ErrorAction SilentlyContinue
 # Assert the layout instead of trusting the exit code: mkfat32 exits 0 for images
 # whose destination paths were mangled, and a missing /POLICY.BIN degrades silently.
 $layout = & $python @pythonArgs (Join-Path 'tools' 'inspect_fat.py') $imagePath 2>&1
-foreach ($requiredMarker in @('SFN POLICY.BIN', "LFN 'vfs'", "LFN 'input'", "LFN 'periph-demo'", "LFN 'sensor-demo'", "LFN 'spi-demo'")) {
+$requiredMarkers = @('SFN POLICY.BIN', "LFN 'vfs'", "LFN 'input'", "LFN 'periph-demo'", "LFN 'sensor-demo'", "LFN 'spi-demo'")
+if ($BoardRpi3) {
+    $requiredMarkers += @("LFN 'bcm-display'", "LFN 'compositor'", "LFN 'fb-console'")
+}
+foreach ($requiredMarker in $requiredMarkers) {
     if (($layout | Select-String -Quiet -SimpleMatch $requiredMarker) -eq $false) {
         Write-Error "aarch64 kernel_fs.img missing required entry: $requiredMarker"
         $layout | Write-Host

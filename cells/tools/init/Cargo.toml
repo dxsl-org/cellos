@@ -18,7 +18,8 @@ test-hooks = []
 hypervisor-min = []
 # Admit the development/reference AArch64 Silo service into the supervised table.
 development-silo-provider = []
+# Select the VideoCore mailbox display driver during RPi3 boot.
+board-rpi3 = []
 
 [build-dependencies]
 cell-build = { path = "../../../libs/cell-build", version = "0.2.0" }
-

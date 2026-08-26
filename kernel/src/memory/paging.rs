@@ -884,6 +884,81 @@ pub fn remap_range_user(start: PhysAddr, pages: usize) {
     }
 }
 
+/// Map a firmware-owned scanout range at its identity address for trusted cells.
+///
+/// Cellos Tier-1 uses a shared address space: `USER` makes this range visible
+/// to every trusted cell, not only the registering display cell. The syscall
+/// authority check prevents accidental arbitrary mappings; it is not hardware
+/// per-cell isolation.
+#[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
+pub fn map_display_framebuffer_user(start: PhysAddr, pages: usize) -> PagingResult<()> {
+    if pages == 0 || start & (PAGE_SIZE - 1) != 0 {
+        return Err(PageTableError::InvalidAddress);
+    }
+    let flags = Flags::from_bits(
+        Flags::VALID
+            | Flags::READ
+            | Flags::WRITE
+            | Flags::USER
+            | Flags::DEVICE
+            | Flags::ACCESSED
+            | Flags::DIRTY,
+    );
+    let mut allocator = crate::memory::frame::FRAME_ALLOCATOR.lock();
+    let Some(allocator) = allocator.as_mut() else {
+        return Err(PageTableError::NotSupported);
+    };
+    let root = KERNEL_ROOT.lock();
+    let Some(root_phys) = *root else {
+        return Err(PageTableError::NotSupported);
+    };
+    // SAFETY: KERNEL_ROOT names the active kernel-owned page table. The frame
+    // allocator remains locked throughout this transaction, matching map_page.
+    let table = unsafe { &mut *(root_phys as *mut PageTable) };
+    for index in 0..pages {
+        let address = start
+            .checked_add(
+                index
+                    .checked_mul(PAGE_SIZE)
+                    .ok_or(PageTableError::InvalidAddress)?,
+            )
+            .ok_or(PageTableError::InvalidAddress)?;
+        if table.translate(address).is_some() {
+            return Err(PageTableError::InvalidAddress);
+        }
+    }
+    let mut mapped = 0usize;
+    for index in 0..pages {
+        let address = start
+            .checked_add(
+                index
+                    .checked_mul(PAGE_SIZE)
+                    .ok_or(PageTableError::InvalidAddress)?,
+            )
+            .ok_or(PageTableError::InvalidAddress)?;
+        let mut allocate_table_frame = || allocator.allocate_frame();
+        if table
+            .map(address, address, flags, &mut allocate_table_frame)
+            .is_err()
+        {
+            for rollback in 0..mapped {
+                let address = start + rollback * PAGE_SIZE;
+                let _ = table.unmap(address);
+            }
+            tlb_flush_all();
+            return Err(PageTableError::OutOfMemory);
+        }
+        mapped += 1;
+    }
+    tlb_flush_all();
+    Ok(())
+}
+
+#[cfg(not(any(target_arch = "riscv64", target_arch = "aarch64")))]
+pub fn map_display_framebuffer_user(_start: PhysAddr, _pages: usize) -> PagingResult<()> {
+    Err(PageTableError::NotSupported)
+}
+
 #[cfg(target_arch = "x86_64")]
 pub fn remap_range_user(start: PhysAddr, pages: usize) {
     use hal::paging::pte_flags_user_rw;

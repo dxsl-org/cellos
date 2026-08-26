@@ -34,10 +34,12 @@ const FALLBACK_MEMORY: [MemoryRange; 2] = [
         size: 0x0100_0000,
         kind: MemoryRangeKind::Kernel,
     },
+    // Firmware DTB memory remains authoritative. This recovery ceiling leaves
+    // the top 64 MiB below the BCM2837 peripheral aperture to VideoCore.
     MemoryRange {
         name: "usable",
         base: 0x0108_0000,
-        size: 0x3DF8_0000,
+        size: 0x39F8_0000,
         kind: MemoryRangeKind::Usable,
     },
 ];
