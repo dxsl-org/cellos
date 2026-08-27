@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["_assert_gpu_renderer_api","cell_main","main"],"mod":["__vi_generated_Counter","__vi_generated_Hello"],"static":["VICELL_SYSCALLS"],"struct":["Counter","Hello"]};
+window.SIDEBAR_ITEMS = {"constant":["DISPLAY_H","DISPLAY_W"],"fn":["cell_main","main"],"mod":["__vi_generated_Counter"],"static":["VICELL_SYSCALLS"],"struct":["Counter"]};

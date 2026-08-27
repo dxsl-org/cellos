@@ -3,7 +3,7 @@
     buf: &amp;[u8; 4096],
     caller: Option&lt;<a class="struct" href="../caller/struct.Caller.html" title="struct service_vfs::caller::Caller">Caller</a>&gt;,
     resp_buf: &amp;'a mut [u8; 4096],
-) -&gt; VfsResponse&lt;'a&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Handle one decoded request on behalf of a caller the kernel has attested.</p>
+) -&gt; <a class="enum" href="../../api/services/ipc/enum.VfsResponse.html" title="enum api::services::ipc::VfsResponse">VfsResponse</a>&lt;'a&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Handle one decoded request on behalf of a caller the kernel has attested.</p>
 <p><code>caller</code> is <code>None</code> when the kernel did not vouch for the sender — an
 unattested delivery path, or a sender that died before it could be resolved.
 Every request is then refused: a service that guesses at an identity is a
