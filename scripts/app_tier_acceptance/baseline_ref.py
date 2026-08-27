@@ -8,6 +8,22 @@ LEDGER = "docs/app-tier-acceptance-ledger.json"
 ZERO = "0" * 40
 
 
+def trusted_snapshot(ref: str) -> str:
+    """Return the latest commit at or before `ref` that changed the ledger."""
+    history = subprocess.run(
+        ["git", "log", "-1", "--format=%H", ref, "--", LEDGER],
+        capture_output=True,
+        text=True,
+    )
+    revision = history.stdout.strip()
+    if history.returncode or not revision:
+        raise ValueError("trusted ref has no ledger snapshot")
+    probe = subprocess.run(["git", "cat-file", "-e", f"{revision}:{LEDGER}"])
+    if probe.returncode:
+        raise ValueError("trusted ledger snapshot is unreadable")
+    return revision
+
+
 def dispatch_baseline(ref: str, default_branch: str) -> str:
     """Return the parent of the latest first-parent ledger transition.
 

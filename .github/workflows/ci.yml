@@ -71,8 +71,9 @@ jobs:
             exit 1
           fi
           if git cat-file -e "$base_ref:docs/app-tier-acceptance-ledger.json" 2>/dev/null; then
-            git show "$base_ref:docs/app-tier-acceptance-ledger.json" > "$baseline_json"
-            git worktree add --detach "$baseline_dir" "$base_ref"
+            baseline_ref="$(PYTHONPATH=scripts python3 -c 'import sys; from app_tier_acceptance.baseline_ref import trusted_snapshot; print(trusted_snapshot(sys.argv[1]))' "$base_ref")"
+            git show "$baseline_ref:docs/app-tier-acceptance-ledger.json" > "$baseline_json"
+            git worktree add --detach "$baseline_dir" "$baseline_ref"
             python3 scripts/validate-app-tier-acceptance.py \
               --baseline "$baseline_json" --baseline-root "$baseline_dir"
           else

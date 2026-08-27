@@ -125,12 +125,14 @@ class ReviewRegressionTests(unittest.TestCase):
         self.commit(root, "docs/app-tier-acceptance-ledger.json", "seed", "seed")
         seed = self.git(root, "rev-parse", "HEAD").strip()
         self.commit(root, "docs/app-tier-acceptance-ledger.json", "transition", "transition")
+        transition = self.git(root, "rev-parse", "HEAD").strip()
         self.commit(root, "README", "unrelated one", "unrelated-one")
         self.commit(root, "notes", "unrelated two", "unrelated-two")
         previous = Path.cwd()
         try:
             os.chdir(root)
             self.assertEqual(baseline_ref.dispatch_baseline("main", "main"), seed)
+            self.assertEqual(baseline_ref.trusted_snapshot("HEAD"), transition)
         finally:
             os.chdir(previous)
 
