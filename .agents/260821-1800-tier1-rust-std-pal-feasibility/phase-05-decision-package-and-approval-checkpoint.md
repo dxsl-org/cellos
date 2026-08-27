@@ -43,7 +43,7 @@ None — only content-addressed inputs enter the approval-input manifest. Verifi
 
 1. Build the canonical approval-input manifest over every prerequisite plan/contract/source/tool/test/fixture/report, including exact equality with the hook map's closed kernel security-backing path set; verify each path/role/digest mechanically during the later verification stage.
 2. Keep the decision package and approval/checkpoint records outside the input set, document the exclusion, and bind each record to the same approval-input-manifest digest.
-3. Reconcile module/hook/API statuses with the compiler choice. `PAL-019` and `PAL-031` remain blocking Deferred. Any omitted module/security path, blocking Deferred hook, unsupported selector, unowned toolchain fork, hidden POSIX/ambient authority, production `dev-weak-rng`, unvalidated writable pointer, or unapproved frozen-ABI drift forces `NO_GO`.
+3. Reconcile module/hook/API statuses with the compiler choice. `PAL-019` and `PAL-031` remain blocking Deferred. Any omitted module/security path, blocking Deferred hook, unsupported selector, unowned toolchain fork, hidden POSIX/ambient authority, production `dev-weak-rng`, missing bounded writable validation or hostile evidence, or unapproved frozen-ABI drift forces `NO_GO`.
 4. Confirm the validator remains fixture-only, non-promotional, physical-order preserving, whole-cohort fail-closed on interference, and closed over linker inputs.
 5. Record approvals from the six named roles without changing `NOT GRANTED` until each named human signs the same independently verified manifest digest after all security-backing blockers are evidenced.
 6. Permit a later PAL/target/runtime implementation child only after every contract approval, the implementation checkpoint, and umbrella Phase 03 production gates are explicitly approved.
@@ -53,7 +53,7 @@ None — only content-addressed inputs enter the approval-input manifest. Verifi
 - Umbrella Phase 03's design, external-floor, provenance, production-integration, hostile/physical evidence, authenticated-retention, release, and ledger gates remain open until explicitly approved.
 - Compiler integration must select the internal PAL under pinned source with reproducible provenance; unsupported fallback, external plug-in claims, and fake `std` are prohibited.
 - Current entropy backing is non-qualifying: the production evidence tuple must omit `dev-weak-rng` and prove real entropy or a zero/error result with no synthetic success.
-- Current `GetRandom` pointer provenance is non-qualifying: bounded caller-owned writable validation plus null/overflow/oversized/unmapped/kernel/peer hostile direct-syscall evidence is mandatory.
+- `GetRandom` technical backing/evidence is complete: bounded caller-owned writable validation and null/overflow/oversized/unmapped/kernel/peer hostile direct-opcode evidence are retained, but `PAL-031` remains Deferred pending named approval of this governed rebind.
 - The six-path kernel security-backing inventory is closed; path-set or digest drift invalidates the package and cannot be omitted from future approval inputs.
 - Hook-map, runtime/API, workload-parity, and benchmark-validator approvals must all be explicit and current.
 - Any frozen-ABI change needs repository-mandated 2× explicit confirmation before implementation planning.
@@ -64,12 +64,12 @@ None — only content-addressed inputs enter the approval-input manifest. Verifi
 - [x] Independent test and review set the package only to **FEASIBILITY PACKAGE VERIFIED / SECURITY BACKING AND HUMAN APPROVAL BLOCKED**; **CONDITIONAL GO** remains contingent and grants no approval.
 - [x] One canonical approval-input manifest covers every plan/contract, transitive source, the exact six-path kernel security-backing inventory, tool, both tests, every fixture, and both expected reports without a self-reference cycle.
 - [x] Approver roles, independence, all six `NOT GRANTED` decisions, `PAL-019`/`PAL-031` blockers, non-claims, and invalidation triggers are explicit and bind the same manifest digest.
-- [x] Later PAL/target/runtime implementation remains blocked until the entropy and pointer-provenance prerequisites, all named approvals, the checkpoint, and umbrella Phase 03 production gates are approved.
+- [x] Later PAL/target/runtime implementation remains blocked until the entropy prerequisite, every remaining Deferred prerequisite, all named approvals, the checkpoint, and umbrella Phase 03 production gates are approved.
 - [x] Umbrella Phase 06 remains pending; this child makes no PAL/target/runtime or promotion-completion claim.
 
 ## Verification and Review Evidence
 
-Final verification passed 33/33 feasibility tests, 57/57 validator adversarial attacks, 36/36 security-manifest tamper attacks, and the host aggregate of 105 passed, 0 failed, and 4 ignored. Reconciliation confirmed 27/27 modules; 36 hooks at 8 Supported / 10 Unsupported / 18 Deferred; 46 pinned Rust sources; the exact six-path kernel security inventory; and all 101 approval inputs with matching digests and links. Final independent quality review returned PASS with no findings, and final independent security review returned PASS with no findings. All six named human approval rows remain `NOT GRANTED`; `PAL-IMPLEMENTATION-CHECKPOINT` remains `BLOCKED`.
+Final verification passed 33/33 feasibility tests, 57/57 validator adversarial attacks, 36/36 security-manifest tamper attacks, and the host aggregate of 105 passed, 0 failed, and 4 ignored. Reconciliation confirmed 27/27 modules; 36 hooks at 8 Supported / 10 Unsupported / 18 Deferred; 46 pinned Rust sources; the exact six-path kernel security inventory; and all 106 approval inputs with matching digests and links. Final independent quality review returned PASS with no findings, and final independent security review returned PASS with no findings. All six named human approval rows remain `NOT GRANTED`; `PAL-IMPLEMENTATION-CHECKPOINT` remains `BLOCKED`.
 
 ## Security Considerations
 

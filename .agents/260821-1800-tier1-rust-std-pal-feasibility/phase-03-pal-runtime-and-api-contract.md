@@ -20,7 +20,7 @@ Freeze the minimum panic, TLS, allocator, startup, and public-API behavior a lat
 
 - Functional: decide the observable contract for startup/termination, panic/unwind, allocation/OOM, TLS/threading, arguments/environment, time/entropy, I/O/filesystem/network/process APIs, synchronization, and error mapping.
 - Non-functional: cleanly distinguish Supported, Unsupported, and Deferred; preserve Cellos Tier 1 SAS capabilities and frozen ABI; avoid POSIX creep; never treat an allowlist bit as proof of buffer provenance or entropy quality.
-- Unsupported APIs must return the documented `std::io::ErrorKind::Unsupported`/equivalent or abort only where the contract requires divergence; no success-shaped stubs. Entropy is non-qualifying while the default tuple enables `dev-weak-rng`; raw pointer transport is non-qualifying while `GetRandom` lacks bounded caller-owned writable validation.
+- Unsupported APIs must return the documented `std::io::ErrorKind::Unsupported`/equivalent or abort only where the contract requires divergence; no success-shaped stubs. Entropy is non-qualifying while the default tuple enables `dev-weak-rng`. `GetRandom` technical backing now includes bounded caller-owned writable validation and focused hostile direct-opcode evidence, but `PAL-031` remains Deferred pending named approval of this governed rebind.
 
 ## Architecture
 
@@ -55,8 +55,8 @@ Freeze the minimum panic, TLS, allocator, startup, and public-API behavior a lat
 
 1. Define a minimum executable lifecycle from loader entry through normal exit and panic/OOM termination for each existing Cellos architecture, marking architecture gaps Deferred.
 2. For panic/unwind, allocator, and language TLS, state invariants, divergence/error semantics, required hooks, and dependencies; reconcile every item to the support map.
-3. Build an API family table with `Supported|Unsupported|Deferred`, exact observable behavior, capability source, and whether availability is required for the initial profile. Keep `PAL-019` and `PAL-031` Deferred while current backing is non-qualifying.
-4. Confirm `std` creates no new authority and that every service-backed operation retains admission/capability checks. Require later hostile direct-syscall evidence for null, overflowed, oversized, unmapped, kernel, and peer writable pointers, with rejection before access.
+3. Build an API family table with `Supported|Unsupported|Deferred`, exact observable behavior, capability source, and whether availability is required for the initial profile. Keep `PAL-019` Deferred because its default entropy backing is non-qualifying; keep `PAL-031` Deferred while named approval reviews its completed technical backing and evidence.
+4. Confirm `std` creates no new authority and that every service-backed operation retains admission/capability checks. Record the completed hostile direct-syscall evidence for null, overflowed, oversized, unmapped, kernel, and peer writable pointers, with rejection before access.
 5. Record invalidation triggers: frozen ABI drift, closed kernel security-backing path/digest drift, production `dev-weak-rng`, entropy behavior drift, pointer-validation drift, loader/startup ABI drift, allocator concurrency-model change, thread model introduction, panic strategy change, or pinned-toolchain change.
 6. Obtain SDK/runtime-owner and security-owner approval only after the blockers are implemented and evidenced; require 2× explicit approval separately if the contract discovers any frozen ABI change.
 
@@ -65,17 +65,17 @@ Freeze the minimum panic, TLS, allocator, startup, and public-API behavior a lat
 - [x] Panic/unwind, allocator/OOM, startup/exit, language TLS/threading, and API-family semantics are explicit and cross-referenced to support-map hook IDs.
 - [x] Every unavailable API fails observably; there are no no-op or success-shaped stubs, including deterministic entropy reported as success.
 - [x] Network TLS and language TLS are explicitly separated.
-- [x] `PAL-019` remains Deferred pending a no-`dev-weak-rng` production tuple and real entropy-or-zero/error evidence; `PAL-031` remains Deferred pending bounded caller-owned writable validation and hostile null/overflow/oversized/unmapped/kernel/peer evidence.
+- [x] `PAL-019` remains Deferred pending a no-`dev-weak-rng` production tuple and real entropy-or-zero/error evidence; `PAL-031` technical backing/evidence is complete and remains Deferred pending named approval of this governed rebind.
 - [x] The contract preserves frozen ABI and existing capability checks; any future ABI change remains a non-waivable implementation blocker requiring 2× approval.
 - [x] SDK/runtime-owner and security-owner approval states are recorded as `NOT GRANTED` and remain blocked on the named security-backing evidence.
 
 ## Verification Evidence
 
-The contract and its closed security-backing manifest passed all 36/36 security-manifest tamper attacks within the final 33/33 feasibility suite. Reconciliation confirmed the exact six-path kernel inventory and matching digests/links; final independent security review returned PASS with no findings. This verifies the fail-closed contract only: current `dev-weak-rng`/zero RNG backing and unvalidated `GetRandom` pointer keep `PAL-019` and `PAL-031` Deferred, both human approval rows `NOT GRANTED`, and implementation authorization blocked.
+The contract and its closed security-backing manifest passed all 36/36 security-manifest tamper attacks within the final 33/33 feasibility suite. Reconciliation confirmed the exact six-path kernel inventory and matching digests/links; final independent security review returned PASS with no findings. Focused QEMU direct-opcode evidence now covers `GetRandom` hostile rejection and final-authorization races. This verifies the fail-closed contract only: current `dev-weak-rng`/zero RNG backing keeps `PAL-019` Deferred; `PAL-031` remains Deferred until named approval of the governed rebind; both human approval rows remain `NOT GRANTED`, and implementation authorization remains blocked.
 
 ## Security Considerations
 
-Entropy must fail closed: the current `dev-weak-rng` default over a zero-byte VirtIO RNG stub is development-only and non-qualifying. Writable syscall buffers must be checked for bounded, complete caller ownership and writable mapping before dereference; the current `GetRandom` path is non-qualifying until hostile null/overflow/oversized/unmapped/kernel/peer direct calls prove rejection without access. Filesystem/network/process APIs cannot gain ambient authority; panic output must not leak secrets or addresses beyond existing policy; allocator/TLS state is per-cell and cannot cross authority boundaries. Error mapping must not turn denial into absence or success.
+Entropy must fail closed: the current `dev-weak-rng` default over a zero-byte VirtIO RNG stub is development-only and non-qualifying. Writable syscall buffers require bounded, complete caller ownership and writable mapping before dereference; `GetRandom` now has this validation and focused hostile direct-opcode evidence, but PAL-031 remains Deferred until named approval of the governed rebind. Filesystem/network/process APIs cannot gain ambient authority; panic output must not leak secrets or addresses beyond existing policy; allocator/TLS state is per-cell and cannot cross authority boundaries. Error mapping must not turn denial into absence or success.
 
 ## Risk Notes
 

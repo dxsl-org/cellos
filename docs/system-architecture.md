@@ -58,10 +58,10 @@
 > Rust sources, and an exact six-path kernel security inventory. Verification
 > passed 33/33 feasibility cases, 57/57 validator adversarial attacks, 36/36
 > security-manifest tamper attacks, and the unchanged host baseline of 105
-> passed, 0 failed, and 4 ignored; all 101 approval inputs and their links and
-> digests match. This verifies only the conditional compiler/runtime contract
-> and fixture-only validator. There is no PAL, target, sysroot, runtime, live
-> capture, or promotion. All six human approval rows remain `NOT GRANTED`, the
+> passed, 0 failed, and 4 ignored; all 106 approval inputs, including the
+> governed GetRandom hostile-evidence report, and their links and digests match.
+> This verifies only the conditional compiler/runtime contract and fixture-only
+> validator. There is no PAL, target, sysroot, runtime, live capture, or promotion. All six human approval rows remain `NOT GRANTED`, the
 > implementation checkpoint is `BLOCKED`, and Phase 06 remains pending and
 > dependency-blocked on Phase 03.
 >

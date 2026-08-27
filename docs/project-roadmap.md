@@ -180,10 +180,10 @@ Cellos is being shaped around product stages, not only phase numbers:
   successful entropy over a zero-byte RNG source. `PAL-031` technical backing
   now has a bounded caller-owned GetRandom output implementation and isolated
   RV64 QEMU hostile evidence, including final-write races against root
-  retirement, grant revoke, and exact backing-frame reuse. The authoritative
-  support map still classifies `PAL-031` as Deferred until the governed
-  security manifest is rebound and every named approval is granted. This
-  runtime evidence does not grant PAL approval, production entropy, or any
+  retirement, grant revoke, and exact backing-frame reuse. The governed
+  security manifest now binds this evidence; the authoritative support map
+  still classifies `PAL-031` as Deferred pending every named approval.
+  This runtime evidence does not grant PAL approval, production entropy, or any
   remaining qualification gate. There is no PAL, target, sysroot, runtime,
   live capture, approval, or promotion. All six approval rows remain `NOT
   GRANTED`, the implementation checkpoint remains `BLOCKED`, and umbrella

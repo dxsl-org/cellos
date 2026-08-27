@@ -2,7 +2,7 @@
 
 Decision: **BLOCKED**
 Feasibility state: `FEASIBILITY_PACKAGE_VERIFIED_SECURITY_BACKING_AND_HUMAN_APPROVAL_BLOCKED`
-Canonical approval-input-manifest SHA-256: `5036ea3690c3b044566bd8916cd9a7022ef751efd9fc491188b04d0f2d548514` (independently package-verified; security backing and human approval blocked).
+Canonical approval-input-manifest SHA-256: `85a1aebe52ae15a396a69b6fca6b5fe6eb2fb66b9cb16bf3f66ac5d1aecff8a7` (independently package-verified; security backing and human approval blocked).
 
 Required before a later child may be created:
 

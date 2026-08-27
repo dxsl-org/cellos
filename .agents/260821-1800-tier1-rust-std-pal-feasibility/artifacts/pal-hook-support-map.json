@@ -827,14 +827,15 @@
     },
     {
       "capability_effect": "Future qualification keeps allowlists and resource capabilities authoritative and accepts only bounded caller-owned writable buffers.",
-      "cellos_backend": "Current ostd syscall wrappers / frozen ViSyscall ABI exist, but the GetRandom handler constructs a mutable slice from the raw cell pointer without `validate_user_buf`.",
+      "cellos_backend": "Current ostd syscall wrappers / frozen ViSyscall ABI and the GetRandom handler perform `validate_user_buf` before constructing the output slice; the focused QEMU direct-opcode matrix completed hostile rejection and final-authorization race evidence.",
       "cfg_gate": "target_os=\"cellos\" (currently reaches `_` unsupported branch unless noted)",
       "classification": "Deferred",
       "contract": "PAL calls only typed frozen syscalls/services. Before any dereference or write, the kernel must reject null, overflowed, oversized, unmapped, kernel, and peer-cell ranges and prove the entire output is caller-owned and writable; IPC preserves buffer/ownership contracts.",
       "dependencies": [
         "PAL-001",
-        "bounded caller-owned writable validation",
-        "hostile direct-syscall evidence"
+        "bounded caller-owned writable validation (implemented)",
+        "hostile direct-syscall evidence (completed focused QEMU matrix)",
+        "named approval of governed manifest rebind"
       ],
       "error_semantics": "Invalid pointer provenance or bounds returns InvalidInput/PermissionDenied without dereference or write; denial, invalid input, OOM, and service-down remain distinct.",
       "evidence": [
@@ -843,17 +844,21 @@
           "kind": "pinned_std"
         },
         {
-          "anchor": "libs/ostd/src/syscall.rs:63-103,1592-1604; libs/api/src/abi/syscall.rs:9-30,271-272,673-678,804-805",
+          "anchor": "libs/ostd/src/syscall.rs; libs/api/src/abi/syscall.rs",
           "kind": "cellos"
         },
         {
-          "anchor": "kernel/src/task/syscall.rs:621-646,1261-1263,1441-1442,4561-4570,4777-5039,5172-5299",
+          "anchor": "kernel/src/task/syscall.rs",
           "kind": "kernel-security-backing"
+        },
+        {
+          "anchor": "artifacts/getrandom-hostile-evidence.md",
+          "kind": "qemu-direct-opcode-evidence"
         }
       ],
       "hook_id": "PAL-031",
       "owner": "Kernel syscall-security owner and Rust std/PAL owner",
-      "rationale": "The primitive boundary and allowlist exist, but current GetRandom pointer provenance is not validated before mutable-slice construction, so the boundary is not yet qualifying.",
+      "rationale": "Technical backing and hostile direct-opcode evidence are complete. PAL-031 remains Deferred while this governed manifest rebind awaits named approval; it is not implementation authorization.",
       "required_by": "raw syscall and IPC transport",
       "safety_invariants": "Every pointer/length is overflow-checked, capped, fully mapped, caller-owned, writable for outputs, and rejected before access when it names null, unmapped, kernel, or peer memory; replies remain bounded with no cross-cell aliasing.",
       "symbol": "platform service boundary used by Cellos PAL",
@@ -1369,7 +1374,7 @@
     "closure": "exact-set",
     "digest_algorithm": "sha256(canonical-json(entries))",
     "entry_count": 6,
-    "inventory_digest": "f7a7bedadf67c960e26b989e51fd58b53c80bc4eef707b133180ac0ff30c7295",
+    "inventory_digest": "62c7149a522a94c148da318ec1a1846985d78f7b23d0d5e03bb9e7fd95c03df6",
     "entries": [
       {
         "path": "kernel/Cargo.toml",
@@ -1377,7 +1382,7 @@
           "kernel feature defaults",
           "production dev-weak-rng exclusion"
         ],
-        "sha256": "f9b837e66768727f992443ebdf8343c3db38e6982094092aa457346d1173f9f3"
+        "sha256": "2ad36b128edcef499e1f23720d988a85b8f9630a80543588aac59ba83a119682"
       },
       {
         "path": "kernel/src/task/drivers.rs",
@@ -1392,7 +1397,7 @@
           "current entropy source implementation",
           "zero-byte unavailable behavior"
         ],
-        "sha256": "ff18f0062e9d1178ed11d24be4aa6b67271ba894854e5e7481c107a88efa4a6e"
+        "sha256": "c87842af651f43e056f131074cc70b9d82a922ef6f39fcfc29c0ec8a25159cbc"
       },
       {
         "path": "kernel/src/task/syscall.rs",
@@ -1403,7 +1408,7 @@
           "GetRandom handler",
           "user-buffer validation primitives"
         ],
-        "sha256": "e4ac459d328c1ccf1c8450ed4f571e0e7c6454048cbb9e6988a479eb30d2fb18"
+        "sha256": "2057e681d9fa2580d835e30c510c7e102a9e98a7210e80f4e2fa6c13cee16e3d"
       },
       {
         "path": "libs/api/src/abi/syscall.rs",
@@ -1411,14 +1416,14 @@
           "frozen syscall opcode decoder",
           "GetRandom allowlist-bit mapping"
         ],
-        "sha256": "3cd2ac33eaff030e4263b8c1dc552018b4578554af5c6499aaf9e67cf4c3f020"
+        "sha256": "7dc2fd0ddd17af6874cf2183a531a4dd9e5bdc59f7a1965034722b85e45eb0ef"
       },
       {
         "path": "libs/ostd/src/syscall.rs",
         "roles": [
           "typed GetRandom caller wrapper"
         ],
-        "sha256": "51227ca82372aabd6b5e1a6737b1c5b6f96a0906014cc1ecef87f6add4366b82"
+        "sha256": "97bab1b31947662cf8a50bb288472ba5e78e83b9e2266d2039fee79ad614b7de"
       }
     ],
     "required_paths": [

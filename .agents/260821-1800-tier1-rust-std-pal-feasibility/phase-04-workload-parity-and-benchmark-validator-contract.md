@@ -88,7 +88,7 @@ The schema also requires `source_kind="synthetic_fixture"` and `fixture_id`; it 
 
 ## Verification Evidence
 
-Final verification passed all 33/33 feasibility tests and all 57/57 validator adversarial attacks; the unchanged host aggregate was 105 passed, 0 failed, and 4 ignored. Every fixture, expected report, schema, validator, CLI, test digest, and link in the 101-input manifest matched. Final quality and security reviews both returned PASS with no findings. The validator remains synthetic-fixture-only and non-promotional, and both benchmark-contract human approval rows remain `NOT GRANTED`.
+Final verification passed all 33/33 feasibility tests and all 57/57 validator adversarial attacks; the unchanged host aggregate was 105 passed, 0 failed, and 4 ignored. Every fixture, expected report, schema, validator, CLI, test digest, link, and governed GetRandom hostile-evidence input in the 106-input manifest matched. Final quality and security reviews both returned PASS with no findings. The validator remains synthetic-fixture-only and non-promotional, and both benchmark-contract human approval rows remain `NOT GRANTED`.
 
 ## Security Considerations
 

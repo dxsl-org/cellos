@@ -2,7 +2,7 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
-## [2026-08-27] GetRandom caller-owned output Phase 02 runtime evidence
+## [2026-08-27] GetRandom caller-owned output evidence and PAL governance rebind
 
 - GetRandom now validates the original descriptor, authorizes the capped
   caller-owned writable span before entropy, and retains final authorization
@@ -11,10 +11,11 @@
   final-write races against production root retirement, grant revoke, and exact
   backing-frame unmap/reuse. It emits one dedicated terminal and excludes the
   unrelated user-copy race fixture.
-- `PAL-031` technical backing/evidence is complete, but its authoritative
-  support-map classification remains `Deferred` pending governed manifest rebind
-  and named approvals. This changes no PAL, target, production-entropy,
-  promotion, or human-approval status.
+- `PAL-031` technical backing/evidence is complete and the governed manifest
+  now binds its current source and contract digests. Its authoritative
+  support-map classification remains `Deferred` pending named approvals. This
+  changes no PAL, target, production-entropy, promotion, or human-approval
+  status.
 
 ## [2026-08-27] Hardware-independent roadmap execution model
 
@@ -484,15 +485,12 @@ ignored. Final quality and security reviews passed with no findings. These
 results verify the package and validator, not live runtime behavior,
 authenticated benchmark evidence, human approval, or promotion.
 
-Two current kernel weaknesses remain implementation blockers. `PAL-019` is
-Deferred because the default development tuple enables predictable
-`dev-weak-rng` success over a zero-byte VirtIO RNG source. `PAL-031` is Deferred
-because `GetRandom` constructs a mutable output slice without proving bounded,
-complete, caller-owned writable provenance. Development/QEMU weak entropy is
-distinct from production qualification: a production tuple must omit the weak
-feature and prove real admitted entropy or observable zero/error, while hostile
-null, overflowed, oversized, unmapped, kernel, and peer pointers must be
-rejected before access.
+`PAL-019` remains Deferred because the default development tuple enables
+predictable `dev-weak-rng` success over a zero-byte VirtIO RNG source.
+`PAL-031` technical backing/evidence is complete and its governed manifest is
+rebound, but it remains Deferred pending named approvals. Development/QEMU weak
+entropy is distinct from production qualification: a production tuple must omit
+the weak feature and prove real admitted entropy or observable zero/error.
 
 There is no PAL, target JSON, private or published sysroot, target/triple,
 Tier 1 `rust-std` runtime, live capture, authenticated promotion evidence, or

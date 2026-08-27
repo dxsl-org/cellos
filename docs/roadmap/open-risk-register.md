@@ -33,8 +33,8 @@ execution class, owner, and reopening event are in
   authorization through the bounded write (`kernel/src/task/syscall.rs`).
   Isolated RV64 QEMU evidence covers direct hostile descriptors and races
   against root retirement, grant revocation, and exact backing-frame reuse.
-  `PAL-031` remains `Deferred` in the authoritative support map until the
-  governed security manifest is rebound and all named approvals are granted.
+  `PAL-031` remains `Deferred` in the authoritative support map pending all
+  named approvals of the now-rebound governed security manifest.
   This local QEMU evidence grants no PAL support, real production entropy,
   implementation-checkpoint, or umbrella Phase 03 production transition.
 
