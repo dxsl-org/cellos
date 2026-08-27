@@ -715,6 +715,21 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     log_info("Initializing scheduler...");
     task::init();
     log_info("Scheduler initialized");
+    // This test-only branch must precede every unrelated boot suite: its
+    // terminal is the sole evidence for opcode 214's SAS ownership path.
+    #[cfg(all(
+        target_arch = "riscv64",
+        feature = "native-domains",
+        feature = "getrandom-sas-test"
+    ))]
+    {
+        task::smp::start_secondaries();
+        // Erase the diverging return type so the generic boot path remains
+        // typechecked without a feature-specific unreachable-code warning.
+        let exit = |success| -> () { crate::qemu_exit(success) };
+        exit(task::user_copy_tests::run_getrandom_primary());
+    }
+
 
     // The loader corpus exercises real spawn_gated denials and snapshots the
     // scheduler around every malformed image. Run it after task::init(), while
@@ -794,6 +809,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // any secondary hart starts running kernel code.
     #[cfg(target_arch = "riscv64")]
     task::smp::start_secondaries();
+
 
     #[cfg(all(target_arch = "riscv64", feature = "test-hooks"))]
     crate::memory::tlb_shootdown_selftest::run_primary();

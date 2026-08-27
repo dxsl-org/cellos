@@ -86,8 +86,13 @@ pub fn prepare_elf_task(
         .iter()
         .map(|p| (p.va, p.final_flags))
         .collect::<Vec<_>>();
-    let segments = super::stack::CellSegments::new(
+    let segments = super::stack::CellSegments::with_writable_pages(
         seg_pages.iter().map(|p| (p.va, p.frame)).collect(),
+        seg_pages
+            .iter()
+            .filter(|p| p.final_flags.bits() & crate::memory::paging::Flags::WRITE != 0)
+            .map(|p| p.va)
+            .collect(),
         load_base,
     );
     #[cfg(feature = "test-hooks")]

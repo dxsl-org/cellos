@@ -66,6 +66,13 @@ pub(crate) mod user_copy;
     target_arch = "riscv64"
 ))]
 pub(crate) mod user_copy_tests;
+#[cfg(all(
+    feature = "native-domains",
+    feature = "test-hooks",
+    target_arch = "riscv64"
+))]
+#[path = "task/getrandom-sas-tests.rs"]
+pub(crate) mod getrandom_sas_tests;
 #[cfg(feature = "test-hooks")]
 pub mod user_hello;
 pub mod user_out;

@@ -83,6 +83,34 @@ impl TaskCopyView {
             .and_then(|s| s.tasks.get(&task_id))
             .map(|t| Self::of(t))
     }
+    /// Whether this view uses the shared SAS root rather than a private Domain.
+    #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+    pub(crate) fn is_sas(&self) -> bool {
+        matches!(
+            self.0,
+            TaskCopyRepr::Boundary(super::user_copy::CopyView::Sas)
+        )
+    }
+
+    /// Verify a writable destination without moving user bytes.
+    pub(crate) fn validate_writable(&self, ptr: usize, len: usize) -> Result<(), ()> {
+        #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+        {
+            match &self.0 {
+                TaskCopyRepr::Boundary(view) => {
+                    use super::user_copy::{probe_writable, UserWriteSlice};
+                    let dst = UserWriteSlice::new(ptr, len, true).map_err(|_| ())?;
+                    probe_writable(view, dst).map_err(|_| ())
+                }
+                TaskCopyRepr::KernelDirect => validate_kernel_range(ptr, len, true),
+            }
+        }
+        #[cfg(not(all(feature = "native-domains", target_arch = "riscv64")))]
+        {
+            let _ = (ptr, len);
+            Ok(())
+        }
+    }
 
     /// Read `len` bytes at `ptr` into a fresh owned buffer. A zero-length
     /// read is valid and yields an empty buffer. Allocation failure and copy

@@ -434,9 +434,6 @@ fn run_copy_fixture() -> bool {
 
     true
 }
-
-// ─── COPY-RACE: revoke blocks on the held CopyReader until drain ────────────
-
 const RACE_VA_A: usize = 0x0400_0000;
 const RACE_VA_B: usize = RACE_VA_A + PAGE_SIZE;
 const RACE_CELL: u64 = 91_201;
@@ -629,6 +626,17 @@ fn run_race_fixture() -> bool {
     }
     let _ = RACE_SPACE.lock().take();
     ok
+}
+
+/// Run only the GetRandom SAS ownership fixture and publish its unique terminal.
+pub(crate) fn run_getrandom_primary() -> bool {
+    let passed = super::getrandom_sas_tests::run_fixture();
+    if passed {
+        log::info!("S22-RV64-GETRANDOM-SAS: PASS");
+    } else {
+        log::error!("S22-RV64-GETRANDOM-SAS: FAIL");
+    }
+    passed
 }
 
 /// Boot hook entry. Emits exactly one COPY marker per boot; the RACE marker is

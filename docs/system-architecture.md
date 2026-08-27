@@ -1275,13 +1275,13 @@ Routing (cross-machine): Private→Public ✓ · Public→Private ✗ · Private
   and reports success. That is an explicitly development-only posture, not
   production qualification. Fleet and production artifacts must omit
   `dev-weak-rng` and prove real admitted entropy or observable zero/error
-  without synthetic success. The current handler also constructs a mutable
-  slice from the raw output pointer before proving bounded, complete,
-  caller-owned writable provenance. Production qualification therefore also
-  requires null, overflowed, oversized, unmapped, kernel, and peer pointers to
-  be rejected before any access. Weak development entropy may produce only
-  disposable test identities; it is never fleet credential, release-signature,
-  production Noise-key, PAL support, or promotion evidence.
+  without synthetic success. GetRandom now validates the original descriptor,
+  authorizes only its bounded caller-owned writable output span, and retains
+  final authorization through the write. Isolated RV64 QEMU evidence includes
+  direct hostile descriptors and races against root retirement, grant
+  revocation, and exact backing-frame reuse. That evidence does not supply PAL
+  approval, production entropy, fleet credentials, release signatures,
+  production Noise keys, or promotion evidence.
 - `ClusterId` is routing-only; the PSK/Noise handshake is the sole authenticator. Multicast gossip is ~G1-only (cloud VPCs block multicast → G2 discovery shifts to a registry).
 
 ### KMS TLS signer boundary (Phase 1, 2026-08-25)

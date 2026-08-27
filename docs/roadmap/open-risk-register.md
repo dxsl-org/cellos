@@ -26,19 +26,16 @@ execution class, owner, and reopening event are in
   finding remains open because fleet key provisioning, the production
   provenance/signature gate, and `signing-required` enforcement are still
   unfinished; development builds still admit unsigned cells by default.
-- **`CELLOS-RUSTSTD-PTR-004` — Critical, owner: later authorized
-  PAL/target/runtime implementation child with the kernel syscall-security and
-  Rust `std`/PAL owners.** `GetRandom` currently constructs a mutable slice
-  from the Cell-supplied output pointer without first applying the available
-  user-buffer validator or otherwise proving bounded, complete, caller-owned
-  writable provenance (`kernel/src/task/syscall.rs`). A caller granted the
-  syscall can therefore present null, overflowed, oversized, unmapped, kernel,
-  or peer-cell ranges to an unsafe write boundary. `PAL-031` remains Deferred.
-  Qualification requires rejection of every hostile class before access,
-  evidenced by direct-syscall tests, while preserving allowlist enforcement and
-  the frozen ABI. This later child is not authorized until all six human
-  approvals, its implementation checkpoint, and umbrella Phase 03 production
-  gates are granted.
+- **`CELLOS-RUSTSTD-PTR-004` — Critical historical GetRandom output-provenance
+  defect; runtime mitigation complete, owner: PAL/target/runtime governance.**
+  GetRandom now validates the original descriptor, caps the write to its frozen
+  ABI bound, proves complete caller-owned writable provenance, and retains final
+  authorization through the bounded write (`kernel/src/task/syscall.rs`).
+  Isolated RV64 QEMU evidence covers direct hostile descriptors and races
+  against root retirement, grant revocation, and exact backing-frame reuse.
+  `PAL-031` remains approval-pending: this local QEMU evidence does not grant
+  PAL support, real production entropy, any of the six human approvals, the
+  implementation checkpoint, or umbrella Phase 03 production gates.
 
 ## High
 

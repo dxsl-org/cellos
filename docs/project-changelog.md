@@ -2,6 +2,19 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-27] GetRandom caller-owned output Phase 02 runtime evidence
+
+- GetRandom now validates the original descriptor, authorizes the capped
+  caller-owned writable span before entropy, and retains final authorization
+  through the bounded write.
+- The isolated two-hart RV64 QEMU fixture covers direct hostile descriptors and
+  final-write races against production root retirement, grant revoke, and exact
+  backing-frame unmap/reuse. It emits one dedicated terminal and excludes the
+  unrelated user-copy race fixture.
+- `PAL-031` is runtime-evidence complete but remains approval-pending. This
+  changes no PAL, target, production-entropy, promotion, or human-approval
+  status.
+
 ## [2026-08-27] Hardware-independent roadmap execution model
 
 - The roadmap now schedules work by capability dependencies, `execution_class`,

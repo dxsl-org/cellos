@@ -38,7 +38,7 @@ mod range;
 mod scatter;
 mod sv39_probe;
 
-pub(crate) use copy::{copy_from_user, copy_to_user};
+pub(crate) use copy::{copy_from_user, copy_to_user, probe_writable};
 pub(crate) use guard::clear_guard_for_context_switch;
 #[cfg(feature = "test-hooks")]
 pub(crate) use guard::forced_guard_fault_recovers_for_test;

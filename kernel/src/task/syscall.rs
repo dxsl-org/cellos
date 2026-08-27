@@ -13,6 +13,25 @@ use api::syscall::ViSpawnArgs;
 use super::copy_glue::TaskCopyView;
 use types::*;
 
+#[cfg(feature = "test-hooks")]
+static GETRANDOM_RACE_ARMED_CALLER: core::sync::atomic::AtomicUsize =
+    core::sync::atomic::AtomicUsize::new(0);
+#[cfg(feature = "test-hooks")]
+static GETRANDOM_RACE_ENTERED: core::sync::atomic::AtomicBool =
+    core::sync::atomic::AtomicBool::new(false);
+#[cfg(feature = "test-hooks")]
+static GETRANDOM_RACE_PROBED_BUSY: core::sync::atomic::AtomicBool =
+    core::sync::atomic::AtomicBool::new(false);
+#[cfg(feature = "test-hooks")]
+static GETRANDOM_RACE_DONE: core::sync::atomic::AtomicBool =
+    core::sync::atomic::AtomicBool::new(false);
+#[cfg(feature = "test-hooks")]
+static GETRANDOM_RACE_NO_EARLY_DONE: core::sync::atomic::AtomicBool =
+    core::sync::atomic::AtomicBool::new(false);
+#[cfg(feature = "test-hooks")]
+static GETRANDOM_RACE_PROBE_TIMED_OUT: core::sync::atomic::AtomicBool =
+    core::sync::atomic::AtomicBool::new(false);
+
 /// Set of physical frames currently issued via `ShmAlloc`.
 /// `ShmMap` accepts only handles that appear here, preventing a malicious
 /// cell from mapping arbitrary kernel/cell-owned frames into its address
@@ -46,15 +65,21 @@ fn shm_is_valid(handle: usize) -> bool {
 
 /// Kernel-managed zero-copy memory region.
 ///
-/// Distinct from `tcb::GrantEntry` which tracks per-task grants from the kernel.
-/// Owner and grantee are tracked by raw task id (usize) — same as `caller_id`
-/// from `current_task_id()`. We intentionally avoid `CellId` wrappers here
-/// because `caller_id` IS a task id, not a Cell id (F7).
+/// Distinct from `tcb::GrantEntry`, which tracks per-task grants from the kernel.
+/// The issuing task identity remains necessary for the existing grant ABI, but
+/// the Cell/generation binding prevents a stale task record from becoming a
+/// writable-output authority after retirement or transfer.
 struct PageGrant {
-    base: usize,                           // physical address of the first allocated page
-    size: usize,                           // logical byte count requested by the owner
-    owner: usize,                          // task id of the GrantAlloc caller
-    shared_to: Option<(usize, GrantPerm)>, // current grantee task id + permission
+    base: usize,
+    size: usize,
+    owner: usize,
+    // Read by the RV64 SAS ownership ledger; retained in every build so a
+    // grant cannot change its security identity across target tuples.
+    #[allow(dead_code)]
+    owner_cell: CellId,
+    #[allow(dead_code)]
+    owner_generation: u64,
+    shared_to: Option<(usize, GrantPerm)>,
 }
 
 static PAGE_GRANT_TABLE: Spinlock<Option<BTreeMap<usize, PageGrant>>> = Spinlock::new(None);
@@ -79,13 +104,15 @@ fn grant_allocated_bytes(size: usize) -> usize {
 
 /// Persistent kernel-managed Grant buffer for a cell's lifetime.
 ///
-/// Supports one grantee at a time via `GrantShare`/`GrantSlice` (same as `PageGrant`).
+/// Supports one grantee at a time via `GrantShare`/`GrantSlice` (same as
+/// `PageGrant`). `owner == 0` denotes an owner-dead VFS handoff awaiting reap.
 struct RegGrant {
-    base: usize, // physical address of first allocated page
-    size: usize, // logical byte count requested by the owner
-    // 0 means the owner exited while a grantee still held the mapping.
+    base: usize,
+    size: usize,
     owner: usize,
-    shared_to: Option<(usize, GrantPerm)>, // authorized grantee task id + permission
+    owner_cell: CellId,
+    owner_generation: u64,
+    shared_to: Option<(usize, GrantPerm)>,
 }
 
 static REG_GRANT_TABLE: Spinlock<Option<BTreeMap<usize, RegGrant>>> = Spinlock::new(None);
@@ -228,6 +255,118 @@ fn refuse_if_pinned(kind: &str, id: usize, base: usize, size: usize) -> Result<(
     Err(SyscallError::PermissionDenied)
 }
 
+/// Remove a caller-owned registered grant after acquiring its ownership lock.
+///
+/// The registered-grant table is deliberately this operation's first
+/// synchronization point: the final GetRandom output lease uses the same lock
+/// to serialize validation, write, and teardown.
+fn unregister_registered_grant(caller_id: usize, reg_id: usize) -> Result<(), SyscallError> {
+    let entry = {
+        let mut table = reg_grant_table_lock().lock();
+        let owned = table
+            .as_ref()
+            .and_then(|grants| grants.get(&reg_id))
+            .filter(|grant| grant.owner == caller_id)
+            .map(|grant| (grant.base, grant.size));
+        match owned {
+            Some((base, size)) => {
+                refuse_if_pinned("GrantUnregister", reg_id, base, size)?;
+                table.as_mut().and_then(|grants| grants.remove(&reg_id))
+            }
+            None => None,
+        }
+    }
+    .ok_or(SyscallError::PermissionDenied)?;
+    free_grant_pages(entry.base, grant_pages_for_size(entry.size));
+    Ok(())
+}
+
+/// Exercise registered-grant teardown without decoder or scheduler pre-locks.
+///
+/// Available only to the in-kernel race fixture; production callers use
+/// `GrantUnregister` through `handle_syscall`.
+#[cfg(feature = "test-hooks")]
+pub(crate) fn test_unregister_registered_grant_for_race(
+    caller_id: usize,
+    reg_id: usize,
+) -> Result<(), SyscallError> {
+    unregister_registered_grant(caller_id, reg_id)
+}
+
+/// Reissue an unregistered one-page race grant at its exact former frame.
+///
+/// The fixture has already removed `base` through the production unregister
+/// path. Returns `true` only after the new caller-owned record is mapped and
+/// its replacement bytes have been cleared.
+#[cfg(feature = "test-hooks")]
+pub(crate) fn test_reregister_registered_grant_for_race(caller_id: usize, base: usize) -> bool {
+    use crate::memory::{frame::FRAME_ALLOCATOR, paging::Flags};
+
+    let claimed = FRAME_ALLOCATOR
+        .lock()
+        .as_mut()
+        .is_some_and(|allocator| allocator.claim_exact_frame_for_test(base));
+    if !claimed {
+        return false;
+    }
+    let user_flags = Flags::from_bits(
+        Flags::VALID | Flags::READ | Flags::WRITE | Flags::USER | Flags::ACCESSED | Flags::DIRTY,
+    );
+    let mapped = FRAME_ALLOCATOR.lock().as_mut().is_some_and(|allocator| {
+        let _ = crate::memory::paging::unmap_page(base);
+        crate::memory::paging::map_page(allocator, base, base, user_flags).is_ok()
+    });
+    if !mapped {
+        free_grant_pages(base, 1);
+        return false;
+    }
+    let zeroed = with_test_sum(|| unsafe {
+        // SAFETY: the one-page race grant above is mapped USER RW at `base`.
+        core::ptr::write_bytes(base as *mut u8, 0, 4096);
+        core::slice::from_raw_parts((base + 32) as *const u8, 64)
+            .iter()
+            .all(|byte| *byte == 0)
+    });
+    if !zeroed {
+        free_grant_pages(base, 1);
+        return false;
+    }
+    let registered = {
+        let mut table = reg_grant_table_lock().lock();
+        match live_task_binding(caller_id) {
+            Some((owner_cell, owner_generation))
+                if !table
+                    .as_ref()
+                    .is_some_and(|grants| grants.contains_key(&base)) =>
+            {
+                if table.is_none() {
+                    *table = Some(BTreeMap::new());
+                }
+                table.as_mut().is_some_and(|grants| {
+                    grants
+                        .insert(
+                            base,
+                            RegGrant {
+                                base,
+                                size: 128,
+                                owner: caller_id,
+                                owner_cell,
+                                owner_generation,
+                                shared_to: None,
+                            },
+                        )
+                        .is_none()
+                })
+            }
+            _ => false,
+        }
+    };
+    if !registered {
+        free_grant_pages(base, 1);
+    }
+    registered
+}
+
 // ── Grant Reaper ──────────────────────────────────────────────────────────────
 
 /// Reclaim all grant pages owned or held by a dying task.
@@ -309,12 +448,22 @@ pub(crate) fn reap_grants_for_task(dead_tid: usize) {
                         .is_some()
                         {
                             grant.owner = 0;
+                            grant.owner_cell = CellId(0);
+                            grant.owner_generation = 0;
                             grant.shared_to = None;
                             owned_keys.push(key);
-                        } else {
-                            // Preserve the legacy transfer only when no live VFS
-                            // lease still spans the region.
+                        } else if let Some((cell_id, generation)) = live_task_binding(grantee) {
+                            // Preserve the legacy transfer only to a live,
+                            // generation-attested grantee.
                             grant.owner = grantee;
+                            grant.owner_cell = cell_id;
+                            grant.owner_generation = generation;
+                        } else {
+                            grant.owner = 0;
+                            grant.owner_cell = CellId(0);
+                            grant.owner_generation = 0;
+                            grant.shared_to = None;
+                            owned_keys.push(key);
                         }
                     } else {
                         owned_keys.push(key);
@@ -675,13 +824,286 @@ pub(super) fn validate_user_buf(ptr: usize, len: usize, max: usize) -> Result<()
 
 /// Derive the phase-03 recoverable copy view for a live caller task.
 ///
-/// Acquires SCHEDULER, clones the view, and releases the lock. Returns
-/// `TaskCopyView::sas()` as a safe fallback when the task record is not found
-/// (the subsequent copy will then surface a proper `InvalidInput` if the
-/// pointer is bad, rather than a kernel panic).
+/// Acquires SCHEDULER, clones the view, and releases the lock. A missing task
+/// is rejected so an unavailable task record cannot become SAS authority.
 fn caller_copy_view(caller_id: usize) -> Result<TaskCopyView, SyscallError> {
     TaskCopyView::for_task(caller_id).ok_or(SyscallError::InvalidInput)
 }
+/// Return the live Cell-generation binding for a task.
+///
+/// Callers holding a grant table preserve the documented
+/// `*_GRANT_TABLE → SCHEDULER` order while taking this snapshot.
+fn live_task_binding(task_id: usize) -> Option<(CellId, u64)> {
+    let scheduler = super::SCHEDULER.lock();
+    scheduler
+        .as_ref()?
+        .tasks
+        .get(&task_id)
+        .filter(|task| !matches!(task.state, TaskState::Retiring | TaskState::Terminated))
+        .map(|task| (task.cell_id, task.cell_generation))
+}
+
+#[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+fn record_end_containing(base: usize, size: usize, ptr: usize) -> Option<usize> {
+    let end = base.checked_add(size)?;
+    (base <= ptr && ptr < end).then_some(end)
+}
+
+#[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+fn sas_record_end(
+    sched: &super::scheduler::Scheduler,
+    page_grants: Option<&BTreeMap<usize, PageGrant>>,
+    registered_grants: Option<&BTreeMap<usize, RegGrant>>,
+    caller_id: usize,
+    ptr: usize,
+) -> Option<usize> {
+    let (cell_id, generation, root_tid) = {
+        let caller = sched.tasks.get(&caller_id)?;
+        if matches!(caller.state, TaskState::Retiring | TaskState::Terminated) {
+            return None;
+        }
+        (caller.cell_id, caller.cell_generation, caller.root_tid)
+    };
+    let stack_end = sched
+        .tasks
+        .values()
+        .filter(|task| {
+            !matches!(task.state, TaskState::Retiring | TaskState::Terminated)
+                && task.cell_id == cell_id
+                && task.cell_generation == generation
+                && task.root_tid == root_tid
+        })
+        .filter_map(|task| {
+            task.user_stack.as_ref().and_then(|stack| {
+                record_end_containing(stack.usable_start(), stack.usable_bytes(), ptr)
+            })
+        })
+        .max();
+    let segment_end = sched.tasks.get(&root_tid).and_then(|root| {
+        (!matches!(root.state, TaskState::Retiring | TaskState::Terminated)
+            && root.cell_id == cell_id
+            && root.cell_generation == generation
+            && root.root_tid == root_tid)
+            .then_some(root.segment_mem.as_ref())?
+            .and_then(|segments| segments.writable_page_end_containing(ptr))
+    });
+    let page_grant_end = page_grants.and_then(|grants| {
+        grants
+            .values()
+            .filter(|grant| {
+                grant.owner == caller_id
+                    && grant.owner_cell == cell_id
+                    && grant.owner_generation == generation
+            })
+            .filter_map(|grant| record_end_containing(grant.base, grant.size, ptr))
+            .max()
+    });
+    let registered_grant_end = registered_grants.and_then(|grants| {
+        grants
+            .values()
+            .filter(|grant| {
+                grant.owner == caller_id
+                    && grant.owner_cell == cell_id
+                    && grant.owner_generation == generation
+            })
+            .filter_map(|grant| record_end_containing(grant.base, grant.size, ptr))
+            .max()
+    });
+    [stack_end, segment_end, page_grant_end, registered_grant_end]
+        .into_iter()
+        .flatten()
+        .max()
+}
+
+/// Verify contiguous coverage by live caller-owned writable records.
+///
+/// Each loop consumes at least one record. A gap, peer record, stale root, or
+/// overflow fails closed without allocating or consulting page writability as
+/// an ownership signal.
+#[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+fn sas_caller_owned_span(
+    sched: &super::scheduler::Scheduler,
+    page_grants: Option<&BTreeMap<usize, PageGrant>>,
+    registered_grants: Option<&BTreeMap<usize, RegGrant>>,
+    caller_id: usize,
+    ptr: usize,
+    len: usize,
+) -> bool {
+    let Some(end) = ptr.checked_add(len) else {
+        return false;
+    };
+    let mut cursor = ptr;
+    while cursor < end {
+        let Some(next) = sas_record_end(sched, page_grants, registered_grants, caller_id, cursor)
+        else {
+            return false;
+        };
+        if next <= cursor {
+            return false;
+        }
+        cursor = next.min(end);
+    }
+    true
+}
+
+/// Preflight the exact output span before consuming entropy.
+///
+/// SAS ownership comes only from caller stack/root-segment/grant records. The
+/// final check repeats under the same ordered lock set held through commit.
+fn preflight_getrandom_output(
+    caller_id: usize,
+    ptr: usize,
+    len: usize,
+) -> Result<(), SyscallError> {
+    let view = caller_copy_view(caller_id)?;
+    #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+    if view.is_sas() {
+        // Lease order: PAGE_GRANT_TABLE → REG_GRANT_TABLE → SCHEDULER. This
+        // extends the established grant-table → scheduler order used by
+        // GrantSlice; no removal path may unmap or reuse a contributing record
+        // while this final-authorization lock set is held.
+        let page_grants = grant_table_lock().lock();
+        let registered_grants = reg_grant_table_lock().lock();
+        let scheduler = super::SCHEDULER.lock();
+        if !scheduler.as_ref().is_some_and(|sched| {
+            sas_caller_owned_span(
+                sched,
+                page_grants.as_ref(),
+                registered_grants.as_ref(),
+                caller_id,
+                ptr,
+                len,
+            )
+        }) {
+            return Err(SyscallError::InvalidInput);
+        }
+    }
+    view.validate_writable(ptr, len)
+        .map_err(|_| SyscallError::InvalidInput)
+}
+
+/// Arm the final-write/unregister serialization fixture for one caller.
+#[cfg(feature = "test-hooks")]
+pub(crate) fn test_arm_getrandom_revoke_race(caller_id: usize) {
+    use core::sync::atomic::Ordering;
+
+    GETRANDOM_RACE_ENTERED.store(false, Ordering::Release);
+    GETRANDOM_RACE_PROBED_BUSY.store(false, Ordering::Release);
+    GETRANDOM_RACE_PROBE_TIMED_OUT.store(false, Ordering::Release);
+    GETRANDOM_RACE_DONE.store(false, Ordering::Release);
+    GETRANDOM_RACE_NO_EARLY_DONE.store(false, Ordering::Release);
+    GETRANDOM_RACE_ARMED_CALLER.store(caller_id, Ordering::Release);
+}
+
+/// Report whether GetRandom's final write has acquired its ownership locks.
+#[cfg(feature = "test-hooks")]
+pub(crate) fn test_getrandom_revoke_race_entered() -> bool {
+    GETRANDOM_RACE_ENTERED.load(core::sync::atomic::Ordering::Acquire)
+}
+
+/// Probe the registered-grant lock used by the production unregister helper.
+#[cfg(feature = "test-hooks")]
+pub(crate) fn test_probe_getrandom_revoke_lock() -> bool {
+    use core::sync::atomic::Ordering;
+
+    let busy = reg_grant_table_lock().try_lock().is_none();
+    GETRANDOM_RACE_PROBED_BUSY.store(busy, Ordering::Release);
+    busy
+}
+
+/// Publish that the unregister worker has completed its teardown attempt.
+#[cfg(feature = "test-hooks")]
+pub(crate) fn test_finish_getrandom_revoke_race() {
+    GETRANDOM_RACE_DONE.store(true, core::sync::atomic::Ordering::Release);
+}
+
+/// Return the final-write race observations in publication order.
+#[cfg(feature = "test-hooks")]
+pub(crate) fn test_getrandom_revoke_race_result() -> (bool, bool, bool, bool) {
+    use core::sync::atomic::Ordering;
+
+    (
+        GETRANDOM_RACE_PROBED_BUSY.load(Ordering::Acquire),
+        GETRANDOM_RACE_NO_EARLY_DONE.load(Ordering::Acquire),
+        GETRANDOM_RACE_DONE.load(Ordering::Acquire),
+        GETRANDOM_RACE_PROBE_TIMED_OUT.load(Ordering::Acquire),
+    )
+}
+
+#[cfg(feature = "test-hooks")]
+fn pause_getrandom_final_write_for_revoke_race(caller_id: usize) -> bool {
+    use core::sync::atomic::Ordering;
+
+    if GETRANDOM_RACE_ARMED_CALLER.swap(0, Ordering::AcqRel) != caller_id {
+        return false;
+    }
+    GETRANDOM_RACE_ENTERED.store(true, Ordering::Release);
+    let mut observed_probe = false;
+    for _ in 0..100_000_000usize {
+        if GETRANDOM_RACE_PROBED_BUSY.load(Ordering::Acquire) {
+            observed_probe = true;
+            break;
+        }
+        core::hint::spin_loop();
+    }
+    GETRANDOM_RACE_PROBE_TIMED_OUT.store(!observed_probe, Ordering::Release);
+    true
+}
+
+#[cfg(feature = "test-hooks")]
+fn verify_getrandom_revoke_race_done_state(was_armed: bool) {
+    use core::sync::atomic::Ordering;
+
+    if !was_armed {
+        return;
+    }
+    GETRANDOM_RACE_NO_EARLY_DONE.store(
+        !GETRANDOM_RACE_DONE.load(Ordering::Acquire),
+        Ordering::Release,
+    );
+}
+
+fn write_getrandom_output(caller_id: usize, ptr: usize, bytes: &[u8]) -> Result<(), SyscallError> {
+    let view = caller_copy_view(caller_id)?;
+    #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+    if view.is_sas() {
+        // This scoped, no-allocation lease covers every record contributing to
+        // a contiguous span. Removal waits for its member lock before it can
+        // mark retiring/revoked, unmap, or return backing to the allocator.
+        let page_grants = grant_table_lock().lock();
+        let registered_grants = reg_grant_table_lock().lock();
+        let scheduler = super::SCHEDULER.lock();
+        let Some(sched) = scheduler.as_ref() else {
+            return Err(SyscallError::InvalidInput);
+        };
+        if !sas_caller_owned_span(
+            sched,
+            page_grants.as_ref(),
+            registered_grants.as_ref(),
+            caller_id,
+            ptr,
+            bytes.len(),
+        ) {
+            return Err(SyscallError::InvalidInput);
+        }
+        let lease = sched
+            .tasks
+            .get(&caller_id)
+            .map(|task| TaskCopyView::of(task))
+            .ok_or(SyscallError::InvalidInput)?;
+        #[cfg(feature = "test-hooks")]
+        let was_armed = pause_getrandom_final_write_for_revoke_race(caller_id);
+        let write_result = lease
+            .write_bytes(ptr, bytes)
+            .map_err(|_| SyscallError::InvalidInput);
+        #[cfg(feature = "test-hooks")]
+        verify_getrandom_revoke_race_done_state(was_armed);
+        return write_result;
+    }
+    view.write_bytes(ptr, bytes)
+        .map_err(|_| SyscallError::InvalidInput)
+}
+
 fn read_user_string(
     caller_id: usize,
     ptr: usize,
@@ -4806,32 +5228,38 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         Syscall::GrantAlloc { size } => {
             const PAGE_SIZE: usize = 4096;
             if size == 0 || size > MAX_GRANT_PAGES * PAGE_SIZE {
-                return Ok(0); // size == 0 or > 16 MiB cap — OOM sentinel per F10
+                return Ok(0);
             }
             let n_pages = size.div_ceil(PAGE_SIZE);
             let paddr = match alloc_grant_pages(n_pages) {
-                Some(p) => p,
+                Some(paddr) => paddr,
                 None => return Ok(0),
             };
-            // Register in the grant table.
-            let mut tbl = grant_table_lock().lock();
-            if tbl.is_none() {
-                *tbl = Some(BTreeMap::new());
+            let mut table = grant_table_lock().lock();
+            let (owner_cell, owner_generation) = match live_task_binding(caller_id) {
+                Some(binding) => binding,
+                None => {
+                    drop(table);
+                    free_grant_pages(paddr, n_pages);
+                    return Err(SyscallError::PermissionDenied);
+                }
+            };
+            if table.is_none() {
+                *table = Some(BTreeMap::new());
             }
-            if let Some(map) = tbl.as_mut() {
-                map.insert(
-                    paddr,
-                    PageGrant {
-                        base: paddr,
-                        size,
-                        owner: caller_id,
-                        shared_to: None,
-                    },
-                );
-            }
-            Ok(paddr) // grant_id == physical base (identity-mapped vaddr in SAS)
+            table.as_mut().unwrap().insert(
+                paddr,
+                PageGrant {
+                    base: paddr,
+                    size,
+                    owner: caller_id,
+                    owner_cell,
+                    owner_generation,
+                    shared_to: None,
+                },
+            );
+            Ok(paddr)
         }
-
         Syscall::GrantShare {
             grant_id,
             target_cell,
@@ -5070,54 +5498,40 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         Syscall::GrantRegister { size } => {
             const PAGE_SIZE: usize = 4096;
             if size == 0 || size > MAX_GRANT_PAGES * PAGE_SIZE {
-                return Ok(0); // OOM sentinel per F10
+                return Ok(0);
             }
             let n_pages = size.div_ceil(PAGE_SIZE);
             let paddr = match alloc_grant_pages(n_pages) {
-                Some(p) => p,
+                Some(paddr) => paddr,
                 None => return Ok(0),
             };
-            let mut tbl = reg_grant_table_lock().lock();
-            if tbl.is_none() {
-                *tbl = Some(BTreeMap::new());
-            }
-            if let Some(map) = tbl.as_mut() {
-                map.insert(
-                    paddr,
-                    RegGrant {
-                        base: paddr,
-                        size,
-                        owner: caller_id,
-                        shared_to: None,
-                    },
-                );
-            }
-            Ok(paddr) // reg_id == physical base
-        }
-
-        Syscall::GrantUnregister { reg_id } => {
-            // Same contract as GrantFree: owner-only, and refused outright while
-            // pinned. Lock order: REG_GRANT_TABLE → pin REGISTRY (leaf).
-            let entry = {
-                let mut tbl = reg_grant_table_lock().lock();
-                let owned = tbl
-                    .as_ref()
-                    .and_then(|m| m.get(&reg_id))
-                    .filter(|g| g.owner == caller_id)
-                    .map(|g| (g.base, g.size));
-                match owned {
-                    None => None,
-                    Some((base, size)) => {
-                        refuse_if_pinned("GrantUnregister", reg_id, base, size)?;
-                        tbl.as_mut().and_then(|m| m.remove(&reg_id))
-                    }
+            let mut table = reg_grant_table_lock().lock();
+            let (owner_cell, owner_generation) = match live_task_binding(caller_id) {
+                Some(binding) => binding,
+                None => {
+                    drop(table);
+                    free_grant_pages(paddr, n_pages);
+                    return Err(SyscallError::PermissionDenied);
                 }
             };
-            let entry = match entry {
-                Some(e) => e,
-                None => return Err(SyscallError::PermissionDenied),
-            };
-            free_grant_pages(entry.base, grant_pages_for_size(entry.size));
+            if table.is_none() {
+                *table = Some(BTreeMap::new());
+            }
+            table.as_mut().unwrap().insert(
+                paddr,
+                RegGrant {
+                    base: paddr,
+                    size,
+                    owner: caller_id,
+                    owner_cell,
+                    owner_generation,
+                    shared_to: None,
+                },
+            );
+            Ok(paddr)
+        }
+        Syscall::GrantUnregister { reg_id } => {
+            unregister_registered_grant(caller_id, reg_id)?;
             Ok(0)
         }
 
@@ -5240,11 +5654,15 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         }
 
         Syscall::GetRandom { buf_ptr, len } => {
-            let capped = len.min(64);
-            if capped == 0 {
+            if len == 0 {
                 return Ok(0);
             }
-            validate_user_buf(buf_ptr, capped, MAX_USER_BUF)?;
+            // Validate the ABI descriptor before entropy is consumed. `len`
+            // remains the caller-declared capacity; only the output span caps
+            // at 64 bytes, as required by the frozen syscall contract.
+            validate_user_buf(buf_ptr, len, MAX_USER_BUF)?;
+            let capped = len.min(64);
+            preflight_getrandom_output(caller_id, buf_ptr, capped)?;
             let mut kbuf = [0u8; 64];
             let written = crate::task::drivers::virtio_rng::get_random(&mut kbuf[..capped]);
             let n = if written > 0 {
@@ -5275,7 +5693,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 0
             };
             if n > 0 {
-                write_user_slice(caller_id, buf_ptr, &kbuf[..n], MAX_USER_BUF)?;
+                write_getrandom_output(caller_id, buf_ptr, &kbuf[..n])?;
             }
             Ok(n)
         }
@@ -5882,6 +6300,56 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
         },
     };
     Some(sc)
+}
+#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+fn with_test_sum<T>(operation: impl FnOnce() -> T) -> T {
+    let saved_sstatus: usize;
+    unsafe {
+        // SAFETY: test-only dispatch must reproduce the real trap entry's SUM state.
+        core::arch::asm!(
+            "csrr {saved_sstatus}, sstatus",
+            "csrs sstatus, {sum}",
+            saved_sstatus = out(reg) saved_sstatus,
+            sum = in(reg) 0x40000_usize,
+            options(nostack)
+        );
+    }
+    let result = operation();
+    if saved_sstatus & 0x40000 == 0 {
+        unsafe {
+            // SAFETY: restore exactly the caller hart's prior SUM bit.
+            core::arch::asm!(
+                "csrc sstatus, {sum}",
+                sum = in(reg) 0x40000_usize,
+                options(nostack)
+            );
+        }
+    }
+    result
+}
+
+#[cfg(all(feature = "test-hooks", not(target_arch = "riscv64")))]
+fn with_test_sum<T>(operation: impl FnOnce() -> T) -> T {
+    operation()
+}
+
+/// Exercise the production raw-opcode decoder and handler without a trap frame.
+///
+/// Test hooks use this only for in-kernel QEMU fixtures whose calls would
+/// otherwise need a hand-written U-mode trampoline. RV64's real syscall entry
+/// runs with `sstatus.SUM` set; mirror that per-hart state around the handler.
+#[cfg(feature = "test-hooks")]
+pub(crate) fn dispatch_raw_for_test(
+    caller_id: usize,
+    syscall_id: usize,
+    a0: usize,
+    a1: usize,
+    a2: usize,
+    a3: usize,
+) -> SyscallResult {
+    check_allowlist(syscall_id, caller_id)?;
+    let syscall = map_syscall(syscall_id, a0, a1, a2, a3).ok_or(SyscallError::InvalidCommand)?;
+    with_test_sum(|| handle_syscall(caller_id, syscall))
 }
 
 /// Per-cell syscall allowlist gate.

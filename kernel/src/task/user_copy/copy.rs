@@ -52,6 +52,25 @@ pub(crate) fn copy_to_user(
         dst.len(),
     )
 }
+/// Probe a destination without moving any bytes.
+///
+/// The caller may use this before an irreversible operation and then repeat the
+/// full copy under its own short-lived ownership lease.
+pub(crate) fn probe_writable(view: &CopyView, dst: UserWriteSlice) -> Result<(), CopyError> {
+    if dst.len() == 0 {
+        return Ok(());
+    }
+    match view {
+        CopyView::Domain(arc) => {
+            if !arc.is_live() {
+                return Err(CopyError::InvalidAddress);
+            }
+            drop(stage_domain(arc, Direction::ToUser, dst.ptr(), dst.len())?);
+            Ok(())
+        }
+        CopyView::Sas => probe_sas(dst.ptr(), dst.len(), Direction::ToUser),
+    }
+}
 
 /// Shared transaction body. `other` is the kernel-side buffer pointer; the
 /// user-side pointer comes from the validated slice.

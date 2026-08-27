@@ -303,6 +303,13 @@ impl Stack {
     pub fn usable_start(&self) -> usize {
         self.base + (self.guard_pages * PAGE_SIZE)
     }
+    /// Whether `[ptr, ptr + len)` stays within this task's mapped stack bytes.
+    pub fn contains_usable_range(&self, ptr: usize, len: usize) -> bool {
+        let Some(end) = ptr.checked_add(len) else {
+            return false;
+        };
+        ptr >= self.usable_start() && end <= self.top
+    }
 
     #[cfg(feature = "test-hooks")]
     /// Prime the usable stack range with a sentinel pattern so later scans can
@@ -410,6 +417,8 @@ impl Drop for Stack {
 #[derive(Debug)]
 pub struct CellSegments {
     pages: alloc::vec::Vec<(types::VAddr, types::PhysAddr)>,
+    /// ELF pages whose final mapping grants the Cell write permission.
+    writable_pages: alloc::vec::Vec<types::VAddr>,
     /// VA base allocated by `va_alloc::alloc_cell_va` for PIE cells; `0` for
     /// fixed-VA cells.  Returned to the allocator's free list on drop.
     pie_va_base: usize,
@@ -420,8 +429,59 @@ impl CellSegments {
         pages: alloc::vec::Vec<(types::VAddr, types::PhysAddr)>,
         pie_va_base: usize,
     ) -> Self {
-        Self { pages, pie_va_base }
+        Self {
+            pages,
+            writable_pages: alloc::vec::Vec::new(),
+            pie_va_base,
+        }
     }
+
+    pub fn with_writable_pages(
+        pages: alloc::vec::Vec<(types::VAddr, types::PhysAddr)>,
+        writable_pages: alloc::vec::Vec<types::VAddr>,
+        pie_va_base: usize,
+    ) -> Self {
+        Self {
+            pages,
+            writable_pages,
+            pie_va_base,
+        }
+    }
+    /// Return the exclusive end of the writable page containing `ptr`.
+    pub fn writable_page_end_containing(&self, ptr: usize) -> Option<usize> {
+        let page = ptr & !(PAGE_SIZE - 1);
+        self.writable_pages
+            .iter()
+            .any(|&candidate| candidate == page)
+            .then(|| page.checked_add(PAGE_SIZE))
+            .flatten()
+    }
+
+    /// Whether every page touched by this range is writable in this Cell image.
+    pub fn contains_writable_range(&self, ptr: usize, len: usize) -> bool {
+        let Some(end) = ptr.checked_add(len) else {
+            return false;
+        };
+        if len == 0 {
+            return false;
+        }
+        let mut page = ptr & !(PAGE_SIZE - 1);
+        while page < end {
+            if !self
+                .writable_pages
+                .iter()
+                .any(|&candidate| candidate == page)
+            {
+                return false;
+            }
+            page = match page.checked_add(PAGE_SIZE) {
+                Some(next) => next,
+                None => return false,
+            };
+        }
+        true
+    }
+
     #[cfg(feature = "test-hooks")]
     pub(crate) fn unpublished_pages(&self) -> &[(types::VAddr, types::PhysAddr)] {
         &self.pages

@@ -177,12 +177,15 @@ Cellos is being shaped around product stages, not only phase numbers:
   content-addressed private source overlay, and verifies a fixture-only,
   non-promotional benchmark validator. `PAL-019` remains Deferred while the
   default development tuple reports predictable `dev-weak-rng` bytes as
-  successful entropy over a zero-byte RNG source; `PAL-031` remains Deferred
-  while `GetRandom` lacks bounded caller-owned writable output validation.
-  There is no PAL, target, sysroot, runtime, live capture, approval, or
-  promotion. All six approval rows remain `NOT GRANTED`, the implementation
-  checkpoint is `BLOCKED`, and umbrella Phase 06 remains pending and
-  dependency-blocked on Phase 03. Maintained detail is in
+  successful entropy over a zero-byte RNG source. `PAL-031` now has a bounded
+  caller-owned GetRandom output implementation and isolated RV64 QEMU hostile
+  evidence, including final-write races against root retirement, grant revoke,
+  and exact backing-frame reuse. This is runtime evidence only: PAL approval,
+  production entropy, and every remaining qualification gate are still
+  external. There is no PAL, target, sysroot, runtime, live capture, approval,
+  or promotion. All six approval rows remain `NOT GRANTED`, the implementation
+  checkpoint remains `APPROVAL_PENDING`, and umbrella Phase 06 remains pending
+  and dependency-blocked on Phase 03. Maintained detail is in
   [runtime-and-platform-tracks.md](roadmap/runtime-and-platform-tracks.md).
 - [Spec 18c Publisher Provenance Envelope](specs/18c-publisher-provenance-envelope.md)
   is **proposed**, pending security-owner and independent-reviewer approval. It

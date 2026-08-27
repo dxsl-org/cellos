@@ -141,6 +141,22 @@ impl FrameAllocator {
         None // OOM
     }
 
+    /// Claim one known-free frame for an in-kernel reuse race.
+    ///
+    /// Returns `false` when `frame` is outside this allocator or no longer free.
+    #[cfg(feature = "test-hooks")]
+    pub(crate) fn claim_exact_frame_for_test(&mut self, frame: PhysAddr) -> bool {
+        let Some(index) = self.addr_to_frame_index(frame) else {
+            return false;
+        };
+        if self.is_frame_allocated(index) {
+            return false;
+        }
+        self.mark_used(index);
+        self.last_alloc_index = index + 1;
+        true
+    }
+
     /// Deallocate a physical frame
     pub fn deallocate_frame(&mut self, frame: PhysAddr) {
         if let Some(idx) = self.addr_to_frame_index(frame) {

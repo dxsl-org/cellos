@@ -197,6 +197,13 @@ pub fn init_kernel_paging(
         root_table
             .identity_map(plic_base, plic_base + plic_size, mmio_flags, &mut alloc_fn)
             .map_err(|_| PageTableError::OutOfMemory)?;
+        // Test-only terminal signaling on QEMU `virt` uses the SiFive test
+        // device. Its page is outside RAM and must be present after paging
+        // activates, otherwise a completed fixture faults while reporting.
+        #[cfg(feature = "test-hooks")]
+        root_table
+            .identity_map(0x0010_0000, 0x0010_1000, mmio_flags, &mut alloc_fn)
+            .map_err(|_| PageTableError::OutOfMemory)?;
         // UART page (0x10000000..0x10001000): kernel-only — S-mode with SUM=0 cannot
         // access USER pages, so the kernel UART driver (uart::init, poll_rhr, IRQ handler)
         // needs a non-USER mapping. Cells use sys_log / SBI; they do not touch UART MMIO.
