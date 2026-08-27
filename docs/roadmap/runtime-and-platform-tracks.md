@@ -82,14 +82,15 @@ promotion evidence.
 
 Implementation remains blocked. `PAL-019` is Deferred because the current
 default development tuple enables predictable `dev-weak-rng` success over a
-zero-byte VirtIO RNG source. `PAL-031` now has source implementation and
-isolated RV64 QEMU hostile evidence: GetRandom validates its original
-descriptor, authorizes the bounded caller-owned output span, and holds final
-authorization through the write against retirement, revocation, and exact
-backing-frame reuse. This does not grant PAL support or production
-qualification. All six named human approvals, the remaining implementation
-checkpoint, production entropy, and umbrella Phase 03 production gates remain
-required.
+zero-byte VirtIO RNG source. `PAL-031` technical backing now has source
+implementation and isolated RV64 QEMU hostile evidence: GetRandom validates
+its original descriptor, authorizes the bounded caller-owned output span, and
+holds final authorization through the write against retirement, revocation,
+and exact backing-frame reuse. The authoritative support map remains
+`Deferred` until its governed security manifest is rebound and every named
+approval is granted. This does not grant PAL support or production
+qualification; the implementation checkpoint, production entropy, and
+umbrella Phase 03 production gates remain blocked.
 
 There is currently no Cellos PAL, target JSON, private or published sysroot,
 published triple, or Tier 1 `rust-std` runtime. No live benchmark was captured,

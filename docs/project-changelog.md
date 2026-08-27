@@ -11,9 +11,10 @@
   final-write races against production root retirement, grant revoke, and exact
   backing-frame unmap/reuse. It emits one dedicated terminal and excludes the
   unrelated user-copy race fixture.
-- `PAL-031` is runtime-evidence complete but remains approval-pending. This
-  changes no PAL, target, production-entropy, promotion, or human-approval
-  status.
+- `PAL-031` technical backing/evidence is complete, but its authoritative
+  support-map classification remains `Deferred` pending governed manifest rebind
+  and named approvals. This changes no PAL, target, production-entropy,
+  promotion, or human-approval status.
 
 ## [2026-08-27] Hardware-independent roadmap execution model
 

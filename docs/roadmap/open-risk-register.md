@@ -27,15 +27,16 @@ execution class, owner, and reopening event are in
   provenance/signature gate, and `signing-required` enforcement are still
   unfinished; development builds still admit unsigned cells by default.
 - **`CELLOS-RUSTSTD-PTR-004` — Critical historical GetRandom output-provenance
-  defect; runtime mitigation complete, owner: PAL/target/runtime governance.**
+  defect; technical mitigation complete, owner: PAL/target/runtime governance.**
   GetRandom now validates the original descriptor, caps the write to its frozen
   ABI bound, proves complete caller-owned writable provenance, and retains final
   authorization through the bounded write (`kernel/src/task/syscall.rs`).
   Isolated RV64 QEMU evidence covers direct hostile descriptors and races
   against root retirement, grant revocation, and exact backing-frame reuse.
-  `PAL-031` remains approval-pending: this local QEMU evidence does not grant
-  PAL support, real production entropy, any of the six human approvals, the
-  implementation checkpoint, or umbrella Phase 03 production gates.
+  `PAL-031` remains `Deferred` in the authoritative support map until the
+  governed security manifest is rebound and all named approvals are granted.
+  This local QEMU evidence grants no PAL support, real production entropy,
+  implementation-checkpoint, or umbrella Phase 03 production transition.
 
 ## High
 
