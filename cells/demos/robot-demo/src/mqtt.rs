@@ -107,27 +107,59 @@ fn mqtt_handshake(net_ep: usize, cap: u32) -> bool {
 }
 
 fn mqtt_publish(net_ep: usize, cap: u32, topic: &str, payload: &str) {
-    let tb = topic.as_bytes();
-    let pb = payload.as_bytes();
-    let remaining = 2 + tb.len() + pb.len();
     let mut pkt = [0u8; 340];
-    let mut rl = [0u8; 4];
-    let rl_len = encode_remaining_len(remaining, &mut rl);
-    if 1 + rl_len + remaining > pkt.len() {
-        println("[robot-demo] mqtt_publish: packet exceeds 340 bytes");
-        return;
+    let packet_len = match encode_publish_packet(topic, payload, &mut pkt) {
+        Ok(len) => len,
+        Err(_) => {
+            println("[robot-demo] mqtt_publish: packet exceeds 340 bytes");
+            return;
+        }
+    };
+    tcp_send_raw(net_ep, cap, &pkt[..packet_len]);
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PublishPacketError {
+    TopicTooLong,
+    PacketTooLong,
+    RemainingLengthTooLong,
+}
+
+fn encode_publish_packet(
+    topic: &str,
+    payload: &str,
+    out: &mut [u8],
+) -> Result<usize, PublishPacketError> {
+    let topic = topic.as_bytes();
+    let payload = payload.as_bytes();
+    if topic.len() > u16::MAX as usize {
+        return Err(PublishPacketError::TopicTooLong);
     }
-    pkt[0] = 0x30;
-    pkt[1..1 + rl_len].copy_from_slice(&rl[..rl_len]);
-    let mut p = 1 + rl_len;
-    pkt[p] = (tb.len() >> 8) as u8;
-    pkt[p + 1] = tb.len() as u8;
-    p += 2;
-    pkt[p..p + tb.len()].copy_from_slice(tb);
-    p += tb.len();
-    pkt[p..p + pb.len()].copy_from_slice(pb);
-    p += pb.len();
-    tcp_send_raw(net_ep, cap, &pkt[..p]);
+
+    let remaining = 2usize
+        .checked_add(topic.len())
+        .and_then(|len| len.checked_add(payload.len()))
+        .ok_or(PublishPacketError::RemainingLengthTooLong)?;
+    let mut encoded_remaining = [0u8; 4];
+    let encoded_remaining_len = encode_remaining_len(remaining, &mut encoded_remaining)
+        .ok_or(PublishPacketError::RemainingLengthTooLong)?;
+    let packet_len = 1usize
+        .checked_add(encoded_remaining_len)
+        .and_then(|len| len.checked_add(remaining))
+        .ok_or(PublishPacketError::PacketTooLong)?;
+    if packet_len > out.len() {
+        return Err(PublishPacketError::PacketTooLong);
+    }
+
+    out[0] = 0x30;
+    out[1..1 + encoded_remaining_len].copy_from_slice(&encoded_remaining[..encoded_remaining_len]);
+    let mut cursor = 1 + encoded_remaining_len;
+    out[cursor..cursor + 2].copy_from_slice(&(topic.len() as u16).to_be_bytes());
+    cursor += 2;
+    out[cursor..cursor + topic.len()].copy_from_slice(topic);
+    cursor += topic.len();
+    out[cursor..cursor + payload.len()].copy_from_slice(payload);
+    Ok(packet_len)
 }
 
 /// Send data and return bytes accepted (0 = socket not yet Established or timeout).
@@ -200,19 +232,89 @@ fn close_cap(net_ep: usize, cap: u32) {
     let _ = sys_recv_timeout(net_ep, &mut r, RECV_TIMEOUT_SOFT_TICKS);
 }
 
-fn encode_remaining_len(mut n: usize, out: &mut [u8; 4]) -> usize {
-    let mut i = 0;
+fn encode_remaining_len(mut value: usize, out: &mut [u8; 4]) -> Option<usize> {
+    const MAX_REMAINING_LEN: usize = 268_435_455;
+
+    if value > MAX_REMAINING_LEN {
+        return None;
+    }
+
+    let mut encoded_len = 0;
     loop {
-        let mut b = (n % 128) as u8;
-        n /= 128;
-        if n > 0 {
-            b |= 0x80;
+        let mut byte = (value % 128) as u8;
+        value /= 128;
+        if value > 0 {
+            byte |= 0x80;
         }
-        out[i] = b;
-        i += 1;
-        if n == 0 || i == 4 {
-            break;
+        out[encoded_len] = byte;
+        encoded_len += 1;
+        if value == 0 {
+            return Some(encoded_len);
         }
     }
-    i
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{encode_publish_packet, encode_remaining_len, PublishPacketError};
+
+    #[test]
+    fn remaining_length_encodes_mqtt_boundaries() {
+        let cases: &[(usize, &[u8])] = &[
+            (0, &[0x00]),
+            (127, &[0x7f]),
+            (128, &[0x80, 0x01]),
+            (16_383, &[0xff, 0x7f]),
+            (16_384, &[0x80, 0x80, 0x01]),
+            (2_097_151, &[0xff, 0xff, 0x7f]),
+            (2_097_152, &[0x80, 0x80, 0x80, 0x01]),
+            (268_435_455, &[0xff, 0xff, 0xff, 0x7f]),
+        ];
+
+        for &(value, expected) in cases {
+            let mut encoded = [0u8; 4];
+            let encoded_len = encode_remaining_len(value, &mut encoded).unwrap();
+            assert_eq!(&encoded[..encoded_len], expected);
+        }
+    }
+
+    #[test]
+    fn remaining_length_rejects_values_above_mqtt_limit() {
+        let mut encoded = [0u8; 4];
+        assert_eq!(encode_remaining_len(268_435_456, &mut encoded), None);
+    }
+
+    #[test]
+    fn publish_packet_encodes_two_byte_remaining_length() {
+        let payload = "x".repeat(125);
+        let mut packet = [0u8; 132];
+        let packet_len = encode_publish_packet("t", &payload, &mut packet).unwrap();
+
+        assert_eq!(packet_len, 131);
+        assert_eq!(&packet[..5], &[0x30, 0x80, 0x01, 0x00, 0x01]);
+        assert_eq!(packet[5], b't');
+        assert_eq!(&packet[6..packet_len], payload.as_bytes());
+    }
+
+    #[test]
+    fn publish_packet_rejects_topic_length_above_u16() {
+        let topic = "t".repeat(u16::MAX as usize + 1);
+        let mut packet = [0u8; 340];
+
+        assert_eq!(
+            encode_publish_packet(&topic, "", &mut packet),
+            Err(PublishPacketError::TopicTooLong)
+        );
+    }
+
+    #[test]
+    fn publish_packet_rejects_payload_that_exceeds_packet_buffer() {
+        let payload = "x".repeat(335);
+        let mut packet = [0u8; 340];
+
+        assert_eq!(
+            encode_publish_packet("t", &payload, &mut packet),
+            Err(PublishPacketError::PacketTooLong)
+        );
+    }
 }

@@ -1,5 +1,5 @@
-#![no_std]
-#![no_main]
+#![cfg_attr(not(test), no_std)]
+#![cfg_attr(not(test), no_main)]
 #![forbid(unsafe_code)]
 
 //! Reference robot demo — G1 graduation criterion 8.
@@ -21,6 +21,7 @@ use hal_i2c::ViI2c;
 use ostd::io::println;
 use types::ViError;
 
+#[cfg(not(test))]
 declare_manifest!(
     block_io = false,
     network = true,
@@ -28,6 +29,7 @@ declare_manifest!(
     gpio = true,
     uart = false
 );
+#[cfg(not(test))]
 api::declare_syscalls![
     Send,
     Recv,
@@ -43,6 +45,7 @@ const LOOP_CYCLES: u32 = 5;
 /// 25.0 °C threshold — relay ON when temperature exceeds this.
 const TEMP_THRESHOLD_CX10: i32 = 250;
 
+#[cfg(not(test))]
 ostd::cell_main!(cell_main);
 
 fn cell_main() {
