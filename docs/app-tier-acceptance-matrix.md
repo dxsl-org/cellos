@@ -7,7 +7,6 @@ build-denominator declaration that differs from Spec 23: three native Rust
 targets × its 32 exact feature selections, and C/Zig FFI only on RV64/AArch64.
 Runtime environment evidence is recorded independently; unratified Rust-std
 and Tier-2 scopes cannot become `PASS`.
-history drift.
 
 | Contract rows | Imported cells | Required cells | Current aggregate | C9 |
 |---|---:|---:|---|---|
