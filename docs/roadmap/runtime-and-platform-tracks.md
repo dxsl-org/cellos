@@ -27,16 +27,23 @@ to the physical hardware tracks.
 - Trusted C/C++/Zig interop is the Tier 1 `ffi-posix` profile. Historical
   `Tier 1b` text refers to that profile, not a distinct execution tier.
 
-## Platform Overlays
+## Platform Overlays and Capability Gates
 
-- G4 is the planned pure-Rust `rust-std` runtime profile for Tier 1.
-- G5 is the later virtualization-platform overlay.
+- G4 is the planned pure-Rust `rust-std` Tier 1 runtime profile. Its next
+  remediation work is `governance-gated`; host results cannot establish a PAL,
+  target, sysroot, runtime, or production qualification.
+- G5 remains a virtualization-platform research/design overlay after G4. It
+  does not prevent Tier 3 QEMU runners, persistence work, or transport parity
+  from advancing to their own documented software evidence ceilings.
 - Untrusted Linux/POSIX application compatibility stays in Tier 3 VM lanes
   until Tier 2 native domains exist.
 - Tier 2 native domains remain unimplemented. [Spec 22](../specs/22-native-domain-cell-implementation-gate.md)
   is the mandatory design and negative-test gate before a private-MMU native
   runtime may be implemented or offered; current native cells remain shared-SAS
   code and are not treated as contained.
+
+The canonical cross-lane execution classes and reopening events are in the
+[roadmap capability table](../project-roadmap.md#capability-lanes).
 
 ## Manifest-v3 ABI Predesign
 

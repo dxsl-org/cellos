@@ -2,6 +2,15 @@
 
 **Last updated**: 2026-08-20
 
+## Execution Relationship
+
+G1–G5 define product and release outcomes. They do not impose a global
+G1→G2→G3 implementation order. Each capability is scheduled independently by
+its documented dependency, `execution_class`, and `evidence_ceiling`; see the
+[capability lanes](../project-roadmap.md#capability-lanes). A result may advance
+only to the evidence class actually exercised. In particular, host/QEMU results
+never satisfy physical, service, or production requirements.
+
 ## G1 - Robot & Embedded
 
 Goal: ship a bounded, fast-booting, never-die OS for RV64/ARM64 SBC-class

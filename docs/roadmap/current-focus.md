@@ -1,12 +1,32 @@
 # Current Focus
 
-**Last updated**: 2026-08-25
+**Last updated**: 2026-08-27
 
-## Active Stage
+## Execution Model
 
-G1 Robot & Embedded remains the active product stage. The practical focus is
-keeping board/HAL/kernel contracts accurate while closing real hardware evidence
-without treating QEMU or compile-only checks as board qualification.
+G1 Robot & Embedded is the active product-stage overlay, not a global queue.
+Capability dependencies and their evidence ceilings determine executable order.
+Host and QEMU evidence are software evidence only; they never qualify a board,
+secure root, cloud authority, or production release.
+
+## Work Available Without New Hardware
+
+- Complete the RPi3 HDMI software boundary through its host/build/policy checks,
+  then stop at framebuffer-range, mailbox-coherency, and visual hardware gates.
+- **Blocked:** Tier 3 hostile QEMU reaches a CPU-bound budget stimulus under
+  pinned QEMU-TCG 10.2.0, but bounds/descriptor/backend lack VMM/VirtIO
+  transport and reset/preemption have no independent VMM recovery outcome.
+- Project each completed lane immediately into the roadmap and acceptance views.
+- The managed-surface child is implementation-complete with host/RISC-V evidence.
+  Its QEMU input/scanout run invoked the repository-owned disk generator, which
+  refused to sign the image until the shared F1 policy is restored: the Hypha
+  gateway lacks `#![forbid(unsafe_code)]` and BCM mailbox unsafe code lacks a
+  reviewed allowlist entry. No additional desktop contract is authorized.
+
+Desktop/ViUI/SDK, local Cell-to-Cell, security/PAL remediation, authenticated
+evidence, and x86 VirtIO each have independent scope, contract, governance, or
+dependency gates. Their precise owners and reopening events are maintained in
+[the roadmap capability table](../project-roadmap.md#capability-lanes).
 
 ## Recent State
 
@@ -85,22 +105,18 @@ without treating QEMU or compile-only checks as board qualification.
 
 ## Next Useful Work
 
-1. Integrate and qualify a concrete Cell-to-Cell Anywhere production root;
-   keep remote/public exports disabled until root provenance, rollback state,
-   and live `/srv/cellos` persistence all have runtime evidence.
-2. Close remaining hardware-gated board evidence with PASS/FAIL/BLOCKED logs.
-3. Keep Phase 04 blocked until signed CI or a secure measured runner can retain
-   authenticated evidence for a qualified floor, persistent recovery, physical
-   hostile cases, provisioned anchors, production wiring, and both human
-   approvals; local verification cannot satisfy this gate.
-4. Keep full Phase 07 and Phase 08 blocked until the Phase 03 provenance,
-   Phase 04 production-admission, and Tier 2 native-domain gates are closed;
-   the verified atomic prerequisite and Phase 08 predesign do not authorize
-   production loader or Manifest-v3 claims.
-5. Continue reducing kernel-resident legacy driver/orchestration code only when
-   a slice has explicit runtime evidence and rollback notes.
-6. Keep HAL/board boundary checks in CI whenever board descriptors, SoC facts,
+1. For local Cell-to-Cell, establish the approved test-only K1 image fixture
+   before recording IPC, queue/cache, and saturation baselines.
+2. For every `scope-gated` or `governance-gated` lane, perform only its named
+   reopening action: obtain the RPi3 unsafe review, add the Tier 3 VMM/VirtIO
+   stimuli and independent outcomes, or obtain the required desktop/security/
+   evidence approval.
+3. After a lane transitions, publish its exact evidence ceiling and remaining
+   reopening event through the roadmap/ledger owner; do not wait for another
+   product stage.
+4. Keep physical board evidence, protected relay assets, G3 accelerator work,
+   and the ADR-0006 production root visibly external-gated.
+5. Keep HAL/board boundary checks in CI whenever board descriptors, SoC facts,
    or HAL ABI hook declarations change.
-7. Use [hardware-tracks.md](hardware-tracks.md) and
-   [runtime-and-platform-tracks.md](runtime-and-platform-tracks.md) for lane
-   status instead of re-reading the archive.
+6. Use [project-roadmap.md](../project-roadmap.md#capability-lanes) for
+   cross-lane routing and the topic pages for evidence details.

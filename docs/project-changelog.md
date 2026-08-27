@@ -2,6 +2,42 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-27] Hardware-independent roadmap execution model
+
+- The roadmap now schedules work by capability dependencies, `execution_class`,
+  and `evidence_ceiling`; G1–G5 remain product/release overlays rather than a
+  global G1→G2→G3 implementation queue.
+- The authoritative lane table identifies the RPi3 HDMI software boundary and
+  Tier 3 hostile QEMU design as independently executable only at their stated
+  gates, alongside desktop/C2C/security/evidence/x86 lanes and the concrete
+  external events required for protected relay, G3, physical-board, and
+  production-root work.
+- This is a documentation and scheduling cutover only. It grants no hardware,
+  secure-root, cloud, admission, service, or production qualification.
+
+## [2026-08-27] Hostile QEMU evidence gate correction
+
+- Retracted the Phase 06 hostile-QEMU PASS claim: guest-authored classifications
+  and reset/budget markers are not VMM/VirtIO evidence.
+- The x86 runner retains a pause-less budget stimulus and reports
+  `BLOCKED_SCOPE`; bounds, descriptor, and backend paths lack a supported
+  VMM/VirtIO transport, while preemption and supervisor restart lack independent
+  outcomes. ARM64 remains `NOT_APPLICABLE` after its known QEMU-TCG fault.
+- No persistence, x86 parity, physical, service, or production qualification is
+  implied. Phase 09 and Phase 10 remain blocked on supported hostile scenarios.
+
+## [2026-08-27] Authenticated software evidence bundle
+
+- CI now stages `cellos.authenticated-evidence/v1` manifests with hashed inputs,
+  raw logs, revision, runner/workflow identity, command, environment, and
+  run-id/attempt sequence; GitHub Actions attests the immutable 90-day bundle.
+- The verification entrypoint pins the GitHub-hosted `ci.yml` signer and rejects
+  self-hosted runners before validating bundle contents. This contract applies
+  only to approved software/QEMU evidence; it cannot qualify physical,
+  secure-root, cloud, approval, or production claims.
+- No evidence is admitted yet: a trusted CI-signed fixture/workflow run and
+  consumed-sequence replay protection remain required.
+
 ## [2026-08-27] ViUI managed compositor surface integration
 
 - `FramebufferRenderer` now submits finite, outward-rounded damage clipped to

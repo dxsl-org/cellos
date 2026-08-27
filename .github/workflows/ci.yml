@@ -1075,3 +1075,44 @@ jobs:
         uses: rustsec/audit-check@v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+
+  attest-catalog:
+    name: Attest Prequalification Catalog
+    runs-on: ubuntu-24.04
+    permissions:
+      id-token: write
+      contents: read
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate and stage software evidence
+        run: |
+          mkdir -p .authenticated-evidence
+          python3 scripts/validate-app-tier-acceptance.py 2>&1 | tee .authenticated-evidence/catalog-validation.log
+          python3 scripts/create-authenticated-evidence-bundle.py \
+            --output evidence/manifest.json \
+            --revision "${{ github.sha }}" \
+            --runner "github-hosted:${{ runner.os }}:${{ runner.arch }}" \
+            --workflow-ref "${{ github.workflow_ref }}" \
+            --sequence "${{ github.run_id }}:${{ github.run_attempt }}" \
+            --command "python3 scripts/validate-app-tier-acceptance.py" \
+            --input catalog.json=scripts/admission_prequalification/catalog.json \
+            --input acceptance-ledger.json=docs/app-tier-acceptance-ledger.json \
+            --log catalog-validation.log=.authenticated-evidence/catalog-validation.log \
+            --environment event_name="${{ github.event_name }}" \
+            --environment ref="${{ github.ref }}"
+
+      - name: Upload immutable evidence bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: authenticated-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/
+          if-no-files-found: error
+          overwrite: false
+          retention-days: 90
+
+      - name: Attest Catalog Evidence Bundle
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: evidence/manifest.json

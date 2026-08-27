@@ -1,5 +1,24 @@
 # TODO
 
+
+## Canonical Capability Routing
+
+Product stages are release overlays, not a global work queue. Execute a lane
+only at its documented evidence ceiling; QEMU/host evidence does not become
+physical, secure-root, cloud, or production evidence.
+
+| Lane | Execution class | Next action / reopening event |
+|---|---|---|
+| RPi3 HDMI software boundary | `governance-gated` | Obtain named review for BCM mailbox unsafe DMA-page copies, or replace them with a safe design |
+| Tier 3 hostile QEMU evidence | `scope-gated` | Add VMM/VirtIO transport for bounds, descriptors, and backend errors, plus independent preemption and supervisor-restart outcomes |
+| ARM64 persistent storage | `scope-gated` | Add supported Phase 06 scenarios; the fixed 8 MiB `build/tier3-arm64-persistent.img` policy is approved |
+| Desktop/ViUI/SDK | `governance-gated` | Restore F1 signing policy for the Hypha gateway and reviewed BCM unsafe use, then run QEMU input/scanout |
+| Local Cell-to-Cell | `scope-gated` | Implement the approved ephemeral K1 injection for the RV64 `app-bench` oracle, then record IPC, queue/cache, and saturation baselines |
+| Kernel security/PAL | `governance-gated` | Obtain named approvals and implementation checkpoints |
+| Authenticated evidence | `scope-gated` | Run and offline-verify the immutable `.github/workflows/ci.yml` bundle; only approved software/QEMU classes are eligible |
+| x86 VirtIO parity | `scope-gated` | Add supported Phase 06 hostile scenarios, then pin one transport after the shared persistence backend |
+| G3 accelerator | `external-gated` | Obtain RK3588, accepted RKNN package/license, then X390 evidence |
+| Protected relay / production root | `external-gated` | Obtain named hardware/cloud assets; ADR-0006 requires a superseding GO ADR |
 1. [in-progress] RPi3:
     - Test board thật SD Storage, HDMI, I2C/SPI [in-progress]
     - Phase 05: Gỡ nghẽn USB Policy v3 & Level IRQ 9
@@ -44,8 +63,9 @@ Manifest v2 và tooling tương thích đã [done]. Việc đổi field vật l�
     - [done] Scope bounded đã phê duyệt: exact clipped damage, một `ManagedSurfaceApp`
       xử lý configure/minimize/restore/close, và `viui-demo` Counter chạy như managed surface.
     - [done] Focused tests, compositor regressions, RISC-V build và scope guard `libs/api`.
-    - [blocked] QEMU runtime evidence: workspace hiện thiếu `disk_v3.img`; chưa tuyên bố
-      production runtime qualification.
+    - [blocked] QEMU runtime evidence: `run.ps1` invoked the repository-owned
+      generator, which refused F1 signing until the Hypha unsafe prohibition
+      and reviewed BCM unsafe allowlist entry are restored.
 
 10. [in-progress] Test board thật: RISC-V và mini pc x86 (Dell)
 

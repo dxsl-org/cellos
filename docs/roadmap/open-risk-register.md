@@ -5,6 +5,15 @@
 This register tracks confirmed production-readiness gaps found while syncing
 docs to code. It is not a bug-fix plan.
 
+## Capability Scheduling Boundary
+
+This register identifies gaps; it does not serialize unrelated work. Each risk
+retains its security, hardware, ABI, and human-approval gates while its owning
+lane advances only to the evidence ceiling it can prove. The authoritative
+execution class, owner, and reopening event are in
+[the roadmap capability table](../project-roadmap.md#capability-lanes).
+
+
 ## Critical
 
 - **`CELLOS-LOADER-SIG-001` — Critical, owner: Phase 03

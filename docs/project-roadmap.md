@@ -22,6 +22,41 @@ historical decision is not represented by the current topic pages.
 | Known open risks and deferred gates | [roadmap/open-risk-register.md](roadmap/open-risk-register.md) |
 | Immutable pre-split snapshot | [project-roadmap-legacy.md](project-roadmap-legacy.md) |
 
+## Execution Model
+
+G1–G5 are release and market overlays, not a global execution queue. A lane may
+advance only when its own dependency and evidence requirements are met; a later
+product-stage label never makes unrelated host or QEMU work wait.
+
+The canonical evidence ladder is `none → contract → host → QEMU → physical →
+service → production`. `execution_class` describes whether a lane may run now:
+`ready`, `scope-gated`, `contract-gated`, `governance-gated`, or
+`external-gated`. `evidence_ceiling` describes the strongest result the next
+slice may truthfully claim. QEMU and host evidence never promote a lane to
+physical, service, or production qualification.
+
+## Capability Lanes
+
+| Capability | Execution class | Evidence ceiling | Owner / next slice | Reopening event |
+|---|---|---|---|---|
+| Roadmap projection | `ready` | `contract` | Hardware-independent roadmap Phase 01/08 | A lane emits bounded evidence/status |
+| RPi3 HDMI software boundary | `governance-gated` | `host` | RPi3 HDMI Phase 04 | Named reviewer approval for `cells/drivers/bcm-display/src/mailbox.rs` unsafe DMA-page copies, or an equivalent safe redesign |
+| Tier 3 hostile QEMU evidence | `scope-gated` | `qemu` | Hardware-independent roadmap Phase 06 | Add VMM/VirtIO transport for bounds, descriptors, and backend errors, plus independent preemption and supervisor-restart outcomes |
+| ARM64 Tier 3 persistent storage | `scope-gated` | `qemu` | Hardware-independent roadmap Phase 09 | Supported Phase 06 hostile scenarios; policy is fixed to `build/tier3-arm64-persistent.img` at 8 MiB with explicit cleanup |
+| Desktop, ViUI, and SDK | `governance-gated` | `qemu` | Managed-surface child is implementation-complete | Restore signed-image F1 policy: `hypha-llm-gateway` must forbid unsafe code; BCM unsafe use requires a reviewed allowlist entry |
+| Local Cell-to-Cell runtime | `scope-gated` | `host` | Cell-to-Cell Anywhere Recovery Plan Phase 01 | Implement the approved ephemeral K1 injection for the RV64 `app-bench` oracle, then record local IPC, queue/cache, and saturation baselines |
+| Kernel signature, pointer, and entropy remediation | `governance-gated` | `host` | Separately approved security children | Named security/PAL approvals and implementation checkpoints |
+| Authenticated software evidence | `scope-gated` | `host` | Hardware-independent roadmap Phase 07 | Run `.github/workflows/ci.yml` on `main`, then verify its immutable attested bundle; only software/QEMU classes are eligible |
+| x86 Tier 3 VirtIO parity | `scope-gated` | `qemu` | Hardware-independent roadmap Phase 10 | Supported Phase 06 scenarios, shared persistence backend, then one pinned transport contract |
+| Protected relay identity | `external-gated` | `host` | KMS/Silo protected relay plan | VF2, STM32H573, OPTIGA TPM, and named AWS DEV account/region |
+| G3 accelerator | `external-gated` | `contract` | Accelerator evidence envelope | RK3588, accepted RKNN package/license, then X390 evidence |
+| Physical boards and production root | `external-gated` | `physical` / `production` | Hardware tracks and ADR-0006 | Exact board logs; vendor package and superseding GO ADR |
+
+The lane-specific child plans under
+[`../.agents/260827-1004-hardware-independent-roadmap/`](../.agents/260827-1004-hardware-independent-roadmap/)
+own execution details. This page is the authoritative routing index; the legacy
+roadmap remains historical only.
+
 ## Current Direction
 
 Cellos is being shaped around product stages, not only phase numbers:
@@ -155,17 +190,17 @@ Cellos is being shaped around product stages, not only phase numbers:
   does not alter the ledger's Phase 03 `PLANNED` status or unblock production
   work. Production admission remains disabled pending qualified and approved
   external-floor and owner-record gates.
-- Net-broker now fails closed on bounded K1 loading before network setup and
-  owns an authenticated LAN beacon channel: bind/join responses are checked,
-  the current UDP source envelope is parsed, beacons are periodically
-  transmitted from monotonic-ms state, and replay/liveness updates validate
-  configured peer identity. The external relay server now requires TLS 1.3
-  mutual authentication, certificate-bound SPKI identities, pre-registration
-  revocation checks, generation-safe duplicate handling, and bounded sessions,
-  frames, and I/O. It starts only from a strict mounted manifest. The obsolete
-  Cellos raw `RelayClient`, `TcpConnect` registration, runtime polling, and
-  fallback callsites are removed; exhausting direct Noise paths returns
-  `NotSupported`.
+- Local Cell-to-Cell recovery is explicitly relay-first. The current broker
+  fails closed on bounded K1 loading, runs authenticated LAN beacons, and owns
+  bounded local ingress/worker/reply roles, but neither direct Noise sessions
+  nor relay routing are constructed from its dispatch loop. The external relay
+  server requires TLS 1.3 mutual authentication, certificate-bound SPKI
+  identities, pre-registration revocation checks, generation-safe duplicate
+  handling, and bounded sessions, frames, and I/O from a strict mounted
+  manifest. Recovery begins with the pending
+  [relay-first contract](../.agents/260819-1409-cell-to-cell-anywhere-core/plan.md);
+  public export and distributed leases remain deferred until separately
+  approved.
 - KMS TLS-signing Phase 1 is verified as a fixture-backed, non-production
   vertical slice. The append-only KMS v1 ABI binds signing authority to the
   live service-net cell generation and TID, keeps C2C X25519 and Relay P-256 as
