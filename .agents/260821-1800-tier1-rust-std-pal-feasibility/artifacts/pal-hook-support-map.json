@@ -489,16 +489,17 @@
       "upstream_path": "library/std/src/sys/process/unsupported.rs"
     },
     {
-      "capability_effect": "Future qualification requires the GetRandom allowlist bit and a real kernel entropy source; no ambient host RNG or development fallback.",
-      "cellos_backend": "Current ViSyscall::GetRandom backing is non-qualifying: the VirtIO RNG stub returns zero and the default kernel feature tuple enables dev-weak-rng xorshift success.",
-      "cfg_gate": "target_os=\"cellos\"; future production kernel tuple must omit `dev-weak-rng`",
+      "capability_effect": "Qualification keeps the GetRandom allowlist bit authoritative and permits no ambient host RNG or development fallback.",
+      "cellos_backend": "The current default kernel tuple remains non-qualifying because it enables dev-weak-rng xorshift success. A governed production-relay build omits default features, and a source-equivalent no-default focused QEMU companion proves zero/error behavior without synthetic bytes when the VirtIO RNG stub returns zero.",
+      "cfg_gate": "target_os=\"cellos\"; governed production kernel tuple omits `dev-weak-rng`",
       "classification": "Deferred",
-      "contract": "Current backing is not approval evidence. A later implementation may qualify only when GetRandom returns bytes from a real admitted entropy source, or returns zero/error without writing synthetic bytes when entropy is unavailable; hashmap keys use the same source.",
+      "contract": "GetRandom returns bytes only from a real admitted entropy source, or returns zero/error without writing synthetic bytes when entropy is unavailable; hashmap keys use the same source. Technical zero/error backing evidence is complete, while approval remains separate.",
       "dependencies": [
         "PAL-031",
-        "production kernel tuple without dev-weak-rng",
-        "real entropy source or zero/error behavior",
-        "hostile direct-syscall evidence"
+        "production kernel tuple without dev-weak-rng (implemented and built)",
+        "real entropy source or zero/error behavior (zero behavior evidenced)",
+        "hostile direct-syscall evidence (completed)",
+        "named approval of governed manifest rebind"
       ],
       "error_semantics": "Missing device, denial, short entropy, or source failure returns zero/error and never success-shaped deterministic bytes, addresses, timer seeds, host randomness, or partial success.",
       "evidence": [
@@ -507,17 +508,21 @@
           "kind": "pinned_std"
         },
         {
-          "anchor": "libs/api/src/abi/syscall.rs:271-272,673-678,804-805; libs/ostd/src/syscall.rs:1592-1604",
+          "anchor": "libs/api/src/abi/syscall.rs; libs/ostd/src/syscall.rs",
           "kind": "cellos"
         },
         {
-          "anchor": "kernel/Cargo.toml:69-80; kernel/src/task/syscall.rs:4561-4603; kernel/src/task/drivers/virtio_rng.rs:1-10",
+          "anchor": "kernel/Cargo.toml; kernel/src/task/syscall.rs; kernel/src/task/drivers/virtio_rng.rs",
           "kind": "kernel-security-backing"
+        },
+        {
+          "anchor": "artifacts/getrandom-hostile-evidence.md",
+          "kind": "production-tuple-and-qemu-zero-evidence"
         }
       ],
       "hook_id": "PAL-019",
       "owner": "Kernel entropy owner and Rust std/PAL owner",
-      "rationale": "The syscall surface exists, but the current default feature tuple turns a zero-byte RNG stub into xorshift bytes reported as success. That behavior is development-only and cannot qualify entropy.",
+      "rationale": "Technical backing/evidence is complete for the zero/error qualification path. PAL-019 remains Deferred because the current default development tuple is non-qualifying and named approval of the governed production tuple is not granted.",
       "required_by": "entropy",
       "safety_invariants": "Exactly requested initialized bytes from admitted real entropy or an observable zero/error; never use dev-weak-rng in a production evidence tuple.",
       "symbol": "fill_bytes / hashmap_random_keys",

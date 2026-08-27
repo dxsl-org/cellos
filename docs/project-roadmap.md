@@ -175,16 +175,14 @@ Cellos is being shaped around product stages, not only phase numbers:
   APPROVAL BLOCKED:** the pinned scope reconciles 27/27 sys modules and 36
   hooks (8 Supported, 10 Unsupported, 18 Deferred), selects a conditional
   content-addressed private source overlay, and verifies a fixture-only,
-  non-promotional benchmark validator. `PAL-019` remains Deferred while the
-  default development tuple reports predictable `dev-weak-rng` bytes as
-  successful entropy over a zero-byte RNG source. `PAL-031` technical backing
-  now has a bounded caller-owned GetRandom output implementation and isolated
-  RV64 QEMU hostile evidence, including final-write races against root
-  retirement, grant revoke, and exact backing-frame reuse. The governed
-  security manifest now binds this evidence; the authoritative support map
-  still classifies `PAL-031` as Deferred pending every named approval.
-  This runtime evidence does not grant PAL approval, production entropy, or any
-  remaining qualification gate. There is no PAL, target, sysroot, runtime,
+  non-promotional benchmark validator. PAL-019 technical backing now binds a
+  production release tuple without default features and a source-equivalent
+  no-default QEMU companion proving zero without synthetic success. PAL-031
+  technical backing binds caller-owned GetRandom validation plus isolated RV64
+  QEMU hostile/final-write race evidence. The authoritative support map keeps
+  both hooks Deferred pending every named approval. This runtime evidence does
+  not grant PAL approval, real entropy, or any remaining qualification gate.
+  There is no PAL, target, sysroot, runtime,
   live capture, approval, or promotion. All six approval rows remain `NOT
   GRANTED`, the implementation checkpoint remains `BLOCKED`, and umbrella
   Phase 06 remains pending and dependency-blocked on Phase 03. Maintained

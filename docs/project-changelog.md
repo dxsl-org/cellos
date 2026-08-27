@@ -2,7 +2,7 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
-## [2026-08-27] GetRandom caller-owned output evidence and PAL governance rebind
+## [2026-08-27] GetRandom technical evidence and PAL governance rebind
 
 - GetRandom now validates the original descriptor, authorizes the capped
   caller-owned writable span before entropy, and retains final authorization
@@ -11,11 +11,15 @@
   final-write races against production root retirement, grant revoke, and exact
   backing-frame unmap/reuse. It emits one dedicated terminal and excludes the
   unrelated user-copy race fixture.
-- `PAL-031` technical backing/evidence is complete and the governed manifest
-  now binds its current source and contract digests. Its authoritative
-  support-map classification remains `Deferred` pending named approvals. This
-  changes no PAL, target, production-entropy, promotion, or human-approval
-  status.
+- The governed production release tuple builds with
+  `--no-default-features --features production-relay-image`; a source-equivalent
+  no-default QEMU companion proves unavailable entropy returns zero without
+  synthetic success.
+- PAL-019 and PAL-031 technical backing/evidence are complete and the governed
+  manifest binds their current release tuple, sources, runner, and contract
+  digests. Both authoritative support-map classifications remain `Deferred`
+  pending named approvals. This changes no PAL, target, real-entropy,
+  promotion, or human-approval status.
 
 ## [2026-08-27] Hardware-independent roadmap execution model
 

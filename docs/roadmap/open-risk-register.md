@@ -55,21 +55,17 @@ execution class, owner, and reopening event are in
   floor and persistent recovery, production gate/task/audit integration,
   physical hostile evidence, provisioned anchors, both human approvals, and
   ledger/release closure.
-- **`CELLOS-RUSTSTD-ENTROPY-005` — High, owner: later authorized
-  PAL/target/runtime implementation child with the kernel entropy and Rust
-  `std`/PAL owners.** The default development kernel feature tuple enables
-  `dev-weak-rng`; the current VirtIO RNG source returns zero bytes, after which
-  `GetRandom` emits predictable xorshift bytes and reports success
-  (`kernel/Cargo.toml`, `kernel/src/task/drivers/virtio_rng.rs`,
-  `kernel/src/task/syscall.rs`). This may support disposable development/QEMU
-  identities with an explicit warning, but it is not production entropy,
-  cryptographic evidence, PAL support, or qualification. `PAL-019` remains
-  Deferred until a production tuple omits `dev-weak-rng` and proves real
-  admitted entropy or observable zero/error without synthetic or partial
-  success. Drift in any of the exact six kernel security-backing paths
-  invalidates the feasibility approval input. The later child remains
-  unauthorized behind the six human approvals, implementation checkpoint, and
-  umbrella Phase 03 production gates.
+- **`CELLOS-RUSTSTD-ENTROPY-005` — High technical mitigation complete; approval
+  pending, owner: kernel entropy and Rust `std`/PAL owners.** The default
+  development tuple still enables `dev-weak-rng` and remains non-qualifying.
+  The governed production release tuple builds with
+  `--no-default-features --features production-relay-image`; a source-equivalent
+  no-default QEMU companion proves unavailable entropy returns zero without
+  synthetic or partial success. `PAL-019` remains Deferred pending named
+  approval of the governed manifest. Drift in any exact kernel backing path,
+  release tuple, or zero/error behavior invalidates this evidence. The later
+  child remains unauthorized behind the six human approvals, implementation
+  checkpoint, and umbrella Phase 03 production gates.
  
 
 ## Medium

@@ -80,16 +80,15 @@ synthetic runs can verify deterministic schema, parity, ordering, interference,
 and closed-linker-input behavior; they are not live captures or authenticated
 promotion evidence.
 
-Implementation remains blocked. `PAL-019` is Deferred because the current
-default development tuple enables predictable `dev-weak-rng` success over a
-zero-byte VirtIO RNG source. `PAL-031` technical backing now has source
-implementation and isolated RV64 QEMU hostile evidence: GetRandom validates
-its original descriptor, authorizes the bounded caller-owned output span, and
-holds final authorization through the write against retirement, revocation,
-and exact backing-frame reuse. The governed security manifest now binds this
-evidence; the authoritative support map remains `Deferred` pending every named
-approval. This does not grant PAL support or production
-qualification; the implementation checkpoint, production entropy, and
+Implementation remains blocked. PAL-019 technical backing binds a production
+release tuple built without defaults and a source-equivalent no-default QEMU
+companion that returns zero without synthetic success. PAL-031 technical
+backing binds caller-owned validation and isolated RV64 QEMU hostile evidence,
+including final authorization through writes racing retirement, revocation,
+and exact backing-frame reuse. The governed security manifest binds both
+technical evidence sets; the authoritative support map keeps PAL-019 and
+PAL-031 `Deferred` pending every named approval. This grants neither PAL
+support nor real production entropy; the implementation checkpoint and
 umbrella Phase 03 production gates remain blocked.
 
 There is currently no Cellos PAL, target JSON, private or published sysroot,

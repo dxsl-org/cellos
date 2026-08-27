@@ -19,7 +19,7 @@ Assemble the feasibility artifacts and fixture-only validator into one canonical
 ## Requirements
 
 - Reconcile source/module/hook completeness, the exact kernel security-backing inventory, compiler choice, runtime/API contract, workload parity, implemented validator/schema/tests/fixtures/reports, owners, risks, and rejection criteria.
-- Present terminal state is exactly **FEASIBILITY PACKAGE VERIFIED / SECURITY BACKING AND HUMAN APPROVAL BLOCKED**. The recommendation is **CONDITIONAL GO** only after `PAL-019`, `PAL-031`, and every other blocker are implemented and evidenced. Verification authorizes neither implementation nor approval; `NO_GO` remains the fail-closed alternative if any input or blocker fails.
+- Present terminal state is exactly **FEASIBILITY PACKAGE VERIFIED / HUMAN APPROVAL BLOCKED**. The recommendation is **CONDITIONAL GO** only after every remaining Deferred blocker and approval gate closes. PAL-019 and PAL-031 technical backing/evidence are complete; verification authorizes neither implementation nor approval, and `NO_GO` remains the fail-closed alternative if any bound input fails.
 - One canonical `artifacts/approval-input-manifest.json` must content-address every plan, contract, transitive pinned/Cellos source, every exact kernel security-backing path, tool, test, fixture, and expected report. Approval and checkpoint records bind its digest.
 - No approval may be inferred from review prose, missing signatures, planned work, local measurements, steering, package verification, or a conditional recommendation.
 
@@ -52,8 +52,8 @@ None — only content-addressed inputs enter the approval-input manifest. Verifi
 
 - Umbrella Phase 03's design, external-floor, provenance, production-integration, hostile/physical evidence, authenticated-retention, release, and ledger gates remain open until explicitly approved.
 - Compiler integration must select the internal PAL under pinned source with reproducible provenance; unsupported fallback, external plug-in claims, and fake `std` are prohibited.
-- Current entropy backing is non-qualifying: the production evidence tuple must omit `dev-weak-rng` and prove real entropy or a zero/error result with no synthetic success.
-- `GetRandom` technical backing/evidence is complete: bounded caller-owned writable validation and null/overflow/oversized/unmapped/kernel/peer hostile direct-opcode evidence are retained, but `PAL-031` remains Deferred pending named approval of this governed rebind.
+- `GetRandom` entropy technical backing/evidence is complete: the governed production release tuple omits `dev-weak-rng`, and its source-equivalent no-default QEMU companion returns zero without synthetic success.
+- `GetRandom` caller-owned buffer technical backing/evidence is complete: bounded validation and null/overflow/oversized/unmapped/kernel/peer hostile direct-opcode cases are retained.
 - The six-path kernel security-backing inventory is closed; path-set or digest drift invalidates the package and cannot be omitted from future approval inputs.
 - Hook-map, runtime/API, workload-parity, and benchmark-validator approvals must all be explicit and current.
 - Any frozen-ABI change needs repository-mandated 2× explicit confirmation before implementation planning.
@@ -64,7 +64,7 @@ None — only content-addressed inputs enter the approval-input manifest. Verifi
 - [x] Independent test and review set the package only to **FEASIBILITY PACKAGE VERIFIED / SECURITY BACKING AND HUMAN APPROVAL BLOCKED**; **CONDITIONAL GO** remains contingent and grants no approval.
 - [x] One canonical approval-input manifest covers every plan/contract, transitive source, the exact six-path kernel security-backing inventory, tool, both tests, every fixture, and both expected reports without a self-reference cycle.
 - [x] Approver roles, independence, all six `NOT GRANTED` decisions, `PAL-019`/`PAL-031` blockers, non-claims, and invalidation triggers are explicit and bind the same manifest digest.
-- [x] Later PAL/target/runtime implementation remains blocked until the entropy prerequisite, every remaining Deferred prerequisite, all named approvals, the checkpoint, and umbrella Phase 03 production gates are approved.
+- [x] Later PAL/target/runtime implementation remains blocked until every remaining Deferred prerequisite, all named approvals, the checkpoint, and umbrella Phase 03 production gates are approved.
 - [x] Umbrella Phase 06 remains pending; this child makes no PAL/target/runtime or promotion-completion claim.
 
 ## Verification and Review Evidence

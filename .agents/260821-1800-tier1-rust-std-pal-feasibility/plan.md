@@ -17,17 +17,17 @@ created: 2026-08-21
 
 This child executes only the approved non-blocked portion of [umbrella Phase 06](../260821-0642-app-tiers-completion/phase-06-tier1-rust-std-pal.md). It inventories the pinned `rust-std` PAL boundary, decides whether a custom-target/internal-PAL path is maintainable, freezes runtime/API and identical-workload contracts, and implements a fixture-only promotion validator with behavioral tests. It does not implement a PAL/target/runtime, publish a target or triple, capture or claim promotion evidence, add fake `std`, or introduce mlibc.
 
-The terminal child state is **FEASIBILITY PACKAGE VERIFIED / SECURITY BACKING AND HUMAN APPROVAL BLOCKED**. The recommendation remains **CONDITIONAL GO** only after every Deferred blocker is implemented and evidenced, including `PAL-019` production entropy without `dev-weak-rng` and `PAL-031` bounded caller-owned writable validation with hostile direct-syscall evidence. Verification does not promote either hook, grant any of the six human approvals, pass the implementation checkpoint, change umbrella Phase 06 from pending, satisfy its Phase 03 dependency, or claim PAL/target/runtime readiness.
+The terminal child state is **FEASIBILITY PACKAGE VERIFIED / HUMAN APPROVAL BLOCKED**. PAL-019 production zero/error backing and PAL-031 bounded caller-owned writable backing now have governed evidence. The recommendation remains **CONDITIONAL GO** until every other Deferred blocker and all six human approvals close. Verification does not promote either hook, pass the implementation checkpoint, change umbrella Phase 06 from pending, satisfy its Phase 03 dependency, or claim PAL/target/runtime readiness.
 
 ## Phases
 
 | Phase | Name | Status | Depends on |
 |---|---|---|---|
-| 01 | [Pinned Source and Hook Inventory](phase-01-pinned-source-and-hook-inventory.md) | verified; security-backing blockers preserved | — |
+| 01 | [Pinned Source and Hook Inventory](phase-01-pinned-source-and-hook-inventory.md) | verified; PAL-019/PAL-031 technical evidence bound | — |
 | 02 | [Compiler Integration Strategy](phase-02-compiler-integration-strategy.md) | verified; conditional recommendation only; human approval NOT GRANTED | 01 |
-| 03 | [PAL Runtime and API Contract](phase-03-pal-runtime-and-api-contract.md) | verified; `PAL-019`/`PAL-031` Deferred; human approval NOT GRANTED | 01 |
+| 03 | [PAL Runtime and API Contract](phase-03-pal-runtime-and-api-contract.md) | technical backing verified; `PAL-019`/`PAL-031` Deferred pending approval | 01 |
 | 04 | [Workload Parity and Benchmark Validator Implementation](phase-04-workload-parity-and-benchmark-validator-contract.md) | verified; fixture-only and non-promotional; human approval NOT GRANTED | 01 |
-| 05 | [Decision Package and Approval Checkpoint](phase-05-decision-package-and-approval-checkpoint.md) | package verified; security backing and human approval BLOCKED | 02, 03, 04 |
+| 05 | [Decision Package and Approval Checkpoint](phase-05-decision-package-and-approval-checkpoint.md) | package verified; human approval BLOCKED | 02, 03, 04 |
 
 ## Stage Graph
 
@@ -50,4 +50,4 @@ Final verification passed 33/33 feasibility tests, 57/57 validator adversarial a
 
 - Evidence inputs are pinned `rust-toolchain.toml`, every module declared by installed `library/std/src/sys/mod.rs:3-30`, the transitive pinned `std` sources in the support map, every cited Cellos `libs/api`/`libs/ostd` backing source, the exact closed kernel security-backing inventory, the governed GetRandom hostile-evidence report/runner/fixture sources, and the benchmark/validator sources named by the phase files.
 - The feasibility package and fixture-only validator are verified while security backing, all six named human approvals, the implementation checkpoint, and umbrella Phase 03 production gates remain blocked. PAL/target/runtime implementation, live capture, a published target/triple, and promotion remain prohibited.
-- A later PAL/target/runtime implementation child may be authorized only after `PAL-019` is implemented/evidenced, every remaining Deferred prerequisite is satisfied, Phase 05 records the compiler-integration choice and all contract approvals, **and** umbrella Phase 03's production gates are approved. Steering cannot waive any condition.
+- A later PAL/target/runtime implementation child may be authorized only after every remaining Deferred prerequisite is satisfied, Phase 05 records all contract approvals, **and** umbrella Phase 03's production gates are approved. Steering cannot waive any condition.

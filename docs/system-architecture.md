@@ -1269,19 +1269,18 @@ Routing (cross-machine): Private→Public ✓ · Public→Private ✗ · Private
   X.509 PKI remains outside the Cellos kernel. See
   [ADR-0005](decisions/0005-mutual-tls-relay-identity.md).
 
-- **Profile-specific entropy and output-buffer gate**: the current default
-  development/QEMU tuple enables `dev-weak-rng`. Because the current VirtIO RNG
-  source returns zero bytes, `GetRandom` substitutes predictable xorshift bytes
-  and reports success. That is an explicitly development-only posture, not
-  production qualification. Fleet and production artifacts must omit
-  `dev-weak-rng` and prove real admitted entropy or observable zero/error
-  without synthetic success. GetRandom now validates the original descriptor,
-  authorizes only its bounded caller-owned writable output span, and retains
-  final authorization through the write. Isolated RV64 QEMU evidence includes
-  direct hostile descriptors and races against root retirement, grant
-  revocation, and exact backing-frame reuse. That evidence does not supply PAL
-  approval, production entropy, fleet credentials, release signatures,
-  production Noise keys, or promotion evidence.
+- **Profile-specific entropy and output-buffer gate**: the default
+  development/QEMU tuple enables `dev-weak-rng` and remains non-qualifying.
+  The governed production release tuple omits default features; its
+  source-equivalent no-default QEMU companion proves unavailable entropy
+  returns zero without synthetic success. GetRandom validates the original
+  descriptor, authorizes only its bounded caller-owned writable span, and
+  retains final authorization through the write. Isolated RV64 QEMU evidence
+  covers direct hostile descriptors and races against root retirement, grant
+  revocation, and exact backing-frame reuse. PAL-019 and PAL-031 technical
+  backing/evidence are complete but both remain Deferred pending named
+  approval. This evidence supplies no real entropy, fleet credentials, release
+  signatures, production Noise keys, PAL approval, or promotion evidence.
 - `ClusterId` is routing-only; the PSK/Noise handshake is the sole authenticator. Multicast gossip is ~G1-only (cloud VPCs block multicast → G2 discovery shifts to a registry).
 
 ### KMS TLS signer boundary (Phase 1, 2026-08-25)
