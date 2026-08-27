@@ -1,37 +1,27 @@
 # TODO
-1. Cập nhật docs:
-    - `.agents/260825-1726-kms-silo-production-root/plan.md` — Phases 1-2 recorded complete; Phases 3-8 pending; Phase 6 may run in parallel and Phase 3 requires explicit approval.
-    - `.agents/260825-sdk-delivery/plan.md` — Phase 06 is partial, but its remaining relay/client closure depends on the KMS/Silo identity lifecycle.
-    - `.agents/260823-rpi3-hardware-completion/plan.md` — SD, sensor, and HDMI lanes are recorded in progress and are independent of KMS, but physical evidence is required.
-    - open-risk-register.md đang có ít nhất hai mục đã lỗi thời: socket đã owner-bind bằng SocketOwner, Lua/WASM đã khai báo LookupService và StateRestore
 
-2. MQTT packet boundary tests: Tách/test remaining-length encoding, topic/payload oversize trong cells/demos/robot-demo/src/mqtt.rs.
-
-3. RPi3:
+1. [in-progress] RPi3:
     - Test board thật SD Storage, HDMI, I2C/SPI [in-progress]
     - Phase 05: Gỡ nghẽn USB Policy v3 & Level IRQ 9
     - cần sensor như SHT3x hoặc MPU6050
-4. RISC-V/x86 Board: Bringup thực tế trên VF2, Pioneer, MiniPC
-5. SDK [in-progress]:
-    - Hoàn thiện net-broker: K1 PSK, LAN Beacon, Relay
-    - Native SDK Core & ViUI Toolkit Widgets, Signals
-    - Mở rộng VFS & Nâng cấp Desktop Compositor
+2. [in-progress] RISC-V/x86 Board: Bringup thực tế trên VF2, Pioneer, MiniPC
+3. [blocked] SDK relay client mutual TLS: phụ thuộc production KMS/Silo identity lifecycle.
  
-6. [blocked] App Tiers completion: cần phần cứng (RPi4b + secure controller riêng hoặc secure boot + remote CAS service)
+4. [blocked] App Tiers completion: cần phần cứng (RPi4b + secure controller riêng hoặc secure boot + remote CAS service)
     - Tier 1 baseline
     - Tier 1 rust std: PAL-019, PAL-031
     - Tier 3
 
-7. Chuẩn hóa manifest và tooling phía người phát triển. Về lâu dài cần tách rõ:
+5. [in-progress] Chuẩn hóa manifest và tooling phía người phát triển. Về lâu dài cần tách rõ:
     - execution_tier: Tier 1/2/3.
     - runtime_profile: Rust, FFI/POSIX, Lua, Linux guest.
     - protection_class: trường tương thích hiện dùng cho PKU/floor.
     - capabilities: quyền thực tế.
     - admission evidence: chữ ký, provenance, owner authorization.
 
-Manifest v2 chỉ nên nhận alias tương thích. Việc đổi field vật lý nên chờ Manifest v3 và phê duyệt ABI riêng.
+Manifest v2 và tooling tương thích đã [done]. Việc đổi field vật lý [blocked], chờ Manifest v3 và phê duyệt ABI riêng.
 
-8. Xây acceptance matrix chung. Mỗi tổ hợp cần trạng thái PASS, BLOCKED, PLANNED:
+6. [done] Xây acceptance matrix chung. Mỗi tổ hợp có trạng thái PASS, BLOCKED, PLANNED:
     - Tier × runtime profile.
     - Kiến trúc CPU.
     - QEMU/KVM/phần cứng thật.
@@ -40,7 +30,7 @@ Manifest v2 chỉ nên nhận alias tương thích. Việc đổi field vật l�
     - SDK module.
     - Build, boot, restart và security-negative tests.
 
-9. Cổng hoàn tất cuối cùng, App tiers chỉ nên được coi là hoàn thiện khi:
+7. [in-progress] Cổng hoàn tất cuối cùng, App tiers chỉ nên được coi là hoàn thiện khi:
     - Không còn dùng Tier 1b, Tier 3b, SDK L1/L2 ngoài compatibility/historical text.
     - Manifest terminology không còn đụng với application tier.
     - Tier 1 có baseline và production admission rõ ràng.
@@ -48,13 +38,13 @@ Manifest v2 chỉ nên nhận alias tương thích. Việc đổi field vật l�
     - Tier 2 chỉ được công bố khi private-domain containment đã có negative evidence.
     - SDK có module/profile matrix và examples khớp code.
 
-10. AI inference server demo (HTTP → NPU cell → response, P99 bound) = G2 Level A, chính là bước cần board RK3588 — đây là mắt xích nối G2 sang G3.
+8. [blocked] AI inference server demo (HTTP → NPU cell → response, P99 bound) = G2 Level A, chính là bước cần board RK3588 — đây là mắt xích nối G2 sang G3.
 
-11. Desktop compositor & ViUI [in-progress]:
+9. [in-progress] Desktop compositor & ViUI:
 
-12. Test board thật: RISC-V và mini pc x86 (Dell)
+10. [in-progress] Test board thật: RISC-V và mini pc x86 (Dell)
 
-13. Phần cứng (StarFive VisionFive 2 v1.3B, STM32H573I-DK Discovery Kit của STMicroelectronics, Infineon OPTIGA™ TPM 2.0 SLB9672 kit) và AWS DEV account/region để unlock KMS Silo
+11. [blocked] Phần cứng (StarFive VisionFive 2 v1.3B, STM32H573I-DK Discovery Kit của STMicroelectronics, Infineon OPTIGA™ TPM 2.0 SLB9672 kit) và AWS DEV account/region để unlock KMS Silo
 
 ### App Layers
 1. **Tier 1** - Trusted Native SAS Cell

@@ -1,17 +1,12 @@
 # Open Risk Register
 
-**Last updated**: 2026-08-24
+**Last updated**: 2026-08-27
 
 This register tracks confirmed production-readiness gaps found while syncing
 docs to code. It is not a bug-fix plan.
 
 ## Critical
 
-- Net socket caps are still keyed only by predictable `CapId` values in
-  `cells/services/net/src/socket_table.rs:20,51`, and the handlers at
-  `cells/services/net/src/handlers.rs:157,177,202` do not owner-bind resolution
-  to the caller. Another network-capable Cell can therefore guess or reuse a
-  live cap and operate on a peer's socket.
 - **`CELLOS-LOADER-SIG-001` — Critical, owner: Phase 03
   provenance/signature boundary.** ADR-0004 binds every final ELF byte except
   the 64-byte `__ViCell_sig` payload, so post-sign mutation of section metadata
@@ -42,10 +37,6 @@ docs to code. It is not a bug-fix plan.
   `cells/services/net/src/handlers.rs:453-459` before the send path at
   `:608-613`, which can truncate valid binary payloads ending in zero bytes.
   The raw path needs an explicit length contract.
-- Lua and WASM host cells do not declare the `StateRestore` / `LookupService`
-  syscall pair required by their argv/VFS paths
-  (`cells/runtimes/lua/src/main.rs:11`, `cells/tools/wasm/src/main.rs:16-20`).
-  Those paths can fail under the enforced syscall allowlist.
 - Production cell admission is not signed-only by default. The 18-row catalog,
   33 stable `test-hooks` cases, and strict runtime parser are prequalification
   infrastructure only; local runs are explicitly non-admissible and the former
