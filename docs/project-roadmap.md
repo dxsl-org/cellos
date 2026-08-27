@@ -3,7 +3,7 @@
 **Project**: Cellos (Jarvis Hybrid OS)
 **Current version**: 0.2.1-dev (Mycelium Era)
 **Current phase**: Phase 1 - Core Stability; active product stage G1 Robot & Embedded
-**Last updated**: 2026-08-26
+**Last updated**: 2026-08-27
 This file is the roadmap entrypoint. The previous all-in-one roadmap is
 preserved as a read-only content snapshot at
 [project-roadmap-legacy.md](project-roadmap-legacy.md). Use it only when a
@@ -87,6 +87,12 @@ Cellos is being shaped around product stages, not only phase numbers:
   surface copy to the dirty region before decoration, cursor composition, and
   GPU flush. This preserves the bounded window-policy contract while avoiding
   whole-surface copies for local damage.
+- ViUI now has a bounded managed-surface integration: `ManagedSurfaceApp`
+  handles configure/resize, minimized/restore, close accept/reject, and
+  explicit shutdown for one compositor-owned `ViSurface`. The live generated
+  Counter demo uses compositor-forwarded input and precise clipped damage.
+  Focused tests and the RISC-V build pass; QEMU runtime qualification remains
+  unrun because `disk_v3.img` is absent.
 
 ## Immediate Open Gates
 

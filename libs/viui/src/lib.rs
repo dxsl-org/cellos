@@ -49,6 +49,7 @@ pub mod gpu_cmd;
 pub mod gpu_renderer;
 pub mod input_bridge;
 pub mod layout;
+pub mod managed_surface;
 pub mod navigation;
 pub mod node;
 pub mod node_widgets;

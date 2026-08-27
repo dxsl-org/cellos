@@ -3,7 +3,7 @@
 **Audience**: Developers new to Cellos
 **Level**: High-level (conceptual + key components)
 **Version**: 0.2.1-dev (Mycelium Era)
-**Last Updated**: 2026-08-26 (KMS/Silo Phase 6 closes NO-GO with no product selected; Phase 4 remains blocked only on protected persistence, authenticated time, and pending-key precommit binding; production is `BLOCKED_BY_ADR_0006`.)
+**Last Updated**: 2026-08-27 (ViUI managed compositor surface integration completed; KMS/Silo production remains `BLOCKED_BY_ADR_0006`.)
 
 > **Status refresh 2026-08-21**: [Spec 23 Native SDK contract](specs/23-native-sdk-contract.md)
 > is ratified as the normative contract for the single Native SDK family. It
@@ -958,6 +958,21 @@ ViUI v2 targets the constraints of Cellos's no_std Cell environment while matchi
 - Signal<T> reactive engine: only affected widgets repaint → no full-screen repaints
 - ViRenderer trait: FramebufferCanvas (CPU, no GPU needed) or GPU backend (G2+)
 - no_std + alloc throughout; no std dependency in runtime crates
+
+`FramebufferRenderer` submits finite damage only after outward rounding and
+clipping it to the current `ViSurface`; `None` remains the full-repaint path,
+while empty or offscreen rectangles submit no damage. `ManagedSurfaceApp`
+provides the compositor boundary for one `ViApp`: configure events apply the
+replacement Grant and trigger relayout, minimized surfaces stop ticking until
+restore, close requests follow an explicit accept/reject policy, and
+`shutdown()` performs the normal surface-destruction sequence after an
+accepted close. `cells/demos/viui-demo` exercises this boundary with the
+generated Counter component and compositor-forwarded input. This adds no
+`libs/api` or wire-protocol change.
+
+Focused ViUI/compositor tests and the RISC-V build verify the implementation.
+The QEMU runtime lane was not run because `disk_v3.img` is absent, so these
+changes do not constitute production runtime qualification.
 
 ### Reactive Update Model
 

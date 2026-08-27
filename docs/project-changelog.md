@@ -2,6 +2,22 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-27] ViUI managed compositor surface integration
+
+- `FramebufferRenderer` now submits finite, outward-rounded damage clipped to
+  the current surface bounds; full damage remains reserved for layout or
+  other full-repaint paths, and empty/offscreen damage is suppressed.
+- `ManagedSurfaceApp` connects one `ViApp` to one compositor-managed
+  `ViSurface`. It handles configure/resize, minimized and restored state,
+  close accept/reject policy, and explicit surface shutdown while preserving
+  the compositor's grant/acknowledgement lifecycle.
+- `viui-demo` now runs the generated Counter component as a live 640×400
+  managed surface and consumes compositor-forwarded input. No `libs/api`
+  files or protocol bytes changed.
+- Focused ViUI/compositor tests and the RISC-V build pass. QEMU runtime
+  qualification was not run because the required `disk_v3.img` is absent;
+  this slice therefore makes no production runtime claim.
+
 ## [2026-08-26] RPi3 SD/VFS persistence gate passes
 
 - SDHCI write completion now uses the architectural counter and `CNTFRQ_EL0`

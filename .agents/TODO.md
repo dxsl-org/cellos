@@ -41,6 +41,11 @@ Manifest v2 và tooling tương thích đã [done]. Việc đổi field vật l�
 8. [blocked] AI inference server demo (HTTP → NPU cell → response, P99 bound) = G2 Level A, chính là bước cần board RK3588 — đây là mắt xích nối G2 sang G3.
 
 9. [in-progress] Desktop compositor & ViUI:
+    - [done] Scope bounded đã phê duyệt: exact clipped damage, một `ManagedSurfaceApp`
+      xử lý configure/minimize/restore/close, và `viui-demo` Counter chạy như managed surface.
+    - [done] Focused tests, compositor regressions, RISC-V build và scope guard `libs/api`.
+    - [blocked] QEMU runtime evidence: workspace hiện thiếu `disk_v3.img`; chưa tuyên bố
+      production runtime qualification.
 
 10. [in-progress] Test board thật: RISC-V và mini pc x86 (Dell)
 
