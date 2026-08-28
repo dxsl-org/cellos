@@ -12,6 +12,7 @@ pub enum ReplyStatus {
     Success = 0,
     Busy = 1,
     Indeterminate = 2,
+    NotSupported = 3,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

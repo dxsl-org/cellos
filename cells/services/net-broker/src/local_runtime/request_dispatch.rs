@@ -29,7 +29,10 @@ pub(super) fn process_request(request: &WorkerRequest) -> QueuedReply {
             let len = encode_hold_command(work_turns, &mut payload).unwrap_or(0);
             reply_with_payload(request, ReplyStatus::Success, &payload[..len])
         }
-        Err(_) => reply_with_payload(request, ReplyStatus::Indeterminate, &[]),
+        // Phase 01: Relay-First Contract Freeze.
+        // Direct paths are exhausted; remote calls are not yet implemented.
+        // Return NotSupported instead of Indeterminate.
+        Err(_) => reply_with_payload(request, ReplyStatus::NotSupported, &[]),
     }
 }
 

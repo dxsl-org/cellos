@@ -91,7 +91,7 @@ pub(super) fn count_reply(
         ReplyStatus::Success if payload_ok => summary.success += 1,
         ReplyStatus::Success => summary.correlation += 1,
         ReplyStatus::Busy => summary.busy += 1,
-        ReplyStatus::Indeterminate => summary.indeterminate += 1,
+        ReplyStatus::Indeterminate | ReplyStatus::NotSupported => summary.indeterminate += 1,
     }
 }
 

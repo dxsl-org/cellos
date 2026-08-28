@@ -13,7 +13,9 @@ impl BrokerState {
     ) -> IngressDecision {
         match status {
             ReplyStatus::Busy => self.counters.busy += 1,
-            ReplyStatus::Indeterminate => self.counters.indeterminate += 1,
+            ReplyStatus::Indeterminate | ReplyStatus::NotSupported => {
+                self.counters.indeterminate += 1
+            }
             ReplyStatus::Success => self.counters.terminal += 1,
         }
         IngressDecision::Immediate(QueuedReply::new(

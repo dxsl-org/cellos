@@ -138,7 +138,9 @@ fn measure_call(
     }
     match reply.status {
         ReplyStatus::Busy => return CallOutcome::Busy,
-        ReplyStatus::Indeterminate => return CallOutcome::Indeterminate,
+        ReplyStatus::Indeterminate | ReplyStatus::NotSupported => {
+            return CallOutcome::Indeterminate
+        }
         ReplyStatus::Success => {}
     }
     let Ok(timestamps) = decode_timed_echo_reply(reply.payload, ECHO_BODY) else {

@@ -23,6 +23,11 @@
 //! 5. P04/P05 crypto transport panics at Init if VirtIO-RNG is absent (fail-closed
 //!    entropy gate, mirroring `ViRng::new()` in the net cell TLS module).
 //!
+//! ## Phase 01: Relay-First Contract Freeze
+//! 1. The broker strictly prioritizes the remote-relay routing path.
+//! 2. Direct paths (e.g., LAN) are gracefully exhausted if unavailable.
+//! 3. All unroutable/exhausted remote calls explicitly return `NotSupported` (no raw fallback).
+//!
 //! ## Hot-swap limitation (OQ5 — unresolved)
 //! In-flight IPC and Noise session re-establish on hot-swap are undefined.
 //! The broker does NOT implement `ViStateTransfer`. A respawn means all cluster

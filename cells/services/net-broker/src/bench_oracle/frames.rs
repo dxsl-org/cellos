@@ -52,6 +52,7 @@ pub fn decode_reply_frame(buf: &[u8]) -> Result<DecodedReply<'_>, OracleError> {
         0 => ReplyStatus::Success,
         1 => ReplyStatus::Busy,
         2 => ReplyStatus::Indeterminate,
+        3 => ReplyStatus::NotSupported,
         _ => return Err(OracleError::InvalidReplyStatus),
     };
     let request_id = u64::from_le_bytes(buf[2..10].try_into().unwrap_or([0; 8]));
