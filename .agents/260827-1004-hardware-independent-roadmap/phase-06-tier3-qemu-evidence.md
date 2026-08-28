@@ -62,16 +62,17 @@ QEMU can close machinery and hostile-input regressions; it cannot validate neste
 
 ## Todo List
 
-- [ ] Approve the architecture-by-scenario matrix.
-- [ ] Implement hostile guest inputs, runners, and strict result parsing.
-- [ ] Keep every VMM/VirtIO production file under Phase 09/10 ownership.
+- [x] Approve the architecture-by-scenario matrix.
+- [ ] Implement malformed GPA/descriptor/backend guest inputs; runners and
+  strict result parsing are implemented.
+- [x] Keep every VMM/VirtIO production file under Phase 09/10 ownership.
 
 ## Success Criteria
 
-- [ ] Strict x86 reaches `/bin/sh` before applicable fault scenarios.
+- [x] Strict x86 reaches `/bin/sh` before applicable fault scenarios.
 - [ ] Malformed guest inputs cause no host panic or cross-guest/service corruption.
 - [ ] Reset/restart and vCPU-budget runner behavior are deterministic.
-- [ ] No persistence, x86 parity, or physical qualification claim is inferred before owning phases pass.
+- [x] No persistence, x86 parity, or physical qualification claim is inferred before owning phases pass.
 
 ## Security Considerations
 
@@ -87,5 +88,20 @@ Run current non-persistence scenarios immediately. Phases 09/10 reuse the same r
 
 ## Deviation Log
 - Attempted the QEMU-TCG 10.2.0 x86 runner with a `repack-initramfs.py`-overlaid Alpine PVH guest probe. It reaches the probe and host-observes outer-QEMU liveness after a CPU-bound budget stimulus. The guest reset stimulus produces neither nested-VMM exit nor supervisor restart. Bounds, descriptor, and backend inputs have no VMM/VirtIO transport; no independent VMM-preemption outcome exists.
-- Attempted the ARM64 QEMU runner. It confirms VMM liveness before the known TCG address-size fault prevents payload execution; this is `NOT_APPLICABLE`, not hostile-runner evidence.
+- Attempted the ARM64 QEMU runner. It confirms VMM liveness before the known TCG address-size fault prevents payload execution; this is `BLOCKED_ENVIRONMENT`, not hostile-runner evidence.
 - Correction: the earlier x86 parser accepted guest-authored classifications and markers as PASS. The runner now reserves PASS entirely, reports actual started/host-observed budget and reset stimuli separately, and emits `BLOCKED_SCOPE` until every axis has an independent VMM/VirtIO outcome.
+- Re-ran strict x86 on 2026-08-28 with pinned QEMU-TCG 10.2.0. The hostile
+  probe started, outer-QEMU liveness remained observable after the CPU-bound
+  stimulus, and reset still produced no nested-VMM exit or supervisor restart.
+  Result remains `BLOCKED_SCOPE`; no guest-memory, descriptor, or backend axis
+  has a production transport before Phases 09/10.
+- Rebuilt and re-ran ARM64 on 2026-08-28. The VMM reached its liveness marker,
+  then the known TCG address-size fault prevented hostile payload execution.
+  Result is `BLOCKED_ENVIRONMENT`, not PASS. No production VMM/VirtIO file was
+  changed during either run.
+- Review correction: ARM64's required scenarios are blocked by its current TCG
+  environment, not inapplicable. The ARM64 runner now classifies the known fault
+  as `BLOCKED_ENVIRONMENT` and has a fail-closed userspace-probe branch for
+  environments where the fault is absent. The malformed GPA, descriptor, and
+  backend corpus remains open; guest-authored `NOT_APPLICABLE` markers are not
+  accepted as scenario PASS.

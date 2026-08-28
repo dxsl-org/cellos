@@ -12,6 +12,11 @@
 - RPi3 HDMI Phase 04 and its hardware-independent software Phase 05 are
   completed. The lane is regression-only; camera and other sensor integration
   remains current executable work but is deferred to a later session.
+- Tier 3 hostile-QEMU Phase 06 now distinguishes the x86 `BLOCKED_SCOPE`
+  result from the ARM64 `BLOCKED_ENVIRONMENT` result. The ARM64 runner accepts
+  an explicit emulator binary, terminates promptly on the known TCG
+  address-size fault, and fails closed if a future environment reaches the
+  hostile userspace probe. No blocked result is promoted to PASS.
 - RPi3-B is bound to revision `a22082` / Raspberry Pi 3 Model B and serial
   `000000003d042795`. `lungmat8` approved the exact BCM mailbox unsafe island
   on 2026-08-28; strict F1/F5, focused host/target tests, RPi3 packaging, image
