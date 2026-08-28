@@ -270,15 +270,46 @@ fn boot_arm() {
     vmm::vcpu_regs(vm_id, vcpu_id, &mut rb, true); // write back
 
     println("[hv] vCPU ready — entering run loop");
-
     // ── 7. Run ───────────────────────────────────────────────────────────────
-    let disk_file = ostd::fs::File::open("/data/guest_disk.img").ok();
-    if disk_file.is_some() {
-        println("[hv] persistent disk: /data/guest_disk.img");
+    let vfs_tid = ostd::syscall::sys_lookup_service(api::syscall::service::VFS).unwrap_or(0);
+    let mut persistent_disk = None;
+    if vfs_tid != 0 {
+        let mut resp_buf = [0u8; api::ipc::IPC_BUF_SIZE];
+        let mut send_buf = [0u8; api::ipc::IPC_BUF_SIZE];
+        let root_req = api::ipc::VfsRequest::OpenRootDir { path: "/mnt" };
+        if let Ok(api::ipc::VfsResponse::DirHandle(mnt_dir)) =
+            ostd::ipc::service_call_typed(vfs_tid, &root_req, &mut send_buf, &mut resp_buf)
+        {
+            let open_sd_req = api::ipc::VfsRequest::OpenDir {
+                dir: mnt_dir,
+                name: "sd",
+            };
+            if let Ok(api::ipc::VfsResponse::DirHandle(sd_dir)) =
+                ostd::ipc::service_call_typed(vfs_tid, &open_sd_req, &mut send_buf, &mut resp_buf)
+            {
+                let open_req = api::ipc::VfsRequest::OpenFileAt {
+                    dir: sd_dir,
+                    name: "guest_disk.img",
+                };
+                if let Ok(api::ipc::VfsResponse::FileHandle(file_handle)) =
+                    ostd::ipc::service_call_typed(vfs_tid, &open_req, &mut send_buf, &mut resp_buf)
+                {
+                    let stat_req = api::ipc::VfsRequest::Stat("/mnt/sd/guest_disk.img");
+                    if let Ok(api::ipc::VfsResponse::Stat { size, is_dir: false }) =
+                        ostd::ipc::service_call_typed(vfs_tid, &stat_req, &mut send_buf, &mut resp_buf)
+                    {
+                        persistent_disk = Some((vfs_tid, file_handle, size));
+                    }
+                }
+            }
+        }
+    }
+    if persistent_disk.is_some() {
+        println("[hv] persistent disk: /mnt/sd/guest_disk.img");
     } else {
         println("[hv] volatile disk fallback");
     }
-    run_loop::run(vm_id, vcpu_id, disk_file);
+    run_loop::run(vm_id, vcpu_id, persistent_disk);
 
     println("[hv] guest exited");
     quiesce()

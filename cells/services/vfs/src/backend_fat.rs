@@ -265,6 +265,34 @@ impl FsBackend for FatBackend {
         result
     }
 
+    fn read_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> usize {
+        use fatfs::{Seek as _, Read as _};
+        let fs = match &self.fs {
+            Some(f) => f,
+            None => return 0,
+        };
+        let rel = match self.rel_nonempty(path) {
+            Some(r) => r,
+            None => return 0,
+        };
+        let mut file = match fs.root_dir().open_file(rel) {
+            Ok(f) => f,
+            Err(_) => return 0,
+        };
+        if file.seek(fatfs::SeekFrom::Start(offset)).is_err() {
+            return 0;
+        }
+        let mut total = 0;
+        while total < buf.len() {
+            match file.read(&mut buf[total..]) {
+                Ok(0) => break,
+                Ok(n) => total += n,
+                Err(_) => break,
+            }
+        }
+        total
+    }
+
     /// Create-or-overwrite with mkdir -p on intermediate directories. Uses
     /// remove-then-create for truncate semantics without `seek(End)`.
     fn write(&mut self, path: &str, content: &[u8]) -> bool {
@@ -307,6 +335,38 @@ impl FsBackend for FatBackend {
                 false
             }
         }
+    }
+
+    fn sync(&mut self, _path: &str) -> bool {
+        crate::blk_router::blk_flush()
+    }
+
+    fn write_at(&mut self, path: &str, offset: u64, content: &[u8]) -> bool {
+        use fatfs::{Seek as _, Write as _};
+        let fs = match &self.fs {
+            Some(f) => f,
+            None => return false,
+        };
+        let rel = match self.rel_nonempty(path) {
+            Some(r) => r,
+            None => return false,
+        };
+        let (parent, name) = split_last(rel);
+        if name.is_empty() {
+            return false;
+        }
+        let dir = match ensure_dir_chain(fs.root_dir(), parent) {
+            Ok(d) => d,
+            Err(()) => return false,
+        };
+        let mut file = match dir.open_file(name) {
+            Ok(f) => f,
+            Err(_) => return false,
+        };
+        if file.seek(fatfs::SeekFrom::Start(offset)).is_err() {
+            return false;
+        }
+        file.write_all(content).is_ok()
     }
 
     /// Append; creates the file (and parents) if absent — first append behaves

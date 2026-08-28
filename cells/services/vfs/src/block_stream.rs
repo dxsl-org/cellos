@@ -12,9 +12,8 @@
 //! builds the NVMe Driver Cell exits early (no PCIe NVMe device), so `nvme_tid()`
 //! always returns `None` there and the VirtIO path is unchanged.
 
-use crate::blk_router::{blk_read, blk_write};
+use crate::blk_router::{blk_flush, blk_read, blk_write};
 use crate::page_cache::PageCache;
-use ostd::syscall::sys_blk_flush;
 
 const SECTOR_SIZE: u64 = 512;
 
@@ -91,7 +90,7 @@ impl fatfs::Write for BlockStream {
 
     /// Issue a flush command so prior writes reach the backing disk image.
     fn flush(&mut self) -> Result<(), ()> {
-        if sys_blk_flush() {
+        if blk_flush() {
             Ok(())
         } else {
             Err(())
@@ -207,7 +206,7 @@ impl fatfs::Write for CachedBlockStream {
     }
 
     fn flush(&mut self) -> Result<(), ()> {
-        if sys_blk_flush() {
+        if blk_flush() {
             Ok(())
         } else {
             Err(())

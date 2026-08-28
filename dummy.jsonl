@@ -1,0 +1,21 @@
+{
+  "mediaType": "application/vnd.dev.sigstore.bundle+json;version=0.1",
+  "verificationMaterial": {
+    "x509CertificateChain": {
+      "certificates": [
+        {
+          "rawBytes": "ZmFrZV9jZXJ0Cg=="
+        }
+      ]
+    }
+  },
+  "dsseEnvelope": {
+    "payloadType": "application/vnd.in-toto+json",
+    "payload": "ZmFrZV9wYXlsb2FkCg==",
+    "signatures": [
+      {
+        "sig": "ZmFrZV9zaWcK"
+      }
+    ]
+  }
+}

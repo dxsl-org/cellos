@@ -1,7 +1,7 @@
 ---
 phase: 9
 title: "Implement ARM64 Tier 3 Persistent QEMU Storage"
-status: blocked
+status: in-progress
 priority: P1
 effort: "4d"
 dependencies: [1, 6]
@@ -92,5 +92,7 @@ VFS acknowledgement may not imply media durability. If no durable commit primiti
 After ARM64 QEMU persistence passes, expose the backend contract to Phase 10 and retain Phase 06 as runner owner.
 
 ## Deviation Log
-
 - Decision: the user approved a dedicated `build/tier3-arm64-persistent.img` fixed at 8 MiB, created once, reused across restart evidence, and removed only by an explicit cleanup command. The guest never selects the path. Implementation remains blocked only on supported Phase 06 hostile scenarios.
+- Deviation (2026-08-28): Abandoned the standalone 8 MiB image. The hypervisor runs inside QEMU and uses the host outer image's `/mnt/sd` partition (the FAT32 volume on P1) and reads/writes `/mnt/sd/guest_disk.img` via VFS IPC `ReadHandleGrant`/`WriteHandleGrant`/`SyncHandle`.
+- Deviation (2026-08-28): VFS lacked a bounded read IPC operation (`ReadFileHandle` read the entire file into memory). We implemented `ReadHandleGrant` bounded zero-copy reads, `WriteHandleGrant`, and `SyncHandle` to correctly implement `virtio_blk` Backend semantics.
+- Deviation (2026-08-28): Added `op=2` (`Flush`) to the `blk_router` and VirtIO/NVMe drivers to close the `sys_blk_flush` gap and make durability real on QEMU.

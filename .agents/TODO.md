@@ -1,4 +1,6 @@
 # TODO
+- Tier 3 hostile-QEMU Phase 06.
+- Phase 04 two-node/direct-LAN vẫn được ghi blocked riêng theo authority mTLS; không chặn single-guest gate.
 - Hiện tại chỉ có RPi3 B+, bỏ RPi3 A+ cho đến khi có nhu cầu thực tế.
 ### Hai blocker không thể tự đóng
 1. Sáu chữ ký con người độc lập:

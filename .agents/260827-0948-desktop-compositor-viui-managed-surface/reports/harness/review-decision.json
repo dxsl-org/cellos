@@ -1,0 +1,1 @@
+{"verdict":"approve","blockingFindings":0,"resolved":["direct input focus bypass","missing explicit surface shutdown","public RefCell surface handle","lifecycle test seam"],"residual":"QEMU runtime evidence pending"}

@@ -167,6 +167,24 @@ pub enum VfsRequest<'a> {
     CloseFile {
         file: crate::vfs_file_handles::ViVfsFileHandle,
     },
+    /// Bounded zero-copy read into a grant buffer using a VFS handle.
+    ReadHandleGrant {
+        file: crate::vfs_file_handles::ViVfsFileHandle,
+        offset: u64,
+        size: usize,
+        grant: usize,
+    },
+    /// Bounded zero-copy write from a grant buffer using a VFS handle.
+    WriteHandleGrant {
+        file: crate::vfs_file_handles::ViVfsFileHandle,
+        offset: u64,
+        grant: usize,
+        bytes: usize,
+    },
+    /// Flush dirty pages for a file handle to the block device.
+    SyncHandle {
+        file: crate::vfs_file_handles::ViVfsFileHandle,
+    },
 }
 
 impl VfsRequest<'_> {
@@ -207,7 +225,10 @@ impl VfsRequest<'_> {
             | Self::SealPaths
             | Self::OpenFileAt { .. }
             | Self::ReadFileHandle { .. }
-            | Self::CloseFile { .. } => false,
+            | Self::CloseFile { .. }
+            | Self::ReadHandleGrant { .. }
+            | Self::WriteHandleGrant { .. }
+            | Self::SyncHandle { .. } => false,
         }
     }
 }

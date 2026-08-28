@@ -28,7 +28,7 @@ const DISK_SPI: u32 = 17; // SPI line for virtio-mmio slot 1
 
 pub enum Backend {
     Volatile(alloc::vec::Vec<u8>),
-    Persistent { file: ostd::fs::File, size: u64 },
+    Persistent { vfs_tid: usize, file: api::vfs_file_handles::ViVfsFileHandle, size: u64 },
 }
 
 pub struct BlkDisk {
@@ -39,12 +39,11 @@ pub struct BlkDisk {
 }
 
 impl BlkDisk {
-    pub fn new(file: Option<ostd::fs::File>) -> Self {
+    pub fn new(file: Option<(usize, api::vfs_file_handles::ViVfsFileHandle, u64)>) -> Self {
         let (backend, num_sectors) = match file {
-            Some(f) => {
-                let size = f.size().unwrap_or(0);
+            Some((vfs_tid, file, size)) => {
                 (
-                    Backend::Persistent { file: f, size },
+                    Backend::Persistent { vfs_tid, file, size },
                     size / (SECTOR_SIZE as u64),
                 )
             }
@@ -117,15 +116,20 @@ fn handle_blk_request(backend: &mut Backend, bufs: &[DescBuf], vm_id: usize) -> 
 fn blk_flush(backend: &mut Backend) -> u8 {
     match backend {
         Backend::Volatile(_) => 0,
-        Backend::Persistent { file, .. } => {
-            if file.sync_all().is_ok() {
+        Backend::Persistent { vfs_tid, file, .. } => {
+            let req = api::ipc::VfsRequest::SyncHandle { file: *file };
+            let mut send_buf = [0u8; 512];
+            let mut resp_buf = [0u8; 512];
+            if let Ok(api::ipc::VfsResponse::Ok) =
+                ostd::ipc::service_call_typed(*vfs_tid, &req, &mut send_buf, &mut resp_buf)
+            {
                 0
             } else {
                 1 // VIRTIO_BLK_S_IOERR
             }
+            }
         }
     }
-}
 
 /// READ: copy disk sectors into driver-writable guest buffers.
 fn blk_read(backend: &mut Backend, sector: u64, bufs: &[DescBuf], vm_id: usize) -> u8 {
@@ -142,17 +146,46 @@ fn blk_read(backend: &mut Backend, sector: u64, bufs: &[DescBuf], vm_id: usize) 
                 crate::vmm::write_guest_memory(vm_id, buf.gpa, &disk[off..off + n]);
                 lba += (n.div_ceil(SECTOR_SIZE)) as u64;
             }
-            Backend::Persistent { file, size } => {
+            Backend::Persistent { vfs_tid, file, size } => {
                 if off >= *size {
                     break;
                 }
-                let n = (buf.len as u64).min(*size - off) as usize;
-                let mut tmp = vec![0u8; n];
-                if file.read_at(off, &mut tmp).unwrap_or(0) != n {
-                    return 1;
+                let mut n = (buf.len as u64).min(*size - off) as usize;
+                let mut chunk_off = 0;
+                while n > 0 {
+                    let chunk = n.min(65536);
+                    let grant_id = ostd::syscall::sys_grant_alloc(chunk).unwrap_or(0);
+                    if grant_id == 0 { return 1; }
+                    ostd::syscall::sys_grant_share(grant_id, *vfs_tid, 2 /* ReadWrite */);
+                    
+                    let req = api::ipc::VfsRequest::ReadHandleGrant {
+                        file: *file,
+                        offset: off + chunk_off as u64,
+                        size: chunk,
+                        grant: grant_id,
+                    };
+                    let mut resp_buf = [0u8; 512];
+                    let mut send_buf = [0u8; 512];
+                    let ok = if let Ok(api::ipc::VfsResponse::GrantDone { bytes }) = 
+                        ostd::ipc::service_call_typed(*vfs_tid, &req, &mut send_buf, &mut resp_buf)
+                    {
+                        if bytes > 0 {
+                            let mut tmp = vec![0u8; bytes];
+                            if ostd::syscall::sys_grant_copy_to_slice(grant_id, &mut tmp) == Some(bytes) {
+                                crate::vmm::write_guest_memory(vm_id, buf.gpa + chunk_off as u64, &tmp);
+                                true
+                            } else { false }
+                        } else { false }
+                    } else { false };
+                    
+                    ostd::syscall::sys_grant_free(grant_id);
+                    if !ok {
+                        return 1;
+                    }
+                    chunk_off += chunk;
+                    n -= chunk;
                 }
-                crate::vmm::write_guest_memory(vm_id, buf.gpa, &tmp);
-                lba += (n.div_ceil(SECTOR_SIZE)) as u64;
+                lba += ((buf.len as u64).min(*size - off).div_ceil(SECTOR_SIZE as u64)) as u64;
             }
         }
     }
@@ -173,26 +206,55 @@ fn blk_write(backend: &mut Backend, sector: u64, bufs: &[DescBuf], vm_id: usize)
                 let n = (buf.len as usize).min(disk.len() - off);
                 let mut tmp = vec![0u8; n];
                 let got = crate::vmm::read_guest_memory(vm_id, buf.gpa, &mut tmp);
-                if got == 0 || got == usize::MAX {
-                    break;
-                }
                 disk[off..off + got].copy_from_slice(&tmp[..got]);
                 lba += (got.div_ceil(SECTOR_SIZE)) as u64;
             }
-            Backend::Persistent { file, size } => {
+            Backend::Persistent { vfs_tid, file, size } => {
                 if off >= *size {
                     break;
                 }
-                let n = (buf.len as u64).min(*size - off) as usize;
-                let mut tmp = vec![0u8; n];
-                let got = crate::vmm::read_guest_memory(vm_id, buf.gpa, &mut tmp);
-                if got == 0 || got == usize::MAX {
-                    break;
+                let mut n = (buf.len as u64).min(*size - off) as usize;
+                let mut chunk_off = 0;
+                while n > 0 {
+                    let chunk = n.min(65536);
+                    let mut tmp = vec![0u8; chunk];
+                    let got = crate::vmm::read_guest_memory(vm_id, buf.gpa + chunk_off as u64, &mut tmp);
+                    if got == 0 || got == usize::MAX {
+                        return 1;
+                    }
+                    let actual = got.min(chunk);
+                    
+                    let grant_id = ostd::syscall::sys_grant_alloc(actual).unwrap_or(0);
+                    if grant_id == 0 { return 1; }
+                    let ptr = ostd::syscall::sys_grant_slice(grant_id).unwrap();
+                    unsafe { core::ptr::copy_nonoverlapping(tmp.as_ptr(), ptr, actual) };
+                    ostd::syscall::sys_grant_share(grant_id, *vfs_tid, 1 /* WriteOnly */);
+                    
+                    let req = api::ipc::VfsRequest::WriteHandleGrant {
+                        file: *file,
+                        offset: off + chunk_off as u64,
+                        bytes: actual,
+                        grant: grant_id,
+                    };
+                    let mut resp_buf = [0u8; 512];
+                    let mut send_buf = [0u8; 512];
+                    let ok = if let Ok(api::ipc::VfsResponse::GrantDone { bytes }) = 
+                        ostd::ipc::service_call_typed(*vfs_tid, &req, &mut send_buf, &mut resp_buf)
+                    {
+                        bytes == actual
+                    } else { false };
+                    
+                    ostd::syscall::sys_grant_free(grant_id);
+                    if !ok {
+                        return 1;
+                    }
+                    chunk_off += actual;
+                    n -= actual;
+                    if actual < chunk {
+                        break;
+                    }
                 }
-                if file.write_at(off, &tmp[..got]).is_err() {
-                    return 1;
-                }
-                lba += (got.div_ceil(SECTOR_SIZE)) as u64;
+                lba += (chunk_off.div_ceil(SECTOR_SIZE)) as u64;
             }
         }
     }

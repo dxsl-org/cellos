@@ -95,3 +95,22 @@ pub fn blk_write(abs_lba: u64, data: &[u8; SECTOR_SIZE]) -> bool {
         sys_blk_write(abs_lba, data)
     }
 }
+
+/// Flush all dirty data for the block device.
+pub fn blk_flush() -> bool {
+    if let Some(tid) = driver_tid() {
+        // Flush request: [op=2 (2B)] = 2 bytes.
+        let mut req = [0u8; 2];
+        req[0..2].copy_from_slice(&2u16.to_le_bytes());
+        if let ostd::syscall::SyscallResult::Err(_) = ostd::syscall::sys_send(tid, &req) {
+            return false;
+        }
+        let mut reply = [0u8; 1];
+        if let ostd::syscall::SyscallResult::Err(_) = ostd::syscall::sys_recv(tid, &mut reply) {
+            return false;
+        }
+        reply[0] == 0
+    } else {
+        ostd::syscall::sys_blk_flush()
+    }
+}

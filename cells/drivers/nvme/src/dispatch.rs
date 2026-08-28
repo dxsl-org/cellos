@@ -4,9 +4,11 @@
 //!
 //! Read request  (10 B): `[op=0 (2B)] [sector (8B)]`
 //! Write request (522 B): `[op=1 (2B)] [sector (8B)] [data (512B)]`
+//! Flush request   (2 B): `[op=2 (2B)]`
 //!
 //! Read reply OK  (513 B): `[0x00] [sector_data (512B)]`
 //! Write reply OK   (1 B): `[0x00]`
+//! Flush reply OK   (1 B): `[0x00]`
 //! Error reply      (1 B): `[0x01]`
 
 use crate::controller::NvmeController;
@@ -19,17 +21,22 @@ pub const REPLY_SIZE: usize = 513;
 pub enum DrvOp {
     Read = 0,
     Write = 1,
+    Flush = 2,
 }
 
 fn parse_op(data: &[u8]) -> Option<(DrvOp, u64)> {
-    if data.len() < 10 {
+    if data.len() < 2 {
         return None;
     }
     let op = match u16::from_le_bytes([data[0], data[1]]) {
         0 => DrvOp::Read,
         1 => DrvOp::Write,
+        2 => return Some((DrvOp::Flush, 0)),
         _ => return None,
     };
+    if data.len() < 10 {
+        return None;
+    }
     let sector = u64::from_le_bytes(data[2..10].try_into().ok()?);
     Some((op, sector))
 }
@@ -106,6 +113,18 @@ pub fn handle(
                 core::ptr::copy_nonoverlapping(data[10..].as_ptr(), io_buf.virt(), 512);
             }
             match ctrl.write_sector(sector, io_buf.phys() as u64) {
+                Ok(_) => {
+                    out[0] = 0;
+                    1
+                }
+                Err(_) => {
+                    out[0] = 1;
+                    1
+                }
+            }
+        }
+        DrvOp::Flush => {
+            match ctrl.flush() {
                 Ok(_) => {
                     out[0] = 0;
                     1

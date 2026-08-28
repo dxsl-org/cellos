@@ -36,9 +36,25 @@ pub trait FsBackend: Send {
     /// Create-or-truncate write. Authorization is the dispatcher's job
     /// (AccessTable); backends may still enforce structural rules.
     fn write(&mut self, path: &str, content: &[u8]) -> bool;
+    /// Positional bounded read. Backends that do not support it return 0.
+    fn read_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> usize {
+        let _ = (path, offset, buf);
+        0
+    }
+
+    /// Positional bounded write. Backends that do not support it return false.
+    fn write_at(&mut self, path: &str, offset: u64, content: &[u8]) -> bool {
+        let _ = (path, offset, content);
+        false
+    }
+
+    /// Flush dirty pages for a path to the block device.
+    fn sync(&mut self, path: &str) -> bool {
+        let _ = path;
+        false
+    }
 
     fn append(&mut self, path: &str, content: &[u8]) -> bool;
-
     /// mkdir -p semantics on FAT; single-level create on RamFS.
     fn mkdir(&mut self, path: &str) -> bool;
 

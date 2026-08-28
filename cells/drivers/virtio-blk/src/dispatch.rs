@@ -4,9 +4,11 @@
 //! one block protocol (`cells/services/vfs/src/block_stream.rs`):
 //!
 //! Read request  (10 B):  `[op=0 (2B)] [sector (8B)]`
+//! Flush request   (2 B): `[op=2 (2B)]`
 //! Write request (522 B): `[op=1 (2B)] [sector (8B)] [data (512B)]`
 //!
 //! Read reply OK  (513 B): `[0x00] [sector_data (512B)]`
+//! Flush reply OK   (1 B): `[0x00]`
 //! Write reply OK   (1 B): `[0x00]`
 //! Error reply      (1 B): `[0x01]`
 
@@ -21,6 +23,7 @@ const SECTOR_SIZE: usize = 512;
 enum DrvOp {
     Read = 0,
     Write = 1,
+    Flush = 2,
 }
 
 fn parse_op(data: &[u8]) -> Option<(DrvOp, u64)> {
@@ -30,8 +33,12 @@ fn parse_op(data: &[u8]) -> Option<(DrvOp, u64)> {
     let op = match u16::from_le_bytes([data[0], data[1]]) {
         0 => DrvOp::Read,
         1 => DrvOp::Write,
+        2 => return Some((DrvOp::Flush, 0)),
         _ => return None,
     };
+    if data.len() < 10 {
+        return None;
+    }
     let sector = u64::from_le_bytes(data[2..10].try_into().ok()?);
     Some((op, sector))
 }
@@ -71,6 +78,15 @@ pub fn handle(dev: &mut BlkDevice, data: &[u8], out: &mut [u8; REPLY_SIZE]) -> u
             let mut sec = [0u8; SECTOR_SIZE];
             sec.copy_from_slice(&data[10..10 + SECTOR_SIZE]);
             if dev.write_sector(sector, &sec) {
+                out[0] = 0;
+                1
+            } else {
+                out[0] = 1;
+                1
+            }
+        }
+        DrvOp::Flush => {
+            if dev.flush() {
                 out[0] = 0;
                 1
             } else {

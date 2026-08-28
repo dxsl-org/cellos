@@ -165,10 +165,18 @@ impl File {
 
     /// Write all of `buf` at `offset`.
     pub fn write_at(&mut self, offset: u64, buf: &[u8]) -> ViResult<()> {
-        use embedded_io::{Seek, SeekFrom};
+        use embedded_io::{Seek, SeekFrom, Write};
         self.seek(SeekFrom::Start(offset))
             .map_err(|_| ViError::IO)?;
-        self.write_all(buf)
+        let mut written = 0;
+        while written < buf.len() {
+            let n = self.write(&buf[written..]).map_err(|_| ViError::IO)?;
+            if n == 0 {
+                return Err(ViError::IO);
+            }
+            written += n;
+        }
+        Ok(())
     }
 
     /// Synchronously flush all modifications to the storage media.

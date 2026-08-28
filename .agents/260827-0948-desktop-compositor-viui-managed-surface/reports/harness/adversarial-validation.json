@@ -1,0 +1,1 @@
+{"mode":"auto","verdict":"approve","checks":["compositor-owned focus","explicit close destruction","capability filtering","Grant configure rollback","no protocol change"]}

@@ -123,6 +123,11 @@ impl BlkDevice {
     pub fn write_sector(&mut self, sector: u64, buf: &[u8]) -> bool {
         self.blk.write_blocks(sector as usize, buf).is_ok()
     }
+
+    /// Send a VirtIO FLUSH request. Returns `true` on success.
+    pub fn flush(&mut self) -> bool {
+        self.blk.flush().is_ok()
+    }
 }
 
 // ─── Slot iterator ────────────────────────────────────────────────────────────

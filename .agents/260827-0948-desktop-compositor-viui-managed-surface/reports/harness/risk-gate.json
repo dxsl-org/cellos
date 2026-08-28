@@ -1,0 +1,1 @@
+{"decision":"pass-with-runtime-evidence-pending","blockingFindings":0,"residualRisks":["QEMU runtime scenario not executed because disk_v3.img is absent"]}

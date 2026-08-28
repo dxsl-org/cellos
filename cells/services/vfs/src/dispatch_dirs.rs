@@ -15,9 +15,10 @@
 //! Settling what a cell inherited, before any of this runs, lives in
 //! [`crate::dir_admission`].
 
-use alloc::string::String;
-use api::dir_handles::ViDirHandle;
 use api::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
+use api::vfs_file_handles::ViVfsFileHandle;
+use api::dir_handles::ViDirHandle;
+use alloc::string::String;
 
 use crate::caller::Caller;
 use crate::dirs::DirError;
@@ -46,6 +47,13 @@ pub fn handle<'a>(
             read_file(vfs, caller, file, offset, max, resp_buf)
         }
         VfsRequest::CloseFile { file } => close_file(vfs, caller, file),
+        VfsRequest::ReadHandleGrant { file, offset, size, grant } => {
+            read_handle_grant(vfs, caller, file, offset, size, grant)
+        }
+        VfsRequest::WriteHandleGrant { file, offset, grant, bytes } => {
+            write_handle_grant(vfs, caller, file, offset, grant, bytes)
+        }
+        VfsRequest::SyncHandle { file } => sync_handle(vfs, caller, file),
         VfsRequest::WriteAt { dir, name, content } => match resolve(vfs, caller, dir, name) {
             Ok(path) => write_file(vfs, caller, &path, content),
             Err(code) => VfsResponse::Err(code),
@@ -171,6 +179,78 @@ fn read_at<'a>(
     VfsResponse::Data(&resp_buf[..n])
 }
 
+fn read_handle_grant<'a>(
+    vfs: &mut VfsManager,
+    caller: Caller,
+    file: ViVfsFileHandle,
+    offset: u64,
+    size: usize,
+    grant: usize,
+) -> VfsResponse<'a> {
+    let path = match vfs.files.path_of(caller, file) {
+        Some(p) => alloc::string::String::from(p),
+        None => return VfsResponse::Err(ERR_HANDLE),
+    };
+    match ostd::syscall::sys_grant_slice_with_len(grant) {
+        None => VfsResponse::Err(ERR_IO),
+        Some((ptr, grant_len)) => {
+            let max_read = size.min(grant_len).min(4096);
+            if max_read == 0 {
+                VfsResponse::GrantDone { bytes: 0 }
+            } else {
+                let mut chunk = alloc::vec![0u8; max_read];
+                let n = vfs.read_at(&path, offset, &mut chunk);
+                if n > 0 {
+                    unsafe {
+                        core::ptr::copy_nonoverlapping(chunk.as_ptr(), ptr, n);
+                    }
+                    VfsResponse::GrantDone { bytes: n }
+                } else {
+                    VfsResponse::GrantDone { bytes: 0 }
+                }
+            }
+        }
+    }
+}
+
+fn write_handle_grant<'a>(
+    vfs: &mut VfsManager,
+    caller: Caller,
+    file: ViVfsFileHandle,
+    offset: u64,
+    grant: usize,
+    bytes: usize,
+) -> VfsResponse<'a> {
+    let path = match vfs.files.path_of(caller, file) {
+        Some(p) => alloc::string::String::from(p),
+        None => return VfsResponse::Err(ERR_HANDLE),
+    };
+    if bytes == 0 {
+        return VfsResponse::GrantDone { bytes: 0 };
+    }
+    let bytes = bytes.min(4096);
+    let mut chunk = alloc::vec![0u8; bytes];
+    if ostd::syscall::sys_grant_copy_to_slice(grant, &mut chunk) != Some(bytes) {
+        return VfsResponse::Err(ERR_IO);
+    }
+    if vfs.write_at(&path, offset, &chunk) {
+        VfsResponse::GrantDone { bytes }
+    } else {
+        VfsResponse::Err(ERR_IO)
+    }
+}
+
+fn sync_handle<'a>(vfs: &mut VfsManager, caller: Caller, file: ViVfsFileHandle) -> VfsResponse<'a> {
+    let path = match vfs.files.path_of(caller, file) {
+        Some(p) => alloc::string::String::from(p),
+        None => return VfsResponse::Err(ERR_HANDLE),
+    };
+    if vfs.sync(&path) {
+        VfsResponse::Ok
+    } else {
+        VfsResponse::Err(ERR_IO)
+    }
+}
 fn stat_path<'a>(vfs: &VfsManager, caller: Caller, path: &str) -> VfsResponse<'a> {
     if !vfs.access.can_read(caller, path) {
         return VfsResponse::Err(ERR_DENIED);

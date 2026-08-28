@@ -1,0 +1,1 @@
+{"spec":".agents/specs/260827-desktop-compositor-viui-managed-surface-spec.md","plan":".agents/260827-0948-desktop-compositor-viui-managed-surface/plan.md","scope":["exact damage","single managed ViUI surface","live viui-demo"],"excluded":["libs/api","desktop shell","GPU","physical boards"]}

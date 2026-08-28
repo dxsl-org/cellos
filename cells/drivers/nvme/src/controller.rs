@@ -43,6 +43,7 @@ const CNS_IDENTIFY_NS: u32 = 0;
 const CNS_IDENTIFY_CTRL: u32 = 1;
 const NVM_OPC_WRITE: u8 = 0x01;
 const NVM_OPC_READ: u8 = 0x02;
+const NVM_OPC_FLUSH: u8 = 0x00;
 
 const POLL_WARN_ITERS: u64 = 1_000_000;
 
@@ -374,5 +375,10 @@ impl NvmeController {
     /// Write one 512-byte sector from `buf` (must be DMA-capable).
     pub fn write_sector(&mut self, sector: u64, buf_phys: u64) -> ViResult<()> {
         self.submit_io(NVM_OPC_WRITE, 1, sector, 0, buf_phys)
+    }
+
+    /// Send an NVMe flush command for the namespace.
+    pub fn flush(&mut self) -> ViResult<()> {
+        self.submit_io(NVM_OPC_FLUSH, 0, 0, 0, 0)
     }
 }

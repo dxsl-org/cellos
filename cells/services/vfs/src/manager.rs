@@ -139,6 +139,27 @@ impl VfsManager {
             .unwrap_or(false)
     }
 
+    pub fn read_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> usize {
+        self.mounts
+            .backend(path)
+            .map(|b| b.read_at(path, offset, buf))
+            .unwrap_or(0)
+    }
+
+    pub fn write_at(&mut self, path: &str, offset: u64, content: &[u8]) -> bool {
+        self.mounts
+            .backend_mut(path)
+            .map(|b| b.write_at(path, offset, content))
+            .unwrap_or(false)
+    }
+
+    pub fn sync(&mut self, path: &str) -> bool {
+        self.mounts
+            .backend_mut(path)
+            .map(|b| b.sync(path))
+            .unwrap_or(false)
+    }
+
     pub fn append(&mut self, path: &str, content: &[u8]) -> bool {
         self.mounts
             .backend_mut(path)

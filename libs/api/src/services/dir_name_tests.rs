@@ -246,6 +246,9 @@ fn no_handle_addressed_request_is_classified_as_path_addressed() {
     assert!(!VfsRequest::UnlinkAt { dir, name: "x" }.is_path_addressed());
     assert!(!VfsRequest::CloseDir { dir }.is_path_addressed());
     assert!(!VfsRequest::SealPaths.is_path_addressed());
+    assert!(!VfsRequest::ReadHandleGrant { file, offset: 0, size: 0, grant: 0 }.is_path_addressed());
+    assert!(!VfsRequest::WriteHandleGrant { file, offset: 0, bytes: 0, grant: 0 }.is_path_addressed());
+    assert!(!VfsRequest::SyncHandle { file }.is_path_addressed());
     assert!(!VfsRequest::OpenFileAt { dir, name: "x" }.is_path_addressed());
     assert!(!VfsRequest::ReadFileHandle {
         file,

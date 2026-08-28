@@ -98,6 +98,10 @@ else
     echo "ViCell-HV" > "$HOSTNAME_TMP"
 fi
 MKFAT_ARGS+=("$HOSTNAME_TMP" "etc/hostname")
+GUEST_DISK_TMP=$(mktemp)
+dd if=/dev/zero of="$GUEST_DISK_TMP" bs=1M count=8 status=none
+MKFAT_ARGS+=("$GUEST_DISK_TMP" "guest_disk.img")
+
 
 echo "[format-disk-hv] Creating $OUT with tools/mkfat32.py..."
 PYTHON_BIN="${PYTHON_BIN:-}"
@@ -110,5 +114,5 @@ if [[ -z "$PYTHON_BIN" ]]; then
 fi
 "$PYTHON_BIN" tools/mkfat32.py "$OUT" "${MKFAT_ARGS[@]}"
 
-rm -f "$HOSTNAME_TMP"
+rm -f "$HOSTNAME_TMP" "$GUEST_DISK_TMP"
 echo "[format-disk-hv] Done: $OUT"
