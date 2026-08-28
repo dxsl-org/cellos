@@ -188,7 +188,6 @@ setsid env \
     CELLOS_C2C_ORACLE_DISK="$DISK" \
     ViCell_QEMU="$QEMU_BIN" \
     cargo test --quiet \
-        --locked \
         --manifest-path tests/integration/Cargo.toml \
         --target "$HOST_TARGET" \
         --test c2c-broker-oracle \
