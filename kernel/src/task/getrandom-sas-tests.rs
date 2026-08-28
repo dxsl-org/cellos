@@ -68,14 +68,22 @@ pub(crate) fn run_fixture() -> bool {
     caller.segment_mem = Some(super::stack::CellSegments::with_writable_pages(
         vec![
             (cross_segment_base, cross_segment_base),
-            (cross_segment_base + PAGE_SIZE, cross_segment_base + PAGE_SIZE),
+            (
+                cross_segment_base + PAGE_SIZE,
+                cross_segment_base + PAGE_SIZE,
+            ),
             (read_only_base, read_only_base),
         ],
         vec![cross_segment_base, cross_segment_base + PAGE_SIZE],
         0,
     ));
     let caller_generation = caller.cell_generation;
-    let mut sibling = Box::new(Task::new(SIBLING, CellId(91_301), "rng-sibling", Vec::new()));
+    let mut sibling = Box::new(Task::new(
+        SIBLING,
+        CellId(91_301),
+        "rng-sibling",
+        Vec::new(),
+    ));
     sibling.cell_generation = caller_generation;
     sibling.root_tid = CALLER;
     sibling.user_stack = Some(sibling_stack);
@@ -122,8 +130,7 @@ pub(crate) fn run_fixture() -> bool {
         && rejected[4] == Err(syscall::SyscallError::InvalidInput)
         && rejected[5] == Err(syscall::SyscallError::InvalidInput)
         && rejected[6] == Err(syscall::SyscallError::InvalidInput)
-        && crate::task::drivers::virtio_rng::test_entropy_requests()
-            == entropy_before_rejections;
+        && crate::task::drivers::virtio_rng::test_entropy_requests() == entropy_before_rejections;
     let sibling_ok =
         syscall::dispatch_raw_for_test(CALLER, RAW_GETRANDOM, sibling_ptr, 65, 0, 0) == Ok(64);
     let caller_ok =
@@ -145,7 +152,11 @@ pub(crate) fn run_fixture() -> bool {
         syscall::dispatch_raw_for_test(CALLER, RAW_GETRANDOM, peer_ptr, 64, 0, 0)
             == Err(syscall::SyscallError::InvalidInput)
             && crate::task::drivers::virtio_rng::test_entropy_requests() == zero_entropy_before;
-    let no_entropy_result = if cfg!(feature = "dev-weak-rng") { 64 } else { 0 };
+    let no_entropy_result = if cfg!(feature = "dev-weak-rng") {
+        64
+    } else {
+        0
+    };
     let zero_entropy_valid =
         syscall::dispatch_raw_for_test(CALLER, RAW_GETRANDOM, sibling_ptr, 65, 0, 0)
             == Ok(no_entropy_result)

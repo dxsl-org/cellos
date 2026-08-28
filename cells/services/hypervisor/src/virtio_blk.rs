@@ -28,10 +28,7 @@ const DISK_SPI: u32 = 17; // SPI line for virtio-mmio slot 1
 
 pub enum Backend {
     Volatile(alloc::vec::Vec<u8>),
-    Persistent {
-        file: ostd::fs::File,
-        size: u64,
-    },
+    Persistent { file: ostd::fs::File, size: u64 },
 }
 
 pub struct BlkDisk {
@@ -46,11 +43,12 @@ impl BlkDisk {
         let (backend, num_sectors) = match file {
             Some(f) => {
                 let size = f.size().unwrap_or(0);
-                (Backend::Persistent { file: f, size }, size / (SECTOR_SIZE as u64))
+                (
+                    Backend::Persistent { file: f, size },
+                    size / (SECTOR_SIZE as u64),
+                )
             }
-            None => {
-                (Backend::Volatile(vec![0u8; DISK_SIZE]), NUM_SECTORS)
-            }
+            None => (Backend::Volatile(vec![0u8; DISK_SIZE]), NUM_SECTORS),
         };
         Self {
             backend,
@@ -137,13 +135,17 @@ fn blk_read(backend: &mut Backend, sector: u64, bufs: &[DescBuf], vm_id: usize) 
         match backend {
             Backend::Volatile(disk) => {
                 let off = off as usize;
-                if off >= disk.len() { break; }
+                if off >= disk.len() {
+                    break;
+                }
                 let n = (buf.len as usize).min(disk.len() - off);
                 crate::vmm::write_guest_memory(vm_id, buf.gpa, &disk[off..off + n]);
                 lba += (n.div_ceil(SECTOR_SIZE)) as u64;
             }
             Backend::Persistent { file, size } => {
-                if off >= *size { break; }
+                if off >= *size {
+                    break;
+                }
                 let n = (buf.len as u64).min(*size - off) as usize;
                 let mut tmp = vec![0u8; n];
                 if file.read_at(off, &mut tmp).unwrap_or(0) != n {
@@ -165,20 +167,28 @@ fn blk_write(backend: &mut Backend, sector: u64, bufs: &[DescBuf], vm_id: usize)
         match backend {
             Backend::Volatile(disk) => {
                 let off = off as usize;
-                if off >= disk.len() { break; }
+                if off >= disk.len() {
+                    break;
+                }
                 let n = (buf.len as usize).min(disk.len() - off);
                 let mut tmp = vec![0u8; n];
                 let got = crate::vmm::read_guest_memory(vm_id, buf.gpa, &mut tmp);
-                if got == 0 || got == usize::MAX { break; }
+                if got == 0 || got == usize::MAX {
+                    break;
+                }
                 disk[off..off + got].copy_from_slice(&tmp[..got]);
                 lba += (got.div_ceil(SECTOR_SIZE)) as u64;
             }
             Backend::Persistent { file, size } => {
-                if off >= *size { break; }
+                if off >= *size {
+                    break;
+                }
                 let n = (buf.len as u64).min(*size - off) as usize;
                 let mut tmp = vec![0u8; n];
                 let got = crate::vmm::read_guest_memory(vm_id, buf.gpa, &mut tmp);
-                if got == 0 || got == usize::MAX { break; }
+                if got == 0 || got == usize::MAX {
+                    break;
+                }
                 if file.write_at(off, &tmp[..got]).is_err() {
                     return 1;
                 }

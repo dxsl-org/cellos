@@ -16,8 +16,9 @@ use loader::load_wasm_bytes;
 
 api::declare_syscalls![Send, Recv, Log, Heartbeat, LookupService, StateRestore];
 
-#[no_mangle]
-pub fn main() {
+ostd::cell_main!(cell_main);
+
+fn cell_main() {
     let argv = ostd::args();
     let path = argv
         .first()

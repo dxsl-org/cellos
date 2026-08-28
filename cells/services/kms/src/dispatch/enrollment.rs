@@ -232,7 +232,7 @@ impl KmsService {
             .destroy_enrollment_key(payload.pending_relay_generation)
             .map_err(|_| KmsErrorCode::RelayUnavailable)?;
         self.lifecycle.drop_pending();
-        Ok(SuccessPayload::new(&[])?)
+        SuccessPayload::new(&[])
     }
 
     /// Opcode 13: service-net binds its validated profile digest.

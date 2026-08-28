@@ -120,9 +120,9 @@ fn mqtt_publish(net_ep: usize, cap: u32, topic: &str, payload: &str) {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum PublishPacketError {
-    TopicTooLong,
-    PacketTooLong,
-    RemainingLengthTooLong,
+    Topic,
+    Packet,
+    RemainingLength,
 }
 
 fn encode_publish_packet(
@@ -133,22 +133,22 @@ fn encode_publish_packet(
     let topic = topic.as_bytes();
     let payload = payload.as_bytes();
     if topic.len() > u16::MAX as usize {
-        return Err(PublishPacketError::TopicTooLong);
+        return Err(PublishPacketError::Topic);
     }
 
     let remaining = 2usize
         .checked_add(topic.len())
         .and_then(|len| len.checked_add(payload.len()))
-        .ok_or(PublishPacketError::RemainingLengthTooLong)?;
+        .ok_or(PublishPacketError::RemainingLength)?;
     let mut encoded_remaining = [0u8; 4];
     let encoded_remaining_len = encode_remaining_len(remaining, &mut encoded_remaining)
-        .ok_or(PublishPacketError::RemainingLengthTooLong)?;
+        .ok_or(PublishPacketError::RemainingLength)?;
     let packet_len = 1usize
         .checked_add(encoded_remaining_len)
         .and_then(|len| len.checked_add(remaining))
-        .ok_or(PublishPacketError::PacketTooLong)?;
+        .ok_or(PublishPacketError::Packet)?;
     if packet_len > out.len() {
-        return Err(PublishPacketError::PacketTooLong);
+        return Err(PublishPacketError::Packet);
     }
 
     out[0] = 0x30;
@@ -303,7 +303,7 @@ mod tests {
 
         assert_eq!(
             encode_publish_packet(&topic, "", &mut packet),
-            Err(PublishPacketError::TopicTooLong)
+            Err(PublishPacketError::Topic)
         );
     }
 
@@ -314,7 +314,7 @@ mod tests {
 
         assert_eq!(
             encode_publish_packet("t", &payload, &mut packet),
-            Err(PublishPacketError::PacketTooLong)
+            Err(PublishPacketError::Packet)
         );
     }
 }

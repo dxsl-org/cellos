@@ -144,7 +144,7 @@ impl FrameAllocator {
     /// Claim one known-free frame for an in-kernel reuse race.
     ///
     /// Returns `false` when `frame` is outside this allocator or no longer free.
-    #[cfg(feature = "test-hooks")]
+    #[cfg(all(feature = "getrandom-sas-test", target_arch = "riscv64"))]
     pub(crate) fn claim_exact_frame_for_test(&mut self, frame: PhysAddr) -> bool {
         let Some(index) = self.addr_to_frame_index(frame) else {
             return false;

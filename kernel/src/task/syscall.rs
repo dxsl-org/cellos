@@ -13,22 +13,22 @@ use api::syscall::ViSpawnArgs;
 use super::copy_glue::TaskCopyView;
 use types::*;
 
-#[cfg(feature = "test-hooks")]
+#[cfg(all(feature = "getrandom-sas-test", target_arch = "riscv64"))]
 static GETRANDOM_RACE_ARMED_CALLER: core::sync::atomic::AtomicUsize =
     core::sync::atomic::AtomicUsize::new(0);
-#[cfg(feature = "test-hooks")]
+#[cfg(all(feature = "getrandom-sas-test", target_arch = "riscv64"))]
 static GETRANDOM_RACE_ENTERED: core::sync::atomic::AtomicBool =
     core::sync::atomic::AtomicBool::new(false);
-#[cfg(feature = "test-hooks")]
+#[cfg(all(feature = "getrandom-sas-test", target_arch = "riscv64"))]
 static GETRANDOM_RACE_PROBED_BUSY: core::sync::atomic::AtomicBool =
     core::sync::atomic::AtomicBool::new(false);
-#[cfg(feature = "test-hooks")]
+#[cfg(all(feature = "getrandom-sas-test", target_arch = "riscv64"))]
 static GETRANDOM_RACE_DONE: core::sync::atomic::AtomicBool =
     core::sync::atomic::AtomicBool::new(false);
-#[cfg(feature = "test-hooks")]
+#[cfg(all(feature = "getrandom-sas-test", target_arch = "riscv64"))]
 static GETRANDOM_RACE_NO_EARLY_DONE: core::sync::atomic::AtomicBool =
     core::sync::atomic::AtomicBool::new(false);
-#[cfg(feature = "test-hooks")]
+#[cfg(all(feature = "getrandom-sas-test", target_arch = "riscv64"))]
 static GETRANDOM_RACE_PROBE_TIMED_OUT: core::sync::atomic::AtomicBool =
     core::sync::atomic::AtomicBool::new(false);
 
@@ -285,7 +285,7 @@ fn unregister_registered_grant(caller_id: usize, reg_id: usize) -> Result<(), Sy
 ///
 /// Available only to the in-kernel race fixture; production callers use
 /// `GrantUnregister` through `handle_syscall`.
-#[cfg(feature = "test-hooks")]
+#[cfg(all(feature = "getrandom-sas-test", target_arch = "riscv64"))]
 pub(crate) fn test_unregister_registered_grant_for_race(
     caller_id: usize,
     reg_id: usize,
@@ -298,7 +298,7 @@ pub(crate) fn test_unregister_registered_grant_for_race(
 /// The fixture has already removed `base` through the production unregister
 /// path. Returns `true` only after the new caller-owned record is mapped and
 /// its replacement bytes have been cleared.
-#[cfg(feature = "test-hooks")]
+#[cfg(all(feature = "getrandom-sas-test", target_arch = "riscv64"))]
 pub(crate) fn test_reregister_registered_grant_for_race(caller_id: usize, base: usize) -> bool {
     use crate::memory::{frame::FRAME_ALLOCATOR, paging::Flags};
 
@@ -983,7 +983,7 @@ fn preflight_getrandom_output(
 }
 
 /// Arm the final-write/unregister serialization fixture for one caller.
-#[cfg(feature = "test-hooks")]
+#[cfg(all(feature = "getrandom-sas-test", target_arch = "riscv64"))]
 pub(crate) fn test_arm_getrandom_revoke_race(caller_id: usize) {
     use core::sync::atomic::Ordering;
 
@@ -996,13 +996,13 @@ pub(crate) fn test_arm_getrandom_revoke_race(caller_id: usize) {
 }
 
 /// Report whether GetRandom's final write has acquired its ownership locks.
-#[cfg(feature = "test-hooks")]
+#[cfg(all(feature = "getrandom-sas-test", target_arch = "riscv64"))]
 pub(crate) fn test_getrandom_revoke_race_entered() -> bool {
     GETRANDOM_RACE_ENTERED.load(core::sync::atomic::Ordering::Acquire)
 }
 
 /// Probe the registered-grant lock used by the production unregister helper.
-#[cfg(feature = "test-hooks")]
+#[cfg(all(feature = "getrandom-sas-test", target_arch = "riscv64"))]
 pub(crate) fn test_probe_getrandom_revoke_lock() -> bool {
     use core::sync::atomic::Ordering;
 
@@ -1012,13 +1012,13 @@ pub(crate) fn test_probe_getrandom_revoke_lock() -> bool {
 }
 
 /// Publish that the unregister worker has completed its teardown attempt.
-#[cfg(feature = "test-hooks")]
+#[cfg(all(feature = "getrandom-sas-test", target_arch = "riscv64"))]
 pub(crate) fn test_finish_getrandom_revoke_race() {
     GETRANDOM_RACE_DONE.store(true, core::sync::atomic::Ordering::Release);
 }
 
 /// Return the final-write race observations in publication order.
-#[cfg(feature = "test-hooks")]
+#[cfg(all(feature = "getrandom-sas-test", target_arch = "riscv64"))]
 pub(crate) fn test_getrandom_revoke_race_result() -> (bool, bool, bool, bool) {
     use core::sync::atomic::Ordering;
 
@@ -1030,7 +1030,7 @@ pub(crate) fn test_getrandom_revoke_race_result() -> (bool, bool, bool, bool) {
     )
 }
 
-#[cfg(feature = "test-hooks")]
+#[cfg(all(feature = "getrandom-sas-test", target_arch = "riscv64"))]
 fn pause_getrandom_final_write_for_revoke_race(caller_id: usize) -> bool {
     use core::sync::atomic::Ordering;
 
@@ -1050,7 +1050,7 @@ fn pause_getrandom_final_write_for_revoke_race(caller_id: usize) -> bool {
     true
 }
 
-#[cfg(feature = "test-hooks")]
+#[cfg(all(feature = "getrandom-sas-test", target_arch = "riscv64"))]
 fn verify_getrandom_revoke_race_done_state(was_armed: bool) {
     use core::sync::atomic::Ordering;
 
@@ -1091,12 +1091,12 @@ fn write_getrandom_output(caller_id: usize, ptr: usize, bytes: &[u8]) -> Result<
             .get(&caller_id)
             .map(|task| TaskCopyView::of(task))
             .ok_or(SyscallError::InvalidInput)?;
-        #[cfg(feature = "test-hooks")]
+        #[cfg(all(feature = "getrandom-sas-test", target_arch = "riscv64"))]
         let was_armed = pause_getrandom_final_write_for_revoke_race(caller_id);
         let write_result = lease
             .write_bytes(ptr, bytes)
             .map_err(|_| SyscallError::InvalidInput);
-        #[cfg(feature = "test-hooks")]
+        #[cfg(all(feature = "getrandom-sas-test", target_arch = "riscv64"))]
         verify_getrandom_revoke_race_done_state(was_armed);
         return write_result;
     }
@@ -1501,6 +1501,14 @@ pub(super) fn test_install_vfs_lease_if_context_live(
     install_vfs_lease_if_context_live(caller_id, context, base, size, grant_id)
 }
 
+#[derive(Clone, Copy)]
+struct GrantSliceRequest {
+    caller_id: usize,
+    grant_id: usize,
+    size_out_ptr: usize,
+    vfs_context: Option<VfsGrantContext>,
+}
+
 struct GrantSliceAccess {
     base: usize,
     size: usize,
@@ -1508,19 +1516,16 @@ struct GrantSliceAccess {
 }
 
 fn authorize_grant_slice_locked(
-    caller_id: usize,
+    request: GrantSliceRequest,
     grant_owner: usize,
     shared_to_tid: Option<usize>,
     base: usize,
     size: usize,
-    grant_id: usize,
-    size_out_ptr: usize,
-    vfs_context: Option<VfsGrantContext>,
 ) -> Result<Option<GrantSliceAccess>, SyscallError> {
-    let authorized = if let Some(context) = vfs_context {
-        grant_owner == context.grant_owner && shared_to_tid == Some(caller_id)
+    let authorized = if let Some(context) = request.vfs_context {
+        grant_owner == context.grant_owner && shared_to_tid == Some(request.caller_id)
     } else {
-        grant_owner == caller_id || shared_to_tid == Some(caller_id)
+        grant_owner == request.caller_id || shared_to_tid == Some(request.caller_id)
     };
     if !authorized {
         return Ok(None);
@@ -1529,9 +1534,10 @@ fn authorize_grant_slice_locked(
     // Validate every fallible output before publishing a lease. Once the lease
     // is installed, returning the raw mapping and writing this slot are
     // infallible, so a failed GrantSlice cannot strand a pin.
-    let size_out = super::user_out::resolve_optional_usize_slot(caller_id, size_out_ptr)?;
-    if vfs_context.is_some_and(|context| {
-        !install_vfs_lease_if_context_live(caller_id, context, base, size, grant_id)
+    let size_out =
+        super::user_out::resolve_optional_usize_slot(request.caller_id, request.size_out_ptr)?;
+    if request.vfs_context.is_some_and(|context| {
+        !install_vfs_lease_if_context_live(request.caller_id, context, base, size, request.grant_id)
     }) {
         return Ok(None);
     }
@@ -1554,18 +1560,21 @@ fn resolve_and_lease_grant(
     size_out_ptr: usize,
     vfs_context: Option<VfsGrantContext>,
 ) -> Result<Option<GrantSliceAccess>, SyscallError> {
+    let request = GrantSliceRequest {
+        caller_id,
+        grant_id,
+        size_out_ptr,
+        vfs_context,
+    };
     {
         let tbl = grant_table_lock().lock();
         if let Some(grant) = tbl.as_ref().and_then(|map| map.get(&grant_id)) {
             return authorize_grant_slice_locked(
-                caller_id,
+                request,
                 grant.owner,
                 grant.shared_to.as_ref().map(|(tid, _)| *tid),
                 grant.base,
                 grant.size,
-                grant_id,
-                size_out_ptr,
-                vfs_context,
             );
         }
     }
@@ -1574,14 +1583,11 @@ fn resolve_and_lease_grant(
         return Ok(None);
     };
     authorize_grant_slice_locked(
-        caller_id,
+        request,
         grant.owner,
         grant.shared_to.as_ref().map(|(tid, _)| *tid),
         grant.base,
         grant.size,
-        grant_id,
-        size_out_ptr,
-        vfs_context,
     )
 }
 
@@ -5371,26 +5377,34 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 (token, base)
             };
             #[cfg(target_arch = "aarch64")]
-            hal::cache::clean_invalidate_data_cache_range(base, len);
+            {
+                hal::cache::clean_invalidate_data_cache_range(base, len);
+                Ok(token)
+            }
             #[cfg(not(target_arch = "aarch64"))]
             {
+                let _ = base;
                 let _ = crate::memory::pin::cancel_cache_sync(token, caller_id);
-                return Err(SyscallError::Unknown);
+                Err(SyscallError::Unknown)
             }
-            Ok(token)
         }
 
         Syscall::GrantCacheSyncComplete { token } => {
             let (base, len) = crate::memory::pin::begin_cache_sync_completion(token, caller_id)
                 .ok_or(SyscallError::PermissionDenied)?;
             #[cfg(target_arch = "aarch64")]
-            hal::cache::invalidate_data_cache_range(base, len);
-            #[cfg(not(target_arch = "aarch64"))]
-            return Err(SyscallError::Unknown);
-            if !crate::memory::pin::complete_cache_sync(token, caller_id) {
-                return Err(SyscallError::PermissionDenied);
+            {
+                hal::cache::invalidate_data_cache_range(base, len);
+                if !crate::memory::pin::complete_cache_sync(token, caller_id) {
+                    return Err(SyscallError::PermissionDenied);
+                }
+                Ok(0)
             }
-            Ok(0)
+            #[cfg(not(target_arch = "aarch64"))]
+            {
+                let _ = (base, len);
+                Err(SyscallError::Unknown)
+            }
         }
 
         Syscall::RegisterDisplayFramebuffer {
@@ -5462,7 +5476,9 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     Ok(crate::resource_registry::DisplayFramebufferReservation::ActiveReplay) => {
                         return Ok(0);
                     }
-                    Err(()) => return Err(SyscallError::PermissionDenied),
+                    Err(crate::resource_registry::DisplayFramebufferReservationError::Conflict) => {
+                        return Err(SyscallError::PermissionDenied);
+                    }
                     Ok(crate::resource_registry::DisplayFramebufferReservation::Reserved) => {}
                 }
                 if crate::memory::paging::map_display_framebuffer_user(base, pages).is_err() {
@@ -6304,7 +6320,7 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
     };
     Some(sc)
 }
-#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+#[cfg(all(feature = "getrandom-sas-test", target_arch = "riscv64"))]
 fn with_test_sum<T>(operation: impl FnOnce() -> T) -> T {
     let saved_sstatus: usize;
     unsafe {
@@ -6331,17 +6347,12 @@ fn with_test_sum<T>(operation: impl FnOnce() -> T) -> T {
     result
 }
 
-#[cfg(all(feature = "test-hooks", not(target_arch = "riscv64")))]
-fn with_test_sum<T>(operation: impl FnOnce() -> T) -> T {
-    operation()
-}
-
 /// Exercise the production raw-opcode decoder and handler without a trap frame.
 ///
 /// Test hooks use this only for in-kernel QEMU fixtures whose calls would
 /// otherwise need a hand-written U-mode trampoline. RV64's real syscall entry
 /// runs with `sstatus.SUM` set; mirror that per-hart state around the handler.
-#[cfg(feature = "test-hooks")]
+#[cfg(all(feature = "getrandom-sas-test", target_arch = "riscv64"))]
 pub(crate) fn dispatch_raw_for_test(
     caller_id: usize,
     syscall_id: usize,

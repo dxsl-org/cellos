@@ -451,9 +451,9 @@ pub fn begin_cache_sync_completion(token: usize, owner: usize) -> Option<(usize,
         .find(|entry| {
             entry.pages != 0 && entry.owner == owner && entry.token == token && !entry.completing
         })
-        .and_then(|entry| {
+        .map(|entry| {
             entry.completing = true;
-            Some((entry.operation_base, entry.operation_len))
+            (entry.operation_base, entry.operation_len)
         })
 }
 

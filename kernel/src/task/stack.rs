@@ -451,8 +451,7 @@ impl CellSegments {
     pub fn writable_page_end_containing(&self, ptr: usize) -> Option<usize> {
         let page = ptr & !(PAGE_SIZE - 1);
         self.writable_pages
-            .iter()
-            .any(|&candidate| candidate == page)
+            .contains(&page)
             .then(|| page.checked_add(PAGE_SIZE))
             .flatten()
     }
@@ -467,11 +466,7 @@ impl CellSegments {
         }
         let mut page = ptr & !(PAGE_SIZE - 1);
         while page < end {
-            if !self
-                .writable_pages
-                .iter()
-                .any(|&candidate| candidate == page)
-            {
+            if !self.writable_pages.contains(&page) {
                 return false;
             }
             page = match page.checked_add(PAGE_SIZE) {

@@ -432,10 +432,17 @@ pub fn owns_exact_mmio(cell_id: CellId, base: usize, len: usize) -> bool {
 }
 
 /// Outcome of atomically reserving one framebuffer mapping transaction.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DisplayFramebufferReservation {
     Reserved,
     ActiveReplay,
+}
+
+/// Why a framebuffer reservation could not be established.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DisplayFramebufferReservationError {
+    /// Another pending or active framebuffer transaction owns the singleton.
+    Conflict,
 }
 
 fn display_framebuffer_candidate(
@@ -467,7 +474,7 @@ pub fn reserve_display_framebuffer(
     width: u16,
     height: u16,
     pitch: usize,
-) -> Result<DisplayFramebufferReservation, ()> {
+) -> Result<DisplayFramebufferReservation, DisplayFramebufferReservationError> {
     let candidate = display_framebuffer_candidate(owner, base, size, width, height, pitch);
     let mut framebuffer = DISPLAY_FRAMEBUFFER.lock();
     match *framebuffer {
@@ -478,7 +485,9 @@ pub fn reserve_display_framebuffer(
         DisplayFramebufferState::Active(existing) if existing == candidate => {
             Ok(DisplayFramebufferReservation::ActiveReplay)
         }
-        DisplayFramebufferState::Pending(_) | DisplayFramebufferState::Active(_) => Err(()),
+        DisplayFramebufferState::Pending(_) | DisplayFramebufferState::Active(_) => {
+            Err(DisplayFramebufferReservationError::Conflict)
+        }
     }
 }
 

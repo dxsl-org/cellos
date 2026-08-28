@@ -38,7 +38,7 @@ fn cell_main() {
 
     let mut imu = Mpu6050::new(i2c, DEFAULT_I2C_ADDR);
     match imu.init() {
-        Ok(id) if id == 0x68 => {
+        Ok(0x68) => {
             println("[mpu6050] WHO_AM_I: 0x68 (MPU6050 verified)");
         }
         Ok(id) => {

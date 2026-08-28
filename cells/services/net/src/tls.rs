@@ -17,7 +17,9 @@
 pub mod block_on;
 pub mod clock;
 pub mod provider;
+#[cfg(test)]
 pub mod relay_certificate;
+#[cfg(test)]
 pub mod relay_profile;
 pub mod rng;
 pub mod roots;

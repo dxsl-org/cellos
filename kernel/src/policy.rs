@@ -251,8 +251,9 @@ fn parse(body: &[u8]) -> Option<LoadedPolicy> {
 
         let mmio_devices = caps_raw[4];
         let block_regions = caps_raw[5];
-        // Domain validation: reject unknown bits (signed-but-malformed).
-        if mmio_devices & !MMIO_MASK != 0 || block_regions & !REGION_MASK != 0 {
+        // The MMIO byte's eight bits are all assigned device classes, so it has
+        // no out-of-domain bit pattern. Reject unknown block-region bits.
+        if block_regions & !REGION_MASK != 0 {
             return None;
         }
         // The three privileged path-caps exist only in v2. In v1 they parse as

@@ -934,7 +934,6 @@ pub fn map_display_framebuffer_user(start: PhysAddr, pages: usize) -> PagingResu
             return Err(PageTableError::InvalidAddress);
         }
     }
-    let mut mapped = 0usize;
     for index in 0..pages {
         let address = start
             .checked_add(
@@ -948,14 +947,13 @@ pub fn map_display_framebuffer_user(start: PhysAddr, pages: usize) -> PagingResu
             .map(address, address, flags, &mut allocate_table_frame)
             .is_err()
         {
-            for rollback in 0..mapped {
+            for rollback in 0..index {
                 let address = start + rollback * PAGE_SIZE;
                 let _ = table.unmap(address);
             }
             tlb_flush_all();
             return Err(PageTableError::OutOfMemory);
         }
-        mapped += 1;
     }
     tlb_flush_all();
     Ok(())

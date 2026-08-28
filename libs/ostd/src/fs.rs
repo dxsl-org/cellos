@@ -158,14 +158,16 @@ impl File {
     /// Read up to `buf.len()` bytes at `offset`.
     pub fn read_at(&mut self, offset: u64, buf: &mut [u8]) -> ViResult<usize> {
         use embedded_io::{Seek, SeekFrom};
-        self.seek(SeekFrom::Start(offset)).map_err(|_| ViError::IO)?;
+        self.seek(SeekFrom::Start(offset))
+            .map_err(|_| ViError::IO)?;
         self.read(buf)
     }
 
     /// Write all of `buf` at `offset`.
     pub fn write_at(&mut self, offset: u64, buf: &[u8]) -> ViResult<()> {
         use embedded_io::{Seek, SeekFrom};
-        self.seek(SeekFrom::Start(offset)).map_err(|_| ViError::IO)?;
+        self.seek(SeekFrom::Start(offset))
+            .map_err(|_| ViError::IO)?;
         self.write_all(buf)
     }
 
