@@ -96,11 +96,11 @@ COMMON_PACKAGES=(
 )
 
 echo "[c2c-oracle-runner] building isolated RV64 oracle cells"
-cargo build --quiet --locked --release --target "$TARGET" "${COMMON_PACKAGES[@]}"
-cargo build --quiet --locked --release --target "$TARGET" \
+cargo build --quiet --release --target "$TARGET" "${COMMON_PACKAGES[@]}"
+cargo build --quiet --release --target "$TARGET" \
     -p app-init --features c2c-broker
 CELLOS_C2C_ORACLE_K1_FILE="$KEY_FILE" \
-    cargo build --quiet --locked --release --target "$TARGET" \
+    cargo build --quiet --release --target "$TARGET" \
         -p service-vfs --features c2c-oracle-k1-fixture
 rm -f -- "$KEY_FILE"
 
@@ -169,7 +169,7 @@ done
 # EMBEDDED_OVERRIDE is scoped to this kernel build. Both the embedded key-bearing
 # VFS ELF and the resulting kernel stay below the private workspace.
 echo "[c2c-oracle-runner] building isolated RV64 kernel"
-EMBEDDED_OVERRIDE="$EMBEDDED" cargo build --quiet --locked --release --target "$TARGET" -p cellos-kernel
+EMBEDDED_OVERRIDE="$EMBEDDED" cargo build --quiet --release --target "$TARGET" -p cellos-kernel
 KERNEL="$REL/cellos-kernel"
 [[ -s "$KERNEL" ]] || {
     echo "FAIL: isolated kernel build did not produce $KERNEL" >&2
