@@ -400,7 +400,7 @@ jobs:
           log="$RUNNER_TEMP/c2c-oracle-evidence/single-guest-local-runtime-qemu.log"
           {
             printf '[oracle] repository runner starting\n'
-            ./scripts/run-c2c-broker-oracle-qemu.sh
+            bash ./scripts/run-c2c-broker-oracle-qemu.sh
           } 2>&1 | tee -a "$log"
 
       - name: Upload single-guest local-runtime QEMU oracle log
