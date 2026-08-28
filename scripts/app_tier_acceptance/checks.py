@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import datetime as dt
 import hashlib
 import json
@@ -24,6 +26,16 @@ def begin_context():
 def end_context(token) -> None:
     """Discard a top-level validator cache even when validation fails."""
     _CACHE.reset(token)
+
+def cached_paths(root: Path, namespace: str, discover: Callable[[], set[str]]) -> set[str]:
+    """Reuse one immutable path discovery result within a validator invocation."""
+    cache = _CACHE.get()
+    if cache is None:
+        return discover()
+    key = (namespace, str(root.resolve()))
+    if key not in cache["paths"]:
+        cache["paths"][key] = frozenset(discover())
+    return set(cache["paths"][key])
 
 
 def exact(value: object, keys: set[str], label: str) -> dict:

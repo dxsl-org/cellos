@@ -132,7 +132,8 @@ class LedgerTests(unittest.TestCase):
                         promoted = True
                 lines[index] = "| " + " | ".join(fields) + " |"
         spec.write_text("\n".join(lines) + "\n")
-        for public_path in sdk_source.paths(ROOT):
+        public_api_paths = sdk_source.paths(ROOT)
+        for public_path in public_api_paths:
             target = root / public_path
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes((ROOT / public_path).read_bytes())
@@ -144,6 +145,9 @@ class LedgerTests(unittest.TestCase):
         self.git(root, "-c", "user.email=a@b", "-c", "user.name=test", "commit", "-m", "seed")
         revision = self.git(root, "rev-parse", "HEAD").strip()
         tree = self.git(root, "rev-parse", "HEAD^{tree}").strip()
+        public_api_template = [
+            dict(artifact(root, path), kind="source") for path in sorted(public_api_paths)
+        ]
         (root / "evidence/trace.log").write_text("dirty trace\n")
         (root / "evidence/untracked.bin").write_bytes(b"untracked\x00bytes")
         (root / "evidence/patch.diff").write_bytes(subprocess.run(["git", "diff", "--binary", revision], cwd=root, capture_output=True).stdout)
@@ -205,7 +209,19 @@ class LedgerTests(unittest.TestCase):
                         claim_value = claims_by_tuple.setdefault(key, claim_value)
                         if claim_value not in data["claims"]:
                             data["claims"].append(claim_value)
-                        evidence.append(cohort(root, claim_value, revision, tree, raw_artifact, canonical_digest, target, selection))
+                        evidence.append(
+                            cohort(
+                                root,
+                                claim_value,
+                                revision,
+                                tree,
+                                raw_artifact,
+                                canonical_digest,
+                                target,
+                                selection,
+                                public_api_template,
+                            )
+                        )
                     cell.update(status="PASS", evidence=evidence)
                 else:
                     cell.update(status="PLANNED" if available == "PLANNED" else "BLOCKED", evidence=[])

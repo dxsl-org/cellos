@@ -47,6 +47,10 @@
   queue-overflow oracle (`queue_peak=16`). This is single-guest local-runtime
   QEMU evidence only, not two-node, relay, remote/public, or production
   evidence.
+- Batched exact Git-blob verification and cached public SDK module discovery
+  within each app-tier acceptance validation. The adversarial 40-test suite
+  retains raw-blob and malformed-revision coverage while avoiding repeated
+  full module-graph scans.
 - Added the required [CI workflow](../.github/workflows/ci.yml) gate
   `c2c-broker-oracle-single-guest-local-runtime`, displayed as
   `C2C Broker Oracle (single-guest local-runtime QEMU)`, with a 60-minute job

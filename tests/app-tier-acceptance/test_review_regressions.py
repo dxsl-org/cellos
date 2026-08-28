@@ -28,6 +28,29 @@ class ReviewRegressionTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[2]
         self.assertIn("libs/viui/src/managed_surface_tests.rs", public_api.paths(root))
 
+    def test_committed_sources_use_raw_blobs_and_reject_git_options(self) -> None:
+        root = Path(tempfile.mkdtemp())
+        self.git(root, "init")
+        (root / ".gitattributes").write_text("source.txt export-subst\n")
+        (root / "source.txt").write_text("$Format:%H$\n")
+        self.git(root, "add", ".")
+        self.git(
+            root,
+            "-c",
+            "user.email=a@b",
+            "-c",
+            "user.name=test",
+            "commit",
+            "-m",
+            "seed",
+        )
+        revision = self.git(root, "rev-parse", "HEAD").strip()
+        (root / "source.txt").write_text(f"{revision}\n")
+        committed = public_api._committed_sources(root, revision, {"source.txt"})
+        self.assertEqual(committed["source.txt"], b"$Format:%H$\n")
+        with self.assertRaisesRegex(ValueError, "revision is invalid"):
+            public_api._committed_sources(root, "--remote=https://example.invalid", {"source.txt"})
+
     def test_clean_cohort_requires_resolvable_git_identity(self) -> None:
         root, data, baseline, baseline_root = self.fixture()
         evidence = data["rows"][0]["cells"][0]["evidence"][0]

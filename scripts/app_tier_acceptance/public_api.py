@@ -6,7 +6,7 @@ import re
 import subprocess
 from pathlib import Path
 
-from .checks import canonical_digest, exact, safe_file
+from .checks import GIT, cached_paths, canonical_digest, exact, safe_file
 
 ROOTS = (
     "libs/api/src/lib.rs",
@@ -26,6 +26,11 @@ FILE_MODULE = re.compile(
 
 def paths(root: Path) -> set[str]:
     """Resolve every file-backed module reachable from the public SDK roots."""
+    return cached_paths(root, "public-api", lambda: _discover_paths(root))
+
+
+def _discover_paths(root: Path) -> set[str]:
+    """Walk the public SDK module graph without consulting validation caches."""
     pending, found = [Path(path) for path in ROOTS], set()
     while pending:
         relative = pending.pop()
@@ -53,8 +58,58 @@ def paths(root: Path) -> set[str]:
     return found
 
 
+def _committed_sources(root: Path, revision: str, expected: set[str]) -> dict[str, bytes]:
+    """Batch-read exact Git blob bytes for the claimed public source revision."""
+    if not GIT.fullmatch(revision):
+        raise ValueError("clean public API revision is invalid")
+    listing = subprocess.run(
+        ["git", "ls-tree", "-r", "-z", revision, "--", *sorted(expected)],
+        cwd=root,
+        capture_output=True,
+    )
+    if listing.returncode:
+        raise ValueError("clean public API revision is not readable")
+    objects = {}
+    try:
+        for record in filter(None, listing.stdout.split(b"\0")):
+            metadata, raw_path = record.split(b"\t", 1)
+            _, kind, object_id = metadata.split(b" ", 2)
+            path = raw_path.decode("utf-8")
+            if kind != b"blob" or path in objects:
+                raise ValueError
+            objects[path] = object_id
+    except (UnicodeDecodeError, ValueError):
+        raise ValueError("clean public API tree is malformed") from None
+    if set(objects) != expected:
+        raise ValueError("clean public API revision is incomplete")
+    ordered = [(path, objects[path]) for path in sorted(expected)]
+    batch = subprocess.run(
+        ["git", "cat-file", "--batch"],
+        cwd=root,
+        input=b"".join(object_id + b"\n" for _, object_id in ordered),
+        capture_output=True,
+    )
+    if batch.returncode:
+        raise ValueError("clean public API blobs are not readable")
+    committed, offset = {}, 0
+    try:
+        for path, expected_id in ordered:
+            header_end = batch.stdout.index(b"\n", offset)
+            object_id, kind, raw_size = batch.stdout[offset:header_end].split(b" ")
+            size = int(raw_size)
+            content_start, content_end = header_end + 1, header_end + 1 + size
+            if object_id != expected_id or kind != b"blob" or batch.stdout[content_end:content_end + 1] != b"\n":
+                raise ValueError
+            committed[path] = batch.stdout[content_start:content_end]
+            offset = content_end + 1
+    except (ValueError, IndexError):
+        raise ValueError("clean public API blob batch is malformed") from None
+    if offset != len(batch.stdout):
+        raise ValueError("clean public API blob batch has trailing data")
+    return committed
+
+
 def validate(root: Path, snapshot: object, revision: str, dirty: bool, abi_version: str) -> str:
-    """Verify the exact public-module snapshot and return its aggregate digest."""
     expected = paths(root)
     if not isinstance(snapshot, list) or {entry.get("path") for entry in snapshot} != expected:
         raise ValueError("public API snapshot is incomplete")
@@ -63,12 +118,10 @@ def validate(root: Path, snapshot: object, revision: str, dirty: bool, abi_versi
         if artifact["kind"] != "source":
             raise ValueError("public API snapshot must contain source artifacts")
         safe_file(root, artifact["path"], artifact["sha256"], artifact["size_bytes"], artifact["kind"])
-        if not dirty:
-            committed = subprocess.run(
-                ["git", "show", f"{revision}:{artifact['path']}"], cwd=root, capture_output=True
-            )
-            if committed.returncode or committed.stdout != (root / artifact["path"]).read_bytes():
-                raise ValueError("clean public API artifact is not present at the claimed revision")
+    if not dirty:
+        archived = _committed_sources(root, revision, expected)
+        if any(archived[path] != (root / path).read_bytes() for path in expected):
+            raise ValueError("clean public API artifact is not present at the claimed revision")
     manifest = (root / "libs/api/src/abi/manifest_flags.rs").read_text(encoding="utf-8")
     if f"pub const MANIFEST_VERSION: u8 = {abi_version};" not in manifest:
         raise ValueError("ABI version is not derived from the public source snapshot")

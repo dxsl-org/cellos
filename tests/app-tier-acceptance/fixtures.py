@@ -27,16 +27,28 @@ def claim(module, cell_id, binding, cpu="riscv64"):
     return {"id": f"claim-{module}-{part}-{cpu}", "status": "PASS", "subject": subjects[cpu], "tuple": tuple_, "completion": "COMPLETE", "source_sha256": binding["sha256"], "matrix_sha256": binding["matrix_sha256"]}
 
 
-def cohort(root, claim_value, revision, tree, evidence_artifact, canonical_digest, target=None, selection=None):
+def cohort(
+    root,
+    claim_value,
+    revision,
+    tree,
+    evidence_artifact,
+    canonical_digest,
+    target=None,
+    selection=None,
+    public_api_template=None,
+):
     """Build six witnesses linked to one real dirty bundle and claim tuple."""
     patch = artifact(root, "evidence/patch.diff")
     blob = artifact(root, "evidence/untracked.bin")
     bundle = {"base_revision": revision, "base_tree": tree, "patch": patch, "untracked": [patch, blob]}
     bundle["digest"] = canonical_digest(bundle)
     tuple_ = claim_value["tuple"]
-    public_api = [artifact(root, path) for path in sorted(sdk_source.paths(root))]
-    for entry in public_api:
-        entry["kind"] = "source"
+    public_api = (
+        [dict(entry) for entry in public_api_template]
+        if public_api_template is not None
+        else [dict(artifact(root, path), kind="source") for path in sorted(sdk_source.paths(root))]
+    )
     denominator = {
         "compiler": "nightly-2026-05-01", "target": "riscv64gc-unknown-none-elf",
         "language": "rust", "feature_selection": "api=default;ostd=default;viui=default", "cfg": "target_arch=\"riscv64\"", "cargo_features": "api=default;ostd=default;viui=default", "cargo_profile": "release", "rustflags": "-C relocation-model=pic",
