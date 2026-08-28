@@ -1,7 +1,7 @@
 {
-  "artifactDir": ".agents/260825-1726-kms-silo-production-root/reports/harness",
-  "planPath": ".agents/260825-1726-kms-silo-production-root",
+  "artifactDir": ".agents/260827-0948-desktop-compositor-viui-managed-surface/reports/harness",
+  "planPath": ".agents/260827-0948-desktop-compositor-viui-managed-surface",
   "skill": "hc-cook",
-  "mode": "interactive",
-  "updatedAt": "2026-08-26T00:32:26Z"
+  "mode": "auto",
+  "updatedAt": "2026-08-27T11:00:00+07:00"
 }
