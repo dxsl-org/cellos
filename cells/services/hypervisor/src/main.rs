@@ -272,7 +272,13 @@ fn boot_arm() {
     println("[hv] vCPU ready — entering run loop");
 
     // ── 7. Run ───────────────────────────────────────────────────────────────
-    run_loop::run(vm_id, vcpu_id);
+    let disk_file = ostd::fs::File::open("/data/guest_disk.img").ok();
+    if disk_file.is_some() {
+        println("[hv] persistent disk: /data/guest_disk.img");
+    } else {
+        println("[hv] volatile disk fallback");
+    }
+    run_loop::run(vm_id, vcpu_id, disk_file);
 
     println("[hv] guest exited");
     quiesce()

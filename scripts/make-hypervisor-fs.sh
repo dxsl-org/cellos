@@ -67,10 +67,16 @@ if [[ -z "${LIBCLANG_PATH:-}" ]]; then
 fi
 echo "[make-hv-fs] Building aarch64 cells (service-hypervisor + core cells)..."
 INIT_FEATURES="${HV_INIT_MIN:+--features app-init/hypervisor-min}"
+
+cargo build --release \
+    --target "$TARGET" \
+    --no-default-features \
+    -p service-vfs
+
 cargo build --release \
     --target "$TARGET" \
     $INIT_FEATURES \
-    -p app-init -p app-shell -p service-vfs -p service-config \
+    -p app-init -p app-shell -p service-config \
     -p service-net -p service-input -p service-compositor -p supervisor \
     -p driver-virtio-gpu -p service-hypervisor
 
@@ -112,7 +118,7 @@ fi
 
 # Alpine kernel and initrd (FAT16 paths are uppercased by the kernel; store as-is).
 VMLINUZ="$ALPINE_CACHE/vmlinuz-virt"
-INITRD="$ALPINE_CACHE/initramfs-virt"
+INITRD="${INITRD_OVERRIDE:-$ALPINE_CACHE/initramfs-virt}"
 if [[ "$GPU_TEST" -eq 1 ]]; then
     bash scripts/prepare-tier3b-gpu-initramfs.sh "$ALPINE_CACHE"
     INITRD="$ALPINE_CACHE/initramfs-tier3b-gpu"

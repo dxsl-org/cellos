@@ -26,16 +26,35 @@ const BLK_T_FLUSH: u32 = 4;
 
 const DISK_SPI: u32 = 17; // SPI line for virtio-mmio slot 1
 
+pub enum Backend {
+    Volatile(alloc::vec::Vec<u8>),
+    Persistent {
+        file: ostd::fs::File,
+        size: u64,
+    },
+}
+
 pub struct BlkDisk {
-    data: alloc::vec::Vec<u8>,
+    backend: Backend,
+    num_sectors: u64,
     last_avail: u16,
     used_idx: u16,
 }
 
 impl BlkDisk {
-    pub fn new() -> Self {
+    pub fn new(file: Option<ostd::fs::File>) -> Self {
+        let (backend, num_sectors) = match file {
+            Some(f) => {
+                let size = f.size().unwrap_or(0);
+                (Backend::Persistent { file: f, size }, size / (SECTOR_SIZE as u64))
+            }
+            None => {
+                (Backend::Volatile(vec![0u8; DISK_SIZE]), NUM_SECTORS)
+            }
+        };
         Self {
-            data: vec![0u8; DISK_SIZE],
+            backend,
+            num_sectors,
             last_avail: 0,
             used_idx: 0,
         }
@@ -50,8 +69,8 @@ impl VirtioDevice for BlkDisk {
     /// virtio-blk config: capacity at bytes 0-7 (little-endian u64 of sectors).
     fn config_read(&self, offset: usize) -> u32 {
         match offset {
-            0 => (NUM_SECTORS & 0xFFFF_FFFF) as u32,
-            4 => (NUM_SECTORS >> 32) as u32,
+            0 => (self.num_sectors & 0xFFFF_FFFF) as u32,
+            4 => (self.num_sectors >> 32) as u32,
             _ => 0,
         }
     }
@@ -60,20 +79,20 @@ impl VirtioDevice for BlkDisk {
         if q != 0 {
             return;
         }
-        // Disjoint field borrows: data / last_avail / used_idx
-        let disk = self.data.as_mut_slice();
+        // Disjoint field borrows: backend / last_avail / used_idx
+        let backend = &mut self.backend;
         process_notify(
             vm_id,
             qcfg,
             &mut self.last_avail,
             &mut self.used_idx,
-            |bufs| handle_blk_request(disk, bufs, vm_id),
+            |bufs| handle_blk_request(backend, bufs, vm_id),
         );
         crate::vmm::inject_irq(vm_id, vcpu_id, DISK_SPI);
     }
 }
 
-fn handle_blk_request(disk: &mut [u8], bufs: &[DescBuf], vm_id: usize) -> u32 {
+fn handle_blk_request(backend: &mut Backend, bufs: &[DescBuf], vm_id: usize) -> u32 {
     if bufs.len() < 3 {
         return 0;
     }
@@ -89,46 +108,83 @@ fn handle_blk_request(disk: &mut [u8], bufs: &[DescBuf], vm_id: usize) -> u32 {
 
     let data_bufs = &bufs[1..status_idx];
     let status = match req_type {
-        BLK_T_IN => blk_read(disk, sector, data_bufs, vm_id),
-        BLK_T_OUT => blk_write(disk, sector, data_bufs, vm_id),
-        BLK_T_FLUSH => 0u8,
+        BLK_T_IN => blk_read(backend, sector, data_bufs, vm_id),
+        BLK_T_OUT => blk_write(backend, sector, data_bufs, vm_id),
+        BLK_T_FLUSH => blk_flush(backend),
         _ => 2u8, // VIRTIO_BLK_S_UNSUPP
     };
     write_status(vm_id, bufs[status_idx].gpa, status);
     1 // bytes placed in used ring (status byte)
 }
+fn blk_flush(backend: &mut Backend) -> u8 {
+    match backend {
+        Backend::Volatile(_) => 0,
+        Backend::Persistent { file, .. } => {
+            if file.sync_all().is_ok() {
+                0
+            } else {
+                1 // VIRTIO_BLK_S_IOERR
+            }
+        }
+    }
+}
 
 /// READ: copy disk sectors into driver-writable guest buffers.
-fn blk_read(disk: &[u8], sector: u64, bufs: &[DescBuf], vm_id: usize) -> u8 {
+fn blk_read(backend: &mut Backend, sector: u64, bufs: &[DescBuf], vm_id: usize) -> u8 {
     let mut lba = sector;
     for buf in bufs {
-        let off = (lba as usize).saturating_mul(SECTOR_SIZE);
-        if off >= disk.len() {
-            break;
+        let off = lba.saturating_mul(SECTOR_SIZE as u64);
+        match backend {
+            Backend::Volatile(disk) => {
+                let off = off as usize;
+                if off >= disk.len() { break; }
+                let n = (buf.len as usize).min(disk.len() - off);
+                crate::vmm::write_guest_memory(vm_id, buf.gpa, &disk[off..off + n]);
+                lba += (n.div_ceil(SECTOR_SIZE)) as u64;
+            }
+            Backend::Persistent { file, size } => {
+                if off >= *size { break; }
+                let n = (buf.len as u64).min(*size - off) as usize;
+                let mut tmp = vec![0u8; n];
+                if file.read_at(off, &mut tmp).unwrap_or(0) != n {
+                    return 1;
+                }
+                crate::vmm::write_guest_memory(vm_id, buf.gpa, &tmp);
+                lba += (n.div_ceil(SECTOR_SIZE)) as u64;
+            }
         }
-        let n = (buf.len as usize).min(disk.len() - off);
-        crate::vmm::write_guest_memory(vm_id, buf.gpa, &disk[off..off + n]);
-        lba += (n.div_ceil(SECTOR_SIZE)) as u64;
     }
     0
 }
 
 /// WRITE: copy driver-readable guest buffers into disk sectors.
-fn blk_write(disk: &mut [u8], sector: u64, bufs: &[DescBuf], vm_id: usize) -> u8 {
+fn blk_write(backend: &mut Backend, sector: u64, bufs: &[DescBuf], vm_id: usize) -> u8 {
     let mut lba = sector;
     for buf in bufs {
-        let off = (lba as usize).saturating_mul(SECTOR_SIZE);
-        if off >= disk.len() {
-            break;
+        let off = lba.saturating_mul(SECTOR_SIZE as u64);
+        match backend {
+            Backend::Volatile(disk) => {
+                let off = off as usize;
+                if off >= disk.len() { break; }
+                let n = (buf.len as usize).min(disk.len() - off);
+                let mut tmp = vec![0u8; n];
+                let got = crate::vmm::read_guest_memory(vm_id, buf.gpa, &mut tmp);
+                if got == 0 || got == usize::MAX { break; }
+                disk[off..off + got].copy_from_slice(&tmp[..got]);
+                lba += (got.div_ceil(SECTOR_SIZE)) as u64;
+            }
+            Backend::Persistent { file, size } => {
+                if off >= *size { break; }
+                let n = (buf.len as u64).min(*size - off) as usize;
+                let mut tmp = vec![0u8; n];
+                let got = crate::vmm::read_guest_memory(vm_id, buf.gpa, &mut tmp);
+                if got == 0 || got == usize::MAX { break; }
+                if file.write_at(off, &tmp[..got]).is_err() {
+                    return 1;
+                }
+                lba += (got.div_ceil(SECTOR_SIZE)) as u64;
+            }
         }
-        let n = (buf.len as usize).min(disk.len() - off);
-        let mut tmp = vec![0u8; n];
-        let got = crate::vmm::read_guest_memory(vm_id, buf.gpa, &mut tmp);
-        if got == 0 || got == usize::MAX {
-            break;
-        }
-        disk[off..off + got].copy_from_slice(&tmp[..got]);
-        lba += (got.div_ceil(SECTOR_SIZE)) as u64;
     }
     0
 }

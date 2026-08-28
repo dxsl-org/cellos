@@ -155,6 +155,24 @@ impl File {
     }
 
     /// Explicitly close the file and revoke its capability.
+    /// Read up to `buf.len()` bytes at `offset`.
+    pub fn read_at(&mut self, offset: u64, buf: &mut [u8]) -> ViResult<usize> {
+        use embedded_io::{Seek, SeekFrom};
+        self.seek(SeekFrom::Start(offset)).map_err(|_| ViError::IO)?;
+        self.read(buf)
+    }
+
+    /// Write all of `buf` at `offset`.
+    pub fn write_at(&mut self, offset: u64, buf: &[u8]) -> ViResult<()> {
+        use embedded_io::{Seek, SeekFrom};
+        self.seek(SeekFrom::Start(offset)).map_err(|_| ViError::IO)?;
+        self.write_all(buf)
+    }
+
+    /// Synchronously flush all modifications to the storage media.
+    pub fn sync_all(&self) -> ViResult<()> {
+        crate::syscall::sys_sync_cap(self.cap_id).map_err(|_| ViError::IO)
+    }
     pub fn close(mut self) -> ViResult<()> {
         self.closed = true;
         syscall::sys_close_cap(self.cap_id);

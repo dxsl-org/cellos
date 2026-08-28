@@ -27,7 +27,7 @@ pub enum RunOutcome {
 }
 
 /// Main VMM run loop. Runs until the guest PSCI SYSTEM_OFF or an unrecoverable exit.
-pub fn run(vm_id: usize, vcpu_id: usize) -> RunOutcome {
+pub fn run(vm_id: usize, vcpu_id: usize, disk_file: Option<ostd::fs::File>) -> RunOutcome {
     // Resolve Net Cell TID for L2 frame bridging (0 = unavailable, bridging disabled).
     let net_tid = sys_lookup_service(service::NET).unwrap_or(0);
     let compositor_tid = sys_lookup_service(service::COMPOSITOR).unwrap_or(0);
@@ -37,7 +37,7 @@ pub fn run(vm_id: usize, vcpu_id: usize) -> RunOutcome {
     let mut gicd = Gicd::new();
     let mut console = Console::new();
     let mut vmio = VirtioMmio::default();
-    let mut blk = BlkDisk::new();
+    let mut blk = BlkDisk::new(disk_file);
     let mut blk_vmio = VirtioMmio::default();
     let mut net = NetDev::new(net_tid);
     let mut net_vmio = VirtioMmio::default();

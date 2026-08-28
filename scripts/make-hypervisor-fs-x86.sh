@@ -27,6 +27,7 @@ SKIP_FETCH="${1:-}"
 TARGET="x86_64-unknown-none"
 BIN_DIR="target/$TARGET/release"
 ALPINE_CACHE=".alpine-cache-x86"
+INITRD_SOURCE="${INITRD_OVERRIDE:-$ALPINE_CACHE/initramfs-virt}"
 EMBEDDED_HV="kernel/src/embedded-hv-x86"
 
 # ── Step 1: Alpine artifacts (vmlinux ELF + initramfs) ──────────────────────
@@ -39,13 +40,18 @@ if [[ ! -f "$ALPINE_CACHE/vmlinux" || ! -f "$ALPINE_CACHE/initramfs-virt" ]]; th
 fi
 
 # ── Step 2: Build x86 cells as PIE ──────────────────────────────────────────
-echo "[make-hv-x86] Building x86 cells (service-hypervisor + core cells)..."
 INIT_FEATURES="${HV_INIT_MIN:+--features app-init/hypervisor-min}"
 RUSTFLAGS="-C relocation-model=pic" cargo build --release \
     --target "$TARGET" \
     -Z build-std=core,alloc \
+    --no-default-features \
+    -p service-vfs
+
+RUSTFLAGS="-C relocation-model=pic" cargo build --release \
+    --target "$TARGET" \
+    -Z build-std=core,alloc \
     $INIT_FEATURES \
-    -p app-init -p app-shell -p service-vfs -p service-config \
+    -p app-init -p app-shell -p service-config \
     -p service-net -p service-hypervisor
 
 # ── Step 3: Assemble kernel_fs.img ──────────────────────────────────────────
@@ -78,8 +84,8 @@ fi
 
 echo "  /vmlinux   <- $ALPINE_CACHE/vmlinux ($(du -sh "$ALPINE_CACHE/vmlinux" | cut -f1))"
 MKFAT_ARGS+=("$ALPINE_CACHE/vmlinux" "/vmlinux")
-echo "  /initrd.gz <- $ALPINE_CACHE/initramfs-virt ($(du -sh "$ALPINE_CACHE/initramfs-virt" | cut -f1))"
-MKFAT_ARGS+=("$ALPINE_CACHE/initramfs-virt" "/initrd.gz")
+echo "  /initrd.gz <- $INITRD_SOURCE ($(du -sh "$INITRD_SOURCE" | cut -f1))"
+MKFAT_ARGS+=("$INITRD_SOURCE" "/initrd.gz")
 
 # Signed operator policy. Without /POLICY.BIN the kernel takes the `Absent` branch,
 # which is dev-permissive: the whole policy layer runs and changes nothing, and no test
