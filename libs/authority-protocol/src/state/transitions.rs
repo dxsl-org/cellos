@@ -119,14 +119,14 @@ impl<S: ProtectedStore> AuthorityState<S> {
         }
         self.relay = RelayProfileState::Promoted {
             intent,
-            receipt: *verified.receipt(),
+            provider_signature: verified.receipt().provider_signature,
         };
         self.persist_value(())
     }
 
     pub fn finalize_commit(&mut self) -> Result<(), AuthorityFault> {
         match self.relay {
-            RelayProfileState::Promoted { intent, receipt } if intent.matches_receipt(&receipt) => {
+            RelayProfileState::Promoted { intent, .. } => {
                 self.relay = RelayProfileState::Active(intent);
                 self.previous_active = None;
                 self.persist_value(())

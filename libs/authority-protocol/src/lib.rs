@@ -16,8 +16,8 @@ use sha2::{Digest, Sha256};
 pub use fault::AuthorityFault;
 pub use message::*;
 pub use state::{
-    verify_protected_record, AuthorityMode, AuthorityState, BootState, CsrChunkIntent,
-    EnrollmentIntent, OpenedBootFact, PendingTimeChallenge, PreparedCommitIntent,
+    verify_protected_record, AuthorityMode, AuthorityState, AuthorityStateConfig, BootState,
+    CsrChunkIntent, EnrollmentIntent, OpenedBootFact, PendingTimeChallenge, PreparedCommitIntent,
     ProtectedAuthorityRecord, ProtectedRecordVerifier, ProtectedStore, ProtectedTimeFloors,
     RelayIntent, RelayProfileState, TimeChallengeSource, TimePurpose, TimeState,
     TlsSignatureIntent, TrustedClock, VerifiedProtectedRecord, PROTECTED_RECORD_MAX,

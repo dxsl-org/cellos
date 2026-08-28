@@ -71,14 +71,16 @@ fn protected_time_floors_survive_lease_consumption() {
     };
     let mut authority = AuthorityState::new(
         MemoryStore::default(),
-        [1; 32],
-        [2; 32],
-        1,
-        0,
-        0,
-        0,
-        [3; 32],
-        floors,
+        AuthorityStateConfig {
+            device_id: [1; 32],
+            authority_id: [2; 32],
+            authority_epoch: 1,
+            boot_floor: 0,
+            generation_floor: 0,
+            state_epoch: 0,
+            boot_challenge: [3; 32],
+            time_floors: floors,
+        },
     );
     let mut challenges = Challenges(4);
     authority.open_boot(&open(1), &measurement()).unwrap();

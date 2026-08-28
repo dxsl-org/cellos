@@ -101,10 +101,13 @@ fn put_relay(writer: &mut Writer<'_>, relay: RelayProfileState) -> Result<(), Wi
             writer.u8(4)?;
             put_intent(writer, value)
         }
-        RelayProfileState::Promoted { intent, receipt } => {
+        RelayProfileState::Promoted {
+            intent,
+            provider_signature,
+        } => {
             writer.u8(5)?;
             put_intent(writer, intent)?;
-            put_receipt(writer, receipt)
+            put_receipt(writer, intent.provider_receipt(provider_signature))
         }
         RelayProfileState::Active(value) => {
             writer.u8(6)?;

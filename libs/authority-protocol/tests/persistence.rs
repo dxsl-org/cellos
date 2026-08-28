@@ -35,14 +35,16 @@ impl ProtectedRecordVerifier for RecordPolicy {
 fn persisted_record_authenticates_and_restores_with_fresh_boot_state() {
     let mut authority = AuthorityState::new(
         CapturingStore::default(),
-        [1; 32],
-        [2; 32],
-        1,
-        0,
-        0,
-        0,
-        [3; 32],
-        floors(),
+        AuthorityStateConfig {
+            device_id: [1; 32],
+            authority_id: [2; 32],
+            authority_epoch: 1,
+            boot_floor: 0,
+            generation_floor: 0,
+            state_epoch: 0,
+            boot_challenge: [3; 32],
+            time_floors: floors(),
+        },
     );
     assert_eq!(authority.open_boot(&open(1), &measurement()), Ok(1));
     let stored = authority.into_store();
@@ -99,7 +101,19 @@ fn cas_conflict_seals_external_counter_domain() {
         revision: 1,
         ..CapturingStore::default()
     };
-    let mut authority = AuthorityState::new(store, [1; 32], [2; 32], 1, 0, 0, 0, [3; 32], floors());
+    let mut authority = AuthorityState::new(
+        store,
+        AuthorityStateConfig {
+            device_id: [1; 32],
+            authority_id: [2; 32],
+            authority_epoch: 1,
+            boot_floor: 0,
+            generation_floor: 0,
+            state_epoch: 0,
+            boot_challenge: [3; 32],
+            time_floors: floors(),
+        },
+    );
     assert_eq!(
         authority.open_boot(&open(1), &measurement()),
         Err(AuthorityFault::PersistenceFailure)
@@ -112,14 +126,16 @@ fn cas_conflict_seals_external_counter_domain() {
 fn persisted_sealed_mode_cannot_restore_as_ready() {
     let mut authority = AuthorityState::new(
         CapturingStore::default(),
-        [1; 32],
-        [2; 32],
-        1,
-        0,
-        0,
-        0,
-        [3; 32],
-        floors(),
+        AuthorityStateConfig {
+            device_id: [1; 32],
+            authority_id: [2; 32],
+            authority_epoch: 1,
+            boot_floor: 0,
+            generation_floor: 0,
+            state_epoch: 0,
+            boot_challenge: [3; 32],
+            time_floors: floors(),
+        },
     );
     let mut request = OpenBootRequest {
         context: context(1, 0, Operation::OpenBoot),
@@ -144,4 +160,79 @@ fn persisted_sealed_mode_cannot_restore_as_ready() {
         [4; 32],
     );
     assert_eq!(restored.mode(), AuthorityMode::Sealed);
+}
+
+#[test]
+fn promoted_record_retains_v1_receipt_layout_and_rejects_mismatched_duplicate() {
+    let digest = [8; DIGEST_LEN];
+    let mut authority = state(0, 0);
+    let mut challenges = Challenges(4);
+    authority.open_boot(&open(1), &measurement()).unwrap();
+    grant_time(
+        &mut authority,
+        &mut challenges,
+        2,
+        1,
+        TimePurpose::Enrollment,
+        1,
+        200,
+    );
+    authority
+        .begin_enrollment(&begin(4, 1), &Clock(101))
+        .unwrap();
+    let mut profile = stage(5, 1, 1, digest);
+    authenticate(&mut profile);
+    let verified =
+        verify_root_profile(profile, &header(&profile), &RequestPolicy, &ProfilePolicy).unwrap();
+    authority.stage_profile(&verified).unwrap();
+    authority
+        .consume_receipt(&consume(6, 1, 1, digest))
+        .unwrap();
+    let prepared = authority.prepare_commit(&commit(7, 1, 1, digest)).unwrap();
+    let intent = *prepared.intent();
+    let receipt = ProviderCasReceipt {
+        device_id: intent.device_id,
+        authority_id: intent.authority_id,
+        authority_epoch: intent.authority_epoch,
+        generation: intent.generation,
+        policy_epoch: intent.policy_epoch,
+        pending_slot: intent.pending_slot,
+        pending_spki_digest: intent.pending_spki_digest,
+        profile_digest: intent.profile_digest,
+        boot_epoch: intent.boot_epoch,
+        validation_request_id: intent.validation_request_id,
+        provider_signature: [9; SIGNATURE_LEN],
+    };
+    let verified_receipt = verify_provider_cas_receipt(receipt, &CasPolicy).unwrap();
+    authority
+        .record_provider_promotion(&prepared, &verified_receipt)
+        .unwrap();
+    let record = authority.into_store().into_record().unwrap();
+
+    let mut encoded = [0u8; PROTECTED_RECORD_MAX];
+    let length = record.encode_canonical(&mut encoded).unwrap();
+    const RELAY_TAG_OFFSET: usize = 24;
+    const RELAY_INTENT_OFFSET: usize = RELAY_TAG_OFFSET + 1;
+    const INTENT_WIRE_LEN: usize = 2 * ID_LEN + 5 * 8 + 1 + 2 * DIGEST_LEN;
+    const RECEIPT_INTENT_OFFSET: usize = RELAY_INTENT_OFFSET + INTENT_WIRE_LEN;
+    const SIGNATURE_OFFSET: usize = RECEIPT_INTENT_OFFSET + INTENT_WIRE_LEN;
+    assert_eq!(encoded[RELAY_TAG_OFFSET], 5);
+    assert_eq!(
+        encoded[RELAY_INTENT_OFFSET..RECEIPT_INTENT_OFFSET],
+        encoded[RECEIPT_INTENT_OFFSET..SIGNATURE_OFFSET]
+    );
+    assert_eq!(
+        encoded[SIGNATURE_OFFSET..SIGNATURE_OFFSET + SIGNATURE_LEN],
+        [9; SIGNATURE_LEN]
+    );
+    assert_eq!(
+        ProtectedAuthorityRecord::decode_canonical(&encoded[..length]),
+        Ok(record)
+    );
+
+    encoded[RECEIPT_INTENT_OFFSET] ^= 1;
+    assert_eq!(
+        ProtectedAuthorityRecord::decode_canonical(&encoded[..length]),
+        Err(WireError::InvalidLength)
+    );
 }

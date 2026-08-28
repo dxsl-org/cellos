@@ -14,4 +14,23 @@ impl RelayIntent {
             && self.boot_epoch == receipt.boot_epoch
             && self.validation_request_id == receipt.validation_request_id
     }
+
+    pub(super) const fn provider_receipt(
+        self,
+        provider_signature: [u8; crate::SIGNATURE_LEN],
+    ) -> ProviderCasReceipt {
+        ProviderCasReceipt {
+            device_id: self.device_id,
+            authority_id: self.authority_id,
+            authority_epoch: self.authority_epoch,
+            generation: self.generation,
+            policy_epoch: self.policy_epoch,
+            pending_slot: self.pending_slot,
+            pending_spki_digest: self.pending_spki_digest,
+            profile_digest: self.profile_digest,
+            boot_epoch: self.boot_epoch,
+            validation_request_id: self.validation_request_id,
+            provider_signature,
+        }
+    }
 }

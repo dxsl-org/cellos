@@ -1,7 +1,5 @@
 use super::ProtectedAuthorityRecord;
-use crate::{
-    AuthorityMode, BootState, ProviderCasReceipt, RelayIntent, RelayProfileState, TimeState,
-};
+use crate::{AuthorityMode, BootState, RelayIntent, RelayProfileState, TimeState};
 
 impl ProtectedAuthorityRecord {
     pub(super) fn invariants_hold(&self) -> bool {
@@ -53,9 +51,7 @@ impl ProtectedAuthorityRecord {
             RelayProfileState::Staged(intent)
             | RelayProfileState::ReceiptConsumed(intent)
             | RelayProfileState::Prepared(intent) => self.current_intent_valid(&intent),
-            RelayProfileState::Promoted { intent, receipt } => {
-                self.current_intent_valid(&intent) && receipt_matches(&intent, &receipt)
-            }
+            RelayProfileState::Promoted { intent, .. } => self.current_intent_valid(&intent),
             RelayProfileState::Active(intent) => {
                 self.previous_active.is_none() && self.intent_valid(&intent)
             }
@@ -83,17 +79,4 @@ fn mode_boot_valid(mode: AuthorityMode, boot: BootState) -> bool {
         AuthorityMode::Serving => matches!(boot, BootState::Open { .. }),
         AuthorityMode::Sealed => true,
     }
-}
-
-fn receipt_matches(intent: &RelayIntent, receipt: &ProviderCasReceipt) -> bool {
-    intent.device_id == receipt.device_id
-        && intent.authority_id == receipt.authority_id
-        && intent.authority_epoch == receipt.authority_epoch
-        && intent.generation == receipt.generation
-        && intent.policy_epoch == receipt.policy_epoch
-        && intent.pending_slot == receipt.pending_slot
-        && intent.pending_spki_digest == receipt.pending_spki_digest
-        && intent.profile_digest == receipt.profile_digest
-        && intent.boot_epoch == receipt.boot_epoch
-        && intent.validation_request_id == receipt.validation_request_id
 }

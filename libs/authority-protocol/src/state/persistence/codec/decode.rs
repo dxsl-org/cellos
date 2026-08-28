@@ -113,10 +113,17 @@ fn get_relay(reader: &mut Reader<'_>) -> Result<RelayProfileState, WireError> {
         2 => RelayProfileState::Staged(get_intent(reader)?),
         3 => RelayProfileState::ReceiptConsumed(get_intent(reader)?),
         4 => RelayProfileState::Prepared(get_intent(reader)?),
-        5 => RelayProfileState::Promoted {
-            intent: get_intent(reader)?,
-            receipt: get_receipt(reader)?,
-        },
+        5 => {
+            let intent = get_intent(reader)?;
+            let receipt = get_receipt(reader)?;
+            if !intent.matches_receipt(&receipt) {
+                return Err(WireError::InvalidLength);
+            }
+            RelayProfileState::Promoted {
+                intent,
+                provider_signature: receipt.provider_signature,
+            }
+        }
         6 => RelayProfileState::Active(get_intent(reader)?),
         _ => return Err(WireError::UnknownMessageKind),
     })

@@ -95,9 +95,30 @@ pub enum RelayProfileState {
     Prepared(RelayIntent),
     Promoted {
         intent: RelayIntent,
-        receipt: crate::ProviderCasReceipt,
+        provider_signature: [u8; crate::SIGNATURE_LEN],
     },
     Active(RelayIntent),
+}
+
+/// Immutable identity and protected counter floors used to initialize an authority.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AuthorityStateConfig {
+    /// Device identity bound into every accepted request and relay intent.
+    pub device_id: [u8; ID_LEN],
+    /// Authority identity bound into every accepted request and relay intent.
+    pub authority_id: [u8; ID_LEN],
+    /// Monotonic authority key epoch.
+    pub authority_epoch: u64,
+    /// Minimum accepted boot epoch.
+    pub boot_floor: u64,
+    /// Minimum accepted relay generation.
+    pub generation_floor: u64,
+    /// Protected authority-state epoch.
+    pub state_epoch: u64,
+    /// Challenge required to open the initial boot.
+    pub boot_challenge: [u8; DIGEST_LEN],
+    /// Protected signed-time floors.
+    pub time_floors: ProtectedTimeFloors,
 }
 
 pub struct AuthorityState<S: ProtectedStore> {
@@ -122,34 +143,24 @@ pub struct AuthorityState<S: ProtectedStore> {
 }
 
 impl<S: ProtectedStore> AuthorityState<S> {
-    pub const fn new(
-        store: S,
-        device_id: [u8; ID_LEN],
-        authority_id: [u8; ID_LEN],
-        authority_epoch: u64,
-        boot_floor: u64,
-        generation_floor: u64,
-        state_epoch: u64,
-        boot_challenge: [u8; DIGEST_LEN],
-        time_floors: ProtectedTimeFloors,
-    ) -> Self {
+    pub const fn new(store: S, config: AuthorityStateConfig) -> Self {
         Self {
             mode: AuthorityMode::Ready,
             boot: BootState::Closed,
             time: TimeState::Unavailable,
             relay: RelayProfileState::Empty,
-            device_id,
-            authority_id,
-            authority_epoch,
-            boot_challenge,
-            boot_floor,
-            generation_floor,
-            state_epoch,
+            device_id: config.device_id,
+            authority_id: config.authority_id,
+            authority_epoch: config.authority_epoch,
+            boot_challenge: config.boot_challenge,
+            boot_floor: config.boot_floor,
+            generation_floor: config.generation_floor,
+            state_epoch: config.state_epoch,
             approved_loader_digest: [0; DIGEST_LEN],
             last_request_sequence: 0,
             previous_active: None,
             pending_time: None,
-            time_floors,
+            time_floors: config.time_floors,
             protected_revision: 0,
             store,
         }

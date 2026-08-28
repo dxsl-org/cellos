@@ -28,6 +28,12 @@ impl ProtectedStore for MemoryStore {
         self.record = None;
     }
 }
+
+impl MemoryStore {
+    pub fn into_record(self) -> Option<ProtectedAuthorityRecord> {
+        self.record
+    }
+}
 pub type TestState = AuthorityState<MemoryStore>;
 
 pub struct RequestPolicy;
@@ -99,14 +105,16 @@ pub fn floors() -> ProtectedTimeFloors {
 pub fn state(boot: u64, generation: u64) -> TestState {
     AuthorityState::new(
         MemoryStore::default(),
-        [1; 32],
-        [2; 32],
-        1,
-        boot,
-        generation,
-        0,
-        [3; 32],
-        floors(),
+        AuthorityStateConfig {
+            device_id: [1; 32],
+            authority_id: [2; 32],
+            authority_epoch: 1,
+            boot_floor: boot,
+            generation_floor: generation,
+            state_epoch: 0,
+            boot_challenge: [3; 32],
+            time_floors: floors(),
+        },
     )
 }
 
