@@ -138,32 +138,34 @@
 <a href=#138 id=138 data-nosnippet>138</a>    }
 <a href=#139 id=139 data-nosnippet>139</a>    <span class="kw">match </span>reply.status {
 <a href=#140 id=140 data-nosnippet>140</a>        ReplyStatus::Busy =&gt; <span class="kw">return </span>CallOutcome::Busy,
-<a href=#141 id=141 data-nosnippet>141</a>        ReplyStatus::Indeterminate =&gt; <span class="kw">return </span>CallOutcome::Indeterminate,
-<a href=#142 id=142 data-nosnippet>142</a>        ReplyStatus::Success =&gt; {}
-<a href=#143 id=143 data-nosnippet>143</a>    }
-<a href=#144 id=144 data-nosnippet>144</a>    <span class="kw">let </span><span class="prelude-val">Ok</span>(timestamps) = decode_timed_echo_reply(reply.payload, ECHO_BODY) <span class="kw">else </span>{
-<a href=#145 id=145 data-nosnippet>145</a>        <span class="kw">return </span>CallOutcome::Correlation;
-<a href=#146 id=146 data-nosnippet>146</a>    };
-<a href=#147 id=147 data-nosnippet>147</a>    <span class="kw">let </span>worker = timestamps.worker_done_ticks;
-<a href=#148 id=148 data-nosnippet>148</a>    <span class="kw">let </span>reply_sent = timestamps.reply_send_ticks;
-<a href=#149 id=149 data-nosnippet>149</a>    <span class="kw">if </span>sent &lt; start || worker &lt; sent || reply_sent &lt; worker || received &lt; reply_sent {
-<a href=#150 id=150 data-nosnippet>150</a>        <span class="kw">return </span>CallOutcome::InvalidTiming;
-<a href=#151 id=151 data-nosnippet>151</a>    }
-<a href=#152 id=152 data-nosnippet>152</a>    CallOutcome::Sample(TimedSample {
-<a href=#153 id=153 data-nosnippet>153</a>        total: ticks_to_ns(received - start),
-<a href=#154 id=154 data-nosnippet>154</a>        send: ticks_to_ns(sent - start),
-<a href=#155 id=155 data-nosnippet>155</a>        reply_wait: ticks_to_ns(received - sent),
-<a href=#156 id=156 data-nosnippet>156</a>        worker: ticks_to_ns(worker - sent),
-<a href=#157 id=157 data-nosnippet>157</a>        reply_pump: ticks_to_ns(reply_sent - worker),
-<a href=#158 id=158 data-nosnippet>158</a>        client_wake: ticks_to_ns(received - reply_sent),
-<a href=#159 id=159 data-nosnippet>159</a>    })
-<a href=#160 id=160 data-nosnippet>160</a>}
-<a href=#161 id=161 data-nosnippet>161</a>
-<a href=#162 id=162 data-nosnippet>162</a><span class="kw">fn </span>percentiles(samples: <span class="kw-2">&amp;mut </span>[u64]) -&gt; (u64, u64) {
-<a href=#163 id=163 data-nosnippet>163</a>    samples.sort_unstable();
-<a href=#164 id=164 data-nosnippet>164</a>    <span class="kw">let </span>last = samples.len().saturating_sub(<span class="number">1</span>);
-<a href=#165 id=165 data-nosnippet>165</a>    <span class="kw">let </span>p50 = (samples.len() / <span class="number">2</span>).min(last);
-<a href=#166 id=166 data-nosnippet>166</a>    <span class="kw">let </span>p99 = ((samples.len() * <span class="number">99</span>) / <span class="number">100</span>).min(last);
-<a href=#167 id=167 data-nosnippet>167</a>    (samples[p50], samples[p99])
-<a href=#168 id=168 data-nosnippet>168</a>}
+<a href=#141 id=141 data-nosnippet>141</a>        ReplyStatus::Indeterminate | ReplyStatus::NotSupported =&gt; {
+<a href=#142 id=142 data-nosnippet>142</a>            <span class="kw">return </span>CallOutcome::Indeterminate
+<a href=#143 id=143 data-nosnippet>143</a>        }
+<a href=#144 id=144 data-nosnippet>144</a>        ReplyStatus::Success =&gt; {}
+<a href=#145 id=145 data-nosnippet>145</a>    }
+<a href=#146 id=146 data-nosnippet>146</a>    <span class="kw">let </span><span class="prelude-val">Ok</span>(timestamps) = decode_timed_echo_reply(reply.payload, ECHO_BODY) <span class="kw">else </span>{
+<a href=#147 id=147 data-nosnippet>147</a>        <span class="kw">return </span>CallOutcome::Correlation;
+<a href=#148 id=148 data-nosnippet>148</a>    };
+<a href=#149 id=149 data-nosnippet>149</a>    <span class="kw">let </span>worker = timestamps.worker_done_ticks;
+<a href=#150 id=150 data-nosnippet>150</a>    <span class="kw">let </span>reply_sent = timestamps.reply_send_ticks;
+<a href=#151 id=151 data-nosnippet>151</a>    <span class="kw">if </span>sent &lt; start || worker &lt; sent || reply_sent &lt; worker || received &lt; reply_sent {
+<a href=#152 id=152 data-nosnippet>152</a>        <span class="kw">return </span>CallOutcome::InvalidTiming;
+<a href=#153 id=153 data-nosnippet>153</a>    }
+<a href=#154 id=154 data-nosnippet>154</a>    CallOutcome::Sample(TimedSample {
+<a href=#155 id=155 data-nosnippet>155</a>        total: ticks_to_ns(received - start),
+<a href=#156 id=156 data-nosnippet>156</a>        send: ticks_to_ns(sent - start),
+<a href=#157 id=157 data-nosnippet>157</a>        reply_wait: ticks_to_ns(received - sent),
+<a href=#158 id=158 data-nosnippet>158</a>        worker: ticks_to_ns(worker - sent),
+<a href=#159 id=159 data-nosnippet>159</a>        reply_pump: ticks_to_ns(reply_sent - worker),
+<a href=#160 id=160 data-nosnippet>160</a>        client_wake: ticks_to_ns(received - reply_sent),
+<a href=#161 id=161 data-nosnippet>161</a>    })
+<a href=#162 id=162 data-nosnippet>162</a>}
+<a href=#163 id=163 data-nosnippet>163</a>
+<a href=#164 id=164 data-nosnippet>164</a><span class="kw">fn </span>percentiles(samples: <span class="kw-2">&amp;mut </span>[u64]) -&gt; (u64, u64) {
+<a href=#165 id=165 data-nosnippet>165</a>    samples.sort_unstable();
+<a href=#166 id=166 data-nosnippet>166</a>    <span class="kw">let </span>last = samples.len().saturating_sub(<span class="number">1</span>);
+<a href=#167 id=167 data-nosnippet>167</a>    <span class="kw">let </span>p50 = (samples.len() / <span class="number">2</span>).min(last);
+<a href=#168 id=168 data-nosnippet>168</a>    <span class="kw">let </span>p99 = ((samples.len() * <span class="number">99</span>) / <span class="number">100</span>).min(last);
+<a href=#169 id=169 data-nosnippet>169</a>    (samples[p50], samples[p99])
+<a href=#170 id=170 data-nosnippet>170</a>}
 </code></pre></div></section></main></body></html>

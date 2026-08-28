@@ -52,69 +52,70 @@
 <a href=#52 id=52 data-nosnippet>52</a>        <span class="number">0 </span>=&gt; ReplyStatus::Success,
 <a href=#53 id=53 data-nosnippet>53</a>        <span class="number">1 </span>=&gt; ReplyStatus::Busy,
 <a href=#54 id=54 data-nosnippet>54</a>        <span class="number">2 </span>=&gt; ReplyStatus::Indeterminate,
-<a href=#55 id=55 data-nosnippet>55</a>        <span class="kw">_ </span>=&gt; <span class="kw">return </span><span class="prelude-val">Err</span>(OracleError::InvalidReplyStatus),
-<a href=#56 id=56 data-nosnippet>56</a>    };
-<a href=#57 id=57 data-nosnippet>57</a>    <span class="kw">let </span>request_id = u64::from_le_bytes(buf[<span class="number">2</span>..<span class="number">10</span>].try_into().unwrap_or([<span class="number">0</span>; <span class="number">8</span>]));
-<a href=#58 id=58 data-nosnippet>58</a>    <span class="kw">let </span>client_sequence = u64::from_le_bytes(buf[<span class="number">10</span>..<span class="number">18</span>].try_into().unwrap_or([<span class="number">0</span>; <span class="number">8</span>]));
-<a href=#59 id=59 data-nosnippet>59</a>    <span class="kw">let </span>payload_len = u16::from_le_bytes(buf[<span class="number">18</span>..<span class="number">20</span>].try_into().unwrap_or([<span class="number">0</span>; <span class="number">2</span>])) <span class="kw">as </span>usize;
-<a href=#60 id=60 data-nosnippet>60</a>    <span class="kw">if </span>payload_len &gt; <span class="kw">crate</span>::local_ingress::MAX_REPLY_BODY
-<a href=#61 id=61 data-nosnippet>61</a>        || RESPONSE_HEADER_LEN + payload_len &gt; buf.len()
-<a href=#62 id=62 data-nosnippet>62</a>    {
-<a href=#63 id=63 data-nosnippet>63</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(OracleError::TruncatedReply);
-<a href=#64 id=64 data-nosnippet>64</a>    }
-<a href=#65 id=65 data-nosnippet>65</a>    <span class="prelude-val">Ok</span>(DecodedReply {
-<a href=#66 id=66 data-nosnippet>66</a>        status,
-<a href=#67 id=67 data-nosnippet>67</a>        request_id,
-<a href=#68 id=68 data-nosnippet>68</a>        client_sequence,
-<a href=#69 id=69 data-nosnippet>69</a>        payload: <span class="kw-2">&amp;</span>buf[RESPONSE_HEADER_LEN..RESPONSE_HEADER_LEN + payload_len],
-<a href=#70 id=70 data-nosnippet>70</a>    })
-<a href=#71 id=71 data-nosnippet>71</a>}
-<a href=#72 id=72 data-nosnippet>72</a>
-<a href=#73 id=73 data-nosnippet>73</a><span class="kw">pub fn </span>stamp_timed_echo_reply_frame(
-<a href=#74 id=74 data-nosnippet>74</a>    frame: <span class="kw-2">&amp;mut </span>[u8],
-<a href=#75 id=75 data-nosnippet>75</a>    reply_send_ticks: u64,
-<a href=#76 id=76 data-nosnippet>76</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), OracleError&gt; {
-<a href=#77 id=77 data-nosnippet>77</a>    <span class="kw">if </span>frame.len() &lt; RESPONSE_HEADER_LEN || frame.first().copied() != <span class="prelude-val">Some</span>(STATUS_TAG) {
-<a href=#78 id=78 data-nosnippet>78</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(OracleError::InvalidReplyTag);
-<a href=#79 id=79 data-nosnippet>79</a>    }
-<a href=#80 id=80 data-nosnippet>80</a>    <span class="kw">let </span>payload_len = u16::from_le_bytes(
-<a href=#81 id=81 data-nosnippet>81</a>        frame[<span class="number">18</span>..<span class="number">20</span>]
-<a href=#82 id=82 data-nosnippet>82</a>            .try_into()
-<a href=#83 id=83 data-nosnippet>83</a>            .map_err(|<span class="kw">_</span>| OracleError::TruncatedReply)<span class="question-mark">?</span>,
-<a href=#84 id=84 data-nosnippet>84</a>    ) <span class="kw">as </span>usize;
-<a href=#85 id=85 data-nosnippet>85</a>    <span class="kw">let </span>end = RESPONSE_HEADER_LEN + payload_len;
-<a href=#86 id=86 data-nosnippet>86</a>    <span class="kw">if </span>payload_len &gt; <span class="kw">crate</span>::local_ingress::MAX_REPLY_BODY || end &gt; frame.len() {
-<a href=#87 id=87 data-nosnippet>87</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(OracleError::TruncatedReply);
-<a href=#88 id=88 data-nosnippet>88</a>    }
-<a href=#89 id=89 data-nosnippet>89</a>    stamp_timed_echo_reply(<span class="kw-2">&amp;mut </span>frame[RESPONSE_HEADER_LEN..end], reply_send_ticks)
-<a href=#90 id=90 data-nosnippet>90</a>}
-<a href=#91 id=91 data-nosnippet>91</a>
-<a href=#92 id=92 data-nosnippet>92</a><span class="kw">fn </span>encode_request(
-<a href=#93 id=93 data-nosnippet>93</a>    client_sequence: u64,
-<a href=#94 id=94 data-nosnippet>94</a>    command: OracleCommand&lt;<span class="lifetime">'_</span>&gt;,
-<a href=#95 id=95 data-nosnippet>95</a>    out: <span class="kw-2">&amp;mut </span>[u8],
-<a href=#96 id=96 data-nosnippet>96</a>) -&gt; <span class="prelude-ty">Result</span>&lt;usize, OracleError&gt; {
-<a href=#97 id=97 data-nosnippet>97</a>    <span class="kw">if </span>out.len() &lt; REQUEST_HEADER_LEN + <span class="number">1 </span>{
-<a href=#98 id=98 data-nosnippet>98</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(OracleError::OutputTooSmall);
-<a href=#99 id=99 data-nosnippet>99</a>    }
-<a href=#100 id=100 data-nosnippet>100</a>    <span class="kw">let </span>body_len = <span class="kw">match </span>command {
-<a href=#101 id=101 data-nosnippet>101</a>        OracleCommand::Echo(payload) =&gt; {
-<a href=#102 id=102 data-nosnippet>102</a>            <span class="kw">if </span>payload.len() + <span class="number">1 </span>&gt; MAX_REQUEST_BODY {
-<a href=#103 id=103 data-nosnippet>103</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(OracleError::PayloadTooLarge);
-<a href=#104 id=104 data-nosnippet>104</a>            }
-<a href=#105 id=105 data-nosnippet>105</a>            encode_echo_command(payload, <span class="kw-2">&amp;mut </span>out[REQUEST_HEADER_LEN..])<span class="question-mark">?
-<a href=#106 id=106 data-nosnippet>106</a>        </span>}
-<a href=#107 id=107 data-nosnippet>107</a>        OracleCommand::Snapshot =&gt; encode_snapshot_command(<span class="kw-2">&amp;mut </span>out[REQUEST_HEADER_LEN..])<span class="question-mark">?</span>,
-<a href=#108 id=108 data-nosnippet>108</a>        OracleCommand::Hold { work_turns } =&gt; {
-<a href=#109 id=109 data-nosnippet>109</a>            encode_hold_command(work_turns, <span class="kw-2">&amp;mut </span>out[REQUEST_HEADER_LEN..])<span class="question-mark">?
-<a href=#110 id=110 data-nosnippet>110</a>        </span>}
-<a href=#111 id=111 data-nosnippet>111</a>    };
-<a href=#112 id=112 data-nosnippet>112</a>    <span class="kw">let </span>frame_len = REQUEST_HEADER_LEN + body_len;
-<a href=#113 id=113 data-nosnippet>113</a>    <span class="kw">if </span>frame_len &gt; LOCAL_PAYLOAD_CAP {
-<a href=#114 id=114 data-nosnippet>114</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(OracleError::PayloadTooLarge);
-<a href=#115 id=115 data-nosnippet>115</a>    }
-<a href=#116 id=116 data-nosnippet>116</a>    out[..<span class="number">8</span>].copy_from_slice(<span class="kw-2">&amp;</span>client_sequence.to_le_bytes());
-<a href=#117 id=117 data-nosnippet>117</a>    out[<span class="number">8</span>..<span class="number">10</span>].copy_from_slice(<span class="kw-2">&amp;</span>(body_len <span class="kw">as </span>u16).to_le_bytes());
-<a href=#118 id=118 data-nosnippet>118</a>    <span class="prelude-val">Ok</span>(frame_len)
-<a href=#119 id=119 data-nosnippet>119</a>}
+<a href=#55 id=55 data-nosnippet>55</a>        <span class="number">3 </span>=&gt; ReplyStatus::NotSupported,
+<a href=#56 id=56 data-nosnippet>56</a>        <span class="kw">_ </span>=&gt; <span class="kw">return </span><span class="prelude-val">Err</span>(OracleError::InvalidReplyStatus),
+<a href=#57 id=57 data-nosnippet>57</a>    };
+<a href=#58 id=58 data-nosnippet>58</a>    <span class="kw">let </span>request_id = u64::from_le_bytes(buf[<span class="number">2</span>..<span class="number">10</span>].try_into().unwrap_or([<span class="number">0</span>; <span class="number">8</span>]));
+<a href=#59 id=59 data-nosnippet>59</a>    <span class="kw">let </span>client_sequence = u64::from_le_bytes(buf[<span class="number">10</span>..<span class="number">18</span>].try_into().unwrap_or([<span class="number">0</span>; <span class="number">8</span>]));
+<a href=#60 id=60 data-nosnippet>60</a>    <span class="kw">let </span>payload_len = u16::from_le_bytes(buf[<span class="number">18</span>..<span class="number">20</span>].try_into().unwrap_or([<span class="number">0</span>; <span class="number">2</span>])) <span class="kw">as </span>usize;
+<a href=#61 id=61 data-nosnippet>61</a>    <span class="kw">if </span>payload_len &gt; <span class="kw">crate</span>::local_ingress::MAX_REPLY_BODY
+<a href=#62 id=62 data-nosnippet>62</a>        || RESPONSE_HEADER_LEN + payload_len &gt; buf.len()
+<a href=#63 id=63 data-nosnippet>63</a>    {
+<a href=#64 id=64 data-nosnippet>64</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(OracleError::TruncatedReply);
+<a href=#65 id=65 data-nosnippet>65</a>    }
+<a href=#66 id=66 data-nosnippet>66</a>    <span class="prelude-val">Ok</span>(DecodedReply {
+<a href=#67 id=67 data-nosnippet>67</a>        status,
+<a href=#68 id=68 data-nosnippet>68</a>        request_id,
+<a href=#69 id=69 data-nosnippet>69</a>        client_sequence,
+<a href=#70 id=70 data-nosnippet>70</a>        payload: <span class="kw-2">&amp;</span>buf[RESPONSE_HEADER_LEN..RESPONSE_HEADER_LEN + payload_len],
+<a href=#71 id=71 data-nosnippet>71</a>    })
+<a href=#72 id=72 data-nosnippet>72</a>}
+<a href=#73 id=73 data-nosnippet>73</a>
+<a href=#74 id=74 data-nosnippet>74</a><span class="kw">pub fn </span>stamp_timed_echo_reply_frame(
+<a href=#75 id=75 data-nosnippet>75</a>    frame: <span class="kw-2">&amp;mut </span>[u8],
+<a href=#76 id=76 data-nosnippet>76</a>    reply_send_ticks: u64,
+<a href=#77 id=77 data-nosnippet>77</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), OracleError&gt; {
+<a href=#78 id=78 data-nosnippet>78</a>    <span class="kw">if </span>frame.len() &lt; RESPONSE_HEADER_LEN || frame.first().copied() != <span class="prelude-val">Some</span>(STATUS_TAG) {
+<a href=#79 id=79 data-nosnippet>79</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(OracleError::InvalidReplyTag);
+<a href=#80 id=80 data-nosnippet>80</a>    }
+<a href=#81 id=81 data-nosnippet>81</a>    <span class="kw">let </span>payload_len = u16::from_le_bytes(
+<a href=#82 id=82 data-nosnippet>82</a>        frame[<span class="number">18</span>..<span class="number">20</span>]
+<a href=#83 id=83 data-nosnippet>83</a>            .try_into()
+<a href=#84 id=84 data-nosnippet>84</a>            .map_err(|<span class="kw">_</span>| OracleError::TruncatedReply)<span class="question-mark">?</span>,
+<a href=#85 id=85 data-nosnippet>85</a>    ) <span class="kw">as </span>usize;
+<a href=#86 id=86 data-nosnippet>86</a>    <span class="kw">let </span>end = RESPONSE_HEADER_LEN + payload_len;
+<a href=#87 id=87 data-nosnippet>87</a>    <span class="kw">if </span>payload_len &gt; <span class="kw">crate</span>::local_ingress::MAX_REPLY_BODY || end &gt; frame.len() {
+<a href=#88 id=88 data-nosnippet>88</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(OracleError::TruncatedReply);
+<a href=#89 id=89 data-nosnippet>89</a>    }
+<a href=#90 id=90 data-nosnippet>90</a>    stamp_timed_echo_reply(<span class="kw-2">&amp;mut </span>frame[RESPONSE_HEADER_LEN..end], reply_send_ticks)
+<a href=#91 id=91 data-nosnippet>91</a>}
+<a href=#92 id=92 data-nosnippet>92</a>
+<a href=#93 id=93 data-nosnippet>93</a><span class="kw">fn </span>encode_request(
+<a href=#94 id=94 data-nosnippet>94</a>    client_sequence: u64,
+<a href=#95 id=95 data-nosnippet>95</a>    command: OracleCommand&lt;<span class="lifetime">'_</span>&gt;,
+<a href=#96 id=96 data-nosnippet>96</a>    out: <span class="kw-2">&amp;mut </span>[u8],
+<a href=#97 id=97 data-nosnippet>97</a>) -&gt; <span class="prelude-ty">Result</span>&lt;usize, OracleError&gt; {
+<a href=#98 id=98 data-nosnippet>98</a>    <span class="kw">if </span>out.len() &lt; REQUEST_HEADER_LEN + <span class="number">1 </span>{
+<a href=#99 id=99 data-nosnippet>99</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(OracleError::OutputTooSmall);
+<a href=#100 id=100 data-nosnippet>100</a>    }
+<a href=#101 id=101 data-nosnippet>101</a>    <span class="kw">let </span>body_len = <span class="kw">match </span>command {
+<a href=#102 id=102 data-nosnippet>102</a>        OracleCommand::Echo(payload) =&gt; {
+<a href=#103 id=103 data-nosnippet>103</a>            <span class="kw">if </span>payload.len() + <span class="number">1 </span>&gt; MAX_REQUEST_BODY {
+<a href=#104 id=104 data-nosnippet>104</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(OracleError::PayloadTooLarge);
+<a href=#105 id=105 data-nosnippet>105</a>            }
+<a href=#106 id=106 data-nosnippet>106</a>            encode_echo_command(payload, <span class="kw-2">&amp;mut </span>out[REQUEST_HEADER_LEN..])<span class="question-mark">?
+<a href=#107 id=107 data-nosnippet>107</a>        </span>}
+<a href=#108 id=108 data-nosnippet>108</a>        OracleCommand::Snapshot =&gt; encode_snapshot_command(<span class="kw-2">&amp;mut </span>out[REQUEST_HEADER_LEN..])<span class="question-mark">?</span>,
+<a href=#109 id=109 data-nosnippet>109</a>        OracleCommand::Hold { work_turns } =&gt; {
+<a href=#110 id=110 data-nosnippet>110</a>            encode_hold_command(work_turns, <span class="kw-2">&amp;mut </span>out[REQUEST_HEADER_LEN..])<span class="question-mark">?
+<a href=#111 id=111 data-nosnippet>111</a>        </span>}
+<a href=#112 id=112 data-nosnippet>112</a>    };
+<a href=#113 id=113 data-nosnippet>113</a>    <span class="kw">let </span>frame_len = REQUEST_HEADER_LEN + body_len;
+<a href=#114 id=114 data-nosnippet>114</a>    <span class="kw">if </span>frame_len &gt; LOCAL_PAYLOAD_CAP {
+<a href=#115 id=115 data-nosnippet>115</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(OracleError::PayloadTooLarge);
+<a href=#116 id=116 data-nosnippet>116</a>    }
+<a href=#117 id=117 data-nosnippet>117</a>    out[..<span class="number">8</span>].copy_from_slice(<span class="kw-2">&amp;</span>client_sequence.to_le_bytes());
+<a href=#118 id=118 data-nosnippet>118</a>    out[<span class="number">8</span>..<span class="number">10</span>].copy_from_slice(<span class="kw-2">&amp;</span>(body_len <span class="kw">as </span>u16).to_le_bytes());
+<a href=#119 id=119 data-nosnippet>119</a>    <span class="prelude-val">Ok</span>(frame_len)
+<a href=#120 id=120 data-nosnippet>120</a>}
 </code></pre></div></section></main></body></html>
