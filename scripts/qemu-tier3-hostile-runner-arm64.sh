@@ -44,8 +44,6 @@ fi
 echo "[hv-hostile-arm64] kernel=$KERNEL disk=$DISK (window=${BOOT_WINDOW}s)"
 echo "[hv-hostile-arm64] $QEMU_VERSION_TEXT"
 
-
-
 # 0. Build the Hostile image if requested.
 if [ ! -f "$KERNEL" ] || [ "${BUILD_HOSTILE_IMAGE:-0}" == "1" ]; then
     echo "Building hostile image..."
@@ -63,6 +61,7 @@ fi
 # Run QEMU in background.
 "$QEMU_ARM64_BIN" \
     -machine "virt,virtualization=on,gic-version=2" \
+    -accel tcg \
     -cpu cortex-a72 \
     -m 1G \
     -nographic \
