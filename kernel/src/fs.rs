@@ -36,16 +36,25 @@ pub fn read_file_from_vifs1(path: &str) -> ViResult<Box<[u8]>> {
         fs.open(upper_path, OpenMode::Read)?
     };
 
-    let mut buf: Vec<u8> = Vec::new();
-    let mut chunk = [0u8; 4096];
-    loop {
-        match file.read(&mut chunk) {
+    let size = usize::try_from(file.size()?).map_err(|_| ViError::InvalidInput)?;
+    if size == 0 {
+        return Err(ViError::NotFound);
+    }
+    let mut buf = Vec::new();
+    buf.try_reserve_exact(size)
+        .map_err(|_| ViError::OutOfMemory)?;
+    buf.resize(size, 0);
+    let mut read = 0usize;
+    while read < size {
+        let end = read.saturating_add(4096).min(size);
+        match file.read(&mut buf[read..end]) {
             Ok(0) => break,
-            Ok(n) => buf.extend_from_slice(&chunk[..n]),
+            Ok(n) => read += n,
             Err(ViError::NotFound) => break, // EOF sentinel on some FAT impls
             Err(e) => return Err(e),
         }
     }
+    buf.truncate(read);
     if buf.is_empty() {
         return Err(ViError::NotFound);
     }

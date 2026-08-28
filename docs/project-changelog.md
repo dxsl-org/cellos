@@ -48,14 +48,23 @@
 - Added the required [CI workflow](../.github/workflows/ci.yml) gate
   `c2c-broker-oracle-single-guest-local-runtime`, displayed as
   `C2C Broker Oracle (single-guest local-runtime QEMU)`, with a 60-minute job
-  limit and 40-minute oracle-step limit. Its `if: always()` upload retains
+  limit and 40-minute oracle-step limit. The job initializes its diagnostic log
+  under `RUNNER_TEMP` before checkout, streams dependency/oracle output into it,
+  installs QEMU without recommended GUI/media packages, and allows a bounded
+  25 minutes for slow package mirrors. Its `if: always()` upload retains
   `c2c-broker-oracle-single-guest-local-runtime-qemu-log-${{ github.run_attempt }}`
-  on ordinary success or failure. Actual runner verification passed integration
-  1/1 with `samples=1000 success=1000 calibration=MEASURED`,
-  `role_gate=PASS`, soak
+  after setup or oracle failure without weakening fail-hard step behavior.
+  Actual runner verification passed integration 1/1 with
+  `samples=1000 success=1000 calibration=MEASURED`, `role_gate=PASS`, soak
   `attempted=10000 success=10000 silent_drop=0`, and
   `overflow status=PASS`. The gate adds no two-node, relay, remote, or
   production claim.
+  The isolated image explicitly enables init's `c2c-broker` feature because it
+  provisions K1; normal images no longer advertise and restart a broker that
+  must fail closed without K1. The kernel heap now matches its documented
+  32 MiB capacity, and VIFS1 uses one exact-sized fallible ELF allocation. These
+  changes remove the broker restart/OOM loop while preserving the fail-closed
+  key requirement.
 - Roadmap work is now distinguished as current executable work, current-scope
   technical debt, future capability, external-gated prerequisite, or production
   release gate. Advanced capability and production prerequisites no longer read

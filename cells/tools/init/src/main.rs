@@ -57,6 +57,8 @@ fn cell_main() {
                 continue;
             }
         };
+        #[cfg(not(feature = "development-silo-provider"))]
+        let _ = tid;
         #[cfg(feature = "development-silo-provider")]
         if matches!(
             service.registration,

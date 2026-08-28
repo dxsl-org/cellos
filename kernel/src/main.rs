@@ -551,7 +551,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // 4. Heap Allocator (Global) - MUST be after paging but before any allocations
     // 32 MiB = 8192 frames. Sized to hold:
     //   - embedded RAM disk copy (~4 MiB), VirtIO GPU framebuffer (~4 MiB), cell ELFs + kernel structures
-    const HEAP_FRAMES: usize = 4_096;
+    const HEAP_FRAMES: usize = 8_192;
     let heap_start = {
         let mut allocator_guard = memory::frame::FRAME_ALLOCATOR.lock();
         let allocator = allocator_guard
@@ -730,7 +730,6 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         exit(task::user_copy_tests::run_getrandom_primary());
     }
 
-
     // The loader corpus exercises real spawn_gated denials and snapshots the
     // scheduler around every malformed image. Run it after task::init(), while
     // the scheduler is available but still empty and before secondary harts or
@@ -809,7 +808,6 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // any secondary hart starts running kernel code.
     #[cfg(target_arch = "riscv64")]
     task::smp::start_secondaries();
-
 
     #[cfg(all(target_arch = "riscv64", feature = "test-hooks"))]
     crate::memory::tlb_shootdown_selftest::run_primary();

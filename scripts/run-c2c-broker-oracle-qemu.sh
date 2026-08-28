@@ -97,6 +97,8 @@ COMMON_PACKAGES=(
 
 echo "[c2c-oracle-runner] building isolated RV64 oracle cells"
 cargo build --quiet --locked --release --target "$TARGET" "${COMMON_PACKAGES[@]}"
+cargo build --quiet --locked --release --target "$TARGET" \
+    -p app-init --features c2c-broker
 CELLOS_C2C_ORACLE_K1_FILE="$KEY_FILE" \
     cargo build --quiet --locked --release --target "$TARGET" \
         -p service-vfs --features c2c-oracle-k1-fixture

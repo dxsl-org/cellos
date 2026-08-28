@@ -18,6 +18,8 @@ test-hooks = []
 hypervisor-min = []
 # Admit the development/reference AArch64 Silo service into the supervised table.
 development-silo-provider = []
+# Spawn the fail-closed C2C broker only in images that provision its cluster key.
+c2c-broker = []
 # Select the VideoCore mailbox display driver during RPi3 boot.
 board-rpi3 = []
 

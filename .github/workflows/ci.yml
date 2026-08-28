@@ -321,13 +321,43 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
+      # Keep evidence under RUNNER_TEMP: checkout may replace the workspace
+      # before the repository exists, but the always-upload must still have a
+      # diagnostic showing which setup stage did not complete.
+      - name: Initialize single-guest local-runtime oracle evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          evidence_dir="$RUNNER_TEMP/c2c-oracle-evidence"
+          mkdir -p "$evidence_dir"
+          {
+            printf '[ci] evidence initialized before checkout and setup\n'
+            printf '[ci] repository checkout starting\n'
+          } > "$evidence_dir/single-guest-local-runtime-qemu.log"
+
       - uses: actions/checkout@v4
+
+      - name: Record single-guest local-runtime checkout completion
+        shell: bash
+        run: |
+          {
+            printf '[ci] repository checkout completed\n'
+            printf '[setup] Rust toolchain installation starting\n'
+          } >> "$RUNNER_TEMP/c2c-oracle-evidence/single-guest-local-runtime-qemu.log"
 
       - name: Install Rust toolchain for single-guest local-runtime oracle
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: nightly-2026-05-01
           components: rust-src
+
+      - name: Record single-guest local-runtime Rust setup completion
+        shell: bash
+        run: |
+          {
+            printf '[setup] Rust toolchain installation completed\n'
+            printf '[setup] Rust dependency cache setup starting\n'
+          } >> "$RUNNER_TEMP/c2c-oracle-evidence/single-guest-local-runtime-qemu.log"
 
       - name: Cache dependencies for single-guest local-runtime oracle
         uses: Swatinem/rust-cache@v2
@@ -337,31 +367,48 @@ jobs:
           key: c2c-broker-oracle-single-guest-local-runtime
 
       - name: Install single-guest local-runtime QEMU dependencies
-        timeout-minutes: 20
+        # Run 33147796277 spent 19m58s fetching 167 MB at 140 kB/s and reached
+        # dpkg only as the old 20-minute limit expired. Skip QEMU's optional
+        # GUI/media recommendations and leave bounded time for unpack/configure.
+        timeout-minutes: 25
+        shell: bash
         run: |
-          sudo apt-get update -q
-          sudo apt-get install -y -q \
-            qemu-system-misc gcc-riscv64-unknown-elf libclang-dev
+          set -euo pipefail
+          log="$RUNNER_TEMP/c2c-oracle-evidence/single-guest-local-runtime-qemu.log"
+          printf '[setup] Rust dependency cache setup completed\n' | tee -a "$log"
+          printf '[setup] apt dependency installation starting\n' | tee -a "$log"
+          sudo apt-get update -q 2>&1 | tee -a "$log"
+          sudo apt-get install -y -q --no-install-recommends \
+            qemu-system-misc gcc-riscv64-unknown-elf libclang-dev 2>&1 | tee -a "$log"
+          printf '[setup] apt dependency installation completed\n' | tee -a "$log"
 
       - name: Install Python cryptography for single-guest local-runtime signing
         timeout-minutes: 5
-        run: python3 -m pip install --user --quiet cryptography
+        shell: bash
+        run: |
+          set -euo pipefail
+          log="$RUNNER_TEMP/c2c-oracle-evidence/single-guest-local-runtime-qemu.log"
+          printf '[setup] Python cryptography installation starting\n' | tee -a "$log"
+          python3 -m pip install --user --quiet cryptography 2>&1 | tee -a "$log"
+          printf '[setup] Python cryptography installation completed\n' | tee -a "$log"
 
       - name: Run single-guest local-runtime C2C broker QEMU oracle
         timeout-minutes: 40
         shell: bash
         run: |
-          set -o pipefail
-          mkdir -p .c2c-oracle-evidence
-          ./scripts/run-c2c-broker-oracle-qemu.sh 2>&1 \
-            | tee .c2c-oracle-evidence/single-guest-local-runtime-qemu.log
+          set -euo pipefail
+          log="$RUNNER_TEMP/c2c-oracle-evidence/single-guest-local-runtime-qemu.log"
+          {
+            printf '[oracle] repository runner starting\n'
+            ./scripts/run-c2c-broker-oracle-qemu.sh
+          } 2>&1 | tee -a "$log"
 
       - name: Upload single-guest local-runtime QEMU oracle log
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: c2c-broker-oracle-single-guest-local-runtime-qemu-log-${{ github.run_attempt }}
-          path: .c2c-oracle-evidence/single-guest-local-runtime-qemu.log
+          path: ${{ runner.temp }}/c2c-oracle-evidence/single-guest-local-runtime-qemu.log
           if-no-files-found: error
           retention-days: 14
 

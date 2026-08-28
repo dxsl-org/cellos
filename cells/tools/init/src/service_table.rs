@@ -51,13 +51,10 @@ impl Service {
 
 #[cfg(feature = "hypervisor-min")]
 pub(crate) const SERVICE_COUNT: usize = 1;
-#[cfg(all(not(feature = "hypervisor-min"), feature = "development-silo-provider"))]
-pub(crate) const SERVICE_COUNT: usize = 10;
-#[cfg(all(
-    not(feature = "hypervisor-min"),
-    not(feature = "development-silo-provider")
-))]
-pub(crate) const SERVICE_COUNT: usize = 9;
+#[cfg(not(feature = "hypervisor-min"))]
+pub(crate) const SERVICE_COUNT: usize = 8
+    + cfg!(feature = "development-silo-provider") as usize
+    + cfg!(feature = "c2c-broker") as usize;
 
 pub(crate) fn configured() -> [Service; SERVICE_COUNT] {
     #[cfg(feature = "hypervisor-min")]
@@ -105,6 +102,7 @@ pub(crate) fn configured() -> [Service; SERVICE_COUNT] {
             Registration::Init(service::KMS),
             RestartPolicy::Permanent,
         ),
+        #[cfg(feature = "c2c-broker")]
         Service::new(
             "/bin/net-broker",
             Registration::Init(service::NET_BROKER),
