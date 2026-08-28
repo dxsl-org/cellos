@@ -3,28 +3,28 @@
 <a href=#3 id=3 data-nosnippet>3</a>///
 <a href=#4 id=4 data-nosnippet>4</a>/// Production returns zero bytes when no hardware RNG is available. The
 <a href=#5 id=5 data-nosnippet>5</a>/// deterministic source below exists only to exercise the kernel's output-copy
-<a href=#6 id=6 data-nosnippet>6</a>/// transaction in an isolated `test-hooks` image.
+<a href=#6 id=6 data-nosnippet>6</a>/// transaction in the isolated RV64 `getrandom-sas-test` image.
 <a href=#7 id=7 data-nosnippet>7</a></span><span class="kw">pub fn </span>init_driver() {}
 <a href=#8 id=8 data-nosnippet>8</a>
-<a href=#9 id=9 data-nosnippet>9</a><span class="attr">#[cfg(feature = <span class="string">"test-hooks"</span>)]
+<a href=#9 id=9 data-nosnippet>9</a><span class="attr">#[cfg(all(feature = <span class="string">"getrandom-sas-test"</span>, target_arch = <span class="string">"riscv64"</span>))]
 <a href=#10 id=10 data-nosnippet>10</a></span><span class="kw">static </span>TEST_ENTROPY_ENABLED: core::sync::atomic::AtomicBool =
 <a href=#11 id=11 data-nosnippet>11</a>    core::sync::atomic::AtomicBool::new(<span class="bool-val">false</span>);
 <a href=#12 id=12 data-nosnippet>12</a>
-<a href=#13 id=13 data-nosnippet>13</a><span class="attr">#[cfg(feature = <span class="string">"test-hooks"</span>)]
+<a href=#13 id=13 data-nosnippet>13</a><span class="attr">#[cfg(all(feature = <span class="string">"getrandom-sas-test"</span>, target_arch = <span class="string">"riscv64"</span>))]
 <a href=#14 id=14 data-nosnippet>14</a></span><span class="kw">static </span>TEST_ENTROPY_REQUESTS: core::sync::atomic::AtomicUsize =
 <a href=#15 id=15 data-nosnippet>15</a>    core::sync::atomic::AtomicUsize::new(<span class="number">0</span>);
 <a href=#16 id=16 data-nosnippet>16</a>
-<a href=#17 id=17 data-nosnippet>17</a><span class="attr">#[cfg(feature = <span class="string">"test-hooks"</span>)]
+<a href=#17 id=17 data-nosnippet>17</a><span class="attr">#[cfg(all(feature = <span class="string">"getrandom-sas-test"</span>, target_arch = <span class="string">"riscv64"</span>))]
 <a href=#18 id=18 data-nosnippet>18</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">struct </span>TestEntropyGuard;
 <a href=#19 id=19 data-nosnippet>19</a>
-<a href=#20 id=20 data-nosnippet>20</a><span class="attr">#[cfg(feature = <span class="string">"test-hooks"</span>)]
+<a href=#20 id=20 data-nosnippet>20</a><span class="attr">#[cfg(all(feature = <span class="string">"getrandom-sas-test"</span>, target_arch = <span class="string">"riscv64"</span>))]
 <a href=#21 id=21 data-nosnippet>21</a></span><span class="kw">impl </span>Drop <span class="kw">for </span>TestEntropyGuard {
 <a href=#22 id=22 data-nosnippet>22</a>    <span class="kw">fn </span>drop(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
 <a href=#23 id=23 data-nosnippet>23</a>        TEST_ENTROPY_ENABLED.store(<span class="bool-val">false</span>, core::sync::atomic::Ordering::Release);
 <a href=#24 id=24 data-nosnippet>24</a>    }
 <a href=#25 id=25 data-nosnippet>25</a>}
 <a href=#26 id=26 data-nosnippet>26</a>
-<a href=#27 id=27 data-nosnippet>27</a><span class="attr">#[cfg(feature = <span class="string">"test-hooks"</span>)]
+<a href=#27 id=27 data-nosnippet>27</a><span class="attr">#[cfg(all(feature = <span class="string">"getrandom-sas-test"</span>, target_arch = <span class="string">"riscv64"</span>))]
 <a href=#28 id=28 data-nosnippet>28</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>enable_test_entropy() -&gt; TestEntropyGuard {
 <a href=#29 id=29 data-nosnippet>29</a>    TEST_ENTROPY_ENABLED.store(<span class="bool-val">true</span>, core::sync::atomic::Ordering::Release);
 <a href=#30 id=30 data-nosnippet>30</a>    TEST_ENTROPY_REQUESTS.store(<span class="number">0</span>, core::sync::atomic::Ordering::Release);
@@ -32,15 +32,15 @@
 <a href=#32 id=32 data-nosnippet>32</a>}
 <a href=#33 id=33 data-nosnippet>33</a>
 <a href=#34 id=34 data-nosnippet>34</a><span class="doccomment">/// Return test-only entropy requests since the latest guard activation.
-<a href=#35 id=35 data-nosnippet>35</a></span><span class="attr">#[cfg(feature = <span class="string">"test-hooks"</span>)]
+<a href=#35 id=35 data-nosnippet>35</a></span><span class="attr">#[cfg(all(feature = <span class="string">"getrandom-sas-test"</span>, target_arch = <span class="string">"riscv64"</span>))]
 <a href=#36 id=36 data-nosnippet>36</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>test_entropy_requests() -&gt; usize {
 <a href=#37 id=37 data-nosnippet>37</a>    TEST_ENTROPY_REQUESTS.load(core::sync::atomic::Ordering::Acquire)
 <a href=#38 id=38 data-nosnippet>38</a>}
 <a href=#39 id=39 data-nosnippet>39</a>
 <a href=#40 id=40 data-nosnippet>40</a><span class="kw">pub fn </span>get_random(buf: <span class="kw-2">&amp;mut </span>[u8]) -&gt; usize {
-<a href=#41 id=41 data-nosnippet>41</a>    <span class="attr">#[cfg(feature = <span class="string">"test-hooks"</span>)]
+<a href=#41 id=41 data-nosnippet>41</a>    <span class="attr">#[cfg(all(feature = <span class="string">"getrandom-sas-test"</span>, target_arch = <span class="string">"riscv64"</span>))]
 <a href=#42 id=42 data-nosnippet>42</a>    </span>TEST_ENTROPY_REQUESTS.fetch_add(<span class="number">1</span>, core::sync::atomic::Ordering::AcqRel);
-<a href=#43 id=43 data-nosnippet>43</a>    <span class="attr">#[cfg(feature = <span class="string">"test-hooks"</span>)]
+<a href=#43 id=43 data-nosnippet>43</a>    <span class="attr">#[cfg(all(feature = <span class="string">"getrandom-sas-test"</span>, target_arch = <span class="string">"riscv64"</span>))]
 <a href=#44 id=44 data-nosnippet>44</a>    </span><span class="kw">if </span>TEST_ENTROPY_ENABLED.load(core::sync::atomic::Ordering::Acquire) {
 <a href=#45 id=45 data-nosnippet>45</a>        <span class="kw">for </span>(index, byte) <span class="kw">in </span>buf.iter_mut().enumerate() {
 <a href=#46 id=46 data-nosnippet>46</a>            <span class="kw-2">*</span>byte = <span class="number">0xA5 </span>^ index <span class="kw">as </span>u8;

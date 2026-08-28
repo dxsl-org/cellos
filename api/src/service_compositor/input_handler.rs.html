@@ -15,7 +15,7 @@
 <a href=#15 id=15 data-nosnippet>15</a><span class="kw">use </span>ostd::syscall::{sys_lookup_service, sys_send, sys_try_send};
 <a href=#16 id=16 data-nosnippet>16</a>
 <a href=#17 id=17 data-nosnippet>17</a><span class="kw">use </span><span class="kw">crate</span>::cursor_state;
-<a href=#18 id=18 data-nosnippet>18</a><span class="kw">use </span><span class="kw">crate</span>::pointer_router::PointerRouter;
+<a href=#18 id=18 data-nosnippet>18</a><span class="kw">use </span><span class="kw">crate</span>::pointer_router::{PointerRouter, RouteContext};
 <a href=#19 id=19 data-nosnippet>19</a><span class="kw">use </span><span class="kw">crate</span>::surface_table::SurfaceTable;
 <a href=#20 id=20 data-nosnippet>20</a><span class="kw">use </span><span class="kw">crate</span>::z_order::ZOrder;
 <a href=#21 id=21 data-nosnippet>21</a>
@@ -160,24 +160,21 @@
 <a href=#160 id=160 data-nosnippet>160</a>        event,
 <a href=#161 id=161 data-nosnippet>161</a>        state.mouse_x,
 <a href=#162 id=162 data-nosnippet>162</a>        state.mouse_y,
-<a href=#163 id=163 data-nosnippet>163</a>        maximum,
-<a href=#164 id=164 data-nosnippet>164</a>        table,
-<a href=#165 id=165 data-nosnippet>165</a>        z_order,
-<a href=#166 id=166 data-nosnippet>166</a>        |decoration| {
-<a href=#167 id=167 data-nosnippet>167</a>            queue_dirty(
-<a href=#168 id=168 data-nosnippet>168</a>                pending_dirty,
-<a href=#169 id=169 data-nosnippet>169</a>                old_decoration.map_or(decoration, |old| old.union(<span class="kw-2">&amp;</span>decoration)),
-<a href=#170 id=170 data-nosnippet>170</a>            );
-<a href=#171 id=171 data-nosnippet>171</a>            set_input_focus(input_tid, compositor_tid);
-<a href=#172 id=172 data-nosnippet>172</a>        },
-<a href=#173 id=173 data-nosnippet>173</a>    );
-<a href=#174 id=174 data-nosnippet>174</a>}
-<a href=#175 id=175 data-nosnippet>175</a>
-<a href=#176 id=176 data-nosnippet>176</a><span class="doccomment">/// Re-send the key-event frame to the focused surface owner.
-<a href=#177 id=177 data-nosnippet>177</a></span><span class="kw">fn </span>forward_key(buf: <span class="kw-2">&amp;</span>[u8; <span class="number">512</span>], state: <span class="kw-2">&amp;</span>InputState) {
-<a href=#178 id=178 data-nosnippet>178</a>    <span class="kw">let </span>owner = state.pointer.focused_owner();
-<a href=#179 id=179 data-nosnippet>179</a>    <span class="kw">if </span>owner != <span class="number">0 </span>{
-<a href=#180 id=180 data-nosnippet>180</a>        <span class="kw">let _ </span>= sys_send(owner, <span class="kw-2">&amp;</span>buf[..INPUT_FRAME_LEN]);
-<a href=#181 id=181 data-nosnippet>181</a>    }
-<a href=#182 id=182 data-nosnippet>182</a>}
+<a href=#163 id=163 data-nosnippet>163</a>        RouteContext::new(maximum, table, z_order, |decoration| {
+<a href=#164 id=164 data-nosnippet>164</a>            queue_dirty(
+<a href=#165 id=165 data-nosnippet>165</a>                pending_dirty,
+<a href=#166 id=166 data-nosnippet>166</a>                old_decoration.map_or(decoration, |old| old.union(<span class="kw-2">&amp;</span>decoration)),
+<a href=#167 id=167 data-nosnippet>167</a>            );
+<a href=#168 id=168 data-nosnippet>168</a>            set_input_focus(input_tid, compositor_tid);
+<a href=#169 id=169 data-nosnippet>169</a>        }),
+<a href=#170 id=170 data-nosnippet>170</a>    );
+<a href=#171 id=171 data-nosnippet>171</a>}
+<a href=#172 id=172 data-nosnippet>172</a>
+<a href=#173 id=173 data-nosnippet>173</a><span class="doccomment">/// Re-send the key-event frame to the focused surface owner.
+<a href=#174 id=174 data-nosnippet>174</a></span><span class="kw">fn </span>forward_key(buf: <span class="kw-2">&amp;</span>[u8; <span class="number">512</span>], state: <span class="kw-2">&amp;</span>InputState) {
+<a href=#175 id=175 data-nosnippet>175</a>    <span class="kw">let </span>owner = state.pointer.focused_owner();
+<a href=#176 id=176 data-nosnippet>176</a>    <span class="kw">if </span>owner != <span class="number">0 </span>{
+<a href=#177 id=177 data-nosnippet>177</a>        <span class="kw">let _ </span>= sys_send(owner, <span class="kw-2">&amp;</span>buf[..INPUT_FRAME_LEN]);
+<a href=#178 id=178 data-nosnippet>178</a>    }
+<a href=#179 id=179 data-nosnippet>179</a>}
 </code></pre></div></section></main></body></html>

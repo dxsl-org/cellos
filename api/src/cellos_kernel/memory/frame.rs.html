@@ -144,7 +144,7 @@
 <a href=#144 id=144 data-nosnippet>144</a>    <span class="doccomment">/// Claim one known-free frame for an in-kernel reuse race.
 <a href=#145 id=145 data-nosnippet>145</a>    ///
 <a href=#146 id=146 data-nosnippet>146</a>    /// Returns `false` when `frame` is outside this allocator or no longer free.
-<a href=#147 id=147 data-nosnippet>147</a>    </span><span class="attr">#[cfg(feature = <span class="string">"test-hooks"</span>)]
+<a href=#147 id=147 data-nosnippet>147</a>    </span><span class="attr">#[cfg(all(feature = <span class="string">"getrandom-sas-test"</span>, target_arch = <span class="string">"riscv64"</span>))]
 <a href=#148 id=148 data-nosnippet>148</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>claim_exact_frame_for_test(<span class="kw-2">&amp;mut </span><span class="self">self</span>, frame: PhysAddr) -&gt; bool {
 <a href=#149 id=149 data-nosnippet>149</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(index) = <span class="self">self</span>.addr_to_frame_index(frame) <span class="kw">else </span>{
 <a href=#150 id=150 data-nosnippet>150</a>            <span class="kw">return </span><span class="bool-val">false</span>;

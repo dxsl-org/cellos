@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["move_pointer","route","route_button"]};
+window.SIDEBAR_ITEMS = {"fn":["move_pointer","release_button","route","route_button"]};

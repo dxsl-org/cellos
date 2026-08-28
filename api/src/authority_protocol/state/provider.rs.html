@@ -14,5 +14,24 @@
 <a href=#14 id=14 data-nosnippet>14</a>            &amp;&amp; <span class="self">self</span>.boot_epoch == receipt.boot_epoch
 <a href=#15 id=15 data-nosnippet>15</a>            &amp;&amp; <span class="self">self</span>.validation_request_id == receipt.validation_request_id
 <a href=#16 id=16 data-nosnippet>16</a>    }
-<a href=#17 id=17 data-nosnippet>17</a>}
+<a href=#17 id=17 data-nosnippet>17</a>
+<a href=#18 id=18 data-nosnippet>18</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">const fn </span>provider_receipt(
+<a href=#19 id=19 data-nosnippet>19</a>        <span class="self">self</span>,
+<a href=#20 id=20 data-nosnippet>20</a>        provider_signature: [u8; <span class="kw">crate</span>::SIGNATURE_LEN],
+<a href=#21 id=21 data-nosnippet>21</a>    ) -&gt; ProviderCasReceipt {
+<a href=#22 id=22 data-nosnippet>22</a>        ProviderCasReceipt {
+<a href=#23 id=23 data-nosnippet>23</a>            device_id: <span class="self">self</span>.device_id,
+<a href=#24 id=24 data-nosnippet>24</a>            authority_id: <span class="self">self</span>.authority_id,
+<a href=#25 id=25 data-nosnippet>25</a>            authority_epoch: <span class="self">self</span>.authority_epoch,
+<a href=#26 id=26 data-nosnippet>26</a>            generation: <span class="self">self</span>.generation,
+<a href=#27 id=27 data-nosnippet>27</a>            policy_epoch: <span class="self">self</span>.policy_epoch,
+<a href=#28 id=28 data-nosnippet>28</a>            pending_slot: <span class="self">self</span>.pending_slot,
+<a href=#29 id=29 data-nosnippet>29</a>            pending_spki_digest: <span class="self">self</span>.pending_spki_digest,
+<a href=#30 id=30 data-nosnippet>30</a>            profile_digest: <span class="self">self</span>.profile_digest,
+<a href=#31 id=31 data-nosnippet>31</a>            boot_epoch: <span class="self">self</span>.boot_epoch,
+<a href=#32 id=32 data-nosnippet>32</a>            validation_request_id: <span class="self">self</span>.validation_request_id,
+<a href=#33 id=33 data-nosnippet>33</a>            provider_signature,
+<a href=#34 id=34 data-nosnippet>34</a>        }
+<a href=#35 id=35 data-nosnippet>35</a>    }
+<a href=#36 id=36 data-nosnippet>36</a>}
 </code></pre></div></section></main></body></html>

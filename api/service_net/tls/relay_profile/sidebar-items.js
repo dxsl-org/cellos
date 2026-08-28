@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["COMPONENT_MAX","PATH_MAX","SCHEMA"],"fn":["push_entry","section_keys","validate_entry","validate_mount_path","validate_relay_hostname"]};
