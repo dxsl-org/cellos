@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["ABSENT","NOT_PROBED","SECTOR_SIZE"],"fn":["blk_read","blk_write","driver_tid"],"static":["DRIVER_TID"]};
+window.SIDEBAR_ITEMS = {"constant":["ABSENT","NOT_PROBED","SECTOR_SIZE"],"fn":["blk_flush","blk_read","blk_write","driver_tid"],"static":["DRIVER_TID"]};

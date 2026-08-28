@@ -270,17 +270,48 @@
 <a href=#270 id=270 data-nosnippet>270</a>    </span>vmm::vcpu_regs(vm_id, vcpu_id, <span class="kw-2">&amp;mut </span>rb, <span class="bool-val">true</span>); <span class="comment">// write back
 <a href=#271 id=271 data-nosnippet>271</a>
 <a href=#272 id=272 data-nosnippet>272</a>    </span>println(<span class="string">"[hv] vCPU ready — entering run loop"</span>);
-<a href=#273 id=273 data-nosnippet>273</a>
-<a href=#274 id=274 data-nosnippet>274</a>    <span class="comment">// ── 7. Run ───────────────────────────────────────────────────────────────
-<a href=#275 id=275 data-nosnippet>275</a>    </span><span class="kw">let </span>disk_file = ostd::fs::File::open(<span class="string">"/data/guest_disk.img"</span>).ok();
-<a href=#276 id=276 data-nosnippet>276</a>    <span class="kw">if </span>disk_file.is_some() {
-<a href=#277 id=277 data-nosnippet>277</a>        println(<span class="string">"[hv] persistent disk: /data/guest_disk.img"</span>);
-<a href=#278 id=278 data-nosnippet>278</a>    } <span class="kw">else </span>{
-<a href=#279 id=279 data-nosnippet>279</a>        println(<span class="string">"[hv] volatile disk fallback"</span>);
-<a href=#280 id=280 data-nosnippet>280</a>    }
-<a href=#281 id=281 data-nosnippet>281</a>    run_loop::run(vm_id, vcpu_id, disk_file);
-<a href=#282 id=282 data-nosnippet>282</a>
-<a href=#283 id=283 data-nosnippet>283</a>    println(<span class="string">"[hv] guest exited"</span>);
-<a href=#284 id=284 data-nosnippet>284</a>    quiesce()
-<a href=#285 id=285 data-nosnippet>285</a>}
+<a href=#273 id=273 data-nosnippet>273</a>    <span class="comment">// ── 7. Run ───────────────────────────────────────────────────────────────
+<a href=#274 id=274 data-nosnippet>274</a>    </span><span class="kw">let </span>vfs_tid = ostd::syscall::sys_lookup_service(api::syscall::service::VFS).unwrap_or(<span class="number">0</span>);
+<a href=#275 id=275 data-nosnippet>275</a>    <span class="kw">let </span><span class="kw-2">mut </span>persistent_disk = <span class="prelude-val">None</span>;
+<a href=#276 id=276 data-nosnippet>276</a>    <span class="kw">if </span>vfs_tid != <span class="number">0 </span>{
+<a href=#277 id=277 data-nosnippet>277</a>        <span class="kw">let </span><span class="kw-2">mut </span>resp_buf = [<span class="number">0u8</span>; api::ipc::IPC_BUF_SIZE];
+<a href=#278 id=278 data-nosnippet>278</a>        <span class="kw">let </span><span class="kw-2">mut </span>send_buf = [<span class="number">0u8</span>; api::ipc::IPC_BUF_SIZE];
+<a href=#279 id=279 data-nosnippet>279</a>        <span class="kw">let </span>root_req = api::ipc::VfsRequest::OpenRootDir { path: <span class="string">"/mnt" </span>};
+<a href=#280 id=280 data-nosnippet>280</a>        <span class="kw">if let </span><span class="prelude-val">Ok</span>(api::ipc::VfsResponse::DirHandle(mnt_dir)) =
+<a href=#281 id=281 data-nosnippet>281</a>            ostd::ipc::service_call_typed(vfs_tid, <span class="kw-2">&amp;</span>root_req, <span class="kw-2">&amp;mut </span>send_buf, <span class="kw-2">&amp;mut </span>resp_buf)
+<a href=#282 id=282 data-nosnippet>282</a>        {
+<a href=#283 id=283 data-nosnippet>283</a>            <span class="kw">let </span>open_sd_req = api::ipc::VfsRequest::OpenDir {
+<a href=#284 id=284 data-nosnippet>284</a>                dir: mnt_dir,
+<a href=#285 id=285 data-nosnippet>285</a>                name: <span class="string">"sd"</span>,
+<a href=#286 id=286 data-nosnippet>286</a>            };
+<a href=#287 id=287 data-nosnippet>287</a>            <span class="kw">if let </span><span class="prelude-val">Ok</span>(api::ipc::VfsResponse::DirHandle(sd_dir)) =
+<a href=#288 id=288 data-nosnippet>288</a>                ostd::ipc::service_call_typed(vfs_tid, <span class="kw-2">&amp;</span>open_sd_req, <span class="kw-2">&amp;mut </span>send_buf, <span class="kw-2">&amp;mut </span>resp_buf)
+<a href=#289 id=289 data-nosnippet>289</a>            {
+<a href=#290 id=290 data-nosnippet>290</a>                <span class="kw">let </span>open_req = api::ipc::VfsRequest::OpenFileAt {
+<a href=#291 id=291 data-nosnippet>291</a>                    dir: sd_dir,
+<a href=#292 id=292 data-nosnippet>292</a>                    name: <span class="string">"guest_disk.img"</span>,
+<a href=#293 id=293 data-nosnippet>293</a>                };
+<a href=#294 id=294 data-nosnippet>294</a>                <span class="kw">if let </span><span class="prelude-val">Ok</span>(api::ipc::VfsResponse::FileHandle(file_handle)) =
+<a href=#295 id=295 data-nosnippet>295</a>                    ostd::ipc::service_call_typed(vfs_tid, <span class="kw-2">&amp;</span>open_req, <span class="kw-2">&amp;mut </span>send_buf, <span class="kw-2">&amp;mut </span>resp_buf)
+<a href=#296 id=296 data-nosnippet>296</a>                {
+<a href=#297 id=297 data-nosnippet>297</a>                    <span class="kw">let </span>stat_req = api::ipc::VfsRequest::Stat(<span class="string">"/mnt/sd/guest_disk.img"</span>);
+<a href=#298 id=298 data-nosnippet>298</a>                    <span class="kw">if let </span><span class="prelude-val">Ok</span>(api::ipc::VfsResponse::Stat { size, is_dir: <span class="bool-val">false </span>}) =
+<a href=#299 id=299 data-nosnippet>299</a>                        ostd::ipc::service_call_typed(vfs_tid, <span class="kw-2">&amp;</span>stat_req, <span class="kw-2">&amp;mut </span>send_buf, <span class="kw-2">&amp;mut </span>resp_buf)
+<a href=#300 id=300 data-nosnippet>300</a>                    {
+<a href=#301 id=301 data-nosnippet>301</a>                        persistent_disk = <span class="prelude-val">Some</span>((vfs_tid, file_handle, size));
+<a href=#302 id=302 data-nosnippet>302</a>                    }
+<a href=#303 id=303 data-nosnippet>303</a>                }
+<a href=#304 id=304 data-nosnippet>304</a>            }
+<a href=#305 id=305 data-nosnippet>305</a>        }
+<a href=#306 id=306 data-nosnippet>306</a>    }
+<a href=#307 id=307 data-nosnippet>307</a>    <span class="kw">if </span>persistent_disk.is_some() {
+<a href=#308 id=308 data-nosnippet>308</a>        println(<span class="string">"[hv] persistent disk: /mnt/sd/guest_disk.img"</span>);
+<a href=#309 id=309 data-nosnippet>309</a>    } <span class="kw">else </span>{
+<a href=#310 id=310 data-nosnippet>310</a>        println(<span class="string">"[hv] volatile disk fallback"</span>);
+<a href=#311 id=311 data-nosnippet>311</a>    }
+<a href=#312 id=312 data-nosnippet>312</a>    run_loop::run(vm_id, vcpu_id, persistent_disk);
+<a href=#313 id=313 data-nosnippet>313</a>
+<a href=#314 id=314 data-nosnippet>314</a>    println(<span class="string">"[hv] guest exited"</span>);
+<a href=#315 id=315 data-nosnippet>315</a>    quiesce()
+<a href=#316 id=316 data-nosnippet>316</a>}
 </code></pre></div></section></main></body></html>

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["MAX_INLINE_PAYLOAD"],"fn":["dir_err","handle","list_at","open_dir","open_root","read_at","resolve","stat_path"]};
+window.SIDEBAR_ITEMS = {"constant":["MAX_INLINE_PAYLOAD"],"fn":["dir_err","handle","list_at","open_dir","open_root","read_at","read_handle_grant","resolve","stat_path","sync_handle","write_handle_grant"]};
