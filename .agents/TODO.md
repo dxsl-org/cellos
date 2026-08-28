@@ -9,10 +9,10 @@ physical, secure-root, cloud, or production evidence.
 
 | Lane | Execution class | Next action / reopening event |
 |---|---|---|
-| RPi3 HDMI software boundary | `governance-gated` | Obtain named review for BCM mailbox unsafe DMA-page copies, or replace them with a safe design |
+| RPi3 HDMI software and exact-device boundary | `scope-gated` | Completed/regression-only on RPi3-B; reopen only for a regression or separately governed production qualification |
 | Tier 3 hostile QEMU evidence | `scope-gated` | Add VMM/VirtIO transport for bounds, descriptors, and backend errors, plus independent preemption and supervisor-restart outcomes |
 | ARM64 persistent storage | `scope-gated` | Add supported Phase 06 scenarios; the fixed 8 MiB `build/tier3-arm64-persistent.img` policy is approved |
-| Desktop/ViUI/SDK | `governance-gated` | Restore F1 signing policy for the Hypha gateway and reviewed BCM unsafe use, then run QEMU input/scanout |
+| Desktop/ViUI/SDK | `scope-gated` | F1 signing governance is restored; resume the owning QEMU input/scanout slice |
 | Local Cell-to-Cell | `scope-gated` | Implement the approved ephemeral K1 injection for the RV64 `app-bench` oracle, then record IPC, queue/cache, and saturation baselines |
 | Kernel security/PAL | `governance-gated` | Obtain named approvals and implementation checkpoints |
 | Authenticated evidence | `scope-gated` | Run and offline-verify the immutable `.github/workflows/ci.yml` bundle; only approved software/QEMU classes are eligible |
@@ -20,7 +20,7 @@ physical, secure-root, cloud, or production evidence.
 | G3 accelerator | `external-gated` | Obtain RK3588, accepted RKNN package/license, then X390 evidence |
 | Protected relay / production root | `external-gated` | Obtain named hardware/cloud assets; ADR-0006 requires a superseding GO ADR |
 1. [in-progress] RPi3:
-    - Test board thật SD Storage, HDMI, I2C/SPI [in-progress]
+    - SD Storage và HDMI trên RPi3-B [completed]; I2C/SPI [in-progress]
     - Phase 05: Gỡ nghẽn USB Policy v3 & Level IRQ 9
     - cần sensor như SHT3x hoặc MPU6050
 2. [in-progress] RISC-V/x86 Board: Bringup thực tế trên VF2, Pioneer, MiniPC

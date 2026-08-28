@@ -173,8 +173,8 @@ $syscallRustSource = Get-Content -Raw -LiteralPath $syscallSource
 if ($syscallRustSource -match '\[rpi3\] Log syscall') {
     throw 'RPi3 console must not synchronously warn for every user log syscall'
 }
-if ($syscallRustSource -notmatch '(?s)Syscall::RecvTimeout.*?let drained = .*?begin_receive_context\(mask\).*?pending_msgs' -or
-    $syscallRustSource -notmatch '(?s)Syscall::TryRecv.*?let drained = .*?begin_receive_context\(mask\).*?pending_msgs') {
+if ($syscallRustSource -notmatch '(?s)Syscall::RecvTimeout.*?vfs_context_drop = t\.begin_receive_context\(mask\).*?pending_msgs.*?finish_vfs_context_drop' -or
+    $syscallRustSource -notmatch '(?s)Syscall::TryRecv.*?vfs_context_drop = t\.begin_receive_context\(mask\).*?pending_msgs.*?finish_vfs_context_drop') {
     throw 'Receive-context maintenance must reuse the pending-message scheduler lock'
 }
 $tcbRustSource = Get-Content -Raw -LiteralPath $tcbSource

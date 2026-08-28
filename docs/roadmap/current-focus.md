@@ -7,7 +7,7 @@
 [ADR-0007](../decisions/0007-development-first-hardware-constrained-execution.md)
 records the current decision: use QEMU and the two existing Raspberry Pi 3
 boards; procure no additional hardware now. The currently available peripherals
-are a camera and an HDMI cable for external-display testing. Other sensor work
+are a camera and an HDMI cable retained for regression testing. Other sensor work
 is deferred. G1 Robot & Embedded is the active product-stage overlay, not a
 global queue. Capability dependencies
 and evidence ceilings determine executable order.
@@ -23,11 +23,10 @@ or qualified independent external floor.
   Host/QEMU results never qualify a board, secure root, cloud authority,
   physical-hostile posture, or production release.
 - Use both existing RPi3 boards for G1 boot and peripheral integration work.
-  The immediate peripheral lane is external-display testing over HDMI. The HDMI
-  unsafe-copy review gates only that governed boundary: complete its
-  host/build/policy work when authorized, then stop at its framebuffer-range,
-  mailbox-coherency, and visual hardware gates. It does not globally block other
-  RPi3 work.
+  The HDMI external-display lane has completed its software and exact-device
+  development gates and is regression-only. Its `lungmat8` approval and strict
+  software checks do not promote the result to production qualification or
+  globally block other RPi3 work.
 - Defer camera and other sensor integration until the sensor lane is resumed.
   The camera's exact identity and interface must be recorded before it is
   exercised or used as physical-behavior evidence.
@@ -46,18 +45,19 @@ or qualified independent external floor.
 - Project each completed lane immediately into the roadmap and acceptance views
   at its exact evidence ceiling.
 - The managed-surface child is implementation-complete with host/RISC-V
-  evidence. Its QEMU input/scanout run invoked the repository-owned disk
-  generator, which refused to sign the image until the shared F1 policy is
-  restored: the Hypha gateway lacks `#![forbid(unsafe_code)]` and BCM mailbox
-  unsafe code lacks a reviewed allowlist entry. No additional desktop contract
-  is authorized.
+  evidence. Its QEMU input/scanout run initially reached the repository-owned
+  disk generator's fail-closed signing policy. The shared F1 policy is now
+  restored: `hypha-llm-gateway` forbids unsafe code and every BCM unsafe file
+  has an exact reviewed entry. No additional desktop contract is authorized.
 
 ## Work classification
 
-- **Current executable work:** the QEMU, two-RPi3, HDMI external-display,
+- **Current executable work:** the QEMU, two-RPi3 non-HDMI peripheral,
   local Cell-to-Cell, evidence-projection, sensor, and separately reopened
   governed lanes above. Camera and other sensor integration retains this
   classification but is deferred in the current session order.
+- **Completed / regression-only:** the RPi3 HDMI software and exact-device
+  development lane; reopen it only for a regression.
 - **Current-scope technical debt:** confirmed defects and maintainability gaps
   in supported paths, including the raw TLS length contract and interactive
   polling/CI evidence gaps tracked by the
@@ -86,21 +86,26 @@ events are maintained in
 ## Recent State
 
 - RPi3 inventory is partial. RPi3-B is identified as board revision `a22082` /
-  Raspberry Pi 3 Model B with unique serial `000000003d042795`. Its post-reboot
-  exact-device run transferred and checksum-verified `cellos.uimg`, discovered
-  the SD card and four MBR partitions, mounted FAT16/FAT32/littlefs/RedoxFS,
-  completed policy/kernel self-tests and the first BCM scanout flush, reached
-  the shell, and finished the VFS suite at `89 PASS, 0 FAIL`. This is
-  development/hardware-integration evidence. HDMI connected after firmware
-  startup produced black / `No Signal`; a power-off retry with HDMI connected
-  and the display active before firmware startup showed U-Boot, the Cellos boot
-  log, and the `Cellos >` prompt. This confirms the reproduction condition, not
-  a root cause among firmware EDID sampling, display handshake/input behavior,
-  and driver behavior. No named reviewer approval is recorded for the mailbox
-  unsafe DMA-page copies, so this observation is non-qualifying and the HDMI
-  visual hardware gate remains `governance-gated`. RPi3-A remains entirely
-  pending, and the historical shell/BCM-scanout capture remains unassigned
-  because it contains no unique serial.
+  Raspberry Pi 3 Model B with unique serial `000000003d042795`; RPi3-A remains
+  pending. On 2026-08-28, `lungmat8` approved the exact BCM mailbox unsafe
+  island and strict F1/F5 passed. The independent repository TFTP log records
+  the final 9,642,048-byte reviewed-image transfer at
+  2026-08-28 11:14:54. Separately,
+  `.agents/debug/rpi3-b-hdmi-reviewed-20260828.raw` contains an earlier boot at
+  lines 37–210 and a later reviewed-image boot beginning around line 253. The
+  later block records one 4,096-byte mailbox page, successful cache begin/exact
+  completion, framebuffer base `0x3e876000`, size 3,686,400, 1280x720, pitch
+  5,120, driver registration, fb-console damage, and a completed first scanout
+  flush without a cell fault. The UART file has no host timestamp or image hash
+  and does not itself prove the 2026-08-28 11:14:54 TFTP event. The user
+  separately observed the cold-connected display remain lit for more than
+  10 minutes with fb-console and cursor movement. This closes the HDMI visual
+  gate at exact-device development evidence only; it is not production
+  qualification.
+  The earlier late-connect black / `No Signal` observation remains only a
+  reproduction condition, not a root-cause finding. The historical
+  shell/BCM-scanout capture remains unassigned because it contains no unique
+  serial.
 - RPi3 post-HAL-split smoke work has landed in `main`.
 - HAL to kernel Rust ABI signatures are centralized in
   `hal/traits/arch/src/kernel_abi.rs`.
@@ -182,10 +187,10 @@ events are maintained in
 2. Exercise the existing RPi3 boot/peripheral path on the available boards and
    retain development-only logs tied to the exact board. Do not infer a
    production-security or external-floor result.
-3. Prepare the bounded external-display path using the available HDMI cable.
-   Respect the HDMI unsafe-copy governance gate; do not cross the
-   framebuffer-range, mailbox-coherency, or visual hardware gates without the
-   required review and exact-board evidence.
+3. Preserve the completed bounded HDMI path: cold-connect and power the display
+   before firmware startup, retain separate exact-board UART and TFTP evidence
+   records for future regressions, and do not promote the RPi3-B development
+   result to production qualification.
 4. Publish each observed result at its evidence ceiling with the remaining
    lane-local gate. Continue local Cell-to-Cell baselines if the hardware lane
    is waiting on physical access or a named review.

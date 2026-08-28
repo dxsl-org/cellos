@@ -173,6 +173,12 @@ impl BcmFramebuffer {
             diagnostic_number("[bcm-display] framebuffer pitch ", pitch as usize);
             return Err(ViError::PermissionDenied);
         }
+        ostd::io::println("[bcm-display] validated framebuffer registered");
+        diagnostic_number("[bcm-display] framebuffer base ", fb_phys_addr);
+        diagnostic_number("[bcm-display] framebuffer size ", fb_size);
+        diagnostic_number("[bcm-display] framebuffer width ", width as usize);
+        diagnostic_number("[bcm-display] framebuffer height ", height as usize);
+        diagnostic_number("[bcm-display] framebuffer pitch ", pitch as usize);
         Ok(Self {
             width,
             height,

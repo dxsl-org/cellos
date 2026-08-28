@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: "Finish RPi3 HDMI Software Boundary"
-status: blocked
+status: completed
 priority: P1
 effort: "5d"
 dependencies: [1]
@@ -19,7 +19,7 @@ tier: thinking
 
 ## Overview
 
-Execute the already-designed safe mailbox/cache/framebuffer implementation through all host/build/QEMU-compatible checks, then stop at the physical framebuffer/coherency gate.
+Completed the approved mailbox/cache/framebuffer implementation through all host/build/QEMU-compatible checks and handed the separate exact-device evidence boundary to the authoritative HDMI phase.
 ## Key Insights
 
 The approved A+ design has a large software-verifiable boundary and three explicitly physical assumptions.
@@ -53,21 +53,21 @@ Use the exact Lane A–E ownership listed in the authoritative HDMI phase; do no
 3. Harden the BCM cell and persistent mailbox lifecycle.
 4. Complete host tests, AArch64 builds, policy checks, generic AArch64/VirtIO compatibility, and security review.
 5. Complete the shared `kernel/src/task/syscall.rs` integration and hand ownership to Phase 02.
-6. Mark the software ceiling reached; leave framebuffer range, VideoCore coherency, and visual stability `BLOCKED_PHYSICAL` until the connected board is available.
+6. Mark the software ceiling reached and hand framebuffer range, VideoCore coherency, and visual stability evidence to the authoritative HDMI phase without promoting this software phase beyond host evidence.
 
 ## Todo List
 
-- [ ] Complete ABI, cache/pin, framebuffer authority, and BCM driver lanes.
-- [ ] Pass host, target-build, policy, compatibility, and review gates.
-- [ ] Hand shared syscall integration ownership to Phase 02 after landing.
-- [ ] Record physical framebuffer/coherency/visual checks as blocked.
+- [x] Complete ABI, cache/pin, framebuffer authority, and BCM driver lanes.
+- [x] Pass host, target-build, policy, compatibility, and review gates.
+- [x] Hand shared syscall integration ownership to Phase 02 after landing.
+- [x] Hand the unchanged physical framebuffer/coherency/visual checks to the authoritative HDMI phase.
 
 ## Success Criteria
 
-- [ ] Every non-physical criterion in the authoritative HDMI plan passes.
-- [ ] Timeout, stale token, foreign owner, malformed geometry, and partial mapping fail closed.
-- [ ] Generic AArch64 continues to select VirtIO and its existing behavior remains unchanged.
-- [ ] No claim is made about returned framebuffer range, mailbox coherency, or visible HDMI output.
+- [x] Every non-physical criterion in the authoritative HDMI plan passes.
+- [x] Timeout, stale token, foreign owner, malformed geometry, and partial mapping fail closed.
+- [x] Generic AArch64 continues to select VirtIO and its existing behavior remains unchanged.
+- [x] This software phase makes no physical claim; exact-board evidence remains owned by the authoritative HDMI phase.
 
 ## Security Considerations
 
@@ -79,8 +79,8 @@ If software work discovers that physical values are required to choose the ABI o
 
 ## Next Steps
 
-Execute the existing HDMI phase through its non-physical criteria, hand off `syscall.rs`, then retain the physical deployment step unchanged.
+Phase complete at its host/software evidence ceiling. Reopen only for a software regression; exact-device evidence remains owned by the authoritative HDMI phase, and production qualification remains unclaimed.
 
 ## Deviation Log
 
-- Full enum/allowlist inspection found that the implemented mailbox transport requires raw DMA-page copies in `cells/drivers/bcm-display/src/mailbox.rs`, but the F1 unsafe allowlist lacks a file entry. Policy requires new entries to name an actual reviewer; adding `cellos-maintainers` would falsely claim the historical group review. Phase is blocked pending named approval or an equivalent safe redesign.
+- Full enum/allowlist inspection found two bounded DMA-page copies in `cells/drivers/bcm-display/src/mailbox.rs`. `lungmat8` approved that exact unsafe island on 2026-08-28; strict F1/F5 then passed with unsafe confined to exact reviewed files. Host BCM tests, AArch64 checks, RPi3 packaging, the reviewed image build, and specialist test/review all passed before physical handoff.

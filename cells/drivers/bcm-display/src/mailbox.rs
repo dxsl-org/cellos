@@ -37,6 +37,7 @@ impl BcmMailbox {
         let size = hal_soc_bcm27xx::BCM2837.mmio.mailbox_grant_size;
         let region = ostd::mmio::request_region(base, size)?;
         let dma = DmaBuf::alloc(1).ok_or(ViError::OutOfMemory)?;
+        diagnostic_number("[bcm-display] mailbox DMA page bytes ", dma.size());
         Ok(Self {
             region,
             dma,
@@ -81,6 +82,7 @@ impl BcmMailbox {
             ostd::io::println("[bcm-display] mailbox diagnostic: cache-sync begin denied");
             return Err(ViError::IO);
         };
+        ostd::io::println("[bcm-display] mailbox cache-sync begin accepted");
         if self
             .region
             .write::<u32>(MBOX_WRITE, (bus_addr & !0xF) | PROPERTY_CHANNEL)
@@ -104,6 +106,7 @@ impl BcmMailbox {
             );
             return Err(self.poison());
         }
+        ostd::io::println("[bcm-display] mailbox cache-sync exact completion accepted");
         self.state = TransportState::Ready;
         // SAFETY: successful exact completion invalidated this DmaBuf range and
         // released its device pin. `dma_words` still points to the owned page;

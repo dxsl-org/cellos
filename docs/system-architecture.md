@@ -305,6 +305,32 @@ resize preview.
   all seven assets/build commands, compiles every selection, and proves conflicting
   real-board features fail. CI runs this matrix on every change.
 
+### RPi3 VideoCore HDMI Boundary
+
+RPi3 selects the BCM display Driver Cell; generic AArch64 continues to select
+the unchanged VirtIO GPU path. The BCM mailbox owns one persistent grant-backed
+DMA page for its cell lifetime. `GrantCacheSyncBegin` validates owner and exact
+bounds, pins the range, performs Point-of-Coherency maintenance, and returns an
+operation token. `GrantCacheSyncComplete` accepts only that owner/token pair,
+invalidates before CPU parsing, and releases only the matching pin. Any
+post-submit uncertainty poisons the transport; task teardown quarantines a
+still-pinned page until reboot. No generic cache-maintenance interface is
+exposed.
+
+`RegisterDisplayFramebuffer` requires both `DEV_DISPLAY` and ownership of the
+BCM mailbox window. The kernel validates the converted ARM base, alignment,
+reserved range, size, geometry, pitch, and byte coverage before installing the
+bounded USER|DEVICE mapping and publishing resolution. This is a trusted
+shared-SAS/LBI boundary, not owner-private page-table isolation; the firmware
+framebuffer allocation therefore remains boot-lifetime. Scanout flush IPC is
+accepted only from kernel sender TID 0, then clipped to the registered
+pitch/range and written with device-visible volatile stores.
+
+The completed RPi3-B run establishes exact-device development evidence only:
+the TFTP transfer record, later UART boot block, and user visual observation
+are retained as separate evidence sources. They do not establish production
+qualification or isolate the earlier late-connect `No Signal` root cause.
+
 ---
 
 ## Kernel (nano-kernel)

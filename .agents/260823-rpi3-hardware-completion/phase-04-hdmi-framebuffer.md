@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "Secure RPi3 HDMI Mailbox and Scanout"
-status: in-progress
+status: completed
 priority: P1
 effort: "5d"
 dependencies: []
@@ -16,19 +16,16 @@ tier: thinking
 
 - **VERIFIED:** RPi3 init now selects `/bin/bcm-display` while generic AArch64 retains `/bin/virtio-gpu` (`cells/tools/init/src/boot.rs:4`, `cells/tools/init/src/boot.rs:35`).
 - **VERIFIED:** RPi3 packaging builds and installs BCM display, compositor, and fb-console artifacts (`scripts/build-aarch64-cells.ps1:132`, `scripts/build-aarch64-cells.ps1:181`); netboot guards pin this behavior (`tools/rpi3-netboot/test-netboot-scripts.ps1:95`).
-- **VERIFIED:** The current mailbox transport allocates and frees one `DmaBuf` per call, including after a post-submit timeout (`cells/drivers/bcm-display/src/mailbox.rs:32`). This is unsafe because a late VideoCore response can target recycled frames.
-- **VERIFIED:** The driver converts the VideoCore alias to a raw physical pointer and later dereferences it from EL0 without kernel validation (`cells/drivers/bcm-display/src/lib.rs:84`, `cells/drivers/bcm-display/src/lib.rs:135`).
-- **VERIFIED:** Physical boot reaches mailbox MMIO but fails framebuffer allocation; HDMI remains black. The connected-board framebuffer range and geometry are therefore still **[UNVERIFIED]**.
 
 ## Overview
 
-Implement the chosen **A+ architecture**: two grant-owned cache-sync syscalls with exact pin lifecycle, one persistent mailbox DMA page, a dedicated display-framebuffer registration syscall, and a narrowly privileged BCM driver. The kernel validates authority and metadata; the trusted Tier-1 display cell performs scanout writes under the existing SAS/LBI model. No generic cache-maintenance or physical-map interface is introduced.
+The completed **A+ architecture** uses two grant-owned cache-sync syscalls with exact pin lifecycle, one persistent mailbox DMA page, a dedicated display-framebuffer registration syscall, and a narrowly privileged BCM driver. The kernel validates authority and metadata; the trusted Tier-1 display cell performs scanout writes under the existing SAS/LBI model. No generic cache-maintenance or physical-map interface was introduced.
 
 ## Key Insights
 
 - **VERIFIED:** `DmaBuf` is a contiguous identity-mapped `GrantAlloc` allocation and requires explicit free (`libs/ostd/src/dma.rs:16`, `libs/ostd/src/dma.rs:62`). `GrantFree` refuses pinned ranges (`kernel/src/task/syscall.rs:4865`), and task death already moves pinned grant frames to quarantine (`kernel/src/task/syscall.rs:233`, `kernel/src/memory/pin.rs:386`).
-- **VERIFIED:** AArch64 already exposes PoC clean, invalidate, and clean-invalidate primitives (`hal/arch/arm/src/aarch64/cache.rs:56`, `hal/arch/arm/src/aarch64/cache.rs:77`, `hal/arch/arm/src/aarch64/cache.rs:98`). Their fixed 64-byte line assumption must be reviewed against the existing CTR-derived instruction-cache implementation (`hal/arch/arm/src/aarch64/cache.rs:18`) before reuse.
-- **VERIFIED:** The pin registry is a bounded leaf lock and tracks owner, exact page span, hold count, and quarantine (`kernel/src/memory/pin.rs:28`, `kernel/src/memory/pin.rs:50`, `kernel/src/memory/pin.rs:113`). Its current `acknowledge(tid)` clears every pin for an owner (`kernel/src/memory/pin.rs:503`), so cache-sync completion needs an exact operation identity rather than owner-wide acknowledgement.
+- **VERIFIED:** the implemented PoC clean, invalidate, and clean-invalidate paths derive the data-cache line size from `CTR_EL0`, matching the existing CTR-derived instruction-cache discipline (`hal/arch/arm/src/aarch64/cache.rs:18`, `hal/arch/arm/src/aarch64/cache.rs:56`, `hal/arch/arm/src/aarch64/cache.rs:82`, `hal/arch/arm/src/aarch64/cache.rs:108`).
+- **VERIFIED:** the bounded pin registry retains owner/page/quarantine state, while the cache-sync operation registry adds exact owner-and-token completion rather than reusing owner-wide pin acknowledgement (`kernel/src/memory/pin.rs:28`, `kernel/src/memory/pin.rs:50`, `kernel/src/memory/pin.rs:113`).
 - **VERIFIED:** Cellos Tier 1 is a shared SAS with LBI, not per-cell MMU isolation (`docs/system-architecture.md:142`, `kernel/src/memory/paging.rs:208`). A USER framebuffer PTE cannot honestly be claimed as owner-only; registry/capability checks and the trusted unsafe allowlist are the boundary.
 - **VERIFIED:** Existing GPU registration has exactly two callers: VirtIO (`cells/drivers/virtio-gpu/src/main.rs:69`) and BCM (`cells/drivers/bcm-display/src/main.rs:49`). Existing `GpuFlush` forwards kernel-origin IPC with sender TID 0 (`kernel/src/task/syscall.rs:4110`, `kernel/src/task/syscall.rs:4133`), and VirtIO already rejects non-kernel senders (`cells/drivers/virtio-gpu/src/main.rs:78`).
 
@@ -73,7 +70,7 @@ kernel GpuFlush -> sender_tid=0 IPC -> bcm-display -> validated framebuffer
 
 ### Cache-sync state and lifetime
 
-- Add planned ABI operations `GrantCacheSyncBegin(grant_id, offset, len) -> token` and `GrantCacheSyncComplete(token)`. Names/opcodes are **[PLANNED/UNVERIFIED]** until assigned in `ViSyscall`; choose unused opcodes and unused allowlist bits after a full enum scan.
+- The additive ABI operations `GrantCacheSyncBegin(grant_id, offset, len) -> token` and `GrantCacheSyncComplete(token)` use opcodes and allowlist bits selected after the completed full enum/allowlist scan.
 - Store an exact active operation entry inside the existing pin registry transaction: token/generation, grant base, byte offset/length, page span, and owner TID. The bounded table and per-owner ceiling remain load-bearing (`kernel/src/memory/pin.rs:50`).
 - Begin lock order is `PAGE_GRANT_TABLE -> pin REGISTRY`; all locks are released before cache maintenance. If cache maintenance cannot complete, roll back the exact newly-created pin before returning because no device submission has occurred.
 - Complete looks up the immutable stored range by token and owner, invalidates it, and atomically removes only that operation. Duplicate, foreign, stale, zero, overflow, or mismatched completion fails closed.
@@ -81,7 +78,7 @@ kernel GpuFlush -> sender_tid=0 IPC -> bcm-display -> validated framebuffer
 
 ### Display registration and SAS boundary
 
-- Add planned ABI operation `RegisterDisplayFramebuffer(base, size, packed_width_height, pitch)` **[PLANNED/UNVERIFIED]**. It is separate from `RequestMmio`: framebuffer RAM is not a peripheral allowlist entry, and overloading MMIO would widen that public contract.
+- The additive `RegisterDisplayFramebuffer(base, size, packed_width_height, pitch)` ABI operation remains separate from `RequestMmio`: framebuffer RAM is not a peripheral allowlist entry, and overloading MMIO would widen that public contract.
 - Require `DEV_DISPLAY` and exact ownership of the RPi3 mailbox window in `resource_registry`. Add a read-only exact-owner query; do not add an unchecked or generic physical-range mapper.
 - Strip/validate the VideoCore alias in the BCM cell, then kernel-check: nonzero fields; `base` page alignment; checked `end = base + size`; `width,height > 0`; bounded dimensions; `pitch >= width * 4`; checked `pitch * height <= size`; `base >= FRAME_ALLOCATOR.memory_end()` (`kernel/src/memory/frame.rs:235`); and `end <= BCM2837.mmio.peripheral_base` (`hal/soc/bcm27xx/src/profile.rs:50`). Reject instead of widening if hardware contradicts the assumed GPU-reserved interval.
 - Map the page-rounded exact range USER|DEVICE in the shared AArch64 root and record one registered display owner/geometry for cleanup and `GpuGetResolution`. This prevents accidental arbitrary mapping through the syscall but is **not owner-only hardware isolation**: all trusted Tier-1 cells share the USER mapping. Document this limitation next to the mapper and keep framebuffer dereference confined to the reviewed BCM unsafe allowlist.
@@ -119,19 +116,20 @@ kernel GpuFlush -> sender_tid=0 IPC -> bcm-display -> validated framebuffer
 ## Success Criteria / Todo List
 
 - [x] RPi3 packaging contains BCM display, compositor, and fb-console; generic selection remains VirtIO.
-- [ ] One persistent mailbox page is allocated; success reuses it only after exact completion, while post-submit timeout causes exit and boot-lifetime quarantine.
-- [ ] Cache Begin/Complete prove grant ownership and exact bounds, order PoC maintenance correctly, and cannot release unrelated pins.
-- [ ] RegisterDisplayFramebuffer rejects every malformed/unauthorized case in the matrix before changing mapping, owner, or resolution state.
-- [ ] Documentation and tests state that framebuffer USER mapping is shared-SAS/trusted-LBI, not owner-only PTE isolation.
-- [ ] BCM embeds a minimal syscall allowlist and ignores every non-kernel GPU IPC sender.
-- [ ] Additive VirtIO and generic AArch64 regression gates pass with no ABI/protocol changes.
-- [ ] Reviewer reports no unresolved High/Critical finding; physical serial gate passes and HDMI remains visibly stable for 10 minutes.
+- [x] One persistent mailbox page is allocated; success reuses it only after exact completion, while post-submit timeout causes exit and boot-lifetime quarantine.
+- [x] Cache Begin/Complete prove grant ownership and exact bounds, order PoC maintenance correctly, and cannot release unrelated pins.
+- [x] RegisterDisplayFramebuffer rejects every malformed/unauthorized case in the matrix before changing mapping, owner, or resolution state.
+- [x] Documentation and tests state that framebuffer USER mapping is shared-SAS/trusted-LBI, not owner-only PTE isolation.
+- [x] BCM embeds a minimal syscall allowlist and ignores every non-kernel GPU IPC sender.
+- [x] Additive VirtIO and generic AArch64 regression gates pass with no ABI/protocol changes.
+- [x] Reviewer reports no unresolved High/Critical finding; physical serial gate passes and HDMI remains visibly stable for 10 minutes.
 
 ## Assumptions / Blockers
 
-- **[UNVERIFIED physical blocker]:** RPi3 firmware returns a 4-KiB-aligned ARM framebuffer range wholly in `[FRAME_ALLOCATOR.memory_end(), BCM2837.mmio.peripheral_base)`. Verify by logging rejected raw values on the connected board; if false, stop and derive a DTB/firmware-reserved aperture rather than weakening bounds.
-- **[UNVERIFIED hardware blocker]:** PoC cache maintenance plus the VC bus alias is sufficient for BCM2837 mailbox coherency. Verify with a canary-filled page and matching response on hardware; stale words block framebuffer registration and require architecture evidence, not longer polling.
-- **[UNVERIFIED ABI assignment]:** exact opcodes and allowlist bits for the three operations remain to be selected after re-grepping the complete current enum. No existing opcode/bit may be repurposed.
+- **[VERIFIED physical range]:** the later reviewed-image UART boot block registered aligned framebuffer range `0x3e876000..0x3ebfa000`, size 3,686,400, 1280x720, pitch 5,120; kernel admission succeeded without weakening reserved-range bounds.
+- **[VERIFIED hardware coherency]:** that later UART block reported one 4,096-byte mailbox page, accepted Begin and exact Complete, parsed the matching response, registered the framebuffer, and completed the first scanout.
+- **[VERIFIED visual]:** the user separately observed stable cold-connected HDMI output with fb-console and cursor movement for more than 10 minutes.
+- **[VERIFIED ABI assignment]:** full enum/allowlist inspection and focused API/BCM tests cover the additive opcodes and bits; no existing assignment was repurposed.
 - Existing `GpuFlush` forwards a raw SAS pointer (`kernel/src/task/syscall.rs:4116`); this systemic trusted-SAS limitation is compatibility-preserved, not solved by this phase.
 - HDMI must be powered and connected before boot. SD repartitioning and the independent SD write-transfer timeout are outside this phase.
 
@@ -145,10 +143,11 @@ kernel GpuFlush -> sender_tid=0 IPC -> bcm-display -> validated framebuffer
 
 ## Validation Log
 
-- **Tier:** Light for this single phase; Fact Checker and Contract Verifier applied using `hc-plan/references/verification-roles.md`.
-- **Claims checked:** 23; **Verified:** 20; **Failed:** 0; **Unverified:** 3 (physical range, hardware coherency, ABI number assignment).
-- Re-grep on 2026-08-26 confirmed every cited existing path/symbol, both `sys_register_gpu_driver` callers, current broad pin acknowledgement, current stack-to-DmaBuf transport, RPi3 packaging, and VirtIO kernel-sender guard.
-- Behavioral trace verified: compositor `GpuFlush` -> kernel `ipc_post_nonblock(0, gpu_cell, ...)` (`kernel/src/task/syscall.rs:4110`) -> driver `AppEvent::Message`; BCM currently discards sender identity (`cells/drivers/bcm-display/src/main.rs:58`) while VirtIO matches sender 0 (`cells/drivers/virtio-gpu/src/main.rs:78`).
+- **Tier:** Exact-device development evidence on RPi3-B; no production qualification.
+- **Software:** strict F1/F5, 11 BCM host tests, API tests, AArch64 driver check, RPi3 cell/kernel builds, uImage verification, netboot static guards, and specialist test/review passed. `lungmat8` approved the exact mailbox unsafe island on 2026-08-28.
+- **TFTP deployment record:** the repository TFTP log independently records the final 9,642,048-byte reviewed-image transfer at 2026-08-28 11:14:54.
+- **UART boot record:** `.agents/debug/rpi3-b-hdmi-reviewed-20260828.raw` contains an earlier boot at lines 37–210 and a later reviewed-image boot beginning around line 253. That later block records revision `a22082`, one 4,096-byte mailbox page, accepted cache begin/exact completion, validated framebuffer base `0x3e876000`, size 3,686,400, 1280x720 geometry with pitch 5,120, registration, fb-console damage, first scanout completion, and no panic/cell fault. The UART file has no host timestamp or image hash, so it does not itself prove the TFTP event's 11:14:54 timestamp.
+- **User visual observation:** the cold-connected display remained stable for more than 10 minutes with fb-console and cursor movement.
 
 ## Deviation Log
 
@@ -159,4 +158,4 @@ kernel GpuFlush -> sender_tid=0 IPC -> bcm-display -> validated framebuffer
 
 ## Next Steps
 
-Run `$hc-cook .agents/260823-rpi3-hardware-completion/phase-04-hdmi-framebuffer.md`: freeze Lane A first; execute Lane B and Lane C in parallel with non-overlapping `syscall.rs` hunks; then Lane D, specialist test/review, and finally the connected-board physical gate.
+Phase complete at exact-device development evidence on RPi3-B. Reopen only for a regression or a separately governed production-qualification program.

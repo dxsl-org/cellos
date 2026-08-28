@@ -32,7 +32,7 @@ qualification claim, Manifest v3, or ledger promotion is authorized.
 | 1 | [AArch64 Test-Hooks Semihosting](./phase-01-aarch64-semihosting.md) | completed | 4h | — |
 | 2 | [Persistent SD Storage](./phase-02-persistent-sd-storage.md) | completed | 2d | — |
 | 3 | [G1 Peripheral Sensor Drivers](./phase-03-g1-peripheral-drivers.md) | in-progress | 3d | — |
-| 4 | [HDMI Framebuffer via VideoCore Mailbox](./phase-04-hdmi-framebuffer.md) | in-progress | 5d | — |
+| 4 | [HDMI Framebuffer via VideoCore Mailbox](./phase-04-hdmi-framebuffer.md) | completed | 5d | — |
 | 5 | [LAN9514 Ethernet via DWC2 USB Host](./phase-05-lan9514-ethernet.md) | blocked (5a steps 1–4 done; 5–6 await policy-v3 USB authority + one-shot IRQ contract) | 15d | — |
 
 ## Parallel Execution

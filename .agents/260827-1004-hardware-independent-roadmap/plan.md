@@ -31,7 +31,7 @@ Estimated implementation total is 36.5d for one pass through every phase, includ
 | 02 | [Close hardware-independent security defects](./phase-02-security-prerequisite-closure.md) | governance-gated | host | 01 |
 | 03 | [Define the next QEMU desktop and SDK slice](./phase-03-desktop-sdk-qemu-lane.md) | scope-gated | qemu | 01 |
 | 04 | [Reconcile and complete local Cell-to-Cell runtime](./phase-04-local-c2c-runtime.md) | scope-gated | host | 01 |
-| 05 | [Finish RPi3 HDMI software boundary](./phase-05-rpi3-hdmi-software-gate.md) | ready | host | 01 |
+| 05 | [RPi3 HDMI software boundary — completed](./phase-05-rpi3-hdmi-software-gate.md) | ready | host | 01 |
 | 06 | [Build Tier 3 hostile QEMU runners](./phase-06-tier3-qemu-evidence.md) | scope-gated | qemu | 01 |
 | 07 | [Authenticate software evidence pipeline](./phase-07-authenticated-evidence-pipeline.md) | governance-gated | host | 01 |
 | 08 | [Project completed lane status](./phase-08-roadmap-ledger-sync.md) | ready | contract | 01 |
@@ -42,13 +42,13 @@ Canonical axes: `execution_class ∈ {ready, scope-gated, contract-gated, govern
 
 ## Dependency Graph
 
-`01 → {02,03,04,05,06,07,08}; {01,06} → 09; {01,06,09} → 10`. Phase 05 owns `kernel/src/task/syscall.rs` before Phase 02. Phase 06 first freezes scenario matrices, guest probes, and runners without production edits. Phase 09 then owns the shared persistent block backend and must pass those scenarios; Phase 10 owns x86 transport integration and must pass the same runners. Phase 07 owns evidence schema; Phase 08 owns roll-up status. No all-lanes join gate exists.
+`01 → {02,03,04,05,06,07,08}; {01,06} → 09; {01,06,09} → 10`. Phase 05 completed its `kernel/src/task/syscall.rs` work and handed ownership to Phase 02. Phase 06 first freezes scenario matrices, guest probes, and runners without production edits. Phase 09 then owns the shared persistent block backend and must pass those scenarios; Phase 10 owns x86 transport integration and must pass the same runners. Phase 07 owns evidence schema; Phase 08 owns roll-up status. No all-lanes join gate exists.
 
 ## Ownership Matrix
 
 | Shared surface | Sole integration owner | Producers |
 |---|---|---|
-| `kernel/src/task/syscall.rs` | Phase 05, then Phase 02 handoff | HDMI and `GetRandom` child slices |
+| `kernel/src/task/syscall.rs` | Phase 02 after completed Phase 05 handoff | HDMI and `GetRandom` child slices |
 | Tier 3 VMM/VirtIO production files | Phase 09 → Phase 10 | Persistent block backend, then x86 transport parity |
 | Tier 3 hostile scenarios/runners | Phase 06 | Phases 09/10 consume runners without transferring production-file ownership |
 | Evidence schema/validator | Phase 07 | All implementation lanes emit raw evidence only |

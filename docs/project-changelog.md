@@ -9,25 +9,29 @@
   continue bounded QEMU, work on the two existing Raspberry Pi 3 boards and
   incoming sensors, and local-runtime work now, with no additional hardware
   procurement.
-- The current session order prioritizes RPi3 boot/peripheral and HDMI
-  external-display work. Camera and other sensor integration remains current
-  executable work but is deferred to a later session.
-- RPi3-B is now bound to revision `a22082` / Raspberry Pi 3 Model B and serial
-  `000000003d042795`. Its post-reboot exact-device run transferred and
-  checksum-verified the 9,637,952-byte `cellos.uimg`, discovered the SD card and
-  all four MBR partitions, mounted FAT16/FAT32/littlefs/RedoxFS, completed
-  policy/kernel self-tests and the first BCM scanout flush, reached the shell,
-  and finished the VFS suite at `89 PASS, 0 FAIL`. This is development and
-  hardware-integration evidence only. HDMI connected after firmware startup
-  produced black / `No Signal`; a power-off retry with HDMI connected and the
-  display active before firmware startup showed U-Boot, the Cellos boot log,
-  and the `Cellos >` prompt. This confirms only the reproduction condition, not
-  a root cause among firmware EDID sampling, display handshake/input behavior,
-  and driver behavior. No named reviewer approval is recorded for the mailbox
-  unsafe DMA-page copies, so the observation is non-qualifying and the HDMI
-  visual gate remains `governance-gated`. RPi3-A remains entirely pending, and
-  the historical boot/filesystem/shell/scanout capture remains unassigned
-  because it has no unique serial.
+- RPi3 HDMI Phase 04 and its hardware-independent software Phase 05 are
+  completed. The lane is regression-only; camera and other sensor integration
+  remains current executable work but is deferred to a later session.
+- RPi3-B is bound to revision `a22082` / Raspberry Pi 3 Model B and serial
+  `000000003d042795`. `lungmat8` approved the exact BCM mailbox unsafe island
+  on 2026-08-28; strict F1/F5, focused host/target tests, RPi3 packaging, image
+  verification, and specialist test/review passed. The reviewed image has
+  SHA-256 `566b73a2e4b3499d564a8e40da41ff895cc1ff61f7388d1894881522c8e8e202`.
+  The repository TFTP log independently records the final 9,642,048-byte
+  transfer at 2026-08-28 11:14:54. Separately,
+  `.agents/debug/rpi3-b-hdmi-reviewed-20260828.raw` contains an earlier boot at
+  lines 37–210 and a later reviewed-image boot beginning around line 253. The
+  later block reports one 4,096-byte mailbox page, successful cache begin/exact
+  completion, framebuffer base `0x3e876000`, size 3,686,400, 1280x720, pitch
+  5,120, driver registration, fb-console damage, and a completed first scanout
+  flush without a cell fault. The UART file has no host timestamp or image hash,
+  so it does not itself prove the TFTP event's 11:14:54 timestamp. The user
+  separately observed the cold-connected HDMI display remain lit for more than
+  10 minutes with fb-console and cursor movement. The HDMI visual gate is
+  closed at exact-device development evidence only, not production
+  qualification. The earlier late-connect black / `No Signal` result remains
+  a reproduction condition rather than a root-cause finding. RPi3-A remains
+  pending, and the historical capture without a unique serial stays unassigned.
 - Added an isolated RV64 local Cell-to-Cell broker oracle runner with an
   ephemeral exact-32-byte K1 compiled only into the run's VFS image. The runner
   uses a private target directory, minimal blank disk, restricted SLIRP with no

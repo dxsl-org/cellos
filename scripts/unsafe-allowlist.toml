@@ -185,6 +185,13 @@ approver = "cellos-maintainers"
 date = "2026-07-14"
 
 [[file]]
+path = "cells/drivers/bcm-display/src/mailbox.rs"
+class = "driver-mmio"
+reason = "Driver Cell: bounded copies marshal property words into and out of the cell-owned persistent DmaBuf; exact cache-sync tokens pin the page across VideoCore access, and post-submit uncertainty poisons the transport until reboot."
+approver = "lungmat8"
+date = "2026-08-28"
+
+[[file]]
 path = "cells/drivers/bcm-display/src/lib.rs"
 class = "driver-mmio"
 reason = "Driver Cell: row-copy dirty rect into VideoCore IV framebuffer memory via raw pointer."
