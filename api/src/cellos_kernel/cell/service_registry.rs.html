@@ -124,97 +124,108 @@
 <a href=#124 id=124 data-nosnippet>124</a>        .any(|entry| <span class="macro">matches!</span>(entry, ServiceEntry::Paused(provider) <span class="kw">if </span><span class="kw-2">*</span>provider == tid))
 <a href=#125 id=125 data-nosnippet>125</a>}
 <a href=#126 id=126 data-nosnippet>126</a>
-<a href=#127 id=127 data-nosnippet>127</a><span class="doccomment">/// Remove every registration that points at `tid`. Called from `exit_task` when a
-<a href=#128 id=128 data-nosnippet>128</a>/// task dies so a client never resolves a service to a dead provider; the
-<a href=#129 id=129 data-nosnippet>129</a>/// supervisor re-registers the replacement's tid on respawn.
-<a href=#130 id=130 data-nosnippet>130</a></span><span class="kw">pub fn </span>clear_tid(tid: usize) {
-<a href=#131 id=131 data-nosnippet>131</a>    <span class="kw">let </span><span class="kw-2">mut </span>map = REGISTRY.lock();
-<a href=#132 id=132 data-nosnippet>132</a>    <span class="kw">let </span>before = map.len();
-<a href=#133 id=133 data-nosnippet>133</a>    map.retain(|<span class="kw">_</span>, entry| <span class="kw">match </span>entry {
-<a href=#134 id=134 data-nosnippet>134</a>        ServiceEntry::Active(provider) | ServiceEntry::Paused(provider) =&gt; <span class="kw-2">*</span>provider != tid,
-<a href=#135 id=135 data-nosnippet>135</a>    });
-<a href=#136 id=136 data-nosnippet>136</a>    <span class="kw">if </span>map.len() != before {
-<a href=#137 id=137 data-nosnippet>137</a>        <span class="macro">log::info!</span>(
-<a href=#138 id=138 data-nosnippet>138</a>            <span class="string">"[service-registry] cleared stale entries for dead tid {}"</span>,
-<a href=#139 id=139 data-nosnippet>139</a>            tid
-<a href=#140 id=140 data-nosnippet>140</a>        );
-<a href=#141 id=141 data-nosnippet>141</a>    }
-<a href=#142 id=142 data-nosnippet>142</a>}
-<a href=#143 id=143 data-nosnippet>143</a>
-<a href=#144 id=144 data-nosnippet>144</a><span class="attr">#[cfg(feature = <span class="string">"test-hooks"</span>)]
-<a href=#145 id=145 data-nosnippet>145</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>snapshot() -&gt; alloc::vec::Vec&lt;(u16, usize, bool)&gt; {
-<a href=#146 id=146 data-nosnippet>146</a>    REGISTRY
-<a href=#147 id=147 data-nosnippet>147</a>        .lock()
-<a href=#148 id=148 data-nosnippet>148</a>        .iter()
-<a href=#149 id=149 data-nosnippet>149</a>        .map(|(service_id, entry)| <span class="kw">match </span>entry {
-<a href=#150 id=150 data-nosnippet>150</a>            ServiceEntry::Active(tid) =&gt; (<span class="kw-2">*</span>service_id, <span class="kw-2">*</span>tid, <span class="bool-val">false</span>),
-<a href=#151 id=151 data-nosnippet>151</a>            ServiceEntry::Paused(tid) =&gt; (<span class="kw-2">*</span>service_id, <span class="kw-2">*</span>tid, <span class="bool-val">true</span>),
-<a href=#152 id=152 data-nosnippet>152</a>        })
-<a href=#153 id=153 data-nosnippet>153</a>        .collect()
-<a href=#154 id=154 data-nosnippet>154</a>}
-<a href=#155 id=155 data-nosnippet>155</a>
-<a href=#156 id=156 data-nosnippet>156</a><span class="attr">#[cfg(test)]
-<a href=#157 id=157 data-nosnippet>157</a></span><span class="kw">mod </span>tests {
-<a href=#158 id=158 data-nosnippet>158</a>    <span class="kw">use </span>super::<span class="kw-2">*</span>;
-<a href=#159 id=159 data-nosnippet>159</a>
-<a href=#160 id=160 data-nosnippet>160</a>    <span class="attr">#[test]
-<a href=#161 id=161 data-nosnippet>161</a>    </span><span class="kw">fn </span>register_then_lookup() {
-<a href=#162 id=162 data-nosnippet>162</a>        <span class="macro">assert!</span>(register(api::syscall::service::VFS, <span class="number">4</span>));
-<a href=#163 id=163 data-nosnippet>163</a>        <span class="macro">assert_eq!</span>(lookup(api::syscall::service::VFS), <span class="prelude-val">Some</span>(<span class="number">4</span>));
-<a href=#164 id=164 data-nosnippet>164</a>    }
-<a href=#165 id=165 data-nosnippet>165</a>
-<a href=#166 id=166 data-nosnippet>166</a>    <span class="attr">#[test]
-<a href=#167 id=167 data-nosnippet>167</a>    </span><span class="kw">fn </span>reject_zero_tid() {
-<a href=#168 id=168 data-nosnippet>168</a>        <span class="macro">assert!</span>(!register(api::syscall::service::NET, <span class="number">0</span>));
-<a href=#169 id=169 data-nosnippet>169</a>        <span class="macro">assert_eq!</span>(lookup(api::syscall::service::NET), <span class="prelude-val">None</span>);
-<a href=#170 id=170 data-nosnippet>170</a>    }
-<a href=#171 id=171 data-nosnippet>171</a>
-<a href=#172 id=172 data-nosnippet>172</a>    <span class="attr">#[test]
-<a href=#173 id=173 data-nosnippet>173</a>    </span><span class="kw">fn </span>reregister_updates_tid() {
-<a href=#174 id=174 data-nosnippet>174</a>        register(api::syscall::service::INPUT, <span class="number">7</span>);
-<a href=#175 id=175 data-nosnippet>175</a>        register(api::syscall::service::INPUT, <span class="number">9</span>);
-<a href=#176 id=176 data-nosnippet>176</a>        <span class="macro">assert_eq!</span>(lookup(api::syscall::service::INPUT), <span class="prelude-val">Some</span>(<span class="number">9</span>));
-<a href=#177 id=177 data-nosnippet>177</a>    }
-<a href=#178 id=178 data-nosnippet>178</a>
-<a href=#179 id=179 data-nosnippet>179</a>    <span class="attr">#[test]
-<a href=#180 id=180 data-nosnippet>180</a>    </span><span class="kw">fn </span>clear_tid_removes_dead_provider() {
-<a href=#181 id=181 data-nosnippet>181</a>        register(api::syscall::service::CONFIG, <span class="number">12</span>);
-<a href=#182 id=182 data-nosnippet>182</a>        clear_tid(<span class="number">12</span>);
-<a href=#183 id=183 data-nosnippet>183</a>        <span class="macro">assert_eq!</span>(lookup(api::syscall::service::CONFIG), <span class="prelude-val">None</span>);
-<a href=#184 id=184 data-nosnippet>184</a>    }
-<a href=#185 id=185 data-nosnippet>185</a>
-<a href=#186 id=186 data-nosnippet>186</a>    <span class="attr">#[test]
-<a href=#187 id=187 data-nosnippet>187</a>    </span><span class="kw">fn </span>pause_hides_only_the_expected_provider() {
-<a href=#188 id=188 data-nosnippet>188</a>        <span class="kw">const </span>TEST_SERVICE: u16 = <span class="number">60_000</span>;
-<a href=#189 id=189 data-nosnippet>189</a>        register(TEST_SERVICE, <span class="number">21</span>);
-<a href=#190 id=190 data-nosnippet>190</a>        <span class="macro">assert!</span>(!pause(TEST_SERVICE, <span class="number">20</span>));
-<a href=#191 id=191 data-nosnippet>191</a>        <span class="macro">assert_eq!</span>(lookup(TEST_SERVICE), <span class="prelude-val">Some</span>(<span class="number">21</span>));
-<a href=#192 id=192 data-nosnippet>192</a>
-<a href=#193 id=193 data-nosnippet>193</a>        <span class="macro">assert!</span>(pause(TEST_SERVICE, <span class="number">21</span>));
-<a href=#194 id=194 data-nosnippet>194</a>        <span class="macro">assert_eq!</span>(lookup(TEST_SERVICE), <span class="prelude-val">None</span>);
-<a href=#195 id=195 data-nosnippet>195</a>        <span class="macro">assert!</span>(pause(TEST_SERVICE, <span class="number">21</span>));
-<a href=#196 id=196 data-nosnippet>196</a>        <span class="macro">assert!</span>(is_paused_tid(<span class="number">21</span>));
-<a href=#197 id=197 data-nosnippet>197</a>    }
-<a href=#198 id=198 data-nosnippet>198</a>
-<a href=#199 id=199 data-nosnippet>199</a>    <span class="attr">#[test]
-<a href=#200 id=200 data-nosnippet>200</a>    </span><span class="kw">fn </span>register_reactivates_a_paused_service() {
-<a href=#201 id=201 data-nosnippet>201</a>        <span class="kw">const </span>TEST_SERVICE: u16 = <span class="number">60_001</span>;
-<a href=#202 id=202 data-nosnippet>202</a>        register(TEST_SERVICE, <span class="number">31</span>);
-<a href=#203 id=203 data-nosnippet>203</a>        <span class="macro">assert!</span>(pause(TEST_SERVICE, <span class="number">31</span>));
-<a href=#204 id=204 data-nosnippet>204</a>        <span class="macro">assert!</span>(register(TEST_SERVICE, <span class="number">31</span>));
-<a href=#205 id=205 data-nosnippet>205</a>        <span class="macro">assert_eq!</span>(lookup(TEST_SERVICE), <span class="prelude-val">Some</span>(<span class="number">31</span>));
-<a href=#206 id=206 data-nosnippet>206</a>    }
-<a href=#207 id=207 data-nosnippet>207</a>
-<a href=#208 id=208 data-nosnippet>208</a>    <span class="attr">#[test]
-<a href=#209 id=209 data-nosnippet>209</a>    </span><span class="kw">fn </span>commit_requires_exact_paused_provider() {
-<a href=#210 id=210 data-nosnippet>210</a>        <span class="kw">const </span>TEST_SERVICE: u16 = <span class="number">60_002</span>;
-<a href=#211 id=211 data-nosnippet>211</a>        register(TEST_SERVICE, <span class="number">41</span>);
-<a href=#212 id=212 data-nosnippet>212</a>        <span class="macro">assert!</span>(!commit_paused(TEST_SERVICE, <span class="number">40</span>, <span class="number">42</span>));
-<a href=#213 id=213 data-nosnippet>213</a>        <span class="macro">assert_eq!</span>(lookup(TEST_SERVICE), <span class="prelude-val">Some</span>(<span class="number">41</span>));
-<a href=#214 id=214 data-nosnippet>214</a>        <span class="macro">assert!</span>(pause(TEST_SERVICE, <span class="number">41</span>));
-<a href=#215 id=215 data-nosnippet>215</a>        <span class="macro">assert!</span>(!commit_paused(TEST_SERVICE, <span class="number">40</span>, <span class="number">42</span>));
-<a href=#216 id=216 data-nosnippet>216</a>        <span class="macro">assert!</span>(commit_paused(TEST_SERVICE, <span class="number">41</span>, <span class="number">42</span>));
-<a href=#217 id=217 data-nosnippet>217</a>        <span class="macro">assert_eq!</span>(lookup(TEST_SERVICE), <span class="prelude-val">Some</span>(<span class="number">42</span>));
-<a href=#218 id=218 data-nosnippet>218</a>    }
-<a href=#219 id=219 data-nosnippet>219</a>}
+<a href=#127 id=127 data-nosnippet>127</a><span class="doccomment">/// Return whether `tid` is the active or paused provider of any trusted
+<a href=#128 id=128 data-nosnippet>128</a>/// supervisor-owned service registration.
+<a href=#129 id=129 data-nosnippet>129</a></span><span class="kw">pub fn </span>is_registered_tid(tid: usize) -&gt; bool {
+<a href=#130 id=130 data-nosnippet>130</a>    REGISTRY.lock().values().any(|entry| {
+<a href=#131 id=131 data-nosnippet>131</a>        <span class="macro">matches!</span>(
+<a href=#132 id=132 data-nosnippet>132</a>            entry,
+<a href=#133 id=133 data-nosnippet>133</a>            ServiceEntry::Active(provider) | ServiceEntry::Paused(provider) <span class="kw">if </span><span class="kw-2">*</span>provider == tid
+<a href=#134 id=134 data-nosnippet>134</a>        )
+<a href=#135 id=135 data-nosnippet>135</a>    })
+<a href=#136 id=136 data-nosnippet>136</a>}
+<a href=#137 id=137 data-nosnippet>137</a>
+<a href=#138 id=138 data-nosnippet>138</a><span class="doccomment">/// Remove every registration that points at `tid`. Called from `exit_task` when a
+<a href=#139 id=139 data-nosnippet>139</a>/// task dies so a client never resolves a service to a dead provider; the
+<a href=#140 id=140 data-nosnippet>140</a>/// supervisor re-registers the replacement's tid on respawn.
+<a href=#141 id=141 data-nosnippet>141</a></span><span class="kw">pub fn </span>clear_tid(tid: usize) {
+<a href=#142 id=142 data-nosnippet>142</a>    <span class="kw">let </span><span class="kw-2">mut </span>map = REGISTRY.lock();
+<a href=#143 id=143 data-nosnippet>143</a>    <span class="kw">let </span>before = map.len();
+<a href=#144 id=144 data-nosnippet>144</a>    map.retain(|<span class="kw">_</span>, entry| <span class="kw">match </span>entry {
+<a href=#145 id=145 data-nosnippet>145</a>        ServiceEntry::Active(provider) | ServiceEntry::Paused(provider) =&gt; <span class="kw-2">*</span>provider != tid,
+<a href=#146 id=146 data-nosnippet>146</a>    });
+<a href=#147 id=147 data-nosnippet>147</a>    <span class="kw">if </span>map.len() != before {
+<a href=#148 id=148 data-nosnippet>148</a>        <span class="macro">log::info!</span>(
+<a href=#149 id=149 data-nosnippet>149</a>            <span class="string">"[service-registry] cleared stale entries for dead tid {}"</span>,
+<a href=#150 id=150 data-nosnippet>150</a>            tid
+<a href=#151 id=151 data-nosnippet>151</a>        );
+<a href=#152 id=152 data-nosnippet>152</a>    }
+<a href=#153 id=153 data-nosnippet>153</a>}
+<a href=#154 id=154 data-nosnippet>154</a>
+<a href=#155 id=155 data-nosnippet>155</a><span class="attr">#[cfg(feature = <span class="string">"test-hooks"</span>)]
+<a href=#156 id=156 data-nosnippet>156</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>snapshot() -&gt; alloc::vec::Vec&lt;(u16, usize, bool)&gt; {
+<a href=#157 id=157 data-nosnippet>157</a>    REGISTRY
+<a href=#158 id=158 data-nosnippet>158</a>        .lock()
+<a href=#159 id=159 data-nosnippet>159</a>        .iter()
+<a href=#160 id=160 data-nosnippet>160</a>        .map(|(service_id, entry)| <span class="kw">match </span>entry {
+<a href=#161 id=161 data-nosnippet>161</a>            ServiceEntry::Active(tid) =&gt; (<span class="kw-2">*</span>service_id, <span class="kw-2">*</span>tid, <span class="bool-val">false</span>),
+<a href=#162 id=162 data-nosnippet>162</a>            ServiceEntry::Paused(tid) =&gt; (<span class="kw-2">*</span>service_id, <span class="kw-2">*</span>tid, <span class="bool-val">true</span>),
+<a href=#163 id=163 data-nosnippet>163</a>        })
+<a href=#164 id=164 data-nosnippet>164</a>        .collect()
+<a href=#165 id=165 data-nosnippet>165</a>}
+<a href=#166 id=166 data-nosnippet>166</a>
+<a href=#167 id=167 data-nosnippet>167</a><span class="attr">#[cfg(test)]
+<a href=#168 id=168 data-nosnippet>168</a></span><span class="kw">mod </span>tests {
+<a href=#169 id=169 data-nosnippet>169</a>    <span class="kw">use </span>super::<span class="kw-2">*</span>;
+<a href=#170 id=170 data-nosnippet>170</a>
+<a href=#171 id=171 data-nosnippet>171</a>    <span class="attr">#[test]
+<a href=#172 id=172 data-nosnippet>172</a>    </span><span class="kw">fn </span>register_then_lookup() {
+<a href=#173 id=173 data-nosnippet>173</a>        <span class="macro">assert!</span>(register(api::syscall::service::VFS, <span class="number">4</span>));
+<a href=#174 id=174 data-nosnippet>174</a>        <span class="macro">assert_eq!</span>(lookup(api::syscall::service::VFS), <span class="prelude-val">Some</span>(<span class="number">4</span>));
+<a href=#175 id=175 data-nosnippet>175</a>    }
+<a href=#176 id=176 data-nosnippet>176</a>
+<a href=#177 id=177 data-nosnippet>177</a>    <span class="attr">#[test]
+<a href=#178 id=178 data-nosnippet>178</a>    </span><span class="kw">fn </span>reject_zero_tid() {
+<a href=#179 id=179 data-nosnippet>179</a>        <span class="macro">assert!</span>(!register(api::syscall::service::NET, <span class="number">0</span>));
+<a href=#180 id=180 data-nosnippet>180</a>        <span class="macro">assert_eq!</span>(lookup(api::syscall::service::NET), <span class="prelude-val">None</span>);
+<a href=#181 id=181 data-nosnippet>181</a>    }
+<a href=#182 id=182 data-nosnippet>182</a>
+<a href=#183 id=183 data-nosnippet>183</a>    <span class="attr">#[test]
+<a href=#184 id=184 data-nosnippet>184</a>    </span><span class="kw">fn </span>reregister_updates_tid() {
+<a href=#185 id=185 data-nosnippet>185</a>        register(api::syscall::service::INPUT, <span class="number">7</span>);
+<a href=#186 id=186 data-nosnippet>186</a>        register(api::syscall::service::INPUT, <span class="number">9</span>);
+<a href=#187 id=187 data-nosnippet>187</a>        <span class="macro">assert_eq!</span>(lookup(api::syscall::service::INPUT), <span class="prelude-val">Some</span>(<span class="number">9</span>));
+<a href=#188 id=188 data-nosnippet>188</a>    }
+<a href=#189 id=189 data-nosnippet>189</a>
+<a href=#190 id=190 data-nosnippet>190</a>    <span class="attr">#[test]
+<a href=#191 id=191 data-nosnippet>191</a>    </span><span class="kw">fn </span>clear_tid_removes_dead_provider() {
+<a href=#192 id=192 data-nosnippet>192</a>        register(api::syscall::service::CONFIG, <span class="number">12</span>);
+<a href=#193 id=193 data-nosnippet>193</a>        clear_tid(<span class="number">12</span>);
+<a href=#194 id=194 data-nosnippet>194</a>        <span class="macro">assert_eq!</span>(lookup(api::syscall::service::CONFIG), <span class="prelude-val">None</span>);
+<a href=#195 id=195 data-nosnippet>195</a>    }
+<a href=#196 id=196 data-nosnippet>196</a>
+<a href=#197 id=197 data-nosnippet>197</a>    <span class="attr">#[test]
+<a href=#198 id=198 data-nosnippet>198</a>    </span><span class="kw">fn </span>pause_hides_only_the_expected_provider() {
+<a href=#199 id=199 data-nosnippet>199</a>        <span class="kw">const </span>TEST_SERVICE: u16 = <span class="number">60_000</span>;
+<a href=#200 id=200 data-nosnippet>200</a>        register(TEST_SERVICE, <span class="number">21</span>);
+<a href=#201 id=201 data-nosnippet>201</a>        <span class="macro">assert!</span>(!pause(TEST_SERVICE, <span class="number">20</span>));
+<a href=#202 id=202 data-nosnippet>202</a>        <span class="macro">assert_eq!</span>(lookup(TEST_SERVICE), <span class="prelude-val">Some</span>(<span class="number">21</span>));
+<a href=#203 id=203 data-nosnippet>203</a>
+<a href=#204 id=204 data-nosnippet>204</a>        <span class="macro">assert!</span>(pause(TEST_SERVICE, <span class="number">21</span>));
+<a href=#205 id=205 data-nosnippet>205</a>        <span class="macro">assert_eq!</span>(lookup(TEST_SERVICE), <span class="prelude-val">None</span>);
+<a href=#206 id=206 data-nosnippet>206</a>        <span class="macro">assert!</span>(pause(TEST_SERVICE, <span class="number">21</span>));
+<a href=#207 id=207 data-nosnippet>207</a>        <span class="macro">assert!</span>(is_paused_tid(<span class="number">21</span>));
+<a href=#208 id=208 data-nosnippet>208</a>    }
+<a href=#209 id=209 data-nosnippet>209</a>
+<a href=#210 id=210 data-nosnippet>210</a>    <span class="attr">#[test]
+<a href=#211 id=211 data-nosnippet>211</a>    </span><span class="kw">fn </span>register_reactivates_a_paused_service() {
+<a href=#212 id=212 data-nosnippet>212</a>        <span class="kw">const </span>TEST_SERVICE: u16 = <span class="number">60_001</span>;
+<a href=#213 id=213 data-nosnippet>213</a>        register(TEST_SERVICE, <span class="number">31</span>);
+<a href=#214 id=214 data-nosnippet>214</a>        <span class="macro">assert!</span>(pause(TEST_SERVICE, <span class="number">31</span>));
+<a href=#215 id=215 data-nosnippet>215</a>        <span class="macro">assert!</span>(register(TEST_SERVICE, <span class="number">31</span>));
+<a href=#216 id=216 data-nosnippet>216</a>        <span class="macro">assert_eq!</span>(lookup(TEST_SERVICE), <span class="prelude-val">Some</span>(<span class="number">31</span>));
+<a href=#217 id=217 data-nosnippet>217</a>    }
+<a href=#218 id=218 data-nosnippet>218</a>
+<a href=#219 id=219 data-nosnippet>219</a>    <span class="attr">#[test]
+<a href=#220 id=220 data-nosnippet>220</a>    </span><span class="kw">fn </span>commit_requires_exact_paused_provider() {
+<a href=#221 id=221 data-nosnippet>221</a>        <span class="kw">const </span>TEST_SERVICE: u16 = <span class="number">60_002</span>;
+<a href=#222 id=222 data-nosnippet>222</a>        register(TEST_SERVICE, <span class="number">41</span>);
+<a href=#223 id=223 data-nosnippet>223</a>        <span class="macro">assert!</span>(!commit_paused(TEST_SERVICE, <span class="number">40</span>, <span class="number">42</span>));
+<a href=#224 id=224 data-nosnippet>224</a>        <span class="macro">assert_eq!</span>(lookup(TEST_SERVICE), <span class="prelude-val">Some</span>(<span class="number">41</span>));
+<a href=#225 id=225 data-nosnippet>225</a>        <span class="macro">assert!</span>(pause(TEST_SERVICE, <span class="number">41</span>));
+<a href=#226 id=226 data-nosnippet>226</a>        <span class="macro">assert!</span>(!commit_paused(TEST_SERVICE, <span class="number">40</span>, <span class="number">42</span>));
+<a href=#227 id=227 data-nosnippet>227</a>        <span class="macro">assert!</span>(commit_paused(TEST_SERVICE, <span class="number">41</span>, <span class="number">42</span>));
+<a href=#228 id=228 data-nosnippet>228</a>        <span class="macro">assert_eq!</span>(lookup(TEST_SERVICE), <span class="prelude-val">Some</span>(<span class="number">42</span>));
+<a href=#229 id=229 data-nosnippet>229</a>    }
+<a href=#230 id=230 data-nosnippet>230</a>}
 </code></pre></div></section></main></body></html>

@@ -11,10 +11,12 @@
 <a href=#11 id=11 data-nosnippet>11</a>        ostd::syscall::SyscallResult::Ok(sender) <span class="kw">if </span>sender &gt; <span class="number">0 </span>=&gt; sender,
 <a href=#12 id=12 data-nosnippet>12</a>        <span class="kw">_ </span>=&gt; <span class="kw">return </span><span class="bool-val">false</span>,
 <a href=#13 id=13 data-nosnippet>13</a>    };
-<a href=#14 id=14 data-nosnippet>14</a>    api::caller_identity::CallerIdentity::from_recv_buf(buf).is_some_and(|identity| {
-<a href=#15 id=15 data-nosnippet>15</a>        identity.cell_id == broker_tid <span class="kw">as </span>u64
-<a href=#16 id=16 data-nosnippet>16</a>            &amp;&amp; identity.generation != <span class="number">0
-<a href=#17 id=17 data-nosnippet>17</a>            </span>&amp;&amp; identity.sender_tid == sender <span class="kw">as </span>u64
-<a href=#18 id=18 data-nosnippet>18</a>    })
-<a href=#19 id=19 data-nosnippet>19</a>}
+<a href=#14 id=14 data-nosnippet>14</a>    <span class="kw">let </span><span class="prelude-val">Some</span>(identity) = api::caller_identity::CallerIdentity::from_recv_buf(buf) <span class="kw">else </span>{
+<a href=#15 id=15 data-nosnippet>15</a>        <span class="kw">return </span><span class="bool-val">false</span>;
+<a href=#16 id=16 data-nosnippet>16</a>    };
+<a href=#17 id=17 data-nosnippet>17</a>    identity.generation != <span class="number">0
+<a href=#18 id=18 data-nosnippet>18</a>        </span>&amp;&amp; identity.sender_tid == sender <span class="kw">as </span>u64
+<a href=#19 id=19 data-nosnippet>19</a>        &amp;&amp; ostd::syscall::sys_resolve_cell_owner(identity.cell_id, identity.generation)
+<a href=#20 id=20 data-nosnippet>20</a>            .is_some_and(|owner| owner.is_live() &amp;&amp; owner.root_tid == broker_tid <span class="kw">as </span>u64)
+<a href=#21 id=21 data-nosnippet>21</a>}
 </code></pre></div></section></main></body></html>
