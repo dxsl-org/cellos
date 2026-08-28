@@ -126,12 +126,14 @@ pub fn main() {
                     message_handler::handle_message(
                         &buf,
                         sender,
-                        fb.width,
-                        fb.height,
-                        &mut input,
-                        &mut table,
-                        &mut z_order,
-                        &mut pending_dirty,
+                        message_handler::MessageContext::new(
+                            fb.width,
+                            fb.height,
+                            &mut input,
+                            &mut table,
+                            &mut z_order,
+                            &mut pending_dirty,
+                        ),
                     );
                 }
             }

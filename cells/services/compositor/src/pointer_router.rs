@@ -34,6 +34,29 @@ pub(super) enum Capture {
     },
 }
 
+pub(crate) struct RouteContext<'a, F> {
+    maximum: Rect,
+    table: &'a mut SurfaceTable,
+    z_order: &'a mut ZOrder,
+    damage: F,
+}
+
+impl<'a, F> RouteContext<'a, F> {
+    pub(crate) fn new(
+        maximum: Rect,
+        table: &'a mut SurfaceTable,
+        z_order: &'a mut ZOrder,
+        damage: F,
+    ) -> Self {
+        Self {
+            maximum,
+            table,
+            z_order,
+            damage,
+        }
+    }
+}
+
 /// Tracks keyboard focus, selected decoration, and pointer capture.
 pub struct PointerRouter {
     pub(super) focused_owner: usize,
@@ -73,19 +96,16 @@ impl PointerRouter {
         self.focused_owner = 0;
     }
 
-    pub fn route<F>(
+    pub(crate) fn route<F>(
         &mut self,
         event: InputEvent,
         x: i32,
         y: i32,
-        maximum: Rect,
-        table: &mut SurfaceTable,
-        z_order: &mut ZOrder,
-        mut damage: F,
+        mut context: RouteContext<'_, F>,
     ) where
         F: FnMut(Rect),
     {
-        input::route(self, event, x, y, maximum, table, z_order, &mut damage);
+        input::route(self, event, x, y, &mut context);
     }
 }
 

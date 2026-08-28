@@ -30,19 +30,6 @@ impl ScreenFb {
         }
     }
 
-    /// Blit the visible part of a surface over the entire screen.
-    pub fn blit_surface(&mut self, s: &SurfaceState) {
-        self.blit_surface_clipped(
-            s,
-            Rect {
-                x: 0,
-                y: 0,
-                w: self.width,
-                h: self.height,
-            },
-        );
-    }
-
     /// Blit only the part of a surface that intersects both `dirty` and scanout.
     ///
     /// Coordinates are intersected in screen space before deriving the matching

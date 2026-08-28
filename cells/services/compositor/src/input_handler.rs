@@ -15,7 +15,7 @@ use api::syscall::service;
 use ostd::syscall::{sys_lookup_service, sys_send, sys_try_send};
 
 use crate::cursor_state;
-use crate::pointer_router::PointerRouter;
+use crate::pointer_router::{PointerRouter, RouteContext};
 use crate::surface_table::SurfaceTable;
 use crate::z_order::ZOrder;
 
@@ -160,16 +160,13 @@ fn route_pointer(
         event,
         state.mouse_x,
         state.mouse_y,
-        maximum,
-        table,
-        z_order,
-        |decoration| {
+        RouteContext::new(maximum, table, z_order, |decoration| {
             queue_dirty(
                 pending_dirty,
                 old_decoration.map_or(decoration, |old| old.union(&decoration)),
             );
             set_input_focus(input_tid, compositor_tid);
-        },
+        }),
     );
 }
 

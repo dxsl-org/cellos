@@ -24,38 +24,35 @@ fn attach_grant(buf: &[u8; 512], sender: usize, table: &mut SurfaceTable) {
     };
     let grant = AttachGrant::decode(frame);
     let cap = grant.cap as u64;
-    if let Some(surface) = table.get_mut(cap) {
-        if surface.owner != sender {
-            sys_send(sender, b"\x00");
-            return;
-        }
-        match sys_grant_slice_with_len(grant.reg_id as usize) {
-            Some((ptr, grant_len))
-                if (grant.width as usize)
-                    .checked_mul(grant.height as usize)
-                    .and_then(|pixels| {
-                        pixels.checked_mul(PixelFormat::from_u8(grant.fmt).bpp() as usize)
-                    })
-                    .is_some_and(|required| required <= grant_len) =>
-            {
-                if surface.attach_grant(
+    let Some(surface) = table.get_mut(cap) else {
+        sys_send(sender, b"\x00");
+        return;
+    };
+    if surface.owner != sender {
+        sys_send(sender, b"\x00");
+        return;
+    }
+    match sys_grant_slice_with_len(grant.reg_id as usize) {
+        Some((ptr, grant_len))
+            if (grant.width as usize)
+                .checked_mul(grant.height as usize)
+                .and_then(|pixels| {
+                    pixels.checked_mul(PixelFormat::from_u8(grant.fmt).bpp() as usize)
+                })
+                .is_some_and(|required| required <= grant_len)
+                && surface.attach_grant(
                     ptr as *const u8,
                     grant.reg_id as usize,
                     grant.width,
                     grant.height,
                     PixelFormat::from_u8(grant.fmt),
-                ) {
-                    sys_send(sender, b"\x01");
-                } else {
-                    sys_send(sender, b"\x00");
-                }
-            }
-            _ => {
-                sys_send(sender, b"\x00");
-            }
+                ) =>
+        {
+            sys_send(sender, b"\x01");
         }
-    } else {
-        sys_send(sender, b"\x00");
+        _ => {
+            sys_send(sender, b"\x00");
+        }
     }
 }
 
@@ -83,13 +80,14 @@ fn damage_notify(buf: &[u8; 512], sender: usize, table: &mut SurfaceTable) {
         return;
     };
     let damage = DamageNotify::decode(frame);
-    if let Some(surface) = table.get_mut(damage.cap as u64) {
-        if surface.owner == sender {
-            surface.damage = Some(match surface.damage {
-                Some(existing) => existing.union(&damage.rect),
-                None => damage.rect,
-            });
-        }
+    if let Some(surface) = table
+        .get_mut(damage.cap as u64)
+        .filter(|surface| surface.owner == sender)
+    {
+        surface.damage = Some(match surface.damage {
+            Some(existing) => existing.union(&damage.rect),
+            None => damage.rect,
+        });
     }
 }
 

@@ -14,17 +14,45 @@ use crate::z_order::ZOrder;
 
 const OWNER_EXITED_OPCODE: u8 = 0xE2;
 
-/// Dispatch one IPC message from a consumer cell or the supervisor.
-pub(crate) fn handle_message(
-    buf: &[u8; 512],
-    sender: usize,
+pub(crate) struct MessageContext<'a> {
     screen_w: u32,
     screen_h: u32,
-    input: &mut InputState,
-    table: &mut SurfaceTable,
-    z_order: &mut ZOrder,
-    pending_dirty: &mut Option<Rect>,
-) {
+    input: &'a mut InputState,
+    table: &'a mut SurfaceTable,
+    z_order: &'a mut ZOrder,
+    pending_dirty: &'a mut Option<Rect>,
+}
+
+impl<'a> MessageContext<'a> {
+    pub(crate) fn new(
+        screen_w: u32,
+        screen_h: u32,
+        input: &'a mut InputState,
+        table: &'a mut SurfaceTable,
+        z_order: &'a mut ZOrder,
+        pending_dirty: &'a mut Option<Rect>,
+    ) -> Self {
+        Self {
+            screen_w,
+            screen_h,
+            input,
+            table,
+            z_order,
+            pending_dirty,
+        }
+    }
+}
+
+/// Dispatch one IPC message from a consumer cell or the supervisor.
+pub(crate) fn handle_message(buf: &[u8; 512], sender: usize, context: MessageContext<'_>) {
+    let MessageContext {
+        screen_w,
+        screen_h,
+        input,
+        table,
+        z_order,
+        pending_dirty,
+    } = context;
     if buf.is_empty() {
         return;
     }
