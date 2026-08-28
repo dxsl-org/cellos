@@ -1,7 +1,7 @@
 ---
 title: "Cell-to-Cell Anywhere Core Recovery Plan"
 description: "Supersede the blocked 260624 plan with a relay-first, typed endpoint architecture across local, LAN, and remote."
-status: pending
+status: in-progress
 priority: P1
 effort: 33
 branch: main
@@ -11,7 +11,28 @@ created: 2026-08-19
 
 # Cell-to-Cell Anywhere Core Recovery Plan
 
-Recovery plan: supersedes `.agents/260624-cell-to-cell-anywhere/` without editing it. This plan does not claim tests, CI, QEMU, relay, LAN, or hardware evidence.
+Recovery plan: supersedes `.agents/260624-cell-to-cell-anywhere/` without editing it. The required `c2c-broker-oracle-single-guest-local-runtime` CI job records only a single-guest local-runtime QEMU oracle; this plan makes no two-node relay, direct-LAN, restart-cleanup, hardware, production, or completion claim.
+
+> **Decision record (2026-08-27):** The hardware-independent roadmap selected
+> this relay-first recovery plan as the sole Cell-to-Cell transport-ordering
+> authority. It supersedes the competing direct-only assumption in
+> `260827-1004-hardware-independent-roadmap` Phase 04. Public export and
+> distributed leases remain deferred; this decision does not assert runtime,
+> QEMU, hardware, or production evidence.
+
+> **Execution boundary (2026-08-28):** The K1 fixture and single-guest baseline
+> suite are implemented and CI-gated. The actual runner passed 1/1 with
+> `samples=1000 success=1000 calibration=MEASURED`, `role_gate=PASS`,
+> successful 1/2/4/8/16-client sweeps,
+> `soak attempted=10000 success=10000 silent_drop=0`, and
+> `overflow status=PASS` at `queue_peak=16`. The two-real-broker relay path
+> remains blocked only by the protected-persistence, authenticated-time, and
+> reviewed pending-key-binding entry gates under frozen KMS opcodes 9–14 in
+> `.agents/260825-1726-kms-silo-production-root/phase-04-service-net-mutual-tls-integration.md`.
+> It reopens only when DEV_REFERENCE Phase 8 emits exact
+> `GO: PHASE4_ENTRY_GATES_SATISFIED`; this is not a global blocker for local
+> work. The attempted protocol scaffold was fully reverted after governance
+> review, leaving no dead or unwired implementation.
 
 ## Verdict
 

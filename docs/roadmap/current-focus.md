@@ -35,13 +35,18 @@ or qualified independent external floor.
   independent preemption/supervisor-restart outcomes is executable QEMU work.
   The existing CPU-bound budget stimulus under pinned QEMU-TCG 10.2.0 is not
   those missing outcomes.
-- The approved local Cell-to-Cell fixture and RV64 `app-bench` broker oracle
-  are now executable through `scripts/run-c2c-broker-oracle-qemu.sh`. The
-  isolated QEMU run measured 100 warmup / 1,000 calibration calls, passed the
-  1/2/4/8/16-client sweeps and role gate, completed the 10,000-call soak with
-  zero silent drops, and passed the queue-overflow oracle. This is single-guest
+- Single-guest local Cell-to-Cell evidence is now required through the
+  [CI workflow](../../.github/workflows/ci.yml) job
+  `c2c-broker-oracle-single-guest-local-runtime`, displayed as
+  `C2C Broker Oracle (single-guest local-runtime QEMU)`. The job allows
+  60 minutes, limits the oracle step to 40 minutes, and uses an `if: always()`
+  upload for the runner log on ordinary success or failure. Actual runner
+  verification passed integration 1/1 with
+  `samples=1000 success=1000 calibration=MEASURED`, `role_gate=PASS`, soak
+  `attempted=10000 success=10000 silent_drop=0`, and
+  `overflow status=PASS`. This remains single-guest
   local-runtime QEMU evidence only; it does not prove two-node direct LAN,
-  relay, remote/public operation, or protected relay identity.
+  relay, remote/public operation, protected relay identity, or production.
 - Project each completed lane immediately into the roadmap and acceptance views
   at its exact evidence ceiling.
 - The managed-surface child is implementation-complete with host/RISC-V

@@ -45,6 +45,17 @@
   queue-overflow oracle (`queue_peak=16`). This is single-guest local-runtime
   QEMU evidence only, not two-node, relay, remote/public, or production
   evidence.
+- Added the required [CI workflow](../.github/workflows/ci.yml) gate
+  `c2c-broker-oracle-single-guest-local-runtime`, displayed as
+  `C2C Broker Oracle (single-guest local-runtime QEMU)`, with a 60-minute job
+  limit and 40-minute oracle-step limit. Its `if: always()` upload retains
+  `c2c-broker-oracle-single-guest-local-runtime-qemu-log-${{ github.run_attempt }}`
+  on ordinary success or failure. Actual runner verification passed integration
+  1/1 with `samples=1000 success=1000 calibration=MEASURED`,
+  `role_gate=PASS`, soak
+  `attempted=10000 success=10000 silent_drop=0`, and
+  `overflow status=PASS`. The gate adds no two-node, relay, remote, or
+  production claim.
 - Roadmap work is now distinguished as current executable work, current-scope
   technical debt, future capability, external-gated prerequisite, or production
   release gate. Advanced capability and production prerequisites no longer read

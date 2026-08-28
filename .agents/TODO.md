@@ -1,4 +1,40 @@
 # TODO
+- Hiện tại chỉ có RPi3 B+, bỏ RPi3 A+ cho đến khi có nhu cầu thực tế.
+### Hai blocker không thể tự đóng
+1. Sáu chữ ký con người độc lập:
+  - compiler/toolchain owner;
+  - independent PAL reviewer;
+  - SDK/runtime owner;
+  - security owner;
+  - performance owner;
+  - independent measurement reviewer.
+2. Umbrella Phase 03 production authority:
+  - external non-replayable hardware floor;
+  - physical replay/power-loss evidence;
+  - production anchors/credentials;
+  - signed CI hoặc secure measured runner;
+  - release/ledger closure;
+  - security-owner và independent-reviewer approval.
+
+### Thứ tự thực hiện khuyến nghị
+1. Chọn floor backend + production hardware
+2. Security review thiết kế floor/A-B protocol
+3. Fix loader signature boundary
+4. Implement floor persistence/recovery
+5. Provision publisher/owner anchors
+6. Wire mọi task-creation path
+7. Thiết lập authenticated runner
+8. Chạy hostile + physical power-loss matrix
+9. Retain immutable evidence bundle
+10. Hai umbrella approvals
+11. Sáu PAL approvals trên cùng manifest digest
+12. Release/ledger PASS
+13. Xét mở PAL-IMPLEMENTATION-CHECKPOINT
+
+
+
+
+
 
 
 ## Canonical Capability Routing
@@ -13,7 +49,7 @@ physical, secure-root, cloud, or production evidence.
 | Tier 3 hostile QEMU evidence | `scope-gated` | Add VMM/VirtIO transport for bounds, descriptors, and backend errors, plus independent preemption and supervisor-restart outcomes |
 | ARM64 persistent storage | `scope-gated` | Add supported Phase 06 scenarios; the fixed 8 MiB `build/tier3-arm64-persistent.img` policy is approved |
 | Desktop/ViUI/SDK | `scope-gated` | F1 signing governance is restored; resume the owning QEMU input/scanout slice |
-| Local Cell-to-Cell | `scope-gated` | Implement the approved ephemeral K1 injection for the RV64 `app-bench` oracle, then record IPC, queue/cache, and saturation baselines |
+| Local Cell-to-Cell | `scope-gated` | K1 fixture and the single-guest local-runtime QEMU baseline suite are done and required by CI job `c2c-broker-oracle-single-guest-local-runtime`; next prove the still-open two-node relay/direct-LAN and restart-cleanup criteria |
 | Kernel security/PAL | `governance-gated` | Obtain named approvals and implementation checkpoints |
 | Authenticated evidence | `scope-gated` | Run and offline-verify the immutable `.github/workflows/ci.yml` bundle; only approved software/QEMU classes are eligible |
 | x86 VirtIO parity | `scope-gated` | Add supported Phase 06 hostile scenarios, then pin one transport after the shared persistence backend |
@@ -24,7 +60,7 @@ physical, secure-root, cloud, or production evidence.
     - Phase 05: Gỡ nghẽn USB Policy v3 & Level IRQ 9
     - cần sensor như SHT3x hoặc MPU6050
 2. [in-progress] RISC-V/x86 Board: Bringup thực tế trên VF2, Pioneer, MiniPC
-3. [blocked] SDK relay client mutual TLS: phụ thuộc production KMS/Silo identity lifecycle.
+3. [blocked] SDK relay client mutual TLS: only this two-real-broker relay path is blocked by the protected-persistence, authenticated-time, and reviewed pending-key-binding entry gates under frozen KMS opcodes 9–14 in `.agents/260825-1726-kms-silo-production-root/phase-04-service-net-mutual-tls-integration.md`; reopen only when DEV_REFERENCE Phase 8 emits exact `GO: PHASE4_ENTRY_GATES_SATISFIED`. This is not a global blocker for single-guest or other approved local work; the attempted protocol scaffold was fully reverted after governance review, with no dead or unwired implementation remaining.
  
 4. [blocked] App Tiers completion: cần phần cứng (RPi4b + secure controller riêng hoặc secure boot + remote CAS service)
     - Tier 1 baseline

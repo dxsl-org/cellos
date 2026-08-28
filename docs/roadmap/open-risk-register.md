@@ -21,7 +21,7 @@ Primary planning classification for the open entries:
 | Planning class | Entries |
 |---|---|
 | Current executable work | Narrow fixes, bounded fixtures, and software evidence that an owning lane can perform now |
-| Current-scope technical debt | Raw TLS length handling, net polling latency, soft-skipping HTTPS evidence, the pinned-QEMU compatibility gap, CI intermittency, and AArch64 semihosting |
+| Current-scope technical debt | Raw TLS length handling, net polling latency, soft-skipping HTTPS evidence, the pinned-QEMU compatibility gap, unrelated hypervisor CI intermittency, and AArch64 semihosting |
 | Future capability | Remote/public net-broker completion and native POSIX completeness beyond currently supported contracts |
 | External-gated prerequisite | Unavailable exact board qualification and exact product/vendor evidence for protected relay or production-root milestones |
 | Production release gate | Fleet signing/provenance, production admission, protected identity/root, secure/measured boot, qualified floor and persistent recovery, physical hostile evidence, authenticated evidence runner, human approvals, and governed ledger/release closure |
@@ -33,6 +33,11 @@ Mitigation and prequalification work may continue without promoting local,
 QEMU, or RPi3 results. The authoritative execution class, owner, and reopening
 event are in
 [the roadmap capability table](../project-roadmap.md#capability-lanes).
+
+The former single-guest local Cell-to-Cell oracle CI-coverage gap is closed by
+the required [workflow job](../../.github/workflows/ci.yml)
+`c2c-broker-oracle-single-guest-local-runtime`. Its result remains QEMU evidence
+only and does not close two-node, relay, remote/public, or production risks.
 
 
 ## Critical
@@ -90,6 +95,16 @@ event are in
   child remains unauthorized behind the six human approvals, implementation
   checkpoint, and umbrella Phase 03 production gates.
  
+- Protected relay mTLS remains unimplemented and fail-closed. The service-net
+  Build and
+  [Cell-to-Cell Anywhere Phase 05](../../.agents/260819-1409-cell-to-cell-anywhere-core/phase-05-relay-first-remote-correctness-oracle.md)
+  relay path may reopen only after real protected persistence and authenticated
+  time exist, a distinct reviewed pending-key binding is approved under the
+  frozen KMS ABI, and the `DEV_REFERENCE`
+  [authority plan](../../.agents/260826-1605-phase4-dev-reference-authority/plan.md)
+  Phase 8 returns GO. This is a lane-local governance gate, not a blocker for
+  the CI-gated single-guest local runtime or unrelated QEMU, RPi3, sensor, and
+  local-runtime development.
 
 ## Medium
 

@@ -77,8 +77,8 @@ approved paths return `NotSupported`; no raw or insecure fallback exists.
 - [x] Resolve relay-first versus direct-only contract conflict.
 - [x] Freeze one bounded local runtime scope with distributed leases deferred.
 - [x] Approve and implement the ephemeral run-scoped K1 image-fixture contract.
-- [x] Record the single-guest RV64 broker calibration, concurrency, soak, role, and overflow baseline.
-- [ ] Prove only approved two-node behavior and cleanup.
+- [x] Record and CI-gate the single-guest RV64 broker calibration, concurrency, soak, role, and overflow baseline.
+- [ ] Prove approved two-node relay/direct-LAN behavior and restart cleanup.
 
 ## Success Criteria
 
@@ -95,19 +95,36 @@ Authenticate before state mutation; bind cluster/node/session generation; cap ev
 
 Do not broaden into distributed leases, HyParView/PlumTree, internet traversal, public exports, or relay identity.
 
-The relay-first recovery plan is the sole transport-ordering authority. Before
-runtime edits, approve a test-only K1 fixture and record the required local
-baselines; a later direct-LAN optimization must not become a raw or insecure fallback.
+The K1 fixture and single-guest baseline oracle are implemented and required in
+CI. This closes the local fixture/baseline prerequisite only; relay, two-node
+direct-LAN, and restart-cleanup evidence remain open, and no raw or insecure
+fallback is permitted.
 
 ## Deviation Log
 
 - Decision: the user selected an ephemeral, run-scoped 32-byte K1 injected into
   the RV64 `app-bench` oracle image only; it is shared only by that run's
   participants and removed with its workspace.
-- Evidence: `scripts/run-c2c-broker-oracle-qemu.sh` completed a real isolated
-  QEMU run with `calibration=MEASURED`, successful 1/2/4/8/16-client sweeps,
-  `role_gate=PASS`, a 10,000-call soak with `silent_drop=0`, and
+- Evidence: required CI job
+  `c2c-broker-oracle-single-guest-local-runtime` (`C2C Broker Oracle
+  (single-guest local-runtime QEMU)`) runs
+  `scripts/run-c2c-broker-oracle-qemu.sh`. The workflow YAML is valid, and the
+  actual isolated RV64 QEMU runner passed 1/1 with
+  `samples=1000 success=1000 calibration=MEASURED`,
+  `role_gate=PASS`, successful 1/2/4/8/16-client sweeps,
+  `soak attempted=10000 success=10000 silent_drop=0`, and
   `overflow status=PASS` at `queue_peak=16`.
-- Boundary: this is a single-guest local broker/runtime oracle. It does not
-  satisfy the two-node direct-LAN, restart-cleanup, relay, remote/public, or
-  production criteria above.
+- Boundary: this is a single-guest local broker/runtime QEMU oracle. It does
+  not satisfy the two-node relay, direct-LAN, restart-cleanup, remote/public,
+  Phase 05, or production criteria above, and it does not raise this phase's
+  evidence ceiling.
+- Governance gate: only the two-real-broker relay path is blocked by the three
+  entry gates in
+  `.agents/260825-1726-kms-silo-production-root/phase-04-service-net-mutual-tls-integration.md`:
+  protected persistence, authenticated time, and reviewed pending-key binding
+  under frozen KMS opcodes 9–14 with AC-001 through AC-011 evidence. Reopen that
+  path only when DEV_REFERENCE Phase 8's exact verifier emits
+  `GO: PHASE4_ENTRY_GATES_SATISFIED`; this is not a global blocker for
+  single-guest or other approved local work.
+- Governance review: the attempted protocol scaffold for the blocked
+  two-broker path was fully reverted. No dead or unwired implementation remains.

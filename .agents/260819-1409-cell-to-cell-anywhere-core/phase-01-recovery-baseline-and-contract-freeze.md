@@ -1,6 +1,6 @@
 ---
 title: "Phase 01 - Recovery Baseline and Contract Freeze"
-status: pending
+status: in_progress
 priority: P1
 effort: 3
 depends_on: []
@@ -28,7 +28,7 @@ Priority P1. Freeze Candidate B and mark this folder as the recovery plan supers
 ## Requirements
 
 - Functional: define Local endpoint, Remote endpoint, export registry, V1 C2C envelope, typed remote errors.
-- Non-functional: no product-code edits in this phase; no CI or hardware claims; freeze measurable feasibility budgets before implementation.
+- Non-functional: no product-code edits in this phase; record only the bounded single-guest local-runtime QEMU CI evidence, with no two-node, relay, LAN, hardware, or production claim.
 
 ## Frozen Feasibility Budgets
 
@@ -59,10 +59,10 @@ Data flow: old artifacts and current code evidence enter as PRIOR/current inputs
 
 - [ ] Root validates the evidence citations.
 - [x] Root completed Red Team Review before implementation.
-- [ ] User confirms Law-1-free Candidate B is the default.
-- [ ] Capture pre-change local direct IPC p99 baseline.
-- [ ] Record queue/cache memory budgets.
-- [ ] Record measured broker concurrency and saturation baseline.
+- [x] User confirms Law-1-free Candidate B is the default.
+- [x] Capture and CI-gate the pre-change local direct IPC p99 baseline.
+- [x] Record and CI-gate the queue/cache memory budgets.
+- [x] Record and CI-gate the measured broker concurrency and saturation baseline.
 
 ## Success Criteria
 
@@ -88,3 +88,34 @@ Revert this plan folder only. No product code or docs outside the folder are tou
 ## Next Steps
 
 Proceed to stable node identity and export registry. Candidate A triggers only after reproducible failure against frozen targets with root cause specifically blocking ingress and no userspace correction.
+
+## Deviation Log
+
+- **2026-08-27**: Implemented Relay-First Contract Freeze.
+  - Explicitly added `NotSupported` to `ReplyStatus` in `local_ingress.rs`.
+  - Updated dispatch to return `NotSupported` instead of `Indeterminate` when paths are exhausted in `request_dispatch.rs`.
+  - Documented the freeze of the Relay-First contract in `main.rs`.
+  - Validated changes via bench_oracle/frames compilation scope. All changes confined within broker.
+- Correction: the contract-freeze work added a fail-closed `NotSupported`
+  outcome before the required feasibility measurements. That behavior is
+  retained as compatible with the user-selected relay-first contract, but it
+  does not complete this phase or authorize later runtime work.
+- Resolved local prerequisite: the ephemeral run-scoped K1 image fixture and
+  single-guest baselines are implemented and required by CI job
+  `c2c-broker-oracle-single-guest-local-runtime`. The actual isolated RV64 QEMU
+  runner passed 1/1 with `samples=1000 success=1000 calibration=MEASURED`,
+  `role_gate=PASS`, successful 1/2/4/8/16-client sweeps,
+  `soak attempted=10000 success=10000 silent_drop=0`, and
+  `overflow status=PASS` at `queue_peak=16`.
+- Evidence boundary: the CI job proves only the single-guest local broker/runtime
+  QEMU oracle. Two-node relay, direct-LAN, restart cleanup, Phase 05, and
+  production remain open.
+- Governance gate: only the two-real-broker relay path is blocked by the
+  protected-persistence, authenticated-time, and reviewed pending-key-binding
+  entry gates under frozen KMS opcodes 9–14 in
+  `.agents/260825-1726-kms-silo-production-root/phase-04-service-net-mutual-tls-integration.md`.
+  Reopen that path only when DEV_REFERENCE Phase 8's exact verifier emits
+  `GO: PHASE4_ENTRY_GATES_SATISFIED`; this does not block approved single-guest
+  or other local-only work.
+- Governance review: the attempted protocol scaffold for the blocked two-broker
+  path was fully reverted; no dead or unwired implementation remains.
