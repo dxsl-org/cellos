@@ -39,6 +39,8 @@
   PID/start-time-bound process group that stale cleanup terminates before
   workspace removal; the default VFS image contains no K1. Broker reply
   evidence is bound to the attested live owner of the registered broker root.
+  Workspace and standalone integration dependencies are pinned by tracked
+  lockfiles, and every oracle cargo invocation runs with `--locked`.
   Its real QEMU run passed measured 100/1,000 calibration,
   1/2/4/8/16-client sweeps, and the broker role gate; it completed a
   10,000-call soak (`success=10000`, `silent_drop=0`) and passed the bounded

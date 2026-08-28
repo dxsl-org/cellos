@@ -3,6 +3,9 @@
 # Nested crate build artifacts (tools/*/target, vi-build-test/target, …)
 target/
 Cargo.lock
+# Reproducible workspace and standalone integration evidence builds.
+!/Cargo.lock
+!/tests/integration/Cargo.lock
 
 # Fetched Linux VM guest artifacts (scripts/fetch-alpine*.sh cache dirs)
 .alpine-cache/
