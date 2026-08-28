@@ -11,7 +11,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
-from app_tier_acceptance import baseline_ref, source, validator
+from app_tier_acceptance import baseline_ref, public_api, source, validator
 from app_tier_acceptance.checks import canonical_digest
 from fixtures import append_event, refresh_event
 import test_acceptance_ledger as acceptance
@@ -23,6 +23,10 @@ class ReviewRegressionTests(unittest.TestCase):
     def fixture(self, full_matrix: bool = True):
         """Return the shared real-Git future fixture."""
         return acceptance.LedgerTests("run").future(full_matrix)
+
+    def test_public_api_resolves_explicit_module_paths(self) -> None:
+        root = Path(__file__).resolve().parents[2]
+        self.assertIn("libs/viui/src/managed_surface_tests.rs", public_api.paths(root))
 
     def test_clean_cohort_requires_resolvable_git_identity(self) -> None:
         root, data, baseline, baseline_root = self.fixture()

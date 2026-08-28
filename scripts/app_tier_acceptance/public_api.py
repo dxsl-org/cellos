@@ -17,7 +17,11 @@ ROOTS = (
     "libs/viui/Cargo.toml",
     "libs/viui-macros/Cargo.toml",
 )
-FILE_MODULE = re.compile(r"^\s*(?:pub\s+)?mod\s+([A-Za-z_][A-Za-z0-9_]*)\s*;", re.MULTILINE)
+FILE_MODULE = re.compile(
+    r'(?:^\s*#\[\s*path\s*=\s*"([^"]+)"\s*\]\s*\n)?'
+    r"^\s*(?:pub\s+)?mod\s+([A-Za-z_][A-Za-z0-9_]*)\s*;",
+    re.MULTILINE,
+)
 
 
 def paths(root: Path) -> set[str]:
@@ -35,8 +39,13 @@ def paths(root: Path) -> set[str]:
         if relative.suffix != ".rs":
             continue
         module_root = relative.parent if relative.name in {"lib.rs", "mod.rs"} else relative.parent / relative.stem
-        for module in FILE_MODULE.findall(source_path.read_text(encoding="utf-8")):
-            candidates = (module_root / f"{module}.rs", module_root / module / "mod.rs")
+        source = source_path.read_text(encoding="utf-8")
+        for declared_path, module in FILE_MODULE.findall(source):
+            candidates = (
+                (relative.parent / declared_path,)
+                if declared_path
+                else (module_root / f"{module}.rs", module_root / module / "mod.rs")
+            )
             resolved = next((candidate for candidate in candidates if (root / candidate).is_file()), None)
             if resolved is None:
                 raise ValueError(f"public module {module} declared by {name} has no source file")
