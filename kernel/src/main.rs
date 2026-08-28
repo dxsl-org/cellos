@@ -979,6 +979,12 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
                 log_info("X86-VMM-SMOKE: SKIP (no SVM/VMX root)");
             }
         }
+        #[cfg(all(target_arch = "x86_64", feature = "x86-mmio-smoke"))]
+        if cpu_features::has_x86_virt() {
+            crate::hypervisor::svm_registry::x86_mmio_smoke();
+        } else {
+            log_info("X86-MMIO-SMOKE: SKIP (no SVM/VMX root)");
+        }
 
         // Spawn the RISC-V Platform Cell before init. x86_64 uses the
         // ACPI-MCFG kernel scanner above until ECAM discovery has a private
@@ -1070,7 +1076,6 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // remaining Info chatter is per-spawn noise ([loader] SpawnFromPath, Spawn:,
     // ELF LOAD) that floods the UART and buries the shell prompt. WARN/ERROR still
     // surface real problems. Raise back to Info when debugging the spawn path.
-    log::set_max_level(log::LevelFilter::Warn);
 
     // Enable interrupts before entering the idle loop.
     // RISC-V: set SPP=1 and SIE=1 in sstatus (0x102).
@@ -1088,6 +1093,8 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // x86_64, x86_32, AArch32: use the Arch trait's enable_interrupts().
     #[cfg(any(target_arch = "x86_64", target_arch = "x86", target_arch = "arm"))]
     crate::hal::ARCH.enable_interrupts();
+
+    log::set_max_level(log::LevelFilter::Warn);
 
     // Probe 'Q': fires ONLY if no IRQ preempted the code between daifclr and here.
     // Q fires  → BCM2835 IRQ is not actually delivered to CPU on QEMU (pending but silent).

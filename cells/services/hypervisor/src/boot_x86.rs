@@ -37,7 +37,7 @@ const INITRD_PATH: &str = "/initrd.gz";
 // periodic mode the guest arms PIT channel 0, which the cell's real-timebase
 // PIT + idle IRQ0 injection can feed; one-shot mode never arms a timer we can
 // drive, so the idle loop HLTs forever waiting for a tick that never comes.
-const CMDLINE: &str = "earlycon=uart8250,io,0x3f8,115200 console=ttyS0 nox2apic lpj=4000000 nohz=off highres=off rdinit=/bin/sh panic=1";
+const CMDLINE: &str = "earlycon=uart8250,io,0x3f8,115200 console=ttyS0 nox2apic lpj=4000000 nohz=off highres=off rdinit=/bin/sh panic=1 virtio_mmio.device=512@0xd0000000:5 virtio_mmio.device=512@0xd0000200:6";
 
 /// 2 MiB alignment for the initramfs placement.
 const ALIGN_2M: u64 = 0x20_0000;
@@ -175,7 +175,13 @@ pub fn run() {
     rb[3] = start_info_gpa; // RBX (x86 gpr index 3)
     vmm::vcpu_regs(vm_id, vcpu_id, &mut rb, true);
 
+    let persistent_disk = crate::persistent_disk::open();
+    if persistent_disk.is_some() {
+        println("[hv-x86] persistent disk: /mnt/sd/guest_disk.img");
+    } else {
+        println("[hv-x86] volatile disk fallback");
+    }
     println("[hv-x86] vCPU ready — entering run loop");
-    run_loop_x86::run(vm_id, vcpu_id);
+    run_loop_x86::run(vm_id, vcpu_id, persistent_disk);
     println("[hv-x86] guest exited");
 }

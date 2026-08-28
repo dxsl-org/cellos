@@ -108,7 +108,7 @@ impl VirtioMmio {
                 if nq < MAX_QUEUES && self.queues[nq].ready && self.queues[nq].num > 0 {
                     let qcfg = self.queues[nq];
                     dev.notify(nq, &qcfg, vm_id, vcpu_id);
-                    self.intr_status |= 1; // used-buffer notification
+                    self.signal_used();
                 }
             }
             0x064 => self.intr_status &= !val, // InterruptACK
@@ -158,6 +158,15 @@ impl VirtioMmio {
             QueueCfg::default()
         }
     }
+    /// Mark a used-buffer completion pending until the guest ACKs ISR bit 0.
+    pub fn signal_used(&mut self) {
+        self.intr_status |= 1;
+    }
+
+    #[cfg(any(target_arch = "x86_64", test))]
+    pub fn interrupt_pending(&self) -> bool {
+        self.intr_status != 0
+    }
 }
 
 #[inline]
@@ -169,19 +178,10 @@ fn set_hi(v: &mut u64, hi: u32) {
     *v = (*v & 0x0000_0000_FFFF_FFFF) | ((hi as u64) << 32);
 }
 
-/// virtio-mmio region: base 0x0a000000, stride 0x200, 32 slots.
-pub const VIRTIO_MMIO_BASE: u64 = 0x0a00_0000;
-pub const VIRTIO_MMIO_STRIDE: u64 = 0x200;
-pub const VIRTIO_MMIO_SLOTS: u64 = 32;
+#[path = "virtio-mmio-address.rs"]
+mod address;
+pub use address::{owns, slot_and_offset};
 
-pub fn owns(ipa: u64) -> bool {
-    (VIRTIO_MMIO_BASE..VIRTIO_MMIO_BASE + VIRTIO_MMIO_SLOTS * VIRTIO_MMIO_STRIDE).contains(&ipa)
-}
-
-pub fn slot_and_offset(ipa: u64) -> (usize, u64) {
-    let rel = ipa - VIRTIO_MMIO_BASE;
-    (
-        (rel / VIRTIO_MMIO_STRIDE) as usize,
-        rel % VIRTIO_MMIO_STRIDE,
-    )
-}
+#[cfg(test)]
+#[path = "virtio-mmio-tests.rs"]
+mod tests;

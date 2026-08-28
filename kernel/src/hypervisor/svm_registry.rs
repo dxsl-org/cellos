@@ -12,6 +12,7 @@ extern crate alloc;
 
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
+use core::sync::atomic::{AtomicU32, Ordering};
 
 use crate::memory::ept::{NestedFormat, NestedPageTable};
 use crate::memory::frame::{phys_to_virt, FRAME_ALLOCATOR};
@@ -31,6 +32,9 @@ struct VcpuFrames {
 
 /// GPA of the guest LAPIC MMIO window (x86 architectural default).
 const APIC_GPA: u64 = 0xFEE0_0000;
+/// ASID 0 is reserved. Never reuse an ASID during a boot: stale nested-TLB
+/// translations would otherwise let a new VM execute a previous VM's GPA map.
+static NEXT_ASID: AtomicU32 = AtomicU32::new(1);
 
 struct SvmVm {
     npt: NestedPageTable,
@@ -148,9 +152,6 @@ pub fn create_vm(owner: usize, guest_pages: usize) -> ViResult<usize> {
 }
 
 /// Create a vCPU entering at GPA `entry_pc`; returns the 1-based `vcpu_id`.
-///
-/// Under `test-hooks`, writes an M1 smoke blob (`mov dx,0x3f8; mov al,'K';
-/// out dx,al; hlt`) at the entry GPA so the test needs no cell-side guest RAM.
 pub fn create_vcpu(owner: usize, vm_id: usize, entry_pc: u64) -> ViResult<usize> {
     // Allocate the SVM backing frames (VMCB + host-save + IOPM + MSRPM).
     let vmcb = alloc_contig(1).ok_or(ViError::OutOfMemory)?;
@@ -177,23 +178,12 @@ pub fn create_vcpu(owner: usize, vm_id: usize, entry_pc: u64) -> ViResult<usize>
     let vm = map.get_mut(&(owner, vm_id)).ok_or(ViError::NotFound)?;
     let vcpu_id = vm.vcpus.len() + 1;
 
-    #[cfg(feature = "test-hooks")]
-    {
-        // GPA base is 0, so the guest-RAM offset equals entry_pc.
-        const SMOKE_BLOB: [u8; 8] = [0x66, 0xBA, 0xF8, 0x03, 0xB0, 0x4B, 0xEE, 0xF4];
-        let off = entry_pc as usize;
-        if off + SMOKE_BLOB.len() <= vm.guest_pages * PAGE_SIZE {
-            // SAFETY: guest RAM is kernel-allocated; no vCPU runs yet. guest_pa
-            // is PHYSICAL — map through HHDM to a kernel VA before writing (on
-            // x86 phys ≠ virt, unlike ARM's identity map).
-            unsafe {
-                let dst = phys_to_virt(vm.guest_pa as usize + off) as *mut u8;
-                core::ptr::copy_nonoverlapping(SMOKE_BLOB.as_ptr(), dst, SMOKE_BLOB.len());
-            }
-        }
-    }
-
     let ncr3 = vm.npt.ncr3();
+    let asid = NEXT_ASID
+        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
+            (current < u32::MAX).then_some(current + 1)
+        })
+        .map_err(|_| ViError::OutOfMemory)?;
     let vmcb_va = phys_to_virt(vmcb) as *mut u8;
     let apic_va = phys_to_virt(vm.apic_frame) as *mut u8;
     // SAFETY: frames freshly allocated + zeroed/filled above; all outlive the
@@ -206,10 +196,13 @@ pub fn create_vcpu(owner: usize, vm_id: usize, entry_pc: u64) -> ViResult<usize>
             host as u64,
             entry_pc,
             ncr3,
+            asid,
             0, // gdt_gpa — smoke/PVH guest does not reload segments in the MVP
             iopm as u64,
             msrpm as u64,
             apic_va,
+            phys_to_virt(vm.guest_pa as usize) as *const u8,
+            vm.guest_pages * PAGE_SIZE,
         )
     };
     vm.vcpus.push(vcpu);
@@ -268,6 +261,15 @@ pub fn run_vcpu_hal(owner: usize, vm_id: usize, vcpu_id: usize) -> ViResult<HalV
             cr0
         );
     }
+    if matches!(exit, HalVmExit::Unknown { ec: 0x400, .. }) {
+        let (info1, gpa, rip) = vcpu.npf_diagnostics();
+        log::error!(
+            "[hv-x86] unsupported NPF: info1={:#x} gpa={:#x} rip={:#x}",
+            info1,
+            gpa,
+            rip
+        );
+    }
     if if_was_set {
         // SAFETY: restore the caller's interrupt-enable state.
         unsafe {
@@ -294,15 +296,22 @@ pub fn write_guest_memory(
     if end > vm.guest_pages * PAGE_SIZE {
         return Err(ViError::InvalidInput);
     }
-    // SAFETY: guest RAM is kernel-allocated; src_ptr validated by the syscall
-    // layer; no vCPU runs concurrently in a single-task cell. guest_pa is
-    // PHYSICAL — map through HHDM (phys ≠ virt on x86).
-    unsafe {
-        core::ptr::copy_nonoverlapping(
-            src_ptr as *const u8,
-            phys_to_virt(vm.guest_pa as usize + offset) as *mut u8,
-            len,
-        );
+    let mut copied = 0;
+    while copied < len {
+        let current_gpa = gpa + copied as u64;
+        let page_remaining = PAGE_SIZE - current_gpa as usize % PAGE_SIZE;
+        let chunk = (len - copied).min(page_remaining);
+        let hpa = vm.npt.translate(current_gpa).ok_or(ViError::InvalidInput)?;
+        // SAFETY: the software NPT walk resolves this GPA to kernel-owned guest
+        // RAM; the syscall layer validated `src_ptr`; `chunk` stays in one page.
+        unsafe {
+            core::ptr::copy_nonoverlapping(
+                (src_ptr + copied) as *const u8,
+                phys_to_virt(hpa as usize) as *mut u8,
+                chunk,
+            );
+        }
+        copied += chunk;
     }
     Ok(len)
 }
@@ -323,15 +332,22 @@ pub fn read_guest_memory(
     if end > vm.guest_pages * PAGE_SIZE {
         return Err(ViError::InvalidInput);
     }
-    // SAFETY: guest RAM is kernel-allocated; dst_ptr validated by the syscall
-    // layer; no vCPU runs concurrently in a single-task cell. guest_pa is
-    // PHYSICAL — map through HHDM (phys ≠ virt on x86).
-    unsafe {
-        core::ptr::copy_nonoverlapping(
-            phys_to_virt(vm.guest_pa as usize + offset) as *const u8,
-            dst_ptr as *mut u8,
-            len,
-        );
+    let mut copied = 0;
+    while copied < len {
+        let current_gpa = gpa + copied as u64;
+        let page_remaining = PAGE_SIZE - current_gpa as usize % PAGE_SIZE;
+        let chunk = (len - copied).min(page_remaining);
+        let hpa = vm.npt.translate(current_gpa).ok_or(ViError::InvalidInput)?;
+        // SAFETY: the software NPT walk resolves this GPA to kernel-owned guest
+        // RAM; the syscall layer validated `dst_ptr`; `chunk` stays in one page.
+        unsafe {
+            core::ptr::copy_nonoverlapping(
+                phys_to_virt(hpa as usize) as *const u8,
+                (dst_ptr + copied) as *mut u8,
+                chunk,
+            );
+        }
+        copied += chunk;
     }
     Ok(len)
 }
@@ -409,6 +425,7 @@ pub fn x86_smoke() {
     const OWNER: usize = 0xF00D;
     const ENTRY: u64 = 0x1000; // GPA (base 0)
     const GUEST_PAGES: usize = 256; // 1 MiB
+    const BLOB: [u8; 8] = [0x66, 0xBA, 0xF8, 0x03, 0xB0, 0x4B, 0xEE, 0xF4];
 
     let vm_id = match create_vm(OWNER, GUEST_PAGES) {
         Ok(id) => id,
@@ -417,6 +434,11 @@ pub fn x86_smoke() {
             return;
         }
     };
+    if write_guest_memory(OWNER, vm_id, ENTRY, BLOB.as_ptr() as usize, BLOB.len()).is_err() {
+        log::error!("[hv-x86] smoke: fixture write failed");
+        reap_vms_for_task(OWNER);
+        return;
+    }
     if let Err(e) = create_vcpu(OWNER, vm_id, ENTRY) {
         log::error!("[hv-x86] smoke: create_vcpu failed: {:?}", e);
         reap_vms_for_task(OWNER);
@@ -445,4 +467,112 @@ pub fn x86_smoke() {
     }
 
     reap_vms_for_task(OWNER);
+}
+
+/// Executable NPF contract: decode one VirtIO MMIO read, service its destination
+/// register, then prove exactly-once RIP advancement through PortOut + HLT.
+#[cfg(feature = "x86-mmio-smoke")]
+pub fn x86_mmio_smoke() {
+    const OWNER: usize = 0xF00E;
+    const ENTRY: u64 = 0x1000;
+    const GUEST_PAGES: usize = 256;
+    const MAGIC: u64 = 0x7472_6976;
+    const BLOB: [u8; 15] = [
+        0xBB, 0x00, 0x00, 0x00, 0xD0, // mov ebx, 0xd0000000
+        0x8B, 0x0B, // mov ecx, [ebx]
+        0x88, 0xC8, // mov al, cl
+        0x66, 0xBA, 0xF8, 0x03, // mov dx, 0x3f8
+        0xEE, // out dx, al
+        0xF4, // hlt
+    ];
+
+    let Ok(vm_id) = create_vm(OWNER, GUEST_PAGES) else {
+        log::error!("X86-MMIO-SMOKE: FAIL create_vm");
+        return;
+    };
+    let mut observed = [0u8; BLOB.len()];
+    if write_guest_memory(OWNER, vm_id, ENTRY, BLOB.as_ptr() as usize, BLOB.len()).is_err()
+        || read_guest_memory(
+            OWNER,
+            vm_id,
+            ENTRY,
+            observed.as_mut_ptr() as usize,
+            observed.len(),
+        )
+        .is_err()
+        || observed != BLOB
+        || create_vcpu(OWNER, vm_id, ENTRY).is_err()
+    {
+        log::error!("X86-MMIO-SMOKE: FAIL fixture setup/readback");
+        reap_vms_for_task(OWNER);
+        return;
+    }
+
+    use api::hypervisor::ViVmExit as ApiVmExit;
+    let mut read = ApiVmExit::Unknown { ec: 0, iss: 0 };
+    let mut port = ApiVmExit::Unknown { ec: 0, iss: 0 };
+    let mut hlt = ApiVmExit::Unknown { ec: 0, iss: 0 };
+    run_mmio_smoke_until_exit(OWNER, vm_id, &mut read);
+    let read_ok = match read {
+        ApiVmExit::MmioRead {
+            ipa: 0xd000_0000,
+            size: 4,
+            reg,
+        } if reg < 16 => {
+            let mut regs = [0u64; 32];
+            vcpu_regs(OWNER, vm_id, 1, regs.as_mut_ptr() as usize, false).is_ok() && {
+                regs[reg as usize] = MAGIC;
+                vcpu_regs(OWNER, vm_id, 1, regs.as_mut_ptr() as usize, true).is_ok()
+            }
+        }
+        _ => false,
+    };
+    if read_ok {
+        run_mmio_smoke_until_exit(OWNER, vm_id, &mut port);
+        run_mmio_smoke_until_exit(OWNER, vm_id, &mut hlt);
+    }
+
+    let port_ok = matches!(
+        port,
+        ApiVmExit::PortOut {
+            port: 0x3f8,
+            val: 0x76,
+            ..
+        }
+    );
+    if read_ok && port_ok && matches!(hlt, ApiVmExit::Hlt) {
+        log::info!("X86-MMIO-SMOKE: PASS (read+gpr+RIP)");
+    } else {
+        log::error!(
+            "X86-MMIO-SMOKE: FAIL read={:?} port={:?} hlt={:?}",
+            read,
+            port,
+            hlt
+        );
+    }
+    reap_vms_for_task(OWNER);
+}
+
+#[cfg(feature = "x86-mmio-smoke")]
+fn run_mmio_smoke_until_exit(owner: usize, vm_id: usize, exit: &mut api::hypervisor::ViVmExit) {
+    let interrupts_were_enabled = interrupts_enabled();
+    for _ in 0..1024 {
+        // SAFETY: the local exit slot is valid; `owner` owns this single-vCPU VM.
+        unsafe {
+            let _ = super::registry::run_vcpu(owner, vm_id, 1, 0, exit);
+        }
+        if !matches!(exit, api::hypervisor::ViVmExit::Preempted) {
+            break;
+        }
+        // Service the pending host IRQ without parking or entering the scheduler;
+        // STI defers delivery until after the following NOP.
+        unsafe {
+            core::arch::asm!("sti", "nop", "cli", options(nomem, nostack));
+        }
+    }
+    if interrupts_were_enabled {
+        unsafe {
+            core::arch::asm!("sti", options(nomem, nostack));
+        }
+    }
 }

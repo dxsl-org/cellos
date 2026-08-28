@@ -66,8 +66,10 @@ mod dtb;
 mod gicd;
 #[cfg(target_arch = "aarch64")]
 mod loader_image;
-#[cfg(target_arch = "aarch64")]
+#[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
 mod net_backend;
+#[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
+mod persistent_disk;
 #[cfg(target_arch = "aarch64")]
 mod pl011;
 #[cfg(target_arch = "aarch64")]
@@ -76,21 +78,20 @@ mod psci;
 mod run_loop;
 #[cfg(target_arch = "aarch64")]
 mod timer;
-#[cfg(target_arch = "aarch64")]
+#[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
 mod virtio_blk;
-#[cfg(target_arch = "aarch64")]
+#[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
 mod virtio_console;
-#[cfg(target_arch = "aarch64")]
+#[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
 mod virtio_gpu;
-#[cfg(target_arch = "aarch64")]
+#[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
 mod virtio_mmio;
-#[cfg(target_arch = "aarch64")]
+#[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
 mod virtio_net;
-#[cfg(target_arch = "aarch64")]
+#[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
 mod virtqueue;
-#[cfg(target_arch = "aarch64")]
+#[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
 mod virtqueue_guard;
-
 // ── x86_64 (SVM/VT-x) personality ──────────────────────────────────────────────
 #[cfg(target_arch = "x86_64")]
 mod acpi;
@@ -271,39 +272,7 @@ fn boot_arm() {
 
     println("[hv] vCPU ready — entering run loop");
     // ── 7. Run ───────────────────────────────────────────────────────────────
-    let vfs_tid = ostd::syscall::sys_lookup_service(api::syscall::service::VFS).unwrap_or(0);
-    let mut persistent_disk = None;
-    if vfs_tid != 0 {
-        let mut resp_buf = [0u8; api::ipc::IPC_BUF_SIZE];
-        let mut send_buf = [0u8; api::ipc::IPC_BUF_SIZE];
-        let root_req = api::ipc::VfsRequest::OpenRootDir { path: "/mnt" };
-        if let Ok(api::ipc::VfsResponse::DirHandle(mnt_dir)) =
-            ostd::ipc::service_call_typed(vfs_tid, &root_req, &mut send_buf, &mut resp_buf)
-        {
-            let open_sd_req = api::ipc::VfsRequest::OpenDir {
-                dir: mnt_dir,
-                name: "sd",
-            };
-            if let Ok(api::ipc::VfsResponse::DirHandle(sd_dir)) =
-                ostd::ipc::service_call_typed(vfs_tid, &open_sd_req, &mut send_buf, &mut resp_buf)
-            {
-                let open_req = api::ipc::VfsRequest::OpenFileAt {
-                    dir: sd_dir,
-                    name: "guest_disk.img",
-                };
-                if let Ok(api::ipc::VfsResponse::FileHandle(file_handle)) =
-                    ostd::ipc::service_call_typed(vfs_tid, &open_req, &mut send_buf, &mut resp_buf)
-                {
-                    let stat_req = api::ipc::VfsRequest::Stat("/mnt/sd/guest_disk.img");
-                    if let Ok(api::ipc::VfsResponse::Stat { size, is_dir: false }) =
-                        ostd::ipc::service_call_typed(vfs_tid, &stat_req, &mut send_buf, &mut resp_buf)
-                    {
-                        persistent_disk = Some((vfs_tid, file_handle, size));
-                    }
-                }
-            }
-        }
-    }
+    let persistent_disk = persistent_disk::open();
     if persistent_disk.is_some() {
         println("[hv] persistent disk: /mnt/sd/guest_disk.img");
     } else {

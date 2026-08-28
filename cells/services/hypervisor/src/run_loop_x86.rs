@@ -13,8 +13,17 @@
 //! kernel-side; only the legacy PIT tick is delivered from here.
 
 extern crate alloc;
+#[path = "x86-irq-dispatch.rs"]
+mod x86_irq_dispatch;
+#[path = "x86-mmio-dispatch.rs"]
+mod x86_mmio_dispatch;
+#[path = "x86-port-dispatch.rs"]
+mod x86_port_dispatch;
 
-use crate::{cmos_rtc::CmosRtc, pic_8259::Pic8259, pit_8253::Pit8253, uart_16550::Uart16550, vmm};
+use crate::{
+    cmos_rtc::CmosRtc, pic_8259::Pic8259, pit_8253::Pit8253, uart_16550::Uart16550,
+    virtio_blk::BlkDisk, virtio_mmio::VirtioMmio, virtio_net::NetDev, vmm,
+};
 use api::hypervisor::ViVmExit;
 use ostd::io::println;
 
@@ -22,56 +31,17 @@ pub enum RunOutcome {
     Shutdown,
 }
 
-/// Ports a guest write to which means "power off" (QEMU/firmware conventions).
-fn is_exit_port(port: u16) -> bool {
-    matches!(port, 0x604 | 0x501 | 0xB004)
-}
-
-/// Deliver the PIT tick if the guest has armed it and IRQ0 is deliverable.
-fn deliver_pit_tick(vm_id: usize, vcpu_id: usize, pit: &Pit8253, pic: &Pic8259) {
-    if pit.irq0_armed() {
-        if let Some(vector) = pic.irq0() {
-            vmm::inject_irq(vm_id, vcpu_id, vector as u32);
-        }
-    }
-}
-
-/// Drain pending host console bytes into the UART RX FIFO. The kernel's UART
-/// ring (fd 0) is a single-consumer stream — this image ships no shell cell,
-/// so the hypervisor is the sole reader and every keystroke reaches the guest.
-fn drain_host_input(uart: &mut Uart16550) {
-    let mut buf = [0u8; 32];
-    while let Ok(n) = ostd::syscall::sys_read(0, &mut buf) {
-        if n == 0 {
-            break;
-        }
-        for &b in &buf[..n] {
-            uart.push_rx(b);
-        }
-        if n < buf.len() {
-            break;
-        }
-    }
-}
-
-/// Inject the UART IRQ4 vector if the 16550 asserts an interrupt and the PIC
-/// gate is open. Returns true when the single per-entry injection slot was
-/// consumed.
-fn deliver_uart_irq(vm_id: usize, vcpu_id: usize, uart: &Uart16550, pic: &Pic8259) -> bool {
-    if !uart.irq_pending() {
-        return false;
-    }
-    match pic.irq(4) {
-        Some(vector) => {
-            vmm::inject_irq(vm_id, vcpu_id, vector as u32);
-            true
-        }
-        None => false,
-    }
-}
-
 /// Run the guest until it powers off or an unrecoverable exit.
-pub fn run(vm_id: usize, vcpu_id: usize) -> RunOutcome {
+pub fn run(
+    vm_id: usize,
+    vcpu_id: usize,
+    disk_file: Option<(usize, api::vfs_file_handles::ViVfsFileHandle, u64)>,
+) -> RunOutcome {
+    let net_tid = ostd::syscall::sys_lookup_service(api::syscall::service::NET).unwrap_or(0);
+    let mut blk = BlkDisk::new(disk_file, None);
+    let mut blk_vmio = VirtioMmio::default();
+    let mut net = NetDev::new(net_tid, None);
+    let mut net_vmio = VirtioMmio::default();
     let mut uart = Uart16550::new();
     let mut pic = Pic8259::new();
     let mut pit = Pit8253::new();
@@ -88,64 +58,43 @@ pub fn run(vm_id: usize, vcpu_id: usize) -> RunOutcome {
         match exit {
             // ── Port OUT — device write; RIP already advanced kernel-side ─────
             ViVmExit::PortOut { port, size: _, val } => {
-                if Uart16550::owns(port) {
-                    uart.write(port, val);
-                } else if Pic8259::owns(port) {
-                    pic.write(port, val);
-                } else if Pit8253::owns(port) {
-                    pit.write(port, val);
-                } else if CmosRtc::owns(port) {
-                    rtc.write(port, val);
-                } else if is_exit_port(port) {
-                    println("[hv-x86] guest power-off port write");
+                if !x86_port_dispatch::write(port, val, &mut uart, &mut pic, &mut pit, &mut rtc) {
                     return RunOutcome::Shutdown;
-                } else {
-                    println(&alloc::format!(
-                        "[hv-x86] unhandled OUT port=0x{:x} val=0x{:x}",
-                        port,
-                        val
-                    ));
                 }
             }
-
             // ── Port IN — device read; return value in guest (E)AX ────────────
             ViVmExit::PortIn { port, size, .. } => {
-                let val = if Uart16550::owns(port) {
-                    uart.read(port)
-                } else if Pic8259::owns(port) {
-                    pic.read(port)
-                } else if Pit8253::owns(port) {
-                    pit.read(port)
-                } else if CmosRtc::owns(port) {
-                    rtc.read(port)
-                } else {
-                    // Open bus: all-ones (unclaimed port reads float high).
-                    0xFFFF_FFFF
-                };
-                write_rax(vm_id, vcpu_id, val, size);
+                let value = x86_port_dispatch::read(port, &mut uart, &pic, &mut pit, &mut rtc);
+                write_rax(vm_id, vcpu_id, value, size);
             }
-
-            // ── HLT — guest idle (a real HLT, or a paced PAUSE busy-wait the
-            //    kernel surfaced as Hlt): deliver the PIT tick so jiffies
-            //    advance. An armed LAPIC timer never reaches here — the kernel
-            //    injects it from the RAM-backed xAPIC frame before surfacing. ──
-            ViVmExit::Hlt => {
-                drain_host_input(&mut uart);
-                if !deliver_uart_irq(vm_id, vcpu_id, &uart, &pic) {
-                    deliver_pit_tick(vm_id, vcpu_id, &pit, &pic);
-                }
-            }
+            // Guest idle: retry one pending virtual interrupt.
+            ViVmExit::Hlt => x86_irq_dispatch::service_idle(
+                vm_id,
+                vcpu_id,
+                net_tid,
+                &mut uart,
+                &pit,
+                &pic,
+                &mut net,
+                &blk_vmio,
+                &mut net_vmio,
+            ),
 
             // ── Host-interrupt preemption — the guest was mid-execution (maybe
             //    a pause-less spin loop): deliver the PIT tick here too, so
             //    jiffies advance at host-tick pace even when the guest never
             //    executes HLT or PAUSE. ──────────────────────────────────────
-            ViVmExit::Preempted => {
-                drain_host_input(&mut uart);
-                if !deliver_uart_irq(vm_id, vcpu_id, &uart, &pic) {
-                    deliver_pit_tick(vm_id, vcpu_id, &pit, &pic);
-                }
-            }
+            ViVmExit::Preempted => x86_irq_dispatch::service_idle(
+                vm_id,
+                vcpu_id,
+                net_tid,
+                &mut uart,
+                &pit,
+                &pic,
+                &mut net,
+                &blk_vmio,
+                &mut net_vmio,
+            ),
 
             // ── MSR — never surfaced anymore (the kernel emulates all MSR exits
             //    internally); fail loud if one arrives so a regression is seen. ─
@@ -160,11 +109,33 @@ pub fn run(vm_id: usize, vcpu_id: usize) -> RunOutcome {
                 return RunOutcome::Shutdown;
             }
 
-            // ── Unmodelled MMIO (NPT fault) — log; virtio window arrives P06 ──
-            ViVmExit::MmioWrite { ipa, .. } | ViVmExit::MmioRead { ipa, .. } => {
+            ViVmExit::MmioWrite { ipa, size: 4, val } => {
+                if !x86_mmio_dispatch::write(
+                    ipa,
+                    val as u32,
+                    vm_id,
+                    vcpu_id,
+                    &mut blk,
+                    &mut blk_vmio,
+                    &mut net,
+                    &mut net_vmio,
+                ) {
+                    return RunOutcome::Shutdown;
+                }
+            }
+
+            ViVmExit::MmioRead { ipa, size: 4, reg } => {
+                let Some(value) = x86_mmio_dispatch::read(ipa, &blk, &blk_vmio, &net, &net_vmio)
+                else {
+                    return RunOutcome::Shutdown;
+                };
+                write_gpr(vm_id, vcpu_id, reg, value);
+            }
+            ViVmExit::MmioRead { ipa, size, .. } | ViVmExit::MmioWrite { ipa, size, .. } => {
                 println(&alloc::format!(
-                    "[hv-x86] unhandled guest MMIO gpa=0x{:x}",
-                    ipa
+                    "[hv-x86] unsupported MMIO width gpa=0x{:x} size={}",
+                    ipa,
+                    size
                 ));
                 return RunOutcome::Shutdown;
             }
@@ -203,5 +174,15 @@ fn write_rax(vm_id: usize, vcpu_id: usize, val: u32, size: u8) {
         _ => 0xFFFF_FFFF,
     };
     rb[0] = val as u64 & mask;
+    vmm::vcpu_regs(vm_id, vcpu_id, &mut rb, true);
+}
+
+fn write_gpr(vm_id: usize, vcpu_id: usize, reg: u8, val: u32) {
+    if reg >= 16 {
+        return;
+    }
+    let mut rb = [0u64; 32];
+    vmm::vcpu_regs(vm_id, vcpu_id, &mut rb, false);
+    rb[reg as usize] = val as u64;
     vmm::vcpu_regs(vm_id, vcpu_id, &mut rb, true);
 }

@@ -17,6 +17,17 @@
   an explicit emulator binary, terminates promptly on the known TCG
   address-size fault, and fails closed if a future environment reaches the
   hostile userspace probe. No blocked result is promoted to PASS.
+- The x86 SVM NPF/MMIO fixture now passes on pinned QEMU-TCG 10.2.0 through
+  MMIO read decode, destination-GPR update, exact RIP advancement, UART
+  `PortOut`, and `HLT`; the outer Cellos host also reaches its shell. The NPF
+  classifier requires the architectural final-translation bit
+  `EXITINFO1[32]` and remains fail-closed for instruction fetches, guest
+  page-table walks (`EXITINFO1[33]`), out-of-window GPAs, and unsynchronized
+  RSP operands. It accepts complete MMIO instructions at the guest-RAM
+  boundary, prevents ASID reuse after exhaustion, and no longer lets
+  `create_vcpu` rewrite guest entry memory under `test-hooks`. This closes the
+  executable transport-decode prerequisite, not strict block/network parity
+  or physical x86 qualification.
 - RPi3-B is bound to revision `a22082` / Raspberry Pi 3 Model B and serial
   `000000003d042795`. `lungmat8` approved the exact BCM mailbox unsafe island
   on 2026-08-28; strict F1/F5, focused host/target tests, RPi3 packaging, image

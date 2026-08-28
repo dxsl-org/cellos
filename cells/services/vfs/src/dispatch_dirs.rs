@@ -191,6 +191,9 @@ fn read_handle_grant<'a>(
         Some(p) => alloc::string::String::from(p),
         None => return VfsResponse::Err(ERR_HANDLE),
     };
+    if !vfs.access.can_read(caller, &path) {
+        return VfsResponse::Err(ERR_DENIED);
+    }
     match ostd::syscall::sys_grant_slice_with_len(grant) {
         None => VfsResponse::Err(ERR_IO),
         Some((ptr, grant_len)) => {
@@ -225,15 +228,38 @@ fn write_handle_grant<'a>(
         Some(p) => alloc::string::String::from(p),
         None => return VfsResponse::Err(ERR_HANDLE),
     };
+    if !vfs.access.can_write(caller, &path) {
+        return VfsResponse::Err(ERR_DENIED);
+    }
     if bytes == 0 {
         return VfsResponse::GrantDone { bytes: 0 };
     }
-    let bytes = bytes.min(4096);
+    if bytes > 4096 {
+        return VfsResponse::Err(ERR_IO);
+    }
+    let file_len = match vfs.stat(&path) {
+        Some((len, false)) => len,
+        _ => return VfsResponse::Err(ERR_IO),
+    };
+    let end = match offset.checked_add(bytes as u64) {
+        Some(e) => e,
+        None => return VfsResponse::Err(ERR_IO),
+    };
+    let new_len = file_len.max(end);
+    let refunded = if vfs.quota.writer_of(&path) == Some(caller.cell) { file_len } else { 0 };
+    let net_charge = new_len.saturating_sub(refunded);
+    if net_charge > 0 && !vfs.quota.can_charge(caller.cell, net_charge) {
+        return VfsResponse::Err(ERR_QUOTA);
+    }
+
     let mut chunk = alloc::vec![0u8; bytes];
     if ostd::syscall::sys_grant_copy_to_slice(grant, &mut chunk) != Some(bytes) {
         return VfsResponse::Err(ERR_IO);
     }
     if vfs.write_at(&path, offset, &chunk) {
+        vfs.quota.release_path(&path, file_len);
+        let _ = vfs.quota.charge(caller.cell, new_len);
+        vfs.quota.set_writer(&path, caller.cell);
         VfsResponse::GrantDone { bytes }
     } else {
         VfsResponse::Err(ERR_IO)
@@ -245,6 +271,9 @@ fn sync_handle<'a>(vfs: &mut VfsManager, caller: Caller, file: ViVfsFileHandle) 
         Some(p) => alloc::string::String::from(p),
         None => return VfsResponse::Err(ERR_HANDLE),
     };
+    if !vfs.access.can_write(caller, &path) {
+        return VfsResponse::Err(ERR_DENIED);
+    }
     if vfs.sync(&path) {
         VfsResponse::Ok
     } else {

@@ -111,6 +111,8 @@ board-rpi3 = ["hal/board-rpi3"]
 native-domains = []
 # Enable in-kernel test harnesses (smoke tests, integration probes). Never in release builds.
 test-hooks = ["dep:qemu-exit", "hal/test-hooks"]
+# Isolated x86 SVM NPF/MMIO decode fixture; does not enable the global test suite.
+x86-mmio-smoke = []
 # Isolated RV64 boot path for the GetRandom SAS ownership fixture. Test-only;
 # exits QEMU before unrelated boot suites execute.
 getrandom-sas-test = ["native-domains", "test-hooks"]

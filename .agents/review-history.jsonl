@@ -1,2 +1,6 @@
 {"date":"2026-08-06","finding":"caller-owned SpawnFromElf bytes could borrow capability-bearing path authority","severity":"critical","decision":"accepted-fixed","files":["kernel/src/loader/launch_profile/mod.rs","kernel/src/loader/launch_profile/tests.rs","kernel/src/loader/boot_ceiling/selftest.rs"]}
 {"date":"2026-08-17","finding":"RPi3 AUX RX dispatch depended on an unreliable CORE0_IRQ_SOURCE GPU bit","severity":"medium","decision":"accepted-fixed","files":["hal/arch/arm/src/aarch64/trap.rs"]}
+{"date":"2026-08-29","finding":"SVM NPF classifier confused final-translation bit 32 with guest-page-walk bit 33","severity":"high","decision":"accepted-fixed","files":["hal/arch/x86/src/x86_64/vmexit_decode.rs","hal/arch/x86/src/x86_64/svm_vcpu.rs"]}
+{"date":"2026-08-29","finding":"MMIO decoder accepted VMCB-owned RSP as a caller-managed GPR","severity":"medium","decision":"accepted-fixed","files":["hal/arch/x86/src/x86_64/vmexit_decode.rs"]}
+{"date":"2026-08-29","finding":"fallback MMIO instruction decode required bytes beyond the complete instruction","severity":"medium","decision":"accepted-fixed","files":["hal/arch/x86/src/x86_64/svm_vcpu.rs"]}
+{"date":"2026-08-29","finding":"SVM ASID allocator wrapped and could reuse stale nested-TLB identity","severity":"medium","decision":"accepted-fixed","files":["kernel/src/hypervisor/svm_registry.rs"]}

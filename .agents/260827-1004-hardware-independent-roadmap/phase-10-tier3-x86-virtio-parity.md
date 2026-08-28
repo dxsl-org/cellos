@@ -69,9 +69,9 @@ The strict x86 guest boots from initramfs, while `run_loop_x86.rs` handles legac
 
 ## Todo List
 
-- [ ] Pin one x86 VirtIO transport and interrupt map.
-- [ ] Reuse shared block/network personalities without protocol forks.
-- [ ] Prove strict boot plus bounded block/network behavior on QEMU 10.2.0.
+- [x] Pin one x86 VirtIO-MMIO transport: block `0xd0000000`/IRQ5, net `0xd0000200`/IRQ6.
+- [x] Reuse shared block/network personalities and Phase 09 persistent-disk adapter without protocol forks.
+- [ ] Prove strict boot plus bounded block/network behavior on pinned QEMU 10.2.0.
 
 ## Success Criteria
 
@@ -79,7 +79,7 @@ The strict x86 guest boots from initramfs, while `run_loop_x86.rs` handles legac
 - [ ] Persistent block FLUSH/reboot/read semantics match Phase 09.
 - [ ] Network traffic uses the shared backend with no hard-coded QEMU-only identity leak.
 - [ ] Malformed transport/queue inputs fail without host panic or cross-guest/service corruption.
-- [ ] No physical AMD/Intel qualification claim is added.
+- [x] No physical AMD/Intel qualification claim is added.
 
 ## Security Considerations
 
@@ -95,4 +95,8 @@ After x86 parity passes, run the Phase 06 scenario suite for parity evidence; ph
 
 ## Deviation Log
 
-- Blocked on Phase 09's shared persistent-backend contract and on the unsupported Phase 06 hostile-input scenarios. No x86 transport is pinned or emulated before those dependencies provide a stable contract.
+- Implemented the single VirtIO-MMIO mapping, architecture-correct PIC vector injection, shared block/network dispatch, and shared `/mnt/sd/guest_disk.img` persistence lookup. Both hypervisor targets and the x86 kernel compile.
+- Queue completion IRQs are level-like rather than one-shot: HLT/Preempted retries one prioritized deliverable slot (UART, block, net, then PIT) while the VirtIO ISR bit remains pending; guest ACK clears it. Successful asynchronous net RX now sets the ISR bit. The focused ACK/retry test passes.
+- Split the newly added x86 IRQ, MMIO, and legacy port dispatch plus the MMIO address/test helpers into focused kebab-case modules; those x86/MMIO files are below 200 lines. Pre-existing touched legacy files (`main.rs`, ARM `run_loop.rs`, and `virtio_blk.rs`) remain above the repository target and are not claimed as remediated by this split.
+- The dedicated NPF/MMIO fixture now passes on pinned QEMU-TCG 10.2.0 and the outer Cellos x86 host still reaches `Cellos >`. QEMU reports the architectural final-translation bit `EXITINFO1[32]` for the fixture's direct MMIO access; the decoder requires that bit and rejects instruction fetches, out-of-window GPAs, and the guest-page-walk bit `EXITINFO1[33]`. It also rejects RSP operands because RSP is VMCB-owned, decodes a complete instruction prefix at the guest-RAM boundary, and leaves ASID allocation permanently exhausted rather than wrapping. `create_vcpu` no longer mutates guest memory under `test-hooks`; each smoke owns its fixture blob. QEMU 8.2.2 remains a known-incompatible runtime and still cannot provide parity evidence.
+- This closes only the executable MMIO decode/GPR/RIP prerequisite. Strict guest block/network discovery, persistence, malformed transport/queue evidence, and Phase 06 parity remain open.

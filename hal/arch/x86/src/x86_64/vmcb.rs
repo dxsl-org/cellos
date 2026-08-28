@@ -40,8 +40,8 @@ const OFF_GDTR: usize = 0x460;
 const OFF_IDTR: usize = 0x480;
 const OFF_CPL: usize = 0x4CB;
 const OFF_EFER: usize = 0x4D0;
-const OFF_CR4: usize = 0x548;
-const OFF_CR3: usize = 0x550;
+pub(crate) const OFF_CR4: usize = 0x548;
+pub(crate) const OFF_CR3: usize = 0x550;
 pub(crate) const OFF_CR0: usize = 0x558;
 pub const OFF_RFLAGS: usize = 0x570;
 pub const OFF_RIP: usize = 0x578;
@@ -90,7 +90,15 @@ impl VmcbView {
     /// (32-bit protected, PVH contract), nested paging rooted at `ncr3`, IOPM /
     /// MSRPM at the given physical addresses (all-ones bitmaps → intercept all),
     /// and a flat GDT at `gdt_gpa` (0 for the M1 smoke blob).
-    pub fn init(&mut self, entry_rip: u64, ncr3: u64, gdt_gpa: u64, iopm_pa: u64, msrpm_pa: u64) {
+    pub fn init(
+        &mut self,
+        entry_rip: u64,
+        ncr3: u64,
+        asid: u32,
+        gdt_gpa: u64,
+        iopm_pa: u64,
+        msrpm_pa: u64,
+    ) {
         // Control area. No CR-write intercept: on SVM the guest drives its own
         // paging/long-mode through NPT (CR0.PG trapping is a VMX-only need).
         // CPUID IS intercepted so the run loop can clear the x2APIC feature bit
@@ -106,7 +114,7 @@ impl VmcbView {
         self.w32(OFF_INTERCEPT2, INT2_VMRUN);
         self.w64(OFF_IOPM_BASE, iopm_pa);
         self.w64(OFF_MSRPM_BASE, msrpm_pa);
-        self.w32(OFF_ASID, 1); // ASID 0 → VMEXIT_INVALID
+        self.w32(OFF_ASID, asid);
         self.w8(OFF_TLB_CONTROL, TLB_FLUSH_ASID);
         self.w64(OFF_VINTR, VINTR_MASKING);
         self.w64(OFF_NP_ENABLE, NP_ENABLE_BIT);
@@ -136,6 +144,12 @@ impl VmcbView {
     pub fn r64(&self, off: usize) -> u64 {
         // SAFETY: off is a documented in-page VMCB offset; base is a live frame.
         unsafe { core::ptr::read_volatile(self.base.add(off) as *const u64) }
+    }
+    /// Volatile byte read from a documented VMCB field.
+    #[inline]
+    pub fn r8(&self, off: usize) -> u8 {
+        // SAFETY: caller supplies an in-page VMCB offset; base is a live frame.
+        unsafe { core::ptr::read_volatile(self.base.add(off)) }
     }
 
     /// Volatile qword write (EVENTINJ / RIP advance / EFER re-assert).
