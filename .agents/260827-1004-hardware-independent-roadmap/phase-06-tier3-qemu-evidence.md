@@ -39,10 +39,10 @@ QEMU can close machinery and hostile-input regressions; it cannot validate neste
 
 ## Assumptions
 
-- **Claim:** QEMU-TCG 10.2.0 is available for strict x86.
-  **Confidence:** high
-  **How to verify:** use existing `QEMU_X86_BIN` version check.
-- **Claim:** AArch64 QEMU covers the same logical cases without EL2 physical fidelity.
+- **Claim:** QEMU-TCG 10.2.0 strict is required for x86/ARM64 matrix runs.
+  **Confidence:** medium
+  **How to verify:** strict version gate in `scripts/qemu-tier3-hostile-runner-{x86,arm64}.sh` requiring `QEMU_VERSION` parse = `10.2.0`.
+- **Claim:** AArch64 and x86 cases remain comparable once production transport coverage is demonstrated.
   **Confidence:** medium
   **How to verify:** inventory backend parity before sharing scenarios.
 
@@ -105,3 +105,5 @@ Run current non-persistence scenarios immediately. Phases 09/10 reuse the same r
   environments where the fault is absent. The malformed GPA, descriptor, and
   backend corpus remains open; guest-authored `NOT_APPLICABLE` markers are not
   accepted as scenario PASS.
+- Strict matrix gate update: both runners now enforce exact QEMU 10.2.0 and fail fast with `BLOCKED_ENVIRONMENT` when unavailable. Current environment exposes only 8.2.2, so matrix execution is blocked at pre-run, not evidence failure.
+- Review correction: the malformed GPA/descriptor/backend payload corpus remains open; this phase still lacks production transport fixtures, so this task stays open in the phase matrix.

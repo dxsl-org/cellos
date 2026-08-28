@@ -10,15 +10,41 @@ KERNEL="${1:-target/aarch64-unknown-none-softfloat/release/cellos-kernel}"
 DISK="${2:-disk_hv_arm.img}"
 BOOT_WINDOW="${BOOT_WINDOW:-60}"
 QEMU_ARM64_BIN="${QEMU_ARM64_BIN:-qemu-system-aarch64}"
+QEMU_KERNEL="$KERNEL"
+QEMU_DISK="$DISK"
+if [[ "${QEMU_ARM64_BIN,,}" == *.exe ]]; then
+    QEMU_KERNEL="$(wslpath -w "$KERNEL")"
+    QEMU_DISK="$(wslpath -w "$DISK")"
+fi
 
 if ! command -v "$QEMU_ARM64_BIN" &>/dev/null; then
     echo "BLOCKED_ENVIRONMENT: $QEMU_ARM64_BIN not found"
     exit 1
 fi
 
+CORPUS_FILE="$(dirname "$0")/tier3-hostile-scenario-matrix.sh"
+if [[ ! -f "$CORPUS_FILE" ]]; then
+    echo "BLOCKED_ENVIRONMENT: scenario matrix file not found: $CORPUS_FILE"
+    exit 1
+fi
+source "$CORPUS_FILE"
 
+QEMU_VERSION_TEXT="$("$QEMU_ARM64_BIN" --version | sed -n '1p')"
+if [[ ! "$QEMU_VERSION_TEXT" =~ QEMU\ emulator\ version\ ([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
+    echo "BLOCKED_ENVIRONMENT: cannot parse QEMU version: $QEMU_VERSION_TEXT"
+    exit 1
+fi
+QEMU_MAJOR="${BASH_REMATCH[1]}"
+QEMU_MINOR="${BASH_REMATCH[2]}"
+QEMU_PATCH="${BASH_REMATCH[3]}"
+if (( QEMU_MAJOR != 10 || QEMU_MINOR != 2 || QEMU_PATCH != 0 )); then
+    echo "BLOCKED_ENVIRONMENT: require QEMU 10.2.0 for strict ARM64 hostile-path evidence, found: $QEMU_VERSION_TEXT"
+    exit 1
+fi
 echo "[hv-hostile-arm64] kernel=$KERNEL disk=$DISK (window=${BOOT_WINDOW}s)"
-echo "[hv-hostile-arm64] $("$QEMU_ARM64_BIN" --version | sed -n '1p')"
+echo "[hv-hostile-arm64] $QEMU_VERSION_TEXT"
+
+
 
 # 0. Build the Hostile image if requested.
 if [ ! -f "$KERNEL" ] || [ "${BUILD_HOSTILE_IMAGE:-0}" == "1" ]; then
@@ -40,8 +66,8 @@ fi
     -cpu cortex-a72 \
     -m 1G \
     -nographic \
-    -kernel "$KERNEL" \
-    -drive "if=none,file=$DISK,format=raw,id=hd0" \
+    -kernel "$QEMU_KERNEL" \
+    -drive "if=none,file=$QEMU_DISK,format=raw,id=hd0" \
     -device virtio-blk-device,drive=hd0 \
     -netdev user,id=net0 \
     -device virtio-net-device,netdev=net0 \
@@ -137,12 +163,11 @@ fi
 
 if grep -qF "[HOSTILE_PROBE] Starting Hostile Probe" qemu-hv-hostile-arm64.log \
     || grep -qF "Starting Hostile Probe..." qemu-hv-hostile-arm64.log; then
-    for marker in \
-        "[HOSTILE_PROBE] BOUNDS_TEST_NOT_APPLICABLE" \
-        "[HOSTILE_PROBE] DESC_TEST_NOT_APPLICABLE" \
-        "[HOSTILE_PROBE] BACKEND_TEST_NOT_APPLICABLE" \
-        "[HOSTILE_PROBE] BUDGET_TEST_STARTED" \
-        "[HOSTILE_PROBE] RESET_TEST_STARTED"; do
+    for row in "${TIER3_HOSTILE_CORPUS[@]}"; do
+        IFS='|' read -r scenario marker _mode expected <<<"$row"
+        if [[ -z "$scenario" || "$scenario" == \#* ]]; then
+            continue
+        fi
         if ! grep -qF "$marker" qemu-hv-hostile-arm64.log; then
             echo "FAIL: hostile probe marker missing: $marker"
             dump_log
@@ -159,8 +184,8 @@ if grep -qF "[HOSTILE_PROBE] Starting Hostile Probe" qemu-hv-hostile-arm64.log \
     fi
     echo "BLOCKED_SCOPE: bounds, descriptor, and backend lack guest-visible VMM/VirtIO transport; VMM preemption and supervisor restart remain unobserved."
     exit 2
+else
+    echo "FAIL: guest neither hit the expected TCG fault nor reached the hostile probe."
+    dump_log
+    exit 1
 fi
-
-echo "FAIL: guest neither hit the expected TCG fault nor reached the hostile probe."
-dump_log
-exit 1

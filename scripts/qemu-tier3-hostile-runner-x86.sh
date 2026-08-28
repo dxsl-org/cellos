@@ -31,6 +31,26 @@ if ! command -v "$QEMU_X86_BIN" &>/dev/null; then
     exit 1
 fi
 
+CORPUS_FILE="$(dirname "$0")/tier3-hostile-scenario-matrix.sh"
+if [[ ! -f "$CORPUS_FILE" ]]; then
+    echo "BLOCKED_ENVIRONMENT: scenario matrix file not found: $CORPUS_FILE"
+    exit 1
+fi
+source "$CORPUS_FILE"
+
+QEMU_VERSION_TEXT="$("$QEMU_X86_BIN" --version | sed -n '1p')"
+if [[ ! "$QEMU_VERSION_TEXT" =~ QEMU\ emulator\ version\ ([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
+    echo "BLOCKED_ENVIRONMENT: cannot parse QEMU version: $QEMU_VERSION_TEXT"
+    exit 1
+fi
+QEMU_MAJOR="${BASH_REMATCH[1]}"
+QEMU_MINOR="${BASH_REMATCH[2]}"
+QEMU_PATCH="${BASH_REMATCH[3]}"
+if (( QEMU_MAJOR != 10 || QEMU_MINOR != 2 || QEMU_PATCH != 0 )); then
+    echo "BLOCKED_ENVIRONMENT: require QEMU 10.2.0 for strict hostile-path evidence, found: $QEMU_VERSION_TEXT"
+    exit 1
+fi
+
 if [[ ! -f "$ISO" ]]; then
     echo "BLOCKED_ENVIRONMENT: ISO not found: $ISO"
     exit 1
@@ -42,7 +62,7 @@ if [[ "${QEMU_X86_BIN,,}" == *.exe ]]; then
 fi
 BOOT_WINDOW="${BOOT_WINDOW:-60}"
 
-QEMU_VERSION="$("$QEMU_X86_BIN" --version | sed -n '1p')"
+QEMU_VERSION="$QEMU_VERSION_TEXT"
 echo "[hv-hostile-x86] iso=$ISO memory=$QEMU_MEMORY (window=${BOOT_WINDOW}s)"
 echo "[hv-hostile-x86] $QEMU_VERSION"
 
@@ -114,7 +134,6 @@ if grep -qia "KERNEL PANIC\|\[fault\] Cell" qemu-hv-hostile.log; then
     dump_log
     exit 1
 fi
-
 if grep -qi "\[hv-x86\] guest triple-fault" qemu-hv-hostile.log; then
     # In some QEMU versions this is deterministic.
     echo "BLOCKED_ENVIRONMENT: Guest triple-fault (possibly QEMU environment issue)"
@@ -128,36 +147,17 @@ if grep -qi "\[hv-x86\] .*fail\|\[hv-x86\] .*error\|\[hv-x86\] unhandled guest M
     exit 1
 fi
 
-# This overlay has no transport into the nested VMM's guest-memory or VirtIO
-# paths. It does exercise a CPU-bound guest loop and guest power-off, but the
-# host lacks a VMM-preemption marker and a supervisor restart outcome.
-NOT_APPLICABLE=(
-    "\[HOSTILE_PROBE\] BOUNDS_TEST_NOT_APPLICABLE"
-    "\[HOSTILE_PROBE\] DESC_TEST_NOT_APPLICABLE"
-    "\[HOSTILE_PROBE\] BACKEND_TEST_NOT_APPLICABLE"
-)
-
-MISSING=()
-for marker in "${NOT_APPLICABLE[@]}"; do
-    if ! grep -q "$marker" qemu-hv-hostile.log; then
-        MISSING+=("$marker")
+for row in "${TIER3_HOSTILE_CORPUS[@]}"; do
+    IFS='|' read -r scenario marker _mode expected <<<"$row"
+    if [[ -z "$scenario" || "$scenario" == \#* ]]; then
+        continue
+    fi
+    if ! grep -qF "$marker" qemu-hv-hostile.log; then
+        echo "FAIL: hostile probe did not emit expected marker: $marker ($scenario)"
+        dump_log
+        exit 1
     fi
 done
-if [ ${#MISSING[@]} -ne 0 ]; then
-    echo "FAIL: hostile probe did not classify every unsupported transport axis."
-    dump_log
-    exit 1
-fi
-if ! grep -q "\[HOSTILE_PROBE\] BUDGET_TEST_STARTED" qemu-hv-hostile.log; then
-    echo "FAIL: vCPU-budget stimulus did not start."
-    dump_log
-    exit 1
-fi
-if ! grep -q "\[HOSTILE_PROBE\] RESET_TEST_STARTED" qemu-hv-hostile.log; then
-    echo "FAIL: reset stimulus did not start."
-    dump_log
-    exit 1
-fi
 
 if [ "$BUDGET_LIVENESS" -eq 1 ]; then
     echo "OBSERVED: outer QEMU remained live after the vCPU-budget stimulus."
@@ -167,5 +167,5 @@ if [ "$RESET_GUEST_EXIT_OBSERVED" -eq 1 ]; then
 else
     echo "UNOBSERVED: guest reset stimulus produced no nested-VMM exit or supervisor restart."
 fi
-echo "BLOCKED_SCOPE: bounds, descriptor, and backend lack VMM/VirtIO transport; VMM preemption and supervisor restart remain unobserved."
+echo "BLOCKED_SCOPE: bounds, descriptor, and backend lack guest-visible VMM/VirtIO transport; VMM preemption and supervisor restart remain unobserved."
 exit 2
