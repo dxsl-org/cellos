@@ -11,6 +11,9 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use crate::backend::FsBackend;
+#[cfg(feature = "c2c-oracle-k1-fixture")]
+const ORACLE_CLUSTER_KEY: &[u8; 32] =
+    include_bytes!(concat!(env!("OUT_DIR"), "/c2c-oracle-cluster.key"));
 
 #[derive(Clone)]
 struct RamFile {
@@ -52,6 +55,20 @@ impl RamFsBackend {
         // binary in RAM (once in kernel_fs.img, once in the VFS cell image).
         root.children
             .insert(String::from("tmp"), Box::new(RamFile::new_dir()));
+
+        // The default build has no /etc/cellos tree and therefore no K1.
+        // Only the isolated benchmark-oracle feature can compile this seed.
+        #[cfg(feature = "c2c-oracle-k1-fixture")]
+        {
+            let mut etc = Box::new(RamFile::new_dir());
+            let mut cellos = Box::new(RamFile::new_dir());
+            cellos.children.insert(
+                String::from("cluster.key"),
+                Box::new(RamFile::new_file(ORACLE_CLUSTER_KEY)),
+            );
+            etc.children.insert(String::from("cellos"), cellos);
+            root.children.insert(String::from("etc"), etc);
+        }
 
         Self { root }
     }
@@ -129,6 +146,22 @@ impl RamFsBackend {
                 true
             }
         }
+    }
+
+    #[cfg(feature = "c2c-oracle-k1-fixture")]
+    fn is_oracle_fixture_path(path: &str) -> bool {
+        let mut parts = path.split('/').filter(|part| !part.is_empty());
+        match (parts.next(), parts.next(), parts.next(), parts.next()) {
+            (Some("etc"), None, None, None)
+            | (Some("etc"), Some("cellos"), None, None)
+            | (Some("etc"), Some("cellos"), Some("cluster.key"), None) => true,
+            _ => false,
+        }
+    }
+
+    #[cfg(not(feature = "c2c-oracle-k1-fixture"))]
+    fn is_oracle_fixture_path(_path: &str) -> bool {
+        false
     }
 }
 
@@ -232,6 +265,9 @@ impl FsBackend for RamFsBackend {
     }
 
     fn unlink(&mut self, path: &str) -> bool {
+        if Self::is_oracle_fixture_path(path) {
+            return false;
+        }
         if let Some((parent_path, name)) = Self::split_parent_name(path) {
             if let Some(parent) = self.find_node_mut(&parent_path) {
                 let removable = parent
@@ -249,6 +285,9 @@ impl FsBackend for RamFsBackend {
     }
 
     fn rmdir_recursive(&mut self, path: &str) -> bool {
+        if Self::is_oracle_fixture_path(path) {
+            return false;
+        }
         if let Some((parent_path, name)) = Self::split_parent_name(path) {
             if let Some(parent) = self.find_node_mut(&parent_path) {
                 if parent

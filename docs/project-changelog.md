@@ -2,6 +2,62 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [Unreleased] Development-first hardware-constrained execution
+
+- Adopted
+  [ADR-0007](decisions/0007-development-first-hardware-constrained-execution.md):
+  continue bounded QEMU, work on the two existing Raspberry Pi 3 boards and
+  incoming sensors, and local-runtime work now, with no additional hardware
+  procurement.
+- The current session order prioritizes RPi3 boot/peripheral and HDMI
+  external-display work. Camera and other sensor integration remains current
+  executable work but is deferred to a later session.
+- RPi3-B is now bound to revision `a22082` / Raspberry Pi 3 Model B and serial
+  `000000003d042795`. Its post-reboot exact-device run transferred and
+  checksum-verified the 9,637,952-byte `cellos.uimg`, discovered the SD card and
+  all four MBR partitions, mounted FAT16/FAT32/littlefs/RedoxFS, completed
+  policy/kernel self-tests and the first BCM scanout flush, reached the shell,
+  and finished the VFS suite at `89 PASS, 0 FAIL`. This is development and
+  hardware-integration evidence only. HDMI connected after firmware startup
+  produced black / `No Signal`; a power-off retry with HDMI connected and the
+  display active before firmware startup showed U-Boot, the Cellos boot log,
+  and the `Cellos >` prompt. This confirms only the reproduction condition, not
+  a root cause among firmware EDID sampling, display handshake/input behavior,
+  and driver behavior. No named reviewer approval is recorded for the mailbox
+  unsafe DMA-page copies, so the observation is non-qualifying and the HDMI
+  visual gate remains `governance-gated`. RPi3-A remains entirely pending, and
+  the historical boot/filesystem/shell/scanout capture remains unassigned
+  because it has no unique serial.
+- Added an isolated RV64 local Cell-to-Cell broker oracle runner with an
+  ephemeral exact-32-byte K1 compiled only into the run's VFS image. The runner
+  uses a private target directory, minimal blank disk, restricted SLIRP with no
+  inbound forwarding or outbound access, prompt plaintext-key removal, and a
+  PID/start-time-bound process group that stale cleanup terminates before
+  workspace removal; the default VFS image contains no K1. Broker reply
+  evidence is bound to the attested live owner of the registered broker root.
+  Its real QEMU run passed measured 100/1,000 calibration,
+  1/2/4/8/16-client sweeps, and the broker role gate; it completed a
+  10,000-call soak (`success=10000`, `silent_drop=0`) and passed the bounded
+  queue-overflow oracle (`queue_peak=16`). This is single-guest local-runtime
+  QEMU evidence only, not two-node, relay, remote/public, or production
+  evidence.
+- Roadmap work is now distinguished as current executable work, current-scope
+  technical debt, future capability, external-gated prerequisite, or production
+  release gate. Advanced capability and production prerequisites no longer read
+  as a global development queue.
+- QEMU remains software-only evidence. RPi3 and sensor results may provide
+  exact-device development/hardware-integration evidence only; RPi3 is not a
+  production-security qualification target or qualified external floor.
+- Production admission and release remain disabled and fail-closed. Remote C2C
+  identity where applicable, protected relay identity, production KMS/root,
+  secure/measured boot, a qualified rollback-resistant external floor,
+  persistent recovery, physical hostile evidence, an authenticated runner,
+  required human approvals, and governed release-ledger closure remain
+  mandatory for the applicable production milestone.
+- This is a documentation and scheduling decision only. It changes no
+  implementation, completed status, evidence result, qualification, approval,
+  or production-admission invariant.
+
 ## [2026-08-27] GetRandom technical evidence and PAL governance rebind
 
 - GetRandom now validates the original descriptor, authorizes the capped

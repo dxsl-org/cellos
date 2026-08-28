@@ -18,6 +18,7 @@ api::declare_syscalls![
     Log,
     Heartbeat,
     LookupService,
+    ResolveCellOwner,
     GetTime,
     SetTimer,
     SpawnPinned,

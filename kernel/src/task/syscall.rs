@@ -3826,17 +3826,20 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             let owner = {
                 let guard = super::SCHEDULER.lock();
                 let sched = guard.as_ref().ok_or(SyscallError::PermissionDenied)?;
-                let allowed = sched.tasks.get(&caller_id).is_some_and(|task| {
+                let owner = sched
+                    .resolve_live_cell_owner(types::CellId(cell_id), generation)
+                    .ok_or(SyscallError::PermissionDenied)?;
+                let vfs_principal = sched.tasks.get(&caller_id).is_some_and(|task| {
                     crate::fast_ipc::is_registered_vfs_cell(task.cell_id.0 as usize)
                         && task.current_caller_cell_id == cell_id
                         && task.current_caller_cell_generation == generation
                 });
-                if !allowed {
+                let registered_service =
+                    crate::cell::service_registry::is_registered_tid(owner.root_tid as usize);
+                if !vfs_principal && !registered_service {
                     return Err(SyscallError::PermissionDenied);
                 }
-                sched
-                    .resolve_live_cell_owner(types::CellId(cell_id), generation)
-                    .ok_or(SyscallError::PermissionDenied)?
+                owner
             };
             let bytes = owner.to_bytes();
             write_user_slice(caller_id, out_ptr, &bytes, MAX_USER_BUF)?;

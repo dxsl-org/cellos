@@ -182,6 +182,7 @@ two-node TLS/Noise exercise remain blocked by the prerequisites above.
 ## Links
 
 - [ADR-0006](./0006-block-production-root-pending-exact-product-evidence.md) — no production root is selected; exact vendor product, firmware, boot, state, time, and board evidence gate the client path.
+- [ADR-0007](./0007-development-first-hardware-constrained-execution.md) — protected relay identity remains a production milestone gate and does not block bounded local-runtime, QEMU, RPi3, or sensor development.
 - `.agents/260825-sdk-delivery/phase-02-relay.md` — relay direction,
   prerequisites, acceptance conditions, and server-only/client-blocked status.
 - `tools/relay-enroll/mtls-mount-manifest.template.toml` — provisioning

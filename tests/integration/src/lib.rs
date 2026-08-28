@@ -250,6 +250,13 @@ impl QemuRunner {
         Self::boot_with_netdev(kernel, disk, "user,id=net0")
     }
 
+    /// Spawn QEMU with a VirtIO NIC that cannot reach the host or external
+    /// networks. The guest retains an in-process network device for isolated
+    /// protocol tests; no inbound forwarding or outbound SLIRP is available.
+    pub fn boot_restricted(kernel: &str, disk: &str) -> Self {
+        Self::boot_with_netdev(kernel, disk, "user,id=net0,restrict=on")
+    }
+
     /// Boot QEMU with a **private copy** of the disk image.
     ///
     /// Each call creates a unique temporary copy of `disk` so concurrent tests

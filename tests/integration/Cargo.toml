@@ -135,6 +135,10 @@ path = "tests/manifest-qemu-continuity.rs"
 name = "native-domain-qemu"
 path = "tests/native-domain-qemu.rs"
 
+[[test]]
+name = "c2c-broker-oracle"
+path = "tests/c2c-broker-oracle.rs"
+
 [dev-dependencies]
 tempfile = "3"
 

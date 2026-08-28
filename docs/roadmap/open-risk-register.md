@@ -1,16 +1,37 @@
 # Open Risk Register
 
-**Last updated**: 2026-08-27
+**Last updated**: 2026-08-28
 
-This register tracks confirmed production-readiness gaps found while syncing
-docs to code. It is not a bug-fix plan.
+This register tracks confirmed readiness gaps found while syncing docs to code.
+It is not a global bug-fix queue, and it does not turn all future or
+production-only capability into technical debt.
 
-## Capability Scheduling Boundary
+## Capability scheduling boundary
 
-This register identifies gaps; it does not serialize unrelated work. Each risk
-retains its security, hardware, ABI, and human-approval gates while its owning
-lane advances only to the evidence ceiling it can prove. The authoritative
-execution class, owner, and reopening event are in
+Risks do not serialize unrelated work. Under
+[ADR-0007](../decisions/0007-development-first-hardware-constrained-execution.md),
+QEMU, the two existing RPi3 boards, incoming sensors, and local-runtime work
+remain executable to their lane-specific evidence ceilings without additional
+procurement. QEMU evidence is software-only. RPi3/sensor evidence is
+development and exact-device hardware-integration evidence only; RPi3 cannot
+qualify production security or the independent external floor.
+
+Primary planning classification for the open entries:
+
+| Planning class | Entries |
+|---|---|
+| Current executable work | Narrow fixes, bounded fixtures, and software evidence that an owning lane can perform now |
+| Current-scope technical debt | Raw TLS length handling, net polling latency, soft-skipping HTTPS evidence, the pinned-QEMU compatibility gap, CI intermittency, and AArch64 semihosting |
+| Future capability | Remote/public net-broker completion and native POSIX completeness beyond currently supported contracts |
+| External-gated prerequisite | Unavailable exact board qualification and exact product/vendor evidence for protected relay or production-root milestones |
+| Production release gate | Fleet signing/provenance, production admission, protected identity/root, secure/measured boot, qualified floor and persistent recovery, physical hostile evidence, authenticated evidence runner, human approvals, and governed ledger/release closure |
+
+An entry's primary class does not erase its nested dependencies. In particular,
+production release gates remain mandatory, disabled, and fail-closed, but block
+only the production-admission or production-release milestone that owns them.
+Mitigation and prequalification work may continue without promoting local,
+QEMU, or RPi3 results. The authoritative execution class, owner, and reopening
+event are in
 [the roadmap capability table](../project-roadmap.md#capability-lanes).
 
 
@@ -44,7 +65,8 @@ execution class, owner, and reopening event are in
   `cells/services/net/src/handlers.rs:453-459` before the send path at
   `:608-613`, which can truncate valid binary payloads ending in zero bytes.
   The raw path needs an explicit length contract.
-- Production cell admission is not signed-only by default. The 18-row catalog,
+- **Production release gate — production cell admission is not signed-only by
+  default.** The 18-row catalog,
   33 stable `test-hooks` cases, and strict runtime parser are prequalification
   infrastructure only; local runs are explicitly non-admissible and the former
   local capture/writer was removed rather than accepted as evidence.
@@ -54,7 +76,8 @@ execution class, owner, and reopening event are in
   stays blocked pending authenticated runner evidence, a qualified external
   floor and persistent recovery, production gate/task/audit integration,
   physical hostile evidence, provisioned anchors, both human approvals, and
-  ledger/release closure.
+  ledger/release closure. These are production-admission requirements, not
+  global blockers for QEMU, RPi3, sensor, or local-runtime development.
 - **`CELLOS-RUSTSTD-ENTROPY-005` — High technical mitigation complete; approval
   pending, owner: kernel entropy and Rust `std`/PAL owners.** The default
   development tuple still enables `dev-weak-rng` and remains non-qualifying.
@@ -97,9 +120,11 @@ execution class, owner, and reopening event are in
   exhausted the former 10-minute budget before tests; the affected apt steps
   now allow 20 minutes, but mirror failures remain infrastructure blockers, not
   runtime passes or functional failures.
-- Several physical hardware lanes remain hardware-gated. Compile/QEMU evidence
-  is useful regression evidence but must not be used as VF2/Pioneer/RPi4 physical
-  qualification.
+- Several additional physical hardware lanes remain external-gated. Compile/
+  QEMU evidence is useful regression evidence but must not be used as VF2,
+  Pioneer, RPi4, or physical x86 qualification. The two existing RPi3 boards
+  remain available for development integration only and cannot qualify a
+  production-security floor.
 - AArch64 test-hooks runtime proof remains blocked where the host-side
   `qemu_exit::AArch64Semihosting` issue is still present.
 

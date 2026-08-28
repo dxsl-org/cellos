@@ -737,7 +737,8 @@ pub fn sys_query_dir_handles(
     api::dir_attestation::ViDirHandleAttestation::from_bytes(buf)
 }
 
-/// Resolve the root lifetime endpoint for the current VFS receive principal.
+/// Resolve the live root endpoint for the current VFS receive principal or a
+/// supervisor-registered service generation.
 #[cfg(not(target_pointer_width = "32"))]
 pub fn sys_resolve_cell_owner(cell_id: u64, generation: u64) -> Option<CellOwner> {
     let mut bytes = [0; CELL_OWNER_LEN];

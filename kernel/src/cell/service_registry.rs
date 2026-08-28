@@ -124,6 +124,17 @@ pub fn is_paused_tid(tid: usize) -> bool {
         .any(|entry| matches!(entry, ServiceEntry::Paused(provider) if *provider == tid))
 }
 
+/// Return whether `tid` is the active or paused provider of any trusted
+/// supervisor-owned service registration.
+pub fn is_registered_tid(tid: usize) -> bool {
+    REGISTRY.lock().values().any(|entry| {
+        matches!(
+            entry,
+            ServiceEntry::Active(provider) | ServiceEntry::Paused(provider) if *provider == tid
+        )
+    })
+}
+
 /// Remove every registration that points at `tid`. Called from `exit_task` when a
 /// task dies so a client never resolves a service to a dead provider; the
 /// supervisor re-registers the replacement's tid on respawn.

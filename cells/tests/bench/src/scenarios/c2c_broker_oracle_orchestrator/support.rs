@@ -4,7 +4,8 @@ use super::{
 };
 use api::task::TaskPriority;
 use ostd::syscall::{
-    sys_lookup_service, sys_recv, sys_send, sys_set_spawn_args, sys_spawn_pinned, SyscallResult,
+    sys_force_exit, sys_lookup_service, sys_recv, sys_send, sys_set_spawn_args, sys_spawn_pinned,
+    SyscallResult,
 };
 use ostd::task::yield_now;
 use service_net_broker::bench_oracle::{
@@ -45,6 +46,8 @@ pub fn recv_summary(tid: usize) -> ClientSummary {
     loop {
         if matches!(sys_recv(tid, &mut buf), SyscallResult::Ok(_)) {
             if let Some(summary) = decode_summary(&buf) {
+                let _ = sys_force_exit(tid);
+                yield_now();
                 return summary;
             }
         }

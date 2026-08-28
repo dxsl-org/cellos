@@ -31,6 +31,9 @@ littlefs = ["dep:littlefs2"]
 # quota enforcement (Err 2) without writing the full 32 MB production limit.
 # Enabled ONLY for the integration-test kernel build — never in production.
 test-hooks = []
+# Injects a run-scoped benchmark-oracle K1 into RamFS. The build script requires
+# CELLOS_C2C_ORACLE_K1_FILE to name exactly 32 bytes whenever this is enabled.
+c2c-oracle-k1-fixture = []
 
 [[bin]]
 name = "service-vfs"

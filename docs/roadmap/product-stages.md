@@ -1,6 +1,6 @@
 # Product Stages
 
-**Last updated**: 2026-08-20
+**Last updated**: 2026-08-28
 
 ## Execution Relationship
 
@@ -10,6 +10,31 @@ its documented dependency, `execution_class`, and `evidence_ceiling`; see the
 [capability lanes](../project-roadmap.md#capability-lanes). A result may advance
 only to the evidence class actually exercised. In particular, host/QEMU results
 never satisfy physical, service, or production requirements.
+
+## Development inventory and planning classes
+
+[ADR-0007](../decisions/0007-development-first-hardware-constrained-execution.md)
+authorizes development-first execution with QEMU, two existing Raspberry Pi 3
+boards, and incoming sensors, with no additional procurement now.
+
+| Roadmap item | Planning class | Stage relationship |
+|---|---|---|
+| G1 QEMU, RPi3, sensor, and local-runtime integration | Current executable work | Advance now to the lane-specific software or development-hardware ceiling |
+| Confirmed defects in currently supported paths | Current-scope technical debt | Track in the [open risk register](open-risk-register.md); do not use this label for all future work |
+| G2 expansion, remote/public C2C, G3, G4, and G5 outcomes | Future capability | May be designed or implemented only through independently opened lanes; they are not defects in G1 |
+| Unavailable exact boards, protected relay assets, cloud identity, and exact production-root evidence | External-gated prerequisite | Block only the milestone requiring that external evidence |
+| Production admission and governed release closure | Production release gate | Remain disabled and fail-closed until every applicable security, hardware, evidence, approval, and ledger invariant passes |
+
+QEMU provides software evidence only. RPi3 and sensor exercise may provide
+development/hardware-integration evidence for the exact device, but RPi3 is
+never a production-security qualification target or a qualified external
+floor. No stock TPM or generic secure-element counter is selected as that floor.
+Remote C2C,
+protected relay identity, production KMS/root, secure/measured boot, a qualified
+rollback-resistant external floor, physical hostile evidence, an authenticated
+runner, required human approvals, and release-ledger closure remain mandatory
+only for the applicable production-admission or production-release claim; they
+do not serialize QEMU, RPi3, sensor, or local-runtime work.
 
 ## G1 - Robot & Embedded
 

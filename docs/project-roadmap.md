@@ -3,7 +3,7 @@
 **Project**: Cellos (Jarvis Hybrid OS)
 **Current version**: 0.2.1-dev (Mycelium Era)
 **Current phase**: Phase 1 - Core Stability; active product stage G1 Robot & Embedded
-**Last updated**: 2026-08-27
+**Last updated**: 2026-08-28
 This file is the roadmap entrypoint. The previous all-in-one roadmap is
 preserved as a read-only content snapshot at
 [project-roadmap-legacy.md](project-roadmap-legacy.md). Use it only when a
@@ -35,22 +35,64 @@ service → production`. `execution_class` describes whether a lane may run now:
 slice may truthfully claim. QEMU and host evidence never promote a lane to
 physical, service, or production qualification.
 
+### Development-first hardware-constrained decision
+
+[ADR-0007](decisions/0007-development-first-hardware-constrained-execution.md)
+sets the current execution policy. The available platform inventory is QEMU,
+two existing Raspberry Pi 3 boards, and incoming sensors. No additional
+hardware procurement is planned now. QEMU, RPi3, sensor, and local-runtime
+lanes may advance independently to their stated evidence ceilings. For the
+current session, the available HDMI cable supports the immediate
+external-display lane; camera and other sensor integration remains executable
+but is deferred in the session order.
+
+QEMU results remain software-only. RPi3 and sensor results may establish
+development and hardware-integration behavior on the exact exercised devices,
+but the RPi3 is never a production-security qualification target or an
+independent external floor. Production admission and production release remain
+disabled and fail-closed until every applicable remote-identity, protected-root,
+secure/measured-boot, qualified-floor, physical-hostile-evidence,
+authenticated-runner, human-approval, and governed-ledger gate is satisfied.
+Those gates are milestone-local: they do not block unrelated QEMU, RPi3,
+sensor, or local-runtime development.
+
+### Planning classes
+
+- **Current executable work**: useful work supported by present software,
+  QEMU, the two RPi3 boards, or incoming sensors, bounded by its lane ceiling.
+- **Current-scope technical debt**: a defect or maintainability gap in the
+  current supported scope; it is not a label for every unfinished capability.
+- **Future capability**: intentionally later product functionality, not a
+  current defect.
+- **External-gated prerequisite**: work that cannot cross its next evidence
+  boundary until a named external asset, product, account, or vendor package
+  exists.
+- **Production release gate**: a mandatory production-admission or
+  production-release invariant. It does not serialize non-production
+  development.
+
 ## Capability Lanes
 
-| Capability | Execution class | Evidence ceiling | Owner / next slice | Reopening event |
-|---|---|---|---|---|
-| Roadmap projection | `ready` | `contract` | Hardware-independent roadmap Phase 01/08 | A lane emits bounded evidence/status |
-| RPi3 HDMI software boundary | `governance-gated` | `host` | RPi3 HDMI Phase 04 | Named reviewer approval for `cells/drivers/bcm-display/src/mailbox.rs` unsafe DMA-page copies, or an equivalent safe redesign |
-| Tier 3 hostile QEMU evidence | `scope-gated` | `qemu` | Hardware-independent roadmap Phase 06 | Add VMM/VirtIO transport for bounds, descriptors, and backend errors, plus independent preemption and supervisor-restart outcomes |
-| ARM64 Tier 3 persistent storage | `scope-gated` | `qemu` | Hardware-independent roadmap Phase 09 | Supported Phase 06 hostile scenarios; policy is fixed to `build/tier3-arm64-persistent.img` at 8 MiB with explicit cleanup |
-| Desktop, ViUI, and SDK | `governance-gated` | `qemu` | Managed-surface child is implementation-complete | Restore signed-image F1 policy: `hypha-llm-gateway` must forbid unsafe code; BCM unsafe use requires a reviewed allowlist entry |
-| Local Cell-to-Cell runtime | `scope-gated` | `host` | Cell-to-Cell Anywhere Recovery Plan Phase 01 | Implement the approved ephemeral K1 injection for the RV64 `app-bench` oracle, then record local IPC, queue/cache, and saturation baselines |
-| Kernel signature, pointer, and entropy remediation | `governance-gated` | `host` | Separately approved security children | Named security/PAL approvals and implementation checkpoints |
-| Authenticated software evidence | `scope-gated` | `host` | Hardware-independent roadmap Phase 07 | Run `.github/workflows/ci.yml` on `main`, then verify its immutable attested bundle; only software/QEMU classes are eligible |
-| x86 Tier 3 VirtIO parity | `scope-gated` | `qemu` | Hardware-independent roadmap Phase 10 | Supported Phase 06 scenarios, shared persistence backend, then one pinned transport contract |
-| Protected relay identity | `external-gated` | `host` | KMS/Silo protected relay plan | VF2, STM32H573, OPTIGA TPM, and named AWS DEV account/region |
-| G3 accelerator | `external-gated` | `contract` | Accelerator evidence envelope | RK3588, accepted RKNN package/license, then X390 evidence |
-| Physical boards and production root | `external-gated` | `physical` / `production` | Hardware tracks and ADR-0006 | Exact board logs; vendor package and superseding GO ADR |
+| Capability | Planning class | Execution class | Evidence ceiling | Owner / next slice | Reopening event |
+|---|---|---|---|---|---|
+| Roadmap projection | Current executable work | `ready` | `contract` | Hardware-independent roadmap Phase 01/08 | A lane emits bounded evidence/status |
+| General QEMU software and integration | Current executable work | `ready` | `qemu` | Owning runtime/platform lane | Exercise the supported software path; do not promote the result to physical, service, or production evidence |
+| RPi3 HDMI software boundary | Current-scope technical debt | `governance-gated` | `host` | RPi3 HDMI Phase 04 | Named reviewer approval for `cells/drivers/bcm-display/src/mailbox.rs` unsafe DMA-page copies, or an equivalent safe redesign |
+| RPi3 peripheral hardware integration | Current executable work | `ready` | `host` now; `physical` development evidence after exact-device exercise | G1 board/peripheral lane using the two available RPi3 boards; HDMI external-display work is immediate | Record the exact board and interface exercised; stop before any production-security qualification claim |
+| Camera and other sensor integration | Current executable work | `deferred` | `contract` until resumed; then exact-device `physical` development evidence | Deferred in the current session order; the available camera must be identified before use | Resume the sensor lane in a later session and record the exact sensor/interface before exercise |
+| Tier 3 hostile QEMU evidence | Current executable work | `scope-gated` | `qemu` | Hardware-independent roadmap Phase 06 | Add VMM/VirtIO transport for bounds, descriptors, and backend errors, plus independent preemption and supervisor-restart outcomes |
+| ARM64 Tier 3 persistent storage | Future capability | `scope-gated` | `qemu` | Hardware-independent roadmap Phase 09 | Supported Phase 06 hostile scenarios; policy is fixed to `build/tier3-arm64-persistent.img` at 8 MiB with explicit cleanup |
+| Desktop, ViUI, and SDK | Future capability | `governance-gated` | `qemu` | Managed-surface child is implementation-complete | Restore signed-image F1 policy: `hypha-llm-gateway` must forbid unsafe code; BCM unsafe use requires a reviewed allowlist entry |
+| Local Cell-to-Cell runtime | Current executable work | `scope-gated` | `qemu` | Hardware-independent roadmap Phase 04 | The isolated RV64 broker oracle now passes calibration, 1/2/4/8/16-client sweeps, role gating, a 10,000-call soak, and queue overflow; separately approve and exercise the remaining two-node direct-LAN/restart scope without promoting this single-guest result |
+| Kernel signature, pointer, and entropy remediation | Current-scope technical debt | `governance-gated` | `host` | Separately approved security children | Named security/PAL approvals and implementation checkpoints |
+| Authenticated software evidence | Current executable work | `scope-gated` | `host` | Hardware-independent roadmap Phase 07 | Run `.github/workflows/ci.yml` on `main`, then verify its immutable attested bundle; only software/QEMU classes are eligible |
+| x86 Tier 3 VirtIO parity | Future capability | `scope-gated` | `qemu` | Hardware-independent roadmap Phase 10 | Supported Phase 06 scenarios, shared persistence backend, then one pinned transport contract |
+| Remote/public Cell-to-Cell operation | Future capability | `contract-gated` | `host` / `service` | Cell-to-Cell Anywhere remote/public children | Separately approve and implement the remote transport, identity, lease, and export contracts; local runtime work need not wait |
+| Protected relay identity | External-gated prerequisite | `external-gated` | `host` | KMS/Silo protected relay plan | VF2, STM32H573, OPTIGA TPM, and named AWS DEV account/region; none is a qualified production floor |
+| G3 accelerator | Future capability | `external-gated` | `contract` | Accelerator evidence envelope | RK3588, accepted RKNN package/license, then X390 evidence |
+| Additional physical-board qualification | External-gated prerequisite | `external-gated` | `physical` | Hardware tracks | Exact VF2, Pioneer, RPi4, or x86 board and board-specific logs; existing RPi3 work need not wait |
+| Production root selection | External-gated prerequisite | `external-gated` | `production` | ADR-0006 | Vendor package satisfying ADR-0006 and a superseding GO ADR; no stock TPM or generic secure-element counter is selected as the floor |
+| Production admission and release | Production release gate | `external-gated` | `production` | Tier 1 admission and governed release owners | Remote C2C identity where applicable, protected relay identity, production KMS/root, secure/measured boot, qualified external floor, physical hostile evidence, authenticated runner, required human approvals, and release-ledger closure |
 
 The lane-specific child plans under
 [`../.agents/260827-1004-hardware-independent-roadmap/`](../.agents/260827-1004-hardware-independent-roadmap/)

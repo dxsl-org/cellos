@@ -16,6 +16,7 @@ api::declare_syscalls![
     GetTime,
     Heartbeat,
     LookupService,
+    ResolveCellOwner,
     SetTimer,
     StateRestore,
     Exit,

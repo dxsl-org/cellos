@@ -3,7 +3,7 @@
 **Audience**: Developers new to Cellos
 **Level**: High-level (conceptual + key components)
 **Version**: 0.2.1-dev (Mycelium Era)
-**Last Updated**: 2026-08-27 (ViUI managed compositor surface integration completed; KMS/Silo production remains `BLOCKED_BY_ADR_0006`.)
+**Last Updated**: 2026-08-28 (development-first hardware-constrained execution recorded; KMS/Silo production remains `BLOCKED_BY_ADR_0006`.)
 
 > **Status refresh 2026-08-21**: [Spec 23 Native SDK contract](specs/23-native-sdk-contract.md)
 > is ratified as the normative contract for the single Native SDK family. It
@@ -134,6 +134,43 @@
 > x86 page-fault hook is declared with a matching compile-time assertion. The
 > boundary script now rejects new local HAL ABI blocks. This is a structural
 > cleanup only: no public ABI changed and no physical-board claim was added.
+
+---
+
+## Development Execution and Production Admission Boundary
+
+[ADR-0007](decisions/0007-development-first-hardware-constrained-execution.md)
+separates the development platform from production trust anchors. The current
+platform inventory is QEMU, two existing Raspberry Pi 3 boards, and incoming
+sensors. The architecture directs work to those assets now and authorizes no
+additional hardware procurement at this time.
+
+| Platform | Permitted evidence | Ceiling and prohibition |
+|---|---|---|
+| Host and QEMU | Software contracts, integration behavior, emulated-device behavior, and bounded hostile software scenarios | `host` or `qemu`; never physical, service, protected-root, secure/measured-boot, or production qualification |
+| Two existing RPi3 boards | G1 development boot, peripheral, sensor, and exact-board hardware-integration behavior | `physical` development evidence for the exact board only; never a production-security target, independent external floor, or production qualification |
+| Incoming sensors | Protocol/fixture work before receipt and exact-device behavior after physical exercise | Host/QEMU before receipt; `physical` development evidence after receipt; never broader device-family or production qualification |
+
+Lanes advance independently to these ceilings. QEMU, RPi3, sensor, and local
+Cell-to-Cell runtime work is current executable work. Defects in supported
+paths are current-scope technical debt; remote/public operation and later
+product-stage expansion are future capabilities; unavailable exact assets and
+vendor evidence are external-gated prerequisites; production admission and
+governed release closure are production release gates. These classifications
+must not be collapsed into a single technical-debt queue.
+
+The production architecture is unchanged and remains fail-closed. Remote C2C
+identity where applicable, protected relay identity, a production KMS/root,
+secure/measured boot, a qualified authenticated rollback-resistant external
+floor with persistent recovery, physical hostile evidence, an authenticated
+runner, required human approvals, and governed release-ledger closure remain
+mandatory before the applicable production-admission or production-release
+claim. No stock TPM or generic secure-element counter is selected as the floor.
+[ADR-0005](decisions/0005-mutual-tls-relay-identity.md) and
+[ADR-0006](decisions/0006-block-production-root-pending-exact-product-evidence.md)
+continue to govern protected remote identity and root selection. Their gates
+block only their production milestones and never promote development evidence;
+production admission stays disabled.
 
 ---
 

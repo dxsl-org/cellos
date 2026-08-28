@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "Reconcile and Complete Local Cell-to-Cell Runtime"
-status: blocked
+status: in_progress
 priority: P1
 effort: "5d"
 dependencies: [1]
@@ -76,7 +76,8 @@ approved paths return `NotSupported`; no raw or insecure fallback exists.
 
 - [x] Resolve relay-first versus direct-only contract conflict.
 - [x] Freeze one bounded local runtime scope with distributed leases deferred.
-- [ ] Approve a test-only K1 image-fixture/provisioning contract before baseline measurement.
+- [x] Approve and implement the ephemeral run-scoped K1 image-fixture contract.
+- [x] Record the single-guest RV64 broker calibration, concurrency, soak, role, and overflow baseline.
 - [ ] Prove only approved two-node behavior and cleanup.
 
 ## Success Criteria
@@ -100,4 +101,13 @@ baselines; a later direct-LAN optimization must not become a raw or insecure fal
 
 ## Deviation Log
 
-- Decision: the user selected an ephemeral, run-scoped 32-byte K1 injected into the RV64 `app-bench` oracle image only; it is shared only by that run's participants and removed with its workspace. The fixture injection and baseline run remain unimplemented.
+- Decision: the user selected an ephemeral, run-scoped 32-byte K1 injected into
+  the RV64 `app-bench` oracle image only; it is shared only by that run's
+  participants and removed with its workspace.
+- Evidence: `scripts/run-c2c-broker-oracle-qemu.sh` completed a real isolated
+  QEMU run with `calibration=MEASURED`, successful 1/2/4/8/16-client sweeps,
+  `role_gate=PASS`, a 10,000-call soak with `silent_drop=0`, and
+  `overflow status=PASS` at `queue_peak=16`.
+- Boundary: this is a single-guest local broker/runtime oracle. It does not
+  satisfy the two-node direct-LAN, restart-cleanup, relay, remote/public, or
+  production criteria above.

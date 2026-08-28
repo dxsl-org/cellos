@@ -138,5 +138,6 @@ No AP-supplied digest, DER object, time, measurement, `attested` flag, readiness
 ## Links
 
 - [ADR-0005: Use mutual TLS for external relay identity](./0005-mutual-tls-relay-identity.md) — production client signing prerequisite and `DEV_REFERENCE` boundary.
+- [ADR-0007](./0007-development-first-hardware-constrained-execution.md) — available development assets may advance to bounded evidence ceilings without selecting or qualifying a production root.
 - `.agents/260825-1726-kms-silo-production-root/phase-06-select-production-root-product.md` — product kill-gate requirements and blocked Phase 7–8 handoff.
 - `.agents/260825-1726-kms-silo-production-root/research/protected-root-report.json` — prior protected-root boundary and reference evidence.

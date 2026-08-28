@@ -1,35 +1,106 @@
 # Current Focus
 
-**Last updated**: 2026-08-27
+**Last updated**: 2026-08-28
 
-## Execution Model
+## Development-first execution boundary
 
-G1 Robot & Embedded is the active product-stage overlay, not a global queue.
-Capability dependencies and their evidence ceilings determine executable order.
-Host and QEMU evidence are software evidence only; they never qualify a board,
-secure root, cloud authority, or production release.
+[ADR-0007](../decisions/0007-development-first-hardware-constrained-execution.md)
+records the current decision: use QEMU and the two existing Raspberry Pi 3
+boards; procure no additional hardware now. The currently available peripherals
+are a camera and an HDMI cable for external-display testing. Other sensor work
+is deferred. G1 Robot & Embedded is the active product-stage overlay, not a
+global queue. Capability dependencies
+and evidence ceilings determine executable order.
 
-## Work Available Without New Hardware
+QEMU evidence is software-only. RPi3 and sensor evidence is development and
+hardware-integration evidence for the exact exercised devices only. The RPi3 is
+not, and must never be presented as, a production-security qualification target
+or qualified independent external floor.
 
-- Complete the RPi3 HDMI software boundary through its host/build/policy checks,
-  then stop at framebuffer-range, mailbox-coherency, and visual hardware gates.
-- **Blocked:** Tier 3 hostile QEMU reaches a CPU-bound budget stimulus under
-  pinned QEMU-TCG 10.2.0, but bounds/descriptor/backend lack VMM/VirtIO
-  transport and reset/preemption have no independent VMM recovery outcome.
-- Project each completed lane immediately into the roadmap and acceptance views.
-- The managed-surface child is implementation-complete with host/RISC-V evidence.
-  Its QEMU input/scanout run invoked the repository-owned disk generator, which
-  refused to sign the image until the shared F1 policy is restored: the Hypha
-  gateway lacks `#![forbid(unsafe_code)]` and BCM mailbox unsafe code lacks a
-  reviewed allowlist entry. No additional desktop contract is authorized.
+## Current executable work
 
-Desktop/ViUI/SDK, local Cell-to-Cell, security/PAL remediation, authenticated
-evidence, and x86 VirtIO each have independent scope, contract, governance, or
-dependency gates. Their precise owners and reopening events are maintained in
+- Continue useful QEMU software and integration work to the `qemu` ceiling.
+  Host/QEMU results never qualify a board, secure root, cloud authority,
+  physical-hostile posture, or production release.
+- Use both existing RPi3 boards for G1 boot and peripheral integration work.
+  The immediate peripheral lane is external-display testing over HDMI. The HDMI
+  unsafe-copy review gates only that governed boundary: complete its
+  host/build/policy work when authorized, then stop at its framebuffer-range,
+  mailbox-coherency, and visual hardware gates. It does not globally block other
+  RPi3 work.
+- Defer camera and other sensor integration until the sensor lane is resumed.
+  The camera's exact identity and interface must be recorded before it is
+  exercised or used as physical-behavior evidence.
+- Tier 3 hostile-QEMU qualification remains blocked at its current result, but
+  adding the missing VMM/VirtIO bounds, descriptor, backend-error transport and
+  independent preemption/supervisor-restart outcomes is executable QEMU work.
+  The existing CPU-bound budget stimulus under pinned QEMU-TCG 10.2.0 is not
+  those missing outcomes.
+- The approved local Cell-to-Cell fixture and RV64 `app-bench` broker oracle
+  are now executable through `scripts/run-c2c-broker-oracle-qemu.sh`. The
+  isolated QEMU run measured 100 warmup / 1,000 calibration calls, passed the
+  1/2/4/8/16-client sweeps and role gate, completed the 10,000-call soak with
+  zero silent drops, and passed the queue-overflow oracle. This is single-guest
+  local-runtime QEMU evidence only; it does not prove two-node direct LAN,
+  relay, remote/public operation, or protected relay identity.
+- Project each completed lane immediately into the roadmap and acceptance views
+  at its exact evidence ceiling.
+- The managed-surface child is implementation-complete with host/RISC-V
+  evidence. Its QEMU input/scanout run invoked the repository-owned disk
+  generator, which refused to sign the image until the shared F1 policy is
+  restored: the Hypha gateway lacks `#![forbid(unsafe_code)]` and BCM mailbox
+  unsafe code lacks a reviewed allowlist entry. No additional desktop contract
+  is authorized.
+
+## Work classification
+
+- **Current executable work:** the QEMU, two-RPi3, HDMI external-display,
+  local Cell-to-Cell, evidence-projection, sensor, and separately reopened
+  governed lanes above. Camera and other sensor integration retains this
+  classification but is deferred in the current session order.
+- **Current-scope technical debt:** confirmed defects and maintainability gaps
+  in supported paths, including the raw TLS length contract and interactive
+  polling/CI evidence gaps tracked by the
+  [open risk register](open-risk-register.md). This label does not apply to all
+  advanced work.
+- **Future capability:** remote/public Cell-to-Cell operation, additional
+  desktop depth, x86 parity beyond current dependencies, G3 accelerators, G4
+  `rust-std`, and G5 virtualization expansion.
+- **External-gated prerequisite:** unavailable exact boards, protected relay
+  assets/cloud identity, and an exact production-root vendor evidence package.
+  No stock TPM or generic secure-element counter is selected as the production
+  floor.
+- **Production release gate:** remote C2C identity where applicable, protected
+  relay identity, production KMS/root, secure/measured boot, a qualified
+  rollback-resistant external floor, persistent recovery, physical hostile
+  evidence, an authenticated runner, required human approvals, and governed
+  release-ledger closure.
+
+Production admission and release remain disabled and fail-closed until every
+applicable production release gate is satisfied. Those gates block only the
+production-admission or production-release milestone that owns them; they do
+not block the current executable work above. Precise owners and reopening
+events are maintained in
 [the roadmap capability table](../project-roadmap.md#capability-lanes).
 
 ## Recent State
 
+- RPi3 inventory is partial. RPi3-B is identified as board revision `a22082` /
+  Raspberry Pi 3 Model B with unique serial `000000003d042795`. Its post-reboot
+  exact-device run transferred and checksum-verified `cellos.uimg`, discovered
+  the SD card and four MBR partitions, mounted FAT16/FAT32/littlefs/RedoxFS,
+  completed policy/kernel self-tests and the first BCM scanout flush, reached
+  the shell, and finished the VFS suite at `89 PASS, 0 FAIL`. This is
+  development/hardware-integration evidence. HDMI connected after firmware
+  startup produced black / `No Signal`; a power-off retry with HDMI connected
+  and the display active before firmware startup showed U-Boot, the Cellos boot
+  log, and the `Cellos >` prompt. This confirms the reproduction condition, not
+  a root cause among firmware EDID sampling, display handshake/input behavior,
+  and driver behavior. No named reviewer approval is recorded for the mailbox
+  unsafe DMA-page copies, so this observation is non-qualifying and the HDMI
+  visual hardware gate remains `governance-gated`. RPi3-A remains entirely
+  pending, and the historical shell/BCM-scanout capture remains unassigned
+  because it contains no unique serial.
 - RPi3 post-HAL-split smoke work has landed in `main`.
 - HAL to kernel Rust ABI signatures are centralized in
   `hal/traits/arch/src/kernel_abi.rs`.
@@ -103,20 +174,29 @@ dependency gates. Their precise owners and reopening events are maintained in
 - `docs/TODO.md` is no longer project documentation. Personal task tracking
   belongs in `.agents/`.
 
-## Next Useful Work
+## Next-session work order
 
-1. For local Cell-to-Cell, establish the approved test-only K1 image fixture
-   before recording IPC, queue/cache, and saturation baselines.
-2. For every `scope-gated` or `governance-gated` lane, perform only its named
-   reopening action: obtain the RPi3 unsafe review, add the Tier 3 VMM/VirtIO
-   stimuli and independent outcomes, or obtain the required desktop/security/
-   evidence approval.
-3. After a lane transitions, publish its exact evidence ceiling and remaining
-   reopening event through the roadmap/ledger owner; do not wait for another
-   product stage.
-4. Keep physical board evidence, protected relay assets, G3 accelerator work,
-   and the ADR-0006 production root visibly external-gated.
-5. Keep HAL/board boundary checks in CI whenever board descriptors, SoC facts,
+1. Record the exact identity and current condition of both available RPi3
+   boards. Record the available camera's exact identity and interface without
+   starting sensor integration. Buy no additional hardware.
+2. Exercise the existing RPi3 boot/peripheral path on the available boards and
+   retain development-only logs tied to the exact board. Do not infer a
+   production-security or external-floor result.
+3. Prepare the bounded external-display path using the available HDMI cable.
+   Respect the HDMI unsafe-copy governance gate; do not cross the
+   framebuffer-range, mailbox-coherency, or visual hardware gates without the
+   required review and exact-board evidence.
+4. Publish each observed result at its evidence ceiling with the remaining
+   lane-local gate. Continue local Cell-to-Cell baselines if the hardware lane
+   is waiting on physical access or a named review.
+5. Resume camera and other sensor protocol, board-interface, driver, fixture,
+   QEMU, and exact-device RPi3 work only in a later sensor session. Keep QEMU
+   results software-only and physical results development/hardware-integration-
+   only.
+6. Keep protected relay assets, other physical boards, G3 acceleration, and the
+   ADR-0006 production root external-gated. Keep every production-admission and
+   release invariant mandatory without making it a global development blocker.
+7. Keep HAL/board boundary checks in CI whenever board descriptors, SoC facts,
    or HAL ABI hook declarations change.
-6. Use [project-roadmap.md](../project-roadmap.md#capability-lanes) for
+8. Use [project-roadmap.md](../project-roadmap.md#capability-lanes) for
    cross-lane routing and the topic pages for evidence details.
