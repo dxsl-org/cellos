@@ -18,6 +18,12 @@ This is the executable child plan for umbrella Phase 03 / TODO C3. It preserves 
 
 Admission is exactly `valid publisher provenance ∧ authenticated owner authorization at external floor generation`. Path labels, manifest protection class, policy capability ceilings, and a present signature alone are not substitutes for either claim.
 
+These are milestone-local production-admission gates. Per
+[ADR-0007](../../docs/decisions/0007-development-first-hardware-constrained-execution.md),
+they do not block unrelated QEMU, two-RPi3, incoming-sensor, or local-runtime
+development, and none of that development can satisfy or weaken this plan's
+production requirements.
+
 ## Current-State Findings
 
 - All supported spawn sources converge in `kernel/src/loader.rs::spawn_gated`: `spawn_from_path` supplies boot-table bytes, while `loader/mem_spawn_gate.rs` converts caller names to `/mem/` labels before using that same gate. The latter must receive the same publisher/owner decision and must never inherit path authority.
@@ -88,7 +94,10 @@ The envelope MUST be detached from the ELF so `final_elf_bytes` has no self-refe
 No backend is selected here. A candidate must implement a boot-usable, authenticated `read` plus conditional `advance` contract over `(generation, transaction_id, transaction_intent_digest)`:
 
 - `read` returns an authenticated, durable floor state; a caller cannot replay an older observation or substitute an unauthenticated one.
-- `advance(expected_generation, intent)` atomically compares `expected_generation`, binds the supplied transaction identity and digest, durably advances exactly one generation, and returns evidence that cannot be forged or rolled back by replacing either A/B slot.
+- `advance(expected_generation, transaction_id, intent_digest)` atomically
+  compares `expected_generation`, binds the supplied `transaction_id` and
+  `intent_digest`, durably advances exactly one generation, and returns
+  evidence that cannot be forged or rolled back by replacing either A/B slot.
 - Repeating an already-completed request is identifiable and cannot create a second advancement; conflicting intent at the same generation fails closed.
 - Power loss at every point has a specified recovery observation. If the floor is ahead of both slots, or a slot is ahead of the floor, recovery is authenticated and explicit; it never derives or advances the floor from a slot.
 - The trust path, provisioning, authorization, persistence/failure domain, counter exhaustion/reset behavior, and removal/replacement attacks are documented and exercised on the actual candidate. A bare counter is insufficient unless it provides an authenticated atomic intent binding with equivalent rollback resistance.
