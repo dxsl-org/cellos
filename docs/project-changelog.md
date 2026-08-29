@@ -45,6 +45,11 @@
   `guest_disk.img` in canonical MBR P1 at LBA 2048. The exact 120-second local
   TCG machinery smoke enters the guest and observes only the documented
   address-size fault.
+- VFS test PASS/FAIL records now assemble the marker, message, and newline in
+  one bounded `sys_log` call. Concurrent SMP kernel logging can no longer split
+  `[PASS] ` from its assertion text and make the VFS quota harness report a
+  timeout after the guest itself completed 96 PASS / 0 FAIL. The rebuilt
+  test-hooks image passes both VFS quota integration tests.
 
 - Corrected the current hardware inventory to `2 × Raspberry Pi 3 Model B+`
   as reported by the owner. Exact serial/revision/condition reconciliation is

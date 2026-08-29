@@ -90,16 +90,30 @@ fn vfs_raw(msg: &[u8]) -> api::ipc::VfsResponse<'static> {
     }
 }
 
+fn report(prefix: &str, msg: &str) {
+    const MAX_REPORT_BYTES: usize = 256;
+    let needed = prefix.len() + msg.len() + 1;
+    if needed > MAX_REPORT_BYTES {
+        let _ = ostd::syscall::sys_log("[FAIL] vfs-test report exceeds output bound\n");
+        return;
+    }
+    let mut line = [0u8; MAX_REPORT_BYTES];
+    line[..prefix.len()].copy_from_slice(prefix.as_bytes());
+    line[prefix.len()..prefix.len() + msg.len()].copy_from_slice(msg.as_bytes());
+    line[needed - 1] = b'\n';
+    if let Ok(text) = core::str::from_utf8(&line[..needed]) {
+        let _ = ostd::syscall::sys_log(text);
+    }
+}
+
 fn pass(msg: &str) {
     PASSED.fetch_add(1, Ordering::Relaxed);
-    ostd::io::print("[PASS] ");
-    ostd::io::println(msg);
+    report("[PASS] ", msg);
 }
 
 fn fail(msg: &str) {
     FAILED.fetch_add(1, Ordering::Relaxed);
-    ostd::io::print("[FAIL] ");
-    ostd::io::println(msg);
+    report("[FAIL] ", msg);
 }
 
 macro_rules! assert_ok {
