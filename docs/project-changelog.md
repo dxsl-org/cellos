@@ -201,8 +201,15 @@
   self-hosted runners before validating bundle contents. This contract applies
   only to approved software/QEMU evidence; it cannot qualify physical,
   secure-root, cloud, approval, or production claims.
-- No evidence is admitted yet: a trusted CI-signed fixture/workflow run and
-  consumed-sequence replay protection remain required.
+- Trusted `main` run
+  [`33247922906`](https://github.com/dxsl-org/cellos/actions/runs/33247922906)
+  produced and attested the bundle for revision
+  `8a2cb1cc1109011ba74f2633f2f4f876b0af8cdf`. Offline verification pinned the
+  GitHub-hosted `ci.yml` signer, rejected self-hosted provenance, and validated
+  every bound input, raw log, producer/toolchain record, and the exact
+  `disk_v3.img` digest.
+- The bundle is verified, not admitted. Consumed-sequence replay protection
+  remains required before Phase 08 may project it into a status ledger.
 
 ## [2026-08-27] ViUI managed compositor surface integration
 

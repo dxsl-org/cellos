@@ -85,12 +85,13 @@ Do not choose Sigstore, cloud KMS, or self-hosted keys by assumption; backend tr
 
 ## Next Steps
 
-Trigger the trusted workflow on `main`, download its immutable evidence bundle,
-and verify it through `validate-evidence-bundle.sh`, which pins the GitHub-hosted
-`ci.yml` signer and rejects self-hosted runners, before Phase 08 projects any result.
+Implement consumed-sequence replay protection, validate sequence reuse and
+regression rejection against the verified run, then let Phase 08 project only
+the approved software/QEMU class. Physical and production classes stay blocked.
 
 ## Deviation Log
 
 - Inventory: CI already had a GitHub-native `attest-catalog` job with OIDC and `attestations: write`, but no signed bundle schema, retention policy, or replay rule.
 - Decision: the user approved software/QEMU-only evidence from GitHub-hosted `.github/workflows/ci.yml`, bound to revision and run-id/attempt with 90-day retention. Physical, secure-root, cloud, approval, and production evidence remain excluded.
-- Implemented `cellos.authenticated-evidence/v1`: CI validates the catalog, stages hashed inputs/raw log/metadata, uploads an immutable 90-day bundle, and attests its manifest. The fail-closed entrypoint verifies the exact GitHub-hosted signer before content validation. A valid CI-signed fixture and a consumed-sequence replay store remain required before evidence can be projected.
+- Implemented `cellos.authenticated-evidence/v1`: CI validates the catalog, stages hashed inputs/raw log/metadata, uploads an immutable 90-day bundle, and attests its manifest. The fail-closed entrypoint verifies the exact GitHub-hosted signer before content validation. A consumed-sequence replay store remains required before evidence can be projected.
+- Verified execution: trusted `main` run `33247922906` at revision `8a2cb1cc1109011ba74f2633f2f4f876b0af8cdf` produced an immutable attested bundle. `validate-evidence-bundle.sh` accepted the GitHub-hosted `ci.yml` signer and all bound contents, including producer/toolchain metadata and the `disk_v3.img` digest. The bundle is verified but not admitted because consumed-sequence replay protection is still absent.
