@@ -1249,7 +1249,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p .authenticated-evidence
-          python3 scripts/validate-app-tier-acceptance.py 2>&1 | tee .authenticated-evidence/catalog-validation.log
+          python3 scripts/validate-admission-prequalification.py 2>&1 | tee .authenticated-evidence/catalog-validation.log
           python3 scripts/create-authenticated-evidence-bundle.py \
             --output evidence/manifest.json \
             --revision "${{ github.sha }}" \
