@@ -23,13 +23,21 @@
   from the release kernel booted on QEMU `q35` and reached the `Cellos >` shell
   prompt without a kernel panic or Cell fault.
 
-- Authenticated evidence admission now requires an explicitly provisioned,
+- Authenticated evidence admission requires an explicitly provisioned,
   operator-owned replay store outside the submitted bundle. Verification binds
   the GitHub-attested subject digest through a second locked member check;
   pinned-directory atomic state rejects exact replay, sequence regression,
   concurrent double-consumption, unsafe ownership/modes, and state bootstrap
-  during admission. Ten adversarial subprocess cases and the real attested
-  run `33247922906` pass once and reject the replay.
+  during admission. Ten adversarial subprocess cases pass. GitHub-hosted `main`
+  run `33251921677:1` at revision
+  `d951d7dbf191133e94061ded7f0a8d17bfcf07c8` completed. Manifest digest
+  `2263115d4f3f58b990074d0cb7489ec5f52523f23a2a9777a8685a8c09492abb`
+  was independently verified, the run-id/attempt sequence was consumed once
+  through explicitly provisioned durable operator-owned external state, and
+  exact replay was rejected. Phase 08 projects the pipeline as
+  completed/regression-only
+  with `execution_class=ready` and `evidence_ceiling=host`; bundled claims keep
+  their original ceilings.
 - ARM64 hypervisor persistence now retries nonblocking VFS admission against
   the same scheduler-tick deadline used by its sender-masked reply wait; a
   never-receiving service cannot park the caller, and uncertain replies poison

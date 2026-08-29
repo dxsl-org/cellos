@@ -33,7 +33,7 @@ Estimated implementation total is 36.5d for one pass through every phase, includ
 | 04 | [Reconcile and complete local Cell-to-Cell runtime](./phase-04-local-c2c-runtime.md) | scope-gated | host | 01 |
 | 05 | [RPi3 HDMI software boundary — completed](./phase-05-rpi3-hdmi-software-gate.md) | ready | host | 01 |
 | 06 | [Build Tier 3 hostile QEMU runners](./phase-06-tier3-qemu-evidence.md) | scope-gated | qemu | 01 |
-| 07 | [Authenticate software evidence pipeline](./phase-07-authenticated-evidence-pipeline.md) | governance-gated | host | 01 |
+| 07 | [Authenticate software evidence pipeline](./phase-07-authenticated-evidence-pipeline.md) | ready | host | 01 |
 | 08 | [Project completed lane status](./phase-08-roadmap-ledger-sync.md) | ready | contract | 01 |
 | 09 | [Implement ARM64 Tier 3 persistent QEMU storage](./phase-09-tier3-persistent-qemu-storage.md) | scope-gated | qemu | 01, 06 |
 | 10 | [Pin and wire x86 Tier 3 VirtIO parity](./phase-10-tier3-x86-virtio-parity.md) | scope-gated | qemu | 01, 06, 09 |

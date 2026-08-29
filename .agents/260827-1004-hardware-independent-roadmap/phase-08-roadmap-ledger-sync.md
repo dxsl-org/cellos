@@ -1,7 +1,7 @@
 ---
 phase: 8
 title: "Record Software Completion and Parked Gates"
-status: in-progress
+status: complete
 priority: P1
 effort: "0.5d"
 dependencies: [1]
@@ -62,16 +62,16 @@ None — status derives only from completed child evidence.
 
 ## Todo List
 
-- [ ] Collect exact evidence and ceiling from the triggering lane.
-- [ ] Update authoritative ledgers and living docs.
-- [ ] Publish the reopening event when the triggering lane remains parked.
+- [x] Collect exact evidence and ceiling from the triggering lane.
+- [x] Update authoritative ledgers and living docs.
+- [x] Publish the reopening event when the triggering lane remains parked.
 
 ## Success Criteria
 
-- [ ] No active roadmap item is globally blocked merely because another product stage lacks hardware.
-- [ ] Every completed software lane points to reproducible evidence and an explicit ceiling.
-- [ ] Every external lane remains visible with a concrete reopening event.
-- [ ] G3 remains procurement/license/probe-only; production identity remains ADR-0006 blocked.
+- [x] No active roadmap item is globally blocked merely because another product stage lacks hardware.
+- [x] Every completed software lane points to reproducible evidence and an explicit ceiling.
+- [x] Every external lane remains visible with a concrete reopening event.
+- [x] G3 remains procurement/license/probe-only; production identity remains ADR-0006 blocked.
 
 ## Security Considerations
 
@@ -93,5 +93,6 @@ Repeat this projection after every lane transition; produce an optional final ro
 - Reclassified the RPi3 HDMI lane as `execution_class=governance-gated`, `evidence_ceiling=host` after the F1 scanner rejected the unapproved BCM mailbox unsafe copies. Existing implementation is not a passing software result; no physical framebuffer, coherency, visual, or production status changed.
 - Attempted to project Phase 06 QEMU runner output. The projection was retracted because its parser treated guest-authored `NOT_APPLICABLE` classifications and self-authored reset/budget markers as evidence.
 - Correction: Phase 06 is not complete. The x86 runner retains a real CPU-bound budget stimulus with outer-QEMU liveness, but its guest reset stimulus produces neither nested-VMM exit nor supervisor restart; bounds/descriptor/backend cannot reach VMM/VirtIO and VMM preemption remains unobserved. The lane remains `scope-gated`; ARM64 remains `NOT_APPLICABLE`.
-- Phase 07 now has an approved GitHub Actions Native Attestations policy limited to software/QEMU evidence. The CI workflow stages and attests a revision/run-sequence-bound bundle, but no workflow run has been independently verified, so the lane is `scope-gated` and no status projection is emitted.
+- Historical state, superseded by the projection below: Phase 07 had an approved GitHub Actions Native Attestations policy limited to software/QEMU evidence, but no workflow run had yet been independently verified, so no status projection was emitted at that point.
 - Superseded the earlier HDMI governance-gated projection after `lungmat8` approved the exact unsafe island and the software plus RPi3-B physical development gates passed. The lane is completed/regression-only at the `physical` development evidence ceiling; the TFTP transfer record, later UART boot block, and user visual observation remain separate evidence sources and do not imply production qualification.
+- Projected Phase 07 after trusted GitHub-hosted `main` run `33251921677:1` at revision `d951d7dbf191133e94061ded7f0a8d17bfcf07c8` completed with attested manifest digest `2263115d4f3f58b990074d0cb7489ec5f52523f23a2a9777a8685a8c09492abb`. The manifest digest was independently verified, the run-id/attempt sequence was consumed once through explicitly provisioned durable operator-owned external state, and exact replay was rejected. Immutable status record: `capability=authenticated-software-evidence`, `environment=github-hosted`, `result=PASS`, `execution_class=ready`, `evidence_ceiling=host`, `remaining_gate=pipeline/schema/workflow-identity regression or separately governed higher evidence`. The app-tier acceptance ledger is intentionally unchanged because this pipeline authenticates carriage and does not alter any app-tier claim or aggregate; `c9` remains `NOT_COMPLETE`.

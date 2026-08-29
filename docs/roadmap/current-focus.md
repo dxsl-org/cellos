@@ -58,6 +58,15 @@ or qualified independent external floor.
   regression also passes. The signed image gate passes F1/F5 after removing
   three unapproved unsafe islands. No physical, production, or additional
   desktop contract is authorized.
+- The authenticated software-evidence pipeline is complete and regression-only
+  at the `host` ceiling. GitHub-hosted `main` run `33251921677:1` at revision
+  `d951d7dbf191133e94061ded7f0a8d17bfcf07c8` completed. Its manifest digest
+  was independently verified, the run-id/attempt sequence was consumed once
+  through explicitly provisioned durable operator-owned external state, and
+  exact replay was rejected. This authenticates bundle origin and integrity
+  only. Every bundled
+  result retains its own evidence ceiling, and no physical, secure-root, cloud,
+  approval, admission, or production status changes.
 
 ## Work classification
 
@@ -66,8 +75,9 @@ or qualified independent external floor.
   governed lanes above. Camera and other sensor integration retains this
   classification but is deferred in the current session order.
 - **Completed / regression-only:** the RPi3 HDMI software and exact-device
-  development lane and the x86 Tier 3 VirtIO software lane at its QEMU ceiling;
-  reopen either only for a regression or separately governed higher evidence.
+  development lane, the x86 Tier 3 VirtIO software lane at its QEMU ceiling,
+  and the authenticated software-evidence pipeline at its host ceiling. Reopen
+  them only for a regression or separately governed higher evidence.
 - **Current-scope technical debt:** confirmed defects and maintainability gaps
   in supported paths, including interactive polling/CI evidence gaps tracked by
   the [open risk register](open-risk-register.md). This label does not apply to

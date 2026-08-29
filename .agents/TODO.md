@@ -1,4 +1,9 @@
 # TODO
+- Phase 07 authenticated software evidence [completed/regression-only] tại trần
+  `host`: GitHub-hosted run `33251921677:1` đã được verify, consume qua durable
+  operator-owned replay state và replay chính xác bị từ chối. Mở lại chỉ khi
+  pipeline/schema/workflow identity regression hoặc có higher-evidence scope
+  được phê duyệt; không nâng bất kỳ claim nào lên physical/production.
 - Phase 10 x86 Tier 3 VirtIO software đã [completed] tại trần QEMU: hai boot
   block/network và 27 hostile scenarios, gồm malformed transport/queue,
   pause-less vCPU preemption, VFS/Net supervisor restart và backend recovery.
@@ -15,7 +20,7 @@
 4. Implement floor persistence/recovery
 5. Provision publisher/owner anchors
 6. Wire mọi task-creation path
-7. Thiết lập authenticated runner
+7. Thiết lập production-admission authenticated runner; software-only authenticated evidence runner đã hoàn tất riêng ở Phase 07
 8. Chạy hostile + physical power-loss matrix
 9. Retain immutable evidence bundle
 10. Hai umbrella approvals

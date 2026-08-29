@@ -172,6 +172,26 @@ continue to govern protected remote identity and root selection. Their gates
 block only their production milestones and never promote development evidence;
 production admission stays disabled.
 
+### Authenticated Software Evidence Boundary
+
+`cellos.authenticated-evidence/v1` binds a GitHub-hosted workflow identity,
+revision, run-id/attempt, runner class, hashed inputs, raw logs, and producer
+metadata into a content-addressed manifest attested by GitHub Actions Native
+Attestations. Offline admission verifies the exact signer and attested manifest
+digest before revalidating every member.
+
+Replay control is external to the submitted bundle. An explicitly provisioned,
+operator-owned state file is opened through a pinned directory, locked across
+verification and consumption, and atomically advanced only for a strictly newer
+run-id/attempt. Failed verification cannot advance state; exact replay,
+regression, concurrent double-consumption, unsafe ownership or modes, and path
+substitution fail closed.
+
+This boundary authenticates software evidence carriage, not the evidence class
+inside it. Host and QEMU results retain their existing ceilings. It cannot
+produce physical, secure-root, cloud/service, human-approval, admissibility, or
+production qualification.
+
 ---
 
 ## Core Philosophy

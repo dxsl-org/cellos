@@ -22,7 +22,7 @@ Primary planning classification for the open entries:
 | Planning class | Entries |
 |---|---|
 | Current executable work | Narrow fixes, bounded fixtures, and software evidence that an owning lane can perform now |
-| Current-scope technical debt | Net polling latency, soft-skipping HTTPS evidence, the pinned-QEMU compatibility gap, unrelated hypervisor CI intermittency, and AArch64 semihosting |
+| Current-scope technical debt | Net polling latency, soft-skipping HTTPS evidence, the pinned-QEMU compatibility gap, and AArch64 semihosting |
 | Future capability | Remote/public net-broker completion and native POSIX completeness beyond currently supported contracts |
 | External-gated prerequisite | Unavailable exact board qualification and exact product/vendor evidence for protected relay or production-root milestones |
 | Production release gate | Fleet signing/provenance, production admission, protected identity/root, secure/measured boot, qualified floor and persistent recovery, physical hostile evidence, authenticated evidence runner, human approvals, and governed ledger/release closure |
@@ -39,6 +39,12 @@ The former single-guest local Cell-to-Cell oracle CI-coverage gap is closed by
 the required [workflow job](../../.github/workflows/ci.yml)
 `c2c-broker-oracle-single-guest-local-runtime`. Its result remains QEMU evidence
 only and does not close two-node, relay, remote/public, or production risks.
+
+The software-evidence origin/integrity and replay-control gap is closed at the
+`host` ceiling by GitHub-hosted run `33251921677:1` and durable external
+sequence consumption. This does not close the distinct production-admission
+runner, physical-hostile, secure-root, human-approval, or release-ledger risks;
+those remain fail-closed production gates.
 
 
 ## Critical
