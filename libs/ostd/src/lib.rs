@@ -103,8 +103,8 @@ pub mod input;
 /// App SDK — structured IPC event loop for Cell applications.
 pub mod app;
 
-/// Cluster client — remote service lookup via net-broker.
-pub mod cluster;
+/// Typed local/remote endpoint descriptors with explicit locality.
+pub mod cluster_endpoint;
 
 /// Service-side message dispatch: [`MessageHandler`] trait + [`dispatch::run_service`] loop.
 pub mod dispatch;

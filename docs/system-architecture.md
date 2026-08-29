@@ -1376,6 +1376,33 @@ supervisor replacement, stale old-TID failure, fresh volatile state, and retry.
 Kernel heartbeat/watchdog termination logs are fail-hard. This is local-process
 evidence only; remote session cleanup and two-node transport remain open.
 
+Phase 04 local protocol construction may proceed while remote dispatch remains
+disabled. The canonical V1 envelope has a 112-byte header and a 3,712-byte
+payload cap: the minimum bound after local ingress, Noise AEAD, and net-cell
+`TcpSend` IPC costs. Streaming and fragmentation are absent. A fixed 16-entry,
+30-second dedup cache keys authenticated source NodeId, source boot epoch,
+request id, and destination server epoch. In-flight entries are never evicted
+or redispatched. Sixteen authenticated source/boot windows retain the highest
+ordered request id. A newer authenticated boot advances the boot floor before
+response-capacity admission, so saturation cannot revive an old boot; stale
+boots and evicted old ids return `Indeterminate`. Expired completed entries may
+therefore release response capacity without turning eviction into redispatch.
+A nonzero `ServerEpoch` identifies one exported-server incarnation within a
+broker lifetime. The boot-local issuer is intentionally volatile. `ReceiveGate`
+accepts only a strictly increasing replacement epoch, then retires
+dead-incarnation response entries while preserving authenticated source replay
+floors. It compares the current epoch before dedup or local delivery.
+Authenticated session incarnation state must still invalidate endpoints learned
+from an older broker before remote enablement. A shared nonzero
+`RelativeDeadline` is mandatory in both the envelope and remote-call API;
+absolute monotonic conversion fails on overflow and distinguishes definite
+pre-dispatch `Timeout` from post-dispatch `Indeterminate`. `LocalEndpoint<M>`
+performs direct sender-masked IPC. `RemoteEndpoint<M>` retains authenticated
+route metadata and the frozen typed error taxonomy, but its Phase 04 `call`
+requires the deadline and returns `NotSupported` without broker contact.
+`CellEndpoint<M>` requires an explicit locality branch. Provider qualification
+still gates remote dispatch, relay, and direct LAN.
+
 ### Cluster membership: 3 modes
 
 A Cell declares its mode via a new additive `__ViCell_cluster` ELF section (follows the `__ViCell_syscalls` pattern; not a manifest/Law-1 change):

@@ -36,6 +36,11 @@ Recovery plan: supersedes `.agents/260624-cell-to-cell-anywhere/` without editin
 >
 > Operator recovery is fixed to a live-supervisor exact nonzero-revision CAS;
 > qualified provider execution and physical recovery evidence remain open.
+> Phase 04 is complete at the disabled local-only ceiling: canonical bounded
+> envelope/decode, fixed no-evict-in-flight cache, boot-local server epochs,
+> explicit typed endpoints, monotonic deadlines, and epoch-before-dedup receive
+> ordering pass 92/92 broker host tests plus 5/5 endpoint integration tests and
+> RV64 builds.
 >
 > The two-real-broker relay path remains blocked only by the
 > protected-persistence, authenticated-time, and reviewed pending-key-binding

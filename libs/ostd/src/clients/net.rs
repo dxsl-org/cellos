@@ -8,13 +8,7 @@ use super::vierr_from_code;
 use crate::service::NetRef;
 use crate::{ViError, ViResult};
 use alloc::vec::Vec;
-use api::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE};
-
-/// Max bytes sent per [`TcpStream::write`] call.
-///
-/// Conservative margin below `IPC_BUF_SIZE` to leave room for postcard framing
-/// (`TcpSend` discriminant + cap_id varint + data length varint ≈ 10 bytes).
-const MAX_TCP_WRITE: usize = IPC_BUF_SIZE - 256;
+use api::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE, NET_TCP_INLINE_DATA_MAX};
 
 /// Yield-retry budget for [`TcpStream::write`] while the socket is in SynSent
 /// (TCP handshake not yet complete). Mirrors `tls_stream::READ_RETRY_BUDGET`.
@@ -165,7 +159,7 @@ impl Default for NetClient {
 /// returns data non-blockingly per call; the loop in `read` handles the wait.
 ///
 /// # Write chunking
-/// [`Write::write`] sends at most [`MAX_TCP_WRITE`] bytes per call due to the
+/// [`Write::write`] sends at most [`NET_TCP_INLINE_DATA_MAX`] bytes per call due to the
 /// IPC buffer limit.  Use [`write_all`][embedded_io::WriteExt::write_all] when
 /// all bytes must be delivered.
 pub struct TcpStream {
@@ -219,7 +213,7 @@ impl embedded_io::Read for TcpStream {
 }
 
 impl embedded_io::Write for TcpStream {
-    /// Write up to `MAX_TCP_WRITE` bytes.
+    /// Write up to `NET_TCP_INLINE_DATA_MAX` bytes.
     ///
     /// Retries on `WouldBlock` up to `WRITE_STALL_BUDGET` times (yielding each
     /// time) so that writes issued immediately after `connect` succeed even when
@@ -228,7 +222,7 @@ impl embedded_io::Write for TcpStream {
         if buf.is_empty() {
             return Ok(0);
         }
-        let chunk = buf.len().min(MAX_TCP_WRITE);
+        let chunk = buf.len().min(NET_TCP_INLINE_DATA_MAX);
         let mut stalls: u32 = 0;
         loop {
             match self.client.tcp_send(self.id, &buf[..chunk]) {

@@ -34,6 +34,7 @@ use ostd::{clients::vfs::VfsClient, syscall::sys_heartbeat, ViError, ViResult};
 
 use crate::rng::BrokerRng;
 use api::cluster::CellNetId;
+use service_net_broker::c2c_envelope::NOISE_TAG_LEN;
 use service_net_broker::kms_dh::{KmsBackedX25519, OpaqueStaticKey};
 
 #[cfg(test)]
@@ -50,7 +51,7 @@ const K1_READ_MAX_BYTES: usize = 64;
 const NOISE_MSG_BUF: usize = 256;
 
 /// Noise AEAD tag overhead per transport record.
-const NOISE_TAG: usize = 16;
+const NOISE_TAG: usize = NOISE_TAG_LEN;
 
 /// Heartbeat re-arm during handshake (must stay < watchdog interval).
 const HEARTBEAT_MS: u64 = 500;

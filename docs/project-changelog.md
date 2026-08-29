@@ -48,6 +48,27 @@
   re-registration, then separately gates peer/relay re-enrollment. Qualified
   provider execution and physical recovery evidence remain open.
 
+- Began Phase 04 local protocol construction without enabling remote dispatch.
+  The canonical allocation-free V1 envelope uses a 112-byte header and a
+  3,712-byte payload cap spanning local ingress, Noise AEAD overhead, and the
+  net-cell `TcpSend` IPC bound. The fixed 16-entry, 30-second dedup cache replays
+  retained completed responses and never evicts in-flight work. Sixteen
+  authenticated source/boot high-water windows reject stale boots and evicted
+  old request ids as `Indeterminate`, while expired completed entries release
+  response capacity. Boot-local server epochs now identify one live exported
+  server incarnation. `LocalEndpoint<M>` uses direct IPC, while
+  `RemoteEndpoint<M>::call` requires a validated nonzero relative deadline and
+  returns typed `NotSupported` without broker contact. `CellEndpoint<M>` requires
+  an explicit locality branch; the nonfunctional raw `ClusterRef` facade was
+  removed. Hostile canonical decoder properties,
+  monotonic deadline classification, and stale-epoch-before-dedup receive
+  ordering are covered; strictly increasing server replacement retires dead
+  response entries while preserving authenticated replay floors, and same/lower
+  replacement is rejected without mutation. Focused broker tests pass 92/92,
+  endpoint integration tests pass 5/5, and RV64 broker/`ostd` builds pass.
+  Phase 04 is complete at its disabled local-only ceiling. Provider, remote
+  dispatch, relay, and direct LAN remain disabled or unimplemented.
+
 - Authenticated evidence admission requires an explicitly provisioned,
   operator-owned replay store outside the submitted bundle. Verification binds
   the GitHub-attested subject digest through a second locked member check;

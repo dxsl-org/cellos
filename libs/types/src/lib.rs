@@ -163,6 +163,7 @@ impl Default for DirEntry {
     }
 }
 
+pub mod c2c;
 pub mod kms;
 pub mod silo;
 

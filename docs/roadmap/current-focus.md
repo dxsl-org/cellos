@@ -67,6 +67,23 @@ or qualified independent external floor.
   10,000-call soak, bounded overflow, watchdog-log, and supervised local broker
   restart results. This does not prove two-node, relay, direct-LAN, remote
   restart/failover, provider qualification, or production readiness.
+- Phase 04 local protocol contract is complete; remote dispatch stays disabled.
+  The allocation-free V1 envelope uses a 112-byte header and a
+  3,712-byte end-to-end payload cap across local ingress, Noise, and net-cell IPC.
+  Its fixed 16-entry, 30-second dedup cache never evicts or redispatches in-flight
+  work. Sixteen authenticated source/boot replay floors keep stale boots and
+  evicted old ids `Indeterminate`. Boot-local server epochs and explicit typed
+  local/remote endpoints are now defined; a shared validated nonzero relative
+  deadline is mandatory in both envelope and remote-call API, whose disabled
+  boundary returns `NotSupported` without broker contact. Hostile canonical
+  decoder properties, monotonic deadline semantics, and epoch-before-dedup
+  receive ordering pass; strictly increasing replacement retires dead response
+  entries while preserving replay floors, and same/lower epochs fail without
+  mutation.
+  Focused broker tests pass 92/92, endpoint integration tests pass 5/5, and
+  RV64 broker/`ostd` builds pass. Phase 04 is complete at the disabled
+  local-only ceiling; provider qualification and authenticated cross-broker
+  incarnation binding gate Phase 05 remote dispatch, relay, and direct LAN.
 - Project each completed lane immediately into the roadmap and acceptance views
   at its exact evidence ceiling.
 - The managed-surface child is complete at the QEMU ceiling. Its dedicated

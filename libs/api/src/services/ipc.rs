@@ -19,6 +19,8 @@ use serde::{Deserialize, Serialize};
 /// message in the system — currently a VFS Write with ~900-byte content
 /// (~916 bytes encoded).  4 KiB gives comfortable headroom.
 pub const IPC_BUF_SIZE: usize = 4096;
+/// Maximum inline TCP data that leaves conservative postcard framing headroom.
+pub const NET_TCP_INLINE_DATA_MAX: usize = IPC_BUF_SIZE - 256;
 
 // ── VFS service ───────────────────────────────────────────────────────────────
 

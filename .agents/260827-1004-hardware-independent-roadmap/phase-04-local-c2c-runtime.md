@@ -144,3 +144,11 @@ permitted.
   calibration, concurrency, 10,000-call soak, role, overflow, watchdog-log,
   and supervised local broker-restart contracts. This does not close the open
   two-node or remote restart/failover criteria.
+- Local protocol continuation: Phase 02 provider gates block remote dispatch,
+  not bounded local envelope/decode/dedup construction. The 112-byte V1 header,
+  3,712-byte end-to-end payload cap, 16-entry/30-second no-evict-in-flight
+  cache, authenticated replay floors, boot-local server epochs, explicit typed
+  endpoints, monotonic deadlines, and epoch-before-dedup receive ordering pass
+  92/92 focused broker tests, 5/5 endpoint integration tests, and RV64 builds.
+  The core Phase 04 protocol contract is complete at its disabled local-only
+  ceiling. Remote transmit, relay, and direct LAN remain unimplemented.
