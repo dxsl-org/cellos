@@ -13,6 +13,7 @@ use ostd::{
     task::yield_now,
 };
 use viui::{
+    event::{Event, KeyCode},
     input_bridge::collect_input_events,
     managed_surface::{ClosePolicy, ManagedSurfaceApp, ManagedTick},
 };
@@ -34,6 +35,8 @@ api::declare_syscalls![
 
 const DISPLAY_W: u32 = 640;
 const DISPLAY_H: u32 = 400;
+const SURFACE_X: i32 = 80;
+const SURFACE_Y: i32 = 80;
 
 ostd::cell_main!(cell_main);
 
@@ -53,18 +56,41 @@ fn cell_main() {
         ostd::io::println("[viui-demo] ERROR: could not set surface title");
         sys_exit(1);
     }
+    surface.move_to(SURFACE_X, SURFACE_Y);
 
     // Keep generated state alive so its signal subscriptions serve the live tree.
-    let (_counter_state, counter_root) = Counter::build();
+    let (counter_state, counter_root) = Counter::build();
+    let count_for_log = counter_state.count.clone();
+    let _count_log = counter_state.count.subscribe(move || {
+        let count = *count_for_log.get();
+        ostd::io::println(&alloc::format!("[viui-demo] count={count}"));
+    });
+    let mut ready = false;
     let mut app = ManagedSurfaceApp::new(Box::new(counter_root), surface);
     app.set_close_policy(ClosePolicy::Accept);
 
     loop {
         let events = collect_input_events(16);
-        if app.tick(&events) == ManagedTick::Closed {
-            ostd::io::println("[viui-demo] close request accepted");
-            app.shutdown();
-            sys_exit(0);
+        for event in &events {
+            if let Event::KeyPress {
+                key: KeyCode::Enter,
+                ..
+            } = event
+            {
+                ostd::io::println("[viui-demo] key=Enter");
+            }
+        }
+        match app.tick(&events) {
+            ManagedTick::Closed => {
+                ostd::io::println("[viui-demo] close request accepted");
+                app.shutdown();
+                sys_exit(0);
+            }
+            ManagedTick::Rendered if !ready => {
+                ready = true;
+                ostd::io::println("[viui-demo] managed surface ready count=0");
+            }
+            ManagedTick::Rendered | ManagedTick::Idle => {}
         }
         yield_now();
     }

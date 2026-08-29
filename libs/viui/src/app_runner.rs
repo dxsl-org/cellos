@@ -99,6 +99,14 @@ impl FocusState {
         });
     }
 
+    /// Focus the widget containing a pointer press, clearing focus on empty space.
+    fn focus_at(&mut self, point: crate::layout::Point) -> bool {
+        let next = self.list.iter().position(|bounds| bounds.contains(point));
+        let changed = self.idx != next;
+        self.idx = next;
+        changed
+    }
+
     /// Returns the screen rect of the currently focused widget, if any.
     fn current_bounds(&self) -> Option<crate::layout::Rect> {
         self.idx.and_then(|i| self.list.get(i).copied())
@@ -375,6 +383,16 @@ impl ViApp {
                 other => other,
             };
 
+            if let Event::MousePress {
+                pos,
+                button: crate::event::MouseButton::Left,
+            } = ev
+            {
+                if self.focus.focus_at(*pos) {
+                    self.layout_dirty = true;
+                }
+            }
+
             // Track held key for software repeat injection (see KeyRepeatState).
             match ev {
                 Event::KeyPress { key, modifiers } => {
@@ -642,13 +660,13 @@ impl ViApp {
 mod tests {
     extern crate alloc;
 
-    use super::ViApp;
+    use super::{FocusState, ViApp};
     use alloc::{boxed::Box, rc::Rc, vec::Vec};
     use core::cell::Cell;
 
     use crate::dirty::DirtyRegion;
     use crate::event::Event;
-    use crate::layout::{Constraints, Rect, Size};
+    use crate::layout::{Constraints, Point, Rect, Size};
     use crate::node::ViNode;
     use crate::render_ctx::RenderCtx;
     use crate::signal::{Signal, SubscriptionHandle};
@@ -721,6 +739,20 @@ mod tests {
         )
     }
 
+
+    #[test]
+    fn pointer_press_focuses_the_widget_under_the_cursor() {
+        let mut focus = FocusState::new();
+        focus.list = alloc::vec![
+            Rect::new(0.0, 0.0, 10.0, 10.0),
+            Rect::new(20.0, 0.0, 10.0, 10.0),
+        ];
+
+        assert!(focus.focus_at(Point::new(25.0, 5.0)));
+        assert_eq!(focus.current_bounds(), Some(focus.list[1]));
+        assert!(focus.focus_at(Point::new(15.0, 5.0)));
+        assert_eq!(focus.current_bounds(), None);
+    }
     #[test]
     fn initial_tick_renders_once_and_idle_tick_skips_work() {
         let signal = Signal::new(0);

@@ -1,6 +1,6 @@
 # Desktop compositor + ViUI managed surface
 
-Status: Implementation complete; QEMU runtime evidence pending
+Status: Complete at the RV64 QEMU software-evidence ceiling
 Spec: [approved spec](../specs/260827-desktop-compositor-viui-managed-surface-spec.md)
 
 - [x] Phase 01 — exact framebuffer damage (`phase-01-exact-damage.md`)

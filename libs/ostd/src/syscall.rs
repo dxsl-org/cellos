@@ -1563,6 +1563,36 @@ pub fn sys_grant_copy_to_slice(grant_id: usize, dst: &mut [u8]) -> Option<usize>
     Some(n)
 }
 
+/// Copy the prefix of `src` into an accessible Grant.
+///
+/// # Parameters
+/// - `grant_id`: identifier of a Grant currently resolvable by the caller.
+/// - `src`: source bytes to copy into the Grant.
+///
+/// # Returns
+/// `Some(bytes_copied)` when the caller may resolve `grant_id`. The copy length
+/// is capped by both `src.len()` and the kernel-registered Grant length.
+///
+/// # Failure
+/// Returns `None` when `grant_id` is unknown, no longer registered, or the
+/// caller does not currently have an accessible mapping for it.
+///
+/// # Safety boundary
+/// Callers never receive or dereference the raw Grant pointer. This facade
+/// resolves the mapping and its registered bound together, limits the write to
+/// that bound, and uses an overlap-safe copy if `src` aliases the Grant mapping.
+pub fn sys_grant_copy_from_slice(grant_id: usize, src: &[u8]) -> Option<usize> {
+    let (ptr, len) = sys_grant_slice_with_len(grant_id)?;
+    let n = src.len().min(len);
+    // SAFETY: GrantSlice validation and VFS lease publication are atomic in the
+    // kernel; `len` is the registered destination bound and `src` is valid for
+    // `n` bytes. `copy` deliberately permits source/destination overlap.
+    unsafe {
+        core::ptr::copy(src.as_ptr(), ptr, n);
+    }
+    Some(n)
+}
+
 /// Release a Grant region (owner-only): unmaps its pages and frees the frames.
 ///
 /// # Returns

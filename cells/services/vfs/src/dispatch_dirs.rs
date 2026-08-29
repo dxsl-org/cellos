@@ -194,25 +194,16 @@ fn read_handle_grant<'a>(
     if !vfs.access.can_read(caller, &path) {
         return VfsResponse::Err(ERR_DENIED);
     }
-    match ostd::syscall::sys_grant_slice_with_len(grant) {
+    let max_read = size.min(4096);
+    let mut chunk = alloc::vec![0u8; max_read];
+    let n = if max_read == 0 {
+        0
+    } else {
+        vfs.read_at(&path, offset, &mut chunk)
+    };
+    match ostd::syscall::sys_grant_copy_from_slice(grant, &chunk[..n]) {
+        Some(copied) => VfsResponse::GrantDone { bytes: copied },
         None => VfsResponse::Err(ERR_IO),
-        Some((ptr, grant_len)) => {
-            let max_read = size.min(grant_len).min(4096);
-            if max_read == 0 {
-                VfsResponse::GrantDone { bytes: 0 }
-            } else {
-                let mut chunk = alloc::vec![0u8; max_read];
-                let n = vfs.read_at(&path, offset, &mut chunk);
-                if n > 0 {
-                    unsafe {
-                        core::ptr::copy_nonoverlapping(chunk.as_ptr(), ptr, n);
-                    }
-                    VfsResponse::GrantDone { bytes: n }
-                } else {
-                    VfsResponse::GrantDone { bytes: 0 }
-                }
-            }
-        }
     }
 }
 

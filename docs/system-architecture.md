@@ -1050,12 +1050,15 @@ replacement Grant and trigger relayout, minimized surfaces stop ticking until
 restore, close requests follow an explicit accept/reject policy, and
 `shutdown()` performs the normal surface-destruction sequence after an
 accepted close. `cells/demos/viui-demo` exercises this boundary with the
-generated Counter component and compositor-forwarded input. This adds no
-`libs/api` or wire-protocol change.
+generated Counter component and compositor-forwarded input. Pointer presses
+also establish local ViUI widget focus, so Enter activation survives a
+compositor maximize/restore cycle. This adds no `libs/api` or wire-protocol
+change.
 
-Focused ViUI/compositor tests and the RISC-V build verify the implementation.
-The QEMU runtime lane was not run because `disk_v3.img` is absent, so these
-changes do not constitute production runtime qualification.
+The dedicated RV64 QEMU oracle passes generated-label repaint, pointer input,
+maximize/restore geometry, accepted close, and post-restore Enter activation.
+The independent `window-policy` QEMU regression remains green. This is QEMU
+software evidence only, not physical-board or production qualification.
 
 ### Reactive Update Model
 

@@ -126,6 +126,7 @@ Build-Cargo -What "fb-console"     -Packages @('fb-console')
 Build-Cargo -What "hypha cells"    -Packages @('hypha-llm-gateway', 'hypha-core', 'hypha-tool-fs', 'hypha-tool-sys', 'hypha-tool-spawn')
 Build-Cargo -What "input-test"     -Packages @('input-test')
 Build-Cargo -What "window-policy-probe" -Packages @('window-policy-probe')
+Build-Cargo -What "viui-demo"     -Packages @('viui-demo')
 Build-Cargo -What "audio-demo"     -Packages @('audio-demo')      # VirtIO sound test tone
 Build-Cargo -What "app-https-demo" -Packages @('app-https-demo')  # G14 TLS server-auth e2e gate
 Build-Cargo -What "app-http-smoke" -Packages @('app-http-smoke')  # ostd::http + ostd::json e2e gate
@@ -268,6 +269,7 @@ Add-CellToSign "$rel_dir/hypha-tool-sys"
 Add-CellToSign "$rel_dir/hypha-tool-spawn"
 Add-CellToSign "$rel_dir/input-test"
 Add-CellToSign "$rel_dir/window-policy-probe"
+Add-RequiredCellToSign "$rel_dir/viui-demo" "viui-demo"
 Add-CellToSign "$rel_dir/audio-demo"
 Add-CellToSign "$rel_dir/app-https-demo"
 Add-CellToSign "$rel_dir/http-smoke"
@@ -359,6 +361,7 @@ $mqtt_bin   = "$rel_dir/mqtt"             # Phase X-5: MQTT client
 $posix_shim_test_bin = "$rel_dir/posix-shim-test"  # Tier 1b POSIX shim test cell
 $input_test_bin      = "$rel_dir/input-test"       # P05 bare-cell input delivery test
 $window_policy_probe_bin = "$rel_dir/window-policy-probe" # Compositor raise/focus integration probe
+$viui_demo_bin = "$rel_dir/viui-demo" # Generated ViUI managed-surface runtime oracle
 # Zig cells — paths resolved by build-zig-cells.ps1 into $zig_elfs hashtable
 $audio_bin = "$rel_dir/audio-demo"   # VirtIO sound test-tone cell (shell: `audio-demo`)
 $https_demo_bin = "$rel_dir/app-https-demo"  # G14 TLS server-auth e2e gate (shell: `https-demo`)
@@ -590,6 +593,7 @@ if (Test-Path $mqtt_bin)  { $table_args += "/bin/mqtt=$mqtt_bin" }
 if (Test-Path $posix_shim_test_bin) { $table_args += "/bin/posix-shim-test=$posix_shim_test_bin" }
 if (Test-Path $input_test_bin)      { $table_args += "/bin/input-test=$input_test_bin" }
 if (Test-Path $window_policy_probe_bin) { $table_args += "/bin/window-policy-probe=$window_policy_probe_bin" }
+$table_args += "/bin/viui-demo=$viui_demo_bin"
 if (Test-Path $audio_bin) { $table_args += "/bin/audio-demo=$audio_bin" }
 if (Test-Path $https_demo_bin) { $table_args += "/bin/https-demo=$https_demo_bin" }
 if (Test-Path $http_smoke_bin) { $table_args += "/bin/http-smoke=$http_smoke_bin" }

@@ -88,7 +88,7 @@ sensor, or local-runtime development.
 | Camera and other sensor integration | Current executable work | `deferred` | `contract` until resumed; then exact-device `physical` development evidence | Deferred in the current session order; the available camera must be identified before use | Resume the sensor lane in a later session and record the exact sensor/interface before exercise |
 | Tier 3 hostile QEMU evidence | Current executable work | `scope-gated` | `qemu` | Hardware-independent roadmap Phase 06; x86 bounds, descriptors, backend faults, reset, restart, and independent vCPU preemption pass in 27 bounded scenarios | Rerun the ARM64 hostile corpus only in an environment that reaches the guest probe past the known synchronous TCG fault |
 | ARM64 Tier 3 persistent storage | Future capability | `scope-gated` | `qemu` | Hardware-independent roadmap Phase 09 | Supported Phase 06 hostile scenarios; policy is fixed to `build/tier3-arm64-persistent.img` at 8 MiB with explicit cleanup |
-| Desktop, ViUI, and SDK | Future capability | `scope-gated` | `qemu` | Managed-surface child is implementation-complete | Resume the owning desktop lane; signed-image F1 is restored because `hypha-llm-gateway` forbids unsafe code and every BCM unsafe file has an exact reviewed entry |
+| Desktop, ViUI, and SDK | Future capability | `scope-gated` | `qemu` | Managed-surface child is complete at the QEMU ceiling | Resume the owning desktop lane only under separate approval; the dedicated RV64 oracle proves generated Counter repaint, maximize/restore, accepted close, and pointer-established keyboard activation, while `window-policy` remains a separate passing regression |
 | Local Cell-to-Cell runtime | Current executable work | `scope-gated` | `qemu` | Hardware-independent roadmap Phase 04 | Required [CI job](../.github/workflows/ci.yml) `c2c-broker-oracle-single-guest-local-runtime` gates the runner; actual runner verification passed 1/1, 1,000 measured calibration successes, role gating, a 10,000/10,000 soak with zero silent drops, and overflow; separately approve and exercise two-node direct-LAN/restart scope without promoting this single-guest result |
 | Kernel signature, pointer, and entropy remediation | Current-scope technical debt | `governance-gated` | `host` | Separately approved security children | Named security/PAL approvals and implementation checkpoints |
 | Authenticated software evidence | Current executable work | `scope-gated` | `host` | Hardware-independent roadmap Phase 07 | Run `.github/workflows/ci.yml` on `main`, then verify its immutable attested bundle; only software/QEMU classes are eligible |
@@ -182,8 +182,10 @@ Cellos is being shaped around product stages, not only phase numbers:
   handles configure/resize, minimized/restore, close accept/reject, and
   explicit shutdown for one compositor-owned `ViSurface`. The live generated
   Counter demo uses compositor-forwarded input and precise clipped damage.
-  Focused tests and the RISC-V build pass; QEMU runtime qualification remains
-  unrun because `disk_v3.img` is absent.
+  Its dedicated RV64 QEMU oracle passes generated-label repaint, pointer input,
+  maximize/restore geometry, accepted close, and post-restore Enter activation;
+  the separate `window-policy` QEMU regression also passes. This is QEMU
+  software evidence only, not physical-board or production qualification.
 
 ## Immediate Open Gates
 

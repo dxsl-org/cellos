@@ -216,9 +216,14 @@
 - `viui-demo` now runs the generated Counter component as a live 640×400
   managed surface and consumes compositor-forwarded input. No `libs/api`
   files or protocol bytes changed.
-- Focused ViUI/compositor tests and the RISC-V build pass. QEMU runtime
-  qualification was not run because the required `disk_v3.img` is absent;
-  this slice therefore makes no production runtime claim.
+- The dedicated RV64 QEMU oracle passes generated-label repaint, pointer
+  interaction, maximize/restore geometry, accepted close, and post-restore
+  Enter activation. The independent compositor `window-policy` regression also
+  passes, so the evidence does not substitute a policy probe for generated
+  `.vi` application behavior.
+- Signed image generation passes F1/F5 after replacing three unapproved unsafe
+  islands with checked UTF-8 handling and bounded grant-copy facades. This is
+  QEMU software evidence only; it makes no physical-board or production claim.
 
 ## [2026-08-26] RPi3 SD/VFS persistence gate passes
 

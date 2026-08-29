@@ -51,11 +51,13 @@ or qualified independent external floor.
   relay, remote/public operation, protected relay identity, or production.
 - Project each completed lane immediately into the roadmap and acceptance views
   at its exact evidence ceiling.
-- The managed-surface child is implementation-complete with host/RISC-V
-  evidence. Its QEMU input/scanout run initially reached the repository-owned
-  disk generator's fail-closed signing policy. The shared F1 policy is now
-  restored: `hypha-llm-gateway` forbids unsafe code and every BCM unsafe file
-  has an exact reviewed entry. No additional desktop contract is authorized.
+- The managed-surface child is complete at the QEMU ceiling. Its dedicated
+  RV64 oracle passes generated Counter repaint, pointer interaction,
+  maximize/restore geometry, accepted close, and pointer-established Enter
+  activation after restore; the separate compositor `window-policy` QEMU
+  regression also passes. The signed image gate passes F1/F5 after removing
+  three unapproved unsafe islands. No physical, production, or additional
+  desktop contract is authorized.
 
 ## Work classification
 

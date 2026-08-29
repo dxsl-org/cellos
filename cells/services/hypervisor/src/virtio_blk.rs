@@ -436,20 +436,15 @@ fn blk_write(backend: &mut Backend, sector: u64, bufs: &[DescBuf], vm_id: usize)
                         return 1;
                     }
 
-                    let grant_id = ostd::syscall::sys_grant_alloc(chunk).unwrap_or(0);
-                    if grant_id == 0 {
-                        println("[hv-blk] grant allocation failed");
-                        return 1;
-                    }
-                    let Some(ptr) = ostd::syscall::sys_grant_slice(grant_id) else {
-                        println("[hv-blk] grant mapping failed");
-                        ostd::syscall::sys_grant_free(grant_id);
+                    let Some(grant_handle) =
+                        ostd::grant::GrantHandle::<u8>::alloc_copy_from_slice(&tmp)
+                    else {
+                        println("[hv-blk] grant allocation/initialization failed");
                         return 1;
                     };
-                    unsafe { core::ptr::copy_nonoverlapping(tmp.as_ptr(), ptr, chunk) };
+                    let grant_id = grant_handle.id();
                     if !ostd::syscall::sys_grant_share(grant_id, *vfs_tid, 1 /* WriteOnly */) {
                         println("[hv-blk] grant share failed");
-                        ostd::syscall::sys_grant_free(grant_id);
                         return 1;
                     }
 
@@ -484,7 +479,7 @@ fn blk_write(backend: &mut Backend, sector: u64, bufs: &[DescBuf], vm_id: usize)
                         }
                     };
 
-                    ostd::syscall::sys_grant_free(grant_id);
+                    drop(grant_handle);
                     if !ok {
                         if poison {
                             *poisoned_tid = *vfs_tid;

@@ -1153,6 +1153,14 @@ jobs:
           cargo test --test window-policy -- --test-threads=1 \
             clicking_exposed_surface_raises_and_focuses_its_owner
 
+      - name: Run ViUI managed-surface evidence
+        env:
+          CARGO_BUILD_TARGET: x86_64-unknown-linux-gnu
+        run: |
+          cd tests/integration
+          cargo test --test viui-managed-surface -- --test-threads=1 \
+            generated_counter_survives_managed_surface_configure
+
   security:
     name: Security Scan
     runs-on: ubuntu-24.04

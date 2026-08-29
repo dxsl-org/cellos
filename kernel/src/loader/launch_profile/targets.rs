@@ -21,6 +21,7 @@ pub(super) fn reviewed_user_target_ceiling(target: &str) -> Option<CapSet> {
         | "/bin/posix-shim-test"
         | "/bin/ps"
         | "/bin/robot-dashboard"
+        | "/bin/viui-demo"
         | "/bin/tetris"
         | "/bin/tetris-c"
         | "/bin/tetris-lua"

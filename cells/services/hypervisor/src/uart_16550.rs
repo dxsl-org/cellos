@@ -218,9 +218,11 @@ impl Uart16550 {
         let end = TX_PREFIX.len() + self.tx_line_len;
         record[TX_PREFIX.len()..end].copy_from_slice(&self.tx_line[..self.tx_line_len]);
         record[end] = b'\n';
-        // All bytes are fixed ASCII or sanitized in `forward`.
-        let text = unsafe { core::str::from_utf8_unchecked(&record[..=end]) };
-        print(text);
+        // All bytes should be fixed ASCII or sanitized in `forward`; if that
+        // invariant is broken, drop the record rather than interpreting it as UTF-8.
+        if let Ok(text) = core::str::from_utf8(&record[..=end]) {
+            print(text);
+        }
         self.tx_line_len = 0;
     }
 }

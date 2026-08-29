@@ -40,6 +40,11 @@ fn shell_service_ipc_tool_edge_is_capability_free() {
         "capability-free ELF targets remain launchable"
     );
     assert_eq!(
+        shell_edge(LaunchRoute::Elf, "/bin/viui-demo").child_ceiling,
+        CapSet::EMPTY,
+        "managed ViUI demos remain capability-free shell targets"
+    );
+    assert_eq!(
         shell_edge(LaunchRoute::Path, "/bin/hotswap").child_ceiling,
         CapSet::EMPTY,
         "the hotswap CLI must not inherit lifecycle or service authority"
