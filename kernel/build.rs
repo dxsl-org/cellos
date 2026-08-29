@@ -1,6 +1,5 @@
 use std::fs;
 use std::path::PathBuf;
-use std::process::Command;
 
 fn main() {
     // Emit the Git short SHA as the snapshot invalidation key.
@@ -98,34 +97,12 @@ fn main() {
 
         fs::copy(&src, &dst).expect("copy embedded cell");
 
-        // Only `init` is an ELF. `kernel_fs.img` is a raw VIFS1 disk image;
-        // passing it to an ELF strip tool always fails and cannot reduce it.
-        if *cell != "init" {
-            continue;
-        }
-
-        // Prefer the installed cross-binutils tool for the target, then fall
-        // back to LLVM/rust/host tools. Failure is non-fatal because stripping
-        // changes image size only, not runtime semantics.
-        let target_strip = match target_arch.as_str() {
-            "riscv64" | "riscv32" => Some("riscv64-unknown-elf-strip"),
-            "aarch64" => Some("aarch64-linux-gnu-strip"),
-            "arm" => Some("arm-none-eabi-strip"),
-            _ => None,
-        };
-        let stripped = target_strip.is_some_and(|tool| try_strip(tool, &dst))
-            || try_strip("llvm-strip", &dst)
-            || try_strip("rust-strip", &dst)
-            || try_strip("strip", &dst);
-
-        if !stripped {
-            println!(
-                "cargo:warning=Could not strip init ELF for target {target_arch}; retained unstripped input"
-            );
-        }
+        // `init` is already signed by the image assembly pipeline. Its signature
+        // covers the final ELF container except the signature payload itself, so
+        // any post-sign strip or section-table rewrite would invalidate admission.
     }
 
-    // Expose stripped embedded dir to source via env! macro.
+    // Expose the copied embedded directory to source via env! macro.
     println!(
         "cargo:rustc-env=EMBEDDED_OUT_DIR={}",
         embedded_out.display()
@@ -146,54 +123,4 @@ fn emit_git_sha() {
         // Any non-zero placeholder is fine; it will match itself on rebuild.
         println!("cargo:rustc-env=VERGEN_GIT_SHA=00000000");
     }
-}
-
-fn try_strip(tool: &str, path: &PathBuf) -> bool {
-    let Some(file_name) = path.file_name().and_then(|name| name.to_str()) else {
-        return false;
-    };
-    let candidate = path.with_file_name(format!("{file_name}.{tool}.strip-candidate"));
-    if fs::copy(path, &candidate).is_err() {
-        return false;
-    }
-
-    let succeeded = Command::new(tool)
-        .arg("--strip-debug")
-        .arg(&candidate)
-        .status()
-        .map(|status| status.success())
-        .unwrap_or(false);
-    let backup = path.with_file_name(format!("{file_name}.unstripped-backup"));
-    let installed = if succeeded && fs::copy(path, &backup).is_ok() {
-        if fs::copy(&candidate, path).is_ok() {
-            true
-        } else {
-            fs::copy(&backup, path).expect("restore unstripped embedded input");
-            false
-        }
-    } else {
-        false
-    };
-
-    let _ = fs::remove_file(&candidate);
-    let _ = fs::remove_file(&backup);
-    if let Some(parent) = candidate.parent() {
-        let prefix = candidate
-            .file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or_default();
-        if let Ok(entries) = fs::read_dir(parent) {
-            for entry in entries.flatten() {
-                if entry
-                    .file_name()
-                    .to_str()
-                    .is_some_and(|name| name.starts_with(prefix))
-                {
-                    let _ = fs::remove_file(entry.path());
-                }
-            }
-        }
-    }
-
-    installed
 }
