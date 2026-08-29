@@ -1431,6 +1431,16 @@ pub fn sys_get_time_ms() -> Option<u64> {
     (ret >= 0).then_some(ret as u64)
 }
 
+/// Read the kernel's monotonic 10 ms scheduler-tick counter.
+///
+/// This is the same time base consumed by [`sys_recv_timeout`]. `None` means
+/// the running kernel or the cell's syscall allowlist does not provide it.
+pub fn sys_get_scheduler_ticks() -> Option<u64> {
+    // SAFETY: register-only syscall; reads and writes no user memory.
+    let ret = unsafe { syscall(ViSyscall::GetTime, 4, 0, 0, 0) };
+    (ret >= 0).then_some(ret as u64)
+}
+
 /// Nanoseconds since Unix epoch from the hardware RTC; 0 if no RTC is present.
 pub fn sys_get_wall_time() -> u64 {
     // SAFETY: register-only syscall.

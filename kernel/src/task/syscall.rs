@@ -4724,6 +4724,8 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     let ms = 0usize;
                     Ok(ms)
                 }
+                // op=4: scheduler ticks (10 ms preemption slices)
+                4 => Ok(super::system_ticks()),
                 // op=2: nanoseconds since Unix epoch (wall-clock)
                 2 => {
                     #[cfg(target_arch = "riscv64")]

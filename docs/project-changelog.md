@@ -30,11 +30,13 @@
   concurrent double-consumption, unsafe ownership/modes, and state bootstrap
   during admission. Ten adversarial subprocess cases and the real attested
   run `33247922906` pass once and reject the replay.
-- ARM64 hypervisor persistence now queues VFS admission while retaining a
-  sender-masked reply timeout and generation poisoning. The machinery image
-  embeds the VirtIO block Cell and places `guest_disk.img` in canonical MBR P1
-  at LBA 2048. The exact 120-second local TCG machinery smoke enters the guest
-  and observes only the documented address-size fault.
+- ARM64 hypervisor persistence now retries nonblocking VFS admission against
+  the same scheduler-tick deadline used by its sender-masked reply wait; a
+  never-receiving service cannot park the caller, and uncertain replies poison
+  the generation. The machinery image embeds the VirtIO block Cell and places
+  `guest_disk.img` in canonical MBR P1 at LBA 2048. The exact 120-second local
+  TCG machinery smoke enters the guest and observes only the documented
+  address-size fault.
 
 - Corrected the current hardware inventory to `2 × Raspberry Pi 3 Model B+`
   as reported by the owner. Exact serial/revision/condition reconciliation is

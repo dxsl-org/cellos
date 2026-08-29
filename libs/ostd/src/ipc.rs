@@ -10,15 +10,15 @@
 #![allow(unsafe_code)]
 
 use crate::syscall::{
-    sys_recv, sys_recv_timeout, sys_send, sys_try_recv, sys_try_send, sys_yield, SyscallResult,
+    sys_get_scheduler_ticks, sys_recv, sys_recv_timeout, sys_send, sys_try_recv, sys_try_send,
+    sys_yield, SyscallResult,
 };
 use core::future::Future;
 use core::pin::Pin;
 use core::task::{Context, Poll};
 use serde::{Deserialize, Serialize};
 
-mod queued;
-pub use queued::{service_call_queued_bounded, service_call_typed_queued_bounded};
+mod deadline;
 
 /// Why a [`service_call`] did not complete. Never silently swallowed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -86,18 +86,16 @@ where
 ///
 /// `send_buf` is used to encode `req`; an encoding failure returns
 /// [`IpcError::Encode`]. `recv_buf` receives the reply and backs the returned
-/// slice. `timeout_ticks` is the maximum number of scheduler ticks spent
-/// waiting for that reply.
+/// slice. `timeout_ticks` is the end-to-end scheduler-tick budget shared by
+/// request admission and the reply wait.
 ///
-/// The encoded request is offered with bounded nonblocking [`sys_try_send`]
-/// attempts. A rejected admission yields before retrying, matching the
-/// compositor bridge and allowing a service that just replied to re-enter
-/// `Recv`. Once one send is accepted the request is never resent. Exhausted
-/// admission attempts return [`IpcError::Send`]. The receive is masked to
-/// `service_tid`; a timeout or receive syscall error returns [`IpcError::Recv`],
-/// and only the exact `service_tid` is accepted. After [`IpcError::Recv`], the
-/// caller must not issue another request to that service generation because an
-/// uncorrelated late reply may still arrive.
+/// The encoded request is offered with nonblocking [`sys_try_send`] until the
+/// deadline. A rejected admission yields before retrying, so a service waiting
+/// on a nested dependency can return to wildcard `Recv`. Once accepted, the
+/// request is never resent and only the remaining deadline is available to the
+/// sender-masked receive. Admission expiry returns [`IpcError::Send`]; receive
+/// expiry or syscall failure returns [`IpcError::Recv`]. After a receive error,
+/// callers must poison that service generation because a late reply may arrive.
 pub fn service_call_bounded<'r, Req: Serialize>(
     service_tid: usize,
     req: &Req,
@@ -105,38 +103,36 @@ pub fn service_call_bounded<'r, Req: Serialize>(
     recv_buf: &'r mut [u8],
     timeout_ticks: u64,
 ) -> Result<&'r [u8], IpcError> {
-    const SEND_ADMISSION_ATTEMPTS: usize = 100;
     let encoded = api::ipc::encode(req, send_buf).map_err(|_| IpcError::Encode)?;
-    let mut delivered = false;
-    for _ in 0..SEND_ADMISSION_ATTEMPTS {
-        if matches!(sys_try_send(service_tid, encoded), SyscallResult::Ok(0)) {
-            delivered = true;
-            break;
-        }
-        sys_yield();
-    }
-    if !delivered {
-        return Err(IpcError::Send);
-    }
-
-    match sys_recv_timeout(service_tid, recv_buf, timeout_ticks) {
-        SyscallResult::Ok(0) => Err(IpcError::Recv),
-        SyscallResult::Ok(sender) if sender == service_tid => {
+    let result = deadline::exchange_until_deadline(
+        service_tid,
+        timeout_ticks,
+        || matches!(sys_try_send(service_tid, encoded), SyscallResult::Ok(0)),
+        sys_get_scheduler_ticks,
+        sys_yield,
+        |remaining| match sys_recv_timeout(service_tid, recv_buf, remaining) {
+            SyscallResult::Ok(sender) => Ok(sender),
+            SyscallResult::Err(_) => Err(()),
+        },
+    );
+    match result {
+        Ok(()) => {
             let len = recv_buf.len();
             Ok(&recv_buf[..len])
         }
-        SyscallResult::Ok(_) => Err(IpcError::WrongSender),
-        SyscallResult::Err(_) => Err(IpcError::Recv),
+        Err(deadline::ExchangeError::Send) => Err(IpcError::Send),
+        Err(deadline::ExchangeError::Recv) => Err(IpcError::Recv),
+        Err(deadline::ExchangeError::WrongSender) => Err(IpcError::WrongSender),
     }
 }
 
 /// [`service_call_bounded`] that decodes the reply into `Resp`.
 ///
-/// Send admission is retried with a finite yield bound, but the request is
-/// never resent after delivery. Exhausted admission returns [`IpcError::Send`].
-/// The receive waits at most `timeout_ticks`, is masked to `service_tid`, and
-/// accepts only that exact sender. Timeout and receive syscall errors return
-/// [`IpcError::Recv`], while malformed reply bytes return [`IpcError::Decode`].
+/// Send admission yields until the shared deadline, but the request is never
+/// resent after delivery. Admission expiry returns [`IpcError::Send`]. The
+/// sender-masked receive gets only the remaining budget; timeout and receive
+/// errors return [`IpcError::Recv`], while malformed bytes return
+/// [`IpcError::Decode`].
 ///
 /// `send_buf` holds the encoded `req`. `recv_buf` receives the reply and is
 /// borrowed by `Resp` when it contains `&str` or `&[u8]` fields, so consume the
