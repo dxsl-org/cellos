@@ -78,7 +78,7 @@ cargo build --release \
     $INIT_FEATURES \
     -p app-init -p app-shell -p service-config \
     -p service-net -p service-input -p service-compositor -p supervisor \
-    -p driver-virtio-gpu -p service-hypervisor
+    -p driver-virtio-blk -p driver-virtio-gpu -p service-hypervisor
 
 # ── Step 3: Build hypervisor kernel_fs.img ──────────────────────────────────
 mkdir -p "$EMBEDDED_HV"
@@ -91,10 +91,11 @@ MKFAT_ARGS=()
 # Copy embedded cells from existing aarch64 embedded dir or fresh build.
 # Bootstrap lookup expects the standard VIFS1 layout (/bin/<cell>) — cells at
 # the FAT root are invisible to it ("bootstrap /bin/shell not in VIFS1").
-for cell in init shell vfs config net input compositor supervisor virtio-gpu; do
+for cell in init shell vfs config net input compositor supervisor block virtio-gpu; do
     src="$BIN_DIR/app-$cell"
     [[ ! -f "$src" ]] && src="$BIN_DIR/service-$cell"
     [[ "$cell" == "supervisor" ]] && src="$BIN_DIR/supervisor"
+    [[ "$cell" == "block" ]] && src="$BIN_DIR/driver-virtio-blk"
     [[ "$cell" == "virtio-gpu" ]] && src="$BIN_DIR/driver-virtio-gpu"
     [[ ! -f "$src" ]] && src="$EMBEDDED_SRC/$cell"
     if [[ -f "$src" ]]; then
@@ -105,9 +106,9 @@ for cell in init shell vfs config net input compositor supervisor virtio-gpu; do
     fi
 done
 
-# Hypervisor cell itself. It MUST ride in VIFS1: the aarch64 image ships no
-# block Driver Cell, so the on-disk FAT /bin store never mounts and a
-# disk-only /bin/hypervisor is unreachable (init's spawn probes VIFS1 first).
+# Hypervisor and block-driver cells MUST ride in VIFS1. The block driver has to
+# start before VFS can mount the external FAT disk containing guest_disk.img;
+# the hypervisor itself must remain reachable even if that mount fails.
 if [[ -f "$BIN_DIR/hypervisor" ]]; then
     echo "  /bin/hypervisor <- $BIN_DIR/hypervisor"
     MKFAT_ARGS+=("$BIN_DIR/hypervisor" "bin/hypervisor")

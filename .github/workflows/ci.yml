@@ -587,7 +587,7 @@ jobs:
           --target aarch64-unknown-none-softfloat
           -Z build-std=core,alloc
           -p app-init -p app-shell -p service-vfs -p service-config
-          -p service-net -p service-hypervisor
+          -p service-net -p service-hypervisor -p driver-virtio-blk
 
       - name: Build hypervisor kernel_fs.img (embeds Alpine)
         run: |

@@ -17,6 +17,9 @@ use core::pin::Pin;
 use core::task::{Context, Poll};
 use serde::{Deserialize, Serialize};
 
+mod queued;
+pub use queued::{service_call_queued_bounded, service_call_typed_queued_bounded};
+
 /// Why a [`service_call`] did not complete. Never silently swallowed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IpcError {

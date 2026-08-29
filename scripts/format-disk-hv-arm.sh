@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
-# Create disk_hv_arm.img — the FAT32 user disk for the ViCell hypervisor boot.
-#
-# Contains the hypervisor cell + core cells.  The kernel_fs.img (with Alpine
-# artifacts) is embedded in the kernel binary via EMBEDDED_OVERRIDE; this disk
-# provides the FAT32 filesystem that init mounts and spawns /bin/hypervisor from.
+# Create the partitioned ARM hypervisor disk. P1 starts at the canonical LBA
+# 2048 and carries guest_disk.img, so the VFS block-driver route mounts it at
+# /mnt/sd. Alpine boot assets and bootstrap cells stay in the kernel's VIFS1
+# image assembled by make-hypervisor-fs.sh.
 #
 # Usage: bash scripts/format-disk-hv-arm.sh [--gui] [output.img]
 
@@ -91,6 +90,8 @@ if [[ "$GUI" -eq 1 && ! -f "$BIN_DIR/driver-virtio-gpu" ]]; then
     exit 1
 fi
 
+TMPDIR_WORK=$(mktemp -d)
+trap 'rm -rf "$TMPDIR_WORK" "${HOSTNAME_TMP:-}" "${GUEST_DISK_TMP:-}"' EXIT
 HOSTNAME_TMP=$(mktemp)
 if [[ "$GUI" -eq 1 ]]; then
     echo "ViCell-HV-GUI" > "$HOSTNAME_TMP"
@@ -103,7 +104,7 @@ dd if=/dev/zero of="$GUEST_DISK_TMP" bs=1M count=8 status=none
 MKFAT_ARGS+=("$GUEST_DISK_TMP" "guest_disk.img")
 
 
-echo "[format-disk-hv] Creating $OUT with tools/mkfat32.py..."
+echo "[format-disk-hv] Creating partitioned $OUT..."
 PYTHON_BIN="${PYTHON_BIN:-}"
 if [[ -z "$PYTHON_BIN" ]]; then
     if command -v python3 >/dev/null 2>&1 && python3 -c 'import sys' >/dev/null 2>&1; then
@@ -112,7 +113,13 @@ if [[ -z "$PYTHON_BIN" ]]; then
         PYTHON_BIN=python
     fi
 fi
-"$PYTHON_BIN" tools/mkfat32.py "$OUT" "${MKFAT_ARGS[@]}"
-
-rm -f "$HOSTNAME_TMP" "$GUEST_DISK_TMP"
-echo "[format-disk-hv] Done: $OUT"
+P1_IMG="$TMPDIR_WORK/p1.img"
+"$PYTHON_BIN" tools/mkfat32.py "$P1_IMG" "${MKFAT_ARGS[@]}"
+PART_FAT32_BASE_LBA=2048
+PART_SRV_BASE_LBA=931072
+PART_SRV_SECTORS=131072
+FULL_SECTORS=$((PART_SRV_BASE_LBA + PART_SRV_SECTORS))
+truncate -s "$((FULL_SECTORS * 512))" "$OUT"
+"$PYTHON_BIN" tools/write-mbr.py "$OUT" >/dev/null
+dd if="$P1_IMG" of="$OUT" bs=512 seek="$PART_FAT32_BASE_LBA" conv=notrunc status=none
+echo "[format-disk-hv] Done: $OUT (MBR + P1 FAT guest disk)"

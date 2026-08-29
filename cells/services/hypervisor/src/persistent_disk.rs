@@ -15,7 +15,7 @@ fn close_partial(vfs_tid: usize, root: api::dir_handles::ViDirHandle, poisoned: 
     let request = api::ipc::VfsRequest::CloseDir { dir: root };
     let mut send_buffer = [0u8; api::ipc::IPC_BUF_SIZE];
     let mut response_buffer = [0u8; api::ipc::IPC_BUF_SIZE];
-    let result: Result<api::ipc::VfsResponse<'_>, _> = ostd::ipc::service_call_typed_bounded(
+    let result: Result<api::ipc::VfsResponse<'_>, _> = ostd::ipc::service_call_typed_queued_bounded(
         vfs_tid,
         &request,
         &mut send_buffer,
@@ -27,9 +27,9 @@ fn close_partial(vfs_tid: usize, root: api::dir_handles::ViDirHandle, poisoned: 
 
 /// Open the policy-owned guest disk through one resolved VFS generation.
 ///
-/// Every request uses a bounded send/receive exchange. A partial open sequence
-/// returns `None`; callers must retain persistent mode and retry after service
-/// discovery rather than falling back to volatile storage.
+/// Requests queue while VFS waits on a nested block-driver reply, then bound
+/// the response wait. A partial open returns `None`; callers retain persistent
+/// mode and reconnect through service discovery after an uncertain receive.
 pub fn open_for(vfs_tid: usize, poisoned: &mut bool) -> Option<PersistentDisk> {
     const TIMEOUT_TICKS: u64 = 200;
     let mut response = [0u8; api::ipc::IPC_BUF_SIZE];
@@ -38,7 +38,7 @@ pub fn open_for(vfs_tid: usize, poisoned: &mut bool) -> Option<PersistentDisk> {
     macro_rules! call {
         ($step:literal, $request:expr) => {{
             response.fill(0);
-            match ostd::ipc::service_call_typed_bounded(
+            match ostd::ipc::service_call_typed_queued_bounded(
                 vfs_tid,
                 $request,
                 &mut request,
@@ -48,7 +48,7 @@ pub fn open_for(vfs_tid: usize, poisoned: &mut bool) -> Option<PersistentDisk> {
                 Ok(value) => value,
                 Err(error) => {
                     ostd::io::println(&alloc::format!(
-                        "[hv-disk] bounded VFS {} failed: {:?}",
+                        "[hv-disk] VFS {} failed: {:?}",
                         $step,
                         error
                     ));
