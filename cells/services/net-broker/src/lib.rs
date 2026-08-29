@@ -16,6 +16,7 @@ pub mod kms_dh;
 pub mod local_ingress;
 pub mod local_queue;
 pub mod local_runtime_metrics;
+pub mod noise_identity;
 mod peer_config;
 pub mod reply_pump;
 pub mod runtime_roles;

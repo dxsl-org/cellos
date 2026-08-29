@@ -74,8 +74,11 @@
   admission: a full pool preserves every occupied session and returns
   `WouldBlock` for later mapping to typed remote `Busy`. Capacity is checked
   before `TcpConnect`, avoiding a socket leak or misleading `NotSupported`
-  fallback. Focused broker tests pass 94/94 and the RV64 release build passes;
-  relay authentication, receive wiring, and two-node evidence remain open.
+  fallback. Noise prologues now order identities by protocol role rather than
+  local endpoint, preventing responder transcript divergence. A paired
+  initiator/responder KKpsk0 regression completes both handshake messages.
+  Focused broker tests pass 95/95 and the RV64 release build passes; relay
+  authentication, receive wiring, and two-node evidence remain open.
 
 - Authenticated evidence admission requires an explicitly provisioned,
   operator-owned replay store outside the submitted bundle. Verification binds

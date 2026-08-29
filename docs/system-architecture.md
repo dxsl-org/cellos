@@ -1408,8 +1408,11 @@ four-slot Noise session pool now admits only into empty slots; exhaustion
 returns `WouldBlock` for mapping to remote `Busy` and never displaces an
 occupied session. `ConnectionManager` checks capacity before `TcpConnect`, so
 full-pool pressure cannot leak a newly opened socket or fall through to
-`NotSupported`. Relay authentication, receive wiring, and two-node evidence
-remain absent.
+`NotSupported`. The Noise prologue binds
+`cluster_id || initiator_node_id || responder_node_id` on both peers; it never
+uses local endpoint order, which would reverse the responder transcript. A
+paired KKpsk0 transcript regression covers this invariant. Relay authentication,
+receive wiring, and two-node evidence remain absent.
 
 ### Cluster membership: 3 modes
 

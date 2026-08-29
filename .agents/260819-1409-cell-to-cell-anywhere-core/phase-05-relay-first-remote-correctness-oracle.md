@@ -45,6 +45,8 @@ Data flow: node A broker -> relay TCP register -> E2E Noise to node B over relay
 - `cells/services/net-broker/src/transport.rs`
 - `cells/services/net-broker/src/transport/connection_pool.rs`
 - `cells/services/net-broker/src/transport/noise_session.rs`
+- `cells/services/net-broker/src/noise_identity.rs`
+- `cells/services/net-broker/src/noise_identity/tests.rs`
 - `cells/services/net-broker/src/transport/tcp_framing.rs`
 - `cells/services/net-broker/src/connection_manager.rs`
 - Future relay runtime owner: `cells/services/net-broker/src/main.rs`
@@ -70,6 +72,9 @@ Data flow: node A broker -> relay TCP register -> E2E Noise to node B over relay
 - [ ] Define oracle topology and logs retained.
 - [x] Define no-evict session-pool admission: full capacity returns explicit
   pressure without opening another TCP path or displacing an existing session.
+- [x] Canonicalize the Noise prologue as
+  `cluster_id || initiator_node_id || responder_node_id` and prove a paired
+  initiator/responder KKpsk0 transcript completes.
 - [ ] Define dedup expiry/exhaustion relay oracle.
 
 ## Success Criteria
@@ -110,7 +115,8 @@ still block relay wiring and any two-node oracle.
 - Binary `ConnectionPool` maps capacity pressure to `ViError::WouldBlock`.
   `ConnectionManager` checks capacity before `TcpConnect` and propagates that
   pressure instead of falling through to `NotSupported`.
-- Focused broker tests pass 94/94 and the RV64 release build passes. Tester and
+- Focused broker tests pass 95/95, including the paired Noise transcript
+  regression, and the RV64 release build passes. Tester and
   production-readiness reviewer rechecks pass.
 - No relay registration, remote dispatch, receive loop, or two-node traffic is
   enabled or claimed.

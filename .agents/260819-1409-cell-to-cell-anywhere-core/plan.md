@@ -44,8 +44,10 @@ Recovery plan: supersedes `.agents/260624-cell-to-cell-anywhere/` without editin
 >
 > Phase 05 local-only contract work has started without relay enablement. The
 > four-session Noise pool now fails closed on exhaustion, preserves all occupied
-> sessions, and reports `WouldBlock` before opening another TCP path. Focused
-> broker tests pass 94/94 and the RV64 release build passes.
+> sessions, and reports `WouldBlock` before opening another TCP path. Noise
+> prologues use protocol-role ordering, so both peers bind the same
+> `initiator || responder` identity transcript. Focused broker tests pass 95/95
+> and the RV64 release build passes.
 >
 > The two-real-broker relay path remains blocked only by the
 > protected-persistence, authenticated-time, and reviewed pending-key-binding

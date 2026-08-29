@@ -12,6 +12,7 @@ use clatter::{
 use ostd::service::NetRef;
 use ostd::{syscall::sys_heartbeat, ViError, ViResult};
 use service_net_broker::kms_dh::KmsBackedX25519;
+use service_net_broker::noise_identity::handshake_prologue;
 
 type Hs = NqHandshakeCore<KmsBackedX25519, ChaChaPoly, Sha256, BrokerRng>;
 type Ts = TransportState<ChaChaPoly, Sha256>;
@@ -30,7 +31,8 @@ pub struct NoiseSession {
 }
 
 impl NoiseSession {
-    /// Construct a session whose identity inputs are bound into the Noise prologue.
+    /// Construct a session whose cluster and ordered peer identities are bound
+    /// into the Noise prologue.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         rng: &mut BrokerRng,
@@ -44,10 +46,12 @@ impl NoiseSession {
         is_initiator: bool,
     ) -> ViResult<Self> {
         let ephemeral = KmsBackedX25519::genkey_rng(rng).map_err(|_| ViError::IO)?;
-        let mut prologue = [0u8; 72];
-        prologue[..8].copy_from_slice(&cluster_id.to_le_bytes());
-        prologue[8..40].copy_from_slice(&local_node_id.0);
-        prologue[40..72].copy_from_slice(&remote_node_id.0);
+        let prologue = handshake_prologue(
+            cluster_id,
+            &local_node_id.0,
+            &remote_node_id.0,
+            is_initiator,
+        );
         let mut hs = NqHandshakeCore::<KmsBackedX25519, ChaChaPoly, Sha256, BrokerRng>::new(
             noise_kk_psk0(),
             prologue.as_slice(),
