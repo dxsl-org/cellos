@@ -266,7 +266,7 @@
 <a href=#266 id=266 data-nosnippet>266</a>    }
 <a href=#267 id=267 data-nosnippet>267</a>
 <a href=#268 id=268 data-nosnippet>268</a>    <span class="kw">fn </span>read_at(<span class="kw-2">&amp;</span><span class="self">self</span>, path: <span class="kw-2">&amp;</span>str, offset: u64, buf: <span class="kw-2">&amp;mut </span>[u8]) -&gt; usize {
-<a href=#269 id=269 data-nosnippet>269</a>        <span class="kw">use </span>fatfs::{Seek <span class="kw">as _</span>, Read <span class="kw">as _</span>};
+<a href=#269 id=269 data-nosnippet>269</a>        <span class="kw">use </span>fatfs::{Read <span class="kw">as _</span>, Seek <span class="kw">as _</span>};
 <a href=#270 id=270 data-nosnippet>270</a>        <span class="kw">let </span>fs = <span class="kw">match </span><span class="kw-2">&amp;</span><span class="self">self</span>.fs {
 <a href=#271 id=271 data-nosnippet>271</a>            <span class="prelude-val">Some</span>(f) =&gt; f,
 <a href=#272 id=272 data-nosnippet>272</a>            <span class="prelude-val">None </span>=&gt; <span class="kw">return </span><span class="number">0</span>,

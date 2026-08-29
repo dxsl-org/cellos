@@ -739,60 +739,59 @@
 <a href=#739 id=739 data-nosnippet>739</a>        )
 <a href=#740 id=740 data-nosnippet>740</a>    }
 <a href=#741 id=741 data-nosnippet>741</a>
-<a href=#742 id=742 data-nosnippet>742</a>
-<a href=#743 id=743 data-nosnippet>743</a>    <span class="attr">#[test]
-<a href=#744 id=744 data-nosnippet>744</a>    </span><span class="kw">fn </span>pointer_press_focuses_the_widget_under_the_cursor() {
-<a href=#745 id=745 data-nosnippet>745</a>        <span class="kw">let </span><span class="kw-2">mut </span>focus = FocusState::new();
-<a href=#746 id=746 data-nosnippet>746</a>        focus.list = <span class="macro">alloc::vec!</span>[
-<a href=#747 id=747 data-nosnippet>747</a>            Rect::new(<span class="number">0.0</span>, <span class="number">0.0</span>, <span class="number">10.0</span>, <span class="number">10.0</span>),
-<a href=#748 id=748 data-nosnippet>748</a>            Rect::new(<span class="number">20.0</span>, <span class="number">0.0</span>, <span class="number">10.0</span>, <span class="number">10.0</span>),
-<a href=#749 id=749 data-nosnippet>749</a>        ];
-<a href=#750 id=750 data-nosnippet>750</a>
-<a href=#751 id=751 data-nosnippet>751</a>        <span class="macro">assert!</span>(focus.focus_at(Point::new(<span class="number">25.0</span>, <span class="number">5.0</span>)));
-<a href=#752 id=752 data-nosnippet>752</a>        <span class="macro">assert_eq!</span>(focus.current_bounds(), <span class="prelude-val">Some</span>(focus.list[<span class="number">1</span>]));
-<a href=#753 id=753 data-nosnippet>753</a>        <span class="macro">assert!</span>(focus.focus_at(Point::new(<span class="number">15.0</span>, <span class="number">5.0</span>)));
-<a href=#754 id=754 data-nosnippet>754</a>        <span class="macro">assert_eq!</span>(focus.current_bounds(), <span class="prelude-val">None</span>);
-<a href=#755 id=755 data-nosnippet>755</a>    }
-<a href=#756 id=756 data-nosnippet>756</a>    <span class="attr">#[test]
-<a href=#757 id=757 data-nosnippet>757</a>    </span><span class="kw">fn </span>initial_tick_renders_once_and_idle_tick_skips_work() {
-<a href=#758 id=758 data-nosnippet>758</a>        <span class="kw">let </span>signal = Signal::new(<span class="number">0</span>);
-<a href=#759 id=759 data-nosnippet>759</a>        <span class="kw">let </span>stats = stats();
-<a href=#760 id=760 data-nosnippet>760</a>        <span class="kw">let </span><span class="kw-2">mut </span>app = app_with_probe(signal, Rc::clone(<span class="kw-2">&amp;</span>stats), <span class="bool-val">false</span>);
-<a href=#761 id=761 data-nosnippet>761</a>
-<a href=#762 id=762 data-nosnippet>762</a>        <span class="macro">assert!</span>(app.tick(<span class="kw-2">&amp;</span>[]));
-<a href=#763 id=763 data-nosnippet>763</a>        <span class="macro">assert_eq!</span>(stats.layouts.get(), <span class="number">1</span>);
-<a href=#764 id=764 data-nosnippet>764</a>        <span class="macro">assert_eq!</span>(stats.paints.get(), <span class="number">1</span>);
-<a href=#765 id=765 data-nosnippet>765</a>
-<a href=#766 id=766 data-nosnippet>766</a>        <span class="macro">assert!</span>(!app.tick(<span class="kw-2">&amp;</span>[]));
-<a href=#767 id=767 data-nosnippet>767</a>        <span class="macro">assert_eq!</span>(stats.layouts.get(), <span class="number">1</span>);
-<a href=#768 id=768 data-nosnippet>768</a>        <span class="macro">assert_eq!</span>(stats.paints.get(), <span class="number">1</span>);
-<a href=#769 id=769 data-nosnippet>769</a>    }
-<a href=#770 id=770 data-nosnippet>770</a>
-<a href=#771 id=771 data-nosnippet>771</a>    <span class="attr">#[test]
-<a href=#772 id=772 data-nosnippet>772</a>    </span><span class="kw">fn </span>consumed_event_relayouts_and_repaints_the_headless_app() {
-<a href=#773 id=773 data-nosnippet>773</a>        <span class="kw">let </span>signal = Signal::new(<span class="number">0</span>);
-<a href=#774 id=774 data-nosnippet>774</a>        <span class="kw">let </span>stats = stats();
-<a href=#775 id=775 data-nosnippet>775</a>        <span class="kw">let </span><span class="kw-2">mut </span>app = app_with_probe(signal, Rc::clone(<span class="kw-2">&amp;</span>stats), <span class="bool-val">true</span>);
-<a href=#776 id=776 data-nosnippet>776</a>        app.tick(<span class="kw-2">&amp;</span>[]);
-<a href=#777 id=777 data-nosnippet>777</a>
-<a href=#778 id=778 data-nosnippet>778</a>        <span class="macro">assert!</span>(app.tick(<span class="kw-2">&amp;</span>[Event::Char(<span class="string">'x'</span>)]));
-<a href=#779 id=779 data-nosnippet>779</a>        <span class="macro">assert_eq!</span>(stats.events.get(), <span class="number">1</span>);
-<a href=#780 id=780 data-nosnippet>780</a>        <span class="macro">assert_eq!</span>(stats.layouts.get(), <span class="number">2</span>);
-<a href=#781 id=781 data-nosnippet>781</a>        <span class="macro">assert_eq!</span>(stats.paints.get(), <span class="number">2</span>);
-<a href=#782 id=782 data-nosnippet>782</a>    }
-<a href=#783 id=783 data-nosnippet>783</a>
-<a href=#784 id=784 data-nosnippet>784</a>    <span class="attr">#[test]
-<a href=#785 id=785 data-nosnippet>785</a>    </span><span class="kw">fn </span>signal_update_repaints_cached_layout_without_relayout() {
-<a href=#786 id=786 data-nosnippet>786</a>        <span class="kw">let </span>signal = Signal::new(<span class="number">0</span>);
-<a href=#787 id=787 data-nosnippet>787</a>        <span class="kw">let </span>stats = stats();
-<a href=#788 id=788 data-nosnippet>788</a>        <span class="kw">let </span><span class="kw-2">mut </span>app = app_with_probe(signal.clone(), Rc::clone(<span class="kw-2">&amp;</span>stats), <span class="bool-val">false</span>);
-<a href=#789 id=789 data-nosnippet>789</a>        app.tick(<span class="kw-2">&amp;</span>[]);
-<a href=#790 id=790 data-nosnippet>790</a>
-<a href=#791 id=791 data-nosnippet>791</a>        signal.set(<span class="number">1</span>);
-<a href=#792 id=792 data-nosnippet>792</a>
-<a href=#793 id=793 data-nosnippet>793</a>        <span class="macro">assert!</span>(app.tick(<span class="kw-2">&amp;</span>[]));
-<a href=#794 id=794 data-nosnippet>794</a>        <span class="macro">assert_eq!</span>(stats.layouts.get(), <span class="number">1</span>);
-<a href=#795 id=795 data-nosnippet>795</a>        <span class="macro">assert_eq!</span>(stats.paints.get(), <span class="number">2</span>);
-<a href=#796 id=796 data-nosnippet>796</a>    }
-<a href=#797 id=797 data-nosnippet>797</a>}
+<a href=#742 id=742 data-nosnippet>742</a>    <span class="attr">#[test]
+<a href=#743 id=743 data-nosnippet>743</a>    </span><span class="kw">fn </span>pointer_press_focuses_the_widget_under_the_cursor() {
+<a href=#744 id=744 data-nosnippet>744</a>        <span class="kw">let </span><span class="kw-2">mut </span>focus = FocusState::new();
+<a href=#745 id=745 data-nosnippet>745</a>        focus.list = <span class="macro">alloc::vec!</span>[
+<a href=#746 id=746 data-nosnippet>746</a>            Rect::new(<span class="number">0.0</span>, <span class="number">0.0</span>, <span class="number">10.0</span>, <span class="number">10.0</span>),
+<a href=#747 id=747 data-nosnippet>747</a>            Rect::new(<span class="number">20.0</span>, <span class="number">0.0</span>, <span class="number">10.0</span>, <span class="number">10.0</span>),
+<a href=#748 id=748 data-nosnippet>748</a>        ];
+<a href=#749 id=749 data-nosnippet>749</a>
+<a href=#750 id=750 data-nosnippet>750</a>        <span class="macro">assert!</span>(focus.focus_at(Point::new(<span class="number">25.0</span>, <span class="number">5.0</span>)));
+<a href=#751 id=751 data-nosnippet>751</a>        <span class="macro">assert_eq!</span>(focus.current_bounds(), <span class="prelude-val">Some</span>(focus.list[<span class="number">1</span>]));
+<a href=#752 id=752 data-nosnippet>752</a>        <span class="macro">assert!</span>(focus.focus_at(Point::new(<span class="number">15.0</span>, <span class="number">5.0</span>)));
+<a href=#753 id=753 data-nosnippet>753</a>        <span class="macro">assert_eq!</span>(focus.current_bounds(), <span class="prelude-val">None</span>);
+<a href=#754 id=754 data-nosnippet>754</a>    }
+<a href=#755 id=755 data-nosnippet>755</a>    <span class="attr">#[test]
+<a href=#756 id=756 data-nosnippet>756</a>    </span><span class="kw">fn </span>initial_tick_renders_once_and_idle_tick_skips_work() {
+<a href=#757 id=757 data-nosnippet>757</a>        <span class="kw">let </span>signal = Signal::new(<span class="number">0</span>);
+<a href=#758 id=758 data-nosnippet>758</a>        <span class="kw">let </span>stats = stats();
+<a href=#759 id=759 data-nosnippet>759</a>        <span class="kw">let </span><span class="kw-2">mut </span>app = app_with_probe(signal, Rc::clone(<span class="kw-2">&amp;</span>stats), <span class="bool-val">false</span>);
+<a href=#760 id=760 data-nosnippet>760</a>
+<a href=#761 id=761 data-nosnippet>761</a>        <span class="macro">assert!</span>(app.tick(<span class="kw-2">&amp;</span>[]));
+<a href=#762 id=762 data-nosnippet>762</a>        <span class="macro">assert_eq!</span>(stats.layouts.get(), <span class="number">1</span>);
+<a href=#763 id=763 data-nosnippet>763</a>        <span class="macro">assert_eq!</span>(stats.paints.get(), <span class="number">1</span>);
+<a href=#764 id=764 data-nosnippet>764</a>
+<a href=#765 id=765 data-nosnippet>765</a>        <span class="macro">assert!</span>(!app.tick(<span class="kw-2">&amp;</span>[]));
+<a href=#766 id=766 data-nosnippet>766</a>        <span class="macro">assert_eq!</span>(stats.layouts.get(), <span class="number">1</span>);
+<a href=#767 id=767 data-nosnippet>767</a>        <span class="macro">assert_eq!</span>(stats.paints.get(), <span class="number">1</span>);
+<a href=#768 id=768 data-nosnippet>768</a>    }
+<a href=#769 id=769 data-nosnippet>769</a>
+<a href=#770 id=770 data-nosnippet>770</a>    <span class="attr">#[test]
+<a href=#771 id=771 data-nosnippet>771</a>    </span><span class="kw">fn </span>consumed_event_relayouts_and_repaints_the_headless_app() {
+<a href=#772 id=772 data-nosnippet>772</a>        <span class="kw">let </span>signal = Signal::new(<span class="number">0</span>);
+<a href=#773 id=773 data-nosnippet>773</a>        <span class="kw">let </span>stats = stats();
+<a href=#774 id=774 data-nosnippet>774</a>        <span class="kw">let </span><span class="kw-2">mut </span>app = app_with_probe(signal, Rc::clone(<span class="kw-2">&amp;</span>stats), <span class="bool-val">true</span>);
+<a href=#775 id=775 data-nosnippet>775</a>        app.tick(<span class="kw-2">&amp;</span>[]);
+<a href=#776 id=776 data-nosnippet>776</a>
+<a href=#777 id=777 data-nosnippet>777</a>        <span class="macro">assert!</span>(app.tick(<span class="kw-2">&amp;</span>[Event::Char(<span class="string">'x'</span>)]));
+<a href=#778 id=778 data-nosnippet>778</a>        <span class="macro">assert_eq!</span>(stats.events.get(), <span class="number">1</span>);
+<a href=#779 id=779 data-nosnippet>779</a>        <span class="macro">assert_eq!</span>(stats.layouts.get(), <span class="number">2</span>);
+<a href=#780 id=780 data-nosnippet>780</a>        <span class="macro">assert_eq!</span>(stats.paints.get(), <span class="number">2</span>);
+<a href=#781 id=781 data-nosnippet>781</a>    }
+<a href=#782 id=782 data-nosnippet>782</a>
+<a href=#783 id=783 data-nosnippet>783</a>    <span class="attr">#[test]
+<a href=#784 id=784 data-nosnippet>784</a>    </span><span class="kw">fn </span>signal_update_repaints_cached_layout_without_relayout() {
+<a href=#785 id=785 data-nosnippet>785</a>        <span class="kw">let </span>signal = Signal::new(<span class="number">0</span>);
+<a href=#786 id=786 data-nosnippet>786</a>        <span class="kw">let </span>stats = stats();
+<a href=#787 id=787 data-nosnippet>787</a>        <span class="kw">let </span><span class="kw-2">mut </span>app = app_with_probe(signal.clone(), Rc::clone(<span class="kw-2">&amp;</span>stats), <span class="bool-val">false</span>);
+<a href=#788 id=788 data-nosnippet>788</a>        app.tick(<span class="kw-2">&amp;</span>[]);
+<a href=#789 id=789 data-nosnippet>789</a>
+<a href=#790 id=790 data-nosnippet>790</a>        signal.set(<span class="number">1</span>);
+<a href=#791 id=791 data-nosnippet>791</a>
+<a href=#792 id=792 data-nosnippet>792</a>        <span class="macro">assert!</span>(app.tick(<span class="kw-2">&amp;</span>[]));
+<a href=#793 id=793 data-nosnippet>793</a>        <span class="macro">assert_eq!</span>(stats.layouts.get(), <span class="number">1</span>);
+<a href=#794 id=794 data-nosnippet>794</a>        <span class="macro">assert_eq!</span>(stats.paints.get(), <span class="number">2</span>);
+<a href=#795 id=795 data-nosnippet>795</a>    }
+<a href=#796 id=796 data-nosnippet>796</a>}
 </code></pre></div></section></main></body></html>
