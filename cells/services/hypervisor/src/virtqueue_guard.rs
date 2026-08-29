@@ -16,12 +16,7 @@ pub fn valid_payload_range(gpa: u64, len: u32) -> bool {
     checked_gpa(gpa, 0, len as u64).is_some()
 }
 
-pub fn valid_queue_config(
-    q_size: u16,
-    desc_gpa: u64,
-    avail_gpa: u64,
-    used_gpa: u64,
-) -> bool {
+pub fn valid_queue_config(q_size: u16, desc_gpa: u64, avail_gpa: u64, used_gpa: u64) -> bool {
     let q_size = q_size as usize;
     if !valid_queue_size(q_size)
         || desc_gpa == 0
@@ -110,24 +105,9 @@ mod tests {
         assert!(!valid_queue_config(8, 0x1000, 0x2001, 0x3000));
         assert!(!valid_queue_config(8, 0x1000, 0x2000, 0x3002));
         assert!(!valid_queue_config(3, 0x1000, 0x2000, 0x3000));
-        assert!(!valid_queue_config(
-            1,
-            u64::MAX - 15,
-            0x2000,
-            0x3000
-        ));
-        assert!(!valid_queue_config(
-            1,
-            0x1000,
-            u64::MAX - 5,
-            0x3000
-        ));
-        assert!(!valid_queue_config(
-            1,
-            0x1000,
-            0x2000,
-            u64::MAX - 11
-        ));
+        assert!(!valid_queue_config(1, u64::MAX - 15, 0x2000, 0x3000));
+        assert!(!valid_queue_config(1, 0x1000, u64::MAX - 5, 0x3000));
+        assert!(!valid_queue_config(1, 0x1000, 0x2000, u64::MAX - 11));
     }
 
     #[test]

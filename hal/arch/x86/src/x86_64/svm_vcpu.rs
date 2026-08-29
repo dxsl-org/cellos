@@ -9,13 +9,12 @@
 use hal_hypervisor::ViVmExit;
 
 use super::vmcb::{
-    VmcbView, EFER_SVME, OFF_CR0, OFF_CR3, OFF_CR4, OFF_EVENTINJ, OFF_EXITCODE,
-    OFF_EXITINFO1, OFF_EXITINFO2, OFF_INT_SHADOW, OFF_NRIP, OFF_RAX, OFF_RFLAGS, OFF_RIP,
+    VmcbView, EFER_SVME, OFF_CR0, OFF_CR3, OFF_CR4, OFF_EVENTINJ, OFF_EXITCODE, OFF_EXITINFO1,
+    OFF_EXITINFO2, OFF_INT_SHADOW, OFF_NRIP, OFF_RAX, OFF_RFLAGS, OFF_RIP,
 };
 use super::vmexit_decode::{
-    decode, decode_mmio, is_mmio_data_npf, VMEXIT_CPUID, VMEXIT_HLT, VMEXIT_INTR,
-    VMEXIT_INVALID, VMEXIT_IOIO, VMEXIT_MSR, VMEXIT_NPF, VMEXIT_PAUSE, VMEXIT_SHUTDOWN,
-    VMEXIT_VMMCALL,
+    decode, decode_mmio, is_mmio_data_npf, VMEXIT_CPUID, VMEXIT_HLT, VMEXIT_INTR, VMEXIT_INVALID,
+    VMEXIT_IOIO, VMEXIT_MSR, VMEXIT_NPF, VMEXIT_PAUSE, VMEXIT_SHUTDOWN, VMEXIT_VMMCALL,
 };
 use super::world_switch::svm_vmrun;
 
@@ -185,7 +184,6 @@ impl SvmVcpu {
         )
     }
 
-
     /// Queue a maskable external interrupt for delivery on the next `VMRUN`.
     ///
     /// Writes the VMCB `EVENTINJ` field (type 0 = external interrupt, valid
@@ -257,12 +255,8 @@ impl SvmVcpu {
             }
             if entry & (1 << 7) != 0 {
                 return match level {
-                    3 => Some(
-                        (entry & 0x000f_ffff_c000_0000) | (address & ((1 << 30) - 1)),
-                    ),
-                    2 => Some(
-                        (entry & 0x000f_ffff_ffe0_0000) | (address & ((1 << 21) - 1)),
-                    ),
+                    3 => Some((entry & 0x000f_ffff_c000_0000) | (address & ((1 << 30) - 1))),
+                    2 => Some((entry & 0x000f_ffff_ffe0_0000) | (address & ((1 << 21) - 1))),
                     _ => None,
                 };
             }
@@ -288,7 +282,6 @@ impl SvmVcpu {
         }
         Some(u64::from_le_bytes(bytes))
     }
-
 
     /// World-switch into the guest, handling internal exits, and return the
     /// first surfaced [`ViVmExit`].

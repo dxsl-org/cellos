@@ -266,7 +266,7 @@ impl FsBackend for FatBackend {
     }
 
     fn read_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> usize {
-        use fatfs::{Seek as _, Read as _};
+        use fatfs::{Read as _, Seek as _};
         let fs = match &self.fs {
             Some(f) => f,
             None => return 0,

@@ -11,7 +11,6 @@ use alloc::vec::Vec;
 use crate::virtio_mmio::QueueCfg;
 use ostd::io::println;
 
-
 /// One segment from a virtqueue descriptor chain.
 pub struct DescBuf {
     pub gpa: u64,
@@ -72,7 +71,6 @@ pub(crate) fn read_descriptor_chain(
     None
 }
 
-
 /// Process one QueueNotify: drain avail ring → walk desc chains → call `handle` → update used ring.
 ///
 /// `last_avail_idx` and `used_idx` are per-queue device-side counters (NOT in guest memory);
@@ -93,8 +91,7 @@ where
     }
 
     // Read avail.idx (u16 at avail_ring + 2).
-    let Some(avail_idx_gpa) = crate::virtqueue_guard::checked_gpa(qcfg.avail_gpa, 2, 2)
-    else {
+    let Some(avail_idx_gpa) = crate::virtqueue_guard::checked_gpa(qcfg.avail_gpa, 2, 2) else {
         return 0;
     };
     let mut b2 = [0u8; 2];
@@ -145,8 +142,7 @@ where
 
         // Advance used.idx with a store that the guest will see (TCG is SC).
         let next_used = used_idx.wrapping_add(1);
-        let Some(used_idx_gpa) = crate::virtqueue_guard::checked_gpa(qcfg.used_gpa, 2, 2)
-        else {
+        let Some(used_idx_gpa) = crate::virtqueue_guard::checked_gpa(qcfg.used_gpa, 2, 2) else {
             break;
         };
         if crate::vmm::write_guest_memory(vm_id, used_idx_gpa, &next_used.to_le_bytes()) != 2 {

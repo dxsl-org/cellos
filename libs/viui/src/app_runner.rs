@@ -739,7 +739,6 @@ mod tests {
         )
     }
 
-
     #[test]
     fn pointer_press_focuses_the_widget_under_the_cursor() {
         let mut focus = FocusState::new();

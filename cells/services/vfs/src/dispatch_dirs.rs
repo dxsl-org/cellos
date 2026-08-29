@@ -15,10 +15,10 @@
 //! Settling what a cell inherited, before any of this runs, lives in
 //! [`crate::dir_admission`].
 
+use alloc::string::String;
+use api::dir_handles::ViDirHandle;
 use api::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
 use api::vfs_file_handles::ViVfsFileHandle;
-use api::dir_handles::ViDirHandle;
-use alloc::string::String;
 
 use crate::caller::Caller;
 use crate::dirs::DirError;
@@ -47,12 +47,18 @@ pub fn handle<'a>(
             read_file(vfs, caller, file, offset, max, resp_buf)
         }
         VfsRequest::CloseFile { file } => close_file(vfs, caller, file),
-        VfsRequest::ReadHandleGrant { file, offset, size, grant } => {
-            read_handle_grant(vfs, caller, file, offset, size, grant)
-        }
-        VfsRequest::WriteHandleGrant { file, offset, grant, bytes } => {
-            write_handle_grant(vfs, caller, file, offset, grant, bytes)
-        }
+        VfsRequest::ReadHandleGrant {
+            file,
+            offset,
+            size,
+            grant,
+        } => read_handle_grant(vfs, caller, file, offset, size, grant),
+        VfsRequest::WriteHandleGrant {
+            file,
+            offset,
+            grant,
+            bytes,
+        } => write_handle_grant(vfs, caller, file, offset, grant, bytes),
         VfsRequest::SyncHandle { file } => sync_handle(vfs, caller, file),
         VfsRequest::WriteAt { dir, name, content } => match resolve(vfs, caller, dir, name) {
             Ok(path) => write_file(vfs, caller, &path, content),
@@ -237,7 +243,11 @@ fn write_handle_grant<'a>(
         None => return VfsResponse::Err(ERR_IO),
     };
     let new_len = file_len.max(end);
-    let refunded = if vfs.quota.writer_of(&path) == Some(caller.cell) { file_len } else { 0 };
+    let refunded = if vfs.quota.writer_of(&path) == Some(caller.cell) {
+        file_len
+    } else {
+        0
+    };
     let net_charge = new_len.saturating_sub(refunded);
     if net_charge > 0 && !vfs.quota.can_charge(caller.cell, net_charge) {
         return VfsResponse::Err(ERR_QUOTA);

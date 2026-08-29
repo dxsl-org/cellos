@@ -123,17 +123,15 @@ pub fn handle(
                 }
             }
         }
-        DrvOp::Flush => {
-            match ctrl.flush() {
-                Ok(_) => {
-                    out[0] = 0;
-                    1
-                }
-                Err(_) => {
-                    out[0] = 1;
-                    1
-                }
+        DrvOp::Flush => match ctrl.flush() {
+            Ok(_) => {
+                out[0] = 0;
+                1
             }
-        }
+            Err(_) => {
+                out[0] = 1;
+                1
+            }
+        },
     }
 }
