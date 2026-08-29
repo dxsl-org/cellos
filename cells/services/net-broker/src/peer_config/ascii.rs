@@ -24,7 +24,7 @@ pub fn parse_ipv4(s: &[u8]) -> Option<[u8; 4]> {
     let mut any = false;
     for &b in s {
         if b == b'.' {
-            if idx >= 3 {
+            if !any || idx >= 3 {
                 return None;
             }
             parts[idx] = cur as u8;

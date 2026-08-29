@@ -1,6 +1,6 @@
 //! Peer config parser for `/etc/cellos/cluster.cfg`.
 
-mod ascii;
+pub(crate) mod ascii;
 
 use api::cluster::{CellNetId, PeerTicket};
 use ascii::{

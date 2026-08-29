@@ -23,6 +23,7 @@ fn ascii_helpers_reject_invalid_inputs() {
     assert!(!eq_slice(b"relay_ip", b"relay_port"));
     assert_eq!(parse_ipv4(b"1.2.3.256"), None);
     assert_eq!(parse_ipv4(b"1.2.x.4"), None);
+    assert_eq!(parse_ipv4(b"1..2.3"), None);
     assert_eq!(parse_u16_ascii(b""), None);
     assert_eq!(parse_u16_ascii(b"65536"), None);
     assert_eq!(parse_addr(b"10.0.0.1"), None);

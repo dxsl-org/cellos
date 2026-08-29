@@ -78,9 +78,13 @@
   local endpoint, preventing responder transcript divergence. Exact byte-layout
   coverage pins the little-endian cluster ID followed by initiator and responder
   NodeIds for both local roles; a paired initiator/responder KKpsk0 regression
-  completes both handshake messages. Focused broker tests pass 96/96 and the
-  RV64 release build passes; relay authentication, receive wiring, and two-node
-  evidence remain open.
+  completes both handshake messages. Added a strict optional global relay
+  endpoint contract using `relay_ip`, nonzero `relay_port`, and the frozen
+  lowercase DNS `relay_hostname` profile. Partial, duplicate, unknown, malformed,
+  and non-canonical declarations fail closed; validated configuration is stored
+  without dialing, resolving DNS, invoking KMS, or enabling relay traffic.
+  Focused broker tests pass 101/101 and the RV64 release build passes; relay
+  authentication, receive wiring, and two-node evidence remain open.
 
 - Authenticated evidence admission requires an explicitly provisioned,
   operator-owned replay store outside the submitted bundle. Verification binds

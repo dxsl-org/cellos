@@ -49,6 +49,10 @@ Data flow: node A broker -> relay TCP register -> E2E Noise to node B over relay
 - `cells/services/net-broker/src/noise_identity/tests.rs`
 - `cells/services/net-broker/src/transport/tcp_framing.rs`
 - `cells/services/net-broker/src/connection_manager.rs`
+- `cells/services/net-broker/src/relay_config.rs`
+- `cells/services/net-broker/src/relay_config/tests.rs`
+- `cells/services/net-broker/src/peer_config/ascii.rs`
+- `cells/services/net-broker/src/identity.rs`
 - Future relay runtime owner: `cells/services/net-broker/src/main.rs`
 - Future relay test harness outside product path, if approved.
 
@@ -64,8 +68,10 @@ Data flow: node A broker -> relay TCP register -> E2E Noise to node B over relay
 
 ## Todo List
 
-- [ ] Define relay config format.
-- [ ] Define relay auth secret or node allowlist.
+- [x] Define the optional global relay endpoint as strict `relay_ip`,
+  `relay_port`, and lowercase DNS `relay_hostname` fields in `cluster.cfg`.
+- [ ] Define mTLS trust/profile inputs and signer authorization; no shared-secret
+  or raw-key fallback.
 - [ ] Define proof-of-possession or Noise-bound registration.
 - [ ] Define duplicate NodeId/hijack rejection oracle.
 - [ ] Define relay reconnect backoff.
@@ -105,9 +111,9 @@ kernel state requires rollback.
 
 ## Next Steps
 
-Continue local-only relay contract work with configuration and authenticated
-registration proof. Provider qualification and authenticated session identity
-still block relay wiring and any two-node oracle.
+Continue local-only relay contract work with authenticated registration proof
+and duplicate-NodeId rejection semantics. Provider qualification and
+authenticated session identity still block relay wiring and any two-node oracle.
 
 ## Local Contract Evidence
 
@@ -117,8 +123,10 @@ still block relay wiring and any two-node oracle.
 - Binary `ConnectionPool` maps capacity pressure to `ViError::WouldBlock`.
   `ConnectionManager` checks capacity before `TcpConnect` and propagates that
   pressure instead of falling through to `NotSupported`.
-- Focused broker tests pass 96/96, including exact prologue byte-layout and
-  paired Noise transcript regressions, and the RV64 release build passes.
-  Tester and production-readiness reviewer rechecks pass.
+- The optional global relay endpoint parser fails closed on partial, duplicate,
+  unknown, malformed IP/port, or non-canonical hostname fields and performs no
+  I/O. `BrokerIdentity` stores only a validated endpoint without dialing it.
+- Focused broker tests pass 101/101 and the RV64 release build passes. Tester
+  and production-readiness reviewer rechecks pass.
 - No relay registration, remote dispatch, receive loop, or two-node traffic is
   enabled or claimed.

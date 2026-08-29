@@ -19,6 +19,7 @@ extern crate alloc;
 
 use crate::export_registry::{load_remote_exports, RegistrySource, RemoteExports};
 use crate::peer_config::{parse_peer_config_bytes, MAX_PEERS};
+use crate::relay_config::{parse_relay_endpoint_bytes, RelayEndpoint};
 use api::cluster::{CellNetId, PeerTicket};
 use ostd::clients::vfs::VfsClient;
 use ostd::io::{print, println};
@@ -35,6 +36,7 @@ pub struct BrokerIdentity {
     peers: [Option<PeerTicket>; MAX_PEERS],
     peers_len: usize,
     remote_exports: RemoteExports,
+    relay_endpoint: Option<RelayEndpoint>,
     /// Reflexive public address discovered via STUN. Updated by `stun` module.
     pub reflexive_addr: Option<([u8; 4], u16)>,
 }
@@ -47,6 +49,7 @@ impl BrokerIdentity {
             peers: [const { None }; MAX_PEERS],
             peers_len: 0,
             remote_exports: RemoteExports::absent(),
+            relay_endpoint: None,
             reflexive_addr: None,
         }
     }
@@ -60,6 +63,9 @@ impl BrokerIdentity {
     /// peer_0_relay_ip=1.2.3.4
     /// peer_0_relay_port=8765
     /// peer_0_direct=192.168.1.10:4521   # optional
+    /// relay_ip=10.0.0.5
+    /// relay_port=443
+    /// relay_hostname=relay.example
     /// peer_1_node_id=...
     /// peer_1_relay_ip=...
     /// peer_1_relay_port=...
@@ -79,6 +85,13 @@ impl BrokerIdentity {
         let (peers, peers_len) = parse_peer_config_bytes(data);
         self.peers = peers;
         self.peers_len = peers_len;
+        self.relay_endpoint = match parse_relay_endpoint_bytes(data) {
+            Ok(endpoint) => endpoint,
+            Err(_) => {
+                println("[net-broker] invalid relay endpoint — relay remains disabled");
+                None
+            }
+        };
         print("[net-broker] loaded peers from cluster.cfg: count=");
         ostd::io::print_usize(self.peers_len);
         println("");
@@ -106,6 +119,11 @@ impl BrokerIdentity {
 
     pub fn remote_exports(&self) -> &RemoteExports {
         &self.remote_exports
+    }
+
+    /// Return the validated relay endpoint without activating relay traffic.
+    pub fn relay_endpoint(&self) -> Option<&RelayEndpoint> {
+        self.relay_endpoint.as_ref()
     }
     pub fn update_reflexive(&mut self, ip: [u8; 4], port: u16) {
         self.reflexive_addr = Some((ip, port));

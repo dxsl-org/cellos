@@ -46,9 +46,11 @@ Recovery plan: supersedes `.agents/260624-cell-to-cell-anywhere/` without editin
 > four-session Noise pool now fails closed on exhaustion, preserves all occupied
 > sessions, and reports `WouldBlock` before opening another TCP path. Noise
 > prologues use protocol-role ordering, so both peers bind the same
-> `initiator || responder` identity transcript. Exact byte-layout and paired
-> transcript regressions pass within 96/96 broker tests; the RV64 release build
-> also passes.
+> `initiator || responder` identity transcript. The optional global relay
+> endpoint is now a strict, allocation-free `cluster.cfg` contract whose
+> validated value is stored without dialing. Exact byte-layout, paired
+> transcript, and endpoint parser regressions pass within 101/101 broker tests;
+> the RV64 release build also passes.
 >
 > The two-real-broker relay path remains blocked only by the
 > protected-persistence, authenticated-time, and reviewed pending-key-binding

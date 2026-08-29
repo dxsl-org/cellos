@@ -1413,8 +1413,13 @@ full-pool pressure cannot leak a newly opened socket or fall through to
 uses local endpoint order, which would reverse the responder transcript. Exact
 byte-layout coverage pins little-endian cluster ID, initiator NodeId, then
 responder NodeId for both local roles; a paired KKpsk0 transcript regression
-covers peer agreement. Relay authentication, receive wiring, and two-node
-evidence remain absent.
+covers peer agreement. `/etc/cellos/cluster.cfg` may describe one future relay
+TLS target with `relay_ip`, nonzero `relay_port`, and canonical lowercase
+`relay_hostname`. Parsing is allocation-free and fails closed on partial,
+duplicate, unknown, or malformed relay fields. `BrokerIdentity` stores the
+validated endpoint but does not dial, resolve DNS, invoke KMS, or alter
+`ConnectionManager`'s relay gate. Relay authentication, receive wiring, and
+two-node evidence remain absent.
 
 ### Cluster membership: 3 modes
 
