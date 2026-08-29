@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["DISPLAY_H","DISPLAY_W"],"fn":["cell_main","main"],"mod":["__vi_generated_Counter"],"static":["VICELL_SYSCALLS"],"struct":["Counter"]};
+window.SIDEBAR_ITEMS = {"constant":["DISPLAY_H","DISPLAY_W","SURFACE_X","SURFACE_Y"],"fn":["cell_main","main"],"mod":["__vi_generated_Counter"],"static":["VICELL_SYSCALLS"],"struct":["Counter"]};
