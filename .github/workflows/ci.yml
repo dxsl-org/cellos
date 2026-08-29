@@ -1053,6 +1053,7 @@ jobs:
     name: Network Data-Path Integration (riscv64)
     outputs:
       evidence-artifact-id: ${{ steps.upload-software-evidence.outputs.artifact-id }}
+      producer-runner: ${{ steps.capture-producer.outputs.producer-runner }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -1097,6 +1098,29 @@ jobs:
           CFLAGS_riscv64gc_unknown_none_elf: -march=rv64gc -mabi=lp64d -mcmodel=medany -ffreestanding -DLFS_NO_INTRINSICS -I${{ github.workspace }}/third_party/freestanding-include
           OBJCOPY: riscv64-unknown-elf-objcopy
         run: pwsh ./gen_disk.ps1 2>&1 | tee software-evidence/gen-disk.log
+
+      - name: Capture producer, toolchain, and disk identity
+        id: capture-producer
+        shell: bash
+        run: |
+          producer_runner="github-hosted:${RUNNER_OS}:${RUNNER_ARCH}:${ImageOS:-unknown}:${ImageVersion:-unknown}"
+          {
+            printf 'runner=%s\n' "$producer_runner"
+            printf 'workflow_ref=%s\nrevision=%s\nsequence=%s:%s\n' \
+              "$GITHUB_WORKFLOW_REF" "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT"
+            printf '\n[rustc]\n'
+            rustc --version --verbose
+            printf '\n[cargo]\n'
+            cargo --version --verbose
+            printf '\n[qemu-system-riscv64]\n'
+            qemu-system-riscv64 --version
+            printf '\n[riscv64-unknown-elf-gcc]\n'
+            riscv64-unknown-elf-gcc --version
+            printf '\n[pwsh]\n'
+            pwsh --version
+          } > software-evidence/producer-metadata.log
+          sha256sum disk_v3.img > software-evidence/disk-v3.sha256
+          printf 'producer-runner=%s\n' "$producer_runner" >> "$GITHUB_OUTPUT"
 
       - name: Run boot + network + shell + VFS tests
         shell: bash
@@ -1219,6 +1243,7 @@ jobs:
         with:
           artifact-ids: ${{ needs.boot-suite.outputs.evidence-artifact-id }}
           path: .authenticated-evidence/runtime
+          merge-multiple: true
 
       - name: Validate and stage software evidence
         shell: bash
@@ -1228,7 +1253,7 @@ jobs:
           python3 scripts/create-authenticated-evidence-bundle.py \
             --output evidence/manifest.json \
             --revision "${{ github.sha }}" \
-            --runner "github-hosted:${{ runner.os }}:${{ runner.arch }}" \
+            --runner "${{ needs.boot-suite.outputs.producer-runner }}" \
             --workflow-ref "${{ github.workflow_ref }}" \
             --sequence "${{ github.run_id }}:${{ github.run_attempt }}" \
             --command "boot-suite: gen_disk + boot + window-policy + viui-managed-surface" \
@@ -1238,7 +1263,9 @@ jobs:
             --input gen-disk.ps1=gen_disk.ps1 \
             --input viui-managed-surface.rs=tests/integration/tests/viui-managed-surface.rs \
             --input window-policy.rs=tests/integration/tests/window-policy.rs \
+            --image disk-v3.sha256=.authenticated-evidence/runtime/disk-v3.sha256 \
             --log catalog-validation.log=.authenticated-evidence/catalog-validation.log \
+            --log producer-metadata.log=.authenticated-evidence/runtime/producer-metadata.log \
             --log gen-disk.log=.authenticated-evidence/runtime/gen-disk.log \
             --log boot-suite.log=.authenticated-evidence/runtime/boot-suite.log \
             --log window-policy.log=.authenticated-evidence/runtime/window-policy.log \
