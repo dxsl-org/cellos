@@ -1,20 +1,21 @@
 #!/usr/bin/env bash
-# Build an x86_64 kernel_fs.img that embeds the Alpine PVH vmlinux + initramfs
-# for the ViCell x86 hypervisor cell (Tier 3b P05).
+# Build an x86_64 kernel_fs.img for the ViCell x86 hypervisor cell.
 #
-# Mirrors make-hypervisor-fs.sh (aarch64) for the x86 personality:
+# The image carries the Alpine PVH guest plus the complete host runtime needed
+# by the x86 VirtIO-MMIO evidence lane:
 #   1. Fetch + extract Alpine x86_64 artifacts (scripts/fetch-alpine-x86.sh).
-#   2. Build the x86 cells (bootstrap + service-hypervisor) as PIE.
-#   3. Assemble kernel/src/embedded-hv-x86/kernel_fs.img with:
-#        /bin/{init,shell,vfs,config,hypervisor}  +  /vmlinux  +  /initrd.gz
+#   2. Build init, platform, PCIe drivers, VFS, Net, and hypervisor as PIE.
+#   3. Assemble kernel/src/embedded-hv-x86/kernel_fs.img with the runtime cells,
+#      /vmlinux, and /initrd.gz.
 #   4. Copy app-init as the separately-embedded INIT_ELF.
 #
 # x86 cells MUST build with `relocation-model=pic` (RUSTFLAGS below) — the
 # config.toml x86 target pins the KERNEL's static/kernel-code-model flags, which
 # are wrong for lower-half PIE cells; RUSTFLAGS replaces them wholesale.
 #
-# After running, build the hypervisor kernel:
-#   RUSTFLAGS="-C relocation-model=pic -C code-model=kernel -C target-feature=-red-zone" \
+# After running, build the fixed-address hypervisor kernel with the same static
+# relocation contract as CI (the x86 Cell binaries above remain PIC):
+#   RUSTFLAGS="-C relocation-model=static -C code-model=kernel -C no-redzone=yes -Z cf-protection=full" \
 #   EMBEDDED_OVERRIDE="kernel/src/embedded-hv-x86" \
 #   cargo build --release -p cellos-kernel --target x86_64-unknown-none
 # then: ./run-x86.ps1 -NoBuild  (or qemu ... -cpu qemu64,+svm -accel tcg)
@@ -39,8 +40,8 @@ if [[ ! -f "$ALPINE_CACHE/vmlinux" || ! -f "$ALPINE_CACHE/initramfs-virt" ]]; th
     exit 1
 fi
 
-# ── Step 2: Build x86 cells as PIE ──────────────────────────────────────────
-INIT_FEATURES="${HV_INIT_MIN:+--features app-init/hypervisor-min}"
+# ── Step 2: Build x86 runtime cells as PIE ───────────────────────────────────
+INIT_FEATURES="${HV_INIT_MIN:+--features app-init/hypervisor-min,service-net/hypervisor-bridge}"
 RUSTFLAGS="-C relocation-model=pic" cargo build --release \
     --target "$TARGET" \
     -Z build-std=core,alloc \
@@ -52,35 +53,36 @@ RUSTFLAGS="-C relocation-model=pic" cargo build --release \
     -Z build-std=core,alloc \
     $INIT_FEATURES \
     -p app-init -p app-shell -p service-config \
+    -p service-platform -p driver-nvme -p driver-e1000 \
     -p service-net -p service-hypervisor
 
 # ── Step 3: Assemble kernel_fs.img ──────────────────────────────────────────
 mkdir -p "$EMBEDDED_HV"
-# /bin/shell IS included (host interactive console before any GUI exists), with a
-# known limitation: the kernel UART RX ring (sys_read fd 0) is a shared stream, so
-# while a host shell session is reading, it races the hypervisor for keystrokes
-# destined for the guest console. The hypervisor-min init profile (HV_INIT_MIN=1)
-# skips the host shell entirely — VM smoke gates run shell-less so the guest's
-# `/ #` is the only console.
+# /bin/shell remains available to the ordinary profile. The hypervisor-min
+# profile does not start it; it supervises VFS then Net before starting the
+# hypervisor, leaving the nested guest as the only interactive console.
 MKFAT_ARGS=()
-for cell in init vfs config shell; do
-    src="$BIN_DIR/app-$cell"
-    [[ ! -f "$src" ]] && src="$BIN_DIR/service-$cell"
-    if [[ -f "$src" ]]; then
-        echo "  /bin/$cell <- $src"
-        MKFAT_ARGS+=("$src" "/bin/$cell")
-    else
-        echo "  WARNING: $cell not found — skipping"
+add_required_cell() {
+    local artifact="$1"
+    local destination="$2"
+    local src="$BIN_DIR/$artifact"
+    if [[ ! -f "$src" ]]; then
+        echo "ERROR: $src not built — $destination would be missing" >&2
+        exit 1
     fi
-done
+    echo "  $destination <- $src"
+    MKFAT_ARGS+=("$src" "$destination")
+}
 
-if [[ -f "$BIN_DIR/hypervisor" ]]; then
-    echo "  /bin/hypervisor <- $BIN_DIR/hypervisor"
-    MKFAT_ARGS+=("$BIN_DIR/hypervisor" "/bin/hypervisor")
-else
-    echo "ERROR: $BIN_DIR/hypervisor not built" >&2
-    exit 1
-fi
+add_required_cell app-init /bin/init
+add_required_cell service-vfs /bin/vfs
+add_required_cell service-config /bin/config
+add_required_cell app-shell /bin/shell
+add_required_cell platform /bin/platform
+add_required_cell driver-nvme /bin/nvme
+add_required_cell driver-e1000 /bin/e1000
+add_required_cell service-net /bin/net
+add_required_cell hypervisor /bin/hypervisor
 
 echo "  /vmlinux   <- $ALPINE_CACHE/vmlinux ($(du -sh "$ALPINE_CACHE/vmlinux" | cut -f1))"
 MKFAT_ARGS+=("$ALPINE_CACHE/vmlinux" "/vmlinux")
@@ -118,15 +120,20 @@ MKFAT_ARGS+=("$POLICY_TMP/POLICY.BIN" "/POLICY.BIN")
 MSYS2_ARG_CONV_EXCL='*' "$PYTHON_BIN" tools/mkfat32.py \
     "$EMBEDDED_HV/kernel_fs.img" "${MKFAT_ARGS[@]}"
 
-# Prove the layout rather than trusting the exit code: mkfat32 exits 0 for an image
-# whose destinations were mangled, and a missing /POLICY.BIN degrades silently.
+# Prove the runtime layout rather than trusting mkfat32's exit code.
 "$PYTHON_BIN" tools/inspect_fat.py "$EMBEDDED_HV/kernel_fs.img" > "$POLICY_TMP/fat-layout.txt"
-if ! grep -q -- '--- /bin ---' "$POLICY_TMP/fat-layout.txt" ||
-   ! grep -q -- "LFN 'hypervisor'" "$POLICY_TMP/fat-layout.txt"; then
-    echo "FAIL: kernel_fs.img does not contain /bin/hypervisor" >&2
+if ! grep -q -- '--- /bin ---' "$POLICY_TMP/fat-layout.txt"; then
+    echo "FAIL: kernel_fs.img does not contain /bin" >&2
     cat "$POLICY_TMP/fat-layout.txt" >&2
     exit 1
 fi
+for required in init platform nvme e1000 net vfs hypervisor; do
+    if ! grep -Fq -- "LFN '$required'" "$POLICY_TMP/fat-layout.txt"; then
+        echo "FAIL: kernel_fs.img does not contain /bin/$required" >&2
+        cat "$POLICY_TMP/fat-layout.txt" >&2
+        exit 1
+    fi
+done
 assert_policy_in_image "$POLICY_TMP/fat-layout.txt" || exit 1
 
 cp "$BIN_DIR/app-init" "$EMBEDDED_HV/init"

@@ -50,7 +50,7 @@ impl Service {
 }
 
 #[cfg(feature = "hypervisor-min")]
-pub(crate) const SERVICE_COUNT: usize = 1;
+pub(crate) const SERVICE_COUNT: usize = 2;
 #[cfg(not(feature = "hypervisor-min"))]
 pub(crate) const SERVICE_COUNT: usize = 8
     + cfg!(feature = "development-silo-provider") as usize
@@ -58,11 +58,18 @@ pub(crate) const SERVICE_COUNT: usize = 8
 
 pub(crate) fn configured() -> [Service; SERVICE_COUNT] {
     #[cfg(feature = "hypervisor-min")]
-    return [Service::new(
-        "/bin/vfs",
-        Registration::Init(service::VFS),
-        RestartPolicy::Permanent,
-    )];
+    return [
+        Service::new(
+            "/bin/vfs",
+            Registration::Init(service::VFS),
+            RestartPolicy::Permanent,
+        ),
+        Service::new(
+            "/bin/net",
+            Registration::Init(service::NET),
+            RestartPolicy::Permanent,
+        ),
+    ];
 
     #[cfg(not(feature = "hypervisor-min"))]
     [

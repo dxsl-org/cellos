@@ -1,12 +1,8 @@
-//! Emulated 8259A PIC pair (master 0x20/0x21, slave 0xA0/0xA1).
+//! Emulated 8259A PIC pair and edge/level control registers.
 //!
-//! The no-LAPIC MVP boots the guest with `nolapic noapic`, so the legacy 8259
-//! is the only interrupt controller. This models exactly what Linux drives at
-//! boot: the ICW1–ICW4 initialisation sequence (which remaps IRQ0–15 off the
-//! CPU exception vectors) and the OCW1 interrupt-mask register. IRR/ISR and
-//! priority resolution are not modelled — the run loop delivers exactly two
-//! master-PIC lines, the PIT's IRQ0 and the UART's IRQ4, each gated on the
-//! programmed vector base + mask (see [`Pic8259::irq`]).
+//! Linux programs the master/slave command and mask ports plus ELCR ports
+//! 0x4D0/0x4D1. IRR/ISR and priority resolution are not modelled; the run loop
+//! delivers one eligible line at a time through [`Pic8259::irq`].
 
 /// One 8259 chip: its programmed vector base, interrupt mask, and ICW state.
 struct Chip {
@@ -58,6 +54,7 @@ impl Chip {
 pub struct Pic8259 {
     master: Chip,
     slave: Chip,
+    elcr: [u8; 2],
 }
 
 impl Pic8259 {
@@ -65,12 +62,13 @@ impl Pic8259 {
         Self {
             master: Chip::new(),
             slave: Chip::new(),
+            elcr: [0; 2],
         }
     }
 
-    /// True if `port` addresses either PIC.
+    /// True if `port` addresses either PIC or its edge/level control register.
     pub fn owns(port: u16) -> bool {
-        matches!(port, 0x20 | 0x21 | 0xA0 | 0xA1)
+        matches!(port, 0x20 | 0x21 | 0xA0 | 0xA1 | 0x4D0 | 0x4D1)
     }
 
     /// Handle a guest `out` to a PIC port.
@@ -81,6 +79,8 @@ impl Pic8259 {
             0x21 => self.master.data(b),
             0xA0 => self.slave.command(b),
             0xA1 => self.slave.data(b),
+            0x4D0 => self.elcr[0] = b,
+            0x4D1 => self.elcr[1] = b,
             _ => {}
         }
     }
@@ -91,6 +91,8 @@ impl Pic8259 {
         let v: u8 = match port {
             0x21 => self.master.mask,
             0xA1 => self.slave.mask,
+            0x4D0 => self.elcr[0],
+            0x4D1 => self.elcr[1],
             _ => 0,
         };
         v as u32

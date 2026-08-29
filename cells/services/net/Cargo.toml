@@ -17,6 +17,7 @@ license.workspace = true
 [features]
 default = ["tls-roots-embedded", "tls-ca-private"]
 
+hypervisor-bridge = []
 # Flavors
 tls-roots-embedded = []
 tls-roots-full     = []   # deps wired in P04

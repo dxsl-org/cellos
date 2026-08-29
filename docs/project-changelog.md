@@ -47,6 +47,13 @@
   `create_vcpu` rewrite guest entry memory under `test-hooks`. This closes the
   executable transport-decode prerequisite, not strict block/network parity
   or physical x86 qualification.
+- Phase 10's full-rebuild `scripts/qemu-x86-virtio-e2e.sh` run passed two fresh
+  outer boots on Windows QEMU-TCG 10.2.0 with Intel VT-d ACTIVE: one persistent
+  16 MiB block backing survived write/FLUSH/readback, IRQ5/IRQ6 fired, and the
+  shared network path completed TX/RX under a distinct nested MAC. This is
+  bounded emulator evidence only; malformed transport/queue and full Phase 06
+  hostile parity remain open, and it adds no physical x86, service, or
+  production qualification.
 - RPi3-B is bound to revision `a22082` / Raspberry Pi 3 Model B and serial
   `000000003d042795`. `lungmat8` approved the exact BCM mailbox unsafe island
   on 2026-08-28; strict F1/F5, focused host/target tests, RPi3 packaging, image

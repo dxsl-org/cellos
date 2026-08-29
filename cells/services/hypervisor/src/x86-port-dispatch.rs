@@ -5,6 +5,18 @@ extern crate alloc;
 use crate::{cmos_rtc::CmosRtc, pic_8259::Pic8259, pit_8253::Pit8253, uart_16550::Uart16550};
 use ostd::io::println;
 
+fn is_absent_pci_config(port: u16) -> bool {
+    (0xCF8..=0xCFF).contains(&port)
+}
+
+fn is_legacy_delay(port: u16) -> bool {
+    port == 0x80
+}
+
+fn is_absent_legacy_uart(port: u16) -> bool {
+    matches!(port, 0x2F8..=0x2FF | 0x3E8..=0x3EF | 0x2E8..=0x2EF)
+}
+
 pub fn write(
     port: u16,
     value: u32,
@@ -21,6 +33,14 @@ pub fn write(
         pit.write(port, value);
     } else if CmosRtc::owns(port) {
         rtc.write(port, value);
+    } else if is_absent_pci_config(port) {
+        // The nested platform is MMIO-only. Legacy PCI config cycles see an
+        // empty bus rather than becoming an unhandled guest exit.
+    } else if is_legacy_delay(port) {
+        // Linux uses port 0x80 as a serialization delay; it has no device state.
+    } else if is_absent_legacy_uart(port) {
+        // Linux probes the fixed ISA COM2-COM4 candidates. The platform freezes
+        // them absent, so writes vanish and reads expose an idle ISA bus.
     } else if matches!(port, 0x604 | 0x501 | 0xB004) {
         println("[hv-x86] guest power-off port write");
         return false;

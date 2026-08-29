@@ -123,8 +123,8 @@ fn size_mask(size: u8) -> u64 {
 
 /// Decode one x86 MMIO `MOV` instruction captured at an NPF.
 ///
-/// VirtIO MMIO registers are 32-bit. Other operand widths, register-register
-/// forms, and unsupported opcodes fail closed instead of advancing guest RIP.
+/// VirtIO transport registers use 32-bit accesses; device-specific config may
+/// use byte accesses. Other forms fail closed instead of advancing guest RIP.
 pub fn decode_mmio(
     info1: u64,
     ipa: u64,
@@ -152,23 +152,25 @@ pub fn decode_mmio(
         return None;
     }
     let reg = ((modrm >> 3) & 7) | ((rex & 4) << 1);
-    if reg == 4 {
-        return None; // RSP lives in the VMCB, not the caller-managed GPR bank.
+    if reg == 4 || (matches!(opcode, 0x88 | 0x8a) && rex == 0 && reg >= 4) {
+        return None; // RSP and legacy high-byte registers are not in this GPR bank.
     }
     cursor = consume_address(instruction, cursor, modrm, rex)?;
     let is_write_fault = info1 & NPF_WRITE != 0;
 
     let exit = match opcode {
+        0x88 if is_write_fault => ViVmExit::MmioWrite {
+            ipa,
+            size: 1,
+            val: gprs[reg as usize] & 0xff,
+        },
+        0x8a if !is_write_fault => ViVmExit::MmioRead { ipa, size: 1, reg },
         0x89 if is_write_fault && rex & 8 == 0 => ViVmExit::MmioWrite {
             ipa,
             size: 4,
             val: gprs[reg as usize] & 0xffff_ffff,
         },
-        0x8b if !is_write_fault && rex & 8 == 0 => ViVmExit::MmioRead {
-            ipa,
-            size: 4,
-            reg,
-        },
+        0x8b if !is_write_fault && rex & 8 == 0 => ViVmExit::MmioRead { ipa, size: 4, reg },
         0xc7 if is_write_fault && rex & 8 == 0 && reg == 0 => {
             let immediate = instruction.get(cursor..cursor.checked_add(4)?)?;
             cursor += 4;
@@ -213,11 +215,53 @@ mod tests {
         gprs[8] = 0xfeed_beef_dead_cafe;
         assert!(matches!(
             decode_mmio(NPF_WRITE, 0xd000_0000, &[0x44, 0x89, 0x07], &gprs),
-            Some((ViVmExit::MmioWrite { size: 4, val: 0xdead_cafe, .. }, 3))
+            Some((
+                ViVmExit::MmioWrite {
+                    size: 4,
+                    val: 0xdead_cafe,
+                    ..
+                },
+                3
+            ))
         ));
         assert!(matches!(
             decode_mmio(0, 0xd000_0000, &[0x41, 0x8b, 0x04, 0x24], &gprs),
-            Some((ViVmExit::MmioRead { size: 4, reg: 0, .. }, 4))
+            Some((
+                ViVmExit::MmioRead {
+                    size: 4,
+                    reg: 0,
+                    ..
+                },
+                4
+            ))
+        ));
+    }
+
+    #[test]
+    fn decodes_byte_device_config_accesses() {
+        let mut gprs = [0u64; 16];
+        gprs[0] = 0x52;
+        assert!(matches!(
+            decode_mmio(NPF_WRITE, 0xd000_0300, &[0x88, 0x02], &gprs),
+            Some((
+                ViVmExit::MmioWrite {
+                    size: 1,
+                    val: 0x52,
+                    ..
+                },
+                2
+            ))
+        ));
+        assert!(matches!(
+            decode_mmio(0, 0xd000_0300, &[0x8a, 0x06], &gprs),
+            Some((
+                ViVmExit::MmioRead {
+                    size: 1,
+                    reg: 0,
+                    ..
+                },
+                2
+            ))
         ));
     }
 
@@ -231,7 +275,14 @@ mod tests {
                 &[0xc7, 0x47, 0x70, 0x04, 0x00, 0x00, 0x00],
                 &gprs,
             ),
-            Some((ViVmExit::MmioWrite { size: 4, val: 4, .. }, 7))
+            Some((
+                ViVmExit::MmioWrite {
+                    size: 4,
+                    val: 4,
+                    ..
+                },
+                7
+            ))
         ));
         assert!(decode_mmio(0, 0xd000_0000, &[0x89, 0x07], &gprs).is_none());
     }
@@ -245,10 +296,7 @@ mod tests {
 
     #[test]
     fn classifies_only_final_mmio_data_translations() {
-        assert!(is_mmio_data_npf(
-            NPF_FINAL_TRANSLATION | 4,
-            0xd000_0000
-        ));
+        assert!(is_mmio_data_npf(NPF_FINAL_TRANSLATION | 4, 0xd000_0000));
         assert!(!is_mmio_data_npf(
             NPF_FINAL_TRANSLATION | NPF_IN_PT_WALK | 4,
             0xd000_0000
@@ -258,9 +306,6 @@ mod tests {
             0xd000_0000
         ));
         assert!(!is_mmio_data_npf(0, 0xd000_0000));
-        assert!(!is_mmio_data_npf(
-            NPF_FINAL_TRANSLATION,
-            0xcfff_ffff
-        ));
+        assert!(!is_mmio_data_npf(NPF_FINAL_TRANSLATION, 0xcfff_ffff));
     }
 }

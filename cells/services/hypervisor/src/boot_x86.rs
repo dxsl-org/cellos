@@ -38,6 +38,16 @@ const INITRD_PATH: &str = "/initrd.gz";
 // PIT + idle IRQ0 injection can feed; one-shot mode never arms a timer we can
 // drive, so the idle loop HLTs forever waiting for a tick that never comes.
 const CMDLINE: &str = "earlycon=uart8250,io,0x3f8,115200 console=ttyS0 nox2apic lpj=4000000 nohz=off highres=off rdinit=/bin/sh panic=1 virtio_mmio.device=512@0xd0000000:5 virtio_mmio.device=512@0xd0000200:6";
+const E2E_CMDLINE: &str = "earlycon=uart8250,io,0x3f8,115200 console=ttyS0 nox2apic pci=off lpj=4000000 nohz=off highres=off rdinit=/bin/virtio-e2e-init panic=1 virtio_mmio.device=512@0xd0000000:5 virtio_mmio.device=512@0xd0000200:6";
+
+fn guest_cmdline() -> &'static str {
+    let Ok(cap) = ostd::syscall::sys_open_cap("/virtio-e2e") else {
+        return CMDLINE;
+    };
+    ostd::syscall::sys_close_cap(cap);
+    println("[hv-x86] guest rdinit: /bin/virtio-e2e-init");
+    E2E_CMDLINE
+}
 
 /// 2 MiB alignment for the initramfs placement.
 const ALIGN_2M: u64 = 0x20_0000;
@@ -156,7 +166,7 @@ pub fn run() {
         ram_size: GUEST_RAM_SIZE,
         initrd_gpa,
         initrd_size,
-        cmdline: CMDLINE,
+        cmdline: guest_cmdline(),
         rsdp_paddr,
     });
     if wg(vm_id, start_info_gpa, &blob).is_err() {

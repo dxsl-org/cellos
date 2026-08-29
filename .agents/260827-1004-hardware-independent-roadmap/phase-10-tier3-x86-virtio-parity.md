@@ -26,7 +26,7 @@ Define and wire the x86 guest's block/network device transport to reuse the Phas
 
 ## Key Insights
 
-The strict x86 guest boots from initramfs, while `run_loop_x86.rs` handles legacy ports and does not dispatch the shared VirtIO-MMIO block/network personalities used by ARM64. The transport mapping must be pinned before implementation.
+The x86 guest now uses one pinned VirtIO-MMIO map and the shared block/network personalities. The dedicated `/virtio-e2e` init supplies bounded device evidence, while the normal pinned Alpine path separately retains strict `/bin/sh` boot evidence; the success claim is therefore aggregate QEMU evidence, not a shell reached by the dedicated evidence init.
 
 ## Requirements
 
@@ -42,19 +42,15 @@ The strict x86 guest boots from initramfs, while `run_loop_x86.rs` handles legac
 
 ## Assumptions
 
-- **Claim:** A fixed VirtIO-MMIO transport is acceptable for the current minimal x86 guest.
-  **Confidence:** low
-  **How to verify:** inspect the pinned guest kernel configuration and boot command line; if it requires PCI, approve a separate PCI transport contract rather than emulating both.
-- **Claim:** The existing interrupt model can inject the selected transport's block/network interrupts.
-  **Confidence:** medium
-  **How to verify:** trace APIC/PIC handling and pin the exact vectors before Build.
+- **Verified QEMU boundary:** The pinned guest discovers the fixed VirtIO-MMIO block and network mapping under QEMU-TCG 10.2.0; this does not select VirtIO-PCI or qualify physical hardware.
+- **Verified QEMU boundary:** IRQ5 and IRQ6 are delivered through the existing interrupt model, with completion acknowledged by the guest.
 
 ## Related Files
 
-- Modify after contract approval: `cells/services/hypervisor/src/run_loop_x86.rs`
-- Modify: x86 boot/configuration and fixed device-map code
-- Reuse: `virtio_mmio.rs`, `virtqueue.rs`, `virtio_blk.rs`, `virtio_net.rs`
-- Modify: focused x86 strict-boot, block, network, and persistence scenarios
+- Modified: `cells/services/hypervisor/src/run_loop_x86.rs`
+- Modified: x86 boot/configuration and fixed device-map code
+- Reused: `virtio_mmio.rs`, `virtqueue.rs`, `virtio_blk.rs`, `virtio_net.rs`
+- Modified: focused x86 strict-boot, block, network, and persistence scenarios
 - Emit: evidence to Phase 08; consume Phase 06 runners without taking their ownership
 
 ## Implementation Steps
@@ -71,13 +67,13 @@ The strict x86 guest boots from initramfs, while `run_loop_x86.rs` handles legac
 
 - [x] Pin one x86 VirtIO-MMIO transport: block `0xd0000000`/IRQ5, net `0xd0000200`/IRQ6.
 - [x] Reuse shared block/network personalities and Phase 09 persistent-disk adapter without protocol forks.
-- [ ] Prove strict boot plus bounded block/network behavior on pinned QEMU 10.2.0.
+- [x] Prove strict boot plus bounded block/network behavior on pinned QEMU 10.2.0.
 
 ## Success Criteria
 
-- [ ] x86 strict guest discovers the selected block/network devices and still reaches `/bin/sh`.
-- [ ] Persistent block FLUSH/reboot/read semantics match Phase 09.
-- [ ] Network traffic uses the shared backend with no hard-coded QEMU-only identity leak.
+- [x] Aggregate evidence shows that the normal pinned x86 strict guest reaches `/bin/sh` and the dedicated evidence guest discovers the selected block/network devices.
+- [x] Persistent block FLUSH/reboot/read semantics match Phase 09.
+- [x] Network traffic uses the shared backend with a distinct nested MAC and no hard-coded QEMU-only identity leak.
 - [ ] Malformed transport/queue inputs fail without host panic or cross-guest/service corruption.
 - [x] No physical AMD/Intel qualification claim is added.
 
@@ -87,11 +83,11 @@ Treat every guest transport field, GPA, queue index, descriptor, length, and int
 
 ## Risk Assessment
 
-If the pinned guest requires VirtIO-PCI, this phase needs a separately approved transport design and may exceed the estimate. Do not silently substitute ad hoc port I/O or duplicate ARM64 logic.
+The bounded two-boot path is proved only under pinned QEMU-TCG 10.2.0. Malformed transport/queue coverage and full Phase 06 hostile parity remain required before this phase can close; physical AMD/Intel qualification remains independent.
 
 ## Next Steps
 
-After x86 parity passes, run the Phase 06 scenario suite for parity evidence; physical x86 remains independently gated.
+Add malformed transport/queue evidence and run the supported Phase 06 hostile scenarios for parity. Keep physical x86 independently gated.
 
 ## Deviation Log
 
@@ -99,4 +95,10 @@ After x86 parity passes, run the Phase 06 scenario suite for parity evidence; ph
 - Queue completion IRQs are level-like rather than one-shot: HLT/Preempted retries one prioritized deliverable slot (UART, block, net, then PIT) while the VirtIO ISR bit remains pending; guest ACK clears it. Successful asynchronous net RX now sets the ISR bit. The focused ACK/retry test passes.
 - Split the newly added x86 IRQ, MMIO, and legacy port dispatch plus the MMIO address/test helpers into focused kebab-case modules; those x86/MMIO files are below 200 lines. Pre-existing touched legacy files (`main.rs`, ARM `run_loop.rs`, and `virtio_blk.rs`) remain above the repository target and are not claimed as remediated by this split.
 - The dedicated NPF/MMIO fixture now passes on pinned QEMU-TCG 10.2.0 and the outer Cellos x86 host still reaches `Cellos >`. QEMU reports the architectural final-translation bit `EXITINFO1[32]` for the fixture's direct MMIO access; the decoder requires that bit and rejects instruction fetches, out-of-window GPAs, and the guest-page-walk bit `EXITINFO1[33]`. It also rejects RSP operands because RSP is VMCB-owned, decodes a complete instruction prefix at the guest-RAM boundary, and leaves ASID allocation permanently exhausted rather than wrapping. `create_vcpu` no longer mutates guest memory under `test-hooks`; each smoke owns its fixture blob. QEMU 8.2.2 remains a known-incompatible runtime and still cannot provide parity evidence.
-- This closes only the executable MMIO decode/GPR/RIP prerequisite. Strict guest block/network discovery, persistence, malformed transport/queue evidence, and Phase 06 parity remain open.
+- At that checkpoint, the fixture closed only the executable MMIO decode/GPR/RIP prerequisite; strict guest block/network discovery and persistence had not yet been exercised, and malformed transport/queue evidence plus Phase 06 parity remained open.
+- The full rebuilt runner passed in 79.40 seconds with `BOOT_WINDOW=180 QEMU_X86_BIN='/mnt/c/Program Files/qemu/qemu-system-x86_64.exe' bash scripts/qemu-x86-virtio-e2e.sh`: two fresh outer boots under QEMU-TCG 10.2.0 used one persistent 16 MiB backing and required explicit `[vtd] Intel VT-d: DMA isolation ACTIVE (per-Cell domains, Sv39 SLPT)` evidence.
+- Both boots reported block/network discovery, IRQ5/IRQ6, and shared network TX/RX with a distinct nested MAC. Run 1 reported block write/FLUSH and `VIRTIO_E2E_FIRST_RUN_PASS`; run 2 reported block readback and `VIRTIO_E2E_SECOND_RUN_PASS`.
+- The E2E image selects its dedicated evidence init with `/virtio-e2e`; normal pinned strict boot and shell evidence remains separate. Linux modern VirtIO networking uses the 12-byte `virtio_net_hdr_v1`: TX strips 12 bytes, RX prepends 12 bytes, and RX sets `num_buffers=1`.
+- Outer persistence required NVMe FLUSH to use namespace ID 1, the actual namespace, rather than invalid namespace ID 0.
+- The reviewed active-IOMMU boundary instantiates `intel-iommu`, rejects DMA mapping unless isolation is active and the backend confirms the map, rolls back exactly one pin hold on failure, and enables BME and records quota only after mapping succeeds.
+- This evidence ceiling is QEMU only. Malformed transport/queue inputs and full Phase 06 hostile parity remain open, so Phase 10 stays blocked; no physical AMD/Intel, service, or production qualification is claimed.

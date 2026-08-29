@@ -9,7 +9,7 @@ mod udp;
 
 use alloc::collections::BTreeMap;
 use api::ipc::{self, NetRequest, NetResponse, IPC_BUF_SIZE};
-use ostd::syscall::{sys_net_tx, sys_send};
+use ostd::syscall::sys_send;
 use smoltcp::{
     iface::{Interface, SocketHandle, SocketSet},
     socket::tcp as smoltcp_tcp,
@@ -148,8 +148,12 @@ pub(crate) fn handle_typed(
         }
         NetRequest::Resolve { .. } => send_typed(sender, R::Err(0xFF)),
         NetRequest::L2Send { data } => {
-            sys_net_tx(data);
-            send_typed(sender, R::Ok);
+            let response = if device.send_l2(data) {
+                R::Ok
+            } else {
+                R::Err(0xFF)
+            };
+            send_typed(sender, response);
         }
         NetRequest::L2Recv { guest_mac } => {
             device.set_guest_mac(guest_mac);

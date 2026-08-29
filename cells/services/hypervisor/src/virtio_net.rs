@@ -3,7 +3,7 @@
 //! ARM uses VirtIO-MMIO slot 2/SPI18; x86 uses slot 1/IRQ6. TX forwards L2
 //! frames to the Net Cell. RX writes one guest buffer and reports completion so
 //! the transport owner can set its ISR bit and retry interrupt delivery.
-//! The 10-byte virtio_net_hdr is prepended on RX and stripped on TX.
+//! The 12-byte modern virtio_net_hdr_v1 is prepended on RX and stripped on TX.
 
 extern crate alloc;
 use crate::virtio_mmio::{QueueCfg, VirtioDevice, VirtioMmio};
@@ -15,6 +15,7 @@ pub const GUEST_MAC: [u8; 6] = [0x52, 0x54, 0x00, 0xAA, 0xBB, 0xCC];
 
 /// virtio-net feature bit: device provides a MAC address in config space.
 const VIRTIO_NET_F_MAC: u32 = 1 << 5;
+const VIRTIO_NET_HDR_V1_LEN: usize = 12;
 
 pub struct NetDev {
     /// Net Cell TID for L2 frame IPC; 0 = net service unavailable.
@@ -40,10 +41,11 @@ impl NetDev {
 
     /// Inject one received Ethernet frame into the guest RX virtqueue.
     ///
-    /// Prepends a 10-byte zero `virtio_net_hdr`, fills one available descriptor
-    /// chain, and advances the used ring. Returns true only when it publishes a
-    /// used entry; the caller owns ISR signaling. An optional device IRQ supports
-    /// the ARM transport, while x86 retries its pending ISR centrally.
+    /// Prepends a 12-byte `virtio_net_hdr_v1`, fills one available descriptor
+    /// chain, and advances the used ring. `num_buffers` is one because this
+    /// device does not negotiate `VIRTIO_NET_F_MRG_RXBUF`.
+    /// Returns true only when it publishes a used entry; the caller owns ISR signaling.
+    /// An optional device IRQ supports ARM; x86 retries its pending ISR centrally.
     pub fn push_rx_frame(
         &mut self,
         frame: &[u8],
@@ -72,8 +74,9 @@ impl NetDev {
         let head = u16::from_le_bytes(b2) as usize;
         self.rx_last_avail = self.rx_last_avail.wrapping_add(1);
 
-        let mut payload = vec![0u8; 10 + frame.len()];
-        payload[10..].copy_from_slice(frame);
+        let mut payload = vec![0u8; VIRTIO_NET_HDR_V1_LEN + frame.len()];
+        payload[10..12].copy_from_slice(&1u16.to_le_bytes());
+        payload[VIRTIO_NET_HDR_V1_LEN..].copy_from_slice(frame);
 
         let mut pos = 0usize;
         let mut cur = head;
@@ -163,7 +166,7 @@ impl VirtioDevice for NetDev {
     }
 }
 
-/// Read all device-readable descriptor bytes, skip 10-byte virtio_net_hdr, send remainder.
+/// Read all device-readable descriptor bytes, strip `virtio_net_hdr_v1`, and send the frame.
 fn handle_tx(bufs: &[DescBuf], vm_id: usize, net_tid: usize) {
     if net_tid == 0 {
         return;
@@ -181,9 +184,8 @@ fn handle_tx(bufs: &[DescBuf], vm_id: usize, net_tid: usize) {
         }
         payload.extend_from_slice(&tmp[..got]);
     }
-    // The first 10 bytes are the virtio_net_hdr; the rest is the raw Ethernet frame.
-    if payload.len() <= 10 {
+    if payload.len() <= VIRTIO_NET_HDR_V1_LEN {
         return;
     }
-    crate::net_backend::transmit(net_tid, &payload[10..]);
+    crate::net_backend::transmit(net_tid, &payload[VIRTIO_NET_HDR_V1_LEN..]);
 }

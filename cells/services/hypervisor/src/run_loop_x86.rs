@@ -109,9 +109,10 @@ pub fn run(
                 return RunOutcome::Shutdown;
             }
 
-            ViVmExit::MmioWrite { ipa, size: 4, val } => {
+            ViVmExit::MmioWrite { ipa, size, val } => {
                 if !x86_mmio_dispatch::write(
                     ipa,
+                    size,
                     val as u32,
                     vm_id,
                     vcpu_id,
@@ -124,20 +125,13 @@ pub fn run(
                 }
             }
 
-            ViVmExit::MmioRead { ipa, size: 4, reg } => {
-                let Some(value) = x86_mmio_dispatch::read(ipa, &blk, &blk_vmio, &net, &net_vmio)
+            ViVmExit::MmioRead { ipa, size, reg } => {
+                let Some(value) =
+                    x86_mmio_dispatch::read(ipa, size, &blk, &blk_vmio, &net, &net_vmio)
                 else {
                     return RunOutcome::Shutdown;
                 };
-                write_gpr(vm_id, vcpu_id, reg, value);
-            }
-            ViVmExit::MmioRead { ipa, size, .. } | ViVmExit::MmioWrite { ipa, size, .. } => {
-                println(&alloc::format!(
-                    "[hv-x86] unsupported MMIO width gpa=0x{:x} size={}",
-                    ipa,
-                    size
-                ));
-                return RunOutcome::Shutdown;
+                write_gpr(vm_id, vcpu_id, reg, value, size);
             }
 
             ViVmExit::Shutdown => {
@@ -177,12 +171,17 @@ fn write_rax(vm_id: usize, vcpu_id: usize, val: u32, size: u8) {
     vmm::vcpu_regs(vm_id, vcpu_id, &mut rb, true);
 }
 
-fn write_gpr(vm_id: usize, vcpu_id: usize, reg: u8, val: u32) {
+fn write_gpr(vm_id: usize, vcpu_id: usize, reg: u8, val: u32, size: u8) {
     if reg >= 16 {
         return;
     }
     let mut rb = [0u64; 32];
     vmm::vcpu_regs(vm_id, vcpu_id, &mut rb, false);
-    rb[reg as usize] = val as u64;
+    let old = rb[reg as usize];
+    rb[reg as usize] = match size {
+        1 => (old & !0xff) | (val as u64 & 0xff),
+        2 => (old & !0xffff) | (val as u64 & 0xffff),
+        _ => val as u64,
+    };
     vmm::vcpu_regs(vm_id, vcpu_id, &mut rb, true);
 }

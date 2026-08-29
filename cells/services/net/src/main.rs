@@ -56,12 +56,17 @@ mod tls_handler;
 mod tls_wire;
 use crate::tls::socket::TlsSocketEntry;
 use alloc::collections::BTreeMap;
+#[cfg(not(feature = "hypervisor-bridge"))]
 use api::syscall::events::NET_RX;
 use core::sync::atomic::{AtomicU16, Ordering};
 use dhcp::{add_dhcp_socket, poll_dhcp, DhcpState};
 use interface::VirtioNetDevice;
 use ostd::io::println;
-use ostd::syscall::{sys_get_time, sys_try_recv_attested, sys_wait_completion, SyscallResult};
+#[cfg(feature = "hypervisor-bridge")]
+use ostd::syscall::sys_recv_attested;
+use ostd::syscall::{sys_get_time, SyscallResult};
+#[cfg(not(feature = "hypervisor-bridge"))]
+use ostd::syscall::{sys_try_recv_attested, sys_wait_completion};
 use poll_driver::POLL_INTERVAL_MS;
 use smoltcp::{
     iface::{Config, Interface, SocketSet, SocketStorage},
@@ -111,76 +116,97 @@ pub fn main() {
     let mut table = SocketTable::new();
     let mut tls_table: BTreeMap<u64, TlsSocketEntry> = BTreeMap::new();
 
+    #[cfg(not(feature = "hypervisor-bridge"))]
     let dhcp_handle = add_dhcp_socket(&mut sockets);
+    #[cfg(not(feature = "hypervisor-bridge"))]
     let mut dhcp_state = DhcpState::Pending;
 
     let mut buf = [0u8; IPC_BUF_SIZE];
+    #[cfg(not(feature = "hypervisor-bridge"))]
     let mut last_poll_ticks = sys_get_time();
     let mut local_ip = [0u8; 4];
+    #[cfg(not(feature = "hypervisor-bridge"))]
     let mut net_rx_producer_proved = false;
+    #[cfg(not(feature = "hypervisor-bridge"))]
     let mut pending_net_rx_proof = false;
 
+    #[cfg(not(feature = "hypervisor-bridge"))]
     println("[net] Starting DHCP...");
 
     loop {
         ostd::syscall::sys_heartbeat(500);
-        let drained = device.pump_rx_split();
-        if pending_net_rx_proof {
-            if !net_rx_producer_proved && drained > 0 {
-                println("[net-rx-producer] irq->completion PASS");
-                net_rx_producer_proved = true;
-            }
-            pending_net_rx_proof = false;
-        }
-
-        if dhcp_state == DhcpState::Pending {
-            dhcp_state = poll_dhcp(
-                dhcp_handle,
-                &mut iface,
-                &mut sockets,
-                &mut device,
-                now_instant(),
-            );
-            if dhcp_state == DhcpState::Acquired {
-                if let Some(smoltcp::wire::IpCidr::Ipv4(cidr)) = iface
-                    .ip_addrs()
-                    .iter()
-                    .find(|a| matches!(a, smoltcp::wire::IpCidr::Ipv4(_)))
-                {
-                    local_ip.copy_from_slice(cidr.address().as_bytes());
-                    let mut s = alloc::string::String::from("[net] IP address: ");
-                    for (i, oct) in local_ip.iter().enumerate() {
-                        if i > 0 {
-                            s.push('.');
-                        }
-                        let mut n = *oct as u32;
-                        let mut digits = [0u8; 3];
-                        let mut di = 3;
-                        loop {
-                            di -= 1;
-                            digits[di] = b'0' + (n % 10) as u8;
-                            n /= 10;
-                            if n == 0 {
-                                break;
-                            }
-                        }
-                        for d in &digits[di..] {
-                            s.push(*d as char);
-                        }
+        #[cfg(not(feature = "hypervisor-bridge"))]
+        {
+            let drained = device.pump_rx_split();
+            #[cfg(not(feature = "hypervisor-bridge"))]
+            {
+                if pending_net_rx_proof {
+                    if !net_rx_producer_proved && drained > 0 {
+                        println("[net-rx-producer] irq->completion PASS");
+                        net_rx_producer_proved = true;
                     }
-                    println(&s);
+                    pending_net_rx_proof = false;
                 }
             }
-        }
 
-        let now = sys_get_time();
-        if now.wrapping_sub(last_poll_ticks) >= POLL_TICKS {
-            iface.poll(now_instant(), &mut device, &mut sockets);
-            last_poll_ticks = now;
+            if dhcp_state == DhcpState::Pending {
+                dhcp_state = poll_dhcp(
+                    dhcp_handle,
+                    &mut iface,
+                    &mut sockets,
+                    &mut device,
+                    now_instant(),
+                );
+                if dhcp_state == DhcpState::Acquired {
+                    if let Some(smoltcp::wire::IpCidr::Ipv4(cidr)) = iface
+                        .ip_addrs()
+                        .iter()
+                        .find(|a| matches!(a, smoltcp::wire::IpCidr::Ipv4(_)))
+                    {
+                        local_ip.copy_from_slice(cidr.address().as_bytes());
+                        let mut s = alloc::string::String::from("[net] IP address: ");
+                        for (i, oct) in local_ip.iter().enumerate() {
+                            if i > 0 {
+                                s.push('.');
+                            }
+                            let mut n = *oct as u32;
+                            let mut digits = [0u8; 3];
+                            let mut di = 3;
+                            loop {
+                                di -= 1;
+                                digits[di] = b'0' + (n % 10) as u8;
+                                n /= 10;
+                                if n == 0 {
+                                    break;
+                                }
+                            }
+                            for d in &digits[di..] {
+                                s.push(*d as char);
+                            }
+                        }
+                        println(&s);
+                    }
+                }
+            }
+
+            let now = sys_get_time();
+            if now.wrapping_sub(last_poll_ticks) >= POLL_TICKS {
+                iface.poll(now_instant(), &mut device, &mut sockets);
+                last_poll_ticks = now;
+            }
         }
 
         buf.fill(0);
-        match sys_try_recv_attested(0, &mut buf) {
+        #[cfg(feature = "hypervisor-bridge")]
+        let receive_result = {
+            // A blocking receiver is healthy while idle; do not let the
+            // progress watchdog reinterpret that state as a deadlock.
+            ostd::syscall::sys_heartbeat(0);
+            sys_recv_attested(0, &mut buf)
+        };
+        #[cfg(not(feature = "hypervisor-bridge"))]
+        let receive_result = sys_try_recv_attested(0, &mut buf);
+        match receive_result {
             SyscallResult::Ok(sender) if sender > 0 => {
                 let Some(identity) = api::caller_identity::CallerIdentity::from_recv_buf(&buf)
                 else {
@@ -206,20 +232,16 @@ pub fn main() {
                 );
             }
             _ => {
-                // Block until NIC RX fires or the smoltcp maintenance deadline.
-                // The deadline is not optional: smoltcp has to be polled for
-                // retransmits and DHCP renewal whether or not a frame arrives.
-                // UNIT TRAP: the wait takes SCHEDULER ticks (10 ms each),
-                // while POLL_TICKS is mtime ticks (10 MHz) for sys_get_time
-                // comparisons. Passing POLL_TICKS here meant a ~2.8 h park —
-                // the 5 s heartbeat then killed net every cycle (restart loop).
-                // The completion itself carries nothing this loop needs: whether
-                // the wake came from a frame or from the deadline, the next pass
-                // does the same work.
-                let timeout_ticks = POLL_INTERVAL_MS / 10; // 100 ms → 10 ticks
-                if let Some(completion) = sys_wait_completion(NET_RX, timeout_ticks) {
-                    pending_net_rx_proof =
-                        completion.source == NET_RX && completion.result == NET_RX as i64;
+                #[cfg(not(feature = "hypervisor-bridge"))]
+                {
+                    // Block until NIC RX fires or the smoltcp maintenance deadline.
+                    // The deadline is not optional: smoltcp has to be polled for
+                    // retransmits and DHCP renewal whether or not a frame arrives.
+                    let timeout_ticks = POLL_INTERVAL_MS / 10; // 100 ms → 10 ticks
+                    if let Some(completion) = sys_wait_completion(NET_RX, timeout_ticks) {
+                        pending_net_rx_proof =
+                            completion.source == NET_RX && completion.result == NET_RX as i64;
+                    }
                 }
             }
         }

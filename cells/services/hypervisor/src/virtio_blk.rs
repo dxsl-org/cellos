@@ -12,6 +12,7 @@ extern crate alloc;
 use crate::virtio_mmio::{QueueCfg, VirtioDevice};
 use crate::virtqueue::{process_notify, DescBuf};
 use alloc::vec;
+use ostd::io::println;
 
 // The fallback must stay below the fixed 8 MiB cell heap. Alpine boots from
 // initramfs and only needs this scratch volume for bounded ad-hoc writes.
@@ -104,6 +105,7 @@ impl VirtioDevice for BlkDisk {
 
 fn handle_blk_request(backend: &mut Backend, bufs: &[DescBuf], vm_id: usize) -> u32 {
     if bufs.len() < 2 {
+        println("[hv-blk] descriptor chain has fewer than two buffers");
         return 0;
     }
     let status_idx = bufs.len() - 1;
@@ -113,11 +115,13 @@ fn handle_blk_request(backend: &mut Backend, bufs: &[DescBuf], vm_id: usize) -> 
         || bufs[status_idx].len != 1
         || !bufs[status_idx].writable
     {
+        println("[hv-blk] malformed descriptor chain");
         return 0; // Malformed chain structure
     }
 
     let mut hdr = [0u8; 16];
     if crate::vmm::read_guest_memory(vm_id, bufs[0].gpa, &mut hdr) != 16 {
+        println("[hv-blk] request header read failed");
         write_status(vm_id, bufs[status_idx].gpa, 1);
         return 1;
     }
@@ -132,6 +136,15 @@ fn handle_blk_request(backend: &mut Backend, bufs: &[DescBuf], vm_id: usize) -> 
         BLK_T_IN | BLK_T_OUT | BLK_T_FLUSH => 1,
         _ => 2u8, // VIRTIO_BLK_S_UNSUPP
     };
+    if status != 0 {
+        println(&alloc::format!(
+            "[hv-blk] request failed type={} sector={} buffers={} status={}",
+            req_type,
+            sector,
+            bufs.len(),
+            status
+        ));
+    }
     write_status(vm_id, bufs[status_idx].gpa, status);
     1 // bytes placed in used ring (status byte)
 }
@@ -242,11 +255,13 @@ fn blk_write(backend: &mut Backend, sector: u64, bufs: &[DescBuf], vm_id: usize)
     let mut total_len = 0u64;
     for buf in bufs {
         if buf.writable {
+            println("[hv-blk] write data descriptor is device-writable");
             return 1;
         }
         total_len = total_len.saturating_add(buf.len as u64);
     }
     if off.saturating_add(total_len) > capacity {
+        println("[hv-blk] write exceeds backend capacity");
         return 1; // Out of bounds
     }
 
@@ -272,19 +287,26 @@ fn blk_write(backend: &mut Backend, sector: u64, bufs: &[DescBuf], vm_id: usize)
                     let got =
                         crate::vmm::read_guest_memory(vm_id, buf.gpa + chunk_off as u64, &mut tmp);
                     if got != chunk {
+                        println("[hv-blk] guest-memory read failed");
                         return 1;
                     }
 
                     let grant_id = ostd::syscall::sys_grant_alloc(chunk).unwrap_or(0);
                     if grant_id == 0 {
+                        println("[hv-blk] grant allocation failed");
                         return 1;
                     }
                     let Some(ptr) = ostd::syscall::sys_grant_slice(grant_id) else {
+                        println("[hv-blk] grant mapping failed");
                         ostd::syscall::sys_grant_free(grant_id);
                         return 1;
                     };
                     unsafe { core::ptr::copy_nonoverlapping(tmp.as_ptr(), ptr, chunk) };
-                    ostd::syscall::sys_grant_share(grant_id, *vfs_tid, 1 /* WriteOnly */);
+                    if !ostd::syscall::sys_grant_share(grant_id, *vfs_tid, 1 /* WriteOnly */) {
+                        println("[hv-blk] grant share failed");
+                        ostd::syscall::sys_grant_free(grant_id);
+                        return 1;
+                    }
 
                     let req = api::ipc::VfsRequest::WriteHandleGrant {
                         file: *file,
@@ -294,12 +316,24 @@ fn blk_write(backend: &mut Backend, sector: u64, bufs: &[DescBuf], vm_id: usize)
                     };
                     let mut resp_buf = [0u8; 512];
                     let mut send_buf = [0u8; 512];
-                    let ok = if let Ok(api::ipc::VfsResponse::GrantDone { bytes }) =
-                        ostd::ipc::service_call_typed(*vfs_tid, &req, &mut send_buf, &mut resp_buf)
-                    {
-                        bytes == chunk
-                    } else {
-                        false
+                    let ok = match ostd::ipc::service_call_typed(
+                        *vfs_tid,
+                        &req,
+                        &mut send_buf,
+                        &mut resp_buf,
+                    ) {
+                        Ok(api::ipc::VfsResponse::GrantDone { bytes }) => bytes == chunk,
+                        Ok(response) => {
+                            println(&alloc::format!(
+                                "[hv-blk] VFS write response: {:?}",
+                                response
+                            ));
+                            false
+                        }
+                        Err(error) => {
+                            println(&alloc::format!("[hv-blk] VFS write failed: {:?}", error));
+                            false
+                        }
                     };
 
                     ostd::syscall::sys_grant_free(grant_id);

@@ -9,8 +9,11 @@
 extern crate alloc;
 
 use alloc::{boxed::Box, collections::VecDeque};
-use core::sync::atomic::{AtomicUsize, Ordering};
-use ostd::syscall::{sys_lookup_service, sys_net_tx, sys_recv_timeout, sys_send, SyscallResult};
+use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use ostd::{
+    io::println,
+    syscall::{sys_lookup_service, sys_net_tx, sys_recv_timeout, sys_send, SyscallResult},
+};
 use smoltcp::{
     phy::{Device, DeviceCapabilities, Medium, RxToken, TxToken},
     time::Instant,
@@ -39,6 +42,8 @@ const ABSENT: usize = usize::MAX;
 
 /// Cached e1000 Driver Cell TID. NOT_PROBED on startup.
 static E1000_TID: AtomicUsize = AtomicUsize::new(NOT_PROBED);
+static FIRST_BRIDGE_TX: AtomicBool = AtomicBool::new(false);
+static FIRST_BRIDGE_RX: AtomicBool = AtomicBool::new(false);
 
 /// Returns the e1000 Driver Cell TID if one has registered, else `None`.
 pub fn e1000_tid() -> Option<usize> {
@@ -99,6 +104,10 @@ impl VirtioNetDevice {
         self.guest_rx_queue.pop_front()
     }
 
+    /// Transmit one raw Ethernet frame through the active NIC provider.
+    pub fn send_l2(&self, frame: &[u8]) -> bool {
+        send_l2_frame(frame)
+    }
     /// Drain pending RX frames from the active NIC into the local queue.
     ///
     /// Routes to the e1000 Driver Cell when registered; falls back to the
@@ -136,6 +145,9 @@ impl VirtioNetDevice {
             };
             if n == 0 {
                 break;
+            }
+            if !FIRST_BRIDGE_RX.swap(true, Ordering::Relaxed) {
+                println(&alloc::format!("[net-bridge] first e1000 RX len={n}"));
             }
             let frame = &scratch[..n];
             match &self.guest_mac {
@@ -207,6 +219,34 @@ fn nic_rx_from_cell(tid: usize, buf: &mut [u8]) -> usize {
     len
 }
 
+fn send_l2_frame(frame: &[u8]) -> bool {
+    if frame.is_empty() || frame.len() > MAX_FRAME {
+        return false;
+    }
+    if let Some(tid) = e1000_tid() {
+        let frame_len = frame.len() as u16;
+        let mut request = alloc::vec![OP_TX, (frame_len & 0xFF) as u8, (frame_len >> 8) as u8,];
+        request.extend_from_slice(frame);
+        if !matches!(sys_send(tid, &request), SyscallResult::Ok(_)) {
+            return false;
+        }
+        let mut status = [1u8; 1];
+        let accepted = matches!(
+            sys_recv_timeout(tid, &mut status, DRV_REPLY_TIMEOUT_TICKS),
+            SyscallResult::Ok(sender) if sender == tid && status[0] == 0
+        );
+        if !FIRST_BRIDGE_TX.swap(true, Ordering::Relaxed) {
+            println(&alloc::format!(
+                "[net-bridge] first e1000 TX len={} accepted={accepted}",
+                frame.len()
+            ));
+        }
+        accepted
+    } else {
+        sys_net_tx(frame)
+    }
+}
+
 pub struct NetRxToken(Box<[u8]>);
 pub struct NetTxToken;
 
@@ -225,26 +265,9 @@ impl TxToken for NetTxToken {
     where
         F: FnOnce(&mut [u8]) -> R,
     {
-        let mut buf = alloc::vec![0u8; len];
-        let result = f(&mut buf);
-        // Route to e1000 Driver Cell when registered; otherwise kernel VirtIO.
-        if let Some(tid) = e1000_tid() {
-            // Tx request: [0x00, len_lo, len_hi] ++ frame_bytes — explicit length
-            // because raw IPC hands the driver its whole recv buffer (no count).
-            let flen = buf.len() as u16;
-            let mut req = alloc::vec![OP_TX, (flen & 0xFF) as u8, (flen >> 8) as u8];
-            req.extend_from_slice(&buf);
-            match sys_send(tid, &req) {
-                SyscallResult::Ok(_) => {
-                    // Bounded wait for the 1-byte status reply — see nic_rx_from_cell.
-                    let mut status = [0u8; 1];
-                    let _ = sys_recv_timeout(tid, &mut status, DRV_REPLY_TIMEOUT_TICKS);
-                }
-                SyscallResult::Err(_) => {}
-            }
-        } else {
-            sys_net_tx(&buf);
-        }
+        let mut buffer = alloc::vec![0u8; len];
+        let result = f(&mut buffer);
+        let _ = send_l2_frame(&buffer);
         result
     }
 }

@@ -379,6 +379,6 @@ impl NvmeController {
 
     /// Send an NVMe flush command for the namespace.
     pub fn flush(&mut self) -> ViResult<()> {
-        self.submit_io(NVM_OPC_FLUSH, 0, 0, 0, 0)
+        self.submit_io(NVM_OPC_FLUSH, 1, 0, 0, 0)
     }
 }

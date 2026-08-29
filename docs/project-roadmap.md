@@ -3,7 +3,7 @@
 **Project**: Cellos (Jarvis Hybrid OS)
 **Current version**: 0.2.1-dev (Mycelium Era)
 **Current phase**: Phase 1 - Core Stability; active product stage G1 Robot & Embedded
-**Last updated**: 2026-08-28
+**Last updated**: 2026-08-29
 This file is the roadmap entrypoint. The previous all-in-one roadmap is
 preserved as a read-only content snapshot at
 [project-roadmap-legacy.md](project-roadmap-legacy.md). Use it only when a
@@ -89,7 +89,7 @@ sensor, or local-runtime development.
 | Local Cell-to-Cell runtime | Current executable work | `scope-gated` | `qemu` | Hardware-independent roadmap Phase 04 | Required [CI job](../.github/workflows/ci.yml) `c2c-broker-oracle-single-guest-local-runtime` gates the runner; actual runner verification passed 1/1, 1,000 measured calibration successes, role gating, a 10,000/10,000 soak with zero silent drops, and overflow; separately approve and exercise two-node direct-LAN/restart scope without promoting this single-guest result |
 | Kernel signature, pointer, and entropy remediation | Current-scope technical debt | `governance-gated` | `host` | Separately approved security children | Named security/PAL approvals and implementation checkpoints |
 | Authenticated software evidence | Current executable work | `scope-gated` | `host` | Hardware-independent roadmap Phase 07 | Run `.github/workflows/ci.yml` on `main`, then verify its immutable attested bundle; only software/QEMU classes are eligible |
-| x86 Tier 3 VirtIO parity | Future capability | `scope-gated` | `qemu` | Hardware-independent roadmap Phase 10 | Supported Phase 06 scenarios, shared persistence backend, then one pinned transport contract |
+| x86 Tier 3 VirtIO parity | Current executable work | `scope-gated` | `qemu` | Hardware-independent roadmap Phase 10; bounded two-boot block/network QEMU evidence is partial | Add malformed transport/queue evidence and Phase 06 hostile parity; physical x86 remains independently gated |
 | Remote/public Cell-to-Cell operation | Future capability | `contract-gated` | `host` / `service` | Cell-to-Cell Anywhere remote/public children | Separately approve and implement the remote transport, identity, lease, and export contracts; local runtime work need not wait |
 | Protected relay identity | External-gated prerequisite | `external-gated` | `host` | KMS/Silo protected relay plan and Cell-to-Cell Anywhere Phase 05 | Reopen service-net Build and the Phase 05 relay path only after real protected persistence, authenticated time, a distinct reviewed pending-key binding under the frozen KMS ABI, and `DEV_REFERENCE` authority Phase 8 GO; this lane-local gate does not block unrelated development |
 | G3 accelerator | Future capability | `external-gated` | `contract` | Accelerator evidence envelope | RK3588, accepted RKNN package/license, then X390 evidence |
@@ -141,10 +141,14 @@ Cellos is being shaped around product stages, not only phase numbers:
   (`switch`, `sas-fastpath`) and two-hart (`migration`) QEMU evidence. Production
   admission remains disabled by default, SAS remains the default view, and no
   Manifest v3 bytes, installer UI, or qualification claims are exposed.
-- Tier 3 x86 QEMU qualification reaches the pinned Alpine 3.21.7
-  Linux 6.12.81 `/bin/sh` BusyBox prompt under QEMU-TCG 10.2.0 at both 1 GiB
-  and 2 GiB. Ubuntu 24.04's QEMU-TCG 8.2.2 remains an explicit compatibility
-  risk; physical x86 qualification remains hardware-gated.
+- Tier 3 x86 has aggregate QEMU evidence: the normal pinned Alpine 3.21.7
+  Linux 6.12.81 path reaches `/bin/sh`, and the dedicated `/virtio-e2e` path
+  passes two fresh outer boots under QEMU-TCG 10.2.0 with Intel VT-d ACTIVE,
+  persistent 16 MiB block write/FLUSH/readback, IRQ5/IRQ6, and shared network
+  TX/RX under a distinct nested MAC. This remains partial QEMU-only evidence:
+  malformed transport/queue inputs and full Phase 06 hostile parity are open,
+  QEMU-TCG 8.2.2 is a known compatibility risk, and physical x86 remains
+  hardware-gated.
 - RV64 QEMU desktop now has a bounded compositor-owned window-policy slice.
   Interactive surfaces carry bounded titles and receive typed lifecycle events
   without losing normal forwarded input. The compositor paints clipped

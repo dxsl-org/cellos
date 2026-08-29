@@ -6,7 +6,6 @@ const DISPLAY_DRIVER_PATH: &str = "/bin/bcm-display";
 #[cfg(not(feature = "board-rpi3"))]
 const DISPLAY_DRIVER_PATH: &str = "/bin/virtio-gpu";
 
-#[cfg(not(feature = "hypervisor-min"))]
 pub(crate) fn start_block_drivers() {
     let _ = sys_spawn_from_path("/bin/block");
     let _ = sys_spawn_from_path("/bin/nvme");
@@ -17,9 +16,6 @@ pub(crate) fn start_block_drivers() {
         ostd::task::yield_now();
     }
 }
-
-#[cfg(feature = "hypervisor-min")]
-pub(crate) fn start_block_drivers() {}
 
 pub(crate) fn prepare_service(path: &str) {
     if path == "/bin/net" {

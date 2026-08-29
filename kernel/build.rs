@@ -98,17 +98,29 @@ fn main() {
 
         fs::copy(&src, &dst).expect("copy embedded cell");
 
-        // Strip debug sections to reduce kernel image size.
-        // Try llvm-strip first (matches LLVM-based cross toolchain), then rust-strip,
-        // then host strip. If none succeed, fall back silently — the kernel will still build.
-        let stripped = try_strip("llvm-strip", &dst)
+        // Only `init` is an ELF. `kernel_fs.img` is a raw VIFS1 disk image;
+        // passing it to an ELF strip tool always fails and cannot reduce it.
+        if *cell != "init" {
+            continue;
+        }
+
+        // Prefer the installed cross-binutils tool for the target, then fall
+        // back to LLVM/rust/host tools. Failure is non-fatal because stripping
+        // changes image size only, not runtime semantics.
+        let target_strip = match target_arch.as_str() {
+            "riscv64" | "riscv32" => Some("riscv64-unknown-elf-strip"),
+            "aarch64" => Some("aarch64-linux-gnu-strip"),
+            "arm" => Some("arm-none-eabi-strip"),
+            _ => None,
+        };
+        let stripped = target_strip.is_some_and(|tool| try_strip(tool, &dst))
+            || try_strip("llvm-strip", &dst)
             || try_strip("rust-strip", &dst)
             || try_strip("strip", &dst);
 
         if !stripped {
             println!(
-                "cargo:warning=Could not strip {} (tool unavailable or failed); retained unstripped input",
-                cell
+                "cargo:warning=Could not strip init ELF for target {target_arch}; retained unstripped input"
             );
         }
     }

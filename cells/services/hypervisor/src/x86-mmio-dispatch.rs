@@ -11,6 +11,7 @@ use ostd::io::println;
 
 pub fn write(
     ipa: u64,
+    size: u8,
     value: u32,
     vm_id: usize,
     vcpu_id: usize,
@@ -27,6 +28,17 @@ pub fn write(
         return false;
     }
     let (slot, offset) = virtio_mmio::slot_and_offset(ipa);
+    if size != 4 {
+        if size == 1 && offset >= 0x100 {
+            return true; // Current device-specific config fields are read-only.
+        }
+        println(&alloc::format!(
+            "[hv-x86] unsupported MMIO write gpa=0x{:x} size={}",
+            ipa,
+            size
+        ));
+        return false;
+    }
     match slot {
         0 => block_mmio.mmio_write(offset, value, block, vm_id, vcpu_id),
         1 => net_mmio.mmio_write(offset, value, net, vm_id, vcpu_id),
@@ -37,6 +49,7 @@ pub fn write(
 
 pub fn read(
     ipa: u64,
+    size: u8,
     block: &BlkDisk,
     block_mmio: &VirtioMmio,
     net: &NetDev,
@@ -50,19 +63,36 @@ pub fn read(
         return None;
     }
     let (slot, offset) = virtio_mmio::slot_and_offset(ipa);
-    match slot {
+    let aligned = match size {
+        4 => offset,
+        1 if offset >= 0x100 => offset & !3,
+        _ => {
+            println(&alloc::format!(
+                "[hv-x86] unsupported MMIO read gpa=0x{:x} size={}",
+                ipa,
+                size
+            ));
+            return None;
+        }
+    };
+    let raw = match slot {
         0 => {
             if offset == 0 {
                 println("[hv-x86] virtio-mmio block probe");
             }
-            Some(block_mmio.mmio_read(offset, block) as u32)
+            block_mmio.mmio_read(aligned, block) as u32
         }
         1 => {
             if offset == 0 {
                 println("[hv-x86] virtio-mmio net probe");
             }
-            Some(net_mmio.mmio_read(offset, net) as u32)
+            net_mmio.mmio_read(aligned, net) as u32
         }
-        _ => Some(0),
-    }
+        _ => 0,
+    };
+    Some(if size == 1 {
+        (raw >> ((offset - aligned) * 8)) & 0xff
+    } else {
+        raw
+    })
 }
