@@ -1,7 +1,7 @@
 ---
 phase: 7
 title: "Authenticate Software Evidence Pipeline"
-status: in-progress
+status: complete
 priority: P1
 effort: "5d"
 dependencies: [1]
@@ -64,16 +64,16 @@ Authenticated runner identity can support only approved software evidence classe
 
 ## Todo List
 
-- [ ] Obtain evidence-class semantics approval.
-- [ ] Select and threat-model one authenticated runner backend.
-- [ ] Validate one canonical catalog with adversarial bundle tests.
+- [x] Obtain evidence-class semantics approval.
+- [x] Select and threat-model one authenticated runner backend.
+- [x] Validate one canonical catalog with adversarial bundle tests.
 
 ## Success Criteria
 
-- [ ] Validator rejects every unauthenticated or altered bundle before ingestion.
-- [ ] A run binds code, tools, image, environment, command, and result.
-- [ ] Local execution remains verification-only.
-- [ ] CI identity implies no rollback-floor or physical evidence.
+- [x] Validator rejects every unauthenticated or altered bundle before ingestion.
+- [x] A run binds code, tools, image, environment, command, and result.
+- [x] Local execution remains verification-only.
+- [x] CI identity implies no rollback-floor or physical evidence.
 
 ## Security Considerations
 
@@ -85,13 +85,13 @@ Do not choose Sigstore, cloud KMS, or self-hosted keys by assumption; backend tr
 
 ## Next Steps
 
-Implement consumed-sequence replay protection, validate sequence reuse and
-regression rejection against the verified run, then let Phase 08 project only
-the approved software/QEMU class. Physical and production classes stay blocked.
+Phase 08 may project only a freshly verified software/QEMU bundle after an
+operator provisions durable external replay state and consumes its sequence.
+Physical and production classes stay blocked.
 
 ## Deviation Log
 
 - Inventory: CI already had a GitHub-native `attest-catalog` job with OIDC and `attestations: write`, but no signed bundle schema, retention policy, or replay rule.
 - Decision: the user approved software/QEMU-only evidence from GitHub-hosted `.github/workflows/ci.yml`, bound to revision and run-id/attempt with 90-day retention. Physical, secure-root, cloud, approval, and production evidence remain excluded.
-- Implemented `cellos.authenticated-evidence/v1`: CI validates the catalog, stages hashed inputs/raw log/metadata, uploads an immutable 90-day bundle, and attests its manifest. The fail-closed entrypoint verifies the exact GitHub-hosted signer before content validation. A consumed-sequence replay store remains required before evidence can be projected.
-- Verified execution: trusted `main` run `33247922906` at revision `8a2cb1cc1109011ba74f2633f2f4f876b0af8cdf` produced an immutable attested bundle. `validate-evidence-bundle.sh` accepted the GitHub-hosted `ci.yml` signer and all bound contents, including producer/toolchain metadata and the `disk_v3.img` digest. The bundle is verified but not admitted because consumed-sequence replay protection is still absent.
+- Implemented `cellos.authenticated-evidence/v1`: CI validates the catalog, stages hashed inputs/raw log/metadata, uploads an immutable 90-day bundle, and attests its manifest. The fail-closed entrypoint verifies the exact GitHub-hosted signer and attested subject digest before content validation.
+- Verified execution: trusted `main` run `33247922906` at revision `8a2cb1cc1109011ba74f2633f2f4f876b0af8cdf` produced an immutable attested bundle. The external replay store is explicitly provisioned, pinned against path substitution, atomically updated under one lock, and revalidates all members before rejecting exact replay/regression. Local consumption proved the contract but remains verification-only; Phase 08 still requires durable operator-owned state.

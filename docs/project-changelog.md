@@ -23,6 +23,19 @@
   from the release kernel booted on QEMU `q35` and reached the `Cellos >` shell
   prompt without a kernel panic or Cell fault.
 
+- Authenticated evidence admission now requires an explicitly provisioned,
+  operator-owned replay store outside the submitted bundle. Verification binds
+  the GitHub-attested subject digest through a second locked member check;
+  pinned-directory atomic state rejects exact replay, sequence regression,
+  concurrent double-consumption, unsafe ownership/modes, and state bootstrap
+  during admission. Ten adversarial subprocess cases and the real attested
+  run `33247922906` pass once and reject the replay.
+- ARM64 hypervisor persistence now queues VFS admission while retaining a
+  sender-masked reply timeout and generation poisoning. The machinery image
+  embeds the VirtIO block Cell and places `guest_disk.img` in canonical MBR P1
+  at LBA 2048. The exact 120-second local TCG machinery smoke enters the guest
+  and observes only the documented address-size fault.
+
 - Corrected the current hardware inventory to `2 × Raspberry Pi 3 Model B+`
   as reported by the owner. Exact serial/revision/condition reconciliation is
   still required; no provisional board labels are assigned. The prior captured
@@ -208,8 +221,10 @@
   GitHub-hosted `ci.yml` signer, rejected self-hosted provenance, and validated
   every bound input, raw log, producer/toolchain record, and the exact
   `disk_v3.img` digest.
-- The bundle is verified, not admitted. Consumed-sequence replay protection
-  remains required before Phase 08 may project it into a status ledger.
+- Replay protection is implemented and adversarially verified, but this prior
+  bundle remains verification-only: Phase 08 requires an operator-provisioned
+  durable external store to consume a freshly verified sequence before ledger
+  projection.
 
 ## [2026-08-27] ViUI managed compositor surface integration
 
