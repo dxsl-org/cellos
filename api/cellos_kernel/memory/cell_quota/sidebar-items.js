@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["DEFAULT_QUOTA_BYTES","MAX_CELLS"],"fn":["can_map_dma","charge","deregister","force_unlock_locks","in_use","record_dma_mapped","record_dma_unmapped","refund","register"],"static":["DMA_IN_USE","IN_USE","QUOTA_LIMITS"],"struct":["QuotaReservation"]};
+window.SIDEBAR_ITEMS = {"constant":["DEFAULT_QUOTA_BYTES","MAX_CELLS"],"fn":["charge","deregister","force_unlock_locks","in_use","record_dma_unmapped","refund","register","try_reserve_dma"],"static":["DMA_IN_USE","IN_USE","QUOTA_LIMITS"],"struct":["DmaQuotaReservation","QuotaReservation"]};
