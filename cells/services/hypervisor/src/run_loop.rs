@@ -32,8 +32,6 @@ pub fn run(
     vcpu_id: usize,
     disk_file: Option<(usize, api::vfs_file_handles::ViVfsFileHandle, u64)>,
 ) -> RunOutcome {
-    // Resolve Net Cell TID for L2 frame bridging (0 = unavailable, bridging disabled).
-    let net_tid = sys_lookup_service(service::NET).unwrap_or(0);
     let compositor_tid = sys_lookup_service(service::COMPOSITOR).unwrap_or(0);
     let (width, height) = sys_get_resolution();
 
@@ -43,7 +41,7 @@ pub fn run(
     let mut vmio = VirtioMmio::default();
     let mut blk = BlkDisk::new(disk_file, Some(17));
     let mut blk_vmio = VirtioMmio::default();
-    let mut net = NetDev::new(net_tid, Some(18));
+    let mut net = NetDev::new(sys_lookup_service(service::NET).unwrap_or(0), Some(18));
     let mut net_vmio = VirtioMmio::default();
     let mut gpu = GpuDev::new(
         compositor_tid,
@@ -148,7 +146,7 @@ pub fn run(
             ViVmExit::Wfi => {
                 timer::inject_timer_irq(vm_id, vcpu_id);
                 gpu.reconnect_compositor(sys_lookup_service(service::COMPOSITOR).unwrap_or(0));
-                if let Some(frame) = net_backend::try_receive(net_tid) {
+                if let Some(frame) = net_backend::try_receive(&mut net.backend) {
                     if net.push_rx_frame(&frame, vm_id, vcpu_id, &net_vmio) {
                         net_vmio.signal_used();
                     }
@@ -158,7 +156,7 @@ pub fn run(
             // ── Preemption budget expired (C2 yield) — poll RX before re-enter
             ViVmExit::Preempted => {
                 gpu.reconnect_compositor(sys_lookup_service(service::COMPOSITOR).unwrap_or(0));
-                if let Some(frame) = net_backend::try_receive(net_tid) {
+                if let Some(frame) = net_backend::try_receive(&mut net.backend) {
                     if net.push_rx_frame(&frame, vm_id, vcpu_id, &net_vmio) {
                         net_vmio.signal_used();
                     }

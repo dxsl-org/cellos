@@ -677,6 +677,24 @@ pub extern "Rust" fn vi_handle_virtio_irq(irq: u32) {
 
 **Note**: As of Phase 01 (2026-06-24, Kernel Boundary Law enforcement), device logic lives in Driver Cells (`cells/drivers/`), not kernel code. The kernel only handles interrupt dispatch and wakeup.
 
+### x86 VMM Backend Lifecycle
+
+The x86 VirtIO block and network models resolve supervised VFS/Net generations
+through the service registry. Backend IPC uses bounded send admission and
+receive deadlines. A receive timeout poisons that service generation until the
+registry publishes a different TID, preventing an uncorrelated late reply from
+being consumed by a later request. A dead generation therefore produces block
+IOERR or network unavailability rather than blocking the VMM. Block recovery
+reopens `/mnt/sd/guest_disk.img` and accepts the new handle only when its size
+matches the retained device capacity. Network recovery remains pending until the new
+generation acknowledges a transmitted frame with `NetResponse::Ok`.
+
+The `hostile-backend-recovery` feature packages a permanent supervisor and
+exposes a test-only MMIO control register that terminates one backend generation.
+Production builds omit this control surface. The x86 hostile runner requires
+independent disconnect markers, new-generation recovery markers, persisted
+block readback, acknowledged network TX, and the corresponding ARP RX.
+
 **Driver residency (2026-07-07, post G2 loader redesign)** — migrated to Driver Cells: **virtio_blk, virtio_net, virtio_gpu, virtio_input, virtio_sound, e1000, nvme**. The kernel drives **no block device** — `virtio_blk.rs` + `virtio_pci.rs` were deleted; `cells/drivers/virtio-blk/` owns the disk and serves `service::BLOCK_DRIVER` (bootstrap cells load from the VIFS1 RAM ramdisk, so no block device is needed before the first Cell exists; see the changelog entry + `docs/specs/15-kernel-boundary.md`). The kernel retains only:
 - **`mmc`** — descoped G2 (no SDHCI on QEMU to validate against; genuine tech debt).
 - **IOMMU init + `map_dma_for_cell`** — whitelisted: the only hardware boundary between Driver Cells and physical memory in a Single Address Space.

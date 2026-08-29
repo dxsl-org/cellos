@@ -31,6 +31,23 @@ ALPINE_CACHE=".alpine-cache-x86"
 INITRD_SOURCE="${INITRD_OVERRIDE:-$ALPINE_CACHE/initramfs-virt}"
 EMBEDDED_HV="kernel/src/embedded-hv-x86"
 
+HV_INIT_MIN_VALUE="${HV_INIT_MIN:-0}"
+HV_HOSTILE_BACKEND_RECOVERY_VALUE="${HV_HOSTILE_BACKEND_RECOVERY:-0}"
+case "$HV_INIT_MIN_VALUE" in
+    0|1) ;;
+    *)
+        echo "ERROR: HV_INIT_MIN must be 0 or 1" >&2
+        exit 1
+        ;;
+esac
+case "$HV_HOSTILE_BACKEND_RECOVERY_VALUE" in
+    0|1) ;;
+    *)
+        echo "ERROR: HV_HOSTILE_BACKEND_RECOVERY must be 0 or 1" >&2
+        exit 1
+        ;;
+esac
+
 # ── Step 1: Alpine artifacts (vmlinux ELF + initramfs) ──────────────────────
 if [[ "$SKIP_FETCH" != "--skip-fetch" ]]; then
     bash scripts/fetch-alpine-x86.sh "$ALPINE_CACHE"
@@ -41,7 +58,19 @@ if [[ ! -f "$ALPINE_CACHE/vmlinux" || ! -f "$ALPINE_CACHE/initramfs-virt" ]]; th
 fi
 
 # ── Step 2: Build x86 runtime cells as PIE ───────────────────────────────────
-INIT_FEATURES="${HV_INIT_MIN:+--features app-init/hypervisor-min,service-net/hypervisor-bridge}"
+
+INIT_FEATURES="service-net/tls-roots-embedded,service-net/tls-ca-private"
+HOSTILE_PACKAGE_ARGS=()
+if [[ "$HV_HOSTILE_BACKEND_RECOVERY_VALUE" == "1" ]]; then
+    INIT_FEATURES+=",app-init/hypervisor-min,app-init/hostile-backend-recovery"
+    INIT_FEATURES+=",service-net/hypervisor-bridge,supervisor/hostile-backend-recovery"
+    INIT_FEATURES+=",service-hypervisor/hostile-backend-recovery"
+    HOSTILE_PACKAGE_ARGS=(-p supervisor)
+elif [[ "$HV_INIT_MIN_VALUE" == "1" ]]; then
+    INIT_FEATURES+=",app-init/hypervisor-min,service-net/hypervisor-bridge"
+fi
+INIT_FEATURE_ARGS=(--features "$INIT_FEATURES")
+
 RUSTFLAGS="-C relocation-model=pic" cargo build --release \
     --target "$TARGET" \
     -Z build-std=core,alloc \
@@ -51,16 +80,18 @@ RUSTFLAGS="-C relocation-model=pic" cargo build --release \
 RUSTFLAGS="-C relocation-model=pic" cargo build --release \
     --target "$TARGET" \
     -Z build-std=core,alloc \
-    $INIT_FEATURES \
+    "${INIT_FEATURE_ARGS[@]}" \
     -p app-init -p app-shell -p service-config \
     -p service-platform -p driver-nvme -p driver-e1000 \
-    -p service-net -p service-hypervisor
+    -p service-net -p service-hypervisor \
+    "${HOSTILE_PACKAGE_ARGS[@]}"
 
 # ── Step 3: Assemble kernel_fs.img ──────────────────────────────────────────
 mkdir -p "$EMBEDDED_HV"
 # /bin/shell remains available to the ordinary profile. The hypervisor-min
 # profile does not start it; it supervises VFS then Net before starting the
-# hypervisor, leaving the nested guest as the only interactive console.
+# hypervisor. Hostile backend recovery additionally supervises /bin/supervisor
+# after Net, leaving the nested guest as the only interactive console.
 MKFAT_ARGS=()
 add_required_cell() {
     local artifact="$1"
@@ -83,6 +114,9 @@ add_required_cell driver-nvme /bin/nvme
 add_required_cell driver-e1000 /bin/e1000
 add_required_cell service-net /bin/net
 add_required_cell hypervisor /bin/hypervisor
+if [[ "$HV_HOSTILE_BACKEND_RECOVERY_VALUE" == "1" ]]; then
+    add_required_cell supervisor /bin/supervisor
+fi
 
 echo "  /vmlinux   <- $ALPINE_CACHE/vmlinux ($(du -sh "$ALPINE_CACHE/vmlinux" | cut -f1))"
 MKFAT_ARGS+=("$ALPINE_CACHE/vmlinux" "/vmlinux")
@@ -134,6 +168,12 @@ for required in init platform nvme e1000 net vfs hypervisor; do
         exit 1
     fi
 done
+if [[ "$HV_HOSTILE_BACKEND_RECOVERY_VALUE" == "1" ]] \
+    && ! grep -Fq -- "LFN 'supervisor'" "$POLICY_TMP/fat-layout.txt"; then
+    echo "FAIL: kernel_fs.img does not contain /bin/supervisor" >&2
+    cat "$POLICY_TMP/fat-layout.txt" >&2
+    exit 1
+fi
 assert_policy_in_image "$POLICY_TMP/fat-layout.txt" || exit 1
 
 cp "$BIN_DIR/app-init" "$EMBEDDED_HV/init"

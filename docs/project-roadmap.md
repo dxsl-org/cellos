@@ -145,12 +145,13 @@ Cellos is being shaped around product stages, not only phase numbers:
   Linux 6.12.81 path reaches `/bin/sh`, and the dedicated `/virtio-e2e` path
   passes two fresh outer boots under QEMU-TCG 10.2.0 with Intel VT-d ACTIVE,
   persistent 16 MiB block write/FLUSH/readback, IRQ5/IRQ6, and shared network
-  TX/RX under a distinct nested MAC. The hostile path also passes 22 bounded,
-  origin-separated transport, queue, descriptor, reset, backend-opcode, and
-  network-recovery scenarios with post-stimulus liveness and host-read
-  persistence. This remains QEMU-only evidence: fault-injectable block/network
-  disconnect recovery and ARM64 hostile execution are blocked, QEMU-TCG 8.2.2
-  remains incompatible, and physical x86 remains hardware-gated.
+  TX/RX under a distinct nested MAC. The hostile path passes 26 bounded,
+  origin-separated scenarios, including supervisor-driven VFS/Net generation
+  termination, bounded unavailable outcomes, persistent block reopen/readback,
+  acknowledged network TX, and matching ARP RX after restart. Post-stimulus
+  liveness and host-read persistence remain required. This is QEMU-only
+  evidence: ARM64 hostile execution is blocked, QEMU-TCG 8.2.2 remains
+  incompatible, and physical x86 remains hardware-gated.
 - RV64 QEMU desktop now has a bounded compositor-owned window-policy slice.
   Interactive surfaces carry bounded titles and receive typed lifecycle events
   without losing normal forwarded input. The compositor paints clipped

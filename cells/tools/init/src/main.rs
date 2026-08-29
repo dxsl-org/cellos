@@ -2,6 +2,9 @@
 #![no_main]
 #![forbid(unsafe_code)]
 
+#[cfg(all(feature = "hostile-backend-recovery", not(feature = "hypervisor-min")))]
+compile_error!("hostile-backend-recovery requires hypervisor-min");
+
 extern crate ostd;
 
 api::declare_manifest!(block_io = false, network = false, spawn = true);

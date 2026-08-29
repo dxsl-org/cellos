@@ -50,7 +50,7 @@ impl Service {
 }
 
 #[cfg(feature = "hypervisor-min")]
-pub(crate) const SERVICE_COUNT: usize = 2;
+pub(crate) const SERVICE_COUNT: usize = 2 + cfg!(feature = "hostile-backend-recovery") as usize;
 #[cfg(not(feature = "hypervisor-min"))]
 pub(crate) const SERVICE_COUNT: usize = 8
     + cfg!(feature = "development-silo-provider") as usize
@@ -67,6 +67,12 @@ pub(crate) fn configured() -> [Service; SERVICE_COUNT] {
         Service::new(
             "/bin/net",
             Registration::Init(service::NET),
+            RestartPolicy::Permanent,
+        ),
+        #[cfg(feature = "hostile-backend-recovery")]
+        Service::new(
+            "/bin/supervisor",
+            Registration::Init(service::SUPERVISOR),
             RestartPolicy::Permanent,
         ),
     ];

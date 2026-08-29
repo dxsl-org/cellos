@@ -185,12 +185,20 @@ pub fn run() {
     rb[3] = start_info_gpa; // RBX (x86 gpr index 3)
     vmm::vcpu_regs(vm_id, vcpu_id, &mut rb, true);
 
-    let persistent_disk = crate::persistent_disk::open();
-    if persistent_disk.is_some() {
-        println("[hv-x86] persistent disk: /mnt/sd/guest_disk.img");
-    } else {
-        println("[hv-x86] volatile disk fallback");
-    }
+    let persistent_disk = match crate::persistent_disk::open() {
+        Ok(Some(disk)) => {
+            println("[hv-x86] persistent disk: /mnt/sd/guest_disk.img");
+            Some(disk)
+        }
+        Ok(None) => {
+            println("[hv-x86] volatile disk fallback");
+            None
+        }
+        Err(()) => {
+            println("[hv-x86] persistent disk unavailable");
+            return;
+        }
+    };
     println("[hv-x86] vCPU ready — entering run loop");
     run_loop_x86::run(vm_id, vcpu_id, persistent_disk);
     println("[hv-x86] guest exited");

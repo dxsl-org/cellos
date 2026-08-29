@@ -64,7 +64,6 @@ fn deliver_pit(vm_id: usize, vcpu_id: usize, pit: &Pit8253, pic: &Pic8259) {
 pub fn service_idle(
     vm_id: usize,
     vcpu_id: usize,
-    net_tid: usize,
     uart: &mut Uart16550,
     pit: &Pit8253,
     pic: &Pic8259,
@@ -73,7 +72,7 @@ pub fn service_idle(
     net_mmio: &mut VirtioMmio,
 ) {
     drain_host_input(uart);
-    if let Some(frame) = net_backend::try_receive(net_tid) {
+    if let Some(frame) = net_backend::try_receive(&mut net_device.backend) {
         if net_device.push_rx_frame(&frame, vm_id, vcpu_id, net_mmio) {
             net_mmio.signal_used();
         }

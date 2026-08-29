@@ -71,7 +71,6 @@ pub fn run(
             ViVmExit::Hlt => x86_irq_dispatch::service_idle(
                 vm_id,
                 vcpu_id,
-                net_tid,
                 &mut uart,
                 &pit,
                 &pic,
@@ -87,7 +86,6 @@ pub fn run(
             ViVmExit::Preempted => x86_irq_dispatch::service_idle(
                 vm_id,
                 vcpu_id,
-                net_tid,
                 &mut uart,
                 &pit,
                 &pic,

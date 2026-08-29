@@ -35,6 +35,10 @@ static void pause_after(void) {
     struct timespec t = { 2, 0 };
     (void)call3(35, (long)&t, 0, 0);
 }
+static void sleep_ms(long ms) {
+    struct timespec t = { ms / 1000, (ms % 1000) * 1000000 };
+    (void)call3(35, (long)&t, 0, 0);
+}
 static void fail(const char *s, long n) {
     EMIT("VIRTIO_HOSTILE_FAIL:"); emit(s, n); EMIT("\n"); call3(60, 1, 0, 0);
     __builtin_unreachable();
@@ -96,7 +100,7 @@ static volatile uint16_t *used_idx(void) { return (uint16_t *)(ring + 2 * PAGE_S
 static void notify_queue(uint32_t index) { wr(0x50, index); }
 static void notify(void) { notify_queue(0); }
 
-static void recovery_write(void) {
+static int try_recovery_write(void) {
     static const char marker[] = "CELLOS_X86_VIRTIO_HOSTILE_RECOVERY_V1";
     clear_ring(); reset(); valid_queue(); wr(0x70, 15);
     uint8_t *hdr = ring + 256, *data = ring + 512, *status = ring + 768;
@@ -108,13 +112,51 @@ static void recovery_write(void) {
     descs()[1] = (struct desc){ ring_gpa + 512, sizeof(marker) - 1, 1, 2 };
     descs()[2] = (struct desc){ ring_gpa + 768, 1, 2, 0 };
     *avail_slot(0) = 0; *avail_idx() = 1; notify();
-    if (*used_idx() != 1 || *status != 0) FAIL("recovery-write-incomplete");
+    if (*used_idx() != 1 || *status != 0) return 0;
     for (unsigned i = 0; i < 16; i++) hdr[i] = 0;
     hdr[0] = 4; *status = 0xff;
     descs()[3] = (struct desc){ ring_gpa + 256, 16, 1, 4 };
     descs()[4] = (struct desc){ ring_gpa + 768, 1, 2, 0 };
     *avail_slot(1) = 3; *avail_idx() = 2; notify();
-    if (*used_idx() != 2 || *status != 0) FAIL("recovery-flush-incomplete");
+    return *used_idx() == 2 && *status == 0;
+}
+static void recovery_write(void) {
+    if (!try_recovery_write()) FAIL("recovery-write-flush-incomplete");
+}
+static int try_recovery_read(void) {
+    static const char marker[] = "CELLOS_X86_VIRTIO_HOSTILE_RECOVERY_V1";
+    clear_ring(); reset(); valid_queue(); wr(0x70, 15);
+    uint8_t *hdr = ring + 256, *data = ring + 512, *status = ring + 768;
+    for (unsigned i = 0; i < 16; i++) hdr[i] = 0;
+    for (unsigned i = 0; i < sizeof(marker) - 1; i++) data[i] = 0;
+    *status = 0xff;
+    descs()[0] = (struct desc){ ring_gpa + 256, 16, 1, 1 };
+    descs()[1] = (struct desc){ ring_gpa + 512, sizeof(marker) - 1, 3, 2 };
+    descs()[2] = (struct desc){ ring_gpa + 768, 1, 2, 0 };
+    *avail_slot(0) = 0; *avail_idx() = 1; notify();
+    if (*used_idx() != 1 || *status != 0) return 0;
+    for (unsigned i = 0; i < sizeof(marker) - 1; i++)
+        if (data[i] != (uint8_t)marker[i]) return 0;
+    return 1;
+}
+static void wait_recovery_read(void) {
+    for (unsigned attempt = 0; attempt < 50; attempt++) {
+        if (try_recovery_read()) return;
+        sleep_ms(100);
+    }
+    FAIL("block-backend-did-not-recover-persisted-data");
+}
+static void block_backend_disconnect(void) {
+    wr(0xfc, 1);
+    clear_ring(); valid_queue(); wr(0x70, 15);
+    uint8_t *hdr = ring + 256, *status = ring + 768;
+    for (unsigned i = 0; i < 16; i++) hdr[i] = 0;
+    hdr[0] = 4; *status = 0xff;
+    descs()[0] = (struct desc){ ring_gpa + 256, 16, 1, 1 };
+    descs()[1] = (struct desc){ ring_gpa + 768, 1, 2, 0 };
+    *avail_slot(0) = 0; *avail_idx() = 1; notify();
+    if (*used_idx() != 1 || *status != 1)
+        FAIL("block-disconnect-did-not-return-ioerr");
 }
 static void unsupported_request(void) {
     clear_ring(); valid_queue(); wr(0x70, 15);
@@ -126,18 +168,76 @@ static void unsupported_request(void) {
     *avail_slot(0) = 0; *avail_idx() = 1; notify();
     if (*used_idx() != 1 || *status != 2) FAIL("unsupported-request-not-rejected");
 }
+static void fill_arp_request(uint8_t *packet, uint8_t source_host) {
+    for (unsigned i = 0; i < 12 + 42; i++) packet[i] = 0;
+    for (unsigned i = 0; i < 6; i++) packet[12 + i] = 0xff;
+    packet[18] = 0x52; packet[19] = 0x54; packet[20] = 0x00;
+    packet[21] = 0xaa; packet[22] = 0xbb; packet[23] = 0xcc;
+    packet[24] = 0x08; packet[25] = 0x06;
+    packet[26] = 0x00; packet[27] = 0x01;
+    packet[28] = 0x08; packet[29] = 0x00;
+    packet[30] = 6; packet[31] = 4;
+    packet[32] = 0x00; packet[33] = 0x01;
+    for (unsigned i = 0; i < 6; i++) packet[34 + i] = packet[18 + i];
+    packet[40] = 10; packet[41] = 0; packet[42] = 2; packet[43] = source_host;
+    packet[50] = 10; packet[51] = 0; packet[52] = 2; packet[53] = 2;
+}
 static void net_tx_recovery(void) {
     clear_ring(); handshake();
     queue_at(1, 8, ring_gpa, avail_gpa, used_gpa); wr(0x70, 15);
     uint8_t *packet = ring + 256;
-    for (unsigned i = 0; i < 12 + 14; i++) packet[i] = 0;
-    for (unsigned i = 0; i < 6; i++) packet[12 + i] = 0xff;
-    packet[18] = 0x52; packet[19] = 0x54; packet[20] = 0x00;
-    packet[21] = 0xaa; packet[22] = 0xbb; packet[23] = 0xcc;
-    packet[24] = 0x08; packet[25] = 0x00;
-    descs()[0] = (struct desc){ ring_gpa + 256, 12 + 14, 0, 0 };
+    fill_arp_request(packet, 15);
+    descs()[0] = (struct desc){ ring_gpa + 256, 12 + 42, 0, 0 };
     *avail_slot(0) = 0; *avail_idx() = 1; notify_queue(1);
     if (*used_idx() != 1) FAIL("net-tx-recovery-incomplete");
+}
+static void net_backend_disconnect(void) {
+    wr(0xfc, 1);
+    net_tx_recovery();
+}
+static int try_net_backend_round_trip(uint8_t source_host) {
+    clear_ring(); reset(); handshake();
+    struct desc *rx_desc = (struct desc *)ring;
+    struct desc *tx_desc = (struct desc *)(ring + 1024);
+    volatile uint16_t *rx_avail_idx = (uint16_t *)(ring + PAGE_SIZE + 2);
+    volatile uint16_t *rx_avail_slot = (uint16_t *)(ring + PAGE_SIZE + 4);
+    volatile uint16_t *rx_used_idx = (uint16_t *)(ring + 2 * PAGE_SIZE + 2);
+    volatile uint16_t *tx_avail_idx = (uint16_t *)(ring + PAGE_SIZE + 512 + 2);
+    volatile uint16_t *tx_avail_slot = (uint16_t *)(ring + PAGE_SIZE + 512 + 4);
+    volatile uint16_t *tx_used_idx = (uint16_t *)(ring + 2 * PAGE_SIZE + 512 + 2);
+    uint8_t *rx_packet = ring + 2048;
+    uint8_t *tx_packet = ring + 1280;
+    rx_desc[0] = (struct desc){ ring_gpa + 2048, 512, 2, 0 };
+    *rx_avail_slot = 0; *rx_avail_idx = 1;
+    fill_arp_request(tx_packet, source_host);
+    tx_desc[0] = (struct desc){ ring_gpa + 1280, 12 + 42, 0, 0 };
+    *tx_avail_slot = 0; *tx_avail_idx = 1;
+    queue_at(0, 8, ring_gpa, avail_gpa, used_gpa);
+    queue_at(1, 8, ring_gpa + 1024, avail_gpa + 512, used_gpa + 512);
+    wr(0x70, 15); notify_queue(1);
+    if (*tx_used_idx != 1) return 0;
+    notify_queue(0);
+    for (unsigned attempt = 0; attempt < 20; attempt++) {
+        if (*rx_used_idx == 1) {
+            for (unsigned i = 0; i < 6; i++) {
+                if (rx_packet[12 + i] != tx_packet[18 + i]) return 0;
+                if (rx_packet[44 + i] != tx_packet[18 + i]) return 0;
+            }
+            return rx_packet[24] == 0x08 && rx_packet[25] == 0x06
+                && rx_packet[32] == 0x00 && rx_packet[33] == 0x02
+                && rx_packet[40] == 10 && rx_packet[41] == 0
+                && rx_packet[42] == 2 && rx_packet[43] == 2
+                && rx_packet[50] == 10 && rx_packet[51] == 0
+                && rx_packet[52] == 2 && rx_packet[53] == source_host;
+        }
+        sleep_ms(100);
+    }
+    return 0;
+}
+static void wait_net_backend_recovery(void) {
+    for (unsigned attempt = 0; attempt < 10; attempt++)
+        if (try_net_backend_round_trip((uint8_t)(16 + attempt))) return;
+    FAIL("net-backend-did-not-recover-tx-rx");
 }
 
 
@@ -189,8 +289,13 @@ static int run(void) {
     SCENARIO("descriptor-next-oob", clear_ring(); valid_queue(); wr(0x70, 15); descs()[0] = (struct desc){ring_gpa + 256, 16, 1, 8}; *avail_slot(0) = 0; *avail_idx() = 1; notify());
     SCENARIO("descriptor-payload-overflow", clear_ring(); valid_queue(); wr(0x70, 15); descs()[0] = (struct desc){0xfffffffffffffff8UL, 16, 0, 0}; *avail_slot(0) = 0; *avail_idx() = 1; notify());
     SCENARIO("backend-unsupported-opcode", unsupported_request());
+    recovery_write();
+    SCENARIO("backend-disconnect", block_backend_disconnect());
+    SCENARIO("backend-reconnect", wait_recovery_read());
     mmio = net_mmio;
     SCENARIO("net-recovery-sentinel", net_tx_recovery());
+    SCENARIO("net-backend-disconnect", net_backend_disconnect());
+    SCENARIO("net-backend-reconnect", wait_net_backend_recovery());
     mmio = blk_mmio;
 
 

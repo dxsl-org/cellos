@@ -48,15 +48,18 @@
   executable transport-decode prerequisite, not strict block/network parity
   or physical x86 qualification.
 - Phase 10's rebuilt x86 VirtIO evidence passed two persistent block/network
-  boots and 22 bounded hostile scenarios on Windows QEMU-TCG 10.2.0 with Intel
+  boots and 26 bounded hostile scenarios on Windows QEMU-TCG 10.2.0 with Intel
   VT-d ACTIVE. Guest UART records are bounded, control-sanitized, and atomically
   origin-tagged; the hostile parser requires unique tagged START/DONE records,
   exactly one untagged host outcome per interval, post-stimulus QEMU liveness,
-  and a host-read post-reset write after FLUSH. Network recovery requires a
-  sender-bound `NetResponse::Ok` and emits its host completion marker only once
-  across guest resets. Fault-injectable block/network disconnect recovery,
-  ARM64 hostile execution, and physical x86 qualification remain blocked; this
-  is bounded emulator evidence, not service or production qualification.
+  and a host-read post-reset write after FLUSH. The hostile-only supervisor
+  control path now terminates VFS and Net generations independently. Bounded
+  IPC returns block IOERR/network unavailability instead of hanging the VMM;
+  block recovery reopens the persistent image and verifies pre-crash data,
+  while network recovery requires a new-generation `NetResponse::Ok` plus a
+  matching ARP reply before publishing recovery. ARM64 hostile execution and
+  physical x86 qualification remain blocked; this is bounded emulator evidence,
+  not service or production qualification.
 - RPi3-B is bound to revision `a22082` / Raspberry Pi 3 Model B and serial
   `000000003d042795`. `lungmat8` approved the exact BCM mailbox unsafe island
   on 2026-08-28; strict F1/F5, focused host/target tests, RPi3 packaging, image

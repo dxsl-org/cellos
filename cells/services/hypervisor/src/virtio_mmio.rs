@@ -4,7 +4,6 @@
 //! VERSION_1 (bit 32 = DriverFeatures high-word bit 0) is mandatory; rejected otherwise.
 use ostd::io::println;
 
-
 /// Maximum queues per device.
 pub const MAX_QUEUES: usize = 2;
 const QUEUE_SIZE_MAX: u16 = crate::virtqueue_guard::MAX_QUEUE_SIZE as u16;
@@ -52,6 +51,8 @@ pub trait VirtioDevice {
         0
     }
     fn reset(&mut self) {}
+    #[cfg(feature = "hostile-backend-recovery")]
+    fn hostile_backend_fault(&mut self, _command: u32) {}
 }
 
 /// Register state for one virtio-mmio slot.
@@ -146,10 +147,7 @@ impl VirtioMmio {
                     println("[hv-virtio-host] reject queue-notify-before-driver-ok");
                     return;
                 }
-                if nq >= MAX_QUEUES
-                    || !self.queues[nq].ready
-                    || !self.queues[nq].is_valid()
-                {
+                if nq >= MAX_QUEUES || !self.queues[nq].ready || !self.queues[nq].is_valid() {
                     println("[hv-virtio-host] reject queue-notify-invalid");
                     return;
                 }
@@ -157,6 +155,8 @@ impl VirtioMmio {
                 dev.notify(nq, &qcfg, vm_id, vcpu_id);
                 self.signal_used();
             }
+            #[cfg(feature = "hostile-backend-recovery")]
+            0x0fc => dev.hostile_backend_fault(val),
             0x064 => self.intr_status &= !val, // InterruptACK
             0x070 => {
                 if val == 0 {

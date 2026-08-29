@@ -23,11 +23,13 @@ const NUM_SECTORS: u64 = (DISK_SIZE / SECTOR_SIZE) as u64;
 const BLK_T_IN: u32 = 0; // read  — device → driver
 const BLK_T_OUT: u32 = 1; // write — driver → device
 const BLK_T_FLUSH: u32 = 4;
+const BACKEND_TIMEOUT_TICKS: u64 = 200;
 
 pub enum Backend {
     Volatile(alloc::vec::Vec<u8>),
     Persistent {
         vfs_tid: usize,
+        poisoned_tid: usize,
         file: api::vfs_file_handles::ViVfsFileHandle,
         size: u64,
     },
@@ -50,6 +52,7 @@ impl BlkDisk {
             Some((vfs_tid, file, size)) => (
                 Backend::Persistent {
                     vfs_tid,
+                    poisoned_tid: 0,
                     file,
                     size,
                 },
@@ -106,6 +109,93 @@ impl VirtioDevice for BlkDisk {
         self.last_avail = 0;
         self.used_idx = 0;
     }
+
+    #[cfg(feature = "hostile-backend-recovery")]
+    fn hostile_backend_fault(&mut self, command: u32) {
+        if command == 1
+            && matches!(self.backend, Backend::Persistent { .. })
+            && crate::backend_fault_control::disconnect(api::syscall::service::VFS)
+        {
+            force_persistent_unavailable_once(&mut self.backend);
+        }
+    }
+}
+
+fn ensure_persistent_connected(backend: &mut Backend) -> bool {
+    if matches!(
+        backend,
+        Backend::Persistent {
+            vfs_tid: usize::MAX,
+            ..
+        }
+    ) {
+        mark_persistent_unavailable(backend, false);
+        println("[hv-backend-fault-host] block unavailable");
+        return false;
+    }
+    let Backend::Persistent {
+        vfs_tid,
+        poisoned_tid,
+        file,
+        size,
+    } = backend
+    else {
+        return true;
+    };
+    let Some(current_tid) = ostd::syscall::sys_lookup_service(api::syscall::service::VFS) else {
+        *vfs_tid = 0;
+        return false;
+    };
+    if current_tid == *poisoned_tid {
+        return false;
+    }
+    if current_tid == *vfs_tid && current_tid != 0 {
+        return true;
+    }
+    let expected_size = *size;
+    let mut poisoned = false;
+    let Some((new_tid, new_file, new_size)) =
+        crate::persistent_disk::open_for(current_tid, &mut poisoned)
+    else {
+        *vfs_tid = 0;
+        if poisoned {
+            *poisoned_tid = current_tid;
+        }
+        return false;
+    };
+    if new_size != expected_size {
+        *vfs_tid = 0;
+        return false;
+    }
+    *vfs_tid = new_tid;
+    *poisoned_tid = 0;
+    *file = new_file;
+    println(&alloc::format!(
+        "[hv-backend-fault-host] recovered service=vfs new_tid={}",
+        new_tid
+    ));
+    true
+}
+
+fn mark_persistent_unavailable(backend: &mut Backend, poison: bool) {
+    if let Backend::Persistent {
+        vfs_tid,
+        poisoned_tid,
+        ..
+    } = backend
+    {
+        if poison {
+            *poisoned_tid = *vfs_tid;
+        }
+        *vfs_tid = 0;
+    }
+}
+
+#[cfg(feature = "hostile-backend-recovery")]
+fn force_persistent_unavailable_once(backend: &mut Backend) {
+    if let Backend::Persistent { vfs_tid, .. } = backend {
+        *vfs_tid = usize::MAX;
+    }
 }
 
 fn handle_blk_request(backend: &mut Backend, bufs: &[DescBuf], vm_id: usize) -> u32 {
@@ -133,6 +223,13 @@ fn handle_blk_request(backend: &mut Backend, bufs: &[DescBuf], vm_id: usize) -> 
     let req_type = u32::from_le_bytes([hdr[0], hdr[1], hdr[2], hdr[3]]);
     let sector = u64::from_le_bytes(hdr[8..16].try_into().unwrap_or([0u8; 8]));
 
+    let recovering = matches!(
+        backend,
+        Backend::Persistent {
+            vfs_tid: 0 | usize::MAX,
+            ..
+        }
+    );
     let data_bufs = &bufs[1..status_idx];
     let status = match req_type {
         BLK_T_IN if bufs.len() >= 3 => blk_read(backend, sector, data_bufs, vm_id),
@@ -141,7 +238,7 @@ fn handle_blk_request(backend: &mut Backend, bufs: &[DescBuf], vm_id: usize) -> 
         BLK_T_IN | BLK_T_OUT | BLK_T_FLUSH => 1,
         _ => 2u8, // VIRTIO_BLK_S_UNSUPP
     };
-    if status != 0 {
+    if status != 0 && !recovering {
         println(&alloc::format!(
             "[hv-blk-host] request failed type={} sector={} buffers={} status={}",
             req_type,
@@ -154,17 +251,34 @@ fn handle_blk_request(backend: &mut Backend, bufs: &[DescBuf], vm_id: usize) -> 
     1 // bytes placed in used ring (status byte)
 }
 fn blk_flush(backend: &mut Backend) -> u8 {
+    if !ensure_persistent_connected(backend) {
+        return 1;
+    }
     match backend {
         Backend::Volatile(_) => 0,
-        Backend::Persistent { vfs_tid, file, .. } => {
+        Backend::Persistent {
+            vfs_tid,
+            poisoned_tid,
+            file,
+            ..
+        } => {
             let req = api::ipc::VfsRequest::SyncHandle { file: *file };
             let mut send_buf = [0u8; 512];
             let mut resp_buf = [0u8; 512];
-            if let Ok(api::ipc::VfsResponse::Ok) =
-                ostd::ipc::service_call_typed(*vfs_tid, &req, &mut send_buf, &mut resp_buf)
-            {
+            let result = ostd::ipc::service_call_typed_bounded(
+                *vfs_tid,
+                &req,
+                &mut send_buf,
+                &mut resp_buf,
+                BACKEND_TIMEOUT_TICKS,
+            );
+            if matches!(&result, Ok(api::ipc::VfsResponse::Ok)) {
                 0
             } else {
+                if matches!(&result, Err(ostd::ipc::IpcError::Recv)) {
+                    *poisoned_tid = *vfs_tid;
+                }
+                *vfs_tid = 0;
                 1 // VIRTIO_BLK_S_IOERR
             }
         }
@@ -172,6 +286,9 @@ fn blk_flush(backend: &mut Backend) -> u8 {
 }
 
 fn blk_read(backend: &mut Backend, sector: u64, bufs: &[DescBuf], vm_id: usize) -> u8 {
+    if !ensure_persistent_connected(backend) {
+        return 1;
+    }
     let capacity = match backend {
         Backend::Volatile(disk) => disk.len() as u64,
         Backend::Persistent { size, .. } => *size,
@@ -201,7 +318,12 @@ fn blk_read(backend: &mut Backend, sector: u64, bufs: &[DescBuf], vm_id: usize) 
                 }
                 off += n as u64;
             }
-            Backend::Persistent { vfs_tid, file, .. } => {
+            Backend::Persistent {
+                vfs_tid,
+                poisoned_tid,
+                file,
+                ..
+            } => {
                 let mut n = buf.len as usize;
                 let mut chunk_off = 0;
                 while n > 0 {
@@ -220,9 +342,15 @@ fn blk_read(backend: &mut Backend, sector: u64, bufs: &[DescBuf], vm_id: usize) 
                     };
                     let mut resp_buf = [0u8; 512];
                     let mut send_buf = [0u8; 512];
-                    let ok = if let Ok(api::ipc::VfsResponse::GrantDone { bytes }) =
-                        ostd::ipc::service_call_typed(*vfs_tid, &req, &mut send_buf, &mut resp_buf)
-                    {
+                    let result = ostd::ipc::service_call_typed_bounded(
+                        *vfs_tid,
+                        &req,
+                        &mut send_buf,
+                        &mut resp_buf,
+                        BACKEND_TIMEOUT_TICKS,
+                    );
+                    let poison = matches!(&result, Err(ostd::ipc::IpcError::Recv));
+                    let ok = if let Ok(api::ipc::VfsResponse::GrantDone { bytes }) = result {
                         let mut tmp = alloc::vec![0u8; chunk];
                         bytes == chunk
                             && ostd::syscall::sys_grant_copy_to_slice(grant_id, &mut tmp)
@@ -238,6 +366,10 @@ fn blk_read(backend: &mut Backend, sector: u64, bufs: &[DescBuf], vm_id: usize) 
 
                     ostd::syscall::sys_grant_free(grant_id);
                     if !ok {
+                        if poison {
+                            *poisoned_tid = *vfs_tid;
+                        }
+                        *vfs_tid = 0;
                         return 1;
                     }
                     chunk_off += chunk;
@@ -251,6 +383,9 @@ fn blk_read(backend: &mut Backend, sector: u64, bufs: &[DescBuf], vm_id: usize) 
 }
 
 fn blk_write(backend: &mut Backend, sector: u64, bufs: &[DescBuf], vm_id: usize) -> u8 {
+    if !ensure_persistent_connected(backend) {
+        return 1;
+    }
     let capacity = match backend {
         Backend::Volatile(disk) => disk.len() as u64,
         Backend::Persistent { size, .. } => *size,
@@ -283,7 +418,12 @@ fn blk_write(backend: &mut Backend, sector: u64, bufs: &[DescBuf], vm_id: usize)
                 disk[off_usize..off_usize + n].copy_from_slice(&tmp[..n]);
                 off += n as u64;
             }
-            Backend::Persistent { vfs_tid, file, .. } => {
+            Backend::Persistent {
+                vfs_tid,
+                poisoned_tid,
+                file,
+                ..
+            } => {
                 let mut n = buf.len as usize;
                 let mut chunk_off = 0;
                 while n > 0 {
@@ -321,12 +461,15 @@ fn blk_write(backend: &mut Backend, sector: u64, bufs: &[DescBuf], vm_id: usize)
                     };
                     let mut resp_buf = [0u8; 512];
                     let mut send_buf = [0u8; 512];
-                    let ok = match ostd::ipc::service_call_typed(
+                    let result = ostd::ipc::service_call_typed_bounded(
                         *vfs_tid,
                         &req,
                         &mut send_buf,
                         &mut resp_buf,
-                    ) {
+                        BACKEND_TIMEOUT_TICKS,
+                    );
+                    let poison = matches!(&result, Err(ostd::ipc::IpcError::Recv));
+                    let ok = match result {
                         Ok(api::ipc::VfsResponse::GrantDone { bytes }) => bytes == chunk,
                         Ok(response) => {
                             println(&alloc::format!(
@@ -343,6 +486,10 @@ fn blk_write(backend: &mut Backend, sector: u64, bufs: &[DescBuf], vm_id: usize)
 
                     ostd::syscall::sys_grant_free(grant_id);
                     if !ok {
+                        if poison {
+                            *poisoned_tid = *vfs_tid;
+                        }
+                        *vfs_tid = 0;
                         return 1;
                     }
                     chunk_off += chunk;

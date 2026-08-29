@@ -13,9 +13,11 @@ default = []
 # When enabled, init spawns /bin/vfs-test after the main service stack is up.
 # Only used in CI test-hooks kernel builds — never in production.
 test-hooks = []
-# When enabled, init brings up only VFS + shell + hypervisor — the Tier-3 VM
+# When enabled, init brings up only VFS + Net before hypervisor — the Tier-3 VM
 # boot profile used by the hypervisor filesystem images and smoke lanes.
 hypervisor-min = []
+# Include the hostile-only supervisor control Cell in the hypervisor-min profile.
+hostile-backend-recovery = ["api/hostile-backend-recovery"]
 # Admit the development/reference AArch64 Silo service into the supervised table.
 development-silo-provider = []
 # Spawn the fail-closed C2C broker only in images that provision its cluster key.

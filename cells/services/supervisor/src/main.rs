@@ -16,11 +16,15 @@
 extern crate alloc;
 
 mod error;
+#[cfg(feature = "hostile-backend-recovery")]
+mod hostile_backend_recovery;
 mod hotswap;
 mod protocol;
 mod snapshot;
 mod transfer;
 
+#[cfg(feature = "hostile-backend-recovery")]
+use api::hostile_backend_recovery::KILL_REQUEST_OPCODE;
 use api::syscall::service;
 use ostd::app::{AppContext, AppEvent};
 use ostd::syscall::{sys_get_procs, sys_lookup_service, sys_send};
@@ -86,6 +90,11 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
                 }
                 let _ = sys_send(sender_tid, &snapshot::run());
             }
+        }
+
+        #[cfg(feature = "hostile-backend-recovery")]
+        AppEvent::RawMessage { sender_tid, data } if data.first() == Some(&KILL_REQUEST_OPCODE) => {
+            hostile_backend_recovery::handle(sender_tid, &data);
         }
 
         AppEvent::RawMessage { sender_tid, data }

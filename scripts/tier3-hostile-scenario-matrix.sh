@@ -34,11 +34,13 @@ X86_VIRTIO_HOSTILE_CORPUS=(
   "descriptor-next-oob|[hv-virtio-host] reject descriptor-chain|descriptor"
   "descriptor-payload-overflow|[hv-virtio-host] reject descriptor-chain|descriptor"
   "backend-unsupported-opcode|[hv-blk-host] request failed type=255 sector=0 buffers=2 status=2|backend"
+  "backend-disconnect|[hv-backend-fault-host] block unavailable|backend-disconnect"
+  "backend-reconnect|[hv-backend-fault-host] recovered service=vfs new_tid=|backend-reconnect"
   "net-recovery-sentinel|[hv-virtio-host] net-tx-complete|net"
+  "net-backend-disconnect|[hv-backend-fault-host] net unavailable|net-disconnect"
+  "net-backend-reconnect|[hv-backend-fault-host] recovered service=net new_tid=|net-reconnect"
 )
 
 X86_VIRTIO_HOSTILE_BLOCKED=(
-  "backend-disconnect|fault-injectable persistent VFS backend plus a host-authored disconnect/reconnect observation"
-  "net-backend-disconnect|fault-injectable Net Cell backend plus host-authored drop/recovery observations"
   "arm64-execution|an ARM TCG environment that reaches the guest probe without the existing synchronous fault"
 )

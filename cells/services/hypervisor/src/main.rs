@@ -56,6 +56,12 @@ api::declare_syscalls![
 
 // VMM syscall wrappers — only the two arches with a kernel VMM backend have a
 // caller; on any other target every wrapper would be dead code.
+#[cfg(all(
+    feature = "hostile-backend-recovery",
+    any(target_arch = "aarch64", target_arch = "x86_64")
+))]
+#[path = "backend-fault-control.rs"]
+mod backend_fault_control;
 #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
 mod vmm;
 
@@ -272,12 +278,20 @@ fn boot_arm() {
 
     println("[hv] vCPU ready — entering run loop");
     // ── 7. Run ───────────────────────────────────────────────────────────────
-    let persistent_disk = persistent_disk::open();
-    if persistent_disk.is_some() {
-        println("[hv] persistent disk: /mnt/sd/guest_disk.img");
-    } else {
-        println("[hv] volatile disk fallback");
-    }
+    let persistent_disk = match persistent_disk::open() {
+        Ok(Some(disk)) => {
+            println("[hv] persistent disk: /mnt/sd/guest_disk.img");
+            Some(disk)
+        }
+        Ok(None) => {
+            println("[hv] volatile disk fallback");
+            None
+        }
+        Err(()) => {
+            println("[hv] persistent disk unavailable");
+            return;
+        }
+    };
     run_loop::run(vm_id, vcpu_id, persistent_disk);
 
     println("[hv] guest exited");

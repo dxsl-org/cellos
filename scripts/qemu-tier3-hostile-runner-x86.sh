@@ -21,6 +21,8 @@ RAW="$WORK_DIR/qemu.raw.log"
 LOG="$WORK_DIR/qemu.log"
 PART_START=2048
 QEMU_PID=""
+VFS_OLD_TID=""
+NET_OLD_TID=""
 
 cleanup() {
     if [[ -n "$QEMU_PID" ]] && kill -0 "$QEMU_PID" 2>/dev/null; then
@@ -52,7 +54,7 @@ mkdir -p "$WORK_DIR"
 if [[ ! -f "$ISO" || "$BUILD_HOSTILE_ISO" == 1 ]]; then
     VIRTIO_E2E_MODE=hostile VIRTIO_E2E_INITRAMFS="$INITRAMFS" \
         bash scripts/prepare-x86-virtio-e2e-initramfs.sh
-    HV_INIT_MIN=1 INITRD_OVERRIDE="$INITRAMFS" \
+    HV_INIT_MIN=1 HV_HOSTILE_BACKEND_RECOVERY=1 INITRD_OVERRIDE="$INITRAMFS" \
         bash scripts/make-hypervisor-fs-x86.sh --skip-fetch
     rm -rf "$EVIDENCE_FS"
     mkdir -p "$EVIDENCE_FS"
@@ -130,6 +132,26 @@ wait_scenario_done() {
     done
     fail_live "scenario window expired before: $marker"
 }
+record_disconnected_generation() {
+    local start_line="$1" done_line="$2" service="$3" variable="$4"
+    local -a records
+    mapfile -t records < <(sed -n "$((start_line + 1)),$((done_line - 1))p" "$RAW" \
+        | grep -aE "^USER: HOSTILE_BACKEND_DISCONNECT service=${service} old_tid=[1-9][0-9]*$" || true)
+    [[ "${#records[@]}" == 1 ]] \
+        || fail_live "expected one supervisor disconnect record for service=$service"
+    printf -v "$variable" '%s' "${records[0]##*=}"
+}
+verify_recovered_generation() {
+    local start_line="$1" done_line="$2" service="$3" old_tid="$4"
+    local -a records
+    mapfile -t records < <(sed -n "$((start_line + 1)),$((done_line - 1))p" "$RAW" \
+        | grep -aE "^USER: \\[hv-backend-fault-host\\] recovered service=${service} new_tid=[1-9][0-9]*$" || true)
+    [[ "${#records[@]}" == 1 ]] \
+        || fail_live "expected one numeric recovery record for service=$service"
+    [[ -n "$old_tid" && "${records[0]##*=}" != "$old_tid" ]] \
+        || fail_live "recovery reused killed generation for service=$service"
+}
+
 verify_interval() {
     local scenario="$1" host_marker="$2"
     local start="[VIRTIO_HOSTILE] START $scenario"
@@ -142,12 +164,34 @@ verify_interval() {
     start_line="$(grep -anxF "USER: [guest-uart] $start" "$RAW" | sed -n '1s/:.*//p')"
     done_line="$(grep -anxF "USER: [guest-uart] $done_marker" "$RAW" | sed -n '1s/:.*//p')"
     [[ "$done_line" -gt "$start_line" ]] || fail_live "invalid START-to-DONE order: $scenario"
-    host_count="$(sed -n "$((start_line + 1)),$((done_line - 1))p" "$RAW" \
-        | grep -acxF "USER: $host_marker" || true)"
+    if [[ "$host_marker" == *= ]]; then
+        host_count="$(sed -n "$((start_line + 1)),$((done_line - 1))p" "$RAW" \
+            | grep -acF "USER: $host_marker" || true)"
+    else
+        host_count="$(sed -n "$((start_line + 1)),$((done_line - 1))p" "$RAW" \
+            | grep -acxF "USER: $host_marker" || true)"
+    fi
     outcome_count="$(sed -n "$((start_line + 1)),$((done_line - 1))p" "$RAW" \
-        | grep -acE '^USER: \[(hv-virtio-host|hv-blk-host)\] ' || true)"
+        | grep -acE '^USER: \[(hv-blk-host|hv-backend-fault-host)\] |^USER: \[hv-virtio-host\] (reject |net-tx-complete$)' || true)"
+    if [[ "$host_marker" == "[hv-virtio-host] reset" ]]; then
+        outcome_count="$host_count"
+    fi
     [[ "$host_count" == 1 && "$outcome_count" == 1 ]] \
         || fail_live "expected one exclusive host outcome inside $scenario interval: $host_marker"
+    case "$scenario" in
+        backend-disconnect)
+            record_disconnected_generation "$start_line" "$done_line" vfs VFS_OLD_TID
+            ;;
+        backend-reconnect)
+            verify_recovered_generation "$start_line" "$done_line" vfs "$VFS_OLD_TID"
+            ;;
+        net-backend-disconnect)
+            record_disconnected_generation "$start_line" "$done_line" net NET_OLD_TID
+            ;;
+        net-backend-reconnect)
+            verify_recovered_generation "$start_line" "$done_line" net "$NET_OLD_TID"
+            ;;
+    esac
 }
 wait_global '[VIRTIO_HOSTILE] TRANSPORTS_ISOLATED'
 for row in "${X86_VIRTIO_HOSTILE_CORPUS[@]}"; do

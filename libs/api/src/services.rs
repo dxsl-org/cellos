@@ -16,6 +16,8 @@ pub mod dir_name_tests;
 pub mod display;
 pub mod driver;
 pub mod fs;
+#[cfg(feature = "hostile-backend-recovery")]
+pub mod hostile_backend_recovery;
 pub mod hotswap;
 pub mod input;
 pub mod ipc;

@@ -17,6 +17,8 @@ serde = { version = "1", default-features = false, features = ["derive"] }
 
 [features]
 default = []
+# Non-production contract for hostile hypervisor backend recovery images.
+hostile-backend-recovery = []
 posix = []
 # Opt-in mlibc Tier B: suppresses posix.rs C symbols so mlibc's libc.a can link
 # without duplicate-symbol errors.  Cells that opt in must also depend on mlibc-shim.

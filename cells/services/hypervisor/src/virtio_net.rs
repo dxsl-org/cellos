@@ -17,8 +17,8 @@ const VIRTIO_NET_F_MAC: u32 = 1 << 5;
 const VIRTIO_NET_HDR_V1_LEN: usize = 12;
 
 pub struct NetDev {
-    /// Net Cell TID for L2 frame IPC; 0 = net service unavailable.
-    pub net_tid: usize,
+    /// Supervised Net Cell connection and recovery state.
+    pub backend: crate::net_backend::Connection,
     rx_last_avail: u16,
     rx_used_idx: u16,
     tx_last_avail: u16,
@@ -30,7 +30,7 @@ pub struct NetDev {
 impl NetDev {
     pub fn new(net_tid: usize, irq: Option<u32>) -> Self {
         Self {
-            net_tid,
+            backend: crate::net_backend::Connection::new(net_tid),
             rx_last_avail: 0,
             rx_used_idx: 0,
             tx_last_avail: 0,
@@ -60,8 +60,7 @@ impl NetDev {
             return false;
         }
 
-        let Some(avail_idx_gpa) = crate::virtqueue_guard::checked_gpa(qcfg.avail_gpa, 2, 2)
-        else {
+        let Some(avail_idx_gpa) = crate::virtqueue_guard::checked_gpa(qcfg.avail_gpa, 2, 2) else {
             return false;
         };
         let mut b2 = [0u8; 2];
@@ -102,9 +101,10 @@ impl NetDev {
         if payload_len > u32::MAX as usize {
             return false;
         }
-        let Some(capacity) = bufs.iter().try_fold(0usize, |sum, buf| {
-            sum.checked_add(buf.len as usize)
-        }) else {
+        let Some(capacity) = bufs
+            .iter()
+            .try_fold(0usize, |sum, buf| sum.checked_add(buf.len as usize))
+        else {
             return false;
         };
         if capacity < payload_len {
@@ -139,8 +139,7 @@ impl NetDev {
             return false;
         };
         let next_used = self.rx_used_idx.wrapping_add(1);
-        let Some(used_idx_gpa) = crate::virtqueue_guard::checked_gpa(qcfg.used_gpa, 2, 2)
-        else {
+        let Some(used_idx_gpa) = crate::virtqueue_guard::checked_gpa(qcfg.used_gpa, 2, 2) else {
             return false;
         };
         let mut elem = [0u8; 8];
@@ -184,7 +183,7 @@ impl VirtioDevice for NetDev {
             0 => {} // RX queue notify — guest added empty buffers; no action until frame arrives.
             1 => {
                 // TX queue — drain guest TX descriptors and forward to the Net Cell.
-                let net_tid = self.net_tid;
+                let backend = &mut self.backend;
                 let mut tx_completed = false;
                 process_notify(
                     vm_id,
@@ -192,7 +191,7 @@ impl VirtioDevice for NetDev {
                     &mut self.tx_last_avail,
                     &mut self.tx_used_idx,
                     |bufs| {
-                        tx_completed |= handle_tx(bufs, vm_id, net_tid);
+                        tx_completed |= handle_tx(bufs, vm_id, backend);
                         0
                     },
                 );
@@ -214,17 +213,26 @@ impl VirtioDevice for NetDev {
         self.tx_last_avail = 0;
         self.tx_used_idx = 0;
     }
+
+    #[cfg(feature = "hostile-backend-recovery")]
+    fn hostile_backend_fault(&mut self, command: u32) {
+        if command == 1 && crate::backend_fault_control::disconnect(api::syscall::service::NET) {
+            self.backend.force_unavailable_once();
+            ostd::io::println("[hv-backend-fault-host] net unavailable");
+        }
+    }
 }
 
 /// Read all device-readable descriptor bytes, strip `virtio_net_hdr_v1`, and
 /// forward the frame. Returns `true` only when the Net Cell acknowledges TX.
-fn handle_tx(bufs: &[DescBuf], vm_id: usize, net_tid: usize) -> bool {
-    if net_tid == 0 || bufs.iter().any(|buf| buf.writable) {
+fn handle_tx(bufs: &[DescBuf], vm_id: usize, backend: &mut crate::net_backend::Connection) -> bool {
+    if bufs.iter().any(|buf| buf.writable) {
         return false;
     }
-    let Some(total) = bufs.iter().try_fold(0usize, |sum, buf| {
-        sum.checked_add(buf.len as usize)
-    }) else {
+    let Some(total) = bufs
+        .iter()
+        .try_fold(0usize, |sum, buf| sum.checked_add(buf.len as usize))
+    else {
         return false;
     };
     if total <= VIRTIO_NET_HDR_V1_LEN || total > api::ipc::IPC_BUF_SIZE {
@@ -239,11 +247,10 @@ fn handle_tx(bufs: &[DescBuf], vm_id: usize, net_tid: usize) -> bool {
     for buf in bufs {
         let start = payload.len();
         payload.resize(start + buf.len as usize, 0);
-        if crate::vmm::read_guest_memory(vm_id, buf.gpa, &mut payload[start..])
-            != buf.len as usize
+        if crate::vmm::read_guest_memory(vm_id, buf.gpa, &mut payload[start..]) != buf.len as usize
         {
             return false;
         }
     }
-    crate::net_backend::transmit(net_tid, &payload[VIRTIO_NET_HDR_V1_LEN..])
+    crate::net_backend::transmit(backend, &payload[VIRTIO_NET_HDR_V1_LEN..])
 }
