@@ -76,4 +76,11 @@ impl VirtioDevice for Console {
             _ => {}
         }
     }
+
+    fn reset(&mut self) {
+        self.last_avail_rx = 0;
+        self.last_avail_tx = 0;
+        self.used_rx = 0;
+        self.used_tx = 0;
+    }
 }

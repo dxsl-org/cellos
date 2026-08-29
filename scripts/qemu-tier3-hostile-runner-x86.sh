@@ -1,171 +1,206 @@
 #!/usr/bin/env bash
-# Run Tier 3 Hostile QEMU scenarios for x86 and parse the result.
-#
-# Usage:
-#   bash scripts/qemu-tier3-hostile-runner-x86.sh [iso]
-#   iso default: build/vicell-x86-hv.iso
-#
-# Environment:
-#   BOOT_WINDOW    seconds to wait (default: 900)
-#   QEMU_X86_BIN   emulator executable (default: qemu-system-x86_64)
-#   QEMU_MEMORY    outer Cellos VM memory (default: 1G)
-#   LOG_TAIL       lines of qemu-hv-hostile.raw.log printed on failure (default 200)
+# Qualified-QEMU x86 VirtIO-MMIO malformed-input evidence. The emulated UART
+# atomically tags guest records as `[guest-uart]`; exact tagged delimiters bound
+# each interval, while acceptance requires exact untagged host outcomes,
+# post-stimulus QEMU liveness, and a host-read persistent recovery write.
 
 set -euo pipefail
 
-ISO="${1:-build/vicell-x86-hv.iso}"
-BOOT_WINDOW="${BOOT_WINDOW:-900}"
+ISO="${1:-build/vicell-x86-virtio-hostile.iso}"
 QEMU_X86_BIN="${QEMU_X86_BIN:-qemu-system-x86_64}"
-QEMU_MEMORY="${QEMU_MEMORY:-1G}"
-# 0. Build the Hostile ISO if requested.
-if [ ! -f "$ISO" ] || [ "${BUILD_HOSTILE_ISO:-0}" == "1" ]; then
-    echo "Building hostile ISO..."
-    bash scripts/prepare-tier3-hostile-initramfs-x86.sh
-    INITRD_OVERRIDE="build/tier3-hostile-initramfs-x86.cpio.gz" bash scripts/make-hypervisor-fs-x86.sh --skip-fetch
-    RUSTFLAGS="-C relocation-model=static -C code-model=kernel -C no-redzone=yes -Z cf-protection=full" EMBEDDED_OVERRIDE="kernel/src/embedded-hv-x86" cargo build --release -p cellos-kernel --target x86_64-unknown-none
-    bash scripts/x86/make-iso-ci.sh "$ISO"
-fi
+QEMU_MEMORY="${QEMU_MEMORY:-2G}"
+BOOT_WINDOW="${BOOT_WINDOW:-900}"
+SCENARIO_WINDOW="${SCENARIO_WINDOW:-30}"
+LIVENESS_WINDOW="${LIVENESS_WINDOW:-1}"
+BUILD_HOSTILE_ISO="${BUILD_HOSTILE_ISO:-0}"
+WORK_DIR="${VIRTIO_HOSTILE_WORK_DIR:-build/x86-virtio-hostile}"
+INITRAMFS="$WORK_DIR/initramfs.cpio.gz"
+EVIDENCE_FS="$WORK_DIR/embedded-hv-x86"
+DISK="$WORK_DIR/outer-nvme.img"
+RAW="$WORK_DIR/qemu.raw.log"
+LOG="$WORK_DIR/qemu.log"
+PART_START=2048
+QEMU_PID=""
 
-if ! command -v "$QEMU_X86_BIN" &>/dev/null; then
-    echo "BLOCKED_ENVIRONMENT: $QEMU_X86_BIN not found"
-    exit 1
-fi
+cleanup() {
+    if [[ -n "$QEMU_PID" ]] && kill -0 "$QEMU_PID" 2>/dev/null; then
+        kill "$QEMU_PID" 2>/dev/null || true
+        wait "$QEMU_PID" 2>/dev/null || true
+    fi
+}
+trap cleanup EXIT INT TERM
 
 CORPUS_FILE="$(dirname "$0")/tier3-hostile-scenario-matrix.sh"
-if [[ ! -f "$CORPUS_FILE" ]]; then
-    echo "BLOCKED_ENVIRONMENT: scenario matrix file not found: $CORPUS_FILE"
-    exit 1
-fi
+[[ -f "$CORPUS_FILE" ]] \
+    || { echo "BLOCKED_ENVIRONMENT: scenario matrix missing: $CORPUS_FILE" >&2; exit 1; }
 source "$CORPUS_FILE"
-
-QEMU_VERSION_TEXT="$("$QEMU_X86_BIN" --version | sed -n '1p')"
-if [[ ! "$QEMU_VERSION_TEXT" =~ QEMU\ emulator\ version\ ([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
-    echo "BLOCKED_ENVIRONMENT: cannot parse QEMU version: $QEMU_VERSION_TEXT"
+for tool in dd sfdisk mkfs.fat mcopy cmp sync truncate sha256sum; do
+    command -v "$tool" >/dev/null 2>&1 \
+        || { echo "BLOCKED_ENVIRONMENT: required tool not found: $tool" >&2; exit 1; }
+done
+if ! command -v "$QEMU_X86_BIN" >/dev/null 2>&1 && [[ ! -x "$QEMU_X86_BIN" ]]; then
+    echo "BLOCKED_ENVIRONMENT: QEMU executable not found: $QEMU_X86_BIN" >&2
     exit 1
 fi
-QEMU_MAJOR="${BASH_REMATCH[1]}"
-QEMU_MINOR="${BASH_REMATCH[2]}"
-QEMU_PATCH="${BASH_REMATCH[3]}"
-if (( QEMU_MAJOR != 10 || QEMU_MINOR != 2 || QEMU_PATCH != 0 )); then
-    echo "BLOCKED_ENVIRONMENT: require QEMU 10.2.0 for strict hostile-path evidence, found: $QEMU_VERSION_TEXT"
-    exit 1
-fi
+qemu_version="$("$QEMU_X86_BIN" --version | sed -n '1p')"
+[[ "$qemu_version" =~ QEMU\ emulator\ version\ 10\.2\.0([^0-9]|$) ]] \
+    || { echo "BLOCKED_ENVIRONMENT: require QEMU-TCG 10.2.0, found: $qemu_version" >&2; exit 1; }
 
-if [[ ! -f "$ISO" ]]; then
-    echo "BLOCKED_ENVIRONMENT: ISO not found: $ISO"
-    exit 1
+mkdir -p "$WORK_DIR"
+[[ "$BUILD_HOSTILE_ISO" == 0 || "$BUILD_HOSTILE_ISO" == 1 ]] \
+    || { echo "FAIL: BUILD_HOSTILE_ISO must be 0 or 1" >&2; exit 1; }
+if [[ ! -f "$ISO" || "$BUILD_HOSTILE_ISO" == 1 ]]; then
+    VIRTIO_E2E_MODE=hostile VIRTIO_E2E_INITRAMFS="$INITRAMFS" \
+        bash scripts/prepare-x86-virtio-e2e-initramfs.sh
+    HV_INIT_MIN=1 INITRD_OVERRIDE="$INITRAMFS" \
+        bash scripts/make-hypervisor-fs-x86.sh --skip-fetch
+    rm -rf "$EVIDENCE_FS"
+    mkdir -p "$EVIDENCE_FS"
+    cp -a kernel/src/embedded-hv-x86/. "$EVIDENCE_FS/"
+    printf 'rdinit=/bin/virtio-e2e-init\n' > "$WORK_DIR/selector"
+    mcopy -o -i "$EVIDENCE_FS/kernel_fs.img" "$WORK_DIR/selector" ::/virtio-e2e
+    RUSTFLAGS="-C relocation-model=static -C code-model=kernel -C no-redzone=yes -Z cf-protection=full" \
+        EMBEDDED_OVERRIDE="$EVIDENCE_FS" \
+        cargo build --release -p cellos-kernel --target x86_64-unknown-none
+    bash scripts/x86/make-iso-ci.sh "$ISO"
 fi
+[[ -f "$ISO" ]] || { echo "BLOCKED_ENVIRONMENT: hostile ISO not found: $ISO" >&2; exit 1; }
 
-QEMU_ISO="$ISO"
+truncate -s 0 "$DISK"
+truncate -s 256M "$DISK"
+printf 'label: dos\nunit: sectors\n\nstart=2048,type=c\n' | sfdisk "$DISK" >/dev/null
+mkfs.fat -F 32 --offset="$PART_START" -n CELLOSHOST "$DISK" >/dev/null
+dd if=/dev/zero of="$WORK_DIR/guest_disk.img" bs=1M count=16 status=none
+mcopy -o -i "$DISK@@$((PART_START * 512))" "$WORK_DIR/guest_disk.img" ::/guest_disk.img
+sync -d "$DISK"
+
+QEMU_ISO="$(realpath "$ISO")"
+QEMU_DISK="$(realpath "$DISK")"
 if [[ "${QEMU_X86_BIN,,}" == *.exe ]]; then
-    QEMU_ISO="$(wslpath -w "$ISO")"
+    command -v wslpath >/dev/null 2>&1 \
+        || { echo "BLOCKED_ENVIRONMENT: Windows QEMU requires wslpath" >&2; exit 1; }
+    QEMU_ISO="$(wslpath -w "$QEMU_ISO")"
+    QEMU_DISK="$(wslpath -w "$QEMU_DISK")"
 fi
-BOOT_WINDOW="${BOOT_WINDOW:-60}"
 
-QEMU_VERSION="$QEMU_VERSION_TEXT"
-echo "[hv-hostile-x86] iso=$ISO memory=$QEMU_MEMORY (window=${BOOT_WINDOW}s)"
-echo "[hv-hostile-x86] $QEMU_VERSION"
-
-# Run QEMU in background.
-"$QEMU_X86_BIN" \
-    -machine q35 \
-    -accel tcg \
-    -cpu qemu64,+pdpe1gb,+svm \
-    -m "$QEMU_MEMORY" \
-    -nographic \
-    -cdrom "$QEMU_ISO" \
-    -boot d \
-    -no-reboot \
-    < /dev/null > qemu-hv-hostile.raw.log 2>&1 &
+fatal_pattern='KERNEL PANIC|\[fault\] Cell|\[hv-x86\].*(fail|error|unexpected|unsupported|unknown vmexit|unhandled|guest (exited|shutdown)|triple-fault)|\[hv-x86\] volatile disk fallback|Init: hypervisor exited|VIRTIO_HOSTILE_FAIL:|corrupt(ion|ed)?'
+"$QEMU_X86_BIN" -machine q35 -device intel-iommu,intremap=on \
+    -accel tcg -cpu qemu64,+pdpe1gb,+svm -m "$QEMU_MEMORY" -nographic \
+    -cdrom "$QEMU_ISO" -boot d -no-reboot \
+    -drive "file=$QEMU_DISK,if=none,id=nvme0,format=raw" \
+    -device nvme,drive=nvme0,serial=CELLOSHOSTILE \
+    -netdev user,id=net0,net=10.0.2.0/24 \
+    -device e1000,netdev=net0,mac=52:54:00:12:34:57 \
+    < /dev/null > "$RAW" 2>&1 &
 QEMU_PID=$!
+overall_deadline=$((SECONDS + BOOT_WINDOW))
 
-# Observe the real budget and reset stimuli from the host. Their guest-side
-# start markers do not prove VMM preemption or supervisor recovery.
-BUDGET_WINDOW="${BUDGET_WINDOW:-1}"
-RESET_WINDOW="${RESET_WINDOW:-3}"
-BUDGET_STARTED_AT=""
-BUDGET_LIVENESS=0
-RESET_STARTED_AT=""
-RESET_GUEST_EXIT_OBSERVED=0
-end_time=$((SECONDS + BOOT_WINDOW))
-while [[ $SECONDS -lt $end_time ]]; do
-    if grep -q "\[HOSTILE_PROBE\] BUDGET_TEST_STARTED" qemu-hv-hostile.raw.log 2>/dev/null; then
-        if [[ -z "$BUDGET_STARTED_AT" ]]; then
-            BUDGET_STARTED_AT=$SECONDS
-        elif (( SECONDS - BUDGET_STARTED_AT >= BUDGET_WINDOW )) && kill -0 "$QEMU_PID" 2>/dev/null; then
-            BUDGET_LIVENESS=1
-        fi
-    fi
-    if grep -q "\[HOSTILE_PROBE\] RESET_TEST_STARTED" qemu-hv-hostile.raw.log 2>/dev/null; then
-        if [[ -z "$RESET_STARTED_AT" ]]; then
-            RESET_STARTED_AT=$SECONDS
-        elif grep -q "\[hv-x86\] guest exited" qemu-hv-hostile.raw.log 2>/dev/null; then
-            RESET_GUEST_EXIT_OBSERVED=1
-            break
-        elif (( SECONDS - RESET_STARTED_AT >= RESET_WINDOW )); then
-            break
-        fi
-    fi
-    if grep -q "KERNEL PANIC\|\[fault\] Cell\|\[hv-x86\] guest triple-fault" qemu-hv-hostile.raw.log 2>/dev/null \
-        || ! kill -0 "$QEMU_PID" 2>/dev/null; then
-        break
-    fi
-    sleep 1
-done
-
-if kill -0 "$QEMU_PID" 2>/dev/null; then
-    kill "$QEMU_PID" 2>/dev/null || true
-fi
-wait "$QEMU_PID" 2>/dev/null || true
-# Strip NULs and ANSI escapes for the parsed log.
-tr -d '\000' < qemu-hv-hostile.raw.log | sed 's/\x1b\[[0-9;]*m//g' > qemu-hv-hostile.log
-
-LOG_TAIL="${LOG_TAIL:-200}"
-
-dump_log() {
-    echo "--- qemu-hv-hostile.log tail ---"
-    tail -n "$LOG_TAIL" qemu-hv-hostile.log
-    echo "--------------------------------"
+fail_live() {
+    echo "FAIL: $1" >&2
+    tr -d '\000\r' < "$RAW" | tail -n 200 >&2 || true
+    exit 1
 }
-
-# 1. Check for hard environment failures / fatal panics.
-if grep -qia "KERNEL PANIC\|\[fault\] Cell" qemu-hv-hostile.log; then
-    echo "FAIL: kernel panic or cell fault detected."
-    dump_log
-    exit 1
-fi
-if grep -qi "\[hv-x86\] guest triple-fault" qemu-hv-hostile.log; then
-    # In some QEMU versions this is deterministic.
-    echo "BLOCKED_ENVIRONMENT: Guest triple-fault (possibly QEMU environment issue)"
-    dump_log
-    exit 1
-fi
-
-if grep -qi "\[hv-x86\] .*fail\|\[hv-x86\] .*error\|\[hv-x86\] unhandled guest MMIO\|\[hv-x86\] unexpected" qemu-hv-hostile.log; then
-    echo "FAIL: hypervisor cell error or unhandled state detected."
-    dump_log
-    exit 1
-fi
-
-for row in "${TIER3_HOSTILE_CORPUS[@]}"; do
-    IFS='|' read -r scenario marker _mode expected <<<"$row"
-    if [[ -z "$scenario" || "$scenario" == \#* ]]; then
-        continue
-    fi
-    if ! grep -qF "$marker" qemu-hv-hostile.log; then
-        echo "FAIL: hostile probe did not emit expected marker: $marker ($scenario)"
-        dump_log
-        exit 1
-    fi
+blocked_live() {
+    local reason
+    reason="$(tr -d '\000\r' < "$RAW" | sed -n 's/^USER: \[guest-uart\] VIRTIO_HOSTILE_BLOCKED://p' | sed -n '$p')"
+    cleanup
+    QEMU_PID=""
+    echo "BLOCKED_SCOPE: direct guest transport prerequisite missing: ${reason:-unknown guest tooling restriction}."
+    exit 2
+}
+wait_global() {
+    local marker="$1"
+    while (( SECONDS < overall_deadline )); do
+        grep -axFq "USER: [guest-uart] $marker" "$RAW" 2>/dev/null && return 0
+        grep -aFq 'USER: [guest-uart] VIRTIO_HOSTILE_BLOCKED:' "$RAW" 2>/dev/null && blocked_live
+        grep -aEqi "$fatal_pattern" "$RAW" 2>/dev/null && fail_live "fatal evidence condition"
+        kill -0 "$QEMU_PID" 2>/dev/null || fail_live "outer QEMU exited before: $marker"
+        sleep 1
+    done
+    fail_live "boot window expired before: $marker"
+}
+wait_scenario_done() {
+    local marker="$1" deadline=$((SECONDS + SCENARIO_WINDOW))
+    while (( SECONDS < deadline && SECONDS < overall_deadline )); do
+        grep -axFq "USER: [guest-uart] $marker" "$RAW" 2>/dev/null && return 0
+        grep -aFq 'USER: [guest-uart] VIRTIO_HOSTILE_BLOCKED:' "$RAW" 2>/dev/null && blocked_live
+        grep -aEqi "$fatal_pattern" "$RAW" 2>/dev/null && fail_live "fatal evidence condition"
+        kill -0 "$QEMU_PID" 2>/dev/null || fail_live "outer QEMU exited before: $marker"
+        sleep 1
+    done
+    fail_live "scenario window expired before: $marker"
+}
+verify_interval() {
+    local scenario="$1" host_marker="$2"
+    local start="[VIRTIO_HOSTILE] START $scenario"
+    local done_marker="[VIRTIO_HOSTILE] DONE $scenario"
+    local start_count done_count start_line done_line host_count outcome_count
+    start_count="$(grep -acxF "USER: [guest-uart] $start" "$RAW" || true)"
+    done_count="$(grep -acxF "USER: [guest-uart] $done_marker" "$RAW" || true)"
+    [[ "$start_count" == 1 && "$done_count" == 1 ]] \
+        || fail_live "scenario delimiters must be unique: $scenario"
+    start_line="$(grep -anxF "USER: [guest-uart] $start" "$RAW" | sed -n '1s/:.*//p')"
+    done_line="$(grep -anxF "USER: [guest-uart] $done_marker" "$RAW" | sed -n '1s/:.*//p')"
+    [[ "$done_line" -gt "$start_line" ]] || fail_live "invalid START-to-DONE order: $scenario"
+    host_count="$(sed -n "$((start_line + 1)),$((done_line - 1))p" "$RAW" \
+        | grep -acxF "USER: $host_marker" || true)"
+    outcome_count="$(sed -n "$((start_line + 1)),$((done_line - 1))p" "$RAW" \
+        | grep -acE '^USER: \[(hv-virtio-host|hv-blk-host)\] ' || true)"
+    [[ "$host_count" == 1 && "$outcome_count" == 1 ]] \
+        || fail_live "expected one exclusive host outcome inside $scenario interval: $host_marker"
+}
+wait_global '[VIRTIO_HOSTILE] TRANSPORTS_ISOLATED'
+for row in "${X86_VIRTIO_HOSTILE_CORPUS[@]}"; do
+    IFS='|' read -r scenario host_marker axis <<<"$row"
+    start="[VIRTIO_HOSTILE] START $scenario"
+    done_marker="[VIRTIO_HOSTILE] DONE $scenario"
+    wait_global "$start"
+    wait_scenario_done "$done_marker"
+    verify_interval "$scenario" "$host_marker"
+    sleep "$LIVENESS_WINDOW"
+    kill -0 "$QEMU_PID" 2>/dev/null \
+        || fail_live "outer QEMU died after $axis stimulus: $scenario"
 done
 
-if [ "$BUDGET_LIVENESS" -eq 1 ]; then
-    echo "OBSERVED: outer QEMU remained live after the vCPU-budget stimulus."
-fi
-if [ "$RESET_GUEST_EXIT_OBSERVED" -eq 1 ]; then
-    echo "OBSERVED: nested VMM guest exited after the guest reset stimulus."
-else
-    echo "UNOBSERVED: guest reset stimulus produced no nested-VMM exit or supervisor restart."
-fi
-echo "BLOCKED_SCOPE: bounds, descriptor, and backend lack guest-visible VMM/VirtIO transport; VMM preemption and supervisor restart remain unobserved."
+recovery_start='[VIRTIO_HOSTILE] START recovery-write-flush'
+recovery_done='[VIRTIO_HOSTILE] DONE recovery-write-flush'
+wait_global "$recovery_start"
+wait_scenario_done "$recovery_done"
+[[ "$(grep -acxF "USER: [guest-uart] $recovery_start" "$RAW" || true)" == 1 \
+    && "$(grep -acxF "USER: [guest-uart] $recovery_done" "$RAW" || true)" == 1 ]] \
+    || fail_live "recovery delimiters must be unique"
+recovery_start_line="$(grep -anxF "USER: [guest-uart] $recovery_start" "$RAW" | sed -n '1s/:.*//p')"
+recovery_done_line="$(grep -anxF "USER: [guest-uart] $recovery_done" "$RAW" | sed -n '1s/:.*//p')"
+[[ "$recovery_done_line" -gt "$recovery_start_line" ]] \
+    || fail_live "invalid recovery START-to-DONE order"
+sleep "$LIVENESS_WINDOW"
+kill -0 "$QEMU_PID" 2>/dev/null || fail_live "outer QEMU died after recovery write/flush"
+cleanup
+QEMU_PID=""
+for row in "${X86_VIRTIO_HOSTILE_CORPUS[@]}"; do
+    IFS='|' read -r scenario host_marker _axis <<<"$row"
+    verify_interval "$scenario" "$host_marker"
+done
+tr -d '\000\r' < "$RAW" | sed -e 's/\x1b\[[0-9;]*m//g' -e 's/^USER: \[guest-uart\] //' -e 's/^USER: //' > "$LOG"
+grep -Eqi "$fatal_pattern" "$LOG" && fail_live "fatal condition in normalized log"
+grep -axFq 'USER: [hv-x86] persistent disk: /mnt/sd/guest_disk.img' "$RAW" \
+    || fail_live "persistent production backend was absent"
+grep -aEq '^\[( INFO| WARN)\] \[vtd\] Intel VT-d: DMA isolation ACTIVE( .*)?$' "$RAW" \
+    || fail_live "VT-d isolation was not active"
+
+rm -f "$WORK_DIR/recovered.img" "$WORK_DIR/recovered-prefix"
+mcopy -i "$DISK@@$((PART_START * 512))" ::/guest_disk.img "$WORK_DIR/recovered.img"
+printf %s CELLOS_X86_VIRTIO_HOSTILE_RECOVERY_V1 > "$WORK_DIR/expected-prefix"
+dd if="$WORK_DIR/recovered.img" of="$WORK_DIR/recovered-prefix" bs=1 \
+    count="$(wc -c < "$WORK_DIR/expected-prefix")" status=none
+cmp -s "$WORK_DIR/expected-prefix" "$WORK_DIR/recovered-prefix" \
+    || fail_live "host-read backend lacks recovery write"
+
+echo "OBSERVED: host-authored VirtIO rejection markers and post-stimulus QEMU liveness for ${#X86_VIRTIO_HOSTILE_CORPUS[@]} bounded scenarios."
+echo "OBSERVED: host-read persistent backend contains the post-reset recovery write after flush."
+for row in "${X86_VIRTIO_HOSTILE_BLOCKED[@]}"; do
+    IFS='|' read -r axis prerequisite <<<"$row"
+    echo "BLOCKED_SCOPE: $axis requires $prerequisite."
+done
+echo "Scope: qualified QEMU-TCG emulator evidence only; no physical-hardware claim."
 exit 2

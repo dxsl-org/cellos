@@ -24,7 +24,7 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-for tool in dd sfdisk mkfs.fat mcopy sync truncate sha256sum; do
+for tool in dd sfdisk mkfs.fat mcopy cmp sync truncate sha256sum; do
     command -v "$tool" >/dev/null 2>&1 \
         || { echo "BLOCKED_ENVIRONMENT: required tool not found: $tool" >&2; exit 1; }
 done
@@ -85,7 +85,7 @@ if [[ "${QEMU_X86_BIN,,}" == *.exe ]]; then
     QEMU_DISK="$(wslpath -w "$QEMU_DISK")"
 fi
 
-fatal_pattern='KERNEL PANIC|\[fault\] Cell|\[hv-x86\].*(fail|error|unexpected|unsupported|unknown vmexit|unhandled|guest (exited|shutdown)|triple-fault)|\[hv-x86\] volatile disk fallback|Init: hypervisor exited|VIRTIO_E2E_FAIL:'
+fatal_pattern='KERNEL PANIC|\[fault\] Cell|\[hv-x86\].*(fail|error|unexpected|unsupported|unknown vmexit|unhandled|guest (exited|shutdown)|triple-fault)|\[hv-x86\] volatile disk fallback|Init: hypervisor exited|VIRTIO_E2E_FAIL:|corrupt(ion|ed)?'
 common_markers=(
     VIRTIO_E2E_BLOCK_DISCOVERY_PASS VIRTIO_E2E_NET_DISCOVERY_PASS
     VIRTIO_E2E_NET_TX_RX_PASS VIRTIO_E2E_IRQ5_PASS VIRTIO_E2E_IRQ6_PASS
@@ -113,7 +113,7 @@ run_outer() {
     cleanup
     ACTIVE_QEMU_PID=""
     tr -d '\000\r' < "$raw" \
-        | sed -e 's/\x1b\[[0-9;]*m//g' -e 's/^USER: //' > "$log"
+        | sed -e 's/\x1b\[[0-9;]*m//g' -e 's/^USER: \[guest-uart\] //' -e 's/^USER: //' > "$log"
     if grep -Eqi "$fatal_pattern" "$log"; then
         echo "FAIL: fatal evidence condition in outer run $run" >&2
         tail -n 200 "$log" >&2
@@ -133,9 +133,32 @@ run_outer() {
     ! grep -qxF "$forbidden" "$log" \
         || { echo "FAIL: run $run emitted wrong-phase marker: $forbidden" >&2; exit 1; }
 }
+extract_backend() {
+    local output="$1"
+    rm -f "$output"
+    mcopy -i "$DISK@@$((PART_START * 512))" ::/guest_disk.img "$output"
+}
+
+verify_backend_marker() {
+    local run="$1"
+    local image="$WORK_DIR/run${run}.guest_disk.img"
+    local expected="$WORK_DIR/normal-expected" actual="$WORK_DIR/run${run}.prefix"
+    printf %s CELLOS_X86_VIRTIO_E2E_PERSIST_V1 > "$expected"
+    extract_backend "$image"
+    dd if="$image" of="$actual" bs=1 count="$(wc -c < "$expected")" status=none
+    cmp -s "$expected" "$actual" \
+        || { echo "FAIL: host-read backend missing persistence marker after run $run" >&2; exit 1; }
+}
+
 
 run_outer 1 VIRTIO_E2E_FIRST_RUN_PASS VIRTIO_E2E_BLOCK_READBACK_PASS
+verify_backend_marker 1
+run1_backend_sha="$(sha256sum "$WORK_DIR/run1.guest_disk.img" | cut -d ' ' -f 1)"
 run_outer 2 VIRTIO_E2E_SECOND_RUN_PASS VIRTIO_E2E_BLOCK_WRITE_FLUSH_PASS
+verify_backend_marker 2
+run2_backend_sha="$(sha256sum "$WORK_DIR/run2.guest_disk.img" | cut -d ' ' -f 1)"
+[[ "$run1_backend_sha" == "$run2_backend_sha" ]] \
+    || { echo "FAIL: persistent backend changed during readback run" >&2; exit 1; }
 for pair in '1 VIRTIO_E2E_BLOCK_WRITE_FLUSH_PASS' '2 VIRTIO_E2E_BLOCK_READBACK_PASS'; do
     set -- $pair
     grep -qxF "$2" "$WORK_DIR/run$1.log" \

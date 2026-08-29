@@ -44,6 +44,8 @@ const MSR_DEFAULT: u8 = 0xB0; // DCD | DSR | CTS asserted (modem lines up)
 /// Bound the RX FIFO so a runaway host input stream cannot grow the cell heap;
 /// 16550-style overflow policy: newest bytes are dropped.
 const RX_FIFO_CAP: usize = 256;
+const TX_LINE_CAP: usize = 1024;
+const TX_PREFIX: &[u8] = b"[guest-uart] ";
 
 /// Minimal 16550 register state + RX FIFO.
 pub struct Uart16550 {
@@ -60,6 +62,10 @@ pub struct Uart16550 {
     /// the IIR read that reports it, per the 16550 contract. Without the edge
     /// latch a level model would interrupt-storm the guest.
     thre_latch: bool,
+    /// Guest bytes are buffered into bounded, atomically logged records so
+    /// another host diagnostic cannot splice guest text into its origin.
+    tx_line: [u8; TX_LINE_CAP],
+    tx_line_len: usize,
 }
 
 impl Uart16550 {
@@ -74,6 +80,8 @@ impl Uart16550 {
             dlm: 0,
             rx: VecDeque::new(),
             thre_latch: false,
+            tx_line: [0; TX_LINE_CAP],
+            tx_line_len: 0,
         }
     }
 
@@ -110,7 +118,7 @@ impl Uart16550 {
                 if self.dlab() {
                     self.dll = byte;
                 } else {
-                    forward(byte);
+                    self.forward(byte);
                     // Synchronous TX: the holding register is empty again the
                     // moment the write completes.
                     self.thre_latch = self.ier & IER_THRE != 0;
@@ -183,13 +191,36 @@ impl Uart16550 {
         };
         v as u32
     }
-}
 
-/// Forward one TX byte to the ViCell console (ASCII only; non-UTF-8 dropped —
-/// the guest console stream is text, matching the ARM PL011 model).
-fn forward(byte: u8) {
-    let buf = [byte];
-    if let Ok(s) = core::str::from_utf8(&buf) {
-        print(s);
+    /// Buffer one guest TX byte and publish complete origin-tagged records.
+    fn forward(&mut self, byte: u8) {
+        if byte == b'\r' {
+            return;
+        }
+        if byte == b'\n' {
+            self.flush_tx_line();
+            return;
+        }
+        if self.tx_line_len == TX_LINE_CAP {
+            self.flush_tx_line();
+        }
+        self.tx_line[self.tx_line_len] = if byte.is_ascii_graphic() || byte == b' ' {
+            byte
+        } else {
+            b'?'
+        };
+        self.tx_line_len += 1;
+    }
+
+    fn flush_tx_line(&mut self) {
+        let mut record = [0u8; TX_LINE_CAP + 14];
+        record[..TX_PREFIX.len()].copy_from_slice(TX_PREFIX);
+        let end = TX_PREFIX.len() + self.tx_line_len;
+        record[TX_PREFIX.len()..end].copy_from_slice(&self.tx_line[..self.tx_line_len]);
+        record[end] = b'\n';
+        // All bytes are fixed ASCII or sanitized in `forward`.
+        let text = unsafe { core::str::from_utf8_unchecked(&record[..=end]) };
+        print(text);
+        self.tx_line_len = 0;
     }
 }

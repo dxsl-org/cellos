@@ -8,26 +8,37 @@
 extern crate alloc;
 use alloc::boxed::Box;
 use api::ipc::{self, NetRequest, NetResponse, IPC_BUF_SIZE};
-use ostd::syscall::{sys_recv, sys_send};
+use ostd::syscall::{sys_recv, sys_send, SyscallResult};
 
 use crate::virtio_net::GUEST_MAC;
 
 /// Forward a raw Ethernet frame to the Net Cell for NIC TX.
 ///
-/// Blocks until the Net Cell sends its `Ok` acknowledgement.  No-op when `net_tid == 0`.
-pub fn transmit(net_tid: usize, frame: &[u8]) {
+/// `net_tid` identifies the Net Cell and `frame` contains the complete L2 frame.
+/// Returns `true` only when the request is encoded and the Net Cell acknowledges
+/// it with `NetResponse::Ok`; returns `false` when the service is unavailable or
+/// returns any other response.
+pub fn transmit(net_tid: usize, frame: &[u8]) -> bool {
     if net_tid == 0 {
-        return;
+        return false;
     }
     let req = NetRequest::L2Send { data: frame };
     let mut buf = [0u8; IPC_BUF_SIZE];
     let Ok(msg) = ipc::encode(&req, &mut buf) else {
-        return;
+        return false;
     };
-    sys_send(net_tid, msg);
-    // Drain the mandatory Ok response to prevent mailbox accumulation.
+    if !matches!(sys_send(net_tid, msg), SyscallResult::Ok(_)) {
+        return false;
+    }
+    // Bind the acknowledgement to the Net Cell so queued traffic cannot satisfy it.
     let mut rb = [0u8; IPC_BUF_SIZE];
-    sys_recv(0, &mut rb);
+    if !matches!(sys_recv(net_tid, &mut rb), SyscallResult::Ok(sender) if sender == net_tid) {
+        return false;
+    }
+    matches!(
+        ipc::decode::<NetResponse<'_>>(&rb),
+        Ok(NetResponse::Ok)
+    )
 }
 
 /// Poll the Net Cell for one inbound Ethernet frame destined for the guest MAC.
@@ -45,9 +56,13 @@ pub fn try_receive(net_tid: usize) -> Option<Box<[u8]>> {
     let Ok(msg) = ipc::encode(&req, &mut buf) else {
         return None;
     };
-    sys_send(net_tid, msg);
+    if !matches!(sys_send(net_tid, msg), SyscallResult::Ok(_)) {
+        return None;
+    }
     let mut rb = [0u8; IPC_BUF_SIZE];
-    sys_recv(0, &mut rb);
+    if !matches!(sys_recv(net_tid, &mut rb), SyscallResult::Ok(sender) if sender == net_tid) {
+        return None;
+    }
     match ipc::decode::<NetResponse<'_>>(&rb) {
         Ok(NetResponse::Data(frame)) if !frame.is_empty() => Some(Box::from(frame)),
         _ => None,

@@ -74,7 +74,7 @@ The x86 guest now uses one pinned VirtIO-MMIO map and the shared block/network p
 - [x] Aggregate evidence shows that the normal pinned x86 strict guest reaches `/bin/sh` and the dedicated evidence guest discovers the selected block/network devices.
 - [x] Persistent block FLUSH/reboot/read semantics match Phase 09.
 - [x] Network traffic uses the shared backend with a distinct nested MAC and no hard-coded QEMU-only identity leak.
-- [ ] Malformed transport/queue inputs fail without host panic or cross-guest/service corruption.
+- [x] Malformed transport/queue inputs fail without host panic or cross-guest/service corruption under the bounded QEMU corpus.
 - [x] No physical AMD/Intel qualification claim is added.
 
 ## Security Considerations
@@ -83,11 +83,16 @@ Treat every guest transport field, GPA, queue index, descriptor, length, and int
 
 ## Risk Assessment
 
-The bounded two-boot path is proved only under pinned QEMU-TCG 10.2.0. Malformed transport/queue coverage and full Phase 06 hostile parity remain required before this phase can close; physical AMD/Intel qualification remains independent.
+The bounded two-boot and 22-scenario hostile paths are proved only under pinned
+QEMU-TCG 10.2.0. Fault-injectable block/network backend disconnect evidence and
+ARM64 hostile execution remain blocked; physical AMD/Intel qualification remains
+independent.
 
 ## Next Steps
 
-Add malformed transport/queue evidence and run the supported Phase 06 hostile scenarios for parity. Keep physical x86 independently gated.
+Add fault-injectable persistent VFS and Net Cell disconnect/recovery evidence,
+then rerun the ARM64 hostile corpus in an environment that reaches the probe.
+Keep physical x86 independently gated.
 
 ## Deviation Log
 
@@ -101,4 +106,24 @@ Add malformed transport/queue evidence and run the supported Phase 06 hostile sc
 - The E2E image selects its dedicated evidence init with `/virtio-e2e`; normal pinned strict boot and shell evidence remains separate. Linux modern VirtIO networking uses the 12-byte `virtio_net_hdr_v1`: TX strips 12 bytes, RX prepends 12 bytes, and RX sets `num_buffers=1`.
 - Outer persistence required NVMe FLUSH to use namespace ID 1, the actual namespace, rather than invalid namespace ID 0.
 - The reviewed active-IOMMU boundary instantiates `intel-iommu`, rejects DMA mapping unless isolation is active and the backend confirms the map, rolls back exactly one pin hold on failure, and enables BME and records quota only after mapping succeeds.
-- This evidence ceiling is QEMU only. Malformed transport/queue inputs and full Phase 06 hostile parity remain open, so Phase 10 stays blocked; no physical AMD/Intel, service, or production qualification is claimed.
+- This evidence ceiling remains QEMU only. The supported x86 hostile corpus is
+  closed, but fault-injected backend disconnect/recovery and ARM64 hostile
+  execution remain blocked, so Phase 10 stays blocked; no physical AMD/Intel,
+  service, or production qualification is claimed.
+- The qualified x86 hostile runner observed exactly one host-authored outcome
+  inside each of 22 origin-separated START/DONE intervals, including bounded
+  transport, queue, descriptor, reset, unsupported block opcode, and
+  sender-authenticated network TX recovery scenarios. QEMU remained live after
+  each stimulus, and a host read recovered the post-reset write after FLUSH.
+- Guest UART records are bounded, printable-ASCII sanitized, and emitted
+  atomically with a `[guest-uart]` origin tag. The hostile parser checks exact
+  tagged guest delimiters against exact untagged host outcomes and requires one
+  exclusive VirtIO/block outcome per interval.
+- Net TX completion evidence is one-shot across guest resets and requires both
+  a reply from the configured Net Cell TID and `NetResponse::Ok`; unrelated
+  mailbox traffic and failed backend sends cannot satisfy it.
+- `scripts/qemu-x86-virtio-e2e.sh` was rebuilt and rerun after the UART evidence
+  boundary changed. Both persistent block/network boots passed on QEMU-TCG
+  10.2.0. The hostile runner intentionally exits `2` after its 22 observations
+  because backend-disconnect, net-backend-disconnect, and ARM64 execution remain
+  explicit blocked scope; no physical or production qualification is claimed.

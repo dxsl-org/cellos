@@ -1,24 +1,13 @@
 # TODO
-- Tier 3 hostile-QEMU Phase 06.
+- Nếu muốn tránh tiếp tục chạm hypervisor ngay, lựa chọn tốt thứ hai là sửa raw TLS explicit-length contract. Đây là technical debt mức High: code đang trim theo byte khác zero cuối cùng, có thể cắt payload nhị phân hợp lệ kết thúc bằng 0x00 (docs/roadmap/open-risk-register.md:69-72).
+- Malformed MMIO/virtqueue/descriptor inputs chưa có hostile evidence đầy đủ.
+- Chưa chạy hết hostile parity scenarios của Phase 06.
+- Chưa qualify trên phần cứng AMD/Intel thật.
+- Vì vậy .agents/260827-1004-hardware-independent-roadmap/phase-10-tier3-x86-virtio-parity.md:4 vẫn là status: blocked; success criterion malformed-input tại dòng 77 còn unchecked.
+- Ngoài lane này còn các việc lớn như x86 Platform Cell discovery, kernel-owned x86 paging, per-vector IDT stubs và production
+ trust keys.
 - Phase 04 two-node/direct-LAN vẫn được ghi blocked riêng theo authority mTLS; không chặn single-guest gate.
-- Hiện tại chỉ có RPi3 B+, bỏ RPi3 A+ cho đến khi có nhu cầu thực tế.
-### Hai blocker không thể tự đóng
-1. Sáu chữ ký con người độc lập:
-  - compiler/toolchain owner;
-  - independent PAL reviewer;
-  - SDK/runtime owner;
-  - security owner;
-  - performance owner;
-  - independent measurement reviewer.
-2. Umbrella Phase 03 production authority:
-  - external non-replayable hardware floor;
-  - physical replay/power-loss evidence;
-  - production anchors/credentials;
-  - signed CI hoặc secure measured runner;
-  - release/ledger closure;
-  - security-owner và independent-reviewer approval.
 
-### Thứ tự thực hiện khuyến nghị
 1. Chọn floor backend + production hardware
 2. Security review thiết kế floor/A-B protocol
 3. Fix loader signature boundary
@@ -33,43 +22,19 @@
 12. Release/ledger PASS
 13. Xét mở PAL-IMPLEMENTATION-CHECKPOINT
 
-
-
-
-
-
-
-## Canonical Capability Routing
-
-Product stages are release overlays, not a global work queue. Execute a lane
-only at its documented evidence ceiling; QEMU/host evidence does not become
-physical, secure-root, cloud, or production evidence.
-
-| Lane | Execution class | Next action / reopening event |
-|---|---|---|
-| RPi3 HDMI software and exact-device boundary | `scope-gated` | Completed/regression-only on RPi3-B; reopen only for a regression or separately governed production qualification |
-| Tier 3 hostile QEMU evidence | `scope-gated` | Add VMM/VirtIO transport for bounds, descriptors, and backend errors, plus independent preemption and supervisor-restart outcomes |
-| ARM64 persistent storage | `scope-gated` | Add supported Phase 06 scenarios; the fixed 8 MiB `build/tier3-arm64-persistent.img` policy is approved |
-| Desktop/ViUI/SDK | `scope-gated` | F1 signing governance is restored; resume the owning QEMU input/scanout slice |
-| Local Cell-to-Cell | `scope-gated` | K1 fixture and the single-guest local-runtime QEMU baseline suite are done and required by CI job `c2c-broker-oracle-single-guest-local-runtime`; next prove the still-open two-node relay/direct-LAN and restart-cleanup criteria |
-| Kernel security/PAL | `governance-gated` | Obtain named approvals and implementation checkpoints |
-| Authenticated evidence | `scope-gated` | Run and offline-verify the immutable `.github/workflows/ci.yml` bundle; only approved software/QEMU classes are eligible |
-| x86 VirtIO parity | `scope-gated` | Add supported Phase 06 hostile scenarios, then pin one transport after the shared persistence backend |
-| G3 accelerator | `external-gated` | Obtain RK3588, accepted RKNN package/license, then X390 evidence |
-| Protected relay / production root | `external-gated` | Obtain named hardware/cloud assets; ADR-0006 requires a superseding GO ADR |
-1. [in-progress] RPi3:
+14. [in-progress] RPi3:
     - SD Storage và HDMI trên RPi3-B [completed]; I2C/SPI [in-progress]
     - Phase 05: Gỡ nghẽn USB Policy v3 & Level IRQ 9
     - cần sensor như SHT3x hoặc MPU6050
-2. [in-progress] RISC-V/x86 Board: Bringup thực tế trên VF2, Pioneer, MiniPC
-3. [blocked] SDK relay client mutual TLS: only this two-real-broker relay path is blocked by the protected-persistence, authenticated-time, and reviewed pending-key-binding entry gates under frozen KMS opcodes 9–14 in `.agents/260825-1726-kms-silo-production-root/phase-04-service-net-mutual-tls-integration.md`; reopen only when DEV_REFERENCE Phase 8 emits exact `GO: PHASE4_ENTRY_GATES_SATISFIED`. This is not a global blocker for single-guest or other approved local work; the attempted protocol scaffold was fully reverted after governance review, with no dead or unwired implementation remaining.
+15. [in-progress] RISC-V/x86 Board: Bringup thực tế trên VF2, Pioneer, MiniPC
+16. [blocked] SDK relay client mutual TLS: only this two-real-broker relay path is blocked by the protected-persistence, authenticated-time, and reviewed pending-key-binding entry gates under frozen KMS opcodes 9–14 in `.agents/260825-1726-kms-silo-production-root/phase-04-service-net-mutual-tls-integration.md`; reopen only when DEV_REFERENCE Phase 8 emits exact `GO: PHASE4_ENTRY_GATES_SATISFIED`. This is not a global blocker for single-guest or other approved local work; the attempted protocol scaffold was fully reverted after governance review, with no dead or unwired implementation remaining.
  
-4. [blocked] App Tiers completion: cần phần cứng (RPi4b + secure controller riêng hoặc secure boot + remote CAS service)
+17. [blocked] App Tiers completion: cần phần cứng (RPi4b + secure controller riêng hoặc secure boot + remote CAS service)
     - Tier 1 baseline
     - Tier 1 rust std: PAL-019, PAL-031
     - Tier 3
 
-5. [in-progress] Chuẩn hóa manifest và tooling phía người phát triển. Về lâu dài cần tách rõ:
+18. [in-progress] Chuẩn hóa manifest và tooling phía người phát triển. Về lâu dài cần tách rõ:
     - execution_tier: Tier 1/2/3.
     - runtime_profile: Rust, FFI/POSIX, Lua, Linux guest.
     - protection_class: trường tương thích hiện dùng cho PKU/floor.
@@ -78,7 +43,7 @@ physical, secure-root, cloud, or production evidence.
 
 Manifest v2 và tooling tương thích đã [done]. Việc đổi field vật lý [blocked], chờ Manifest v3 và phê duyệt ABI riêng.
 
-6. [done] Xây acceptance matrix chung. Mỗi tổ hợp có trạng thái PASS, BLOCKED, PLANNED:
+19. [done] Xây acceptance matrix chung. Mỗi tổ hợp có trạng thái PASS, BLOCKED, PLANNED:
     - Tier × runtime profile.
     - Kiến trúc CPU.
     - QEMU/KVM/phần cứng thật.
@@ -87,17 +52,17 @@ Manifest v2 và tooling tương thích đã [done]. Việc đổi field vật l�
     - SDK module.
     - Build, boot, restart và security-negative tests.
 
-7. [in-progress] Cổng hoàn tất cuối cùng, App tiers chỉ nên được coi là hoàn thiện khi:
+20. [in-progress] Cổng hoàn tất cuối cùng, App tiers chỉ nên được coi là hoàn thiện khi:
     - Không còn dùng Tier 1b, Tier 3b, SDK L1/L2 ngoài compatibility/historical text.
     - Manifest terminology không còn đụng với application tier.
     - Tier 1 có baseline và production admission rõ ràng.
     - Tier 3 có ít nhất một lane hardware-qualified.
     - Tier 2 chỉ được công bố khi private-domain containment đã có negative evidence.
-    - SDK có module/profile matrix và examples khớp code.
+    - SDK có module/profile matrix và examples khớp code./
 
-8. [blocked] AI inference server demo (HTTP → NPU cell → response, P99 bound) = G2 Level A, chính là bước cần board RK3588 — đây là mắt xích nối G2 sang G3.
+21. [blocked] AI inference server demo (HTTP → NPU cell → response, P99 bound) = G2 Level A, chính là bước cần board RK3588 — đây là mắt xích nối G2 sang G3.
 
-9. [in-progress] Desktop compositor & ViUI:
+22. [in-progress] Desktop compositor & ViUI:
     - [done] Scope bounded đã phê duyệt: exact clipped damage, một `ManagedSurfaceApp`
       xử lý configure/minimize/restore/close, và `viui-demo` Counter chạy như managed surface.
     - [done] Focused tests, compositor regressions, RISC-V build và scope guard `libs/api`.
@@ -105,9 +70,9 @@ Manifest v2 và tooling tương thích đã [done]. Việc đổi field vật l�
       generator, which refused F1 signing until the Hypha unsafe prohibition
       and reviewed BCM unsafe allowlist entry are restored.
 
-10. [in-progress] Test board thật: RISC-V và mini pc x86 (Dell)
+23. [in-progress] Test board thật: RISC-V và mini pc x86 (Dell)
 
-11. [blocked] Phần cứng (StarFive VisionFive 2 v1.3B, STM32H573I-DK Discovery Kit của STMicroelectronics, Infineon OPTIGA™ TPM 2.0 SLB9672 kit) và AWS DEV account/region để unlock KMS Silo
+24. [blocked] Phần cứng (StarFive VisionFive 2 v1.3B, STM32H573I-DK Discovery Kit của STMicroelectronics, Infineon OPTIGA™ TPM 2.0 SLB9672 kit) và AWS DEV account/region để unlock KMS Silo
 
 ### App Layers
 1. **Tier 1** - Trusted Native SAS Cell

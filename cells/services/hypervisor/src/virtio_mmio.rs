@@ -2,10 +2,17 @@
 //!
 //! Handshake: ACK(1)→DRIVER(2)→feature exchange→FEATURES_OK(8)→queue setup→DRIVER_OK(4).
 //! VERSION_1 (bit 32 = DriverFeatures high-word bit 0) is mandatory; rejected otherwise.
+use ostd::io::println;
+
 
 /// Maximum queues per device.
 pub const MAX_QUEUES: usize = 2;
-const QUEUE_SIZE_MAX: u16 = 256;
+const QUEUE_SIZE_MAX: u16 = crate::virtqueue_guard::MAX_QUEUE_SIZE as u16;
+const INVALID_QUEUE: usize = MAX_QUEUES;
+const STATUS_DRIVER_OK: u32 = 0x04;
+const STATUS_NEEDS_RESET: u32 = 0x40;
+const STATUS_FAILED: u32 = 0x80;
+
 // VIRTIO_F_VERSION_1 sits in feature high-word bit 0 (bit 32 of the 64-bit field).
 const VIRTIO_F_VERSION_1_HI: u32 = 1;
 
@@ -17,6 +24,17 @@ pub struct QueueCfg {
     pub desc_gpa: u64,
     pub avail_gpa: u64,
     pub used_gpa: u64,
+}
+
+impl QueueCfg {
+    pub fn is_valid(&self) -> bool {
+        crate::virtqueue_guard::valid_queue_config(
+            self.num,
+            self.desc_gpa,
+            self.avail_gpa,
+            self.used_gpa,
+        )
+    }
 }
 
 /// Device model contract.
@@ -64,7 +82,7 @@ impl VirtioMmio {
                     dev.device_features_hi() as u64
                 }
             }
-            0x034 => QUEUE_SIZE_MAX as u64, // QueueNumMax
+            0x034 if q < MAX_QUEUES => QUEUE_SIZE_MAX as u64, // QueueNumMax
             0x038 if q < MAX_QUEUES => self.queues[q].num as u64,
             0x044 if q < MAX_QUEUES && self.queues[q].ready => 1,
             0x060 => self.intr_status as u64,
@@ -93,57 +111,94 @@ impl VirtioMmio {
                 }
             }
             0x024 => self.drv_feat_sel = val,
-            0x030 if (val as usize) < MAX_QUEUES => {
+            0x030 => {
                 self.queue_sel = val as usize;
+                if self.queue_sel >= MAX_QUEUES {
+                    println("[hv-virtio-host] reject queue-select");
+                }
             }
             0x038 if q < MAX_QUEUES => {
-                self.queues[q].num = val.min(QUEUE_SIZE_MAX as u32) as u16;
+                let queue = &mut self.queues[q];
+                queue.ready = false;
+                queue.num = if crate::virtqueue_guard::valid_queue_size(val as usize) {
+                    val as u16
+                } else {
+                    0
+                };
             }
-            0x044 if q < MAX_QUEUES => {
-                self.queues[q].ready = val == 1;
+            0x044 => {
+                if q < MAX_QUEUES && val == 0 {
+                    self.queues[q].ready = false;
+                } else if q < MAX_QUEUES && val == 1 && self.queues[q].is_valid() {
+                    self.queues[q].ready = true;
+                } else {
+                    if q < MAX_QUEUES {
+                        self.queues[q].ready = false;
+                    }
+                    println("[hv-virtio-host] reject queue-ready");
+                }
             }
             0x050 => {
-                // QueueNotify: val = queue index signalled by the driver.
                 let nq = val as usize;
-                if nq < MAX_QUEUES && self.queues[nq].ready && self.queues[nq].num > 0 {
-                    let qcfg = self.queues[nq];
-                    dev.notify(nq, &qcfg, vm_id, vcpu_id);
-                    self.signal_used();
+                if self.status & STATUS_DRIVER_OK == 0
+                    || self.status & (STATUS_NEEDS_RESET | STATUS_FAILED) != 0
+                {
+                    println("[hv-virtio-host] reject queue-notify-before-driver-ok");
+                    return;
                 }
+                if nq >= MAX_QUEUES
+                    || !self.queues[nq].ready
+                    || !self.queues[nq].is_valid()
+                {
+                    println("[hv-virtio-host] reject queue-notify-invalid");
+                    return;
+                }
+                let qcfg = self.queues[nq];
+                dev.notify(nq, &qcfg, vm_id, vcpu_id);
+                self.signal_used();
             }
             0x064 => self.intr_status &= !val, // InterruptACK
             0x070 => {
                 if val == 0 {
                     dev.reset();
                     *self = VirtioMmio::default();
+                    println("[hv-virtio-host] reset");
+                }
+                if self.status & (STATUS_NEEDS_RESET | STATUS_FAILED) != 0 {
                     return;
-                } // device reset
+                }
                 if val & 0x8 != 0 && self.drv_feat_hi & VIRTIO_F_VERSION_1_HI == 0 {
                     // Guest did not negotiate VERSION_1; signal NEEDS_RESET.
-                    self.status |= 0x40;
+                    self.status |= STATUS_NEEDS_RESET;
                     return;
                 }
                 self.status = val;
-                if val & 0x80 != 0 {
-                    self.status |= 0x40;
-                } // FAILED → NEEDS_RESET
+                if val & STATUS_FAILED != 0 {
+                    self.status |= STATUS_NEEDS_RESET;
+                }
             }
             0x080 if q < MAX_QUEUES => {
+                self.queues[q].ready = false;
                 set_lo(&mut self.queues[q].desc_gpa, val);
             }
             0x084 if q < MAX_QUEUES => {
+                self.queues[q].ready = false;
                 set_hi(&mut self.queues[q].desc_gpa, val);
             }
             0x090 if q < MAX_QUEUES => {
+                self.queues[q].ready = false;
                 set_lo(&mut self.queues[q].avail_gpa, val);
             }
             0x094 if q < MAX_QUEUES => {
+                self.queues[q].ready = false;
                 set_hi(&mut self.queues[q].avail_gpa, val);
             }
             0x0a0 if q < MAX_QUEUES => {
+                self.queues[q].ready = false;
                 set_lo(&mut self.queues[q].used_gpa, val);
             }
             0x0a4 if q < MAX_QUEUES => {
+                self.queues[q].ready = false;
                 set_hi(&mut self.queues[q].used_gpa, val);
             }
             _ => {}

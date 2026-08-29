@@ -101,6 +101,11 @@ impl VirtioDevice for BlkDisk {
             crate::vmm::inject_irq(vm_id, vcpu_id, irq);
         }
     }
+
+    fn reset(&mut self) {
+        self.last_avail = 0;
+        self.used_idx = 0;
+    }
 }
 
 fn handle_blk_request(backend: &mut Backend, bufs: &[DescBuf], vm_id: usize) -> u32 {
@@ -138,7 +143,7 @@ fn handle_blk_request(backend: &mut Backend, bufs: &[DescBuf], vm_id: usize) -> 
     };
     if status != 0 {
         println(&alloc::format!(
-            "[hv-blk] request failed type={} sector={} buffers={} status={}",
+            "[hv-blk-host] request failed type={} sector={} buffers={} status={}",
             req_type,
             sector,
             bufs.len(),
