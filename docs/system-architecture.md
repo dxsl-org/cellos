@@ -1418,8 +1418,16 @@ TLS target with `relay_ip`, nonzero `relay_port`, and canonical lowercase
 `relay_hostname`. Parsing is allocation-free and fails closed on partial,
 duplicate, unknown, or malformed relay fields. `BrokerIdentity` stores the
 validated endpoint but does not dial, resolve DNS, invoke KMS, or alter
-`ConnectionManager`'s relay gate. Relay authentication, receive wiring, and
-two-node evidence remain absent.
+`ConnectionManager`'s relay gate. On the server, the NodeId returned by the
+existing TLS 1.3 certificate validator is the only admission authority. A
+synchronous connection gate bounds accepted sockets before TLS begins and holds
+the slot through session teardown. The bounded route table then rejects
+unauthenticated, identity-mismatched, duplicate-live, and capacity attempts
+before mutation; exact generations reject stale disconnect cleanup. Duplicate
+same-certificate connections cannot replace or cancel the established route.
+No proof blob, advertised NodeId, shared secret, or raw key can authorize
+registration. Cellos client authentication, receive wiring, and two-node
+evidence remain absent.
 
 ### Cluster membership: 3 modes
 

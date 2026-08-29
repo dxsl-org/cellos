@@ -26,8 +26,11 @@ Priority P1. Make remote work through an authenticated self-hosted relay first, 
 
 ## Requirements
 
-- Functional: relay register, relay registration proof, duplicate NodeId rejection, peer send, peer receive, relay-mediated Noise session, C2C request/response, relay-only two-node oracle.
-- Non-functional: self-hosted relay, no public relay dependency, bounded frame size, heartbeat-safe receive cadence.
+- Functional: certificate-derived connection admission, duplicate NodeId
+  rejection, peer send, peer receive, relay-mediated Noise session, C2C
+  request/response, and a relay-only two-node oracle.
+- Non-functional: self-hosted relay, no public relay dependency, bounded
+  pre-TLS connections/sessions/frames, and heartbeat-safe receive cadence.
 
 ## Entry Gate
 
@@ -37,7 +40,9 @@ Priority P1. Make remote work through an authenticated self-hosted relay first, 
 
 ## Architecture
 
-Data flow: node A broker -> relay TCP register -> E2E Noise to node B over relay packets -> C2C request -> node B local export -> response -> relay -> node A dedup/response.
+Data flow: node A broker -> bounded TLS 1.3 connection -> certificate-derived
+NodeId admission -> E2E Noise to node B over relay packets -> C2C request ->
+node B local export -> response -> relay -> node A dedup/response.
 
 ## Related Code Files
 
@@ -53,12 +58,21 @@ Data flow: node A broker -> relay TCP register -> E2E Noise to node B over relay
 - `cells/services/net-broker/src/relay_config/tests.rs`
 - `cells/services/net-broker/src/peer_config/ascii.rs`
 - `cells/services/net-broker/src/identity.rs`
+- `tools/relay-server/relay_admission.py`
+- `tools/relay-server/relay_admission_test.py`
+- `tools/relay-server/relay.py`
+- `tools/relay-server/relay_test.py`
+- `tools/relay-server/relay_cancellation_test.py`
+- `tools/relay-server/relay_bootstrap.py`
+- `tools/relay-server/relay_bootstrap_test.py`
+- `tools/relay-server/_relay_certificate_support.py`
+- `tools/relay-server/_relay_test_support.py`
 - Future relay runtime owner: `cells/services/net-broker/src/main.rs`
 - Future relay test harness outside product path, if approved.
 
 ## Implementation Steps
 
-1. Specify relay server authentication, registration proof, and duplicate NodeId rejection.
+1. Specify certificate-derived relay admission and duplicate NodeId rejection.
 2. Specify relay-mediated Noise handshake.
 3. Wire relay receive into broker dispatcher.
 4. Add relay-only path selection and health state.
@@ -72,8 +86,11 @@ Data flow: node A broker -> relay TCP register -> E2E Noise to node B over relay
   `relay_port`, and lowercase DNS `relay_hostname` fields in `cluster.cfg`.
 - [ ] Define mTLS trust/profile inputs and signer authorization; no shared-secret
   or raw-key fallback.
-- [ ] Define proof-of-possession or Noise-bound registration.
-- [ ] Define duplicate NodeId/hijack rejection oracle.
+- [x] Use the validated mTLS certificate-derived NodeId as registration proof;
+  no advertised identity, proof blob, shared secret, or raw-key fallback can
+  become route authority.
+- [x] Reject unauthenticated, identity-mismatched, duplicate-live, capacity, and
+  stale-disconnect admission transitions without displacing a live route.
 - [ ] Define relay reconnect backoff.
 - [ ] Define oracle topology and logs retained.
 - [x] Define no-evict session-pool admission: full capacity returns explicit
@@ -91,7 +108,8 @@ Data flow: node A broker -> relay TCP register -> E2E Noise to node B over relay
 - Relay sees NodeIds and ciphertext only.
 - Relay disconnect maps to `Unreachable` or `Indeterminate`, not `NoService`.
 - Missing destination and relay forward failure never silently drop an accepted request.
-- Duplicate NodeId registration is rejected or quarantined before packet forwarding.
+- A duplicate live certificate-derived NodeId is rejected before packet
+  forwarding and cannot displace the established route.
 - In-flight relay requests are never evicted; pressure is visible to caller.
 
 ## Risk Assessment
@@ -101,7 +119,10 @@ Data flow: node A broker -> relay TCP register -> E2E Noise to node B over relay
 
 ## Security Considerations
 
-Relay is authenticated and self-hosted. Relay compromise cannot forge Noise-authenticated node identity. Registration must prove ownership of the advertised NodeId before the relay table is mutated.
+Relay is authenticated and self-hosted. Relay compromise cannot forge
+Noise-authenticated node identity. TLS and certificate-policy validation derive
+the sole admitted NodeId before route-table mutation; there is no advertised
+identity claim or registration proof frame.
 
 ## Rollback
 
@@ -111,9 +132,9 @@ kernel state requires rollback.
 
 ## Next Steps
 
-Continue local-only relay contract work with authenticated registration proof
-and duplicate-NodeId rejection semantics. Provider qualification and
-authenticated session identity still block relay wiring and any two-node oracle.
+Continue local-only relay contract work with reconnect backoff and
+sender-visible delivery-error semantics. Protected client signer qualification
+still blocks Cellos relay wiring and any two-node oracle.
 
 ## Local Contract Evidence
 
@@ -126,7 +147,11 @@ authenticated session identity still block relay wiring and any two-node oracle.
 - The optional global relay endpoint parser fails closed on partial, duplicate,
   unknown, malformed IP/port, or non-canonical hostname fields and performs no
   I/O. `BrokerIdentity` stores only a validated endpoint without dialing it.
-- Focused broker tests pass 101/101 and the RV64 release build passes. Tester
-  and production-readiness reviewer rechecks pass.
-- No relay registration, remote dispatch, receive loop, or two-node traffic is
+- Focused broker tests pass 101/101 and the RV64 release build passes.
+- The pure relay admission table, pre-TLS connection gate, and mTLS wire
+  regressions pass within 33/33 relay-server tests. Duplicate same-certificate
+  connections close without interrupting or rerouting the established session;
+  stale generation cleanup cannot remove a later explicit admission. Tester and
+  production-readiness reviewer rechecks pass.
+- No Cellos relay client, remote dispatch, receive loop, or two-node traffic is
   enabled or claimed.

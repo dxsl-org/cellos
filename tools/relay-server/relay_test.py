@@ -121,24 +121,23 @@ class RelayWireTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await read_frame(reader), bytes([FT_ERROR, ERR_MALFORMED_FRAME]))
         self.assertEqual(await asyncio.wait_for(reader.read(1), 2), b"")
 
-    async def test_duplicate_identity_stale_cleanup_keeps_replacement_routable(self) -> None:
-        old_reader, old_writer = await self.open_client(self.certificates.client_a)
+    async def test_duplicate_identity_is_rejected_without_displacing_live_route(self) -> None:
+        live_reader, live_writer = await self.open_client(self.certificates.client_a)
         sender_reader, sender_writer = await self.open_client(self.certificates.client_b)
-        await self.assert_ping(old_reader, old_writer, b"old-live")
+        await self.assert_ping(live_reader, live_writer, b"old-live")
         await self.assert_ping(sender_reader, sender_writer, b"sender--")
 
-        new_reader, new_writer = await self.open_client(self.certificates.client_a)
-        self.assertEqual(await asyncio.wait_for(old_reader.read(1), 2), b"")
-        await self.assert_ping(new_reader, new_writer, b"new-live")
-        await asyncio.sleep(0)
+        duplicate_reader, _ = await self.open_client(self.certificates.client_a)
+        self.assertEqual(await asyncio.wait_for(duplicate_reader.read(1), 2), b"")
+        await self.assert_ping(live_reader, live_writer, b"still-up")
 
-        opaque = b"replacement-route"
+        opaque = b"original-route"
         await send_frame(
             sender_writer,
             bytes([FT_SEND_PACKET]) + self.certificates.client_a.node_id + opaque,
         )
         self.assertEqual(
-            await read_frame(new_reader),
+            await read_frame(live_reader),
             bytes([FT_RECV_PACKET]) + self.certificates.client_b.node_id + opaque,
         )
 

@@ -3,6 +3,11 @@ from __future__ import annotations
 import asyncio
 import unittest
 
+from relay_admission import (
+    AdmissionError,
+    AdmissionLease,
+    AuthenticatedSessionIdentity,
+)
 from relay import RelayServer
 from relay_identity import Denylist
 
@@ -32,35 +37,53 @@ class FakeWriter:
 
 
 class RelayCancellationTests(unittest.IsolatedAsyncioTestCase):
-    async def test_source_replacement_closes_blocked_destination_buffer(self) -> None:
+    async def test_duplicate_identity_does_not_cancel_or_replace_live_source(self) -> None:
         relay = RelayServer(Denylist(frozenset(), frozenset()), io_timeout=60)
         source_id = b"s" * 32
         destination_id = b"d" * 32
         destination = FakeWriter(block_drain=True)
         destination_handler = asyncio.create_task(asyncio.sleep(60))
-        relay._register(destination_id, destination, destination_handler)
+        destination_lease = relay._register(
+            AuthenticatedSessionIdentity(destination_id),
+            destination_id,
+            destination,
+            destination_handler,
+        )
+        self.assertIsInstance(destination_lease, AdmissionLease)
 
-        async def forward(writer: FakeWriter) -> None:
+        source = FakeWriter()
+
+        async def forward() -> None:
             handler = asyncio.current_task()
             assert handler is not None
-            entry = relay._register(source_id, writer, handler)
-            assert entry is not None
+            admitted = relay._register(
+                AuthenticatedSessionIdentity(source_id), source_id, source, handler
+            )
+            assert isinstance(admitted, AdmissionLease)
             try:
-                await relay._forward(source_id, entry.generation, destination_id, b"noise")
+                await relay._forward(
+                    source_id, admitted.generation, destination_id, b"noise"
+                )
             finally:
-                relay._unregister(source_id, entry.generation)
+                relay._unregister(source_id, admitted.generation)
 
-        first = asyncio.create_task(forward(FakeWriter()))
+        first = asyncio.create_task(forward())
         await asyncio.wait_for(destination.drain_started.wait(), 1)
-
-        replacements = []
+        handler = asyncio.current_task()
+        assert handler is not None
         for _ in range(4):
-            replacement = asyncio.create_task(forward(FakeWriter()))
-            replacements.append(replacement)
-            await asyncio.sleep(0)
+            rejected = relay._register(
+                AuthenticatedSessionIdentity(source_id),
+                source_id,
+                FakeWriter(),
+                handler,
+            )
+            self.assertEqual(rejected, AdmissionError.DUPLICATE_LIVE)
+        self.assertFalse(source.closed)
+        self.assertFalse(destination.closed)
 
-        await asyncio.gather(first, *replacements, return_exceptions=True)
-        self.assertTrue(destination.closed)
+        destination.release_drain.set()
+        await first
         self.assertEqual(len(destination.frames), 1)
 
         destination_handler.cancel()

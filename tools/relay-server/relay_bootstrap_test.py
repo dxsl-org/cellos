@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from relay_bootstrap import build_ssl_context, parse_args
+from relay_bootstrap import ConnectionGate, build_ssl_context, parse_args
 from _relay_test_support import (
     CertificateSet,
     close_writer,
@@ -40,6 +40,15 @@ class RelayBootstrapTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(context.minimum_version, ssl.TLSVersion.TLSv1_3)
         self.assertEqual(context.maximum_version, ssl.TLSVersion.TLSv1_3)
 
+    def test_connection_gate_bounds_handshakes_and_live_sessions(self) -> None:
+        gate = ConnectionGate(1)
+        self.assertTrue(gate.try_acquire())
+        self.assertFalse(gate.try_acquire())
+        self.assertEqual(gate.active, 1)
+        gate.release()
+        self.assertTrue(gate.try_acquire())
+        gate.release()
+
     def test_manifest_cli_path_is_mandatory(self) -> None:
         with mock.patch("sys.argv", ["relay_bootstrap.py"]):
             with contextlib.redirect_stderr(io.StringIO()):
@@ -64,6 +73,25 @@ class RelayBootstrapTests(unittest.IsolatedAsyncioTestCase):
                 reader, writer = await connect(
                     self.certificates, self.certificates.untrusted_client, port
                 )
+            except (ConnectionResetError, ssl.SSLError):
+                return
+            try:
+                result = await asyncio.wait_for(reader.read(1), 2)
+            except (ConnectionResetError, ssl.SSLError):
+                return
+            self.assertEqual(result, b"")
+        finally:
+            if writer is not None:
+                await close_writer(writer)
+            server.close()
+            await server.wait_closed()
+
+    async def test_missing_client_certificate_is_rejected_before_relay_handle(self) -> None:
+        server, _, port = await start_relay(self.certificates, empty_denylist())
+        writer = None
+        try:
+            try:
+                reader, writer = await connect(self.certificates, None, port)
             except (ConnectionResetError, ssl.SSLError):
                 return
             try:

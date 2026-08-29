@@ -8,7 +8,7 @@ import logging
 import ssl
 from pathlib import Path
 
-from relay import MAX_FRAME_SIZE, RelayServer
+from relay import MAX_AUTHENTICATED_SESSIONS, MAX_FRAME_SIZE, RelayServer
 from relay_identity import load_denylist
 from relay_manifest import RelayServerConfig, load_server_manifest
 
@@ -16,6 +16,72 @@ log = logging.getLogger("relay")
 TLS_HANDSHAKE_TIMEOUT_SECONDS = 10.0
 TLS_SHUTDOWN_TIMEOUT_SECONDS = 5.0
 SERVER_BACKLOG = 128
+MAX_ACTIVE_CONNECTIONS = MAX_AUTHENTICATED_SESSIONS
+
+
+class ConnectionGate:
+    """Synchronous event-loop gate spanning TLS handshake and live session."""
+
+    def __init__(self, limit: int) -> None:
+        if limit <= 0:
+            raise ValueError("connection limit must be positive")
+        self.limit = limit
+        self.active = 0
+
+    def try_acquire(self) -> bool:
+        if self.active >= self.limit:
+            return False
+        self.active += 1
+        return True
+
+    def release(self) -> None:
+        if self.active <= 0:
+            raise RuntimeError("connection gate underflow")
+        self.active -= 1
+
+
+async def start_relay_server(
+    relay: RelayServer,
+    context: ssl.SSLContext,
+    host: str,
+    port: int,
+    *,
+    connection_limit: int = MAX_ACTIVE_CONNECTIONS,
+) -> tuple[asyncio.AbstractServer, ConnectionGate]:
+    """Start a raw acceptor that bounds connections before starting TLS."""
+    gate = ConnectionGate(connection_limit)
+
+    async def connected(
+        reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+    ) -> None:
+        if not gate.try_acquire():
+            writer.close()
+            await writer.wait_closed()
+            return
+        try:
+            await writer.start_tls(
+                context,
+                ssl_handshake_timeout=TLS_HANDSHAKE_TIMEOUT_SECONDS,
+                ssl_shutdown_timeout=TLS_SHUTDOWN_TIMEOUT_SECONDS,
+            )
+            await relay.handle(reader, writer)
+        except (ConnectionError, ssl.SSLError, TimeoutError):
+            writer.close()
+            try:
+                await writer.wait_closed()
+            except (ConnectionError, ssl.SSLError):
+                pass
+        finally:
+            gate.release()
+
+    server = await asyncio.start_server(
+        connected,
+        host,
+        port,
+        limit=MAX_FRAME_SIZE + 4,
+        backlog=SERVER_BACKLOG,
+    )
+    return server, gate
 
 
 def build_ssl_context(
@@ -43,15 +109,11 @@ async def serve(config: RelayServerConfig) -> None:
         config.private_key_pem,
         config.client_issuing_ca_pem,
     )
-    server = await asyncio.start_server(
-        relay.handle,
+    server, _ = await start_relay_server(
+        relay,
+        context,
         config.bind_host,
         config.port,
-        ssl=context,
-        limit=MAX_FRAME_SIZE + 4,
-        ssl_handshake_timeout=TLS_HANDSHAKE_TIMEOUT_SECONDS,
-        ssl_shutdown_timeout=TLS_SHUTDOWN_TIMEOUT_SECONDS,
-        backlog=SERVER_BACKLOG,
     )
     addrs = ", ".join(str(sock.getsockname()) for sock in server.sockets or ())
     log.info("Cellos mTLS relay listening on %s", addrs)

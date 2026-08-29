@@ -8,6 +8,12 @@ import logging
 import ssl
 from dataclasses import dataclass
 
+from relay_admission import (
+    AdmissionError,
+    AdmissionLease,
+    AdmissionTable,
+    AuthenticatedSessionIdentity,
+)
 from relay_identity import Denylist, PeerCertificateError, peer_identity
 from relay_io import (
     ERR_MALFORMED_FRAME,
@@ -33,7 +39,6 @@ log = logging.getLogger("relay")
 @dataclass(frozen=True)
 class ClientEntry:
     writer: asyncio.StreamWriter
-    generation: int
     handler: asyncio.Task[None]
     send_lock: asyncio.Lock
 
@@ -47,10 +52,8 @@ class RelayServer:
         io_timeout: float = IO_TIMEOUT_SECONDS,
     ) -> None:
         self.denylist = denylist
-        self.max_sessions = max_sessions
         self.io_timeout = io_timeout
-        self.clients: dict[bytes, ClientEntry] = {}
-        self._next_generation = 0
+        self.admission: AdmissionTable[ClientEntry] = AdmissionTable(max_sessions)
 
     async def handle(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
@@ -65,11 +68,13 @@ class RelayServer:
             node_id = peer_identity(ssl_object.getpeercert(binary_form=True), self.denylist)
             handler = asyncio.current_task()
             assert handler is not None
-            entry = self._register(node_id, writer, handler)
-            if entry is None:
-                log.warning("authenticated session limit reached for %s", addr)
+            admitted = self._register(
+                AuthenticatedSessionIdentity(node_id), node_id, writer, handler
+            )
+            if isinstance(admitted, AdmissionError):
+                log.warning("relay admission rejected for %s: %s", addr, admitted.name)
                 return
-            generation = entry.generation
+            generation = admitted.generation
             log.info("authenticated node %s from %s", node_id.hex()[:8], addr)
             await self._dispatch(reader, writer, node_id, generation)
         except PeerCertificateError as exc:
@@ -90,34 +95,25 @@ class RelayServer:
 
     def _register(
         self,
-        node_id: bytes,
+        authenticated: AuthenticatedSessionIdentity | None,
+        claimed_node_id: bytes,
         writer: asyncio.StreamWriter,
         handler: asyncio.Task[None],
-    ) -> ClientEntry | None:
-        old = self.clients.get(node_id)
-        if old is None and len(self.clients) >= self.max_sessions:
-            return None
-        self._next_generation += 1
-        entry = ClientEntry(writer, self._next_generation, handler, asyncio.Lock())
-        self.clients[node_id] = entry
-        if old is not None and old.writer is not writer:
-            old.writer.close()
-            if old.handler is not handler:
-                old.handler.cancel()
-        return entry
+    ) -> AdmissionLease[ClientEntry] | AdmissionError:
+        entry = ClientEntry(writer, handler, asyncio.Lock())
+        return self.admission.admit(authenticated, claimed_node_id, entry)
 
     def _unregister(self, node_id: bytes, generation: int) -> None:
-        current = self.clients.get(node_id)
-        if current is not None and current.generation == generation:
-            del self.clients[node_id]
+        if self.admission.release(node_id, generation) is None:
             log.info("node %s disconnected", node_id.hex()[:8])
 
     def _current(
         self, node_id: bytes, generation: int, writer: asyncio.StreamWriter | None = None
     ) -> ClientEntry | None:
-        entry = self.clients.get(node_id)
-        if entry is None or entry.generation != generation:
+        lease = self.admission.current(node_id, generation)
+        if lease is None:
             return None
+        entry = lease.session
         if writer is not None and entry.writer is not writer:
             return None
         return entry
@@ -168,10 +164,11 @@ class RelayServer:
     ) -> None:
         if self._current(src_id, generation) is None:
             return
-        destination = self.clients.get(dest_id)
+        destination = self.admission.lookup(dest_id)
         if destination is None:
             await self._send_error(src_id, generation, ERR_DESTINATION_UNAVAILABLE)
             return
+        destination_entry = destination.session
         try:
             sent = await self._send_current(
                 dest_id,
@@ -180,7 +177,7 @@ class RelayServer:
                 (src_id, generation),
             )
         except (ConnectionError, ssl.SSLError, TimeoutError):
-            destination.writer.close()
+            destination_entry.writer.close()
             sent = False
         if not sent and self._current(src_id, generation) is not None:
             await self._send_error(src_id, generation, ERR_DESTINATION_UNAVAILABLE)

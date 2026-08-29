@@ -83,8 +83,17 @@
   lowercase DNS `relay_hostname` profile. Partial, duplicate, unknown, malformed,
   and non-canonical declarations fail closed; validated configuration is stored
   without dialing, resolving DNS, invoking KMS, or enabling relay traffic.
-  Focused broker tests pass 101/101 and the RV64 release build passes; relay
-  authentication, receive wiring, and two-node evidence remain open.
+  Added a pure bounded relay admission table behind the existing TLS 1.3
+  certificate validator. The certificate-derived NodeId is the sole route
+  authority; unauthenticated, mismatched, duplicate-live, capacity, and stale
+  cleanup attempts leave the route table unchanged. A second same-certificate
+  connection closes without interrupting the established route, and exact
+  generations protect later explicit re-admission. A synchronous connection
+  gate now bounds each accepted connection before its TLS handshake and retains
+  the slot through session teardown, preventing route capacity from leaving
+  pre-authentication work unbounded. Relay-server tests pass 33/33; focused
+  broker tests remain 101/101 and the RV64 broker release build passes. Cellos
+  client authentication, receive wiring, and two-node evidence remain open.
 
 - Authenticated evidence admission requires an explicitly provisioned,
   operator-owned replay store outside the submitted bundle. Verification binds

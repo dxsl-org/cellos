@@ -31,7 +31,8 @@ until all prerequisites exist. The KMS-internal AArch64-QEMU Silo provider is
   secret.
 - Preserve Noise as end-to-end payload protection.
 - Prevent downgrade to unauthenticated relay registration.
-- Bound relay resource use and make duplicate replacement race-safe.
+- Bound relay resource use and reject duplicate live identities without route
+  displacement or stale-cleanup races.
 - Avoid treating completed server work as completion of the blocked client path.
 
 ## Considered Options
@@ -105,8 +106,10 @@ the caller.
 The server starts only from a mandatory mounted manifest defining its TLS
 material, client trust roots, NodeId denylist, and limits. Before registration
 it validates the chain, `clientAuth` EKU, P-256 key, NodeId binding, and denylist.
-Sessions, frames, I/O, and delivery errors are bounded. Duplicate NodeId
-replacement is generation-safe so stale cleanup cannot remove a newer route.
+Sessions, frames, I/O, and delivery errors are bounded. A second live session
+with the same certificate-derived NodeId is rejected without displacing the
+current route. Monotonic route generations prevent stale disconnect cleanup
+from removing a later explicitly re-admitted route.
 
 The relay forwards payloads as opaque Noise ciphertext. mTLS authenticates the
 external relay hop; it does not terminate or replace Noise.
@@ -154,9 +157,10 @@ signer. A certificate is insufficient if its key is exportable or arbitrary
 callers can invoke its signer.
 
 The mandatory manifest prevents permissive defaults. Resource bounds limit
-exhaustion, and generation-safe replacement prevents a stale disconnect from
-removing a new authenticated route. The relay must not parse Noise ciphertext
-as authenticated application plaintext.
+exhaustion. Duplicate live NodeIds fail before route mutation, and exact
+generation release prevents a stale disconnect from removing a later route.
+The relay must not parse Noise ciphertext as authenticated application
+plaintext.
 
 ## Verification
 
@@ -167,17 +171,22 @@ Acceptance evidence must show that:
   before registration;
 - NodeId is exactly `SHA-256(SPKI DER)` and matches OID
   `1.3.6.1.4.1.55555.1.1`;
-- startup fails without a valid mounted manifest, limits hold, and stale cleanup
-  cannot remove a replacement session;
+- startup fails without a valid mounted manifest, limits hold, duplicate live
+  NodeIds cannot displace the current route, and stale cleanup cannot remove a
+  later explicitly re-admitted session;
 - the Cellos client validates server CA/hostname and signs only through the
   authorized protected KMS path and its qualified production hardware provider,
   without exposing key bytes; and
 - a two-node exercise preserves opaque end-to-end Noise traffic and fails closed
   without raw fallback.
 
-Current evidence covers the server-only certificate, identity, revocation,
-routing, duplicate-session, manifest, and bounds contract. Client mTLS and the
-two-node TLS/Noise exercise remain blocked by the prerequisites above.
+Current evidence directly covers TLS 1.3 and required-client-certificate
+configuration, missing/untrusted client certificates, NodeId extension binding,
+denylist enforcement, bounded pre-TLS connections, routing, duplicate-live
+rejection, manifest validation, and route/session limits. Dedicated non-P-256
+and wrong-`clientAuth` negative fixtures remain required before the complete
+server certificate-policy claim. Client mTLS and the two-node TLS/Noise exercise
+remain blocked by the prerequisites above.
 
 ## Links
 
