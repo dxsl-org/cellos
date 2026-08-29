@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["IpcError"],"fn":["recv_async","service_call","service_call_bounded","service_call_typed","service_call_typed_bounded"],"struct":["AsyncRecv"]};
+window.SIDEBAR_ITEMS = {"enum":["IpcError"],"fn":["recv_async","service_call","service_call_bounded","service_call_queued_bounded","service_call_typed","service_call_typed_bounded","service_call_typed_queued_bounded"],"struct":["AsyncRecv"]};
