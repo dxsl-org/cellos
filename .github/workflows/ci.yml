@@ -1051,6 +1051,8 @@ jobs:
   # and note why, don't silently retry until green.
   boot-suite:
     name: Network Data-Path Integration (riscv64)
+    outputs:
+      evidence-artifact-id: ${{ steps.upload-software-evidence.outputs.artifact-id }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -1079,7 +1081,11 @@ jobs:
         timeout-minutes: 5
         run: python3 -m pip install --user --quiet cryptography
 
+      - name: Prepare authenticated software evidence logs
+        run: mkdir -p software-evidence
+
       - name: Build cells + kernel + disk images (gen_disk)
+        shell: bash
         env:
           # gen_disk's cargo builds pass no --target: locally the gitignored
           # .cargo/config.toml supplies the riscv64 default; without this the
@@ -1090,9 +1096,10 @@ jobs:
           # service-vfs) includes <string.h> — vendored freestanding set.
           CFLAGS_riscv64gc_unknown_none_elf: -march=rv64gc -mabi=lp64d -mcmodel=medany -ffreestanding -DLFS_NO_INTRINSICS -I${{ github.workspace }}/third_party/freestanding-include
           OBJCOPY: riscv64-unknown-elf-objcopy
-        run: pwsh ./gen_disk.ps1
+        run: pwsh ./gen_disk.ps1 2>&1 | tee software-evidence/gen-disk.log
 
       - name: Run boot + network + shell + VFS tests
+        shell: bash
         env:
           CARGO_BUILD_TARGET: x86_64-unknown-linux-gnu
         # Allowlist by exact test-fn name (OR semantics). --test-threads=2: each
@@ -1143,23 +1150,39 @@ jobs:
             console_long_line_with_backspace_no_stall \
             input_service_registered_at_boot compositor_input_routing_active \
             bench_all_pass input_keyboard_e2e input_bare_cell \
-            posix_shim_getentropy posix_shim_net
+            posix_shim_getentropy posix_shim_net \
+            2>&1 | tee "$GITHUB_WORKSPACE/software-evidence/boot-suite.log"
 
       - name: Run compositor window-policy evidence
+        shell: bash
         env:
           CARGO_BUILD_TARGET: x86_64-unknown-linux-gnu
         run: |
           cd tests/integration
           cargo test --test window-policy -- --test-threads=1 \
-            clicking_exposed_surface_raises_and_focuses_its_owner
+            clicking_exposed_surface_raises_and_focuses_its_owner \
+            2>&1 | tee "$GITHUB_WORKSPACE/software-evidence/window-policy.log"
 
       - name: Run ViUI managed-surface evidence
+        shell: bash
         env:
           CARGO_BUILD_TARGET: x86_64-unknown-linux-gnu
         run: |
           cd tests/integration
           cargo test --test viui-managed-surface -- --test-threads=1 \
-            generated_counter_survives_managed_surface_configure
+            generated_counter_survives_managed_surface_configure \
+            2>&1 | tee "$GITHUB_WORKSPACE/software-evidence/viui-managed-surface.log"
+
+      - name: Upload software evidence logs
+        id: upload-software-evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: software-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: software-evidence/
+          if-no-files-found: error
+          overwrite: false
+          retention-days: 90
 
   security:
     name: Security Scan
@@ -1181,7 +1204,8 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
   attest-catalog:
-    name: Attest Prequalification Catalog
+    name: Attest Authenticated Software Evidence
+    needs: [lint, boot-suite]
     runs-on: ubuntu-24.04
     permissions:
       id-token: write
@@ -1190,7 +1214,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Download software evidence logs
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ needs.boot-suite.outputs.evidence-artifact-id }}
+          path: .authenticated-evidence/runtime
+
       - name: Validate and stage software evidence
+        shell: bash
         run: |
           mkdir -p .authenticated-evidence
           python3 scripts/validate-app-tier-acceptance.py 2>&1 | tee .authenticated-evidence/catalog-validation.log
@@ -1200,12 +1231,22 @@ jobs:
             --runner "github-hosted:${{ runner.os }}:${{ runner.arch }}" \
             --workflow-ref "${{ github.workflow_ref }}" \
             --sequence "${{ github.run_id }}:${{ github.run_attempt }}" \
-            --command "python3 scripts/validate-app-tier-acceptance.py" \
+            --command "boot-suite: gen_disk + boot + window-policy + viui-managed-surface" \
             --input catalog.json=scripts/admission_prequalification/catalog.json \
             --input acceptance-ledger.json=docs/app-tier-acceptance-ledger.json \
+            --input workflow.yml=.github/workflows/ci.yml \
+            --input gen-disk.ps1=gen_disk.ps1 \
+            --input viui-managed-surface.rs=tests/integration/tests/viui-managed-surface.rs \
+            --input window-policy.rs=tests/integration/tests/window-policy.rs \
             --log catalog-validation.log=.authenticated-evidence/catalog-validation.log \
+            --log gen-disk.log=.authenticated-evidence/runtime/gen-disk.log \
+            --log boot-suite.log=.authenticated-evidence/runtime/boot-suite.log \
+            --log window-policy.log=.authenticated-evidence/runtime/window-policy.log \
+            --log viui-managed-surface.log=.authenticated-evidence/runtime/viui-managed-surface.log \
             --environment event_name="${{ github.event_name }}" \
-            --environment ref="${{ github.ref }}"
+            --environment ref="${{ github.ref }}" \
+            --environment lint_result="${{ needs.lint.result }}" \
+            --environment boot_suite_result="${{ needs.boot-suite.result }}"
 
       - name: Upload immutable evidence bundle
         uses: actions/upload-artifact@v4
@@ -1216,7 +1257,7 @@ jobs:
           overwrite: false
           retention-days: 90
 
-      - name: Attest Catalog Evidence Bundle
+      - name: Attest Authenticated Software Evidence Bundle
         uses: actions/attest-build-provenance@v2
         with:
           subject-path: evidence/manifest.json
