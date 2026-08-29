@@ -1410,9 +1410,11 @@ occupied session. `ConnectionManager` checks capacity before `TcpConnect`, so
 full-pool pressure cannot leak a newly opened socket or fall through to
 `NotSupported`. The Noise prologue binds
 `cluster_id || initiator_node_id || responder_node_id` on both peers; it never
-uses local endpoint order, which would reverse the responder transcript. A
-paired KKpsk0 transcript regression covers this invariant. Relay authentication,
-receive wiring, and two-node evidence remain absent.
+uses local endpoint order, which would reverse the responder transcript. Exact
+byte-layout coverage pins little-endian cluster ID, initiator NodeId, then
+responder NodeId for both local roles; a paired KKpsk0 transcript regression
+covers peer agreement. Relay authentication, receive wiring, and two-node
+evidence remain absent.
 
 ### Cluster membership: 3 modes
 

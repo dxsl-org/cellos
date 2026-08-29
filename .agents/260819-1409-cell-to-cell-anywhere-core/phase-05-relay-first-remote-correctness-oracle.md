@@ -75,6 +75,8 @@ Data flow: node A broker -> relay TCP register -> E2E Noise to node B over relay
 - [x] Canonicalize the Noise prologue as
   `cluster_id || initiator_node_id || responder_node_id` and prove a paired
   initiator/responder KKpsk0 transcript completes.
+- [x] Pin the 72-byte prologue layout for both local roles: little-endian
+  cluster ID, then initiator NodeId, then responder NodeId.
 - [ ] Define dedup expiry/exhaustion relay oracle.
 
 ## Success Criteria
@@ -115,8 +117,8 @@ still block relay wiring and any two-node oracle.
 - Binary `ConnectionPool` maps capacity pressure to `ViError::WouldBlock`.
   `ConnectionManager` checks capacity before `TcpConnect` and propagates that
   pressure instead of falling through to `NotSupported`.
-- Focused broker tests pass 95/95, including the paired Noise transcript
-  regression, and the RV64 release build passes. Tester and
-  production-readiness reviewer rechecks pass.
+- Focused broker tests pass 96/96, including exact prologue byte-layout and
+  paired Noise transcript regressions, and the RV64 release build passes.
+  Tester and production-readiness reviewer rechecks pass.
 - No relay registration, remote dispatch, receive loop, or two-node traffic is
   enabled or claimed.

@@ -41,6 +41,21 @@ impl RngCore for TestRng {
 impl CryptoRng for TestRng {}
 
 #[test]
+fn prologue_layout_is_cluster_then_initiator_then_responder_for_both_roles() {
+    let cluster_id = 0x0123_4567_89ab_cdef;
+    let initiator_id = core::array::from_fn(|index| 0x80 + index as u8);
+    let responder_id = core::array::from_fn(|index| 0x40 + index as u8);
+    let initiator_view = handshake_prologue(cluster_id, &initiator_id, &responder_id, true);
+    let responder_view = handshake_prologue(cluster_id, &responder_id, &initiator_id, false);
+
+    for prologue in [initiator_view, responder_view] {
+        assert_eq!(&prologue[..8], &cluster_id.to_le_bytes());
+        assert_eq!(&prologue[8..40], &initiator_id);
+        assert_eq!(&prologue[40..72], &responder_id);
+    }
+}
+
+#[test]
 fn initiator_and_responder_complete_the_same_transcript() {
     let mut rng = TestRng::default();
     let initiator_static = KmsBackedX25519::genkey_rng(&mut rng).expect("initiator static key");

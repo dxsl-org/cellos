@@ -75,10 +75,12 @@
   `WouldBlock` for later mapping to typed remote `Busy`. Capacity is checked
   before `TcpConnect`, avoiding a socket leak or misleading `NotSupported`
   fallback. Noise prologues now order identities by protocol role rather than
-  local endpoint, preventing responder transcript divergence. A paired
-  initiator/responder KKpsk0 regression completes both handshake messages.
-  Focused broker tests pass 95/95 and the RV64 release build passes; relay
-  authentication, receive wiring, and two-node evidence remain open.
+  local endpoint, preventing responder transcript divergence. Exact byte-layout
+  coverage pins the little-endian cluster ID followed by initiator and responder
+  NodeIds for both local roles; a paired initiator/responder KKpsk0 regression
+  completes both handshake messages. Focused broker tests pass 96/96 and the
+  RV64 release build passes; relay authentication, receive wiring, and two-node
+  evidence remain open.
 
 - Authenticated evidence admission requires an explicitly provisioned,
   operator-owned replay store outside the submitted bundle. Verification binds
