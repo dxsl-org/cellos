@@ -2,6 +2,10 @@
 
 pub type PersistentDisk = (usize, api::vfs_file_handles::ViVfsFileHandle, u64);
 
+// VFS cold-start can remain in nested block-driver work for several seconds on
+// shared TCG runners. The complete admission-plus-reply exchange stays finite.
+const VFS_CALL_TIMEOUT_TICKS: u64 = 1_000;
+
 pub fn open() -> Result<Option<PersistentDisk>, ()> {
     let Some(vfs_tid) = ostd::syscall::sys_lookup_service(api::syscall::service::VFS) else {
         return Ok(None);
@@ -11,7 +15,6 @@ pub fn open() -> Result<Option<PersistentDisk>, ()> {
 }
 
 fn close_partial(vfs_tid: usize, root: api::dir_handles::ViDirHandle, poisoned: &mut bool) {
-    const TIMEOUT_TICKS: u64 = 200;
     let request = api::ipc::VfsRequest::CloseDir { dir: root };
     let mut send_buffer = [0u8; api::ipc::IPC_BUF_SIZE];
     let mut response_buffer = [0u8; api::ipc::IPC_BUF_SIZE];
@@ -20,7 +23,7 @@ fn close_partial(vfs_tid: usize, root: api::dir_handles::ViDirHandle, poisoned: 
         &request,
         &mut send_buffer,
         &mut response_buffer,
-        TIMEOUT_TICKS,
+        VFS_CALL_TIMEOUT_TICKS,
     );
     *poisoned |= matches!(result, Err(ostd::ipc::IpcError::Recv));
 }
@@ -31,7 +34,6 @@ fn close_partial(vfs_tid: usize, root: api::dir_handles::ViDirHandle, poisoned: 
 /// block-driver reply. A partial open returns `None`; callers retain persistent
 /// mode and reconnect through service discovery after an uncertain receive.
 pub fn open_for(vfs_tid: usize, poisoned: &mut bool) -> Option<PersistentDisk> {
-    const TIMEOUT_TICKS: u64 = 200;
     let mut response = [0u8; api::ipc::IPC_BUF_SIZE];
     let mut request = [0u8; api::ipc::IPC_BUF_SIZE];
     let mut cleanup_root = None;
@@ -43,7 +45,7 @@ pub fn open_for(vfs_tid: usize, poisoned: &mut bool) -> Option<PersistentDisk> {
                 $request,
                 &mut request,
                 &mut response,
-                TIMEOUT_TICKS,
+                VFS_CALL_TIMEOUT_TICKS,
             ) {
                 Ok(value) => value,
                 Err(error) => {
