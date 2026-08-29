@@ -86,8 +86,26 @@ it into enabled remote routing.
 - [x] Keep invalid/absent export registries fail closed.
 - [x] Preserve local-only ephemeral fallback with remote disabled.
 - [ ] Provision a qualified clone-resistant KMS provider and retained evidence.
-- [ ] Define operator lost-key/clone recovery under supervisor authority.
+- [x] Define operator lost-key/clone recovery under supervisor authority.
 - [ ] Exercise an approved two-node relay oracle before enabling remote.
+
+## Operator Recovery Contract
+
+1. Recovery is never automatic. `CloneDetected`, lost-key evidence, or an
+   operator rekey first leaves remote disabled.
+2. The live attested supervisor reads KMS status and records the exact nonzero
+   `blob_revision`; zero is not a wildcard.
+3. The supervisor submits `RotateNodeIdentity` with one auditable reason and
+   that exact revision. Foreign/stale supervisors, malformed reserved fields,
+   revision races, and unavailable protected roots fail closed.
+4. A qualified provider must atomically seal the replacement, advance the blob
+   revision, revoke every old handle, and clear the broker binding before KMS
+   returns success. Partial persistence never authorizes either identity.
+5. The broker must register and acquire again. The changed public NodeId keeps
+   remote disabled until peer/relay enrollment and export policy are reconciled.
+6. If KMS cannot report the exact prior revision, operator recovery stops at
+   physical authority re-provisioning; plaintext restoration and forced
+   zero-revision rotation are forbidden.
 
 ## Success Criteria
 
@@ -108,6 +126,17 @@ it into enabled remote routing.
   `has_secure_identity=false`, explicit remote-disabled logging, and no remote
   dispatch wiring.
 
+## Verification Evidence
+
+- Rotation request decoding and the `ostd` KMS client reject a zero blob
+  revision before IPC; it cannot act as a wildcard.
+- Host verification passes 51 `types` tests and 59 `service-kms` tests.
+- `service-kms` and its `ostd` client compile for
+  `riscv64gc-unknown-none-elf`.
+- This verifies the recovery contract boundary only. No qualified provider,
+  successful protected rotation, physical recovery, or remote enablement is
+  claimed.
+
 ## Security Considerations
 
 The private X25519 scalar remains KMS-owned. Clatter receives only an opaque
@@ -121,5 +150,7 @@ Existing local services remain unaffected; never replace KMS with plaintext VFS 
 
 ## Next Steps
 
-Proceed with the already bounded local ingress work. Remote envelope/relay work
-remains gated by provider readiness and its separately governed entry conditions.
+Proceed to qualified provider and physical recovery evidence. Phase 04 local
+envelope/decode/dedup work may proceed, but remote dispatch and relay remain
+blocked until those Phase 02 gates and separately governed entry conditions
+pass.

@@ -24,7 +24,11 @@ impl RotateNodeIdentityRequestPayload {
     }
 
     pub fn decode(bytes: &[u8]) -> Option<Self> {
-        if bytes.len() != Self::LEN || bytes[1] != 0 || read_u32(bytes, 4) != 0 {
+        if bytes.len() != Self::LEN
+            || bytes[1] != 0
+            || read_u32(bytes, 4) != 0
+            || read_u64(bytes, 8) == 0
+        {
             return None;
         }
         Some(Self {

@@ -113,11 +113,17 @@ impl KmsClient {
     }
 
     /// Rotate the node identity under supervisor authority.
+    ///
+    /// `expected_blob_revision` is an exact nonzero compare-and-swap guard.
+    /// Callers must first read status; zero is never a wildcard recovery mode.
     pub fn rotate_node_identity(
         &self,
         reason: RotateNodeIdentityReason,
         expected_blob_revision: u64,
     ) -> Result<RotateNodeIdentityResponsePayload, KmsClientError> {
+        if expected_blob_revision == 0 {
+            return Err(KmsClientError::InvalidPayload);
+        }
         let payload = RotateNodeIdentityRequestPayload {
             reason,
             reserved0: 0,

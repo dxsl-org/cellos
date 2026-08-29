@@ -41,6 +41,13 @@
   qualification, two-node transport, relay, direct-LAN, remote restart/failover,
   hardware, or production readiness.
 
+- Node-identity recovery now requires the live attested supervisor and an exact
+  nonzero blob revision; zero cannot act as a wildcard rotation. The approved
+  clone/lost-key/operator-rekey contract keeps remote disabled, requires atomic
+  protected replacement, revision advance, old-handle revocation, and broker
+  re-registration, then separately gates peer/relay re-enrollment. Qualified
+  provider execution and physical recovery evidence remain open.
+
 - Authenticated evidence admission requires an explicitly provisioned,
   operator-owned replay store outside the submitted bundle. Verification binds
   the GitHub-attested subject digest through a second locked member check;

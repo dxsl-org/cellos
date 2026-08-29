@@ -66,7 +66,7 @@ fn rotate_is_supervisor_only_and_still_requires_root() {
         reason: RotateNodeIdentityReason::OperatorRekey,
         reserved0: 0,
         flags: 0,
-        expected_blob_revision: 0,
+        expected_blob_revision: 1,
     };
     let frame = request(KmsOpcode::RotateNodeIdentity, &payload.encode());
     let denied = KmsService::new()
@@ -87,4 +87,25 @@ fn rotate_is_supervisor_only_and_still_requires_root() {
         )
         .unwrap();
     assert_error(allowed, KmsErrorCode::SecureRootRequired);
+}
+
+#[test]
+fn rotate_rejects_zero_revision_before_provider_access() {
+    let payload = RotateNodeIdentityRequestPayload {
+        reason: RotateNodeIdentityReason::LostKeyRecovery,
+        reserved0: 0,
+        flags: 0,
+        expected_blob_revision: 1,
+    };
+    let mut bytes = payload.encode();
+    bytes[8..16].fill(0);
+    let response = KmsService::new()
+        .handle(
+            &request(KmsOpcode::RotateNodeIdentity, &bytes),
+            8,
+            Some(caller(40, 50, 8)),
+            registry(Some(7), Some(8)),
+        )
+        .unwrap();
+    assert_error(response, KmsErrorCode::ProviderFailure);
 }

@@ -56,8 +56,12 @@ or qualified independent external floor.
   snapshots and gives Clatter handle/epoch/public metadata; the private scalar
   never enters broker or VFS state. Plaintext VFS `machine-id` is not a C2C
   identity root. KMS absence, non-ready provider state, or any mixed snapshot
-  selects an ephemeral local-only identity and keeps remote disabled. Focused
-  host tests pass 63/63; Candidate B local ingress is complete at the
+  selects an ephemeral local-only identity and keeps remote disabled.
+  Operator recovery is now fixed to a live-supervisor, exact nonzero-revision
+  compare-and-swap contract; clone/lost-key states cannot auto-rotate or restore
+  plaintext identity. Qualified provider execution and physical recovery
+  evidence remain open.
+  Focused host tests pass 63/63; Candidate B local ingress is complete at the
   single-guest ceiling. The restart-enabled QEMU oracle retains its 1/1
   integration result, 1,000 measured calibration successes, role, concurrency,
   10,000-call soak, bounded overflow, watchdog-log, and supervised local broker

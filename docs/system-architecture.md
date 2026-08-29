@@ -1354,6 +1354,16 @@ mixed/non-ready snapshot selects an ephemeral local-only NodeId and keeps remote
 disabled. This consumer wiring does not qualify a provider or prove two-node
 transport.
 
+Node-identity recovery is supervisor-only and compare-and-swap guarded. The
+live attested supervisor must read an exact nonzero blob revision and submit an
+auditable clone-recovery, lost-key-recovery, or operator-rekey reason; zero is
+never a wildcard. Recovery first keeps remote disabled. A qualified provider
+must atomically seal the replacement, advance the revision, revoke old handles,
+and clear the broker binding before success. The broker then re-registers and
+re-acquires, while changed peer/relay enrollment remains an independent gate.
+Unavailable revision/root state stops at physical authority re-provisioning;
+plaintext restoration is forbidden.
+
 Phase 03 implements Candidate B without a kernel ABI change. The broker's main
 task blocks in `sys_recv_attested`; fixed-capacity request, reply, in-flight,
 and stale-history state binds work to the kernel-attested sender TID, Cell id,

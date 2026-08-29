@@ -34,6 +34,9 @@ Recovery plan: supersedes `.agents/260624-cell-to-cell-anywhere/` without editin
 > kernel heartbeat/watchdog termination markers, and supervised broker restart
 > with clean role drain, stale old-TID failure, fresh state, and successful retry.
 >
+> Operator recovery is fixed to a live-supervisor exact nonzero-revision CAS;
+> qualified provider execution and physical recovery evidence remain open.
+>
 > The two-real-broker relay path remains blocked only by the
 > protected-persistence, authenticated-time, and reviewed pending-key-binding
 > entry gates under frozen KMS opcodes 9–14 in

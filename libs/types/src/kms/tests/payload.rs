@@ -5,7 +5,8 @@ use crate::kms::{
     AcquireNodeIdentityPayload, BindingEpoch, BrokerBindingPayload, KmsCapabilityReadiness,
     KmsKeyAlgorithm, KmsProviderKind, NodeIdentityHandle, NodeIdentityState,
     NodeIdentityStatusPayload, RelayP256StatusPayload, RelayProviderAssessment,
-    RotateNodeIdentityResponsePayload, Tls13ClientCertificateVerifyRequestPayload,
+    RotateNodeIdentityReason, RotateNodeIdentityRequestPayload, RotateNodeIdentityResponsePayload,
+    Tls13ClientCertificateVerifyRequestPayload,
 };
 
 #[test]
@@ -60,6 +61,24 @@ fn typed_payload_codecs_preserve_canonical_bytes() {
         RotateNodeIdentityResponsePayload::decode(&rotate.encode()),
         Some(rotate)
     );
+}
+
+#[test]
+fn rotation_request_requires_exact_nonzero_revision() {
+    let request = RotateNodeIdentityRequestPayload {
+        reason: RotateNodeIdentityReason::LostKeyRecovery,
+        reserved0: 0,
+        flags: 0,
+        expected_blob_revision: 9,
+    };
+    assert_eq!(
+        RotateNodeIdentityRequestPayload::decode(&request.encode()),
+        Some(request)
+    );
+
+    let mut wildcard = request.encode();
+    wildcard[8..16].fill(0);
+    assert_eq!(RotateNodeIdentityRequestPayload::decode(&wildcard), None);
 }
 
 #[test]
