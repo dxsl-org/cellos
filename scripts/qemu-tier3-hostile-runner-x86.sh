@@ -22,7 +22,7 @@ if [ ! -f "$ISO" ] || [ "${BUILD_HOSTILE_ISO:-0}" == "1" ]; then
     echo "Building hostile ISO..."
     bash scripts/prepare-tier3-hostile-initramfs-x86.sh
     INITRD_OVERRIDE="build/tier3-hostile-initramfs-x86.cpio.gz" bash scripts/make-hypervisor-fs-x86.sh --skip-fetch
-    RUSTFLAGS="-C relocation-model=pic -C code-model=kernel -C target-feature=-red-zone" EMBEDDED_OVERRIDE="kernel/src/embedded-hv-x86" cargo build --release -p cellos-kernel --target x86_64-unknown-none
+    RUSTFLAGS="-C relocation-model=static -C code-model=kernel -C no-redzone=yes -Z cf-protection=full" EMBEDDED_OVERRIDE="kernel/src/embedded-hv-x86" cargo build --release -p cellos-kernel --target x86_64-unknown-none
     bash scripts/x86/make-iso-ci.sh "$ISO"
 fi
 

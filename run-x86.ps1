@@ -52,10 +52,10 @@ function Find-LimineBin {
 # ── Step 1: Build kernel ───────────────────────────────────────────────────────
 if (-not $NoBuild) {
     Write-Host "[1/4] Building x86_64 kernel..."
-    # relocation-model=pic produces a DYN (PIE) ELF that Limine 8.x can load
-    # into the higher half.  Keep -red-zone disabled (required for x86_64 kernels
-    # so interrupt handlers do not corrupt the System V ABI red zone).
-    $env:RUSTFLAGS = "-C relocation-model=pic -C code-model=kernel -C target-feature=-red-zone"
+    # This kernel is linked at its fixed higher-half address; keep the static
+    # relocation model used by local target config and CI. Cell binaries use
+    # separate PIC overrides.
+    $env:RUSTFLAGS = "-C relocation-model=static -C code-model=kernel -C no-redzone=yes -Z cf-protection=full"
     cargo build --release -p cellos-kernel --target x86_64-unknown-none
     $env:RUSTFLAGS = $null
     if ($LASTEXITCODE -ne 0) { Write-Error "Cargo build failed"; exit 1 }

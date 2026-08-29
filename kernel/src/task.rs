@@ -76,9 +76,6 @@ pub mod user_out;
 pub mod vfs_lifecycle_selftest;
 pub mod waker;
 
-#[cfg(test)]
-mod tests;
-
 use crate::sync::Spinlock;
 use alloc::string::String;
 #[cfg(feature = "test-hooks")]

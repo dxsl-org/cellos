@@ -72,6 +72,7 @@ const CFG_STATUS: usize = 0x06;
 
 // Command register bits.
 const CMD_MEM_SPACE: u16 = 1 << 1;
+const CMD_BUS_MASTER: u16 = 1 << 2;
 
 // Capability IDs.
 const CAP_ID_PM: u8 = 0x01;
@@ -552,6 +553,58 @@ unsafe fn scan(ecam_base: usize) {
                 pm,
             });
         }
+    }
+}
+
+/// Enable MMIO decoding and bus mastering after the caller has established
+/// exclusive BDF ownership and an IOMMU mapping.
+pub fn enable_bus_master(bdf: u32) {
+    let bus = ((bdf >> 8) & 0xFF) as u8;
+    let dev = ((bdf >> 3) & 0x1F) as u8;
+    let fun = (bdf & 0x07) as u8;
+    if bus != 0 {
+        return;
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    let ecam_base = ecam_base_x86();
+    #[cfg(target_arch = "riscv64")]
+    let ecam_base = ECAM_BASE_RISCV;
+    #[cfg(all(
+        target_arch = "aarch64",
+        not(feature = "board-rpi3"),
+        not(feature = "board-rpi4")
+    ))]
+    let ecam_base = ECAM_BASE_AARCH64;
+    #[cfg(any(
+        all(
+            target_arch = "aarch64",
+            any(feature = "board-rpi3", feature = "board-rpi4")
+        ),
+        not(any(
+            target_arch = "x86_64",
+            target_arch = "riscv64",
+            target_arch = "aarch64"
+        ))
+    ))]
+    let ecam_base = 0usize;
+    if ecam_base == 0 {
+        return;
+    }
+
+    // SAFETY: the bus-0 ECAM window is identity-mapped before Driver Cells run,
+    // and the decoded BDF is bounded to that window. PCI devices are static for
+    // the boot, so a registered owner cannot disappear between grant and write.
+    unsafe {
+        let command = read16(ecam_base, bus, dev, fun, CFG_COMMAND);
+        write16(
+            ecam_base,
+            bus,
+            dev,
+            fun,
+            CFG_COMMAND,
+            command | CMD_MEM_SPACE | CMD_BUS_MASTER,
+        );
     }
 }
 

@@ -1129,11 +1129,14 @@ impl Scheduler {
     }
 
     /// Take task IDs whose resources can be reaped outside SCHEDULER. A task
-    /// remains pending until its outgoing saved context has stopped executing.
+    /// remains pending until its outgoing saved context has stopped executing
+    /// and every DMA publication reservation has committed or rolled back.
     pub fn take_pending_grant_reap(&mut self) -> Vec<usize> {
         let mut reap = Vec::new();
         self.pending_grant_reap.retain(|tid| {
-            if super::hart_local::ready::any_hart_running(*tid) {
+            if super::hart_local::ready::any_hart_running(*tid)
+                || super::syscall::dma_publication_in_flight(*tid)
+            {
                 true
             } else {
                 reap.push(*tid);
@@ -1185,7 +1188,11 @@ impl Scheduler {
                 .iter()
                 .enumerate()
                 .all(|(hart, &epoch)| super::smp::retirement_switch_completed(hart, epoch));
-            if !members_live && completed {
+            let dma_publication_in_flight = retirement
+                .member_tids
+                .iter()
+                .any(|tid| super::syscall::dma_publication_in_flight(*tid));
+            if !members_live && completed && !dma_publication_in_flight {
                 // Retiring members remain in `tasks` until this exact
                 // quiescence boundary so a stale remote Context is visibly
                 // terminal to syscall dispatch. Move those records and any
@@ -1765,6 +1772,7 @@ mod retirement_tests {
     #[cfg(not(target_arch = "riscv64"))]
     #[test]
     fn blocked_task_requeued_from_boot_is_selectable() {
+        let _guard = crate::TEST_STATE_LOCK.lock();
         const TID: usize = 60_004;
         const CELL_RAW: u64 = 61;
         let hart = super::super::hart_local::current_hart_id();
@@ -1810,6 +1818,7 @@ mod retirement_tests {
     #[cfg(not(target_arch = "riscv64"))]
     #[test]
     fn faulted_task_to_boot_allows_successor_selection() {
+        let _guard = crate::TEST_STATE_LOCK.lock();
         const FAULTED_TID: usize = 60_005;
         const SUCCESSOR_TID: usize = 60_006;
         const CELL_RAW: u64 = 60;
@@ -1867,6 +1876,7 @@ mod retirement_tests {
 
     #[test]
     fn remote_root_retirement_waits_for_zombie_worker_switch_before_slot_reuse() {
+        let _guard = crate::TEST_STATE_LOCK.lock();
         const ROOT_TID: usize = 60_001;
         const WORKER_TID: usize = 60_002;
         const CELL_RAW: u64 = 63;
@@ -1943,12 +1953,18 @@ mod retirement_tests {
         // and the root-retirement sweep. The generation-owned zombie must stay
         // retained until it moves with the quiescent retirement.
         assert!(scheduler.take_reapable_zombies().is_empty());
+        let publication = super::super::syscall::test_reserve_dma_publication(WORKER_TID)
+            .expect("reserve DMA publication marker");
+        assert!(scheduler.take_quiescent_root_retirements().is_empty());
+        assert!(!scheduler.cell_owner_slot_is_empty(CellId(CELL_RAW)));
+        drop(publication);
         let mut ready = scheduler.take_quiescent_root_retirements();
         assert_eq!(ready.len(), 1);
         let retirement = ready.pop().expect("one quiescent retirement");
         assert!(retirement.member_tids.contains(&WORKER_TID));
-        assert_eq!(retirement.zombies.len(), 1);
-        assert_eq!(retirement.zombies[0].id, WORKER_TID);
+        assert_eq!(retirement.zombies.len(), 2);
+        assert!(retirement.zombies.iter().any(|task| task.id == ROOT_TID));
+        assert!(retirement.zombies.iter().any(|task| task.id == WORKER_TID));
         assert!(!scheduler.cell_owner_slot_is_empty(CellId(CELL_RAW)));
         let owner = retirement.owner;
         drop(retirement.zombies);
@@ -1959,9 +1975,26 @@ mod retirement_tests {
         super::super::hart_local::ready::set_executing_task_id(remote_hart, old_executing);
         super::super::hart_local::ready::set_selected_task_id(remote_hart, old_selected);
     }
+    #[test]
+    fn worker_resource_reap_waits_for_dma_publication() {
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        const WORKER_TID: usize = 60_007;
+        let mut scheduler = Scheduler::new();
+        scheduler.pending_grant_reap.push(WORKER_TID);
+        let publication = super::super::syscall::test_reserve_dma_publication(WORKER_TID)
+            .expect("reserve worker DMA publication marker");
+
+        assert!(scheduler.take_pending_grant_reap().is_empty());
+        assert_eq!(scheduler.pending_grant_reap, alloc::vec![WORKER_TID]);
+
+        drop(publication);
+        assert_eq!(scheduler.take_pending_grant_reap(), alloc::vec![WORKER_TID]);
+        assert!(scheduler.pending_grant_reap.is_empty());
+    }
 
     #[test]
     fn matching_zombie_deferred_fault_is_idempotent() {
+        let _guard = crate::TEST_STATE_LOCK.lock();
         const TID: usize = 60_003;
         const CELL_RAW: u64 = 62;
         const GENERATION: u64 = 9;
@@ -1992,6 +2025,7 @@ mod retirement_tests {
 
     #[test]
     fn owner_watch_tokens_stop_before_the_signed_return_boundary() {
+        let _guard = crate::TEST_STATE_LOCK.lock();
         let mut scheduler = Scheduler::new();
         scheduler.next_cell_owner_watch = MAX_RETURNABLE_OWNER_WATCH_TOKEN;
 

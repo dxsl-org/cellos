@@ -542,7 +542,7 @@ pub fn region_count() -> usize {
 }
 
 #[cfg(test)]
-mod tests {
+mod display_tests {
     use super::*;
 
     #[test]

@@ -5,11 +5,13 @@
 
 use core::arch::global_asm;
 
+#[cfg(target_os = "none")]
 extern "C" {
     /// Linker symbol: top of the kernel `.stack` section (64 KiB, BSS).
     static __stack_top: u8;
 }
 
+#[cfg(target_os = "none")]
 global_asm!(
     ".section .text.boot, \"ax\"",
     ".global _start",

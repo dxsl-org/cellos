@@ -61,11 +61,11 @@ rustflags = ["-C", "relocation-model=pic"]
 rustflags = ["-C", "relocation-model=pic", "-C", "target-feature=+bti,+paca,+pacg"]
 
 [target.x86_64-unknown-none]
-# code-model=kernel + no red zone: standard for a bare-metal x86_64 kernel.
+# `-C no-redzone=yes` is the rustc codegen option for disabling the SysV red
+# zone; `red-zone` is not an x86 target feature.
 #
-# +cet-shstk emits ENDBR64 prologues and shadow-stack instructions. The CPU only
-# honours them once CR4.CET + S_CET.ENDBR_EN are set (cet::init_kernel_cet());
-# on non-CET hardware the bytes execute as a NOP sled.
+# `-Z cf-protection=full` requests LLVM's x86 CET branch and return protection.
+# ENDBR landing pads remain backward-compatible on CPUs without CET enforcement.
 #
 # relocation-model=static is required: the Limine loader panics when LOAD segments
 # with different permissions share a page, and PIE generates the extra
@@ -74,12 +74,11 @@ rustflags = ["-C", "relocation-model=pic", "-C", "target-feature=+bti,+paca,+pac
 # NOTE this is the KERNEL profile. x86_64 CELLS build with relocation-model=pic —
 # the image scripts and CI both override it per-invocation.
 #
-# The two target features share one `-C target-feature=` flag so this array is
-# byte-comparable with the CI env var — scripts/check-cargo-config-parity.py
-# enforces that. (rustc accumulates repeated -C target-feature, so splitting them
-# would behave the same but defeat the check.)
+# Keep this array byte-comparable with the CI environment value;
+# scripts/check-cargo-config-parity.py enforces that contract.
 rustflags = [
     "-C", "code-model=kernel",
-    "-C", "target-feature=-red-zone,+cet-shstk",
+    "-C", "no-redzone=yes",
+    "-Z", "cf-protection=full",
     "-C", "relocation-model=static",
 ]

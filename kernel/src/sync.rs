@@ -1,5 +1,6 @@
 //! Synchronization primitives.
 
+#[cfg(not(all(test, not(target_os = "none"))))]
 use crate::hal::Arch;
 use core::cell::UnsafeCell;
 use core::ops::{Deref, DerefMut};
@@ -26,7 +27,9 @@ impl<T> Spinlock<T> {
         // Disable interrupts to prevent ISR from deadlocking on this lock
         // We use crate::hal::ARCH directly.
         // Note: Generic code in sync.rs depending on crate::hal is acceptable in this kernel structure.
+        #[cfg(not(all(test, not(target_os = "none"))))]
         let saved_int = crate::hal::ARCH.interrupts_enabled();
+        #[cfg(not(all(test, not(target_os = "none"))))]
         crate::hal::ARCH.disable_interrupts();
 
         while self
@@ -39,6 +42,7 @@ impl<T> Spinlock<T> {
         }
         SpinlockGuard {
             lock: self,
+            #[cfg(not(all(test, not(target_os = "none"))))]
             saved_int,
         }
     }
@@ -55,7 +59,9 @@ impl<T> Spinlock<T> {
     /// it proves the guarded data was mid-mutation when the fault landed, so
     /// reading it would observe a half-updated structure.
     pub fn try_lock(&self) -> Option<SpinlockGuard<'_, T>> {
+        #[cfg(not(all(test, not(target_os = "none"))))]
         let saved_int = crate::hal::ARCH.interrupts_enabled();
+        #[cfg(not(all(test, not(target_os = "none"))))]
         crate::hal::ARCH.disable_interrupts();
 
         if self
@@ -65,11 +71,13 @@ impl<T> Spinlock<T> {
         {
             Some(SpinlockGuard {
                 lock: self,
+                #[cfg(not(all(test, not(target_os = "none"))))]
                 saved_int,
             })
         } else {
             // No guard is produced, so nothing will run the Drop that normally
             // restores this — do it here or the caller silently loses interrupts.
+            #[cfg(not(all(test, not(target_os = "none"))))]
             if saved_int {
                 crate::hal::ARCH.enable_interrupts();
             }
@@ -89,6 +97,7 @@ impl<T> Spinlock<T> {
 
 pub struct SpinlockGuard<'a, T> {
     lock: &'a Spinlock<T>,
+    #[cfg(not(all(test, not(target_os = "none"))))]
     saved_int: bool,
 }
 
@@ -109,6 +118,7 @@ impl<'a, T> Drop for SpinlockGuard<'a, T> {
     fn drop(&mut self) {
         self.lock.lock.store(false, Ordering::Release);
         // Restore interrupt state
+        #[cfg(not(all(test, not(target_os = "none"))))]
         if self.saved_int {
             crate::hal::ARCH.enable_interrupts();
         }

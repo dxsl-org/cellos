@@ -46,6 +46,64 @@ fn shm_handles_lock() -> &'static Spinlock<Option<BTreeSet<usize>>> {
     &SHM_HANDLES
 }
 
+const MAX_IN_FLIGHT_DMA_PUBLICATIONS: usize = 64;
+static DMA_PUBLICATIONS: Spinlock<[usize; MAX_IN_FLIGHT_DMA_PUBLICATIONS]> =
+    Spinlock::new([0; MAX_IN_FLIGHT_DMA_PUBLICATIONS]);
+
+pub(crate) struct DmaPublicationGuard {
+    slot: usize,
+    tid: usize,
+    quota: Option<crate::memory::cell_quota::DmaQuotaReservation>,
+}
+
+impl DmaPublicationGuard {
+    fn commit(mut self) {
+        if let Some(quota) = self.quota.take() {
+            quota.commit();
+        }
+    }
+}
+
+impl Drop for DmaPublicationGuard {
+    fn drop(&mut self) {
+        // Roll quota back before making retirement eligible to proceed.
+        drop(self.quota.take());
+        let mut publications = DMA_PUBLICATIONS.lock();
+        debug_assert_eq!(publications[self.slot], self.tid);
+        publications[self.slot] = 0;
+    }
+}
+
+fn reserve_dma_publication(
+    tid: usize,
+    quota: crate::memory::cell_quota::DmaQuotaReservation,
+) -> Option<DmaPublicationGuard> {
+    if tid == 0 {
+        return None;
+    }
+    let mut publications = DMA_PUBLICATIONS.lock();
+    if publications.contains(&tid) {
+        return None;
+    }
+    let slot = publications.iter().position(|entry| *entry == 0)?;
+    publications[slot] = tid;
+    Some(DmaPublicationGuard {
+        slot,
+        tid,
+        quota: Some(quota),
+    })
+}
+
+pub(crate) fn dma_publication_in_flight(tid: usize) -> bool {
+    DMA_PUBLICATIONS.lock().contains(&tid)
+}
+
+#[cfg(test)]
+pub(crate) fn test_reserve_dma_publication(tid: usize) -> Option<DmaPublicationGuard> {
+    let quota = crate::memory::cell_quota::try_reserve_dma(0, 0)?;
+    reserve_dma_publication(tid, quota)
+}
+
 fn shm_register(handle: usize) {
     let mut guard = shm_handles_lock().lock();
     if guard.is_none() {
@@ -98,6 +156,137 @@ fn grant_pages_for_size(size: usize) -> usize {
 
 fn grant_allocated_bytes(size: usize) -> usize {
     grant_pages_for_size(size) * 4096
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DmaGrantError {
+    NotOwned,
+    BdfNotOwned,
+    QuotaExceeded,
+    Pin(crate::memory::pin::PinError),
+    PublicationBusy,
+}
+
+fn dma_range_within(
+    grant_base: usize,
+    grant_size: usize,
+    dma_base: usize,
+    dma_size: usize,
+) -> bool {
+    let Some(grant_end) = grant_base.checked_add(grant_size) else {
+        return false;
+    };
+    let Some(dma_end) = dma_base.checked_add(dma_size) else {
+        return false;
+    };
+    grant_base <= dma_base && dma_end <= grant_end
+}
+
+fn page_grant_authorizes_dma(
+    grant: &PageGrant,
+    caller_id: usize,
+    caller_binding: (CellId, u64),
+    dma_base: usize,
+    dma_size: usize,
+) -> bool {
+    grant.owner == caller_id
+        && (grant.owner_cell, grant.owner_generation) == caller_binding
+        && dma_range_within(grant.base, grant.size, dma_base, dma_size)
+}
+
+fn reg_grant_authorizes_dma(
+    grant: &RegGrant,
+    caller_id: usize,
+    caller_binding: (CellId, u64),
+    dma_base: usize,
+    dma_size: usize,
+) -> bool {
+    grant.owner == caller_id
+        && (grant.owner_cell, grant.owner_generation) == caller_binding
+        && dma_range_within(grant.base, grant.size, dma_base, dma_size)
+}
+
+/// Reserve one already-authorized DMA publication while the caller still holds
+/// the owning grant table and scheduler locks. The fixed-slot lifecycle marker
+/// allocates no memory under `SCHEDULER`; pin publication remains protected by
+/// the grant lock.
+fn reserve_authorized_dma_publication(
+    caller_id: usize,
+    caller_cell: CellId,
+    bdf: u32,
+    base: usize,
+    size: usize,
+) -> Result<DmaPublicationGuard, DmaGrantError> {
+    if crate::resource_registry::owner_of_bdf(bdf) != Some(caller_id) {
+        return Err(DmaGrantError::BdfNotOwned);
+    }
+    let quota = crate::memory::cell_quota::try_reserve_dma(caller_cell.0 as usize, size)
+        .ok_or(DmaGrantError::QuotaExceeded)?;
+    let publication =
+        reserve_dma_publication(caller_id, quota).ok_or(DmaGrantError::PublicationBusy)?;
+    crate::memory::pin::pin(base, size, caller_id).map_err(DmaGrantError::Pin)?;
+    Ok(publication)
+}
+
+/// Validate and pin a caller-owned DMA span, then return a lifecycle marker
+/// that prevents root retirement until IOMMU publication commits or rolls back.
+fn reserve_caller_owned_dma_range(
+    caller_id: usize,
+    bdf: u32,
+    base: usize,
+    size: usize,
+) -> Result<DmaPublicationGuard, DmaGrantError> {
+    {
+        let page_grants = grant_table_lock().lock();
+        let scheduler = super::SCHEDULER.lock();
+        let caller_binding = scheduler
+            .as_ref()
+            .and_then(|scheduler| scheduler.tasks.get(&caller_id))
+            .filter(|task| !matches!(task.state, TaskState::Retiring | TaskState::Terminated))
+            .map(|task| (task.cell_id, task.cell_generation))
+            .ok_or(DmaGrantError::NotOwned)?;
+        let authorized = page_grants.as_ref().is_some_and(|grants| {
+            grants.values().any(|grant| {
+                page_grant_authorizes_dma(grant, caller_id, caller_binding, base, size)
+            })
+        });
+        if authorized {
+            return reserve_authorized_dma_publication(
+                caller_id,
+                caller_binding.0,
+                bdf,
+                base,
+                size,
+            );
+        }
+    }
+
+    {
+        let registered_grants = reg_grant_table_lock().lock();
+        let scheduler = super::SCHEDULER.lock();
+        let caller_binding = scheduler
+            .as_ref()
+            .and_then(|scheduler| scheduler.tasks.get(&caller_id))
+            .filter(|task| !matches!(task.state, TaskState::Retiring | TaskState::Terminated))
+            .map(|task| (task.cell_id, task.cell_generation))
+            .ok_or(DmaGrantError::NotOwned)?;
+        let authorized = registered_grants.as_ref().is_some_and(|grants| {
+            grants
+                .values()
+                .any(|grant| reg_grant_authorizes_dma(grant, caller_id, caller_binding, base, size))
+        });
+        if authorized {
+            return reserve_authorized_dma_publication(
+                caller_id,
+                caller_binding.0,
+                bdf,
+                base,
+                size,
+            );
+        }
+    }
+
+    Err(DmaGrantError::NotOwned)
 }
 
 // ── Registered Grant Table (GrantRegister / GrantUnregister, syscalls 215/216) ──
@@ -4261,38 +4450,60 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             if phys & 0xFFF != 0 || size & 0xFFF != 0 || size == 0 {
                 return Err(SyscallError::InvalidInput);
             }
-            if phys.checked_add(size as u64).is_none() {
+            let Some(phys_end) = phys.checked_add(size as u64) else {
+                return Err(SyscallError::InvalidInput);
+            };
+            let Ok(phys_base) = usize::try_from(phys) else {
+                return Err(SyscallError::InvalidInput);
+            };
+            if usize::try_from(phys_end).is_err() {
                 return Err(SyscallError::InvalidInput);
             }
-            let bdf_owner = crate::resource_registry::owner_of_bdf(bdf);
-            let cell_id_raw = {
-                super::SCHEDULER
-                    .lock()
-                    .as_ref()
-                    .and_then(|s| s.tasks.get(&caller_id).map(|t| t.cell_id.0 as usize))
-                    .unwrap_or(0)
+            let publication = match reserve_caller_owned_dma_range(caller_id, bdf, phys_base, size)
+            {
+                Ok(publication) => publication,
+                Err(DmaGrantError::NotOwned) => {
+                    log::warn!(
+                        "[iommu] Cell {caller_id} DMA grant denied: {phys:#x}+{size} is not \
+                             contained in a live caller-owned Grant"
+                    );
+                    return Err(SyscallError::PermissionDenied);
+                }
+                Err(DmaGrantError::BdfNotOwned) => {
+                    log::warn!(
+                        "[iommu] Cell {caller_id} DMA grant denied: BDF {bdf:08x} is not owned"
+                    );
+                    return Err(SyscallError::PermissionDenied);
+                }
+                Err(DmaGrantError::QuotaExceeded) => {
+                    log::warn!("[iommu] Cell {caller_id} DMA quota exceeded (size={size})");
+                    return Err(SyscallError::PermissionDenied);
+                }
+                Err(DmaGrantError::Pin(error)) => {
+                    log::warn!(
+                        "[iommu] Cell {caller_id} DMA grant denied: cannot pin \
+                             {phys:#x}+{size} ({error:?})"
+                    );
+                    return Err(SyscallError::PermissionDenied);
+                }
+                Err(DmaGrantError::PublicationBusy) => {
+                    log::warn!(
+                        "[iommu] Cell {caller_id} DMA grant denied: publication already in flight"
+                    );
+                    return Err(SyscallError::Unknown);
+                }
             };
-            if bdf_owner != Some(caller_id) {
-                log::warn!("[iommu] Cell {} (cell_raw={}) DMA grant denied: BDF {:08x} not owned (owner={:?})",
-                           caller_id, cell_id_raw, bdf, bdf_owner);
-                return Err(SyscallError::PermissionDenied);
-            }
-            if !crate::memory::cell_quota::can_map_dma(cell_id_raw, size) {
-                log::warn!(
-                    "[iommu] Cell {} DMA quota exceeded (size={})",
-                    caller_id,
-                    size
-                );
-                return Err(SyscallError::PermissionDenied);
-            }
-            if let Err(e) = crate::memory::pin::pin(phys as usize, size, caller_id) {
-                log::warn!(
-                    "[iommu] Cell {caller_id} DMA grant denied: cannot pin {phys:#x}+{size} ({e:?})"
-                );
-                return Err(SyscallError::PermissionDenied);
-            }
-            super::drivers::iommu::map_dma_for_cell(caller_id as u64, bdf, phys, size);
-            crate::memory::cell_quota::record_dma_mapped(cell_id_raw, size);
+            let Some(iova) =
+                super::drivers::iommu::map_dma_for_cell(caller_id as u64, bdf, phys, size)
+            else {
+                let rolled_back = crate::memory::pin::rollback_pin(phys_base, size, caller_id);
+                debug_assert!(rolled_back, "failed DMA map must release its exact pin");
+                drop(publication);
+                log::warn!("[iommu] Cell {caller_id} DMA grant denied: no active mapping backend");
+                return Err(SyscallError::Unknown);
+            };
+            super::drivers::pcie_ecam::enable_bus_master(bdf);
+            publication.commit();
             log::info!(
                 "[iommu] Cell {} granted DMA BDF={:02x}:{:02x}.{} phys={:#x} size={}",
                 caller_id,
@@ -4302,7 +4513,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 phys,
                 size
             );
-            Ok(phys as usize)
+            Ok(iova as usize)
         }
 
         Syscall::CloseCap { cap_id } => {
@@ -6568,28 +6779,31 @@ const _: crate::hal::SyscallDispatch = ViCell_syscall_dispatch;
 #[cfg(test)]
 mod tests {
     use super::{
-        check_allowlist, encode_syscall_result, map_syscall, supports_typed_spawn_oom,
-        syscall_to_vi, withhold_or_free, Syscall, SyscallError,
+        check_allowlist, encode_syscall_result, map_syscall, page_grant_authorizes_dma,
+        reg_grant_authorizes_dma, supports_typed_spawn_oom, syscall_to_vi, withhold_or_free,
+        PageGrant, RegGrant, Syscall, SyscallError,
     };
-    use crate::sync::Spinlock;
-    use crate::task::{scheduler::Scheduler, SCHEDULER};
+    use crate::task::{scheduler::Scheduler, tcb::Task, SCHEDULER};
     use api::syscall::ViSyscall;
     use types::CellId;
-
-    static TEST_LOCK: Spinlock<()> = Spinlock::new(());
 
     fn with_scheduler_task<F>(allowlist: u64, f: F)
     where
         F: FnOnce(usize),
     {
-        let _guard = TEST_LOCK.lock();
+        let _guard = crate::TEST_STATE_LOCK.lock();
         let mut previous = SCHEDULER.lock();
         let saved = previous.take();
         let mut scheduler = Scheduler::new();
-        let tid = scheduler
-            .spawn("allowlist-test", CellId(7), alloc::vec::Vec::new())
-            .expect("spawn allowlist-test");
-        scheduler.tasks.get_mut(&tid).unwrap().syscall_allowlist = allowlist;
+        let tid = 1;
+        let mut task = alloc::boxed::Box::new(Task::new(
+            tid,
+            CellId(7),
+            "allowlist-test",
+            alloc::vec::Vec::new(),
+        ));
+        task.syscall_allowlist = allowlist;
+        scheduler.tasks.insert(tid, task);
         *previous = Some(scheduler);
         drop(previous);
 
@@ -6683,7 +6897,71 @@ mod tests {
     }
 
     #[test]
+    fn dma_authority_requires_live_owner_binding_and_contained_range() {
+        const OWNER: usize = 77;
+        const BASE: usize = 0x5100_0000;
+        const SIZE: usize = 0x4000;
+        let binding = (CellId(9), 3);
+        let page_grant = PageGrant {
+            base: BASE,
+            size: SIZE,
+            owner: OWNER,
+            owner_cell: binding.0,
+            owner_generation: binding.1,
+            shared_to: None,
+        };
+        assert!(page_grant_authorizes_dma(
+            &page_grant,
+            OWNER,
+            binding,
+            BASE + 0x1000,
+            0x2000
+        ));
+        assert!(!page_grant_authorizes_dma(
+            &page_grant,
+            OWNER + 1,
+            binding,
+            BASE,
+            0x1000
+        ));
+        assert!(!page_grant_authorizes_dma(
+            &page_grant,
+            OWNER,
+            (binding.0, binding.1 + 1),
+            BASE,
+            0x1000
+        ));
+        assert!(!page_grant_authorizes_dma(
+            &page_grant,
+            OWNER,
+            binding,
+            BASE + SIZE - 0x1000,
+            0x2000
+        ));
+
+        let reg_grant = RegGrant {
+            base: BASE,
+            size: SIZE,
+            owner: OWNER,
+            owner_cell: binding.0,
+            owner_generation: binding.1,
+            shared_to: None,
+        };
+        assert!(reg_grant_authorizes_dma(
+            &reg_grant, OWNER, binding, BASE, SIZE
+        ));
+        assert!(!reg_grant_authorizes_dma(
+            &reg_grant,
+            OWNER,
+            binding,
+            BASE - 0x1000,
+            0x2000
+        ));
+    }
+
+    #[test]
     fn vfs_holder_release_before_reap_frees_without_orphaning_quarantine() {
+        let _guard = crate::TEST_STATE_LOCK.lock();
         const BASE: usize = 0x4f00_0000;
         const HOLDER: usize = 30_601;
         const OWNER: usize = 30_602;

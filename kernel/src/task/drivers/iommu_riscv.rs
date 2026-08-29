@@ -333,12 +333,12 @@ pub(super) fn init_hw() {
 /// Creates a per-Cell `Sv39IommuPt` + PSCID on first call. Writes a DDT entry
 /// for `bdf` immediately (even before `activate()`). A bare CPU fence is insufficient
 /// for DC cache coherency — IODIR.INVAL_DDT + IOFENCE.C are issued after each DC write.
-pub(super) fn map_range_for_cell(tid: u64, bdf: u32, phys: u64, size: usize) {
+pub(super) fn map_range_for_cell(tid: u64, bdf: u32, phys: u64, size: usize) -> bool {
     let bar0 = BAR0.load(Ordering::Relaxed);
     let ddt_virt = DDT_VIRT.load(Ordering::Relaxed);
     let cq_virt = CQ_VIRT.load(Ordering::Relaxed);
     if bar0 == 0 || ddt_virt == 0 {
-        return;
+        return false;
     }
 
     let mut domains = RISCV_DOMAINS.lock();
@@ -376,6 +376,7 @@ pub(super) fn map_range_for_cell(tid: u64, bdf: u32, phys: u64, size: usize) {
             issue_iofence(bar0, cq_virt);
         }
     }
+    true
 }
 
 /// Backward-compat: register a DMA range for the kernel domain (tid=0) without a BDF.

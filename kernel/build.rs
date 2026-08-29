@@ -9,6 +9,7 @@ fn main() {
     emit_git_sha();
     // Choose linker script based on target architecture (and board feature).
     let target_arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
+    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
     let board_rpi3 = std::env::var("CARGO_FEATURE_BOARD_RPI3").is_ok();
     let (ld_script, rerun_path) = match target_arch.as_str() {
         // board-rpi3: VideoCore loads at 0x80000; use dedicated linker script.
@@ -20,7 +21,9 @@ fn main() {
         "x86" => ("kernel/linker-x86-32.ld", "kernel/linker-x86-32.ld"),
         _ => ("kernel/linker.ld", "kernel/linker.ld"),
     };
-    println!("cargo:rustc-link-arg=-T{ld_script}");
+    if target_os == "none" {
+        println!("cargo:rustc-link-arg=-T{ld_script}");
+    }
     println!("cargo:rerun-if-changed={rerun_path}");
     println!("cargo:rerun-if-changed=kernel/linker-rpi3.ld");
     println!("cargo:rerun-if-changed=kernel/linker-x86-64.ld");

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MPL-2.0
 //! Cellos Kernel - Entry point
 
-#![no_std]
-#![no_main]
-#![feature(alloc_error_handler)]
+#![cfg_attr(not(all(test, not(target_os = "none"))), no_std)]
+#![cfg_attr(not(all(test, not(target_os = "none"))), no_main)]
+#![cfg_attr(not(all(test, not(target_os = "none"))), feature(alloc_error_handler))]
 
 #[cfg(all(feature = "board-vf2", feature = "board-pioneer"))]
 compile_error!(
@@ -29,6 +29,7 @@ compile_error!("production relay kernel excludes development, test, and recovery
 
 extern crate alloc;
 
+#[cfg(not(all(test, not(target_os = "none"))))]
 use core::panic::PanicInfo;
 
 #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
@@ -65,6 +66,8 @@ use hal::Arch;
 mod cpu_features;
 pub mod platform;
 mod sync;
+#[cfg(test)]
+pub(crate) static TEST_STATE_LOCK: sync::Spinlock<()> = sync::Spinlock::new(());
 
 /// Signal QEMU to exit with a success (0) or failure (1) code.
 ///
@@ -1234,6 +1237,7 @@ pub extern "C" fn vi_rv64_kernel_fault_snapshot(satp: usize, stval: usize) {
 /// Cell. Therefore this handler never schedules or retires a Cell. Only the
 /// architecture trap path, after proving an interrupted U-mode context, may
 /// enter the deferred retirement funnel.
+#[cfg(not(all(test, not(target_os = "none"))))]
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
     // True kernel panic: print diagnostics and halt.

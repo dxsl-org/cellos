@@ -393,6 +393,26 @@ pub fn pin(base: usize, len: usize, owner: usize) -> Result<(), PinError> {
     };
     Ok(())
 }
+/// Roll back one ordinary pin when setup fails before DMA is enabled.
+///
+/// The range and owner must match the preceding [`pin`] call exactly.
+pub fn rollback_pin(base: usize, len: usize, owner: usize) -> bool {
+    let Some((start, pages)) = span(base, len) else {
+        return false;
+    };
+    let mut reg = REGISTRY.lock();
+    let Some(entry) = reg.pins.iter_mut().find(|entry| {
+        entry.pages == pages && entry.base == start && entry.owner == owner && !entry.quarantined
+    }) else {
+        return false;
+    };
+    if entry.holds > 1 {
+        entry.holds -= 1;
+    } else {
+        *entry = EMPTY_PIN;
+    }
+    true
+}
 
 /// Reserve one exact cache synchronization pin and return its non-zero token.
 ///

@@ -4,6 +4,25 @@
 
 ## [Unreleased] Development-first hardware-constrained execution
 
+- `cellos-kernel` now separates its host `libtest` configuration from the
+  freestanding runtime: `std` supplies host panic, allocation-error, and global
+  allocation services only under `cfg(test)`, while `target_os = "none"` keeps
+  the kernel handlers, allocator, linker script, interrupt masking, and x86
+  `_start`. Host unit tests now compile and pass 86/86 on
+  `x86_64-unknown-linux-gnu`; RISC-V and x86_64 bare-metal checks remain green.
+- `GrantDma` now accepts only page-aligned spans wholly contained in a live,
+  generation-bound `PageGrant` or `RegGrant` owned by the calling task. The
+  grant table and scheduler binding remain locked through pin publication; a
+  fixed-slot, allocation-free lifecycle reservation then defers retirement
+  through IOMMU mapping, bus-master enablement, and quota commit without holding
+  `SCHEDULER` across allocator or MMIO work. Same-Cell worker tasks reserve DMA
+  quota through one atomic CAS counter; failed pin or mapping paths refund
+  before the lifecycle marker is released. The x86 kernel flags now use
+  `-C no-redzone=yes` and LLVM `-Z cf-protection=full`; local configuration,
+  CI, and QEMU build overrides agree. A fresh 9,410,560-byte BIOS+UEFI ISO built
+  from the release kernel booted on QEMU `q35` and reached the `Cellos >` shell
+  prompt without a kernel panic or Cell fault.
+
 - Adopted
   [ADR-0007](decisions/0007-development-first-hardware-constrained-execution.md):
   continue bounded QEMU, work on the two existing Raspberry Pi 3 boards and

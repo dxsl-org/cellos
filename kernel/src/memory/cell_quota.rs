@@ -201,29 +201,56 @@ pub fn in_use(cell_id: CellId) -> usize {
 /// instead of a named `const`.
 static DMA_IN_USE: [AtomicUsize; MAX_CELLS] = [const { AtomicUsize::new(0) }; MAX_CELLS];
 
-/// Returns `true` if Cell `cell_id_raw` can map `size` more bytes into the IOMMU
-/// without exceeding its DMA quota (1× memory quota limit).
+/// Atomic DMA quota reservation. Dropping an uncommitted reservation refunds
+/// its bytes, so every failure path can roll back without a separate check/add
+/// window.
+pub(crate) struct DmaQuotaReservation {
+    cell_id_raw: usize,
+    size: usize,
+    committed: bool,
+}
+
+impl DmaQuotaReservation {
+    pub(crate) fn commit(mut self) {
+        self.committed = true;
+    }
+}
+
+impl Drop for DmaQuotaReservation {
+    fn drop(&mut self) {
+        if !self.committed {
+            record_dma_unmapped(self.cell_id_raw, self.size);
+        }
+    }
+}
+
+/// Atomically reserve `size` bytes against the Cell's DMA quota.
 ///
-/// Kernel domain (cell_id_raw=0) is always allowed.
-pub fn can_map_dma(cell_id_raw: usize, size: usize) -> bool {
+/// Concurrent worker tasks in one Cell contend on the same atomic counter; at
+/// most the reservations fitting within the configured limit can succeed.
+pub(crate) fn try_reserve_dma(cell_id_raw: usize, size: usize) -> Option<DmaQuotaReservation> {
     if cell_id_raw == 0 || cell_id_raw >= MAX_CELLS {
-        return true;
+        return Some(DmaQuotaReservation {
+            cell_id_raw,
+            size,
+            committed: true,
+        });
     }
     let limit = QUOTA_LIMITS
         .lock()
         .get(&cell_id_raw)
         .copied()
         .unwrap_or(DEFAULT_QUOTA_BYTES);
-    let cur = DMA_IN_USE[cell_id_raw].load(Ordering::Relaxed);
-    cur.saturating_add(size) <= limit
-}
-
-/// Record `size` bytes of DMA mapped for Cell `cell_id_raw`. Lock-free.
-pub fn record_dma_mapped(cell_id_raw: usize, size: usize) {
-    if cell_id_raw == 0 || cell_id_raw >= MAX_CELLS {
-        return;
-    }
-    DMA_IN_USE[cell_id_raw].fetch_add(size, Ordering::Relaxed);
+    DMA_IN_USE[cell_id_raw]
+        .fetch_update(Ordering::AcqRel, Ordering::Relaxed, |current| {
+            current.checked_add(size).filter(|next| *next <= limit)
+        })
+        .ok()?;
+    Some(DmaQuotaReservation {
+        cell_id_raw,
+        size,
+        committed: false,
+    })
 }
 
 /// Record `size` bytes of DMA released for Cell `cell_id_raw`. Lock-free.
@@ -290,4 +317,45 @@ pub(crate) fn reusable_cell_id_contract() -> bool {
         .unwrap_or(false);
     drop(held);
     reused && snapshot() == before
+}
+
+#[cfg(all(test, not(target_os = "none")))]
+mod tests {
+    use super::*;
+    use alloc::sync::Arc;
+    use core::sync::atomic::AtomicUsize;
+    use std::sync::Barrier;
+    use std::thread;
+
+    #[test]
+    fn concurrent_workers_share_one_atomic_dma_quota() {
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        const CELL_RAW: usize = MAX_CELLS - 1;
+        const LIMIT: usize = 4096;
+        let cell = CellId(CELL_RAW as u64);
+        register(cell, LIMIT);
+
+        let barrier = Arc::new(Barrier::new(2));
+        let successes = Arc::new(AtomicUsize::new(0));
+        let mut workers = alloc::vec::Vec::new();
+        for _ in 0..2 {
+            let barrier = Arc::clone(&barrier);
+            let successes = Arc::clone(&successes);
+            workers.push(thread::spawn(move || {
+                let reservation = try_reserve_dma(CELL_RAW, LIMIT);
+                if reservation.is_some() {
+                    successes.fetch_add(1, Ordering::Relaxed);
+                }
+                barrier.wait();
+                drop(reservation);
+            }));
+        }
+        for worker in workers {
+            worker.join().expect("DMA quota worker");
+        }
+
+        assert_eq!(successes.load(Ordering::Relaxed), 1);
+        assert_eq!(DMA_IN_USE[CELL_RAW].load(Ordering::Relaxed), 0);
+        deregister(cell);
+    }
 }

@@ -35,7 +35,7 @@ unsafe impl GlobalAlloc for QuotaAlloc {
     }
 }
 
-#[global_allocator]
+#[cfg_attr(not(all(test, not(target_os = "none"))), global_allocator)]
 static ALLOCATOR: QuotaAlloc = QuotaAlloc {
     inner: LockedHeap::empty(),
 };
@@ -52,6 +52,7 @@ pub unsafe fn init_heap(heap_start: usize, heap_size: usize) {
 }
 
 /// Allocator error handler
+#[cfg(not(all(test, not(target_os = "none"))))]
 #[alloc_error_handler]
 fn alloc_error_handler(layout: core::alloc::Layout) -> ! {
     log::error!("allocation error: {:?}", layout);

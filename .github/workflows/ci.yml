@@ -25,9 +25,9 @@ env:
   # riscv64: pic for kernel (la→GOT self-relocation) AND cells (avoids
   # absolute R_RISCV_64 relocations that -pie linking rejects).
   CARGO_TARGET_RISCV64GC_UNKNOWN_NONE_ELF_RUSTFLAGS: "-C relocation-model=pic"
-  # x86_64: Limine panics on PIE kernels (permission-split LOAD pages);
-  # kernel code model + no red zone + CET landing pads.
-  CARGO_TARGET_X86_64_UNKNOWN_NONE_RUSTFLAGS: "-C code-model=kernel -C target-feature=-red-zone,+cet-shstk -C relocation-model=static"
+  # x86_64: Limine-compatible static kernel, no red zone, and LLVM CET
+  # branch/return protection.
+  CARGO_TARGET_X86_64_UNKNOWN_NONE_RUSTFLAGS: "-C code-model=kernel -C no-redzone=yes -Z cf-protection=full -C relocation-model=static"
   # aarch64: pic for kernel and cells (matches run-arm-virt.ps1 /
   # build-aarch64-cells.ps1) + BTI/PAC codegen.
   CARGO_TARGET_AARCH64_UNKNOWN_NONE_SOFTFLOAT_RUSTFLAGS: "-C relocation-model=pic -C target-feature=+bti,+paca,+pacg"

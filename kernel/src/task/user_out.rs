@@ -57,13 +57,11 @@ pub(super) fn write_resolved_optional_usize(slot: Option<*mut usize>, value: usi
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sync::{Spinlock, SpinlockGuard};
+    use crate::sync::SpinlockGuard;
     use crate::task::{scheduler::Scheduler, tcb::Task};
     use alloc::boxed::Box;
     use alloc::vec::Vec;
     use types::CellId;
-
-    static TEST_LOCK: Spinlock<()> = Spinlock::new(());
 
     struct SchedulerTestGuard {
         _guard: SpinlockGuard<'static, ()>,
@@ -72,7 +70,7 @@ mod tests {
 
     impl SchedulerTestGuard {
         fn new() -> Self {
-            let guard = TEST_LOCK.lock();
+            let guard = crate::TEST_STATE_LOCK.lock();
             let mut scheduler = SCHEDULER.lock();
             let saved = scheduler.take();
             Self {

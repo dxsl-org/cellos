@@ -289,10 +289,10 @@ pub(super) fn init_hw() {
 /// Add [phys, phys+size) to the VT-d SLPT for Cell `tid` owning device `bdf`.
 ///
 /// Creates a per-Cell domain on first call. Writes context entry for (bus, dev, func).
-pub(super) fn map_range_for_cell(tid: u64, bdf: u32, phys: u64, size: usize) {
+pub(super) fn map_range_for_cell(tid: u64, bdf: u32, phys: u64, size: usize) -> bool {
     let ctx_virt = VTD_CTX_VIRT.load(Ordering::Relaxed);
     if ctx_virt == 0 {
-        return;
+        return false;
     } // VT-d not present
 
     let mut domains = VTD_DOMAINS.lock();
@@ -333,6 +333,7 @@ pub(super) fn map_range_for_cell(tid: u64, bdf: u32, phys: u64, size: usize) {
         did,
         slpt_phys
     );
+    true
 }
 
 /// Backward-compat wrapper: kernel domain (tid=0, bdf=0) → map in tid=0 domain.

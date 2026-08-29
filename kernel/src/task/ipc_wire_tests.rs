@@ -8,6 +8,7 @@ fn wire_message_bounds() {
         sender_tid: 1,
         sender_cell_id: 10,
         sender_generation: 1,
+        delivery_id: 7,
     };
     let small_payload = [0xabu8; 128];
     let msg =
@@ -17,6 +18,7 @@ fn wire_message_bounds() {
     assert_eq!(msg.header.sender_tid, 1);
     assert_eq!(msg.header.sender_cell_id, 10);
     assert_eq!(msg.header.sender_generation, 1);
+    assert_eq!(msg.header.delivery_id, 7);
 
     let empty = IpcWireMessage::try_new(header, &[]).expect("should allow empty payload");
     assert!(empty.is_empty());

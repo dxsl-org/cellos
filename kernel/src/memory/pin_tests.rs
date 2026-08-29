@@ -13,12 +13,14 @@ const fn arena(n: usize) -> usize {
 
 #[test]
 fn refuses_an_empty_or_overflowing_range() {
+    let _guard = crate::TEST_STATE_LOCK.lock();
     assert_eq!(pin(arena(0), 0, 900), Err(PinError::InvalidRange));
     assert_eq!(pin(usize::MAX - 8, 64, 900), Err(PinError::InvalidRange));
 }
 
 #[test]
 fn a_pinned_region_reports_its_holder() {
+    let _guard = crate::TEST_STATE_LOCK.lock();
     let base = arena(1);
     assert_eq!(pin(base, PAGE_SIZE, 901), Ok(()));
     let held = holder_of(base, PAGE_SIZE).expect("region must report as pinned");
@@ -31,6 +33,7 @@ fn a_pinned_region_reports_its_holder() {
 
 #[test]
 fn a_partial_overlap_still_counts_as_pinned() {
+    let _guard = crate::TEST_STATE_LOCK.lock();
     let base = arena(2);
     // Pin the middle page of a three-page span, then ask about the whole span:
     // a teardown of the enclosing grant must not be allowed to proceed.
@@ -42,6 +45,7 @@ fn a_partial_overlap_still_counts_as_pinned() {
 
 #[test]
 fn an_unaligned_range_pins_every_page_it_touches() {
+    let _guard = crate::TEST_STATE_LOCK.lock();
     let base = arena(3);
     assert_eq!(pin(base + 8, 16, 903), Ok(()));
     let held = holder_of(base, PAGE_SIZE).expect("head page must be covered");
@@ -52,6 +56,7 @@ fn an_unaligned_range_pins_every_page_it_touches() {
 
 #[test]
 fn repinning_the_same_range_reuses_the_slot() {
+    let _guard = crate::TEST_STATE_LOCK.lock();
     let base = arena(4);
     assert_eq!(pin(base, PAGE_SIZE, 904), Ok(()));
     assert_eq!(pin(base, PAGE_SIZE, 904), Ok(()));
@@ -60,9 +65,26 @@ fn repinning_the_same_range_reuses_the_slot() {
     assert!(acknowledge(904).is_empty());
     assert!(holder_of(base, PAGE_SIZE).is_none());
 }
+#[test]
+fn rollback_releases_only_the_failed_pin_hold() {
+    let _guard = crate::TEST_STATE_LOCK.lock();
+    let base = arena(24);
+    let owner = 924;
+    assert_eq!(pin(base, PAGE_SIZE, owner), Ok(()));
+    assert_eq!(pin(base, PAGE_SIZE, owner), Ok(()));
+    assert!(rollback_pin(base, PAGE_SIZE, owner));
+    assert_eq!(
+        holder_of(base, PAGE_SIZE).map(|holder| holder.holds),
+        Some(1)
+    );
+    assert!(!rollback_pin(base + PAGE_SIZE, PAGE_SIZE, owner));
+    assert!(rollback_pin(base, PAGE_SIZE, owner));
+    assert!(holder_of(base, PAGE_SIZE).is_none());
+}
 
 #[test]
 fn cache_sync_completion_releases_only_its_exact_token() {
+    let _guard = crate::TEST_STATE_LOCK.lock();
     let first = arena(19);
     let second = arena(20);
     let owner = 919;
@@ -84,6 +106,7 @@ fn cache_sync_completion_releases_only_its_exact_token() {
 
 #[test]
 fn cache_sync_quarantine_cannot_be_released_by_owner_acknowledgement() {
+    let _guard = crate::TEST_STATE_LOCK.lock();
     let base = arena(21);
     let owner = 920;
     let before = quarantined_pages();
@@ -101,6 +124,7 @@ fn cache_sync_quarantine_cannot_be_released_by_owner_acknowledgement() {
 
 #[test]
 fn cache_sync_acknowledgement_before_reap_does_not_drop_the_hold() {
+    let _guard = crate::TEST_STATE_LOCK.lock();
     let base = arena(22);
     let owner = 921;
     let _token = begin_cache_sync(base, PAGE_SIZE, owner).expect("cache token");
@@ -113,6 +137,7 @@ fn cache_sync_acknowledgement_before_reap_does_not_drop_the_hold() {
 
 #[test]
 fn a_single_owner_cannot_exhaust_the_table() {
+    let _guard = crate::TEST_STATE_LOCK.lock();
     let base = arena(5);
     for i in 0..MAX_PINS_PER_TASK {
         assert_eq!(pin(base + i * PAGE_SIZE, PAGE_SIZE, 905), Ok(()));
@@ -127,6 +152,7 @@ fn a_single_owner_cannot_exhaust_the_table() {
 
 #[test]
 fn death_quarantines_rather_than_releases() {
+    let _guard = crate::TEST_STATE_LOCK.lock();
     let base = arena(6);
     assert_eq!(pin(base, 2 * PAGE_SIZE, 906), Ok(()));
     assert_eq!(quarantine_task(906), 1);
@@ -146,6 +172,7 @@ fn death_quarantines_rather_than_releases() {
 
 #[test]
 fn an_acknowledgement_before_death_leaves_nothing_to_quarantine() {
+    let _guard = crate::TEST_STATE_LOCK.lock();
     let base = arena(7);
     assert_eq!(pin(base, PAGE_SIZE, 907), Ok(()));
     assert!(acknowledge(907).is_empty());
@@ -156,6 +183,7 @@ fn an_acknowledgement_before_death_leaves_nothing_to_quarantine() {
 
 #[test]
 fn only_frames_the_reaper_withheld_are_ever_released() {
+    let _guard = crate::TEST_STATE_LOCK.lock();
     // A range pinned but never handed to the quarantine — an MMIO window a
     // driver authorised for DMA, say — must not come back as frames to free.
     let base = arena(8);
@@ -167,6 +195,7 @@ fn only_frames_the_reaper_withheld_are_ever_released() {
 
 #[test]
 fn quarantine_and_acknowledgement_are_per_owner() {
+    let _guard = crate::TEST_STATE_LOCK.lock();
     let mine = arena(9);
     let theirs = arena(10);
     assert_eq!(pin(mine, PAGE_SIZE, 909), Ok(()));
@@ -181,6 +210,7 @@ fn quarantine_and_acknowledgement_are_per_owner() {
 
 #[test]
 fn frames_are_charged_to_the_pin_holder_not_the_dead_owner() {
+    let _guard = crate::TEST_STATE_LOCK.lock();
     // A driver cell authorises DMA against another cell's buffer. When that
     // other cell dies, the driver's acknowledgement is the one that counts.
     let base = arena(11);
@@ -196,6 +226,7 @@ fn frames_are_charged_to_the_pin_holder_not_the_dead_owner() {
 
 #[test]
 fn vfs_release_is_exact_to_the_request_and_target() {
+    let _guard = crate::TEST_STATE_LOCK.lock();
     let base = arena(12);
     assert_eq!(pin_vfs_lease(base, PAGE_SIZE, 912, 301, 7, 1), Ok(()));
     assert_eq!(release_vfs_lease(301, 913, 1), alloc::vec![]);
@@ -208,6 +239,7 @@ fn vfs_release_is_exact_to_the_request_and_target() {
 
 #[test]
 fn owner_death_pending_revokes_until_the_matching_vfs_release() {
+    let _guard = crate::TEST_STATE_LOCK.lock();
     let base = arena(13);
     assert_eq!(pin_vfs_lease(base, PAGE_SIZE, 913, 302, 8, 9), Ok(()));
     assert!(mark_vfs_lease_pending_revoke(302, 913, 9));
@@ -225,6 +257,7 @@ fn owner_death_pending_revokes_until_the_matching_vfs_release() {
 
 #[test]
 fn smp_vfs_holder_release_before_reaper_transfer_leaves_no_orphan() {
+    let _guard = crate::TEST_STATE_LOCK.lock();
     // This is the release-wins side of the SMP interleaving. Owner death has
     // pending-revoked the exact lease, then the holder completes before the
     // reaper's transfer transaction linearizes. The reaper must free normally,
@@ -245,6 +278,7 @@ fn smp_vfs_holder_release_before_reaper_transfer_leaves_no_orphan() {
 
 #[test]
 fn dead_vfs_holder_releases_every_quarantined_lease_it_held() {
+    let _guard = crate::TEST_STATE_LOCK.lock();
     let first = arena(14);
     let second = arena(15);
     assert_eq!(pin_vfs_lease(first, PAGE_SIZE, 914, 303, 9, 1), Ok(()));
@@ -261,6 +295,7 @@ fn dead_vfs_holder_releases_every_quarantined_lease_it_held() {
 
 #[test]
 fn vfs_owner_query_filters_by_overlapping_owner() {
+    let _guard = crate::TEST_STATE_LOCK.lock();
     let first = arena(16);
     let second = arena(17);
     assert_eq!(pin_vfs_lease(first, PAGE_SIZE, 916, 304, 11, 1), Ok(()));

@@ -26,30 +26,32 @@ pub fn init() {
     super::iommu_x86::init_hw();
 }
 
-/// Phase 2: register a DMA physical range in the IOMMU page table.
+/// Register a DMA physical range in the IOMMU page table.
 ///
-/// Backward-compat wrapper for code without a known BDF — uses kernel domain (tid=0).
-/// Callers with a known BDF SHOULD use `map_dma_for_cell` instead.
+/// Returns the identity IOVA only after the active architecture backend
+/// confirms that it installed the mapping.
 #[inline]
-pub fn map_dma(phys: u64, size: usize) -> u64 {
+pub fn map_dma(phys: u64, size: usize) -> Option<u64> {
     map_dma_for_cell(0, 0, phys, size)
 }
 
-/// Register `[phys, phys+size)` in the IOMMU for Cell `tid` owning device `bdf`.
+/// Register `[phys, phys+size)` for Cell `tid` owning device `bdf`.
 ///
-/// Creates a per-Cell IOMMU domain on first call. Writes a DDT/context entry for `bdf`.
-/// Returns IOVA (identity == phys in SAS).
-pub fn map_dma_for_cell(tid: u64, bdf: u32, phys: u64, size: usize) -> u64 {
-    if size == 0 {
-        return phys;
+/// Returns `None` unless translation enforcement is already active.
+pub fn map_dma_for_cell(tid: u64, bdf: u32, phys: u64, size: usize) -> Option<u64> {
+    if size == 0 || !is_active() {
+        return None;
     }
     #[cfg(target_arch = "riscv64")]
-    super::iommu_riscv::map_range_for_cell(tid, bdf, phys, size);
+    let mapped = super::iommu_riscv::map_range_for_cell(tid, bdf, phys, size);
     #[cfg(target_arch = "x86_64")]
-    super::iommu_x86::map_range_for_cell(tid, bdf, phys, size);
+    let mapped = super::iommu_x86::map_range_for_cell(tid, bdf, phys, size);
     #[cfg(not(any(target_arch = "riscv64", target_arch = "x86_64")))]
-    let _ = (tid, bdf); // no IOMMU backend on this arch yet
-    phys
+    let mapped = {
+        let _ = (tid, bdf, phys, size);
+        false
+    };
+    mapped.then_some(phys)
 }
 
 /// No-op stub. Per-Cell IOTLB invalidation is handled by `cleanup_cell` on Cell exit.

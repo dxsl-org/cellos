@@ -69,7 +69,7 @@ fi
 if [[ ! -f "$ISO" ]]; then
     echo "FAIL: ISO not found: $ISO" >&2
     echo "  Build with: bash scripts/make-hypervisor-fs-x86.sh && \\" >&2
-    echo "    RUSTFLAGS='-C relocation-model=pic -C code-model=kernel -C target-feature=-red-zone' \\" >&2
+    echo "    RUSTFLAGS='-C relocation-model=static -C code-model=kernel -C no-redzone=yes -Z cf-protection=full' \\" >&2
     echo "    EMBEDDED_OVERRIDE='kernel/src/embedded-hv-x86' cargo build --release -p cellos-kernel --target x86_64-unknown-none && \\" >&2
     echo "    bash scripts/x86/make-iso-ci.sh build/vicell-x86-hv.iso" >&2
     exit 1
