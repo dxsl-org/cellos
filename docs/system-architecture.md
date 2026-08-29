@@ -1403,6 +1403,14 @@ requires the deadline and returns `NotSupported` without broker contact.
 `CellEndpoint<M>` requires an explicit locality branch. Provider qualification
 still gates remote dispatch, relay, and direct LAN.
 
+Phase 05 local contract work begins without opening a remote route. The
+four-slot Noise session pool now admits only into empty slots; exhaustion
+returns `WouldBlock` for mapping to remote `Busy` and never displaces an
+occupied session. `ConnectionManager` checks capacity before `TcpConnect`, so
+full-pool pressure cannot leak a newly opened socket or fall through to
+`NotSupported`. Relay authentication, receive wiring, and two-node evidence
+remain absent.
+
 ### Cluster membership: 3 modes
 
 A Cell declares its mode via a new additive `__ViCell_cluster` ELF section (follows the `__ViCell_syscalls` pattern; not a manifest/Law-1 change):

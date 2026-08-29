@@ -1,6 +1,6 @@
 ---
 title: "Phase 05 - Relay-First Remote Correctness Oracle"
-status: pending
+status: in_progress
 priority: P1
 effort: 5
 depends_on: [04]
@@ -41,10 +41,14 @@ Data flow: node A broker -> relay TCP register -> E2E Noise to node B over relay
 
 ## Related Code Files
 
-- Future owner phase: `cells/services/net-broker/src/relay.rs`
-- Future owner phase: `cells/services/net-broker/src/connection_manager.rs`
-- Future owner phase: `cells/services/net-broker/src/main.rs`
-- Future owner phase: relay test harness outside product path, if approved.
+- `cells/services/net-broker/src/session_pool.rs`
+- `cells/services/net-broker/src/transport.rs`
+- `cells/services/net-broker/src/transport/connection_pool.rs`
+- `cells/services/net-broker/src/transport/noise_session.rs`
+- `cells/services/net-broker/src/transport/tcp_framing.rs`
+- `cells/services/net-broker/src/connection_manager.rs`
+- Future relay runtime owner: `cells/services/net-broker/src/main.rs`
+- Future relay test harness outside product path, if approved.
 
 ## Implementation Steps
 
@@ -64,7 +68,8 @@ Data flow: node A broker -> relay TCP register -> E2E Noise to node B over relay
 - [ ] Define duplicate NodeId/hijack rejection oracle.
 - [ ] Define relay reconnect backoff.
 - [ ] Define oracle topology and logs retained.
-- [ ] Define no-evict-in-flight relay pool behavior.
+- [x] Define no-evict session-pool admission: full capacity returns explicit
+  pressure without opening another TCP path or displacing an existing session.
 - [ ] Define dedup expiry/exhaustion relay oracle.
 
 ## Success Criteria
@@ -87,8 +92,25 @@ Relay is authenticated and self-hosted. Relay compromise cannot forge Noise-auth
 
 ## Rollback
 
-Disable relay remote mode and keep local endpoint path plus plan artifacts. No kernel state requires rollback.
+Disable relay remote mode and keep local endpoint behavior. The bounded session
+pool requires no rollback because it only removes unsafe LRU displacement. No
+kernel state requires rollback.
 
 ## Next Steps
 
-Proceed to direct LAN Noise optimization after relay oracle passes.
+Continue local-only relay contract work with configuration and authenticated
+registration proof. Provider qualification and authenticated session identity
+still block relay wiring and any two-node oracle.
+
+## Local Contract Evidence
+
+- `BoundedSessionPool<T, 4>` admits only into empty slots. A full pool returns
+  ownership unchanged; explicit removal opens one slot without touching
+  survivors.
+- Binary `ConnectionPool` maps capacity pressure to `ViError::WouldBlock`.
+  `ConnectionManager` checks capacity before `TcpConnect` and propagates that
+  pressure instead of falling through to `NotSupported`.
+- Focused broker tests pass 94/94 and the RV64 release build passes. Tester and
+  production-readiness reviewer rechecks pass.
+- No relay registration, remote dispatch, receive loop, or two-node traffic is
+  enabled or claimed.

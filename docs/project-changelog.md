@@ -69,6 +69,14 @@
   Phase 04 is complete at its disabled local-only ceiling. Provider, remote
   dispatch, relay, and direct LAN remain disabled or unimplemented.
 
+- Began Phase 05 local-only relay contract work without enabling relay traffic.
+  Replaced the four-session Noise pool's LRU displacement with fail-closed
+  admission: a full pool preserves every occupied session and returns
+  `WouldBlock` for later mapping to typed remote `Busy`. Capacity is checked
+  before `TcpConnect`, avoiding a socket leak or misleading `NotSupported`
+  fallback. Focused broker tests pass 94/94 and the RV64 release build passes;
+  relay authentication, receive wiring, and two-node evidence remain open.
+
 - Authenticated evidence admission requires an explicitly provisioned,
   operator-owned replay store outside the submitted bundle. Verification binds
   the GitHub-attested subject digest through a second locked member check;

@@ -37,6 +37,10 @@ impl<'a> ConnectionManager<'a> {
     /// Ensure a direct Noise session exists for `peer`.
     ///
     /// `psk` is the K1 cluster PSK. `rng` is the broker's PRNG.
+    ///
+    /// # Errors
+    /// Returns `WouldBlock` when the bounded session pool is full or
+    /// `NotSupported` when no authenticated path succeeds.
     pub fn ensure_connected(
         &mut self,
         net: &mut NetRef,
@@ -50,6 +54,9 @@ impl<'a> ConnectionManager<'a> {
         if let Some(slot) = self.find_session(&peer.node_id) {
             return Ok(slot);
         }
+        if self.pool.is_full() {
+            return Err(ViError::WouldBlock);
+        }
 
         // Try direct TCP paths.
         for i in 0..peer.addrs_len as usize {
@@ -59,6 +66,7 @@ impl<'a> ConnectionManager<'a> {
             }
             match self.try_direct_connect(net, peer, ip, port, psk, my_static, rng, cluster_id) {
                 Ok(slot) => return Ok(slot),
+                Err(ViError::WouldBlock) => return Err(ViError::WouldBlock),
                 Err(_) => continue,
             }
         }
@@ -88,6 +96,9 @@ impl<'a> ConnectionManager<'a> {
         rng: &mut BrokerRng,
         cluster_id: u64,
     ) -> ViResult<usize> {
+        if self.pool.is_full() {
+            return Err(ViError::WouldBlock);
+        }
         let mut resp = [0u8; api::ipc::IPC_BUF_SIZE];
 
         sys_heartbeat(HEARTBEAT_MS);
@@ -113,8 +124,7 @@ impl<'a> ConnectionManager<'a> {
         )?;
 
         session.do_handshake(net)?;
-        let slot = self.pool.insert(session);
-        Ok(slot)
+        self.pool.try_insert(session)
     }
 }
 

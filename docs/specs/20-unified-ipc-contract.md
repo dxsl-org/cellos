@@ -150,9 +150,9 @@ reason ∈ {
   (`BEACON_INTERVAL_MS = 1000`, `PEER_LOSS_MS`), which is **not** bounded by the K≤4 Noise
   pool. Only per-service `peer_confirmed_dead` needs a session. This decouples watch count
   from K (see §3) and supplies `peer_indeterminate` for free.
-- `WatchFired` carries a per-watch monotonic `seq`; `transport_evicted` MUST NOT be
-  delivered as a peer death. LRU eviction of a live session (`transport.rs:273-289`) is a
-  local resource event, never a statement about the peer.
+- `WatchFired` carries a per-watch monotonic `seq`. Session-pool exhaustion
+  returns explicit `Busy`/`WouldBlock` pressure without displacing live state;
+  capacity pressure is never delivered as peer death.
 - **Remote watch requires a broker-scoped, non-SpawnCap kernel primitive** that can observe
   only services the broker itself brokers — not arbitrary tids. Granting the broker full
   SpawnCap `NotifyOnExit` (syscall 204, gated at `syscall.rs:1866-1873`) would make it a
@@ -171,9 +171,9 @@ reason ∈ {
 ## 3. Constraints the design must survive (verified)
 
 IPC buffer 4096 B; `UdpRecv` 512 B + 6 B header; `MAX_SOCKETS = 18` (shared DHCP/ARP/user);
-Noise `MAX_SESSIONS = 4` with **LRU eviction of live sessions** (`transport.rs:40,273-289`);
-broker is NORMAL priority under a ~500 ms RT watchdog (`main.rs:91`) on a **single dispatch
-thread** (`main.rs:126`).
+Noise `MAX_SESSIONS = 4` with fail-closed admission and no occupied-slot
+replacement (`session_pool.rs`); broker is NORMAL priority under a ~500 ms RT
+watchdog (`main.rs:91`) on a **single dispatch thread** (`main.rs:126`).
 
 **Two structural ceilings the "fleet backbone" claim must respect:**
 

@@ -20,6 +20,7 @@ mod peer_config;
 pub mod reply_pump;
 pub mod runtime_roles;
 pub mod server_epoch;
+pub mod session_pool;
 
 #[cfg(target_os = "none")]
 pub mod identity;
