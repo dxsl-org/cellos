@@ -23,9 +23,15 @@
   from the release kernel booted on QEMU `q35` and reached the `Cellos >` shell
   prompt without a kernel panic or Cell fault.
 
+- Corrected the current hardware inventory to `2 × Raspberry Pi 3 Model B+`
+  as reported by the owner. Exact serial/revision/condition reconciliation is
+  still required; no provisional board labels are assigned. The prior captured
+  revision `a22082` / `RPI 3 Model B` / serial `000000003d042795` run remains
+  separate exact-device development evidence and is unassigned to the current
+  inventory.
 - Adopted
   [ADR-0007](decisions/0007-development-first-hardware-constrained-execution.md):
-  continue bounded QEMU, work on the two existing Raspberry Pi 3 boards and
+  continue bounded QEMU, work on the two Raspberry Pi 3 Model B+ boards and
   incoming sensors, and local-runtime work now, with no additional hardware
   procurement.
 - RPi3 HDMI Phase 04 and its hardware-independent software Phase 05 are
@@ -65,10 +71,11 @@
   the QEMU evidence ceiling. ARM64 hostile execution and physical x86
   qualification remain blocked; this is emulator evidence, not service or
   production qualification.
-- RPi3-B is bound to revision `a22082` / Raspberry Pi 3 Model B and serial
-  `000000003d042795`. `lungmat8` approved the exact BCM mailbox unsafe island
-  on 2026-08-28; strict F1/F5, focused host/target tests, RPi3 packaging, image
-  verification, and specialist test/review passed. The reviewed image has
+- A prior exact-device run reported revision `a22082` / Raspberry Pi 3 Model B
+  and serial `000000003d042795`; its mapping to the two current Model B+ boards
+  remains unresolved. `lungmat8` approved that run's exact BCM mailbox unsafe
+  island on 2026-08-28; strict F1/F5, focused host/target tests, RPi3 packaging,
+  image verification, and specialist test/review passed. The reviewed image has
   SHA-256 `566b73a2e4b3499d564a8e40da41ff895cc1ff61f7388d1894881522c8e8e202`.
   The repository TFTP log independently records the final 9,642,048-byte
   transfer at 2026-08-28 11:14:54. Separately,
@@ -83,8 +90,9 @@
   10 minutes with fb-console and cursor movement. The HDMI visual gate is
   closed at exact-device development evidence only, not production
   qualification. The earlier late-connect black / `No Signal` result remains
-  a reproduction condition rather than a root-cause finding. RPi3-A remains
-  pending, and the historical capture without a unique serial stays unassigned.
+  a reproduction condition rather than a root-cause finding. The historical
+  capture without a unique serial also stays unassigned to either current
+  Model B+ board.
 - Added an isolated RV64 local Cell-to-Cell broker oracle runner with an
   ephemeral exact-32-byte K1 compiled only into the run's VFS image. The runner
   uses a private target directory, minimal blank disk, restricted SLIRP with no

@@ -1,16 +1,16 @@
 # Current Focus
 
-**Last updated**: 2026-08-28
+**Last updated**: 2026-08-29
 
 ## Development-first execution boundary
 
 [ADR-0007](../decisions/0007-development-first-hardware-constrained-execution.md)
-records the current decision: use QEMU and the two existing Raspberry Pi 3
-boards; procure no additional hardware now. The currently available peripherals
-are a camera and an HDMI cable retained for regression testing. Other sensor work
-is deferred. G1 Robot & Embedded is the active product-stage overlay, not a
-global queue. Capability dependencies
-and evidence ceilings determine executable order.
+records the current decision: use QEMU and the two owner-reported Raspberry Pi 3
+Model B+ boards; procure no additional hardware now. The currently available
+peripherals are a camera and an HDMI cable retained for regression testing.
+Other sensor work is deferred. G1 Robot & Embedded is the active product-stage
+overlay, not a global queue. Capability dependencies and evidence ceilings
+determine executable order.
 
 QEMU evidence is software-only. RPi3 and sensor evidence is development and
 hardware-integration evidence for the exact exercised devices only. The RPi3 is
@@ -22,7 +22,8 @@ or qualified independent external floor.
 - Continue useful QEMU software and integration work to the `qemu` ceiling.
   Host/QEMU results never qualify a board, secure root, cloud authority,
   physical-hostile posture, or production release.
-- Use both existing RPi3 boards for G1 boot and peripheral integration work.
+- Use both owner-reported Raspberry Pi 3 Model B+ boards for G1 boot and
+  peripheral integration work.
   The HDMI external-display lane has completed its software and exact-device
   development gates and is regression-only. Its `lungmat8` approval and strict
   software checks do not promote the result to production qualification or
@@ -58,7 +59,7 @@ or qualified independent external floor.
 
 ## Work classification
 
-- **Current executable work:** the QEMU, two-RPi3 non-HDMI peripheral,
+- **Current executable work:** the QEMU, two-Model-B+ non-HDMI peripheral,
   local Cell-to-Cell, evidence-projection, sensor, and separately reopened
   governed lanes above. Camera and other sensor integration retains this
   classification but is deferred in the current session order.
@@ -91,11 +92,15 @@ events are maintained in
 
 ## Recent State
 
-- RPi3 inventory is partial. RPi3-B is identified as board revision `a22082` /
-  Raspberry Pi 3 Model B with unique serial `000000003d042795`; RPi3-A remains
-  pending. On 2026-08-28, `lungmat8` approved the exact BCM mailbox unsafe
-  island and strict F1/F5 passed. The independent repository TFTP log records
-  the final 9,642,048-byte reviewed-image transfer at
+- Current inventory comprises `2 × Raspberry Pi 3 Model B+` as reported by the
+  owner. No provisional board labels are assigned. The exact serial, revision,
+  and condition of both boards—and their relationship to prior captures—remain
+  unresolved pending reconciliation.
+- A prior exact-device run reported board revision `a22082` / `RPI 3 Model B`
+  and unique serial `000000003d042795`; it is not assigned to either current
+  Model B+ board. On 2026-08-28, `lungmat8` approved that run's exact BCM
+  mailbox unsafe island and strict F1/F5 passed. The independent repository
+  TFTP log records the final 9,642,048-byte reviewed-image transfer at
   2026-08-28 11:14:54. Separately,
   `.agents/debug/rpi3-b-hdmi-reviewed-20260828.raw` contains an earlier boot at
   lines 37–210 and a later reviewed-image boot beginning around line 253. The
@@ -106,12 +111,12 @@ events are maintained in
   and does not itself prove the 2026-08-28 11:14:54 TFTP event. The user
   separately observed the cold-connected display remain lit for more than
   10 minutes with fb-console and cursor movement. This closes the HDMI visual
-  gate at exact-device development evidence only; it is not production
-  qualification.
-  The earlier late-connect black / `No Signal` observation remains only a
-  reproduction condition, not a root-cause finding. The historical
-  shell/BCM-scanout capture remains unassigned because it contains no unique
-  serial.
+  gate for that exact captured device at development evidence only; it is not
+  production qualification. The earlier late-connect black / `No Signal`
+  observation remains only a reproduction condition, not a root-cause finding.
+- The historical shell/BCM-scanout capture remains unassigned because it
+  contains no unique serial and therefore cannot be mapped to either current
+  Model B+ board.
 - RPi3 post-HAL-split smoke work has landed in `main`.
 - HAL to kernel Rust ABI signatures are centralized in
   `hal/traits/arch/src/kernel_abi.rs`.
@@ -187,16 +192,18 @@ events are maintained in
 
 ## Next-session work order
 
-1. Record the exact identity and current condition of both available RPi3
-   boards. Record the available camera's exact identity and interface without
-   starting sensor integration. Buy no additional hardware.
-2. Exercise the existing RPi3 boot/peripheral path on the available boards and
-   retain development-only logs tied to the exact board. Do not infer a
-   production-security or external-floor result.
+1. Identify both available Raspberry Pi 3 Model B+ boards: record each exact
+   serial, revision, and current condition, then reconcile whether either
+   corresponds to the prior `a22082` / Model B / serial `000000003d042795` run.
+   Record the available camera's exact identity and interface without starting
+   sensor integration. Buy no additional hardware.
+2. Exercise the existing RPi3 boot/peripheral path on the reconciled current
+   boards and retain development-only logs tied to the exact board. Do not
+   infer a production-security or external-floor result.
 3. Preserve the completed bounded HDMI path: cold-connect and power the display
    before firmware startup, retain separate exact-board UART and TFTP evidence
-   records for future regressions, and do not promote the RPi3-B development
-   result to production qualification.
+   records for future regressions, and do not promote the prior exact-device
+   development result to production qualification.
 4. Publish each observed result at its evidence ceiling with the remaining
    lane-local gate. Continue local Cell-to-Cell baselines if the hardware lane
    is waiting on physical access or a named review.

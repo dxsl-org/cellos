@@ -1,6 +1,6 @@
 # Product Stages
 
-**Last updated**: 2026-08-28
+**Last updated**: 2026-08-29
 
 ## Execution Relationship
 
@@ -14,8 +14,8 @@ never satisfy physical, service, or production requirements.
 ## Development inventory and planning classes
 
 [ADR-0007](../decisions/0007-development-first-hardware-constrained-execution.md)
-authorizes development-first execution with QEMU, two existing Raspberry Pi 3
-boards, and incoming sensors, with no additional procurement now.
+authorizes development-first execution with QEMU, two owner-reported Raspberry
+Pi 3 Model B+ boards, and incoming sensors, with no additional procurement now.
 
 | Roadmap item | Planning class | Stage relationship |
 |---|---|---|

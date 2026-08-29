@@ -39,11 +39,13 @@ physical, service, or production qualification.
 
 [ADR-0007](decisions/0007-development-first-hardware-constrained-execution.md)
 sets the current execution policy. The available platform inventory is QEMU,
-two existing Raspberry Pi 3 boards, and incoming sensors. No additional
-hardware procurement is planned now. QEMU, RPi3, sensor, and local-runtime
-lanes may advance independently to their stated evidence ceilings. The HDMI
-external-display lane is complete at exact-device development evidence and is
-regression-only; camera and other sensor integration remains executable but is
+two owner-reported Raspberry Pi 3 Model B+ boards, and incoming sensors. No
+additional hardware procurement is planned now. QEMU, RPi3, sensor, and
+local-runtime lanes may advance independently to their stated evidence
+ceilings. The HDMI external-display lane is complete at exact-device
+development evidence on the prior captured Model B device, whose mapping to
+the current Model B+ inventory is unresolved. The lane is regression-only;
+camera and other sensor integration remains executable but is
 deferred in the session order.
 
 QEMU results remain software-only. RPi3 and sensor results may establish
@@ -59,7 +61,8 @@ sensor, or local-runtime development.
 ### Planning classes
 
 - **Current executable work**: useful work supported by present software,
-  QEMU, the two RPi3 boards, or incoming sensors, bounded by its lane ceiling.
+  QEMU, the two Raspberry Pi 3 Model B+ boards, or incoming sensors, bounded
+  by its lane ceiling.
 - **Current-scope technical debt**: a defect or maintainability gap in the
   current supported scope; it is not a label for every unfinished capability.
 - **Future capability**: intentionally later product functionality, not a
@@ -80,8 +83,8 @@ sensor, or local-runtime development.
 |---|---|---|---|---|---|
 | Roadmap projection | Current executable work | `ready` | `contract` | Hardware-independent roadmap Phase 01/08 | A lane emits bounded evidence/status |
 | General QEMU software and integration | Current executable work | `ready` | `qemu` | Owning runtime/platform lane | Exercise the supported software path; do not promote the result to physical, service, or production evidence |
-| RPi3 HDMI software and exact-device boundary | Completed / regression-only | `scope-gated` | `physical` development evidence on RPi3-B | Phases 04 and 05 completed; no active HDMI slice | Reopen only for a regression: the exact mailbox unsafe island is approved by `lungmat8`, strict F1/F5 passes, and the separately recorded TFTP deployment, later UART boot block, and user visual observation close the reviewed exact-device gate |
-| RPi3 peripheral hardware integration | Current executable work | `ready` | `host` now; `physical` development evidence after exact-device exercise | G1 board/peripheral lane using the two available RPi3 boards; HDMI external-display work is completed and regression-only | Record the exact board and interface exercised; stop before any production-security qualification claim |
+| RPi3 HDMI software and exact-device boundary | Completed / regression-only | `scope-gated` | `physical` development evidence on the prior captured revision `a22082` / Model B / serial `000000003d042795` device; mapping to current inventory unresolved | Phases 04 and 05 completed; no active HDMI slice | Reopen only for a regression: the exact mailbox unsafe island is approved by `lungmat8`, strict F1/F5 passes, and the separately recorded TFTP deployment, later UART boot block, and user visual observation close the reviewed exact-device gate |
+| RPi3 peripheral hardware integration | Current executable work | `ready` | `host` now; `physical` development evidence after exact-device exercise | G1 board/peripheral lane using the two available Raspberry Pi 3 Model B+ boards; HDMI external-display work is completed and regression-only | Reconcile each current board's exact serial, revision, and condition before attributing evidence; stop before any production-security qualification claim |
 | Camera and other sensor integration | Current executable work | `deferred` | `contract` until resumed; then exact-device `physical` development evidence | Deferred in the current session order; the available camera must be identified before use | Resume the sensor lane in a later session and record the exact sensor/interface before exercise |
 | Tier 3 hostile QEMU evidence | Current executable work | `scope-gated` | `qemu` | Hardware-independent roadmap Phase 06; x86 bounds, descriptors, backend faults, reset, restart, and independent vCPU preemption pass in 27 bounded scenarios | Rerun the ARM64 hostile corpus only in an environment that reaches the guest probe past the known synchronous TCG fault |
 | ARM64 Tier 3 persistent storage | Future capability | `scope-gated` | `qemu` | Hardware-independent roadmap Phase 09 | Supported Phase 06 hostile scenarios; policy is fixed to `build/tier3-arm64-persistent.img` at 8 MiB with explicit cleanup |

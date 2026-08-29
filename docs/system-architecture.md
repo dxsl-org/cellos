@@ -141,14 +141,14 @@
 
 [ADR-0007](decisions/0007-development-first-hardware-constrained-execution.md)
 separates the development platform from production trust anchors. The current
-platform inventory is QEMU, two existing Raspberry Pi 3 boards, and incoming
-sensors. The architecture directs work to those assets now and authorizes no
-additional hardware procurement at this time.
+platform inventory is QEMU, two owner-reported Raspberry Pi 3 Model B+ boards,
+and incoming sensors. The architecture directs work to those assets now and
+authorizes no additional hardware procurement at this time.
 
 | Platform | Permitted evidence | Ceiling and prohibition |
 |---|---|---|
 | Host and QEMU | Software contracts, integration behavior, emulated-device behavior, and bounded hostile software scenarios | `host` or `qemu`; never physical, service, protected-root, secure/measured-boot, or production qualification |
-| Two existing RPi3 boards | G1 development boot, peripheral, sensor, and exact-board hardware-integration behavior | `physical` development evidence for the exact board only; never a production-security target, independent external floor, or production qualification |
+| Two owner-reported Raspberry Pi 3 Model B+ boards | G1 development boot, peripheral, sensor, and exact-board hardware-integration behavior after exact serial/revision/condition reconciliation | `physical` development evidence for the exact board only; never a production-security target, independent external floor, or production qualification |
 | Incoming sensors | Protocol/fixture work before receipt and exact-device behavior after physical exercise | Host/QEMU before receipt; `physical` development evidence after receipt; never broader device-family or production qualification |
 
 Lanes advance independently to these ceilings. QEMU, RPi3, sensor, and local
@@ -326,9 +326,11 @@ framebuffer allocation therefore remains boot-lifetime. Scanout flush IPC is
 accepted only from kernel sender TID 0, then clipped to the registered
 pitch/range and written with device-visible volatile stores.
 
-The completed RPi3-B run establishes exact-device development evidence only:
-the TFTP transfer record, later UART boot block, and user visual observation
-are retained as separate evidence sources. They do not establish production
+The completed run on revision `a22082` / Raspberry Pi 3 Model B / serial
+`000000003d042795` establishes exact-device development evidence only. Its
+mapping to the two owner-reported current Model B+ boards is unresolved. The
+TFTP transfer record, later UART boot block, and user visual observation are
+retained as separate evidence sources. They do not establish production
 qualification or isolate the earlier late-connect `No Signal` root cause.
 
 ---

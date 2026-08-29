@@ -16,7 +16,19 @@ Public evidence establishes that Nuvoton has an OpenTitan-derived family in mass
 
 Generic OpenTitan design evidence cannot fill those product gaps. The published P-256 API accepts a caller-provided, pre-hashed digest rather than reconstructing either permitted message ([OpenTitan Earl Grey 1.0.0 P-256 API](https://github.com/lowRISC/opentitan/blob/earlgrey_1.0.0/sw/device/lib/crypto/include/ecc_p256.h)). Earl Grey publishes a fixed-frequency timer and an always-on wake/watchdog timer, but no authenticated wall-clock facility; firmware can rewrite or clear the AON wake counter, its 64-bit access is non-atomic, and its counters stop in the killed state ([Earl Grey 1.0.0 datasheet](https://opentitan.org/earlgrey_1.0.0/book/hw/top_earlgrey/doc/datasheet.html), [AON timer theory of operation](https://opentitan.org/earlgrey_1.0.0/book/hw/ip/aon_timer/doc/theory_of_operation.html), and [AON timer programmer’s guide](https://opentitan.org/earlgrey_1.0.0/book/hw/ip/aon_timer/doc/programmers_guide.html)). The public lifecycle design defines irreversible OTP-backed production and RMA states, but that is reference-design evidence rather than proof of the selected product’s fuse state, factory ceremony, token custody, or service contract ([OpenTitan Earl Grey 1.0.0 device lifecycle](https://opentitan.org/earlgrey_1.0.0/book/doc/security/specs/device_life_cycle/index.html)).
 
-The existing Raspberry Pi 3 Model B also cannot supply the required non-circular AP↔root boot authorization. Raspberry Pi’s supported secure-boot tooling applies to Raspberry Pi 4 or newer ([Raspberry Pi secure-boot documentation](https://raw.githubusercontent.com/raspberrypi/usbboot/master/docs/secure-boot.md)). For BCM2837, the ROM loads and transfers control to `bootcode.bin`; the Pi 3 schematic exposes header SPI0 and RUN separately from the SD boot signals ([Raspberry Pi boot sequence](https://www.raspberrypi.com/documentation/computers/raspberry-pi.html#boot-sequence), [Raspberry Pi 3 Model B reduced schematic](https://pip.raspberrypi.com/documents/RP-008340-DS)). A header-attached root therefore receives an AP assertion only after unverified AP code is already executing. Such an assertion cannot independently authorize that same code.
+The Raspberry Pi 3 platform also cannot supply the required non-circular
+AP↔root boot authorization. The prior exact-device record reports a Raspberry
+Pi 3 Model B, while current inventory is two owner-reported Raspberry Pi 3
+Model B+ boards whose exact identities and mapping to that run remain
+unresolved. Raspberry Pi’s supported secure-boot tooling applies to Raspberry
+Pi 4 or newer ([Raspberry Pi secure-boot documentation](https://raw.githubusercontent.com/raspberrypi/usbboot/master/docs/secure-boot.md)).
+For BCM2837, the ROM loads and transfers control to `bootcode.bin`; the Pi 3
+schematic exposes header SPI0 and RUN separately from the SD boot signals
+([Raspberry Pi boot sequence](https://www.raspberrypi.com/documentation/computers/raspberry-pi.html#boot-sequence),
+[Raspberry Pi 3 Model B reduced schematic](https://pip.raspberrypi.com/documents/RP-008340-DS)).
+A header-attached root therefore receives an AP assertion only after unverified
+AP code is already executing. Such an assertion cannot independently authorize
+that same code.
 
 ## Decision Drivers
 

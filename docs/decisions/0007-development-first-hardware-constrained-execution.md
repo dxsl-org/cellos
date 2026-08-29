@@ -6,8 +6,12 @@
 ## Context
 
 Cellos has useful software, platform, and hardware-integration work that can be
-performed with the assets already available: QEMU, two Raspberry Pi 3 boards,
-and incoming sensors. No additional hardware procurement is planned now.
+performed with the assets already available: QEMU, two owner-reported Raspberry
+Pi 3 Model B+ boards, and incoming sensors. Both current boards still require
+exact serial, revision, and condition reconciliation. The prior exact-device
+record reports revision `a22082` / Raspberry Pi 3 Model B / serial
+`000000003d042795` and remains unassigned to either current board. No additional
+hardware procurement is planned now.
 
 The production architecture has stronger requirements than these development
 assets can prove. QEMU is a software/emulation environment. The Raspberry Pi 3
@@ -45,7 +49,8 @@ fail-closed security decisions in
 
 ### Option A (chosen): Advance independent development lanes to explicit evidence ceilings
 
-- **Pro**: Uses QEMU, both existing RPi3 boards, and incoming sensors immediately.
+- **Pro**: Uses QEMU, both owner-reported Raspberry Pi 3 Model B+ boards, and
+  incoming sensors immediately.
 - **Pro**: Keeps software, development-hardware, and production evidence
   distinguishable.
 - **Pro**: Leaves every production-admission and release invariant mandatory.
@@ -96,9 +101,11 @@ fail-closed security decisions in
 
 Cellos adopts development-first, hardware-constrained execution.
 
-1. **Use the available inventory.** QEMU, two existing Raspberry Pi 3 boards,
-   and incoming sensors are the active development platform. No additional
-   hardware procurement is authorized by this decision.
+1. **Use the available inventory.** QEMU, two owner-reported Raspberry Pi 3
+   Model B+ boards, and incoming sensors are the active development platform.
+   Reconcile both boards' exact serial, revision, and condition before
+   attributing exact-device evidence. No additional hardware procurement is
+   authorized by this decision.
 2. **Schedule by lane, not by a global production queue.** QEMU, RPi3, sensor,
    and local Cell-to-Cell runtime lanes may advance independently when their own
    dependencies are met. An unavailable advanced capability blocks only the
@@ -136,8 +143,9 @@ Cellos adopts development-first, hardware-constrained execution.
 
 ### Positive
 
-- The next session can focus on the two existing RPi3 boards and incoming
-  sensors, with QEMU used for bounded software counterparts and fixtures.
+- The next session can identify and reconcile both current Raspberry Pi 3
+  Model B+ boards and incoming sensors, with QEMU used for bounded software
+  counterparts and fixtures.
 - Local-runtime and other software lanes can continue without waiting for
   protected relay, cloud, accelerator, or production-root assets.
 - Evidence remains auditable because each result stops at a stated ceiling.

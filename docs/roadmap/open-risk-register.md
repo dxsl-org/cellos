@@ -10,11 +10,12 @@ production-only capability into technical debt.
 
 Risks do not serialize unrelated work. Under
 [ADR-0007](../decisions/0007-development-first-hardware-constrained-execution.md),
-QEMU, the two existing RPi3 boards, incoming sensors, and local-runtime work
-remain executable to their lane-specific evidence ceilings without additional
-procurement. QEMU evidence is software-only. RPi3/sensor evidence is
-development and exact-device hardware-integration evidence only; RPi3 cannot
-qualify production security or the independent external floor.
+QEMU, the two owner-reported Raspberry Pi 3 Model B+ boards, incoming sensors,
+and local-runtime work remain executable to their lane-specific evidence
+ceilings without additional procurement. QEMU evidence is software-only.
+RPi3/sensor evidence is development and exact-device hardware-integration
+evidence only; RPi3 cannot qualify production security or the independent
+external floor.
 
 Primary planning classification for the open entries:
 
@@ -133,9 +134,9 @@ only and does not close two-node, relay, remote/public, or production risks.
   runtime passes or functional failures.
 - Several additional physical hardware lanes remain external-gated. Compile/
   QEMU evidence is useful regression evidence but must not be used as VF2,
-  Pioneer, RPi4, or physical x86 qualification. The two existing RPi3 boards
-  remain available for development integration only and cannot qualify a
-  production-security floor.
+  Pioneer, RPi4, or physical x86 qualification. The two owner-reported
+  Raspberry Pi 3 Model B+ boards remain available for development integration
+  only and cannot qualify a production-security floor.
 - AArch64 test-hooks runtime proof remains blocked where the host-side
   `qemu_exit::AArch64Semihosting` issue is still present.
 

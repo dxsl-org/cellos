@@ -1,6 +1,6 @@
 # Hardware Tracks
 
-**Last updated**: 2026-08-28
+**Last updated**: 2026-08-29
 
 This page collects the hardware qualification lanes that matter for roadmap
 reading. For the architecture split between board descriptors, SoC facts, and
@@ -16,19 +16,24 @@ shared drivers, see [system-architecture.md](../system-architecture.md).
 
 ## Current Qualification Lanes
 
-- RPi3 physical smoke is merged and should be treated as real hardware evidence.
+- Prior RPi3 physical smoke is merged as real evidence for the exact captured
+  device; it is not evidence for either current Model B+ board until identity
+  reconciliation.
 - VF2, Pioneer, and RPi4 remain physical-only qualification lanes unless a log
   explicitly records PASS/FAIL/BLOCKED evidence.
 - QEMU and compile-only checks are regression evidence, not board qualification.
 
 ## Available RPi3 Inventory
 
-- **RPi3-A — identity and condition pending.** No revision, serial, or runtime
-  evidence is currently bound to this physical board.
-- **RPi3-B — identified; boot, peripheral, and HDMI path exercised.** Firmware
-  and U-Boot report board revision `a22082`, `RPI 3 Model B`, 948 MiB DRAM, and
-  unique serial `000000003d042795`. The reviewed 2026-08-28 HDMI image has
-  SHA-256 `566b73a2e4b3499d564a8e40da41ff895cc1ff61f7388d1894881522c8e8e202`.
+- **Current inventory — `2 × Raspberry Pi 3 Model B+`, owner-reported;
+  reconciliation pending.** No provisional board labels are assigned. Record
+  each board's exact serial, revision, and current condition before binding
+  runtime evidence to it.
+- **Prior exact-device run — current-inventory mapping unresolved.** Firmware
+  and U-Boot reported board revision `a22082`, `RPI 3 Model B`, 948 MiB DRAM,
+  and unique serial `000000003d042795`. This record is not assigned to either
+  current Model B+ board. The reviewed 2026-08-28 HDMI image has SHA-256
+  `566b73a2e4b3499d564a8e40da41ff895cc1ff61f7388d1894881522c8e8e202`.
   The repository TFTP log independently records the final 9,642,048-byte
   transfer at 2026-08-28 11:14:54. Separately,
   `.agents/debug/rpi3-b-hdmi-reviewed-20260828.raw` contains an earlier boot at
@@ -48,10 +53,10 @@ shared drivers, see [system-architecture.md](../system-architecture.md).
   `.agents/debug/rpi3-hdmi-data-path-long-capture.raw` reports revision
   `a22082`, reaches the Cellos shell, mounts FAT16/FAT32/littlefs, registers the
   BCM display driver, and completes its first scanout flush. It contains no
-  unique serial, so it cannot be attributed to RPi3-A or RPi3-B.
+  unique serial, so it cannot be attributed to either current Model B+ board.
 - **Current access state.** COM4 and the direct 100-Mbps Ethernet link were
-  usable for the RPi3-B run. The COM4 recorder and verified repository TFTP
-  process were stopped after the final capture.
+  usable for the prior exact-device run. The COM4 recorder and verified
+  repository TFTP process were stopped after the final capture.
 - **Available peripherals.** One HDMI cable is retained for regression testing.
   A camera is available but its model/interface is still unrecorded and sensor
   integration is deferred in the current session order.
