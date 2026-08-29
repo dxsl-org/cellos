@@ -23,7 +23,7 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 use api::ipc::{NetRequest, NetResponse};
 use clatter::{
-    crypto::{cipher::ChaChaPoly, dh::X25519, hash::Sha256},
+    crypto::{cipher::ChaChaPoly, hash::Sha256},
     handshakepattern::noise_kk_psk0,
     traits::{Dh, Handshaker},
     transportstate::TransportState,
@@ -34,6 +34,7 @@ use ostd::{clients::vfs::VfsClient, syscall::sys_heartbeat, ViError, ViResult};
 
 use crate::rng::BrokerRng;
 use api::cluster::CellNetId;
+use service_net_broker::kms_dh::{KmsBackedX25519, OpaqueStaticKey};
 
 #[cfg(test)]
 mod tests;
@@ -88,21 +89,27 @@ where
     Ok(key)
 }
 
-/// X25519 static keypair generated at broker Init via BrokerRng.
-/// Held in broker RAM only until a separately authenticated key exchange can
-/// associate it with a peer; the current beacon frame carries no static key.
+/// X25519 static keypair for either local-only ephemeral or opaque KMS identity.
 pub struct StaticKeypair {
-    inner: KeyPair<<X25519 as Dh>::PubKey, <X25519 as Dh>::PrivateKey>,
+    inner: KeyPair<<KmsBackedX25519 as Dh>::PubKey, <KmsBackedX25519 as Dh>::PrivateKey>,
 }
 
 impl StaticKeypair {
+    /// Generate an ephemeral static key for the remote-disabled local path.
     pub fn generate(rng: &mut BrokerRng) -> Self {
         Self {
-            inner: X25519::genkey_rng(rng).expect("[net-broker] static keygen failed"),
+            inner: KmsBackedX25519::genkey_rng(rng).expect("[net-broker] static keygen failed"),
         }
     }
 
-    /// Public key bytes — share with cluster peers via P05 beacon.
+    /// Construct from KMS metadata without importing private key bytes.
+    pub fn from_opaque(key: OpaqueStaticKey) -> Self {
+        Self {
+            inner: key.into_keypair(),
+        }
+    }
+
+    /// Public key bytes used as the G1 `CellNetId`.
     pub fn public_bytes(&self) -> [u8; 32] {
         self.inner.public
     }
@@ -110,7 +117,7 @@ impl StaticKeypair {
 
 // ── NoiseSession ──────────────────────────────────────────────────────────────
 
-type Hs = NqHandshakeCore<X25519, ChaChaPoly, Sha256, BrokerRng>;
+type Hs = NqHandshakeCore<KmsBackedX25519, ChaChaPoly, Sha256, BrokerRng>;
 type Ts = TransportState<ChaChaPoly, Sha256>;
 
 enum Phase {
@@ -151,7 +158,7 @@ impl NoiseSession {
         is_initiator: bool,
     ) -> ViResult<Self> {
         // Pre-generate our ephemeral key so clatter never calls BrokerRng::default().
-        let ephemeral = X25519::genkey_rng(rng).map_err(|_| ViError::IO)?;
+        let ephemeral = KmsBackedX25519::genkey_rng(rng).map_err(|_| ViError::IO)?;
 
         // Prologue = cluster_id(8) ‖ local_node_id(32) ‖ remote_node_id(32) = 72 bytes.
         // Both sides must compute identically; a NodeId mismatch fails the handshake.
@@ -160,7 +167,7 @@ impl NoiseSession {
         prologue[8..40].copy_from_slice(&local_node_id.0);
         prologue[40..72].copy_from_slice(&remote_node_id.0);
 
-        let mut hs = NqHandshakeCore::<X25519, ChaChaPoly, Sha256, BrokerRng>::new(
+        let mut hs = NqHandshakeCore::<KmsBackedX25519, ChaChaPoly, Sha256, BrokerRng>::new(
             noise_kk_psk0(),
             prologue.as_slice(),
             is_initiator,

@@ -1,9 +1,9 @@
 ---
 title: "Phase 03 - Broker Ingress Task and Bounded Local Queues"
-status: pending
+status: complete
 priority: P1
 effort: 4
-depends_on: [01, 02]
+depends_on: [01]
 owner: "broker-runtime"
 ---
 
@@ -16,13 +16,17 @@ owner: "broker-runtime"
 
 ## Overview
 
-Priority P1. Implement Candidate B runtime shape: a dedicated blocking `sys_recv_attested` ingress task feeds bounded in-cell queues, while network/relay loops keep their own polling cadence.
+Priority P1. Candidate B is implemented: the main broker task blocks in
+`sys_recv_attested`, while dedicated worker, reply-pump, and network-poller
+roles operate bounded broker-owned state.
 
 ## Key Insights
 
-- `sys_recv_attested` exists for blocking receive and carries kernel caller identity.
-- Current broker uses `sys_try_recv`, which has no attestation flag.
-- Avoiding Law 1 means Candidate B must separate local ingress from relay/network polling.
+- Kernel-attested caller identity, not payload identity, binds each request.
+- Fixed request/reply/in-flight capacities make overload observable as `Busy`.
+- Broker-owned monotonic request ids and stale history prevent receive-order or
+  delayed-reply confusion.
+- The network poller retains independent cadence while local ingress blocks.
 
 ## Requirements
 
@@ -31,53 +35,61 @@ Priority P1. Implement Candidate B runtime shape: a dedicated blocking `sys_recv
 
 ## Entry Gate
 
-- Phase 01 budgets are frozen.
-- Phase 02 has pinned public/remote disabled-until-key-lifecycle behavior.
-- Prototype scope is approved as throwaway evidence, not product completion.
+- Phase 01 budgets are frozen and measured.
+- Phase 02 pins remote disabled unless protected KMS identity and later gates pass.
+- Evidence remains a single-guest local-runtime oracle, not remote completion.
 
 ## Exit Gate Before Phase 04
 
-- Verify `ostd` task scheduler coexistence for ingress task, broker worker, heartbeat, and network polling.
-- Verify request/reply correlation under concurrent local and broker traffic.
-- Verify bounded queue wakeups and full-queue `Busy`.
-- Verify zero watchdog expirations in the prototype window.
-- Verify relay/network polling still progresses while ingress blocks in `sys_recv_attested`.
+- [x] Verify scheduler coexistence for ingress, worker, reply pump, heartbeat,
+  and network polling.
+- [x] Verify request/reply correlation under concurrent local traffic.
+- [x] Verify bounded queue wakeups and full-queue `Busy`.
+- [x] Verify zero kernel heartbeat/watchdog termination markers in the oracle.
+- [x] Verify network polling progresses while ingress and soak traffic run.
 
 ## Architecture
 
-Data flow: local cell -> blocking attested ingress task -> parse request -> bounded broker queue -> broker worker -> local direct call or remote sender -> reply queue -> response to caller.
+Data flow: local cell -> blocking attested ingress -> fixed request queue -> fair broker worker -> fixed reply queue -> bounded `sys_try_send` pump. A separate role polls network state without holding the broker lock across network IPC.
 
 ## Related Code Files
 
-- Future owner phase: `cells/services/net-broker/src/main.rs`
-- Future owner phase: new focused broker queue/runtime modules under `cells/services/net-broker/src/`
-- Future owner phase: no `libs/api` touch.
+- `cells/services/net-broker/src/local_runtime.rs`
+- `cells/services/net-broker/src/local_ingress.rs`
+- `cells/services/net-broker/src/local_queue.rs`
+- `cells/services/net-broker/src/local_queue/state/`
+- `cells/services/net-broker/src/reply_pump.rs`
+- `cells/services/net-broker/src/runtime_roles.rs`
+- `cells/services/net-broker/src/local_runtime/restart_oracle.rs`
+- `cells/tests/bench/src/scenarios/c2c_broker_oracle*`
+- `tests/integration/tests/c2c-broker-oracle.rs`
+- `scripts/run-c2c-broker-oracle-qemu.sh`
 
 ## Implementation Steps
 
-1. Define ingress task lifecycle and heartbeat contract.
-2. Define bounded queues and overflow mapping to `Busy`.
-3. Define caller identity propagation from ingress to worker.
-4. Define shutdown and broker restart behavior.
-5. Define how relay/network loops wake the worker without consuming ingress capacity.
-6. Define broker-owned request ids for replies so concurrent broker traffic cannot satisfy the wrong caller.
-7. Build and discard a scheduler coexistence prototype before protocol Phase 04.
+1. Bound request, reply, in-flight, stale-history, and per-caller state.
+2. Bind ingress to kernel-attested sender TID, Cell id, and generation.
+3. Assign broker-owned monotonic request ids and reject stale completion.
+4. Separate worker, reply-pump, and network-poller roles.
+5. Retain Busy replies with bounded attempts and explicit terminal accounting.
+6. Exercise concurrency, saturation, soak, scheduler progress, and supervised
+   broker restart in isolated RV64 QEMU.
 
 ## Todo List
 
-- [ ] Size local ingress queue.
-- [ ] Size remote reply queue.
-- [ ] Define per-caller fairness.
-- [ ] Define watchdog-safe blocking points.
-- [ ] Define reply correlation and stale reply rejection.
-- [ ] Prototype scheduler coexistence with network polling.
-- [ ] Record prototype result against Phase 01 budgets.
+- [x] Size local ingress queue.
+- [x] Size local reply queue.
+- [x] Define and unit-test per-caller fairness.
+- [x] Define watchdog-safe blocking points.
+- [x] Define reply correlation and stale reply rejection.
+- [x] Prove scheduler coexistence with network polling.
+- [x] Record the result against Phase 01 budgets.
 
 ## Success Criteria
 
 - Local ingress never needs attested `TryRecv`.
 - Queue full returns `Busy`, not silent drop.
-- Relay polling cannot starve local attested ingress.
+- The broker network poller cannot starve local attested ingress.
 - Replies are matched by broker-owned request id, not receive order alone.
 - Phase 04 is blocked until scheduler, queue wakeup, heartbeat, and network polling gates pass.
 
@@ -96,4 +108,25 @@ Disable remote broker path and route local calls directly. Remove queued worker 
 
 ## Next Steps
 
-Proceed to C2C envelope and dedup semantics.
+Phase 04 remains blocked on the protected remote identity/provider gates. The
+completed local ingress runtime may continue serving local-only broker work.
+Remote envelope, relay, two-node, and direct-LAN claims remain open.
+
+## Verification Evidence
+
+- 63/63 focused host library tests pass.
+- The isolated restart-enabled RV64 oracle passes 1/1 with 1,000 measured
+  calibration calls; successful 1/2/4/8/16-client sweeps; 10,000/10,000 soak
+  calls with zero silent drops, positive network progress, and no heartbeat or
+  watchdog termination marker; bounded overflow at queue peak 16; and
+  supervised restart with clean three-role drain, stale old-TID failure, fresh
+  broker state, and successful retry on a replacement TID.
+- Evidence ceiling: single-guest local QEMU only.
+
+## Scope Decision
+
+- **2026-08-29:** The Phase 03 coexistence gate is explicitly local-only. It
+  covers the implemented single-guest network/beacon poller running beside
+  attested ingress, worker, and reply-pump roles. It does not cover an
+  unimplemented relay loop. Relay-specific starvation and remote-session
+  progress remain Phase 05/08 gates and cannot be inferred from this phase.

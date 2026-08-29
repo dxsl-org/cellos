@@ -9,7 +9,10 @@ use clatter::crypto::dh::X25519;
 use clatter::error::{DhError, DhResult};
 use clatter::traits::{CryptoComponent, Dh, Rng};
 use clatter::KeyPair;
-use types::kms::{BindingEpoch, NodeIdentityHandle};
+use types::kms::{
+    AcquireNodeIdentityPayload, BindingEpoch, BrokerBindingPayload, KmsProviderKind,
+    NodeIdentityHandle, NodeIdentityState, NodeIdentityStatusPayload,
+};
 
 const PRIVATE_REPR_LEN: usize = 77;
 const TAG_LOCAL: u8 = 1;
@@ -101,6 +104,32 @@ impl OpaqueStaticKey {
         encoded[PUBLIC_KEY].copy_from_slice(&self.public_key);
         KeyPair::new(self.public_key, encoded)
     }
+}
+
+/// Validate one KMS acquisition snapshot and build an opaque static key.
+///
+/// Every readiness, provider, revision, epoch, and public-key field must agree;
+/// a mixed or stale snapshot returns `None` and cannot enable remote identity.
+pub fn opaque_key_from_kms(
+    binding: BrokerBindingPayload,
+    status: NodeIdentityStatusPayload,
+    acquired: AcquireNodeIdentityPayload,
+) -> Option<OpaqueStaticKey> {
+    if binding.binding_epoch.0 == 0
+        || status.state != NodeIdentityState::Ready
+        || status.remote_allowed != 1
+        || status.provider == KmsProviderKind::None
+        || status.binding_epoch != binding.binding_epoch
+        || status.blob_revision == 0
+        || acquired.state != NodeIdentityState::Ready
+        || acquired.provider != status.provider
+        || acquired.binding_epoch != binding.binding_epoch
+        || acquired.blob_revision != status.blob_revision
+        || acquired.public_key != status.public_key
+    {
+        return None;
+    }
+    OpaqueStaticKey::new(acquired.handle, acquired.binding_epoch, acquired.public_key)
 }
 
 fn opaque_static_dh(key: &PrivateRepr, peer: &PublicKey) -> DhResult<DhOutput> {

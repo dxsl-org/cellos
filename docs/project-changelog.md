@@ -23,6 +23,24 @@
   from the release kernel booted on QEMU `q35` and reached the `Cellos >` shell
   prompt without a kernel panic or Cell fault.
 
+- The local Cell-to-Cell broker now consumes the existing opaque KMS node
+  identity contract. Startup binds the live broker, requires matching ready
+  register/status/acquire snapshots across provider, binding epoch, blob
+  revision, public key, and opaque handle/epoch metadata through
+  `KmsBackedX25519`; the private scalar never enters broker or VFS state.
+  Plaintext VFS `machine-id` is retired as a C2C identity root. KMS absence,
+  non-ready state, or any mixed snapshot selects an ephemeral local-only
+  identity and keeps remote disabled. Candidate B local ingress is complete at
+  the single-guest ceiling. Focused host tests pass 63/63, RV64 broker/VFS
+  release builds pass, and the restart-enabled oracle passes 1/1 with 1,000
+  measured calibration successes, all concurrency sweeps, 10,000/10,000 soak
+  calls with zero silent drops and positive network progress, bounded overflow,
+  no kernel heartbeat/watchdog termination marker, and clean supervised broker
+  restart with stale old-TID rejection, fresh state, and successful retry.
+  This is single-guest QEMU software evidence only; it does not prove provider
+  qualification, two-node transport, relay, direct-LAN, remote restart/failover,
+  hardware, or production readiness.
+
 - Authenticated evidence admission requires an explicitly provisioned,
   operator-owned replay store outside the submitted bundle. Verification binds
   the GitHub-attested subject digest through a second locked member check;

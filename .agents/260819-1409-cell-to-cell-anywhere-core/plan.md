@@ -11,7 +11,7 @@ created: 2026-08-19
 
 # Cell-to-Cell Anywhere Core Recovery Plan
 
-Recovery plan: supersedes `.agents/260624-cell-to-cell-anywhere/` without editing it. The required `c2c-broker-oracle-single-guest-local-runtime` CI job records only a single-guest local-runtime QEMU oracle; this plan makes no two-node relay, direct-LAN, restart-cleanup, hardware, production, or completion claim.
+Recovery plan: supersedes `.agents/260624-cell-to-cell-anywhere/` without editing it. The required `c2c-broker-oracle-single-guest-local-runtime` CI job records only a single-guest local-runtime QEMU oracle; this plan makes no two-node relay, direct-LAN, remote in-flight restart/failover, hardware, production, or completion claim.
 
 > **Decision record (2026-08-27):** The hardware-independent roadmap selected
 > this relay-first recovery plan as the sole Cell-to-Cell transport-ordering
@@ -20,23 +20,31 @@ Recovery plan: supersedes `.agents/260624-cell-to-cell-anywhere/` without editin
 > distributed leases remain deferred; this decision does not assert runtime,
 > QEMU, hardware, or production evidence.
 
-> **Execution boundary (2026-08-28):** The K1 fixture and single-guest baseline
-> suite are implemented and CI-gated. The actual runner passed 1/1 with
-> `samples=1000 success=1000 calibration=MEASURED`, `role_gate=PASS`,
-> successful 1/2/4/8/16-client sweeps,
-> `soak attempted=10000 success=10000 silent_drop=0`, and
-> `overflow status=PASS` at `queue_peak=16`. The two-real-broker relay path
-> remains blocked only by the protected-persistence, authenticated-time, and
-> reviewed pending-key-binding entry gates under frozen KMS opcodes 9–14 in
+> **Execution boundary (2026-08-29):** The K1 fixture and single-guest baseline
+> suite are implemented and CI-gated. The broker now registers with the existing
+> KMS ABI, validates exact register/status/acquire snapshots, and can supply
+> Clatter with an opaque KMS static-DH handle/epoch/public key without importing
+> the private scalar. Plaintext VFS `machine-id` is retired as a C2C identity
+> root. KMS absence, non-ready provider state, or any mixed snapshot selects an
+> ephemeral local-only identity and keeps remote disabled. Candidate B local
+> ingress is complete at the single-guest ceiling: focused host tests pass
+> 63/63; the restart-enabled RV64 oracle passes 1/1, 1,000 measured calibration
+> successes, role gating, all 1/2/4/8/16-client sweeps, a 10,000/10,000 soak
+> with zero silent drops and positive network progress, bounded overflow, zero
+> kernel heartbeat/watchdog termination markers, and supervised broker restart
+> with clean role drain, stale old-TID failure, fresh state, and successful retry.
+>
+> The two-real-broker relay path remains blocked only by the
+> protected-persistence, authenticated-time, and reviewed pending-key-binding
+> entry gates under frozen KMS opcodes 9–14 in
 > `.agents/260825-1726-kms-silo-production-root/phase-04-service-net-mutual-tls-integration.md`.
 > It reopens only when DEV_REFERENCE Phase 8 emits exact
 > `GO: PHASE4_ENTRY_GATES_SATISFIED`; this is not a global blocker for local
-> work. The attempted protocol scaffold was fully reverted after governance
-> review, leaving no dead or unwired implementation.
+> work. No two-node, relay, direct-LAN, hardware, or production claim is made.
 
 ## Verdict
 
-Candidate B is default: explicit Local/Remote typed endpoints; local direct kernel IPC; userspace `net-broker` for LAN/remote; stable first-boot X25519 node key; dedicated blocking `sys_recv_attested` ingress task feeding bounded in-cell queues; relay-first correctness; direct LAN as optimization.
+Candidate B is default: explicit Local/Remote typed endpoints; local direct kernel IPC; userspace `net-broker` for LAN/remote; protected KMS-owned stable X25519 node identity with opaque static DH; dedicated blocking `sys_recv_attested` ingress task feeding bounded in-cell queues; relay-first correctness; direct LAN as optimization.
 
 Candidate A, attested `TryRecv` parity, is only a contingency after reproducible failure against frozen latency/watchdog/queue targets, root cause specifically blocks ingress, no userspace repair exists, and Law 1 receives two confirmations.
 
@@ -46,7 +54,7 @@ Candidate A, attested `TryRecv` parity, is only a contingency after reproducible
 |---|---|---:|---|---|
 | 01 | [Recovery baseline and contract freeze](./phase-01-recovery-baseline-and-contract-freeze.md) | 3 | none | no |
 | 02 | [Stable node identity and exported endpoint registry](./phase-02-stable-node-identity-and-exported-endpoint-registry.md) | 4 | 01 | no |
-| 03 | [Broker ingress task and bounded local queues](./phase-03-broker-ingress-task-and-bounded-local-queues.md) | 4 | 01,02 | no |
+| 03 | [Broker ingress task and bounded local queues](./phase-03-broker-ingress-task-and-bounded-local-queues.md) | 4 | 01; consumes Phase 02 fail-closed policy | no |
 | 04 | [C2C envelope, request semantics, and dedup](./phase-04-c2c-envelope-request-semantics-and-dedup.md) | 5 | 02,03 | no |
 | 05 | [Relay-first remote correctness oracle](./phase-05-relay-first-remote-correctness-oracle.md) | 5 | 04 | no |
 | 06 | [Direct LAN Noise optimization](./phase-06-direct-lan-noise-optimization.md) | 3 | 05 | no |

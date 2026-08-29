@@ -63,6 +63,23 @@ fn clatter_accepts_opaque_static_and_local_ephemeral_keys() {
 }
 
 #[test]
+fn clatter_accepts_local_fallback_static_and_ephemeral_keys() {
+    let mut rng = TestRng::default();
+    let static_pair = KmsBackedX25519::genkey_rng(&mut rng).unwrap();
+    let ephemeral = KmsBackedX25519::genkey_rng(&mut rng).unwrap();
+    let handshake = NqHandshakeCore::<KmsBackedX25519, ChaChaPoly, Sha256, TestRng>::new(
+        noise_kk_psk0(),
+        &[],
+        true,
+        Some(static_pair),
+        Some(ephemeral),
+        Some([0x5C; 32]),
+        None,
+    );
+    assert!(handshake.is_ok());
+}
+
+#[test]
 fn opaque_static_dh_is_host_fail_closed() {
     let static_pair = OpaqueStaticKey::new(NodeIdentityHandle(7), BindingEpoch(9), [0xA5; 32])
         .unwrap()
@@ -88,4 +105,65 @@ fn local_ephemeral_dh_rejects_all_zero_output() {
         KmsBackedX25519::dh(&local.secret, &[0; 32]),
         Err(clatter::error::DhError::KeyGeneration)
     ));
+}
+
+fn ready_snapshot() -> (
+    BrokerBindingPayload,
+    NodeIdentityStatusPayload,
+    AcquireNodeIdentityPayload,
+) {
+    (
+        BrokerBindingPayload {
+            binding_epoch: BindingEpoch(9),
+            bound_cell_id: 2,
+            bound_generation: 3,
+            bound_service_tid: 8,
+        },
+        NodeIdentityStatusPayload {
+            state: NodeIdentityState::Ready,
+            provider: KmsProviderKind::HardwareSealed,
+            remote_allowed: 1,
+            reserved: 0,
+            binding_epoch: BindingEpoch(9),
+            blob_revision: 4,
+            policy_epoch: 7,
+            public_key: [0xA5; 32],
+        },
+        AcquireNodeIdentityPayload {
+            handle: NodeIdentityHandle(6),
+            provider: KmsProviderKind::HardwareSealed,
+            state: NodeIdentityState::Ready,
+            reserved: 0,
+            binding_epoch: BindingEpoch(9),
+            blob_revision: 4,
+            public_key: [0xA5; 32],
+        },
+    )
+}
+
+#[test]
+fn matching_ready_snapshot_builds_opaque_identity() {
+    let (binding, status, acquired) = ready_snapshot();
+    assert!(opaque_key_from_kms(binding, status, acquired).is_some());
+}
+
+#[test]
+fn mixed_or_nonready_snapshot_fails_closed() {
+    let (binding, status, acquired) = ready_snapshot();
+
+    let mut denied = status;
+    denied.remote_allowed = 0;
+    assert!(opaque_key_from_kms(binding, denied, acquired).is_none());
+
+    let mut stale = acquired;
+    stale.binding_epoch = BindingEpoch(8);
+    assert!(opaque_key_from_kms(binding, status, stale).is_none());
+
+    let mut wrong_revision = acquired;
+    wrong_revision.blob_revision = 5;
+    assert!(opaque_key_from_kms(binding, status, wrong_revision).is_none());
+
+    let mut wrong_public = acquired;
+    wrong_public.public_key = [0x5C; 32];
+    assert!(opaque_key_from_kms(binding, status, wrong_public).is_none());
 }

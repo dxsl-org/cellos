@@ -23,6 +23,18 @@ fn assert_line(lines: &[&str], required: &[&str]) {
     );
 }
 
+fn assert_positive_field(lines: &[&str], marker: &str, field: &str) {
+    let value = lines
+        .iter()
+        .find(|line| line.contains(marker))
+        .and_then(|line| {
+            line.split_whitespace()
+                .find_map(|token| token.strip_prefix(field)?.parse::<u64>().ok())
+        })
+        .unwrap_or_else(|| panic!("missing numeric {field} on {marker} line"));
+    assert!(value > 0, "{field} must be positive on {marker} line");
+}
+
 #[test]
 fn local_c2c_broker_oracle_meets_baseline_contract() {
     let kernel = env::var("CELLOS_C2C_ORACLE_KERNEL")
@@ -54,6 +66,20 @@ fn local_c2c_broker_oracle_meets_baseline_contract() {
         });
 
     let output = qemu.dump();
+    assert!(
+        output.contains("[net-broker] restart oracle drained runtime roles"),
+        "restart passed without proving all runtime roles drained\n{output}"
+    );
+    for forbidden in [
+        "[net-broker] restart oracle role drain timed out",
+        "[heartbeat] task ",
+        "[watchdog] task ",
+    ] {
+        assert!(
+            !output.contains(forbidden),
+            "oracle observed runtime termination marker {forbidden:?}\n{output}"
+        );
+    }
     let lines = oracle_lines(&output);
     assert_line(&lines, &[" baseline ", "calibration=MEASURED"]);
     assert_line(&lines, &["role_gate=PASS"]);
@@ -68,9 +94,18 @@ fn local_c2c_broker_oracle_meets_baseline_contract() {
     }
     assert_line(
         &lines,
-        &["soak attempted=10000 ", "success=10000 ", "silent_drop=0 "],
+        &[
+            "soak attempted=10000 ",
+            "success=10000 ",
+            "silent_drop=0 ",
+            "network_progress_delta=",
+            "heartbeat_miss_delta=0 ",
+            "watchdog_expired_delta=0",
+        ],
     );
+    assert_positive_field(&lines, "soak attempted=10000 ", "network_progress_delta=");
     assert_line(&lines, &["overflow status=PASS"]);
+    assert_line(&lines, &["restart status=PASS"]);
     assert!(
         lines.iter().all(|line| !line.contains("BLOCKED")),
         "oracle emitted a blocked result:\n{}",

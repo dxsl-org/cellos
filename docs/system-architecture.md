@@ -3,7 +3,7 @@
 **Audience**: Developers new to Cellos
 **Level**: High-level (conceptual + key components)
 **Version**: 0.2.1-dev (Mycelium Era)
-**Last Updated**: 2026-08-28 (development-first hardware-constrained execution recorded; KMS/Silo production remains `BLOCKED_BY_ADR_0006`.)
+**Last Updated**: 2026-08-29 (opaque KMS-backed C2C identity consumer wired; remote/provider gates remain closed.)
 
 > **Status refresh 2026-08-21**: [Spec 23 Native SDK contract](specs/23-native-sdk-contract.md)
 > is ratified as the normative contract for the single Native SDK family. It
@@ -1342,7 +1342,29 @@ Layer A/B/C ownership or turn MTE/MPK into a side-channel guarantee.
 
 Language-Based Isolation is the Rust type system within **one** compiler's address space (SAS). It proves nothing about a remote machine. Therefore **every remote machine is untrusted**, cross-machine messages must be explicitly authenticated, and the kernel only ever sees *local* IPC. All cross-machine logic lives in a **userspace `net-broker` Cell** — zero kernel changes to the transport/auth substrate. Intra-machine zero-copy IPC (Grant) degrades to **one-copy** across machines; every other Cell guarantee (supervisor restart, capability gating, owned buffers) survives.
 
-Phase 02A adds a boot-provisioned, non-secret export registry at `/etc/cellos/c2c-exports.cfg` inside `net-broker`. The registry is policy input, not a secret store: the broker can validate and count exported endpoints, but it still keeps remote/public delivery disabled until a separate secure node-identity authority exists. Readable `/etc/cellos` state is never authorization.
+Phase 02A adds a boot-provisioned, non-secret export registry at `/etc/cellos/c2c-exports.cfg` inside `net-broker`. The registry is policy input, not a secret store: the broker can validate and count exported endpoints, but it still keeps remote/public delivery disabled unless the protected KMS identity is ready and every later transport/governance gate passes. Readable `/etc/cellos` state is never authorization.
+
+Phase 02B uses the existing append-only KMS ABI for node identity. The live
+broker registers with KMS and accepts an identity only when status and
+acquisition agree on ready state, provider, binding epoch, blob revision, and
+public key. `KmsBackedX25519` gives Clatter an opaque handle/epoch representation
+and delegates static DH to KMS; the private scalar never enters broker or VFS
+state. Plaintext VFS `machine-id` is not an identity root. KMS absence or any
+mixed/non-ready snapshot selects an ephemeral local-only NodeId and keeps remote
+disabled. This consumer wiring does not qualify a provider or prove two-node
+transport.
+
+Phase 03 implements Candidate B without a kernel ABI change. The broker's main
+task blocks in `sys_recv_attested`; fixed-capacity request, reply, in-flight,
+and stale-history state binds work to the kernel-attested sender TID, Cell id,
+and generation. Broker-owned monotonic request ids correlate replies, per-caller
+windows bound fairness, full queues return `Busy`, and bounded reply retries
+retain explicit ownership. Separate worker, reply-pump, and network-poller
+roles prevent blocking local ingress from stopping network cadence. The
+restart-enabled single-guest RV64 oracle also proves clean role drain,
+supervisor replacement, stale old-TID failure, fresh volatile state, and retry.
+Kernel heartbeat/watchdog termination logs are fail-hard. This is local-process
+evidence only; remote session cleanup and two-node transport remain open.
 
 ### Cluster membership: 3 modes
 

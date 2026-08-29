@@ -73,10 +73,12 @@ mod gossip;
 mod lease;
 mod routing;
 
+use ostd::clients::KmsClient;
 use ostd::io::{print, println};
 use rng::BrokerRng;
 use service_net_broker::export_registry::RemoteDisabledReason;
 use service_net_broker::identity::BrokerIdentity;
+use service_net_broker::kms_dh::opaque_key_from_kms;
 use transport::{ClusterKeySource, StaticKeypair, VfsFileKeySource};
 
 fn print_hex_byte(b: u8) {
@@ -91,6 +93,24 @@ fn print_hex_byte(b: u8) {
     }
 }
 
+fn load_static_keypair(rng: &mut BrokerRng) -> (StaticKeypair, bool) {
+    let opaque = KmsClient::connect().ok().and_then(|client| {
+        let binding = client.register_broker_instance().ok()?;
+        let status = client.get_node_identity_status().ok()?;
+        let acquired = client.acquire_node_identity().ok()?;
+        opaque_key_from_kms(binding, status, acquired)
+    });
+    match opaque {
+        Some(key) => {
+            println("[net-broker] opaque KMS node identity acquired.");
+            (StaticKeypair::from_opaque(key), true)
+        }
+        None => {
+            println("[net-broker] KMS node identity unavailable; remote remains disabled.");
+            (StaticKeypair::generate(rng), false)
+        }
+    }
+}
 ostd::cell_main!(cell_main);
 
 fn cell_main() {
@@ -109,8 +129,7 @@ fn cell_main() {
     .load()
     .unwrap_or_else(|_| panic!("[net-broker] cluster K1 unavailable or invalid"));
 
-    // Generate per-run X25519 static keypair. Public half = G1 CellNetId.
-    let static_kp = StaticKeypair::generate(&mut rng);
+    let (static_kp, has_secure_identity) = load_static_keypair(&mut rng);
     let mut identity = BrokerIdentity::from_static_pub(static_kp.public_bytes());
     identity.load_config();
     identity.load_export_registry();
@@ -125,13 +144,20 @@ fn cell_main() {
         RemoteDisabledReason::NoSecureIdentity => {
             print("[net-broker] c2c exports: ");
             ostd::io::print_usize(identity.remote_exports().export_count());
-            println(" loaded, remote disabled (no secure identity)");
+            if has_secure_identity {
+                println(" loaded, remote disabled (transport gate closed)");
+            } else {
+                println(" loaded, remote disabled (no secure identity)");
+            }
         }
     }
 
-    // Log the first 4 bytes of the per-run NodeId for local diagnostics only.
     let nid = identity.node_id.0;
-    print("[net-broker] ephemeral NodeId prefix (diagnostic only; remote disabled): ");
+    if has_secure_identity {
+        print("[net-broker] KMS-backed NodeId prefix (remote disabled): ");
+    } else {
+        print("[net-broker] ephemeral NodeId prefix (diagnostic only; remote disabled): ");
+    }
     for b in &nid[..4] {
         print_hex_byte(*b);
     }

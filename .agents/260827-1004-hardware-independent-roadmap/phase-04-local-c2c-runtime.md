@@ -77,8 +77,10 @@ approved paths return `NotSupported`; no raw or insecure fallback exists.
 - [x] Resolve relay-first versus direct-only contract conflict.
 - [x] Freeze one bounded local runtime scope with distributed leases deferred.
 - [x] Approve and implement the ephemeral run-scoped K1 image-fixture contract.
-- [x] Record and CI-gate the single-guest RV64 broker calibration, concurrency, soak, role, and overflow baseline.
-- [ ] Prove approved two-node relay/direct-LAN behavior and restart cleanup.
+- [x] Record and CI-gate single-guest calibration, concurrency, soak, role,
+  overflow, watchdog-log, and supervised local broker-restart evidence.
+- [ ] Prove approved two-node relay/direct-LAN behavior and remote
+  session/route restart cleanup.
 
 ## Success Criteria
 
@@ -96,9 +98,10 @@ Authenticate before state mutation; bind cluster/node/session generation; cap ev
 Do not broaden into distributed leases, HyParView/PlumTree, internet traversal, public exports, or relay identity.
 
 The K1 fixture and single-guest baseline oracle are implemented and required in
-CI. This closes the local fixture/baseline prerequisite only; relay, two-node
-direct-LAN, and restart-cleanup evidence remain open, and no raw or insecure
-fallback is permitted.
+CI. This closes the local fixture, bounded runtime, and supervised local
+broker-restart prerequisite only. Relay, two-node direct-LAN, and remote
+session/route restart cleanup remain open; no raw or insecure fallback is
+permitted.
 
 ## Deviation Log
 
@@ -112,12 +115,15 @@ fallback is permitted.
   actual isolated RV64 QEMU runner passed 1/1 with
   `samples=1000 success=1000 calibration=MEASURED`,
   `role_gate=PASS`, successful 1/2/4/8/16-client sweeps,
-  `soak attempted=10000 success=10000 silent_drop=0`, and
-  `overflow status=PASS` at `queue_peak=16`.
-- Boundary: this is a single-guest local broker/runtime QEMU oracle. It does
-  not satisfy the two-node relay, direct-LAN, restart-cleanup, remote/public,
-  Phase 05, or production criteria above, and it does not raise this phase's
-  evidence ceiling.
+  `soak attempted=10000 success=10000 silent_drop=0`,
+  positive soak network progress, no kernel heartbeat/watchdog termination
+  marker, `overflow status=PASS` at `queue_peak=16`, and `restart status=PASS`
+  after clean role drain, stale old-TID rejection, fresh state, and retry on a
+  replacement TID.
+- Boundary: this is a single-guest local broker/runtime and supervised-process
+  restart oracle. It does not satisfy two-node relay, direct-LAN, remote
+  session/route restart cleanup, remote/public, Phase 05, or production
+  criteria, and it does not raise this phase's evidence ceiling.
 - Governance gate: only the two-real-broker relay path is blocked by the three
   entry gates in
   `.agents/260825-1726-kms-silo-production-root/phase-04-service-net-mutual-tls-integration.md`:
@@ -128,3 +134,13 @@ fallback is permitted.
   single-guest or other approved local work.
 - Governance review: the attempted protocol scaffold for the blocked
   two-broker path was fully reverted. No dead or unwired implementation remains.
+- Stable-identity slice: the broker now consumes the existing opaque KMS
+  static-DH seam. Exact register/status/acquire snapshot agreement is mandatory;
+  the private scalar never enters broker or VFS state. KMS absence/non-readiness
+  falls back only to an ephemeral local identity with remote disabled.
+  Plaintext VFS `machine-id` was explicitly rejected as a C2C identity root.
+- Verification: focused host tests pass 63/63, RV64 broker/VFS release builds
+  pass, and the rebuilt single-guest oracle passes 1/1 with measured
+  calibration, concurrency, 10,000-call soak, role, overflow, watchdog-log,
+  and supervised local broker-restart contracts. This does not close the open
+  two-node or remote restart/failover criteria.

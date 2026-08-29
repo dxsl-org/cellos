@@ -43,12 +43,26 @@ or qualified independent external floor.
   `C2C Broker Oracle (single-guest local-runtime QEMU)`. The job allows
   60 minutes, limits the oracle step to 40 minutes, and uses an `if: always()`
   upload for the runner log on ordinary success or failure. Actual runner
-  verification passed integration 1/1 with
-  `samples=1000 success=1000 calibration=MEASURED`, `role_gate=PASS`, soak
-  `attempted=10000 success=10000 silent_drop=0`, and
-  `overflow status=PASS`. This remains single-guest
-  local-runtime QEMU evidence only; it does not prove two-node direct LAN,
-  relay, remote/public operation, protected relay identity, or production.
+  verification passes integration 1/1 with
+  `samples=1000 success=1000 calibration=MEASURED`, `role_gate=PASS`,
+  `attempted=10000 success=10000 silent_drop=0`, positive soak network
+  progress, `overflow status=PASS`, no kernel heartbeat/watchdog termination
+  marker, and `restart status=PASS` after clean role drain and successful retry
+  on a replacement TID. This remains single-guest local-runtime QEMU evidence;
+  it does not prove two-node direct LAN, relay, remote session cleanup,
+  remote/public operation, protected relay identity, or production.
+- The broker's stable-identity consumer now uses the existing opaque KMS
+  static-DH seam. It accepts only matching ready register/status/acquire
+  snapshots and gives Clatter handle/epoch/public metadata; the private scalar
+  never enters broker or VFS state. Plaintext VFS `machine-id` is not a C2C
+  identity root. KMS absence, non-ready provider state, or any mixed snapshot
+  selects an ephemeral local-only identity and keeps remote disabled. Focused
+  host tests pass 63/63; Candidate B local ingress is complete at the
+  single-guest ceiling. The restart-enabled QEMU oracle retains its 1/1
+  integration result, 1,000 measured calibration successes, role, concurrency,
+  10,000-call soak, bounded overflow, watchdog-log, and supervised local broker
+  restart results. This does not prove two-node, relay, direct-LAN, remote
+  restart/failover, provider qualification, or production readiness.
 - Project each completed lane immediately into the roadmap and acceptance views
   at its exact evidence ceiling.
 - The managed-surface child is complete at the QEMU ceiling. Its dedicated

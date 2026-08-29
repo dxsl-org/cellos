@@ -142,7 +142,7 @@ pub fn print_soak_line(total: ClientSummary, delta: SnapshotDelta, snapshot: Ora
         .saturating_sub(delta.completed)
         .saturating_sub(delta.terminal);
     println(&format!(
-        "[c2c-broker-oracle] soak attempted={} success={} busy={} indeterminate={} duplicate={} stale={} correlation={} accepted_delta={} completed_delta={} terminal_delta={} silent_drop={} peak_bytes={} static_footprint_bytes={}",
+        "[c2c-broker-oracle] soak attempted={} success={} busy={} indeterminate={} duplicate={} stale={} correlation={} accepted_delta={} completed_delta={} terminal_delta={} silent_drop={} peak_bytes={} static_footprint_bytes={} network_progress_delta={} heartbeat_miss_delta={} watchdog_expired_delta={}",
         total.attempted,
         total.success,
         total.busy,
@@ -155,7 +155,10 @@ pub fn print_soak_line(total: ClientSummary, delta: SnapshotDelta, snapshot: Ora
         delta.terminal,
         silent_drop,
         snapshot.peak_bytes,
-        snapshot.static_footprint_bytes
+        snapshot.static_footprint_bytes,
+        delta.network_progress,
+        delta.heartbeat_miss,
+        delta.watchdog_expired
     ));
 }
 

@@ -1,6 +1,6 @@
 ---
 title: "Phase 01 - Recovery Baseline and Contract Freeze"
-status: in_progress
+status: complete
 priority: P1
 effort: 3
 depends_on: []
@@ -57,7 +57,7 @@ Data flow: old artifacts and current code evidence enter as PRIOR/current inputs
 
 ## Todo List
 
-- [ ] Root validates the evidence citations.
+- [x] Root validates the evidence citations.
 - [x] Root completed Red Team Review before implementation.
 - [x] User confirms Law-1-free Candidate B is the default.
 - [x] Capture and CI-gate the pre-change local direct IPC p99 baseline.
@@ -108,8 +108,9 @@ Proceed to stable node identity and export registry. Candidate A triggers only a
   `soak attempted=10000 success=10000 silent_drop=0`, and
   `overflow status=PASS` at `queue_peak=16`.
 - Evidence boundary: the CI job proves only the single-guest local broker/runtime
-  QEMU oracle. Two-node relay, direct-LAN, restart cleanup, Phase 05, and
-  production remain open.
+  QEMU oracle, including supervised local broker restart. Two-node relay,
+  direct-LAN, remote in-flight restart/failover, Phase 05, and production remain
+  open.
 - Governance gate: only the two-real-broker relay path is blocked by the
   protected-persistence, authenticated-time, and reviewed pending-key-binding
   entry gates under frozen KMS opcodes 9–14 in
