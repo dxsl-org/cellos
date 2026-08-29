@@ -27,6 +27,11 @@ use crate::{
 use api::hypervisor::ViVmExit;
 use ostd::io::println;
 
+#[cfg(feature = "hostile-backend-recovery")]
+const HOSTILE_PREEMPTION_PORT: u16 = 0x5050;
+#[cfg(feature = "hostile-backend-recovery")]
+const HOSTILE_PREEMPTION_ARM: u32 = 0x5052_4545;
+
 pub enum RunOutcome {
     Shutdown,
 }
@@ -47,6 +52,8 @@ pub fn run(
     let mut pit = Pit8253::new();
     let mut rtc = CmosRtc::new();
     let mut exit = ViVmExit::Unknown { ec: 0, iss: 0 };
+    #[cfg(feature = "hostile-backend-recovery")]
+    let mut hostile_preemption_armed = false;
 
     loop {
         let ret = vmm::run_vcpu(vm_id, vcpu_id, &mut exit);
@@ -58,6 +65,11 @@ pub fn run(
         match exit {
             // ── Port OUT — device write; RIP already advanced kernel-side ─────
             ViVmExit::PortOut { port, size: _, val } => {
+                #[cfg(feature = "hostile-backend-recovery")]
+                if port == HOSTILE_PREEMPTION_PORT && val == HOSTILE_PREEMPTION_ARM {
+                    hostile_preemption_armed = true;
+                    continue;
+                }
                 if !x86_port_dispatch::write(port, val, &mut uart, &mut pic, &mut pit, &mut rtc) {
                     return RunOutcome::Shutdown;
                 }
@@ -83,16 +95,23 @@ pub fn run(
             //    a pause-less spin loop): deliver the PIT tick here too, so
             //    jiffies advance at host-tick pace even when the guest never
             //    executes HLT or PAUSE. ──────────────────────────────────────
-            ViVmExit::Preempted => x86_irq_dispatch::service_idle(
-                vm_id,
-                vcpu_id,
-                &mut uart,
-                &pit,
-                &pic,
-                &mut net,
-                &blk_vmio,
-                &mut net_vmio,
-            ),
+            ViVmExit::Preempted => {
+                #[cfg(feature = "hostile-backend-recovery")]
+                if hostile_preemption_armed {
+                    println("[hv-virtio-host] vcpu-preempted");
+                    hostile_preemption_armed = false;
+                }
+                x86_irq_dispatch::service_idle(
+                    vm_id,
+                    vcpu_id,
+                    &mut uart,
+                    &pit,
+                    &pic,
+                    &mut net,
+                    &blk_vmio,
+                    &mut net_vmio,
+                );
+            }
 
             // ── MSR — never surfaced anymore (the kernel emulates all MSR exits
             //    internally); fail loud if one arrives so a regression is seen. ─

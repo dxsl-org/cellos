@@ -172,7 +172,7 @@ verify_interval() {
             | grep -acxF "USER: $host_marker" || true)"
     fi
     outcome_count="$(sed -n "$((start_line + 1)),$((done_line - 1))p" "$RAW" \
-        | grep -acE '^USER: \[(hv-blk-host|hv-backend-fault-host)\] |^USER: \[hv-virtio-host\] (reject |net-tx-complete$)' || true)"
+        | grep -acE '^USER: \[(hv-blk-host|hv-backend-fault-host)\] |^USER: \[hv-virtio-host\] (reject |net-tx-complete$|vcpu-preempted$)' || true)"
     if [[ "$host_marker" == "[hv-virtio-host] reset" ]]; then
         outcome_count="$host_count"
     fi

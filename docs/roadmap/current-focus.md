@@ -30,11 +30,12 @@ or qualified independent external floor.
 - Defer camera and other sensor integration until the sensor lane is resumed.
   The camera's exact identity and interface must be recorded before it is
   exercised or used as physical-behavior evidence.
-- Tier 3 hostile-QEMU qualification remains blocked at its current result, but
-  adding the missing VMM/VirtIO bounds, descriptor, backend-error transport and
-  independent preemption/supervisor-restart outcomes is executable QEMU work.
-  The existing CPU-bound budget stimulus under pinned QEMU-TCG 10.2.0 is not
-  those missing outcomes.
+- The x86 Tier 3 hostile path now passes 27 bounded, origin-separated scenarios
+  under pinned QEMU-TCG 10.2.0, including transport/queue/descriptor rejection,
+  reset, independent pause-less vCPU preemption, and VFS/Net supervisor restart
+  with backend recovery. ARM64 hostile execution remains blocked by the known
+  synchronous TCG fault before the guest probe; rerun that corpus only in an
+  environment that reaches the probe.
 - Single-guest local Cell-to-Cell evidence is now required through the
   [CI workflow](../../.github/workflows/ci.yml) job
   `c2c-broker-oracle-single-guest-local-runtime`, displayed as
@@ -62,15 +63,15 @@ or qualified independent external floor.
   governed lanes above. Camera and other sensor integration retains this
   classification but is deferred in the current session order.
 - **Completed / regression-only:** the RPi3 HDMI software and exact-device
-  development lane; reopen it only for a regression.
+  development lane and the x86 Tier 3 VirtIO software lane at its QEMU ceiling;
+  reopen either only for a regression or separately governed higher evidence.
 - **Current-scope technical debt:** confirmed defects and maintainability gaps
-  in supported paths, including the raw TLS length contract and interactive
-  polling/CI evidence gaps tracked by the
-  [open risk register](open-risk-register.md). This label does not apply to all
-  advanced work.
+  in supported paths, including interactive polling/CI evidence gaps tracked by
+  the [open risk register](open-risk-register.md). This label does not apply to
+  all advanced work.
 - **Future capability:** remote/public Cell-to-Cell operation, additional
-  desktop depth, x86 parity beyond current dependencies, G3 accelerators, G4
-  `rust-std`, and G5 virtualization expansion.
+  desktop and x86 platform depth, G3 accelerators, G4 `rust-std`, and G5
+  virtualization expansion.
 - **External-gated prerequisite:** unavailable exact boards, protected relay
   assets/cloud identity, and an exact production-root vendor evidence package.
   No stock TPM or generic secure-element counter is selected as the production

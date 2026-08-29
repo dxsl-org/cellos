@@ -1,6 +1,6 @@
 # Open Risk Register
 
-**Last updated**: 2026-08-28
+**Last updated**: 2026-08-29
 
 This register tracks confirmed readiness gaps found while syncing docs to code.
 It is not a global bug-fix queue, and it does not turn all future or
@@ -21,7 +21,7 @@ Primary planning classification for the open entries:
 | Planning class | Entries |
 |---|---|
 | Current executable work | Narrow fixes, bounded fixtures, and software evidence that an owning lane can perform now |
-| Current-scope technical debt | Raw TLS length handling, net polling latency, soft-skipping HTTPS evidence, the pinned-QEMU compatibility gap, unrelated hypervisor CI intermittency, and AArch64 semihosting |
+| Current-scope technical debt | Net polling latency, soft-skipping HTTPS evidence, the pinned-QEMU compatibility gap, unrelated hypervisor CI intermittency, and AArch64 semihosting |
 | Future capability | Remote/public net-broker completion and native POSIX completeness beyond currently supported contracts |
 | External-gated prerequisite | Unavailable exact board qualification and exact product/vendor evidence for protected relay or production-root milestones |
 | Production release gate | Fleet signing/provenance, production admission, protected identity/root, secure/measured boot, qualified floor and persistent recovery, physical hostile evidence, authenticated evidence runner, human approvals, and governed ledger/release closure |
@@ -66,10 +66,6 @@ only and does not close two-node, relay, remote/public, or production risks.
 
 ## High
 
-- TLS raw fallback still trims at the last non-zero byte in
-  `cells/services/net/src/handlers.rs:453-459` before the send path at
-  `:608-613`, which can truncate valid binary payloads ending in zero bytes.
-  The raw path needs an explicit length contract.
 - **Production release gate — production cell admission is not signed-only by
   default.** The 18-row catalog,
   33 stable `test-hooks` cases, and strict runtime parser are prequalification

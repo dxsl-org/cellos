@@ -49,6 +49,22 @@ static void blocked(const char *s, long n) {
     for (;;) pause_after();
 }
 #define BLOCKED(s) blocked(s, sizeof(s) - 1)
+static void exercise_vcpu_preemption(void) {
+    const uint16_t port = 0x5050;
+    const uint32_t arm = 0x50524545;
+    struct timespec started = { 0, 0 };
+    struct timespec now = { 0, 0 };
+    volatile uint64_t state = 1;
+    if (call3(228, 1, (long)&started, 0) < 0) FAIL("clock-gettime-start");
+    __asm__ volatile("outl %0, %1" : : "a"(arm), "Nd"(port) : "memory");
+    do {
+        for (unsigned i = 0; i < 100000; i++)
+            state = state * 6364136223846793005UL + 1;
+        if (call3(228, 1, (long)&now, 0) < 0) FAIL("clock-gettime-loop");
+    } while ((now.sec - started.sec) * 1000000000L
+             + now.nsec - started.nsec < 100000000L);
+    if (state == 0) FAIL("preemption-spin-state");
+}
 
 
 static volatile uint32_t *mmio;
@@ -262,6 +278,7 @@ static int run(void) {
     avail_gpa = physical_page(ring + PAGE_SIZE);
     used_gpa = physical_page(ring + 2 * PAGE_SIZE);
 
+    SCENARIO("vcpu-preemption", exercise_vcpu_preemption());
     SCENARIO("invalid-queue-select", wr(0x30, 0); wr(0x38, 8);
         wr(0x30, 0xffffffff); wr(0x38, 3); wr(0x30, 0);
         if (mmio[0x38 / 4] != 8) FAIL("invalid-queue-select-left-stale-queue"));

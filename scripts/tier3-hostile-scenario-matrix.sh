@@ -13,6 +13,7 @@ TIER3_HOSTILE_CORPUS=(
 # Ordered x86 guest stimuli and their host-authored production-path outcomes.
 # START/DONE lines only delimit an interval; they are never acceptance evidence.
 X86_VIRTIO_HOSTILE_CORPUS=(
+  "vcpu-preemption|[hv-virtio-host] vcpu-preempted|budget"
   "invalid-queue-select|[hv-virtio-host] reject queue-select|transport"
   "queue-size-zero|[hv-virtio-host] reject queue-ready|queue"
   "queue-size-non-power-two|[hv-virtio-host] reject queue-ready|queue"

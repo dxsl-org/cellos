@@ -48,18 +48,23 @@
   executable transport-decode prerequisite, not strict block/network parity
   or physical x86 qualification.
 - Phase 10's rebuilt x86 VirtIO evidence passed two persistent block/network
-  boots and 26 bounded hostile scenarios on Windows QEMU-TCG 10.2.0 with Intel
-  VT-d ACTIVE. Guest UART records are bounded, control-sanitized, and atomically
+  boots and 27 bounded hostile scenarios on Windows QEMU-TCG 10.2.0 with Intel
+  VT-d ACTIVE. The added CPU-bound scenario arms a hostile-image-only probe,
+  then requires exactly one host-authored `ViVmExit::Preempted` outcome between
+  its tagged START/DONE records; the observed interval is
+  `START vcpu-preemption → [hv-virtio-host] vcpu-preempted → DONE`.
+  Guest UART records remain bounded, control-sanitized, and atomically
   origin-tagged; the hostile parser requires unique tagged START/DONE records,
   exactly one untagged host outcome per interval, post-stimulus QEMU liveness,
   and a host-read post-reset write after FLUSH. The hostile-only supervisor
-  control path now terminates VFS and Net generations independently. Bounded
-  IPC returns block IOERR/network unavailability instead of hanging the VMM;
-  block recovery reopens the persistent image and verifies pre-crash data,
-  while network recovery requires a new-generation `NetResponse::Ok` plus a
-  matching ARP reply before publishing recovery. ARM64 hostile execution and
-  physical x86 qualification remain blocked; this is bounded emulator evidence,
-  not service or production qualification.
+  control path terminates VFS and Net generations independently. Bounded IPC
+  returns block IOERR/network unavailability instead of hanging the VMM; block
+  recovery reopens the persistent image and verifies pre-crash data, while
+  network recovery requires a new-generation `NetResponse::Ok` plus a matching
+  ARP reply before publishing recovery. The x86 software lane is complete at
+  the QEMU evidence ceiling. ARM64 hostile execution and physical x86
+  qualification remain blocked; this is emulator evidence, not service or
+  production qualification.
 - RPi3-B is bound to revision `a22082` / Raspberry Pi 3 Model B and serial
   `000000003d042795`. `lungmat8` approved the exact BCM mailbox unsafe island
   on 2026-08-28; strict F1/F5, focused host/target tests, RPi3 packaging, image

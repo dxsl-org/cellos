@@ -83,13 +83,13 @@ sensor, or local-runtime development.
 | RPi3 HDMI software and exact-device boundary | Completed / regression-only | `scope-gated` | `physical` development evidence on RPi3-B | Phases 04 and 05 completed; no active HDMI slice | Reopen only for a regression: the exact mailbox unsafe island is approved by `lungmat8`, strict F1/F5 passes, and the separately recorded TFTP deployment, later UART boot block, and user visual observation close the reviewed exact-device gate |
 | RPi3 peripheral hardware integration | Current executable work | `ready` | `host` now; `physical` development evidence after exact-device exercise | G1 board/peripheral lane using the two available RPi3 boards; HDMI external-display work is completed and regression-only | Record the exact board and interface exercised; stop before any production-security qualification claim |
 | Camera and other sensor integration | Current executable work | `deferred` | `contract` until resumed; then exact-device `physical` development evidence | Deferred in the current session order; the available camera must be identified before use | Resume the sensor lane in a later session and record the exact sensor/interface before exercise |
-| Tier 3 hostile QEMU evidence | Current executable work | `scope-gated` | `qemu` | Hardware-independent roadmap Phase 06 | Add VMM/VirtIO transport for bounds, descriptors, and backend errors, plus independent preemption and supervisor-restart outcomes |
+| Tier 3 hostile QEMU evidence | Current executable work | `scope-gated` | `qemu` | Hardware-independent roadmap Phase 06; x86 bounds, descriptors, backend faults, reset, restart, and independent vCPU preemption pass in 27 bounded scenarios | Rerun the ARM64 hostile corpus only in an environment that reaches the guest probe past the known synchronous TCG fault |
 | ARM64 Tier 3 persistent storage | Future capability | `scope-gated` | `qemu` | Hardware-independent roadmap Phase 09 | Supported Phase 06 hostile scenarios; policy is fixed to `build/tier3-arm64-persistent.img` at 8 MiB with explicit cleanup |
 | Desktop, ViUI, and SDK | Future capability | `scope-gated` | `qemu` | Managed-surface child is implementation-complete | Resume the owning desktop lane; signed-image F1 is restored because `hypha-llm-gateway` forbids unsafe code and every BCM unsafe file has an exact reviewed entry |
 | Local Cell-to-Cell runtime | Current executable work | `scope-gated` | `qemu` | Hardware-independent roadmap Phase 04 | Required [CI job](../.github/workflows/ci.yml) `c2c-broker-oracle-single-guest-local-runtime` gates the runner; actual runner verification passed 1/1, 1,000 measured calibration successes, role gating, a 10,000/10,000 soak with zero silent drops, and overflow; separately approve and exercise two-node direct-LAN/restart scope without promoting this single-guest result |
 | Kernel signature, pointer, and entropy remediation | Current-scope technical debt | `governance-gated` | `host` | Separately approved security children | Named security/PAL approvals and implementation checkpoints |
 | Authenticated software evidence | Current executable work | `scope-gated` | `host` | Hardware-independent roadmap Phase 07 | Run `.github/workflows/ci.yml` on `main`, then verify its immutable attested bundle; only software/QEMU classes are eligible |
-| x86 Tier 3 VirtIO parity | Current executable work | `scope-gated` | `qemu` | Hardware-independent roadmap Phase 10; bounded two-boot block/network and 22-scenario hostile QEMU evidence pass | Add fault-injectable block/net disconnect recovery and unblock ARM64 hostile execution; physical x86 remains independently gated |
+| x86 Tier 3 VirtIO parity | Completed / regression-only | `scope-gated` | `qemu` | Hardware-independent roadmap Phase 10 completed with two-boot block/network and 27-scenario hostile QEMU evidence | Reopen for a software regression or a separately governed physical-x86 qualification run |
 | Remote/public Cell-to-Cell operation | Future capability | `contract-gated` | `host` / `service` | Cell-to-Cell Anywhere remote/public children | Separately approve and implement the remote transport, identity, lease, and export contracts; local runtime work need not wait |
 | Protected relay identity | External-gated prerequisite | `external-gated` | `host` | KMS/Silo protected relay plan and Cell-to-Cell Anywhere Phase 05 | Reopen service-net Build and the Phase 05 relay path only after real protected persistence, authenticated time, a distinct reviewed pending-key binding under the frozen KMS ABI, and `DEV_REFERENCE` authority Phase 8 GO; this lane-local gate does not block unrelated development |
 | G3 accelerator | Future capability | `external-gated` | `contract` | Accelerator evidence envelope | RK3588, accepted RKNN package/license, then X390 evidence |
@@ -145,13 +145,14 @@ Cellos is being shaped around product stages, not only phase numbers:
   Linux 6.12.81 path reaches `/bin/sh`, and the dedicated `/virtio-e2e` path
   passes two fresh outer boots under QEMU-TCG 10.2.0 with Intel VT-d ACTIVE,
   persistent 16 MiB block write/FLUSH/readback, IRQ5/IRQ6, and shared network
-  TX/RX under a distinct nested MAC. The hostile path passes 26 bounded,
-  origin-separated scenarios, including supervisor-driven VFS/Net generation
-  termination, bounded unavailable outcomes, persistent block reopen/readback,
-  acknowledged network TX, and matching ARP RX after restart. Post-stimulus
-  liveness and host-read persistence remain required. This is QEMU-only
-  evidence: ARM64 hostile execution is blocked, QEMU-TCG 8.2.2 remains
-  incompatible, and physical x86 remains hardware-gated.
+  TX/RX under a distinct nested MAC. The hostile path passes 27 bounded,
+  origin-separated scenarios, including an independently observed pause-less
+  vCPU preemption, supervisor-driven VFS/Net generation termination, bounded
+  unavailable outcomes, persistent block reopen/readback, acknowledged network
+  TX, and matching ARP RX after restart. Post-stimulus liveness and host-read
+  persistence remain required. This is QEMU-only evidence: ARM64 hostile
+  execution is blocked, QEMU-TCG 8.2.2 remains incompatible, and physical x86
+  remains hardware-gated.
 - RV64 QEMU desktop now has a bounded compositor-owned window-policy slice.
   Interactive surfaces carry bounded titles and receive typed lifecycle events
   without losing normal forwarded input. The compositor paints clipped

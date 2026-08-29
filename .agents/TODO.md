@@ -1,9 +1,10 @@
 # TODO
-- Nếu muốn tránh tiếp tục chạm hypervisor ngay, lựa chọn tốt thứ hai là sửa raw TLS explicit-length contract. Đây là technical debt mức High: code đang trim theo byte khác zero cuối cùng, có thể cắt payload nhị phân hợp lệ kết thúc bằng 0x00 (docs/roadmap/open-risk-register.md:69-72).
-- Malformed MMIO/virtqueue/descriptor inputs chưa có hostile evidence đầy đủ.
-- Chưa chạy hết hostile parity scenarios của Phase 06.
-- Chưa qualify trên phần cứng AMD/Intel thật.
-- Vì vậy .agents/260827-1004-hardware-independent-roadmap/phase-10-tier3-x86-virtio-parity.md:4 vẫn là status: blocked; success criterion malformed-input tại dòng 77 còn unchecked.
+- Phase 10 x86 Tier 3 VirtIO software đã [completed] tại trần QEMU: hai boot
+  block/network và 27 hostile scenarios, gồm malformed transport/queue,
+  pause-less vCPU preemption, VFS/Net supervisor restart và backend recovery.
+- Phase 06 còn [blocked] riêng trên ARM64 vì synchronous TCG fault xảy ra trước
+  guest probe; không hạ gate hoặc suy diễn PASS từ kết quả x86.
+- Qualification AMD/Intel thật vẫn là hardware gate độc lập.
 - Ngoài lane này còn các việc lớn như x86 Platform Cell discovery, kernel-owned x86 paging, per-vector IDT stubs và production
  trust keys.
 - Phase 04 two-node/direct-LAN vẫn được ghi blocked riêng theo authority mTLS; không chặn single-guest gate.

@@ -63,15 +63,19 @@ QEMU can close machinery and hostile-input regressions; it cannot validate neste
 ## Todo List
 
 - [x] Approve the architecture-by-scenario matrix.
-- [ ] Implement malformed GPA/descriptor/backend guest inputs; runners and
-  strict result parsing are implemented.
+- [x] Exercise malformed GPA/descriptor/backend inputs and independent vCPU
+  preemption through the x86 production transport with strict result parsing.
+- [ ] Rerun the same supported hostile axes on ARM64 after an environment reaches
+  the guest probe past the known synchronous TCG fault.
 - [x] Keep every VMM/VirtIO production file under Phase 09/10 ownership.
 
 ## Success Criteria
 
 - [x] Strict x86 reaches `/bin/sh` before applicable fault scenarios.
-- [ ] Malformed guest inputs cause no host panic or cross-guest/service corruption.
-- [ ] Reset/restart and vCPU-budget runner behavior are deterministic.
+- [ ] Malformed guest inputs cause no host panic or cross-guest/service corruption
+  on every supported architecture; x86 passes and ARM64 remains environment-blocked.
+- [ ] Reset/restart and vCPU-budget runner behavior are deterministic on every
+  supported architecture; x86 passes and ARM64 remains environment-blocked.
 - [x] No persistence, x86 parity, or physical qualification claim is inferred before owning phases pass.
 
 ## Security Considerations
@@ -106,4 +110,11 @@ Run current non-persistence scenarios immediately. Phases 09/10 reuse the same r
   backend corpus remains open; guest-authored `NOT_APPLICABLE` markers are not
   accepted as scenario PASS.
 - Strict matrix gate update: both runners now enforce exact QEMU 10.2.0 and fail fast with `BLOCKED_ENVIRONMENT` when unavailable. Current environment exposes only 8.2.2, so matrix execution is blocked at pre-run, not evidence failure.
-- Review correction: the malformed GPA/descriptor/backend payload corpus remains open; this phase still lacks production transport fixtures, so this task stays open in the phase matrix.
+- On 2026-08-29, the rebuilt x86 runner passed 27 bounded scenarios on pinned
+  QEMU-TCG 10.2.0. A hostile-image-only port command arms one observation; only
+  an actual `ViVmExit::Preempted` emits the untagged host outcome. The strict
+  interval was `START vcpu-preemption`, one `[hv-virtio-host] vcpu-preempted`,
+  then `DONE vcpu-preemption`, with outer-QEMU liveness retained. VFS/Net
+  supervisor restart and recovery scenarios also pass. The runner still exits
+  `2` because ARM64 execution remains `BLOCKED_SCOPE`; Phase 06 therefore stays
+  blocked without weakening or promoting that architecture.
