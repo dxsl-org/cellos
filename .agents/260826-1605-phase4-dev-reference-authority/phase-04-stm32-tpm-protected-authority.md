@@ -88,31 +88,65 @@ public KMS fixtures remain unchanged.
 ### Certificate/Profile Validator Contract
 
 The next authorized software slice is a sibling no_std, allocation-free
-`profile-validator` core with a thin firmware adapter. It implements the
-existing `RootProfileVerifier` seam; it does not change private wire bytes,
-authority transitions, journal recovery, or expose a general X.509 API.
-Before any certificate parsing or TPM read, Phase 2 must authenticate and
-decode the complete typed request, then invoke `RootProfileVerifier`. Invalid
-request authentication must return without calling the verifier, reading TPM,
-or touching policy state. This ordering change preserves the frozen wire and
-transition surface and requires a counting-verifier regression test; it closes
-the unauthenticated cryptographic-work, TPM-oracle, and denial-of-service path.
+`profile-validator` core with a thin firmware adapter plus the reviewed private
+protocol v2 chunk transport. Public KMS opcodes and payloads remain frozen.
+Private protocol v1 is rejected after the clean cutover; no compatibility
+decoder, direct-profile fallback, generic upload, or general X.509 API remains.
+Before any certificate parsing or TPM read, Phase 2 authenticates and decodes
+the complete typed request. Invalid authentication returns without invoking
+profile policy, reading TPM, or touching upload storage.
 
+Profile-bank bytes reuse the existing canonical relay representation: one to
+three complete DER certificates concatenated leaf-first, with no added header
+or length words. The pinned root is not transmitted. The exact raw-chain bound
+is `RELAY_CHAIN_MAX_LEN = 12,288`; each certificate's strict DER TLV length
+frames the next. Empty, indefinite/non-minimal/truncated DER, duplicate
+certificates, trailing bytes, an included root, or a fourth certificate fails
+rather than normalizes. `profile_digest` is SHA-256 over these exact bytes.
 
-`ValidateAndStageRelayProfileRequest.profile` has one canonical v1 encoding:
-`version:u8 = 1`, `certificate_count:u8 = 1..=3`, `reserved:u16 = 0`, followed
-by that many non-empty `der_length:u16` plus DER-certificate byte strings.
-Integers are big-endian, certificates are leaf-first, the pinned root is not
-transmitted, and the 768-byte wire bound covers the entire encoding. Exact
-consumption is mandatory. Indefinite lengths, non-minimal DER, duplicate
-extensions, zero/truncated members, extra bytes, reordered/duplicate
-certificates, an included root, or a chain that does not fit are rejected
-rather than normalized. `profile_digest` is SHA-256 over these exact bytes.
-Before implementation, generated production-profile fixtures for direct-root,
-one-intermediate, and two-intermediate chains must prove that each required
-positive fits unchanged under 768 bytes. If any required chain cannot fit, this
-slice stops for Phase 2 protocol review; it must not truncate a chain, weaken
-validation, silently reduce the required positives, or change frozen bytes.
+Private protocol v2 preserves operation values 1–12 but changes operation 7 to
+replace inline profile bytes with `{upload_handle:u64, profile_len:u32}`.
+Operation 13 begins an upload with caller-selected nonzero `upload_handle` plus
+the exact generation, policy epoch, pending slot, pending-SPKI digest, profile
+digest, TPM-public digest, and total length. Operation 14 writes
+`{upload_handle, chunk_index:u8, chunk}`. Chunks are at most 768 bytes, indices
+are contiguous from zero, every non-final chunk is exactly 768 bytes, the final
+chunk is non-empty and exact, and at most 16 chunks cover 12,288 raw bytes.
+Authentication precedes every state or storage read.
+
+Begin initializes and read-backs the inactive bank before persisting one
+`Uploading` intent from exact `Pending`. Repeating Begin under a newer
+authenticated request with the exact handle and metadata is idempotent from
+`Uploading`; mismatch seals. `BeginRelayProfileUploadResponse` is exactly
+`{upload_handle:u64, profile_len:u32, chunk_size:u16, next_index:u8}`.
+`WriteRelayProfileChunkResponse` is exactly
+`{upload_handle:u64, next_index:u8, complete:u8}` with `complete` restricted to
+zero or one.
+
+Each chunk slot is written, authenticated, and read back under device,
+authority, authority epoch, boot epoch, generation, upload handle, profile
+digest, total length, index, and physical pending slot before protected
+`next_index` advances. A retry for an index below `next_index` succeeds only
+when its exact authenticated stored bytes match; index equal to `next_index`
+writes or reuses one exact post-cut candidate; larger indices fail. Recovery
+requires exact authenticated chunks below `next_index`, permits at
+`next_index` only absent/torn residue or one exact authenticated retry
+candidate, and seals authenticated data above it or any metadata/conflict.
+Reclaim erases only the `next_index` chunk region, never the committed prefix.
+
+Operation 7 requires all chunks, hashes their exact concatenation, and performs
+profile/TPM validation before staging a bank reference
+`{slot, generation, length, digest, SPKI}`. Repeating exact operation 7 under a
+new authenticated request from the resulting `Staged` state returns the same
+receipt without mutation; a mismatch seals. `AbortRelayEnrollment` is allowed
+from `Pending`, `Uploading`, `Staged`, or `ReceiptConsumed` but not
+`Prepared`/`Promoted`: it commits the journal state that drops the pending bank
+reference before erasing the bank, so a cut leaves only unreferenced residue.
+Active and pending profile banks are authenticated external flash objects; the
+counter journal never copies 12 KiB values. Recovery authenticates every
+referenced bank before service. Missing or mismatched referenced banks seal;
+unreferenced inactive residue is never serveable and may be erased only after
+journal recovery.
 
 
 The validator receives only immutable, trusted policy inputs: the provisioned
@@ -156,10 +190,11 @@ canonical profile bytes and all three verified digests; the existing boolean
 trait adapter discards the value only after all checks succeed.
 
 Host tests must prove unauthenticated requests invoke neither verifier nor TPM,
-and cover every framing, algorithm, path, extension, identity, time, floor,
-denylist, digest, TPM binding, stale-snapshot/slot-race, and 768-byte boundary
-negative, including missing/duplicate/malformed/wrong-length/mismatched or
-denylisted NodeId bindings, plus direct-root and one/two-intermediate positives.
+and cover every framing, chunk order/retry/cut, algorithm, path, extension,
+identity, time, floor, denylist, digest, TPM binding, stale-snapshot/slot-race,
+and zero/768/769/12,288/12,289-byte boundary negative, including missing,
+duplicate, malformed, wrong-length, mismatched, or denylisted NodeId bindings,
+plus direct-root and one/two-intermediate positives.
 These remain `SOFTWARE_HARNESS`; only exact locked-device tests may satisfy
 the physical pending-key and no-side-effect rows.
 
@@ -206,7 +241,7 @@ the physical pending-key and no-side-effect rows.
 ## Implementation Steps
 
 1. From Phase 1 inventory, probe MCU/TPM identity, firmware, SPI, option-byte, debug, lifecycle, and NV capabilities without mutation; reconcile every assumption or stop.
-2. **Journal/recovery host slice completed; certificate validator blocked 2026-08-29.** The journal remains `SOFTWARE_HARNESS`. Phase 2 now authenticates before invoking the profile verifier. Minimal policy-complete DER fixtures encode to 485 bytes for direct-root, 858 bytes with one intermediate, and 1,228 bytes with two intermediates. The latter two exceed the frozen 768-byte request field, so the contract's hard stop applies: do not implement, truncate, or weaken the validator until Phase 2 protocol review resolves bounded chain transport.
+2. **Journal/recovery host slice completed; chunked profile transport selected 2026-08-29.** Minimal raw concatenated-DER direct/one/two-intermediate profiles measured 479/850/1,218 bytes, proving private v1 insufficient. The approved clean v2 cutover reuses the frozen 12,288-byte chain bound with authenticated 768-byte chunks and stages only a verified bank reference. Next implement the frozen v2 state machine, bank recovery, and validator without changing public KMS bytes.
 3. Generate `provision/plan.py` output containing device IDs, STiRoT image/key digests, the approved Phase 3 SRAM-loader and manifest-verification-key digests bound into the approved image/policy, exact option-byte/OTP/lifecycle/debug writes, TPM persistent/NV definitions, auth policies, irreversibility, and recovery consequences.
 4. **Operator checkpoint:** obtain explicit approval tied to the plan hash before key creation/persistence, `NV_DefineSpace`, OTP/STiRoT provisioning, lifecycle transition, debug closure, or destructive snapshot work. A changed hash requires new approval; no purchase/cloud action occurs here.
 5. Provision STiRoT and TPM in approved order, verify image acceptance/rejection and public key/NV attributes, then close debug/lifecycle only at its separately recorded irreversible checkpoint.
@@ -218,7 +253,7 @@ the physical pending-key and no-side-effect rows.
 - [ ] Freeze typed surface, TPM handle/NV/policy map, complete record schema, and transition table.
 - [x] Host full-record envelope, exact Phase 2 successor gate, counter-exact dual-slot recovery, irreversible seal seam, and cut-point/reboot harness pass at the `SOFTWARE_HARNESS` ceiling.
 - [x] Authenticate the complete request before invoking profile policy or TPM work; 28 authority-protocol host tests pass.
-- [ ] **BLOCKED:** resolve canonical certificate-chain transport; measured one/two-intermediate profiles exceed `PROFILE_MAX = 768`.
+- [x] Resolve canonical certificate-chain transport: operator selected the reviewed clean private-v2 chunk protocol with a 12,288-byte total bound.
 - [ ] Complete and approve irreversible provisioning plan before mutation.
 - [ ] Execute every physical failure row with exact firmware and record hashes.
 - [ ] Prove pending-SPKI validation, single-use receipt, active-only signing, and generic-operation absence.
@@ -250,4 +285,5 @@ None at planning time beyond: **2026-08-26 Decision** — security red-team revi
 - 2026-08-29 — Decision: the next authorized software slice is the Phase 4 full-record dual-slot journal and recovery harness. It wraps, rather than forks, the canonical Phase 2 protected record; Phase 2 may expose a read-only binding view but its v1 bytes and transition surface remain frozen. Hardware authentication, TPM counter behavior, flash atomicity, and lifecycle claims remain gated.
 - 2026-08-29 — Result: the first Phase 4 software slice is complete. `RecoveredRecord` is opaque, commit internally re-authenticates the current slot, Phase 2 owns exact mode/boot/time/pending-time/relay successor validation, and the counter-domain seal is absorbing across reboot. RV64 no_std checks and host suites pass; exact STM32/TPM behavior remains unclaimed.
 - 2026-08-29 — Decision: freeze the next software slice as a closed, canonical certificate-profile validator over the existing bounded request. Phase 2 must authenticate before invoking the verifier. A serialized journal-derived pending-enrollment snapshot and repeated exact-slot TPM read close substitution and race paths. The root stays provisioned; validation is offline, algorithm-closed, time-, policy-, NodeId-, and TPM-bound. Exact direct/one/two-intermediate fixtures must fit the frozen 768-byte field or stop for protocol review.
-- 2026-08-29 — Blocker: generated minimal policy-complete P-256 profiles measured 485/858/1,228 bytes for zero/one/two intermediates including the canonical four-byte profile header and two-byte DER lengths. Because the frozen request admits only 768 bytes, required intermediate-chain positives are unrepresentable. Validator implementation stopped as required; resolution needs Phase 2 protocol review, not truncation or relaxed path policy.
+- 2026-08-29 — Blocker: generated minimal policy-complete raw concatenated-DER P-256 profiles measured 479/850/1,218 bytes for zero/one/two intermediates. Because the v1 request admits only 768 bytes, required intermediate-chain positives were unrepresentable. Validator implementation stopped as required; resolution needed Phase 2 protocol review, not truncation or relaxed path policy.
+- 2026-08-29 — Decision: operator selected chunked private protocol v2. The clean cutover rejects v1, preserves public KMS bytes, adds typed begin/write operations, changes validation to reference a complete authenticated upload, persists upload progress, and stores active/pending chains in authenticated external banks so counter-journal records remain bounded.

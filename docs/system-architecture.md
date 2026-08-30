@@ -427,10 +427,11 @@ return: all incomplete prefixes seal, while a complete authenticated write
 recovers exactly the new record.
 
 Profile-request authentication completes before root-profile policy or TPM work.
-The closed validator remains protocol-blocked: minimal policy-complete
-direct/one/two-intermediate profiles require 485/858/1,228 bytes, while the
-frozen private request carries at most 768. Intermediate chains cannot be
-truncated or accepted under a weaker path policy.
+The closed validator uses the selected clean private-v2 upload: raw
+concatenated-DER chain bytes retain the existing 12,288-byte/three-certificate
+bound and cross the private boundary as at most sixteen authenticated 768-byte
+chunks. The counter journal stores only an authenticated external-bank
+reference; recovery must authenticate the referenced bank before service.
 
 The no_std core and full `authority-protocol` suite pass 26 and 28 focused host
 tests respectively. The counter, authenticator, and slots are explicit

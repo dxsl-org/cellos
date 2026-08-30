@@ -34,9 +34,9 @@ Define the sole private AP↔STM32 authority contract as a `no_std`, no-allocati
 - Create `authority_protocol` with `#![no_std]`, no `alloc`, no serde-dependent implicit layout, fixed-width integer types, explicit little-endian codecs, checked arithmetic, compile-time maxima, and caller-provided buffers.
 - Use a fixed header containing magic, protocol version, `DEV_REFERENCE` lane tag, message kind, payload length, request ID, and reserved-zero bytes; every message has an exact or declared bounded length.
 - Bind authenticated responses to device ID, authority ID, boot epoch, request ID, operation, payload digest, and authority signature; unknown version/kind, trailing bytes, nonzero reserved bytes, oversized lengths, replay, or response mismatch fails closed.
-- Expose only: `OpenBoot`, `ReadCommittedRelayState`, `RequestSignedTime`, `AcceptSignedTime`, `BeginRelayEnrollment`, `ReadRelayCsrChunk`, `ValidateAndStageRelayProfile`, `ConsumeStagedRelayProfile`, `CommitRelayGeneration`, `AbortRelayEnrollment`, `GetRelayActivePublicKey`, and `SignTls13ClientCertificateVerify`.
+- Private protocol v2 exposes only: `OpenBoot`, `ReadCommittedRelayState`, `RequestSignedTime`, `AcceptSignedTime`, `BeginRelayEnrollment`, `ReadRelayCsrChunk`, `BeginRelayProfileUpload`, `WriteRelayProfileChunk`, `ValidateAndStageRelayProfile`, `ConsumeStagedRelayProfile`, `CommitRelayGeneration`, `AbortRelayEnrollment`, `GetRelayActivePublicKey`, and `SignTls13ClientCertificateVerify`.
 - `SignTls13ClientCertificateVerify` is retained only for deterministic DEV_REFERENCE fixture compatibility and production-provider denial. It cannot consume a network transcript or prove relay target binding. ADR-0008's private authority-owned TLS session/chunk/record operations are a reviewed post-entry-GO parent Phase 4 revision, not part of this entry-gate protocol.
-- `ValidateAndStageRelayProfile` accepts one bounded typed profile record, independently binds the pending TPM public area, and creates a durable single-use `StagedProfileReceipt`; `ConsumeStagedRelayProfile` accepts only `{generation, policy_epoch, profile_digest}` from public opcode 13 and cannot create trust.
+- Protocol v2 rejects v1 and has no direct-profile compatibility path. `BeginRelayProfileUpload` binds one nonzero 12,288-byte-maximum upload intent; `WriteRelayProfileChunk` accepts only sequential authenticated chunks of at most 768 bytes; `ValidateAndStageRelayProfile` names the completed handle/length/digest, independently binds the pending TPM public area, and creates one durable single-use `StagedProfileReceipt`. Public opcode 13 still supplies only `{generation, policy_epoch, profile_digest}` and cannot create trust.
 - Define closed `AuthorityFault` codes for malformed/version/length/state errors, identity or challenge mismatch, stale/replay/regression, time invalid/unavailable, profile rejection, receipt absent/consumed, provider split-brain, persistence failure, and sealed authority; faults carry no strings or secret material.
 - Define explicit `AuthorityMode`, `BootState`, `TimeState`, and `RelayProfileState` transitions. Illegal transitions and every integrity/floor ambiguity enter or preserve `Sealed`; runtime protocol contains no provisioning/unseal/reset command.
 - Preserve byte-for-byte request/response fixtures for public KMS opcodes 9–14, including opcode numbers, status bytes, payload order/length, errors, chunk bounds, and opcode 14 active-only semantics.
@@ -59,7 +59,7 @@ Define the sole private AP↔STM32 authority contract as a `no_std`, no-allocati
 ## Assumptions
 
 - **Claim:** STM32 and AP Rust targets can consume the same core-only crate without target-specific dependencies. **Confidence:** medium. **How to verify:** compile the crate for the exact Phase 1-recorded STM32 target and the VF2/host fixture target before either adapter is written.
-- **Claim:** One bounded profile record can hold the repository's maximum canonical relay chain without heap allocation. **Confidence:** medium. **How to verify:** derive the maximum from `libs/types/src/kms/payload/enroll.rs` and current chain policy, then compile-time assert encoded maximum ≤ frame maximum.
+- **Resolved:** One 768-byte profile frame cannot hold required intermediate chains; minimal raw concatenated-DER direct/one/two-intermediate profiles measured 479/850/1,218 bytes. The selected private-v2 transport reuses the frozen 12,288-byte raw-chain representation and chunks it at 768 bytes without changing public KMS bytes.
 - **Claim:** Existing opcode 9–14 tests cover every request and response byte shape. **Confidence:** low. **How to verify:** enumerate every payload type referenced by `KmsOpcode::{BeginRelayEnrollment..GetRelayActivePublicKey}` and require one literal golden vector per direction and error shape.
 - **Claim:** All new DEV artifacts can carry stable ASCII lane markers detectable by the production scanner. **Confidence:** medium. **How to verify:** inventory later-phase feature, manifest, certificate/anchor, and bundle names and scan synthetic binaries with markers split across read chunks.
 
@@ -90,6 +90,7 @@ Define the sole private AP↔STM32 authority contract as a `no_std`, no-allocati
 - [x] Literal public KMS 9–14 and private-protocol fixtures pass byte-for-byte.
 - [x] Forbidden generic operation search and malformed-frame/state-transition scenarios pass.
 - [x] Production candidates reject every DEV feature/marker and retain the exact ADR-0006 block.
+- [ ] Private protocol v2 begin/write/finalize fixtures and upload transition/cut matrix pass.
 
 ## Success Criteria
 

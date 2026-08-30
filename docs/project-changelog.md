@@ -19,10 +19,12 @@
   write recovers exactly the new record. Twenty-six journal tests and the
   complete 28-test authority-protocol suite pass, together with RV64 no_std
   checks; unauthenticated profile requests now return before root-verifier or
-  TPM-policy work. Minimal policy-complete direct/one/two-intermediate profiles
-  measure 485/858/1,228 bytes, so the latter two cannot fit the frozen 768-byte
-  request and certificate-validator implementation is blocked on protocol
-  review. This proves software ordering and recovery only; TPM NV behavior,
+  TPM-policy work. Minimal policy-complete raw concatenated-DER
+  direct/one/two-intermediate profiles measure 479/850/1,218 bytes, proving the
+  768-byte private-v1 request insufficient. The selected clean private-v2
+  transport reuses the frozen 12,288-byte chain bound through sixteen
+  authenticated 768-byte chunks and stages only an authenticated bank
+  reference. This proves software ordering and recovery only; TPM NV behavior,
   STM32 flash atomicity, lifecycle/debug protection,
   isolation, endurance, and physical power loss remain hardware-gated.
 
