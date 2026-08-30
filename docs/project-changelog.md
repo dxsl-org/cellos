@@ -13,10 +13,14 @@
   DER signatures. The fail-closed KMS adapter makes one exact pinned-key
   `DIGEST`/`ECDSA_SHA_256` call, validates and verifies the result, normalizes
   high-S output, forces final wire encoding, and neither retries nor falls back.
-  Public-only golden and malformed vectors round-trip exactly. Focused tests
-  pass 35/35 and final review found no remaining scoped issue. No clock,
-  allocator, handler, AWS resource, credential, network call, or deployment
-  action occurred; those steps remain gated.
+  The pure allocation core revalidates an exact signed request, hashes its full
+  canonical labels 1–9 for the future immutable receipt, and advances sequence,
+  Unix floor, and bounded expiry with strict interval, protected-floor, and
+  uint64 checks. Public-only golden and malformed vectors round-trip exactly.
+  Focused tests pass 43/43 and final review found no remaining scoped issue. No
+  clock authentication, transaction persistence, receipt recovery, handler, AWS
+  resource, credential, network call, or deployment action occurred; those
+  steps remain gated.
 
 - Phase 4's deterministic, non-executing provisioning-plan generator is complete
   only at the `SOFTWARE_HARNESS` ceiling. Each of its nine ordered mutations now
