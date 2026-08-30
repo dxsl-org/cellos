@@ -227,7 +227,7 @@ Routing any new idea: (1) uses SAS/LBI → **Tier 1 native**; (2) trusted librar
 └─────────────────────────────────────────┘
 ```
 
-- [x] Host journal rejects malformed/authentication/identity/profile/successor/floor faults, revalidates the canonical counter-1/physical-slot-A genesis invariant, requires the authenticated counter-minus-one slot to prove each later exact transition, seals authenticated role/identity/nonchain mismatches, models every persistent inactive-slot byte prefix after counter increment without relying on `commit` returning, and recovers the exact new record after a complete write/read-back cut. It passes 26 focused tests plus the complete 27-test authority-protocol suite; this is not hardware evidence.
+### RV64 Desktop Input, Decoration, and Scanout
 
 The input service owns device translation and sends pointer frames only to the
 compositor. The compositor owns cursor state, surface hit-testing, z-order,
@@ -426,7 +426,13 @@ inactive-slot byte prefix after counter increment without allowing `commit` to
 return: all incomplete prefixes seal, while a complete authenticated write
 recovers exactly the new record.
 
-The no_std core and full `authority-protocol` suite pass 26 and 27 focused host
+Profile-request authentication completes before root-profile policy or TPM work.
+The closed validator remains protocol-blocked: minimal policy-complete
+direct/one/two-intermediate profiles require 485/858/1,228 bytes, while the
+frozen private request carries at most 768. Intermediate chains cannot be
+truncated or accepted under a weaker path policy.
+
+The no_std core and full `authority-protocol` suite pass 26 and 28 focused host
 tests respectively. The counter, authenticator, and slots are explicit
 `SOFTWARE_HARNESS` seams. These results prove codec, transition, ordering, and
 snapshot-model behavior only; they do not prove SLB9672 NV semantics, STM32

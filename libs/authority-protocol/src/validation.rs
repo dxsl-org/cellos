@@ -100,10 +100,12 @@ pub fn verify_root_profile<P: RequestAuthenticator, R: RootProfileVerifier>(
     request_policy: &P,
     root_policy: &R,
 ) -> Result<RootValidatedProfile, AuthorityFault> {
-    if request.pending_slot > 1 || !root_policy.verify_root_profile(&request) {
+    let validated = verify_typed_request(request, header, request_policy)?;
+    if validated.request().pending_slot > 1 || !root_policy.verify_root_profile(validated.request())
+    {
         return Err(AuthorityFault::ProfileRejected);
     }
-    verify_typed_request(request, header, request_policy).map(RootValidatedProfile)
+    Ok(RootValidatedProfile(validated))
 }
 
 pub fn verify_provider_cas_receipt<V: ProviderCasVerifier>(

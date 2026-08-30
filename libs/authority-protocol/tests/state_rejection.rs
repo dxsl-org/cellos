@@ -1,6 +1,33 @@
+use core::cell::Cell;
+
 mod support;
 use authority_protocol::*;
 use support::*;
+
+struct CountingProfilePolicy<'a>(&'a Cell<usize>);
+
+impl RootProfileVerifier for CountingProfilePolicy<'_> {
+    fn verify_root_profile(&self, _: &ValidateAndStageRelayProfileRequest) -> bool {
+        self.0.set(self.0.get() + 1);
+        true
+    }
+}
+
+#[test]
+fn unauthenticated_profile_never_reaches_root_verifier() {
+    let calls = Cell::new(0);
+    let profile = stage(2, 1, 1, [5; 32]);
+    assert_eq!(
+        verify_root_profile(
+            profile,
+            &header(&profile),
+            &RequestPolicy,
+            &CountingProfilePolicy(&calls),
+        ),
+        Err(AuthorityFault::ChallengeMismatch)
+    );
+    assert_eq!(calls.get(), 0);
+}
 
 #[test]
 fn invalid_der_time_and_profile_never_create_validation_tokens() {
