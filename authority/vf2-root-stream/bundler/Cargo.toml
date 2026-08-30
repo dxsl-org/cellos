@@ -1,0 +1,21 @@
+[package]
+name = "vf2-root-stream-bundler"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "SOFTWARE_HARNESS DEV_REFERENCE VF2 root-stream host tools"
+
+[package.metadata.cellos]
+evidence = "SOFTWARE_HARNESS"
+lane = "DEV_REFERENCE"
+
+[dependencies]
+manifest-core = { path = "../manifest-core", features = ["signing"] }
+
+[[bin]]
+name = "vf2-root-stream-bundler"
+path = "src/bin/vf2-root-stream-bundler.rs"
+
+[[bin]]
+name = "vf2-root-stream-verifier"
+path = "src/bin/vf2-root-stream-verifier.rs"

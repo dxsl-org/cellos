@@ -353,7 +353,7 @@ TFTP transfer record, later UART boot block, and user visual observation are
 retained as separate evidence sources. They do not establish production
 qualification or isolate the earlier late-connect `No Signal` root cause.
 
-### Planned VF2 DEV_REFERENCE Root Stream
+### VF2 DEV_REFERENCE Root Stream
 
 ADR-0010 freezes the host-implementable manifest contract for the hardware-gated
 VisionFive 2 v1.3B lane. After immutable BootROM/XMODEM loads a reviewed SRAM
@@ -365,18 +365,32 @@ headers, and an embedded RFC 8949 core-deterministic CBOR manifest binding
 `DEV_REFERENCE`, exact device/authority/loader/request identity, and contiguous
 OpenSBI/DTB/Cellos/VIFS descriptors.
 
-After DRAM initialization, immutable limits define the successfully initialized
-usable-DRAM aperture and reserve a page-aligned quarantine fully contained within
-it and disjoint from loader, stack, scratch, every final range, and entry address.
-Containment and checked ends pass before pre-clear. The loader writes every
-bounded transfer block only there,
-authenticates the envelope before semantic parsing, completes the transfer,
-verifies all four component digests, and only then copies exact slices to final
-ranges. Its exact-board cleanup profile must use evidenced uncached/
-device-visible accesses or clean every touched cache line to the required point
-of coherency, then execute `fence rw,rw`; a compiler fence cannot authorize
-handoff or reset release.
+After DRAM initialization, immutable staging and manifest limits define the
+successfully initialized usable-DRAM aperture, page-aligned quarantine, and four
+worst-case final component/entry windows. Quarantine and every final window must
+be contained within that initialized aperture. Checked ends, capacity, and
+disjointness pass before pre-clear without requiring a manifest from the
+unrequested transfer. The loader then writes every bounded block only to
+quarantine, authenticates the envelope, checks decoded actual ranges inside the
+pre-admitted windows, completes the transfer, verifies all component digests,
+and only then copies exact slices to final ranges. Its exact-board cleanup
+profile must use evidenced uncached/device-visible accesses or clean every
+touched cache line to the required point of coherency, then execute
+`fence rw,rw`; a compiler fence cannot authorize handoff or reset release.
 
+
+`authority/vf2-root-stream/` now implements the host-verifiable subset. Its
+`manifest-core` is no_std/no-allocation and accepts only the frozen CBOR/COSE,
+identity, range, digest, staging, and XMODEM profile. `bundler` emits deterministic
+sender transcripts from caller-supplied components, signing seed, identities,
+addresses, and limits; `verifier` independently parses and verifies them. Host
+input reads are bounded before allocation. `LogicalQuarantine::prepare` uses only
+immutable limits and worst-case windows, proving validation and logical pre-clear
+before any bundle byte or decoded manifest; post-receive verification owns the
+actual signed ranges. The harness also proves final-clear and cleanup-hook order
+without claiming physical visibility. The core passes RV64 no_std checking, 28
+focused host tests pass, and an actual bundler-to-verifier transcript smoke
+succeeds.
 Host work may prove deterministic bytes, fail-closed parser/range/transfer/
 quarantine behavior, logical clearing, and cleanup-hook order only. It cannot
 claim cache/store-buffer/DRAM visibility. The loader owns no durable replay

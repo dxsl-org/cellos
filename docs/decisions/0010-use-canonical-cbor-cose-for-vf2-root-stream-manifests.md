@@ -158,15 +158,22 @@ and the final descriptor end must equal `component_region_length`.
 ### Quarantine staging contract
 
 The loader never streams component bytes directly into their final load
-addresses. After DRAM initialization, one immutable `StagingLimits` value in the
-reviewed loader defines the successfully initialized usable-DRAM aperture
+addresses. After DRAM initialization, immutable `StagingLimits` in the reviewed
+loader define the successfully initialized usable-DRAM aperture
 `[usable_dram_base, usable_dram_end)`, a page-aligned half-open quarantine range
 `[staging_base, staging_base + staging_size)`, a nonzero
-`max_transfer_blocks`, and the manifest bound. The aperture is nonempty; every
-addition and `max_transfer_blocks * 1024` is checked for overflow; `staging_size`
-is a multiple of 1,024 and must cover the maximum concatenated XMODEM data-block
-payload; and the complete staging range must be contained within the usable-DRAM
-aperture before any pre-clear or receive write. A hardware loader build is
+`max_transfer_blocks`, and the manifest bound. Immutable `ManifestLimits` define
+the four worst-case component load windows, maximum sizes, OpenSBI entry, COSE
+bound, and maximum component-region length. These values exist before any bundle
+byte; pre-clear never depends on a decoded manifest.
+
+The aperture is nonempty; every addition and `max_transfer_blocks * 1024` is
+checked for overflow; `staging_size` is a multiple of 1,024 and covers the
+maximum concatenated XMODEM data-block payload; the maximum logical stream fits
+that payload capacity; and quarantine plus all four worst-case final windows are
+fully contained within initialized usable DRAM. Quarantine is disjoint from
+loader, stack, scratch, every final window, and the admitted entry before any
+pre-clear or receive write. A hardware loader build is
 inadmissible until measured DRAM initialization tests freeze these values. Host
 tests inject explicitly labeled `SOFTWARE_HARNESS` limits and cannot promote
 them.
@@ -178,11 +185,13 @@ end offset pass. The COSE envelope, manifest payload, component region, and
 canonical final padding remain in this range; parsers and hashers borrow bounded
 slices rather than copying attacker-controlled lengths.
 
-The staging range must be disjoint from the SRAM loader image, stack, manifest
-scratch, final OpenSBI/DTB/Cellos/VIFS ranges, and every admitted entry address.
-All pairs are checked as half-open physical ranges with checked arithmetic before
-the transfer is accepted. The loader never jumps to, exposes, or treats staging
-as a final component address.
+Before receive, all immutable worst-case OpenSBI/DTB/Cellos/VIFS windows must be
+contained within initialized usable DRAM, and quarantine is checked against
+those windows and the entry without an unavailable signed manifest. After COSE
+verification and payload decoding, each actual final range and entry must fit
+its already-admitted immutable window; actual final ranges remain pairwise
+disjoint. The loader never jumps to, exposes, or treats staging as a final
+component address.
 
 Only after signature, manifest semantics, transfer completion, padding, and all
 four component digests pass may the loader copy the exact verified component
@@ -210,9 +219,9 @@ requesting or executing mutable bundle bytes.
 
 ### Verification order
 
-1. Initialize DRAM, validate the immutable staging/final ranges and cleanup
-   profile, and complete the full device-visible quarantine pre-clear before
-   requesting bundle bytes.
+1. Initialize DRAM; validate immutable staging limits, worst-case final windows,
+   and cleanup profile; then complete the full device-visible quarantine
+   pre-clear before requesting any bundle byte. No manifest object exists yet.
 2. Receive only a bounded, monotonic XMODEM-1K block sequence into quarantine;
    bound `cose_length` and parse only the exact COSE envelope needed to obtain
    borrowed protected, payload, and signature slices.
@@ -221,8 +230,9 @@ requesting or executing mutable bundle bytes.
 4. Parse the payload under the deterministic profile; re-encoding is not an
    acceptance path.
 5. Check exact device, authority, loader digest, nonzero boot/request binding,
-   component order, arithmetic, final/staging disjointness, limits, entry
-   address, and total logical length.
+   component order, arithmetic, each actual final range/entry against its
+   immutable pre-admitted window, pairwise actual-range disjointness, and total
+   logical length.
 6. Receive exactly the remaining declared component bytes, require canonical
    final-block padding and a successful EOT handshake, and reject any additional
    XMODEM data block.

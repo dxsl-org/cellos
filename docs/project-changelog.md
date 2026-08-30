@@ -6,18 +6,25 @@
 
 - ADR-0010 freezes the VF2 `DEV_REFERENCE` root stream as one bounded
   post-loader XMODEM-1K transfer containing deterministic-CBOR `COSE_Sign1` and
-  the component region. Immutable limits define the initialized usable-DRAM
-  aperture and reserve a pre-cleared quarantine fully contained within it and
-  disjoint from loader, scratch, final ranges, and entry addresses. Containment
-  passes before pre-clear. The loader stages every block there, requires
-  canonical padding/EOT, verifies the envelope and all components, and only then
-  copies exact slices to final ranges. Before handoff/reset release, the
+  the component region. Immutable staging/manifest limits define initialized
+  usable DRAM, quarantine, and worst-case component/entry windows before any
+  bundle byte. Quarantine and every final window must be contained within that
+  initialized aperture; containment/disjointness and pre-clear require no decoded
+  manifest. After authentication, actual signed ranges must fit those
+  pre-admitted windows; all components verify before exact final copies.
+  Before handoff/reset release, the
   exact-board cleanup profile must use evidenced uncached/device-visible accesses
   or clean every touched cache line to the required coherency point, followed by
-  `fence rw,rw`; a compiler fence is insufficient. Host `SOFTWARE_HARNESS` work
-  may prove logical clearing and cleanup order but not physical visibility.
-  BootROM limits, quarantine placement/cleanup, sole-sender isolation, replay
-  resistance, and hardware admission remain blocked on the exact VF2/STM32 lane.
+  `fence rw,rw`; a compiler fence is insufficient. The host implementation under
+  `authority/vf2-root-stream/` now supplies the no_std/no-allocation core,
+  deterministic bundler, independent verifier, bounded-before-allocation input,
+  XMODEM codec, and logical quarantine cleanup-order harness. Pre-receive tests
+  now construct no manifest and actual ranges are validated only after staged
+  signature verification. RV64 no_std checking, 28 focused host tests, and an
+  actual bundler→verifier transcript smoke pass. This is `SOFTWARE_HARNESS` only
+  and proves no physical visibility. BootROM limits, quarantine placement/
+  cleanup, sole-sender isolation, replay resistance, and hardware admission
+  remain blocked on the exact VF2/STM32 lane.
 
 - `cellos-kernel` now separates its host `libtest` configuration from the
   freestanding runtime: `std` supplies host panic, allocation-error, and global

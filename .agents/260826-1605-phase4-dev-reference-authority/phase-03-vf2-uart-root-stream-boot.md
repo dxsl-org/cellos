@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "VF2 UART Root-Stream Boot"
-status: pending
+status: blocked
 priority: P1
 dependencies: [2]
 tier: thinking
@@ -31,7 +31,7 @@ Prove, on the exact VF2 v1.3B/JH7110, that immutable BootROM UART/XMODEM can loa
 - After Phase 2, consume `libs/authority-protocol/` for post-boot typed operations only; do not create a second wire contract there. The BootROM/XMODEM boot-stream framing is a separate pre-runtime protocol owned and frozen by this phase — it is explicitly not part of the Phase 2 closed operation set.
 - Permanently select `RGPIO_1:RGPIO_0 = 11`; authority owns AP power/reset and UART0 RX, with onboard/external competing TX sources physically removed or isolated.
 - BootROM loads only the reviewed SRAM loader; the loader accepts exactly one ADR-0010 `u32be length || tagged COSE_Sign1 || component region` stream carried by a second bounded XMODEM-1K transfer. It requires canonical final-block padding and successful EOT before handoff. COSE is Ed25519-only with an embedded RFC 8949 core-deterministic CBOR payload, fixed external AAD, empty unprotected headers, one compiled key ID, and no optional or unknown fields.
-- The signed manifest binds fixed offsets, lengths, load addresses, SHA-256 digests, `DEV_REFERENCE`, device/authority identity, nonzero boot epoch/request ID, approved-loader digest, entry address, and exact component-region length. After DRAM initialization, immutable physically frozen limits define the successfully initialized usable-DRAM aperture and reserve one page-aligned quarantine range fully contained within it and disjoint from loader, stack, scratch, every final range, and every entry address. Containment and checked ends pass before pre-clear. The loader then receives each bounded XMODEM block only in quarantine, authenticates and completes the entire transfer, verifies all four staged components, copies exact verified slices to final ranges, and performs the frozen visible cleanup before handoff.
+- The signed manifest binds fixed offsets, lengths, load addresses, SHA-256 digests, `DEV_REFERENCE`, device/authority identity, nonzero boot epoch/request ID, approved-loader digest, entry address, and exact component-region length. Before requesting any bundle byte, immutable physically frozen staging and manifest limits define initialized usable DRAM, quarantine, and worst-case component/entry windows; quarantine and every final window must be contained in usable DRAM, mutually disjoint as required, and pre-cleared without a decoded manifest. The loader then receives only into quarantine, authenticates COSE, checks actual signed ranges inside the pre-admitted windows, completes the transfer, verifies all components, copies exact slices, and performs visible cleanup.
 - The STiRoT-approved STM32 sender image/policy embeds the exact SRAM-loader bytes and manifest-verification key; the sender verifies the approved-loader digest before emitting any XMODEM byte, and that digest is persisted in the Phase 4 authority record/OpenBoot fact.
 - Bundle order is exactly OpenSBI, firmware DTB, Cellos, VIFS. Builders reject overlap, integer overflow, trailing bytes, duplicate or reordered components, non-deterministic metadata, wrong lane, and any admitted size/address limit violation.
 - Loader has no QSPI, SD, eMMC, USB, network, shell, recovery, or AP-measurement path; loss, corruption, replay, or timeout leaves execution sealed and reset-controlled.
@@ -48,7 +48,7 @@ Prove, on the exact VF2 v1.3B/JH7110, that immutable BootROM UART/XMODEM can loa
 `STM32 sender → isolated UART0 RX → immutable JH7110 BootROM/XMODEM → SRAM loader → authenticated bounded bundle → OpenSBI/DTB/Cellos/VIFS`
 
 - `bundler` emits the exact ADR-0010 outer stream and byte-reproducible deterministic CBOR/COSE object inside the second bounded XMODEM-1K transfer; an independent host verifier parses emitted transfer bytes rather than trusting builder state.
-- Shared `manifest-core` owns the closed no-allocation CBOR/COSE profile, checked arithmetic, component descriptors, and injectable immutable limits. `loader` validates staging/final disjointness before receive, requires canonical final-block padding and XMODEM EOT, authenticates before semantic parsing, and verifies every quarantined component before any final-range copy. Its physically frozen cleanup profile uses either evidenced uncached/device-visible accesses or an exact cache clean-to-coherency primitive, then `fence rw,rw`; compiler ordering alone is insufficient. Host limits remain `SOFTWARE_HARNESS`.
+- Shared `manifest-core` owns the closed no-allocation CBOR/COSE profile, checked arithmetic, component descriptors, and injectable immutable limits. `LogicalQuarantine::prepare` consumes only immutable staging/manifest limits and worst-case final windows, so validation and pre-clear finish before any bundle byte; actual manifest ranges are checked only after staged receive and signature verification. Loader cleanup uses evidenced uncached/device-visible accesses or an exact cache clean-to-coherency primitive plus `fence rw,rw`; compiler ordering alone is insufficient. Host limits remain `SOFTWARE_HARNESS`.
 - Root-owned load switch/reset supervisor holds reset until straps and sole-sender routing are stable. AP UART TX and all AP-provided status are diagnostic only, never authorization.
 
 ### Evidence Boundary
@@ -80,11 +80,12 @@ Prove, on the exact VF2 v1.3B/JH7110, that immutable BootROM UART/XMODEM can loa
 
 ## Related Code Files
 
-- Create: `authority/vf2-root-stream/manifest-core/{Cargo.toml,src/lib.rs,src/format.rs,src/verify.rs}`
-- Create: `authority/vf2-root-stream/bundler/{Cargo.toml,src/main.rs}`
-- Create: `authority/vf2-root-stream/loader/{Cargo.toml,linker.ld,src/main.rs,src/limits.rs,src/uart.rs,src/dram.rs}`
-- Create: `authority/vf2-root-stream/sender/{Cargo.toml,src/lib.rs}` and `authority/vf2-root-stream/manifests/dev-reference.toml`
-- Create: `authority/vf2-root-stream/hardware/{run-gate.py,failure-matrix.toml,capture-schema.json}`
+- Created software-harness workspace: `authority/vf2-root-stream/Cargo.toml`
+- Created: `authority/vf2-root-stream/manifest-core/` — no_std/no-allocation deterministic CBOR/COSE codec, Ed25519 verifier/signer, range/staging validator, logical quarantine lifecycle, component verifier, and XMODEM transcript codec.
+- Created: `authority/vf2-root-stream/bundler/` — strict deterministic bundler and independent verifier host binaries.
+- Create after physical bounds freeze: `authority/vf2-root-stream/loader/{Cargo.toml,linker.ld,src/main.rs,src/limits.rs,src/uart.rs,src/dram.rs}`
+- Create after authority hardware admission: `authority/vf2-root-stream/sender/{Cargo.toml,src/lib.rs}` and `authority/vf2-root-stream/manifests/dev-reference.toml`
+- Create for real hardware evidence: `authority/vf2-root-stream/hardware/{run-gate.py,failure-matrix.toml,capture-schema.json}`
 - Modify only after physical contract is frozen: `boards/starfive/visionfive-2/board.rs`. Root `Cargo.toml` workspace registration belongs solely to Phase 6 as serialized owner; hand DEV marker names (`DEV_REFERENCE`, lane tags) to the Phase 2-owned production checker instead of editing `scripts/check-production-relay-image.py` or its tests here.
 - Keep unchanged: `scripts/vf2-build.ps1`, `scripts/vf2-flash.sh`, `libs/types/src/kms/{model.rs,payload/enroll.rs,payload/tls.rs}`
 - Record real outputs under `.agents/260826-1605-phase4-dev-reference-authority/evidence/phase-03/`; never check in fabricated captures.
@@ -93,7 +94,7 @@ Prove, on the exact VF2 v1.3B/JH7110, that immutable BootROM UART/XMODEM can loa
 
 1. Inventory exact board/BootROM/strap/UART revisions from Phase 1; approve a reversible wiring plan before powering hardware. No purchase or board modification is implied.
 2. Build a marker-only SRAM loader; sweep admitted payload sizes and XMODEM timing with `python3 authority/vf2-root-stream/hardware/run-gate.py bootrom-feasibility --capture-dir <real-dir>`; freeze measured-safe limits or stop.
-3. Implement the ADR-0010 shared manifest core and canonical bundle builder plus an independent verifier. Run two clean builds with identical inputs and `cmp` bundle outputs; cover every COSE, deterministic-CBOR, identity, replay-model, digest, length, range, order, truncation, final-padding, missing-EOT, extra-data-block, appended-logical-byte, usable-DRAM containment, quarantine-bound, overlap, premature-copy, pre-validation-no-write, post-validation-logical-zero, and cleanup-hook-order negative named by the ADR. Host limits and outputs remain explicitly `SOFTWARE_HARNESS`; they cannot freeze physical bounds or prove cache/store-buffer/DRAM visibility.
+3. **Completed 2026-08-29 at `SOFTWARE_HARNESS` ceiling.** ADR-0010 shared manifest core, canonical bundler, and independent verifier cover exact COSE/deterministic-CBOR, identity, digest, framing, XMODEM, usable-DRAM containment for quarantine and final windows, immutable worst-case windows, post-signature actual ranges, pre-validation-no-write, pre-receive logical clear without a manifest, cleanup-hook order, and bounded host input. The no_std RV64 core checks; 28 focused host tests and an actual bundler→verifier smoke pass. This freezes no physical bound and proves no physical visibility.
 4. After physical limits are frozen, implement the bounded loader and STM32 sender library over this phase's pre-runtime boot-stream framing; embed the frozen loader bytes and manifest-verification key in the sender image, verify the loader digest before the first XMODEM byte, authenticate the complete manifest before any component handoff, and reject every forbidden transport/source.
 5. Install fixed straps, root-owned power/reset, and UART isolation only at the operator-approved hardware checkpoint; document continuity and component identities.
 6. Run `python3 authority/vf2-root-stream/hardware/run-gate.py full-matrix --matrix authority/vf2-root-stream/hardware/failure-matrix.toml --capture-dir <real-dir>` with analyzer channels on UART RX/TX, straps, reset, power, and relevant media clocks/chip-selects.
@@ -102,7 +103,7 @@ Prove, on the exact VF2 v1.3B/JH7110, that immutable BootROM UART/XMODEM can loa
 ## Todo List
 
 - [ ] Freeze BootROM/XMODEM, SRAM, initialized usable-DRAM aperture, address, timeout, component, contained disjoint quarantine, and exact cleanup/coherency bounds from real measurements.
-- [ ] Produce byte-identical ADR-0010 four-part bundles and exhaustive `SOFTWARE_HARNESS` COSE/CBOR/signature/parser/range/quarantine negatives without claiming physical evidence.
+- [x] Produce byte-identical ADR-0010 four-part bundles and exhaustive `SOFTWARE_HARNESS` COSE/CBOR/signature/parser/range/quarantine negatives without claiming physical evidence.
 - [ ] Bind exact loader bytes/key into the STiRoT-approved sender image and persist the approved-loader digest in the authority record/OpenBoot fact.
 - [ ] Prove physical sole-sender/reset/strap/media behavior for every matrix row.
 - [ ] Preserve DEV_REFERENCE classification and frozen KMS ABI.
@@ -113,6 +114,7 @@ Prove, on the exact VF2 v1.3B/JH7110, that immutable BootROM UART/XMODEM can loa
 - [ ] Every negative row produces no Cellos handoff and no alternate-media execution; each result has raw capture, wiring revision, firmware/bundle hashes, and operator timestamp.
 - [ ] Substituted, rolled-back, and truncated-loader negatives emit no executed mutable byte and each carries the recorded digest-mismatch outcome.
 - [ ] Host-only results are labeled `SOFTWARE_HARNESS` and physical results `VF2_V1_3B_HARDWARE`; neither is promoted to production evidence.
+- [x] Host tooling remains `SOFTWARE_HARNESS`/`DEV_REFERENCE`, passes 28 focused tests plus no_std RV64 check and a real bundler→verifier smoke, and exposes no default hardware limits.
 
 ## Risk Assessment
 
@@ -131,3 +133,4 @@ On pass, publish only the frozen loader/bundle/physical contract to Phase 6 and 
 None at planning time beyond: **2026-08-26 Decision** — security and simplicity red-team reviews returned NO-GO; resolved without weakening any stop. (1) PLAN-BOOT-001: exact SRAM-loader bytes and manifest-verification key are bound into the STiRoT-approved STM32 image/policy, verified before any XMODEM byte, with the approved-loader digest persisted in the Phase 4 authority record/OpenBoot fact plus substituted/rolled-back/truncated-loader physical negatives. (2) Simplicity review: BootROM/XMODEM boot-stream framing declared a separate pre-runtime protocol owned by this phase (outside the Phase 2 closed operation set); production-checker ownership stays with Phase 2 (marker-name handoff only); root `Cargo.toml` workspace registration defers to Phase 6 as sole serialized owner. During Build append each Decision/Deviation/Surprise with trigger, contract impact, and reversal; escalate irreversible or contract-breaking changes before action.
 - 2026-08-26 — Decision: software track authorized; only `SOFTWARE_HARNESS` rows (bundle format, parser/range rejection, linker size) may proceed pre-admission. BootROM/XMODEM, sole-sender, and analyzer evidence remain hardware-gated exactly as written.
 - 2026-08-29 — Decision: ADR-0010 freezes the software-track root stream as a bounded tagged `COSE_Sign1` object with an embedded RFC 8949 core-deterministic CBOR manifest and Ed25519-only verification. Host implementation may proceed with injected `SOFTWARE_HARNESS` limits; loader admission, exact physical bounds, and replay resistance remain blocked on the named-hardware sole-sender gate.
+- 2026-08-29 — Implementation: `authority/vf2-root-stream/` completes the ADR-0010 host tooling and logical quarantine-order harness. Security/quality review found and resolved unbounded host file allocation before configured limits. Physical loader placement, cache/coherency cleanup, XMODEM timing, sole-sender wiring, and every hardware matrix row remain blocked.
