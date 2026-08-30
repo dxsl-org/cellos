@@ -10,10 +10,13 @@
   inputs. Requests bind the registered canonical Ed25519 DER-SPKI and verify the
   exact labels 1–8; responses bind source epoch and the complete request, hash
   exact labels 1–14 for KMS `DIGEST` signing, and require canonical low-S P-256
-  DER signatures. Public-only golden and malformed vectors round-trip exactly.
-  Focused tests pass 28/28 and final review found no remaining scoped issue.
-  No clock, allocator, handler, AWS resource, credential, or deployment action
-  occurred; those steps remain gated.
+  DER signatures. The fail-closed KMS adapter makes one exact pinned-key
+  `DIGEST`/`ECDSA_SHA_256` call, validates and verifies the result, normalizes
+  high-S output, forces final wire encoding, and neither retries nor falls back.
+  Public-only golden and malformed vectors round-trip exactly. Focused tests
+  pass 35/35 and final review found no remaining scoped issue. No clock,
+  allocator, handler, AWS resource, credential, network call, or deployment
+  action occurred; those steps remain gated.
 
 - Phase 4's deterministic, non-executing provisioning-plan generator is complete
   only at the `SOFTWARE_HARNESS` ceiling. Each of its nine ordered mutations now

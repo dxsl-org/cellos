@@ -60,6 +60,7 @@ CloudFormation owns exactly one API, Lambda/version alias, execution role, log g
 - Create: `tools/dev-reference-signed-time/requirements.txt`
 - Create: `tools/dev-reference-signed-time/src/handler.py`
 - Create: `tools/dev-reference-signed-time/src/protocol.py`
+- Create: `tools/dev-reference-signed-time/src/kms_signer.py`
 - Create: `tools/dev-reference-signed-time/src/clock.py`
 - Create: `tools/dev-reference-signed-time/src/state.py`
 - Create: `tools/dev-reference-signed-time/tests/test_protocol.py`
@@ -90,7 +91,8 @@ CloudFormation owns exactly one API, Lambda/version alias, execution role, log g
 ## Todo List
 
 - [x] Freeze vectors and strict codec.
-- [ ] Implement clock gate, transaction allocator, receipt recovery, and signer.
+- [x] Implement the pinned, fail-closed KMS signer adapter.
+- [ ] Implement clock gate, transaction allocator, and receipt recovery.
 - [ ] Review IAM/key policies and DEV production rejection.
 - [ ] Obtain operator authorization and execute deployment, outage, restore, and rollback scenarios.
 - [ ] Hand the pinned manifest, vectors, and raw evidence index to Phase 6.
@@ -130,3 +132,4 @@ Phase 6 consumes only the reviewed endpoint/key/source manifest and frozen vecto
 - 2026-08-26 — Decision: the same NO-GO carried PLAN-TIME-003 (a restored DynamoDB table could still produce valid signatures). Resolution applied pre-execution: allocator lineage anchored outside the restorable table by strict source-epoch rotation on restore/fork plus the authority-side epoch-transition policy, with restored-past-floor and alternating same-epoch-fork rejections as deterministic and live tests.
 - 2026-08-26 — Decision: software track authorized; CBOR schema, handler code, CloudFormation template, and golden vectors may be written pre-admission. Deployment, key creation, and every live scenario stay blocked on the named AWS DEV account and operator authorization.
 - 2026-08-30 — `SOFTWARE_HARNESS` step 1 complete: strict deterministic-CBOR request/response codecs, exact Ed25519 request and low-S P-256 response verification, KMS DIGEST signing bytes, 1,024-byte wire bounds, source-epoch/request/key bindings, and public-only golden/malformed vectors. Focused tests pass 28/28 and final review found no remaining scoped issue. No AWS resource, clock, allocator, handler, credential, or deployment action occurred.
+- 2026-08-30 — KMS signer `SOFTWARE_HARNESS` slice complete: one injected client makes exactly one manifest-pinned `DIGEST`/`ECDSA_SHA_256` call, validates the returned key and algorithm, normalizes strict DER to low-S, verifies against the pinned P-256 key, and forces final protocol encoding. Client/configuration failures expose only stable local errors without chained provider detail; no retry, fallback, generic signing surface, network, credential, or AWS mutation exists. Focused tests pass 35/35 and final review found no remaining scoped issue.
