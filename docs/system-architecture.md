@@ -353,6 +353,39 @@ TFTP transfer record, later UART boot block, and user visual observation are
 retained as separate evidence sources. They do not establish production
 qualification or isolate the earlier late-connect `No Signal` root cause.
 
+### Planned VF2 DEV_REFERENCE Root Stream
+
+ADR-0010 freezes the host-implementable manifest contract for the hardware-gated
+VisionFive 2 v1.3B lane. After immutable BootROM/XMODEM loads a reviewed SRAM
+loader, the authority supplies one bounded second XMODEM-1K transfer containing
+`u32be COSE length || tagged COSE_Sign1 || component region`. The loader requires
+canonical final-block padding and successful EOT before handoff. The COSE object
+uses pure Ed25519, one compiled key ID, fixed external AAD, empty unprotected
+headers, and an embedded RFC 8949 core-deterministic CBOR manifest binding
+`DEV_REFERENCE`, exact device/authority/loader/request identity, and contiguous
+OpenSBI/DTB/Cellos/VIFS descriptors.
+
+After DRAM initialization, immutable limits define the successfully initialized
+usable-DRAM aperture and reserve a page-aligned quarantine fully contained within
+it and disjoint from loader, stack, scratch, every final range, and entry address.
+Containment and checked ends pass before pre-clear. The loader writes every
+bounded transfer block only there,
+authenticates the envelope before semantic parsing, completes the transfer,
+verifies all four component digests, and only then copies exact slices to final
+ranges. Its exact-board cleanup profile must use evidenced uncached/
+device-visible accesses or clean every touched cache line to the required point
+of coherency, then execute `fence rw,rw`; a compiler fence cannot authorize
+handoff or reset release.
+
+Host work may prove deterministic bytes, fail-closed parser/range/transfer/
+quarantine behavior, logical clearing, and cleanup-hook order only. It cannot
+claim cache/store-buffer/DRAM visibility. The loader owns no durable replay
+floor: replay resistance still requires protected authority monotonic state and
+physical proof that the STM32 is the sole UART sender. BootROM limits,
+quarantine placement/cleanup, addresses, reset behavior, alternate-media
+negatives, and hardware admission remain blocked on exact-board measurement;
+host limits cannot freeze or substitute for them.
+
 ---
 
 ## Kernel (nano-kernel)

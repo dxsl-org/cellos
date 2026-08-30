@@ -48,6 +48,7 @@ Phases 3, 4, and 5 may execute in parallel after Phase 2. Any hard-stop result b
 - Signed time binds device, authority, boot, request, purpose, nonce, source epoch/sequence, Unix floor, and expiry. Outage seals.
 - Every artifact remains `DEV_REFERENCE`; production checks retain exact `BLOCKED_BY_ADR_0006` behavior.
 - ADR-0008 assigns the complete fixed relay TLS endpoint to the protected authority. Phase 7's opcode-8 probe is deterministic DEV_REFERENCE compatibility evidence only: it never connects to a relay, proves target binding, or satisfies AC-012; production providers deny the signer.
+- ADR-0010 freezes one bounded post-loader XMODEM-1K transfer carrying deterministic-CBOR `COSE_Sign1` plus exact OpenSBI/DTB/Cellos/VIFS descriptors. A physically frozen initialized-DRAM aperture contains the pre-cleared quarantine, which is disjoint from loader/final ranges; containment passes before pre-clear and all digests pass before final copies. Cleanup uses an evidenced uncached path or exact clean-to-coherency primitive plus `fence rw,rw`; host clearing cannot prove physical visibility. The loader has no replay floor; protected-state and sole-sender evidence remain mandatory.
 - Ownership: BootROM/XMODEM boot-stream framing is a separate pre-runtime protocol owned by Phase 3, outside the Phase 2 closed operation set. Root `Cargo.toml` workspace registration has exactly one serialized owner (Phase 6). Production-checker code stays owned by Phase 2; phases 3–5 hand off marker names only. Phase 7 is restricted to the standalone managed-CA/authority/KMS compatibility probe; ADR-0008 endpoint implementation and every service-net, net-broker, OSTD, and `embedded-tls` change wait for parent Phase 4 after Phase 8 GO.
 
 ## Evidence Gate
@@ -69,6 +70,7 @@ Security red-team (PLAN-BOOT-001, PLAN-TIME-002/003/004, PLAN-EVIDENCE-005) and 
 - [Codebase scout](./scout-report.md)
 - [Parent Phase 4](../260825-1726-kms-silo-production-root/phase-04-service-net-mutual-tls-integration.md)
 - [ADR-0008 protected TLS ownership](../../docs/decisions/0008-protected-relay-tls-endpoint-ownership.md)
+- [ADR-0010 root-stream manifest](../../docs/decisions/0010-use-canonical-cbor-cose-for-vf2-root-stream-manifests.md)
 
 ## Cook Handoff
 

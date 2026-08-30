@@ -4,6 +4,21 @@
 
 ## [Unreleased] Development-first hardware-constrained execution
 
+- ADR-0010 freezes the VF2 `DEV_REFERENCE` root stream as one bounded
+  post-loader XMODEM-1K transfer containing deterministic-CBOR `COSE_Sign1` and
+  the component region. Immutable limits define the initialized usable-DRAM
+  aperture and reserve a pre-cleared quarantine fully contained within it and
+  disjoint from loader, scratch, final ranges, and entry addresses. Containment
+  passes before pre-clear. The loader stages every block there, requires
+  canonical padding/EOT, verifies the envelope and all components, and only then
+  copies exact slices to final ranges. Before handoff/reset release, the
+  exact-board cleanup profile must use evidenced uncached/device-visible accesses
+  or clean every touched cache line to the required coherency point, followed by
+  `fence rw,rw`; a compiler fence is insufficient. Host `SOFTWARE_HARNESS` work
+  may prove logical clearing and cleanup order but not physical visibility.
+  BootROM limits, quarantine placement/cleanup, sole-sender isolation, replay
+  resistance, and hardware admission remain blocked on the exact VF2/STM32 lane.
+
 - `cellos-kernel` now separates its host `libtest` configuration from the
   freestanding runtime: `std` supplies host panic, allocation-error, and global
   allocation services only under `cfg(test)`, while `target_os = "none"` keeps
