@@ -35,7 +35,9 @@ class CertificateSet:
     missing_binding: Credential
     wrong_binding: Credential
     untrusted_client: Credential
-
+    wrong_eku: Credential
+    missing_eku: Credential
+    non_p256: Credential
 
 def _node_id(key: ec.EllipticCurvePrivateKey) -> bytes:
     spki = key.public_key().public_bytes(
@@ -114,8 +116,11 @@ def _make_leaf(
     *,
     server: bool = False,
     binding: str = "correct",
+    client_auth: bool = True,
+    include_eku: bool = True,
+    curve: ec.EllipticCurve | None = None,
 ) -> Credential:
-    key = ec.generate_private_key(ec.SECP256R1())
+    key = ec.generate_private_key(curve or ec.SECP256R1())
     node_id = _node_id(key)
     builder = (
         x509.CertificateBuilder()
@@ -140,17 +145,16 @@ def _make_leaf(
             ),
             critical=True,
         )
-        .add_extension(
-            x509.ExtendedKeyUsage(
-                [
-                    ExtendedKeyUsageOID.SERVER_AUTH
-                    if server
-                    else ExtendedKeyUsageOID.CLIENT_AUTH
-                ]
-            ),
-            critical=False,
-        )
     )
+    if include_eku:
+        eku = (
+            ExtendedKeyUsageOID.SERVER_AUTH
+            if server or not client_auth
+            else ExtendedKeyUsageOID.CLIENT_AUTH
+        )
+        builder = builder.add_extension(
+            x509.ExtendedKeyUsage([eku]), critical=False
+        )
     if server:
         builder = builder.add_extension(
             x509.SubjectAlternativeName(
@@ -177,6 +181,14 @@ def make_certificates(root: Path) -> CertificateSet:
     client_b = _make_leaf(root, "client-b", 21, ca_key, ca)
     missing = _make_leaf(root, "client-missing", 22, ca_key, ca, binding="missing")
     wrong = _make_leaf(root, "client-wrong", 23, ca_key, ca, binding="wrong")
+    wrong_eku = _make_leaf(root, "client-wrong-eku", 24, ca_key, ca, client_auth=False)
+    missing_eku = _make_leaf(root, "client-missing-eku", 25, ca_key, ca, include_eku=False)
+    non_p256 = _make_leaf(
+        root, "client-non-p256", 26, ca_key, ca, curve=ec.SECP384R1()
+    )
     _, other_key, other_ca = _make_ca(root, "untrusted-ca", 2)
-    untrusted = _make_leaf(root, "client-untrusted", 24, other_key, other_ca)
-    return CertificateSet(ca_path, server, client_a, client_b, missing, wrong, untrusted)
+    untrusted = _make_leaf(root, "client-untrusted", 27, other_key, other_ca)
+    return CertificateSet(
+        ca_path, server, client_a, client_b, missing, wrong, untrusted,
+        wrong_eku, missing_eku, non_p256,
+    )

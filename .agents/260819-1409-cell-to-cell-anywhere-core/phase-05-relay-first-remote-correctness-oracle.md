@@ -86,6 +86,8 @@ node B local export -> response -> relay -> node A dedup/response.
   `relay_port`, and lowercase DNS `relay_hostname` fields in `cluster.cfg`.
 - [ ] Define mTLS trust/profile inputs and signer authorization; no shared-secret
   or raw-key fallback.
+- [x] Exercise missing/wrong `clientAuth` EKU and non-P-256 certificate
+  rejection before route admission.
 - [x] Use the validated mTLS certificate-derived NodeId as registration proof;
   no advertised identity, proof blob, shared secret, or raw-key fallback can
   become route authority.
@@ -153,12 +155,13 @@ blocks Cellos relay wiring, sender-side error mapping, and any two-node oracle.
   I/O. `BrokerIdentity` stores only a validated endpoint without dialing it.
 - Focused broker tests pass 101/101 and the RV64 release build passes.
 - The pure relay admission table, pre-TLS connection gate, delivery-outcome
-  split, and mTLS wire regressions pass within 34/34 relay-server tests. A
-  missing destination returns definite `ERR_DESTINATION_UNAVAILABLE`; a
-  destination write/drain failure after bytes may be queued returns
-  `ERR_DELIVERY_UNCERTAIN`. Duplicate same-certificate connections cannot
-  interrupt or reroute the established session, and stale generation cleanup
-  cannot remove a later explicit admission. Tester and production-readiness
-  reviewer rechecks pass.
+  split, certificate-policy negatives, and mTLS wire regressions pass within
+  37/37 relay-server tests. Missing/wrong `clientAuth` EKU and non-P-256 keys
+  fail before route admission. A missing destination returns definite
+  `ERR_DESTINATION_UNAVAILABLE`; a destination write/drain failure after bytes
+  may be queued returns `ERR_DELIVERY_UNCERTAIN`. Duplicate same-certificate
+  connections cannot interrupt or reroute the established session, and stale
+  generation cleanup cannot remove a later explicit admission. Tester and
+  production-readiness reviewer rechecks pass.
 - No Cellos relay client, remote dispatch, receive loop, or two-node traffic is
   enabled or claimed.

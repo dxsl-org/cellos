@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 
 from relay import ERR_DESTINATION_UNAVAILABLE, FT_ERROR, FT_PING, FT_PONG, FT_SEND_PACKET
-from relay_identity import Denylist, load_denylist
+from relay_identity import Denylist, PeerCertificateError, load_denylist, peer_identity
 from _relay_test_support import (
     CertificateSet,
     close_writer,
@@ -67,6 +67,18 @@ class RelayIdentityWireTests(unittest.IsolatedAsyncioTestCase):
         await self.assert_application_rejection(
             self.certificates.wrong_binding, empty_denylist()
         )
+
+    def test_wrong_eku_is_rejected_before_registration(self) -> None:
+        with self.assertRaisesRegex(PeerCertificateError, "clientAuth"):
+            peer_identity(self.certificates.wrong_eku.der, empty_denylist())
+
+    def test_missing_eku_is_rejected_before_registration(self) -> None:
+        with self.assertRaisesRegex(PeerCertificateError, "required certificate extension"):
+            peer_identity(self.certificates.missing_eku.der, empty_denylist())
+
+    def test_non_p256_key_is_rejected_before_registration(self) -> None:
+        with self.assertRaisesRegex(PeerCertificateError, "P-256"):
+            peer_identity(self.certificates.non_p256.der, empty_denylist())
 
     async def test_revoked_node_identity_is_never_registered(self) -> None:
         denylist_path = self.root / "deny-node.json"

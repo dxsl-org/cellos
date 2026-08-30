@@ -95,9 +95,11 @@
   definite destination absence before any write from uncertain delivery after a
   destination write/drain attempt can queue bytes. The former remains
   `ERR_DESTINATION_UNAVAILABLE`; the latter is `ERR_DELIVERY_UNCERTAIN`, and no
-  server-side success receipt is invented. Relay-server tests pass 34/34;
-  focused broker tests remain 101/101 and the RV64 broker release build passes.
-  Cellos client error mapping, receive wiring, and two-node evidence remain open.
+  server-side success receipt is invented. Added exact negative fixtures for
+  missing/wrong `clientAuth` EKU and non-P-256 peer keys; each fails before
+  route admission. Relay-server tests pass 37/37; focused broker tests remain
+  101/101 and the RV64 broker release build passes. Cellos client error mapping,
+  receive wiring, and two-node evidence remain open.
 
 - Authenticated evidence admission requires an explicitly provisioned,
   operator-owned replay store outside the submitted bundle. Verification binds

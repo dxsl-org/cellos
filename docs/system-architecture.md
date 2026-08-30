@@ -1426,7 +1426,9 @@ unauthenticated, identity-mismatched, duplicate-live, and capacity attempts
 before mutation; exact generations reject stale disconnect cleanup. Duplicate
 same-certificate connections cannot replace or cancel the established route.
 No proof blob, advertised NodeId, shared secret, or raw key can authorize
-registration. Relay forwarding distinguishes definite destination absence
+registration. Server certificate-policy regressions directly reject
+missing/wrong `clientAuth` EKU and non-P-256 peer keys before route admission.
+Relay forwarding distinguishes definite destination absence
 before a write from uncertain delivery after a write/drain attempt may have
 queued bytes. It reports `ERR_DESTINATION_UNAVAILABLE` for the former and
 `ERR_DELIVERY_UNCERTAIN` for the latter; successful drain is not an

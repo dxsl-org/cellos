@@ -52,10 +52,11 @@ Recovery plan: supersedes `.agents/260624-cell-to-cell-anywhere/` without editin
 > validated mTLS certificate-derived NodeId as the sole route authority, rejects
 > duplicate live identities without displacement, and uses exact-generation
 > release. Exact byte-layout, paired transcript, and endpoint parser regressions
-> pass within 101/101 broker tests; 34/34 relay-server tests cover the bounded
-> pre-TLS gate, authenticated admission, wire behavior, and the definite
-> destination-missing versus accepted-then-uncertain write-failure split. The
-> RV64 broker release build also passes.
+> pass within 101/101 broker tests; 37/37 relay-server tests cover the bounded
+> pre-TLS gate, authenticated admission, missing/wrong `clientAuth` and
+> non-P-256 rejection, wire behavior, and the definite destination-missing
+> versus accepted-then-uncertain write-failure split. The RV64 broker release
+> build also passes.
 >
 > The two-real-broker relay path remains blocked only by the
 > protected-persistence, authenticated-time, and reviewed pending-key-binding

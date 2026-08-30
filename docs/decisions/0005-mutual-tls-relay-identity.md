@@ -193,10 +193,10 @@ Current evidence directly covers TLS 1.3 and required-client-certificate
 configuration, missing/untrusted client certificates, NodeId extension binding,
 denylist enforcement, bounded pre-TLS connections, routing, duplicate-live
 rejection, definite/uncertain delivery-error separation, manifest validation,
-and route/session limits. Dedicated non-P-256
-and wrong-`clientAuth` negative fixtures remain required before the complete
-server certificate-policy claim. Client mTLS and the two-node TLS/Noise exercise
-remain blocked by the prerequisites above.
+missing/wrong `clientAuth` rejection, non-P-256 rejection, and route/session
+limits. The server-only certificate-policy contract is covered at the host-test
+ceiling. Client mTLS and the two-node TLS/Noise exercise remain blocked by the
+prerequisites above.
 
 ## Links
 
