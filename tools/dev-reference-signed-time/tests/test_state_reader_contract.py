@@ -4,11 +4,12 @@ from dataclasses import FrozenInstanceError, replace
 import path_bootstrap  # noqa: F401
 
 from protocol_models import MAX_UINT64, SignedRequest
+from request_protocol import parse_request
 from state_reader import DynamoStateReader, ReaderError, StateSnapshot
 from state_reader_support import (
     EPOCH, TABLE, FakeClient, expected_transaction, fixture, read_result,
 )
-from vector_support import unsigned_request
+from vector_support import request_fixture, unsigned_request
 
 
 class SignedRequestChild(SignedRequest):
@@ -31,8 +32,11 @@ class StateReaderContractTests(unittest.TestCase):
         self.assertIsNone(raised.exception.__cause__)
         self.assertIsNone(raised.exception.__context__)
 
-    def test_one_exact_ordered_transaction_returns_frozen_snapshot(self):
-        request, registration, state = fixture()
+    def test_parsed_request_drives_exact_lookup_and_returns_frozen_snapshot(self):
+        vector, expected_request, _ = request_fixture()
+        request = parse_request(bytes.fromhex(vector["canonical_cbor_hex"]))
+        _, registration, state = fixture()
+        self.assertEqual(request, expected_request)
         client = FakeClient()
         snapshot = DynamoStateReader(client, TABLE, EPOCH).load_snapshot(request)
 

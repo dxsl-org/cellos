@@ -1,17 +1,15 @@
 """Fail-closed transactional DynamoDB allocation and receipt recovery."""
 
-from collections.abc import Mapping
 from typing import Any
 
 from allocation import AdmittedSample, AllocationState, allocate_response
-from protocol_models import MAX_UINT64, SignedRequest
-from receipt import (
-    Receipt, construct_receipt, recover_receipt, request_receipt_key,
-)
+from protocol_models import MAX_UINT64, SignedRequest, UnsignedResponse
+from receipt import Receipt, construct_receipt
 from state_codec import (
-    AuthorityRegistration, decode_receipt, encode_allocation_state,
+    AuthorityRegistration, encode_allocation_state,
     encode_authority_registration, encode_receipt,
 )
+from state_store_recovery import operation_succeeded, read_committed_receipt
 
 _CONFIGURATION_FAILURE = "invalid state store configuration"
 _STORE_FAILURE = "state store operation failed"
@@ -21,14 +19,6 @@ class StoreError(RuntimeError):
     """Stable value-free failure at the transactional persistence boundary."""
 
 
-def _write_succeeded(result: Any) -> bool:
-    if not isinstance(result, Mapping):
-        return False
-    metadata = result.get("ResponseMetadata")
-    return (type(metadata) is dict
-            and type(metadata.get("HTTPStatusCode")) is int
-            and metadata["HTTPStatusCode"] == 200
-            and type(metadata.get("RequestId")) is str and bool(metadata["RequestId"]))
 
 
 class DynamoStateStore:
@@ -116,7 +106,7 @@ class DynamoStateStore:
         ambiguous = False
         try:
             result = self._transact_write_items(TransactItems=transaction)
-            ambiguous = not _write_succeeded(result)
+            ambiguous = not operation_succeeded(result)
         except Exception:
             ambiguous = True
         if ambiguous:
@@ -168,32 +158,30 @@ class DynamoStateStore:
                 "ExpressionAttributeNames": {"#pk": "pk"},
             }},
         ]
-    def _recover(self, request: SignedRequest) -> Receipt:
+
+    def recover_committed(self, request: SignedRequest) -> UnsignedResponse | None:
+        """Recover exact committed response labels without clock admission."""
+        receipt = self._read_committed(request)
+        return None if receipt is None else receipt.response
+
+    def _read_committed(self, request: SignedRequest) -> Receipt | None:
         failed = False
         try:
-            key = request_receipt_key(request.authority_id, request.request_id)
-            result = self._transact_get_items(TransactItems=[{"Get": {
-                "TableName": self._table_name, "Key": {"pk": {"S": key}},
-            }}])
-            if not isinstance(result, Mapping):
-                raise TypeError("DynamoDB read result is not a mapping")
-            if not _write_succeeded(result):
-                raise ValueError("DynamoDB read did not return a success envelope")
-            responses = result.get("Responses")
-            if type(responses) is not list or len(responses) != 1:
-                raise ValueError("DynamoDB read returned the wrong response count")
-            entry = responses[0]
-            if not isinstance(entry, Mapping) or set(entry) != {"Item"}:
-                raise ValueError("DynamoDB read did not return one exact item")
-            receipt = decode_receipt(entry["Item"])
-            recover_receipt(
-                receipt,
+            receipt = read_committed_receipt(
+                self._transact_get_items,
+                self._table_name,
                 request,
-                configured_source_epoch=self._configured_source_epoch,
-                manifest_key_id=self._manifest_key_id,
+                self._configured_source_epoch,
+                self._manifest_key_id,
             )
         except Exception:
             failed = True
         if failed:
+            raise StoreError(_STORE_FAILURE)
+        return receipt
+
+    def _recover(self, request: SignedRequest) -> Receipt:
+        receipt = self._read_committed(request)
+        if receipt is None:
             raise StoreError(_STORE_FAILURE)
         return receipt

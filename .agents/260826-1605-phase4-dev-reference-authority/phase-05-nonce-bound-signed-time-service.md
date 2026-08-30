@@ -61,6 +61,7 @@ CloudFormation owns exactly one API, Lambda/version alias, execution role, log g
 - Create: `tools/dev-reference-signed-time/src/handler.py`
 - Create: `tools/dev-reference-signed-time/src/protocol.py`
 - Create: `tools/dev-reference-signed-time/src/kms_signer.py`
+- Create: `tools/dev-reference-signed-time/src/request_protocol.py`
 - Create: `tools/dev-reference-signed-time/src/kms_public_key.py`
 - Create: `tools/dev-reference-signed-time/src/clock.py`
 - Create: `tools/dev-reference-signed-time/src/clock_policy.py`
@@ -70,6 +71,7 @@ CloudFormation owns exactly one API, Lambda/version alias, execution role, log g
 - Create: `tools/dev-reference-signed-time/src/receipt.py`
 - Create: `tools/dev-reference-signed-time/src/state_codec.py`
 - Create: `tools/dev-reference-signed-time/src/state_store.py`
+- Create: `tools/dev-reference-signed-time/src/state_store_recovery.py`
 - Create: `tools/dev-reference-signed-time/src/state_reader.py`
 - Create: `tools/dev-reference-signed-time/tests/test_protocol.py`
 - Create: `tools/dev-reference-signed-time/tests/test_state.py`
@@ -97,6 +99,7 @@ CloudFormation owns exactly one API, Lambda/version alias, execution role, log g
 10. Save AWS request IDs, CloudFormation events, CloudWatch logs, table sequence snapshots, signed CBOR bytes, signatures, outage observations, and rollback commands under `.agents/260826-1605-phase4-dev-reference-authority/evidence/phase-05/<run-id>/`; redact account identifiers only in the shareable copy, never alter the raw operator-held record.
 
 ## Todo List
+- [x] Implement two-stage canonical request parsing and registration authentication.
 
 - [x] Freeze vectors and strict codec.
 - [x] Implement the pinned, fail-closed KMS signer adapter.
@@ -105,6 +108,7 @@ CloudFormation owns exactly one API, Lambda/version alias, execution role, log g
 - [x] Implement exact receipt construction and ambiguous-outcome recovery core.
 - [x] Freeze strict DynamoDB registration, allocator-state, and receipt record codecs.
 - [x] Implement exact DynamoDB transaction CAS and ambiguous receipt recovery adapter.
+- [x] Expose exact receipt-first retry recovery before clock admission.
 - [x] Implement exact transactional registration/state snapshot reader.
 - [x] Implement stateless clock-observation admission policy.
 - [ ] Implement the configured authenticated clock gate.
@@ -157,3 +161,5 @@ Phase 6 consumes only the reviewed endpoint/key/source manifest and frozen vecto
 - 2026-08-30 — KMS public-key `SOFTWARE_HARNESS` slice complete: one injected `GetPublicKey` call accepts only a normal HTTP 200/nonempty-request-ID envelope for the exact manifest key ID, P-256 key spec, `SIGN_VERIFY` usage, and `ECDSA_SHA_256` support. The canonical DER-SPKI SHA-256 is compared in constant time with the manifest pin before immutable bytes may compose with the signer. Malformed, hostile, mismatched, wrong-curve, wrong-usage/algorithm, digest, and provider failures return stable errors without retry, alternate key, generic KMS operation, credential, network, or AWS mutation. Focused tests pass 133/133 and final review found no remaining scoped issue.
 - 2026-08-30 — Clock-policy `SOFTWARE_HARNESS` slice complete: a stateless policy pins upstream identity, source epoch, maximum sample age, and maximum uncertainty, then admits only exact uint64 provider observations whose interval width equals the declared uncertainty, age/uncertainty stay within inclusive limits, valid-until advances beyond the floor, and protected server floor lies inside the interval. It returns only an immutable allocation sample and uses no ambient clock, I/O, cache, holdover, alternate source, fallback, or test override. This policy explicitly does not authenticate observations; the exact single upstream adapter remains unimplemented and blocked on provider selection. Focused tests pass 147/147 and final review found no remaining scoped issue.
 - 2026-08-30 — Manifest-schema `SOFTWARE_HARNESS` slice complete: a frozen, canonical, 4,096-byte-bounded JSON schema pins only DEV_REFERENCE protocol/source constants, AWS region, exact HTTPS `/v1/time` endpoint and SPKI digest, source epoch, KMS key ARN/DER digest/algorithm, upstream identity, and clock-policy bounds. It rejects duplicate/noncanonical JSON, malformed types/digests/URLs, overlength DNS names, invalid partition-region/account/key ARNs, and pre-bounds all variable strings before parsing or serialization. Pure helpers derive clock policy and KMS pins without I/O. No manifest instance, provider/account/endpoint/key selection, production consumer, credential, AWS call, or deployment was added. Focused tests pass 189/189 and final review found no remaining scoped issue.
+- 2026-08-30 — Request-boundary `SOFTWARE_HARNESS` slice complete: request parsing/self-signature verification moved into one focused module and now precedes registration lookup without claiming registration. Strict canonical labels 1–9, size, key form, and embedded Ed25519 signature are verified before one exact state-reader lookup; the returned non-revoked registration must then byte-match device, authority, and key before authentication completes. One-step decode remains explicit composition, all callers migrated, the old request surface was removed from the response module, and a shared error type avoids import cycles. Arbitrary self-signed keys cannot pass another registration. No handler, network, provider, credential, AWS call, or deployment action occurred. Focused tests pass 190/190 and final review found no remaining scoped issue.
+- 2026-08-30 — Receipt-first retry `SOFTWARE_HARNESS` slice complete: `DynamoStateStore.recover_committed()` now self-verifies the signed request before I/O, performs exactly one transactional read of the exact receipt key, treats only the documented successful `Responses: [None]` shape as absence, and returns either the strictly revalidated immutable `UnsignedResponse` or `None`. Present receipts retain every committed label and expiry for mandatory KMS re-signing; recovery performs no allocation, state write, clock/sample access, expiry refresh, or signing. Malformed requests fail before I/O, malformed/substituted receipts and envelopes fail with stable errors, and ambiguous writes reuse the same private validated receipt read while still requiring presence. No handler, live database, clock provider, KMS call, credential, network, or deployment action occurred. Focused and full tests pass 193/193 and final review found no remaining scoped issue.

@@ -6,8 +6,10 @@ from dataclasses import dataclass
 from typing import Any
 
 from allocation import AllocationResult, AllocationState
-from protocol import ProtocolError, encode_request, response_signing_bytes
+from protocol import response_signing_bytes
+from protocol_errors import ProtocolError
 from protocol_models import MAX_UINT64, SOURCE_ID, SignedRequest, UnsignedResponse
+from request_protocol import encode_request
 
 SOURCE_STATE_KEY = f"source#{SOURCE_ID}/state"
 _AUTHORITY_ID_BYTES = 32

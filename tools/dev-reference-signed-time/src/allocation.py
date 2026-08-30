@@ -4,8 +4,9 @@ import hashlib
 from dataclasses import dataclass
 from typing import Any
 
-from protocol import ProtocolError, encode_request
+from protocol_errors import ProtocolError
 from protocol_models import MAX_UINT64, SignedRequest, UnsignedResponse
+from request_protocol import encode_request
 
 
 class AllocationError(ValueError):

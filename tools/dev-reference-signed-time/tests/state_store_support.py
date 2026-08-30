@@ -5,7 +5,7 @@ from cryptography.hazmat.primitives.asymmetric import ed25519
 
 from allocation import AdmittedSample, AllocationState, allocate_response
 from receipt import construct_receipt
-from protocol import request_signing_bytes
+from request_protocol import request_signing_bytes
 from protocol_models import SignedRequest, UnsignedRequest
 from state_codec import (
     AuthorityRegistration, encode_allocation_state, encode_authority_registration,

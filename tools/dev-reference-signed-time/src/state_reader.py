@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from allocation import AllocationState
-from protocol import encode_request
+from request_protocol import encode_request
 from protocol_models import MAX_UINT64, SignedRequest
 from receipt import SOURCE_STATE_KEY, authority_registration_key
 from state_codec import (

@@ -44,11 +44,19 @@
   region, HTTPS endpoint/SPKI, source epoch, KMS ARN/key digest, upstream
   identity, and clock bounds without checking in any selected manifest instance.
   It pre-bounds every variable field and rejects noncanonical JSON, overlength
-  DNS names, and invalid partition/region/account/KMS-key combinations. Focused
-  tests pass 189/189, including isolated discovery, and final review found no
-  remaining scoped issue. No live clock authentication, database operation,
-  handler, AWS resource, credential, network call, or deployment action
-  occurred; those steps remain gated.
+  DNS names, and invalid partition/region/account/KMS-key combinations. Manifest
+  tests pass 42/42 and final review found no remaining scoped issue. Request
+  handling now has an explicit two-stage boundary: strict canonical parsing and
+  embedded-key signature verification precede the exact registration lookup,
+  while non-revoked tuple/key equality completes authentication afterward.
+  Every caller migrated off the former combined response module. Exact retries
+  now have a receipt-first path before clock admission: one exact transactional
+  read returns unchanged committed response labels for mandatory KMS
+  re-signing, or the documented null item response permits fresh allocation.
+  Invalid requests fail before I/O; malformed receipts never fall through to
+  the clock. The full suite passes 193/193. No live clock authentication,
+  database operation, handler, AWS resource, credential, network call, or
+  deployment action occurred; those steps remain gated.
 
 - Phase 4's deterministic, non-executing provisioning-plan generator is complete
   only at the `SOFTWARE_HARNESS` ceiling. Each of its nine ordered mutations now

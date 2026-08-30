@@ -5,8 +5,14 @@ import path_bootstrap
 from vector_support import request_fixture
 
 import cbor_codec
-from protocol import ProtocolError, decode_request, encode_request, request_signing_bytes
-from protocol_models import RegisteredAuthority
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import ed25519
+from protocol_errors import ProtocolError
+from protocol_models import RegisteredAuthority, SignedRequest, UnsignedRequest
+from request_protocol import (
+    authenticate_request, decode_request, encode_request, parse_request,
+    request_signing_bytes,
+)
 
 
 class RequestProtocolTests(unittest.TestCase):
@@ -17,14 +23,19 @@ class RequestProtocolTests(unittest.TestCase):
 
     def reject_values(self, values):
         with self.assertRaises(ProtocolError):
-            decode_request(cbor_codec.dumps(values), self.registration)
+            parse_request(cbor_codec.dumps(values))
 
-    def test_golden_request_round_trips_and_verifies_exact_bytes(self):
-        decoded = decode_request(self.encoded, self.registration)
-        self.assertEqual(decoded, self.request)
-        self.assertEqual(encode_request(decoded), self.encoded)
-        self.assertEqual(request_signing_bytes(decoded), bytes.fromhex(self.vector["signing_cbor_hex"]))
-        self.assertEqual(decoded.signature.hex(), self.vector["signature_hex"])
+    def test_golden_request_round_trips_through_both_explicit_stages(self):
+        parsed = parse_request(self.encoded)
+        authenticated = authenticate_request(parsed, self.registration)
+        self.assertEqual(parsed, self.request)
+        self.assertIs(authenticated, parsed)
+        self.assertEqual(decode_request(self.encoded, self.registration), parsed)
+        self.assertEqual(encode_request(authenticated), self.encoded)
+        self.assertEqual(
+            request_signing_bytes(parsed), bytes.fromhex(self.vector["signing_cbor_hex"])
+        )
+        self.assertEqual(parsed.signature.hex(), self.vector["signature_hex"])
 
     def test_every_signed_label_substitution_is_rejected(self):
         replacements = {
@@ -81,23 +92,64 @@ class RequestProtocolTests(unittest.TestCase):
             with self.assertRaises(ProtocolError):
                 request_signing_bytes(replace(self.request, purpose=purpose))
 
-    def test_registered_tuple_and_key_are_exact_bindings(self):
-        wrong_device = RegisteredAuthority(b"x" * 32, self.registration.authority_id,
-                                           self.registration.public_key_der)
-        wrong_authority = RegisteredAuthority(self.registration.device_id, b"x" * 32,
-                                              self.registration.public_key_der)
-        wrong_key = RegisteredAuthority(self.registration.device_id, self.registration.authority_id,
-                                        self.registration.public_key_der[:-1] + b"\x00")
-        for registration in (wrong_device, wrong_authority, wrong_key):
-            with self.assertRaises(ProtocolError):
-                decode_request(self.encoded, registration)
+    def test_registered_tuple_key_and_type_are_exact_bindings(self):
+        wrong_device = RegisteredAuthority(
+            b"x" * 32, self.registration.authority_id, self.registration.public_key_der
+        )
+        wrong_authority = RegisteredAuthority(
+            self.registration.device_id, b"x" * 32, self.registration.public_key_der
+        )
+        wrong_key = RegisteredAuthority(
+            self.registration.device_id,
+            self.registration.authority_id,
+            self.registration.public_key_der[:-1] + b"\x00",
+        )
+        malformed_key = RegisteredAuthority(
+            self.registration.device_id, self.registration.authority_id, b"x" * 44
+        )
+        for registration in (wrong_device, wrong_authority, wrong_key, malformed_key, object()):
+            with self.subTest(registration=registration):
+                with self.assertRaises(ProtocolError):
+                    authenticate_request(self.request, registration)
+
+    def test_arbitrary_self_signed_key_cannot_pass_a_different_registration(self):
+        private_key = ed25519.Ed25519PrivateKey.generate()
+        public_key = private_key.public_key().public_bytes(
+            serialization.Encoding.DER,
+            serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        unsigned = UnsignedRequest(
+            self.request.device_id,
+            self.request.authority_id,
+            self.request.boot_epoch,
+            self.request.request_id,
+            self.request.purpose,
+            self.request.nonce,
+            public_key,
+        )
+        request = SignedRequest(
+            unsigned.device_id,
+            unsigned.authority_id,
+            unsigned.boot_epoch,
+            unsigned.request_id,
+            unsigned.purpose,
+            unsigned.nonce,
+            unsigned.authority_pubkey,
+            private_key.sign(request_signing_bytes(unsigned)),
+        )
+        self.assertEqual(parse_request(encode_request(request)), request)
+        with self.assertRaises(ProtocolError):
+            authenticate_request(request, self.registration)
 
     def test_noncanonical_trailing_and_oversize_requests_are_rejected(self):
         duplicate = bytes.fromhex("aa01010101") + self.encoded[3:]
         for encoded in (duplicate, self.encoded + b"\x00", self.encoded + b"\x00" * 1024):
             with self.subTest(length=len(encoded)):
                 with self.assertRaises(ProtocolError):
-                    decode_request(encoded, self.registration)
+                    parse_request(encoded)
+        for non_bytes in (bytearray(self.encoded), memoryview(self.encoded), None):
+            with self.assertRaises(ProtocolError):
+                parse_request(non_bytes)
 
     def test_invalid_signature_cannot_be_encoded(self):
         with self.assertRaises(ProtocolError):
