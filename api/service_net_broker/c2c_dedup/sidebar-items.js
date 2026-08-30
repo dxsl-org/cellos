@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["DEDUP_CAPACITY","DEDUP_STATIC_BYTES","DEDUP_TTL_MS","SOURCE_WINDOW_CAPACITY"],"enum":["C2cStatus","DedupDecision","DedupError"],"struct":["CachedReply","DedupCache","DedupKey"]};

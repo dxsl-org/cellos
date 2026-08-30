@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["bench_oracle","export_registry","identity","kms_dh","local_ingress","local_queue","local_runtime_metrics","reply_pump","runtime_roles"]};
+window.SIDEBAR_ITEMS = {"mod":["bench_oracle","c2c_deadline","c2c_dedup","c2c_envelope","c2c_receive","export_registry","identity","kms_dh","local_ingress","local_queue","local_runtime_metrics","noise_identity","relay_config","relay_reconnect","reply_pump","runtime_roles","server_epoch","session_pool"]};

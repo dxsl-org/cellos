@@ -142,7 +142,7 @@
 <a href=#142 id=142 data-nosnippet>142</a>        .saturating_sub(delta.completed)
 <a href=#143 id=143 data-nosnippet>143</a>        .saturating_sub(delta.terminal);
 <a href=#144 id=144 data-nosnippet>144</a>    println(<span class="kw-2">&amp;</span><span class="macro">format!</span>(
-<a href=#145 id=145 data-nosnippet>145</a>        <span class="string">"[c2c-broker-oracle] soak attempted={} success={} busy={} indeterminate={} duplicate={} stale={} correlation={} accepted_delta={} completed_delta={} terminal_delta={} silent_drop={} peak_bytes={} static_footprint_bytes={}"</span>,
+<a href=#145 id=145 data-nosnippet>145</a>        <span class="string">"[c2c-broker-oracle] soak attempted={} success={} busy={} indeterminate={} duplicate={} stale={} correlation={} accepted_delta={} completed_delta={} terminal_delta={} silent_drop={} peak_bytes={} static_footprint_bytes={} network_progress_delta={} heartbeat_miss_delta={} watchdog_expired_delta={}"</span>,
 <a href=#146 id=146 data-nosnippet>146</a>        total.attempted,
 <a href=#147 id=147 data-nosnippet>147</a>        total.success,
 <a href=#148 id=148 data-nosnippet>148</a>        total.busy,
@@ -155,23 +155,26 @@
 <a href=#155 id=155 data-nosnippet>155</a>        delta.terminal,
 <a href=#156 id=156 data-nosnippet>156</a>        silent_drop,
 <a href=#157 id=157 data-nosnippet>157</a>        snapshot.peak_bytes,
-<a href=#158 id=158 data-nosnippet>158</a>        snapshot.static_footprint_bytes
-<a href=#159 id=159 data-nosnippet>159</a>    ));
-<a href=#160 id=160 data-nosnippet>160</a>}
-<a href=#161 id=161 data-nosnippet>161</a>
-<a href=#162 id=162 data-nosnippet>162</a><span class="kw">pub fn </span>print_overflow_line(status: <span class="kw-2">&amp;</span>str, total: ClientSummary, delta: SnapshotDelta, peak: u64) {
-<a href=#163 id=163 data-nosnippet>163</a>    println(<span class="kw-2">&amp;</span><span class="macro">format!</span>(
-<a href=#164 id=164 data-nosnippet>164</a>        <span class="string">"[c2c-broker-oracle] overflow status={} attempted={} success={} busy={} indeterminate={} correlation={} queue_peak={} network_progress_delta={} heartbeat_miss_delta={} watchdog_expired_delta={} busy_frame=0x7f01"</span>,
-<a href=#165 id=165 data-nosnippet>165</a>        status,
-<a href=#166 id=166 data-nosnippet>166</a>        total.attempted,
-<a href=#167 id=167 data-nosnippet>167</a>        total.success,
-<a href=#168 id=168 data-nosnippet>168</a>        total.busy,
-<a href=#169 id=169 data-nosnippet>169</a>        total.indeterminate,
-<a href=#170 id=170 data-nosnippet>170</a>        total.correlation,
-<a href=#171 id=171 data-nosnippet>171</a>        peak,
-<a href=#172 id=172 data-nosnippet>172</a>        delta.network_progress,
-<a href=#173 id=173 data-nosnippet>173</a>        delta.heartbeat_miss,
-<a href=#174 id=174 data-nosnippet>174</a>        delta.watchdog_expired
-<a href=#175 id=175 data-nosnippet>175</a>    ));
-<a href=#176 id=176 data-nosnippet>176</a>}
+<a href=#158 id=158 data-nosnippet>158</a>        snapshot.static_footprint_bytes,
+<a href=#159 id=159 data-nosnippet>159</a>        delta.network_progress,
+<a href=#160 id=160 data-nosnippet>160</a>        delta.heartbeat_miss,
+<a href=#161 id=161 data-nosnippet>161</a>        delta.watchdog_expired
+<a href=#162 id=162 data-nosnippet>162</a>    ));
+<a href=#163 id=163 data-nosnippet>163</a>}
+<a href=#164 id=164 data-nosnippet>164</a>
+<a href=#165 id=165 data-nosnippet>165</a><span class="kw">pub fn </span>print_overflow_line(status: <span class="kw-2">&amp;</span>str, total: ClientSummary, delta: SnapshotDelta, peak: u64) {
+<a href=#166 id=166 data-nosnippet>166</a>    println(<span class="kw-2">&amp;</span><span class="macro">format!</span>(
+<a href=#167 id=167 data-nosnippet>167</a>        <span class="string">"[c2c-broker-oracle] overflow status={} attempted={} success={} busy={} indeterminate={} correlation={} queue_peak={} network_progress_delta={} heartbeat_miss_delta={} watchdog_expired_delta={} busy_frame=0x7f01"</span>,
+<a href=#168 id=168 data-nosnippet>168</a>        status,
+<a href=#169 id=169 data-nosnippet>169</a>        total.attempted,
+<a href=#170 id=170 data-nosnippet>170</a>        total.success,
+<a href=#171 id=171 data-nosnippet>171</a>        total.busy,
+<a href=#172 id=172 data-nosnippet>172</a>        total.indeterminate,
+<a href=#173 id=173 data-nosnippet>173</a>        total.correlation,
+<a href=#174 id=174 data-nosnippet>174</a>        peak,
+<a href=#175 id=175 data-nosnippet>175</a>        delta.network_progress,
+<a href=#176 id=176 data-nosnippet>176</a>        delta.heartbeat_miss,
+<a href=#177 id=177 data-nosnippet>177</a>        delta.watchdog_expired
+<a href=#178 id=178 data-nosnippet>178</a>    ));
+<a href=#179 id=179 data-nosnippet>179</a>}
 </code></pre></div></section></main></body></html>

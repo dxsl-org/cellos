@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["CellState","FileType","GrantPerm","HalError","ViError"],"mod":["kms","silo"],"struct":["CellId","DirEntry","GrantId","SemVer"],"type":["HalResult","PhysAddr","Result","VAddr","ViResult"]};
+window.SIDEBAR_ITEMS = {"enum":["CellState","FileType","GrantPerm","HalError","ViError"],"mod":["c2c","kms","silo"],"struct":["CellId","DirEntry","GrantId","SemVer"],"type":["HalResult","PhysAddr","Result","VAddr","ViResult"]};

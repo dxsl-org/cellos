@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["RelayConfigError"],"fn":["parse_relay_endpoint_bytes"],"struct":["RelayEndpoint"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["C2C_HEADER_LEN","C2C_VERSION","MAX_C2C_FRAME","MAX_C2C_PAYLOAD","NOISE_TAG_LEN"],"enum":["EnvelopeError","EnvelopeKind","RetryClass"],"fn":["decode"],"struct":["C2cEnvelope","RelativeDeadline","ServerEpoch"]};

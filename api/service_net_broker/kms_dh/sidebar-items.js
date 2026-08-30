@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["KmsBackedX25519","OpaqueStaticKey"]};
+window.SIDEBAR_ITEMS = {"fn":["opaque_key_from_kms"],"struct":["KmsBackedX25519","OpaqueStaticKey"]};
