@@ -40,10 +40,15 @@
   rejects stale, over-uncertain, inconsistent, expired, or protected-floor-
   external observations without ambient time, cache, holdover, or fallback. It
   does not authenticate observations; the exact upstream adapter remains
-  unimplemented. Focused tests pass 147/147, including isolated discovery, and
-  final review found no remaining scoped issue. No live clock authentication,
-  database operation, handler, AWS resource, credential, network call, or
-  deployment action occurred; those steps remain gated.
+  unimplemented. A strict canonical DEV_REFERENCE manifest schema now pins the
+  region, HTTPS endpoint/SPKI, source epoch, KMS ARN/key digest, upstream
+  identity, and clock bounds without checking in any selected manifest instance.
+  It pre-bounds every variable field and rejects noncanonical JSON, overlength
+  DNS names, and invalid partition/region/account/KMS-key combinations. Focused
+  tests pass 189/189, including isolated discovery, and final review found no
+  remaining scoped issue. No live clock authentication, database operation,
+  handler, AWS resource, credential, network call, or deployment action
+  occurred; those steps remain gated.
 
 - Phase 4's deterministic, non-executing provisioning-plan generator is complete
   only at the `SOFTWARE_HARNESS` ceiling. Each of its nine ordered mutations now
