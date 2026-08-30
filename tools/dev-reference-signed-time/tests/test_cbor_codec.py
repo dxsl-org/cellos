@@ -1,4 +1,5 @@
 import unittest
+import path_bootstrap
 
 from vector_support import vector
 from cbor_codec import CborError, dumps, loads

@@ -1,13 +1,13 @@
 import hashlib
 import unittest
 from dataclasses import FrozenInstanceError, replace
+import path_bootstrap
 
 from allocation import (
     AdmittedSample, AllocationError, AllocationState, allocate_response,
 )
 from protocol_models import MAX_UINT64, SignedRequest
 from vector_support import request_fixture, unsigned_request
-
 
 class IntChild(int):
     pass

@@ -1,5 +1,6 @@
 import unittest
 from dataclasses import replace
+import path_bootstrap
 
 from vector_support import request_fixture, response_fixture, unsigned_request
 

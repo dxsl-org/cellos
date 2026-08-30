@@ -1,5 +1,6 @@
 import unittest
 from dataclasses import replace
+import path_bootstrap
 
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec, utils

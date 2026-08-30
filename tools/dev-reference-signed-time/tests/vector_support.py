@@ -1,11 +1,8 @@
 """Public-vector loaders shared by the protocol unit tests."""
 
 import json
-import sys
-from pathlib import Path
-
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "src"))
+import path_bootstrap
+ROOT = path_bootstrap.ROOT
 
 from protocol_models import RegisteredAuthority, SignedRequest, SignedResponse, UnsignedRequest
 

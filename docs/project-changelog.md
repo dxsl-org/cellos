@@ -16,11 +16,15 @@
   The pure allocation core revalidates an exact signed request, hashes its full
   canonical labels 1–9 for the future immutable receipt, and advances sequence,
   Unix floor, and bounded expiry with strict interval, protected-floor, and
-  uint64 checks. Public-only golden and malformed vectors round-trip exactly.
-  Focused tests pass 43/43 and final review found no remaining scoped issue. No
-  clock authentication, transaction persistence, receipt recovery, handler, AWS
-  resource, credential, network call, or deployment action occurred; those
-  steps remain gated.
+  uint64 checks. The receipt core freezes exact lower-hex state/registration/
+  request keys, stores the full canonical signed-request digest and immutable
+  response labels, and permits only an exact constant-time digest retry without
+  refreshing sequence, time, or expiry. Public-only golden and malformed vectors
+  round-trip exactly. Focused tests pass 53/53, and every test module passes
+  isolated discovery through one explicit shared source-path bootstrap. Final
+  review found no remaining scoped issue. No clock authentication, transaction
+  operation, handler, AWS resource, credential, network call, or deployment
+  action occurred; those steps remain gated.
 
 - Phase 4's deterministic, non-executing provisioning-plan generator is complete
   only at the `SOFTWARE_HARNESS` ceiling. Each of its nine ordered mutations now
