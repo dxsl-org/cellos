@@ -4,17 +4,23 @@ use types::kms::{validate_hostname, RELAY_HOSTNAME_MAX};
 /// Validated endpoint for a future authenticated relay transport.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RelayEndpoint {
-    /// Numeric IPv4 address used only after authenticated transport enablement.
-    pub ip: [u8; 4],
-    /// Nonzero TCP port.
-    pub port: u16,
-    /// Zero-padded lowercase DNS hostname used for certificate verification.
-    pub hostname: [u8; RELAY_HOSTNAME_MAX],
-    /// Number of meaningful bytes in `hostname`.
-    pub hostname_len: u8,
+    ip: [u8; 4],
+    port: u16,
+    hostname: [u8; RELAY_HOSTNAME_MAX],
+    hostname_len: u8,
 }
 
 impl RelayEndpoint {
+    /// Return the validated numeric IPv4 address.
+    pub const fn ip(&self) -> [u8; 4] {
+        self.ip
+    }
+
+    /// Return the validated nonzero TCP port.
+    pub const fn port(&self) -> u16 {
+        self.port
+    }
+
     /// Return the validated lowercase DNS hostname without zero padding.
     pub fn hostname(&self) -> &[u8] {
         &self.hostname[..self.hostname_len as usize]

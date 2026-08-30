@@ -81,8 +81,11 @@
   completes both handshake messages. Added a strict optional global relay
   endpoint contract using `relay_ip`, nonzero `relay_port`, and the frozen
   lowercase DNS `relay_hostname` profile. Partial, duplicate, unknown, malformed,
-  and non-canonical declarations fail closed; validated configuration is stored
-  without dialing, resolving DNS, invoking KMS, or enabling relay traffic.
+  and non-canonical declarations fail closed. `RelayEndpoint` now keeps its IP,
+  port, hostname buffer, and length private and exposes only read-only validated
+  accessors, preventing callers from constructing zero-port or inconsistent
+  hostname states. Validated configuration is stored without dialing, resolving
+  DNS, invoking KMS, or enabling relay traffic.
   Added a pure bounded relay admission table behind the existing TLS 1.3
   certificate validator. The certificate-derived NodeId is the sole route
   authority; unauthenticated, mismatched, duplicate-live, capacity, and stale

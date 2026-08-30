@@ -1416,8 +1416,11 @@ responder NodeId for both local roles; a paired KKpsk0 transcript regression
 covers peer agreement. `/etc/cellos/cluster.cfg` may describe one future relay
 TLS target with `relay_ip`, nonzero `relay_port`, and canonical lowercase
 `relay_hostname`. Parsing is allocation-free and fails closed on partial,
-duplicate, unknown, or malformed relay fields. `BrokerIdentity` stores the
-validated endpoint but does not dial, resolve DNS, invoke KMS, or alter
+duplicate, unknown, or malformed relay fields. `RelayEndpoint` has a private
+representation and read-only IP, port, and hostname accessors, so callers cannot
+bypass parser validation with a zero port, malformed hostname, inconsistent
+length, or nonzero padding. `BrokerIdentity` stores the validated endpoint but
+does not dial, resolve DNS, invoke KMS, or alter
 `ConnectionManager`'s relay gate. On the server, the NodeId returned by the
 existing TLS 1.3 certificate validator is the only admission authority. A
 synchronous connection gate bounds accepted sockets before TLS begins and holds

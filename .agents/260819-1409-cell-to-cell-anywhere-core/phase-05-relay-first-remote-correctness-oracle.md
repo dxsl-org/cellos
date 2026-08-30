@@ -84,6 +84,8 @@ node B local export -> response -> relay -> node A dedup/response.
 
 - [x] Define the optional global relay endpoint as strict `relay_ip`,
   `relay_port`, and lowercase DNS `relay_hostname` fields in `cluster.cfg`.
+- [x] Preserve the validated endpoint invariant with private representation and
+  read-only `ip()`, `port()`, and `hostname()` accessors.
 - [ ] Define mTLS trust/profile inputs and signer authorization; no shared-secret
   or raw-key fallback.
 - [x] Exercise missing/wrong `clientAuth` EKU and non-P-256 certificate
@@ -152,8 +154,11 @@ blocks Cellos relay wiring, sender-side error mapping, and any two-node oracle.
   pressure instead of falling through to `NotSupported`.
 - The optional global relay endpoint parser fails closed on partial, duplicate,
   unknown, malformed IP/port, or non-canonical hostname fields and performs no
-  I/O. `BrokerIdentity` stores only a validated endpoint without dialing it.
-- Focused broker tests pass 101/101 and the RV64 release build passes.
+  I/O. `RelayEndpoint` fields are private, so callers cannot construct zero
+  ports, invalid hostnames, inconsistent lengths, or nonzero padding; read-only
+  accessors expose only parser-validated values. `BrokerIdentity` stores the
+  endpoint without dialing it. Focused broker tests pass 101/101 and the RV64
+  release build passes.
 - The pure relay admission table, pre-TLS connection gate, delivery-outcome
   split, certificate-policy negatives, and mTLS wire regressions pass within
   37/37 relay-server tests. Missing/wrong `clientAuth` EKU and non-P-256 keys

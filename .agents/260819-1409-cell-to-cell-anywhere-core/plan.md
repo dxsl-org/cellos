@@ -47,10 +47,12 @@ Recovery plan: supersedes `.agents/260624-cell-to-cell-anywhere/` without editin
 > sessions, and reports `WouldBlock` before opening another TCP path. Noise
 > prologues use protocol-role ordering, so both peers bind the same
 > `initiator || responder` identity transcript. The optional global relay
-> endpoint is now a strict, allocation-free `cluster.cfg` contract whose
-> validated value is stored without dialing. Server admission now treats the
-> validated mTLS certificate-derived NodeId as the sole route authority, rejects
-> duplicate live identities without displacement, and uses exact-generation
+> endpoint is now a strict, allocation-free `cluster.cfg` contract with private
+> representation and read-only accessors, so its validated invariant survives
+> storage without dialing.
+> Server admission treats the validated mTLS certificate-derived NodeId as the
+> sole route authority, rejects duplicate live identities without displacement,
+> and uses exact-generation
 > release. Exact byte-layout, paired transcript, and endpoint parser regressions
 > pass within 101/101 broker tests; 37/37 relay-server tests cover the bounded
 > pre-TLS gate, authenticated admission, missing/wrong `clientAuth` and

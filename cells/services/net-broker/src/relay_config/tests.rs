@@ -14,8 +14,8 @@ fn absent_or_complete_endpoint_is_deterministic() {
     )
     .expect("valid config")
     .expect("configured endpoint");
-    assert_eq!(endpoint.ip, [127, 0, 0, 1]);
-    assert_eq!(endpoint.port, 443);
+    assert_eq!(endpoint.ip(), [127, 0, 0, 1]);
+    assert_eq!(endpoint.port(), 443);
     assert_eq!(endpoint.hostname(), b"relay.example");
     assert!(endpoint.hostname[endpoint.hostname_len as usize..]
         .iter()
