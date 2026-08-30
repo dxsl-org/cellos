@@ -98,14 +98,10 @@ def construct_receipt(allocation: AllocationResult) -> Receipt:
     return Receipt(allocation.request_digest, response)
 
 
-def recover_receipt(
+def _validate_recovery_inputs(
     receipt: Receipt | None,
     request: SignedRequest,
-    *,
-    configured_source_epoch: int,
-    manifest_key_id: str,
-) -> UnsignedResponse:
-    """Return unchanged committed labels only for one exact authenticated retry."""
+) -> None:
     if receipt is None:
         _fail("missing-receipt")
     if type(receipt) is not Receipt:
@@ -116,13 +112,15 @@ def recover_receipt(
         _fail("malformed-receipt")
     if type(request) is not SignedRequest:
         _fail("invalid-request")
-    invalid_request = False
-    try:
-        canonical_request = encode_request(request)
-    except ProtocolError:
-        invalid_request = True
-    if invalid_request:
-        _fail("invalid-request")
+
+
+def _recover_labels(
+    receipt: Receipt,
+    request: SignedRequest,
+    canonical_request: bytes,
+    configured_source_epoch: int,
+    manifest_key_id: str,
+) -> UnsignedResponse:
     digest = hashlib.sha256(canonical_request).digest()
     if not hmac.compare_digest(receipt.request_digest, digest):
         _fail("request-digest-mismatch")
@@ -154,3 +152,41 @@ def recover_receipt(
     if response.key_id != manifest_key_id:
         _fail("receipt-mismatch")
     return response
+
+
+def recover_receipt(
+    receipt: Receipt | None,
+    request: SignedRequest,
+    *,
+    configured_source_epoch: int,
+    manifest_key_id: str,
+) -> UnsignedResponse:
+    """Return unchanged committed labels only for one exact authenticated retry."""
+    _validate_recovery_inputs(receipt, request)
+    invalid_request = False
+    try:
+        canonical_request = encode_request(request)
+    except ProtocolError:
+        invalid_request = True
+    if invalid_request:
+        _fail("invalid-request")
+    return _recover_labels(
+        receipt, request, canonical_request, configured_source_epoch, manifest_key_id,
+    )
+
+
+def _recover_validated_receipt(
+    receipt: Receipt | None,
+    request: SignedRequest,
+    canonical_request: bytes,
+    *,
+    configured_source_epoch: int,
+    manifest_key_id: str,
+) -> UnsignedResponse:
+    """Recover exact labels from one request already canonically verified."""
+    _validate_recovery_inputs(receipt, request)
+    if type(canonical_request) is not bytes:
+        _fail("invalid-request")
+    return _recover_labels(
+        receipt, request, canonical_request, configured_source_epoch, manifest_key_id,
+    )

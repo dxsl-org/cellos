@@ -50,10 +50,14 @@ def request_signer():
 
 
 class FakeClient:
-    def __init__(self, *, write_result=None, write_error=None, read_result=None, read_error=None):
+    def __init__(
+        self, *, write_result=None, write_error=None, read_result=None,
+        read_results=None, read_error=None,
+    ):
         self.write_result = write_success() if write_result is None else write_result
         self.write_error = write_error
         self.read_result = read_result
+        self.read_results = None if read_results is None else list(read_results)
         self.read_error = read_error
         self.calls = []
 
@@ -67,6 +71,8 @@ class FakeClient:
         self.calls.append(("read", copy.deepcopy(kwargs)))
         if self.read_error is not None:
             raise self.read_error
+        if self.read_results is not None:
+            return self.read_results.pop(0)
         return self.read_result
 
 

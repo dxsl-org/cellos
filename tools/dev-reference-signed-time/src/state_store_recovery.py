@@ -4,9 +4,10 @@ from collections.abc import Callable, Mapping
 from typing import Any
 
 from protocol_models import SignedRequest
-from request_protocol import encode_request
-from receipt import Receipt, recover_receipt, request_receipt_key
-from state_codec import decode_receipt
+from receipt import Receipt, _recover_validated_receipt, request_receipt_key
+from state_codec import (
+    AuthorityRegistration, decode_receipt, encode_authority_registration,
+)
 
 
 def operation_succeeded(result: Any) -> bool:
@@ -23,15 +24,32 @@ def operation_succeeded(result: Any) -> bool:
     )
 
 
-def read_committed_receipt(
+def encode_active_registration(
+    request: SignedRequest,
+    registration: AuthorityRegistration,
+) -> dict[str, dict[str, Any]]:
+    """Validate and encode the exact active registration tuple."""
+    if type(request) is not SignedRequest:
+        raise TypeError("request has the wrong type")
+    item = encode_authority_registration(registration)
+    if registration.revoked or (
+        registration.device_id,
+        registration.authority_id,
+        registration.public_key_der,
+    ) != (request.device_id, request.authority_id, request.authority_pubkey):
+        raise ValueError("registration is not active for request")
+    return item
+
+
+def _read_committed_receipt(
     transact_get_items: Callable[..., Any],
     table_name: str,
     request: SignedRequest,
+    canonical_request: bytes,
     configured_source_epoch: int,
     manifest_key_id: str,
 ) -> Receipt | None:
     """Read and validate the receipt bound to one exact signed request."""
-    encode_request(request)
     key = request_receipt_key(request.authority_id, request.request_id)
     result = transact_get_items(TransactItems=[{"Get": {
         "TableName": table_name, "Key": {"pk": {"S": key}},
@@ -51,9 +69,10 @@ def read_committed_receipt(
     if type(entry) is not dict or set(entry) != {"Item"}:
         raise ValueError("DynamoDB read did not return one exact item")
     receipt = decode_receipt(entry["Item"])
-    recover_receipt(
+    _recover_validated_receipt(
         receipt,
         request,
+        canonical_request,
         configured_source_epoch=configured_source_epoch,
         manifest_key_id=manifest_key_id,
     )

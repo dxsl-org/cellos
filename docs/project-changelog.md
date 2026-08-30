@@ -50,13 +50,17 @@
   embedded-key signature verification precede the exact registration lookup,
   while non-revoked tuple/key equality completes authentication afterward.
   Every caller migrated off the former combined response module. Exact retries
-  now have a receipt-first path before clock admission: one exact transactional
-  read returns unchanged committed response labels for mandatory KMS
-  re-signing, or the documented null item response permits fresh allocation.
-  Invalid requests fail before I/O; malformed receipts never fall through to
-  the clock. The full suite passes 193/193. No live clock authentication,
-  database operation, handler, AWS resource, credential, network call, or
-  deployment action occurred; those steps remain gated.
+  now have a registration-gated receipt-first path before clock admission: an
+  exact active authenticated tuple is required before one receipt read may
+  return unchanged committed labels for mandatory KMS re-signing. Revoked,
+  substituted, and unrelated self-signed authorities fail before receipt I/O.
+  The documented null response permits fresh allocation but is not authoritative
+  after a write attempt: a read→write-conflict→read test recovers an identical
+  concurrent winner's exact receipt without a second write or expiry refresh.
+  Invalid requests and malformed receipts never fall through to the clock. The
+  full suite passes 195/195. No live clock authentication, database operation,
+  handler, AWS resource, credential, network call, or deployment action
+  occurred; those steps remain gated.
 
 - Phase 4's deterministic, non-executing provisioning-plan generator is complete
   only at the `SOFTWARE_HARNESS` ceiling. Each of its nine ordered mutations now

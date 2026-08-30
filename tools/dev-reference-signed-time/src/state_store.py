@@ -4,12 +4,14 @@ from typing import Any
 
 from allocation import AdmittedSample, AllocationState, allocate_response
 from protocol_models import MAX_UINT64, SignedRequest, UnsignedResponse
+from request_protocol import encode_request
 from receipt import Receipt, construct_receipt
 from state_codec import (
-    AuthorityRegistration, encode_allocation_state,
-    encode_authority_registration, encode_receipt,
+    AuthorityRegistration, encode_allocation_state, encode_receipt,
 )
-from state_store_recovery import operation_succeeded, read_committed_receipt
+from state_store_recovery import (
+    _read_committed_receipt, encode_active_registration, operation_succeeded,
+)
 
 _CONFIGURATION_FAILURE = "invalid state store configuration"
 _STORE_FAILURE = "state store operation failed"
@@ -72,17 +74,7 @@ class DynamoStateStore:
         """Conditionally advance state and durably bind one exact request."""
         failed = False
         try:
-            if type(registration) is not AuthorityRegistration or registration.revoked:
-                raise ValueError("registration is not active")
-            if type(request) is not SignedRequest:
-                raise TypeError("request has the wrong type")
-            if (
-                registration.device_id,
-                registration.authority_id,
-                registration.public_key_der,
-            ) != (request.device_id, request.authority_id, request.authority_pubkey):
-                raise ValueError("registration does not match request")
-            registration_item = encode_authority_registration(registration)
+            registration_item = encode_active_registration(request, registration)
             prior_item = encode_allocation_state(state)
             allocation = allocate_response(
                 configured_source_epoch=self._configured_source_epoch,
@@ -110,7 +102,7 @@ class DynamoStateStore:
         except Exception:
             ambiguous = True
         if ambiguous:
-            return self._recover(request)
+            return self._recover(request, registration)
         return receipt
 
     def _write_transaction(self, registration, prior, state, receipt):
@@ -159,18 +151,29 @@ class DynamoStateStore:
             }},
         ]
 
-    def recover_committed(self, request: SignedRequest) -> UnsignedResponse | None:
-        """Recover exact committed response labels without clock admission."""
-        receipt = self._read_committed(request)
+    def recover_committed(
+        self,
+        request: SignedRequest,
+        registration: AuthorityRegistration,
+    ) -> UnsignedResponse | None:
+        """Recover exact committed response labels for an active registration."""
+        receipt = self._read_committed(request, registration)
         return None if receipt is None else receipt.response
 
-    def _read_committed(self, request: SignedRequest) -> Receipt | None:
+    def _read_committed(
+        self,
+        request: SignedRequest,
+        registration: AuthorityRegistration,
+    ) -> Receipt | None:
         failed = False
         try:
-            receipt = read_committed_receipt(
+            canonical_request = encode_request(request)
+            encode_active_registration(request, registration)
+            receipt = _read_committed_receipt(
                 self._transact_get_items,
                 self._table_name,
                 request,
+                canonical_request,
                 self._configured_source_epoch,
                 self._manifest_key_id,
             )
@@ -180,8 +183,12 @@ class DynamoStateStore:
             raise StoreError(_STORE_FAILURE)
         return receipt
 
-    def _recover(self, request: SignedRequest) -> Receipt:
-        receipt = self._read_committed(request)
+    def _recover(
+        self,
+        request: SignedRequest,
+        registration: AuthorityRegistration,
+    ) -> Receipt:
+        receipt = self._read_committed(request, registration)
         if receipt is None:
             raise StoreError(_STORE_FAILURE)
         return receipt
