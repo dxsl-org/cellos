@@ -24,11 +24,17 @@
   canonical uint64 decimals, Ed25519 registration keys, and canonical response
   bytes. Unsigned responses stop at 950 bytes, reserving the exact 74-byte
   worst-case low-S P-256 signature field under the 1,024-byte final wire limit.
-  Public-only golden and malformed vectors round-trip exactly. Focused tests pass
-  87/87, including isolated discovery, and final review found no remaining scoped
-  issue. No clock authentication, transaction persistence, database operation,
-  handler, AWS resource, credential, network call, or deployment action occurred;
-  those steps remain gated.
+  The injected DynamoDB adapter now emits one exact atomic registration check,
+  prior-state CAS, and create-only receipt transaction. Only an exact HTTP 200
+  AWS write envelope with a nonempty request ID confirms the write. Every
+  exception or malformed/non-200 write envelope is ambiguous and never retried:
+  one exact-key transactional read may return only the strictly decoded receipt
+  for the complete authenticated request, and only under its own exact HTTP 200
+  envelope with a nonempty request ID. Public-only golden and malformed vectors
+  round-trip exactly. Focused tests pass 103/103, including isolated discovery,
+  and final review found no remaining scoped issue. No clock authentication,
+  live database operation, handler, AWS resource, credential, network call, or
+  deployment action occurred; those steps remain gated.
 
 - Phase 4's deterministic, non-executing provisioning-plan generator is complete
   only at the `SOFTWARE_HARNESS` ceiling. Each of its nine ordered mutations now
