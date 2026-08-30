@@ -19,6 +19,7 @@ pub mod local_runtime_metrics;
 pub mod noise_identity;
 mod peer_config;
 pub mod relay_config;
+pub mod relay_reconnect;
 pub mod reply_pump;
 pub mod runtime_roles;
 pub mod server_epoch;

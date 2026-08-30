@@ -56,6 +56,7 @@ node B local export -> response -> relay -> node A dedup/response.
 - `cells/services/net-broker/src/connection_manager.rs`
 - `cells/services/net-broker/src/relay_config.rs`
 - `cells/services/net-broker/src/relay_config/tests.rs`
+- `cells/services/net-broker/src/relay_reconnect.rs`
 - `cells/services/net-broker/src/peer_config/ascii.rs`
 - `cells/services/net-broker/src/identity.rs`
 - `tools/relay-server/relay_admission.py`
@@ -95,7 +96,8 @@ node B local export -> response -> relay -> node A dedup/response.
   become route authority.
 - [x] Reject unauthenticated, identity-mismatched, duplicate-live, capacity, and
   stale-disconnect admission transitions without displacing a live route.
-- [ ] Define relay reconnect backoff.
+- [x] Define relay reconnect backoff with equal jitter, exponential growth, a
+  30-second ceiling, and reset only after authenticated session establishment.
 - [x] Separate definite pre-write destination absence from accepted-then-uncertain
   destination write/drain failure with bounded relay error codes.
 - [ ] Define oracle topology and logs retained.
@@ -140,9 +142,10 @@ kernel state requires rollback.
 
 ## Next Steps
 
-Continue local-only relay contract work with reconnect backoff and a future
-correlated client framing decision. Protected client signer qualification still
-blocks Cellos relay wiring, sender-side error mapping, and any two-node oracle.
+Continue local-only relay contract work with a future correlated client framing
+decision and oracle evidence definition. Protected client signer qualification
+still blocks Cellos relay wiring, sender-side error mapping, and any two-node
+oracle.
 
 ## Local Contract Evidence
 
@@ -157,8 +160,10 @@ blocks Cellos relay wiring, sender-side error mapping, and any two-node oracle.
   I/O. `RelayEndpoint` fields are private, so callers cannot construct zero
   ports, invalid hostnames, inconsistent lengths, or nonzero padding; read-only
   accessors expose only parser-validated values. `BrokerIdentity` stores the
-  endpoint without dialing it. Focused broker tests pass 101/101 and the RV64
-  release build passes.
+  endpoint without dialing it. The relay reconnect contract uses allocation-free
+  equal jitter over exponentially growing windows, caps delays at 30 seconds,
+  and resets only after authenticated session establishment. Focused broker
+  tests pass 105/105 and the RV64 release build passes.
 - The pure relay admission table, pre-TLS connection gate, delivery-outcome
   split, certificate-policy negatives, and mTLS wire regressions pass within
   37/37 relay-server tests. Missing/wrong `clientAuth` EKU and non-P-256 keys

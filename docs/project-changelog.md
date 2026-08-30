@@ -100,9 +100,13 @@
   `ERR_DESTINATION_UNAVAILABLE`; the latter is `ERR_DELIVERY_UNCERTAIN`, and no
   server-side success receipt is invented. Added exact negative fixtures for
   missing/wrong `clientAuth` EKU and non-P-256 peer keys; each fails before
-  route admission. Relay-server tests pass 37/37; focused broker tests remain
-  101/101 and the RV64 broker release build passes. Cellos client error mapping,
-  receive wiring, and two-node evidence remain open.
+  route admission. Added allocation-free equal-jitter relay reconnect backoff:
+  the exponential ceiling grows from one to 30 seconds, every delay remains in
+  the upper half of its current window, repeated failures saturate safely, and
+  only authenticated session establishment resets the sequence. Relay-server
+  tests pass 37/37; focused broker tests pass 105/105 and the RV64 broker release
+  build passes. Cellos client error mapping, receive wiring, and two-node
+  evidence remain open.
 
 - Authenticated evidence admission requires an explicitly provisioned,
   operator-owned replay store outside the submitted bundle. Verification binds
