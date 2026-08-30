@@ -20,17 +20,23 @@ pub fn decode_record<A: RecordAuthenticator>(
     input: &[u8],
     authenticator: &A,
 ) -> Result<FullRecord, CodecError> {
-    if input.len() > RECORD_MAX {
-        return Err(WireError::OversizePayload.into());
-    }
-    let body_len = input
-        .len()
-        .checked_sub(TAG_LEN)
-        .ok_or(WireError::Truncated)?;
-    let expected = authenticator.authenticate(&input[..body_len]);
-    if !constant_time_eq(&expected, &input[body_len..]) {
+    if !record_authenticates(input, authenticator)? {
         return Err(CodecError::Authentication);
     }
+    decode_authenticated_record(input)
+}
+
+pub(crate) fn record_authenticates<A: RecordAuthenticator>(
+    input: &[u8],
+    authenticator: &A,
+) -> Result<bool, WireError> {
+    let body_len = body_len(input)?;
+    let expected = authenticator.authenticate(&input[..body_len]);
+    Ok(constant_time_eq(&expected, &input[body_len..]))
+}
+
+pub(crate) fn decode_authenticated_record(input: &[u8]) -> Result<FullRecord, CodecError> {
+    let body_len = body_len(input)?;
     let mut reader = Reader::new(&input[..body_len]);
     if reader.take(4)? != MAGIC {
         return Err(WireError::BadMagic.into());
@@ -67,6 +73,13 @@ pub fn decode_record<A: RecordAuthenticator>(
     };
     record.validate()?;
     Ok(record)
+}
+
+fn body_len(input: &[u8]) -> Result<usize, WireError> {
+    if input.len() > RECORD_MAX {
+        return Err(WireError::OversizePayload);
+    }
+    input.len().checked_sub(TAG_LEN).ok_or(WireError::Truncated)
 }
 
 fn get_hardware(reader: &mut Reader<'_>) -> Result<HardwareBindings, WireError> {

@@ -11,7 +11,7 @@ pub fn verify_protected_successor(
 ) -> Result<(), AuthorityFault> {
     let valid = previous.invariants_hold()
         && next.invariants_hold()
-        && next.revision == previous.revision.checked_add(1).unwrap_or(0)
+        && previous.revision.checked_add(1) == Some(next.revision)
         && previous.device_id == next.device_id
         && previous.authority_id == next.authority_id
         && previous.authority_epoch == next.authority_epoch

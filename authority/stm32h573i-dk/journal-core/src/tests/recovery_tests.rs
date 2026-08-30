@@ -11,6 +11,91 @@ fn one_exact_current_slot_recovers_while_old_or_torn_slot_is_ignored() {
 }
 
 #[test]
+fn current_record_requires_its_authenticated_exact_predecessor() {
+    let prior = full_record(SlotRole::A);
+    let current = successor(&prior);
+    let prior_bytes = encode_full(&prior);
+    let current_bytes = encode_full(&current);
+    let recovered = recover(
+        2,
+        [Some(&prior_bytes), Some(&current_bytes)],
+        &TestAuth,
+        &identity(),
+    )
+    .unwrap();
+    assert_eq!(recovered.record(), &current);
+    assert_eq!(
+        recover(2, [None, Some(&current_bytes)], &TestAuth, &identity()),
+        Err(RecoveryError::Sealed)
+    );
+}
+
+#[test]
+fn individually_valid_but_illegal_successor_seals() {
+    let prior = full_record(SlotRole::A);
+    let mut current = successor(&prior);
+    current.hardware.manifest_key_digest = [0x55; 32];
+    assert_eq!(current.validate(), Ok(()));
+    assert_eq!(
+        recover(
+            2,
+            [Some(&encode_full(&prior)), Some(&encode_full(&current))],
+            &TestAuth,
+            &identity(),
+        ),
+        Err(RecoveryError::Sealed)
+    );
+}
+
+#[test]
+fn authenticated_identity_mismatch_cannot_hide_beside_valid_current() {
+    let mut prior = full_record(SlotRole::A);
+    let current = successor(&prior);
+    prior.hardware.lane_id = [0x44; 32];
+    assert_eq!(
+        recover(
+            2,
+            [Some(&encode_full(&prior)), Some(&encode_full(&current))],
+            &TestAuth,
+            &identity(),
+        ),
+        Err(RecoveryError::Sealed)
+    );
+}
+
+#[test]
+fn authenticated_nonchain_counter_seals_instead_of_being_skipped() {
+    let stale = record_at(1, SlotRole::A);
+    let current = record_at(3, SlotRole::B);
+    assert_eq!(
+        recover(
+            3,
+            [Some(&encode_full(&stale)), Some(&encode_full(&current))],
+            &TestAuth,
+            &identity(),
+        ),
+        Err(RecoveryError::Sealed)
+    );
+}
+
+#[test]
+fn authenticated_slot_role_mismatch_cannot_hide_beside_valid_current() {
+    let wrong_role_prior = record_at(1, SlotRole::B);
+    let current = successor(&full_record(SlotRole::A));
+    assert_eq!(
+        recover(
+            2,
+            [
+                Some(&encode_full(&wrong_role_prior)),
+                Some(&encode_full(&current)),
+            ],
+            &TestAuth,
+            &identity(),
+        ),
+        Err(RecoveryError::Sealed)
+    );
+}
+#[test]
 fn stale_future_and_wrong_identity_records_seal() {
     let current = encoded(SlotRole::A);
     assert_eq!(

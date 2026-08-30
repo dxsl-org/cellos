@@ -10,6 +10,17 @@ fn exact_same_state_revision_successor_is_allowed() {
 }
 
 #[test]
+fn revision_exhaustion_cannot_wrap_to_zero() {
+    let opened = opened_record();
+    let exhausted = rewrite(&opened, u64::MAX, |_| {});
+    let wrapped = rewrite(&opened, 0, |_| {});
+    assert_eq!(
+        verify_protected_successor(&exhausted, &wrapped),
+        Err(AuthorityFault::PersistenceFailure)
+    );
+}
+
+#[test]
 fn sealed_record_is_absorbing() {
     let serving = opened_record();
     let sealed = rewrite(&serving, 2, |bytes| bytes[13] = 3);

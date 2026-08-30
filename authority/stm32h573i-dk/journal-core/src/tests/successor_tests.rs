@@ -99,9 +99,11 @@ fn pending_state_requires_pending_material_and_preserves_no_previous_active() {
 
 #[test]
 fn counter_exhaustion_irreversibly_seals() {
-    let current = record_at(u64::MAX, SlotRole::A);
+    let prior = record_at(u64::MAX - 1, SlotRole::A);
+    let current = record_at(u64::MAX, SlotRole::B);
     let mut storage = FakeStorage::empty(StorageFault::None);
-    storage.slots[0] = encode_full(&current);
+    storage.slots[0] = encode_full(&prior);
+    storage.slots[1] = encode_full(&current);
     let mut journal = Journal::new(counter(u64::MAX), storage, TestAuth, identity());
     assert_eq!(
         journal.commit(full_record(SlotRole::B)),

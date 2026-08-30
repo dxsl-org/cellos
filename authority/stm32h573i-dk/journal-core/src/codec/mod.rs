@@ -3,6 +3,7 @@ mod encode;
 mod io;
 
 pub use decode::decode_record;
+pub(crate) use decode::{decode_authenticated_record, record_authenticates};
 pub use encode::encode_record;
 
 use crate::RecordError;

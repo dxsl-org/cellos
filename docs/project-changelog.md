@@ -9,13 +9,16 @@
   canonical Phase 2 protected record with complete PERSIST-003 hardware/profile
   bindings, re-authenticates the actual current slot internally, validates exact
   Phase 2 boot/time/relay successors plus Phase 4 profile and hardware floors,
-  writes only after counter increment, and uses an irreversible absorbing
-  counter-domain seal. Direct reboot snapshots cover every inactive-slot byte
-  prefix after increment without relying on error return: incomplete writes
-  seal and a complete authenticated write recovers exactly the new record.
-  Twenty journal tests and the complete 26-test authority-protocol suite pass,
-  together with RV64 no_std checks. This proves software ordering and recovery
-  only; TPM NV behavior, STM32 flash atomicity, lifecycle/debug protection,
+  requires the authenticated counter-minus-one slot to prove each post-genesis
+  recovery edge, writes only after counter increment, and uses an irreversible
+  absorbing counter-domain seal. Authenticated role, identity, stale-counter,
+  and illegal-successor mismatches seal rather than being skipped. Direct reboot
+  snapshots cover every inactive-slot byte prefix after increment without
+  relying on error return: incomplete writes seal and a complete authenticated
+  write recovers exactly the new record. Twenty-five journal tests and the
+  complete 27-test authority-protocol suite pass, together with RV64 no_std
+  checks. This proves software ordering and recovery only; TPM NV behavior,
+  STM32 flash atomicity, lifecycle/debug protection,
   isolation, endurance, and physical power loss remain hardware-gated.
 
 - ADR-0010 freezes the VF2 `DEV_REFERENCE` root stream as one bounded

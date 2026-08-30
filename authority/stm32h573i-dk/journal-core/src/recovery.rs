@@ -1,4 +1,7 @@
-use crate::{decode_record, FullRecord, RecordAuthenticator, SlotRole};
+use crate::{
+    codec::{decode_authenticated_record, record_authenticates},
+    FullRecord, RecordAuthenticator, SlotRole,
+};
 use authority_protocol::DIGEST_LEN;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -25,7 +28,7 @@ pub enum RecoveryError {
     Ambiguous,
 }
 
-/// Recover exactly one authenticated record matching the protected counter.
+/// Recover one authenticated counter head and its exact predecessor chain.
 pub fn recover<A: RecordAuthenticator>(
     counter: u64,
     slots: [Option<&[u8]>; 2],
@@ -35,24 +38,44 @@ pub fn recover<A: RecordAuthenticator>(
     if counter == 0 {
         return Err(RecoveryError::Sealed);
     }
-    let mut recovered = None;
+    let prior_counter = counter.checked_sub(1);
+    let mut current = None;
+    let mut prior = None;
     for (index, bytes) in slots.into_iter().enumerate() {
         let Some(bytes) = bytes else { continue };
-        let Ok(record) = decode_record(bytes, authenticator) else {
-            continue;
-        };
-        if record.counter != counter
-            || record.slot_role != role(index)
-            || !identity_matches(&record, expected)
-        {
+        let authenticated = record_authenticates(bytes, authenticator).unwrap_or(false);
+        if !authenticated {
             continue;
         }
-        if recovered.is_some() {
-            return Err(RecoveryError::Ambiguous);
+        let record = decode_authenticated_record(bytes).map_err(|_| RecoveryError::Sealed)?;
+        if record.slot_role != role(index) || !identity_matches(&record, expected) {
+            return Err(RecoveryError::Sealed);
         }
-        recovered = Some(RecoveredRecord { record });
+        if record.counter == counter {
+            insert_unique(&mut current, record)?;
+        } else if counter > 1 && Some(record.counter) == prior_counter {
+            insert_unique(&mut prior, record)?;
+        } else {
+            return Err(RecoveryError::Sealed);
+        }
     }
-    recovered.ok_or(RecoveryError::Sealed)
+    let current = current.ok_or(RecoveryError::Sealed)?;
+    if counter == 1 {
+        return Ok(RecoveredRecord { record: current });
+    }
+    let prior = prior.ok_or(RecoveryError::Sealed)?;
+    current
+        .validate_successor(Some(&prior))
+        .map_err(|_| RecoveryError::Sealed)?;
+    Ok(RecoveredRecord { record: current })
+}
+
+fn insert_unique(target: &mut Option<FullRecord>, record: FullRecord) -> Result<(), RecoveryError> {
+    if target.is_some() {
+        return Err(RecoveryError::Ambiguous);
+    }
+    *target = Some(record);
+    Ok(())
 }
 
 fn identity_matches(record: &FullRecord, expected: &ExpectedIdentity) -> bool {

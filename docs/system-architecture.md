@@ -411,18 +411,21 @@ boot, signed-time challenge/lease, relay transaction, identity, and monotonic
 floor edges without changing its v1 bytes or operation set. Phase 4 adds the
 lane/boot/loader/manifest-key, firmware/policy, trust-policy, bounded canonical
 SPKI/profile, counter, and physical-slot bindings.
-
 Commit always re-reads and authenticates the actual current slot, increments the
 abstract non-orderly counter, writes only the inactive complete slot, and
 authenticates/decodes read-back before returning. The recovery token is opaque.
-Missing, torn, replayed, cross-device, wrong-role, same-counter ambiguous, floor-
-regressed, or illegal-successor state invokes an irreversible counter-domain
-seal; the in-memory journal is also absorbing. The power-cut harness reboots
-directly from every persistent inactive-slot byte prefix after counter increment
-without allowing `commit` to return: all incomplete prefixes seal, while a
-complete authenticated write recovers exactly the new record.
+After genesis, recovery requires both the authenticated counter head and the
+counter-minus-one slot, then revalidates their exact Phase 2 and Phase 4
+successor edge. Authenticated wrong-role, cross-identity, stale/future counter,
+or illegal-successor records seal rather than being skipped. Missing, torn,
+replayed, same-counter ambiguous, floor-regressed, or otherwise invalid state
+also invokes an irreversible counter-domain seal; the in-memory journal is
+absorbing. The power-cut harness reboots directly from every persistent
+inactive-slot byte prefix after counter increment without allowing `commit` to
+return: all incomplete prefixes seal, while a complete authenticated write
+recovers exactly the new record.
 
-The no_std core and full `authority-protocol` suite pass 20 and 26 focused host
+The no_std core and full `authority-protocol` suite pass 25 and 27 focused host
 tests respectively. The counter, authenticator, and slots are explicit
 `SOFTWARE_HARNESS` seams. These results prove codec, transition, ordering, and
 snapshot-model behavior only; they do not prove SLB9672 NV semantics, STM32
