@@ -22,8 +22,71 @@ pub fn stage(
         pending_spki_digest: [7; 32],
         profile_digest: digest,
         tpm_public_digest: [6; 32],
-        profile: Bounded::from_slice(&digest).unwrap(),
+        upload_handle: 44,
+        profile_len: 32,
     }
+}
+
+pub fn upload_request(
+    sequence: u64,
+    boot: u64,
+    generation: u64,
+    digest: [u8; 32],
+) -> BeginRelayProfileUploadRequest {
+    BeginRelayProfileUploadRequest {
+        context: context(sequence, boot, Operation::BeginRelayProfileUpload),
+        upload_handle: 44,
+        generation,
+        policy_epoch: 1,
+        pending_slot: 0,
+        pending_spki_digest: [7; 32],
+        profile_digest: digest,
+        tpm_public_digest: [6; 32],
+        profile_len: 32,
+    }
+}
+
+pub fn begin_upload(
+    sequence: u64,
+    boot: u64,
+    generation: u64,
+    digest: [u8; 32],
+) -> ValidatedRequest<BeginRelayProfileUploadRequest> {
+    validated(upload_request(sequence, boot, generation, digest))
+}
+
+pub fn write_profile(
+    sequence: u64,
+    boot: u64,
+    digest: [u8; 32],
+) -> ValidatedRequest<WriteRelayProfileChunkRequest> {
+    validated(WriteRelayProfileChunkRequest {
+        context: context(sequence, boot, Operation::WriteRelayProfileChunk),
+        upload_handle: 44,
+        chunk_index: 0,
+        chunk: Bounded::from_slice(&digest).unwrap(),
+    })
+}
+
+pub fn complete_upload(
+    state: &mut TestState,
+    first_sequence: u64,
+    boot: u64,
+    generation: u64,
+    digest: [u8; 32],
+) -> RelayIntent {
+    let upload = state
+        .authorize_profile_upload(&begin_upload(first_sequence, boot, generation, digest))
+        .unwrap();
+    state.acknowledge_profile_upload(&upload).unwrap();
+    let chunk = state
+        .authorize_profile_chunk(&write_profile(first_sequence + 1, boot, digest))
+        .unwrap();
+    state.acknowledge_profile_chunk(&chunk).unwrap();
+    let request = super::validated(stage(first_sequence + 2, boot, generation, digest));
+    let admitted = state.admit_profile_validation(&request).unwrap();
+    let verified = verify_root_profile(admitted, &super::ProfilePolicy).unwrap();
+    state.stage_profile(&verified).unwrap()
 }
 
 pub fn consume(
@@ -68,6 +131,8 @@ pub fn promote(state: &mut TestState, request: &ValidatedRequest<CommitRelayGene
         profile_digest: intent.profile_digest,
         boot_epoch: intent.boot_epoch,
         validation_request_id: intent.validation_request_id,
+        upload_handle: intent.upload_handle,
+        profile_len: intent.profile_len,
         provider_signature: [9; 64],
     };
     let verified = verify_provider_cas_receipt(receipt, &CasPolicy).unwrap();

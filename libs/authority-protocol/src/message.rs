@@ -15,7 +15,9 @@ pub const SIGNATURE_LEN: usize = 64;
 pub const RESPONSE_AUTH_INPUT_LEN: usize = 113;
 pub const RESPONSE_BINDING_WIRE_LEN: usize = 177;
 pub const HOSTNAME_MAX: usize = 64;
-pub const PROFILE_MAX: usize = 768;
+pub const PROFILE_CHUNK_MAX: usize = 768;
+pub const PROFILE_MAX_LEN: usize = 12_288;
+pub const PROFILE_MAX_CHUNKS: usize = 16;
 pub const CSR_CHUNK_MAX: usize = 104;
 pub const TLS_SIGNATURE_MAX: usize = 72;
 
@@ -177,12 +179,14 @@ request_types! {
     AcceptSignedTimeRequest => AcceptSignedTime { time_request_id: [u8; 16], purpose: u8, source_epoch: u64, source_sequence: u64, unix_seconds: i64, expires_at: u64, nonce: [u8; DIGEST_LEN], source_signature: Bounded<TLS_SIGNATURE_MAX> },
     BeginRelayEnrollmentRequest => BeginRelayEnrollment { hostname: Bounded<HOSTNAME_MAX> },
     ReadRelayCsrChunkRequest => ReadRelayCsrChunk { csr_handle: u64, chunk_index: u32 },
-    ValidateAndStageRelayProfileRequest => ValidateAndStageRelayProfile { generation: u64, policy_epoch: u64, pending_slot: u8, pending_spki_digest: [u8; DIGEST_LEN], profile_digest: [u8; DIGEST_LEN], tpm_public_digest: [u8; DIGEST_LEN], profile: Bounded<PROFILE_MAX> },
+    ValidateAndStageRelayProfileRequest => ValidateAndStageRelayProfile { generation: u64, policy_epoch: u64, pending_slot: u8, pending_spki_digest: [u8; DIGEST_LEN], profile_digest: [u8; DIGEST_LEN], tpm_public_digest: [u8; DIGEST_LEN], upload_handle: u64, profile_len: u32 },
     ConsumeStagedRelayProfileRequest => ConsumeStagedRelayProfile { generation: u64, policy_epoch: u64, profile_digest: [u8; DIGEST_LEN] },
     CommitRelayGenerationRequest => CommitRelayGeneration { generation: u64, policy_epoch: u64, profile_digest: [u8; DIGEST_LEN] },
     AbortRelayEnrollmentRequest => AbortRelayEnrollment { generation: u64 },
     GetRelayActivePublicKeyRequest => GetRelayActivePublicKey {},
     SignTls13ClientCertificateVerifyRequest => SignTls13ClientCertificateVerify { transcript_hash: [u8; DIGEST_LEN], relay_generation: u64, active_profile_digest: [u8; DIGEST_LEN], public_request_id: u64 },
+    BeginRelayProfileUploadRequest => BeginRelayProfileUpload { upload_handle: u64, generation: u64, policy_epoch: u64, pending_slot: u8, pending_spki_digest: [u8; DIGEST_LEN], profile_digest: [u8; DIGEST_LEN], tpm_public_digest: [u8; DIGEST_LEN], profile_len: u32 },
+    WriteRelayProfileChunkRequest => WriteRelayProfileChunk { upload_handle: u64, chunk_index: u8, chunk: Bounded<PROFILE_CHUNK_MAX> },
 }
 
 pub const REQUEST_CONTEXT_WIRE_LEN: usize = 185;

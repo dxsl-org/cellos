@@ -160,22 +160,31 @@ pub fn pending_record() -> FullRecord {
     let mut fixed = [0u8; PROTECTED_RECORD_MAX];
     let length = base.protected.encode_canonical(&mut fixed).unwrap();
     let mut bytes = fixed[..length].to_vec();
-    bytes[24] = 1;
-    let mut pending = Vec::new();
-    pending.extend_from_slice(&1u64.to_le_bytes());
     bytes[5..13].copy_from_slice(&2u64.to_le_bytes());
-    pending.extend_from_slice(&1u64.to_le_bytes());
-    bytes.splice(25..25, pending);
-    bytes[121..129].copy_from_slice(&1u64.to_le_bytes());
+    let mut relay = Vec::new();
+    relay.push(1);
+    relay.extend_from_slice(&1u64.to_le_bytes());
+    relay.extend_from_slice(&1u64.to_le_bytes());
+    relay.push(0);
+    let shift = relay.len() - 1;
+    bytes.splice(24..25, relay);
+    bytes[105 + shift..113 + shift].copy_from_slice(&1u64.to_le_bytes());
     let protected = ProtectedAuthorityRecord::decode_canonical(&bytes).unwrap();
     FullRecord {
         counter: 2,
         slot_role: SlotRole::B,
         protected,
         pending: Some(ProfileMaterial {
+            device_id: [1; 32],
+            authority_id: [2; 32],
+            authority_epoch: 1,
+            boot_epoch: 1,
             slot: 0,
+            generation: 1,
+            profile_len: 0,
+            profile_digest: [0; 32],
+            tpm_public_digest: [13; 32],
             spki: Bounded::from_slice(b"pending-spki").unwrap(),
-            profile: Bounded::from_slice(&[]).unwrap(),
         }),
         ..base
     }

@@ -29,6 +29,7 @@ impl<S: ProtectedStore> AuthorityState<S> {
             RelayProfileState::Pending {
                 generation,
                 csr_handle,
+                ..
             } if request.csr_handle == csr_handle => self.persist_value(CsrChunkIntent {
                 generation,
                 csr_handle,

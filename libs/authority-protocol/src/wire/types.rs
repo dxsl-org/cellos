@@ -15,6 +15,8 @@ pub enum Operation {
     AbortRelayEnrollment = 10,
     GetRelayActivePublicKey = 11,
     SignTls13ClientCertificateVerify = 12,
+    BeginRelayProfileUpload = 13,
+    WriteRelayProfileChunk = 14,
 }
 
 impl TryFrom<u8> for Operation {
@@ -35,6 +37,8 @@ impl TryFrom<u8> for Operation {
             10 => AbortRelayEnrollment,
             11 => GetRelayActivePublicKey,
             12 => SignTls13ClientCertificateVerify,
+            13 => BeginRelayProfileUpload,
+            14 => WriteRelayProfileChunk,
             _ => return Err(value),
         })
     }

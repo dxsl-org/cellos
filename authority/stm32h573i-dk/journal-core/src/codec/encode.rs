@@ -55,11 +55,17 @@ fn put_profile(writer: &mut Writer<'_>, value: Option<&ProfileMaterial>) -> Resu
         return writer.u8(0);
     };
     writer.u8(1)?;
+    writer.put(&value.device_id)?;
+    writer.put(&value.authority_id)?;
+    writer.u64(value.authority_epoch)?;
+    writer.u64(value.boot_epoch)?;
     writer.u8(value.slot)?;
+    writer.u64(value.generation)?;
+    writer.u32(value.profile_len)?;
+    writer.put(&value.profile_digest)?;
+    writer.put(&value.tpm_public_digest)?;
     writer.u16(length(value.spki.len())?)?;
-    writer.put(value.spki.as_slice())?;
-    writer.u16(length(value.profile.len())?)?;
-    writer.put(value.profile.as_slice())
+    writer.put(value.spki.as_slice())
 }
 
 fn length(value: usize) -> Result<u16, WireError> {

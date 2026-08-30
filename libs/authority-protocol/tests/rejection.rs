@@ -31,7 +31,7 @@ fn envelope_mutations_fail_closed() {
     assert!(decode_typed_request(&frame[..length]).is_ok());
 
     let mut mutant = frame;
-    mutant[4] = 2;
+    mutant[4] = 1;
     assert_eq!(
         decode_typed_request(&mutant[..length]),
         Err(WireError::UnsupportedVersion)
@@ -130,6 +130,36 @@ fn malformed_der_and_noncanonical_profile_fields_are_rejected() {
         .unwrap();
     assert_eq!(
         TypedRequest::decode_payload(Operation::ValidateAndStageRelayProfile, &payload[..length]),
+        Err(WireError::InvalidLength)
+    );
+}
+
+#[test]
+fn upload_handles_lengths_indices_and_chunks_are_bounded() {
+    let mut payload = [0u8; FRAME_MAX_PAYLOAD];
+    let begin = BeginRelayProfileUploadRequest {
+        upload_handle: 0,
+        ..upload_request(2, 1, 1, [8; 32])
+    };
+    let length = TypedRequest::BeginRelayProfileUpload(begin)
+        .encode_payload(&mut payload)
+        .unwrap();
+    assert_eq!(
+        TypedRequest::decode_payload(Operation::BeginRelayProfileUpload, &payload[..length]),
+        Err(WireError::InvalidLength)
+    );
+
+    let chunk = WriteRelayProfileChunkRequest {
+        context: context(2, 1, Operation::WriteRelayProfileChunk),
+        upload_handle: 1,
+        chunk_index: PROFILE_MAX_CHUNKS as u8,
+        chunk: Bounded::from_slice(&[1]).unwrap(),
+    };
+    let length = TypedRequest::WriteRelayProfileChunk(chunk)
+        .encode_payload(&mut payload)
+        .unwrap();
+    assert_eq!(
+        TypedRequest::decode_payload(Operation::WriteRelayProfileChunk, &payload[..length]),
         Err(WireError::InvalidLength)
     );
 }

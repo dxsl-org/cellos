@@ -2,7 +2,7 @@
 #![forbid(unsafe_code)]
 //! Closed private AP↔STM32 protocol for the terminal `DEV_REFERENCE` lane.
 //!
-//! The carrier is untrusted. Exactly twelve typed operations exist; runtime
+//! The carrier is untrusted. Exactly fourteen typed operations exist; runtime
 //! provisioning, unseal, reset, arbitrary execution, and caller-selected keys
 //! are intentionally unrepresentable.
 
@@ -18,16 +18,17 @@ pub use message::*;
 pub use state::{
     verify_protected_record, verify_protected_successor, AuthorityMode, AuthorityState,
     AuthorityStateConfig, BootState, CsrChunkIntent, EnrollmentIntent, OpenedBootFact,
-    PendingTimeChallenge, PreparedCommitIntent, ProtectedAuthorityRecord, ProtectedRecordBindings,
+    PendingTimeChallenge, PreparedCommitIntent, ProfileChunkIntent, ProfileChunkMode,
+    ProfileUploadIntent, ProtectedAuthorityRecord, ProtectedRecordBindings,
     ProtectedRecordVerifier, ProtectedStore, ProtectedTimeFloors, RelayIntent, RelayProfileState,
     TimeChallengeSource, TimePurpose, TimeState, TlsSignatureIntent, TrustedClock,
     VerifiedProtectedRecord, PROTECTED_RECORD_MAX,
 };
 pub use validation::{
     is_strict_p256_der_signature, verify_boot_measurement, verify_provider_cas_receipt,
-    verify_root_profile, verify_signed_time, BootMeasurementVerifier, ProviderCasReceipt,
-    ProviderCasVerifier, RootProfileVerifier, RootValidatedProfile, SignedTimeVerifier,
-    VerifiedBootMeasurement, VerifiedProviderCasReceipt, VerifiedSignedTime,
+    verify_root_profile, verify_signed_time, AdmittedProfileValidation, BootMeasurementVerifier,
+    ProviderCasReceipt, ProviderCasVerifier, RootProfileVerifier, RootValidatedProfile,
+    SignedTimeVerifier, VerifiedBootMeasurement, VerifiedProviderCasReceipt, VerifiedSignedTime,
 };
 pub use wire::{
     decode_fault, decode_fault_frame, decode_typed_request, decode_typed_response,
@@ -37,7 +38,7 @@ pub use wire::{
 };
 
 pub const FRAME_MAGIC: [u8; 4] = *b"AUTH";
-pub const PROTOCOL_VERSION: u8 = 1;
+pub const PROTOCOL_VERSION: u8 = 2;
 pub const LANE_DEV_REFERENCE: u8 = 1;
 pub const FRAME_HEADER_LEN: usize = 36;
 pub const FRAME_MAX_PAYLOAD: usize = 1200;

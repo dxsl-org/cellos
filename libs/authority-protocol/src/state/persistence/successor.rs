@@ -1,8 +1,8 @@
+mod helpers;
+use helpers::{enrolled, stable, time_floors_strictly_advance};
+
 use super::ProtectedAuthorityRecord;
-use crate::{
-    AuthorityFault, AuthorityMode, BootState, ProtectedTimeFloors, RelayIntent, RelayProfileState,
-    TimeState,
-};
+use crate::{AuthorityFault, AuthorityMode, BootState, RelayProfileState, TimeState};
 
 /// Verify that `next` is one legal persisted Phase-2 transition after `previous`.
 pub fn verify_protected_successor(
@@ -107,15 +107,50 @@ fn relay_advances(previous: &ProtectedAuthorityRecord, next: &ProtectedAuthority
         return previous.generation_floor == next.generation_floor;
     }
     match (old, new) {
-        (RelayProfileState::Empty, RelayProfileState::Pending { generation, .. }) => {
-            enrolled(previous, next, None, generation)
-        }
-        (RelayProfileState::Active(active), RelayProfileState::Pending { generation, .. }) => {
-            enrolled(previous, next, Some(active), generation)
-        }
-        (RelayProfileState::Pending { generation, .. }, RelayProfileState::Staged(intent)) => {
+        (
+            RelayProfileState::Empty,
+            RelayProfileState::Pending {
+                generation,
+                pending_slot,
+                ..
+            },
+        ) => enrolled(previous, next, None, generation, pending_slot),
+        (
+            RelayProfileState::Active(active),
+            RelayProfileState::Pending {
+                generation,
+                pending_slot,
+                ..
+            },
+        ) => enrolled(previous, next, Some(active), generation, pending_slot),
+        (
+            RelayProfileState::Pending {
+                generation,
+                csr_handle,
+                pending_slot,
+            },
+            RelayProfileState::Uploading(upload),
+        ) => {
             stable(previous, next)
-                && generation == intent.generation
+                && generation == upload.generation
+                && csr_handle == upload.csr_handle
+                && pending_slot == upload.pending_slot
+                && upload.next_index == 0
+                && previous.previous_active == next.previous_active
+        }
+        (RelayProfileState::Uploading(old), RelayProfileState::Uploading(new)) => {
+            stable(previous, next)
+                && old.next_index.checked_add(1) == Some(new.next_index)
+                && (crate::ProfileUploadIntent {
+                    next_index: new.next_index,
+                    ..old
+                }) == new
+                && previous.previous_active == next.previous_active
+        }
+        (RelayProfileState::Uploading(upload), RelayProfileState::Staged(intent)) => {
+            stable(previous, next)
+                && upload.complete()
+                && upload.matches_relay_intent(&intent)
                 && previous.previous_active == next.previous_active
         }
         (RelayProfileState::Staged(old), RelayProfileState::ReceiptConsumed(new))
@@ -130,6 +165,7 @@ fn relay_advances(previous: &ProtectedAuthorityRecord, next: &ProtectedAuthority
         }
         (
             RelayProfileState::Pending { .. }
+            | RelayProfileState::Uploading(_)
             | RelayProfileState::Staged(_)
             | RelayProfileState::ReceiptConsumed(_),
             RelayProfileState::Empty,
@@ -140,6 +176,7 @@ fn relay_advances(previous: &ProtectedAuthorityRecord, next: &ProtectedAuthority
         }
         (
             RelayProfileState::Pending { .. }
+            | RelayProfileState::Uploading(_)
             | RelayProfileState::Staged(_)
             | RelayProfileState::ReceiptConsumed(_),
             RelayProfileState::Active(new),
@@ -150,25 +187,4 @@ fn relay_advances(previous: &ProtectedAuthorityRecord, next: &ProtectedAuthority
         }
         _ => false,
     }
-}
-
-fn enrolled(
-    previous: &ProtectedAuthorityRecord,
-    next: &ProtectedAuthorityRecord,
-    active: Option<RelayIntent>,
-    generation: u64,
-) -> bool {
-    previous.generation_floor.checked_add(1) == Some(generation)
-        && next.generation_floor == generation
-        && next.previous_active == active
-}
-
-fn stable(previous: &ProtectedAuthorityRecord, next: &ProtectedAuthorityRecord) -> bool {
-    previous.generation_floor == next.generation_floor
-}
-
-fn time_floors_strictly_advance(old: ProtectedTimeFloors, new: ProtectedTimeFloors) -> bool {
-    new.unix_seconds > old.unix_seconds
-        && (new.source_epoch > old.source_epoch
-            || (new.source_epoch == old.source_epoch && new.source_sequence > old.source_sequence))
 }

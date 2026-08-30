@@ -37,14 +37,19 @@ impl TypedResponse {
                 expires_at: reader.u64()?,
             }),
             Operation::BeginRelayEnrollment => {
-                Self::BeginRelayEnrollment(BeginRelayEnrollmentResponse {
+                let value = BeginRelayEnrollmentResponse {
                     binding,
                     generation: reader.u64()?,
                     policy_epoch: reader.u64()?,
+                    pending_slot: reader.u8()?,
                     csr_handle: reader.u64()?,
                     csr_len: reader.u32()?,
                     csr_digest: reader.array()?,
-                })
+                };
+                if value.pending_slot > 1 {
+                    return Err(WireError::InvalidLength);
+                }
+                Self::BeginRelayEnrollment(value)
             }
             Operation::ReadRelayCsrChunk => Self::ReadRelayCsrChunk(ReadRelayCsrChunkResponse {
                 binding,
@@ -52,20 +57,30 @@ impl TypedResponse {
                 chunk: reader.bounded()?,
             }),
             Operation::ValidateAndStageRelayProfile => {
+                let receipt = StagedProfileReceipt {
+                    device_id: reader.array()?,
+                    authority_id: reader.array()?,
+                    authority_epoch: reader.u64()?,
+                    generation: reader.u64()?,
+                    policy_epoch: reader.u64()?,
+                    pending_slot: reader.u8()?,
+                    pending_spki_digest: reader.array()?,
+                    profile_digest: reader.array()?,
+                    boot_epoch: reader.u64()?,
+                    upload_handle: reader.u64()?,
+                    profile_len: reader.u32()?,
+                    validation_request_id: reader.u64()?,
+                };
+                if receipt.pending_slot > 1
+                    || receipt.upload_handle == 0
+                    || receipt.profile_len == 0
+                    || receipt.profile_len as usize > PROFILE_MAX_LEN
+                {
+                    return Err(WireError::InvalidLength);
+                }
                 Self::ValidateAndStageRelayProfile(ValidateAndStageRelayProfileResponse {
                     binding,
-                    receipt: StagedProfileReceipt {
-                        device_id: reader.array()?,
-                        authority_id: reader.array()?,
-                        authority_epoch: reader.u64()?,
-                        generation: reader.u64()?,
-                        policy_epoch: reader.u64()?,
-                        pending_slot: reader.u8()?,
-                        pending_spki_digest: reader.array()?,
-                        profile_digest: reader.array()?,
-                        boot_epoch: reader.u64()?,
-                        validation_request_id: reader.u64()?,
-                    },
+                    receipt,
                 })
             }
             Operation::ConsumeStagedRelayProfile => {
@@ -106,6 +121,41 @@ impl TypedResponse {
                     binding,
                     signature: reader.array()?,
                 })
+            }
+            Operation::BeginRelayProfileUpload => {
+                let value = BeginRelayProfileUploadResponse {
+                    binding,
+                    upload_handle: reader.u64()?,
+                    profile_len: reader.u32()?,
+                    chunk_size: reader.u16()?,
+                    next_index: reader.u8()?,
+                };
+                let size = PROFILE_CHUNK_MAX as u32;
+                let chunks = value.profile_len.div_ceil(size);
+                if value.upload_handle == 0
+                    || value.profile_len == 0
+                    || value.profile_len as usize > PROFILE_MAX_LEN
+                    || value.chunk_size as usize != PROFILE_CHUNK_MAX
+                    || value.next_index as u32 > chunks
+                {
+                    return Err(WireError::InvalidLength);
+                }
+                Self::BeginRelayProfileUpload(value)
+            }
+            Operation::WriteRelayProfileChunk => {
+                let value = WriteRelayProfileChunkResponse {
+                    binding,
+                    upload_handle: reader.u64()?,
+                    next_index: reader.u8()?,
+                    complete: reader.u8()?,
+                };
+                if value.upload_handle == 0
+                    || value.next_index as usize > PROFILE_MAX_CHUNKS
+                    || value.complete > 1
+                {
+                    return Err(WireError::InvalidLength);
+                }
+                Self::WriteRelayProfileChunk(value)
             }
         };
         reader.finish()?;

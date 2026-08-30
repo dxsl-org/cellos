@@ -71,6 +71,24 @@ impl TypedRequest {
                     public_request_id: reader.u64()?,
                 })
             }
+            Operation::BeginRelayProfileUpload => {
+                Self::BeginRelayProfileUpload(read_upload(context, &mut reader)?)
+            }
+            Operation::WriteRelayProfileChunk => {
+                let value = WriteRelayProfileChunkRequest {
+                    context,
+                    upload_handle: reader.u64()?,
+                    chunk_index: reader.u8()?,
+                    chunk: reader.bounded()?,
+                };
+                if value.upload_handle == 0
+                    || value.chunk_index as usize >= PROFILE_MAX_CHUNKS
+                    || value.chunk.is_empty()
+                {
+                    return Err(WireError::InvalidLength);
+                }
+                Self::WriteRelayProfileChunk(value)
+            }
         };
         reader.finish()?;
         Ok(request)
@@ -110,12 +128,45 @@ fn read_profile(
         pending_spki_digest: reader.array()?,
         profile_digest: reader.array()?,
         tpm_public_digest: reader.array()?,
-        profile: reader.bounded()?,
+        upload_handle: reader.u64()?,
+        profile_len: reader.u32()?,
     };
-    if value.pending_slot > 1 || value.profile.is_empty() {
+    validate_profile_metadata(value.pending_slot, value.upload_handle, value.profile_len)?;
+    Ok(value)
+}
+
+fn read_upload(
+    context: RequestContext,
+    reader: &mut Reader<'_>,
+) -> Result<BeginRelayProfileUploadRequest, WireError> {
+    let value = BeginRelayProfileUploadRequest {
+        context,
+        upload_handle: reader.u64()?,
+        generation: reader.u64()?,
+        policy_epoch: reader.u64()?,
+        pending_slot: reader.u8()?,
+        pending_spki_digest: reader.array()?,
+        profile_digest: reader.array()?,
+        tpm_public_digest: reader.array()?,
+        profile_len: reader.u32()?,
+    };
+    validate_profile_metadata(value.pending_slot, value.upload_handle, value.profile_len)?;
+    Ok(value)
+}
+
+fn validate_profile_metadata(
+    pending_slot: u8,
+    upload_handle: u64,
+    profile_len: u32,
+) -> Result<(), WireError> {
+    if pending_slot > 1
+        || upload_handle == 0
+        || profile_len == 0
+        || profile_len as usize > PROFILE_MAX_LEN
+    {
         return Err(WireError::InvalidLength);
     }
-    Ok(value)
+    Ok(())
 }
 
 fn read_purpose(reader: &mut Reader<'_>) -> Result<u8, WireError> {

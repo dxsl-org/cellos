@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0 OR MIT"
 authors = ["DXSL"]
-description = "Closed AP <-> STM32 DEV_REFERENCE authority protocol: fixed frames, twelve typed operations, fail-closed state."
+description = "Closed AP <-> STM32 DEV_REFERENCE authority protocol: fixed frames, fourteen typed operations, fail-closed state."
 
 [dependencies]
 sha2 = { version = "0.10", default-features = false }

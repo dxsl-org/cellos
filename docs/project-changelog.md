@@ -16,17 +16,28 @@
   and illegal-successor mismatches seal rather than being skipped. Direct reboot
   snapshots cover every inactive-slot byte prefix after increment without
   relying on error return: incomplete writes seal and a complete authenticated
-  write recovers exactly the new record. Twenty-six journal tests and the
-  complete 28-test authority-protocol suite pass, together with RV64 no_std
-  checks; unauthenticated profile requests now return before root-verifier or
-  TPM-policy work. Minimal policy-complete raw concatenated-DER
-  direct/one/two-intermediate profiles measure 479/850/1,218 bytes, proving the
-  768-byte private-v1 request insufficient. The selected clean private-v2
-  transport reuses the frozen 12,288-byte chain bound through sixteen
-  authenticated 768-byte chunks and stages only an authenticated bank
-  reference. This proves software ordering and recovery only; TPM NV behavior,
-  STM32 flash atomicity, lifecycle/debug protection,
-  isolation, endurance, and physical power loss remain hardware-gated.
+  write recovers exactly the new record. The clean private-v2 cutover rejects
+  v1, carries the existing 12,288-byte raw DER chain in at most sixteen
+  authenticated 768-byte chunks, durably admits every begin/chunk request
+  before bank work, binds uploads to the journal-selected inactive slot and CSR,
+  and persists exact idempotent progress. Journal-only recovery remains opaque;
+  every durable upload header and committed chunk prefix must authenticate, and
+  a complete upload must pass its full profile hash before a serviceable record
+  can issue a pending-enrollment snapshot. Completed active/staged references
+  receive the same bank gate. Profile verification requires an opaque
+  state-admission token after the
+  boot/identity/sequence floor is durable, so unauthenticated and authenticated
+  stale/replayed frames invoke no bank, X.509, or TPM work. The allocation-free
+  validator enforces closed P-256 paths, issuer EKU/name constraints, canonical
+  RFC 5280 time tags, exact SAN/EKU/NodeId, signed time, denylists, and
+  root/duplicate-SPKI exclusion. Its journal-issued snapshot binds revision,
+  identity, authority/boot epoch, CSR, slot, and profile metadata; a strict
+  double-read `TPM2B_PUBLIC` parser derives the P-256 SPKI and requires exact
+  equality with both journal and leaf certificate SPKIs. RV64 no_std checks and
+  38 journal/bank, 11 validator, and 36 authority-protocol host tests pass. This
+  proves software behavior only; TPM NV behavior, STM32 flash atomicity,
+  lifecycle/debug protection, isolation, endurance, and physical power loss
+  remain hardware-gated.
 
 - ADR-0010 freezes the VF2 `DEV_REFERENCE` root stream as one bounded
   post-loader XMODEM-1K transfer containing deterministic-CBOR `COSE_Sign1` and

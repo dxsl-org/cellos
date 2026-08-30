@@ -405,12 +405,12 @@ host limits cannot freeze or substitute for them.
 `authority/stm32h573i-dk/journal-core/` implements the host-verifiable
 PERSIST-003 full-record envelope and counter-exact dual-slot journal without
 registering firmware in the root workspace. The canonical Phase 2 protected
-record remains the state-machine owner; `authority-protocol` now exposes an
-immutable binding view and exact successor verifier covering absorbing seal,
-boot, signed-time challenge/lease, relay transaction, identity, and monotonic
-floor edges without changing its v1 bytes or operation set. Phase 4 adds the
-lane/boot/loader/manifest-key, firmware/policy, trust-policy, bounded canonical
-SPKI/profile, counter, and physical-slot bindings.
+record remains the state-machine owner. `authority-protocol` private v2 adds
+bounded authenticated profile begin/chunk operations and exact successor
+verification covering absorbing seal, boot, signed-time challenge/lease, relay
+transaction, identity, CSR, selected inactive slot, and monotonic floor edges.
+Phase 4 adds the lane/boot/loader/manifest-key, firmware/policy, trust-policy,
+bounded canonical SPKI/profile, counter, and physical-slot bindings.
 Commit always re-reads and authenticates the actual current slot, increments the
 abstract non-orderly counter, writes only the inactive complete slot, and
 authenticates/decodes read-back before returning. The recovery token is opaque.
@@ -426,19 +426,34 @@ inactive-slot byte prefix after counter increment without allowing `commit` to
 return: all incomplete prefixes seal, while a complete authenticated write
 recovers exactly the new record.
 
-Profile-request authentication completes before root-profile policy or TPM work.
-The closed validator uses the selected clean private-v2 upload: raw
-concatenated-DER chain bytes retain the existing 12,288-byte/three-certificate
-bound and cross the private boundary as at most sixteen authenticated 768-byte
-chunks. The counter journal stores only an authenticated external-bank
-reference; recovery must authenticate the referenced bank before service.
+Profile-request authentication and durable sequence admission complete before
+profile-bank, root-profile policy, or TPM work. Raw concatenated-DER chain bytes
+retain the 12,288-byte/three-certificate bound and cross private v2 as at most
+sixteen authenticated 768-byte chunks. Upload state binds the journal-selected
+inactive slot and state-derived CSR handle. The counter journal stores
+key-only pending material while uploading and an authenticated external-bank
+reference after staging. Journal-only recovery is non-serviceable:
+`ProfileBank` authenticates every durable upload header and committed chunk
+prefix, requires a complete upload's full profile hash before snapshot
+issuance, and authenticates every completed active/staged reference before
+minting the public recovered-record token.
 
-The no_std core and full `authority-protocol` suite pass 26 and 28 focused host
-tests respectively. The counter, authenticator, and slots are explicit
-`SOFTWARE_HARNESS` seams. These results prove codec, transition, ordering, and
-snapshot-model behavior only; they do not prove SLB9672 NV semantics, STM32
-flash atomicity, STiRoT/debug protection, electrical isolation, endurance, or
-physical power-loss behavior.
+The allocation-free validator accepts only that journal-issued snapshot and an
+opaque post-admission capability. It binds journal/protected revision, device
+and authority identity, authority/boot epoch, CSR, slot, generation, upload,
+policy, profile, and SPKI metadata. It strictly parses a stable double-read
+`TPM2B_PUBLIC`, requires the closed TPM ECC P-256/SHA-256 signing profile, and
+requires its derived canonical SPKI to equal both journal and leaf certificate
+SPKIs. The X.509 path rejects uploaded/duplicate root SPKIs, non-client issuer
+EKUs, noncanonical RFC 5280 time tags, and every out-of-profile extension,
+identity, validity, algorithm, denylist, or NodeId binding.
+
+The no_std suites pass 38 journal/bank, 11 validator, and 36
+`authority-protocol` focused host tests. The counter, authenticator, banks, and
+slots are explicit `SOFTWARE_HARNESS` seams. These results prove codec,
+transition, ordering, and snapshot-model behavior only; they do not prove
+SLB9672 NV semantics, STM32 flash atomicity, STiRoT/debug protection,
+electrical isolation, endurance, or physical power-loss behavior.
 
 ---
 

@@ -92,9 +92,15 @@ The next authorized software slice is a sibling no_std, allocation-free
 protocol v2 chunk transport. Public KMS opcodes and payloads remain frozen.
 Private protocol v1 is rejected after the clean cutover; no compatibility
 decoder, direct-profile fallback, generic upload, or general X.509 API remains.
-Before any certificate parsing or TPM read, Phase 2 authenticates and decodes
-the complete typed request. Invalid authentication returns without invoking
-profile policy, reading TPM, or touching upload storage.
+Before any bank, certificate-policy, or TPM work, Phase 2 authenticates and
+decodes the complete typed request, then admits it under the serialized
+`AuthorityState` lock. Admission checks identity, boot, challenge, strictly
+new sequence, and exact `Uploading`/idempotent-`Staged` metadata and persists
+the request floor before returning an opaque `AdmittedProfileValidation`.
+Only that token can enter the root verifier. Invalid MAC and captured
+authenticated stale/replayed requests invoke neither bank nor verifier; an
+accepted exact retry uses a newer sequence whose floor is durable before any
+receipt response.
 
 Profile-bank bytes reuse the existing canonical relay representation: one to
 three complete DER certificates concatenated leaf-first, with no added header
@@ -189,9 +195,11 @@ stage no receipt, promote no key, and write no state. A successful internal
 canonical profile bytes and all three verified digests; the existing boolean
 trait adapter discards the value only after all checks succeed.
 
-Host tests must prove unauthenticated requests invoke neither verifier nor TPM,
-and cover every framing, chunk order/retry/cut, algorithm, path, extension,
-identity, time, floor, denylist, digest, TPM binding, stale-snapshot/slot-race,
+Host tests must prove unauthenticated and authenticated stale/replayed requests
+invoke neither bank, verifier, nor TPM, while exact newer-sequence retries
+persist their floor before responding. They cover every framing, chunk
+order/retry/cut, algorithm, path, extension, identity, time, floor, denylist,
+digest, TPM binding, stale-snapshot/slot-race,
 and zero/768/769/12,288/12,289-byte boundary negative, including missing,
 duplicate, malformed, wrong-length, mismatched, or denylisted NodeId bindings,
 plus direct-root and one/two-intermediate positives.
@@ -252,7 +260,7 @@ the physical pending-key and no-side-effect rows.
 
 - [ ] Freeze typed surface, TPM handle/NV/policy map, complete record schema, and transition table.
 - [x] Host full-record envelope, exact Phase 2 successor gate, counter-exact dual-slot recovery, irreversible seal seam, and cut-point/reboot harness pass at the `SOFTWARE_HARNESS` ceiling.
-- [x] Authenticate the complete request before invoking profile policy or TPM work; 28 authority-protocol host tests pass.
+- [x] Authenticate and durably state-admit profile begin/chunk/validation requests before bank, policy, or TPM work; bind the journal-selected inactive slot and state-derived CSR handle; 36 authority-protocol host tests pass.
 - [x] Resolve canonical certificate-chain transport: operator selected the reviewed clean private-v2 chunk protocol with a 12,288-byte total bound.
 - [ ] Complete and approve irreversible provisioning plan before mutation.
 - [ ] Execute every physical failure row with exact firmware and record hashes.
@@ -264,7 +272,7 @@ the physical pending-key and no-side-effect rows.
 - [ ] Substituted, rolled-back, and truncated-loader requests emit no XMODEM byte and produce a recorded digest-mismatch seal; the approved-loader digest round-trips through provisioning approval, PERSIST-003 records, and the OpenBoot fact.
 - [ ] Every power/snapshot/prepare/promote/finalize edge recovers one exact authenticated tuple or seals; no regressed floor, PREPARED service, or split brain occurs.
 - [ ] Physical chain/SPKI/receipt/generic-command negatives fail without TPM side effects; software-only results remain visibly distinct and satisfy no hardware criterion.
-- [x] Host journal rejects malformed/authentication/identity/profile/successor/floor faults, revalidates the canonical counter-1/physical-slot-A genesis invariant, requires the authenticated counter-minus-one slot to prove each later exact transition, seals authenticated role/identity/nonchain mismatches, models every persistent inactive-slot byte prefix after counter increment without relying on `commit` returning, and recovers the exact new record after a complete write/read-back cut. It passes 26 focused tests plus the complete 28-test authority-protocol suite; this is not hardware evidence.
+- [x] Host journal and profile-bank cores reject malformed/authentication/identity/profile/successor/floor, cut, replay, retry, and bank-reference faults; journal-only recovery stays opaque, every durable upload prefix authenticates, and complete uploads pass their full bank hash before snapshot issuance. The closed validator's public API accepts only that bank-gated journal snapshot and an opaque admission token, parses the exact TPM P-256 public area, and binds its derived SPKI to both journal and leaf certificate. Direct/one/two-intermediate paths cover issuer EKU, root/duplicate SPKI, SAN/NodeId, canonical time, denylist, mismatched token/snapshot, stale identity/revision/CSR, unrelated TPM key, and double-read races. The no_std host suites pass 38 journal/bank, 11 validator, and 36 authority-protocol tests; this is not hardware evidence.
 
 ## Risk Assessment
 

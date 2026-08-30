@@ -20,6 +20,8 @@ pub enum TypedRequest {
     AbortRelayEnrollment(AbortRelayEnrollmentRequest),
     GetRelayActivePublicKey(GetRelayActivePublicKeyRequest),
     SignTls13ClientCertificateVerify(SignTls13ClientCertificateVerifyRequest),
+    BeginRelayProfileUpload(BeginRelayProfileUploadRequest),
+    WriteRelayProfileChunk(WriteRelayProfileChunkRequest),
 }
 pub(crate) trait CanonicalBody {
     fn canonical_body(&self) -> ([u8; DIGEST_LEN], usize);
@@ -49,6 +51,8 @@ canonical_body! {
     AbortRelayEnrollmentRequest => AbortRelayEnrollment,
     GetRelayActivePublicKeyRequest => GetRelayActivePublicKey,
     SignTls13ClientCertificateVerifyRequest => SignTls13ClientCertificateVerify,
+    BeginRelayProfileUploadRequest => BeginRelayProfileUpload,
+    WriteRelayProfileChunkRequest => WriteRelayProfileChunk,
 }
 
 impl TypedRequest {
@@ -68,6 +72,8 @@ impl TypedRequest {
             Self::SignTls13ClientCertificateVerify(_) => {
                 Operation::SignTls13ClientCertificateVerify
             }
+            Self::BeginRelayProfileUpload(_) => Operation::BeginRelayProfileUpload,
+            Self::WriteRelayProfileChunk(_) => Operation::WriteRelayProfileChunk,
         }
     }
     pub const fn context(&self) -> &RequestContext {
@@ -84,6 +90,8 @@ impl TypedRequest {
             Self::AbortRelayEnrollment(value) => &value.context,
             Self::GetRelayActivePublicKey(value) => &value.context,
             Self::SignTls13ClientCertificateVerify(value) => &value.context,
+            Self::BeginRelayProfileUpload(value) => &value.context,
+            Self::WriteRelayProfileChunk(value) => &value.context,
         }
     }
 
@@ -101,6 +109,8 @@ impl TypedRequest {
             Self::AbortRelayEnrollment(value) => &mut value.context,
             Self::GetRelayActivePublicKey(value) => &mut value.context,
             Self::SignTls13ClientCertificateVerify(value) => &mut value.context,
+            Self::BeginRelayProfileUpload(value) => &mut value.context,
+            Self::WriteRelayProfileChunk(value) => &mut value.context,
         }
     }
 

@@ -38,6 +38,9 @@ impl<'a> Writer<'a> {
     pub fn u16(&mut self, value: u16) -> Result<(), WireError> {
         self.put(&value.to_be_bytes())
     }
+    pub fn u32(&mut self, value: u32) -> Result<(), WireError> {
+        self.put(&value.to_be_bytes())
+    }
 
     pub fn u64(&mut self, value: u64) -> Result<(), WireError> {
         self.put(&value.to_be_bytes())
@@ -77,6 +80,9 @@ impl<'a> Reader<'a> {
 
     pub fn u16(&mut self) -> Result<u16, WireError> {
         Ok(u16::from_be_bytes(self.array()?))
+    }
+    pub fn u32(&mut self) -> Result<u32, WireError> {
+        Ok(u32::from_be_bytes(self.array()?))
     }
 
     pub fn u64(&mut self) -> Result<u64, WireError> {

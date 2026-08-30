@@ -1,4 +1,5 @@
-use crate::{FullRecord, HardwareBindings, ProfileMaterial, RecordError, SlotRole};
+use crate::model::material::{key_only, staged_from_key};
+use crate::{FullRecord, HardwareBindings, RecordError, SlotRole};
 use authority_protocol::{verify_protected_successor, RelayProfileState};
 
 impl FullRecord {
@@ -60,14 +61,23 @@ fn profiles_advance(old: &FullRecord, new: &FullRecord) -> bool {
             old.active.is_none()
                 && old.pending.is_none()
                 && new.active.is_none()
-                && unprofiled(new.pending.as_ref())
+                && matches!(new.pending.as_ref(), Some(value) if key_only(value))
         }
         (RelayProfileState::Active(_), RelayProfileState::Pending { .. }) => {
-            old.active == new.active && old.pending.is_none() && unprofiled(new.pending.as_ref())
-        }
-        (RelayProfileState::Pending { .. }, RelayProfileState::Staged(_)) => {
             old.active == new.active
-                && staged_from_pending(old.pending.as_ref(), new.pending.as_ref())
+                && old.pending.is_none()
+                && matches!(new.pending.as_ref(), Some(value) if key_only(value))
+        }
+        (RelayProfileState::Pending { .. }, RelayProfileState::Uploading(_))
+        | (RelayProfileState::Uploading(_), RelayProfileState::Uploading(_)) => {
+            old.active == new.active && old.pending == new.pending
+        }
+        (RelayProfileState::Uploading(_), RelayProfileState::Staged(_)) => {
+            old.active == new.active
+                && matches!(
+                    (old.pending.as_ref(), new.pending.as_ref()),
+                    (Some(old), Some(new)) if staged_from_key(old, new)
+                )
         }
         (RelayProfileState::Staged(_), RelayProfileState::ReceiptConsumed(_))
         | (RelayProfileState::ReceiptConsumed(_), RelayProfileState::Prepared(_))
@@ -79,33 +89,20 @@ fn profiles_advance(old: &FullRecord, new: &FullRecord) -> bool {
         }
         (
             RelayProfileState::Pending { .. }
+            | RelayProfileState::Uploading(_)
             | RelayProfileState::Staged(_)
             | RelayProfileState::ReceiptConsumed(_),
             RelayProfileState::Empty,
         ) => new.active.is_none() && new.pending.is_none(),
         (
             RelayProfileState::Pending { .. }
+            | RelayProfileState::Uploading(_)
             | RelayProfileState::Staged(_)
             | RelayProfileState::ReceiptConsumed(_),
             RelayProfileState::Active(_),
         ) => new.active == old.active && new.pending.is_none(),
         _ => false,
     }
-}
-
-fn unprofiled(value: Option<&ProfileMaterial>) -> bool {
-    matches!(value, Some(value) if value.profile.is_empty())
-}
-
-fn staged_from_pending(old: Option<&ProfileMaterial>, new: Option<&ProfileMaterial>) -> bool {
-    matches!(
-        (old, new),
-        (Some(old), Some(new))
-            if old.slot == new.slot
-                && old.spki == new.spki
-                && old.profile.is_empty()
-                && !new.profile.is_empty()
-    )
 }
 
 fn require(condition: bool, error: RecordError) -> Result<(), RecordError> {

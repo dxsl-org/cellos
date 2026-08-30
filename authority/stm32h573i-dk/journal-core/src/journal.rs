@@ -1,6 +1,6 @@
 use crate::{
     decode_record, encode_record, recover, ExpectedIdentity, FullRecord, RecordAuthenticator,
-    RecoveredRecord, RecoveryError, SlotRole, RECORD_MAX,
+    RecoveryError, SlotRole, UnvalidatedRecoveredRecord, RECORD_MAX,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -53,7 +53,7 @@ impl<C: Counter, S: SlotStorage, A: RecordAuthenticator> Journal<C, S, A> {
     }
 
     /// Recover one exact counter-matching slot or return a sealing error.
-    pub fn recover(&mut self) -> Result<RecoveredRecord, JournalError> {
+    pub fn recover(&mut self) -> Result<UnvalidatedRecoveredRecord, JournalError> {
         self.ensure_open()?;
         let counter = self.counter.read().map_err(|_| JournalError::Counter)?;
         let mut first = [0u8; RECORD_MAX];
@@ -97,7 +97,10 @@ impl<C: Counter, S: SlotStorage, A: RecordAuthenticator> Journal<C, S, A> {
     /// Persist `next` using increment, inactive-slot write, and read-back order.
     /// Any failure after counter increment returns `Sealed` because rollback is
     /// no longer provable.
-    pub fn commit(&mut self, mut next: FullRecord) -> Result<RecoveredRecord, JournalError> {
+    pub fn commit(
+        &mut self,
+        mut next: FullRecord,
+    ) -> Result<UnvalidatedRecoveredRecord, JournalError> {
         self.ensure_open()?;
         let observed = self.counter.read().map_err(|_| JournalError::Counter)?;
         let current = if observed == 0 {
@@ -116,7 +119,7 @@ impl<C: Counter, S: SlotStorage, A: RecordAuthenticator> Journal<C, S, A> {
         next.counter = next_counter;
         next.slot_role = target;
         validate_identity(&next, &self.expected)?;
-        next.validate_successor(current.as_ref().map(RecoveredRecord::record))
+        next.validate_successor(current.as_ref().map(UnvalidatedRecoveredRecord::record))
             .map_err(|_| JournalError::InvalidRecord)?;
         let mut encoded = [0u8; RECORD_MAX];
         let length = encode_record(&next, &self.authenticator, &mut encoded)
@@ -146,7 +149,7 @@ impl<C: Counter, S: SlotStorage, A: RecordAuthenticator> Journal<C, S, A> {
         if decoded != next || !matches_identity(&decoded, &self.expected) {
             return Err(self.seal());
         }
-        Ok(RecoveredRecord { record: decoded })
+        Ok(UnvalidatedRecoveredRecord { record: decoded })
     }
 
     fn ensure_open(&mut self) -> Result<(), JournalError> {

@@ -1,6 +1,7 @@
 use super::media::*;
 use super::support::*;
 use crate::*;
+use sha2::{Digest, Sha256};
 
 fn counter(value: u64) -> FakeCounter {
     FakeCounter {
@@ -71,30 +72,83 @@ fn legal_successor_uses_the_inactive_slot() {
 }
 
 #[test]
-fn pending_state_requires_pending_material_and_preserves_no_previous_active() {
+fn pending_and_uploading_require_the_exact_key_material() {
     let pending = pending_record();
     assert_eq!(pending.validate(), Ok(()));
     let previous = full_record(SlotRole::A);
     assert_eq!(pending.validate_successor(Some(&previous)), Ok(()));
 
-    let mut profiled_early = pending.clone();
-    profiled_early.pending.as_mut().unwrap().profile =
-        authority_protocol::Bounded::from_slice(b"not-yet-validated").unwrap();
-    assert_eq!(profiled_early.validate(), Ok(()));
-    assert_eq!(
-        profiled_early.validate_successor(Some(&previous)),
-        Err(RecordError::InvalidSuccessor)
-    );
+    let mut premature = pending.clone();
+    let material = premature.pending.as_mut().unwrap();
+    material.profile_len = 1;
+    material.profile_digest = [3; 32];
+    assert_eq!(premature.validate(), Err(RecordError::ProfileMismatch));
+    let mut partial = pending.clone();
+    partial.pending.as_mut().unwrap().profile_digest = [1; 32];
+    assert_eq!(partial.validate(), Err(RecordError::InvalidProfile));
 
     let mut missing = pending.clone();
     missing.pending = None;
     assert_eq!(missing.validate(), Err(RecordError::ProfileMismatch));
 
-    let mut substituted = pending;
-    let mut active = substituted.pending.clone().unwrap();
-    active.slot = 1;
-    substituted.active = Some(active);
+    let uploading = uploading_record(&pending);
+    assert_eq!(uploading.validate(), Ok(()));
+    assert_eq!(uploading.validate_successor(Some(&pending)), Ok(()));
+    assert_eq!(uploading.pending, pending.pending);
+
+    let mut substituted = uploading;
+    substituted.pending.as_mut().unwrap().tpm_public_digest = [99; 32];
     assert_eq!(substituted.validate(), Err(RecordError::ProfileMismatch));
+}
+
+pub const UPLOAD_PROFILE: [u8; 100] = [0x5a; 100];
+
+pub fn uploading_record(pending: &FullRecord) -> FullRecord {
+    upload_record(pending, 3, 0, 18)
+}
+
+pub fn completed_uploading_record(uploading: &FullRecord) -> FullRecord {
+    upload_record(uploading, 4, 1, upload_bytes(0).len())
+}
+
+fn upload_record(
+    previous: &FullRecord,
+    counter: u64,
+    next_index: u8,
+    previous_relay_len: usize,
+) -> FullRecord {
+    let mut fixed = [0u8; authority_protocol::PROTECTED_RECORD_MAX];
+    let length = previous.protected.encode_canonical(&mut fixed).unwrap();
+    let mut bytes = fixed[..length].to_vec();
+    bytes[5..13].copy_from_slice(&counter.to_le_bytes());
+    bytes.splice(24..24 + previous_relay_len, upload_bytes(next_index));
+    let protected = authority_protocol::ProtectedAuthorityRecord::decode_canonical(&bytes).unwrap();
+    FullRecord {
+        counter,
+        slot_role: previous.slot_role.other(),
+        protected,
+        ..previous.clone()
+    }
+}
+
+fn upload_bytes(next_index: u8) -> std::vec::Vec<u8> {
+    let mut upload = std::vec::Vec::new();
+    upload.push(2);
+    upload.extend_from_slice(&[1; 32]);
+    upload.extend_from_slice(&[2; 32]);
+    upload.extend_from_slice(&1u64.to_le_bytes());
+    upload.extend_from_slice(&1u64.to_le_bytes());
+    upload.extend_from_slice(&1u64.to_le_bytes());
+    upload.extend_from_slice(&1u64.to_le_bytes());
+    upload.extend_from_slice(&1u64.to_le_bytes());
+    upload.push(0);
+    upload.extend_from_slice(&Sha256::digest(b"pending-spki"));
+    upload.extend_from_slice(&Sha256::digest(UPLOAD_PROFILE));
+    upload.extend_from_slice(&[13; 32]);
+    upload.extend_from_slice(&9u64.to_le_bytes());
+    upload.extend_from_slice(&(UPLOAD_PROFILE.len() as u32).to_le_bytes());
+    upload.push(next_index);
+    upload
 }
 
 #[test]

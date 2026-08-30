@@ -17,6 +17,8 @@ pub enum TypedResponse {
     AbortRelayEnrollment(AbortRelayEnrollmentResponse),
     GetRelayActivePublicKey(GetRelayActivePublicKeyResponse),
     SignTls13ClientCertificateVerify(SignTls13ClientCertificateVerifyResponse),
+    BeginRelayProfileUpload(BeginRelayProfileUploadResponse),
+    WriteRelayProfileChunk(WriteRelayProfileChunkResponse),
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ValidatedResponse(TypedResponse);
@@ -77,6 +79,8 @@ impl TypedResponse {
             Self::SignTls13ClientCertificateVerify(_) => {
                 Operation::SignTls13ClientCertificateVerify
             }
+            Self::BeginRelayProfileUpload(_) => Operation::BeginRelayProfileUpload,
+            Self::WriteRelayProfileChunk(_) => Operation::WriteRelayProfileChunk,
         }
     }
     pub const fn binding(&self) -> &AuthenticatedBinding {
@@ -93,6 +97,8 @@ impl TypedResponse {
             Self::AbortRelayEnrollment(value) => &value.binding,
             Self::GetRelayActivePublicKey(value) => &value.binding,
             Self::SignTls13ClientCertificateVerify(value) => &value.binding,
+            Self::BeginRelayProfileUpload(value) => &value.binding,
+            Self::WriteRelayProfileChunk(value) => &value.binding,
         }
     }
 
@@ -110,6 +116,8 @@ impl TypedResponse {
             Self::AbortRelayEnrollment(value) => &mut value.binding,
             Self::GetRelayActivePublicKey(value) => &mut value.binding,
             Self::SignTls13ClientCertificateVerify(value) => &mut value.binding,
+            Self::BeginRelayProfileUpload(value) => &mut value.binding,
+            Self::WriteRelayProfileChunk(value) => &mut value.binding,
         }
     }
 

@@ -11,7 +11,7 @@ pub trait SignedTimeVerifier {
 }
 
 pub trait RootProfileVerifier {
-    fn verify_root_profile(&self, request: &ValidateAndStageRelayProfileRequest) -> bool;
+    fn verify_root_profile(&self, admitted: &AdmittedProfileValidation) -> bool;
 }
 
 pub trait BootMeasurementVerifier {
@@ -49,6 +49,8 @@ pub struct ProviderCasReceipt {
     pub profile_digest: [u8; DIGEST_LEN],
     pub boot_epoch: u64,
     pub validation_request_id: u64,
+    pub upload_handle: u64,
+    pub profile_len: u32,
     pub provider_signature: [u8; SIGNATURE_LEN],
 }
 
@@ -65,7 +67,39 @@ impl VerifiedSignedTime {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct RootValidatedProfile(ValidatedRequest<ValidateAndStageRelayProfileRequest>);
+pub struct AdmittedProfileValidation {
+    request: ValidatedRequest<ValidateAndStageRelayProfileRequest>,
+    authority_epoch: u64,
+    csr_handle: u64,
+}
+impl AdmittedProfileValidation {
+    pub const fn request(&self) -> &ValidateAndStageRelayProfileRequest {
+        self.request.request()
+    }
+
+    pub const fn authority_epoch(&self) -> u64 {
+        self.authority_epoch
+    }
+
+    pub const fn csr_handle(&self) -> u64 {
+        self.csr_handle
+    }
+
+    pub(crate) const fn new(
+        request: ValidatedRequest<ValidateAndStageRelayProfileRequest>,
+        authority_epoch: u64,
+        csr_handle: u64,
+    ) -> Self {
+        Self {
+            request,
+            authority_epoch,
+            csr_handle,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RootValidatedProfile(AdmittedProfileValidation);
 impl RootValidatedProfile {
     pub(crate) const fn request(&self) -> &ValidateAndStageRelayProfileRequest {
         self.0.request()
@@ -86,26 +120,23 @@ pub fn verify_signed_time<P: RequestAuthenticator, S: SignedTimeVerifier>(
     request_policy: &P,
     source_policy: &S,
 ) -> Result<VerifiedSignedTime, AuthorityFault> {
-    if !is_strict_p256_der_signature(request.source_signature.as_slice())
-        || !source_policy.verify_signed_time(&request)
+    let validated = verify_typed_request(request, header, request_policy)?;
+    if !is_strict_p256_der_signature(validated.request().source_signature.as_slice())
+        || !source_policy.verify_signed_time(validated.request())
     {
         return Err(AuthorityFault::TimeInvalid);
     }
-    verify_typed_request(request, header, request_policy).map(VerifiedSignedTime)
+    Ok(VerifiedSignedTime(validated))
 }
 
-pub fn verify_root_profile<P: RequestAuthenticator, R: RootProfileVerifier>(
-    request: ValidateAndStageRelayProfileRequest,
-    header: &FrameHeader,
-    request_policy: &P,
+pub fn verify_root_profile<R: RootProfileVerifier>(
+    admitted: AdmittedProfileValidation,
     root_policy: &R,
 ) -> Result<RootValidatedProfile, AuthorityFault> {
-    let validated = verify_typed_request(request, header, request_policy)?;
-    if validated.request().pending_slot > 1 || !root_policy.verify_root_profile(validated.request())
-    {
+    if !root_policy.verify_root_profile(&admitted) {
         return Err(AuthorityFault::ProfileRejected);
     }
-    Ok(RootValidatedProfile(validated))
+    Ok(RootValidatedProfile(admitted))
 }
 
 pub fn verify_provider_cas_receipt<V: ProviderCasVerifier>(

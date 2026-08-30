@@ -1,10 +1,10 @@
 use super::{
-    AuthorityState, EnrollmentIntent, PreparedCommitIntent, ProtectedStore, RelayIntent,
-    RelayProfileState, TimePurpose, TlsSignatureIntent, TrustedClock,
+    AuthorityState, EnrollmentIntent, PreparedCommitIntent, ProtectedStore, RelayProfileState,
+    TimePurpose, TlsSignatureIntent, TrustedClock,
 };
 use crate::{
     constant_time_eq, AbortRelayEnrollmentRequest, AuthorityFault, BeginRelayEnrollmentRequest,
-    CommitRelayGenerationRequest, ConsumeStagedRelayProfileRequest, RootValidatedProfile,
+    CommitRelayGenerationRequest, ConsumeStagedRelayProfileRequest,
     SignTls13ClientCertificateVerifyRequest, ValidatedRequest, VerifiedProviderCasReceipt,
 };
 
@@ -26,44 +26,19 @@ impl<S: ProtectedStore> AuthorityState<S> {
             Some(value) => value,
             None => return self.seal(AuthorityFault::PersistenceFailure),
         };
+        let pending_slot = self
+            .previous_active
+            .map_or(0, |intent| intent.pending_slot ^ 1);
         self.relay = RelayProfileState::Pending {
             generation: self.generation_floor,
             csr_handle: self.generation_floor,
+            pending_slot,
         };
         self.persist_value(EnrollmentIntent {
             generation: self.generation_floor,
+            pending_slot,
             hostname: request.hostname,
         })
-    }
-
-    pub fn stage_profile(
-        &mut self,
-        verified: &RootValidatedProfile,
-    ) -> Result<RelayIntent, AuthorityFault> {
-        let request = verified.request();
-        self.authorize_context(&request.context)?;
-        if self.relay
-            != (RelayProfileState::Pending {
-                generation: request.generation,
-                csr_handle: request.generation,
-            })
-        {
-            return self.seal(AuthorityFault::ProfileRejected);
-        }
-        let intent = RelayIntent {
-            device_id: self.device_id,
-            authority_id: self.authority_id,
-            authority_epoch: self.authority_epoch,
-            generation: request.generation,
-            policy_epoch: request.policy_epoch,
-            pending_slot: request.pending_slot,
-            pending_spki_digest: request.pending_spki_digest,
-            profile_digest: request.profile_digest,
-            boot_epoch: request.context.boot_epoch,
-            validation_request_id: request.context.request_id,
-        };
-        self.relay = RelayProfileState::Staged(intent);
-        self.persist_value(intent)
     }
 
     pub fn consume_receipt(
@@ -143,6 +118,7 @@ impl<S: ProtectedStore> AuthorityState<S> {
         self.authorize_context(&request.context)?;
         let matches = match self.relay {
             RelayProfileState::Pending { generation, .. } => generation == request.generation,
+            RelayProfileState::Uploading(upload) => upload.generation == request.generation,
             RelayProfileState::Staged(intent) | RelayProfileState::ReceiptConsumed(intent) => {
                 intent.generation == request.generation
             }

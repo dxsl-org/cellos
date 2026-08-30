@@ -27,6 +27,9 @@ impl<'a> Writer<'a> {
     pub(super) fn u64(&mut self, value: u64) -> Result<(), WireError> {
         self.put(&value.to_le_bytes())
     }
+    pub(super) fn u32(&mut self, value: u32) -> Result<(), WireError> {
+        self.put(&value.to_le_bytes())
+    }
     pub(super) const fn finish(self) -> usize {
         self.offset
     }
@@ -60,6 +63,9 @@ impl<'a> Reader<'a> {
     }
     pub(super) fn u64(&mut self) -> Result<u64, WireError> {
         Ok(u64::from_le_bytes(self.array()?))
+    }
+    pub(super) fn u32(&mut self) -> Result<u32, WireError> {
+        Ok(u32::from_le_bytes(self.array()?))
     }
     pub(super) fn finish(self) -> Result<(), WireError> {
         if self.offset == self.input.len() {

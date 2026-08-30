@@ -1,15 +1,15 @@
 use super::super::ProtectedAuthorityRecord;
 use super::common::Writer;
 use crate::{
-    AuthorityMode, BootState, ProviderCasReceipt, RelayIntent, RelayProfileState, TimeState,
-    WireError,
+    AuthorityMode, BootState, ProfileUploadIntent, ProviderCasReceipt, RelayIntent,
+    RelayProfileState, TimeState, WireError,
 };
 
 impl ProtectedAuthorityRecord {
     pub fn encode_canonical(&self, output: &mut [u8]) -> Result<usize, WireError> {
         let mut writer = Writer::new(output);
         writer.put(b"ASTR")?;
-        writer.u8(1)?;
+        writer.u8(2)?;
         writer.u64(self.revision)?;
         writer.u8(match self.mode {
             AuthorityMode::Ready => 1,
@@ -84,33 +84,39 @@ fn put_relay(writer: &mut Writer<'_>, relay: RelayProfileState) -> Result<(), Wi
         RelayProfileState::Pending {
             generation,
             csr_handle,
+            pending_slot,
         } => {
             writer.u8(1)?;
             writer.u64(generation)?;
-            writer.u64(csr_handle)
+            writer.u64(csr_handle)?;
+            writer.u8(pending_slot)
+        }
+        RelayProfileState::Uploading(value) => {
+            writer.u8(2)?;
+            put_upload(writer, value)
         }
         RelayProfileState::Staged(value) => {
-            writer.u8(2)?;
-            put_intent(writer, value)
-        }
-        RelayProfileState::ReceiptConsumed(value) => {
             writer.u8(3)?;
             put_intent(writer, value)
         }
-        RelayProfileState::Prepared(value) => {
+        RelayProfileState::ReceiptConsumed(value) => {
             writer.u8(4)?;
+            put_intent(writer, value)
+        }
+        RelayProfileState::Prepared(value) => {
+            writer.u8(5)?;
             put_intent(writer, value)
         }
         RelayProfileState::Promoted {
             intent,
             provider_signature,
         } => {
-            writer.u8(5)?;
+            writer.u8(6)?;
             put_intent(writer, intent)?;
             put_receipt(writer, intent.provider_receipt(provider_signature))
         }
         RelayProfileState::Active(value) => {
-            writer.u8(6)?;
+            writer.u8(7)?;
             put_intent(writer, value)
         }
     }
@@ -120,28 +126,45 @@ fn put_intent(writer: &mut Writer<'_>, value: RelayIntent) -> Result<(), WireErr
     writer.put(&value.authority_id)?;
     writer.u64(value.authority_epoch)?;
     writer.u64(value.generation)?;
+    writer.u64(value.csr_handle)?;
     writer.u64(value.policy_epoch)?;
     writer.u8(value.pending_slot)?;
     writer.put(&value.pending_spki_digest)?;
     writer.put(&value.profile_digest)?;
     writer.u64(value.boot_epoch)?;
-    writer.u64(value.validation_request_id)
+    writer.u64(value.validation_request_id)?;
+    writer.put(&value.tpm_public_digest)?;
+    writer.u64(value.upload_handle)?;
+    writer.u32(value.profile_len)
+}
+fn put_upload(writer: &mut Writer<'_>, value: ProfileUploadIntent) -> Result<(), WireError> {
+    writer.put(&value.device_id)?;
+    writer.put(&value.authority_id)?;
+    writer.u64(value.authority_epoch)?;
+    writer.u64(value.boot_epoch)?;
+    writer.u64(value.generation)?;
+    writer.u64(value.csr_handle)?;
+    writer.u64(value.policy_epoch)?;
+    writer.u8(value.pending_slot)?;
+    writer.put(&value.pending_spki_digest)?;
+    writer.put(&value.profile_digest)?;
+    writer.put(&value.tpm_public_digest)?;
+    writer.u64(value.upload_handle)?;
+    writer.u32(value.profile_len)?;
+    writer.u8(value.next_index)
 }
 fn put_receipt(writer: &mut Writer<'_>, value: ProviderCasReceipt) -> Result<(), WireError> {
-    put_intent(
-        writer,
-        RelayIntent {
-            device_id: value.device_id,
-            authority_id: value.authority_id,
-            authority_epoch: value.authority_epoch,
-            generation: value.generation,
-            policy_epoch: value.policy_epoch,
-            pending_slot: value.pending_slot,
-            pending_spki_digest: value.pending_spki_digest,
-            profile_digest: value.profile_digest,
-            boot_epoch: value.boot_epoch,
-            validation_request_id: value.validation_request_id,
-        },
-    )?;
+    writer.put(&value.device_id)?;
+    writer.put(&value.authority_id)?;
+    writer.u64(value.authority_epoch)?;
+    writer.u64(value.generation)?;
+    writer.u64(value.policy_epoch)?;
+    writer.u8(value.pending_slot)?;
+    writer.put(&value.pending_spki_digest)?;
+    writer.put(&value.profile_digest)?;
+    writer.u64(value.boot_epoch)?;
+    writer.u64(value.validation_request_id)?;
+    writer.u64(value.upload_handle)?;
+    writer.u32(value.profile_len)?;
     writer.put(&value.provider_signature)
 }

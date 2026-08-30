@@ -45,6 +45,7 @@ impl TypedResponse {
                 binding!(value);
                 writer.u64(value.generation)?;
                 writer.u64(value.policy_epoch)?;
+                writer.u8(value.pending_slot)?;
                 writer.u64(value.csr_handle)?;
                 writer.u32(value.csr_len)?;
                 writer.put(&value.csr_digest)?;
@@ -65,6 +66,8 @@ impl TypedResponse {
                 writer.put(&value.receipt.pending_spki_digest)?;
                 writer.put(&value.receipt.profile_digest)?;
                 writer.u64(value.receipt.boot_epoch)?;
+                writer.u64(value.receipt.upload_handle)?;
+                writer.u32(value.receipt.profile_len)?;
                 writer.u64(value.receipt.validation_request_id)?;
             }
             Self::ConsumeStagedRelayProfile(value) => {
@@ -93,6 +96,19 @@ impl TypedResponse {
             Self::SignTls13ClientCertificateVerify(value) => {
                 binding!(value);
                 writer.put(&value.signature)?;
+            }
+            Self::BeginRelayProfileUpload(value) => {
+                binding!(value);
+                writer.u64(value.upload_handle)?;
+                writer.u32(value.profile_len)?;
+                writer.u16(value.chunk_size)?;
+                writer.u8(value.next_index)?;
+            }
+            Self::WriteRelayProfileChunk(value) => {
+                binding!(value);
+                writer.u64(value.upload_handle)?;
+                writer.u8(value.next_index)?;
+                writer.u8(value.complete)?;
             }
         }
         Ok(writer.finish())

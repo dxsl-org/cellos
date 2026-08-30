@@ -3,13 +3,20 @@
 mod boot;
 mod intents;
 mod persistence;
+mod profile;
 mod provider;
 mod read;
+mod relay;
 mod time;
 mod transitions;
+mod upload;
 mod view;
 pub use boot::OpenedBootFact;
-pub use intents::{CsrChunkIntent, EnrollmentIntent, TlsSignatureIntent};
+pub use intents::{
+    CsrChunkIntent, EnrollmentIntent, ProfileChunkIntent, ProfileChunkMode, ProfileUploadIntent,
+    TlsSignatureIntent,
+};
+pub use relay::{PreparedCommitIntent, RelayIntent, RelayProfileState};
 pub use time::{TimeChallengeSource, TrustedClock};
 
 use crate::{constant_time_eq, AuthorityFault, RequestContext, DIGEST_LEN, ID_LEN};
@@ -61,44 +68,6 @@ pub enum TimeState {
         time_request_id: [u8; 16],
         purpose: TimePurpose,
     },
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct RelayIntent {
-    pub device_id: [u8; ID_LEN],
-    pub authority_id: [u8; ID_LEN],
-    pub authority_epoch: u64,
-    pub generation: u64,
-    pub policy_epoch: u64,
-    pub pending_slot: u8,
-    pub pending_spki_digest: [u8; DIGEST_LEN],
-    pub profile_digest: [u8; DIGEST_LEN],
-    pub boot_epoch: u64,
-    pub validation_request_id: u64,
-}
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct PreparedCommitIntent(RelayIntent);
-impl PreparedCommitIntent {
-    pub const fn intent(&self) -> &RelayIntent {
-        &self.0
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RelayProfileState {
-    Empty,
-    Pending {
-        generation: u64,
-        csr_handle: u64,
-    },
-    Staged(RelayIntent),
-    ReceiptConsumed(RelayIntent),
-    Prepared(RelayIntent),
-    Promoted {
-        intent: RelayIntent,
-        provider_signature: [u8; crate::SIGNATURE_LEN],
-    },
-    Active(RelayIntent),
 }
 
 /// Immutable identity and protected counter floors used to initialize an authority.

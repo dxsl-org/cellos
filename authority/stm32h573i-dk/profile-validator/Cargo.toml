@@ -1,0 +1,12 @@
+[package]
+name = "stm32-profile-validator"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+authority-protocol.workspace = true
+p256 = { version = "0.13", default-features = false, features = ["ecdsa"] }
+stm32-authority-journal = { path = "../journal-core" }
+sha2.workspace = true

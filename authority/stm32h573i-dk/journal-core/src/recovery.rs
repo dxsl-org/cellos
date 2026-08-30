@@ -3,6 +3,7 @@ use crate::{
     FullRecord, RecordAuthenticator, SlotRole,
 };
 use authority_protocol::DIGEST_LEN;
+use core::fmt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ExpectedIdentity {
@@ -10,13 +11,32 @@ pub struct ExpectedIdentity {
     pub authority_id: [u8; DIGEST_LEN],
     pub lane_id: [u8; DIGEST_LEN],
 }
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RecoveredRecord {
+/// Journal-authenticated state that is not serviceable until profile-bank validation.
+#[derive(Clone, PartialEq, Eq)]
+pub struct UnvalidatedRecoveredRecord {
     pub(crate) record: FullRecord,
 }
 
+impl UnvalidatedRecoveredRecord {
+    pub(crate) const fn record(&self) -> &FullRecord {
+        &self.record
+    }
+}
+
+impl fmt::Debug for UnvalidatedRecoveredRecord {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("UnvalidatedRecoveredRecord(..)")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecoveredRecord {
+    pub(crate) record: FullRecord,
+    pub(crate) upload_bank_complete: bool,
+}
+
 impl RecoveredRecord {
-    /// Return the authenticated full record carried by this recovery token.
+    /// Return the journal and profile-bank authenticated full record.
     pub const fn record(&self) -> &FullRecord {
         &self.record
     }
@@ -28,13 +48,13 @@ pub enum RecoveryError {
     Ambiguous,
 }
 
-/// Recover one authenticated counter head and its exact predecessor chain.
+/// Recover one journal-authenticated head for subsequent profile-bank validation.
 pub fn recover<A: RecordAuthenticator>(
     counter: u64,
     slots: [Option<&[u8]>; 2],
     authenticator: &A,
     expected: &ExpectedIdentity,
-) -> Result<RecoveredRecord, RecoveryError> {
+) -> Result<UnvalidatedRecoveredRecord, RecoveryError> {
     if counter == 0 {
         return Err(RecoveryError::Sealed);
     }
@@ -64,13 +84,13 @@ pub fn recover<A: RecordAuthenticator>(
         current
             .validate_successor(None)
             .map_err(|_| RecoveryError::Sealed)?;
-        return Ok(RecoveredRecord { record: current });
+        return Ok(UnvalidatedRecoveredRecord { record: current });
     }
     let prior = prior.ok_or(RecoveryError::Sealed)?;
     current
         .validate_successor(Some(&prior))
         .map_err(|_| RecoveryError::Sealed)?;
-    Ok(RecoveredRecord { record: current })
+    Ok(UnvalidatedRecoveredRecord { record: current })
 }
 
 fn insert_unique(target: &mut Option<FullRecord>, record: FullRecord) -> Result<(), RecoveryError> {

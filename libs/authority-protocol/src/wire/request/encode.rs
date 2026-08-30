@@ -48,7 +48,8 @@ impl TypedRequest {
                 writer.put(&value.pending_spki_digest)?;
                 writer.put(&value.profile_digest)?;
                 writer.put(&value.tpm_public_digest)?;
-                writer.bounded(&value.profile)?;
+                writer.u64(value.upload_handle)?;
+                writer.u32(value.profile_len)?;
             }
             Self::ConsumeStagedRelayProfile(value) => {
                 context!(value);
@@ -79,6 +80,23 @@ impl TypedRequest {
                 writer.u64(value.relay_generation)?;
                 writer.put(&value.active_profile_digest)?;
                 writer.u64(value.public_request_id)?;
+            }
+            Self::BeginRelayProfileUpload(value) => {
+                context!(value);
+                writer.u64(value.upload_handle)?;
+                writer.u64(value.generation)?;
+                writer.u64(value.policy_epoch)?;
+                writer.u8(value.pending_slot)?;
+                writer.put(&value.pending_spki_digest)?;
+                writer.put(&value.profile_digest)?;
+                writer.put(&value.tpm_public_digest)?;
+                writer.u32(value.profile_len)?;
+            }
+            Self::WriteRelayProfileChunk(value) => {
+                context!(value);
+                writer.u64(value.upload_handle)?;
+                writer.u8(value.chunk_index)?;
+                writer.bounded(&value.chunk)?;
             }
         }
         Ok(writer.finish())

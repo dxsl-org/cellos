@@ -1,5 +1,5 @@
 [workspace]
-members = ["journal-core"]
+members = ["journal-core", "profile-validator"]
 resolver = "2"
 
 [workspace.package]

@@ -1,8 +1,8 @@
 use super::super::ProtectedAuthorityRecord;
 use super::common::Reader;
 use crate::{
-    AuthorityMode, BootState, PendingTimeChallenge, ProtectedTimeFloors, ProviderCasReceipt,
-    RelayIntent, RelayProfileState, TimePurpose, TimeState, WireError,
+    AuthorityMode, BootState, PendingTimeChallenge, ProfileUploadIntent, ProtectedTimeFloors,
+    ProviderCasReceipt, RelayIntent, RelayProfileState, TimePurpose, TimeState, WireError,
 };
 
 impl ProtectedAuthorityRecord {
@@ -11,7 +11,7 @@ impl ProtectedAuthorityRecord {
         if reader.take(4)? != b"ASTR" {
             return Err(WireError::BadMagic);
         }
-        if reader.u8()? != 1 {
+        if reader.u8()? != 2 {
             return Err(WireError::UnsupportedVersion);
         }
         let revision = reader.u64()?;
@@ -109,11 +109,13 @@ fn get_relay(reader: &mut Reader<'_>) -> Result<RelayProfileState, WireError> {
         1 => RelayProfileState::Pending {
             generation: reader.u64()?,
             csr_handle: reader.u64()?,
+            pending_slot: reader.u8()?,
         },
-        2 => RelayProfileState::Staged(get_intent(reader)?),
-        3 => RelayProfileState::ReceiptConsumed(get_intent(reader)?),
-        4 => RelayProfileState::Prepared(get_intent(reader)?),
-        5 => {
+        2 => RelayProfileState::Uploading(get_upload(reader)?),
+        3 => RelayProfileState::Staged(get_intent(reader)?),
+        4 => RelayProfileState::ReceiptConsumed(get_intent(reader)?),
+        5 => RelayProfileState::Prepared(get_intent(reader)?),
+        6 => {
             let intent = get_intent(reader)?;
             let receipt = get_receipt(reader)?;
             if !intent.matches_receipt(&receipt) {
@@ -124,12 +126,48 @@ fn get_relay(reader: &mut Reader<'_>) -> Result<RelayProfileState, WireError> {
                 provider_signature: receipt.provider_signature,
             }
         }
-        6 => RelayProfileState::Active(get_intent(reader)?),
+        7 => RelayProfileState::Active(get_intent(reader)?),
         _ => return Err(WireError::UnknownMessageKind),
     })
 }
 fn get_intent(reader: &mut Reader<'_>) -> Result<RelayIntent, WireError> {
     Ok(RelayIntent {
+        device_id: reader.array()?,
+        authority_id: reader.array()?,
+        authority_epoch: reader.u64()?,
+        generation: reader.u64()?,
+        csr_handle: reader.u64()?,
+        policy_epoch: reader.u64()?,
+        pending_slot: reader.u8()?,
+        pending_spki_digest: reader.array()?,
+        profile_digest: reader.array()?,
+        boot_epoch: reader.u64()?,
+        validation_request_id: reader.u64()?,
+        tpm_public_digest: reader.array()?,
+        upload_handle: reader.u64()?,
+        profile_len: reader.u32()?,
+    })
+}
+fn get_upload(reader: &mut Reader<'_>) -> Result<ProfileUploadIntent, WireError> {
+    Ok(ProfileUploadIntent {
+        device_id: reader.array()?,
+        authority_id: reader.array()?,
+        authority_epoch: reader.u64()?,
+        boot_epoch: reader.u64()?,
+        generation: reader.u64()?,
+        csr_handle: reader.u64()?,
+        policy_epoch: reader.u64()?,
+        pending_slot: reader.u8()?,
+        pending_spki_digest: reader.array()?,
+        profile_digest: reader.array()?,
+        tpm_public_digest: reader.array()?,
+        upload_handle: reader.u64()?,
+        profile_len: reader.u32()?,
+        next_index: reader.u8()?,
+    })
+}
+fn get_receipt(reader: &mut Reader<'_>) -> Result<ProviderCasReceipt, WireError> {
+    Ok(ProviderCasReceipt {
         device_id: reader.array()?,
         authority_id: reader.array()?,
         authority_epoch: reader.u64()?,
@@ -140,21 +178,8 @@ fn get_intent(reader: &mut Reader<'_>) -> Result<RelayIntent, WireError> {
         profile_digest: reader.array()?,
         boot_epoch: reader.u64()?,
         validation_request_id: reader.u64()?,
-    })
-}
-fn get_receipt(reader: &mut Reader<'_>) -> Result<ProviderCasReceipt, WireError> {
-    let value = get_intent(reader)?;
-    Ok(ProviderCasReceipt {
-        device_id: value.device_id,
-        authority_id: value.authority_id,
-        authority_epoch: value.authority_epoch,
-        generation: value.generation,
-        policy_epoch: value.policy_epoch,
-        pending_slot: value.pending_slot,
-        pending_spki_digest: value.pending_spki_digest,
-        profile_digest: value.profile_digest,
-        boot_epoch: value.boot_epoch,
-        validation_request_id: value.validation_request_id,
+        upload_handle: reader.u64()?,
+        profile_len: reader.u32()?,
         provider_signature: reader.array()?,
     })
 }

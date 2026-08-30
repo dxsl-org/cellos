@@ -4,7 +4,7 @@ use crate::{
 };
 use authority_protocol::{
     constant_time_eq, verify_protected_record, Bounded, ProtectedAuthorityRecord,
-    ProtectedRecordVerifier, WireError, PROFILE_MAX,
+    ProtectedRecordVerifier, WireError,
 };
 
 struct AuthenticatedRecord;
@@ -102,17 +102,29 @@ fn get_profile(reader: &mut Reader<'_>) -> Result<Option<ProfileMaterial>, WireE
     match reader.u8()? {
         0 => Ok(None),
         1 => {
+            let device_id = reader.array()?;
+            let authority_id = reader.array()?;
+            let authority_epoch = reader.u64()?;
+            let boot_epoch = reader.u64()?;
             let slot = reader.u8()?;
+            let generation = reader.u64()?;
+            let profile_len = reader.u32()?;
+            let profile_digest = reader.array()?;
+            let tpm_public_digest = reader.array()?;
             let spki_len = reader.u16()? as usize;
             let spki = Bounded::<SPKI_MAX>::from_slice(reader.take(spki_len)?)
                 .ok_or(WireError::OversizePayload)?;
-            let profile_len = reader.u16()? as usize;
-            let profile = Bounded::<PROFILE_MAX>::from_slice(reader.take(profile_len)?)
-                .ok_or(WireError::OversizePayload)?;
             Ok(Some(ProfileMaterial {
+                device_id,
+                authority_id,
+                authority_epoch,
+                boot_epoch,
                 slot,
+                generation,
+                profile_len,
+                profile_digest,
+                tpm_public_digest,
                 spki,
-                profile,
             }))
         }
         _ => Err(WireError::UnknownMessageKind),
