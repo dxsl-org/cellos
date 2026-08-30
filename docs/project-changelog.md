@@ -36,10 +36,14 @@
   non-revoked registration tuple and configured source epoch. The KMS key loader
   makes one exact `GetPublicKey` call and admits only the manifest key ID,
   P-256/`SIGN_VERIFY`/`ECDSA_SHA_256` contract and constant-time SHA-256 DER-SPKI
-  pin. Focused tests pass 133/133, including isolated discovery, and final review
-  found no remaining scoped issue. No clock authentication, live database
-  operation, handler, AWS resource, credential, network call, or deployment
-  action occurred; those steps remain gated.
+  pin. A stateless clock policy now binds upstream identity/source epoch and
+  rejects stale, over-uncertain, inconsistent, expired, or protected-floor-
+  external observations without ambient time, cache, holdover, or fallback. It
+  does not authenticate observations; the exact upstream adapter remains
+  unimplemented. Focused tests pass 147/147, including isolated discovery, and
+  final review found no remaining scoped issue. No live clock authentication,
+  database operation, handler, AWS resource, credential, network call, or
+  deployment action occurred; those steps remain gated.
 
 - Phase 4's deterministic, non-executing provisioning-plan generator is complete
   only at the `SOFTWARE_HARNESS` ceiling. Each of its nine ordered mutations now
