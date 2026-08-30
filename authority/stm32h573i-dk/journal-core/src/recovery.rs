@@ -61,6 +61,9 @@ pub fn recover<A: RecordAuthenticator>(
     }
     let current = current.ok_or(RecoveryError::Sealed)?;
     if counter == 1 {
+        current
+            .validate_successor(None)
+            .map_err(|_| RecoveryError::Sealed)?;
         return Ok(RecoveredRecord { record: current });
     }
     let prior = prior.ok_or(RecoveryError::Sealed)?;

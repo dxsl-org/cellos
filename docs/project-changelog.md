@@ -9,13 +9,14 @@
   canonical Phase 2 protected record with complete PERSIST-003 hardware/profile
   bindings, re-authenticates the actual current slot internally, validates exact
   Phase 2 boot/time/relay successors plus Phase 4 profile and hardware floors,
-  requires the authenticated counter-minus-one slot to prove each post-genesis
+  requires genesis to pass the canonical counter-1/physical-slot-A successor
+  invariant and the authenticated counter-minus-one slot to prove each later
   recovery edge, writes only after counter increment, and uses an irreversible
   absorbing counter-domain seal. Authenticated role, identity, stale-counter,
   and illegal-successor mismatches seal rather than being skipped. Direct reboot
   snapshots cover every inactive-slot byte prefix after increment without
   relying on error return: incomplete writes seal and a complete authenticated
-  write recovers exactly the new record. Twenty-five journal tests and the
+  write recovers exactly the new record. Twenty-six journal tests and the
   complete 27-test authority-protocol suite pass, together with RV64 no_std
   checks. This proves software ordering and recovery only; TPM NV behavior,
   STM32 flash atomicity, lifecycle/debug protection,
@@ -95,7 +96,7 @@
   authenticated source/boot high-water windows reject stale boots and evicted
   old request ids as `Indeterminate`, while expired completed entries release
   response capacity. Boot-local server epochs now identify one live exported
-  server incarnation. `LocalEndpoint<M>` uses direct IPC, while
+| STM32 DEV_REFERENCE protected journal | External-gated prerequisite | `scope-gated` | `host` `SOFTWARE_HARNESS` complete; later exact-device `physical` development evidence | Authority Phase 4; canonical full-record codec, Phase 2-owned exact successor/exhaustion gate, opaque internally recovered baseline, slot-A genesis invariant, authenticated counter-minus-one recovery chain, counter-first inactive-slot journal, irreversible seal seam, and every-prefix persistent cut/reboot model pass 26 journal tests plus the complete 27-test authority-protocol suite and no_std checks | Exact STM32H573I-DK and private SLB9672 must freeze identity/NV/policy/flash limits and prove non-orderly counter behavior, isolation, lifecycle/debug protection, endurance, and physical cut recovery; host output remains `SOFTWARE_HARNESS` only |
   `RemoteEndpoint<M>::call` requires a validated nonzero relative deadline and
   returns typed `NotSupported` without broker contact. `CellEndpoint<M>` requires
   an explicit locality branch; the nonfunctional raw `ClusterRef` facade was

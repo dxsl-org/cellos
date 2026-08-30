@@ -11,6 +11,15 @@ fn one_exact_current_slot_recovers_while_old_or_torn_slot_is_ignored() {
 }
 
 #[test]
+fn genesis_record_in_slot_b_seals_even_when_role_matches() {
+    let genesis = encoded(SlotRole::B);
+    assert_eq!(
+        recover(1, [None, Some(&genesis)], &TestAuth, &identity()),
+        Err(RecoveryError::Sealed)
+    );
+}
+
+#[test]
 fn current_record_requires_its_authenticated_exact_predecessor() {
     let prior = full_record(SlotRole::A);
     let current = successor(&prior);

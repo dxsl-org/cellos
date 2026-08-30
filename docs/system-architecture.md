@@ -227,7 +227,7 @@ Routing any new idea: (1) uses SAS/LBI → **Tier 1 native**; (2) trusted librar
 └─────────────────────────────────────────┘
 ```
 
-### RV64 Desktop Input, Decoration, and Scanout
+- [x] Host journal rejects malformed/authentication/identity/profile/successor/floor faults, revalidates the canonical counter-1/physical-slot-A genesis invariant, requires the authenticated counter-minus-one slot to prove each later exact transition, seals authenticated role/identity/nonchain mismatches, models every persistent inactive-slot byte prefix after counter increment without relying on `commit` returning, and recovers the exact new record after a complete write/read-back cut. It passes 26 focused tests plus the complete 27-test authority-protocol suite; this is not hardware evidence.
 
 The input service owns device translation and sends pointer frames only to the
 compositor. The compositor owns cursor state, surface hit-testing, z-order,
@@ -414,8 +414,9 @@ SPKI/profile, counter, and physical-slot bindings.
 Commit always re-reads and authenticates the actual current slot, increments the
 abstract non-orderly counter, writes only the inactive complete slot, and
 authenticates/decodes read-back before returning. The recovery token is opaque.
-After genesis, recovery requires both the authenticated counter head and the
-counter-minus-one slot, then revalidates their exact Phase 2 and Phase 4
+Genesis recovery revalidates the canonical counter-1/physical-slot-A successor
+invariant. After genesis, recovery requires both the authenticated counter head
+and the counter-minus-one slot, then revalidates their exact Phase 2 and Phase 4
 successor edge. Authenticated wrong-role, cross-identity, stale/future counter,
 or illegal-successor records seal rather than being skipped. Missing, torn,
 replayed, same-counter ambiguous, floor-regressed, or otherwise invalid state
@@ -425,7 +426,7 @@ inactive-slot byte prefix after counter increment without allowing `commit` to
 return: all incomplete prefixes seal, while a complete authenticated write
 recovers exactly the new record.
 
-The no_std core and full `authority-protocol` suite pass 25 and 27 focused host
+The no_std core and full `authority-protocol` suite pass 26 and 27 focused host
 tests respectively. The counter, authenticator, and slots are explicit
 `SOFTWARE_HARNESS` seams. These results prove codec, transition, ordering, and
 snapshot-model behavior only; they do not prove SLB9672 NV semantics, STM32
