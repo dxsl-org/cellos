@@ -85,6 +85,84 @@ Phase 2 requires only a read-only protected-record binding view needed by the
 adapter verifier. Its canonical v1 bytes, operation set, state transitions, and
 public KMS fixtures remain unchanged.
 
+### Certificate/Profile Validator Contract
+
+The next authorized software slice is a sibling no_std, allocation-free
+`profile-validator` core with a thin firmware adapter. It implements the
+existing `RootProfileVerifier` seam; it does not change private wire bytes,
+authority transitions, journal recovery, or expose a general X.509 API.
+Before any certificate parsing or TPM read, Phase 2 must authenticate and
+decode the complete typed request, then invoke `RootProfileVerifier`. Invalid
+request authentication must return without calling the verifier, reading TPM,
+or touching policy state. This ordering change preserves the frozen wire and
+transition surface and requires a counting-verifier regression test; it closes
+the unauthenticated cryptographic-work, TPM-oracle, and denial-of-service path.
+
+
+`ValidateAndStageRelayProfileRequest.profile` has one canonical v1 encoding:
+`version:u8 = 1`, `certificate_count:u8 = 1..=3`, `reserved:u16 = 0`, followed
+by that many non-empty `der_length:u16` plus DER-certificate byte strings.
+Integers are big-endian, certificates are leaf-first, the pinned root is not
+transmitted, and the 768-byte wire bound covers the entire encoding. Exact
+consumption is mandatory. Indefinite lengths, non-minimal DER, duplicate
+extensions, zero/truncated members, extra bytes, reordered/duplicate
+certificates, an included root, or a chain that does not fit are rejected
+rather than normalized. `profile_digest` is SHA-256 over these exact bytes.
+Before implementation, generated production-profile fixtures for direct-root,
+one-intermediate, and two-intermediate chains must prove that each required
+positive fits unchanged under 768 bytes. If any required chain cannot fit, this
+slice stops for Phase 2 protocol review; it must not truncate a chain, weaken
+validation, silently reduce the required positives, or change frozen bytes.
+
+
+The validator receives only immutable, trusted policy inputs: the provisioned
+relay DNS identity, pinned root certificate and SPKI digest, accepted signed
+time, firmware/policy floors, record-bound denylist and qualification
+snapshots, and a `PendingEnrollmentSnapshot`. The snapshot is derived from the
+authenticated current journal record and binds its revision, generation,
+CSR handle, selected pending slot, and pending SPKI bytes. It performs no AIA,
+DNS, OCSP, provider, or network lookup. Missing, stale, or digest-mismatched
+policy or enrollment inputs fail closed.
+
+The admitted certificate profile is closed: ECDSA P-256/SHA-256 signatures and
+P-256 SPKIs only; every child is signed by the next certificate and the last by
+the single pinned root; issuer/subject, AKI/SKI, basic constraints, CA key
+usage, path length, name constraints, and validity at the accepted signed time
+must all pass. Unknown critical extensions fail. The leaf must be an end-entity
+certificate with key usage exactly `digitalSignature`, EKU exactly
+`clientAuth`, and exactly one DNS SAN byte-equal to the provisioned relay name;
+CN fallback, wildcard, IP, URI, alternate DNS names, and CA/server usages fail.
+As required by [ADR-0005](../../docs/decisions/0005-mutual-tls-relay-identity.md),
+it must contain exactly one private extension OID `1.3.6.1.4.1.55555.1.1`
+whose raw `extnValue` payload is exactly the 32-byte
+NodeId `SHA-256(leaf SPKI DER)`; missing, duplicated, nested, malformed,
+wrong-length, or mismatched values fail. The NodeId and positive leaf serial
+are checked against the record-bound canonical denylist snapshot.
+
+The serialized firmware dispatcher holds one exclusive enrollment transaction
+from authenticated-request admission through journal staging. Under that
+transaction, the adapter requires request generation and pending slot to match
+the `PendingEnrollmentSnapshot`, independently reads that exact TPM slot, and
+requires `tpm_public_digest` to equal SHA-256 of its canonical `TPM2B_PUBLIC`
+bytes, `pending_spki_digest` to equal SHA-256 of the leaf's exact DER
+SubjectPublicKeyInfo, and that SubjectPublicKeyInfo to equal both the snapshot
+SPKI and the one derived from the TPM public area. Immediately before staging,
+it re-reads the same TPM public area and requires byte equality with the first
+read; the journal revision must also remain unchanged. Zero digests,
+read/parse failures, stale snapshots, races, and any mismatch produce `false`,
+stage no receipt, promote no key, and write no state. A successful internal
+`ValidatedRelayProfile` is constructible only by the validator and carries the
+canonical profile bytes and all three verified digests; the existing boolean
+trait adapter discards the value only after all checks succeed.
+
+Host tests must prove unauthenticated requests invoke neither verifier nor TPM,
+and cover every framing, algorithm, path, extension, identity, time, floor,
+denylist, digest, TPM binding, stale-snapshot/slot-race, and 768-byte boundary
+negative, including missing/duplicate/malformed/wrong-length/mismatched or
+denylisted NodeId bindings, plus direct-root and one/two-intermediate positives.
+These remain `SOFTWARE_HARNESS`; only exact locked-device tests may satisfy
+the physical pending-key and no-side-effect rows.
+
 ### Evidence Boundary
 
 | Evidence class | May establish | Must not claim |
@@ -128,7 +206,7 @@ public KMS fixtures remain unchanged.
 ## Implementation Steps
 
 1. From Phase 1 inventory, probe MCU/TPM identity, firmware, SPI, option-byte, debug, lifecycle, and NV capabilities without mutation; reconcile every assumption or stop.
-2. **Journal/recovery host slice completed 2026-08-29.** The no_std full-record codec, dual-slot journal, irreversible counter-domain seal seam, independent recovery verifier, Phase 2-owned exact successor validator, and cut-point/reboot harness remain `SOFTWARE_HARNESS`. Next implement the certificate/profile validator and typed firmware adapters without changing the frozen private wire bytes.
+2. **Journal/recovery host slice completed 2026-08-29.** The no_std full-record codec, dual-slot journal, irreversible counter-domain seal seam, independent recovery verifier, Phase 2-owned exact successor validator, and cut-point/reboot harness remain `SOFTWARE_HARNESS`. The certificate/profile validator contract is now frozen above; next implement its host core and typed firmware adapter without changing the private wire bytes.
 3. Generate `provision/plan.py` output containing device IDs, STiRoT image/key digests, the approved Phase 3 SRAM-loader and manifest-verification-key digests bound into the approved image/policy, exact option-byte/OTP/lifecycle/debug writes, TPM persistent/NV definitions, auth policies, irreversibility, and recovery consequences.
 4. **Operator checkpoint:** obtain explicit approval tied to the plan hash before key creation/persistence, `NV_DefineSpace`, OTP/STiRoT provisioning, lifecycle transition, debug closure, or destructive snapshot work. A changed hash requires new approval; no purchase/cloud action occurs here.
 5. Provision STiRoT and TPM in approved order, verify image acceptance/rejection and public key/NV attributes, then close debug/lifecycle only at its separately recorded irreversible checkpoint.
@@ -169,3 +247,4 @@ None at planning time beyond: **2026-08-26 Decision** — security red-team revi
 - 2026-08-26 — Decision: software track authorized; codec/state/certificate harnesses and the provision-plan generator may proceed pre-admission as `SOFTWARE_HARNESS`. Provisioning, TPM/STiRoT work, and the physical failure matrix stay operator-gated.
 - 2026-08-29 — Decision: the next authorized software slice is the Phase 4 full-record dual-slot journal and recovery harness. It wraps, rather than forks, the canonical Phase 2 protected record; Phase 2 may expose a read-only binding view but its v1 bytes and transition surface remain frozen. Hardware authentication, TPM counter behavior, flash atomicity, and lifecycle claims remain gated.
 - 2026-08-29 — Result: the first Phase 4 software slice is complete. `RecoveredRecord` is opaque, commit internally re-authenticates the current slot, Phase 2 owns exact mode/boot/time/pending-time/relay successor validation, and the counter-domain seal is absorbing across reboot. RV64 no_std checks and host suites pass; exact STM32/TPM behavior remains unclaimed.
+- 2026-08-29 — Decision: freeze the next software slice as a closed, canonical certificate-profile validator over the existing bounded request. Phase 2 must authenticate before invoking the verifier. A serialized journal-derived pending-enrollment snapshot and repeated exact-slot TPM read close substitution and race paths. The root stays provisioned; validation is offline, algorithm-closed, time-, policy-, NodeId-, and TPM-bound. Exact direct/one/two-intermediate fixtures must fit the frozen 768-byte field or stop for protocol review.
