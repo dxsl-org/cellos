@@ -91,9 +91,13 @@
   generations protect later explicit re-admission. A synchronous connection
   gate now bounds each accepted connection before its TLS handshake and retains
   the slot through session teardown, preventing route capacity from leaving
-  pre-authentication work unbounded. Relay-server tests pass 33/33; focused
-  broker tests remain 101/101 and the RV64 broker release build passes. Cellos
-  client authentication, receive wiring, and two-node evidence remain open.
+  pre-authentication work unbounded. Relay delivery errors now distinguish
+  definite destination absence before any write from uncertain delivery after a
+  destination write/drain attempt can queue bytes. The former remains
+  `ERR_DESTINATION_UNAVAILABLE`; the latter is `ERR_DELIVERY_UNCERTAIN`, and no
+  server-side success receipt is invented. Relay-server tests pass 34/34;
+  focused broker tests remain 101/101 and the RV64 broker release build passes.
+  Cellos client error mapping, receive wiring, and two-node evidence remain open.
 
 - Authenticated evidence admission requires an explicitly provisioned,
   operator-owned replay store outside the submitted bundle. Verification binds

@@ -32,6 +32,7 @@ FT_PONG = 0x0C
 FT_ERROR = 0x7F
 ERR_DESTINATION_UNAVAILABLE = 0x01
 ERR_UNKNOWN_FRAME = 0x03
+ERR_DELIVERY_UNCERTAIN = 0x04
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("relay")
@@ -178,7 +179,9 @@ class RelayServer:
             )
         except (ConnectionError, ssl.SSLError, TimeoutError):
             destination_entry.writer.close()
-            sent = False
+            if self._current(src_id, generation) is not None:
+                await self._send_error(src_id, generation, ERR_DELIVERY_UNCERTAIN)
+            return
         if not sent and self._current(src_id, generation) is not None:
             await self._send_error(src_id, generation, ERR_DESTINATION_UNAVAILABLE)
 

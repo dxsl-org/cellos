@@ -1426,8 +1426,15 @@ unauthenticated, identity-mismatched, duplicate-live, and capacity attempts
 before mutation; exact generations reject stale disconnect cleanup. Duplicate
 same-certificate connections cannot replace or cancel the established route.
 No proof blob, advertised NodeId, shared secret, or raw key can authorize
-registration. Cellos client authentication, receive wiring, and two-node
-evidence remain absent.
+registration. Relay forwarding distinguishes definite destination absence
+before a write from uncertain delivery after a write/drain attempt may have
+queued bytes. It reports `ERR_DESTINATION_UNAVAILABLE` for the former and
+`ERR_DELIVERY_UNCERTAIN` for the latter; successful drain is not an
+application-delivery receipt. Current `FT_ERROR` has no request correlation, so
+a future pipelined client must conservatively treat affected outstanding work as
+`Indeterminate` or adopt a separately approved correlated framing revision.
+Cellos client authentication, receive wiring, and two-node evidence remain
+absent.
 
 ### Cluster membership: 3 modes
 

@@ -110,6 +110,13 @@ Sessions, frames, I/O, and delivery errors are bounded. A second live session
 with the same certificate-derived NodeId is rejected without displacing the
 current route. Monotonic route generations prevent stale disconnect cleanup
 from removing a later explicitly re-admitted route.
+Destination absence detected before any destination write is a definite
+unavailable outcome. Once a forwarding write is attempted, a write, TLS, or
+drain failure is delivery-uncertain because bytes may already be queued. The
+server reports distinct bounded errors and emits no success receipt. The
+uncertain error is channel-level because the relay cannot inspect opaque C2C
+request IDs; future pipelining requires conservative outstanding-work handling
+or a separately approved correlated framing revision.
 
 The relay forwards payloads as opaque Noise ciphertext. mTLS authenticates the
 external relay hop; it does not terminate or replace Noise.
@@ -174,6 +181,8 @@ Acceptance evidence must show that:
 - startup fails without a valid mounted manifest, limits hold, duplicate live
   NodeIds cannot displace the current route, and stale cleanup cannot remove a
   later explicitly re-admitted session;
+- destination absence and post-write/drain failure produce distinct definite
+  unavailable and delivery-uncertain errors without a false success receipt;
 - the Cellos client validates server CA/hostname and signs only through the
   authorized protected KMS path and its qualified production hardware provider,
   without exposing key bytes; and
@@ -183,7 +192,8 @@ Acceptance evidence must show that:
 Current evidence directly covers TLS 1.3 and required-client-certificate
 configuration, missing/untrusted client certificates, NodeId extension binding,
 denylist enforcement, bounded pre-TLS connections, routing, duplicate-live
-rejection, manifest validation, and route/session limits. Dedicated non-P-256
+rejection, definite/uncertain delivery-error separation, manifest validation,
+and route/session limits. Dedicated non-P-256
 and wrong-`clientAuth` negative fixtures remain required before the complete
 server certificate-policy claim. Client mTLS and the two-node TLS/Noise exercise
 remain blocked by the prerequisites above.

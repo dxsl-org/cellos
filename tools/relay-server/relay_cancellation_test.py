@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import struct
 import unittest
 
 from relay_admission import (
@@ -8,7 +9,7 @@ from relay_admission import (
     AdmissionLease,
     AuthenticatedSessionIdentity,
 )
-from relay import RelayServer
+from relay import ERR_DELIVERY_UNCERTAIN, FT_ERROR, RelayServer
 from relay_identity import Denylist
 
 
@@ -88,6 +89,36 @@ class RelayCancellationTests(unittest.IsolatedAsyncioTestCase):
 
         destination_handler.cancel()
         await asyncio.gather(destination_handler, return_exceptions=True)
+
+    async def test_destination_drain_timeout_is_sender_visible_uncertain(self) -> None:
+        relay = RelayServer(Denylist(frozenset(), frozenset()), io_timeout=0.01)
+        source_id = b"s" * 32
+        destination_id = b"d" * 32
+        source = FakeWriter()
+        destination = FakeWriter(block_drain=True)
+        handler = asyncio.current_task()
+        assert handler is not None
+        source_lease = relay._register(
+            AuthenticatedSessionIdentity(source_id), source_id, source, handler
+        )
+        destination_lease = relay._register(
+            AuthenticatedSessionIdentity(destination_id),
+            destination_id,
+            destination,
+            handler,
+        )
+        assert isinstance(source_lease, AdmissionLease)
+        assert isinstance(destination_lease, AdmissionLease)
+
+        await relay._forward(
+            source_id, source_lease.generation, destination_id, b"opaque"
+        )
+
+        self.assertTrue(destination.closed)
+        self.assertEqual(len(destination.frames), 1)
+        error = bytes([FT_ERROR, ERR_DELIVERY_UNCERTAIN])
+        self.assertEqual(source.frames, [struct.pack(">I", len(error)) + error])
+        self.assertFalse(source.closed)
 
 
 if __name__ == "__main__":

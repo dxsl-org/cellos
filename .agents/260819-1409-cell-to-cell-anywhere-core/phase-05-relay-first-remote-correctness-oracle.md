@@ -92,6 +92,8 @@ node B local export -> response -> relay -> node A dedup/response.
 - [x] Reject unauthenticated, identity-mismatched, duplicate-live, capacity, and
   stale-disconnect admission transitions without displacing a live route.
 - [ ] Define relay reconnect backoff.
+- [x] Separate definite pre-write destination absence from accepted-then-uncertain
+  destination write/drain failure with bounded relay error codes.
 - [ ] Define oracle topology and logs retained.
 - [x] Define no-evict session-pool admission: full capacity returns explicit
   pressure without opening another TCP path or displacing an existing session.
@@ -106,8 +108,10 @@ node B local export -> response -> relay -> node A dedup/response.
 
 - Two isolated nodes complete one exported service request via relay.
 - Relay sees NodeIds and ciphertext only.
-- Relay disconnect maps to `Unreachable` or `Indeterminate`, not `NoService`.
-- Missing destination and relay forward failure never silently drop an accepted request.
+- Missing destination is a definite pre-write rejection; destination write or
+  drain failure is explicitly uncertain and never silently treated as
+  non-delivery. Relay disconnect maps to `Unreachable` or `Indeterminate`, not
+  `NoService`.
 - A duplicate live certificate-derived NodeId is rejected before packet
   forwarding and cannot displace the established route.
 - In-flight relay requests are never evicted; pressure is visible to caller.
@@ -132,9 +136,9 @@ kernel state requires rollback.
 
 ## Next Steps
 
-Continue local-only relay contract work with reconnect backoff and
-sender-visible delivery-error semantics. Protected client signer qualification
-still blocks Cellos relay wiring and any two-node oracle.
+Continue local-only relay contract work with reconnect backoff and a future
+correlated client framing decision. Protected client signer qualification still
+blocks Cellos relay wiring, sender-side error mapping, and any two-node oracle.
 
 ## Local Contract Evidence
 
@@ -148,10 +152,13 @@ still blocks Cellos relay wiring and any two-node oracle.
   unknown, malformed IP/port, or non-canonical hostname fields and performs no
   I/O. `BrokerIdentity` stores only a validated endpoint without dialing it.
 - Focused broker tests pass 101/101 and the RV64 release build passes.
-- The pure relay admission table, pre-TLS connection gate, and mTLS wire
-  regressions pass within 33/33 relay-server tests. Duplicate same-certificate
-  connections close without interrupting or rerouting the established session;
-  stale generation cleanup cannot remove a later explicit admission. Tester and
-  production-readiness reviewer rechecks pass.
+- The pure relay admission table, pre-TLS connection gate, delivery-outcome
+  split, and mTLS wire regressions pass within 34/34 relay-server tests. A
+  missing destination returns definite `ERR_DESTINATION_UNAVAILABLE`; a
+  destination write/drain failure after bytes may be queued returns
+  `ERR_DELIVERY_UNCERTAIN`. Duplicate same-certificate connections cannot
+  interrupt or reroute the established session, and stale generation cleanup
+  cannot remove a later explicit admission. Tester and production-readiness
+  reviewer rechecks pass.
 - No Cellos relay client, remote dispatch, receive loop, or two-node traffic is
   enabled or claimed.

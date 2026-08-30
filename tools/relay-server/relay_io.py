@@ -41,9 +41,8 @@ async def send_frame(
     try:
         await asyncio.wait_for(writer.drain(), timeout)
     except asyncio.CancelledError:
-        # A source-generation replacement can cancel forwarding after bytes were
-        # queued but before backpressure completes. Closing the destination
-        # discards that transport buffer instead of letting each replacement add
-        # another queued frame.
+        # Cancellation after `write` has queued bytes has an uncertain delivery
+        # outcome. Close the destination so buffered work cannot outlive the
+        # forwarding task.
         writer.close()
         raise
