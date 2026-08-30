@@ -4,6 +4,17 @@
 
 ## [Unreleased] Development-first hardware-constrained execution
 
+- Phase 5's signed-time wire contract is frozen at the `SOFTWARE_HARNESS`
+  ceiling. The strict deterministic-CBOR codec rejects non-shortest, duplicate,
+  indefinite, tagged, floating-point, unsupported, trailing, and oversized
+  inputs. Requests bind the registered canonical Ed25519 DER-SPKI and verify the
+  exact labels 1–8; responses bind source epoch and the complete request, hash
+  exact labels 1–14 for KMS `DIGEST` signing, and require canonical low-S P-256
+  DER signatures. Public-only golden and malformed vectors round-trip exactly.
+  Focused tests pass 28/28 and final review found no remaining scoped issue.
+  No clock, allocator, handler, AWS resource, credential, or deployment action
+  occurred; those steps remain gated.
+
 - Phase 4's deterministic, non-executing provisioning-plan generator is complete
   only at the `SOFTWARE_HARNESS` ceiling. Each of its nine ordered mutations now
   carries an exact typed address space/address, byte width, write mask, requested

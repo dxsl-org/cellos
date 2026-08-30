@@ -1,0 +1,20 @@
+{
+  "format": "cellos-deterministic-cbor-malformed-v1",
+  "cases": [
+    {"name": "duplicate-map-key", "cbor_hex": "a201010101", "reason": "duplicate label"},
+    {"name": "nonminimal-map-key", "cbor_hex": "a1180101", "reason": "non-shortest integer"},
+    {"name": "nonminimal-value", "cbor_hex": "a1011801", "reason": "non-shortest integer"},
+    {"name": "out-of-order-map-keys", "cbor_hex": "a202010101", "reason": "non-deterministic key order"},
+    {"name": "indefinite-map", "cbor_hex": "bf0101ff", "reason": "indefinite length"},
+    {"name": "indefinite-byte-string", "cbor_hex": "5f4100ff", "reason": "indefinite length"},
+    {"name": "tag", "cbor_hex": "c000", "reason": "tag unsupported"},
+    {"name": "float", "cbor_hex": "fa00000000", "reason": "float unsupported"},
+    {"name": "array", "cbor_hex": "80", "reason": "array unsupported"},
+    {"name": "negative-integer", "cbor_hex": "20", "reason": "negative integer unsupported"},
+    {"name": "boolean", "cbor_hex": "f5", "reason": "boolean unsupported"},
+    {"name": "null", "cbor_hex": "f6", "reason": "null unsupported"},
+    {"name": "invalid-utf8", "cbor_hex": "61ff", "reason": "text must be UTF-8"},
+    {"name": "reserved-additional-info", "cbor_hex": "1c", "reason": "reserved additional information"},
+    {"name": "trailing-item", "cbor_hex": "0000", "reason": "trailing bytes"}
+  ]
+}

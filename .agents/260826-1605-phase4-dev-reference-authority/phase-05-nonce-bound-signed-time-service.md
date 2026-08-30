@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: "Nonce-Bound Signed-Time Service"
-status: pending
+status: in_progress
 priority: P1
 dependencies: [2]
 tier: thinking
@@ -89,7 +89,7 @@ CloudFormation owns exactly one API, Lambda/version alias, execution role, log g
 
 ## Todo List
 
-- [ ] Freeze vectors and strict codec.
+- [x] Freeze vectors and strict codec.
 - [ ] Implement clock gate, transaction allocator, receipt recovery, and signer.
 - [ ] Review IAM/key policies and DEV production rejection.
 - [ ] Obtain operator authorization and execute deployment, outage, restore, and rollback scenarios.
@@ -97,7 +97,7 @@ CloudFormation owns exactly one API, Lambda/version alias, execution role, log g
 
 ## Success Criteria
 
-- [ ] Deterministic vectors round-trip byte-for-byte and every malformed/binding substitution returns no signed fact.
+- [x] Deterministic vectors round-trip byte-for-byte and every malformed/binding substitution returns no signed fact.
 - [ ] Concurrent live requests allocate one strict sequence per committed receipt; conflicts, ambiguous writes, old-state restore, and clock uncertainty never allocate an unrecorded signature.
 - [ ] Every response binds the exact request tuple and expires in at most 60 seconds; no response crosses expiry or claims a second source/region/key.
 - [ ] Live endpoint, upstream, DynamoDB, and KMS outages stop signing, and an authorized version rollback is evidenced without state rollback or failover.
@@ -129,3 +129,4 @@ Phase 6 consumes only the reviewed endpoint/key/source manifest and frozen vecto
 - 2026-08-26 — Decision: the red-team security/consistency gate returned NO-GO with PLAN-TIME-002 (deployment principals retained indirect signing reachability). Resolution applied pre-execution: explicit signing-reachability TCB — immutable published versions only, four separated roles under permission boundaries, break-glass key-disable plus epoch rotation — plus new physical/live negative probes; no existing hard stop weakened.
 - 2026-08-26 — Decision: the same NO-GO carried PLAN-TIME-003 (a restored DynamoDB table could still produce valid signatures). Resolution applied pre-execution: allocator lineage anchored outside the restorable table by strict source-epoch rotation on restore/fork plus the authority-side epoch-transition policy, with restored-past-floor and alternating same-epoch-fork rejections as deterministic and live tests.
 - 2026-08-26 — Decision: software track authorized; CBOR schema, handler code, CloudFormation template, and golden vectors may be written pre-admission. Deployment, key creation, and every live scenario stay blocked on the named AWS DEV account and operator authorization.
+- 2026-08-30 — `SOFTWARE_HARNESS` step 1 complete: strict deterministic-CBOR request/response codecs, exact Ed25519 request and low-S P-256 response verification, KMS DIGEST signing bytes, 1,024-byte wire bounds, source-epoch/request/key bindings, and public-only golden/malformed vectors. Focused tests pass 28/28 and final review found no remaining scoped issue. No AWS resource, clock, allocator, handler, credential, or deployment action occurred.
