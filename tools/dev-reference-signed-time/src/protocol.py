@@ -9,10 +9,9 @@ from protocol_crypto import (
     verify_p256_digest,
 )
 from protocol_models import (
-    MAX_REQUEST_BYTES, MAX_RESPONSE_BYTES, MAX_UINT64, PROTOCOL_VERSION,
-    SIGNING_ALGORITHM, SOURCE_ID,
-    VALID_PURPOSES, RegisteredAuthority, SignedRequest, SignedResponse,
-    UnsignedRequest, UnsignedResponse,
+    MAX_REQUEST_BYTES, MAX_RESPONSE_BYTES, MAX_UNSIGNED_RESPONSE_BYTES, MAX_UINT64,
+    PROTOCOL_VERSION, SIGNING_ALGORITHM, SOURCE_ID, VALID_PURPOSES,
+    RegisteredAuthority, SignedRequest, SignedResponse, UnsignedRequest, UnsignedResponse,
 )
 
 
@@ -122,9 +121,12 @@ def _response_map(response: UnsignedResponse, signature: bytes | None = None) ->
 
 def _dump_response(response: UnsignedResponse, signature: bytes | None = None) -> bytes:
     try:
-        return cbor_codec.dumps(_response_map(response, signature))
+        encoded = cbor_codec.dumps(_response_map(response, signature))
     except cbor_codec.CborError as exc:
         raise ProtocolError(str(exc)) from exc
+    if len(encoded) > (MAX_RESPONSE_BYTES if signature is not None else MAX_UNSIGNED_RESPONSE_BYTES):
+        raise ProtocolError("response exceeds size limit")
+    return encoded
 
 def _validate_response(response: UnsignedResponse) -> None:
     if not isinstance(response, UnsignedResponse):
@@ -162,13 +164,11 @@ def encode_response(response: SignedResponse) -> bytes:
     except CryptoError as exc:
         raise ProtocolError(str(exc)) from exc
     encoded = _dump_response(response, response.signature)
-    if len(encoded) > MAX_RESPONSE_BYTES:
-        raise ProtocolError("response exceeds 1024 bytes")
     return encoded
 
 
-def decode_response(data: bytes, public_key_der: bytes, expected_key_id: str,
-                    expected_source_epoch: int, request: UnsignedRequest) -> SignedResponse:
+def decode_response(data: bytes, public_key_der: bytes, expected_key_id: str, expected_source_epoch: int,
+                    request: UnsignedRequest) -> SignedResponse:
     """Decode, bind to source epoch, request, and key ID, then verify P-256."""
     _uint(expected_source_epoch, "expected_source_epoch")
     try:

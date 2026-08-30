@@ -19,12 +19,16 @@
   uint64 checks. The receipt core freezes exact lower-hex state/registration/
   request keys, stores the full canonical signed-request digest and immutable
   response labels, and permits only an exact constant-time digest retry without
-  refreshing sequence, time, or expiry. Public-only golden and malformed vectors
-  round-trip exactly. Focused tests pass 53/53, and every test module passes
-  isolated discovery through one explicit shared source-path bootstrap. Final
-  review found no remaining scoped issue. No clock authentication, transaction
-  operation, handler, AWS resource, credential, network call, or deployment
-  action occurred; those steps remain gated.
+  refreshing sequence, time, or expiry. Strict DynamoDB AttributeValue codecs
+  now freeze exact registration, allocator-state, and receipt records, including
+  canonical uint64 decimals, Ed25519 registration keys, and canonical response
+  bytes. Unsigned responses stop at 950 bytes, reserving the exact 74-byte
+  worst-case low-S P-256 signature field under the 1,024-byte final wire limit.
+  Public-only golden and malformed vectors round-trip exactly. Focused tests pass
+  87/87, including isolated discovery, and final review found no remaining scoped
+  issue. No clock authentication, transaction persistence, database operation,
+  handler, AWS resource, credential, network call, or deployment action occurred;
+  those steps remain gated.
 
 - Phase 4's deterministic, non-executing provisioning-plan generator is complete
   only at the `SOFTWARE_HARNESS` ceiling. Each of its nine ordered mutations now

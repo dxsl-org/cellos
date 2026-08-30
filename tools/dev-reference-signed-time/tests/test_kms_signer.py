@@ -9,6 +9,7 @@ from kms_signer import KmsSigner, KmsSignerError
 from protocol import encode_response, response_signing_digest
 from protocol_crypto import P256_ORDER, canonicalize_p256_der_signature
 from protocol_models import SIGNING_ALGORITHM, SignedResponse, UnsignedResponse
+from response_size_support import response_at_unsigned_limit
 
 
 class FakeKmsClient:
@@ -167,19 +168,13 @@ class KmsSignerTests(unittest.TestCase):
             with self.subTest(signature=repr(signature)[:32]):
                 self.assert_failed_closed(result=self.kms_result(signature))
 
-    def test_encoded_response_size_failure_is_closed_after_one_call(self):
-        oversized = replace(self.unsigned, key_id="k" * 1024)
-        digest = response_signing_digest(oversized)
-        signature = self.private_key.sign(
-            digest, ec.ECDSA(utils.Prehashed(hashes.SHA256())))
-        client = FakeKmsClient({
-            "KeyId": oversized.key_id,
-            "SigningAlgorithm": SIGNING_ALGORITHM,
-            "Signature": signature,
-        })
+    def test_oversized_response_fails_before_kms_call(self):
+        maximum = response_at_unsigned_limit(self.unsigned)
+        oversized = replace(maximum, key_id=maximum.key_id + "k")
+        client = FakeKmsClient()
         with self.assertRaisesRegex(KmsSignerError, "^KMS signing failed$"):
             KmsSigner(client, oversized.key_id, self.public_key_der).sign_response(oversized)
-        self.assertEqual(len(client.calls), 1)
+        self.assertEqual(client.calls, [])
 
     def test_invalid_or_mismatched_unsigned_response_never_calls_kms(self):
         cases = [
