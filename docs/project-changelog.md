@@ -33,11 +33,13 @@
   envelope with a nonempty request ID. Public-only golden and malformed vectors
   round-trip exactly. The transactional snapshot reader revalidates the signed
   request before one ordered registration/state read, then strictly binds the
-  non-revoked registration tuple and configured source epoch. Focused tests pass
-  117/117, including isolated discovery, and final review found no remaining
-  scoped issue. No clock authentication, live database operation, handler, AWS
-  resource, credential, network call, or deployment action occurred; those
-  steps remain gated.
+  non-revoked registration tuple and configured source epoch. The KMS key loader
+  makes one exact `GetPublicKey` call and admits only the manifest key ID,
+  P-256/`SIGN_VERIFY`/`ECDSA_SHA_256` contract and constant-time SHA-256 DER-SPKI
+  pin. Focused tests pass 133/133, including isolated discovery, and final review
+  found no remaining scoped issue. No clock authentication, live database
+  operation, handler, AWS resource, credential, network call, or deployment
+  action occurred; those steps remain gated.
 
 - Phase 4's deterministic, non-executing provisioning-plan generator is complete
   only at the `SOFTWARE_HARNESS` ceiling. Each of its nine ordered mutations now
