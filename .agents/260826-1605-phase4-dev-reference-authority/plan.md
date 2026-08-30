@@ -30,7 +30,7 @@ Produce real AC-001 through AC-011 evidence for the approved Phase 4 Build-entry
 | 1 | [Admission and Asset Baseline](./phase-01-admission-and-asset-baseline.md) | blocked | hardware, AWS account |
 | 2 | [Private Protocol and DEV Separation](./phase-02-private-protocol-and-dev-separation.md) | blocked; SOFTWARE_HARNESS complete | 1 |
 | 3 | [VF2 UART Root-Stream Boot](./phase-03-vf2-uart-root-stream-boot.md) | blocked; manifest SOFTWARE_HARNESS complete | 2, exact hardware |
-| 4 | [STM32 and TPM Protected Authority](./phase-04-stm32-tpm-protected-authority.md) | pending | 2 |
+| 4 | [STM32 and TPM Protected Authority](./phase-04-stm32-tpm-protected-authority.md) | in progress; dual-slot journal `SOFTWARE_HARNESS` contract frozen | 2 |
 | 5 | [Nonce-Bound Signed-Time Service](./phase-05-nonce-bound-signed-time-service.md) | pending | 2 |
 | 6 | [Frozen-ABI KMS Authority Integration](./phase-06-frozen-abi-kms-authority-integration.md) | pending | 3, 4, 5 |
 | 7 | [Relay Enrollment and Legacy-Signer Compatibility](./phase-07-relay-enrollment-and-mtls-integration.md) | pending | 6 |

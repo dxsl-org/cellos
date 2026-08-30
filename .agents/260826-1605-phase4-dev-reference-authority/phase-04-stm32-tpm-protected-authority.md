@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "STM32 and TPM Protected Authority"
-status: pending
+status: "in_progress; SOFTWARE_HARNESS"
 priority: P1
 dependencies: [2]
 tier: thinking
@@ -53,6 +53,38 @@ Build the typed STiRoT-provisioned STM32H573IIK3Q authority whose private SPI-at
 - State transitions are `EMPTY | COMMITTED | PREPARED(exact intent) | PROMOTED(exact TPM CAS receipt)`. Only a counter-matching authenticated COMMITTED record authorizes service.
 - Pending validation produces `{device, authority_epoch, boot_epoch, request, generation, policy_epoch, pending_slot, pending_spki, profile_digest}` as a durable single-use receipt; raw chain bytes are canonicalized and bounded before persistence.
 
+
+### Software Slice Contract
+
+The first authorized Phase 4 slice is the host-only authenticated dual-slot
+journal and exhaustive recovery harness. It consumes the canonical
+`authority_protocol::ProtectedAuthorityRecord`; it does not fork the Phase 2
+transition table or private wire protocol.
+
+The Phase 4 full record is a versioned, fixed-endian, exactly consumed envelope
+containing the canonical Phase 2 record plus the remaining PERSIST-003 hardware
+bindings: lane identity; restart floor; approved boot-measurement,
+SRAM-loader, and manifest-key digests; firmware and policy floors;
+trust/verifier/denylist/qualification digests; bounded canonical active and
+pending SPKI/profile bytes; transaction intent; and exact provider receipt.
+Lengths are compile-time bounded, reserved bytes are zero, trailing bytes and
+unknown versions fail, and authentication covers the canonical envelope plus
+device identity, TPM authority identity, NV counter, and physical slot role.
+
+The journal owns two complete slots and an abstract non-orderly counter. A
+mutation is `increment counter → erase/write inactive slot → authenticate and
+decode read-back → publish`. Recovery reads the counter and both slots without
+repair: it accepts exactly one authenticated, invariant-valid record whose
+counter equals the TPM value and whose identity/slot binding matches; missing,
+torn, replayed, cross-device, same-counter ambiguous, or invalid-transition
+candidates seal. PREPARED is never serveable, provider state is never queried to
+guess recovery, and the host authenticator/counter/flash implementations remain
+explicit `SOFTWARE_HARNESS` seams rather than TPM or power-loss evidence.
+
+Phase 2 requires only a read-only protected-record binding view needed by the
+adapter verifier. Its canonical v1 bytes, operation set, state transitions, and
+public KMS fixtures remain unchanged.
+
 ### Evidence Boundary
 
 | Evidence class | May establish | Must not claim |
@@ -95,7 +127,7 @@ Build the typed STiRoT-provisioned STM32H573IIK3Q authority whose private SPI-at
 ## Implementation Steps
 
 1. From Phase 1 inventory, probe MCU/TPM identity, firmware, SPI, option-byte, debug, lifecycle, and NV capabilities without mutation; reconcile every assumption or stop.
-2. Implement typed firmware, complete record codec, independent slot verifier, certificate/profile validator, and exhaustive cut-point state harness over `authority_protocol`; label all outputs `SOFTWARE_HARNESS`.
+2. Implement the frozen host-only full-record codec, dual-slot journal, independent recovery verifier, and exhaustive cut-point harness over `authority_protocol`; add only the read-only Phase 2 record-binding view required for verification. Then implement the certificate/profile validator and typed firmware adapters. Label all outputs `SOFTWARE_HARNESS`.
 3. Generate `provision/plan.py` output containing device IDs, STiRoT image/key digests, the approved Phase 3 SRAM-loader and manifest-verification-key digests bound into the approved image/policy, exact option-byte/OTP/lifecycle/debug writes, TPM persistent/NV definitions, auth policies, irreversibility, and recovery consequences.
 4. **Operator checkpoint:** obtain explicit approval tied to the plan hash before key creation/persistence, `NV_DefineSpace`, OTP/STiRoT provisioning, lifecycle transition, debug closure, or destructive snapshot work. A changed hash requires new approval; no purchase/cloud action occurs here.
 5. Provision STiRoT and TPM in approved order, verify image acceptance/rejection and public key/NV attributes, then close debug/lifecycle only at its separately recorded irreversible checkpoint.
@@ -132,3 +164,4 @@ On pass, Phase 6 consumes the typed facts/receipts and opaque provider adapter; 
 
 None at planning time beyond: **2026-08-26 Decision** — security red-team review returned NO-GO on PLAN-BOOT-001; resolved without weakening any stop by binding the exact Phase 3 SRAM-loader bytes and manifest-verification key into this phase's STiRoT-approved image/policy, verifying the approved-loader digest before any XMODEM byte, persisting that digest in PERSIST-003 tuples and the OpenBoot fact, and adding substituted/rolled-back/truncated-loader physical negatives. Root `Cargo.toml` registration defers to Phase 6 as sole serialized owner and production-checker ownership stays with Phase 2 (marker-name handoff only), per the simplicity NO-GO resolution logged in Phase 3. During Build append each Decision/Deviation/Surprise with trigger, contract impact, and reversal; irreversible deviations are escalated before action.
 - 2026-08-26 — Decision: software track authorized; codec/state/certificate harnesses and the provision-plan generator may proceed pre-admission as `SOFTWARE_HARNESS`. Provisioning, TPM/STiRoT work, and the physical failure matrix stay operator-gated.
+- 2026-08-29 — Decision: the next authorized software slice is the Phase 4 full-record dual-slot journal and recovery harness. It wraps, rather than forks, the canonical Phase 2 protected record; Phase 2 may expose a read-only binding view but its v1 bytes and transition surface remain frozen. Hardware authentication, TPM counter behavior, flash atomicity, and lifecycle claims remain gated.
