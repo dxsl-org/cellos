@@ -132,6 +132,18 @@
   AC-012 gates relay enablement and Phase 4 completion. This resolves the
   architecture decision, not the entry evidence or client implementation.
 
+- Accepted ADR-0009 for request-correlated relay packet failures before any
+  Cellos relay client exists. The clean cutover retires legacy
+  `FT_SEND_PACKET (0x08)`, adds `0x0d` with a nonzero per-TLS-session `u64be`
+  correlation, and reserves `FT_PACKET_ERROR (0x0a)` for correlated definite
+  unavailable or delivery-uncertain outcomes. Uncorrelated `FT_ERROR (0x7f)` is
+  protocol-fatal only. The outer `FT_RECV_PACKET` layout remains unchanged, and
+  C2C request IDs remain inside Noise. The server clean cutover is implemented:
+  compile checks pass 4/4 and the focused relay suite passes 40/40, including
+  exact two-request correlation and fatal legacy/zero/malformed cases.
+  Authority-owned client framing and broker correlation lifecycle still wait for
+  Phase 4 Build.
+
 - Authenticated evidence admission requires an explicitly provisioned,
   operator-owned replay store outside the submitted bundle. Verification binds
   the GitHub-attested subject digest through a second locked member check;

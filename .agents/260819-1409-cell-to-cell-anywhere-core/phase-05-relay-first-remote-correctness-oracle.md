@@ -16,6 +16,8 @@ owner: "relay-runtime"
 - Relay identity decision: `../../docs/decisions/0005-mutual-tls-relay-identity.md`
 - Protected TLS ownership:
   `../../docs/decisions/0008-protected-relay-tls-endpoint-ownership.md`
+- Correlated relay framing:
+  `../../docs/decisions/0009-correlate-relay-packet-failures.md`
 - Protected signer gate:
   `../260825-1726-kms-silo-production-root/phase-04-service-net-mutual-tls-integration.md`
 - Approved protected profile contract:
@@ -30,6 +32,7 @@ Priority P1. Make remote work through an authenticated self-hosted relay first, 
 - Relay framing exists but inbound relay frames are not wired.
 - Relay-first gives a stable correctness path for NAT-hostile and remote environments.
 - Payload must remain end-to-end Noise encrypted.
+- ADR-0009 retires ambiguous uncorrelated sends before any Cellos relay client exists.
 
 ## Requirements
 
@@ -38,6 +41,8 @@ Priority P1. Make remote work through an authenticated self-hosted relay first, 
   request/response, and a relay-only two-node oracle.
 - Non-functional: self-hosted relay, no public relay dependency, bounded
   pre-TLS connections/sessions/frames, and heartbeat-safe receive cadence.
+- Wire contract: `FT_SEND_PACKET_CORRELATED (0x0d)` carries a nonzero per-TLS-session `u64be` correlation before the destination NodeId; `FT_PACKET_ERROR (0x0a)` returns that correlation plus one definite/uncertain code. Legacy `0x08` and malformed server input are connection-fatal. Server codec work may proceed locally; the authority-owned client codec and correlation lifecycle wait for post-entry-GO Phase 4 Build.
+- Correlation lifecycle: active current-generation errors resolve once; retired lower-than-next values are ignored and bounded-counted; zero/future/unaccepted or stale-generation input never selects a request. Only explicit authority rejection with typed-request ownership returned remains `NotSubmitted`; acceptance or an ambiguous send outcome is `Submitted`, so disconnect maps unresolved work to `Indeterminate`.
 
 ## Entry Gate
 
@@ -62,6 +67,15 @@ compromise. Public KMS opcodes 9–14 remain unchanged, and the legacy opaque
 transcript-hash signer denies in production. Generic TLS,
 caller-selected identity, shared-secret, raw-key, and insecure fallback remain
 forbidden.
+
+ADR-0009 cleanly retires `FT_SEND_PACKET (0x08)`. The protected authority emits
+`0x0d || correlation:u64be || destination:NodeId[32] || Noise ciphertext` from a
+typed broker request and parses request-scoped `FT_PACKET_ERROR (0x0a)` into a
+typed generation-bound event. Uncorrelated `FT_ERROR (0x7f)` remains only for
+fatal protocol errors followed by close. Correlation is nonzero, strictly
+increasing, never reused within one authenticated TLS session, and locally keyed
+with relay session generation. Net-broker never constructs/parses raw outer
+frames; `FT_RECV_PACKET` and the opaque Noise envelope stay unchanged.
 
 ## Related Code Files
 
@@ -93,12 +107,13 @@ forbidden.
 ## Implementation Steps
 
 1. Specify certificate-derived relay admission and duplicate NodeId rejection.
-2. Specify relay-mediated Noise handshake.
-3. Wire relay receive into broker dispatcher.
-4. Add relay-only path selection and health state.
-5. Define isolated two-node relay oracle with no hardware evidence claim.
-6. Define sender-visible errors for destination-missing, relay write failure, and relay disconnect.
-7. Verify retry mapping over relay for `Busy`, `Unreachable`, `Timeout`, and `Indeterminate`.
+2. Replace legacy server send/error framing with ADR-0009 correlated packet failures.
+3. During post-entry-GO Phase 4 Build, add the authority-owned outer codec and typed broker correlation lifecycle.
+4. Specify relay-mediated Noise handshake.
+5. Wire typed relay receive events into broker dispatcher with bounded session-generation correlation state.
+6. Add relay-only path selection and health state.
+7. Define isolated two-node relay oracle with no hardware evidence claim.
+8. Verify exact sender-visible mapping for destination absence, uncertain forwarding, relay disconnect, `Busy`, `Timeout`, and `Indeterminate`.
 
 ## Todo List
 
@@ -128,6 +143,9 @@ forbidden.
 - [x] Pin the 72-byte prologue layout for both local roles: little-endian
   cluster ID, then initiator NodeId, then responder NodeId.
 - [x] Define deterministic dedup expiry/exhaustion relay-oracle predicates.
+- [x] Approve ADR-0009 clean correlated framing; reject legacy dual-stack and single-outstanding-request fallback.
+- [x] Implement server-side exact `0x0d` send and `0x0a` packet-error layouts; reject retired `0x08` and malformed framing.
+- [ ] After Phase 4 entry GO, implement the authority-owned client codec, typed request ownership, and broker active/retired correlation state.
 
 ## Oracle Topology and Retained Evidence
 
@@ -198,13 +216,14 @@ kernel state requires rollback.
 
 ## Next Steps
 
-Continue local-only relay work only where it does not cross the blocked
-protected-authority Build gates. ADR-0008 resolves TLS endpoint ownership, but
-protected persistence, authenticated time, pending-key binding, and the
-DEV_REFERENCE Phase 8 GO over AC-001..AC-011 remain unsatisfied. After that GO,
-Phase 4 must implement ADR-0008 and pass AC-012 before this relay route can open.
-Correlated client framing still requires a separately approved wire revision.
-No sender-side mapping, relay-oracle execution, or two-node result is available.
+ADR-0009 server framing is complete at the host-service ceiling. Do not add a
+raw net-broker codec: the authority-owned client codec and broker correlation
+integration wait for post-entry-GO Phase 4 Build. ADR-0008 resolves TLS endpoint
+ownership, but protected persistence, authenticated time, pending-key binding,
+and the DEV_REFERENCE Phase 8 GO over AC-001..AC-011 remain unsatisfied. After
+that GO, Phase 4 must implement ADR-0008/0009 and pass AC-012 before this relay
+route can open. No sender-side mapping, relay-oracle execution, or two-node
+result is available.
 
 ## Local Contract Evidence
 
@@ -224,14 +243,16 @@ No sender-side mapping, relay-oracle execution, or two-node result is available.
   and resets only after authenticated session establishment. Focused broker
   tests pass 105/105 and the RV64 release build passes.
 - The pure relay admission table, pre-TLS connection gate, delivery-outcome
-  split, certificate-policy negatives, and mTLS wire regressions pass within
-  37/37 relay-server tests. Missing/wrong `clientAuth` EKU and non-P-256 keys
-  fail before route admission. A missing destination returns definite
-  `ERR_DESTINATION_UNAVAILABLE`; a destination write/drain failure after bytes
-  may be queued returns `ERR_DELIVERY_UNCERTAIN`. Duplicate same-certificate
-  connections cannot interrupt or reroute the established session, and stale
-  generation cleanup cannot remove a later explicit admission. Tester and
-  production-readiness reviewer rechecks pass.
+  split, certificate-policy negatives, and correlated wire regressions pass
+  40/40 relay-server tests. The server accepts only nonzero-correlated `0x0d`
+  sends, preserves opaque payloads in unchanged `0x09` receive frames, echoes
+  exact correlations in `0x0a` definite/uncertain errors, rejects retired `0x08`,
+  zero/malformed/unknown input with fatal `0x7f` and close, and keeps two
+  interleaved failures distinct. Missing/wrong `clientAuth` EKU and non-P-256
+  keys fail before route admission. Duplicate same-certificate connections
+  cannot interrupt or reroute the established session, and stale generation
+  cleanup cannot remove a later explicit admission. Compile 4/4, focused tester,
+  production-readiness, and security reviews pass.
 - ADR-0008 now fixes target binding: the protected authority owns the complete
   relay TLS endpoint, service-net carries only bounded bytes, and the old public
   transcript-hash signer denies in production. This is an approved architecture,

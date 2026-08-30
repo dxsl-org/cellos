@@ -48,8 +48,9 @@ not entry-gate evidence; all three gates remain NO-GO.
 - Contract approval does not satisfy any gate. Product selection,
   hardware-provider plumbing, and Phase 7 evidence are not Phase 4 entry gates.
 - Version the closed private authority protocol for bounded relay TLS sessions,
-  ordered record chunks, typed opaque application records, cancellation,
-  close, and reset. No generic TLS or arbitrary signing operation may exist.
+  ordered record chunks, typed ADR-0009 correlated send/receive/error operations,
+  cancellation, close, and reset. No raw application frame, generic TLS, or
+  arbitrary signing operation may exist.
 - Keep public KMS opcodes 9–14 and their wire encodings byte-for-byte unchanged.
   The old transcript-hash signing opcode remains fixture-compatible but denies
   in production and is never called by the relay client.
@@ -62,9 +63,11 @@ not entry-gate evidence; all three gates remain NO-GO.
 - `service-net` opens only the configured relay endpoint for the live attested
   broker generation and transports bounded TLS bytes. It cannot select or
   observe hostname, CA, profile, key, scheme, signature, or traffic secret.
-- Net-broker's production API supplies and receives bounded typed Noise-record
-  buffers. The authority treats their contents as opaque: this prevents honest
-  path plaintext routing but cannot prove provenance against a compromised
+- Net-broker's production API supplies bounded typed session generation,
+  correlation, destination NodeId, and Noise-record buffers and receives typed
+  source/Noise or packet-error events. The authority constructs/parses ADR-0009
+  outer frames and treats Noise contents as opaque. This prevents honest-path
+  plaintext routing but cannot prove provenance against a compromised
   application processor, which already controls the supplied bytes.
 - Missing/rolled-back authenticated time, stale broker or TLS generation,
   endpoint/profile mismatch, malformed or reordered chunks, replay, alert, EOF,
@@ -98,30 +101,33 @@ relay identity.
 ## Related Code Files
 | File | Action | Test impact |
 |---|---|---|
-| `docs/decisions/0008-protected-relay-tls-endpoint-ownership.md` | New decision | architecture gate |
-| `libs/authority-protocol/src/{message,wire,state}.rs` | Version/extend | byte fixtures, state rejection |
-| protected authority TLS adapter/engine | Create | handshake, chain, record, reset |
+| `docs/decisions/{0008-protected-relay-tls-endpoint-ownership,0009-correlate-relay-packet-failures}.md` | Decisions | architecture gates |
+| `libs/authority-protocol/src/{message,wire,state}.rs` | Version/extend | typed send/receive/error byte fixtures, state rejection |
+| protected authority TLS adapter/engine | Create | handshake, outer relay codec, chain, record, reset |
 | `cells/services/kms/src/dispatch/relay.rs` | Modify | production legacy-sign denial |
-| `cells/services/net/src/{relay_wire,relay_handler}.rs` | Create | carrier ownership/chunk tests |
-| `libs/ostd/src/clients/relay_mtls.rs` | Create | privileged bounded carrier IPC |
+| `cells/services/net/src/{relay_wire,relay_handler}.rs` | Create | opaque carrier ownership/chunk tests; no outer-frame codec |
+| `libs/ostd/src/clients/relay_mtls.rs` | Create | privileged bounded typed authority IPC |
 | `cells/services/net-broker/src/connection_manager.rs` | Modify | direct-first routing |
-| `cells/services/net-broker/src/relay_transport.rs` | Create | Noise ciphertext framing |
+| `cells/services/net-broker/src/relay_transport.rs` | Create | typed correlation lifecycle; no raw relay-frame codec |
 
 ## Implementation Steps
 1. Specify the private authority-protocol revision: fixed session generation,
-   ordered chunk offsets/final markers, endpoint/profile binding, request
-   authentication, cancellation, close, and deterministic errors.
+   ordered chunk offsets/final markers, ADR-0009 typed correlated
+   send/receive/error operations, exact request-ownership return, endpoint/profile
+   binding, request authentication, cancellation, close, and deterministic errors.
 2. Preserve public KMS opcode 9–14 byte fixtures and make the legacy
    transcript-hash signer deny for production providers.
 3. Build the bounded protected TLS client engine with internal authenticated
    time, fixed relay trust/hostname, server CertificateVerify/Finished checks,
-   bounded client chain, fallible P-256 signing, and record seal/open.
+   bounded client chain, fallible P-256 signing, ADR-0009 outer-frame codec, and
+   record seal/open.
 4. Prove hostile chain, record, chunk, replay, reorder, truncation, timeout,
    alert, EOF, cancellation, profile rotation, and authority-reset behavior.
 5. Add service-net's fixed-endpoint carrier. Bind socket and authority session
    generation to the live attested net-broker; expose no generic TLS flags.
-6. Add privileged OSTD carrier IPC and net-broker relay transport whose honest
-   production path exchanges only bounded Noise ciphertext.
+6. Add privileged OSTD carrier IPC and net-broker relay transport that exchanges
+   only typed generation/correlation/destination/Noise requests and typed
+   source/Noise or packet-error events with the authority.
 7. Restore fallback only to this protected mTLS path after direct Noise fails;
    preserve request ID, deadline, retry class, dedup state, and no-evict rules.
 8. Exercise attacker server, invalid CA/SAN/time/profile, missing/intermediate
@@ -136,6 +142,7 @@ relay identity.
 - [x] Approve ADR-0008 protected relay TLS endpoint ownership; reject opaque
   service-net-only transcript assertions.
 - [ ] Implement the ADR-0008 protected TLS endpoint and fixed-endpoint carrier; satisfy AC-012 before route enablement.
+- [ ] Implement ADR-0009 outer framing inside the authority and bounded broker correlation state; net-broker and service-net never exchange raw relay frames.
 - [ ] Bind sockets to broker generation and restore direct-first authenticated relay routing.
 
 ## Test Scenario Matrix
@@ -150,6 +157,10 @@ relay identity.
 | Critical | missing/default/rolled-back trusted time | fail before handshake |
 | High | chain >3 entries or >12 KiB | reject before handshake |
 | Critical | chunk replay/reorder/truncation or stale TLS generation | exact protected session destroyed |
+| Critical | retired/duplicate correlation | ignore and bounded-count; never select newer request or close session |
+| Critical | zero/future/stale-generation correlation or legacy `0x08` | reject before broker event; current request table unchanged |
+| Critical | protected send returns ownership unchanged | `NotSubmitted`, definite local unavailable allowed |
+| Critical | protected send accepted or outcome ambiguous, then disconnect | `Submitted`, unresolved request is `Indeterminate` |
 | High | valid direct path | relay not contacted |
 | High | direct exhausted plus valid profile | mTLS relay carries Noise bytes |
 
@@ -158,6 +169,7 @@ relay identity.
 - [ ] AC-012 hostile-path evidence passes before relay enablement or Phase 4 completion.
 - [ ] Product selection remains absent from the Phase 4 entry and completion gates.
 - [ ] Generic `TlsStream` remains server-auth only.
+- [ ] The authority alone constructs/parses ADR-0009 outer frames; net-broker supplies typed metadata plus opaque Noise and service-net carries only TLS chunks.
 - [ ] Only the privileged broker path can establish relay mTLS.
 - [ ] Every signer and TLS failure is bounded and fail closed.
 - [ ] Protected authorization proves the exact configured relay server identity

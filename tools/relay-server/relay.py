@@ -25,10 +25,11 @@ from relay_io import (
 )
 
 MAX_AUTHENTICATED_SESSIONS = 128
-FT_SEND_PACKET = 0x08
 FT_RECV_PACKET = 0x09
+FT_PACKET_ERROR = 0x0A
 FT_PING = 0x0B
 FT_PONG = 0x0C
+FT_SEND_PACKET_CORRELATED = 0x0D
 FT_ERROR = 0x7F
 ERR_DESTINATION_UNAVAILABLE = 0x01
 ERR_UNKNOWN_FRAME = 0x03
@@ -131,10 +132,15 @@ class RelayServer:
             if frame is None or self._current(src_id, generation, writer) is None:
                 return
             frame_type = frame[0]
-            if frame_type == FT_SEND_PACKET:
-                if len(frame) < 33:
+            if frame_type == FT_SEND_PACKET_CORRELATED:
+                if len(frame) < 41:
                     raise ProtocolError(ERR_MALFORMED_FRAME)
-                await self._forward(src_id, generation, frame[1:33], frame[33:])
+                correlation = int.from_bytes(frame[1:9], "big")
+                if correlation == 0:
+                    raise ProtocolError(ERR_MALFORMED_FRAME)
+                await self._forward(
+                    src_id, generation, correlation, frame[9:41], frame[41:]
+                )
             elif frame_type == FT_PING:
                 if len(frame) != 9:
                     raise ProtocolError(ERR_MALFORMED_FRAME)
@@ -161,13 +167,20 @@ class RelayServer:
             return True
 
     async def _forward(
-        self, src_id: bytes, generation: int, dest_id: bytes, payload: bytes
+        self,
+        src_id: bytes,
+        generation: int,
+        correlation: int,
+        dest_id: bytes,
+        payload: bytes,
     ) -> None:
         if self._current(src_id, generation) is None:
             return
         destination = self.admission.lookup(dest_id)
         if destination is None:
-            await self._send_error(src_id, generation, ERR_DESTINATION_UNAVAILABLE)
+            await self._send_packet_error(
+                src_id, generation, correlation, ERR_DESTINATION_UNAVAILABLE
+            )
             return
         destination_entry = destination.session
         try:
@@ -180,10 +193,29 @@ class RelayServer:
         except (ConnectionError, ssl.SSLError, TimeoutError):
             destination_entry.writer.close()
             if self._current(src_id, generation) is not None:
-                await self._send_error(src_id, generation, ERR_DELIVERY_UNCERTAIN)
+                await self._send_packet_error(
+                    src_id, generation, correlation, ERR_DELIVERY_UNCERTAIN
+                )
             return
         if not sent and self._current(src_id, generation) is not None:
-            await self._send_error(src_id, generation, ERR_DESTINATION_UNAVAILABLE)
+            await self._send_packet_error(
+                src_id, generation, correlation, ERR_DESTINATION_UNAVAILABLE
+            )
+
+    async def _send_packet_error(
+        self, node_id: bytes, generation: int, correlation: int, code: int
+    ) -> None:
+        data = (
+            bytes([FT_PACKET_ERROR])
+            + correlation.to_bytes(8, "big")
+            + bytes([code])
+        )
+        try:
+            await self._send_current(node_id, generation, data)
+        except (ConnectionError, ssl.SSLError, TimeoutError):
+            entry = self._current(node_id, generation)
+            if entry is not None:
+                entry.writer.close()
 
     async def _send_error(self, node_id: bytes, generation: int, code: int) -> None:
         try:

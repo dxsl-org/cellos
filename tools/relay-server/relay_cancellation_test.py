@@ -9,7 +9,7 @@ from relay_admission import (
     AdmissionLease,
     AuthenticatedSessionIdentity,
 )
-from relay import ERR_DELIVERY_UNCERTAIN, FT_ERROR, RelayServer
+from relay import ERR_DELIVERY_UNCERTAIN, FT_PACKET_ERROR, RelayServer
 from relay_identity import Denylist
 
 
@@ -63,7 +63,7 @@ class RelayCancellationTests(unittest.IsolatedAsyncioTestCase):
             assert isinstance(admitted, AdmissionLease)
             try:
                 await relay._forward(
-                    source_id, admitted.generation, destination_id, b"noise"
+                    source_id, admitted.generation, 11, destination_id, b"noise"
                 )
             finally:
                 relay._unregister(source_id, admitted.generation)
@@ -111,12 +111,16 @@ class RelayCancellationTests(unittest.IsolatedAsyncioTestCase):
         assert isinstance(destination_lease, AdmissionLease)
 
         await relay._forward(
-            source_id, source_lease.generation, destination_id, b"opaque"
+            source_id, source_lease.generation, 13, destination_id, b"opaque"
         )
 
         self.assertTrue(destination.closed)
         self.assertEqual(len(destination.frames), 1)
-        error = bytes([FT_ERROR, ERR_DELIVERY_UNCERTAIN])
+        error = (
+            bytes([FT_PACKET_ERROR])
+            + (13).to_bytes(8, "big")
+            + bytes([ERR_DELIVERY_UNCERTAIN])
+        )
         self.assertEqual(source.frames, [struct.pack(">I", len(error)) + error])
         self.assertFalse(source.closed)
 

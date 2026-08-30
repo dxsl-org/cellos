@@ -113,16 +113,19 @@ relay.
    socket for a live privileged broker generation and transports bounded TLS
    record chunks. It cannot select a hostname, CA, certificate, profile, key,
    signature scheme, or alternate destination and cannot observe TLS secrets.
-3. **Typed opaque application data.** Net-broker's production API supplies and
-   receives only bounded Noise-record buffers through the privileged relay
-   tunnel. The authority treats their contents as opaque. This contract prevents
-   accidental plaintext routing but does not let the authority distinguish
-   malicious caller-supplied plaintext from Noise ciphertext.
+3. **Typed opaque application data.** Net-broker's production API supplies only
+   bounded typed `{session_generation, correlation, destination_node_id,
+   Noise_record}` sends and receives typed `{source_node_id, Noise_record}` or
+   packet-error events. The authority validates/encodes the outer relay frame but
+   treats `Noise_record` contents as opaque. This prevents accidental plaintext
+   routing but does not let the authority distinguish malicious caller-supplied
+   plaintext from Noise ciphertext.
 4. **Private protocol revision.** A reviewed next version of the private
    authority protocol will provide closed typed relay-TLS session, chunk,
-   application-record, close, and cancellation operations. Each operation binds
-   device/authority identity, boot epoch, monotonic sequence, session generation,
-   active profile, configured endpoint, and authenticated request context.
+   correlated send/receive/error, close, and cancellation operations. Each
+   operation binds device/authority identity, boot epoch, monotonic sequence,
+   session generation, active profile, configured endpoint, and authenticated
+   request context.
 5. **Public ABI freeze.** Public KMS opcodes 9–14 and their encodings do not
    change. The old transcript-hash signing opcode remains fixture/compatibility
    surface and must deny in production; the relay client never uses it.
@@ -182,8 +185,10 @@ Acceptance evidence must prove:
   affecting another generation;
 - public KMS opcode 9–14 byte fixtures remain unchanged and the legacy signing
   request is denied by production providers;
-- the production broker API accepts only typed bounded Noise-record buffers,
-  instrumented honest-path runs carry no plaintext C2C envelopes or Cell
+- the production broker API accepts only typed bounded generation/correlation/
+  destination/Noise sends and typed source/Noise or packet-error events; the
+  authority alone constructs/parses ADR-0009 outer frames;
+- instrumented honest-path runs carry no plaintext C2C envelopes or Cell
   payloads, and the evidence explicitly makes no malicious-caller provenance
   claim;
 - retained logs contain no keys, TLS secrets, signatures, certificates, Noise
@@ -197,5 +202,6 @@ Acceptance evidence must prove:
 - [ADR-0005](./0005-mutual-tls-relay-identity.md) — mTLS identity and certificate lifecycle remain authoritative; this ADR replaces only the client TLS ownership boundary.
 - [ADR-0006](./0006-block-production-root-pending-exact-product-evidence.md) — production root implementation remains exact-product and evidence gated.
 - [ADR-0007](./0007-development-first-hardware-constrained-execution.md) — DEV_REFERENCE implementation does not satisfy production admission.
+- [ADR-0009](./0009-correlate-relay-packet-failures.md) — request-scoped relay failures use transport-local correlation without exposing C2C request IDs or changing TLS ownership.
 - [Service-net mutual TLS plan](../../.agents/260825-1726-kms-silo-production-root/phase-04-service-net-mutual-tls-integration.md) — implementation owner and blocked entry gates.
 - [Relay-first C2C plan](../../.agents/260819-1409-cell-to-cell-anywhere-core/phase-05-relay-first-remote-correctness-oracle.md) — relay oracle and no-client status.

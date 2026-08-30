@@ -113,10 +113,10 @@ from removing a later explicitly re-admitted route.
 Destination absence detected before any destination write is a definite
 unavailable outcome. Once a forwarding write is attempted, a write, TLS, or
 drain failure is delivery-uncertain because bytes may already be queued. The
-server reports distinct bounded errors and emits no success receipt. The
-uncertain error is channel-level because the relay cannot inspect opaque C2C
-request IDs; future pipelining requires conservative outstanding-work handling
-or a separately approved correlated framing revision.
+server reports distinct bounded errors and emits no success receipt. ADR-0009
+keeps C2C request IDs opaque while adding a per-TLS-session correlation sequence
+to the outer send frame and request-scoped packet errors. Uncorrelated
+`FT_ERROR` remains connection-fatal only.
 
 The relay forwards payloads as opaque Noise ciphertext. mTLS authenticates the
 external relay hop; it does not terminate or replace Noise.
@@ -183,6 +183,7 @@ Acceptance evidence must show that:
   later explicitly re-admitted session;
 - destination absence and post-write/drain failure produce distinct definite
   unavailable and delivery-uncertain errors without a false success receipt;
+- ADR-0009 correlated send and packet-error frames map two interleaved request failures independently, reject the retired `0x08` send frame, and never expose the C2C request ID;
 - the protected authority validates the server CA/hostname and owns client
   CertificateVerify plus TLS record keys, while `service-net` transports only
   bounded bytes and no component exposes key material; and
@@ -203,6 +204,7 @@ prerequisites above.
 - [ADR-0006](./0006-block-production-root-pending-exact-product-evidence.md) — no production root is selected; exact vendor product, firmware, boot, state, time, and board evidence gate the client path.
 - [ADR-0007](./0007-development-first-hardware-constrained-execution.md) — protected relay identity remains a production milestone gate and does not block bounded local-runtime, QEMU, RPi3, or sensor development.
 - [ADR-0008](./0008-protected-relay-tls-endpoint-ownership.md) — supersedes the relay client ownership boundary: the protected authority, not service-net, owns the complete TLS endpoint.
+- [ADR-0009](./0009-correlate-relay-packet-failures.md) — cleanly replaces uncorrelated packet failures before any Cellos relay client exists.
 - `.agents/260825-sdk-delivery/phase-02-relay.md` — relay direction,
   prerequisites, acceptance conditions, and server-only/client-blocked status.
 - `tools/relay-enroll/mtls-mount-manifest.template.toml` — provisioning

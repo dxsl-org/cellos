@@ -1436,15 +1436,25 @@ same-certificate connections cannot replace or cancel the established route.
 No proof blob, advertised NodeId, shared secret, or raw key can authorize
 registration. Server certificate-policy regressions directly reject
 missing/wrong `clientAuth` EKU and non-P-256 peer keys before route admission.
-Relay forwarding distinguishes definite destination absence
-before a write from uncertain delivery after a write/drain attempt may have
-queued bytes. It reports `ERR_DESTINATION_UNAVAILABLE` for the former and
-`ERR_DELIVERY_UNCERTAIN` for the latter; successful drain is not an
-application-delivery receipt. Current `FT_ERROR` has no request correlation, so
-a future pipelined client must conservatively treat affected outstanding work as
-`Indeterminate` or adopt a separately approved correlated framing revision.
-Cellos client authentication, receive wiring, and two-node evidence remain
-absent.
+Relay forwarding distinguishes definite destination absence before any
+destination write from uncertain delivery after a write/drain attempt may have
+queued bytes. ADR-0009 retires legacy `FT_SEND_PACKET (0x08)` before a Cellos
+relay client exists. The server-only `0x0d`/`0x0a` codec is implemented and its
+focused suite passes 40/40. During Phase 4 Build, the Protected Relay Authority
+constructs
+`FT_SEND_PACKET_CORRELATED (0x0d)` from typed generation/correlation/destination/
+Noise input and parses request-scoped `FT_PACKET_ERROR (0x0a)` plus unchanged
+`FT_RECV_PACKET (0x09)` into typed broker events. Uncorrelated
+`FT_ERROR (0x7f)` is protocol-fatal and followed by close. C2C request identity
+remains inside Noise. Client authentication, receive wiring, and two-node
+evidence remain absent.
+
+Typed-request ownership is the delivery threshold: explicit authority rejection
+before acceptance remains `NotSubmitted`; acceptance or ambiguous completion is
+`Submitted`, and unresolved disconnect then maps to `Indeterminate`. Retired
+lower-than-next correlations are ignored without closing the session; zero,
+future/unaccepted, stale-generation, malformed, or unauthenticated input never
+selects a request.
 
 ADR-0008 assigns the complete relay TLS client endpoint to the Protected Relay
 Authority. It owns configured server chain/hostname/time validation, transcript
@@ -1452,13 +1462,14 @@ and Finished checks, active client-chain selection, CertificateVerify, traffic
 secrets, and record seal/open. service-net opens only the fixed relay socket for
 a live broker generation and carries bounded TLS chunks; it makes no TLS trust
 decision and sees no traffic secret. Net-broker's typed production path supplies
-Noise-record buffers as TLS application bytes, but the authority treats bytes as
-opaque and cannot prove ciphertext provenance against a compromised application
-processor. Public KMS opcodes 9–14 remain unchanged; the old opaque
-transcript-hash signer is fixture-only and denies in production.
-The private authority protocol must be versioned for bounded, authenticated,
-generation-bound TLS session/chunk/cancel/close operations during Phase 4 Build
-and verified before relay enablement.
+session generation, correlation, destination NodeId, and opaque Noise records;
+the authority constructs/parses the outer relay frame and cannot prove Noise
+ciphertext provenance against a compromised application processor. Public KMS
+opcodes 9–14 remain unchanged; the old opaque transcript-hash signer is
+fixture-only and denies in production. The private authority protocol must be
+versioned for bounded authenticated TLS session/chunk/correlated-send/receive/
+error/cancel/close operations during Phase 4 Build and verified before relay
+enablement.
 
 The relay-only correctness oracle uses separate network namespaces for one
 self-hosted relay and two Cellos nodes. ACLs deny node-to-node traffic; retained

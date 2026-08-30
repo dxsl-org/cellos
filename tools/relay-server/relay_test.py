@@ -12,10 +12,11 @@ from relay import (
     ERR_MALFORMED_FRAME,
     ERR_UNKNOWN_FRAME,
     FT_ERROR,
+    FT_PACKET_ERROR,
     FT_PING,
     FT_PONG,
     FT_RECV_PACKET,
-    FT_SEND_PACKET,
+    FT_SEND_PACKET_CORRELATED,
     MAX_FRAME_SIZE,
 )
 from _relay_test_support import (
@@ -79,7 +80,10 @@ class RelayWireTests(unittest.IsolatedAsyncioTestCase):
         opaque = b"\x00\xffnoise\x08\x09\x7fpayload"
         await send_frame(
             writer_a,
-            bytes([FT_SEND_PACKET]) + self.certificates.client_b.node_id + opaque,
+            bytes([FT_SEND_PACKET_CORRELATED])
+            + (1).to_bytes(8, "big")
+            + self.certificates.client_b.node_id
+            + opaque,
         )
         self.assertEqual(
             await read_frame(reader_b),
@@ -90,9 +94,13 @@ class RelayWireTests(unittest.IsolatedAsyncioTestCase):
         reader, writer = await self.open_client(self.certificates.client_a)
         await self.assert_ping(reader, writer, b"ready---")
 
-        await send_frame(writer, bytes([FT_SEND_PACKET]) + bytes(32) + b"opaque")
+        await send_frame(
+            writer,
+            bytes([FT_SEND_PACKET_CORRELATED]) + (1).to_bytes(8, "big") + bytes(32) + b"opaque",
+        )
         self.assertEqual(
-            await read_frame(reader), bytes([FT_ERROR, ERR_DESTINATION_UNAVAILABLE])
+            await read_frame(reader),
+            bytes([FT_PACKET_ERROR]) + (1).to_bytes(8, "big") + bytes([ERR_DESTINATION_UNAVAILABLE]),
         )
         await self.assert_ping(reader, writer, b"still-up")
 
@@ -108,11 +116,45 @@ class RelayWireTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await read_frame(reader), bytes([FT_ERROR, ERR_UNKNOWN_FRAME]))
         self.assertEqual(await asyncio.wait_for(reader.read(1), 2), b"")
 
-    async def test_malformed_send_packet_is_rejected(self) -> None:
+    async def test_malformed_correlated_send_packet_is_rejected(self) -> None:
         reader, writer = await self.open_client(self.certificates.client_a)
-        await send_frame(writer, bytes([FT_SEND_PACKET]) + bytes(31))
+        await send_frame(
+            writer, bytes([FT_SEND_PACKET_CORRELATED]) + (1).to_bytes(8, "big") + bytes(31)
+        )
         self.assertEqual(await read_frame(reader), bytes([FT_ERROR, ERR_MALFORMED_FRAME]))
         self.assertEqual(await asyncio.wait_for(reader.read(1), 2), b"")
+
+    async def test_zero_correlation_is_rejected(self) -> None:
+        reader, writer = await self.open_client(self.certificates.client_a)
+        await send_frame(
+            writer, bytes([FT_SEND_PACKET_CORRELATED]) + bytes(8 + 32)
+        )
+        self.assertEqual(await read_frame(reader), bytes([FT_ERROR, ERR_MALFORMED_FRAME]))
+        self.assertEqual(await asyncio.wait_for(reader.read(1), 2), b"")
+
+    async def test_retired_legacy_send_frame_is_rejected(self) -> None:
+        reader, writer = await self.open_client(self.certificates.client_a)
+        await send_frame(writer, b"\x08" + bytes(32))
+        self.assertEqual(await read_frame(reader), bytes([FT_ERROR, ERR_UNKNOWN_FRAME]))
+        self.assertEqual(await asyncio.wait_for(reader.read(1), 2), b"")
+
+    async def test_two_unavailable_packets_keep_exact_correlations(self) -> None:
+        reader, writer = await self.open_client(self.certificates.client_a)
+        for correlation in (3, 7):
+            await send_frame(
+                writer,
+                bytes([FT_SEND_PACKET_CORRELATED])
+                + correlation.to_bytes(8, "big")
+                + bytes(32),
+            )
+        for correlation in (3, 7):
+            self.assertEqual(
+                await read_frame(reader),
+                bytes([FT_PACKET_ERROR])
+                + correlation.to_bytes(8, "big")
+                + bytes([ERR_DESTINATION_UNAVAILABLE]),
+            )
+        await self.assert_ping(reader, writer, b"still-up")
 
     async def test_oversize_frame_header_is_rejected_without_reading_a_body(self) -> None:
         reader, writer = await self.open_client(self.certificates.client_a)
@@ -134,7 +176,10 @@ class RelayWireTests(unittest.IsolatedAsyncioTestCase):
         opaque = b"original-route"
         await send_frame(
             sender_writer,
-            bytes([FT_SEND_PACKET]) + self.certificates.client_a.node_id + opaque,
+            bytes([FT_SEND_PACKET_CORRELATED])
+            + (9).to_bytes(8, "big")
+            + self.certificates.client_a.node_id
+            + opaque,
         )
         self.assertEqual(
             await read_frame(live_reader),

@@ -56,16 +56,20 @@ Recovery plan: supersedes `.agents/260624-cell-to-cell-anywhere/` without editin
 > grows exponentially to a 30-second ceiling, and resets only after an
 > authenticated session is established. Exact byte-layout, paired transcript,
 > endpoint parser, and reconnect regressions pass within 105/105 broker tests;
-> 37/37 relay-server tests cover the bounded pre-TLS gate, authenticated
-> admission, missing/wrong `clientAuth` and non-P-256 rejection, wire behavior,
-> and the definite destination-missing versus accepted-then-uncertain
-> write-failure split. The RV64 broker release build also passes.
+> 40/40 relay-server tests cover the bounded pre-TLS gate, authenticated
+> admission, certificate-policy rejection, clean `0x08` retirement, exact
+> correlated `0x0d`/`0x0a` failures, unchanged opaque `0x09` forwarding, and the
+> definite destination-missing versus accepted-then-uncertain write-failure
+> split. The RV64 broker release build also passes.
 > ADR-0008 now fixes relay target binding: the Protected Relay Authority owns
 > server verification, client authentication, TLS secrets, and record crypto;
 > service-net carries only bounded bytes, and the old transcript-hash signer
-> denies in production. The isolated oracle topology, deterministic predicates,
-> and authenticated evidence contract are defined, but no client or oracle run
-> is claimed.
+> denies in production. ADR-0009's server clean cutover from legacy
+> uncorrelated send/error frames to per-TLS-session correlated packet failures
+> is implemented and verified; authority/client framing and broker correlation
+> integration wait for Phase 4 Build. The isolated
+> oracle topology, deterministic predicates, and authenticated evidence contract
+> are defined, but no client or oracle run is claimed.
 >
 > The two-real-broker relay path remains blocked by protected persistence,
 > authenticated time, reviewed pending-key binding, DEV_REFERENCE Phase 8 GO,

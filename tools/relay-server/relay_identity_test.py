@@ -6,7 +6,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from relay import ERR_DESTINATION_UNAVAILABLE, FT_ERROR, FT_PING, FT_PONG, FT_SEND_PACKET
+from relay import (
+    ERR_DESTINATION_UNAVAILABLE,
+    FT_PACKET_ERROR,
+    FT_PING,
+    FT_PONG,
+    FT_SEND_PACKET_CORRELATED,
+)
 from relay_identity import Denylist, PeerCertificateError, load_denylist, peer_identity
 from _relay_test_support import (
     CertificateSet,
@@ -100,11 +106,16 @@ class RelayIdentityWireTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await read_frame(sender_reader), bytes([FT_PONG]) + b"sender--")
         await send_frame(
             sender_writer,
-            bytes([FT_SEND_PACKET]) + self.certificates.client_a.node_id + b"data",
+            bytes([FT_SEND_PACKET_CORRELATED])
+            + (5).to_bytes(8, "big")
+            + self.certificates.client_a.node_id
+            + b"data",
         )
         self.assertEqual(
             await read_frame(sender_reader),
-            bytes([FT_ERROR, ERR_DESTINATION_UNAVAILABLE]),
+            bytes([FT_PACKET_ERROR])
+            + (5).to_bytes(8, "big")
+            + bytes([ERR_DESTINATION_UNAVAILABLE]),
         )
 
     async def test_revoked_certificate_serial_is_rejected(self) -> None:
