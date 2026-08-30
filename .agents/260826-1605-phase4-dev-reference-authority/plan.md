@@ -31,7 +31,7 @@ Produce real AC-001 through AC-011 evidence for the approved Phase 4 Build-entry
 | 2 | [Private Protocol and DEV Separation](./phase-02-private-protocol-and-dev-separation.md) | blocked; SOFTWARE_HARNESS complete | 1 |
 | 3 | [VF2 UART Root-Stream Boot](./phase-03-vf2-uart-root-stream-boot.md) | blocked; manifest SOFTWARE_HARNESS complete | 2, exact hardware |
 | 4 | [STM32 and TPM Protected Authority](./phase-04-stm32-tpm-protected-authority.md) | in progress; chunked private v2 selected, dual-slot journal `SOFTWARE_HARNESS` complete | 2 |
-| 5 | [Nonce-Bound Signed-Time Service](./phase-05-nonce-bound-signed-time-service.md) | in progress; protocol/request, KMS, registration-gated retry recovery, persistence, clock-policy, and manifest `SOFTWARE_HARNESS` cores complete | 2 |
+| 5 | [Nonce-Bound Signed-Time Service](./phase-05-nonce-bound-signed-time-service.md) | in progress; handler, protocol/request, KMS, registration-gated retry recovery, persistence, clock-policy, and manifest `SOFTWARE_HARNESS` cores complete | 2 |
 | 6 | [Frozen-ABI KMS Authority Integration](./phase-06-frozen-abi-kms-authority-integration.md) | pending | 3, 4, 5 |
 | 7 | [Relay Enrollment and Legacy-Signer Compatibility](./phase-07-relay-enrollment-and-mtls-integration.md) | pending | 6 |
 | 8 | [Fault Evidence and Entry-Gate Review](./phase-08-fault-evidence-and-entry-gate-review.md) | pending | 7 |

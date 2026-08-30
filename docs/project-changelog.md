@@ -57,10 +57,14 @@
   The documented null response permits fresh allocation but is not authoritative
   after a write attempt: a read→write-conflict→read test recovers an identical
   concurrent winner's exact receipt without a second write or expiry refresh.
-  Invalid requests and malformed receipts never fall through to the clock. The
-  full suite passes 195/195. No live clock authentication, database operation,
-  handler, AWS resource, credential, network call, or deployment action
-  occurred; those steps remain gated.
+  Invalid requests and malformed receipts never fall through to the clock. An
+  injected handler core now composes this order end to end. Retry responses are
+  re-signed and canonically encoded without floor, clock, allocation, write, or
+  expiry refresh; only absence loads one protected floor and admitted sample,
+  commits once, signs once, and encodes once. The full suite passes 209/209.
+  No concrete clock provider, protected-floor implementation, Lambda event
+  adapter, live database operation, AWS resource, credential, network call, or
+  deployment action occurred; those steps remain gated.
 
 - Phase 4's deterministic, non-executing provisioning-plan generator is complete
   only at the `SOFTWARE_HARNESS` ceiling. Each of its nine ordered mutations now
