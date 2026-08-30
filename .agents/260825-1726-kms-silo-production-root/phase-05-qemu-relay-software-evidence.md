@@ -31,7 +31,10 @@ QEMU can prove policy mediation, CSR enrollment, TLS behavior, Noise opacity, ca
 - Collect deterministic PASS/FAIL evidence; never relabel it production-ready.
 
 ## Architecture
-Two QEMU AArch64 nodes run net-broker/service-net/KMS/Silo and connect through the host relay server. A test CA accepts each constrained KMS CSR and issues a client certificate with the exact NodeId extension.
+Two QEMU AArch64 nodes run net-broker, service-net byte carriers, and
+DEV_REFERENCE Protected Relay Authority TLS endpoints through the host relay
+server. A test CA accepts each constrained CSR and issues a client certificate
+with the exact NodeId extension.
 
 ## Assumptions
 - **Claim:** The harness can launch two isolated QEMU instances with separate disk/config mounts and network endpoints. **Confidence:** medium. **How to verify:** inspect existing multi-node scripts before adding a harness.
@@ -47,11 +50,15 @@ Two QEMU AArch64 nodes run net-broker/service-net/KMS/Silo and connect through t
 | project docs/evidence | Modify | status qualification |
 
 ## Implementation Steps
-1. Build reproducible development guest, KMS, service-net, broker, disk, and relay-server artifacts.
+1. Build reproducible development guest, authority TLS endpoint, service-net
+   carrier, broker, disk, and relay-server artifacts.
 2. Generate two distinct reference keys, export constrained CSRs, issue matching client chains, and mount separate manifests.
 3. Start relay server and both nodes; wait for explicit service readiness rather than sleeps.
 4. Prove valid mTLS registration and an opaque Noise exchange after direct-path exhaustion.
-5. Run negative matrix: unauthorized caller, malformed CSR, wrong chain/SPKI/extension, stale generation, denied signer, Silo reset, relay CA/SAN failure, revoked NodeId, malformed/oversized frame, duplicate session, cancellation.
+5. Run negative matrix: unauthorized caller, attacker TLS server, malformed CSR,
+   wrong chain/SPKI/extension, stale TLS generation, chunk replay/reorder/
+   truncation, authority reset, relay CA/SAN failure, revoked NodeId,
+   malformed/oversized frame, duplicate session, and cancellation.
 6. Prove direct Noise success does not contact relay and every unavailable prerequisite returns `NotSupported`/typed failure without raw fallback.
 7. Archive concise logs and label the result `software-complete / non-hardware-qualified`.
 

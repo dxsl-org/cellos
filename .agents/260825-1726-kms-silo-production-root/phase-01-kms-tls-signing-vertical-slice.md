@@ -46,8 +46,8 @@ The existing KMS fixed-frame ABI, caller trailer, broker binding, and `RootProvi
 - Security correction: this fixture-backed request proves typed signing
   mechanics only. Because untrusted service-net supplies the opaque transcript
   hash, it does not bind the protected signer to the configured relay server and
-  must not be wired into a relay client. Phase 4 owns an unapproved replacement
-  architecture while public KMS opcodes remain frozen.
+  must not be wired into a relay client. ADR-0008 replaces it with an
+  authority-owned TLS endpoint while public KMS opcodes remain frozen.
 - `RelayP256Status` includes protected profile/time floors and a per-device
   monotonic qualification epoch/record digest, plus
   `DevelopmentReference | QualificationTest | ProductionQualified`.
@@ -134,8 +134,8 @@ Production requests additionally require the protected profile digest and
   `reports/harness/review-decision.json`).
 - 2026-08-29 security review supersedes the earlier relay-authorization verdict:
   the fixture path cannot prove the exact relay server identity inside the
-  protected boundary. Production exclusion still holds, so no reachable relay
-  client is exposed; Phase 4 remains blocked on a target-bound design.
+  protected boundary. ADR-0008 now fixes the replacement ownership boundary,
+  but production exclusion and every Phase 4 entry gate remain in force.
 
 ## Todo List
 - [x] Freeze canonical TLS signing frames and errors.

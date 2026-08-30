@@ -1446,14 +1446,19 @@ a future pipelined client must conservatively treat affected outstanding work as
 Cellos client authentication, receive wiring, and two-node evidence remain
 absent.
 
-Fixed relay CA/profile inputs do not complete protected signer authorization.
-The current frozen request lets untrusted service-net submit an opaque TLS
-transcript hash after performing its own server CA/hostname checks; the
-protected authority therefore cannot prove that the signature authenticates the
-configured relay rather than an attacker-controlled server. Relay client work
-remains blocked until an approved design binds protected signing to the exact
-server chain, hostname/endpoint, handshake, live broker generation, and active
-client tuple without trusting service-net assertions.
+ADR-0008 assigns the complete relay TLS client endpoint to the Protected Relay
+Authority. It owns configured server chain/hostname/time validation, transcript
+and Finished checks, active client-chain selection, CertificateVerify, traffic
+secrets, and record seal/open. service-net opens only the fixed relay socket for
+a live broker generation and carries bounded TLS chunks; it makes no TLS trust
+decision and sees no traffic secret. Net-broker's typed production path supplies
+Noise-record buffers as TLS application bytes, but the authority treats bytes as
+opaque and cannot prove ciphertext provenance against a compromised application
+processor. Public KMS opcodes 9–14 remain unchanged; the old opaque
+transcript-hash signer is fixture-only and denies in production.
+The private authority protocol must be versioned for bounded, authenticated,
+generation-bound TLS session/chunk/cancel/close operations during Phase 4 Build
+and verified before relay enablement.
 
 The relay-only correctness oracle uses separate network namespaces for one
 self-hosted relay and two Cellos nodes. ACLs deny node-to-node traffic; retained
@@ -1486,18 +1491,21 @@ Routing (cross-machine): Private→Public ✓ · Public→Private ✗ · Private
 |-------|-----------|----------|
 | **Native Cell↔Cell, G1** | **Noise KKpsk0** (p2p) + **XChaCha20-Poly1305** (gossip) | **K1** PSK (baked, fleet-shared) |
 | **Native Cell↔Cell, G2** | **same Noise core** (identity upgrade, not a transport swap) | **K3** per-node static key + DICE attestation; revocation via KMS Cell |
-| **Interop / external relay / HTTPS-serving** | **TLS 1.3 mTLS (X.509)** at the external boundary; relayed Cell payload remains opaque Noise ciphertext | CA-rooted PKI; relay NodeId is `SHA-256(SPKI DER)` |
+| **Interop / external relay / HTTPS-serving** | **TLS 1.3 mTLS (X.509)** at the external boundary; the correct relayed Cell path carries Noise ciphertext inside TLS | CA-rooted PKI; relay NodeId is `SHA-256(SPKI DER)` |
 
 **Hard rules (architectural invariants):**
 - Native Cell-to-Cell traffic **never replaces Noise with mTLS**. Noise is the
   lingua franca at every stage; G1→G2 is an identity upgrade (K1→K3), not a
   transport swap.
-- mTLS terminates only at an external/interop boundary. A native `net-broker`
-  may act as the mTLS client for an external relay, but it must preserve Noise
-  end-to-end, validate the relay CA and hostname, and sign through an attested,
-  service-net-authorized KMS relay key without exposing private-key bytes.
-  X.509 PKI remains outside the Cellos kernel. See
-  [ADR-0005](decisions/0005-mutual-tls-relay-identity.md).
+- mTLS terminates only at an external/interop boundary. For the native external
+  relay path, the Protected Relay Authority is the complete fixed TLS client
+  endpoint: it validates relay CA/hostname/time, owns the transcript, Finished,
+  client identity, traffic secrets, and record crypto. `service-net` is only a
+  bounded fixed-endpoint byte carrier, and net-broker's correct production path
+  preserves Noise end-to-end. The authority cannot authenticate application-byte
+  provenance after application-processor compromise. X.509 PKI remains outside
+  the Cellos kernel. See [ADR-0005](decisions/0005-mutual-tls-relay-identity.md)
+  and [ADR-0008](decisions/0008-protected-relay-tls-endpoint-ownership.md).
 
 - **Profile-specific entropy and output-buffer gate**: the default
   development/QEMU tuple enables `dev-weak-rng` and remains non-qualifying.
@@ -1536,6 +1544,11 @@ normalizes the signature to low-S, and self-verifies it before advancing replay
 state or returning the signature. Authorization, replay rejection, profile
 binding, and self-verification therefore remain inside KMS rather than the TLS
 client.
+
+ADR-0008 narrows this Phase 1 operation to fixture compatibility. It is not a
+production relay-client seam: production providers deny standalone transcript
+signing, while the protected authority owns the complete TLS endpoint through a
+separately versioned private protocol.
 
 The implemented Relay P-256 providers are the Phase 1 fixture and the optional
 Phase 2 development Silo; neither is protected production hardware. Unsafe

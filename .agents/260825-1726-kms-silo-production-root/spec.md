@@ -11,7 +11,12 @@ decision: "Frozen KMS ABI plus root-owned Protected Relay Authority"
 
 Phase 4 may begin only after runtime has real protected persistence, real authenticated time, and a reviewed pending-key binding under existing KMS opcodes 9–14. VFS, supervisor, service-net, network transport, and the application processor are outside the trust boundary. ADR-0006 still blocks Phases 7–8; this contract selects no production root.
 
-Approval fixes the contract. It does not prove any entry gate. Phase 4 remains blocked until a concrete authority and signed-time source satisfy every acceptance criterion.
+Approval fixes the contract. It does not prove any entry gate. Phase 4 remains blocked until a concrete authority and signed-time source satisfy build-entry AC-001 through AC-011.
+
+ADR-0008 amends the relay TLS ownership boundary without satisfying an entry
+gate: the authority owns the complete fixed relay TLS endpoint, service-net is
+only a bounded byte carrier, and the legacy public transcript-hash signer denies
+in production.
 
 ## Functional Requirements
 
@@ -46,8 +51,9 @@ Approval fixes the contract. It does not prove any entry gate. Phase 4 remains b
 - **BIND-005 — Opcode 13 semantics.** WHEN KMS opcode 13 receives `{generation, policy_epoch, profile_digest}`, KMS SHALL only match and consume an already root-validated staged receipt; it SHALL NOT trust the caller digest or create pending trust itself.
 - **BIND-006 — Stale or substituted input.** IF the leaf SPKI is substituted, the chain is truncated, misordered, or oversized, EKU/SAN/CA/validity is wrong, generation or policy is stale, the receipt is replayed or consumed, or the pending slot changes after validation, THEN stage or commit SHALL fail closed.
 - **BIND-007 — Commit binding.** WHEN commit begins, THE authority SHALL prepare the exact intent, verify the provider CAS-promotion authenticated receipt for the same tuple, and then finalize the COMMITTED record; the caller SHALL NOT select key material or active identity.
-- **BIND-008 — Signing authorization.** WHEN TLS CertificateVerify is requested, THE authority SHALL authorize only the exact active COMMITTED relay tuple and TLS purpose. Generic signing SHALL be absent or unrepresentable.
-- **BIND-009 — Caller limits.** service-net and supervisor MAY transport opaque requests and responses but SHALL NOT assert trusted boot, time, profile, pending identity, qualification, or commit result.
+- **BIND-008 — TLS endpoint ownership.** WHEN relay TLS is attempted, THE authority SHALL own server chain/hostname/time validation, transcript and Finished verification, the active client chain, CertificateVerify, traffic secrets, and record seal/open for the exact COMMITTED relay tuple. The public transcript-hash signing request SHALL remain byte-compatible but deny in production.
+- **BIND-009 — Caller limits.** service-net and supervisor MAY transport bounded opaque TLS bytes and authority requests/responses but SHALL NOT assert trusted TLS server identity, transcript, Finished, boot, time, profile, pending identity, qualification, or commit result.
+- **BIND-010 — Opaque application contract.** WHEN relay application records cross the protected boundary, THE production broker API SHALL accept only bounded typed Noise-record buffers and THE authority SHALL treat their contents as opaque. This prevents accidental plaintext routing but cannot prove ciphertext provenance against a compromised application processor; that threat is outside this authority's confidentiality guarantee.
 
 ### Lane and packaging constraints
 
@@ -61,7 +67,7 @@ Approval fixes the contract. It does not prove any entry gate. Phase 4 remains b
 
 Required analysis and verification covers replayed, torn, or missing state; old-snapshot restore; authority reset; application-processor, service-net, or supervisor compromise; time-token replay, freeze, fork, or rollback; a freshly signed response backed by a rolled-back remote database; provider/authority split-brain; crash at every prepare/promote/finalize edge; pending-certificate substitution; chain truncation, ordering, and size; invalid EKU, SAN, CA status, or validity; stale caller generation; generic signing attempts; authority partition or outage; and production packaging of the DEV lane.
 
-## Acceptance Criteria
+## Build Entry Acceptance Criteria
 
 - **AC-001:** Normal non-test runtime bypasses the current persistence `PermissionDenied` and zero-time stubs only while the real authority is challenge-verified and available.
 - **AC-002:** Authority-identity pinning and a fresh boot challenge fail closed on substitution or replay.
@@ -74,6 +80,10 @@ Required analysis and verification covers replayed, torn, or missing state; old-
 - **AC-009:** Generic signer, profile, and time assertions remain absent from service-net and supervisor interfaces.
 - **AC-010:** Production build and packaging checks reject every DEV authority, provider, anchor, certificate, and feature and retain the ADR-0006 block.
 - **AC-011:** Independent security review confirms the authority trust boundary, transaction recovery, and fail-closed paths before entry gates are marked passed.
+
+## Phase 4 Completion and Route-Enable Criterion
+
+- **AC-012:** After Build implements ADR-0008, attacker server, wrong CA/hostname, modified transcript, invalid Finished, stale TLS generation, and chunk replay/reorder/truncation fail inside the authority before client authentication or application release; service-net cannot request a standalone production signature. AC-012 cannot open Build and must pass before relay enablement or Phase 4 completion.
 
 ## Out of Scope
 
@@ -94,8 +104,9 @@ Required analysis and verification covers replayed, torn, or missing state; old-
 
 ## Open Prerequisite
 
-A concrete real DEV_REFERENCE authority or equivalent appliance and signed-time authority have not been named or evidenced. Therefore this approved contract leaves Phase 4 `blocked`; only evidence satisfying AC-001 through AC-011 may open Build.
+The selected DEV_REFERENCE authority and signed-time candidate has not been implemented or evidenced. Therefore this approved contract leaves Phase 4 `blocked`; only evidence satisfying build-entry AC-001 through AC-011 may open Build. AC-012 is the mandatory post-Build completion and route-enable gate.
 
 ## Change Log
 
 - 2026-08-26 — Approved Option A: integrated protected persistence, authenticated time, and pending-key binding while preserving KMS opcodes 9–14.
+- 2026-08-29 — ADR-0008 amended relay TLS ownership: the protected authority owns the fixed endpoint and service-net carries bounded bytes; public KMS opcodes remain unchanged.

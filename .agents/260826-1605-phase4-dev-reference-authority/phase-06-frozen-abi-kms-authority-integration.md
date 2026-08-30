@@ -129,7 +129,7 @@ Keep TPM authorization and private keys entirely behind STM32; zeroize bounded t
 
 ## Next Steps
 
-Only after these criteria and raw evidence exist may Phase 7 wire opaque enrollment transport and mTLS. The parent Phase 4 remains blocked until Phase 8 validates real AC-001..AC-011 evidence and an independent security review passes.
+Only after these criteria and raw evidence exist may Phase 7 run managed-CA enrollment plus deterministic legacy-signer compatibility. It may not open a relay TLS session or claim target binding. The parent Phase 4 remains blocked until Phase 8 validates real AC-001..AC-011 evidence and an independent security review passes; after GO, parent Phase 4 implements ADR-0008 and must pass AC-012 before relay enablement.
 
 ## Deviation Log
 - Decision: this phase is the single serialized owner for root `Cargo.toml` workspace registration of any Phase 3–5 artifact; parallel phases hand off marker names to the Phase 2 checker instead of editing it.

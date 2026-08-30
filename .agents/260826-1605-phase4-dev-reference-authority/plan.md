@@ -15,7 +15,7 @@ created: 2026-08-26
 
 ## Objective
 
-Produce real AC-001 through AC-011 evidence for the approved Phase 4 entry contract. This plan builds prerequisite authority infrastructure; it does not begin service-net Phase 4 Build, select a production root, or weaken ADR-0006.
+Produce real AC-001 through AC-011 evidence for the approved Phase 4 Build-entry contract. This plan builds prerequisite authority infrastructure; it does not satisfy post-Build AC-012, begin service-net Phase 4 Build, select a production root, or weaken ADR-0006.
 
 ## Entry State
 
@@ -33,7 +33,7 @@ Produce real AC-001 through AC-011 evidence for the approved Phase 4 entry contr
 | 4 | [STM32 and TPM Protected Authority](./phase-04-stm32-tpm-protected-authority.md) | pending | 2 |
 | 5 | [Nonce-Bound Signed-Time Service](./phase-05-nonce-bound-signed-time-service.md) | pending | 2 |
 | 6 | [Frozen-ABI KMS Authority Integration](./phase-06-frozen-abi-kms-authority-integration.md) | pending | 3, 4, 5 |
-| 7 | [Relay Enrollment and mTLS Integration](./phase-07-relay-enrollment-and-mtls-integration.md) | pending | 6 |
+| 7 | [Relay Enrollment and Legacy-Signer Compatibility](./phase-07-relay-enrollment-and-mtls-integration.md) | pending | 6 |
 | 8 | [Fault Evidence and Entry-Gate Review](./phase-08-fault-evidence-and-entry-gate-review.md) | pending | 7 |
 
 Phases 3, 4, and 5 may execute in parallel after Phase 2. Any hard-stop result blocks Phases 6–8; no fallback lane is permitted.
@@ -47,8 +47,8 @@ Phases 3, 4, and 5 may execute in parallel after Phase 2. Any hard-stop result b
 - Authority state is bound to a stable TPM identity and non-regressing NV counter; every torn or mismatched state recovers the exact tuple or seals.
 - Signed time binds device, authority, boot, request, purpose, nonce, source epoch/sequence, Unix floor, and expiry. Outage seals.
 - Every artifact remains `DEV_REFERENCE`; production checks retain exact `BLOCKED_BY_ADR_0006` behavior.
-- Relay sessions bind to their accepted time fact with hard teardown at a deadline ≤ its `expires_at`; renewal requires fresh purpose-bound reauthorization; expiry, reset, or failed renewal tears down even mid-traffic. Proven live in Phase 7's standalone probe; production enforcement lands in parent Phase 4 after Phase 8 GO.
-- Ownership: BootROM/XMODEM boot-stream framing is a separate pre-runtime protocol owned by Phase 3, outside the Phase 2 closed operation set. Root `Cargo.toml` workspace registration has exactly one serialized owner (Phase 6). Production-checker code stays owned by Phase 2; phases 3–5 hand off marker names only. Phase 7 is restricted to the standalone managed-CA/authority/KMS probe; all service-net, net-broker, ostd, and `embedded-tls` changes wait for parent Phase 4 after Phase 8 GO.
+- ADR-0008 assigns the complete fixed relay TLS endpoint to the protected authority. Phase 7's opcode-8 probe is deterministic DEV_REFERENCE compatibility evidence only: it never connects to a relay, proves target binding, or satisfies AC-012; production providers deny the signer.
+- Ownership: BootROM/XMODEM boot-stream framing is a separate pre-runtime protocol owned by Phase 3, outside the Phase 2 closed operation set. Root `Cargo.toml` workspace registration has exactly one serialized owner (Phase 6). Production-checker code stays owned by Phase 2; phases 3–5 hand off marker names only. Phase 7 is restricted to the standalone managed-CA/authority/KMS compatibility probe; ADR-0008 endpoint implementation and every service-net, net-broker, OSTD, and `embedded-tls` change wait for parent Phase 4 after Phase 8 GO.
 
 ## Evidence Gate
 
@@ -68,6 +68,7 @@ Security red-team (PLAN-BOOT-001, PLAN-TIME-002/003/004, PLAN-EVIDENCE-005) and 
 - [Candidate research](../reports/research-260826-1605-phase4-dev-reference-lane.md)
 - [Codebase scout](./scout-report.md)
 - [Parent Phase 4](../260825-1726-kms-silo-production-root/phase-04-service-net-mutual-tls-integration.md)
+- [ADR-0008 protected TLS ownership](../../docs/decisions/0008-protected-relay-tls-endpoint-ownership.md)
 
 ## Cook Handoff
 

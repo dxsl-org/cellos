@@ -95,13 +95,13 @@ where `SPKI DER` is the complete DER-encoded SubjectPublicKeyInfo from the leaf
 certificate. The extension must contain exactly that 32-byte value. Any
 mismatch fails before route registration.
 
-The Cellos client must validate the relay server's CA chain and hostname and
-produce TLS `CertificateVerify` signatures through an attested,
-service-net-authorized KMS P-256 signer. Its production provider must be the
-hardware product selected, implemented, and physically qualified through Phases
-6–8; the KMS-internal AArch64-QEMU Silo provider is `DEV_REFERENCE` only.
-Private-key bytes must never be provisioned to the filesystem or returned to
-the caller.
+The Protected Relay Authority owns the complete relay TLS client endpoint under
+[ADR-0008](./0008-protected-relay-tls-endpoint-ownership.md): server
+chain/hostname/time verification, handshake transcript and Finished validation,
+client profile selection, CertificateVerify, traffic secrets, and TLS records.
+`service-net` is only the bounded untrusted byte carrier. Private-key bytes and
+TLS secrets must never be provisioned to the filesystem or returned across the
+authority boundary.
 
 The server starts only from a mandatory mounted manifest defining its TLS
 material, client trust roots, NodeId denylist, and limits. Before registration
@@ -148,8 +148,8 @@ external relay hop; it does not terminate or replace Noise.
 - Attested authorization limiting identity-signing requests to service-net.
 - Managed-CA certificate issuance, provisioning, rotation, trust anchors, and
   the private NodeId extension profile.
-- A service-net mTLS client-auth profile with client chain, protected signer,
-  hostname/CA validation, and bounded transport integration.
+- A protected-authority TLS client endpoint with fixed client chain,
+  hostname/CA policy, bounded record transport, and live broker authorization.
 - Until these exist, the Cellos relay path remains blocked and direct Noise
   address exhaustion returns `NotSupported`; raw fallback is forbidden.
 - Server-only completion does **not** complete the Cellos client,
@@ -183,9 +183,9 @@ Acceptance evidence must show that:
   later explicitly re-admitted session;
 - destination absence and post-write/drain failure produce distinct definite
   unavailable and delivery-uncertain errors without a false success receipt;
-- the Cellos client validates server CA/hostname and signs only through the
-  authorized protected KMS path and its qualified production hardware provider,
-  without exposing key bytes; and
+- the protected authority validates the server CA/hostname and owns client
+  CertificateVerify plus TLS record keys, while `service-net` transports only
+  bounded bytes and no component exposes key material; and
 - a two-node exercise preserves opaque end-to-end Noise traffic and fails closed
   without raw fallback.
 
@@ -202,6 +202,7 @@ prerequisites above.
 
 - [ADR-0006](./0006-block-production-root-pending-exact-product-evidence.md) — no production root is selected; exact vendor product, firmware, boot, state, time, and board evidence gate the client path.
 - [ADR-0007](./0007-development-first-hardware-constrained-execution.md) — protected relay identity remains a production milestone gate and does not block bounded local-runtime, QEMU, RPi3, or sensor development.
+- [ADR-0008](./0008-protected-relay-tls-endpoint-ownership.md) — supersedes the relay client ownership boundary: the protected authority, not service-net, owns the complete TLS endpoint.
 - `.agents/260825-sdk-delivery/phase-02-relay.md` — relay direction,
   prerequisites, acceptance conditions, and server-only/client-blocked status.
 - `tools/relay-enroll/mtls-mount-manifest.template.toml` — provisioning

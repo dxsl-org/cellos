@@ -1,6 +1,6 @@
 ---
 title: "KMS/Silo Protected Relay Identity"
-description: "Deliver a fail-closed P-256 relay signer through KMS, a development-only Silo reference lane, and a separately hardware-qualified production provider."
+description: "Deliver an authority-owned relay TLS endpoint, a development-only Silo reference lane, and a separately hardware-qualified production provider."
 status: in-progress
 priority: P1
 effort: "not estimated"
@@ -14,8 +14,10 @@ created: 2026-08-25
 # KMS/Silo Protected Relay Identity
 
 ## Overview
-Build `service-net → KMS → RootProvider`: typed TLS 1.3/P-256 relay signing, optional `DEV_REFERENCE` Silo evidence, and a production lane that remains blocked because ADR-0006 selects no root product.
-This supersedes `.agents/260712-1902-dice-attestation-identity/phase-02-*` and `phase-03-*`; generic DICE expansion is not on the software mTLS critical path.
+Build `net-broker Noise ciphertext → service-net byte carrier → Protected Relay
+Authority TLS endpoint`: optional `DEV_REFERENCE` evidence and a production lane
+that remains blocked because ADR-0006 selects no root product. Public KMS
+opcodes 9–14 remain frozen; generic DICE expansion is not on the relay path.
 
 ## Phases
 
@@ -32,9 +34,13 @@ This supersedes `.agents/260712-1902-dice-attestation-identity/phase-02-*` and `
 
 ## Progress
 
-Phases 1–3 are complete; Phase 6 completed its specified NO-GO branch with no product or irreversible action approved. The overall plan remains **in progress**.
-Phase 4's entry contract is approved in [`spec.md`](./spec.md); deep research selects a VF2 UART-root-stream plus STM32H573/SLB9672/AWS composition, but all three gates remain NO-GO until AC-001 through AC-011 are evidenced. Product selection is not its dependency.
-Production remains `BLOCKED_BY_ADR_0006` until one ADR-0006 vendor-signed evidence package passes review and a superseding GO ADR names an exact product.
+Phases 1–3 are complete; Phase 6 completed its specified NO-GO branch with no
+product or irreversible action approved. ADR-0008 fixes Phase 4 TLS ownership,
+but the overall plan remains **in progress**. Phase 4 stays NO-GO until
+build-entry AC-001 through AC-011 are evidenced. After Build, AC-012 gates relay
+enablement and Phase 4 completion. Production remains `BLOCKED_BY_ADR_0006`
+until a vendor-signed evidence package passes review and a superseding GO ADR
+names an exact product.
 
 ## Dependency Graph
 
@@ -51,28 +57,19 @@ P4 is software-only and product-independent. P5 is `DEV_REFERENCE` only; P7–P8
 - Frozen opcode 14 exposes only the active key; Phase 4 must add authenticated pending-key binding.
 - Runtime stays sealed without protected persistence and authenticated time; no insecure fallback.
 - ADR-0006 selects no production root product; no KMS ABI change or disabled hardware placeholder is approved.
-- Phase 4 preserves public KMS opcodes 9–14 and places protected persistence, authenticated time, and direct pending-SPKI validation in one root-owned Protected Relay Authority.
+- Phase 4 preserves public KMS opcodes 9–14 and places protected persistence, authenticated time, direct pending-SPKI validation, and the complete fixed relay TLS endpoint in one root-owned Protected Relay Authority; the legacy public signer denies in production.
 
 ## Handoff Boundaries
 
 - Phase 4 may proceed only after `spec.md` AC-001 through AC-011 are evidenced; approving the contract does not open Build and does not wait for production product selection.
+- Phase 4 must implement ADR-0008 after entry GO and pass AC-012 before relay enablement or completion; AC-012 is not a Build entry gate.
 - Phase 5 may provide `DEV_REFERENCE` evidence only and cannot satisfy a production gate.
 - Phase 6 closed NO-GO without product, procurement, OTP, firmware, board, provisioning, or manufacturing approval.
 - Phases 7–8 remain blocked until one coherent vendor-signed package satisfies every ADR-0006 reopening criterion, passes review, and a superseding GO ADR names the exact product.
 
 ## Completion Evidence
-
-- Phase 1: 59/59 focused tests; unsafe provider/artifact paths rejected.
-- Phase 2: 75/75 host tests and the signed AArch64 `DEV_REFERENCE` QEMU lane passed.
-- Phase 3: 140/140 host tests (41 types, 58 KMS, 17 Silo, 24 net); exact out-of-order and full KMS suites passed.
-- RV64/AArch64 KMS and current-tree AArch64 development-Silo checks passed clean; the latter used `LLVM_OBJCOPY`.
-- Relay-enroll passed 10/10, relay-manifest 11/11, and OpenSSL verified the CSR self-signature.
-- Production checker passed 2/2; direct unqualified input failed closed and produced no image.
-- Final Phase 3 code and security re-reviews returned GO with no residual findings.
-- Phase 6 completed **NO-GO**: ADR-0006 accepted no production product and `research/phase-06-production-root-kill-gate.md` records the evidence/refutation; final security and consistency re-reviews returned GO with zero residual findings, `research/protected-root-report.json` parsed, and the master-plan size check passed at 77 lines.
-
-## Evidence
-
-- `reports/phase-03-deviation-log.md`; `reports/harness/verification.json`; `reports/harness/execution-evidence.json`
-- `reports/harness/adversarial-validation.json`; `reports/harness/risk-gate.json`; `reports/harness/review-decision.json`
-- `docs/decisions/0006-block-production-root-pending-exact-product-evidence.md`; `research/phase-06-production-root-kill-gate.md`; [`spec.md`](./spec.md); [`DEV_REFERENCE research`](../reports/research-260826-1605-phase4-dev-reference-lane.md)
+- Phase 1 passed 59/59 focused tests; Phase 2 passed 75/75 host tests plus signed AArch64 `DEV_REFERENCE` QEMU; Phase 3 passed 140/140 host tests.
+- RV64/AArch64 KMS, current-tree AArch64 development-Silo, relay-enroll 10/10, relay-manifest 11/11, and OpenSSL CSR verification passed.
+- Production checker passed 2/2; direct unqualified input failed closed without an image; final Phase 3 code/security reviews returned GO.
+- Phase 6 completed **NO-GO** with no product selected; ADR-0006 and `research/phase-06-production-root-kill-gate.md` record the reviewed evidence.
+- Evidence: `reports/phase-03-deviation-log.md`; `reports/harness/{verification,execution-evidence,adversarial-validation,risk-gate,review-decision}.json`; [`spec.md`](./spec.md); [`DEV_REFERENCE research`](../reports/research-260826-1605-phase4-dev-reference-lane.md).

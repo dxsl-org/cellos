@@ -82,7 +82,7 @@ No qualification or implementation step is authorized. The following are reopeni
 - [ ] The superseding GO ADR, completed Phase 7, and revised exact Phase 8 plan all name the same accepted product deployment and TCB.
 - [ ] Two independently provisioned production-lifecycle devices pass every product, board, boot, lifecycle, state/time, transport, recovery, and destructive-operation gate in the reviewed rewrite.
 - [ ] Each device accepts only its own independently signed qualification record; replay, cross-device substitution, or any tuple change invalidates production state.
-- [ ] The ADR-0005 TLS 1.3 client path carries opaque Noise traffic through the protected signer with no raw, generic-sign, exportable-key, development, or downgrade fallback.
+- [ ] The ADR-0005/ADR-0008 TLS 1.3 client path carries opaque Noise traffic through the protected-authority TLS endpoint with no standalone signer, raw, generic-sign, exportable-key, development, or downgrade fallback.
 - [ ] Production artifacts exclude every development/reference path, and no provider-ready or disabled-plumbing state can enable a production route.
 - [ ] Authenticated build provenance binds every qualified production artifact to the exact reviewed source, toolchain, configuration, signer, and release manifest.
 - [ ] Independent review reports zero unresolved Critical/High findings for the exact evidence package and observed results.

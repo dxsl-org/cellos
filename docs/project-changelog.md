@@ -120,6 +120,18 @@
   Every retained member is secret-scanned and uses per-run opaque node aliases.
   This defines the oracle; it does not claim that a two-node run occurred.
 
+- Accepted ADR-0008 for protected relay TLS endpoint ownership. The Protected
+  Relay Authority will own the complete TLS 1.3 client state: configured server
+  verification, transcript and Finished checks, active client identity,
+  CertificateVerify, traffic secrets, and record seal/open. service-net becomes
+  a fixed-endpoint bounded byte carrier. Net-broker's typed correct path supplies
+  Noise-record buffers, while the authority treats their contents as opaque and
+  makes no malicious-caller ciphertext-provenance claim. Public KMS opcodes 9–14
+  remain byte-compatible; the old transcript-hash signer remains fixture-only
+  and must deny in production. Entry AC-001..AC-011 open Phase 4 Build; post-Build
+  AC-012 gates relay enablement and Phase 4 completion. This resolves the
+  architecture decision, not the entry evidence or client implementation.
+
 - Authenticated evidence admission requires an explicitly provisioned,
   operator-owned replay store outside the submitted bundle. Verification binds
   the GitHub-attested subject digest through a second locked member check;
@@ -511,6 +523,9 @@
   authenticated build provenance. No production artifact or hardware-backed
   signing claim is made. This preserves the boundary established by
   [ADR-0005](decisions/0005-mutual-tls-relay-identity.md).
+  ADR-0008 later limits this operation to fixture compatibility: production
+  providers deny it, and the relay client uses the authority-owned TLS endpoint
+  instead.
 - Focused verification passed 59/59 tests (40 KMS and 19 KMS wire types), all
   10 unsafe Cargo matrices and 18 unsafe artifact-checker probes were rejected,
   and both code and security reviews reported no residual Critical or High

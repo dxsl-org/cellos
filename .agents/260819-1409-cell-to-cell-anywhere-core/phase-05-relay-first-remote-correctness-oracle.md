@@ -14,6 +14,8 @@ owner: "relay-runtime"
 - Transport: `research/transport-report.md`
 - Success gates: `reports/success-gates.md`
 - Relay identity decision: `../../docs/decisions/0005-mutual-tls-relay-identity.md`
+- Protected TLS ownership:
+  `../../docs/decisions/0008-protected-relay-tls-endpoint-ownership.md`
 - Protected signer gate:
   `../260825-1726-kms-silo-production-root/phase-04-service-net-mutual-tls-integration.md`
 - Approved protected profile contract:
@@ -49,15 +51,17 @@ Data flow: node A broker -> bounded TLS 1.3 connection -> certificate-derived
 NodeId admission -> E2E Noise to node B over relay packets -> C2C request ->
 node B local export -> response -> relay -> node A dedup/response.
 
-The server trust inputs and active client-certificate profile are fixed, not
-caller-selected. Signer authorization is not yet complete: current frozen
-requests let untrusted service-net submit an opaque transcript hash after doing
-its own relay CA/hostname validation, so the protected authority cannot prove
-that it is authenticating the configured relay rather than an attacker server.
-Remote wiring stays blocked until an approved architecture binds protected
-signing to the exact server chain, hostname/endpoint, handshake, live broker
-generation, and active client tuple without trusting service-net assertions.
-Generic client identity and shared-secret/raw-key fallback remain forbidden.
+ADR-0008 binds both relay server validation and device client authentication to
+one protected TLS state machine. The Protected Relay Authority owns server
+chain/hostname/time checks, transcript and Finished verification, the active
+client profile, CertificateVerify, traffic secrets, and TLS records.
+`service-net` is only the fixed-endpoint bounded byte carrier. Net-broker's
+correct typed path sends and receives Noise-record buffers; the authority treats
+them as opaque and cannot prove ciphertext provenance after application-processor
+compromise. Public KMS opcodes 9–14 remain unchanged, and the legacy opaque
+transcript-hash signer denies in production. Generic TLS,
+caller-selected identity, shared-secret, raw-key, and insecure fallback remain
+forbidden.
 
 ## Related Code Files
 
@@ -102,8 +106,8 @@ Generic client identity and shared-secret/raw-key fallback remain forbidden.
   `relay_port`, and lowercase DNS `relay_hostname` fields in `cluster.cfg`.
 - [x] Preserve the validated endpoint invariant with private representation and
   read-only `ip()`, `port()`, and `hostname()` accessors.
-- [ ] Define protected mTLS signer authorization bound to the exact authenticated
-  relay server identity; fixed trust/profile inputs alone are insufficient.
+- [x] Define protected mTLS target binding through ADR-0008 authority-owned TLS;
+  fixed trust/profile inputs alone are insufficient.
 - [x] Exercise missing/wrong `clientAuth` EKU and non-P-256 certificate
   rejection before route admission.
 - [x] Use the validated mTLS certificate-derived NodeId as registration proof;
@@ -194,12 +198,13 @@ kernel state requires rollback.
 
 ## Next Steps
 
-Continue local-only relay contract work only where it does not cross the blocked
-client signer boundary. Resolve protected relay-server identity binding before
-client implementation; current opaque transcript-hash authorization is
-insufficient. Correlated client framing still requires a separately approved
-wire revision. These blockers prevent sender-side mapping, relay-oracle
-execution, and any two-node result.
+Continue local-only relay work only where it does not cross the blocked
+protected-authority Build gates. ADR-0008 resolves TLS endpoint ownership, but
+protected persistence, authenticated time, pending-key binding, and the
+DEV_REFERENCE Phase 8 GO over AC-001..AC-011 remain unsatisfied. After that GO,
+Phase 4 must implement ADR-0008 and pass AC-012 before this relay route can open.
+Correlated client framing still requires a separately approved wire revision.
+No sender-side mapping, relay-oracle execution, or two-node result is available.
 
 ## Local Contract Evidence
 
@@ -227,11 +232,11 @@ execution, and any two-node result.
   connections cannot interrupt or reroute the established session, and stale
   generation cleanup cannot remove a later explicit admission. Tester and
   production-readiness reviewer rechecks pass.
-- Server trust inputs and the active client profile are fixed, but protected
-  signer authorization is explicitly incomplete because the current authority
-  cannot verify the relay server behind an opaque caller-supplied transcript
-  hash. The isolated topology, deterministic failure predicates, privacy rules,
-  and externally attested/replay-protected evidence bundle are defined; no
-  oracle run is claimed.
+- ADR-0008 now fixes target binding: the protected authority owns the complete
+  relay TLS endpoint, service-net carries only bounded bytes, and the old public
+  transcript-hash signer denies in production. This is an approved architecture,
+  not an implemented client. The isolated topology, deterministic failure
+  predicates, privacy rules, and externally attested/replay-protected evidence
+  bundle are defined; no oracle run is claimed.
 - No Cellos relay client, remote dispatch, receive loop, or two-node traffic is
   enabled or claimed.
