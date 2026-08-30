@@ -14,8 +14,9 @@ pub use time::{TimeChallengeSource, TrustedClock};
 
 use crate::{constant_time_eq, AuthorityFault, RequestContext, DIGEST_LEN, ID_LEN};
 pub use persistence::{
-    verify_protected_record, ProtectedAuthorityRecord, ProtectedRecordVerifier, ProtectedStore,
-    VerifiedProtectedRecord, PROTECTED_RECORD_MAX,
+    verify_protected_record, verify_protected_successor, ProtectedAuthorityRecord,
+    ProtectedRecordBindings, ProtectedRecordVerifier, ProtectedStore, VerifiedProtectedRecord,
+    PROTECTED_RECORD_MAX,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

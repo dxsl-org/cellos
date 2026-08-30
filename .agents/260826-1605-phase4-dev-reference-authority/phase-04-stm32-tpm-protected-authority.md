@@ -120,6 +120,7 @@ public KMS fixtures remain unchanged.
 - Create: `authority/stm32h573i-dk/src/state/{mod.rs,record.rs,journal.rs,recovery.rs,transaction.rs}`
 - Create: `authority/stm32h573i-dk/src/{profile.rs,tls_sign.rs,time.rs}` and `authority/stm32h573i-dk/provision/{inventory.py,plan.py,apply.py,policy.toml}`
 - Create: `authority/stm32h573i-dk/hardware/{run-gate.py,failure-matrix.toml,capture-schema.json}`
+- Completed host slice: `authority/stm32h573i-dk/journal-core/` plus the Phase 2-owned `verify_protected_successor` and immutable protected-record binding view in `libs/authority-protocol/`.
 - Hand off DEV marker names only (`DEV_REFERENCE`, lane tags) to the Phase 2-owned `scripts/check-production-relay-image.py`; phases 3–5 never edit checker code or tests. Root `Cargo.toml` workspace registration is owned solely by Phase 6 as serialized owner. Consume but do not redefine `libs/authority-protocol/`.
 - Keep unchanged: `libs/types/src/kms/{model.rs,payload/enroll.rs,payload/tls.rs}`; Phase 6 alone wires KMS adapters.
 - Record real outputs under `.agents/260826-1605-phase4-dev-reference-authority/evidence/phase-04/`; store no private keys, TPM auth values, or unlock material.
@@ -127,7 +128,7 @@ public KMS fixtures remain unchanged.
 ## Implementation Steps
 
 1. From Phase 1 inventory, probe MCU/TPM identity, firmware, SPI, option-byte, debug, lifecycle, and NV capabilities without mutation; reconcile every assumption or stop.
-2. Implement the frozen host-only full-record codec, dual-slot journal, independent recovery verifier, and exhaustive cut-point harness over `authority_protocol`; add only the read-only Phase 2 record-binding view required for verification. Then implement the certificate/profile validator and typed firmware adapters. Label all outputs `SOFTWARE_HARNESS`.
+2. **Journal/recovery host slice completed 2026-08-29.** The no_std full-record codec, dual-slot journal, irreversible counter-domain seal seam, independent recovery verifier, Phase 2-owned exact successor validator, and cut-point/reboot harness remain `SOFTWARE_HARNESS`. Next implement the certificate/profile validator and typed firmware adapters without changing the frozen private wire bytes.
 3. Generate `provision/plan.py` output containing device IDs, STiRoT image/key digests, the approved Phase 3 SRAM-loader and manifest-verification-key digests bound into the approved image/policy, exact option-byte/OTP/lifecycle/debug writes, TPM persistent/NV definitions, auth policies, irreversibility, and recovery consequences.
 4. **Operator checkpoint:** obtain explicit approval tied to the plan hash before key creation/persistence, `NV_DefineSpace`, OTP/STiRoT provisioning, lifecycle transition, debug closure, or destructive snapshot work. A changed hash requires new approval; no purchase/cloud action occurs here.
 5. Provision STiRoT and TPM in approved order, verify image acceptance/rejection and public key/NV attributes, then close debug/lifecycle only at its separately recorded irreversible checkpoint.
@@ -137,6 +138,7 @@ public KMS fixtures remain unchanged.
 ## Todo List
 
 - [ ] Freeze typed surface, TPM handle/NV/policy map, complete record schema, and transition table.
+- [x] Host full-record envelope, exact Phase 2 successor gate, counter-exact dual-slot recovery, irreversible seal seam, and cut-point/reboot harness pass at the `SOFTWARE_HARNESS` ceiling.
 - [ ] Complete and approve irreversible provisioning plan before mutation.
 - [ ] Execute every physical failure row with exact firmware and record hashes.
 - [ ] Prove pending-SPKI validation, single-use receipt, active-only signing, and generic-operation absence.
@@ -147,6 +149,7 @@ public KMS fixtures remain unchanged.
 - [ ] Substituted, rolled-back, and truncated-loader requests emit no XMODEM byte and produce a recorded digest-mismatch seal; the approved-loader digest round-trips through provisioning approval, PERSIST-003 records, and the OpenBoot fact.
 - [ ] Every power/snapshot/prepare/promote/finalize edge recovers one exact authenticated tuple or seals; no regressed floor, PREPARED service, or split brain occurs.
 - [ ] Physical chain/SPKI/receipt/generic-command negatives fail without TPM side effects; software-only results remain visibly distinct and satisfy no hardware criterion.
+- [x] Host journal rejects malformed/authentication/identity/profile/successor/floor faults, models every persistent inactive-slot byte prefix after counter increment without relying on `commit` returning, and recovers the exact new record after a complete write/read-back cut. It passes 20 focused tests plus the complete 26-test authority-protocol suite; this is not hardware evidence.
 
 ## Risk Assessment
 
@@ -165,3 +168,4 @@ On pass, Phase 6 consumes the typed facts/receipts and opaque provider adapter; 
 None at planning time beyond: **2026-08-26 Decision** — security red-team review returned NO-GO on PLAN-BOOT-001; resolved without weakening any stop by binding the exact Phase 3 SRAM-loader bytes and manifest-verification key into this phase's STiRoT-approved image/policy, verifying the approved-loader digest before any XMODEM byte, persisting that digest in PERSIST-003 tuples and the OpenBoot fact, and adding substituted/rolled-back/truncated-loader physical negatives. Root `Cargo.toml` registration defers to Phase 6 as sole serialized owner and production-checker ownership stays with Phase 2 (marker-name handoff only), per the simplicity NO-GO resolution logged in Phase 3. During Build append each Decision/Deviation/Surprise with trigger, contract impact, and reversal; irreversible deviations are escalated before action.
 - 2026-08-26 — Decision: software track authorized; codec/state/certificate harnesses and the provision-plan generator may proceed pre-admission as `SOFTWARE_HARNESS`. Provisioning, TPM/STiRoT work, and the physical failure matrix stay operator-gated.
 - 2026-08-29 — Decision: the next authorized software slice is the Phase 4 full-record dual-slot journal and recovery harness. It wraps, rather than forks, the canonical Phase 2 protected record; Phase 2 may expose a read-only binding view but its v1 bytes and transition surface remain frozen. Hardware authentication, TPM counter behavior, flash atomicity, and lifecycle claims remain gated.
+- 2026-08-29 — Result: the first Phase 4 software slice is complete. `RecoveredRecord` is opaque, commit internally re-authenticates the current slot, Phase 2 owns exact mode/boot/time/pending-time/relay successor validation, and the counter-domain seal is absorbing across reboot. RV64 no_std checks and host suites pass; exact STM32/TPM behavior remains unclaimed.

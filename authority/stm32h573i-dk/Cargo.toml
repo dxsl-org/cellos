@@ -1,0 +1,17 @@
+[workspace]
+members = ["journal-core"]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+license = "MPL-2.0"
+publish = false
+
+[workspace.dependencies]
+authority-protocol = { path = "../../libs/authority-protocol" }
+sha2 = { version = "0.10", default-features = false }
+
+[workspace.metadata.cellos]
+evidence_boundary = "SOFTWARE_HARNESS"
+authority_lane = "DEV_REFERENCE"
+production_evidence = false

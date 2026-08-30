@@ -16,11 +16,12 @@ use sha2::{Digest, Sha256};
 pub use fault::AuthorityFault;
 pub use message::*;
 pub use state::{
-    verify_protected_record, AuthorityMode, AuthorityState, AuthorityStateConfig, BootState,
-    CsrChunkIntent, EnrollmentIntent, OpenedBootFact, PendingTimeChallenge, PreparedCommitIntent,
-    ProtectedAuthorityRecord, ProtectedRecordVerifier, ProtectedStore, ProtectedTimeFloors,
-    RelayIntent, RelayProfileState, TimeChallengeSource, TimePurpose, TimeState,
-    TlsSignatureIntent, TrustedClock, VerifiedProtectedRecord, PROTECTED_RECORD_MAX,
+    verify_protected_record, verify_protected_successor, AuthorityMode, AuthorityState,
+    AuthorityStateConfig, BootState, CsrChunkIntent, EnrollmentIntent, OpenedBootFact,
+    PendingTimeChallenge, PreparedCommitIntent, ProtectedAuthorityRecord, ProtectedRecordBindings,
+    ProtectedRecordVerifier, ProtectedStore, ProtectedTimeFloors, RelayIntent, RelayProfileState,
+    TimeChallengeSource, TimePurpose, TimeState, TlsSignatureIntent, TrustedClock,
+    VerifiedProtectedRecord, PROTECTED_RECORD_MAX,
 };
 pub use validation::{
     is_strict_p256_der_signature, verify_boot_measurement, verify_provider_cas_receipt,

@@ -1,7 +1,9 @@
 mod auth;
 mod codec;
 mod invariants;
+mod successor;
 pub use auth::PROTECTED_RECORD_MAX;
+pub use successor::verify_protected_successor;
 
 use super::*;
 use crate::AuthorityFault;
@@ -24,6 +26,27 @@ pub struct ProtectedAuthorityRecord {
     previous_active: Option<RelayIntent>,
     pending_time: Option<PendingTimeChallenge>,
     time_floors: ProtectedTimeFloors,
+}
+
+/// Read-only values required to bind a canonical record to protected storage.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ProtectedRecordBindings {
+    pub revision: u64,
+    pub mode: AuthorityMode,
+    pub boot: BootState,
+    pub time: TimeState,
+    pub relay: RelayProfileState,
+    pub device_id: [u8; ID_LEN],
+    pub authority_id: [u8; ID_LEN],
+    pub authority_epoch: u64,
+    pub boot_floor: u64,
+    pub generation_floor: u64,
+    pub state_epoch: u64,
+    pub approved_loader_digest: [u8; DIGEST_LEN],
+    pub last_request_sequence: u64,
+    pub previous_active: Option<RelayIntent>,
+    pub pending_time: Option<PendingTimeChallenge>,
+    pub time_floors: ProtectedTimeFloors,
 }
 
 pub trait ProtectedStore {
@@ -54,6 +77,28 @@ pub fn verify_protected_record<V: ProtectedRecordVerifier>(
 impl ProtectedAuthorityRecord {
     pub const fn revision(&self) -> u64 {
         self.revision
+    }
+
+    /// Return immutable security bindings without exposing record mutation.
+    pub const fn bindings(&self) -> ProtectedRecordBindings {
+        ProtectedRecordBindings {
+            revision: self.revision,
+            mode: self.mode,
+            boot: self.boot,
+            time: self.time,
+            relay: self.relay,
+            device_id: self.device_id,
+            authority_id: self.authority_id,
+            authority_epoch: self.authority_epoch,
+            boot_floor: self.boot_floor,
+            generation_floor: self.generation_floor,
+            state_epoch: self.state_epoch,
+            approved_loader_digest: self.approved_loader_digest,
+            last_request_sequence: self.last_request_sequence,
+            previous_active: self.previous_active,
+            pending_time: self.pending_time,
+            time_floors: self.time_floors,
+        }
     }
 }
 
