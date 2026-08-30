@@ -1446,6 +1446,28 @@ a future pipelined client must conservatively treat affected outstanding work as
 Cellos client authentication, receive wiring, and two-node evidence remain
 absent.
 
+Fixed relay CA/profile inputs do not complete protected signer authorization.
+The current frozen request lets untrusted service-net submit an opaque TLS
+transcript hash after performing its own server CA/hostname checks; the
+protected authority therefore cannot prove that the signature authenticates the
+configured relay rather than an attacker-controlled server. Relay client work
+remains blocked until an approved design binds protected signing to the exact
+server chain, hostname/endpoint, handshake, live broker generation, and active
+client tuple without trusting service-net assertions.
+
+The relay-only correctness oracle uses separate network namespaces for one
+self-hosted relay and two Cellos nodes. ACLs deny node-to-node traffic; retained
+route/ACL snapshots and negative direct probes make bypass observable. Exact
+request-path correlation and deterministic dedup, deadline, forwarding,
+disconnect, and reconnect predicates are mandatory. The canonical
+`cellos.authenticated-evidence/v1` bundle hashes all members except its manifest;
+GitHub attests the manifest digest, while external operator state binds and
+single-consumes the workflow identity, revision, run-id/attempt, lane identities,
+and fresh oracle nonce. All members are secret-scanned, commands contain only
+secret references, and collision-checked per-run aliases replace stable NodeId
+prefixes. Host/QEMU evidence proves only the isolated software path. No oracle
+run or client implementation is claimed.
+
 ### Cluster membership: 3 modes
 
 A Cell declares its mode via a new additive `__ViCell_cluster` ELF section (follows the `__ViCell_syscalls` pattern; not a manifest/Law-1 change):

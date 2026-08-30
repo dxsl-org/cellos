@@ -94,7 +94,7 @@ sensor, or local-runtime development.
 | Authenticated software evidence | Completed / regression-only | `ready` | `host` | Hardware-independent roadmap Phase 07; trusted GitHub-hosted `main` run `33251921677:1` at revision `d951d7dbf191133e94061ded7f0a8d17bfcf07c8` completed, manifest digest `2263115d4f3f58b990074d0cb7489ec5f52523f23a2a9777a8685a8c09492abb` was independently verified, the run-id/attempt sequence was consumed once through explicitly provisioned durable operator-owned external state, and exact replay was rejected | Reopen only for a pipeline/schema/workflow-identity regression or a separately governed higher evidence class; authenticated carriage preserves each bundled result's existing ceiling and implies no physical, secure-root, cloud, approval, admissibility, or production claim |
 | x86 Tier 3 VirtIO parity | Completed / regression-only | `scope-gated` | `qemu` | Hardware-independent roadmap Phase 10 completed with two-boot block/network and 27-scenario hostile QEMU evidence | Reopen for a software regression or a separately governed physical-x86 qualification run |
 | Remote/public Cell-to-Cell operation | Future capability | `contract-gated` | `host` / `service` | Cell-to-Cell Anywhere remote/public children | Separately approve and implement the remote transport, identity, lease, and export contracts; local runtime work need not wait |
-| Protected relay identity | External-gated prerequisite | `external-gated` | `host` | KMS/Silo protected relay plan and Cell-to-Cell Anywhere Phase 05 | Reopen service-net Build and the Phase 05 relay path only after real protected persistence, authenticated time, a distinct reviewed pending-key binding under the frozen KMS ABI, and `DEV_REFERENCE` authority Phase 8 GO; this lane-local gate does not block unrelated development |
+| Protected relay identity | External-gated prerequisite | `external-gated` | `host` | KMS/Silo protected relay plan and Cell-to-Cell Anywhere Phase 05 | Reopen service-net Build and the Phase 05 relay path only after real protected persistence, authenticated time, a distinct reviewed pending-key binding under the frozen public KMS ABI, `DEV_REFERENCE` authority Phase 8 GO, and a separately approved protected binding between CertificateVerify authorization and the exact relay server identity; the current opaque transcript-hash request is insufficient, and this lane-local gate does not block unrelated development |
 | G3 accelerator | Future capability | `external-gated` | `contract` | Accelerator evidence envelope | RK3588, accepted RKNN package/license, then X390 evidence |
 | Additional physical-board qualification | External-gated prerequisite | `external-gated` | `physical` | Hardware tracks | Exact VF2, Pioneer, RPi4, or x86 board and board-specific logs; existing RPi3 work need not wait |
 | Production root selection | External-gated prerequisite | `external-gated` | `production` | ADR-0006 | Vendor package satisfying ADR-0006 and a superseding GO ADR; no stock TPM or generic secure-element counter is selected as the floor |
@@ -271,6 +271,12 @@ Cellos is being shaped around product stages, not only phase numbers:
   against the exact TLS 1.3 client `CertificateVerify` input. No generic signing
   operation or private-key export was added. See
   [ADR-0005](decisions/0005-mutual-tls-relay-identity.md).
+- A 2026-08-29 security review narrowed that Phase 1 evidence: untrusted
+  service-net supplies an opaque transcript hash, so the protected authority
+  cannot prove that the signature authenticates the configured relay rather
+  than an attacker server. The fixture remains unreachable from a relay client;
+  Phase 4 Build requires a separately approved target-bound signer architecture
+  before any client wiring.
 - KMS/Silo Phase 2 is complete as a clean-cutover `DEV_REFERENCE`,
   AArch64-virtualized-QEMU-only provider. The public/general Silo handle,
   initialization, signing, ECDH, and raw-command surfaces are removed. Only the

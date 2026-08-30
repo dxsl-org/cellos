@@ -13,6 +13,11 @@ owner: "relay-runtime"
 
 - Transport: `research/transport-report.md`
 - Success gates: `reports/success-gates.md`
+- Relay identity decision: `../../docs/decisions/0005-mutual-tls-relay-identity.md`
+- Protected signer gate:
+  `../260825-1726-kms-silo-production-root/phase-04-service-net-mutual-tls-integration.md`
+- Approved protected profile contract:
+  `../260825-1726-kms-silo-production-root/spec.md`
 
 ## Overview
 
@@ -43,6 +48,16 @@ Priority P1. Make remote work through an authenticated self-hosted relay first, 
 Data flow: node A broker -> bounded TLS 1.3 connection -> certificate-derived
 NodeId admission -> E2E Noise to node B over relay packets -> C2C request ->
 node B local export -> response -> relay -> node A dedup/response.
+
+The server trust inputs and active client-certificate profile are fixed, not
+caller-selected. Signer authorization is not yet complete: current frozen
+requests let untrusted service-net submit an opaque transcript hash after doing
+its own relay CA/hostname validation, so the protected authority cannot prove
+that it is authenticating the configured relay rather than an attacker server.
+Remote wiring stays blocked until an approved architecture binds protected
+signing to the exact server chain, hostname/endpoint, handshake, live broker
+generation, and active client tuple without trusting service-net assertions.
+Generic client identity and shared-secret/raw-key fallback remain forbidden.
 
 ## Related Code Files
 
@@ -87,8 +102,8 @@ node B local export -> response -> relay -> node A dedup/response.
   `relay_port`, and lowercase DNS `relay_hostname` fields in `cluster.cfg`.
 - [x] Preserve the validated endpoint invariant with private representation and
   read-only `ip()`, `port()`, and `hostname()` accessors.
-- [ ] Define mTLS trust/profile inputs and signer authorization; no shared-secret
-  or raw-key fallback.
+- [ ] Define protected mTLS signer authorization bound to the exact authenticated
+  relay server identity; fixed trust/profile inputs alone are insufficient.
 - [x] Exercise missing/wrong `clientAuth` EKU and non-P-256 certificate
   rejection before route admission.
 - [x] Use the validated mTLS certificate-derived NodeId as registration proof;
@@ -100,7 +115,7 @@ node B local export -> response -> relay -> node A dedup/response.
   30-second ceiling, and reset only after authenticated session establishment.
 - [x] Separate definite pre-write destination absence from accepted-then-uncertain
   destination write/drain failure with bounded relay error codes.
-- [ ] Define oracle topology and logs retained.
+- [x] Define isolated oracle topology and privacy-safe retained evidence.
 - [x] Define no-evict session-pool admission: full capacity returns explicit
   pressure without opening another TCP path or displacing an existing session.
 - [x] Canonicalize the Noise prologue as
@@ -108,7 +123,42 @@ node B local export -> response -> relay -> node A dedup/response.
   initiator/responder KKpsk0 transcript completes.
 - [x] Pin the 72-byte prologue layout for both local roles: little-endian
   cluster ID, then initiator NodeId, then responder NodeId.
-- [ ] Define dedup expiry/exhaustion relay oracle.
+- [x] Define deterministic dedup expiry/exhaustion relay-oracle predicates.
+
+## Oracle Topology and Retained Evidence
+
+- One self-hosted relay and two Cellos node instances run in separate network
+  namespaces. Namespace ACLs permit each node to reach only the relay and deny
+  node-to-node traffic. Distinct CA-issued identities, state directories, and
+  NodeIds are mandatory; both nodes share only the intended cluster and K1.
+  Retained ACL/route snapshots and successful negative direct-connect probes
+  prove that absent direct candidates are enforced rather than assumed.
+- The broker emits a selected-path event for the exact request ID. The run
+  requires `relay` for that request, one exported response, and unchanged request
+  ID through disconnect/reconnect. Any direct-path event or missing correlation
+  fails the run.
+- Deterministic lanes require: duplicate-before-completion returns `Busy`
+  without redispatch; retained completion replays the same result; expired
+  non-idempotent completion returns `Indeterminate` without redispatch; a cache
+  full of in-flight entries returns `Busy` without eviction; expired completed
+  state releases capacity; pre-dispatch expiry returns `Timeout`; post-dispatch
+  expiry or disconnect after possible delivery returns `Indeterminate`; definite
+  pre-write destination absence returns `Unreachable`.
+- The authoritative bundle uses `cellos.authenticated-evidence/v1` in the pinned
+  GitHub-hosted workflow. A canonical manifest hashes every retained member
+  except itself; GitHub attests that manifest digest. The attested digest,
+  workflow identity, revision, run-id/attempt, lane identities, and a fresh
+  operator-issued oracle nonce are anchored outside the bundle and consumed
+  once through the operator-owned replay store.
+- Separate relay, node-A, and node-B logs, ACL/route snapshots, negative probes,
+  machine-readable predicates, and result summary are retained. Every retained
+  member is scanned. Commands are canonical argument arrays containing secret
+  references, never expanded secret values; nodes use collision-checked
+  per-run opaque aliases rather than stable NodeId prefixes.
+- Payloads, request bodies, K1, private/signature material, certificate bodies,
+  full NodeIds, unrestricted environments, missing members/hashes, forbidden
+  content, failed isolation, or unclassified outcomes fail admission. Host/QEMU
+  evidence proves only the isolated software path, never hardware or production.
 
 ## Success Criteria
 
@@ -121,6 +171,8 @@ node B local export -> response -> relay -> node A dedup/response.
 - A duplicate live certificate-derived NodeId is rejected before packet
   forwarding and cannot displace the established route.
 - In-flight relay requests are never evicted; pressure is visible to caller.
+- Dedup, deadline, disconnect, and reconnect lanes meet every deterministic
+  predicate above with no duplicate local dispatch or in-flight eviction.
 
 ## Risk Assessment
 
@@ -142,10 +194,12 @@ kernel state requires rollback.
 
 ## Next Steps
 
-Continue local-only relay contract work with a future correlated client framing
-decision and oracle evidence definition. Protected client signer qualification
-still blocks Cellos relay wiring, sender-side error mapping, and any two-node
-oracle.
+Continue local-only relay contract work only where it does not cross the blocked
+client signer boundary. Resolve protected relay-server identity binding before
+client implementation; current opaque transcript-hash authorization is
+insufficient. Correlated client framing still requires a separately approved
+wire revision. These blockers prevent sender-side mapping, relay-oracle
+execution, and any two-node result.
 
 ## Local Contract Evidence
 
@@ -173,5 +227,11 @@ oracle.
   connections cannot interrupt or reroute the established session, and stale
   generation cleanup cannot remove a later explicit admission. Tester and
   production-readiness reviewer rechecks pass.
+- Server trust inputs and the active client profile are fixed, but protected
+  signer authorization is explicitly incomplete because the current authority
+  cannot verify the relay server behind an opaque caller-supplied transcript
+  hash. The isolated topology, deterministic failure predicates, privacy rules,
+  and externally attested/replay-protected evidence bundle are defined; no
+  oracle run is claimed.
 - No Cellos relay client, remote dispatch, receive loop, or two-node traffic is
   enabled or claimed.

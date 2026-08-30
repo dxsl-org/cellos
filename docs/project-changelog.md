@@ -107,6 +107,18 @@
   tests pass 37/37; focused broker tests pass 105/105 and the RV64 broker release
   build passes. Cellos client error mapping, receive wiring, and two-node
   evidence remain open.
+  Defined the Phase 05 relay-oracle contract without crossing the blocked client
+  boundary. Security review found that fixed CA/profile inputs are insufficient:
+  the current opaque transcript-hash signer request leaves untrusted service-net
+  unable to prove the exact relay server identity to the protected authority.
+  Signer authorization and client implementation remain blocked pending an
+  approved target-bound design. The oracle now requires namespace/ACL-enforced
+  relay-only routing, negative direct probes, exact selected-path correlation,
+  deterministic dedup/deadline/failure predicates, and
+  `cellos.authenticated-evidence/v1`. Its canonical member hashes are anchored by
+  GitHub attestation and externally replay-protected run identity/nonce state.
+  Every retained member is secret-scanned and uses per-run opaque node aliases.
+  This defines the oracle; it does not claim that a two-node run occurred.
 
 - Authenticated evidence admission requires an explicitly provisioned,
   operator-owned replay store outside the submitted bundle. Verification binds

@@ -43,6 +43,11 @@ The existing KMS fixed-frame ABI, caller trailer, broker binding, and `RootProvi
   `{transcript_hash[32], relay_generation, active_profile_digest, request_id}`.
   Qualification and authenticated time are protected provider state, never
   caller-supplied booleans/proofs.
+- Security correction: this fixture-backed request proves typed signing
+  mechanics only. Because untrusted service-net supplies the opaque transcript
+  hash, it does not bind the protected signer to the configured relay server and
+  must not be wired into a relay client. Phase 4 owns an unapproved replacement
+  architecture while public KMS opcodes remain frozen.
 - `RelayP256Status` includes protected profile/time floors and a per-device
   monotonic qualification epoch/record digest, plus
   `DevelopmentReference | QualificationTest | ProductionQualified`.
@@ -127,6 +132,10 @@ Production requests additionally require the protected profile digest and
   residual Critical/High findings
   (`reports/harness/adversarial-validation.json`,
   `reports/harness/review-decision.json`).
+- 2026-08-29 security review supersedes the earlier relay-authorization verdict:
+  the fixture path cannot prove the exact relay server identity inside the
+  protected boundary. Production exclusion still holds, so no reachable relay
+  client is exposed; Phase 4 remains blocked on a target-bound design.
 
 ## Todo List
 - [x] Freeze canonical TLS signing frames and errors.

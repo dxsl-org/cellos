@@ -46,13 +46,20 @@ not entry-gate evidence; all three gates remain NO-GO.
 - Add a separate `RelayMtlsProvider`; retain normal server-auth
   `ViTlsProvider` unchanged.
 - Only the live attested net-broker generation can request privileged relay connect.
-- Service-net is the sole runtime signer caller and sends exactly
-  `{transcript_hash[32], relay_generation, active_profile_digest, request_id}`.
-  KMS/provider compare the digest and generation with protected state; they read
-  qualification and authenticated-time state internally, never from caller
-  assertions.
+- The current proposed request
+  `{transcript_hash[32], relay_generation, active_profile_digest, request_id}` is
+  insufficient because service-net is outside the trust boundary and the
+  protected authority cannot derive the relay server identity from an opaque
+  hash. Do not implement this signer path.
+- Before Build, approve a design that binds CertificateVerify authorization to
+  protected verification of the exact relay server chain, hostname/endpoint,
+  handshake, live broker generation, and active client tuple without trusting
+  service-net assertions. Public KMS opcodes 9–14 remain frozen; any necessary
+  internal privileged protocol requires separate review.
 - Convert KMS's canonical low-S `r||s` to DER only in the TLS adapter.
-- Validate relay CA, validity, hostname/SAN, TLS 1.3, and active client profile.
+- Validate relay CA, validity, hostname/SAN, TLS 1.3, and active client profile
+  inside the approved protected target-binding design, not by trusting
+  service-net's result.
 - Replace the build-time clock clamp with authenticated time checked against the
   protected floor. Missing or rolled-back time fails the handshake.
 - Preserve direct Noise first; relay carries opaque Noise records and has no
@@ -60,7 +67,11 @@ not entry-gate evidence; all three gates remain NO-GO.
 - Bound handshake, I/O, frames, sessions, retries, cancellation, and errors.
 
 ## Architecture
-`net-broker privileged connect → service-net active profile → embedded-tls handshake → KMS typed CertificateVerify → external relay`. Broker never gets TLS key material and generic consumers cannot spend the relay identity.
+Target boundary, with mechanism still unapproved:
+`net-broker privileged connect → service-net transport → protected relay-server
+identity/transcript validation + active-profile CertificateVerify → external
+relay`. Broker never gets TLS key material, service-net cannot choose the
+authenticated server, and generic consumers cannot spend the relay identity.
 
 ## Assumptions
 - **Claim:** A maintained dependency patch can be pinned reproducibly without forking unrelated TLS code. **Confidence:** medium. **How to verify:** implement the smallest upstream-compatible `try_sign` change and run embedded-tls client-auth tests.
@@ -106,6 +117,8 @@ not entry-gate evidence; all three gates remain NO-GO.
 - [ ] Evidence the authenticated-time contract in `spec.md`.
 - [ ] Evidence the pending-key binding contract in `spec.md`.
 - [ ] Make external signer failure error-safe.
+- [ ] Approve protected relay-server identity binding; reject opaque
+  service-net-only transcript assertions.
 - [ ] Add isolated relay mTLS provider and privileged relay-connect IPC.
 - [ ] Bind sockets to broker generation and restore direct-first authenticated relay routing.
 
@@ -116,6 +129,7 @@ not entry-gate evidence; all three gates remain NO-GO.
 | Critical | KMS denial/unavailable signer | handshake error, no panic/fallback |
 | Critical | raw/K1/tls-insecure route | absent from production |
 | High | invalid server CA/SAN/time/client profile | fail before registration |
+| Critical | service-net requests signing for attacker TLS server | protected authority denies before client authentication |
 | High | valid leaf plus intermediate chain | server receives ordered full chain |
 | Critical | missing/default/rolled-back trusted time | fail before handshake |
 | High | chain >3 entries or >12 KiB | reject before handshake |
@@ -128,6 +142,8 @@ not entry-gate evidence; all three gates remain NO-GO.
 - [ ] Generic `TlsStream` remains server-auth only.
 - [ ] Only the privileged broker path can establish relay mTLS.
 - [ ] Every signer and TLS failure is bounded and fail closed.
+- [ ] Protected authorization proves the exact configured relay server identity
+  and handshake without trusting service-net assertions.
 - [ ] A managed-CA leaf requiring an intermediate completes client
   authentication; missing/misordered/oversized chains fail closed.
 - [ ] No private key, generic sign handle, or plaintext Cell payload crosses service boundaries.
@@ -139,17 +155,17 @@ A broad “mTLS flags” extension to generic TLS would expose the device identi
 KMS creates the exact CertificateVerify signature; service-net must not prehash arbitrary caller data. Noise remains the end-to-end application security boundary.
 
 ## Next Steps
-Do not begin Phase 4 Build. First implement and evidence the selected
-DEV_REFERENCE candidate via
-[its execution plan](../260826-1605-phase4-dev-reference-authority/plan.md):
-the JH7110 SRAM loader feasibility gate, protected state fault matrix,
-signed-time deployment, and AC-001 through AC-011 review; its Phase 8 GO alone
-may open this phase's Build. Phase 5 may prove the resulting software path only
-as `DEV_REFERENCE`. ADR-0006 independently blocks Phases 7–8 pending vendor
-evidence and a superseding GO ADR.
+Do not begin Phase 4 Build. In addition to the three existing entry gates,
+approve a protected relay-server identity-binding architecture; the current
+opaque transcript-hash request is insufficient. Continue the selected
+DEV_REFERENCE candidate through
+[its execution plan](../260826-1605-phase4-dev-reference-authority/plan.md), but
+its Phase 8 GO cannot by itself authorize the signer path. ADR-0006 independently
+blocks Phases 7–8 pending vendor evidence and a superseding GO ADR.
 
 ## Deviation Log
 2026-08-26 — ADR-0006 clarified that Phase 4 is product-independent, retained the protected-persistence and authenticated-time gates, added a distinct reviewed pending-key binding under frozen opcodes 9–14, and approved no KMS ABI change.
 2026-08-26 — Approved `spec.md` selects a root-owned Protected Relay Authority while preserving public KMS opcodes 9–14. Approval fixes the three entry-gate contracts but leaves Phase 4 blocked until AC-001 through AC-011 are evidenced.
 2026-08-26 — Deep research selected the VF2 UART-root-stream plus STM32H573/SLB9672/AWS signed-time composition as the only concrete DEV_REFERENCE candidate worth implementing. The research remains NO-GO evidence: no hardware, firmware, endpoint, fault matrix, or AC-001 through AC-011 result exists, so Phase 4 stays blocked.
 2026-08-26 — Created the DEV_REFERENCE execution plan with red-team corrections applied; its Phase 8 GO is now the sole opener for Phase 4 Build, so Next Steps link to it directly.
+2026-08-29 — Security review found that the frozen opaque transcript-hash signer request cannot bind the configured relay server identity inside the protected boundary because service-net performs CA/hostname validation while remaining untrusted. Phase 4 Build now also requires a separately approved target-bound signer architecture; no KMS ABI or implementation change is approved here.

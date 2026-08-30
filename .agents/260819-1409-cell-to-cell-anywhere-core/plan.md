@@ -60,14 +60,18 @@ Recovery plan: supersedes `.agents/260624-cell-to-cell-anywhere/` without editin
 > admission, missing/wrong `clientAuth` and non-P-256 rejection, wire behavior,
 > and the definite destination-missing versus accepted-then-uncertain
 > write-failure split. The RV64 broker release build also passes.
+> Server trust inputs and the active client profile are fixed, but protected
+> signer authorization is not: the current opaque transcript-hash request cannot
+> prove the exact relay server identity to the protected authority. The isolated
+> oracle topology, deterministic predicates, and authenticated evidence contract
+> are defined, but no oracle run is claimed.
 >
-> The two-real-broker relay path remains blocked only by the
-> protected-persistence, authenticated-time, and reviewed pending-key-binding
-> entry gates under frozen KMS opcodes 9–14 in
+> The two-real-broker relay path remains blocked by protected persistence,
+> authenticated time, reviewed pending-key binding, and an approved protected
+> relay-server identity binding under frozen public KMS opcodes 9–14. The first
+> three gates remain tracked in
 > `.agents/260825-1726-kms-silo-production-root/phase-04-service-net-mutual-tls-integration.md`.
-> It reopens only when DEV_REFERENCE Phase 8 emits exact
-> `GO: PHASE4_ENTRY_GATES_SATISFIED`; this is not a global blocker for local
-> work. No two-node, relay, direct-LAN, hardware, or production claim is made.
+> No two-node, relay, direct-LAN, hardware, or production claim is made.
 
 ## Verdict
 
