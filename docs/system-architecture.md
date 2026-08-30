@@ -445,8 +445,9 @@ policy, profile, and SPKI metadata. It strictly parses a stable double-read
 `TPM2B_PUBLIC`, requires the closed TPM ECC P-256/SHA-256 signing profile, and
 requires its derived canonical SPKI to equal both journal and leaf certificate
 SPKIs. The X.509 path rejects uploaded/duplicate root SPKIs, non-client issuer
-EKUs, noncanonical RFC 5280 time tags, and every out-of-profile extension,
-identity, validity, algorithm, denylist, or NodeId binding.
+EKUs, noncanonical RFC 5280 time tags, unknown critical extensions, and invalid
+identity, validity, algorithm, denylist, or NodeId bindings. Unknown
+non-critical extensions remain ignored as required by the approved profile.
 
 The no_std suites pass 38 journal/bank, 11 validator, and 36
 `authority-protocol` focused host tests. The counter, authenticator, banks, and
