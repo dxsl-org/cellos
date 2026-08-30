@@ -4,6 +4,22 @@
 
 ## [Unreleased] Development-first hardware-constrained execution
 
+- Phase 4's deterministic, non-executing provisioning-plan generator is complete
+  only at the `SOFTWARE_HARNESS` ceiling. Each of its nine ordered mutations now
+  carries an exact typed address space/address, byte width, write mask, requested
+  bytes, expected readback bytes, and authority-policy binding. TPM request bytes
+  must hash to the selected stable/active/pending/NV template, STM32 targets bind
+  their addresses, masked write/readback bits must agree, and every step is
+  self-hashed inside the approval-bound canonical payload. The payload also binds
+  the complete authority-protocol and journal crate source trees. Normal mode and
+  Phase 1 remain blocked; explicit software-harness mode permits only the existing
+  AWS read-only identity admission failure and rejects every other failure.
+  Focused provisioning tests pass 22/22 and affected admission tests pass 11/11;
+  final review found no remaining scoped issue. Nothing was executed: actual
+  admitted inventory, preclosure evidence, exact operator approval, every
+  mutation, hardware provisioning, physical failure evidence, and parent Phase 4
+  remain blocked.
+
 - Phase 4 now includes the `SOFTWARE_HARNESS` STM32 authority full-record and
   dual-slot journal core under `authority/stm32h573i-dk/`. It wraps the frozen
   canonical Phase 2 protected record with complete PERSIST-003 hardware/profile

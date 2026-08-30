@@ -85,10 +85,10 @@ def semantic_checks(inventory: dict, evidence_dir: Path, checks: list) -> None:
     record("aws-read-only-identity", _aws_identity_problems(inventory["aws_dev_account"], evidence_dir))
 
 
-def evaluate(inventory_path: Path, evidence_dir: Path) -> tuple[str, dict]:
+def evaluate_inventory(inventory: dict, evidence_dir: Path) -> tuple[str, dict]:
+    """Evaluate one already-loaded inventory without reopening its path."""
     if not evidence_dir.is_dir():
         raise AdmissionError(f"evidence directory not found: {evidence_dir}")
-    inventory = load_json(inventory_path)
     schema = load_json(SCHEMA_PATH)
 
     checks = []
@@ -109,6 +109,10 @@ def evaluate(inventory_path: Path, evidence_dir: Path) -> tuple[str, dict]:
         "checks": checks,
     }
     return status, report
+
+
+def evaluate(inventory_path: Path, evidence_dir: Path) -> tuple[str, dict]:
+    return evaluate_inventory(load_json(inventory_path), evidence_dir)
 
 
 def main(argv=None) -> int:
