@@ -4,6 +4,8 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ed25519
 
 from allocation import AdmittedSample, AllocationState, allocate_response
+from lineage_state import encode_lineage_head, lineage_head_condition, lineage_head_get
+from lineage_test_support import ALLOCATOR_TABLE, RESPONSE_KEY_ID, contract
 from receipt import construct_receipt
 from request_protocol import request_signing_bytes
 from protocol_models import SignedRequest, UnsignedRequest
@@ -13,9 +15,10 @@ from state_codec import (
 )
 from vector_support import request_fixture
 
-TABLE = "signed-time-state"
-EPOCH = 7
-KEY_ID = "manifest-key"
+CONTRACT = contract()
+TABLE = ALLOCATOR_TABLE
+EPOCH = CONTRACT.transition.source_epoch
+KEY_ID = RESPONSE_KEY_ID
 def response_metadata(request_id="test-request", status=200):
     return {
         "HTTPStatusCode": status,
@@ -97,16 +100,26 @@ def fixture(*, state=None, sample=None, floor=None, request=None):
 
 def receipt_read(receipt):
     return {
-        "Responses": [{"Item": encode_receipt(receipt)}],
+        "Responses": [
+            {"Item": encode_lineage_head(CONTRACT)},
+            {"Item": encode_receipt(receipt)},
+        ],
         "ResponseMetadata": response_metadata("receipt-read"),
     }
 
 
+def absent_read():
+    return {
+        "Responses": [{"Item": encode_lineage_head(CONTRACT)}, None],
+        "ResponseMetadata": response_metadata("absent"),
+    }
+
 def expected_read(request):
     key = f"request#{request.authority_id.hex()}/{request.request_id.hex()}"
-    return {"TransactItems": [{"Get": {
-        "TableName": TABLE, "Key": {"pk": {"S": key}},
-    }}]}
+    return {"TransactItems": [
+        lineage_head_get(CONTRACT),
+        {"Get": {"TableName": TABLE, "Key": {"pk": {"S": key}}}},
+    ]}
 
 
 def expected_write(registration, prior_state, receipt):
@@ -139,6 +152,7 @@ def expected_write(registration, prior_state, receipt):
         ":sequence": prior["source_sequence"], ":time": prior["last_unix_seconds"],
     }
     return {"TransactItems": [
+        lineage_head_condition(CONTRACT),
         {"ConditionCheck": {
             "TableName": TABLE, "Key": {"pk": registration_item["pk"]},
             "ConditionExpression": (

@@ -4,7 +4,7 @@ from collections.abc import Mapping
 import path_bootstrap  # noqa: F401
 
 from state_reader import DynamoStateReader, ReaderError
-from state_reader_support import EPOCH, TABLE, FakeClient, fixture, metadata, read_result
+from state_reader_support import CONTRACT, FakeClient, fixture, metadata, read_result
 
 
 class IntChild(int):
@@ -38,7 +38,7 @@ class StateReaderEnvelopeTests(unittest.TestCase):
         request = fixture()[0]
         client = FakeClient(result)
         with self.assertRaises(ReaderError) as raised:
-            DynamoStateReader(client, TABLE, EPOCH).load_snapshot(request)
+            DynamoStateReader(client, CONTRACT).load_snapshot(request)
         self.assertEqual(str(raised.exception), "state reader operation failed")
         self.assertIsNone(raised.exception.__cause__)
         self.assertIsNone(raised.exception.__context__)
@@ -47,10 +47,10 @@ class StateReaderEnvelopeTests(unittest.TestCase):
     def test_missing_extra_and_swapped_responses_fail_closed(self):
         valid = read_result()["Responses"]
         cases = (
-            [], valid[:1], valid + [valid[0]], list(reversed(valid)),
-            [{}, valid[1]],
-            [{"Item": valid[0]["Item"], "Extra": {}}, valid[1]],
-            [{"Item": valid[0]["Item"]}, {"item": valid[1]["Item"]}],
+            [], valid[:1], valid[:2], valid + [valid[0]], list(reversed(valid)),
+            [{}, valid[1], valid[2]],
+            [{"Item": valid[0]["Item"], "Extra": {}}, valid[1], valid[2]],
+            [valid[0], valid[1], {"item": valid[2]["Item"]}],
         )
         for responses in cases:
             with self.subTest(responses=len(responses)):
@@ -81,7 +81,7 @@ class StateReaderEnvelopeTests(unittest.TestCase):
         request = fixture()[0]
         client = FakeClient(error=RuntimeError("provider credential secret"))
         with self.assertRaises(ReaderError) as raised:
-            DynamoStateReader(client, TABLE, EPOCH).load_snapshot(request)
+            DynamoStateReader(client, CONTRACT).load_snapshot(request)
 
         self.assertEqual(str(raised.exception), "state reader operation failed")
         self.assertNotIn("secret", str(raised.exception))
@@ -91,7 +91,9 @@ class StateReaderEnvelopeTests(unittest.TestCase):
 
     def test_hostile_entry_mapping_is_sanitized(self):
         valid = read_result()["Responses"]
-        self.assert_failed(read_result(responses=[HostileMapping(), valid[1]]))
+        self.assert_failed(
+            read_result(responses=[HostileMapping(), valid[1], valid[2]]),
+        )
 
 
 if __name__ == "__main__":

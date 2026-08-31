@@ -4,10 +4,8 @@ from dataclasses import FrozenInstanceError, fields
 from unittest.mock import patch
 
 import path_bootstrap
-from manifest import (
-    MAX_MANIFEST_BYTES, ManifestError, SignedTimeManifest,
-    decode_manifest, encode_manifest,
-)
+from manifest import ManifestError, decode_manifest, encode_manifest
+from manifest_model import MAX_MANIFEST_BYTES, SignedTimeManifest
 from manifest_test_support import GOLDEN, valid_manifest
 from protocol_models import MAX_UINT64
 from manifest_validation import (
@@ -38,7 +36,7 @@ class ManifestFieldTests(unittest.TestCase):
 
     def test_every_frozen_constant_rejects_mutation_and_inexact_type(self):
         cases = {
-            "schema_version": (2, True, IntChild(1)),
+            "schema_version": (1, True, IntChild(2)),
             "classification": ("PRODUCTION", "", StrChild("DEV_REFERENCE")),
             "protocol_version": (2, True, IntChild(1)),
             "source_id": ("other", "", StrChild("cellos-dev-time-v1")),
@@ -70,10 +68,7 @@ class ManifestFieldTests(unittest.TestCase):
                     self.assert_encode_rejected(**{name: value})
 
     def test_uint64_boundaries_are_preserved(self):
-        for name in (
-            "source_epoch", "max_sample_age_seconds",
-            "max_uncertainty_seconds",
-        ):
+        for name in ("max_sample_age_seconds", "max_uncertainty_seconds"):
             for value in (0, MAX_UINT64):
                 with self.subTest(field=name, value=value):
                     manifest = valid_manifest(**{name: value})
@@ -81,11 +76,17 @@ class ManifestFieldTests(unittest.TestCase):
                         getattr(decode_manifest(encode_manifest(manifest)), name),
                         value,
                     )
+        for value in (1, MAX_UINT64):
+            manifest = valid_manifest(source_epoch=value)
+            self.assertEqual(
+                decode_manifest(encode_manifest(manifest)).source_epoch, value,
+            )
+        self.assert_encode_rejected(source_epoch=0)
 
     def test_every_binary_pin_requires_exact_bytes_of_length_32(self):
         for name in (
             "endpoint_spki_sha256", "kms_public_key_der_sha256",
-            "upstream_public_key",
+            "lineage_public_key_der_sha256", "upstream_public_key",
         ):
             bad = (b"", b"x" * 31, b"x" * 33, BytesChild(b"x" * 32),
                    bytearray(b"x" * 32), "11" * 32, None)
@@ -97,7 +98,10 @@ class ManifestFieldTests(unittest.TestCase):
 
     def test_json_digests_require_lowercase_exact_hex(self):
         value = json.loads(GOLDEN)
-        for name in ("endpoint_spki_sha256", "kms_public_key_der_sha256"):
+        for name in (
+            "endpoint_spki_sha256", "kms_public_key_der_sha256",
+            "lineage_public_key_der_sha256",
+        ):
             valid = value[name]
             for digest in (valid[:-1] + "A", valid[:-1], valid + "0", "g" * 64, 1):
                 with self.subTest(field=name, digest=repr(digest)):
@@ -127,6 +131,7 @@ class ManifestFieldTests(unittest.TestCase):
             ("aws_region", "r" * (MAX_AWS_REGION_CHARS + 1)),
             ("endpoint_url", "e" * (MAX_ENDPOINT_URL_CHARS + 1)),
             ("kms_key_id", "k" * (MAX_KMS_KEY_ID_CHARS + 1)),
+            ("lineage_kms_key_id", "k" * (MAX_KMS_KEY_ID_CHARS + 1)),
         )
         for name, value in cases:
             with self.subTest(name=name):

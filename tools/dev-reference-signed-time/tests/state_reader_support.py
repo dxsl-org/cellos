@@ -4,6 +4,8 @@ import copy
 import path_bootstrap  # noqa: F401
 
 from allocation import AllocationState
+from lineage_state import encode_lineage_head, lineage_head_get
+from lineage_test_support import ALLOCATOR_TABLE, contract
 from receipt import SOURCE_STATE_KEY, authority_registration_key
 from state_codec import (
     AuthorityRegistration,
@@ -12,8 +14,9 @@ from state_codec import (
 )
 from vector_support import request_fixture
 
-TABLE = "signed-time-state"
-EPOCH = 7
+CONTRACT = contract()
+TABLE = ALLOCATOR_TABLE
+EPOCH = CONTRACT.transition.source_epoch
 _DEFAULT = object()
 
 
@@ -37,6 +40,7 @@ def read_result(
     del request
     if responses is None:
         responses = [
+            {"Item": encode_lineage_head(CONTRACT)},
             {"Item": encode_authority_registration(registration or default_registration)},
             {"Item": encode_allocation_state(state or default_state)},
         ]
@@ -50,6 +54,7 @@ def read_result(
 
 def expected_transaction(request):
     return {"TransactItems": [
+        lineage_head_get(CONTRACT),
         {"Get": {
             "TableName": TABLE,
             "Key": {"pk": {"S": authority_registration_key(request.authority_id)}},

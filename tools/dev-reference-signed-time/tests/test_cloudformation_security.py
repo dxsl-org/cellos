@@ -40,10 +40,48 @@ class KmsAndRuntimePolicyTests(unittest.TestCase):
             "Action": "sts:AssumeRole",
         }])
         inline = statements(role["Policies"][0]["PolicyDocument"])
-        self.assertEqual(len(inline), 2)
-        table = next(item for item in inline if "dynamodb:TransactGetItems" in actions(item))
-        self.assertEqual(actions(table), {"dynamodb:TransactGetItems", "dynamodb:TransactWriteItems"})
-        self.assertEqual(table["Resource"], {"Fn::GetAtt": ["SignedTimeTable", "Arn"]})
+        self.assertEqual(len(inline), 6)
+        by_sid = {item["Sid"]: item for item in inline}
+        expected = {
+            "ExactAllocatorTransactionReads": (
+                {"dynamodb:GetItem"}, "SignedTimeTable", "TransactGetItems",
+            ),
+            "ExactAllocatorTransactionWrites": (
+                {"dynamodb:ConditionCheckItem", "dynamodb:PutItem"},
+                "SignedTimeTable", "TransactWriteItems",
+            ),
+            "ExactLineageTransactionReads": (
+                {"dynamodb:GetItem"}, "LineageTable", "TransactGetItems",
+            ),
+            "ExactLineageTransactionChecks": (
+                {"dynamodb:ConditionCheckItem"},
+                "LineageTable", "TransactWriteItems",
+            ),
+        }
+        for sid, (expected_actions, table, enclosing) in expected.items():
+            statement = by_sid[sid]
+            self.assertEqual(actions(statement), expected_actions)
+            self.assertEqual(statement["Resource"], {"Fn::GetAtt": [table, "Arn"]})
+            self.assertEqual(statement["Condition"], {
+                "ForAnyValue:StringEquals": {
+                    "dynamodb:EnclosingOperation": [enclosing],
+                },
+            })
+        lineage_actions = set().union(*(
+            actions(item)
+            for item in inline
+            if item.get("Resource") == {"Fn::GetAtt": ["LineageTable", "Arn"]}
+        ))
+        self.assertEqual(
+            lineage_actions,
+            {"dynamodb:GetItem", "dynamodb:ConditionCheckItem"},
+        )
+        identity = by_sid["ExactTableIdentityReads"]
+        self.assertEqual(actions(identity), {"dynamodb:DescribeTable"})
+        self.assertEqual(identity["Resource"], [
+            {"Fn::GetAtt": ["SignedTimeTable", "Arn"]},
+            {"Fn::GetAtt": ["LineageTable", "Arn"]},
+        ])
         logs = next(item for item in inline if "logs:PutLogEvents" in actions(item))
         self.assertEqual(actions(logs), {"logs:CreateLogStream", "logs:PutLogEvents"})
         self.assertEqual(logs["Resource"], {
@@ -54,10 +92,41 @@ class KmsAndRuntimePolicyTests(unittest.TestCase):
         })
         key_statements = statements(resource("RuntimeSigningKeyPolicy")["Properties"]["PolicyDocument"])
         self.assertEqual(set().union(*(actions(item) for item in key_statements)), {"kms:Sign", "kms:GetPublicKey"})
-        for item in key_statements:
-            self.assertEqual(item["Resource"], {"Fn::GetAtt": ["SigningKey", "Arn"]})
+        sign = next(item for item in key_statements if actions(item) == {"kms:Sign"})
+        read = next(
+            item for item in key_statements
+            if actions(item) == {"kms:GetPublicKey"}
+        )
+        self.assertEqual(sign["Resource"], {"Fn::GetAtt": ["SigningKey", "Arn"]})
+        self.assertEqual(read["Resource"], [
+            {"Fn::GetAtt": ["SigningKey", "Arn"]},
+            {"Fn::GetAtt": ["LineageKey", "Arn"]},
+        ])
         sign = next(item for item in key_statements if actions(item) == {"kms:Sign"})
         self.assertEqual(sign["Condition"], {"StringEquals": {"kms:SigningAlgorithm": "ECDSA_SHA_256"}})
+
+    def test_lineage_key_excludes_runtime_signing(self) -> None:
+        policy = resource("LineageKey")["Properties"]["KeyPolicy"]
+        encoded = json.dumps(policy, sort_keys=True)
+        self.assertNotIn(":root", encoded)
+        values = statements(policy)
+        runtime = {"AWS": {"Fn::GetAtt": ["RuntimeRole", "Arn"]}}
+        transition = {"AWS": {"Fn::GetAtt": ["LineageTransitionRole", "Arn"]}}
+        admin = {"AWS": {"Fn::GetAtt": ["KeyPolicyAdminRole", "Arn"]}}
+        runtime_values = [item for item in values if item["Principal"] == runtime]
+        transition_values = [
+            item for item in values if item["Principal"] == transition
+        ]
+        admin_values = [item for item in values if item["Principal"] == admin]
+        self.assertEqual(
+            [actions(item) for item in runtime_values], [{"kms:GetPublicKey"}],
+        )
+        self.assertEqual(
+            [actions(item) for item in transition_values], [{"kms:Sign"}],
+        )
+        self.assertEqual(len(admin_values), 1)
+        self.assertNotIn("kms:Sign", actions(admin_values[0]))
+
 
     def test_api_integrates_and_permits_only_the_published_alias_post_path(self) -> None:
         integration = resource("SignedTimeIntegration")["Properties"]

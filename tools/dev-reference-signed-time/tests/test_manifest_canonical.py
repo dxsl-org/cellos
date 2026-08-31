@@ -2,7 +2,8 @@ import json
 import unittest
 
 import path_bootstrap
-from manifest import MAX_MANIFEST_BYTES, ManifestError, decode_manifest, encode_manifest
+from manifest import ManifestError, decode_manifest, encode_manifest
+from manifest_model import MAX_MANIFEST_BYTES
 from manifest_test_support import GOLDEN, valid_manifest
 
 class BytesChild(bytes):
@@ -71,7 +72,7 @@ class ManifestCanonicalTests(unittest.TestCase):
                 self.assert_rejected(candidate)
 
     def test_nan_and_infinity_tokens_are_rejected(self):
-        marker = b'"source_epoch":7'
+        marker = b'"source_epoch":1'
         for token in (b"NaN", b"Infinity", b"-Infinity"):
             with self.subTest(token=token):
                 self.assert_rejected(

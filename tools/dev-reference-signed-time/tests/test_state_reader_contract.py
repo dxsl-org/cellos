@@ -3,11 +3,11 @@ from dataclasses import FrozenInstanceError, replace
 
 import path_bootstrap  # noqa: F401
 
-from protocol_models import MAX_UINT64, SignedRequest
+from protocol_models import SignedRequest
 from request_protocol import parse_request
 from state_reader import DynamoStateReader, ReaderError, StateSnapshot
 from state_reader_support import (
-    EPOCH, TABLE, FakeClient, expected_transaction, fixture, read_result,
+    CONTRACT, EPOCH, FakeClient, expected_transaction, fixture, read_result,
 )
 from vector_support import request_fixture, unsigned_request
 
@@ -16,12 +16,6 @@ class SignedRequestChild(SignedRequest):
     pass
 
 
-class IntChild(int):
-    pass
-
-
-class StrChild(str):
-    pass
 
 
 class StateReaderContractTests(unittest.TestCase):
@@ -38,7 +32,7 @@ class StateReaderContractTests(unittest.TestCase):
         _, registration, state = fixture()
         self.assertEqual(request, expected_request)
         client = FakeClient()
-        snapshot = DynamoStateReader(client, TABLE, EPOCH).load_snapshot(request)
+        snapshot = DynamoStateReader(client, CONTRACT).load_snapshot(request)
 
         self.assertEqual(client.calls, [expected_transaction(request)])
         self.assertEqual(snapshot, StateSnapshot(registration, state))
@@ -51,10 +45,11 @@ class StateReaderContractTests(unittest.TestCase):
         request, registration, state = fixture()
         result = read_result(registration, state)
         client = FakeClient(result)
-        snapshot = DynamoStateReader(client, TABLE, EPOCH).load_snapshot(request)
+        snapshot = DynamoStateReader(client, CONTRACT).load_snapshot(request)
 
         result["Responses"][0]["Item"].clear()
         result["Responses"][1]["Item"].clear()
+        result["Responses"][2]["Item"].clear()
         client.calls[0]["TransactItems"].clear()
         self.assertEqual(snapshot, StateSnapshot(registration, state))
         self.assertEqual(request, fixture()[0])
@@ -75,7 +70,7 @@ class StateReaderContractTests(unittest.TestCase):
             with self.subTest(candidate=type(candidate).__name__):
                 client = FakeClient()
                 self.assert_reader_error(
-                    lambda: DynamoStateReader(client, TABLE, EPOCH).load_snapshot(candidate),
+                    lambda: DynamoStateReader(client, CONTRACT).load_snapshot(candidate),
                     "state reader operation failed",
                 )
                 self.assertEqual(client.calls, [])
@@ -94,27 +89,24 @@ class StateReaderContractTests(unittest.TestCase):
 
         valid_client = FakeClient()
         cases = (
-            (MissingOperation(), TABLE, EPOCH),
-            (NonCallable(), TABLE, EPOCH),
-            (HostileOperation(), TABLE, EPOCH),
-            (valid_client, "", EPOCH),
-            (valid_client, StrChild(TABLE), EPOCH),
-            (valid_client, TABLE, -1),
-            (valid_client, TABLE, MAX_UINT64 + 1),
-            (valid_client, TABLE, True),
-            (valid_client, TABLE, IntChild(EPOCH)),
+            (MissingOperation(), CONTRACT),
+            (NonCallable(), CONTRACT),
+            (HostileOperation(), CONTRACT),
+            (valid_client, object()),
+            (valid_client, None),
+            (valid_client, True),
         )
-        for client, table, epoch in cases:
-            with self.subTest(table=repr(table), epoch=repr(epoch)):
+        for client, selected in cases:
+            with self.subTest(contract_type=type(selected).__name__):
                 self.assert_reader_error(
-                    lambda: DynamoStateReader(client, table, epoch),
+                    lambda: DynamoStateReader(client, selected),
                     "invalid state reader configuration",
                 )
 
     def test_reader_pins_callable_and_has_only_transactional_read_surface(self):
         request = fixture()[0]
         client = FakeClient()
-        reader = DynamoStateReader(client, TABLE, EPOCH)
+        reader = DynamoStateReader(client, CONTRACT)
 
         def forbidden(**kwargs):
             raise AssertionError(kwargs)
@@ -148,7 +140,7 @@ class StateReaderContractTests(unittest.TestCase):
 
         request = fixture()[0]
         client = SurfaceClient()
-        DynamoStateReader(client, TABLE, EPOCH).load_snapshot(request)
+        DynamoStateReader(client, CONTRACT).load_snapshot(request)
         self.assertEqual(client.lookups, ["transact_get_items"])
         self.assertEqual(client.calls, [expected_transaction(request)])
 

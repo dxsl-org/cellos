@@ -98,8 +98,17 @@ class ManifestKmsArnTests(unittest.TestCase):
                 region=region,
                 resource=resource,
             )
+            lineage_arn = kms_arn(
+                partition=partition,
+                region=region,
+                resource="key/aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+            )
             with self.subTest(partition=partition, region=region):
-                manifest = valid_manifest(aws_region=region, kms_key_id=arn)
+                manifest = valid_manifest(
+                    aws_region=region,
+                    kms_key_id=arn,
+                    lineage_kms_key_id=lineage_arn,
+                )
                 self.assertEqual(
                     decode_manifest(encode_manifest(manifest)),
                     manifest,

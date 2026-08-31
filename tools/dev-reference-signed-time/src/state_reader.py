@@ -5,8 +5,10 @@ from dataclasses import dataclass
 from typing import Any
 
 from allocation import AllocationState
+from lineage import LineageContract
+from lineage_state import lineage_head_get, require_lineage_head
 from request_protocol import encode_request
-from protocol_models import MAX_UINT64, SignedRequest
+from protocol_models import SignedRequest
 from receipt import SOURCE_STATE_KEY, authority_registration_key
 from state_codec import (
     AuthorityRegistration,
@@ -46,28 +48,22 @@ def _successful_envelope(result: Any) -> bool:
 class DynamoStateReader:
     """Load one exact authority registration and allocator state transactionally."""
 
-    __slots__ = ("_configured_source_epoch", "_table_name", "_transact_get_items")
+    __slots__ = ("_contract", "_transact_get_items")
 
-    def __init__(self, client: Any, table_name: str, configured_source_epoch: int) -> None:
+    def __init__(self, client: Any, contract: LineageContract) -> None:
         failed = False
         try:
             transact_get_items = client.transact_get_items
             if not callable(transact_get_items):
                 raise TypeError("DynamoDB transaction read is not callable")
-            if type(table_name) is not str or not table_name:
-                raise ValueError("invalid table name")
-            if not (
-                type(configured_source_epoch) is int
-                and 0 <= configured_source_epoch <= MAX_UINT64
-            ):
-                raise ValueError("invalid source epoch")
+            if type(contract) is not LineageContract:
+                raise TypeError("invalid lineage contract")
         except Exception:
             failed = True
         if failed:
             raise ReaderError(_CONFIGURATION_FAILURE)
         self._transact_get_items = transact_get_items
-        self._table_name = table_name
-        self._configured_source_epoch = configured_source_epoch
+        self._contract = contract
 
     def load_snapshot(self, request: SignedRequest) -> StateSnapshot:
         """Revalidate ``request`` and load its exact authority and source state."""
@@ -76,13 +72,15 @@ class DynamoStateReader:
             if type(request) is not SignedRequest:
                 raise TypeError("request has the wrong type")
             encode_request(request)
+            table = self._contract.transition.allocator_table_name
             transaction = [
+                lineage_head_get(self._contract),
                 {"Get": {
-                    "TableName": self._table_name,
+                    "TableName": table,
                     "Key": {"pk": {"S": authority_registration_key(request.authority_id)}},
                 }},
                 {"Get": {
-                    "TableName": self._table_name,
+                    "TableName": table,
                     "Key": {"pk": {"S": SOURCE_STATE_KEY}},
                 }},
             ]
@@ -90,14 +88,17 @@ class DynamoStateReader:
             if not _successful_envelope(result):
                 raise ValueError("DynamoDB read did not return a success envelope")
             responses = result.get("Responses")
-            if type(responses) is not list or len(responses) != 2:
+            if type(responses) is not list or len(responses) != 3:
                 raise ValueError("DynamoDB read returned the wrong response count")
-            first, second = responses
+            head, first, second = responses
+            if type(head) is not dict or set(head) != {"Item"}:
+                raise ValueError("DynamoDB read did not return the lineage head")
+            require_lineage_head(head["Item"], self._contract)
             if not all(
                 isinstance(entry, Mapping) and set(entry) == {"Item"}
                 for entry in (first, second)
             ):
-                raise ValueError("DynamoDB read did not return two exact items")
+                raise ValueError("DynamoDB read did not return two exact state items")
             registration = decode_authority_registration(first["Item"])
             state = decode_allocation_state(second["Item"])
             if registration.revoked or (
@@ -106,7 +107,7 @@ class DynamoStateReader:
                 registration.public_key_der,
             ) != (request.device_id, request.authority_id, request.authority_pubkey):
                 raise ValueError("registration does not authorize request")
-            if state.source_epoch != self._configured_source_epoch:
+            if state.source_epoch != self._contract.transition.source_epoch:
                 raise ValueError("allocation state has the wrong source epoch")
             snapshot = StateSnapshot(registration, state)
         except Exception:
