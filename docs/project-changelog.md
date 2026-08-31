@@ -4,6 +4,18 @@
 
 ## [Unreleased] Development-first hardware-constrained execution
 
+- Corrected the misleading HTTPS smoke contract without weakening TLS. The
+  existing `boot-suite` image now runs and retains the independently supported
+  plain-HTTP round trip. The harness deliberately makes no assertion from the
+  guest's generic HTTPS connect failure: default `service-net` has no
+  authenticated certificate time and cannot reach certificate verification,
+  while the same output could represent an unrelated transport failure. Direct
+  clock/socket tests retain ownership of the fail-closed boundary. No leaf
+  certificate, clock, trust root, or runtime TLS policy changed. Positive HTTPS
+  evidence remains blocked on admitted authenticated time or a separately
+  reviewed test-only provider. The AArch64 semihosting acceptance-ledger
+  blocker remains open until its governed resolution-evidence contract passes.
+
 - Phase 5's nonce-bound signed-time service remains at the `SOFTWARE_HARNESS`
   ceiling. Protocol, persistence/recovery, allocator, clock policy, pinned KMS,
   strict Cloudflare Roughtime provider profile, ADR-0012 allocator lineage, and

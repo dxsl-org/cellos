@@ -1122,6 +1122,16 @@ jobs:
           sha256sum disk_v3.img > software-evidence/disk-v3.sha256
           printf 'producer-runner=%s\n' "$producer_runner" >> "$GITHUB_OUTPUT"
 
+      - name: Run HTTP smoke evidence
+        shell: bash
+        env:
+          CARGO_BUILD_TARGET: x86_64-unknown-linux-gnu
+        run: |
+          set -o pipefail
+          cd tests/integration
+          cargo test --test http-smoke -- --test-threads=1 \
+            2>&1 | tee "$GITHUB_WORKSPACE/software-evidence/http-smoke.log"
+
       - name: Run boot + network + shell + VFS tests
         shell: bash
         env:

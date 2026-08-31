@@ -22,7 +22,7 @@ Primary planning classification for the open entries:
 | Planning class | Entries |
 |---|---|
 | Current executable work | Narrow fixes, bounded fixtures, and software evidence that an owning lane can perform now |
-| Current-scope technical debt | Net polling latency, soft-skipping HTTPS evidence, the pinned-QEMU compatibility gap, and AArch64 semihosting |
+| Current-scope technical debt | Net polling latency, the pinned-QEMU compatibility gap, and AArch64 semihosting ledger closure |
 | Future capability | Remote/public net-broker completion and native POSIX completeness beyond currently supported contracts |
 | External-gated prerequisite | Unavailable exact board qualification and exact product/vendor evidence for protected relay or production-root milestones |
 | Production release gate | Fleet signing/provenance, production admission, protected identity/root, secure/measured boot, qualified floor and persistent recovery, physical hostile evidence, authenticated evidence runner, human approvals, and governed ledger/release closure |
@@ -107,7 +107,15 @@ those remain fail-closed production gates.
   [authority plan](../../.agents/260826-1605-phase4-dev-reference-authority/plan.md)
   Phase 8 returns GO. This is a lane-local governance gate, not a blocker for
   the CI-gated single-guest local runtime or unrelated QEMU, RPi3, sensor, and
-  local-runtime development.
+  local-runtime development. The `boot-suite` now runs the independently
+  supported plain-HTTP smoke and requires `HTTP PASS`. Its guest still attempts
+  HTTPS, but the harness deliberately makes no claim from the generic connect
+  failure: default `service-net` has no authenticated certificate time, so the
+  request cannot reach certificate verification, while the same output could
+  also represent an unrelated transport failure. Direct clock/socket tests own
+  the fail-closed boundary. Positive HTTPS requires admitted authenticated time
+  or a separately approved, explicitly test-only clock/provider harness that
+  cannot weaken the default image.
 
 ## Medium
 
@@ -127,9 +135,6 @@ those remain fail-closed production gates.
 - Net service polling still uses a 100 ms cadence in `cells/services/net/src/main.rs`,
   which is acceptable as a stopgap but remains latency debt for more interactive
   workloads.
-- The HTTPS smoke path soft-skips when its TLS mock is unavailable
-  (`tests/integration/tests/http-smoke.rs:170-175,211-219`), so CI can degrade
-  to HTTP-only evidence unless that prerequisite becomes a hard CI gate.
 - Native POSIX path handling remains incomplete: canonicalization, `chdir`,
   `rename`, `getcwd`, and `fstat` contain stubs or deferred behavior in
   `kernel/src/task.rs`; Tier 1 must not be documented as POSIX-complete.
@@ -143,8 +148,12 @@ those remain fail-closed production gates.
   Pioneer, RPi4, or physical x86 qualification. The two owner-reported
   Raspberry Pi 3 Model B+ boards remain available for development integration
   only and cannot qualify a production-security floor.
-- AArch64 test-hooks runtime proof remains blocked where the host-side
-  `qemu_exit::AArch64Semihosting` issue is still present.
+
+- AArch64 test-hooks semihosting code and a dedicated runner exist, but
+  `B-AARCH64-SEMHOSTING` remains `BLOCKED` in the authoritative acceptance
+  ledger with the stale `qemu-rv64` subject and no schema-valid, fresh,
+  independently owned raw resolution evidence. A local runner or completed plan
+  checkbox cannot close that governed ledger record.
 
 ## Low
 

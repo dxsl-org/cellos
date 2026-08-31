@@ -3,18 +3,11 @@
 //! Boots QEMU RISC-V with the `http-smoke` cell and a host-side Python mock LLM
 //! (`tools/hypha-mock-llm/mock_proxy.py`) reachable at 10.0.2.2 via SLIRP.
 //!
-//! Gate conditions:
-//!   PASS  — `[http-smoke] HTTP PASS` seen in serial output
-//!           `[http-smoke] HTTPS PASS` seen (soft: skipped if TLS mock unavailable)
-//!   SKIP  — prerequisites not met (kernel/disk/qemu/python/http-smoke missing)
-//!   FAIL  — `[http-smoke] HTTP FAIL` seen OR neither PASS nor FAIL within timeout
-//!
-//! Prerequisites:
-//!   cargo build --release -p cellos-kernel  (RUSTFLAGS="-C relocation-model=pic")
-//!   cargo build --release -p app-http-smoke
-//!   ./gen_disk.ps1                           (installs /bin/http-smoke on the disk)
-//!   qemu-system-riscv64 on PATH
-//!   python (or python3) on PATH — with optional `cryptography` package for TLS mock
+//! This gate is intentionally HTTP-only. Default `service-net` has no
+//! authenticated certificate time, so the guest's HTTPS attempt cannot exercise
+//! certificate verification and its generic connect failure is not evidence.
+//! Missing build, QEMU, Python, mock, or cell prerequisites skip locally and
+//! fail under CI.
 
 use std::net::TcpStream as StdTcp;
 use std::path::PathBuf;
@@ -26,9 +19,8 @@ use vicell_integration_tests::{qemu_binary, QemuRunner};
 const BOOT_TIMEOUT: u64 = 60;
 const SMOKE_TIMEOUT: u64 = 90;
 
-// Ports the smoke cell connects to (must match cells/demos/http-smoke/src/main.rs).
+// Plain mock port; the guest's HTTPS attempt is denied before TCP opens.
 const HTTP_PORT: u16 = 8080;
-const HTTPS_PORT: u16 = 8443;
 
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -56,7 +48,7 @@ fn mock_script_path() -> PathBuf {
     repo_root().join("tools/hypha-mock-llm/mock_proxy.py")
 }
 
-/// Resolve the Python interpreter: try `python` first, then `python3`.
+/// Resolve a working Python 3 interpreter.
 fn python_bin() -> Option<String> {
     for name in &["python", "python3"] {
         if Command::new(name)
@@ -73,11 +65,8 @@ fn python_bin() -> Option<String> {
     None
 }
 
-/// Disk contains `/bin/http-smoke` if gen_disk.ps1 was run after the build.
+/// A built smoke cell is a necessary precondition for its disk entry.
 fn http_smoke_on_disk() -> bool {
-    // Probe via the write-cell-table: the cell table has a fixed-size header that's
-    // hard to parse here. Instead we heuristically check that http-smoke was built,
-    // which is necessary for gen_disk to include it.
     repo_root()
         .join("target/riscv64gc-unknown-none-elf/release/http-smoke")
         .exists()
@@ -95,30 +84,22 @@ fn prerequisites_ok() -> bool {
     let smoke_ok = http_smoke_on_disk();
 
     if !kernel_ok {
-        eprintln!(
-            "SKIP http-smoke: kernel not built ({})\n  Run: RUSTFLAGS=\"-C relocation-model=pic\" cargo build --release -p cellos-kernel",
-            kernel_path()
-        );
+        eprintln!("SKIP http-smoke: kernel not built ({})", kernel_path());
     }
     if !disk_ok {
-        eprintln!("SKIP http-smoke: disk_v3.img missing — run ./gen_disk.ps1");
+        eprintln!("SKIP http-smoke: disk_v3.img missing");
     }
     if !qemu_ok {
         eprintln!("SKIP http-smoke: qemu-system-riscv64 not on PATH");
     }
     if !python_ok {
-        eprintln!("SKIP http-smoke: python / python3 not on PATH");
+        eprintln!("SKIP http-smoke: Python 3 not on PATH");
     }
     if !mock_ok {
-        eprintln!(
-            "SKIP http-smoke: mock_proxy.py not found at {}",
-            mock_script_path().display()
-        );
+        eprintln!("SKIP http-smoke: {} is missing", mock_script_path().display());
     }
     if !smoke_ok {
-        eprintln!(
-            "SKIP http-smoke: http-smoke cell not built\n  Run: cargo build --release -p app-http-smoke && ./gen_disk.ps1"
-        );
+        eprintln!("SKIP http-smoke: app-http-smoke is not built");
     }
 
     vicell_integration_tests::ci_guard(
@@ -126,63 +107,56 @@ fn prerequisites_ok() -> bool {
     )
 }
 
-/// Spawn the mock proxy on the host and wait until it accepts TCP connections.
-///
-/// Returns the child process (caller must keep it alive) or None if the mock
-/// failed to bind within the timeout (e.g. TLS mock when `cryptography` is
-/// absent and no cert files exist).
-fn start_mock(python: &str, args: &[&str], port: u16) -> Option<Child> {
-    let script = mock_script_path();
-    let mut cmd = Command::new(python);
-    cmd.arg(script.as_os_str())
+struct MockProcess {
+    child: Child,
+}
+
+impl Drop for MockProcess {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
+/// Spawn the required plain mock and fail cleanly if it cannot own the port.
+fn start_mock(python: &str, args: &[&str], port: u16) -> MockProcess {
+    assert!(
+        StdTcp::connect(("127.0.0.1", port)).is_err(),
+        "http-smoke: required port {port} is already in use"
+    );
+    let mut child = Command::new(python)
+        .arg(mock_script_path())
         .args(args)
         .stdout(Stdio::null())
-        .stderr(Stdio::null());
-
-    let child = cmd.spawn().ok()?;
-
-    // Poll the port until it accepts a connection or we time out.
+        .stderr(Stdio::inherit())
+        .spawn()
+        .unwrap_or_else(|error| panic!("http-smoke: failed to spawn mock on {port}: {error}"));
     let deadline = Instant::now() + Duration::from_secs(8);
     loop {
-        if StdTcp::connect(format!("127.0.0.1:{port}")).is_ok() {
-            return Some(child);
+        if let Some(status) = child.try_wait().expect("mock process status is readable") {
+            panic!("http-smoke: mock on {port} exited before bind: {status}");
+        }
+        if StdTcp::connect(("127.0.0.1", port)).is_ok() {
+            return MockProcess { child };
         }
         if Instant::now() > deadline {
-            eprintln!("WARN http-smoke: mock on :{port} did not bind within 8 s — skipping");
-            return None;
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!("http-smoke: mock on {port} did not bind within 8 seconds");
         }
         std::thread::sleep(Duration::from_millis(200));
     }
 }
 
-/// G1 gate: `ostd::http` (HTTP + HTTPS) round-trip smoke over the mock LLM.
-///
-/// HTTP path is a hard gate (must pass). HTTPS path is soft-skipped when the
-/// TLS mock is unavailable (no `cryptography` package and no pre-generated cert).
+/// Prove the supported plain-HTTP round trip; HTTPS has a separate gated owner.
 #[test]
 fn http_smoke_e2e() {
     if !prerequisites_ok() {
         return;
     }
 
-    let py = python_bin().unwrap();
-
-    // Start plain HTTP mock (port 8080) — required.
-    let _mock_plain = match start_mock(&py, &["--plain"], HTTP_PORT) {
-        Some(c) => c,
-        None => {
-            panic!("http-smoke: plain HTTP mock (:{HTTP_PORT}) failed to start — cannot run test");
-        }
-    };
-
-    // Start TLS mock (port 8443) — soft: skip HTTPS assertion if unavailable.
-    let tls_mock_running = start_mock(&py, &[], HTTPS_PORT).is_some();
-    if !tls_mock_running {
-        eprintln!(
-            "WARN http-smoke: TLS mock (:{HTTPS_PORT}) unavailable — HTTPS assertion skipped.\n\
-             Install `pip install cryptography` and re-run to enable the HTTPS gate."
-        );
-    }
+    let py = python_bin().expect("Python passed prerequisite gate");
+    let _mock_plain = start_mock(&py, &["--plain"], HTTP_PORT);
 
     // Boot QEMU with SLIRP (guest sees host at 10.0.2.2).
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
@@ -194,11 +168,9 @@ fn http_smoke_e2e() {
         )
     });
 
-    // Small settle delay so init finishes spawning services before we send.
     std::thread::sleep(Duration::from_millis(500));
     qemu.send_line("http-smoke");
 
-    // Wait until the smoke cell prints its final line.
     qemu.wait_for("[http-smoke] done", SMOKE_TIMEOUT)
         .unwrap_or_else(|e| {
             panic!(
@@ -209,25 +181,8 @@ fn http_smoke_e2e() {
 
     let output = qemu.dump();
 
-    // ── HTTP gate (hard) ──────────────────────────────────────────────────────
     assert!(
         output.contains("[http-smoke] HTTP PASS"),
-        "http-smoke HTTP gate FAILED.\n\
-         Expected `[http-smoke] HTTP PASS` in serial output.\n\
-         --- serial output ---\n{output}"
+        "http-smoke HTTP gate failed\n--- serial output ---\n{output}"
     );
-
-    // ── HTTPS gate (soft) ─────────────────────────────────────────────────────
-    if tls_mock_running {
-        assert!(
-            output.contains("[http-smoke] HTTPS PASS"),
-            "http-smoke HTTPS gate FAILED.\n\
-             TLS mock was running on :{HTTPS_PORT} but HTTPS path did not pass.\n\
-             Check TlsStream::connect / HttpClient<TlsStream> implementation.\n\
-             --- serial output ---\n{output}"
-        );
-    } else if output.contains("[http-smoke] HTTPS PASS") {
-        // Bonus: HTTPS passed even without explicit mock (unlikely but accept it).
-        eprintln!("INFO http-smoke: HTTPS PASS (unexpected — TLS mock was not confirmed running)");
-    }
 }
