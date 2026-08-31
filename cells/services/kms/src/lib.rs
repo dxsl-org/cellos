@@ -11,8 +11,17 @@
         feature = "hardware-relay-provider",
         feature = "development-silo-provider"
     ),
+    all(
+        feature = "hardware-relay-provider",
+        feature = "development-stm32-authority"
+    ),
     all(feature = "hardware-relay-provider", feature = "fixture-provider"),
+    all(
+        feature = "development-silo-provider",
+        feature = "development-stm32-authority"
+    ),
     all(feature = "development-silo-provider", feature = "fixture-provider"),
+    all(feature = "development-stm32-authority", feature = "fixture-provider"),
 ))]
 compile_error!("service-kms: select at most one relay provider");
 
@@ -39,6 +48,24 @@ compile_error!(
 compile_error!(
     "service-kms: development-silo-provider is restricted to the AArch64 bare-metal QEMU lane"
 );
+
+#[cfg(all(
+    feature = "development-stm32-authority",
+    not(all(
+        target_arch = "riscv64",
+        target_os = "none",
+        feature = "vf2-dev-reference"
+    ))
+))]
+compile_error!(
+    "service-kms: development-stm32-authority requires the RISC-V bare-metal VF2 DEV_REFERENCE lane"
+);
+
+#[cfg(all(
+    feature = "vf2-dev-reference",
+    not(feature = "development-stm32-authority")
+))]
+compile_error!("service-kms: vf2-dev-reference is only valid with development-stm32-authority");
 
 #[cfg(test)]
 extern crate std;

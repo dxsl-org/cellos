@@ -144,3 +144,10 @@ Revert: restore per-phase checker/workspace edits (rejected).
   `7d62eaa9...` (`tests/frame.rs`), `26a2b6ae...` (`tests/payload.rs`), and
   `fd514249...` (`tests/enrollment.rs`). This is a pre-change regression
   baseline only; it grants no hardware or acceptance-criterion credit.
+- Evidence: Step 1 now registers `development-stm32-authority` only in KMS,
+  requires the paired `vf2-dev-reference` selector plus the RISC-V bare-metal
+  target, and makes it mutually exclusive with every existing relay provider.
+  The production-image checker freezes and rejects both exact feature names in
+  feature lists and artifact content. RV64 no_std paired-feature compilation
+  and all 8 checker tests pass; missing-selector, host, and multi-provider
+  negative compilations fail with their exact gate diagnostics.

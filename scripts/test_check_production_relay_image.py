@@ -49,10 +49,19 @@ class UnsafeFeatureMatrixTests(unittest.TestCase):
 class DevMarkerRejectionTests(unittest.TestCase):
     CHUNK = 64 * 1024
 
-    def test_signed_time_classification_handoff_is_frozen(self) -> None:
+    def test_dev_marker_classification_handoff_is_frozen(self) -> None:
         self.assertLessEqual(
-            {"DEV_REFERENCE", "SOFTWARE_HARNESS", "AWS_DEV_SIGNED_TIME",
-             "aws-dev-signed-time", "cellos-dev-time-v1"},
+            {"development-stm32-authority", "vf2-dev-reference"},
+            CHECKER.DEV_MARKER_NAMES,
+        )
+        self.assertLessEqual(
+            {
+                "DEV_REFERENCE",
+                "SOFTWARE_HARNESS",
+                "AWS_DEV_SIGNED_TIME",
+                "aws-dev-signed-time",
+                "cellos-dev-time-v1",
+            },
             CHECKER.DEV_MARKER_NAMES,
         )
 
