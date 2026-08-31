@@ -22,12 +22,18 @@
   `UnsignedZip`; only the later approved AWS Signer output may supply
   CloudFormation `CodeSha256`. Local real-wheel smoke imported cryptography
   41.0.7, cffi 1.16.0, and the Lambda entrypoint from two identical artifacts.
-  No artifact is operator-approved or deployable. The authenticated live
-  Cloudflare observation still omitted mandatory `NONC` and signed `RADI=1`;
-  progress remains blocked on provider interoperability, reviewed manifest and
-  wheelhouse inputs, signing/upload/deploy/rollback/evidence scripts, a named
-  AWS DEV account/region, operator authorization, and live
-  outage/restore/fork/rollback/security evidence. No AWS mutation occurred.
+  No artifact is operator-approved or deployable. Source/history review confirms
+  the authenticated live Cloudflare response is not a supported dialect:
+  draft 11 and draft 8 both require root `NONC`, draft 11 requires `RADI>=3`,
+  current Cloudflare source emits/requires `NONC`, and official vectors are
+  locally generated fixtures rather than endpoint captures. Cloudflare's public
+  endpoint still matches the pre-fix missing-`NONC` fingerprint and one-second
+  test radius; its deployed revision/configuration is unpublished. ADR-0011 now
+  records the invalid live-interoperability premise and keeps the strict adapter
+  unchanged. Progress remains blocked on a conforming endpoint or new reviewed
+  provider/profile and source epoch, reviewed packaging inputs,
+  signing/upload/deploy/rollback/evidence scripts, AWS authorization, and live
+  security evidence. No AWS mutation occurred.
 
 - Phase 4's STM32/TPM authority has reached its `SOFTWARE_HARNESS` ceiling.
   The typed private-v2 protocol, authenticated profile bank, full-record

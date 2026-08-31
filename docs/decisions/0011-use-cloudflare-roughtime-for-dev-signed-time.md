@@ -1,6 +1,6 @@
 # ADR-0011: Use Cloudflare Roughtime for DEV_REFERENCE signed time
 
-- **Status:** Accepted
+- **Status:** Accepted — deployment blocked by provider incompatibility
 - **Date:** 2026-08-31
 
 ## Context
@@ -19,10 +19,12 @@ rough time as a midpoint and radius. That is the authenticated interval required
 by the existing clock-policy boundary without trusting the Lambda host clock.
 
 Cloudflare marks the service beta and warns that its root public key may change.
-Its official implementation currently supports IETF drafts 11 and 8, regards
-its API as unstable, disclaims backwards compatibility, and says not to use it
-in production software. This lane pins draft 11 exactly; it does not implement
-draft negotiation or infer draft 15 support from the newer Internet-Draft.
+Its public source currently implements IETF drafts 11 and 8, regards its API as
+unstable, disclaims backwards compatibility, and says not to use it in
+production software. Cloudflare publishes no deployed source revision,
+response-profile contract, radius configuration, or rollout record for the
+public endpoint. This lane pins draft 11 exactly; it does not infer deployed
+conformance from repository code or synthetic vectors.
 The selected service is also a single provider. This decision therefore trades
 availability and protocol stability for a concrete, independently operated,
 cryptographically authenticated development source.
@@ -200,25 +202,41 @@ the trust-root change visible to protected non-regression policy and evidence.
 
 ## Compatibility Gate Result
 
-Cloudflare's official Apache-2.0 vectors 001 and 010 match the generated
-1,024-byte requests exactly and verify through the complete pinned-key chain;
-vector 010 independently exercises a non-empty four-node Merkle path under the
-selected provider ordering. Focused Roughtime tests pass 24/24; the complete
-signed-time suite passes 258/258.
+Cloudflare's Apache-2.0 vectors 001 and 010 match the generated 1,024-byte
+requests and verify through the complete test-key chain; vector 010 exercises a
+non-empty ten-request Merkle batch. They are not captures from
+`roughtime.cloudflare.com`. Cloudflare generates them locally with fixed private
+keys, `MIDP=50`, `RADI=5`, and its own `CreateReplies`/`VerifyReply` pair.
 
 One post-correction query was sent without retry to the published endpoint. Its
 352-byte response authenticated under the published long-term key: delegation,
 signed `SREP`, nonce Merkle proof, response version `0x8000000b`, and delegation
-window all verified. The response nevertheless omitted draft-11's mandatory
-root `NONC` and signed `RADI=1`, below draft-11's mandatory minimum of three
-seconds. The strict adapter rejected it.
+window all verified. It nevertheless omitted draft-11's mandatory root `NONC`
+and signed `RADI=1`, below draft-11's mandatory minimum of three seconds. The
+strict adapter rejected it.
 
-This observation proves endpoint and pinned-key reachability once, not live
-Cloudflare-profile interoperability. Deployment remains blocked. The
-implementation does not weaken mandatory fields or radius semantics to
-accommodate one undocumented server behavior; accepting any further dialect
-beyond the reviewed Cloudflare source/vector profile requires a new decision
-and source epoch.
+Source history now explains the fingerprint without making it admissible.
+Cloudflare commit `d09eb373` added root `NONC` to replies in December 2024;
+commit `932a07ae` made its client reject missing or substituted response
+`NONC`; and regenerated vectors postdate that fix. Current draft-11 source emits
+`NONC`, while the checked-in test server still hard-codes a one-second radius
+without enforcing the draft-11 minimum. Cloudflare issue 72 independently
+reports that the public endpoint fails the current official IETF client with
+`protocol: response is missing NONC tag` and returns a one-second Google-profile
+radius. The exact deployed binary and configuration remain unpublished, so
+identifying the service as a particular pre-fix/test-server build is inference,
+not operator evidence.
+
+No reviewed protocol permits `VER=0x8000000b` with missing root `NONC` or
+`RADI=1`. Draft 8 also mandates `NONC`, and its lower radius rule cannot override
+the authenticated draft-11 version. The adapter is therefore correct: do not
+remove the root-`NONC` check, lower the radius floor, reinterpret the signed
+radius, or treat implementation fixtures as a live-service contract.
+
+The ADR's original live-interoperability premise is invalid. This observation
+proves endpoint/key reachability only. Deployment remains blocked until the
+endpoint emits the exact pinned profile or a separately reviewed provider/profile
+decision advances the source epoch and proves its nonce and interval semantics.
 
 ## Consequences
 
@@ -282,4 +300,6 @@ result from this lane may be promoted to that claim.
 - [TIME-001..008 and AC-004/005](../../.agents/260825-1726-kms-silo-production-root/spec.md) — fail-closed signed-time and protected-floor requirements.
 - [Cloudflare Roughtime usage documentation](https://developers.cloudflare.com/time-services/roughtime/usage/) — published endpoint, long-term public key, beta status, and rotation notice.
 - [Cloudflare Roughtime repository](https://github.com/cloudflare/roughtime) — selected provider profile, official draft-11/draft-08 support statement, unstable-API warning, Apache-2.0 implementation, and authoritative vectors including non-empty-path vector 010.
+- [Cloudflare NONC reply fix](https://github.com/cloudflare/roughtime/commit/d09eb37366a1861d0c53711ad035d1defa7e3a6a) and [matching verifier fix](https://github.com/cloudflare/roughtime/commit/932a07ae00a1912339aa62b38996a86d5f0a5eae) — establish that current source emits and requires response `NONC`.
+- [Cloudflare issue 72](https://github.com/cloudflare/roughtime/issues/72) — independent reproduction that the published endpoint remains incompatible with the current official IETF client.
 - [IETF Roughtime draft-11](https://www.ietf.org/archive/id/draft-ietf-ntp-roughtime-11.html) — source for selected fields, signature contexts, nonce proof, and interval semantics; its section 6.3.1 path-fold ordering is not the Cloudflare provider ordering selected above.

@@ -456,6 +456,26 @@ transition, ordering, and snapshot-model behavior only; they do not prove
 SLB9672 NV semantics, STM32 flash atomicity, STiRoT/debug protection,
 electrical isolation, endurance, or physical power-loss behavior.
 
+### AWS DEV_REFERENCE Signed-Time Provider
+
+ADR-0011 pins Cloudflare draft 11, version `0x8000000b`, the published endpoint
+and long-term key, exact nonce-Merkle/delegation/SREP verification, mandatory
+root `NONC`, and signed `RADI>=3`. Generated Cloudflare vectors prove the local
+implementation contract only; they use fixed test keys and synthetic
+`MIDP=50`/`RADI=5` replies, not public-service captures.
+
+The public endpoint is currently incompatible. One pinned-key-authenticated
+draft-11 response omitted root `NONC` and signed `RADI=1`; Cloudflare issue 72
+independently corroborates only the public endpoint's IETF missing-`NONC`
+failure. Cloudflare source history added reply
+`NONC` in `d09eb373` and required it in `932a07ae`; current source emits and
+verifies the field, while the public deployment revision/configuration is not
+published. Neither draft 11 nor draft 8 permits the observed missing `NONC`, and
+draft 11 forbids the one-second radius. Runtime therefore remains sealed; it
+does not relax nonce or radius checks, reinterpret the signed interval, or
+infer deployment conformance from repository fixtures. Reopening requires a
+conforming endpoint or a separately reviewed provider/profile and source epoch.
+
 ### AWS DEV_REFERENCE Signed-Time Allocator Lineage
 
 ADR-0012 separates allocator rollback authority from allocator persistence.
