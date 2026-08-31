@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: "Nonce-Bound Signed-Time Service"
-status: in_progress
+status: "blocked; SOFTWARE_HARNESS cores complete"
 priority: P1
 dependencies: [2]
 tier: thinking
@@ -99,6 +99,9 @@ CloudFormation owns exactly one API, Lambda/version alias, execution role, log g
 10. Save AWS request IDs, CloudFormation events, CloudWatch logs, table sequence snapshots, signed CBOR bytes, signatures, outage observations, and rollback commands under `.agents/260826-1605-phase4-dev-reference-authority/evidence/phase-05/<run-id>/`; redact account identifiers only in the shareable copy, never alter the raw operator-held record.
 
 ## Todo List
+- [x] Complete the enumerated protocol, persistence/recovery, allocator,
+  clock-policy, pinned-KMS, handler, manifest, production-rejection, and
+  non-deploying CloudFormation/IAM software cores.
 - [x] Implement two-stage canonical request parsing and registration authentication.
 
 - [x] Freeze vectors and strict codec.
@@ -118,6 +121,18 @@ CloudFormation owns exactly one API, Lambda/version alias, execution role, log g
 - [x] Freeze strict canonical DEV_REFERENCE deployment-manifest schema.
 - [x] Freeze the non-deploying CloudFormation/IAM intended-resource harness.
 - [x] Review static IAM/key policies and DEV production-rejection handoff.
+- [ ] Freeze and test allocator-lineage transitions, including restored state
+  advanced past a protected device floor and alternating same-epoch forks —
+  blocked on selection of the non-restorable epoch/checkpoint authority and
+  its authenticated transition contract.
+- [ ] Implement `scripts/package.sh` — blocked until the exact authenticated
+  clock adapter and deployable handler-artifact composition are frozen.
+- [ ] Implement `scripts/deploy.sh` — blocked until the provider contract,
+  dedicated AWS account/region, immutable artifact/signing-profile inputs, and
+  operator authorization exist.
+- [ ] Implement `scripts/rollback.sh` and
+  `scripts/capture-live-evidence.sh` — blocked until an authorized live stack,
+  immutable version/alias identifiers, and the reviewed evidence schema exist.
 - [ ] Obtain operator authorization and execute deployment, outage, restore, and rollback scenarios.
 - [ ] Hand the pinned manifest, vectors, and raw evidence index to Phase 6.
 
@@ -173,3 +188,14 @@ Phase 6 consumes only the reviewed endpoint/key/source manifest and frozen vecto
 - 2026-08-31 — Handler response-binding fix complete: before any KMS call, both recovery and fresh-commit exact `UnsignedResponse` values must byte-match the parsed request's device, authority, boot epoch, request ID, purpose, and nonce and must match the transactional snapshot's source epoch. Exact dataclass substitutions for every field fail with one stable handler error; retry mismatches never reach floor/sample/commit, fresh mismatches stop immediately after the single commit, and neither path reaches signing or encoding. No fallback or alternate response path was added. Focused and full tests pass 230/230 and final review found no remaining scoped issue.
 - 2026-08-31 — Production-rejection handoff review complete without modifying the Phase 2-owned checker: the reviewed manifest module exports one immutable exact marker set covering `DEV_REFERENCE`, `SOFTWARE_HARNESS`, both AWS DEV signed-time names, and `cellos-dev-time-v1`; a focused test freezes that contract. Phase 2 subsequently consumed `SOFTWARE_HARNESS` into its sole checker, whose feature-name, artifact-content, and split-chunk matrices now reject all handed-off markers while clean candidates remain blocked by ADR-0006; checker tests pass 8/8. The authenticated clock adapter is explicitly blocked on the missing custom provider contract, but that blocker no longer stops independent software work. The signed-time suite passes 231/231.
 - 2026-08-31 — Final signer-boundary fix complete: after the exact `SignedResponse` container check and before encoding, every inherited unsigned field must retain both the exact runtime type and value of the already validated `UnsignedResponse`; only the signature may be added. Value substitutions and equality-compatible type substitutions (`float` for `int`, `bytearray` for `bytes`, and a `str` subclass) across all 11 fields fail with the stable handler error before the encoder is called on both recovery and fresh paths. Focused tests pass 5/5, all handler tests pass 19/19, the full signed-time suite passes 233/233, and final review found no remaining scoped issue.
+- 2026-08-31 — Checkpoint: the implemented provider-independent Phase 5
+  software cores pass the full signed-time suite 233/233 and production
+  rejection 8/8. Phase 5 is blocked: the selected custom signed-HTTPS clock
+  provider lacks its endpoint, canonical response/signature contract, key/SPKI
+  pin, freshness semantics, and non-restorable allocator-lineage authority;
+  the planned package/deploy/rollback/evidence scripts therefore do not exist.
+  No dedicated AWS DEV account/region or irreversible deployment authorization
+  is recorded, and no live outage, restore, rollback, principal-reachability,
+  or allocator-fork evidence exists. The CloudFormation graph remains
+  intentionally marked non-deployable; host evidence satisfies no live-service
+  criterion.

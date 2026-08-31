@@ -4,6 +4,17 @@
 
 ## [Unreleased] Development-first hardware-constrained execution
 
+- Phase 5's nonce-bound signed-time service cores have reached their current
+  `SOFTWARE_HARNESS` ceiling. The implemented protocol, persistence/recovery,
+  allocator, policy, pinned-KMS, handler, manifest, production-rejection, and
+  non-deploying CloudFormation/IAM contracts pass 233 signed-time and 8
+  production-rejection tests. The allocator-lineage contract and planned
+  package/deploy/rollback/evidence scripts remain open. Progress is blocked on
+  the authenticated clock and non-restorable epoch/checkpoint authority
+  contracts, a named AWS DEV account/region, operator-authorized deployment,
+  real artifact composition, and the live outage/restore/rollback/security
+  evidence matrix.
+
 - Phase 4's STM32/TPM authority has reached its `SOFTWARE_HARNESS` ceiling.
   The typed private-v2 protocol, authenticated profile bank, full-record
   journal/recovery model, certificate/profile validator, promotion recovery,
