@@ -112,8 +112,10 @@ those remain fail-closed production gates.
   HTTPS, but the harness deliberately makes no claim from the generic connect
   failure: default `service-net` has no authenticated certificate time, so the
   request cannot reach certificate verification, while the same output could
-  also represent an unrelated transport failure. Direct clock/socket tests own
-  the fail-closed boundary. Positive HTTPS requires admitted authenticated time
+  also represent an unrelated transport failure. Direct clock tests prove
+  authenticated time remains unavailable; fail-closed handler/socket guards
+  enforce the duplicated pre-TCP/pre-handshake checks but do not yet have
+  dedicated direct tests. Positive HTTPS requires admitted authenticated time
   or a separately approved, explicitly test-only clock/provider harness that
   cannot weaken the default image.
 

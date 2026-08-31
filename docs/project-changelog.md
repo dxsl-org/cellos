@@ -10,9 +10,10 @@
   guest's generic HTTPS connect failure: default `service-net` has no
   authenticated certificate time and cannot reach certificate verification,
   while the same output could represent an unrelated transport failure. Direct
-  clock/socket tests retain ownership of the fail-closed boundary. No leaf
-  certificate, clock, trust root, or runtime TLS policy changed. Positive HTTPS
-  evidence remains blocked on admitted authenticated time or a separately
+  clock tests cover time unavailability; duplicated handler/socket guards
+  enforce fail-closed prechecks but do not yet have dedicated direct tests. No
+  leaf certificate, clock, trust root, or runtime TLS policy changed. Positive
+  HTTPS evidence remains blocked on admitted authenticated time or a separately
   reviewed test-only provider. The AArch64 semihosting acceptance-ledger
   blocker remains open until its governed resolution-evidence contract passes.
 
