@@ -19,6 +19,70 @@ pub(super) fn complete_upload(
         revision: &revision,
         record: &record,
     };
+    let mut state = pending_state(store);
+
+    let profile_digest = Sha256::digest(&fixture.profile).into();
+    let tpm_digest = Sha256::digest(&fixture.tpm).into();
+    let request = validated(BeginRelayProfileUploadRequest {
+        context: context(5, 1, Operation::BeginRelayProfileUpload),
+        upload_handle: 11,
+        generation: 1,
+        policy_epoch: 3,
+        pending_slot: 0,
+        pending_spki_digest: fixture.spki,
+        profile_digest,
+        tpm_public_digest: tpm_digest,
+        profile_len: fixture.profile.len() as u32,
+    });
+    let metadata = ProfileBankMetadata {
+        slot: 0,
+        device_id: [1; 32],
+        authority_id: [2; 32],
+        authority_epoch: 1,
+        boot_epoch: 1,
+        generation: 1,
+        policy_epoch: 3,
+        upload_handle: 11,
+        profile_len: fixture.profile.len() as u32,
+        profile_digest,
+        pending_spki_digest: fixture.spki,
+        spki: Bounded::from_slice(&fixture.spki_der).unwrap(),
+        tpm_public_digest: tpm_digest,
+    };
+    let mut bank = ProfileBank::new(MemoryBank::default(), Auth);
+    let mut upload = begin_profile_upload(&mut state, &mut bank, &request, &metadata).unwrap();
+    for (index, bytes) in fixture.profile.chunks(PROFILE_CHUNK_SIZE).enumerate() {
+        let write = validated(WriteRelayProfileChunkRequest {
+            context: context(6 + index as u64, 1, Operation::WriteRelayProfileChunk),
+            upload_handle: 11,
+            chunk_index: index as u8,
+            chunk: Bounded::from_slice(bytes).unwrap(),
+        });
+        upload = write_profile_chunk(&mut state, &mut bank, &write, &metadata).unwrap();
+    }
+    let validation = validated(ValidateAndStageRelayProfileRequest {
+        context: context(
+            6 + upload.chunk_count() as u64,
+            1,
+            Operation::ValidateAndStageRelayProfile,
+        ),
+        generation: 1,
+        policy_epoch: 3,
+        pending_slot: 0,
+        pending_spki_digest: fixture.spki,
+        profile_digest,
+        tpm_public_digest: tpm_digest,
+        upload_handle: 11,
+        profile_len: fixture.profile.len() as u32,
+    });
+    let prior = record.get().unwrap();
+    let admitted = state.admit_profile_validation(&validation).unwrap();
+    let current = record.get().unwrap();
+    let (storage, _) = bank.into_parts();
+    (prior, current, storage, admitted)
+}
+
+pub(super) fn pending_state<S: ProtectedStore>(store: S) -> AuthorityState<S> {
     let mut state = AuthorityState::new(
         store,
         AuthorityStateConfig {
@@ -68,76 +132,10 @@ pub(super) fn complete_upload(
         hostname: Bounded::from_slice(b"node.example").unwrap(),
     });
     state.begin_enrollment(&begin, &Clock).unwrap();
-
-    let profile_digest = Sha256::digest(&fixture.profile).into();
-    let tpm_digest = Sha256::digest(&fixture.tpm).into();
-    let request = validated(BeginRelayProfileUploadRequest {
-        context: context(5, 1, Operation::BeginRelayProfileUpload),
-        upload_handle: 11,
-        generation: 1,
-        policy_epoch: 3,
-        pending_slot: 0,
-        pending_spki_digest: fixture.spki,
-        profile_digest,
-        tpm_public_digest: tpm_digest,
-        profile_len: fixture.profile.len() as u32,
-    });
-    let mut upload = state.authorize_profile_upload(&request).unwrap();
-    upload = state.acknowledge_profile_upload(&upload).unwrap();
-    let metadata = ProfileBankMetadata {
-        slot: 0,
-        device_id: [1; 32],
-        authority_id: [2; 32],
-        authority_epoch: 1,
-        boot_epoch: 1,
-        generation: 1,
-        policy_epoch: 3,
-        upload_handle: 11,
-        profile_len: fixture.profile.len() as u32,
-        profile_digest,
-        pending_spki_digest: fixture.spki,
-        spki: Bounded::from_slice(&fixture.spki_der).unwrap(),
-        tpm_public_digest: tpm_digest,
-    };
-    let mut bank = ProfileBank::new(MemoryBank::default(), Auth);
-    bank.initialize(&metadata).unwrap();
-    for (index, bytes) in fixture.profile.chunks(PROFILE_CHUNK_SIZE).enumerate() {
-        let write = validated(WriteRelayProfileChunkRequest {
-            context: context(6 + index as u64, 1, Operation::WriteRelayProfileChunk),
-            upload_handle: 11,
-            chunk_index: index as u8,
-            chunk: Bounded::from_slice(bytes).unwrap(),
-        });
-        let intent = state.authorize_profile_chunk(&write).unwrap();
-        let next = bank
-            .write_chunk(&metadata, upload.next_index, index as u8, bytes)
-            .unwrap();
-        upload = state.acknowledge_profile_chunk(&intent).unwrap();
-        assert_eq!(next, upload.next_index);
-    }
-    let validation = validated(ValidateAndStageRelayProfileRequest {
-        context: context(
-            6 + upload.chunk_count() as u64,
-            1,
-            Operation::ValidateAndStageRelayProfile,
-        ),
-        generation: 1,
-        policy_epoch: 3,
-        pending_slot: 0,
-        pending_spki_digest: fixture.spki,
-        profile_digest,
-        tpm_public_digest: tpm_digest,
-        upload_handle: 11,
-        profile_len: fixture.profile.len() as u32,
-    });
-    let prior = record.get().unwrap();
-    let admitted = state.admit_profile_validation(&validation).unwrap();
-    let current = record.get().unwrap();
-    let (storage, _) = bank.into_parts();
-    (prior, current, storage, admitted)
+    state
 }
 
-fn context(sequence: u64, boot: u64, operation: Operation) -> RequestContext {
+pub(super) fn context(sequence: u64, boot: u64, operation: Operation) -> RequestContext {
     RequestContext {
         device_id: [1; 32],
         authority_id: [2; 32],
@@ -150,7 +148,7 @@ fn context(sequence: u64, boot: u64, operation: Operation) -> RequestContext {
         authenticator: [0; 32],
     }
 }
-fn validated<T: AuthorityRequest>(mut request: T) -> ValidatedRequest<T> {
+pub(super) fn validated<T: AuthorityRequest>(mut request: T) -> ValidatedRequest<T> {
     request.context_mut().payload_digest = request.canonical_body_digest();
     let request_header = header(&request);
     verify_typed_request(request, &request_header, &Requests).unwrap()

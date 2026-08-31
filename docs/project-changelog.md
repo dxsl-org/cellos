@@ -118,14 +118,19 @@
   snapshots cover every inactive-slot byte prefix after increment without
   relying on error return: incomplete writes seal and a complete authenticated
   write recovers exactly the new record. The clean private-v2 cutover rejects
-  v1, carries the existing 12,288-byte raw DER chain in at most sixteen
-  authenticated 768-byte chunks, durably admits every begin/chunk request
-  before bank work, binds uploads to the journal-selected inactive slot and CSR,
-  and persists exact idempotent progress. Journal-only recovery remains opaque;
-  every durable upload header and committed chunk prefix must authenticate, and
-  a complete upload must pass its full profile hash before a serviceable record
-  can issue a pending-enrollment snapshot. Completed active/staged references
-  receive the same bank gate. Profile verification requires an opaque
+  v1 and carries the existing 12,288-byte raw DER chain in at most sixteen
+  authenticated 768-byte chunks. Request admission durably advances the
+  authentication floor before media work, but a Phase 4-owned thin adapter now
+  initializes and authenticates/read-backs the bank before persisting
+  `Uploading`, then writes and authenticates/read-backs each chunk before
+  advancing protected `next_index`. Only a pre-authorize `Pending` state may
+  initialize media; every `Uploading` retry, including index zero, authenticates
+  the existing header and committed prefix. Absent or corrupt retry media seals.
+  Journal-only recovery remains opaque; every durable upload header and committed chunk
+  prefix must authenticate, and a complete upload must pass its full profile
+  hash before a serviceable record can issue a pending-enrollment snapshot.
+  Completed active/staged references receive the same bank gate. Profile
+  verification requires an opaque
   state-admission token after the
   boot/identity/sequence floor is durable, so unauthenticated and authenticated
   stale/replayed frames invoke no bank, X.509, or TPM work. The allocation-free
@@ -135,7 +140,7 @@
   identity, authority/boot epoch, CSR, slot, and profile metadata; a strict
   double-read `TPM2B_PUBLIC` parser derives the P-256 SPKI and requires exact
   equality with both journal and leaf certificate SPKIs. RV64 no_std checks and
-  38 journal/bank, 11 validator, and 36 authority-protocol host tests pass. This
+  38 journal/bank, 14 validator, and 36 authority-protocol host tests pass. This
   proves software behavior only; TPM NV behavior, STM32 flash atomicity,
   lifecycle/debug protection, isolation, endurance, and physical power loss
   remain hardware-gated.
