@@ -150,15 +150,16 @@
   requires both exact generation and profile digest in `Active`; either mismatch
   seals. Staged receipt consumption and commit preparation require exact
   generation, policy epoch, and profile digest; every substitution seals. Exact
-  receipt consumption is single-use, replay seals, and an exact newer-sequence
-  commit retry recovers the identical persisted prepared intent. Provider
-  promotion rejects a bad signature before state mutation and independently
-  binds all 12 provider receipt tuple fields; every mismatch seals. Authenticated
-  reboot recovery finalizes the exact persisted `Promoted` intent and retains
-  exact `Active` after a later reboot, with boot closed and time unavailable
-  after each restore. RV64 no_std
-  checks and 38 journal/bank, 17 validator, and 50 authority-protocol host tests
-  pass. This proves software behavior only;
+  receipt consumption is single-use and replay seals. Commit preparation
+  substitutions seal; exact newer-sequence retries recover the identical
+  prepared intent both in-boot and after authenticated `Prepared` reboot.
+  Restored `ReceiptConsumed` opens only under the fresh challenge and prepares
+  its exact persisted intent. Provider promotion rejects a bad signature before
+  state mutation and independently binds all 12 provider receipt tuple fields;
+  every mismatch seals. Authenticated `Promoted` reboot finalizes its exact
+  intent and later reboot retains exact `Active`; every restore closes boot and
+  invalidates time. RV64 no_std checks and 38 journal/bank, 17 validator, and 52
+  authority-protocol host tests pass. This proves software behavior only;
   TPM NV behavior, STM32 flash atomicity, lifecycle/debug protection, isolation,
   endurance, and physical power loss
   remain hardware-gated.

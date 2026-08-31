@@ -260,7 +260,7 @@ the physical pending-key and no-side-effect rows.
 
 - [ ] Freeze typed surface, TPM handle/NV/policy map, complete record schema, and transition table.
 - [x] Host full-record envelope, exact Phase 2 successor gate, counter-exact dual-slot recovery, irreversible seal seam, and cut-point/reboot harness pass at the `SOFTWARE_HARNESS` ceiling.
-- [x] Authenticate and durably state-admit profile begin/chunk/validation requests before bank, policy, or TPM work; bind the journal-selected inactive slot and state-derived CSR handle; 50 authority-protocol host tests pass.
+- [x] Authenticate and durably state-admit profile begin/chunk/validation requests before bank, policy, or TPM work; bind the journal-selected inactive slot and state-derived CSR handle; 52 authority-protocol host tests pass.
 - [x] Resolve canonical certificate-chain transport: operator selected the reviewed clean private-v2 chunk protocol with a 12,288-byte total bound.
 - [ ] Freeze the AP request-authentication contract: the STM32 authority's
   exact session/key establishment, challenge and boot binding, authenticator
@@ -277,13 +277,15 @@ the physical pending-key and no-side-effect rows.
   both mandatory; either mismatch seals. Staged receipt consumption separately
   requires exact generation, policy epoch, and profile digest; every mismatch
   seals, exact consumption is single-use, and replay seals. Commit preparation
-  requires the same exact three-field tuple; every mismatch seals, while an
-  exact newer-sequence retry recovers the identical persisted prepared intent.
-  Provider promotion requires a verified signature plus exact equality across
-  all 12 receipt tuple fields; every independent substitution seals. A reboot
-  from persisted `Promoted` finalizes that exact intent, and a reboot after
-  finalize retains exact `Active`; both restore closed boot and unavailable
-  time. Physical receipt/signing proof remains open.
+  requires the same exact three-field tuple; every mismatch seals, while exact
+  newer-sequence retries recover the identical persisted intent both in-boot
+  and after reboot from `Prepared`. Reboot from `ReceiptConsumed` opens only
+  under the new challenge and prepares the exact persisted intent. Provider
+  promotion requires a verified signature plus exact equality across all 12
+  receipt tuple fields; every independent substitution seals. A reboot from
+  persisted `Promoted` finalizes that exact intent, and a reboot after finalize
+  retains exact `Active`; every restore closes boot and invalidates time.
+  Physical receipt/signing proof remains open.
 
 ## Success Criteria
 
@@ -376,3 +378,11 @@ None at planning time beyond: **2026-08-26 Decision** — security red-team revi
   passes 50/50 and RV64 no_std check passes. This is host persistence/recovery
   proof only, not flash atomicity, provider durability, or physical power-loss
   evidence.
+- 2026-08-31 — Result: pre-promotion recovery tests authenticate and restore
+  both `ReceiptConsumed` and `Prepared` records carrying a live time lease.
+  Restore closes boot and invalidates time; only the fresh reboot challenge
+  opens epoch 2. `ReceiptConsumed` then prepares the exact pre-reboot intent,
+  while a newer-sequence exact retry from restored `Prepared` returns the
+  identical `PreparedCommitIntent` and remains prepared. The focused suite
+  passes 2/2; the full protocol suite passes 52/52 and RV64 no_std check passes.
+  This is host persistence/recovery proof only.
