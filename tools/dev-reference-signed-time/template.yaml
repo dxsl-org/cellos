@@ -7,7 +7,7 @@
       "Deployable": false,
       "LiveIsolationClaim": false,
       "ArtifactContract": "A prebuilt, approved, code-signed S3 object and its exact CodeSha256 must be supplied; this template does not build, package, select, or approve code.",
-      "CompositionLimitation": "The current handler artifact and authenticated upstream provider composition are not deployable yet.",
+      "CompositionLimitation": "The generic runtime composition is SOFTWARE_HARNESS only; no deployable artifact exists until an operator supplies the reviewed canonical manifest and approved local dependency wheelhouse.",
       "SignerApprovalEvidence": "The profile version remains pinned in the CodeSigningConfig. Immutable version approval and artifact-to-profile evidence are external requirements; the approval role can inspect only the derived unversioned profile.",
       "ExternalControlsRequired": [
         "Externally administered permissions boundary and SCP",
@@ -789,11 +789,11 @@
       "DependsOn": ["RuntimeSigningKeyPolicy", "FunctionLogGroup", "FunctionCodeSigningConfig"],
       "Properties": {
         "FunctionName": "cellos-dev-reference-signed-time",
-        "Description": "SOFTWARE_HARNESS only; provider composition is not deployable yet.",
+        "Description": "SOFTWARE_HARNESS runtime; live provider interoperability and deployment remain blocked.",
         "PackageType": "Zip",
         "Runtime": "python3.12",
         "Architectures": ["x86_64"],
-        "Handler": "handler.lambda_handler",
+        "Handler": "lambda_entrypoint.lambda_handler",
         "Role": {"Fn::GetAtt": ["RuntimeRole", "Arn"]},
         "CodeSigningConfigArn": {"Fn::GetAtt": ["FunctionCodeSigningConfig", "CodeSigningConfigArn"]},
         "Code": {

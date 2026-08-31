@@ -143,7 +143,7 @@ class TemplateContractTests(unittest.TestCase):
         properties = function["Properties"]
         self.assertEqual(properties["PackageType"], "Zip")
         self.assertEqual(properties["FunctionName"], "cellos-dev-reference-signed-time")
-        self.assertEqual(properties["Handler"], "handler.lambda_handler")
+        self.assertEqual(properties["Handler"], "lambda_entrypoint.lambda_handler")
         self.assertEqual(properties["CodeSigningConfigArn"], {
             "Fn::GetAtt": ["FunctionCodeSigningConfig", "CodeSigningConfigArn"]
         })
