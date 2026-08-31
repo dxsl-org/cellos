@@ -8,8 +8,8 @@ from unittest.mock import patch
 import path_bootstrap
 from clock_policy import ClockPolicy
 from manifest import (
-    ManifestError, decode_manifest, derive_clock_policy,
-    derive_kms_key_pins, encode_manifest,
+    ManifestError, PRODUCTION_REJECTION_MARKERS, decode_manifest,
+    derive_clock_policy, derive_kms_key_pins, encode_manifest,
 )
 from manifest_test_support import GOLDEN, KMS_ARN, KMS_DIGEST, valid_manifest
 
@@ -34,6 +34,19 @@ class ManifestDerivationTests(unittest.TestCase):
         self.assertEqual(digest, KMS_DIGEST)
         self.assertIs(type(key_id), str)
         self.assertIs(type(digest), bytes)
+
+    def test_production_rejection_handoff_is_exact_and_immutable(self):
+        self.assertIs(type(PRODUCTION_REJECTION_MARKERS), frozenset)
+        self.assertEqual(
+            PRODUCTION_REJECTION_MARKERS,
+            {
+                "AWS_DEV_SIGNED_TIME",
+                "DEV_REFERENCE",
+                "SOFTWARE_HARNESS",
+                "aws-dev-signed-time",
+                "cellos-dev-time-v1",
+            },
+        )
 
     def test_derivations_revalidate_the_manifest(self):
         invalid = replace(valid_manifest(), source_epoch=True)

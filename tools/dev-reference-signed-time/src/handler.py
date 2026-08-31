@@ -5,13 +5,36 @@ from typing import Any
 
 from allocation import AdmittedSample, AllocationState
 from protocol import encode_response
-from protocol_models import MAX_UINT64, SignedResponse, UnsignedResponse
+from protocol_models import MAX_UINT64, SignedRequest, SignedResponse, UnsignedResponse
 from receipt import Receipt
 from request_protocol import parse_request
 from state_codec import AuthorityRegistration
 from state_reader import StateSnapshot
 
 _HANDLER_FAILURE = "signed-time handler operation failed"
+
+
+def _require_response_binding(
+    response: UnsignedResponse, request: SignedRequest, source_epoch: int
+) -> None:
+    response_request = (
+        response.device_id,
+        response.authority_id,
+        response.boot_epoch,
+        response.request_id,
+        response.purpose,
+        response.nonce,
+    )
+    parsed_request = (
+        request.device_id,
+        request.authority_id,
+        request.boot_epoch,
+        request.request_id,
+        request.purpose,
+        request.nonce,
+    )
+    if response_request != parsed_request or response.source_epoch != source_epoch:
+        raise TypeError("state store returned a response for another request or epoch")
 
 
 class HandlerError(RuntimeError):
@@ -93,6 +116,7 @@ class SignedTimeHandler:
                 response = receipt.response
             if type(response) is not UnsignedResponse:
                 raise TypeError("state store returned an invalid response")
+            _require_response_binding(response, request, snapshot.state.source_epoch)
             signed = self._sign_response(response)
             if type(signed) is not SignedResponse:
                 raise TypeError("signer returned an invalid response")

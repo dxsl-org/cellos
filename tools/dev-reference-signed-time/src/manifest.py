@@ -12,6 +12,13 @@ import manifest_validation as validation
 MAX_MANIFEST_BYTES = 4096
 SCHEMA_VERSION = 1
 CLASSIFICATION = "DEV_REFERENCE"
+PRODUCTION_REJECTION_MARKERS = frozenset({
+    "AWS_DEV_SIGNED_TIME",
+    "DEV_REFERENCE",
+    "SOFTWARE_HARNESS",
+    "aws-dev-signed-time",
+    "cellos-dev-time-v1",
+})
 _ERROR = "invalid signed-time manifest"
 _HEX_32 = re.compile(r"[0-9a-f]{64}").fullmatch
 class ManifestError(ValueError):

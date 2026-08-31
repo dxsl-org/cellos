@@ -71,6 +71,16 @@
   and the full suite passes 227/227. No concrete clock provider, protected-floor
   implementation, Lambda runtime entrypoint, live database operation, AWS
   resource, credential, network call, packaging, or deployment action occurred.
+  The handler now independently binds every recovered or committed unsigned
+  response to all six parsed-request fields and the transactional snapshot
+  source epoch before KMS signing. Exact cross-request or cross-epoch dataclass
+  substitutions stop before signing or encoding. The full suite passes 230/230.
+  Phase 05 now exports an immutable production-rejection handoff containing
+  `DEV_REFERENCE`, `SOFTWARE_HARNESS`, both AWS DEV signed-time names, and
+  `cellos-dev-time-v1`; it does not modify the Phase 2-owned checker. Existing
+  checker tests pass 7/7, manifest tests pass 43/43, and the signed-time suite
+  passes 231/231. The custom authenticated clock adapter remains explicitly
+  blocked on its missing provider wire/signature/freshness contract.
 
 - Phase 4's deterministic, non-executing provisioning-plan generator is complete
   only at the `SOFTWARE_HARNESS` ceiling. Each of its nine ordered mutations now
