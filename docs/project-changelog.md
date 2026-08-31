@@ -160,13 +160,14 @@
   endurance, and physical power loss
   remain hardware-gated.
 
-- Phase 6 begins with fail-closed `development-stm32-authority` and
-  `vf2-dev-reference` KMS feature gates. The authority feature requires both the
-  explicit VF2 selector and RISC-V bare-metal target, and is mutually exclusive
-  with existing relay providers. Production-image checks freeze and reject both
-  exact markers in feature lists and artifacts. RV64 paired-feature compilation
-  and all 8 checker tests pass; missing-selector, host, and multi-provider builds
-  fail at their intended compile-time gates. No authority provider is selected.
+- Phase 6 begins with fail-closed `development-stm32-authority` and the
+  already-frozen `vf2-root-stream` KMS feature gates. The authority feature
+  requires both the explicit VF2 selector and RISC-V bare-metal target, and is
+  mutually exclusive with existing relay providers. Phase 2's unchanged
+  production-image checker already rejects both exact markers in feature lists
+  and artifacts. RV64 paired-feature compilation and all 8 checker tests pass;
+  missing-selector, host, and multi-provider builds fail at their intended
+  compile-time gates. No authority provider is selected.
   `AuthorityClient` is explicitly blocked: KMS has no exclusive concrete STM32
   transport owner, while `authority-protocol` defines mandatory 32-byte request
   authenticators but exposes only verification, with no AP session/key

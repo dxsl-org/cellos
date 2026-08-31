@@ -54,7 +54,7 @@ compile_error!(
     not(all(
         target_arch = "riscv64",
         target_os = "none",
-        feature = "vf2-dev-reference"
+        feature = "vf2-root-stream"
     ))
 ))]
 compile_error!(
@@ -62,10 +62,10 @@ compile_error!(
 );
 
 #[cfg(all(
-    feature = "vf2-dev-reference",
+    feature = "vf2-root-stream",
     not(feature = "development-stm32-authority")
 ))]
-compile_error!("service-kms: vf2-dev-reference is only valid with development-stm32-authority");
+compile_error!("service-kms: vf2-root-stream is only valid with development-stm32-authority");
 
 #[cfg(test)]
 extern crate std;

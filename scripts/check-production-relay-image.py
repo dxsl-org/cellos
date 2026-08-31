@@ -53,7 +53,6 @@ FROZEN_DEV_MARKERS = [
     "slb9672-dev-anchor",
     "stm32h573i-dk-dev-authority",
     "vf2-root-stream",
-    "vf2-dev-reference",
 ]
 DEV_MARKER_NAMES = frozenset(FROZEN_DEV_MARKERS)
 DEV_MARKERS = tuple(marker.encode("ascii") for marker in FROZEN_DEV_MARKERS)

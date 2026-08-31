@@ -160,13 +160,14 @@ Revert: restore per-phase checker/workspace edits (rejected).
   `7d62eaa9...` (`tests/frame.rs`), `26a2b6ae...` (`tests/payload.rs`), and
   `fd514249...` (`tests/enrollment.rs`). This is a pre-change regression
   baseline only; it grants no hardware or acceptance-criterion credit.
-- Evidence: Step 1 now registers `development-stm32-authority` only in KMS,
-  requires the paired `vf2-dev-reference` selector plus the RISC-V bare-metal
-  target, and makes it mutually exclusive with every existing relay provider.
-  The production-image checker freezes and rejects both exact feature names in
-  feature lists and artifact content. RV64 no_std paired-feature compilation
-  and all 8 checker tests pass; missing-selector, host, and multi-provider
-  negative compilations fail with their exact gate diagnostics.
+- Evidence: Step 1 registers `development-stm32-authority` only in KMS and
+  requires the already-frozen `vf2-root-stream` marker plus the RISC-V
+  bare-metal target. Both KMS features are mutually exclusive with every
+  existing relay provider. Phase 2's unchanged production-image checker already
+  rejects both exact marker names in feature lists and artifact content. RV64
+  no_std paired-feature compilation and all 8 checker tests pass;
+  missing-selector, host, and multi-provider negative compilations fail with
+  their exact gate diagnostics.
 - Blocker: `authority-protocol` requires a 32-byte authenticator on every
   request and exports verifier-only `RequestAuthenticator`; neither it nor the
   STM32 adapter defines AP session/key establishment or purpose-bounded request
@@ -177,3 +178,9 @@ Revert: restore per-phase checker/workspace edits (rejected).
   ephemeral key. ADR-0011 remains unsaved. Building `AuthorityClient` over a
   test seam now would invent both security boundaries, so Step 2 remains blocked
   on exact Phase 4 contracts and hardware evidence.
+- Correction: Phase 6 initially introduced `vf2-dev-reference` by editing the
+  Phase 2-owned production checker and its tests. That breached the serialized
+  ownership contract and duplicated the already-frozen `vf2-root-stream`
+  marker. The KMS gate now reuses `vf2-root-stream`; both checker edits are
+  reverted, so Phase 2 remains the sole checker owner and no marker handoff is
+  required.
