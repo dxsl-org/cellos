@@ -77,10 +77,17 @@
   substitutions stop before signing or encoding. The full suite passes 230/230.
   Phase 05 now exports an immutable production-rejection handoff containing
   `DEV_REFERENCE`, `SOFTWARE_HARNESS`, both AWS DEV signed-time names, and
-  `cellos-dev-time-v1`; it does not modify the Phase 2-owned checker. Existing
-  checker tests pass 7/7, manifest tests pass 43/43, and the signed-time suite
+  `cellos-dev-time-v1`; it does not modify the Phase 2-owned checker. Phase 2
+  subsequently consumed `SOFTWARE_HARNESS` into the sole production checker;
+  exact feature, artifact, and split-boundary rejection plus the unchanged clean
+  ADR-0006 block pass 8/8. Manifest tests pass 43/43 and the signed-time suite
   passes 231/231. The custom authenticated clock adapter remains explicitly
   blocked on its missing provider wire/signature/freshness contract.
+  The final signer boundary now requires all 11 inherited unsigned response
+  fields to preserve both exact runtime type and value before encoding; only the
+  signature may be added. Value substitutions and equality-compatible type
+  substitutions fail before the encoder is called. Focused tests pass 5/5,
+  handler tests pass 19/19, and the full signed-time suite passes 233/233.
 
 - Phase 4's deterministic, non-executing provisioning-plan generator is complete
   only at the `SOFTWARE_HARNESS` ceiling. Each of its nine ordered mutations now

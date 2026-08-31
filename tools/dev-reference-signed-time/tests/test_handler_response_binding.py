@@ -1,5 +1,6 @@
 import unittest
 from dataclasses import replace
+from unittest.mock import patch
 
 import path_bootstrap  # noqa: F401
 
@@ -10,7 +11,7 @@ from protocol_models import UnsignedResponse
 from receipt import Receipt
 
 
-_BINDING_FIELDS = (
+_REQUEST_BINDING_FIELDS = (
     "device_id",
     "authority_id",
     "boot_epoch",
@@ -19,6 +20,24 @@ _BINDING_FIELDS = (
     "nonce",
     "source_epoch",
 )
+
+_SIGNED_BINDING_FIELDS = (
+    "source_epoch",
+    "source_sequence",
+    "unix_seconds",
+    "expires_at",
+    "device_id",
+    "authority_id",
+    "boot_epoch",
+    "request_id",
+    "purpose",
+    "nonce",
+    "key_id",
+)
+
+
+class _StringChild(str):
+    pass
 
 
 def _different_bytes(value):
@@ -30,10 +49,23 @@ def _mismatched_response(response, field):
         value = _different_bytes(getattr(response, field))
     elif field == "purpose":
         value = 2 if response.purpose != 2 else 1
+    elif field == "key_id":
+        value = f"{response.key_id}-substituted"
     else:
         current = getattr(response, field)
         value = 1 if current == 0 else 0
     return replace(response, **{field: value})
+
+
+def _equal_value_wrong_type(response, field):
+    value = getattr(response, field)
+    if type(value) is int:
+        substituted = float(value)
+    elif type(value) is bytes:
+        substituted = bytearray(value)
+    else:
+        substituted = _StringChild(value)
+    return replace(response, **{field: substituted})
 
 
 class HandlerResponseBindingTests(unittest.TestCase):
@@ -50,7 +82,7 @@ class HandlerResponseBindingTests(unittest.TestCase):
         self.assertIsNone(raised.exception.__context__)
 
     def test_recovery_rejects_each_request_or_source_epoch_mismatch_before_clock(self):
-        for field in _BINDING_FIELDS:
+        for field in _REQUEST_BINDING_FIELDS:
             with self.subTest(field=field):
                 data, _, _, receipt, calls, reader, store, signer, loaders = dependencies()
                 response = _mismatched_response(receipt.response, field)
@@ -75,7 +107,7 @@ class HandlerResponseBindingTests(unittest.TestCase):
                 )
 
     def test_fresh_commit_rejects_each_request_or_source_epoch_mismatch_before_signing(self):
-        for field in _BINDING_FIELDS:
+        for field in _REQUEST_BINDING_FIELDS:
             with self.subTest(field=field):
                 data, _, _, receipt, calls, reader, store, signer, loaders = dependencies()
                 response = _mismatched_response(receipt.response, field)
@@ -101,6 +133,40 @@ class HandlerResponseBindingTests(unittest.TestCase):
                     ),
                     (1, 1, 1, 1, 1, 0),
                 )
+
+    def test_signer_cannot_substitute_any_unsigned_response_field(self):
+        for field in _SIGNED_BINDING_FIELDS:
+            with self.subTest(field=field):
+                data, _, _, receipt, calls, reader, store, signer, loaders = dependencies()
+                store.recovered = receipt.response
+                signer.result = _mismatched_response(signed_copy(receipt.response), field)
+
+                with patch("handler.encode_response") as encode:
+                    self.assert_handler_error(
+                        lambda: self.service(reader, store, signer, loaders).handle(data)
+                    )
+
+                encode.assert_not_called()
+                self.assertEqual(
+                    [call[0] for call in calls], ["snapshot", "recover", "sign"]
+                )
+                self.assertEqual(signer.count, 1)
+
+    def test_signer_cannot_substitute_equality_compatible_field_types(self):
+        for field in _SIGNED_BINDING_FIELDS:
+            with self.subTest(field=field):
+                data, _, _, receipt, _, reader, store, signer, loaders = dependencies()
+                store.recovered = receipt.response
+                signer.result = _equal_value_wrong_type(
+                    signed_copy(receipt.response), field
+                )
+
+                with patch("handler.encode_response") as encode:
+                    self.assert_handler_error(
+                        lambda: self.service(reader, store, signer, loaders).handle(data)
+                    )
+
+                encode.assert_not_called()
 
     def test_matching_recovery_and_fresh_responses_keep_existing_behavior(self):
         for path in ("recovery", "fresh"):
