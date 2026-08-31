@@ -456,6 +456,37 @@ transition, ordering, and snapshot-model behavior only; they do not prove
 SLB9672 NV semantics, STM32 flash atomicity, STiRoT/debug protection,
 electrical isolation, endurance, or physical power-loss behavior.
 
+### AWS DEV_REFERENCE Signed-Time Allocator Lineage
+
+ADR-0012 separates allocator rollback authority from allocator persistence.
+`tools/dev-reference-signed-time/` models two retained DynamoDB tables: the
+restorable allocator and an external lineage table excluded from every allocator
+restore/switch procedure. Manifest schema 2 pins both names and immutable
+`DescribeTable.TableId` UUIDs, the response and lineage KMS key identities and
+DER-SPKI digests, and one canonical low-S P-256 signed transition.
+
+Genesis is source epoch 1 with a zero parent. Every later transition is an exact
+direct child with epoch `N+1`, parent signed-transition digest, new response key,
+and reviewed reason. Restore/fork also requires a new allocator name and
+`TableId`; response-key-only rotation retains the exact allocator identity.
+Startup authenticates this contract and verifies both live table IDs
+before service dependencies may compose. Snapshot and exact-receipt recovery
+transactions read the selected lineage head; allocator writes atomically
+condition-check it. The separate transition role can sign with only the lineage
+key, CAS-migrate only the exact candidate allocator source-state epoch while
+preserving sequence/Unix floor, and update only
+`lineage#cellos-dev-time-v1/head`; runtime can sign only with the response key.
+
+DynamoDB authorizes transaction subactions through the underlying item actions.
+Runtime receives `DescribeTable` on both pinned tables, lineage-table `GetItem`
+only when enclosed by `TransactGetItems`, and `ConditionCheckItem` only when
+enclosed by `TransactWriteItems`; it receives no lineage `PutItem`, `UpdateItem`,
+or `DeleteItem`. Thus runtime can verify and compare the selected head but cannot
+replace it. The mechanism remains at the `SOFTWARE_HARNESS` / `DEV_REFERENCE`
+ceiling: live AWS restore, key-disable, CAS-race, role-isolation, and outage
+evidence remains mandatory, and production rollback authority remains blocked
+by ADR-0006.
+
 ---
 
 ## Kernel (nano-kernel)

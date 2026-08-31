@@ -277,6 +277,7 @@ result from this lane may be promoted to that claim.
 ## Links
 
 - [ADR-0007: Use development-first hardware-constrained execution](./0007-development-first-hardware-constrained-execution.md) — this choice and all resulting software/live evidence remain bounded to `DEV_REFERENCE` and cannot satisfy production gates.
+- [ADR-0012: Use an external lineage table and KMS key for signed-time epochs](./0012-use-external-lineage-table-and-kms-key.md) — selects the independent allocator-incarnation/epoch authority consumed by the same manifest.
 - [Phase 5 nonce-bound signed-time plan](../../.agents/260826-1605-phase4-dev-reference-authority/phase-05-nonce-bound-signed-time-service.md) — owns the unchanged CellOS `/v1/time` contract and the upstream adapter implementation.
 - [TIME-001..008 and AC-004/005](../../.agents/260825-1726-kms-silo-production-root/spec.md) — fail-closed signed-time and protected-floor requirements.
 - [Cloudflare Roughtime usage documentation](https://developers.cloudflare.com/time-services/roughtime/usage/) — published endpoint, long-term public key, beta status, and rotation notice.

@@ -6,17 +6,24 @@
 
 - Phase 5's nonce-bound signed-time service cores remain at the
   `SOFTWARE_HARNESS` ceiling. Protocol, persistence/recovery, allocator, policy,
-  pinned-KMS, handler, manifest, production-rejection, non-deploying
-  CloudFormation/IAM, and strict Cloudflare Roughtime draft-11 provider-profile
-  contracts pass 258 signed-time and 8 production-rejection tests; official
-  vectors 001 and non-empty-path 010 match and verify. One non-retried live
-  query returned a pinned-key-authenticated version-`0x8000000b` response but
-  omitted mandatory `NONC` and signed `RADI=1`; the adapter rejected both
-  draft-11 violations.
-  Progress remains blocked on live provider interoperability, non-restorable
-  allocator lineage, artifact scripts, a named AWS DEV account/region,
-  operator-authorized deployment, and the outage/restore/rollback/security
-  evidence matrix.
+  pinned-KMS, handler, strict Cloudflare Roughtime provider profile, and
+  ADR-0012 allocator-lineage contracts pass 283 signed-time and 8
+  production-rejection tests. Manifest schema 2 pins immutable allocator and
+  external-lineage `TableId` values, separate response/lineage keys, and one
+  canonical signed epoch transition. Every snapshot/recovery read and allocator
+  write checks the exact external head; strict direct-child admission, one-shot
+  table identity, exact restored-state epoch migration and ambiguous-CAS proof,
+  transition CAS, retained dual-table/dual-key infrastructure, and
+  runtime/transition-role KMS separation fail closed under substitutions.
+  Runtime lineage-table data-plane IAM is limited to `GetItem` enclosed by
+  `TransactGetItems` and `ConditionCheckItem` enclosed by
+  `TransactWriteItems`; `DescribeTable` verifies identity, and no runtime
+  lineage mutation action is granted. No AWS mutation occurred.
+  The authenticated live Cloudflare observation still omitted mandatory `NONC`
+  and signed `RADI=1`. Progress remains blocked on live provider
+  interoperability, artifact scripts, a named AWS DEV account/region,
+  operator-authorized deployment, and live outage/restore/fork/rollback/security
+  evidence.
 
 - Phase 4's STM32/TPM authority has reached its `SOFTWARE_HARNESS` ceiling.
   The typed private-v2 protocol, authenticated profile bank, full-record
