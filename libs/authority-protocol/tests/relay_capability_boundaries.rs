@@ -74,6 +74,12 @@ fn promoted_state() -> (TestState, Challenges) {
     (state, challenges)
 }
 
+fn active_state() -> (TestState, Challenges) {
+    let (mut state, challenges) = consumed_state();
+    promote(&mut state, &commit(9, 1, 1, DIGEST));
+    (state, challenges)
+}
+
 fn assert_signing_rejected(
     mut state: TestState,
     mut challenges: Challenges,
@@ -107,6 +113,31 @@ fn assert_signing_rejected(
     assert_eq!(state.mode(), AuthorityMode::Sealed);
 }
 
+fn assert_active_tuple_rejected(generation: u64, profile_digest: [u8; 32]) {
+    let (mut state, mut challenges) = active_state();
+    grant_time(
+        &mut state,
+        &mut challenges,
+        10,
+        1,
+        TimePurpose::TlsCertificateVerify,
+        2,
+        250,
+    );
+    let request = validated(SignTls13ClientCertificateVerifyRequest {
+        context: context(12, 1, Operation::SignTls13ClientCertificateVerify),
+        transcript_hash: [4; 32],
+        relay_generation: generation,
+        active_profile_digest: profile_digest,
+        public_request_id: 44,
+    });
+    assert_eq!(
+        state.authorize_tls_signature(&request, &Clock(150)),
+        Err(AuthorityFault::InvalidState)
+    );
+    assert_eq!(state.mode(), AuthorityMode::Sealed);
+}
+
 #[test]
 fn signing_rejects_every_non_active_relay_state() {
     let mut empty = state(0, 0);
@@ -131,6 +162,12 @@ fn signing_rejects_every_non_active_relay_state() {
 
     let (promoted, promoted_challenges) = promoted_state();
     assert_signing_rejected(promoted, promoted_challenges, 10, 2);
+}
+
+#[test]
+fn signing_requires_the_exact_active_generation_and_profile() {
+    assert_active_tuple_rejected(2, DIGEST);
+    assert_active_tuple_rejected(1, [8; 32]);
 }
 
 #[test]

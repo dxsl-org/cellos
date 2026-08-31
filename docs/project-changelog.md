@@ -146,9 +146,10 @@
   recheck, and protected staging. Revision races stop before staging. Matching
   lost-response retries return only the persisted staged intent without media,
   TPM, or restaging work. New capability-boundary coverage rejects and seals TLS
-  signing in every non-active state, including promoted pre-finalize, and proves
-  exact staged-receipt consumption is single-use. RV64 no_std checks and 38
-  journal/bank, 17 validator, and 38 authority-protocol host tests pass. This
+  signing in every non-active state, including promoted pre-finalize, and
+  requires both exact generation and profile digest in `Active`; either mismatch
+  seals. Exact staged-receipt consumption is single-use. RV64 no_std checks and
+  38 journal/bank, 17 validator, and 39 authority-protocol host tests pass. This
   proves software behavior only;
   TPM NV behavior, STM32 flash atomicity, lifecycle/debug protection, isolation,
   endurance, and physical power loss
