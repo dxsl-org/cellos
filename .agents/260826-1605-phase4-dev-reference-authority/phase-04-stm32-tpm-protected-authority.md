@@ -260,7 +260,7 @@ the physical pending-key and no-side-effect rows.
 
 - [ ] Freeze typed surface, TPM handle/NV/policy map, complete record schema, and transition table.
 - [x] Host full-record envelope, exact Phase 2 successor gate, counter-exact dual-slot recovery, irreversible seal seam, and cut-point/reboot harness pass at the `SOFTWARE_HARNESS` ceiling.
-- [x] Authenticate and durably state-admit profile begin/chunk/validation requests before bank, policy, or TPM work; bind the journal-selected inactive slot and state-derived CSR handle; 44 authority-protocol host tests pass.
+- [x] Authenticate and durably state-admit profile begin/chunk/validation requests before bank, policy, or TPM work; bind the journal-selected inactive slot and state-derived CSR handle; 48 authority-protocol host tests pass.
 - [x] Resolve canonical certificate-chain transport: operator selected the reviewed clean private-v2 chunk protocol with a 12,288-byte total bound.
 - [ ] Freeze the AP request-authentication contract: the STM32 authority's
   exact session/key establishment, challenge and boot binding, authenticator
@@ -276,10 +276,12 @@ the physical pending-key and no-side-effect rows.
   states, sealing each attempt. Exact `Active` generation and profile digest are
   both mandatory; either mismatch seals. Staged receipt consumption separately
   requires exact generation, policy epoch, and profile digest; every mismatch
-  seals, exact consumption is single-use, and replay seals. Provider promotion
-  requires a verified signature plus exact equality across all 12 receipt tuple
-  fields; every independent substitution seals. Physical receipt/signing proof
-  remains open.
+  seals, exact consumption is single-use, and replay seals. Commit preparation
+  requires the same exact three-field tuple; every mismatch seals, while an
+  exact newer-sequence retry recovers the identical persisted prepared intent.
+  Provider promotion requires a verified signature plus exact equality across
+  all 12 receipt tuple fields; every independent substitution seals. Physical
+  receipt/signing proof remains open.
 
 ## Success Criteria
 
@@ -357,3 +359,10 @@ None at planning time beyond: **2026-08-26 Decision** — security red-team revi
   rejected before promotion. The focused suite passes 2/2 over 12 tuple
   substitutions plus the signature negative; the full protocol suite passes
   44/44 and RV64 no_std check passes. This is host state-machine proof only.
+- 2026-08-31 — Result: commit-preparation boundary tests independently
+  substitute generation, policy epoch, and profile digest after exact receipt
+  consumption. Each fresh authenticated mismatch returns `ProviderSplitBrain`
+  and seals. A separate lost-response case retries the exact tuple with a newer
+  sequence and recovers the identical `PreparedCommitIntent` while remaining
+  `Prepared`. The focused suite passes 4/4; the full protocol suite passes 48/48
+  and RV64 no_std check passes. This is host state-machine proof only.

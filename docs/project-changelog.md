@@ -148,12 +148,14 @@
   TPM, or restaging work. New capability-boundary coverage rejects and seals TLS
   signing in every non-active state, including promoted pre-finalize, and
   requires both exact generation and profile digest in `Active`; either mismatch
-  seals. Staged receipt consumption requires exact generation, policy epoch, and
-  profile digest; each substitution seals, exact consumption is single-use, and
-  replay seals. Provider promotion rejects a bad signature before state mutation
-  and independently binds all 12 provider receipt tuple fields; every mismatch
-  seals. RV64 no_std checks and 38 journal/bank, 17 validator, and 44
-  authority-protocol host tests pass. This proves software behavior only;
+  seals. Staged receipt consumption and commit preparation require exact
+  generation, policy epoch, and profile digest; every substitution seals. Exact
+  receipt consumption is single-use, replay seals, and an exact newer-sequence
+  commit retry recovers the identical persisted prepared intent. Provider
+  promotion rejects a bad signature before state mutation and independently
+  binds all 12 provider receipt tuple fields; every mismatch seals. RV64 no_std
+  checks and 38 journal/bank, 17 validator, and 48 authority-protocol host tests
+  pass. This proves software behavior only;
   TPM NV behavior, STM32 flash atomicity, lifecycle/debug protection, isolation,
   endurance, and physical power loss
   remain hardware-gated.
