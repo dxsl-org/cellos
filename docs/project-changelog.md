@@ -10,11 +10,13 @@
   guest's generic HTTPS connect failure: default `service-net` has no
   authenticated certificate time and cannot reach certificate verification,
   while the same output could represent an unrelated transport failure. Direct
-  clock tests cover time unavailability; duplicated handler/socket guards
-  enforce fail-closed prechecks but do not yet have dedicated direct tests. No
-  leaf certificate, clock, trust root, or runtime TLS policy changed. Positive
-  HTTPS evidence remains blocked on admitted authenticated time or a separately
-  reviewed test-only provider. The AArch64 semihosting acceptance-ledger
+  clock tests cover time unavailability; new direct handler/socket preflight
+  tests pin zero-capability and `InvalidCertificate` denial before `make_tcp`
+  and record-buffer allocation. All 26 default host tests pass, along with
+  default and verified-TLS RISC-V builds. No leaf certificate, clock, trust
+  root, or runtime TLS policy changed. Positive HTTPS evidence remains blocked
+  on admitted authenticated time or a separately reviewed test-only provider.
+  The AArch64 semihosting acceptance-ledger
   blocker remains open until its governed resolution-evidence contract passes.
 
 - Phase 5's nonce-bound signed-time service remains at the `SOFTWARE_HARNESS`

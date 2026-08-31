@@ -113,9 +113,10 @@ those remain fail-closed production gates.
   failure: default `service-net` has no authenticated certificate time, so the
   request cannot reach certificate verification, while the same output could
   also represent an unrelated transport failure. Direct clock tests prove
-  authenticated time remains unavailable; fail-closed handler/socket guards
-  enforce the duplicated pre-TCP/pre-handshake checks but do not yet have
-  dedicated direct tests. Positive HTTPS requires admitted authenticated time
+  authenticated time remains unavailable. Dedicated handler and socket
+  preflight tests now pin the zero-capability and `InvalidCertificate` mappings;
+  their production call sites invoke those preflights before `make_tcp` and
+  record-buffer allocation. Positive HTTPS requires admitted authenticated time
   or a separately approved, explicitly test-only clock/provider harness that
   cannot weaken the default image.
 
