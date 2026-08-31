@@ -21,13 +21,14 @@ tier: thinking
 
 ## Overview
 
-Build a self-contained DEV_REFERENCE signed-time deployment in one named AWS region: Regional API Gateway `POST /v1/time` → one Lambda → one DynamoDB allocator and one AWS KMS P-256 signing key. The service stops rather than signing through clock uncertainty, state conflict, dependency outage, or regional outage; it has no second region, failover source, cached lease, or availability exception.
+Build a self-contained DEV_REFERENCE signed-time deployment in one named AWS region: Regional API Gateway `POST /v1/time` → one Lambda → one DynamoDB allocator and one AWS KMS P-256 signing key. Every new allocation performs one fresh nonce-bound UDP exchange with the manifest-pinned Cloudflare Roughtime draft-11 provider before policy admission. The service stops rather than signing through clock uncertainty, state conflict, dependency outage, or regional outage; it has no retry, second address/protocol/source/region, cached lease, holdover, or availability exception.
 
 ## Key Insights
 
 - AWS KMS authenticates this project-operated source; it does not prove that an unsigned Lambda host clock is correct.
 - DynamoDB serializes allocation but is not rollback-proof. The STM32 protected floors in Phase 6 must reject a freshly signed response from restored old server state.
 - A durable idempotency receipt may reproduce the identical committed payload after an ambiguous Lambda result; it is not a time cache and never extends expiry.
+- The upstream trust root is the manifest-pinned Cloudflare Roughtime long-term key, not DNS, UDP reachability, or the Lambda host clock. Runtime A/AAAA lookup only locates the one configured endpoint.
 
 ## Requirements
 
@@ -44,13 +45,13 @@ Build a self-contained DEV_REFERENCE signed-time deployment in one named AWS reg
 
 ## Architecture
 
-`STM32 signed request → Regional API Gateway → Lambda canonical verifier → fresh single upstream clock sample → DynamoDB CAS+receipt → AWS KMS Sign → STM32 protected verifier`.
+`STM32 signed request → Regional API Gateway → Lambda canonical verifier → one fresh Cloudflare Roughtime UDP exchange → clock-policy admission → DynamoDB CAS+receipt → AWS KMS Sign → STM32 protected verifier`.
 
-CloudFormation owns exactly one API, Lambda/version alias, execution role, log group, `ECC_NIST_P256` `SIGN_VERIFY` key, and deletion-protected/PITR-enabled table in the operator-named region. The Lambda role receives only log writes, `dynamodb:TransactWriteItems`/`TransactGetItems` on that table, `kms:GetPublicKey`, and `kms:Sign` on that key; deployment principals can administer but cannot sign. Authority registrations are table records with no public administration route. The reviewed manifest pins protocol/source ID, region, endpoint/SPKI, source epoch, key ARN/key ID, KMS DER-SPKI SHA-256, algorithm, upstream identity, maximum sample age, and maximum uncertainty.
+CloudFormation owns exactly one API, Lambda/version alias, execution role, log group, `ECC_NIST_P256` `SIGN_VERIFY` key, and deletion-protected/PITR-enabled table in the operator-named region. The Lambda role receives only log writes, `dynamodb:TransactWriteItems`/`TransactGetItems` on that table, `kms:GetPublicKey`, and `kms:Sign` on that key; deployment principals can administer but cannot sign. Authority registrations are table records with no public administration route. The reviewed manifest retains the external HTTPS endpoint/SPKI and pins the upstream as UDP-only Roughtime draft-11 at `roughtime.cloudflare.com:2003`, key `0GD7c3yP8xEc4Zl2zeuN2SlLvDVVocjsPSL8/Rl/7zg=`, version `0x8000000b`, one 1,012-byte request message/1,024-byte packet, 2,000 ms timeout, and exact fail-closed policy bounds.
 
 ## Assumptions
 
-- **Claim:** The operator-named upstream exposes an authenticated time interval and freshness usable per request without holdover. **Confidence:** low. **How to verify:** Phase 1 records the exact protocol/endpoint; exercise expiry, uncertainty, and outage before deployment. If it exposes only host time or cannot report uncertainty, stop.
+- **Observed compatibility gate:** one post-correction, non-retried query reached `roughtime.cloudflare.com:2003` and returned a 352-byte response whose pinned-key delegation, signed `SREP`, nonce Merkle proof, version `0x8000000b`, and delegation window authenticated. The response omitted draft-11's mandatory root `NONC` and signed `RADI=1`, below draft-11's mandatory three-second minimum, so the adapter rejected it. **Conclusion:** official-vector software compatibility is proven; live endpoint interoperability is not and deployment remains blocked.
 - **Claim:** The dedicated DEV account permits Regional API Gateway, Lambda, DynamoDB PITR/deletion protection, and asymmetric KMS keys in one region. **Confidence:** medium. **How to verify:** operator runs read-only service-quota and region-availability checks with the approved profile.
 - **Claim:** API Gateway exposes a stable TLS identity suitable for the Phase 1 reviewed pin policy. **Confidence:** medium. **How to verify:** capture the deployed certificate/SPKI chain and prove the authority's configured pin behavior before admission.
 
@@ -63,7 +64,11 @@ CloudFormation owns exactly one API, Lambda/version alias, execution role, log g
 - Create: `tools/dev-reference-signed-time/src/kms_signer.py`
 - Create: `tools/dev-reference-signed-time/src/request_protocol.py`
 - Create: `tools/dev-reference-signed-time/src/kms_public_key.py`
-- Create: `tools/dev-reference-signed-time/src/clock.py`
+- Create: `tools/dev-reference-signed-time/src/roughtime_codec.py`
+- Create: `tools/dev-reference-signed-time/src/roughtime_config.py`
+- Create: `tools/dev-reference-signed-time/src/roughtime_verify.py`
+- Create: `tools/dev-reference-signed-time/src/roughtime_adapter.py`
+- Create: focused Roughtime codec, verification-vector, UDP transport, and adapter tests under `tools/dev-reference-signed-time/tests/`
 - Create: `tools/dev-reference-signed-time/src/clock_policy.py`
 - Create: `tools/dev-reference-signed-time/src/manifest.py`
 - Create: `tools/dev-reference-signed-time/src/allocation.py`
@@ -88,7 +93,7 @@ CloudFormation owns exactly one API, Lambda/version alias, execution role, log g
 ## Implementation Steps
 
 1. Freeze the numeric CBOR schema, size limits, Ed25519 request verification, KMS digest/signature rules, strict decoder, and cross-language golden vectors before provisioning AWS resources.
-2. Implement the single configured clock adapter as a fresh interval verdict; expose no Lambda host-clock fallback, holdover, alternate source, or test override in the deployed handler.
+2. Implement the exact configured clock adapter: construct one 1,024-byte request packet containing the exact 1,012-byte `VER`/`NONC`/`SRV`/`ZZZZ` message; resolve A/AAAA once, select one address, send once, receive once with truncation detection and a 2,000 ms timeout; strictly verify the Cloudflare draft-11 profile's root version/nonce, pinned-key delegation with the `delegation signature--\0` context, signed `SREP`, nonce-leaf Merkle inclusion, `MIDP`, `RADI >= 3`, and delegation window. Merkle folding follows Cloudflare `protocol.go` and official vector 010—bit 0 `current||sibling`, bit 1 `sibling||current`—rather than the opposite ordering written in IETF draft-11 section 6.3.1. Conservatively map `(MIDP-RADI, MIDP+RADI)` to policy input `[MIDP-RADI+1, MIDP+RADI-1]`, retain uncertainty `2*RADI`, measure age with elapsed monotonic time, set one-shot validity to `MIDP+RADI`, and reject every arithmetic or policy failure. Expose no retry, TCP, fallback, cache, holdover, alternate source, or test bypass.
 3. Implement the table keys `source#cellos-dev-time-v1/state`, `authority#<authority-id>/registration`, and `request#<authority-id>/<request-id>`; condition-check registration/revocation and source epoch in the allocator transaction.
 4. Implement ambiguous-outcome recovery: read only the exact receipt, compare its request digest, and sign its immutable labels; otherwise return failure without advancing again.
 5. Add CloudFormation least-privilege policies, key policy, alarms, log retention, PITR, deletion protection, immutable published-version alias routing only, four separated deploy/code-sign/IAM/key-policy roles each under a permissions boundary denying function/role/key-policy mutation, and outputs for endpoint, region, table, key ARN, and public-key digest.
@@ -117,7 +122,7 @@ CloudFormation owns exactly one API, Lambda/version alias, execution role, log g
 - [x] Implement stateless clock-observation admission policy.
 - [x] Compose receipt-first signed-time handler orchestration with injected trusted boundaries.
 - [x] Bind every store response to the parsed request and snapshot epoch before KMS.
-- [ ] Implement the configured authenticated clock gate — blocked: the selected custom signed-HTTPS provider still lacks its endpoint, response schema, signature/canonicalization contract, key/SPKI pin, and freshness semantics.
+- [x] Implement the configured authenticated clock gate as the strict, pinned Cloudflare Roughtime draft-11 provider-profile UDP adapter; generated-key tests plus official Apache-2.0 vectors 001 and non-empty-path 010 cover exact requests and authenticated response chains. One authenticated live response violated mandatory `NONC`/`RADI` rules, so live interoperability remains blocked.
 - [x] Freeze strict canonical DEV_REFERENCE deployment-manifest schema.
 - [x] Freeze the non-deploying CloudFormation/IAM intended-resource harness.
 - [x] Review static IAM/key policies and DEV production-rejection handoff.
@@ -125,11 +130,8 @@ CloudFormation owns exactly one API, Lambda/version alias, execution role, log g
   advanced past a protected device floor and alternating same-epoch forks —
   blocked on selection of the non-restorable epoch/checkpoint authority and
   its authenticated transition contract.
-- [ ] Implement `scripts/package.sh` — blocked until the exact authenticated
-  clock adapter and deployable handler-artifact composition are frozen.
-- [ ] Implement `scripts/deploy.sh` — blocked until the provider contract,
-  dedicated AWS account/region, immutable artifact/signing-profile inputs, and
-  operator authorization exist.
+- [ ] Implement `scripts/package.sh` — blocked until deployable handler-artifact composition and the operator-approved AWS inputs are frozen.
+- [ ] Implement `scripts/deploy.sh` — blocked until the dedicated AWS account/region, immutable artifact/signing-profile inputs, network egress review, and operator authorization exist.
 - [ ] Implement `scripts/rollback.sh` and
   `scripts/capture-live-evidence.sh` — blocked until an authorized live stack,
   immutable version/alias identifiers, and the reviewed evidence schema exist.
@@ -139,6 +141,7 @@ CloudFormation owns exactly one API, Lambda/version alias, execution role, log g
 ## Success Criteria
 
 - [x] Deterministic vectors round-trip byte-for-byte and every malformed/binding substitution returns no signed fact.
+- [x] The software clock adapter constructs and verifies only the exact pinned UDP Cloudflare draft-11 provider profile, maps checked `MIDP`/`RADI` bounds through the existing admission policy, and exposes no retry, TCP, alternate provider, cache, holdover, or host-clock fallback.
 - [ ] Concurrent live requests allocate one strict sequence per committed receipt; conflicts, ambiguous writes, old-state restore, and clock uncertainty never allocate an unrecorded signature.
 - [ ] Every response binds the exact request tuple and expires in at most 60 seconds; no response crosses expiry or claims a second source/region/key.
 - [ ] Live endpoint, upstream, DynamoDB, and KMS outages stop signing, and an authorized version rollback is evidenced without state rollback or failover.
@@ -148,8 +151,8 @@ CloudFormation owns exactly one API, Lambda/version alias, execution role, log g
 
 ## Hard Stops
 
-- Stop before deployment if the exact upstream source/provenance, uncertainty, freshness, endpoint pin, AWS account/region, or operator authorization is absent.
-- Stop on any design that signs Lambda host time, adds a cache/holdover, retries another source/region/key/table, permits a human signer, or cannot distinguish exact-receipt recovery from a new allocation.
+- Stop before deployment if the pinned Cloudflare key/version/UDP contract, outbound UDP reachability, admitted uncertainty, freshness, endpoint pin, AWS account/region, or operator authorization is absent. A provider key change requires source review and source-epoch advance, never dual acceptance.
+- Stop on any design that signs Lambda host time, discovers a key through DNS, adds TCP or address retry, adds a cache/holdover, retries another source/region/key/table, permits a human signer, or cannot distinguish exact-receipt recovery from a new allocation.
 - Stop if production packaging can accept any endpoint, anchor, key, manifest, feature, or artifact from this tree.
 - Stop if any deployment principal retains direct or indirect signing reachability, if API routing can reach mutable function code, or if restored/forked allocator state can sign without strict source-epoch rotation.
 
@@ -188,14 +191,15 @@ Phase 6 consumes only the reviewed endpoint/key/source manifest and frozen vecto
 - 2026-08-31 — Handler response-binding fix complete: before any KMS call, both recovery and fresh-commit exact `UnsignedResponse` values must byte-match the parsed request's device, authority, boot epoch, request ID, purpose, and nonce and must match the transactional snapshot's source epoch. Exact dataclass substitutions for every field fail with one stable handler error; retry mismatches never reach floor/sample/commit, fresh mismatches stop immediately after the single commit, and neither path reaches signing or encoding. No fallback or alternate response path was added. Focused and full tests pass 230/230 and final review found no remaining scoped issue.
 - 2026-08-31 — Production-rejection handoff review complete without modifying the Phase 2-owned checker: the reviewed manifest module exports one immutable exact marker set covering `DEV_REFERENCE`, `SOFTWARE_HARNESS`, both AWS DEV signed-time names, and `cellos-dev-time-v1`; a focused test freezes that contract. Phase 2 subsequently consumed `SOFTWARE_HARNESS` into its sole checker, whose feature-name, artifact-content, and split-chunk matrices now reject all handed-off markers while clean candidates remain blocked by ADR-0006; checker tests pass 8/8. The authenticated clock adapter is explicitly blocked on the missing custom provider contract, but that blocker no longer stops independent software work. The signed-time suite passes 231/231.
 - 2026-08-31 — Final signer-boundary fix complete: after the exact `SignedResponse` container check and before encoding, every inherited unsigned field must retain both the exact runtime type and value of the already validated `UnsignedResponse`; only the signature may be added. Value substitutions and equality-compatible type substitutions (`float` for `int`, `bytearray` for `bytes`, and a `str` subclass) across all 11 fields fail with the stable handler error before the encoder is called on both recovery and fresh paths. Focused tests pass 5/5, all handler tests pass 19/19, the full signed-time suite passes 233/233, and final review found no remaining scoped issue.
-- 2026-08-31 — Checkpoint: the implemented provider-independent Phase 5
-  software cores pass the full signed-time suite 233/233 and production
-  rejection 8/8. Phase 5 is blocked: the selected custom signed-HTTPS clock
-  provider lacks its endpoint, canonical response/signature contract, key/SPKI
-  pin, freshness semantics, and non-restorable allocator-lineage authority;
-  the planned package/deploy/rollback/evidence scripts therefore do not exist.
-  No dedicated AWS DEV account/region or irreversible deployment authorization
-  is recorded, and no live outage, restore, rollback, principal-reachability,
-  or allocator-fork evidence exists. The CloudFormation graph remains
-  intentionally marked non-deployable; host evidence satisfies no live-service
+- 2026-08-31 — Pre-ADR checkpoint: the provider-independent Phase 5 software
+  cores passed the full signed-time suite 233/233 and production rejection 8/8.
+  The then-planned custom signed-HTTPS provider had no implementable contract.
+  ADR-0011 subsequently superseded that provider blocker with exact Cloudflare
+  Roughtime draft-11 pins. The non-restorable allocator-lineage authority and
+  package/deploy/rollback/evidence scripts remain open. No dedicated AWS DEV
+  account/region or irreversible deployment authorization is recorded, and no
+  live outage, restore, rollback, principal-reachability, allocator-fork, or
+  positive provider-endpoint evidence exists. The CloudFormation graph remains
+  intentionally non-deployable; host evidence satisfies no live-service
   criterion.
+- 2026-08-31 — Provider decision and software implementation: ADR-0011 selected Cloudflare's published Roughtime draft-11 implementation profile as the sole upstream. The manifest fail-closed pins UDP, `roughtime.cloudflare.com:2003`, long-term key `0GD7c3yP8xEc4Zl2zeuN2SlLvDVVocjsPSL8/Rl/7zg=`, version `0x8000000b`, 2,000 ms timeout, 1,012-byte request message, and 1,024-byte packet limit while retaining the external CellOS HTTPS endpoint/SPKI. Focused modules implement the bounded codec, exact request, delegation/SREP/nonce-Merkle verification, one-address one-send one-receive transport, checked inner-interval mapping, elapsed-monotonic age, and existing admission policy. Official Apache-2.0 vectors 001 and non-empty-path 010 pin the provider's Merkle ordering, which is opposite the IETF draft-11 section 6.3.1 prose; generic draft-11 interoperability is not claimed. Focused Roughtime tests pass 24/24 and the full signed-time suite passes 258/258. One post-correction, non-retried live query returned a pinned-key-authenticated 352-byte version-`0x8000000b` response but omitted mandatory root `NONC` and signed `RADI=1`; the strict adapter rejected both violations. This proves endpoint/key reachability for that observation, not provider interoperability or production suitability.

@@ -4,15 +4,18 @@
 
 ## [Unreleased] Development-first hardware-constrained execution
 
-- Phase 5's nonce-bound signed-time service cores have reached their current
-  `SOFTWARE_HARNESS` ceiling. The implemented protocol, persistence/recovery,
-  allocator, policy, pinned-KMS, handler, manifest, production-rejection, and
-  non-deploying CloudFormation/IAM contracts pass 233 signed-time and 8
-  production-rejection tests. The allocator-lineage contract and planned
-  package/deploy/rollback/evidence scripts remain open. Progress is blocked on
-  the authenticated clock and non-restorable epoch/checkpoint authority
-  contracts, a named AWS DEV account/region, operator-authorized deployment,
-  real artifact composition, and the live outage/restore/rollback/security
+- Phase 5's nonce-bound signed-time service cores remain at the
+  `SOFTWARE_HARNESS` ceiling. Protocol, persistence/recovery, allocator, policy,
+  pinned-KMS, handler, manifest, production-rejection, non-deploying
+  CloudFormation/IAM, and strict Cloudflare Roughtime draft-11 provider-profile
+  contracts pass 258 signed-time and 8 production-rejection tests; official
+  vectors 001 and non-empty-path 010 match and verify. One non-retried live
+  query returned a pinned-key-authenticated version-`0x8000000b` response but
+  omitted mandatory `NONC` and signed `RADI=1`; the adapter rejected both
+  draft-11 violations.
+  Progress remains blocked on live provider interoperability, non-restorable
+  allocator lineage, artifact scripts, a named AWS DEV account/region,
+  operator-authorized deployment, and the outage/restore/rollback/security
   evidence matrix.
 
 - Phase 4's STM32/TPM authority has reached its `SOFTWARE_HARNESS` ceiling.
@@ -59,13 +62,15 @@
   non-revoked registration tuple and configured source epoch. The KMS key loader
   makes one exact `GetPublicKey` call and admits only the manifest key ID,
   P-256/`SIGN_VERIFY`/`ECDSA_SHA_256` contract and constant-time SHA-256 DER-SPKI
-  pin. A stateless clock policy now binds upstream identity/source epoch and
+  pin. The stateless clock policy binds upstream identity/source epoch and
   rejects stale, over-uncertain, inconsistent, expired, or protected-floor-
-  external observations without ambient time, cache, holdover, or fallback. It
-  does not authenticate observations; the exact upstream adapter remains
-  unimplemented. A strict canonical DEV_REFERENCE manifest schema now pins the
-  region, HTTPS endpoint/SPKI, source epoch, KMS ARN/key digest, upstream
-  identity, and clock bounds without checking in any selected manifest instance.
+  external observations without ambient time, cache, holdover, or fallback.
+  The strict adapter now pins Cloudflare's draft-11 provider profile, verifies
+  delegation, signed `SREP`, provider-vector nonce Merkle inclusion, version
+  and interval bounds, and uses one UDP send/receive with no retry. The
+  canonical DEV_REFERENCE manifest pins
+  that provider alongside region, HTTPS endpoint/SPKI, source epoch, KMS
+  ARN/key digest, and clock bounds without checking in a selected instance.
   It pre-bounds every variable field and rejects noncanonical JSON, overlength
   DNS names, and invalid partition/region/account/KMS-key combinations. Manifest
   tests pass 42/42 and final review found no remaining scoped issue. Request

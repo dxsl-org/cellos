@@ -337,10 +337,10 @@ None at planning time beyond: **2026-08-26 Decision** — security red-team revi
   confidential and integrity-protected path from the STM32 authority to the
   isolated KMS. UART/carrier/DMA are untrusted; the exact loader has neither a
   secret nor an attested ephemeral key, so plaintext is cloneable and encryption
-  to an unauthenticated key permits substitution. ADR-0011 remains unsaved and
-  `AuthorityClient` remains blocked until exact hardware demonstrates a secure
-  handoff. Persistent AP keys, generic signers, and speculative crypto are not
-  accepted fallbacks.
+  to an unauthenticated key permits substitution. The loader-handoff capability
+  ADR remains unsaved, and `AuthorityClient` remains blocked until exact hardware
+  demonstrates a secure handoff. Persistent AP keys, generic signers, and
+  speculative crypto are not accepted fallbacks.
 - 2026-08-31 — Result: focused authority capability-boundary tests now exercise
   every non-active relay state, including provider-promoted pre-finalize, and
   require TLS-sign authorization to return `InvalidState` and seal. Separate
