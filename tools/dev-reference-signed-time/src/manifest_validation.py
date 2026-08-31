@@ -7,9 +7,6 @@ from urllib.parse import urlsplit
 MAX_AWS_REGION_CHARS = 32
 MAX_ENDPOINT_URL_CHARS = 270
 MAX_KMS_KEY_ID_CHARS = 105
-# With every other field at its valid maximum, 263 astral scalars encode to
-# 4085 bytes under ensure_ascii; one more would cross the 4096-byte limit.
-MAX_UPSTREAM_IDENTITY_CHARS = 263
 
 _DNS_HOST = re.compile(
     r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?"
@@ -36,7 +33,6 @@ def bounded_strings_are_valid(
     aws_region: Any,
     endpoint_url: Any,
     kms_key_id: Any,
-    upstream_identity: Any,
 ) -> bool:
     return (
         type(aws_region) is str
@@ -45,8 +41,6 @@ def bounded_strings_are_valid(
         and 0 < len(endpoint_url) <= MAX_ENDPOINT_URL_CHARS
         and type(kms_key_id) is str
         and 0 < len(kms_key_id) <= MAX_KMS_KEY_ID_CHARS
-        and type(upstream_identity) is str
-        and 0 < len(upstream_identity) <= MAX_UPSTREAM_IDENTITY_CHARS
     )
 
 

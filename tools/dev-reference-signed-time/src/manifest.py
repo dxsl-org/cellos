@@ -1,5 +1,6 @@
 """Strict canonical DEV_REFERENCE signed-time manifest schema."""
 
+from base64 import b64decode, b64encode
 from dataclasses import dataclass, fields
 import json
 import re
@@ -7,6 +8,11 @@ from typing import Any, NoReturn
 
 from clock_policy import ClockPolicy
 from protocol_models import MAX_UINT64, PROTOCOL_VERSION, SIGNING_ALGORITHM, SOURCE_ID
+from roughtime_config import (
+    PROVIDER_HOST, PROVIDER_PROTOCOL, PROVIDER_PUBLIC_KEY, PROVIDER_TIMEOUT_MILLISECONDS,
+    PROVIDER_TRANSPORT, PROVIDER_PORT, PROVIDER_VERSION, REQUEST_MESSAGE_BYTES,
+    MAX_PACKET_BYTES, RoughtimeProviderConfig,
+)
 import manifest_validation as validation
 
 MAX_MANIFEST_BYTES = 4096
@@ -44,14 +50,33 @@ class SignedTimeManifest:
     upstream_identity: str
     max_sample_age_seconds: int
     max_uncertainty_seconds: int
+    upstream_protocol: str
+    upstream_transport: str
+    upstream_host: str
+    upstream_port: int
+    upstream_public_key: bytes
+    upstream_version: int
+    upstream_timeout_milliseconds: int
+    upstream_request_message_bytes: int
+    upstream_max_packet_bytes: int
 _FIELD_NAMES = frozenset(field.name for field in fields(SignedTimeManifest))
 _UINT_FIELDS = ("source_epoch", "max_sample_age_seconds", "max_uncertainty_seconds")
 _CONSTANTS = {
     "schema_version": SCHEMA_VERSION, "classification": CLASSIFICATION,
     "protocol_version": PROTOCOL_VERSION, "source_id": SOURCE_ID,
     "signing_algorithm": SIGNING_ALGORITHM,
+    "upstream_identity": PROVIDER_HOST,
+    "upstream_protocol": PROVIDER_PROTOCOL,
+    "upstream_transport": PROVIDER_TRANSPORT,
+    "upstream_host": PROVIDER_HOST,
+    "upstream_port": PROVIDER_PORT,
+    "upstream_version": PROVIDER_VERSION,
+    "upstream_timeout_milliseconds": PROVIDER_TIMEOUT_MILLISECONDS,
+    "upstream_request_message_bytes": REQUEST_MESSAGE_BYTES,
+    "upstream_max_packet_bytes": MAX_PACKET_BYTES,
 }
 _DIGEST_FIELDS = ("endpoint_spki_sha256", "kms_public_key_der_sha256")
+_KEY_FIELDS = ("upstream_public_key",)
 def _validate_manifest(manifest: Any) -> None:
     if type(manifest) is not SignedTimeManifest:
         _fail()
@@ -63,15 +88,16 @@ def _validate_manifest(manifest: Any) -> None:
         value = getattr(manifest, name)
         if type(value) is not int or not 0 <= value <= MAX_UINT64:
             _fail()
-    for name in _DIGEST_FIELDS:
+    for name in _DIGEST_FIELDS + _KEY_FIELDS:
         value = getattr(manifest, name)
         if type(value) is not bytes or len(value) != 32:
             _fail()
+    if manifest.upstream_public_key != PROVIDER_PUBLIC_KEY:
+        _fail()
     if not validation.bounded_strings_are_valid(
         manifest.aws_region,
         manifest.endpoint_url,
         manifest.kms_key_id,
-        manifest.upstream_identity,
     ):
         _fail()
     if not validation.endpoint_is_valid(manifest.endpoint_url):
@@ -82,6 +108,8 @@ def _as_json_object(manifest: SignedTimeManifest) -> dict[str, Any]:
     result = {field.name: getattr(manifest, field.name) for field in fields(manifest)}
     for name in _DIGEST_FIELDS:
         result[name] = result[name].hex()
+    for name in _KEY_FIELDS:
+        result[name] = b64encode(result[name]).decode("ascii")
     return result
 def encode_manifest(manifest: SignedTimeManifest) -> bytes:
     """Encode one validated manifest as its sole canonical JSON representation."""
@@ -111,6 +139,21 @@ def _from_json_object(value: Any) -> SignedTimeManifest:
         if type(digest) is not str or _HEX_32(digest) is None:
             _fail()
         converted[name] = bytes.fromhex(digest)
+    for name in _KEY_FIELDS:
+        encoded = converted[name]
+        if type(encoded) is not str:
+            _fail()
+        failed = False
+        try:
+            decoded = b64decode(encoded, validate=True)
+        except ValueError:
+            failed = True
+            decoded = b""
+        if failed:
+            _fail()
+        if b64encode(decoded).decode("ascii") != encoded:
+            _fail()
+        converted[name] = decoded
     return SignedTimeManifest(**converted)
 def decode_manifest(data: bytes) -> SignedTimeManifest:
     """Decode only bounded UTF-8 bytes already in exact canonical JSON form."""
@@ -144,3 +187,12 @@ def derive_kms_key_pins(manifest: SignedTimeManifest) -> tuple[str, bytes]:
     """Return the exact KMS key ARN and DER-SPKI SHA-256 pin."""
     _validate_manifest(manifest)
     return manifest.kms_key_id, manifest.kms_public_key_der_sha256
+def derive_roughtime_config(manifest: SignedTimeManifest) -> RoughtimeProviderConfig:
+    """Derive the sole pinned UDP provider configuration without I/O."""
+    _validate_manifest(manifest)
+    return RoughtimeProviderConfig(*(getattr(manifest, name) for name in (
+        "upstream_protocol", "upstream_transport", "upstream_host",
+        "upstream_port", "upstream_public_key", "upstream_version",
+        "upstream_timeout_milliseconds", "upstream_request_message_bytes",
+        "upstream_max_packet_bytes",
+    )))

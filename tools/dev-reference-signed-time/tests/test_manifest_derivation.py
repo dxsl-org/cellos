@@ -9,9 +9,11 @@ import path_bootstrap
 from clock_policy import ClockPolicy
 from manifest import (
     ManifestError, PRODUCTION_REJECTION_MARKERS, decode_manifest,
-    derive_clock_policy, derive_kms_key_pins, encode_manifest,
+    derive_clock_policy, derive_kms_key_pins, derive_roughtime_config,
+    encode_manifest,
 )
 from manifest_test_support import GOLDEN, KMS_ARN, KMS_DIGEST, valid_manifest
+from roughtime_config import provider_config
 
 
 class ManifestDerivationTests(unittest.TestCase):
@@ -21,7 +23,7 @@ class ManifestDerivationTests(unittest.TestCase):
         self.assertEqual(
             policy,
             ClockPolicy(
-                upstream_identity="authenticated-clock.example.com",
+                upstream_identity="roughtime.cloudflare.com",
                 source_epoch=7,
                 max_sample_age_seconds=5,
                 max_uncertainty_seconds=2,
@@ -34,6 +36,11 @@ class ManifestDerivationTests(unittest.TestCase):
         self.assertEqual(digest, KMS_DIGEST)
         self.assertIs(type(key_id), str)
         self.assertIs(type(digest), bytes)
+
+    def test_roughtime_config_derives_every_exact_provider_pin(self):
+        self.assertEqual(
+            derive_roughtime_config(valid_manifest()), provider_config(),
+        )
 
     def test_production_rejection_handoff_is_exact_and_immutable(self):
         self.assertIs(type(PRODUCTION_REJECTION_MARKERS), frozenset)
@@ -50,7 +57,9 @@ class ManifestDerivationTests(unittest.TestCase):
 
     def test_derivations_revalidate_the_manifest(self):
         invalid = replace(valid_manifest(), source_epoch=True)
-        for helper in (derive_clock_policy, derive_kms_key_pins):
+        for helper in (
+            derive_clock_policy, derive_kms_key_pins, derive_roughtime_config,
+        ):
             with self.subTest(helper=helper.__name__):
                 with self.assertRaises(ManifestError):
                     helper(invalid)
@@ -67,6 +76,9 @@ class ManifestDerivationTests(unittest.TestCase):
             self.assertEqual(encode_manifest(manifest), GOLDEN)
             self.assertIsInstance(derive_clock_policy(manifest), ClockPolicy)
             self.assertEqual(derive_kms_key_pins(manifest)[0], KMS_ARN)
+            self.assertEqual(
+                derive_roughtime_config(manifest), provider_config(),
+            )
 
     def test_all_failures_have_one_value_free_detail_and_no_exception_chain(self):
         failures = (

@@ -59,8 +59,8 @@ class ManifestCanonicalTests(unittest.TestCase):
         variants = (
             GOLDEN + b"x",
             GOLDEN.replace(
-                b"authenticated-clock.example.com",
-                "authénticated-clock.example.com".encode("utf-8"),
+                b"roughtime.cloudflare.com",
+                "roughtime.cloudflaré.com".encode("utf-8"),
             ),
             b"\xef\xbb\xbf" + GOLDEN,
             GOLDEN[:-1] + b"\xff",
@@ -86,11 +86,8 @@ class ManifestCanonicalTests(unittest.TestCase):
         for candidate in candidates:
             with self.subTest(value=repr(candidate)):
                 self.assert_rejected(candidate)
-    def test_oversized_input_and_oversized_encoding_are_rejected(self):
+    def test_oversized_input_is_rejected(self):
         self.assert_rejected(b" " * (MAX_MANIFEST_BYTES + 1))
-        huge = valid_manifest(upstream_identity="x" * MAX_MANIFEST_BYTES)
-        with self.assertRaises(ManifestError):
-            encode_manifest(huge)
 
     @staticmethod
     def canonical(value):

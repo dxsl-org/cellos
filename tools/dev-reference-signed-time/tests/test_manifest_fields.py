@@ -1,17 +1,19 @@
 import json
 import unittest
-from dataclasses import FrozenInstanceError, fields, replace
+from dataclasses import FrozenInstanceError, fields
 from unittest.mock import patch
 
 import path_bootstrap
-from manifest import ManifestError, SignedTimeManifest, decode_manifest, encode_manifest
-from manifest_test_support import GOLDEN, KMS_UUID, kms_arn, valid_manifest
+from manifest import (
+    MAX_MANIFEST_BYTES, ManifestError, SignedTimeManifest,
+    decode_manifest, encode_manifest,
+)
+from manifest_test_support import GOLDEN, valid_manifest
 from protocol_models import MAX_UINT64
 from manifest_validation import (
     MAX_AWS_REGION_CHARS,
     MAX_ENDPOINT_URL_CHARS,
     MAX_KMS_KEY_ID_CHARS,
-    MAX_UPSTREAM_IDENTITY_CHARS,
 )
 
 
@@ -41,6 +43,15 @@ class ManifestFieldTests(unittest.TestCase):
             "protocol_version": (2, True, IntChild(1)),
             "source_id": ("other", "", StrChild("cellos-dev-time-v1")),
             "signing_algorithm": ("RSA", "", StrChild("ECDSA_SHA_256")),
+            "upstream_identity": ("other", "", StrChild("roughtime.cloudflare.com")),
+            "upstream_protocol": ("roughtime", "", StrChild("roughtime-draft-11")),
+            "upstream_transport": ("tcp", "", StrChild("udp")),
+            "upstream_host": ("example.com", "", StrChild("roughtime.cloudflare.com")),
+            "upstream_port": (2004, True, IntChild(2003)),
+            "upstream_version": (1, True, IntChild(0x8000000B)),
+            "upstream_timeout_milliseconds": (1, True, IntChild(2000)),
+            "upstream_request_message_bytes": (512, True, IntChild(1012)),
+            "upstream_max_packet_bytes": (2048, True, IntChild(1024)),
         }
         for field, values in cases.items():
             for value in values:
@@ -71,10 +82,15 @@ class ManifestFieldTests(unittest.TestCase):
                         value,
                     )
 
-    def test_both_binary_digests_require_exact_bytes_of_length_32(self):
-        for name in ("endpoint_spki_sha256", "kms_public_key_der_sha256"):
+    def test_every_binary_pin_requires_exact_bytes_of_length_32(self):
+        for name in (
+            "endpoint_spki_sha256", "kms_public_key_der_sha256",
+            "upstream_public_key",
+        ):
             bad = (b"", b"x" * 31, b"x" * 33, BytesChild(b"x" * 32),
                    bytearray(b"x" * 32), "11" * 32, None)
+            if name == "upstream_public_key":
+                bad += (b"x" * 32,)
             for value in bad:
                 with self.subTest(field=name, value=repr(value)):
                     self.assert_encode_rejected(**{name: value})
@@ -90,22 +106,27 @@ class ManifestFieldTests(unittest.TestCase):
                     with self.assertRaises(ManifestError):
                         decode_manifest(self.canonical(candidate))
 
-    def test_region_and_upstream_identity_require_nonempty_exact_strings(self):
-        for name in ("aws_region", "upstream_identity"):
-            original = getattr(valid_manifest(), name)
-            for value in ("", StrChild(original), b"value", None, True):
-                with self.subTest(field=name, value=repr(value)):
-                    self.assert_encode_rejected(**{name: value})
+    def test_json_provider_key_requires_exact_canonical_base64(self):
+        value = json.loads(GOLDEN)
+        valid = value["upstream_public_key"]
+        for key in (valid[:-1], valid + "=", valid[:-2] + "==", "!" * 44, 1):
+            with self.subTest(key=repr(key)):
+                candidate = dict(value)
+                candidate["upstream_public_key"] = key
+                with self.assertRaises(ManifestError):
+                    decode_manifest(self.canonical(candidate))
+
+    def test_region_requires_nonempty_exact_string(self):
+        original = valid_manifest().aws_region
+        for value in ("", StrChild(original), b"value", None, True):
+            with self.subTest(value=repr(value)):
+                self.assert_encode_rejected(aws_region=value)
 
     def test_pre_serialization_string_bounds_precede_parsing_and_json(self):
         cases = (
             ("aws_region", "r" * (MAX_AWS_REGION_CHARS + 1)),
             ("endpoint_url", "e" * (MAX_ENDPOINT_URL_CHARS + 1)),
             ("kms_key_id", "k" * (MAX_KMS_KEY_ID_CHARS + 1)),
-            (
-                "upstream_identity",
-                "i" * (MAX_UPSTREAM_IDENTITY_CHARS + 1),
-            ),
         )
         for name, value in cases:
             with self.subTest(name=name):
@@ -119,34 +140,12 @@ class ManifestFieldTests(unittest.TestCase):
                 split.assert_not_called()
                 arn.assert_not_called()
 
-    def test_upstream_identity_exact_safe_bound_including_astral_unicode(self):
-        for scalar in ("x", "\U0001f4a9"):
-            with self.subTest(scalar=repr(scalar)):
-                identity = scalar * MAX_UPSTREAM_IDENTITY_CHARS
-                manifest = valid_manifest(upstream_identity=identity)
-                self.assertEqual(
-                    decode_manifest(encode_manifest(manifest)),
-                    manifest,
-                )
-                self.assert_encode_rejected(
-                    upstream_identity=(
-                        scalar * (MAX_UPSTREAM_IDENTITY_CHARS + 1)
-                    ),
-                )
-
-    def test_worst_case_valid_manifest_remains_below_byte_limit(self):
-        region = "us-east-" + "1" + "0" * 23
-        host = ".".join(("a" * 63, "b" * 63, "c" * 63, "d" * 61))
-        manifest = valid_manifest(
-            aws_region=region,
-            endpoint_url=f"https://{host}/v1/time",
-            kms_key_id=kms_arn(region=region, resource=f"key/{KMS_UUID}"),
-            upstream_identity="\U0001f4a9" * MAX_UPSTREAM_IDENTITY_CHARS,
-            source_epoch=MAX_UINT64,
-            max_sample_age_seconds=MAX_UINT64,
-            max_uncertainty_seconds=MAX_UINT64,
+    def test_valid_manifest_remains_below_byte_limit(self):
+        self.assertLess(len(encode_manifest(valid_manifest())), MAX_MANIFEST_BYTES)
+        self.assertEqual(
+            decode_manifest(encode_manifest(valid_manifest())),
+            valid_manifest(),
         )
-        self.assertEqual(len(encode_manifest(manifest)), 4085)
 
     def test_manifest_is_frozen_slotted_and_exact_container_type_is_required(self):
         manifest = valid_manifest()
