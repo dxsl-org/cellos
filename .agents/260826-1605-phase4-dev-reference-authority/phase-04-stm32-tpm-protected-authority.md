@@ -260,7 +260,7 @@ the physical pending-key and no-side-effect rows.
 
 - [ ] Freeze typed surface, TPM handle/NV/policy map, complete record schema, and transition table.
 - [x] Host full-record envelope, exact Phase 2 successor gate, counter-exact dual-slot recovery, irreversible seal seam, and cut-point/reboot harness pass at the `SOFTWARE_HARNESS` ceiling.
-- [x] Authenticate and durably state-admit profile begin/chunk/validation requests before bank, policy, or TPM work; bind the journal-selected inactive slot and state-derived CSR handle; 48 authority-protocol host tests pass.
+- [x] Authenticate and durably state-admit profile begin/chunk/validation requests before bank, policy, or TPM work; bind the journal-selected inactive slot and state-derived CSR handle; 50 authority-protocol host tests pass.
 - [x] Resolve canonical certificate-chain transport: operator selected the reviewed clean private-v2 chunk protocol with a 12,288-byte total bound.
 - [ ] Freeze the AP request-authentication contract: the STM32 authority's
   exact session/key establishment, challenge and boot binding, authenticator
@@ -280,8 +280,10 @@ the physical pending-key and no-side-effect rows.
   requires the same exact three-field tuple; every mismatch seals, while an
   exact newer-sequence retry recovers the identical persisted prepared intent.
   Provider promotion requires a verified signature plus exact equality across
-  all 12 receipt tuple fields; every independent substitution seals. Physical
-  receipt/signing proof remains open.
+  all 12 receipt tuple fields; every independent substitution seals. A reboot
+  from persisted `Promoted` finalizes that exact intent, and a reboot after
+  finalize retains exact `Active`; both restore closed boot and unavailable
+  time. Physical receipt/signing proof remains open.
 
 ## Success Criteria
 
@@ -366,3 +368,11 @@ None at planning time beyond: **2026-08-26 Decision** — security red-team revi
   sequence and recovers the identical `PreparedCommitIntent` while remaining
   `Prepared`. The focused suite passes 4/4; the full protocol suite passes 48/48
   and RV64 no_std check passes. This is host state-machine proof only.
+- 2026-08-31 — Result: promotion recovery tests authenticate and restore the
+  exact persisted record across reboot. Restored `Promoted` has closed boot and
+  unavailable time, then finalizes only its persisted intent to `Active`;
+  restoring again after finalize retains the exact active intent without
+  reopening boot or time. The focused suite passes 2/2; the full protocol suite
+  passes 50/50 and RV64 no_std check passes. This is host persistence/recovery
+  proof only, not flash atomicity, provider durability, or physical power-loss
+  evidence.

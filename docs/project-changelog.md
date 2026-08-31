@@ -153,8 +153,11 @@
   receipt consumption is single-use, replay seals, and an exact newer-sequence
   commit retry recovers the identical persisted prepared intent. Provider
   promotion rejects a bad signature before state mutation and independently
-  binds all 12 provider receipt tuple fields; every mismatch seals. RV64 no_std
-  checks and 38 journal/bank, 17 validator, and 48 authority-protocol host tests
+  binds all 12 provider receipt tuple fields; every mismatch seals. Authenticated
+  reboot recovery finalizes the exact persisted `Promoted` intent and retains
+  exact `Active` after a later reboot, with boot closed and time unavailable
+  after each restore. RV64 no_std
+  checks and 38 journal/bank, 17 validator, and 50 authority-protocol host tests
   pass. This proves software behavior only;
   TPM NV behavior, STM32 flash atomicity, lifecycle/debug protection, isolation,
   endurance, and physical power loss
