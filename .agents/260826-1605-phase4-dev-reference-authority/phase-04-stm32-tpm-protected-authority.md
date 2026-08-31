@@ -260,7 +260,7 @@ the physical pending-key and no-side-effect rows.
 
 - [ ] Freeze typed surface, TPM handle/NV/policy map, complete record schema, and transition table.
 - [x] Host full-record envelope, exact Phase 2 successor gate, counter-exact dual-slot recovery, irreversible seal seam, and cut-point/reboot harness pass at the `SOFTWARE_HARNESS` ceiling.
-- [x] Authenticate and durably state-admit profile begin/chunk/validation requests before bank, policy, or TPM work; bind the journal-selected inactive slot and state-derived CSR handle; 36 authority-protocol host tests pass.
+- [x] Authenticate and durably state-admit profile begin/chunk/validation requests before bank, policy, or TPM work; bind the journal-selected inactive slot and state-derived CSR handle; 38 authority-protocol host tests pass.
 - [x] Resolve canonical certificate-chain transport: operator selected the reviewed clean private-v2 chunk protocol with a 12,288-byte total bound.
 - [ ] Freeze the AP request-authentication contract: the STM32 authority's
   exact session/key establishment, challenge and boot binding, authenticator
@@ -271,6 +271,11 @@ the physical pending-key and no-side-effect rows.
 - [ ] Complete and approve irreversible provisioning plan before mutation.
 - [ ] Execute every physical failure row with exact firmware and record hashes.
 - [ ] Prove pending-SPKI validation, single-use receipt, active-only signing, and generic-operation absence.
+- [x] Host model rejects TLS signing from `Empty`, `Pending`, `Uploading`,
+  `Staged`, `ReceiptConsumed`, `Prepared`, and provider-promoted pre-finalize
+  states, sealing each attempt; only exact `Active` remains authorized. It also
+  proves a staged receipt can transition to `ReceiptConsumed` exactly once and
+  seals a newer-sequence replay. Physical receipt/signing proof remains open.
 
 ## Success Criteria
 
@@ -325,3 +330,10 @@ None at planning time beyond: **2026-08-26 Decision** — security red-team revi
   `AuthorityClient` remains blocked until exact hardware demonstrates a secure
   handoff. Persistent AP keys, generic signers, and speculative crypto are not
   accepted fallbacks.
+- 2026-08-31 — Result: focused authority capability-boundary tests now exercise
+  every non-active relay state, including provider-promoted pre-finalize, and
+  require TLS-sign authorization to return `InvalidState` and seal. A separate
+  test consumes the exact staged receipt once, then requires a newer-sequence
+  replay to return `ReceiptConsumed` and seal. The new focused suite passes 2/2;
+  the full protocol suite passes 38/38 and RV64 no_std check passes. This is
+  host state-machine proof only, not physical TPM/provider/signing evidence.
