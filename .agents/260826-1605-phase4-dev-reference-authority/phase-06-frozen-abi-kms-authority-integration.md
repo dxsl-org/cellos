@@ -118,6 +118,12 @@ Replace the runtime protected-state `PermissionDenied` stub and relay-provider p
 - Stop if any Phase 3/4/5 admission artifact, pin, physical identity, operator authorization, or real hardware/cloud dependency is missing.
 - Stop on any public opcode/payload byte change, alternate provider/state/time fallback, PREPARED-only service, caller-created stage trust, unauthenticated promotion result, or `ProductionQualified` classification.
 - Stop if the runtime link cannot exclude AP spoofing/replay, or if recovery needs inference from provider/VFS/cache rather than an authenticated authority receipt.
+- Stop before implementing `AuthorityClient` until Phase 4 freezes and issues
+  the AP-side request-authentication capability. The protocol currently exposes
+  only verifier-side `RequestAuthenticator`; it has no session/key
+  establishment, request-signing API, rotation/reset contract, or exact binding
+  between the 32-byte authenticator, challenge, boot epoch, and AP identity.
+  Never substitute a KMS-held generic signer.
 
 ## Risk Assessment
 
@@ -129,7 +135,14 @@ Keep TPM authorization and private keys entirely behind STM32; zeroize bounded t
 
 ## Next Steps
 
-Only after these criteria and raw evidence exist may Phase 7 run managed-CA enrollment plus deterministic legacy-signer compatibility. It may not open a relay TLS session or claim target binding. The parent Phase 4 remains blocked until Phase 8 validates real AC-001..AC-011 evidence and an independent security review passes; after GO, parent Phase 4 implements ADR-0008 and must pass AC-012 before relay enablement.
+After Phase 4 supplies both the concrete exclusive runtime transport and the
+purpose-bounded AP request-authentication capability, this phase may implement
+`AuthorityClient`. Only after the remaining criteria and raw evidence exist may
+Phase 7 run managed-CA enrollment plus deterministic legacy-signer
+compatibility. It may not open a relay TLS session or claim target binding. The
+parent Phase 4 remains blocked until Phase 8 validates real AC-001..AC-011
+evidence and an independent security review passes; after GO, parent Phase 4
+implements ADR-0008 and must pass AC-012 before relay enablement.
 
 ## Deviation Log
 - Decision: this phase is the single serialized owner for root `Cargo.toml` workspace registration of any Phase 3–5 artifact; parallel phases hand off marker names to the Phase 2 checker instead of editing it.
@@ -151,3 +164,9 @@ Revert: restore per-phase checker/workspace edits (rejected).
   feature lists and artifact content. RV64 no_std paired-feature compilation
   and all 8 checker tests pass; missing-selector, host, and multi-provider
   negative compilations fail with their exact gate diagnostics.
+- Blocker: `authority-protocol` requires a 32-byte authenticator on every
+  request and exports verifier-only `RequestAuthenticator`; neither it nor the
+  STM32 adapter defines AP session/key establishment or purpose-bounded request
+  signing. KMS also lacks an exclusive concrete STM32 transport owner. Building
+  `AuthorityClient` over a test seam now would invent both security boundaries,
+  so Step 2 remains blocked on the Phase 4 contracts.

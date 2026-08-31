@@ -157,8 +157,13 @@
   with existing relay providers. Production-image checks freeze and reject both
   exact markers in feature lists and artifacts. RV64 paired-feature compilation
   and all 8 checker tests pass; missing-selector, host, and multi-provider builds
-  fail at their intended compile-time gates. No authority provider is selected
-  yet, and this software gate grants no hardware or AC credit.
+  fail at their intended compile-time gates. No authority provider is selected.
+  `AuthorityClient` is explicitly blocked: KMS has no exclusive concrete STM32
+  transport owner, while `authority-protocol` defines mandatory 32-byte request
+  authenticators but exposes only verification, with no AP session/key
+  establishment or purpose-bounded signing capability. Phase 4 must freeze that
+  issuance/binding contract; KMS must never receive a generic authority signer.
+  These software gates and blockers grant no hardware or AC credit.
 
 - ADR-0010 freezes the VF2 `DEV_REFERENCE` root stream as one bounded
   post-loader XMODEM-1K transfer containing deterministic-CBOR `COSE_Sign1` and

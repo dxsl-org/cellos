@@ -262,6 +262,10 @@ the physical pending-key and no-side-effect rows.
 - [x] Host full-record envelope, exact Phase 2 successor gate, counter-exact dual-slot recovery, irreversible seal seam, and cut-point/reboot harness pass at the `SOFTWARE_HARNESS` ceiling.
 - [x] Authenticate and durably state-admit profile begin/chunk/validation requests before bank, policy, or TPM work; bind the journal-selected inactive slot and state-derived CSR handle; 36 authority-protocol host tests pass.
 - [x] Resolve canonical certificate-chain transport: operator selected the reviewed clean private-v2 chunk protocol with a 12,288-byte total bound.
+- [ ] Freeze the AP request-authentication contract: exact session/key
+  establishment, challenge and boot binding, authenticator issuance, rotation,
+  reset behavior, and signer ownership. The AP must receive only a
+  purpose-bounded session capability; never a generic STM32/TPM signer.
 - [ ] Complete and approve irreversible provisioning plan before mutation.
 - [ ] Execute every physical failure row with exact firmware and record hashes.
 - [ ] Prove pending-SPKI validation, single-use receipt, active-only signing, and generic-operation absence.
@@ -284,7 +288,14 @@ Trusted: approved STiRoT firmware, protected STM32 execution/flash keys, authori
 
 ## Next Steps
 
-On pass, Phase 6 consumes the typed facts/receipts and opaque provider adapter; Phase 8 reviews raw physical evidence. Until all Phase 4 rows and later AC-001..011 pass, the parent remains blocked.
+Before Phase 6 can construct a real `AuthorityClient`, this phase must also
+freeze and implement request-authenticator issuance: `authority-protocol`
+currently defines the 32-byte request authenticator and verifier-only
+`RequestAuthenticator`, but no session/key establishment or AP signing
+capability. On pass, Phase 6 consumes that purpose-bounded session capability,
+typed facts/receipts, and the opaque provider adapter; Phase 8 reviews raw
+physical evidence. Until all Phase 4 rows and later AC-001..011 pass, the parent
+remains blocked.
 
 ## Deviation Log
 
