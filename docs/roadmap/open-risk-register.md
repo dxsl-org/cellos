@@ -125,12 +125,15 @@ those remain fail-closed production gates.
 - **`CELLOS-HV-X86-TCG-001` — Medium, owner: Tier 3 x86 VM lane.** The
   qualified QEMU-TCG 10.2.0 runtime boots the pinned Alpine 3.21.7 guest at
   both 1 GiB and 2 GiB, reaches Linux 6.12.81, runs `/bin/sh`, and exposes the
-  BusyBox `~ #` prompt. Ubuntu 24.04's QEMU-TCG 8.2.2 remains incompatible:
-  the same ISO, VMCB/NPT code, CPU model, and memory sizes fetch zeros at the
-  entry GPA and triple-fault (`rip=0x1127370 cr0=0x11`). The smoke runner
-  accepts `QEMU_X86_BIN` so CI and WSL can select the qualified emulator and
-  emits a specific diagnostic for the 8.2.2 signature. Hardware nested-SVM
-  evidence and the precise upstream TCG regression range remain open.
+  BusyBox `~ #` prompt. Ubuntu 24.04's QEMU-TCG 8.2.2 and upstream QEMU commits
+  through `4a75c8c7d6` remain incompatible: the same ISO, VMCB/NPT code, CPU
+  model, and memory sizes fetch zeros at the nested entry GPA and triple-fault
+  (`rip=0x1127370 cr0=0x11`). The smoke runner accepts `QEMU_X86_BIN` so CI and
+  WSL can select the qualified emulator and emits a specific diagnostic for the
+  8.2.2 signature. Regression is isolated upstream to `b56617bbcb`
+  (`target/i386: Walk NPT in guest real mode`) which restores real-mode NPT
+  walking behavior in nested paging paths. Hardware nested-SVM evidence remains
+  open.
 
 - Net-broker is still partial wiring. `cells/services/net-broker/src/main.rs`
   marks K1 PSK loading, LAN beacon sockets, relay dispatch, lease renewal, and

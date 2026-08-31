@@ -1085,6 +1085,7 @@ jobs:
       - name: Prepare authenticated software evidence logs
         run: mkdir -p software-evidence
 
+
       - name: Build cells + kernel + disk images (gen_disk)
         shell: bash
         env:
@@ -1131,7 +1132,6 @@ jobs:
           cd tests/integration
           cargo test --test http-smoke -- --test-threads=1 \
             2>&1 | tee "$GITHUB_WORKSPACE/software-evidence/http-smoke.log"
-
       - name: Run boot + network + shell + VFS tests
         shell: bash
         env:
@@ -1266,7 +1266,7 @@ jobs:
             --runner "${{ needs.boot-suite.outputs.producer-runner }}" \
             --workflow-ref "${{ github.workflow_ref }}" \
             --sequence "${{ github.run_id }}:${{ github.run_attempt }}" \
-            --command "boot-suite: gen_disk + boot + window-policy + viui-managed-surface" \
+            --command "boot-suite: gen_disk + http-smoke + boot + window-policy + viui-managed-surface" \
             --input catalog.json=scripts/admission_prequalification/catalog.json \
             --input acceptance-ledger.json=docs/app-tier-acceptance-ledger.json \
             --input workflow.yml=.github/workflows/ci.yml \
