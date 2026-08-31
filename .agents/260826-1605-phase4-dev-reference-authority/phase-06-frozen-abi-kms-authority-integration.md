@@ -137,3 +137,10 @@ Why: red-team finding F — shared files were claimed by concurrent phases.
 Impact: `plan.md` ownership; no contract change.
 Revert: restore per-phase checker/workspace edits (rejected).
 - Decision: software track authorized; fixture-simulator integration and unit/fault tests may proceed pre-admission. Step 9 (physical probe matrix) and all AC credit stay hardware-gated; simulator output is regression proof only.
+- Evidence: Phase 6 software entry baseline records 54 passing `types` host tests
+  and 8 passing production-image checker tests. Frozen KMS source/fixture SHA-256
+  values are `07531027...` (`model.rs`), `c2294a6a...` (`frame.rs`),
+  `9ab32ef0...` (`payload/enroll.rs`), `a3c0ab28...` (`payload/tls.rs`),
+  `7d62eaa9...` (`tests/frame.rs`), `26a2b6ae...` (`tests/payload.rs`), and
+  `fd514249...` (`tests/enrollment.rs`). This is a pre-change regression
+  baseline only; it grants no hardware or acceptance-criterion credit.
