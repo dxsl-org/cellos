@@ -150,7 +150,9 @@
   requires both exact generation and profile digest in `Active`; either mismatch
   seals. Staged receipt consumption requires exact generation, policy epoch, and
   profile digest; each substitution seals, exact consumption is single-use, and
-  replay seals. RV64 no_std checks and 38 journal/bank, 17 validator, and 42
+  replay seals. Provider promotion rejects a bad signature before state mutation
+  and independently binds all 12 provider receipt tuple fields; every mismatch
+  seals. RV64 no_std checks and 38 journal/bank, 17 validator, and 44
   authority-protocol host tests pass. This proves software behavior only;
   TPM NV behavior, STM32 flash atomicity, lifecycle/debug protection, isolation,
   endurance, and physical power loss
