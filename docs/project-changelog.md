@@ -61,10 +61,16 @@
   injected handler core now composes this order end to end. Retry responses are
   re-signed and canonically encoded without floor, clock, allocation, write, or
   expiry refresh; only absence loads one protected floor and admitted sample,
-  commits once, signs once, and encodes once. The full suite passes 209/209.
-  No concrete clock provider, protected-floor implementation, Lambda event
-  adapter, live database operation, AWS resource, credential, network call, or
-  deployment action occurred; those steps remain gated.
+  commits once, signs once, and encodes once. A non-deploying CloudFormation/IAM
+  harness now freezes the intended retained table/key/function graph, exact
+  runtime permissions, enforced code signing, alias-only HTTP ingress, logs,
+  alarms, and four separated operational roles. It explicitly makes no live
+  isolation claim: external boundary/SCP contents, the actual CloudFormation
+  service role, artifact approval, missing provider/runtime composition, and
+  operator negative probes remain hard gates. Infrastructure tests pass 18/18
+  and the full suite passes 227/227. No concrete clock provider, protected-floor
+  implementation, Lambda runtime entrypoint, live database operation, AWS
+  resource, credential, network call, packaging, or deployment action occurred.
 
 - Phase 4's deterministic, non-executing provisioning-plan generator is complete
   only at the `SOFTWARE_HARNESS` ceiling. Each of its nine ordered mutations now
