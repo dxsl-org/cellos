@@ -19,8 +19,23 @@ pub(super) fn complete_upload(
         revision: &revision,
         record: &record,
     };
-    let mut state = pending_state(store);
+    let (mut state, bank, validation) = uploaded_state(fixture, store);
+    let prior = record.get().unwrap();
+    let admitted = state.admit_profile_validation(&validation).unwrap();
+    let current = record.get().unwrap();
+    let (storage, _) = bank.into_parts();
+    (prior, current, storage, admitted)
+}
 
+pub(crate) fn uploaded_state<S: ProtectedStore>(
+    fixture: &Fixture,
+    store: S,
+) -> (
+    AuthorityState<S>,
+    ProfileBank<MemoryBank, Auth>,
+    ValidatedRequest<ValidateAndStageRelayProfileRequest>,
+) {
+    let mut state = pending_state(store);
     let profile_digest = Sha256::digest(&fixture.profile).into();
     let tpm_digest = Sha256::digest(&fixture.tpm).into();
     let request = validated(BeginRelayProfileUploadRequest {
@@ -60,26 +75,32 @@ pub(super) fn complete_upload(
         });
         upload = write_profile_chunk(&mut state, &mut bank, &write, &metadata).unwrap();
     }
-    let validation = validated(ValidateAndStageRelayProfileRequest {
-        context: context(
-            6 + upload.chunk_count() as u64,
-            1,
-            Operation::ValidateAndStageRelayProfile,
-        ),
+    let validation = validation_request(
+        fixture,
+        6 + upload.chunk_count() as u64,
+        profile_digest,
+        tpm_digest,
+    );
+    (state, bank, validation)
+}
+
+pub(crate) fn validation_request(
+    fixture: &Fixture,
+    sequence: u64,
+    profile_digest: [u8; 32],
+    tpm_public_digest: [u8; 32],
+) -> ValidatedRequest<ValidateAndStageRelayProfileRequest> {
+    validated(ValidateAndStageRelayProfileRequest {
+        context: context(sequence, 1, Operation::ValidateAndStageRelayProfile),
         generation: 1,
         policy_epoch: 3,
         pending_slot: 0,
         pending_spki_digest: fixture.spki,
         profile_digest,
-        tpm_public_digest: tpm_digest,
+        tpm_public_digest,
         upload_handle: 11,
         profile_len: fixture.profile.len() as u32,
-    });
-    let prior = record.get().unwrap();
-    let admitted = state.admit_profile_validation(&validation).unwrap();
-    let current = record.get().unwrap();
-    let (storage, _) = bank.into_parts();
-    (prior, current, storage, admitted)
+    })
 }
 
 pub(super) fn pending_state<S: ProtectedStore>(store: S) -> AuthorityState<S> {

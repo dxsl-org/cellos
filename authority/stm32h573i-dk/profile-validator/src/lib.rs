@@ -4,6 +4,7 @@
 //! Allocation-free, closed-policy validation for authenticated enrollment profiles.
 //! Profiles are strict DER certificates concatenated leaf first; trust roots are policy only.
 
+mod adapter;
 mod admission;
 mod cert;
 mod der;
@@ -15,6 +16,7 @@ mod pending;
 mod policy;
 mod time;
 mod tpm;
+mod transaction;
 #[cfg(test)]
 extern crate std;
 #[cfg(test)]
@@ -28,6 +30,7 @@ pub use metadata::ValidatedProfileMetadata;
 pub use pending::{PendingPublicReader, PendingPublicRequest, PublicReadError, MAX_TPM2B_PUBLIC};
 pub use policy::{DeniedSerial, TrustedPolicy};
 pub use stm32_authority_journal::PendingEnrollmentSnapshot;
+pub use transaction::{validate_and_stage_profile, PendingSnapshotSource, ProfileStageError};
 
 /// Maximum accepted raw leaf-first certificate profile size.
 pub const MAX_PROFILE_LEN: usize = 12_288;

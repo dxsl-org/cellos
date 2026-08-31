@@ -5,6 +5,9 @@ mod snapshot_support;
 mod upload_cut_support;
 mod upload_flow_cuts;
 pub use snapshot::{admitted_snapshot, snapshot};
+pub(super) use snapshot_flow::uploaded_state;
+pub(super) use snapshot_flow::validation_request;
+pub(super) use snapshot_support::Store;
 
 use certificate::{certificate, key, name, ski, spki, CertificateSpec};
 use sha2::{Digest, Sha256};

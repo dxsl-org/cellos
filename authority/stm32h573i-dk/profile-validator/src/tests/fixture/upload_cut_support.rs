@@ -1,5 +1,5 @@
-use super::snapshot_flow::{context, pending_state, validated};
-use super::snapshot_support::{Auth, MemoryBank};
+use super::snapshot_flow::{context, validated};
+use super::snapshot_support::MemoryBank;
 use authority_protocol::*;
 use core::cell::Cell;
 use sha2::{Digest, Sha256};

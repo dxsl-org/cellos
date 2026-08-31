@@ -139,10 +139,16 @@
   root/duplicate-SPKI exclusion. Its journal-issued snapshot binds revision,
   identity, authority/boot epoch, CSR, slot, and profile metadata; a strict
   double-read `TPM2B_PUBLIC` parser derives the P-256 SPKI and requires exact
-  equality with both journal and leaf certificate SPKIs. RV64 no_std checks and
-  38 journal/bank, 14 validator, and 36 authority-protocol host tests pass. This
-  proves software behavior only; TPM NV behavior, STM32 flash atomicity,
-  lifecycle/debug protection, isolation, endurance, and physical power loss
+  equality with both journal and leaf certificate SPKIs. The public no_std
+  staging transaction holds exclusive mutable boundaries across request
+  admission, authenticated bank-snapshot recovery, full certificate/TPM
+  validation, internal root-capability issuance, immediate journal-revision
+  recheck, and protected staging. Revision races stop before staging. Matching
+  lost-response retries return only the persisted staged intent without media,
+  TPM, or restaging work. RV64 no_std checks and 38 journal/bank, 17 validator,
+  and 36 authority-protocol host tests pass. This proves software behavior only;
+  TPM NV behavior, STM32 flash atomicity, lifecycle/debug protection, isolation,
+  endurance, and physical power loss
   remain hardware-gated.
 
 - ADR-0010 freezes the VF2 `DEV_REFERENCE` root stream as one bounded
