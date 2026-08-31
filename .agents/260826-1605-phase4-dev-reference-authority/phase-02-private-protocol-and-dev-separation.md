@@ -91,7 +91,7 @@ Define the sole private AP↔STM32 authority contract as a `no_std`, no-allocati
 - [x] Literal public KMS 9–14 and private-protocol fixtures pass byte-for-byte.
 - [x] Forbidden generic operation search and malformed-frame/state-transition scenarios pass.
 - [x] Production candidates reject every DEV feature/marker and retain the exact ADR-0006 block.
-- [ ] Private protocol v2 begin/write/finalize fixtures and upload transition/cut matrix pass.
+- [x] Private protocol v2 begin/write/finalize fixtures and upload transition/cut matrix pass.
 
 ## Success Criteria
 
@@ -125,3 +125,4 @@ After all criteria pass, Phases 3, 4, and 5 may consume `authority_protocol` in 
 - 2026-08-26 — Result: the authorized SOFTWARE_HARNESS slice is complete and host-verified. The phase remains blocked on Phase 1 and claims no hardware/cloud acceptance evidence.
 - 2026-08-29 — Result: Phase 2 now owns the clean private-v2 chunk wire/state surface, immutable protected-record binding view, exact successor verifier, and opaque state-admitted profile-verification token. Upload begin/chunk admission durably advances the request floor before bank work, binds the state-selected inactive slot and CSR handle, and preserves exact retries. Public KMS fixtures remain unchanged; 36 authority-protocol host tests cover v1 rejection, v2 wire/state/persistence, revision exhaustion, reboot replay, active-slot rejection, and proof that unauthenticated or authenticated stale/replayed profile requests invoke no adapter.
 - 2026-08-31 — Result: Phase 2 consumed Phase 5's reviewed `SOFTWARE_HARNESS` marker handoff into the sole production checker. The existing closed feature-name, binary-content, and 64-KiB split-boundary matrices now exercise it automatically; an explicit signed-time handoff membership test prevents silent removal. Marker-bearing candidates exit 1 naming the marker, while a clean exact candidate still exits 3 with the unchanged ADR-0006 block. Checker tests pass 8/8; no downstream phase edited the checker.
+- 2026-08-31 — Result: the remaining private-v2 evidence checklist was reconciled against the literal 14-request/14-response golden frames, authenticated begin/chunk/finalize transition tests, and the journal profile-bank cut/recovery matrix. Explicit host-target runs pass 36/36 `authority-protocol` tests and 38/38 `stm32-authority-journal` tests. The earlier bare `cargo test` attempt selected the repository's default `riscv64gc-unknown-none-elf` target and could not build host test binaries; rerunning with `--target x86_64-unknown-linux-gnu` exercised the intended host harness. This closes only Phase 2's `SOFTWARE_HARNESS` checklist; Phase 1 and every physical acceptance gate remain blocked.
