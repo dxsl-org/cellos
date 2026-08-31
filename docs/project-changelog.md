@@ -4,6 +4,18 @@
 
 ## [Unreleased] Development-first hardware-constrained execution
 
+- Phase 4's STM32/TPM authority has reached its `SOFTWARE_HARNESS` ceiling.
+  The typed private-v2 protocol, authenticated profile bank, full-record
+  journal/recovery model, certificate/profile validator, promotion recovery,
+  production rejection, and deterministic non-executing provisioning plan are
+  complete. The closure gate passes 52 authority-protocol, 38 journal, 17
+  profile-validator, 22 provisioning, and 8 production-rejection tests plus
+  RV64 no_std checks. Physical completion remains blocked on admitted
+  STM32H573I-DK/SLB9672 hardware, exact TPM values, operator-approved
+  irreversible provisioning, locked-device failure evidence, and a proven
+  confidential/integrity-protected capability handoff to isolated KMS;
+  synthetic fixture values satisfy no hardware criterion.
+
 - Phase 5's signed-time wire contract is frozen at the `SOFTWARE_HARNESS`
   ceiling. The strict deterministic-CBOR codec rejects non-shortest, duplicate,
   indefinite, tagged, floating-point, unsupported, trailing, and oversized

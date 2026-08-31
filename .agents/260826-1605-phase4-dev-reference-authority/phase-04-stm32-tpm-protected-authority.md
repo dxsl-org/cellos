@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "STM32 and TPM Protected Authority"
-status: "in_progress; SOFTWARE_HARNESS"
+status: "blocked; SOFTWARE_HARNESS complete"
 priority: P1
 dependencies: [2]
 tier: thinking
@@ -249,7 +249,7 @@ the physical pending-key and no-side-effect rows.
 ## Implementation Steps
 
 1. From Phase 1 inventory, probe MCU/TPM identity, firmware, SPI, option-byte, debug, lifecycle, and NV capabilities without mutation; reconcile every assumption or stop.
-2. **Journal/recovery host slice completed; chunked profile transport selected 2026-08-29.** Minimal raw concatenated-DER direct/one/two-intermediate profiles measured 479/850/1,218 bytes, proving private v1 insufficient. The approved clean v2 cutover reuses the frozen 12,288-byte chain bound with authenticated 768-byte chunks and stages only a verified bank reference. Next implement the frozen v2 state machine, bank recovery, and validator without changing public KMS bytes.
+2. **Journal/recovery, chunked profile transport, authenticated bank, validator, and promotion/recovery host slices completed.** Minimal raw concatenated-DER direct/one/two-intermediate profiles measured 479/850/1,218 bytes, proving private v1 insufficient. The approved clean v2 cutover reuses the frozen 12,288-byte chain bound with authenticated 768-byte chunks and stages only a verified bank reference. All host-verifiable state-machine and recovery boundaries are implemented without changing public KMS bytes.
 3. **Provision-plan generator completed at the `SOFTWARE_HARNESS` ceiling; no execution.** `provision/plan.py` deterministically emits an approval-bound canonical payload covering device and STiRoT/approved-loader identities, closed typed TPM handle/NV/template/policy fields, and nine ordered mutation artifacts. Each artifact contains an exact typed address space/address, byte width, nonzero write mask, requested bytes, expected readback bytes, policy binding, derived byte digests, and a self-hash. TPM request bytes must match the selected stable/active/pending/NV template; STM32 identifiers bind their addresses and masked write/readback bits must agree. Complete `libs/authority-protocol/` and `authority/stm32h573i-dk/journal-core/` source trees are also bound. Normal generation remains blocked on Phase 1 admission; explicit software-harness mode allows only the existing AWS read-only identity gate as the sole admission failure and rejects every other failure. Actual admitted inventory, preclosure evidence, exact operator approval, and every mutation remain blocked.
 4. **Operator checkpoint:** obtain explicit approval tied to the plan hash before key creation/persistence, `NV_DefineSpace`, OTP/STiRoT provisioning, lifecycle transition, debug closure, or destructive snapshot work. A changed hash requires new approval; no purchase/cloud action occurs here.
 5. Provision STiRoT and TPM in approved order, verify image acceptance/rejection and public key/NV attributes, then close debug/lifecycle only at its separately recorded irreversible checkpoint.
@@ -258,7 +258,8 @@ the physical pending-key and no-side-effect rows.
 
 ## Todo List
 
-- [ ] Freeze typed surface, TPM handle/NV/policy map, complete record schema, and transition table.
+- [x] Freeze the `SOFTWARE_HARNESS` typed surface, complete record schema, transition table, and deterministic provisioning-plan schema. The harness accepts only explicit synthetic TPM handle/NV/template/policy values and cannot freeze the admitted device's exact values.
+- [ ] Freeze the exact admitted TPM handle/NV/template/policy map from Phase 1 inventory and bind the operator-approved values into the final provisioning plan.
 - [x] Host full-record envelope, exact Phase 2 successor gate, counter-exact dual-slot recovery, irreversible seal seam, and cut-point/reboot harness pass at the `SOFTWARE_HARNESS` ceiling.
 - [x] Authenticate and durably state-admit profile begin/chunk/validation requests before bank, policy, or TPM work; bind the journal-selected inactive slot and state-derived CSR handle; 52 authority-protocol host tests pass.
 - [x] Resolve canonical certificate-chain transport: operator selected the reviewed clean private-v2 chunk protocol with a 12,288-byte total bound.
@@ -386,3 +387,13 @@ None at planning time beyond: **2026-08-26 Decision** — security red-team revi
   identical `PreparedCommitIntent` and remains prepared. The focused suite
   passes 2/2; the full protocol suite passes 52/52 and RV64 no_std check passes.
   This is host persistence/recovery proof only.
+- 2026-08-31 — Closure: every reachable Phase 4 software deliverable is
+  complete. The final gate passes authority protocol 52/52, journal 38/38,
+  profile validator 17/17, provisioning 22/22, production rejection 8/8,
+  RV64 no_std checks for all three Rust crates, and workspace formatting.
+  Phase 4 is now explicitly blocked rather than in progress: its remaining
+  work requires admitted STM32H573I-DK/SLB9672 hardware, exact TPM values,
+  operator approval of the irreversible plan hash, locked-device failure
+  evidence, and a demonstrated confidential and integrity-protected
+  purpose-bounded capability handoff to isolated KMS. Synthetic fixture values
+  are not promoted into a hardware contract and satisfy no physical criterion.
