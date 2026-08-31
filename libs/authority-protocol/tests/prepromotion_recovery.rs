@@ -48,6 +48,12 @@ fn restore(record: ProtectedAuthorityRecord, expected_digest: [u8; 32]) -> TestS
     )
 }
 
+fn unrelated_record() -> ProtectedAuthorityRecord {
+    let mut unrelated = state(0, 0);
+    unrelated.open_boot(&open(1), &measurement()).unwrap();
+    unrelated.into_store().into_record().unwrap()
+}
+
 fn reboot_open(sequence: u64) -> ValidatedRequest<OpenBootRequest> {
     let mut request = OpenBootRequest {
         context: context(sequence, 0, Operation::OpenBoot),
@@ -83,6 +89,10 @@ fn reboot_from_consumed_receipt_prepares_the_exact_persisted_intent() {
     assert!(matches!(state.time_state(), TimeState::Valid { .. }));
 
     let (record, expected_digest) = persisted(state);
+    assert_eq!(
+        verify_protected_record(unrelated_record(), &RecordPolicy(expected_digest)),
+        Err(AuthorityFault::PersistenceFailure)
+    );
     let mut recovered = restore(record, expected_digest);
     assert_eq!(recovered.boot_state(), BootState::Closed);
     assert_eq!(recovered.time_state(), TimeState::Unavailable);
