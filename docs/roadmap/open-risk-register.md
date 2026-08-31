@@ -1,6 +1,6 @@
 # Open Risk Register
 
-**Last updated**: 2026-08-29
+**Last updated**: 2026-08-31
 
 This register tracks confirmed readiness gaps found while syncing docs to code.
 It is not a global bug-fix queue, and it does not turn all future or
@@ -22,7 +22,7 @@ Primary planning classification for the open entries:
 | Planning class | Entries |
 |---|---|
 | Current executable work | Narrow fixes, bounded fixtures, and software evidence that an owning lane can perform now |
-| Current-scope technical debt | Net polling latency, the pinned-QEMU compatibility gap, and AArch64 semihosting ledger closure |
+| Current-scope technical debt | Bounded net idle IPC dispatch latency, the pinned-QEMU compatibility gap, and AArch64 semihosting ledger closure |
 | Future capability | Remote/public net-broker completion and native POSIX completeness beyond currently supported contracts |
 | External-gated prerequisite | Unavailable exact board qualification and exact product/vendor evidence for protected relay or production-root milestones |
 | Production release gate | Fleet signing/provenance, production admission, protected identity/root, secure/measured boot, qualified floor and persistent recovery, physical hostile evidence, authenticated evidence runner, human approvals, and governed ledger/release closure |
@@ -135,9 +135,16 @@ those remain fail-closed production gates.
 - Net-broker is still partial wiring. `cells/services/net-broker/src/main.rs`
   marks K1 PSK loading, LAN beacon sockets, relay dispatch, lease renewal, and
   enrollment handling as TODOs; docs should not claim completed swarm routing.
-- Net service polling still uses a 100 ms cadence in `cells/services/net/src/main.rs`,
-  which is acceptable as a stopgap but remains latency debt for more interactive
-  workloads.
+- The former nearly 100 ms service-net idle IPC blind spot is narrowed at the
+  software/QEMU ceiling. `WaitCompletion` still does not wake for IPC, so the
+  service-local policy now caps its NET_RX wait at one scheduler tick plus
+  normal dispatch while preserving interrupt-driven NET_RX wakeup. The
+  independent smoltcp maintenance interval remains 100 ms; this is not a hard
+  wall-clock or physical-hardware latency bound, and no unrelated completion
+  ABI limitation is closed. The C2C QEMU oracle passed 1/1 with
+  `[net-rx-producer] irq->completion PASS`, 1,000/1,000 calibration calls,
+  10,000/10,000 soak calls, positive network progress, zero
+  heartbeat/watchdog deltas, and no heartbeat/watchdog termination markers.
 - Native POSIX path handling remains incomplete: canonicalization, `chdir`,
   `rename`, `getcwd`, and `fstat` contain stubs or deferred behavior in
   `kernel/src/task.rs`; Tier 1 must not be documented as POSIX-complete.

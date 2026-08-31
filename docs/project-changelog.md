@@ -4,6 +4,16 @@
 
 ## [Unreleased] Development-first hardware-constrained execution
 
+- Bounded service-net's former nearly 100 ms idle IPC blind spot to one
+  scheduler tick plus normal dispatch while retaining interrupt-driven NET_RX
+  and the independent 100 ms smoltcp maintenance interval. Service-net's host
+  tests pass 28/28, including both exact policy tests at 1/1; the default and
+  verified-TLS RISC-V builds pass. The C2C QEMU oracle passed 1/1 with
+  `[net-rx-producer] irq->completion PASS`, 1,000/1,000 calibration,
+  10,000/10,000 soak, positive network progress, zero heartbeat/watchdog
+  deltas, and no termination markers. This is a service-local software policy
+  and QEMU-only evidence, not a hard wall-clock or physical-hardware bound.
+
 - Corrected the misleading HTTPS smoke contract without weakening TLS. The
   existing `boot-suite` image now runs and retains the independently supported
   plain-HTTP round trip. The harness deliberately makes no assertion from the
