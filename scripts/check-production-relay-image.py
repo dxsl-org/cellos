@@ -41,6 +41,7 @@ FROZEN_DEV_MARKERS = [
     "AWS_DEV_SIGNED_TIME",
     "DEV_REFERENCE",
     "SLB9672",
+    "SOFTWARE_HARNESS",
     "STM32H573I-DK",
     "TPM9672FW1523PCEBTOBO1",
     "aws-dev-signed-time",
