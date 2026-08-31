@@ -24,4 +24,8 @@ pub mod relay_profile;
 pub mod rng;
 pub mod roots;
 pub mod socket;
+
+#[cfg(test)]
+#[path = "tls/authenticated-time-precheck-tests.rs"]
+pub(crate) mod authenticated_time_precheck_tests;
 pub mod transport;
