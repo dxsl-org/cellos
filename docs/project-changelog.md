@@ -161,8 +161,12 @@
   `AuthorityClient` is explicitly blocked: KMS has no exclusive concrete STM32
   transport owner, while `authority-protocol` defines mandatory 32-byte request
   authenticators but exposes only verification, with no AP session/key
-  establishment or purpose-bounded signing capability. Phase 4 must freeze that
-  issuance/binding contract; KMS must never receive a generic authority signer.
+  establishment or purpose-bounded signing capability. The preferred loader
+  handoff is not yet an accepted ADR: UART/carrier/DMA are untrusted, plaintext
+  capability material is cloneable, and the loader has no established secret or
+  attested ephemeral key that can prevent encryption-key substitution. Phase 4
+  must prove a confidential, integrity-protected handoff from the STM32
+  authority to isolated KMS; KMS must never receive a generic authority signer.
   These software gates and blockers grant no hardware or AC credit.
 
 - ADR-0010 freezes the VF2 `DEV_REFERENCE` root stream as one bounded

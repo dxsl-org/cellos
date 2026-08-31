@@ -119,11 +119,14 @@ Replace the runtime protected-state `PermissionDenied` stub and relay-provider p
 - Stop on any public opcode/payload byte change, alternate provider/state/time fallback, PREPARED-only service, caller-created stage trust, unauthenticated promotion result, or `ProductionQualified` classification.
 - Stop if the runtime link cannot exclude AP spoofing/replay, or if recovery needs inference from provider/VFS/cache rather than an authenticated authority receipt.
 - Stop before implementing `AuthorityClient` until Phase 4 freezes and issues
-  the AP-side request-authentication capability. The protocol currently exposes
-  only verifier-side `RequestAuthenticator`; it has no session/key
-  establishment, request-signing API, rotation/reset contract, or exact binding
-  between the 32-byte authenticator, challenge, boot epoch, and AP identity.
-  Never substitute a KMS-held generic signer.
+  the AP-side request-authentication capability through a confidential,
+  integrity-protected path. The protocol currently exposes only verifier-side
+  `RequestAuthenticator`; it has no session/key establishment, request-signing
+  API, rotation/reset contract, or exact binding between the 32-byte
+  authenticator, challenge, boot epoch, and AP identity. UART/carrier/DMA are
+  untrusted: a plaintext capability is cloneable, while encryption to an
+  unauthenticated loader key permits substitution. Never substitute a KMS-held
+  generic signer or a speculative key exchange.
 
 ## Risk Assessment
 
@@ -167,6 +170,10 @@ Revert: restore per-phase checker/workspace edits (rejected).
 - Blocker: `authority-protocol` requires a 32-byte authenticator on every
   request and exports verifier-only `RequestAuthenticator`; neither it nor the
   STM32 adapter defines AP session/key establishment or purpose-bounded request
-  signing. KMS also lacks an exclusive concrete STM32 transport owner. Building
-  `AuthorityClient` over a test seam now would invent both security boundaries,
-  so Step 2 remains blocked on the Phase 4 contracts.
+  signing. KMS also lacks an exclusive concrete STM32 transport owner. The
+  preferred loader-handoff direction is not approved because no current path
+  protects capability confidentiality and integrity from the untrusted
+  UART/carrier/DMA, and the loader has no established secret or attested
+  ephemeral key. ADR-0011 remains unsaved. Building `AuthorityClient` over a
+  test seam now would invent both security boundaries, so Step 2 remains blocked
+  on exact Phase 4 contracts and hardware evidence.

@@ -262,9 +262,11 @@ the physical pending-key and no-side-effect rows.
 - [x] Host full-record envelope, exact Phase 2 successor gate, counter-exact dual-slot recovery, irreversible seal seam, and cut-point/reboot harness pass at the `SOFTWARE_HARNESS` ceiling.
 - [x] Authenticate and durably state-admit profile begin/chunk/validation requests before bank, policy, or TPM work; bind the journal-selected inactive slot and state-derived CSR handle; 36 authority-protocol host tests pass.
 - [x] Resolve canonical certificate-chain transport: operator selected the reviewed clean private-v2 chunk protocol with a 12,288-byte total bound.
-- [ ] Freeze the AP request-authentication contract: exact session/key
-  establishment, challenge and boot binding, authenticator issuance, rotation,
-  reset behavior, and signer ownership. The AP must receive only a
+- [ ] Freeze the AP request-authentication contract: the STM32 authority's
+  exact session/key establishment, challenge and boot binding, authenticator
+  issuance, rotation, reset behavior, signer ownership, and confidential,
+  integrity-protected delivery to isolated KMS. No capability may cross the
+  untrusted UART/carrier/DMA in plaintext. The AP must receive only a
   purpose-bounded session capability; never a generic STM32/TPM signer.
 - [ ] Complete and approve irreversible provisioning plan before mutation.
 - [ ] Execute every physical failure row with exact firmware and record hashes.
@@ -288,14 +290,19 @@ Trusted: approved STiRoT firmware, protected STM32 execution/flash keys, authori
 
 ## Next Steps
 
-Before Phase 6 can construct a real `AuthorityClient`, this phase must also
-freeze and implement request-authenticator issuance: `authority-protocol`
-currently defines the 32-byte request authenticator and verifier-only
+Before Phase 6 can construct a real `AuthorityClient`, this phase must freeze
+and implement request-authenticator issuance. `authority-protocol` currently
+defines the 32-byte request authenticator and verifier-only
 `RequestAuthenticator`, but no session/key establishment or AP signing
-capability. On pass, Phase 6 consumes that purpose-bounded session capability,
-typed facts/receipts, and the opaque provider adapter; Phase 8 reviews raw
-physical evidence. Until all Phase 4 rows and later AC-001..011 pass, the parent
-remains blocked.
+capability. The initially selected loader-handoff direction remains unapproved:
+the exact loader has no established secret or attested ephemeral key, so an
+untrusted UART/carrier/DMA could copy plaintext capability material or
+substitute an unauthenticated encryption key. Phase 4 must identify and prove a
+concrete confidential, integrity-protected handoff before an ADR or client may
+land. On pass, Phase 6 consumes that purpose-bounded session capability, typed
+facts/receipts, and the opaque provider adapter; Phase 8 reviews raw physical
+evidence. Until all Phase 4 rows and later AC-001..011 pass, the parent remains
+blocked.
 
 ## Deviation Log
 
@@ -309,3 +316,12 @@ None at planning time beyond: **2026-08-26 Decision** — security red-team revi
 - 2026-08-30 — Result: implementation step 3's deterministic, non-executing provisioning-plan generator is complete at the `SOFTWARE_HARNESS` ceiling. It binds exact typed address/mask/request/readback artifacts for all nine steps, cross-binds TPM request bytes to stable/active/pending/NV templates and every step to the TPM policy, binds STM32 identifiers to addresses and masked readback semantics, self-hashes every artifact, and binds the complete authority-protocol and journal source trees in the canonical approval payload. Normal mode remains blocked; explicit software-harness mode permits only the existing AWS read-only identity admission failure and rejects every other admission failure. Focused provisioning tests pass 22/22, affected admission tests pass 11/11, and final review found no remaining scoped issue. No plan was executed: actual admitted inventory, preclosure evidence, exact operator approval, every mutation, hardware provisioning, physical failure evidence, and parent Phase 4 remain blocked.
 - 2026-08-31 — Result: the private-v2 cross-crate owner now enforces authorize → bank initialize/authenticated readback → `Uploading` acknowledgement and authorize chunk → bank write/authenticated readback → `next_index` acknowledgement. The pre-authorize relay snapshot permits initialization only from `Pending`; every accepted `Uploading` retry, including `next_index == 0`, authenticates the existing header and committed prefix instead of reinitializing. Absent/corrupt headers or committed-prefix corruption seal both bank and protected authority state. Deterministic abrupt-cut hooks at the pre-media, actual media-readback, and protected-acknowledgement boundaries explicitly fire and reboot to `Pending` or `Uploading` with the prior index. no_std checks pass; host suites pass 38/38 journal, 14/14 validator, and 36/36 protocol tests. This remains `SOFTWARE_HARNESS`, not STM32 flash or power-loss evidence.
 - 2026-08-31 — Result: the public `validate_and_stage_profile` transaction now owns the whole admitted-profile mutation boundary: authenticate and durably admit the request, obtain a nonconstructible bank-gated journal snapshot, run full validation with both exact TPM reads through a crate-private `RootProfilePolicy`, issue the protocol capability, immediately re-read the journal revision, and stage only if unchanged. The caller contract requires the firmware's exclusive enrollment lock for the complete call. Revision races return `JournalChanged` while relay state remains `Uploading`. A matching newer-sequence retry after a lost staged response advances the request floor and returns the persisted `RelayIntent` with zero snapshot, revision, TPM, or restaging calls. Validator tests pass 17/17, journal 38/38, and protocol 36/36; no public standalone root-capability adapter, generic X.509 API, or pre-admission entry point exists.
+- 2026-08-31 — Blocker: operator selected loader handoff as the preferred
+  request-capability direction, then security review found no established
+  confidential and integrity-protected path from the STM32 authority to the
+  isolated KMS. UART/carrier/DMA are untrusted; the exact loader has neither a
+  secret nor an attested ephemeral key, so plaintext is cloneable and encryption
+  to an unauthenticated key permits substitution. ADR-0011 remains unsaved and
+  `AuthorityClient` remains blocked until exact hardware demonstrates a secure
+  handoff. Persistent AP keys, generic signers, and speculative crypto are not
+  accepted fallbacks.
