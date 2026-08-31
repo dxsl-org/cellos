@@ -477,6 +477,27 @@ key, CAS-migrate only the exact candidate allocator source-state epoch while
 preserving sequence/Unix floor, and update only
 `lineage#cellos-dev-time-v1/head`; runtime can sign only with the response key.
 
+The Lambda artifact contains one canonical schema-2 `manifest.json`. Cold start
+requires its region, allocator/lineage table names, and response/lineage key ARNs
+to match the exact Lambda environment; configured SDK endpoint overrides are
+ignored. It then loads and pins both KMS public keys, authenticates the selected
+lineage transition, verifies both live `TableId` values, and composes one
+immutable reader/store/response-signer/Roughtime handler graph. The API Gateway
+payload-v2 boundary accepts only exact `POST /v1/time`, the signed-time CBOR
+content type, canonical bounded base64 request bytes, and returns only bounded
+base64 CBOR or an empty failure. One bounded `int(time.time())` read is a
+non-authoritative sanity floor: it can deny a Roughtime interval but never
+supplies response time.
+
+`scripts/package.sh` is deliberately offline and AWS-free. It requires one
+canonical manifest and a complete SHA-256-indexed local wheelhouse; accepts only
+exact pinned dependency names/versions, matching wheel metadata and declared
+Python 3.12 x86_64 tag tuples; rejects symlink/path/archive substitutions; and
+normalizes file order, timestamps, modes, and compression into deterministic
+unsigned ZIP bytes. Reported hashes are named `UnsignedZipSha256*`. The final
+CloudFormation `CodeSha256` must be computed from the separately approved
+AWS-Signer output, never copied from the pre-signing package.
+
 DynamoDB authorizes transaction subactions through the underlying item actions.
 Runtime receives `DescribeTable` on both pinned tables, lineage-table `GetItem`
 only when enclosed by `TransactGetItems`, and `ConditionCheckItem` only when

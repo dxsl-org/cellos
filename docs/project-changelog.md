@@ -4,26 +4,30 @@
 
 ## [Unreleased] Development-first hardware-constrained execution
 
-- Phase 5's nonce-bound signed-time service cores remain at the
-  `SOFTWARE_HARNESS` ceiling. Protocol, persistence/recovery, allocator, policy,
-  pinned-KMS, handler, strict Cloudflare Roughtime provider profile, and
-  ADR-0012 allocator-lineage contracts pass 283 signed-time and 8
-  production-rejection tests. Manifest schema 2 pins immutable allocator and
-  external-lineage `TableId` values, separate response/lineage keys, and one
-  canonical signed epoch transition. Every snapshot/recovery read and allocator
-  write checks the exact external head; strict direct-child admission, one-shot
-  table identity, exact restored-state epoch migration and ambiguous-CAS proof,
-  transition CAS, retained dual-table/dual-key infrastructure, and
-  runtime/transition-role KMS separation fail closed under substitutions.
-  Runtime lineage-table data-plane IAM is limited to `GetItem` enclosed by
-  `TransactGetItems` and `ConditionCheckItem` enclosed by
-  `TransactWriteItems`; `DescribeTable` verifies identity, and no runtime
-  lineage mutation action is granted. No AWS mutation occurred.
-  The authenticated live Cloudflare observation still omitted mandatory `NONC`
-  and signed `RADI=1`. Progress remains blocked on live provider
-  interoperability, artifact scripts, a named AWS DEV account/region,
-  operator-authorized deployment, and live outage/restore/fork/rollback/security
-  evidence.
+- Phase 5's nonce-bound signed-time service remains at the `SOFTWARE_HARNESS`
+  ceiling. Protocol, persistence/recovery, allocator, clock policy, pinned KMS,
+  strict Cloudflare Roughtime provider profile, ADR-0012 allocator lineage, and
+  the concrete Lambda/package composition pass 303 signed-time and 8
+  production-rejection tests. Cold start admits one canonical packaged schema-2
+  manifest, exact AWS region/table/key environment bindings, two live pinned
+  KMS public keys, the authenticated lineage head, and both live table IDs
+  before composing the sole reader/store/signer/Roughtime graph. The API
+  boundary accepts only payload-v2 exact `POST /v1/time` base64 CBOR and emits
+  bounded base64 CBOR or an empty failure. One bounded Lambda host-clock read is
+  non-authoritative and may only deny an authenticated upstream interval.
+  `scripts/package.sh` performs no AWS or dependency-network access: it requires
+  a canonical manifest and complete SHA-256-indexed local wheelhouse, validates
+  exact dependency pins, wheel metadata, and Python 3.12 x86_64 tag tuples, and
+  emits byte-deterministic unsigned ZIP bytes. Its digest labels explicitly say
+  `UnsignedZip`; only the later approved AWS Signer output may supply
+  CloudFormation `CodeSha256`. Local real-wheel smoke imported cryptography
+  41.0.7, cffi 1.16.0, and the Lambda entrypoint from two identical artifacts.
+  No artifact is operator-approved or deployable. The authenticated live
+  Cloudflare observation still omitted mandatory `NONC` and signed `RADI=1`;
+  progress remains blocked on provider interoperability, reviewed manifest and
+  wheelhouse inputs, signing/upload/deploy/rollback/evidence scripts, a named
+  AWS DEV account/region, operator authorization, and live
+  outage/restore/fork/rollback/security evidence. No AWS mutation occurred.
 
 - Phase 4's STM32/TPM authority has reached its `SOFTWARE_HARNESS` ceiling.
   The typed private-v2 protocol, authenticated profile bank, full-record
