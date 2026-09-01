@@ -22,7 +22,7 @@ use service_net_broker::runtime_roles::{start_runtime_roles, RuntimeRole};
 mod request_dispatch;
 #[cfg(feature = "restart-oracle")]
 #[path = "local_runtime/restart_oracle.rs"]
-mod restart_oracle;
+pub(crate) mod restart_oracle;
 
 use request_dispatch::process_request;
 

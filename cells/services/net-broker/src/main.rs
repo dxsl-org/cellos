@@ -49,6 +49,7 @@ api::declare_cluster!(mode = Private, name = "robots");
 api::declare_syscalls![
     Send,
     Recv,
+    RecvTimeout,
     TrySend,
     Reply,
     Log,

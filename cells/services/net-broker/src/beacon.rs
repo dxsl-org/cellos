@@ -210,9 +210,33 @@ pub struct BeaconChannel {
     cap_id: u32,
 }
 
-const BEACON_IPC_TIMEOUT_TICKS: u64 = 50;
+const BEACON_IPC_TIMEOUT_TICKS: u64 = service_net_broker::runtime_roles::NETWORK_IPC_TIMEOUT_TICKS;
 
 impl BeaconChannel {
+    fn call_after_admission<'r>(
+        service_tid: usize,
+        request: &NetRequest<'_>,
+        send_buffer: &mut [u8; api::ipc::IPC_BUF_SIZE],
+        response_buffer: &'r mut [u8; api::ipc::IPC_BUF_SIZE],
+    ) -> Result<NetResponse<'r>, ()> {
+        let encoded = api::ipc::encode(request, send_buffer).map_err(|_| ())?;
+        if !matches!(
+            ostd::syscall::sys_send(service_tid, encoded),
+            ostd::syscall::SyscallResult::Ok(_)
+        ) {
+            return Err(());
+        }
+        match ostd::syscall::sys_recv_timeout(
+            service_tid,
+            response_buffer,
+            BEACON_IPC_TIMEOUT_TICKS,
+        ) {
+            ostd::syscall::SyscallResult::Ok(sender) if sender == service_tid => {
+                api::ipc::decode(response_buffer).map_err(|_| ())
+            }
+            _ => Err(()),
+        }
+    }
     pub fn init(net: &mut NetRef) -> Option<Self> {
         let mut resp = [0u8; api::ipc::IPC_BUF_SIZE];
         let cap_id = match net
@@ -254,7 +278,7 @@ impl BeaconChannel {
         let mut request = [0u8; api::ipc::IPC_BUF_SIZE];
         let mut response = [0u8; api::ipc::IPC_BUF_SIZE];
         sys_heartbeat(HEARTBEAT_MS);
-        let result = ostd::ipc::service_call_typed_bounded::<NetRequest, NetResponse>(
+        let result = Self::call_after_admission(
             service_tid,
             &NetRequest::UdpSend {
                 cap_id: self.cap_id,
@@ -264,7 +288,6 @@ impl BeaconChannel {
             },
             &mut request,
             &mut response,
-            BEACON_IPC_TIMEOUT_TICKS,
         );
         match result {
             Ok(response) => Ok(response_sent_full_frame(response)),
@@ -276,10 +299,14 @@ impl BeaconChannel {
     }
 
     pub fn try_recv_frame(&self, net: &mut NetRef) -> Result<Option<[u8; WIRE_LEN]>, ()> {
+        #[cfg(feature = "restart-oracle")]
+        if crate::local_runtime::restart_oracle::shutdown_requested() {
+            return Ok(None);
+        }
         let service_tid = net.resolve().ok_or(())?;
         let mut request = [0u8; api::ipc::IPC_BUF_SIZE];
         let mut response = [0u8; api::ipc::IPC_BUF_SIZE];
-        let result = ostd::ipc::service_call_typed_bounded::<NetRequest, NetResponse>(
+        let result = Self::call_after_admission(
             service_tid,
             &NetRequest::UdpRecv {
                 cap_id: self.cap_id,
@@ -289,7 +316,6 @@ impl BeaconChannel {
             },
             &mut request,
             &mut response,
-            BEACON_IPC_TIMEOUT_TICKS,
         );
         match result {
             Ok(NetResponse::Data(data)) => Ok(decode_udp_frame(data)),
