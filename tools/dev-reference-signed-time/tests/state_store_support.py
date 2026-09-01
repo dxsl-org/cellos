@@ -110,8 +110,15 @@ def receipt_read(receipt):
 
 def absent_read():
     return {
-        "Responses": [{"Item": encode_lineage_head(CONTRACT)}, None],
+        "Responses": [{"Item": encode_lineage_head(CONTRACT)}, {}],
         "ResponseMetadata": response_metadata("absent"),
+    }
+
+
+def null_absent_read():
+    return {
+        "Responses": [{"Item": encode_lineage_head(CONTRACT)}, None],
+        "ResponseMetadata": response_metadata("null-absent"),
     }
 
 def expected_read(request):

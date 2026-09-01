@@ -7,7 +7,8 @@ from state_store_recovery_failure_cases import RecoveryFailureCases
 from state_store import DynamoStateStore, StoreError
 from state_store_support import (
     CONTRACT, EPOCH, KEY_ID, FakeClient, absent_read, expected_read,
-    expected_write, fixture, receipt_read, request_signer, response_metadata,
+    expected_write, fixture, null_absent_read, receipt_read, request_signer,
+    response_metadata,
 )
 
 
@@ -50,6 +51,15 @@ class StateStoreRecoveryTests(RecoveryFailureCases, unittest.TestCase):
         registration, _, _, _, request, _ = fixture()
         absent = absent_read()
         client = FakeClient(read_result=absent)
+
+        recovered = DynamoStateStore(client, CONTRACT).recover_committed(request, registration)
+
+        self.assertIsNone(recovered)
+        self.assertEqual(client.calls, [("read", expected_read(request))])
+
+    def test_preflight_null_absence_returns_none(self):
+        registration, _, _, _, request, _ = fixture()
+        client = FakeClient(read_result=null_absent_read())
 
         recovered = DynamoStateStore(client, CONTRACT).recover_committed(request, registration)
 
