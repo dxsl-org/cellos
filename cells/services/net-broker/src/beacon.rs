@@ -210,6 +210,8 @@ pub struct BeaconChannel {
     cap_id: u32,
 }
 
+const BEACON_IPC_TIMEOUT_TICKS: u64 = 50;
+
 impl BeaconChannel {
     pub fn init(net: &mut NetRef) -> Option<Self> {
         let mut resp = [0u8; api::ipc::IPC_BUF_SIZE];
@@ -247,40 +249,55 @@ impl BeaconChannel {
         Some(Self { cap_id })
     }
 
-    pub fn send_frame(&self, net: &mut NetRef, frame: &[u8; WIRE_LEN]) -> bool {
-        let mut resp = [0u8; api::ipc::IPC_BUF_SIZE];
+    pub fn send_frame(&self, net: &mut NetRef, frame: &[u8; WIRE_LEN]) -> Result<bool, ()> {
+        let service_tid = net.resolve().ok_or(())?;
+        let mut request = [0u8; api::ipc::IPC_BUF_SIZE];
+        let mut response = [0u8; api::ipc::IPC_BUF_SIZE];
         sys_heartbeat(HEARTBEAT_MS);
-        let response = match net.call::<NetRequest, NetResponse>(
+        let result = ostd::ipc::service_call_typed_bounded::<NetRequest, NetResponse>(
+            service_tid,
             &NetRequest::UdpSend {
                 cap_id: self.cap_id,
                 addr: MULTICAST_GROUP,
                 port: BEACON_PORT,
                 data: frame,
             },
-            &mut resp,
-        ) {
-            Ok(response) => response,
-            Err(_) => return false,
-        };
-        response_sent_full_frame(response)
+            &mut request,
+            &mut response,
+            BEACON_IPC_TIMEOUT_TICKS,
+        );
+        match result {
+            Ok(response) => Ok(response_sent_full_frame(response)),
+            Err(_) => {
+                net.invalidate();
+                Err(())
+            }
+        }
     }
 
-    pub fn try_recv_frame(&self, net: &mut NetRef) -> Option<[u8; WIRE_LEN]> {
-        let mut resp = [0u8; api::ipc::IPC_BUF_SIZE];
-        match net
-            .call::<NetRequest, NetResponse>(
-                &NetRequest::UdpRecv {
-                    cap_id: self.cap_id,
-                    // The net cell adds the source envelope to its response, not this
-                    // receive capacity. Preserve the exact bounded wire-frame read.
-                    buf_len: WIRE_LEN as u32,
-                },
-                &mut resp,
-            )
-            .ok()?
-        {
-            NetResponse::Data(data) => decode_udp_frame(data),
-            _ => None,
+    pub fn try_recv_frame(&self, net: &mut NetRef) -> Result<Option<[u8; WIRE_LEN]>, ()> {
+        let service_tid = net.resolve().ok_or(())?;
+        let mut request = [0u8; api::ipc::IPC_BUF_SIZE];
+        let mut response = [0u8; api::ipc::IPC_BUF_SIZE];
+        let result = ostd::ipc::service_call_typed_bounded::<NetRequest, NetResponse>(
+            service_tid,
+            &NetRequest::UdpRecv {
+                cap_id: self.cap_id,
+                // The net cell adds the source envelope to its response, not this
+                // receive capacity. Preserve the exact bounded wire-frame read.
+                buf_len: WIRE_LEN as u32,
+            },
+            &mut request,
+            &mut response,
+            BEACON_IPC_TIMEOUT_TICKS,
+        );
+        match result {
+            Ok(NetResponse::Data(data)) => Ok(decode_udp_frame(data)),
+            Ok(_) => Ok(None),
+            Err(_) => {
+                net.invalidate();
+                Err(())
+            }
         }
     }
 }

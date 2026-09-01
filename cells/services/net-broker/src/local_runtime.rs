@@ -89,9 +89,9 @@ impl BrokerNetworkState {
         })
     }
 
-    fn poll_beacon(&mut self) {
+    fn poll_beacon(&mut self) -> bool {
         let Some(now) = sys_get_time_ms() else {
-            return;
+            return true;
         };
         if beacon::beacon_due(now, self.next_beacon_at) {
             self.next_beacon_at = beacon::next_beacon_deadline(now);
@@ -103,22 +103,26 @@ impl BrokerNetworkState {
                     self.beacon_counter,
                 );
                 let frame = beacon::encrypt_beacon(&self.gossip_key, &plain, &mut self.rng);
-                if self.channel.send_frame(&mut self.net, &frame) {
-                    self.beacon_counter += 1;
+                match self.channel.send_frame(&mut self.net, &frame) {
+                    Ok(true) => self.beacon_counter += 1,
+                    Ok(false) => {}
+                    Err(()) => return false,
                 }
             }
         }
 
-        let Some(frame) = self.channel.try_recv_frame(&mut self.net) else {
-            return;
+        let frame = match self.channel.try_recv_frame(&mut self.net) {
+            Ok(Some(frame)) => frame,
+            Ok(None) => return true,
+            Err(()) => return false,
         };
         let Some(plain) = beacon::decrypt_beacon(&self.gossip_key, &frame) else {
-            return;
+            return true;
         };
-        if !self.accepts_beacon(&plain) {
-            return;
+        if self.accepts_beacon(&plain) {
+            self.peers.update(&plain);
         }
-        self.peers.update(&plain);
+        true
     }
 
     fn accepts_beacon(&self, plain: &BeaconPlain) -> bool {
@@ -235,8 +239,13 @@ extern "C" fn network_entry(_arg: usize) {
         // state out first so ingress and worker roles never wait on network IPC.
         let network = { lock_runtime_state(true).network.take() };
         if let Some(mut network) = network {
-            network.poll_beacon();
-            lock_runtime_state(true).network = Some(network);
+            if network.poll_beacon() {
+                lock_runtime_state(true).network = Some(network);
+            } else {
+                ostd::io::println(
+                    "[net-broker] beacon IPC timed out; network disabled until restart",
+                );
+            }
         }
         lock_runtime_state(true).broker.note_network_poll();
         ostd::task::yield_now();
