@@ -8,7 +8,7 @@ use smoltcp::{
 
 use super::{make_tcp, send_typed, tcp_state_byte, try_promote};
 use crate::{
-    next_ephemeral_port,
+    service_runtime::next_ephemeral_port,
     socket_state::SocketState,
     socket_table::{SocketOwner, SocketTable},
     tls::socket::TlsSocketEntry,

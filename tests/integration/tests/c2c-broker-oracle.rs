@@ -70,8 +70,13 @@ fn local_c2c_broker_oracle_meets_baseline_contract() {
         output.contains("[net-broker] restart oracle drained runtime roles"),
         "restart passed without proving all runtime roles drained\n{output}"
     );
+    assert!(
+        output.contains("[net-rx-producer] irq->completion PASS"),
+        "oracle passed without proving interrupt-driven NET_RX completion\n{output}"
+    );
     for forbidden in [
         "[net-broker] restart oracle role drain timed out",
+        "[net-broker] beacon IPC timed out; network disabled until restart",
         "[heartbeat] task ",
         "[watchdog] task ",
     ] {
