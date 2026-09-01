@@ -1,7 +1,7 @@
 ---
 title: "Cell-to-Cell Anywhere Core Recovery Plan"
 description: "Supersede the blocked 260624 plan with a relay-first, typed endpoint architecture across local, LAN, and remote."
-status: in-progress
+status: blocked
 priority: P1
 effort: 33
 branch: main
@@ -42,14 +42,13 @@ Recovery plan: supersedes `.agents/260624-cell-to-cell-anywhere/` without editin
 > ordering pass 92/92 broker host tests plus 5/5 endpoint integration tests and
 > RV64 builds.
 >
-> Phase 05 local-only contract work has started without relay enablement. The
-> four-session Noise pool now fails closed on exhaustion, preserves all occupied
-> sessions, and reports `WouldBlock` before opening another TCP path. Noise
-> prologues use protocol-role ordering, so both peers bind the same
+> Phase 05's bounded local contract portion is complete without relay
+> enablement. The four-session Noise pool fails closed on exhaustion, preserves
+> all occupied sessions, and reports `WouldBlock` before opening another TCP
+> path. Noise prologues use protocol-role ordering, so both peers bind the same
 > `initiator || responder` identity transcript. The optional global relay
-> endpoint is now a strict, allocation-free `cluster.cfg` contract with private
-> representation and read-only accessors, so its validated invariant survives
-> storage without dialing.
+> endpoint is a strict, allocation-free `cluster.cfg` contract with private
+> representation and read-only accessors; it is stored without dialing.
 > Server admission treats the validated mTLS certificate-derived NodeId as the
 > sole route authority, rejects duplicate live identities without displacement,
 > and uses exact-generation release. Relay reconnect delay uses equal jitter,

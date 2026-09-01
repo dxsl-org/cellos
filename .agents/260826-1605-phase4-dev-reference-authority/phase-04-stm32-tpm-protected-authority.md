@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "STM32 and TPM Protected Authority"
-status: "in_progress; SOFTWARE_HARNESS"
+status: "blocked; SOFTWARE_HARNESS complete"
 priority: P1
 dependencies: [2]
 tier: thinking
@@ -249,8 +249,8 @@ the physical pending-key and no-side-effect rows.
 ## Implementation Steps
 
 1. From Phase 1 inventory, probe MCU/TPM identity, firmware, SPI, option-byte, debug, lifecycle, and NV capabilities without mutation; reconcile every assumption or stop.
-2. **Journal/recovery host slice completed; chunked profile transport selected 2026-08-29.** Minimal raw concatenated-DER direct/one/two-intermediate profiles measured 479/850/1,218 bytes, proving private v1 insufficient. The approved clean v2 cutover reuses the frozen 12,288-byte chain bound with authenticated 768-byte chunks and stages only a verified bank reference. Next implement the frozen v2 state machine, bank recovery, and validator without changing public KMS bytes.
-3. Generate `provision/plan.py` output containing device IDs, STiRoT image/key digests, the approved Phase 3 SRAM-loader and manifest-verification-key digests bound into the approved image/policy, exact option-byte/OTP/lifecycle/debug writes, TPM persistent/NV definitions, auth policies, irreversibility, and recovery consequences.
+2. **Journal/recovery, chunked profile transport, authenticated bank, validator, and promotion/recovery host slices completed.** Minimal raw concatenated-DER direct/one/two-intermediate profiles measured 479/850/1,218 bytes, proving private v1 insufficient. The approved clean v2 cutover reuses the frozen 12,288-byte chain bound with authenticated 768-byte chunks and stages only a verified bank reference. All host-verifiable state-machine and recovery boundaries are implemented without changing public KMS bytes.
+3. **Provision-plan generator completed at the `SOFTWARE_HARNESS` ceiling; no execution.** `provision/plan.py` deterministically emits an approval-bound canonical payload covering device and STiRoT/approved-loader identities, closed typed TPM handle/NV/template/policy fields, and nine ordered mutation artifacts. Each artifact contains an exact typed address space/address, byte width, nonzero write mask, requested bytes, expected readback bytes, policy binding, derived byte digests, and a self-hash. TPM request bytes must match the selected stable/active/pending/NV template; STM32 identifiers bind their addresses and masked write/readback bits must agree. Complete `libs/authority-protocol/` and `authority/stm32h573i-dk/journal-core/` source trees are also bound. Normal generation remains blocked on Phase 1 admission; explicit software-harness mode allows only the existing AWS read-only identity gate as the sole admission failure and rejects every other failure. Actual admitted inventory, preclosure evidence, exact operator approval, and every mutation remain blocked.
 4. **Operator checkpoint:** obtain explicit approval tied to the plan hash before key creation/persistence, `NV_DefineSpace`, OTP/STiRoT provisioning, lifecycle transition, debug closure, or destructive snapshot work. A changed hash requires new approval; no purchase/cloud action occurs here.
 5. Provision STiRoT and TPM in approved order, verify image acceptance/rejection and public key/NV attributes, then close debug/lifecycle only at its separately recorded irreversible checkpoint.
 6. Run `python3 authority/stm32h573i-dk/hardware/run-gate.py full-matrix --matrix authority/stm32h573i-dk/hardware/failure-matrix.toml --capture-dir <real-dir>` using external power-cut/analyzer and admitted snapshot fixture; inability to inject a faithful locked-device edge leaves that row unpassed.
@@ -258,13 +258,35 @@ the physical pending-key and no-side-effect rows.
 
 ## Todo List
 
-- [ ] Freeze typed surface, TPM handle/NV/policy map, complete record schema, and transition table.
+- [x] Freeze the `SOFTWARE_HARNESS` typed surface, complete record schema, transition table, and deterministic provisioning-plan schema. The harness accepts only explicit synthetic TPM handle/NV/template/policy values and cannot freeze the admitted device's exact values.
+- [ ] Freeze the exact admitted TPM handle/NV/template/policy map from Phase 1 inventory and bind the operator-approved values into the final provisioning plan.
 - [x] Host full-record envelope, exact Phase 2 successor gate, counter-exact dual-slot recovery, irreversible seal seam, and cut-point/reboot harness pass at the `SOFTWARE_HARNESS` ceiling.
-- [x] Authenticate and durably state-admit profile begin/chunk/validation requests before bank, policy, or TPM work; bind the journal-selected inactive slot and state-derived CSR handle; 36 authority-protocol host tests pass.
+- [x] Authenticate and durably state-admit profile begin/chunk/validation requests before bank, policy, or TPM work; bind the journal-selected inactive slot and state-derived CSR handle; 52 authority-protocol host tests pass.
 - [x] Resolve canonical certificate-chain transport: operator selected the reviewed clean private-v2 chunk protocol with a 12,288-byte total bound.
+- [ ] Freeze the AP request-authentication contract: the STM32 authority's
+  exact session/key establishment, challenge and boot binding, authenticator
+  issuance, rotation, reset behavior, signer ownership, and confidential,
+  integrity-protected delivery to isolated KMS. No capability may cross the
+  untrusted UART/carrier/DMA in plaintext. The AP must receive only a
+  purpose-bounded session capability; never a generic STM32/TPM signer.
 - [ ] Complete and approve irreversible provisioning plan before mutation.
 - [ ] Execute every physical failure row with exact firmware and record hashes.
 - [ ] Prove pending-SPKI validation, single-use receipt, active-only signing, and generic-operation absence.
+- [x] Host model rejects TLS signing from `Empty`, `Pending`, `Uploading`,
+  `Staged`, `ReceiptConsumed`, `Prepared`, and provider-promoted pre-finalize
+  states, sealing each attempt. Exact `Active` generation and profile digest are
+  both mandatory; either mismatch seals. Staged receipt consumption separately
+  requires exact generation, policy epoch, and profile digest; every mismatch
+  seals, exact consumption is single-use, and replay seals. Commit preparation
+  requires the same exact three-field tuple; every mismatch seals, while exact
+  newer-sequence retries recover the identical persisted intent both in-boot
+  and after reboot from `Prepared`. Reboot from `ReceiptConsumed` opens only
+  under the new challenge and prepares the exact persisted intent. Provider
+  promotion requires a verified signature plus exact equality across all 12
+  receipt tuple fields; every independent substitution seals. A reboot from
+  persisted `Promoted` finalizes that exact intent, and a reboot after finalize
+  retains exact `Active`; every restore closes boot and invalidates time.
+  Physical receipt/signing proof remains open.
 
 ## Success Criteria
 
@@ -272,7 +294,7 @@ the physical pending-key and no-side-effect rows.
 - [ ] Substituted, rolled-back, and truncated-loader requests emit no XMODEM byte and produce a recorded digest-mismatch seal; the approved-loader digest round-trips through provisioning approval, PERSIST-003 records, and the OpenBoot fact.
 - [ ] Every power/snapshot/prepare/promote/finalize edge recovers one exact authenticated tuple or seals; no regressed floor, PREPARED service, or split brain occurs.
 - [ ] Physical chain/SPKI/receipt/generic-command negatives fail without TPM side effects; software-only results remain visibly distinct and satisfy no hardware criterion.
-- [x] Host journal and profile-bank cores reject malformed/authentication/identity/profile/successor/floor, cut, replay, retry, and bank-reference faults; journal-only recovery stays opaque, every durable upload prefix authenticates, and complete uploads pass their full bank hash before snapshot issuance. The closed validator's public API accepts only that bank-gated journal snapshot and an opaque admission token, parses the exact TPM P-256 public area, and binds its derived SPKI to both journal and leaf certificate. Direct/one/two-intermediate paths cover issuer EKU, root/duplicate SPKI, SAN/NodeId, canonical time, denylist, mismatched token/snapshot, stale identity/revision/CSR, unrelated TPM key, and double-read races. The no_std host suites pass 38 journal/bank, 11 validator, and 36 authority-protocol tests; this is not hardware evidence.
+- [x] Host journal and profile-bank cores reject malformed/authentication/identity/profile/successor/floor, cut, replay, retry, and bank-reference faults; journal-only recovery stays opaque, every durable upload prefix authenticates, and complete uploads pass their full bank hash before snapshot issuance. The cross-crate upload adapter persists only request admission before media work, then initializes/authenticates/read-backs the bank before persisting `Uploading` and writes/authenticates/read-backs each chunk before advancing `next_index`; reboot cuts at each boundary retain `Pending` or the prior upload index. The public exclusive staging transaction then performs admission → nonconstructible authenticated bank snapshot → full certificate/TPM validation → internal root capability → immediate journal-revision recheck → `stage_profile` without releasing its mutable boundaries. Matching staged retries durably advance the request floor and return the already-persisted intent without media, TPM, or restaging work. Direct/one/two-intermediate paths cover issuer EKU, root/duplicate SPKI, SAN/NodeId, canonical time, denylist, mismatched token/snapshot, stale identity/revision/CSR, unrelated TPM key, double-read races, revision races, and lost-response retries. The no_std host suites pass 38 journal/bank, 17 validator, and 36 authority-protocol tests; this is not hardware evidence.
 
 ## Risk Assessment
 
@@ -284,7 +306,19 @@ Trusted: approved STiRoT firmware, protected STM32 execution/flash keys, authori
 
 ## Next Steps
 
-On pass, Phase 6 consumes the typed facts/receipts and opaque provider adapter; Phase 8 reviews raw physical evidence. Until all Phase 4 rows and later AC-001..011 pass, the parent remains blocked.
+Before Phase 6 can construct a real `AuthorityClient`, this phase must freeze
+and implement request-authenticator issuance. `authority-protocol` currently
+defines the 32-byte request authenticator and verifier-only
+`RequestAuthenticator`, but no session/key establishment or AP signing
+capability. The initially selected loader-handoff direction remains unapproved:
+the exact loader has no established secret or attested ephemeral key, so an
+untrusted UART/carrier/DMA could copy plaintext capability material or
+substitute an unauthenticated encryption key. Phase 4 must identify and prove a
+concrete confidential, integrity-protected handoff before an ADR or client may
+land. On pass, Phase 6 consumes that purpose-bounded session capability, typed
+facts/receipts, and the opaque provider adapter; Phase 8 reviews raw physical
+evidence. Until all Phase 4 rows and later AC-001..011 pass, the parent remains
+blocked.
 
 ## Deviation Log
 
@@ -295,3 +329,71 @@ None at planning time beyond: **2026-08-26 Decision** — security red-team revi
 - 2026-08-29 — Decision: freeze the next software slice as a closed, canonical certificate-profile validator over the existing bounded request. Phase 2 must authenticate before invoking the verifier. A serialized journal-derived pending-enrollment snapshot and repeated exact-slot TPM read close substitution and race paths. The root stays provisioned; validation is offline, algorithm-closed, time-, policy-, NodeId-, and TPM-bound. Exact direct/one/two-intermediate fixtures must fit the frozen 768-byte field or stop for protocol review.
 - 2026-08-29 — Blocker: generated minimal policy-complete raw concatenated-DER P-256 profiles measured 479/850/1,218 bytes for zero/one/two intermediates. Because the v1 request admits only 768 bytes, required intermediate-chain positives were unrepresentable. Validator implementation stopped as required; resolution needed Phase 2 protocol review, not truncation or relaxed path policy.
 - 2026-08-29 — Decision: operator selected chunked private protocol v2. The clean cutover rejects v1, preserves public KMS bytes, adds typed begin/write operations, changes validation to reference a complete authenticated upload, persists upload progress, and stores active/pending chains in authenticated external banks so counter-journal records remain bounded.
+- 2026-08-30 — Result: implementation step 3's deterministic, non-executing provisioning-plan generator is complete at the `SOFTWARE_HARNESS` ceiling. It binds exact typed address/mask/request/readback artifacts for all nine steps, cross-binds TPM request bytes to stable/active/pending/NV templates and every step to the TPM policy, binds STM32 identifiers to addresses and masked readback semantics, self-hashes every artifact, and binds the complete authority-protocol and journal source trees in the canonical approval payload. Normal mode remains blocked; explicit software-harness mode permits only the existing AWS read-only identity admission failure and rejects every other admission failure. Focused provisioning tests pass 22/22, affected admission tests pass 11/11, and final review found no remaining scoped issue. No plan was executed: actual admitted inventory, preclosure evidence, exact operator approval, every mutation, hardware provisioning, physical failure evidence, and parent Phase 4 remain blocked.
+- 2026-08-31 — Result: the private-v2 cross-crate owner now enforces authorize → bank initialize/authenticated readback → `Uploading` acknowledgement and authorize chunk → bank write/authenticated readback → `next_index` acknowledgement. The pre-authorize relay snapshot permits initialization only from `Pending`; every accepted `Uploading` retry, including `next_index == 0`, authenticates the existing header and committed prefix instead of reinitializing. Absent/corrupt headers or committed-prefix corruption seal both bank and protected authority state. Deterministic abrupt-cut hooks at the pre-media, actual media-readback, and protected-acknowledgement boundaries explicitly fire and reboot to `Pending` or `Uploading` with the prior index. no_std checks pass; host suites pass 38/38 journal, 14/14 validator, and 36/36 protocol tests. This remains `SOFTWARE_HARNESS`, not STM32 flash or power-loss evidence.
+- 2026-08-31 — Result: the public `validate_and_stage_profile` transaction now owns the whole admitted-profile mutation boundary: authenticate and durably admit the request, obtain a nonconstructible bank-gated journal snapshot, run full validation with both exact TPM reads through a crate-private `RootProfilePolicy`, issue the protocol capability, immediately re-read the journal revision, and stage only if unchanged. The caller contract requires the firmware's exclusive enrollment lock for the complete call. Revision races return `JournalChanged` while relay state remains `Uploading`. A matching newer-sequence retry after a lost staged response advances the request floor and returns the persisted `RelayIntent` with zero snapshot, revision, TPM, or restaging calls. Validator tests pass 17/17, journal 38/38, and protocol 36/36; no public standalone root-capability adapter, generic X.509 API, or pre-admission entry point exists.
+- 2026-08-31 — Blocker: operator selected loader handoff as the preferred
+  request-capability direction, then security review found no established
+  confidential and integrity-protected path from the STM32 authority to the
+  isolated KMS. UART/carrier/DMA are untrusted; the exact loader has neither a
+  secret nor an attested ephemeral key, so plaintext is cloneable and encryption
+  to an unauthenticated key permits substitution. The loader-handoff capability
+  ADR remains unsaved, and `AuthorityClient` remains blocked until exact hardware
+  demonstrates a secure handoff. Persistent AP keys, generic signers, and
+  speculative crypto are not accepted fallbacks.
+- 2026-08-31 — Result: focused authority capability-boundary tests now exercise
+  every non-active relay state, including provider-promoted pre-finalize, and
+  require TLS-sign authorization to return `InvalidState` and seal. Separate
+  fresh active-state cases require exact generation and profile digest, sealing
+  either mismatch. The receipt test consumes the exact staged receipt once, then
+  requires a newer-sequence replay to return `ReceiptConsumed` and seal. The
+  focused suite passes 3/3; the full protocol suite passes 39/39 and RV64 no_std
+  check passes. This is host state-machine proof only, not physical
+  TPM/provider/signing evidence.
+- 2026-08-31 — Result: staged-receipt boundary tests independently substitute
+  generation, policy epoch, and profile digest after a complete validated stage.
+  Each authenticated, fresh-sequence mismatch returns `ReceiptAbsent` and seals;
+  the exact positive and single-use replay cases remain covered separately. The
+  focused suite passes 3/3; the full protocol suite passes 42/42 and RV64 no_std
+  check passes. This is host state-machine proof only.
+- 2026-08-31 — Result: provider-promotion boundary tests independently mutate
+  every receipt tuple field: device, authority, authority epoch, generation,
+  policy epoch, pending slot/SPKI, profile digest, boot epoch, validation
+  request, upload handle, and profile length. Each otherwise signature-accepted
+  mismatch returns `ProviderSplitBrain` and seals; a bad provider signature is
+  rejected before promotion. The focused suite passes 2/2 over 12 tuple
+  substitutions plus the signature negative; the full protocol suite passes
+  44/44 and RV64 no_std check passes. This is host state-machine proof only.
+- 2026-08-31 — Result: commit-preparation boundary tests independently
+  substitute generation, policy epoch, and profile digest after exact receipt
+  consumption. Each fresh authenticated mismatch returns `ProviderSplitBrain`
+  and seals. A separate lost-response case retries the exact tuple with a newer
+  sequence and recovers the identical `PreparedCommitIntent` while remaining
+  `Prepared`. The focused suite passes 4/4; the full protocol suite passes 48/48
+  and RV64 no_std check passes. This is host state-machine proof only.
+- 2026-08-31 — Result: promotion recovery tests authenticate and restore the
+  exact persisted record across reboot. Restored `Promoted` has closed boot and
+  unavailable time, then finalizes only its persisted intent to `Active`;
+  restoring again after finalize retains the exact active intent without
+  reopening boot or time. The focused suite passes 2/2; the full protocol suite
+  passes 50/50 and RV64 no_std check passes. This is host persistence/recovery
+  proof only, not flash atomicity, provider durability, or physical power-loss
+  evidence.
+- 2026-08-31 — Result: pre-promotion recovery tests authenticate and restore
+  both `ReceiptConsumed` and `Prepared` records carrying a live time lease.
+  Restore closes boot and invalidates time; only the fresh reboot challenge
+  opens epoch 2. `ReceiptConsumed` then prepares the exact pre-reboot intent,
+  while a newer-sequence exact retry from restored `Prepared` returns the
+  identical `PreparedCommitIntent` and remains prepared. The focused suite
+  passes 2/2; the full protocol suite passes 52/52 and RV64 no_std check passes.
+  This is host persistence/recovery proof only.
+- 2026-08-31 — Closure: every reachable Phase 4 software deliverable is
+  complete. The final gate passes authority protocol 52/52, journal 38/38,
+  profile validator 17/17, provisioning 22/22, production rejection 8/8,
+  RV64 no_std checks for all three Rust crates, and workspace formatting.
+  Phase 4 is now explicitly blocked rather than in progress: its remaining
+  work requires admitted STM32H573I-DK/SLB9672 hardware, exact TPM values,
+  operator approval of the irreversible plan hash, locked-device failure
+  evidence, and a demonstrated confidential and integrity-protected
+  purpose-bounded capability handoff to isolated KMS. Synthetic fixture values
+  are not promoted into a hardware contract and satisfy no physical criterion.

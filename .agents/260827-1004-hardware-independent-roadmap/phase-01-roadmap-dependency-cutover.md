@@ -62,16 +62,16 @@ None — current roadmap files and active plans were read directly.
 
 ## Todo List
 
-- [ ] Publish the capability-lane table and evidence ladder.
-- [ ] Reconcile every lane to the canonical execution-class and evidence-ceiling enums.
-- [ ] Link every lane to one owning plan and reopening event.
+- [x] Publish the capability-lane table and evidence ladder.
+- [x] Reconcile every lane to the canonical execution-class and evidence-ceiling enums.
+- [x] Link every lane to one owning plan and reopening event.
 
 ## Success Criteria
 
-- [ ] A reader can identify work executable today without opening the legacy roadmap.
-- [ ] No QEMU/compile result is represented as physical or production PASS.
-- [ ] G3 has no software implementation task before real vendor/hardware evidence.
-- [ ] Every parked lane names the exact event that reopens it.
+- [x] A reader can identify work executable today without opening the legacy roadmap.
+- [x] No QEMU/compile result is represented as physical or production PASS.
+- [x] G3 has no software implementation task before real vendor/hardware evidence.
+- [x] Every parked lane names the exact event that reopens it.
 
 ## Security Considerations
 

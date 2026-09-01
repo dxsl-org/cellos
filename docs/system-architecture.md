@@ -456,6 +456,78 @@ transition, ordering, and snapshot-model behavior only; they do not prove
 SLB9672 NV semantics, STM32 flash atomicity, STiRoT/debug protection,
 electrical isolation, endurance, or physical power-loss behavior.
 
+### AWS DEV_REFERENCE Signed-Time Provider
+
+ADR-0011 pins Cloudflare draft 11, version `0x8000000b`, the published endpoint
+and long-term key, exact nonce-Merkle/delegation/SREP verification, mandatory
+root `NONC`, and signed `RADI>=3`. Generated Cloudflare vectors prove the local
+implementation contract only; they use fixed test keys and synthetic
+`MIDP=50`/`RADI=5` replies, not public-service captures.
+
+The public endpoint is currently incompatible. One pinned-key-authenticated
+draft-11 response omitted root `NONC` and signed `RADI=1`; Cloudflare issue 72
+independently corroborates only the public endpoint's IETF missing-`NONC`
+failure. Cloudflare source history added reply
+`NONC` in `d09eb373` and required it in `932a07ae`; current source emits and
+verifies the field, while the public deployment revision/configuration is not
+published. Neither draft 11 nor draft 8 permits the observed missing `NONC`, and
+draft 11 forbids the one-second radius. Runtime therefore remains sealed; it
+does not relax nonce or radius checks, reinterpret the signed interval, or
+infer deployment conformance from repository fixtures. Reopening requires a
+conforming endpoint or a separately reviewed provider/profile and source epoch.
+
+### AWS DEV_REFERENCE Signed-Time Allocator Lineage
+
+ADR-0012 separates allocator rollback authority from allocator persistence.
+`tools/dev-reference-signed-time/` models two retained DynamoDB tables: the
+restorable allocator and an external lineage table excluded from every allocator
+restore/switch procedure. Manifest schema 2 pins both names and immutable
+`DescribeTable.TableId` UUIDs, the response and lineage KMS key identities and
+DER-SPKI digests, and one canonical low-S P-256 signed transition.
+
+Genesis is source epoch 1 with a zero parent. Every later transition is an exact
+direct child with epoch `N+1`, parent signed-transition digest, new response key,
+and reviewed reason. Restore/fork also requires a new allocator name and
+`TableId`; response-key-only rotation retains the exact allocator identity.
+Startup authenticates this contract and verifies both live table IDs
+before service dependencies may compose. Snapshot and exact-receipt recovery
+transactions read the selected lineage head; allocator writes atomically
+condition-check it. The separate transition role can sign with only the lineage
+key, CAS-migrate only the exact candidate allocator source-state epoch while
+preserving sequence/Unix floor, and update only
+`lineage#cellos-dev-time-v1/head`; runtime can sign only with the response key.
+
+The Lambda artifact contains one canonical schema-2 `manifest.json`. Cold start
+requires its region, allocator/lineage table names, and response/lineage key ARNs
+to match the exact Lambda environment; configured SDK endpoint overrides are
+ignored. It then loads and pins both KMS public keys, authenticates the selected
+lineage transition, verifies both live `TableId` values, and composes one
+immutable reader/store/response-signer/Roughtime handler graph. The API Gateway
+payload-v2 boundary accepts only exact `POST /v1/time`, the signed-time CBOR
+content type, canonical bounded base64 request bytes, and returns only bounded
+base64 CBOR or an empty failure. One bounded `int(time.time())` read is a
+non-authoritative sanity floor: it can deny a Roughtime interval but never
+supplies response time.
+
+`scripts/package.sh` is deliberately offline and AWS-free. It requires one
+canonical manifest and a complete SHA-256-indexed local wheelhouse; accepts only
+exact pinned dependency names/versions, matching wheel metadata and declared
+Python 3.12 x86_64 tag tuples; rejects symlink/path/archive substitutions; and
+normalizes file order, timestamps, modes, and compression into deterministic
+unsigned ZIP bytes. Reported hashes are named `UnsignedZipSha256*`. The final
+CloudFormation `CodeSha256` must be computed from the separately approved
+AWS-Signer output, never copied from the pre-signing package.
+
+DynamoDB authorizes transaction subactions through the underlying item actions.
+Runtime receives `DescribeTable` on both pinned tables, lineage-table `GetItem`
+only when enclosed by `TransactGetItems`, and `ConditionCheckItem` only when
+enclosed by `TransactWriteItems`; it receives no lineage `PutItem`, `UpdateItem`,
+or `DeleteItem`. Thus runtime can verify and compare the selected head but cannot
+replace it. The mechanism remains at the `SOFTWARE_HARNESS` / `DEV_REFERENCE`
+ceiling: live AWS restore, key-disable, CAS-race, role-isolation, and outage
+evidence remains mandatory, and production rollback authority remains blocked
+by ADR-0006.
+
 ---
 
 ## Kernel (nano-kernel)

@@ -629,10 +629,9 @@ jobs:
           chmod +x scripts/qemu-hypervisor-smoke.sh
           bash scripts/qemu-hypervisor-smoke.sh
 
-      # This lane fails intermittently on an unchanged source tree (docs/TODO.md).
-      # The step log only holds the tail the script prints, so keep the whole
-      # boot output per run — comparing a failing run against a passing one is
-      # the only way to characterise the intermittency.
+      # The historical EL2 IRQ/preemption intermittency is fixed. Retain the
+      # complete boot output for regression diagnosis and to distinguish the
+      # narrowly tolerated TCG nested-walk signature from functional failures.
       - name: Upload QEMU boot log
         if: always()
         uses: actions/upload-artifact@v4
@@ -1148,10 +1147,9 @@ jobs:
   # network_curl_http_get) under TCG contention from running the whole suite
   # at once; each passed 100% in isolation and across both full runs overall.
   # The allowlist below was expanded to the full current test list on that
-  # evidence. Verified only on local QEMU 10.2.0/Windows, not yet on this
-  # job's ubuntu-24.04 QEMU build — first CI run after this change is the
-  # verification; if a test proves flaky here that wasn't locally, remove it
-  # and note why, don't silently retry until green.
+  # evidence. Hosted Ubuntu 24.04 run 33486590595:1 passed all 54 allowlisted
+  # serially and uploaded software-evidence-33486590595-1. Any NEW test remains
+  # excluded until it passes 2/2 consecutive full runs; never retry to green.
   boot-suite:
     name: Network Data-Path Integration (riscv64)
     outputs:
@@ -1187,6 +1185,7 @@ jobs:
 
       - name: Prepare authenticated software evidence logs
         run: mkdir -p software-evidence
+
 
       - name: Build cells + kernel + disk images (gen_disk)
         shell: bash
@@ -1225,6 +1224,15 @@ jobs:
           sha256sum disk_v3.img > software-evidence/disk-v3.sha256
           printf 'producer-runner=%s\n' "$producer_runner" >> "$GITHUB_OUTPUT"
 
+      - name: Run HTTP smoke evidence
+        shell: bash
+        env:
+          CARGO_BUILD_TARGET: x86_64-unknown-linux-gnu
+        run: |
+          set -o pipefail
+          cd tests/integration
+          cargo test --test http-smoke -- --test-threads=1 \
+            2>&1 | tee "$GITHUB_WORKSPACE/software-evidence/http-smoke.log"
       - name: Run boot + network + shell + VFS tests
         shell: bash
         env:
@@ -1359,17 +1367,19 @@ jobs:
             --runner "${{ needs.boot-suite.outputs.producer-runner }}" \
             --workflow-ref "${{ github.workflow_ref }}" \
             --sequence "${{ github.run_id }}:${{ github.run_attempt }}" \
-            --command "boot-suite: gen_disk + boot + window-policy + viui-managed-surface" \
+            --command "boot-suite: gen_disk + http-smoke + boot + window-policy + viui-managed-surface" \
             --input catalog.json=scripts/admission_prequalification/catalog.json \
             --input acceptance-ledger.json=docs/app-tier-acceptance-ledger.json \
             --input workflow.yml=.github/workflows/ci.yml \
             --input gen-disk.ps1=gen_disk.ps1 \
-            --input viui-managed-surface.rs=tests/integration/tests/viui-managed-surface.rs \
             --input window-policy.rs=tests/integration/tests/window-policy.rs \
+            --input viui-managed-surface.rs=tests/integration/tests/viui-managed-surface.rs \
+            --input http-smoke.rs=tests/integration/tests/http-smoke.rs \
             --image disk-v3.sha256=.authenticated-evidence/runtime/disk-v3.sha256 \
             --log catalog-validation.log=.authenticated-evidence/catalog-validation.log \
             --log producer-metadata.log=.authenticated-evidence/runtime/producer-metadata.log \
             --log gen-disk.log=.authenticated-evidence/runtime/gen-disk.log \
+            --log http-smoke.log=.authenticated-evidence/runtime/http-smoke.log \
             --log boot-suite.log=.authenticated-evidence/runtime/boot-suite.log \
             --log window-policy.log=.authenticated-evidence/runtime/window-policy.log \
             --log viui-managed-surface.log=.authenticated-evidence/runtime/viui-managed-surface.log \

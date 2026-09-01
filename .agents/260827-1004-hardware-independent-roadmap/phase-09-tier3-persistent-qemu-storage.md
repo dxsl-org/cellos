@@ -1,7 +1,7 @@
 ---
 phase: 9
 title: "Implement ARM64 Tier 3 Persistent QEMU Storage"
-status: in-progress
+status: blocked
 priority: P1
 effort: "4d"
 dependencies: [1, 6]
@@ -25,7 +25,11 @@ Replace the ARM64 QEMU guest's 4 MiB volatile heap disk with a bounded persisten
 
 ## Key Insights
 
-`virtio_blk.rs` currently stores every sector in a `Vec<u8>` and acknowledges FLUSH without durability. This is an in-repo software gap, not an external dependency.
+The bounded `/mnt/sd/guest_disk.img` policy, grant-backed read/write path, and
+`op=2` FLUSH plumbing are implemented. The remaining gap is runtime evidence:
+the supported ARM64 hostile scenarios do not reach the guest probe in the
+current TCG environment, so write/FLUSH/reboot/read and failure recovery remain
+unproven.
 
 ## Requirements
 
@@ -39,14 +43,12 @@ Replace the ARM64 QEMU guest's 4 MiB volatile heap disk with a bounded persisten
 
 `guest virtio-blk → bounded descriptor parser → persistent block adapter → Cellos VFS/block service → mounted QEMU disk image`. The adapter owns serialization and maps service errors to VirtIO status.
 
-## Assumptions
+## Evidence Boundary
 
-- **Claim:** The mounted VFS path supports bounded grant-backed writes and commit-before-acknowledge.
-  **Confidence:** high
-  **How to verify:** reconcile `.agents/260825-sdk-delivery/phase-04-vfs-grant-write.md` with current service code before Build.
-- **Claim:** One fixed ARM64 QEMU volume is sufficient for the first persistence contract.
-  **Confidence:** medium
-  **How to verify:** approve the exact path, capacity, image lifecycle, and cleanup policy before implementation.
+Implementation and focused contract evidence do not establish ARM64 runtime
+durability. Completion requires the supported Phase 06 ARM64 scenarios to reach
+the guest probe and demonstrate the success and failure matrices without
+changing the fixed backing-path contract.
 
 ## Related Files
 
@@ -68,8 +70,8 @@ Replace the ARM64 QEMU guest's 4 MiB volatile heap disk with a bounded persisten
 
 ## Todo List
 
-- [ ] Approve exact persistent volume policy and lifecycle.
-- [ ] Implement bounded read/write/FLUSH semantics.
+- [x] Approve exact persistent volume policy and lifecycle.
+- [x] Implement bounded read/write/FLUSH semantics.
 - [ ] Prove ARM64 QEMU write/flush/reboot/read and failure recovery.
 
 ## Success Criteria
@@ -89,7 +91,9 @@ VFS acknowledgement may not imply media durability. If no durable commit primiti
 
 ## Next Steps
 
-After ARM64 QEMU persistence passes, expose the backend contract to Phase 10 and retain Phase 06 as runner owner.
+Resume only in an environment where the supported Phase 06 ARM64 hostile
+scenarios reach the guest probe. Then run write/FLUSH/reboot/read and the failure
+matrix without changing the implemented backing-path contract.
 
 ## Deviation Log
 - Decision: the user approved a dedicated `build/tier3-arm64-persistent.img` fixed at 8 MiB, created once, reused across restart evidence, and removed only by an explicit cleanup command. The guest never selects the path. Implementation remains blocked only on supported Phase 06 hostile scenarios.

@@ -4,6 +4,14 @@
 
 ## [Unreleased] Development-first hardware-constrained execution
 
+- Reconciled hosted CI evidence after run
+  [`33486590595:1`](https://github.com/dxsl-org/cellos/actions/runs/33486590595).
+  The Ubuntu 24.04 RISC-V boot suite passed all 54 allowlisted tests and uploaded
+  `software-evidence-33486590595-1` (artifact `9792567480`); ARM64 TCG machinery
+  also passed. Workflow and risk metadata no longer describe the repaired EL2
+  IRQ/preemption defect as intermittent. These are hosted-QEMU software results,
+  not ARM64 KVM, physical, service, admission, or production evidence.
+
 - Wired an independent
   [`qemu-x86-hypervisor-boot`](../.github/workflows/ci.yml) job on
   `ubuntu-24.04`. It builds the checksum-pinned official QEMU 10.2.0 source via
@@ -39,6 +47,177 @@
   and 2 GiB all reached the origin-tagged `~ #` guest prompt. A QEMU 10.2.0
   VirtIO-MMIO run with a socket-backed ARP/ICMP peer also reached
   `VIRTIO_E2E_NET_TX_RX_PASS` and `VIRTIO_E2E_IRQ6_PASS`.
+
+- Bounded service-net's former nearly 100 ms idle IPC blind spot to one
+  scheduler tick plus normal dispatch while retaining interrupt-driven NET_RX
+  and the independent 100 ms smoltcp maintenance interval. Service-net's host
+  tests pass 28/28, including both exact policy tests at 1/1; the default and
+  verified-TLS RISC-V builds pass. The C2C QEMU oracle passed 1/1 with
+  `[net-rx-producer] irq->completion PASS`, 1,000/1,000 calibration,
+  10,000/10,000 soak, positive network progress, zero heartbeat/watchdog
+  deltas, and no termination markers. This is a service-local software policy
+  and QEMU-only evidence, not a hard wall-clock or physical-hardware bound.
+
+- Corrected the misleading HTTPS smoke contract without weakening TLS. The
+  existing `boot-suite` image now runs and retains the independently supported
+  plain-HTTP round trip. The harness deliberately makes no assertion from the
+  guest's generic HTTPS connect failure: default `service-net` has no
+  authenticated certificate time and cannot reach certificate verification,
+  while the same output could represent an unrelated transport failure. Direct
+  clock tests cover time unavailability; new direct handler/socket preflight
+  tests pin zero-capability and `InvalidCertificate` denial before `make_tcp`
+  and record-buffer allocation. All 26 default host tests pass, along with
+  default and verified-TLS RISC-V builds. No leaf certificate, clock, trust
+  root, or runtime TLS policy changed. Positive HTTPS evidence remains blocked
+  on admitted authenticated time or a separately reviewed test-only provider.
+  The AArch64 semihosting acceptance-ledger
+  blocker remains open until its governed resolution-evidence contract passes.
+
+- Phase 5's nonce-bound signed-time service remains at the `SOFTWARE_HARNESS`
+  ceiling. Protocol, persistence/recovery, allocator, clock policy, pinned KMS,
+  strict Cloudflare Roughtime provider profile, ADR-0012 allocator lineage, and
+  the concrete Lambda/package composition pass 303 signed-time and 8
+  production-rejection tests. Cold start admits one canonical packaged schema-2
+  manifest, exact AWS region/table/key environment bindings, two live pinned
+  KMS public keys, the authenticated lineage head, and both live table IDs
+  before composing the sole reader/store/signer/Roughtime graph. The API
+  boundary accepts only payload-v2 exact `POST /v1/time` base64 CBOR and emits
+  bounded base64 CBOR or an empty failure. One bounded Lambda host-clock read is
+  non-authoritative and may only deny an authenticated upstream interval.
+  `scripts/package.sh` performs no AWS or dependency-network access: it requires
+  a canonical manifest and complete SHA-256-indexed local wheelhouse, validates
+  exact dependency pins, wheel metadata, and Python 3.12 x86_64 tag tuples, and
+  emits byte-deterministic unsigned ZIP bytes. Its digest labels explicitly say
+  `UnsignedZip`; only the later approved AWS Signer output may supply
+  CloudFormation `CodeSha256`. Local real-wheel smoke imported cryptography
+  41.0.7, cffi 1.16.0, and the Lambda entrypoint from two identical artifacts.
+  No artifact is operator-approved or deployable. Source/history review confirms
+  the authenticated live Cloudflare response is not a supported dialect:
+  draft 11 and draft 8 both require root `NONC`, draft 11 requires `RADI>=3`,
+  current Cloudflare source emits/requires `NONC`, and official vectors are
+  locally generated fixtures rather than endpoint captures. Cloudflare's public
+  endpoint still matches the pre-fix missing-`NONC` fingerprint and one-second
+  test radius; its deployed revision/configuration is unpublished. ADR-0011 now
+  records the invalid live-interoperability premise and keeps the strict adapter
+  unchanged. Progress remains blocked on a conforming endpoint or new reviewed
+  provider/profile and source epoch, reviewed packaging inputs,
+  signing/upload/deploy/rollback/evidence scripts, AWS authorization, and live
+  security evidence. No AWS mutation occurred.
+
+- Phase 4's STM32/TPM authority has reached its `SOFTWARE_HARNESS` ceiling.
+  The typed private-v2 protocol, authenticated profile bank, full-record
+  journal/recovery model, certificate/profile validator, promotion recovery,
+  production rejection, and deterministic non-executing provisioning plan are
+  complete. The closure gate passes 52 authority-protocol, 38 journal, 17
+  profile-validator, 22 provisioning, and 8 production-rejection tests plus
+  RV64 no_std checks. Physical completion remains blocked on admitted
+  STM32H573I-DK/SLB9672 hardware, exact TPM values, operator-approved
+  irreversible provisioning, locked-device failure evidence, and a proven
+  confidential/integrity-protected capability handoff to isolated KMS;
+  synthetic fixture values satisfy no hardware criterion.
+
+- Phase 5's signed-time wire contract is frozen at the `SOFTWARE_HARNESS`
+  ceiling. The strict deterministic-CBOR codec rejects non-shortest, duplicate,
+  indefinite, tagged, floating-point, unsupported, trailing, and oversized
+  inputs. Requests bind the registered canonical Ed25519 DER-SPKI and verify the
+  exact labels 1–8; responses bind source epoch and the complete request, hash
+  exact labels 1–14 for KMS `DIGEST` signing, and require canonical low-S P-256
+  DER signatures. The fail-closed KMS adapter makes one exact pinned-key
+  `DIGEST`/`ECDSA_SHA_256` call, validates and verifies the result, normalizes
+  high-S output, forces final wire encoding, and neither retries nor falls back.
+  The pure allocation core revalidates an exact signed request, hashes its full
+  canonical labels 1–9 for the future immutable receipt, and advances sequence,
+  Unix floor, and bounded expiry with strict interval, protected-floor, and
+  uint64 checks. The receipt core freezes exact lower-hex state/registration/
+  request keys, stores the full canonical signed-request digest and immutable
+  response labels, and permits only an exact constant-time digest retry without
+  refreshing sequence, time, or expiry. Strict DynamoDB AttributeValue codecs
+  now freeze exact registration, allocator-state, and receipt records, including
+  canonical uint64 decimals, Ed25519 registration keys, and canonical response
+  bytes. Unsigned responses stop at 950 bytes, reserving the exact 74-byte
+  worst-case low-S P-256 signature field under the 1,024-byte final wire limit.
+  The injected DynamoDB adapter now emits one exact atomic registration check,
+  prior-state CAS, and create-only receipt transaction. Only an exact HTTP 200
+  AWS write envelope with a nonempty request ID confirms the write. Every
+  exception or malformed/non-200 write envelope is ambiguous and never retried:
+  one exact-key transactional read may return only the strictly decoded receipt
+  for the complete authenticated request, and only under its own exact HTTP 200
+  envelope with a nonempty request ID. Public-only golden and malformed vectors
+  round-trip exactly. The transactional snapshot reader revalidates the signed
+  request before one ordered registration/state read, then strictly binds the
+  non-revoked registration tuple and configured source epoch. The KMS key loader
+  makes one exact `GetPublicKey` call and admits only the manifest key ID,
+  P-256/`SIGN_VERIFY`/`ECDSA_SHA_256` contract and constant-time SHA-256 DER-SPKI
+  pin. The stateless clock policy binds upstream identity/source epoch and
+  rejects stale, over-uncertain, inconsistent, expired, or protected-floor-
+  external observations without ambient time, cache, holdover, or fallback.
+  The strict adapter now pins Cloudflare's draft-11 provider profile, verifies
+  delegation, signed `SREP`, provider-vector nonce Merkle inclusion, version
+  and interval bounds, and uses one UDP send/receive with no retry. The
+  canonical DEV_REFERENCE manifest pins
+  that provider alongside region, HTTPS endpoint/SPKI, source epoch, KMS
+  ARN/key digest, and clock bounds without checking in a selected instance.
+  It pre-bounds every variable field and rejects noncanonical JSON, overlength
+  DNS names, and invalid partition/region/account/KMS-key combinations. Manifest
+  tests pass 42/42 and final review found no remaining scoped issue. Request
+  handling now has an explicit two-stage boundary: strict canonical parsing and
+  embedded-key signature verification precede the exact registration lookup,
+  while non-revoked tuple/key equality completes authentication afterward.
+  Every caller migrated off the former combined response module. Exact retries
+  now have a registration-gated receipt-first path before clock admission: an
+  exact active authenticated tuple is required before one receipt read may
+  return unchanged committed labels for mandatory KMS re-signing. Revoked,
+  substituted, and unrelated self-signed authorities fail before receipt I/O.
+  The documented null response permits fresh allocation but is not authoritative
+  after a write attempt: a read→write-conflict→read test recovers an identical
+  concurrent winner's exact receipt without a second write or expiry refresh.
+  Invalid requests and malformed receipts never fall through to the clock. An
+  injected handler core now composes this order end to end. Retry responses are
+  re-signed and canonically encoded without floor, clock, allocation, write, or
+  expiry refresh; only absence loads one protected floor and admitted sample,
+  commits once, signs once, and encodes once. A non-deploying CloudFormation/IAM
+  harness now freezes the intended retained table/key/function graph, exact
+  runtime permissions, enforced code signing, alias-only HTTP ingress, logs,
+  alarms, and four separated operational roles. It explicitly makes no live
+  isolation claim: external boundary/SCP contents, the actual CloudFormation
+  service role, artifact approval, missing provider/runtime composition, and
+  operator negative probes remain hard gates. Infrastructure tests pass 18/18
+  and the full suite passes 227/227. No concrete clock provider, protected-floor
+  implementation, Lambda runtime entrypoint, live database operation, AWS
+  resource, credential, network call, packaging, or deployment action occurred.
+  The handler now independently binds every recovered or committed unsigned
+  response to all six parsed-request fields and the transactional snapshot
+  source epoch before KMS signing. Exact cross-request or cross-epoch dataclass
+  substitutions stop before signing or encoding. The full suite passes 230/230.
+  Phase 05 now exports an immutable production-rejection handoff containing
+  `DEV_REFERENCE`, `SOFTWARE_HARNESS`, both AWS DEV signed-time names, and
+  `cellos-dev-time-v1`; it does not modify the Phase 2-owned checker. Phase 2
+  subsequently consumed `SOFTWARE_HARNESS` into the sole production checker;
+  exact feature, artifact, and split-boundary rejection plus the unchanged clean
+  ADR-0006 block pass 8/8. Manifest tests pass 43/43 and the signed-time suite
+  passes 231/231. The custom authenticated clock adapter remains explicitly
+  blocked on its missing provider wire/signature/freshness contract.
+  The final signer boundary now requires all 11 inherited unsigned response
+  fields to preserve both exact runtime type and value before encoding; only the
+  signature may be added. Value substitutions and equality-compatible type
+  substitutions fail before the encoder is called. Focused tests pass 5/5,
+  handler tests pass 19/19, and the full signed-time suite passes 233/233.
+
+- Phase 4's deterministic, non-executing provisioning-plan generator is complete
+  only at the `SOFTWARE_HARNESS` ceiling. Each of its nine ordered mutations now
+  carries an exact typed address space/address, byte width, write mask, requested
+  bytes, expected readback bytes, and authority-policy binding. TPM request bytes
+  must hash to the selected stable/active/pending/NV template, STM32 targets bind
+  their addresses, masked write/readback bits must agree, and every step is
+  self-hashed inside the approval-bound canonical payload. The payload also binds
+  the complete authority-protocol and journal crate source trees. Normal mode and
+  Phase 1 remain blocked; explicit software-harness mode permits only the existing
+  AWS read-only identity admission failure and rejects every other failure.
+  Focused provisioning tests pass 22/22 and affected admission tests pass 11/11;
+  final review found no remaining scoped issue. Nothing was executed: actual
+  admitted inventory, preclosure evidence, exact operator approval, every
+  mutation, hardware provisioning, physical failure evidence, and parent Phase 4
+  remain blocked.
 - Phase 4 now includes the `SOFTWARE_HARNESS` STM32 authority full-record and
   dual-slot journal core under `authority/stm32h573i-dk/`. It wraps the frozen
   canonical Phase 2 protected record with complete PERSIST-003 hardware/profile
@@ -52,14 +231,19 @@
   snapshots cover every inactive-slot byte prefix after increment without
   relying on error return: incomplete writes seal and a complete authenticated
   write recovers exactly the new record. The clean private-v2 cutover rejects
-  v1, carries the existing 12,288-byte raw DER chain in at most sixteen
-  authenticated 768-byte chunks, durably admits every begin/chunk request
-  before bank work, binds uploads to the journal-selected inactive slot and CSR,
-  and persists exact idempotent progress. Journal-only recovery remains opaque;
-  every durable upload header and committed chunk prefix must authenticate, and
-  a complete upload must pass its full profile hash before a serviceable record
-  can issue a pending-enrollment snapshot. Completed active/staged references
-  receive the same bank gate. Profile verification requires an opaque
+  v1 and carries the existing 12,288-byte raw DER chain in at most sixteen
+  authenticated 768-byte chunks. Request admission durably advances the
+  authentication floor before media work, but a Phase 4-owned thin adapter now
+  initializes and authenticates/read-backs the bank before persisting
+  `Uploading`, then writes and authenticates/read-backs each chunk before
+  advancing protected `next_index`. Only a pre-authorize `Pending` state may
+  initialize media; every `Uploading` retry, including index zero, authenticates
+  the existing header and committed prefix. Absent or corrupt retry media seals.
+  Journal-only recovery remains opaque; every durable upload header and committed chunk
+  prefix must authenticate, and a complete upload must pass its full profile
+  hash before a serviceable record can issue a pending-enrollment snapshot.
+  Completed active/staged references receive the same bank gate. Profile
+  verification requires an opaque
   state-admission token after the
   boot/identity/sequence floor is durable, so unauthenticated and authenticated
   stale/replayed frames invoke no bank, X.509, or TPM work. The allocation-free
@@ -68,11 +252,49 @@
   root/duplicate-SPKI exclusion. Its journal-issued snapshot binds revision,
   identity, authority/boot epoch, CSR, slot, and profile metadata; a strict
   double-read `TPM2B_PUBLIC` parser derives the P-256 SPKI and requires exact
-  equality with both journal and leaf certificate SPKIs. RV64 no_std checks and
-  38 journal/bank, 11 validator, and 36 authority-protocol host tests pass. This
-  proves software behavior only; TPM NV behavior, STM32 flash atomicity,
-  lifecycle/debug protection, isolation, endurance, and physical power loss
+  equality with both journal and leaf certificate SPKIs. The public no_std
+  staging transaction holds exclusive mutable boundaries across request
+  admission, authenticated bank-snapshot recovery, full certificate/TPM
+  validation, internal root-capability issuance, immediate journal-revision
+  recheck, and protected staging. Revision races stop before staging. Matching
+  lost-response retries return only the persisted staged intent without media,
+  TPM, or restaging work. New capability-boundary coverage rejects and seals TLS
+  signing in every non-active state, including promoted pre-finalize, and
+  requires both exact generation and profile digest in `Active`; either mismatch
+  seals. Staged receipt consumption and commit preparation require exact
+  generation, policy epoch, and profile digest; every substitution seals. Exact
+  receipt consumption is single-use and replay seals. Commit preparation
+  substitutions seal; exact newer-sequence retries recover the identical
+  prepared intent both in-boot and after authenticated `Prepared` reboot.
+  Restored `ReceiptConsumed` opens only under the fresh challenge and prepares
+  its exact persisted intent. Provider promotion rejects a bad signature before
+  state mutation and independently binds all 12 provider receipt tuple fields;
+  every mismatch seals. Authenticated `Promoted` reboot finalizes its exact
+  intent and later reboot retains exact `Active`; every restore closes boot and
+  invalidates time. RV64 no_std checks and 38 journal/bank, 17 validator, and 52
+  authority-protocol host tests pass. This proves software behavior only;
+  TPM NV behavior, STM32 flash atomicity, lifecycle/debug protection, isolation,
+  endurance, and physical power loss
   remain hardware-gated.
+
+- Phase 6 begins with fail-closed `development-stm32-authority` and the
+  already-frozen `vf2-root-stream` KMS feature gates. The authority feature
+  requires both the explicit VF2 selector and RISC-V bare-metal target, and is
+  mutually exclusive with existing relay providers. Phase 2's unchanged
+  production-image checker already rejects both exact markers in feature lists
+  and artifacts. RV64 paired-feature compilation and all 8 checker tests pass;
+  missing-selector, host, and multi-provider builds fail at their intended
+  compile-time gates. No authority provider is selected.
+  `AuthorityClient` is explicitly blocked: KMS has no exclusive concrete STM32
+  transport owner, while `authority-protocol` defines mandatory 32-byte request
+  authenticators but exposes only verification, with no AP session/key
+  establishment or purpose-bounded signing capability. The preferred loader
+  handoff is not yet an accepted ADR: UART/carrier/DMA are untrusted, plaintext
+  capability material is cloneable, and the loader has no established secret or
+  attested ephemeral key that can prevent encryption-key substitution. Phase 4
+  must prove a confidential, integrity-protected handoff from the STM32
+  authority to isolated KMS; KMS must never receive a generic authority signer.
+  These software gates and blockers grant no hardware or AC credit.
 
 - ADR-0010 freezes the VF2 `DEV_REFERENCE` root stream as one bounded
   post-loader XMODEM-1K transfer containing deterministic-CBOR `COSE_Sign1` and
