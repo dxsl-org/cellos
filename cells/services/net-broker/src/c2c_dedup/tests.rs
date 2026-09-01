@@ -22,6 +22,18 @@ fn constants_and_static_budget_are_frozen() {
 }
 
 #[test]
+fn empty_state_tracks_admitted_entries() {
+    let mut cache = DedupCache::new();
+    assert!(cache.is_empty());
+
+    assert_eq!(
+        cache.begin(key(1), RetryClass::Never, 0),
+        DedupDecision::Dispatch
+    );
+    assert!(!cache.is_empty());
+}
+
+#[test]
 fn duplicate_inflight_is_busy_and_completion_replays() {
     let mut cache = DedupCache::new();
     let request = key(1);

@@ -124,6 +124,12 @@ impl DedupCache {
         })
     }
 
+    /// Return whether the cache contains no admitted entries.
+    pub fn is_empty(&self) -> bool {
+        self.entries.iter().all(Option::is_none)
+    }
+
+    /// Return the number of admitted cache entries.
     pub fn len(&self) -> usize {
         self.entries.iter().flatten().count()
     }
