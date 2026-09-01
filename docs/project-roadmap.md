@@ -93,6 +93,7 @@ sensor, or local-runtime development.
 | Kernel signature, pointer, and entropy remediation | Current-scope technical debt | `governance-gated` | `host` | Separately approved security children | Named security/PAL approvals and implementation checkpoints |
 | Authenticated software evidence | Completed / regression-only | `ready` | `host` | Hardware-independent roadmap Phase 07; trusted GitHub-hosted `main` run `33251921677:1` at revision `d951d7dbf191133e94061ded7f0a8d17bfcf07c8` completed, manifest digest `2263115d4f3f58b990074d0cb7489ec5f52523f23a2a9777a8685a8c09492abb` was independently verified, the run-id/attempt sequence was consumed once through explicitly provisioned durable operator-owned external state, and exact replay was rejected | Reopen only for a pipeline/schema/workflow-identity regression or a separately governed higher evidence class; authenticated carriage preserves each bundled result's existing ceiling and implies no physical, secure-root, cloud, approval, admissibility, or production claim |
 | x86 Tier 3 VirtIO parity | Completed / regression-only | `scope-gated` | `qemu` | Hardware-independent roadmap Phase 10 completed with two-boot block/network and 27-scenario hostile QEMU evidence | Reopen for a software regression or a separately governed physical-x86 qualification run |
+| x86 hypervisor boot-to-shell CI gate | Current executable work | `ready` | local `qemu`; hosted CI execution pending | Independent [CI job](../.github/workflows/ci.yml) `qemu-x86-hypervisor-boot` is wired with checksum-pinned official QEMU 10.2.0 source, a volatile-disk hypervisor image, the `/ #` shell oracle, hard timeouts, and always-uploaded evidence. The local Ubuntu 24.04-equivalent dependency path built and installed the source in 86.90 seconds with downloads disabled and slirp 4.7.0; its exact image/kernel/ISO flow and strict 1 GiB `BOOT_WINDOW=600` smoke passed in 600.09 seconds. | Complete the first hosted GitHub Actions execution; the cold local PASS is not a hosted CI PASS and grants no KVM, persistence, physical-x86, admission, or production qualification |
 | Remote/public Cell-to-Cell operation | Future capability | `contract-gated` | `host` / `service` | ADR-0009 and Cell-to-Cell Anywhere remote/public children; correlated relay server codec verified 40/40 | Authority-owned client framing and bounded broker correlation integration wait for post-entry-GO Phase 4 Build; remote routing still waits for ADR-0008 AC-012 plus the separately governed identity/export gates |
 | Protected relay identity | External-gated prerequisite | `external-gated` | `host` | ADR-0008, KMS/Silo protected relay plan, and Cell-to-Cell Anywhere Phase 05 | Real protected persistence, authenticated time, reviewed pending-key binding, and `DEV_REFERENCE` authority Phase 8 GO over AC-001..AC-011 open service-net Build. Build must then implement ADR-0008 and pass AC-012 before the Phase 05 relay route can be enabled; public KMS opcodes stay frozen and this lane-local gate does not block unrelated development |
 | STM32 DEV_REFERENCE protected journal | External-gated prerequisite | `scope-gated` | `host` `SOFTWARE_HARNESS` complete; later exact-device `physical` development evidence | Authority Phase 4 private v2; chunked upload, durable pre-bank admission, inactive-slot/CSR binding, authenticated upload-prefix/full-hash recovery gate, journal-issued pending snapshot, strict public X.509 API path, and parsed TPM-key-to-leaf-SPKI binding pass 38 journal/bank, 11 validator, and 36 authority-protocol host tests plus RV64 no_std checks | Integrate the verified cores into firmware; exact STM32H573I-DK and private SLB9672 must then prove identity/NV/policy/flash limits, isolation, lifecycle/debug protection, endurance, and physical cut recovery |
@@ -158,6 +159,20 @@ Cellos is being shaped around product stages, not only phase numbers:
   persistence remain required. This is QEMU-only evidence: ARM64 hostile
   execution is blocked, QEMU-TCG 8.2.2 remains incompatible, and physical x86
   remains hardware-gated.
+- Independent [CI job](../.github/workflows/ci.yml)
+  `qemu-x86-hypervisor-boot` now wires the x86 hypervisor boot-to-shell path to
+  checksum-pinned official QEMU 10.2.0 source, `HV_VOLATILE_DISK=1`, the `/ #`
+  shell oracle within 600 seconds, hard step/job timeouts, and evidence
+  collection/upload under `if: always()`. The local Ubuntu 24.04-equivalent
+  dependency path built and installed the official source in 86.90 seconds
+  with downloads disabled and slirp 4.7.0, then the exact image/kernel/ISO flow
+  and strict 1 GiB `BOOT_WINDOW=600` `/ #` smoke passed in 600.09 seconds. Local
+  static/adversarial validation and review also passed. The first hosted GitHub
+  Actions execution has not run, so hosted CI coverage
+  remains pending. This local QEMU PASS is not a hosted CI PASS and grants no
+  KVM, persistence, physical, admission, or production evidence. The preceding
+  x86 QEMU evidence remains unchanged, and this independent gate does not alter
+  blocked Cell-to-Cell Phase 05.
 - RV64 QEMU desktop now has a bounded compositor-owned window-policy slice.
   Interactive surfaces carry bounded titles and receive typed lifecycle events
   without losing normal forwarded input. The compositor paints clipped
