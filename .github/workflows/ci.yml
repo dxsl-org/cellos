@@ -836,6 +836,109 @@ jobs:
           chmod +x scripts/qemu-x86_64-test.sh
           BOOT_WINDOW=90 bash scripts/qemu-x86_64-test.sh build/vicell-x86.iso
 
+  qemu-x86-hypervisor-boot:
+    name: QEMU Hypervisor Boot-to-Shell (x86_64)
+    runs-on: ubuntu-24.04
+    needs: build
+    timeout-minutes: 60
+    env:
+      QEMU_X86_PREFIX: ${{ github.workspace }}/.ci-cache/qemu-10.2.0
+    steps:
+      - name: Initialize x86 hypervisor evidence
+        run: |
+          mkdir -p "$RUNNER_TEMP/x86-hypervisor-evidence"
+          printf '[gate] x86 hypervisor CI started\n' > "$RUNNER_TEMP/x86-hypervisor-evidence/gate.log"
+
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-05-01
+          components: rust-src
+          targets: x86_64-unknown-none
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+          key: x86-hypervisor-boot
+
+      - name: Install QEMU build and image dependencies
+        timeout-minutes: 10
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q \
+            binutils build-essential curl gzip libglib2.0-dev libpixman-1-dev \
+            libslirp-dev ninja-build pkg-config python3-venv xorriso xz-utils zstd
+      - name: Install Python cryptography (policy blob signing)
+        timeout-minutes: 5
+        run: python3 -m pip install --user --quiet cryptography
+
+
+      - name: Restore QEMU 10.2.0
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.QEMU_X86_PREFIX }}
+          key: qemu-x86_64-10.2.0-${{ runner.os }}-${{ runner.arch }}
+
+      - name: Install pinned QEMU 10.2.0
+        timeout-minutes: 25
+        run: bash scripts/install-qemu-x86-ci.sh
+
+      - name: Build x86 hypervisor filesystem
+        timeout-minutes: 20
+        env:
+          HV_VOLATILE_DISK: "1"
+          CC_x86_64_unknown_none: cc
+          CFLAGS_x86_64_unknown_none: -ffreestanding -fno-stack-protector -mno-red-zone -mno-sse -mno-mmx -DLFS_NO_INTRINSICS -I${{ github.workspace }}/third_party/freestanding-include
+          BINDGEN_EXTRA_CLANG_ARGS_x86_64_unknown_none: --target=x86_64-linux-gnu
+        run: bash scripts/make-hypervisor-fs-x86.sh
+
+      - name: Build x86 hypervisor kernel
+        timeout-minutes: 10
+        env:
+          RUSTFLAGS: -C relocation-model=static -C code-model=kernel -C no-redzone=yes -Z cf-protection=full
+          EMBEDDED_OVERRIDE: kernel/src/embedded-hv-x86
+        run: >
+          cargo build --release
+          -p cellos-kernel
+          --target x86_64-unknown-none
+          -Z build-std=core,alloc
+
+      - name: Build x86 hypervisor Limine ISO
+        run: bash scripts/x86/make-iso-ci.sh build/vicell-x86-hv.iso
+
+      - name: Run x86 hypervisor boot-to-shell gate
+        id: hypervisor-smoke
+        timeout-minutes: 12
+        env:
+          QEMU_X86_BIN: ${{ env.QEMU_X86_PREFIX }}/bin/qemu-system-x86_64
+          QEMU_MEMORY: 1G
+          HV_SMOKE_MODE: boot
+          BOOT_WINDOW: "600"
+        run: bash scripts/qemu-hypervisor-smoke-x86.sh build/vicell-x86-hv.iso
+      - name: Collect x86 hypervisor evidence
+        if: always()
+        run: |
+          printf '[gate] job_status=%s smoke_outcome=%s\n' \
+            "${{ job.status }}" "${{ steps.hypervisor-smoke.outcome }}" \
+            >> "$RUNNER_TEMP/x86-hypervisor-evidence/gate.log"
+          for log in qemu-hv-x86.log qemu-hv-x86.raw.log; do
+            if [ -f "$log" ]; then
+              cp "$log" "$RUNNER_TEMP/x86-hypervisor-evidence/"
+            fi
+          done
+
+
+      - name: Upload x86 hypervisor boot logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: x86-hypervisor-boot-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/x86-hypervisor-evidence
+          if-no-files-found: error
+          retention-days: 14
+
   vfs-quota:
     name: VFS Quota Integration Test
     runs-on: ubuntu-24.04

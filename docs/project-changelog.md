@@ -4,6 +4,24 @@
 
 ## [Unreleased] Development-first hardware-constrained execution
 
+- Wired an independent
+  [`qemu-x86-hypervisor-boot`](../.github/workflows/ci.yml) job on
+  `ubuntu-24.04`. It builds the checksum-pinned official QEMU 10.2.0 source via
+  [`scripts/install-qemu-x86-ci.sh`](../scripts/install-qemu-x86-ci.sh), builds
+  the hypervisor image with `HV_VOLATILE_DISK=1`, and requires the guest `/ #`
+  shell oracle within a 600-second boot window. The smoke step has a 12-minute
+  timeout, the job has a 60-minute timeout, and gate plus serial evidence is
+  collected and uploaded under `if: always()`. The local Ubuntu
+  24.04-equivalent dependency path built and installed the official source in
+  86.90 seconds with downloads disabled and slirp 4.7.0, then the exact
+  image/kernel/ISO flow and strict 1 GiB `BOOT_WINDOW=600` `/ #` smoke passed
+  in 600.09 seconds. Local static/adversarial validation and review also passed.
+  The first hosted GitHub Actions execution has not run, so the job remains
+  pending hosted execution rather than a hosted CI PASS. This
+  local QEMU evidence grants no KVM, persistence, physical x86, admission, or
+  production claim, does not alter the preceding x86 QEMU evidence, and does
+  not affect the unrelated blocked Cell-to-Cell Phase 05 boundary.
+
 - Repaired the x86 Tier 3 no-drive boot path without weakening persistent
   storage. `HV_VOLATILE_DISK=1` now selects an explicit compile-time volatile
   block policy for the ISO smoke; persistent mode remains the default and
