@@ -16,7 +16,6 @@ use alloc::collections::BTreeMap;
 use embedded_tls::TlsError;
 use smoltcp::{
     iface::{Config, Interface, SocketSet, SocketStorage},
-    socket::tcp,
     time::Instant,
     wire::{EthernetAddress, HardwareAddress},
 };
@@ -24,7 +23,7 @@ use smoltcp::{
 use crate::{
     interface::VirtioNetDevice,
     socket_table::{SocketOwner, SocketTable},
-    tls::socket::TlsSocketEntry,
+    tls::socket::prepare_handshake_buffers,
     tls_handler::handle_tls_raw,
     tls_wire::TLS_CONNECT_OP,
 };
@@ -73,24 +72,7 @@ fn handler_rejects_before_allocating_tcp_capability() {
 #[test]
 fn socket_entry_rejects_before_handshake_state() {
     BUFFER_ALLOCATIONS.store(0, Ordering::Relaxed);
-    let mut device = VirtioNetDevice::new();
-    let mut iface = Interface::new(interface_config(), &mut device, Instant::from_millis(0));
-    let mut storage = [SocketStorage::EMPTY];
-    let mut sockets = SocketSet::new(&mut storage[..]);
-    let handle = sockets.add(tcp::Socket::new(
-        tcp::SocketBuffer::new(alloc::vec![0u8; 64]),
-        tcp::SocketBuffer::new(alloc::vec![0u8; 64]),
-    ));
-    let sockets_ptr = &mut sockets as *mut SocketSet<'_> as *mut ();
-    unsafe {
-        crate::tls::transport::set_tls_context(
-            &mut iface as *mut Interface,
-            &mut device as *mut VirtioNetDevice,
-            sockets_ptr,
-        );
-    }
-
-    let result = unsafe { TlsSocketEntry::handshake(handle, "mock") };
+    let result = prepare_handshake_buffers();
 
     assert!(matches!(result, Err(TlsError::InvalidCertificate)));
     assert_eq!(BUFFER_ALLOCATIONS.load(Ordering::Relaxed), 0);
