@@ -1271,12 +1271,14 @@ jobs:
             --input acceptance-ledger.json=docs/app-tier-acceptance-ledger.json \
             --input workflow.yml=.github/workflows/ci.yml \
             --input gen-disk.ps1=gen_disk.ps1 \
-            --input viui-managed-surface.rs=tests/integration/tests/viui-managed-surface.rs \
             --input window-policy.rs=tests/integration/tests/window-policy.rs \
+            --input viui-managed-surface.rs=tests/integration/tests/viui-managed-surface.rs \
+            --input http-smoke.rs=tests/integration/tests/http-smoke.rs \
             --image disk-v3.sha256=.authenticated-evidence/runtime/disk-v3.sha256 \
             --log catalog-validation.log=.authenticated-evidence/catalog-validation.log \
             --log producer-metadata.log=.authenticated-evidence/runtime/producer-metadata.log \
             --log gen-disk.log=.authenticated-evidence/runtime/gen-disk.log \
+            --log http-smoke.log=.authenticated-evidence/runtime/http-smoke.log \
             --log boot-suite.log=.authenticated-evidence/runtime/boot-suite.log \
             --log window-policy.log=.authenticated-evidence/runtime/window-policy.log \
             --log viui-managed-surface.log=.authenticated-evidence/runtime/viui-managed-surface.log \
