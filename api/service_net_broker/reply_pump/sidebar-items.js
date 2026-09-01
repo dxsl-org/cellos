@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["MAX_REPLY_SEND_ATTEMPTS"],"enum":["RetainBusyResult","TrySendResult"],"fn":["retain_busy_reply"]};
+window.SIDEBAR_ITEMS = {"constant":["MAX_REPLY_SEND_ATTEMPTS"],"enum":["RetainBusyResult","TrySendResult"],"fn":["reply_turn_budget","retain_busy_reply"]};

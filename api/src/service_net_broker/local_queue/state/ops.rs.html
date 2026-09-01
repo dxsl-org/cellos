@@ -136,7 +136,7 @@
 <a href=#136 id=136 data-nosnippet>136</a>    <span class="kw">pub fn </span>complete_request(
 <a href=#137 id=137 data-nosnippet>137</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
 <a href=#138 id=138 data-nosnippet>138</a>        request: <span class="kw-2">&amp;</span>WorkerRequest,
-<a href=#139 id=139 data-nosnippet>139</a>        reply: QueuedReply,
+<a href=#139 id=139 data-nosnippet>139</a>        <span class="kw-2">mut </span>reply: QueuedReply,
 <a href=#140 id=140 data-nosnippet>140</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), CompletionError&gt; {
 <a href=#141 id=141 data-nosnippet>141</a>        <span class="kw">if </span><span class="self">self</span>.stale_contains(request.key) {
 <a href=#142 id=142 data-nosnippet>142</a>            <span class="self">self</span>.counters.duplicate += <span class="number">1</span>;
@@ -157,44 +157,45 @@
 <a href=#157 id=157 data-nosnippet>157</a>        <span class="self">self</span>.inflight[slot] = <span class="prelude-val">None</span>;
 <a href=#158 id=158 data-nosnippet>158</a>        <span class="self">self</span>.stale[<span class="self">self</span>.stale_cursor % STALE_REPLY_RING_CAP] = <span class="prelude-val">Some</span>(request.key);
 <a href=#159 id=159 data-nosnippet>159</a>        <span class="self">self</span>.stale_cursor = (<span class="self">self</span>.stale_cursor + <span class="number">1</span>) % STALE_REPLY_RING_CAP;
-<a href=#160 id=160 data-nosnippet>160</a>        <span class="self">self</span>.push_reply(reply);
-<a href=#161 id=161 data-nosnippet>161</a>        <span class="self">self</span>.counters.completed += <span class="number">1</span>;
-<a href=#162 id=162 data-nosnippet>162</a>        <span class="self">self</span>.refresh_peaks();
-<a href=#163 id=163 data-nosnippet>163</a>        <span class="prelude-val">Ok</span>(())
-<a href=#164 id=164 data-nosnippet>164</a>    }
-<a href=#165 id=165 data-nosnippet>165</a>
-<a href=#166 id=166 data-nosnippet>166</a>    <span class="kw">pub fn </span>take_next_reply(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;QueuedReply&gt; {
-<a href=#167 id=167 data-nosnippet>167</a>        <span class="kw">let </span>idx = <span class="self">self
-<a href=#168 id=168 data-nosnippet>168</a>            </span>.replies
-<a href=#169 id=169 data-nosnippet>169</a>            .iter()
-<a href=#170 id=170 data-nosnippet>170</a>            .enumerate()
-<a href=#171 id=171 data-nosnippet>171</a>            .filter_map(|(idx, slot)| slot.map(|reply| (idx, reply.order)))
-<a href=#172 id=172 data-nosnippet>172</a>            .min_by_key(|(<span class="kw">_</span>, order)| <span class="kw-2">*</span>order)<span class="question-mark">?
-<a href=#173 id=173 data-nosnippet>173</a>            </span>.<span class="number">0</span>;
-<a href=#174 id=174 data-nosnippet>174</a>        <span class="self">self</span>.replies[idx].take()
-<a href=#175 id=175 data-nosnippet>175</a>    }
-<a href=#176 id=176 data-nosnippet>176</a>
-<a href=#177 id=177 data-nosnippet>177</a>    <span class="kw">pub fn </span>requeue_reply(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw-2">mut </span>reply: QueuedReply) -&gt; bool {
-<a href=#178 id=178 data-nosnippet>178</a>        <span class="kw">if </span><span class="self">self</span>.reply_len() &gt;= LOCAL_REPLY_QUEUE_CAP {
-<a href=#179 id=179 data-nosnippet>179</a>            <span class="kw">return </span><span class="bool-val">false</span>;
-<a href=#180 id=180 data-nosnippet>180</a>        }
-<a href=#181 id=181 data-nosnippet>181</a>        reply.order = <span class="self">self</span>.bump_reply_order();
-<a href=#182 id=182 data-nosnippet>182</a>        reply.attempts = reply.attempts.saturating_add(<span class="number">1</span>);
-<a href=#183 id=183 data-nosnippet>183</a>        <span class="self">self</span>.push_reply(reply);
-<a href=#184 id=184 data-nosnippet>184</a>        <span class="self">self</span>.refresh_peaks();
-<a href=#185 id=185 data-nosnippet>185</a>        <span class="bool-val">true
-<a href=#186 id=186 data-nosnippet>186</a>    </span>}
-<a href=#187 id=187 data-nosnippet>187</a>
-<a href=#188 id=188 data-nosnippet>188</a>    <span class="kw">pub fn </span>request_len(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize {
-<a href=#189 id=189 data-nosnippet>189</a>        <span class="self">self</span>.requests.iter().flatten().count()
-<a href=#190 id=190 data-nosnippet>190</a>    }
-<a href=#191 id=191 data-nosnippet>191</a>
-<a href=#192 id=192 data-nosnippet>192</a>    <span class="kw">pub fn </span>reply_len(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize {
-<a href=#193 id=193 data-nosnippet>193</a>        <span class="self">self</span>.replies.iter().flatten().count()
-<a href=#194 id=194 data-nosnippet>194</a>    }
-<a href=#195 id=195 data-nosnippet>195</a>
-<a href=#196 id=196 data-nosnippet>196</a>    <span class="kw">pub fn </span>inflight_len(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize {
-<a href=#197 id=197 data-nosnippet>197</a>        <span class="self">self</span>.inflight.iter().flatten().count()
-<a href=#198 id=198 data-nosnippet>198</a>    }
-<a href=#199 id=199 data-nosnippet>199</a>}
+<a href=#160 id=160 data-nosnippet>160</a>        reply.order = <span class="self">self</span>.bump_reply_order();
+<a href=#161 id=161 data-nosnippet>161</a>        <span class="self">self</span>.push_reply(reply);
+<a href=#162 id=162 data-nosnippet>162</a>        <span class="self">self</span>.counters.completed += <span class="number">1</span>;
+<a href=#163 id=163 data-nosnippet>163</a>        <span class="self">self</span>.refresh_peaks();
+<a href=#164 id=164 data-nosnippet>164</a>        <span class="prelude-val">Ok</span>(())
+<a href=#165 id=165 data-nosnippet>165</a>    }
+<a href=#166 id=166 data-nosnippet>166</a>
+<a href=#167 id=167 data-nosnippet>167</a>    <span class="kw">pub fn </span>take_next_reply(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;QueuedReply&gt; {
+<a href=#168 id=168 data-nosnippet>168</a>        <span class="kw">let </span>idx = <span class="self">self
+<a href=#169 id=169 data-nosnippet>169</a>            </span>.replies
+<a href=#170 id=170 data-nosnippet>170</a>            .iter()
+<a href=#171 id=171 data-nosnippet>171</a>            .enumerate()
+<a href=#172 id=172 data-nosnippet>172</a>            .filter_map(|(idx, slot)| slot.map(|reply| (idx, reply.order)))
+<a href=#173 id=173 data-nosnippet>173</a>            .min_by_key(|(<span class="kw">_</span>, order)| <span class="kw-2">*</span>order)<span class="question-mark">?
+<a href=#174 id=174 data-nosnippet>174</a>            </span>.<span class="number">0</span>;
+<a href=#175 id=175 data-nosnippet>175</a>        <span class="self">self</span>.replies[idx].take()
+<a href=#176 id=176 data-nosnippet>176</a>    }
+<a href=#177 id=177 data-nosnippet>177</a>
+<a href=#178 id=178 data-nosnippet>178</a>    <span class="kw">pub fn </span>requeue_reply(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw-2">mut </span>reply: QueuedReply) -&gt; bool {
+<a href=#179 id=179 data-nosnippet>179</a>        <span class="kw">if </span><span class="self">self</span>.reply_len() &gt;= LOCAL_REPLY_QUEUE_CAP {
+<a href=#180 id=180 data-nosnippet>180</a>            <span class="kw">return </span><span class="bool-val">false</span>;
+<a href=#181 id=181 data-nosnippet>181</a>        }
+<a href=#182 id=182 data-nosnippet>182</a>        reply.order = <span class="self">self</span>.bump_reply_order();
+<a href=#183 id=183 data-nosnippet>183</a>        reply.attempts = reply.attempts.saturating_add(<span class="number">1</span>);
+<a href=#184 id=184 data-nosnippet>184</a>        <span class="self">self</span>.push_reply(reply);
+<a href=#185 id=185 data-nosnippet>185</a>        <span class="self">self</span>.refresh_peaks();
+<a href=#186 id=186 data-nosnippet>186</a>        <span class="bool-val">true
+<a href=#187 id=187 data-nosnippet>187</a>    </span>}
+<a href=#188 id=188 data-nosnippet>188</a>
+<a href=#189 id=189 data-nosnippet>189</a>    <span class="kw">pub fn </span>request_len(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize {
+<a href=#190 id=190 data-nosnippet>190</a>        <span class="self">self</span>.requests.iter().flatten().count()
+<a href=#191 id=191 data-nosnippet>191</a>    }
+<a href=#192 id=192 data-nosnippet>192</a>
+<a href=#193 id=193 data-nosnippet>193</a>    <span class="kw">pub fn </span>reply_len(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize {
+<a href=#194 id=194 data-nosnippet>194</a>        <span class="self">self</span>.replies.iter().flatten().count()
+<a href=#195 id=195 data-nosnippet>195</a>    }
+<a href=#196 id=196 data-nosnippet>196</a>
+<a href=#197 id=197 data-nosnippet>197</a>    <span class="kw">pub fn </span>inflight_len(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize {
+<a href=#198 id=198 data-nosnippet>198</a>        <span class="self">self</span>.inflight.iter().flatten().count()
+<a href=#199 id=199 data-nosnippet>199</a>    }
+<a href=#200 id=200 data-nosnippet>200</a>}
 </code></pre></div></section></main></body></html>
