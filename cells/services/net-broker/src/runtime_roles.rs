@@ -1,3 +1,15 @@
+/// Maximum scheduler turns for one network-role IPC exchange.
+///
+/// At the kernel's 10 ms scheduler quantum this is two seconds. A timeout
+/// poisons the current beacon connection, so no late reply can be reused.
+pub const NETWORK_IPC_TIMEOUT_TICKS: u64 = 200;
+
+/// Maximum elapsed time for all runtime roles to drain during restart.
+///
+/// This exceeds [`NETWORK_IPC_TIMEOUT_TICKS`] by one second, leaving a bounded
+/// scheduling window for a timed-out network role to observe shutdown and exit.
+pub const RESTART_DRAIN_TIMEOUT_MS: u64 = 3_000;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RuntimeRole {
     LocalWorker,
