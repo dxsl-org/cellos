@@ -174,6 +174,11 @@ impl SocketTable {
         self.udp_caps.remove(&cap);
         self.entries.remove(&cap)
     }
+
+    #[cfg(test)]
+    pub(crate) fn next_cap_for_test(&self) -> u64 {
+        self.next_cap
+    }
 }
 
 #[cfg(test)]
