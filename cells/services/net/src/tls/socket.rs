@@ -64,6 +64,12 @@ fn allocate_record_buffer() -> &'static mut [u8] {
     Box::leak(Box::new([0u8; TLS_BUF]))
 }
 
+pub(super) fn prepare_handshake_buffers() -> Result<(&'static mut [u8], &'static mut [u8]), TlsError>
+{
+    authenticated_time_preflight()?;
+    Ok((allocate_record_buffer(), allocate_record_buffer()))
+}
+
 impl TlsSocketEntry {
     /// Perform the TLS 1.3 handshake over `handle` and return a live entry.
     ///
@@ -76,10 +82,7 @@ impl TlsSocketEntry {
     /// # Safety
     /// `set_tls_context()` must have been called with valid pointers before this.
     pub unsafe fn handshake(handle: SocketHandle, hostname: &str) -> Result<Self, TlsError> {
-        authenticated_time_preflight()?;
-        // Leak 32 KiB for TLS record buffers — intentional, documented cost.
-        let read_buf = allocate_record_buffer();
-        let write_buf = allocate_record_buffer();
+        let (read_buf, write_buf) = prepare_handshake_buffers()?;
 
         let transport = SmoltcpTlsTransport::new(handle);
         let mut conn = TlsConnection::new(transport, read_buf, write_buf);
