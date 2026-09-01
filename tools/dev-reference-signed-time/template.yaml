@@ -1,0 +1,868 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Non-deploying SOFTWARE_HARNESS graph for the CellOS DEV_REFERENCE signed-time service.",
+  "Metadata": {
+    "CellOSArchitecture": {
+      "Classification": "SOFTWARE_HARNESS",
+      "Deployable": false,
+      "LiveIsolationClaim": false,
+      "ArtifactContract": "A prebuilt, approved, code-signed S3 object and its exact CodeSha256 must be supplied; this template does not build, package, select, or approve code.",
+      "CompositionLimitation": "The current handler artifact and authenticated upstream provider composition are not deployable yet.",
+      "SignerApprovalEvidence": "The profile version remains pinned in the CodeSigningConfig. Immutable version approval and artifact-to-profile evidence are external requirements; the approval role can inspect only the derived unversioned profile.",
+      "ExternalControlsRequired": [
+        "Externally administered permissions boundary and SCP",
+        "Separated CloudFormation service role",
+        "Exact separately controlled key-policy administrator role",
+        "Independent code-sign approval",
+        "Operator authorization and retained negative-probe evidence"
+      ],
+      "EvidenceRequirement": "This mutable template declares intended resources and roles only. The exact separately controlled key-policy administrator must remain available, and the launch role, boundary and SCP contents plus live direct and indirect kms:Sign isolation must be proven outside this stack before deployment or acceptance."
+    }
+  },
+  "Parameters": {
+    "ArtifactS3Bucket": {
+      "Type": "String",
+      "Description": "Existing bucket containing the approved code-signed ZIP artifact.",
+      "MinLength": 3,
+      "MaxLength": 63,
+      "AllowedPattern": "^(?!xn--)(?!.*\\.\\.)(?!.*\\.-)(?!.*-\\.)(?!\\d{1,3}(?:\\.\\d{1,3}){3}$)[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$"
+    },
+    "ArtifactS3Key": {
+      "Type": "String",
+      "Description": "Exact existing S3 key for the approved code-signed ZIP artifact.",
+      "MinLength": 1,
+      "MaxLength": 1024,
+      "AllowedPattern": "^(?!/)(?!.*//)[A-Za-z0-9!_.*'()/-]+$"
+    },
+    "ArtifactS3ObjectVersion": {
+      "Type": "String",
+      "Description": "Exact immutable S3 object version for the approved artifact.",
+      "MinLength": 1,
+      "MaxLength": 1024,
+      "AllowedPattern": "^[A-Za-z0-9._~+/=-]+$"
+    },
+    "CodeSha256": {
+      "Type": "String",
+      "Description": "Exact base64-encoded SHA-256 digest of the approved ZIP artifact.",
+      "AllowedPattern": "^[A-Za-z0-9+/]{43}=$",
+      "MinLength": 44,
+      "MaxLength": 44
+    },
+    "SignerProfileVersionArn": {
+      "Type": "String",
+      "Description": "Exact pre-existing AWS Signer signing-profile version ARN approved for this artifact.",
+      "AllowedPattern": "^arn:(aws|aws-us-gov|aws-cn):signer:[a-z0-9-]+:[0-9]{12}:/signing-profiles/[A-Za-z0-9_-]{2,64}/[A-Za-z0-9_-]{1,64}$",
+      "MinLength": 35,
+      "MaxLength": 1024
+    },
+    "ExternalPermissionsBoundaryArn": {
+      "Type": "String",
+      "Description": "Externally administered permissions boundary; its deny semantics cannot be proven by this template.",
+      "AllowedPattern": "^arn:(aws|aws-us-gov|aws-cn):iam::[0-9]{12}:policy/[A-Za-z0-9+=,.@_/-]{1,128}$"
+    },
+    "CloudFormationServiceRoleArn": {
+      "Type": "String",
+      "Description": "Pre-existing separated CloudFormation service role governed outside this stack.",
+      "AllowedPattern": "^arn:(aws|aws-us-gov|aws-cn):iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]{1,128}$"
+    },
+    "DeployTrustedPrincipalArn": {
+      "Type": "String",
+      "Description": "Exact external role allowed to assume the separated deploy role.",
+      "AllowedPattern": "^arn:(aws|aws-us-gov|aws-cn):iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]{1,128}$"
+    },
+    "CodeSignTrustedPrincipalArn": {
+      "Type": "String",
+      "Description": "Exact external role allowed to assume the separated code-sign approval role.",
+      "AllowedPattern": "^arn:(aws|aws-us-gov|aws-cn):iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]{1,128}$"
+    },
+    "IamTrustedPrincipalArn": {
+      "Type": "String",
+      "Description": "Exact external role allowed to assume the separated IAM review role.",
+      "AllowedPattern": "^arn:(aws|aws-us-gov|aws-cn):iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]{1,128}$"
+    },
+    "KeyPolicyTrustedPrincipalArn": {
+      "Type": "String",
+      "Description": "Exact external role allowed to assume the separated key-policy administration role.",
+      "AllowedPattern": "^arn:(aws|aws-us-gov|aws-cn):iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]{1,128}$"
+    },
+    "AlarmTopicArn": {
+      "Type": "String",
+      "Description": "Exact pre-existing operator-approved SNS topic ARN for all harness alarms.",
+      "AllowedPattern": "^arn:(aws|aws-us-gov|aws-cn):sns:[a-z0-9-]+:[0-9]{12}:[A-Za-z0-9_-]{1,256}$"
+    }
+  },
+  "Rules": {
+    "SeparatedExternalPrincipals": {
+      "Assertions": [
+        {"Assert": {"Fn::Not": [{"Fn::Equals": [{"Ref": "DeployTrustedPrincipalArn"}, {"Ref": "CodeSignTrustedPrincipalArn"}]}]}, "AssertDescription": "Deploy and code-sign principals must differ."},
+        {"Assert": {"Fn::Not": [{"Fn::Equals": [{"Ref": "DeployTrustedPrincipalArn"}, {"Ref": "IamTrustedPrincipalArn"}]}]}, "AssertDescription": "Deploy and IAM principals must differ."},
+        {"Assert": {"Fn::Not": [{"Fn::Equals": [{"Ref": "DeployTrustedPrincipalArn"}, {"Ref": "KeyPolicyTrustedPrincipalArn"}]}]}, "AssertDescription": "Deploy and key-policy principals must differ."},
+        {"Assert": {"Fn::Not": [{"Fn::Equals": [{"Ref": "CodeSignTrustedPrincipalArn"}, {"Ref": "IamTrustedPrincipalArn"}]}]}, "AssertDescription": "Code-sign and IAM principals must differ."},
+        {"Assert": {"Fn::Not": [{"Fn::Equals": [{"Ref": "CodeSignTrustedPrincipalArn"}, {"Ref": "KeyPolicyTrustedPrincipalArn"}]}]}, "AssertDescription": "Code-sign and key-policy principals must differ."},
+        {"Assert": {"Fn::Not": [{"Fn::Equals": [{"Ref": "IamTrustedPrincipalArn"}, {"Ref": "KeyPolicyTrustedPrincipalArn"}]}]}, "AssertDescription": "IAM and key-policy principals must differ."},
+        {"Assert": {"Fn::Not": [{"Fn::Equals": [{"Ref": "CloudFormationServiceRoleArn"}, {"Ref": "DeployTrustedPrincipalArn"}]}]}, "AssertDescription": "CloudFormation service role and deploy principal must differ."},
+        {"Assert": {"Fn::Not": [{"Fn::Equals": [{"Ref": "CloudFormationServiceRoleArn"}, {"Ref": "CodeSignTrustedPrincipalArn"}]}]}, "AssertDescription": "CloudFormation service role and code-sign principal must differ."},
+        {"Assert": {"Fn::Not": [{"Fn::Equals": [{"Ref": "CloudFormationServiceRoleArn"}, {"Ref": "IamTrustedPrincipalArn"}]}]}, "AssertDescription": "CloudFormation service role and IAM principal must differ."},
+        {"Assert": {"Fn::Not": [{"Fn::Equals": [{"Ref": "CloudFormationServiceRoleArn"}, {"Ref": "KeyPolicyTrustedPrincipalArn"}]}]}, "AssertDescription": "CloudFormation service role and key-policy principal must differ."}
+      ]
+    }
+  },
+  "Resources": {
+    "SignedTimeTable": {
+      "Type": "AWS::DynamoDB::Table",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "TableName": "cellos-dev-reference-signed-time",
+        "BillingMode": "PAY_PER_REQUEST",
+        "AttributeDefinitions": [{"AttributeName": "pk", "AttributeType": "S"}],
+        "KeySchema": [{"AttributeName": "pk", "KeyType": "HASH"}],
+        "DeletionProtectionEnabled": true,
+        "PointInTimeRecoverySpecification": {
+          "PointInTimeRecoveryEnabled": true,
+          "RecoveryPeriodInDays": 35
+        },
+        "SSESpecification": {
+          "SSEEnabled": true,
+          "SSEType": "KMS"
+        }
+      }
+    },
+    "RuntimeRole": {
+      "Type": "AWS::IAM::Role",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "RoleName": "cellos-dev-reference-signed-time-runtime",
+        "PermissionsBoundary": {"Ref": "ExternalPermissionsBoundaryArn"},
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [{
+            "Sid": "OnlyLambdaService",
+            "Effect": "Allow",
+            "Principal": {"Service": "lambda.amazonaws.com"},
+            "Action": "sts:AssumeRole"
+          }]
+        },
+        "Policies": [{
+          "PolicyName": "exact-table-and-function-log-group",
+          "PolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [
+              {
+                "Sid": "ExactTableTransactions",
+                "Effect": "Allow",
+                "Action": ["dynamodb:TransactGetItems", "dynamodb:TransactWriteItems"],
+                "Resource": {"Fn::GetAtt": ["SignedTimeTable", "Arn"]}
+              },
+              {
+                "Sid": "ExactFunctionLogGroupStreams",
+                "Effect": "Allow",
+                "Action": ["logs:CreateLogStream", "logs:PutLogEvents"],
+                "Resource": {
+                  "Fn::Sub": [
+                    "${LogGroupArn}:*",
+                    {"LogGroupArn": {"Fn::GetAtt": ["FunctionLogGroup", "Arn"]}}
+                  ]
+                }
+              }
+            ]
+          }
+        }]
+      }
+    },
+    "DeployAdminRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "RoleName": "cellos-dev-reference-signed-time-deploy-admin",
+        "PermissionsBoundary": {"Ref": "ExternalPermissionsBoundaryArn"},
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [{
+            "Sid": "ExactExternalPrincipal",
+            "Effect": "Allow",
+            "Principal": {"AWS": {"Ref": "DeployTrustedPrincipalArn"}},
+            "Action": "sts:AssumeRole",
+            "Condition": {"ArnEquals": {"aws:PrincipalArn": {"Ref": "DeployTrustedPrincipalArn"}}}
+          }]
+        },
+        "Policies": [
+          {
+            "PolicyName": "fail-closed-signing-reachability-guardrails",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "DenyDirectCodeIamAndKeyPolicyMutation",
+                  "Effect": "Deny",
+                  "Action": [
+                    "lambda:UpdateFunctionCode", "lambda:UpdateFunctionConfiguration", "lambda:DeleteFunction",
+                    "lambda:PutFunctionCodeSigningConfig", "lambda:DeleteFunctionCodeSigningConfig", "lambda:PublishVersion",
+                    "lambda:CreateAlias", "lambda:UpdateAlias", "lambda:DeleteAlias", "lambda:AddPermission", "lambda:RemovePermission",
+                    "lambda:PutFunctionConcurrency", "lambda:DeleteFunctionConcurrency",
+                    "lambda:PutFunctionEventInvokeConfig", "lambda:UpdateFunctionEventInvokeConfig", "lambda:DeleteFunctionEventInvokeConfig",
+                    "iam:CreateRole", "iam:DeleteRole", "iam:UpdateRole", "iam:UpdateAssumeRolePolicy",
+                    "iam:PutRolePolicy", "iam:DeleteRolePolicy", "iam:AttachRolePolicy", "iam:DetachRolePolicy",
+                    "iam:TagRole", "iam:UntagRole", "iam:CreatePolicy", "iam:CreatePolicyVersion",
+                    "iam:SetDefaultPolicyVersion", "iam:DeletePolicy", "iam:DeletePolicyVersion",
+                    "kms:Sign", "kms:CreateGrant", "kms:RetireGrant", "kms:RevokeGrant", "kms:PutKeyPolicy"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenyRuntimeAssumptionAndDelegation",
+                  "Effect": "Deny",
+                  "Action": ["sts:AssumeRole", "iam:PassRole"],
+                  "Resource": {"Fn::GetAtt": ["RuntimeRole", "Arn"]}
+                },
+                {
+                  "Sid": "DenyPostBootstrapStackCreation",
+                  "Effect": "Deny",
+                  "Action": "cloudformation:CreateStack",
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenyUnseparatedCloudFormationMutation",
+                  "Effect": "Deny",
+                  "Action": ["cloudformation:UpdateStack", "cloudformation:CreateChangeSet"],
+                  "Resource": "*",
+                  "Condition": {"StringNotEquals": {"cloudformation:RoleArn": {"Ref": "CloudFormationServiceRoleArn"}}}
+                }
+              ]
+            }
+          },
+          {
+            "PolicyName": "narrow-current-stack-update",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "UpdateCurrentStackThroughSeparatedServiceRole",
+                  "Effect": "Allow",
+                  "Action": ["cloudformation:UpdateStack", "cloudformation:CreateChangeSet"],
+                  "Resource": {"Ref": "AWS::StackId"},
+                  "Condition": {"StringEquals": {"cloudformation:RoleArn": {"Ref": "CloudFormationServiceRoleArn"}}}
+                },
+                {
+                  "Sid": "InspectCurrentStack",
+                  "Effect": "Allow",
+                  "Action": ["cloudformation:DescribeStacks", "cloudformation:GetTemplate"],
+                  "Resource": {"Ref": "AWS::StackId"}
+                },
+                {
+                  "Sid": "OperateOnlyDeterministicallyNamedChangeSets",
+                  "Effect": "Allow",
+                  "Action": ["cloudformation:DescribeChangeSet", "cloudformation:DeleteChangeSet", "cloudformation:ExecuteChangeSet"],
+                  "Resource": {"Fn::Sub": "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:changeSet/cellos-dev-reference-signed-time-*/*"}
+                },
+                {
+                  "Sid": "PassOnlySeparatedCloudFormationServiceRole",
+                  "Effect": "Allow",
+                  "Action": "iam:PassRole",
+                  "Resource": {"Ref": "CloudFormationServiceRoleArn"},
+                  "Condition": {"StringEquals": {"iam:PassedToService": "cloudformation.amazonaws.com"}}
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "CodeSignApprovalRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "RoleName": "cellos-dev-reference-signed-time-code-sign-approval",
+        "PermissionsBoundary": {"Ref": "ExternalPermissionsBoundaryArn"},
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [{
+            "Sid": "ExactExternalPrincipal",
+            "Effect": "Allow",
+            "Principal": {"AWS": {"Ref": "CodeSignTrustedPrincipalArn"}},
+            "Action": "sts:AssumeRole",
+            "Condition": {"ArnEquals": {"aws:PrincipalArn": {"Ref": "CodeSignTrustedPrincipalArn"}}}
+          }]
+        },
+        "Policies": [
+          {
+            "PolicyName": "fail-closed-signing-reachability-guardrails",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "DenyDirectCodeIamAndKeyPolicyMutation",
+                  "Effect": "Deny",
+                  "Action": [
+                    "lambda:UpdateFunctionCode", "lambda:UpdateFunctionConfiguration", "lambda:DeleteFunction",
+                    "lambda:PutFunctionCodeSigningConfig", "lambda:DeleteFunctionCodeSigningConfig", "lambda:PublishVersion",
+                    "lambda:CreateAlias", "lambda:UpdateAlias", "lambda:DeleteAlias", "lambda:AddPermission", "lambda:RemovePermission",
+                    "lambda:PutFunctionConcurrency", "lambda:DeleteFunctionConcurrency",
+                    "lambda:PutFunctionEventInvokeConfig", "lambda:UpdateFunctionEventInvokeConfig", "lambda:DeleteFunctionEventInvokeConfig",
+                    "iam:CreateRole", "iam:DeleteRole", "iam:UpdateRole", "iam:UpdateAssumeRolePolicy",
+                    "iam:PutRolePolicy", "iam:DeleteRolePolicy", "iam:AttachRolePolicy", "iam:DetachRolePolicy",
+                    "iam:TagRole", "iam:UntagRole", "iam:CreatePolicy", "iam:CreatePolicyVersion",
+                    "iam:SetDefaultPolicyVersion", "iam:DeletePolicy", "iam:DeletePolicyVersion",
+                    "kms:Sign", "kms:CreateGrant", "kms:RetireGrant", "kms:RevokeGrant", "kms:PutKeyPolicy"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenyRuntimeAssumptionAndDelegation",
+                  "Effect": "Deny",
+                  "Action": ["sts:AssumeRole", "iam:PassRole"],
+                  "Resource": {"Fn::GetAtt": ["RuntimeRole", "Arn"]}
+                },
+                {
+                  "Sid": "DenyAllIndirectStackMutation",
+                  "Effect": "Deny",
+                  "Action": ["cloudformation:CreateStack", "cloudformation:UpdateStack", "cloudformation:CreateChangeSet", "cloudformation:ExecuteChangeSet"],
+                  "Resource": "*"
+                }
+              ]
+            }
+          },
+          {
+            "PolicyName": "inspect-approved-signer-profile",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [{
+                "Sid": "InspectOnlyApprovedProfile",
+                "Effect": "Allow",
+                "Action": "signer:GetSigningProfile",
+                "Resource": {
+                  "Fn::Join": [
+                    "/",
+                    [
+                      {"Fn::Select": [0, {"Fn::Split": ["/", {"Ref": "SignerProfileVersionArn"}]}]},
+                      {"Fn::Select": [1, {"Fn::Split": ["/", {"Ref": "SignerProfileVersionArn"}]}]},
+                      {"Fn::Select": [2, {"Fn::Split": ["/", {"Ref": "SignerProfileVersionArn"}]}]}
+                    ]
+                  ]
+                }
+              }]
+            }
+          }
+        ]
+      }
+    },
+    "IamReviewRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "RoleName": "cellos-dev-reference-signed-time-iam-review",
+        "PermissionsBoundary": {"Ref": "ExternalPermissionsBoundaryArn"},
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [{
+            "Sid": "ExactExternalPrincipal",
+            "Effect": "Allow",
+            "Principal": {"AWS": {"Ref": "IamTrustedPrincipalArn"}},
+            "Action": "sts:AssumeRole",
+            "Condition": {"ArnEquals": {"aws:PrincipalArn": {"Ref": "IamTrustedPrincipalArn"}}}
+          }]
+        },
+        "Policies": [
+          {
+            "PolicyName": "fail-closed-signing-reachability-guardrails",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "DenyDirectCodeIamAndKeyPolicyMutation",
+                  "Effect": "Deny",
+                  "Action": [
+                    "lambda:UpdateFunctionCode", "lambda:UpdateFunctionConfiguration", "lambda:DeleteFunction",
+                    "lambda:PutFunctionCodeSigningConfig", "lambda:DeleteFunctionCodeSigningConfig", "lambda:PublishVersion",
+                    "lambda:CreateAlias", "lambda:UpdateAlias", "lambda:DeleteAlias", "lambda:AddPermission", "lambda:RemovePermission",
+                    "lambda:PutFunctionConcurrency", "lambda:DeleteFunctionConcurrency",
+                    "lambda:PutFunctionEventInvokeConfig", "lambda:UpdateFunctionEventInvokeConfig", "lambda:DeleteFunctionEventInvokeConfig",
+                    "iam:CreateRole", "iam:DeleteRole", "iam:UpdateRole", "iam:UpdateAssumeRolePolicy",
+                    "iam:PutRolePolicy", "iam:DeleteRolePolicy", "iam:AttachRolePolicy", "iam:DetachRolePolicy",
+                    "iam:TagRole", "iam:UntagRole", "iam:CreatePolicy", "iam:CreatePolicyVersion",
+                    "iam:SetDefaultPolicyVersion", "iam:DeletePolicy", "iam:DeletePolicyVersion",
+                    "kms:Sign", "kms:CreateGrant", "kms:RetireGrant", "kms:RevokeGrant", "kms:PutKeyPolicy"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenyRuntimeAssumptionAndDelegation",
+                  "Effect": "Deny",
+                  "Action": ["sts:AssumeRole", "iam:PassRole"],
+                  "Resource": {"Fn::GetAtt": ["RuntimeRole", "Arn"]}
+                },
+                {
+                  "Sid": "DenyAllIndirectStackMutation",
+                  "Effect": "Deny",
+                  "Action": ["cloudformation:CreateStack", "cloudformation:UpdateStack", "cloudformation:CreateChangeSet", "cloudformation:ExecuteChangeSet"],
+                  "Resource": "*"
+                }
+              ]
+            }
+          },
+          {
+            "PolicyName": "inspect-only-separated-roles-and-boundary",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "InspectOnlyDeclaredRoles",
+                  "Effect": "Allow",
+                  "Action": ["iam:GetRole", "iam:GetRolePolicy", "iam:ListAttachedRolePolicies", "iam:ListRolePolicies"],
+                  "Resource": [
+                    {"Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cellos-dev-reference-signed-time-runtime"},
+                    {"Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cellos-dev-reference-signed-time-deploy-admin"},
+                    {"Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cellos-dev-reference-signed-time-code-sign-approval"},
+                    {"Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cellos-dev-reference-signed-time-iam-review"},
+                    {"Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cellos-dev-reference-signed-time-key-policy-admin"}
+                  ]
+                },
+                {
+                  "Sid": "InspectOnlyExternalBoundary",
+                  "Effect": "Allow",
+                  "Action": ["iam:GetPolicy", "iam:GetPolicyVersion"],
+                  "Resource": {"Ref": "ExternalPermissionsBoundaryArn"}
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "KeyPolicyAdminRole": {
+      "Type": "AWS::IAM::Role",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "RoleName": "cellos-dev-reference-signed-time-key-policy-admin",
+        "PermissionsBoundary": {"Ref": "ExternalPermissionsBoundaryArn"},
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [{
+            "Sid": "ExactExternalPrincipal",
+            "Effect": "Allow",
+            "Principal": {"AWS": {"Ref": "KeyPolicyTrustedPrincipalArn"}},
+            "Action": "sts:AssumeRole",
+            "Condition": {"ArnEquals": {"aws:PrincipalArn": {"Ref": "KeyPolicyTrustedPrincipalArn"}}}
+          }]
+        },
+        "Policies": [{
+          "PolicyName": "fail-closed-signing-reachability-guardrails",
+          "PolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [
+              {
+                "Sid": "DenyDirectCodeIamAndSigningMutation",
+                "Effect": "Deny",
+                "Action": [
+                  "lambda:UpdateFunctionCode", "lambda:UpdateFunctionConfiguration", "lambda:DeleteFunction",
+                  "lambda:PutFunctionCodeSigningConfig", "lambda:DeleteFunctionCodeSigningConfig", "lambda:PublishVersion",
+                  "lambda:CreateAlias", "lambda:UpdateAlias", "lambda:DeleteAlias", "lambda:AddPermission", "lambda:RemovePermission",
+                  "lambda:PutFunctionConcurrency", "lambda:DeleteFunctionConcurrency",
+                  "lambda:PutFunctionEventInvokeConfig", "lambda:UpdateFunctionEventInvokeConfig", "lambda:DeleteFunctionEventInvokeConfig",
+                  "iam:CreateRole", "iam:DeleteRole", "iam:UpdateRole", "iam:UpdateAssumeRolePolicy",
+                  "iam:PutRolePolicy", "iam:DeleteRolePolicy", "iam:AttachRolePolicy", "iam:DetachRolePolicy",
+                  "iam:TagRole", "iam:UntagRole", "iam:CreatePolicy", "iam:CreatePolicyVersion",
+                  "iam:SetDefaultPolicyVersion", "iam:DeletePolicy", "iam:DeletePolicyVersion",
+                  "kms:Sign", "kms:CreateGrant", "kms:RetireGrant", "kms:RevokeGrant"
+                ],
+                "Resource": "*"
+              },
+              {
+                "Sid": "DenyRuntimeAssumptionAndDelegation",
+                "Effect": "Deny",
+                "Action": ["sts:AssumeRole", "iam:PassRole"],
+                "Resource": {"Fn::GetAtt": ["RuntimeRole", "Arn"]}
+              },
+              {
+                "Sid": "DenyAllIndirectStackMutation",
+                "Effect": "Deny",
+                "Action": ["cloudformation:CreateStack", "cloudformation:UpdateStack", "cloudformation:CreateChangeSet", "cloudformation:ExecuteChangeSet"],
+                "Resource": "*"
+              }
+            ]
+          }
+        }]
+      }
+    },
+    "SigningKey": {
+      "Type": "AWS::KMS::Key",
+      "DependsOn": ["RuntimeRole", "KeyPolicyAdminRole"],
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "Description": "DEV_REFERENCE signed-time P-256 signing key; not a DynamoDB SSE key.",
+        "Enabled": true,
+        "EnableKeyRotation": false,
+        "KeySpec": "ECC_NIST_P256",
+        "KeyUsage": "SIGN_VERIFY",
+        "MultiRegion": false,
+        "PendingWindowInDays": 30,
+        "BypassPolicyLockoutSafetyCheck": true,
+        "KeyPolicy": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "RuntimeMaySignOnlyWithPinnedAlgorithm",
+              "Effect": "Allow",
+              "Principal": {"AWS": {"Fn::GetAtt": ["RuntimeRole", "Arn"]}},
+              "Action": "kms:Sign",
+              "Resource": "*",
+              "Condition": {"StringEquals": {"kms:SigningAlgorithm": "ECDSA_SHA_256"}}
+            },
+            {
+              "Sid": "RuntimeMayReadOnlyItsPublicKey",
+              "Effect": "Allow",
+              "Principal": {"AWS": {"Fn::GetAtt": ["RuntimeRole", "Arn"]}},
+              "Action": "kms:GetPublicKey",
+              "Resource": "*"
+            },
+            {
+              "Sid": "SeparatedKeyAdministratorCannotUseSigningOperation",
+              "Effect": "Allow",
+              "Principal": {"AWS": {"Fn::GetAtt": ["KeyPolicyAdminRole", "Arn"]}},
+              "Action": ["kms:DescribeKey", "kms:GetKeyPolicy", "kms:PutKeyPolicy", "kms:EnableKey", "kms:DisableKey", "kms:ScheduleKeyDeletion", "kms:CancelKeyDeletion", "kms:TagResource", "kms:UntagResource"],
+              "Resource": "*"
+            }
+          ]
+        }
+      }
+    },
+    "RuntimeSigningKeyPolicy": {
+      "Type": "AWS::IAM::Policy",
+      "DependsOn": "SigningKey",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "PolicyName": "cellos-dev-reference-signed-time-exact-key",
+        "Roles": [{"Ref": "RuntimeRole"}],
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "SignOnlyPinnedAlgorithm",
+              "Effect": "Allow",
+              "Action": "kms:Sign",
+              "Resource": {"Fn::GetAtt": ["SigningKey", "Arn"]},
+              "Condition": {"StringEquals": {"kms:SigningAlgorithm": "ECDSA_SHA_256"}}
+            },
+            {
+              "Sid": "ReadExactPublicKey",
+              "Effect": "Allow",
+              "Action": "kms:GetPublicKey",
+              "Resource": {"Fn::GetAtt": ["SigningKey", "Arn"]}
+            }
+          ]
+        }
+      }
+    },
+    "KeyPolicyAdminReadPolicy": {
+      "Type": "AWS::IAM::Policy",
+      "DependsOn": "SigningKey",
+      "Properties": {
+        "PolicyName": "cellos-dev-reference-signed-time-key-inspection",
+        "Roles": [{"Ref": "KeyPolicyAdminRole"}],
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [{
+            "Sid": "InspectExactSigningKey",
+            "Effect": "Allow",
+            "Action": ["kms:DescribeKey", "kms:GetKeyPolicy"],
+            "Resource": {"Fn::GetAtt": ["SigningKey", "Arn"]}
+          }]
+        }
+      }
+    },
+    "FunctionLogGroup": {
+      "Type": "AWS::Logs::LogGroup",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "LogGroupName": "/cellos/dev-reference/signed-time/function",
+        "RetentionInDays": 365
+      }
+    },
+    "FunctionCodeSigningConfig": {
+      "Type": "AWS::Lambda::CodeSigningConfig",
+      "Properties": {
+        "Description": "Enforces the exact externally approved Signer profile version.",
+        "AllowedPublishers": {
+          "SigningProfileVersionArns": [{"Ref": "SignerProfileVersionArn"}]
+        },
+        "CodeSigningPolicies": {
+          "UntrustedArtifactOnDeployment": "Enforce"
+        }
+      }
+    },
+    "SignedTimeFunction": {
+      "Type": "AWS::Lambda::Function",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "DependsOn": ["RuntimeSigningKeyPolicy", "FunctionLogGroup", "FunctionCodeSigningConfig"],
+      "Properties": {
+        "FunctionName": "cellos-dev-reference-signed-time",
+        "Description": "SOFTWARE_HARNESS only; provider composition is not deployable yet.",
+        "PackageType": "Zip",
+        "Runtime": "python3.12",
+        "Architectures": ["x86_64"],
+        "Handler": "handler.lambda_handler",
+        "Role": {"Fn::GetAtt": ["RuntimeRole", "Arn"]},
+        "CodeSigningConfigArn": {"Fn::GetAtt": ["FunctionCodeSigningConfig", "CodeSigningConfigArn"]},
+        "Code": {
+          "S3Bucket": {"Ref": "ArtifactS3Bucket"},
+          "S3Key": {"Ref": "ArtifactS3Key"},
+          "S3ObjectVersion": {"Ref": "ArtifactS3ObjectVersion"}
+        },
+        "MemorySize": 256,
+        "Timeout": 10,
+        "ReservedConcurrentExecutions": 1,
+        "LoggingConfig": {
+          "LogFormat": "JSON",
+          "ApplicationLogLevel": "ERROR",
+          "SystemLogLevel": "WARN",
+          "LogGroup": {"Ref": "FunctionLogGroup"}
+        },
+        "Environment": {
+          "Variables": {
+            "SIGNED_TIME_TABLE_NAME": {"Ref": "SignedTimeTable"},
+            "SIGNED_TIME_KMS_KEY_ARN": {"Fn::GetAtt": ["SigningKey", "Arn"]}
+          }
+        }
+      }
+    },
+    "SignedTimeVersion": {
+      "Type": "AWS::Lambda::Version",
+      "DependsOn": "SignedTimeFunction",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "FunctionName": {"Ref": "SignedTimeFunction"},
+        "CodeSha256": {"Ref": "CodeSha256"},
+        "Description": "Immutable approved signed-time artifact version."
+      }
+    },
+    "SignedTimeAlias": {
+      "Type": "AWS::Lambda::Alias",
+      "DependsOn": "SignedTimeVersion",
+      "Properties": {
+        "Name": "live",
+        "Description": "Only API-reachable immutable signed-time version.",
+        "FunctionName": {"Ref": "SignedTimeFunction"},
+        "FunctionVersion": {"Fn::GetAtt": ["SignedTimeVersion", "Version"]}
+      }
+    },
+    "SignedTimeApi": {
+      "Type": "AWS::ApiGatewayV2::Api",
+      "Properties": {
+        "Name": "cellos-dev-reference-signed-time",
+        "ProtocolType": "HTTP",
+        "DisableExecuteApiEndpoint": false
+      }
+    },
+    "ApiAccessLogGroup": {
+      "Type": "AWS::Logs::LogGroup",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "LogGroupName": "/cellos/dev-reference/signed-time/api",
+        "RetentionInDays": 365
+      }
+    },
+    "SignedTimeIntegration": {
+      "Type": "AWS::ApiGatewayV2::Integration",
+      "DependsOn": "SignedTimeAlias",
+      "Properties": {
+        "ApiId": {"Ref": "SignedTimeApi"},
+        "IntegrationType": "AWS_PROXY",
+        "IntegrationMethod": "POST",
+        "IntegrationUri": {
+          "Fn::Sub": [
+            "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${AliasArn}/invocations",
+            {"AliasArn": {"Fn::GetAtt": ["SignedTimeAlias", "AliasArn"]}}
+          ]
+        },
+        "PayloadFormatVersion": "2.0",
+        "TimeoutInMillis": 10000
+      }
+    },
+    "SignedTimeRoute": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "DependsOn": "SignedTimeIntegration",
+      "Properties": {
+        "ApiId": {"Ref": "SignedTimeApi"},
+        "RouteKey": "POST /v1/time",
+        "AuthorizationType": "NONE",
+        "Target": {"Fn::Join": ["/", ["integrations", {"Ref": "SignedTimeIntegration"}]]}
+      }
+    },
+    "SignedTimeStage": {
+      "Type": "AWS::ApiGatewayV2::Stage",
+      "DependsOn": ["SignedTimeRoute", "ApiAccessLogGroup"],
+      "Properties": {
+        "ApiId": {"Ref": "SignedTimeApi"},
+        "StageName": "$default",
+        "AutoDeploy": true,
+        "DefaultRouteSettings": {
+          "DetailedMetricsEnabled": true,
+          "ThrottlingBurstLimit": 10,
+          "ThrottlingRateLimit": 5
+        },
+        "AccessLogSettings": {
+          "DestinationArn": {"Fn::GetAtt": ["ApiAccessLogGroup", "Arn"]},
+          "Format": "{\"requestId\":\"$context.requestId\",\"routeKey\":\"$context.routeKey\",\"status\":\"$context.status\",\"integrationError\":\"$context.integrationErrorMessage\"}"
+        }
+      }
+    },
+    "AliasInvokePermission": {
+      "Type": "AWS::Lambda::Permission",
+      "DependsOn": ["SignedTimeAlias", "SignedTimeRoute"],
+      "Properties": {
+        "Action": "lambda:InvokeFunction",
+        "FunctionName": {"Ref": "SignedTimeAlias"},
+        "Principal": "apigateway.amazonaws.com",
+        "SourceAccount": {"Ref": "AWS::AccountId"},
+        "SourceArn": {"Fn::Sub": "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${SignedTimeApi}/$default/POST/v1/time"}
+      }
+    },
+    "FunctionErrorsAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmDescription": "Published signed-time alias returned any Lambda error.",
+        "AlarmActions": [{"Ref": "AlarmTopicArn"}],
+        "Namespace": "AWS/Lambda",
+        "MetricName": "Errors",
+        "Dimensions": [
+          {"Name": "FunctionName", "Value": {"Ref": "SignedTimeFunction"}},
+          {"Name": "Resource", "Value": {"Fn::Sub": "${SignedTimeFunction}:live"}}
+        ],
+        "Statistic": "Sum",
+        "Period": 60,
+        "EvaluationPeriods": 1,
+        "DatapointsToAlarm": 1,
+        "Threshold": 0,
+        "ComparisonOperator": "GreaterThanThreshold",
+        "TreatMissingData": "notBreaching"
+      }
+    },
+    "FunctionThrottlesAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmDescription": "Published signed-time alias was throttled.",
+        "AlarmActions": [{"Ref": "AlarmTopicArn"}],
+        "Namespace": "AWS/Lambda",
+        "MetricName": "Throttles",
+        "Dimensions": [
+          {"Name": "FunctionName", "Value": {"Ref": "SignedTimeFunction"}},
+          {"Name": "Resource", "Value": {"Fn::Sub": "${SignedTimeFunction}:live"}}
+        ],
+        "Statistic": "Sum",
+        "Period": 60,
+        "EvaluationPeriods": 1,
+        "DatapointsToAlarm": 1,
+        "Threshold": 0,
+        "ComparisonOperator": "GreaterThanThreshold",
+        "TreatMissingData": "notBreaching"
+      }
+    },
+    "ApiServerErrorsAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmDescription": "Signed-time HTTP API returned any server error.",
+        "AlarmActions": [{"Ref": "AlarmTopicArn"}],
+        "Namespace": "AWS/ApiGateway",
+        "MetricName": "5xx",
+        "Dimensions": [
+          {"Name": "ApiId", "Value": {"Ref": "SignedTimeApi"}},
+          {"Name": "Stage", "Value": "$default"}
+        ],
+        "Statistic": "Sum",
+        "Period": 60,
+        "EvaluationPeriods": 1,
+        "DatapointsToAlarm": 1,
+        "Threshold": 0,
+        "ComparisonOperator": "GreaterThanThreshold",
+        "TreatMissingData": "notBreaching"
+      }
+    },
+    "TableSystemErrorsAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmDescription": "Signed-time allocator table returned any system error.",
+        "AlarmActions": [{"Ref": "AlarmTopicArn"}],
+        "Namespace": "AWS/DynamoDB",
+        "MetricName": "SystemErrors",
+        "Dimensions": [
+          {"Name": "TableName", "Value": {"Ref": "SignedTimeTable"}},
+          {"Name": "Operation", "Value": "TransactWriteItems"}
+        ],
+        "Statistic": "Sum",
+        "Period": 60,
+        "EvaluationPeriods": 1,
+        "DatapointsToAlarm": 1,
+        "Threshold": 0,
+        "ComparisonOperator": "GreaterThanThreshold",
+        "TreatMissingData": "notBreaching"
+      }
+    },
+    "TableThrottledRequestsAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmDescription": "Signed-time allocator table throttled any request.",
+        "AlarmActions": [{"Ref": "AlarmTopicArn"}],
+        "Namespace": "AWS/DynamoDB",
+        "MetricName": "ThrottledRequests",
+        "Dimensions": [
+          {"Name": "TableName", "Value": {"Ref": "SignedTimeTable"}},
+          {"Name": "Operation", "Value": "TransactWriteItems"}
+        ],
+        "Statistic": "Sum",
+        "Period": 60,
+        "EvaluationPeriods": 1,
+        "DatapointsToAlarm": 1,
+        "Threshold": 0,
+        "ComparisonOperator": "GreaterThanThreshold",
+        "TreatMissingData": "notBreaching"
+      }
+    }
+  },
+  "Outputs": {
+    "HarnessClassification": {
+      "Description": "This is not deployment or live-isolation evidence.",
+      "Value": "SOFTWARE_HARNESS"
+    },
+    "DeploymentReadiness": {
+      "Description": "Provider/handler artifact composition remains deliberately blocked.",
+      "Value": "NOT_DEPLOYABLE_PROVIDER_AND_ARTIFACT_COMPOSITION_INCOMPLETE"
+    },
+    "ExternalControlsGate": {
+      "Description": "Required before any deployment or isolation claim.",
+      "Value": "EXTERNAL_BOUNDARY_SCP_CFN_SERVICE_ROLE_KMS_ADMIN_CODE_SIGN_APPROVAL_OPERATOR_EVIDENCE_REQUIRED"
+    },
+    "LiveIsolationEvidence": {
+      "Description": "A mutable same-stack graph cannot prove deploy-principal indirect-Sign isolation.",
+      "Value": "REQUIRED_NOT_PROVIDED"
+    },
+    "KeyAdministratorRequirement": {
+      "Description": "The exact separately controlled administrator named by this template must remain available because the KMS lockout safety bypass is deliberate.",
+      "Value": {"Fn::GetAtt": ["KeyPolicyAdminRole", "Arn"]}
+    },
+    "SignedTimeEndpoint": {
+      "Description": "Intended DEV_REFERENCE endpoint; output is not evidence that it exists or is admitted.",
+      "Value": {"Fn::Sub": "https://${SignedTimeApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/v1/time"}
+    },
+    "SignedTimeRegion": {
+      "Description": "Intended single AWS region.",
+      "Value": {"Ref": "AWS::Region"}
+    },
+    "SignedTimeTableName": {
+      "Description": "Intended retained allocator table.",
+      "Value": {"Ref": "SignedTimeTable"}
+    },
+    "SigningKeyArn": {
+      "Description": "Intended retained signing key; its public-key digest must be obtained and independently approved after creation.",
+      "Value": {"Fn::GetAtt": ["SigningKey", "Arn"]}
+    },
+    "PublicKeyDigest": {
+      "Description": "Not derived by CloudFormation; operator evidence and reviewed manifest pinning remain required.",
+      "Value": "NOT_AVAILABLE_UNTIL_INDEPENDENT_OPERATOR_CAPTURE_AND_APPROVAL"
+    }
+  }
+}
