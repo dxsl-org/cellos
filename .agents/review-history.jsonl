@@ -4,3 +4,4 @@
 {"date":"2026-08-29","finding":"MMIO decoder accepted VMCB-owned RSP as a caller-managed GPR","severity":"medium","decision":"accepted-fixed","files":["hal/arch/x86/src/x86_64/vmexit_decode.rs"]}
 {"date":"2026-08-29","finding":"fallback MMIO instruction decode required bytes beyond the complete instruction","severity":"medium","decision":"accepted-fixed","files":["hal/arch/x86/src/x86_64/svm_vcpu.rs"]}
 {"date":"2026-08-29","finding":"SVM ASID allocator wrapped and could reuse stale nested-TLB identity","severity":"medium","decision":"accepted-fixed","files":["kernel/src/hypervisor/svm_registry.rs"]}
+{"date":"2026-09-02","skill":"hc-fix","category":"atomic-admission-race","module":"cells","file":"cells/services/net-broker/src/beacon.rs","severity":"High","summary":"shutdown could claim pre-admission between cancellation check and queued post"}

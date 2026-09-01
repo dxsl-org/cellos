@@ -1,18 +1,13 @@
 use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use service_net_broker::local_ingress::ParsedLocalRequest;
-
+use service_net_broker::restart_ipc_state::{
+    arm_shutdown, finish_admission, RestartIpcState as State,
+};
 const RUNTIME_ROLE_COUNT: usize = 3;
-const NETWORK_IPC_IDLE: usize = 0;
-const NETWORK_IPC_ACTIVE: usize = 1;
-const NETWORK_IPC_ARMED_IDLE: usize = 2;
-const NETWORK_IPC_ARMED_ACTIVE: usize = 3;
-const NETWORK_IPC_ACKED: usize = 4;
-// Bound shutdown by elapsed time, not scheduler turns: runnable-task count changes
-// how many yields a role needs before it can observe the shutdown flag.
+// Elapsed-time shutdown bounds remain stable as runnable-task counts change.
 const DRAIN_TIMEOUT_MS: u64 = service_net_broker::runtime_roles::RESTART_DRAIN_TIMEOUT_MS;
-
 static SHUTDOWN_REQUESTED: AtomicBool = AtomicBool::new(false);
-static NETWORK_IPC_STATE: AtomicUsize = AtomicUsize::new(NETWORK_IPC_IDLE);
+static NETWORK_IPC_STATE: AtomicUsize = AtomicUsize::new(State::Idle.raw());
 static EXITED_ROLES: AtomicUsize = AtomicUsize::new(0);
 
 pub fn request_matches(
@@ -30,30 +25,29 @@ pub fn request_matches(
 }
 
 pub fn shutdown() -> ! {
-    // Publish the arm before waiting for an admission. If an exchange is already
-    // active, its completion preserves the arm for the next exchange. ACKED is
-    // stable until this role publishes SHUTDOWN_REQUESTED, so single-hart runs
-    // do not depend on timer preemption catching a transient ACTIVE state.
-    loop {
+    // Shutdown atomically classifies an idle, admitting, or admitted exchange.
+    // An in-progress admission publishes whether the post succeeded before the
+    // shutdown flag is released.
+    let shutdown_before_admission = loop {
         let state = NETWORK_IPC_STATE.load(Ordering::Acquire);
-        let armed = match state {
-            NETWORK_IPC_IDLE => NETWORK_IPC_ARMED_IDLE,
-            NETWORK_IPC_ACTIVE => NETWORK_IPC_ARMED_ACTIVE,
-            NETWORK_IPC_ARMED_IDLE | NETWORK_IPC_ARMED_ACTIVE | NETWORK_IPC_ACKED => break,
-            _ => exit_admission_timeout(),
+        let Some(state_value) = State::from_raw(state) else {
+            exit_admission_timeout();
+        };
+        let Some((armed, before_admission)) = arm_shutdown(state_value) else {
+            break false;
         };
         if NETWORK_IPC_STATE
-            .compare_exchange(state, armed, Ordering::AcqRel, Ordering::Acquire)
+            .compare_exchange(state, armed.raw(), Ordering::AcqRel, Ordering::Acquire)
             .is_ok()
         {
-            break;
+            break before_admission;
         }
-    }
+    };
 
     let Some(admission_started_at_ms) = ostd::syscall::sys_get_time_ms() else {
         exit_admission_timeout();
     };
-    while NETWORK_IPC_STATE.load(Ordering::Acquire) != NETWORK_IPC_ACKED {
+    while NETWORK_IPC_STATE.load(Ordering::Acquire) != State::Acked.raw() {
         let Some(now_ms) = ostd::syscall::sys_get_time_ms() else {
             exit_admission_timeout();
         };
@@ -64,6 +58,9 @@ pub fn shutdown() -> ! {
     }
 
     SHUTDOWN_REQUESTED.store(true, Ordering::Release);
+    if shutdown_before_admission {
+        ostd::io::println("[net-broker] restart oracle shutdown-before-admission exercised");
+    }
     let Some(started_at_ms) = ostd::syscall::sys_get_time_ms() else {
         exit_drain_timeout();
     };
@@ -82,49 +79,76 @@ pub fn shutdown() -> ! {
     }
 }
 
-/// Marks one post-admission IPC active.
-///
-/// Returns `false` if another exchange is active or restart already claimed it.
-pub fn network_ipc_started() -> bool {
+/// Claims the atomic state surrounding one nonblocking admission attempt.
+/// Returns `false` when shutdown already owns the exchange.
+pub fn network_ipc_admission_started() -> bool {
+    NETWORK_IPC_STATE
+        .compare_exchange(
+            State::Idle.raw(),
+            State::Admitting.raw(),
+            Ordering::AcqRel,
+            Ordering::Acquire,
+        )
+        .is_ok()
+}
+
+/// Publishes whether the guarded admission attempt queued its request.
+/// Returns `true` when shutdown raced the attempt and owns its result.
+pub fn network_ipc_admission_finished(admitted: bool) -> bool {
     loop {
         let state = NETWORK_IPC_STATE.load(Ordering::Acquire);
-        let active = match state {
-            NETWORK_IPC_IDLE => NETWORK_IPC_ACTIVE,
-            NETWORK_IPC_ARMED_IDLE => NETWORK_IPC_ACKED,
-            _ => return false,
+        let Some(state_value) = State::from_raw(state) else {
+            return true;
+        };
+        let Some((next, shutdown_owned)) = finish_admission(state_value, admitted) else {
+            return true;
         };
         if NETWORK_IPC_STATE
-            .compare_exchange(state, active, Ordering::AcqRel, Ordering::Acquire)
+            .compare_exchange(state, next.raw(), Ordering::AcqRel, Ordering::Acquire)
             .is_ok()
         {
+            if !shutdown_owned {
+                return false;
+            }
+            while !shutdown_requested() {
+                ostd::task::yield_now();
+            }
+            if admitted {
+                ostd::io::println("[net-broker] restart oracle shutdown-after-admission exercised");
+            } else {
+                ostd::io::println(
+                    "[net-broker] restart oracle shutdown-before-admission exercised",
+                );
+            }
             return true;
         }
     }
 }
 
 /// Acknowledges that an armed restart found the currently admitted IPC waiting.
-///
 /// The acknowledgement remains published until shutdown releases the wait.
 pub fn network_ipc_cancellation_checkpoint() {
     let _ = NETWORK_IPC_STATE.compare_exchange(
-        NETWORK_IPC_ARMED_ACTIVE,
-        NETWORK_IPC_ACKED,
+        State::ArmedActive.raw(),
+        State::Acked.raw(),
         Ordering::AcqRel,
         Ordering::Acquire,
     );
 }
 
 /// Completes the active IPC at the restart linearization point.
-///
 /// Returns `true` when restart claimed the exchange and its response must be
 /// discarded; returns `false` when normal completion won the race.
 pub fn network_ipc_finished() -> bool {
     loop {
         let state = NETWORK_IPC_STATE.load(Ordering::Acquire);
-        let idle = match state {
-            NETWORK_IPC_ACTIVE => NETWORK_IPC_IDLE,
-            NETWORK_IPC_ARMED_ACTIVE => NETWORK_IPC_ARMED_IDLE,
-            NETWORK_IPC_ACKED => {
+        let Some(state_value) = State::from_raw(state) else {
+            return true;
+        };
+        let idle = match state_value {
+            State::Active => State::Idle,
+            State::ArmedActive => State::Acked,
+            State::Acked => {
                 while !shutdown_requested() {
                     ostd::task::yield_now();
                 }
@@ -134,9 +158,12 @@ pub fn network_ipc_finished() -> bool {
             _ => return true,
         };
         if NETWORK_IPC_STATE
-            .compare_exchange(state, idle, Ordering::AcqRel, Ordering::Acquire)
+            .compare_exchange(state, idle.raw(), Ordering::AcqRel, Ordering::Acquire)
             .is_ok()
         {
+            if idle == State::Acked {
+                continue;
+            }
             return false;
         }
     }

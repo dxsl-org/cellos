@@ -48,6 +48,7 @@ api::declare_cluster!(mode = Private, name = "robots");
 // broker's behalf (init has SpawnCap; the broker does not).
 api::declare_syscalls![
     Send,
+    SendGather,
     Recv,
     RecvTimeout,
     TrySend,

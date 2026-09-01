@@ -24,6 +24,9 @@ use chacha20poly1305::{
 use ostd::service::NetRef;
 use ostd::syscall::{sys_get_time_ms, sys_heartbeat};
 use rand_core::RngCore;
+use service_net_broker::ipc_deadline::{
+    admit_request_until_deadline, receive_until_deadline, AdmissionAttempt, SendAdmission,
+};
 use sha2::{Digest, Sha256};
 
 use crate::rng::BrokerRng;
@@ -213,64 +216,78 @@ pub struct BeaconChannel {
 const BEACON_IPC_TIMEOUT_TICKS: u64 = service_net_broker::runtime_roles::NETWORK_IPC_TIMEOUT_TICKS;
 
 impl BeaconChannel {
-    fn call_after_admission<'r>(
+    fn call_bounded<'r>(
         service_tid: usize,
         request: &NetRequest<'_>,
         send_buffer: &mut [u8; api::ipc::IPC_BUF_SIZE],
         response_buffer: &'r mut [u8; api::ipc::IPC_BUF_SIZE],
     ) -> Result<Option<NetResponse<'r>>, ()> {
         let encoded = api::ipc::encode(request, send_buffer).map_err(|_| ())?;
-        if !matches!(
-            ostd::syscall::sys_send(service_tid, encoded),
-            ostd::syscall::SyscallResult::Ok(_)
-        ) {
-            return Err(());
-        }
-        #[cfg(feature = "restart-oracle")]
-        if !crate::local_runtime::restart_oracle::network_ipc_started() {
-            return Err(());
-        }
-
-        let Some(started_at) = ostd::syscall::sys_get_scheduler_ticks() else {
-            #[cfg(feature = "restart-oracle")]
-            if crate::local_runtime::restart_oracle::network_ipc_finished() {
-                return Ok(None);
-            }
-            return Err(());
-        };
-
-        let deadline = started_at.saturating_add(BEACON_IPC_TIMEOUT_TICKS);
-        let receive_result: Result<Option<ostd::syscall::SyscallResult>, ()> = loop {
-            #[cfg(feature = "restart-oracle")]
-            {
-                crate::local_runtime::restart_oracle::network_ipc_cancellation_checkpoint();
-                if crate::local_runtime::restart_oracle::shutdown_requested() {
-                    break Ok(None);
+        let started_at = ostd::syscall::sys_get_scheduler_ticks().ok_or(())?;
+        let admission = admit_request_until_deadline(
+            started_at,
+            BEACON_IPC_TIMEOUT_TICKS,
+            || {
+                #[cfg(feature = "restart-oracle")]
+                {
+                    return crate::local_runtime::restart_oracle::shutdown_requested();
                 }
-            }
-            let Some(now) = ostd::syscall::sys_get_scheduler_ticks() else {
-                break Err(());
-            };
-            let remaining = deadline.saturating_sub(now);
-            if remaining == 0 {
-                break Err(());
-            }
-            match ostd::syscall::sys_recv_timeout(
-                service_tid,
-                response_buffer,
-                remaining.min(service_net_broker::runtime_roles::NETWORK_IPC_CANCEL_POLL_TICKS),
-            ) {
-                ostd::syscall::SyscallResult::Ok(0) => {}
-                result => break Ok(Some(result)),
-            }
-        };
+                #[cfg(not(feature = "restart-oracle"))]
+                false
+            },
+            || {
+                #[cfg(feature = "restart-oracle")]
+                if !crate::local_runtime::restart_oracle::network_ipc_admission_started() {
+                    return AdmissionAttempt::Cancelled;
+                }
+                let admitted = matches!(
+                    ostd::syscall::sys_post(service_tid, encoded),
+                    ostd::syscall::SyscallResult::Ok(0)
+                );
+                #[cfg(feature = "restart-oracle")]
+                if crate::local_runtime::restart_oracle::network_ipc_admission_finished(admitted) {
+                    return AdmissionAttempt::Cancelled;
+                }
+                if admitted {
+                    AdmissionAttempt::Admitted
+                } else {
+                    AdmissionAttempt::Rejected
+                }
+            },
+            ostd::syscall::sys_get_scheduler_ticks,
+            ostd::task::yield_now,
+        )?;
+        if admission == SendAdmission::Cancelled {
+            return Ok(None);
+        }
+
+        let receive_result = receive_until_deadline(
+            started_at,
+            BEACON_IPC_TIMEOUT_TICKS,
+            service_net_broker::runtime_roles::NETWORK_IPC_CANCEL_POLL_TICKS,
+            || {
+                #[cfg(feature = "restart-oracle")]
+                {
+                    crate::local_runtime::restart_oracle::network_ipc_cancellation_checkpoint();
+                    return crate::local_runtime::restart_oracle::shutdown_requested();
+                }
+                #[cfg(not(feature = "restart-oracle"))]
+                false
+            },
+            ostd::syscall::sys_get_scheduler_ticks,
+            |slice| match ostd::syscall::sys_recv_timeout(service_tid, response_buffer, slice) {
+                ostd::syscall::SyscallResult::Ok(0) => Ok(None),
+                ostd::syscall::SyscallResult::Ok(sender) => Ok(Some(sender)),
+                ostd::syscall::SyscallResult::Err(_) => Err(()),
+            },
+        );
 
         #[cfg(feature = "restart-oracle")]
         if crate::local_runtime::restart_oracle::network_ipc_finished() {
             return Ok(None);
         }
         match receive_result?.ok_or(())? {
-            ostd::syscall::SyscallResult::Ok(sender) if sender == service_tid => {
+            sender if sender == service_tid => {
                 api::ipc::decode(response_buffer).map(Some).map_err(|_| ())
             }
             _ => Err(()),
@@ -317,7 +334,7 @@ impl BeaconChannel {
         let mut request = [0u8; api::ipc::IPC_BUF_SIZE];
         let mut response = [0u8; api::ipc::IPC_BUF_SIZE];
         sys_heartbeat(HEARTBEAT_MS);
-        let result = Self::call_after_admission(
+        let result = Self::call_bounded(
             service_tid,
             &NetRequest::UdpSend {
                 cap_id: self.cap_id,
@@ -346,7 +363,7 @@ impl BeaconChannel {
         let service_tid = net.resolve().ok_or(())?;
         let mut request = [0u8; api::ipc::IPC_BUF_SIZE];
         let mut response = [0u8; api::ipc::IPC_BUF_SIZE];
-        let result = Self::call_after_admission(
+        let result = Self::call_bounded(
             service_tid,
             &NetRequest::UdpRecv {
                 cap_id: self.cap_id,

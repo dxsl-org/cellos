@@ -988,6 +988,25 @@ pub fn sys_send_gather(target: usize, segments: &[IoVec]) -> SyscallResult {
     SyscallResult::Ok(ret as usize)
 }
 
+/// Queue one owned IPC message without parking the sender.
+///
+/// The target's bounded mailbox retains the message until its next receive,
+/// which makes this compatible with polling receivers. The kernel copies
+/// `msg` before returning.
+///
+/// # Returns
+/// `Ok(0)` when queued or delivered. Any other value means the target was
+/// unavailable or its mailbox was full.
+pub fn sys_post(target: usize, msg: &[u8]) -> SyscallResult {
+    sys_send_gather(
+        target,
+        &[IoVec {
+            ptr: msg.as_ptr() as usize,
+            len: msg.len(),
+        }],
+    )
+}
+
 /// Receive one IPC message scattered into up to 8 non-contiguous buffers.
 ///
 /// The kernel fills each segment in order; if the message is shorter than

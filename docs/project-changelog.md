@@ -4,6 +4,14 @@
 
 ## [Unreleased] Development-first hardware-constrained execution
 
+- Made beacon request admission nonblocking and restart-cancellable end to end.
+  The broker now uses the kernel's bounded owned-message queue through
+  `sys_post`, sharing one deadline across queue admission and sliced reply
+  receive. Deterministic host guards cover shutdown before admission, after
+  admission, and on both sides of the admission-timeout/arm boundary. The
+  real-QEMU oracle requires a raced restart to drain without admission timeout,
+  beacon disablement, heartbeat, or watchdog faults.
+
 - Prevented transient net-broker reply contention from exhausting all 32 delivery
   attempts before a live receiver gets another scheduler turn. Each pump turn now
   snapshots the pending reply count, attempts each eligible reply at most once,

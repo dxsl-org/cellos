@@ -66,10 +66,13 @@ fn local_c2c_broker_oracle_meets_baseline_contract() {
         });
 
     let output = qemu.dump();
+    let shutdown_race_exercised = output
+        .contains("[net-broker] restart oracle shutdown-before-admission exercised")
+        || output.contains("[net-broker] restart oracle shutdown-after-admission exercised");
     assert!(
         output.contains("[net-broker] restart oracle drained runtime roles")
-            && output.contains("[net-broker] restart oracle shutdown-after-admission exercised"),
-        "restart passed without exercising and draining an admitted network IPC\n{output}"
+            && shutdown_race_exercised,
+        "restart passed without exercising and draining a network IPC race\n{output}"
     );
     assert!(
         output.contains("[net-rx-producer] irq->completion PASS"),
@@ -77,6 +80,7 @@ fn local_c2c_broker_oracle_meets_baseline_contract() {
     );
     for forbidden in [
         "[net-broker] restart oracle role drain timed out",
+        "[net-broker] restart oracle IPC admission timed out",
         "[net-broker] beacon IPC timed out; network disabled until restart",
         "[heartbeat] task ",
         "[watchdog] task ",
