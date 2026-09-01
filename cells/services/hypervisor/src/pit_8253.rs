@@ -1,11 +1,9 @@
 //! Emulated 8253/8254 PIT (channels 0x40–0x42, control 0x43, gate 0x61),
 //! backed by **real time** (`sys_get_time`, HPET nanoseconds on x86).
 //!
-//! Two boot-critical jobs:
-//!   * **Channel 0** is the periodic tick. Once the guest arms it,
-//!     [`Pit8253::irq0_armed`] reports IRQ0 pending so the run loop injects it
-//!     on guest idle (HLT, and paced PAUSE exits surfaced as Hlt) — this is
-//!     what advances jiffies so calibration loops and `msleep` progress.
+//!   * **Channel 0** is the periodic tick. Once its real-time period elapses,
+//!     [`Pit8253::take_irq0_due`] reports one coalesced IRQ0 so the run loop can
+//!     advance guest jiffies without starving backend polling.
 //!   * **Channel 2** + port 0x61 drive Linux's PIT-based TSC calibration. The
 //!     counter decrements against real elapsed time and OUT2 (0x61 bit5)
 //!     latches high when the programmed interval genuinely elapses, so
@@ -111,6 +109,7 @@ impl Channel {
 pub struct Pit8253 {
     ch: [Channel; 3],
     port61: u8,
+    irq0_periods_delivered: u64,
 }
 
 impl Pit8253 {
@@ -118,6 +117,7 @@ impl Pit8253 {
         Self {
             ch: [Channel::new(); 3],
             port61: 0,
+            irq0_periods_delivered: 0,
         }
     }
 
@@ -130,7 +130,14 @@ impl Pit8253 {
     pub fn write(&mut self, port: u16, val: u32) {
         let b = (val & 0xFF) as u8;
         match port {
-            0x40..=0x42 => self.ch[(port - 0x40) as usize].load_byte(b),
+            0x40 => {
+                let completes_reload = self.ch[0].hi_phase;
+                self.ch[0].load_byte(b);
+                if completes_reload {
+                    self.irq0_periods_delivered = 0;
+                }
+            }
+            0x41..=0x42 => self.ch[(port - 0x40) as usize].load_byte(b),
             0x43 => {
                 let sel = (b >> 6) & 0x3;
                 if sel == 3 {
@@ -170,9 +177,21 @@ impl Pit8253 {
         v as u32
     }
 
-    /// True once channel 0 (the periodic tick) has been programmed — the run
-    /// loop then injects IRQ0 on guest idle to advance the guest's jiffies.
-    pub fn irq0_armed(&self) -> bool {
-        self.ch[0].armed
+    /// Consume one due channel-0 interrupt, coalescing missed periods.
+    pub fn take_irq0_due(&mut self) -> bool {
+        let channel = &self.ch[0];
+        if !channel.armed {
+            return false;
+        }
+        let elapsed_periods = if channel.one_shot {
+            u64::from(channel.expired())
+        } else {
+            channel.elapsed() / channel.period()
+        };
+        if elapsed_periods <= self.irq0_periods_delivered {
+            return false;
+        }
+        self.irq0_periods_delivered = elapsed_periods;
+        true
     }
 }

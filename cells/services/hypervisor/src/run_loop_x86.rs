@@ -52,6 +52,7 @@ pub fn run(
     let mut pit = Pit8253::new();
     let mut rtc = CmosRtc::new();
     let mut exit = ViVmExit::Unknown { ec: 0, iss: 0 };
+    let mut net_poll_turn = false;
     #[cfg(feature = "hostile-backend-recovery")]
     let mut hostile_preemption_armed = false;
 
@@ -79,17 +80,21 @@ pub fn run(
                 let value = x86_port_dispatch::read(port, &mut uart, &pic, &mut pit, &mut rtc);
                 write_rax(vm_id, vcpu_id, value, size);
             }
-            // Guest idle: retry one pending virtual interrupt.
-            ViVmExit::Hlt => x86_irq_dispatch::service_idle(
-                vm_id,
-                vcpu_id,
-                &mut uart,
-                &pit,
-                &pic,
-                &mut net,
-                &blk_vmio,
-                &mut net_vmio,
-            ),
+            // HLT is a safe record boundary only after the UART drains THRE.
+            ViVmExit::Hlt => {
+                uart.flush_tx_if_quiescent();
+                x86_irq_dispatch::service_idle(
+                    vm_id,
+                    vcpu_id,
+                    &mut uart,
+                    &mut pit,
+                    &pic,
+                    &mut net,
+                    &blk_vmio,
+                    &mut net_vmio,
+                    &mut net_poll_turn,
+                );
+            }
 
             // ── Host-interrupt preemption — the guest was mid-execution (maybe
             //    a pause-less spin loop): deliver the PIT tick here too, so
@@ -105,11 +110,12 @@ pub fn run(
                     vm_id,
                     vcpu_id,
                     &mut uart,
-                    &pit,
+                    &mut pit,
                     &pic,
                     &mut net,
                     &blk_vmio,
                     &mut net_vmio,
+                    &mut net_poll_turn,
                 );
             }
 
