@@ -67,8 +67,9 @@ fn local_c2c_broker_oracle_meets_baseline_contract() {
 
     let output = qemu.dump();
     assert!(
-        output.contains("[net-broker] restart oracle drained runtime roles"),
-        "restart passed without proving all runtime roles drained\n{output}"
+        output.contains("[net-broker] restart oracle drained runtime roles")
+            && output.contains("[net-broker] restart oracle shutdown-after-admission exercised"),
+        "restart passed without exercising and draining an admitted network IPC\n{output}"
     );
     assert!(
         output.contains("[net-rx-producer] irq->completion PASS"),
