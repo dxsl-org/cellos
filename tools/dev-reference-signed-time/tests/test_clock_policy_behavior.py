@@ -42,7 +42,7 @@ class ClockPolicyBehaviorTests(unittest.TestCase):
             with self.assertRaises(FrozenInstanceError):
                 value.source_epoch = 8
 
-    def test_age_and_uncertainty_limits_are_inclusive_and_equality_is_exact(self):
+    def test_age_and_provider_uncertainty_limits_are_inclusive(self):
         self.assertEqual(self.admit(), AdmittedSample(100, 110, 111))
         self.assert_error(
             "sample-too-old",
@@ -52,12 +52,17 @@ class ClockPolicyBehaviorTests(unittest.TestCase):
             "uncertainty-too-large",
             policy=replace(self.policy, max_uncertainty_seconds=9),
         )
-        for uncertainty in (9, 11):
-            with self.subTest(uncertainty=uncertainty):
-                self.assert_error(
-                    "uncertainty-mismatch",
-                    observation=replace(self.observation, uncertainty_seconds=uncertainty),
-                )
+        self.assert_error(
+            "uncertainty-mismatch",
+            observation=replace(self.observation, uncertainty_seconds=9),
+        )
+        self.assertEqual(
+            self.admit(
+                policy=replace(self.policy, max_uncertainty_seconds=11),
+                observation=replace(self.observation, uncertainty_seconds=11),
+            ),
+            AdmittedSample(100, 110, 111),
+        )
 
     def test_identity_and_epoch_must_match_exactly(self):
         self.assert_error(

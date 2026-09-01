@@ -2,15 +2,15 @@
 
 import re
 from typing import Any
+import uuid
 from urllib.parse import urlsplit
 
 MAX_AWS_REGION_CHARS = 32
 MAX_ENDPOINT_URL_CHARS = 270
 MAX_KMS_KEY_ID_CHARS = 105
-# With every other field at its valid maximum, 263 astral scalars encode to
-# 4085 bytes under ensure_ascii; one more would cross the 4096-byte limit.
-MAX_UPSTREAM_IDENTITY_CHARS = 263
 
+MAX_TABLE_NAME_CHARS = 255
+MAX_TABLE_ID_CHARS = 36
 _DNS_HOST = re.compile(
     r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?"
     r"(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*"
@@ -31,12 +31,12 @@ _REGION_MATCHERS = {
     "aws-cn": _CHINA_REGION,
 }
 
+_TABLE_NAME = re.compile(r"[A-Za-z0-9_.-]{3,255}").fullmatch
 
 def bounded_strings_are_valid(
     aws_region: Any,
     endpoint_url: Any,
     kms_key_id: Any,
-    upstream_identity: Any,
 ) -> bool:
     return (
         type(aws_region) is str
@@ -45,9 +45,37 @@ def bounded_strings_are_valid(
         and 0 < len(endpoint_url) <= MAX_ENDPOINT_URL_CHARS
         and type(kms_key_id) is str
         and 0 < len(kms_key_id) <= MAX_KMS_KEY_ID_CHARS
-        and type(upstream_identity) is str
-        and 0 < len(upstream_identity) <= MAX_UPSTREAM_IDENTITY_CHARS
     )
+
+
+def lineage_strings_are_valid(
+    allocator_table_name: Any,
+    lineage_table_name: Any,
+    lineage_kms_key_id: Any,
+) -> bool:
+    return (
+        type(allocator_table_name) is str
+        and 3 <= len(allocator_table_name) <= MAX_TABLE_NAME_CHARS
+        and type(lineage_table_name) is str
+        and 3 <= len(lineage_table_name) <= MAX_TABLE_NAME_CHARS
+        and allocator_table_name != lineage_table_name
+        and type(lineage_kms_key_id) is str
+        and 0 < len(lineage_kms_key_id) <= MAX_KMS_KEY_ID_CHARS
+    )
+
+
+def table_identity_is_valid(name: Any, table_id: Any) -> bool:
+    if (
+        type(name) is not str
+        or _TABLE_NAME(name) is None
+        or type(table_id) is not str
+        or len(table_id) != MAX_TABLE_ID_CHARS
+    ):
+        return False
+    try:
+        return str(uuid.UUID(table_id)) == table_id
+    except (ValueError, AttributeError):
+        return False
 
 
 def endpoint_is_valid(value: str) -> bool:

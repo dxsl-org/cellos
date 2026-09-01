@@ -34,7 +34,7 @@ class ClockPolicy:
 
 @dataclass(frozen=True, slots=True)
 class ProviderTimeObservation:
-    """Time data already authenticated and age-measured by the future adapter."""
+    """Authenticated closed interval plus its provider-declared uncertainty."""
 
     upstream_identity: str
     source_epoch: int
@@ -96,7 +96,7 @@ def admit_time_observation(
         _fail("source-epoch-mismatch")
     if observation.sample_floor > observation.sample_ceiling:
         _fail("reversed-sample-interval")
-    if observation.uncertainty_seconds != observation.sample_ceiling - observation.sample_floor:
+    if observation.uncertainty_seconds < observation.sample_ceiling - observation.sample_floor:
         _fail("uncertainty-mismatch")
     if observation.sample_age_seconds > policy.max_sample_age_seconds:
         _fail("sample-too-old")

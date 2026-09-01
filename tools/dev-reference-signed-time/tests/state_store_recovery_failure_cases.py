@@ -4,21 +4,23 @@ from dataclasses import replace
 from state_codec import encode_receipt
 from state_store import DynamoStateStore, StoreError
 from state_store_support import (
-    EPOCH, KEY_ID, TABLE, FakeClient, expected_read, fixture, receipt_read,
+    CONTRACT, EPOCH, KEY_ID, FakeClient, expected_read, fixture, receipt_read,
     response_metadata,
 )
 
 
 class RecoveryFailureCases:
-    def test_preflight_rejects_wrong_manifest_key_or_source_epoch(self):
+    def test_preflight_rejects_wrong_response_key_or_source_epoch(self):
         registration, _, _, _, request, receipt = fixture()
         for epoch, key_id in ((EPOCH + 1, KEY_ID), (EPOCH, "wrong-key")):
             with self.subTest(epoch=epoch, key_id=key_id):
-                client = FakeClient(read_result=receipt_read(receipt))
+                response = replace(receipt.response, source_epoch=epoch, key_id=key_id)
+                wrong_receipt = replace(receipt, response=response)
+                client = FakeClient(read_result=receipt_read(wrong_receipt))
                 with self.assertRaises(StoreError):
-                    DynamoStateStore(
-                        client, TABLE, epoch, key_id,
-                    ).recover_committed(request, registration)
+                    DynamoStateStore(client, CONTRACT).recover_committed(
+                        request, registration,
+                    )
                 self.assertEqual(client.calls, [("read", expected_read(request))])
 
     def test_preflight_malformed_envelopes_and_receipts_fail_closed(self):
@@ -47,9 +49,7 @@ class RecoveryFailureCases:
             with self.subTest(read_result=read_result):
                 client = FakeClient(read_result=read_result)
                 with self.assertRaises(StoreError) as raised:
-                    DynamoStateStore(
-                        client, TABLE, EPOCH, KEY_ID,
-                    ).recover_committed(request, registration)
+                    DynamoStateStore(client, CONTRACT).recover_committed(request, registration)
                 self.assertEqual(str(raised.exception), "state store operation failed")
                 self.assertIsNone(raised.exception.__cause__)
                 self.assertIsNone(raised.exception.__context__)
@@ -59,9 +59,7 @@ class RecoveryFailureCases:
         registration, _, _, _, request, _ = fixture()
         client = FakeClient(read_error=RuntimeError("read credential secret"))
         with self.assertRaises(StoreError) as raised:
-            DynamoStateStore(
-                client, TABLE, EPOCH, KEY_ID,
-            ).recover_committed(request, registration)
+            DynamoStateStore(client, CONTRACT).recover_committed(request, registration)
         self.assertEqual(str(raised.exception), "state store operation failed")
         self.assertIsNone(raised.exception.__cause__)
         self.assertIsNone(raised.exception.__context__)

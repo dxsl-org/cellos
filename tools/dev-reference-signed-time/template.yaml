@@ -7,7 +7,7 @@
       "Deployable": false,
       "LiveIsolationClaim": false,
       "ArtifactContract": "A prebuilt, approved, code-signed S3 object and its exact CodeSha256 must be supplied; this template does not build, package, select, or approve code.",
-      "CompositionLimitation": "The current handler artifact and authenticated upstream provider composition are not deployable yet.",
+      "CompositionLimitation": "The generic runtime composition is SOFTWARE_HARNESS only; no deployable artifact exists until an operator supplies the reviewed canonical manifest and approved local dependency wheelhouse.",
       "SignerApprovalEvidence": "The profile version remains pinned in the CodeSigningConfig. Immutable version approval and artifact-to-profile evidence are external requirements; the approval role can inspect only the derived unversioned profile.",
       "ExternalControlsRequired": [
         "Externally administered permissions boundary and SCP",
@@ -85,6 +85,11 @@
       "Description": "Exact external role allowed to assume the separated key-policy administration role.",
       "AllowedPattern": "^arn:(aws|aws-us-gov|aws-cn):iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]{1,128}$"
     },
+    "LineageTransitionTrustedPrincipalArn": {
+      "Type": "String",
+      "Description": "Exact external role allowed to assume the allocator-lineage transition role.",
+      "AllowedPattern": "^arn:(aws|aws-us-gov|aws-cn):iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]{1,128}$"
+    },
     "AlarmTopicArn": {
       "Type": "String",
       "Description": "Exact pre-existing operator-approved SNS topic ARN for all harness alarms.",
@@ -103,7 +108,12 @@
         {"Assert": {"Fn::Not": [{"Fn::Equals": [{"Ref": "CloudFormationServiceRoleArn"}, {"Ref": "DeployTrustedPrincipalArn"}]}]}, "AssertDescription": "CloudFormation service role and deploy principal must differ."},
         {"Assert": {"Fn::Not": [{"Fn::Equals": [{"Ref": "CloudFormationServiceRoleArn"}, {"Ref": "CodeSignTrustedPrincipalArn"}]}]}, "AssertDescription": "CloudFormation service role and code-sign principal must differ."},
         {"Assert": {"Fn::Not": [{"Fn::Equals": [{"Ref": "CloudFormationServiceRoleArn"}, {"Ref": "IamTrustedPrincipalArn"}]}]}, "AssertDescription": "CloudFormation service role and IAM principal must differ."},
-        {"Assert": {"Fn::Not": [{"Fn::Equals": [{"Ref": "CloudFormationServiceRoleArn"}, {"Ref": "KeyPolicyTrustedPrincipalArn"}]}]}, "AssertDescription": "CloudFormation service role and key-policy principal must differ."}
+        {"Assert": {"Fn::Not": [{"Fn::Equals": [{"Ref": "CloudFormationServiceRoleArn"}, {"Ref": "KeyPolicyTrustedPrincipalArn"}]}]}, "AssertDescription": "CloudFormation service role and key-policy principal must differ."},
+        {"Assert": {"Fn::Not": [{"Fn::Equals": [{"Ref": "LineageTransitionTrustedPrincipalArn"}, {"Ref": "DeployTrustedPrincipalArn"}]}]}, "AssertDescription": "Lineage-transition and deploy principals must differ."},
+        {"Assert": {"Fn::Not": [{"Fn::Equals": [{"Ref": "LineageTransitionTrustedPrincipalArn"}, {"Ref": "CodeSignTrustedPrincipalArn"}]}]}, "AssertDescription": "Lineage-transition and code-sign principals must differ."},
+        {"Assert": {"Fn::Not": [{"Fn::Equals": [{"Ref": "LineageTransitionTrustedPrincipalArn"}, {"Ref": "IamTrustedPrincipalArn"}]}]}, "AssertDescription": "Lineage-transition and IAM principals must differ."},
+        {"Assert": {"Fn::Not": [{"Fn::Equals": [{"Ref": "LineageTransitionTrustedPrincipalArn"}, {"Ref": "KeyPolicyTrustedPrincipalArn"}]}]}, "AssertDescription": "Lineage-transition and key-policy principals must differ."},
+        {"Assert": {"Fn::Not": [{"Fn::Equals": [{"Ref": "LineageTransitionTrustedPrincipalArn"}, {"Ref": "CloudFormationServiceRoleArn"}]}]}, "AssertDescription": "Lineage-transition principal and CloudFormation service role must differ."}
       ]
     }
   },
@@ -114,6 +124,26 @@
       "UpdateReplacePolicy": "Retain",
       "Properties": {
         "TableName": "cellos-dev-reference-signed-time",
+        "BillingMode": "PAY_PER_REQUEST",
+        "AttributeDefinitions": [{"AttributeName": "pk", "AttributeType": "S"}],
+        "KeySchema": [{"AttributeName": "pk", "KeyType": "HASH"}],
+        "DeletionProtectionEnabled": true,
+        "PointInTimeRecoverySpecification": {
+          "PointInTimeRecoveryEnabled": true,
+          "RecoveryPeriodInDays": 35
+        },
+        "SSESpecification": {
+          "SSEEnabled": true,
+          "SSEType": "KMS"
+        }
+      }
+    },
+    "LineageTable": {
+      "Type": "AWS::DynamoDB::Table",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "TableName": "cellos-dev-reference-signed-time-lineage",
         "BillingMode": "PAY_PER_REQUEST",
         "AttributeDefinitions": [{"AttributeName": "pk", "AttributeType": "S"}],
         "KeySchema": [{"AttributeName": "pk", "KeyType": "HASH"}],
@@ -150,10 +180,57 @@
             "Version": "2012-10-17",
             "Statement": [
               {
-                "Sid": "ExactTableTransactions",
+                "Sid": "ExactAllocatorTransactionReads",
                 "Effect": "Allow",
-                "Action": ["dynamodb:TransactGetItems", "dynamodb:TransactWriteItems"],
-                "Resource": {"Fn::GetAtt": ["SignedTimeTable", "Arn"]}
+                "Action": "dynamodb:GetItem",
+                "Resource": {"Fn::GetAtt": ["SignedTimeTable", "Arn"]},
+                "Condition": {
+                  "ForAnyValue:StringEquals": {
+                    "dynamodb:EnclosingOperation": ["TransactGetItems"]
+                  }
+                }
+              },
+              {
+                "Sid": "ExactAllocatorTransactionWrites",
+                "Effect": "Allow",
+                "Action": ["dynamodb:ConditionCheckItem", "dynamodb:PutItem"],
+                "Resource": {"Fn::GetAtt": ["SignedTimeTable", "Arn"]},
+                "Condition": {
+                  "ForAnyValue:StringEquals": {
+                    "dynamodb:EnclosingOperation": ["TransactWriteItems"]
+                  }
+                }
+              },
+              {
+                "Sid": "ExactLineageTransactionReads",
+                "Effect": "Allow",
+                "Action": "dynamodb:GetItem",
+                "Resource": {"Fn::GetAtt": ["LineageTable", "Arn"]},
+                "Condition": {
+                  "ForAnyValue:StringEquals": {
+                    "dynamodb:EnclosingOperation": ["TransactGetItems"]
+                  }
+                }
+              },
+              {
+                "Sid": "ExactLineageTransactionChecks",
+                "Effect": "Allow",
+                "Action": "dynamodb:ConditionCheckItem",
+                "Resource": {"Fn::GetAtt": ["LineageTable", "Arn"]},
+                "Condition": {
+                  "ForAnyValue:StringEquals": {
+                    "dynamodb:EnclosingOperation": ["TransactWriteItems"]
+                  }
+                }
+              },
+              {
+                "Sid": "ExactTableIdentityReads",
+                "Effect": "Allow",
+                "Action": "dynamodb:DescribeTable",
+                "Resource": [
+                  {"Fn::GetAtt": ["SignedTimeTable", "Arn"]},
+                  {"Fn::GetAtt": ["LineageTable", "Arn"]}
+                ]
               },
               {
                 "Sid": "ExactFunctionLogGroupStreams",
@@ -412,7 +489,8 @@
                     {"Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cellos-dev-reference-signed-time-deploy-admin"},
                     {"Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cellos-dev-reference-signed-time-code-sign-approval"},
                     {"Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cellos-dev-reference-signed-time-iam-review"},
-                    {"Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cellos-dev-reference-signed-time-key-policy-admin"}
+                    {"Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cellos-dev-reference-signed-time-key-policy-admin"},
+                    {"Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cellos-dev-reference-signed-time-lineage-transition"}
                   ]
                 },
                 {
@@ -483,6 +561,25 @@
         }]
       }
     },
+    "LineageTransitionRole": {
+      "Type": "AWS::IAM::Role",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "RoleName": "cellos-dev-reference-signed-time-lineage-transition",
+        "PermissionsBoundary": {"Ref": "ExternalPermissionsBoundaryArn"},
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [{
+            "Sid": "ExactExternalPrincipal",
+            "Effect": "Allow",
+            "Principal": {"AWS": {"Ref": "LineageTransitionTrustedPrincipalArn"}},
+            "Action": "sts:AssumeRole",
+            "Condition": {"ArnEquals": {"aws:PrincipalArn": {"Ref": "LineageTransitionTrustedPrincipalArn"}}}
+          }]
+        }
+      }
+    },
     "SigningKey": {
       "Type": "AWS::KMS::Key",
       "DependsOn": ["RuntimeRole", "KeyPolicyAdminRole"],
@@ -526,9 +623,52 @@
         }
       }
     },
+    "LineageKey": {
+      "Type": "AWS::KMS::Key",
+      "DependsOn": ["RuntimeRole", "LineageTransitionRole", "KeyPolicyAdminRole"],
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "Description": "DEV_REFERENCE allocator-lineage P-256 transition key; runtime cannot sign with it.",
+        "Enabled": true,
+        "EnableKeyRotation": false,
+        "KeySpec": "ECC_NIST_P256",
+        "KeyUsage": "SIGN_VERIFY",
+        "MultiRegion": false,
+        "PendingWindowInDays": 30,
+        "BypassPolicyLockoutSafetyCheck": true,
+        "KeyPolicy": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "TransitionRoleMaySignOnlyLineageTransitions",
+              "Effect": "Allow",
+              "Principal": {"AWS": {"Fn::GetAtt": ["LineageTransitionRole", "Arn"]}},
+              "Action": "kms:Sign",
+              "Resource": "*",
+              "Condition": {"StringEquals": {"kms:SigningAlgorithm": "ECDSA_SHA_256"}}
+            },
+            {
+              "Sid": "RuntimeMayReadLineagePublicKey",
+              "Effect": "Allow",
+              "Principal": {"AWS": {"Fn::GetAtt": ["RuntimeRole", "Arn"]}},
+              "Action": "kms:GetPublicKey",
+              "Resource": "*"
+            },
+            {
+              "Sid": "SeparatedKeyAdministratorCannotUseSigningOperation",
+              "Effect": "Allow",
+              "Principal": {"AWS": {"Fn::GetAtt": ["KeyPolicyAdminRole", "Arn"]}},
+              "Action": ["kms:DescribeKey", "kms:GetKeyPolicy", "kms:PutKeyPolicy", "kms:EnableKey", "kms:DisableKey", "kms:ScheduleKeyDeletion", "kms:CancelKeyDeletion", "kms:TagResource", "kms:UntagResource"],
+              "Resource": "*"
+            }
+          ]
+        }
+      }
+    },
     "RuntimeSigningKeyPolicy": {
       "Type": "AWS::IAM::Policy",
-      "DependsOn": "SigningKey",
+      "DependsOn": ["SigningKey", "LineageKey"],
       "DeletionPolicy": "Retain",
       "UpdateReplacePolicy": "Retain",
       "Properties": {
@@ -545,10 +685,57 @@
               "Condition": {"StringEquals": {"kms:SigningAlgorithm": "ECDSA_SHA_256"}}
             },
             {
-              "Sid": "ReadExactPublicKey",
+              "Sid": "ReadExactPublicKeys",
               "Effect": "Allow",
               "Action": "kms:GetPublicKey",
-              "Resource": {"Fn::GetAtt": ["SigningKey", "Arn"]}
+              "Resource": [
+                {"Fn::GetAtt": ["SigningKey", "Arn"]},
+                {"Fn::GetAtt": ["LineageKey", "Arn"]}
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "LineageTransitionPolicy": {
+      "Type": "AWS::IAM::Policy",
+      "DependsOn": ["LineageKey", "LineageTable", "SignedTimeTable"],
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "PolicyName": "cellos-dev-reference-signed-time-lineage-transition",
+        "Roles": [{"Ref": "LineageTransitionRole"}],
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "SignOnlyWithLineageKeyAndPinnedAlgorithm",
+              "Effect": "Allow",
+              "Action": "kms:Sign",
+              "Resource": {"Fn::GetAtt": ["LineageKey", "Arn"]},
+              "Condition": {"StringEquals": {"kms:SigningAlgorithm": "ECDSA_SHA_256"}}
+            },
+            {
+              "Sid": "CompareAndSwapOnlyLineageHead",
+              "Effect": "Allow",
+              "Action": "dynamodb:UpdateItem",
+              "Resource": {"Fn::GetAtt": ["LineageTable", "Arn"]},
+              "Condition": {
+                "ForAllValues:StringEquals": {
+                  "dynamodb:LeadingKeys": ["lineage#cellos-dev-time-v1/head"]
+                }
+              }
+            },
+            {
+              "Sid": "MigrateOnlyAllocatorSourceEpoch",
+              "Effect": "Allow",
+              "Action": "dynamodb:UpdateItem",
+              "Resource": {"Fn::GetAtt": ["SignedTimeTable", "Arn"]},
+              "Condition": {
+                "ForAllValues:StringEquals": {
+                  "dynamodb:LeadingKeys": ["source#cellos-dev-time-v1/state"]
+                }
+              }
             }
           ]
         }
@@ -556,17 +743,20 @@
     },
     "KeyPolicyAdminReadPolicy": {
       "Type": "AWS::IAM::Policy",
-      "DependsOn": "SigningKey",
+      "DependsOn": ["SigningKey", "LineageKey"],
       "Properties": {
         "PolicyName": "cellos-dev-reference-signed-time-key-inspection",
         "Roles": [{"Ref": "KeyPolicyAdminRole"}],
         "PolicyDocument": {
           "Version": "2012-10-17",
           "Statement": [{
-            "Sid": "InspectExactSigningKey",
+            "Sid": "InspectExactSigningKeys",
             "Effect": "Allow",
             "Action": ["kms:DescribeKey", "kms:GetKeyPolicy"],
-            "Resource": {"Fn::GetAtt": ["SigningKey", "Arn"]}
+            "Resource": [
+              {"Fn::GetAtt": ["SigningKey", "Arn"]},
+              {"Fn::GetAtt": ["LineageKey", "Arn"]}
+            ]
           }]
         }
       }
@@ -599,11 +789,11 @@
       "DependsOn": ["RuntimeSigningKeyPolicy", "FunctionLogGroup", "FunctionCodeSigningConfig"],
       "Properties": {
         "FunctionName": "cellos-dev-reference-signed-time",
-        "Description": "SOFTWARE_HARNESS only; provider composition is not deployable yet.",
+        "Description": "SOFTWARE_HARNESS runtime; live provider interoperability and deployment remain blocked.",
         "PackageType": "Zip",
         "Runtime": "python3.12",
         "Architectures": ["x86_64"],
-        "Handler": "handler.lambda_handler",
+        "Handler": "lambda_entrypoint.lambda_handler",
         "Role": {"Fn::GetAtt": ["RuntimeRole", "Arn"]},
         "CodeSigningConfigArn": {"Fn::GetAtt": ["FunctionCodeSigningConfig", "CodeSigningConfigArn"]},
         "Code": {
@@ -623,7 +813,9 @@
         "Environment": {
           "Variables": {
             "SIGNED_TIME_TABLE_NAME": {"Ref": "SignedTimeTable"},
-            "SIGNED_TIME_KMS_KEY_ARN": {"Fn::GetAtt": ["SigningKey", "Arn"]}
+            "SIGNED_TIME_LINEAGE_TABLE_NAME": {"Ref": "LineageTable"},
+            "SIGNED_TIME_KMS_KEY_ARN": {"Fn::GetAtt": ["SigningKey", "Arn"]},
+            "SIGNED_TIME_LINEAGE_KMS_KEY_ARN": {"Fn::GetAtt": ["LineageKey", "Arn"]}
           }
         }
       }
@@ -856,9 +1048,21 @@
       "Description": "Intended retained allocator table.",
       "Value": {"Ref": "SignedTimeTable"}
     },
+    "LineageTableName": {
+      "Description": "Intended retained external allocator-lineage table; it is excluded from allocator restore operations.",
+      "Value": {"Ref": "LineageTable"}
+    },
     "SigningKeyArn": {
       "Description": "Intended retained signing key; its public-key digest must be obtained and independently approved after creation.",
       "Value": {"Fn::GetAtt": ["SigningKey", "Arn"]}
+    },
+    "LineageKeyArn": {
+      "Description": "Intended retained lineage-transition key; runtime may read its public key but cannot sign with it.",
+      "Value": {"Fn::GetAtt": ["LineageKey", "Arn"]}
+    },
+    "LineageTransitionRoleArn": {
+      "Description": "Separated role allowed to sign and compare-and-swap only the lineage head.",
+      "Value": {"Fn::GetAtt": ["LineageTransitionRole", "Arn"]}
     },
     "PublicKeyDigest": {
       "Description": "Not derived by CloudFormation; operator evidence and reviewed manifest pinning remain required.",

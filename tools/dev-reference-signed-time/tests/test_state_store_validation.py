@@ -4,28 +4,22 @@ from dataclasses import replace
 import path_bootstrap
 
 from allocation import AdmittedSample, AllocationState
-from protocol_models import MAX_UINT64
 from state_codec import AuthorityRegistration
 from state_store import DynamoStateStore, StoreError
-from state_store_support import EPOCH, KEY_ID, TABLE, FakeClient, fixture
+from state_store_support import CONTRACT, EPOCH, KEY_ID, FakeClient, fixture
 
 
 class StateStoreValidationTests(unittest.TestCase):
-    def test_constructor_rejects_malformed_pins_and_client_operations(self):
+    def test_constructor_rejects_malformed_contract_and_client_operations(self):
         client = FakeClient()
-
-        class StrChild(str):
-            pass
-
         cases = (
-            (object(), TABLE, EPOCH, KEY_ID),
-            (client, "", EPOCH, KEY_ID), (client, StrChild(TABLE), EPOCH, KEY_ID),
-            (client, TABLE, -1, KEY_ID), (client, TABLE, True, KEY_ID),
-            (client, TABLE, MAX_UINT64 + 1, KEY_ID),
-            (client, TABLE, EPOCH, ""), (client, TABLE, EPOCH, StrChild(KEY_ID)),
+            (object(), CONTRACT),
+            (client, object()),
+            (client, None),
+            (client, True),
         )
         for arguments in cases:
-            with self.subTest(arguments=arguments[1:]):
+            with self.subTest(contract_type=type(arguments[1]).__name__):
                 with self.assertRaises(StoreError) as raised:
                     DynamoStateStore(*arguments)
                 self.assertEqual(str(raised.exception), "invalid state store configuration")
@@ -37,7 +31,7 @@ class StateStoreValidationTests(unittest.TestCase):
             setattr(broken, field, None)
             with self.subTest(field=field):
                 with self.assertRaises(StoreError):
-                    DynamoStateStore(broken, TABLE, EPOCH, KEY_ID)
+                    DynamoStateStore(broken, CONTRACT)
 
     def test_revoked_and_wrong_registration_tuples_make_no_client_call(self):
         registration, state, floor, sample, request, _ = fixture()
@@ -52,7 +46,7 @@ class StateStoreValidationTests(unittest.TestCase):
             with self.subTest(changed=changed):
                 client = FakeClient()
                 with self.assertRaises(StoreError):
-                    DynamoStateStore(client, TABLE, EPOCH, KEY_ID).commit_allocation(
+                    DynamoStateStore(client, CONTRACT).commit_allocation(
                         changed, state, floor, sample, request,
                     )
                 self.assertEqual(client.calls, [])
@@ -75,7 +69,7 @@ class StateStoreValidationTests(unittest.TestCase):
             client = FakeClient()
             with self.subTest(changed=type(changed).__name__):
                 with self.assertRaises(StoreError):
-                    DynamoStateStore(client, TABLE, EPOCH, KEY_ID).commit_allocation(
+                    DynamoStateStore(client, CONTRACT).commit_allocation(
                         changed, state, floor, sample, request,
                     )
                 self.assertEqual(client.calls, [])
@@ -94,7 +88,7 @@ class StateStoreValidationTests(unittest.TestCase):
             client = FakeClient()
             with self.subTest(types=tuple(map(type, (changed_state, changed_floor, changed_sample, changed_request)))):
                 with self.assertRaises(StoreError) as raised:
-                    DynamoStateStore(client, TABLE, EPOCH, KEY_ID).commit_allocation(
+                    DynamoStateStore(client, CONTRACT).commit_allocation(
                         registration, changed_state, changed_floor, changed_sample, changed_request,
                     )
                 self.assertEqual(str(raised.exception), "state store operation failed")
@@ -123,7 +117,7 @@ class StateStoreValidationTests(unittest.TestCase):
             with self.subTest(result=result):
                 client = FakeClient(write_result=result)
                 with self.assertRaises(StoreError) as raised:
-                    DynamoStateStore(client, TABLE, EPOCH, KEY_ID).commit_allocation(
+                    DynamoStateStore(client, CONTRACT).commit_allocation(
                         registration, state, floor, sample, request,
                     )
                 self.assertIsNone(raised.exception.__cause__)
