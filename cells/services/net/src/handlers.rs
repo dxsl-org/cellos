@@ -18,7 +18,7 @@ use smoltcp::{
 
 use crate::{
     interface::VirtioNetDevice,
-    now_instant,
+    service_runtime::now_instant,
     socket_state::SocketState,
     socket_table::{SocketOwner, SocketTable},
     tls::socket::TlsSocketEntry,
