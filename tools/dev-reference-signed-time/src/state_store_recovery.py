@@ -71,7 +71,7 @@ def _read_committed_receipt(
     if type(head) is not dict or set(head) != {"Item"}:
         raise ValueError("DynamoDB read did not return the lineage head")
     require_lineage_head(head["Item"], contract)
-    if entry is None:
+    if entry is None or (type(entry) is dict and not entry):
         return None
     if type(entry) is not dict or set(entry) != {"Item"}:
         raise ValueError("DynamoDB read did not return one exact receipt")
