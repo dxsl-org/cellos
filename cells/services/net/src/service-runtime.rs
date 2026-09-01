@@ -2,14 +2,14 @@ use alloc::{collections::BTreeMap, string::String};
 #[cfg(not(feature = "hypervisor-bridge"))]
 use api::syscall::events::NET_RX;
 use core::sync::atomic::{AtomicU16, Ordering};
+#[cfg(feature = "hypervisor-bridge")]
+use ostd::syscall::sys_recv_attested;
+#[cfg(not(feature = "hypervisor-bridge"))]
+use ostd::syscall::{sys_try_recv_attested, sys_wait_completion, sys_yield};
 use ostd::{
     io::println,
     syscall::{sys_get_time, SyscallResult},
 };
-#[cfg(feature = "hypervisor-bridge")]
-use ostd::syscall::sys_recv_attested;
-#[cfg(not(feature = "hypervisor-bridge"))]
-use ostd::syscall::{sys_try_recv_attested, sys_wait_completion};
 use smoltcp::{
     iface::{Config, Interface, SocketSet, SocketStorage},
     time::Instant,
@@ -27,10 +27,10 @@ use crate::{
 const IPC_BUF_SIZE: usize = 4096;
 const MAC: EthernetAddress = EthernetAddress([0x52, 0x54, 0x00, 0x12, 0x34, 0x56]);
 const NET_RX_IDLE_WAIT_SCHEDULER_TICKS: u64 = 1;
+const IPC_BURST_GRACE_YIELDS: u8 = 1;
 const SMOLTCP_MAINTENANCE_INTERVAL_MS: u64 = 100;
 const MTIME_TICKS_PER_MS: u64 = 10_000;
-const SMOLTCP_MAINTENANCE_TICKS: u64 =
-    SMOLTCP_MAINTENANCE_INTERVAL_MS * MTIME_TICKS_PER_MS;
+const SMOLTCP_MAINTENANCE_TICKS: u64 = SMOLTCP_MAINTENANCE_INTERVAL_MS * MTIME_TICKS_PER_MS;
 static NEXT_PORT: AtomicU16 = AtomicU16::new(49152);
 
 pub(crate) fn next_ephemeral_port() -> u16 {
@@ -43,6 +43,14 @@ pub(crate) fn next_ephemeral_port() -> u16 {
 
 pub(crate) fn now_instant() -> Instant {
     Instant::from_micros((sys_get_time() / 10) as i64)
+}
+
+fn consume_ipc_burst_grace(remaining: &mut u8) -> bool {
+    if *remaining == 0 {
+        return false;
+    }
+    *remaining -= 1;
+    true
 }
 
 #[cfg(target_os = "none")]
@@ -74,6 +82,8 @@ pub(crate) fn run() {
     let mut net_rx_producer_proved = false;
     #[cfg(not(feature = "hypervisor-bridge"))]
     let mut pending_net_rx_proof = false;
+    #[cfg(not(feature = "hypervisor-bridge"))]
+    let mut ipc_burst_grace = 0;
 
     #[cfg(not(feature = "hypervisor-bridge"))]
     println("[net] Starting DHCP...");
@@ -170,12 +180,18 @@ pub(crate) fn run() {
                     &mut tls_table,
                     &local_ip,
                 );
+                #[cfg(not(feature = "hypervisor-bridge"))]
+                {
+                    ipc_burst_grace = IPC_BURST_GRACE_YIELDS;
+                }
             }
             _ => {
                 #[cfg(not(feature = "hypervisor-bridge"))]
-                // IPC does not wake WaitCompletion, so bound this park independently
-                // from the slower smoltcp maintenance cadence.
-                if let Some(completion) =
+                if consume_ipc_burst_grace(&mut ipc_burst_grace) {
+                    // Let the caller run after a reply before parking on NET_RX;
+                    // sequential IPC bursts then avoid one timer quantum per call.
+                    sys_yield();
+                } else if let Some(completion) =
                     sys_wait_completion(NET_RX, NET_RX_IDLE_WAIT_SCHEDULER_TICKS)
                 {
                     pending_net_rx_proof =

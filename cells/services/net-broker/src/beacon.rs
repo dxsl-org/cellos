@@ -210,7 +210,72 @@ pub struct BeaconChannel {
     cap_id: u32,
 }
 
+const BEACON_IPC_TIMEOUT_TICKS: u64 = service_net_broker::runtime_roles::NETWORK_IPC_TIMEOUT_TICKS;
+
 impl BeaconChannel {
+    fn call_after_admission<'r>(
+        service_tid: usize,
+        request: &NetRequest<'_>,
+        send_buffer: &mut [u8; api::ipc::IPC_BUF_SIZE],
+        response_buffer: &'r mut [u8; api::ipc::IPC_BUF_SIZE],
+    ) -> Result<Option<NetResponse<'r>>, ()> {
+        let encoded = api::ipc::encode(request, send_buffer).map_err(|_| ())?;
+        if !matches!(
+            ostd::syscall::sys_send(service_tid, encoded),
+            ostd::syscall::SyscallResult::Ok(_)
+        ) {
+            return Err(());
+        }
+        #[cfg(feature = "restart-oracle")]
+        if !crate::local_runtime::restart_oracle::network_ipc_started() {
+            return Err(());
+        }
+
+        let Some(started_at) = ostd::syscall::sys_get_scheduler_ticks() else {
+            #[cfg(feature = "restart-oracle")]
+            if crate::local_runtime::restart_oracle::network_ipc_finished() {
+                return Ok(None);
+            }
+            return Err(());
+        };
+
+        let deadline = started_at.saturating_add(BEACON_IPC_TIMEOUT_TICKS);
+        let receive_result: Result<Option<ostd::syscall::SyscallResult>, ()> = loop {
+            #[cfg(feature = "restart-oracle")]
+            {
+                crate::local_runtime::restart_oracle::network_ipc_cancellation_checkpoint();
+                if crate::local_runtime::restart_oracle::shutdown_requested() {
+                    break Ok(None);
+                }
+            }
+            let Some(now) = ostd::syscall::sys_get_scheduler_ticks() else {
+                break Err(());
+            };
+            let remaining = deadline.saturating_sub(now);
+            if remaining == 0 {
+                break Err(());
+            }
+            match ostd::syscall::sys_recv_timeout(
+                service_tid,
+                response_buffer,
+                remaining.min(service_net_broker::runtime_roles::NETWORK_IPC_CANCEL_POLL_TICKS),
+            ) {
+                ostd::syscall::SyscallResult::Ok(0) => {}
+                result => break Ok(Some(result)),
+            }
+        };
+
+        #[cfg(feature = "restart-oracle")]
+        if crate::local_runtime::restart_oracle::network_ipc_finished() {
+            return Ok(None);
+        }
+        match receive_result?.ok_or(())? {
+            ostd::syscall::SyscallResult::Ok(sender) if sender == service_tid => {
+                api::ipc::decode(response_buffer).map(Some).map_err(|_| ())
+            }
+            _ => Err(()),
+        }
+    }
     pub fn init(net: &mut NetRef) -> Option<Self> {
         let mut resp = [0u8; api::ipc::IPC_BUF_SIZE];
         let cap_id = match net
@@ -247,40 +312,58 @@ impl BeaconChannel {
         Some(Self { cap_id })
     }
 
-    pub fn send_frame(&self, net: &mut NetRef, frame: &[u8; WIRE_LEN]) -> bool {
-        let mut resp = [0u8; api::ipc::IPC_BUF_SIZE];
+    pub fn send_frame(&self, net: &mut NetRef, frame: &[u8; WIRE_LEN]) -> Result<bool, ()> {
+        let service_tid = net.resolve().ok_or(())?;
+        let mut request = [0u8; api::ipc::IPC_BUF_SIZE];
+        let mut response = [0u8; api::ipc::IPC_BUF_SIZE];
         sys_heartbeat(HEARTBEAT_MS);
-        let response = match net.call::<NetRequest, NetResponse>(
+        let result = Self::call_after_admission(
+            service_tid,
             &NetRequest::UdpSend {
                 cap_id: self.cap_id,
                 addr: MULTICAST_GROUP,
                 port: BEACON_PORT,
                 data: frame,
             },
-            &mut resp,
-        ) {
-            Ok(response) => response,
-            Err(_) => return false,
-        };
-        response_sent_full_frame(response)
+            &mut request,
+            &mut response,
+        );
+        match result {
+            Ok(Some(response)) => Ok(response_sent_full_frame(response)),
+            Ok(None) => Ok(false),
+            Err(_) => {
+                net.invalidate();
+                Err(())
+            }
+        }
     }
 
-    pub fn try_recv_frame(&self, net: &mut NetRef) -> Option<[u8; WIRE_LEN]> {
-        let mut resp = [0u8; api::ipc::IPC_BUF_SIZE];
-        match net
-            .call::<NetRequest, NetResponse>(
-                &NetRequest::UdpRecv {
-                    cap_id: self.cap_id,
-                    // The net cell adds the source envelope to its response, not this
-                    // receive capacity. Preserve the exact bounded wire-frame read.
-                    buf_len: WIRE_LEN as u32,
-                },
-                &mut resp,
-            )
-            .ok()?
-        {
-            NetResponse::Data(data) => decode_udp_frame(data),
-            _ => None,
+    pub fn try_recv_frame(&self, net: &mut NetRef) -> Result<Option<[u8; WIRE_LEN]>, ()> {
+        #[cfg(feature = "restart-oracle")]
+        if crate::local_runtime::restart_oracle::shutdown_requested() {
+            return Ok(None);
+        }
+        let service_tid = net.resolve().ok_or(())?;
+        let mut request = [0u8; api::ipc::IPC_BUF_SIZE];
+        let mut response = [0u8; api::ipc::IPC_BUF_SIZE];
+        let result = Self::call_after_admission(
+            service_tid,
+            &NetRequest::UdpRecv {
+                cap_id: self.cap_id,
+                // The net cell adds the source envelope to its response, not this
+                // receive capacity. Preserve the exact bounded wire-frame read.
+                buf_len: WIRE_LEN as u32,
+            },
+            &mut request,
+            &mut response,
+        );
+        match result {
+            Ok(Some(NetResponse::Data(data))) => Ok(decode_udp_frame(data)),
+            Ok(Some(_)) | Ok(None) => Ok(None),
+            Err(_) => {
+                net.invalidate();
+                Err(())
+            }
         }
     }
 }

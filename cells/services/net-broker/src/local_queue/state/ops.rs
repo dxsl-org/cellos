@@ -136,7 +136,7 @@ impl BrokerState {
     pub fn complete_request(
         &mut self,
         request: &WorkerRequest,
-        reply: QueuedReply,
+        mut reply: QueuedReply,
     ) -> Result<(), CompletionError> {
         if self.stale_contains(request.key) {
             self.counters.duplicate += 1;
@@ -157,6 +157,7 @@ impl BrokerState {
         self.inflight[slot] = None;
         self.stale[self.stale_cursor % STALE_REPLY_RING_CAP] = Some(request.key);
         self.stale_cursor = (self.stale_cursor + 1) % STALE_REPLY_RING_CAP;
+        reply.order = self.bump_reply_order();
         self.push_reply(reply);
         self.counters.completed += 1;
         self.refresh_peaks();

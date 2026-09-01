@@ -4,6 +4,28 @@
 
 ## [Unreleased] Development-first hardware-constrained execution
 
+- Prevented transient net-broker reply contention from exhausting all 32 delivery
+  attempts before a live receiver gets another scheduler turn. Each pump turn now
+  snapshots the pending reply count, attempts each eligible reply at most once,
+  and uses one monotonic order for initial and requeued replies. The bounded
+  terminal policy remains intact for persistently unreachable receivers.
+
+- Made admitted net-broker beacon IPC waits restart-cancellable without changing
+  their two-second failure deadline. Reply waits recheck the restart signal every
+  10 scheduler ticks (about 100 ms), while a compile-time invariant preserves at
+  least one second of scheduler margin inside the three-second role-drain bound.
+  The real-QEMU restart oracle now arms shutdown first, waits for a persistent
+  post-admission acknowledgement, and rejects runs that do not prove the
+  shutdown-after-admission race before all runtime roles drain.
+
+- Reconciled hosted CI evidence after run
+  [`33486590595:1`](https://github.com/dxsl-org/cellos/actions/runs/33486590595).
+  The Ubuntu 24.04 RISC-V boot suite passed all 54 allowlisted tests and uploaded
+  `software-evidence-33486590595-1` (artifact `9792567480`); ARM64 TCG machinery
+  also passed. Workflow and risk metadata no longer describe the repaired EL2
+  IRQ/preemption defect as intermittent. These are hosted-QEMU software results,
+  not ARM64 KVM, physical, service, admission, or production evidence.
+
 - Wired an independent
   [`qemu-x86-hypervisor-boot`](../.github/workflows/ci.yml) job on
   `ubuntu-24.04`. It builds the checksum-pinned official QEMU 10.2.0 source via

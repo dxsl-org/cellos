@@ -151,11 +151,12 @@ those remain fail-closed production gates.
 - Native POSIX path handling remains incomplete: canonicalization, `chdir`,
   `rename`, `getcwd`, and `fstat` contain stubs or deferred behavior in
   `kernel/src/task.rs`; Tier 1 must not be documented as POSIX-complete.
-- The hypervisor CI lane is documented as intermittent in
-  `.github/workflows/ci.yml:512`. Hosted-runner dependency downloads have also
-  exhausted the former 10-minute budget before tests; the affected apt steps
-  now allow 20 minutes, but mirror failures remain infrastructure blockers, not
-  runtime passes or functional failures.
+- The historical ARM64 hypervisor machinery intermittency was fixed at the
+  EL2 IRQ/preemption boundary. Hosted run `33486590595:1` passes the retained
+  TCG machinery oracle; full logs remain diagnostic evidence for distinguishing
+  the narrowly tolerated nested-walk signature from functional failures.
+  Hosted-runner mirror failures remain infrastructure blockers, not runtime
+  passes or functional failures.
 - Several additional physical hardware lanes remain external-gated. Compile/
   QEMU evidence is useful regression evidence but must not be used as VF2,
   Pioneer, RPi4, or physical x86 qualification. The two owner-reported

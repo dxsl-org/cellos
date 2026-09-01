@@ -1,11 +1,6 @@
 //! Raw TLS IPC dispatch for the net service cell.
-use alloc::collections::BTreeMap;
-use ostd::syscall::{sys_get_time, sys_heartbeat, sys_send};
-use smoltcp::{
-    iface::{Interface, SocketHandle, SocketSet},
-    socket::tcp,
-    wire::{IpAddress, IpEndpoint},
-};
+
+extern crate alloc;
 use crate::{
     interface::VirtioNetDevice,
     service_runtime::{next_ephemeral_port, now_instant},
@@ -13,6 +8,13 @@ use crate::{
     socket_table::{SocketOwner, SocketTable},
     tls::socket::TlsSocketEntry,
     tls_wire::{encode_tls_recv_reply, parse_raw_tls_request, RawTlsRequest},
+};
+use alloc::collections::BTreeMap;
+use ostd::syscall::{sys_get_time, sys_heartbeat, sys_send};
+use smoltcp::{
+    iface::{Interface, SocketHandle, SocketSet},
+    socket::tcp,
+    wire::{IpAddress, IpEndpoint},
 };
 fn authenticated_time_available() -> bool {
     crate::tls::clock::observe().is_some()
