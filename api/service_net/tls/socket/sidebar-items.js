@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["TLS_BUF"],"struct":["TlsSocketEntry"]};
+window.SIDEBAR_ITEMS = {"constant":["TLS_BUF"],"fn":["allocate_record_buffer","authenticated_time_preflight","prepare_handshake_buffers"],"struct":["TlsSocketEntry"]};
