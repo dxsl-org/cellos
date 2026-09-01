@@ -9,7 +9,6 @@ use smoltcp::{
     socket::tcp,
     wire::{IpAddress, IpEndpoint},
 };
-
 use crate::{
     interface::VirtioNetDevice,
     service_runtime::{next_ephemeral_port, now_instant},
