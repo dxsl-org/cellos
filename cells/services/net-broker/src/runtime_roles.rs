@@ -4,11 +4,18 @@
 /// poisons the current beacon connection, so no late reply can be reused.
 pub const NETWORK_IPC_TIMEOUT_TICKS: u64 = 200;
 
+/// Maximum interval before an admitted network IPC rechecks restart cancellation.
+pub const NETWORK_IPC_CANCEL_POLL_TICKS: u64 = 10;
+
 /// Maximum elapsed time for all runtime roles to drain during restart.
-///
-/// This exceeds [`NETWORK_IPC_TIMEOUT_TICKS`] by one second, leaving a bounded
-/// scheduling window for a timed-out network role to observe shutdown and exit.
 pub const RESTART_DRAIN_TIMEOUT_MS: u64 = 3_000;
+
+const SCHEDULER_TICK_MS: u64 = 10;
+const RESTART_MIN_SCHEDULING_MARGIN_MS: u64 = 1_000;
+const _: () = assert!(
+    RESTART_DRAIN_TIMEOUT_MS
+        >= NETWORK_IPC_CANCEL_POLL_TICKS * SCHEDULER_TICK_MS + RESTART_MIN_SCHEDULING_MARGIN_MS
+);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RuntimeRole {
@@ -44,6 +51,14 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn restart_drain_preserves_scheduler_margin_after_admission() {
+        let cancellation_latency_ms = NETWORK_IPC_CANCEL_POLL_TICKS * SCHEDULER_TICK_MS;
+        assert!(
+            RESTART_DRAIN_TIMEOUT_MS - cancellation_latency_ms >= RESTART_MIN_SCHEDULING_MARGIN_MS
+        );
+    }
 
     #[test]
     fn starts_roles_in_order() {

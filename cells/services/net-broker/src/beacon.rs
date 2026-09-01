@@ -218,7 +218,7 @@ impl BeaconChannel {
         request: &NetRequest<'_>,
         send_buffer: &mut [u8; api::ipc::IPC_BUF_SIZE],
         response_buffer: &'r mut [u8; api::ipc::IPC_BUF_SIZE],
-    ) -> Result<NetResponse<'r>, ()> {
+    ) -> Result<Option<NetResponse<'r>>, ()> {
         let encoded = api::ipc::encode(request, send_buffer).map_err(|_| ())?;
         if !matches!(
             ostd::syscall::sys_send(service_tid, encoded),
@@ -226,13 +226,52 @@ impl BeaconChannel {
         ) {
             return Err(());
         }
-        match ostd::syscall::sys_recv_timeout(
-            service_tid,
-            response_buffer,
-            BEACON_IPC_TIMEOUT_TICKS,
-        ) {
+        #[cfg(feature = "restart-oracle")]
+        if !crate::local_runtime::restart_oracle::network_ipc_started() {
+            return Err(());
+        }
+
+        let Some(started_at) = ostd::syscall::sys_get_scheduler_ticks() else {
+            #[cfg(feature = "restart-oracle")]
+            if crate::local_runtime::restart_oracle::network_ipc_finished() {
+                return Ok(None);
+            }
+            return Err(());
+        };
+
+        let deadline = started_at.saturating_add(BEACON_IPC_TIMEOUT_TICKS);
+        let receive_result: Result<Option<ostd::syscall::SyscallResult>, ()> = loop {
+            #[cfg(feature = "restart-oracle")]
+            {
+                crate::local_runtime::restart_oracle::network_ipc_cancellation_checkpoint();
+                if crate::local_runtime::restart_oracle::shutdown_requested() {
+                    break Ok(None);
+                }
+            }
+            let Some(now) = ostd::syscall::sys_get_scheduler_ticks() else {
+                break Err(());
+            };
+            let remaining = deadline.saturating_sub(now);
+            if remaining == 0 {
+                break Err(());
+            }
+            match ostd::syscall::sys_recv_timeout(
+                service_tid,
+                response_buffer,
+                remaining.min(service_net_broker::runtime_roles::NETWORK_IPC_CANCEL_POLL_TICKS),
+            ) {
+                ostd::syscall::SyscallResult::Ok(0) => {}
+                result => break Ok(Some(result)),
+            }
+        };
+
+        #[cfg(feature = "restart-oracle")]
+        if crate::local_runtime::restart_oracle::network_ipc_finished() {
+            return Ok(None);
+        }
+        match receive_result?.ok_or(())? {
             ostd::syscall::SyscallResult::Ok(sender) if sender == service_tid => {
-                api::ipc::decode(response_buffer).map_err(|_| ())
+                api::ipc::decode(response_buffer).map(Some).map_err(|_| ())
             }
             _ => Err(()),
         }
@@ -290,7 +329,8 @@ impl BeaconChannel {
             &mut response,
         );
         match result {
-            Ok(response) => Ok(response_sent_full_frame(response)),
+            Ok(Some(response)) => Ok(response_sent_full_frame(response)),
+            Ok(None) => Ok(false),
             Err(_) => {
                 net.invalidate();
                 Err(())
@@ -318,8 +358,8 @@ impl BeaconChannel {
             &mut response,
         );
         match result {
-            Ok(NetResponse::Data(data)) => Ok(decode_udp_frame(data)),
-            Ok(_) => Ok(None),
+            Ok(Some(NetResponse::Data(data))) => Ok(decode_udp_frame(data)),
+            Ok(Some(_)) | Ok(None) => Ok(None),
             Err(_) => {
                 net.invalidate();
                 Err(())
