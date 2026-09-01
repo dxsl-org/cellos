@@ -68,7 +68,7 @@ fi
 
 if [[ ! -f "$ISO" ]]; then
     echo "FAIL: ISO not found: $ISO" >&2
-    echo "  Build with: bash scripts/make-hypervisor-fs-x86.sh && \\" >&2
+    echo "  Build with: HV_VOLATILE_DISK=1 bash scripts/make-hypervisor-fs-x86.sh && \\" >&2
     echo "    RUSTFLAGS='-C relocation-model=static -C code-model=kernel -C no-redzone=yes -Z cf-protection=full' \\" >&2
     echo "    EMBEDDED_OVERRIDE='kernel/src/embedded-hv-x86' cargo build --release -p cellos-kernel --target x86_64-unknown-none && \\" >&2
     echo "    bash scripts/x86/make-iso-ci.sh build/vicell-x86-hv.iso" >&2
@@ -88,7 +88,8 @@ QEMU_VERSION="$("$QEMU_X86_BIN" --version | sed -n '1p')"
 echo "[hv-smoke-x86] mode=$HV_SMOKE_MODE iso=$ISO memory=$QEMU_MEMORY (window=${BOOT_WINDOW}s)"
 echo "[hv-smoke-x86] $QEMU_VERSION"
 
-timeout "$BOOT_WINDOW" "$QEMU_X86_BIN" \
+# Kill QEMU at the exact deadline so post-window output cannot satisfy a gate.
+timeout --signal=KILL "$BOOT_WINDOW" "$QEMU_X86_BIN" \
     -machine q35 \
     -accel tcg \
     -cpu qemu64,+pdpe1gb,+svm \

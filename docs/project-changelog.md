@@ -4,6 +4,41 @@
 
 ## [Unreleased] Development-first hardware-constrained execution
 
+- Wired an independent
+  [`qemu-x86-hypervisor-boot`](../.github/workflows/ci.yml) job on
+  `ubuntu-24.04`. It builds the checksum-pinned official QEMU 10.2.0 source via
+  [`scripts/install-qemu-x86-ci.sh`](../scripts/install-qemu-x86-ci.sh), builds
+  the hypervisor image with `HV_VOLATILE_DISK=1`, and requires the guest `/ #`
+  shell oracle within a 600-second boot window. The smoke step has a 12-minute
+  timeout, the job has a 60-minute timeout, and gate plus serial evidence is
+  collected and uploaded under `if: always()`. The local Ubuntu
+  24.04-equivalent dependency path built and installed the official source in
+  86.90 seconds with downloads disabled and slirp 4.7.0, then the exact
+  image/kernel/ISO flow and strict 1 GiB `BOOT_WINDOW=600` `/ #` smoke passed
+  in 600.09 seconds. Local static/adversarial validation and review also passed.
+  Hosted pull-request run
+  [`33474206901:1`](https://github.com/dxsl-org/cellos/actions/runs/33474206901)
+  then passed `qemu-x86-hypervisor-boot`; its always-uploaded
+  `x86-hypervisor-boot-1` artifact records `job_status=success`,
+  `smoke_outcome=success`, the volatile-disk selection, vCPU run-loop entry,
+  and the guest `~ #` prompt. This hosted QEMU-TCG evidence grants no KVM,
+  persistence, physical x86, admission, or production claim, does not alter
+  the preceding x86 QEMU evidence, and does not affect the unrelated blocked
+  Cell-to-Cell Phase 05 boundary.
+
+- Repaired the x86 Tier 3 no-drive boot path without weakening persistent
+  storage. `HV_VOLATILE_DISK=1` now selects an explicit compile-time volatile
+  block policy for the ISO smoke; persistent mode remains the default and
+  aborts on absent VFS or any disk-open failure. The builder rejects combining
+  volatile storage with hostile-backend recovery, and the smoke runner enforces
+  its deadline with an immediate hard cutoff. BusyBox ash is launched explicitly
+  in interactive mode, newline-free UART records flush only at a true HLT after
+  THRE drains, and UART/VirtIO IRQs precede backend IPC. Due PIT ticks alternate
+  with one bounded Net Cell poll, preserving timer progress without starving
+  guest RX. Strict 900-second QEMU-TCG 10.2.0 and 9.1.50 boots at 1 GiB
+  and 2 GiB all reached the origin-tagged `~ #` guest prompt. A QEMU 10.2.0
+  VirtIO-MMIO run with a socket-backed ARP/ICMP peer also reached
+  `VIRTIO_E2E_NET_TX_RX_PASS` and `VIRTIO_E2E_IRQ6_PASS`.
 - Phase 4 now includes the `SOFTWARE_HARNESS` STM32 authority full-record and
   dual-slot journal core under `authority/stm32h573i-dk/`. It wraps the frozen
   canonical Phase 2 protected record with complete PERSIST-003 hardware/profile

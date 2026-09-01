@@ -21,6 +21,8 @@
 # then: ./run-x86.ps1 -NoBuild  (or qemu ... -cpu qemu64,+svm -accel tcg)
 #
 # Usage: bash scripts/make-hypervisor-fs-x86.sh [--skip-fetch]
+#   HV_VOLATILE_DISK=1 selects the no-drive smoke policy. The default is
+#   persistent and fails closed if its configured VFS-backed disk cannot open.
 
 set -euo pipefail
 
@@ -33,6 +35,7 @@ EMBEDDED_HV="kernel/src/embedded-hv-x86"
 
 HV_INIT_MIN_VALUE="${HV_INIT_MIN:-0}"
 HV_HOSTILE_BACKEND_RECOVERY_VALUE="${HV_HOSTILE_BACKEND_RECOVERY:-0}"
+HV_VOLATILE_DISK_VALUE="${HV_VOLATILE_DISK:-0}"
 case "$HV_INIT_MIN_VALUE" in
     0|1) ;;
     *)
@@ -47,6 +50,17 @@ case "$HV_HOSTILE_BACKEND_RECOVERY_VALUE" in
         exit 1
         ;;
 esac
+case "$HV_VOLATILE_DISK_VALUE" in
+    0|1) ;;
+    *)
+        echo "ERROR: HV_VOLATILE_DISK must be 0 or 1" >&2
+        exit 1
+        ;;
+esac
+if [[ "$HV_HOSTILE_BACKEND_RECOVERY_VALUE" == "1" && "$HV_VOLATILE_DISK_VALUE" == "1" ]]; then
+    echo "ERROR: hostile backend recovery requires persistent disk mode" >&2
+    exit 1
+fi
 
 # ── Step 1: Alpine artifacts (vmlinux ELF + initramfs) ──────────────────────
 if [[ "$SKIP_FETCH" != "--skip-fetch" ]]; then
@@ -61,6 +75,9 @@ fi
 
 INIT_FEATURES="service-net/tls-roots-embedded,service-net/tls-ca-private"
 HOSTILE_PACKAGE_ARGS=()
+if [[ "$HV_VOLATILE_DISK_VALUE" == "1" ]]; then
+    INIT_FEATURES+=",service-hypervisor/volatile-disk"
+fi
 if [[ "$HV_HOSTILE_BACKEND_RECOVERY_VALUE" == "1" ]]; then
     INIT_FEATURES+=",app-init/hypervisor-min,app-init/hostile-backend-recovery"
     INIT_FEATURES+=",service-net/hypervisor-bridge,supervisor/hostile-backend-recovery"

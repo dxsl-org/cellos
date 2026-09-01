@@ -6,6 +6,7 @@ pub type PersistentDisk = (usize, api::vfs_file_handles::ViVfsFileHandle, u64);
 // shared TCG runners. The complete admission-plus-reply exchange stays finite.
 const VFS_CALL_TIMEOUT_TICKS: u64 = 1_000;
 
+#[cfg(not(feature = "volatile-disk"))]
 pub fn open() -> Result<Option<PersistentDisk>, ()> {
     let Some(vfs_tid) = ostd::syscall::sys_lookup_service(api::syscall::service::VFS) else {
         return Ok(None);

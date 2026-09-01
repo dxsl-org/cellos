@@ -407,12 +407,10 @@ impl SvmVcpu {
                     return decode(code, info1, info2, self.gpr[0], self.gpr[1], self.gpr[2]);
                 }
                 // PAUSE — guest busy-wait (cpu_relax). Linux's calibration loops
-                // spin on jiffies with PAUSE and never reach HLT, so the tick
-                // must also be delivered here: at most once per PAUSE_TICK_NS of
-                // real time and only when the guest can take an IRQ. An armed
-                // LAPIC timer is injected kernel-side; otherwise the exit
-                // surfaces as Hlt so the cell delivers the 8259 PIT tick (the
-                // same "idle — deliver a tick" contract as a real HLT exit).
+                // spin on jiffies with PAUSE and never reach HLT, so paced exits
+                // still give the cell a PIT service boundary. They surface as
+                // Preempted rather than Hlt: only a real HLT may close a partial
+                // guest-UART record.
                 VMEXIT_PAUSE => {
                     self.advance(code, info1, nrip);
                     internal += 1;
@@ -420,7 +418,7 @@ impl SvmVcpu {
                         if let Some(vec) = self.apic_timer_vector() {
                             self.inject_ext_irq(vec);
                         } else {
-                            return ViVmExit::Hlt;
+                            return ViVmExit::Preempted;
                         }
                     }
                     continue;

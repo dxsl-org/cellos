@@ -106,8 +106,21 @@ impl Uart16550 {
     /// injects the PIC's IRQ4 vector while this holds (level-triggered; the
     /// guest handler drains RBR / reads IIR, dropping the condition).
     pub fn irq_pending(&self) -> bool {
-        (self.ier & IER_RDA != 0 && !self.rx.is_empty())
-            || (self.ier & IER_THRE != 0 && self.thre_latch)
+        (self.ier & IER_RDA != 0 && !self.rx.is_empty()) || self.thre_irq_pending()
+    }
+
+    /// Publish a partial TX record only after the guest has drained THRE work.
+    ///
+    /// A true HLT with no pending THRE interrupt is the serial driver's
+    /// quiescence boundary for non-newline output such as interactive prompts.
+    pub fn flush_tx_if_quiescent(&mut self) {
+        if self.tx_line_len != 0 && !self.thre_irq_pending() {
+            self.flush_tx_line();
+        }
+    }
+
+    fn thre_irq_pending(&self) -> bool {
+        self.ier & IER_THRE != 0 && self.thre_latch
     }
 
     /// Handle a guest `out` to `port` with the low byte of `val`.
