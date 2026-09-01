@@ -16,11 +16,15 @@
   86.90 seconds with downloads disabled and slirp 4.7.0, then the exact
   image/kernel/ISO flow and strict 1 GiB `BOOT_WINDOW=600` `/ #` smoke passed
   in 600.09 seconds. Local static/adversarial validation and review also passed.
-  The first hosted GitHub Actions execution has not run, so the job remains
-  pending hosted execution rather than a hosted CI PASS. This
-  local QEMU evidence grants no KVM, persistence, physical x86, admission, or
-  production claim, does not alter the preceding x86 QEMU evidence, and does
-  not affect the unrelated blocked Cell-to-Cell Phase 05 boundary.
+  Hosted pull-request run
+  [`33474206901:1`](https://github.com/dxsl-org/cellos/actions/runs/33474206901)
+  then passed `qemu-x86-hypervisor-boot`; its always-uploaded
+  `x86-hypervisor-boot-1` artifact records `job_status=success`,
+  `smoke_outcome=success`, the volatile-disk selection, vCPU run-loop entry,
+  and the guest `~ #` prompt. This hosted QEMU-TCG evidence grants no KVM,
+  persistence, physical x86, admission, or production claim, does not alter
+  the preceding x86 QEMU evidence, and does not affect the unrelated blocked
+  Cell-to-Cell Phase 05 boundary.
 
 - Repaired the x86 Tier 3 no-drive boot path without weakening persistent
   storage. `HV_VOLATILE_DISK=1` now selects an explicit compile-time volatile
