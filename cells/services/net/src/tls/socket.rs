@@ -52,6 +52,24 @@ pub struct TlsSocketEntry {
     pub handle: SocketHandle,
 }
 
+fn authenticated_time_preflight() -> Result<(), TlsError> {
+    crate::tls::clock::observe()
+        .map(|_| ())
+        .ok_or(TlsError::InvalidCertificate)
+}
+
+fn allocate_record_buffer() -> &'static mut [u8] {
+    #[cfg(test)]
+    super::authenticated_time_precheck_tests::record_buffer_allocation();
+    Box::leak(Box::new([0u8; TLS_BUF]))
+}
+
+pub(super) fn prepare_handshake_buffers() -> Result<(&'static mut [u8], &'static mut [u8]), TlsError>
+{
+    authenticated_time_preflight()?;
+    Ok((allocate_record_buffer(), allocate_record_buffer()))
+}
+
 impl TlsSocketEntry {
     /// Perform the TLS 1.3 handshake over `handle` and return a live entry.
     ///
@@ -64,16 +82,7 @@ impl TlsSocketEntry {
     /// # Safety
     /// `set_tls_context()` must have been called with valid pointers before this.
     pub unsafe fn handshake(handle: SocketHandle, hostname: &str) -> Result<Self, TlsError> {
-        // embedded-tls treats `TlsClock::None` as "skip validity checks".
-        // Refuse before allocating connection state or calling `open()` so
-        // unavailable/default/rolled-back authenticated time can never weaken
-        // certificate verification.
-        if crate::tls::clock::observe().is_none() {
-            return Err(TlsError::InvalidCertificate);
-        }
-        // Leak 32 KiB for TLS record buffers — intentional, documented cost.
-        let read_buf: &'static mut [u8] = Box::leak(Box::new([0u8; TLS_BUF]));
-        let write_buf: &'static mut [u8] = Box::leak(Box::new([0u8; TLS_BUF]));
+        let (read_buf, write_buf) = prepare_handshake_buffers()?;
 
         let transport = SmoltcpTlsTransport::new(handle);
         let mut conn = TlsConnection::new(transport, read_buf, write_buf);

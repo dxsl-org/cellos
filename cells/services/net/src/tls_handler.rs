@@ -17,7 +17,15 @@ use smoltcp::{
     socket::tcp,
     wire::{IpAddress, IpEndpoint},
 };
-
+fn authenticated_time_available() -> bool {
+    crate::tls::clock::observe().is_some()
+}
+fn send_connect_reply(sender: usize, cap: u64) {
+    let reply = cap.to_le_bytes();
+    #[cfg(test)]
+    crate::tls::authenticated_time_precheck_tests::record_connect_reply(&reply);
+    sys_send(sender, &reply);
+}
 fn make_tcp(
     sockets: &mut SocketSet<'_>,
     table: &mut SocketTable,
@@ -35,7 +43,6 @@ fn make_tcp(
         }
     }
 }
-
 #[allow(clippy::too_many_arguments)]
 pub fn handle_tls_raw(
     buf: &[u8],
@@ -54,7 +61,6 @@ pub fn handle_tls_raw(
             return;
         }
     };
-
     match req {
         RawTlsRequest::Close { cap } => {
             if let Some(h) = table.remove(cap, owner) {
@@ -70,16 +76,14 @@ pub fn handle_tls_raw(
             port,
             hostname,
         } => {
-            // Fail before opening TCP: embedded-tls interprets a missing clock
-            // as permission to skip certificate validity checks.
-            if crate::tls::clock::observe().is_none() {
-                sys_send(sender, &[0u8; 8]);
+            if !authenticated_time_available() {
+                send_connect_reply(sender, 0);
                 return;
             }
             let (handle, cap_id) = match make_tcp(sockets, table, owner) {
                 Ok(t) => t,
                 Err(_) => {
-                    sys_send(sender, &[0u8; 8]);
+                    send_connect_reply(sender, 0);
                     return;
                 }
             };
@@ -91,7 +95,7 @@ pub fn handle_tls_raw(
             {
                 table.remove_internal(cap_id);
                 sockets.remove(handle);
-                sys_send(sender, &[0u8; 8]);
+                send_connect_reply(sender, 0);
                 return;
             }
             table.set_state(cap_id, SocketState::Connecting);
@@ -106,7 +110,7 @@ pub fn handle_tls_raw(
                     tcp::State::Closed | tcp::State::CloseWait => {
                         table.remove_internal(cap_id);
                         sockets.remove(handle);
-                        sys_send(sender, &[0u8; 8]);
+                        send_connect_reply(sender, 0);
                         return;
                     }
                     _ => {}
@@ -115,7 +119,7 @@ pub fn handle_tls_raw(
                 if now >= tcp_deadline {
                     table.remove_internal(cap_id);
                     sockets.remove(handle);
-                    sys_send(sender, &[0u8; 8]);
+                    send_connect_reply(sender, 0);
                     return;
                 }
                 if now >= next_hb {
@@ -127,9 +131,6 @@ pub fn handle_tls_raw(
             table.set_state(cap_id, SocketState::Connected);
 
             let sockets_ptr = sockets as *mut SocketSet<'_> as *mut ();
-            // SAFETY: The net cell serializes dispatch. The TLS transport uses these
-            // pointers only during this synchronous handshake, while their referents live.
-            // No concurrent or reentrant TLS operation may occur.
             unsafe {
                 crate::tls::transport::set_tls_context(
                     iface as *mut Interface,
@@ -140,12 +141,12 @@ pub fn handle_tls_raw(
             match unsafe { TlsSocketEntry::handshake(handle, hostname) } {
                 Ok(entry) => {
                     tls_table.insert(cap_id, entry);
-                    sys_send(sender, &cap_id.to_le_bytes());
+                    send_connect_reply(sender, cap_id);
                 }
                 Err(_) => {
                     table.remove_internal(cap_id);
                     sockets.remove(handle);
-                    sys_send(sender, &[0u8; 8]);
+                    send_connect_reply(sender, 0);
                 }
             }
         }
@@ -155,8 +156,6 @@ pub fn handle_tls_raw(
                 return;
             }
             let sockets_ptr = sockets as *mut SocketSet<'_> as *mut ();
-            // SAFETY: Net cell is single-threaded; iface, device, and sockets live for the
-            // duration of send; entry.send flushes and completes before returning.
             let result = tls_table.get_mut(&cap).map(|entry| unsafe {
                 entry.send(
                     data,
@@ -176,8 +175,6 @@ pub fn handle_tls_raw(
                 return;
             }
             let sockets_ptr = sockets as *mut SocketSet<'_> as *mut ();
-            // SAFETY: Net cell is single-threaded; iface, device, and sockets live for the
-            // duration of recv; entry.recv copies decrypted bytes into data.
             let result = tls_table.get_mut(&cap).map(|entry| {
                 let mut data = alloc::vec![0u8; buf_len];
                 let r = unsafe {
