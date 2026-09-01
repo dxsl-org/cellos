@@ -37,7 +37,10 @@ const INITRD_PATH: &str = "/initrd.gz";
 // periodic mode the guest arms PIT channel 0, which the cell's real-timebase
 // PIT + idle IRQ0 injection can feed; one-shot mode never arms a timer we can
 // drive, so the idle loop HLTs forever waiting for a tick that never comes.
-const CMDLINE: &str = "earlycon=uart8250,io,0x3f8,115200 console=ttyS0 nox2apic lpj=4000000 nohz=off highres=off rdinit=/bin/sh panic=1 virtio_mmio.device=512@0xd0000000:5 virtio_mmio.device=512@0xd0000200:6";
+// BusyBox ash does not reliably infer an interactive terminal from this minimal
+// PVH console. Pass `-i` through the kernel's `--` init-argument separator so
+// the boot contract includes an observable shell prompt.
+const CMDLINE: &str = "earlycon=uart8250,io,0x3f8,115200 console=ttyS0 nox2apic lpj=4000000 nohz=off highres=off rdinit=/bin/sh panic=1 virtio_mmio.device=512@0xd0000000:5 virtio_mmio.device=512@0xd0000200:6 -- -i";
 const E2E_CMDLINE: &str = "earlycon=uart8250,io,0x3f8,115200 console=ttyS0 nox2apic pci=off lpj=4000000 nohz=off highres=off rdinit=/bin/virtio-e2e-init panic=1 virtio_mmio.device=512@0xd0000000:5 virtio_mmio.device=512@0xd0000200:6";
 
 fn guest_cmdline() -> &'static str {
@@ -185,17 +188,23 @@ pub fn run() {
     rb[3] = start_info_gpa; // RBX (x86 gpr index 3)
     vmm::vcpu_regs(vm_id, vcpu_id, &mut rb, true);
 
+    #[cfg(feature = "volatile-disk")]
+    let persistent_disk = {
+        println("[hv-x86] volatile disk selected by build policy");
+        None
+    };
+    #[cfg(not(feature = "volatile-disk"))]
     let persistent_disk = match crate::persistent_disk::open() {
         Ok(Some(disk)) => {
             println("[hv-x86] persistent disk: /mnt/sd/guest_disk.img");
             Some(disk)
         }
         Ok(None) => {
-            println("[hv-x86] volatile disk fallback");
-            None
+            println("[hv-x86] persistent disk unavailable: VFS absent");
+            return;
         }
         Err(()) => {
-            println("[hv-x86] persistent disk unavailable");
+            println("[hv-x86] persistent disk open failed");
             return;
         }
     };

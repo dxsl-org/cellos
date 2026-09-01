@@ -52,12 +52,15 @@ fn deliver_virtio(
     }
 }
 
-fn deliver_pit(vm_id: usize, vcpu_id: usize, pit: &Pit8253, pic: &Pic8259) {
-    if pit.irq0_armed() {
-        if let Some(vector) = pic.irq0() {
-            vmm::inject_irq(vm_id, vcpu_id, u32::from(vector));
-        }
+fn deliver_pit(vm_id: usize, vcpu_id: usize, pit: &mut Pit8253, pic: &Pic8259) -> bool {
+    let Some(vector) = pic.irq0() else {
+        return false;
+    };
+    if !pit.take_irq0_due() {
+        return false;
     }
+    vmm::inject_irq(vm_id, vcpu_id, u32::from(vector));
+    true
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -65,21 +68,33 @@ pub fn service_idle(
     vm_id: usize,
     vcpu_id: usize,
     uart: &mut Uart16550,
-    pit: &Pit8253,
+    pit: &mut Pit8253,
     pic: &Pic8259,
     net_device: &mut NetDev,
     block_mmio: &VirtioMmio,
     net_mmio: &mut VirtioMmio,
+    net_poll_turn: &mut bool,
 ) {
     drain_host_input(uart);
+    // UART and device-completion IRQs always win. A due PIT alternates with
+    // one bounded backend poll so slow nested TCG cannot starve guest RX.
+    if deliver_uart(vm_id, vcpu_id, uart, pic)
+        || deliver_virtio(vm_id, vcpu_id, block_mmio, net_mmio, pic)
+    {
+        return;
+    }
+    if !*net_poll_turn && deliver_pit(vm_id, vcpu_id, pit, pic) {
+        *net_poll_turn = true;
+        return;
+    }
+    *net_poll_turn = false;
+
     if let Some(frame) = net_backend::try_receive(&mut net_device.backend) {
         if net_device.push_rx_frame(&frame, vm_id, vcpu_id, net_mmio) {
             net_mmio.signal_used();
         }
     }
-    if !deliver_uart(vm_id, vcpu_id, uart, pic)
-        && !deliver_virtio(vm_id, vcpu_id, block_mmio, net_mmio, pic)
-    {
-        deliver_pit(vm_id, vcpu_id, pit, pic);
+    if !deliver_virtio(vm_id, vcpu_id, block_mmio, net_mmio, pic) {
+        let _ = deliver_pit(vm_id, vcpu_id, pit, pic);
     }
 }

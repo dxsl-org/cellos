@@ -4,6 +4,19 @@
 
 ## [Unreleased] Development-first hardware-constrained execution
 
+- Repaired the x86 Tier 3 no-drive boot path without weakening persistent
+  storage. `HV_VOLATILE_DISK=1` now selects an explicit compile-time volatile
+  block policy for the ISO smoke; persistent mode remains the default and
+  aborts on absent VFS or any disk-open failure. The builder rejects combining
+  volatile storage with hostile-backend recovery, and the smoke runner enforces
+  its deadline with an immediate hard cutoff. BusyBox ash is launched explicitly
+  in interactive mode, newline-free UART records flush only at a true HLT after
+  THRE drains, and UART/VirtIO IRQs precede backend IPC. Due PIT ticks alternate
+  with one bounded Net Cell poll, preserving timer progress without starving
+  guest RX. Strict 900-second QEMU-TCG 10.2.0 and 9.1.50 boots at 1 GiB
+  and 2 GiB all reached the origin-tagged `~ #` guest prompt. A QEMU 10.2.0
+  VirtIO-MMIO run with a socket-backed ARP/ICMP peer also reached
+  `VIRTIO_E2E_NET_TX_RX_PASS` and `VIRTIO_E2E_IRQ6_PASS`.
 - Phase 4 now includes the `SOFTWARE_HARNESS` STM32 authority full-record and
   dual-slot journal core under `authority/stm32h573i-dk/`. It wraps the frozen
   canonical Phase 2 protected record with complete PERSIST-003 hardware/profile

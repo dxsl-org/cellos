@@ -5,6 +5,8 @@
 //!
 //! Reads vmlinuz + initrd.gz from VIFS1, builds a minimal DTB, maps 128 MiB
 //! of guest RAM, loads all images, and runs the VmExit dispatch loop.
+#[cfg(all(feature = "volatile-disk", feature = "hostile-backend-recovery"))]
+compile_error!("volatile-disk cannot provide hostile backend recovery");
 
 extern crate alloc;
 
