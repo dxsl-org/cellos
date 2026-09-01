@@ -84,12 +84,13 @@ or qualified independent external floor.
   RV64 broker/`ostd` builds pass. Phase 04 is complete at the disabled
   local-only ceiling; provider qualification and authenticated cross-broker
   incarnation binding gate Phase 05 remote dispatch, relay, and direct LAN.
-- Phase 05 local-only contract work is in progress. The four-session Noise pool
-  no longer performs LRU displacement: full capacity preserves existing
-  sessions, returns `WouldBlock`, and is detected before `TcpConnect`. Focused
-  broker tests pass 94/94 and the RV64 release build passes. Relay
-  authentication/configuration, receive wiring, and two-node evidence remain
-  blocked or unimplemented.
+- Phase 05's bounded local contract portion is complete without relay
+  enablement. The four-session Noise pool preserves occupied sessions and
+  returns `WouldBlock` before `TcpConnect`; paired prologue, relay-endpoint,
+  admission, reconnect, and server-framing regressions pass. Authority-owned
+  client framing and correlation integration remain blocked until the exact
+  Phase 4 entry GO. After that Build work, AC-012 gates relay enablement,
+  relay receive, the two-node oracle, and phase completion.
 - Project each completed lane immediately into the roadmap and acceptance views
   at its exact evidence ceiling.
 - The managed-surface child is complete at the QEMU ceiling. Its dedicated

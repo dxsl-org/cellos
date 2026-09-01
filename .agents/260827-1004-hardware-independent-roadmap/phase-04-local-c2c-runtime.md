@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "Reconcile and Complete Local Cell-to-Cell Runtime"
-status: in_progress
+status: blocked
 priority: P1
 effort: "5d"
 dependencies: [1]
@@ -84,10 +84,10 @@ approved paths return `NotSupported`; no raw or insecure fallback exists.
 
 ## Success Criteria
 
-- [ ] One authoritative C2C plan owns the runtime contract.
-- [ ] Approved modules are reachable from one state owner without duplicate machinery.
+- [x] One authoritative C2C plan owns the runtime contract.
+- [x] Approved local modules are reachable from one state owner without duplicate machinery.
 - [ ] Two QEMU nodes complete the approved authenticated direct-LAN path.
-- [ ] Restart removes stale sessions/routes and never enables raw relay fallback.
+- [ ] Restart removes stale remote sessions/routes and never enables raw relay fallback.
 
 ## Security Considerations
 
@@ -152,3 +152,7 @@ permitted.
   92/92 focused broker tests, 5/5 endpoint integration tests, and RV64 builds.
   The core Phase 04 protocol contract is complete at its disabled local-only
   ceiling. Remote transmit, relay, and direct LAN remain unimplemented.
+- Status reconciliation (2026-09-01): the local/single-guest contract is
+  complete. The only remaining phase criteria require the two-real-broker path,
+  so this phase is blocked until the exact
+  `GO: PHASE4_ENTRY_GATES_SATISFIED` result and post-Build AC-012 evidence.

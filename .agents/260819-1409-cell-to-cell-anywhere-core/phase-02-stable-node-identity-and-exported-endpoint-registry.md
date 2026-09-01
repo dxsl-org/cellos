@@ -1,6 +1,6 @@
 ---
 title: "Phase 02 - Stable Node Identity and Exported Endpoint Registry"
-status: in_progress
+status: blocked
 priority: P1
 effort: 4
 depends_on: [01]

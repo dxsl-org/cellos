@@ -46,7 +46,6 @@ pub fn shutdown() -> ! {
 pub fn shutdown_requested() -> bool {
     SHUTDOWN_REQUESTED.load(Ordering::Acquire)
 }
-
 fn exit_drain_timeout() -> ! {
     ostd::io::println("[net-broker] restart oracle role drain timed out");
     ostd::syscall::sys_exit(0xC2C0_03FF)

@@ -1,6 +1,6 @@
 ---
 title: "Phase 05 - Relay-First Remote Correctness Oracle"
-status: in_progress
+status: blocked
 priority: P1
 effort: 5
 depends_on: [04]
