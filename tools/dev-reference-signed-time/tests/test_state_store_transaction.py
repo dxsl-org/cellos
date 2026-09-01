@@ -5,7 +5,7 @@ import path_bootstrap
 from allocation import AdmittedSample, AllocationState
 from state_store import DynamoStateStore
 from state_store_support import (
-    EPOCH, KEY_ID, TABLE, FakeClient, expected_write, fixture, write_success,
+    CONTRACT, EPOCH, KEY_ID, TABLE, FakeClient, expected_write, fixture, write_success,
 )
 
 
@@ -13,7 +13,7 @@ class StateStoreTransactionTests(unittest.TestCase):
     def test_commit_uses_one_exact_low_level_transaction_and_returns_receipt(self):
         registration, state, floor, sample, request, receipt = fixture()
         client = FakeClient(write_result=write_success("commit-request"))
-        store = DynamoStateStore(client, TABLE, EPOCH, KEY_ID)
+        store = DynamoStateStore(client, CONTRACT)
 
         result = store.commit_allocation(registration, state, floor, sample, request)
 
@@ -22,9 +22,10 @@ class StateStoreTransactionTests(unittest.TestCase):
         self.assertEqual(client.calls, [("write", expected_write(registration, state, receipt))])
         transaction = client.calls[0][1]
         self.assertNotIn("ClientRequestToken", transaction)
-        self.assertEqual([next(iter(item)) for item in transaction["TransactItems"]], [
-            "ConditionCheck", "Put", "Put",
-        ])
+        self.assertEqual(
+            [next(iter(item)) for item in transaction["TransactItems"]],
+            ["ConditionCheck", "ConditionCheck", "Put", "Put"],
+        )
 
     def test_candidate_at_sample_high_bound_commits_without_inferred_state(self):
         state = AllocationState(EPOCH, 99, 1_700_000_029)
@@ -34,7 +35,7 @@ class StateStoreTransactionTests(unittest.TestCase):
         )
         client = FakeClient(write_result=write_success("high-bound-request"))
 
-        result = DynamoStateStore(client, TABLE, EPOCH, KEY_ID).commit_allocation(
+        result = DynamoStateStore(client, CONTRACT).commit_allocation(
             registration, state, floor, sample, request,
         )
 
@@ -46,7 +47,7 @@ class StateStoreTransactionTests(unittest.TestCase):
     def test_inputs_and_returned_receipt_are_immutable_and_unchanged(self):
         registration, state, floor, sample, request, receipt = fixture()
         before = (registration, state, sample, request)
-        result = DynamoStateStore(FakeClient(), TABLE, EPOCH, KEY_ID).commit_allocation(
+        result = DynamoStateStore(FakeClient(), CONTRACT).commit_allocation(
             registration, state, floor, sample, request,
         )
 
@@ -76,7 +77,7 @@ class StateStoreTransactionTests(unittest.TestCase):
                 raise AssertionError("successful commit must not read")
 
         client = MinimalClient()
-        DynamoStateStore(client, TABLE, EPOCH, KEY_ID).commit_allocation(
+        DynamoStateStore(client, CONTRACT).commit_allocation(
             registration, state, floor, sample, request,
         )
         self.assertEqual(client.calls, 1)

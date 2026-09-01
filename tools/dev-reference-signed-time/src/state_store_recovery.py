@@ -3,6 +3,8 @@
 from collections.abc import Callable, Mapping
 from typing import Any
 
+from lineage import LineageContract
+from lineage_state import lineage_head_get, require_lineage_head
 from protocol_models import SignedRequest
 from receipt import Receipt, _recover_validated_receipt, request_receipt_key
 from state_codec import (
@@ -43,17 +45,19 @@ def encode_active_registration(
 
 def _read_committed_receipt(
     transact_get_items: Callable[..., Any],
-    table_name: str,
+    contract: LineageContract,
     request: SignedRequest,
     canonical_request: bytes,
-    configured_source_epoch: int,
-    manifest_key_id: str,
 ) -> Receipt | None:
     """Read and validate the receipt bound to one exact signed request."""
     key = request_receipt_key(request.authority_id, request.request_id)
-    result = transact_get_items(TransactItems=[{"Get": {
-        "TableName": table_name, "Key": {"pk": {"S": key}},
-    }}])
+    result = transact_get_items(TransactItems=[
+        lineage_head_get(contract),
+        {"Get": {
+            "TableName": contract.transition.allocator_table_name,
+            "Key": {"pk": {"S": key}},
+        }},
+    ])
     if (
         type(result) is not dict
         or set(result) != {"Responses", "ResponseMetadata"}
@@ -61,19 +65,22 @@ def _read_committed_receipt(
     ):
         raise ValueError("DynamoDB read did not return an exact success envelope")
     responses = result.get("Responses")
-    if type(responses) is not list or len(responses) != 1:
+    if type(responses) is not list or len(responses) != 2:
         raise ValueError("DynamoDB read returned the wrong response count")
-    entry = responses[0]
-    if entry is None:
+    head, entry = responses
+    if type(head) is not dict or set(head) != {"Item"}:
+        raise ValueError("DynamoDB read did not return the lineage head")
+    require_lineage_head(head["Item"], contract)
+    if entry is None or (type(entry) is dict and not entry):
         return None
     if type(entry) is not dict or set(entry) != {"Item"}:
-        raise ValueError("DynamoDB read did not return one exact item")
+        raise ValueError("DynamoDB read did not return one exact receipt")
     receipt = decode_receipt(entry["Item"])
     _recover_validated_receipt(
         receipt,
         request,
         canonical_request,
-        configured_source_epoch=configured_source_epoch,
-        manifest_key_id=manifest_key_id,
+        configured_source_epoch=contract.transition.source_epoch,
+        manifest_key_id=contract.transition.response_key_id,
     )
     return receipt

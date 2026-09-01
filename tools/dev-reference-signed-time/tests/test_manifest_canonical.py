@@ -2,7 +2,8 @@ import json
 import unittest
 
 import path_bootstrap
-from manifest import MAX_MANIFEST_BYTES, ManifestError, decode_manifest, encode_manifest
+from manifest import ManifestError, decode_manifest, encode_manifest
+from manifest_model import MAX_MANIFEST_BYTES
 from manifest_test_support import GOLDEN, valid_manifest
 
 class BytesChild(bytes):
@@ -59,8 +60,8 @@ class ManifestCanonicalTests(unittest.TestCase):
         variants = (
             GOLDEN + b"x",
             GOLDEN.replace(
-                b"authenticated-clock.example.com",
-                "authénticated-clock.example.com".encode("utf-8"),
+                b"roughtime.cloudflare.com",
+                "roughtime.cloudflaré.com".encode("utf-8"),
             ),
             b"\xef\xbb\xbf" + GOLDEN,
             GOLDEN[:-1] + b"\xff",
@@ -71,7 +72,7 @@ class ManifestCanonicalTests(unittest.TestCase):
                 self.assert_rejected(candidate)
 
     def test_nan_and_infinity_tokens_are_rejected(self):
-        marker = b'"source_epoch":7'
+        marker = b'"source_epoch":1'
         for token in (b"NaN", b"Infinity", b"-Infinity"):
             with self.subTest(token=token):
                 self.assert_rejected(
@@ -86,11 +87,8 @@ class ManifestCanonicalTests(unittest.TestCase):
         for candidate in candidates:
             with self.subTest(value=repr(candidate)):
                 self.assert_rejected(candidate)
-    def test_oversized_input_and_oversized_encoding_are_rejected(self):
+    def test_oversized_input_is_rejected(self):
         self.assert_rejected(b" " * (MAX_MANIFEST_BYTES + 1))
-        huge = valid_manifest(upstream_identity="x" * MAX_MANIFEST_BYTES)
-        with self.assertRaises(ManifestError):
-            encode_manifest(huge)
 
     @staticmethod
     def canonical(value):

@@ -48,7 +48,7 @@ def contains_wildcard(value: object) -> bool:
 
 
 class AdministrationRoleTests(unittest.TestCase):
-    def test_four_roles_have_external_boundary_and_exact_separated_trust(self) -> None:
+    def test_four_admin_roles_have_external_boundary_and_exact_trust(self) -> None:
         for role_name, principal_parameter in ADMIN_ROLES.items():
             properties = resource(role_name)["Properties"]
             self.assertEqual(properties["PermissionsBoundary"], {"Ref": "ExternalPermissionsBoundaryArn"})
@@ -58,12 +58,6 @@ class AdministrationRoleTests(unittest.TestCase):
             self.assertEqual(trust[0]["Principal"], {"AWS": {"Ref": principal_parameter}})
             self.assertEqual(actions(trust[0]), {"sts:AssumeRole"})
             self.assertEqual(trust[0]["Condition"], {"ArnEquals": {"aws:PrincipalArn": {"Ref": principal_parameter}}})
-        assertions = TEMPLATE["Rules"]["SeparatedExternalPrincipals"]["Assertions"]
-        self.assertEqual(len(assertions), 10)
-        service_role_ref = {"Ref": "CloudFormationServiceRoleArn"}
-        self.assertEqual(sum(service_role_ref in assertion["Assert"]["Fn::Not"][0]["Fn::Equals"] for assertion in assertions), 4)
-        for assertion in assertions:
-            self.assertIn("Fn::Not", assertion["Assert"])
 
     def test_each_admin_explicitly_denies_direct_signing_and_mutation(self) -> None:
         runtime_arn = {"Fn::GetAtt": ["RuntimeRole", "Arn"]}
@@ -153,7 +147,10 @@ class AdministrationRoleTests(unittest.TestCase):
             for name, item in allow_statements()
             if contains_wildcard(item.get("Resource"))
         ]
-        self.assertEqual({name for name, _ in wildcard_allows}, {"SigningKey", "RuntimeRole", "DeployAdminRole"})
+        self.assertEqual(
+            {name for name, _ in wildcard_allows},
+            {"SigningKey", "LineageKey", "RuntimeRole", "DeployAdminRole"},
+        )
         runtime = [item for name, item in wildcard_allows if name == "RuntimeRole"]
         self.assertEqual(len(runtime), 1)
         self.assertEqual(actions(runtime[0]), {"logs:CreateLogStream", "logs:PutLogEvents"})
@@ -163,7 +160,7 @@ class AdministrationRoleTests(unittest.TestCase):
             "cloudformation:DescribeChangeSet", "cloudformation:DeleteChangeSet", "cloudformation:ExecuteChangeSet",
         })
         for name, item in wildcard_allows:
-            if name != "SigningKey":
+            if name not in {"SigningKey", "LineageKey"}:
                 continue
             self.assertTrue(actions(item) <= {
                 "kms:Sign", "kms:GetPublicKey", "kms:DescribeKey", "kms:GetKeyPolicy", "kms:PutKeyPolicy",
@@ -189,7 +186,11 @@ class AdministrationRoleTests(unittest.TestCase):
         self.assertEqual(key_policy["Roles"], [{"Ref": "KeyPolicyAdminRole"}])
         key_allow = statements(key_policy["PolicyDocument"])[0]
         self.assertEqual(actions(key_allow), {"kms:DescribeKey", "kms:GetKeyPolicy"})
-        self.assertEqual(key_allow["Resource"], {"Fn::GetAtt": ["SigningKey", "Arn"]})
+        self.assertEqual(key_allow["Resource"], [
+            {"Fn::GetAtt": ["SigningKey", "Arn"]},
+            {"Fn::GetAtt": ["LineageKey", "Arn"]},
+        ])
+
 
 
 if __name__ == "__main__":

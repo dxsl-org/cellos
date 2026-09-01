@@ -6,8 +6,9 @@ from state_codec import AuthorityRegistration
 from state_store_recovery_failure_cases import RecoveryFailureCases
 from state_store import DynamoStateStore, StoreError
 from state_store_support import (
-    EPOCH, KEY_ID, TABLE, FakeClient, expected_read, expected_write, fixture,
-    receipt_read, request_signer, response_metadata,
+    CONTRACT, EPOCH, KEY_ID, FakeClient, absent_read, expected_read,
+    expected_write, fixture, null_absent_read, receipt_read, request_signer,
+    response_metadata,
 )
 
 
@@ -25,7 +26,7 @@ class StateStoreRecoveryTests(RecoveryFailureCases, unittest.TestCase):
             read_result=receipt_read(receipt),
         )
 
-        store = RecoverySpy(client, TABLE, EPOCH, KEY_ID)
+        store = RecoverySpy(client, CONTRACT)
         result = store.commit_allocation(registration, state, floor, sample, request)
 
         self.assertEqual(result, receipt)
@@ -40,9 +41,7 @@ class StateStoreRecoveryTests(RecoveryFailureCases, unittest.TestCase):
         registration, _, _, _, request, receipt = fixture()
         client = FakeClient(read_result=receipt_read(receipt))
 
-        recovered = DynamoStateStore(
-            client, TABLE, EPOCH, KEY_ID,
-        ).recover_committed(request, registration)
+        recovered = DynamoStateStore(client, CONTRACT).recover_committed(request, registration)
 
         self.assertEqual(recovered, receipt.response)
         self.assertEqual(client.calls, [("read", expected_read(request))])
@@ -50,30 +49,31 @@ class StateStoreRecoveryTests(RecoveryFailureCases, unittest.TestCase):
 
     def test_preflight_canonical_absence_returns_none(self):
         registration, _, _, _, request, _ = fixture()
-        absent = {
-            "Responses": [None],
-            "ResponseMetadata": response_metadata("absent"),
-        }
+        absent = absent_read()
         client = FakeClient(read_result=absent)
 
-        recovered = DynamoStateStore(
-            client, TABLE, EPOCH, KEY_ID,
-        ).recover_committed(request, registration)
+        recovered = DynamoStateStore(client, CONTRACT).recover_committed(request, registration)
+
+        self.assertIsNone(recovered)
+        self.assertEqual(client.calls, [("read", expected_read(request))])
+
+    def test_preflight_null_absence_returns_none(self):
+        registration, _, _, _, request, _ = fixture()
+        client = FakeClient(read_result=null_absent_read())
+
+        recovered = DynamoStateStore(client, CONTRACT).recover_committed(request, registration)
 
         self.assertIsNone(recovered)
         self.assertEqual(client.calls, [("read", expected_read(request))])
 
     def test_absent_pre_read_still_recovers_concurrent_identical_winner(self):
         registration, state, floor, sample, request, winner = fixture()
-        absent = {
-            "Responses": [None],
-            "ResponseMetadata": response_metadata("absent"),
-        }
+        absent = absent_read()
         client = FakeClient(
             write_error=RuntimeError("conditional conflict"),
             read_results=(absent, receipt_read(winner)),
         )
-        store = DynamoStateStore(client, TABLE, EPOCH, KEY_ID)
+        store = DynamoStateStore(client, CONTRACT)
 
         self.assertIsNone(store.recover_committed(request, registration))
         recovered = store.commit_allocation(
@@ -95,14 +95,11 @@ class StateStoreRecoveryTests(RecoveryFailureCases, unittest.TestCase):
         registration, state, floor, sample, changed, changed_receipt = fixture(
             request=changed,
         )
-        absent = {
-            "Responses": [None],
-            "ResponseMetadata": response_metadata("absent"),
-        }
+        absent = absent_read()
         client = FakeClient(write_error=RuntimeError("stale"), read_result=absent)
 
         with self.assertRaises(StoreError):
-            DynamoStateStore(client, TABLE, EPOCH, KEY_ID).commit_allocation(
+            DynamoStateStore(client, CONTRACT).commit_allocation(
                 registration, state, floor, sample, changed,
             )
 
@@ -119,7 +116,7 @@ class StateStoreRecoveryTests(RecoveryFailureCases, unittest.TestCase):
         client = FakeClient(read_result=receipt_read(receipt))
 
         with self.assertRaises(StoreError):
-            DynamoStateStore(client, TABLE, EPOCH, KEY_ID).recover_committed(
+            DynamoStateStore(client, CONTRACT).recover_committed(
                 changed, registration,
             )
 
@@ -129,16 +126,11 @@ class StateStoreRecoveryTests(RecoveryFailureCases, unittest.TestCase):
         registration, _, _, _, request, _ = fixture()
         signature = request.signature[:-1] + bytes([request.signature[-1] ^ 1])
         invalid = replace(request, signature=signature)
-        absent = {
-            "Responses": [None],
-            "ResponseMetadata": response_metadata("absent"),
-        }
+        absent = absent_read()
         client = FakeClient(read_result=absent)
 
         with self.assertRaises(StoreError):
-            DynamoStateStore(
-                client, TABLE, EPOCH, KEY_ID,
-            ).recover_committed(invalid, registration)
+            DynamoStateStore(client, CONTRACT).recover_committed(invalid, registration)
 
         self.assertEqual(client.calls, [])
 
@@ -165,9 +157,7 @@ class StateStoreRecoveryTests(RecoveryFailureCases, unittest.TestCase):
             with self.subTest(registration=type(candidate_registration).__name__):
                 client = FakeClient(read_result={"must": "not be read"})
                 with self.assertRaises(StoreError):
-                    DynamoStateStore(
-                        client, TABLE, EPOCH, KEY_ID,
-                    ).recover_committed(candidate_request, candidate_registration)
+                    DynamoStateStore(client, CONTRACT).recover_committed(candidate_request, candidate_registration)
                 self.assertEqual(client.calls, [])
 
     def test_malformed_write_envelope_recovers_only_exact_receipt(self):
@@ -176,7 +166,7 @@ class StateStoreRecoveryTests(RecoveryFailureCases, unittest.TestCase):
             write_result={"ResponseMetadata": {"HTTPStatusCode": 503, "RequestId": "failed"}},
             read_result=receipt_read(receipt),
         )
-        result = DynamoStateStore(client, TABLE, EPOCH, KEY_ID).commit_allocation(
+        result = DynamoStateStore(client, CONTRACT).commit_allocation(
             registration, state, floor, sample, request,
         )
         self.assertEqual(result, receipt)

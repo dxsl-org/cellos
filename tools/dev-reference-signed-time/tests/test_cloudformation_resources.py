@@ -20,6 +20,7 @@ class TemplateContractTests(unittest.TestCase):
             "CodeSignTrustedPrincipalArn",
             "IamTrustedPrincipalArn",
             "KeyPolicyTrustedPrincipalArn",
+            "LineageTransitionTrustedPrincipalArn",
             "AlarmTopicArn",
         }
         parameters = TEMPLATE["Parameters"]
@@ -55,10 +56,10 @@ class TemplateContractTests(unittest.TestCase):
         for item in RESOURCES.values():
             counts[item["Type"]] = counts.get(item["Type"], 0) + 1
         self.assertEqual(counts, {
-            "AWS::DynamoDB::Table": 1,
-            "AWS::IAM::Role": 5,
-            "AWS::KMS::Key": 1,
-            "AWS::IAM::Policy": 2,
+            "AWS::DynamoDB::Table": 2,
+            "AWS::IAM::Role": 6,
+            "AWS::KMS::Key": 2,
+            "AWS::IAM::Policy": 3,
             "AWS::Logs::LogGroup": 2,
             "AWS::Lambda::CodeSigningConfig": 1,
             "AWS::Lambda::Function": 1,
@@ -72,39 +73,63 @@ class TemplateContractTests(unittest.TestCase):
             "AWS::CloudWatch::Alarm": 5,
         })
 
-    def test_table_is_retained_deletion_protected_and_pitr_enabled(self) -> None:
-        table = resource("SignedTimeTable")
-        self.assertEqual(table["DeletionPolicy"], "Retain")
-        self.assertEqual(table["UpdateReplacePolicy"], "Retain")
-        properties = table["Properties"]
-        self.assertEqual(properties["BillingMode"], "PAY_PER_REQUEST")
-        self.assertEqual(properties["AttributeDefinitions"], [{"AttributeName": "pk", "AttributeType": "S"}])
-        self.assertEqual(properties["KeySchema"], [{"AttributeName": "pk", "KeyType": "HASH"}])
-        self.assertIs(properties["DeletionProtectionEnabled"], True)
-        self.assertEqual(properties["PointInTimeRecoverySpecification"], {
-            "PointInTimeRecoveryEnabled": True,
-            "RecoveryPeriodInDays": 35,
-        })
-        self.assertEqual(properties["SSESpecification"], {"SSEEnabled": True, "SSEType": "KMS"})
-        self.assertNotIn("KMSMasterKeyId", properties["SSESpecification"])
+    def test_tables_are_retained_deletion_protected_and_pitr_enabled(self) -> None:
+        for name in ("SignedTimeTable", "LineageTable"):
+            table = resource(name)
+            self.assertEqual(table["DeletionPolicy"], "Retain")
+            self.assertEqual(table["UpdateReplacePolicy"], "Retain")
+            properties = table["Properties"]
+            self.assertEqual(properties["BillingMode"], "PAY_PER_REQUEST")
+            self.assertEqual(
+                properties["AttributeDefinitions"],
+                [{"AttributeName": "pk", "AttributeType": "S"}],
+            )
+            self.assertEqual(
+                properties["KeySchema"],
+                [{"AttributeName": "pk", "KeyType": "HASH"}],
+            )
+            self.assertIs(properties["DeletionProtectionEnabled"], True)
+            self.assertEqual(properties["PointInTimeRecoverySpecification"], {
+                "PointInTimeRecoveryEnabled": True,
+                "RecoveryPeriodInDays": 35,
+            })
+            self.assertEqual(
+                properties["SSESpecification"],
+                {"SSEEnabled": True, "SSEType": "KMS"},
+            )
+            self.assertNotIn("KMSMasterKeyId", properties["SSESpecification"])
+        self.assertNotEqual(
+            resource("SignedTimeTable")["Properties"]["TableName"],
+            resource("LineageTable")["Properties"]["TableName"],
+        )
 
-    def test_signing_key_shape_retention_and_role_first_dependency(self) -> None:
-        key = resource("SigningKey")
-        self.assertEqual(key["DeletionPolicy"], "Retain")
-        self.assertEqual(key["UpdateReplacePolicy"], "Retain")
-        self.assertEqual(set(key["DependsOn"]), {"RuntimeRole", "KeyPolicyAdminRole"})
-        properties = key["Properties"]
-        self.assertEqual(properties["KeySpec"], "ECC_NIST_P256")
-        self.assertEqual(properties["KeyUsage"], "SIGN_VERIFY")
-        self.assertIs(properties["MultiRegion"], False)
-        self.assertEqual(properties["PendingWindowInDays"], 30)
-        self.assertIs(properties["BypassPolicyLockoutSafetyCheck"], True)
+    def test_signing_keys_are_retained_p256_and_role_first(self) -> None:
+        expected_dependencies = {
+            "SigningKey": {"RuntimeRole", "KeyPolicyAdminRole"},
+            "LineageKey": {
+                "RuntimeRole", "LineageTransitionRole", "KeyPolicyAdminRole",
+            },
+        }
+        for name, dependencies in expected_dependencies.items():
+            key = resource(name)
+            self.assertEqual(key["DeletionPolicy"], "Retain")
+            self.assertEqual(key["UpdateReplacePolicy"], "Retain")
+            self.assertEqual(set(key["DependsOn"]), dependencies)
+            properties = key["Properties"]
+            self.assertEqual(properties["KeySpec"], "ECC_NIST_P256")
+            self.assertEqual(properties["KeyUsage"], "SIGN_VERIFY")
+            self.assertIs(properties["MultiRegion"], False)
+            self.assertEqual(properties["PendingWindowInDays"], 30)
+            self.assertIs(properties["BypassPolicyLockoutSafetyCheck"], True)
         attached = resource("RuntimeSigningKeyPolicy")
-        for retained_name in ("RuntimeRole", "KeyPolicyAdminRole", "RuntimeSigningKeyPolicy"):
+        for retained_name in (
+            "RuntimeRole", "KeyPolicyAdminRole", "LineageTransitionRole",
+            "RuntimeSigningKeyPolicy", "LineageTransitionPolicy",
+        ):
             retained = resource(retained_name)
             self.assertEqual(retained["DeletionPolicy"], "Retain")
             self.assertEqual(retained["UpdateReplacePolicy"], "Retain")
-        self.assertEqual(attached["DependsOn"], "SigningKey")
+        self.assertEqual(set(attached["DependsOn"]), {"SigningKey", "LineageKey"})
         self.assertEqual(attached["Properties"]["Roles"], [{"Ref": "RuntimeRole"}])
 
     def test_function_requires_exact_signed_versioned_artifact(self) -> None:
@@ -118,7 +143,7 @@ class TemplateContractTests(unittest.TestCase):
         properties = function["Properties"]
         self.assertEqual(properties["PackageType"], "Zip")
         self.assertEqual(properties["FunctionName"], "cellos-dev-reference-signed-time")
-        self.assertEqual(properties["Handler"], "handler.lambda_handler")
+        self.assertEqual(properties["Handler"], "lambda_entrypoint.lambda_handler")
         self.assertEqual(properties["CodeSigningConfigArn"], {
             "Fn::GetAtt": ["FunctionCodeSigningConfig", "CodeSigningConfigArn"]
         })
