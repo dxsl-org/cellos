@@ -4,6 +4,12 @@
 
 ## [Unreleased] Development-first hardware-constrained execution
 
+- Prevented transient net-broker reply contention from exhausting all 32 delivery
+  attempts before a live receiver gets another scheduler turn. Each pump turn now
+  snapshots the pending reply count, attempts each eligible reply at most once,
+  and uses one monotonic order for initial and requeued replies. The bounded
+  terminal policy remains intact for persistently unreachable receivers.
+
 - Made admitted net-broker beacon IPC waits restart-cancellable without changing
   their two-second failure deadline. Reply waits recheck the restart signal every
   10 scheduler ticks (about 100 ms), while a compile-time invariant preserves at

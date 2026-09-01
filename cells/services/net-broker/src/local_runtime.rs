@@ -11,11 +11,12 @@ use service_net_broker::bench_oracle;
 use service_net_broker::identity::BrokerIdentity;
 use service_net_broker::local_ingress::parse_request;
 use service_net_broker::local_queue::{
-    BrokerState, CompletionError, IngressDecision, QueuedReply, REPLY_TRY_SEND_BUDGET,
-    WORKER_HEARTBEAT_TICKS,
+    BrokerState, CompletionError, IngressDecision, QueuedReply, WORKER_HEARTBEAT_TICKS,
 };
 use service_net_broker::local_runtime_metrics::heartbeat_gap_miss;
-use service_net_broker::reply_pump::{retain_busy_reply, RetainBusyResult, TrySendResult};
+use service_net_broker::reply_pump::{
+    reply_turn_budget, retain_busy_reply, RetainBusyResult, TrySendResult,
+};
 use service_net_broker::runtime_roles::{start_runtime_roles, RuntimeRole};
 
 #[path = "local_runtime/request_dispatch.rs"]
@@ -283,7 +284,11 @@ fn send_or_queue(mut reply: QueuedReply, rearm_heartbeat: bool) {
 }
 
 fn pump_reply_turn() {
-    for _ in 0..REPLY_TRY_SEND_BUDGET {
+    let budget = {
+        let state = lock_runtime_state(true);
+        reply_turn_budget(state.broker.reply_len())
+    };
+    for _ in 0..budget {
         let next = { lock_runtime_state(true).broker.take_next_reply() };
         let Some(reply) = next else {
             break;

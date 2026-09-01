@@ -1,4 +1,4 @@
-use crate::local_queue::{BrokerState, QueuedReply};
+use crate::local_queue::{BrokerState, QueuedReply, REPLY_TRY_SEND_BUDGET};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TrySendResult {
@@ -7,6 +7,18 @@ pub enum TrySendResult {
 }
 
 pub const MAX_REPLY_SEND_ATTEMPTS: u8 = 32;
+
+/// Number of replies eligible for one pump turn.
+///
+/// Snapshotting the queue length prevents a requeued Busy reply from consuming
+/// several lifetime attempts before its receiver gets another scheduler turn.
+pub const fn reply_turn_budget(pending_replies: usize) -> usize {
+    if pending_replies < REPLY_TRY_SEND_BUDGET {
+        pending_replies
+    } else {
+        REPLY_TRY_SEND_BUDGET
+    }
+}
 
 // The reply remains inline and Copy because this no-alloc retry path must hand
 // ownership back to its caller when the bounded queue is saturated.
@@ -90,6 +102,26 @@ mod tests {
         assert_eq!(state.reply_len(), LOCAL_REPLY_QUEUE_CAP);
         assert_eq!(state.counters.try_send_busy, 1);
         assert_eq!(state.counters.terminal, 0);
+    }
+
+    #[test]
+    fn one_busy_reply_consumes_one_attempt_per_pump_turn() {
+        let mut state = BrokerState::new();
+        assert!(state.requeue_reply(QueuedReply::new(2, 3, 4, ReplyStatus::Success, &[], 0,)));
+        let attempts_before = state.take_next_reply().expect("queued reply").attempts;
+        assert!(state.requeue_reply(QueuedReply::new(2, 3, 4, ReplyStatus::Success, &[], 0,)));
+
+        let budget = reply_turn_budget(state.reply_len());
+        assert_eq!(budget, 1);
+        for _ in 0..budget {
+            let reply = state.take_next_reply().expect("turn reply");
+            assert_eq!(
+                retain_busy_reply(&mut state, reply),
+                RetainBusyResult::Queued
+            );
+        }
+        let retained = state.take_next_reply().expect("retained reply");
+        assert_eq!(retained.attempts, attempts_before + 1);
     }
 
     #[test]

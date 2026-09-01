@@ -115,6 +115,34 @@ fn monotonic_ids_reject_wrap_into_stale_history() {
 }
 
 #[test]
+fn busy_requeue_stays_behind_replies_present_at_turn_start() {
+    let mut state = BrokerState::new();
+    for (tid, seq) in [(1, 10), (2, 20)] {
+        assert_eq!(
+            state.handle_ingress(
+                tid,
+                Some(identity(tid as u64, 1, tid as u64)),
+                Ok(parsed(seq, b"x")),
+            ),
+            IngressDecision::Accepted
+        );
+    }
+    let first_request = state.take_next_request().unwrap();
+    let second_request = state.take_next_request().unwrap();
+    state
+        .complete_request(&first_request, QueuedReply::success(&first_request))
+        .unwrap();
+    state
+        .complete_request(&second_request, QueuedReply::success(&second_request))
+        .unwrap();
+
+    let first_reply = state.take_next_reply().unwrap();
+    assert!(state.requeue_reply(first_reply));
+    let next_reply = state.take_next_reply().unwrap();
+    assert_eq!(next_reply.client_sequence, second_request.client_sequence);
+}
+
+#[test]
 fn reply_retry_state_counts_busy_and_requeues() {
     let mut state = BrokerState::new();
     let reply = QueuedReply::new(5, 6, 7, ReplyStatus::Busy, &[], 0);
