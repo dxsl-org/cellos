@@ -5,13 +5,66 @@ from typing import Any
 
 from allocation import AdmittedSample, AllocationState
 from protocol import encode_response
-from protocol_models import MAX_UINT64, SignedResponse, UnsignedResponse
+from protocol_models import MAX_UINT64, SignedRequest, SignedResponse, UnsignedResponse
 from receipt import Receipt
 from request_protocol import parse_request
 from state_codec import AuthorityRegistration
 from state_reader import StateSnapshot
 
 _HANDLER_FAILURE = "signed-time handler operation failed"
+
+
+def _require_response_binding(
+    response: UnsignedResponse, request: SignedRequest, source_epoch: int
+) -> None:
+    response_request = (
+        response.device_id,
+        response.authority_id,
+        response.boot_epoch,
+        response.request_id,
+        response.purpose,
+        response.nonce,
+    )
+    parsed_request = (
+        request.device_id,
+        request.authority_id,
+        request.boot_epoch,
+        request.request_id,
+        request.purpose,
+        request.nonce,
+    )
+    if response_request != parsed_request or response.source_epoch != source_epoch:
+        raise TypeError("state store returned a response for another request or epoch")
+
+
+def _require_signed_response_binding(
+    signed: SignedResponse, response: UnsignedResponse
+) -> None:
+    if (
+        type(signed.source_epoch) is not type(response.source_epoch)
+        or signed.source_epoch != response.source_epoch
+        or type(signed.source_sequence) is not type(response.source_sequence)
+        or signed.source_sequence != response.source_sequence
+        or type(signed.unix_seconds) is not type(response.unix_seconds)
+        or signed.unix_seconds != response.unix_seconds
+        or type(signed.expires_at) is not type(response.expires_at)
+        or signed.expires_at != response.expires_at
+        or type(signed.device_id) is not type(response.device_id)
+        or signed.device_id != response.device_id
+        or type(signed.authority_id) is not type(response.authority_id)
+        or signed.authority_id != response.authority_id
+        or type(signed.boot_epoch) is not type(response.boot_epoch)
+        or signed.boot_epoch != response.boot_epoch
+        or type(signed.request_id) is not type(response.request_id)
+        or signed.request_id != response.request_id
+        or type(signed.purpose) is not type(response.purpose)
+        or signed.purpose != response.purpose
+        or type(signed.nonce) is not type(response.nonce)
+        or signed.nonce != response.nonce
+        or type(signed.key_id) is not type(response.key_id)
+        or signed.key_id != response.key_id
+    ):
+        raise TypeError("signer returned a response with substituted unsigned fields")
 
 
 class HandlerError(RuntimeError):
@@ -93,9 +146,11 @@ class SignedTimeHandler:
                 response = receipt.response
             if type(response) is not UnsignedResponse:
                 raise TypeError("state store returned an invalid response")
+            _require_response_binding(response, request, snapshot.state.source_epoch)
             signed = self._sign_response(response)
             if type(signed) is not SignedResponse:
                 raise TypeError("signer returned an invalid response")
+            _require_signed_response_binding(signed, response)
             encoded = encode_response(signed)
         except Exception:
             failed = True

@@ -1,3 +1,4 @@
+mod adapter_tests;
 mod fixture;
 mod path_rejection;
 mod pending_rejection;
