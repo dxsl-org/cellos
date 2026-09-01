@@ -76,6 +76,7 @@ fn local_c2c_broker_oracle_meets_baseline_contract() {
     );
     for forbidden in [
         "[net-broker] restart oracle role drain timed out",
+        "[net-broker] beacon IPC timed out; network disabled until restart",
         "[heartbeat] task ",
         "[watchdog] task ",
     ] {
