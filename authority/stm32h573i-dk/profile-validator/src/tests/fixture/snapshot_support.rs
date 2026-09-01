@@ -4,9 +4,9 @@ use sha2::{Digest, Sha256};
 use std::{array, vec::Vec};
 use stm32_authority_journal::*;
 
-pub(super) struct Store<'a> {
-    pub(super) revision: &'a Cell<u64>,
-    pub(super) record: &'a Cell<Option<ProtectedAuthorityRecord>>,
+pub(crate) struct Store<'a> {
+    pub(crate) revision: &'a Cell<u64>,
+    pub(crate) record: &'a Cell<Option<ProtectedAuthorityRecord>>,
 }
 impl ProtectedStore for Store<'_> {
     fn compare_and_swap(&mut self, expected: u64, next: &ProtectedAuthorityRecord) -> bool {
@@ -54,7 +54,7 @@ impl TimeChallengeSource for Challenges {
 }
 
 #[derive(Clone, Copy)]
-pub(super) struct Auth;
+pub(crate) struct Auth;
 impl RecordAuthenticator for Auth {
     fn authenticate(&self, bytes: &[u8]) -> [u8; 32] {
         tagged_hash(b"journal", bytes)
@@ -72,7 +72,7 @@ fn tagged_hash(tag: &[u8], bytes: &[u8]) -> [u8; 32] {
     hash.finalize().into()
 }
 
-pub(super) struct MemoryBank {
+pub(crate) struct MemoryBank {
     headers: [Vec<u8>; 2],
     chunks: [[Vec<u8>; PROFILE_CHUNK_REGIONS]; 2],
     sealed: bool,

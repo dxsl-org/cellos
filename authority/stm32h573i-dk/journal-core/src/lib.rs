@@ -15,9 +15,10 @@ pub use codec::{decode_record, encode_record, CodecError, RECORD_MAX};
 pub use journal::{BackendError, Counter, Journal, JournalError, SlotStorage};
 pub use model::{FullRecord, HardwareBindings, ProfileMaterial, RecordError, SlotRole, SPKI_MAX};
 pub use profile_bank::{
-    BankError, BankStorageError, ProfileBank, ProfileBankAuthenticator, ProfileBankMetadata,
-    ProfileBankReference, ProfileBankStorage, UploadHead, PROFILE_BANK_CHUNK_REGION_MAX,
-    PROFILE_BANK_HEADER_MAX, PROFILE_CHUNK_REGIONS, PROFILE_CHUNK_SIZE,
+    begin_profile_upload, write_profile_chunk, BankError, BankStorageError, ProfileBank,
+    ProfileBankAuthenticator, ProfileBankMetadata, ProfileBankReference, ProfileBankStorage,
+    UploadFlowError, UploadHead, PROFILE_BANK_CHUNK_REGION_MAX, PROFILE_BANK_HEADER_MAX,
+    PROFILE_CHUNK_REGIONS, PROFILE_CHUNK_SIZE,
 };
 pub use recovery::{
     recover, ExpectedIdentity, RecoveredRecord, RecoveryError, UnvalidatedRecoveredRecord,

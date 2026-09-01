@@ -49,6 +49,13 @@ class UnsafeFeatureMatrixTests(unittest.TestCase):
 class DevMarkerRejectionTests(unittest.TestCase):
     CHUNK = 64 * 1024
 
+    def test_signed_time_classification_handoff_is_frozen(self) -> None:
+        self.assertLessEqual(
+            {"DEV_REFERENCE", "SOFTWARE_HARNESS", "AWS_DEV_SIGNED_TIME",
+             "aws-dev-signed-time", "cellos-dev-time-v1"},
+            CHECKER.DEV_MARKER_NAMES,
+        )
+
     def run_checker(self, kms_features: str, artifact_payloads: list[bytes]):
         root = Path(__file__).resolve().parents[1]
         with tempfile.TemporaryDirectory() as directory:

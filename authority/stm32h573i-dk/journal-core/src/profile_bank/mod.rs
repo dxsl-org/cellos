@@ -1,10 +1,12 @@
 mod codec;
+mod flow;
 mod recovery;
 mod reference;
 mod service;
 mod types;
 mod write;
 
+pub use flow::{begin_profile_upload, write_profile_chunk, UploadFlowError};
 pub use types::{
     BankError, BankStorageError, ProfileBankAuthenticator, ProfileBankMetadata,
     ProfileBankReference, ProfileBankStorage, UploadHead, PROFILE_BANK_CHUNK_REGION_MAX,
