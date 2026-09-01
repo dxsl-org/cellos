@@ -242,8 +242,11 @@ impl BeaconChannel {
         let deadline = started_at.saturating_add(BEACON_IPC_TIMEOUT_TICKS);
         let receive_result: Result<Option<ostd::syscall::SyscallResult>, ()> = loop {
             #[cfg(feature = "restart-oracle")]
-            if crate::local_runtime::restart_oracle::shutdown_requested() {
-                break Ok(None);
+            {
+                crate::local_runtime::restart_oracle::network_ipc_cancellation_checkpoint();
+                if crate::local_runtime::restart_oracle::shutdown_requested() {
+                    break Ok(None);
+                }
             }
             let Some(now) = ostd::syscall::sys_get_scheduler_ticks() else {
                 break Err(());

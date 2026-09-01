@@ -4,7 +4,9 @@ use service_net_broker::local_ingress::ParsedLocalRequest;
 const RUNTIME_ROLE_COUNT: usize = 3;
 const NETWORK_IPC_IDLE: usize = 0;
 const NETWORK_IPC_ACTIVE: usize = 1;
-const NETWORK_IPC_ARMED: usize = 2;
+const NETWORK_IPC_ARMED_IDLE: usize = 2;
+const NETWORK_IPC_ARMED_ACTIVE: usize = 3;
+const NETWORK_IPC_ACKED: usize = 4;
 // Bound shutdown by elapsed time, not scheduler turns: runnable-task count changes
 // how many yields a role needs before it can observe the shutdown flag.
 const DRAIN_TIMEOUT_MS: u64 = service_net_broker::runtime_roles::RESTART_DRAIN_TIMEOUT_MS;
@@ -28,23 +30,30 @@ pub fn request_matches(
 }
 
 pub fn shutdown() -> ! {
-    // Claim an exchange atomically. If completion wins the race, wait for the
-    // next admission rather than treating a stale observation as proof.
-    let Some(admission_started_at_ms) = ostd::syscall::sys_get_time_ms() else {
-        exit_admission_timeout();
-    };
+    // Publish the arm before waiting for an admission. If an exchange is already
+    // active, its completion preserves the arm for the next exchange. ACKED is
+    // stable until this role publishes SHUTDOWN_REQUESTED, so single-hart runs
+    // do not depend on timer preemption catching a transient ACTIVE state.
     loop {
+        let state = NETWORK_IPC_STATE.load(Ordering::Acquire);
+        let armed = match state {
+            NETWORK_IPC_IDLE => NETWORK_IPC_ARMED_IDLE,
+            NETWORK_IPC_ACTIVE => NETWORK_IPC_ARMED_ACTIVE,
+            NETWORK_IPC_ARMED_IDLE | NETWORK_IPC_ARMED_ACTIVE | NETWORK_IPC_ACKED => break,
+            _ => exit_admission_timeout(),
+        };
         if NETWORK_IPC_STATE
-            .compare_exchange(
-                NETWORK_IPC_ACTIVE,
-                NETWORK_IPC_ARMED,
-                Ordering::AcqRel,
-                Ordering::Acquire,
-            )
+            .compare_exchange(state, armed, Ordering::AcqRel, Ordering::Acquire)
             .is_ok()
         {
             break;
         }
+    }
+
+    let Some(admission_started_at_ms) = ostd::syscall::sys_get_time_ms() else {
+        exit_admission_timeout();
+    };
+    while NETWORK_IPC_STATE.load(Ordering::Acquire) != NETWORK_IPC_ACKED {
         let Some(now_ms) = ostd::syscall::sys_get_time_ms() else {
             exit_admission_timeout();
         };
@@ -77,14 +86,32 @@ pub fn shutdown() -> ! {
 ///
 /// Returns `false` if another exchange is active or restart already claimed it.
 pub fn network_ipc_started() -> bool {
-    NETWORK_IPC_STATE
-        .compare_exchange(
-            NETWORK_IPC_IDLE,
-            NETWORK_IPC_ACTIVE,
-            Ordering::AcqRel,
-            Ordering::Acquire,
-        )
-        .is_ok()
+    loop {
+        let state = NETWORK_IPC_STATE.load(Ordering::Acquire);
+        let active = match state {
+            NETWORK_IPC_IDLE => NETWORK_IPC_ACTIVE,
+            NETWORK_IPC_ARMED_IDLE => NETWORK_IPC_ACKED,
+            _ => return false,
+        };
+        if NETWORK_IPC_STATE
+            .compare_exchange(state, active, Ordering::AcqRel, Ordering::Acquire)
+            .is_ok()
+        {
+            return true;
+        }
+    }
+}
+
+/// Acknowledges that an armed restart found the currently admitted IPC waiting.
+///
+/// The acknowledgement remains published until shutdown releases the wait.
+pub fn network_ipc_cancellation_checkpoint() {
+    let _ = NETWORK_IPC_STATE.compare_exchange(
+        NETWORK_IPC_ARMED_ACTIVE,
+        NETWORK_IPC_ACKED,
+        Ordering::AcqRel,
+        Ordering::Acquire,
+    );
 }
 
 /// Completes the active IPC at the restart linearization point.
@@ -92,21 +119,26 @@ pub fn network_ipc_started() -> bool {
 /// Returns `true` when restart claimed the exchange and its response must be
 /// discarded; returns `false` when normal completion won the race.
 pub fn network_ipc_finished() -> bool {
-    match NETWORK_IPC_STATE.compare_exchange(
-        NETWORK_IPC_ACTIVE,
-        NETWORK_IPC_IDLE,
-        Ordering::AcqRel,
-        Ordering::Acquire,
-    ) {
-        Ok(_) => false,
-        Err(NETWORK_IPC_ARMED) => {
-            while !shutdown_requested() {
-                ostd::task::yield_now();
+    loop {
+        let state = NETWORK_IPC_STATE.load(Ordering::Acquire);
+        let idle = match state {
+            NETWORK_IPC_ACTIVE => NETWORK_IPC_IDLE,
+            NETWORK_IPC_ARMED_ACTIVE => NETWORK_IPC_ARMED_IDLE,
+            NETWORK_IPC_ACKED => {
+                while !shutdown_requested() {
+                    ostd::task::yield_now();
+                }
+                ostd::io::println("[net-broker] restart oracle shutdown-after-admission exercised");
+                return true;
             }
-            ostd::io::println("[net-broker] restart oracle shutdown-after-admission exercised");
-            true
+            _ => return true,
+        };
+        if NETWORK_IPC_STATE
+            .compare_exchange(state, idle, Ordering::AcqRel, Ordering::Acquire)
+            .is_ok()
+        {
+            return false;
         }
-        Err(_) => true,
     }
 }
 

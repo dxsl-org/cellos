@@ -8,9 +8,9 @@
   their two-second failure deadline. Reply waits recheck the restart signal every
   10 scheduler ticks (about 100 ms), while a compile-time invariant preserves at
   least one second of scheduler margin inside the three-second role-drain bound.
-  The real-QEMU restart oracle now arms shutdown, waits for a post-admission
-  cancellation checkpoint, and rejects runs that do not prove that race before
-  all runtime roles drain.
+  The real-QEMU restart oracle now arms shutdown first, waits for a persistent
+  post-admission acknowledgement, and rejects runs that do not prove the
+  shutdown-after-admission race before all runtime roles drain.
 
 - Reconciled hosted CI evidence after run
   [`33486590595:1`](https://github.com/dxsl-org/cellos/actions/runs/33486590595).
