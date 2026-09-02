@@ -38,6 +38,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### 🐛 Fixes
 - x86_64: preserve user state and balance CPL3 GS/PKRU across IDT, suspended SYSCALL, fresh IRET, and scheduler switches
 - x86_64: correct the bootstrap SysV stack phase with an 8-byte synthetic bottom-frame slot before tail-entering Rust
+- tools: validate MemInfo conservation in frame units before independently rounding displayed KiB values
 - kernel: clean completion waiter lifecycle safely
 - boot: reject snapshots from mismatched RAM bases
 - build: align cross-target CI and image generation
