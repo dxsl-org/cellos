@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["cell_main","decimal","frames_to_kib","main"],"static":["VICELL_SYSCALLS"]};
+window.SIDEBAR_ITEMS = {"fn":["cell_main","decimal","frames_to_kib","main","validated_kib"],"static":["VICELL_SYSCALLS"]};
