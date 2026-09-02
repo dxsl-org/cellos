@@ -146,9 +146,8 @@ those remain fail-closed production gates.
   path. Enrollment, lease renewal, swarm routing, relay, and direct-LAN
   operation remain open; the local result proves no two-node, service,
   physical, or production completion.
-- **The local IPC-aware `WaitCompletion` implementation is closed at source
-  and deterministic kernel-selftest level; corrected final-source combined
-  QEMU evidence is pending.** Queued IPC now interrupts a parked
+- **The local IPC-aware `WaitCompletion` implementation is closed at the
+  clean-source single-guest QEMU ceiling.** Queued IPC now interrupts a parked
   `WaitCompletion` through the existing raw return `0`, with no completion
   record. The public completion ABI and source vocabulary remain `NET_RX` and
   `TIMER`; no IPC completion source was added. Kernel park/publication
@@ -165,11 +164,22 @@ those remain fail-closed production gates.
   same-cycle PASS. That observation is mandatory but non-causal. A drain at or
   above the ceiling is neutral INCONCLUSIVE: it neither satisfies nor itself
   fails the gate, while INCONCLUSIVE-only output cannot pass.
-  The recorded cycle 36 (`start=144542529`, `raw_ret=0`, `elapsed=442232`) and
-  its passing benchmark came from pre-final-code source and are historical,
-  not final-source proof. Final-source QEMU evidence will be recorded only
-  after the corrected canonical rerun. This remains outside two-node, service,
-  physical, hard-latency, and production completion.
+  Clean-source commit `59501e2b` passed one canonical
+  `scripts/run-c2c-broker-oracle-qemu.sh` invocation (exit 0, 1/1), including
+  the exact `[selftest] IPC-PENDING: PASS (deferred, bounded, quota-safe,
+  completion-wake)` and `[selftest] NET-RX-RESERVATION: PASS (fills, remembers,
+  releases, IPC-safe)` markers with no corresponding FAIL. Runtime cycle 36
+  reported `start_ticks=144911300`, `raw_ret=0`, `elapsed_ticks=586804`,
+  `proof_ceiling_ticks=900000`, `budget_ticks=1000000`, and `status=PASS`;
+  no INCONCLUSIVE marker appeared. This mandatory runtime observation is
+  supplemental and non-causal. The measured baseline completed 1000/1000, the
+  1/2/4/8/16 sweeps passed, the soak completed 10000/10000 with positive
+  network progress and zero heartbeat/watchdog deltas, overflow and restart
+  passed, and no forbidden oracle or runtime marker appeared. These remain
+  local/QEMU classifier and benchmark results, not a physical timing bound or
+  evidence that the timing observation caused the benchmark result. The risk
+  remains outside two-node, service, physical, hard-latency, and production
+  completion.
 - Native POSIX path handling remains incomplete: canonicalization, `chdir`,
   `rename`, `getcwd`, and `fstat` contain stubs or deferred behavior in
   `kernel/src/task.rs`; Tier 1 must not be documented as POSIX-complete.

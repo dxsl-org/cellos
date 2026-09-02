@@ -651,10 +651,23 @@
   runtime wake-cause claim.
 - The earlier cycle 36 capture (`start=144542529`, `raw_ret=0`,
   `elapsed=442232`) and its passing benchmark came from pre-final-code source.
-  They are historical observations, not final-source proof. A first
+  They remain historical observations, not final-source proof. A first
   final-source attempt stopped on a cycle 30 late drain under the legacy
-  maintenance-timeout classifier and did not complete the benchmark. Corrected
-  final-source QEMU evidence will be added only after rerun.
+  maintenance-timeout classifier and did not complete the benchmark.
+- Clean-source commit `59501e2b` then passed one canonical
+  `scripts/run-c2c-broker-oracle-qemu.sh` invocation (exit 0, 1/1). It observed
+  the exact `[selftest] IPC-PENDING: PASS (deferred, bounded, quota-safe,
+  completion-wake)` and `[selftest] NET-RX-RESERVATION: PASS (fills, remembers,
+  releases, IPC-safe)` markers with no corresponding FAIL. Runtime cycle 36
+  reported `start_ticks=144911300`, `raw_ret=0`, `elapsed_ticks=586804`,
+  `proof_ceiling_ticks=900000`, `budget_ticks=1000000`, and `status=PASS`;
+  no INCONCLUSIVE marker appeared. This mandatory runtime observation is
+  supplemental and non-causal. The measured baseline completed 1000/1000, the
+  1/2/4/8/16 sweeps passed, the soak completed 10000/10000 with positive
+  network progress and zero heartbeat/watchdog deltas, overflow and restart
+  passed, and no forbidden oracle or runtime marker appeared. These are
+  local/QEMU classifier and benchmark results, not a physical timing bound or
+  evidence that the timing observation caused the benchmark result.
 - Earlier API 91/91, service-net 30/30, fresh RV64 build, feature-off marker
   exclusion, focused decoder, and deterministic kernel boot-test evidence
   remain recorded. The decoder's package suite is still 23/24 because of the

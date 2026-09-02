@@ -59,17 +59,25 @@ or qualified independent external floor.
   launching every post-command benchmark gate; it does not wait for a runtime
   timing PASS before launch. Final whole-run parsing nevertheless requires at
   least one exact raw-zero same-cycle PASS below the exclusive `900000`
-  ceiling. That observation is mandatory but non-causal. A drain at or above
-  the ceiling is neutral INCONCLUSIVE: it neither satisfies nor itself fails
-  the gate, while INCONCLUSIVE-only output cannot pass. The prior cycle 36
-  (`start=144542529`, `raw_ret=0`, `elapsed=442232`) plus calibration, sweeps,
-  soak, overflow, and restart came
-  from pre-final-code source and is historical rather than final-source proof.
-  Final-source QEMU evidence will be added only after the corrected canonical
-  rerun. This work proves no hard wall-clock or physical latency bound,
-  two-node direct LAN, relay, remote session cleanup, remote/public operation,
-  service deployment, physical execution, protected relay identity, or
-  production.
+  ceiling. A drain at or above the ceiling is neutral INCONCLUSIVE: it neither
+  satisfies nor itself fails the gate, while INCONCLUSIVE-only output cannot
+  pass. Clean-source commit `59501e2b` passed one canonical
+  `scripts/run-c2c-broker-oracle-qemu.sh` invocation (exit 0, 1/1), including
+  the exact `[selftest] IPC-PENDING: PASS (deferred, bounded, quota-safe,
+  completion-wake)` and `[selftest] NET-RX-RESERVATION: PASS (fills, remembers,
+  releases, IPC-safe)` markers with no corresponding FAIL. Runtime cycle 36
+  reported `start_ticks=144911300`, `raw_ret=0`, `elapsed_ticks=586804`,
+  `proof_ceiling_ticks=900000`, `budget_ticks=1000000`, and `status=PASS`;
+  no INCONCLUSIVE marker appeared. This mandatory runtime observation is
+  supplemental and non-causal. The measured baseline completed 1000/1000, the
+  1/2/4/8/16 sweeps passed, the soak completed 10000/10000 with positive
+  network progress and zero heartbeat/watchdog deltas, overflow and restart
+  passed, and no forbidden oracle or runtime marker appeared. These remain
+  local/QEMU classifier and benchmark results, not a physical timing bound or
+  evidence that the timing observation caused the benchmark result. This work
+  proves no two-node direct LAN, relay, remote session cleanup, remote/public
+  operation, service deployment, physical execution, protected relay identity,
+  or production completion.
 - The broker's stable-identity consumer now uses the existing opaque KMS
   static-DH seam. It accepts only matching ready register/status/acquire
   snapshots and gives Clatter handle/epoch/public metadata; the private scalar
@@ -83,9 +91,9 @@ or qualified independent external floor.
 - API tests pass 91/91, service-net host tests pass 30/30, the deterministic
   kernel completion-wake boot gate passes 1/1, and fresh RV64 builds pass;
   Candidate B local ingress remains complete at its source/host boundary. The
-  corrected combined final-source QEMU gate is pending rerun. The focused
-  `ostd` completion decoder test passed, but the package suite is 23/24 because
-  of the unrelated, pre-existing `read_file` bounds failure; this is not a
+  clean-source combined QEMU result is recorded above. The focused `ostd`
+  completion decoder test passed, but the package suite is 23/24 because of the
+  unrelated, pre-existing `read_file` bounds failure; this is not a
   package-wide PASS.
   Enrollment, lease renewal, and routing remain unwired or unreachable from the
   broker dispatch path.
