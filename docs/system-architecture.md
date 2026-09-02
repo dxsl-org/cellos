@@ -3,7 +3,28 @@
 **Audience**: Developers new to Cellos
 **Level**: High-level (conceptual + key components)
 **Version**: 0.2.1-dev (Mycelium Era)
-**Last Updated**: 2026-08-29 (opaque KMS-backed C2C identity consumer wired; remote/provider gates remain closed.)
+**Last Updated**: 2026-09-02 (x86_64 per-vector IDT real-CPL3 safety gate verified at the QEMU ceiling.)
+
+> **Status refresh 2026-09-02 — X86_64 PER-VECTOR IDT REAL-CPL3 GATE
+> PASSED:** Hardware IDT entry changes neither GS nor PKRU. The common path now
+> uses saved CS.RPL3 to swap to kernel GS and set kernel PKRU before Rust, then
+> restores the selected task's PKRU and performs a late user-GS swap with
+> interrupts masked. `syscall_entry` preserves user state before its kernel
+> transition and resumes from frame-owned RSP; fresh `__trap_exit` restores
+> task PKRU before its late swap, and scheduler switches update stack/PKRU state
+> without rewriting GS-base MSRs.
+>
+> The isolated `x86-idt-cpl3-test` q35 lane requires PKU/CR4.PKE and uses two
+> real Ring-3 tasks to prove fresh IRET, INT80, timer preemption,
+> suspended-SYSCALL resume, exact privilege frames, GS/KERNEL_GS_BASE balance,
+> and distinct task PKRU values. QEMU returned the required status 33 with one
+> exact CPL0 marker, one exact full CPL3 marker, two pre-scheduler timer wakeups,
+> one scheduler initialization, and no forbidden output. Generic `test-hooks`
+> and production exclude the terminal fixture; the fresh production ISO reached
+> the shell and all 7 x86 boot integration tests passed. Both final reviews
+> passed with no findings. See the
+> [q35 board guide](../boards/qemu/q35-x86_64/README.md). This remains QEMU
+> software evidence, not physical-x86 qualification.
 
 > **Status refresh 2026-08-21**: [Spec 23 Native SDK contract](specs/23-native-sdk-contract.md)
 > is ratified as the normative contract for the single Native SDK family. It
@@ -799,6 +820,20 @@ remain for later migration slices.
 
 **ARM AArch64 — Production boot PASS** ✅
 **x86_64 — Production boot PASS** ✅
+- `hal/arch/x86/src/x86_64/idt.rs` installs the generated 256-address table;
+  its entry modules normalize vector/error state, preserve all 15 GPRs and DF,
+  and dispatch from saved CPL without assigning an IST.
+- Saved CS.RPL3 drives the common entry's GS/PKRU state machine. IDT,
+  `syscall_entry`, and fresh `__trap_exit` establish kernel GS/PKRU before Rust
+  and restore selected-task PKRU plus user GS only in masked late-return
+  windows; scheduler switches update task state without rewriting GS-base MSRs.
+- #PF alone reads CR2. Attributable Ring-3 exceptions retire the current Cell;
+  kernel exceptions and NMI/#DF/#MC are fatal. Timer EOIs before its callback,
+  UART EOIs after its callback, and 0x80/0xff return without EOI.
+- The terminal two-task fixture and HAL debug-exit edge exist only under
+  `x86-idt-cpl3-test`; generic `test-hooks` and production remain fixture-free.
+  Commands and the exact status-plus-marker oracle are in the
+  [q35 board guide](../boards/qemu/q35-x86_64/README.md).
 - PCIe-only x86 platforms enumerate no VirtIO-MMIO slots; the boot path skips that discovery to avoid a platform panic.
 **RV32, AArch32 — TRAIT STUBS** (trait impls only, no boot code)
 

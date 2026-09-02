@@ -65,7 +65,7 @@ ARM64 target:
 | **Heap Snapshot** | ✅ | Instant-On: snapshot → restore |
 | **RV32 Nano** | ✅ | QEMU S-mode boot verified · OpenSBI · SATP=0 |
 | **AArch64** | ✅ boot | Boots to scheduler on QEMU virt |
-| **x86_64** | ✅ boot | Boots to scheduler on QEMU q35 |
+| **x86_64** | ✅ boot | QEMU q35 · per-vector IDT + real-CPL3 GS/PKRU oracle passed |
 | Compositor | 📋 | Full GPU desktop — G2 |
 | ARM64 full bring-up | 📋 | Beyond ring-3 smoke |
 | Hot migration | 📋 | Zero-downtime Cell live update — G2 |
@@ -111,7 +111,7 @@ Cellos/
 |--------|--------|-------|
 | `riscv64gc-unknown-none-elf` | ✅ Primary | Full boot · all services |
 | `aarch64-unknown-none` | ✅ Boots | Scheduler reached; full bring-up G1 next |
-| `x86_64-unknown-none` | ✅ Boots | Scheduler reached; full bring-up G2 |
+| `x86_64-unknown-none` | ✅ Boots | Scheduler + per-vector IDT real-CPL3 transition gate passed on QEMU q35; see [board commands](./boards/qemu/q35-x86_64/README.md) |
 | `riscv32imc-unknown-none-elf` | ✅ Boot | Cellos-Nano · QEMU S-mode verified |
 
 Build kernel with `RUSTFLAGS=-Crelocation-model=pic` (handled automatically). Cells stay non-PIC — do **not** put this in `.cargo/config.toml` globally.
@@ -190,4 +190,4 @@ Cellos draws ideas from:
 
 ---
 
-**Version**: 0.2.1-dev Mycelium · **Last Updated**: 2026-08-19
+**Version**: 0.2.1-dev Mycelium · **Last Updated**: 2026-09-02

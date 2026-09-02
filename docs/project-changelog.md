@@ -4,6 +4,38 @@
 
 ## [Unreleased] Development-first hardware-constrained execution
 
+- Replaced the x86_64 shared interrupt entries with 256 deterministic
+  per-vector stubs and one normalized common frame. The entry path preserves
+  all 15 GPRs and interrupted DF, clears DF for Rust, and dynamically aligns
+  its SysV call. Saved CS controls privilege transitions: a CPL3 interrupt
+  swaps to kernel GS and kernel PKRU before Rust, then restores the selected
+  task's PKRU and swaps back to user GS in a masked late-return window. Routing
+  uses vector plus saved CPL: #PF alone reads CR2, attributable Ring-3
+  exceptions retire the current Cell, kernel exceptions and NMI/#DF/#MC remain
+  fatal, timer and UART retain EOI-before and EOI-after ordering, and 0x80 plus
+  LAPIC-spurious 0xff return without callback or EOI.
+  [`scripts/build-x86_64-idt-test-ci.sh`](../scripts/build-x86_64-idt-test-ci.sh)
+  enables only the dedicated `x86-idt-cpl3-test` feature and
+  [`scripts/qemu-x86_64-idt-test.sh`](../scripts/qemu-x86_64-idt-test.sh)
+  enforces underlying debug-exit status 33, exactly one CPL0 marker, exactly
+  one
+  `X86-IDT-CPL3: PASS fresh=ok int80=ok timer=32 switch=syscall-resume gs=kernel/user pkru=0/55555550/55555544`
+  marker, two pre-scheduler timer wakeups, one scheduler initialization, and no
+  forbidden failure/reset output. Its two real Ring-3 tasks prove fresh IRET,
+  INT80, timer preemption, suspended-SYSCALL resume with exact RIP/RDX,
+  GS/KERNEL_GS_BASE balance, and task PKRU values
+  `0x55555550`/`0x55555544`.
+  The safety audit also fixed syscall user-state/RSP preservation, fresh
+  `__trap_exit` PKRU ordering, and scheduler GS-base ownership. The earlier
+  CPL0 lane exposed and closed a bootstrap ABI mismatch by reserving one zeroed
+  8-byte synthetic bottom-frame slot before `_start`'s unchanged tail-jump.
+  Generic `test-hooks` and production exclude the terminal fixture, its
+  dispatch shim, namespaces, and markers; the fresh production image reached
+  the shell and all 7 x86 boot integration tests passed. Final verification
+  and both final reviews passed with no findings. This is QEMU software
+  evidence, not physical-x86 qualification; commands and prerequisites are in
+  the [q35 board guide](../boards/qemu/q35-x86_64/README.md).
+
 - Replaced the shell `free` built-in and standalone `/bin/free` placeholder
   text with checked `ViMemInfoV1` totals in KiB. Both paths require the existing
   `MemInfo` allowlist bit 56; `/bin/free` still launches with an empty capability

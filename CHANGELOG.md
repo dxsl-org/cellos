@@ -8,6 +8,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### 🚀 Improvements
+- x86_64: install 256 vector/CPL-aware IDT entries and verify them with an isolated `x86-idt-cpl3-test` two-task Ring-3 QEMU oracle
 - security: land non-admissible Tier 1 admission catalog/test infrastructure; Phase 04 production evidence remains blocked
 - kernel: enforce post-relocation W^X page permissions
 - signing: gate cells through F1/F5 admission
@@ -35,6 +36,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - performance: release builds for all bootstrap table entries
 
 ### 🐛 Fixes
+- x86_64: preserve user state and balance CPL3 GS/PKRU across IDT, suspended SYSCALL, fresh IRET, and scheduler switches
+- x86_64: correct the bootstrap SysV stack phase with an 8-byte synthetic bottom-frame slot before tail-entering Rust
 - kernel: clean completion waiter lifecycle safely
 - boot: reject snapshots from mismatched RAM bases
 - build: align cross-target CI and image generation
