@@ -121,19 +121,6 @@ The CLI sends the request to the Supervisor over IPC. The legacy `HotSwap` sysca
 
 ---
 
-## Grant Chains
-
-When one Cell delegates a capability to another (`grant_to`), the new cap's
-`grant_depth` is decremented.  A cap with `grant_depth == 0` cannot be
-delegated further — any attempt returns `ViError::NotSupported`.
-
-Default depth: **4** (`MAX_GRANT_DEPTH` in `kernel/src/cell/cap_registry.rs`).
-Change this per-cap with `alloc_with_grant_depth()` (planned helper).
-
-This prevents unbounded delegation chains that could create capability cycles.
-
----
-
 ## Lease Auto-Revocation
 
 A cap with `expires_at` set is silently revoked on the next `verify()` call
@@ -152,7 +139,7 @@ let cap = table.alloc_with_lease(owner, resource, perms, now + 10_000_000);
 | File | Purpose |
 |------|---------|
 | `libs/api/src/hotswap.rs` | `ViStateTransfer` trait definition |
-| `kernel/src/cell/cap_registry.rs` | Grant depth + lease expiry enforcement |
+| `kernel/src/cell/cap_registry.rs` | Capability allocation and lease expiry enforcement |
 | `kernel/src/cell/hotswap.rs` | Live cutover helpers, `HotSwapReady`, and bit-32 compatibility bookkeeping |
 | `cells/services/config/src/main.rs` | Config KV state transfer impl |
 | `cells/services/vfs/src/state_transfer.rs` | VFS handle table state transfer |
