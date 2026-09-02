@@ -205,8 +205,14 @@ those remain fail-closed production gates.
 - AArch64 test-hooks semihosting code and a dedicated runner exist, but
   `B-AARCH64-SEMHOSTING` remains `BLOCKED` in the authoritative acceptance
   ledger with the stale `qemu-rv64` subject and no schema-valid, fresh,
-  independently owned raw resolution evidence. A local runner or completed plan
-  checkbox cannot close that governed ledger record.
+  independently owned raw resolution evidence. Issue
+  [#47](https://github.com/dxsl-org/cellos/issues/47) assigns the required
+  separate Evidence Runner, Ledger Steward, and Independent Reviewer roles.
+  A local runner, local agent, or completed plan checkbox cannot close that
+  governed record. Until Phase 01 is independently ratified, the ordered live
+  POSIX documentation, shell `cd`/`pwd`, `fstat`, atomic `rename`, and pinned
+  QEMU-TCG x86 compatibility follow-ups remain pending; unrelated ready lanes
+  are not blocked.
 
 ## Low
 

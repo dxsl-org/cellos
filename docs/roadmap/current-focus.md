@@ -37,6 +37,14 @@ or qualified independent external floor.
   with backend recovery. ARM64 hostile execution remains blocked by the known
   synchronous TCG fault before the guest probe; rerun that corpus only in an
   environment that reaches the probe.
+- The AArch64 test-hooks semihosting implementation has a successful local
+  diagnostic run, but the authoritative ledger remains blocked. Issue
+  [#47](https://github.com/dxsl-org/cellos/issues/47) requires a genuinely
+  separate Evidence Runner, Ledger Steward, and Independent Reviewer. This
+  governance gate serializes only the six ordered follow-up phases: live POSIX
+  documentation, shell `cd`/`pwd`, `fstat`, atomic `rename`, and the later
+  pinned-QEMU x86 compatibility phase remain pending. The independently
+  completed kernel CWD/path substrate does not bypass Phase 01.
 - Single-guest local Cell-to-Cell evidence is now required through the
   [CI workflow](../../.github/workflows/ci.yml) job
   `c2c-broker-oracle-single-guest-local-runtime`, displayed as
@@ -280,29 +288,34 @@ events are maintained in
 
 ## Next-session work order
 
-1. Identify both available Raspberry Pi 3 Model B+ boards: record each exact
-   serial, revision, and current condition, then reconcile whether either
-   corresponds to the prior `a22082` / Model B / serial `000000003d042795` run.
-   Record the available camera's exact identity and interface without starting
-   sensor integration. Buy no additional hardware.
-2. Exercise the existing RPi3 boot/peripheral path on the reconciled current
+1. Obtain the three independent role actions required by Issue
+   [#47](https://github.com/dxsl-org/cellos/issues/47). Keep all six ordered
+   follow-up phases pending until Phase 01 is ratified; local agents and the
+   retained diagnostic evidence cannot close the gate.
+2. While that external governance action is pending, continue only independent
+   ready lanes. Identify both available Raspberry Pi 3 Model B+ boards: record
+   each exact serial, revision, and current condition, then reconcile whether
+   either corresponds to the prior `a22082` / Model B / serial
+   `000000003d042795` run. Record the available camera's exact identity and
+   interface without starting sensor integration. Buy no additional hardware.
+3. Exercise the existing RPi3 boot/peripheral path on the reconciled current
    boards and retain development-only logs tied to the exact board. Do not
    infer a production-security or external-floor result.
-3. Preserve the completed bounded HDMI path: cold-connect and power the display
+4. Preserve the completed bounded HDMI path: cold-connect and power the display
    before firmware startup, retain separate exact-board UART and TFTP evidence
    records for future regressions, and do not promote the prior exact-device
    development result to production qualification.
-4. Publish each observed result at its evidence ceiling with the remaining
+5. Publish each observed result at its evidence ceiling with the remaining
    lane-local gate. Continue local Cell-to-Cell baselines if the hardware lane
    is waiting on physical access or a named review.
-5. Resume camera and other sensor protocol, board-interface, driver, fixture,
+6. Resume camera and other sensor protocol, board-interface, driver, fixture,
    QEMU, and exact-device RPi3 work only in a later sensor session. Keep QEMU
    results software-only and physical results development/hardware-integration-
    only.
-6. Keep protected relay assets, other physical boards, G3 acceleration, and the
+7. Keep protected relay assets, other physical boards, G3 acceleration, and the
    ADR-0006 production root external-gated. Keep every production-admission and
    release invariant mandatory without making it a global development blocker.
-7. Keep HAL/board boundary checks in CI whenever board descriptors, SoC facts,
+8. Keep HAL/board boundary checks in CI whenever board descriptors, SoC facts,
    or HAL ABI hook declarations change.
-8. Use [project-roadmap.md](../project-roadmap.md#capability-lanes) for
+9. Use [project-roadmap.md](../project-roadmap.md#capability-lanes) for
    cross-lane routing and the topic pages for evidence details.
