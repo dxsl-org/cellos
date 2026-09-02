@@ -45,17 +45,25 @@ or qualified independent external floor.
   upload for the runner log on ordinary success or failure.
   `cell_main` loads K1 through a bounded path, initializes authenticated beacon
   state, and uses deadline- and cancellation-bounded service-net admission
-  whose start/finish is linearized with shutdown. Actual runner verification
-  passes integration 1/1 with `samples=1000 success=1000
-  calibration=MEASURED`, `role_gate=PASS`, `attempted=10000 success=10000
-  silent_drop=0`, positive soak network progress, `overflow status=PASS`, no
-  kernel heartbeat/watchdog termination marker, and `restart status=PASS`
-  after clean role drain and successful retry on a replacement TID. This makes
-  the exercised local beacon admission restart-safe. The result remains
-  single-guest local-runtime QEMU evidence; it does not prove two-node direct
-  LAN, relay,
-  remote session cleanup, remote/public operation, service deployment,
-  physical execution, protected relay identity, or production.
+  whose start/finish is linearized with shutdown. Queued IPC now interrupts a
+  parked `WaitCompletion` through the existing raw return `0`, with no
+  completion record. The public completion ABI and source vocabulary remain
+  `NET_RX` and `TIMER`; no IPC completion source was added. Kernel
+  park/publication linearization remains under `SCHEDULER`, outgoing-context
+  handoff is armed before wait-state publication across `Send`, post, and
+  `TrySend`, and NET_RX `Completing` ownership is preserved.
+  Service-net retains its finite 10-tick (about 100 ms) smoltcp maintenance
+  wake and exactly one production grace yield (`grace=1`). The exact QEMU 1/1
+  IPC-wake proof correlated `cycle=36`, `start=144542529`, `raw_ret=0`, and
+  `elapsed=442232`, below the exclusive proof ceiling `900000` and separately
+  from the maintenance budget `1000000`. Feature-off binaries contain no
+  oracle markers. Post-command calibration passed 1,000/1,000, sweeps and
+  10,000/10,000 soak passed with positive network progress, zero
+  heartbeat/watchdog deltas, and overflow/restart PASS.
+  This remains single-guest local-runtime QEMU evidence; it proves no hard
+  wall-clock or physical latency bound, two-node direct LAN, relay, remote
+  session cleanup, remote/public operation, service deployment, physical
+  execution, protected relay identity, or production.
 - The broker's stable-identity consumer now uses the existing opaque KMS
   static-DH seam. It accepts only matching ready register/status/acquire
   snapshots and gives Clatter handle/epoch/public metadata; the private scalar
@@ -66,11 +74,11 @@ or qualified independent external floor.
   compare-and-swap contract; clone/lost-key states cannot auto-rotate or restore
   plaintext identity. Qualified provider execution and physical recovery
   evidence remain open.
-  Host net-broker tests pass 114/114, API tests pass 89/89, and the RV64 check
-  passes; Candidate B local ingress is complete at the single-guest ceiling.
-  The restart-enabled QEMU oracle retains its 1/1 integration result, 1,000
-  measured calibration successes, role, concurrency, 10,000/10,000 soak,
-  bounded overflow, watchdog-log, and supervised local broker restart results.
+- API tests pass 91/91, service-net host tests pass 30/30, the exact boot/QEMU
+  lane passes 1/1, and fresh RV64 builds pass; Candidate B local ingress
+  remains complete at the single-guest ceiling. The focused `ostd` completion
+  decoder test passed, but the package suite is 23/24 because of the unrelated,
+  pre-existing `read_file` bounds failure; this is not a package-wide PASS.
   Enrollment, lease renewal, and routing remain unwired or unreachable from the
   broker dispatch path.
   This does not prove two-node, relay, direct-LAN, remote restart/failover,
@@ -130,8 +138,9 @@ or qualified independent external floor.
   and the authenticated software-evidence pipeline at its host ceiling. Reopen
   them only for a regression or separately governed higher evidence.
 - **Current-scope technical debt:** confirmed defects and maintainability gaps
-  in supported paths, including interactive polling/CI evidence gaps tracked by
-  the [open risk register](open-risk-register.md). This label does not apply to
+  in supported paths, including pinned-QEMU compatibility and AArch64
+  semihosting ledger closure tracked by the
+  [open risk register](open-risk-register.md). This label does not apply to
   all advanced work.
 - **Future capability:** remote/public Cell-to-Cell operation, additional
   desktop and x86 platform depth, G3 accelerators, G4 `rust-std`, and G5

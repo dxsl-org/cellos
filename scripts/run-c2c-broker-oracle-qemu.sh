@@ -98,8 +98,8 @@ COMMON_PACKAGES=(
 echo "[c2c-oracle-runner] building isolated RV64 oracle cells"
 cargo build --quiet --locked --release --target "$TARGET" "${COMMON_PACKAGES[@]}"
 cargo build --quiet --locked --release --target "$TARGET" \
-    -p service-net-broker -p app-bench \
-    --features service-net-broker/restart-oracle,app-bench/restart-oracle
+    -p service-net -p service-net-broker -p app-bench \
+    --features service-net/ipc-wake-oracle,service-net-broker/restart-oracle,app-bench/restart-oracle
 cargo build --quiet --locked --release --target "$TARGET" \
     -p app-init --features c2c-broker
 CELLOS_C2C_ORACLE_K1_FILE="$KEY_FILE" \

@@ -13,6 +13,20 @@ pub enum SyscallResult {
     Err(SyscallError),
 }
 
+/// Detailed outcome of [`sys_wait_completion_detailed`].
+///
+/// Unlike [`sys_wait_completion`], this preserves whether the kernel returned
+/// exactly zero without a record or returned an error/invalid result.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum WaitCompletionResult {
+    /// The raw syscall return was exactly zero and no record was written.
+    NoRecord,
+    /// The raw syscall return was one and the written record decoded successfully.
+    Completion(ViCompletion),
+    /// Any other raw return, including one paired with a malformed record.
+    ErrorOrInvalid(isize),
+}
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum SyscallError {
     InvalidDriverId,
@@ -455,7 +469,11 @@ pub fn sys_mem_info() -> Result<ViMemInfoV1, SyscallError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{decode_snapshot_result, decode_spawn_result, SyscallError, SyscallResult};
+    use super::{
+        decode_snapshot_result, decode_spawn_result, decode_wait_completion_result, SyscallError,
+        SyscallResult, WaitCompletionResult,
+    };
+    use api::completion::{source, ViCompletion, COMPLETION_LEN};
 
     #[test]
     fn spawn_result_decoder_preserves_additive_oom() {
@@ -486,6 +504,37 @@ mod tests {
             decode_snapshot_result(-9),
             SyscallResult::Err(SyscallError::Unknown)
         ));
+    }
+
+    #[test]
+    fn wait_completion_decoder_distinguishes_raw_zero_record_and_invalid_results() {
+        let completion = ViCompletion {
+            slot: 7,
+            source: source::NET_RX,
+            result: source::NET_RX as i64,
+        };
+        let record = completion.to_bytes();
+
+        assert_eq!(
+            decode_wait_completion_result(0, &record),
+            WaitCompletionResult::NoRecord
+        );
+        assert_eq!(
+            decode_wait_completion_result(1, &record),
+            WaitCompletionResult::Completion(completion)
+        );
+        assert_eq!(
+            decode_wait_completion_result(-1, &record),
+            WaitCompletionResult::ErrorOrInvalid(-1)
+        );
+        assert_eq!(
+            decode_wait_completion_result(2, &record),
+            WaitCompletionResult::ErrorOrInvalid(2)
+        );
+        assert_eq!(
+            decode_wait_completion_result(1, &[0u8; COMPLETION_LEN]),
+            WaitCompletionResult::ErrorOrInvalid(1)
+        );
     }
 }
 
@@ -1865,19 +1914,19 @@ pub fn sys_wait_for_event(mask: u32, timeout_ticks: u64) -> u32 {
 /// The call reserves a slot on this cell's completion queue before it parks, so
 /// the source always has somewhere to put the result. Deadline behavior depends
 /// on the source: `NET_RX` accepts zero for an indefinite wait and returns
-/// `None` when a finite timeout expires; `TIMER` requires a nonzero duration and
-/// returns a completion with `result = 0` when that duration expires.
+/// [`WaitCompletionResult::NoRecord`] when a finite timeout expires; `TIMER`
+/// requires a nonzero duration and returns a completion with `result = 0` when
+/// that duration expires.
 ///
 /// `mask` names exactly one source — see `api::completion::source`.
 ///
 /// # Errors
-/// `None` on timeout, on a mask this kernel does not serve, and when the cell's
-/// queue is full (that many operations are already outstanding). A caller that
-/// must tell those apart cannot use this wrapper.
+/// [`WaitCompletionResult::ErrorOrInvalid`] preserves a rejected syscall return
+/// and also reports a claimed record that does not decode as a completion.
 ///
 /// Requires `WaitForEvent` or `WaitCompletion` in the cell's `declare_syscalls!`
 /// list; both name the same authority.
-pub fn sys_wait_completion(mask: u32, timeout_ticks: u64) -> Option<ViCompletion> {
+pub fn sys_wait_completion_detailed(mask: u32, timeout_ticks: u64) -> WaitCompletionResult {
     let mut record = [0u8; COMPLETION_LEN];
     // SAFETY: `record` is a live, exclusively borrowed stack buffer of exactly
     // COMPLETION_LEN bytes, which is the length this syscall writes; the kernel
@@ -1891,10 +1940,33 @@ pub fn sys_wait_completion(mask: u32, timeout_ticks: u64) -> Option<ViCompletion
             record.as_mut_ptr() as usize,
         )
     };
-    if ret != 1 {
-        return None;
+    decode_wait_completion_result(ret, &record)
+}
+
+fn decode_wait_completion_result(
+    ret: isize,
+    record: &[u8; COMPLETION_LEN],
+) -> WaitCompletionResult {
+    match ret {
+        0 => WaitCompletionResult::NoRecord,
+        1 => ViCompletion::from_bytes(record).map_or(
+            WaitCompletionResult::ErrorOrInvalid(ret),
+            WaitCompletionResult::Completion,
+        ),
+        _ => WaitCompletionResult::ErrorOrInvalid(ret),
     }
-    ViCompletion::from_bytes(&record)
+}
+
+/// Backward-compatible completion wait.
+///
+/// Returns a completion only for a valid written record. As before, raw zero,
+/// rejected syscalls, unexpected returns, and malformed records all map to
+/// `None`. Use [`sys_wait_completion_detailed`] when those cases must differ.
+pub fn sys_wait_completion(mask: u32, timeout_ticks: u64) -> Option<ViCompletion> {
+    match sys_wait_completion_detailed(mask, timeout_ticks) {
+        WaitCompletionResult::Completion(completion) => Some(completion),
+        WaitCompletionResult::NoRecord | WaitCompletionResult::ErrorOrInvalid(_) => None,
+    }
 }
 
 // ── Supervisor Primitives (P03) ───────────────────────────────────────────────

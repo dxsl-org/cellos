@@ -25,7 +25,8 @@ use ostd::service::NetRef;
 use ostd::syscall::{sys_get_time_ms, sys_heartbeat};
 use rand_core::RngCore;
 use service_net_broker::ipc_deadline::{
-    admit_request_until_deadline, receive_until_deadline, AdmissionAttempt, SendAdmission,
+    admit_request_until_deadline, receive_until_deadline, AdmissionAttempt, DeadlineError,
+    SendAdmission,
 };
 use sha2::{Digest, Sha256};
 
@@ -256,7 +257,8 @@ impl BeaconChannel {
             },
             ostd::syscall::sys_get_scheduler_ticks,
             ostd::task::yield_now,
-        )?;
+        )
+        .map_err(|_| ())?;
         if admission == SendAdmission::Cancelled {
             return Ok(None);
         }
@@ -278,7 +280,7 @@ impl BeaconChannel {
             |slice| match ostd::syscall::sys_recv_timeout(service_tid, response_buffer, slice) {
                 ostd::syscall::SyscallResult::Ok(0) => Ok(None),
                 ostd::syscall::SyscallResult::Ok(sender) => Ok(Some(sender)),
-                ostd::syscall::SyscallResult::Err(_) => Err(()),
+                ostd::syscall::SyscallResult::Err(_) => Err(DeadlineError::ReceiveFailed),
             },
         );
 
@@ -286,7 +288,7 @@ impl BeaconChannel {
         if crate::local_runtime::restart_oracle::network_ipc_finished() {
             return Ok(None);
         }
-        match receive_result?.ok_or(())? {
+        match receive_result.map_err(|_| ())?.ok_or(())? {
             sender if sender == service_tid => {
                 api::ipc::decode(response_buffer).map(Some).map_err(|_| ())
             }

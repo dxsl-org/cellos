@@ -22,7 +22,7 @@ Primary planning classification for the open entries:
 | Planning class | Entries |
 |---|---|
 | Current executable work | Narrow fixes, bounded fixtures, and software evidence that an owning lane can perform now |
-| Current-scope technical debt | Bounded net idle IPC dispatch latency, the pinned-QEMU compatibility gap, and AArch64 semihosting ledger closure |
+| Current-scope technical debt | The pinned-QEMU compatibility gap and AArch64 semihosting ledger closure |
 | Future capability | Remote/public net-broker completion and native POSIX completeness beyond currently supported contracts |
 | External-gated prerequisite | Unavailable exact board qualification and exact product/vendor evidence for protected relay or production-root milestones |
 | Production release gate | Fleet signing/provenance, production admission, protected identity/root, secure/measured boot, qualified floor and persistent recovery, physical hostile evidence, authenticated evidence runner, human approvals, and governed ledger/release closure |
@@ -146,16 +146,25 @@ those remain fail-closed production gates.
   path. Enrollment, lease renewal, swarm routing, relay, and direct-LAN
   operation remain open; the local result proves no two-node, service,
   physical, or production completion.
-- The former nearly 100 ms service-net idle IPC blind spot is narrowed at the
-  software/QEMU ceiling. `WaitCompletion` still does not wake for IPC, so the
-  service-local policy now caps its NET_RX wait at one scheduler tick plus
-  normal dispatch while preserving interrupt-driven NET_RX wakeup. The
-  independent smoltcp maintenance interval remains 100 ms; this is not a hard
-  wall-clock or physical-hardware latency bound, and no unrelated completion
-  ABI limitation is closed. The C2C QEMU oracle passed 1/1 with
-  `[net-rx-producer] irq->completion PASS`, 1,000/1,000 calibration calls,
-  10,000/10,000 soak calls, positive network progress, zero
-  heartbeat/watchdog deltas, and no heartbeat/watchdog termination markers.
+- **The local/QEMU IPC-aware `WaitCompletion` blind spot is closed at the
+  software/single-guest QEMU ceiling.** Queued IPC now interrupts a parked
+  `WaitCompletion` through the existing raw return `0`, with no completion
+  record. The public completion ABI and source vocabulary remain `NET_RX` and
+  `TIMER`; no IPC completion source was added. Kernel park/publication
+  linearization remains under `SCHEDULER`, and the outgoing-context handoff is
+  armed before wait-state publication across `Send`, post, and `TrySend` while
+  preserving NET_RX `Completing` ownership.
+  Service-net retains a finite 10-tick (about 100 ms) smoltcp maintenance wake
+  and exactly one production grace yield (`grace=1`); neither is the former
+  one-tick IPC workaround. The final QEMU 1/1 proof correlated `cycle=36`,
+  `start=144542529`, `raw_ret=0`, and `elapsed=442232`, below the exclusive
+  IPC-wake proof ceiling `900000` and separately from the maintenance budget
+  `1000000`. Post-command calibration passed 1,000/1,000, sweeps and
+  10,000/10,000 soak passed with positive network progress, zero
+  heartbeat/watchdog deltas, and overflow/restart PASS; feature-off binaries
+  contained no oracle markers. This is software/single-guest QEMU evidence,
+  not a hard wall-clock or physical latency bound and not two-node, service,
+  physical, or production completion.
 - Native POSIX path handling remains incomplete: canonicalization, `chdir`,
   `rename`, `getcwd`, and `fstat` contain stubs or deferred behavior in
   `kernel/src/task.rs`; Tier 1 must not be documented as POSIX-complete.

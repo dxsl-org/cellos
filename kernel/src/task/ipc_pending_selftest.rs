@@ -5,9 +5,10 @@
 //! invalid: success proves the producer queued owned bytes without touching the
 //! foreign buffer. Teardown removes every synthetic task and ready-queue entry.
 
-use super::completion_selftest::{insert, remove};
-use super::tcb::{Task, TaskState, HOTSWAP_MSG_QUEUE_DEPTH};
+use super::completion_selftest::{insert, queue, remove};
+use super::tcb::{Task, TaskState, HOTSWAP_MSG_QUEUE_DEPTH, INPUT_EVENT_QUEUE_DEPTH};
 use alloc::vec::Vec;
+use core::sync::atomic::Ordering;
 use types::CellId;
 
 const SENDER: usize = 9321;
@@ -33,6 +34,21 @@ fn prepare_receiver(mask: usize) {
                 deadline: None,
             };
         }
+    }
+}
+
+fn prepare_completion_wait_receiver() {
+    insert(SENDER, TEST_CELL);
+    insert(RECEIVER, TEST_CELL + 1);
+    if let Some(task) = super::SCHEDULER
+        .lock()
+        .as_mut()
+        .and_then(|sched| sched.tasks.get_mut(&RECEIVER))
+    {
+        task.state = TaskState::WaitCompletion {
+            source: api::completion::source::NET_RX,
+            deadline: None,
+        };
     }
 }
 
@@ -85,6 +101,376 @@ fn all_producers_defer_foreign_writes() -> bool {
     }
     reset();
     ok
+}
+
+fn verify_completion_wait_wake(expected: &[u8], ready_before: usize, sender_blocks: bool) -> bool {
+    let guard = super::SCHEDULER.lock();
+    let Some(sched) = guard.as_ref() else {
+        return fail("scheduler missing after completion-wait IPC wake");
+    };
+    let Some(receiver) = sched.tasks.get(&RECEIVER) else {
+        return fail("completion-wait receiver disappeared");
+    };
+    let sender_generation = sched
+        .tasks
+        .get(&SENDER)
+        .map(|task| task.cell_generation)
+        .unwrap_or(0);
+    let receiver_ok = receiver.state == TaskState::Ready
+        && matches!(
+            receiver.pending_msgs.as_slice(),
+            [msg]
+                if msg.sender_tid == SENDER
+                    && msg.payload() == expected
+                    && msg.wire_header().is_some_and(|header| {
+                        header.sender_tid == SENDER
+                            && header.sender_cell_id == TEST_CELL
+                            && header.sender_generation == sender_generation
+                            && header.delivery_id != 0
+                    })
+        );
+    let sender_ok = sched.tasks.get(&SENDER).is_some_and(|sender| {
+        if sender_blocks {
+            matches!(
+                sender.state,
+                TaskState::Sending { target, .. } if target == RECEIVER
+            )
+        } else {
+            sender.state == TaskState::Ready
+        }
+    });
+    receiver_ok && sender_ok && super::hart_local::ready::total_ready_count() == ready_before + 1
+}
+
+/// The state publication is the handoff boundary: a producer arriving before
+/// `yield_cpu` or after the switch observes the same state and must perform the
+/// same single ready transition.
+fn all_producers_wake_net_rx_completion_wait() -> bool {
+    let payload = b"completion-ipc";
+    let mut ok = true;
+
+    prepare_completion_wait_receiver();
+    let ready_before = super::hart_local::ready::total_ready_count();
+    if super::ipc_send(SENDER, RECEIVER, payload.as_ptr() as usize, payload.len()) != Ok(1)
+        || !verify_completion_wait_wake(payload, ready_before, true)
+    {
+        ok = fail("ipc_send did not wake NET_RX wait while preserving blocking send");
+    }
+    reset();
+
+    prepare_completion_wait_receiver();
+    let ready_before = super::hart_local::ready::total_ready_count();
+    if super::ipc_post_nonblock(SENDER, RECEIVER, payload).is_err()
+        || !verify_completion_wait_wake(payload, ready_before, false)
+    {
+        ok = fail("ipc_post_nonblock did not wake NET_RX completion wait");
+    }
+    reset();
+
+    prepare_completion_wait_receiver();
+    let ready_before = super::hart_local::ready::total_ready_count();
+    let saved_input = super::drivers::driver_cell::INPUT_CELL_TID.load(Ordering::Acquire);
+    super::drivers::driver_cell::INPUT_CELL_TID.store(SENDER, Ordering::Release);
+    let sent =
+        super::ipc_try_send(SENDER, RECEIVER, payload.as_ptr() as usize, payload.len()).is_ok();
+    super::drivers::driver_cell::INPUT_CELL_TID.store(saved_input, Ordering::Release);
+    if !sent || !verify_completion_wait_wake(payload, ready_before, false) {
+        ok = fail("trusted ipc_try_send did not wake NET_RX completion wait");
+    }
+    reset();
+
+    prepare_completion_wait_receiver();
+    let ready_before = super::hart_local::ready::total_ready_count();
+    let saved_input = super::drivers::driver_cell::INPUT_CELL_TID.load(Ordering::Acquire);
+    super::drivers::driver_cell::INPUT_CELL_TID.store(0, Ordering::Release);
+    let rejected =
+        super::ipc_try_send(SENDER, RECEIVER, payload.as_ptr() as usize, payload.len()).is_err();
+    super::drivers::driver_cell::INPUT_CELL_TID.store(saved_input, Ordering::Release);
+    let unchanged = {
+        let guard = super::SCHEDULER.lock();
+        guard
+            .as_ref()
+            .and_then(|sched| sched.tasks.get(&RECEIVER))
+            .is_some_and(|task| {
+                matches!(
+                    task.state,
+                    TaskState::WaitCompletion {
+                        source: api::completion::source::NET_RX,
+                        ..
+                    }
+                ) && task.pending_msgs.is_empty()
+            })
+    };
+    if !rejected || !unchanged || super::hart_local::ready::total_ready_count() != ready_before {
+        ok = fail("untrusted ipc_try_send broadened completion-wait admission");
+    }
+    reset();
+    ok
+}
+
+fn ready_receiver_is_not_enqueued_twice() -> bool {
+    prepare_completion_wait_receiver();
+    let ready_before = super::hart_local::ready::total_ready_count();
+    let first = super::ipc_post_nonblock(SENDER, RECEIVER, b"first");
+    let second = super::ipc_post_nonblock(SENDER, RECEIVER, b"second");
+    let unchanged_ready_depth = super::hart_local::ready::total_ready_count() == ready_before + 1;
+    let messages_preserved = {
+        let guard = super::SCHEDULER.lock();
+        guard
+            .as_ref()
+            .and_then(|sched| sched.tasks.get(&RECEIVER))
+            .is_some_and(|task| {
+                matches!(
+                    task.pending_msgs.as_slice(),
+                    [first, second]
+                        if first.payload() == b"first" && second.payload() == b"second"
+                )
+            })
+    };
+    reset();
+    first.is_ok() && second.is_ok() && unchanged_ready_depth && messages_preserved
+        || fail("IPC queued a receiver that was already Ready more than once")
+}
+
+fn timer_completion_wait_remains_deadline_only() -> bool {
+    insert(SENDER, TEST_CELL);
+    insert(RECEIVER, TEST_CELL + 1);
+    let ready_before = super::hart_local::ready::total_ready_count();
+    let queued_before_park = super::ipc_post_nonblock(SENDER, RECEIVER, b"before-timer-park");
+    let decision = {
+        let mut guard = super::SCHEDULER.lock();
+        guard
+            .as_mut()
+            .and_then(|sched| sched.tasks.get_mut(&RECEIVER))
+            .map(|task| {
+                super::completion_wait::publish_wait_state_locked(
+                    task,
+                    RECEIVER,
+                    api::completion::source::TIMER,
+                    Some(u64::MAX),
+                )
+            })
+    };
+    let posted_while_waiting = super::ipc_post_nonblock(SENDER, RECEIVER, b"timer-ipc");
+    let unchanged = {
+        let guard = super::SCHEDULER.lock();
+        guard
+            .as_ref()
+            .and_then(|sched| sched.tasks.get(&RECEIVER))
+            .is_some_and(|task| {
+                matches!(
+                    task.state,
+                    TaskState::WaitCompletion {
+                        source: api::completion::source::TIMER,
+                        ..
+                    }
+                ) && matches!(
+                    task.pending_msgs.as_slice(),
+                    [before, during]
+                        if before.payload() == b"before-timer-park"
+                            && during.payload() == b"timer-ipc"
+                )
+            })
+    };
+    let ready_unchanged = super::hart_local::ready::total_ready_count() == ready_before;
+    reset();
+    queued_before_park.is_ok()
+        && decision == Some(super::completion_wait::CompletionParkDecision::Parked)
+        && posted_while_waiting.is_ok()
+        && unchanged
+        && ready_unchanged
+        || fail("IPC interrupted a TIMER completion wait")
+}
+
+fn fill_completion_wait_mailbox(depth: usize) -> bool {
+    prepare_completion_wait_receiver();
+    let mut guard = super::SCHEDULER.lock();
+    let Some(task) = guard
+        .as_mut()
+        .and_then(|sched| sched.tasks.get_mut(&RECEIVER))
+    else {
+        return false;
+    };
+    for _ in 0..depth {
+        if super::queue_pending_msg(task, SENDER, b"x", depth).is_err() {
+            return false;
+        }
+    }
+    true
+}
+
+fn completion_wait_mailbox_is_unchanged(depth: usize, ready_before: usize) -> bool {
+    let guard = super::SCHEDULER.lock();
+    let Some(sched) = guard.as_ref() else {
+        return false;
+    };
+    sched.tasks.get(&RECEIVER).is_some_and(|task| {
+        matches!(
+            task.state,
+            TaskState::WaitCompletion {
+                source: api::completion::source::NET_RX,
+                ..
+            }
+        ) && task.pending_msgs.len() == depth
+    }) && sched
+        .tasks
+        .get(&SENDER)
+        .is_some_and(|task| task.state == TaskState::Ready)
+        && super::hart_local::ready::total_ready_count() == ready_before
+}
+
+fn full_completion_wait_mailbox_never_wakes() -> bool {
+    let payload = b"overflow";
+    let mut ok = true;
+
+    if !fill_completion_wait_mailbox(HOTSWAP_MSG_QUEUE_DEPTH) {
+        reset();
+        return fail("could not fill Send completion-wait mailbox");
+    }
+    let ready_before = super::hart_local::ready::total_ready_count();
+    let refused = super::ipc_send(SENDER, RECEIVER, payload.as_ptr() as usize, payload.len())
+        == Err(super::IpcSendError::Backpressure);
+    if !refused || !completion_wait_mailbox_is_unchanged(HOTSWAP_MSG_QUEUE_DEPTH, ready_before) {
+        ok = fail("full mailbox Send mutated or woke completion waiter");
+    }
+    reset();
+
+    if !fill_completion_wait_mailbox(HOTSWAP_MSG_QUEUE_DEPTH) {
+        reset();
+        return fail("could not fill post completion-wait mailbox");
+    }
+    let ready_before = super::hart_local::ready::total_ready_count();
+    let refused = super::ipc_post_nonblock(SENDER, RECEIVER, payload).is_err();
+    if !refused || !completion_wait_mailbox_is_unchanged(HOTSWAP_MSG_QUEUE_DEPTH, ready_before) {
+        ok = fail("full mailbox post mutated or woke completion waiter");
+    }
+    reset();
+
+    if !fill_completion_wait_mailbox(INPUT_EVENT_QUEUE_DEPTH) {
+        reset();
+        return fail("could not fill TrySend completion-wait mailbox");
+    }
+    let ready_before = super::hart_local::ready::total_ready_count();
+    let saved_input = super::drivers::driver_cell::INPUT_CELL_TID.load(Ordering::Acquire);
+    super::drivers::driver_cell::INPUT_CELL_TID.store(SENDER, Ordering::Release);
+    let refused =
+        super::ipc_try_send(SENDER, RECEIVER, payload.as_ptr() as usize, payload.len()).is_err();
+    super::drivers::driver_cell::INPUT_CELL_TID.store(saved_input, Ordering::Release);
+    if !refused || !completion_wait_mailbox_is_unchanged(INPUT_EVENT_QUEUE_DEPTH, ready_before) {
+        ok = fail("full mailbox TrySend mutated or woke completion waiter");
+    }
+    reset();
+    ok
+}
+#[cfg(target_arch = "riscv64")]
+fn completion_wait_publication_arms_existing_handoff() -> bool {
+    insert(RECEIVER, TEST_CELL + 1);
+    let hart = super::hart_local::current_hart_id();
+    let saved_current = super::hart_local::ready::current_task_id_for(hart);
+    let saved_outgoing = super::hart_local::ready::outgoing_context_save_task_id_for(hart);
+    super::hart_local::ready::set_current_task_id(hart, RECEIVER);
+    let decision = {
+        let mut guard = super::SCHEDULER.lock();
+        guard
+            .as_mut()
+            .and_then(|sched| sched.tasks.get_mut(&RECEIVER))
+            .map(|task| {
+                super::completion_wait::publish_wait_state_locked(
+                    task,
+                    RECEIVER,
+                    api::completion::source::NET_RX,
+                    None,
+                )
+            })
+    };
+    let armed = super::hart_local::ready::outgoing_context_save_task_id_for(hart) == RECEIVER;
+    super::hart_local::ready::set_current_task_id(hart, saved_current);
+    super::hart_local::ready::begin_outgoing_context_save(hart, saved_outgoing);
+    reset();
+    decision == Some(super::completion_wait::CompletionParkDecision::Parked) && armed
+        || fail("completion-wait publication did not arm the existing SMP handoff")
+}
+
+#[cfg(not(target_arch = "riscv64"))]
+fn completion_wait_publication_arms_existing_handoff() -> bool {
+    true
+}
+
+fn ipc_before_park_returns_raw_zero() -> bool {
+    insert(SENDER, TEST_CELL);
+    insert(RECEIVER, TEST_CELL + 1);
+    if let Some(sched) = super::SCHEDULER.lock().as_mut() {
+        super::completion::deliver_pending_wakes(sched);
+    }
+    let Some(completions) = queue(RECEIVER) else {
+        reset();
+        return fail("pre-park case could not reach completion queue");
+    };
+    let Some(slot) = completions.reserve() else {
+        reset();
+        return fail("pre-park case could not reserve completion slot");
+    };
+    let Some(waiter) = super::completion_wait::WaiterRegistration::new(
+        &completions,
+        RECEIVER,
+        slot,
+        api::completion::source::NET_RX,
+    ) else {
+        let _ = completions.release(slot);
+        reset();
+        return fail("pre-park case could not register waiter");
+    };
+    super::waker::arm_net_rx(completions.clone(), slot);
+
+    let ready_before = super::hart_local::ready::total_ready_count();
+    let posted = super::ipc_post_nonblock(SENDER, RECEIVER, b"pre-park");
+    let decision = {
+        let mut guard = super::SCHEDULER.lock();
+        guard
+            .as_mut()
+            .and_then(|sched| sched.tasks.get_mut(&RECEIVER))
+            .map(|task| {
+                super::completion_wait::publish_wait_state_locked(
+                    task,
+                    RECEIVER,
+                    api::completion::source::NET_RX,
+                    None,
+                )
+            })
+    };
+    let mut untouched = [0xa5u8; api::completion::COMPLETION_LEN];
+    let outcome = super::completion_wait::finish_net_rx_wait(
+        RECEIVER,
+        untouched.as_mut_ptr() as usize,
+        &completions,
+    );
+    drop(waiter);
+
+    let task_ok = {
+        let guard = super::SCHEDULER.lock();
+        guard
+            .as_ref()
+            .and_then(|sched| sched.tasks.get(&RECEIVER))
+            .is_some_and(|task| {
+                task.state == TaskState::Ready
+                    && task.completion_wait.is_none()
+                    && matches!(
+                        task.pending_msgs.as_slice(),
+                        [msg] if msg.payload() == b"pre-park"
+                    )
+            })
+    };
+    let ok = posted.is_ok()
+        && decision == Some(super::completion_wait::CompletionParkDecision::MailboxPending)
+        && outcome == Ok(0)
+        && untouched == [0xa5u8; api::completion::COMPLETION_LEN]
+        && completions.reserved() == 0
+        && completions.drainable() == 0
+        && !super::completion::wakes_pending()
+        && super::hart_local::ready::total_ready_count() == ready_before
+        && task_ok;
+    reset();
+    ok || fail("IPC-before-park did not abort NET_RX wait cleanly with raw zero")
 }
 
 fn full_mailbox_refuses_without_wake() -> bool {
@@ -304,9 +690,15 @@ fn try_recv_attestation_writes_identity_trailer() -> bool {
         || fail("try_recv with attest_caller=true did not write valid CallerIdentity trailer")
 }
 
-/// Returns true iff all IPC producers defer foreign writes and fail safely.
+/// Returns true iff IPC publication is receiver-owned, bounded and wake-safe.
 pub fn self_test() -> bool {
     let ok = all_producers_defer_foreign_writes()
+        & all_producers_wake_net_rx_completion_wait()
+        & ready_receiver_is_not_enqueued_twice()
+        & timer_completion_wait_remains_deadline_only()
+        & full_completion_wait_mailbox_never_wakes()
+        & completion_wait_publication_arms_existing_handoff()
+        & ipc_before_park_returns_raw_zero()
         & full_mailbox_refuses_without_wake()
         & quota_failure_is_fallible()
         & heap_payload_refunds_receiver_quota()
@@ -314,7 +706,7 @@ pub fn self_test() -> bool {
         & pending_drain_keeps_sender_context_without_relocking()
         & try_recv_attestation_writes_identity_trailer();
     if ok {
-        log::info!("[selftest] IPC-PENDING: PASS (deferred, bounded, quota-safe)");
+        log::info!("[selftest] IPC-PENDING: PASS (deferred, bounded, quota-safe, completion-wake)");
     }
     ok
 }

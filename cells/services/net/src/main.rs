@@ -47,6 +47,9 @@ api::declare_syscalls![
 
 mod dhcp;
 mod handlers;
+#[cfg(all(feature = "ipc-wake-oracle", not(feature = "hypervisor-bridge")))]
+#[path = "idle-ipc-wake-oracle.rs"]
+mod idle_ipc_wake_oracle;
 mod interface;
 #[path = "service-runtime.rs"]
 mod service_runtime;

@@ -70,16 +70,6 @@
   VirtIO-MMIO run with a socket-backed ARP/ICMP peer also reached
   `VIRTIO_E2E_NET_TX_RX_PASS` and `VIRTIO_E2E_IRQ6_PASS`.
 
-- Bounded service-net's former nearly 100 ms idle IPC blind spot to one
-  scheduler tick plus normal dispatch while retaining interrupt-driven NET_RX
-  and the independent 100 ms smoltcp maintenance interval. Service-net's host
-  tests pass 28/28, including both exact policy tests at 1/1; the default and
-  verified-TLS RISC-V builds pass. The C2C QEMU oracle passed 1/1 with
-  `[net-rx-producer] irq->completion PASS`, 1,000/1,000 calibration,
-  10,000/10,000 soak, positive network progress, zero heartbeat/watchdog
-  deltas, and no termination markers. This is a service-local software policy
-  and QEMU-only evidence, not a hard wall-clock or physical-hardware bound.
-
 - Corrected the misleading HTTPS smoke contract without weakening TLS. The
   existing `boot-suite` image now runs and retains the independently supported
   plain-HTTP round trip. The harness deliberately makes no assertion from the
@@ -633,6 +623,33 @@
 - This is a documentation and scheduling decision only. It changes no
   implementation, completed status, evidence result, qualification, approval,
   or production-admission invariant.
+
+
+## [2026-09-02] IPC-aware local C2C completion wake closes QEMU blind spot
+
+- Queued IPC now interrupts a parked `WaitCompletion` through the existing raw
+  return `0`, meaning wake with no completion record. Kernel publication/park
+  linearizes under `SCHEDULER`; outgoing-context handoff arms before wait-state
+  publication across `Send`, post, and `TrySend`, while NET_RX `Completing`
+  ownership is preserved. The public completion ABI and source vocabulary
+  remain `NET_RX` and `TIMER`; no IPC completion source was added.
+- Service-net removes the one-tick IPC workaround while retaining its finite
+  10-tick (about 100 ms) smoltcp maintenance wake and exactly one production
+  grace yield (`grace=1`). Final QEMU proof passed exact boot 1/1:
+  `cycle=36`, `start=144542529`, `raw_ret=0`, and `elapsed=442232`, below the
+  exclusive IPC-wake proof ceiling `900000` and separately from the maintenance
+  budget `1000000`. Feature-off binaries contain no oracle markers. Post-command
+  calibration passed 1,000/1,000; sweeps and 10,000/10,000 soak passed with
+  positive network progress, zero heartbeat/watchdog deltas, and
+  overflow/restart PASS.
+- API passes 91/91, service-net passes 30/30, and fresh RV64 builds pass. The
+  focused `ostd` decoder test passed, but its package suite is 23/24 because of
+  the unrelated pre-existing `read_file` bounds failure; this is not a
+  package-wide PASS. Final review found no Critical, High, or Medium findings.
+  This closes only the software/single-guest QEMU blind spot: it establishes no
+  hard wall-clock or physical latency bound and no two-node, direct-LAN, relay,
+  remote/public, service, physical, or production completion. Enrollment,
+  lease, and routing risks remain with the separate remote net-broker lane.
 
 ## [2026-08-27] GetRandom technical evidence and PAL governance rebind
 

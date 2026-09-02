@@ -217,6 +217,43 @@ pub(crate) fn queue_wire_msg(
     })
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum IpcWakeCause {
+    None,
+    Recv,
+    NetRxCompletionWait,
+}
+
+impl IpcWakeCause {
+    fn made_runnable(self) -> bool {
+        self != Self::None
+    }
+}
+
+/// Classify and apply the receiver wake after its wire record is published.
+///
+/// The caller holds `SCHEDULER` and supplies the producer's existing `Recv`
+/// eligibility result. Keeping that result outside this helper preserves each
+/// producer's admission/mask semantics while giving every producer one
+/// `WaitCompletion(NET_RX)` interrupt path.
+fn wake_after_ipc_publish(target: &mut Task, recv_eligible: bool) -> IpcWakeCause {
+    let cause = if recv_eligible {
+        IpcWakeCause::Recv
+    } else if matches!(
+        target.state,
+        TaskState::WaitCompletion { source, .. }
+            if source == api::completion::source::NET_RX
+    ) {
+        IpcWakeCause::NetRxCompletionWait
+    } else {
+        IpcWakeCause::None
+    };
+    if cause.made_runnable() {
+        target.state = TaskState::Ready;
+    }
+    cause
+}
+
 fn sender_context(sched: &Scheduler, sender_tid: usize) -> (u64, u64) {
     let Some(task) = sched.tasks.get(&sender_tid) else {
         return (0, 0);
@@ -1675,23 +1712,22 @@ pub fn ipc_send(
         .tasks
         .get(&target_id)
         .ok_or(IpcSendError::TargetGone)?;
-    let target_ready =
+    let recv_eligible =
         matches!(target.state, TaskState::Recv { mask, .. } if mask == 0 || mask == caller_id);
     let target_frozen = matches!(target.state, TaskState::Frozen { .. });
 
     // Publish before any blocking decision: queue-full is a Backpressure
     // error, never a block. Once queued, the kernel owns the payload and
     // sender death cannot invalidate it.
-    if let Some(target) = sched.tasks.get_mut(&target_id) {
+    let wake = if let Some(target) = sched.tasks.get_mut(&target_id) {
         queue_wire_msg(target, wire_msg, tcb::HOTSWAP_MSG_QUEUE_DEPTH)
             .map_err(|_| IpcSendError::Backpressure)?;
-        if target_ready {
-            // Caller-context assignment is deferred to the dequeue/commit
-            // path so the request generation advances exactly once per
-            // accepted message.
-            target.state = TaskState::Ready;
-        }
-    }
+        // Caller-context assignment is deferred to the dequeue/commit path so
+        // the request generation advances exactly once per accepted message.
+        wake_after_ipc_publish(target, recv_eligible)
+    } else {
+        IpcWakeCause::None
+    };
     if target_frozen {
         log::debug!(
             "[hotswap] queued msg ({} bytes) from tid={} to frozen tid={}",
@@ -1701,9 +1737,11 @@ pub fn ipc_send(
         );
         return Ok(0);
     }
-    if target_ready {
+    if wake.made_runnable() {
         let prio = sched.push_ready(target_id);
         sched.pend_preempt_if_needed(prio);
+    }
+    if wake == IpcWakeCause::Recv {
         return Ok(0);
     }
     arm_ipc_block_handoff(caller_id);
@@ -1719,9 +1757,10 @@ pub fn ipc_send(
 
 /// Post a message to `target_id` without blocking the caller.
 ///
-/// Queues an owned message and wakes the target immediately when it is in `Recv`.
-/// Busy targets retain the queued message until their next receive call. The
-/// mailbox is bounded by `HOTSWAP_MSG_QUEUE_DEPTH`.
+/// Queues an owned message and wakes a compatible `Recv` or a
+/// `WaitCompletion(NET_RX)` target immediately. Other busy targets retain the
+/// queued message until their next receive call. The mailbox is bounded by
+/// `HOTSWAP_MSG_QUEUE_DEPTH`.
 ///
 /// Never puts the caller in `Sending` state — the caller always continues.
 /// Returns `Ok(())` if delivered or queued, `Err(())` if target is gone or queue full.
@@ -1747,7 +1786,7 @@ pub fn ipc_post_nonblock(
         // Known pre-existing contract gap (2026-07-31 Recv buffer-pinning audit):
         // unlike ipc_send/ipc_try_send, this path intentionally preserves its
         // current behavior of matching any Recv without consulting the mask.
-        let target_ready = sched
+        let recv_eligible = sched
             .tasks
             .get(&target_id)
             .is_some_and(|t| matches!(t.state, TaskState::Recv { .. }));
@@ -1760,15 +1799,15 @@ pub fn ipc_post_nonblock(
             delivery_id: next_delivery_id(),
         };
         let wire = ipc_wire::IpcWireMessage::try_new(header, msg)?;
-        if let Some(t) = sched.tasks.get_mut(&target_id) {
-            queue_wire_msg(t, wire, tcb::HOTSWAP_MSG_QUEUE_DEPTH)?;
-            // Caller-context assignment is deferred to the dequeue/commit
-            // path so the request generation advances exactly once.
-            if target_ready {
-                t.state = TaskState::Ready;
-            }
-        }
-        if target_ready {
+        let wake = if let Some(target) = sched.tasks.get_mut(&target_id) {
+            queue_wire_msg(target, wire, tcb::HOTSWAP_MSG_QUEUE_DEPTH)?;
+            // Caller-context assignment is deferred to the dequeue/commit path
+            // so the request generation advances exactly once.
+            wake_after_ipc_publish(target, recv_eligible)
+        } else {
+            IpcWakeCause::None
+        };
+        if wake.made_runnable() {
             let prio = sched.push_ready(target_id);
             sched.pend_preempt_if_needed(prio);
         }
@@ -1999,12 +2038,12 @@ pub fn ipc_try_send(
     if !sched.tasks.contains_key(&target_id) || paused_target_rejects(sched, caller_id, target_id) {
         return Err(());
     }
-    let target_ready = sched
+    let recv_eligible = sched
         .tasks
         .get(&target_id)
         .map(|t| matches!(t.state, TaskState::Recv { mask, .. } if mask == 0 || mask == caller_id))
         .unwrap_or(false);
-    if !target_ready && !is_trusted_input_sender(caller_id) {
+    if !recv_eligible && !is_trusted_input_sender(caller_id) {
         return Err(());
     }
     let (sender_cell_id, sender_generation) = sender_context(sched, caller_id);
@@ -2015,15 +2054,15 @@ pub fn ipc_try_send(
         delivery_id: next_delivery_id(),
     };
     let wire = ipc_wire::IpcWireMessage::try_new(header, &msg_bytes)?;
-    if let Some(target) = sched.tasks.get_mut(&target_id) {
+    let wake = if let Some(target) = sched.tasks.get_mut(&target_id) {
         queue_wire_msg(target, wire, tcb::INPUT_EVENT_QUEUE_DEPTH)?;
-        // Caller-context assignment is deferred to the dequeue/commit path
-        // so the request generation advances exactly once per message.
-        if target_ready {
-            target.state = TaskState::Ready;
-        }
-    }
-    if target_ready {
+        // Caller-context assignment is deferred to the dequeue/commit path so
+        // the request generation advances exactly once per message.
+        wake_after_ipc_publish(target, recv_eligible)
+    } else {
+        IpcWakeCause::None
+    };
+    if wake.made_runnable() {
         let prio = sched.push_ready(target_id);
         sched.pend_preempt_if_needed(prio);
     }

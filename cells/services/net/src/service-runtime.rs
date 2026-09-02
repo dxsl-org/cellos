@@ -4,8 +4,12 @@ use api::syscall::events::NET_RX;
 use core::sync::atomic::{AtomicU16, Ordering};
 #[cfg(feature = "hypervisor-bridge")]
 use ostd::syscall::sys_recv_attested;
+#[cfg(all(not(feature = "hypervisor-bridge"), not(feature = "ipc-wake-oracle")))]
+use ostd::syscall::sys_wait_completion;
 #[cfg(not(feature = "hypervisor-bridge"))]
-use ostd::syscall::{sys_try_recv_attested, sys_wait_completion, sys_yield};
+use ostd::syscall::{sys_try_recv_attested, sys_yield};
+#[cfg(all(feature = "ipc-wake-oracle", not(feature = "hypervisor-bridge")))]
+use ostd::syscall::{sys_wait_completion_detailed, WaitCompletionResult};
 use ostd::{
     io::println,
     syscall::{sys_get_time, SyscallResult},
@@ -26,11 +30,33 @@ use crate::{
 
 const IPC_BUF_SIZE: usize = 4096;
 const MAC: EthernetAddress = EthernetAddress([0x52, 0x54, 0x00, 0x12, 0x34, 0x56]);
-const NET_RX_IDLE_WAIT_SCHEDULER_TICKS: u64 = 1;
+const NET_RX_MAINTENANCE_WAIT_SCHEDULER_TICKS: u64 = 10;
+#[cfg(any(
+    test,
+    all(feature = "ipc-wake-oracle", not(feature = "hypervisor-bridge"))
+))]
+const SCHEDULER_TICK_MS: u64 = 10;
 const IPC_BURST_GRACE_YIELDS: u8 = 1;
 const SMOLTCP_MAINTENANCE_INTERVAL_MS: u64 = 100;
 const MTIME_TICKS_PER_MS: u64 = 10_000;
 const SMOLTCP_MAINTENANCE_TICKS: u64 = SMOLTCP_MAINTENANCE_INTERVAL_MS * MTIME_TICKS_PER_MS;
+// A 10-tick deadline can fire just after 9 complete tick periods when the
+// submission lands immediately before a scheduler tick. The exclusive ceiling
+// therefore has to be the preceding 9 periods, not the 100 ms maintenance budget.
+#[cfg(any(
+    test,
+    all(feature = "ipc-wake-oracle", not(feature = "hypervisor-bridge"))
+))]
+const IDLE_IPC_WAKE_PROOF_CEILING_TICKS: u64 =
+    (NET_RX_MAINTENANCE_WAIT_SCHEDULER_TICKS - 1) * SCHEDULER_TICK_MS * MTIME_TICKS_PER_MS;
+
+#[cfg(any(
+    test,
+    all(feature = "ipc-wake-oracle", not(feature = "hypervisor-bridge"))
+))]
+pub(crate) const fn idle_ipc_wake_is_provably_early(elapsed_ticks: u64) -> bool {
+    elapsed_ticks < IDLE_IPC_WAKE_PROOF_CEILING_TICKS
+}
 static NEXT_PORT: AtomicU16 = AtomicU16::new(49152);
 
 pub(crate) fn next_ephemeral_port() -> u16 {
@@ -84,6 +110,8 @@ pub(crate) fn run() {
     let mut pending_net_rx_proof = false;
     #[cfg(not(feature = "hypervisor-bridge"))]
     let mut ipc_burst_grace = 0;
+    #[cfg(all(feature = "ipc-wake-oracle", not(feature = "hypervisor-bridge")))]
+    let mut idle_ipc_wake_oracle = crate::idle_ipc_wake_oracle::IdleIpcWakeOracle::new();
 
     #[cfg(not(feature = "hypervisor-bridge"))]
     println("[net] Starting DHCP...");
@@ -161,11 +189,17 @@ pub(crate) fn run() {
             SyscallResult::Ok(sender) if sender > 0 => {
                 let Some(identity) = api::caller_identity::CallerIdentity::from_recv_buf(&buffer)
                 else {
+                    #[cfg(all(feature = "ipc-wake-oracle", not(feature = "hypervisor-bridge")))]
+                    idle_ipc_wake_oracle.record_ipc_miss();
                     continue;
                 };
                 if identity.cell_id == 0 || identity.generation == 0 {
+                    #[cfg(all(feature = "ipc-wake-oracle", not(feature = "hypervisor-bridge")))]
+                    idle_ipc_wake_oracle.record_ipc_miss();
                     continue;
                 }
+                #[cfg(all(feature = "ipc-wake-oracle", not(feature = "hypervisor-bridge")))]
+                idle_ipc_wake_oracle.record_ipc_drain(sys_get_time());
                 handlers::handle_request(
                     &buffer,
                     sender,
@@ -186,17 +220,49 @@ pub(crate) fn run() {
                 }
             }
             _ => {
+                #[cfg(all(feature = "ipc-wake-oracle", not(feature = "hypervisor-bridge")))]
+                idle_ipc_wake_oracle.record_ipc_miss();
                 #[cfg(not(feature = "hypervisor-bridge"))]
                 if consume_ipc_burst_grace(&mut ipc_burst_grace) {
                     // Let the caller run after a reply before parking on NET_RX;
                     // sequential IPC bursts then avoid one timer quantum per call.
                     sys_yield();
-                } else if let Some(completion) =
-                    sys_wait_completion(NET_RX, NET_RX_IDLE_WAIT_SCHEDULER_TICKS)
-                {
-                    pending_net_rx_proof =
-                        completion.source == NET_RX && completion.result == NET_RX as i64;
+                } else {
+                    #[cfg(feature = "ipc-wake-oracle")]
+                    let wait_started_ticks = sys_get_time();
+                    #[cfg(feature = "ipc-wake-oracle")]
+                    let completion = match sys_wait_completion_detailed(
+                        NET_RX,
+                        NET_RX_MAINTENANCE_WAIT_SCHEDULER_TICKS,
+                    ) {
+                        WaitCompletionResult::NoRecord => {
+                            idle_ipc_wake_oracle.arm(
+                                wait_started_ticks,
+                                SMOLTCP_MAINTENANCE_TICKS,
+                                IDLE_IPC_WAKE_PROOF_CEILING_TICKS,
+                            );
+                            None
+                        }
+                        WaitCompletionResult::Completion(completion) => {
+                            idle_ipc_wake_oracle.clear();
+                            Some(completion)
+                        }
+                        WaitCompletionResult::ErrorOrInvalid(_) => {
+                            idle_ipc_wake_oracle.clear();
+                            None
+                        }
+                    };
+                    #[cfg(not(feature = "ipc-wake-oracle"))]
+                    let completion =
+                        sys_wait_completion(NET_RX, NET_RX_MAINTENANCE_WAIT_SCHEDULER_TICKS);
+                    if let Some(completion) = completion {
+                        pending_net_rx_proof =
+                            completion.source == NET_RX && completion.result == NET_RX as i64;
+                    }
                 }
+                // A recordless return means queued IPC interrupted the wait early or
+                // the finite maintenance budget elapsed. Either way, retry the loop
+                // without claiming NET_RX producer proof.
             }
         }
     }

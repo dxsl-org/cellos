@@ -19,20 +19,20 @@
 
 use super::completion::{self, Completion, CompletionQueue};
 use super::syscall::{validate_user_buf, SyscallError};
-use super::tcb::{CompletionWait, TaskState};
+use super::tcb::{CompletionWait, Task, TaskState};
 use super::waker;
 use api::completion::{ViCompletion, COMPLETION_LEN};
 
 /// Removes this waiter's registration on every return path without erasing a
 /// newer waiter that may have replaced it on the shared per-cell queue.
-struct WaiterRegistration<'a> {
+pub(super) struct WaiterRegistration<'a> {
     queue: &'a CompletionQueue,
     tid: usize,
     slot: super::completion::SlotId,
 }
 
 impl<'a> WaiterRegistration<'a> {
-    fn new(
+    pub(super) fn new(
         queue: &'a CompletionQueue,
         tid: usize,
         slot: super::completion::SlotId,
@@ -77,6 +77,70 @@ impl Drop for WaiterRegistration<'_> {
 pub(super) fn source_is_valid(mask: u32, deadline: Option<u64>) -> bool {
     api::completion::source::is_single_supported(mask)
         && (mask != api::completion::source::TIMER || deadline.is_some())
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(super) enum CompletionParkDecision {
+    Parked,
+    MailboxPending,
+}
+
+/// Publish a completion wait only if no already-published IPC must interrupt it.
+///
+/// The caller holds `SCHEDULER`; keeping the mailbox predicate, outgoing
+/// context handoff, and state write in this one critical section closes both
+/// enqueue-before-park orderings and the state-before-yield SMP window. TIMER
+/// is deliberately deadline-only and therefore ignores the mailbox.
+pub(super) fn publish_wait_state_locked(
+    task: &mut Task,
+    tid: usize,
+    source: u32,
+    deadline: Option<u64>,
+) -> CompletionParkDecision {
+    if source == api::completion::source::NET_RX && !task.pending_msgs.is_empty() {
+        return CompletionParkDecision::MailboxPending;
+    }
+    super::arm_ipc_block_handoff(tid);
+    task.state = TaskState::WaitCompletion { source, deadline };
+    CompletionParkDecision::Parked
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(super) enum NetRxCleanupStep {
+    NoRecord,
+    Record(Completion),
+    RetryCompleting,
+}
+
+/// Resolve one ownership transition at the end of a NET_RX wait.
+///
+/// `Completing` is not an empty result: the source owns the reservation and
+/// must finish publishing before the waiter may decide between a record and
+pub(super) fn net_rx_cleanup_step(queue: &alloc::sync::Arc<CompletionQueue>) -> NetRxCleanupStep {
+    match waker::disarm_net_rx(queue) {
+        waker::DisarmResult::Owned(slot) if queue.release(slot) => NetRxCleanupStep::NoRecord,
+        waker::DisarmResult::Completing => NetRxCleanupStep::RetryCompleting,
+        _ => queue
+            .drain()
+            .map(NetRxCleanupStep::Record)
+            .unwrap_or(NetRxCleanupStep::NoRecord),
+    }
+}
+
+pub(super) fn finish_net_rx_wait(
+    caller_id: usize,
+    out_ptr: usize,
+    queue: &alloc::sync::Arc<CompletionQueue>,
+) -> Result<usize, SyscallError> {
+    loop {
+        match net_rx_cleanup_step(queue) {
+            NetRxCleanupStep::NoRecord => return Ok(0),
+            NetRxCleanupStep::Record(done) => {
+                return write_completion(caller_id, out_ptr, done);
+            }
+            NetRxCleanupStep::RetryCompleting => core::hint::spin_loop(),
+        }
+    }
 }
 
 /// Reserve a slot on the caller's completion queue, wait for it to be filled,
@@ -167,15 +231,31 @@ pub fn wait_completion(
     }
 
     loop {
-        // Completion waits have their own task state so TIMER expiry cannot be
-        // confused with a legacy WaitForEvent timeout.
-        {
+        // The mailbox predicate and the completion-wait publication share the
+        // producer's scheduler critical section. An IPC already queued for a
+        // NET_RX waiter therefore selects the existing raw no-record return
+        // rather than allowing the task to park behind that message.
+        let park = {
             let mut guard = super::SCHEDULER.lock();
-            if let Some(task) = guard.as_mut().and_then(|s| s.tasks.get_mut(&caller_id)) {
-                task.state = TaskState::WaitCompletion {
-                    source: mask,
-                    deadline,
-                };
+            guard
+                .as_mut()
+                .and_then(|sched| sched.tasks.get_mut(&caller_id))
+                .map(|task| publish_wait_state_locked(task, caller_id, mask, deadline))
+        };
+        match park {
+            Some(CompletionParkDecision::MailboxPending) => {
+                return finish_net_rx_wait(caller_id, out_ptr, &queue);
+            }
+            Some(CompletionParkDecision::Parked) => {}
+            None => {
+                if is_net_rx {
+                    while let NetRxCleanupStep::RetryCompleting = net_rx_cleanup_step(&queue) {
+                        core::hint::spin_loop();
+                    }
+                } else {
+                    let _ = queue.release(slot);
+                }
+                return Err(SyscallError::Unknown);
             }
         }
         super::yield_cpu();
@@ -210,28 +290,10 @@ pub fn wait_completion(
             continue;
         }
 
-        // Nothing landed: the NET_RX deadline passed, or the wake was spurious.
-        // Either way the reservation goes back, and the race with a frame
-        // arriving at this exact moment is settled by whoever takes the slot.
-        match waker::disarm_net_rx(&queue) {
-            waker::DisarmResult::Owned(own) if queue.release(own) => return Ok(0),
-            // The source owns the slot but has not published it yet. This can
-            // only run concurrently on another hart, so wait until the queue
-            // record becomes visible before clearing the waiter registration.
-            waker::DisarmResult::Completing => core::hint::spin_loop(),
-            // Either the source completed the slot as it was being withdrawn,
-            // or another waiter displaced it. Both publish a result before
-            // leaving the Completing state.
-            _ => {
-                return match queue.drain() {
-                    Some(done) => write_completion(caller_id, out_ptr, done),
-                    None => Ok(0),
-                };
-            }
-        }
-        if let Some(done) = queue.drain() {
-            return write_completion(caller_id, out_ptr, done);
-        }
+        // A deadline/spurious wake and an IPC interruption all use the same
+        // ownership resolution. A concurrent source publication wins over the
+        // raw-zero path and is drained as a genuine NET_RX record.
+        return finish_net_rx_wait(caller_id, out_ptr, &queue);
     }
 }
 

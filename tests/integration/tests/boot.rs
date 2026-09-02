@@ -1911,24 +1911,33 @@ fn stack_sizing_paths_emit_kernel_and_user_watermarks() {
 
 // ── Input M2.2 — kernel IPC + compositor integration ─────────────────────────
 
-/// The boot self-test proves all three producers avoid a foreign `Recv.buf_ptr`,
-/// and that full-mailbox and cell-quota failures leave the receiver unchanged.
+/// The boot self-tests prove bounded IPC publication, direct wake of a parked
+/// NET_RX completion wait, and exact NET_RX reservation ownership under an IPC
+/// interruption.
 #[test]
 fn ipc_pending_delivery_selftest_passes() {
     if !prerequisites_ok() {
         return;
     }
     let qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
-    qemu.wait_for(
-        "[selftest] IPC-PENDING: PASS (deferred, bounded, quota-safe)",
-        BOOT_TIMEOUT,
-    )
-    .unwrap_or_else(|e| {
-        panic!(
-            "IPC pending-delivery self-test did not pass: {e}\n--- output ---\n{}",
+    for marker in [
+        "[selftest] IPC-PENDING: PASS (deferred, bounded, quota-safe, completion-wake)",
+        "[selftest] NET-RX-RESERVATION: PASS (fills, remembers, releases, IPC-safe)",
+    ] {
+        qemu.wait_for(marker, BOOT_TIMEOUT).unwrap_or_else(|e| {
+            panic!("missing {marker}: {e}\n--- output ---\n{}", qemu.dump())
+        });
+    }
+    for marker in [
+        "[selftest] IPC-PENDING: FAIL",
+        "[selftest] NET-RX-RESERVATION: FAIL",
+    ] {
+        assert!(
+            !qemu.output_contains(marker),
+            "self-test reported {marker}\n--- output ---\n{}",
             qemu.dump()
-        )
-    });
+        );
+    }
 }
 
 #[test]

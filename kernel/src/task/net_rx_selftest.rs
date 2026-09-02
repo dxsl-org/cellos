@@ -189,16 +189,92 @@ fn split_signal_publication_is_visible() -> bool {
     ok
 }
 
+/// IPC may end a NET_RX wait without a record, but it cannot take a slot from
+/// an ISR that has already claimed the reservation. The intermediate
+/// `Completing` state must retry, then drain the source's genuine record.
+fn ipc_abort_waits_for_split_publication() -> bool {
+    insert(TID_ONE, CELL_ONE);
+    let mut ok = true;
+    match queue(TID_ONE) {
+        Some(q) => match q.reserve() {
+            Some(slot) => {
+                waker::arm_net_rx(q.clone(), slot);
+                let queued = {
+                    let mut guard = super::SCHEDULER.lock();
+                    guard
+                        .as_mut()
+                        .and_then(|sched| sched.tasks.get_mut(&TID_ONE))
+                        .is_some_and(|task| {
+                            super::queue_pending_msg(
+                                task,
+                                TID_TWO,
+                                b"ipc",
+                                super::tcb::HOTSWAP_MSG_QUEUE_DEPTH,
+                            )
+                            .is_ok()
+                        })
+                };
+                match waker::begin_signal_net_rx_for_test() {
+                    Some(pending) => {
+                        let first = super::completion_wait::net_rx_cleanup_step(&q);
+                        if first != super::completion_wait::NetRxCleanupStep::RetryCompleting
+                            || q.reserved() != 1
+                            || q.drainable() != 0
+                        {
+                            ok = fail("IPC abort released or returned during NET_RX Completing");
+                        }
+                        waker::finish_signal_net_rx_for_test(pending);
+                        match super::completion_wait::net_rx_cleanup_step(&q) {
+                            super::completion_wait::NetRxCleanupStep::Record(done)
+                                if done.slot == slot
+                                    && done.source == NET_RX
+                                    && done.result == NET_RX as isize => {}
+                            other => {
+                                ok = fail(&alloc::format!(
+                                    "IPC abort resolved split publication as {:?}",
+                                    other
+                                ))
+                            }
+                        }
+                    }
+                    None => ok = fail("IPC abort case could not begin split publication"),
+                }
+                let ipc_preserved = {
+                    let guard = super::SCHEDULER.lock();
+                    guard
+                        .as_ref()
+                        .and_then(|sched| sched.tasks.get(&TID_ONE))
+                        .is_some_and(|task| {
+                            matches!(
+                                task.pending_msgs.as_slice(),
+                                [msg] if msg.sender_tid == TID_TWO && msg.payload() == b"ipc"
+                            )
+                        })
+                };
+                if !queued || !ipc_preserved || q.reserved() != 0 || q.drainable() != 0 {
+                    ok = fail("split NET_RX completion consumed IPC or leaked its slot");
+                }
+                reset(&[&q]);
+            }
+            None => ok = fail("IPC abort case could not reserve a completion slot"),
+        },
+        None => ok = fail("IPC abort case could not reach completion queue"),
+    }
+    remove(TID_ONE);
+    ok
+}
+
 /// Returns true iff the NET_RX reservation completes, remembers and releases as
 /// specified. Logs a decisive serial line.
 pub fn self_test() -> bool {
     let ok = signal_fills_the_reservation()
         & signal_with_no_waiter_is_remembered()
         & takeover_completes_the_displaced_reservation()
-        & split_signal_publication_is_visible();
+        & split_signal_publication_is_visible()
+        & ipc_abort_waits_for_split_publication();
 
     if ok {
-        log::info!("[selftest] NET-RX-RESERVATION: PASS (fills, remembers, releases)");
+        log::info!("[selftest] NET-RX-RESERVATION: PASS (fills, remembers, releases, IPC-safe)");
     } else {
         log::error!("[selftest] NET-RX-RESERVATION: FAIL");
     }

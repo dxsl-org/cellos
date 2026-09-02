@@ -18,6 +18,7 @@ license.workspace = true
 default = ["tls-roots-embedded", "tls-ca-private"]
 
 hypervisor-bridge = []
+ipc-wake-oracle = []
 # Flavors
 tls-roots-embedded = []
 tls-roots-full     = []   # deps wired in P04

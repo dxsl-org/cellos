@@ -1,6 +1,7 @@
 use crate::{ViError, ViResult};
 use alloc::vec::Vec;
 
+#[derive(Debug, PartialEq, Eq)]
 pub(super) struct FileReadPlan<'a> {
     pub(super) parents: Vec<&'a str>,
     pub(super) file_name: &'a str,
