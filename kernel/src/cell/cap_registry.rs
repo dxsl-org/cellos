@@ -44,11 +44,6 @@ pub struct CapEntry {
     /// `None` = permanent (revoked only by explicit `close` or cell exit).
     /// `Some(t)` = auto-revoked on the first `verify` call after tick `t`.
     pub expires_at: Option<u64>,
-    /// Remaining re-grant depth (default `MAX_GRANT_DEPTH = 4`).
-    ///
-    /// 0 = this cap cannot be delegated further via `grant_to`.  Each
-    /// successful `grant_to` clones the cap with `grant_depth - 1`.
-    pub grant_depth: u8,
 }
 
 /// The global capability table.
@@ -56,9 +51,6 @@ pub struct CapTable {
     entries: BTreeMap<CapId, CapEntry>,
     next_id: u64,
 }
-
-/// Maximum number of times a capability can be delegated via `grant_to`.
-const MAX_GRANT_DEPTH: u8 = 4;
 
 impl Default for CapTable {
     fn default() -> Self {
@@ -93,7 +85,6 @@ impl CapTable {
                 resource,
                 perms,
                 expires_at: None,
-                grant_depth: MAX_GRANT_DEPTH,
             },
         );
         id
@@ -115,55 +106,6 @@ impl CapTable {
             e.expires_at = Some(expires_at);
         }
         id
-    }
-
-    /// Delegate `cap_id` from `from_cell` to `to_cell`, decrementing grant depth.
-    ///
-    /// A new capability (with the same resource type, permissions, and lease) is
-    /// allocated for `to_cell`.  The new cap's `grant_depth` is the current
-    /// depth minus one.  `from_cell` retains ownership of the original cap.
-    ///
-    /// # Errors
-    /// - `ViError::PermissionDenied` — `from_cell` does not own `cap_id`.
-    /// - `ViError::NotSupported` — `grant_depth == 0` on the source cap.
-    /// - `ViError::NotFound` — `cap_id` not in table.
-    pub fn grant_to(
-        &mut self,
-        cap_id: CapId,
-        from_cell: CellId,
-        to_cell: CellId,
-    ) -> ViResult<CapId> {
-        self.verify(cap_id, from_cell)?;
-        let entry = self.entries.get_mut(&cap_id).ok_or(ViError::NotFound)?;
-        if entry.grant_depth == 0 {
-            return Err(ViError::NotSupported); // depth exhausted — cannot delegate further
-        }
-        let new_depth = entry.grant_depth - 1;
-        let new_perms = entry.perms;
-        let new_expires = entry.expires_at;
-        // Allocate a new cap for the target; we cannot clone the resource itself
-        // (it lives inside a Box) so the grant creates a "reference" cap type.
-        // For v1.0 we model this as a File cap pointing to the same underlying file.
-        // Full resource sharing across cells is deferred to Phase 13 VFS caps.
-        let new_id = self.next_id;
-        self.next_id = self.next_id.wrapping_add(1).max(1);
-        // Re-borrow entry after next_id mutation.
-        let parent_owner = self.entries[&cap_id].owner;
-        let _ = parent_owner; // for future ACL audit trail
-                              // Create a shallow grant cap — for now we mark it as non-file to avoid
-                              // moving the Box.  The VFS file-handle grant is a separate op in Phase 07.
-                              // This primarily enables grant-depth bookkeeping for non-file caps.
-        self.entries.insert(
-            CapId(new_id),
-            CapEntry {
-                owner: to_cell,
-                resource: CapResource::File { file: None }, // placeholder; real content in VFS cap
-                perms: new_perms,
-                expires_at: new_expires,
-                grant_depth: new_depth,
-            },
-        );
-        Ok(CapId(new_id))
     }
 
     /// Verify that `caller` owns `cap_id` and the lease has not expired.
