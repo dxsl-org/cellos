@@ -107,6 +107,7 @@ fn read_uses_requested_bound_for_followup_chunks() {
         MockReply::File(9),
         MockReply::DataLen(MAX_READ_CHUNK as usize, b'a'),
         MockReply::DataLen(17, b'b'),
+        MockReply::DataLen(0, b'z'),
         MockReply::Ok,
         MockReply::Ok,
     ]);
@@ -120,7 +121,7 @@ fn read_uses_requested_bound_for_followup_chunks() {
     let cleanup = session.cleanup();
     assert_eq!(bytes.len(), MAX_READ_CHUNK as usize + 17);
     assert_eq!(cleanup, Ok(()));
-    assert!(ops.calls[4].contains("max: 17"));
+    assert!(ops.calls[3].contains("max: 17"));
 }
 
 #[test]

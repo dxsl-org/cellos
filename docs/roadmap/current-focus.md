@@ -92,9 +92,9 @@ or qualified independent external floor.
   kernel completion-wake boot gate passes 1/1, and fresh RV64 builds pass;
   Candidate B local ingress remains complete at its source/host boundary. The
   clean-source combined QEMU result is recorded above. The focused `ostd`
-  completion decoder test passed, but the package suite is 23/24 because of the
-  unrelated, pre-existing `read_file` bounds failure; this is not a
-  package-wide PASS.
+  completion decoder and bounded `read_file` regression pass; the host unit
+  suite now passes 24/24 and `cluster-endpoint` passes 5/5. This is not a
+  package-wide PASS: doctests remain 8 passed, 11 failed, and 2 ignored.
   Enrollment, lease renewal, and routing remain unwired or unreachable from the
   broker dispatch path.
   This does not prove two-node, relay, direct-LAN, remote restart/failover,
