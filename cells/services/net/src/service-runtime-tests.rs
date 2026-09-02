@@ -1,7 +1,8 @@
 use super::{
-    consume_ipc_burst_grace, idle_ipc_wake_is_provably_early, IDLE_IPC_WAKE_PROOF_CEILING_TICKS,
-    IPC_BURST_GRACE_YIELDS, MTIME_TICKS_PER_MS, NET_RX_MAINTENANCE_WAIT_SCHEDULER_TICKS,
-    SCHEDULER_TICK_MS, SMOLTCP_MAINTENANCE_INTERVAL_MS, SMOLTCP_MAINTENANCE_TICKS,
+    classify_idle_ipc_wake, consume_ipc_burst_grace, IdleIpcWakeClassification,
+    IDLE_IPC_WAKE_PROOF_CEILING_TICKS, IPC_BURST_GRACE_YIELDS, MTIME_TICKS_PER_MS,
+    NET_RX_MAINTENANCE_WAIT_SCHEDULER_TICKS, SCHEDULER_TICK_MS, SMOLTCP_MAINTENANCE_INTERVAL_MS,
+    SMOLTCP_MAINTENANCE_TICKS,
 };
 
 #[test]
@@ -16,19 +17,24 @@ fn net_rx_wait_is_finite_and_maintenance_aligned() {
 }
 
 #[test]
-fn idle_ipc_wake_proof_ceiling_precedes_earliest_phase_aligned_deadline() {
+fn idle_ipc_wake_classifier_is_exclusive_at_proof_ceiling() {
     assert_eq!(
         IDLE_IPC_WAKE_PROOF_CEILING_TICKS,
         (NET_RX_MAINTENANCE_WAIT_SCHEDULER_TICKS - 1) * SCHEDULER_TICK_MS * MTIME_TICKS_PER_MS
     );
     assert_eq!(IDLE_IPC_WAKE_PROOF_CEILING_TICKS, 900_000);
     assert!(IDLE_IPC_WAKE_PROOF_CEILING_TICKS < SMOLTCP_MAINTENANCE_TICKS);
-    assert!(idle_ipc_wake_is_provably_early(
-        IDLE_IPC_WAKE_PROOF_CEILING_TICKS - 1
-    ));
-    assert!(!idle_ipc_wake_is_provably_early(
-        IDLE_IPC_WAKE_PROOF_CEILING_TICKS
-    ));
+    assert_eq!(
+        classify_idle_ipc_wake(899_999),
+        IdleIpcWakeClassification::Pass
+    );
+    for elapsed_ticks in [900_000, 1_000_000, 1_473_679] {
+        assert_eq!(
+            classify_idle_ipc_wake(elapsed_ticks),
+            IdleIpcWakeClassification::Inconclusive,
+            "elapsed_ticks={elapsed_ticks} must not imply a wake cause"
+        );
+    }
 }
 
 #[test]

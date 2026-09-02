@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "Local QEMU Oracle and Evidence Sync"
-status: completed
+status: in_progress
 priority: P1
 effort: 0.5d
 dependencies: [2]
@@ -14,23 +14,23 @@ tier: medium
 
 ## Overview
 
-Prove in the existing isolated RV64 single-guest runner that queued local broker IPC can produce an exact raw-zero, recordless service-net wake before the earliest phase-aligned maintenance deadline, then independently gate the unchanged benchmark after a fresh command `START`.
+Prove the queued-IPC completion wake with the kernel's deterministic QEMU selftests, then independently gate the unchanged benchmark after a fresh command `START`. Service-net raw-zero timing remains supplemental observation only because a later mailbox drain cannot establish what caused the earlier recordless return.
 
 ## Requirements
 
 - Reuse the existing broker-to-net `sys_post` request path and `bench c2c-broker-oracle`; add no completion ABI, request opcode, remote relay, or cross-guest behavior. The review-added detailed OSTD result seam is the only API-level scope deviation.
-- Observe a complete chronological same-cycle `ARMED`→`PASS` pair from retained startup output; do not treat an `ARMED` line as a host reservation.
-- Emit `idle_ipc_wake status=PASS` only when `sys_wait_completion` returned exact raw `0`, the immediately retried TryRecv handled queued IPC, and elapsed guest mtime was strictly below both the exclusive 900,000-tick proof ceiling and the unchanged 1,000,000-tick maintenance budget.
-- Reject any `FAIL`, `BLOCKED`, or maintenance-timeout oracle marker from every observed cycle, not only the selected passing cycle.
-- After the startup primitive gate, checkpoint output, issue the unchanged benchmark command, and require a fresh subsequent `START`.
+- Require the exact kernel `IPC-PENDING` completion-wake and `NET-RX-RESERVATION` IPC-safe PASS markers with neither corresponding FAIL marker before launching the benchmark.
+- Emit `idle_ipc_wake status=PASS` only for exact raw `0` followed by a same-cycle drain strictly below the exclusive 900,000-tick proof ceiling. Emit `status=INCONCLUSIVE wake=recordless raw_ret=0 reason=late-drain` at or above that ceiling; this is neither PASS nor FAIL.
+- Do not delay benchmark launch waiting for a runtime timing PASS. At final whole-run parsing, require at least one exact validated PASS; well-formed INCONCLUSIVE results are neutral, but INCONCLUSIVE-only output cannot pass the run. Reject genuine `FAIL`, `BLOCKED`, or legacy maintenance-timeout markers across the whole run.
+- After the deterministic kernel checkpoint, issue the unchanged benchmark command and require a fresh subsequent `START`.
 - Retain every existing oracle gate: real NET_RX proof, measured calibration, 1/2/4/8/16 sweeps, 10,000/10,000 soak with zero silent drops, positive network progress, zero heartbeat/watchdog deltas, overflow pass, and restart pass.
 - Oracle instrumentation is feature-gated and absent from normal service-net builds; it must not change the one-yield grace, scheduling, syscall count, wait duration, or messages.
 
 ## Architecture
 
-The `ipc-wake-oracle` service-net feature is observation-only. A bounded module records the wait-cycle number and `sys_get_time` immediately before the real completion wait. A detailed OSTD decoder separates exact raw `0`, a valid completion, and error/invalid results; only exact raw `0` can become a candidate. The next successful attested IPC drain in the same cycle emits PASS only below an exclusive 900,000-tick proof ceiling, which excludes the earliest phase-aligned 10-tick timeout.
+The `ipc-wake-oracle` service-net feature is observation-only. A bounded module records the wait-cycle number and `sys_get_time` immediately before the real completion wait. A detailed OSTD decoder separates exact raw `0`, a valid completion, and error/invalid results; only exact raw `0` can become a candidate. A same-cycle drain below the exclusive 900,000-tick ceiling is an exact PASS observation required somewhere in the full retained run. A drain at or above the ceiling is INCONCLUSIVE because it may follow the normal maintenance wake; it neither satisfies nor fails the run.
 
-Because autonomous broker traffic shares the same principal and an `ARMED` state is replaceable rather than reserved, the host accepts a completed startup `ARMED`→`PASS` pair as the primitive proof. It then takes a new checkpoint and independently requires the benchmark's fresh `START` and all broad result gates. Feature-on retains the production grace yield of one.
+The canonical causal proof comes from the exact kernel `IPC-PENDING` completion-wake and `NET-RX-RESERVATION` IPC-safe selftests. Once those PASS with no corresponding FAIL, the host checkpoints output and immediately launches the benchmark, then requires the fresh `START` and every broad result gate. Final parsing additionally requires at least one exact runtime PASS across the retained output. That timing observation is mandatory but non-causal: it does not establish that the benchmark or queued IPC caused a particular raw-zero return. Feature-on retains the production grace yield of one.
 
 ## Assumptions
 
@@ -50,39 +50,36 @@ Because autonomous broker traffic shares the same principal and an `ARMED` state
 - Modify: `libs/ostd/src/syscall.rs` and focused tests — detailed wait-result decoder with a compatible legacy wrapper.
 - Modify: `libs/ostd/src/clients/vfs/read_file/path.rs` — private-type derives needed for the pre-existing package tests to compile; no layout or visibility change.
 - Modify: `scripts/run-c2c-broker-oracle-qemu.sh` — build service-net with the oracle feature in the isolated image.
-- Modify: `tests/integration/tests/c2c-broker-oracle.rs` — startup-pair ordering, exact PASS fields, whole-run failure rejection, independent command `START`, and retained baseline assertions.
-- Modify after PASS: `docs/roadmap/open-risk-register.md`, `docs/roadmap/current-focus.md`, `docs/project-roadmap.md`, `docs/project-changelog.md` — synchronize evidence while preserving local-QEMU and non-production ceilings.
+- Modify: `tests/integration/tests/c2c-broker-oracle.rs` — deterministic kernel checkpoint, exact supplemental runtime-result validation, whole-run failure rejection, independent command `START`, and retained baseline assertions.
+- Modify before final-source rerun: `docs/roadmap/open-risk-register.md`, `docs/roadmap/current-focus.md`, `docs/project-roadmap.md`, `docs/project-changelog.md` — qualify the pre-final-code observation and leave final-source QEMU evidence pending.
 
 ## Implementation Steps
 
 1. Add the feature and bounded focused module. Track only cycle, wait-start tick, raw result classification, and the current candidate; reset or clear it on every disqualifying outcome.
-2. Emit `ARMED` immediately before the real wait with coherent cycle/start/budget/ceiling fields. Emit PASS only after exact raw `0` and the immediate successful attested IPC drain in that same cycle.
+2. Emit `ARMED` immediately before the real wait with coherent cycle/start/budget/ceiling fields. Emit PASS only for an exact raw-zero same-cycle drain below 900,000 ticks; emit well-formed INCONCLUSIVE for a late drain.
 3. Add a detailed OSTD wait-result decoder that distinguishes `NoRecord`, valid `Completion`, and `ErrorOrInvalid`, while preserving the legacy `Option` wrapper.
 4. Keep the real wait at 10 scheduler ticks, the post-reply grace at one, and the feature off by default. Confirm normal RV64 artifacts contain no oracle markers.
-5. In the host test, reject `FAIL`, `BLOCKED`, and maintenance-timeout markers from every retained oracle line, then require one chronological same-cycle startup pair with exact raw zero and elapsed below the exclusive ceiling.
-6. After that primitive gate, checkpoint output, launch the unchanged benchmark once, require a later `START`, and evaluate the retained NET_RX, calibration, sweep, soak, network-progress, liveness, overflow, and restart gates.
-7. Keep evidence wording local and software/QEMU-only. Do not infer that the benchmark caused the accepted startup pair.
-8. Synchronize the four living evidence documents with the atomic queued-IPC/raw-zero contract, 10-tick maintenance fallback, exact local QEMU evidence, and explicit remote/physical/production caveats.
+5. In the host test, require the exact kernel completion-wake and IPC-safe PASS markers with no corresponding FAIL before the command checkpoint. Reject `FAIL`, `BLOCKED`, and maintenance-timeout markers from the whole run.
+6. Launch the unchanged benchmark without waiting for a timing PASS, require a fresh later `START`, and evaluate the retained NET_RX, calibration, sweep, soak, network-progress, liveness, overflow, and restart gates.
+7. Validate every retained timing PASS as exact raw zero, recordless, same-cycle, and strictly below the ceiling, and require at least one such PASS in final whole-run parsing. Accept individual INCONCLUSIVE markers as neutral evidence, but reject INCONCLUSIVE-only runs.
+8. Keep evidence wording local and software/QEMU-only. Qualify cycle 36 as a pre-final-code observation; add final-source evidence only after a successful rerun.
 
 ## Success Criteria
 
-- [x] The canonical runner, invoked once, observed a chronological same-cycle startup `ARMED`→`PASS` pair with exact raw `0`: `cycle=36`, `start_ticks=144542529`, `elapsed_ticks=442232`, proof ceiling `900000`, budget `1000000`.
-- [x] The exclusive ceiling proves the accepted pair preceded the earliest phase-aligned 10-tick maintenance deadline; every observed `FAIL`, `BLOCKED`, and maintenance-timeout marker is rejected.
-- [x] The independent post-checkpoint benchmark emitted a fresh `START`; real NET_RX proof, measured 1000/1000 calibration, 1/2/4/8/16 sweeps, 10000/10000 soak, positive network progress, zero heartbeat/watchdog deltas, overflow, and restart all passed.
-- [x] A normal feature-off RV64 kernel plus service-net build succeeded and contained zero oracle markers.
-- [x] The detailed OSTD decoder test passed.
-- [ ] The containing OSTD package suite is **not** a PASS: 23/24 because the unrelated pre-existing `clients::vfs::read_file::tests::bounds::read_uses_requested_bound_for_followup_chunks` bounds test still fails after private derives allowed the suite to compile.
-- [x] Risk, current-focus, project-roadmap, and changelog projections were synchronized with the captured local QEMU result and explicitly preserve ABI, observation-only, local-only, remote, physical, and production caveats.
+- [x] The canonical gate requires exact kernel `IPC-PENDING` completion-wake and `NET-RX-RESERVATION` IPC-safe PASS markers with no corresponding FAIL, launches the benchmark without first waiting for timing PASS, and finally requires at least one exact runtime PASS.
+- [x] Classifier boundaries encode 899999 as PASS and 900000, 1000000, and 1473679 as INCONCLUSIVE; a late raw-zero drain is neither run success nor failure, while INCONCLUSIVE-only output cannot pass the run.
+- [x] The independent post-checkpoint benchmark still requires a fresh `START`, real NET_RX proof, measured 1000/1000 calibration, 1/2/4/8/16 sweeps, 10000/10000 soak, positive network progress, zero heartbeat/watchdog deltas, overflow, and restart.
+- [x] Genuine `FAIL`, `BLOCKED`, and legacy maintenance-timeout markers remain rejected across the whole run.
+- [ ] Rerun the final-source canonical runner and record its kernel-selftest, mandatory exact runtime PASS, and benchmark result.
+- [x] Risk, current-focus, project-roadmap, and changelog projections qualify the cycle 36 capture as pre-final-code and make no final-source runtime claim.
 
 ## Evidence and Results
 
-- Diff and formatting checks passed; API passed 91 tests; service-net passed 30 tests; the fresh RV64 release kernel and exact IPC boot test passed 1/1.
-- The final hardened canonical QEMU run passed 1/1. Its accepted primitive pair was `cycle=36 start_ticks=144542529 raw_ret=0 elapsed_ticks=442232 proof_ceiling_ticks=900000 budget_ticks=1000000`, satisfying `442232 < 900000 < 1000000`.
-- After the independent command checkpoint and fresh `START`, measured calibration completed 1000/1000; all 1/2/4/8/16 sweeps completed; soak completed 10000/10000 with positive network progress and zero heartbeat/watchdog deltas; overflow and restart passed.
-- The detailed OSTD decoder behavior passed its focused test. The package result remains 23 passed, 1 failed and is recorded as a known unrelated baseline, never as a pass.
-- Final review found no Critical, High, or Medium issue after the raw-result seam, exclusive ceiling, and whole-run failure scan were added.
-- Evidence ceiling: local software plus isolated single-guest QEMU only. No remote, external-system, physical-latency, deployment, or production claim.
-- The four living evidence documents were synchronized after the passing local QEMU gate; they do not broaden the evidence ceiling.
+- Earlier API, service-net, feature-off artifact, detailed-decoder, and exact kernel boot-test results remain recorded in their owning phases.
+- Cycle 36 (`start_ticks=144542529 raw_ret=0 elapsed_ticks=442232`) was captured before the final oracle/classifier source. It is a historical supplemental observation, not final-source proof and not evidence that queued IPC caused that raw-zero return.
+- The first final-source attempt stopped at startup cycle 30 when the old classifier reported a late raw-zero drain as legacy `maintenance-timeout`. That outcome motivated INCONCLUSIVE classification; it is not a runtime failure finding and did not complete the canonical benchmark gate.
+- Final-source QEMU evidence is pending a rerun of the corrected canonical gate. The run must retain both exact kernel PASS markers with no corresponding FAIL, pass every post-command benchmark gate, and include at least one exact sub-900,000-tick runtime PASS across the full output.
+- Evidence ceiling remains local software plus isolated single-guest QEMU only. The mandatory runtime timing PASS is non-causal and creates no remote, external-system, physical-latency, deployment, or production claim.
 
 ## Security Considerations
 
@@ -90,10 +87,12 @@ The feature must be off by default, expose no syscall/request surface, allocate 
 
 ## Risk Notes
 
-An `ARMED` line is an observation, not a reservation: autonomous broker traffic shares the principal and can replace or consume a cycle before a host command reaches the benchmark. The accepted startup pair therefore proves only the queued-IPC/raw-zero primitive; the fresh post-checkpoint `START` and broad benchmark gates prove the independent benchmark run. Exact raw-result decoding, the 900,000-tick exclusive ceiling, and whole-run rejection of failure markers close the false-positive paths identified by review.
+An `ARMED` line is an observation, not a reservation: autonomous broker traffic shares the principal and can replace or consume a cycle. More importantly, a later TryRecv drain cannot causally attribute the preceding raw-zero return. The deterministic kernel selftests therefore own the completion-wake proof. The gate launches the benchmark after those selftests without waiting for timing, but final whole-run parsing still requires one exact sub-ceiling PASS; individual late drains remain neutral INCONCLUSIVE and cannot satisfy that requirement. The fresh post-checkpoint `START` and broad benchmark gates independently prove the benchmark run. Exact raw-result decoding, the exclusive ceiling, and whole-run rejection of genuine failure markers close false-positive and false-negative paths without turning ambiguity into failure.
 
 ## Deviation Log
 
-- **Observation-only oracle deviation:** Rejected the planned host-selected fresh post-shell cycle because `ARMED` provides no lease or acknowledgement and autonomous broker traffic uses the same service principal. Restored the production post-reply grace of one for feature-on builds. The final gate accepts a retained, completed startup same-cycle raw-zero pair, then independently checkpoints and requires a fresh benchmark `START` plus every broad result gate. This deliberately does not claim benchmark provenance for the startup wake pair.
-- **Review-driven hardening:** Added a detailed raw-result seam so only exact raw `0` can arm proof, introduced the exclusive 900,000-tick ceiling below the unchanged 1,000,000-tick maintenance budget, and reject `FAIL`, `BLOCKED`, or maintenance-timeout evidence from every cycle.
+- **Observation-only oracle deviation:** Rejected the planned host-selected fresh post-shell cycle because `ARMED` provides no lease or acknowledgement and autonomous broker traffic uses the same service principal. Restored the production post-reply grace of one for feature-on builds.
+- **Non-causal timing correction:** Final-source review proved that a late raw-zero first drain is ambiguous: it may follow maintenance and cannot identify the earlier wake cause. Reclassified elapsed time at or above 900,000 ticks as INCONCLUSIVE, made the exact kernel completion-wake/IPC-safe selftests the canonical launch prerequisite, and removed the pre-launch wait for timing PASS. Final whole-run parsing still requires at least one exact early PASS; INCONCLUSIVE-only output cannot pass.
+- **Evidence correction:** Cycle 36 and its 442232-tick drain came from pre-final-code source and had been prematurely labeled final proof. The living documents now identify it only as historical supplemental evidence. The first final-source attempt stopped at cycle 30 on the legacy maintenance-timeout classification; a corrected final-source rerun is still required.
+- **Review-driven hardening retained:** Exact raw `0`, the unchanged 1,000,000-tick maintenance budget, the exclusive 900,000-tick PASS ceiling, whole-run rejection of genuine failure markers, and all benchmark gates remain mandatory.
 - **OSTD baseline caveat:** Private trait derives allowed the detailed decoder tests to compile. The focused decoder test passed, but the package remains 23/24 due the unrelated pre-existing `read_file` bounds failure; it is not reported as a pass.

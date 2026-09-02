@@ -54,8 +54,22 @@ const IDLE_IPC_WAKE_PROOF_CEILING_TICKS: u64 =
     test,
     all(feature = "ipc-wake-oracle", not(feature = "hypervisor-bridge"))
 ))]
-pub(crate) const fn idle_ipc_wake_is_provably_early(elapsed_ticks: u64) -> bool {
-    elapsed_ticks < IDLE_IPC_WAKE_PROOF_CEILING_TICKS
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum IdleIpcWakeClassification {
+    Pass,
+    Inconclusive,
+}
+
+#[cfg(any(
+    test,
+    all(feature = "ipc-wake-oracle", not(feature = "hypervisor-bridge"))
+))]
+pub(crate) const fn classify_idle_ipc_wake(elapsed_ticks: u64) -> IdleIpcWakeClassification {
+    if elapsed_ticks < IDLE_IPC_WAKE_PROOF_CEILING_TICKS {
+        IdleIpcWakeClassification::Pass
+    } else {
+        IdleIpcWakeClassification::Inconclusive
+    }
 }
 static NEXT_PORT: AtomicU16 = AtomicU16::new(49152);
 

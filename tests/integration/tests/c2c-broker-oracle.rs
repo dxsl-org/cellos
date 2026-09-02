@@ -5,7 +5,12 @@ use vicell_integration_tests::QemuRunner;
 const BOOT_TIMEOUT_SECS: u64 = 120;
 const ORACLE_TIMEOUT_SECS: u64 = 600;
 const PREFIX: &str = "[c2c-broker-oracle]";
-const STARTUP_WAKE_TIMEOUT_SECS: u64 = 30;
+const IPC_PENDING_PASS: &str =
+    "[selftest] IPC-PENDING: PASS (deferred, bounded, quota-safe, completion-wake)";
+const IPC_PENDING_FAIL: &str = "[selftest] IPC-PENDING: FAIL";
+const NET_RX_RESERVATION_PASS: &str =
+    "[selftest] NET-RX-RESERVATION: PASS (fills, remembers, releases, IPC-safe)";
+const NET_RX_RESERVATION_FAIL: &str = "[selftest] NET-RX-RESERVATION: FAIL";
 
 fn oracle_lines(output: &str) -> Vec<&str> {
     output
@@ -50,86 +55,113 @@ fn assert_positive_field(lines: &[&str], required: &[&str], field: &str) {
     assert!(value > 0, "{field} must be positive on {required:?} line");
 }
 
-fn assert_no_idle_ipc_wake_failures(lines: &[&str]) {
-    for line in lines
-        .iter()
-        .copied()
-        .filter(|line| has_token(line, "idle_ipc_wake"))
-    {
+fn assert_no_oracle_failures(lines: &[&str]) {
+    for line in lines {
         assert!(
             !["FAIL", "BLOCKED", "maintenance-timeout"]
                 .iter()
                 .any(|forbidden| {
                     has_token(line, forbidden) || has_field_value(line, forbidden)
                 }),
-            "retained output contains a rejected idle IPC wake result: {line}\n{}",
+            "retained output contains a rejected oracle result: {line}\n{}",
             lines.join("\n")
         );
     }
 }
 
-fn assert_startup_wake_pair(lines: &[&str]) {
-    assert_no_idle_ipc_wake_failures(lines);
-
-    for (armed_index, armed_line) in lines.iter().copied().enumerate().filter(|(_, line)| {
-        has_token(line, "idle_ipc_wake") && has_token(line, "status=ARMED")
-    }) {
-        let armed_cycle =
-            numeric_field(armed_line, "cycle=").expect("armed marker must carry a numeric cycle");
-        let armed_start = numeric_field(armed_line, "start_ticks=")
-            .expect("armed marker must carry numeric start_ticks");
-        let armed_budget = numeric_field(armed_line, "budget_ticks=")
-            .expect("armed marker must carry numeric budget_ticks");
-        let armed_proof_ceiling = numeric_field(armed_line, "proof_ceiling_ticks=")
-            .expect("armed marker must carry numeric proof_ceiling_ticks");
-        assert_eq!(
-            numeric_field(armed_line, "raw_ret="),
-            Some(0),
-            "an idle IPC wake candidate must be armed only for exact raw zero"
-        );
-        assert!(armed_cycle > 0, "armed wait cycle must be positive");
-        assert!(armed_start > 0, "armed wait start_ticks must be positive");
-        assert_eq!(
-            armed_budget, 1_000_000,
-            "armed wait must use the 100 ms smoltcp maintenance budget"
-        );
-        assert_eq!(
-            armed_proof_ceiling, 900_000,
-            "armed wait proof must end before the earliest phase-aligned deadline wake"
-        );
+fn assert_kernel_completion_wake_proofs(output: &str) {
+    for required in [IPC_PENDING_PASS, NET_RX_RESERVATION_PASS] {
         assert!(
-            armed_proof_ceiling < armed_budget,
-            "proof ceiling must be stricter than the maintenance budget"
+            output.contains(required),
+            "missing exact kernel completion-wake proof {required:?}\n{output}"
         );
+    }
+    for forbidden in [IPC_PENDING_FAIL, NET_RX_RESERVATION_FAIL] {
+        assert!(
+            !output.contains(forbidden),
+            "kernel completion-wake proof emitted failure {forbidden:?}\n{output}"
+        );
+    }
+}
 
-        let pass_line = lines
+fn assert_armed_wait(armed_line: &str) -> (u64, u64, u64) {
+    let cycle =
+        numeric_field(armed_line, "cycle=").expect("armed marker must carry a numeric cycle");
+    let start_ticks = numeric_field(armed_line, "start_ticks=")
+        .expect("armed marker must carry numeric start_ticks");
+    let budget = numeric_field(armed_line, "budget_ticks=")
+        .expect("armed marker must carry numeric budget_ticks");
+    let proof_ceiling = numeric_field(armed_line, "proof_ceiling_ticks=")
+        .expect("armed marker must carry numeric proof_ceiling_ticks");
+    assert_eq!(
+        numeric_field(armed_line, "raw_ret="),
+        Some(0),
+        "an idle IPC wake candidate must be armed only for exact raw zero"
+    );
+    assert!(cycle > 0, "armed wait cycle must be positive");
+    assert!(start_ticks > 0, "armed wait start_ticks must be positive");
+    assert_eq!(
+        budget, 1_000_000,
+        "armed wait must use the 100 ms smoltcp maintenance budget"
+    );
+    assert_eq!(
+        proof_ceiling, 900_000,
+        "armed wait proof must end before the earliest phase-aligned deadline wake"
+    );
+    assert!(
+        proof_ceiling < budget,
+        "proof ceiling must be stricter than the maintenance budget"
+    );
+    (cycle, budget, proof_ceiling)
+}
+
+fn assert_runtime_wake_evidence(lines: &[&str]) {
+    assert_no_oracle_failures(lines);
+    let mut saw_pass = false;
+
+    for (result_index, result_line) in lines.iter().copied().enumerate() {
+        if !has_token(result_line, "idle_ipc_wake") {
+            continue;
+        }
+        let is_pass = has_token(result_line, "status=PASS");
+        let is_inconclusive = has_token(result_line, "status=INCONCLUSIVE");
+        if !is_pass && !is_inconclusive {
+            continue;
+        }
+
+        let result_cycle = numeric_field(result_line, "cycle=")
+            .expect("idle IPC wake result must carry a numeric cycle");
+        let armed_line = lines[..result_index]
             .iter()
             .copied()
-            .skip(armed_index + 1)
+            .rev()
             .find(|line| {
                 has_token(line, "idle_ipc_wake")
-                    && has_token(line, "status=PASS")
-                    && numeric_field(line, "cycle=") == Some(armed_cycle)
+                    && has_token(line, "status=ARMED")
+                    && numeric_field(line, "cycle=") == Some(result_cycle)
+            })
+            .unwrap_or_else(|| {
+                panic!(
+                    "idle IPC wake result has no preceding same-cycle ARMED marker: {result_line}"
+                )
             });
-        let Some(pass_line) = pass_line else {
-            continue;
-        };
+        let (_, armed_budget, armed_proof_ceiling) = assert_armed_wait(armed_line);
 
         assert!(
-            has_token(pass_line, "wake=recordless"),
-            "idle IPC wake PASS was not caused by a raw recordless return: {pass_line}"
+            has_token(result_line, "wake=recordless"),
+            "idle IPC wake result was not caused by a raw recordless return: {result_line}"
         );
         assert_eq!(
-            numeric_field(pass_line, "raw_ret="),
+            numeric_field(result_line, "raw_ret="),
             Some(0),
-            "idle IPC wake PASS must preserve the exact raw zero observation"
+            "idle IPC wake result must preserve the exact raw zero observation"
         );
-        let elapsed = numeric_field(pass_line, "elapsed_ticks=")
-            .expect("idle IPC wake PASS must carry numeric elapsed_ticks");
-        let budget = numeric_field(pass_line, "budget_ticks=")
-            .expect("idle IPC wake PASS must carry numeric budget_ticks");
-        let proof_ceiling = numeric_field(pass_line, "proof_ceiling_ticks=")
-            .expect("idle IPC wake PASS must carry numeric proof_ceiling_ticks");
+        let elapsed = numeric_field(result_line, "elapsed_ticks=")
+            .expect("idle IPC wake result must carry numeric elapsed_ticks");
+        let budget = numeric_field(result_line, "budget_ticks=")
+            .expect("idle IPC wake result must carry numeric budget_ticks");
+        let proof_ceiling = numeric_field(result_line, "proof_ceiling_ticks=")
+            .expect("idle IPC wake result must carry numeric proof_ceiling_ticks");
         assert_eq!(
             budget, armed_budget,
             "armed and drained wait markers must carry the same maintenance budget"
@@ -138,16 +170,27 @@ fn assert_startup_wake_pair(lines: &[&str]) {
             proof_ceiling, armed_proof_ceiling,
             "armed and drained wait markers must carry the same proof ceiling"
         );
-        assert!(
-            elapsed < proof_ceiling,
-            "idle IPC wake was not strictly earlier than the deadline window: elapsed={elapsed} proof_ceiling={proof_ceiling}"
-        );
 
-        return;
+        if is_pass {
+            assert!(
+                elapsed < proof_ceiling,
+                "idle IPC wake PASS was not strictly below the proof ceiling: {result_line}"
+            );
+            saw_pass = true;
+        } else {
+            assert!(
+                has_token(result_line, "reason=late-drain"),
+                "inconclusive idle IPC wake must identify a late drain: {result_line}"
+            );
+            assert!(
+                elapsed >= proof_ceiling,
+                "idle IPC wake became INCONCLUSIVE before the proof ceiling: {result_line}"
+            );
+        }
     }
-
-    panic!(
-        "retained startup output contained no chronologically ordered same-cycle ARMED/PASS pair\n{}",
+    assert!(
+        saw_pass,
+        "retained output contained no exact sub-ceiling runtime wake PASS\n{}",
         lines.join("\n")
     );
 }
@@ -162,19 +205,8 @@ fn local_c2c_broker_oracle_meets_baseline_contract() {
     let mut qemu = QemuRunner::boot_restricted(&kernel, &disk);
     qemu.wait_for("Cellos >", BOOT_TIMEOUT_SECS)
         .unwrap_or_else(|error| panic!("oracle shell did not boot: {error}\n{}", qemu.dump()));
-    qemu.wait_for(
-        "[c2c-broker-oracle] idle_ipc_wake status=PASS",
-        STARTUP_WAKE_TIMEOUT_SECS,
-    )
-    .unwrap_or_else(|error| {
-        panic!(
-            "retained startup output did not complete an instrumented IPC wake cycle: {error}\n{}",
-            qemu.dump()
-        )
-    });
     let startup_output = qemu.dump();
-    let startup_lines = oracle_lines(&startup_output);
-    assert_startup_wake_pair(&startup_lines);
+    assert_kernel_completion_wake_proofs(&startup_output);
 
     let command_checkpoint = qemu.output_checkpoint();
     qemu.send_line("bench c2c-broker-oracle");
@@ -210,8 +242,10 @@ fn local_c2c_broker_oracle_meets_baseline_contract() {
 
     let output = qemu.dump();
     let output_after_command = &output[command_checkpoint..];
+    let all_oracle_lines = oracle_lines(&output);
     let command_lines = oracle_lines(output_after_command);
-    assert_no_idle_ipc_wake_failures(&oracle_lines(&output));
+    assert_kernel_completion_wake_proofs(&output);
+    assert_runtime_wake_evidence(&all_oracle_lines);
     assert_tokens(&command_lines, &["START"]);
 
     let shutdown_race_exercised = output_after_command
@@ -263,13 +297,6 @@ fn local_c2c_broker_oracle_meets_baseline_contract() {
     );
     assert_tokens(&command_lines, &["overflow", "status=PASS"]);
     assert_tokens(&command_lines, &["restart", "status=PASS"]);
-    assert!(
-        command_lines
-            .iter()
-            .all(|line| !has_token(line, "BLOCKED") && !has_field_value(line, "BLOCKED")),
-        "oracle emitted a blocked result:\n{}",
-        command_lines.join("\n")
-    );
 
     for line in command_lines {
         println!("{line}");

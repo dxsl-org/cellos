@@ -625,7 +625,7 @@
   or production-admission invariant.
 
 
-## [2026-09-02] IPC-aware local C2C completion wake closes QEMU blind spot
+## [2026-09-02] IPC-aware local C2C completion wake and corrected QEMU oracle
 
 - Queued IPC now interrupts a parked `WaitCompletion` through the existing raw
   return `0`, meaning wake with no completion record. Kernel publication/park
@@ -635,21 +635,34 @@
   remain `NET_RX` and `TIMER`; no IPC completion source was added.
 - Service-net removes the one-tick IPC workaround while retaining its finite
   10-tick (about 100 ms) smoltcp maintenance wake and exactly one production
-  grace yield (`grace=1`). Final QEMU proof passed exact boot 1/1:
-  `cycle=36`, `start=144542529`, `raw_ret=0`, and `elapsed=442232`, below the
-  exclusive IPC-wake proof ceiling `900000` and separately from the maintenance
-  budget `1000000`. Feature-off binaries contain no oracle markers. Post-command
-  calibration passed 1,000/1,000; sweeps and 10,000/10,000 soak passed with
-  positive network progress, zero heartbeat/watchdog deltas, and
-  overflow/restart PASS.
-- API passes 91/91, service-net passes 30/30, and fresh RV64 builds pass. The
-  focused `ostd` decoder test passed, but its package suite is 23/24 because of
-  the unrelated pre-existing `read_file` bounds failure; this is not a
-  package-wide PASS. Final review found no Critical, High, or Medium findings.
-  This closes only the software/single-guest QEMU blind spot: it establishes no
-  hard wall-clock or physical latency bound and no two-node, direct-LAN, relay,
-  remote/public, service, physical, or production completion. Enrollment,
-  lease, and routing risks remain with the separate remote net-broker lane.
+  grace yield (`grace=1`). The timing classifier keeps the exclusive `900000`
+  PASS ceiling: exact raw-zero same-cycle drains at or above it now emit
+  well-formed INCONCLUSIVE late-drain evidence rather than PASS or FAIL.
+- The canonical QEMU gate no longer waits for a timing PASS. It first requires
+  exact kernel `IPC-PENDING` completion-wake and `NET-RX-RESERVATION` IPC-safe
+  PASS markers with no corresponding FAIL, then checkpoints and runs measured
+  calibration, 1/2/4/8/16 sweeps, 10,000/10,000 soak with positive network
+  progress and zero heartbeat/watchdog deltas, overflow, and restart. Genuine
+  `FAIL`, `BLOCKED`, and legacy maintenance-timeout markers remain rejected
+  across the whole run. The benchmark launches without waiting for timing, but
+  final parsing requires at least one exact sub-ceiling runtime PASS. That PASS
+  is mandatory but supplemental and non-causal. Individual INCONCLUSIVE
+  markers are neutral; INCONCLUSIVE-only output cannot pass and makes no
+  runtime wake-cause claim.
+- The earlier cycle 36 capture (`start=144542529`, `raw_ret=0`,
+  `elapsed=442232`) and its passing benchmark came from pre-final-code source.
+  They are historical observations, not final-source proof. A first
+  final-source attempt stopped on a cycle 30 late drain under the legacy
+  maintenance-timeout classifier and did not complete the benchmark. Corrected
+  final-source QEMU evidence will be added only after rerun.
+- Earlier API 91/91, service-net 30/30, fresh RV64 build, feature-off marker
+  exclusion, focused decoder, and deterministic kernel boot-test evidence
+  remain recorded. The decoder's package suite is still 23/24 because of the
+  unrelated pre-existing `read_file` bounds failure; this is not a package-wide
+  PASS. This work establishes no hard wall-clock or physical latency bound and
+  no two-node, direct-LAN, relay, remote/public, service, physical, or
+  production completion. Enrollment, lease, and routing risks remain with the
+  separate remote net-broker lane.
 
 ## [2026-08-27] GetRandom technical evidence and PAL governance rebind
 

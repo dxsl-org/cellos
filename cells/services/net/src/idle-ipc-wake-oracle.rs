@@ -1,4 +1,4 @@
-use crate::service_runtime::idle_ipc_wake_is_provably_early;
+use crate::service_runtime::{classify_idle_ipc_wake, IdleIpcWakeClassification};
 use ostd::io::println;
 
 struct ArmedWait {
@@ -60,14 +60,17 @@ impl IdleIpcWakeOracle {
         let cycle = armed.cycle;
         let maintenance_budget_ticks = armed.maintenance_budget_ticks;
         let proof_ceiling_ticks = armed.proof_ceiling_ticks;
-        if idle_ipc_wake_is_provably_early(elapsed_ticks) {
-            println(&alloc::format!(
-                "[c2c-broker-oracle] idle_ipc_wake status=PASS cycle={cycle} wake=recordless raw_ret=0 elapsed_ticks={elapsed_ticks} budget_ticks={maintenance_budget_ticks} proof_ceiling_ticks={proof_ceiling_ticks}"
-            ));
-        } else {
-            println(&alloc::format!(
-                "[c2c-broker-oracle] idle_ipc_wake status=FAIL cycle={cycle} wake=maintenance-timeout elapsed_ticks={elapsed_ticks} budget_ticks={maintenance_budget_ticks} proof_ceiling_ticks={proof_ceiling_ticks}"
-            ));
+        match classify_idle_ipc_wake(elapsed_ticks) {
+            IdleIpcWakeClassification::Pass => {
+                println(&alloc::format!(
+                    "[c2c-broker-oracle] idle_ipc_wake status=PASS cycle={cycle} wake=recordless raw_ret=0 elapsed_ticks={elapsed_ticks} budget_ticks={maintenance_budget_ticks} proof_ceiling_ticks={proof_ceiling_ticks}"
+                ));
+            }
+            IdleIpcWakeClassification::Inconclusive => {
+                println(&alloc::format!(
+                    "[c2c-broker-oracle] idle_ipc_wake status=INCONCLUSIVE wake=recordless raw_ret=0 reason=late-drain cycle={cycle} elapsed_ticks={elapsed_ticks} budget_ticks={maintenance_budget_ticks} proof_ceiling_ticks={proof_ceiling_ticks}"
+                ));
+            }
         }
     }
 }

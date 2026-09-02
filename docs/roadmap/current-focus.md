@@ -53,17 +53,23 @@ or qualified independent external floor.
   handoff is armed before wait-state publication across `Send`, post, and
   `TrySend`, and NET_RX `Completing` ownership is preserved.
   Service-net retains its finite 10-tick (about 100 ms) smoltcp maintenance
-  wake and exactly one production grace yield (`grace=1`). The exact QEMU 1/1
-  IPC-wake proof correlated `cycle=36`, `start=144542529`, `raw_ret=0`, and
-  `elapsed=442232`, below the exclusive proof ceiling `900000` and separately
-  from the maintenance budget `1000000`. Feature-off binaries contain no
-  oracle markers. Post-command calibration passed 1,000/1,000, sweeps and
-  10,000/10,000 soak passed with positive network progress, zero
-  heartbeat/watchdog deltas, and overflow/restart PASS.
-  This remains single-guest local-runtime QEMU evidence; it proves no hard
-  wall-clock or physical latency bound, two-node direct LAN, relay, remote
-  session cleanup, remote/public operation, service deployment, physical
-  execution, protected relay identity, or production.
+  wake and exactly one production grace yield (`grace=1`). The canonical gate
+  now requires the exact kernel `IPC-PENDING` completion-wake and
+  `NET-RX-RESERVATION` IPC-safe PASS markers with no corresponding FAIL before
+  launching every post-command benchmark gate; it does not wait for a runtime
+  timing PASS before launch. Final whole-run parsing nevertheless requires at
+  least one exact raw-zero same-cycle PASS below the exclusive `900000`
+  ceiling. That observation is mandatory but non-causal. A drain at or above
+  the ceiling is neutral INCONCLUSIVE: it neither satisfies nor itself fails
+  the gate, while INCONCLUSIVE-only output cannot pass. The prior cycle 36
+  (`start=144542529`, `raw_ret=0`, `elapsed=442232`) plus calibration, sweeps,
+  soak, overflow, and restart came
+  from pre-final-code source and is historical rather than final-source proof.
+  Final-source QEMU evidence will be added only after the corrected canonical
+  rerun. This work proves no hard wall-clock or physical latency bound,
+  two-node direct LAN, relay, remote session cleanup, remote/public operation,
+  service deployment, physical execution, protected relay identity, or
+  production.
 - The broker's stable-identity consumer now uses the existing opaque KMS
   static-DH seam. It accepts only matching ready register/status/acquire
   snapshots and gives Clatter handle/epoch/public metadata; the private scalar
@@ -74,11 +80,13 @@ or qualified independent external floor.
   compare-and-swap contract; clone/lost-key states cannot auto-rotate or restore
   plaintext identity. Qualified provider execution and physical recovery
   evidence remain open.
-- API tests pass 91/91, service-net host tests pass 30/30, the exact boot/QEMU
-  lane passes 1/1, and fresh RV64 builds pass; Candidate B local ingress
-  remains complete at the single-guest ceiling. The focused `ostd` completion
-  decoder test passed, but the package suite is 23/24 because of the unrelated,
-  pre-existing `read_file` bounds failure; this is not a package-wide PASS.
+- API tests pass 91/91, service-net host tests pass 30/30, the deterministic
+  kernel completion-wake boot gate passes 1/1, and fresh RV64 builds pass;
+  Candidate B local ingress remains complete at its source/host boundary. The
+  corrected combined final-source QEMU gate is pending rerun. The focused
+  `ostd` completion decoder test passed, but the package suite is 23/24 because
+  of the unrelated, pre-existing `read_file` bounds failure; this is not a
+  package-wide PASS.
   Enrollment, lease renewal, and routing remain unwired or unreachable from the
   broker dispatch path.
   This does not prove two-node, relay, direct-LAN, remote restart/failover,

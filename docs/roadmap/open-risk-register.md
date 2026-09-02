@@ -146,8 +146,9 @@ those remain fail-closed production gates.
   path. Enrollment, lease renewal, swarm routing, relay, and direct-LAN
   operation remain open; the local result proves no two-node, service,
   physical, or production completion.
-- **The local/QEMU IPC-aware `WaitCompletion` blind spot is closed at the
-  software/single-guest QEMU ceiling.** Queued IPC now interrupts a parked
+- **The local IPC-aware `WaitCompletion` implementation is closed at source
+  and deterministic kernel-selftest level; corrected final-source combined
+  QEMU evidence is pending.** Queued IPC now interrupts a parked
   `WaitCompletion` through the existing raw return `0`, with no completion
   record. The public completion ABI and source vocabulary remain `NET_RX` and
   `TIMER`; no IPC completion source was added. Kernel park/publication
@@ -156,15 +157,19 @@ those remain fail-closed production gates.
   preserving NET_RX `Completing` ownership.
   Service-net retains a finite 10-tick (about 100 ms) smoltcp maintenance wake
   and exactly one production grace yield (`grace=1`); neither is the former
-  one-tick IPC workaround. The final QEMU 1/1 proof correlated `cycle=36`,
-  `start=144542529`, `raw_ret=0`, and `elapsed=442232`, below the exclusive
-  IPC-wake proof ceiling `900000` and separately from the maintenance budget
-  `1000000`. Post-command calibration passed 1,000/1,000, sweeps and
-  10,000/10,000 soak passed with positive network progress, zero
-  heartbeat/watchdog deltas, and overflow/restart PASS; feature-off binaries
-  contained no oracle markers. This is software/single-guest QEMU evidence,
-  not a hard wall-clock or physical latency bound and not two-node, service,
-  physical, or production completion.
+  one-tick IPC workaround. The canonical runner now requires the exact kernel
+  `IPC-PENDING` completion-wake and `NET-RX-RESERVATION` IPC-safe PASS markers
+  with no corresponding FAIL, then every post-command benchmark gate. It
+  launches the benchmark without first waiting for timing PASS, but final
+  whole-run parsing requires at least one exact sub-`900000` raw-zero
+  same-cycle PASS. That observation is mandatory but non-causal. A drain at or
+  above the ceiling is neutral INCONCLUSIVE: it neither satisfies nor itself
+  fails the gate, while INCONCLUSIVE-only output cannot pass.
+  The recorded cycle 36 (`start=144542529`, `raw_ret=0`, `elapsed=442232`) and
+  its passing benchmark came from pre-final-code source and are historical,
+  not final-source proof. Final-source QEMU evidence will be recorded only
+  after the corrected canonical rerun. This remains outside two-node, service,
+  physical, hard-latency, and production completion.
 - Native POSIX path handling remains incomplete: canonicalization, `chdir`,
   `rename`, `getcwd`, and `fstat` contain stubs or deferred behavior in
   `kernel/src/task.rs`; Tier 1 must not be documented as POSIX-complete.
