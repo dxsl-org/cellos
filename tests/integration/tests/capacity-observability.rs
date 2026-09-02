@@ -12,6 +12,49 @@ fn repo_root() -> PathBuf {
         .expect("repo root resolves")
 }
 
+fn assert_latest_meminfo(output: &str, surface: &str) {
+    assert!(
+        !output.contains("approx") && !output.contains("not yet wired"),
+        "{surface} emitted placeholder memory text\n{output}"
+    );
+
+    let row = output
+        .lines()
+        .rev()
+        .find(|line| line.contains("Mem (KiB):"))
+        .unwrap_or_else(|| panic!("{surface} did not emit a Mem (KiB) row\n{output}"));
+    let values = row
+        .split_once("Mem (KiB):")
+        .expect("matched row contains its marker")
+        .1;
+    let mut fields = values.split_whitespace();
+    let total = fields
+        .next()
+        .unwrap_or_else(|| panic!("{surface} row has no total: {row}"))
+        .parse::<u64>()
+        .unwrap_or_else(|error| panic!("{surface} total is not an integer: {error}: {row}"));
+    let used = fields
+        .next()
+        .unwrap_or_else(|| panic!("{surface} row has no used value: {row}"))
+        .parse::<u64>()
+        .unwrap_or_else(|error| panic!("{surface} used is not an integer: {error}: {row}"));
+    let free = fields
+        .next()
+        .unwrap_or_else(|| panic!("{surface} row has no free value: {row}"))
+        .parse::<u64>()
+        .unwrap_or_else(|error| panic!("{surface} free is not an integer: {error}: {row}"));
+    assert!(
+        fields.next().is_none(),
+        "{surface} row has unexpected fields: {row}"
+    );
+    assert!(total > 0, "{surface} reported zero total memory: {row}");
+    assert_eq!(
+        used.checked_add(free),
+        Some(total),
+        "{surface} total does not equal used + free: {row}"
+    );
+}
+
 #[test]
 fn meminfo_denial_and_typed_spawn_oom_are_runtime_visible() {
     let root = repo_root();
@@ -36,6 +79,26 @@ fn meminfo_denial_and_typed_spawn_oom_are_runtime_visible() {
     qemu.wait_for("=== Cellos shell ready", 45)
         .unwrap_or_else(|error| panic!("shell: {error}\n{}", qemu.dump()));
     std::thread::sleep(Duration::from_secs(1));
+    let shell_free_checkpoint = qemu.output_checkpoint();
+    qemu.send_line("free");
+    qemu.wait_for_after("Cellos >", shell_free_checkpoint, 20)
+        .unwrap_or_else(|error| panic!("shell free: {error}\n{}", qemu.dump()));
+    let shell_free_output = qemu.dump();
+    let shell_free_output = shell_free_output
+        .get(shell_free_checkpoint..)
+        .expect("shell free checkpoint remains a UTF-8 boundary");
+    assert_latest_meminfo(shell_free_output, "shell free");
+
+    let standalone_free_checkpoint = qemu.output_checkpoint();
+    qemu.send_line("exec /bin/free");
+    qemu.wait_for_after("Cellos >", standalone_free_checkpoint, 20)
+        .unwrap_or_else(|error| panic!("standalone free: {error}\n{}", qemu.dump()));
+    let standalone_free_output = qemu.dump();
+    let standalone_free_output = standalone_free_output
+        .get(standalone_free_checkpoint..)
+        .expect("standalone free checkpoint remains a UTF-8 boundary");
+    assert_latest_meminfo(standalone_free_output, "/bin/free");
+
 
     qemu.send_line("capacity-probe");
     qemu.wait_for("[a2a3-probe] MEMINFO_DENIED", 30)
