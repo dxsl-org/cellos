@@ -93,8 +93,8 @@
 <a href=#93 id=93 data-nosnippet>93</a>    /// - Cannot be killed by external signal (returns `ViError::PermissionDenied`).
 <a href=#94 id=94 data-nosnippet>94</a>    /// - Can only be terminated by the hotswap orchestrator via `exit_task` after a
 <a href=#95 id=95 data-nosnippet>95</a>    ///   successful swap, or rolled back to `Ready` on failure.
-<a href=#96 id=96 data-nosnippet>96</a>    /// - Incoming IPC is queued in `crate::cell::hotswap::FROZEN` registry instead
-<a href=#97 id=97 data-nosnippet>97</a>    ///   of being delivered (Phase 02 will drain the queue; P01 stubs this).
+<a href=#96 id=96 data-nosnippet>96</a>    /// - Accepted incoming IPC is retained in this task's pending mailbox and
+<a href=#97 id=97 data-nosnippet>97</a>    ///   transferred only by the live cutover barrier to the replacement.
 <a href=#98 id=98 data-nosnippet>98</a>    </span>Frozen {
 <a href=#99 id=99 data-nosnippet>99</a>        swap_id: u64,
 <a href=#100 id=100 data-nosnippet>100</a>    },

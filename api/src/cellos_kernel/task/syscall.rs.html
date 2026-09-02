@@ -6664,327 +6664,332 @@
 <a href=#6664 id=6664 data-nosnippet>6664</a>#[no_mangle]
 <a href=#6665 id=6665 data-nosnippet>6665</a>#[allow(non_snake_case)] </span><span class="comment">// ABI name required by the HAL trap vector — cannot be snake_case
 <a href=#6666 id=6666 data-nosnippet>6666</a></span><span class="kw">pub extern </span><span class="string">"Rust" </span><span class="kw">fn </span>ViCell_syscall_dispatch(frame: <span class="kw-2">&amp;mut </span>ViTrapFrame) {
-<a href=#6667 id=6667 data-nosnippet>6667</a>    <span class="kw">let </span>syscall_id = frame.regs[<span class="number">17</span>];
-<a href=#6668 id=6668 data-nosnippet>6668</a>
-<a href=#6669 id=6669 data-nosnippet>6669</a>    <span class="comment">// Watchdog progress signal: a syscall proves the caller is making progress
-<a href=#6670 id=6670 data-nosnippet>6670</a>    // (ViCell cells are poll-based — try_recv/yield every loop iteration), so
-<a href=#6671 id=6671 data-nosnippet>6671</a>    // reset its CPU-monopoly counter.
-<a href=#6672 id=6672 data-nosnippet>6672</a>    </span>{
-<a href=#6673 id=6673 data-nosnippet>6673</a>        <span class="kw">let </span>hart_id = <span class="kw">super</span>::hart_local::current_hart_id();
-<a href=#6674 id=6674 data-nosnippet>6674</a>        <span class="kw">let </span>cid = <span class="kw">super</span>::hart_local::ready::current_task_id_for(hart_id);
-<a href=#6675 id=6675 data-nosnippet>6675</a>        <span class="kw">if </span>cid &gt; <span class="number">0 </span>{
-<a href=#6676 id=6676 data-nosnippet>6676</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(sched) = <span class="kw">super</span>::SCHEDULER.lock().as_mut() {
-<a href=#6677 id=6677 data-nosnippet>6677</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(t) = sched.tasks.get_mut(<span class="kw-2">&amp;</span>cid) {
-<a href=#6678 id=6678 data-nosnippet>6678</a>                    t.run_ticks = <span class="number">0</span>;
-<a href=#6679 id=6679 data-nosnippet>6679</a>                    t.rt_overrun_warned = <span class="bool-val">false</span>;
-<a href=#6680 id=6680 data-nosnippet>6680</a>                }
-<a href=#6681 id=6681 data-nosnippet>6681</a>            }
-<a href=#6682 id=6682 data-nosnippet>6682</a>        }
-<a href=#6683 id=6683 data-nosnippet>6683</a>    }
-<a href=#6684 id=6684 data-nosnippet>6684</a>
-<a href=#6685 id=6685 data-nosnippet>6685</a>    <span class="kw">let </span>a0 = frame.regs[<span class="number">10</span>];
-<a href=#6686 id=6686 data-nosnippet>6686</a>    <span class="kw">let </span>a1 = frame.regs[<span class="number">11</span>];
-<a href=#6687 id=6687 data-nosnippet>6687</a>    <span class="kw">let </span>a2 = frame.regs[<span class="number">12</span>];
-<a href=#6688 id=6688 data-nosnippet>6688</a>    <span class="kw">let </span>a3 = frame.regs[<span class="number">13</span>];
+<a href=#6667 id=6667 data-nosnippet>6667</a>    <span class="attr">#[cfg(all(feature = <span class="string">"x86-idt-cpl3-test"</span>, target_arch = <span class="string">"x86_64"</span>))]
+<a href=#6668 id=6668 data-nosnippet>6668</a>    </span><span class="kw">if </span><span class="kw">crate</span>::hal::idt::handle_cpl3_probe_syscall(frame) {
+<a href=#6669 id=6669 data-nosnippet>6669</a>        <span class="kw">return</span>;
+<a href=#6670 id=6670 data-nosnippet>6670</a>    }
+<a href=#6671 id=6671 data-nosnippet>6671</a>
+<a href=#6672 id=6672 data-nosnippet>6672</a>    <span class="kw">let </span>syscall_id = frame.regs[<span class="number">17</span>];
+<a href=#6673 id=6673 data-nosnippet>6673</a>
+<a href=#6674 id=6674 data-nosnippet>6674</a>    <span class="comment">// Watchdog progress signal: a syscall proves the caller is making progress
+<a href=#6675 id=6675 data-nosnippet>6675</a>    // (ViCell cells are poll-based — try_recv/yield every loop iteration), so
+<a href=#6676 id=6676 data-nosnippet>6676</a>    // reset its CPU-monopoly counter.
+<a href=#6677 id=6677 data-nosnippet>6677</a>    </span>{
+<a href=#6678 id=6678 data-nosnippet>6678</a>        <span class="kw">let </span>hart_id = <span class="kw">super</span>::hart_local::current_hart_id();
+<a href=#6679 id=6679 data-nosnippet>6679</a>        <span class="kw">let </span>cid = <span class="kw">super</span>::hart_local::ready::current_task_id_for(hart_id);
+<a href=#6680 id=6680 data-nosnippet>6680</a>        <span class="kw">if </span>cid &gt; <span class="number">0 </span>{
+<a href=#6681 id=6681 data-nosnippet>6681</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(sched) = <span class="kw">super</span>::SCHEDULER.lock().as_mut() {
+<a href=#6682 id=6682 data-nosnippet>6682</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(t) = sched.tasks.get_mut(<span class="kw-2">&amp;</span>cid) {
+<a href=#6683 id=6683 data-nosnippet>6683</a>                    t.run_ticks = <span class="number">0</span>;
+<a href=#6684 id=6684 data-nosnippet>6684</a>                    t.rt_overrun_warned = <span class="bool-val">false</span>;
+<a href=#6685 id=6685 data-nosnippet>6685</a>                }
+<a href=#6686 id=6686 data-nosnippet>6686</a>            }
+<a href=#6687 id=6687 data-nosnippet>6687</a>        }
+<a href=#6688 id=6688 data-nosnippet>6688</a>    }
 <a href=#6689 id=6689 data-nosnippet>6689</a>
-<a href=#6690 id=6690 data-nosnippet>6690</a>    <span class="kw">let </span><span class="prelude-val">Some</span>(syscall) = map_syscall(syscall_id, a0, a1, a2, a3) <span class="kw">else </span>{
-<a href=#6691 id=6691 data-nosnippet>6691</a>        frame.regs[<span class="number">10</span>] = usize::MAX;
-<a href=#6692 id=6692 data-nosnippet>6692</a>        <span class="kw">return</span>;
-<a href=#6693 id=6693 data-nosnippet>6693</a>    };
+<a href=#6690 id=6690 data-nosnippet>6690</a>    <span class="kw">let </span>a0 = frame.regs[<span class="number">10</span>];
+<a href=#6691 id=6691 data-nosnippet>6691</a>    <span class="kw">let </span>a1 = frame.regs[<span class="number">11</span>];
+<a href=#6692 id=6692 data-nosnippet>6692</a>    <span class="kw">let </span>a2 = frame.regs[<span class="number">12</span>];
+<a href=#6693 id=6693 data-nosnippet>6693</a>    <span class="kw">let </span>a3 = frame.regs[<span class="number">13</span>];
 <a href=#6694 id=6694 data-nosnippet>6694</a>
-<a href=#6695 id=6695 data-nosnippet>6695</a>    <span class="kw">let </span>caller_id = <span class="kw">super</span>::current_task_id();
-<a href=#6696 id=6696 data-nosnippet>6696</a>
-<a href=#6697 id=6697 data-nosnippet>6697</a>    <span class="kw">if </span>check_allowlist(syscall_id, caller_id).is_err() {
-<a href=#6698 id=6698 data-nosnippet>6698</a>        frame.regs[<span class="number">10</span>] = usize::MAX;
-<a href=#6699 id=6699 data-nosnippet>6699</a>        <span class="kw">return</span>;
-<a href=#6700 id=6700 data-nosnippet>6700</a>    }
+<a href=#6695 id=6695 data-nosnippet>6695</a>    <span class="kw">let </span><span class="prelude-val">Some</span>(syscall) = map_syscall(syscall_id, a0, a1, a2, a3) <span class="kw">else </span>{
+<a href=#6696 id=6696 data-nosnippet>6696</a>        frame.regs[<span class="number">10</span>] = usize::MAX;
+<a href=#6697 id=6697 data-nosnippet>6697</a>        <span class="kw">return</span>;
+<a href=#6698 id=6698 data-nosnippet>6698</a>    };
+<a href=#6699 id=6699 data-nosnippet>6699</a>
+<a href=#6700 id=6700 data-nosnippet>6700</a>    <span class="kw">let </span>caller_id = <span class="kw">super</span>::current_task_id();
 <a href=#6701 id=6701 data-nosnippet>6701</a>
-<a href=#6702 id=6702 data-nosnippet>6702</a>    <span class="comment">// SAFETY: csrs/csrc sstatus SUM (bit 18) enables S-mode access to user pages
-<a href=#6703 id=6703 data-nosnippet>6703</a>    // for the duration of handle_syscall. Disabled immediately after to prevent
-<a href=#6704 id=6704 data-nosnippet>6704</a>    // inadvertent user-page reads on subsequent kernel faults.
-<a href=#6705 id=6705 data-nosnippet>6705</a>    </span><span class="attr">#[cfg(target_arch = <span class="string">"riscv64"</span>)]
-<a href=#6706 id=6706 data-nosnippet>6706</a>    </span><span class="kw">unsafe </span>{
-<a href=#6707 id=6707 data-nosnippet>6707</a>        <span class="macro">core::arch::asm!</span>(<span class="string">"csrs sstatus, {0}"</span>, <span class="kw">in</span>(reg) <span class="number">0x40000usize</span>);
-<a href=#6708 id=6708 data-nosnippet>6708</a>    }
-<a href=#6709 id=6709 data-nosnippet>6709</a>
-<a href=#6710 id=6710 data-nosnippet>6710</a>    <span class="kw">let </span>supports_typed_oom = supports_typed_spawn_oom(<span class="kw-2">&amp;</span>syscall);
-<a href=#6711 id=6711 data-nosnippet>6711</a>    <span class="kw">let </span>result = handle_syscall(caller_id, syscall);
-<a href=#6712 id=6712 data-nosnippet>6712</a>
-<a href=#6713 id=6713 data-nosnippet>6713</a>    <span class="attr">#[cfg(target_arch = <span class="string">"riscv64"</span>)]
-<a href=#6714 id=6714 data-nosnippet>6714</a>    </span><span class="kw">unsafe </span>{
-<a href=#6715 id=6715 data-nosnippet>6715</a>        <span class="macro">core::arch::asm!</span>(<span class="string">"csrc sstatus, {0}"</span>, <span class="kw">in</span>(reg) <span class="number">0x40000usize</span>);
-<a href=#6716 id=6716 data-nosnippet>6716</a>    }
+<a href=#6702 id=6702 data-nosnippet>6702</a>    <span class="kw">if </span>check_allowlist(syscall_id, caller_id).is_err() {
+<a href=#6703 id=6703 data-nosnippet>6703</a>        frame.regs[<span class="number">10</span>] = usize::MAX;
+<a href=#6704 id=6704 data-nosnippet>6704</a>        <span class="kw">return</span>;
+<a href=#6705 id=6705 data-nosnippet>6705</a>    }
+<a href=#6706 id=6706 data-nosnippet>6706</a>
+<a href=#6707 id=6707 data-nosnippet>6707</a>    <span class="comment">// SAFETY: csrs/csrc sstatus SUM (bit 18) enables S-mode access to user pages
+<a href=#6708 id=6708 data-nosnippet>6708</a>    // for the duration of handle_syscall. Disabled immediately after to prevent
+<a href=#6709 id=6709 data-nosnippet>6709</a>    // inadvertent user-page reads on subsequent kernel faults.
+<a href=#6710 id=6710 data-nosnippet>6710</a>    </span><span class="attr">#[cfg(target_arch = <span class="string">"riscv64"</span>)]
+<a href=#6711 id=6711 data-nosnippet>6711</a>    </span><span class="kw">unsafe </span>{
+<a href=#6712 id=6712 data-nosnippet>6712</a>        <span class="macro">core::arch::asm!</span>(<span class="string">"csrs sstatus, {0}"</span>, <span class="kw">in</span>(reg) <span class="number">0x40000usize</span>);
+<a href=#6713 id=6713 data-nosnippet>6713</a>    }
+<a href=#6714 id=6714 data-nosnippet>6714</a>
+<a href=#6715 id=6715 data-nosnippet>6715</a>    <span class="kw">let </span>supports_typed_oom = supports_typed_spawn_oom(<span class="kw-2">&amp;</span>syscall);
+<a href=#6716 id=6716 data-nosnippet>6716</a>    <span class="kw">let </span>result = handle_syscall(caller_id, syscall);
 <a href=#6717 id=6717 data-nosnippet>6717</a>
-<a href=#6718 id=6718 data-nosnippet>6718</a>    frame.regs[<span class="number">10</span>] = encode_syscall_result(result, usize::MAX, supports_typed_oom);
-<a href=#6719 id=6719 data-nosnippet>6719</a>}
-<a href=#6720 id=6720 data-nosnippet>6720</a>
-<a href=#6721 id=6721 data-nosnippet>6721</a><span class="attr">#[cfg(not(target_arch = <span class="string">"riscv32"</span>))]
-<a href=#6722 id=6722 data-nosnippet>6722</a></span><span class="kw">const _</span>: <span class="kw">crate</span>::hal::SyscallDispatch = ViCell_syscall_dispatch;
-<a href=#6723 id=6723 data-nosnippet>6723</a>
-<a href=#6724 id=6724 data-nosnippet>6724</a><span class="attr">#[cfg(target_arch = <span class="string">"riscv32"</span>)]
-<a href=#6725 id=6725 data-nosnippet>6725</a>#[no_mangle]
-<a href=#6726 id=6726 data-nosnippet>6726</a>#[allow(non_snake_case)]
-<a href=#6727 id=6727 data-nosnippet>6727</a></span><span class="kw">pub extern </span><span class="string">"Rust" </span><span class="kw">fn </span>ViCell_syscall_dispatch(frame: <span class="kw-2">&amp;mut </span><span class="kw">crate</span>::hal::arch::ViTrapFrame) {
-<a href=#6728 id=6728 data-nosnippet>6728</a>    <span class="comment">// Promote u32 register slots to usize (= u32 on rv32) for arch-agnostic helpers.
-<a href=#6729 id=6729 data-nosnippet>6729</a>    </span><span class="kw">let </span>syscall_id = frame.regs[<span class="number">17</span>] <span class="kw">as </span>usize;
-<a href=#6730 id=6730 data-nosnippet>6730</a>
-<a href=#6731 id=6731 data-nosnippet>6731</a>    <span class="comment">// Watchdog: syscall proves the cell is making forward progress.
-<a href=#6732 id=6732 data-nosnippet>6732</a>    </span>{
-<a href=#6733 id=6733 data-nosnippet>6733</a>        <span class="kw">let </span>hart_id = <span class="kw">super</span>::hart_local::current_hart_id();
-<a href=#6734 id=6734 data-nosnippet>6734</a>        <span class="kw">let </span>cid = <span class="kw">super</span>::hart_local::ready::current_task_id_for(hart_id);
-<a href=#6735 id=6735 data-nosnippet>6735</a>        <span class="kw">if </span>cid &gt; <span class="number">0 </span>{
-<a href=#6736 id=6736 data-nosnippet>6736</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(sched) = <span class="kw">super</span>::SCHEDULER.lock().as_mut() {
-<a href=#6737 id=6737 data-nosnippet>6737</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(t) = sched.tasks.get_mut(<span class="kw-2">&amp;</span>cid) {
-<a href=#6738 id=6738 data-nosnippet>6738</a>                    t.run_ticks = <span class="number">0</span>;
-<a href=#6739 id=6739 data-nosnippet>6739</a>                    t.rt_overrun_warned = <span class="bool-val">false</span>;
-<a href=#6740 id=6740 data-nosnippet>6740</a>                }
-<a href=#6741 id=6741 data-nosnippet>6741</a>            }
-<a href=#6742 id=6742 data-nosnippet>6742</a>        }
-<a href=#6743 id=6743 data-nosnippet>6743</a>    }
-<a href=#6744 id=6744 data-nosnippet>6744</a>
-<a href=#6745 id=6745 data-nosnippet>6745</a>    <span class="kw">let </span>a0 = frame.regs[<span class="number">10</span>] <span class="kw">as </span>usize;
-<a href=#6746 id=6746 data-nosnippet>6746</a>    <span class="kw">let </span>a1 = frame.regs[<span class="number">11</span>] <span class="kw">as </span>usize;
-<a href=#6747 id=6747 data-nosnippet>6747</a>    <span class="kw">let </span>a2 = frame.regs[<span class="number">12</span>] <span class="kw">as </span>usize;
-<a href=#6748 id=6748 data-nosnippet>6748</a>    <span class="kw">let </span>a3 = frame.regs[<span class="number">13</span>] <span class="kw">as </span>usize;
+<a href=#6718 id=6718 data-nosnippet>6718</a>    <span class="attr">#[cfg(target_arch = <span class="string">"riscv64"</span>)]
+<a href=#6719 id=6719 data-nosnippet>6719</a>    </span><span class="kw">unsafe </span>{
+<a href=#6720 id=6720 data-nosnippet>6720</a>        <span class="macro">core::arch::asm!</span>(<span class="string">"csrc sstatus, {0}"</span>, <span class="kw">in</span>(reg) <span class="number">0x40000usize</span>);
+<a href=#6721 id=6721 data-nosnippet>6721</a>    }
+<a href=#6722 id=6722 data-nosnippet>6722</a>
+<a href=#6723 id=6723 data-nosnippet>6723</a>    frame.regs[<span class="number">10</span>] = encode_syscall_result(result, usize::MAX, supports_typed_oom);
+<a href=#6724 id=6724 data-nosnippet>6724</a>}
+<a href=#6725 id=6725 data-nosnippet>6725</a>
+<a href=#6726 id=6726 data-nosnippet>6726</a><span class="attr">#[cfg(not(target_arch = <span class="string">"riscv32"</span>))]
+<a href=#6727 id=6727 data-nosnippet>6727</a></span><span class="kw">const _</span>: <span class="kw">crate</span>::hal::SyscallDispatch = ViCell_syscall_dispatch;
+<a href=#6728 id=6728 data-nosnippet>6728</a>
+<a href=#6729 id=6729 data-nosnippet>6729</a><span class="attr">#[cfg(target_arch = <span class="string">"riscv32"</span>)]
+<a href=#6730 id=6730 data-nosnippet>6730</a>#[no_mangle]
+<a href=#6731 id=6731 data-nosnippet>6731</a>#[allow(non_snake_case)]
+<a href=#6732 id=6732 data-nosnippet>6732</a></span><span class="kw">pub extern </span><span class="string">"Rust" </span><span class="kw">fn </span>ViCell_syscall_dispatch(frame: <span class="kw-2">&amp;mut </span><span class="kw">crate</span>::hal::arch::ViTrapFrame) {
+<a href=#6733 id=6733 data-nosnippet>6733</a>    <span class="comment">// Promote u32 register slots to usize (= u32 on rv32) for arch-agnostic helpers.
+<a href=#6734 id=6734 data-nosnippet>6734</a>    </span><span class="kw">let </span>syscall_id = frame.regs[<span class="number">17</span>] <span class="kw">as </span>usize;
+<a href=#6735 id=6735 data-nosnippet>6735</a>
+<a href=#6736 id=6736 data-nosnippet>6736</a>    <span class="comment">// Watchdog: syscall proves the cell is making forward progress.
+<a href=#6737 id=6737 data-nosnippet>6737</a>    </span>{
+<a href=#6738 id=6738 data-nosnippet>6738</a>        <span class="kw">let </span>hart_id = <span class="kw">super</span>::hart_local::current_hart_id();
+<a href=#6739 id=6739 data-nosnippet>6739</a>        <span class="kw">let </span>cid = <span class="kw">super</span>::hart_local::ready::current_task_id_for(hart_id);
+<a href=#6740 id=6740 data-nosnippet>6740</a>        <span class="kw">if </span>cid &gt; <span class="number">0 </span>{
+<a href=#6741 id=6741 data-nosnippet>6741</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(sched) = <span class="kw">super</span>::SCHEDULER.lock().as_mut() {
+<a href=#6742 id=6742 data-nosnippet>6742</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(t) = sched.tasks.get_mut(<span class="kw-2">&amp;</span>cid) {
+<a href=#6743 id=6743 data-nosnippet>6743</a>                    t.run_ticks = <span class="number">0</span>;
+<a href=#6744 id=6744 data-nosnippet>6744</a>                    t.rt_overrun_warned = <span class="bool-val">false</span>;
+<a href=#6745 id=6745 data-nosnippet>6745</a>                }
+<a href=#6746 id=6746 data-nosnippet>6746</a>            }
+<a href=#6747 id=6747 data-nosnippet>6747</a>        }
+<a href=#6748 id=6748 data-nosnippet>6748</a>    }
 <a href=#6749 id=6749 data-nosnippet>6749</a>
-<a href=#6750 id=6750 data-nosnippet>6750</a>    <span class="kw">let </span><span class="prelude-val">Some</span>(syscall) = map_syscall(syscall_id, a0, a1, a2, a3) <span class="kw">else </span>{
-<a href=#6751 id=6751 data-nosnippet>6751</a>        frame.regs[<span class="number">10</span>] = u32::MAX;
-<a href=#6752 id=6752 data-nosnippet>6752</a>        <span class="kw">return</span>;
-<a href=#6753 id=6753 data-nosnippet>6753</a>    };
+<a href=#6750 id=6750 data-nosnippet>6750</a>    <span class="kw">let </span>a0 = frame.regs[<span class="number">10</span>] <span class="kw">as </span>usize;
+<a href=#6751 id=6751 data-nosnippet>6751</a>    <span class="kw">let </span>a1 = frame.regs[<span class="number">11</span>] <span class="kw">as </span>usize;
+<a href=#6752 id=6752 data-nosnippet>6752</a>    <span class="kw">let </span>a2 = frame.regs[<span class="number">12</span>] <span class="kw">as </span>usize;
+<a href=#6753 id=6753 data-nosnippet>6753</a>    <span class="kw">let </span>a3 = frame.regs[<span class="number">13</span>] <span class="kw">as </span>usize;
 <a href=#6754 id=6754 data-nosnippet>6754</a>
-<a href=#6755 id=6755 data-nosnippet>6755</a>    <span class="kw">let </span>caller_id = <span class="kw">super</span>::current_task_id();
-<a href=#6756 id=6756 data-nosnippet>6756</a>
-<a href=#6757 id=6757 data-nosnippet>6757</a>    <span class="kw">if </span>check_allowlist(syscall_id, caller_id).is_err() {
-<a href=#6758 id=6758 data-nosnippet>6758</a>        frame.regs[<span class="number">10</span>] = u32::MAX;
-<a href=#6759 id=6759 data-nosnippet>6759</a>        <span class="kw">return</span>;
-<a href=#6760 id=6760 data-nosnippet>6760</a>    }
+<a href=#6755 id=6755 data-nosnippet>6755</a>    <span class="kw">let </span><span class="prelude-val">Some</span>(syscall) = map_syscall(syscall_id, a0, a1, a2, a3) <span class="kw">else </span>{
+<a href=#6756 id=6756 data-nosnippet>6756</a>        frame.regs[<span class="number">10</span>] = u32::MAX;
+<a href=#6757 id=6757 data-nosnippet>6757</a>        <span class="kw">return</span>;
+<a href=#6758 id=6758 data-nosnippet>6758</a>    };
+<a href=#6759 id=6759 data-nosnippet>6759</a>
+<a href=#6760 id=6760 data-nosnippet>6760</a>    <span class="kw">let </span>caller_id = <span class="kw">super</span>::current_task_id();
 <a href=#6761 id=6761 data-nosnippet>6761</a>
-<a href=#6762 id=6762 data-nosnippet>6762</a>    <span class="comment">// SAFETY: csrs/csrc sstatus SUM (bit 18) — same bit position on RV32 and RV64
-<a href=#6763 id=6763 data-nosnippet>6763</a>    // per the RISC-V Privileged Spec §4.1.1. Disabled after handle_syscall.
-<a href=#6764 id=6764 data-nosnippet>6764</a>    </span><span class="kw">unsafe </span>{
-<a href=#6765 id=6765 data-nosnippet>6765</a>        <span class="macro">core::arch::asm!</span>(<span class="string">"csrs sstatus, {0}"</span>, <span class="kw">in</span>(reg) <span class="number">0x40000usize</span>);
-<a href=#6766 id=6766 data-nosnippet>6766</a>    }
-<a href=#6767 id=6767 data-nosnippet>6767</a>
-<a href=#6768 id=6768 data-nosnippet>6768</a>    <span class="kw">let </span>supports_typed_oom = supports_typed_spawn_oom(<span class="kw-2">&amp;</span>syscall);
-<a href=#6769 id=6769 data-nosnippet>6769</a>    <span class="kw">let </span>result = handle_syscall(caller_id, syscall);
-<a href=#6770 id=6770 data-nosnippet>6770</a>
-<a href=#6771 id=6771 data-nosnippet>6771</a>    <span class="kw">unsafe </span>{
-<a href=#6772 id=6772 data-nosnippet>6772</a>        <span class="macro">core::arch::asm!</span>(<span class="string">"csrc sstatus, {0}"</span>, <span class="kw">in</span>(reg) <span class="number">0x40000usize</span>);
-<a href=#6773 id=6773 data-nosnippet>6773</a>    }
-<a href=#6774 id=6774 data-nosnippet>6774</a>
-<a href=#6775 id=6775 data-nosnippet>6775</a>    frame.regs[<span class="number">10</span>] = encode_syscall_result(result, u32::MAX <span class="kw">as </span>usize, supports_typed_oom) <span class="kw">as </span>u32;
-<a href=#6776 id=6776 data-nosnippet>6776</a>}
-<a href=#6777 id=6777 data-nosnippet>6777</a>
-<a href=#6778 id=6778 data-nosnippet>6778</a><span class="attr">#[cfg(target_arch = <span class="string">"riscv32"</span>)]
-<a href=#6779 id=6779 data-nosnippet>6779</a></span><span class="kw">const _</span>: <span class="kw">crate</span>::hal::SyscallDispatch = ViCell_syscall_dispatch;
-<a href=#6780 id=6780 data-nosnippet>6780</a>
-<a href=#6781 id=6781 data-nosnippet>6781</a><span class="attr">#[cfg(test)]
-<a href=#6782 id=6782 data-nosnippet>6782</a></span><span class="kw">mod </span>tests {
-<a href=#6783 id=6783 data-nosnippet>6783</a>    <span class="kw">use </span>super::{
-<a href=#6784 id=6784 data-nosnippet>6784</a>        check_allowlist, encode_syscall_result, map_syscall, page_grant_authorizes_dma,
-<a href=#6785 id=6785 data-nosnippet>6785</a>        reg_grant_authorizes_dma, supports_typed_spawn_oom, syscall_to_vi, withhold_or_free,
-<a href=#6786 id=6786 data-nosnippet>6786</a>        PageGrant, RegGrant, Syscall, SyscallError,
-<a href=#6787 id=6787 data-nosnippet>6787</a>    };
-<a href=#6788 id=6788 data-nosnippet>6788</a>    <span class="kw">use </span><span class="kw">crate</span>::task::{scheduler::Scheduler, tcb::Task, SCHEDULER};
-<a href=#6789 id=6789 data-nosnippet>6789</a>    <span class="kw">use </span>api::syscall::ViSyscall;
-<a href=#6790 id=6790 data-nosnippet>6790</a>    <span class="kw">use </span>types::CellId;
-<a href=#6791 id=6791 data-nosnippet>6791</a>
-<a href=#6792 id=6792 data-nosnippet>6792</a>    <span class="kw">fn </span>with_scheduler_task&lt;F&gt;(allowlist: u64, f: F)
-<a href=#6793 id=6793 data-nosnippet>6793</a>    <span class="kw">where
-<a href=#6794 id=6794 data-nosnippet>6794</a>        </span>F: FnOnce(usize),
-<a href=#6795 id=6795 data-nosnippet>6795</a>    {
-<a href=#6796 id=6796 data-nosnippet>6796</a>        <span class="kw">let </span>_guard = <span class="kw">crate</span>::TEST_STATE_LOCK.lock();
-<a href=#6797 id=6797 data-nosnippet>6797</a>        <span class="kw">let </span><span class="kw-2">mut </span>previous = SCHEDULER.lock();
-<a href=#6798 id=6798 data-nosnippet>6798</a>        <span class="kw">let </span>saved = previous.take();
-<a href=#6799 id=6799 data-nosnippet>6799</a>        <span class="kw">let </span><span class="kw-2">mut </span>scheduler = Scheduler::new();
-<a href=#6800 id=6800 data-nosnippet>6800</a>        <span class="kw">let </span>tid = <span class="number">1</span>;
-<a href=#6801 id=6801 data-nosnippet>6801</a>        <span class="kw">let </span><span class="kw-2">mut </span>task = alloc::boxed::Box::new(Task::new(
-<a href=#6802 id=6802 data-nosnippet>6802</a>            tid,
-<a href=#6803 id=6803 data-nosnippet>6803</a>            CellId(<span class="number">7</span>),
-<a href=#6804 id=6804 data-nosnippet>6804</a>            <span class="string">"allowlist-test"</span>,
-<a href=#6805 id=6805 data-nosnippet>6805</a>            alloc::vec::Vec::new(),
-<a href=#6806 id=6806 data-nosnippet>6806</a>        ));
-<a href=#6807 id=6807 data-nosnippet>6807</a>        task.syscall_allowlist = allowlist;
-<a href=#6808 id=6808 data-nosnippet>6808</a>        scheduler.tasks.insert(tid, task);
-<a href=#6809 id=6809 data-nosnippet>6809</a>        <span class="kw-2">*</span>previous = <span class="prelude-val">Some</span>(scheduler);
-<a href=#6810 id=6810 data-nosnippet>6810</a>        drop(previous);
-<a href=#6811 id=6811 data-nosnippet>6811</a>
-<a href=#6812 id=6812 data-nosnippet>6812</a>        f(tid);
-<a href=#6813 id=6813 data-nosnippet>6813</a>
-<a href=#6814 id=6814 data-nosnippet>6814</a>        <span class="kw">let </span><span class="kw-2">mut </span>restore = SCHEDULER.lock();
-<a href=#6815 id=6815 data-nosnippet>6815</a>        <span class="kw-2">*</span>restore = saved;
-<a href=#6816 id=6816 data-nosnippet>6816</a>    }
-<a href=#6817 id=6817 data-nosnippet>6817</a>
-<a href=#6818 id=6818 data-nosnippet>6818</a>    <span class="attr">#[test]
-<a href=#6819 id=6819 data-nosnippet>6819</a>    </span><span class="kw">fn </span>get_procs2_maps_args_and_dispatch_variant() {
-<a href=#6820 id=6820 data-nosnippet>6820</a>        <span class="kw">let </span>syscall = map_syscall(ViSyscall::GetProcs2 <span class="kw">as </span>usize, <span class="number">0x1000</span>, <span class="number">7</span>, <span class="number">0</span>, <span class="number">0</span>)
-<a href=#6821 id=6821 data-nosnippet>6821</a>            .expect(<span class="string">"GetProcs2 must decode"</span>);
-<a href=#6822 id=6822 data-nosnippet>6822</a>        <span class="kw">match </span>syscall {
-<a href=#6823 id=6823 data-nosnippet>6823</a>            Syscall::GetProcs2 { buf_ptr, buf_len } =&gt; {
-<a href=#6824 id=6824 data-nosnippet>6824</a>                <span class="macro">assert_eq!</span>(buf_ptr, <span class="number">0x1000</span>);
-<a href=#6825 id=6825 data-nosnippet>6825</a>                <span class="macro">assert_eq!</span>(buf_len, <span class="number">7</span>);
-<a href=#6826 id=6826 data-nosnippet>6826</a>            }
-<a href=#6827 id=6827 data-nosnippet>6827</a>            other =&gt; <span class="macro">panic!</span>(<span class="string">"decoded wrong syscall variant: {other:?}"</span>),
-<a href=#6828 id=6828 data-nosnippet>6828</a>        }
-<a href=#6829 id=6829 data-nosnippet>6829</a>        <span class="macro">assert_eq!</span>(syscall_to_vi(<span class="kw-2">&amp;</span>syscall), <span class="prelude-val">Some</span>(ViSyscall::GetProcs2));
-<a href=#6830 id=6830 data-nosnippet>6830</a>    }
-<a href=#6831 id=6831 data-nosnippet>6831</a>
-<a href=#6832 id=6832 data-nosnippet>6832</a>    <span class="attr">#[test]
-<a href=#6833 id=6833 data-nosnippet>6833</a>    </span><span class="kw">fn </span>get_procs2_allowlist_denies_without_bit_55() {
-<a href=#6834 id=6834 data-nosnippet>6834</a>        with_scheduler_task(<span class="number">0</span>, |tid| {
-<a href=#6835 id=6835 data-nosnippet>6835</a>            <span class="macro">assert_eq!</span>(
-<a href=#6836 id=6836 data-nosnippet>6836</a>                check_allowlist(ViSyscall::GetProcs2 <span class="kw">as </span>usize, tid),
-<a href=#6837 id=6837 data-nosnippet>6837</a>                <span class="prelude-val">Err</span>(SyscallError::PermissionDenied)
-<a href=#6838 id=6838 data-nosnippet>6838</a>            );
-<a href=#6839 id=6839 data-nosnippet>6839</a>        });
-<a href=#6840 id=6840 data-nosnippet>6840</a>    }
-<a href=#6841 id=6841 data-nosnippet>6841</a>
-<a href=#6842 id=6842 data-nosnippet>6842</a>    <span class="attr">#[test]
-<a href=#6843 id=6843 data-nosnippet>6843</a>    </span><span class="kw">fn </span>get_procs2_allowlist_allows_with_bit_55() {
-<a href=#6844 id=6844 data-nosnippet>6844</a>        with_scheduler_task(<span class="number">1u64 </span>&lt;&lt; <span class="number">55</span>, |tid| {
-<a href=#6845 id=6845 data-nosnippet>6845</a>            <span class="macro">assert_eq!</span>(check_allowlist(ViSyscall::GetProcs2 <span class="kw">as </span>usize, tid), <span class="prelude-val">Ok</span>(()));
-<a href=#6846 id=6846 data-nosnippet>6846</a>        });
-<a href=#6847 id=6847 data-nosnippet>6847</a>    }
-<a href=#6848 id=6848 data-nosnippet>6848</a>
-<a href=#6849 id=6849 data-nosnippet>6849</a>    <span class="attr">#[test]
-<a href=#6850 id=6850 data-nosnippet>6850</a>    </span><span class="kw">fn </span>syscall_result_encoding_preserves_generic_and_additive_oom_codes() {
-<a href=#6851 id=6851 data-nosnippet>6851</a>        <span class="macro">assert_eq!</span>(encode_syscall_result(<span class="prelude-val">Ok</span>(<span class="number">9</span>), usize::MAX, <span class="bool-val">false</span>), <span class="number">9</span>);
-<a href=#6852 id=6852 data-nosnippet>6852</a>        <span class="macro">assert_eq!</span>(
-<a href=#6853 id=6853 data-nosnippet>6853</a>            encode_syscall_result(<span class="prelude-val">Err</span>(SyscallError::InvalidInput), usize::MAX, <span class="bool-val">true</span>),
-<a href=#6854 id=6854 data-nosnippet>6854</a>            usize::MAX
-<a href=#6855 id=6855 data-nosnippet>6855</a>        );
-<a href=#6856 id=6856 data-nosnippet>6856</a>        <span class="macro">assert_eq!</span>(
-<a href=#6857 id=6857 data-nosnippet>6857</a>            encode_syscall_result(<span class="prelude-val">Err</span>(SyscallError::OutOfMemory), usize::MAX, <span class="bool-val">true</span>),
-<a href=#6858 id=6858 data-nosnippet>6858</a>            usize::MAX - <span class="number">1
-<a href=#6859 id=6859 data-nosnippet>6859</a>        </span>);
-<a href=#6860 id=6860 data-nosnippet>6860</a>        <span class="macro">assert_eq!</span>(
-<a href=#6861 id=6861 data-nosnippet>6861</a>            encode_syscall_result(<span class="prelude-val">Err</span>(SyscallError::OutOfMemory), u32::MAX <span class="kw">as </span>usize, <span class="bool-val">true</span>),
-<a href=#6862 id=6862 data-nosnippet>6862</a>            u32::MAX <span class="kw">as </span>usize - <span class="number">1
-<a href=#6863 id=6863 data-nosnippet>6863</a>        </span>);
-<a href=#6864 id=6864 data-nosnippet>6864</a>        <span class="macro">assert_eq!</span>(
-<a href=#6865 id=6865 data-nosnippet>6865</a>            encode_syscall_result(<span class="prelude-val">Err</span>(SyscallError::OutOfMemory), usize::MAX, <span class="bool-val">false</span>),
-<a href=#6866 id=6866 data-nosnippet>6866</a>            usize::MAX
-<a href=#6867 id=6867 data-nosnippet>6867</a>        );
-<a href=#6868 id=6868 data-nosnippet>6868</a>        <span class="macro">assert!</span>(supports_typed_spawn_oom(<span class="kw-2">&amp;</span>Syscall::SpawnFromPath {
-<a href=#6869 id=6869 data-nosnippet>6869</a>            path_ptr: <span class="number">0</span>,
-<a href=#6870 id=6870 data-nosnippet>6870</a>            path_len: <span class="number">0</span>,
-<a href=#6871 id=6871 data-nosnippet>6871</a>        }));
-<a href=#6872 id=6872 data-nosnippet>6872</a>        <span class="macro">assert!</span>(!supports_typed_spawn_oom(<span class="kw-2">&amp;</span>Syscall::MemInfo {
-<a href=#6873 id=6873 data-nosnippet>6873</a>            out_ptr: <span class="number">0</span>,
-<a href=#6874 id=6874 data-nosnippet>6874</a>            out_len: <span class="number">0</span>,
-<a href=#6875 id=6875 data-nosnippet>6875</a>        }));
-<a href=#6876 id=6876 data-nosnippet>6876</a>    }
-<a href=#6877 id=6877 data-nosnippet>6877</a>
-<a href=#6878 id=6878 data-nosnippet>6878</a>    <span class="attr">#[test]
-<a href=#6879 id=6879 data-nosnippet>6879</a>    </span><span class="kw">fn </span>mem_info_maps_args_and_requires_bit_56() {
-<a href=#6880 id=6880 data-nosnippet>6880</a>        <span class="kw">let </span>syscall = map_syscall(ViSyscall::MemInfo <span class="kw">as </span>usize, <span class="number">0x2000</span>, <span class="number">32</span>, <span class="number">0</span>, <span class="number">0</span>)
-<a href=#6881 id=6881 data-nosnippet>6881</a>            .expect(<span class="string">"MemInfo must decode"</span>);
-<a href=#6882 id=6882 data-nosnippet>6882</a>        <span class="kw">match </span>syscall {
-<a href=#6883 id=6883 data-nosnippet>6883</a>            Syscall::MemInfo { out_ptr, out_len } =&gt; {
-<a href=#6884 id=6884 data-nosnippet>6884</a>                <span class="macro">assert_eq!</span>(out_ptr, <span class="number">0x2000</span>);
-<a href=#6885 id=6885 data-nosnippet>6885</a>                <span class="macro">assert_eq!</span>(out_len, <span class="number">32</span>);
-<a href=#6886 id=6886 data-nosnippet>6886</a>            }
-<a href=#6887 id=6887 data-nosnippet>6887</a>            other =&gt; <span class="macro">panic!</span>(<span class="string">"decoded wrong syscall variant: {other:?}"</span>),
-<a href=#6888 id=6888 data-nosnippet>6888</a>        }
-<a href=#6889 id=6889 data-nosnippet>6889</a>        <span class="macro">assert_eq!</span>(syscall_to_vi(<span class="kw-2">&amp;</span>syscall), <span class="prelude-val">Some</span>(ViSyscall::MemInfo));
-<a href=#6890 id=6890 data-nosnippet>6890</a>        with_scheduler_task(<span class="number">0</span>, |tid| {
-<a href=#6891 id=6891 data-nosnippet>6891</a>            <span class="macro">assert_eq!</span>(
-<a href=#6892 id=6892 data-nosnippet>6892</a>                check_allowlist(ViSyscall::MemInfo <span class="kw">as </span>usize, tid),
-<a href=#6893 id=6893 data-nosnippet>6893</a>                <span class="prelude-val">Err</span>(SyscallError::PermissionDenied)
-<a href=#6894 id=6894 data-nosnippet>6894</a>            );
-<a href=#6895 id=6895 data-nosnippet>6895</a>        });
-<a href=#6896 id=6896 data-nosnippet>6896</a>        with_scheduler_task(<span class="number">1u64 </span>&lt;&lt; <span class="number">56</span>, |tid| {
-<a href=#6897 id=6897 data-nosnippet>6897</a>            <span class="macro">assert_eq!</span>(check_allowlist(ViSyscall::MemInfo <span class="kw">as </span>usize, tid), <span class="prelude-val">Ok</span>(()));
-<a href=#6898 id=6898 data-nosnippet>6898</a>        });
-<a href=#6899 id=6899 data-nosnippet>6899</a>    }
-<a href=#6900 id=6900 data-nosnippet>6900</a>
-<a href=#6901 id=6901 data-nosnippet>6901</a>    <span class="attr">#[test]
-<a href=#6902 id=6902 data-nosnippet>6902</a>    </span><span class="kw">fn </span>dma_authority_requires_live_owner_binding_and_contained_range() {
-<a href=#6903 id=6903 data-nosnippet>6903</a>        <span class="kw">const </span>OWNER: usize = <span class="number">77</span>;
-<a href=#6904 id=6904 data-nosnippet>6904</a>        <span class="kw">const </span>BASE: usize = <span class="number">0x5100_0000</span>;
-<a href=#6905 id=6905 data-nosnippet>6905</a>        <span class="kw">const </span>SIZE: usize = <span class="number">0x4000</span>;
-<a href=#6906 id=6906 data-nosnippet>6906</a>        <span class="kw">let </span>binding = (CellId(<span class="number">9</span>), <span class="number">3</span>);
-<a href=#6907 id=6907 data-nosnippet>6907</a>        <span class="kw">let </span>page_grant = PageGrant {
-<a href=#6908 id=6908 data-nosnippet>6908</a>            base: BASE,
-<a href=#6909 id=6909 data-nosnippet>6909</a>            size: SIZE,
-<a href=#6910 id=6910 data-nosnippet>6910</a>            owner: OWNER,
-<a href=#6911 id=6911 data-nosnippet>6911</a>            owner_cell: binding.<span class="number">0</span>,
-<a href=#6912 id=6912 data-nosnippet>6912</a>            owner_generation: binding.<span class="number">1</span>,
-<a href=#6913 id=6913 data-nosnippet>6913</a>            shared_to: <span class="prelude-val">None</span>,
-<a href=#6914 id=6914 data-nosnippet>6914</a>        };
-<a href=#6915 id=6915 data-nosnippet>6915</a>        <span class="macro">assert!</span>(page_grant_authorizes_dma(
-<a href=#6916 id=6916 data-nosnippet>6916</a>            <span class="kw-2">&amp;</span>page_grant,
-<a href=#6917 id=6917 data-nosnippet>6917</a>            OWNER,
-<a href=#6918 id=6918 data-nosnippet>6918</a>            binding,
-<a href=#6919 id=6919 data-nosnippet>6919</a>            BASE + <span class="number">0x1000</span>,
-<a href=#6920 id=6920 data-nosnippet>6920</a>            <span class="number">0x2000
-<a href=#6921 id=6921 data-nosnippet>6921</a>        </span>));
-<a href=#6922 id=6922 data-nosnippet>6922</a>        <span class="macro">assert!</span>(!page_grant_authorizes_dma(
-<a href=#6923 id=6923 data-nosnippet>6923</a>            <span class="kw-2">&amp;</span>page_grant,
-<a href=#6924 id=6924 data-nosnippet>6924</a>            OWNER + <span class="number">1</span>,
-<a href=#6925 id=6925 data-nosnippet>6925</a>            binding,
-<a href=#6926 id=6926 data-nosnippet>6926</a>            BASE,
-<a href=#6927 id=6927 data-nosnippet>6927</a>            <span class="number">0x1000
-<a href=#6928 id=6928 data-nosnippet>6928</a>        </span>));
-<a href=#6929 id=6929 data-nosnippet>6929</a>        <span class="macro">assert!</span>(!page_grant_authorizes_dma(
-<a href=#6930 id=6930 data-nosnippet>6930</a>            <span class="kw-2">&amp;</span>page_grant,
-<a href=#6931 id=6931 data-nosnippet>6931</a>            OWNER,
-<a href=#6932 id=6932 data-nosnippet>6932</a>            (binding.<span class="number">0</span>, binding.<span class="number">1 </span>+ <span class="number">1</span>),
-<a href=#6933 id=6933 data-nosnippet>6933</a>            BASE,
-<a href=#6934 id=6934 data-nosnippet>6934</a>            <span class="number">0x1000
-<a href=#6935 id=6935 data-nosnippet>6935</a>        </span>));
-<a href=#6936 id=6936 data-nosnippet>6936</a>        <span class="macro">assert!</span>(!page_grant_authorizes_dma(
-<a href=#6937 id=6937 data-nosnippet>6937</a>            <span class="kw-2">&amp;</span>page_grant,
-<a href=#6938 id=6938 data-nosnippet>6938</a>            OWNER,
-<a href=#6939 id=6939 data-nosnippet>6939</a>            binding,
-<a href=#6940 id=6940 data-nosnippet>6940</a>            BASE + SIZE - <span class="number">0x1000</span>,
-<a href=#6941 id=6941 data-nosnippet>6941</a>            <span class="number">0x2000
-<a href=#6942 id=6942 data-nosnippet>6942</a>        </span>));
-<a href=#6943 id=6943 data-nosnippet>6943</a>
-<a href=#6944 id=6944 data-nosnippet>6944</a>        <span class="kw">let </span>reg_grant = RegGrant {
-<a href=#6945 id=6945 data-nosnippet>6945</a>            base: BASE,
-<a href=#6946 id=6946 data-nosnippet>6946</a>            size: SIZE,
-<a href=#6947 id=6947 data-nosnippet>6947</a>            owner: OWNER,
-<a href=#6948 id=6948 data-nosnippet>6948</a>            owner_cell: binding.<span class="number">0</span>,
-<a href=#6949 id=6949 data-nosnippet>6949</a>            owner_generation: binding.<span class="number">1</span>,
-<a href=#6950 id=6950 data-nosnippet>6950</a>            shared_to: <span class="prelude-val">None</span>,
-<a href=#6951 id=6951 data-nosnippet>6951</a>        };
-<a href=#6952 id=6952 data-nosnippet>6952</a>        <span class="macro">assert!</span>(reg_grant_authorizes_dma(
-<a href=#6953 id=6953 data-nosnippet>6953</a>            <span class="kw-2">&amp;</span>reg_grant, OWNER, binding, BASE, SIZE
-<a href=#6954 id=6954 data-nosnippet>6954</a>        ));
-<a href=#6955 id=6955 data-nosnippet>6955</a>        <span class="macro">assert!</span>(!reg_grant_authorizes_dma(
-<a href=#6956 id=6956 data-nosnippet>6956</a>            <span class="kw-2">&amp;</span>reg_grant,
-<a href=#6957 id=6957 data-nosnippet>6957</a>            OWNER,
-<a href=#6958 id=6958 data-nosnippet>6958</a>            binding,
-<a href=#6959 id=6959 data-nosnippet>6959</a>            BASE - <span class="number">0x1000</span>,
-<a href=#6960 id=6960 data-nosnippet>6960</a>            <span class="number">0x2000
-<a href=#6961 id=6961 data-nosnippet>6961</a>        </span>));
-<a href=#6962 id=6962 data-nosnippet>6962</a>    }
-<a href=#6963 id=6963 data-nosnippet>6963</a>
-<a href=#6964 id=6964 data-nosnippet>6964</a>    <span class="attr">#[test]
-<a href=#6965 id=6965 data-nosnippet>6965</a>    </span><span class="kw">fn </span>vfs_holder_release_before_reap_frees_without_orphaning_quarantine() {
-<a href=#6966 id=6966 data-nosnippet>6966</a>        <span class="kw">let </span>_guard = <span class="kw">crate</span>::TEST_STATE_LOCK.lock();
-<a href=#6967 id=6967 data-nosnippet>6967</a>        <span class="kw">const </span>BASE: usize = <span class="number">0x4f00_0000</span>;
-<a href=#6968 id=6968 data-nosnippet>6968</a>        <span class="kw">const </span>HOLDER: usize = <span class="number">30_601</span>;
-<a href=#6969 id=6969 data-nosnippet>6969</a>        <span class="kw">const </span>OWNER: usize = <span class="number">30_602</span>;
-<a href=#6970 id=6970 data-nosnippet>6970</a>        <span class="kw">const </span>GENERATION: u64 = <span class="number">41</span>;
-<a href=#6971 id=6971 data-nosnippet>6971</a>
-<a href=#6972 id=6972 data-nosnippet>6972</a>        <span class="kw">let </span>before = <span class="kw">crate</span>::memory::pin::quarantined_pages();
-<a href=#6973 id=6973 data-nosnippet>6973</a>        <span class="macro">assert_eq!</span>(
-<a href=#6974 id=6974 data-nosnippet>6974</a>            <span class="kw">crate</span>::memory::pin::pin_vfs_lease(BASE, <span class="number">4096</span>, OWNER, HOLDER, <span class="number">1</span>, GENERATION),
-<a href=#6975 id=6975 data-nosnippet>6975</a>            <span class="prelude-val">Ok</span>(())
-<a href=#6976 id=6976 data-nosnippet>6976</a>        );
-<a href=#6977 id=6977 data-nosnippet>6977</a>        <span class="macro">assert!</span>(<span class="kw">crate</span>::memory::pin::mark_vfs_lease_pending_revoke(
-<a href=#6978 id=6978 data-nosnippet>6978</a>            HOLDER, OWNER, GENERATION
-<a href=#6979 id=6979 data-nosnippet>6979</a>        ));
-<a href=#6980 id=6980 data-nosnippet>6980</a>        <span class="macro">assert_eq!</span>(
-<a href=#6981 id=6981 data-nosnippet>6981</a>            <span class="kw">crate</span>::memory::pin::release_vfs_lease(HOLDER, OWNER, GENERATION),
-<a href=#6982 id=6982 data-nosnippet>6982</a>            <span class="macro">alloc::vec!</span>[]
-<a href=#6983 id=6983 data-nosnippet>6983</a>        );
-<a href=#6984 id=6984 data-nosnippet>6984</a>
-<a href=#6985 id=6985 data-nosnippet>6985</a>        <span class="macro">assert!</span>(!withhold_or_free(BASE, <span class="number">1</span>));
-<a href=#6986 id=6986 data-nosnippet>6986</a>        <span class="macro">assert_eq!</span>(<span class="kw">crate</span>::memory::pin::quarantined_pages(), before);
-<a href=#6987 id=6987 data-nosnippet>6987</a>        <span class="macro">assert!</span>(<span class="kw">crate</span>::memory::pin::holder_of(BASE, <span class="number">4096</span>).is_none());
-<a href=#6988 id=6988 data-nosnippet>6988</a>    }
-<a href=#6989 id=6989 data-nosnippet>6989</a>}
+<a href=#6762 id=6762 data-nosnippet>6762</a>    <span class="kw">if </span>check_allowlist(syscall_id, caller_id).is_err() {
+<a href=#6763 id=6763 data-nosnippet>6763</a>        frame.regs[<span class="number">10</span>] = u32::MAX;
+<a href=#6764 id=6764 data-nosnippet>6764</a>        <span class="kw">return</span>;
+<a href=#6765 id=6765 data-nosnippet>6765</a>    }
+<a href=#6766 id=6766 data-nosnippet>6766</a>
+<a href=#6767 id=6767 data-nosnippet>6767</a>    <span class="comment">// SAFETY: csrs/csrc sstatus SUM (bit 18) — same bit position on RV32 and RV64
+<a href=#6768 id=6768 data-nosnippet>6768</a>    // per the RISC-V Privileged Spec §4.1.1. Disabled after handle_syscall.
+<a href=#6769 id=6769 data-nosnippet>6769</a>    </span><span class="kw">unsafe </span>{
+<a href=#6770 id=6770 data-nosnippet>6770</a>        <span class="macro">core::arch::asm!</span>(<span class="string">"csrs sstatus, {0}"</span>, <span class="kw">in</span>(reg) <span class="number">0x40000usize</span>);
+<a href=#6771 id=6771 data-nosnippet>6771</a>    }
+<a href=#6772 id=6772 data-nosnippet>6772</a>
+<a href=#6773 id=6773 data-nosnippet>6773</a>    <span class="kw">let </span>supports_typed_oom = supports_typed_spawn_oom(<span class="kw-2">&amp;</span>syscall);
+<a href=#6774 id=6774 data-nosnippet>6774</a>    <span class="kw">let </span>result = handle_syscall(caller_id, syscall);
+<a href=#6775 id=6775 data-nosnippet>6775</a>
+<a href=#6776 id=6776 data-nosnippet>6776</a>    <span class="kw">unsafe </span>{
+<a href=#6777 id=6777 data-nosnippet>6777</a>        <span class="macro">core::arch::asm!</span>(<span class="string">"csrc sstatus, {0}"</span>, <span class="kw">in</span>(reg) <span class="number">0x40000usize</span>);
+<a href=#6778 id=6778 data-nosnippet>6778</a>    }
+<a href=#6779 id=6779 data-nosnippet>6779</a>
+<a href=#6780 id=6780 data-nosnippet>6780</a>    frame.regs[<span class="number">10</span>] = encode_syscall_result(result, u32::MAX <span class="kw">as </span>usize, supports_typed_oom) <span class="kw">as </span>u32;
+<a href=#6781 id=6781 data-nosnippet>6781</a>}
+<a href=#6782 id=6782 data-nosnippet>6782</a>
+<a href=#6783 id=6783 data-nosnippet>6783</a><span class="attr">#[cfg(target_arch = <span class="string">"riscv32"</span>)]
+<a href=#6784 id=6784 data-nosnippet>6784</a></span><span class="kw">const _</span>: <span class="kw">crate</span>::hal::SyscallDispatch = ViCell_syscall_dispatch;
+<a href=#6785 id=6785 data-nosnippet>6785</a>
+<a href=#6786 id=6786 data-nosnippet>6786</a><span class="attr">#[cfg(test)]
+<a href=#6787 id=6787 data-nosnippet>6787</a></span><span class="kw">mod </span>tests {
+<a href=#6788 id=6788 data-nosnippet>6788</a>    <span class="kw">use </span>super::{
+<a href=#6789 id=6789 data-nosnippet>6789</a>        check_allowlist, encode_syscall_result, map_syscall, page_grant_authorizes_dma,
+<a href=#6790 id=6790 data-nosnippet>6790</a>        reg_grant_authorizes_dma, supports_typed_spawn_oom, syscall_to_vi, withhold_or_free,
+<a href=#6791 id=6791 data-nosnippet>6791</a>        PageGrant, RegGrant, Syscall, SyscallError,
+<a href=#6792 id=6792 data-nosnippet>6792</a>    };
+<a href=#6793 id=6793 data-nosnippet>6793</a>    <span class="kw">use </span><span class="kw">crate</span>::task::{scheduler::Scheduler, tcb::Task, SCHEDULER};
+<a href=#6794 id=6794 data-nosnippet>6794</a>    <span class="kw">use </span>api::syscall::ViSyscall;
+<a href=#6795 id=6795 data-nosnippet>6795</a>    <span class="kw">use </span>types::CellId;
+<a href=#6796 id=6796 data-nosnippet>6796</a>
+<a href=#6797 id=6797 data-nosnippet>6797</a>    <span class="kw">fn </span>with_scheduler_task&lt;F&gt;(allowlist: u64, f: F)
+<a href=#6798 id=6798 data-nosnippet>6798</a>    <span class="kw">where
+<a href=#6799 id=6799 data-nosnippet>6799</a>        </span>F: FnOnce(usize),
+<a href=#6800 id=6800 data-nosnippet>6800</a>    {
+<a href=#6801 id=6801 data-nosnippet>6801</a>        <span class="kw">let </span>_guard = <span class="kw">crate</span>::TEST_STATE_LOCK.lock();
+<a href=#6802 id=6802 data-nosnippet>6802</a>        <span class="kw">let </span><span class="kw-2">mut </span>previous = SCHEDULER.lock();
+<a href=#6803 id=6803 data-nosnippet>6803</a>        <span class="kw">let </span>saved = previous.take();
+<a href=#6804 id=6804 data-nosnippet>6804</a>        <span class="kw">let </span><span class="kw-2">mut </span>scheduler = Scheduler::new();
+<a href=#6805 id=6805 data-nosnippet>6805</a>        <span class="kw">let </span>tid = <span class="number">1</span>;
+<a href=#6806 id=6806 data-nosnippet>6806</a>        <span class="kw">let </span><span class="kw-2">mut </span>task = alloc::boxed::Box::new(Task::new(
+<a href=#6807 id=6807 data-nosnippet>6807</a>            tid,
+<a href=#6808 id=6808 data-nosnippet>6808</a>            CellId(<span class="number">7</span>),
+<a href=#6809 id=6809 data-nosnippet>6809</a>            <span class="string">"allowlist-test"</span>,
+<a href=#6810 id=6810 data-nosnippet>6810</a>            alloc::vec::Vec::new(),
+<a href=#6811 id=6811 data-nosnippet>6811</a>        ));
+<a href=#6812 id=6812 data-nosnippet>6812</a>        task.syscall_allowlist = allowlist;
+<a href=#6813 id=6813 data-nosnippet>6813</a>        scheduler.tasks.insert(tid, task);
+<a href=#6814 id=6814 data-nosnippet>6814</a>        <span class="kw-2">*</span>previous = <span class="prelude-val">Some</span>(scheduler);
+<a href=#6815 id=6815 data-nosnippet>6815</a>        drop(previous);
+<a href=#6816 id=6816 data-nosnippet>6816</a>
+<a href=#6817 id=6817 data-nosnippet>6817</a>        f(tid);
+<a href=#6818 id=6818 data-nosnippet>6818</a>
+<a href=#6819 id=6819 data-nosnippet>6819</a>        <span class="kw">let </span><span class="kw-2">mut </span>restore = SCHEDULER.lock();
+<a href=#6820 id=6820 data-nosnippet>6820</a>        <span class="kw-2">*</span>restore = saved;
+<a href=#6821 id=6821 data-nosnippet>6821</a>    }
+<a href=#6822 id=6822 data-nosnippet>6822</a>
+<a href=#6823 id=6823 data-nosnippet>6823</a>    <span class="attr">#[test]
+<a href=#6824 id=6824 data-nosnippet>6824</a>    </span><span class="kw">fn </span>get_procs2_maps_args_and_dispatch_variant() {
+<a href=#6825 id=6825 data-nosnippet>6825</a>        <span class="kw">let </span>syscall = map_syscall(ViSyscall::GetProcs2 <span class="kw">as </span>usize, <span class="number">0x1000</span>, <span class="number">7</span>, <span class="number">0</span>, <span class="number">0</span>)
+<a href=#6826 id=6826 data-nosnippet>6826</a>            .expect(<span class="string">"GetProcs2 must decode"</span>);
+<a href=#6827 id=6827 data-nosnippet>6827</a>        <span class="kw">match </span>syscall {
+<a href=#6828 id=6828 data-nosnippet>6828</a>            Syscall::GetProcs2 { buf_ptr, buf_len } =&gt; {
+<a href=#6829 id=6829 data-nosnippet>6829</a>                <span class="macro">assert_eq!</span>(buf_ptr, <span class="number">0x1000</span>);
+<a href=#6830 id=6830 data-nosnippet>6830</a>                <span class="macro">assert_eq!</span>(buf_len, <span class="number">7</span>);
+<a href=#6831 id=6831 data-nosnippet>6831</a>            }
+<a href=#6832 id=6832 data-nosnippet>6832</a>            other =&gt; <span class="macro">panic!</span>(<span class="string">"decoded wrong syscall variant: {other:?}"</span>),
+<a href=#6833 id=6833 data-nosnippet>6833</a>        }
+<a href=#6834 id=6834 data-nosnippet>6834</a>        <span class="macro">assert_eq!</span>(syscall_to_vi(<span class="kw-2">&amp;</span>syscall), <span class="prelude-val">Some</span>(ViSyscall::GetProcs2));
+<a href=#6835 id=6835 data-nosnippet>6835</a>    }
+<a href=#6836 id=6836 data-nosnippet>6836</a>
+<a href=#6837 id=6837 data-nosnippet>6837</a>    <span class="attr">#[test]
+<a href=#6838 id=6838 data-nosnippet>6838</a>    </span><span class="kw">fn </span>get_procs2_allowlist_denies_without_bit_55() {
+<a href=#6839 id=6839 data-nosnippet>6839</a>        with_scheduler_task(<span class="number">0</span>, |tid| {
+<a href=#6840 id=6840 data-nosnippet>6840</a>            <span class="macro">assert_eq!</span>(
+<a href=#6841 id=6841 data-nosnippet>6841</a>                check_allowlist(ViSyscall::GetProcs2 <span class="kw">as </span>usize, tid),
+<a href=#6842 id=6842 data-nosnippet>6842</a>                <span class="prelude-val">Err</span>(SyscallError::PermissionDenied)
+<a href=#6843 id=6843 data-nosnippet>6843</a>            );
+<a href=#6844 id=6844 data-nosnippet>6844</a>        });
+<a href=#6845 id=6845 data-nosnippet>6845</a>    }
+<a href=#6846 id=6846 data-nosnippet>6846</a>
+<a href=#6847 id=6847 data-nosnippet>6847</a>    <span class="attr">#[test]
+<a href=#6848 id=6848 data-nosnippet>6848</a>    </span><span class="kw">fn </span>get_procs2_allowlist_allows_with_bit_55() {
+<a href=#6849 id=6849 data-nosnippet>6849</a>        with_scheduler_task(<span class="number">1u64 </span>&lt;&lt; <span class="number">55</span>, |tid| {
+<a href=#6850 id=6850 data-nosnippet>6850</a>            <span class="macro">assert_eq!</span>(check_allowlist(ViSyscall::GetProcs2 <span class="kw">as </span>usize, tid), <span class="prelude-val">Ok</span>(()));
+<a href=#6851 id=6851 data-nosnippet>6851</a>        });
+<a href=#6852 id=6852 data-nosnippet>6852</a>    }
+<a href=#6853 id=6853 data-nosnippet>6853</a>
+<a href=#6854 id=6854 data-nosnippet>6854</a>    <span class="attr">#[test]
+<a href=#6855 id=6855 data-nosnippet>6855</a>    </span><span class="kw">fn </span>syscall_result_encoding_preserves_generic_and_additive_oom_codes() {
+<a href=#6856 id=6856 data-nosnippet>6856</a>        <span class="macro">assert_eq!</span>(encode_syscall_result(<span class="prelude-val">Ok</span>(<span class="number">9</span>), usize::MAX, <span class="bool-val">false</span>), <span class="number">9</span>);
+<a href=#6857 id=6857 data-nosnippet>6857</a>        <span class="macro">assert_eq!</span>(
+<a href=#6858 id=6858 data-nosnippet>6858</a>            encode_syscall_result(<span class="prelude-val">Err</span>(SyscallError::InvalidInput), usize::MAX, <span class="bool-val">true</span>),
+<a href=#6859 id=6859 data-nosnippet>6859</a>            usize::MAX
+<a href=#6860 id=6860 data-nosnippet>6860</a>        );
+<a href=#6861 id=6861 data-nosnippet>6861</a>        <span class="macro">assert_eq!</span>(
+<a href=#6862 id=6862 data-nosnippet>6862</a>            encode_syscall_result(<span class="prelude-val">Err</span>(SyscallError::OutOfMemory), usize::MAX, <span class="bool-val">true</span>),
+<a href=#6863 id=6863 data-nosnippet>6863</a>            usize::MAX - <span class="number">1
+<a href=#6864 id=6864 data-nosnippet>6864</a>        </span>);
+<a href=#6865 id=6865 data-nosnippet>6865</a>        <span class="macro">assert_eq!</span>(
+<a href=#6866 id=6866 data-nosnippet>6866</a>            encode_syscall_result(<span class="prelude-val">Err</span>(SyscallError::OutOfMemory), u32::MAX <span class="kw">as </span>usize, <span class="bool-val">true</span>),
+<a href=#6867 id=6867 data-nosnippet>6867</a>            u32::MAX <span class="kw">as </span>usize - <span class="number">1
+<a href=#6868 id=6868 data-nosnippet>6868</a>        </span>);
+<a href=#6869 id=6869 data-nosnippet>6869</a>        <span class="macro">assert_eq!</span>(
+<a href=#6870 id=6870 data-nosnippet>6870</a>            encode_syscall_result(<span class="prelude-val">Err</span>(SyscallError::OutOfMemory), usize::MAX, <span class="bool-val">false</span>),
+<a href=#6871 id=6871 data-nosnippet>6871</a>            usize::MAX
+<a href=#6872 id=6872 data-nosnippet>6872</a>        );
+<a href=#6873 id=6873 data-nosnippet>6873</a>        <span class="macro">assert!</span>(supports_typed_spawn_oom(<span class="kw-2">&amp;</span>Syscall::SpawnFromPath {
+<a href=#6874 id=6874 data-nosnippet>6874</a>            path_ptr: <span class="number">0</span>,
+<a href=#6875 id=6875 data-nosnippet>6875</a>            path_len: <span class="number">0</span>,
+<a href=#6876 id=6876 data-nosnippet>6876</a>        }));
+<a href=#6877 id=6877 data-nosnippet>6877</a>        <span class="macro">assert!</span>(!supports_typed_spawn_oom(<span class="kw-2">&amp;</span>Syscall::MemInfo {
+<a href=#6878 id=6878 data-nosnippet>6878</a>            out_ptr: <span class="number">0</span>,
+<a href=#6879 id=6879 data-nosnippet>6879</a>            out_len: <span class="number">0</span>,
+<a href=#6880 id=6880 data-nosnippet>6880</a>        }));
+<a href=#6881 id=6881 data-nosnippet>6881</a>    }
+<a href=#6882 id=6882 data-nosnippet>6882</a>
+<a href=#6883 id=6883 data-nosnippet>6883</a>    <span class="attr">#[test]
+<a href=#6884 id=6884 data-nosnippet>6884</a>    </span><span class="kw">fn </span>mem_info_maps_args_and_requires_bit_56() {
+<a href=#6885 id=6885 data-nosnippet>6885</a>        <span class="kw">let </span>syscall = map_syscall(ViSyscall::MemInfo <span class="kw">as </span>usize, <span class="number">0x2000</span>, <span class="number">32</span>, <span class="number">0</span>, <span class="number">0</span>)
+<a href=#6886 id=6886 data-nosnippet>6886</a>            .expect(<span class="string">"MemInfo must decode"</span>);
+<a href=#6887 id=6887 data-nosnippet>6887</a>        <span class="kw">match </span>syscall {
+<a href=#6888 id=6888 data-nosnippet>6888</a>            Syscall::MemInfo { out_ptr, out_len } =&gt; {
+<a href=#6889 id=6889 data-nosnippet>6889</a>                <span class="macro">assert_eq!</span>(out_ptr, <span class="number">0x2000</span>);
+<a href=#6890 id=6890 data-nosnippet>6890</a>                <span class="macro">assert_eq!</span>(out_len, <span class="number">32</span>);
+<a href=#6891 id=6891 data-nosnippet>6891</a>            }
+<a href=#6892 id=6892 data-nosnippet>6892</a>            other =&gt; <span class="macro">panic!</span>(<span class="string">"decoded wrong syscall variant: {other:?}"</span>),
+<a href=#6893 id=6893 data-nosnippet>6893</a>        }
+<a href=#6894 id=6894 data-nosnippet>6894</a>        <span class="macro">assert_eq!</span>(syscall_to_vi(<span class="kw-2">&amp;</span>syscall), <span class="prelude-val">Some</span>(ViSyscall::MemInfo));
+<a href=#6895 id=6895 data-nosnippet>6895</a>        with_scheduler_task(<span class="number">0</span>, |tid| {
+<a href=#6896 id=6896 data-nosnippet>6896</a>            <span class="macro">assert_eq!</span>(
+<a href=#6897 id=6897 data-nosnippet>6897</a>                check_allowlist(ViSyscall::MemInfo <span class="kw">as </span>usize, tid),
+<a href=#6898 id=6898 data-nosnippet>6898</a>                <span class="prelude-val">Err</span>(SyscallError::PermissionDenied)
+<a href=#6899 id=6899 data-nosnippet>6899</a>            );
+<a href=#6900 id=6900 data-nosnippet>6900</a>        });
+<a href=#6901 id=6901 data-nosnippet>6901</a>        with_scheduler_task(<span class="number">1u64 </span>&lt;&lt; <span class="number">56</span>, |tid| {
+<a href=#6902 id=6902 data-nosnippet>6902</a>            <span class="macro">assert_eq!</span>(check_allowlist(ViSyscall::MemInfo <span class="kw">as </span>usize, tid), <span class="prelude-val">Ok</span>(()));
+<a href=#6903 id=6903 data-nosnippet>6903</a>        });
+<a href=#6904 id=6904 data-nosnippet>6904</a>    }
+<a href=#6905 id=6905 data-nosnippet>6905</a>
+<a href=#6906 id=6906 data-nosnippet>6906</a>    <span class="attr">#[test]
+<a href=#6907 id=6907 data-nosnippet>6907</a>    </span><span class="kw">fn </span>dma_authority_requires_live_owner_binding_and_contained_range() {
+<a href=#6908 id=6908 data-nosnippet>6908</a>        <span class="kw">const </span>OWNER: usize = <span class="number">77</span>;
+<a href=#6909 id=6909 data-nosnippet>6909</a>        <span class="kw">const </span>BASE: usize = <span class="number">0x5100_0000</span>;
+<a href=#6910 id=6910 data-nosnippet>6910</a>        <span class="kw">const </span>SIZE: usize = <span class="number">0x4000</span>;
+<a href=#6911 id=6911 data-nosnippet>6911</a>        <span class="kw">let </span>binding = (CellId(<span class="number">9</span>), <span class="number">3</span>);
+<a href=#6912 id=6912 data-nosnippet>6912</a>        <span class="kw">let </span>page_grant = PageGrant {
+<a href=#6913 id=6913 data-nosnippet>6913</a>            base: BASE,
+<a href=#6914 id=6914 data-nosnippet>6914</a>            size: SIZE,
+<a href=#6915 id=6915 data-nosnippet>6915</a>            owner: OWNER,
+<a href=#6916 id=6916 data-nosnippet>6916</a>            owner_cell: binding.<span class="number">0</span>,
+<a href=#6917 id=6917 data-nosnippet>6917</a>            owner_generation: binding.<span class="number">1</span>,
+<a href=#6918 id=6918 data-nosnippet>6918</a>            shared_to: <span class="prelude-val">None</span>,
+<a href=#6919 id=6919 data-nosnippet>6919</a>        };
+<a href=#6920 id=6920 data-nosnippet>6920</a>        <span class="macro">assert!</span>(page_grant_authorizes_dma(
+<a href=#6921 id=6921 data-nosnippet>6921</a>            <span class="kw-2">&amp;</span>page_grant,
+<a href=#6922 id=6922 data-nosnippet>6922</a>            OWNER,
+<a href=#6923 id=6923 data-nosnippet>6923</a>            binding,
+<a href=#6924 id=6924 data-nosnippet>6924</a>            BASE + <span class="number">0x1000</span>,
+<a href=#6925 id=6925 data-nosnippet>6925</a>            <span class="number">0x2000
+<a href=#6926 id=6926 data-nosnippet>6926</a>        </span>));
+<a href=#6927 id=6927 data-nosnippet>6927</a>        <span class="macro">assert!</span>(!page_grant_authorizes_dma(
+<a href=#6928 id=6928 data-nosnippet>6928</a>            <span class="kw-2">&amp;</span>page_grant,
+<a href=#6929 id=6929 data-nosnippet>6929</a>            OWNER + <span class="number">1</span>,
+<a href=#6930 id=6930 data-nosnippet>6930</a>            binding,
+<a href=#6931 id=6931 data-nosnippet>6931</a>            BASE,
+<a href=#6932 id=6932 data-nosnippet>6932</a>            <span class="number">0x1000
+<a href=#6933 id=6933 data-nosnippet>6933</a>        </span>));
+<a href=#6934 id=6934 data-nosnippet>6934</a>        <span class="macro">assert!</span>(!page_grant_authorizes_dma(
+<a href=#6935 id=6935 data-nosnippet>6935</a>            <span class="kw-2">&amp;</span>page_grant,
+<a href=#6936 id=6936 data-nosnippet>6936</a>            OWNER,
+<a href=#6937 id=6937 data-nosnippet>6937</a>            (binding.<span class="number">0</span>, binding.<span class="number">1 </span>+ <span class="number">1</span>),
+<a href=#6938 id=6938 data-nosnippet>6938</a>            BASE,
+<a href=#6939 id=6939 data-nosnippet>6939</a>            <span class="number">0x1000
+<a href=#6940 id=6940 data-nosnippet>6940</a>        </span>));
+<a href=#6941 id=6941 data-nosnippet>6941</a>        <span class="macro">assert!</span>(!page_grant_authorizes_dma(
+<a href=#6942 id=6942 data-nosnippet>6942</a>            <span class="kw-2">&amp;</span>page_grant,
+<a href=#6943 id=6943 data-nosnippet>6943</a>            OWNER,
+<a href=#6944 id=6944 data-nosnippet>6944</a>            binding,
+<a href=#6945 id=6945 data-nosnippet>6945</a>            BASE + SIZE - <span class="number">0x1000</span>,
+<a href=#6946 id=6946 data-nosnippet>6946</a>            <span class="number">0x2000
+<a href=#6947 id=6947 data-nosnippet>6947</a>        </span>));
+<a href=#6948 id=6948 data-nosnippet>6948</a>
+<a href=#6949 id=6949 data-nosnippet>6949</a>        <span class="kw">let </span>reg_grant = RegGrant {
+<a href=#6950 id=6950 data-nosnippet>6950</a>            base: BASE,
+<a href=#6951 id=6951 data-nosnippet>6951</a>            size: SIZE,
+<a href=#6952 id=6952 data-nosnippet>6952</a>            owner: OWNER,
+<a href=#6953 id=6953 data-nosnippet>6953</a>            owner_cell: binding.<span class="number">0</span>,
+<a href=#6954 id=6954 data-nosnippet>6954</a>            owner_generation: binding.<span class="number">1</span>,
+<a href=#6955 id=6955 data-nosnippet>6955</a>            shared_to: <span class="prelude-val">None</span>,
+<a href=#6956 id=6956 data-nosnippet>6956</a>        };
+<a href=#6957 id=6957 data-nosnippet>6957</a>        <span class="macro">assert!</span>(reg_grant_authorizes_dma(
+<a href=#6958 id=6958 data-nosnippet>6958</a>            <span class="kw-2">&amp;</span>reg_grant, OWNER, binding, BASE, SIZE
+<a href=#6959 id=6959 data-nosnippet>6959</a>        ));
+<a href=#6960 id=6960 data-nosnippet>6960</a>        <span class="macro">assert!</span>(!reg_grant_authorizes_dma(
+<a href=#6961 id=6961 data-nosnippet>6961</a>            <span class="kw-2">&amp;</span>reg_grant,
+<a href=#6962 id=6962 data-nosnippet>6962</a>            OWNER,
+<a href=#6963 id=6963 data-nosnippet>6963</a>            binding,
+<a href=#6964 id=6964 data-nosnippet>6964</a>            BASE - <span class="number">0x1000</span>,
+<a href=#6965 id=6965 data-nosnippet>6965</a>            <span class="number">0x2000
+<a href=#6966 id=6966 data-nosnippet>6966</a>        </span>));
+<a href=#6967 id=6967 data-nosnippet>6967</a>    }
+<a href=#6968 id=6968 data-nosnippet>6968</a>
+<a href=#6969 id=6969 data-nosnippet>6969</a>    <span class="attr">#[test]
+<a href=#6970 id=6970 data-nosnippet>6970</a>    </span><span class="kw">fn </span>vfs_holder_release_before_reap_frees_without_orphaning_quarantine() {
+<a href=#6971 id=6971 data-nosnippet>6971</a>        <span class="kw">let </span>_guard = <span class="kw">crate</span>::TEST_STATE_LOCK.lock();
+<a href=#6972 id=6972 data-nosnippet>6972</a>        <span class="kw">const </span>BASE: usize = <span class="number">0x4f00_0000</span>;
+<a href=#6973 id=6973 data-nosnippet>6973</a>        <span class="kw">const </span>HOLDER: usize = <span class="number">30_601</span>;
+<a href=#6974 id=6974 data-nosnippet>6974</a>        <span class="kw">const </span>OWNER: usize = <span class="number">30_602</span>;
+<a href=#6975 id=6975 data-nosnippet>6975</a>        <span class="kw">const </span>GENERATION: u64 = <span class="number">41</span>;
+<a href=#6976 id=6976 data-nosnippet>6976</a>
+<a href=#6977 id=6977 data-nosnippet>6977</a>        <span class="kw">let </span>before = <span class="kw">crate</span>::memory::pin::quarantined_pages();
+<a href=#6978 id=6978 data-nosnippet>6978</a>        <span class="macro">assert_eq!</span>(
+<a href=#6979 id=6979 data-nosnippet>6979</a>            <span class="kw">crate</span>::memory::pin::pin_vfs_lease(BASE, <span class="number">4096</span>, OWNER, HOLDER, <span class="number">1</span>, GENERATION),
+<a href=#6980 id=6980 data-nosnippet>6980</a>            <span class="prelude-val">Ok</span>(())
+<a href=#6981 id=6981 data-nosnippet>6981</a>        );
+<a href=#6982 id=6982 data-nosnippet>6982</a>        <span class="macro">assert!</span>(<span class="kw">crate</span>::memory::pin::mark_vfs_lease_pending_revoke(
+<a href=#6983 id=6983 data-nosnippet>6983</a>            HOLDER, OWNER, GENERATION
+<a href=#6984 id=6984 data-nosnippet>6984</a>        ));
+<a href=#6985 id=6985 data-nosnippet>6985</a>        <span class="macro">assert_eq!</span>(
+<a href=#6986 id=6986 data-nosnippet>6986</a>            <span class="kw">crate</span>::memory::pin::release_vfs_lease(HOLDER, OWNER, GENERATION),
+<a href=#6987 id=6987 data-nosnippet>6987</a>            <span class="macro">alloc::vec!</span>[]
+<a href=#6988 id=6988 data-nosnippet>6988</a>        );
+<a href=#6989 id=6989 data-nosnippet>6989</a>
+<a href=#6990 id=6990 data-nosnippet>6990</a>        <span class="macro">assert!</span>(!withhold_or_free(BASE, <span class="number">1</span>));
+<a href=#6991 id=6991 data-nosnippet>6991</a>        <span class="macro">assert_eq!</span>(<span class="kw">crate</span>::memory::pin::quarantined_pages(), before);
+<a href=#6992 id=6992 data-nosnippet>6992</a>        <span class="macro">assert!</span>(<span class="kw">crate</span>::memory::pin::holder_of(BASE, <span class="number">4096</span>).is_none());
+<a href=#6993 id=6993 data-nosnippet>6993</a>    }
+<a href=#6994 id=6994 data-nosnippet>6994</a>}
 </code></pre></div></section></main></body></html>

@@ -268,11 +268,11 @@
 <a href=#268 id=268 data-nosnippet>268</a>    </span>}
 <a href=#269 id=269 data-nosnippet>269</a>}
 <a href=#270 id=270 data-nosnippet>270</a>
-<a href=#271 id=271 data-nosnippet>271</a><span class="doccomment">/// Set the kernel-stack pointer in the TSS (for Ring-3 to Ring-0 transitions).
+<a href=#271 id=271 data-nosnippet>271</a><span class="doccomment">/// Set TSS.rsp0 and CPU_LOCAL.kernel_rsp for the selected Ring-3 task.
 <a href=#272 id=272 data-nosnippet>272</a></span><span class="attr">#[cfg(target_arch = <span class="string">"x86_64"</span>)]
 <a href=#273 id=273 data-nosnippet>273</a></span><span class="kw">pub fn </span>set_kernel_stack(sp: usize) {
-<a href=#274 id=274 data-nosnippet>274</a>    <span class="comment">// Update both TSS.rsp0 (for hardware interrupt stack switch) and
-<a href=#275 id=275 data-nosnippet>275</a>    // the per-CPU GS area (for syscall_entry swapgs-based stack switch).
+<a href=#274 id=274 data-nosnippet>274</a>    <span class="comment">// Context switches run in kernel GS state and deliberately preserve both
+<a href=#275 id=275 data-nosnippet>275</a>    // GS-base MSRs; only the two stack destinations change here.
 <a href=#276 id=276 data-nosnippet>276</a>    </span>gdt::set_kernel_stack(sp <span class="kw">as </span>u64);
 <a href=#277 id=277 data-nosnippet>277</a>    syscall::set_kernel_stack(sp <span class="kw">as </span>u64);
 <a href=#278 id=278 data-nosnippet>278</a>}

@@ -66,8 +66,8 @@ a finite TIMER wakes when <code>deadline</code> elapses.</p>
 <li>Cannot be killed by external signal (returns <code>ViError::PermissionDenied</code>).</li>
 <li>Can only be terminated by the hotswap orchestrator via <code>exit_task</code> after a
 successful swap, or rolled back to <code>Ready</code> on failure.</li>
-<li>Incoming IPC is queued in <code>crate::cell::hotswap::FROZEN</code> registry instead
-of being delivered (Phase 02 will drain the queue; P01 stubs this).</li>
+<li>Accepted incoming IPC is retained in this task’s pending mailbox and
+transferred only by the live cutover barrier to the replacement.</li>
 </ul>
 </div><div class="sub-variant" id="variant.Frozen.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.Frozen.field.swap_id" class="section-header"><a href="#variant.Frozen.field.swap_id" class="anchor field">§</a><code>swap_id: u64</code></span></div></div><section id="variant.WaitIrq" class="variant"><a href="#variant.WaitIrq" class="anchor">§</a><h3 class="code-header">WaitIrq</h3></section><div class="docblock"><p>Blocked in <code>sys_wait_irq(irq, mmio_base)</code> until hardware IRQ <code>irq</code> fires.</p>
 <p>Woken by the scheduler sweep (NOT from ISR — ISR only sets <code>IRQ_PENDING[irq]</code>).
