@@ -144,6 +144,11 @@ pub const fn service_syscall_set(block_io: bool, network: bool, spawn: bool) -> 
 ///
 /// # Usage
 /// ```no_run
+/// use ostd::app::{AppContext, AppEvent};
+/// use ostd::runtime::CellRuntime;
+///
+/// fn my_handler(_context: &mut AppContext, _event: AppEvent) {}
+///
 /// CellRuntime::new()
 ///     .heartbeat(500)             // 5-second watchdog (500 × 10 ms ticks)
 ///     .help("Usage: foo <file>")  // auto-handle -h / --help
@@ -215,27 +220,18 @@ impl Default for CellRuntime {
 /// and `main()` from a capability declaration.
 ///
 /// # Forms
+///
+/// The capability-free form accepts `handler` with optional `help`. Capability
+/// shorthands add one of `block_io`, `network`, or `spawn`. The full form
+/// accepts all three capability booleans, with optional `help`.
+///
+/// # Example
 /// ```no_run
-/// // No caps (minimal app)
-/// ostd::app_entry!(handler = my_fn);
+/// use ostd::app::{AppContext, AppEvent};
 ///
-/// // With automatic --help handling
-/// ostd::app_entry!(help = "Usage: foo <file>", handler = my_fn);
+/// fn my_handler(_context: &mut AppContext, _event: AppEvent) {}
 ///
-/// // Single cap shorthands
-/// ostd::app_entry!(spawn = true, handler = my_fn);
-/// ostd::app_entry!(network = true, handler = my_fn);
-/// ostd::app_entry!(block_io = true, handler = my_fn);
-///
-/// // Cap + help
-/// ostd::app_entry!(block_io = true, help = "Usage: cat <file>", handler = my_fn);
-///
-/// // Full explicit form
-/// ostd::app_entry!(block_io = false, network = false, spawn = true, handler = my_fn);
-///
-/// // Full form with help
-/// ostd::app_entry!(block_io = false, network = false, spawn = true,
-///                  help = "Usage: ...", handler = my_fn);
+/// ostd::app_entry!(network = true, handler = my_handler);
 /// ```
 ///
 /// The generated `main()` arms the heartbeat watchdog, checks for `-h`/`--help`
@@ -391,10 +387,17 @@ macro_rules! app_entry {
 /// syscall profile (includes `WaitForEvent` in the base set).
 ///
 /// # Forms
+///
+/// The macro accepts bare `handler`, a `network` or `block_io` shorthand, or
+/// the full `block_io`/`network`/`spawn` capability form.
+///
+/// # Example
 /// ```no_run
-/// ostd::service_entry!(handler = my_fn);
-/// ostd::service_entry!(network = true, handler = my_fn);
-/// ostd::service_entry!(block_io = true, network = true, spawn = false, handler = my_fn);
+/// use ostd::app::{AppContext, AppEvent};
+///
+/// fn my_handler(_context: &mut AppContext, _event: AppEvent) {}
+///
+/// ostd::service_entry!(network = true, handler = my_handler);
 /// ```
 #[macro_export]
 macro_rules! service_entry {

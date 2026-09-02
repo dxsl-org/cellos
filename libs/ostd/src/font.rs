@@ -5,9 +5,15 @@
 //! Covers ASCII 0x20–0x7E (printable range).
 //!
 //! ## Usage
-//! ```
-//! let px = surface.pixels_mut();
-//! draw_text(px, surface.stride(), 8, 8, "ViCell 0.3", 0xFF_FF_FF_FF);
+//! ```no_run
+//! use ostd::display::ViSurface;
+//! use ostd::font::draw_text;
+//!
+//! # fn paint(surface: &mut ViSurface) {
+//! let stride = surface.stride();
+//! let pixels = surface.pixels_mut();
+//! draw_text(pixels, stride, 8, 8, "ViCell 0.3", 0xFF_FF_FF_FF);
+//! # }
 //! ```
 
 /// 8×8 CP437 bitmap font: ASCII 0x20 (space) to 0x7E (~).

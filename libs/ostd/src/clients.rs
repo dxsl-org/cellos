@@ -19,8 +19,12 @@
 //! Clients are lazily initialized via [`AppContext::vfs`], [`AppContext::net`],
 //! and [`AppContext::input`].  They can also be constructed standalone:
 //! ```no_run
+//! # fn main() -> ostd::ViResult<()> {
 //! let mut vfs = ostd::clients::VfsClient::new();
 //! let bytes = vfs.read_file("/bin/shell")?;
+//! # let _ = bytes;
+//! # Ok(())
+//! # }
 //! ```
 
 pub mod input;

@@ -48,8 +48,13 @@ struct CachedGlyph {
 ///
 /// # Usage
 /// ```no_run
-/// let atlas = GlyphAtlas::new(include_bytes!("../assets/font.ttf")).unwrap();
+/// use ostd::font_atlas::GlyphAtlas;
+///
+/// # fn rasterize(font_bytes: &[u8]) {
+/// let mut atlas = GlyphAtlas::new(font_bytes).expect("valid font");
 /// let (metrics, bitmap) = atlas.rasterize('A', 16.0);
+/// # let _ = (metrics, bitmap);
+/// # }
 /// ```
 pub struct GlyphAtlas {
     font: Font,

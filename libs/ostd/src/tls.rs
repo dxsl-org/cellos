@@ -6,9 +6,10 @@
 //!
 //! ## Usage
 //! ```no_run
-//! // Look up net service TID at startup.
-//! let net = sys_lookup_service(api::service::NET).unwrap();
+//! use ostd::service::{lookup, service};
+//! use ostd::tls::{tls_close, tls_connect, tls_read, tls_write};
 //!
+//! let net = lookup(service::NET).expect("net service not ready");
 //! let cap = tls_connect(net, [93, 184, 216, 34], 443, "example.com");
 //! if cap == 0 { /* handle error */ }
 //!

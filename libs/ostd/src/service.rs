@@ -51,12 +51,18 @@ pub fn register(service_id: u16, tid: usize) -> ViResult<()> {
 ///
 /// # Usage
 /// ```no_run
-/// use ostd::service::{ServiceRef, service};
-/// use api::ipc::{IPC_BUF_SIZE, VfsRequest, VfsResponse};
+/// use ostd::service::{service, ServiceRef};
+/// use ostd::services::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
+/// use ostd::ViResult;
 ///
-/// let mut vfs: ServiceRef<{service::VFS}> = ServiceRef::new();
-/// let mut resp_buf = [0u8; IPC_BUF_SIZE];
-/// let resp: VfsResponse = vfs.call(&VfsRequest::Stat("/tmp"), &mut resp_buf)?;
+/// # fn stat() -> ViResult<()> {
+/// let mut vfs: ServiceRef<{ service::VFS }> = ServiceRef::new();
+/// let mut response_buffer = [0u8; IPC_BUF_SIZE];
+/// let response: VfsResponse =
+///     vfs.call(&VfsRequest::Stat("/tmp"), &mut response_buffer)?;
+/// # let _ = response;
+/// # Ok(())
+/// # }
 /// ```
 pub struct ServiceRef<const ID: u16> {
     cached_tid: Option<usize>,

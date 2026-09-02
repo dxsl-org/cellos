@@ -1,12 +1,18 @@
 //! App-side display helpers: `ViSurface` for Grant-backed compositor surfaces.
 //!
 //! ## Usage
-//! ```
+//! ```no_run
+//! use ostd::display::{wait_for_compositor, ViSurface};
+//! use ostd::services::display::PixelFormat;
+//!
+//! # fn create_surface() -> ostd::ViResult<()> {
 //! let comp_tid = wait_for_compositor();
-//! let mut surf = ViSurface::create(comp_tid, 640, 480, PixelFormat::Bgra8888)?;
-//! let px = surf.pixels_mut();
-//! // draw into px ...
-//! surf.damage_all();
+//! let mut surface = ViSurface::create(comp_tid, 640, 480, PixelFormat::Bgra8888)?;
+//! let pixels = surface.pixels_mut();
+//! // draw into pixels ...
+//! surface.damage_all();
+//! # Ok(())
+//! # }
 //! ```
 
 mod dispatcher;

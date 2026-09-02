@@ -12,6 +12,8 @@
 //! # Typical flow
 //!
 //! ```rust,no_run
+//! use ostd::grant::GrantHandle;
+//!
 //! // Allocate a 4-KiB region typed as raw bytes.
 //! let mut handle = GrantHandle::<u8>::alloc(4096).expect("OOM");
 //! // ... fill with data ...
