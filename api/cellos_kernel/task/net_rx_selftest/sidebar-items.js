@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["CELL_ONE","CELL_TWO","TID_ONE","TID_TWO"],"fn":["fail","reset","self_test","signal_fills_the_reservation","signal_with_no_waiter_is_remembered","split_signal_publication_is_visible","takeover_completes_the_displaced_reservation"]};
+window.SIDEBAR_ITEMS = {"constant":["CELL_ONE","CELL_TWO","TID_ONE","TID_TWO"],"fn":["fail","ipc_abort_waits_for_split_publication","reset","self_test","signal_fills_the_reservation","signal_with_no_waiter_is_remembered","split_signal_publication_is_visible","takeover_completes_the_displaced_reservation"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["AdmissionAttempt","DeadlineError","SendAdmission"],"fn":["admit_request_until_deadline","receive_until_deadline"]};
