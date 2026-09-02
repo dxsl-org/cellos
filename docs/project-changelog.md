@@ -4,6 +4,30 @@
 
 ## [Unreleased] Development-first hardware-constrained execution
 
+- Replaced the shell `free` built-in and standalone `/bin/free` placeholder
+  text with checked `ViMemInfoV1` totals in KiB. Both paths require the existing
+  `MemInfo` allowlist bit 56; `/bin/free` still launches with an empty capability
+  ceiling. They fail closed on syscall denial, arithmetic overflow, or
+  `used + free != total`. The retained RV64 capacity QEMU gate requires both
+  commands to emit a positive, non-placeholder `Mem (KiB)` row, then still
+  proves unauthorized bit-56 denial, typed `SpawnPinned` OOM, no kernel panic,
+  and shell recovery. This does not change the `MemInfo` ABI, allocator
+  accounting, the unmet memory-footprint objective, or hardware/production
+  qualification.
+
+- Removed the dead Cell-ID-keyed FROZEN registry and its lifecycle writes.
+  Live hot-swap remains bound to the exact task incarnation by task ID,
+  generation, swap ID, and freeze nonce; the state-transfer and cutover
+  contracts are unchanged. This is internal cleanup, not a new hot-swap
+  capability or broader runtime guarantee.
+
+- Removed the unused `grant_to` and grant-depth fields from kernel capability
+  entries and allocation. They never implemented delegation; the registry's
+  live contract remains single ownership, permission bits, optional lease
+  expiry, close, and owner-exit revocation. Spawn-time `CapSet` intersection is
+  unchanged. Scoped review of these maintenance changes found zero findings;
+  no public ABI or new delegation/revocation behavior is claimed.
+
 - Completed the bounded kernel CWD/path lane without claiming POSIX
   compatibility. One canonical absolute lexical resolver now attributes
   relative `open`, `remove`, `chdir`, and exact non-NUL `getcwd` operations to

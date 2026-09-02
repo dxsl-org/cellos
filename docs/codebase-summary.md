@@ -4,7 +4,7 @@
 **Version**: 0.2.1-dev (Mycelium Era)
 **Language**: Rust (nightly, `no_std`)
 **Crates**: 111 active workspace members (`cargo metadata --no-deps`)
-**Last Updated**: 2026-08-19 (workspace, HAL/board split, and runtime docs refreshed against `origin/main`)
+**Last Updated**: 2026-09-02 (capability-registry semantics refreshed)
 
 ---
 
@@ -58,7 +58,7 @@ Cellos/
 
 1. **Single Address Space (SAS)** — all Cells share one virtual address space; no TLB flush on IPC
 2. **Cellular isolation** — most Cell crates forbid `unsafe`; exceptions are documented, audited driver/service boundaries where hardware or FFI requires it
-3. **Capability model** — capabilities have optional lease expiry + grant-depth enforcement
+3. **Capability model** — capability entries enforce single ownership, permission bits, optional lease expiry, close, and owner-exit revocation; spawn-time `CapSet` intersection remains the separate monotonic-downgrade boundary
 4. **Hot-swap** — `ViStateTransfer` on shell/config/vfs; 5-step live Cell replacement
 5. **Law 2 (Owned Buffers)** — no `&mut [u8]` across `async` boundaries
 6. **Law 5 (No mod.rs)** — `foo.rs` parallel to `foo/` everywhere
