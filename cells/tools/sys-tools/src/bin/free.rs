@@ -54,7 +54,7 @@ fn validated_kib(
     free_frames: u64,
     page_size: u64,
 ) -> Option<(u64, u64, u64)> {
-    if used_frames.checked_add(free_frames)? != total_frames {
+    if used_frames.checked_add(free_frames) != Some(total_frames) || page_size == 0 {
         return None;
     }
     Some((

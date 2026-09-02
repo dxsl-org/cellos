@@ -38,7 +38,7 @@ fn validated_kib(
     free_frames: u64,
     page_size: u64,
 ) -> Option<(u64, u64, u64)> {
-    if used_frames.checked_add(free_frames)? != total_frames {
+    if used_frames.checked_add(free_frames) != Some(total_frames) || page_size == 0 {
         return None;
     }
     Some((
@@ -175,8 +175,10 @@ mod tests {
     }
 
     #[test]
-    fn invalid_or_overflowing_frame_snapshot_is_rejected() {
+    fn invalid_zero_sized_or_overflowing_frame_snapshot_is_rejected() {
         assert_eq!(validated_kib(3, 1, 1, 4096), None);
+        assert_eq!(validated_kib(2, 1, 1, 0), None);
+        assert_eq!(validated_kib(u64::MAX, u64::MAX, 1, 1), None);
         assert_eq!(validated_kib(u64::MAX, u64::MAX, 0, 2), None);
     }
 }
