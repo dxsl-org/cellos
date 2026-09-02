@@ -39,11 +39,12 @@
 - Replaced the shell `free` built-in and standalone `/bin/free` placeholder
   text with checked `ViMemInfoV1` totals in KiB. Both paths require the existing
   `MemInfo` allowlist bit 56; `/bin/free` still launches with an empty capability
-  ceiling. They fail closed on syscall denial, arithmetic overflow, or an
-  invalid frame-domain `used + free != total` snapshot, validated before byte
-  conversion. Each valid value is then independently converted to KiB, so the
-  display and runtime gate permit the mathematically valid one-KiB rounding gap
-  for page sizes not aligned to 1 KiB. The retained RV64 capacity QEMU gate
+  ceiling. They fail closed on syscall denial, a zero page size, arithmetic
+  overflow, or an invalid frame-domain `used + free != total` snapshot,
+  validated before byte conversion. Each valid value is then independently
+  converted to KiB, so the display and runtime gate permit the mathematically
+  valid one-KiB rounding gap for page sizes not aligned to 1 KiB. The retained
+  RV64 capacity QEMU gate
   requires both commands to emit a positive, non-placeholder `Mem (KiB)` row,
   then still proves unauthorized bit-56 denial, typed `SpawnPinned` OOM, no
   kernel panic, and shell recovery. This does not change the `MemInfo` ABI,
