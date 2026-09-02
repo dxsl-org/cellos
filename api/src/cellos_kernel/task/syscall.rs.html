@@ -3830,7 +3830,7 @@
 <a href=#3830 id=3830 data-nosnippet>3830</a>        }
 <a href=#3831 id=3831 data-nosnippet>3831</a>        Syscall::Open { path_ptr, path_len } =&gt; {
 <a href=#3832 id=3832 data-nosnippet>3832</a>            <span class="kw">let </span>path = read_user_string(caller_id, path_ptr, path_len, MAX_LOG_MSG)<span class="question-mark">?</span>;
-<a href=#3833 id=3833 data-nosnippet>3833</a>            <span class="kw">if let </span><span class="prelude-val">Ok</span>(fd) = <span class="kw">super</span>::file_open(<span class="kw-2">&amp;</span>path) {
+<a href=#3833 id=3833 data-nosnippet>3833</a>            <span class="kw">if let </span><span class="prelude-val">Ok</span>(fd) = <span class="kw">super</span>::file_open(caller_id, <span class="kw-2">&amp;</span>path) {
 <a href=#3834 id=3834 data-nosnippet>3834</a>                <span class="kw">return </span><span class="prelude-val">Ok</span>(fd);
 <a href=#3835 id=3835 data-nosnippet>3835</a>            }
 <a href=#3836 id=3836 data-nosnippet>3836</a>            <span class="prelude-val">Err</span>(SyscallError::FileNotFound)
@@ -3881,7 +3881,7 @@
 <a href=#3881 id=3881 data-nosnippet>3881</a>        <span class="comment">// Syscall::Remove removed
 <a href=#3882 id=3882 data-nosnippet>3882</a>        </span>Syscall::ChDir { path_ptr, path_len } =&gt; {
 <a href=#3883 id=3883 data-nosnippet>3883</a>            <span class="kw">let </span>path = read_user_string(caller_id, path_ptr, path_len, MAX_LOG_MSG)<span class="question-mark">?</span>;
-<a href=#3884 id=3884 data-nosnippet>3884</a>            <span class="kw">if </span><span class="kw">super</span>::file_chdir(<span class="kw-2">&amp;</span>path).is_ok() {
+<a href=#3884 id=3884 data-nosnippet>3884</a>            <span class="kw">if </span><span class="kw">super</span>::file_chdir(caller_id, <span class="kw-2">&amp;</span>path).is_ok() {
 <a href=#3885 id=3885 data-nosnippet>3885</a>                <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="number">0</span>);
 <a href=#3886 id=3886 data-nosnippet>3886</a>            }
 <a href=#3887 id=3887 data-nosnippet>3887</a>            <span class="prelude-val">Err</span>(SyscallError::FileNotFound)
@@ -3892,7 +3892,7 @@
 <a href=#3892 id=3892 data-nosnippet>3892</a>            kbuf.try_reserve_exact(buf_len)
 <a href=#3893 id=3893 data-nosnippet>3893</a>                .map_err(|<span class="kw">_</span>| SyscallError::OutOfMemory)<span class="question-mark">?</span>;
 <a href=#3894 id=3894 data-nosnippet>3894</a>            kbuf.resize(buf_len, <span class="number">0</span>);
-<a href=#3895 id=3895 data-nosnippet>3895</a>            <span class="kw">if let </span><span class="prelude-val">Ok</span>(len) = <span class="kw">super</span>::file_getcwd(<span class="kw-2">&amp;mut </span>kbuf) {
+<a href=#3895 id=3895 data-nosnippet>3895</a>            <span class="kw">if let </span><span class="prelude-val">Ok</span>(len) = <span class="kw">super</span>::file_getcwd(caller_id, <span class="kw-2">&amp;mut </span>kbuf) {
 <a href=#3896 id=3896 data-nosnippet>3896</a>                write_user_slice(caller_id, buf_ptr, <span class="kw-2">&amp;</span>kbuf[..len], MAX_USER_BUF)<span class="question-mark">?</span>;
 <a href=#3897 id=3897 data-nosnippet>3897</a>                <span class="kw">return </span><span class="prelude-val">Ok</span>(len);
 <a href=#3898 id=3898 data-nosnippet>3898</a>            }
@@ -4677,7 +4677,7 @@
 <a href=#4677 id=4677 data-nosnippet>4677</a>            <span class="kw">match </span>op {
 <a href=#4678 id=4678 data-nosnippet>4678</a>                <span class="number">0 </span>=&gt; {
 <a href=#4679 id=4679 data-nosnippet>4679</a>                    <span class="kw">let </span>path = read_user_string(caller_id, arg1, arg2, MAX_LOG_MSG)<span class="question-mark">?</span>;
-<a href=#4680 id=4680 data-nosnippet>4680</a>                    <span class="kw">super</span>::file_remove(<span class="kw-2">&amp;</span>path).map_err(|<span class="kw">_</span>| SyscallError::PermissionDenied)
+<a href=#4680 id=4680 data-nosnippet>4680</a>                    <span class="kw">super</span>::file_remove(caller_id, <span class="kw-2">&amp;</span>path).map_err(|<span class="kw">_</span>| SyscallError::PermissionDenied)
 <a href=#4681 id=4681 data-nosnippet>4681</a>                }
 <a href=#4682 id=4682 data-nosnippet>4682</a>                <span class="number">1 </span>=&gt; {
 <a href=#4683 id=4683 data-nosnippet>4683</a>                    <span class="comment">// Rename - Stub
