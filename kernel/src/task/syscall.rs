@@ -3830,7 +3830,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         }
         Syscall::Open { path_ptr, path_len } => {
             let path = read_user_string(caller_id, path_ptr, path_len, MAX_LOG_MSG)?;
-            if let Ok(fd) = super::file_open(&path) {
+            if let Ok(fd) = super::file_open(caller_id, &path) {
                 return Ok(fd);
             }
             Err(SyscallError::FileNotFound)
@@ -3881,7 +3881,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         // Syscall::Remove removed
         Syscall::ChDir { path_ptr, path_len } => {
             let path = read_user_string(caller_id, path_ptr, path_len, MAX_LOG_MSG)?;
-            if super::file_chdir(&path).is_ok() {
+            if super::file_chdir(caller_id, &path).is_ok() {
                 return Ok(0);
             }
             Err(SyscallError::FileNotFound)
@@ -3892,7 +3892,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             kbuf.try_reserve_exact(buf_len)
                 .map_err(|_| SyscallError::OutOfMemory)?;
             kbuf.resize(buf_len, 0);
-            if let Ok(len) = super::file_getcwd(&mut kbuf) {
+            if let Ok(len) = super::file_getcwd(caller_id, &mut kbuf) {
                 write_user_slice(caller_id, buf_ptr, &kbuf[..len], MAX_USER_BUF)?;
                 return Ok(len);
             }
@@ -4677,7 +4677,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             match op {
                 0 => {
                     let path = read_user_string(caller_id, arg1, arg2, MAX_LOG_MSG)?;
-                    super::file_remove(&path).map_err(|_| SyscallError::PermissionDenied)
+                    super::file_remove(caller_id, &path).map_err(|_| SyscallError::PermissionDenied)
                 }
                 1 => {
                     // Rename - Stub

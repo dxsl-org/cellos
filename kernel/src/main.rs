@@ -739,6 +739,12 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // unrelated boot tasks can add noise. Assertions make any failure boot-fatal.
     #[cfg(feature = "test-hooks")]
     crate::loader::elf_tests::run_all();
+    #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+    if task::path_selftest::self_test() {
+        log_info("cwd-path self-test PASS");
+    } else {
+        log_info("cwd-path self-test FAIL");
+    }
 
     // 7a. Trust-model self-tests (thread identity inheritance + honest revoke).
     // Runs HERE — after the scheduler exists but BEFORE secondaries start — so the

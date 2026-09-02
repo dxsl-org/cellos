@@ -10,7 +10,7 @@ use core::cmp;
 use crate::sync::Spinlock;
 use crate::task::drivers::ramdisk::ViRamDisk; // Use RAM disk instead of VirtIO
 use api::block::ViBlockDevice;
-use api::fs::{BoxFuture, FileResult, OpenMode, ViFile, ViFileSystem};
+use api::fs::{BoxFuture, FileResult, OpenMode, Stat, ViFile, ViFileSystem};
 use types::{ViError, ViResult}; // Using Spinlock for kernel level sync
 
 // Import io traits from fatfs (0.4)
@@ -267,6 +267,46 @@ impl ViFileSystem for ViFatFS {
             fs: self.inner.clone(),
             is_dir,
         }))
+    }
+
+    fn stat(&self, path: &str) -> ViResult<Stat> {
+        let rel_path = path.trim_start_matches('/');
+        let fs_lock = self.inner.lock();
+        if rel_path.is_empty() {
+            return Ok(Stat {
+                size: 0,
+                is_dir: true,
+                exists: true,
+                _pad: [0; 6],
+            });
+        }
+
+        let root = fs_lock.root_dir();
+        let stat = match root.open_file(rel_path) {
+            Ok(mut file) => {
+                let size = file.seek(SeekFrom::End(0)).map_err(|_| ViError::IO)?;
+                Ok(Stat {
+                    size,
+                    is_dir: false,
+                    exists: true,
+                    _pad: [0; 6],
+                })
+            }
+            Err(fatfs::Error::NotFound | fatfs::Error::InvalidInput) => {
+                match root.open_dir(rel_path) {
+                    Ok(_) => Ok(Stat {
+                        size: 0,
+                        is_dir: true,
+                        exists: true,
+                        _pad: [0; 6],
+                    }),
+                    Err(fatfs::Error::NotFound) => Err(ViError::NotFound),
+                    Err(_) => Err(ViError::IO),
+                }
+            }
+            Err(_) => Err(ViError::IO),
+        };
+        stat
     }
 
     fn mkdir(&self, path: &str) -> ViResult<()> {

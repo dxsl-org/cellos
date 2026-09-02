@@ -54,6 +54,8 @@ pub(crate) mod getrandom_sas_tests;
 pub mod ipc_guardrail_selftest;
 pub mod ipc_pending_selftest;
 pub mod ipc_test;
+#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+pub mod path_selftest;
 pub mod pending_mailbox;
 #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
 pub mod retirement_selftest;
@@ -1436,66 +1438,89 @@ pub fn has_ready_tasks() -> bool {
     hart_local::ready::total_ready_count() > 0
 }
 
-// Helper to resolve path relative to CWD
-fn resolve_path(cwd: &str, path: &str) -> alloc::string::String {
-    if path.starts_with('/') {
-        alloc::string::String::from(path)
-    } else {
-        // Simple path joining
-        let mut p = alloc::string::String::from(cwd);
-        if !p.ends_with('/') {
-            p.push('/');
+fn append_path_components(output: &mut String, path: &str) {
+    for component in path.split('/') {
+        match component {
+            "" | "." => {}
+            ".." => {
+                if output.len() > 1 {
+                    let slash = output.rfind('/').unwrap_or(0);
+                    output.truncate(slash.max(1));
+                }
+            }
+            component => {
+                if output.len() > 1 {
+                    output.push('/');
+                }
+                output.push_str(component);
+            }
         }
-        p.push_str(path);
-        // TODO: Handle ".." and "." canonicalization
-        p
+    }
+}
+
+/// Lexically canonicalize `path` against `cwd` without allocating components.
+///
+/// The caller reserves the maximum possible output size once, so appending
+/// cannot trigger additional allocator calls.
+fn resolve_path(cwd: &str, path: &str) -> core::result::Result<String, ()> {
+    if path.is_empty() {
+        return Err(());
+    }
+
+    let capacity = if path.starts_with('/') {
+        path.len()
+    } else {
+        cwd.len()
+            .checked_add(path.len())
+            .and_then(|len| len.checked_add(1))
+            .ok_or(())?
+    };
+    let mut output = String::new();
+    output.try_reserve_exact(capacity).map_err(|_| ())?;
+    output.push('/');
+    if !path.starts_with('/') {
+        append_path_components(&mut output, cwd);
+    }
+    append_path_components(&mut output, path);
+    Ok(output)
+}
+
+fn resolve_task_path(caller_id: usize, path: &str) -> core::result::Result<String, ()> {
+    let scheduler = SCHEDULER.lock();
+    let task = scheduler
+        .as_ref()
+        .and_then(|sched| sched.tasks.get(&caller_id));
+    let task = task.ok_or(())?;
+    if path.starts_with('/') {
+        resolve_path("/", path)
+    } else {
+        resolve_path(&task.cwd, path)
     }
 }
 
 // --- File System Syscall Handlers ---
 
 #[allow(clippy::result_unit_err)]
-pub fn file_open(path: &str) -> core::result::Result<usize, ()> {
-    // 1. Resolve path
-    let full_path = if let Some(sched) = SCHEDULER.lock().as_mut() {
-        if let Some(task) = sched.current_task_mut() {
-            resolve_path(&task.cwd, path)
-        } else {
-            // Should not happen
-            String::from(path)
-        }
-    } else {
-        return Err(());
-    };
+pub fn file_open(caller_id: usize, path: &str) -> core::result::Result<usize, ()> {
+    let full_path = resolve_task_path(caller_id, path)?;
 
-    // 2. Open file via VIFS
-    // We loop to acquire FS lock to avoid deadlock with scheduler lock?
-    // No, here we don't hold scheduler lock while calling FS.
-
-    // Check if VIFS1 is initialized
     use crate::fs::VIFS1;
     let file = {
-        let mut fs_lock = VIFS1.lock();
-        if let Some(fs) = fs_lock.as_mut() {
-            fs.open(&full_path, api::fs::OpenMode::Read)
-                .map_err(|_| ())?
-        } else {
-            return Err(());
-        }
+        let fs_lock = VIFS1.lock();
+        let fs = fs_lock.as_ref().ok_or(())?;
+        fs.open(&full_path, api::fs::OpenMode::Read)
+            .map_err(|_| ())?
     };
 
-    // 3. Store in Task
-    if let Some(sched) = SCHEDULER.lock().as_mut() {
-        if let Some(task) = sched.current_task_mut() {
-            let fd = task.open_files.keys().max().map(|k| k + 1).unwrap_or(3); // Start FD at 3 (0,1,2 reserved)
-            task.open_files
-                .insert(fd, crate::task::tcb::FileHandle::new(file));
-            return Ok(fd);
-        }
-    }
-
-    // Task terminated concurrently?
-    Err(())
+    let mut scheduler = SCHEDULER.lock();
+    let task = scheduler
+        .as_mut()
+        .and_then(|sched| sched.tasks.get_mut(&caller_id))
+        .ok_or(())?;
+    let fd = task.open_files.keys().max().map(|fd| fd + 1).unwrap_or(3);
+    task.open_files
+        .insert(fd, crate::task::tcb::FileHandle::new(file));
+    Ok(fd)
 }
 
 pub fn file_read(fd: usize, buf: &mut [u8]) -> usize {
@@ -1585,8 +1610,25 @@ pub fn file_fstat(_fd: usize, _stat_ptr: usize) -> core::result::Result<usize, (
     Err(())
 }
 
-pub fn file_chdir(_path: &str) -> core::result::Result<usize, ()> {
-    // TODO: Implement chdir
+pub fn file_chdir(caller_id: usize, path: &str) -> core::result::Result<usize, ()> {
+    let full_path = resolve_task_path(caller_id, path)?;
+
+    let is_directory = {
+        let fs_lock = crate::fs::VIFS1.lock();
+        let fs = fs_lock.as_ref().ok_or(())?;
+        let stat = fs.stat(&full_path).map_err(|_| ())?;
+        stat.exists && stat.is_dir
+    };
+    if !is_directory {
+        return Err(());
+    }
+
+    let mut scheduler = SCHEDULER.lock();
+    let task = scheduler
+        .as_mut()
+        .and_then(|sched| sched.tasks.get_mut(&caller_id))
+        .ok_or(())?;
+    task.cwd = full_path;
     Ok(0)
 }
 
@@ -1610,26 +1652,13 @@ pub fn file_seek(fd: usize, offset: isize, whence: usize) -> core::result::Resul
     Err(())
 }
 
-pub fn file_remove(path: &str) -> core::result::Result<usize, ()> {
-    // 1. Resolve path
-    let full_path = if let Some(sched) = SCHEDULER.lock().as_mut() {
-        if let Some(task) = sched.current_task_mut() {
-            resolve_path(&task.cwd, path)
-        } else {
-            String::from(path)
-        }
-    } else {
-        return Err(());
-    };
+pub fn file_remove(caller_id: usize, path: &str) -> core::result::Result<usize, ()> {
+    let full_path = resolve_task_path(caller_id, path)?;
 
-    use crate::fs::VIFS1;
-    let mut fs_lock = VIFS1.lock();
-    if let Some(fs) = fs_lock.as_mut() {
-        if fs.remove(&full_path).is_ok() {
-            return Ok(0);
-        }
-    }
-    Err(())
+    let fs_lock = crate::fs::VIFS1.lock();
+    let fs = fs_lock.as_ref().ok_or(())?;
+    fs.remove(&full_path).map_err(|_| ())?;
+    Ok(0)
 }
 
 pub fn file_rename(_old: &str, _new: &str) -> core::result::Result<usize, ()> {
@@ -1637,8 +1666,18 @@ pub fn file_rename(_old: &str, _new: &str) -> core::result::Result<usize, ()> {
     Err(())
 }
 
-pub fn file_getcwd(_buf: &mut [u8]) -> core::result::Result<usize, ()> {
-    Err(())
+pub fn file_getcwd(caller_id: usize, buf: &mut [u8]) -> core::result::Result<usize, ()> {
+    let scheduler = SCHEDULER.lock();
+    let task = scheduler
+        .as_ref()
+        .and_then(|sched| sched.tasks.get(&caller_id))
+        .ok_or(())?;
+    let cwd = task.cwd.as_bytes();
+    if buf.len() < cwd.len() {
+        return Err(());
+    }
+    buf[..cwd.len()].copy_from_slice(cwd);
+    Ok(cwd.len())
 }
 use crate::task::tcb::LeaseAttributes;
 
