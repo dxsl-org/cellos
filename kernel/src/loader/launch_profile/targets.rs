@@ -13,6 +13,7 @@ pub(super) fn reviewed_user_target_ceiling(target: &str) -> Option<CapSet> {
         | "/bin/curl"
         | "/bin/doom"
         | "/bin/echo"
+        | "/bin/free"
         | "/bin/gpio-test-rv"
         | "/bin/http-smoke"
         | "/bin/input-test"
@@ -41,6 +42,7 @@ pub(super) fn reviewed_user_target_ceiling(target: &str) -> Option<CapSet> {
         "/bin/sensor-demo" => sensor_mmio_capset(),
         "/bin/spi-demo" => spi_demo_mmio_capset(),
         "/bin/bench"
+        | "/bin/capacity-probe"
         | "/bin/hotswap-demo-v1"
         | "/bin/hotswap-demo-v2"
         | "/bin/hypha"

@@ -283,6 +283,7 @@ Add-CellToSign "$rel_dir/cat"
 Add-CellToSign "$rel_dir/echo"
 Add-CellToSign "$rel_dir/ps"
 Add-CellToSign "$rel_dir/kill"
+Add-RequiredCellToSign "$rel_dir/free" "app-sys-tools (free binary)"
 Add-RequiredCellToSign "$rel_dir/hotswap" "app-sys-tools (hotswap binary)"
 if (Test-Path "$rel_dir/lua")          { Add-CellToSign "$rel_dir/lua" }
 if (Test-Path "$rel_dir/doom")         { Add-CellToSign "$rel_dir/doom" }
@@ -376,6 +377,7 @@ $cat_bin  = "$rel_dir/cat"
 $echo_bin = "$rel_dir/echo"
 $ps_bin   = "$rel_dir/ps"
 $kill_bin = "$rel_dir/kill"
+$free_bin = "$rel_dir/free"
 $hotswap_bin = "$rel_dir/hotswap"
 
 foreach ($pair in @(
@@ -451,9 +453,12 @@ if ($LASTEXITCODE -ne 0 -or -not (Test-Path $policy_bin)) {
 #   2. Kernel-FD-only data: /doom1.wad — DOOM reads it through mlibc → kernel
 #      Open/Read syscalls, which resolve against VIFS1 only (kernel/src/fs.rs).
 #      Moving it out needs mlibc file I/O → VFS routing (tracked in TODO).
-#   3. hotswap-demo-v1/v2: kernel-side hotswap (cell/hotswap.rs) loads the new
+#   3. /bin/free: the focused standalone MemInfo gate deliberately uses the
+#      shell's explicit `exec` builtin, whose File::open reads Kernel-FS/VIFS1
+#      before SpawnFromElf; the P6 table is not visible on that path.
+#   4. hotswap-demo-v1/v2: kernel-side hotswap (cell/hotswap.rs) loads the new
 #      ELF via loader::spawn_from_path (VIFS1/P2 only — no VFS from kernel).
-# EVERYTHING else lives in the disk cell-store (table_args → P2 table + P6 FAT)
+# Everything else lives in the disk cell-store (table_args → P2 table + P6 FAT)
 # and is spawned via VFS + sys_spawn_from_elf (ostd sys_spawn_from_path does
 # this automatically once service::VFS is registered).
 $kfs_args = @(
@@ -475,6 +480,7 @@ if (Test-Path $virtio_blk_bin) { $kfs_args += @($virtio_blk_bin, "/bin/block") }
 if ($doom_wad)  { $kfs_args += @($doom_wad, "/doom1.wad") }
 if (Test-Path $hotswap_demo_v1_bin) { $kfs_args += @($hotswap_demo_v1_bin, "/bin/hotswap-demo-v1") }
 if (Test-Path $hotswap_demo_v2_bin) { $kfs_args += @($hotswap_demo_v2_bin, "/bin/hotswap-demo-v2") }
+$kfs_args += @($free_bin, "/bin/free")
 # bench + bench-probe: same kernel-spawn-bound class as the hotswap demos —
 # bench re-spawns itself/its probe via sys_spawn_pinned, which resolves through
 # the KERNEL loader (VIFS1/P2 only, no VFS), so the child spawns need VIFS1.
@@ -611,6 +617,7 @@ if (Test-Path $cat_bin)  { $table_args += "/bin/cat=$cat_bin" }
 if (Test-Path $echo_bin) { $table_args += "/bin/echo=$echo_bin" }
 if (Test-Path $ps_bin)   { $table_args += "/bin/ps=$ps_bin" }
 if (Test-Path $kill_bin) { $table_args += "/bin/kill=$kill_bin" }
+if (Test-Path $free_bin) { $table_args += "/bin/free=$free_bin" }
 if (Test-Path $hotswap_bin) { $table_args += "/bin/hotswap=$hotswap_bin" }
 & $python "$tools_dir/write-cell-table.py" @table_args
 if ($LASTEXITCODE -ne 0) {

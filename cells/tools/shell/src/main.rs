@@ -26,6 +26,7 @@ api::declare_syscalls![
     RecvTimeout,
     Reply,
     Log,
+    MemInfo,
     Heartbeat,
     LookupService,
     SpawnFromPath,

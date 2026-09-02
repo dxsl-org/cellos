@@ -24,39 +24,47 @@ fn shell_has_no_mem_launch_edge() {
 }
 
 #[test]
-fn shell_service_ipc_tool_edge_is_capability_free() {
-    assert_eq!(
-        shell_edge(LaunchRoute::Path, "/bin/httpd").child_ceiling,
-        CapSet::EMPTY
-    );
-    assert_eq!(
-        shell_edge(LaunchRoute::Elf, "/bin/httpd").child_ceiling,
-        CapSet::EMPTY,
-        "service-IPC tools must not carry ambient network authority"
-    );
-    assert_eq!(
-        shell_edge(LaunchRoute::Elf, "/bin/vfs-test").child_ceiling,
-        CapSet::EMPTY,
-        "capability-free ELF targets remain launchable"
-    );
-    assert_eq!(
-        shell_edge(LaunchRoute::Elf, "/bin/viui-demo").child_ceiling,
-        CapSet::EMPTY,
-        "managed ViUI demos remain capability-free shell targets"
-    );
-    assert_eq!(
-        shell_edge(LaunchRoute::Path, "/bin/hotswap").child_ceiling,
-        CapSet::EMPTY,
-        "the hotswap CLI must not inherit lifecycle or service authority"
-    );
-    assert_eq!(
-        shell_edge(LaunchRoute::Elf, "/bin/hotswap").child_ceiling,
-        CapSet::EMPTY,
-        "the VFS-loaded hotswap CLI must remain capability-free"
-    );
+fn shell_reviewed_capability_free_edges_remain_empty() {
+    for (route, target) in [
+        (LaunchRoute::Path, "/bin/httpd"),
+        (LaunchRoute::Elf, "/bin/httpd"),
+        (LaunchRoute::Elf, "/bin/vfs-test"),
+        (LaunchRoute::Path, "/bin/free"),
+        (LaunchRoute::Elf, "/bin/free"),
+        (LaunchRoute::Elf, "/bin/viui-demo"),
+        (LaunchRoute::Path, "/bin/hotswap"),
+        (LaunchRoute::Elf, "/bin/hotswap"),
+    ] {
+        assert_eq!(
+            shell_edge(route, target).child_ceiling,
+            CapSet::EMPTY,
+            "{target} must remain capability-free on {route:?}"
+        );
+    }
     assert!(
         authorize(caller("shell", false, false), LaunchRoute::Elf, "/bin/vfs").is_none(),
         "shell must not launch privileged services by path forgery"
+    );
+}
+
+#[test]
+fn capacity_probe_path_grants_only_spawn_and_elf_is_denied() {
+    assert_eq!(
+        shell_edge(LaunchRoute::Path, "/bin/capacity-probe").child_ceiling,
+        CapSet {
+            spawn: true,
+            ..CapSet::EMPTY
+        },
+        "the denial probe needs only its declared SpawnPinned authority"
+    );
+    assert!(
+        authorize(
+            caller("shell", false, false),
+            LaunchRoute::Elf,
+            "/bin/capacity-probe"
+        )
+        .is_none(),
+        "caller-owned ELF bytes must not receive the denial probe's spawn authority"
     );
 }
 
