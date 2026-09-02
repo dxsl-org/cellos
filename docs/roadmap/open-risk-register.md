@@ -1,6 +1,6 @@
 # Open Risk Register
 
-**Last updated**: 2026-08-31
+**Last updated**: 2026-09-02
 
 This register tracks confirmed readiness gaps found while syncing docs to code.
 It is not a global bug-fix queue, and it does not turn all future or
@@ -135,9 +135,17 @@ those remain fail-closed production gates.
   walking behavior in nested paging paths. Hardware nested-SVM evidence remains
   open.
 
-- Net-broker is still partial wiring. `cells/services/net-broker/src/main.rs`
-  marks K1 PSK loading, LAN beacon sockets, relay dispatch, lease renewal, and
-  enrollment handling as TODOs; docs should not claim completed swarm routing.
+- **Net-broker local beacon admission is implemented at the host/single-guest
+  QEMU ceiling.** `cells/services/net-broker/src/main.rs` loads K1 through its
+  bounded path, initializes `BrokerNetworkState`, and constructs authenticated
+  beacon state. Beacon service-net admission is deadline- and
+  cancellation-bounded and linearized with shutdown, making the exercised
+  local admission restart-safe.
+- **Net-broker remote wiring remains partial.** `enrollment.rs`, `lease.rs`,
+  and `routing.rs` remain unreachable or unwired from the broker dispatch
+  path. Enrollment, lease renewal, swarm routing, relay, and direct-LAN
+  operation remain open; the local result proves no two-node, service,
+  physical, or production completion.
 - The former nearly 100 ms service-net idle IPC blind spot is narrowed at the
   software/QEMU ceiling. `WaitCompletion` still does not wake for IPC, so the
   service-local policy now caps its NET_RX wait at one scheduler tick plus

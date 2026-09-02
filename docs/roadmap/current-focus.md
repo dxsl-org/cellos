@@ -1,6 +1,6 @@
 # Current Focus
 
-**Last updated**: 2026-08-29
+**Last updated**: 2026-09-02
 
 ## Development-first execution boundary
 
@@ -42,15 +42,20 @@ or qualified independent external floor.
   `c2c-broker-oracle-single-guest-local-runtime`, displayed as
   `C2C Broker Oracle (single-guest local-runtime QEMU)`. The job allows
   60 minutes, limits the oracle step to 40 minutes, and uses an `if: always()`
-  upload for the runner log on ordinary success or failure. Actual runner
-  verification passes integration 1/1 with
-  `samples=1000 success=1000 calibration=MEASURED`, `role_gate=PASS`,
-  `attempted=10000 success=10000 silent_drop=0`, positive soak network
-  progress, `overflow status=PASS`, no kernel heartbeat/watchdog termination
-  marker, and `restart status=PASS` after clean role drain and successful retry
-  on a replacement TID. This remains single-guest local-runtime QEMU evidence;
-  it does not prove two-node direct LAN, relay, remote session cleanup,
-  remote/public operation, protected relay identity, or production.
+  upload for the runner log on ordinary success or failure.
+  `cell_main` loads K1 through a bounded path, initializes authenticated beacon
+  state, and uses deadline- and cancellation-bounded service-net admission
+  whose start/finish is linearized with shutdown. Actual runner verification
+  passes integration 1/1 with `samples=1000 success=1000
+  calibration=MEASURED`, `role_gate=PASS`, `attempted=10000 success=10000
+  silent_drop=0`, positive soak network progress, `overflow status=PASS`, no
+  kernel heartbeat/watchdog termination marker, and `restart status=PASS`
+  after clean role drain and successful retry on a replacement TID. This makes
+  the exercised local beacon admission restart-safe. The result remains
+  single-guest local-runtime QEMU evidence; it does not prove two-node direct
+  LAN, relay,
+  remote session cleanup, remote/public operation, service deployment,
+  physical execution, protected relay identity, or production.
 - The broker's stable-identity consumer now uses the existing opaque KMS
   static-DH seam. It accepts only matching ready register/status/acquire
   snapshots and gives Clatter handle/epoch/public metadata; the private scalar
@@ -61,12 +66,16 @@ or qualified independent external floor.
   compare-and-swap contract; clone/lost-key states cannot auto-rotate or restore
   plaintext identity. Qualified provider execution and physical recovery
   evidence remain open.
-  Focused host tests pass 63/63; Candidate B local ingress is complete at the
-  single-guest ceiling. The restart-enabled QEMU oracle retains its 1/1
-  integration result, 1,000 measured calibration successes, role, concurrency,
-  10,000-call soak, bounded overflow, watchdog-log, and supervised local broker
-  restart results. This does not prove two-node, relay, direct-LAN, remote
-  restart/failover, provider qualification, or production readiness.
+  Host net-broker tests pass 114/114, API tests pass 89/89, and the RV64 check
+  passes; Candidate B local ingress is complete at the single-guest ceiling.
+  The restart-enabled QEMU oracle retains its 1/1 integration result, 1,000
+  measured calibration successes, role, concurrency, 10,000/10,000 soak,
+  bounded overflow, watchdog-log, and supervised local broker restart results.
+  Enrollment, lease renewal, and routing remain unwired or unreachable from the
+  broker dispatch path.
+  This does not prove two-node, relay, direct-LAN, remote restart/failover,
+  service deployment, physical execution, provider qualification, or
+  production readiness.
 - Phase 04 local protocol contract is complete; remote dispatch stays disabled.
   The allocation-free V1 envelope uses a 112-byte header and a
   3,712-byte end-to-end payload cap across local ingress, Noise, and net-cell IPC.
