@@ -4,6 +4,19 @@
 
 ## [Unreleased] Development-first hardware-constrained execution
 
+- Completed the bounded kernel CWD/path lane without claiming POSIX
+  compatibility. One canonical absolute lexical resolver now attributes
+  relative `open`, `remove`, `chdir`, and exact non-NUL `getcwd` operations to
+  the syscall caller; `chdir` validates an existing directory failure-atomically,
+  and VIFS1 FAT `stat` distinguishes root, file, directory, and missing paths.
+  The post-change release boot gate exited 0 at the shell with zero faults; the
+  fresh immutable-FAT test-hooks marker gate also exited 0 with exactly one
+  `cwd-path self-test PASS` and no CWD failure, panic, or unclassified fault.
+  Its generic runner alone exits 1 under unchanged policy for the deliberate
+  classified `stack_overflow_probe` Cell 254 fault while boot continues.
+  `fstat`, `rename`, shell `cd`/`pwd`, C wrappers, symlinks, new ABI work, and
+  broad POSIX remain future capabilities.
+
 - Made beacon request admission nonblocking and restart-cancellable end to end.
   The broker now uses the kernel's bounded owned-message queue through
   `sys_post`, sharing one deadline across queue admission and sliced reply

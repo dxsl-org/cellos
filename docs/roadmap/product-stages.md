@@ -1,6 +1,6 @@
 # Product Stages
 
-**Last updated**: 2026-08-29
+**Last updated**: 2026-09-02
 
 ## Execution Relationship
 
@@ -76,6 +76,13 @@ license gates are in [G3 Accelerator Evidence Envelope](../research/g3-accelerat
 Direction: a Tier 1 `rust-std` runtime profile using pure-Rust PAL plus a custom
 `*-unknown-cellos` rustc target. Do not route native Tier 1 `std` through mlibc,
 because that pulls C/POSIX assumptions into the trusted Tier 1 path.
+
+The bounded kernel CWD/path lane is complete with paired fault-free release-boot
+and immutable-FAT test-hooks marker evidence. It covers canonical
+caller-attributed relative `open`, `remove`, `chdir`, exact non-NUL `getcwd`,
+and VIFS1 FAT `stat`. This is a narrow native contract, not POSIX
+compatibility. `fstat`, `rename`, shell `cd`/`pwd`, C wrappers, symlinks, new
+ABI work, and broad POSIX support remain future capabilities.
 
 ## G5 - Virtualization Platform
 

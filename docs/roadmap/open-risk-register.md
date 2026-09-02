@@ -180,9 +180,16 @@ those remain fail-closed production gates.
   evidence that the timing observation caused the benchmark result. The risk
   remains outside two-node, service, physical, hard-latency, and production
   completion.
-- Native POSIX path handling remains incomplete: canonicalization, `chdir`,
-  `rename`, `getcwd`, and `fstat` contain stubs or deferred behavior in
-  `kernel/src/task.rs`; Tier 1 must not be documented as POSIX-complete.
+- The bounded native kernel CWD/path lane is complete: one canonical absolute
+  lexical resolver serves caller-attributed relative `open`, `remove`, `chdir`,
+  and exact non-NUL `getcwd`; `chdir` validates an existing directory
+  failure-atomically, and VIFS1 FAT `stat` covers root/file/directory/missing.
+  A fault-free post-change release boot and the fresh immutable-FAT test-hooks
+  marker gate supply the paired evidence; the test-hooks generic runner's
+  deliberate classified Cell 254 fault remains subject to unchanged global
+  fault policy. `fstat`, `rename`, shell `cd`/`pwd`, C wrappers, symlinks, and
+  broad native POSIX compatibility remain future capabilities; Tier 1 must not
+  be described as POSIX-complete.
 - The historical ARM64 hypervisor machinery intermittency was fixed at the
   EL2 IRQ/preemption boundary. Hosted run `33486590595:1` passes the retained
   TCG machinery oracle; full logs remain diagnostic evidence for distinguishing
