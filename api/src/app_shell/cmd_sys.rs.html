@@ -38,7 +38,7 @@
 <a href=#38 id=38 data-nosnippet>38</a>    free_frames: u64,
 <a href=#39 id=39 data-nosnippet>39</a>    page_size: u64,
 <a href=#40 id=40 data-nosnippet>40</a>) -&gt; <span class="prelude-ty">Option</span>&lt;(u64, u64, u64)&gt; {
-<a href=#41 id=41 data-nosnippet>41</a>    <span class="kw">if </span>used_frames.checked_add(free_frames)<span class="question-mark">? </span>!= total_frames {
+<a href=#41 id=41 data-nosnippet>41</a>    <span class="kw">if </span>used_frames.checked_add(free_frames) != <span class="prelude-val">Some</span>(total_frames) || page_size == <span class="number">0 </span>{
 <a href=#42 id=42 data-nosnippet>42</a>        <span class="kw">return </span><span class="prelude-val">None</span>;
 <a href=#43 id=43 data-nosnippet>43</a>    }
 <a href=#44 id=44 data-nosnippet>44</a>    <span class="prelude-val">Some</span>((
@@ -175,9 +175,11 @@
 <a href=#175 id=175 data-nosnippet>175</a>    }
 <a href=#176 id=176 data-nosnippet>176</a>
 <a href=#177 id=177 data-nosnippet>177</a>    <span class="attr">#[test]
-<a href=#178 id=178 data-nosnippet>178</a>    </span><span class="kw">fn </span>invalid_or_overflowing_frame_snapshot_is_rejected() {
+<a href=#178 id=178 data-nosnippet>178</a>    </span><span class="kw">fn </span>invalid_zero_sized_or_overflowing_frame_snapshot_is_rejected() {
 <a href=#179 id=179 data-nosnippet>179</a>        <span class="macro">assert_eq!</span>(validated_kib(<span class="number">3</span>, <span class="number">1</span>, <span class="number">1</span>, <span class="number">4096</span>), <span class="prelude-val">None</span>);
-<a href=#180 id=180 data-nosnippet>180</a>        <span class="macro">assert_eq!</span>(validated_kib(u64::MAX, u64::MAX, <span class="number">0</span>, <span class="number">2</span>), <span class="prelude-val">None</span>);
-<a href=#181 id=181 data-nosnippet>181</a>    }
-<a href=#182 id=182 data-nosnippet>182</a>}
+<a href=#180 id=180 data-nosnippet>180</a>        <span class="macro">assert_eq!</span>(validated_kib(<span class="number">2</span>, <span class="number">1</span>, <span class="number">1</span>, <span class="number">0</span>), <span class="prelude-val">None</span>);
+<a href=#181 id=181 data-nosnippet>181</a>        <span class="macro">assert_eq!</span>(validated_kib(u64::MAX, u64::MAX, <span class="number">1</span>, <span class="number">1</span>), <span class="prelude-val">None</span>);
+<a href=#182 id=182 data-nosnippet>182</a>        <span class="macro">assert_eq!</span>(validated_kib(u64::MAX, u64::MAX, <span class="number">0</span>, <span class="number">2</span>), <span class="prelude-val">None</span>);
+<a href=#183 id=183 data-nosnippet>183</a>    }
+<a href=#184 id=184 data-nosnippet>184</a>}
 </code></pre></div></section></main></body></html>

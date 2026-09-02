@@ -54,7 +54,7 @@
 <a href=#54 id=54 data-nosnippet>54</a>    free_frames: u64,
 <a href=#55 id=55 data-nosnippet>55</a>    page_size: u64,
 <a href=#56 id=56 data-nosnippet>56</a>) -&gt; <span class="prelude-ty">Option</span>&lt;(u64, u64, u64)&gt; {
-<a href=#57 id=57 data-nosnippet>57</a>    <span class="kw">if </span>used_frames.checked_add(free_frames)<span class="question-mark">? </span>!= total_frames {
+<a href=#57 id=57 data-nosnippet>57</a>    <span class="kw">if </span>used_frames.checked_add(free_frames) != <span class="prelude-val">Some</span>(total_frames) || page_size == <span class="number">0 </span>{
 <a href=#58 id=58 data-nosnippet>58</a>        <span class="kw">return </span><span class="prelude-val">None</span>;
 <a href=#59 id=59 data-nosnippet>59</a>    }
 <a href=#60 id=60 data-nosnippet>60</a>    <span class="prelude-val">Some</span>((
