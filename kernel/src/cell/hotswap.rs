@@ -1,23 +1,15 @@
 //! Hot-swap support primitives shared by the supervisor-owned replacement path.
 //!
-//! The legacy syscall-400 whole-sequence orchestrator is retired. This module now
-//! keeps only the still-live freeze state, replacement binding, mailbox cutover,
-//! and `HotSwapReady` bookkeeping used by opcodes 401 and 413-422.
+//! The live protocol freezes an exact task incarnation in `TaskState::Frozen`,
+//! binds replacement ceiling reservations to its generation and nonce, rolls an
+//! aborted swap back to `Ready`, and transfers accepted IPC through the pending
+//! mailboxes at cutover before retiring the source task.
 
 use crate::sync::Spinlock;
 use alloc::collections::BTreeMap;
 use types::{CellId, ViError, ViResult};
 
-// ─── Freeze registry ─────────────────────────────────────────────────────────
-
-/// Global freeze set — cell ids whose incoming IPC should be queued rather than
-/// delivered.  Phase 02 will use this to buffer then flush messages to the new
-/// cell.  In Phase 01 the queuing is a no-op stub: existing callers simply fail
-/// to send if the cell is frozen (same as before).
-///
-/// Lock ordering: FROZEN (leaf) — never acquired while SCHEDULER is held.
-static FROZEN: Spinlock<alloc::collections::BTreeSet<u64>> =
-    Spinlock::new(alloc::collections::BTreeSet::new());
+// ─── Task-incarnation ceiling reservations ──────────────────────────────────
 
 /// One replacement ceiling per exact frozen task incarnation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -38,12 +30,11 @@ enum CeilingState {
 static SWAP_CEILINGS: Spinlock<BTreeMap<usize, CeilingState>> = Spinlock::new(BTreeMap::new());
 static NEXT_FREEZE_NONCE: Spinlock<u64> = Spinlock::new(1);
 
-/// Force-release this module's lock during fault teardown.
+/// Force-release this module's locks during fault teardown.
 ///
 /// # Safety
 /// Single-hart; called only from the fault/panic path with interrupts disabled.
 pub unsafe fn force_unlock_locks() {
-    FROZEN.force_unlock();
     SWAP_CEILINGS.force_unlock();
     NEXT_FREEZE_NONCE.force_unlock();
 }
@@ -53,24 +44,6 @@ fn next_freeze_nonce() -> u64 {
     let nonce = *next;
     *next = next.checked_add(1).expect("freeze nonce space exhausted");
     nonce
-}
-
-/// Mark `cell_id` as frozen.  Subsequent `sys_send` calls to this cell will
-/// queue the message in the task's pending queue instead of delivering it.
-pub fn freeze(cell_id: CellId) {
-    FROZEN.lock().insert(cell_id.0);
-    log::info!("[hotswap] froze cell {}", cell_id.0);
-}
-
-/// Return true if `cell_id` is currently frozen.
-pub fn is_frozen(cell_id: CellId) -> bool {
-    FROZEN.lock().contains(&cell_id.0)
-}
-
-/// Remove `cell_id` from the freeze set and resume normal message delivery.
-pub fn unfreeze(cell_id: CellId) {
-    FROZEN.lock().remove(&cell_id.0);
-    log::info!("[hotswap] unfroze cell {}", cell_id.0);
 }
 
 /// Exclusive rollback owner for one exact frozen task incarnation.

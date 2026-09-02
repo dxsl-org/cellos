@@ -93,8 +93,8 @@ pub enum TaskState {
     /// - Cannot be killed by external signal (returns `ViError::PermissionDenied`).
     /// - Can only be terminated by the hotswap orchestrator via `exit_task` after a
     ///   successful swap, or rolled back to `Ready` on failure.
-    /// - Incoming IPC is queued in `crate::cell::hotswap::FROZEN` registry instead
-    ///   of being delivered (Phase 02 will drain the queue; P01 stubs this).
+    /// - Accepted incoming IPC is retained in this task's pending mailbox and
+    ///   transferred only by the live cutover barrier to the replacement.
     Frozen {
         swap_id: u64,
     },
