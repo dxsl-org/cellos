@@ -10,7 +10,7 @@
 //! # Example (VFS service)
 //! ```no_run
 //! use ostd::dispatch::{run_service, MessageHandler};
-//! use ostd::ViError;
+//! # const VFS_ERR_IO: u8 = 1;
 //! use api::ipc::{VfsRequest, VfsResponse};
 //!
 //! struct VfsHandler;
@@ -22,7 +22,7 @@
 //!     fn handle<'de>(&mut self, req: Self::Request<'de>, _sender: usize) -> Self::Response {
 //!         match req {
 //!             VfsRequest::Stat(path) => VfsResponse::Stat { size: 0, is_dir: false },
-//!             _ => VfsResponse::Err(ViError::NotSupported as u8),
+//!             _ => VfsResponse::Err(VFS_ERR_IO),
 //!         }
 //!     }
 //! }
