@@ -1,4 +1,6 @@
+#[cfg(all(not(test), target_os = "none"))]
 use crate::syscall::sys_log;
+#[cfg(all(not(test), target_os = "none"))]
 use core::panic::PanicInfo;
 
 /// Root `_start` against `--gc-sections`.

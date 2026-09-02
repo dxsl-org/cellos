@@ -6,7 +6,7 @@
 // proprietary Cells that link against this crate.
 
 #![no_std]
-#![feature(alloc_error_handler)]
+#![cfg_attr(target_os = "none", feature(alloc_error_handler))]
 
 extern crate alloc;
 

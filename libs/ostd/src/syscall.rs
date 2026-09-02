@@ -467,77 +467,6 @@ pub fn sys_mem_info() -> Result<ViMemInfoV1, SyscallError> {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::{
-        decode_snapshot_result, decode_spawn_result, decode_wait_completion_result, SyscallError,
-        SyscallResult, WaitCompletionResult,
-    };
-    use api::completion::{source, ViCompletion, COMPLETION_LEN};
-
-    #[test]
-    fn spawn_result_decoder_preserves_additive_oom() {
-        assert!(matches!(decode_spawn_result(7), SyscallResult::Ok(7)));
-        assert!(matches!(
-            decode_spawn_result(-1),
-            SyscallResult::Err(SyscallError::Unknown)
-        ));
-        assert!(matches!(
-            decode_spawn_result(-2),
-            SyscallResult::Err(SyscallError::OutOfMemory)
-        ));
-    }
-
-    #[test]
-    fn snapshot_result_decoder_preserves_denial_and_oom() {
-        assert!(matches!(decode_snapshot_result(0), SyscallResult::Ok(0)));
-        assert!(matches!(decode_snapshot_result(17), SyscallResult::Ok(17)));
-        assert!(matches!(
-            decode_snapshot_result(-1),
-            SyscallResult::Err(SyscallError::PermissionDenied)
-        ));
-        assert!(matches!(
-            decode_snapshot_result(-2),
-            SyscallResult::Err(SyscallError::OutOfMemory)
-        ));
-        assert!(matches!(
-            decode_snapshot_result(-9),
-            SyscallResult::Err(SyscallError::Unknown)
-        ));
-    }
-
-    #[test]
-    fn wait_completion_decoder_distinguishes_raw_zero_record_and_invalid_results() {
-        let completion = ViCompletion {
-            slot: 7,
-            source: source::NET_RX,
-            result: source::NET_RX as i64,
-        };
-        let record = completion.to_bytes();
-
-        assert_eq!(
-            decode_wait_completion_result(0, &record),
-            WaitCompletionResult::NoRecord
-        );
-        assert_eq!(
-            decode_wait_completion_result(1, &record),
-            WaitCompletionResult::Completion(completion)
-        );
-        assert_eq!(
-            decode_wait_completion_result(-1, &record),
-            WaitCompletionResult::ErrorOrInvalid(-1)
-        );
-        assert_eq!(
-            decode_wait_completion_result(2, &record),
-            WaitCompletionResult::ErrorOrInvalid(2)
-        );
-        assert_eq!(
-            decode_wait_completion_result(1, &[0u8; COMPLETION_LEN]),
-            WaitCompletionResult::ErrorOrInvalid(1)
-        );
-    }
-}
-
 /// Open a file by path and return a capability ID.
 ///
 /// Returns `Ok(cap_id)` where `cap_id > 0`, or `Err` if the path is not found.
@@ -2200,5 +2129,76 @@ pub fn sys_query_hotswap_ready(target_tid: usize) -> Result<bool, SyscallError> 
         1 => Ok(true),
         0 => Ok(false),
         _ => Err(SyscallError::PermissionDenied), // PermissionDenied or unknown tid (FileNotFound)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        decode_snapshot_result, decode_spawn_result, decode_wait_completion_result, SyscallError,
+        SyscallResult, WaitCompletionResult,
+    };
+    use api::completion::{source, ViCompletion, COMPLETION_LEN};
+
+    #[test]
+    fn spawn_result_decoder_preserves_additive_oom() {
+        assert!(matches!(decode_spawn_result(7), SyscallResult::Ok(7)));
+        assert!(matches!(
+            decode_spawn_result(-1),
+            SyscallResult::Err(SyscallError::Unknown)
+        ));
+        assert!(matches!(
+            decode_spawn_result(-2),
+            SyscallResult::Err(SyscallError::OutOfMemory)
+        ));
+    }
+
+    #[test]
+    fn snapshot_result_decoder_preserves_denial_and_oom() {
+        assert!(matches!(decode_snapshot_result(0), SyscallResult::Ok(0)));
+        assert!(matches!(decode_snapshot_result(17), SyscallResult::Ok(17)));
+        assert!(matches!(
+            decode_snapshot_result(-1),
+            SyscallResult::Err(SyscallError::PermissionDenied)
+        ));
+        assert!(matches!(
+            decode_snapshot_result(-2),
+            SyscallResult::Err(SyscallError::OutOfMemory)
+        ));
+        assert!(matches!(
+            decode_snapshot_result(-9),
+            SyscallResult::Err(SyscallError::Unknown)
+        ));
+    }
+
+    #[test]
+    fn wait_completion_decoder_distinguishes_raw_zero_record_and_invalid_results() {
+        let completion = ViCompletion {
+            slot: 7,
+            source: source::NET_RX,
+            result: source::NET_RX as i64,
+        };
+        let record = completion.to_bytes();
+
+        assert_eq!(
+            decode_wait_completion_result(0, &record),
+            WaitCompletionResult::NoRecord
+        );
+        assert_eq!(
+            decode_wait_completion_result(1, &record),
+            WaitCompletionResult::Completion(completion)
+        );
+        assert_eq!(
+            decode_wait_completion_result(-1, &record),
+            WaitCompletionResult::ErrorOrInvalid(-1)
+        );
+        assert_eq!(
+            decode_wait_completion_result(2, &record),
+            WaitCompletionResult::ErrorOrInvalid(2)
+        );
+        assert_eq!(
+            decode_wait_completion_result(1, &[0u8; COMPLETION_LEN]),
+            WaitCompletionResult::ErrorOrInvalid(1)
+        );
     }
 }

@@ -1,3 +1,5 @@
+#![cfg(target_os = "none")]
+
 //! Cell heap allocator — a real freeing allocator (linked-list free list).
 //!
 //! Replaces the former bump allocator whose `dealloc` was a no-op: that leaked
