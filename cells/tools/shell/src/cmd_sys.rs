@@ -32,6 +32,21 @@ pub fn cmd_uname(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult
 fn frames_to_kib(frames: u64, page_size: u64) -> Option<u64> {
     frames.checked_mul(page_size).map(|bytes| bytes / 1024)
 }
+fn validated_kib(
+    total_frames: u64,
+    used_frames: u64,
+    free_frames: u64,
+    page_size: u64,
+) -> Option<(u64, u64, u64)> {
+    if used_frames.checked_add(free_frames)? != total_frames {
+        return None;
+    }
+    Some((
+        frames_to_kib(total_frames, page_size)?,
+        frames_to_kib(used_frames, page_size)?,
+        frames_to_kib(free_frames, page_size)?,
+    ))
+}
 
 fn decimal(mut value: u64, buffer: &mut [u8; 20]) -> &str {
     let mut cursor = buffer.len();
@@ -52,19 +67,15 @@ pub fn cmd_free(_args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()>
         crate::executor::shell_println("free: MemInfo denied or unavailable");
         ViError::Unknown
     })?;
-    let values = (
-        frames_to_kib(info.total_frames, info.page_size),
-        frames_to_kib(info.used_frames, info.page_size),
-        frames_to_kib(info.free_frames, info.page_size),
-    );
-    let (Some(total_kib), Some(used_kib), Some(free_kib)) = values else {
+    let Some((total_kib, used_kib, free_kib)) = validated_kib(
+        info.total_frames,
+        info.used_frames,
+        info.free_frames,
+        info.page_size,
+    ) else {
         crate::executor::shell_println("free: MemInfo denied or unavailable");
         return Err(ViError::Unknown);
     };
-    if used_kib.checked_add(free_kib) != Some(total_kib) {
-        crate::executor::shell_println("free: MemInfo denied or unavailable");
-        return Err(ViError::Unknown);
-    }
 
     let mut total_buf = [0u8; 20];
     let mut used_buf = [0u8; 20];
@@ -152,4 +163,20 @@ pub fn cmd_blkio_test(_args: crate::text_engine::args::LegacyArgs<'_>) -> ViResu
         ostd::io::println("blkio: denied");
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validated_kib;
+
+    #[test]
+    fn valid_frame_snapshot_survives_independent_kib_flooring() {
+        assert_eq!(validated_kib(2, 1, 1, 1536), Some((3, 1, 1)));
+    }
+
+    #[test]
+    fn invalid_or_overflowing_frame_snapshot_is_rejected() {
+        assert_eq!(validated_kib(3, 1, 1, 4096), None);
+        assert_eq!(validated_kib(u64::MAX, u64::MAX, 0, 2), None);
+    }
 }

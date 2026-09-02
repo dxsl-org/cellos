@@ -48,10 +48,12 @@ fn assert_latest_meminfo(output: &str, surface: &str) {
         "{surface} row has unexpected fields: {row}"
     );
     assert!(total > 0, "{surface} reported zero total memory: {row}");
-    assert_eq!(
-        used.checked_add(free),
-        Some(total),
-        "{surface} total does not equal used + free: {row}"
+    let accounted = used
+        .checked_add(free)
+        .unwrap_or_else(|| panic!("{surface} displayed capacity overflows: {row}"));
+    assert!(
+        accounted <= total && total - accounted <= 1,
+        "{surface} displayed capacity exceeds one KiB of independent rounding: {row}"
     );
 }
 

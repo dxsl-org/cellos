@@ -17,19 +17,15 @@ fn cell_main() {
         }
     };
 
-    let values = (
-        frames_to_kib(info.total_frames, info.page_size),
-        frames_to_kib(info.used_frames, info.page_size),
-        frames_to_kib(info.free_frames, info.page_size),
-    );
-    let (Some(total_kib), Some(used_kib), Some(free_kib)) = values else {
+    let Some((total_kib, used_kib, free_kib)) = validated_kib(
+        info.total_frames,
+        info.used_frames,
+        info.free_frames,
+        info.page_size,
+    ) else {
         ostd::io::println("free: MemInfo denied or unavailable");
         ostd::syscall::sys_exit(1);
     };
-    if used_kib.checked_add(free_kib) != Some(total_kib) {
-        ostd::io::println("free: MemInfo denied or unavailable");
-        ostd::syscall::sys_exit(1);
-    }
 
     let mut total_buf = [0u8; 20];
     let mut used_buf = [0u8; 20];
@@ -50,6 +46,22 @@ fn cell_main() {
 
 fn frames_to_kib(frames: u64, page_size: u64) -> Option<u64> {
     frames.checked_mul(page_size).map(|bytes| bytes / 1024)
+}
+
+fn validated_kib(
+    total_frames: u64,
+    used_frames: u64,
+    free_frames: u64,
+    page_size: u64,
+) -> Option<(u64, u64, u64)> {
+    if used_frames.checked_add(free_frames)? != total_frames {
+        return None;
+    }
+    Some((
+        frames_to_kib(total_frames, page_size)?,
+        frames_to_kib(used_frames, page_size)?,
+        frames_to_kib(free_frames, page_size)?,
+    ))
 }
 
 fn decimal(mut value: u64, buffer: &mut [u8; 20]) -> &str {
