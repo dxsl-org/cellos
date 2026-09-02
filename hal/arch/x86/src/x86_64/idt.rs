@@ -1,262 +1,125 @@
-//! x86_64 Interrupt Descriptor Table — 256 16-byte long-mode gates.
-//!
-//! All entries use the `extern "x86-interrupt"` ABI so LLVM saves all
-//! caller-saved registers and emits `iretq` (not `ret`) on return.
-//! Without this, a bare `extern "C"` handler would return with `ret`
-//! into the CPU's stacked interrupt frame, causing a triple-fault.
-//!
-//! Per-vector dispatch:
-//!   0x20 — LAPIC periodic timer → `vi_timer_tick()` (kernel scheduler tick)
-//!   0x24 — COM1 / IOAPIC IRQ 4 → `vi_handle_uart_irq()` (shell stdin)
-//!   0x0E — #PF (with error code) → `vi_handle_page_fault()`
+//! x86_64 Interrupt Descriptor Table with one generated entry per vector.
 
 use core::arch::asm;
-use hal_arch_trait::{vi_handle_page_fault, vi_handle_uart_irq, vi_timer_tick};
 
-/// Interrupt stack frame pushed by the CPU on every exception/interrupt entry.
-#[repr(C)]
-pub struct InterruptFrame {
-    pub rip: u64,
-    pub cs: u64,
-    pub rflags: u64,
-    pub rsp: u64,
-    pub ss: u64,
+#[cfg(feature = "x86-idt-cpl3-test")]
+mod cpl3_entry;
+#[cfg(feature = "x86-idt-cpl3-test")]
+mod cpl3_platform;
+#[cfg(feature = "x86-idt-cpl3-test")]
+mod cpl3_probe;
+mod dispatch;
+mod entry;
+mod fatal;
+pub mod policy;
+#[cfg(feature = "x86-idt-cpl3-test")]
+mod probe;
+#[cfg(feature = "x86-idt-cpl3-test")]
+mod probe_entry;
+#[cfg(feature = "x86-idt-cpl3-test")]
+mod probe_timer;
+
+include!(concat!(env!("OUT_DIR"), "/x86_idt_generated.rs"));
+
+unsafe extern "C" {
+    static x86_64_idt_stub_table: [usize; X86_IDT_STUB_COUNT];
 }
 
 #[repr(C)]
 #[derive(Copy, Clone)]
 struct IdtEntry {
     off_lo: u16,
-    sel: u16,
+    selector: u16,
     ist: u8,
-    attr: u8,
+    attributes: u8,
     off_mid: u16,
     off_hi: u32,
-    _res: u32,
+    reserved: u32,
 }
+
 impl IdtEntry {
-    fn new(handler: u64, dpl: u8) -> Self {
+    const MISSING: Self = Self {
+        off_lo: 0,
+        selector: 0,
+        ist: 0,
+        attributes: 0,
+        off_mid: 0,
+        off_hi: 0,
+        reserved: 0,
+    };
+
+    fn interrupt_gate(handler: usize, dpl: u8) -> Self {
+        let handler = handler as u64;
         Self {
-            off_lo: (handler & 0xFFFF) as u16,
-            sel: 0x08,
+            off_lo: handler as u16,
+            selector: 0x08,
             ist: 0,
-            attr: 0x8E | ((dpl & 3) << 5),
-            off_mid: ((handler >> 16) & 0xFFFF) as u16,
-            off_hi: ((handler >> 32) & 0xFFFF_FFFF) as u32,
-            _res: 0,
+            attributes: 0x8e | ((dpl & 3) << 5),
+            off_mid: (handler >> 16) as u16,
+            off_hi: (handler >> 32) as u32,
+            reserved: 0,
         }
     }
 }
 
 #[repr(C, align(16))]
-struct Idt {
-    e: [IdtEntry; 256],
-}
+struct Idt([IdtEntry; X86_IDT_STUB_COUNT]);
+
 #[repr(C, packed)]
-struct IdtPtr {
+struct IdtPointer {
     limit: u16,
     base: u64,
 }
 
-static mut IDT: Idt = Idt {
-    e: [IdtEntry {
-        off_lo: 0,
-        sel: 0,
-        ist: 0,
-        attr: 0,
-        off_mid: 0,
-        off_hi: 0,
-        _res: 0,
-    }; 256],
-};
+static mut IDT: Idt = Idt([IdtEntry::MISSING; X86_IDT_STUB_COUNT]);
 
 pub fn init() {
-    // SAFETY: single-threaded boot; IDT is a static global.
     unsafe {
-        // SAFETY: addr_of_mut! avoids creating a Rust reference to a mutable static.
-        let idt_ptr = core::ptr::addr_of_mut!(IDT);
-
-        // General handler for most vectors (no CPU-pushed error code).
-        let handler_addr = x86_64_irq_handler as *const () as u64;
-        for e in (*idt_ptr).e.iter_mut() {
-            *e = IdtEntry::new(handler_addr, 0);
+        let idt = core::ptr::addr_of_mut!(IDT);
+        let mut previous = 0;
+        for (vector, &handler) in x86_64_idt_stub_table.iter().enumerate() {
+            debug_assert!(handler != 0 && (vector == 0 || handler > previous));
+            previous = handler;
+            let dpl = if vector == 0x80 { 3 } else { 0 };
+            (*idt).0[vector] = IdtEntry::interrupt_gate(handler, dpl);
         }
-
-        // Exceptions that push an error code: #DF=8, #TS=10, #NP=11, #SS=12, #GP=13, #PF=14, #AC=17
-        let ec_handler = x86_64_ec_handler as *const () as u64;
-        for vec in [8u8, 10, 11, 12, 13, 14, 17] {
-            (*idt_ptr).e[vec as usize] = IdtEntry::new(ec_handler, 0);
-        }
-
-        // Vector 21 (#CP — Control Protection Exception, from CET IBT / Shadow Stack).
-        // Registered unconditionally: the handler is only invoked if CET is enabled
-        // by cet::init_kernel_cet(), so having the entry present does no harm when CET is off.
-        (*idt_ptr).e[21] = IdtEntry::new(x86_64_cp_handler as *const () as u64, 0);
-
-        // Vector 0x80: DPL=3 so user code can issue `int 0x80` (legacy, tolerated).
-        (*idt_ptr).e[0x80] = IdtEntry::new(handler_addr, 3);
-
-        // Vector 0x20: LAPIC periodic timer → vi_timer_tick().
-        // The LAPIC is programmed to fire at vector 0x20 by apic::init_lapic_calibrated.
-        (*idt_ptr).e[0x20] = IdtEntry::new(x86_64_timer_handler as *const () as u64, 0);
-
-        // Vector 0x24: COM1 UART RX (IOAPIC IRQ 4, redirected to vector 0x24) → vi_handle_uart_irq().
-        (*idt_ptr).e[0x24] = IdtEntry::new(x86_64_uart_handler as *const () as u64, 0);
-
-        let ptr = IdtPtr {
+        let pointer = IdtPointer {
             limit: (core::mem::size_of::<Idt>() - 1) as u16,
-            base: core::ptr::addr_of!((*idt_ptr).e) as u64,
+            base: core::ptr::addr_of!((*idt).0) as u64,
         };
-        // SAFETY: ptr points to a valid, aligned IDT; lidt from Ring 0 is safe.
-        // NOTE: `nomem` must NOT be used here — lidt reads 10 bytes from &ptr.
-        // Without the memory-access annotation, LLVM treats the stores to `ptr`
-        // as dead and eliminates them; `lidt` then reads stale stack bytes.
-        asm!("lidt [{p}]", p = in(reg) &ptr, options(nostack));
+        asm!("lidt [{pointer}]", pointer = in(reg) &pointer, options(nostack));
     }
+
+    #[cfg(feature = "x86-idt-cpl3-test")]
+    probe::run_exception_probes();
 }
 
-/// Install a handler for an arbitrary IDT vector (Ring 0, no error code).
-///
-/// Used by `uart_16550::init_input_irq` to wire COM1 RX after IOAPIC redirect.
-/// Prerequisite: `init()` must have been called first.
-///
-/// # Safety
-/// `handler` must be a valid kernel function; caller ensures it is safe to call
-/// from interrupt context.
-pub unsafe fn install_vector(vec: u8, handler: u64) {
-    let idt_ptr = core::ptr::addr_of_mut!(IDT);
-    // SAFETY: IDT is already loaded; updating an entry is atomic at 64-bit alignment.
-    unsafe {
-        (*idt_ptr).e[vec as usize] = IdtEntry::new(handler, 0);
-    }
+#[cfg(feature = "x86-idt-cpl3-test")]
+pub fn require_cpl3_pku() {
+    cpl3_platform::require_pku();
 }
 
-/// Handler for IRQs and exceptions WITHOUT a CPU-pushed error code.
-///
-/// `extern "x86-interrupt"` causes LLVM to save all registers and return
-/// via `iretq`, matching the CPU's expectation on interrupt return.
-#[no_mangle]
-extern "x86-interrupt" fn x86_64_irq_handler(frame: InterruptFrame) {
-    // Dispatch based on vector.  Without per-vector stubs we do not know
-    // the vector number here; LAPIC timer is the primary expected IRQ.
-    // TODO: generate per-vector stubs that push the vector index.
-    super::apic::eoi();
-    let _ = frame;
+#[cfg(feature = "x86-idt-cpl3-test")]
+pub fn cpl3_user_image() -> (&'static [u8], usize, usize, usize) {
+    cpl3_platform::user_image()
 }
 
-/// LAPIC periodic timer handler (vector 0x20).
-///
-/// ACKs the LAPIC *before* calling `vi_timer_tick()` so the LAPIC is no longer
-/// in-service when the first context switch fires inside `vi_timer_tick →
-/// yield_cpu → Context::switch`.  If EOI were after `vi_timer_tick()`, the
-/// switch would bypass the EOI call, leaving the LAPIC stuck with an
-/// in-service interrupt that blocks all future timer delivery.
-#[no_mangle]
-extern "x86-interrupt" fn x86_64_timer_handler(_frame: InterruptFrame) {
-    // ACK first: clear the in-service bit so future timer IRQs are deliverable
-    // even if Context::switch() below never returns to this handler.
-    super::apic::eoi();
-    // SAFETY: vi_timer_tick is #[no_mangle] in kernel/src/task.rs; safe to call
-    // from interrupt context (interrupts disabled by CPU on IRQ entry).
-    unsafe {
-        vi_timer_tick();
-    }
+#[cfg(feature = "x86-idt-cpl3-test")]
+pub fn arm_cpl3_probe(code_base: usize, b_return_offset: usize) {
+    cpl3_probe::arm(code_base, b_return_offset);
 }
 
-/// COM1 UART RX handler (vector 0x24 / IOAPIC IRQ 4).
-///
-/// Drains the UART RHR into the kernel RX buffer, then ACKs the LAPIC.
-#[no_mangle]
-extern "x86-interrupt" fn x86_64_uart_handler(_frame: InterruptFrame) {
-    // SAFETY: vi_handle_uart_irq is #[no_mangle] in kernel/src/task/drivers/uart.rs.
-    unsafe {
-        vi_handle_uart_irq();
-    }
-    super::apic::eoi();
+#[cfg(feature = "x86-idt-cpl3-test")]
+pub fn handle_cpl3_probe_syscall(frame: &mut super::trap::ViTrapFrame) -> bool {
+    cpl3_probe::handle_syscall(frame)
 }
 
-/// Handler for exceptions WITH a CPU-pushed error code (#GP, #PF, etc.).
-///
-/// Forwards #PF (vector 14) to the kernel page-fault handler via the
-/// `vi_handle_page_fault` extern hook so demand-paging can map user pages.
-/// All other error-code exceptions still end in a kernel panic.
-///
-/// Phase 02 will add per-vector stubs that push the vector index so this
-/// handler can distinguish #PF from #GP cleanly without the CR2 heuristic.
-#[no_mangle]
-extern "x86-interrupt" fn x86_64_ec_handler(frame: InterruptFrame, error_code: u64) {
-    let cr2: u64;
-    // SAFETY: reading CR2 does not modify any state.
-    unsafe {
-        asm!("mov {}, cr2", out(reg) cr2, options(nomem, nostack));
-    }
-
-    // Heuristic: attempt page-fault handling for every error-code exception.
-    // For true #PF (vector 14) the kernel handler maps the page or panics.
-    // For #GP and others the kernel handler will panic immediately because
-    // error_code bit 2 (U/S) will be 0 for a kernel-mode fault (kernel CS=8).
-    //
-    // SAFETY: vi_handle_page_fault is defined in kernel::memory::paging; it
-    // acquires scheduler and frame-allocator spinlocks which the IDT entry
-    // path does not hold.
-    unsafe {
-        vi_handle_page_fault(cr2 as usize, error_code, frame.rip, frame.cs, frame.rsp);
-    }
+#[cfg(feature = "x86-idt-cpl3-test")]
+pub fn cpl3_probe_fail() -> ! {
+    probe::fail()
 }
 
-/// #CP — Control Protection Exception (vector 21, CET IBT / Shadow Stack violation).
-///
-/// Error code layout (Intel SDM Vol.3 §6.15 Table 6-9):
-///   bits [2:0]: violation type
-///     0x01 = near-RET shadow-stack token mismatch
-///     0x02 = far-RET / IRET shadow-stack token mismatch
-///     0x04 = missing ENDBR64 (IBT violation — most common during development)
-///     0x05 = RSTORSSP mismatch
-///     0x06 = SETSSBSY without matching SAVEPREVSSP
-///
-/// On a production kernel this fault is always fatal: an IBT violation means
-/// either a hijacked return address (exploit in progress) or an ENDBR-missing
-/// indirect call target (kernel bug). We halt immediately to prevent further
-/// damage and print a minimal diagnostic to COM1.
-#[no_mangle]
-extern "x86-interrupt" fn x86_64_cp_handler(frame: InterruptFrame, error_code: u64) {
-    use super::uart_16550::putchar;
-
-    let msg = b"[FAULT] #CP (CET) RIP=0x";
-    for &c in msg {
-        putchar(c);
-    }
-
-    // Print RIP as 16 hex digits (big-endian nibbles).
-    let rip = frame.rip;
-    for i in (0..16u32).rev() {
-        let nibble = ((rip >> (i * 4)) & 0xF) as u8;
-        putchar(if nibble < 10 {
-            b'0' + nibble
-        } else {
-            b'a' + nibble - 10
-        });
-    }
-
-    let ec_msg = b" ec=0x";
-    for &c in ec_msg {
-        putchar(c);
-    }
-
-    // Print low byte of error code as two hex digits.
-    let ec = (error_code & 0xFF) as u8;
-    let hi = ec >> 4;
-    let lo = ec & 0xF;
-    putchar(if hi < 10 { b'0' + hi } else { b'a' + hi - 10 });
-    putchar(if lo < 10 { b'0' + lo } else { b'a' + lo - 10 });
-    putchar(b'\n');
-
-    // Halt indefinitely — a #CP is always fatal in the kernel.
-    loop {
-        // SAFETY: hlt waits for the next interrupt; combined with cli (IF=0
-        // on fault entry) this spins forever, which is the desired halt.
-        unsafe {
-            core::arch::asm!("hlt", options(nomem, nostack));
-        }
-    }
-}
+#[cfg(feature = "x86-idt-cpl3-test")]
+pub const CPL3_PKRU_A: u32 = cpl3_probe::PKRU_A;
+#[cfg(feature = "x86-idt-cpl3-test")]
+pub const CPL3_PKRU_B: u32 = cpl3_probe::PKRU_B;

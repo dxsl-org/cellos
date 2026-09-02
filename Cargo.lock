@@ -1505,6 +1505,7 @@ dependencies = [
  "hal-arch-trait",
  "hal-hypervisor",
  "hal-paging",
+ "qemu-exit",
  "types",
 ]
 

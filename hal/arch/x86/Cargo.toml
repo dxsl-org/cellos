@@ -10,10 +10,14 @@ hal-paging      = { path = "../../traits/paging", version = "0.1.0" }
 hal-hypervisor  = { path = "../../traits/hypervisor", version = "0.1.0" }
 types = { path = "../../../libs/types", version = "0.1.0" }
 critical-section = { version = "1", optional = true, features = ["restore-state-usize"] }
+qemu-exit = { version = "4", optional = true }
 
 [features]
 default = []
 critical-section-impl = ["dep:critical-section"]
+test-hooks = []
+# Terminal CPL0/CPL3 IDT transition fixture and its debug-exit dependency.
+x86-idt-cpl3-test = ["test-hooks", "dep:qemu-exit"]
 # CET-IBT: Indirect Branch Tracking enforcement (requires CPU support; detected at runtime).
 cet-ibt = []
 # CET shadow stack: kernel shadow stack (activates WRSS; requires CPU + cet-ibt at runtime).

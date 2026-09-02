@@ -268,11 +268,11 @@ impl Arch for X86_64Arch {
     }
 }
 
-/// Set the kernel-stack pointer in the TSS (for Ring-3 to Ring-0 transitions).
+/// Set TSS.rsp0 and CPU_LOCAL.kernel_rsp for the selected Ring-3 task.
 #[cfg(target_arch = "x86_64")]
 pub fn set_kernel_stack(sp: usize) {
-    // Update both TSS.rsp0 (for hardware interrupt stack switch) and
-    // the per-CPU GS area (for syscall_entry swapgs-based stack switch).
+    // Context switches run in kernel GS state and deliberately preserve both
+    // GS-base MSRs; only the two stack destinations change here.
     gdt::set_kernel_stack(sp as u64);
     syscall::set_kernel_stack(sp as u64);
 }

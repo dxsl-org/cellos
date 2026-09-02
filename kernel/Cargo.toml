@@ -111,6 +111,8 @@ board-rpi3 = ["hal/board-rpi3"]
 native-domains = []
 # Enable in-kernel test harnesses (smoke tests, integration probes). Never in release builds.
 test-hooks = ["dep:qemu-exit", "hal/test-hooks"]
+# Terminal x86 per-vector IDT CPL3 oracle; never enable in generic test images.
+x86-idt-cpl3-test = ["test-hooks", "hal/x86-idt-cpl3-test"]
 # Isolated x86 SVM NPF/MMIO decode fixture; does not enable the global test suite.
 x86-mmio-smoke = []
 # Isolated RV64 boot path for the GetRandom SAS ownership fixture. Test-only;

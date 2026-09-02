@@ -6664,6 +6664,11 @@ fn check_allowlist(syscall_id: usize, caller_id: usize) -> Result<(), SyscallErr
 #[no_mangle]
 #[allow(non_snake_case)] // ABI name required by the HAL trap vector — cannot be snake_case
 pub extern "Rust" fn ViCell_syscall_dispatch(frame: &mut ViTrapFrame) {
+    #[cfg(all(feature = "x86-idt-cpl3-test", target_arch = "x86_64"))]
+    if crate::hal::idt::handle_cpl3_probe_syscall(frame) {
+        return;
+    }
+
     let syscall_id = frame.regs[17];
 
     // Watchdog progress signal: a syscall proves the caller is making progress

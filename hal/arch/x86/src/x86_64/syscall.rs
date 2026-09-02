@@ -38,18 +38,19 @@ const IA32_EFER: u32 = 0xC000_0080;
 const IA32_STAR: u32 = 0xC000_0081;
 const IA32_LSTAR: u32 = 0xC000_0082;
 const IA32_FMASK: u32 = 0xC000_0084;
+const IA32_GSBASE: u32 = 0xC000_0101;
 const IA32_KERNEL_GSBASE: u32 = 0xC000_0102; // Swapped into GS_BASE by swapgs
 
-/// Per-CPU storage used by the `swapgs`-based stack swap in syscall_entry.
+/// Per-CPU storage addressed through GS while the CPU is in kernel state.
 ///
 /// Layout (offsets are load-bearing — referenced directly in asm):
 ///   gs:0  = kernel RSP (loaded on syscall entry)
 ///   gs:8  = scratch (user RSP saved here during syscall)
-///   gs:16 = PKU value for the current task (loaded into PKRU on ring-3 re-entry)
+///   gs:16 = PKU value for the selected task (loaded on every Ring-3 return)
 ///
-/// KERNEL_GS_BASE MSR must point here before any Ring-3 entry.
-/// `set_cpu_local` initialises this; `set_kernel_stack` updates slot [0];
-/// `set_task_pku` updates slot [16].
+/// Kernel state is GS_BASE=`&CPU_LOCAL`, KERNEL_GS_BASE=user GS (currently 0).
+/// User state is the swapped pair. Context switches preserve the physical pair;
+/// `set_kernel_stack` updates slot [0] and `set_task_pku` updates slot [16].
 #[repr(C, align(16))]
 struct CpuLocal {
     kernel_rsp: u64, // offset 0  — gs:0
@@ -63,6 +64,10 @@ static mut CPU_LOCAL: CpuLocal = CpuLocal {
     pku_value: 0,
     _pad: 0,
 };
+#[cfg(feature = "x86-idt-cpl3-test")]
+pub(crate) fn cpu_local_addr_for_test() -> u64 {
+    core::ptr::addr_of!(CPU_LOCAL) as u64
+}
 
 const _: hal_arch_trait::SyscallDispatch = ViCell_syscall_dispatch;
 
@@ -86,11 +91,10 @@ fn wrmsr(msr: u32, val: u64) {
 
 /// Initialise SYSCALL/SYSRET path and per-CPU GS area.
 ///
-/// Must be called from Ring 0 before any Ring-3 entry.  Sets up:
+/// Must be called from Ring 0 before any Ring-3 entry. Sets up:
 /// - EFER.SCE so the CPU honours the SYSCALL instruction
 /// - STAR/LSTAR/FMASK for the entry point and segment selectors
-/// - KERNEL_GS_BASE pointing at `CPU_LOCAL` so `swapgs` in the syscall
-///   entry stub can load the kernel stack without touching user memory
+/// - the kernel GS invariant: GS_BASE=`&CPU_LOCAL`, KERNEL_GS_BASE=0
 pub fn init() {
     wrmsr(IA32_EFER, rdmsr(IA32_EFER) | 1); // SCE=1
                                             // STAR[47:32] = kernel CS (syscall: CS=0x08, SS=0x10).
@@ -105,34 +109,21 @@ pub fn init() {
     wrmsr(IA32_LSTAR, syscall_entry as *const () as u64);
     wrmsr(IA32_FMASK, 0x0300); // clear IF + DF on syscall entry
 
-    // Point KERNEL_GS_BASE at the per-CPU area so swapgs in syscall_entry
-    // exchanges GS_BASE with KERNEL_GS_BASE and gives us %gs:0 / %gs:8.
-    // SAFETY: CPU_LOCAL is a static; addr_of! gives a raw pointer without
-    // creating a Rust reference.
-    // addr_of! on a static does not require unsafe (no Rust reference created).
+    // Establish kernel state directly. A later kernel→user SWAPGS produces
+    // user GS_BASE=0 and KERNEL_GS_BASE=&CPU_LOCAL.
     let cpu_local_addr = core::ptr::addr_of!(CPU_LOCAL) as u64;
-    wrmsr(IA32_KERNEL_GSBASE, cpu_local_addr);
+    wrmsr(IA32_GSBASE, cpu_local_addr);
+    wrmsr(IA32_KERNEL_GSBASE, 0);
 }
 
-/// Update the kernel-stack pointer stored in the per-CPU area.
+/// Update only the kernel-stack slot in the per-CPU area.
 ///
-/// Called by the scheduler before every Ring-3 entry so that `swapgs` +
-/// `movq %gs:0, %rsp` in `syscall_entry` loads the correct kernel stack.
-///
-/// Also reinitialises IA32_KERNEL_GS_BASE to `&CPU_LOCAL` on every call.
-/// When Task A enters a syscall, the entry `swapgs` stores Task A's user GS
-/// (= 0 for ViCell cells) into KERNEL_GS_BASE and puts &CPU_LOCAL in GS_BASE.
-/// If Task A blocks before its exit `swapgs`, KERNEL_GS_BASE remains 0.
-/// The next task's syscall entry `swapgs` would then load GS_BASE = 0 and
-/// fault at `%gs:8` (va = 0x8).  Resetting KERNEL_GS_BASE here is safe
-/// because ViCell cells do not use the GS segment (user GS is always 0).
+/// The scheduler calls this while already in kernel GS state. Context switches
+/// must preserve GS_BASE/KERNEL_GS_BASE rather than rewriting either MSR.
 pub fn set_kernel_stack(sp: u64) {
     // SAFETY: CPU_LOCAL is a static with no aliased Rust references here.
-    // wrmsr from Ring 0 is safe; we only touch the GS MSRs.
     unsafe {
         CPU_LOCAL.kernel_rsp = sp;
-        let cpu_local_addr = core::ptr::addr_of!(CPU_LOCAL) as u64;
-        wrmsr(IA32_KERNEL_GSBASE, cpu_local_addr);
     }
 }
 
@@ -163,6 +154,9 @@ pub fn set_task_pku(val: u32) {
 //   R11 = user RFLAGS (saved by CPU; IF cleared via FMASK=0x0300)
 //   RSP = still user RSP
 //   CS  = kernel CS from STAR[47:32]
+//   GS_BASE = user GS (currently 0), KERNEL_GS_BASE = &CPU_LOCAL
+//   PKRU = selected task value; hardware changes neither GS nor PKRU
+// Software immediately SWAPGS, saves every user field, then changes PKRU to 0.
 //
 // Frame layout on kernel stack (288 bytes total, 16-byte aligned):
 //   RSP+0   … RSP+255  = regs[0..31]   (256 bytes, 32 × 8)
@@ -209,15 +203,7 @@ syscall_entry:
     # Encoding: F3 0F 1E FA (NOP on non-CET CPUs).
     .byte 0xF3, 0x0F, 0x1E, 0xFA
     swapgs
-    # PKU: enter kernel domain (PKRU=0 = all-access).
-    # Guard: wrpkru is #UD on CPUs without PKU — check ViCell_pku_active first.
-    cmpb $0, ViCell_pku_active(%rip)
-    je .Lpku_entry_skip
-    xorl %eax, %eax        # PKRU = 0 (all-access for kernel)
-    xorl %ecx, %ecx        # WRPKRU precondition: ECX must be 0
-    xorl %edx, %edx        # WRPKRU precondition: EDX must be 0
-    wrpkru
-.Lpku_entry_skip:
+    # Save every user register before WRPKRU clobbers EAX/ECX/EDX.
     # Save user RSP into per-CPU scratch; load kernel RSP.
     movq %rsp, %gs:8
     movq %gs:0, %rsp
@@ -286,6 +272,15 @@ syscall_entry:
     # --- Save SYSCALL-hardwired return state ---
     movq %r11, 256(%rsp)    # sstatus = saved RFLAGS (R11 by hardware)
     movq %rcx, 264(%rsp)    # sepc    = return RIP   (RCX by hardware)
+    # PKU: enter the kernel domain only after RAX/RCX/RDX and every other
+    # user-visible field have been captured in the frame.
+    cmpb $0, ViCell_pku_active(%rip)
+    je .Lpku_entry_skip
+    xorl %eax, %eax
+    xorl %ecx, %ecx
+    xorl %edx, %edx
+    wrpkru
+.Lpku_entry_skip:
 
     # Call ViCell_syscall_dispatch(&mut frame).
     # RSP is 16-byte aligned here (288 % 16 == 0); the CALL pushes 8 bytes
@@ -293,57 +288,40 @@ syscall_entry:
     movq %rsp, %rdi          # arg0 = *mut ViTrapFrame
     call ViCell_syscall_dispatch
 
-    # --- Restore callee-saved (dispatcher may have rescheduled) ---
+    # Validate the SYSRET destination while kernel PKRU=0. RDI is scratch until
+    # the frame restores it below.
+    movq 264(%rsp), %rcx
+    movq %rcx, %rdi
+    sarq $47, %rdi
+    jnz 1f
+
+    # A blocked syscall resumes through yield_cpu with IF set. From this point
+    # through SYSRET there is no interruptible user-PKRU or user-GS window.
+    cli
+    cmpb $0, ViCell_pku_active(%rip)
+    je .Lpku_exit_skip
+    movl %gs:16, %eax
+    xorl %ecx, %ecx
+    xorl %edx, %edx
+    wrpkru
+.Lpku_exit_skip:
+
+    # Restore all user-visible registers only after WRPKRU's clobbers.
     movq 144(%rsp), %r12
     movq 152(%rsp), %r13
     movq 160(%rsp), %r14
     movq 168(%rsp), %r15
-    movq  24(%rsp), %rbx
-    movq  32(%rsp), %rbp
-
-    # Return value is in frame.regs[10] (+80).
+    movq 24(%rsp), %rbx
+    movq 32(%rsp), %rbp
     movq 80(%rsp), %rax
-
-    # PKU: restore user PKRU before ring-3 re-entry.
-    # CRITICAL: must run BEFORE loading %rcx with the return RIP below —
-    # wrpkru requires xorl %ecx which destroys %rcx.
-    cmpb $0, ViCell_pku_active(%rip)
-    je .Lpku_exit_skip
-    movl %gs:16, %eax          # pku_value from CPU_LOCAL (offset 16)
-    xorl %ecx, %ecx            # WRPKRU precondition: ECX must be 0
-    xorl %edx, %edx            # WRPKRU precondition: EDX must be 0
-    wrpkru                     # PKRU := EAX
-    movq 80(%rsp), %rax        # reload return value (eax was overwritten by pku_value)
-.Lpku_exit_skip:
-    # Reload RCX (return RIP) and R11 (RFLAGS) for SYSRET.
-    movq 264(%rsp), %rcx     # sepc    → RCX
-    movq 256(%rsp), %r11     # sstatus → R11
-
-    # CVE-2012-0217: Intel #GP if SYSRET executes with non-canonical RCX.
-    # Check BEFORE restoring %rdi below so it can serve as scratch.
-    movq  %rcx, %rdi
-    sarq  $47,  %rdi         # canonical user → 0; kernel/non-canonical → non-zero
-    jnz   1f                 # non-canonical: trap, do not sysretq
-
-    # Restore caller-saved argument registers (preserve-all contract).
-    # The ostd syscall stub declares rdi/rsi/rdx/r10 as `in` (NOT clobbered)
-    # and never mentions r8/r9 — the compiler is entitled to keep live values
-    # (including a cached syscall number) in ANY of them across `syscall`.
-    # Leaking kernel garbage here corrupted the NEXT syscall's RAX (P02 bug:
-    # println's second write arrived as SetTimer).
-    movq  88(%rsp), %rsi     # regs[11] = original arg1
-    movq  96(%rsp), %rdx     # regs[12] = original arg2
-    movq 104(%rsp), %r10     # regs[13] = original arg3
-    movq 112(%rsp), %r8      # regs[14] = original arg4
-    movq 120(%rsp), %r9      # regs[15] = original arg5
-    movq  48(%rsp), %rdi     # regs[6]  = original arg0 (saved at entry)
-
-    # Close the IRQ window for the final descent. If this syscall blocked,
-    # yield_cpu's resume path ran `sti`, so IF=1 here — an IRQ landing after
-    # the RSP switch would push its frame onto the USER stack at CPL0, and
-    # after swapgs the handler would run with GS_BASE = user GS. Both are
-    # survivable in SAS but fragile; mask until sysretq restores IF from R11.
-    cli
+    movq 264(%rsp), %rcx
+    movq 256(%rsp), %r11
+    movq 88(%rsp), %rsi
+    movq 96(%rsp), %rdx
+    movq 104(%rsp), %r10
+    movq 112(%rsp), %r8
+    movq 120(%rsp), %r9
+    movq 48(%rsp), %rdi
 
     # Switch to user RSP saved at entry (frame.regs[2], +16). Reading %gs:8
     # instead would be wrong when this task blocked via yield_cpu(): another

@@ -20,17 +20,17 @@
 //! any register but the caller must zero ECX before calling, which destroys
 //! the prior value in RCX. See `syscall.rs` exit path for the reload sequence.
 
-/// Exported as `ViCell_pku_active` for direct asm reference in `__trap_exit` and
-/// `syscall_entry`. Set to 1 only AFTER PKU is fully initialised and IBT is confirmed.
-/// The asm paths (`syscall.rs` / `boot.rs`) test this byte before executing `wrpkru`
-/// to avoid #UD on CPUs that do not support PKU.
+/// Exported as `ViCell_pku_active` for direct asm reference in all Ring-3
+/// entry/exit paths. Production sets it only after PKU and IBT are active.
+/// The dedicated test-hooks oracle may arm it without IBT after requiring PKU
+/// and CR4.PKE; that image is never a production security configuration.
 ///
-/// `#[used]` keeps the symbol alive in release builds (no other Rust code reads it;
-/// only asm addresses it by name). `#[export_name]` controls the linker symbol name.
+/// The asm paths test this byte before executing `wrpkru` to avoid #UD on CPUs
+/// without PKU. `#[used]` keeps the direct-assembly symbol alive.
 ///
 /// # Safety
-/// Written exactly once at boot from a single-threaded init path (`init()`), then
-/// treated as read-only by all asm callers. No concurrent Rust reference exists after boot.
+/// Written from the single-core boot path before the first Ring-3 entry, then
+/// treated as read-only by all asm callers.
 #[used]
 #[export_name = "ViCell_pku_active"]
 pub static mut PKU_ACTIVE: u8 = 0;
@@ -111,8 +111,14 @@ pub fn init() {
         return;
     }
 
-    // Require IBT as a mandatory prerequisite.
+    // Production requires IBT before enabling PKU. The dedicated test-hooks
+    // image deliberately defers activation to its mandatory real-CPL3 oracle,
+    // which requires PKU hardware and exercises WRPKRU without claiming the
+    // resulting image is a secure production configuration.
     if !super::cet::detect().ibt {
+        #[cfg(feature = "x86-idt-cpl3-test")]
+        log_str("[INFO] PKU: deferred to mandatory real-CPL3 transition oracle\n");
+        #[cfg(not(feature = "x86-idt-cpl3-test"))]
         log_str("[WARN] PKU: skipped — CET-IBT not available (prerequisite)\n");
         return;
     }

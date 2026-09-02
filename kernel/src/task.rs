@@ -30,6 +30,8 @@ pub mod tcb;
 pub mod thread_cap_selftest;
 pub mod thread_quota_selftest;
 pub mod thread_user_entry_selftest;
+#[cfg(all(feature = "x86-idt-cpl3-test", target_arch = "x86_64"))]
+mod x86_idt_cpl3;
 pub use elf_prepare::{prepare_elf_task, PreparedElfTask};
 pub mod launch;
 pub use launch::{
@@ -671,6 +673,8 @@ pub fn init() {
         core::ptr::write(&mut *sched_guard, Some(Scheduler::new()));
     }
     drop(sched_guard);
+    #[cfg(all(feature = "x86-idt-cpl3-test", target_arch = "x86_64"))]
+    x86_idt_cpl3::run();
 
     // Enable S-mode timer interrupt and arm the first preemption tick.
     // Done after scheduler init so vi_timer_tick() sees a valid SCHEDULER.
@@ -1279,10 +1283,10 @@ pub fn yield_cpu() {
                 next
             };
             if !next.is_null() {
-                // Set TSS.rsp0 / KERNEL_GS_BASE for the next task's syscall path.
-                // On x86_64 use kernel_trap_sp (= kstack_top - TRAP_FRAME_SIZE, fixed
-                // at spawn) so CPU_LOCAL.kernel_rsp never drifts to the deep
-                // cooperative-switch RSP saved inside a blocked yield_cpu frame.
+                // Set TSS.rsp0 and CPU_LOCAL.kernel_rsp for the incoming task.
+                // The physical GS_BASE/KERNEL_GS_BASE pair is kernel context
+                // state and must remain untouched across this raw switch.
+                // kernel_trap_sp is fixed at spawn, unlike the deep yield RSP.
                 let next_ref = &*next;
                 // aarch64 context stores sp as u64 (register-width field);
                 // riscv64 already uses usize — keep it cast-free so clippy's

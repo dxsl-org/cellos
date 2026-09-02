@@ -20,11 +20,13 @@ global_asm!(
     // This vacates the Limine-reclaimable bootloader stack from the very first
     // instruction.
     "lea rsp, [rip + {stack_top}]",
-    // 16-byte align required by the SysV ABI before the first CALL/RET.
+    // Align the call-site stack, then reserve a zero synthetic return slot so
+    // the JMP target observes the SysV function-entry invariant RSP % 16 == 8.
     "and rsp, -16",
-    // Clear frame pointer for clean backtraces.
+    "push 0",
+    // Clear frame pointer for a clean bottom frame.
     "xor rbp, rbp",
-    // Jump (not CALL) so kmain_x86 is the ABI bottom-frame.
+    // Jump (not CALL): kmain_x86 never returns and remains the ABI bottom frame.
     "jmp {entry}",
     stack_top = sym __stack_top,
     entry    = sym kmain_x86,
@@ -33,8 +35,9 @@ global_asm!(
 /// Rust bridge from `_start` to `kmain`.
 ///
 /// # Safety
-/// Called from `_start` with a valid 16-byte-aligned kernel stack.
-/// Passes `hartid=0, dtb=0`; both are ignored on x86_64 inside `kmain`.
+/// Called from `_start` with a valid kernel stack whose zero synthetic return
+/// slot gives this `extern "C"` function the SysV entry alignment RSP % 16 == 8.
+/// The function never returns. `hartid=0, dtb=0` are ignored on x86_64.
 #[no_mangle]
 pub extern "C" fn kmain_x86() -> ! {
     extern "C" {
@@ -51,6 +54,8 @@ pub extern "C" fn kmain_x86() -> ! {
 //   • Interrupts are disabled (IF=0) — the scheduler holds the CPU lock.
 //   • The frame was seeded by spawn_from_mem: sepc=entry, regs[2]=user_sp,
 //     sstatus=0x202 (IF=1, reserved bit 1 = 1), all other regs = 0.
+//   • Kernel GS state is active: GS_BASE=&CPU_LOCAL, KERNEL_GS_BASE=user GS.
+//   • PKRU=0; CPU_LOCAL.pku_value names the selected task's user PKRU.
 //
 // ViTrapFrame offsets (byte):
 //   regs[N]  = N*8     (N = 0..31, total 256 bytes)
@@ -98,9 +103,19 @@ global_asm!(
     "mov [rsp + 240], rax",
     // user SS = SEL_USER_DATA = 0x1B  (GDT uDS 0x18 | RPL3)
     "mov qword ptr [rsp + 248], 0x1B",
+    // A fresh task starts from kernel state. Mask first, restore its selected
+    // PKRU while GS still addresses CPU_LOCAL, then restore every user GPR so
+    // WRPKRU's EAX/ECX/EDX operands cannot leak into the new task.
+    "cli",
+    "cmp byte ptr [rip + ViCell_pku_active], 0",
+    "je 1f",
+    "mov eax, dword ptr gs:[16]",
+    "xor ecx, ecx",
+    "xor edx, edx",
+    "wrpkru",
+    "1:",
     // ── Restore GP registers from ViTrapFrame ───────────────────────────────
-    // Load callee-saved and caller-saved regs (skip rax/rcx/rdx/r11 for last).
-    // rsp itself is NOT restored here — iretq will load user RSP from the frame.
+    // rsp itself is restored by iretq from the five-word frame.
     "mov rbx, [rsp + 24]",  // regs[3]
     "mov rbp, [rsp + 32]",  // regs[4]
     "mov rsi, [rsp + 40]",  // regs[5]
@@ -108,27 +123,17 @@ global_asm!(
     "mov r8,  [rsp + 56]",  // regs[7]
     "mov r9,  [rsp + 64]",  // regs[8]
     "mov r10, [rsp + 72]",  // regs[9]
+    "mov r11, [rsp + 80]",  // regs[10]
     "mov r12, [rsp + 88]",  // regs[11]
     "mov r13, [rsp + 96]",  // regs[12]
     "mov r14, [rsp + 104]", // regs[13]
     "mov r15, [rsp + 112]", // regs[14]
     "mov rdx, [rsp + 120]", // regs[15]
     "mov rcx, [rsp + 8]",   // regs[1]
-    "mov r11, [rsp + 80]",  // regs[10]
     "mov rax, [rsp + 136]", // regs[17]
-    // ── PKU: restore user PKRU before ring-3 re-entry (iretq path) ──────────
-    // Guard: wrpkru causes #UD on CPUs without PKU — test ViCell_pku_active first.
-    // ECX must be 0 for wrpkru; this clobbers %rax which is then reloaded.
-    "cmp byte ptr [rip + ViCell_pku_active], 0",
-    "je 1f",
-    "mov eax, dword ptr gs:[16]", // pku_value from CPU_LOCAL (offset 16)
-    "xor ecx, ecx",               // WRPKRU precondition: ECX = 0
-    "xor edx, edx",               // WRPKRU precondition: EDX = 0
-    "wrpkru",                     // PKRU := EAX
-    "mov rax, [rsp + 136]",       // reload user rax (was overwritten by pku_value)
-    "1:",
-    // ── Advance RSP to the iretq frame and enter ring-3 ─────────────────────
+    // No GS-relative access is permitted after this late swap.
     "add rsp, 216",
+    "swapgs",
     "iretq",
 );
 

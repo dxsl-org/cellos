@@ -1,12 +1,13 @@
-//! x86_64 exception / syscall register save frame.
+//! x86_64 scheduler/syscall register-save frame.
 //!
-//! Layout mirrors the RISC-V ViTrapFrame shape (32 regs + sstatus + sepc +
-//! stval + scause) so kernel/src/task*.rs compiles across architectures.
+//! `ViTrapFrame` is the task-switch ABI and is not the hardware IDT entry
+//! record; interrupt entry uses the fixed 160-byte `idt::entry::EntryFrame`.
+//! Its layout mirrors the RISC-V shape so kernel task code stays portable.
 //!
 //! ## Authoritative register-to-index map
 //!
-//! All assembly (`__trap_exit`, syscall entry, interrupt stubs) MUST use
-//! these offsets exclusively.  The byte offset for `regs[N]` is `N * 8`.
+//! The task-exit and syscall assembly MUST use these offsets exclusively.
+//! The byte offset for `regs[N]` is `N * 8`.
 //!
 //! | Index | Offset | x86_64 register | Notes                              |
 //! |-------|--------|-----------------|------------------------------------|
