@@ -12,7 +12,7 @@ const RESTART_WINDOW_TICKS: u64 = 1000;
 pub(crate) fn run(services: &mut [Service], mut hypervisor_tid: Option<usize>) -> ! {
     let mut buffer = [0u8; 16];
     let mut hypervisor_restarts = 0u32;
-    let mut hypervisor_last_restart = 0u64;
+    let mut hypervisor_window_start = 0u64;
     loop {
         let dead = match sys_recv(0, &mut buffer) {
             SyscallResult::Ok(tid) => tid,
@@ -27,17 +27,16 @@ pub(crate) fn run(services: &mut [Service], mut hypervisor_tid: Option<usize>) -
         if hypervisor_tid == Some(dead) {
             relay_hypervisor_exit(dead);
             let now = sys_get_time();
-            if now.saturating_sub(hypervisor_last_restart) > RESTART_WINDOW_TICKS {
+            if now.wrapping_sub(hypervisor_window_start) > RESTART_WINDOW_TICKS {
+                hypervisor_window_start = now;
                 hypervisor_restarts = 0;
             }
-            hypervisor_last_restart = now;
             if hypervisor_restarts >= MAX_RESTARTS_PER_WINDOW {
                 println("Init: hypervisor restart storm — giving up.");
                 hypervisor_tid = None;
                 continue;
             }
             hypervisor_restarts += 1;
-            println("Init: hypervisor died — respawning...");
             hypervisor_tid = crate::boot::spawn_hypervisor();
             if hypervisor_tid.is_some() {
                 println("Init: hypervisor restarted.");
