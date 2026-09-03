@@ -98,7 +98,7 @@
     },
     {
       "id": "B-AARCH64-SEMHOSTING",
-      "status": "BLOCKED",
+      "status": "PASS",
       "subject": "qemu-arm64",
       "scope": "AArch64 test-hooks semihosting execution and clean termination.",
       "evidence": [
@@ -109,7 +109,34 @@
           "kind": "source"
         }
       ],
-      "resolution": null
+      "resolution": {
+        "event_id": "resolution-b-aarch64-semhosting",
+        "subject": "qemu-arm64",
+        "architecture": "aarch64",
+        "environment": "qemu",
+        "hardware": "QEMU TCG",
+        "firmware_sha256": "N/A",
+        "owner": "accountable-maintainer",
+        "runner": "independent-runner",
+        "command": "bash scripts/qemu-aarch64-test-hooks.sh",
+        "recorded_at": "2026-09-03T09:38:17Z",
+        "expires_at": "2026-09-05T09:38:17Z",
+        "ttl_seconds": 172800,
+        "artifacts": [
+          {
+            "path": "docs/evidence/aarch64-semihosting-20260903-03-raw.txt",
+            "sha256": "a586202f56ba2a3141f0db663b79c4141c67a190c039510ac53c300eb9f326ee",
+            "size_bytes": 29509,
+            "kind": "log"
+          },
+          {
+            "path": "docs/evidence/aarch64-semihosting-20260903-03-runner.txt",
+            "sha256": "1fe1ed44c5682c9683a079ecb971dba27686ee763a9c7782fb022618b72cf370",
+            "size_bytes": 29328,
+            "kind": "artifact"
+          }
+        ]
+      }
     }
   ],
   "rows": [
@@ -1130,11 +1157,57 @@
       },
       "state_digest": "7572c43ded85e49be465e6145bd41b3fe2611f20ee43b0e6018496ce43fce040",
       "hash": "25e0c016c0ba7fb2bb1e51e534f24900899d9212c7a284680e9c615749ba13e8"
+    },
+    {
+      "sequence": 7,
+      "event_id": "resolution-b-aarch64-semhosting",
+      "previous_hash": "25e0c016c0ba7fb2bb1e51e534f24900899d9212c7a284680e9c615749ba13e8",
+      "steward": "lungmat8",
+      "reviewer": "datgausaigon",
+      "recorded_at": "2026-09-03T09:38:17Z",
+      "action": {
+        "kind": "blocker_resolution",
+        "blocker_id": "B-AARCH64-SEMHOSTING",
+        "changes": [
+          {
+            "section": "blockers",
+            "before_sha256": "978a1b28a4608eeb5244394943aaeb3ce48ba7e68196e09d2bcd8606fe2e83fc",
+            "after_sha256": "63e55585eaf6c32fe7781ad8029e94f0581b1c4aee701dec724850b726e38003"
+          }
+        ],
+        "evidence": [
+          {
+            "path": "docs/evidence/aarch64-semihosting-20260903-03-raw.txt",
+            "sha256": "a586202f56ba2a3141f0db663b79c4141c67a190c039510ac53c300eb9f326ee",
+            "size_bytes": 29509,
+            "kind": "log"
+          },
+          {
+            "path": "docs/evidence/aarch64-semihosting-20260903-03-runner.txt",
+            "sha256": "1fe1ed44c5682c9683a079ecb971dba27686ee763a9c7782fb022618b72cf370",
+            "size_bytes": 29328,
+            "kind": "artifact"
+          }
+        ],
+        "github_approval": {
+          "issue": 47,
+          "decision": "YES",
+          "approver": "datgausaigon",
+          "decision_recorded_at": "2026-09-03T09:38:14Z",
+          "proposal_commit": "1442bcf8174bb1404d4d2df045cbcb5a1ae463ce",
+          "evidence_urls": [
+            "https://github.com/dxsl-org/cellos/blob/1442bcf8174bb1404d4d2df045cbcb5a1ae463ce/docs/evidence/aarch64-semihosting-20260903-03-raw.txt",
+            "https://github.com/dxsl-org/cellos/blob/1442bcf8174bb1404d4d2df045cbcb5a1ae463ce/docs/evidence/aarch64-semihosting-20260903-03-runner.txt"
+          ]
+        }
+      },
+      "state_digest": "8e315bbad59405e21b203546375d5058bde667b3d9fcb4790c884befa8e68b78",
+      "hash": "e3e31c56db4fcfeec26ff4cbfe4db309930ddcc4bb5a6e4ecf6acbbcac1fc017"
     }
   ],
   "baseline_prefix": {
-    "event_count": 6,
-    "tip_hash": "25e0c016c0ba7fb2bb1e51e534f24900899d9212c7a284680e9c615749ba13e8"
+    "event_count": 7,
+    "tip_hash": "e3e31c56db4fcfeec26ff4cbfe4db309930ddcc4bb5a6e4ecf6acbbcac1fc017"
   },
   "source_binding": {
     "path": "docs/specs/23-native-sdk-contract.md",
