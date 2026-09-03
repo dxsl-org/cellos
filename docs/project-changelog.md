@@ -3,6 +3,22 @@
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
 ## [Unreleased] Development-first hardware-constrained execution
+- Implemented atomic rename backend gate, explicit mutation authority, and
+  service-local namespace lease accounting for Phase 05. Published `Rename=255`
+  on allowlist bit 62, added `VfsMutate` declaration metadata on bit 63 (with
+  `u32` trailer flags and `CALLER_FLAG_VFS_MUTATE`), restricted `OpenCap` to
+  existing-only read with `CapPerms::FILE_READ`, centrally classified 12
+  mutating VFS requests before dispatch, and implemented `FsBackend::rename_no_replace`
+  for RedoxFS `/srv` regular files with equal-path short-circuit and quota writer
+  metadata migration. Exact clean-tree verification at commit
+  `ad07ede4e68161c5938ddbdab7cef58a457d0924` (tree
+  `ace1af32651dcb6daba6997b7f8da82f57b32c7e`) passed Gate A sector sweep 1/1,
+  Gate C namespace ledger 11/11, API 98/98, Net-Broker 114/114, KMS 59/59, and
+  QEMU `redoxfs-srv` 3/3 including 8 rename matrix scenarios in `test_s6_rename`.
+  Evidence: `docs/evidence/atomic-rename-verification.txt` (SHA-256
+  `6099828df7eaa2e06a5df1d726d392a9f226c162e5c90247273cd8330791a75e`, 3,141 bytes).
+  Kernel BootFS remains immutable; no C/shell wrapper or production claim is added.
+
 - Published truthful caller-scoped descriptor metadata as `Fstat=254` on
   allowlist bit 61. The frozen 32-byte `ViFstatV1` reports only kind, access,
   and size; kernel dispatch validates output before metadata gathering and

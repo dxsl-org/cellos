@@ -1,0 +1,58 @@
+# Atomic Rename Backend Gate Verification (Phase 05)
+
+- **Date:** 2026-09-04
+- **Lane:** phase-05-atomic-rename-backend-gate
+- **Phase 05G Gate Commit:** `c770e928e358f0ce9270cee0bfc6db1d01cd831a`
+- **Phase 05G Gate Tree:** `41854345e9222839be3eb68a2855b706b2ea58e8`
+- **Phase 05A Implementation Commit:** `ad07ede4e68161c5938ddbdab7cef58a457d0924`
+- **Phase 05A Implementation Tree:** `ace1af32651dcb6daba6997b7f8da82f57b32c7e`
+- **Law 1 Confirmations:** Checkpoint 1 (YES), Checkpoint 2 (YES)
+
+## Executed Commands and Verified Results (Clean Worktree)
+
+1. **Gate A: RedoxFS Sector-by-Sector Write Failure Atomicity**
+   - Command: `cargo test --target x86_64-unknown-linux-gnu --manifest-path third_party/redoxfs/Cargo.toml --features std,log --test rename_failure_atomic`
+   - Result: `1 passed; 0 failed; finished in 0.39s`
+
+2. **Gate C: VFS Namespace Lease Ledger Host Tests**
+   - Command: `cargo test --target x86_64-unknown-linux-gnu --manifest-path third_party/redoxfs/Cargo.toml --features std,log --test vfs_namespace_gate`
+   - Result: `11 passed; 0 failed; finished in 0.00s`
+
+3. **Host API and Service Unit Test Baseline**
+   - Command: `cargo test --target x86_64-unknown-linux-gnu -p api`
+   - Result: `98 passed; 0 failed; 4 ignored; finished in 0.00s`
+   - Command: `cargo test --target x86_64-unknown-linux-gnu -p service-net-broker --lib`
+   - Result: `114 passed; 0 failed; finished in 0.03s`
+   - Command: `cargo test --target x86_64-unknown-linux-gnu -p service-kms --lib`
+   - Result: `59 passed; 0 failed; finished in 0.02s`
+
+4. **Kernel Cap-File Read-Only Enforcement Self-Test**
+   - Built into `kernel/src/task/cap_file_selftest.rs` and executed on kernel boot.
+   - Confirms `OpenCap` issues `FILE_READ`, permits `READ` and `SEEK`, and strictly denies `WRITE` / `TRUNCATE`.
+
+5. **QEMU Writable RedoxFS `/srv` Integration Oracle**
+   - Commands:
+     `bash scripts/mksrv-img.sh`
+     `RUSTFLAGS="-D warnings -C relocation-model=pic" bash scripts/build-srv-test-ci.sh`
+     `cargo test --manifest-path tests/integration/Cargo.toml --target x86_64-unknown-linux-gnu --test redoxfs-srv -- --nocapture`
+   - Result:
+     `test riscv64_redoxfs_srv_degrade_no_disk ... ok`
+     `test riscv64_redoxfs_srv_basic ... ok`
+     `test riscv64_redoxfs_srv_persistence ... ok`
+     `3 passed; 0 failed; finished in 6.88s`
+   - Exercised `test_s6_rename` coverage:
+     - Unequal rename `/srv/rn1.txt` -> `/srv/rn2.txt` succeeds and moves quota writer metadata.
+     - Equal path rename `/srv/rn1.txt` -> `/srv/rn1.txt` succeeds without backend call.
+     - Equal path with active open file handle succeeds.
+     - Unequal rename with active open handle denied with open conflict.
+     - Missing source fails.
+     - Missing-equal path fails.
+     - Root rename `/srv` rejected.
+     - Cross-mount rename (`/srv` -> `/bin`) rejected.
+     - Directory rename rejected.
+
+## Production and Qualification Boundaries
+
+- No physical hardware, production security qualification, or C2C Phase 05 claims are made.
+- Kernel BootFS remains read-only and immutable.
+- Atomic rename is strictly constrained to `/srv` RedoxFS regular files.
