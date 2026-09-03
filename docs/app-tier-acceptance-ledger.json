@@ -40,6 +40,14 @@
       "board_revision": "Raspberry Pi 3 Model B v1.2",
       "firmware_digest": "0000000000000000000000000000000000000000000000000000000000000000",
       "host_vmm": ""
+    },
+    {
+      "id": "qemu-arm64",
+      "environment": "qemu",
+      "architecture": "aarch64",
+      "board_revision": "",
+      "firmware_digest": "",
+      "host_vmm": "QEMU TCG"
     }
   ],
   "blockers": [
@@ -91,8 +99,8 @@
     {
       "id": "B-AARCH64-SEMHOSTING",
       "status": "BLOCKED",
-      "subject": "qemu-rv64",
-      "scope": "AArch64 test-hooks semihosting does not compile.",
+      "subject": "qemu-arm64",
+      "scope": "AArch64 test-hooks semihosting execution and clean termination.",
       "evidence": [
         {
           "path": "docs/specs/23-native-sdk-contract.md",
@@ -1083,11 +1091,50 @@
       },
       "state_digest": "88ebc7c89f372100a5e01af30a34f7cfb4ebf6ef5f306ce6788a95353f0e1d4f",
       "hash": "7fee6172195840bc1702e84f021f2db398415809463fd5bdbed76466bd972b9e"
+    },
+    {
+      "sequence": 6,
+      "event_id": "correction-qemu-arm64",
+      "previous_hash": "7fee6172195840bc1702e84f021f2db398415809463fd5bdbed76466bd972b9e",
+      "steward": "lungmat8",
+      "reviewer": "datgausaigon",
+      "recorded_at": "2026-09-03T09:38:16Z",
+      "action": {
+        "kind": "record_correction",
+        "changes": [
+          {
+            "section": "subjects",
+            "before_sha256": "4e86b0914788f9206200728faf828a37535b6d031203fce156a64db634265dec",
+            "after_sha256": "18ae8dc235918275abbaf4cd822319023e9e92e4bddf70d1ca52044c3bbe8d2b"
+          },
+          {
+            "section": "blockers",
+            "before_sha256": "4995b38a0a5dadb30f54e82a26dfc513ef52d142beb96ee06ba3846e8786e6e2",
+            "after_sha256": "978a1b28a4608eeb5244394943aaeb3ce48ba7e68196e09d2bcd8606fe2e83fc"
+          }
+        ],
+        "evidence": [
+          {
+            "path": "docs/evidence/aarch64-semihosting-20260903-03-raw.txt",
+            "sha256": "a586202f56ba2a3141f0db663b79c4141c67a190c039510ac53c300eb9f326ee",
+            "size_bytes": 29509,
+            "kind": "log"
+          },
+          {
+            "path": "docs/evidence/aarch64-semihosting-20260903-03-runner.txt",
+            "sha256": "1fe1ed44c5682c9683a079ecb971dba27686ee763a9c7782fb022618b72cf370",
+            "size_bytes": 29328,
+            "kind": "artifact"
+          }
+        ]
+      },
+      "state_digest": "7572c43ded85e49be465e6145bd41b3fe2611f20ee43b0e6018496ce43fce040",
+      "hash": "25e0c016c0ba7fb2bb1e51e534f24900899d9212c7a284680e9c615749ba13e8"
     }
   ],
   "baseline_prefix": {
-    "event_count": 5,
-    "tip_hash": "7fee6172195840bc1702e84f021f2db398415809463fd5bdbed76466bd972b9e"
+    "event_count": 6,
+    "tip_hash": "25e0c016c0ba7fb2bb1e51e534f24900899d9212c7a284680e9c615749ba13e8"
   },
   "source_binding": {
     "path": "docs/specs/23-native-sdk-contract.md",
