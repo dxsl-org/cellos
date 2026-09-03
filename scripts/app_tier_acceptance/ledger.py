@@ -114,6 +114,13 @@ def blockers(root: dict, subject_map: dict, path: Path, as_of) -> bool:
             event = next((event for event in root["events"] if event["event_id"] == event_id), None)
             if event is None or not any(change["section"] == "blockers" for change in event["action"].get("changes", [])):
                 raise ValueError("blocker resolution event is missing or unrelated")
+            if root.get("schema_version") == 4:
+                if event["action"].get("kind") != "blocker_resolution":
+                    raise ValueError("schema 4 blocker resolution requires blocker_resolution event")
+                if item["id"] == "B-AARCH64-SEMHOSTING" and (item["subject"] != "qemu-arm64" or item["resolution"]["architecture"] != "aarch64"):
+                    raise ValueError("B-AARCH64-SEMHOSTING must resolve against qemu-arm64 aarch64 subject")
+            if event["action"].get("kind") == "blocker_resolution" and event["action"].get("blocker_id") != item["id"]:
+                raise ValueError("blocker resolution event blocker id mismatch")
         elif item["resolution"] is not None:
             raise ValueError("unresolved blocker cannot have resolution")
     return all(item["status"] == "PASS" for item in root["blockers"])
@@ -157,19 +164,98 @@ def lifecycle(root: dict, states: dict[int, str], event_ids: dict[str, tuple[int
 
 
 def baseline(current: dict, prior: object) -> None:
-    """Permit one appended event and exactly one adjacent lifecycle state transition."""
+    """Permit one appended event and exactly one adjacent lifecycle state transition or governance action."""
     if not isinstance(prior, dict):
         raise ValueError("external trusted baseline required")
     previous_events = prior.get("events")
     if not isinstance(previous_events, list) or current["events"][: len(previous_events)] != previous_events or len(current["events"]) != len(previous_events) + 1:
         raise ValueError("candidate must append exactly one event to baseline")
+    action = current["events"][-1]["action"]
+    kind = action.get("kind")
+
+    if kind == "schema_migration":
+        if prior.get("schema_version") != 3 or current.get("schema_version") != 4:
+            raise ValueError("schema migration must transition schema_version 3 to 4")
+        if current["phase_lifecycle"] != prior.get("phase_lifecycle"):
+            raise ValueError("schema migration cannot modify phase lifecycle")
+        immutable = set(current) - {"events", "baseline_prefix", "schema_version"}
+        if any(current[key] != prior.get(key) for key in immutable):
+            raise ValueError("schema migration changed unauthorized section")
+        expected = [{"section": "schema_version", "before_sha256": canonical_digest(3), "after_sha256": canonical_digest(4)}]
+        if action.get("changes") != expected:
+            raise ValueError("schema migration changes mismatch")
+        return
+
+    if kind == "record_correction":
+        if prior.get("schema_version") != 4 or current.get("schema_version") != 4:
+            raise ValueError("record correction requires schema version 4")
+        if current["phase_lifecycle"] != prior.get("phase_lifecycle"):
+            raise ValueError("record correction cannot modify phase lifecycle")
+        allowed = {"events", "baseline_prefix", "subjects", "blockers"}
+        if any(current[key] != prior.get(key) for key in set(current) - allowed):
+            raise ValueError("record correction changed unauthorized section")
+        prior_sub = prior.get("subjects", [])
+        if current["subjects"][: len(prior_sub)] != prior_sub:
+            raise ValueError("record correction cannot modify existing subjects")
+        prior_b, current_b = prior.get("blockers", []), current.get("blockers", [])
+        if len(current_b) != len(prior_b):
+            raise ValueError("record correction cannot add or remove blockers")
+        for before, after in zip(prior_b, current_b):
+            if before["id"] != after["id"] or before["evidence"] != after["evidence"]:
+                raise ValueError("record correction cannot modify blocker id or evidence")
+            if after["status"] != "BLOCKED" or after["resolution"] is not None:
+                raise ValueError("record correction must keep blocker BLOCKED and resolution null")
+        changed = [k for k in ("subjects", "blockers") if current[k] != prior[k]]
+        if not changed:
+            raise ValueError("record correction must change subjects or blockers")
+        expected = [{"section": k, "before_sha256": canonical_digest(prior[k]), "after_sha256": canonical_digest(current[k])} for k in changed]
+        if action.get("changes") != expected:
+            raise ValueError("record correction changes mismatch")
+        return
+
+    if kind == "blocker_resolution":
+        if prior.get("schema_version") != 4 or current.get("schema_version") != 4:
+            raise ValueError("blocker resolution requires schema version 4")
+        if current["phase_lifecycle"] != prior.get("phase_lifecycle"):
+            raise ValueError("blocker resolution cannot modify phase lifecycle")
+        allowed = {"events", "baseline_prefix", "blockers"}
+        if any(current[key] != prior.get(key) for key in set(current) - allowed):
+            raise ValueError("blocker resolution changed unauthorized section")
+        blocker_id = action.get("blocker_id")
+        prior_b, current_b = prior.get("blockers", []), current.get("blockers", [])
+        if len(current_b) != len(prior_b):
+            raise ValueError("blocker resolution cannot add or remove blockers")
+        changed = [(b, a) for b, a in zip(prior_b, current_b) if b != a]
+        if len(changed) != 1 or changed[0][1]["id"] != blocker_id:
+            raise ValueError("blocker resolution must modify only the named blocker")
+        before, after = changed[0]
+        if before["status"] != "BLOCKED" or before["resolution"] is not None:
+            raise ValueError("resolved blocker must have been BLOCKED without resolution")
+        if after["status"] != "PASS" or not isinstance(after["resolution"], dict):
+            raise ValueError("resolved blocker must be PASS with resolution")
+        if (after["id"], after["subject"], after["scope"], after["evidence"]) != (before["id"], before["subject"], before["scope"], before["evidence"]):
+            raise ValueError("resolved blocker cannot change identity, subject, scope, or historical evidence")
+        if after["resolution"]["event_id"] != current["events"][-1]["event_id"]:
+            raise ValueError("resolved blocker must bind current event id")
+        expected = [{"section": "blockers", "before_sha256": canonical_digest(prior_b), "after_sha256": canonical_digest(current_b)}]
+        if action.get("changes") != expected:
+            raise ValueError("blocker resolution changes mismatch")
+        historical = {(art["path"], art["sha256"]) for b in current_b for art in b["evidence"]}
+        if {(art["path"], art["sha256"]) for art in action.get("evidence", [])} & historical:
+            raise ValueError("blocker resolution reuses historical blocker evidence")
+        return
+
+    if kind != "lifecycle_transition":
+        raise ValueError("unsupported baseline transition action")
+
     old = prior.get("phase_lifecycle")
     if not isinstance(old, list) or len(old) != 8:
         raise ValueError("baseline lifecycle invalid")
     changed = [(before, after) for before, after in zip(old, current["phase_lifecycle"]) if before["status"] != after["status"]]
-    action = current["events"][-1]["action"]
     if len(changed) != 1 or changed[0][0]["phase"] != changed[0][1]["phase"] or LIFE.index(changed[0][1]["status"]) != LIFE.index(changed[0][0]["status"]) + 1:
         raise ValueError("lifecycle must advance one external-baseline step")
+    if prior.get("schema_version") == 4 and (current["subjects"] != prior["subjects"] or current["blockers"] != prior["blockers"]):
+        raise ValueError("lifecycle transition cannot bundle correction or resolution")
     mutable = ("source_binding", "subjects", "blockers", "rows", "security_negatives", "claims", "c9")
     immutable = set(current) - {"events", "baseline_prefix", "phase_lifecycle", *mutable}
     if any(current[key] != prior.get(key) for key in immutable):

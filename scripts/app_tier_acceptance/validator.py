@@ -112,7 +112,8 @@ def _validate_snapshot(data: object, as_of: dt.datetime, root: Path) -> str:
     from . import ledger
 
     value = exact(data, ROOT_KEYS, "ledger")
-    if integer(value["schema_version"], "schema version") != 3 or value["authoritative"] is not True or value["axes"] != AXES:
+    schema_version = integer(value["schema_version"], "schema version")
+    if schema_version not in {3, 4} or value["authoritative"] is not True or value["axes"] != AXES:
         raise ValueError("ledger root schema invalid")
     subject_map = subjects(value["subjects"])
     progressed = any(item.get("status") != "PLANNED" for item in value["phase_lifecycle"] if item.get("phase") != 1)

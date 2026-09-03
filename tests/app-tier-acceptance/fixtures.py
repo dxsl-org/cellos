@@ -109,3 +109,114 @@ def append_event(data, prior, phase, to_status, canonical_digest):
     events.append({"sequence": len(events) + 1, "event_id": ident, "previous_hash": events[-1]["hash"], "steward": "steward", "reviewer": "reviewer", "recorded_at": recorded, "action": action, "state_digest": "0" * 64, "hash": "0" * 64})
     data["baseline_prefix"] = {"event_count": len(events), "tip_hash": "0" * 64}
     refresh_event(data, canonical_digest)
+
+
+def append_migration_event(data, prior, canonical_digest, recorded=None):
+    """Append a schema_migration event (3 -> 4)."""
+    events = data["events"]
+    ident = "schema-migration-v3-to-v4"
+    changes = [
+        {
+            "section": "schema_version",
+            "before_sha256": canonical_digest(prior["schema_version"]),
+            "after_sha256": canonical_digest(data["schema_version"]),
+        }
+    ]
+    evidence = [dict(data["events"][0]["action"]["evidence"][0])]
+    action = {
+        "kind": "schema_migration",
+        "from_version": prior["schema_version"],
+        "to_version": data["schema_version"],
+        "changes": changes,
+        "evidence": evidence,
+    }
+    if recorded is None:
+        prior_time = dt.datetime.fromisoformat(events[-1]["recorded_at"].replace("Z", "+00:00"))
+        recorded = (prior_time + dt.timedelta(seconds=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    events.append({
+        "sequence": len(events) + 1,
+        "event_id": ident,
+        "previous_hash": events[-1]["hash"],
+        "steward": "steward",
+        "reviewer": "reviewer",
+        "recorded_at": recorded,
+        "action": action,
+        "state_digest": "0" * 64,
+        "hash": "0" * 64,
+    })
+    data["baseline_prefix"] = {"event_count": len(events), "tip_hash": "0" * 64}
+    refresh_event(data, canonical_digest)
+
+
+def append_correction_event(data, prior, canonical_digest, recorded=None, evidence=None):
+    """Append a record_correction event."""
+    events = data["events"]
+    ident = "correction-qemu-arm64"
+    changed_sections = [k for k in ("subjects", "blockers") if data[k] != prior[k]]
+    changes = [
+        {
+            "section": k,
+            "before_sha256": canonical_digest(prior[k]),
+            "after_sha256": canonical_digest(data[k]),
+        }
+        for k in changed_sections
+    ]
+    if evidence is None:
+        evidence = [dict(data["events"][0]["action"]["evidence"][0])]
+    action = {
+        "kind": "record_correction",
+        "changes": changes,
+        "evidence": evidence,
+    }
+    if recorded is None:
+        prior_time = dt.datetime.fromisoformat(events[-1]["recorded_at"].replace("Z", "+00:00"))
+        recorded = (prior_time + dt.timedelta(seconds=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    events.append({
+        "sequence": len(events) + 1,
+        "event_id": ident,
+        "previous_hash": events[-1]["hash"],
+        "steward": "steward",
+        "reviewer": "reviewer",
+        "recorded_at": recorded,
+        "action": action,
+        "state_digest": "0" * 64,
+        "hash": "0" * 64,
+    })
+    data["baseline_prefix"] = {"event_count": len(events), "tip_hash": "0" * 64}
+    refresh_event(data, canonical_digest)
+
+
+def append_resolution_event(data, prior, blocker_id, github_approval_data, canonical_digest, recorded=None, evidence=None):
+    """Append a blocker_resolution event."""
+    events = data["events"]
+    ident = f"resolution-{blocker_id.lower()}"
+    changes = [
+        {
+            "section": "blockers",
+            "before_sha256": canonical_digest(prior["blockers"]),
+            "after_sha256": canonical_digest(data["blockers"]),
+        }
+    ]
+    action = {
+        "kind": "blocker_resolution",
+        "blocker_id": blocker_id,
+        "changes": changes,
+        "evidence": evidence,
+        "github_approval": github_approval_data,
+    }
+    if recorded is None:
+        prior_time = dt.datetime.fromisoformat(events[-1]["recorded_at"].replace("Z", "+00:00"))
+        recorded = (prior_time + dt.timedelta(seconds=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    events.append({
+        "sequence": len(events) + 1,
+        "event_id": ident,
+        "previous_hash": events[-1]["hash"],
+        "steward": "steward",
+        "reviewer": github_approval_data["approver"],
+        "recorded_at": recorded,
+        "action": action,
+        "state_digest": "0" * 64,
+        "hash": "0" * 64,
+    })
+    data["baseline_prefix"] = {"event_count": len(events), "tip_hash": "0" * 64}
+    refresh_event(data, canonical_digest)
