@@ -21,7 +21,7 @@
 
 ## POSIX Shim Profile
 
-Minimal C ABI for common functions. Declared in `libs/api/src/posix.rs`.
+Minimal C ABI for common functions. Declared in `libs/api/src/services/posix.rs`.
 
 ### Setup
 
@@ -54,7 +54,7 @@ extern "C" {
 - `getentropy(buf, len)` → random bytes (via `sys_get_random`)
 - `clock_gettime(clock_id, tp)` → wall-clock / monotonic time
 
-For the full list, see `libs/api/src/posix.rs`.
+For the full list, see `libs/api/src/services/posix.rs`.
 
 ### Example: Getentropy
 

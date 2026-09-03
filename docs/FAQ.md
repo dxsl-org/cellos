@@ -77,7 +77,7 @@ Trade-offs accepted:
 
 ## 7. Why no Linux compatibility?
 
-A POSIX/Linux compatibility shim is tracked in `libs/api/src/posix.rs` for basic
+A POSIX compatibility shim is tracked in `libs/api/src/services/posix.rs` for basic
 syscall forwarding, but full Linux ABI compatibility is not a goal.  Cellos is a
 research OS exploring a different design point; apps are written as Cells, not
 POSIX processes.  For Linux app compat, see Redox or Asterinas.

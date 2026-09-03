@@ -115,9 +115,9 @@ Dành cho **nhúng thư viện C/C++ vào Rust cell** — link trực tiếp ven
 
 ### 3.1 Two-profile C library strategy (G2)
 
-**Profile A — posix.rs shim** (default, embedded/simple cells, no build overhead):
+**Profile A — POSIX services shim** (default, embedded/simple cells, no build overhead):
 
-| | Profile A: posix.rs | Profile B: mlibc |
+| | Profile A: POSIX services shim | Profile B: mlibc |
 |---|---|---|
 | Binary size | Small | Larger (Grisu3, slab alloc) |
 | printf float | Limited | Grisu3 (correct %.15g) |
@@ -125,7 +125,7 @@ Dành cho **nhúng thư viện C/C++ vào Rust cell** — link trực tiếp ven
 | Build | Rust only | WSL2 Meson build first |
 | Default | Yes | Opt-in via feature |
 
-**CRITICAL mutual exclusion:** `api = { features = ["mlibc"] }` suppresses posix.rs. Forget the feature while using mlibc-shim → duplicate-symbol link error. **Never link both.**
+**CRITICAL mutual exclusion:** `api = { features = ["mlibc"] }` suppresses the POSIX services shim. Forget the feature while using mlibc-shim → duplicate-symbol link error. **Never link both.**
 
 See `docs/mlibc-build.md` for the full mlibc build guide.
 
@@ -134,7 +134,7 @@ See `docs/mlibc-build.md` for the full mlibc build guide.
 ```
 [Tier 1 ffi-posix link flow - mlibc profile:]
   cell.rs (Rust, owns the cell)
-    └── api = { features = ["mlibc"] }  ← posix.rs suppressed
+    └── api = { features = ["mlibc"] }  ← POSIX services shim suppressed
     └── mlibc-shim                      ← links third_party/mlibc/build/libc.a
     └── extern "C" { fn rknn_init(...); }   ← FFI bindings
          ↓ links statically
@@ -144,7 +144,7 @@ See `docs/mlibc-build.md` for the full mlibc build guide.
          ↓ → ViSyscall (VFS IPC, Net IPC, GetTime, GetRandom)
 ```
 
-**Implementation hiện tại** (`libs/api/src/posix.rs`, 482 lines, feature flag `posix`):
+**Implementation hiện tại** (`libs/api/src/services/posix.rs`, feature flag `posix`):
 
 | Nhóm | Functions | Status |
 |---|---|---|
@@ -153,8 +153,8 @@ See `docs/mlibc-build.md` for the full mlibc build guide.
 | Files | `_open/_read/_write/_close/_lseek` → ViSyscall | ✅ Done |
 | Time | `_time/_gettimeofday` → ViSyscall::GetTime | ✅ Done |
 | Exit | `_exit` → ViSyscall::Exit | ✅ Done |
-| Entropy | `getentropy/arc4random_buf` → ViSyscall::GetRandom | 🔶 Cần thêm (~50 LOC) |
-| Network | `connect/send/recv/close` → Net IPC | 🔶 Cần thêm (~200 LOC) |
+| Entropy | `getentropy/arc4random_buf` → ViSyscall::GetRandom | ✅ Done |
+| Network | `connect/send/recv/close` → Net IPC | ✅ Done |
 | Process | `_fork/_execve/_kill/_wait` | ❌ Returns -1 (SAS incompatible) |
 | Memory map | `_sbrk` | ❌ Returns NULL (Rust allocator used) |
 

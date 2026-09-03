@@ -1,6 +1,6 @@
 //! POSIX shim integration test cell.
 //!
-//! Tests the C ABI shims in `libs/api/src/posix.rs`:
+//! Tests the C ABI shims in `libs/api/src/services/posix.rs`:
 //!   - getentropy(2) via sys_get_random (opcode 214)
 //!   - socket / connect / send / recv / close via typed Net IPC
 //!
