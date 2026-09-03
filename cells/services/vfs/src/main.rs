@@ -29,7 +29,11 @@ mod dirs;
 mod dispatch;
 mod dispatch_dirs;
 mod dispatch_file_handles;
+mod dispatch_grants;
+mod dispatch_paths;
+mod fast_handler;
 mod file_handles;
+mod grant_read;
 mod grant_write;
 mod handle_table;
 #[cfg(all(feature = "littlefs", target_arch = "x86_64"))]
@@ -42,9 +46,9 @@ mod pending;
 mod quota;
 mod subtree;
 
+use fast_handler::{vfs_fast_handler, GLOBAL_VFS};
 use manager::VfsManager;
 use ostd::io::println;
-use ostd::prelude::*;
 
 // Declares block-I/O capability; the kernel grants BlockIoCap at spawn.
 // part_data/part_lfs scope the raw block syscalls to P1 (FAT32) + P4
@@ -93,66 +97,6 @@ api::declare_syscalls![
     // turns that corruption into an unbounded sleep that hangs the boot.
 ];
 
-// Global VFS manager for the fast-IPC handler (which runs outside the main recv loop).
-// Protected by a spinlock; on single-hart there is no actual contention.
-static GLOBAL_VFS: Mutex<Option<VfsManager>> = Mutex::new(None);
-
-/// Fast-IPC handler: serves VfsRequest::GetFile without ecall overhead.
-///
-/// Authorized exactly like the ecall path.  It has to be: `GetFile` replies with a
-/// raw `DataPtr`, which in a single address space is permanent read authority that
-/// cannot be revoked once handed out — so an ungated fast path would make the gate
-/// on the ecall path decorative.  `caller` comes from the kernel
-/// (`kernel::fast_ipc::call_vfs` resolves it from live scheduler state), never from
-/// an argument this cell's client controls; `None` means unattributable, which is
-/// refused.
-///
-/// A cell this service has never served over the ecall path is declined with a
-/// zero-length reply, which `call_vfs` callers treat as "fast path unavailable"
-/// and retry as an ordinary syscall.  The reason is the seal: deciding whether a
-/// cell may still name a path needs the kernel's provenance record, and pulling
-/// that is a syscall this handler cannot make with interrupts disabled.  Serving
-/// an unknown cell here would therefore serve a path read to a cell that should
-/// already have been refused one.  The cost is a single ecall per cell.
-///
-/// # Safety
-/// Called with S-mode interrupts disabled (guaranteed by `ostd::fast_ipc::call_vfs`).
-unsafe fn vfs_fast_handler(
-    caller: Option<api::caller_identity::CallerIdentity>,
-    req: &api::ipc::VfsRequest<'_>,
-    out: &mut [u8; api::ipc::IPC_BUF_SIZE],
-) -> usize {
-    let resp = match caller.map(crate::caller::Caller::from_attested) {
-        None => api::ipc::VfsResponse::Err(3), // unknown caller → denied
-        Some(caller) => match req {
-            api::ipc::VfsRequest::GetFile(path) => {
-                if let Some(vfs) = GLOBAL_VFS.lock().as_ref() {
-                    if !vfs.dirs.has_met(caller) {
-                        return 0; // decline; the ecall path will decide
-                    }
-                    // Sealed and unauthorized are one refusal: this cell may not
-                    // read this path, and which rule said so is not the caller's
-                    // business.
-                    if vfs.dirs.is_sealed(caller) || !vfs.access.can_read_fast(caller, path) {
-                        api::ipc::VfsResponse::Err(3)
-                    } else if let Some((ptr, len)) = vfs.get_file_ptr(path) {
-                        api::ipc::VfsResponse::DataPtr {
-                            ptr: ptr as u64,
-                            len: len as u64,
-                        }
-                    } else {
-                        api::ipc::VfsResponse::Err(1)
-                    }
-                } else {
-                    api::ipc::VfsResponse::Err(0xFF)
-                }
-            }
-            _ => api::ipc::VfsResponse::Err(0xFE), // other ops must use ecall path
-        },
-    };
-    api::ipc::encode(&resp, out).map(|s| s.len()).unwrap_or(0)
-}
-
 #[no_mangle]
 pub fn main() {
     println("VFS Service v0.2: RamFS + mkdir/rmdir/unlink IPC (typed postcard)");
@@ -160,7 +104,10 @@ pub fn main() {
     // VirtIO disk (which logs its own success/fallback status).
     let vfs = VfsManager::new();
     #[cfg(feature = "test-hooks")]
-    file_handles::selftest::run();
+    {
+        file_handles::selftest::run();
+        access::selftest::run();
+    }
     *GLOBAL_VFS.lock() = Some(vfs);
 
     // Register the fast-IPC handler so trusted Cells can bypass ecall for VFS reads.

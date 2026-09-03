@@ -35,7 +35,7 @@ pub(crate) struct WatchedOwner {
     pub token: u64,
 }
 pub struct VfsManager {
-    mounts: MountTable,
+    pub(crate) mounts: MountTable,
     pub handles: HandleTable,
     pub quota: QuotaTracker,
     pub access: AccessTable,

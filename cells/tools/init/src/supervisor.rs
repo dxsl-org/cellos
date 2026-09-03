@@ -23,6 +23,8 @@ pub(crate) fn run(services: &mut [Service], mut hypervisor_tid: Option<usize>) -
         let reason = u64::from_le_bytes(buffer[..8].try_into().unwrap());
 
         if hypervisor_tid == Some(dead) {
+            // The kernel's exit_task automatically purges dead mappings from
+            // the service registry via clear_tid(dead), so lookup returns None.
             relay_hypervisor_exit(dead);
             hypervisor_tid = None;
             continue;

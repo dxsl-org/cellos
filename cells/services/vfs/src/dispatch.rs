@@ -7,7 +7,7 @@
 
 use crate::caller::Caller;
 use crate::manager::VfsManager;
-use crate::paths::{unlink_file, write_file, ERR_DENIED, ERR_HANDLE, ERR_IO, ERR_QUOTA};
+use crate::paths::{ERR_DENIED, ERR_HANDLE};
 
 /// Handle one decoded request on behalf of a caller the kernel has attested.
 ///
@@ -51,113 +51,18 @@ pub fn handle_request<'a>(
         return api::ipc::VfsResponse::Err(ERR_DENIED);
     }
 
-    match req {
-        api::ipc::VfsRequest::GetFile(p) => {
-            // Authorize BEFORE resolving: the reply is a raw pointer into VFS
-            // memory, which in a single address space is permanent read authority
-            // that cannot be taken back once handed out.
-            if !vfs.access.can_read(caller, p) {
-                return api::ipc::VfsResponse::Err(ERR_DENIED);
-            }
-            if let Some((ptr, len)) = vfs.get_file_ptr(p) {
-                api::ipc::VfsResponse::DataPtr {
-                    ptr: ptr as u64,
-                    len: len as u64,
-                }
-            } else {
-                api::ipc::VfsResponse::Err(ERR_IO)
-            }
-        }
+    if let Some(resp) = crate::dispatch_paths::handle_path_request(vfs, caller, &req) {
+        return resp;
+    }
 
+    match req {
         api::ipc::VfsRequest::ListDir(p) => {
-            // Authorize BEFORE listing: a directory listing is itself information.
             if !vfs.access.can_read(caller, p) {
                 return api::ipc::VfsResponse::Err(ERR_DENIED);
             }
             let n = vfs.list_dir(p, resp_buf);
             api::ipc::VfsResponse::Data(&resp_buf[..n])
         }
-
-        api::ipc::VfsRequest::Stat(p) => {
-            // Authorize BEFORE stat: size and existence are what an unauthorized
-            // caller would be probing for.
-            if !vfs.access.can_read(caller, p) {
-                return api::ipc::VfsResponse::Err(ERR_DENIED);
-            }
-            match vfs.stat(p) {
-                Some((size, is_dir)) => api::ipc::VfsResponse::Stat { size, is_dir },
-                None => api::ipc::VfsResponse::Err(ERR_IO),
-            }
-        }
-
-        api::ipc::VfsRequest::Write { path, content } => write_file(vfs, caller, path, content),
-
-        api::ipc::VfsRequest::Append { path, content } => {
-            if !vfs.access.can_write(caller, path) {
-                return api::ipc::VfsResponse::Err(ERR_DENIED);
-            }
-            let append_len = content.len() as u64;
-            if !vfs.quota.can_charge(caller.cell, append_len) {
-                return api::ipc::VfsResponse::Err(ERR_QUOTA);
-            }
-            if vfs.append(path, content) {
-                let _ = vfs.quota.charge(caller.cell, append_len);
-                // Only claims the path if nobody was charged for it yet; an
-                // append does not move the earlier bytes' ownership.
-                vfs.quota.record_writer(path, caller.cell);
-                api::ipc::VfsResponse::Ok
-            } else {
-                api::ipc::VfsResponse::Err(ERR_IO)
-            }
-        }
-
-        api::ipc::VfsRequest::Mkdir(p) => {
-            if !vfs.access.can_write(caller, p) {
-                api::ipc::VfsResponse::Err(ERR_DENIED)
-            } else if vfs.mkdir(p) {
-                api::ipc::VfsResponse::Ok
-            } else {
-                api::ipc::VfsResponse::Err(ERR_IO)
-            }
-        }
-
-        api::ipc::VfsRequest::Rmdir(p) => {
-            // Destructive: authorize before touching the backend.  A path the caller
-            // may not write is a path it may not delete.
-            if !vfs.access.can_remove_dir(caller, p) {
-                return api::ipc::VfsResponse::Err(ERR_DENIED);
-            }
-            // Verifies the target IS a directory — POSIX ENOTDIR semantics.
-            if vfs.rmdir(p) {
-                api::ipc::VfsResponse::Ok
-            } else {
-                api::ipc::VfsResponse::Err(ERR_IO)
-            }
-        }
-
-        api::ipc::VfsRequest::Unlink(p) => unlink_file(vfs, caller, p),
-
-        api::ipc::VfsRequest::RmdirRecursive(p) => {
-            // Authorize BEFORE the walk: that walk lists the whole subtree, so
-            // checking after it would leave a directory-size probe open to callers
-            // who may not write the path.
-            if !vfs.access.can_remove_tree(caller, p) {
-                return api::ipc::VfsResponse::Err(ERR_DENIED);
-            }
-            // Measure per file while the tree still exists: rmdir_recursive
-            // returns only bool, and two files in one tree can be charged to two
-            // different cells.
-            let files = crate::subtree::files_under(vfs, p, 32);
-            if vfs.rmdir_recursive(p) {
-                for (path, size) in files {
-                    vfs.quota.release_path(&path, size);
-                }
-                api::ipc::VfsResponse::Ok
-            } else {
-                api::ipc::VfsResponse::Err(ERR_IO)
-            }
-        }
-
         api::ipc::VfsRequest::ReadAsync { path } => {
             // Authorize BEFORE reading: the read happens now (the disk backend is
             // still blocking) and `Poll` only hands over what was already read, so
@@ -211,58 +116,7 @@ pub fn handle_request<'a>(
             offset,
             size,
             grant,
-        } => {
-            // Re-authorize the handle's path before anything is copied, for the
-            // same reason as `Poll`: the open-time decision can be stale.  A cap
-            // the caller does not own is indistinguishable from an unknown one
-            // (`None` here, zero bytes below), but a cap it *does* own whose path
-            // is now denied gets a straight refusal — that leaks nothing it did
-            // not already know.
-            match vfs.handles.path_of(caller, api::cap::CapId(cap)) {
-                Some(path) if !vfs.access.can_read(caller, path) => {
-                    // Refuse before touching the grant: nothing is read, so there
-                    // is no F14 drain obligation.
-                    return api::ipc::VfsResponse::Err(ERR_DENIED);
-                }
-                _ => {}
-            }
-            // Validate: VFS must have been GrantShare'd access by the app.
-            match ostd::syscall::sys_grant_slice_with_len(grant) {
-                None => api::ipc::VfsResponse::Err(ERR_IO), // no access
-                Some((ptr, grant_len)) => {
-                    // A cap owned by another cell reports zero bytes, exactly like
-                    // an unknown cap — the caller cannot tell the two apart.
-                    let bytes = if let Some(entry) =
-                        vfs.handles.get_mut(caller, api::cap::CapId(cap))
-                    {
-                        match usize::try_from(offset) {
-                            Ok(offset) if offset < entry.data_len => {
-                                let avail = entry.data_len - offset;
-                                let n = size.min(avail).min(grant_len).min(4096);
-                                if n == 0 {
-                                    0
-                                } else if let Some(src) = entry.data_ptr.checked_add(offset) {
-                                    // SAFETY: `src` stays within the in-memory file image because
-                                    // `offset < data_len` and `n <= data_len - offset`; `ptr` is a
-                                    // kernel-validated grant buffer of at least `n` bytes.
-                                    unsafe {
-                                        core::ptr::copy_nonoverlapping(src as *const u8, ptr, n);
-                                    }
-                                    n
-                                } else {
-                                    0
-                                }
-                            }
-                            Ok(_) | Err(_) => 0,
-                        }
-                    } else {
-                        0 // unknown cap, or not this caller's — nothing is copied
-                    };
-                    // F14: reply AFTER filling the buffer.
-                    api::ipc::VfsResponse::GrantDone { bytes }
-                }
-            }
-        }
+        } => crate::grant_read::read_grant(vfs, caller, cap, offset, size, grant),
 
         api::ipc::VfsRequest::WriteGrant {
             cap,
@@ -272,28 +126,7 @@ pub fn handle_request<'a>(
         } => crate::grant_write::write(vfs, caller, cap, offset, grant, bytes),
 
         api::ipc::VfsRequest::ReadFileGrant { path, grant, max } => {
-            // Authorize BEFORE the grant is even resolved: this arm copies a whole
-            // file, so it is the widest read in the interface.
-            if !vfs.access.can_read(caller, path) {
-                return api::ipc::VfsResponse::Err(ERR_DENIED);
-            }
-            match ostd::syscall::sys_grant_slice_with_len(grant) {
-                None => api::ipc::VfsResponse::Err(ERR_IO), // grant not shared to VFS
-                Some((ptr, grant_len)) => {
-                    // Resolve via the mount table (BinOverlay → cell-store for /bin),
-                    // then copy the WHOLE file into the caller's grant in one shot.
-                    let data = vfs.read_to_vec(path);
-                    let n = data.len().min(max).min(grant_len);
-                    // SAFETY: ptr is the caller's identity-mapped grant, GrantShare'd
-                    // RW and `n` is capped by the kernel-registered Grant length;
-                    // `data` is a fresh owned Vec. The caller's ipc_call blocks until
-                    // we reply, so it cannot free the grant before this copy completes.
-                    unsafe {
-                        core::ptr::copy_nonoverlapping(data.as_ptr(), ptr, n);
-                    }
-                    api::ipc::VfsResponse::GrantDone { bytes: n }
-                }
-            }
+            crate::grant_read::read_file_grant(vfs, caller, path, grant, max)
         }
 
         // ── Directory capabilities ──────────────────────────────────────────
@@ -318,5 +151,6 @@ pub fn handle_request<'a>(
         | api::ipc::VfsRequest::SyncHandle { .. } => {
             crate::dispatch_dirs::handle(vfs, caller, &req, resp_buf)
         }
+        _ => api::ipc::VfsResponse::Err(0xFF),
     }
 }

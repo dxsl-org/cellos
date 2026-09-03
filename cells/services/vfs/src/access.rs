@@ -13,10 +13,19 @@
 //! the kernel reads at spawn (`__ViCell_manifest`, source of `BlockIoCap` /
 //! `NetworkCap` / `SpawnCap`). Per-cell VFS path grants are a separate concern.
 
+mod guest_disk;
 mod kms;
 mod rules;
+#[cfg(feature = "test-hooks")]
+pub(crate) mod selftest;
+#[cfg(feature = "test-hooks")]
+pub(crate) mod stub;
+#[cfg(test)]
+mod tests;
 
 use crate::caller::Caller;
+use guest_disk::live_hypervisor_matches;
+pub(crate) use guest_disk::{contains_guest_disk, is_guest_disk_path, GUEST_DISK_PATH};
 use kms::{
     contains_kms_namespace, is_canonical_policy_path, is_kms_namespace_path, is_kms_store_rule,
     live_kms_matches,
@@ -36,7 +45,7 @@ impl AccessTable {
         Self::with_service_lookup(default_service_lookup)
     }
 
-    fn with_service_lookup(service_lookup: fn(u16) -> Option<usize>) -> Self {
+    pub(crate) fn with_service_lookup(service_lookup: fn(u16) -> Option<usize>) -> Self {
         Self {
             exact: rules::EXACT_RULES,
             prefixes: rules::PREFIX_RULES,
@@ -52,10 +61,15 @@ impl AccessTable {
         self.decide(caller, path, AccessKind::Write)
     }
 
-    /// Whether `caller` may read `path`.
+    /// Whether `caller` may write to the guest system disk image.
     ///
-    /// Every read op in `dispatch` is gated on this. Returns `false` when no rule
-    /// matches — a relative path, for instance, matches no prefix including `/`.
+    /// Restricted to the live registered hypervisor provider; other cells cannot
+    /// touch the VM disk backend directly.
+    pub fn is_live_hypervisor(&self, caller: Caller) -> bool {
+        live_hypervisor_matches(caller, self.service_lookup)
+    }
+
+    /// Whether `caller` may read `path`.
     pub fn can_read(&self, caller: Caller, path: &str) -> bool {
         self.decide(caller, path, AccessKind::Read)
     }
@@ -76,6 +90,7 @@ impl AccessTable {
         is_canonical_policy_path(path)
             && self.can_write(caller, path)
             && !contains_kms_namespace(path)
+            && !contains_guest_disk(path)
     }
 
     /// Whether `caller` may remove `path` as a directory.
@@ -83,11 +98,18 @@ impl AccessTable {
         is_canonical_policy_path(path)
             && self.can_write(caller, path)
             && !contains_kms_namespace(path)
+            && !contains_guest_disk(path)
     }
 
     fn decide(&self, caller: Caller, path: &str, kind: AccessKind) -> bool {
         if !is_canonical_policy_path(path) {
             return false;
+        }
+        if is_guest_disk_path(path) {
+            return match kind {
+                AccessKind::Read => true,
+                AccessKind::Write => self.is_live_hypervisor(caller),
+            };
         }
         match self.rule_for(path) {
             Some(rule) if is_kms_store_rule(rule.prefix) => {
@@ -133,66 +155,4 @@ fn default_service_lookup(service_id: u16) -> Option<usize> {
 #[cfg(not(target_os = "none"))]
 fn default_service_lookup(_service_id: u16) -> Option<usize> {
     None
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use types::CellId;
-
-    const CELL: Caller = Caller {
-        cell: CellId(5),
-        generation: 1,
-        sender_tid: 50,
-    };
-
-    #[test]
-    fn reads_are_allowed_across_the_shipped_prefixes() {
-        let table = AccessTable::new();
-        for path in ["/bin/shell", "/data/x", "/tmp/x", "/mnt/sd/x", "/srv/x"] {
-            assert!(table.can_read(CELL, path), "{path} should be readable");
-        }
-    }
-
-    #[test]
-    fn a_path_matching_no_rule_is_denied_both_ways() {
-        let table = AccessTable::new();
-        // No leading slash → matches no prefix, not even "/".
-        assert!(!table.can_read(CELL, "etc/shadow"));
-        assert!(!table.can_write(CELL, "etc/shadow"));
-        assert!(!table.can_read(CELL, ""));
-    }
-
-    #[test]
-    fn bin_is_readable_but_not_writable() {
-        let table = AccessTable::new();
-        assert!(table.can_read(CELL, "/bin/vfs"));
-        assert!(!table.can_write(CELL, "/bin/vfs"));
-    }
-
-    #[test]
-    fn root_is_read_only() {
-        let table = AccessTable::new();
-        assert!(table.can_read(CELL, "/motd"));
-        assert!(!table.can_write(CELL, "/motd"));
-    }
-
-    #[test]
-    fn a_whole_path_rule_overrides_the_prefix_it_sits_under() {
-        static EXACT: &[PathRule] = &[PathRule {
-            prefix: "/data/secret",
-            allow_read_all: false,
-            allow_write_all: false,
-        }];
-        let table = AccessTable::with_service_lookup(|_| None);
-        let table = AccessTable {
-            exact: EXACT,
-            prefixes: rules::PREFIX_RULES,
-            service_lookup: table.service_lookup,
-        };
-        assert!(!table.can_read(CELL, "/data/secret"));
-        // Only the exact path is affected; its neighbours still follow /data/.
-        assert!(table.can_read(CELL, "/data/secretive"));
-        assert!(table.can_read(CELL, "/data/other"));
-    }
 }

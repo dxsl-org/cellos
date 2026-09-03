@@ -36,7 +36,7 @@ pub(crate) fn write<'a>(
     else {
         return VfsResponse::Err(ERR_DENIED);
     };
-    if !vfs.access.can_write(caller, &path) {
+    if crate::access::is_guest_disk_path(&path) || !vfs.access.can_write(caller, &path) {
         return VfsResponse::Err(ERR_DENIED);
     }
     let Some((file_len, false)) = vfs.stat(&path) else {

@@ -348,7 +348,7 @@ review_by = "2026-10-28"
 tracking = "midori-lessons phase 07 (grant/pointer audit)"
 
 [[file]]
-path = "cells/services/vfs/src/dispatch.rs"
+path = "cells/services/vfs/src/grant_read.rs"
 class = "temporary-audit"
 reason = "The two \"caller blocks\" copy_nonoverlapping writes into the caller's grant (dispatch.rs:195 ReadGrant, dispatch.rs:249 ReadFileGrant). Their whole soundness argument is \"the caller's ipc_call blocks until we reply, so it cannot free the grant\" — exactly the assumption phase 07 must audit. This entry legitimises nothing beyond that audit window."
 approver = "cellos-maintainers"
@@ -366,7 +366,7 @@ review_by = "2026-10-28"
 tracking = "midori-lessons phase 07 (grant/pointer audit)"
 
 [[file]]
-path = "cells/services/vfs/src/main.rs"
+path = "cells/services/vfs/src/fast_handler.rs"
 class = "temporary-audit"
 reason = "VFS raw-pointer I/O awaiting the grant/pointer audit. Temporary — do not treat as settled."
 approver = "cellos-maintainers"

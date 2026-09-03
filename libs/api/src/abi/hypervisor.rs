@@ -84,3 +84,20 @@ impl ViVmExit {
 // `Hvc { regs: [u64; 8] }` envelope, or `validate_user_buf(size_of::<ViVmExit>())`
 // in the run_vcpu syscall path breaks for every existing cell. Pin it.
 const _: () = assert!(core::mem::size_of::<ViVmExit>() == 80);
+
+/// Well-known system service registration ID for the Tier 3 hypervisor service (`/bin/hypervisor`).
+///
+/// init registers the live hypervisor under this ID via `sys_register_service`.
+/// VFS uses this live registration to authorize the fixed-capacity guest system-disk writer
+/// across supervised restarts.
+pub const HYPERVISOR_SERVICE_ID: u16 = 14;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hypervisor_service_id_is_stable() {
+        assert_eq!(HYPERVISOR_SERVICE_ID, 14);
+    }
+}

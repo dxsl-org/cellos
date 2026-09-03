@@ -6,6 +6,9 @@
 
 extern crate alloc;
 
+use crate::boot_x86_profile::{
+    guest_cmdline, GUEST_RAM_PAGES, GUEST_RAM_SIZE, INITRD_PATH, VMLINUX_PATH,
+};
 use crate::{
     acpi,
     boot_info::{self, BootInfoParams},
@@ -13,45 +16,6 @@ use crate::{
 };
 use ostd::io::println;
 use types::{ViError, ViResult};
-
-/// 128 MiB guest RAM (contiguous carve; matches the proven ARM cell size and
-/// fits Alpine's initramfs boot). Larger carves fail the frame allocator's
-/// contiguous request on the x86 memory map.
-const GUEST_RAM_SIZE: u64 = 128 * 1024 * 1024;
-const GUEST_RAM_PAGES: usize = (GUEST_RAM_SIZE / 4096) as usize;
-
-const VMLINUX_PATH: &str = "/vmlinux";
-const INITRD_PATH: &str = "/initrd.gz";
-// `nox2apic`: keep the guest in xAPIC mode. x2APIC needs IRQ remapping (VT-d IR)
-// this VMM does not emulate; instead the guest drives the LAPIC through the
-// RAM-backed 0xFEE00000 MMIO window (kernel-mapped) and the timer is polled
-// kernel-side on HLT. CPUID also clears ECX[21] so this is belt-and-braces.
-//
-// `lpj=4000000`: preset loops_per_jiffy so `calibrate_delay()` is skipped. Its
-// `calibrate_delay_converge()` busy-waits for jiffies to advance, but the
-// periodic tick is not wired until AFTER calibrate_delay in the x86 boot order,
-// so without a preset it spins forever on this minimal timer platform.
-//
-// `nohz=off highres=off`: force the legacy PERIODIC tick via the boot
-// clockevent (i8253 PIT) instead of tickless/high-res one-shot mode. In
-// periodic mode the guest arms PIT channel 0, which the cell's real-timebase
-// PIT + idle IRQ0 injection can feed; one-shot mode never arms a timer we can
-// drive, so the idle loop HLTs forever waiting for a tick that never comes.
-// BusyBox ash does not reliably infer an interactive terminal from this minimal
-// PVH console. Pass `-i` through the kernel's `--` init-argument separator so
-// the boot contract includes an observable shell prompt.
-const CMDLINE: &str = "earlycon=uart8250,io,0x3f8,115200 console=ttyS0 nox2apic lpj=4000000 nohz=off highres=off rdinit=/bin/sh panic=1 virtio_mmio.device=512@0xd0000000:5 virtio_mmio.device=512@0xd0000200:6 -- -i";
-const E2E_CMDLINE: &str = "earlycon=uart8250,io,0x3f8,115200 console=ttyS0 nox2apic pci=off lpj=4000000 nohz=off highres=off rdinit=/bin/virtio-e2e-init panic=1 virtio_mmio.device=512@0xd0000000:5 virtio_mmio.device=512@0xd0000200:6";
-
-fn guest_cmdline() -> &'static str {
-    let Ok(cap) = ostd::syscall::sys_open_cap("/virtio-e2e") else {
-        return CMDLINE;
-    };
-    ostd::syscall::sys_close_cap(cap);
-    println("[hv-x86] guest rdinit: /bin/virtio-e2e-init");
-    E2E_CMDLINE
-}
-
 /// 2 MiB alignment for the initramfs placement.
 const ALIGN_2M: u64 = 0x20_0000;
 

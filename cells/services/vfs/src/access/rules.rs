@@ -35,11 +35,18 @@ pub struct PathRule {
 /// to name *which* cell it is narrower for, and see the module note on why that
 /// binding does not exist yet. The lookup ships now so adding a row later is a
 /// data change rather than a control-flow change.
-pub static EXACT_RULES: &[PathRule] = &[PathRule {
-    prefix: "/srv/cellos",
-    allow_read_all: false,
-    allow_write_all: false,
-}];
+pub static EXACT_RULES: &[PathRule] = &[
+    PathRule {
+        prefix: "/srv/cellos",
+        allow_read_all: false,
+        allow_write_all: false,
+    },
+    PathRule {
+        prefix: crate::access::GUEST_DISK_PATH,
+        allow_read_all: true,
+        allow_write_all: false,
+    },
+];
 
 /// Prefix rules, first match wins. Ordered specific → general; `/` is last and
 /// matches every absolute path, so a path that reaches it is decided by it.

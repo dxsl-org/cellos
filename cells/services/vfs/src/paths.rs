@@ -33,7 +33,7 @@ pub(crate) fn write_file<'a>(
     path: &str,
     content: &[u8],
 ) -> api::ipc::VfsResponse<'a> {
-    if !vfs.access.can_write(caller, path) {
+    if crate::access::is_guest_disk_path(path) || !vfs.access.can_write(caller, path) {
         return api::ipc::VfsResponse::Err(ERR_DENIED);
     }
     let old_size = vfs.file_size(path);
@@ -71,7 +71,7 @@ pub(crate) fn unlink_file<'a>(
     caller: Caller,
     path: &str,
 ) -> api::ipc::VfsResponse<'a> {
-    if !vfs.access.can_write(caller, path) {
+    if crate::access::is_guest_disk_path(path) || !vfs.access.can_write(caller, path) {
         return api::ipc::VfsResponse::Err(ERR_DENIED);
     }
     let file_size = vfs.file_size(path);

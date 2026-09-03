@@ -135,85 +135,36 @@ fn riscv64_vfs_quota_all_pass() {
     wait_for_or_dump(&runner, "[stack-baseline] name=init phase=boot ");
     wait_for_or_dump(&runner, "[stack-baseline] name=shell phase=boot ");
     wait_for_or_dump(&runner, "[stack-baseline] name=vfs phase=boot ");
-    wait_for_or_dump(
-        &runner,
+    for marker in [
         "[vfs-file-handle] wrong-owner-read-close-preserves-entry PASS",
-    );
-    wait_for_or_dump(&runner, "[vfs-file-handle] quota-32-per-owner PASS");
-    wait_for_or_dump(
-        &runner,
+        "[vfs-file-handle] quota-32-per-owner PASS",
         "[vfs-file-handle] nonreuse-and-u64-exhaustion PASS",
-    );
-    wait_for_or_dump(&runner, "[vfs-file-handle] exact-generation-purge PASS");
-    wait_for_or_dump(
-        &runner,
+        "[vfs-file-handle] exact-generation-purge PASS",
         "[vfs-file-handle] parent-cross-owner-transitive-revoke PASS",
-    );
-    wait_for_or_dump(
-        &runner,
         "[vfs-file-handle] owner-watch-filehandle-cleanup PASS",
-    );
-    wait_for_or_dump(&runner, "[vfs-file-handle] higher-generation-cleanup PASS");
-    wait_for_or_dump(&runner, VFS_LIFETIME_PASS_PREFIX);
-    wait_for_or_dump(
-        &runner,
+        "[vfs-file-handle] higher-generation-cleanup PASS",
+        "[vfs-guest-disk] fixed-capacity-boundary PASS",
+        VFS_LIFETIME_PASS_PREFIX,
         "[PASS] dircap: GetFile returns a nonempty pointer before sealing",
-    );
-    wait_for_or_dump(
-        &runner,
         "[PASS] dircap: revoking a parent dir reaps file handles opened below it",
-    );
-    wait_for_or_dump(
-        &runner,
         "[PASS] grant: ReadFileGrant clamps to grant length",
-    );
-    wait_for_or_dump(&runner, "[PASS] grant: ReadFileGrant copies nonzero bytes");
-    wait_for_or_dump(
-        &runner,
+        "[PASS] grant: ReadFileGrant copies nonzero bytes",
         "[PASS] grant-write: unknown handle is denied before grant access",
-    );
-    wait_for_or_dump(
-        &runner,
         "[PASS] grant-write: helper returns committed byte count",
-    );
-    wait_for_or_dump(
-        &runner,
         "[PASS] grant-write: commits exact bytes before acknowledgement",
-    );
-    wait_for_or_dump(
-        &runner,
         "[PASS] grant-write: invalid offset is refused before grant access",
-    );
-    wait_for_or_dump(
-        &runner,
         "[PASS] grant-write: short grant is refused without mutation",
-    );
-    wait_for_or_dump(
-        &runner,
         "[PASS] grant-write: failed writes leave committed bytes unchanged",
-    );
-    wait_for_or_dump(
-        &runner,
         "[PASS] grant-write: write authorization precedes grant access",
-    );
-    wait_for_or_dump(
-        &runner,
         "[PASS] grant-write: quota overflow is refused before grant access",
-    );
-    wait_for_or_dump(
-        &runner,
         "[PASS] grant-write: quota refusal leaves committed bytes unchanged",
-    );
-    wait_for_or_dump(
-        &runner,
         "[PASS] grant: ReadFileGrant is refused after sealing",
-    );
-    wait_for_or_dump(
-        &runner,
         "[PASS] dircap: ReadFileHandle still works after sealing",
-    );
-    wait_for_or_dump(&runner, "[vfs-test] ALL TESTS PASSED");
-    wait_for_or_dump(&runner, "[stack-baseline] name=vfs-test phase=exit ");
+        "[vfs-test] ALL TESTS PASSED",
+        "[stack-baseline] name=vfs-test phase=exit ",
+    ] {
+        wait_for_or_dump(&runner, marker);
+    }
 
     let serial = runner.dump();
     assert!(

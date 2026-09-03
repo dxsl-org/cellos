@@ -21,55 +21,16 @@
 # then: ./run-x86.ps1 -NoBuild  (or qemu ... -cpu qemu64,+svm -accel tcg)
 #
 # Usage: bash scripts/make-hypervisor-fs-x86.sh [--skip-fetch]
-#   HV_VOLATILE_DISK=1 selects the no-drive smoke policy. The default is
+#   HV_GUEST_PROFILE=alpine (default) keeps the proven 128 MiB initramfs lane.
+#   HV_GUEST_PROFILE=ubuntu selects the 512 MiB persistent-root profile.
+#   HV_VOLATILE_DISK=1 selects the no-drive Alpine smoke policy. The default is
 #   persistent and fails closed if its configured VFS-backed disk cannot open.
 
 set -euo pipefail
-
-SKIP_FETCH="${1:-}"
-TARGET="x86_64-unknown-none"
-BIN_DIR="target/$TARGET/release"
-ALPINE_CACHE=".alpine-cache-x86"
-INITRD_SOURCE="${INITRD_OVERRIDE:-$ALPINE_CACHE/initramfs-virt}"
-EMBEDDED_HV="kernel/src/embedded-hv-x86"
-
-HV_INIT_MIN_VALUE="${HV_INIT_MIN:-0}"
-HV_HOSTILE_BACKEND_RECOVERY_VALUE="${HV_HOSTILE_BACKEND_RECOVERY:-0}"
-HV_VOLATILE_DISK_VALUE="${HV_VOLATILE_DISK:-0}"
-case "$HV_INIT_MIN_VALUE" in
-    0|1) ;;
-    *)
-        echo "ERROR: HV_INIT_MIN must be 0 or 1" >&2
-        exit 1
-        ;;
-esac
-case "$HV_HOSTILE_BACKEND_RECOVERY_VALUE" in
-    0|1) ;;
-    *)
-        echo "ERROR: HV_HOSTILE_BACKEND_RECOVERY must be 0 or 1" >&2
-        exit 1
-        ;;
-esac
-case "$HV_VOLATILE_DISK_VALUE" in
-    0|1) ;;
-    *)
-        echo "ERROR: HV_VOLATILE_DISK must be 0 or 1" >&2
-        exit 1
-        ;;
-esac
-if [[ "$HV_HOSTILE_BACKEND_RECOVERY_VALUE" == "1" && "$HV_VOLATILE_DISK_VALUE" == "1" ]]; then
-    echo "ERROR: hostile backend recovery requires persistent disk mode" >&2
-    exit 1
-fi
-
-# ── Step 1: Alpine artifacts (vmlinux ELF + initramfs) ──────────────────────
-if [[ "$SKIP_FETCH" != "--skip-fetch" ]]; then
-    bash scripts/fetch-alpine-x86.sh "$ALPINE_CACHE"
-fi
-if [[ ! -f "$ALPINE_CACHE/vmlinux" || ! -f "$ALPINE_CACHE/initramfs-virt" ]]; then
-    echo "ERROR: Alpine x86 artifacts missing — run scripts/fetch-alpine-x86.sh" >&2
-    exit 1
-fi
+# shellcheck source=scripts/lib-make-hypervisor-fs.sh
+source "$(dirname "$0")/lib-make-hypervisor-fs.sh"
+parse_and_validate_args "$@"
+prepare_guest_artifacts
 
 # ── Step 2: Build x86 runtime cells as PIE ───────────────────────────────────
 
@@ -78,12 +39,15 @@ HOSTILE_PACKAGE_ARGS=()
 if [[ "$HV_VOLATILE_DISK_VALUE" == "1" ]]; then
     INIT_FEATURES+=",service-hypervisor/volatile-disk"
 fi
+if [[ "$GUEST_PROFILE" == "ubuntu" ]]; then
+    INIT_FEATURES+=",service-hypervisor/ubuntu-wide-guest"
+fi
 if [[ "$HV_HOSTILE_BACKEND_RECOVERY_VALUE" == "1" ]]; then
     INIT_FEATURES+=",app-init/hypervisor-min,app-init/hostile-backend-recovery"
     INIT_FEATURES+=",service-net/hypervisor-bridge,supervisor/hostile-backend-recovery"
     INIT_FEATURES+=",service-hypervisor/hostile-backend-recovery"
     HOSTILE_PACKAGE_ARGS=(-p supervisor)
-elif [[ "$HV_INIT_MIN_VALUE" == "1" ]]; then
+elif [[ "$GUEST_PROFILE" == "ubuntu" || "$HV_INIT_MIN_VALUE" == "1" ]]; then
     INIT_FEATURES+=",app-init/hypervisor-min,service-net/hypervisor-bridge"
 fi
 INIT_FEATURE_ARGS=(--features "$INIT_FEATURES")
@@ -135,8 +99,8 @@ if [[ "$HV_HOSTILE_BACKEND_RECOVERY_VALUE" == "1" ]]; then
     add_required_cell supervisor /bin/supervisor
 fi
 
-echo "  /vmlinux   <- $ALPINE_CACHE/vmlinux ($(du -sh "$ALPINE_CACHE/vmlinux" | cut -f1))"
-MKFAT_ARGS+=("$ALPINE_CACHE/vmlinux" "/vmlinux")
+echo "  /vmlinux   <- $VMLINUX_SOURCE ($(du -sh "$VMLINUX_SOURCE" | cut -f1))"
+MKFAT_ARGS+=("$VMLINUX_SOURCE" "/vmlinux")
 echo "  /initrd.gz <- $INITRD_SOURCE ($(du -sh "$INITRD_SOURCE" | cut -f1))"
 MKFAT_ARGS+=("$INITRD_SOURCE" "/initrd.gz")
 

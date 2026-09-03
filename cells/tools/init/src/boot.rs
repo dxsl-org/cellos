@@ -1,5 +1,8 @@
 use api::syscall::service;
-use ostd::syscall::{sys_lookup_service, sys_notify_on_exit, sys_spawn_from_path, SyscallResult};
+use ostd::syscall::{
+    sys_lookup_service, sys_notify_on_exit, sys_register_service, sys_spawn_from_path,
+    SyscallResult,
+};
 
 #[cfg(feature = "board-rpi3")]
 const DISPLAY_DRIVER_PATH: &str = "/bin/bcm-display";
@@ -46,7 +49,14 @@ pub(crate) fn spawn_optional_services() -> Option<usize> {
     let hypervisor_tid = match sys_spawn_from_path("/bin/hypervisor") {
         SyscallResult::Ok(tid) => {
             let _ = sys_notify_on_exit(tid);
-            Some(tid)
+            if let SyscallResult::Err(_) =
+                sys_register_service(api::hypervisor::HYPERVISOR_SERVICE_ID, tid)
+            {
+                ostd::io::println("Init: hypervisor service registration failed.");
+                None
+            } else {
+                Some(tid)
+            }
         }
         _ => None,
     };
