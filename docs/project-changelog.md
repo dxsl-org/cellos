@@ -3,6 +3,25 @@
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
 ## [Unreleased] Development-first hardware-constrained execution
+- Published the bounded caller-scoped shell CWD ABI as `Chdir=252` and
+  `Getcwd=253` on shared allowlist bit 60. Kernel dispatch and handler-level
+  allowlist attribution now use the explicit caller task; `ostd` exposes typed
+  wrappers; shell `cd`, direct `pwd`, and `$(pwd)` share kernel CWD truth.
+  Removed obsolete raw 107/108 CWD mappings while retaining `FileOp=107`;
+  failed `cd` keeps the prior CWD, short `getcwd` leaves output unchanged, and
+  existing `$(cat)`/`$(vcat)` failure behavior is unchanged. Exact clean-tree
+  QEMU verification at commit `6b9aae923909c4ac4e3228821e70158d7d232769`
+  (tree `18de37371e31e9a5c0081da4f7dcabff4e80a22b`) passed API 19/19,
+  `vfs-quota` 1/1, and `shell-utils` 1/1 with 38 required shell markers.
+  The VFS guest retained its expected single-hart AP-13 capability SKIP and
+  classified Cell-254 guard-page termination (`cause=0xf`) after the deliberate
+  overflow probe. Neither CI=1 host test skipped prerequisites; no unclassified
+  access-fault or FAIL marker appeared.
+  Evidence: `docs/evidence/shell-cwd-verification.txt` (SHA-256
+  `8f8f9e76dcd845686aeb633d692f14b2c8c1cae2a36fa8a30e0ad55c0d95f54a`,
+  2,628 bytes). This adds no HOME/default-cd, inheritance, symlink, mount, C
+  wrapper, or broader POSIX claim.
+
 - Repaired live POSIX navigation and factual bounded-feature status across
   `docs/FAQ.md`, `docs/guides/tier1b-c-zig.md`, `docs/specs/05-application.md`,
   and `cells/tests/posix-shim-test/src/main.rs`. Replaced stale monolithic

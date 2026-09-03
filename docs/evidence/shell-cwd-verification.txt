@@ -1,0 +1,39 @@
+EVENT_ID=shell-cwd-verification-20260903-03
+RECORDED_AT=2026-09-03T10:58:13Z
+REVISION=6b9aae923909c4ac4e3228821e70158d7d232769
+TREE=18de37371e31e9a5c0081da4f7dcabff4e80a22b
+CHECKOUT=/home/dmin/worktrees/cellos-cwd-03a
+INITIAL_TRACKED_STATUS_BEGIN
+INITIAL_TRACKED_STATUS_END
+ENV_CARGO_TARGET_RISCV64GC_UNKNOWN_NONE_ELF_RUSTFLAGS=-C relocation-model=pic
+ENV_AUTHORITY=.github/workflows/ci.yml:27
+COMMAND_1=cargo test -p api abi::syscall_tests
+RC_1=0
+RESULT_1=19 passed; 0 failed; 0 ignored; 72 filtered
+COMMAND_2=bash scripts/build-test-hooks-ci.sh
+RC_2=0
+RESULT_2=test-hooks kernel built; 8 cells signed after F1/F5 PASS
+COMMAND_3=CI=1 cargo test --manifest-path tests/integration/Cargo.toml --test vfs-quota riscv64_vfs_quota_all_pass -- --exact --nocapture
+RC_3=0
+RESULT_3=1 passed; 0 failed; 0 ignored; 1 filtered; exact QEMU test executed
+GUEST_3=cwd-path self-test PASS; AP-12/AP-14/AP-15 PASS; ATOMIC_PUBLICATION_AP-13: SKIP (hart 1 not online; SMP probe not required); expected classified [fault] Cell 254 guard-page termination with cause=0xf after deliberate overflow; no unclassified access-fault or FAIL marker
+COMMAND_4=bash scripts/build-shell-test-ci.sh
+RC_4=0
+RESULT_4=shell-test kernel built; 4 cells signed after F1/F5 PASS
+COMMAND_5=CI=1 cargo test --manifest-path tests/integration/Cargo.toml --test shell-utils shell_utils_all_scenarios_pass -- --exact --nocapture
+RC_5=0
+RESULT_5=1 passed; 0 failed; 0 ignored; 0 filtered; exact QEMU test executed; 38 required markers plus COMPLETE and ALL TESTS PASSED; no fault/FAIL marker
+PREREQUISITE_SKIP=none; both CI=1 host tests executed QEMU
+EXPECTED_GUEST_CAPABILITY_SKIP=ATOMIC_PUBLICATION_AP-13 only; single-hart VFS runner does not claim SMP proof
+ARTIFACT_1=target/riscv64gc-unknown-none-elf/release/cellos-kernel-test-hooks
+ARTIFACT_1_SIZE=6237256
+ARTIFACT_1_SHA256=0833d8afadc6cd39932982e4d7a31d9007ae9bb0695a562e826038af88eb319f
+ARTIFACT_2=target/riscv64gc-unknown-none-elf/release/cellos-kernel-shell-test
+ARTIFACT_2_SIZE=5888200
+ARTIFACT_2_SHA256=2942dbeacc96754738bcff755367bf1fa6e868d75c3e83522f2a0c6bc2dd265a
+FINAL_TRACKED_STATUS_BEGIN
+ M kernel/src/embedded-test-hooks/init
+FINAL_TRACKED_STATUS_END
+SUPERSEDED_1=89d67099 clean-checkout build failed before QEMU because the gitignored workstation RV64 PIC setting was absent
+SUPERSEDED_2=89d67099 passing evidence invalidated because that candidate broadened failed cat/vcat command-substitution semantics beyond Phase 03
+CHECKPOINT_2=APPROVED by Accountable Maintainer at 2026-09-03T11:12:02Z with AP-13 guest capability SKIP and expected classified Cell-254 cause=0xf guard-page termination explicit
