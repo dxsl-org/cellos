@@ -20,6 +20,8 @@ pub(crate) mod domain_switch;
 ))]
 pub(crate) mod domain_switch_tests;
 mod elf_prepare;
+#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+pub mod fstat_selftest;
 pub mod hart_local;
 pub mod manifest_v2_selftest;
 pub mod net_rx_selftest;
@@ -1610,8 +1612,48 @@ pub fn file_readdir(fd: usize, buf: &mut [u8]) -> core::result::Result<usize, ()
     Err(())
 }
 
-pub fn file_fstat(_fd: usize, _stat_ptr: usize) -> core::result::Result<usize, ()> {
-    Err(())
+/// Gather truthful metadata for one descriptor owned by `caller_id`.
+///
+/// Standard descriptors are character devices with their fixed access
+/// direction. VIFS descriptors are read-only in the current open contract;
+/// regular-file size is queried without changing the handle cursor, while
+/// directories report size zero. No caller memory is accessed here.
+pub fn file_fstat(
+    caller_id: usize,
+    fd: usize,
+) -> core::result::Result<api::syscall::ViFstatV1, ()> {
+    use api::syscall::{
+        ViFstatV1, VI_FSTAT_ACCESS_READ, VI_FSTAT_ACCESS_WRITE, VI_FSTAT_KIND_CHARACTER,
+        VI_FSTAT_KIND_DIRECTORY, VI_FSTAT_KIND_REGULAR,
+    };
+
+    let mut scheduler = SCHEDULER.lock();
+    let task = scheduler
+        .as_mut()
+        .and_then(|sched| sched.tasks.get_mut(&caller_id))
+        .ok_or(())?;
+    let mut metadata = ViFstatV1::default();
+    match fd {
+        0 => {
+            metadata.kind = VI_FSTAT_KIND_CHARACTER;
+            metadata.access = VI_FSTAT_ACCESS_READ;
+        }
+        1 | 2 => {
+            metadata.kind = VI_FSTAT_KIND_CHARACTER;
+            metadata.access = VI_FSTAT_ACCESS_WRITE;
+        }
+        _ => {
+            let handle = task.open_files.get_mut(&fd).ok_or(())?;
+            metadata.access = VI_FSTAT_ACCESS_READ;
+            if handle.is_dir() {
+                metadata.kind = VI_FSTAT_KIND_DIRECTORY;
+            } else {
+                metadata.kind = VI_FSTAT_KIND_REGULAR;
+                metadata.size = handle.size().map_err(|_| ())?;
+            }
+        }
+    }
+    Ok(metadata)
 }
 
 pub fn file_chdir(caller_id: usize, path: &str) -> core::result::Result<usize, ()> {

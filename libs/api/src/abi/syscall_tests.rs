@@ -10,7 +10,11 @@
 mod tests {
     use core::mem::{align_of, size_of};
 
-    use crate::syscall::{ProcessInfo, ProcessInfoV2, SyscallSet, ViMemInfoV1, ViSyscall};
+    use crate::syscall::{
+        ProcessInfo, ProcessInfoV2, SyscallSet, ViFstatV1, ViMemInfoV1, ViSyscall,
+        VI_FSTAT_ACCESS_READ, VI_FSTAT_ACCESS_WRITE, VI_FSTAT_KIND_CHARACTER,
+        VI_FSTAT_KIND_DIRECTORY, VI_FSTAT_KIND_REGULAR, VI_FSTAT_V1_LEN,
+    };
 
     /// All (id, expected_variant) pairs that must round-trip correctly.
     const CASES: &[(usize, ViSyscall)] = &[
@@ -74,6 +78,7 @@ mod tests {
         (311, ViSyscall::NetRx),
         (252, ViSyscall::Chdir),
         (253, ViSyscall::Getcwd),
+        (254, ViSyscall::Fstat),
     ];
 
     #[test]
@@ -120,6 +125,7 @@ mod tests {
         assert_eq!(ViSyscall::PauseService as usize, 422);
         assert_eq!(ViSyscall::Chdir as usize, 252);
         assert_eq!(ViSyscall::Getcwd as usize, 253);
+        assert_eq!(ViSyscall::Fstat as usize, 254);
     }
 
     /// The appended opcodes must sit past every previously shipped id. An
@@ -143,6 +149,7 @@ mod tests {
                     | ViSyscall::PauseService
                     | ViSyscall::Chdir
                     | ViSyscall::Getcwd
+                    | ViSyscall::Fstat
             ) {
                 continue;
             }
@@ -157,6 +164,7 @@ mod tests {
             assert_ne!(id, ViSyscall::PauseService as usize);
             assert_ne!(id, ViSyscall::ResolveCellOwnerRecord as usize);
             assert_ne!(id, ViSyscall::WatchCellOwnerRecord as usize);
+            assert_ne!(id, ViSyscall::Fstat as usize);
         }
         // Previously unmapped ids must still decode as Unknown, so nothing that
         // used to be rejected is now silently accepted as a new opcode.
@@ -186,7 +194,7 @@ mod tests {
     }
 
     #[test]
-    fn cwd_operations_use_bit_60_without_moving_existing_high_bits() {
+    fn fstat_uses_bit_61_without_moving_existing_high_bits() {
         assert_eq!(ViSyscall::GetProcs2.allowlist_bit(), Some(55));
         assert_eq!(ViSyscall::MemInfo.allowlist_bit(), Some(56));
         assert_eq!(ViSyscall::SpawnReplacement.allowlist_bit(), Some(57));
@@ -198,18 +206,21 @@ mod tests {
         );
         assert_eq!(ViSyscall::Chdir.allowlist_bit(), Some(60));
         assert_eq!(ViSyscall::Getcwd.allowlist_bit(), Some(60));
+        assert_eq!(ViSyscall::Fstat.allowlist_bit(), Some(61));
         assert_eq!(
             SyscallSet::EMPTY
                 .with(ViSyscall::Chdir)
                 .with(ViSyscall::Getcwd)
+                .with(ViSyscall::Fstat)
                 .bits(),
-            1u64 << 60
+            (1u64 << 60) | (1u64 << 61)
         );
+        assert_eq!(ViSyscall::from(255), ViSyscall::Unknown);
         assert!(
             CASES
                 .iter()
-                .all(|(_, syscall)| syscall.allowlist_bit() != Some(63)),
-            "bit 63 must remain unused"
+                .all(|(_, syscall)| !matches!(syscall.allowlist_bit(), Some(62) | Some(63))),
+            "bit 62 must remain reserved and bit 63 must remain unused"
         );
     }
 
@@ -267,9 +278,45 @@ mod tests {
     }
 
     #[test]
+    fn fstat_v1_layout_and_values_are_stable() {
+        assert_eq!(size_of::<ViFstatV1>(), VI_FSTAT_V1_LEN);
+        assert_eq!(VI_FSTAT_V1_LEN, 32);
+        assert_eq!(align_of::<ViFstatV1>(), 8);
+        assert_eq!(core::mem::offset_of!(ViFstatV1, kind), 0);
+        assert_eq!(core::mem::offset_of!(ViFstatV1, access), 4);
+        assert_eq!(core::mem::offset_of!(ViFstatV1, size), 8);
+        assert_eq!(core::mem::offset_of!(ViFstatV1, reserved), 16);
+        assert_eq!(VI_FSTAT_KIND_CHARACTER, 1);
+        assert_eq!(VI_FSTAT_KIND_REGULAR, 2);
+        assert_eq!(VI_FSTAT_KIND_DIRECTORY, 3);
+        assert_eq!(VI_FSTAT_ACCESS_READ, 1);
+        assert_eq!(VI_FSTAT_ACCESS_WRITE, 2);
+    }
+
+    #[test]
+    fn fstat_v1_defaults_and_field_values_are_stable() {
+        let zero = ViFstatV1::default();
+        assert_eq!(zero.kind, 0);
+        assert_eq!(zero.access, 0);
+        assert_eq!(zero.size, 0);
+        assert_eq!(zero.reserved, [0; 2]);
+
+        let record = ViFstatV1 {
+            kind: VI_FSTAT_KIND_REGULAR,
+            access: VI_FSTAT_ACCESS_READ | VI_FSTAT_ACCESS_WRITE,
+            size: 0x0102_0304_0506_0708,
+            reserved: [0; 2],
+        };
+        assert_eq!(record.kind, 2);
+        assert_eq!(record.access, 3);
+        assert_eq!(record.size, 0x0102_0304_0506_0708);
+        assert_eq!(record.reserved, [0; 2]);
+    }
+
+    #[test]
     fn unknown_id_decodes_to_unknown_variant() {
         // IDs that have no assigned meaning must produce Unknown, not panic.
-        let unassigned = [9, 50, 99, 100, 108, 254, 255, 999, usize::MAX];
+        let unassigned = [9, 50, 99, 100, 108, 255, 999, usize::MAX];
         for id in unassigned {
             let got = ViSyscall::from(id);
             assert_eq!(
@@ -374,6 +421,7 @@ mod allowlist {
         assert_eq!(ViSyscall::MemInfo.allowlist_bit(), Some(56));
         assert_eq!(ViSyscall::SpawnReplacement.allowlist_bit(), Some(57));
         assert_eq!(ViSyscall::PauseService.allowlist_bit(), Some(49));
+        assert_eq!(ViSyscall::Fstat.allowlist_bit(), Some(61));
 
         let mask = SyscallSet::EMPTY
             .with(ViSyscall::Send)

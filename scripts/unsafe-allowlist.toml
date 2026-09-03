@@ -122,6 +122,13 @@ approver = "cellos-maintainers"
 date = "2026-07-14"
 
 [[file]]
+path = "cells/tests/posix-shim-test/src/fstat.rs"
+class = "c-ffi"
+reason = "C FFI (Tier 1b): extern \"C\" calls across the mlibc boundary are unsafe by construction; the C side is outside the Rust type system entirely."
+approver = "cellos-maintainers"
+date = "2026-09-03"
+
+[[file]]
 path = "cells/drivers/e1000/src/controller.rs"
 class = "driver-mmio"
 reason = "Driver Cell: volatile MMIO register access and DMA descriptor setup. The Kernel Boundary Law moved drivers out of the kernel, so the wall around this unsafe is the IOMMU, not LBI."

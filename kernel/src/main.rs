@@ -745,6 +745,12 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     } else {
         log_info("cwd-path self-test FAIL");
     }
+    #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+    if task::fstat_selftest::self_test() {
+        log_info("fstat self-test PASS");
+    } else {
+        log_info("fstat self-test FAIL");
+    }
 
     // 7a. Trust-model self-tests (thread identity inheritance + honest revoke).
     // Runs HERE — after the scheduler exists but BEFORE secondaries start — so the

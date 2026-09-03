@@ -5,7 +5,10 @@
 #![allow(unused_variables)]
 
 use super::strings::strlen;
-use crate::syscall::ViSyscall;
+use crate::syscall::{
+    ViFstatV1, ViSyscall, VI_FSTAT_ACCESS_READ, VI_FSTAT_ACCESS_WRITE, VI_FSTAT_KIND_CHARACTER,
+    VI_FSTAT_KIND_DIRECTORY, VI_FSTAT_KIND_REGULAR, VI_FSTAT_V1_LEN,
+};
 use core::ffi::{c_char, c_int, c_long, c_void};
 
 // ---------------------------------------------------------------------------
@@ -221,20 +224,104 @@ pub unsafe extern "C" fn _lseek(handle: c_int, offset: c_long, whence: c_int) ->
     ) as c_long
 }
 
+fn fstat_fields(wire: &ViFstatV1) -> Option<(c_int, c_long)> {
+    let known_access = VI_FSTAT_ACCESS_READ | VI_FSTAT_ACCESS_WRITE;
+    if wire.access == 0 || wire.access & !known_access != 0 || wire.reserved != [0; 2] {
+        return None;
+    }
+    let mode = match wire.kind {
+        VI_FSTAT_KIND_CHARACTER => 0o020000,
+        VI_FSTAT_KIND_REGULAR => 0o100000,
+        VI_FSTAT_KIND_DIRECTORY => 0o040000,
+        _ => return None,
+    };
+    Some((mode, c_long::try_from(wire.size).ok()?))
+}
+
 /// # Safety
-/// `st` must be either null or non-null, properly aligned, and valid for writes of
-/// `size_of::<stat>()` bytes.
+/// `st` must be non-null, properly aligned, and valid for writes of
+/// `size_of::<stat>()` bytes. On any transport or translation failure, caller
+/// bytes are left unchanged.
 #[no_mangle]
 pub unsafe extern "C" fn _fstat(handle: c_int, st: *mut stat) -> c_int {
-    if !st.is_null() {
-        core::ptr::write_bytes(st as *mut u8, 0, core::mem::size_of::<stat>());
-        if handle <= 2 {
-            (*st).st_mode = 0o20000 | 0o666; // S_IFCHR
-        } else {
-            (*st).st_mode = 0o100000 | 0o666; // S_IFREG
+    if st.is_null() {
+        return -1;
+    }
+
+    let mut wire = ViFstatV1::default();
+    let written = raw_syscall(
+        ViSyscall::Fstat,
+        handle as usize,
+        &mut wire as *mut ViFstatV1 as usize,
+        VI_FSTAT_V1_LEN,
+        0,
+    );
+    if written != VI_FSTAT_V1_LEN as isize {
+        return -1;
+    }
+
+    let Some((mode, size)) = fstat_fields(&wire) else {
+        return -1;
+    };
+    let mut translated = core::mem::MaybeUninit::<stat>::zeroed();
+    let translated_ptr = translated.as_mut_ptr();
+    core::ptr::addr_of_mut!((*translated_ptr).st_mode).write(mode);
+    core::ptr::addr_of_mut!((*translated_ptr).st_size).write(size);
+    core::ptr::copy_nonoverlapping(
+        translated_ptr as *const u8,
+        st as *mut u8,
+        core::mem::size_of::<stat>(),
+    );
+    0
+}
+
+#[cfg(test)]
+mod fstat_tests {
+    use super::*;
+
+    fn wire(kind: u32, access: u32, size: u64) -> ViFstatV1 {
+        ViFstatV1 {
+            kind,
+            access,
+            size,
+            reserved: [0; 2],
         }
     }
-    0
+
+    #[test]
+    fn accepts_only_known_kinds_and_access_bits() {
+        assert_eq!(
+            fstat_fields(&wire(VI_FSTAT_KIND_CHARACTER, VI_FSTAT_ACCESS_READ, 0)),
+            Some((0o020000, 0))
+        );
+        assert_eq!(
+            fstat_fields(&wire(
+                VI_FSTAT_KIND_REGULAR,
+                VI_FSTAT_ACCESS_READ | VI_FSTAT_ACCESS_WRITE,
+                7
+            )),
+            Some((0o100000, 7))
+        );
+        assert_eq!(
+            fstat_fields(&wire(VI_FSTAT_KIND_DIRECTORY, VI_FSTAT_ACCESS_READ, 0)),
+            Some((0o040000, 0))
+        );
+        assert_eq!(fstat_fields(&wire(0, VI_FSTAT_ACCESS_READ, 0)), None);
+        assert_eq!(fstat_fields(&wire(4, VI_FSTAT_ACCESS_READ, 0)), None);
+        assert_eq!(fstat_fields(&wire(VI_FSTAT_KIND_REGULAR, 0, 0)), None);
+        assert_eq!(fstat_fields(&wire(VI_FSTAT_KIND_REGULAR, 1 << 2, 0)), None);
+    }
+
+    #[test]
+    fn rejects_reserved_data_and_unrepresentable_size() {
+        let mut reserved = wire(VI_FSTAT_KIND_REGULAR, VI_FSTAT_ACCESS_READ, 1);
+        reserved.reserved[0] = 1;
+        assert_eq!(fstat_fields(&reserved), None);
+        assert_eq!(
+            fstat_fields(&wire(VI_FSTAT_KIND_REGULAR, VI_FSTAT_ACCESS_READ, u64::MAX)),
+            None
+        );
+    }
 }
 
 /// # Safety

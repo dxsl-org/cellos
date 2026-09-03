@@ -176,6 +176,13 @@ pub enum ViSyscall {
     FileOp = 107, // Rename, Remove
     Chdir = 252,
     Getcwd = 253,
+    /// Query caller-scoped descriptor metadata through a fixed-width wire record.
+    ///
+    /// ABI: a0 = fd, a1 = output pointer, a2 = output length → bytes written.
+    /// The output must hold at least [`VI_FSTAT_V1_LEN`] bytes. Success writes
+    /// exactly one [`ViFstatV1`] and returns `VI_FSTAT_V1_LEN`; failure writes
+    /// nothing. Requires allowlist bit 61.
+    Fstat = 254,
 
     // === Time/System (120-129) ===
     GetTime = 120,
@@ -511,6 +518,55 @@ pub enum ViSyscall {
     RegisterDisplayFramebuffer = 251,
 }
 
+/// Byte length of the frozen [`ViFstatV1`] wire record.
+pub const VI_FSTAT_V1_LEN: usize = 32;
+
+/// [`ViFstatV1::kind`] value for character devices.
+pub const VI_FSTAT_KIND_CHARACTER: u32 = 1;
+/// [`ViFstatV1::kind`] value for regular files.
+pub const VI_FSTAT_KIND_REGULAR: u32 = 2;
+/// [`ViFstatV1::kind`] value for directories.
+pub const VI_FSTAT_KIND_DIRECTORY: u32 = 3;
+
+/// [`ViFstatV1::access`] bit indicating readable access.
+pub const VI_FSTAT_ACCESS_READ: u32 = 1;
+/// [`ViFstatV1::access`] bit indicating writable access.
+pub const VI_FSTAT_ACCESS_WRITE: u32 = 2;
+
+/// Version 1 caller-scoped descriptor metadata.
+///
+/// This fixed-width record is the kernel wire format. It deliberately exposes
+/// only facts the current backends can report truthfully: descriptor kind,
+/// access direction, and byte size. `reserved` is always zero on output.
+#[repr(C, align(8))]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ViFstatV1 {
+    /// One of `VI_FSTAT_KIND_*`.
+    pub kind: u32,
+    /// A non-empty combination of `VI_FSTAT_ACCESS_*`.
+    pub access: u32,
+    /// File size in bytes; zero for character devices and directories.
+    pub size: u64,
+    /// Reserved for future versions; always zero in version 1.
+    pub reserved: [u64; 2],
+}
+
+const _: () = {
+    assert!(core::mem::size_of::<ViFstatV1>() == VI_FSTAT_V1_LEN);
+    assert!(core::mem::align_of::<ViFstatV1>() == 8);
+    assert!(core::mem::offset_of!(ViFstatV1, kind) == 0);
+    assert!(core::mem::offset_of!(ViFstatV1, access) == 4);
+    assert!(core::mem::offset_of!(ViFstatV1, size) == 8);
+    assert!(core::mem::offset_of!(ViFstatV1, reserved) == 16);
+    assert!(VI_FSTAT_KIND_CHARACTER == 1);
+    assert!(VI_FSTAT_KIND_REGULAR == 2);
+    assert!(VI_FSTAT_KIND_DIRECTORY == 3);
+    assert!(VI_FSTAT_ACCESS_READ == 1);
+    assert!(VI_FSTAT_ACCESS_WRITE == 2);
+    assert!(ViSyscall::Fstat as usize == 254);
+    assert!(matches!(ViSyscall::Fstat.allowlist_bit(), Some(61)));
+};
+
 /// Bit constants for the `cap_mask` argument of `ViSyscall::CapRevoke`.
 ///
 /// The 32-bit mask encodes which capability classes to strip from the target cell.
@@ -783,7 +839,9 @@ impl ViSyscall {
             // CWD operations (bit 60): caller-scoped chdir and getcwd.
             // Bounded lexical traversal that preserves task isolation.
             Self::Chdir | Self::Getcwd => Some(60),
-            // Bits 61 and 62 are reserved for fstat and rename; bit 63 remains unused.
+            // Caller-scoped descriptor metadata has its own opt-in authority.
+            Self::Fstat => Some(61),
+            // Bit 62 is reserved for rename; bit 63 remains unused.
             // Yield, Exit, and ForceExit are always permitted — a Cell must be able
             // to yield the CPU, exit cleanly, and force-terminate unresponsive tasks
             // regardless of its allowlist.  SpawnCap is the authority gate for ForceExit.
@@ -900,6 +958,7 @@ impl From<usize> for ViSyscall {
             251 => ViSyscall::RegisterDisplayFramebuffer,
             252 => ViSyscall::Chdir,
             253 => ViSyscall::Getcwd,
+            254 => ViSyscall::Fstat,
             300 => ViSyscall::GpuFlush,
             301 => ViSyscall::GpuCursor,
             302 => ViSyscall::GpuGetResolution,

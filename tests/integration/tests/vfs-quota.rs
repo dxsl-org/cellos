@@ -1,19 +1,4 @@
 //! VFS quota integration test.
-//!
-//! Boots a test-hooks RISC-V kernel (no disk — embedded FS only) and verifies
-//! that the in-guest `vfs-test` cell runs all test scenarios — including the
-//! quota-enforcement scenario that requires a 2 KiB quota limit.
-//!
-//! All vfs-test paths use /tmp (RamFS), so no block device is needed.
-//! The quota tracker in dispatch.rs charges every successful write regardless
-//! of which backend path is used, making /tmp quota tests valid.
-//!
-//! Prerequisites (run scripts/build-test-hooks-cells.ps1 first):
-//!   target/riscv64gc-unknown-none-elf/release/cellos-kernel-test-hooks
-//!
-//! Run:
-//!   cargo test --manifest-path tests/integration/Cargo.toml \
-//!              --target x86_64-pc-windows-msvc vfs_quota
 
 use std::path::PathBuf;
 use vicell_integration_tests::{qemu_binary, QemuRunner};
@@ -124,6 +109,7 @@ fn riscv64_vfs_quota_all_pass() {
         "stack-probe self-test PASS (two guards, overflow target unmapped, watermark)",
     );
     wait_for_or_dump(&runner, "cwd-path self-test PASS");
+    wait_for_or_dump(&runner, "fstat self-test PASS");
     wait_for_or_dump(
         &runner,
         "stack-sizing policy self-test PASS (measured=16, unknown=64)",
@@ -168,6 +154,18 @@ fn riscv64_vfs_quota_all_pass() {
     }
 
     let serial = runner.dump();
+    assert_eq!(
+        serial.matches("fstat self-test PASS").count(),
+        1,
+        "truthful fstat lower-layer marker must appear exactly once:\n{serial}",
+    );
+    let mut cell_faults = serial.lines().filter(|line| line.contains("[fault] Cell "));
+    assert!(
+        cell_faults.next().is_some_and(|line| {
+            line.contains("[fault] Cell 254 ") && line.contains("terminated: cause=0xf")
+        }) && cell_faults.next().is_none(),
+        "expected exactly one classified Cell-254 guard-page termination:\n{serial}",
+    );
     assert!(
         !serial.contains("[FAIL] grant:"),
         "--- serial output ---\n{}\n---",
@@ -185,6 +183,8 @@ fn riscv64_vfs_quota_all_pass() {
     );
     assert!(
         !serial.contains("cwd-path self-test FAIL")
+            && !serial.contains("fstat self-test FAIL")
+            && !serial.contains("[selftest] FSTAT: FAIL")
             && !serial.contains("[vfs-test] FAIL")
             && !serial.contains("Load access fault")
             && !serial.contains("Store/AMO access fault")

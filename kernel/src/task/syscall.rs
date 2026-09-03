@@ -1135,15 +1135,12 @@ fn sas_caller_owned_span(
     true
 }
 
-/// Preflight the exact output span before consuming entropy.
+/// Preflight an exact caller-owned output span without moving user bytes.
 ///
-/// SAS ownership comes only from caller stack/root-segment/grant records. The
-/// final check repeats under the same ordered lock set held through commit.
-fn preflight_getrandom_output(
-    caller_id: usize,
-    ptr: usize,
-    len: usize,
-) -> Result<(), SyscallError> {
+/// SAS ownership comes only from caller stack/root-segment/grant records.
+/// Callers that consume or otherwise act on external state must repeat the
+/// ownership check under their operation-specific final-commit lock set.
+fn preflight_user_output(caller_id: usize, ptr: usize, len: usize) -> Result<(), SyscallError> {
     let view = caller_copy_view(caller_id)?;
     #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
     if view.is_sas() {
@@ -2149,8 +2146,12 @@ pub enum Syscall {
         buf_ptr: usize,
         buf_len: usize,
     },
-    /// 106: FStat (Get File Info)
-    FStat { fd: usize, stat_ptr: usize },
+    /// 254: write one fixed-width caller-scoped descriptor metadata record.
+    Fstat {
+        fd: usize,
+        out_ptr: usize,
+        out_len: usize,
+    },
     /// 107: ChDir (Change Directory)
     ChDir { path_ptr: usize, path_len: usize },
     /// 108: GetCwd (Get Current Directory)
@@ -2456,6 +2457,7 @@ fn syscall_to_vi(syscall: &Syscall) -> Option<api::syscall::ViSyscall> {
         Syscall::Write { .. } => V::Write,
         Syscall::Close { .. } => V::Close,
         Syscall::ReadDir { .. } => V::ReadDir,
+        Syscall::Fstat { .. } => V::Fstat,
         Syscall::Seek { .. } => V::Seek,
         Syscall::FileOp { .. } => V::FileOp,
         Syscall::ChDir { .. } => V::Chdir,
@@ -3874,11 +3876,27 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             }
             Ok(read_bytes)
         }
-        Syscall::FStat { fd, stat_ptr } => {
-            if stat_ptr == 0 {
-                return Err(SyscallError::InvalidInput);
+        Syscall::Fstat {
+            fd,
+            out_ptr,
+            out_len,
+        } => {
+            let len = api::syscall::VI_FSTAT_V1_LEN;
+            if out_len < len {
+                return Err(SyscallError::BufferTooSmall);
             }
-            super::file_fstat(fd, stat_ptr).map_err(|_| SyscallError::Unknown)
+            validate_user_buf(out_ptr, len, MAX_USER_BUF)?;
+            preflight_user_output(caller_id, out_ptr, len)?;
+
+            let metadata = super::file_fstat(caller_id, fd).map_err(|_| SyscallError::Unknown)?;
+            let bytes = unsafe {
+                core::slice::from_raw_parts(
+                    &metadata as *const api::syscall::ViFstatV1 as *const u8,
+                    len,
+                )
+            };
+            write_user_slice(caller_id, out_ptr, bytes, MAX_USER_BUF)?;
+            Ok(len)
         }
         // Syscall::Remove removed
         Syscall::ChDir { path_ptr, path_len } => {
@@ -5896,7 +5914,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             // at 64 bytes, as required by the frozen syscall contract.
             validate_user_buf(buf_ptr, len, MAX_USER_BUF)?;
             let capped = len.min(64);
-            preflight_getrandom_output(caller_id, buf_ptr, capped)?;
+            preflight_user_output(caller_id, buf_ptr, capped)?;
             let mut kbuf = [0u8; 64];
             let written = crate::task::drivers::virtio_rng::get_random(&mut kbuf[..capped]);
             let n = if written > 0 {
@@ -6295,6 +6313,11 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
             offset: a1 as isize,
             whence: a2,
         },
+        ViSyscall::Fstat => Syscall::Fstat {
+            fd: a0,
+            out_ptr: a1,
+            out_len: a2,
+        },
         ViSyscall::FileOp => Syscall::FileOp {
             op: a0,
             arg1: a1,
@@ -6507,10 +6530,6 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
                 name_ptr: a0,
                 name_len: a1,
             },
-            106 => Syscall::FStat {
-                fd: a0,
-                stat_ptr: a1,
-            },
             110 => Syscall::MkDir {
                 path_ptr: a0,
                 path_len: a1,
@@ -6600,12 +6619,9 @@ fn check_allowlist(syscall_id: usize, caller_id: usize) -> Result<(), SyscallErr
     // intentionally absent from `ViSyscall` (Law 1: keeps experimental ids out
     // of the stable ABI) so they decode as `Unknown` — but they are NOT unknown:
     // 500/501/503 are gated by bit 36 below + the ZST BlockIoCap at the handler;
-    // 502 and the legacy raw ops (3/100/106/110/111) predate the bitmap and
-    // stay always-permitted, matching their pre-Phase-31b behavior.
-    let known_raw = matches!(
-        syscall_id,
-        3 | 100 | 106 | 110 | 111 | 500 | 501 | 502 | 503
-    );
+    // 502 and the legacy raw ops (3/100/110/111) predate the bitmap and stay
+    // always-permitted, matching their pre-Phase-31b behavior.
+    let known_raw = matches!(syscall_id, 3 | 100 | 110 | 111 | 500 | 501 | 502 | 503);
 
     let Some(allowlist) = syscall_allowlist_for(caller_id) else {
         log::warn!(
@@ -6942,6 +6958,42 @@ mod tests {
         with_scheduler_task(1u64 << 60, |tid| {
             assert_eq!(check_allowlist(ViSyscall::Chdir as usize, tid), Ok(()));
             assert_eq!(check_allowlist(ViSyscall::Getcwd as usize, tid), Ok(()));
+        });
+    }
+
+    #[test]
+    fn fstat_maps_args_requires_bit_61_and_leaves_106_as_seek() {
+        let fstat =
+            map_syscall(ViSyscall::Fstat as usize, 7, 0x5000, 32, 0).expect("Fstat must decode");
+        assert!(matches!(
+            fstat,
+            Syscall::Fstat {
+                fd: 7,
+                out_ptr: 0x5000,
+                out_len: 32
+            }
+        ));
+        assert_eq!(syscall_to_vi(&fstat), Some(ViSyscall::Fstat));
+
+        let seek = map_syscall(106, 7, usize::MAX, 2, 0).expect("Seek 106 must decode");
+        assert!(matches!(
+            seek,
+            Syscall::Seek {
+                fd: 7,
+                offset: -1,
+                whence: 2
+            }
+        ));
+        assert!(map_syscall(255, 0, 0, 0, 0).is_none());
+
+        with_scheduler_task(0, |tid| {
+            assert_eq!(
+                check_allowlist(ViSyscall::Fstat as usize, tid),
+                Err(SyscallError::PermissionDenied)
+            );
+        });
+        with_scheduler_task(1u64 << 61, |tid| {
+            assert_eq!(check_allowlist(ViSyscall::Fstat as usize, tid), Ok(()));
         });
     }
 

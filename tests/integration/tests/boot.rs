@@ -1924,9 +1924,8 @@ fn ipc_pending_delivery_selftest_passes() {
         "[selftest] IPC-PENDING: PASS (deferred, bounded, quota-safe, completion-wake)",
         "[selftest] NET-RX-RESERVATION: PASS (fills, remembers, releases, IPC-safe)",
     ] {
-        qemu.wait_for(marker, BOOT_TIMEOUT).unwrap_or_else(|e| {
-            panic!("missing {marker}: {e}\n--- output ---\n{}", qemu.dump())
-        });
+        qemu.wait_for(marker, BOOT_TIMEOUT)
+            .unwrap_or_else(|e| panic!("missing {marker}: {e}\n--- output ---\n{}", qemu.dump()));
     }
     for marker in [
         "[selftest] IPC-PENDING: FAIL",
@@ -2155,6 +2154,45 @@ fn input_bare_cell() {
 }
 
 // ── Tier 1b: POSIX C shim integration tests ───────────────────────────────────
+
+/// Truthful `_fstat` must traverse open → fixed-width kernel metadata → C
+/// translation, then close the descriptor before its terminal marker.
+#[test]
+fn posix_shim_fstat() {
+    if !prerequisites_ok() {
+        return;
+    }
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("shell prompt: {e}\n{}", qemu.dump()));
+    std::thread::sleep(Duration::from_millis(300));
+    qemu.send_line("posix-shim-test");
+    qemu.wait_for("POSIX-FSTAT: OK", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("fstat shim failed: {e}\n--- output ---\n{}", qemu.dump()));
+
+    let serial = qemu.dump();
+    assert_eq!(
+        serial.matches("[posix-shim] POSIX-FSTAT-OPEN: OK").count(),
+        1,
+        "open marker must appear exactly once\n--- output ---\n{serial}"
+    );
+    assert_eq!(
+        serial.matches("[posix-shim] POSIX-FSTAT: OK").count(),
+        1,
+        "fstat marker must appear exactly once\n--- output ---\n{serial}"
+    );
+    assert!(
+        !serial.contains("POSIX-FSTAT-OPEN: FAIL")
+            && !serial.contains("POSIX-FSTAT: FAIL")
+            && !serial.contains("[KERNEL PANIC]")
+            && !serial.contains("panicked at")
+            && !serial.contains("[fault] Cell ")
+            && !serial.contains("Load access fault")
+            && !serial.contains("Store/AMO access fault")
+            && !serial.contains("Instruction access fault"),
+        "fstat route reported a failure, panic, or cell fault\n--- output ---\n{serial}"
+    );
+}
 
 /// Tier 1b: `getentropy(2)` shim via sys_get_random (opcode 214).
 ///

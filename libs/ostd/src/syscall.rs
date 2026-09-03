@@ -4,7 +4,7 @@ use api::cell_owner::{CellOwner, CELL_OWNER_LEN};
 #[cfg(target_pointer_width = "32")]
 use api::cell_owner::{CellOwnerRequest, CELL_OWNER_REQUEST_LEN};
 use api::completion::{ViCompletion, COMPLETION_LEN};
-use api::syscall::{ViMemInfoV1, ViSpawnArgs, ViSyscall};
+use api::syscall::{ViFstatV1, ViMemInfoV1, ViSpawnArgs, ViSyscall, VI_FSTAT_V1_LEN};
 use core::arch::asm;
 
 #[derive(Debug, Copy, Clone)]
@@ -904,6 +904,29 @@ pub fn sys_getcwd(buf: &mut [u8]) -> Result<usize, SyscallError> {
         Ok(ret as usize)
     } else {
         Err(SyscallError::BufferTooSmall)
+    }
+}
+
+/// Query metadata for one caller-owned file descriptor.
+///
+/// The kernel writes the fixed-width [`ViFstatV1`] record only on success and
+/// returns its exact byte length. Any failure leaves `out` unchanged.
+pub fn sys_fstat(fd: usize, out: &mut ViFstatV1) -> Result<usize, SyscallError> {
+    // SAFETY: `out` is valid for the frozen 32-byte record. The kernel validates
+    // the complete output range before gathering metadata and copies once last.
+    let ret = unsafe {
+        syscall(
+            ViSyscall::Fstat,
+            fd,
+            out as *mut ViFstatV1 as usize,
+            VI_FSTAT_V1_LEN,
+            0,
+        )
+    };
+    if ret == VI_FSTAT_V1_LEN as isize {
+        Ok(VI_FSTAT_V1_LEN)
+    } else {
+        Err(SyscallError::Unknown)
     }
 }
 

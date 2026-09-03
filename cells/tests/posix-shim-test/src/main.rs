@@ -1,17 +1,19 @@
 //! POSIX shim integration test cell.
 //!
 //! Tests the C ABI shims in `libs/api/src/services/posix.rs`:
+//!   - open/fstat/close with truthful, failure-atomic descriptor metadata
 //!   - getentropy(2) via sys_get_random (opcode 214)
 //!   - socket / connect / send / recv / close via typed Net IPC
 //!
-//! Spawn with: `posix-shim-test` from the shell.
-//! The integration test in tests/integration/tests/boot.rs checks for:
-//!   "POSIX-ENTROPY: OK" and "POSIX-NET: OK"
+//! Spawn with: `posix-shim-test` from the shell. Integration tests require the
+//! dedicated `POSIX-FSTAT-*`, `POSIX-ENTROPY`, and `POSIX-NET` markers.
 
 #![no_std]
 #![no_main]
 extern crate alloc;
 extern crate ostd;
+
+mod fstat;
 
 use alloc::format;
 use core::ffi::c_void;
@@ -23,8 +25,17 @@ const ECHO_IP: [u8; 4] = [10, 0, 2, 2];
 const ECHO_PORT: u16 = 10009;
 
 api::declare_manifest!(block_io = false, network = false, spawn = false);
-// GetRandom needed for getentropy; Send/Recv/LookupService for net-service IPC.
-api::declare_syscalls![Send, Recv, Log, LookupService, GetRandom];
+// Add only the file trio needed by the fstat smoke to the existing restrictive set.
+api::declare_syscalls![
+    Send,
+    Recv,
+    Log,
+    LookupService,
+    GetRandom,
+    Open,
+    Fstat,
+    Close
+];
 
 // Declare C ABI directly — works whether the symbols come from api::posix (Tier A)
 // or mlibc/libc.a (Tier B); avoids Rust feature-unification breaking the lookup.
@@ -43,11 +54,12 @@ extern "C" {
     fn send(fd: i32, buf: *const c_void, len: usize, flags: i32) -> isize;
     fn recv(fd: i32, buf: *mut c_void, len: usize, flags: i32) -> isize;
     #[link_name = "_close"]
-    fn close(fd: i32);
+    fn close(fd: i32) -> i32;
 }
 
 #[no_mangle]
 pub fn main() {
+    fstat::test_fstat();
     test_getentropy();
     test_net();
 }
