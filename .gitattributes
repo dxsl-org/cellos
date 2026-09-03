@@ -11,4 +11,4 @@
 *.elf binary
 
 # Runtime evidence must retain the exact byte stream emitted by QEMU.
-docs/evidence/*-raw.txt -text
+docs/evidence/*-raw.txt -text -whitespace
