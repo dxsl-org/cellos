@@ -123,6 +123,7 @@ fn riscv64_vfs_quota_all_pass() {
         &runner,
         "stack-probe self-test PASS (two guards, overflow target unmapped, watermark)",
     );
+    wait_for_or_dump(&runner, "cwd-path self-test PASS");
     wait_for_or_dump(
         &runner,
         "stack-sizing policy self-test PASS (measured=16, unknown=64)",
@@ -181,5 +182,13 @@ fn riscv64_vfs_quota_all_pass() {
         !serial.contains("ATOMIC_PUBLICATION_AP-13: PASS")
             && !serial.contains("ATOMIC_PUBLICATION_ALL: PASS"),
         "single-hart VFS runner must not certify the SMP atomic contract:\n{serial}",
+    );
+    assert!(
+        !serial.contains("cwd-path self-test FAIL")
+            && !serial.contains("[vfs-test] FAIL")
+            && !serial.contains("Load access fault")
+            && !serial.contains("Store/AMO access fault")
+            && !serial.contains("Instruction access fault"),
+        "VFS quota output contains a failure or guest fault:\n{serial}",
     );
 }

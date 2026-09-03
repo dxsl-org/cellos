@@ -2458,6 +2458,8 @@ fn syscall_to_vi(syscall: &Syscall) -> Option<api::syscall::ViSyscall> {
         Syscall::ReadDir { .. } => V::ReadDir,
         Syscall::Seek { .. } => V::Seek,
         Syscall::FileOp { .. } => V::FileOp,
+        Syscall::ChDir { .. } => V::Chdir,
+        Syscall::GetCwd { .. } => V::Getcwd,
         Syscall::GetTime { .. } => V::GetTime,
         Syscall::GpuFlush { .. } => V::GpuFlush,
         Syscall::AudioPlay { .. } => V::AudioPlay,
@@ -6491,6 +6493,14 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
             buf_ptr: a0,
             max: a1,
         },
+        ViSyscall::Chdir => Syscall::ChDir {
+            path_ptr: a0,
+            path_len: a1,
+        },
+        ViSyscall::Getcwd => Syscall::GetCwd {
+            buf_ptr: a0,
+            buf_len: a1,
+        },
         _ => match syscall_id {
             3 => Syscall::SetTimer { deadline: a0 },
             100 => Syscall::ServiceLookup {
@@ -6500,14 +6510,6 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
             106 => Syscall::FStat {
                 fd: a0,
                 stat_ptr: a1,
-            },
-            107 => Syscall::ChDir {
-                path_ptr: a0,
-                path_len: a1,
-            },
-            108 => Syscall::GetCwd {
-                buf_ptr: a0,
-                buf_len: a1,
             },
             110 => Syscall::MkDir {
                 path_ptr: a0,
@@ -6598,11 +6600,11 @@ fn check_allowlist(syscall_id: usize, caller_id: usize) -> Result<(), SyscallErr
     // intentionally absent from `ViSyscall` (Law 1: keeps experimental ids out
     // of the stable ABI) so they decode as `Unknown` — but they are NOT unknown:
     // 500/501/503 are gated by bit 36 below + the ZST BlockIoCap at the handler;
-    // 502 and the legacy FD ops (3/100/106/107/108/110/111) predate the bitmap
-    // and stay always-permitted, matching their pre-Phase-31b behavior.
+    // 502 and the legacy raw ops (3/100/106/110/111) predate the bitmap and
+    // stay always-permitted, matching their pre-Phase-31b behavior.
     let known_raw = matches!(
         syscall_id,
-        3 | 100 | 106 | 107 | 108 | 110 | 111 | 500 | 501 | 502 | 503
+        3 | 100 | 106 | 110 | 111 | 500 | 501 | 502 | 503
     );
 
     let Some(allowlist) = syscall_allowlist_for(caller_id) else {
@@ -6900,6 +6902,46 @@ mod tests {
         });
         with_scheduler_task(1u64 << 56, |tid| {
             assert_eq!(check_allowlist(ViSyscall::MemInfo as usize, tid), Ok(()));
+        });
+    }
+
+    #[test]
+    fn cwd_syscalls_map_args_and_require_bit_60() {
+        let chdir =
+            map_syscall(ViSyscall::Chdir as usize, 0x3000, 4, 0, 0).expect("Chdir must decode");
+        assert!(matches!(
+            chdir,
+            Syscall::ChDir {
+                path_ptr: 0x3000,
+                path_len: 4
+            }
+        ));
+        assert_eq!(syscall_to_vi(&chdir), Some(ViSyscall::Chdir));
+
+        let getcwd =
+            map_syscall(ViSyscall::Getcwd as usize, 0x4000, 64, 0, 0).expect("Getcwd must decode");
+        assert!(matches!(
+            getcwd,
+            Syscall::GetCwd {
+                buf_ptr: 0x4000,
+                buf_len: 64
+            }
+        ));
+        assert_eq!(syscall_to_vi(&getcwd), Some(ViSyscall::Getcwd));
+
+        with_scheduler_task(0, |tid| {
+            assert_eq!(
+                check_allowlist(ViSyscall::Chdir as usize, tid),
+                Err(SyscallError::PermissionDenied)
+            );
+            assert_eq!(
+                check_allowlist(ViSyscall::Getcwd as usize, tid),
+                Err(SyscallError::PermissionDenied)
+            );
+        });
+        with_scheduler_task(1u64 << 60, |tid| {
+            assert_eq!(check_allowlist(ViSyscall::Chdir as usize, tid), Ok(()));
+            assert_eq!(check_allowlist(ViSyscall::Getcwd as usize, tid), Ok(()));
         });
     }
 

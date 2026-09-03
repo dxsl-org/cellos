@@ -394,6 +394,84 @@ fn test_vfs_bounded_grant_read(jobs: &mut Jobs) {
         ),
     }
 }
+fn assert_status(jobs: &mut Jobs, name: &str, line: &str, want: i32) {
+    let status = crate::executor::execute(&crate::parser::parse(line), jobs);
+    if status == want {
+        pass(name);
+    } else {
+        fail(name, &alloc::format!("{status}"), &alloc::format!("{want}"));
+    }
+}
+
+fn test_shell_cwd(jobs: &mut Jobs) {
+    assert_equals(jobs, "shell cwd root direct", "pwd", "/\n");
+    assert_equals(jobs, "shell cwd root captured", "echo $(pwd)", "/\n");
+
+    assert_status(jobs, "shell cwd relative cd succeeds", "cd BIN", 0);
+    assert_equals(jobs, "shell cwd relative direct", "pwd", "/BIN\n");
+    assert_equals(jobs, "shell cwd relative captured", "echo $(pwd)", "/BIN\n");
+
+    assert_status(jobs, "shell cwd absolute root cd succeeds", "cd /", 0);
+    assert_status(jobs, "shell cwd absolute BIN cd succeeds", "cd /BIN", 0);
+    assert_equals(jobs, "shell cwd BIN direct", "pwd", "/BIN\n");
+    assert_equals(jobs, "shell cwd BIN captured", "echo $(pwd)", "/BIN\n");
+
+    assert_status(jobs, "shell cwd dot cd succeeds", "cd .", 0);
+    assert_equals(jobs, "shell cwd dot direct", "pwd", "/BIN\n");
+    assert_equals(jobs, "shell cwd dot captured", "echo $(pwd)", "/BIN\n");
+
+    assert_status(jobs, "shell cwd dotdot cd succeeds", "cd ..", 0);
+    assert_equals(jobs, "shell cwd dotdot direct", "pwd", "/\n");
+    assert_equals(jobs, "shell cwd dotdot captured", "echo $(pwd)", "/\n");
+
+    assert_status(jobs, "shell cwd root saturation cd succeeds", "cd ..", 0);
+    assert_equals(jobs, "shell cwd root saturation direct", "pwd", "/\n");
+    assert_equals(
+        jobs,
+        "shell cwd root saturation captured",
+        "echo $(pwd)",
+        "/\n",
+    );
+
+    assert_status(jobs, "shell cwd zero operands fails", "cd", 1);
+    assert_equals(jobs, "shell cwd zero operands retains CWD", "pwd", "/\n");
+
+    assert_status(jobs, "shell cwd two operands fail", "cd /BIN /TMP", 1);
+    assert_equals(jobs, "shell cwd two operands retains CWD", "pwd", "/\n");
+
+    assert_status(
+        jobs,
+        "shell cwd missing dir fails",
+        "cd /nonexistent_dir",
+        1,
+    );
+    assert_equals(jobs, "shell cwd missing dir retains CWD", "pwd", "/\n");
+
+    assert_status(jobs, "shell cwd regular file fails", "cd /BIN/init", 1);
+    assert_equals(jobs, "shell cwd regular file retains CWD", "pwd", "/\n");
+
+    assert_status(jobs, "shell cwd final BIN cd succeeds", "cd /BIN", 0);
+    let direct = crate::executor::capture_line("pwd", jobs);
+    let captured = crate::executor::capture_line("echo $(pwd)", jobs);
+    if direct == captured && direct == b"/BIN\n" {
+        pass("shell cwd direct matches captured");
+    } else {
+        fail(
+            "shell cwd direct matches captured",
+            core::str::from_utf8(&direct).unwrap_or(""),
+            core::str::from_utf8(&captured).unwrap_or(""),
+        );
+    }
+
+    assert_status(jobs, "shell cwd restore root cd succeeds", "cd /", 0);
+    assert_equals(jobs, "shell cwd restored root direct", "pwd", "/\n");
+    assert_equals(
+        jobs,
+        "shell cwd restored root captured",
+        "echo $(pwd)",
+        "/\n",
+    );
+}
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
@@ -421,6 +499,7 @@ pub fn run() {
     test_fg_bg(&mut jobs);
     test_top_batch(&mut jobs);
     test_vfs_bounded_grant_read(&mut jobs);
+    test_shell_cwd(&mut jobs);
 
     let (passed, failed) = (PASSED.load(Ordering::SeqCst), FAILED.load(Ordering::SeqCst));
     ostd::io::println("");

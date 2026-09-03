@@ -55,8 +55,11 @@ api::declare_syscalls![
     Open,
     Close,
     ReadDir,
+    Chdir,
+    Getcwd,
 ];
 
+mod cmd_cwd;
 mod cmd_fs;
 mod cmd_sys;
 mod commands;

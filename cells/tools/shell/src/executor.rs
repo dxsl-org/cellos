@@ -48,11 +48,11 @@ pub fn shell_stdin() -> Vec<u8> {
 /// All recognized shell built-in names, used by tab completion.
 #[cfg(not(feature = "shell_test"))] // reason: tab completion only exists in the interactive REPL
 pub const BUILTINS: &[&str] = &[
-    "alias", "awk", "bg", "blktest", "break", "cat", "clear", "continue", "echo", "env", "exec",
-    "exit", "export", "fg", "find", "free", "grep", "head", "help", "jobs", "kill", "ls", "mkdir",
-    "ps", "pwd", "read", "rm", "rmdir", "sed", "shutdown", "sleep", "snapshot", "sort", "source",
-    "tail", "tee", "test", "top", "unalias", "uniq", "unset", "uname", "uptime", "vappend", "vcat",
-    "vwrite", "wc",
+    "alias", "awk", "bg", "blktest", "break", "cat", "cd", "clear", "continue", "echo", "env",
+    "exec", "exit", "export", "fg", "find", "free", "grep", "head", "help", "jobs", "kill", "ls",
+    "mkdir", "ps", "pwd", "read", "rm", "rmdir", "sed", "shutdown", "sleep", "snapshot", "sort",
+    "source", "tail", "tee", "test", "top", "unalias", "uniq", "unset", "uname", "uptime",
+    "vappend", "vcat", "vwrite", "wc",
 ];
 
 // ── Shell-global state ────────────────────────────────────────────────────────
@@ -68,51 +68,50 @@ use crate::shell_state::{
     get_function, get_var, set_loop_signal, set_var, take_loop_signal, unset_var,
 };
 
-/// Expand a single token: `$NAME` (whole-token only) → variable value.
-/// Non-`$` tokens are returned unchanged (as an owned String clone).
-/// Expand `$VAR` and `$?` references anywhere inside a token (mid-token expansion).
+/// Capture one supported command for `$(...)`.
 ///
-/// Scans for `$` followed by an identifier (`[A-Za-z_][A-Za-z0-9_]*`) or `?`.
-/// Any `$` that is not followed by a valid name is passed through unchanged.
-/// Fast path: tokens with no `$` are returned as-is (no allocation).
-/// Capture the output of a built-in command without printing it.
-///
-/// Only a small capturable set is supported: `echo`, `vcat`/`cat`, `pwd`.
-/// External binaries and unsupported built-ins return an empty String.
-/// Nested `$(...)` is the caller's responsibility to reject before calling.
-fn run_capture(inner: &str) -> String {
+/// A capture failure aborts the containing command so it cannot substitute
+/// fabricated output.
+fn run_capture(inner: &str) -> Result<String, ()> {
     let mut words = inner.split_whitespace();
     let cmd = match words.next() {
-        Some(c) => c,
-        None => return String::new(),
+        Some(command) => command,
+        None => return Ok(String::new()),
     };
     let args: alloc::vec::Vec<&str> = words.collect();
-    match cmd {
+    let output = match cmd {
         "echo" => {
             let bytes = crate::commands::cmd_echo_to_vec(&args);
             String::from(core::str::from_utf8(&bytes).unwrap_or(""))
         }
         "vcat" | "cat" => {
-            if let Some(path) = args.first() {
-                match crate::cmd_fs::read_file_vfs_owned(path, 4096) {
-                    Ok(bytes) => String::from(core::str::from_utf8(&bytes).unwrap_or("")),
-                    Err(_) => {
-                        ostd::io::println("shell: command substitution read failed");
-                        String::new()
-                    }
+            let Some(path) = args.first() else {
+                return Ok(String::new());
+            };
+            match crate::cmd_fs::read_file_vfs_owned(path, 4096) {
+                Ok(bytes) => String::from(core::str::from_utf8(&bytes).unwrap_or("")),
+                Err(_) => {
+                    ostd::io::println("shell: command substitution read failed");
+                    String::new()
                 }
-            } else {
-                String::new()
             }
         }
-        "pwd" => String::from("/\n"),
+        "pwd" => {
+            let mut cwd = crate::cmd_cwd::get_shell_cwd().map_err(|_| ())?;
+            cwd.push('\n');
+            cwd
+        }
         _ => String::new(),
-    }
+    };
+    Ok(output)
 }
 
-fn expand_token(s: &str) -> String {
+/// Expand variable and single-level command substitutions in one token.
+///
+/// A failed `pwd` capture propagates so the containing command returns nonzero.
+fn expand_token(s: &str) -> Result<String, ()> {
     if !s.contains('$') {
-        return String::from(s);
+        return Ok(String::from(s));
     }
     let mut result = String::new();
     let bytes = s.as_bytes();
@@ -143,7 +142,7 @@ fn expand_token(s: &str) -> String {
                     let inner = core::str::from_utf8(&bytes[inner_start..j]).unwrap_or("");
                     // Reject nested $(...) — pass $(  literally so the user can see the issue.
                     if !inner.contains("$(") {
-                        let captured = run_capture(inner.trim());
+                        let captured = run_capture(inner.trim())?;
                         result.push_str(captured.trim_end_matches('\n'));
                         i = j + 1;
                         continue;
@@ -208,20 +207,20 @@ fn expand_token(s: &str) -> String {
         result.push(bytes[i] as char); // shell tokens are ASCII
         i += 1;
     }
-    result
+    Ok(result)
 }
 
-fn expand_word(word: &Word) -> String {
+fn expand_word(word: &Word) -> Result<String, ()> {
     let mut expanded = String::new();
     for segment in &word.segments {
         match segment.quote {
             QuoteStyle::Single => expanded.push_str(&segment.text),
             QuoteStyle::None | QuoteStyle::Double => {
-                expanded.push_str(&expand_token(&segment.text));
+                expanded.push_str(&expand_token(&segment.text)?);
             }
         }
     }
-    expanded
+    Ok(expanded)
 }
 
 /// Parse and execute `line`, capturing all `shell_print` output into a `Vec<u8>`.
@@ -277,7 +276,9 @@ pub fn execute(ast: &Ast, jobs: &mut Jobs) -> i32 {
             last
         }
         Ast::Case { expr, arms } => {
-            let value = expand_token(expr);
+            let Ok(value) = expand_token(expr) else {
+                return 1;
+            };
             for (pattern, body) in arms {
                 if case_matches(pattern, &value) {
                     execute(body, jobs);
@@ -394,8 +395,19 @@ fn exec_cmd(cmd: &Cmd, _stdin: &[u8], jobs: &mut Jobs) -> i32 {
         return 0;
     }
 
-    // Expand $VAR tokens in every argument before dispatch.
-    let expanded: Vec<String> = cmd.argv.iter().map(expand_word).collect();
+    // Failed command substitution aborts before dispatch with a nonzero status.
+    let expanded = match cmd
+        .argv
+        .iter()
+        .map(expand_word)
+        .collect::<Result<Vec<_>, _>>()
+    {
+        Ok(expanded) => expanded,
+        Err(()) => {
+            set_var("?", "1");
+            return 1;
+        }
+    };
     let prog: &str = &expanded[0];
     let args: Vec<String> = expanded[1..].to_vec();
 
@@ -419,9 +431,13 @@ fn exec_cmd(cmd: &Cmd, _stdin: &[u8], jobs: &mut Jobs) -> i32 {
         {
             let arg_refs = args.iter().map(String::as_str).collect::<Vec<_>>();
             let bytes = crate::commands::cmd_echo_to_vec(&arg_refs);
-            if !crate::cmd_fs::write_file(&expand_word(path), &bytes) {
+            let Ok(path) = expand_word(path) else {
+                set_var("?", "1");
+                return 1;
+            };
+            if !crate::cmd_fs::write_file(&path, &bytes) {
                 ostd::io::print("echo: cannot write '");
-                ostd::io::print(&path.text);
+                ostd::io::print(&path);
                 ostd::io::println("'");
                 return 1;
             }
@@ -434,9 +450,13 @@ fn exec_cmd(cmd: &Cmd, _stdin: &[u8], jobs: &mut Jobs) -> i32 {
         {
             let arg_refs = args.iter().map(String::as_str).collect::<Vec<_>>();
             let bytes = crate::commands::cmd_echo_to_vec(&arg_refs);
-            if !crate::cmd_fs::append_file(&expand_word(path), &bytes) {
+            let Ok(path) = expand_word(path) else {
+                set_var("?", "1");
+                return 1;
+            };
+            if !crate::cmd_fs::append_file(&path, &bytes) {
                 ostd::io::print("echo: cannot append '");
-                ostd::io::print(&path.text);
+                ostd::io::print(&path);
                 ostd::io::println("'");
                 return 1;
             }
@@ -452,11 +472,15 @@ fn exec_cmd(cmd: &Cmd, _stdin: &[u8], jobs: &mut Jobs) -> i32 {
         .iter()
         .find(|r| matches!(r, Redirect::StdinFrom(_)))
     {
-        stdin_file_buf = match crate::cmd_fs::read_file_vfs_owned(&expand_word(path), 4096) {
+        let Ok(path) = expand_word(path) else {
+            set_var("?", "1");
+            return 1;
+        };
+        stdin_file_buf = match crate::cmd_fs::read_file_vfs_owned(&path, 4096) {
             Ok(bytes) => bytes,
             Err(_) => {
                 ostd::io::print("shell: cannot open '");
-                ostd::io::print(&path.text);
+                ostd::io::print(&path);
                 ostd::io::println("'");
                 return 1;
             }
@@ -475,18 +499,28 @@ fn exec_cmd(cmd: &Cmd, _stdin: &[u8], jobs: &mut Jobs) -> i32 {
     let stdout_redir = cmd
         .redirects
         .iter()
-        .find_map(|r| match r {
-            Redirect::StdoutTo(path) => Some((path.clone(), false)),
-            Redirect::StdoutAppend(path) => Some((path.clone(), true)),
+        .find_map(|redirect| match redirect {
+            Redirect::StdoutTo(path) => Some((path, false)),
+            Redirect::StdoutAppend(path) => Some((path, true)),
             _ => None,
         })
         .or_else(|| {
-            cmd.redirects.iter().find_map(|r| match r {
+            cmd.redirects.iter().find_map(|redirect| match redirect {
                 // Fallback: StderrTo reuses the stdout-capture path (one-channel shell).
-                Redirect::StderrTo(path) => Some((path.clone(), false)),
+                Redirect::StderrTo(path) => Some((path, false)),
                 _ => None,
             })
         });
+    let stdout_redir = match stdout_redir {
+        Some((path, append)) => match expand_word(path) {
+            Ok(path) => Some((path, append)),
+            Err(()) => {
+                set_var("?", "1");
+                return 1;
+            }
+        },
+        None => None,
+    };
 
     // Wire the pipe-fed stdin so pipe-aware built-ins can read it.
     state::set_stdin(effective_stdin);
@@ -500,7 +534,7 @@ fn exec_cmd(cmd: &Cmd, _stdin: &[u8], jobs: &mut Jobs) -> i32 {
             status = dispatch_builtin(prog, &args, jobs);
             captured = guard.finish();
         } // capture popped here, before the VFS write
-        let write_ok = crate::cmd_fs::vfs_write_chunked(&expand_word(&path), &captured, append);
+        let write_ok = crate::cmd_fs::vfs_write_chunked(&path, &captured, append);
         if status == 0 && !write_ok {
             1
         } else {
@@ -579,6 +613,7 @@ fn dispatch_builtin(prog: &str, args: &[String], jobs: &mut Jobs) -> i32 {
         "vappend" => Some(with_legacy_parts(args, crate::cmd_fs::cmd_vappend)),
         "kill" => Some(with_legacy_parts(args, crate::commands::cmd_kill)),
         "ps" => Some(with_legacy_parts(args, crate::commands::cmd_ps)),
+        "cd" => Some(with_legacy_parts(args, crate::cmd_cwd::cmd_cd)),
         "pwd" => Some(with_legacy_parts(args, crate::cmd_sys::cmd_pwd)),
         "uname" => Some(with_legacy_parts(args, crate::cmd_sys::cmd_uname)),
         "free" => Some(with_legacy_parts(args, crate::cmd_sys::cmd_free)),
@@ -1071,7 +1106,7 @@ mod tests {
 
     fn expanded_arg(line: &str) -> alloc::string::String {
         match parse(line) {
-            Ast::Simple(cmd) => expand_word(&cmd.argv[1]),
+            Ast::Simple(cmd) => expand_word(&cmd.argv[1]).expect("expansion succeeds"),
             _ => panic!("expected Simple"),
         }
     }

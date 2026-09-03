@@ -3,14 +3,7 @@
 use ostd::prelude::*;
 use ostd::syscall;
 
-/// `pwd` — print the current working directory.
-///
-/// ViCell v1.0 has no per-cell CWD tracking; always prints `/` until
-/// Phase 17a adds a proper chdir/getcwd implementation.
-pub fn cmd_pwd(_args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
-    crate::executor::shell_println("/");
-    Ok(())
-}
+pub use crate::cmd_cwd::cmd_pwd;
 
 /// `uname [-a]` — print system identification.
 pub fn cmd_uname(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {

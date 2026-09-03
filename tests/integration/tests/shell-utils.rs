@@ -83,6 +83,37 @@ fn shell_utils_all_scenarios_pass() {
         "[shell-test] PASS  bounded handle read preserves directory error",
         "[shell-test] PASS  bounded handle read preserves missing error",
         "[shell-test] PASS  bounded handle read cleans up after errors",
+        "[shell-test] PASS  shell cwd root direct",
+        "[shell-test] PASS  shell cwd root captured",
+        "[shell-test] PASS  shell cwd relative cd succeeds",
+        "[shell-test] PASS  shell cwd relative direct",
+        "[shell-test] PASS  shell cwd relative captured",
+        "[shell-test] PASS  shell cwd absolute root cd succeeds",
+        "[shell-test] PASS  shell cwd absolute BIN cd succeeds",
+        "[shell-test] PASS  shell cwd BIN direct",
+        "[shell-test] PASS  shell cwd BIN captured",
+        "[shell-test] PASS  shell cwd dot cd succeeds",
+        "[shell-test] PASS  shell cwd dot direct",
+        "[shell-test] PASS  shell cwd dot captured",
+        "[shell-test] PASS  shell cwd dotdot cd succeeds",
+        "[shell-test] PASS  shell cwd dotdot direct",
+        "[shell-test] PASS  shell cwd dotdot captured",
+        "[shell-test] PASS  shell cwd root saturation cd succeeds",
+        "[shell-test] PASS  shell cwd root saturation direct",
+        "[shell-test] PASS  shell cwd root saturation captured",
+        "[shell-test] PASS  shell cwd zero operands fails",
+        "[shell-test] PASS  shell cwd zero operands retains CWD",
+        "[shell-test] PASS  shell cwd two operands fail",
+        "[shell-test] PASS  shell cwd two operands retains CWD",
+        "[shell-test] PASS  shell cwd missing dir fails",
+        "[shell-test] PASS  shell cwd missing dir retains CWD",
+        "[shell-test] PASS  shell cwd regular file fails",
+        "[shell-test] PASS  shell cwd regular file retains CWD",
+        "[shell-test] PASS  shell cwd final BIN cd succeeds",
+        "[shell-test] PASS  shell cwd direct matches captured",
+        "[shell-test] PASS  shell cwd restore root cd succeeds",
+        "[shell-test] PASS  shell cwd restored root direct",
+        "[shell-test] PASS  shell cwd restored root captured",
     ] {
         assert!(
             output.contains(marker),
@@ -92,5 +123,12 @@ fn shell_utils_all_scenarios_pass() {
     assert!(
         output.contains("[shell-test] ALL TESTS PASSED"),
         "shell-test suite completed with failures\n--- serial output ---\n{output}"
+    );
+    assert!(
+        !output.contains("[shell-test] FAIL")
+            && !output.contains("Load access fault")
+            && !output.contains("Store/AMO access fault")
+            && !output.contains("Instruction access fault"),
+        "shell-test output contains a failure or guest fault\n--- serial output ---\n{output}"
     );
 }

@@ -868,6 +868,45 @@ pub fn sys_read(fd: usize, buffer: &mut [u8]) -> Result<usize, SyscallError> {
     }
 }
 
+/// Change the current task's working directory to `path`.
+///
+/// Returns `Ok(())` on success. The raw ABI cannot distinguish rejection
+/// causes, so invalid paths, non-directory targets, and denied calls return
+/// `SyscallError::FileNotFound`.
+pub fn sys_chdir(path: &str) -> Result<(), SyscallError> {
+    // SAFETY: path is a valid UTF-8 string; kernel reads up to path.len() bytes.
+    let ret = unsafe { syscall(ViSyscall::Chdir, path.as_ptr() as usize, path.len(), 0, 0) };
+    if ret == 0 {
+        Ok(())
+    } else {
+        Err(SyscallError::FileNotFound)
+    }
+}
+
+/// Write the current task's non-NUL working-directory bytes into `buf`.
+///
+/// Returns the exact number of bytes written. The raw ABI cannot distinguish
+/// rejection causes, so a short or invalid buffer and denied calls return
+/// `SyscallError::BufferTooSmall`; failure leaves `buf` unchanged.
+pub fn sys_getcwd(buf: &mut [u8]) -> Result<usize, SyscallError> {
+    // SAFETY: buf is valid for writes of buf.len() bytes. The kernel validates
+    // the entire range and copies only after the CWD fits.
+    let ret = unsafe {
+        syscall(
+            ViSyscall::Getcwd,
+            buf.as_mut_ptr() as usize,
+            buf.len(),
+            0,
+            0,
+        )
+    };
+    if ret >= 0 {
+        Ok(ret as usize)
+    } else {
+        Err(SyscallError::BufferTooSmall)
+    }
+}
+
 /// Read the next directory entry from an open directory fd.
 ///
 /// Returns `Ok(Some(entry))` per entry, `Ok(None)` at end of directory.

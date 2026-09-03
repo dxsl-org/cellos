@@ -6,7 +6,7 @@ use ostd::syscall;
 pub fn cmd_help() -> ViResult<()> {
     crate::executor::shell_println("Cellos Shell v0.2.1 — built-in commands:");
     crate::executor::shell_println(
-        "  Files:   ls  cat  wc  head  tail  grep  sed  awk  find  uniq  sort  mkdir  rmdir  rm",
+        "  Files:   cd  ls  cat  wc  head  tail  grep  sed  awk  find  uniq  sort  mkdir  rmdir  rm",
     );
     crate::executor::shell_println(
         "  System:  ps  top  kill  pwd  uname  free  env  uptime  sleep  clear  exec",

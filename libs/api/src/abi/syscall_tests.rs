@@ -72,6 +72,8 @@ mod tests {
         (238, ViSyscall::SpawnFromElf),
         (310, ViSyscall::NetTx),
         (311, ViSyscall::NetRx),
+        (252, ViSyscall::Chdir),
+        (253, ViSyscall::Getcwd),
     ];
 
     #[test]
@@ -116,6 +118,8 @@ mod tests {
         assert_eq!(ViSyscall::Snapshot as usize, 420);
         assert_eq!(ViSyscall::SpawnReplacement as usize, 421);
         assert_eq!(ViSyscall::PauseService as usize, 422);
+        assert_eq!(ViSyscall::Chdir as usize, 252);
+        assert_eq!(ViSyscall::Getcwd as usize, 253);
     }
 
     /// The appended opcodes must sit past every previously shipped id. An
@@ -137,6 +141,8 @@ mod tests {
                     | ViSyscall::WatchCellOwnerRecord
                     | ViSyscall::SpawnReplacement
                     | ViSyscall::PauseService
+                    | ViSyscall::Chdir
+                    | ViSyscall::Getcwd
             ) {
                 continue;
             }
@@ -177,6 +183,34 @@ mod tests {
         );
         assert_ne!(ViSyscall::ReadLog.allowlist_bit(), Some(58));
         assert_ne!(ViSyscall::SpawnReplacement.allowlist_bit(), Some(58));
+    }
+
+    #[test]
+    fn cwd_operations_use_bit_60_without_moving_existing_high_bits() {
+        assert_eq!(ViSyscall::GetProcs2.allowlist_bit(), Some(55));
+        assert_eq!(ViSyscall::MemInfo.allowlist_bit(), Some(56));
+        assert_eq!(ViSyscall::SpawnReplacement.allowlist_bit(), Some(57));
+        assert_eq!(ViSyscall::GrantCacheSyncBegin.allowlist_bit(), Some(58));
+        assert_eq!(ViSyscall::GrantCacheSyncComplete.allowlist_bit(), Some(58));
+        assert_eq!(
+            ViSyscall::RegisterDisplayFramebuffer.allowlist_bit(),
+            Some(59)
+        );
+        assert_eq!(ViSyscall::Chdir.allowlist_bit(), Some(60));
+        assert_eq!(ViSyscall::Getcwd.allowlist_bit(), Some(60));
+        assert_eq!(
+            SyscallSet::EMPTY
+                .with(ViSyscall::Chdir)
+                .with(ViSyscall::Getcwd)
+                .bits(),
+            1u64 << 60
+        );
+        assert!(
+            CASES
+                .iter()
+                .all(|(_, syscall)| syscall.allowlist_bit() != Some(63)),
+            "bit 63 must remain unused"
+        );
     }
 
     /// `WaitCompletion` parks on the same authority as `WaitForEvent` and shares
@@ -235,7 +269,7 @@ mod tests {
     #[test]
     fn unknown_id_decodes_to_unknown_variant() {
         // IDs that have no assigned meaning must produce Unknown, not panic.
-        let unassigned = [9, 50, 99, 100, 108, 999, usize::MAX];
+        let unassigned = [9, 50, 99, 100, 108, 254, 255, 999, usize::MAX];
         for id in unassigned {
             let got = ViSyscall::from(id);
             assert_eq!(

@@ -174,6 +174,8 @@ pub enum ViSyscall {
     Write = 109,
     Seek = 106,
     FileOp = 107, // Rename, Remove
+    Chdir = 252,
+    Getcwd = 253,
 
     // === Time/System (120-129) ===
     GetTime = 120,
@@ -778,6 +780,10 @@ impl ViSyscall {
             // A firmware framebuffer is distinct from peripheral MMIO and
             // therefore receives a dedicated, opt-in authority bit.
             Self::RegisterDisplayFramebuffer => Some(59),
+            // CWD operations (bit 60): caller-scoped chdir and getcwd.
+            // Bounded lexical traversal that preserves task isolation.
+            Self::Chdir | Self::Getcwd => Some(60),
+            // Bits 61 and 62 are reserved for fstat and rename; bit 63 remains unused.
             // Yield, Exit, and ForceExit are always permitted — a Cell must be able
             // to yield the CPU, exit cleanly, and force-terminate unresponsive tasks
             // regardless of its allowlist.  SpawnCap is the authority gate for ForceExit.
@@ -892,6 +898,8 @@ impl From<usize> for ViSyscall {
             249 => ViSyscall::GrantCacheSyncBegin,
             250 => ViSyscall::GrantCacheSyncComplete,
             251 => ViSyscall::RegisterDisplayFramebuffer,
+            252 => ViSyscall::Chdir,
+            253 => ViSyscall::Getcwd,
             300 => ViSyscall::GpuFlush,
             301 => ViSyscall::GpuCursor,
             302 => ViSyscall::GpuGetResolution,
