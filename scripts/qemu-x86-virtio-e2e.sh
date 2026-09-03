@@ -33,9 +33,9 @@ if ! command -v "$QEMU_X86_BIN" >/dev/null 2>&1 && [[ ! -x "$QEMU_X86_BIN" ]]; t
     exit 1
 fi
 
-qemu_version="$("$QEMU_X86_BIN" --version | sed -n '1p')"
-if [[ ! "$qemu_version" =~ QEMU\ emulator\ version\ 10\.2\.0([^0-9]|$) ]]; then
-    echo "BLOCKED_ENVIRONMENT: require QEMU-TCG 10.2.0, found: $qemu_version" >&2
+qemu_version="$("$QEMU_X86_BIN" --version 2>&1 | sed -n '1p')"
+if [[ "$qemu_version" != "QEMU emulator version 10.2.0" ]]; then
+    echo "BLOCKED_ENVIRONMENT: requires exact 'QEMU emulator version 10.2.0' (got '$qemu_version' from $QEMU_X86_BIN)" >&2
     exit 1
 fi
 
