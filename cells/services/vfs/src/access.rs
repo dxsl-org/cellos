@@ -60,7 +60,7 @@ impl AccessTable {
     /// `/srv/cellos/kms` is narrower than the broad `/srv/` prefix: only the
     /// live KMS service instance may touch it.
     pub fn can_write(&self, caller: Caller, path: &str) -> bool {
-        self.decide(caller, path, AccessKind::Write)
+        caller.may_mutate() && self.decide(caller, path, AccessKind::Write)
     }
 
     /// Whether `caller` may write to the guest system disk image.
@@ -89,7 +89,8 @@ impl AccessTable {
 
     /// Whether `caller` may recursively remove `path` and its descendants.
     pub fn can_remove_tree(&self, caller: Caller, path: &str) -> bool {
-        is_canonical_policy_path(path)
+        caller.may_mutate()
+            && is_canonical_policy_path(path)
             && self.can_write(caller, path)
             && !contains_kms_namespace(path)
             && !contains_guest_disk(path)
@@ -97,7 +98,8 @@ impl AccessTable {
 
     /// Whether `caller` may remove `path` as a directory.
     pub fn can_remove_dir(&self, caller: Caller, path: &str) -> bool {
-        is_canonical_policy_path(path)
+        caller.may_mutate()
+            && is_canonical_policy_path(path)
             && self.can_write(caller, path)
             && !contains_kms_namespace(path)
             && !contains_guest_disk(path)

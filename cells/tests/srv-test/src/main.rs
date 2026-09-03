@@ -23,7 +23,7 @@ extern crate alloc;
 use core::sync::atomic::{AtomicU32, Ordering};
 
 api::declare_manifest!(block_io = false, network = false, spawn = false);
-api::declare_syscalls![Send, Recv, Log, LookupService];
+api::declare_syscalls![Send, Recv, Log, LookupService, VfsMutate];
 
 fn vfs_tid() -> usize {
     use api::syscall::service;
@@ -177,6 +177,166 @@ fn test_s5_unlink() {
     }
 }
 
+/// S6: Atomic rename on /srv:
+///   - Unequal success (/srv/rn1.txt -> /srv/rn2.txt)
+///   - Equal regular file returns Ok without error
+///   - Equal-open success (with active open handle) returns Ok
+///   - Missing-equal failure
+///   - Missing source fails
+///   - Root rename rejected
+///   - Cross-mount rejected
+///   - Directory rename rejected
+///   - Open-conflict unequal rename rejected
+fn test_s6_rename() {
+    let content = b"atomic-rename-data";
+    if !matches!(
+        vfs_req(&api::ipc::VfsRequest::Write {
+            path: "/srv/rn1.txt",
+            content,
+        }),
+        api::ipc::VfsResponse::Ok
+    ) {
+        fail("S6 rename", "setup write failed");
+        return;
+    }
+
+    // Equal path on existing regular file succeeds
+    if !matches!(
+        vfs_req(&api::ipc::VfsRequest::Rename {
+            old: "/srv/rn1.txt",
+            new: "/srv/rn1.txt",
+        }),
+        api::ipc::VfsResponse::Ok
+    ) {
+        fail("S6 rename", "equal path failed");
+        return;
+    }
+
+    // Missing-equal failure
+    if !matches!(
+        vfs_req(&api::ipc::VfsRequest::Rename {
+            old: "/srv/nonexistent_eq.txt",
+            new: "/srv/nonexistent_eq.txt",
+        }),
+        api::ipc::VfsResponse::Err(_)
+    ) {
+        fail("S6 rename", "missing equal should fail");
+        return;
+    }
+
+    // Root rename rejection
+    if !matches!(
+        vfs_req(&api::ipc::VfsRequest::Rename {
+            old: "/srv",
+            new: "/srv_renamed",
+        }),
+        api::ipc::VfsResponse::Err(_)
+    ) {
+        fail("S6 rename", "root rename should fail");
+        return;
+    }
+
+    // Cross-mount rejection (/srv -> /bin)
+    if !matches!(
+        vfs_req(&api::ipc::VfsRequest::Rename {
+            old: "/srv/rn1.txt",
+            new: "/bin/rn1.txt",
+        }),
+        api::ipc::VfsResponse::Err(_)
+    ) {
+        fail("S6 rename", "cross-mount should fail");
+        return;
+    }
+
+    // Open file handle and test equal-open success vs unequal open-conflict
+    let handle = match vfs_req(&api::ipc::VfsRequest::ReadAsync {
+        path: "/srv/rn1.txt",
+    }) {
+        api::ipc::VfsResponse::PendingHandle(h) => h,
+        _ => {
+            fail("S6 rename", "ReadAsync failed");
+            return;
+        }
+    };
+
+    // Equal-open success
+    if !matches!(
+        vfs_req(&api::ipc::VfsRequest::Rename {
+            old: "/srv/rn1.txt",
+            new: "/srv/rn1.txt",
+        }),
+        api::ipc::VfsResponse::Ok
+    ) {
+        fail("S6 rename", "equal-open rename failed");
+        let _ = vfs_req(&api::ipc::VfsRequest::Poll { handle });
+        return;
+    }
+
+    // Open-conflict: unequal rename while handle is open must be rejected
+    if !matches!(
+        vfs_req(&api::ipc::VfsRequest::Rename {
+            old: "/srv/rn1.txt",
+            new: "/srv/rn2.txt",
+        }),
+        api::ipc::VfsResponse::Err(_)
+    ) {
+        fail("S6 rename", "open conflict should fail");
+        let _ = vfs_req(&api::ipc::VfsRequest::Poll { handle });
+        return;
+    }
+
+    // Close handle by polling to completion
+    let _ = vfs_req(&api::ipc::VfsRequest::Poll { handle });
+
+    // Unequal rename to absent target succeeds now that handle is released
+    if !matches!(
+        vfs_req(&api::ipc::VfsRequest::Rename {
+            old: "/srv/rn1.txt",
+            new: "/srv/rn2.txt",
+        }),
+        api::ipc::VfsResponse::Ok
+    ) {
+        fail("S6 rename", "unequal rename failed");
+        return;
+    }
+
+    // Source absent
+    if !matches!(
+        vfs_req(&api::ipc::VfsRequest::Stat("/srv/rn1.txt")),
+        api::ipc::VfsResponse::Err(_)
+    ) {
+        fail("S6 rename", "source still exists");
+        return;
+    }
+
+    // Target exists
+    match vfs_req(&api::ipc::VfsRequest::Stat("/srv/rn2.txt")) {
+        api::ipc::VfsResponse::Stat { is_dir: false, size, .. } if size == content.len() as u64 => {}
+        _ => {
+            fail("S6 rename", "target stat incorrect");
+            return;
+        }
+    }
+
+    // Directory rename rejection
+    let _ = vfs_req(&api::ipc::VfsRequest::Mkdir("/srv/rndir"));
+    if !matches!(
+        vfs_req(&api::ipc::VfsRequest::Rename {
+            old: "/srv/rndir",
+            new: "/srv/rndir2",
+        }),
+        api::ipc::VfsResponse::Err(_)
+    ) {
+        fail("S6 rename", "dir rename should fail");
+        let _ = vfs_req(&api::ipc::VfsRequest::Rmdir("/srv/rndir"));
+        return;
+    }
+    let _ = vfs_req(&api::ipc::VfsRequest::Rmdir("/srv/rndir"));
+
+    // Cleanup
+    let _ = vfs_req(&api::ipc::VfsRequest::Unlink("/srv/rn2.txt"));
+    pass("S6 rename");
+}
 // ── Persistence marker ───────────────────────────────────────────────────────
 
 /// Check if a persist marker from a previous boot is present.
@@ -220,6 +380,7 @@ fn cell_main() {
     test_s3_listdir();
     test_s4_mkdir();
     test_s5_unlink();
+    test_s6_rename();
 
     write_persist_marker();
 

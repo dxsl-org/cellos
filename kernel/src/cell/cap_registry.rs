@@ -73,10 +73,7 @@ impl CapTable {
     pub fn alloc(&mut self, owner: CellId, resource: CapResource, perms: u32) -> CapId {
         let id = CapId(self.next_id);
         let next = self.next_id.wrapping_add(1);
-        debug_assert!(
-            next != 0,
-            "CapId counter wrapped to 0 — unreachable in practice"
-        );
+        debug_assert!(next != 0, "CapId counter wrapped to 0");
         self.next_id = if next == 0 { 1 } else { next };
         self.entries.insert(
             id,
@@ -167,12 +164,14 @@ impl CapTable {
         &mut self,
         cap_id: CapId,
         owner: types::CellId,
+        required_perm: api::cap::CapPerms,
     ) -> ViResult<alloc::boxed::Box<dyn api::fs::ViFile + Send + Sync>> {
         self.verify(cap_id, owner)?;
         let entry = self.entries.get_mut(&cap_id).ok_or(ViError::NotFound)?;
-        // Single variant today; match for future exhaustiveness when more cap types land.
+        if !api::cap::CapPerms(entry.perms).has(required_perm) {
+            return Err(ViError::PermissionDenied);
+        }
         let CapResource::File { ref mut file } = entry.resource;
-        // None means a concurrent read is in progress (single-core: shouldn't happen).
         file.take().ok_or(ViError::InvalidInput)
     }
 
@@ -184,10 +183,8 @@ impl CapTable {
         cap_id: CapId,
         boxed_file: alloc::boxed::Box<dyn api::fs::ViFile + Send + Sync>,
     ) {
-        if let Some(CapEntry {
-            resource: CapResource::File { ref mut file },
-            ..
-        }) = self.entries.get_mut(&cap_id)
+        if let Some(CapEntry { resource: CapResource::File { ref mut file }, .. }) =
+            self.entries.get_mut(&cap_id)
         {
             *file = Some(boxed_file);
         }

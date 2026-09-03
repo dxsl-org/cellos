@@ -65,6 +65,7 @@ mod tests {
         cell: CellId(5),
         generation: 1,
         sender_tid: 50,
+        flags: api::caller_identity::CALLER_FLAG_VFS_MUTATE,
     };
 
     fn live_table() -> AccessTable {

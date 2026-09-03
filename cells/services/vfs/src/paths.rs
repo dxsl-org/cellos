@@ -36,6 +36,17 @@ pub(crate) fn write_file<'a>(
     if crate::access::is_guest_disk_path(path) || !vfs.access.can_write(caller, path) {
         return api::ipc::VfsResponse::Err(ERR_DENIED);
     }
+    let _lease = if path == "/srv" || path.starts_with("/srv/") {
+        let Ok(k) = crate::namespace::NamespaceKey::parse(path) else {
+            return api::ipc::VfsResponse::Err(ERR_DENIED);
+        };
+        let Ok(l) = vfs.ledger.acquire_transient(&k) else {
+            return api::ipc::VfsResponse::Err(ERR_DENIED);
+        };
+        Some(l)
+    } else {
+        None
+    };
     let old_size = vfs.file_size(path);
     let new_size = content.len() as u64;
     let refunded_to_caller = if vfs.quota.writer_of(path) == Some(caller.cell) {
@@ -74,6 +85,17 @@ pub(crate) fn unlink_file<'a>(
     if crate::access::is_guest_disk_path(path) || !vfs.access.can_write(caller, path) {
         return api::ipc::VfsResponse::Err(ERR_DENIED);
     }
+    let _res = if path == "/srv" || path.starts_with("/srv/") {
+        let Ok(k) = crate::namespace::NamespaceKey::parse(path) else {
+            return api::ipc::VfsResponse::Err(ERR_DENIED);
+        };
+        let Ok(r) = vfs.ledger.reserve_one(&k) else {
+            return api::ipc::VfsResponse::Err(ERR_DENIED);
+        };
+        Some(r)
+    } else {
+        None
+    };
     let file_size = vfs.file_size(path);
     if vfs.unlink(path) {
         vfs.quota.release_path(path, file_size);

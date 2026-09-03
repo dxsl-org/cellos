@@ -34,7 +34,8 @@ api::declare_syscalls![
     GrantAlloc,
     GrantShare,
     GrantSlice,
-    GrantFree
+    GrantFree,
+    VfsMutate,
 ];
 
 /// Resolve the live VFS service tid via the service registry.

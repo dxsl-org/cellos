@@ -57,6 +57,7 @@ pub mod drivers;
 pub(crate) mod getrandom_sas_tests;
 pub mod ipc_guardrail_selftest;
 pub mod ipc_pending_selftest;
+pub mod cap_file_selftest;
 pub mod ipc_test;
 #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
 pub mod path_selftest;

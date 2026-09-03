@@ -405,4 +405,41 @@ impl FsBackend for RedoxFsBackend {
         })
         .unwrap_or(false)
     }
+
+    fn rename_no_replace(&mut self, old: &str, new: &str) -> bool {
+        let old_rel = match self.rel_path(old) {
+            Some(r) => String::from(r),
+            None => return false,
+        };
+        let new_rel = match self.rel_path(new) {
+            Some(r) => String::from(r),
+            None => return false,
+        };
+        self.with_fs(|fs| {
+            fs.tx(|tx| {
+                let (old_parent, old_name) = Self::parent_and_name(tx, &old_rel).ok_or(
+                    redox_syscall::error::Error::new(redox_syscall::error::ENOENT),
+                )?;
+                let (new_parent, new_name) = Self::parent_and_name(tx, &new_rel).ok_or(
+                    redox_syscall::error::Error::new(redox_syscall::error::ENOENT),
+                )?;
+                let old_node = tx.find_node(old_parent, old_name)?;
+                if !old_node.data().is_file() {
+                    return Err(redox_syscall::error::Error::new(
+                        redox_syscall::error::EISDIR,
+                    ));
+                }
+                if tx.find_node(new_parent, new_name).is_ok() {
+                    return Err(redox_syscall::error::Error::new(
+                        redox_syscall::error::EEXIST,
+                    ));
+                }
+                tx.rename_node_no_replace(old_parent, old_name, new_parent, new_name)?;
+                Ok(())
+            })
+            .ok()?;
+            Some(true)
+        })
+        .unwrap_or(false)
+    }
 }

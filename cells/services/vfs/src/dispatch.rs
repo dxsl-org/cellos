@@ -43,6 +43,11 @@ pub fn handle_request<'a>(
         Err(_) => return api::ipc::VfsResponse::Err(0xFF), // malformed request
     };
 
+    // Centrally deny any mutating request from a caller lacking VfsMutate authority
+    // BEFORE path sealing, handle resolution, or backend work.
+    if req.requires_mutation_authority() && !caller.may_mutate() {
+        return api::ipc::VfsResponse::Err(ERR_DENIED);
+    }
     // A cell that has given up path strings is refused here, before the request
     // reaches an arm that could serve it. Refusing at the entry rather than in
     // each arm is what makes the guarantee hold for every path-addressed
@@ -75,8 +80,19 @@ pub fn handle_request<'a>(
             if !caller.may_own_state() {
                 return api::ipc::VfsResponse::Err(ERR_DENIED);
             }
+            let lease = if path.starts_with("/srv") {
+                let Ok(k) = crate::namespace::NamespaceKey::parse(path) else {
+                    return api::ipc::VfsResponse::Err(ERR_DENIED);
+                };
+                let Ok(l) = vfs.ledger.acquire_service_handle(&k) else {
+                    return api::ipc::VfsResponse::Err(ERR_DENIED);
+                };
+                Some(l)
+            } else {
+                None
+            };
             let data = vfs.read_to_vec(path);
-            let handle = vfs.pending.insert(caller, path, data);
+            let handle = vfs.pending.insert(caller, path, data, lease);
             api::ipc::VfsResponse::PendingHandle(handle)
         }
 
@@ -123,7 +139,12 @@ pub fn handle_request<'a>(
             offset,
             grant,
             bytes,
-        } => crate::grant_write::write(vfs, caller, cap, offset, grant, bytes),
+        } => {
+            if !caller.may_mutate() {
+                return api::ipc::VfsResponse::Err(ERR_DENIED);
+            }
+            crate::grant_write::write(vfs, caller, cap, offset, grant, bytes)
+        }
 
         api::ipc::VfsRequest::ReadFileGrant { path, grant, max } => {
             crate::grant_read::read_file_grant(vfs, caller, path, grant, max)
@@ -134,6 +155,15 @@ pub fn handle_request<'a>(
         // counterpart above, and interleaving them would put the two addressing
         // models in one match where a reader has to check which one each arm is
         // in.
+        api::ipc::VfsRequest::WriteHandleGrant { .. }
+        | api::ipc::VfsRequest::SyncHandle { .. }
+        | api::ipc::VfsRequest::WriteAt { .. }
+        | api::ipc::VfsRequest::UnlinkAt { .. }
+            if !caller.may_mutate() =>
+        {
+            api::ipc::VfsResponse::Err(ERR_DENIED)
+        }
+
         api::ipc::VfsRequest::OpenRootDir { .. }
         | api::ipc::VfsRequest::OpenDir { .. }
         | api::ipc::VfsRequest::ReadAt { .. }

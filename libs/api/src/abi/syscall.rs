@@ -183,6 +183,11 @@ pub enum ViSyscall {
     /// exactly one [`ViFstatV1`] and returns `VI_FSTAT_V1_LEN`; failure writes
     /// nothing. Requires allowlist bit 61.
     Fstat = 254,
+    /// Atomic file rename syscall.
+    ///
+    /// ABI: a0 = old_path_ptr, a1 = old_path_len, a2 = new_path_ptr, a3 = new_path_len → 0 on success.
+    /// Requires allowlist bit 62.
+    Rename = 255,
 
     // === Time/System (120-129) ===
     GetTime = 120,
@@ -565,6 +570,8 @@ const _: () = {
     assert!(VI_FSTAT_ACCESS_WRITE == 2);
     assert!(ViSyscall::Fstat as usize == 254);
     assert!(matches!(ViSyscall::Fstat.allowlist_bit(), Some(61)));
+    assert!(ViSyscall::Rename as usize == 255);
+    assert!(matches!(ViSyscall::Rename.allowlist_bit(), Some(62)));
 };
 
 /// Bit constants for the `cap_mask` argument of `ViSyscall::CapRevoke`.
@@ -661,6 +668,12 @@ impl SyscallSet {
 /// ```ignore
 /// api::declare_syscalls![Send, Recv, TryRecv, Log, Heartbeat, LookupService];
 /// ```
+/// Allowlist bit index declaring authority to mutate VFS state (create/write/unlink/rename).
+pub const VFS_MUTATE_DECLARATION_BIT: u8 = 63;
+
+/// Allowlist bitmask declaring authority to mutate VFS state.
+pub const VFS_MUTATE_DECLARATION_MASK: u64 = 1u64 << VFS_MUTATE_DECLARATION_BIT;
+
 #[macro_export]
 macro_rules! declare_syscalls {
     ($($syscall:ident),* $(,)?) => {
@@ -669,12 +682,23 @@ macro_rules! declare_syscalls {
         pub static VICELL_SYSCALLS: u64 = const {
             let mut mask: u64 = 0u64;
             $(
-                if let Some(bit) = $crate::syscall::ViSyscall::$syscall.allowlist_bit() {
-                    mask |= 1u64 << bit;
-                }
+                $crate::__declare_syscall_entry!(mask, $syscall);
             )*
             mask
         };
+    };
+}
+
+#[macro_export]
+#[doc(hidden)]
+macro_rules! __declare_syscall_entry {
+    ($mask:ident, VfsMutate) => {
+        $mask |= $crate::syscall::VFS_MUTATE_DECLARATION_MASK;
+    };
+    ($mask:ident, $syscall:ident) => {
+        if let Some(bit) = $crate::syscall::ViSyscall::$syscall.allowlist_bit() {
+            $mask |= 1u64 << bit;
+        }
     };
 }
 
@@ -841,7 +865,8 @@ impl ViSyscall {
             Self::Chdir | Self::Getcwd => Some(60),
             // Caller-scoped descriptor metadata has its own opt-in authority.
             Self::Fstat => Some(61),
-            // Bit 62 is reserved for rename; bit 63 remains unused.
+            // Atomic rename has its own opt-in authority.
+            Self::Rename => Some(62),
             // Yield, Exit, and ForceExit are always permitted — a Cell must be able
             // to yield the CPU, exit cleanly, and force-terminate unresponsive tasks
             // regardless of its allowlist.  SpawnCap is the authority gate for ForceExit.
@@ -959,6 +984,7 @@ impl From<usize> for ViSyscall {
             252 => ViSyscall::Chdir,
             253 => ViSyscall::Getcwd,
             254 => ViSyscall::Fstat,
+            255 => ViSyscall::Rename,
             300 => ViSyscall::GpuFlush,
             301 => ViSyscall::GpuCursor,
             302 => ViSyscall::GpuGetResolution,

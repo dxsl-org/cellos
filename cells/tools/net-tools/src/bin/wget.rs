@@ -16,7 +16,7 @@ use ostd::syscall::{sys_lookup_service, sys_recv, sys_send, sys_yield, SyscallRe
 
 const RESP_BUF: usize = 4096;
 
-api::declare_syscalls![Send, Recv, Log, StateRestore, LookupService];
+api::declare_syscalls![Send, Recv, Log, StateRestore, LookupService, VfsMutate];
 
 ostd::cell_main!(cell_main);
 

@@ -58,6 +58,7 @@ api::declare_syscalls![
     GrantUnregister,
     GpuGetResolution,
     WaitForEvent,
+    VfsMutate,
 ];
 
 // VMM syscall wrappers — only the two arches with a kernel VMM backend have a

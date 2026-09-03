@@ -14,18 +14,10 @@
 //! message payload has been copied.
 //!
 //! ## Why the tail of the buffer, and not a new message field
-//! The wire format is postcard, whose byte 0 is the request discriminant.
-//! Widening the request enum, or prefixing the frame, moves every following byte
-//! and has already cost this project one silent framing collision. `decode`
-//! (`take_from_bytes`) reads exactly the bytes one message needs and ignores the
-//! rest, so a trailer at a fixed offset past the payload is invisible to every
-//! existing parser, on both the kernel and the cell side.
-//!
-//! The trailer deliberately does not carry a Cell root TID. It remains exactly
-//! 32 bytes and reports the sender for transport diagnostics; VFS obtains the
-//! separately attested root lifetime endpoint through `ResolveCellOwner` or the
-//! atomic `WatchCellOwner` syscall record.
-//!
+//! Postcard byte 0 is the request discriminant; a trailer at a fixed offset
+//! past the payload is invisible to existing parsers on both kernel and cell sides.
+//! The trailer reports sender diagnostics; VFS obtains root lifetime endpoints
+//! separately via `ResolveCellOwner` or `WatchCellOwner`.
 //! ## Invariants
 //! - Opting in **reserves** the tail: a receiver that passes the flag must treat
 //!   `buf[buf_len - CALLER_IDENTITY_LEN ..]` as kernel-owned and must not expect
@@ -49,9 +41,11 @@
 /// way to change any receiver's observable behaviour.
 pub const RECV_ATTEST_CALLER: usize = 1;
 
+/// Caller identity flag indicating the calling Cell has declared VfsMutate authority.
+pub const CALLER_FLAG_VFS_MUTATE: u32 = 1 << 0;
+
 /// Size in bytes of the identity trailer reserved at the end of a recv buffer.
 pub const CALLER_IDENTITY_LEN: usize = 32;
-
 /// Tag distinguishing a kernel-written trailer from leftover payload bytes.
 ///
 /// Not a security control — a cell that can write another cell's recv buffer in a
@@ -66,20 +60,13 @@ const MAGIC: u32 = 0x5649_4349; // "VICI"
 /// or, inside the kernel, from live scheduler state — never from request bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CallerIdentity {
-    /// Owning cell of the calling task. A thread reports its parent cell here,
-    /// which is what makes this usable for both authorization and accounting.
+    /// Flag word unpacked from trailer bytes 4..8 (e.g. [`CALLER_FLAG_VFS_MUTATE`]).
+    pub flags: u32,
+    /// Owning cell of the calling task. A thread reports its parent cell here.
     pub cell_id: u64,
-    /// Monotonic epoch assigned when the cell was created, inherited by its
-    /// threads. Distinguishes a respawned cell from the dead one it replaced even
-    /// if a future scheduler recycles task ids, so state a service holds against
-    /// a `cell_id` cannot be inherited by an unrelated successor.
-    ///
-    /// `0` means "this delivery path does not attest a generation". Callers that
-    /// key durable state on identity must refuse `0`; callers that only consult a
-    /// path-keyed policy may ignore it.
+    /// Monotonic epoch assigned when the cell was created, inherited by its threads.
     pub generation: u64,
-    /// Task id that actually sent the message. Diagnostics only — a thread and its
-    /// cell share `cell_id` but not this.
+    /// Task id that actually sent the message. Diagnostics only.
     pub sender_tid: u64,
 }
 
@@ -88,8 +75,7 @@ impl CallerIdentity {
     pub fn to_trailer(&self) -> [u8; CALLER_IDENTITY_LEN] {
         let mut out = [0u8; CALLER_IDENTITY_LEN];
         out[0..4].copy_from_slice(&MAGIC.to_le_bytes());
-        // [4..8] reserved: zero today, so a future flag word can be added without
-        // moving cell_id/generation/sender_tid.
+        out[4..8].copy_from_slice(&self.flags.to_le_bytes());
         out[8..16].copy_from_slice(&self.cell_id.to_le_bytes());
         out[16..24].copy_from_slice(&self.generation.to_le_bytes());
         out[24..32].copy_from_slice(&self.sender_tid.to_le_bytes());
@@ -126,11 +112,15 @@ impl CallerIdentity {
         if u32::from_le_bytes(tag) != MAGIC {
             return None;
         }
+        let mut flag_bytes = [0u8; 4];
+        flag_bytes.copy_from_slice(&bytes[4..8]);
+        let flags = u32::from_le_bytes(flag_bytes);
         let cell_id = word(8);
         if cell_id == 0 {
             return None; // kernel/unattributable — never a cell
         }
         Some(Self {
+            flags,
             cell_id,
             generation: word(16),
             sender_tid: word(24),
@@ -143,6 +133,7 @@ mod tests {
     use super::*;
 
     const SAMPLE: CallerIdentity = CallerIdentity {
+        flags: 0,
         cell_id: 7,
         generation: 42,
         sender_tid: 9,
@@ -154,6 +145,12 @@ mod tests {
             CallerIdentity::from_trailer(&SAMPLE.to_trailer()),
             Some(SAMPLE)
         );
+    }
+    #[test]
+    fn flags_round_trip() {
+        let mut sample = SAMPLE;
+        sample.flags = CALLER_FLAG_VFS_MUTATE;
+        assert_eq!(CallerIdentity::from_trailer(&sample.to_trailer()), Some(sample));
     }
 
     #[test]

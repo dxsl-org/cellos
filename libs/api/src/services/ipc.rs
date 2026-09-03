@@ -187,6 +187,11 @@ pub enum VfsRequest<'a> {
     SyncHandle {
         file: crate::vfs_file_handles::ViVfsFileHandle,
     },
+    /// Atomic rename of a file or directory from `old` to `new`.
+    Rename {
+        old: &'a str,
+        new: &'a str,
+    },
 }
 
 impl VfsRequest<'_> {
@@ -209,7 +214,8 @@ impl VfsRequest<'_> {
             | Self::RmdirRecursive(_)
             | Self::ReadAsync { .. }
             | Self::ReadFileGrant { .. }
-            | Self::OpenRootDir { .. } => true,
+            | Self::OpenRootDir { .. }
+            | Self::Rename { .. } => true,
             // `Poll`, `ReadGrant` and `WriteGrant` carry a handle the service
             // issued, not a path. They stay reachable so a sealed cell can drain
             // work it started before sealing; the path recorded against the
@@ -231,6 +237,45 @@ impl VfsRequest<'_> {
             | Self::ReadHandleGrant { .. }
             | Self::WriteHandleGrant { .. }
             | Self::SyncHandle { .. } => false,
+        }
+    }
+
+    /// Whether this request requires the caller to hold VfsMutate authority.
+    ///
+    /// Matched exhaustively so any future variant must be classified.
+    pub fn requires_mutation_authority(&self) -> bool {
+        match self {
+            Self::Write { .. }
+            | Self::Append { .. }
+            | Self::Mkdir(_)
+            | Self::Rmdir(_)
+            | Self::Unlink(_)
+            | Self::RmdirRecursive(_)
+            | Self::WriteGrant { .. }
+            | Self::WriteAt { .. }
+            | Self::UnlinkAt { .. }
+            | Self::WriteHandleGrant { .. }
+            | Self::SyncHandle { .. }
+            | Self::Rename { .. } => true,
+
+            Self::GetFile(_)
+            | Self::ListDir(_)
+            | Self::Stat(_)
+            | Self::ReadAsync { .. }
+            | Self::Poll { .. }
+            | Self::ReadGrant { .. }
+            | Self::ReadFileGrant { .. }
+            | Self::OpenRootDir { .. }
+            | Self::OpenDir { .. }
+            | Self::ReadAt { .. }
+            | Self::StatAt { .. }
+            | Self::ListAt { .. }
+            | Self::CloseDir { .. }
+            | Self::SealPaths
+            | Self::OpenFileAt { .. }
+            | Self::ReadFileHandle { .. }
+            | Self::CloseFile { .. }
+            | Self::ReadHandleGrant { .. } => false,
         }
     }
 }

@@ -26,8 +26,8 @@ use crate::file_handles::FileHandleTable;
 use crate::handle_table::HandleTable;
 use crate::mount::MountTable;
 use crate::pending::PendingTable;
+use crate::namespace::NamespaceLedger;
 use crate::quota::QuotaTracker;
-
 #[derive(Clone, Copy)]
 pub(crate) struct WatchedOwner {
     pub principal: Caller,
@@ -44,6 +44,7 @@ pub struct VfsManager {
     /// Directory capabilities. Deliberately not serialised across a hot-swap —
     /// see `dirs::lifecycle`, where the reasoning for that lives.
     pub dirs: DirTable,
+    pub ledger: NamespaceLedger,
     watched_owners: BTreeMap<(u64, u64), WatchedOwner>,
     cancelled_owner_watch_tokens: Vec<u64>,
 }
@@ -94,6 +95,7 @@ impl VfsManager {
             pending: PendingTable::new(),
             files: FileHandleTable::new(),
             dirs: DirTable::new(),
+            ledger: NamespaceLedger::new(),
             watched_owners: BTreeMap::new(),
             cancelled_owner_watch_tokens: Vec::new(),
         }
@@ -104,10 +106,7 @@ impl VfsManager {
     }
 
     pub fn list_dir(&self, path: &str, out: &mut [u8]) -> usize {
-        self.mounts
-            .backend(path)
-            .map(|b| b.list(path, out))
-            .unwrap_or(0)
+        self.mounts.backend(path).map(|b| b.list(path, out)).unwrap_or(0)
     }
 
     pub fn stat(&self, path: &str) -> Option<(u64, bool)> {
@@ -119,79 +118,50 @@ impl VfsManager {
     }
 
     pub fn file_size(&self, path: &str) -> u64 {
-        self.mounts
-            .backend(path)
-            .map(|b| b.file_size(path))
-            .unwrap_or(0)
+        self.mounts.backend(path).map(|b| b.file_size(path)).unwrap_or(0)
     }
 
     pub fn read_to_vec(&self, path: &str) -> Vec<u8> {
-        self.mounts
-            .backend(path)
-            .map(|b| b.read_to_vec(path))
-            .unwrap_or_default()
+        self.mounts.backend(path).map(|b| b.read_to_vec(path)).unwrap_or_default()
     }
 
     pub fn write(&mut self, path: &str, content: &[u8]) -> bool {
-        self.mounts
-            .backend_mut(path)
-            .map(|b| b.write(path, content))
-            .unwrap_or(false)
+        self.mounts.backend_mut(path).map(|b| b.write(path, content)).unwrap_or(false)
     }
 
     pub fn read_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> usize {
-        self.mounts
-            .backend(path)
-            .map(|b| b.read_at(path, offset, buf))
-            .unwrap_or(0)
+        self.mounts.backend(path).map(|b| b.read_at(path, offset, buf)).unwrap_or(0)
     }
 
     pub fn write_at(&mut self, path: &str, offset: u64, content: &[u8]) -> bool {
-        self.mounts
-            .backend_mut(path)
-            .map(|b| b.write_at(path, offset, content))
-            .unwrap_or(false)
+        self.mounts.backend_mut(path).map(|b| b.write_at(path, offset, content)).unwrap_or(false)
     }
 
     pub fn sync(&mut self, path: &str) -> bool {
-        self.mounts
-            .backend_mut(path)
-            .map(|b| b.sync(path))
-            .unwrap_or(false)
+        self.mounts.backend_mut(path).map(|b| b.sync(path)).unwrap_or(false)
     }
 
     pub fn append(&mut self, path: &str, content: &[u8]) -> bool {
-        self.mounts
-            .backend_mut(path)
-            .map(|b| b.append(path, content))
-            .unwrap_or(false)
+        self.mounts.backend_mut(path).map(|b| b.append(path, content)).unwrap_or(false)
     }
 
     pub fn mkdir(&mut self, path: &str) -> bool {
-        self.mounts
-            .backend_mut(path)
-            .map(|b| b.mkdir(path))
-            .unwrap_or(false)
+        self.mounts.backend_mut(path).map(|b| b.mkdir(path)).unwrap_or(false)
     }
 
     pub fn rmdir(&mut self, path: &str) -> bool {
-        self.mounts
-            .backend_mut(path)
-            .map(|b| b.rmdir(path))
-            .unwrap_or(false)
+        self.mounts.backend_mut(path).map(|b| b.rmdir(path)).unwrap_or(false)
     }
 
     pub fn unlink(&mut self, path: &str) -> bool {
-        self.mounts
-            .backend_mut(path)
-            .map(|b| b.unlink(path))
-            .unwrap_or(false)
+        self.mounts.backend_mut(path).map(|b| b.unlink(path)).unwrap_or(false)
     }
 
     pub fn rmdir_recursive(&mut self, path: &str) -> bool {
-        self.mounts
-            .backend_mut(path)
-            .map(|b| b.rmdir_recursive(path))
-            .unwrap_or(false)
+        self.mounts.backend_mut(path).map(|b| b.rmdir_recursive(path)).unwrap_or(false)
+    }
+
+    pub fn rename_no_replace(&mut self, old: &str, new: &str) -> bool {
+        self.mounts.backend_mut(old).map(|b| b.rename_no_replace(old, new)).unwrap_or(false)
     }
 }

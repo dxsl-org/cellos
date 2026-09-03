@@ -225,6 +225,11 @@ fn every_path_naming_request_is_classified_as_path_addressed() {
     }
     .is_path_addressed());
     assert!(VfsRequest::OpenRootDir { path: "/x" }.is_path_addressed());
+    assert!(VfsRequest::Rename {
+        old: "/a",
+        new: "/b",
+    }
+    .is_path_addressed());
 }
 
 #[test]
@@ -372,6 +377,29 @@ fn file_handle_variants_append_after_the_directory_capability_slice() {
     )
     .unwrap();
     assert_eq!(encoded[0], 25, "CloseFile must stay variant 25");
+}
+
+#[test]
+fn rename_variant_appends_at_end_and_round_trips() {
+    let mut buf = [0u8; 64];
+    let encoded = super::ipc::encode(
+        &VfsRequest::Rename {
+            old: "/a",
+            new: "/b",
+        },
+        &mut buf,
+    )
+    .unwrap();
+    assert_eq!(encoded[0], 29, "Rename must stay request variant 29");
+
+    let decoded: VfsRequest = super::ipc::decode(encoded).unwrap();
+    match decoded {
+        VfsRequest::Rename { old, new } => {
+            assert_eq!(old, "/a");
+            assert_eq!(new, "/b");
+        }
+        other => panic!("round trip changed the request: {other:?}"),
+    }
 }
 
 #[test]

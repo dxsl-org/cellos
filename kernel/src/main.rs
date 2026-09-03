@@ -791,6 +791,8 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         } else {
             log_info("ipc-pending self-test FAIL");
         }
+        task::cap_file_selftest::run();
+        log_info("cap-file self-test PASS (read-only enforcement)");
         if task::ipc_guardrail_selftest::self_test() {
             log_info("ipc-guardrail self-test PASS (dead-peer wake, RecvScatter isolated)");
         } else {

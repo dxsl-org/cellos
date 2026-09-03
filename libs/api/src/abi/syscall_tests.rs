@@ -79,6 +79,7 @@ mod tests {
         (252, ViSyscall::Chdir),
         (253, ViSyscall::Getcwd),
         (254, ViSyscall::Fstat),
+        (255, ViSyscall::Rename),
     ];
 
     #[test]
@@ -126,6 +127,7 @@ mod tests {
         assert_eq!(ViSyscall::Chdir as usize, 252);
         assert_eq!(ViSyscall::Getcwd as usize, 253);
         assert_eq!(ViSyscall::Fstat as usize, 254);
+        assert_eq!(ViSyscall::Rename as usize, 255);
     }
 
     /// The appended opcodes must sit past every previously shipped id. An
@@ -150,6 +152,7 @@ mod tests {
                     | ViSyscall::Chdir
                     | ViSyscall::Getcwd
                     | ViSyscall::Fstat
+                    | ViSyscall::Rename
             ) {
                 continue;
             }
@@ -165,6 +168,7 @@ mod tests {
             assert_ne!(id, ViSyscall::ResolveCellOwnerRecord as usize);
             assert_ne!(id, ViSyscall::WatchCellOwnerRecord as usize);
             assert_ne!(id, ViSyscall::Fstat as usize);
+            assert_ne!(id, ViSyscall::Rename as usize);
         }
         // Previously unmapped ids must still decode as Unknown, so nothing that
         // used to be rejected is now silently accepted as a new opcode.
@@ -207,20 +211,23 @@ mod tests {
         assert_eq!(ViSyscall::Chdir.allowlist_bit(), Some(60));
         assert_eq!(ViSyscall::Getcwd.allowlist_bit(), Some(60));
         assert_eq!(ViSyscall::Fstat.allowlist_bit(), Some(61));
+        assert_eq!(ViSyscall::Rename.allowlist_bit(), Some(62));
         assert_eq!(
             SyscallSet::EMPTY
                 .with(ViSyscall::Chdir)
                 .with(ViSyscall::Getcwd)
                 .with(ViSyscall::Fstat)
+                .with(ViSyscall::Rename)
                 .bits(),
-            (1u64 << 60) | (1u64 << 61)
+            (1u64 << 60) | (1u64 << 61) | (1u64 << 62)
         );
-        assert_eq!(ViSyscall::from(255), ViSyscall::Unknown);
+        assert_eq!(ViSyscall::from(255), ViSyscall::Rename);
+        assert_eq!(ViSyscall::from(256), ViSyscall::Unknown);
         assert!(
             CASES
                 .iter()
-                .all(|(_, syscall)| !matches!(syscall.allowlist_bit(), Some(62) | Some(63))),
-            "bit 62 must remain reserved and bit 63 must remain unused"
+                .all(|(_, syscall)| syscall.allowlist_bit() != Some(63)),
+            "bit 63 is reserved for VfsMutate declaration, not a syscall"
         );
     }
 
@@ -316,7 +323,7 @@ mod tests {
     #[test]
     fn unknown_id_decodes_to_unknown_variant() {
         // IDs that have no assigned meaning must produce Unknown, not panic.
-        let unassigned = [9, 50, 99, 100, 108, 255, 999, usize::MAX];
+        let unassigned = [9, 50, 99, 100, 108, 256, 999, usize::MAX];
         for id in unassigned {
             let got = ViSyscall::from(id);
             assert_eq!(
@@ -422,6 +429,9 @@ mod allowlist {
         assert_eq!(ViSyscall::SpawnReplacement.allowlist_bit(), Some(57));
         assert_eq!(ViSyscall::PauseService.allowlist_bit(), Some(49));
         assert_eq!(ViSyscall::Fstat.allowlist_bit(), Some(61));
+        assert_eq!(ViSyscall::Rename.allowlist_bit(), Some(62));
+        assert_eq!(crate::syscall::VFS_MUTATE_DECLARATION_BIT, 63);
+        assert_eq!(crate::syscall::VFS_MUTATE_DECLARATION_MASK, 1u64 << 63);
 
         let mask = SyscallSet::EMPTY
             .with(ViSyscall::Send)
@@ -429,5 +439,15 @@ mod allowlist {
             .with(ViSyscall::Log)
             .0;
         assert_eq!(mask, 0x403u64, "bit-packing mismatch: got {:#x}", mask);
+    }
+
+    #[test]
+    #[allow(unsafe_code)]
+    fn declare_syscalls_with_vfs_mutate() {
+        crate::declare_syscalls![Send, Recv, Rename, VfsMutate];
+        assert_eq!(
+            VICELL_SYSCALLS,
+            (1u64 << 0) | (1u64 << 1) | (1u64 << 62) | (1u64 << 63)
+        );
     }
 }

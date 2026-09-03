@@ -23,6 +23,7 @@ pub struct FileEntry {
     pub path: String,
     pub parent_dir: u64,
     pub state: FileState,
+    pub _lease: Option<crate::namespace::ServiceHandle>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -49,11 +50,22 @@ impl FileHandleTable {
         }
     }
 
+    #[allow(dead_code)]
     pub fn insert(
         &mut self,
         owner: Caller,
         path: &str,
         parent_dir: u64,
+    ) -> Result<ViVfsFileHandle, FileHandleError> {
+        self.insert_leased(owner, path, parent_dir, None)
+    }
+
+    pub fn insert_leased(
+        &mut self,
+        owner: Caller,
+        path: &str,
+        parent_dir: u64,
+        lease: Option<crate::namespace::ServiceHandle>,
     ) -> Result<ViVfsFileHandle, FileHandleError> {
         let key = owner_counts::key(owner);
         if self.counts.get(&key).copied().unwrap_or(0) >= MAX_FILE_HANDLES_PER_CALLER {
@@ -75,6 +87,7 @@ impl FileHandleTable {
                 path: path.to_string(),
                 parent_dir,
                 state: FileState::Open,
+                _lease: lease,
             },
         );
         *self.counts.entry(key).or_insert(0) += 1;

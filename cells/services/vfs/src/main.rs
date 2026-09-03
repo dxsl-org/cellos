@@ -39,6 +39,7 @@ mod handle_table;
 #[cfg(all(feature = "littlefs", target_arch = "x86_64"))]
 mod lfs_string_shim;
 mod manager;
+mod namespace;
 mod mount;
 mod page_cache;
 mod paths;

@@ -14,6 +14,7 @@ mod tls_signing;
 
 fn caller(cell_id: u64, generation: u64, sender_tid: usize) -> CallerIdentity {
     CallerIdentity {
+        flags: 0,
         cell_id,
         generation,
         sender_tid: sender_tid as u64,

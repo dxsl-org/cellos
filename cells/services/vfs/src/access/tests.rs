@@ -5,6 +5,7 @@ const CELL: Caller = Caller {
     cell: CellId(5),
     generation: 1,
     sender_tid: 50,
+    flags: api::caller_identity::CALLER_FLAG_VFS_MUTATE,
 };
 
 #[test]
@@ -55,4 +56,35 @@ fn a_whole_path_rule_overrides_the_prefix_it_sits_under() {
     // Only the exact path is affected; its neighbours still follow /data/.
     assert!(table.can_read(CELL, "/data/secretive"));
     assert!(table.can_read(CELL, "/data/other"));
+}
+
+#[test]
+fn non_mutator_cannot_write_any_path() {
+    let unmutated = Caller {
+        cell: CellId(5),
+        generation: 1,
+        sender_tid: 50,
+        flags: 0,
+    };
+    let table = AccessTable::new();
+    assert!(!table.can_write(unmutated, "/data/x"));
+    assert!(!table.can_write(unmutated, "/tmp/x"));
+    assert!(!table.can_write(unmutated, "/srv/x"));
+    assert!(!table.can_remove_dir(unmutated, "/srv/dir"));
+    assert!(!table.can_remove_tree(unmutated, "/srv/dir"));
+}
+
+#[test]
+fn unflagged_caller_is_denied_mutation_regardless_of_path_policy() {
+    let unflagged = Caller {
+        cell: CellId(5),
+        generation: 1,
+        sender_tid: 50,
+        flags: 0,
+    };
+    let table = AccessTable::new();
+    assert!(table.can_read(unflagged, "/srv/test"));
+    assert!(!table.can_write(unflagged, "/srv/test"));
+    assert!(!table.can_remove_dir(unflagged, "/srv/test"));
+    assert!(!table.can_remove_tree(unflagged, "/srv/test"));
 }

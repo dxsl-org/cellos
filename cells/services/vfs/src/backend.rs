@@ -66,4 +66,12 @@ pub trait FsBackend: Send {
 
     /// Recursive delete (`rm -r`). Backends that do not support it return false.
     fn rmdir_recursive(&mut self, path: &str) -> bool;
+
+    /// Atomic no-replace rename from `old` to `new`.
+    ///
+    /// Backends that do not support it return false (only RedoxFS supports this).
+    fn rename_no_replace(&mut self, old: &str, new: &str) -> bool {
+        let _ = (old, new);
+        false
+    }
 }

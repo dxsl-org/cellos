@@ -57,6 +57,7 @@ api::declare_syscalls![
     ReadDir,
     Chdir,
     Getcwd,
+    VfsMutate,
 ];
 
 mod cmd_cwd;

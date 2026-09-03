@@ -28,12 +28,22 @@ pub fn open_file<'a>(
         Some((_, false)) => {}
         Some((_, true)) | None => return VfsResponse::Err(ERR_IO),
     }
-    match vfs.files.insert(caller, &path, dir.0) {
+    let lease = if path == "/srv" || path.starts_with("/srv/") {
+        let Ok(k) = crate::namespace::NamespaceKey::parse(&path) else {
+            return VfsResponse::Err(ERR_DENIED);
+        };
+        let Ok(l) = vfs.ledger.acquire_service_handle(&k) else {
+            return VfsResponse::Err(ERR_DENIED);
+        };
+        Some(l)
+    } else {
+        None
+    };
+    match vfs.files.insert_leased(caller, &path, dir.0, lease) {
         Ok(file) => VfsResponse::FileHandle(file),
         Err(err) => VfsResponse::Err(file_err(err)),
     }
 }
-
 pub fn read_file<'a>(
     vfs: &mut VfsManager,
     caller: Caller,

@@ -28,6 +28,8 @@ pub struct Caller {
     /// Sending thread, retained only for the reply transport. It is never a
     /// lifetime endpoint; root identity comes from a tokenized owner watch.
     pub sender_tid: u64,
+    /// Attested trailer flags (e.g. CALLER_FLAG_VFS_MUTATE).
+    pub flags: u32,
 }
 
 impl PartialEq for Caller {
@@ -46,6 +48,7 @@ impl Caller {
             cell,
             generation,
             sender_tid: 0,
+            flags: 0,
         }
     }
 
@@ -58,6 +61,7 @@ impl Caller {
             cell: CellId(id.cell_id),
             generation: id.generation,
             sender_tid: id.sender_tid,
+            flags: id.flags,
         }
     }
 
@@ -71,6 +75,11 @@ impl Caller {
     pub fn may_own_state(&self) -> bool {
         self.cell.0 != 0 && self.generation != 0
     }
+
+    /// Whether the caller declared VfsMutate authority.
+    pub fn may_mutate(&self) -> bool {
+        (self.flags & api::caller_identity::CALLER_FLAG_VFS_MUTATE) != 0
+    }
 }
 
 #[cfg(test)]
@@ -80,6 +89,7 @@ mod tests {
     #[test]
     fn attested_identity_becomes_the_cell_not_the_sending_thread() {
         let caller = Caller::from_attested(CallerIdentity {
+            flags: 0,
             cell_id: 4,
             generation: 9,
             sender_tid: 77, // a thread of cell 4
@@ -94,11 +104,13 @@ mod tests {
             cell: CellId(4),
             generation: 1,
             sender_tid: 70,
+            flags: 0,
         };
         let respawned = Caller {
             cell: CellId(4),
             generation: 2,
             sender_tid: 71,
+            flags: 0,
         };
         assert_ne!(old, respawned);
     }
@@ -109,11 +121,13 @@ mod tests {
             cell: CellId(4),
             generation: 2,
             sender_tid: 70,
+            flags: 0,
         };
         let right = Caller {
             cell: CellId(4),
             generation: 2,
             sender_tid: 71,
+            flags: 0,
         };
         assert_eq!(left, right);
         assert!(left.may_own_state());
@@ -125,7 +139,26 @@ mod tests {
             cell: CellId(4),
             generation: 0,
             sender_tid: 77,
+            flags: 0,
         };
         assert!(!caller.may_own_state());
+    }
+
+    #[test]
+    fn caller_may_mutate_reflects_trailer_flag() {
+        let non_mutator = Caller {
+            cell: CellId(4),
+            generation: 1,
+            sender_tid: 77,
+            flags: 0,
+        };
+        assert!(!non_mutator.may_mutate());
+        let mutator = Caller {
+            cell: CellId(4),
+            generation: 1,
+            sender_tid: 77,
+            flags: api::caller_identity::CALLER_FLAG_VFS_MUTATE,
+        };
+        assert!(mutator.may_mutate());
     }
 }

@@ -97,3 +97,21 @@ fn monotonic_ids_fail_closed_on_exhaustion() {
         Err(FileHandleError::Exhausted)
     );
 }
+
+#[test]
+fn file_handle_table_leased_entry_cleans_up_on_close_and_revocation() {
+    let mut table = FileHandleTable::new();
+    let ledger = crate::namespace::NamespaceLedger::new();
+    let key = crate::namespace::NamespaceKey::parse("/srv/fh").expect("key");
+    let lease = ledger.acquire_service_handle(&key).expect("lease");
+    assert_eq!(ledger.entry_count(), 1);
+    let handle = table.insert_leased(CELL_A, "/srv/fh", 5, Some(lease)).expect("handle");
+    assert!(table.close(CELL_A, handle));
+    assert_eq!(ledger.entry_count(), 0);
+
+    let lease2 = ledger.acquire_service_handle(&key).expect("lease2");
+    assert_eq!(ledger.entry_count(), 1);
+    let _h2 = table.insert_leased(CELL_A, "/srv/fh", 5, Some(lease2)).expect("h2");
+    assert_eq!(table.revoke_by_parent_dirs(&[5]), 1);
+    assert_eq!(ledger.entry_count(), 0);
+}

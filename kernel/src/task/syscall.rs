@@ -1534,8 +1534,16 @@ pub fn attested_identity_of(sender_tid: usize) -> Option<api::caller_identity::C
     let sched = sched_guard.as_ref()?;
     let task = sched.tasks.get(&sender_tid)?;
     let owner = sched.resolve_live_cell_owner(task.cell_id, task.cell_generation)?;
+    let flags = if task.syscall_allowlist != u64::MAX
+        && (task.syscall_allowlist & (1u64 << 63)) != 0
+    {
+        api::caller_identity::CALLER_FLAG_VFS_MUTATE
+    } else {
+        0
+    };
     (owner.cell_id == task.cell_id.0 && owner.generation == task.cell_generation).then_some(
         api::caller_identity::CallerIdentity {
+            flags,
             cell_id: task.cell_id.0,
             generation: task.cell_generation,
             sender_tid: sender_tid as u64,
@@ -2152,6 +2160,13 @@ pub enum Syscall {
         out_ptr: usize,
         out_len: usize,
     },
+    /// 255: Rename (Old Path, New Path -> 0 on success)
+    Rename {
+        old_ptr: usize,
+        old_len: usize,
+        new_ptr: usize,
+        new_len: usize,
+    },
     /// 107: ChDir (Change Directory)
     ChDir { path_ptr: usize, path_len: usize },
     /// 108: GetCwd (Get Current Directory)
@@ -2458,6 +2473,7 @@ fn syscall_to_vi(syscall: &Syscall) -> Option<api::syscall::ViSyscall> {
         Syscall::Close { .. } => V::Close,
         Syscall::ReadDir { .. } => V::ReadDir,
         Syscall::Fstat { .. } => V::Fstat,
+        Syscall::Rename { .. } => V::Rename,
         Syscall::Seek { .. } => V::Seek,
         Syscall::FileOp { .. } => V::FileOp,
         Syscall::ChDir { .. } => V::Chdir,
@@ -3898,6 +3914,19 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             write_user_slice(caller_id, out_ptr, bytes, MAX_USER_BUF)?;
             Ok(len)
         }
+        Syscall::Rename {
+            old_ptr,
+            old_len,
+            new_ptr,
+            new_len,
+        } => {
+            let old_path = read_user_string(caller_id, old_ptr, old_len, MAX_LOG_MSG)?;
+            let new_path = read_user_string(caller_id, new_ptr, new_len, MAX_LOG_MSG)?;
+            if super::file_rename(&old_path, &new_path).is_ok() {
+                return Ok(0);
+            }
+            Err(SyscallError::PermissionDenied)
+        }
         // Syscall::Remove removed
         Syscall::ChDir { path_ptr, path_len } => {
             let path = read_user_string(caller_id, path_ptr, path_len, MAX_LOG_MSG)?;
@@ -4274,7 +4303,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 guard
                     .as_mut()
                     .ok_or(SyscallError::FileNotFound)?
-                    .open(&path_str, api::fs::OpenMode::ReadWrite)
+                    .open(&path_str, api::fs::OpenMode::Read)
                     .map_err(|_| SyscallError::FileNotFound)?
             };
             let cell_id = if let Some(sched) = super::SCHEDULER.lock().as_ref() {
@@ -4289,7 +4318,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             let cap_id = crate::cell::cap_registry::CAP_TABLE.lock().alloc(
                 cell_id,
                 crate::cell::cap_registry::CapResource::File { file: Some(file) },
-                api::cap::CapPerms::FILE_RW.0,
+                api::cap::CapPerms::FILE_READ.0,
             );
             Ok(cap_id.0 as usize)
         }
@@ -4314,7 +4343,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             };
             let mut boxed_file = crate::cell::cap_registry::CAP_TABLE
                 .lock()
-                .park_file(crate::cell::cap_registry::CapId(cap_id as u64), cell_id)
+                .park_file(crate::cell::cap_registry::CapId(cap_id as u64), cell_id, api::cap::CapPerms::READ)
                 .map_err(|_| SyscallError::PermissionDenied)?;
             let mut kbuf = alloc::vec::Vec::new();
             kbuf.try_reserve_exact(buf_len)
@@ -4357,7 +4386,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             };
             let mut boxed_file = crate::cell::cap_registry::CAP_TABLE
                 .lock()
-                .park_file(crate::cell::cap_registry::CapId(cap_id as u64), cell_id)
+                .park_file(crate::cell::cap_registry::CapId(cap_id as u64), cell_id, api::cap::CapPerms::READ)
                 .map_err(|_| SyscallError::PermissionDenied)?;
             let seek_result = boxed_file.seek(pos);
             crate::cell::cap_registry::CAP_TABLE
@@ -4389,7 +4418,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             };
             let mut boxed_file = crate::cell::cap_registry::CAP_TABLE
                 .lock()
-                .park_file(crate::cell::cap_registry::CapId(cap_id as u64), cell_id)
+                .park_file(crate::cell::cap_registry::CapId(cap_id as u64), cell_id, api::cap::CapPerms::WRITE)
                 .map_err(|_| SyscallError::PermissionDenied)?;
             let write_result = boxed_file.write(&bytes);
             crate::cell::cap_registry::CAP_TABLE
@@ -4413,7 +4442,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             };
             let mut boxed_file = crate::cell::cap_registry::CAP_TABLE
                 .lock()
-                .park_file(crate::cell::cap_registry::CapId(cap_id as u64), cell_id)
+                .park_file(crate::cell::cap_registry::CapId(cap_id as u64), cell_id, api::cap::CapPerms::READ)
                 .map_err(|_| SyscallError::PermissionDenied)?;
             let result = boxed_file.size();
             crate::cell::cap_registry::CAP_TABLE
@@ -4436,7 +4465,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             };
             let mut boxed_file = crate::cell::cap_registry::CAP_TABLE
                 .lock()
-                .park_file(crate::cell::cap_registry::CapId(cap_id as u64), cell_id)
+                .park_file(crate::cell::cap_registry::CapId(cap_id as u64), cell_id, api::cap::CapPerms::WRITE)
                 .map_err(|_| SyscallError::PermissionDenied)?;
             let result = boxed_file.truncate(len as u64);
             crate::cell::cap_registry::CAP_TABLE
@@ -4457,7 +4486,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             };
             let mut boxed_file = crate::cell::cap_registry::CAP_TABLE
                 .lock()
-                .park_file(crate::cell::cap_registry::CapId(cap_id as u64), cell_id)
+                .park_file(crate::cell::cap_registry::CapId(cap_id as u64), cell_id, api::cap::CapPerms::WRITE)
                 .map_err(|_| SyscallError::PermissionDenied)?;
             let result = boxed_file.sync();
             crate::cell::cap_registry::CAP_TABLE
@@ -6318,6 +6347,12 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
             out_ptr: a1,
             out_len: a2,
         },
+        ViSyscall::Rename => Syscall::Rename {
+            old_ptr: a0,
+            old_len: a1,
+            new_ptr: a2,
+            new_len: a3,
+        },
         ViSyscall::FileOp => Syscall::FileOp {
             op: a0,
             arg1: a1,
@@ -6539,6 +6574,12 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
                 path_len: a1,
             },
             // Block I/O — intentionally absent from ViSyscall/libs/api (avoids Law 1).
+            255 => Syscall::Rename {
+                old_ptr: a0,
+                old_len: a1,
+                new_ptr: a2,
+                new_len: a3,
+            },
             500 => Syscall::BlkRead {
                 sector: a0 as u64,
                 buf_ptr: a1,
@@ -6614,6 +6655,11 @@ fn check_allowlist(syscall_id: usize, caller_id: usize) -> Result<(), SyscallErr
     } else {
         None
     };
+    let rename_bit: Option<u8> = if syscall_id == 255 {
+        Some(62)
+    } else {
+        None
+    };
 
     // Raw opcodes with a dedicated `map_syscall` fallback mapping. These are
     // intentionally absent from `ViSyscall` (Law 1: keeps experimental ids out
@@ -6653,7 +6699,7 @@ fn check_allowlist(syscall_id: usize, caller_id: usize) -> Result<(), SyscallErr
         );
         return Err(SyscallError::PermissionDenied);
     }
-    if let Some(b) = bit {
+    if let Some(b) = bit.or(rename_bit) {
         if allowlist & (1u64 << b) == 0 {
             log::warn!(
                 "[kernel] syscall {:?} (bit {}) denied for tid {} (allowlist={:#018x})",
@@ -6984,7 +7030,28 @@ mod tests {
                 whence: 2
             }
         ));
-        assert!(map_syscall(255, 0, 0, 0, 0).is_none());
+        let rename = map_syscall(ViSyscall::Rename as usize, 0x1000, 10, 0x2000, 20)
+            .expect("Rename must decode");
+        assert!(matches!(
+            rename,
+            Syscall::Rename {
+                old_ptr: 0x1000,
+                old_len: 10,
+                new_ptr: 0x2000,
+                new_len: 20
+            }
+        ));
+        assert_eq!(syscall_to_vi(&rename), Some(ViSyscall::Rename));
+
+        with_scheduler_task(0, |tid| {
+            assert_eq!(
+                check_allowlist(ViSyscall::Rename as usize, tid),
+                Err(SyscallError::PermissionDenied)
+            );
+        });
+        with_scheduler_task(1u64 << 62, |tid| {
+            assert_eq!(check_allowlist(ViSyscall::Rename as usize, tid), Ok(()));
+        });
 
         with_scheduler_task(0, |tid| {
             assert_eq!(

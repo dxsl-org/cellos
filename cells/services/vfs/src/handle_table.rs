@@ -1,14 +1,5 @@
-#![allow(dead_code)] // reason: write path wired in full VirtIO-FAT phase
+#![allow(dead_code)]
 //! Open file handle table for the VFS service.
-//!
-//! Maps a `CapId` (issued by the kernel) to the VFS-internal state needed to
-//! service subsequent `Read`, `Write`, `Seek`, and `Close` IPC requests.
-//!
-//! One table serves every client cell — the `CapId` keyspace is shared, not
-//! per-cell.  Each entry therefore records the cell that opened it, and every
-//! lookup takes the caller's identity and compares it before handing back state.
-//! Holding a `CapId` value is not by itself sufficient to reach an entry.
-
 use alloc::collections::BTreeMap;
 use alloc::string::{String, ToString};
 use api::cap::CapId;
@@ -18,25 +9,13 @@ use crate::caller::Caller;
 
 /// State for one open file handle inside the VFS cell.
 pub struct HandleEntry {
-    /// The caller that opened this handle: the only caller permitted to reach the
-    /// entry, and the cell whose quota it is accounted against.  Compared on
-    /// every lookup — see [`HandleTable::get_mut`] and [`HandleTable::remove`].
-    /// Carries the cell generation, so a successor cell under a recycled
-    /// `CellId` is not the same owner.
     pub owner: Caller,
-    /// Path this handle was opened for.  Kept so a read through the handle can be
-    /// re-authorized against the current rules: the open-time check proves only
-    /// what policy said then, and a handle can outlive a rule change.
     pub path: String,
-    /// Pointer into the in-memory data slice (RamFS backing).
-    /// Zero for directories or write-mode files not yet flushed.
     pub data_ptr: VAddr,
-    /// Length of the data slice.
     pub data_len: usize,
-    /// Current read/write position within `data_ptr..data_ptr+data_len`.
     pub pos: usize,
-    /// Whether this handle is open for writing.
     pub writable: bool,
+    pub _lease: Option<crate::namespace::ServiceHandle>,
 }
 
 /// VFS-internal file handle table.
@@ -52,14 +31,18 @@ impl HandleTable {
         }
     }
 
-    /// Register a new read-only handle for `owner`, backed by `data_ptr/data_len`.
-    pub fn insert_ro(
+    pub fn insert_ro(&mut self, owner: Caller, cap: CapId, path: &str, ptr: VAddr, len: usize) {
+        self.insert_ro_leased(owner, cap, path, ptr, len, None);
+    }
+
+    pub fn insert_ro_leased(
         &mut self,
         owner: Caller,
         cap: CapId,
         path: &str,
         data_ptr: VAddr,
         data_len: usize,
+        lease: Option<crate::namespace::ServiceHandle>,
     ) {
         self.entries.insert(
             cap.0,
@@ -70,6 +53,7 @@ impl HandleTable {
                 data_len,
                 pos: 0,
                 writable: false,
+                _lease: lease,
             },
         );
     }
@@ -205,5 +189,17 @@ mod tests {
         assert_eq!(table.purge_owner(CELL_B), 1);
         assert!(table.get_mut(CELL_B, B_CAP).is_none());
         assert!(table.get_mut(CELL_B_RESPAWNED, CapId(8)).is_some());
+    }
+
+    #[test]
+    fn handle_table_leased_entry_drops_service_handle_on_remove() {
+        let mut table = HandleTable::new();
+        let ledger = crate::namespace::NamespaceLedger::new();
+        let key = crate::namespace::NamespaceKey::parse("/srv/item").expect("key");
+        let lease = ledger.acquire_service_handle(&key).expect("lease");
+        assert_eq!(ledger.entry_count(), 1);
+        table.insert_ro_leased(CELL_B, B_CAP, "/srv/item", 0x1000, 64, Some(lease));
+        assert!(table.remove(CELL_B, B_CAP).is_some());
+        assert_eq!(ledger.entry_count(), 0);
     }
 }

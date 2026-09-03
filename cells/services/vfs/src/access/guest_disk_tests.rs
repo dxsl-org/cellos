@@ -1,11 +1,11 @@
 use super::*;
 use core::sync::atomic::{AtomicUsize, Ordering};
 use types::CellId;
-
 const CELL: Caller = Caller {
     cell: CellId(5),
     generation: 1,
     sender_tid: 50,
+    flags: api::caller_identity::CALLER_FLAG_VFS_MUTATE,
 };
 
 #[test]
@@ -40,16 +40,19 @@ fn death_clears_authorization_and_new_tid_is_authorized() {
         cell: CellId(60),
         generation: 1,
         sender_tid: 50,
+        flags: api::caller_identity::CALLER_FLAG_VFS_MUTATE,
     };
     let hv_v2 = Caller {
         cell: CellId(60),
         generation: 2,
         sender_tid: 52,
+        flags: api::caller_identity::CALLER_FLAG_VFS_MUTATE,
     };
     let impostor = Caller {
         cell: CellId(61),
         generation: 1,
         sender_tid: 99,
+        flags: api::caller_identity::CALLER_FLAG_VFS_MUTATE,
     };
 
     // 1. Initial live hypervisor (TID 50) is authorized.

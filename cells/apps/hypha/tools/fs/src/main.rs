@@ -25,7 +25,7 @@ use ostd::runtime::CellRuntime;
 use ostd::syscall::sys_exit;
 
 api::declare_manifest!(block_io = false, network = false, spawn = false);
-api::declare_syscalls![Send, Recv, Log, LookupService];
+api::declare_syscalls![Send, Recv, Log, LookupService, VfsMutate];
 
 ostd::cell_main!(cell_main);
 

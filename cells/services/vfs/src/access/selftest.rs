@@ -14,6 +14,7 @@ fn guest_disk_security_boundary_is_fail_closed() {
         cell: CellId(60),
         generation: 1,
         sender_tid: 50,
+        flags: api::caller_identity::CALLER_FLAG_VFS_MUTATE,
     };
     vfs.access = crate::access::AccessTable::with_service_lookup(|id| {
         (id == api::hypervisor::HYPERVISOR_SERVICE_ID).then_some(50)
@@ -27,6 +28,7 @@ fn guest_disk_security_boundary_is_fail_closed() {
         cell: CellId(60),
         generation: 2,
         sender_tid: 52,
+        flags: api::caller_identity::CALLER_FLAG_VFS_MUTATE,
     };
     vfs.access = crate::access::AccessTable::with_service_lookup(|_| None);
     assert!(!vfs.access.can_write(dead_caller, "/mnt/sd/guest_disk.img"));
@@ -146,6 +148,7 @@ fn guest_disk_security_boundary_is_fail_closed() {
         cell: CellId(77),
         generation: 1,
         sender_tid: 66,
+        flags: 0,
     };
     let _ = vfs.dirs.on_contact(other_caller);
     vfs.dirs.mark_attested(other_caller);
