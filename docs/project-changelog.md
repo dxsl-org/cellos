@@ -4,6 +4,29 @@
 
 ## [Unreleased] Development-first hardware-constrained execution
 
+- Implemented the Tier 3 wide-guest Ubuntu/glibc substrate and fixed-capacity
+  storage contract. Added stable service ID `HYPERVISOR_SERVICE_ID = 14` in
+  `libs/api/src/abi/hypervisor.rs` with stability assertions. `app-init` registers
+  the spawned hypervisor instance under ID 14, and the kernel's `exit_task`
+  automatically clears dead registrations via `clear_tid` upon task termination.
+  `service-vfs` restricts writes to `/mnt/sd/guest_disk.img` to the live
+  registered hypervisor provider, rejects whole-file write/unlink, enforces strict
+  directory-tree and ancestor containment in `can_remove_tree` and `can_remove_dir`
+  across `/`, `/mnt`, `/mnt/`, `/mnt/sd`, `/mnt/sd/`, and `/mnt/sd/guest_disk.img`
+  so `RmdirRecursive` cannot delete the system disk, and permits preallocated
+  fixed-capacity overwrites via `WriteHandleGrant` without generic quota charging
+  while strictly forbidding file growth. The hypervisor cell gains the opt-in
+  `ubuntu-wide-guest` Cargo feature, which selects a 512 MiB
+  guest RAM carve and a root-on-blk `/dev/vda` ext4 systemd multi-user command line
+  while keeping the 128 MiB Alpine fast lane default. Added reproducible
+  pinned image builder `scripts/build-ubuntu-wide-guest-x86.sh` (Canonical Noble
+  20240821 rootfs SHA-256 `16429c49387eaf783a88ce1896940dfdb10b51cbec38304b2b652e26993276b7`)
+  and two-boot persistence runner `scripts/qemu-ubuntu-wide-guest-x86.sh`.
+  The two-boot apt-persistence and full Ubuntu guest boot behaviors remain
+  explicitly blocked by their external prerequisites (host root for rootfs creation
+  and qualified QEMU-TCG 10.2.0); existing host unit tests (146 passed) and the
+  volatile-disk Alpine machinery boot (vCPU ready) were reverified.
+
 - Replaced the x86_64 shared interrupt entries with 256 deterministic
   per-vector stubs and one normalized common frame. The entry path preserves
   all 15 GPRs and interrupted DF, clears DF for Rust, and dynamically aligns

@@ -37,6 +37,18 @@ or qualified independent external floor.
   with backend recovery. ARM64 hostile execution remains blocked by the known
   synchronous TCG fault before the guest probe; rerun that corpus only in an
   environment that reaches the probe.
+- The Tier 3 wide-guest Ubuntu/glibc substrate is implemented: stable service ID
+  14 (`HYPERVISOR_SERVICE_ID` in `libs/api/src/abi/hypervisor.rs`) registers the hypervisor on spawn, the kernel
+  auto-clears dead registrations on task exit, VFS grants the live provider
+  preallocated fixed-capacity write access to `/mnt/sd/guest_disk.img` without
+  quota charging while forbidding file growth, whole-file write, and recursive tree
+  deletion across `/`, `/mnt`, `/mnt/`, `/mnt/sd`, `/mnt/sd/`, and
+  `/mnt/sd/guest_disk.img`, and `ubuntu-wide-guest` enables 512 MiB RAM and
+  root-on-blk `/dev/vda` ext4 systemd multi-user boot. The reproducible
+  Canonical Noble 24.04 image builder and two-boot persistence runner are pinned
+  and fail-closed. Execution of the two-boot apt-persistence and full systemd
+  multi-user assertions remains blocked on its external prerequisites: host root
+  for rootfs creation and qualified QEMU-TCG 10.2.0.
 - The AArch64 test-hooks semihosting implementation has a successful local
   diagnostic run, but the authoritative ledger remains blocked. Issue
   [#47](https://github.com/dxsl-org/cellos/issues/47) requires a genuinely
