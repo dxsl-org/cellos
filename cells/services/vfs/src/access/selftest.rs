@@ -22,6 +22,27 @@ fn guest_disk_security_boundary_is_fail_closed() {
     vfs.dirs.mark_attested(hv_caller);
 
     assert!(vfs.access.can_write(hv_caller, "/mnt/sd/guest_disk.img"));
+    let dead_caller = hv_caller;
+    let respawned_caller = Caller {
+        cell: CellId(60),
+        generation: 2,
+        sender_tid: 52,
+    };
+    vfs.access = crate::access::AccessTable::with_service_lookup(|_| None);
+    assert!(!vfs.access.can_write(dead_caller, "/mnt/sd/guest_disk.img"));
+    assert!(!vfs
+        .access
+        .can_write(respawned_caller, "/mnt/sd/guest_disk.img"));
+    vfs.access = crate::access::AccessTable::with_service_lookup(|id| {
+        (id == api::hypervisor::HYPERVISOR_SERVICE_ID).then_some(52)
+    });
+    assert!(!vfs.access.can_write(dead_caller, "/mnt/sd/guest_disk.img"));
+    assert!(vfs
+        .access
+        .can_write(respawned_caller, "/mnt/sd/guest_disk.img"));
+    vfs.access = crate::access::AccessTable::with_service_lookup(|id| {
+        (id == api::hypervisor::HYPERVISOR_SERVICE_ID).then_some(50)
+    });
 
     for protected in [
         "/",

@@ -14,6 +14,8 @@
 //! `NetworkCap` / `SpawnCap`). Per-cell VFS path grants are a separate concern.
 
 mod guest_disk;
+#[cfg(test)]
+mod guest_disk_tests;
 mod kms;
 mod rules;
 #[cfg(feature = "test-hooks")]

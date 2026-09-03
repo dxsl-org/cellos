@@ -39,14 +39,8 @@ pub(crate) fn prepare_service(path: &str) {
     }
 }
 
-pub(crate) fn spawn_optional_services() -> Option<usize> {
-    #[cfg(not(feature = "hypervisor-min"))]
-    match sys_spawn_from_path("/bin/fb-console") {
-        SyscallResult::Ok(_) => ostd::io::println("Init: fb-console spawned."),
-        SyscallResult::Err(_) => ostd::io::println("Init: fb-console spawn failed."),
-    }
-
-    let hypervisor_tid = match sys_spawn_from_path("/bin/hypervisor") {
+pub(crate) fn spawn_hypervisor() -> Option<usize> {
+    match sys_spawn_from_path("/bin/hypervisor") {
         SyscallResult::Ok(tid) => {
             let _ = sys_notify_on_exit(tid);
             if let SyscallResult::Err(_) =
@@ -59,8 +53,17 @@ pub(crate) fn spawn_optional_services() -> Option<usize> {
             }
         }
         _ => None,
-    };
+    }
+}
 
+pub(crate) fn spawn_optional_services() -> Option<usize> {
+    #[cfg(not(feature = "hypervisor-min"))]
+    match sys_spawn_from_path("/bin/fb-console") {
+        SyscallResult::Ok(_) => ostd::io::println("Init: fb-console spawned."),
+        SyscallResult::Err(_) => ostd::io::println("Init: fb-console spawn failed."),
+    }
+
+    let hypervisor_tid = spawn_hypervisor();
     #[cfg(not(feature = "hypervisor-min"))]
     {
         let _ = sys_spawn_from_path("/bin/silo-test");

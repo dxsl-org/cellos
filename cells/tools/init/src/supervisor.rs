@@ -11,6 +11,8 @@ const RESTART_WINDOW_TICKS: u64 = 1000;
 
 pub(crate) fn run(services: &mut [Service], mut hypervisor_tid: Option<usize>) -> ! {
     let mut buffer = [0u8; 16];
+    let mut hypervisor_restarts = 0u32;
+    let mut hypervisor_last_restart = 0u64;
     loop {
         let dead = match sys_recv(0, &mut buffer) {
             SyscallResult::Ok(tid) => tid,
@@ -23,10 +25,25 @@ pub(crate) fn run(services: &mut [Service], mut hypervisor_tid: Option<usize>) -
         let reason = u64::from_le_bytes(buffer[..8].try_into().unwrap());
 
         if hypervisor_tid == Some(dead) {
-            // The kernel's exit_task automatically purges dead mappings from
-            // the service registry via clear_tid(dead), so lookup returns None.
             relay_hypervisor_exit(dead);
-            hypervisor_tid = None;
+            let now = sys_get_time();
+            if now.saturating_sub(hypervisor_last_restart) > RESTART_WINDOW_TICKS {
+                hypervisor_restarts = 0;
+            }
+            hypervisor_last_restart = now;
+            if hypervisor_restarts >= MAX_RESTARTS_PER_WINDOW {
+                println("Init: hypervisor restart storm — giving up.");
+                hypervisor_tid = None;
+                continue;
+            }
+            hypervisor_restarts += 1;
+            println("Init: hypervisor died — respawning...");
+            hypervisor_tid = crate::boot::spawn_hypervisor();
+            if hypervisor_tid.is_some() {
+                println("Init: hypervisor restarted.");
+            } else {
+                println("Init: hypervisor restart FAILED.");
+            }
             continue;
         }
 
