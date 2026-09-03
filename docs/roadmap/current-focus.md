@@ -51,16 +51,16 @@ unrelated host, QEMU, exact-device development, or documentation work.
   and fail-closed. Execution of the two-boot apt-persistence and full systemd
   multi-user assertions remains blocked on its external prerequisites: host root
   for rootfs creation and qualified QEMU-TCG 10.2.0.
-- The AArch64 test-hooks semihosting implementation has a successful local
-  diagnostic run, but the authoritative ledger promotion remains blocked.
-  Issue [#47](https://github.com/dxsl-org/cellos/issues/47) is the GitHub
-  approval channel: the sole maintainer may prepare the evidence and correction,
-  but another repository member must answer explicit `YES` or `NO` against the
-  exact proposal, commit, and evidence before independent ratification.
-  AI/subagents and CI are automated assurance and cannot supply that answer.
-  Live POSIX documentation, shell `cd`/`pwd`, `fstat`, atomic `rename`, and
-  pinned-QEMU x86 compatibility no longer depend on this ledger promotion; each
-  proceeds under its own technical, ABI, authority, and evidence gates.
+- The AArch64 test-hooks semihosting ledger closure is complete. Blocker
+  `B-AARCH64-SEMHOSTING` was corrected to subject `qemu-arm64` and resolved to
+  PASS under schema v4 following independent ratification on Issue
+  [#47](https://github.com/dxsl-org/cellos/issues/47) by repository collaborator
+  @datgausaigon (`DECISION: YES`). The resolution binds fresh QEMU runtime
+  artifacts (`docs/evidence/aarch64-semihosting-20260903-03-raw.txt` and
+  `docs/evidence/aarch64-semihosting-20260903-03-runner.txt`). Acceptance-ledger
+  production Phase 3 remains PLANNED. Independent development lanes (POSIX
+  documentation, shell `cd`/`pwd`, `fstat`, atomic `rename`, and pinned-QEMU x86
+  compatibility) proceed under their own gates.
 - Single-guest local Cell-to-Cell evidence is now required through the
   [CI workflow](../../.github/workflows/ci.yml) job
   `c2c-broker-oracle-single-guest-local-runtime`, displayed as
@@ -304,12 +304,9 @@ events are maintained in
 
 ## Next-session work order
 
-1. For the AArch64 ledger only, complete the fresh evidence and append-only
-   correction proposal, bind the exact claim, commit/tree, and evidence in Issue
-   [#47](https://github.com/dxsl-org/cellos/issues/47), then request
-   `DECISION: YES` or `DECISION: NO` from one repository member distinct from
-   the accountable maintainer. Until `YES`, keep only that ledger promotion
-   blocked; retained local evidence remains diagnostic.
+1. AArch64 semihosting ledger closure is complete: Issue #47 ratified
+   `B-AARCH64-SEMHOSTING` resolution to PASS under schema v4 with bound QEMU
+   evidence. Acceptance-ledger production Phase 3 remains PLANNED.
 2. Independently continue any ready lane, beginning with both available
    Raspberry Pi 3 Model B+ boards: record each exact serial, revision, and
    current condition, then reconcile whether either corresponds to the prior

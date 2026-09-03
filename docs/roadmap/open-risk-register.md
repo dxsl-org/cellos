@@ -202,18 +202,15 @@ those remain fail-closed production gates.
   Raspberry Pi 3 Model B+ boards remain available for development integration
   only and cannot qualify a production-security floor.
 
-- AArch64 test-hooks semihosting code and a dedicated runner exist, but
-  `B-AARCH64-SEMHOSTING` remains `BLOCKED` in the authoritative acceptance
-  ledger with the stale `qemu-rv64` subject and no independently ratified
-  correction. Issue
-  [#47](https://github.com/dxsl-org/cellos/issues/47) is the required approval
-  channel. The sole maintainer may own preparation and execution; AI, local
-  agents, and CI provide automated assurance only. Promotion requires another
-  repository member to answer explicit `YES` on the issue or pull request
-  bound to the exact proposal, commit, and evidence; `NO` or no answer keeps
-  only that promotion blocked. Native POSIX documentation and implementation,
-  atomic `rename`, and pinned QEMU-TCG x86 compatibility are independent lanes
-  governed by their own gates.
+- AArch64 test-hooks semihosting blocker `B-AARCH64-SEMHOSTING` was corrected
+  and resolved to PASS under schema v4 with independent ratification on Issue
+  [#47](https://github.com/dxsl-org/cellos/issues/47) by repository collaborator
+  @datgausaigon (`DECISION: YES`). The resolution binds fresh QEMU runtime
+  evidence (`docs/evidence/aarch64-semihosting-20260903-03-raw.txt` and
+  `docs/evidence/aarch64-semihosting-20260903-03-runner.txt`). This closes the
+  test-hook semihosting debt at the QEMU ceiling; acceptance-ledger production
+  Phase 3 remains PLANNED, and physical AArch64 hardware qualification remains an
+  external-gated prerequisite.
 
 ## Low
 

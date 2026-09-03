@@ -3,6 +3,21 @@
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
 ## [Unreleased] Development-first hardware-constrained execution
+- Resolved acceptance blocker `B-AARCH64-SEMHOSTING` on the AArch64 QEMU
+  test-hooks boundary. The append-only acceptance ledger was migrated to schema
+  v4 (event `schema-v4-migration`), corrected with subject `qemu-arm64` and
+  execution/clean-termination scope (event `correction-qemu-arm64`), and resolved
+  to PASS (event `resolution-b-aarch64-semhosting`) after independent
+  ratification on GitHub Issue #47 by collaborator @datgausaigon (`DECISION: YES`).
+  Bound evidence is raw stream `docs/evidence/aarch64-semihosting-20260903-03-raw.txt`
+  (SHA-256 `a586202f56ba2a3141f0db663b79c4141c67a190c039510ac53c300eb9f326ee`, 29,509 bytes)
+  and runner transcript `docs/evidence/aarch64-semihosting-20260903-03-runner.txt`
+  (SHA-256 `1fe1ed44c5682c9683a079ecb971dba27686ee763a9c7782fb022618b72cf370`, 29,328 bytes)
+  tested at commit `01e2eef714151759ea7dd7bb468249870be8e5fe` (tree `8c20579e0a0d922bc375883ad8933b9134a4fa85`).
+  Build, runner, and outer pipeline exit statuses were all 0. Acceptance-ledger
+  production Phase 3 remains PLANNED; physical AArch64 board and production
+  qualification exclusions remain unchanged.
+
 
 - Adopted solo-first development with independent promotion. One accountable
   maintainer may perform planning, implementation, testing, self-review,
