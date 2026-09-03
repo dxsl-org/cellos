@@ -37,7 +37,8 @@ extern "C" {
     fn printf(fmt: *const u8, ...) -> i32;
     fn socket(domain: i32, socktype: i32, protocol: i32) -> i32;
     fn getentropy(buf: *mut u8, len: usize) -> i32;
-    fn clock_gettime(clock_id: i32, tp: *mut TimeSpec) -> i32;
+    fn _time(tloc: *mut i64) -> i64;
+    fn _gettimeofday(tv: *mut c_void, tz: *mut c_void) -> i32;
 }
 ```
 
@@ -46,13 +47,14 @@ extern "C" {
 - `malloc(size)` → heap allocation via `sys_anon_allocate`
 - `free(ptr)` → deallocate
 - `printf(fmt, ...)` → formatted output
-- `socket(domain, socktype, protocol)` → TCP/UDP socket
+- `socket(domain, socktype, protocol)` → TCP stream socket (`AF_INET`/`SOCK_STREAM` only)
 - `connect(fd, addr, addrlen)` → connect to peer
 - `send(fd, buf, len, flags)` → send bytes
 - `recv(fd, buf, len, flags)` → receive bytes
 - `close(fd)` → close socket
 - `getentropy(buf, len)` → random bytes (via `sys_get_random`)
-- `clock_gettime(clock_id, tp)` → wall-clock / monotonic time
+- `_time(tloc)` → epoch seconds (via `ViSyscall::GetTime`)
+- `_gettimeofday(tv, tz)` → wall-clock time (seconds, microseconds=0)
 
 For the full list, see `libs/api/src/services/posix.rs`.
 
