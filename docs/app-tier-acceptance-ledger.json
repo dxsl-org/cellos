@@ -1,84 +1,1098 @@
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "authoritative": true,
   "projection": "docs/app-tier-acceptance-matrix.md is review-only; build denominators are derived only from Spec 23 by the validator.",
-  "axes": ["tier", "runtime_profile", "sdk_module", "cpu", "environment", "admission", "ipc", "grant", "mmio", "dma", "lifecycle", "security_negative"],
+  "axes": [
+    "tier",
+    "runtime_profile",
+    "sdk_module",
+    "cpu",
+    "environment",
+    "admission",
+    "ipc",
+    "grant",
+    "mmio",
+    "dma",
+    "lifecycle",
+    "security_negative"
+  ],
   "subjects": [
-    {"id":"qemu-rv64","environment":"qemu","architecture":"riscv64","board_revision":"","firmware_digest":"","host_vmm":"QEMU TCG"},
-    {"id":"kvm-arm64","environment":"kvm","architecture":"aarch64","board_revision":"","firmware_digest":"","host_vmm":"ARM64 KVM"},
-    {"id":"physical-rpi3","environment":"physical","architecture":"aarch64","board_revision":"Raspberry Pi 3 Model B v1.2","firmware_digest":"0000000000000000000000000000000000000000000000000000000000000000","host_vmm":""}
+    {
+      "id": "qemu-rv64",
+      "environment": "qemu",
+      "architecture": "riscv64",
+      "board_revision": "",
+      "firmware_digest": "",
+      "host_vmm": "QEMU TCG"
+    },
+    {
+      "id": "kvm-arm64",
+      "environment": "kvm",
+      "architecture": "aarch64",
+      "board_revision": "",
+      "firmware_digest": "",
+      "host_vmm": "ARM64 KVM"
+    },
+    {
+      "id": "physical-rpi3",
+      "environment": "physical",
+      "architecture": "aarch64",
+      "board_revision": "Raspberry Pi 3 Model B v1.2",
+      "firmware_digest": "0000000000000000000000000000000000000000000000000000000000000000",
+      "host_vmm": ""
+    }
   ],
   "blockers": [
-    {"id":"B-HARDWARE","status":"BLOCKED","subject":"physical-rpi3","scope":"RPi3 boot is not app-tier runtime qualification.","evidence":[{"path":"docs/specs/23-native-sdk-contract.md","sha256":"027e1a2bbfb19f55dec326a0588a459ff635f24f136ad0f6a971d67e93ca9e42","size_bytes":30313,"kind":"source"}],"resolution":null},
-    {"id":"B-ADMISSION","status":"BLOCKED","subject":"qemu-rv64","scope":"Tier 2 admission requires fail-closed hostile tests.","evidence":[{"path":"docs/specs/23-native-sdk-contract.md","sha256":"027e1a2bbfb19f55dec326a0588a459ff635f24f136ad0f6a971d67e93ca9e42","size_bytes":30313,"kind":"source"}],"resolution":null},
-    {"id":"B-TIER2","status":"BLOCKED","subject":"kvm-arm64","scope":"Native domains remain unimplemented.","evidence":[{"path":"docs/specs/23-native-sdk-contract.md","sha256":"027e1a2bbfb19f55dec326a0588a459ff635f24f136ad0f6a971d67e93ca9e42","size_bytes":30313,"kind":"source"}],"resolution":null},
-    {"id":"B-AARCH64-SEMHOSTING","status":"BLOCKED","subject":"qemu-rv64","scope":"AArch64 test-hooks semihosting does not compile.","evidence":[{"path":"docs/specs/23-native-sdk-contract.md","sha256":"027e1a2bbfb19f55dec326a0588a459ff635f24f136ad0f6a971d67e93ca9e42","size_bytes":30313,"kind":"source"}],"resolution":null}
+    {
+      "id": "B-HARDWARE",
+      "status": "BLOCKED",
+      "subject": "physical-rpi3",
+      "scope": "RPi3 boot is not app-tier runtime qualification.",
+      "evidence": [
+        {
+          "path": "docs/specs/23-native-sdk-contract.md",
+          "sha256": "027e1a2bbfb19f55dec326a0588a459ff635f24f136ad0f6a971d67e93ca9e42",
+          "size_bytes": 30313,
+          "kind": "source"
+        }
+      ],
+      "resolution": null
+    },
+    {
+      "id": "B-ADMISSION",
+      "status": "BLOCKED",
+      "subject": "qemu-rv64",
+      "scope": "Tier 2 admission requires fail-closed hostile tests.",
+      "evidence": [
+        {
+          "path": "docs/specs/23-native-sdk-contract.md",
+          "sha256": "027e1a2bbfb19f55dec326a0588a459ff635f24f136ad0f6a971d67e93ca9e42",
+          "size_bytes": 30313,
+          "kind": "source"
+        }
+      ],
+      "resolution": null
+    },
+    {
+      "id": "B-TIER2",
+      "status": "BLOCKED",
+      "subject": "kvm-arm64",
+      "scope": "Native domains remain unimplemented.",
+      "evidence": [
+        {
+          "path": "docs/specs/23-native-sdk-contract.md",
+          "sha256": "027e1a2bbfb19f55dec326a0588a459ff635f24f136ad0f6a971d67e93ca9e42",
+          "size_bytes": 30313,
+          "kind": "source"
+        }
+      ],
+      "resolution": null
+    },
+    {
+      "id": "B-AARCH64-SEMHOSTING",
+      "status": "BLOCKED",
+      "subject": "qemu-rv64",
+      "scope": "AArch64 test-hooks semihosting does not compile.",
+      "evidence": [
+        {
+          "path": "docs/specs/23-native-sdk-contract.md",
+          "sha256": "027e1a2bbfb19f55dec326a0588a459ff635f24f136ad0f6a971d67e93ca9e42",
+          "size_bytes": 30313,
+          "kind": "source"
+        }
+      ],
+      "resolution": null
+    }
   ],
   "rows": [
-    {"id": "C2-FDN", "aggregate": "BLOCKED", "cells": [
-      {"id":"C2-FDN/rust-no-std","source_text":"**PARTIAL**","source_availability":"PARTIAL","required_for_c9":true,"status":"BLOCKED","evidence":[]},
-      {"id":"C2-FDN/rust-std","source_text":"**PLANNED**","source_availability":"PLANNED","required_for_c9":true,"status":"PLANNED","evidence":[]},
-      {"id":"C2-FDN/ffi-posix","source_text":"**PARTIAL**","source_availability":"PARTIAL","required_for_c9":true,"status":"BLOCKED","evidence":[]},
-      {"id":"C2-FDN/lua","source_text":"**PARTIAL**","source_availability":"PARTIAL","required_for_c9":true,"status":"BLOCKED","evidence":[]},
-      {"id":"C2-FDN/T1","source_text":"**PARTIAL** trusted SAS","source_availability":"PARTIAL","required_for_c9":true,"status":"BLOCKED","evidence":[]},
-      {"id":"C2-FDN/T2","source_text":"**BLOCKED**: copied/domain-safe IPC and explicit grants only after Spec 22","source_availability":"BLOCKED","required_for_c9":true,"status":"BLOCKED","evidence":[]}]},
-    {"id":"C2-RNS","aggregate":"BLOCKED","cells":[
-      {"id":"C2-RNS/rust-no-std","source_text":"**PARTIAL**","source_availability":"PARTIAL","required_for_c9":true,"status":"BLOCKED","evidence":[]},
-      {"id":"C2-RNS/rust-std","source_text":"**N/A**","source_availability":"N/A","required_for_c9":false,"status":"BLOCKED","evidence":[]},
-      {"id":"C2-RNS/ffi-posix","source_text":"**N/A**","source_availability":"N/A","required_for_c9":false,"status":"BLOCKED","evidence":[]},
-      {"id":"C2-RNS/lua","source_text":"**N/A**","source_availability":"N/A","required_for_c9":false,"status":"BLOCKED","evidence":[]},
-      {"id":"C2-RNS/T1","source_text":"**PARTIAL**","source_availability":"PARTIAL","required_for_c9":true,"status":"BLOCKED","evidence":[]},
-      {"id":"C2-RNS/T2","source_text":"**BLOCKED** pending native-domain runtime evidence","source_availability":"BLOCKED","required_for_c9":true,"status":"BLOCKED","evidence":[]}]},
-    {"id":"C2-RST","aggregate":"BLOCKED","cells":[
-      {"id":"C2-RST/rust-no-std","source_text":"**N/A**","source_availability":"N/A","required_for_c9":false,"status":"BLOCKED","evidence":[]},
-      {"id":"C2-RST/rust-std","source_text":"**PLANNED**","source_availability":"PLANNED","required_for_c9":true,"status":"PLANNED","evidence":[]},
-      {"id":"C2-RST/ffi-posix","source_text":"**N/A**","source_availability":"N/A","required_for_c9":false,"status":"BLOCKED","evidence":[]},
-      {"id":"C2-RST/lua","source_text":"**N/A**","source_availability":"N/A","required_for_c9":false,"status":"BLOCKED","evidence":[]},
-      {"id":"C2-RST/T1","source_text":"**PLANNED**","source_availability":"PLANNED","required_for_c9":true,"status":"PLANNED","evidence":[]},
-      {"id":"C2-RST/T2","source_text":"**PLANNED**","source_availability":"PLANNED","required_for_c9":true,"status":"PLANNED","evidence":[]}]},
-    {"id":"C2-FFI","aggregate":"BLOCKED","cells":[
-      {"id":"C2-FFI/rust-no-std","source_text":"**N/A**","source_availability":"N/A","required_for_c9":false,"status":"BLOCKED","evidence":[]},
-      {"id":"C2-FFI/rust-std","source_text":"**N/A**","source_availability":"N/A","required_for_c9":false,"status":"BLOCKED","evidence":[]},
-      {"id":"C2-FFI/ffi-posix","source_text":"**PARTIAL**","source_availability":"PARTIAL","required_for_c9":true,"status":"BLOCKED","evidence":[]},
-      {"id":"C2-FFI/lua","source_text":"**N/A**","source_availability":"N/A","required_for_c9":false,"status":"BLOCKED","evidence":[]},
-      {"id":"C2-FFI/T1","source_text":"**PARTIAL**, trusted","source_availability":"PARTIAL","required_for_c9":true,"status":"BLOCKED","evidence":[]},
-      {"id":"C2-FFI/T2","source_text":"**UNSUPPORTED** until a domain-safe FFI/runtime contract passes Spec 22","source_availability":"UNSUPPORTED","required_for_c9":false,"status":"BLOCKED","evidence":[]}]},
-    {"id":"C2-LUA","aggregate":"BLOCKED","cells":[
-      {"id":"C2-LUA/rust-no-std","source_text":"**N/A**","source_availability":"N/A","required_for_c9":false,"status":"BLOCKED","evidence":[]},
-      {"id":"C2-LUA/rust-std","source_text":"**N/A**","source_availability":"N/A","required_for_c9":false,"status":"BLOCKED","evidence":[]},
-      {"id":"C2-LUA/ffi-posix","source_text":"**N/A**","source_availability":"N/A","required_for_c9":false,"status":"BLOCKED","evidence":[]},
-      {"id":"C2-LUA/lua","source_text":"**PARTIAL**","source_availability":"PARTIAL","required_for_c9":true,"status":"BLOCKED","evidence":[]},
-      {"id":"C2-LUA/T1","source_text":"**PARTIAL**, trusted Rust-hosted runtime","source_availability":"PARTIAL","required_for_c9":true,"status":"BLOCKED","evidence":[]},
-      {"id":"C2-LUA/T2","source_text":"**UNSUPPORTED** until domain-safe native runtime design and evidence exist","source_availability":"UNSUPPORTED","required_for_c9":false,"status":"BLOCKED","evidence":[]}]},
-    {"id":"C2-SVC","aggregate":"BLOCKED","cells":[
-      {"id":"C2-SVC/rust-no-std","source_text":"**PARTIAL**","source_availability":"PARTIAL","required_for_c9":true,"status":"BLOCKED","evidence":[]},{"id":"C2-SVC/rust-std","source_text":"**PLANNED**","source_availability":"PLANNED","required_for_c9":true,"status":"PLANNED","evidence":[]},{"id":"C2-SVC/ffi-posix","source_text":"**PARTIAL**","source_availability":"PARTIAL","required_for_c9":true,"status":"BLOCKED","evidence":[]},{"id":"C2-SVC/lua","source_text":"**PARTIAL**","source_availability":"PARTIAL","required_for_c9":true,"status":"BLOCKED","evidence":[]},{"id":"C2-SVC/T1","source_text":"**PARTIAL** where declared service/capability exists","source_availability":"PARTIAL","required_for_c9":true,"status":"BLOCKED","evidence":[]},{"id":"C2-SVC/T2","source_text":"**BLOCKED** until copied IPC and explicit domain grants are implemented","source_availability":"BLOCKED","required_for_c9":true,"status":"BLOCKED","evidence":[]}]},
-    {"id":"C2-UI","aggregate":"BLOCKED","cells":[
-      {"id":"C2-UI/rust-no-std","source_text":"**PARTIAL**","source_availability":"PARTIAL","required_for_c9":true,"status":"BLOCKED","evidence":[]},{"id":"C2-UI/rust-std","source_text":"**PLANNED**","source_availability":"PLANNED","required_for_c9":true,"status":"PLANNED","evidence":[]},{"id":"C2-UI/ffi-posix","source_text":"**UNSUPPORTED**","source_availability":"UNSUPPORTED","required_for_c9":false,"status":"BLOCKED","evidence":[]},{"id":"C2-UI/lua","source_text":"**UNSUPPORTED**","source_availability":"UNSUPPORTED","required_for_c9":false,"status":"BLOCKED","evidence":[]},{"id":"C2-UI/T1","source_text":"**PARTIAL**","source_availability":"PARTIAL","required_for_c9":true,"status":"BLOCKED","evidence":[]},{"id":"C2-UI/T2","source_text":"**BLOCKED** pending domain-safe surface/input/grant design","source_availability":"BLOCKED","required_for_c9":true,"status":"BLOCKED","evidence":[]}]},
-    {"id":"C2-MID","aggregate":"BLOCKED","cells":[
-      {"id":"C2-MID/rust-no-std","source_text":"**PARTIAL**","source_availability":"PARTIAL","required_for_c9":true,"status":"BLOCKED","evidence":[]},{"id":"C2-MID/rust-std","source_text":"**PLANNED**","source_availability":"PLANNED","required_for_c9":true,"status":"PLANNED","evidence":[]},{"id":"C2-MID/ffi-posix","source_text":"**PARTIAL**","source_availability":"PARTIAL","required_for_c9":true,"status":"BLOCKED","evidence":[]},{"id":"C2-MID/lua","source_text":"**PARTIAL**","source_availability":"PARTIAL","required_for_c9":true,"status":"BLOCKED","evidence":[]},{"id":"C2-MID/T1","source_text":"**PARTIAL**","source_availability":"PARTIAL","required_for_c9":true,"status":"BLOCKED","evidence":[]},{"id":"C2-MID/T2","source_text":"**BLOCKED** for identity-sensitive helpers; future variants must copy or use explicit domain grants","source_availability":"BLOCKED","required_for_c9":true,"status":"BLOCKED","evidence":[]}]},
-    {"id":"C2-TOL","aggregate":"BLOCKED","cells":[
-      {"id":"C2-TOL/rust-no-std","source_text":"**PARTIAL**","source_availability":"PARTIAL","required_for_c9":true,"status":"BLOCKED","evidence":[]},{"id":"C2-TOL/rust-std","source_text":"**PLANNED**","source_availability":"PLANNED","required_for_c9":true,"status":"PLANNED","evidence":[]},{"id":"C2-TOL/ffi-posix","source_text":"**PARTIAL**","source_availability":"PARTIAL","required_for_c9":true,"status":"BLOCKED","evidence":[]},{"id":"C2-TOL/lua","source_text":"**PARTIAL**","source_availability":"PARTIAL","required_for_c9":true,"status":"BLOCKED","evidence":[]},{"id":"C2-TOL/T1","source_text":"**PARTIAL**","source_availability":"PARTIAL","required_for_c9":true,"status":"BLOCKED","evidence":[]},{"id":"C2-TOL/T2","source_text":"**BLOCKED** until Tier 2 admission/package format is separately approved","source_availability":"BLOCKED","required_for_c9":true,"status":"BLOCKED","evidence":[]}]},
-    {"id":"C2-OBS","aggregate":"BLOCKED","cells":[
-      {"id":"C2-OBS/rust-no-std","source_text":"**PARTIAL**","source_availability":"PARTIAL","required_for_c9":true,"status":"BLOCKED","evidence":[]},{"id":"C2-OBS/rust-std","source_text":"**PLANNED**","source_availability":"PLANNED","required_for_c9":true,"status":"PLANNED","evidence":[]},{"id":"C2-OBS/ffi-posix","source_text":"**PARTIAL**","source_availability":"PARTIAL","required_for_c9":true,"status":"BLOCKED","evidence":[]},{"id":"C2-OBS/lua","source_text":"**PARTIAL**","source_availability":"PARTIAL","required_for_c9":true,"status":"BLOCKED","evidence":[]},{"id":"C2-OBS/T1","source_text":"**PARTIAL**","source_availability":"PARTIAL","required_for_c9":true,"status":"BLOCKED","evidence":[]},{"id":"C2-OBS/T2","source_text":"**BLOCKED** until a domain-safe observability policy exists","source_availability":"BLOCKED","required_for_c9":true,"status":"BLOCKED","evidence":[]}]}
+    {
+      "id": "C2-FDN",
+      "aggregate": "BLOCKED",
+      "cells": [
+        {
+          "id": "C2-FDN/rust-no-std",
+          "source_text": "**PARTIAL**",
+          "source_availability": "PARTIAL",
+          "required_for_c9": true,
+          "status": "BLOCKED",
+          "evidence": []
+        },
+        {
+          "id": "C2-FDN/rust-std",
+          "source_text": "**PLANNED**",
+          "source_availability": "PLANNED",
+          "required_for_c9": true,
+          "status": "PLANNED",
+          "evidence": []
+        },
+        {
+          "id": "C2-FDN/ffi-posix",
+          "source_text": "**PARTIAL**",
+          "source_availability": "PARTIAL",
+          "required_for_c9": true,
+          "status": "BLOCKED",
+          "evidence": []
+        },
+        {
+          "id": "C2-FDN/lua",
+          "source_text": "**PARTIAL**",
+          "source_availability": "PARTIAL",
+          "required_for_c9": true,
+          "status": "BLOCKED",
+          "evidence": []
+        },
+        {
+          "id": "C2-FDN/T1",
+          "source_text": "**PARTIAL** trusted SAS",
+          "source_availability": "PARTIAL",
+          "required_for_c9": true,
+          "status": "BLOCKED",
+          "evidence": []
+        },
+        {
+          "id": "C2-FDN/T2",
+          "source_text": "**BLOCKED**: copied/domain-safe IPC and explicit grants only after Spec 22",
+          "source_availability": "BLOCKED",
+          "required_for_c9": true,
+          "status": "BLOCKED",
+          "evidence": []
+        }
+      ]
+    },
+    {
+      "id": "C2-RNS",
+      "aggregate": "BLOCKED",
+      "cells": [
+        {
+          "id": "C2-RNS/rust-no-std",
+          "source_text": "**PARTIAL**",
+          "source_availability": "PARTIAL",
+          "required_for_c9": true,
+          "status": "BLOCKED",
+          "evidence": []
+        },
+        {
+          "id": "C2-RNS/rust-std",
+          "source_text": "**N/A**",
+          "source_availability": "N/A",
+          "required_for_c9": false,
+          "status": "BLOCKED",
+          "evidence": []
+        },
+        {
+          "id": "C2-RNS/ffi-posix",
+          "source_text": "**N/A**",
+          "source_availability": "N/A",
+          "required_for_c9": false,
+          "status": "BLOCKED",
+          "evidence": []
+        },
+        {
+          "id": "C2-RNS/lua",
+          "source_text": "**N/A**",
+          "source_availability": "N/A",
+          "required_for_c9": false,
+          "status": "BLOCKED",
+          "evidence": []
+        },
+        {
+          "id": "C2-RNS/T1",
+          "source_text": "**PARTIAL**",
+          "source_availability": "PARTIAL",
+          "required_for_c9": true,
+          "status": "BLOCKED",
+          "evidence": []
+        },
+        {
+          "id": "C2-RNS/T2",
+          "source_text": "**BLOCKED** pending native-domain runtime evidence",
+          "source_availability": "BLOCKED",
+          "required_for_c9": true,
+          "status": "BLOCKED",
+          "evidence": []
+        }
+      ]
+    },
+    {
+      "id": "C2-RST",
+      "aggregate": "BLOCKED",
+      "cells": [
+        {
+          "id": "C2-RST/rust-no-std",
+          "source_text": "**N/A**",
+          "source_availability": "N/A",
+          "required_for_c9": false,
+          "status": "BLOCKED",
+          "evidence": []
+        },
+        {
+          "id": "C2-RST/rust-std",
+          "source_text": "**PLANNED**",
+          "source_availability": "PLANNED",
+          "required_for_c9": true,
+          "status": "PLANNED",
+          "evidence": []
+        },
+        {
+          "id": "C2-RST/ffi-posix",
+          "source_text": "**N/A**",
+          "source_availability": "N/A",
+          "required_for_c9": false,
+          "status": "BLOCKED",
+          "evidence": []
+        },
+        {
+          "id": "C2-RST/lua",
+          "source_text": "**N/A**",
+          "source_availability": "N/A",
+          "required_for_c9": false,
+          "status": "BLOCKED",
+          "evidence": []
+        },
+        {
+          "id": "C2-RST/T1",
+          "source_text": "**PLANNED**",
+          "source_availability": "PLANNED",
+          "required_for_c9": true,
+          "status": "PLANNED",
+          "evidence": []
+        },
+        {
+          "id": "C2-RST/T2",
+          "source_text": "**PLANNED**",
+          "source_availability": "PLANNED",
+          "required_for_c9": true,
+          "status": "PLANNED",
+          "evidence": []
+        }
+      ]
+    },
+    {
+      "id": "C2-FFI",
+      "aggregate": "BLOCKED",
+      "cells": [
+        {
+          "id": "C2-FFI/rust-no-std",
+          "source_text": "**N/A**",
+          "source_availability": "N/A",
+          "required_for_c9": false,
+          "status": "BLOCKED",
+          "evidence": []
+        },
+        {
+          "id": "C2-FFI/rust-std",
+          "source_text": "**N/A**",
+          "source_availability": "N/A",
+          "required_for_c9": false,
+          "status": "BLOCKED",
+          "evidence": []
+        },
+        {
+          "id": "C2-FFI/ffi-posix",
+          "source_text": "**PARTIAL**",
+          "source_availability": "PARTIAL",
+          "required_for_c9": true,
+          "status": "BLOCKED",
+          "evidence": []
+        },
+        {
+          "id": "C2-FFI/lua",
+          "source_text": "**N/A**",
+          "source_availability": "N/A",
+          "required_for_c9": false,
+          "status": "BLOCKED",
+          "evidence": []
+        },
+        {
+          "id": "C2-FFI/T1",
+          "source_text": "**PARTIAL**, trusted",
+          "source_availability": "PARTIAL",
+          "required_for_c9": true,
+          "status": "BLOCKED",
+          "evidence": []
+        },
+        {
+          "id": "C2-FFI/T2",
+          "source_text": "**UNSUPPORTED** until a domain-safe FFI/runtime contract passes Spec 22",
+          "source_availability": "UNSUPPORTED",
+          "required_for_c9": false,
+          "status": "BLOCKED",
+          "evidence": []
+        }
+      ]
+    },
+    {
+      "id": "C2-LUA",
+      "aggregate": "BLOCKED",
+      "cells": [
+        {
+          "id": "C2-LUA/rust-no-std",
+          "source_text": "**N/A**",
+          "source_availability": "N/A",
+          "required_for_c9": false,
+          "status": "BLOCKED",
+          "evidence": []
+        },
+        {
+          "id": "C2-LUA/rust-std",
+          "source_text": "**N/A**",
+          "source_availability": "N/A",
+          "required_for_c9": false,
+          "status": "BLOCKED",
+          "evidence": []
+        },
+        {
+          "id": "C2-LUA/ffi-posix",
+          "source_text": "**N/A**",
+          "source_availability": "N/A",
+          "required_for_c9": false,
+          "status": "BLOCKED",
+          "evidence": []
+        },
+        {
+          "id": "C2-LUA/lua",
+          "source_text": "**PARTIAL**",
+          "source_availability": "PARTIAL",
+          "required_for_c9": true,
+          "status": "BLOCKED",
+          "evidence": []
+        },
+        {
+          "id": "C2-LUA/T1",
+          "source_text": "**PARTIAL**, trusted Rust-hosted runtime",
+          "source_availability": "PARTIAL",
+          "required_for_c9": true,
+          "status": "BLOCKED",
+          "evidence": []
+        },
+        {
+          "id": "C2-LUA/T2",
+          "source_text": "**UNSUPPORTED** until domain-safe native runtime design and evidence exist",
+          "source_availability": "UNSUPPORTED",
+          "required_for_c9": false,
+          "status": "BLOCKED",
+          "evidence": []
+        }
+      ]
+    },
+    {
+      "id": "C2-SVC",
+      "aggregate": "BLOCKED",
+      "cells": [
+        {
+          "id": "C2-SVC/rust-no-std",
+          "source_text": "**PARTIAL**",
+          "source_availability": "PARTIAL",
+          "required_for_c9": true,
+          "status": "BLOCKED",
+          "evidence": []
+        },
+        {
+          "id": "C2-SVC/rust-std",
+          "source_text": "**PLANNED**",
+          "source_availability": "PLANNED",
+          "required_for_c9": true,
+          "status": "PLANNED",
+          "evidence": []
+        },
+        {
+          "id": "C2-SVC/ffi-posix",
+          "source_text": "**PARTIAL**",
+          "source_availability": "PARTIAL",
+          "required_for_c9": true,
+          "status": "BLOCKED",
+          "evidence": []
+        },
+        {
+          "id": "C2-SVC/lua",
+          "source_text": "**PARTIAL**",
+          "source_availability": "PARTIAL",
+          "required_for_c9": true,
+          "status": "BLOCKED",
+          "evidence": []
+        },
+        {
+          "id": "C2-SVC/T1",
+          "source_text": "**PARTIAL** where declared service/capability exists",
+          "source_availability": "PARTIAL",
+          "required_for_c9": true,
+          "status": "BLOCKED",
+          "evidence": []
+        },
+        {
+          "id": "C2-SVC/T2",
+          "source_text": "**BLOCKED** until copied IPC and explicit domain grants are implemented",
+          "source_availability": "BLOCKED",
+          "required_for_c9": true,
+          "status": "BLOCKED",
+          "evidence": []
+        }
+      ]
+    },
+    {
+      "id": "C2-UI",
+      "aggregate": "BLOCKED",
+      "cells": [
+        {
+          "id": "C2-UI/rust-no-std",
+          "source_text": "**PARTIAL**",
+          "source_availability": "PARTIAL",
+          "required_for_c9": true,
+          "status": "BLOCKED",
+          "evidence": []
+        },
+        {
+          "id": "C2-UI/rust-std",
+          "source_text": "**PLANNED**",
+          "source_availability": "PLANNED",
+          "required_for_c9": true,
+          "status": "PLANNED",
+          "evidence": []
+        },
+        {
+          "id": "C2-UI/ffi-posix",
+          "source_text": "**UNSUPPORTED**",
+          "source_availability": "UNSUPPORTED",
+          "required_for_c9": false,
+          "status": "BLOCKED",
+          "evidence": []
+        },
+        {
+          "id": "C2-UI/lua",
+          "source_text": "**UNSUPPORTED**",
+          "source_availability": "UNSUPPORTED",
+          "required_for_c9": false,
+          "status": "BLOCKED",
+          "evidence": []
+        },
+        {
+          "id": "C2-UI/T1",
+          "source_text": "**PARTIAL**",
+          "source_availability": "PARTIAL",
+          "required_for_c9": true,
+          "status": "BLOCKED",
+          "evidence": []
+        },
+        {
+          "id": "C2-UI/T2",
+          "source_text": "**BLOCKED** pending domain-safe surface/input/grant design",
+          "source_availability": "BLOCKED",
+          "required_for_c9": true,
+          "status": "BLOCKED",
+          "evidence": []
+        }
+      ]
+    },
+    {
+      "id": "C2-MID",
+      "aggregate": "BLOCKED",
+      "cells": [
+        {
+          "id": "C2-MID/rust-no-std",
+          "source_text": "**PARTIAL**",
+          "source_availability": "PARTIAL",
+          "required_for_c9": true,
+          "status": "BLOCKED",
+          "evidence": []
+        },
+        {
+          "id": "C2-MID/rust-std",
+          "source_text": "**PLANNED**",
+          "source_availability": "PLANNED",
+          "required_for_c9": true,
+          "status": "PLANNED",
+          "evidence": []
+        },
+        {
+          "id": "C2-MID/ffi-posix",
+          "source_text": "**PARTIAL**",
+          "source_availability": "PARTIAL",
+          "required_for_c9": true,
+          "status": "BLOCKED",
+          "evidence": []
+        },
+        {
+          "id": "C2-MID/lua",
+          "source_text": "**PARTIAL**",
+          "source_availability": "PARTIAL",
+          "required_for_c9": true,
+          "status": "BLOCKED",
+          "evidence": []
+        },
+        {
+          "id": "C2-MID/T1",
+          "source_text": "**PARTIAL**",
+          "source_availability": "PARTIAL",
+          "required_for_c9": true,
+          "status": "BLOCKED",
+          "evidence": []
+        },
+        {
+          "id": "C2-MID/T2",
+          "source_text": "**BLOCKED** for identity-sensitive helpers; future variants must copy or use explicit domain grants",
+          "source_availability": "BLOCKED",
+          "required_for_c9": true,
+          "status": "BLOCKED",
+          "evidence": []
+        }
+      ]
+    },
+    {
+      "id": "C2-TOL",
+      "aggregate": "BLOCKED",
+      "cells": [
+        {
+          "id": "C2-TOL/rust-no-std",
+          "source_text": "**PARTIAL**",
+          "source_availability": "PARTIAL",
+          "required_for_c9": true,
+          "status": "BLOCKED",
+          "evidence": []
+        },
+        {
+          "id": "C2-TOL/rust-std",
+          "source_text": "**PLANNED**",
+          "source_availability": "PLANNED",
+          "required_for_c9": true,
+          "status": "PLANNED",
+          "evidence": []
+        },
+        {
+          "id": "C2-TOL/ffi-posix",
+          "source_text": "**PARTIAL**",
+          "source_availability": "PARTIAL",
+          "required_for_c9": true,
+          "status": "BLOCKED",
+          "evidence": []
+        },
+        {
+          "id": "C2-TOL/lua",
+          "source_text": "**PARTIAL**",
+          "source_availability": "PARTIAL",
+          "required_for_c9": true,
+          "status": "BLOCKED",
+          "evidence": []
+        },
+        {
+          "id": "C2-TOL/T1",
+          "source_text": "**PARTIAL**",
+          "source_availability": "PARTIAL",
+          "required_for_c9": true,
+          "status": "BLOCKED",
+          "evidence": []
+        },
+        {
+          "id": "C2-TOL/T2",
+          "source_text": "**BLOCKED** until Tier 2 admission/package format is separately approved",
+          "source_availability": "BLOCKED",
+          "required_for_c9": true,
+          "status": "BLOCKED",
+          "evidence": []
+        }
+      ]
+    },
+    {
+      "id": "C2-OBS",
+      "aggregate": "BLOCKED",
+      "cells": [
+        {
+          "id": "C2-OBS/rust-no-std",
+          "source_text": "**PARTIAL**",
+          "source_availability": "PARTIAL",
+          "required_for_c9": true,
+          "status": "BLOCKED",
+          "evidence": []
+        },
+        {
+          "id": "C2-OBS/rust-std",
+          "source_text": "**PLANNED**",
+          "source_availability": "PLANNED",
+          "required_for_c9": true,
+          "status": "PLANNED",
+          "evidence": []
+        },
+        {
+          "id": "C2-OBS/ffi-posix",
+          "source_text": "**PARTIAL**",
+          "source_availability": "PARTIAL",
+          "required_for_c9": true,
+          "status": "BLOCKED",
+          "evidence": []
+        },
+        {
+          "id": "C2-OBS/lua",
+          "source_text": "**PARTIAL**",
+          "source_availability": "PARTIAL",
+          "required_for_c9": true,
+          "status": "BLOCKED",
+          "evidence": []
+        },
+        {
+          "id": "C2-OBS/T1",
+          "source_text": "**PARTIAL**",
+          "source_availability": "PARTIAL",
+          "required_for_c9": true,
+          "status": "BLOCKED",
+          "evidence": []
+        },
+        {
+          "id": "C2-OBS/T2",
+          "source_text": "**BLOCKED** until a domain-safe observability policy exists",
+          "source_availability": "BLOCKED",
+          "required_for_c9": true,
+          "status": "BLOCKED",
+          "evidence": []
+        }
+      ]
+    }
   ],
-  "security_negatives":[
-    {"id":"S22-01-PEER-PAGE","status":"BLOCKED","subject":"kvm-arm64","expected":"deny","observed":"not-run","evidence":[{"path":"docs/specs/23-native-sdk-contract.md","sha256":"027e1a2bbfb19f55dec326a0588a459ff635f24f136ad0f6a971d67e93ca9e42","size_bytes":30313,"kind":"source"}],"witness":null},
-    {"id":"S22-02-PRIVILEGED-PROBE","status":"BLOCKED","subject":"kvm-arm64","expected":"deny","observed":"not-run","evidence":[{"path":"docs/specs/23-native-sdk-contract.md","sha256":"027e1a2bbfb19f55dec326a0588a459ff635f24f136ad0f6a971d67e93ca9e42","size_bytes":30313,"kind":"source"}],"witness":null},
-    {"id":"S22-03-SYSCALL-POINTER","status":"BLOCKED","subject":"kvm-arm64","expected":"deny","observed":"not-run","evidence":[{"path":"docs/specs/23-native-sdk-contract.md","sha256":"027e1a2bbfb19f55dec326a0588a459ff635f24f136ad0f6a971d67e93ca9e42","size_bytes":30313,"kind":"source"}],"witness":null},
-    {"id":"S22-04-SAS-SCHEDULE","status":"BLOCKED","subject":"kvm-arm64","expected":"deny","observed":"not-run","evidence":[{"path":"docs/specs/23-native-sdk-contract.md","sha256":"027e1a2bbfb19f55dec326a0588a459ff635f24f136ad0f6a971d67e93ca9e42","size_bytes":30313,"kind":"source"}],"witness":null},
-    {"id":"S22-05-DOMAIN-SWITCH","status":"BLOCKED","subject":"kvm-arm64","expected":"deny","observed":"not-run","evidence":[{"path":"docs/specs/23-native-sdk-contract.md","sha256":"027e1a2bbfb19f55dec326a0588a459ff635f24f136ad0f6a971d67e93ca9e42","size_bytes":30313,"kind":"source"}],"witness":null},
-    {"id":"S22-06-TAG-REUSE","status":"BLOCKED","subject":"kvm-arm64","expected":"deny","observed":"not-run","evidence":[{"path":"docs/specs/23-native-sdk-contract.md","sha256":"027e1a2bbfb19f55dec326a0588a459ff635f24f136ad0f6a971d67e93ca9e42","size_bytes":30313,"kind":"source"}],"witness":null},
-    {"id":"S22-07-GRANT-REVOKE","status":"BLOCKED","subject":"kvm-arm64","expected":"deny","observed":"not-run","evidence":[{"path":"docs/specs/23-native-sdk-contract.md","sha256":"027e1a2bbfb19f55dec326a0588a459ff635f24f136ad0f6a971d67e93ca9e42","size_bytes":30313,"kind":"source"}],"witness":null},
-    {"id":"S22-08-KILL-DMA","status":"BLOCKED","subject":"kvm-arm64","expected":"deny","observed":"not-run","evidence":[{"path":"docs/specs/23-native-sdk-contract.md","sha256":"027e1a2bbfb19f55dec326a0588a459ff635f24f136ad0f6a971d67e93ca9e42","size_bytes":30313,"kind":"source"}],"witness":null},
-    {"id":"S22-09-FORCED-EXIT","status":"BLOCKED","subject":"kvm-arm64","expected":"deny","observed":"not-run","evidence":[{"path":"docs/specs/23-native-sdk-contract.md","sha256":"027e1a2bbfb19f55dec326a0588a459ff635f24f136ad0f6a971d67e93ca9e42","size_bytes":30313,"kind":"source"}],"witness":null},
-    {"id":"S22-10-INVALID-IMAGE","status":"BLOCKED","subject":"kvm-arm64","expected":"deny","observed":"not-run","evidence":[{"path":"docs/specs/23-native-sdk-contract.md","sha256":"027e1a2bbfb19f55dec326a0588a459ff635f24f136ad0f6a971d67e93ca9e42","size_bytes":30313,"kind":"source"}],"witness":null},
-    {"id":"S22-11-DEVICE-REQUEST","status":"BLOCKED","subject":"kvm-arm64","expected":"deny","observed":"not-run","evidence":[{"path":"docs/specs/23-native-sdk-contract.md","sha256":"027e1a2bbfb19f55dec326a0588a459ff635f24f136ad0f6a971d67e93ca9e42","size_bytes":30313,"kind":"source"}],"witness":null},
-    {"id":"S22-12-ROLLBACK","status":"BLOCKED","subject":"kvm-arm64","expected":"deny","observed":"not-run","evidence":[{"path":"docs/specs/23-native-sdk-contract.md","sha256":"027e1a2bbfb19f55dec326a0588a459ff635f24f136ad0f6a971d67e93ca9e42","size_bytes":30313,"kind":"source"}],"witness":null}
+  "security_negatives": [
+    {
+      "id": "S22-01-PEER-PAGE",
+      "status": "BLOCKED",
+      "subject": "kvm-arm64",
+      "expected": "deny",
+      "observed": "not-run",
+      "evidence": [
+        {
+          "path": "docs/specs/23-native-sdk-contract.md",
+          "sha256": "027e1a2bbfb19f55dec326a0588a459ff635f24f136ad0f6a971d67e93ca9e42",
+          "size_bytes": 30313,
+          "kind": "source"
+        }
+      ],
+      "witness": null
+    },
+    {
+      "id": "S22-02-PRIVILEGED-PROBE",
+      "status": "BLOCKED",
+      "subject": "kvm-arm64",
+      "expected": "deny",
+      "observed": "not-run",
+      "evidence": [
+        {
+          "path": "docs/specs/23-native-sdk-contract.md",
+          "sha256": "027e1a2bbfb19f55dec326a0588a459ff635f24f136ad0f6a971d67e93ca9e42",
+          "size_bytes": 30313,
+          "kind": "source"
+        }
+      ],
+      "witness": null
+    },
+    {
+      "id": "S22-03-SYSCALL-POINTER",
+      "status": "BLOCKED",
+      "subject": "kvm-arm64",
+      "expected": "deny",
+      "observed": "not-run",
+      "evidence": [
+        {
+          "path": "docs/specs/23-native-sdk-contract.md",
+          "sha256": "027e1a2bbfb19f55dec326a0588a459ff635f24f136ad0f6a971d67e93ca9e42",
+          "size_bytes": 30313,
+          "kind": "source"
+        }
+      ],
+      "witness": null
+    },
+    {
+      "id": "S22-04-SAS-SCHEDULE",
+      "status": "BLOCKED",
+      "subject": "kvm-arm64",
+      "expected": "deny",
+      "observed": "not-run",
+      "evidence": [
+        {
+          "path": "docs/specs/23-native-sdk-contract.md",
+          "sha256": "027e1a2bbfb19f55dec326a0588a459ff635f24f136ad0f6a971d67e93ca9e42",
+          "size_bytes": 30313,
+          "kind": "source"
+        }
+      ],
+      "witness": null
+    },
+    {
+      "id": "S22-05-DOMAIN-SWITCH",
+      "status": "BLOCKED",
+      "subject": "kvm-arm64",
+      "expected": "deny",
+      "observed": "not-run",
+      "evidence": [
+        {
+          "path": "docs/specs/23-native-sdk-contract.md",
+          "sha256": "027e1a2bbfb19f55dec326a0588a459ff635f24f136ad0f6a971d67e93ca9e42",
+          "size_bytes": 30313,
+          "kind": "source"
+        }
+      ],
+      "witness": null
+    },
+    {
+      "id": "S22-06-TAG-REUSE",
+      "status": "BLOCKED",
+      "subject": "kvm-arm64",
+      "expected": "deny",
+      "observed": "not-run",
+      "evidence": [
+        {
+          "path": "docs/specs/23-native-sdk-contract.md",
+          "sha256": "027e1a2bbfb19f55dec326a0588a459ff635f24f136ad0f6a971d67e93ca9e42",
+          "size_bytes": 30313,
+          "kind": "source"
+        }
+      ],
+      "witness": null
+    },
+    {
+      "id": "S22-07-GRANT-REVOKE",
+      "status": "BLOCKED",
+      "subject": "kvm-arm64",
+      "expected": "deny",
+      "observed": "not-run",
+      "evidence": [
+        {
+          "path": "docs/specs/23-native-sdk-contract.md",
+          "sha256": "027e1a2bbfb19f55dec326a0588a459ff635f24f136ad0f6a971d67e93ca9e42",
+          "size_bytes": 30313,
+          "kind": "source"
+        }
+      ],
+      "witness": null
+    },
+    {
+      "id": "S22-08-KILL-DMA",
+      "status": "BLOCKED",
+      "subject": "kvm-arm64",
+      "expected": "deny",
+      "observed": "not-run",
+      "evidence": [
+        {
+          "path": "docs/specs/23-native-sdk-contract.md",
+          "sha256": "027e1a2bbfb19f55dec326a0588a459ff635f24f136ad0f6a971d67e93ca9e42",
+          "size_bytes": 30313,
+          "kind": "source"
+        }
+      ],
+      "witness": null
+    },
+    {
+      "id": "S22-09-FORCED-EXIT",
+      "status": "BLOCKED",
+      "subject": "kvm-arm64",
+      "expected": "deny",
+      "observed": "not-run",
+      "evidence": [
+        {
+          "path": "docs/specs/23-native-sdk-contract.md",
+          "sha256": "027e1a2bbfb19f55dec326a0588a459ff635f24f136ad0f6a971d67e93ca9e42",
+          "size_bytes": 30313,
+          "kind": "source"
+        }
+      ],
+      "witness": null
+    },
+    {
+      "id": "S22-10-INVALID-IMAGE",
+      "status": "BLOCKED",
+      "subject": "kvm-arm64",
+      "expected": "deny",
+      "observed": "not-run",
+      "evidence": [
+        {
+          "path": "docs/specs/23-native-sdk-contract.md",
+          "sha256": "027e1a2bbfb19f55dec326a0588a459ff635f24f136ad0f6a971d67e93ca9e42",
+          "size_bytes": 30313,
+          "kind": "source"
+        }
+      ],
+      "witness": null
+    },
+    {
+      "id": "S22-11-DEVICE-REQUEST",
+      "status": "BLOCKED",
+      "subject": "kvm-arm64",
+      "expected": "deny",
+      "observed": "not-run",
+      "evidence": [
+        {
+          "path": "docs/specs/23-native-sdk-contract.md",
+          "sha256": "027e1a2bbfb19f55dec326a0588a459ff635f24f136ad0f6a971d67e93ca9e42",
+          "size_bytes": 30313,
+          "kind": "source"
+        }
+      ],
+      "witness": null
+    },
+    {
+      "id": "S22-12-ROLLBACK",
+      "status": "BLOCKED",
+      "subject": "kvm-arm64",
+      "expected": "deny",
+      "observed": "not-run",
+      "evidence": [
+        {
+          "path": "docs/specs/23-native-sdk-contract.md",
+          "sha256": "027e1a2bbfb19f55dec326a0588a459ff635f24f136ad0f6a971d67e93ca9e42",
+          "size_bytes": 30313,
+          "kind": "source"
+        }
+      ],
+      "witness": null
+    }
   ],
-  "claims":[{"id":"seed-t2-foundation","status":"BLOCKED","subject":"physical-rpi3","tuple":{"tier":"T2","runtime_profile":"rust-no-std","sdk_module":"C2-FDN","cpu":"aarch64","environment":"physical","admission":"denied","ipc":"unqualified","grant":"unqualified","mmio":"denied","dma":"denied","lifecycle":"unqualified","security_negative":"hostile-test-missing"},"completion":"INCOMPLETE","source_sha256":"027e1a2bbfb19f55dec326a0588a459ff635f24f136ad0f6a971d67e93ca9e42","matrix_sha256":"f742a6ec1f5a0110bbe4882028ac32fbdd9c884307d207171519919704ca7ece"}],
-  "phase_lifecycle":[{"phase":1,"status":"LEDGER_RECORDED","event_id":"phase-02-seed"},{"phase":2,"status":"LEDGER_RECORDED","event_id":"phase-02-ledger-recorded"},{"phase":3,"status":"PLANNED","event_id":null},{"phase":4,"status":"PLANNED","event_id":null},{"phase":5,"status":"PLANNED","event_id":null},{"phase":6,"status":"PLANNED","event_id":null},{"phase":7,"status":"PLANNED","event_id":null},{"phase":8,"status":"PLANNED","event_id":null}],
+  "claims": [
+    {
+      "id": "seed-t2-foundation",
+      "status": "BLOCKED",
+      "subject": "physical-rpi3",
+      "tuple": {
+        "tier": "T2",
+        "runtime_profile": "rust-no-std",
+        "sdk_module": "C2-FDN",
+        "cpu": "aarch64",
+        "environment": "physical",
+        "admission": "denied",
+        "ipc": "unqualified",
+        "grant": "unqualified",
+        "mmio": "denied",
+        "dma": "denied",
+        "lifecycle": "unqualified",
+        "security_negative": "hostile-test-missing"
+      },
+      "completion": "INCOMPLETE",
+      "source_sha256": "027e1a2bbfb19f55dec326a0588a459ff635f24f136ad0f6a971d67e93ca9e42",
+      "matrix_sha256": "f742a6ec1f5a0110bbe4882028ac32fbdd9c884307d207171519919704ca7ece"
+    }
+  ],
+  "phase_lifecycle": [
+    {
+      "phase": 1,
+      "status": "LEDGER_RECORDED",
+      "event_id": "phase-02-seed"
+    },
+    {
+      "phase": 2,
+      "status": "LEDGER_RECORDED",
+      "event_id": "phase-02-ledger-recorded"
+    },
+    {
+      "phase": 3,
+      "status": "PLANNED",
+      "event_id": null
+    },
+    {
+      "phase": 4,
+      "status": "PLANNED",
+      "event_id": null
+    },
+    {
+      "phase": 5,
+      "status": "PLANNED",
+      "event_id": null
+    },
+    {
+      "phase": 6,
+      "status": "PLANNED",
+      "event_id": null
+    },
+    {
+      "phase": 7,
+      "status": "PLANNED",
+      "event_id": null
+    },
+    {
+      "phase": 8,
+      "status": "PLANNED",
+      "event_id": null
+    }
+  ],
   "c9": "NOT_COMPLETE",
-  "events":[{"sequence":1,"event_id":"phase-02-seed","previous_hash":"GENESIS","steward":"app-tier-steward","reviewer":"independent-contract-reviewer","recorded_at":"2026-08-21T00:00:00Z","action":{"kind":"seed","phase":1,"to_status":"LEDGER_RECORDED","evidence":[{"path":"docs/specs/23-native-sdk-contract.md","sha256":"027e1a2bbfb19f55dec326a0588a459ff635f24f136ad0f6a971d67e93ca9e42","size_bytes":30313,"kind":"source"}]},"state_digest":"81f97cb4748750c644364973e698597cd026ebf630f4526dfc2bd23e3ea80719","hash":"32b43d458df543f516da1724ec2f7d34b40eee3e21b80323383b51db8a3c50ef"},{"sequence":2,"event_id":"phase-02-implemented","previous_hash":"32b43d458df543f516da1724ec2f7d34b40eee3e21b80323383b51db8a3c50ef","steward":"app-tier-implementation-steward","reviewer":"independent-contract-reviewer","recorded_at":"2026-08-21T07:27:00Z","action":{"kind":"lifecycle_transition","phase":2,"from_status":"PLANNED","to_status":"IMPLEMENTED","changes":[{"section":"source_binding","before_sha256":"fb722c82218d13389bd16d7b34234438aa723b247a157899ace30ec983349431","after_sha256":"6172dd40a74ec3d1197d75a24576829edf9a304dfbc9347690bfa31d71b15cac"},{"section":"phase_lifecycle","before_sha256":"cdd9440510507b2b768594efe25d999f81e6733a90383916e57d337f4a424c16","after_sha256":"e8239944d5efad1646883014a2b33994d0d21de05034abd0c878e9d2a5e34d0c"}],"evidence":[{"path":"scripts/validate-app-tier-acceptance.py","sha256":"794e54b48ad4fc664cfae2a34d0a0cb6758a959737beb7a3ca61cb5e5073e659","size_bytes":2000,"kind":"artifact"}],"implementation":{"revision":"a4f53c8f5b8cad934c69a177ef7a0c75a8b69c62","base_tree":"5d2faaafa1ddcf0242125d1b2b88df521c2a8556","command":"python3 -m compileall -q scripts/app_tier_acceptance scripts/validate-app-tier-acceptance.py","target":"app-tier-validator","result":"PASS","artifact":{"path":"scripts/validate-app-tier-acceptance.py","sha256":"794e54b48ad4fc664cfae2a34d0a0cb6758a959737beb7a3ca61cb5e5073e659","size_bytes":2000,"kind":"artifact"}}},"state_digest":"3742bdab0ebdcad8f81cce0bbec219b14374627ac3b0e9b1ea1143486bde304f","hash":"a68cd3174a59a31ce3bb9e09a93cb400d6854054050b18bed2ccacd290436f41"},{"sequence":3,"event_id":"phase-02-verified","previous_hash":"a68cd3174a59a31ce3bb9e09a93cb400d6854054050b18bed2ccacd290436f41","steward":"app-tier-verification-steward","reviewer":"independent-verification-reviewer","recorded_at":"2026-08-21T08:52:26Z","action":{"kind":"lifecycle_transition","phase":2,"from_status":"IMPLEMENTED","to_status":"VERIFIED","changes":[{"section":"phase_lifecycle","before_sha256":"e8239944d5efad1646883014a2b33994d0d21de05034abd0c878e9d2a5e34d0c","after_sha256":"2050ba5e5148c46266cebd08c635b67188c555622dbefa63350467a6accc48f3"}],"evidence":[{"path":"docs/evidence/app-tier-phase02-verification.log","sha256":"032f1c537e97c0b882e096184d59036bba83b3a13acf013d580a84251b8b1f8f","size_bytes":2033,"kind":"log"}],"independent_runner":"independent-phase02-verifier"},"state_digest":"5ac9f4bd3d228aa1147c03ce758a4773bbfd4e23d04d3619d9f1bf741f39f88f","hash":"b105131816bcb9d812af898a5d253ff50428ce97fd9436da3092bdbf6012b84a"},{"sequence":4,"event_id":"phase-02-ledger-recorded","previous_hash":"b105131816bcb9d812af898a5d253ff50428ce97fd9436da3092bdbf6012b84a","steward":"app-tier-ledger-steward","reviewer":"independent-ledger-reviewer","recorded_at":"2026-08-21T09:00:00Z","action":{"kind":"lifecycle_transition","phase":2,"from_status":"VERIFIED","to_status":"LEDGER_RECORDED","changes":[{"section":"phase_lifecycle","before_sha256":"2050ba5e5148c46266cebd08c635b67188c555622dbefa63350467a6accc48f3","after_sha256":"5ea8d45d342a61cb985e9309e1dec4e3eae6d6146bb19a43c89fdc0b3790401d"}],"evidence":[{"path":"docs/evidence/app-tier-phase02-ledger-attestation.json","sha256":"00b6f3fbe3d8ee0c0a0fc6fc27ddd4ceddaf53b174be13a758985a89fa00c417","size_bytes":629,"kind":"artifact"}],"attestation":{"steward":"app-tier-ledger-steward","reviewer":"independent-ledger-reviewer","statement":"Reviewed the content-addressed Phase 02 ledger delta and clean-checkout baseline validation; no Medium-or-higher finding remains."}},"state_digest":"7bc7390b6522ad5f4fa605230bc1c2b0acb40e71a9fbbbdca8c92a595f0c3b86","hash":"c6a48870921bd26e4b354d8be7fd97a9dd80c8c6d95b8f83f843b05871f5d578"}],
-  "baseline_prefix":{"event_count":4,"tip_hash":"c6a48870921bd26e4b354d8be7fd97a9dd80c8c6d95b8f83f843b05871f5d578"},
-  "source_binding":{"path":"docs/specs/23-native-sdk-contract.md","sha256":"027e1a2bbfb19f55dec326a0588a459ff635f24f136ad0f6a971d67e93ca9e42","matrix_sha256":"f742a6ec1f5a0110bbe4882028ac32fbdd9c884307d207171519919704ca7ece","ratified_revision":"798e8b04e75b6ea787d7b5882da4f64359ed7974"}
+  "events": [
+    {
+      "sequence": 1,
+      "event_id": "phase-02-seed",
+      "previous_hash": "GENESIS",
+      "steward": "app-tier-steward",
+      "reviewer": "independent-contract-reviewer",
+      "recorded_at": "2026-08-21T00:00:00Z",
+      "action": {
+        "kind": "seed",
+        "phase": 1,
+        "to_status": "LEDGER_RECORDED",
+        "evidence": [
+          {
+            "path": "docs/specs/23-native-sdk-contract.md",
+            "sha256": "027e1a2bbfb19f55dec326a0588a459ff635f24f136ad0f6a971d67e93ca9e42",
+            "size_bytes": 30313,
+            "kind": "source"
+          }
+        ]
+      },
+      "state_digest": "81f97cb4748750c644364973e698597cd026ebf630f4526dfc2bd23e3ea80719",
+      "hash": "32b43d458df543f516da1724ec2f7d34b40eee3e21b80323383b51db8a3c50ef"
+    },
+    {
+      "sequence": 2,
+      "event_id": "phase-02-implemented",
+      "previous_hash": "32b43d458df543f516da1724ec2f7d34b40eee3e21b80323383b51db8a3c50ef",
+      "steward": "app-tier-implementation-steward",
+      "reviewer": "independent-contract-reviewer",
+      "recorded_at": "2026-08-21T07:27:00Z",
+      "action": {
+        "kind": "lifecycle_transition",
+        "phase": 2,
+        "from_status": "PLANNED",
+        "to_status": "IMPLEMENTED",
+        "changes": [
+          {
+            "section": "source_binding",
+            "before_sha256": "fb722c82218d13389bd16d7b34234438aa723b247a157899ace30ec983349431",
+            "after_sha256": "6172dd40a74ec3d1197d75a24576829edf9a304dfbc9347690bfa31d71b15cac"
+          },
+          {
+            "section": "phase_lifecycle",
+            "before_sha256": "cdd9440510507b2b768594efe25d999f81e6733a90383916e57d337f4a424c16",
+            "after_sha256": "e8239944d5efad1646883014a2b33994d0d21de05034abd0c878e9d2a5e34d0c"
+          }
+        ],
+        "evidence": [
+          {
+            "path": "scripts/validate-app-tier-acceptance.py",
+            "sha256": "794e54b48ad4fc664cfae2a34d0a0cb6758a959737beb7a3ca61cb5e5073e659",
+            "size_bytes": 2000,
+            "kind": "artifact"
+          }
+        ],
+        "implementation": {
+          "revision": "a4f53c8f5b8cad934c69a177ef7a0c75a8b69c62",
+          "base_tree": "5d2faaafa1ddcf0242125d1b2b88df521c2a8556",
+          "command": "python3 -m compileall -q scripts/app_tier_acceptance scripts/validate-app-tier-acceptance.py",
+          "target": "app-tier-validator",
+          "result": "PASS",
+          "artifact": {
+            "path": "scripts/validate-app-tier-acceptance.py",
+            "sha256": "794e54b48ad4fc664cfae2a34d0a0cb6758a959737beb7a3ca61cb5e5073e659",
+            "size_bytes": 2000,
+            "kind": "artifact"
+          }
+        }
+      },
+      "state_digest": "3742bdab0ebdcad8f81cce0bbec219b14374627ac3b0e9b1ea1143486bde304f",
+      "hash": "a68cd3174a59a31ce3bb9e09a93cb400d6854054050b18bed2ccacd290436f41"
+    },
+    {
+      "sequence": 3,
+      "event_id": "phase-02-verified",
+      "previous_hash": "a68cd3174a59a31ce3bb9e09a93cb400d6854054050b18bed2ccacd290436f41",
+      "steward": "app-tier-verification-steward",
+      "reviewer": "independent-verification-reviewer",
+      "recorded_at": "2026-08-21T08:52:26Z",
+      "action": {
+        "kind": "lifecycle_transition",
+        "phase": 2,
+        "from_status": "IMPLEMENTED",
+        "to_status": "VERIFIED",
+        "changes": [
+          {
+            "section": "phase_lifecycle",
+            "before_sha256": "e8239944d5efad1646883014a2b33994d0d21de05034abd0c878e9d2a5e34d0c",
+            "after_sha256": "2050ba5e5148c46266cebd08c635b67188c555622dbefa63350467a6accc48f3"
+          }
+        ],
+        "evidence": [
+          {
+            "path": "docs/evidence/app-tier-phase02-verification.log",
+            "sha256": "032f1c537e97c0b882e096184d59036bba83b3a13acf013d580a84251b8b1f8f",
+            "size_bytes": 2033,
+            "kind": "log"
+          }
+        ],
+        "independent_runner": "independent-phase02-verifier"
+      },
+      "state_digest": "5ac9f4bd3d228aa1147c03ce758a4773bbfd4e23d04d3619d9f1bf741f39f88f",
+      "hash": "b105131816bcb9d812af898a5d253ff50428ce97fd9436da3092bdbf6012b84a"
+    },
+    {
+      "sequence": 4,
+      "event_id": "phase-02-ledger-recorded",
+      "previous_hash": "b105131816bcb9d812af898a5d253ff50428ce97fd9436da3092bdbf6012b84a",
+      "steward": "app-tier-ledger-steward",
+      "reviewer": "independent-ledger-reviewer",
+      "recorded_at": "2026-08-21T09:00:00Z",
+      "action": {
+        "kind": "lifecycle_transition",
+        "phase": 2,
+        "from_status": "VERIFIED",
+        "to_status": "LEDGER_RECORDED",
+        "changes": [
+          {
+            "section": "phase_lifecycle",
+            "before_sha256": "2050ba5e5148c46266cebd08c635b67188c555622dbefa63350467a6accc48f3",
+            "after_sha256": "5ea8d45d342a61cb985e9309e1dec4e3eae6d6146bb19a43c89fdc0b3790401d"
+          }
+        ],
+        "evidence": [
+          {
+            "path": "docs/evidence/app-tier-phase02-ledger-attestation.json",
+            "sha256": "00b6f3fbe3d8ee0c0a0fc6fc27ddd4ceddaf53b174be13a758985a89fa00c417",
+            "size_bytes": 629,
+            "kind": "artifact"
+          }
+        ],
+        "attestation": {
+          "steward": "app-tier-ledger-steward",
+          "reviewer": "independent-ledger-reviewer",
+          "statement": "Reviewed the content-addressed Phase 02 ledger delta and clean-checkout baseline validation; no Medium-or-higher finding remains."
+        }
+      },
+      "state_digest": "7bc7390b6522ad5f4fa605230bc1c2b0acb40e71a9fbbbdca8c92a595f0c3b86",
+      "hash": "c6a48870921bd26e4b354d8be7fd97a9dd80c8c6d95b8f83f843b05871f5d578"
+    },
+    {
+      "sequence": 5,
+      "event_id": "schema-v4-migration",
+      "previous_hash": "c6a48870921bd26e4b354d8be7fd97a9dd80c8c6d95b8f83f843b05871f5d578",
+      "steward": "lungmat8",
+      "reviewer": "datgausaigon",
+      "recorded_at": "2026-09-03T09:38:15Z",
+      "action": {
+        "kind": "schema_migration",
+        "from_version": 3,
+        "to_version": 4,
+        "changes": [
+          {
+            "section": "schema_version",
+            "before_sha256": "4e07408562bedb8b60ce05c1decfe3ad16b72230967de01f640b7e4729b49fce",
+            "after_sha256": "4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a"
+          }
+        ],
+        "evidence": [
+          {
+            "path": "docs/evidence/aarch64-semihosting-20260903-03-raw.txt",
+            "sha256": "a586202f56ba2a3141f0db663b79c4141c67a190c039510ac53c300eb9f326ee",
+            "size_bytes": 29509,
+            "kind": "log"
+          },
+          {
+            "path": "docs/evidence/aarch64-semihosting-20260903-03-runner.txt",
+            "sha256": "1fe1ed44c5682c9683a079ecb971dba27686ee763a9c7782fb022618b72cf370",
+            "size_bytes": 29328,
+            "kind": "artifact"
+          }
+        ]
+      },
+      "state_digest": "88ebc7c89f372100a5e01af30a34f7cfb4ebf6ef5f306ce6788a95353f0e1d4f",
+      "hash": "7fee6172195840bc1702e84f021f2db398415809463fd5bdbed76466bd972b9e"
+    }
+  ],
+  "baseline_prefix": {
+    "event_count": 5,
+    "tip_hash": "7fee6172195840bc1702e84f021f2db398415809463fd5bdbed76466bd972b9e"
+  },
+  "source_binding": {
+    "path": "docs/specs/23-native-sdk-contract.md",
+    "sha256": "027e1a2bbfb19f55dec326a0588a459ff635f24f136ad0f6a971d67e93ca9e42",
+    "matrix_sha256": "f742a6ec1f5a0110bbe4882028ac32fbdd9c884307d207171519919704ca7ece",
+    "ratified_revision": "798e8b04e75b6ea787d7b5882da4f64359ed7974"
+  }
 }
