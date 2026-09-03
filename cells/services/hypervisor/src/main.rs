@@ -73,8 +73,8 @@ mod vmm;
 
 // ── aarch64 (EL2) personality ─────────────────────────────────────────────────
 #[cfg(target_arch = "aarch64")]
-#[cfg(target_arch = "aarch64")]
 mod boot_arm;
+#[cfg(target_arch = "aarch64")]
 mod dtb;
 #[cfg(target_arch = "aarch64")]
 mod gicd;

@@ -12,10 +12,8 @@ fn strip_mnt_sd_prefix(path: &str) -> Option<&str> {
         let rest = &path[7..];
         if rest.is_empty() {
             Some("")
-        } else if rest.starts_with('/') {
-            Some(&rest[1..])
         } else {
-            None
+            rest.strip_prefix('/')
         }
     } else {
         None
