@@ -8,13 +8,15 @@
   and `cells/tests/posix-shim-test/src/main.rs`. Replaced stale monolithic
   `libs/api/src/posix.rs` references with split root
   `libs/api/src/services/posix.rs`, removed obsolete 482-line count, marked
-  implemented entropy (`getentropy`/`arc4random_buf`) and network
-  (`connect`/`send`/`recv`/`close`) functions completed, and retained explicit
-  process, mmap, signal, and non-Linux compatibility limitations. Verified
-  searches from clean commit `3aa676c32b3ab06ea0f03c5330e493eb5748b17b` (tree
-  `fc3cb3aef5ec81142c73e36a7ec986bff63aa1bb`) recorded in
+  implemented entropy (`getentropy`/`arc4random_buf`), network
+  (`connect`/`send`/`recv`/`close`, restricted to `AF_INET`/`SOCK_STREAM`), and
+  time (`_time`/`_gettimeofday`) functions completed while removing unexported
+  `clock_gettime` from the POSIX shim profile, and retained explicit process,
+  mmap, signal, and non-Linux compatibility limitations. Verified searches from
+  clean commit `07aae8b6a067b4fe6b49bc05b054d5aaa53eb4e8` (tree
+  `7f794da69bc18fa53c6a6f5ae186ba269cb5e070`) recorded in
   `docs/evidence/posix-live-path-repair-verification.txt` (SHA-256
-  `14b1140a87d81b6b2c744fa07dfaa7c3618f8fcfbb13679db1d55198a0542532`, 771 bytes).
+  `f1e6a50498c937a567a1f287583a4ce17e807c5b9e7380cb1da27c29f33a62ee`, 1123 bytes).
 
 - Resolved acceptance blocker `B-AARCH64-SEMHOSTING` on the AArch64 QEMU
   test-hooks boundary. The append-only acceptance ledger was migrated to schema

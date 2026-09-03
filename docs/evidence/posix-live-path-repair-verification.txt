@@ -1,7 +1,7 @@
-EVENT_ID=posix-live-path-repair-20260903-01
-RECORDED_AT=2026-09-03T09:46:33Z
-REVISION=3aa676c32b3ab06ea0f03c5330e493eb5748b17b
-TREE=fc3cb3aef5ec81142c73e36a7ec986bff63aa1bb
+EVENT_ID=posix-live-path-repair-20260903-02
+RECORDED_AT=2026-09-03T09:49:57Z
+REVISION=07aae8b6a067b4fe6b49bc05b054d5aaa53eb4e8
+TREE=7f794da69bc18fa53c6a6f5ae186ba269cb5e070
 TRACKED_STATUS_BEGIN
 TRACKED_STATUS_END
 COMMAND_1=git grep -n 'libs/api/src/posix.rs' -- docs/FAQ.md docs/guides/tier1b-c-zig.md docs/specs/05-application.md cells/tests/posix-shim-test/src/main.rs
@@ -11,3 +11,8 @@ RC_2=1
 COMMAND_3=git grep -n 'Linux compatibility' -- docs/FAQ.md docs/guides/tier1b-c-zig.md docs/specs/05-application.md cells/tests/posix-shim-test/src/main.rs
 docs/FAQ.md:78:## 7. Why no Linux compatibility?
 RC_3=0
+COMMAND_4=git grep -n 'clock_gettime' -- docs/guides/tier1b-c-zig.md | grep -E '^[0-9]+:.*fn clock_gettime|- `clock_gettime'
+RC_4=1
+COMMAND_5=git grep -n 'socket(domain, socktype, protocol)' -- docs/guides/tier1b-c-zig.md
+docs/guides/tier1b-c-zig.md:50:- `socket(domain, socktype, protocol)` → TCP stream socket (`AF_INET`/`SOCK_STREAM` only)
+RC_5=0
