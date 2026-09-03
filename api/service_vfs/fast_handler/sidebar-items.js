@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["vfs_fast_handler"],"static":["GLOBAL_VFS"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["GUEST_DISK_83_ALT_BASENAME","GUEST_DISK_83_BASENAME","GUEST_DISK_BASENAME","GUEST_DISK_PATH"],"fn":["contains_guest_disk","is_guest_disk_path","is_sfn_alias","live_hypervisor_matches","strip_mnt_sd_prefix"]};

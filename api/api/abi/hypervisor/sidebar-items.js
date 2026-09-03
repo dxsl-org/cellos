@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["ViVmExit"]};
+window.SIDEBAR_ITEMS = {"constant":["HYPERVISOR_SERVICE_ID"],"enum":["ViVmExit"]};

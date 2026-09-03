@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["main","quiesce"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS"]};
+window.SIDEBAR_ITEMS = {"fn":["main","quiesce"],"mod":["dtb"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS"]};
