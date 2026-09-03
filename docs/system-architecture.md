@@ -3,7 +3,7 @@
 **Audience**: Developers new to Cellos
 **Level**: High-level (conceptual + key components)
 **Version**: 0.2.1-dev (Mycelium Era)
-**Last Updated**: 2026-09-02 (x86_64 per-vector IDT real-CPL3 safety gate verified at the QEMU ceiling.)
+**Last Updated**: 2026-09-03 (solo-first development and independent claim promotion adopted.)
 
 > **Status refresh 2026-09-02 — X86_64 PER-VECTOR IDT REAL-CPL3 GATE
 > PASSED:** Hardware IDT entry changes neither GS nor PKRU. The common path now
@@ -161,10 +161,13 @@
 ## Development Execution and Production Admission Boundary
 
 [ADR-0007](decisions/0007-development-first-hardware-constrained-execution.md)
-separates the development platform from production trust anchors. The current
-platform inventory is QEMU, two owner-reported Raspberry Pi 3 Model B+ boards,
-and incoming sensors. The architecture directs work to those assets now and
-authorizes no additional hardware procurement at this time.
+separates the development platform from production trust anchors.
+[ADR-0013](decisions/0013-solo-first-development-independent-promotion.md)
+separates development-role ownership from independent claim promotion. The
+current platform inventory is QEMU, two owner-reported Raspberry Pi 3 Model B+
+boards, and incoming sensors. One accountable maintainer may execute all
+development roles against those assets; no additional hardware procurement is
+authorized at this time.
 
 | Platform | Permitted evidence | Ceiling and prohibition |
 |---|---|---|
@@ -179,6 +182,15 @@ product-stage expansion are future capabilities; unavailable exact assets and
 vendor evidence are external-gated prerequisites; production admission and
 governed release closure are production release gates. These classifications
 must not be collapsed into a single technical-debt queue.
+
+AI agents, local subagents, and CI jobs are automated assurance, not independent
+accountable identities. Missing independent-member approval blocks only its
+named independently ratified or production claim. An independent decision is
+valid only as an explicit `DECISION: YES` or `DECISION: NO` by another
+repository member on the GitHub issue or pull request bound to the exact
+proposal, commit/tree, and evidence. `YES` authorizes only the named promotion;
+`NO` rejects it and leaves that promotion blocked. External requirements for
+additional parties remain external-gated.
 
 The production architecture is unchanged and remains fail-closed. Remote C2C
 identity where applicable, protected relay identity, a production KMS/root,

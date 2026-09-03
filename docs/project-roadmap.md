@@ -3,7 +3,7 @@
 **Project**: Cellos (Jarvis Hybrid OS)
 **Current version**: 0.2.1-dev (Mycelium Era)
 **Current phase**: Phase 1 - Core Stability; active product stage G1 Robot & Embedded
-**Last updated**: 2026-09-02
+**Last updated**: 2026-09-03
 This file is the roadmap entrypoint. The previous all-in-one roadmap is
 preserved as a read-only content snapshot at
 [project-roadmap-legacy.md](project-roadmap-legacy.md). Use it only when a
@@ -58,6 +58,19 @@ authenticated-runner, human-approval, and governed-ledger gate is satisfied.
 Those gates are milestone-local: they do not block unrelated QEMU, RPi3,
 sensor, or local-runtime development.
 
+### Solo-first development and independent promotion
+
+[ADR-0013](decisions/0013-solo-first-development-independent-promotion.md)
+allows the sole accountable maintainer to perform every development role,
+including planning, implementation, testing, self-review, documentation, and
+development release. AI agents and CI jobs provide automated assurance only;
+they are not independent accountable identities. A missing independent-member
+approval blocks only the independently ratified or production claim that names
+it, never unrelated work below that evidence ceiling. When such approval is
+required, a repository member distinct from the maintainer must answer an
+explicit `YES` or `NO` on the GitHub issue or pull request bound to the exact
+proposal, commit, and evidence.
+
 ### Planning classes
 
 - **Current executable work**: useful work supported by present software,
@@ -96,10 +109,10 @@ sensor, or local-runtime development.
 | x86 Tier 3 VirtIO parity | Completed / regression-only | `scope-gated` | `qemu` | Hardware-independent roadmap Phase 10 completed with two-boot block/network and 27-scenario hostile QEMU evidence | Reopen for a software regression or a separately governed physical-x86 qualification run |
 | x86_64 interrupt entry and dispatch | Completed / regression-only | `ready` | `qemu` | Per-vector IDT plan completed with 256 deterministic entries, exact normalized errors, vector/CPL routing, 15-GPR/DF preservation, saved-CS GS/PKRU transitions, corrected syscall/fresh-exit state restoration, and an isolated `x86-idt-cpl3-test` two-task Ring-3 status-plus-marker oracle; generic `test-hooks` and production are fixture-free, the production boot/integration gates passed, and the earlier bootstrap SysV stack-phase defect is corrected | Reopen for an x86 interrupt/transition regression or a separately governed physical-x86 qualification run |
 | Native CWD/path substrate | Completed / regression-only | `ready` | `qemu` | Canonical caller-attributed CWD/path resolution, `chdir`, `getcwd`, and VIFS1 FAT stat are complete | Reopen only for a regression or a separately approved broader path contract |
-| AArch64 semihosting ledger closure | Current-scope technical debt | `governance-gated` | `qemu` | Issue #47 / ordered Phase 01 requires independently owned raw evidence plus separate ratification of the append-only correction mechanism | A distinct Evidence Runner, Ledger Steward, and Independent Reviewer accept the fresh evidence and correction path |
-| Ordered native POSIX follow-up | Future capability | `governance-gated` | `qemu` | Ordered Phases 02–05 cover live documentation, shell `cd`/`pwd`, `fstat`, and atomic `rename`; every predecessor and phase-local ABI/backend/authority/lease gate remains mandatory | Phase 01 is independently ratified, then each phase satisfies its own hard gates in sequence; completion of the CWD substrate does not bypass them |
-| Pinned QEMU-TCG x86 compatibility | Current-scope technical debt | `scope-gated` | `qemu` | Ordered Phase 06 hardens the exact official QEMU 10.2.0 runner boundary; completed x86 Tier 3 VirtIO parity remains a separate regression-only capability | Phase 05 is accepted and one fresh clean-prefix QEMU 10.2.0 provenance run passes unchanged smoke, e2e, and hostile oracles |
-| x86 hypervisor boot-to-shell CI gate | Completed / regression-only | `ready` | hosted `qemu` | Independent [CI job](../.github/workflows/ci.yml) `qemu-x86-hypervisor-boot` is wired with checksum-pinned official QEMU 10.2.0 source, a volatile-disk hypervisor image, the `/ #` shell oracle, hard timeouts, and always-uploaded evidence. The local Ubuntu 24.04-equivalent dependency path built and installed the source in 86.90 seconds with downloads disabled and slirp 4.7.0; its exact image/kernel/ISO flow and strict 1 GiB `BOOT_WINDOW=600` smoke passed in 600.09 seconds. Hosted pull-request run [`33474206901:1`](https://github.com/dxsl-org/cellos/actions/runs/33474206901) passed the dedicated job and uploaded `x86-hypervisor-boot-1` with successful gate/smoke status and the guest prompt. | Reopen for a software regression or a separately governed KVM or physical-x86 qualification run; QEMU-TCG evidence grants no KVM, persistence, physical-x86, admission, or production qualification |
+| AArch64 semihosting ledger closure | Current-scope technical debt | `governance-gated` | `qemu` | Issue #47 retains the fresh-evidence and append-only correction work; the sole maintainer may prepare and execute it, while AI/CI remain automated assurance | Promote the ledger record only after another repository member gives an explicit `YES` on the GitHub issue or pull request bound to the exact proposal, commit, and evidence; `NO` keeps the promotion blocked |
+| Native POSIX follow-up | Future capability | `scope-gated` | `qemu` | Documentation repair, shell `cd`/`pwd`, `fstat`, and atomic `rename` are independent development lanes; the sole maintainer may own all execution roles | Run each lane when its own ABI, backend, authority, lease, and verification gates pass; AArch64 ledger ratification is not a dependency |
+| Pinned QEMU-TCG x86 compatibility | Current-scope technical debt | `scope-gated` | `qemu` | The x86 compatibility lane hardens the exact official QEMU 10.2.0 runner boundary; completed x86 Tier 3 VirtIO parity remains separate regression coverage | Run independently when one fresh clean-prefix QEMU 10.2.0 provenance execution can exercise the unchanged smoke, end-to-end, and hostile oracles |
+| x86 hypervisor boot-to-shell CI gate | Completed / regression-only | `ready` | hosted `qemu` | Separate automated-assurance [CI job](../.github/workflows/ci.yml) `qemu-x86-hypervisor-boot` is wired with checksum-pinned official QEMU 10.2.0 source, a volatile-disk hypervisor image, the `/ #` shell oracle, hard timeouts, and always-uploaded evidence. The local Ubuntu 24.04-equivalent dependency path built and installed the source in 86.90 seconds with downloads disabled and slirp 4.7.0; its exact image/kernel/ISO flow and strict 1 GiB `BOOT_WINDOW=600` smoke passed in 600.09 seconds. Hosted pull-request run [`33474206901:1`](https://github.com/dxsl-org/cellos/actions/runs/33474206901) passed the dedicated job and uploaded `x86-hypervisor-boot-1` with successful gate/smoke status and the guest prompt. | Reopen for a software regression or a separately governed KVM or physical-x86 qualification run; QEMU-TCG evidence grants no KVM, persistence, physical-x86, admission, or production qualification |
 | Remote/public Cell-to-Cell operation | Future capability | `contract-gated` | `host` / `service` | ADR-0009 and Cell-to-Cell Anywhere remote/public children; correlated relay server codec verified 40/40 | Authority-owned client framing and bounded broker correlation integration wait for post-entry-GO Phase 4 Build; remote routing still waits for ADR-0008 AC-012 plus the separately governed identity/export gates |
 | Protected relay identity | External-gated prerequisite | `external-gated` | `host` | ADR-0008, KMS/Silo protected relay plan, and Cell-to-Cell Anywhere Phase 05 | Real protected persistence, authenticated time, reviewed pending-key binding, and `DEV_REFERENCE` authority Phase 8 GO over AC-001..AC-011 open service-net Build. Build must then implement ADR-0008 and pass AC-012 before the Phase 05 relay route can be enabled; public KMS opcodes stay frozen and this lane-local gate does not block unrelated development |
 | STM32 DEV_REFERENCE protected authority | External-gated prerequisite | `external-gated` | `host` `SOFTWARE_HARNESS` complete; later exact-device `physical` development evidence | Authority Phase 4 private v2; typed protocol, authenticated profile bank, full-record journal/recovery model, certificate/profile validator, promotion recovery, production rejection, and deterministic non-executing provisioning plan pass 52 authority-protocol, 38 journal/bank, 17 validator, 22 provisioning, and 8 production-rejection tests plus RV64 no_std checks | Admit exact STM32H573I-DK and private SLB9672 hardware; freeze its TPM handle/NV/template/policy map; obtain operator approval of the irreversible plan hash; prove locked-device isolation, lifecycle/debug protection, endurance, and the full physical failure matrix; and demonstrate a confidential, integrity-protected, purpose-bounded STM32-to-isolated-KMS capability handoff |
@@ -110,10 +123,8 @@ sensor, or local-runtime development.
 | Production root selection | External-gated prerequisite | `external-gated` | `production` | ADR-0006 | Vendor package satisfying ADR-0006 and a superseding GO ADR; no stock TPM or generic secure-element counter is selected as the floor |
 | Production admission and release | Production release gate | `external-gated` | `production` | Tier 1 admission and governed release owners | Remote C2C identity where applicable, protected relay identity, production KMS/root, secure/measured boot, qualified external floor, physical hostile evidence, authenticated runner, required human approvals, and release-ledger closure |
 
-The lane-specific child plans under
-[`../.agents/260827-1004-hardware-independent-roadmap/`](../.agents/260827-1004-hardware-independent-roadmap/)
-own execution details. This page is the authoritative routing index; the legacy
-roadmap remains historical only.
+Internal lane-specific child plans own execution details. This page is the
+authoritative routing index; the legacy roadmap remains historical only.
 
 ## Current Direction
 
@@ -166,7 +177,7 @@ Cellos is being shaped around product stages, not only phase numbers:
   persistence remain required. This is QEMU-only evidence: ARM64 hostile
   execution is blocked, QEMU-TCG 8.2.2 remains incompatible, and physical x86
   remains hardware-gated.
-- Independent [CI job](../.github/workflows/ci.yml)
+- Separate automated-assurance [CI job](../.github/workflows/ci.yml)
   `qemu-x86-hypervisor-boot` now wires the x86 hypervisor boot-to-shell path to
   checksum-pinned official QEMU 10.2.0 source, `HV_VOLATILE_DISK=1`, the `/ #`
   shell oracle within 600 seconds, hard step/job timeouts, and evidence

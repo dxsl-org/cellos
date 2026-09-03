@@ -1,5 +1,5 @@
 # Cellos Patterns
-**Version**: 0.2.1-dev | **Last Updated**: 2026-06-05
+**Version**: 0.2.1-dev | **Last Updated**: 2026-09-03
 
 Design patterns, idioms, and architectural decisions for Cellos development.
 Detailed content lives in `docs/patterns/` sub-files — this file is the index.
@@ -31,7 +31,7 @@ See [code-standards.md](code-standards.md) for full enforcement rules.
 
 | Law | Rule |
 |-----|------|
-| 1 | `libs/api/` changes require 2× user confirmation |
+| 1 | `libs/api/` and `libs/types/` changes require two-step owner confirmation; independent promotion uses explicit GitHub `YES`/`NO` from another member |
 | 2 | No `&mut [u8]` across async boundaries — use `Box<[u8]>` |
 | 3 | Use `VAddr`/`PAddr`, never raw `u64` for addresses |
 | 4 | `#![forbid(unsafe_code)]` in all Cells |

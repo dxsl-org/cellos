@@ -180,7 +180,8 @@ the evidence and superseding decision specified by ADR-0006.
 - [ADR-0008](./0008-protected-relay-tls-endpoint-ownership.md) — the protected TLS endpoint may advance only to its lane-specific DEV_REFERENCE ceiling until production gates pass.
 - [ADR-0011](./0011-use-cloudflare-roughtime-for-dev-signed-time.md) — Cloudflare Roughtime remains a `DEV_REFERENCE` software/live evidence source and cannot satisfy production time-authority or admission gates.
 - [ADR-0012](./0012-use-external-lineage-table-and-kms-key.md) — allocator lineage is a separate `DEV_REFERENCE` table/key contract; its host tests do not prove live AWS isolation, restore safety, or production rollback resistance.
+- [ADR-0013](./0013-solo-first-development-independent-promotion.md) — extends lane-local execution to a solo maintainer while retaining GitHub-recorded independent promotion gates.
 - [Project roadmap](../project-roadmap.md#development-first-hardware-constrained-decision) — authoritative capability routing and planning classes.
-- [Current focus](../roadmap/current-focus.md#development-first-execution-boundary) — active inventory and next-session work order.
+- [Current focus](../roadmap/current-focus.md#development-first-solo-first-execution-boundary) — active inventory, solo execution rule, and next-session work order.
 - [System architecture](../system-architecture.md#development-execution-and-production-admission-boundary) — architecture-level evidence ceilings and production boundary.
 - [Tier 1 baseline and production admission plan](../../.agents/260821-1700-tier1-baseline-admission/plan.md#child-contract) — production-admission blockers remain local to that plan.

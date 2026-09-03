@@ -3,7 +3,35 @@
 **Scope**: Rust code across kernel, HAL, libraries, and Cells  
 **Edition**: 2021  
 **Nightly**: Required for `no_std` bare-metal features  
-**Last Updated**: 2026-08-26
+**Last Updated**: 2026-09-03
+
+---
+## Solo-First Development and Independent Promotion
+
+- One accountable maintainer MAY own planning, implementation, testing,
+  self-review, documentation, and development release work. Different roles do
+  not imply different people unless a gate explicitly says
+  `independent member`.
+- AI agents, local subagents, and CI jobs are automated assurance. They MUST
+  NOT be represented as independent accountable identities or human approval.
+- Missing independent-member approval blocks only the claim or promotion that
+  names that gate. It MUST NOT block unrelated implementation, documentation,
+  host validation, QEMU validation, or exact-device development work whose own
+  technical gates pass.
+- An independent-member decision is valid only when a repository member other
+  than the accountable maintainer posts an explicit `YES` or `NO` on the
+  GitHub issue or pull request containing the exact proposal, commit, and
+  evidence references. Silence, reactions, aliases, email, chat, AI output,
+  and CI results do not count.
+- The request MUST state one binary question and bind the exact proposal,
+  commit SHA, and evidence URLs. The member's comment MUST contain
+  `DECISION: YES` or `DECISION: NO`. Any material change to those bound inputs
+  invalidates the decision and requires a new GitHub response.
+- External standards, vendor contracts, or production controls that explicitly
+  require more parties remain external-gated. Solo development never promotes
+  host, QEMU, or development-hardware evidence to production.
+- See
+  [ADR-0013](decisions/0013-solo-first-development-independent-promotion.md).
 
 ---
 
@@ -12,7 +40,10 @@
 ### Law 1: Interface is Sacred
 
 - **Scope**: `libs/api/` and `libs/types/`
-- **Rule**: Any changes require 2x explicit user confirmation
+- **Rule**: Any change requires two explicit confirmations from the accountable
+  maintainer at separate checkpoints: design approval before editing, then
+  implementation approval after reviewing the exact ABI delta and evidence.
+  This is a two-step owner check, not a two-person approval.
 - **Reason**: These define the stable ABI between kernel and Cells
 - **Implementation**:
   - Use `#[repr(C)]` on public structs/enums that cross the ABI boundary

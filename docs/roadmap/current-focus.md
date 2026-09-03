@@ -1,21 +1,23 @@
 # Current Focus
 
-**Last updated**: 2026-09-02
+**Last updated**: 2026-09-03
 
-## Development-first execution boundary
+## Development-first, solo-first execution boundary
 
 [ADR-0007](../decisions/0007-development-first-hardware-constrained-execution.md)
-records the current decision: use QEMU and the two owner-reported Raspberry Pi 3
-Model B+ boards; procure no additional hardware now. The currently available
-peripherals are a camera and an HDMI cable retained for regression testing.
-Other sensor work is deferred. G1 Robot & Embedded is the active product-stage
-overlay, not a global queue. Capability dependencies and evidence ceilings
-determine executable order.
+keeps work lane-local and bounded by available hardware and truthful evidence
+ceilings. [ADR-0013](../decisions/0013-solo-first-development-independent-promotion.md)
+allows the sole accountable maintainer to perform all development roles.
+AI agents, local subagents, and CI jobs provide automated assurance; none is an
+independent accountable identity.
 
 QEMU evidence is software-only. RPi3 and sensor evidence is development and
-hardware-integration evidence for the exact exercised devices only. The RPi3 is
-not, and must never be presented as, a production-security qualification target
-or qualified independent external floor.
+hardware-integration evidence for the exact exercised devices only. A missing
+independent-member decision blocks only the independently ratified or
+production promotion that requires it. When required, another repository
+member must answer explicit `YES` or `NO` through the GitHub issue or pull
+request bound to the exact proposal, commit, and evidence. It does not block
+unrelated host, QEMU, exact-device development, or documentation work.
 
 ## Current executable work
 
@@ -50,13 +52,15 @@ or qualified independent external floor.
   multi-user assertions remains blocked on its external prerequisites: host root
   for rootfs creation and qualified QEMU-TCG 10.2.0.
 - The AArch64 test-hooks semihosting implementation has a successful local
-  diagnostic run, but the authoritative ledger remains blocked. Issue
-  [#47](https://github.com/dxsl-org/cellos/issues/47) requires a genuinely
-  separate Evidence Runner, Ledger Steward, and Independent Reviewer. This
-  governance gate serializes only the six ordered follow-up phases: live POSIX
-  documentation, shell `cd`/`pwd`, `fstat`, atomic `rename`, and the later
-  pinned-QEMU x86 compatibility phase remain pending. The independently
-  completed kernel CWD/path substrate does not bypass Phase 01.
+  diagnostic run, but the authoritative ledger promotion remains blocked.
+  Issue [#47](https://github.com/dxsl-org/cellos/issues/47) is the GitHub
+  approval channel: the sole maintainer may prepare the evidence and correction,
+  but another repository member must answer explicit `YES` or `NO` against the
+  exact proposal, commit, and evidence before independent ratification.
+  AI/subagents and CI are automated assurance and cannot supply that answer.
+  Live POSIX documentation, shell `cd`/`pwd`, `fstat`, atomic `rename`, and
+  pinned-QEMU x86 compatibility no longer depend on this ledger promotion; each
+  proceeds under its own technical, ABI, authority, and evidence gates.
 - Single-guest local Cell-to-Cell evidence is now required through the
   [CI workflow](../../.github/workflows/ci.yml) job
   `c2c-broker-oracle-single-guest-local-runtime`, displayed as
@@ -300,16 +304,18 @@ events are maintained in
 
 ## Next-session work order
 
-1. Obtain the three independent role actions required by Issue
-   [#47](https://github.com/dxsl-org/cellos/issues/47). Keep all six ordered
-   follow-up phases pending until Phase 01 is ratified; local agents and the
-   retained diagnostic evidence cannot close the gate.
-2. While that external governance action is pending, continue only independent
-   ready lanes. Identify both available Raspberry Pi 3 Model B+ boards: record
-   each exact serial, revision, and current condition, then reconcile whether
-   either corresponds to the prior `a22082` / Model B / serial
-   `000000003d042795` run. Record the available camera's exact identity and
-   interface without starting sensor integration. Buy no additional hardware.
+1. For the AArch64 ledger only, complete the fresh evidence and append-only
+   correction proposal, bind the exact claim, commit/tree, and evidence in Issue
+   [#47](https://github.com/dxsl-org/cellos/issues/47), then request
+   `DECISION: YES` or `DECISION: NO` from one repository member distinct from
+   the accountable maintainer. Until `YES`, keep only that ledger promotion
+   blocked; retained local evidence remains diagnostic.
+2. Independently continue any ready lane, beginning with both available
+   Raspberry Pi 3 Model B+ boards: record each exact serial, revision, and
+   current condition, then reconcile whether either corresponds to the prior
+   `a22082` / Model B / serial `000000003d042795` run. Record the available
+   camera's exact identity and interface without starting sensor integration.
+   Buy no additional hardware.
 3. Exercise the existing RPi3 boot/peripheral path on the reconciled current
    boards and retain development-only logs tied to the exact board. Do not
    infer a production-security or external-floor result.

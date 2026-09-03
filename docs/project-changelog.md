@@ -4,6 +4,16 @@
 
 ## [Unreleased] Development-first hardware-constrained execution
 
+- Adopted solo-first development with independent promotion. One accountable
+  maintainer may perform planning, implementation, testing, self-review,
+  documentation, and development release; AI agents and CI remain automated
+  assurance rather than independent accountable identities. Missing external
+  approval now blocks only its independently ratified or production claim, not
+  unrelated development lanes. When another member is required, only an
+  explicit GitHub issue or pull-request `YES`/`NO` bound to the exact proposal,
+  commit, and evidence is authoritative. Law 1 is clarified as two owner
+  confirmations at separate checkpoints rather than a two-person requirement.
+
 - Implemented the Tier 3 wide-guest Ubuntu/glibc substrate and fixed-capacity
   storage contract. Added stable service ID `HYPERVISOR_SERVICE_ID = 14` in
   `libs/api/src/abi/hypervisor.rs` with stability assertions. `app-init` registers

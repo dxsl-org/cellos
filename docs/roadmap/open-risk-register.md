@@ -1,6 +1,6 @@
 # Open Risk Register
 
-**Last updated**: 2026-09-02
+**Last updated**: 2026-09-03
 
 This register tracks confirmed readiness gaps found while syncing docs to code.
 It is not a global bug-fix queue, and it does not turn all future or
@@ -204,15 +204,16 @@ those remain fail-closed production gates.
 
 - AArch64 test-hooks semihosting code and a dedicated runner exist, but
   `B-AARCH64-SEMHOSTING` remains `BLOCKED` in the authoritative acceptance
-  ledger with the stale `qemu-rv64` subject and no schema-valid, fresh,
-  independently owned raw resolution evidence. Issue
-  [#47](https://github.com/dxsl-org/cellos/issues/47) assigns the required
-  separate Evidence Runner, Ledger Steward, and Independent Reviewer roles.
-  A local runner, local agent, or completed plan checkbox cannot close that
-  governed record. Until Phase 01 is independently ratified, the ordered live
-  POSIX documentation, shell `cd`/`pwd`, `fstat`, atomic `rename`, and pinned
-  QEMU-TCG x86 compatibility follow-ups remain pending; unrelated ready lanes
-  are not blocked.
+  ledger with the stale `qemu-rv64` subject and no independently ratified
+  correction. Issue
+  [#47](https://github.com/dxsl-org/cellos/issues/47) is the required approval
+  channel. The sole maintainer may own preparation and execution; AI, local
+  agents, and CI provide automated assurance only. Promotion requires another
+  repository member to answer explicit `YES` on the issue or pull request
+  bound to the exact proposal, commit, and evidence; `NO` or no answer keeps
+  only that promotion blocked. Native POSIX documentation and implementation,
+  atomic `rename`, and pinned QEMU-TCG x86 compatibility are independent lanes
+  governed by their own gates.
 
 ## Low
 
