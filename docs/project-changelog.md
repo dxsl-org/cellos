@@ -3,6 +3,19 @@
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
 ## [Unreleased] Development-first hardware-constrained execution
+- Repaired live POSIX navigation and factual bounded-feature status across
+  `docs/FAQ.md`, `docs/guides/tier1b-c-zig.md`, `docs/specs/05-application.md`,
+  and `cells/tests/posix-shim-test/src/main.rs`. Replaced stale monolithic
+  `libs/api/src/posix.rs` references with split root
+  `libs/api/src/services/posix.rs`, removed obsolete 482-line count, marked
+  implemented entropy (`getentropy`/`arc4random_buf`) and network
+  (`connect`/`send`/`recv`/`close`) functions completed, and retained explicit
+  process, mmap, signal, and non-Linux compatibility limitations. Verified
+  searches from clean commit `3aa676c32b3ab06ea0f03c5330e493eb5748b17b` (tree
+  `fc3cb3aef5ec81142c73e36a7ec986bff63aa1bb`) recorded in
+  `docs/evidence/posix-live-path-repair-verification.txt` (SHA-256
+  `14b1140a87d81b6b2c744fa07dfaa7c3618f8fcfbb13679db1d55198a0542532`, 771 bytes).
+
 - Resolved acceptance blocker `B-AARCH64-SEMHOSTING` on the AArch64 QEMU
   test-hooks boundary. The append-only acceptance ledger was migrated to schema
   v4 (event `schema-v4-migration`), corrected with subject `qemu-arm64` and
