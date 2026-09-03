@@ -187,9 +187,10 @@ those remain fail-closed production gates.
   A fault-free post-change release boot and the fresh immutable-FAT test-hooks
   marker gate supply the paired evidence; the test-hooks generic runner's
   deliberate classified Cell 254 fault remains subject to unchanged global
-  fault policy. `fstat`, `rename`, shell `cd`/`pwd`, C wrappers, symlinks, and
-  broad native POSIX compatibility remain future capabilities; Tier 1 must not
-  be described as POSIX-complete.
+  fault policy. Caller-scoped shell `cd`/`pwd` and bounded truthful `fstat` are
+  complete; fstat exposes only descriptor kind, access, and size. `rename`,
+  additional C wrappers, symlinks, and broad native POSIX compatibility remain
+  future capabilities; Tier 1 must not be described as POSIX-complete.
 - The historical ARM64 hypervisor machinery intermittency was fixed at the
   EL2 IRQ/preemption boundary. Hosted run `33486590595:1` passes the retained
   TCG machinery oracle; full logs remain diagnostic evidence for distinguishing

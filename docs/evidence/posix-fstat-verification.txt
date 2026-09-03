@@ -1,0 +1,43 @@
+EVENT_ID=posix-fstat-verification-20260903-04
+RECORDED_AT=2026-09-03T12:18:54Z
+REVISION=4856f4de50320b33f283f2db6862dd9fca1b300f
+TREE=ad20ae093fe30e0b4f15fc176712cf559c7c2520
+CHECKOUT=/home/dmin/worktrees/cellos-fstat-04a
+INITIAL_TRACKED_STATUS=clean detached exact revision
+ENV_HOST_TARGET=x86_64-unknown-linux-gnu
+ENV_CARGO_TARGET_RISCV64GC_UNKNOWN_NONE_ELF_RUSTFLAGS=-C relocation-model=pic
+COMMAND_1=CARGO_BUILD_TARGET=x86_64-unknown-linux-gnu cargo test -p api abi::syscall_tests
+RC_1=0
+RESULT_1=21 passed; 0 failed; 0 ignored; 74 filtered across library and contract binaries
+COMMAND_2=bash scripts/build-test-hooks-ci.sh
+RC_2=0
+RESULT_2=test-hooks kernel built; 8 cells signed after F1/F5 PASS; split POSIX FFI file accepted by explicit unsafe allowlist
+COMMAND_3=CI=1 cargo test --manifest-path tests/integration/Cargo.toml --target x86_64-unknown-linux-gnu --test vfs-quota riscv64_vfs_quota_all_pass -- --exact --nocapture
+RC_3=0
+RESULT_3=1 passed; 0 failed; 0 ignored; 1 filtered; exact QEMU test executed
+GUEST_3=fstat self-test PASS exactly once; ATOMIC_PUBLICATION_AP-13: SKIP (hart 1 not online; SMP probe not required) exactly once; expected classified [fault] Cell 254 guard-page termination with cause=0xf exactly once; no additional Cell fault, unclassified access fault, fstat/VFS FAIL, or generic substitute marker
+ARTIFACT_1=target/riscv64gc-unknown-none-elf/release/cellos-kernel-test-hooks
+ARTIFACT_1_SIZE=6250512
+ARTIFACT_1_SHA256=afaa81616d6e4f1b09e1c3d5704ab1696a0d4142b6c50cfbb9c185a48f828f43
+COMMAND_4=CARGO_BUILD_TARGET=riscv64gc-unknown-none-elf pwsh ./gen_disk.ps1
+RC_4=0
+RESULT_4=production kernel/disk built; 46 cells signed after F1/F5 PASS; required posix-shim-test built and packaged; optional tetris-lua failed and was omitted without a stale artifact
+COMMAND_5=CI=1 cargo test --manifest-path tests/integration/Cargo.toml --target x86_64-unknown-linux-gnu --test boot posix_shim_fstat -- --exact --nocapture
+RC_5=0
+RESULT_5=1 passed; 0 failed; 0 ignored; 61 filtered; exact QEMU test executed
+GUEST_5=POSIX-FSTAT-OPEN: OK exactly once; POSIX-FSTAT: OK exactly once; no fstat-specific skip, fault, panic, access fault, or FAIL; one unrelated thread-user-entry runtime-gate capability SKIP is outside this lane
+ARTIFACT_2=target/riscv64gc-unknown-none-elf/release/cellos-kernel
+ARTIFACT_2_SIZE=43636944
+ARTIFACT_2_SHA256=9d88eed8d68c0ef384ff14e8dff8c2f5d97c1d9d7779b476b31f7438afa01bd3
+SUPPLEMENT_COMMAND=CARGO_BUILD_TARGET=riscv64gc-unknown-none-elf pwsh ./gen_disk.ps1 && CI=1 cargo test --manifest-path tests/integration/Cargo.toml --target x86_64-unknown-linux-gnu --test boot posix_shim_fstat -- --exact --nocapture --test-threads=1
+SUPPLEMENT_RC=0
+SUPPLEMENT_RESULT=clean exact revision; build passed; exact single-thread test 1 passed, 0 failed, 61 filtered; both OK markers exactly once; zero fstat-specific skip/fault/FAIL
+SUPPLEMENT_ARTIFACT_SIZE=43636944
+SUPPLEMENT_ARTIFACT_SHA256=fdd239f2465352b56e7e608b0f17a0962cbd7ee81b3aa6937849820e6ec98aa6
+PREREQUISITE_SKIP=none; both CI=1 host tests executed QEMU
+EXPECTED_GUEST_CAPABILITY_SKIP=ATOMIC_PUBLICATION_AP-13 only on the lower-layer single-hart route; no SMP proof claimed
+SUPERSEDED_1=77ff6a78 signing failed closed because split src/fstat.rs lacked its unsafe allowlist entry
+SUPERSEDED_2=fe44be95 lower-layer passed but candidate was invalidated before POSIX verification because vfs-quota.rs exceeded the 200-line project bound
+CHECKPOINT_2_SUPERSEDED=Accountable Maintainer approval at 2026-09-03T12:14:19Z preceded the required --test-threads=1 supplement and does not bind the final evidence boundary
+CHECKPOINT_2=APPROVED by Accountable Maintainer at 2026-09-03T12:20:54Z over exact 04A interface, migration impact, primary clean run, and required --test-threads=1 supplement artifact fdd239f2465352b56e7e608b0f17a0962cbd7ee81b3aa6937849820e6ec98aa6
+FINAL_TRACKED_SOURCE_STATUS=clean; disposable generated artifacts removed with verification checkout

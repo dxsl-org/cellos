@@ -778,6 +778,10 @@ pub struct Grant {
 - Read-only FAT32 parser for boot
 - Contains: `/bin/shell`, `/bin/hello`, `/bin/lua`, `/bin/cat`, `/bin/ls`
 - Kernel uses this to spawn init Cell
+- Caller-scoped `Fstat=254` returns the frozen 32-byte `ViFstatV1` wire record
+  with only descriptor kind, access, and size. VIFS handles remain read-only;
+  the kernel never writes a target C `stat`, and the POSIX shim performs the
+  zero-initialized type/size-only translation.
 
 ---
 

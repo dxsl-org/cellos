@@ -80,9 +80,10 @@ because that pulls C/POSIX assumptions into the trusted Tier 1 path.
 The bounded kernel CWD/path lane is complete with paired fault-free release-boot
 and immutable-FAT test-hooks marker evidence. It covers canonical
 caller-attributed relative `open`, `remove`, `chdir`, exact non-NUL `getcwd`,
-and VIFS1 FAT `stat`. This is a narrow native contract, not POSIX
-compatibility. `fstat`, `rename`, shell `cd`/`pwd`, C wrappers, symlinks, new
-ABI work, and broad POSIX support remain future capabilities.
+and VIFS1 FAT `stat`. Caller-scoped shell `cd`/`pwd` and the fixed-width
+kind/access/size `fstat` contract are also complete. These remain narrow native
+contracts, not POSIX compatibility. `rename`, additional C wrappers, symlinks,
+new ABI work, and broad POSIX support remain future capabilities.
 
 ## G5 - Virtualization Platform
 

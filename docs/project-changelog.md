@@ -3,6 +3,23 @@
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
 ## [Unreleased] Development-first hardware-constrained execution
+- Published truthful caller-scoped descriptor metadata as `Fstat=254` on
+  allowlist bit 61. The frozen 32-byte `ViFstatV1` reports only kind, access,
+  and size; kernel dispatch validates output before metadata gathering and
+  performs one final copy. `_fstat` translates exact wire success (`32`) into
+  a zero-initialized type/size-only C `stat` and C success (`0`), while every
+  failure returns `-1` with caller bytes unchanged. Obsolete raw FStat 106 was
+  removed; typed `Seek=106` remains. Exact clean-tree QEMU verification at
+  commit `4856f4de50320b33f283f2db6862dd9fca1b300f` (tree
+  `ad20ae093fe30e0b4f15fc176712cf559c7c2520`) passed API 21/21,
+  `vfs-quota` 1/1, and `boot::posix_shim_fstat` 1/1. The lower-layer route
+  retained its required AP-13 guest SKIP and classified Cell-254 `cause=0xf`
+  guard termination; the POSIX route observed both OK markers exactly once,
+  including the required clean single-thread supplement. Evidence:
+  `docs/evidence/posix-fstat-verification.txt` (SHA-256
+  `14a3f53d725f748afa4976158cfcd0b2c73c3adcf2fee8bebfbce4ed7e4e3171`,
+  3,960 bytes). No writable metadata, rename, or broader POSIX claim is added.
+
 - Published the bounded caller-scoped shell CWD ABI as `Chdir=252` and
   `Getcwd=253` on shared allowlist bit 60. Kernel dispatch and handler-level
   allowlist attribution now use the explicit caller task; `ostd` exposes typed
