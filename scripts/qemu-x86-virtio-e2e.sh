@@ -19,6 +19,13 @@ ACTIVE_QEMU_PID=""
 cleanup() {
     if [[ -n "$ACTIVE_QEMU_PID" ]] && kill -0 "$ACTIVE_QEMU_PID" 2>/dev/null; then
         kill "$ACTIVE_QEMU_PID" 2>/dev/null || true
+        for _ in {1..10}; do
+            kill -0 "$ACTIVE_QEMU_PID" 2>/dev/null || break
+            sleep 0.2
+        done
+        if kill -0 "$ACTIVE_QEMU_PID" 2>/dev/null; then
+            kill -KILL "$ACTIVE_QEMU_PID" 2>/dev/null || true
+        fi
         wait "$ACTIVE_QEMU_PID" 2>/dev/null || true
     fi
 }

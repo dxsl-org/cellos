@@ -27,6 +27,13 @@ NET_OLD_TID=""
 cleanup() {
     if [[ -n "$QEMU_PID" ]] && kill -0 "$QEMU_PID" 2>/dev/null; then
         kill "$QEMU_PID" 2>/dev/null || true
+        for _ in {1..10}; do
+            kill -0 "$QEMU_PID" 2>/dev/null || break
+            sleep 0.2
+        done
+        if kill -0 "$QEMU_PID" 2>/dev/null; then
+            kill -KILL "$QEMU_PID" 2>/dev/null || true
+        fi
         wait "$QEMU_PID" 2>/dev/null || true
     fi
 }
