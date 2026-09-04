@@ -85,7 +85,7 @@
 <a href=#85 id=85 data-nosnippet>85</a>    fmt: <span class="kw-2">*const </span>c_char,
 <a href=#86 id=86 data-nosnippet>86</a>    args: VaList&lt;<span class="lifetime">'_</span>&gt;,
 <a href=#87 id=87 data-nosnippet>87</a>) -&gt; c_int {
-<a href=#88 id=88 data-nosnippet>88</a>    vsnprintf_core(buf, size, fmt, args) <span class="kw">as </span>c_int
+<a href=#88 id=88 data-nosnippet>88</a>    vsnprintf_core(buf <span class="kw">as </span><span class="kw-2">*mut </span>u8, size, fmt <span class="kw">as </span><span class="kw-2">*const </span>u8, args) <span class="kw">as </span>c_int
 <a href=#89 id=89 data-nosnippet>89</a>}
 <a href=#90 id=90 data-nosnippet>90</a>
 <a href=#91 id=91 data-nosnippet>91</a><span class="doccomment">/// Formats `fmt` with `args` into `buf` with no length limit (C `sprintf` semantics).
@@ -97,7 +97,7 @@
 <a href=#97 id=97 data-nosnippet>97</a>/// point to a valid NUL-terminated C string; `args` must match `fmt`'s specifiers.
 <a href=#98 id=98 data-nosnippet>98</a></span><span class="attr">#[no_mangle]
 <a href=#99 id=99 data-nosnippet>99</a></span><span class="kw">pub unsafe extern </span><span class="string">"C" </span><span class="kw">fn </span>vsprintf(buf: <span class="kw-2">*mut </span>c_char, fmt: <span class="kw-2">*const </span>c_char, args: VaList&lt;<span class="lifetime">'_</span>&gt;) -&gt; c_int {
-<a href=#100 id=100 data-nosnippet>100</a>    vsnprintf_core(buf, usize::MAX / <span class="number">2</span>, fmt, args) <span class="kw">as </span>c_int
+<a href=#100 id=100 data-nosnippet>100</a>    vsnprintf_core(buf <span class="kw">as </span><span class="kw-2">*mut </span>u8, usize::MAX / <span class="number">2</span>, fmt <span class="kw">as </span><span class="kw-2">*const </span>u8, args) <span class="kw">as </span>c_int
 <a href=#101 id=101 data-nosnippet>101</a>}
 <a href=#102 id=102 data-nosnippet>102</a>
 <a href=#103 id=103 data-nosnippet>103</a><span class="doccomment">/// Formats `fmt` with `args` and writes the result to stdout (fd 1).
@@ -108,7 +108,7 @@
 <a href=#108 id=108 data-nosnippet>108</a></span><span class="attr">#[no_mangle]
 <a href=#109 id=109 data-nosnippet>109</a></span><span class="kw">pub unsafe extern </span><span class="string">"C" </span><span class="kw">fn </span>vprintf(fmt: <span class="kw-2">*const </span>c_char, args: VaList&lt;<span class="lifetime">'_</span>&gt;) -&gt; c_int {
 <a href=#110 id=110 data-nosnippet>110</a>    <span class="kw">let </span><span class="kw-2">mut </span>tmp = [<span class="number">0u8</span>; <span class="number">1024</span>];
-<a href=#111 id=111 data-nosnippet>111</a>    <span class="kw">let </span>n = vsnprintf_core(tmp.as_mut_ptr(), tmp.len(), fmt, args);
+<a href=#111 id=111 data-nosnippet>111</a>    <span class="kw">let </span>n = vsnprintf_core(tmp.as_mut_ptr(), tmp.len(), fmt <span class="kw">as </span><span class="kw-2">*const </span>u8, args);
 <a href=#112 id=112 data-nosnippet>112</a>    _write(<span class="number">1</span>, tmp.as_ptr() <span class="kw">as </span><span class="kw-2">*const </span>c_void, n.min(tmp.len()));
 <a href=#113 id=113 data-nosnippet>113</a>    n <span class="kw">as </span>c_int
 <a href=#114 id=114 data-nosnippet>114</a>}
@@ -128,7 +128,7 @@
 <a href=#128 id=128 data-nosnippet>128</a>) -&gt; c_int {
 <a href=#129 id=129 data-nosnippet>129</a>    <span class="kw">let </span>fd = fd_of(stream);
 <a href=#130 id=130 data-nosnippet>130</a>    <span class="kw">let </span><span class="kw-2">mut </span>tmp = [<span class="number">0u8</span>; <span class="number">1024</span>];
-<a href=#131 id=131 data-nosnippet>131</a>    <span class="kw">let </span>n = vsnprintf_core(tmp.as_mut_ptr(), tmp.len(), fmt, args);
+<a href=#131 id=131 data-nosnippet>131</a>    <span class="kw">let </span>n = vsnprintf_core(tmp.as_mut_ptr(), tmp.len(), fmt <span class="kw">as </span><span class="kw-2">*const </span>u8, args);
 <a href=#132 id=132 data-nosnippet>132</a>    _write(fd, tmp.as_ptr() <span class="kw">as </span><span class="kw-2">*const </span>c_void, n.min(tmp.len()));
 <a href=#133 id=133 data-nosnippet>133</a>    n <span class="kw">as </span>c_int
 <a href=#134 id=134 data-nosnippet>134</a>}

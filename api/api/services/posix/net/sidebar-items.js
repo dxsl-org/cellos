@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["_close","connect","recv","send","socket"],"struct":["sockaddr_in"]};
+window.SIDEBAR_ITEMS = {"fn":["_close","close","connect","recv","send","socket"],"struct":["sockaddr_in"]};
