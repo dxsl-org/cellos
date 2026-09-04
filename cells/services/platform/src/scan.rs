@@ -28,24 +28,54 @@ const CMD_MEM_SPACE: u16 = 1 << 1;
 
 // ── low-level config-space accessors (all return a fallback on bounds error) ─
 
-fn r32(r: &MmioRegion, dev: u8, fun: u8, off: usize) -> u32 {
+trait ConfigSpace {
+    fn read_u32(&self, offset: usize) -> Option<u32>;
+    fn read_u16(&self, offset: usize) -> Option<u16>;
+    fn read_u8(&self, offset: usize) -> Option<u8>;
+    fn write_u32(&self, offset: usize, value: u32) -> Option<()>;
+    fn write_u16(&self, offset: usize, value: u16) -> Option<()>;
+}
+
+impl ConfigSpace for MmioRegion {
+    fn read_u32(&self, offset: usize) -> Option<u32> {
+        MmioRegion::read_u32(self, offset).ok()
+    }
+
+    fn read_u16(&self, offset: usize) -> Option<u16> {
+        MmioRegion::read::<u16>(self, offset).ok()
+    }
+
+    fn read_u8(&self, offset: usize) -> Option<u8> {
+        MmioRegion::read::<u8>(self, offset).ok()
+    }
+
+    fn write_u32(&self, offset: usize, value: u32) -> Option<()> {
+        MmioRegion::write_u32(self, offset, value).ok()
+    }
+
+    fn write_u16(&self, offset: usize, value: u16) -> Option<()> {
+        MmioRegion::write::<u16>(self, offset, value).ok()
+    }
+}
+
+fn r32<R: ConfigSpace + ?Sized>(r: &R, dev: u8, fun: u8, off: usize) -> u32 {
     r.read_u32(cfg_off(dev, fun, off)).unwrap_or(0xFFFF_FFFF)
 }
 
-fn r16(r: &MmioRegion, dev: u8, fun: u8, off: usize) -> u16 {
-    r.read::<u16>(cfg_off(dev, fun, off)).unwrap_or(0xFFFF)
+fn r16<R: ConfigSpace + ?Sized>(r: &R, dev: u8, fun: u8, off: usize) -> u16 {
+    r.read_u16(cfg_off(dev, fun, off)).unwrap_or(0xFFFF)
 }
 
-fn r8(r: &MmioRegion, dev: u8, fun: u8, off: usize) -> u8 {
-    r.read::<u8>(cfg_off(dev, fun, off)).unwrap_or(0xFF)
+fn r8<R: ConfigSpace + ?Sized>(r: &R, dev: u8, fun: u8, off: usize) -> u8 {
+    r.read_u8(cfg_off(dev, fun, off)).unwrap_or(0xFF)
 }
 
-fn w32(r: &MmioRegion, dev: u8, fun: u8, off: usize, v: u32) {
+fn w32<R: ConfigSpace + ?Sized>(r: &R, dev: u8, fun: u8, off: usize, v: u32) {
     let _ = r.write_u32(cfg_off(dev, fun, off), v);
 }
 
-fn w16(r: &MmioRegion, dev: u8, fun: u8, off: usize, v: u16) {
-    let _ = r.write::<u16>(cfg_off(dev, fun, off), v);
+fn w16<R: ConfigSpace + ?Sized>(r: &R, dev: u8, fun: u8, off: usize, v: u16) {
+    let _ = r.write_u16(cfg_off(dev, fun, off), v);
 }
 
 /// ECAM formula for bus 0: `(dev << 15) | (fun << 12) | off`
@@ -56,8 +86,26 @@ fn cfg_off(dev: u8, fun: u8, off: usize) -> usize {
 
 // ── BAR size probing ──────────────────────────────────────────────────────────
 
+fn bar_size32(mask_value: u32) -> u32 {
+    let mask = mask_value & 0xFFFF_FFF0;
+    if mask == 0 {
+        0
+    } else {
+        (!mask).wrapping_add(1)
+    }
+}
+
+fn bar_size64(mask_low: u32, mask_high: u32) -> u64 {
+    let mask = ((mask_high as u64) << 32) | ((mask_low & 0xFFFF_FFF0) as u64);
+    if mask == 0 {
+        0
+    } else {
+        (!mask).wrapping_add(1)
+    }
+}
+
 /// Probe size of a 32-bit MMIO BAR via the write-all-ones / read-back method.
-fn probe32(r: &MmioRegion, dev: u8, fun: u8, bar_idx: usize) -> u32 {
+fn probe32<R: ConfigSpace + ?Sized>(r: &R, dev: u8, fun: u8, bar_idx: usize) -> u32 {
     let off = CFG_BAR0 + bar_idx * 4;
     let orig_cmd = r16(r, dev, fun, CFG_COMMAND);
     let orig_bar = r32(r, dev, fun, off);
@@ -68,16 +116,11 @@ fn probe32(r: &MmioRegion, dev: u8, fun: u8, bar_idx: usize) -> u32 {
     // Restore BAR and command register.
     w32(r, dev, fun, off, orig_bar);
     w16(r, dev, fun, CFG_COMMAND, orig_cmd);
-    let mask = rb & 0xFFFF_FFF0;
-    if mask == 0 {
-        0
-    } else {
-        (!mask).wrapping_add(1)
-    }
+    bar_size32(rb)
 }
 
 /// Probe size of a 64-bit MMIO BAR (low + high dword pair).
-fn probe64(r: &MmioRegion, dev: u8, fun: u8, bar_idx: usize) -> u64 {
+fn probe64<R: ConfigSpace + ?Sized>(r: &R, dev: u8, fun: u8, bar_idx: usize) -> u64 {
     let off_lo = CFG_BAR0 + bar_idx * 4;
     let off_hi = CFG_BAR0 + (bar_idx + 1) * 4;
     let orig_cmd = r16(r, dev, fun, CFG_COMMAND);
@@ -91,12 +134,7 @@ fn probe64(r: &MmioRegion, dev: u8, fun: u8, bar_idx: usize) -> u64 {
     w32(r, dev, fun, off_lo, orig_lo);
     w32(r, dev, fun, off_hi, orig_hi);
     w16(r, dev, fun, CFG_COMMAND, orig_cmd);
-    let mask64 = ((rb_hi as u64) << 32) | ((rb_lo & 0xFFFF_FFF0) as u64);
-    if mask64 == 0 {
-        0
-    } else {
-        (!mask64).wrapping_add(1)
-    }
+    bar_size64(rb_lo, rb_hi)
 }
 
 // ── Public scanner entry point ────────────────────────────────────────────────
@@ -183,5 +221,153 @@ pub fn scan_and_register(region: &MmioRegion) {
             // and sys_find_pcie_device queries work without a kernel ECAM scan.
             let _ = sys_register_pci_device(bdf, cls, bar0_base, bar0_size);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use alloc::vec::Vec;
+    use core::cell::{Cell, RefCell};
+
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    enum Event {
+        Read16(usize),
+        Read32(usize),
+        Write16(usize, u16),
+        Write32(usize, u32),
+    }
+
+    struct FakeConfig {
+        command: Cell<u16>,
+        bars: RefCell<[u32; 6]>,
+        masks: [u32; 6],
+        events: RefCell<Vec<Event>>,
+    }
+
+    impl FakeConfig {
+        fn new(command: u16, bars: [u32; 6], masks: [u32; 6]) -> Self {
+            Self {
+                command: Cell::new(command),
+                bars: RefCell::new(bars),
+                masks,
+                events: RefCell::new(Vec::new()),
+            }
+        }
+
+        fn bar_index(offset: usize) -> Option<usize> {
+            let relative = offset.checked_sub(CFG_BAR0)?;
+            if relative < 6 * 4 && relative % 4 == 0 {
+                Some(relative / 4)
+            } else {
+                None
+            }
+        }
+    }
+
+    impl ConfigSpace for FakeConfig {
+        fn read_u32(&self, offset: usize) -> Option<u32> {
+            self.events.borrow_mut().push(Event::Read32(offset));
+            let index = Self::bar_index(offset)?;
+            let value = self.bars.borrow()[index];
+            Some(if value == u32::MAX {
+                self.masks[index]
+            } else {
+                value
+            })
+        }
+
+        fn read_u16(&self, offset: usize) -> Option<u16> {
+            self.events.borrow_mut().push(Event::Read16(offset));
+            (offset == CFG_COMMAND).then(|| self.command.get())
+        }
+
+        fn read_u8(&self, _offset: usize) -> Option<u8> {
+            None
+        }
+
+        fn write_u32(&self, offset: usize, value: u32) -> Option<()> {
+            self.events.borrow_mut().push(Event::Write32(offset, value));
+            let index = Self::bar_index(offset)?;
+            self.bars.borrow_mut()[index] = value;
+            Some(())
+        }
+
+        fn write_u16(&self, offset: usize, value: u16) -> Option<()> {
+            self.events.borrow_mut().push(Event::Write16(offset, value));
+            if offset != CFG_COMMAND {
+                return None;
+            }
+            self.command.set(value);
+            Some(())
+        }
+    }
+
+    #[test]
+    fn bar_mask_decoding_covers_absent_and_sized_bars() {
+        assert_eq!(bar_size32(0), 0);
+        assert_eq!(bar_size32(0xFFFF_F00F), 0x1000);
+        assert_eq!(bar_size32(0xFFFF_C008), 0x4000);
+        assert_eq!(bar_size32(0xFFFE_0000), 0x2_0000);
+
+        assert_eq!(bar_size64(0, 0), 0);
+        assert_eq!(bar_size64(0xFFE0_000C, 0xFFFF_FFFF), 0x20_0000);
+    }
+
+    #[test]
+    fn probe32_disables_decode_and_restores_bar_and_command() {
+        let original_bar = 0xFEBC_0008;
+        let config = FakeConfig::new(
+            0x0007,
+            [original_bar, 0, 0, 0, 0, 0],
+            [0xFFFE_0008, 0, 0, 0, 0, 0],
+        );
+
+        assert_eq!(probe32(&config, 0, 0, 0), 0x2_0000);
+        assert_eq!(config.command.get(), 0x0007);
+        assert_eq!(config.bars.borrow()[0], original_bar);
+        assert_eq!(
+            config.events.borrow().as_slice(),
+            &[
+                Event::Read16(CFG_COMMAND),
+                Event::Read32(CFG_BAR0),
+                Event::Write16(CFG_COMMAND, 0x0005),
+                Event::Write32(CFG_BAR0, u32::MAX),
+                Event::Read32(CFG_BAR0),
+                Event::Write32(CFG_BAR0, original_bar),
+                Event::Write16(CFG_COMMAND, 0x0007),
+            ]
+        );
+    }
+
+    #[test]
+    fn probe64_disables_decode_and_restores_both_dwords() {
+        let original_low = 0x1000_000C;
+        let original_high = 0x0000_0001;
+        let config = FakeConfig::new(
+            0x0007,
+            [original_low, original_high, 0, 0, 0, 0],
+            [0xFFE0_000C, 0xFFFF_FFFF, 0, 0, 0, 0],
+        );
+
+        assert_eq!(probe64(&config, 0, 0, 0), 0x20_0000);
+        assert_eq!(config.command.get(), 0x0007);
+        assert_eq!(&config.bars.borrow()[..2], &[original_low, original_high]);
+        assert_eq!(
+            config.events.borrow().as_slice(),
+            &[
+                Event::Read16(CFG_COMMAND),
+                Event::Read32(CFG_BAR0),
+                Event::Read32(CFG_BAR0 + 4),
+                Event::Write16(CFG_COMMAND, 0x0005),
+                Event::Write32(CFG_BAR0, u32::MAX),
+                Event::Write32(CFG_BAR0 + 4, u32::MAX),
+                Event::Read32(CFG_BAR0),
+                Event::Read32(CFG_BAR0 + 4),
+                Event::Write32(CFG_BAR0, original_low),
+                Event::Write32(CFG_BAR0 + 4, original_high),
+                Event::Write16(CFG_COMMAND, 0x0007),
+            ]
+        );
     }
 }
