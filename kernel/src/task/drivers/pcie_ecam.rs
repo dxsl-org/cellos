@@ -41,6 +41,25 @@ fn ecam_base_x86() -> usize {
     X86_ECAM_BASE.load(Ordering::Relaxed)
 }
 
+#[cfg(target_arch = "x86_64")]
+static X86_ECAM_BUS_START: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(0);
+#[cfg(target_arch = "x86_64")]
+static X86_ECAM_BUS_END: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(0);
+
+#[cfg(target_arch = "x86_64")]
+pub fn set_ecam_bus_range_x86(start: u8, end: u8) {
+    X86_ECAM_BUS_START.store(start, Ordering::Relaxed);
+    X86_ECAM_BUS_END.store(end, Ordering::Relaxed);
+}
+
+#[cfg(target_arch = "x86_64")]
+pub fn ecam_bus_range_x86() -> (u8, u8) {
+    (
+        X86_ECAM_BUS_START.load(Ordering::Relaxed),
+        X86_ECAM_BUS_END.load(Ordering::Relaxed),
+    )
+}
+
 /// PCIe ECAM config-space base for RISC-V virt gpex.
 /// Source: QEMU virt machine DTS — `pci@30000000`.
 pub const ECAM_BASE_RISCV: usize = 0x3000_0000;

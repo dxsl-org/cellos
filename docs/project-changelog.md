@@ -3,6 +3,17 @@
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
 ## [Unreleased] Development-first hardware-constrained execution
+- Implemented x86 Platform Cell PCIe discovery handoff via ACPI MCFG launch argv.
+  Kernel extracts base address and bus range from validated ACPI MCFG, attaches
+  `--ecam-base=<hex> --bus-start=<N> --bus-end=<N>` to `SpawnRequest::with_argv`,
+  and spawns `/bin/platform` before `init` on x86_64. `/bin/platform` adds
+  `StateRestore` to its explicit syscall allowlist, decodes spawn argv via
+  `ostd::args`, claims the 1 MiB bus-0 ECAM MMIO window, walks all 32 device slots,
+  and registers discovered BARs and PCI devices. Verified by host unit tests
+  (4 passed in `service-platform`) and live QEMU q35 boot (`[INFO] Platform Cell
+  spawned (x86 PCIe ECAM scanner)` -> `USER: [platform] ECAM scan buses 0-255
+  starting` -> `USER: [platform] ECAM scan complete`).
+
 - Hardened QEMU-TCG x86 version parity and verified Phase 06 qualification
   oracles under pinned official QEMU 10.2.0. Runners reject unqualified
   executables before launch (`scripts/qemu-hypervisor-smoke-x86.sh`,

@@ -450,6 +450,10 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         // Set runtime ECAM base from validated ACPI before PCIe scan. Zero
         // keeps PCIe closed; there is no implicit q35 fallback.
         crate::task::drivers::pcie_ecam::set_ecam_base_x86(x86_ecam_base as usize);
+        crate::task::drivers::pcie_ecam::set_ecam_bus_range_x86(
+            acpi_info.ecam_bus_start,
+            acpi_info.ecam_bus_end,
+        );
 
         log_info("Initializing x86_64 paging (kernel PML4)...");
         let root_table_phys = {
@@ -1003,9 +1007,9 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             log_info("X86-MMIO-SMOKE: SKIP (no SVM/VMX root)");
         }
 
-        // Spawn the RISC-V Platform Cell before init. x86_64 uses the
-        // ACPI-MCFG kernel scanner above until ECAM discovery has a private
-        // kernel-to-Platform-Cell channel that does not expand the public ABI.
+        // Spawn the Platform Cell before init (PCIe ECAM scanner).
+        // RISC-V uses the compile-time GPEX window (0x3000_0000).
+        // x86_64 hands the validated runtime ACPI-MCFG base and bus range via argv.
         // Failure is non-fatal: kernel-side PCI_DEVICES stays empty; Driver Cells
         // that rely on sys_find_pcie_device will simply not find their device.
         #[cfg(target_arch = "riscv64")]
@@ -1015,6 +1019,24 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         ) {
             Ok(_) => log_info("Platform Cell spawned (PCIe ECAM scanner)"),
             Err(_) => log_info("Platform Cell absent — PCIe BARs will not be pre-registered"),
+        }
+
+        #[cfg(target_arch = "x86_64")]
+        if x86_ecam_base != 0 {
+            let argv_str = alloc::format!(
+                "--ecam-base={:#x} --bus-start={} --bus-end={}",
+                x86_ecam_base,
+                acpi_info.ecam_bus_start,
+                acpi_info.ecam_bus_end,
+            );
+            match crate::loader::spawn_from_path(
+                "/bin/platform",
+                crate::loader::SpawnRequest::governed_boot()
+                    .with_argv(argv_str.into_bytes()),
+            ) {
+                Ok(_) => log_info("Platform Cell spawned (x86 PCIe ECAM scanner)"),
+                Err(_) => log_info("Platform Cell absent — PCIe BARs will not be pre-registered"),
+            }
         }
 
         // `aligned_elf::bytes` borrows an already aligned embedded image and only

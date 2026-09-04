@@ -24,6 +24,10 @@ pub struct AcpiInfo {
     pub hpet_base: u64,
     /// PCIe ECAM config space base (MCFG allocation[0].base_address).
     pub ecam_base: u64,
+    /// PCIe ECAM bus start (MCFG allocation[0].bus_start).
+    pub ecam_bus_start: u8,
+    /// PCIe ECAM bus end (MCFG allocation[0].bus_end).
+    pub ecam_bus_end: u8,
     /// ISA IRQ → GSI override table. Index = ISA IRQ (0–15); value = GSI.
     /// Entries not overridden by MADT type-2 keep identity mapping (IRQ N → GSI N).
     pub irq_overrides: [u32; 16],
@@ -41,6 +45,8 @@ impl Default for AcpiInfo {
             ioapic_gsi_base: 0,
             hpet_base: 0,
             ecam_base: 0,
+            ecam_bus_start: 0,
+            ecam_bus_end: 0,
             irq_overrides: overrides,
         }
     }
@@ -483,7 +489,14 @@ fn parse_mcfg(virt: usize, length: usize, info: &mut AcpiInfo) {
             && base_addr & 0xF_FFFF == 0
         {
             info.ecam_base = base_addr;
-            log::info!("[acpi] MCFG: segment 0 bus 0 ECAM base = {:#x}", base_addr);
+            info.ecam_bus_start = bus_start;
+            info.ecam_bus_end = bus_end;
+            log::info!(
+                "[acpi] MCFG: segment 0 bus {}-{} ECAM base = {:#x}",
+                bus_start,
+                bus_end,
+                base_addr
+            );
             return;
         }
     }

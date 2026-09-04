@@ -24,6 +24,12 @@ impl SpawnRequest {
         }
     }
 
+    /// Attach command-line arguments to this launch request.
+    pub fn with_argv(mut self, argv: Vec<u8>) -> Self {
+        self.argv = Some(argv);
+        self
+    }
+
     /// Governed syscall path with separately captured caller authority and
     /// edge-specific child ceiling.
     pub(crate) fn governed_caller(
