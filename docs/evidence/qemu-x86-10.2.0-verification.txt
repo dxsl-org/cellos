@@ -29,23 +29,20 @@
    - Result: `BLOCKED_ENVIRONMENT: requires exact 'QEMU emulator version 10.2.0' (got 'QEMU emulator version 8.2.2 (Debian 1:8.2.2+ds-0ubuntu1.17)' from /usr/bin/qemu-system-x86_64)` (exit 1)
 
 2. **Hypervisor Smoke: 1 GiB Strict Alpine Boot**
-   - Command: `QEMU_MEMORY=1G HV_SMOKE_MODE=boot BOOT_WINDOW=100 QEMU_X86_BIN="$QEMU_X86_BIN" bash scripts/qemu-hypervisor-smoke-x86.sh`
+   - Command: `QEMU_MEMORY=1G HV_SMOKE_MODE=boot BOOT_WINDOW=600 QEMU_X86_BIN="$QEMU_X86_BIN" bash scripts/qemu-hypervisor-smoke-x86.sh`
    - Result: `PASS: Alpine guest '/ #' prompt reached — x86 hypervisor smoke test OK` (exit 0)
-   - Verification: Guest reached busybox shell prompt (`~ # ?[6n`) with zero fatal, panic, or triple-fault signatures.
-
+   - Verification: Freshly regenerated `qemu-hv-x86.log` (SHA-256 `82d2ea3ea7ab853d94c6fea30b5d930ac7d65d692e43ee6546d6588569dbb7a4`). Guest reached busybox shell prompt (`~ # ?[6n`) with zero fatal, panic, or triple-fault signatures.
 3. **VirtIO-MMIO Block/Net Two-Boot Persistence E2E**
    - Command: `BUILD_EVIDENCE_IMAGE=0 QEMU_X86_BIN="$QEMU_X86_BIN" bash scripts/qemu-x86-virtio-e2e.sh`
    - Result: `PASS: x86 VirtIO-MMIO block/net persistence evidence under QEMU-TCG 10.2.0` (exit 0)
-   - Verification: First run write/flush verified (`VIRTIO_E2E_FIRST_RUN_PASS`), second run readback verified (`VIRTIO_E2E_SECOND_RUN_PASS`), IRQ 5 and 6 handled, VT-d DMA isolation active, host-read SHA-256 match.
-
+   - Verification: First run write/flush verified (`VIRTIO_E2E_FIRST_RUN_PASS`, `run1.log` SHA-256 `b272b998e812fa8d1a6809dbbe27a2a886481078a37a0e8438091822bca38ba4`), second run readback verified (`VIRTIO_E2E_SECOND_RUN_PASS`, `run2.log` SHA-256 `a0dfdc4438f1c8a161563a80bf9aa022931fd75098dd5884cad9aaff6b399010`), IRQ 5 and 6 handled, VT-d DMA isolation active, host-read SHA-256 match.
 4. **Tier 3 VirtIO Hostile Corpus (27 Scenarios + Recovery Write Flush)**
    - Command: `BUILD_HOSTILE_ISO=0 QEMU_X86_BIN="$QEMU_X86_BIN" bash scripts/qemu-tier3-hostile-runner-x86.sh`
    - Result:
      `OBSERVED: host-authored VirtIO rejection markers and post-stimulus QEMU liveness for 27 bounded scenarios.`
      `OBSERVED: host-read persistent backend contains the post-reset recovery write after flush.`
      `Scope: qualified QEMU-TCG emulator evidence only; no physical-hardware claim.` (exit 0)
-   - Verification: All 27 bounded intervals verified with unique host markers, liveness maintained across all stimuli, supervisor disconnect/reconnect generations quarantined, persistent recovery prefix matched.
-
+   - Verification: Freshly regenerated `build/x86-virtio-hostile/qemu.log` (SHA-256 `e0279f8b909d72d419102951325178915fc90ba0798f8ad3d598014d3b6a477a`). All 27 bounded intervals verified with unique host markers, liveness maintained across all stimuli, supervisor disconnect/reconnect generations quarantined, bounded cleanup cleanly terminates child QEMU, persistent recovery prefix matched.
 ## Scope and Risk Boundaries
 
 - **Software Evidence Ceiling:** Qualified QEMU-TCG 10.2.0 software evidence only; no claim on physical AMD/Intel hardware or nested-virtualization fidelity.

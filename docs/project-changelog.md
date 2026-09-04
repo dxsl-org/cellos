@@ -17,7 +17,7 @@
   `docs/evidence/qemu-x86-10.2.0-installer.txt` (SHA-256
   `200a1fa6c3bb02b1e24edee4ddb6984b9cc206907094cde328d04896ed6c4b5f`, 294,005
   bytes) and `docs/evidence/qemu-x86-10.2.0-verification.txt` (SHA-256
-  `9edb5c3867f28e780b52e9bc86d85b329a186ed9e58fa919dfd1b1b49b3ed024`, 4,364
+  `c257436b46c6cd310b14d714d907306147e44d2c2c6a0bcab33c8bffcef1faaa`, 4,832
   bytes). ARM64 hostile execution remains isolated as `BLOCKED_SCOPE`; all
   evidence remains QEMU software qualification with no physical hardware claim.
 
