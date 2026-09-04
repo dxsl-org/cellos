@@ -42,6 +42,6 @@ X86_VIRTIO_HOSTILE_CORPUS=(
   "net-backend-reconnect|[hv-backend-fault-host] recovered service=net new_tid=|net-reconnect"
 )
 
-X86_VIRTIO_HOSTILE_BLOCKED=(
-  "arm64-execution|an ARM TCG environment that reaches the guest probe without the existing synchronous fault"
-)
+# Genuine x86 hostile axes that lack transport coverage. ARM64 execution is isolated
+# to scripts/qemu-tier3-hostile-runner-arm64.sh and the cross-architecture umbrella ledger.
+X86_VIRTIO_HOSTILE_BLOCKED=()

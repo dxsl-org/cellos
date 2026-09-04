@@ -244,9 +244,13 @@ cmp -s "$WORK_DIR/expected-prefix" "$WORK_DIR/recovered-prefix" \
 
 echo "OBSERVED: host-authored VirtIO rejection markers and post-stimulus QEMU liveness for ${#X86_VIRTIO_HOSTILE_CORPUS[@]} bounded scenarios."
 echo "OBSERVED: host-read persistent backend contains the post-reset recovery write after flush."
-for row in "${X86_VIRTIO_HOSTILE_BLOCKED[@]}"; do
-    IFS='|' read -r axis prerequisite <<<"$row"
-    echo "BLOCKED_SCOPE: $axis requires $prerequisite."
-done
+if [[ ${#X86_VIRTIO_HOSTILE_BLOCKED[@]} -gt 0 ]]; then
+    for row in "${X86_VIRTIO_HOSTILE_BLOCKED[@]}"; do
+        IFS='|' read -r axis prerequisite <<<"$row"
+        echo "BLOCKED_SCOPE: $axis requires $prerequisite."
+    done
+    echo "Scope: qualified QEMU-TCG emulator evidence only; no physical-hardware claim."
+    exit 2
+fi
 echo "Scope: qualified QEMU-TCG emulator evidence only; no physical-hardware claim."
-exit 2
+exit 0
