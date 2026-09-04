@@ -18,6 +18,18 @@
 - **Literal First-Line Version:** `QEMU emulator version 10.2.0`
 - **Full Build Transcript Evidence:** `docs/evidence/qemu-x86-10.2.0-installer.txt` (SHA-256 `200a1fa6c3bb02b1e24edee4ddb6984b9cc206907094cde328d04896ed6c4b5f`)
 
+
+## Bound Prebuilt Image Inputs
+
+- **Smoke ISO:** `build/vicell-x86-hv.iso`
+  - SHA-256: `c907a6d8433c4e3987e44dbd5d6987b9d18ba7e2301593ccacd9dad60f10476c`
+  - Size: 68,165,632 bytes
+- **VirtIO-MMIO Persistence E2E ISO:** `build/vicell-x86-virtio-e2e.iso`
+  - SHA-256: `83a788f43146953a5f865299aea8077e1cf0d3e792984d25d7a6d680c4d6c050`
+  - Size: 68,165,632 bytes
+- **VirtIO Hostile Corpus ISO:** `build/vicell-x86-virtio-hostile.iso`
+  - SHA-256: `845f19c7f1465015370dc6298e396b1e335609554558f53984252e41a4d1b619`
+  - Size: 68,165,632 bytes
 ## Executed Commands and Verified Results
 
 1. **Prelaunch Rejection of Unqualified Binaries**

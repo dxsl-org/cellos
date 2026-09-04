@@ -48,16 +48,17 @@ gate, and the result does not make legacy/distro/hardware x86 compatible.
 
 `initially absent .../qemu-10.2.0 -> QEMU_X86_PREFIX -> installer PREFIX -> exact QEMU_X86_BIN -> identical inline literal preflight in smoke/e2e/hostile -> unchanged launch/oracles -> hashed transcripts`. Version identity is necessary, not sufficient. Inline three comparisons; add no shell framework.
 
-**06A** commits only the three runner preflight changes. From a clean checkout of exact 06A commit/tree, build the pinned emulator at one initially absent prefix and run all oracles; only then **06B** appends normal verification/current docs with tested commit/tree, commands/results, and hashes. Failure halts completion.
+**06A** (`0117192b`) committed the initial runner preflight changes. Under ADR-0013 §§3–5 maintainer authority, superseding candidate **06A2** (`d8001dd7`, tree `4316333abccb0caebd0eb0a0df5c994229b6888d`) decoupled cross-architecture ARM64 contamination from the x86 matrix and added bounded child-termination cleanup across runners. From a clean checkout of that exact candidate, the pinned emulator is built at one initially absent prefix and all oracles run; only then **06B** appends normal verification/current docs bound to that exact tested commit/tree. Failure halts completion.
 
 ## Related Code Files
 
 - Modify: `scripts/qemu-hypervisor-smoke-x86.sh`
 - Modify: `scripts/qemu-x86-virtio-e2e.sh`
 - Modify: `scripts/qemu-tier3-hostile-runner-x86.sh`
-- Read/retain: `scripts/install-qemu-x86-ci.sh`, `.github/workflows/ci.yml`, guest images/scenario matrix
+- Modify: `scripts/tier3-hostile-scenario-matrix.sh`
+- Read/retain: `scripts/install-qemu-x86-ci.sh`, `.github/workflows/ci.yml`, owned qualified guest images
 - Create after clean verification: `docs/evidence/qemu-x86-10.2.0-installer.txt`, `docs/evidence/qemu-x86-10.2.0-verification.txt`
-- Documentation trigger after evidence: current risk/roadmap/`[Unreleased]` wording bound to exact tested 06A commit/tree
+- Documentation trigger after evidence: current risk/roadmap/`[Unreleased]` wording bound to exact tested 06A2 commit/tree
 - Exclude: kernel/VMM/VMCB/memory code, legacy-QEMU fork, distro packaging, physical/KVM qualification
 
 ## Implementation Steps
