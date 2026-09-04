@@ -680,34 +680,70 @@
 <a href=#680 id=680 data-nosnippet>680</a>        &amp;&amp; recv_buf[..payload.len()] == <span class="kw-2">*</span>payload
 <a href=#681 id=681 data-nosnippet>681</a>        &amp;&amp; identity
 <a href=#682 id=682 data-nosnippet>682</a>            == <span class="prelude-val">Some</span>(api::caller_identity::CallerIdentity {
-<a href=#683 id=683 data-nosnippet>683</a>                cell_id: TEST_CELL,
-<a href=#684 id=684 data-nosnippet>684</a>                generation: sender_generation,
-<a href=#685 id=685 data-nosnippet>685</a>                sender_tid: SENDER <span class="kw">as </span>u64,
-<a href=#686 id=686 data-nosnippet>686</a>            });
-<a href=#687 id=687 data-nosnippet>687</a>
-<a href=#688 id=688 data-nosnippet>688</a>    reset();
-<a href=#689 id=689 data-nosnippet>689</a>    attested_ok
-<a href=#690 id=690 data-nosnippet>690</a>        || fail(<span class="string">"try_recv with attest_caller=true did not write valid CallerIdentity trailer"</span>)
-<a href=#691 id=691 data-nosnippet>691</a>}
-<a href=#692 id=692 data-nosnippet>692</a>
-<a href=#693 id=693 data-nosnippet>693</a><span class="doccomment">/// Returns true iff IPC publication is receiver-owned, bounded and wake-safe.
-<a href=#694 id=694 data-nosnippet>694</a></span><span class="kw">pub fn </span>self_test() -&gt; bool {
-<a href=#695 id=695 data-nosnippet>695</a>    <span class="kw">let </span>ok = all_producers_defer_foreign_writes()
-<a href=#696 id=696 data-nosnippet>696</a>        &amp; all_producers_wake_net_rx_completion_wait()
-<a href=#697 id=697 data-nosnippet>697</a>        &amp; ready_receiver_is_not_enqueued_twice()
-<a href=#698 id=698 data-nosnippet>698</a>        &amp; timer_completion_wait_remains_deadline_only()
-<a href=#699 id=699 data-nosnippet>699</a>        &amp; full_completion_wait_mailbox_never_wakes()
-<a href=#700 id=700 data-nosnippet>700</a>        &amp; completion_wait_publication_arms_existing_handoff()
-<a href=#701 id=701 data-nosnippet>701</a>        &amp; ipc_before_park_returns_raw_zero()
-<a href=#702 id=702 data-nosnippet>702</a>        &amp; full_mailbox_refuses_without_wake()
-<a href=#703 id=703 data-nosnippet>703</a>        &amp; quota_failure_is_fallible()
-<a href=#704 id=704 data-nosnippet>704</a>        &amp; heap_payload_refunds_receiver_quota()
-<a href=#705 id=705 data-nosnippet>705</a>        &amp; death_wake_precedes_later_message()
-<a href=#706 id=706 data-nosnippet>706</a>        &amp; pending_drain_keeps_sender_context_without_relocking()
-<a href=#707 id=707 data-nosnippet>707</a>        &amp; try_recv_attestation_writes_identity_trailer();
-<a href=#708 id=708 data-nosnippet>708</a>    <span class="kw">if </span>ok {
-<a href=#709 id=709 data-nosnippet>709</a>        <span class="macro">log::info!</span>(<span class="string">"[selftest] IPC-PENDING: PASS (deferred, bounded, quota-safe, completion-wake)"</span>);
-<a href=#710 id=710 data-nosnippet>710</a>    }
-<a href=#711 id=711 data-nosnippet>711</a>    ok
-<a href=#712 id=712 data-nosnippet>712</a>}
+<a href=#683 id=683 data-nosnippet>683</a>                flags: <span class="number">0</span>,
+<a href=#684 id=684 data-nosnippet>684</a>                cell_id: TEST_CELL,
+<a href=#685 id=685 data-nosnippet>685</a>                generation: sender_generation,
+<a href=#686 id=686 data-nosnippet>686</a>                sender_tid: SENDER <span class="kw">as </span>u64,
+<a href=#687 id=687 data-nosnippet>687</a>            });
+<a href=#688 id=688 data-nosnippet>688</a>
+<a href=#689 id=689 data-nosnippet>689</a>    <span class="comment">// Case 2: SENDER has bit 63 set and allowlist != u64::MAX -&gt; flags = CALLER_FLAG_VFS_MUTATE
+<a href=#690 id=690 data-nosnippet>690</a>    </span><span class="kw">if let </span><span class="prelude-val">Some</span>(sched) = <span class="kw">super</span>::SCHEDULER.lock().as_mut() {
+<a href=#691 id=691 data-nosnippet>691</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(task) = sched.tasks.get_mut(<span class="kw-2">&amp;</span>SENDER) {
+<a href=#692 id=692 data-nosnippet>692</a>            task.syscall_allowlist = <span class="number">1u64 </span>&lt;&lt; <span class="number">63</span>;
+<a href=#693 id=693 data-nosnippet>693</a>        }
+<a href=#694 id=694 data-nosnippet>694</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(receiver) = sched.tasks.get_mut(<span class="kw-2">&amp;</span>RECEIVER) {
+<a href=#695 id=695 data-nosnippet>695</a>            receiver.pending_msgs.try_push(<span class="kw">super</span>::tcb::PendingMsg {
+<a href=#696 id=696 data-nosnippet>696</a>                sender_tid: SENDER,
+<a href=#697 id=697 data-nosnippet>697</a>                data: <span class="kw">super</span>::pending_mailbox::PendingMsgData::try_copy(payload, TEST_CELL <span class="kw">as </span>usize)
+<a href=#698 id=698 data-nosnippet>698</a>                    .expect(<span class="string">"inline payload copy must fit"</span>),
+<a href=#699 id=699 data-nosnippet>699</a>                wire: <span class="prelude-val">None</span>,
+<a href=#700 id=700 data-nosnippet>700</a>                enqueued_tick: <span class="number">0</span>,
+<a href=#701 id=701 data-nosnippet>701</a>            }).ok();
+<a href=#702 id=702 data-nosnippet>702</a>        }
+<a href=#703 id=703 data-nosnippet>703</a>    }
+<a href=#704 id=704 data-nosnippet>704</a>    recv_buf.fill(<span class="number">0</span>);
+<a href=#705 id=705 data-nosnippet>705</a>    <span class="kw">let </span>mutate_delivered = <span class="kw">super</span>::syscall::handle_syscall(
+<a href=#706 id=706 data-nosnippet>706</a>        RECEIVER,
+<a href=#707 id=707 data-nosnippet>707</a>        <span class="kw">super</span>::syscall::Syscall::TryRecv {
+<a href=#708 id=708 data-nosnippet>708</a>            mask: SENDER,
+<a href=#709 id=709 data-nosnippet>709</a>            buf_ptr: recv_buf.as_mut_ptr() <span class="kw">as </span>usize,
+<a href=#710 id=710 data-nosnippet>710</a>            buf_len: recv_buf.len(),
+<a href=#711 id=711 data-nosnippet>711</a>            attest_caller: <span class="bool-val">true</span>,
+<a href=#712 id=712 data-nosnippet>712</a>        },
+<a href=#713 id=713 data-nosnippet>713</a>    );
+<a href=#714 id=714 data-nosnippet>714</a>    <span class="kw">let </span>mutate_identity = api::caller_identity::CallerIdentity::from_recv_buf(<span class="kw-2">&amp;</span>recv_buf);
+<a href=#715 id=715 data-nosnippet>715</a>    <span class="kw">let </span>mutate_ok = <span class="macro">matches!</span>(mutate_delivered, <span class="prelude-val">Ok</span>(id) <span class="kw">if </span>id == SENDER)
+<a href=#716 id=716 data-nosnippet>716</a>        &amp;&amp; mutate_identity
+<a href=#717 id=717 data-nosnippet>717</a>            == <span class="prelude-val">Some</span>(api::caller_identity::CallerIdentity {
+<a href=#718 id=718 data-nosnippet>718</a>                flags: api::caller_identity::CALLER_FLAG_VFS_MUTATE,
+<a href=#719 id=719 data-nosnippet>719</a>                cell_id: TEST_CELL,
+<a href=#720 id=720 data-nosnippet>720</a>                generation: sender_generation,
+<a href=#721 id=721 data-nosnippet>721</a>                sender_tid: SENDER <span class="kw">as </span>u64,
+<a href=#722 id=722 data-nosnippet>722</a>            });
+<a href=#723 id=723 data-nosnippet>723</a>
+<a href=#724 id=724 data-nosnippet>724</a>    reset();
+<a href=#725 id=725 data-nosnippet>725</a>    (attested_ok &amp;&amp; mutate_ok)
+<a href=#726 id=726 data-nosnippet>726</a>        || fail(<span class="string">"try_recv with attest_caller=true did not write valid CallerIdentity trailer or mutate flags"</span>)
+<a href=#727 id=727 data-nosnippet>727</a>}
+<a href=#728 id=728 data-nosnippet>728</a>
+<a href=#729 id=729 data-nosnippet>729</a><span class="doccomment">/// Returns true iff IPC publication is receiver-owned, bounded and wake-safe.
+<a href=#730 id=730 data-nosnippet>730</a></span><span class="kw">pub fn </span>self_test() -&gt; bool {
+<a href=#731 id=731 data-nosnippet>731</a>    <span class="kw">let </span>ok = all_producers_defer_foreign_writes()
+<a href=#732 id=732 data-nosnippet>732</a>        &amp; all_producers_wake_net_rx_completion_wait()
+<a href=#733 id=733 data-nosnippet>733</a>        &amp; ready_receiver_is_not_enqueued_twice()
+<a href=#734 id=734 data-nosnippet>734</a>        &amp; timer_completion_wait_remains_deadline_only()
+<a href=#735 id=735 data-nosnippet>735</a>        &amp; full_completion_wait_mailbox_never_wakes()
+<a href=#736 id=736 data-nosnippet>736</a>        &amp; completion_wait_publication_arms_existing_handoff()
+<a href=#737 id=737 data-nosnippet>737</a>        &amp; ipc_before_park_returns_raw_zero()
+<a href=#738 id=738 data-nosnippet>738</a>        &amp; full_mailbox_refuses_without_wake()
+<a href=#739 id=739 data-nosnippet>739</a>        &amp; quota_failure_is_fallible()
+<a href=#740 id=740 data-nosnippet>740</a>        &amp; heap_payload_refunds_receiver_quota()
+<a href=#741 id=741 data-nosnippet>741</a>        &amp; death_wake_precedes_later_message()
+<a href=#742 id=742 data-nosnippet>742</a>        &amp; pending_drain_keeps_sender_context_without_relocking()
+<a href=#743 id=743 data-nosnippet>743</a>        &amp; try_recv_attestation_writes_identity_trailer();
+<a href=#744 id=744 data-nosnippet>744</a>    <span class="kw">if </span>ok {
+<a href=#745 id=745 data-nosnippet>745</a>        <span class="macro">log::info!</span>(<span class="string">"[selftest] IPC-PENDING: PASS (deferred, bounded, quota-safe, completion-wake)"</span>);
+<a href=#746 id=746 data-nosnippet>746</a>    }
+<a href=#747 id=747 data-nosnippet>747</a>    ok
+<a href=#748 id=748 data-nosnippet>748</a>}
 </code></pre></div></section></main></body></html>

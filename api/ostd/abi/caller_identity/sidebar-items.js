@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["CALLER_IDENTITY_LEN","RECV_ATTEST_CALLER"],"struct":["CallerIdentity"]};
+window.SIDEBAR_ITEMS = {"constant":["CALLER_FLAG_VFS_MUTATE","CALLER_IDENTITY_LEN","RECV_ATTEST_CALLER"],"struct":["CallerIdentity"]};

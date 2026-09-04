@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["close","filled_stat","fstat","open","stat_bytes","test_fstat","validate_open_fstat"],"struct":["Stat"]};

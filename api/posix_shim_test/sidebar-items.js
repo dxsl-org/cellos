@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["ECHO_IP","ECHO_PORT"],"fn":["close","connect","getentropy","main","recv","send","socket","test_getentropy","test_net"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS"],"struct":["SockaddrIn"]};
+window.SIDEBAR_ITEMS = {"constant":["ECHO_IP","ECHO_PORT"],"fn":["close","connect","getentropy","main","recv","send","socket","test_getentropy","test_net"],"mod":["fstat"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS"],"struct":["SockaddrIn"]};

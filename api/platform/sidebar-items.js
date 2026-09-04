@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["ECAM_BUS0_SIZE"],"fn":["main","on_event","scan_ecam"],"mod":["scan"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS"]};
+window.SIDEBAR_ITEMS = {"constant":["ECAM_BUS0_SIZE"],"fn":["get_ecam_config","main","on_event","parse_address","parse_ecam_args","print_u8","scan_ecam"],"mod":["scan"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS"]};

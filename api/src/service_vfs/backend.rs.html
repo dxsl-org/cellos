@@ -66,5 +66,13 @@
 <a href=#66 id=66 data-nosnippet>66</a>
 <a href=#67 id=67 data-nosnippet>67</a>    <span class="doccomment">/// Recursive delete (`rm -r`). Backends that do not support it return false.
 <a href=#68 id=68 data-nosnippet>68</a>    </span><span class="kw">fn </span>rmdir_recursive(<span class="kw-2">&amp;mut </span><span class="self">self</span>, path: <span class="kw-2">&amp;</span>str) -&gt; bool;
-<a href=#69 id=69 data-nosnippet>69</a>}
+<a href=#69 id=69 data-nosnippet>69</a>
+<a href=#70 id=70 data-nosnippet>70</a>    <span class="doccomment">/// Atomic no-replace rename from `old` to `new`.
+<a href=#71 id=71 data-nosnippet>71</a>    ///
+<a href=#72 id=72 data-nosnippet>72</a>    /// Backends that do not support it return false (only RedoxFS supports this).
+<a href=#73 id=73 data-nosnippet>73</a>    </span><span class="kw">fn </span>rename_no_replace(<span class="kw-2">&amp;mut </span><span class="self">self</span>, old: <span class="kw-2">&amp;</span>str, new: <span class="kw-2">&amp;</span>str) -&gt; bool {
+<a href=#74 id=74 data-nosnippet>74</a>        <span class="kw">let _ </span>= (old, new);
+<a href=#75 id=75 data-nosnippet>75</a>        <span class="bool-val">false
+<a href=#76 id=76 data-nosnippet>76</a>    </span>}
+<a href=#77 id=77 data-nosnippet>77</a>}
 </code></pre></div></section></main></body></html>

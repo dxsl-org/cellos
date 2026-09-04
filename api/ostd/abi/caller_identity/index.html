@@ -10,16 +10,10 @@ then writes a <a href="struct.CallerIdentity.html" title="struct ostd::abi::call
 <a href="constant.CALLER_IDENTITY_LEN.html" title="constant ostd::abi::caller_identity::CALLER_IDENTITY_LEN"><code>CALLER_IDENTITY_LEN</code></a> bytes</strong> of that receiver’s own recv buffer, after the
 message payload has been copied.</p>
 <h3 id="why-the-tail-of-the-buffer-and-not-a-new-message-field"><a class="doc-anchor" href="#why-the-tail-of-the-buffer-and-not-a-new-message-field">§</a>Why the tail of the buffer, and not a new message field</h3>
-<p>The wire format is postcard, whose byte 0 is the request discriminant.
-Widening the request enum, or prefixing the frame, moves every following byte
-and has already cost this project one silent framing collision. <code>decode</code>
-(<code>take_from_bytes</code>) reads exactly the bytes one message needs and ignores the
-rest, so a trailer at a fixed offset past the payload is invisible to every
-existing parser, on both the kernel and the cell side.</p>
-<p>The trailer deliberately does not carry a Cell root TID. It remains exactly
-32 bytes and reports the sender for transport diagnostics; VFS obtains the
-separately attested root lifetime endpoint through <code>ResolveCellOwner</code> or the
-atomic <code>WatchCellOwner</code> syscall record.</p>
+<p>Postcard byte 0 is the request discriminant; a trailer at a fixed offset
+past the payload is invisible to existing parsers on both kernel and cell sides.
+The trailer reports sender diagnostics; VFS obtains root lifetime endpoints
+separately via <code>ResolveCellOwner</code> or <code>WatchCellOwner</code>.</p>
 <h3 id="invariants"><a class="doc-anchor" href="#invariants">§</a>Invariants</h3>
 <ul>
 <li>Opting in <strong>reserves</strong> the tail: a receiver that passes the flag must treat
@@ -37,4 +31,4 @@ no permissive interpretation of a missing trailer.</li>
 allocations), so it is rejected at parse time rather than deep in a policy
 table.</li>
 </ul>
-</div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.CallerIdentity.html" title="struct ostd::abi::caller_identity::CallerIdentity">Caller<wbr>Identity</a></dt><dd>Who the kernel says called.</dd></dl><h2 id="constants" class="section-header">Constants<a href="#constants" class="anchor">§</a></h2><dl class="item-table"><dt><a class="constant" href="constant.CALLER_IDENTITY_LEN.html" title="constant ostd::abi::caller_identity::CALLER_IDENTITY_LEN">CALLER_<wbr>IDENTITY_<wbr>LEN</a></dt><dd>Size in bytes of the identity trailer reserved at the end of a recv buffer.</dd><dt><a class="constant" href="constant.RECV_ATTEST_CALLER.html" title="constant ostd::abi::caller_identity::RECV_ATTEST_CALLER">RECV_<wbr>ATTEST_<wbr>CALLER</a></dt><dd>Fourth <code>ViSyscall::Recv</code> argument requesting a caller-identity trailer.</dd></dl></section></div></main></body></html>
+</div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.CallerIdentity.html" title="struct ostd::abi::caller_identity::CallerIdentity">Caller<wbr>Identity</a></dt><dd>Who the kernel says called.</dd></dl><h2 id="constants" class="section-header">Constants<a href="#constants" class="anchor">§</a></h2><dl class="item-table"><dt><a class="constant" href="constant.CALLER_FLAG_VFS_MUTATE.html" title="constant ostd::abi::caller_identity::CALLER_FLAG_VFS_MUTATE">CALLER_<wbr>FLAG_<wbr>VFS_<wbr>MUTATE</a></dt><dd>Caller identity flag indicating the calling Cell has declared VfsMutate authority.</dd><dt><a class="constant" href="constant.CALLER_IDENTITY_LEN.html" title="constant ostd::abi::caller_identity::CALLER_IDENTITY_LEN">CALLER_<wbr>IDENTITY_<wbr>LEN</a></dt><dd>Size in bytes of the identity trailer reserved at the end of a recv buffer.</dd><dt><a class="constant" href="constant.RECV_ATTEST_CALLER.html" title="constant ostd::abi::caller_identity::RECV_ATTEST_CALLER">RECV_<wbr>ATTEST_<wbr>CALLER</a></dt><dd>Fourth <code>ViSyscall::Recv</code> argument requesting a caller-identity trailer.</dd></dl></section></div></main></body></html>

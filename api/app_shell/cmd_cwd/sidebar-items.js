@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_SHELL_CWD_BYTES"],"fn":["cmd_cd","cmd_pwd","get_shell_cwd"]};

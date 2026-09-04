@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["AcquireError","SharedKind"],"struct":["ExclusiveReservation","InvalidNamespaceKey","NamespaceKey","NamespaceLedger","ServiceHandle","SharedLease","State","Transient"],"type":["Acquire","Entries"]};

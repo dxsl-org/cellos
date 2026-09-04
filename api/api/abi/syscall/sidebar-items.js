@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["ViSyscall"],"mod":["cap_mask","events","service"],"struct":["ProcessInfo","ProcessInfoV2","SyscallSet","ViMemInfoV1","ViSpawnArgs"]};
+window.SIDEBAR_ITEMS = {"constant":["VFS_MUTATE_DECLARATION_BIT","VFS_MUTATE_DECLARATION_MASK","VI_FSTAT_ACCESS_READ","VI_FSTAT_ACCESS_WRITE","VI_FSTAT_KIND_CHARACTER","VI_FSTAT_KIND_DIRECTORY","VI_FSTAT_KIND_REGULAR","VI_FSTAT_V1_LEN"],"enum":["ViSyscall"],"mod":["cap_mask","events","service"],"struct":["ProcessInfo","ProcessInfoV2","SyscallSet","ViFstatV1","ViMemInfoV1","ViSpawnArgs"]};
