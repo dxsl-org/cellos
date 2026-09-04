@@ -250,6 +250,63 @@ pub(super) unsafe fn vfs_unlink(path: &str) -> c_int {
         _ => -1,
     }
 }
+pub(super) unsafe fn vfs_stat(path: &str, st: *mut stat) -> c_int {
+    let vfs = vfs_tid();
+    if vfs == 0 {
+        return -1;
+    }
+
+    let req = crate::ipc::VfsRequest::Stat(path);
+    let mut send_buf = [0u8; crate::ipc::IPC_BUF_SIZE];
+    let Ok(encoded) = crate::ipc::encode(&req, &mut send_buf) else {
+        return -1;
+    };
+
+    let sent = raw_syscall(
+        ViSyscall::Send,
+        vfs,
+        encoded.as_ptr() as usize,
+        encoded.len(),
+        0,
+    );
+    if sent < 0 {
+        VFS_TID_CACHE.store(0, core::sync::atomic::Ordering::Relaxed);
+        return -1;
+    }
+
+    let mut recv_buf = [0u8; crate::ipc::IPC_BUF_SIZE];
+    let n = raw_syscall(
+        ViSyscall::Recv,
+        vfs,
+        recv_buf.as_mut_ptr() as usize,
+        recv_buf.len(),
+        0,
+    );
+    if n <= 0 {
+        VFS_TID_CACHE.store(0, core::sync::atomic::Ordering::Relaxed);
+        return -1;
+    }
+
+    match crate::ipc::decode::<crate::ipc::VfsResponse>(&recv_buf[..n as usize]) {
+        Ok(crate::ipc::VfsResponse::Stat { size, is_dir }) => {
+            let Ok(c_size) = c_long::try_from(size) else {
+                return -1;
+            };
+            let mode = if is_dir { 0o040000 } else { 0o100000 };
+            let mut translated = core::mem::MaybeUninit::<stat>::zeroed();
+            let translated_ptr = translated.as_mut_ptr();
+            core::ptr::addr_of_mut!((*translated_ptr).st_mode).write(mode);
+            core::ptr::addr_of_mut!((*translated_ptr).st_size).write(c_size);
+            core::ptr::copy_nonoverlapping(
+                translated_ptr as *const u8,
+                st as *mut u8,
+                core::mem::size_of::<stat>(),
+            );
+            0
+        }
+        _ => -1,
+    }
+}
 
 /// # Safety
 /// `name` must be non-null and point to a valid NUL-terminated C string.
@@ -405,6 +462,15 @@ pub unsafe extern "C" fn _stat(name: *const c_char, st: *mut stat) -> c_int {
     if name.is_null() || st.is_null() {
         return -1;
     }
+    let len = strlen(name);
+    let bytes = core::slice::from_raw_parts(name as *const u8, len);
+    if let Ok(path_str) = core::str::from_utf8(bytes) {
+        let ret = vfs_stat(path_str, st);
+        if ret == 0 {
+            return 0;
+        }
+    }
+    // Fallback for early-boot or direct kernel-VIFS1 paths:
     let fd = _open(name, 0, 0);
     if fd < 0 {
         return -1;
