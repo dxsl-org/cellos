@@ -10,8 +10,8 @@
 - Phase 06 còn [blocked] riêng trên ARM64 vì synchronous TCG fault xảy ra trước
   guest probe; không hạ gate hoặc suy diễn PASS từ kết quả x86.
 - Qualification AMD/Intel thật vẫn là hardware gate độc lập.
-- Ngoài lane này còn các việc lớn như x86 Platform Cell discovery, kernel-owned x86 paging, per-vector IDT stubs và production
- trust keys.
+- Ngoài lane này còn các việc lớn như x86 Platform Cell discovery [completed], kernel-owned x86 paging, per-vector IDT stubs [completed] và production
+  trust keys.
 - Phase 04 two-node/direct-LAN vẫn được ghi blocked riêng theo authority mTLS; không chặn single-guest gate.
 
 1. Chọn floor backend + production hardware
