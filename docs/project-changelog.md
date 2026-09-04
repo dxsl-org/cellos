@@ -26,6 +26,15 @@
   signed `posix-shim-test` cell; its fresh-disk integration test requires
   exactly one `RAW-RENAME: OK` and `POSIX-RENAME: OK` marker with no panic or
   Cell fault.
+- Added POSIX `_mkdir`/`mkdir` and `_rmdir`/`rmdir` wrappers over existing
+  typed `VfsRequest::Mkdir`/`Rmdir` IPC. The shim returns success only for VFS
+  `Ok`, fails closed for null or non-UTF-8 paths, and retries service lookup
+  only after transport loss. The POSIX mode argument remains ABI-compatible but
+  is not sent to VFS; the RedoxFS backend applies its directory mode. The live
+  `/srv` conformance test now proves a regular file survives a failed `rmdir`,
+  then proves mkdir → directory stat → rmdir → absent failure-atomic stat and
+  rejects repeat removal, with its QEMU marker asserted exactly once.
+
 
 
 - Implemented x86 Platform Cell PCIe discovery handoff via ACPI MCFG launch argv.

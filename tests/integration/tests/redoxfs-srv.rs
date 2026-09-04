@@ -82,7 +82,7 @@ fn prerequisites_ok_with_disk() -> bool {
 }
 
 /// S1–S6: mount, write+read, listdir, mkdir, unlink, atomic rename; then live
-/// POSIX rename.
+/// POSIX mkdir/rmdir and rename.
 /// The test creates a temp copy of the base disk image so repeated runs do not
 /// accumulate state in `build/disk_srv.img`.
 #[test]
@@ -108,9 +108,16 @@ fn riscv64_redoxfs_srv_basic() {
             panic!("{e}");
         });
 
-    // Exercise live POSIX rename on RedoxFS P5 (/srv) via posix-shim-test
+    // Exercise live POSIX directory lifecycle and rename on RedoxFS P5 (/srv)
+    // via posix-shim-test.
     std::thread::sleep(std::time::Duration::from_millis(500));
     runner.send_line("posix-shim-test");
+    runner
+        .wait_for("[posix-shim] POSIX-MKDIR-RMDIR: OK", 60)
+        .unwrap_or_else(|e| {
+            eprintln!("--- serial output ---\n{}\n---", runner.dump());
+            panic!("{e}");
+        });
     runner
         .wait_for("[posix-shim] POSIX-RENAME: OK", 60)
         .unwrap_or_else(|e| {
@@ -137,9 +144,15 @@ fn riscv64_redoxfs_srv_basic() {
         1,
         "POSIX-RENAME marker must appear exactly once\n--- output ---\n{serial}"
     );
+    assert_eq!(
+        serial.matches("[posix-shim] POSIX-MKDIR-RMDIR: OK").count(),
+        1,
+        "POSIX-MKDIR-RMDIR marker must appear exactly once\n--- output ---\n{serial}"
+    );
     assert!(
         !serial.contains("[selftest] IPC-PENDING: FAIL")
             && !serial.contains("RAW-RENAME: FAIL")
+            && !serial.contains("POSIX-MKDIR-RMDIR: FAIL")
             && !serial.contains("POSIX-RENAME: FAIL")
             && !serial.contains("[KERNEL PANIC]")
             && !serial.contains("panicked at")
@@ -147,7 +160,7 @@ fn riscv64_redoxfs_srv_basic() {
             && !serial.contains("Load access fault")
             && !serial.contains("Store/AMO access fault")
             && !serial.contains("Instruction access fault"),
-        "rename reported a failure, panic, or cell fault\n--- output ---\n{serial}"
+        "POSIX directory lifecycle or rename reported a failure, panic, or cell fault\n--- output ---\n{serial}"
     );
 }
 

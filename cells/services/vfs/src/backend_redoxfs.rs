@@ -346,6 +346,11 @@ impl FsBackend for RedoxFsBackend {
                     redox_syscall::error::Error::new(redox_syscall::error::ENOENT),
                 )?;
                 let node = tx.find_node(parent_ptr, name)?;
+                if !node.data().is_dir() {
+                    return Err(redox_syscall::error::Error::new(
+                        redox_syscall::error::ENOTDIR,
+                    ));
+                }
                 tx.remove_node(parent_ptr, name, node.data().mode())?;
                 Ok(())
             })

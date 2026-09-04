@@ -1,5 +1,5 @@
 use alloc::format;
-use core::ffi::{c_char, c_long};
+use core::ffi::{c_char, c_int, c_long};
 use ostd::io::println;
 
 #[repr(C)]
@@ -32,6 +32,10 @@ extern "C" {
     fn rename(old: *const c_char, new: *const c_char) -> i32;
     #[link_name = "_close"]
     fn close(fd: i32) -> i32;
+    #[link_name = "_mkdir"]
+    fn mkdir(name: *const c_char, mode: c_int) -> c_int;
+    #[link_name = "_rmdir"]
+    fn rmdir(name: *const c_char) -> c_int;
 }
 fn filled_stat(byte: u8) -> core::mem::MaybeUninit<Stat> {
     let mut value = core::mem::MaybeUninit::<Stat>::uninit();
@@ -210,6 +214,82 @@ pub(super) fn test_unlink() {
     }
 
     println("[posix-shim] POSIX-UNLINK: OK");
+}
+
+pub(super) fn test_mkdir_rmdir() {
+    const PATH: &[u8] = b"/srv/posix_mkdir_rmdir_smoke\0";
+    const MISSING: &[u8] = b"/srv/posix_mkdir_rmdir_missing\0";
+    const INVALID_UTF8: &[u8] = b"/srv/posix_mkdir_rmdir_\xFF\0";
+
+    if unsafe { mkdir(core::ptr::null(), 0o755) } != -1 || unsafe { rmdir(core::ptr::null()) } != -1
+    {
+        println("[posix-shim] POSIX-MKDIR-RMDIR: FAIL null path succeeded");
+        return;
+    }
+    if unsafe { mkdir(INVALID_UTF8.as_ptr() as *const c_char, 0o755) } != -1
+        || unsafe { rmdir(INVALID_UTF8.as_ptr() as *const c_char) } != -1
+    {
+        println("[posix-shim] POSIX-MKDIR-RMDIR: FAIL invalid UTF-8 succeeded");
+        return;
+    }
+    if unsafe { rmdir(MISSING.as_ptr() as *const c_char) } != -1 {
+        println("[posix-shim] POSIX-MKDIR-RMDIR: FAIL missing directory removed");
+        return;
+    }
+    const FILE_PATH: &str = "/srv/posix_mkdir_rmdir_regular_file";
+    const FILE_CSTR: &[u8] = b"/srv/posix_mkdir_rmdir_regular_file\0";
+    let mut vfs = ostd::clients::VfsClient::new();
+    if vfs
+        .write_file(FILE_PATH, b"rmdir must not delete this file\n")
+        .is_err()
+    {
+        println("[posix-shim] POSIX-MKDIR-RMDIR: FAIL create regular file");
+        return;
+    }
+    if unsafe { rmdir(FILE_CSTR.as_ptr() as *const c_char) } != -1 {
+        println("[posix-shim] POSIX-MKDIR-RMDIR: FAIL rmdir regular file succeeded");
+        return;
+    }
+    let mut regular = filled_stat(0xA5);
+    if unsafe { stat(FILE_CSTR.as_ptr() as *const c_char, regular.as_mut_ptr()) } != 0
+        || unsafe { (*regular.as_ptr()).st_mode } != 0o100000
+    {
+        println("[posix-shim] POSIX-MKDIR-RMDIR: FAIL regular file was removed");
+        return;
+    }
+    if unsafe { unlink(FILE_CSTR.as_ptr() as *const c_char) } != 0 {
+        println("[posix-shim] POSIX-MKDIR-RMDIR: FAIL cleanup regular file");
+        return;
+    }
+    if unsafe { mkdir(PATH.as_ptr() as *const c_char, 0o755) } != 0 {
+        println("[posix-shim] POSIX-MKDIR-RMDIR: FAIL mkdir");
+        return;
+    }
+    let mut before = filled_stat(0xA5);
+    if unsafe { stat(PATH.as_ptr() as *const c_char, before.as_mut_ptr()) } != 0
+        || unsafe { (*before.as_ptr()).st_mode } != 0o040000
+    {
+        println("[posix-shim] POSIX-MKDIR-RMDIR: FAIL directory stat");
+        return;
+    }
+
+    if unsafe { rmdir(PATH.as_ptr() as *const c_char) } != 0 {
+        println("[posix-shim] POSIX-MKDIR-RMDIR: FAIL rmdir");
+        return;
+    }
+    let mut after = filled_stat(0xA5);
+    if unsafe { stat(PATH.as_ptr() as *const c_char, after.as_mut_ptr()) } != -1
+        || !stat_bytes(&after).iter().all(|byte| *byte == 0xA5)
+    {
+        println("[posix-shim] POSIX-MKDIR-RMDIR: FAIL removed directory stat");
+        return;
+    }
+    if unsafe { rmdir(PATH.as_ptr() as *const c_char) } != -1 {
+        println("[posix-shim] POSIX-MKDIR-RMDIR: FAIL second rmdir succeeded");
+        return;
+    }
+
+    println("[posix-shim] POSIX-MKDIR-RMDIR: OK");
 }
 
 pub(super) fn test_rename() {

@@ -208,13 +208,12 @@ fn vfs_tid() -> usize {
     }
 }
 
-pub(super) unsafe fn vfs_unlink(path: &str) -> c_int {
+unsafe fn vfs_mutate(req: crate::ipc::VfsRequest<'_>) -> c_int {
     let vfs = vfs_tid();
     if vfs == 0 {
         return -1;
     }
 
-    let req = crate::ipc::VfsRequest::Unlink(path);
     let mut send_buf = [0u8; crate::ipc::IPC_BUF_SIZE];
     let Ok(encoded) = crate::ipc::encode(&req, &mut send_buf) else {
         return -1;
@@ -233,65 +232,38 @@ pub(super) unsafe fn vfs_unlink(path: &str) -> c_int {
     }
 
     let mut recv_buf = [0u8; crate::ipc::IPC_BUF_SIZE];
-    let n = raw_syscall(
+    let sender = raw_syscall(
         ViSyscall::Recv,
         vfs,
         recv_buf.as_mut_ptr() as usize,
         recv_buf.len(),
         0,
     );
-    if n <= 0 {
+    if sender <= 0 || sender as usize != vfs {
         VFS_TID_CACHE.store(0, core::sync::atomic::Ordering::Relaxed);
         return -1;
     }
 
-    match crate::ipc::decode::<crate::ipc::VfsResponse>(&recv_buf[..n as usize]) {
+    match crate::ipc::decode::<crate::ipc::VfsResponse>(&recv_buf) {
         Ok(crate::ipc::VfsResponse::Ok) => 0,
         _ => -1,
     }
 }
 
+pub(super) unsafe fn vfs_unlink(path: &str) -> c_int {
+    vfs_mutate(crate::ipc::VfsRequest::Unlink(path))
+}
+
+pub(super) unsafe fn vfs_mkdir(path: &str) -> c_int {
+    vfs_mutate(crate::ipc::VfsRequest::Mkdir(path))
+}
+
+pub(super) unsafe fn vfs_rmdir(path: &str) -> c_int {
+    vfs_mutate(crate::ipc::VfsRequest::Rmdir(path))
+}
+
 pub(super) unsafe fn vfs_rename(old: &str, new: &str) -> c_int {
-    let vfs = vfs_tid();
-    if vfs == 0 {
-        return -1;
-    }
-
-    let req = crate::ipc::VfsRequest::Rename { old, new };
-    let mut send_buf = [0u8; crate::ipc::IPC_BUF_SIZE];
-    let Ok(encoded) = crate::ipc::encode(&req, &mut send_buf) else {
-        return -1;
-    };
-
-    let sent = raw_syscall(
-        ViSyscall::Send,
-        vfs,
-        encoded.as_ptr() as usize,
-        encoded.len(),
-        0,
-    );
-    if sent < 0 {
-        VFS_TID_CACHE.store(0, core::sync::atomic::Ordering::Relaxed);
-        return -1;
-    }
-
-    let mut recv_buf = [0u8; crate::ipc::IPC_BUF_SIZE];
-    let n = raw_syscall(
-        ViSyscall::Recv,
-        vfs,
-        recv_buf.as_mut_ptr() as usize,
-        recv_buf.len(),
-        0,
-    );
-    if n <= 0 {
-        VFS_TID_CACHE.store(0, core::sync::atomic::Ordering::Relaxed);
-        return -1;
-    }
-
-    match crate::ipc::decode::<crate::ipc::VfsResponse>(&recv_buf[..n as usize]) {
-        Ok(crate::ipc::VfsResponse::Ok) => 0,
-        _ => -1,
-    }
+    vfs_mutate(crate::ipc::VfsRequest::Rename { old, new })
 }
 
 /// # Safety
@@ -322,6 +294,52 @@ pub unsafe extern "C" fn _rename(old: *const c_char, new: *const c_char) -> c_in
 pub unsafe extern "C" fn rename(old: *const c_char, new: *const c_char) -> c_int {
     _rename(old, new)
 }
+
+/// # Safety
+/// `name` must be non-null and point to a valid NUL-terminated C string.
+/// `_mode` is accepted for POSIX ABI compatibility; VFS currently applies its
+/// own directory mode and receives no caller-supplied mode bits.
+#[no_mangle]
+pub unsafe extern "C" fn _mkdir(name: *const c_char, _mode: c_int) -> c_int {
+    if name.is_null() {
+        return -1;
+    }
+    let len = strlen(name);
+    let bytes = core::slice::from_raw_parts(name as *const u8, len);
+    let Ok(path_str) = core::str::from_utf8(bytes) else {
+        return -1;
+    };
+    vfs_mkdir(path_str)
+}
+
+/// # Safety
+/// `name` must be non-null and point to a valid NUL-terminated C string.
+#[no_mangle]
+pub unsafe extern "C" fn mkdir(name: *const c_char, mode: c_int) -> c_int {
+    _mkdir(name, mode)
+}
+
+/// # Safety
+/// `name` must be non-null and point to a valid NUL-terminated C string.
+#[no_mangle]
+pub unsafe extern "C" fn _rmdir(name: *const c_char) -> c_int {
+    if name.is_null() {
+        return -1;
+    }
+    let len = strlen(name);
+    let bytes = core::slice::from_raw_parts(name as *const u8, len);
+    let Ok(path_str) = core::str::from_utf8(bytes) else {
+        return -1;
+    };
+    vfs_rmdir(path_str)
+}
+
+/// # Safety
+/// `name` must be non-null and point to a valid NUL-terminated C string.
+#[no_mangle]
+pub unsafe extern "C" fn rmdir(name: *const c_char) -> c_int {
+    _rmdir(name)
+}
 pub(super) unsafe fn vfs_stat(path: &str, st: *mut stat) -> c_int {
     let vfs = vfs_tid();
     if vfs == 0 {
@@ -347,19 +365,19 @@ pub(super) unsafe fn vfs_stat(path: &str, st: *mut stat) -> c_int {
     }
 
     let mut recv_buf = [0u8; crate::ipc::IPC_BUF_SIZE];
-    let n = raw_syscall(
+    let sender = raw_syscall(
         ViSyscall::Recv,
         vfs,
         recv_buf.as_mut_ptr() as usize,
         recv_buf.len(),
         0,
     );
-    if n <= 0 {
+    if sender <= 0 || sender as usize != vfs {
         VFS_TID_CACHE.store(0, core::sync::atomic::Ordering::Relaxed);
         return -1;
     }
 
-    match crate::ipc::decode::<crate::ipc::VfsResponse>(&recv_buf[..n as usize]) {
+    match crate::ipc::decode::<crate::ipc::VfsResponse>(&recv_buf) {
         Ok(crate::ipc::VfsResponse::Stat { size, is_dir }) => {
             let Ok(c_size) = c_long::try_from(size) else {
                 return -1;
