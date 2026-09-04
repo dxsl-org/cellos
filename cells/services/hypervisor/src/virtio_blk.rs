@@ -87,21 +87,26 @@ impl VirtioDevice for BlkDisk {
         }
     }
 
-    fn notify(&mut self, q: usize, qcfg: &QueueCfg, vm_id: usize, vcpu_id: usize) {
+    fn notify(&mut self, q: usize, qcfg: &QueueCfg, vm_id: usize, vcpu_id: usize) -> bool {
         if q != 0 {
-            return;
+            return false;
         }
         // Disjoint field borrows: backend / last_avail / used_idx
         let backend = &mut self.backend;
-        process_notify(
+        let published = process_notify(
             vm_id,
             qcfg,
             &mut self.last_avail,
             &mut self.used_idx,
             |bufs| handle_blk_request(backend, bufs, vm_id),
         );
-        if let Some(irq) = self.irq {
-            crate::vmm::inject_irq(vm_id, vcpu_id, irq);
+        if published > 0 {
+            if let Some(irq) = self.irq {
+                crate::vmm::inject_irq(vm_id, vcpu_id, irq);
+            }
+            true
+        } else {
+            false
         }
     }
 
@@ -176,7 +181,6 @@ fn ensure_persistent_connected(backend: &mut Backend) -> bool {
     ));
     true
 }
-
 fn mark_persistent_unavailable(backend: &mut Backend, poison: bool) {
     if let Backend::Persistent {
         vfs_tid,
@@ -193,7 +197,13 @@ fn mark_persistent_unavailable(backend: &mut Backend, poison: bool) {
 
 #[cfg(feature = "hostile-backend-recovery")]
 fn force_persistent_unavailable_once(backend: &mut Backend) {
-    if let Backend::Persistent { vfs_tid, .. } = backend {
+    if let Backend::Persistent {
+        vfs_tid,
+        poisoned_tid,
+        ..
+    } = backend
+    {
+        *poisoned_tid = *vfs_tid;
         *vfs_tid = usize::MAX;
     }
 }

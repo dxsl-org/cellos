@@ -35,17 +35,17 @@ impl VirtioDevice for Console {
     fn device_id(&self) -> u32 {
         3
     }
-
-    fn notify(&mut self, q: usize, qcfg: &QueueCfg, vm_id: usize, vcpu_id: usize) {
+    fn notify(&mut self, q: usize, qcfg: &QueueCfg, vm_id: usize, vcpu_id: usize) -> bool {
         match q {
             0 => {
                 // RX queue (host→guest): stub.
                 // A future phase will inject ViCell serial input as guest virtio-console input.
                 let _ = (&mut self.last_avail_rx, &mut self.used_rx);
+                false
             }
             1 => {
                 // TX queue (guest→host): read each readable descriptor and forward to serial.
-                process_notify(
+                let published = process_notify(
                     vm_id,
                     qcfg,
                     &mut self.last_avail_tx,
@@ -70,10 +70,15 @@ impl VirtioDevice for Console {
                         total
                     },
                 );
-                // Inject SPI so the guest interrupt handler runs and processes the used ring.
-                crate::vmm::inject_irq(vm_id, vcpu_id, CONSOLE_SPI);
+                if published > 0 {
+                    // Inject SPI so the guest interrupt handler runs and processes the used ring.
+                    crate::vmm::inject_irq(vm_id, vcpu_id, CONSOLE_SPI);
+                    true
+                } else {
+                    false
+                }
             }
-            _ => {}
+            _ => false,
         }
     }
 
@@ -82,5 +87,18 @@ impl VirtioDevice for Console {
         self.last_avail_tx = 0;
         self.used_rx = 0;
         self.used_tx = 0;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn empty_console_tx_notify_publishes_no_entries_and_returns_false() {
+        let mut console = Console::new();
+        let qcfg = QueueCfg::default();
+        let published = console.notify(1, &qcfg, 0, 0);
+        assert!(!published);
     }
 }

@@ -19,6 +19,18 @@
   `6099828df7eaa2e06a5df1d726d392a9f226c162e5c90247273cd8330791a75e`, 3,141 bytes).
   Kernel BootFS remains immutable; no C/shell wrapper or production claim is added.
 
+- Reconciled Phase 06 Tier 3 hostile-QEMU scope with the host-tested/pending-runtime
+  x86 delivery repair. The 27-scenario corpus exposed stale `sti; hlt` `INT_SHADOW`
+  state suppressing cell-side timer injection, plus level-triggered VirtIO
+  starvation of a due PIT tick. The repair preserves due LAPIC injection,
+  restores HLT shadow consumption, polls network RX independently of PIT
+  delivery, gates VirtIO console SPI and notification on published used entries,
+  and quarantines stale VFS/Net supervisor generations. Verified by focused host
+  device/MMIO unit tests (14 passed in `service-hypervisor`), while `INT_SHADOW`,
+  dispatch fairness, and generation quarantine remain pending fresh runtime
+  qualification in a clean environment; ARM64 hostile execution remains
+  `BLOCKED_SCOPE`; all claims remain QEMU-only.
+
 - Published truthful caller-scoped descriptor metadata as `Fstat=254` on
   allowlist bit 61. The frozen 32-byte `ViFstatV1` reports only kind, access,
   and size; kernel dispatch validates output before metadata gathering and

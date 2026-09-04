@@ -46,7 +46,9 @@ pub trait VirtioDevice {
         VIRTIO_F_VERSION_1_HI
     }
     /// Guest rang QueueNotify for queue `q` with the confirmed queue config.
-    fn notify(&mut self, q: usize, qcfg: &QueueCfg, vm_id: usize, vcpu_id: usize);
+    ///
+    /// Returns `true` only if one or more used-ring entries were published.
+    fn notify(&mut self, q: usize, qcfg: &QueueCfg, vm_id: usize, vcpu_id: usize) -> bool;
     fn config_read(&self, _offset: usize) -> u32 {
         0
     }
@@ -152,8 +154,10 @@ impl VirtioMmio {
                     return;
                 }
                 let qcfg = self.queues[nq];
-                dev.notify(nq, &qcfg, vm_id, vcpu_id);
-                self.signal_used();
+                let notified = dev.notify(nq, &qcfg, vm_id, vcpu_id);
+                if notified {
+                    self.signal_used();
+                }
             }
             #[cfg(feature = "hostile-backend-recovery")]
             0x0fc => dev.hostile_backend_fault(val),

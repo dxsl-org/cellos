@@ -1,5 +1,5 @@
-#![no_std]
-#![no_main]
+#![cfg_attr(not(test), no_std)]
+#![cfg_attr(not(test), no_main)]
 
 //! Hypervisor Service Cell — boots an ARM64 Linux guest via EL2 Stage-2 MMU.
 //!
@@ -130,6 +130,7 @@ mod run_loop_x86;
 mod uart_16550;
 
 /// Entry: dispatch to the arch personality that has a VMM backend.
+#[cfg(not(test))]
 #[no_mangle]
 pub fn main() -> ! {
     #[cfg(target_arch = "aarch64")]

@@ -15,7 +15,6 @@ pub const GUEST_MAC: [u8; 6] = [0x52, 0x54, 0x00, 0xAA, 0xBB, 0xCC];
 /// virtio-net feature bit: device provides a MAC address in config space.
 const VIRTIO_NET_F_MAC: u32 = 1 << 5;
 const VIRTIO_NET_HDR_V1_LEN: usize = 12;
-
 pub struct NetDev {
     /// Supervised Net Cell connection and recovery state.
     pub backend: crate::net_backend::Connection,
@@ -160,6 +159,7 @@ impl NetDev {
     }
 }
 
+
 impl VirtioDevice for NetDev {
     fn device_id(&self) -> u32 {
         1
@@ -178,14 +178,14 @@ impl VirtioDevice for NetDev {
         }
     }
 
-    fn notify(&mut self, q: usize, qcfg: &QueueCfg, vm_id: usize, vcpu_id: usize) {
+    fn notify(&mut self, q: usize, qcfg: &QueueCfg, vm_id: usize, vcpu_id: usize) -> bool {
         match q {
-            0 => {} // RX queue notify — guest added empty buffers; no action until frame arrives.
+            0 => false, // RX queue notify — guest added empty buffers; no action until frame arrives.
             1 => {
                 // TX queue — drain guest TX descriptors and forward to the Net Cell.
                 let backend = &mut self.backend;
                 let mut tx_completed = false;
-                process_notify(
+                let published = process_notify(
                     vm_id,
                     qcfg,
                     &mut self.tx_last_avail,
@@ -199,11 +199,16 @@ impl VirtioDevice for NetDev {
                     ostd::io::println("[hv-virtio-host] net-tx-complete");
                     self.tx_completion_logged = true;
                 }
-                if let Some(irq) = self.irq {
-                    crate::vmm::inject_irq(vm_id, vcpu_id, irq);
+                if published > 0 {
+                    if let Some(irq) = self.irq {
+                        crate::vmm::inject_irq(vm_id, vcpu_id, irq);
+                    }
+                    true
+                } else {
+                    false
                 }
             }
-            _ => {}
+            _ => false,
         }
     }
 

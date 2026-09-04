@@ -20,7 +20,7 @@ tier: thinking
 
 ## Overview
 
-Build architecture-aware hostile-input matrices, guest probes, and QEMU runners against current production paths without editing VMM/VirtIO production files.
+Build architecture-aware hostile-input matrices, guest probes, and QEMU runners against current production paths. The x86 corpus may drive a minimal, evidenced repair in VMCB interrupt delivery or normal dispatch when it proves a production delivery fault; it remains QEMU evidence, not nested-virtualization fidelity or physical qualification.
 
 ## Key Insights
 
@@ -30,12 +30,13 @@ QEMU can close machinery and hostile-input regressions; it cannot validate neste
 
 - Preserve pinned Alpine and QEMU-TCG 10.2.0 strict x86 path.
 - Cover guest-memory bounds, malformed VirtIO, reset, vCPU budget, and supervisor restart.
-- Keep persistence and x86 parity implementation in Phases 09/10; expose reusable scenarios without claiming their results early.
+- Record persistence and x86 parity only through their own passing runners; do
+  not infer physical qualification.
 - Treat QEMU-TCG 8.2.2 incompatibility as environment risk, not runtime PASS.
 
 ## Architecture
 
-`host runner → hostile guest/probe input → current VMM/VirtIO production path → observed denial/reset/recovery markers`. Phase 06 owns the runner and input corpus only.
+`host runner → hostile guest/probe input → current VMM/VirtIO production path → observed denial/reset/recovery markers`. Phase 06 owns the runner and corpus, plus only the narrowly evidenced VMCB/dispatcher repair required to restore that path; persistence and parity retain their dedicated runners.
 
 ## Assumptions
 
@@ -48,9 +49,11 @@ QEMU can close machinery and hostile-input regressions; it cannot validate neste
 
 ## Related Files
 
-- Do not modify: `cells/services/hypervisor/src/vmm.rs`, `virtio_blk.rs`, `virtio_net.rs`
-- Modify/create: focused hypervisor runners, hostile guest payloads, scenario matrix, strict log parser
-- Emit: environment-specific evidence for Phase 08; do not edit the acceptance ledger
+- `hal/arch/x86/src/x86_64/svm_vcpu.rs` — x86 `sti; hlt` shadow consumption and due LAPIC injection
+- `cells/services/hypervisor/src/x86-irq-dispatch.rs` — bounded VirtIO/PIT service fairness
+- `cells/services/hypervisor/src/{virtio_blk,net_backend}.rs` — stale supervisor-generation quarantine
+- `tests/guests/x86-virtio-e2e/hostile-mmio.c` and focused runners — hostile corpus and strict parser
+- Emit: environment-specific evidence; do not edit the acceptance ledger
 
 ## Implementation Steps
 
@@ -65,18 +68,21 @@ QEMU can close machinery and hostile-input regressions; it cannot validate neste
 - [x] Approve the architecture-by-scenario matrix.
 - [x] Exercise malformed GPA/descriptor/backend inputs and independent vCPU
   preemption through the x86 production transport with strict result parsing.
+- [x] Repair the proven x86 HLT interrupt-shadow delivery fault and dispatch
+  starvation exposed by the corpus.
 - [ ] Rerun the same supported hostile axes on ARM64 after an environment reaches
   the guest probe past the known synchronous TCG fault.
-- [x] Keep every VMM/VirtIO production file under Phase 09/10 ownership.
 
 ## Success Criteria
 
-- [x] Strict x86 reaches `/bin/sh` before applicable fault scenarios.
+- [x] Strict x86 reaches `/bin/sh` at 1 GiB before applicable fault scenarios.
+- [x] x86 normal two-boot VirtIO block/network persistence and the 27-scenario
+  hostile corpus pass under pinned QEMU-TCG 10.2.0.
 - [ ] Malformed guest inputs cause no host panic or cross-guest/service corruption
   on every supported architecture; x86 passes and ARM64 remains environment-blocked.
 - [ ] Reset/restart and vCPU-budget runner behavior are deterministic on every
   supported architecture; x86 passes and ARM64 remains environment-blocked.
-- [x] No persistence, x86 parity, or physical qualification claim is inferred before owning phases pass.
+- [x] No physical x86 qualification claim is inferred from QEMU evidence.
 
 ## Security Considerations
 
@@ -118,3 +124,14 @@ Run current non-persistence scenarios immediately. Phases 09/10 reuse the same r
   supervisor restart and recovery scenarios also pass. The runner still exits
   `2` because ARM64 execution remains `BLOCKED_SCOPE`; Phase 06 therefore stays
   blocked without weakening or promoting that architecture.
+- On 2026-09-04, the hostile corpus exposed an x86 delivery defect addressed
+  by a host-tested/pending-runtime repair: a consumed `sti; hlt` retained
+  `INT_SHADOW` and rejected the cell-side timer injection. The repair clears
+  that shadow at the HLT exit, preserves due LAPIC injection, services RX
+  independently of PIT delivery, gates VirtIO console SPI and notification on
+  published used entries, and alternates a due PIT tick with a pending level
+  VirtIO interrupt. Host device/MMIO unit tests pass (14/14 in
+  `service-hypervisor`). Full runtime smoke, two-boot VirtIO persistence, and
+  hostile execution reflect historical observations and remain pending fresh
+  clean qualification; ARM64 remains `BLOCKED_SCOPE`; no physical
+  qualification is implied.

@@ -67,8 +67,7 @@ impl VirtioDevice for GpuDev {
             _ => 0,
         }
     }
-
-    fn notify(&mut self, queue: usize, qcfg: &QueueCfg, vm_id: usize, vcpu_id: usize) {
+    fn notify(&mut self, queue: usize, qcfg: &QueueCfg, vm_id: usize, vcpu_id: usize) -> bool {
         let published = match queue {
             0 => process_notify(
                 vm_id,
@@ -93,10 +92,10 @@ impl VirtioDevice for GpuDev {
                 &mut self.used_idx[1],
                 |bufs| dispatch::handle_cursor(&mut self.resources, bufs, vm_id),
             ),
-            _ => return,
+            _ => return false,
         };
         if published == 0 {
-            return;
+            return false;
         }
         if queue == 1 {
             if let Some((_, width, height, _)) = self.resources.bound_resource() {
@@ -109,6 +108,7 @@ impl VirtioDevice for GpuDev {
             }
         }
         crate::vmm::inject_irq(vm_id, vcpu_id, GPU_SPI);
+        true
     }
 
     fn reset(&mut self) {

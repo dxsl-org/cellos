@@ -35,6 +35,7 @@ impl Connection {
 
     #[cfg(feature = "hostile-backend-recovery")]
     pub fn force_unavailable_once(&mut self) {
+        self.poisoned_tid = self.tid;
         self.tid = 0;
         self.recovery_pending = true;
         self.force_unavailable_once = true;

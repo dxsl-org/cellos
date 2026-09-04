@@ -388,16 +388,23 @@ impl SvmVcpu {
                     return decode(code, info1, info2, self.gpr[0], self.gpr[1], self.gpr[2]);
                 }
                 // HLT: guest idle. Advance past it (nRIP when present, else the
-                // fixed length — TCG +svm has no NRIPS so nRIP reads 0). If the
-                // guest LAPIC timer is armed, deliver its vector kernel-side and
-                // re-enter without bothering the cell; otherwise surface Hlt so
-                // the cell injects the 8259 PIT IRQ0 (pre-LAPIC boot tick).
+                // fixed length — TCG +svm has no NRIPS so nRIP reads 0). Pace
+                // an armed LAPIC timer against the host timebase: injecting on
+                // every HLT traps the vCPU in this kernel loop and starves
+                // cell-side VirtIO service, while a due timer remains the LAPIC
+                // responsibility rather than falling back to the PIC.
                 VMEXIT_HLT => {
                     self.advance(code, info1, nrip);
+                    // `sti; hlt` exits after the shadowed HLT is consumed. It
+                    // must no longer suppress the cell-side timer injection.
+                    self.vmcb
+                        .w64(OFF_INT_SHADOW, self.vmcb.r64(OFF_INT_SHADOW) & !1);
                     if let Some(vec) = self.apic_timer_vector() {
-                        self.inject_ext_irq(vec);
-                        internal += 1;
-                        continue;
+                        if self.pause_tick_due() {
+                            self.inject_ext_irq(vec);
+                            internal += 1;
+                            continue;
+                        }
                     }
                     return decode(code, info1, info2, self.gpr[0], self.gpr[1], self.gpr[2]);
                 }

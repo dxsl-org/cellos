@@ -5,6 +5,7 @@ use crate::{
     virtio_mmio::VirtioMmio, virtio_net::NetDev, vmm,
 };
 
+
 fn drain_host_input(uart: &mut Uart16550) {
     let mut buf = [0u8; 32];
     while let Ok(n) = ostd::syscall::sys_read(0, &mut buf) {
@@ -73,28 +74,33 @@ pub fn service_idle(
     net_device: &mut NetDev,
     block_mmio: &VirtioMmio,
     net_mmio: &mut VirtioMmio,
-    net_poll_turn: &mut bool,
+    prefer_pit: &mut bool,
 ) {
     drain_host_input(uart);
-    // UART and device-completion IRQs always win. A due PIT alternates with
-    // one bounded backend poll so slow nested TCG cannot starve guest RX.
-    if deliver_uart(vm_id, vcpu_id, uart, pic)
-        || deliver_virtio(vm_id, vcpu_id, block_mmio, net_mmio, pic)
-    {
+    if deliver_uart(vm_id, vcpu_id, uart, pic) {
         return;
     }
-    if !*net_poll_turn && deliver_pit(vm_id, vcpu_id, pit, pic) {
-        *net_poll_turn = true;
-        return;
-    }
-    *net_poll_turn = false;
 
+    // RX polling cannot depend on a PIT delivery: Linux can mask the legacy
+    // PIC while the LAPIC is active.
     if let Some(frame) = net_backend::try_receive(&mut net_device.backend) {
         if net_device.push_rx_frame(&frame, vm_id, vcpu_id, net_mmio) {
             net_mmio.signal_used();
         }
     }
-    if !deliver_virtio(vm_id, vcpu_id, block_mmio, net_mmio, pic) {
-        let _ = deliver_pit(vm_id, vcpu_id, pit, pic);
+
+    // A level-triggered VirtIO interrupt stays pending until guest ACK. Give a
+    // due PIT tick the next idle boundary so that level cannot prevent timer
+    // wakeups needed to reach the ACK.
+    if *prefer_pit && deliver_pit(vm_id, vcpu_id, pit, pic) {
+        *prefer_pit = false;
+        return;
+    }
+    if deliver_virtio(vm_id, vcpu_id, block_mmio, net_mmio, pic) {
+        *prefer_pit = true;
+        return;
+    }
+    if deliver_pit(vm_id, vcpu_id, pit, pic) {
+        *prefer_pit = false;
     }
 }

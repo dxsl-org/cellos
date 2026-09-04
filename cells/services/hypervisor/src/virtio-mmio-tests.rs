@@ -6,19 +6,19 @@ struct DummyDevice {
     resets: usize,
     queue_cursor: usize,
     last_queue: Option<usize>,
+    pub publish_used: bool,
 }
-
 impl VirtioDevice for DummyDevice {
     fn device_id(&self) -> u32 {
         0
     }
 
-    fn notify(&mut self, queue: usize, _: &QueueCfg, _: usize, _: usize) {
+    fn notify(&mut self, queue: usize, _: &QueueCfg, _: usize, _: usize) -> bool {
         self.notifications += 1;
         self.queue_cursor += 1;
         self.last_queue = Some(queue);
+        self.publish_used
     }
-
     fn reset(&mut self) {
         self.resets += 1;
         self.queue_cursor = 0;
@@ -142,24 +142,35 @@ fn malformed_ready_value_revokes_a_ready_queue() {
 fn notifications_require_driver_ok_and_a_valid_ready_queue() {
     let mut mmio = VirtioMmio::default();
     let mut device = DummyDevice::default();
+    device.publish_used = true;
     configure_valid_queue(&mut mmio, &mut device, 1);
 
     write(&mut mmio, &mut device, 0x050, 1);
     assert_eq!(device.notifications, 0);
+    assert!(!mmio.interrupt_pending());
 
     write(&mut mmio, &mut device, 0x070, 0x04);
     write(&mut mmio, &mut device, 0x050, 0);
     assert_eq!(device.notifications, 0);
+    assert!(!mmio.interrupt_pending());
     write(&mut mmio, &mut device, 0x050, 1);
     assert_eq!(device.notifications, 1);
     assert_eq!(device.last_queue, Some(1));
+    assert!(mmio.interrupt_pending());
+
+    write(&mut mmio, &mut device, 0x064, 1);
+    assert!(!mmio.interrupt_pending());
+
+    device.publish_used = false;
+    write(&mut mmio, &mut device, 0x050, 1);
+    assert_eq!(device.notifications, 2);
+    assert!(!mmio.interrupt_pending());
 
     write(&mut mmio, &mut device, 0x030, 1);
     write(&mut mmio, &mut device, 0x038, 0);
     write(&mut mmio, &mut device, 0x050, 1);
-    assert_eq!(device.notifications, 1);
+    assert_eq!(device.notifications, 2);
 }
-
 #[test]
 fn needs_reset_status_is_latched_and_gates_notifications() {
     let mut mmio = VirtioMmio::default();
@@ -199,4 +210,24 @@ fn reset_clears_transport_and_device_owned_queue_state() {
     assert_eq!(mmio.mmio_read(0x060, &device), 0);
     assert_eq!(mmio.queue_cfg(0).num, 0);
     assert_eq!(mmio.queue_cfg(1).num, 0);
+}
+
+#[test]
+fn notify_without_published_used_entries_does_not_signal_interrupt() {
+    let mut mmio = VirtioMmio::default();
+    let mut device = DummyDevice::default();
+    configure_valid_queue(&mut mmio, &mut device, 0);
+    write(&mut mmio, &mut device, 0x070, 0x04);
+    device.publish_used = false;
+
+    write(&mut mmio, &mut device, 0x050, 0);
+    assert_eq!(device.notifications, 1);
+    assert!(!mmio.interrupt_pending());
+    assert_eq!(mmio.mmio_read(0x060, &device), 0);
+
+    device.publish_used = true;
+    write(&mut mmio, &mut device, 0x050, 0);
+    assert_eq!(device.notifications, 2);
+    assert!(mmio.interrupt_pending());
+    assert_eq!(mmio.mmio_read(0x060, &device), 1);
 }

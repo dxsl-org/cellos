@@ -28,13 +28,11 @@ const ABSENT: usize = usize::MAX;
 static DRIVER_TID: AtomicUsize = AtomicUsize::new(NOT_PROBED);
 
 /// Returns the block Driver Cell TID if one has registered, else `None`.
-/// Caches the result so only the first call performs the lookup syscall.
+/// Caches a live driver TID across requests, re-checking service discovery
+/// when no driver was registered previously.
 fn driver_tid() -> Option<usize> {
     let cached = DRIVER_TID.load(Ordering::Relaxed);
-    if cached == ABSENT {
-        return None;
-    }
-    if cached != NOT_PROBED {
+    if cached != NOT_PROBED && cached != ABSENT {
         return Some(cached);
     }
 
@@ -43,10 +41,7 @@ fn driver_tid() -> Option<usize> {
             DRIVER_TID.store(tid, Ordering::Relaxed);
             Some(tid)
         }
-        _ => {
-            DRIVER_TID.store(ABSENT, Ordering::Relaxed);
-            None
-        }
+        _ => None,
     }
 }
 

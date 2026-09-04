@@ -150,7 +150,9 @@ static int try_recovery_read(void) {
     descs()[1] = (struct desc){ ring_gpa + 512, sizeof(marker) - 1, 3, 2 };
     descs()[2] = (struct desc){ ring_gpa + 768, 1, 2, 0 };
     *avail_slot(0) = 0; *avail_idx() = 1; notify();
-    if (*used_idx() != 1 || *status != 0) return 0;
+    int complete = *used_idx() == 1 && *status == 0;
+    wr(0x64, 1); // Deassert the used-ring IRQ before a retry can sleep on the PIT.
+    if (!complete) return 0;
     for (unsigned i = 0; i < sizeof(marker) - 1; i++)
         if (data[i] != (uint8_t)marker[i]) return 0;
     return 1;
@@ -231,28 +233,38 @@ static int try_net_backend_round_trip(uint8_t source_host) {
     queue_at(0, 8, ring_gpa, avail_gpa, used_gpa);
     queue_at(1, 8, ring_gpa + 1024, avail_gpa + 512, used_gpa + 512);
     wr(0x70, 15); notify_queue(1);
-    if (*tx_used_idx != 1) return 0;
+    if (*tx_used_idx != 1) {
+        wr(0x64, 1);
+        return 0;
+    }
+    wr(0x64, 1);
     notify_queue(0);
-    for (unsigned attempt = 0; attempt < 20; attempt++) {
+    for (unsigned attempt = 0; attempt < 2; attempt++) {
         if (*rx_used_idx == 1) {
+            int valid = 1;
             for (unsigned i = 0; i < 6; i++) {
-                if (rx_packet[12 + i] != tx_packet[18 + i]) return 0;
-                if (rx_packet[44 + i] != tx_packet[18 + i]) return 0;
+                if (rx_packet[12 + i] != tx_packet[18 + i]) valid = 0;
+                if (rx_packet[44 + i] != tx_packet[18 + i]) valid = 0;
             }
-            return rx_packet[24] == 0x08 && rx_packet[25] == 0x06
+            valid &= rx_packet[24] == 0x08 && rx_packet[25] == 0x06
                 && rx_packet[32] == 0x00 && rx_packet[33] == 0x02
                 && rx_packet[40] == 10 && rx_packet[41] == 0
                 && rx_packet[42] == 2 && rx_packet[43] == 2
                 && rx_packet[50] == 10 && rx_packet[51] == 0
                 && rx_packet[52] == 2 && rx_packet[53] == source_host;
+            wr(0x64, 1);
+            return valid;
         }
+        wr(0x64, 1);
         sleep_ms(100);
     }
     return 0;
 }
 static void wait_net_backend_recovery(void) {
-    for (unsigned attempt = 0; attempt < 10; attempt++)
+    for (unsigned attempt = 0; attempt < 10; attempt++) {
         if (try_net_backend_round_trip((uint8_t)(16 + attempt))) return;
+        sleep_ms(100);
+    }
     FAIL("net-backend-did-not-recover-tx-rx");
 }
 

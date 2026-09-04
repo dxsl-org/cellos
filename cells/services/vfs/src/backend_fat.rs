@@ -73,7 +73,9 @@ impl FatBackend {
                 Some(fs)
             }
             Err(_) => {
-                println("[vfs] WARNING: FAT32 mount failed for this volume");
+                ostd::io::print("[vfs] WARNING: FAT32 ");
+                ostd::io::print(prefix);
+                println(" mount failed");
                 None
             }
         };
