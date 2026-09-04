@@ -3,6 +3,24 @@
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
 ## [Unreleased] Development-first hardware-constrained execution
+- Hardened QEMU-TCG x86 version parity and verified Phase 06 qualification
+  oracles under pinned official QEMU 10.2.0. Runners reject unqualified
+  executables before launch (`scripts/qemu-hypervisor-smoke-x86.sh`,
+  `scripts/qemu-x86-virtio-e2e.sh`, `scripts/qemu-tier3-hostile-runner-x86.sh`).
+  Clean-prefix source build of QEMU 10.2.0 (SHA-256
+  `849afef0f261903c6ab3aba4a5b1b6042388acdabe34554cc9e1baf71d8e1077`) passed
+  the 1 GiB strict Alpine Linux boot smoke, two-boot VirtIO-MMIO block/network
+  persistence E2E, and the 27-scenario VirtIO hostile corpus with bounded cleanup
+  and persistent backend recovery write flush. Tested at verification commit
+  `d8001dd7071629b8a131a948ed4db2ad3a264f41` (tree
+  `4316333abccb0caebd0eb0a0df5c994229b6888d`). Evidence:
+  `docs/evidence/qemu-x86-10.2.0-installer.txt` (SHA-256
+  `200a1fa6c3bb02b1e24edee4ddb6984b9cc206907094cde328d04896ed6c4b5f`, 294,005
+  bytes) and `docs/evidence/qemu-x86-10.2.0-verification.txt` (SHA-256
+  `9edb5c3867f28e780b52e9bc86d85b329a186ed9e58fa919dfd1b1b49b3ed024`, 4,364
+  bytes). ARM64 hostile execution remains isolated as `BLOCKED_SCOPE`; all
+  evidence remains QEMU software qualification with no physical hardware claim.
+
 - Implemented atomic rename backend gate, explicit mutation authority, and
   service-local namespace lease accounting for Phase 05. Published `Rename=255`
   on allowlist bit 62, added `VfsMutate` declaration metadata on bit 63 (with

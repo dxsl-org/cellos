@@ -58,9 +58,9 @@ unrelated host, QEMU, exact-device development, or documentation work.
   @datgausaigon (`DECISION: YES`). The resolution binds fresh QEMU runtime
   artifacts (`docs/evidence/aarch64-semihosting-20260903-03-raw.txt` and
   `docs/evidence/aarch64-semihosting-20260903-03-runner.txt`). Acceptance-ledger
-  production Phase 3 remains PLANNED. The caller-scoped shell `cd`/`pwd`,
-  bounded truthful `fstat`, and Phase 05 atomic `rename` backend gate lanes are complete;
-  POSIX documentation and pinned-QEMU x86 compatibility retain their independent gates.
+- The caller-scoped shell `cd`/`pwd`, bounded truthful `fstat`, Phase 05 atomic `rename`
+  backend gate, and Phase 06 pinned-QEMU x86 compatibility lanes are complete;
+  POSIX documentation repair is complete and ARM64 hostile execution remains isolated.
 - Single-guest local Cell-to-Cell evidence is now required through the
   [CI workflow](../../.github/workflows/ci.yml) job
   `c2c-broker-oracle-single-guest-local-runtime`, displayed as
