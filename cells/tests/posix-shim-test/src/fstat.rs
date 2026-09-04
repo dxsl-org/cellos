@@ -261,6 +261,49 @@ pub(super) fn test_mkdir_rmdir() {
         println("[posix-shim] POSIX-MKDIR-RMDIR: FAIL cleanup regular file");
         return;
     }
+    const NONEMPTY_DIR_CSTR: &[u8] = b"/srv/posix_mkdir_rmdir_nonempty\0";
+    const NONEMPTY_CHILD_PATH: &str = "/srv/posix_mkdir_rmdir_nonempty/child";
+    const NONEMPTY_CHILD_CSTR: &[u8] = b"/srv/posix_mkdir_rmdir_nonempty/child\0";
+    if unsafe { mkdir(NONEMPTY_DIR_CSTR.as_ptr() as *const c_char, 0o755) } != 0 {
+        println("[posix-shim] POSIX-MKDIR-RMDIR: FAIL mkdir non-empty directory");
+        return;
+    }
+    if vfs
+        .write_file(
+            NONEMPTY_CHILD_PATH,
+            b"rmdir must not remove non-empty directories\n",
+        )
+        .is_err()
+    {
+        println("[posix-shim] POSIX-MKDIR-RMDIR: FAIL create non-empty directory child");
+        return;
+    }
+    if unsafe { mkdir(NONEMPTY_DIR_CSTR.as_ptr() as *const c_char, 0o755) } != -1 {
+        println("[posix-shim] POSIX-MKDIR-RMDIR: FAIL duplicate mkdir succeeded");
+        return;
+    }
+    if unsafe { rmdir(NONEMPTY_DIR_CSTR.as_ptr() as *const c_char) } != -1 {
+        println("[posix-shim] POSIX-MKDIR-RMDIR: FAIL rmdir non-empty directory succeeded");
+        return;
+    }
+    let mut child = filled_stat(0xA5);
+    if unsafe {
+        stat(
+            NONEMPTY_CHILD_CSTR.as_ptr() as *const c_char,
+            child.as_mut_ptr(),
+        )
+    } != 0
+        || unsafe { (*child.as_ptr()).st_mode } != 0o100000
+    {
+        println("[posix-shim] POSIX-MKDIR-RMDIR: FAIL non-empty directory child was removed");
+        return;
+    }
+    if unsafe { unlink(NONEMPTY_CHILD_CSTR.as_ptr() as *const c_char) } != 0
+        || unsafe { rmdir(NONEMPTY_DIR_CSTR.as_ptr() as *const c_char) } != 0
+    {
+        println("[posix-shim] POSIX-MKDIR-RMDIR: FAIL cleanup non-empty directory");
+        return;
+    }
     if unsafe { mkdir(PATH.as_ptr() as *const c_char, 0o755) } != 0 {
         println("[posix-shim] POSIX-MKDIR-RMDIR: FAIL mkdir");
         return;
