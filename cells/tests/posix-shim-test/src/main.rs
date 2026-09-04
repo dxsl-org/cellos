@@ -36,7 +36,7 @@ api::declare_syscalls![
     Open,
     Fstat,
     Close,
-    FileOp
+    VfsMutate
 ];
 
 // Declare C ABI directly — works whether the symbols come from api::posix (Tier A)

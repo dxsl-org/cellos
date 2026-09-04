@@ -150,12 +150,60 @@ pub(super) fn test_stat() {
 pub(super) fn test_unlink() {
     // Calling unlink on NULL or non-existent file must fail closed (-1)
     let null_ret = unsafe { unlink(core::ptr::null()) };
-    let non_existent = unsafe { unlink(b"/NONEXISTENT_FILE_12345\0".as_ptr() as *const c_char) };
-    if null_ret == -1 && non_existent == -1 {
-        println("[posix-shim] POSIX-UNLINK: OK");
-    } else {
-        println(&format!(
-            "[posix-shim] POSIX-UNLINK: FAIL null_ret={null_ret} non_existent={non_existent}"
-        ));
+    if null_ret != -1 {
+        println("[posix-shim] POSIX-UNLINK: FAIL null_ret != -1");
+        return;
     }
+
+    let non_existent = unsafe {
+        unlink(b"/tmp/nonexistent_posix_unlink_12345\0".as_ptr() as *const c_char)
+    };
+    if non_existent != -1 {
+        println("[posix-shim] POSIX-UNLINK: FAIL non_existent != -1");
+        return;
+    }
+
+    // Positive create -> stat (exists) -> unlink (success) -> stat (gone) -> unlink (fails)
+    const SMOKE_PATH: &str = "/tmp/posix_unlink_smoke.txt";
+    const SMOKE_CSTR: &[u8] = b"/tmp/posix_unlink_smoke.txt\0";
+
+    let mut vfs = ostd::clients::VfsClient::new();
+    if vfs.write_file(SMOKE_PATH, b"posix unlink smoke data\n").is_err() {
+        println("[posix-shim] POSIX-UNLINK: FAIL create file");
+        return;
+    }
+
+    // Verify stat confirms file exists
+    let mut st = filled_stat(0);
+    let stat_before = unsafe { stat(SMOKE_CSTR.as_ptr() as *const c_char, st.as_mut_ptr()) };
+    if stat_before != 0 {
+        println("[posix-shim] POSIX-UNLINK: FAIL stat before unlink");
+        return;
+    }
+
+    // Call unlink -> must return 0
+    let unlink_ret = unsafe { unlink(SMOKE_CSTR.as_ptr() as *const c_char) };
+    if unlink_ret != 0 {
+        println(&format!(
+            "[posix-shim] POSIX-UNLINK: FAIL unlink ret={unlink_ret}"
+        ));
+        return;
+    }
+
+    // Verify stat confirms file is gone
+    let mut st_after = filled_stat(0xA5);
+    let stat_after = unsafe { stat(SMOKE_CSTR.as_ptr() as *const c_char, st_after.as_mut_ptr()) };
+    if stat_after != -1 {
+        println("[posix-shim] POSIX-UNLINK: FAIL file still exists after unlink");
+        return;
+    }
+
+    // Second unlink on same file must fail closed (-1)
+    let unlink_again = unsafe { unlink(SMOKE_CSTR.as_ptr() as *const c_char) };
+    if unlink_again != -1 {
+        println("[posix-shim] POSIX-UNLINK: FAIL second unlink succeeded");
+        return;
+    }
+
+    println("[posix-shim] POSIX-UNLINK: OK");
 }

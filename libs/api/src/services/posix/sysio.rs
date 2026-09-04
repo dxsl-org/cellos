@@ -184,20 +184,88 @@ pub unsafe extern "C" fn _link(_old: *const c_char, _new: *const c_char) -> c_in
     -1
 }
 
+static VFS_TID_CACHE: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
+
+fn vfs_tid() -> usize {
+    let cached = VFS_TID_CACHE.load(core::sync::atomic::Ordering::Relaxed);
+    if cached != 0 {
+        return cached;
+    }
+    let tid = unsafe {
+        raw_syscall(
+            ViSyscall::LookupService,
+            crate::syscall::service::VFS as usize,
+            0,
+            0,
+            0,
+        )
+    };
+    if tid > 0 {
+        VFS_TID_CACHE.store(tid as usize, core::sync::atomic::Ordering::Relaxed);
+        tid as usize
+    } else {
+        0
+    }
+}
+
+pub(super) unsafe fn vfs_unlink(path: &str) -> c_int {
+    let vfs = vfs_tid();
+    if vfs == 0 {
+        return -1;
+    }
+
+    let req = crate::ipc::VfsRequest::Unlink(path);
+    let mut send_buf = [0u8; crate::ipc::IPC_BUF_SIZE];
+    let Ok(encoded) = crate::ipc::encode(&req, &mut send_buf) else {
+        return -1;
+    };
+
+    let sent = raw_syscall(
+        ViSyscall::Send,
+        vfs,
+        encoded.as_ptr() as usize,
+        encoded.len(),
+        0,
+    );
+    if sent < 0 {
+        VFS_TID_CACHE.store(0, core::sync::atomic::Ordering::Relaxed);
+        return -1;
+    }
+
+    let mut recv_buf = [0u8; crate::ipc::IPC_BUF_SIZE];
+    let n = raw_syscall(
+        ViSyscall::Recv,
+        vfs,
+        recv_buf.as_mut_ptr() as usize,
+        recv_buf.len(),
+        0,
+    );
+    if n <= 0 {
+        VFS_TID_CACHE.store(0, core::sync::atomic::Ordering::Relaxed);
+        return -1;
+    }
+
+    match crate::ipc::decode::<crate::ipc::VfsResponse>(&recv_buf[..n as usize]) {
+        Ok(crate::ipc::VfsResponse::Ok) => 0,
+        _ => -1,
+    }
+}
+
 /// # Safety
 /// `name` must be non-null and point to a valid NUL-terminated C string.
+/// Routes through typed VFS IPC subject to `VfsMutate` declaration authority
+/// and lease accounting.
 #[no_mangle]
 pub unsafe extern "C" fn _unlink(name: *const c_char) -> c_int {
     if name.is_null() {
         return -1;
     }
     let len = strlen(name);
-    let ret = raw_syscall(ViSyscall::FileOp, 0, name as usize, len, 0);
-    if ret == 0 {
-        0
-    } else {
-        -1
-    }
+    let bytes = core::slice::from_raw_parts(name as *const u8, len);
+    let Ok(path_str) = core::str::from_utf8(bytes) else {
+        return -1;
+    };
+    vfs_unlink(path_str)
 }
 
 /// # Safety
