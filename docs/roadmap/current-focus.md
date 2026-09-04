@@ -1,6 +1,6 @@
 # Current Focus
 
-**Last updated**: 2026-09-03
+**Last updated**: 2026-09-04
 
 ## Development-first, solo-first execution boundary
 
@@ -49,8 +49,8 @@ unrelated host, QEMU, exact-device development, or documentation work.
   root-on-blk `/dev/vda` ext4 systemd multi-user boot. The reproducible
   Canonical Noble 24.04 image builder and two-boot persistence runner are pinned
   and fail-closed. Execution of the two-boot apt-persistence and full systemd
-  multi-user assertions remains blocked on its external prerequisites: host root
-  for rootfs creation and qualified QEMU-TCG 10.2.0.
+  multi-user assertions remains blocked on the remaining external prerequisite:
+  host root for rootfs creation.
 - The AArch64 test-hooks semihosting ledger closure is complete. Blocker
   `B-AARCH64-SEMHOSTING` was corrected to subject `qemu-arm64` and resolved to
   PASS under schema v4 following independent ratification on Issue
@@ -58,6 +58,7 @@ unrelated host, QEMU, exact-device development, or documentation work.
   @datgausaigon (`DECISION: YES`). The resolution binds fresh QEMU runtime
   artifacts (`docs/evidence/aarch64-semihosting-20260903-03-raw.txt` and
   `docs/evidence/aarch64-semihosting-20260903-03-runner.txt`). Acceptance-ledger
+  production Phase 3 remains `PLANNED`.
 - The caller-scoped shell `cd`/`pwd`, bounded truthful `fstat`, Phase 05 atomic `rename`
   backend gate, and Phase 06 pinned-QEMU x86 compatibility lanes are complete;
   POSIX documentation repair is complete and ARM64 hostile execution remains isolated.
@@ -178,10 +179,9 @@ unrelated host, QEMU, exact-device development, or documentation work.
   and the authenticated software-evidence pipeline at its host ceiling. Reopen
   them only for a regression or separately governed higher evidence.
 - **Current-scope technical debt:** confirmed defects and maintainability gaps
-  in supported paths, including pinned-QEMU compatibility and AArch64
-  semihosting ledger closure tracked by the
-  [open risk register](open-risk-register.md). This label does not apply to
-  all advanced work.
+  in supported paths, including kernel signature, pointer, and entropy
+  remediation tracked by the [open risk register](open-risk-register.md). This
+  label does not apply to completed/regression-only lanes or all advanced work.
 - **Future capability:** remote/public Cell-to-Cell operation, additional
   desktop and x86 platform depth, G3 accelerators, G4 `rust-std`, and G5
   virtualization expansion.

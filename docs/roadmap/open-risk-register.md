@@ -1,6 +1,6 @@
 # Open Risk Register
 
-**Last updated**: 2026-09-03
+**Last updated**: 2026-09-04
 
 This register tracks confirmed readiness gaps found while syncing docs to code.
 It is not a global bug-fix queue, and it does not turn all future or
@@ -22,7 +22,7 @@ Primary planning classification for the open entries:
 | Planning class | Entries |
 |---|---|
 | Current executable work | Narrow fixes, bounded fixtures, and software evidence that an owning lane can perform now |
-| Current-scope technical debt | The pinned-QEMU compatibility gap and AArch64 semihosting ledger closure |
+| Current-scope technical debt | Kernel signature, pointer, and entropy remediation |
 | Future capability | Remote/public net-broker completion and native POSIX completeness beyond currently supported contracts |
 | External-gated prerequisite | Unavailable exact board qualification and exact product/vendor evidence for protected relay or production-root milestones |
 | Production release gate | Fleet signing/provenance, production admission, protected identity/root, secure/measured boot, qualified floor and persistent recovery, physical hostile evidence, authenticated evidence runner, human approvals, and governed ledger/release closure |
@@ -187,10 +187,11 @@ those remain fail-closed production gates.
   A fault-free post-change release boot and the fresh immutable-FAT test-hooks
   marker gate supply the paired evidence; the test-hooks generic runner's
   deliberate classified Cell 254 fault remains subject to unchanged global
-  fault policy. Caller-scoped shell `cd`/`pwd` and bounded truthful `fstat` are
-  complete; fstat exposes only descriptor kind, access, and size. `rename`,
-  additional C wrappers, symlinks, and broad native POSIX compatibility remain
-  future capabilities; Tier 1 must not be described as POSIX-complete.
+  fault policy. Caller-scoped shell `cd`/`pwd`, bounded truthful `fstat`, and
+  typed VFS `stat`/`unlink`/`rename`/`mkdir`/`rmdir` are complete bounded native
+  contracts. Symlinks, additional C wrappers, and broad native POSIX
+  compatibility remain future capabilities; Tier 1 must not be described as
+  POSIX-complete.
 - The historical ARM64 hypervisor machinery intermittency was fixed at the
   EL2 IRQ/preemption boundary. Hosted run `33486590595:1` passes the retained
   TCG machinery oracle; full logs remain diagnostic evidence for distinguishing
