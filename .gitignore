@@ -122,3 +122,5 @@ cells/apps/vove/
 /.agents/debug/
 /.agents/**/pack.json
 /build/*.iso
+/.ci-cache/
+/build/x86-virtio-*

@@ -3,7 +3,7 @@
 //! Three test functions:
 //!
 //! 1. `riscv64_redoxfs_srv_basic` — single boot with a P5-formatted disk;
-//!    waits for the srv-test cell to complete all 5 scenarios.
+//!    waits for all six srv-test scenarios, then runs the POSIX rename smoke.
 //!
 //! 2. `riscv64_redoxfs_srv_degrade_no_disk` — boot with no VirtIO-BLK; confirms
 //!    the VFS service warns and degrades gracefully instead of panicking.
@@ -81,8 +81,8 @@ fn prerequisites_ok_with_disk() -> bool {
     vicell_integration_tests::ci_guard(kernel.exists() && disk.exists() && qemu_ok())
 }
 
-/// S1–S5: mount, write+read, listdir, mkdir, unlink.
-///
+/// S1–S6: mount, write+read, listdir, mkdir, unlink, atomic rename; then live
+/// POSIX rename.
 /// The test creates a temp copy of the base disk image so repeated runs do not
 /// accumulate state in `build/disk_srv.img`.
 #[test]
@@ -98,7 +98,8 @@ fn riscv64_redoxfs_srv_basic() {
         .expect("create temp disk");
     std::fs::copy(srv_disk(), tmp.path()).expect("copy srv disk");
 
-    let runner = QemuRunner::boot_rv64_with_disk(&srv_test_kernel(), tmp.path().to_str().unwrap());
+    let mut runner =
+        QemuRunner::boot_rv64_with_disk(&srv_test_kernel(), tmp.path().to_str().unwrap());
 
     runner
         .wait_for("[srv-test] ALL TESTS PASSED", 120)
@@ -106,6 +107,48 @@ fn riscv64_redoxfs_srv_basic() {
             eprintln!("--- serial output ---\n{}\n---", runner.dump());
             panic!("{e}");
         });
+
+    // Exercise live POSIX rename on RedoxFS P5 (/srv) via posix-shim-test
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    runner.send_line("posix-shim-test");
+    runner
+        .wait_for("[posix-shim] POSIX-RENAME: OK", 60)
+        .unwrap_or_else(|e| {
+            eprintln!("--- serial output ---\n{}\n---", runner.dump());
+            panic!("{e}");
+        });
+    let serial = runner.dump();
+    assert_eq!(
+        serial
+            .matches(
+                "[selftest] IPC-PENDING: PASS (deferred, bounded, quota-safe, completion-wake)"
+            )
+            .count(),
+        1,
+        "IPC-PENDING marker must appear exactly once\n--- output ---\n{serial}"
+    );
+    assert_eq!(
+        serial.matches("[posix-shim] RAW-RENAME: OK").count(),
+        1,
+        "RAW-RENAME marker must appear exactly once\n--- output ---\n{serial}"
+    );
+    assert_eq!(
+        serial.matches("[posix-shim] POSIX-RENAME: OK").count(),
+        1,
+        "POSIX-RENAME marker must appear exactly once\n--- output ---\n{serial}"
+    );
+    assert!(
+        !serial.contains("[selftest] IPC-PENDING: FAIL")
+            && !serial.contains("RAW-RENAME: FAIL")
+            && !serial.contains("POSIX-RENAME: FAIL")
+            && !serial.contains("[KERNEL PANIC]")
+            && !serial.contains("panicked at")
+            && !serial.contains("[fault] Cell ")
+            && !serial.contains("Load access fault")
+            && !serial.contains("Store/AMO access fault")
+            && !serial.contains("Instruction access fault"),
+        "rename reported a failure, panic, or cell fault\n--- output ---\n{serial}"
+    );
 }
 
 /// S6: boot with no VirtIO-BLK → VFS must warn that /srv is unavailable but
@@ -154,7 +197,7 @@ fn riscv64_redoxfs_srv_persistence() {
     std::fs::copy(srv_disk(), tmp.path()).expect("copy srv disk");
     let tmp_path = tmp.path().to_str().unwrap().to_owned();
 
-    // Boot 1: srv-test runs all 5 scenarios and writes /srv/persist.txt.
+    // Boot 1: srv-test runs all six scenarios and writes /srv/persist.txt.
     {
         let r = QemuRunner::boot_rv64_with_disk(&srv_test_kernel(), &tmp_path);
         r.wait_for("[srv-test] PERSIST_WRITE_DONE", 120)

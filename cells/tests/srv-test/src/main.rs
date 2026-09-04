@@ -1,8 +1,8 @@
 //! RedoxFS /srv integration test cell.
 //!
 //! Verifies the VFS /srv backend (RedoxFS on MBR partition P5) by exercising
-//! five scenarios over IPC, then writes a persistence marker for the
-//! two-boot persistence integration test.
+//! six scenarios over IPC, then writes a persistence marker for the two-boot
+//! persistence integration test.
 //!
 //! Requires a disk with P5 formatted by `scripts/mksrv-img.sh`.
 //!
@@ -12,6 +12,7 @@
 //!   [srv-test] S3 listdir: PASS
 //!   [srv-test] S4 mkdir: PASS
 //!   [srv-test] S5 unlink: PASS
+//!   [srv-test] S6 rename: PASS
 //!   [srv-test] PERSIST_WRITE_DONE
 //!   [srv-test] ALL TESTS PASSED
 

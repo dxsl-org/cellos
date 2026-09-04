@@ -250,6 +250,78 @@ pub(super) unsafe fn vfs_unlink(path: &str) -> c_int {
         _ => -1,
     }
 }
+
+pub(super) unsafe fn vfs_rename(old: &str, new: &str) -> c_int {
+    let vfs = vfs_tid();
+    if vfs == 0 {
+        return -1;
+    }
+
+    let req = crate::ipc::VfsRequest::Rename { old, new };
+    let mut send_buf = [0u8; crate::ipc::IPC_BUF_SIZE];
+    let Ok(encoded) = crate::ipc::encode(&req, &mut send_buf) else {
+        return -1;
+    };
+
+    let sent = raw_syscall(
+        ViSyscall::Send,
+        vfs,
+        encoded.as_ptr() as usize,
+        encoded.len(),
+        0,
+    );
+    if sent < 0 {
+        VFS_TID_CACHE.store(0, core::sync::atomic::Ordering::Relaxed);
+        return -1;
+    }
+
+    let mut recv_buf = [0u8; crate::ipc::IPC_BUF_SIZE];
+    let n = raw_syscall(
+        ViSyscall::Recv,
+        vfs,
+        recv_buf.as_mut_ptr() as usize,
+        recv_buf.len(),
+        0,
+    );
+    if n <= 0 {
+        VFS_TID_CACHE.store(0, core::sync::atomic::Ordering::Relaxed);
+        return -1;
+    }
+
+    match crate::ipc::decode::<crate::ipc::VfsResponse>(&recv_buf[..n as usize]) {
+        Ok(crate::ipc::VfsResponse::Ok) => 0,
+        _ => -1,
+    }
+}
+
+/// # Safety
+/// `old` and `new` must be non-null and point to valid NUL-terminated C strings.
+/// Rename is routed through typed VFS IPC with VfsMutate authority and namespace
+/// reservation on /srv.
+#[no_mangle]
+pub unsafe extern "C" fn _rename(old: *const c_char, new: *const c_char) -> c_int {
+    if old.is_null() || new.is_null() {
+        return -1;
+    }
+    let old_len = strlen(old);
+    let new_len = strlen(new);
+    let old_bytes = core::slice::from_raw_parts(old as *const u8, old_len);
+    let new_bytes = core::slice::from_raw_parts(new as *const u8, new_len);
+    let (Ok(old_str), Ok(new_str)) = (
+        core::str::from_utf8(old_bytes),
+        core::str::from_utf8(new_bytes),
+    ) else {
+        return -1;
+    };
+    vfs_rename(old_str, new_str)
+}
+
+/// # Safety
+/// `old` and `new` must be non-null and point to valid NUL-terminated C strings.
+#[no_mangle]
+pub unsafe extern "C" fn rename(old: *const c_char, new: *const c_char) -> c_int {
+    _rename(old, new)
+}
 pub(super) unsafe fn vfs_stat(path: &str, st: *mut stat) -> c_int {
     let vfs = vfs_tid();
     if vfs == 0 {

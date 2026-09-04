@@ -1534,13 +1534,12 @@ pub fn attested_identity_of(sender_tid: usize) -> Option<api::caller_identity::C
     let sched = sched_guard.as_ref()?;
     let task = sched.tasks.get(&sender_tid)?;
     let owner = sched.resolve_live_cell_owner(task.cell_id, task.cell_generation)?;
-    let flags = if task.syscall_allowlist != u64::MAX
-        && (task.syscall_allowlist & (1u64 << 63)) != 0
-    {
-        api::caller_identity::CALLER_FLAG_VFS_MUTATE
-    } else {
-        0
-    };
+    let flags =
+        if task.syscall_allowlist != u64::MAX && (task.syscall_allowlist & (1u64 << 63)) != 0 {
+            api::caller_identity::CALLER_FLAG_VFS_MUTATE
+        } else {
+            0
+        };
     (owner.cell_id == task.cell_id.0 && owner.generation == task.cell_generation).then_some(
         api::caller_identity::CallerIdentity {
             flags,
@@ -3922,10 +3921,38 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         } => {
             let old_path = read_user_string(caller_id, old_ptr, old_len, MAX_LOG_MSG)?;
             let new_path = read_user_string(caller_id, new_ptr, new_len, MAX_LOG_MSG)?;
-            if super::file_rename(&old_path, &new_path).is_ok() {
-                return Ok(0);
+            let vfs_tid = crate::cell::service_registry::lookup(api::syscall::service::VFS)
+                .ok_or(SyscallError::InvalidCommand)?;
+            let request = api::ipc::VfsRequest::Rename {
+                old: &old_path,
+                new: &new_path,
+            };
+            let mut request_buf = [0u8; api::ipc::IPC_BUF_SIZE];
+            let encoded = api::ipc::encode(&request, &mut request_buf)
+                .map_err(|_| SyscallError::InvalidCommand)?;
+            match super::ipc_send_kernel(caller_id, vfs_tid, encoded) {
+                Ok(0) => {}
+                Ok(1) => super::yield_cpu(),
+                Err(super::IpcSendError::Backpressure) => return Err(SyscallError::TryAgain),
+                Ok(_) => return Err(SyscallError::InvalidCommand),
+                Err(super::IpcSendError::TargetGone) => return Err(SyscallError::InvalidCommand),
             }
-            Err(SyscallError::PermissionDenied)
+
+            let mut response_buf = [0u8; api::ipc::IPC_BUF_SIZE];
+            loop {
+                let response = super::ipc_recv_kernel(caller_id, vfs_tid, &mut response_buf)
+                    .map_err(|_| SyscallError::InvalidCommand)?;
+                match response {
+                    Some((_, len)) => {
+                        return match api::ipc::decode::<api::ipc::VfsResponse>(&response_buf[..len])
+                        {
+                            Ok(api::ipc::VfsResponse::Ok) => Ok(0),
+                            _ => Err(SyscallError::PermissionDenied),
+                        };
+                    }
+                    None => super::yield_cpu(),
+                }
+            }
         }
         // Syscall::Remove removed
         Syscall::ChDir { path_ptr, path_len } => {
@@ -6655,11 +6682,7 @@ fn check_allowlist(syscall_id: usize, caller_id: usize) -> Result<(), SyscallErr
     } else {
         None
     };
-    let rename_bit: Option<u8> = if syscall_id == 255 {
-        Some(62)
-    } else {
-        None
-    };
+    let rename_bit: Option<u8> = if syscall_id == 255 { Some(62) } else { None };
 
     // Raw opcodes with a dedicated `map_syscall` fallback mapping. These are
     // intentionally absent from `ViSyscall` (Law 1: keeps experimental ids out
@@ -7050,6 +7073,15 @@ mod tests {
             );
         });
         with_scheduler_task(1u64 << 62, |tid| {
+            assert_eq!(check_allowlist(ViSyscall::Rename as usize, tid), Ok(()));
+        });
+        with_scheduler_task(1u64 << 63, |tid| {
+            assert_eq!(
+                check_allowlist(ViSyscall::Rename as usize, tid),
+                Err(SyscallError::PermissionDenied)
+            );
+        });
+        with_scheduler_task((1u64 << 62) | (1u64 << 63), |tid| {
             assert_eq!(check_allowlist(ViSyscall::Rename as usize, tid), Ok(()));
         });
 

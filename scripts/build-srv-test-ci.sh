@@ -55,14 +55,14 @@ cargo build --release \
     -Z build-std=core,alloc \
     -p service-vfs
 
-echo "==> Building app-srv-test..."
+echo "==> Building app-srv-test and app-posix-shim-test..."
 cargo build --release \
     --target riscv64gc-unknown-none-elf \
     -Z build-std=core,alloc \
-    -p app-srv-test
+    -p app-srv-test -p app-posix-shim-test
 
 echo "==> Verifying cell binaries..."
-for bin in app-init app-shell service-vfs service-config srv-test platform driver-virtio-blk; do
+for bin in app-init app-shell service-vfs service-config srv-test posix-shim-test platform driver-virtio-blk; do
     if [[ ! -f "$REL/$bin" ]]; then
         echo "FAIL: missing required binary: $REL/$bin" >&2; exit 1
     fi
@@ -73,7 +73,7 @@ source scripts/lib-sign-cells.sh
 
 echo "==> Signing cells..."
 sign_cells "$REL/app-init" "$REL/app-shell" "$REL/service-vfs" "$REL/service-config" \
-           "$REL/srv-test" "$REL/platform" "$REL/driver-virtio-blk"
+           "$REL/srv-test" "$REL/posix-shim-test" "$REL/platform" "$REL/driver-virtio-blk"
 
 echo "==> Assembling kernel_fs.img (srv-test)..."
 mkdir -p "$SRV_DIR"
@@ -94,6 +94,7 @@ bake_policy "$TMPDIR_KFS/POLICY.BIN"
     "$REL/platform"       /bin/platform \
     "$REL/driver-virtio-blk" /bin/block \
     "$REL/srv-test"       /bin/srv-test \
+    "$REL/posix-shim-test" /bin/posix-shim-test \
     "$TMPDIR_KFS/hostname" /etc/hostname \
     "$TMPDIR_KFS/POLICY.BIN" /POLICY.BIN
 
@@ -105,8 +106,9 @@ fi
 # only surfaces later as a confusing "cell not found" at boot.
 "$PYTHON_BIN" tools/inspect_fat.py "${SRV_DIR}/kernel_fs.img" > "$TMPDIR_KFS/fat-layout.txt"
 if ! grep -q -- '--- /bin ---' "$TMPDIR_KFS/fat-layout.txt" ||
-   ! grep -q -- "LFN 'srv-test'" "$TMPDIR_KFS/fat-layout.txt"; then
-    echo "FAIL: kernel_fs.img does not contain /bin/srv-test" >&2
+   ! grep -q -- "LFN 'srv-test'" "$TMPDIR_KFS/fat-layout.txt" ||
+   ! grep -q -- "LFN 'posix-shim-test'" "$TMPDIR_KFS/fat-layout.txt"; then
+    echo "FAIL: kernel_fs.img does not contain /bin/srv-test and /bin/posix-shim-test" >&2
     cat "$TMPDIR_KFS/fat-layout.txt" >&2
     exit 1
 fi

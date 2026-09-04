@@ -4,12 +4,29 @@
 
 ## [Unreleased] Development-first hardware-constrained execution
 - Implemented Phase 1 of POSIX completion: added truthful `_stat`/`stat` and
-  `_unlink`/`unlink` to POSIX services shim (`libs/api/src/services/posix/sysio.rs`),
-  connected `unlink` to kernel `ViSyscall::FileOp` remove handling, and added
-  `close`, `open`, `read`, `write`, `lseek`, `fstat` aliases. Synced `VI_SYS_FSTAT`
-  (254) and implemented `sys_fstat`/`sys_stat` with `ViFstatV1` 32-byte wire decoding
-  in mlibc sysdeps (`third_party/mlibc/sysdeps/vicell`). Added positive and negative
-  conformance assertions for `stat` and `unlink` in `app-posix-shim-test`.
+  `_unlink`/`unlink` to the POSIX services shim
+  (`libs/api/src/services/posix/sysio.rs`), routing unified VFS namespaces
+  through typed `VfsRequest::Stat` and `VfsRequest::Unlink` IPC while retaining
+  raw kernel open/fstat only for direct VIFS1 or early boot. Added `close`,
+  `open`, `read`, `write`, `lseek`, and `fstat` aliases. Synced `VI_SYS_FSTAT`
+  (254) and implemented `sys_fstat`/`sys_stat` with `ViFstatV1` 32-byte wire
+  decoding in mlibc sysdeps (`third_party/mlibc/sysdeps/vicell`). Added positive
+  and negative conformance assertions for `stat` and `unlink` in
+  `app-posix-shim-test`.
+- Added POSIX `_rename`/`rename` to the typed VFS IPC shim and completed the
+  published raw `ViSyscall::Rename` path. The kernel postcard-encodes the
+  request, sends it to the registered VFS service through the normal
+  mask-respecting IPC transport with the initiating Cell's attested identity,
+  and waits for its response in kernel-owned storage; only VFS `Ok` returns
+  syscall success. Bit 62 admits the raw opcode; VFS separately requires the
+  non-`ALL` bit-63 `VfsMutate` attestation. The conformance cell rejects null,
+  absent-source, and unsupported-namespace requests, then proves `/srv` create
+  → stat → rename → source absent → destination present → unlink through both
+  the POSIX shim and raw syscall. The RedoxFS `/srv` QEMU image now contains the
+  signed `posix-shim-test` cell; its fresh-disk integration test requires
+  exactly one `RAW-RENAME: OK` and `POSIX-RENAME: OK` marker with no panic or
+  Cell fault.
+
 
 - Implemented x86 Platform Cell PCIe discovery handoff via ACPI MCFG launch argv.
   Kernel extracts base address and bus range from validated ACPI MCFG, attaches

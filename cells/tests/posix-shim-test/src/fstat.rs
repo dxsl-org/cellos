@@ -28,6 +28,8 @@ extern "C" {
     fn stat(name: *const c_char, st: *mut Stat) -> i32;
     #[link_name = "_unlink"]
     fn unlink(name: *const c_char) -> i32;
+    #[link_name = "_rename"]
+    fn rename(old: *const c_char, new: *const c_char) -> i32;
     #[link_name = "_close"]
     fn close(fd: i32) -> i32;
 }
@@ -155,9 +157,8 @@ pub(super) fn test_unlink() {
         return;
     }
 
-    let non_existent = unsafe {
-        unlink(b"/tmp/nonexistent_posix_unlink_12345\0".as_ptr() as *const c_char)
-    };
+    let non_existent =
+        unsafe { unlink(b"/tmp/nonexistent_posix_unlink_12345\0".as_ptr() as *const c_char) };
     if non_existent != -1 {
         println("[posix-shim] POSIX-UNLINK: FAIL non_existent != -1");
         return;
@@ -168,7 +169,10 @@ pub(super) fn test_unlink() {
     const SMOKE_CSTR: &[u8] = b"/tmp/posix_unlink_smoke.txt\0";
 
     let mut vfs = ostd::clients::VfsClient::new();
-    if vfs.write_file(SMOKE_PATH, b"posix unlink smoke data\n").is_err() {
+    if vfs
+        .write_file(SMOKE_PATH, b"posix unlink smoke data\n")
+        .is_err()
+    {
         println("[posix-shim] POSIX-UNLINK: FAIL create file");
         return;
     }
@@ -206,4 +210,144 @@ pub(super) fn test_unlink() {
     }
 
     println("[posix-shim] POSIX-UNLINK: OK");
+}
+
+pub(super) fn test_rename() {
+    // Calling rename on NULL pointers must fail closed (-1)
+    let null_both = unsafe { rename(core::ptr::null(), core::ptr::null()) };
+    if null_both != -1 {
+        println("[posix-shim] POSIX-RENAME: FAIL null_both != -1");
+        return;
+    }
+
+    let non_existent_src = unsafe {
+        rename(
+            b"/srv/nonexistent_src_12345\0".as_ptr() as *const c_char,
+            b"/srv/nonexistent_dst_12345\0".as_ptr() as *const c_char,
+        )
+    };
+    if non_existent_src != -1 {
+        println("[posix-shim] POSIX-RENAME: FAIL non_existent_src != -1");
+        return;
+    }
+
+    // Calling rename on non-/srv path must fail closed (-1) (VFS backend constraint)
+    let non_srv = unsafe {
+        rename(
+            b"/tmp/non_srv_src\0".as_ptr() as *const c_char,
+            b"/tmp/non_srv_dst\0".as_ptr() as *const c_char,
+        )
+    };
+    if non_srv != -1 {
+        println("[posix-shim] POSIX-RENAME: FAIL non_srv != -1");
+        return;
+    }
+
+    // Positive create -> stat (exists) -> rename -> stat old (gone) -> stat new (exists) -> unlink (cleanup)
+    const RN_SRC_PATH: &str = "/srv/posix_rename_src.txt";
+    const RN_SRC_CSTR: &[u8] = b"/srv/posix_rename_src.txt\0";
+    const RN_DST_CSTR: &[u8] = b"/srv/posix_rename_dst.txt\0";
+
+    let mut vfs = ostd::clients::VfsClient::new();
+    if vfs
+        .write_file(RN_SRC_PATH, b"posix rename smoke data\n")
+        .is_err()
+    {
+        println("[posix-shim] POSIX-RENAME: FAIL create src file");
+        return;
+    }
+
+    // Verify stat confirms src file exists
+    let mut st = filled_stat(0);
+    let stat_before = unsafe { stat(RN_SRC_CSTR.as_ptr() as *const c_char, st.as_mut_ptr()) };
+    if stat_before != 0 {
+        println("[posix-shim] POSIX-RENAME: FAIL stat before rename");
+        return;
+    }
+
+    // Call rename -> must return 0
+    let rn_ret = unsafe {
+        rename(
+            RN_SRC_CSTR.as_ptr() as *const c_char,
+            RN_DST_CSTR.as_ptr() as *const c_char,
+        )
+    };
+    if rn_ret != 0 {
+        println(&format!(
+            "[posix-shim] POSIX-RENAME: FAIL rename ret={rn_ret}"
+        ));
+        return;
+    }
+
+    // Verify stat confirms src file is gone
+    let mut st_old = filled_stat(0xAA);
+    let stat_old = unsafe { stat(RN_SRC_CSTR.as_ptr() as *const c_char, st_old.as_mut_ptr()) };
+    if stat_old != -1 {
+        println("[posix-shim] POSIX-RENAME: FAIL src file still exists after rename");
+        return;
+    }
+
+    // Verify stat confirms dst file exists
+    let mut st_new = filled_stat(0x55);
+    let stat_new = unsafe { stat(RN_DST_CSTR.as_ptr() as *const c_char, st_new.as_mut_ptr()) };
+    if stat_new != 0 {
+        println("[posix-shim] POSIX-RENAME: FAIL dst file does not exist after rename");
+        return;
+    }
+
+    // Cleanup dst file via unlink
+    let unlink_ret = unsafe { unlink(RN_DST_CSTR.as_ptr() as *const c_char) };
+    if unlink_ret != 0 {
+        println("[posix-shim] POSIX-RENAME: FAIL cleanup unlink dst");
+        return;
+    }
+
+    println("[posix-shim] POSIX-RENAME: OK");
+}
+
+/// Exercise the published raw Rename ABI. Its kernel RPC must retain this
+/// cell's attested VfsMutate identity; a queue acknowledgement is insufficient.
+pub(super) fn test_raw_rename() {
+    const SRC_PATH: &str = "/srv/raw_rename_src.txt";
+    const SRC_CSTR: &[u8] = b"/srv/raw_rename_src.txt\0";
+    const DST_CSTR: &[u8] = b"/srv/raw_rename_dst.txt\0";
+
+    let mut vfs = ostd::clients::VfsClient::new();
+    if ostd::syscall::sys_rename(
+        "/srv/raw_rename_missing.txt",
+        "/srv/raw_rename_missing_dst.txt",
+    )
+    .is_ok()
+    {
+        println("[posix-shim] RAW-RENAME: FAIL missing source succeeded");
+        return;
+    }
+
+    if vfs
+        .write_file(SRC_PATH, b"raw rename smoke data\n")
+        .is_err()
+    {
+        println("[posix-shim] RAW-RENAME: FAIL create src file");
+        return;
+    }
+    if ostd::syscall::sys_rename(SRC_PATH, "/srv/raw_rename_dst.txt").is_err() {
+        println("[posix-shim] RAW-RENAME: FAIL syscall");
+        return;
+    }
+
+    let mut old = filled_stat(0xAA);
+    if unsafe { stat(SRC_CSTR.as_ptr() as *const c_char, old.as_mut_ptr()) } != -1 {
+        println("[posix-shim] RAW-RENAME: FAIL src file still exists");
+        return;
+    }
+    let mut new = filled_stat(0x55);
+    if unsafe { stat(DST_CSTR.as_ptr() as *const c_char, new.as_mut_ptr()) } != 0 {
+        println("[posix-shim] RAW-RENAME: FAIL dst file missing");
+        return;
+    }
+    if unsafe { unlink(DST_CSTR.as_ptr() as *const c_char) } != 0 {
+        println("[posix-shim] RAW-RENAME: FAIL cleanup");
+        return;
+    }
+    println("[posix-shim] RAW-RENAME: OK");
 }

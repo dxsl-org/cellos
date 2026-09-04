@@ -103,6 +103,34 @@ fn all_producers_defer_foreign_writes() -> bool {
     ok
 }
 
+/// `ipc_send_kernel` backs raw Rename. Unlike `ipc_post_nonblock`, it must not
+/// wake a VFS task parked in a nested receive for a different sender.
+fn kernel_send_respects_receiver_mask() -> bool {
+    let payload = b"kernel-mask";
+    prepare_receiver(usize::MAX);
+    let sent = super::ipc_send_kernel(SENDER, RECEIVER, payload) == Ok(1);
+    let preserved = {
+        let guard = super::SCHEDULER.lock();
+        let Some(sched) = guard.as_ref() else {
+            reset();
+            return fail("scheduler missing after kernel send");
+        };
+        let receiver = sched.tasks.get(&RECEIVER);
+        let sender = sched.tasks.get(&SENDER);
+        matches!(
+            receiver.map(|task| &task.state),
+            Some(TaskState::Recv { mask, .. }) if *mask == usize::MAX
+        ) && receiver.is_some_and(|task| {
+            matches!(task.pending_msgs.as_slice(), [msg] if msg.sender_tid == SENDER && msg.payload() == payload)
+        }) && matches!(
+            sender.map(|task| &task.state),
+            Some(TaskState::Sending { target, .. }) if *target == RECEIVER
+        )
+    };
+    reset();
+    sent && preserved || fail("kernel send ignored a receiver mask")
+}
+
 fn verify_completion_wait_wake(expected: &[u8], ready_before: usize, sender_blocks: bool) -> bool {
     let guard = super::SCHEDULER.lock();
     let Some(sched) = guard.as_ref() else {
@@ -686,19 +714,67 @@ fn try_recv_attestation_writes_identity_trailer() -> bool {
                 sender_tid: SENDER as u64,
             });
 
-    // Case 2: SENDER has bit 63 set and allowlist != u64::MAX -> flags = CALLER_FLAG_VFS_MUTATE
+    // Case 2: Rename's bit 62 alone admits its syscall but does not attest
+    // VfsMutate to the VFS service.
     if let Some(sched) = super::SCHEDULER.lock().as_mut() {
         if let Some(task) = sched.tasks.get_mut(&SENDER) {
-            task.syscall_allowlist = 1u64 << 63;
+            task.syscall_allowlist = 1u64 << 62;
         }
         if let Some(receiver) = sched.tasks.get_mut(&RECEIVER) {
-            receiver.pending_msgs.try_push(super::tcb::PendingMsg {
-                sender_tid: SENDER,
-                data: super::pending_mailbox::PendingMsgData::try_copy(payload, TEST_CELL as usize)
+            receiver
+                .pending_msgs
+                .try_push(super::tcb::PendingMsg {
+                    sender_tid: SENDER,
+                    data: super::pending_mailbox::PendingMsgData::try_copy(
+                        payload,
+                        TEST_CELL as usize,
+                    )
                     .expect("inline payload copy must fit"),
-                wire: None,
-                enqueued_tick: 0,
-            }).ok();
+                    wire: None,
+                    enqueued_tick: 0,
+                })
+                .ok();
+        }
+    }
+    recv_buf.fill(0);
+    let rename_only_delivered = super::syscall::handle_syscall(
+        RECEIVER,
+        super::syscall::Syscall::TryRecv {
+            mask: SENDER,
+            buf_ptr: recv_buf.as_mut_ptr() as usize,
+            buf_len: recv_buf.len(),
+            attest_caller: true,
+        },
+    );
+    let rename_only_identity = api::caller_identity::CallerIdentity::from_recv_buf(&recv_buf);
+    let rename_only_ok = matches!(rename_only_delivered, Ok(id) if id == SENDER)
+        && rename_only_identity
+            == Some(api::caller_identity::CallerIdentity {
+                flags: 0,
+                cell_id: TEST_CELL,
+                generation: sender_generation,
+                sender_tid: SENDER as u64,
+            });
+
+    // Case 3: only the explicit combination attests VfsMutate.
+    if let Some(sched) = super::SCHEDULER.lock().as_mut() {
+        if let Some(task) = sched.tasks.get_mut(&SENDER) {
+            task.syscall_allowlist = (1u64 << 62) | (1u64 << 63);
+        }
+        if let Some(receiver) = sched.tasks.get_mut(&RECEIVER) {
+            receiver
+                .pending_msgs
+                .try_push(super::tcb::PendingMsg {
+                    sender_tid: SENDER,
+                    data: super::pending_mailbox::PendingMsgData::try_copy(
+                        payload,
+                        TEST_CELL as usize,
+                    )
+                    .expect("inline payload copy must fit"),
+                    wire: None,
+                    enqueued_tick: 0,
+                })
+                .expect("pending mailbox has room");
         }
     }
     recv_buf.fill(0);
@@ -722,13 +798,14 @@ fn try_recv_attestation_writes_identity_trailer() -> bool {
             });
 
     reset();
-    (attested_ok && mutate_ok)
-        || fail("try_recv with attest_caller=true did not write valid CallerIdentity trailer or mutate flags")
+    (attested_ok && rename_only_ok && mutate_ok)
+        || fail("try_recv did not preserve Rename/VfsMutate gate separation")
 }
 
 /// Returns true iff IPC publication is receiver-owned, bounded and wake-safe.
 pub fn self_test() -> bool {
     let ok = all_producers_defer_foreign_writes()
+        & kernel_send_respects_receiver_mask()
         & all_producers_wake_net_rx_completion_wait()
         & ready_receiver_is_not_enqueued_twice()
         & timer_completion_wait_remains_deadline_only()

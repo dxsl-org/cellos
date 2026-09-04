@@ -51,6 +51,6 @@ pub use net::{_close, close, connect, recv, send, sockaddr_in, socket};
 pub use stdio::FILE;
 #[cfg(not(feature = "mlibc"))]
 pub use sysio::{
-    _fstat, _lseek, _open, _putchar, _read, _stat, _unlink, _write, fstat, lseek, open, read, stat,
-    unlink, write,
+    _fstat, _lseek, _open, _putchar, _read, _rename, _stat, _unlink, _write, fstat, lseek, open,
+    read, rename, stat, unlink, write,
 };

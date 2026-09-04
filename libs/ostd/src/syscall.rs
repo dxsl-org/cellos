@@ -930,6 +930,30 @@ pub fn sys_fstat(fd: usize, out: &mut ViFstatV1) -> Result<usize, SyscallError> 
     }
 }
 
+/// Rename a regular file through the VFS service with the caller's attested
+/// identity and `VfsMutate` declaration.
+///
+/// The kernel forwards the raw `Rename` opcode to VFS and returns `Ok(())` only
+/// after its no-replace rename transaction succeeds.
+pub fn sys_rename(old: &str, new: &str) -> Result<(), SyscallError> {
+    // SAFETY: both paths are valid UTF-8 slices; the kernel copies their exact
+    // byte ranges before encoding the VFS request.
+    let ret = unsafe {
+        syscall(
+            ViSyscall::Rename,
+            old.as_ptr() as usize,
+            old.len(),
+            new.as_ptr() as usize,
+            new.len(),
+        )
+    };
+    if ret == 0 {
+        Ok(())
+    } else {
+        Err(SyscallError::PermissionDenied)
+    }
+}
+
 /// Read the next directory entry from an open directory fd.
 ///
 /// Returns `Ok(Some(entry))` per entry, `Ok(None)` at end of directory.

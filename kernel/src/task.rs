@@ -1708,11 +1708,6 @@ pub fn file_remove(caller_id: usize, path: &str) -> core::result::Result<usize, 
     Ok(0)
 }
 
-pub fn file_rename(_old: &str, _new: &str) -> core::result::Result<usize, ()> {
-    // TODO: Implement rename in ViFileSystem trait first
-    Err(())
-}
-
 pub fn file_getcwd(caller_id: usize, buf: &mut [u8]) -> core::result::Result<usize, ()> {
     let scheduler = SCHEDULER.lock();
     let task = scheduler
@@ -1754,7 +1749,7 @@ pub fn ipc_send(
         return Err(IpcSendError::Backpressure);
     }
 
-    let (caller_view, header) = {
+    let caller_view = {
         let guard = SCHEDULER.lock();
         let sched = guard.as_ref().ok_or(IpcSendError::TargetGone)?;
         if !sched.tasks.contains_key(&target_id) {
@@ -1764,26 +1759,53 @@ pub fn ipc_send(
         if paused_target_rejects(sched, caller_id, target_id) {
             return Err(IpcSendError::Backpressure);
         }
-        let caller = sched
-            .tasks
-            .get(&caller_id)
-            .ok_or(IpcSendError::TargetGone)?;
-        let caller_view = copy_glue::TaskCopyView::of(caller);
+        copy_glue::TaskCopyView::of(
+            sched
+                .tasks
+                .get(&caller_id)
+                .ok_or(IpcSendError::TargetGone)?,
+        )
+    };
+    let msg_bytes = caller_view
+        .read_bytes(msg_ptr, msg_len)
+        .map_err(|_| IpcSendError::Backpressure)?;
+    ipc_send_kernel(caller_id, target_id, &msg_bytes)
+}
+
+/// Send kernel-owned IPC bytes with the same receiver-mask and delivery-token
+/// semantics as [`ipc_send`].
+///
+/// Kernel-mediated RPCs cannot expose temporary postcard buffers in Cell memory,
+/// but they must never use the fire-and-forget path: a masked nested receive
+/// must retain its target restriction.
+pub fn ipc_send_kernel(
+    caller_id: usize,
+    target_id: usize,
+    msg: &[u8],
+) -> core::result::Result<usize, IpcSendError> {
+    if msg.len() > ipc_wire::MAX_IPC_WIRE_PAYLOAD {
+        return Err(IpcSendError::Backpressure);
+    }
+
+    let header = {
+        let guard = SCHEDULER.lock();
+        let sched = guard.as_ref().ok_or(IpcSendError::TargetGone)?;
+        if !sched.tasks.contains_key(&target_id) || !sched.tasks.contains_key(&caller_id) {
+            return Err(IpcSendError::TargetGone);
+        }
+        if paused_target_rejects(sched, caller_id, target_id) {
+            return Err(IpcSendError::Backpressure);
+        }
         let (sender_cell_id, sender_generation) = sender_context(sched, caller_id);
-        let header = ipc_wire::IpcWireHeader {
+        ipc_wire::IpcWireHeader {
             sender_tid: caller_id,
             sender_cell_id,
             sender_generation,
             delivery_id: next_delivery_id(),
-        };
-        (caller_view, header)
+        }
     };
-
-    let msg_bytes = caller_view
-        .read_bytes(msg_ptr, msg_len)
-        .map_err(|_| IpcSendError::Backpressure)?;
-    let wire_msg = ipc_wire::IpcWireMessage::try_new(header, &msg_bytes)
-        .map_err(|_| IpcSendError::Backpressure)?;
+    let wire_msg =
+        ipc_wire::IpcWireMessage::try_new(header, msg).map_err(|_| IpcSendError::Backpressure)?;
 
     let mut guard = SCHEDULER.lock();
     let sched = guard.as_mut().ok_or(IpcSendError::TargetGone)?;
@@ -1801,26 +1823,14 @@ pub fn ipc_send(
     let recv_eligible =
         matches!(target.state, TaskState::Recv { mask, .. } if mask == 0 || mask == caller_id);
     let target_frozen = matches!(target.state, TaskState::Frozen { .. });
-
-    // Publish before any blocking decision: queue-full is a Backpressure
-    // error, never a block. Once queued, the kernel owns the payload and
-    // sender death cannot invalidate it.
     let wake = if let Some(target) = sched.tasks.get_mut(&target_id) {
         queue_wire_msg(target, wire_msg, tcb::HOTSWAP_MSG_QUEUE_DEPTH)
             .map_err(|_| IpcSendError::Backpressure)?;
-        // Caller-context assignment is deferred to the dequeue/commit path so
-        // the request generation advances exactly once per accepted message.
         wake_after_ipc_publish(target, recv_eligible)
     } else {
         IpcWakeCause::None
     };
     if target_frozen {
-        log::debug!(
-            "[hotswap] queued msg ({} bytes) from tid={} to frozen tid={}",
-            msg_len,
-            caller_id,
-            target_id
-        );
         return Ok(0);
     }
     if wake.made_runnable() {
@@ -1974,6 +1984,63 @@ pub fn ipc_recv(
     }
     wake_sender_token(sched, sender_id, caller_id, header);
     Ok(sender_id)
+}
+
+/// Receive an IPC payload into kernel-owned storage.
+///
+/// The normal receive path copies into caller memory. Kernel-mediated RPCs need
+/// the same delivery-token, caller-context, and sender-wake semantics without
+/// exposing a temporary response buffer to the requesting Cell.
+pub fn ipc_recv_kernel(
+    caller_id: usize,
+    mask: usize,
+    out: &mut [u8],
+) -> core::result::Result<Option<(usize, usize)>, ()> {
+    // Copy and commit while holding SCHEDULER. The destination is kernel-owned,
+    // so this cannot fault or allocate after VFS has committed a mutation.
+    let mut guard = SCHEDULER.lock();
+    let sched = guard.as_mut().ok_or(())?;
+    let slot = sched
+        .tasks
+        .get(&caller_id)
+        .ok_or(())?
+        .pending_msgs
+        .iter()
+        .position(|message| message.wire.is_some() && (mask == 0 || message.sender_tid == mask));
+    let Some(index) = slot else {
+        arm_ipc_block_handoff(caller_id);
+        if let Some(caller) = sched.tasks.get_mut(&caller_id) {
+            caller.state = TaskState::Recv {
+                mask,
+                buf_ptr: 0,
+                buf_len: 0,
+                deadline: None,
+            };
+        }
+        return Ok(None);
+    };
+
+    let (sender_id, header, len) = {
+        let receiver = sched.tasks.get_mut(&caller_id).ok_or(())?;
+        let record = receiver.pending_msgs.as_slice().get(index).ok_or(())?;
+        let wire = record.wire.as_ref().ok_or(())?;
+        let len = wire.len();
+        if len > out.len() {
+            return Err(());
+        }
+        out[..len].copy_from_slice(wire.as_slice());
+        let sender_id = record.sender_tid;
+        let header = wire.header;
+        receiver.pending_msgs.remove(index);
+        receiver.set_received_caller_context(
+            sender_id,
+            header.sender_cell_id,
+            header.sender_generation,
+        );
+        (sender_id, header, len)
+    };
+    wake_sender_token(sched, sender_id, caller_id, header);
+    Ok(Some((sender_id, len)))
 }
 
 pub fn ipc_try_recv(

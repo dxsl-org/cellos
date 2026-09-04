@@ -186,7 +186,9 @@ pub enum ViSyscall {
     /// Atomic file rename syscall.
     ///
     /// ABI: a0 = old_path_ptr, a1 = old_path_len, a2 = new_path_ptr, a3 = new_path_len → 0 on success.
-    /// Requires allowlist bit 62.
+    /// Kernel admission requires allowlist bit 62. The VFS mutation transaction
+    /// independently requires the bit-63 `VfsMutate` marker in the same explicit,
+    /// non-`ALL` declaration; bit 63 alone never authorizes this opcode.
     Rename = 255,
 
     // === Time/System (120-129) ===
