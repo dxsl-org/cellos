@@ -20,8 +20,10 @@
 #define __MLIBC_LINUX_OPTION   0
 #define __MLIBC_POSIX_OPTION   0
 
-// Optional sysdep: isatty — we implement it to control stdio buffering
+// Optional sysdeps
 #define __MLIBC_HAVE_SYS_ISATTY 1
+#define __MLIBC_HAVE_SYS_FSTAT  1
+#define __MLIBC_HAVE_SYS_STAT   1
 
 namespace mlibc {
 
@@ -64,5 +66,9 @@ int sys_vm_unmap(void *pointer, size_t size);
 
 // isatty — fd 0-2 are always considered terminals so stdio is unbuffered
 int sys_isatty(int fd);
+
+// File metadata (Phase 04 truthful fstat v1)
+int sys_fstat(int fd, struct stat *st);
+int sys_stat(const char *path, struct stat *st);
 
 } // namespace mlibc

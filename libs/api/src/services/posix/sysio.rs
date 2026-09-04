@@ -125,6 +125,13 @@ pub unsafe extern "C" fn _open(name: *const c_char, flags: c_int, mode: c_int) -
 }
 
 /// # Safety
+/// `name` must be non-null and point to a valid NUL-terminated C string (read via `strlen`).
+#[no_mangle]
+pub unsafe extern "C" fn open(name: *const c_char, flags: c_int, mode: c_int) -> c_int {
+    _open(name, flags, mode)
+}
+
+/// # Safety
 /// No pointers are dereferenced; all arguments are ignored by this stub.
 #[no_mangle]
 pub unsafe extern "C" fn _fcntl(_fd: c_int, _cmd: c_int, _arg: c_int) -> c_int {
@@ -178,10 +185,26 @@ pub unsafe extern "C" fn _link(_old: *const c_char, _new: *const c_char) -> c_in
 }
 
 /// # Safety
-/// `_name` is ignored by this stub and never dereferenced.
+/// `name` must be non-null and point to a valid NUL-terminated C string.
 #[no_mangle]
-pub unsafe extern "C" fn _unlink(_name: *const c_char) -> c_int {
-    -1
+pub unsafe extern "C" fn _unlink(name: *const c_char) -> c_int {
+    if name.is_null() {
+        return -1;
+    }
+    let len = strlen(name);
+    let ret = raw_syscall(ViSyscall::FileOp, 0, name as usize, len, 0);
+    if ret == 0 {
+        0
+    } else {
+        -1
+    }
+}
+
+/// # Safety
+/// `name` must be non-null and point to a valid NUL-terminated C string.
+#[no_mangle]
+pub unsafe extern "C" fn unlink(name: *const c_char) -> c_int {
+    _unlink(name)
 }
 
 /// # Safety
@@ -204,10 +227,24 @@ pub unsafe extern "C" fn _write(handle: c_int, buf: *const c_void, count: usize)
 }
 
 /// # Safety
+/// `buf` must be non-null, properly aligned, and valid for reads of `count` bytes.
+#[no_mangle]
+pub unsafe extern "C" fn write(handle: c_int, buf: *const c_void, count: usize) -> c_int {
+    _write(handle, buf, count)
+}
+
+/// # Safety
 /// `buf` must be non-null, properly aligned, and valid for writes of `count` bytes.
 #[no_mangle]
 pub unsafe extern "C" fn _read(handle: c_int, buf: *mut c_void, count: usize) -> c_int {
     raw_syscall(ViSyscall::Read, handle as usize, buf as usize, count, 0) as c_int
+}
+
+/// # Safety
+/// `buf` must be non-null, properly aligned, and valid for writes of `count` bytes.
+#[no_mangle]
+pub unsafe extern "C" fn read(handle: c_int, buf: *mut c_void, count: usize) -> c_int {
+    _read(handle, buf, count)
 }
 
 /// # Safety
@@ -222,6 +259,13 @@ pub unsafe extern "C" fn _lseek(handle: c_int, offset: c_long, whence: c_int) ->
         whence as usize,
         0,
     ) as c_long
+}
+
+/// # Safety
+/// No pointers are dereferenced; all arguments are plain integers.
+#[no_mangle]
+pub unsafe extern "C" fn lseek(handle: c_int, offset: c_long, whence: c_int) -> c_long {
+    _lseek(handle, offset, whence)
 }
 
 fn fstat_fields(wire: &ViFstatV1) -> Option<(c_int, c_long)> {
@@ -273,6 +317,42 @@ pub unsafe extern "C" fn _fstat(handle: c_int, st: *mut stat) -> c_int {
         core::mem::size_of::<stat>(),
     );
     0
+}
+
+/// # Safety
+/// `st` must be non-null, properly aligned, and valid for writes of
+/// `size_of::<stat>()` bytes. On any transport or translation failure, caller
+/// bytes are left unchanged.
+#[no_mangle]
+pub unsafe extern "C" fn fstat(handle: c_int, st: *mut stat) -> c_int {
+    _fstat(handle, st)
+}
+
+/// # Safety
+/// `name` must be non-null and point to a valid NUL-terminated C string.
+/// `st` must be non-null, properly aligned, and valid for writes of
+/// `size_of::<stat>()` bytes. On any failure, caller bytes are left unchanged.
+#[no_mangle]
+pub unsafe extern "C" fn _stat(name: *const c_char, st: *mut stat) -> c_int {
+    if name.is_null() || st.is_null() {
+        return -1;
+    }
+    let fd = _open(name, 0, 0);
+    if fd < 0 {
+        return -1;
+    }
+    let ret = _fstat(fd, st);
+    raw_syscall(ViSyscall::Close, fd as usize, 0, 0, 0);
+    ret
+}
+
+/// # Safety
+/// `name` must be non-null and point to a valid NUL-terminated C string.
+/// `st` must be non-null, properly aligned, and valid for writes of
+/// `size_of::<stat>()` bytes. On any failure, caller bytes are left unchanged.
+#[no_mangle]
+pub unsafe extern "C" fn stat(name: *const c_char, st: *mut stat) -> c_int {
+    _stat(name, st)
 }
 
 #[cfg(test)]

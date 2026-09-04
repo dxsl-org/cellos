@@ -192,4 +192,44 @@ int sys_isatty(int fd) {
     return (fd >= 0 && fd <= 2) ? 1 : 0;
 }
 
+// ViCell Fstat v1 wire record layout (matches kernel ViFstatV1, 32 bytes)
+struct vi_fstat_v1 {
+    uint32_t kind;
+    uint32_t access;
+    uint64_t size;
+    uint64_t reserved[2];
+};
+
+#define VI_FSTAT_KIND_CHAR   1
+#define VI_FSTAT_KIND_REG    2
+#define VI_FSTAT_KIND_DIR    3
+
+int sys_fstat(int fd, struct stat *st) {
+    if (!st) return EINVAL;
+    struct vi_fstat_v1 wire = {0, 0, 0, {0, 0}};
+    long ret = vicell_syscall(VI_SYS_FSTAT, (long)fd, (long)&wire, sizeof(wire), 0);
+    if (ret != (long)sizeof(wire)) return EBADF;
+    vi_memset(st, 0, sizeof(*st));
+    if (wire.kind == VI_FSTAT_KIND_CHAR) {
+        st->st_mode = S_IFCHR;
+    } else if (wire.kind == VI_FSTAT_KIND_REG) {
+        st->st_mode = S_IFREG;
+    } else if (wire.kind == VI_FSTAT_KIND_DIR) {
+        st->st_mode = S_IFDIR;
+    } else {
+        return EIO;
+    }
+    st->st_size = (off_t)wire.size;
+    return 0;
+}
+
+int sys_stat(const char *path, struct stat *st) {
+    if (!path || !st) return EINVAL;
+    int fd = -1;
+    int err = sys_open(path, 0, 0, &fd);
+    if (err) return err;
+    int ret = sys_fstat(fd, st);
+    sys_close(fd);
+    return ret;
+}
 } // namespace mlibc

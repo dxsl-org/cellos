@@ -2,11 +2,12 @@
 //!
 //! Tests the C ABI shims in `libs/api/src/services/posix.rs`:
 //!   - open/fstat/close with truthful, failure-atomic descriptor metadata
+//!   - stat and unlink with truthful return values and failure atomicity
 //!   - getentropy(2) via sys_get_random (opcode 214)
 //!   - socket / connect / send / recv / close via typed Net IPC
 //!
 //! Spawn with: `posix-shim-test` from the shell. Integration tests require the
-//! dedicated `POSIX-FSTAT-*`, `POSIX-ENTROPY`, and `POSIX-NET` markers.
+//! dedicated `POSIX-FSTAT-*`, `POSIX-STAT`, `POSIX-UNLINK`, `POSIX-ENTROPY`, and `POSIX-NET` markers.
 
 #![no_std]
 #![no_main]
@@ -34,7 +35,8 @@ api::declare_syscalls![
     GetRandom,
     Open,
     Fstat,
-    Close
+    Close,
+    FileOp
 ];
 
 // Declare C ABI directly — works whether the symbols come from api::posix (Tier A)
@@ -60,6 +62,8 @@ extern "C" {
 #[no_mangle]
 pub fn main() {
     fstat::test_fstat();
+    fstat::test_stat();
+    fstat::test_unlink();
     test_getentropy();
     test_net();
 }

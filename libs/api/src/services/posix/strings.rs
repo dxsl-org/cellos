@@ -192,7 +192,7 @@ pub unsafe extern "C" fn strcat(dest: *mut c_char, src: *const c_char) -> *mut c
 /// `s` must be a valid NUL-terminated string readable up to its terminator.
 #[no_mangle]
 pub unsafe extern "C" fn strchr(s: *const c_char, c: c_int) -> *mut c_char {
-    let v = c as u8;
+    let v = c as c_char;
     let mut i = 0;
     loop {
         let b = *s.add(i);
@@ -213,7 +213,7 @@ pub unsafe extern "C" fn strchr(s: *const c_char, c: c_int) -> *mut c_char {
 /// `s` must be a valid NUL-terminated string readable up to its terminator.
 #[no_mangle]
 pub unsafe extern "C" fn strrchr(s: *const c_char, c: c_int) -> *mut c_char {
-    let v = c as u8;
+    let v = c as c_char;
     let len = strlen(s);
     let mut i = len;
     loop {

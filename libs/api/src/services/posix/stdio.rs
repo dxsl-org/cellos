@@ -85,7 +85,7 @@ pub unsafe extern "C" fn vsnprintf(
     fmt: *const c_char,
     args: VaList<'_>,
 ) -> c_int {
-    vsnprintf_core(buf, size, fmt, args) as c_int
+    vsnprintf_core(buf as *mut u8, size, fmt as *const u8, args) as c_int
 }
 
 /// Formats `fmt` with `args` into `buf` with no length limit (C `sprintf` semantics).
@@ -97,7 +97,7 @@ pub unsafe extern "C" fn vsnprintf(
 /// point to a valid NUL-terminated C string; `args` must match `fmt`'s specifiers.
 #[no_mangle]
 pub unsafe extern "C" fn vsprintf(buf: *mut c_char, fmt: *const c_char, args: VaList<'_>) -> c_int {
-    vsnprintf_core(buf, usize::MAX / 2, fmt, args) as c_int
+    vsnprintf_core(buf as *mut u8, usize::MAX / 2, fmt as *const u8, args) as c_int
 }
 
 /// Formats `fmt` with `args` and writes the result to stdout (fd 1).
@@ -108,7 +108,7 @@ pub unsafe extern "C" fn vsprintf(buf: *mut c_char, fmt: *const c_char, args: Va
 #[no_mangle]
 pub unsafe extern "C" fn vprintf(fmt: *const c_char, args: VaList<'_>) -> c_int {
     let mut tmp = [0u8; 1024];
-    let n = vsnprintf_core(tmp.as_mut_ptr(), tmp.len(), fmt, args);
+    let n = vsnprintf_core(tmp.as_mut_ptr(), tmp.len(), fmt as *const u8, args);
     _write(1, tmp.as_ptr() as *const c_void, n.min(tmp.len()));
     n as c_int
 }
@@ -128,7 +128,7 @@ pub unsafe extern "C" fn vfprintf(
 ) -> c_int {
     let fd = fd_of(stream);
     let mut tmp = [0u8; 1024];
-    let n = vsnprintf_core(tmp.as_mut_ptr(), tmp.len(), fmt, args);
+    let n = vsnprintf_core(tmp.as_mut_ptr(), tmp.len(), fmt as *const u8, args);
     _write(fd, tmp.as_ptr() as *const c_void, n.min(tmp.len()));
     n as c_int
 }

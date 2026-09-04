@@ -15,8 +15,10 @@
 #define VI_SYS_READ      102
 #define VI_SYS_CLOSE     103
 #define VI_SYS_SEEK      106
+#define VI_SYS_FILEOP    107
 #define VI_SYS_WRITE     109
 #define VI_SYS_GETTIME   120
+#define VI_SYS_FSTAT     254
 
 // GetTime op-selectors (kernel/src/task/syscall.rs handler)
 #define VI_GETTIME_TICKS  0   // monotonic 10MHz ticks since boot

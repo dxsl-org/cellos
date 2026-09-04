@@ -290,6 +290,13 @@ pub unsafe extern "C" fn _close(handle: c_int) -> c_int {
     raw_syscall(ViSyscall::Close, handle as usize, 0, 0, 0) as c_int
 }
 
+/// # Safety
+/// Standard POSIX close() semantics.
+#[no_mangle]
+pub unsafe extern "C" fn close(handle: c_int) -> c_int {
+    _close(handle)
+}
+
 unsafe fn socket_close(fd: c_int) -> c_int {
     let idx = (fd - SOCK_BASE_FD) as usize;
     let cap = SOCK_CAPS[idx].load(Ordering::Acquire);

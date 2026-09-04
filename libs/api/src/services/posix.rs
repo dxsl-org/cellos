@@ -46,8 +46,11 @@ pub mod sysio;
 #[cfg(not(feature = "mlibc"))]
 pub use entropy::{arc4random_buf, getentropy};
 #[cfg(not(feature = "mlibc"))]
-pub use net::{_close, connect, recv, send, sockaddr_in, socket};
+pub use net::{_close, close, connect, recv, send, sockaddr_in, socket};
 #[cfg(not(feature = "mlibc"))]
 pub use stdio::FILE;
 #[cfg(not(feature = "mlibc"))]
-pub use sysio::_putchar;
+pub use sysio::{
+    _fstat, _lseek, _open, _putchar, _read, _stat, _unlink, _write, fstat, lseek, open, read, stat,
+    unlink, write,
+};

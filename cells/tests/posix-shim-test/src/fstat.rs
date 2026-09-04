@@ -24,10 +24,13 @@ extern "C" {
     fn open(name: *const c_char, flags: i32, mode: i32) -> i32;
     #[link_name = "_fstat"]
     fn fstat(fd: i32, st: *mut Stat) -> i32;
+    #[link_name = "_stat"]
+    fn stat(name: *const c_char, st: *mut Stat) -> i32;
+    #[link_name = "_unlink"]
+    fn unlink(name: *const c_char) -> i32;
     #[link_name = "_close"]
     fn close(fd: i32) -> i32;
 }
-
 fn filled_stat(byte: u8) -> core::mem::MaybeUninit<Stat> {
     let mut value = core::mem::MaybeUninit::<Stat>::uninit();
     unsafe {
@@ -101,6 +104,58 @@ pub(super) fn test_fstat() {
     } else {
         println(&format!(
             "[posix-shim] POSIX-FSTAT: FAIL valid={valid} close={close_ret}"
+        ));
+    }
+}
+
+pub(super) fn test_stat() {
+    const PATH: &[u8] = b"/BIN/INIT\0";
+    let mut actual = filled_stat(0xA5);
+    let ret = unsafe { stat(PATH.as_ptr() as *const c_char, actual.as_mut_ptr()) };
+    if ret != 0 {
+        println("[posix-shim] POSIX-STAT: FAIL ret != 0");
+        return;
+    }
+    let actual_ref = unsafe { &*actual.as_ptr() };
+    if actual_ref.st_mode != 0o100000 || actual_ref.st_size == 0 {
+        println(&format!(
+            "[posix-shim] POSIX-STAT: FAIL mode={:#o} size={}",
+            actual_ref.st_mode, actual_ref.st_size
+        ));
+        return;
+    }
+
+    // Negative tests:
+    let mut invalid = filled_stat(0xA5);
+    let null_path = unsafe { stat(core::ptr::null(), invalid.as_mut_ptr()) };
+    let null_buf = unsafe { stat(PATH.as_ptr() as *const c_char, core::ptr::null_mut()) };
+    let non_existent = unsafe {
+        stat(
+            b"/NONEXISTENT_FILE_12345\0".as_ptr() as *const c_char,
+            invalid.as_mut_ptr(),
+        )
+    };
+
+    if null_path == -1
+        && null_buf == -1
+        && non_existent == -1
+        && stat_bytes(&invalid).iter().all(|byte| *byte == 0xA5)
+    {
+        println("[posix-shim] POSIX-STAT: OK");
+    } else {
+        println("[posix-shim] POSIX-STAT: FAIL negative checks");
+    }
+}
+
+pub(super) fn test_unlink() {
+    // Calling unlink on NULL or non-existent file must fail closed (-1)
+    let null_ret = unsafe { unlink(core::ptr::null()) };
+    let non_existent = unsafe { unlink(b"/NONEXISTENT_FILE_12345\0".as_ptr() as *const c_char) };
+    if null_ret == -1 && non_existent == -1 {
+        println("[posix-shim] POSIX-UNLINK: OK");
+    } else {
+        println(&format!(
+            "[posix-shim] POSIX-UNLINK: FAIL null_ret={null_ret} non_existent={non_existent}"
         ));
     }
 }

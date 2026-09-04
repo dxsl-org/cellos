@@ -3,6 +3,14 @@
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
 ## [Unreleased] Development-first hardware-constrained execution
+- Implemented Phase 1 of POSIX completion: added truthful `_stat`/`stat` and
+  `_unlink`/`unlink` to POSIX services shim (`libs/api/src/services/posix/sysio.rs`),
+  connected `unlink` to kernel `ViSyscall::FileOp` remove handling, and added
+  `close`, `open`, `read`, `write`, `lseek`, `fstat` aliases. Synced `VI_SYS_FSTAT`
+  (254) and implemented `sys_fstat`/`sys_stat` with `ViFstatV1` 32-byte wire decoding
+  in mlibc sysdeps (`third_party/mlibc/sysdeps/vicell`). Added positive and negative
+  conformance assertions for `stat` and `unlink` in `app-posix-shim-test`.
+
 - Implemented x86 Platform Cell PCIe discovery handoff via ACPI MCFG launch argv.
   Kernel extracts base address and bus range from validated ACPI MCFG, attaches
   `--ecam-base=<hex> --bus-start=<N> --bus-end=<N>` to `SpawnRequest::with_argv`,
