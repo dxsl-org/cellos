@@ -147,6 +147,10 @@ path = "tests/native-domain-qemu.rs"
 name = "c2c-broker-oracle"
 path = "tests/c2c-broker-oracle.rs"
 
+[[test]]
+name = "e1000-dma-layout"
+path = "tests/e1000-dma-layout.rs"
+
 [dev-dependencies]
 tempfile = "3"
 

@@ -19,10 +19,12 @@ extern crate alloc;
 
 mod controller;
 mod dispatch;
+mod dma_layout;
 
 use controller::E1000Controller;
 use dispatch::{handle, NicReply, REPLY_BUF};
 use ostd::app::{AppContext, AppEvent};
+use ostd::io::print_fmt;
 use ostd::mmio;
 use ostd::sync::Mutex;
 use ostd::syscall::{sys_find_pcie_device, sys_register_nic_driver, sys_try_send, PcieDeviceInfo};
@@ -73,7 +75,13 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
             // 3. Initialise controller (reset + MAC read + ring setup).
             let ctrl = match E1000Controller::new(mmio_region, bdf) {
                 Ok(c) => c,
-                Err(_) => ostd::syscall::sys_exit(1),
+                Err(error) => {
+                    let _ = print_fmt(format_args!(
+                        "[e1000] controller initialization failed: {:?}\n",
+                        error
+                    ));
+                    ostd::syscall::sys_exit(1)
+                }
             };
 
             // 4. Register as the active NIC driver.

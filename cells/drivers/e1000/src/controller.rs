@@ -3,6 +3,7 @@
 //! Law 4 exception: Driver Cells may use `unsafe` for MMIO register access.
 //! Every `unsafe` block carries a `// SAFETY:` comment.
 
+use crate::dma_layout::{authorize_dma_layout, DmaIovas, DmaSlot, RX_SLOTS, TX_SLOTS};
 use core::sync::atomic::{compiler_fence, Ordering};
 use ostd::dma::DmaBuf;
 use ostd::mmio::MmioRegion;
@@ -53,8 +54,8 @@ const EERD_START: u32 = 1;
 const EERD_DONE: u32 = 1 << 4;
 const RAH_AV: u32 = 1 << 31;
 
-const N_TX: usize = 16;
-const N_RX: usize = 16;
+const N_TX: usize = TX_SLOTS;
+const N_RX: usize = RX_SLOTS;
 pub const BUF_SIZE: usize = 2048;
 
 // ── Descriptor types ──────────────────────────────────────────────────────────
@@ -91,6 +92,7 @@ pub struct E1000Controller {
     rx_ring: DmaBuf,
     tx_bufs: [DmaBuf; N_TX],
     rx_bufs: [DmaBuf; N_RX],
+    dma_iovas: DmaIovas,
     tx_next: usize,
     rx_head: usize,
     pub mac: [u8; 6],
@@ -150,27 +152,28 @@ impl E1000Controller {
             core::hint::spin_loop();
         }
 
-        // Allocate TX ring + buffers.
+        // Allocate all DMA objects before authorization. No device-visible DMA
+        // address is programmed until every object has an approved IOVA.
         let tx_ring = DmaBuf::alloc(1).ok_or(ViError::OutOfMemory)?; // holds 16×TxDesc = 256B
-        let _ = tx_ring.authorize(bdf);
-        unsafe { core::ptr::write_bytes(tx_ring.virt(), 0, tx_ring.size()) };
-
-        // SAFETY: N_TX = 16 — safe to init array slot-by-slot with MaybeUninit.
-        let tx_bufs = core::array::from_fn(|_| {
-            let b = DmaBuf::alloc(1).expect("e1000 tx DmaBuf OOM");
-            let _ = b.authorize(bdf);
-            b
-        });
-
+        let tx_bufs = core::array::from_fn(|_| DmaBuf::alloc(1).expect("e1000 tx DmaBuf OOM"));
         let rx_ring = DmaBuf::alloc(1).ok_or(ViError::OutOfMemory)?;
-        let _ = rx_ring.authorize(bdf);
-        unsafe { core::ptr::write_bytes(rx_ring.virt(), 0, rx_ring.size()) };
+        let rx_bufs = core::array::from_fn(|_| DmaBuf::alloc(1).expect("e1000 rx DmaBuf OOM"));
 
-        let rx_bufs = core::array::from_fn(|_| {
-            let b = DmaBuf::alloc(1).expect("e1000 rx DmaBuf OOM");
-            let _ = b.authorize(bdf);
-            b
-        });
+        let dma_iovas = authorize_dma_layout(|slot| {
+            let result = match slot {
+                DmaSlot::TxRing => tx_ring.authorize(bdf),
+                DmaSlot::TxBuffer(index) => tx_bufs[index].authorize(bdf),
+                DmaSlot::RxRing => rx_ring.authorize(bdf),
+                DmaSlot::RxBuffer(index) => rx_bufs[index].authorize(bdf),
+            };
+            result.map_err(|_| ViError::PermissionDenied)
+        })?;
+
+        // SAFETY: both ring allocations cover one writable DMA page.
+        unsafe {
+            core::ptr::write_bytes(tx_ring.virt(), 0, tx_ring.size());
+            core::ptr::write_bytes(rx_ring.virt(), 0, rx_ring.size());
+        }
 
         let mut ctrl = E1000Controller {
             mmio,
@@ -178,6 +181,7 @@ impl E1000Controller {
             rx_ring,
             tx_bufs,
             rx_bufs,
+            dma_iovas,
             tx_next: 0,
             rx_head: 0,
             mac: [0u8; 6],
@@ -209,26 +213,26 @@ impl E1000Controller {
         }
 
         // Program TX ring.
-        let tx_phys = ctrl.tx_ring.phys() as u64;
-        ctrl.wr32(TDBAL, tx_phys as u32);
-        ctrl.wr32(TDBAH, (tx_phys >> 32) as u32);
+        let tx_iova = ctrl.dma_iovas.tx_ring;
+        ctrl.wr32(TDBAL, tx_iova as u32);
+        ctrl.wr32(TDBAH, (tx_iova >> 32) as u32);
         ctrl.wr32(TDLEN, (N_TX * 16) as u32);
         ctrl.wr32(TDH, 0);
         ctrl.wr32(TDT, 0);
 
         // Fill RX descriptors.
         for i in 0..N_RX {
-            let phys = ctrl.rx_bufs[i].phys() as u64;
+            let iova = ctrl.dma_iovas.rx_buffers[i];
             // SAFETY: rx_ring covers N_RX×16 bytes; i < N_RX.
             unsafe {
                 let desc = (ctrl.rx_ring.virt() as *mut RxDesc).add(i);
-                core::ptr::write_volatile(&mut (*desc).buf_addr, phys);
+                core::ptr::write_volatile(&mut (*desc).buf_addr, iova);
                 core::ptr::write_volatile(&mut (*desc).status, 0);
             }
         }
-        let rx_phys = ctrl.rx_ring.phys() as u64;
-        ctrl.wr32(RDBAL, rx_phys as u32);
-        ctrl.wr32(RDBAH, (rx_phys >> 32) as u32);
+        let rx_iova = ctrl.dma_iovas.rx_ring;
+        ctrl.wr32(RDBAL, rx_iova as u32);
+        ctrl.wr32(RDBAH, (rx_iova >> 32) as u32);
         ctrl.wr32(RDLEN, (N_RX * 16) as u32);
         ctrl.wr32(RDH, 0);
         ctrl.wr32(RDT, (N_RX - 1) as u32);
@@ -257,12 +261,12 @@ impl E1000Controller {
         unsafe {
             core::ptr::copy_nonoverlapping(frame.as_ptr(), self.tx_bufs[slot].virt(), frame.len());
         }
-        let phys = self.tx_bufs[slot].phys() as u64;
+        let iova = self.dma_iovas.tx_buffers[slot];
 
         // SAFETY: tx_ring covers N_TX×TxDesc; slot < N_TX.
         unsafe {
             let desc = (self.tx_ring.virt() as *mut TxDesc).add(slot);
-            core::ptr::write_volatile(&mut (*desc).buf_addr, phys);
+            core::ptr::write_volatile(&mut (*desc).buf_addr, iova);
             core::ptr::write_volatile(&mut (*desc).length, frame.len() as u16);
             core::ptr::write_volatile(&mut (*desc).cso, 0);
             core::ptr::write_volatile(&mut (*desc).cmd, CMD_EOP | CMD_IFCS | CMD_RS);
@@ -324,8 +328,8 @@ impl E1000Controller {
         // SAFETY: rx_ring[head] and rx_bufs[head] are valid DMA memory.
         unsafe {
             let desc = (self.rx_ring.virt() as *mut RxDesc).add(head);
-            let phys = self.rx_bufs[head].phys() as u64;
-            core::ptr::write_volatile(&mut (*desc).buf_addr, phys);
+            let iova = self.dma_iovas.rx_buffers[head];
+            core::ptr::write_volatile(&mut (*desc).buf_addr, iova);
             core::ptr::write_volatile(&mut (*desc).status, 0);
         }
         self.rx_head = (head + 1) % N_RX;
