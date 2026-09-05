@@ -1,10 +1,9 @@
-//! smoltcp Device adapter backed by kernel VirtIO net IPC or e1000 Driver Cell.
+//! smoltcp Device adapter backed by a registered NIC Driver Cell.
 //!
-//! On first Tx/Rx operation the adapter probes the service registry for a
-//! registered e1000 NIC Driver Cell (`service::NIC_DRIVER`). When found, frames
-//! are exchanged via IPC (e1000 DrvRequest protocol). When absent the kernel
-//! VirtIO path (`sys_net_tx` / `sys_net_rx`) is used as the fallback — QEMU
-//! VirtIO builds are unaffected.
+//! Tx/Rx operations resolve the provider registered under
+//! `service::NIC_DRIVER`. A missed lookup remains retryable so a slow-starting
+//! driver can become available later; transport failures invalidate the cached
+//! TID so a restarted driver can be discovered.
 
 extern crate alloc;
 
@@ -24,10 +23,10 @@ use smoltcp::{
 /// parking net in Recv past its 5 s heartbeat (watchdog would kill net).
 const DRV_REPLY_TIMEOUT_TICKS: u64 = 20; // 200 ms
 
-/// Maximum Ethernet frame size (VirtIO net header is prepended by kernel).
+/// Maximum Ethernet frame size accepted by the Net Cell.
 const MAX_FRAME: usize = 1514;
 
-/// e1000 IPC op codes (matching cells/drivers/e1000/src/dispatch.rs).
+/// NIC Driver Cell IPC op codes shared by VirtIO and e1000 providers.
 const OP_TX: u8 = 0;
 const OP_RX: u8 = 1;
 // reason: only consumed by get_driver_mac(), which is not yet wired into net
@@ -36,34 +35,66 @@ const OP_RX: u8 = 1;
 #[allow(dead_code)]
 const OP_GETMAC: u8 = 2;
 
-/// Sentinel values for E1000_TID.
+/// Zero means no NIC Driver Cell has been discovered yet.
 const NOT_PROBED: usize = 0;
-const ABSENT: usize = usize::MAX;
 
-/// Cached e1000 Driver Cell TID. NOT_PROBED on startup.
-static E1000_TID: AtomicUsize = AtomicUsize::new(NOT_PROBED);
+/// Cached active NIC Driver Cell TID.
+static NIC_DRIVER_TID: AtomicUsize = AtomicUsize::new(NOT_PROBED);
 static FIRST_BRIDGE_TX: AtomicBool = AtomicBool::new(false);
 static FIRST_BRIDGE_RX: AtomicBool = AtomicBool::new(false);
 
-/// Returns the e1000 Driver Cell TID if one has registered, else `None`.
-pub fn e1000_tid() -> Option<usize> {
-    let cached = E1000_TID.load(Ordering::Relaxed);
-    if cached == ABSENT {
-        return None;
-    }
+fn resolve_cached_nic_driver(
+    cache: &AtomicUsize,
+    lookup: impl FnOnce() -> Option<usize>,
+) -> Option<usize> {
+    let cached = cache.load(Ordering::Relaxed);
     if cached != NOT_PROBED {
         return Some(cached);
     }
 
-    match sys_lookup_service(api::syscall::service::NIC_DRIVER) {
-        Some(tid) if tid != 0 => {
-            E1000_TID.store(tid, Ordering::Relaxed);
-            Some(tid)
-        }
-        _ => {
-            E1000_TID.store(ABSENT, Ordering::Relaxed);
-            None
-        }
+    let tid = lookup().filter(|tid| *tid != NOT_PROBED)?;
+    cache.store(tid, Ordering::Relaxed);
+    Some(tid)
+}
+
+fn invalidate_cached_nic_driver(cache: &AtomicUsize, tid: usize) {
+    let _ = cache.compare_exchange(tid, NOT_PROBED, Ordering::Relaxed, Ordering::Relaxed);
+}
+
+/// Returns the active NIC Driver Cell TID, re-probing after absence or failure.
+fn nic_driver_tid() -> Option<usize> {
+    resolve_cached_nic_driver(&NIC_DRIVER_TID, || {
+        sys_lookup_service(api::syscall::service::NIC_DRIVER)
+    })
+}
+
+fn invalidate_nic_driver(tid: usize) {
+    invalidate_cached_nic_driver(&NIC_DRIVER_TID, tid);
+}
+
+#[cfg(test)]
+mod nic_driver_cache_tests {
+    use super::*;
+
+    #[test]
+    fn retries_lookup_after_delayed_registration() {
+        let cache = AtomicUsize::new(NOT_PROBED);
+
+        assert_eq!(resolve_cached_nic_driver(&cache, || None), None);
+        assert_eq!(cache.load(Ordering::Relaxed), NOT_PROBED);
+        assert_eq!(resolve_cached_nic_driver(&cache, || Some(7)), Some(7));
+        assert_eq!(cache.load(Ordering::Relaxed), 7);
+    }
+
+    #[test]
+    fn invalidates_failed_driver_and_discovers_restart() {
+        let cache = AtomicUsize::new(7);
+
+        invalidate_cached_nic_driver(&cache, 7);
+        assert_eq!(resolve_cached_nic_driver(&cache, || Some(9)), Some(9));
+
+        invalidate_cached_nic_driver(&cache, 7);
+        assert_eq!(cache.load(Ordering::Relaxed), 9);
     }
 }
 
@@ -84,11 +115,10 @@ impl VirtioNetDevice {
         }
     }
 
-    /// Enqueue an inbound frame received from the kernel VirtIO net driver.
+    /// Enqueue an inbound frame received from a NIC provider.
     // reason: pump_rx()/pump_rx_split() currently pull frames themselves via
-    // sys_net_rx/nic_rx_from_cell; push_rx is the counterpart for a future
-    // push-notification delivery path (kernel/driver cell pushes frames instead
-    // of being polled).
+    // the Driver Cell or disabled legacy syscalls; push_rx is the counterpart
+    // for a future push-notification delivery path.
     #[allow(dead_code)]
     pub fn push_rx(&mut self, frame: Box<[u8]>) {
         self.rx_queue.push_back(frame);
@@ -110,14 +140,14 @@ impl VirtioNetDevice {
     }
     /// Drain pending RX frames from the active NIC into the local queue.
     ///
-    /// Routes to the e1000 Driver Cell when registered; falls back to the
-    /// kernel VirtIO `NetRx` syscall.
+    /// Routes through the registered NIC Driver Cell. The legacy kernel
+    /// `NetRx` syscall is a disabled fallback while no provider is registered.
     /// Returns the number of frames pulled.
     pub fn pump_rx(&mut self) -> usize {
         let mut pulled = 0;
         let mut scratch = [0u8; MAX_FRAME];
         for _ in 0..16 {
-            let n = if let Some(tid) = e1000_tid() {
+            let n = if let Some(tid) = nic_driver_tid() {
                 nic_rx_from_cell(tid, &mut scratch)
             } else {
                 ostd::syscall::sys_net_rx(&mut scratch)
@@ -138,7 +168,7 @@ impl VirtioNetDevice {
         let mut pulled = 0;
         let mut scratch = [0u8; MAX_FRAME];
         for _ in 0..16 {
-            let n = if let Some(tid) = e1000_tid() {
+            let n = if let Some(tid) = nic_driver_tid() {
                 nic_rx_from_cell(tid, &mut scratch)
             } else {
                 ostd::syscall::sys_net_rx(&mut scratch)
@@ -173,29 +203,38 @@ impl VirtioNetDevice {
         pulled
     }
 
-    /// Query the e1000 Driver Cell for the MAC address, if registered.
+    /// Query the NIC Driver Cell for the MAC address, if registered.
     // reason: not yet called from net cell init — see OP_GETMAC above.
     #[allow(dead_code)]
     pub fn get_driver_mac(&self) -> Option<[u8; 6]> {
-        let tid = e1000_tid()?;
+        let tid = nic_driver_tid()?;
         match sys_send(tid, &[OP_GETMAC]) {
-            SyscallResult::Err(_) => return None,
+            SyscallResult::Err(_) => {
+                invalidate_nic_driver(tid);
+                return None;
+            }
             SyscallResult::Ok(_) => {}
         }
         let mut mac = [0u8; 6];
         match sys_recv_timeout(tid, &mut mac, DRV_REPLY_TIMEOUT_TICKS) {
             SyscallResult::Ok(s) if s == tid => Some(mac),
-            _ => None, // timeout or misdelivery — treat as unavailable
+            _ => {
+                invalidate_nic_driver(tid);
+                None
+            }
         }
     }
 }
 
-/// Receive one Ethernet frame from the e1000 Driver Cell.
+/// Receive one Ethernet frame from the NIC Driver Cell.
 /// Returns the frame length (0 = nothing ready).
 fn nic_rx_from_cell(tid: usize, buf: &mut [u8]) -> usize {
     // Rx request: [0x01] — 1 byte.
     match sys_send(tid, &[OP_RX]) {
-        SyscallResult::Err(_) => return 0,
+        SyscallResult::Err(_) => {
+            invalidate_nic_driver(tid);
+            return 0;
+        }
         SyscallResult::Ok(_) => {}
     }
     // Reply: [len_lo, len_hi] ++ frame_bytes. Total ≤ 2 + MAX_FRAME.
@@ -208,7 +247,8 @@ fn nic_rx_from_cell(tid: usize, buf: &mut [u8]) -> usize {
         _ => 0,
     };
     if sender != tid {
-        // Timeout (sender==0) or G18 misdelivery — no frame this round.
+        // Timeout or misdelivery: re-resolve in case the provider restarted.
+        invalidate_nic_driver(tid);
         return 0;
     }
     let len = u16::from_le_bytes([reply[0], reply[1]]) as usize;
@@ -223,18 +263,22 @@ fn send_l2_frame(frame: &[u8]) -> bool {
     if frame.is_empty() || frame.len() > MAX_FRAME {
         return false;
     }
-    if let Some(tid) = e1000_tid() {
+    if let Some(tid) = nic_driver_tid() {
         let frame_len = frame.len() as u16;
         let mut request = alloc::vec![OP_TX, (frame_len & 0xFF) as u8, (frame_len >> 8) as u8,];
         request.extend_from_slice(frame);
         if !matches!(sys_send(tid, &request), SyscallResult::Ok(_)) {
+            invalidate_nic_driver(tid);
             return false;
         }
         let mut status = [1u8; 1];
-        let accepted = matches!(
-            sys_recv_timeout(tid, &mut status, DRV_REPLY_TIMEOUT_TICKS),
-            SyscallResult::Ok(sender) if sender == tid && status[0] == 0
-        );
+        let accepted = match sys_recv_timeout(tid, &mut status, DRV_REPLY_TIMEOUT_TICKS) {
+            SyscallResult::Ok(sender) if sender == tid => status[0] == 0,
+            _ => {
+                invalidate_nic_driver(tid);
+                false
+            }
+        };
         if !FIRST_BRIDGE_TX.swap(true, Ordering::Relaxed) {
             println(&alloc::format!(
                 "[net-bridge] first e1000 TX len={} accepted={accepted}",

@@ -95,7 +95,7 @@ fn consume_ipc_burst_grace(remaining: &mut u8) -> bool {
 
 #[cfg(target_os = "none")]
 pub(crate) fn run() {
-    println("[net] Network Service v0.1: smoltcp + VirtIO net + DHCP");
+    println("[net] Network Service v0.1: smoltcp + NIC Driver Cell + DHCP");
 
     let mut device = VirtioNetDevice::new();
     let config = Config::new(HardwareAddress::Ethernet(MAC));

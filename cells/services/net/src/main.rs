@@ -3,7 +3,7 @@
 
 //! Net Service Cell.
 //!
-//! Drives a smoltcp TCP/IPv4 stack backed by the kernel VirtIO net driver.
+//! Drives a smoltcp TCP/IPv4 stack backed by the registered NIC Driver Cell.
 //! Provides BSD-style socket IPC for consumer cells via typed postcard messages
 //! (`api::ipc::NetRequest`/`NetResponse`).  Legacy TLS raw opcodes (0x30–0x32)
 //! from `ostd::tls` are handled by the raw fallback in `handlers`.
