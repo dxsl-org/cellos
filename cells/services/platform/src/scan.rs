@@ -1,7 +1,7 @@
-//! ECAM bus-0 scanner for the Platform Cell.
+//! ECAM multi-bus scanner for the Platform Cell.
 //!
-//! Walks all 32 device slots on bus 0 and registers each discovered MMIO BAR
-//! with the kernel via `sys_register_pcie_bar`. This lets Driver Cells
+//! Walks every firmware-admitted bus and registers each discovered endpoint
+//! MMIO BAR with the kernel via `sys_register_pcie_bar`. This lets Driver Cells
 //! subsequently claim individual BARs through `sys_request_mmio`.
 //!
 //! BAR size probing follows PCI 3.0 §6.2.5.1: write 0xFFFFFFFF, read back,
@@ -58,6 +58,45 @@ impl ConfigSpace for MmioRegion {
     }
 }
 
+struct BusConfig<'a, R: ConfigSpace + ?Sized> {
+    inner: &'a R,
+    base_offset: usize,
+}
+
+impl<R: ConfigSpace + ?Sized> ConfigSpace for BusConfig<'_, R> {
+    fn read_u32(&self, offset: usize) -> Option<u32> {
+        self.inner.read_u32(self.base_offset.checked_add(offset)?)
+    }
+
+    fn read_u16(&self, offset: usize) -> Option<u16> {
+        self.inner.read_u16(self.base_offset.checked_add(offset)?)
+    }
+
+    fn read_u8(&self, offset: usize) -> Option<u8> {
+        self.inner.read_u8(self.base_offset.checked_add(offset)?)
+    }
+
+    fn write_u32(&self, offset: usize, value: u32) -> Option<()> {
+        self.inner
+            .write_u32(self.base_offset.checked_add(offset)?, value)
+    }
+
+    fn write_u16(&self, offset: usize, value: u16) -> Option<()> {
+        self.inner
+            .write_u16(self.base_offset.checked_add(offset)?, value)
+    }
+}
+
+fn bus_offset(bus_start: u8, bus: u8) -> Option<usize> {
+    (bus as usize)
+        .checked_sub(bus_start as usize)?
+        .checked_mul(super::ECAM_BYTES_PER_BUS)
+}
+
+fn encode_bdf(bus: u8, dev: u8, fun: u8) -> u32 {
+    ((bus as u32) << 8) | ((dev as u32) << 3) | (fun as u32)
+}
+
 fn r32<R: ConfigSpace + ?Sized>(r: &R, dev: u8, fun: u8, off: usize) -> u32 {
     r.read_u32(cfg_off(dev, fun, off)).unwrap_or(0xFFFF_FFFF)
 }
@@ -78,7 +117,7 @@ fn w16<R: ConfigSpace + ?Sized>(r: &R, dev: u8, fun: u8, off: usize, v: u16) {
     let _ = r.write_u16(cfg_off(dev, fun, off), v);
 }
 
-/// ECAM formula for bus 0: `(dev << 15) | (fun << 12) | off`
+/// Function-local offset within one bus-sized ECAM window.
 #[inline(always)]
 fn cfg_off(dev: u8, fun: u8, off: usize) -> usize {
     ((dev as usize) << 15) | ((fun as usize) << 12) | off
@@ -139,12 +178,25 @@ fn probe64<R: ConfigSpace + ?Sized>(r: &R, dev: u8, fun: u8, bar_idx: usize) -> 
 
 // ── Public scanner entry point ────────────────────────────────────────────────
 
-/// Walk bus 0, decode all type-0 MMIO BARs, and register each non-zero BAR
-/// with the kernel via `sys_register_pcie_bar`.
+/// Walk every admitted bus, decode endpoint MMIO BARs, and register each
+/// non-zero BAR with the kernel via `sys_register_pcie_bar`.
 ///
 /// After this call returns, Driver Cells can claim individual BARs through
 /// `sys_request_mmio` backed by `PcieDriverCap`.
-pub fn scan_and_register(region: &MmioRegion) {
+pub fn scan_and_register(region: &MmioRegion, bus_start: u8, bus_end: u8) {
+    for bus in bus_start..=bus_end {
+        let Some(base_offset) = bus_offset(bus_start, bus) else {
+            continue;
+        };
+        let bus_region = BusConfig {
+            inner: region,
+            base_offset,
+        };
+        scan_bus_and_register(&bus_region, bus);
+    }
+}
+
+fn scan_bus_and_register<R: ConfigSpace + ?Sized>(region: &R, bus: u8) {
     for dev in 0u8..32 {
         if r16(region, dev, 0, CFG_VENDOR_ID) == 0xFFFF {
             continue; // slot empty
@@ -162,7 +214,7 @@ pub fn scan_and_register(region: &MmioRegion) {
                 continue;
             }
 
-            let bdf: u32 = ((dev as u32) << 3) | (fun as u32);
+            let bdf = encode_bdf(bus, dev, fun);
             let class = r8(region, dev, fun, CFG_CLASS_CODE);
             let subclass = r8(region, dev, fun, CFG_SUBCLASS);
             let prog_if = r8(region, dev, fun, CFG_CLASS_PROG);
@@ -219,7 +271,12 @@ pub fn scan_and_register(region: &MmioRegion) {
 
             // Register class/BAR0 info so the kernel PCI_DEVICES list is populated
             // and sys_find_pcie_device queries work without a kernel ECAM scan.
-            let _ = sys_register_pci_device(bdf, cls, bar0_base, bar0_size);
+            if sys_register_pci_device(bdf, cls, bar0_base, bar0_size).is_ok() {
+                let _ = ostd::io::print_fmt(format_args!(
+                    "[platform] registered bus {} device {} function {} class {}:{}:{}\n",
+                    bus, dev, fun, class, subclass, prog_if
+                ));
+            }
         }
     }
 }
@@ -312,6 +369,18 @@ mod tests {
 
         assert_eq!(bar_size64(0, 0), 0);
         assert_eq!(bar_size64(0xFFE0_000C, 0xFFFF_FFFF), 0x20_0000);
+    }
+
+    #[test]
+    fn bus_offsets_are_relative_and_bdfs_preserve_the_bus() {
+        assert_eq!(bus_offset(0, 0), Some(0));
+        assert_eq!(bus_offset(0, 1), Some(crate::ECAM_BYTES_PER_BUS));
+        assert_eq!(bus_offset(64, 64), Some(0));
+        assert_eq!(bus_offset(64, 65), Some(crate::ECAM_BYTES_PER_BUS));
+        assert_eq!(bus_offset(65, 64), None);
+        assert_eq!(encode_bdf(0, 31, 7), 0x00FF);
+        assert_eq!(encode_bdf(1, 0, 0), 0x0100);
+        assert_eq!(encode_bdf(65, 31, 7), 0x41FF);
     }
 
     #[test]

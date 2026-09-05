@@ -3,8 +3,9 @@
 //! This cell holds the singleton `PlatformCap` (path-granted by the kernel
 //! loader for `/bin/platform`). It:
 //!
-//!   1. Claims the per-arch ECAM bus-0 MMIO window via `sys_request_mmio`.
-//!   2. Walks all 32 device slots, decodes MMIO BARs, and registers each via
+//!   1. Claims the complete firmware-admitted ECAM MMIO window through
+//!      `sys_request_mmio`.
+//!   2. Walks every admitted bus, decodes MMIO BARs, and registers each via
 //!      `sys_register_pcie_bar` (which populates `resource_registry::PCIE_BARS`).
 //!   3. Releases the ECAM MMIO claim by dropping the `MmioRegion` (H3 one-shot
 //!      semantics — no cell can re-claim ECAM after this).
@@ -34,8 +35,8 @@ use ostd::io::{print, println};
 use ostd::mmio::request_region;
 use ostd::syscall::sys_exit;
 
-/// ECAM bus-0 window size: 1 MiB (32 devices × 8 functions × 4 KiB).
-const ECAM_BUS0_SIZE: usize = 0x10_0000;
+/// ECAM bytes per PCI bus (32 devices × 8 functions × 4 KiB).
+const ECAM_BYTES_PER_BUS: usize = 0x10_0000;
 
 // Syscall allowlist stays explicit: app_entry!'s generated set (app_syscall_set)
 // lacks RequestMmio/RegisterPcieBar/RegisterPciDevice, which this cell needs.
@@ -73,9 +74,18 @@ fn scan_ecam() {
         return;
     }
 
-    // Claim the ECAM bus-0 window. This call goes through the PlatformCap bypass
-    // in the kernel RequestMmio handler (no allowlist check, overlap check only).
-    let region = match request_region(ecam_base, ECAM_BUS0_SIZE) {
+    let Some(ecam_len) = ecam_window_size(bus_start, bus_end) else {
+        println("[platform] invalid ECAM bus range — scan refused");
+        return;
+    };
+    if ecam_base.checked_add(ecam_len).is_none() {
+        println("[platform] ECAM window overflows address space — scan refused");
+        return;
+    }
+
+    // Claim exactly the firmware-admitted ECAM allocation. This call goes
+    // through the PlatformCap bypass in RequestMmio; overlap checks still apply.
+    let region = match request_region(ecam_base, ecam_len) {
         Ok(r) => r,
         Err(_) => {
             println("[platform] ECAM MMIO claim failed — kernel fallback active");
@@ -83,16 +93,12 @@ fn scan_ecam() {
         }
     };
 
-    if bus_end > bus_start {
-        print("[platform] ECAM scan buses ");
-        print_u8(bus_start);
-        print("-");
-        print_u8(bus_end);
-        println(" starting (bus 0 active)");
-    } else {
-        println("[platform] ECAM scan bus 0 starting");
-    }
-    scan::scan_and_register(&region);
+    print("[platform] ECAM scan buses ");
+    print_u8(bus_start);
+    print("-");
+    print_u8(bus_end);
+    println(" starting");
+    scan::scan_and_register(&region, bus_start, bus_end);
     println("[platform] ECAM scan complete");
 
     // `region` drops here — releases the ECAM MMIO claim (H3 one-shot semantics).
@@ -149,6 +155,13 @@ fn parse_ecam_args(args: &[String]) -> (usize, u8, u8) {
     }
 
     (base, bus_start, bus_end)
+}
+
+fn ecam_window_size(bus_start: u8, bus_end: u8) -> Option<usize> {
+    let buses = (bus_end as usize)
+        .checked_sub(bus_start as usize)?
+        .checked_add(1)?;
+    buses.checked_mul(ECAM_BYTES_PER_BUS)
 }
 
 fn parse_address(s: &str) -> Option<usize> {
@@ -235,5 +248,14 @@ mod tests {
         assert_eq!(base, 0);
         assert_eq!(bus_start, 0);
         assert_eq!(bus_end, 0);
+    }
+
+    #[test]
+    fn ecam_window_size_is_inclusive_and_bounded() {
+        assert_eq!(ecam_window_size(0, 0), Some(ECAM_BYTES_PER_BUS));
+        assert_eq!(ecam_window_size(0, 1), Some(2 * ECAM_BYTES_PER_BUS));
+        assert_eq!(ecam_window_size(64, 65), Some(2 * ECAM_BYTES_PER_BUS));
+        assert_eq!(ecam_window_size(2, 1), None);
+        assert_eq!(ecam_window_size(0, u8::MAX), Some(0x1000_0000));
     }
 }

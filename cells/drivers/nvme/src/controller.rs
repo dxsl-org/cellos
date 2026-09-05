@@ -136,7 +136,9 @@ impl NvmeController {
         // 7. Identify Controller → VWC flag.
         {
             let id_buf = DmaBuf::alloc(1).ok_or(ViError::OutOfMemory)?;
-            let _ = id_buf.authorize(bdf);
+            id_buf
+                .authorize(bdf)
+                .map_err(|_| ViError::PermissionDenied)?;
             let id_phys = id_buf.phys() as u64;
             ctrl.admin_cmd(
                 ADMIN_OPC_IDENTIFY,
@@ -159,7 +161,9 @@ impl NvmeController {
         // 8. Identify Namespace 1 → LBA count + format.
         {
             let id_buf = DmaBuf::alloc(1).ok_or(ViError::OutOfMemory)?;
-            let _ = id_buf.authorize(bdf);
+            id_buf
+                .authorize(bdf)
+                .map_err(|_| ViError::PermissionDenied)?;
             let id_phys = id_buf.phys() as u64;
             ctrl.admin_cmd(
                 ADMIN_OPC_IDENTIFY,

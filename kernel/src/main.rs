@@ -399,6 +399,16 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         0
     };
     #[cfg(target_arch = "x86_64")]
+    let x86_ecam_len = if x86_ecam_base == 0 {
+        0
+    } else {
+        crate::task::drivers::pcie_ecam::ecam_window_size(
+            acpi_info.ecam_bus_start,
+            acpi_info.ecam_bus_end,
+        )
+        .expect("validated ACPI MCFG range has a bounded ECAM window")
+    };
+    #[cfg(target_arch = "x86_64")]
     let x86_timer_ready = x86_lapic_base != 0 && x86_ioapic_base != 0 && x86_hpet_base != 0;
 
     // 3. Paging (Virtual Memory) Setup
@@ -466,6 +476,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
                 x86_hpet_base,
                 x86_lapic_base,
                 x86_ecam_base,
+                x86_ecam_len,
             )
             .expect("Failed to initialize x86_64 kernel PML4")
         };
@@ -639,19 +650,17 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // PCIe ECAM scan + NVMe + e1000 + VirtIO PCI init.
     // ARM64 virt uses VirtIO MMIO (not PCIe); accessing 0x3F000000 on QEMU
     // virt 7+ triggers a Synchronous External Abort — skip on aarch64.
-    // x86_64: the validated ACPI MCFG bus-0 window is identity-mapped;
-    // virtio_pci::init() probes vendor 0x1AF4 PCIe devices for BLK/NET.
+    // x86_64: the complete validated ACPI MCFG window is identity-mapped;
+    // the early kernel fallback scans its first admitted bus before Platform.
     #[cfg(any(target_arch = "riscv64", target_arch = "x86_64"))]
     {
         #[cfg(target_arch = "x86_64")]
         if x86_ecam_base != 0 {
-            // Transitional no-ABI path: the Platform Cell cannot receive MCFG
-            // yet, so x86 enumeration stays kernel-side and uses the validated
-            // runtime base. Driver ownership remains in user-space cells.
+            // Early first-admitted-bus fallback: seed kernel PCI identity and
+            // activate VT-d before any DMA-capable Driver Cell can run. The
+            // Platform Cell receives the full validated MCFG range via argv
+            // later and performs authoritative multi-bus enumeration.
             task::drivers::pcie_ecam::init();
-            // The x86 Platform Cell is not spawned on this transitional path,
-            // so no RegisterPciDevice syscall can trigger deferred IOMMU init.
-            // Activate VT-d here, before init can spawn any DMA-capable Driver Cell.
             task::drivers::iommu::init();
             task::drivers::iommu::activate_isolation();
         } else {

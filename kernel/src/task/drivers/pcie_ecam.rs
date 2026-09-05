@@ -1,15 +1,15 @@
 //! PCIe ECAM (Enhanced Configuration Access Mechanism) walker.
 //!
-//! Scans bus 0, devices 0-31, probing functions per the header-type multi-function
-//! bit. Exposes a kernel-internal snapshot of discovered PCI devices.
+//! The kernel fallback scans one admitted bus, probing functions per the
+//! header-type multi-function bit. Exposes a kernel-internal device snapshot.
 //!
 //! ECAM bases per machine:
 //!   x86_64      : runtime ACPI MCFG (no q35 fallback)
 //!   RISC-V virt : 0x3000_0000
 //!   ARM64 virt  : 0x3F00_0000
 //!
-//! Only bus 0 is mapped (1 MiB). Devices on buses > 0 require extending the
-//! MMIO window — documented follow-up (no QEMU NVMe lands on bus > 0).
+//! The Platform Cell may map and enumerate the complete firmware-admitted bus
+//! range. Kernel fallback enumeration remains bus-0-only on non-x86 targets.
 //!
 //! Call ordering: `platform::init()` → `init_kernel_paging*()` → `pcie_ecam::init()`.
 
@@ -73,8 +73,19 @@ pub const ECAM_BASE_RISCV: usize = 0x3000_0000;
 ))]
 pub const ECAM_BASE_AARCH64: usize = hal_soc_arm_virt::QEMU_ARM_VIRT.pcie_ecam_bus0.base;
 
-/// Bus 0 ECAM window size (1 MiB = 32 devices × 8 functions × 4 KiB).
-pub const ECAM_BUS0_SIZE: usize = 0x10_0000; // 1 MiB
+/// ECAM bytes per PCI bus (32 devices × 8 functions × 4 KiB).
+pub const ECAM_BYTES_PER_BUS: usize = 0x10_0000;
+
+/// Checked byte length for an inclusive MCFG bus range.
+pub fn ecam_window_size(bus_start: u8, bus_end: u8) -> Option<usize> {
+    let buses = (bus_end as usize)
+        .checked_sub(bus_start as usize)?
+        .checked_add(1)?;
+    buses.checked_mul(ECAM_BYTES_PER_BUS)
+}
+
+/// Bus 0 ECAM window size retained for fixed-base non-x86 machines.
+pub const ECAM_BUS0_SIZE: usize = ECAM_BYTES_PER_BUS;
 
 // ── Config space offsets (PCI 3.0 type-0 header) ─────────────────────────────
 
@@ -186,14 +197,55 @@ pub fn is_platform_registered() -> bool {
 
 // ── ECAM MMIO accessors ───────────────────────────────────────────────────────
 
-/// Compute MMIO address for a BDF + register offset.
+/// Compute an MMIO address relative to an admitted inclusive bus range.
+#[inline(always)]
+fn config_addr_in_range(
+    ecam_base: usize,
+    bus_start: u8,
+    bus_end: u8,
+    bus: u8,
+    dev: u8,
+    fun: u8,
+    off: usize,
+) -> Option<*mut u8> {
+    if bus < bus_start || bus > bus_end || dev >= 32 || fun >= 8 || off >= 0x1000 {
+        return None;
+    }
+    let bus_offset = (bus as usize)
+        .checked_sub(bus_start as usize)?
+        .checked_mul(ECAM_BYTES_PER_BUS)?;
+    let offset = bus_offset
+        .checked_add((dev as usize) << 15)?
+        .checked_add((fun as usize) << 12)?
+        .checked_add(off)?;
+    Some(ecam_base.checked_add(offset)? as *mut u8)
+}
+
+/// Read vendor/device identity from one checked ECAM function.
 ///
-/// ECAM formula: base + (bus << 20) + (device << 15) + (function << 12) + offset.
+/// # Safety
+/// The admitted ECAM window must be identity-mapped and remain live.
+unsafe fn read_identity_in_range(
+    ecam_base: usize,
+    bus_start: u8,
+    bus_end: u8,
+    bus: u8,
+    dev: u8,
+    fun: u8,
+) -> Option<(u16, u16)> {
+    let ptr = config_addr_in_range(ecam_base, bus_start, bus_end, bus, dev, fun, CFG_VENDOR_ID)?;
+    // SAFETY: the checked function header lies in the caller-provided live ECAM window.
+    let vendor = unsafe { core::ptr::read_volatile(ptr.cast::<u16>()) };
+    // SAFETY: device ID immediately follows vendor ID in the same function header.
+    let device = unsafe { core::ptr::read_volatile(ptr.add(CFG_DEVICE_ID).cast::<u16>()) };
+    Some((vendor, device))
+}
+
+/// Compute MMIO address for the fixed bus-0 kernel fallback scanners.
 #[inline(always)]
 fn config_addr(ecam_base: usize, bus: u8, dev: u8, fun: u8, off: usize) -> *mut u8 {
-    let addr =
-        ecam_base + ((bus as usize) << 20) + ((dev as usize) << 15) + ((fun as usize) << 12) + off;
-    addr as *mut u8
+    config_addr_in_range(ecam_base, 0, u8::MAX, bus, dev, fun, off)
+        .expect("PCI ECAM address is bounded")
 }
 
 /// Read a u32 from PCI config space via ECAM MMIO.
@@ -487,58 +539,57 @@ unsafe fn walk_caps(
 
 // ── Scanner ───────────────────────────────────────────────────────────────────
 
-/// Scan bus 0 of the ECAM window and populate the global `PCI_DEVICES` list.
+/// Scan one bus of the ECAM window and populate the global device list.
 ///
 /// # Safety
-/// `ecam_base` must point to an identity-mapped 1 MiB ECAM bus-0 window.
-unsafe fn scan(ecam_base: usize) {
+/// `ecam_base + (config_bus << 20)` must point to the identity-mapped ECAM
+/// window for `reported_bus`. Nonzero-start allocations use `config_bus = 0`
+/// because their allocation base already denotes the first admitted bus.
+unsafe fn scan(ecam_base: usize, config_bus: u8, reported_bus: u8) {
     let mut devices = PCI_DEVICES.lock();
 
     for dev in 0u8..32 {
-        // Check function 0 first. If vendor == 0xFFFF, no device is present.
-        // SAFETY: ECAM window is identity-mapped.
-        let vendor = unsafe { read16(ecam_base, 0, dev, 0, CFG_VENDOR_ID) };
+        // SAFETY: the selected ECAM bus window is identity-mapped.
+        let vendor = unsafe { read16(ecam_base, config_bus, dev, 0, CFG_VENDOR_ID) };
         if vendor == 0xFFFF {
             continue;
         }
 
-        // SAFETY: ECAM window is identity-mapped.
-        let hdr_type = unsafe { read8(ecam_base, 0, dev, 0, CFG_HEADER_TYPE) };
-        // Bit 7 of header_type indicates a multi-function device.
-        let is_multi = hdr_type & 0x80 != 0;
-        let max_fun: u8 = if is_multi { 8 } else { 1 };
+        // SAFETY: the selected ECAM bus window is identity-mapped.
+        let hdr_type = unsafe { read8(ecam_base, config_bus, dev, 0, CFG_HEADER_TYPE) };
+        let max_fun: u8 = if hdr_type & 0x80 != 0 { 8 } else { 1 };
 
         for fun in 0u8..max_fun {
-            // SAFETY: ECAM window is identity-mapped.
-            let vid = unsafe { read16(ecam_base, 0, dev, fun, CFG_VENDOR_ID) };
+            // SAFETY: the selected ECAM bus window is identity-mapped.
+            let vid = unsafe { read16(ecam_base, config_bus, dev, fun, CFG_VENDOR_ID) };
             if vid == 0xFFFF {
                 continue;
             }
 
-            // SAFETY: ECAM window is identity-mapped.
-            let did = unsafe { read16(ecam_base, 0, dev, fun, CFG_DEVICE_ID) };
-            let prog_if = unsafe { read8(ecam_base, 0, dev, fun, CFG_CLASS_PROG) };
-            let subclass = unsafe { read8(ecam_base, 0, dev, fun, CFG_SUBCLASS) };
-            let class = unsafe { read8(ecam_base, 0, dev, fun, CFG_CLASS_CODE) };
+            // SAFETY: the selected ECAM bus window is identity-mapped.
+            let did = unsafe { read16(ecam_base, config_bus, dev, fun, CFG_DEVICE_ID) };
+            let prog_if = unsafe { read8(ecam_base, config_bus, dev, fun, CFG_CLASS_PROG) };
+            let subclass = unsafe { read8(ecam_base, config_bus, dev, fun, CFG_SUBCLASS) };
+            let class = unsafe { read8(ecam_base, config_bus, dev, fun, CFG_CLASS_CODE) };
 
             // Decode BARs for type-0 headers (endpoints). Skip bridges (type-1).
-            let hdr = unsafe { read8(ecam_base, 0, dev, fun, CFG_HEADER_TYPE) } & 0x7F;
+            let hdr =
+                unsafe { read8(ecam_base, config_bus, dev, fun, CFG_HEADER_TYPE) } & 0x7F;
             let bars = if hdr == 0 {
-                // SAFETY: ECAM window is identity-mapped.
-                unsafe { decode_bars(ecam_base, 0, dev, fun) }
+                // SAFETY: the selected ECAM bus window is identity-mapped.
+                unsafe { decode_bars(ecam_base, config_bus, dev, fun) }
             } else {
                 [Bar::None; 6]
             };
 
-            // Walk capabilities.
-            // SAFETY: ECAM window is identity-mapped.
-            let (msix, pm) = unsafe { walk_caps(ecam_base, 0, dev, fun) };
+            // SAFETY: the selected ECAM bus window is identity-mapped.
+            let (msix, pm) = unsafe { walk_caps(ecam_base, config_bus, dev, fun) };
 
             let bar0_addr = bars[0].base_addr();
             log::info!(
                 "[pcie] {:02x}:{:02x}.{} vendor={:04x} device={:04x} \
                  class={:02x}:{:02x}:{:02x} bar0={:#x}",
-                0u8,
+                reported_bus,
                 dev,
                 fun,
                 vid,
@@ -561,7 +612,7 @@ unsafe fn scan(ecam_base: usize) {
             }
 
             devices.push(PciDevice {
-                bdf: (0, dev, fun),
+                bdf: (reported_bus, dev, fun),
                 vendor_id: vid,
                 device_id: did,
                 class,
@@ -581,20 +632,20 @@ pub fn enable_bus_master(bdf: u32) {
     let bus = ((bdf >> 8) & 0xFF) as u8;
     let dev = ((bdf >> 3) & 0x1F) as u8;
     let fun = (bdf & 0x07) as u8;
-    if bus != 0 {
-        return;
-    }
 
     #[cfg(target_arch = "x86_64")]
-    let ecam_base = ecam_base_x86();
+    let (ecam_base, bus_start, bus_end) = {
+        let (start, end) = ecam_bus_range_x86();
+        (ecam_base_x86(), start, end)
+    };
     #[cfg(target_arch = "riscv64")]
-    let ecam_base = ECAM_BASE_RISCV;
+    let (ecam_base, bus_start, bus_end) = (ECAM_BASE_RISCV, 0u8, 0u8);
     #[cfg(all(
         target_arch = "aarch64",
         not(feature = "board-rpi3"),
         not(feature = "board-rpi4")
     ))]
-    let ecam_base = ECAM_BASE_AARCH64;
+    let (ecam_base, bus_start, bus_end) = (ECAM_BASE_AARCH64, 0u8, 0u8);
     #[cfg(any(
         all(
             target_arch = "aarch64",
@@ -606,22 +657,28 @@ pub fn enable_bus_master(bdf: u32) {
             target_arch = "aarch64"
         ))
     ))]
-    let ecam_base = 0usize;
+    let (ecam_base, bus_start, bus_end) = (0usize, 0u8, 0u8);
     if ecam_base == 0 {
         return;
     }
-
-    // SAFETY: the bus-0 ECAM window is identity-mapped before Driver Cells run,
-    // and the decoded BDF is bounded to that window. PCI devices are static for
-    // the boot, so a registered owner cannot disappear between grant and write.
-    unsafe {
-        let command = read16(ecam_base, bus, dev, fun, CFG_COMMAND);
-        write16(
-            ecam_base,
+    let Some(command_ptr) =
+        config_addr_in_range(ecam_base, bus_start, bus_end, bus, dev, fun, CFG_COMMAND)
+    else {
+        log::warn!(
+            "[pcie] refusing bus-master enable outside ECAM range: {:02x}:{:02x}.{}",
             bus,
             dev,
-            fun,
-            CFG_COMMAND,
+            fun
+        );
+        return;
+    };
+
+    // SAFETY: the complete admitted ECAM window is identity-mapped before
+    // Driver Cells run, and command_ptr was checked against that exact range.
+    unsafe {
+        let command = core::ptr::read_volatile(command_ptr as *const u16);
+        core::ptr::write_volatile(
+            command_ptr as *mut u16,
             command | CMD_MEM_SPACE | CMD_BUS_MASTER,
         );
     }
@@ -659,6 +716,11 @@ pub fn init() {
     )))]
     let ecam_base = 0usize; // bare-physical arches: no PCIe
 
+    #[cfg(target_arch = "x86_64")]
+    let scan_bus = ecam_bus_range_x86().0;
+    #[cfg(not(target_arch = "x86_64"))]
+    let scan_bus = 0u8;
+
     if ecam_base == 0 {
         log::info!("[pcie] ECAM: no PCIe on this architecture");
         return;
@@ -669,20 +731,25 @@ pub fn init() {
         log::info!("[pcie] ECAM: already scanned, skipping");
         return;
     }
+    log::info!(
+        "[pcie] ECAM fallback scan bus {} @ {:#x} (1 MiB window)",
+        scan_bus,
+        ecam_base
+    );
 
-    log::info!("[pcie] ECAM scan bus 0 @ {:#x} (1 MiB window)", ecam_base);
-
-    // SAFETY: The ECAM bus-0 window (1 MiB at ecam_base) is identity-mapped in
-    // `init_kernel_paging` (riscv/arm) or `init_kernel_paging_x86` (x86_64)
-    // before this function is called. Volatile config-space reads/writes are
-    // bounded to that window.
+    // SAFETY: the first admitted ECAM bus window is identity-mapped before this
+    // function is called. The MCFG allocation base denotes `scan_bus`, so
+    // config-space access is relative to local bus offset zero.
     unsafe {
-        scan(ecam_base);
+        scan(ecam_base, 0, scan_bus);
     }
 
     let count = PCI_DEVICES.lock().len();
     if count == 0 {
-        log::warn!("[pcie] ECAM scan found no devices on bus 0 — check ECAM base and MMIO mapping");
+        log::warn!(
+            "[pcie] ECAM scan found no devices on bus {} — check base and MMIO mapping",
+            scan_bus
+        );
     } else {
         log::info!("[pcie] ECAM scan complete: {} device(s) found", count);
     }
@@ -736,6 +803,23 @@ pub fn register_device(bdf: u32, cls: u32, bar0_base: usize, bar0_size: usize) {
     let class = ((cls >> 16) & 0xFF) as u8;
     let subclass = ((cls >> 8) & 0xFF) as u8;
     let prog_if = (cls & 0xFF) as u8;
+    #[cfg(target_arch = "x86_64")]
+    let (vendor_id, device_id) = {
+        let ecam_base = ecam_base_x86();
+        let (bus_start, bus_end) = ecam_bus_range_x86();
+        if ecam_base == 0 {
+            (0, 0)
+        } else {
+            // SAFETY: x86 paging maps the validated MCFG allocation before the
+            // Platform Cell can issue registration syscalls.
+            unsafe {
+                read_identity_in_range(ecam_base, bus_start, bus_end, bus, dev, fun)
+                    .unwrap_or((0, 0))
+            }
+        }
+    };
+    #[cfg(not(target_arch = "x86_64"))]
+    let (vendor_id, device_id) = (0, 0);
 
     {
         let devices = PCI_DEVICES.lock();
@@ -776,8 +860,8 @@ pub fn register_device(bdf: u32, cls: u32, bar0_base: usize, bar0_size: usize) {
 
     PCI_DEVICES.lock().push(PciDevice {
         bdf: (bus, dev, fun),
-        vendor_id: 0, // not probed by Platform Cell (BAR/class is sufficient for find_class)
-        device_id: 0,
+        vendor_id,
+        device_id,
         class,
         subclass,
         prog_if,
@@ -817,4 +901,52 @@ pub fn find_class(class: u8, subclass: u8, prog_if: u8) -> Option<PciDevice> {
             true
         })
         .cloned()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ecam_window_size_is_inclusive_and_rejects_reversed_ranges() {
+        assert_eq!(ecam_window_size(0, 0), Some(ECAM_BYTES_PER_BUS));
+        assert_eq!(ecam_window_size(0, 1), Some(2 * ECAM_BYTES_PER_BUS));
+        assert_eq!(ecam_window_size(64, 65), Some(2 * ECAM_BYTES_PER_BUS));
+        assert_eq!(ecam_window_size(2, 1), None);
+        assert_eq!(ecam_window_size(0, u8::MAX), Some(0x1000_0000));
+    }
+
+    #[test]
+    fn ecam_addressing_is_relative_to_bus_start_and_bounded() {
+        let base = 0xB000_0000usize;
+        assert_eq!(
+            config_addr_in_range(base, 64, 65, 64, 0, 0, 0).map(|p| p as usize),
+            Some(base)
+        );
+        assert_eq!(
+            config_addr_in_range(base, 64, 65, 65, 31, 7, 0xFFC).map(|p| p as usize),
+            Some(base + 2 * ECAM_BYTES_PER_BUS - 4)
+        );
+        assert!(config_addr_in_range(base, 64, 65, 63, 0, 0, 0).is_none());
+        assert!(config_addr_in_range(base, 64, 65, 66, 0, 0, 0).is_none());
+        assert!(config_addr_in_range(base, 64, 65, 64, 32, 0, 0).is_none());
+        assert!(config_addr_in_range(base, 64, 65, 64, 0, 8, 0).is_none());
+        assert!(config_addr_in_range(base, 64, 65, 64, 0, 0, 0x1000).is_none());
+        assert!(config_addr_in_range(usize::MAX, 0, 0, 0, 0, 0, 1).is_none());
+    }
+
+    #[test]
+    fn identity_read_uses_relative_bus_window() {
+        let mut ecam = alloc::vec![0u8; 2 * ECAM_BYTES_PER_BUS];
+        let function_offset = ECAM_BYTES_PER_BUS + (3usize << 15) + (2usize << 12);
+        ecam[function_offset..function_offset + 2].copy_from_slice(&0x8086u16.to_ne_bytes());
+        ecam[function_offset + 2..function_offset + 4]
+            .copy_from_slice(&0x100Eu16.to_ne_bytes());
+
+        // SAFETY: the test owns a correctly sized, live in-memory ECAM stand-in.
+        let identity = unsafe {
+            read_identity_in_range(ecam.as_ptr() as usize, 64, 65, 65, 3, 2)
+        };
+        assert_eq!(identity, Some((0x8086, 0x100E)));
+    }
 }

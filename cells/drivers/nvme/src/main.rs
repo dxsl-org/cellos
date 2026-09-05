@@ -24,6 +24,7 @@ mod queue;
 use controller::NvmeController;
 use ostd::app::{AppContext, AppEvent};
 use ostd::dma::DmaBuf;
+use ostd::io::print_fmt;
 use ostd::mmio;
 use ostd::sync::Mutex;
 use ostd::syscall::{sys_find_pcie_device, sys_register_block_driver, sys_send, PcieDeviceInfo};
@@ -86,7 +87,15 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
                 Some(b) => b,
                 None => ostd::syscall::sys_exit(1),
             };
-            let _ = io_buf.authorize(bdf);
+            if io_buf.authorize(bdf).is_err() {
+                ostd::syscall::sys_exit(1);
+            }
+            let _ = print_fmt(format_args!(
+                "[nvme] DMA authorized for bus {} device {} function {}\n",
+                (bdf >> 8) & 0xFF,
+                (bdf >> 3) & 0x1F,
+                bdf & 0x07
+            ));
 
             // 4. Register as the active block driver.
             let _ = sys_register_block_driver();

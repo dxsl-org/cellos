@@ -1829,7 +1829,7 @@ pub fn sys_register_pcie_bar(bdf: u32, base: usize, len: usize) -> Result<(), Sy
 /// without a kernel-side ECAM scan. Call once per discovered device after `scan_and_register`.
 /// Requires singleton PlatformCap (allowlist bit 53).
 ///
-/// * `bdf`       — `(bus << 16) | (dev << 8) | fun`
+/// * `bdf`       — `(bus << 8) | (dev << 3) | function`
 /// * `cls`       — `(class << 16) | (subclass << 8) | prog_if`
 /// * `bar0_base` — physical base of BAR0, or 0 if absent
 /// * `bar0_size` — probed BAR0 size in bytes, or 0

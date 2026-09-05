@@ -102,7 +102,7 @@ pub enum ViSyscall {
     ///
     /// Called by the Platform Cell after ECAM scan; populates kernel `PCI_DEVICES` so
     /// `sys_find_pcie_device` queries work without a kernel-side ECAM scan.
-    /// `bdf`       = (bus<<16)|(dev<<8)|fun
+    /// `bdf`       = `(bus<<8)|(dev<<3)|function`
     /// `cls`       = (class<<16)|(subclass<<8)|prog_if
     /// `bar0_base` = physical base of BAR0 (or 0 if absent)
     /// `bar0_size` = probed BAR0 size in bytes (or 0)

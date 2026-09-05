@@ -1337,9 +1337,11 @@ pub fn yield_cpu() {
 fn reap_retired_task_resources(tid: usize) {
     crate::resource_registry::release_bdfs_for(tid);
     // IOFENCE/IOTLB completion is the acknowledgement required before pinned
-    // frames may leave quarantine.
-    crate::task::drivers::iommu::cleanup_cell(tid as u64);
-    crate::task::syscall::release_acked_frames(tid);
+    // frames may leave quarantine. On timeout, grant reaping below withholds
+    // the still-pinned pages instead of recycling DMA-reachable memory.
+    if crate::task::drivers::iommu::cleanup_cell(tid as u64) {
+        crate::task::syscall::release_acked_frames(tid);
+    }
     crate::task::syscall::reap_grants_for_task(tid);
     crate::hypervisor::registry::reap_vms_for_task(tid);
 }

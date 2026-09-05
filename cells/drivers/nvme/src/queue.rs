@@ -80,10 +80,10 @@ impl Queue {
         let sq_buf = DmaBuf::alloc(sq_pages)?;
         let cq_buf = DmaBuf::alloc(cq_pages)?;
 
-        // Authorize IOMMU for this PCIe device to DMA into these pages.
-        // SAFETY: DmaBuf was just allocated; bdf is the NVMe controller's BDF.
-        let _ = sq_buf.authorize(bdf);
-        let _ = cq_buf.authorize(bdf);
+        // Authorize IOMMU for this PCIe device before any queue address is
+        // programmed. A rejected or unconfirmed publication must fail closed.
+        sq_buf.authorize(bdf).ok()?;
+        cq_buf.authorize(bdf).ok()?;
 
         // Zero queues (DmaBuf is not guaranteed zeroed).
         unsafe {

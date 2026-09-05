@@ -36,6 +36,51 @@ impl embedded_io::Error for OstdError {
     }
 }
 
+struct FixedLogLine {
+    bytes: [u8; 192],
+    len: usize,
+}
+
+impl FixedLogLine {
+    const fn new() -> Self {
+        Self {
+            bytes: [0; 192],
+            len: 0,
+        }
+    }
+
+    fn as_str(&self) -> &str {
+        // Every appended fragment originated as valid UTF-8 and is copied whole.
+        core::str::from_utf8(&self.bytes[..self.len]).expect("fixed log line is UTF-8")
+    }
+}
+
+impl core::fmt::Write for FixedLogLine {
+    fn write_str(&mut self, value: &str) -> core::fmt::Result {
+        let end = self.len.checked_add(value.len()).ok_or(core::fmt::Error)?;
+        if end > self.bytes.len() {
+            return Err(core::fmt::Error);
+        }
+        self.bytes[self.len..end].copy_from_slice(value.as_bytes());
+        self.len = end;
+        Ok(())
+    }
+}
+
+/// Format into a bounded stack buffer and publish it through one log syscall.
+///
+/// Returns `false` without publishing if the formatted record exceeds 192 bytes.
+pub fn print_fmt(args: core::fmt::Arguments<'_>) -> bool {
+    use core::fmt::Write;
+
+    let mut line = FixedLogLine::new();
+    if line.write_fmt(args).is_err() {
+        return false;
+    }
+    print(line.as_str());
+    true
+}
+
 /// Print to console.
 pub fn print(s: &str) {
     let _ = syscall::sys_log(s);

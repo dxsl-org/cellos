@@ -458,8 +458,8 @@ fn parse_madt(virt: usize, length: usize, info: &mut AcpiInfo) {
 
 /// Parse MCFG (Memory Mapped Configuration Space) table.
 ///
-/// Selects the allocation entry that covers segment 0, bus 0. The current
-/// scanner is intentionally bus-0-only, so any other allocation remains closed.
+/// Selects the first valid allocation for segment 0. MCFG stores a segment's
+/// bus-0-relative ECAM base; the admitted window starts at `base + bus_start×1 MiB`.
 /// MCFG body layout (after 36-byte SDT header):
 ///   - 8 bytes reserved
 ///   - then N × 16-byte allocation entries:
@@ -482,25 +482,31 @@ fn parse_mcfg(virt: usize, length: usize, info: &mut AcpiInfo) {
         let segment = unsafe { core::ptr::read_unaligned((entry + 8) as *const u16) };
         let bus_start = unsafe { core::ptr::read_volatile((entry + 10) as *const u8) };
         let bus_end = unsafe { core::ptr::read_volatile((entry + 11) as *const u8) };
+        let window_len =
+            crate::task::drivers::pcie_ecam::ecam_window_size(bus_start, bus_end);
+        let window_base = base_addr.checked_add((bus_start as u64) << 20);
         if segment == 0
-            && bus_start == 0
-            && bus_end >= bus_start
             && base_addr != 0
             && base_addr & 0xF_FFFF == 0
+            && window_base
+                .zip(window_len)
+                .and_then(|(base, len)| base.checked_add(len as u64))
+                .is_some()
         {
-            info.ecam_base = base_addr;
+            let window_base = window_base.expect("validated MCFG window base");
+            info.ecam_base = window_base;
             info.ecam_bus_start = bus_start;
             info.ecam_bus_end = bus_end;
             log::info!(
-                "[acpi] MCFG: segment 0 bus {}-{} ECAM base = {:#x}",
+                "[acpi] MCFG: segment 0 bus {}-{} ECAM window base = {:#x}",
                 bus_start,
                 bus_end,
-                base_addr
+                window_base
             );
             return;
         }
     }
-    log::warn!("[acpi] MCFG has no valid segment 0 bus 0 allocation — PCIe gate closed");
+    log::warn!("[acpi] MCFG has no valid segment 0 allocation — PCIe gate closed");
 }
 
 // ---------------------------------------------------------------------------
@@ -544,5 +550,47 @@ fn parse_hpet(virt: usize, length: usize, info: &mut AcpiInfo) {
         log::info!("[acpi] HPET: event timer block = {:#x}", hpet_addr);
     } else {
         log::warn!("[acpi] HPET: GAS address is 0 — timer gate closed");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use alloc::vec;
+    use alloc::vec::Vec;
+
+    fn mcfg_entry(base: u64, segment: u16, bus_start: u8, bus_end: u8) -> Vec<u8> {
+        let mut table = vec![0u8; 60];
+        table[44..52].copy_from_slice(&base.to_le_bytes());
+        table[52..54].copy_from_slice(&segment.to_le_bytes());
+        table[54] = bus_start;
+        table[55] = bus_end;
+        table
+    }
+
+    #[test]
+    fn mcfg_normalizes_nonzero_start_to_the_admitted_window() {
+        let table = mcfg_entry(0xB000_0000, 0, 64, 65);
+        let mut info = AcpiInfo::default();
+        parse_mcfg(table.as_ptr() as usize, table.len(), &mut info);
+        assert_eq!(info.ecam_base, 0xB400_0000);
+        assert_eq!(info.ecam_bus_start, 64);
+        assert_eq!(info.ecam_bus_end, 65);
+    }
+
+    #[test]
+    fn mcfg_rejects_reversed_or_overflowing_allocations() {
+        let reversed = mcfg_entry(0xB000_0000, 0, 65, 64);
+        let mut info = AcpiInfo::default();
+        parse_mcfg(reversed.as_ptr() as usize, reversed.len(), &mut info);
+        assert_eq!(info.ecam_base, 0);
+
+        let overflowing = mcfg_entry(u64::MAX & !0xF_FFFF, 0, 0, u8::MAX);
+        parse_mcfg(
+            overflowing.as_ptr() as usize,
+            overflowing.len(),
+            &mut info,
+        );
+        assert_eq!(info.ecam_base, 0);
     }
 }

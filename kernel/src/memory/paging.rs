@@ -502,9 +502,11 @@ pub fn unmap_page(vaddr: VAddr) -> PagingResult<()> {
 /// - `ioapic_base`: I/O APIC physical address from validated ACPI MADT
 /// - `hpet_base`:   HPET physical address from the validated ACPI HPET table
 /// - `lapic_base`:  Local APIC physical address from validated ACPI MADT
+/// - `ecam_base`:   ECAM allocation base from validated ACPI MCFG
+/// - `ecam_len`:    checked byte length of the inclusive MCFG bus range
 ///
-/// All three MMIO regions are identity-mapped (VA == PA) so `init_timers()` can
-/// access them directly after the CR3 switch.
+/// All admitted MMIO regions are identity-mapped (VA == PA) so early hardware
+/// initialization and the Platform Cell can access them after the CR3 switch.
 ///
 /// Preconditions:
 /// - The frame allocator is initialised.
@@ -519,6 +521,7 @@ pub fn init_kernel_paging_x86(
     hpet_base: u64,
     lapic_base: u64,
     ecam_base: u64,
+    ecam_len: usize,
 ) -> PagingResult<PhysAddr> {
     use crate::memory::frame::phys_to_virt;
     use hal::paging::{pte_flags_mmio, read_cr3, walk_create, walk_read, PTE_PRESENT};
@@ -567,13 +570,19 @@ pub fn init_kernel_paging_x86(
     let hpet_base_usize = hpet_base as usize;
     let lapic_base_usize = lapic_base as usize;
     let ecam_base_usize = ecam_base as usize;
-    // PCIe ECAM bus-0 window = 1 MiB (256 devices × 8 fns × 4 KiB config space).
-    const ECAM_BUS0_SIZE: usize = 0x10_0000;
+    let ecam_end = if ecam_base_usize == 0 {
+        0
+    } else {
+        ecam_base_usize
+            .checked_add(ecam_len)
+            .filter(|end| *end > ecam_base_usize)
+            .ok_or(PageTableError::InvalidAddress)?
+    };
     let mmio_regions: &[(usize, usize)] = &[
         (ioapic_base_usize, ioapic_base_usize + PAGE_SIZE), // IOAPIC (from ACPI)
         (hpet_base_usize, hpet_base_usize + PAGE_SIZE),     // HPET   (from ACPI)
         (lapic_base_usize, lapic_base_usize + PAGE_SIZE),   // LAPIC  (from ACPI)
-        (ecam_base_usize, ecam_base_usize + ECAM_BUS0_SIZE), // PCIe ECAM bus 0
+        (ecam_base_usize, ecam_end),                        // complete MCFG allocation
     ];
     for &(start, end) in mmio_regions {
         if start == 0 {

@@ -4569,15 +4569,36 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     return Err(SyscallError::Unknown);
                 }
             };
-            let Some(iova) =
-                super::drivers::iommu::map_dma_for_cell(caller_id as u64, bdf, phys, size)
-            else {
-                let rolled_back = crate::memory::pin::rollback_pin(phys_base, size, caller_id);
-                debug_assert!(rolled_back, "failed DMA map must release its exact pin");
-                drop(publication);
-                log::warn!("[iommu] Cell {caller_id} DMA grant denied: no active mapping backend");
-                return Err(SyscallError::Unknown);
-            };
+            let iova =
+                match super::drivers::iommu::map_dma_for_cell(
+                    caller_id as u64,
+                    bdf,
+                    phys,
+                    size,
+                ) {
+                    super::drivers::iommu::DmaMapResult::Mapped(iova) => iova,
+                    super::drivers::iommu::DmaMapResult::Rejected => {
+                        let rolled_back =
+                            crate::memory::pin::rollback_pin(phys_base, size, caller_id);
+                        debug_assert!(rolled_back, "rejected DMA map must release its exact pin");
+                        drop(publication);
+                        log::warn!(
+                            "[iommu] Cell {caller_id} DMA grant denied: no active mapping backend"
+                        );
+                        return Err(SyscallError::Unknown);
+                    }
+                    super::drivers::iommu::DmaMapResult::PublishedUnconfirmed => {
+                        // A context/SLPT entry is already hardware-visible. Keep
+                        // the pin and quota until task teardown clears and drains
+                        // that exact requester; do not enable bus mastering.
+                        publication.commit();
+                        log::warn!(
+                            "[iommu] Cell {caller_id} DMA mapping unconfirmed: \
+                             retaining pin for BDF {bdf:08x}"
+                        );
+                        return Err(SyscallError::Unknown);
+                    }
+                };
             super::drivers::pcie_ecam::enable_bus_master(bdf);
             publication.commit();
             log::info!(

@@ -9,6 +9,14 @@
 
 use core::sync::atomic::{AtomicBool, Ordering};
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DmaMapResult {
+    Mapped(u64),
+    Rejected,
+    /// Hardware may observe the published mapping; its pin must be retained.
+    PublishedUnconfirmed,
+}
+
 static IOMMU_ISOLATED: AtomicBool = AtomicBool::new(false);
 /// Set when `pcie_ecam::init()` is removed from the boot path.
 /// `try_deferred_init()` (called from `RegisterPciDevice` handler) checks this
@@ -26,32 +34,50 @@ pub fn init() {
     super::iommu_x86::init_hw();
 }
 
-/// Register a DMA physical range in the IOMMU page table.
-///
-/// Returns the identity IOVA only after the active architecture backend
-/// confirms that it installed the mapping.
+/// Register a DMA physical range or authorize identity DMA when x86 has no
+/// remapping hardware. A present-but-inactive remapper rejects the request.
 #[inline]
 pub fn map_dma(phys: u64, size: usize) -> Option<u64> {
-    map_dma_for_cell(0, 0, phys, size)
+    match map_dma_for_cell(0, 0, phys, size) {
+        DmaMapResult::Mapped(iova) => Some(iova),
+        DmaMapResult::Rejected | DmaMapResult::PublishedUnconfirmed => None,
+    }
 }
 
 /// Register `[phys, phys+size)` for Cell `tid` owning device `bdf`.
 ///
-/// Returns `None` unless translation enforcement is already active.
-pub fn map_dma_for_cell(tid: u64, bdf: u32, phys: u64, size: usize) -> Option<u64> {
-    if size == 0 || !is_active() {
-        return None;
+/// Distinguishes a clean rejection from a mapping that was published before an
+/// invalidation timeout; the latter requires the caller to retain the DMA pin.
+pub fn map_dma_for_cell(tid: u64, bdf: u32, phys: u64, size: usize) -> DmaMapResult {
+    if size == 0 {
+        return DmaMapResult::Rejected;
+    }
+    if !is_active() {
+        #[cfg(target_arch = "x86_64")]
+        return if super::iommu_x86::is_present() {
+            DmaMapResult::Rejected
+        } else {
+            // No remapping hardware exists; ownership/pinning still succeeded,
+            // and the machine's DMA contract is identity addressing.
+            DmaMapResult::Mapped(phys)
+        };
+        #[cfg(not(target_arch = "x86_64"))]
+        return DmaMapResult::Rejected;
     }
     #[cfg(target_arch = "riscv64")]
-    let mapped = super::iommu_riscv::map_range_for_cell(tid, bdf, phys, size);
+    let mapped = if super::iommu_riscv::map_range_for_cell(tid, bdf, phys, size) {
+        DmaMapResult::Mapped(phys)
+    } else {
+        DmaMapResult::Rejected
+    };
     #[cfg(target_arch = "x86_64")]
     let mapped = super::iommu_x86::map_range_for_cell(tid, bdf, phys, size);
     #[cfg(not(any(target_arch = "riscv64", target_arch = "x86_64")))]
     let mapped = {
         let _ = (tid, bdf, phys, size);
-        false
+        DmaMapResult::Rejected
     };
-    mapped.then_some(phys)
+    mapped
 }
 
 /// No-op stub. Per-Cell IOTLB invalidation is handled by `cleanup_cell` on Cell exit.
@@ -60,14 +86,23 @@ pub fn unmap_dma(_iova: u64, _size: usize) {}
 
 /// Flush IOTLB and zero DDT/context entries for `tid`'s DMA domain.
 ///
-/// MUST be called on Cell exit BEFORE DMA frames are returned to the frame allocator.
-pub fn cleanup_cell(tid: u64) {
+/// Returns `true` only when hardware acknowledged teardown. Callers must keep
+/// pinned frames quarantined when it returns `false`.
+pub fn cleanup_cell(tid: u64) -> bool {
     #[cfg(target_arch = "riscv64")]
-    super::iommu_riscv::unmap_cell(tid);
+    {
+        super::iommu_riscv::unmap_cell(tid);
+        true
+    }
     #[cfg(target_arch = "x86_64")]
-    super::iommu_x86::unmap_cell_domain(tid); // Phase 02 will implement
+    {
+        super::iommu_x86::unmap_cell_domain(tid)
+    }
     #[cfg(not(any(target_arch = "riscv64", target_arch = "x86_64")))]
-    let _ = tid; // no IOMMU backend on this arch yet
+    {
+        let _ = tid;
+        true
+    }
 }
 
 /// Phase 3: switch IOMMU from passthrough to page-table enforcement.
@@ -110,10 +145,9 @@ pub fn set_deferred_init_pending() {
 /// Called from the `RegisterPciDevice` syscall handler after each device is added
 /// to `PCI_DEVICES`. Returns immediately if already initialized or not deferred.
 ///
-/// Phase 3 (`activate_isolation`) runs immediately after `init_hw` here: by the
-/// time the IOMMU device is registered, no Driver Cell DMA has occurred yet
-/// (Driver Cells spawn after Platform Cell completes enumeration). Subsequent
-/// `map_dma_for_cell` calls add DDT entries lazily and take effect immediately.
+/// Phase 3 (`activate_isolation`) runs immediately after `init_hw` here. Until
+/// activation succeeds, a present remapper causes DMA grants to fail closed;
+/// later mappings take effect through the active per-Cell backend.
 pub fn try_deferred_init() {
     if !IOMMU_DEFERRED.load(Ordering::Relaxed) {
         return;
