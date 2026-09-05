@@ -2,9 +2,11 @@
 mod dma_layout;
 
 use dma_layout::{
-    authorize_dma_layout, for_each_initial_dma_program, with_authorized_dma_layout, DmaSlot,
-    InitialDmaProgram, RX_SLOTS, TX_SLOTS,
+    authorize_dma_layout, for_each_initial_dma_program, try_init_array, with_authorized_dma_layout,
+    DmaSlot, InitialDmaProgram, RX_SLOTS, TX_SLOTS,
 };
+use std::cell::Cell;
+use std::rc::Rc;
 
 fn nonidentity_iova(slot: DmaSlot) -> u64 {
     let offset = match slot {
@@ -143,4 +145,42 @@ fn controller_cannot_fall_back_to_cpu_physical_addresses() {
         .expect("controller initialization must use the authorization boundary");
     assert!(boundary < source.find("ctrl.wr32(TCTL").unwrap());
     assert!(boundary < source.find("ctrl.wr32(RCTL").unwrap());
+}
+
+struct DropProbe(Rc<Cell<usize>>);
+
+impl Drop for DropProbe {
+    fn drop(&mut self) {
+        self.0.set(self.0.get() + 1);
+    }
+}
+
+#[test]
+fn fallible_array_initializes_every_slot_without_heap_staging() {
+    let drops = Rc::new(Cell::new(0));
+    let values = try_init_array::<_, (), 4>(|_| Ok(DropProbe(Rc::clone(&drops))))
+        .expect("all slots should initialize");
+
+    assert_eq!(values.len(), 4);
+    assert_eq!(drops.get(), 0);
+    drop(values);
+    assert_eq!(drops.get(), 4);
+}
+
+#[test]
+fn fallible_array_stops_and_drops_initialized_prefix_on_error() {
+    let drops = Rc::new(Cell::new(0));
+    let attempts = Cell::new(0);
+    let result: Result<[DropProbe; 8], &str> = try_init_array(|index| {
+        attempts.set(attempts.get() + 1);
+        if index == 3 {
+            Err("out of memory")
+        } else {
+            Ok(DropProbe(Rc::clone(&drops)))
+        }
+    });
+
+    assert!(matches!(result, Err("out of memory")));
+    assert_eq!(attempts.get(), 4);
+    assert_eq!(drops.get(), 3);
 }

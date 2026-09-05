@@ -4,8 +4,8 @@
 //! Every `unsafe` block carries a `// SAFETY:` comment.
 
 use crate::dma_layout::{
-    for_each_initial_dma_program, with_authorized_dma_layout, DmaIovas, DmaSlot, InitialDmaProgram,
-    RX_SLOTS, TX_SLOTS,
+    for_each_initial_dma_program, try_init_array, with_authorized_dma_layout, DmaIovas, DmaSlot,
+    InitialDmaProgram, RX_SLOTS, TX_SLOTS,
 };
 use core::sync::atomic::{compiler_fence, Ordering};
 use ostd::dma::DmaBuf;
@@ -159,9 +159,9 @@ impl E1000Controller {
         // Allocate all DMA objects before authorization. No device-visible DMA
         // address is programmed until every object has an approved IOVA.
         let tx_ring = DmaBuf::alloc(1).ok_or(ViError::OutOfMemory)?; // holds 16×TxDesc = 256B
-        let tx_bufs = core::array::from_fn(|_| DmaBuf::alloc(1).expect("e1000 tx DmaBuf OOM"));
+        let tx_bufs = try_init_array(|_| DmaBuf::alloc(1).ok_or(ViError::OutOfMemory))?;
         let rx_ring = DmaBuf::alloc(1).ok_or(ViError::OutOfMemory)?;
-        let rx_bufs = core::array::from_fn(|_| DmaBuf::alloc(1).expect("e1000 rx DmaBuf OOM"));
+        let rx_bufs = try_init_array(|_| DmaBuf::alloc(1).ok_or(ViError::OutOfMemory))?;
 
         with_authorized_dma_layout(
             (mmio, tx_ring, rx_ring, tx_bufs, rx_bufs),

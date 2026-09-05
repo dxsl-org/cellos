@@ -1,4 +1,41 @@
 //! Pure DMA authorization ordering and IOVA capture for the e1000 controller.
+use core::mem::MaybeUninit;
+
+/// Initialize a fixed-size array without heap allocation or panic-on-error.
+pub(crate) fn try_init_array<T, E, const N: usize>(
+    mut initialize: impl FnMut(usize) -> Result<T, E>,
+) -> Result<[T; N], E> {
+    struct InitGuard<'a, T> {
+        storage: &'a mut [MaybeUninit<T>],
+        initialized: usize,
+    }
+
+    impl<T> Drop for InitGuard<'_, T> {
+        fn drop(&mut self) {
+            for value in &mut self.storage[..self.initialized] {
+                // SAFETY: only the prefix counted by `initialized` was written.
+                unsafe { value.assume_init_drop() };
+            }
+        }
+    }
+
+    // SAFETY: an array of MaybeUninit<T> requires no initialization.
+    let mut storage: [MaybeUninit<T>; N] = unsafe { MaybeUninit::uninit().assume_init() };
+    let mut guard = InitGuard {
+        storage: &mut storage,
+        initialized: 0,
+    };
+    for index in 0..N {
+        guard.storage[index].write(initialize(index)?);
+        guard.initialized += 1;
+    }
+
+    // SAFETY: all N elements were initialized above. Reading transfers their
+    // ownership into the returned array; clearing the count prevents double-drop.
+    let initialized = unsafe { (guard.storage.as_ptr() as *const [T; N]).read() };
+    guard.initialized = 0;
+    Ok(initialized)
+}
 
 pub(crate) const TX_SLOTS: usize = 16;
 pub(crate) const RX_SLOTS: usize = 16;
