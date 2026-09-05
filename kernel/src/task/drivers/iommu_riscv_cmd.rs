@@ -23,9 +23,12 @@ pub(crate) const fn encode_iotinval_vma(pscid: u32) -> (u64, u64) {
     (word0, 0)
 }
 
-/// IOFENCE.C with AV=WSI=PR=PW=0.
+/// IOFENCE.C with PR=PW=1 and AV=WSI=0.
+///
+/// Ordering both prior device reads and writes is required before DMA-accessible
+/// frames can leave quarantine and be reclaimed.
 pub(crate) const fn encode_iofence_c() -> (u64, u64) {
-    (OPCODE_IOFENCE, 0)
+    (OPCODE_IOFENCE | (1 << 12) | (1 << 13), 0)
 }
 
 /// IODIR.INVAL_DDT with DV=1 and the exact 24-bit device ID.

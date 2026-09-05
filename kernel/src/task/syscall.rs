@@ -980,6 +980,41 @@ fn caller_has_pcie_driver(caller_id: usize) -> bool {
     caller_has_cap(caller_id, |t| t.pcie_driver_cap.is_some())
 }
 
+fn register_driver_service(
+    caller_id: usize,
+    service_id: u16,
+    publish_role: fn(usize),
+    rollback_role: fn(usize),
+) -> Result<usize, SyscallError> {
+    let scheduler = crate::task::SCHEDULER.lock();
+    let authorized = scheduler
+        .as_ref()
+        .and_then(|scheduler| scheduler.tasks.get(&caller_id))
+        .is_some_and(|task| {
+            task.pcie_driver_cap.is_some()
+                && !matches!(
+                    &task.state,
+                    crate::task::tcb::TaskState::Retiring | crate::task::tcb::TaskState::Terminated
+                )
+        });
+    if !authorized {
+        return Err(SyscallError::PermissionDenied);
+    }
+
+    let published = crate::task::drivers::driver_cell::publish_role_or_rollback(
+        caller_id,
+        publish_role,
+        || crate::cell::service_registry::register(service_id, caller_id),
+        rollback_role,
+    );
+    drop(scheduler);
+    if published {
+        Ok(0)
+    } else {
+        Err(SyscallError::InvalidInput)
+    }
+}
+
 fn caller_has_mmio_device(caller_id: usize, device: u8) -> bool {
     caller_has_cap(caller_id, |t| t.mmio_devices & device != 0)
 }
@@ -5282,51 +5317,20 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         // 416: RegisterBlockDriver — announce caller as the active block device driver.
         // Stores tid in BLOCK_DRIVER_CELL and registers under service::BLOCK_DRIVER
         // so VFS can resolve it via LookupService.
-        Syscall::RegisterBlockDriver => {
-            if !caller_has_pcie_driver(caller_id) {
-                return Err(SyscallError::PermissionDenied);
-            }
-            // Bypass the SpawnCap gate — PcieDriverCap is the authority for driver
-            // namespace registration. If the bounded namespace rejects this
-            // publication, roll back only this caller's role.
-            if crate::task::drivers::driver_cell::publish_role_or_rollback(
-                caller_id,
-                crate::task::drivers::driver_cell::register_block_driver,
-                || {
-                    crate::cell::service_registry::register(
-                        api::syscall::service::BLOCK_DRIVER,
-                        caller_id,
-                    )
-                },
-                crate::task::drivers::driver_cell::deregister_block_driver,
-            ) {
-                Ok(0)
-            } else {
-                Err(SyscallError::InvalidInput)
-            }
-        }
+        Syscall::RegisterBlockDriver => register_driver_service(
+            caller_id,
+            api::syscall::service::BLOCK_DRIVER,
+            crate::task::drivers::driver_cell::register_block_driver,
+            crate::task::drivers::driver_cell::deregister_block_driver,
+        ),
 
         // 417: RegisterNicDriver — announce caller as the active NIC driver.
-        Syscall::RegisterNicDriver => {
-            if !caller_has_pcie_driver(caller_id) {
-                return Err(SyscallError::PermissionDenied);
-            }
-            if crate::task::drivers::driver_cell::publish_role_or_rollback(
-                caller_id,
-                crate::task::drivers::driver_cell::register_nic_driver,
-                || {
-                    crate::cell::service_registry::register(
-                        api::syscall::service::NIC_DRIVER,
-                        caller_id,
-                    )
-                },
-                crate::task::drivers::driver_cell::deregister_nic_driver,
-            ) {
-                Ok(0)
-            } else {
-                Err(SyscallError::InvalidInput)
-            }
-        }
+        Syscall::RegisterNicDriver => register_driver_service(
+            caller_id,
+            api::syscall::service::NIC_DRIVER,
+            crate::task::drivers::driver_cell::register_nic_driver,
+            crate::task::drivers::driver_cell::deregister_nic_driver,
+        ),
 
         // 418: FindPcieDevice — query ECAM table for a device by class triple.
         // Writes a `PcieDeviceInfo` record to `out_ptr` and returns 1 if found.

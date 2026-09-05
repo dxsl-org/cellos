@@ -187,10 +187,10 @@ fn enqueue_cmd(bar0: usize, cq_virt: usize, w0: u64, w1: u64) -> bool {
     true
 }
 
-/// Issue IOFENCE.C and return only after the IOMMU drains the queue.
+/// Issue IOFENCE.C with PR+PW and return only after the IOMMU drains the queue.
 ///
-/// Frame quarantine: `true` is the acknowledgement required before DMA frames
-/// or BDF ownership may be reused.
+/// Frame quarantine: `true` acknowledges the invalidations and globally orders
+/// prior device reads and writes before DMA frames or BDF ownership are reused.
 fn issue_iofence(bar0: usize, cq_virt: usize) -> bool {
     let (w0, w1) = encode_iofence_c();
     if !enqueue_cmd(bar0, cq_virt, w0, w1) {

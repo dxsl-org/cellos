@@ -98,13 +98,9 @@ fn kernel_rolls_back_driver_role_when_service_registry_rejects() {
             .unwrap_or_else(|| panic!("missing end of {role} registration handler"));
         let handler = &SYSCALL_SOURCE[start..end];
 
-        assert!(handler.contains("publish_role_or_rollback("));
+        assert!(handler.contains("register_driver_service("));
         assert!(handler.contains(register));
         assert!(handler.contains(deregister));
-        assert!(
-            handler.contains("Err(SyscallError::InvalidInput)"),
-            "{role} service-registry rejection must reach the Driver Cell"
-        );
     }
     assert!(DRIVER_CELL_SOURCE.contains("static ROLE_PUBLICATION: Spinlock<()>"));
     assert!(
@@ -115,9 +111,23 @@ fn kernel_rolls_back_driver_role_when_service_registry_rejects() {
         "registration and teardown must share the publication transaction"
     );
     assert!(DRIVER_CELL_SOURCE.contains("service_registry::clear_tid(tid);"));
-    assert!(DRIVER_CELL_SOURCE.contains("let scheduler = crate::task::SCHEDULER.lock();"));
-    assert!(DRIVER_CELL_SOURCE.contains("crate::task::tcb::TaskState::Retiring"));
-    assert!(DRIVER_CELL_SOURCE.contains("drop(scheduler);"));
+    let helper_start = SYSCALL_SOURCE
+        .find("fn register_driver_service")
+        .expect("missing atomic driver registration helper");
+    let helper_end = SYSCALL_SOURCE[helper_start..]
+        .find("fn caller_has_mmio_device")
+        .map(|offset| helper_start + offset)
+        .expect("missing end of driver registration helper");
+    let helper = &SYSCALL_SOURCE[helper_start..helper_end];
+    assert!(helper.contains("let scheduler = crate::task::SCHEDULER.lock();"));
+    assert!(helper.contains("task.pcie_driver_cap.is_some()"));
+    assert!(helper.contains("crate::task::tcb::TaskState::Retiring"));
+    assert!(helper.contains("publish_role_or_rollback("));
+    assert!(helper.contains("drop(scheduler);"));
+    assert!(
+        helper.contains("Err(SyscallError::InvalidInput)"),
+        "service-registry rejection must reach the Driver Cell"
+    );
     assert!(DRIVER_CELL_SOURCE.contains("if publish_service()"));
     assert!(DRIVER_CELL_SOURCE.contains("rollback_role(tid);"));
     assert!(

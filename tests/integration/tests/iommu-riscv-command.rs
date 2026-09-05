@@ -15,8 +15,8 @@ fn encodes_iotinval_vma_pscid_fields() {
 }
 
 #[test]
-fn encodes_iofence_c_opcode() {
-    assert_eq!(command::encode_iofence_c(), (0x0000_0000_0000_0002, 0));
+fn encodes_iofence_c_read_write_ordering() {
+    assert_eq!(command::encode_iofence_c(), (0x0000_0000_0000_3002, 0));
 }
 
 #[test]

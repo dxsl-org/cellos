@@ -158,6 +158,8 @@ impl E1000Controller {
 
         // Allocate all DMA objects before authorization. No device-visible DMA
         // address is programmed until every object has an approved IOVA.
+        // Any error from this constructor is terminal in main: DmaBuf has no
+        // Drop cleanup, so task teardown deliberately reclaims the Cell's grants.
         let tx_ring = DmaBuf::alloc(1).ok_or(ViError::OutOfMemory)?; // holds 16×TxDesc = 256B
         let tx_bufs = try_init_array(|_| DmaBuf::alloc(1).ok_or(ViError::OutOfMemory))?;
         let rx_ring = DmaBuf::alloc(1).ok_or(ViError::OutOfMemory)?;
@@ -175,8 +177,8 @@ impl E1000Controller {
                 result.map_err(|_| ViError::PermissionDenied)
             },
             |(mmio, tx_ring, rx_ring, tx_bufs, rx_bufs), dma_iovas| {
-                // Every DMA-address descriptor/register write and TX/RX
-                // enablement stays behind successful authorization.
+                // Initial DMA-address descriptor/register writes and TX/RX
+                // enablement stay behind successful authorization.
 
                 // SAFETY: both ring allocations cover one writable DMA page.
                 unsafe {

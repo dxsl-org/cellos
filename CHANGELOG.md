@@ -40,7 +40,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - e1000: fail closed on DMA authorization/OOM and program rings/descriptors with authorized IOVAs
 - nvme: retain authorized IOVAs for queue bases, Identify PRPs, and sector I/O buffers
 - drivers: publish initialized state before registration and fail closed when registration is rejected
-- pcie: preserve exclusive Driver Cell BDF ownership and DMA pins across competing probes or unacknowledged IOMMU publication/teardown, with spec-correct RISC-V IODIR/IOTINVAL/IOFENCE batches
+- pcie: preserve exclusive Driver Cell BDF ownership and DMA pins across competing probes or unacknowledged IOMMU publication/teardown, with spec-correct RISC-V IODIR/IOTINVAL/IOFENCE batches that order prior device reads and writes before reclamation
 - x86_64: preserve user state and balance CPL3 GS/PKRU across IDT, suspended SYSCALL, fresh IRET, and scheduler switches
 - x86_64: correct the bootstrap SysV stack phase with an 8-byte synthetic bottom-frame slot before tail-entering Rust
 - tools: validate MemInfo frame conservation and nonzero page size before independently rounding displayed KiB values

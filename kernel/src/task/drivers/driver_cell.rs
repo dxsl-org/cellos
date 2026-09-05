@@ -60,37 +60,12 @@ fn registered_virtio_irq_for_owner(tid: usize) -> Option<u32> {
         .map(|slot| slot.irq)
 }
 
-/// Publish a live task's driver role and matching service route.
+/// Publish an authorized driver's role and matching service route.
 ///
-/// Lock order is `SCHEDULER -> ROLE_PUBLICATION -> service/role leaves`, the
-/// same order used by task teardown. Holding SCHEDULER through publication
-/// prevents a remote kill from completing before a dead TID is registered.
+/// The syscall caller holds `SCHEDULER`, establishing lock order
+/// `SCHEDULER -> ROLE_PUBLICATION -> service/role leaves`. Task teardown uses
+/// the same order, so authorization, liveness, and publication cannot race.
 pub(crate) fn publish_role_or_rollback(
-    tid: usize,
-    publish_role: impl FnOnce(usize),
-    publish_service: impl FnOnce() -> bool,
-    rollback_role: impl FnOnce(usize),
-) -> bool {
-    let scheduler = crate::task::SCHEDULER.lock();
-    let live = scheduler
-        .as_ref()
-        .and_then(|scheduler| scheduler.tasks.get(&tid))
-        .is_some_and(|task| {
-            !matches!(
-                &task.state,
-                crate::task::tcb::TaskState::Terminated | crate::task::tcb::TaskState::Retiring
-            )
-        });
-    if !live {
-        return false;
-    }
-    let published =
-        publish_live_role_or_rollback(tid, publish_role, publish_service, rollback_role);
-    drop(scheduler);
-    published
-}
-
-fn publish_live_role_or_rollback(
     tid: usize,
     publish_role: impl FnOnce(usize),
     publish_service: impl FnOnce() -> bool,
@@ -208,7 +183,7 @@ pub fn deregister_all_for(tid: usize) {
 #[cfg(test)]
 mod tests {
     use super::{
-        deregister_all_for, publish_live_role_or_rollback, NicDriverState, BLOCK_DRIVER_CELL,
+        deregister_all_for, publish_role_or_rollback, NicDriverState, BLOCK_DRIVER_CELL,
         GPU_DRIVER_CELL, INPUT_CELL_TID, NIC_DRIVER_STATE,
     };
     use core::sync::atomic::{AtomicUsize, Ordering};
@@ -272,15 +247,10 @@ mod tests {
                 .ok();
         };
 
-        assert!(!publish_live_role_or_rollback(
-            41,
-            publish,
-            || false,
-            rollback,
-        ));
+        assert!(!publish_role_or_rollback(41, publish, || false, rollback,));
         assert_eq!(owner.load(Ordering::Acquire), 0);
 
-        assert!(!publish_live_role_or_rollback(
+        assert!(!publish_role_or_rollback(
             41,
             |tid| owner.store(tid, Ordering::Release),
             || {
