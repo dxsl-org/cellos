@@ -37,6 +37,18 @@
 
 
 
+- Made `/bin/net` a mandatory, freshly built x86 image input and FAT-inspected
+  package entry. The builder invalidates the previous service ELF and
+  `kernel_fs.img` before the fatal net build, preventing stale DHCP evidence.
+  The q35 NIC runners now bound serial connection setup, detect early QEMU
+  exit, and reap failed children. Strict ordinary and VT-d integration gates
+  require NIC registration, accepted e1000 Driver-Cell Tx, e1000 Rx, a later
+  ASCII IP-address marker, and a settled final snapshot without kernel panic or
+  Cell fault; VT-d must be active first and NVMe retains an independent DMA
+  witness. Fresh cells → kernel → ISO passed, followed by strict `nic-x86` 2/2,
+  `pcie-multibus-x86` 2/2, `nvme-x86` 3/3, and full `x86_64-boot` 7/7. This is
+  q35/QEMU software evidence only; physical NIC qualification remains open.
+
 - Extended x86 Platform Cell PCIe discovery from bus 0 to every bus in the
   checked inclusive segment-0 ACPI MCFG range. The kernel treats the raw MCFG
   ECAM base as bus-0-relative, normalizes the mapped window by `bus_start`, and
@@ -53,7 +65,7 @@
   registered the bus-1 NVMe endpoint and ordered `VT-d ACTIVE` before exact BDF
   `01:00.0` DMA authorization before block-driver registration. This closes
   only the q35 software gate for buses above 0; physical-x86 qualification,
-  production signing, real NIC Tx/Rx/DHCP, and ACPI DMAR discovery remain open.
+  production signing, physical NIC Tx/Rx/DHCP, and ACPI DMAR discovery remain open.
 
 - Hardened QEMU-TCG x86 version parity and verified Phase 06 qualification
   oracles under pinned official QEMU 10.2.0. Runners reject unqualified

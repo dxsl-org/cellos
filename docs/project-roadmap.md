@@ -233,16 +233,16 @@ Cellos is being shaped around product stages, not only phase numbers:
   boot/storage/UART and BCM GPIO/I2C/SPI gates pass; VF2, Pioneer, RPi4, and
   physical x86 remain hardware-gated.
 - The q35 PCIe/ECAM/NVMe/e1000/VT-d software lane now covers admitted buses
-  above bus 0. Checked inclusive MCFG mapping and the matching Platform claim
-  normalize the bus-0-relative raw ECAM base by `bus_start`; enumeration and
-  VT-d use canonical BDFs and distinct context tables per bus. Platform and
-  kernel host suites pass 9/9 and 100/100, the `driver-nvme` cross-check and a
-  fresh cells → kernel → ISO build pass, and strict q35 multibus, `nic-x86`,
-  and `nvme-x86` pass 2/2, 2/2, and 3/3. Runtime registered bus-1 NVMe and
-  ordered `VT-d ACTIVE` before exact BDF `01:00.0` DMA authorization before
-  block-driver registration. This closes only the q35 software gate: physical
-  x86 and ACPI DMAR discovery remain hardware-gated, while real NIC
-  Tx/Rx/DHCP remains open.
+  above bus 0 and the e1000 DHCP data plane. Checked inclusive MCFG mapping and
+  the matching Platform claim normalize the bus-0-relative ECAM base by
+  `bus_start`; enumeration and VT-d use canonical BDFs and distinct context
+  tables per bus. The x86 image now requires a fresh `/bin/net` and invalidates
+  stale service/image artifacts before that build. Strict q35 runtime passes
+  multibus 2/2, e1000 DHCP 2/2, NVMe 3/3, and full x86 boot 7/7. Ordinary and
+  VT-d DHCP gates order NIC registration, accepted Driver-Cell Tx, e1000 Rx,
+  and the acquired IP; the VT-d case requires isolation first. This closes
+  only the q35 software Tx/Rx/DHCP gate. Physical x86 NIC qualification and
+  ACPI DMAR discovery remain hardware-gated.
 - AArch64 test-hooks runtime evidence remains host-gated where the existing
   `qemu_exit::AArch64Semihosting` issue blocks the lane.
 - RV32 release compilation is verified, but RV32 runtime cannot run on this

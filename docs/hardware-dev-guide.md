@@ -72,6 +72,9 @@ Hiện trạng và ranh giới:
   `bus[15:8] | device[7:3] | function[2:0]`. q35 đã chứng minh NVMe sau root
   port tại `01:00.0`; đây chỉ đóng gate phần mềm QEMU, không phải qualification
   cho PCIe/NVMe trên máy x86 thật.
+- q35 đã đóng gate phần mềm e1000 DHCP bằng thứ tự đăng ký NIC → Driver Cell
+  chấp nhận Tx → e1000 Rx → nhận địa chỉ IP, cả khi VT-d đã ACTIVE. Đây không
+  phải bằng chứng cho NIC vật lý; I219/e1000e và DMA trên máy thật vẫn mở.
 - x86 SMP chưa được triển khai. Bằng chứng VT-d per-bus trên q35 vẫn dùng
   remapping unit cố định `0xFED90000`; lane phần cứng tiếp tục đóng cho đến khi
   địa chỉ này được khám phá từ ACPI DMAR.

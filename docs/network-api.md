@@ -1,7 +1,8 @@
 # Cellos Network Service API
 
 The Net Service Cell (`cells/services/net/`) drives a smoltcp TCP/IPv4 stack
-backed by the kernel VirtIO NIC driver and provides BSD-style socket IPC.
+backed by either the kernel VirtIO NIC driver or the e1000 Driver Cell and
+provides BSD-style socket IPC.
 
 ---
 
@@ -15,14 +16,14 @@ Net Cell (cells/services/net/)
         ├─ socket_table: CapId → smoltcp SocketHandle
         ├─ smoltcp Interface + SocketSet
         │    ├─ TcpSocket, UdpSocket, Dhcpv4Socket
-        │    └─ VirtioNetDevice (RX queue + IPC TX)
+        │    └─ Network device adapter (VirtIO or e1000)
         └─ DHCP client (acquires 10.0.2.15 from QEMU)
                 │
-                ▼ IPC frames
-        Kernel VirtIO net driver (kernel/src/task/drivers/virtio_net.rs)
-                │ DMA + IRQ
+                ▼ frame transport
+        Kernel VirtIO driver or e1000 Driver Cell
+                │ DMA + IRQ/polling
                 ▼
-        QEMU VirtIO NIC → host user-mode network (10.0.2.0/24)
+        QEMU NIC → host user-mode network (10.0.2.0/24)
 ```
 
 ---
@@ -41,7 +42,8 @@ Default QEMU assignment: **10.0.2.15/24**, gateway **10.0.2.2**.
 
 ## Inbound IPC (kernel → net cell)
 
-Raw Ethernet frames arrive from `virtio_net::handle_irq()`.
+Raw Ethernet frames arrive from `virtio_net::handle_irq()` or the e1000
+Driver-Cell polling bridge.
 
 | Offset | Size | Field |
 |--------|------|-------|
@@ -197,6 +199,7 @@ confused with the unimplemented service-level `NetRequest::Resolve` request.
 | File | Purpose |
 |------|---------|
 | `kernel/src/task/drivers/virtio_net.rs` | VirtIO NIC driver (DMA, IRQ) |
+| `cells/drivers/e1000/` | e1000 PCIe Driver Cell (DMA rings, polled Tx/Rx) |
 | `cells/services/net/src/main.rs` | Cell entry point + IPC receive loop |
 | `cells/services/net/src/interface.rs` | smoltcp Device adapter (RX queue, TX via IPC) |
 | `cells/services/net/src/socket_table.rs` | CapId → smoltcp SocketHandle mapping |
@@ -204,4 +207,5 @@ confused with the unimplemented service-level `NetRequest::Resolve` request.
 | `cells/services/net/src/poll_driver.rs` | IPC opcode constants + message decoder |
 | `tests/integration/tests/boot.rs` | RISC-V boot and network integration scenarios |
 | `tests/integration/tests/nic-riscv.rs` | RISC-V VirtIO NIC scenarios |
+| `tests/integration/tests/nic-x86.rs` | q35 e1000 DHCP and VT-d data-plane gates |
 | `tests/integration/tests/http-smoke.rs` | HTTP/TLS smoke scenarios |
