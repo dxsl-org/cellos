@@ -17,6 +17,23 @@ pub enum DmaMapResult {
     PublishedUnconfirmed,
 }
 
+/// Classify a mapping whose device context was written before invalidation.
+///
+/// Either a command-queue publication failure or a missing IOFENCE
+/// acknowledgement leaves hardware visibility uncertain and keeps the pin.
+#[cfg_attr(not(target_arch = "riscv64"), allow(dead_code))]
+pub(crate) const fn classify_dma_publication(
+    iova: u64,
+    invalidation_published: bool,
+    fence_acknowledged: bool,
+) -> DmaMapResult {
+    if invalidation_published && fence_acknowledged {
+        DmaMapResult::Mapped(iova)
+    } else {
+        DmaMapResult::PublishedUnconfirmed
+    }
+}
+
 static IOMMU_ISOLATED: AtomicBool = AtomicBool::new(false);
 /// Set when `pcie_ecam::init()` is removed from the boot path.
 /// `try_deferred_init()` (called from `RegisterPciDevice` handler) checks this
@@ -65,11 +82,7 @@ pub fn map_dma_for_cell(tid: u64, bdf: u32, phys: u64, size: usize) -> DmaMapRes
         return DmaMapResult::Rejected;
     }
     #[cfg(target_arch = "riscv64")]
-    let mapped = if super::iommu_riscv::map_range_for_cell(tid, bdf, phys, size) {
-        DmaMapResult::Mapped(phys)
-    } else {
-        DmaMapResult::Rejected
-    };
+    let mapped = super::iommu_riscv::map_range_for_cell(tid, bdf, phys, size);
     #[cfg(target_arch = "x86_64")]
     let mapped = super::iommu_x86::map_range_for_cell(tid, bdf, phys, size);
     #[cfg(not(any(target_arch = "riscv64", target_arch = "x86_64")))]
@@ -91,8 +104,7 @@ pub fn unmap_dma(_iova: u64, _size: usize) {}
 pub fn cleanup_cell(tid: u64) -> bool {
     #[cfg(target_arch = "riscv64")]
     {
-        super::iommu_riscv::unmap_cell(tid);
-        true
+        super::iommu_riscv::unmap_cell(tid)
     }
     #[cfg(target_arch = "x86_64")]
     {

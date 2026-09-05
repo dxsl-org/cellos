@@ -4370,7 +4370,11 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             };
             let mut boxed_file = crate::cell::cap_registry::CAP_TABLE
                 .lock()
-                .park_file(crate::cell::cap_registry::CapId(cap_id as u64), cell_id, api::cap::CapPerms::READ)
+                .park_file(
+                    crate::cell::cap_registry::CapId(cap_id as u64),
+                    cell_id,
+                    api::cap::CapPerms::READ,
+                )
                 .map_err(|_| SyscallError::PermissionDenied)?;
             let mut kbuf = alloc::vec::Vec::new();
             kbuf.try_reserve_exact(buf_len)
@@ -4413,7 +4417,11 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             };
             let mut boxed_file = crate::cell::cap_registry::CAP_TABLE
                 .lock()
-                .park_file(crate::cell::cap_registry::CapId(cap_id as u64), cell_id, api::cap::CapPerms::READ)
+                .park_file(
+                    crate::cell::cap_registry::CapId(cap_id as u64),
+                    cell_id,
+                    api::cap::CapPerms::READ,
+                )
                 .map_err(|_| SyscallError::PermissionDenied)?;
             let seek_result = boxed_file.seek(pos);
             crate::cell::cap_registry::CAP_TABLE
@@ -4445,7 +4453,11 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             };
             let mut boxed_file = crate::cell::cap_registry::CAP_TABLE
                 .lock()
-                .park_file(crate::cell::cap_registry::CapId(cap_id as u64), cell_id, api::cap::CapPerms::WRITE)
+                .park_file(
+                    crate::cell::cap_registry::CapId(cap_id as u64),
+                    cell_id,
+                    api::cap::CapPerms::WRITE,
+                )
                 .map_err(|_| SyscallError::PermissionDenied)?;
             let write_result = boxed_file.write(&bytes);
             crate::cell::cap_registry::CAP_TABLE
@@ -4469,7 +4481,11 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             };
             let mut boxed_file = crate::cell::cap_registry::CAP_TABLE
                 .lock()
-                .park_file(crate::cell::cap_registry::CapId(cap_id as u64), cell_id, api::cap::CapPerms::READ)
+                .park_file(
+                    crate::cell::cap_registry::CapId(cap_id as u64),
+                    cell_id,
+                    api::cap::CapPerms::READ,
+                )
                 .map_err(|_| SyscallError::PermissionDenied)?;
             let result = boxed_file.size();
             crate::cell::cap_registry::CAP_TABLE
@@ -4492,7 +4508,11 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             };
             let mut boxed_file = crate::cell::cap_registry::CAP_TABLE
                 .lock()
-                .park_file(crate::cell::cap_registry::CapId(cap_id as u64), cell_id, api::cap::CapPerms::WRITE)
+                .park_file(
+                    crate::cell::cap_registry::CapId(cap_id as u64),
+                    cell_id,
+                    api::cap::CapPerms::WRITE,
+                )
                 .map_err(|_| SyscallError::PermissionDenied)?;
             let result = boxed_file.truncate(len as u64);
             crate::cell::cap_registry::CAP_TABLE
@@ -4513,7 +4533,11 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             };
             let mut boxed_file = crate::cell::cap_registry::CAP_TABLE
                 .lock()
-                .park_file(crate::cell::cap_registry::CapId(cap_id as u64), cell_id, api::cap::CapPerms::WRITE)
+                .park_file(
+                    crate::cell::cap_registry::CapId(cap_id as u64),
+                    cell_id,
+                    api::cap::CapPerms::WRITE,
+                )
                 .map_err(|_| SyscallError::PermissionDenied)?;
             let result = boxed_file.sync();
             crate::cell::cap_registry::CAP_TABLE
@@ -4570,12 +4594,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 }
             };
             let iova =
-                match super::drivers::iommu::map_dma_for_cell(
-                    caller_id as u64,
-                    bdf,
-                    phys,
-                    size,
-                ) {
+                match super::drivers::iommu::map_dma_for_cell(caller_id as u64, bdf, phys, size) {
                     super::drivers::iommu::DmaMapResult::Mapped(iova) => iova,
                     super::drivers::iommu::DmaMapResult::Rejected => {
                         let rolled_back =
@@ -5267,11 +5286,24 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             if !caller_has_pcie_driver(caller_id) {
                 return Err(SyscallError::PermissionDenied);
             }
-            crate::task::drivers::driver_cell::register_block_driver(caller_id);
             // Bypass the SpawnCap gate — PcieDriverCap is the authority for driver
-            // namespace registration. Direct write into service registry.
-            crate::cell::service_registry::register(api::syscall::service::BLOCK_DRIVER, caller_id);
-            Ok(0)
+            // namespace registration. If the bounded namespace rejects this
+            // publication, roll back only this caller's role.
+            if crate::task::drivers::driver_cell::publish_role_or_rollback(
+                caller_id,
+                crate::task::drivers::driver_cell::register_block_driver,
+                || {
+                    crate::cell::service_registry::register(
+                        api::syscall::service::BLOCK_DRIVER,
+                        caller_id,
+                    )
+                },
+                crate::task::drivers::driver_cell::deregister_block_driver,
+            ) {
+                Ok(0)
+            } else {
+                Err(SyscallError::InvalidInput)
+            }
         }
 
         // 417: RegisterNicDriver — announce caller as the active NIC driver.
@@ -5279,9 +5311,21 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             if !caller_has_pcie_driver(caller_id) {
                 return Err(SyscallError::PermissionDenied);
             }
-            crate::task::drivers::driver_cell::register_nic_driver(caller_id);
-            crate::cell::service_registry::register(api::syscall::service::NIC_DRIVER, caller_id);
-            Ok(0)
+            if crate::task::drivers::driver_cell::publish_role_or_rollback(
+                caller_id,
+                crate::task::drivers::driver_cell::register_nic_driver,
+                || {
+                    crate::cell::service_registry::register(
+                        api::syscall::service::NIC_DRIVER,
+                        caller_id,
+                    )
+                },
+                crate::task::drivers::driver_cell::deregister_nic_driver,
+            ) {
+                Ok(0)
+            } else {
+                Err(SyscallError::InvalidInput)
+            }
         }
 
         // 418: FindPcieDevice — query ECAM table for a device by class triple.
@@ -5307,8 +5351,11 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                         crate::task::drivers::pcie_ecam::Bar::Memory64 { size, .. } => size,
                         _ => 0x4000, // fallback 16 KiB
                     };
-                    // Record BDF → caller ownership for IOMMU gate.
-                    crate::resource_registry::register_bdf_owner(bdf, caller_id);
+                    // Claim without displacing a live Driver Cell. A competing
+                    // instance observes "not found" and may retry after reap.
+                    if !crate::resource_registry::claim_bdf_owner(bdf, caller_id) {
+                        return Ok(0);
+                    }
                     // Write the 20-byte PcieDeviceInfo to the cell's out_ptr.
                     // SAFETY: SAS — caller's virtual address == kernel's virtual address.
                     // The cell is responsible for passing a valid, writeable pointer.
@@ -5351,14 +5398,13 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         }
 
         // 235: RegisterPcieBar — Platform Cell announces a discovered PCIe BAR.
-        // Populates PCIE_BARS allowlist (resource_registry) so Driver Cells can
-        // claim the BAR via sys_request_mmio. Records BDF → caller ownership.
-        Syscall::RegisterPcieBar { bdf, base, len } => {
+        // Populates the MMIO allowlist only. BDF ownership belongs to the Driver
+        // Cell that claims the device through FindPcieDevice.
+        Syscall::RegisterPcieBar { bdf: _, base, len } => {
             if !caller_has_platform(caller_id) {
                 return Err(SyscallError::PermissionDenied);
             }
             crate::resource_registry::register_pcie_bar(base, len);
-            crate::resource_registry::register_bdf_owner(bdf, caller_id);
             // Any RegisterPcieBar call from the Platform Cell marks it as active;
             // Phase 08 uses this to gate out the kernel ECAM scan.
             crate::task::drivers::pcie_ecam::mark_platform_registered();

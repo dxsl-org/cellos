@@ -957,15 +957,9 @@ impl Scheduler {
             self.pending_vfs_holder_release.push(tid);
         }
 
-        // Service-registry cleanup: drop any well-known service_id that pointed at this
-        // tid, so a client lookup in the death→respawn window returns "none" (and retries)
-        // rather than a dead provider. The supervisor re-registers the replacement's tid.
-        // Locks only REGISTRY (a leaf), safe under the SCHEDULER lock.
-        crate::cell::service_registry::clear_tid(tid);
-
-        // Driver-role cleanup: prevent service lookups, IRQ cache hits, or the input
-        // poll path from targeting a dead or recycled TID. The supervisor re-registers
-        // replacements.
+        // Clear service routes and Driver Cell roles under the publication
+        // transaction lock. A racing registration therefore completes before
+        // exact-TID teardown, never leaving a dead service route behind.
         crate::task::drivers::driver_cell::deregister_all_for(tid);
 
         // Remove from every hart's ready queue if present.

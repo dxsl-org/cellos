@@ -45,10 +45,14 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
                 ostd::syscall::sys_exit(0);
             };
 
-            // Announce as the active block driver: VFS then routes DrvRequest IPC here.
-            let _ = sys_register_block_driver();
-
+            // Publish state before registration because VFS may route a request
+            // immediately after successful publication.
             *STATE.lock() = Some(dev);
+            if sys_register_block_driver().is_err() {
+                *STATE.lock() = None;
+                ostd::io::println("[virtio-blk] block driver registration failed");
+                ostd::syscall::sys_exit(1);
+            }
             ostd::io::println("[virtio-blk] ready");
         }
 

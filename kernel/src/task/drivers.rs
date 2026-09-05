@@ -30,7 +30,9 @@ pub mod gpio_irq; // GPIO edge IRQ → MMIO-owner IPC dispatch (AArch64 PL061)
 pub mod iommu; // IOMMU common API — three-phase DMA isolation
 pub mod iommu_pt; // IOMMU identity-mapping page tables (Sv39 / VT-d SLPT)
 #[cfg(target_arch = "riscv64")]
-pub mod iommu_riscv; // RISC-V IOMMU — 1-level DDT + Sv39 second-stage
+pub mod iommu_riscv; // RISC-V IOMMU — 3-level DDT + Sv39 first-stage
+#[cfg(target_arch = "riscv64")]
+mod iommu_riscv_cmd;
 #[cfg(target_arch = "x86_64")]
 pub mod iommu_x86; // Intel VT-d — TT=TRANSLATED + Sv39 SLPT
 pub mod nic;

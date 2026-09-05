@@ -155,6 +155,22 @@ path = "tests/e1000-dma-layout.rs"
 name = "nvme-dma-addressing"
 path = "tests/nvme-dma-addressing.rs"
 
+[[test]]
+name = "driver-registration-contract"
+path = "tests/driver-registration-contract.rs"
+
+[[test]]
+name = "pcie-bdf-ownership"
+path = "tests/pcie-bdf-ownership.rs"
+
+[[test]]
+name = "iommu-riscv-command"
+path = "tests/iommu-riscv-command.rs"
+
+[[test]]
+name = "iommu-publication"
+path = "tests/iommu-publication.rs"
+
 [dev-dependencies]
 tempfile = "3"
 

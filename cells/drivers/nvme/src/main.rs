@@ -101,10 +101,17 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
                 bdf & 0x07
             ));
 
-            // 4. Register as the active block driver.
-            let _ = sys_register_block_driver();
-
+            // Publish state before registration: VFS may route requests as soon
+            // as the syscall succeeds.
             *STATE.lock() = Some(NvmeState { ctrl, io_buf });
+            if let Err(error) = sys_register_block_driver() {
+                *STATE.lock() = None;
+                let _ = print_fmt(format_args!(
+                    "[nvme] block driver registration failed: {:?}\n",
+                    error
+                ));
+                ostd::syscall::sys_exit(1);
+            }
         }
 
         // VFS speaks the raw DrvRequest protocol (no 0xAC App-SDK envelope), so

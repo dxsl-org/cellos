@@ -35,6 +35,8 @@ static NIC_DRIVER_STATE: Spinlock<NicDriverState> = Spinlock::new(NicDriverState
 
 /// TID of the registered GPU Driver Cell (0 = none; no kernel GPU fallback).
 pub static GPU_DRIVER_CELL: AtomicUsize = AtomicUsize::new(0);
+/// Serializes role state with its matching service-registry publication.
+static ROLE_PUBLICATION: Spinlock<()> = Spinlock::new(());
 
 const VIRTIO_DEVICE_ID_OFFSET: usize = 0x8;
 const VIRTIO_DEVICE_ID_NETWORK: u32 = 1;
@@ -56,6 +58,52 @@ fn registered_virtio_irq_for_owner(tid: usize) -> Option<u32> {
             device_id == VIRTIO_DEVICE_ID_NETWORK
         })
         .map(|slot| slot.irq)
+}
+
+/// Publish a live task's driver role and matching service route.
+///
+/// Lock order is `SCHEDULER -> ROLE_PUBLICATION -> service/role leaves`, the
+/// same order used by task teardown. Holding SCHEDULER through publication
+/// prevents a remote kill from completing before a dead TID is registered.
+pub(crate) fn publish_role_or_rollback(
+    tid: usize,
+    publish_role: impl FnOnce(usize),
+    publish_service: impl FnOnce() -> bool,
+    rollback_role: impl FnOnce(usize),
+) -> bool {
+    let scheduler = crate::task::SCHEDULER.lock();
+    let live = scheduler
+        .as_ref()
+        .and_then(|scheduler| scheduler.tasks.get(&tid))
+        .is_some_and(|task| {
+            !matches!(
+                &task.state,
+                crate::task::tcb::TaskState::Terminated | crate::task::tcb::TaskState::Retiring
+            )
+        });
+    if !live {
+        return false;
+    }
+    let published =
+        publish_live_role_or_rollback(tid, publish_role, publish_service, rollback_role);
+    drop(scheduler);
+    published
+}
+
+fn publish_live_role_or_rollback(
+    tid: usize,
+    publish_role: impl FnOnce(usize),
+    publish_service: impl FnOnce() -> bool,
+    rollback_role: impl FnOnce(usize),
+) -> bool {
+    let _publication = ROLE_PUBLICATION.lock();
+    publish_role(tid);
+    if publish_service() {
+        true
+    } else {
+        rollback_role(tid);
+        false
+    }
 }
 
 /// Record `tid` as the active block driver.  Overwrites any previous registration.
@@ -145,25 +193,25 @@ pub fn clear_input_cell_if(tid: usize) {
         .ok();
 }
 
-/// Clear every well-known Driver Cell role owned by `tid`.
+/// Clear service routes and every Driver Cell role owned by an exact dead TID.
 ///
-/// This is the single lifecycle teardown entrypoint for task death, force-exit,
-/// and hotswap retirement. Each role clears only on an exact TID match so an
-/// unrelated replacement cannot lose its registration.
+/// Sharing `ROLE_PUBLICATION` with registration prevents teardown from
+/// interleaving between role publication and service publication.
 pub fn deregister_all_for(tid: usize) {
+    let _publication = ROLE_PUBLICATION.lock();
+    crate::cell::service_registry::clear_tid(tid);
     clear_input_cell_if(tid);
     deregister_block_driver(tid);
     deregister_nic_driver(tid);
     deregister_gpu_driver(tid);
 }
-
 #[cfg(test)]
 mod tests {
     use super::{
-        deregister_all_for, NicDriverState, BLOCK_DRIVER_CELL, GPU_DRIVER_CELL, INPUT_CELL_TID,
-        NIC_DRIVER_STATE,
+        deregister_all_for, publish_live_role_or_rollback, NicDriverState, BLOCK_DRIVER_CELL,
+        GPU_DRIVER_CELL, INPUT_CELL_TID, NIC_DRIVER_STATE,
     };
-    use core::sync::atomic::Ordering;
+    use core::sync::atomic::{AtomicUsize, Ordering};
 
     fn seed_roles(owner_tid: usize, nic_irq: u32) {
         BLOCK_DRIVER_CELL.store(owner_tid, Ordering::Release);
@@ -212,5 +260,43 @@ mod tests {
         );
 
         reset_roles();
+    }
+
+    #[test]
+    fn rejected_service_publication_rolls_back_only_the_exact_owner() {
+        let owner = AtomicUsize::new(0);
+        let publish = |tid| owner.store(tid, Ordering::Release);
+        let rollback = |tid| {
+            owner
+                .compare_exchange(tid, 0, Ordering::AcqRel, Ordering::Relaxed)
+                .ok();
+        };
+
+        assert!(!publish_live_role_or_rollback(
+            41,
+            publish,
+            || false,
+            rollback,
+        ));
+        assert_eq!(owner.load(Ordering::Acquire), 0);
+
+        assert!(!publish_live_role_or_rollback(
+            41,
+            |tid| owner.store(tid, Ordering::Release),
+            || {
+                owner.store(52, Ordering::Release);
+                false
+            },
+            |tid| {
+                owner
+                    .compare_exchange(tid, 0, Ordering::AcqRel, Ordering::Relaxed)
+                    .ok();
+            },
+        ));
+        assert_eq!(
+            owner.load(Ordering::Acquire),
+            52,
+            "rollback must not erase a concurrently published replacement"
+        );
     }
 }

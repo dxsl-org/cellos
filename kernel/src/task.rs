@@ -49,6 +49,7 @@ pub mod ipc_wire_selftest;
 #[cfg(test)]
 mod ipc_wire_tests;
 pub use tcb::Task;
+pub mod cap_file_selftest;
 #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
 pub mod context_handoff_selftest;
 pub mod drivers;
@@ -57,7 +58,6 @@ pub mod drivers;
 pub(crate) mod getrandom_sas_tests;
 pub mod ipc_guardrail_selftest;
 pub mod ipc_pending_selftest;
-pub mod cap_file_selftest;
 pub mod ipc_test;
 #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
 pub mod path_selftest;
@@ -84,7 +84,7 @@ pub mod vfs_lifecycle_selftest;
 pub mod waker;
 
 use crate::sync::Spinlock;
-use alloc::string::String;
+use alloc::{collections::VecDeque, string::String};
 #[cfg(feature = "test-hooks")]
 use core::sync::atomic::{AtomicU8, Ordering};
 use log::info;
@@ -398,6 +398,11 @@ const _: crate::hal::UserCopyGuardFault = vi_user_copy_guard_fault;
 
 // Global Scheduler Instance
 pub(crate) static SCHEDULER: Spinlock<Option<Scheduler>> = Spinlock::new(None);
+/// Dead tasks whose IOMMU teardown has not yet been hardware-acknowledged.
+/// One entry is retried per scheduler pass to bound teardown latency.
+static IOMMU_CLEANUP_RETRIES: Spinlock<VecDeque<usize>> = Spinlock::new(VecDeque::new());
+/// Prevents duplicate retirement paths from observing an in-progress domain as absent.
+static IOMMU_CLEANUP_SERIAL: Spinlock<()> = Spinlock::new(());
 
 // Global Tick Counter
 static TICKS: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
@@ -1066,6 +1071,8 @@ pub fn yield_cpu() {
         let _ = queue.release(slot);
     }
 
+    retry_retired_dma_cleanup();
+
     // The common retirement funnel owns every task-local release. Worker exits
     // contribute one tid; a root contributes its entire quiesced generation.
     let grant_tids = {
@@ -1334,13 +1341,38 @@ pub fn yield_cpu() {
 /// Reap state keyed by a concrete task TID. This is intentionally shared by
 /// worker and root retirement so a root cannot leave a member's grant, pin,
 /// IOMMU domain, BDF, VM, or VFS lease behind for a reused CellId.
-fn reap_retired_task_resources(tid: usize) {
+fn release_retired_dma_after_ack(tid: usize) -> bool {
+    let _cleanup = IOMMU_CLEANUP_SERIAL.lock();
+    if !crate::task::drivers::iommu::cleanup_cell(tid as u64) {
+        return false;
+    }
     crate::resource_registry::release_bdfs_for(tid);
-    // IOFENCE/IOTLB completion is the acknowledgement required before pinned
-    // frames may leave quarantine. On timeout, grant reaping below withholds
-    // the still-pinned pages instead of recycling DMA-reachable memory.
-    if crate::task::drivers::iommu::cleanup_cell(tid as u64) {
-        crate::task::syscall::release_acked_frames(tid);
+    crate::task::syscall::release_acked_frames(tid);
+    true
+}
+
+fn queue_retired_dma_cleanup(tid: usize) {
+    // Retirement emits each TID once per funnel. A failed retry moves its one
+    // entry from front to back, so requeue stays constant-time.
+    IOMMU_CLEANUP_RETRIES.lock().push_back(tid);
+}
+
+fn retry_retired_dma_cleanup() {
+    let retry = IOMMU_CLEANUP_RETRIES.lock().pop_front();
+    if let Some(tid) = retry {
+        if !release_retired_dma_after_ack(tid) {
+            queue_retired_dma_cleanup(tid);
+        }
+    }
+}
+
+fn reap_retired_task_resources(tid: usize) {
+    // IOFENCE/IOTLB completion is the acknowledgement required before another
+    // Driver Cell may claim the BDF or pinned frames may leave quarantine.
+    // On timeout both ownership and still-pinned frames remain fail-closed and
+    // one deferred teardown is retried on each scheduler pass.
+    if !release_retired_dma_after_ack(tid) {
+        queue_retired_dma_cleanup(tid);
     }
     crate::task::syscall::reap_grants_for_task(tid);
     crate::hypervisor::registry::reap_vms_for_task(tid);

@@ -18,7 +18,11 @@ use alloc::{
 };
 // RV32 lacks native 64-bit atomics; portable-atomic polyfills AtomicU64 there
 // via the critical-section impl hal/arch/riscv registers.
+use super::iommu::{classify_dma_publication, DmaMapResult};
 use super::iommu_pt::Sv39IommuPt;
+use super::iommu_riscv_cmd::{
+    encode_cqb, encode_iodir_inval_ddt, encode_iofence_c, encode_iotinval_vma,
+};
 use crate::sync::Spinlock;
 use crate::task::drivers::pcie_ecam;
 #[cfg(not(target_arch = "riscv32"))]
@@ -31,21 +35,26 @@ const CLASS: u8 = 0x08;
 const SUB: u8 = 0x06;
 const PROGIF: u8 = 0x00;
 
-// BAR0 register offsets (RISC-V IOMMU spec v1.0.1 §3.1)
+// BAR0 register offsets (RISC-V IOMMU spec v1.0.1, register layout)
 const REG_CAPS: usize = 0x00;
 const REG_FCTL: usize = 0x08;
 const REG_DDTP: usize = 0x10;
-const REG_CQB: usize = 0x18; // Command Queue Base
-const REG_CQH: usize = 0x20; // Command Queue Head (HW-owned, read-only)
-const REG_CQT: usize = 0x28; // Command Queue Tail (SW-owned)
-const REG_IPSR: usize = 0x38;
+const REG_CQB: usize = 0x18;
+const REG_CQH: usize = 0x20;
+const REG_CQT: usize = 0x24;
+const REG_CQCSR: usize = 0x48;
+const REG_IPSR: usize = 0x54;
 
 const DDTP_MODE_BARE: u64 = 1;
-const DDTP_MODE_3LVL: u64 = 4; // RISC-V IOMMU spec §2.2: Off=0 Bare=1 1LVL=2 2LVL=3 3LVL=4
+const DDTP_MODE_3LVL: u64 = 4;
+const DDTP_BUSY: u64 = 1 << 4;
 
+const CQCSR_CQEN: u32 = 1;
+const CQCSR_CQON: u32 = 1 << 16;
+const CQCSR_BUSY: u32 = 1 << 17;
 const CQ_DEPTH: usize = 64;
-const CQ_LOG2: u64 = 6; // log2(64)
-const CQ_ENTRY: usize = 16; // bytes per CQ entry
+const CQ_LOG2: u8 = 6;
+const CQ_ENTRY: usize = 16;
 
 const DC_TC_V: u64 = 1;
 const SATP_MODE_SV39: u64 = 8u64 << 60;
@@ -58,6 +67,8 @@ static BAR0: AtomicUsize = AtomicUsize::new(0);
 static DDT_VIRT: AtomicUsize = AtomicUsize::new(0); // L1 table virtual address
 static DDT_PHYS: AtomicU64 = AtomicU64::new(0); // L1 table physical address (identity)
 static CQ_VIRT: AtomicUsize = AtomicUsize::new(0);
+/// Serializes each invalidation batch through its acknowledging IOFENCE.
+static CQ_TRANSACTION: Spinlock<()> = Spinlock::new(());
 
 struct RiscvDomain {
     pt: Sv39IommuPt,
@@ -84,6 +95,11 @@ unsafe fn read32(base: usize, off: usize) -> u32 {
 unsafe fn write32(base: usize, off: usize, val: u32) {
     // SAFETY: caller ensures base is valid identity-mapped MMIO.
     unsafe { core::ptr::write_volatile((base + off) as *mut u32, val) }
+}
+#[inline]
+unsafe fn read64(base: usize, off: usize) -> u64 {
+    // SAFETY: caller ensures base is valid identity-mapped MMIO.
+    unsafe { core::ptr::read_volatile((base + off) as *const u64) }
 }
 #[inline]
 unsafe fn write64(base: usize, off: usize, val: u64) {
@@ -114,68 +130,97 @@ pub(super) fn free_pscid(id: u16) {
 
 // ── Command queue ─────────────────────────────────────────────────────────────
 
-fn cq_head(bar0: usize) -> u64 {
-    let v = unsafe { core::ptr::read_volatile((bar0 + REG_CQH) as *const u64) };
-    v & 0xFFFF
+fn wait_ddtp_ready(bar0: usize) -> bool {
+    for _ in 0..POLL_MAX {
+        if unsafe { read64(bar0, REG_DDTP) } & DDTP_BUSY == 0 {
+            return true;
+        }
+        core::hint::spin_loop();
+    }
+    log::warn!("[iommu_riscv] DDTP busy timeout");
+    false
 }
 
-/// Enqueue one 16-byte CQ entry. CQ-full guard spins until a slot is free.
-fn enqueue_cmd(bar0: usize, cq_virt: usize, w0: u64, w1: u64) {
+fn wait_cq_state(bar0: usize, enabled: bool) -> bool {
+    for _ in 0..POLL_MAX {
+        let state = unsafe { read32(bar0, REG_CQCSR) };
+        if state & CQCSR_BUSY == 0 && (state & CQCSR_CQON != 0) == enabled {
+            return true;
+        }
+        core::hint::spin_loop();
+    }
+    log::warn!("[iommu_riscv] command queue state transition timeout");
+    false
+}
+
+fn cq_head(bar0: usize) -> u32 {
+    unsafe { read32(bar0, REG_CQH) }
+}
+
+/// Enqueue one 16-byte CQ entry. Returns `false` if the queue never frees a slot.
+///
+/// Caller holds `CQ_TRANSACTION`, preventing another producer from racing the
+/// CQT read/slot write/tail publication sequence.
+fn enqueue_cmd(bar0: usize, cq_virt: usize, w0: u64, w1: u64) -> bool {
     let mut spin = 0u64;
     loop {
-        let t = unsafe { core::ptr::read_volatile((bar0 + REG_CQT) as *const u64) } & 0xFFFF;
-        let h = cq_head(bar0);
-        if (t + 1) % CQ_DEPTH as u64 != h {
+        let tail = unsafe { read32(bar0, REG_CQT) };
+        let head = cq_head(bar0);
+        if (tail + 1) % CQ_DEPTH as u32 != head {
             break;
         }
         spin += 1;
         if spin > POLL_MAX {
-            log::warn!("[iommu_riscv] CQ full — QEMU may not process CQ commands");
-            return;
+            log::warn!("[iommu_riscv] CQ full — command was not published");
+            return false;
         }
         core::hint::spin_loop();
     }
-    let tail = unsafe { core::ptr::read_volatile((bar0 + REG_CQT) as *const u64) } & 0xFFFF;
+    let tail = unsafe { read32(bar0, REG_CQT) };
     let slot = cq_virt + (tail as usize) * CQ_ENTRY;
     unsafe {
         core::ptr::write_volatile(slot as *mut u64, w0);
         core::ptr::write_volatile((slot + 8) as *mut u64, w1);
-        core::ptr::write_volatile((bar0 + REG_CQT) as *mut u64, (tail + 1) % CQ_DEPTH as u64);
+        core::sync::atomic::fence(Ordering::Release);
+        write32(bar0, REG_CQT, (tail + 1) % CQ_DEPTH as u32);
     }
+    true
 }
 
-/// Issue IOFENCE.C and poll until IOMMU drains the queue (CQH == CQT).
+/// Issue IOFENCE.C and return only after the IOMMU drains the queue.
 ///
-/// Frame quarantine: this MUST complete before DMA frames return to the frame allocator.
-fn issue_iofence(bar0: usize, cq_virt: usize) {
-    enqueue_cmd(bar0, cq_virt, 0x03, 0); // IOFENCE.C: OPCODE=3, FUNC3=0
-    let expected = unsafe { core::ptr::read_volatile((bar0 + REG_CQT) as *const u64) } & 0xFFFF;
+/// Frame quarantine: `true` is the acknowledgement required before DMA frames
+/// or BDF ownership may be reused.
+fn issue_iofence(bar0: usize, cq_virt: usize) -> bool {
+    let (w0, w1) = encode_iofence_c();
+    if !enqueue_cmd(bar0, cq_virt, w0, w1) {
+        return false;
+    }
+    let expected = unsafe { read32(bar0, REG_CQT) };
     let mut spin = 0u64;
     loop {
         if cq_head(bar0) == expected {
-            break;
+            return true;
         }
         spin += 1;
         if spin > POLL_MAX {
-            log::warn!("[iommu_riscv] IOFENCE timeout — QEMU may not advance CQH");
-            break; // validated: log warn + continue on QEMU
+            log::warn!("[iommu_riscv] IOFENCE timeout — retaining DMA quarantine");
+            return false;
         }
         core::hint::spin_loop();
     }
 }
 
 /// Invalidate all first-stage IOTLB entries for a specific PSCID.
-fn invalidate_pscid_tlb(bar0: usize, cq_virt: usize, pscid: u16) {
-    // IOTINVAL.VMA: OPCODE=2, FUNC3=0 (VMA/first-stage), PSCV=bit20, PSCID[9:0] in bits[31:22]
-    let w0 = 0x02u64 | (1u64 << 20) | ((pscid as u64 & 0x3FF) << 22);
-    enqueue_cmd(bar0, cq_virt, w0, 0);
+fn invalidate_pscid_tlb(bar0: usize, cq_virt: usize, pscid: u16) -> bool {
+    let (w0, w1) = encode_iotinval_vma(pscid as u32);
+    enqueue_cmd(bar0, cq_virt, w0, w1)
 }
 
 /// Invalidate the IOMMU's cached Device Context for a device_id.
-fn invalidate_dc(bar0: usize, cq_virt: usize, device_id: u64) {
-    // IODIR.INVAL_DDT: OPCODE=1, FUNC3=2 (DDT targeted), DV=bit10, DID in bits[35:12]
-    let w0 = 0x01u64 | (2u64 << 7) | (1u64 << 10) | (device_id << 12);
-    enqueue_cmd(bar0, cq_virt, w0, 0);
+fn invalidate_dc(bar0: usize, cq_virt: usize, device_id: u32) -> bool {
+    let (w0, w1) = encode_iodir_inval_ddt(device_id);
+    enqueue_cmd(bar0, cq_virt, w0, w1)
 }
 
 // ── 3LVL DDT tree management ──────────────────────────────────────────────────
@@ -285,14 +330,34 @@ pub(super) fn init_hw() {
         return;
     }
 
-    let _caps = unsafe { core::ptr::read_volatile((bar0 + REG_CAPS) as *const u64) };
+    let _caps = unsafe { read64(bar0, REG_CAPS) };
+    if !wait_ddtp_ready(bar0) {
+        return;
+    }
+    unsafe {
+        // Feature controls may change only while the IOMMU is Off and queues
+        // are disabled. Keep memory structures little-endian.
+        write64(bar0, REG_DDTP, 0);
+    }
+    if !wait_ddtp_ready(bar0) {
+        return;
+    }
+    unsafe {
+        write32(bar0, REG_CQCSR, 0);
+    }
+    if !wait_cq_state(bar0, false) {
+        return;
+    }
     unsafe {
         write32(bar0, REG_FCTL, 0);
-        write64(bar0, REG_DDTP, DDTP_MODE_BARE);
         let ipsr = read32(bar0, REG_IPSR);
         if ipsr != 0 {
             write32(bar0, REG_IPSR, ipsr);
         }
+        write64(bar0, REG_DDTP, DDTP_MODE_BARE);
+    }
+    if !wait_ddtp_ready(bar0) {
+        return;
     }
 
     // Allocate L1 DDT: 512 × 8-byte non-leaf entries = 4096 bytes.
@@ -306,17 +371,19 @@ pub(super) fn init_hw() {
     let cq_virt = unsafe { alloc_zeroed(layout) } as usize;
     assert!(cq_virt != 0, "[iommu_riscv] OOM: CQ");
 
+    unsafe {
+        write64(bar0, REG_CQB, encode_cqb(cq_virt as u64, CQ_LOG2));
+        write32(bar0, REG_CQT, 0);
+        write32(bar0, REG_CQCSR, CQCSR_CQEN);
+    }
+    if !wait_cq_state(bar0, true) {
+        return;
+    }
+
     BAR0.store(bar0, Ordering::Relaxed);
     DDT_VIRT.store(ddt_virt, Ordering::Relaxed);
     DDT_PHYS.store(ddt_virt as u64, Ordering::Relaxed); // identity-mapped: VA == PA
     CQ_VIRT.store(cq_virt, Ordering::Relaxed);
-
-    // Program CQ: REG_CQB = (cq_phys >> 12) | log2(depth)
-    unsafe {
-        write64(bar0, REG_CQB, (cq_virt as u64 >> 12) | CQ_LOG2);
-        let fctl = read32(bar0, REG_FCTL);
-        write32(bar0, REG_FCTL, fctl | 1); // CQEN = bit 0
-    }
 
     log::info!(
         "[iommu] RISC-V IOMMU HW ready (vendor={:04x} dev={:04x}) \
@@ -331,14 +398,14 @@ pub(super) fn init_hw() {
 /// Register `[phys, phys+size)` for Cell `tid` owning device `bdf`.
 ///
 /// Creates a per-Cell `Sv39IommuPt` + PSCID on first call. Writes a DDT entry
-/// for `bdf` immediately (even before `activate()`). A bare CPU fence is insufficient
-/// for DC cache coherency — IODIR.INVAL_DDT + IOFENCE.C are issued after each DC write.
-pub(super) fn map_range_for_cell(tid: u64, bdf: u32, phys: u64, size: usize) -> bool {
+/// for `bdf` immediately (even before `activate()`). IODIR.INVAL_DDT and
+/// IOTINVAL.VMA are acknowledged together by IOFENCE.C after each update.
+pub(super) fn map_range_for_cell(tid: u64, bdf: u32, phys: u64, size: usize) -> DmaMapResult {
     let bar0 = BAR0.load(Ordering::Relaxed);
     let ddt_virt = DDT_VIRT.load(Ordering::Relaxed);
     let cq_virt = CQ_VIRT.load(Ordering::Relaxed);
     if bar0 == 0 || ddt_virt == 0 {
-        return false;
+        return DmaMapResult::Rejected;
     }
 
     let mut domains = RISCV_DOMAINS.lock();
@@ -370,48 +437,69 @@ pub(super) fn map_range_for_cell(tid: u64, bdf: u32, phys: u64, size: usize) -> 
             pscid
         );
 
-        // Invalidate IOMMU's cached DC for this device — CPU fence alone is insufficient.
-        if cq_virt != 0 {
-            invalidate_dc(bar0, cq_virt, bdf as u64);
-            issue_iofence(bar0, cq_virt);
-        }
+        // The DC is already visible in memory. Missing CQ publication or
+        // IOFENCE acknowledgement is therefore published-but-unconfirmed and
+        // must retain the caller's DMA pin. Serialize the complete batch so
+        // another hart cannot overwrite a command before this fence drains.
+        let (translations_published, fence_acknowledged) = {
+            let _transaction = CQ_TRANSACTION.lock();
+            let directory_published = cq_virt != 0 && invalidate_dc(bar0, cq_virt, bdf);
+            let translations_published =
+                directory_published && invalidate_pscid_tlb(bar0, cq_virt, pscid);
+            let fence_acknowledged = translations_published && issue_iofence(bar0, cq_virt);
+            (translations_published, fence_acknowledged)
+        };
+        return classify_dma_publication(phys, translations_published, fence_acknowledged);
     }
-    true
+    DmaMapResult::Mapped(phys)
 }
 
 /// Backward-compat: register a DMA range for the kernel domain (tid=0) without a BDF.
 #[allow(dead_code)] // reason: kept for API parity with iommu_x86; no caller wired up yet
 pub(super) fn map_range(phys: u64, size: usize) {
-    map_range_for_cell(0, 0, phys, size);
+    let _ = map_range_for_cell(0, 0, phys, size);
 }
 
 // ── Cell exit DMA cleanup ─────────────────────────────────────────────────────
 
-/// Flush IOTLB for `tid`'s domain and zero its DDT entries. Called on Cell exit.
+/// Flush IOTLB and invalidate DDT contexts for `tid`.
 ///
-/// Frame quarantine: IOFENCE must complete BEFORE the caller returns DMA frames
-/// to the frame allocator.
-pub(super) fn unmap_cell(tid: u64) {
+/// Returns `true` only after hardware acknowledges every teardown command.
+/// Failure keeps the domain so ownership and pinned frames remain quarantined.
+pub(super) fn unmap_cell(tid: u64) -> bool {
     let bar0 = BAR0.load(Ordering::Relaxed);
     let ddt_virt = DDT_VIRT.load(Ordering::Relaxed);
     let cq_virt = CQ_VIRT.load(Ordering::Relaxed);
 
-    // Remove domain while holding lock, then operate outside lock.
-    let domain = RISCV_DOMAINS.lock().remove(&tid);
-    let domain = match domain {
-        Some(d) => d,
-        None => return,
+    // The dead task cannot issue new mappings. Temporarily remove its domain so
+    // teardown can run without holding RISCV_DOMAINS across bounded MMIO polls.
+    let Some(domain) = RISCV_DOMAINS.lock().remove(&tid) else {
+        return true;
     };
 
-    if bar0 != 0 && cq_virt != 0 {
-        invalidate_pscid_tlb(bar0, cq_virt, domain.pscid);
-        issue_iofence(bar0, cq_virt); // frame quarantine: must complete before frame release
-    }
+    if bar0 != 0 {
+        if ddt_virt == 0 || cq_virt == 0 {
+            RISCV_DOMAINS.lock().insert(tid, domain);
+            return false;
+        }
 
-    // Zero DDT entries for each BDF this Cell owned.
-    if ddt_virt != 0 {
-        for &bdf in &domain.bdfs {
-            zero_dc_3lvl(ddt_virt, bdf);
+        // Publish every DDT removal, invalidate the domain's first-stage
+        // translations, then use one IOFENCE as acknowledgement for the batch.
+        // The transaction guard drops before a failed domain is reinserted,
+        // preserving the map path's RISCV_DOMAINS -> CQ_TRANSACTION lock order.
+        let acknowledged = {
+            let _transaction = CQ_TRANSACTION.lock();
+            let directory_published = domain.bdfs.iter().copied().all(|bdf| {
+                zero_dc_3lvl(ddt_virt, bdf);
+                invalidate_dc(bar0, cq_virt, bdf)
+            });
+            let translations_published =
+                directory_published && invalidate_pscid_tlb(bar0, cq_virt, domain.pscid);
+            translations_published && issue_iofence(bar0, cq_virt)
+        };
+        if !acknowledged {
+            RISCV_DOMAINS.lock().insert(tid, domain);
+            return false;
         }
     }
 
@@ -421,6 +509,7 @@ pub(super) fn unmap_cell(tid: u64) {
         tid,
         domain.pscid
     );
+    true
 }
 
 // ── Phase 3: activate enforcement ────────────────────────────────────────────
@@ -452,6 +541,10 @@ pub(super) fn activate() {
     let ddtp = ((ddt_phys >> 12) << 10) | DDTP_MODE_3LVL;
     unsafe {
         write64(bar0, REG_DDTP, ddtp);
+    }
+    if !wait_ddtp_ready(bar0) || unsafe { read64(bar0, REG_DDTP) } & 0xF != DDTP_MODE_3LVL {
+        log::warn!("[iommu_riscv] 3LVL activation was not acknowledged");
+        return;
     }
 
     super::iommu::set_active();

@@ -593,11 +593,19 @@ mod display_tests {
 static BDF_OWNERS: Spinlock<alloc::collections::BTreeMap<u32, usize>> =
     Spinlock::new(alloc::collections::BTreeMap::new());
 
-/// Register a PCIe BDF as owned by task `tid`.
+/// Atomically claim an unowned PCIe BDF for task `tid`.
 ///
-/// Called when a Driver Cell is granted ownership of a PCIe device.
-pub fn register_bdf_owner(bdf: u32, tid: usize) {
-    BDF_OWNERS.lock().insert(bdf, tid);
+/// Repeated claims by the same task are idempotent. A live owner cannot be
+/// displaced; task reaping releases its claims through [`release_bdfs_for`].
+pub fn claim_bdf_owner(bdf: u32, tid: usize) -> bool {
+    let mut owners = BDF_OWNERS.lock();
+    match owners.get(&bdf).copied() {
+        Some(owner) => owner == tid,
+        None => {
+            owners.insert(bdf, tid);
+            true
+        }
+    }
 }
 
 /// Return the task ID that currently owns `bdf`, or `None` if unowned.

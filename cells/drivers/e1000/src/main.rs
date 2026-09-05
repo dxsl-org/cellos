@@ -84,10 +84,17 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
                 }
             };
 
-            // 4. Register as the active NIC driver.
-            let _ = sys_register_nic_driver();
-
+            // Publish state before registration: the kernel may route requests
+            // as soon as the syscall succeeds.
             *STATE.lock() = Some(NicState { ctrl });
+            if let Err(error) = sys_register_nic_driver() {
+                *STATE.lock() = None;
+                let _ = print_fmt(format_args!(
+                    "[e1000] NIC driver registration failed: {:?}\n",
+                    error
+                ));
+                ostd::syscall::sys_exit(1);
+            }
         }
 
         // The net service speaks the raw NIC wire protocol (no 0xAC App-SDK
