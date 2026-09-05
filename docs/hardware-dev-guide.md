@@ -65,12 +65,16 @@ Hiện trạng và ranh giới:
 
 - ACPI chỉ mở gate khi RSDP và bảng MADT/MCFG/HPET đã được map và checksum hợp lệ;
   không có fallback ngầm sang địa chỉ QEMU q35.
-- Kernel tạm thời scan ECAM x86 từ MCFG vì Platform Cell chưa có kênh private
-  nhận ECAM runtime. Đây là giải pháp chuyển tiếp, không mở rộng public ABI.
-- Scanner hiện chỉ đi bus 0, chưa duyệt PCI-to-PCI bridge; NVMe sau bridge vẫn
-  là hardware/architecture gate.
-- x86 SMP chưa được triển khai. VT-d cũng đóng trong lane này cho đến khi địa
-  chỉ remapping unit được lấy từ ACPI DMAR thay vì `0xFED90000` của q35.
+- Kernel chuyển base/range ECAM đã xác thực cho Platform Cell qua launch argv;
+  raw MCFG base là bus-0-relative, còn cửa sổ map/claim inclusive được kiểm tra
+  và chuẩn hoá theo `bus_start`. Cơ chế này không thay đổi syscall ABI công khai.
+- Platform quét mọi bus được MCFG cho phép bằng offset tương đối và BDF chuẩn
+  `bus[15:8] | device[7:3] | function[2:0]`. q35 đã chứng minh NVMe sau root
+  port tại `01:00.0`; đây chỉ đóng gate phần mềm QEMU, không phải qualification
+  cho PCIe/NVMe trên máy x86 thật.
+- x86 SMP chưa được triển khai. Bằng chứng VT-d per-bus trên q35 vẫn dùng
+  remapping unit cố định `0xFED90000`; lane phần cứng tiếp tục đóng cho đến khi
+  địa chỉ này được khám phá từ ACPI DMAR.
 - e1000 chỉ nhận Intel 82540EM `8086:100e`; I219/e1000e không thuộc phạm vi.
 
 Tạo media bằng đường dẫn tương đối từ root repo:

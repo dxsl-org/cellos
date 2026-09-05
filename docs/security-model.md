@@ -136,13 +136,18 @@ IOVA==PA, no permission table) to **per-Cell translate mode** on both architectu
   translation domain, a unique **PSCID** per Cell (with a free-list to survive Cell restarts), and
   `IOTINVAL.VMA` / `IOFENCE.C` / `IODIR.INVAL_DDT` invalidation.
 - **x86** (`kernel/src/task/drivers/iommu_x86.rs`): a per-Cell VT-d second-level page table (`VtdSlpt`) with
-  its own DID, ECAP-computed IOTLB offsets, and PSI/DSI IOTLB + context-cache invalidation.
+  its own DID, one lazily initialized context table per PCI bus, exact canonical BDF tracking, ECAP-computed
+  IOTLB offsets, and context-cache plus PSI/DSI IOTLB invalidation. Publishing a new bus context while
+  translation is active requires acknowledged global context-cache invalidation followed by acknowledged
+  global IOTLB invalidation with read/write drains before `GrantDma` succeeds. If invalidation is not
+  acknowledged, authorization fails and the newly pinned frames remain quarantined rather than reclaimed.
 
 DMA authorization is now a first-class capability: the new **`sys_grant_dma` (233)** syscall grants a Cell a
 BDF plus a DMA-mapping quota (1× its memory quota, page-aligned), enforced by `can_map_dma()` +
-`record_dma_mapped/unmapped()`. On Cell exit, `cleanup_cell()` (Exit / ForceExit / watchdog paths) tears down
-the domain and issues `IOFENCE`/IVT flush **before** frame reclaim. Peripherals default to the kernel domain;
-a userspace Driver Cell must explicitly request authorization. This closes the Thunderclap (NDSS 2019) class
+`record_dma_mapped/unmapped()`. On Cell exit, `cleanup_cell()` (Exit / ForceExit / watchdog paths) clears every
+exact BDF context, then invalidates the context cache, invalidates and drains the IOTLB, and only then permits
+frame reclaim. Peripherals default to the kernel domain; a userspace Driver Cell must explicitly request
+authorization. This closes the Thunderclap (NDSS 2019) class
 of attack for PCIe DMA-capable devices — the blast radius of a compromised Driver Cell is now confined to its
 own granted pages, not all of physical memory.
 
@@ -347,7 +352,7 @@ Bước 4: Kernel unsafe blocks
 | Fuzzing | Weekly libFuzzer harnesses on ELF parser + VFS path validator |
 | HW — spatial | MTE hardening is available on Armv8.5+/QEMU, **not RK3588**; x86 PKU register/return-path plumbing exists but keys remain all-zero and enforcement is absent; PMP needs a future M-mode owner |
 | HW — control-flow | ✅ **Shipped**: BTI+PAC-RET (ARM), CET-IBT (x86); Zicfilp/Zicfiss (RISC-V) _(roadmap)_ |
-| HW — DMA | ✅ **Shipped**: IOMMU translate mode (RISC-V 3LVL DDT / x86 VT-d per-Cell) + per-Cell `sys_grant_dma` (**not** MMIO ownership). virtio-mmio DMA + IOPMP coverage _(roadmap)_ |
+| HW — DMA | ✅ **Shipped**: IOMMU translate mode (RISC-V 3LVL DDT / x86 VT-d per-Cell with per-bus context tables) + per-Cell `sys_grant_dma` (**not** MMIO ownership). virtio-mmio DMA + IOPMP coverage _(roadmap)_ |
 | HW — VM-grade _(roadmap)_ | Stage-2/EPT (Tier 3); TDX/SEV-SNP/ARM CCA for attested multi-tenant |
 
 > Spec 19 owns the Layer A/B/C hardware-isolation taxonomy. The research document rates

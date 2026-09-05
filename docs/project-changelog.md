@@ -37,21 +37,23 @@
 
 
 
-- Implemented x86 Platform Cell PCIe discovery handoff via ACPI MCFG launch argv.
-  Kernel extracts base address and bus range from validated ACPI MCFG, attaches
-  `--ecam-base=<hex> --bus-start=<N> --bus-end=<N>` to `SpawnRequest::with_argv`,
-  and spawns `/bin/platform` before `init` on x86_64. `/bin/platform` adds
-  `StateRestore` to its explicit syscall allowlist, decodes spawn argv via
-  `ostd::args`, claims the 1 MiB bus-0 ECAM MMIO window, walks all 32 device slots,
-  and registers discovered BARs and PCI devices. Seven `service-platform` host
-  tests cover BAR32/BAR64 size-mask decoding and exact memory-decode/BAR/command
-  restoration. A dedicated RV64 `no_std` test-hooks harness exercises
-  `resource_registry::valid_pcie_bar_window` against aligned valid windows,
-  zero/misaligned/non-power-of-two inputs, the 1 GiB ceiling, and address
-  overflow; its live QEMU gate requires exactly one bounded/aligned/overflow-safe
-  PASS marker after a later boot milestone. The existing `vfs-quota` CI job
-  builds the test-hooks kernel once and runs both `vfs-quota` and
-  `pcie-bar-window`; the q35 NIC/NVMe regression remains green at 5/5.
+- Extended x86 Platform Cell PCIe discovery from bus 0 to every bus in the
+  checked inclusive segment-0 ACPI MCFG range. The kernel treats the raw MCFG
+  ECAM base as bus-0-relative, normalizes the mapped window by `bus_start`, and
+  passes `--ecam-base=<hex> --bus-start=<N> --bus-end=<N>` without changing the
+  frozen syscall ABI. `/bin/platform` claims the same bounded window, uses
+  bus-relative ECAM offsets, and registers the canonical
+  `bus[15:8] | device[7:3] | function[2:0]` BDF. VT-d now uses a distinct
+  context table per bus and completes ordered context-cache then IOTLB
+  invalidation with drains before DMA authorization; teardown clears exact BDF
+  contexts before invalidation and pinned-frame release. Verification passed
+  the Platform and kernel host suites at 9/9 and 100/100, the `driver-nvme`
+  cross-check, a fresh cells → kernel → ISO build, strict q35 multibus at 2/2,
+  strict `nic-x86` at 2/2, and strict `nvme-x86` at 3/3. Runtime evidence
+  registered the bus-1 NVMe endpoint and ordered `VT-d ACTIVE` before exact BDF
+  `01:00.0` DMA authorization before block-driver registration. This closes
+  only the q35 software gate for buses above 0; physical-x86 qualification,
+  production signing, real NIC Tx/Rx/DHCP, and ACPI DMAR discovery remain open.
 
 - Hardened QEMU-TCG x86 version parity and verified Phase 06 qualification
   oracles under pinned official QEMU 10.2.0. Runners reject unqualified
@@ -1685,20 +1687,20 @@ changed and no physical-RPi3 claim was added.
 
 ## [2026-08-20] Phase 05 q35 PCIe storage and network tightens the x86 lane
 
-The current QEMU q35 x86_64 lane now scans PCIe ECAM on bus 0, registers
-bounded BAR windows through the resource registry, and keeps invalid BARs
-fail-closed instead of granting MMIO authority. VT-d activation remains
-board-gated behind the q35 fixed base, before any DMA-capable Driver Cell is
-allowed to use the path.
+At this dated phase, the QEMU q35 x86_64 lane validated root-complex ECAM
+enumeration, registered bounded BAR windows through the resource registry, and
+kept invalid BARs fail-closed instead of granting MMIO authority. VT-d
+activation remained board-gated behind the q35 fixed base before any
+DMA-capable Driver Cell could use the path.
 
 NVMe now has a QEMU FAT32 write/read witness through `/mnt/sd`, and the e1000
 cell closes the unsupported-device path with a bounded discovery retry instead
 of a false permanent absence. The build path also works from WSL/Windows
 tooling after script portability fixes.
 
-This lane is still QEMU-only. Physical x86 remains gated, bus 0 is the only
-validated enumeration path, real NIC Tx/Rx/DHCP are not proven, and the BAR
-kernel unit-harness gap stays deferred.
+The Unreleased multi-bus completion later superseded this phase's enumeration
+limit. The lane remains QEMU-only: physical x86 and real NIC Tx/Rx/DHCP remain
+gated.
 
 ## [2026-08-20] Phase 03 BCM/RPi3 hardware lane closes
 
@@ -3012,10 +3014,15 @@ The x86 image (VIFS1 ramdisk) now carries the PCIe cell stack: `/bin/platform` (
 ### Test suite modernised (was gating on deleted kernel-driver logs)
 `nvme-x86.rs` and `nic-x86.rs` asserted `[e1000] NIC initialized` / `[nvme] driver ready` / `[vtd] passthrough enabled` — strings that no longer exist since the drivers were exiled to cells. New oracles: `[driver_cell] block driver registered` / `[driver_cell] NIC driver registered` (promoted info→warn — they fire post-scheduler after the log level drops, same rationale as the input-registration marker) and `[vtd] Intel VT-d: DMA isolation ACTIVE` (deferred init, also warn now). nvme tests boot the ISO (the old `-kernel` boot never worked with Limine). Result: **boot 7/7 + nvme 2/2 + nic 2/2 + virtio 1/1 (+1 ignored: virtio-blk cell is MMIO-only, not in the x86 image)**.
 
-### Known issues (tracked, not regressions)
-- **NVMe under VT-d**: with `-device intel-iommu`, the NVMe cell's Identify DMA times out — lazy per-Cell SLPT mapping after TE=1 isn't honoured by QEMU DMAR yet (a domain-selective IOTLB flush after SLPT writes was added — correct per spec for CM=1 — but insufficient). e1000 registration and VT-d activation itself work; the vtd test asserts those only.
+### Issues at that revision
+- **NVMe under VT-d — resolved:** later invalidation fixes and current multi-bus
+  verification supersede the timeout; strict `nvme-x86` now passes 3/3, with
+  `VT-d ACTIVE` before exact BDF `01:00.0` DMA authorization before
+  block-driver registration.
 - **vfs mounts before the NVMe cell registers** (init spawns `/bin/nvme` at the net hook, after vfs) and caches `BLOCK_DRIVER` as absent — FAT-on-NVMe needs an init-ordering pass.
-- Platform scan's `bdf` devfn encoding round-trips today's kernel decode but the intermediate `(bus,dev,fun)` tuple is garbled for bus>0 — harmless on q35 bus 0, worth normalising.
+- **Nonzero-bus BDF — resolved:** Platform now registers the canonical
+  `bus[15:8] | device[7:3] | function[2:0]` value; q35 runtime registered the
+  bus-1 NVMe endpoint at `01:00.0`.
 
 ---
 

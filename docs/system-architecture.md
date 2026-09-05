@@ -144,10 +144,11 @@
 > missing enabled hardware, typed driver lists gate initialization, and CI runs
 > the ownership plus seven-board build matrix. RV64 and AArch64 QEMU runtime gates
 > pass; QEMU q35 x86_64 is the current x86 integration board, and the Phase 05
-> PCIe lane passes in QEMU only with bus 0 ECAM, bounded BAR registration, and
-> q35-gated VT-d before DMA-capable cells. RPi3 has merged physical smoke,
-> external-SD, and BCM GPIO/I2C/SPI evidence; VF2, Pioneer, RPi4, and physical
-> x86 remain hardware-gated.
+> PCIe lane now covers the checked inclusive ACPI MCFG range, canonical nonzero
+> BDFs, bounded BAR registration, and per-bus VT-d contexts before DMA-capable
+> cells use them. This evidence remains QEMU-only. RPi3 has merged physical
+> smoke, external-SD, and BCM GPIO/I2C/SPI evidence; VF2, Pioneer, RPi4, and
+> physical x86 remain hardware-gated.
 
 > **Status refresh 2026-08-19**: HAL↔kernel Rust ABI hooks are now single-sourced
 > in `hal/traits/arch/src/kernel_abi.rs`; HAL arch crates import the shared
@@ -345,11 +346,12 @@ resize preview.
   BIOS/RSDP windows. The kernel selects that profile before early serial output;
   validated ACPI remains the only source for LAPIC, IOAPIC, HPET, and PCIe ECAM
   addresses, so every downstream timer/interrupt/PCIe gate still fails closed.
-  The Phase 05 q35 flow scans PCIe ECAM on bus 0, registers BAR windows through
-  the resource registry, and keeps VT-d board-gated at the q35 fixed base before
-  any DMA-capable Driver Cell starts. That evidence is QEMU-only; physical x86
-  remains gated, bus > 0 is not yet validated, and real NIC Tx/Rx/DHCP is not
-  proven.
+  The Phase 05 q35 flow maps and scans the checked inclusive ACPI MCFG bus range,
+  registers canonical BDF/BAR windows through the resource registry, and uses
+  distinct VT-d context tables per bus with acknowledged invalidation before
+  DMA authorization. The bus-1 NVMe root-port path passes with and without VT-d.
+  That evidence is QEMU-only; physical x86 and ACPI DMAR discovery remain gated,
+  and real NIC Tx/Rx/DHCP is not proven.
 - The shared SDHCI controller receives an immutable runtime access policy;
   BCM2837 word-only/spaced writes, BCM2711 native access, and JH7110 native
   access do not create per-board driver implementations.

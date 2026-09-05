@@ -8,6 +8,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### 🚀 Improvements
+- platform: enumerate checked inclusive MCFG ECAM ranges across buses with canonical BDFs and per-bus VT-d contexts
 - x86_64: install 256 vector/CPL-aware IDT entries and verify them with an isolated `x86-idt-cpl3-test` two-task Ring-3 QEMU oracle
 - security: land non-admissible Tier 1 admission catalog/test infrastructure; Phase 04 production evidence remains blocked
 - kernel: enforce post-relocation W^X page permissions
