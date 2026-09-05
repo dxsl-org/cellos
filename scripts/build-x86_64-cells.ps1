@@ -1,7 +1,8 @@
 # build-x86_64-cells.ps1 — Build x86_64 cells and create kernel_fs.img for x86_64
 #
-# Builds app-shell and service-vfs (+ service-config) for x86_64-unknown-none,
-# then packages them into kernel/src/embedded-x86_64/kernel_fs.img.
+# Builds the shell, core services (including the net service), and Driver Cells
+# for x86_64-unknown-none, then packages them into
+# kernel/src/embedded-x86_64/kernel_fs.img.
 #
 # Run from the ViCell root directory.
 
@@ -11,6 +12,7 @@ $ErrorActionPreference = 'Stop'
 $target    = "x86_64-unknown-none"
 $buildDir  = "target\$target\release"
 $embedded  = "kernel\src\embedded-x86_64"
+$imagePath = "$embedded\kernel_fs.img"
 $buildStd  = "-Z build-std=core,alloc"
 # Cells link at CELL_VA_START (0x1_0000_0000 = 4 GiB) since 2026-06-19; a small
 # code-model with relocation-model=static cannot materialise that address
@@ -80,6 +82,25 @@ $cmd = "cargo build --release -p service-config --target $target $buildStd 2>&1"
 Invoke-Expression $cmd | Select-Object -Last 10
 if ($LASTEXITCODE -ne 0) { Write-Warning "service-config build failed (exit $LASTEXITCODE)" }
 
+# The e1000 data-plane gate requires a freshly built /bin/net. Invalidate both
+# the prior net binary and packaged image first: no failed build may leave a
+# stale image available to the subsequent kernel/ISO steps.
+Write-Host "Building service-net..."
+$netSrc = "$buildDir\service-net"
+foreach ($stale in @($netSrc, $imagePath)) {
+    if (Test-Path $stale) {
+        Remove-Item $stale -Force
+        if (Test-Path $stale) {
+            throw "Failed to invalidate stale x86_64 artifact: $stale"
+        }
+    }
+}
+$cmd = "cargo build --release -p service-net --target $target $buildStd 2>&1"
+Invoke-Expression $cmd | Select-Object -Last 10
+if ($LASTEXITCODE -ne 0 -or -not (Test-Path $netSrc)) {
+    throw "service-net build failed; refusing to create an image without fresh /bin/net"
+}
+
 # Build the PCIe cell stack (Kernel Boundary Law: drivers live in cells).
 # platform = ECAM scanner (kernel spawns /bin/platform before init);
 # nvme/e1000 = PCIe Driver Cells (init spawns them; PcieDriverCap is
@@ -122,6 +143,7 @@ $cells = @(
     @{ Bin = "app-shell";      Dst = "/bin/shell"  },
     @{ Bin = "service-vfs";    Dst = "/bin/vfs"    },
     @{ Bin = "service-config"; Dst = "/bin/config" },
+    @{ Bin = "service-net";    Dst = "/bin/net"    },
     @{ Bin = "platform";       Dst = "/bin/platform" },
     @{ Bin = "driver-nvme";    Dst = "/bin/nvme"   },
     @{ Bin = "driver-e1000";   Dst = "/bin/e1000"  },
@@ -132,7 +154,6 @@ $cells = @(
     @{ Bin = "kill";           Dst = "/bin/kill"   }
 )
 
-$imagePath = "kernel\src\embedded-x86_64\kernel_fs.img"
 $imgArgs = @((Convert-ToolPath $imagePath))
 $found   = @()
 foreach ($c in $cells) {
@@ -148,7 +169,7 @@ foreach ($c in $cells) {
     }
 }
 
-foreach ($required in @('app-shell', 'service-vfs', 'service-config', 'platform', 'driver-nvme', 'driver-e1000')) {
+foreach ($required in @('app-shell', 'service-vfs', 'service-config', 'service-net', 'platform', 'driver-nvme', 'driver-e1000')) {
     if ($required -notin $found) {
         throw "Required x86_64 cell missing from image inputs: $required"
     }
@@ -187,6 +208,11 @@ Remove-Item $policyTmp -Force -ErrorAction SilentlyContinue
 $layout = & $python (Join-Path 'tools' 'inspect_fat.py') (Convert-ToolPath $imagePath) 2>&1
 if (($layout | Select-String -Quiet -SimpleMatch 'SFN POLICY.BIN') -eq $false) {
     Write-Error "x86_64 kernel_fs.img has no /POLICY.BIN in the root directory"
+    $layout | Write-Host
+    exit 1
+}
+if (($layout | Select-String -Quiet -SimpleMatch "LFN[1] 'net'") -eq $false) {
+    Write-Error "x86_64 kernel_fs.img has no /bin/net entry"
     $layout | Write-Host
     exit 1
 }
