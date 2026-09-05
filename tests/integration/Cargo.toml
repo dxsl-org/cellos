@@ -40,6 +40,10 @@ name = "pcie-bar-window"
 path = "tests/pcie-bar-window.rs"
 
 [[test]]
+name = "pcie-multibus-x86"
+path = "tests/pcie-multibus-x86.rs"
+
+[[test]]
 name = "atomic-publication"
 path = "tests/atomic-publication.rs"
 

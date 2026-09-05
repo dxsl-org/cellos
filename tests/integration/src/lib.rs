@@ -955,6 +955,91 @@ impl QemuRunner {
         }
     }
 
+    /// Boot q35 with an NVMe endpoint behind a PCIe root port on bus 1.
+    ///
+    /// When `with_vtd` is true, Intel VT-d is installed before the root port so
+    /// the same `01:00.0` requester must complete NVMe queue/Identify DMA through
+    /// its bus-specific context table.
+    pub fn boot_x86_bios_with_multibus_nvme(
+        iso: &str,
+        nvme_disk: &str,
+        with_vtd: bool,
+    ) -> Self {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind serial socket");
+        let port = listener.local_addr().unwrap().port();
+
+        let mut command = Command::new(qemu_binary_x86());
+        command.args([
+            "-machine",
+            "q35",
+            "-cpu",
+            "qemu64,+pdpe1gb",
+            "-m",
+            "256M",
+            "-nographic",
+            "-cdrom",
+            iso,
+            "-boot",
+            "d",
+            "-no-reboot",
+            "-monitor",
+            "none",
+        ]);
+        if with_vtd {
+            command.args(["-device", "intel-iommu"]);
+        }
+        command
+            .args([
+                "-device",
+                "pcie-root-port,id=rp1,chassis=1,slot=2",
+                "-drive",
+            ])
+            .arg(format!("file={nvme_disk},format=raw,if=none,id=nvme0"))
+            .args([
+                "-device",
+                "nvme,drive=nvme0,serial=multibus01,bus=rp1",
+                "-serial",
+            ])
+            .arg(format!("tcp:127.0.0.1:{port}"));
+
+        let child = command
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("qemu-system-x86_64 must be on PATH");
+
+        listener.set_nonblocking(false).expect("blocking listener");
+        let stream = listener
+            .accept()
+            .expect("QEMU did not connect to the serial socket")
+            .0;
+        let writer = stream.try_clone().expect("clone serial stream");
+
+        let output = Arc::new(Mutex::new(String::new()));
+        let buf = Arc::clone(&output);
+        thread::spawn(move || {
+            let mut reader = BufReader::new(stream);
+            let mut byte = [0u8; 1];
+            loop {
+                match reader.read(&mut byte) {
+                    Ok(0) | Err(_) => break,
+                    Ok(_) => match buf.lock() {
+                        Ok(mut output) => output.push(byte[0] as char),
+                        Err(poisoned) => poisoned.into_inner().push(byte[0] as char),
+                    },
+                }
+            }
+        });
+        Self {
+            child,
+            writer: Some(writer),
+            output,
+            temp_disk: None,
+            monitor: None,
+        }
+    }
+
     /// Boot x86_64 q35 from a Limine ISO with a VirtIO BLK PCI device attached.
     ///
     /// Same boot path as `boot_x86_bios` (SeaBIOS + ISO) but adds a
