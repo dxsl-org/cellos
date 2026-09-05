@@ -233,10 +233,12 @@ Cellos is being shaped around product stages, not only phase numbers:
   boot/storage/UART and BCM GPIO/I2C/SPI gates pass; VF2, Pioneer, RPi4, and
   physical x86 remain hardware-gated.
 - The q35 Phase 05 PCIe/NVMe/e1000/VT-d lane passes in QEMU. BAR32/BAR64
-  size-mask decoding and exact memory-decode/BAR/command restoration now have
+  size-mask decoding and exact memory-decode/BAR/command restoration have
   focused host unit coverage. The dedicated `no_std`
-  `resource_registry::valid_pcie_bar_window` harness, PCIe buses above bus 0,
-  and real NIC Tx/Rx/DHCP remain open.
+  `resource_registry::valid_pcie_bar_window` harness passes under RV64
+  test-hooks with an exact bounded/aligned/overflow-safe marker and runs in the
+  required `vfs-quota` CI job. PCIe buses above bus 0 and real NIC Tx/Rx/DHCP
+  remain open.
 - AArch64 test-hooks runtime evidence remains host-gated where the existing
   `qemu_exit::AArch64Semihosting` issue blocks the lane.
 - RV32 release compilation is verified, but RV32 runtime cannot run on this

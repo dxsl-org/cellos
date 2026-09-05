@@ -618,6 +618,15 @@ pub unsafe fn force_unlock_bdf_locks() {
     BDF_OWNERS.force_unlock();
 }
 
+#[cfg(feature = "test-hooks")]
+#[path = "resource_registry_selftest.rs"]
+mod selftest;
+
+#[cfg(feature = "test-hooks")]
+pub(crate) fn pcie_bar_window_self_test() -> bool {
+    selftest::run()
+}
+
 #[cfg(test)]
 #[path = "resource_registry_tests.rs"]
 mod tests;

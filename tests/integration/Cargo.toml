@@ -36,6 +36,10 @@ name = "vfs-quota"
 path = "tests/vfs-quota.rs"
 
 [[test]]
+name = "pcie-bar-window"
+path = "tests/pcie-bar-window.rs"
+
+[[test]]
 name = "atomic-publication"
 path = "tests/atomic-publication.rs"
 

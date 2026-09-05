@@ -737,6 +737,13 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         exit(task::user_copy_tests::run_getrandom_primary());
     }
 
+    #[cfg(feature = "test-hooks")]
+    if crate::resource_registry::pcie_bar_window_self_test() {
+        log_info("[selftest] PCIE-BAR-WINDOW: PASS (bounded, aligned, overflow-safe)");
+    } else {
+        log_info("[selftest] PCIE-BAR-WINDOW: FAIL");
+    }
+
     // The loader corpus exercises real spawn_gated denials and snapshots the
     // scheduler around every malformed image. Run it after task::init(), while
     // the scheduler is available but still empty and before secondary harts or

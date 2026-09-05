@@ -43,10 +43,15 @@
   and spawns `/bin/platform` before `init` on x86_64. `/bin/platform` adds
   `StateRestore` to its explicit syscall allowlist, decodes spawn argv via
   `ostd::args`, claims the 1 MiB bus-0 ECAM MMIO window, walks all 32 device slots,
-  and registers discovered BARs and PCI devices. Verified by host unit tests
-  (4 passed in `service-platform`) and live QEMU q35 boot (`[INFO] Platform Cell
-  spawned (x86 PCIe ECAM scanner)` -> `USER: [platform] ECAM scan buses 0-255
-  starting` -> `USER: [platform] ECAM scan complete`).
+  and registers discovered BARs and PCI devices. Seven `service-platform` host
+  tests cover BAR32/BAR64 size-mask decoding and exact memory-decode/BAR/command
+  restoration. A dedicated RV64 `no_std` test-hooks harness exercises
+  `resource_registry::valid_pcie_bar_window` against aligned valid windows,
+  zero/misaligned/non-power-of-two inputs, the 1 GiB ceiling, and address
+  overflow; its live QEMU gate requires exactly one bounded/aligned/overflow-safe
+  PASS marker after a later boot milestone. The existing `vfs-quota` CI job
+  builds the test-hooks kernel once and runs both `vfs-quota` and
+  `pcie-bar-window`; the q35 NIC/NVMe regression remains green at 5/5.
 
 - Hardened QEMU-TCG x86 version parity and verified Phase 06 qualification
   oracles under pinned official QEMU 10.2.0. Runners reject unqualified

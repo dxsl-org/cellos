@@ -973,12 +973,15 @@ jobs:
           chmod +x scripts/build-test-hooks-ci.sh
           bash scripts/build-test-hooks-ci.sh
 
-      - name: Run VFS quota integration test
+      - name: Run test-hooks integration gates
         # tests/integration/.cargo/config.toml pins the host target to
         # x86_64-pc-windows-msvc (local dev); the env var overrides it here.
         env:
           CARGO_BUILD_TARGET: x86_64-unknown-linux-gnu
-        run: cd tests/integration && cargo test --test vfs-quota
+        run: |
+          cd tests/integration
+          cargo test --test vfs-quota
+          cargo test --test pcie-bar-window
 
   redoxfs-srv:
     name: RedoxFS /srv Integration Test
