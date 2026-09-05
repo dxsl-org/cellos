@@ -11,11 +11,57 @@ pub(crate) enum DmaSlot {
     RxBuffer(usize),
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum InitialDmaProgram {
+    TxRingBase(u64),
+    RxDescriptor { slot: usize, iova: u64 },
+    RxRingBase(u64),
+    Enable,
+}
+
+#[derive(Clone, Copy)]
 pub(crate) struct DmaIovas {
-    pub(crate) tx_ring: u64,
-    pub(crate) tx_buffers: [u64; TX_SLOTS],
-    pub(crate) rx_ring: u64,
-    pub(crate) rx_buffers: [u64; RX_SLOTS],
+    tx_ring: u64,
+    tx_buffers: [u64; TX_SLOTS],
+    rx_ring: u64,
+    rx_buffers: [u64; RX_SLOTS],
+}
+
+impl DmaIovas {
+    #[inline]
+    pub(crate) fn tx_ring_iova(&self) -> u64 {
+        self.tx_ring
+    }
+
+    #[inline]
+    pub(crate) fn rx_ring_iova(&self) -> u64 {
+        self.rx_ring
+    }
+
+    #[inline]
+    pub(crate) fn tx_descriptor_iova(&self, slot: usize) -> u64 {
+        self.tx_buffers[slot]
+    }
+
+    #[inline]
+    pub(crate) fn rx_descriptor_iova(&self, slot: usize) -> u64 {
+        self.rx_buffers[slot]
+    }
+}
+
+pub(crate) fn for_each_initial_dma_program(
+    layout: &DmaIovas,
+    mut emit: impl FnMut(InitialDmaProgram),
+) {
+    emit(InitialDmaProgram::TxRingBase(layout.tx_ring_iova()));
+    for slot in 0..RX_SLOTS {
+        emit(InitialDmaProgram::RxDescriptor {
+            slot,
+            iova: layout.rx_descriptor_iova(slot),
+        });
+    }
+    emit(InitialDmaProgram::RxRingBase(layout.rx_ring_iova()));
+    emit(InitialDmaProgram::Enable);
 }
 
 /// Authorize every e1000 DMA object in deterministic initialization order.
@@ -44,4 +90,17 @@ pub(crate) fn authorize_dma_layout<E>(
         rx_ring,
         rx_buffers,
     })
+}
+
+/// Run DMA-address programming and TX/RX enablement only after every DMA
+/// object is authorized.
+///
+/// Authorization rejection skips the side-effecting closure entirely.
+pub(crate) fn with_authorized_dma_layout<R, E, T>(
+    resources: R,
+    mut authorize: impl FnMut(&R, DmaSlot) -> Result<u64, E>,
+    initialize: impl FnOnce(R, DmaIovas) -> T,
+) -> Result<T, E> {
+    let layout = authorize_dma_layout(|slot| authorize(&resources, slot))?;
+    Ok(initialize(resources, layout))
 }
