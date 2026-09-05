@@ -172,7 +172,7 @@ ABI: a0 = bdf (u32), a1 = base (usize), a2 = len (usize) → 0 on success.</p>
 </div><section id="variant.RegisterPciDevice" class="variant"><a href="#variant.RegisterPciDevice" class="anchor">§</a><h3 class="code-header">RegisterPciDevice = 236</h3></section><div class="docblock"><p>Register a discovered PCI device with class/BAR info (Platform Cell only).</p>
 <p>Called by the Platform Cell after ECAM scan; populates kernel <code>PCI_DEVICES</code> so
 <code>sys_find_pcie_device</code> queries work without a kernel-side ECAM scan.
-<code>bdf</code>       = (bus&lt;&lt;16)|(dev&lt;&lt;8)|fun
+<code>bdf</code>       = <code>(bus&lt;&lt;8)|(dev&lt;&lt;3)|function</code>
 <code>cls</code>       = (class&lt;&lt;16)|(subclass&lt;&lt;8)|prog_if
 <code>bar0_base</code> = physical base of BAR0 (or 0 if absent)
 <code>bar0_size</code> = probed BAR0 size in bytes (or 0)

@@ -80,10 +80,10 @@
 <a href=#80 id=80 data-nosnippet>80</a>        <span class="kw">let </span>sq_buf = DmaBuf::alloc(sq_pages)<span class="question-mark">?</span>;
 <a href=#81 id=81 data-nosnippet>81</a>        <span class="kw">let </span>cq_buf = DmaBuf::alloc(cq_pages)<span class="question-mark">?</span>;
 <a href=#82 id=82 data-nosnippet>82</a>
-<a href=#83 id=83 data-nosnippet>83</a>        <span class="comment">// Authorize IOMMU for this PCIe device to DMA into these pages.
-<a href=#84 id=84 data-nosnippet>84</a>        // SAFETY: DmaBuf was just allocated; bdf is the NVMe controller's BDF.
-<a href=#85 id=85 data-nosnippet>85</a>        </span><span class="kw">let _ </span>= sq_buf.authorize(bdf);
-<a href=#86 id=86 data-nosnippet>86</a>        <span class="kw">let _ </span>= cq_buf.authorize(bdf);
+<a href=#83 id=83 data-nosnippet>83</a>        <span class="comment">// Authorize IOMMU for this PCIe device before any queue address is
+<a href=#84 id=84 data-nosnippet>84</a>        // programmed. A rejected or unconfirmed publication must fail closed.
+<a href=#85 id=85 data-nosnippet>85</a>        </span>sq_buf.authorize(bdf).ok()<span class="question-mark">?</span>;
+<a href=#86 id=86 data-nosnippet>86</a>        cq_buf.authorize(bdf).ok()<span class="question-mark">?</span>;
 <a href=#87 id=87 data-nosnippet>87</a>
 <a href=#88 id=88 data-nosnippet>88</a>        <span class="comment">// Zero queues (DmaBuf is not guaranteed zeroed).
 <a href=#89 id=89 data-nosnippet>89</a>        </span><span class="kw">unsafe </span>{

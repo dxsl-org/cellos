@@ -102,7 +102,7 @@
 <a href=#102 id=102 data-nosnippet>102</a>    ///
 <a href=#103 id=103 data-nosnippet>103</a>    /// Called by the Platform Cell after ECAM scan; populates kernel `PCI_DEVICES` so
 <a href=#104 id=104 data-nosnippet>104</a>    /// `sys_find_pcie_device` queries work without a kernel-side ECAM scan.
-<a href=#105 id=105 data-nosnippet>105</a>    /// `bdf`       = (bus&lt;&lt;16)|(dev&lt;&lt;8)|fun
+<a href=#105 id=105 data-nosnippet>105</a>    /// `bdf`       = `(bus&lt;&lt;8)|(dev&lt;&lt;3)|function`
 <a href=#106 id=106 data-nosnippet>106</a>    /// `cls`       = (class&lt;&lt;16)|(subclass&lt;&lt;8)|prog_if
 <a href=#107 id=107 data-nosnippet>107</a>    /// `bar0_base` = physical base of BAR0 (or 0 if absent)
 <a href=#108 id=108 data-nosnippet>108</a>    /// `bar0_size` = probed BAR0 size in bytes (or 0)

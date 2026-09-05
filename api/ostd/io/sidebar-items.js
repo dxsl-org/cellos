@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["print","print_usize","println","stdin","stdout"],"struct":["OstdError","Stdin","Stdout"]};
+window.SIDEBAR_ITEMS = {"fn":["print","print_fmt","print_usize","println","stdin","stdout"],"struct":["OstdError","Stdin","Stdout"]};

@@ -8,7 +8,7 @@
 without a kernel-side ECAM scan. Call once per discovered device after <code>scan_and_register</code>.
 Requires singleton PlatformCap (allowlist bit 53).</p>
 <ul>
-<li><code>bdf</code>       — <code>(bus &lt;&lt; 16) | (dev &lt;&lt; 8) | fun</code></li>
+<li><code>bdf</code>       — <code>(bus &lt;&lt; 8) | (dev &lt;&lt; 3) | function</code></li>
 <li><code>cls</code>       — <code>(class &lt;&lt; 16) | (subclass &lt;&lt; 8) | prog_if</code></li>
 <li><code>bar0_base</code> — physical base of BAR0, or 0 if absent</li>
 <li><code>bar0_size</code> — probed BAR0 size in bytes, or 0</li>

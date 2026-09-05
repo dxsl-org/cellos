@@ -1829,7 +1829,7 @@
 <a href=#1829 id=1829 data-nosnippet>1829</a>/// without a kernel-side ECAM scan. Call once per discovered device after `scan_and_register`.
 <a href=#1830 id=1830 data-nosnippet>1830</a>/// Requires singleton PlatformCap (allowlist bit 53).
 <a href=#1831 id=1831 data-nosnippet>1831</a>///
-<a href=#1832 id=1832 data-nosnippet>1832</a>/// * `bdf`       — `(bus &lt;&lt; 16) | (dev &lt;&lt; 8) | fun`
+<a href=#1832 id=1832 data-nosnippet>1832</a>/// * `bdf`       — `(bus &lt;&lt; 8) | (dev &lt;&lt; 3) | function`
 <a href=#1833 id=1833 data-nosnippet>1833</a>/// * `cls`       — `(class &lt;&lt; 16) | (subclass &lt;&lt; 8) | prog_if`
 <a href=#1834 id=1834 data-nosnippet>1834</a>/// * `bar0_base` — physical base of BAR0, or 0 if absent
 <a href=#1835 id=1835 data-nosnippet>1835</a>/// * `bar0_size` — probed BAR0 size in bytes, or 0
