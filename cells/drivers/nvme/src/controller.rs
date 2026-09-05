@@ -1,11 +1,12 @@
 //! NVMe controller logic ported from kernel/src/task/drivers/blk_nvme.rs.
 //!
-//! In the Driver Cell, MMIO access goes through `ostd::mmio::MmioRegion` instead
-//! of identity-mapped raw pointers.  DMA allocation uses `ostd::dma::DmaBuf`.
+//! In the Driver Cell, MMIO access goes through `ostd::mmio::MmioRegion`.
+//! DMA allocations retain the device-visible IOVA returned by authorization.
 //!
 //! Law 4 exception: Driver Cells may use `unsafe` for MMIO register access.
 //! Every `unsafe` block is annotated with `// SAFETY:`.
 
+use crate::dma::AuthorizedDma;
 use core::sync::atomic::{fence, Ordering};
 use ostd::dma::DmaBuf;
 use ostd::mmio::MmioRegion;
@@ -93,13 +94,13 @@ impl NvmeController {
         }
 
         // 3. Allocate admin queues.
-        let admin = Queue::new(bdf, ADMIN_QUEUE_DEPTH).ok_or(ViError::OutOfMemory)?;
+        let admin = Queue::new(bdf, ADMIN_QUEUE_DEPTH)?;
 
         // 4. Program AQA, ASQ, ACQ.
         let aqa = ((ADMIN_QUEUE_DEPTH as u32 - 1) << 16) | (ADMIN_QUEUE_DEPTH as u32 - 1);
         Self::write32(&mmio, REG_AQA, aqa)?;
-        Self::write64(&mmio, REG_ASQ, admin.sq_phys())?;
-        Self::write64(&mmio, REG_ACQ, admin.cq_phys())?;
+        Self::write64(&mmio, REG_ASQ, admin.sq_iova())?;
+        Self::write64(&mmio, REG_ACQ, admin.cq_iova())?;
 
         // 5. Enable controller.
         let cc = CC_EN | CC_CSS_NVM | CC_MPS_4K | CC_AMS_RR | CC_IOSQES | CC_IOCQES;
@@ -125,7 +126,7 @@ impl NvmeController {
         let mut ctrl = NvmeController {
             mmio,
             admin,
-            io: Queue::new(bdf, IO_QUEUE_DEPTH).ok_or(ViError::OutOfMemory)?,
+            io: Queue::new(bdf, IO_QUEUE_DEPTH)?,
             db_stride,
             n_sectors: 0,
             lba_bytes: 512,
@@ -136,14 +137,12 @@ impl NvmeController {
         // 7. Identify Controller → VWC flag.
         {
             let id_buf = DmaBuf::alloc(1).ok_or(ViError::OutOfMemory)?;
-            id_buf
-                .authorize(bdf)
+            let id_buf = AuthorizedDma::authorize(id_buf, |buf| buf.authorize(bdf))
                 .map_err(|_| ViError::PermissionDenied)?;
-            let id_phys = id_buf.phys() as u64;
             ctrl.admin_cmd(
                 ADMIN_OPC_IDENTIFY,
                 0,
-                id_phys,
+                id_buf.iova(),
                 0,
                 CNS_IDENTIFY_CTRL,
                 0,
@@ -153,22 +152,20 @@ impl NvmeController {
                 0,
             )?;
             // SAFETY: id_buf is DMA memory we own; VWC is byte 525 in the Identify Controller data.
-            let vwc_byte = unsafe { *(id_buf.virt().add(525)) };
+            let vwc_byte = unsafe { *(id_buf.inner().virt().add(525)) };
             ctrl.vwc = vwc_byte & 1 != 0;
-            id_buf.free();
+            id_buf.into_inner().free();
         }
 
         // 8. Identify Namespace 1 → LBA count + format.
         {
             let id_buf = DmaBuf::alloc(1).ok_or(ViError::OutOfMemory)?;
-            id_buf
-                .authorize(bdf)
+            let id_buf = AuthorizedDma::authorize(id_buf, |buf| buf.authorize(bdf))
                 .map_err(|_| ViError::PermissionDenied)?;
-            let id_phys = id_buf.phys() as u64;
             ctrl.admin_cmd(
                 ADMIN_OPC_IDENTIFY,
                 1,
-                id_phys,
+                id_buf.iova(),
                 0,
                 CNS_IDENTIFY_NS,
                 0,
@@ -179,25 +176,25 @@ impl NvmeController {
             )?;
             // SAFETY: id_buf is a valid 4-KiB Identify Namespace response.
             unsafe {
-                let ptr = id_buf.virt();
+                let ptr = id_buf.inner().virt();
                 ctrl.n_sectors = core::ptr::read_volatile(ptr as *const u64);
                 let flbas = *ptr.add(26); // FLBAS: current LBA format index
                 let lba_fmt_idx = (flbas & 0x0F) as usize;
                 let lba_ds = *ptr.add(128 + lba_fmt_idx * 4 + 1); // LBA data shift
                 ctrl.lba_bytes = 1u32 << lba_ds;
             }
-            id_buf.free();
+            id_buf.into_inner().free();
         }
 
         // 9. Create I/O CQ (admin opcode 0x05).
         // CDW10 layout (NVMe 1.x §5.3/§5.4): QSIZE[31:16] (0-based) | QID[15:0].
         // The first port of this file inverted the two fields — QEMU then created
         // CQ with QID=63 and Create-SQ failed with Invalid CQID (CQ 1 absent).
-        let io_cq_phys = ctrl.io.cq_phys();
+        let io_cq_iova = ctrl.io.cq_iova();
         ctrl.admin_cmd(
             ADMIN_OPC_CREATE_CQ,
             0,
-            io_cq_phys,
+            io_cq_iova,
             0,
             ((IO_QUEUE_DEPTH as u32 - 1) << 16) | 1, // CDW10: QSIZE | QID=1
             0x1, // CDW11: IEN=0 (polled), PC=1 (physically contiguous)
@@ -208,11 +205,11 @@ impl NvmeController {
         )?;
 
         // 10. Create I/O SQ (admin opcode 0x01).
-        let io_sq_phys = ctrl.io.sq_phys();
+        let io_sq_iova = ctrl.io.sq_iova();
         ctrl.admin_cmd(
             ADMIN_OPC_CREATE_SQ,
             0,
-            io_sq_phys,
+            io_sq_iova,
             0,
             ((IO_QUEUE_DEPTH as u32 - 1) << 16) | 1, // CDW10: QSIZE | QID=1
             (1 << 16) | 0x1,                         // CDW11: CQID=1 | PC=1

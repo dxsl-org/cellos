@@ -19,9 +19,11 @@ extern crate alloc;
 
 mod controller;
 mod dispatch;
+mod dma;
 mod queue;
 
 use controller::NvmeController;
+use dma::AuthorizedDma;
 use ostd::app::{AppContext, AppEvent};
 use ostd::dma::DmaBuf;
 use ostd::io::print_fmt;
@@ -39,7 +41,7 @@ const NVME_BAR0_LEN: usize = 0x4000; // 16 KiB
 
 struct NvmeState {
     ctrl: NvmeController,
-    io_buf: DmaBuf,
+    io_buf: AuthorizedDma<DmaBuf>,
 }
 
 static STATE: Mutex<Option<NvmeState>> = Mutex::new(None);
@@ -82,14 +84,16 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
                 Err(_) => ostd::syscall::sys_exit(1),
             };
 
-            // Allocate a reusable 512-byte I/O DMA buffer.
+            // Allocate a reusable 512-byte I/O DMA buffer and retain the
+            // device-visible address returned by authorization.
             let io_buf = match DmaBuf::alloc(1) {
                 Some(b) => b,
                 None => ostd::syscall::sys_exit(1),
             };
-            if io_buf.authorize(bdf).is_err() {
-                ostd::syscall::sys_exit(1);
-            }
+            let io_buf = match AuthorizedDma::authorize(io_buf, |buf| buf.authorize(bdf)) {
+                Ok(buf) => buf,
+                Err(_) => ostd::syscall::sys_exit(1),
+            };
             let _ = print_fmt(format_args!(
                 "[nvme] DMA authorized for bus {} device {} function {}\n",
                 (bdf >> 8) & 0xFF,

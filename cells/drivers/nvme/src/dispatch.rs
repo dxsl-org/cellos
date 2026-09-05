@@ -12,6 +12,7 @@
 //! Error reply      (1 B): `[0x01]`
 
 use crate::controller::NvmeController;
+use crate::dma::AuthorizedDma;
 use ostd::dma::DmaBuf;
 
 /// Total reply buffer size: status byte + one full 512-byte sector.
@@ -71,7 +72,7 @@ pub fn encode_write(sector: u64, data: &[u8; 512]) -> [u8; 522] {
 /// Error:    writes `[0x01]`, returns 1.
 pub fn handle(
     ctrl: &mut NvmeController,
-    io_buf: &DmaBuf,
+    io_buf: &AuthorizedDma<DmaBuf>,
     data: &[u8],
     out: &mut [u8; REPLY_SIZE],
 ) -> usize {
@@ -85,13 +86,17 @@ pub fn handle(
 
     match op {
         DrvOp::Read => {
-            match ctrl.read_sector(sector, io_buf.phys() as u64) {
+            match ctrl.read_sector(sector, io_buf.iova()) {
                 Ok(_) => {
                     out[0] = 0;
-                    // SAFETY: io_buf is identity-mapped (phys == virt) in SAS.
-                    // read_sector completed; DMA data is now stable in io_buf.
+                    // SAFETY: read_sector completed; DMA data is now stable in
+                    // the CPU mapping retained by io_buf.
                     unsafe {
-                        core::ptr::copy_nonoverlapping(io_buf.virt(), out[1..].as_mut_ptr(), 512);
+                        core::ptr::copy_nonoverlapping(
+                            io_buf.inner().virt(),
+                            out[1..].as_mut_ptr(),
+                            512,
+                        );
                     }
                     513
                 }
@@ -107,12 +112,12 @@ pub fn handle(
                 out[0] = 1;
                 return 1;
             }
-            // SAFETY: io_buf is identity-mapped; we write the caller's payload
-            // in before handing the physical address to the NVMe controller.
+            // SAFETY: write the caller payload into the CPU mapping before
+            // submitting the authorized device-visible IOVA.
             unsafe {
-                core::ptr::copy_nonoverlapping(data[10..].as_ptr(), io_buf.virt(), 512);
+                core::ptr::copy_nonoverlapping(data[10..].as_ptr(), io_buf.inner().virt(), 512);
             }
-            match ctrl.write_sector(sector, io_buf.phys() as u64) {
+            match ctrl.write_sector(sector, io_buf.iova()) {
                 Ok(_) => {
                     out[0] = 0;
                     1

@@ -151,6 +151,10 @@ path = "tests/c2c-broker-oracle.rs"
 name = "e1000-dma-layout"
 path = "tests/e1000-dma-layout.rs"
 
+[[test]]
+name = "nvme-dma-addressing"
+path = "tests/nvme-dma-addressing.rs"
+
 [dev-dependencies]
 tempfile = "3"
 

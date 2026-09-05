@@ -11,8 +11,10 @@
 
 extern crate alloc;
 
+use crate::dma::AuthorizedDma;
 use core::mem::size_of;
 use ostd::dma::DmaBuf;
+use types::{ViError, ViResult};
 
 /// NVMe Submission Queue Entry (64 bytes, NVMe 1.x §4.2).
 #[repr(C, align(64))]
@@ -62,8 +64,8 @@ impl CqEntry {
 }
 
 pub struct Queue {
-    pub sq_buf: DmaBuf,
-    pub cq_buf: DmaBuf,
+    pub sq_buf: AuthorizedDma<DmaBuf>,
+    pub cq_buf: AuthorizedDma<DmaBuf>,
     pub depth: u16,
     pub sq_tail: u16,
     pub cq_head: u16,
@@ -72,26 +74,28 @@ pub struct Queue {
 }
 
 impl Queue {
-    /// Allocate a new queue pair for `depth` entries, registering DMA with IOMMU.
-    pub fn new(bdf: u32, depth: u16) -> Option<Self> {
+    /// Allocate and authorize a queue pair, retaining both returned IOVAs.
+    pub fn new(bdf: u32, depth: u16) -> ViResult<Self> {
         let sq_pages = (depth as usize * size_of::<SqEntry>()).div_ceil(4096);
         let cq_pages = (depth as usize * size_of::<CqEntry>()).div_ceil(4096);
 
-        let sq_buf = DmaBuf::alloc(sq_pages)?;
-        let cq_buf = DmaBuf::alloc(cq_pages)?;
+        let sq_buf = DmaBuf::alloc(sq_pages).ok_or(ViError::OutOfMemory)?;
+        let cq_buf = DmaBuf::alloc(cq_pages).ok_or(ViError::OutOfMemory)?;
 
-        // Authorize IOMMU for this PCIe device before any queue address is
-        // programmed. A rejected or unconfirmed publication must fail closed.
-        sq_buf.authorize(bdf).ok()?;
-        cq_buf.authorize(bdf).ok()?;
+        // A rejected mapping fails closed before any queue address is
+        // programmed into the controller.
+        let sq_buf = AuthorizedDma::authorize(sq_buf, |buf| buf.authorize(bdf))
+            .map_err(|_| ViError::PermissionDenied)?;
+        let cq_buf = AuthorizedDma::authorize(cq_buf, |buf| buf.authorize(bdf))
+            .map_err(|_| ViError::PermissionDenied)?;
 
         // Zero queues (DmaBuf is not guaranteed zeroed).
         unsafe {
-            core::ptr::write_bytes(sq_buf.virt(), 0, sq_buf.size());
-            core::ptr::write_bytes(cq_buf.virt(), 0, cq_buf.size());
+            core::ptr::write_bytes(sq_buf.inner().virt(), 0, sq_buf.inner().size());
+            core::ptr::write_bytes(cq_buf.inner().virt(), 0, cq_buf.inner().size());
         }
 
-        Some(Self {
+        Ok(Self {
             sq_buf,
             cq_buf,
             depth,
@@ -102,16 +106,16 @@ impl Queue {
         })
     }
 
-    /// Physical base address of the SQ (to program into controller registers).
+    /// Device-visible base address of the SQ.
     #[inline]
-    pub fn sq_phys(&self) -> u64 {
-        self.sq_buf.phys() as u64
+    pub fn sq_iova(&self) -> u64 {
+        self.sq_buf.iova()
     }
 
-    /// Physical base address of the CQ.
+    /// Device-visible base address of the CQ.
     #[inline]
-    pub fn cq_phys(&self) -> u64 {
-        self.cq_buf.phys() as u64
+    pub fn cq_iova(&self) -> u64 {
+        self.cq_buf.iova()
     }
 
     /// Mutable pointer to the SQ entry at `idx`.
@@ -121,7 +125,7 @@ impl Queue {
     #[inline]
     pub unsafe fn sq_entry(&mut self, idx: usize) -> *mut SqEntry {
         // SAFETY: caller guarantees idx < depth; sq_buf covers depth*64 bytes.
-        unsafe { (self.sq_buf.virt() as *mut SqEntry).add(idx) }
+        unsafe { (self.sq_buf.inner().virt() as *mut SqEntry).add(idx) }
     }
 
     /// Shared pointer to the CQ entry at `idx`.
@@ -131,7 +135,7 @@ impl Queue {
     #[inline]
     pub unsafe fn cq_entry(&self, idx: usize) -> *const CqEntry {
         // SAFETY: caller guarantees idx < depth; cq_buf covers depth*16 bytes.
-        unsafe { (self.cq_buf.virt() as *const CqEntry).add(idx) }
+        unsafe { (self.cq_buf.inner().virt() as *const CqEntry).add(idx) }
     }
 
     pub fn next_cid(&mut self) -> u16 {

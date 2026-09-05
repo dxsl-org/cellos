@@ -6,10 +6,10 @@
 //!
 //! # Usage
 //! ```ignore
-//! let buf = DmaBuf::alloc(4).expect("OOM");      // 4 pages (16 KiB)
-//! buf.authorize(0x0300).expect("IOMMU deny");     // BDF 0:3:0
-//! let phys = buf.phys();                         // program into NVMe/e1000 regs
-//! ```
+//! let buf = DmaBuf::alloc(4).expect("OOM");       // 4 pages (16 KiB)
+//! let iova = buf.authorize(0x0300).expect("IOMMU deny");
+//! // Program `iova` into device registers/descriptors; use `virt()` for CPU access.
+//! # let _ = iova;
 
 use crate::syscall::{
     sys_grant_alloc, sys_grant_cache_sync_begin, sys_grant_cache_sync_complete, sys_grant_dma,
@@ -18,8 +18,9 @@ use crate::syscall::{
 
 /// A physically-contiguous, page-aligned DMA buffer backed by a Grant region.
 ///
-/// In SAS the virtual address equals the physical address (identity mapping),
-/// so [`phys`](DmaBuf::phys) and [`virt`](DmaBuf::virt) return the same value.
+/// In SAS the CPU virtual and physical addresses are currently identical.
+/// Device-visible addresses are established by [`DmaBuf::authorize`] and may
+/// differ from both; callers must program the returned IOVA into hardware.
 ///
 /// Drop does NOT free the buffer — call [`DmaBuf::free`] explicitly.
 /// Driver Cells typically hold DMA buffers for their entire lifetime.
@@ -35,7 +36,7 @@ impl DmaBuf {
         Some(Self { grant_id, n_pages })
     }
 
-    /// Physical base address — program this into DMA descriptor registers.
+    /// CPU physical base address; do not substitute this for an authorized IOVA.
     #[inline]
     pub fn phys(&self) -> usize {
         self.grant_id
