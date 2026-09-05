@@ -245,46 +245,98 @@ pub struct QemuRunner {
 
 const SERIAL_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
+/// Terminate and reap QEMU after serial setup fails.
+fn terminate_qemu(child: &mut Child) {
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
 /// Accept QEMU's serial TCP connection without leaving a child behind if QEMU
 /// exits early or never connects.
-fn accept_qemu_serial(listener: &TcpListener, child: &mut Child) -> TcpStream {
-    listener
-        .set_nonblocking(true)
-        .expect("set serial listener nonblocking");
-    let deadline = Instant::now() + SERIAL_CONNECT_TIMEOUT;
+fn try_accept_qemu_serial(
+    listener: &TcpListener,
+    child: &mut Child,
+    timeout: Duration,
+) -> Result<TcpStream, String> {
+    if let Err(error) = listener.set_nonblocking(true) {
+        terminate_qemu(child);
+        return Err(format!(
+            "failed to set serial listener nonblocking: {error}"
+        ));
+    }
+    let deadline = Instant::now() + timeout;
 
     loop {
         match listener.accept() {
-            Ok((stream, _)) => return stream,
+            Ok((stream, _)) => {
+                if let Err(error) = stream.set_nonblocking(false) {
+                    terminate_qemu(child);
+                    return Err(format!(
+                        "failed to set QEMU serial connection blocking: {error}"
+                    ));
+                }
+                return Ok(stream);
+            }
             Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {}
             Err(error) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                panic!("failed to accept QEMU serial connection: {error}");
+                terminate_qemu(child);
+                return Err(format!("failed to accept QEMU serial connection: {error}"));
             }
         }
 
         match child.try_wait() {
             Ok(Some(status)) => {
-                panic!("QEMU exited before connecting its serial socket: {status}");
+                return Err(format!(
+                    "QEMU exited before connecting its serial socket: {status}"
+                ));
             }
             Ok(None) => {}
             Err(error) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                panic!("failed to query QEMU while awaiting serial connection: {error}");
+                terminate_qemu(child);
+                return Err(format!(
+                    "failed to query QEMU while awaiting serial connection: {error}"
+                ));
             }
         }
 
         if Instant::now() >= deadline {
-            let _ = child.kill();
-            let _ = child.wait();
-            panic!(
+            terminate_qemu(child);
+            return Err(format!(
                 "QEMU did not connect its serial socket within {}s",
-                SERIAL_CONNECT_TIMEOUT.as_secs()
-            );
+                timeout.as_secs()
+            ));
         }
         thread::sleep(Duration::from_millis(10));
+    }
+}
+
+fn accept_qemu_serial(listener: &TcpListener, child: &mut Child) -> TcpStream {
+    try_accept_qemu_serial(listener, child, SERIAL_CONNECT_TIMEOUT)
+        .unwrap_or_else(|error| panic!("{error}"))
+}
+
+#[cfg(test)]
+mod serial_accept_tests {
+    use super::*;
+
+    #[test]
+    fn reports_early_qemu_exit_without_waiting_for_timeout() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind serial socket");
+        let mut child = Command::new(std::env::current_exe().expect("current test executable"))
+            .arg("--list")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn short-lived child");
+
+        let error = try_accept_qemu_serial(&listener, &mut child, Duration::from_secs(5))
+            .expect_err("child exit must abort serial accept");
+
+        assert!(
+            error.contains("exited before connecting its serial socket"),
+            "unexpected serial accept error: {error}"
+        );
     }
 }
 
@@ -377,7 +429,7 @@ impl QemuRunner {
         let port = listener.local_addr().unwrap().port();
         let harts = harts.to_string();
 
-        let child = Command::new(qemu_binary())
+        let mut child = Command::new(qemu_binary())
             .args([
                 "-machine",
                 "virt",
@@ -401,11 +453,7 @@ impl QemuRunner {
             .spawn()
             .expect("qemu-system-riscv64 must be on PATH");
 
-        listener.set_nonblocking(false).expect("blocking listener");
-        let stream = listener
-            .accept()
-            .expect("QEMU did not connect to the serial socket")
-            .0;
+        let stream = accept_qemu_serial(&listener, &mut child);
         let writer = stream.try_clone().expect("clone serial stream");
 
         let output = Arc::new(Mutex::new(String::new()));
@@ -440,7 +488,7 @@ impl QemuRunner {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind serial socket");
         let port = listener.local_addr().unwrap().port();
 
-        let child = Command::new(qemu_binary())
+        let mut child = Command::new(qemu_binary())
             .args([
                 "-machine",
                 "virt",
@@ -466,11 +514,7 @@ impl QemuRunner {
             .spawn()
             .expect("qemu-system-riscv64 must be on PATH");
 
-        listener.set_nonblocking(false).expect("blocking listener");
-        let stream = listener
-            .accept()
-            .expect("QEMU did not connect to the serial socket")
-            .0;
+        let stream = accept_qemu_serial(&listener, &mut child);
         let writer = stream.try_clone().expect("clone serial stream");
 
         let output = Arc::new(Mutex::new(String::new()));
@@ -504,7 +548,7 @@ impl QemuRunner {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind serial socket");
         let port = listener.local_addr().unwrap().port();
 
-        let child = Command::new(qemu_binary_aarch64())
+        let mut child = Command::new(qemu_binary_aarch64())
             .args([
                 // gic-version=2: QEMU 7+ defaults to GICv3 on virt; our GIC driver
                 // targets GICv2 MMIO (GICC at 0x08010000, GICD at 0x08000000).
@@ -528,11 +572,7 @@ impl QemuRunner {
             .spawn()
             .expect("qemu-system-aarch64 must be on PATH");
 
-        listener.set_nonblocking(false).expect("blocking listener");
-        let stream = listener
-            .accept()
-            .expect("QEMU did not connect to the serial socket")
-            .0;
+        let stream = accept_qemu_serial(&listener, &mut child);
         let writer = stream.try_clone().expect("clone serial stream");
 
         let output = Arc::new(Mutex::new(String::new()));
@@ -566,7 +606,7 @@ impl QemuRunner {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind serial socket");
         let port = listener.local_addr().unwrap().port();
 
-        let child = Command::new(qemu_binary_aarch64())
+        let mut child = Command::new(qemu_binary_aarch64())
             .args([
                 // gic-version=2: QEMU 7+ defaults to GICv3 on virt; our GIC driver
                 // targets GICv2 MMIO (GICC at 0x08010000, GICD at 0x08000000).
@@ -601,11 +641,7 @@ impl QemuRunner {
             .spawn()
             .expect("qemu-system-aarch64 must be on PATH");
 
-        listener.set_nonblocking(false).expect("blocking listener");
-        let stream = listener
-            .accept()
-            .expect("QEMU did not connect to the serial socket")
-            .0;
+        let stream = accept_qemu_serial(&listener, &mut child);
         let writer = stream.try_clone().expect("clone serial stream");
 
         let output = Arc::new(Mutex::new(String::new()));
@@ -678,34 +714,12 @@ impl QemuRunner {
             let _ = reader.read_to_string(&mut text);
             *captured_stderr.lock().unwrap() = text;
         });
-        listener
-            .set_nonblocking(true)
-            .expect("nonblocking serial listener");
-        let deadline = Instant::now() + Duration::from_secs(15);
-        let stream = loop {
-            match listener.accept() {
-                Ok((stream, _)) => break stream,
-                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {}
-                Err(error) => panic!("QEMU serial accept failed: {error}"),
-            }
-            if let Some(status) = child.try_wait().expect("poll QEMU process") {
+        let stream = try_accept_qemu_serial(&listener, &mut child, Duration::from_secs(15))
+            .unwrap_or_else(|error| {
+                // Let the stderr-drain thread observe EOF after the helper reaps QEMU.
                 thread::sleep(Duration::from_millis(25));
-                panic!(
-                    "QEMU exited before connecting serial ({status})\n--- stderr ---\n{}",
-                    qemu_stderr.lock().unwrap()
-                );
-            }
-            if Instant::now() >= deadline {
-                let _ = child.kill();
-                let _ = child.wait();
-                thread::sleep(Duration::from_millis(25));
-                panic!(
-                    "QEMU did not connect to serial within 15s\n--- stderr ---\n{}",
-                    qemu_stderr.lock().unwrap()
-                );
-            }
-            thread::sleep(Duration::from_millis(25));
-        };
+                panic!("{error}\n--- stderr ---\n{}", qemu_stderr.lock().unwrap());
+            });
         let writer = stream.try_clone().expect("clone serial stream");
         let output = Arc::new(Mutex::new(String::new()));
         let captured = Arc::clone(&output);
@@ -735,7 +749,7 @@ impl QemuRunner {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind serial socket");
         let port = listener.local_addr().unwrap().port();
 
-        let child = Command::new(qemu_binary_x86())
+        let mut child = Command::new(qemu_binary_x86())
             .args([
                 "-machine",
                 "q35",
@@ -763,11 +777,7 @@ impl QemuRunner {
             .spawn()
             .expect("qemu-system-x86_64 must be on PATH");
 
-        listener.set_nonblocking(false).expect("blocking listener");
-        let stream = listener
-            .accept()
-            .expect("QEMU did not connect to the serial socket")
-            .0;
+        let stream = accept_qemu_serial(&listener, &mut child);
         let writer = stream.try_clone().expect("clone serial stream");
 
         let output = Arc::new(Mutex::new(String::new()));
@@ -802,7 +812,7 @@ impl QemuRunner {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind serial socket");
         let port = listener.local_addr().unwrap().port();
 
-        let child = Command::new(qemu_binary_x86())
+        let mut child = Command::new(qemu_binary_x86())
             .args([
                 "-machine",
                 "q35",
@@ -831,11 +841,7 @@ impl QemuRunner {
             .spawn()
             .expect("qemu-system-x86_64 must be on PATH");
 
-        listener.set_nonblocking(false).expect("blocking listener");
-        let stream = listener
-            .accept()
-            .expect("QEMU did not connect to the serial socket")
-            .0;
+        let stream = accept_qemu_serial(&listener, &mut child);
         let writer = stream.try_clone().expect("clone serial stream");
 
         let output = Arc::new(Mutex::new(String::new()));
@@ -1035,18 +1041,14 @@ impl QemuRunner {
             ])
             .arg(format!("tcp:127.0.0.1:{port}"));
 
-        let child = command
+        let mut child = command
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()
             .expect("qemu-system-x86_64 must be on PATH");
 
-        listener.set_nonblocking(false).expect("blocking listener");
-        let stream = listener
-            .accept()
-            .expect("QEMU did not connect to the serial socket")
-            .0;
+        let stream = accept_qemu_serial(&listener, &mut child);
         let writer = stream.try_clone().expect("clone serial stream");
 
         let output = Arc::new(Mutex::new(String::new()));
@@ -1088,7 +1090,7 @@ impl QemuRunner {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind serial socket");
         let port = listener.local_addr().unwrap().port();
 
-        let child = Command::new(qemu_binary_x86())
+        let mut child = Command::new(qemu_binary_x86())
             .args([
                 "-machine",
                 "q35",
@@ -1118,11 +1120,7 @@ impl QemuRunner {
             .spawn()
             .expect("qemu-system-x86_64 must be on PATH");
 
-        listener.set_nonblocking(false).expect("blocking listener");
-        let stream = listener
-            .accept()
-            .expect("QEMU did not connect to the serial socket")
-            .0;
+        let stream = accept_qemu_serial(&listener, &mut child);
         let writer = stream.try_clone().expect("clone serial stream");
 
         let output = Arc::new(Mutex::new(String::new()));
@@ -1155,7 +1153,7 @@ impl QemuRunner {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind serial socket");
         let port = listener.local_addr().unwrap().port();
 
-        let child = Command::new(qemu_binary_rv32())
+        let mut child = Command::new(qemu_binary_rv32())
             .args([
                 "-machine",
                 "virt",
@@ -1177,11 +1175,7 @@ impl QemuRunner {
             .spawn()
             .expect("qemu-system-riscv32 must be on PATH");
 
-        listener.set_nonblocking(false).expect("blocking listener");
-        let stream = listener
-            .accept()
-            .expect("QEMU did not connect to the serial socket")
-            .0;
+        let stream = accept_qemu_serial(&listener, &mut child);
         let writer = stream.try_clone().expect("clone serial stream");
 
         let output = Arc::new(Mutex::new(String::new()));
@@ -1214,7 +1208,7 @@ impl QemuRunner {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind serial socket");
         let port = listener.local_addr().unwrap().port();
 
-        let child = Command::new(qemu_binary_arm32())
+        let mut child = Command::new(qemu_binary_arm32())
             .args([
                 "-machine",
                 "virt",
@@ -1236,11 +1230,7 @@ impl QemuRunner {
             .spawn()
             .expect("qemu-system-arm must be on PATH");
 
-        listener.set_nonblocking(false).expect("blocking listener");
-        let stream = listener
-            .accept()
-            .expect("QEMU did not connect to the serial socket")
-            .0;
+        let stream = accept_qemu_serial(&listener, &mut child);
         let writer = stream.try_clone().expect("clone serial stream");
 
         let output = Arc::new(Mutex::new(String::new()));
@@ -1274,7 +1264,7 @@ impl QemuRunner {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind serial socket");
         let port = listener.local_addr().unwrap().port();
 
-        let child = Command::new(qemu_binary_i386())
+        let mut child = Command::new(qemu_binary_i386())
             .args([
                 "-machine",
                 "pc",
@@ -1296,11 +1286,7 @@ impl QemuRunner {
             .spawn()
             .expect("qemu-system-i386 must be on PATH");
 
-        listener.set_nonblocking(false).expect("blocking listener");
-        let stream = listener
-            .accept()
-            .expect("QEMU did not connect to the serial socket")
-            .0;
+        let stream = accept_qemu_serial(&listener, &mut child);
         let writer = stream.try_clone().expect("clone serial stream");
 
         let output = Arc::new(Mutex::new(String::new()));
@@ -1344,7 +1330,7 @@ impl QemuRunner {
         let monitor_listener = TcpListener::bind("127.0.0.1:0").expect("bind monitor socket");
         let monitor_port = monitor_listener.local_addr().unwrap().port();
 
-        let child = Command::new(qemu_binary())
+        let mut child = Command::new(qemu_binary())
             .args([
                 "-machine",
                 "virt",
@@ -1394,11 +1380,8 @@ impl QemuRunner {
             .expect("qemu-system-riscv64 must be on PATH");
 
         // Accept QEMU's connection to our serial socket.
-        listener.set_nonblocking(false).expect("blocking listener");
-        let stream = listener
-            .accept()
-            .expect("QEMU did not connect to the serial socket")
-            .0;
+
+        let stream = accept_qemu_serial(&listener, &mut child);
         let writer = stream.try_clone().expect("clone serial stream");
 
         // Accept QEMU's connection to our monitor socket.
@@ -1466,7 +1449,7 @@ impl QemuRunner {
         let qmp_port = qmp_listener.local_addr().unwrap().port();
         drop(qmp_listener); // release the port so QEMU can bind it
 
-        let child = Command::new(qemu_binary())
+        let mut child = Command::new(qemu_binary())
             .args([
                 "-machine",
                 "virt",
@@ -1510,13 +1493,8 @@ impl QemuRunner {
             .expect("qemu-system-riscv64 must be on PATH");
 
         // Accept QEMU's serial connection.
-        serial_listener
-            .set_nonblocking(false)
-            .expect("blocking listener");
-        let stream = serial_listener
-            .accept()
-            .expect("QEMU did not connect to serial socket")
-            .0;
+
+        let stream = accept_qemu_serial(&serial_listener, &mut child);
         let writer = stream.try_clone().expect("clone serial stream");
 
         // Connect to QEMU's QMP server in a background thread.
@@ -1923,7 +1901,7 @@ impl QemuRunner {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind serial socket");
         let port = listener.local_addr().unwrap().port();
 
-        let child = Command::new(qemu_x86_binary())
+        let mut child = Command::new(qemu_x86_binary())
             .args([
                 "-machine",
                 "q35",
@@ -1951,11 +1929,7 @@ impl QemuRunner {
             .spawn()
             .expect("qemu-system-x86_64 must be on PATH or set $VIOS_QEMU_X86");
 
-        listener.set_nonblocking(false).expect("blocking listener");
-        let stream = listener
-            .accept()
-            .expect("QEMU did not connect to the serial socket")
-            .0;
+        let stream = accept_qemu_serial(&listener, &mut child);
         let writer = stream.try_clone().expect("clone serial stream");
 
         let output = Arc::new(Mutex::new(String::new()));
@@ -1991,7 +1965,7 @@ impl QemuRunner {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind serial socket");
         let port = listener.local_addr().unwrap().port();
 
-        let child = Command::new(qemu_x86_binary())
+        let mut child = Command::new(qemu_x86_binary())
             .args([
                 "-machine",
                 "q35",
@@ -2021,11 +1995,7 @@ impl QemuRunner {
             .spawn()
             .expect("qemu-system-x86_64 must be on PATH or set $VIOS_QEMU_X86");
 
-        listener.set_nonblocking(false).expect("blocking listener");
-        let stream = listener
-            .accept()
-            .expect("QEMU did not connect to the serial socket")
-            .0;
+        let stream = accept_qemu_serial(&listener, &mut child);
         let writer = stream.try_clone().expect("clone serial stream");
         let output = Arc::new(Mutex::new(String::new()));
         let buf = Arc::clone(&output);
@@ -2057,7 +2027,7 @@ impl QemuRunner {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind serial socket");
         let port = listener.local_addr().unwrap().port();
 
-        let child = Command::new(qemu_x86_binary())
+        let mut child = Command::new(qemu_x86_binary())
             .args([
                 "-machine",
                 "q35",
@@ -2090,11 +2060,7 @@ impl QemuRunner {
             .spawn()
             .expect("qemu-system-x86_64 must be on PATH or set $VIOS_QEMU_X86");
 
-        listener.set_nonblocking(false).expect("blocking listener");
-        let stream = listener
-            .accept()
-            .expect("QEMU did not connect to the serial socket")
-            .0;
+        let stream = accept_qemu_serial(&listener, &mut child);
         let writer = stream.try_clone().expect("clone serial stream");
         let output = Arc::new(Mutex::new(String::new()));
         let buf = Arc::clone(&output);
@@ -2127,7 +2093,7 @@ impl QemuRunner {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind serial socket");
         let port = listener.local_addr().unwrap().port();
 
-        let child = Command::new(qemu_binary())
+        let mut child = Command::new(qemu_binary())
             .args([
                 "-machine",
                 "virt",
@@ -2159,11 +2125,7 @@ impl QemuRunner {
             .spawn()
             .expect("qemu-system-riscv64 must be on PATH");
 
-        listener.set_nonblocking(false).expect("blocking listener");
-        let stream = listener
-            .accept()
-            .expect("QEMU did not connect to the serial socket")
-            .0;
+        let stream = accept_qemu_serial(&listener, &mut child);
         let writer = stream.try_clone().expect("clone serial stream");
         let output = Arc::new(Mutex::new(String::new()));
         let buf = Arc::clone(&output);
