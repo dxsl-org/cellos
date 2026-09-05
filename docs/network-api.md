@@ -1,8 +1,8 @@
 # Cellos Network Service API
 
 The Net Service Cell (`cells/services/net/`) drives a smoltcp TCP/IPv4 stack
-backed by either the kernel VirtIO NIC driver or the e1000 Driver Cell and
-provides BSD-style socket IPC.
+backed by a registered VirtIO or e1000 NIC Driver Cell and provides BSD-style
+socket IPC.
 
 ---
 
@@ -16,11 +16,10 @@ Net Cell (cells/services/net/)
         ├─ socket_table: CapId → smoltcp SocketHandle
         ├─ smoltcp Interface + SocketSet
         │    ├─ TcpSocket, UdpSocket, Dhcpv4Socket
-        │    └─ Network device adapter (VirtIO or e1000)
-        └─ DHCP client (acquires 10.0.2.15 from QEMU)
+        │    └─ Network device adapter (registered VirtIO/e1000 Driver Cell)
                 │
                 ▼ frame transport
-        Kernel VirtIO driver or e1000 Driver Cell
+        Registered VirtIO or e1000 NIC Driver Cell
                 │ DMA + IRQ/polling
                 ▼
         QEMU NIC → host user-mode network (10.0.2.0/24)
@@ -40,26 +39,28 @@ Default QEMU assignment: **10.0.2.15/24**, gateway **10.0.2.2**.
 
 ---
 
-## Inbound IPC (kernel → net cell)
+## NIC Driver Cell frame transport
 
-Raw Ethernet frames arrive from `virtio_net::handle_irq()` or the e1000
-Driver-Cell polling bridge.
+The Net Cell discovers the active provider through the `NIC_DRIVER` service.
+The VirtIO and e1000 Driver Cells implement the same request/reply protocol, so
+the Net Cell does not select a wire format based on the NIC model.
 
-| Offset | Size | Field |
-|--------|------|-------|
-| 0 | 1 | opcode `0x00` = RX_FRAME |
-| 1 | N | raw Ethernet frame bytes |
+All multi-byte fields are little-endian:
 
----
+| Operation | Request (net → driver) | Reply (driver → net) |
+|-----------|------------------------|----------------------|
+| TX | `[0x00][length: u16][frame bytes]` | `[0x00]` accepted / `[0x01]` error |
+| RX | `[0x01]` | `[length: u16][frame bytes]`; zero length means no frame ready |
+| GET_MAC | `[0x02]` | six raw MAC-address bytes |
 
-## Outbound IPC (net cell → kernel)
+The explicit TX length is required because raw IPC delivery may expose the
+driver's entire padded receive buffer rather than the sender's byte count. The
+Net Cell limits frames to 1514 bytes. The VirtIO provider accepts up to 1514
+bytes; the e1000 provider's internal buffer permits up to 2048 bytes.
 
-TX frames are sent back via `interface::NetTxToken`.
-
-| Offset | Size | Field |
-|--------|------|-------|
-| 0 | 1 | opcode `0x01` = TX_FRAME |
-| 1 | N | raw Ethernet frame bytes |
+If no Driver Cell is registered, the adapter calls the legacy kernel
+`NetTx`/`NetRx` syscalls. Their current backend is disabled (`false`/zero), so
+networking remains unavailable rather than falling back to a kernel NIC driver.
 
 ---
 
@@ -198,8 +199,9 @@ confused with the unimplemented service-level `NetRequest::Resolve` request.
 
 | File | Purpose |
 |------|---------|
-| `kernel/src/task/drivers/virtio_net.rs` | VirtIO NIC driver (DMA, IRQ) |
-| `cells/drivers/e1000/` | e1000 PCIe Driver Cell (DMA rings, polled Tx/Rx) |
+| `cells/drivers/virtio-net/` | VirtIO NIC Driver Cell (DMA, IRQ, shared NIC IPC) |
+| `cells/drivers/e1000/` | e1000 PCIe Driver Cell (DMA rings, polled Tx/Rx, shared NIC IPC) |
+| `kernel/src/task/drivers/nic.rs` | Disabled legacy `NetTx`/`NetRx` syscall backend |
 | `cells/services/net/src/main.rs` | Cell entry point + IPC receive loop |
 | `cells/services/net/src/interface.rs` | smoltcp Device adapter (RX queue, TX via IPC) |
 | `cells/services/net/src/socket_table.rs` | CapId → smoltcp SocketHandle mapping |
