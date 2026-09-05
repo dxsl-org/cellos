@@ -44,6 +44,8 @@ Default QEMU assignment: **10.0.2.15/24**, gateway **10.0.2.2**.
 The Net Cell discovers the active provider through the `NIC_DRIVER` service.
 The VirtIO and e1000 Driver Cells implement the same request/reply protocol, so
 the Net Cell does not select a wire format based on the NIC model.
+A missed lookup remains retryable, and a transport failure invalidates the
+cached provider TID so a restarted Driver Cell can be discovered.
 
 All multi-byte fields are little-endian:
 
