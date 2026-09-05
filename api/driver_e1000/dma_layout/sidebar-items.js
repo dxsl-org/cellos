@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["RX_SLOTS","TX_SLOTS"],"enum":["DmaSlot","InitialDmaProgram"],"fn":["authorize_dma_layout","for_each_initial_dma_program","try_init_array","with_authorized_dma_layout"],"struct":["DmaIovas"]};

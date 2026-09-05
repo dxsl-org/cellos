@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["DID_MASK","OPCODE_IODIR","OPCODE_IOFENCE","OPCODE_IOTINVAL","PPN_MASK","PSCID_MASK"],"fn":["encode_cqb","encode_iodir_inval_ddt","encode_iofence_c","encode_iotinval_vma"]};
