@@ -1,21 +1,13 @@
-//! x86_64 PCIe NIC (e1000) + Intel VT-d integration tests — Driver Cell
-//! architecture.
+//! x86_64 q35 e1000 DHCP data-plane gates, with and without Intel VT-d.
 //!
-//! The kernel drives no NIC hardware (Kernel Boundary Law): the Platform Cell
-//! scans ECAM, init spawns the e1000 Driver Cell (`/bin/e1000`), which claims
-//! BAR0 MMIO and announces itself via `sys_register_nic_driver`. The oracle is
-//! the kernel registration marker `[driver_cell] NIC driver registered`.
+//! The complete oracle crosses every Driver-Cell boundary: the Platform Cell
+//! discovers e1000, the e1000 Cell registers, the net service submits a DHCP
+//! frame through that driver, e1000 reports an RX frame, and smoltcp acquires an
+//! address from QEMU's isolated SLIRP DHCP server.
 //!
-//! `nic_x86_e1000_init` — boots QEMU q35 with `-device e1000` and asserts the
-//! Driver Cell registration.
-//!
-//! `nic_x86_vtd_enabled` — same boot plus `-device intel-iommu`; asserts the
-//! deferred VT-d activation (`[vtd] Intel VT-d: DMA isolation ACTIVE`, fired
-//! from the Platform Cell's RegisterPciDevice path) AND that BOTH Driver
-//! Cells still register with translation enabled. The NVMe registration is
-//! the strong oracle: it requires Identify/queue DMA round-trips through the
-//! per-Cell VT-d SLPT, proving DMA isolation actually translates (a malformed
-//! context entry — the original AW-in-lo bug — fails exactly this).
+//! The VT-d variant additionally requires isolation to become active before
+//! the e1000 DMA traffic. Its retained NVMe registration proves an independent
+//! DMA client also completes real queue traffic through the translated domain.
 //!
 //! Both tests skip gracefully when the x86_64 ISO is not built or
 //! `qemu-system-x86_64` is not on PATH.
@@ -24,7 +16,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use vicell_integration_tests::{qemu_x86_binary, QemuRunner};
 
-const BOOT_TIMEOUT: u64 = 45;
+const BOOT_TIMEOUT: u64 = 60;
 
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -61,6 +53,51 @@ fn prerequisites_ok() -> bool {
     vicell_integration_tests::ci_guard(iso_ok && qemu_ok)
 }
 
+fn require_marker(qemu: &QemuRunner, disk: &std::path::Path, marker: &str, context: &str) {
+    qemu.wait_for(marker, BOOT_TIMEOUT).unwrap_or_else(|error| {
+        let _ = std::fs::remove_file(disk);
+        panic!(
+            "{context}: marker {marker:?} absent after {BOOT_TIMEOUT}s: {error}\n\
+             --- serial output ---\n{}",
+            qemu.dump()
+        )
+    });
+}
+
+fn assert_e1000_dhcp_order(serial: &str, first_marker: &str) {
+    let first = serial
+        .find(first_marker)
+        .unwrap_or_else(|| panic!("missing initial marker {first_marker:?}\n{serial}"));
+    let registered = serial
+        .find("[driver_cell] NIC driver registered")
+        .unwrap_or_else(|| panic!("missing NIC registration\n{serial}"));
+    let tx = serial
+        .find("[net-bridge] first e1000 TX")
+        .unwrap_or_else(|| panic!("missing e1000 Tx evidence\n{serial}"));
+    let rx = serial
+        .find("[net-bridge] first e1000 RX")
+        .unwrap_or_else(|| panic!("missing e1000 Rx evidence\n{serial}"));
+    let dhcp = serial
+        .find("[net] DHCP acquired")
+        .unwrap_or_else(|| panic!("missing DHCP acquisition\n{serial}"));
+    let tx_line = serial[tx..].lines().next().unwrap_or_default();
+
+    assert!(
+        tx_line.contains("accepted=true"),
+        "first e1000 Tx was not accepted by its Driver Cell: {tx_line}\n{serial}"
+    );
+    assert!(
+        first <= registered && registered < tx && tx < rx && rx < dhcp,
+        "invalid e1000 DHCP evidence order\n{serial}"
+    );
+    assert!(!serial.contains("[KERNEL PANIC]"), "kernel panic\n{serial}");
+    assert!(
+        !serial.contains("PANIC: Application crashed!"),
+        "Cell panic\n{serial}"
+    );
+    assert!(!serial.contains("[fault] Cell"), "Cell fault\n{serial}");
+}
+
 fn make_nvme_disk() -> PathBuf {
     static CTR: AtomicU64 = AtomicU64::new(0);
     let path = std::env::temp_dir().join(format!(
@@ -79,14 +116,9 @@ fn make_nvme_disk() -> PathBuf {
     path
 }
 
-/// The e1000 Driver Cell must bind the QEMU `-device e1000` NIC and register
-/// as the system NIC driver.
-///
-/// Proves: Platform Cell ECAM scan finds class 02:00:00, the Driver Cell
-/// claims BAR0 via user-mapped MMIO, initialises the controller, and calls
-/// `sys_register_nic_driver`.
+/// Ordinary q35: require Driver-Cell Tx/Rx and a completed DHCP lease.
 #[test]
-fn nic_x86_e1000_init() {
+fn nic_x86_e1000_dhcp() {
     if !prerequisites_ok() {
         return;
     }
@@ -94,28 +126,42 @@ fn nic_x86_e1000_init() {
     let disk = make_nvme_disk();
     let qemu = QemuRunner::boot_x86_bios_with_nic(&iso_path(), &disk.to_string_lossy());
 
-    qemu.wait_for("[driver_cell] NIC driver registered", BOOT_TIMEOUT)
-        .unwrap_or_else(|e| {
-            let _ = std::fs::remove_file(&disk);
-            panic!(
-                "e1000 Driver Cell did not register within {BOOT_TIMEOUT}s: {e}\n\
-                 Chain: platform ECAM scan → find_pcie_device(02:00:00) → BAR0 MMIO \
-                 claim → sys_register_nic_driver.\n\
-                 --- serial output ---\n{}",
-                qemu.dump()
-            )
-        });
+    let registration = "[driver_cell] NIC driver registered";
+    require_marker(
+        &qemu,
+        &disk,
+        registration,
+        "e1000 Driver Cell did not register",
+    );
+    require_marker(
+        &qemu,
+        &disk,
+        "[net-bridge] first e1000 TX",
+        "net service did not submit DHCP through e1000",
+    );
+    require_marker(
+        &qemu,
+        &disk,
+        "[net-bridge] first e1000 RX",
+        "e1000 did not receive the SLIRP DHCP response",
+    );
+    require_marker(
+        &qemu,
+        &disk,
+        "[net] IP address:",
+        "isolated SLIRP DHCP did not complete",
+    );
 
+    // Keep the guest alive briefly after success so an immediate panic/fault
+    // emitted behind the DHCP line reaches the byte-at-a-time serial reader.
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    assert_e1000_dhcp_order(&qemu.dump(), registration);
     let _ = std::fs::remove_file(&disk);
 }
 
-/// Intel VT-d deferred activation + e1000 Driver Cell on x86_64 q35.
-///
-/// Verifies the deferred IOMMU init fires from the Platform Cell's device
-/// registration (GCAP probe, root/context tables, GCMD.SRTP + TE), and the
-/// e1000 Driver Cell still registers with translation enabled.
+/// VT-d q35: isolation must precede accepted e1000 DMA and DHCP completion.
 #[test]
-fn nic_x86_vtd_enabled() {
+fn nic_x86_vtd_e1000_dhcp() {
     if !prerequisites_ok() {
         return;
     }
@@ -123,41 +169,41 @@ fn nic_x86_vtd_enabled() {
     let disk = make_nvme_disk();
     let qemu = QemuRunner::boot_x86_bios_with_vtd(&iso_path(), &disk.to_string_lossy());
 
-    qemu.wait_for("[vtd] Intel VT-d: DMA isolation ACTIVE", BOOT_TIMEOUT)
-        .unwrap_or_else(|e| {
-            let _ = std::fs::remove_file(&disk);
-            panic!(
-                "VT-d not activated within {BOOT_TIMEOUT}s: {e}\n\
-                 Deferred init fires from RegisterPciDevice — check the Platform \
-                 Cell spawned and -device intel-iommu precedes endpoint devices.\n\
-                 --- serial output ---\n{}",
-                qemu.dump()
-            )
-        });
+    let active = "[vtd] Intel VT-d: DMA isolation ACTIVE";
+    require_marker(&qemu, &disk, active, "VT-d did not activate");
+    require_marker(
+        &qemu,
+        &disk,
+        "[driver_cell] block driver registered",
+        "NVMe DMA did not complete under VT-d",
+    );
+    require_marker(
+        &qemu,
+        &disk,
+        "[driver_cell] NIC driver registered",
+        "e1000 Driver Cell did not register under VT-d",
+    );
+    require_marker(
+        &qemu,
+        &disk,
+        "[net-bridge] first e1000 TX",
+        "net service did not submit DHCP through VT-d e1000",
+    );
+    require_marker(
+        &qemu,
+        &disk,
+        "[net-bridge] first e1000 RX",
+        "e1000 did not receive DHCP through VT-d",
+    );
+    require_marker(
+        &qemu,
+        &disk,
+        "[net] IP address:",
+        "isolated SLIRP DHCP did not complete under VT-d",
+    );
 
-    // The NVMe Driver Cell must register after VT-d is active — its controller
-    // init does real DMA (Identify + queue creation) THROUGH the per-Cell SLPT,
-    // so this is the proof that VT-d translation actually works.
-    qemu.wait_for("[driver_cell] block driver registered", 20)
-        .unwrap_or_else(|e| {
-            let _ = std::fs::remove_file(&disk);
-            panic!(
-                "NVMe Driver Cell did not register under VT-d (DMA through SLPT broken): {e}\n\
-                 --- serial output ---\n{}",
-                qemu.dump()
-            )
-        });
-
-    // The e1000 Driver Cell must also register after VT-d is active.
-    qemu.wait_for("[driver_cell] NIC driver registered", 15)
-        .unwrap_or_else(|e| {
-            let _ = std::fs::remove_file(&disk);
-            panic!(
-                "e1000 Driver Cell did not register after VT-d activation: {e}\n\
-                 --- serial output ---\n{}",
-                qemu.dump()
-            )
-        });
-
+    // The final forbidden-marker scan must include immediate post-DHCP output.
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    assert_e1000_dhcp_order(&qemu.dump(), active);
     let _ = std::fs::remove_file(&disk);
 }

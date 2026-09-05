@@ -243,6 +243,51 @@ pub struct QemuRunner {
     monitor: Option<TcpStream>,
 }
 
+const SERIAL_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Accept QEMU's serial TCP connection without leaving a child behind if QEMU
+/// exits early or never connects.
+fn accept_qemu_serial(listener: &TcpListener, child: &mut Child) -> TcpStream {
+    listener
+        .set_nonblocking(true)
+        .expect("set serial listener nonblocking");
+    let deadline = Instant::now() + SERIAL_CONNECT_TIMEOUT;
+
+    loop {
+        match listener.accept() {
+            Ok((stream, _)) => return stream,
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {}
+            Err(error) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                panic!("failed to accept QEMU serial connection: {error}");
+            }
+        }
+
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                panic!("QEMU exited before connecting its serial socket: {status}");
+            }
+            Ok(None) => {}
+            Err(error) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                panic!("failed to query QEMU while awaiting serial connection: {error}");
+            }
+        }
+
+        if Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!(
+                "QEMU did not connect its serial socket within {}s",
+                SERIAL_CONNECT_TIMEOUT.as_secs()
+            );
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+}
+
 impl QemuRunner {
     /// Spawn QEMU booting `kernel` with `disk` attached as the VirtIO block
     /// device, with the guest serial bridged to a localhost TCP socket.
@@ -822,7 +867,7 @@ impl QemuRunner {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind serial socket");
         let port = listener.local_addr().unwrap().port();
 
-        let child = Command::new(qemu_binary_x86())
+        let mut child = Command::new(qemu_binary_x86())
             .args([
                 "-machine",
                 "q35",
@@ -855,11 +900,7 @@ impl QemuRunner {
             .spawn()
             .expect("qemu-system-x86_64 must be on PATH");
 
-        listener.set_nonblocking(false).expect("blocking listener");
-        let stream = listener
-            .accept()
-            .expect("QEMU did not connect to the serial socket")
-            .0;
+        let stream = accept_qemu_serial(&listener, &mut child);
         let writer = stream.try_clone().expect("clone serial stream");
 
         let output = Arc::new(Mutex::new(String::new()));
@@ -891,7 +932,7 @@ impl QemuRunner {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind serial socket");
         let port = listener.local_addr().unwrap().port();
 
-        let child = Command::new(qemu_binary_x86())
+        let mut child = Command::new(qemu_binary_x86())
             .args([
                 "-machine",
                 "q35",
@@ -927,11 +968,7 @@ impl QemuRunner {
             .spawn()
             .expect("qemu-system-x86_64 must be on PATH");
 
-        listener.set_nonblocking(false).expect("blocking listener");
-        let stream = listener
-            .accept()
-            .expect("QEMU did not connect to the serial socket")
-            .0;
+        let stream = accept_qemu_serial(&listener, &mut child);
         let writer = stream.try_clone().expect("clone serial stream");
 
         let output = Arc::new(Mutex::new(String::new()));
@@ -960,11 +997,7 @@ impl QemuRunner {
     /// When `with_vtd` is true, Intel VT-d is installed before the root port so
     /// the same `01:00.0` requester must complete NVMe queue/Identify DMA through
     /// its bus-specific context table.
-    pub fn boot_x86_bios_with_multibus_nvme(
-        iso: &str,
-        nvme_disk: &str,
-        with_vtd: bool,
-    ) -> Self {
+    pub fn boot_x86_bios_with_multibus_nvme(iso: &str, nvme_disk: &str, with_vtd: bool) -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind serial socket");
         let port = listener.local_addr().unwrap().port();
 
