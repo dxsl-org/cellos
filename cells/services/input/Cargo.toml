@@ -20,3 +20,5 @@ cell-build = { path = "../../../libs/cell-build", version = "0.2.0" }
 [features]
 default = ["virtio-mmio"]
 virtio-mmio = []
+board-rpi3 = []
+board-rpi4 = []

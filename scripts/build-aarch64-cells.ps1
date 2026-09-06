@@ -104,7 +104,7 @@ Write-Host "Building service-input (UART EV_ASCII relay consumer)..."
 if ($BoardRpi3) {
     $rpi3Input = Join-Path $rpi3BuildDir 'service-input'
     Remove-Item -LiteralPath $rpi3Input -Force -ErrorAction SilentlyContinue
-    cargo build --release -p service-input --no-default-features --target $target `
+    cargo build --release -p service-input --features board-rpi3 --no-default-features --target $target `
         --target-dir $rpi3TargetDir 2>&1 | Select-Object -Last 5
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $rpi3Input)) {
         throw 'RPi3 service-input build failed; refusing to package a stale artifact'
