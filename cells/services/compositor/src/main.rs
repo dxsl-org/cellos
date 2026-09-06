@@ -56,7 +56,7 @@ fn build_hw_cursor_sprite() -> [u8; 64 * 64 * 4] {
     }
     buf
 }
-ostd::declare_custom_heap!(24 * 1024 * 1024);
+ostd::declare_custom_heap!(10 * 1024 * 1024);
 
 #[cfg(not(test))]
 #[no_mangle]

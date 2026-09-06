@@ -1524,6 +1524,20 @@ pub fn sys_get_scheduler_ticks() -> Option<u64> {
     (ret >= 0).then_some(ret as u64)
 }
 
+/// Read the monotonic hardware tick counter frequency in Hz.
+///
+/// Returns `None` when the running kernel or the cell's syscall allowlist does
+/// not provide it, or returns 0.
+pub fn sys_get_timer_freq() -> Option<u64> {
+    // SAFETY: register-only syscall; reads and writes no user memory.
+    let ret = unsafe { syscall(ViSyscall::GetTime, 5, 0, 0, 0) };
+    if ret > 0 {
+        Some(ret as u64)
+    } else {
+        None
+    }
+}
+
 /// Nanoseconds since Unix epoch from the hardware RTC; 0 if no RTC is present.
 pub fn sys_get_wall_time() -> u64 {
     // SAFETY: register-only syscall.

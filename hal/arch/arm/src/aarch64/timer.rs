@@ -255,3 +255,13 @@ pub fn read_ticks() -> u64 {
     }
     val
 }
+
+/// Read the timer frequency (CNTFRQ_EL0) in Hz.
+pub fn read_freq() -> u64 {
+    let val: u64;
+    // SAFETY: CNTFRQ_EL0 is read-only; no state modified.
+    unsafe {
+        core::arch::asm!("mrs {}, cntfrq_el0", out(reg) val, options(nomem, nostack));
+    }
+    val
+}

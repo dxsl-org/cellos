@@ -4865,9 +4865,13 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     // 10 MHz mtime on QEMU RV64 → 10_000 ticks/ms
                     #[cfg(target_arch = "riscv64")]
                     let ms = (hal::common::timer::read_mtime() / 10_000) as usize;
-                    // 62.5 MHz CNTPCT on QEMU ARM64 virt → 62_500 ticks/ms
+                    // Dynamic timer frequency on ARM64 (19.2 MHz on RPi3, 62.5 MHz on QEMU virt)
                     #[cfg(target_arch = "aarch64")]
-                    let ms = (hal::timer::read_ticks() / 62_500) as usize;
+                    let ms = {
+                        let freq = hal::timer::read_freq();
+                        let ticks_per_ms = if freq > 0 { freq / 1000 } else { 62_500 };
+                        (hal::timer::read_ticks() / ticks_per_ms) as usize
+                    };
                     // HPET already returns nanoseconds; ÷ 1_000_000 → ms
                     #[cfg(target_arch = "x86_64")]
                     let ms = (hal::hpet::now_ns() / 1_000_000) as usize;
@@ -4912,6 +4916,22 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     )))]
                     let s = 0usize;
                     Ok(s)
+                }
+                // op=5: monotonic tick counter frequency in Hz
+                5 => {
+                    #[cfg(target_arch = "riscv64")]
+                    let freq = 10_000_000usize;
+                    #[cfg(target_arch = "aarch64")]
+                    let freq = hal::timer::read_freq() as usize;
+                    #[cfg(target_arch = "x86_64")]
+                    let freq = 1_000_000_000usize; // HPET is in nanoseconds (1 GHz)
+                    #[cfg(not(any(
+                        target_arch = "riscv64",
+                        target_arch = "aarch64",
+                        target_arch = "x86_64"
+                    )))]
+                    let freq = 10_000_000usize;
+                    Ok(freq)
                 }
                 // Unknown op — return 0 for backward compatibility
                 _ => Ok(0),

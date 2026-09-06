@@ -24,9 +24,8 @@ use linked_list_allocator::Heap;
 
 /// Default per-cell heap size: 512 KiB gives ample headroom for normal cells
 /// while keeping footprint minimal. Cells needing larger heaps (e.g. VFS, compositor)
-/// can initialize their own static arena via `init_custom_heap()`.
-const HEAP_SIZE: usize = 2 * 1024 * 1024;
-
+/// can initialize their own static arena via `declare_custom_heap!()`.
+const HEAP_SIZE: usize = 512 * 1024;
 /// Backing arena for the cell heap. 16-byte aligned so the allocator can satisfy
 /// the largest natural alignment without wasting the first bytes.
 #[repr(align(16))]

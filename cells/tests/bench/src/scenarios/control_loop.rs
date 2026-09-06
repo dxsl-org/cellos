@@ -13,15 +13,15 @@
 
 extern crate alloc;
 use crate::framework::rt_report::RtReport;
+use crate::framework::timer::timer_freq_hz;
 use alloc::vec::Vec;
 use ostd::syscall::{sys_exit, sys_get_time, sys_recv, sys_recv_timeout, sys_send, SyscallResult};
-
 /// Receive timeout uses 10 ms scheduler ticks; five ticks request a 50 ms period.
 const PERIOD_SCHEDULER_TICKS: u64 = 5;
-/// `sys_get_time` reports the 10 MHz hardware timebase used for measured error.
-const PERIOD_TIME_TICKS: u64 = 50 * 10_000;
-/// Allowed measured overrun before a deadline miss: 5 ms in the hardware timebase.
-const SLACK_TIME_TICKS: u64 = 5 * 10_000;
+/// Target period duration in milliseconds (5 scheduler ticks @ 10 ms/tick = 50 ms).
+const PERIOD_MS: u64 = 50;
+/// Allowed measured overrun before a deadline miss: 5 ms slack.
+const SLACK_MS: u64 = 5;
 /// Number of measured periods.
 const CL_ITERS: u32 = 200;
 
@@ -76,6 +76,9 @@ pub fn run_control_loop() -> ! {
     let mut errors: Vec<u64> = Vec::with_capacity(CL_ITERS as usize);
     let mut miss = 0u32;
     let mut valid = true;
+    let freq = timer_freq_hz();
+    let period_time_ticks = (PERIOD_MS * freq) / 1000;
+    let slack_time_ticks = (SLACK_MS * freq) / 1000;
     let mut prev = sys_get_time();
     for _ in 0..CL_ITERS {
         match sys_recv_timeout(0, &mut buf, PERIOD_SCHEDULER_TICKS) {
@@ -87,9 +90,9 @@ pub fn run_control_loop() -> ! {
         }
         let now = sys_get_time();
         let actual = now.saturating_sub(prev);
-        let err = actual.abs_diff(PERIOD_TIME_TICKS);
+        let err = actual.abs_diff(period_time_ticks);
         errors.push(err);
-        if actual > PERIOD_TIME_TICKS + SLACK_TIME_TICKS {
+        if actual > period_time_ticks + slack_time_ticks {
             miss += 1;
         }
         prev = now;
