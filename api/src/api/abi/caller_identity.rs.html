@@ -150,44 +150,47 @@
 <a href=#150 id=150 data-nosnippet>150</a>    </span><span class="kw">fn </span>flags_round_trip() {
 <a href=#151 id=151 data-nosnippet>151</a>        <span class="kw">let </span><span class="kw-2">mut </span>sample = SAMPLE;
 <a href=#152 id=152 data-nosnippet>152</a>        sample.flags = CALLER_FLAG_VFS_MUTATE;
-<a href=#153 id=153 data-nosnippet>153</a>        <span class="macro">assert_eq!</span>(CallerIdentity::from_trailer(<span class="kw-2">&amp;</span>sample.to_trailer()), <span class="prelude-val">Some</span>(sample));
-<a href=#154 id=154 data-nosnippet>154</a>    }
-<a href=#155 id=155 data-nosnippet>155</a>
-<a href=#156 id=156 data-nosnippet>156</a>    <span class="attr">#[test]
-<a href=#157 id=157 data-nosnippet>157</a>    </span><span class="kw">fn </span>untagged_tail_is_not_an_identity() {
-<a href=#158 id=158 data-nosnippet>158</a>        <span class="comment">// A recv buffer whose tail still holds bytes of a previous message.
-<a href=#159 id=159 data-nosnippet>159</a>        </span><span class="macro">assert_eq!</span>(
-<a href=#160 id=160 data-nosnippet>160</a>            CallerIdentity::from_trailer(<span class="kw-2">&amp;</span>[<span class="number">0xABu8</span>; CALLER_IDENTITY_LEN]),
-<a href=#161 id=161 data-nosnippet>161</a>            <span class="prelude-val">None
-<a href=#162 id=162 data-nosnippet>162</a>        </span>);
-<a href=#163 id=163 data-nosnippet>163</a>        <span class="macro">assert_eq!</span>(
-<a href=#164 id=164 data-nosnippet>164</a>            CallerIdentity::from_trailer(<span class="kw-2">&amp;</span>[<span class="number">0u8</span>; CALLER_IDENTITY_LEN]),
-<a href=#165 id=165 data-nosnippet>165</a>            <span class="prelude-val">None
-<a href=#166 id=166 data-nosnippet>166</a>        </span>);
-<a href=#167 id=167 data-nosnippet>167</a>    }
-<a href=#168 id=168 data-nosnippet>168</a>
-<a href=#169 id=169 data-nosnippet>169</a>    <span class="attr">#[test]
-<a href=#170 id=170 data-nosnippet>170</a>    </span><span class="kw">fn </span>cell_zero_is_rejected() {
-<a href=#171 id=171 data-nosnippet>171</a>        <span class="kw">let </span><span class="kw-2">mut </span>trailer = SAMPLE.to_trailer();
-<a href=#172 id=172 data-nosnippet>172</a>        trailer[<span class="number">8</span>..<span class="number">16</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">0u64</span>.to_le_bytes());
-<a href=#173 id=173 data-nosnippet>173</a>        <span class="macro">assert_eq!</span>(CallerIdentity::from_trailer(<span class="kw-2">&amp;</span>trailer), <span class="prelude-val">None</span>);
-<a href=#174 id=174 data-nosnippet>174</a>    }
-<a href=#175 id=175 data-nosnippet>175</a>
-<a href=#176 id=176 data-nosnippet>176</a>    <span class="attr">#[test]
-<a href=#177 id=177 data-nosnippet>177</a>    </span><span class="kw">fn </span>short_buffer_yields_no_identity() {
-<a href=#178 id=178 data-nosnippet>178</a>        <span class="macro">assert_eq!</span>(CallerIdentity::from_trailer(<span class="kw-2">&amp;</span>[<span class="number">0u8</span>; <span class="number">8</span>]), <span class="prelude-val">None</span>);
-<a href=#179 id=179 data-nosnippet>179</a>        <span class="macro">assert_eq!</span>(CallerIdentity::from_recv_buf(<span class="kw-2">&amp;</span>[<span class="number">0u8</span>; <span class="number">4</span>]), <span class="prelude-val">None</span>);
-<a href=#180 id=180 data-nosnippet>180</a>    }
-<a href=#181 id=181 data-nosnippet>181</a>
-<a href=#182 id=182 data-nosnippet>182</a>    <span class="attr">#[test]
-<a href=#183 id=183 data-nosnippet>183</a>    </span><span class="kw">fn </span>identity_is_read_from_the_tail_not_the_head() {
-<a href=#184 id=184 data-nosnippet>184</a>        <span class="kw">let </span><span class="kw-2">mut </span>buf = [<span class="number">0u8</span>; <span class="number">512</span>];
-<a href=#185 id=185 data-nosnippet>185</a>        <span class="kw">let </span>start = buf.len() - CALLER_IDENTITY_LEN;
-<a href=#186 id=186 data-nosnippet>186</a>        buf[start..].copy_from_slice(<span class="kw-2">&amp;</span>SAMPLE.to_trailer());
-<a href=#187 id=187 data-nosnippet>187</a>        <span class="comment">// A payload that happens to contain the tag at the head must not be
-<a href=#188 id=188 data-nosnippet>188</a>        // mistaken for the trailer.
-<a href=#189 id=189 data-nosnippet>189</a>        </span>buf[<span class="number">0</span>..CALLER_IDENTITY_LEN].copy_from_slice(<span class="kw-2">&amp;</span>SAMPLE.to_trailer());
-<a href=#190 id=190 data-nosnippet>190</a>        <span class="macro">assert_eq!</span>(CallerIdentity::from_recv_buf(<span class="kw-2">&amp;</span>buf), <span class="prelude-val">Some</span>(SAMPLE));
-<a href=#191 id=191 data-nosnippet>191</a>    }
-<a href=#192 id=192 data-nosnippet>192</a>}
+<a href=#153 id=153 data-nosnippet>153</a>        <span class="macro">assert_eq!</span>(
+<a href=#154 id=154 data-nosnippet>154</a>            CallerIdentity::from_trailer(<span class="kw-2">&amp;</span>sample.to_trailer()),
+<a href=#155 id=155 data-nosnippet>155</a>            <span class="prelude-val">Some</span>(sample)
+<a href=#156 id=156 data-nosnippet>156</a>        );
+<a href=#157 id=157 data-nosnippet>157</a>    }
+<a href=#158 id=158 data-nosnippet>158</a>
+<a href=#159 id=159 data-nosnippet>159</a>    <span class="attr">#[test]
+<a href=#160 id=160 data-nosnippet>160</a>    </span><span class="kw">fn </span>untagged_tail_is_not_an_identity() {
+<a href=#161 id=161 data-nosnippet>161</a>        <span class="comment">// A recv buffer whose tail still holds bytes of a previous message.
+<a href=#162 id=162 data-nosnippet>162</a>        </span><span class="macro">assert_eq!</span>(
+<a href=#163 id=163 data-nosnippet>163</a>            CallerIdentity::from_trailer(<span class="kw-2">&amp;</span>[<span class="number">0xABu8</span>; CALLER_IDENTITY_LEN]),
+<a href=#164 id=164 data-nosnippet>164</a>            <span class="prelude-val">None
+<a href=#165 id=165 data-nosnippet>165</a>        </span>);
+<a href=#166 id=166 data-nosnippet>166</a>        <span class="macro">assert_eq!</span>(
+<a href=#167 id=167 data-nosnippet>167</a>            CallerIdentity::from_trailer(<span class="kw-2">&amp;</span>[<span class="number">0u8</span>; CALLER_IDENTITY_LEN]),
+<a href=#168 id=168 data-nosnippet>168</a>            <span class="prelude-val">None
+<a href=#169 id=169 data-nosnippet>169</a>        </span>);
+<a href=#170 id=170 data-nosnippet>170</a>    }
+<a href=#171 id=171 data-nosnippet>171</a>
+<a href=#172 id=172 data-nosnippet>172</a>    <span class="attr">#[test]
+<a href=#173 id=173 data-nosnippet>173</a>    </span><span class="kw">fn </span>cell_zero_is_rejected() {
+<a href=#174 id=174 data-nosnippet>174</a>        <span class="kw">let </span><span class="kw-2">mut </span>trailer = SAMPLE.to_trailer();
+<a href=#175 id=175 data-nosnippet>175</a>        trailer[<span class="number">8</span>..<span class="number">16</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">0u64</span>.to_le_bytes());
+<a href=#176 id=176 data-nosnippet>176</a>        <span class="macro">assert_eq!</span>(CallerIdentity::from_trailer(<span class="kw-2">&amp;</span>trailer), <span class="prelude-val">None</span>);
+<a href=#177 id=177 data-nosnippet>177</a>    }
+<a href=#178 id=178 data-nosnippet>178</a>
+<a href=#179 id=179 data-nosnippet>179</a>    <span class="attr">#[test]
+<a href=#180 id=180 data-nosnippet>180</a>    </span><span class="kw">fn </span>short_buffer_yields_no_identity() {
+<a href=#181 id=181 data-nosnippet>181</a>        <span class="macro">assert_eq!</span>(CallerIdentity::from_trailer(<span class="kw-2">&amp;</span>[<span class="number">0u8</span>; <span class="number">8</span>]), <span class="prelude-val">None</span>);
+<a href=#182 id=182 data-nosnippet>182</a>        <span class="macro">assert_eq!</span>(CallerIdentity::from_recv_buf(<span class="kw-2">&amp;</span>[<span class="number">0u8</span>; <span class="number">4</span>]), <span class="prelude-val">None</span>);
+<a href=#183 id=183 data-nosnippet>183</a>    }
+<a href=#184 id=184 data-nosnippet>184</a>
+<a href=#185 id=185 data-nosnippet>185</a>    <span class="attr">#[test]
+<a href=#186 id=186 data-nosnippet>186</a>    </span><span class="kw">fn </span>identity_is_read_from_the_tail_not_the_head() {
+<a href=#187 id=187 data-nosnippet>187</a>        <span class="kw">let </span><span class="kw-2">mut </span>buf = [<span class="number">0u8</span>; <span class="number">512</span>];
+<a href=#188 id=188 data-nosnippet>188</a>        <span class="kw">let </span>start = buf.len() - CALLER_IDENTITY_LEN;
+<a href=#189 id=189 data-nosnippet>189</a>        buf[start..].copy_from_slice(<span class="kw-2">&amp;</span>SAMPLE.to_trailer());
+<a href=#190 id=190 data-nosnippet>190</a>        <span class="comment">// A payload that happens to contain the tag at the head must not be
+<a href=#191 id=191 data-nosnippet>191</a>        // mistaken for the trailer.
+<a href=#192 id=192 data-nosnippet>192</a>        </span>buf[<span class="number">0</span>..CALLER_IDENTITY_LEN].copy_from_slice(<span class="kw-2">&amp;</span>SAMPLE.to_trailer());
+<a href=#193 id=193 data-nosnippet>193</a>        <span class="macro">assert_eq!</span>(CallerIdentity::from_recv_buf(<span class="kw-2">&amp;</span>buf), <span class="prelude-val">Some</span>(SAMPLE));
+<a href=#194 id=194 data-nosnippet>194</a>    }
+<a href=#195 id=195 data-nosnippet>195</a>}
 </code></pre></div></section></main></body></html>

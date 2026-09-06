@@ -1,0 +1,40 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Recoverable domain-aware user copy boundary (Spec 22, phase 03)."><title>cellos_kernel::task::user_copy - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="cellos_kernel" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.0-nightly (f53b654a8 2026-04-30)" data-channel="nightly" data-search-js="search-b5634cc7.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../static.files/storage-41dd4d93.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../../static.files/main-aa4d37ac.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"></head><body class="rustdoc mod"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Module user_copy</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../cellos_kernel/index.html">cellos_<wbr>kernel</a><span class="version">0.2.1</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module user_<wbr>copy</a></h2><h3><a href="#modules">Module Items</a></h3><ul class="block"><li><a href="#modules" title="Modules">Modules</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="../index.html">In cellos_<wbr>kernel::<wbr>task</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../index.html">cellos_kernel</a>::<wbr><a href="../index.html">task</a></div><h1>Module <span>user_<wbr>copy</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../src/cellos_kernel/task/user_copy/mod.rs.html#1-51">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Recoverable domain-aware user copy boundary (Spec 22, phase 03).</p>
+<p>This is the ONLY module allowed to touch user bytes. Every syscall-facing
+dereference goes through <a href="copy/fn.copy_from_user.html" title="fn cellos_kernel::task::user_copy::copy::copy_from_user"><code>copy_from_user</code></a> / <a href="copy/fn.copy_to_user.html" title="fn cellos_kernel::task::user_copy::copy::copy_to_user"><code>copy_to_user</code></a>, which run a
+uniform two-pass transaction:</p>
+<ol>
+<li>PROBE PASS (non-mutating): arithmetic range validation (null / overflow /
+non-canonical / kernel-half), then a per-page permission check — private
+roots consult their mapping ledger AND the live Sv39 PTEs; the shared
+address space walks the currently active root. No bytes move, so any
+failure here leaves both destinations byte-identical.</li>
+<li>COMMIT PASS: the byte copy runs inside a per-hart recoverable fault
+guard. For <code>CopyView::Domain</code> the CopyReader pin is held across the
+whole commit and every page’s PTE is re-walked under the pin before any
+byte moves; because <code>unmap_private_page</code>/<code>unmap_grant_page</code> drain copy
+readers BEFORE tearing down any PTE, an in-window fault is unreachable
+through the public API and remains a recoverable <code>CopyError</code> (never a
+panic). For <code>CopyView::Sas</code> the commit copies through user VAs under the
+active shared root, retaining today’s SUM-based shared-space semantics;
+the guard converts a racing revocation into the same recoverable error.</li>
+</ol>
+<p>The guard itself lives in <code>hart_local</code> (<code>user_copy_guard_*</code>). The RV64 trap
+handler routes guard-owned page faults to the helper’s error label by
+rewinding <code>sepc</code>; everything else keeps its existing fatal path. No
+scheduler lock, no allocation, and no callbacks run inside the guarded
+window, and the window masks interrupts so a context switch can never carry
+a stale guard into another task (<code>clear_guard_for_context_switch</code> is the
+defense-in-depth backstop for that invariant).</p>
+<p>Layout: <a href="range/index.html" title="mod cellos_kernel::task::user_copy::range"><code>range</code></a> owns the validated slice/view vocabulary,
+<a href="sv39_probe/index.html" title="mod cellos_kernel::task::user_copy::sv39_probe"><code>sv39_probe</code></a> owns ledger + live-PTE validation, <a href="copy/index.html" title="mod cellos_kernel::task::user_copy::copy"><code>copy</code></a> orchestrates
+the two-pass transaction, and <a href="guard/index.html" title="mod cellos_kernel::task::user_copy::guard"><code>guard</code></a> arms the per-hart recoverable
+fault window around every byte movement.</p>
+</div></details><h2 id="modules" class="section-header">Modules<a href="#modules" class="anchor">§</a></h2><dl class="item-table"><dt><a class="mod" href="copy/index.html" title="mod cellos_kernel::task::user_copy::copy">copy</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Two-pass transaction orchestration: entry points, the shared <code>execute</code>
+body, the pinned Domain commit, and the Sas direct-VA commit.</dd><dt><a class="mod" href="guard/index.html" title="mod cellos_kernel::task::user_copy::guard">guard</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Per-hart recoverable-fault guard: window arming, the guarded byte-copy
+core, and the trap-facing glue contract. The RV64 trap handler routes
+guard-owned page faults here by rewinding <code>sepc</code> to the landing pad
+published in <code>user_copy_guard_resume_pc</code>.</dd><dt><a class="mod" href="range/index.html" title="mod cellos_kernel::task::user_copy::range">range</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Validated user-range vocabulary for the copy boundary: typed slices,
+the execution view, and the recoverable error. No allocation, no
+dereferences — construction is pure arithmetic validation.</dd><dt><a class="mod" href="scatter/index.html" title="mod cellos_kernel::task::user_copy::scatter">scatter</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Multi-destination scatter transaction orchestration.</dd><dt><a class="mod" href="sv39_probe/index.html" title="mod cellos_kernel::task::user_copy::sv39_probe">sv39_<wbr>probe</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Ledger + live-Sv39-PTE validation for probed user ranges. Both the
+private-root (Domain) and shared-root (Sas) probe passes live here; no
+byte ever moves in this module.</dd></dl></section></div></main></body></html>

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["DEFAULT_ITERS","DEFAULT_WARMUP"],"fn":["run","run_default"]};
+window.SIDEBAR_ITEMS = {"constant":["DEFAULT_ITERS","DEFAULT_WARMUP"],"enum":["RunStage"],"fn":["run"],"struct":["RunFailure"]};

@@ -179,5 +179,12 @@
 <a href=#179 id=179 data-nosnippet>179</a>}
 <a href=#180 id=180 data-nosnippet>180</a>
 <a href=#181 id=181 data-nosnippet>181</a><span class="attr">#[cfg(target_arch = <span class="string">"x86_64"</span>)]
-<a href=#182 id=182 data-nosnippet>182</a></span><span class="kw">const _</span>: HandlePageFault = vi_handle_page_fault;
+<a href=#182 id=182 data-nosnippet>182</a></span><span class="kw">unsafe extern </span><span class="string">"Rust" </span>{
+<a href=#183 id=183 data-nosnippet>183</a>    <span class="kw">pub safe fn </span>vi_x86_idt_cpl3_park_b();
+<a href=#184 id=184 data-nosnippet>184</a>    <span class="kw">pub safe fn </span>vi_x86_idt_cpl3_wake_b();
+<a href=#185 id=185 data-nosnippet>185</a>    <span class="kw">pub safe fn </span>vi_x86_idt_cpl3_switch_to_a();
+<a href=#186 id=186 data-nosnippet>186</a>}
+<a href=#187 id=187 data-nosnippet>187</a>
+<a href=#188 id=188 data-nosnippet>188</a><span class="attr">#[cfg(target_arch = <span class="string">"x86_64"</span>)]
+<a href=#189 id=189 data-nosnippet>189</a></span><span class="kw">const _</span>: HandlePageFault = vi_handle_page_fault;
 </code></pre></div></section></main></body></html>

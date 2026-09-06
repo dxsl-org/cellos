@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_RETAINED_JOBS"],"enum":["Admission","ContractError","JobState","ReconcileDecision"],"fn":["transition","valid_configuration","validate_observation","validate_provenance","validate_request"],"struct":["AdmissionObservation","Configuration","JobRecord","PlacementObservation","Principal","TransferContract","TransferRequest"]};

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["HOTSWAP_MSG_QUEUE_DEPTH","INPUT_EVENT_QUEUE_DEPTH"],"enum":["SyscallFuture","TaskState"],"fn":["next_cell_generation"],"static":["NEXT_CELL_GENERATION"],"struct":["CompletionWait","FileHandle","GrantEntry","Lease","LeaseAttributes","Task"]};
+window.SIDEBAR_ITEMS = {"constant":["HOTSWAP_MSG_QUEUE_DEPTH","INPUT_EVENT_QUEUE_DEPTH"],"enum":["SyscallFuture","TaskAddressSpace","TaskState"],"fn":["next_cell_generation"],"static":["NEXT_CELL_GENERATION"],"struct":["CompletionWait","FileHandle","GrantEntry","Lease","LeaseAttributes","Task"]};

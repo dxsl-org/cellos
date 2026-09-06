@@ -447,91 +447,98 @@
 <a href=#447 id=447 data-nosnippet>447</a>            pie_va_base,
 <a href=#448 id=448 data-nosnippet>448</a>        }
 <a href=#449 id=449 data-nosnippet>449</a>    }
-<a href=#450 id=450 data-nosnippet>450</a>    <span class="doccomment">/// Return the exclusive end of the writable page containing `ptr`.
-<a href=#451 id=451 data-nosnippet>451</a>    </span><span class="kw">pub fn </span>writable_page_end_containing(<span class="kw-2">&amp;</span><span class="self">self</span>, ptr: usize) -&gt; <span class="prelude-ty">Option</span>&lt;usize&gt; {
-<a href=#452 id=452 data-nosnippet>452</a>        <span class="kw">let </span>page = ptr &amp; !(PAGE_SIZE - <span class="number">1</span>);
-<a href=#453 id=453 data-nosnippet>453</a>        <span class="self">self</span>.writable_pages
-<a href=#454 id=454 data-nosnippet>454</a>            .contains(<span class="kw-2">&amp;</span>page)
-<a href=#455 id=455 data-nosnippet>455</a>            .then(|| page.checked_add(PAGE_SIZE))
-<a href=#456 id=456 data-nosnippet>456</a>            .flatten()
-<a href=#457 id=457 data-nosnippet>457</a>    }
-<a href=#458 id=458 data-nosnippet>458</a>
-<a href=#459 id=459 data-nosnippet>459</a>    <span class="doccomment">/// Whether every page touched by this range is writable in this Cell image.
-<a href=#460 id=460 data-nosnippet>460</a>    </span><span class="kw">pub fn </span>contains_writable_range(<span class="kw-2">&amp;</span><span class="self">self</span>, ptr: usize, len: usize) -&gt; bool {
-<a href=#461 id=461 data-nosnippet>461</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(end) = ptr.checked_add(len) <span class="kw">else </span>{
-<a href=#462 id=462 data-nosnippet>462</a>            <span class="kw">return </span><span class="bool-val">false</span>;
-<a href=#463 id=463 data-nosnippet>463</a>        };
-<a href=#464 id=464 data-nosnippet>464</a>        <span class="kw">if </span>len == <span class="number">0 </span>{
-<a href=#465 id=465 data-nosnippet>465</a>            <span class="kw">return </span><span class="bool-val">false</span>;
-<a href=#466 id=466 data-nosnippet>466</a>        }
-<a href=#467 id=467 data-nosnippet>467</a>        <span class="kw">let </span><span class="kw-2">mut </span>page = ptr &amp; !(PAGE_SIZE - <span class="number">1</span>);
-<a href=#468 id=468 data-nosnippet>468</a>        <span class="kw">while </span>page &lt; end {
-<a href=#469 id=469 data-nosnippet>469</a>            <span class="kw">if </span>!<span class="self">self</span>.writable_pages.contains(<span class="kw-2">&amp;</span>page) {
-<a href=#470 id=470 data-nosnippet>470</a>                <span class="kw">return </span><span class="bool-val">false</span>;
-<a href=#471 id=471 data-nosnippet>471</a>            }
-<a href=#472 id=472 data-nosnippet>472</a>            page = <span class="kw">match </span>page.checked_add(PAGE_SIZE) {
-<a href=#473 id=473 data-nosnippet>473</a>                <span class="prelude-val">Some</span>(next) =&gt; next,
-<a href=#474 id=474 data-nosnippet>474</a>                <span class="prelude-val">None </span>=&gt; <span class="kw">return </span><span class="bool-val">false</span>,
-<a href=#475 id=475 data-nosnippet>475</a>            };
-<a href=#476 id=476 data-nosnippet>476</a>        }
-<a href=#477 id=477 data-nosnippet>477</a>        <span class="bool-val">true
-<a href=#478 id=478 data-nosnippet>478</a>    </span>}
-<a href=#479 id=479 data-nosnippet>479</a>
-<a href=#480 id=480 data-nosnippet>480</a>    <span class="attr">#[cfg(feature = <span class="string">"test-hooks"</span>)]
-<a href=#481 id=481 data-nosnippet>481</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>unpublished_pages(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>[(types::VAddr, types::PhysAddr)] {
-<a href=#482 id=482 data-nosnippet>482</a>        <span class="kw-2">&amp;</span><span class="self">self</span>.pages
-<a href=#483 id=483 data-nosnippet>483</a>    }
-<a href=#484 id=484 data-nosnippet>484</a>
-<a href=#485 id=485 data-nosnippet>485</a>    <span class="doccomment">/// Total physical bytes reserved for this cell's ELF segment frames.
-<a href=#486 id=486 data-nosnippet>486</a>    </span><span class="kw">pub fn </span>allocated_bytes(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize {
-<a href=#487 id=487 data-nosnippet>487</a>        <span class="self">self</span>.pages.len() * PAGE_SIZE
-<a href=#488 id=488 data-nosnippet>488</a>    }
-<a href=#489 id=489 data-nosnippet>489</a>
-<a href=#490 id=490 data-nosnippet>490</a>    <span class="doccomment">/// Unmap this cell's segment VAs immediately at death — WITHOUT freeing the
-<a href=#491 id=491 data-nosnippet>491</a>    /// frames (those are freed lazily when the zombie is reaped, in `drop`).
-<a href=#492 id=492 data-nosnippet>492</a>    ///
-<a href=#493 id=493 data-nosnippet>493</a>    /// Frees the address space right away so (a) a respawn can reuse the fixed VA
-<a href=#494 id=494 data-nosnippet>494</a>    /// and (b) the load-time overwrite guard (`load_segments`) only ever observes
-<a href=#495 id=495 data-nosnippet>495</a>    /// LIVE cells' (and kernel MMIO) mappings, never a dead-but-unreaped cell's.
-<a href=#496 id=496 data-nosnippet>496</a>    /// Locks only `KERNEL_ROOT` (a leaf), so it is safe under the SCHEDULER lock.
-<a href=#497 id=497 data-nosnippet>497</a>    </span><span class="kw">pub fn </span>eager_unmap(<span class="kw-2">&amp;</span><span class="self">self</span>) {
-<a href=#498 id=498 data-nosnippet>498</a>        <span class="kw">for </span><span class="kw-2">&amp;</span>(vaddr, frame) <span class="kw">in </span><span class="kw-2">&amp;</span><span class="self">self</span>.pages {
-<a href=#499 id=499 data-nosnippet>499</a>            <span class="comment">// Only unmap a VA that still resolves to OUR frame (it won't if a
-<a href=#500 id=500 data-nosnippet>500</a>            // respawn already re-pointed it — leave the new mapping intact).
-<a href=#501 id=501 data-nosnippet>501</a>            </span><span class="kw">if </span>paging::virt_to_phys(vaddr) == <span class="prelude-val">Some</span>(frame) {
-<a href=#502 id=502 data-nosnippet>502</a>                <span class="kw">let _ </span>= paging::unmap_page(vaddr);
-<a href=#503 id=503 data-nosnippet>503</a>            }
-<a href=#504 id=504 data-nosnippet>504</a>            <span class="comment">// Flush even when a replacement mapping won the race: an old remote
-<a href=#505 id=505 data-nosnippet>505</a>            // translation for this VA can still point at this segment's frame.
-<a href=#506 id=506 data-nosnippet>506</a>            </span><span class="kw">crate</span>::memory::tlb_shootdown::flush_page(vaddr);
-<a href=#507 id=507 data-nosnippet>507</a>        }
-<a href=#508 id=508 data-nosnippet>508</a>    }
-<a href=#509 id=509 data-nosnippet>509</a>}
-<a href=#510 id=510 data-nosnippet>510</a>
-<a href=#511 id=511 data-nosnippet>511</a><span class="kw">impl </span>Drop <span class="kw">for </span>CellSegments {
-<a href=#512 id=512 data-nosnippet>512</a>    <span class="kw">fn </span>drop(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
-<a href=#513 id=513 data-nosnippet>513</a>        <span class="comment">// Leaf and parent invalidations must reach every hart before either
-<a href=#514 id=514 data-nosnippet>514</a>        // backing or page-table frames return to the allocator.
-<a href=#515 id=515 data-nosnippet>515</a>        </span><span class="self">self</span>.eager_unmap();
-<a href=#516 id=516 data-nosnippet>516</a>        <span class="kw">for </span><span class="kw-2">&amp;</span>(vaddr, _frame) <span class="kw">in </span><span class="kw-2">&amp;</span><span class="self">self</span>.pages {
-<a href=#517 id=517 data-nosnippet>517</a>            <span class="kw">let </span>reclaimed = paging::prune_empty_tables(vaddr);
-<a href=#518 id=518 data-nosnippet>518</a>            <span class="kw">if </span>!reclaimed.is_empty() {
-<a href=#519 id=519 data-nosnippet>519</a>                <span class="kw">crate</span>::memory::tlb_shootdown::flush_page(vaddr);
-<a href=#520 id=520 data-nosnippet>520</a>                <span class="kw">let </span><span class="kw-2">mut </span>frames = FRAME_ALLOCATOR.lock();
-<a href=#521 id=521 data-nosnippet>521</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(allocator) = frames.as_mut() {
-<a href=#522 id=522 data-nosnippet>522</a>                    reclaimed.release(allocator);
-<a href=#523 id=523 data-nosnippet>523</a>                }
-<a href=#524 id=524 data-nosnippet>524</a>            }
-<a href=#525 id=525 data-nosnippet>525</a>        }
-<a href=#526 id=526 data-nosnippet>526</a>        <span class="kw">let </span><span class="kw-2">mut </span>frame_guard = FRAME_ALLOCATOR.lock();
-<a href=#527 id=527 data-nosnippet>527</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(allocator) = frame_guard.as_mut() {
-<a href=#528 id=528 data-nosnippet>528</a>            <span class="kw">for </span><span class="kw-2">&amp;</span>(_vaddr, frame) <span class="kw">in </span><span class="kw-2">&amp;</span><span class="self">self</span>.pages {
-<a href=#529 id=529 data-nosnippet>529</a>                allocator.deallocate_frame(frame);
-<a href=#530 id=530 data-nosnippet>530</a>            }
-<a href=#531 id=531 data-nosnippet>531</a>        }
-<a href=#532 id=532 data-nosnippet>532</a>        <span class="kw">if </span><span class="self">self</span>.pie_va_base != <span class="number">0 </span>{
-<a href=#533 id=533 data-nosnippet>533</a>            <span class="kw">crate</span>::loader::va_alloc::free_cell_va(<span class="self">self</span>.pie_va_base);
-<a href=#534 id=534 data-nosnippet>534</a>        }
-<a href=#535 id=535 data-nosnippet>535</a>    }
-<a href=#536 id=536 data-nosnippet>536</a>}
+<a href=#450 id=450 data-nosnippet>450</a>    <span class="kw">pub fn </span>pages(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>[(types::VAddr, types::PhysAddr)] {
+<a href=#451 id=451 data-nosnippet>451</a>        <span class="kw-2">&amp;</span><span class="self">self</span>.pages
+<a href=#452 id=452 data-nosnippet>452</a>    }
+<a href=#453 id=453 data-nosnippet>453</a>
+<a href=#454 id=454 data-nosnippet>454</a>    <span class="kw">pub fn </span>is_writable(<span class="kw-2">&amp;</span><span class="self">self</span>, va: types::VAddr) -&gt; bool {
+<a href=#455 id=455 data-nosnippet>455</a>        <span class="self">self</span>.writable_pages.contains(<span class="kw-2">&amp;</span>va)
+<a href=#456 id=456 data-nosnippet>456</a>    }
+<a href=#457 id=457 data-nosnippet>457</a>    <span class="doccomment">/// Return the exclusive end of the writable page containing `ptr`.
+<a href=#458 id=458 data-nosnippet>458</a>    </span><span class="kw">pub fn </span>writable_page_end_containing(<span class="kw-2">&amp;</span><span class="self">self</span>, ptr: usize) -&gt; <span class="prelude-ty">Option</span>&lt;usize&gt; {
+<a href=#459 id=459 data-nosnippet>459</a>        <span class="kw">let </span>page = ptr &amp; !(PAGE_SIZE - <span class="number">1</span>);
+<a href=#460 id=460 data-nosnippet>460</a>        <span class="self">self</span>.writable_pages
+<a href=#461 id=461 data-nosnippet>461</a>            .contains(<span class="kw-2">&amp;</span>page)
+<a href=#462 id=462 data-nosnippet>462</a>            .then(|| page.checked_add(PAGE_SIZE))
+<a href=#463 id=463 data-nosnippet>463</a>            .flatten()
+<a href=#464 id=464 data-nosnippet>464</a>    }
+<a href=#465 id=465 data-nosnippet>465</a>
+<a href=#466 id=466 data-nosnippet>466</a>    <span class="doccomment">/// Whether every page touched by this range is writable in this Cell image.
+<a href=#467 id=467 data-nosnippet>467</a>    </span><span class="kw">pub fn </span>contains_writable_range(<span class="kw-2">&amp;</span><span class="self">self</span>, ptr: usize, len: usize) -&gt; bool {
+<a href=#468 id=468 data-nosnippet>468</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(end) = ptr.checked_add(len) <span class="kw">else </span>{
+<a href=#469 id=469 data-nosnippet>469</a>            <span class="kw">return </span><span class="bool-val">false</span>;
+<a href=#470 id=470 data-nosnippet>470</a>        };
+<a href=#471 id=471 data-nosnippet>471</a>        <span class="kw">if </span>len == <span class="number">0 </span>{
+<a href=#472 id=472 data-nosnippet>472</a>            <span class="kw">return </span><span class="bool-val">false</span>;
+<a href=#473 id=473 data-nosnippet>473</a>        }
+<a href=#474 id=474 data-nosnippet>474</a>        <span class="kw">let </span><span class="kw-2">mut </span>page = ptr &amp; !(PAGE_SIZE - <span class="number">1</span>);
+<a href=#475 id=475 data-nosnippet>475</a>        <span class="kw">while </span>page &lt; end {
+<a href=#476 id=476 data-nosnippet>476</a>            <span class="kw">if </span>!<span class="self">self</span>.writable_pages.contains(<span class="kw-2">&amp;</span>page) {
+<a href=#477 id=477 data-nosnippet>477</a>                <span class="kw">return </span><span class="bool-val">false</span>;
+<a href=#478 id=478 data-nosnippet>478</a>            }
+<a href=#479 id=479 data-nosnippet>479</a>            page = <span class="kw">match </span>page.checked_add(PAGE_SIZE) {
+<a href=#480 id=480 data-nosnippet>480</a>                <span class="prelude-val">Some</span>(next) =&gt; next,
+<a href=#481 id=481 data-nosnippet>481</a>                <span class="prelude-val">None </span>=&gt; <span class="kw">return </span><span class="bool-val">false</span>,
+<a href=#482 id=482 data-nosnippet>482</a>            };
+<a href=#483 id=483 data-nosnippet>483</a>        }
+<a href=#484 id=484 data-nosnippet>484</a>        <span class="bool-val">true
+<a href=#485 id=485 data-nosnippet>485</a>    </span>}
+<a href=#486 id=486 data-nosnippet>486</a>
+<a href=#487 id=487 data-nosnippet>487</a>    <span class="attr">#[cfg(feature = <span class="string">"test-hooks"</span>)]
+<a href=#488 id=488 data-nosnippet>488</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>unpublished_pages(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>[(types::VAddr, types::PhysAddr)] {
+<a href=#489 id=489 data-nosnippet>489</a>        <span class="kw-2">&amp;</span><span class="self">self</span>.pages
+<a href=#490 id=490 data-nosnippet>490</a>    }
+<a href=#491 id=491 data-nosnippet>491</a>
+<a href=#492 id=492 data-nosnippet>492</a>    <span class="doccomment">/// Total physical bytes reserved for this cell's ELF segment frames.
+<a href=#493 id=493 data-nosnippet>493</a>    </span><span class="kw">pub fn </span>allocated_bytes(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize {
+<a href=#494 id=494 data-nosnippet>494</a>        <span class="self">self</span>.pages.len() * PAGE_SIZE
+<a href=#495 id=495 data-nosnippet>495</a>    }
+<a href=#496 id=496 data-nosnippet>496</a>
+<a href=#497 id=497 data-nosnippet>497</a>    <span class="doccomment">/// Unmap this cell's segment VAs immediately at death — WITHOUT freeing the
+<a href=#498 id=498 data-nosnippet>498</a>    /// frames (those are freed lazily when the zombie is reaped, in `drop`).
+<a href=#499 id=499 data-nosnippet>499</a>    ///
+<a href=#500 id=500 data-nosnippet>500</a>    /// Frees the address space right away so (a) a respawn can reuse the fixed VA
+<a href=#501 id=501 data-nosnippet>501</a>    /// and (b) the load-time overwrite guard (`load_segments`) only ever observes
+<a href=#502 id=502 data-nosnippet>502</a>    /// LIVE cells' (and kernel MMIO) mappings, never a dead-but-unreaped cell's.
+<a href=#503 id=503 data-nosnippet>503</a>    /// Locks only `KERNEL_ROOT` (a leaf), so it is safe under the SCHEDULER lock.
+<a href=#504 id=504 data-nosnippet>504</a>    </span><span class="kw">pub fn </span>eager_unmap(<span class="kw-2">&amp;</span><span class="self">self</span>) {
+<a href=#505 id=505 data-nosnippet>505</a>        <span class="kw">for </span><span class="kw-2">&amp;</span>(vaddr, frame) <span class="kw">in </span><span class="kw-2">&amp;</span><span class="self">self</span>.pages {
+<a href=#506 id=506 data-nosnippet>506</a>            <span class="comment">// Only unmap a VA that still resolves to OUR frame (it won't if a
+<a href=#507 id=507 data-nosnippet>507</a>            // respawn already re-pointed it — leave the new mapping intact).
+<a href=#508 id=508 data-nosnippet>508</a>            </span><span class="kw">if </span>paging::virt_to_phys(vaddr) == <span class="prelude-val">Some</span>(frame) {
+<a href=#509 id=509 data-nosnippet>509</a>                <span class="kw">let _ </span>= paging::unmap_page(vaddr);
+<a href=#510 id=510 data-nosnippet>510</a>            }
+<a href=#511 id=511 data-nosnippet>511</a>            <span class="comment">// Flush even when a replacement mapping won the race: an old remote
+<a href=#512 id=512 data-nosnippet>512</a>            // translation for this VA can still point at this segment's frame.
+<a href=#513 id=513 data-nosnippet>513</a>            </span><span class="kw">crate</span>::memory::tlb_shootdown::flush_page(vaddr);
+<a href=#514 id=514 data-nosnippet>514</a>        }
+<a href=#515 id=515 data-nosnippet>515</a>    }
+<a href=#516 id=516 data-nosnippet>516</a>}
+<a href=#517 id=517 data-nosnippet>517</a>
+<a href=#518 id=518 data-nosnippet>518</a><span class="kw">impl </span>Drop <span class="kw">for </span>CellSegments {
+<a href=#519 id=519 data-nosnippet>519</a>    <span class="kw">fn </span>drop(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
+<a href=#520 id=520 data-nosnippet>520</a>        <span class="comment">// Leaf and parent invalidations must reach every hart before either
+<a href=#521 id=521 data-nosnippet>521</a>        // backing or page-table frames return to the allocator.
+<a href=#522 id=522 data-nosnippet>522</a>        </span><span class="self">self</span>.eager_unmap();
+<a href=#523 id=523 data-nosnippet>523</a>        <span class="kw">for </span><span class="kw-2">&amp;</span>(vaddr, _frame) <span class="kw">in </span><span class="kw-2">&amp;</span><span class="self">self</span>.pages {
+<a href=#524 id=524 data-nosnippet>524</a>            <span class="kw">let </span>reclaimed = paging::prune_empty_tables(vaddr);
+<a href=#525 id=525 data-nosnippet>525</a>            <span class="kw">if </span>!reclaimed.is_empty() {
+<a href=#526 id=526 data-nosnippet>526</a>                <span class="kw">crate</span>::memory::tlb_shootdown::flush_page(vaddr);
+<a href=#527 id=527 data-nosnippet>527</a>                <span class="kw">let </span><span class="kw-2">mut </span>frames = FRAME_ALLOCATOR.lock();
+<a href=#528 id=528 data-nosnippet>528</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(allocator) = frames.as_mut() {
+<a href=#529 id=529 data-nosnippet>529</a>                    reclaimed.release(allocator);
+<a href=#530 id=530 data-nosnippet>530</a>                }
+<a href=#531 id=531 data-nosnippet>531</a>            }
+<a href=#532 id=532 data-nosnippet>532</a>        }
+<a href=#533 id=533 data-nosnippet>533</a>        <span class="kw">let </span><span class="kw-2">mut </span>frame_guard = FRAME_ALLOCATOR.lock();
+<a href=#534 id=534 data-nosnippet>534</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(allocator) = frame_guard.as_mut() {
+<a href=#535 id=535 data-nosnippet>535</a>            <span class="kw">for </span><span class="kw-2">&amp;</span>(_vaddr, frame) <span class="kw">in </span><span class="kw-2">&amp;</span><span class="self">self</span>.pages {
+<a href=#536 id=536 data-nosnippet>536</a>                allocator.deallocate_frame(frame);
+<a href=#537 id=537 data-nosnippet>537</a>            }
+<a href=#538 id=538 data-nosnippet>538</a>        }
+<a href=#539 id=539 data-nosnippet>539</a>        <span class="kw">if </span><span class="self">self</span>.pie_va_base != <span class="number">0 </span>{
+<a href=#540 id=540 data-nosnippet>540</a>            <span class="kw">crate</span>::loader::va_alloc::free_cell_va(<span class="self">self</span>.pie_va_base);
+<a href=#541 id=541 data-nosnippet>541</a>        }
+<a href=#542 id=542 data-nosnippet>542</a>    }
+<a href=#543 id=543 data-nosnippet>543</a>}
 </code></pre></div></section></main></body></html>

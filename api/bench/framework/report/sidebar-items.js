@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["build_report","format_report","print_json","print_report"]};
+window.SIDEBAR_ITEMS = {"fn":["build_report","format_report","print_json","print_memory_json","print_report","print_value_json"]};

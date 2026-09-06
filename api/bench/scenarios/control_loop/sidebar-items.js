@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["CL_ITERS","PERIOD_TICKS","SLACK_TICKS"],"fn":["run_control_loop"]};
+window.SIDEBAR_ITEMS = {"constant":["CL_ITERS","PERIOD_SCHEDULER_TICKS","PERIOD_TIME_TICKS","RESULT_LEN","SLACK_TIME_TICKS"],"fn":["decode_result","get_u64","put_u64","run_control_loop"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["advance","take_staged"],"struct":["HartOwnedSlot"]};

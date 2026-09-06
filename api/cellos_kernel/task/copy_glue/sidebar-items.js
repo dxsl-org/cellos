@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["TaskCopyRepr"],"mod":["scatter"],"struct":["TaskCopyView"]};
+window.SIDEBAR_ITEMS = {"enum":["TaskCopyRepr"],"fn":["validate_kernel_range"],"mod":["scatter"],"struct":["TaskCopyView"]};

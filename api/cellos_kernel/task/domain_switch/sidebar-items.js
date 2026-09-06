@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["DomainTransition"],"struct":["DomainRef","SwitchPlan"]};

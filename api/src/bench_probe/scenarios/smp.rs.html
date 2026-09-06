@@ -53,234 +53,286 @@
 <a href=#53 id=53 data-nosnippet>53</a>
 <a href=#54 id=54 data-nosnippet>54</a><span class="comment">// ── Orchestrator-only helpers ─────────────────────────────────────────────────
 <a href=#55 id=55 data-nosnippet>55</a>
-<a href=#56 id=56 data-nosnippet>56</a></span><span class="kw">fn </span>spawn_worker() -&gt; <span class="prelude-ty">Option</span>&lt;usize&gt; {
-<a href=#57 id=57 data-nosnippet>57</a>    sys_set_spawn_args(<span class="string">"smp-worker"</span>);
-<a href=#58 id=58 data-nosnippet>58</a>    <span class="kw">match </span>sys_spawn_pinned(PROBE_PATH, TaskPriority::Normal <span class="kw">as </span>u8, <span class="number">0</span>) {
-<a href=#59 id=59 data-nosnippet>59</a>        SyscallResult::Ok(tid) =&gt; <span class="prelude-val">Some</span>(tid),
-<a href=#60 id=60 data-nosnippet>60</a>        <span class="kw">_ </span>=&gt; <span class="prelude-val">None</span>,
-<a href=#61 id=61 data-nosnippet>61</a>    }
-<a href=#62 id=62 data-nosnippet>62</a>}
-<a href=#63 id=63 data-nosnippet>63</a>
-<a href=#64 id=64 data-nosnippet>64</a><span class="doccomment">/// Receive the exit notification for `tid` (caller must have already called
-<a href=#65 id=65 data-nosnippet>65</a>/// `sys_notify_on_exit(tid)`).  Loops past unrelated notifications.
-<a href=#66 id=66 data-nosnippet>66</a></span><span class="kw">fn </span>recv_exit(tid: usize) {
+<a href=#56 id=56 data-nosnippet>56</a></span><span class="kw">fn </span>spawn_worker() -&gt; <span class="prelude-ty">Result</span>&lt;usize, ()&gt; {
+<a href=#57 id=57 data-nosnippet>57</a>    <span class="kw">if </span>!sys_set_spawn_args(<span class="string">"smp-worker"</span>) {
+<a href=#58 id=58 data-nosnippet>58</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(());
+<a href=#59 id=59 data-nosnippet>59</a>    }
+<a href=#60 id=60 data-nosnippet>60</a>    <span class="kw">match </span>sys_spawn_pinned(PROBE_PATH, TaskPriority::Normal <span class="kw">as </span>u8, <span class="number">0</span>) {
+<a href=#61 id=61 data-nosnippet>61</a>        SyscallResult::Ok(tid) <span class="kw">if </span>tid != <span class="number">0 </span>=&gt; <span class="prelude-val">Ok</span>(tid),
+<a href=#62 id=62 data-nosnippet>62</a>        <span class="kw">_ </span>=&gt; <span class="prelude-val">Err</span>(()),
+<a href=#63 id=63 data-nosnippet>63</a>    }
+<a href=#64 id=64 data-nosnippet>64</a>}
+<a href=#65 id=65 data-nosnippet>65</a>
+<a href=#66 id=66 data-nosnippet>66</a><span class="kw">fn </span>recv_exit(tid: usize) -&gt; <span class="prelude-ty">Result</span>&lt;(), ()&gt; {
 <a href=#67 id=67 data-nosnippet>67</a>    <span class="kw">let </span><span class="kw-2">mut </span>buf = [<span class="number">0u8</span>; <span class="number">8</span>];
-<a href=#68 id=68 data-nosnippet>68</a>    <span class="kw">loop </span>{
-<a href=#69 id=69 data-nosnippet>69</a>        <span class="kw">if let </span>SyscallResult::Ok(s) = sys_recv(<span class="number">0</span>, <span class="kw-2">&amp;mut </span>buf) {
-<a href=#70 id=70 data-nosnippet>70</a>            <span class="kw">if </span>s == tid {
-<a href=#71 id=71 data-nosnippet>71</a>                <span class="kw">break</span>;
-<a href=#72 id=72 data-nosnippet>72</a>            }
-<a href=#73 id=73 data-nosnippet>73</a>        }
-<a href=#74 id=74 data-nosnippet>74</a>    }
-<a href=#75 id=75 data-nosnippet>75</a>}
-<a href=#76 id=76 data-nosnippet>76</a>
-<a href=#77 id=77 data-nosnippet>77</a><span class="doccomment">/// Register and await `tid`'s exit.
-<a href=#78 id=78 data-nosnippet>78</a></span><span class="kw">fn </span>wait_exit(tid: usize) {
-<a href=#79 id=79 data-nosnippet>79</a>    <span class="kw">let _ </span>= sys_notify_on_exit(tid);
-<a href=#80 id=80 data-nosnippet>80</a>    recv_exit(tid);
-<a href=#81 id=81 data-nosnippet>81</a>}
-<a href=#82 id=82 data-nosnippet>82</a>
-<a href=#83 id=83 data-nosnippet>83</a><span class="doccomment">/// Prove caller-visible dead-peer error plus queued ForceExit notification.
-<a href=#84 id=84 data-nosnippet>84</a></span><span class="kw">pub fn </span>run_peer_death_guard() -&gt; ! {
-<a href=#85 id=85 data-nosnippet>85</a>    sys_set_spawn_args(<span class="string">"heartbeat-peer"</span>);
-<a href=#86 id=86 data-nosnippet>86</a>    <span class="kw">let </span>blocked_peer = <span class="kw">match </span>sys_spawn_pinned(PROBE_PATH, TaskPriority::Normal <span class="kw">as </span>u8, <span class="number">0</span>) {
-<a href=#87 id=87 data-nosnippet>87</a>        SyscallResult::Ok(tid) =&gt; tid,
-<a href=#88 id=88 data-nosnippet>88</a>        <span class="kw">_ </span>=&gt; {
-<a href=#89 id=89 data-nosnippet>89</a>            println(<span class="string">"[peer-death-runtime] FAIL — heartbeat child spawn"</span>);
-<a href=#90 id=90 data-nosnippet>90</a>            sys_exit(<span class="number">1</span>);
-<a href=#91 id=91 data-nosnippet>91</a>        }
-<a href=#92 id=92 data-nosnippet>92</a>    };
-<a href=#93 id=93 data-nosnippet>93</a>    <span class="kw">for _ in </span><span class="number">0</span>..<span class="number">20 </span>{
-<a href=#94 id=94 data-nosnippet>94</a>        yield_now();
-<a href=#95 id=95 data-nosnippet>95</a>    }
-<a href=#96 id=96 data-nosnippet>96</a>    <span class="kw">if </span>!<span class="macro">matches!</span>(sys_send(blocked_peer, <span class="kw-2">&amp;</span>[<span class="number">1</span>]), SyscallResult::Ok(<span class="kw">_</span>)) {
-<a href=#97 id=97 data-nosnippet>97</a>        println(<span class="string">"[peer-death-runtime] FAIL — heartbeat child start"</span>);
-<a href=#98 id=98 data-nosnippet>98</a>        <span class="kw">let _ </span>= sys_force_exit(blocked_peer);
-<a href=#99 id=99 data-nosnippet>99</a>        sys_exit(<span class="number">1</span>);
+<a href=#68 id=68 data-nosnippet>68</a>    <span class="kw">match </span>sys_recv(tid, <span class="kw-2">&amp;mut </span>buf) {
+<a href=#69 id=69 data-nosnippet>69</a>        SyscallResult::Ok(sender) <span class="kw">if </span>sender == tid =&gt; <span class="prelude-val">Ok</span>(()),
+<a href=#70 id=70 data-nosnippet>70</a>        <span class="kw">_ </span>=&gt; <span class="prelude-val">Err</span>(()),
+<a href=#71 id=71 data-nosnippet>71</a>    }
+<a href=#72 id=72 data-nosnippet>72</a>}
+<a href=#73 id=73 data-nosnippet>73</a>
+<a href=#74 id=74 data-nosnippet>74</a><span class="kw">fn </span>wait_exit(tid: usize) -&gt; <span class="prelude-ty">Result</span>&lt;(), ()&gt; {
+<a href=#75 id=75 data-nosnippet>75</a>    <span class="kw">if </span>!<span class="macro">matches!</span>(sys_notify_on_exit(tid), SyscallResult::Ok(<span class="kw">_</span>)) {
+<a href=#76 id=76 data-nosnippet>76</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(());
+<a href=#77 id=77 data-nosnippet>77</a>    }
+<a href=#78 id=78 data-nosnippet>78</a>    recv_exit(tid)
+<a href=#79 id=79 data-nosnippet>79</a>}
+<a href=#80 id=80 data-nosnippet>80</a>
+<a href=#81 id=81 data-nosnippet>81</a><span class="kw">fn </span>force_exit(tid: usize) -&gt; bool {
+<a href=#82 id=82 data-nosnippet>82</a>    <span class="macro">matches!</span>(sys_force_exit(tid), SyscallResult::Ok(<span class="kw">_</span>))
+<a href=#83 id=83 data-nosnippet>83</a>}
+<a href=#84 id=84 data-nosnippet>84</a>
+<a href=#85 id=85 data-nosnippet>85</a><span class="doccomment">/// Prove caller-visible dead-peer error plus queued ForceExit notification.
+<a href=#86 id=86 data-nosnippet>86</a></span><span class="kw">pub fn </span>run_peer_death_guard() -&gt; ! {
+<a href=#87 id=87 data-nosnippet>87</a>    <span class="kw">if </span>!sys_set_spawn_args(<span class="string">"heartbeat-peer"</span>) {
+<a href=#88 id=88 data-nosnippet>88</a>        println(<span class="string">"[peer-death-runtime] FAIL — heartbeat child argument staging"</span>);
+<a href=#89 id=89 data-nosnippet>89</a>        sys_exit(<span class="number">1</span>);
+<a href=#90 id=90 data-nosnippet>90</a>    }
+<a href=#91 id=91 data-nosnippet>91</a>    <span class="kw">let </span>blocked_peer = <span class="kw">match </span>sys_spawn_pinned(PROBE_PATH, TaskPriority::Normal <span class="kw">as </span>u8, <span class="number">0</span>) {
+<a href=#92 id=92 data-nosnippet>92</a>        SyscallResult::Ok(tid) =&gt; tid,
+<a href=#93 id=93 data-nosnippet>93</a>        <span class="kw">_ </span>=&gt; {
+<a href=#94 id=94 data-nosnippet>94</a>            println(<span class="string">"[peer-death-runtime] FAIL — heartbeat child spawn"</span>);
+<a href=#95 id=95 data-nosnippet>95</a>            sys_exit(<span class="number">1</span>);
+<a href=#96 id=96 data-nosnippet>96</a>        }
+<a href=#97 id=97 data-nosnippet>97</a>    };
+<a href=#98 id=98 data-nosnippet>98</a>    <span class="kw">for _ in </span><span class="number">0</span>..<span class="number">20 </span>{
+<a href=#99 id=99 data-nosnippet>99</a>        yield_now();
 <a href=#100 id=100 data-nosnippet>100</a>    }
-<a href=#101 id=101 data-nosnippet>101</a>    <span class="kw">if </span>!<span class="macro">matches!</span>(sys_send(blocked_peer, <span class="kw-2">&amp;</span>[<span class="number">2</span>]), SyscallResult::Err(<span class="kw">_</span>)) {
-<a href=#102 id=102 data-nosnippet>102</a>        println(<span class="string">"[peer-death-runtime] FAIL — blocked send did not return an error"</span>);
+<a href=#101 id=101 data-nosnippet>101</a>    <span class="kw">if </span>!<span class="macro">matches!</span>(sys_send(blocked_peer, <span class="kw-2">&amp;</span>[<span class="number">1</span>]), SyscallResult::Ok(<span class="kw">_</span>)) {
+<a href=#102 id=102 data-nosnippet>102</a>        println(<span class="string">"[peer-death-runtime] FAIL — heartbeat child start"</span>);
 <a href=#103 id=103 data-nosnippet>103</a>        <span class="kw">let _ </span>= sys_force_exit(blocked_peer);
 <a href=#104 id=104 data-nosnippet>104</a>        sys_exit(<span class="number">1</span>);
 <a href=#105 id=105 data-nosnippet>105</a>    }
-<a href=#106 id=106 data-nosnippet>106</a>
-<a href=#107 id=107 data-nosnippet>107</a>    sys_set_spawn_args(<span class="string">"load"</span>);
-<a href=#108 id=108 data-nosnippet>108</a>    <span class="kw">let </span>forced_tid = <span class="kw">match </span>sys_spawn_pinned(PROBE_PATH, TaskPriority::Normal <span class="kw">as </span>u8, <span class="number">0</span>) {
-<a href=#109 id=109 data-nosnippet>109</a>        SyscallResult::Ok(tid) =&gt; tid,
-<a href=#110 id=110 data-nosnippet>110</a>        <span class="kw">_ </span>=&gt; {
-<a href=#111 id=111 data-nosnippet>111</a>            println(<span class="string">"[peer-death-runtime] FAIL — ForceExit child spawn"</span>);
-<a href=#112 id=112 data-nosnippet>112</a>            sys_exit(<span class="number">1</span>);
-<a href=#113 id=113 data-nosnippet>113</a>        }
-<a href=#114 id=114 data-nosnippet>114</a>    };
-<a href=#115 id=115 data-nosnippet>115</a>    <span class="kw">if </span>!<span class="macro">matches!</span>(sys_notify_on_exit(forced_tid), SyscallResult::Ok(<span class="kw">_</span>)) {
-<a href=#116 id=116 data-nosnippet>116</a>        println(<span class="string">"[peer-death-runtime] FAIL — ForceExit watch"</span>);
-<a href=#117 id=117 data-nosnippet>117</a>        <span class="kw">let _ </span>= sys_force_exit(forced_tid);
-<a href=#118 id=118 data-nosnippet>118</a>        sys_exit(<span class="number">1</span>);
-<a href=#119 id=119 data-nosnippet>119</a>    }
-<a href=#120 id=120 data-nosnippet>120</a>    <span class="kw">for _ in </span><span class="number">0</span>..<span class="number">20 </span>{
-<a href=#121 id=121 data-nosnippet>121</a>        yield_now();
-<a href=#122 id=122 data-nosnippet>122</a>    }
-<a href=#123 id=123 data-nosnippet>123</a>    <span class="kw">if </span>!<span class="macro">matches!</span>(sys_force_exit(forced_tid), SyscallResult::Ok(<span class="kw">_</span>)) {
-<a href=#124 id=124 data-nosnippet>124</a>        println(<span class="string">"[peer-death-runtime] FAIL — ForceExit denied"</span>);
-<a href=#125 id=125 data-nosnippet>125</a>        sys_exit(<span class="number">1</span>);
-<a href=#126 id=126 data-nosnippet>126</a>    }
-<a href=#127 id=127 data-nosnippet>127</a>    recv_exit(forced_tid);
-<a href=#128 id=128 data-nosnippet>128</a>
-<a href=#129 id=129 data-nosnippet>129</a>    println(<span class="string">"[peer-death-runtime] PASS (blocked-send error + ForceExit notification)"</span>);
-<a href=#130 id=130 data-nosnippet>130</a>    sys_exit(<span class="number">0</span>);
-<a href=#131 id=131 data-nosnippet>131</a>}
-<a href=#132 id=132 data-nosnippet>132</a>
-<a href=#133 id=133 data-nosnippet>133</a><span class="comment">// ── Scenario 1: spawn_rate ────────────────────────────────────────────────────
-<a href=#134 id=134 data-nosnippet>134</a>
-<a href=#135 id=135 data-nosnippet>135</a></span><span class="doccomment">/// Sequential spawn throughput.  PASS iff ≥ 10 tasks/sec on single-hart QEMU TCG.
-<a href=#136 id=136 data-nosnippet>136</a>///
-<a href=#137 id=137 data-nosnippet>137</a>/// Tests that spawn+compute+exit overhead stays bounded. The 10/sec floor
-<a href=#138 id=138 data-nosnippet>138</a>/// accommodates single-hart QEMU TCG (observed ~15/sec); real 2-hart MTTCG
-<a href=#139 id=139 data-nosnippet>139</a>/// achieves ≥ 30/sec.
-<a href=#140 id=140 data-nosnippet>140</a></span><span class="kw">fn </span>measure_spawn_rate() -&gt; <span class="prelude-ty">Option</span>&lt;bool&gt; {
-<a href=#141 id=141 data-nosnippet>141</a>    <span class="kw">const </span>N: u64 = <span class="number">8</span>;
-<a href=#142 id=142 data-nosnippet>142</a>    <span class="kw">const </span>TARGET: u64 = <span class="number">10</span>; <span class="comment">// ≥ 100 ms per full lifecycle budget (conservative for TCG)
-<a href=#143 id=143 data-nosnippet>143</a>
-<a href=#144 id=144 data-nosnippet>144</a>    </span><span class="kw">let </span>t0 = sys_get_time();
-<a href=#145 id=145 data-nosnippet>145</a>    <span class="kw">for _ in </span><span class="number">0</span>..N {
-<a href=#146 id=146 data-nosnippet>146</a>        <span class="kw">match </span>spawn_worker() {
-<a href=#147 id=147 data-nosnippet>147</a>            <span class="prelude-val">Some</span>(tid) =&gt; wait_exit(tid),
-<a href=#148 id=148 data-nosnippet>148</a>            <span class="prelude-val">None </span>=&gt; {
-<a href=#149 id=149 data-nosnippet>149</a>                println(<span class="string">"[smp] spawn_rate SKIP — bench-probe not at /bin/bench-probe"</span>);
-<a href=#150 id=150 data-nosnippet>150</a>                <span class="kw">return </span><span class="prelude-val">None</span>;
-<a href=#151 id=151 data-nosnippet>151</a>            }
-<a href=#152 id=152 data-nosnippet>152</a>        }
-<a href=#153 id=153 data-nosnippet>153</a>    }
-<a href=#154 id=154 data-nosnippet>154</a>    <span class="kw">let </span>dt_ns = sys_get_time()
-<a href=#155 id=155 data-nosnippet>155</a>        .saturating_sub(t0)
-<a href=#156 id=156 data-nosnippet>156</a>        .saturating_mul(NS_PER_TICK);
-<a href=#157 id=157 data-nosnippet>157</a>    <span class="kw">let </span>per_sec = N
-<a href=#158 id=158 data-nosnippet>158</a>        .saturating_mul(<span class="number">1_000_000_000</span>)
-<a href=#159 id=159 data-nosnippet>159</a>        .checked_div(dt_ns)
-<a href=#160 id=160 data-nosnippet>160</a>        .unwrap_or(u64::MAX);
-<a href=#161 id=161 data-nosnippet>161</a>    <span class="kw">let </span>pass = per_sec &gt;= TARGET;
-<a href=#162 id=162 data-nosnippet>162</a>    println(<span class="kw-2">&amp;</span><span class="macro">format!</span>(
-<a href=#163 id=163 data-nosnippet>163</a>        <span class="string">"[smp] spawn_rate {}: {}/sec (target ≥{}/sec){}"</span>,
-<a href=#164 id=164 data-nosnippet>164</a>        <span class="kw">if </span>pass { <span class="string">"PASS" </span>} <span class="kw">else </span>{ <span class="string">"FAIL" </span>},
-<a href=#165 id=165 data-nosnippet>165</a>        per_sec,
-<a href=#166 id=166 data-nosnippet>166</a>        TARGET,
-<a href=#167 id=167 data-nosnippet>167</a>        CAVEAT
-<a href=#168 id=168 data-nosnippet>168</a>    ));
-<a href=#169 id=169 data-nosnippet>169</a>    <span class="prelude-val">Some</span>(pass)
-<a href=#170 id=170 data-nosnippet>170</a>}
-<a href=#171 id=171 data-nosnippet>171</a>
-<a href=#172 id=172 data-nosnippet>172</a><span class="comment">// ── Scenario 2: ipc_throughput ────────────────────────────────────────────────
-<a href=#173 id=173 data-nosnippet>173</a>
-<a href=#174 id=174 data-nosnippet>174</a></span><span class="doccomment">/// Sustained IPC round-trips (orchestrator ↔ echo worker).
-<a href=#175 id=175 data-nosnippet>175</a>/// PASS iff ≥ 5 000 msgs/sec.
-<a href=#176 id=176 data-nosnippet>176</a></span><span class="kw">fn </span>measure_ipc_throughput() -&gt; <span class="prelude-ty">Option</span>&lt;bool&gt; {
-<a href=#177 id=177 data-nosnippet>177</a>    <span class="kw">const </span>MSGS: u64 = <span class="number">1_000</span>;
-<a href=#178 id=178 data-nosnippet>178</a>    <span class="kw">const </span>TARGET: u64 = <span class="number">5_000</span>;
-<a href=#179 id=179 data-nosnippet>179</a>
-<a href=#180 id=180 data-nosnippet>180</a>    sys_set_spawn_args(<span class="string">"ipc-echo"</span>);
-<a href=#181 id=181 data-nosnippet>181</a>    <span class="kw">let </span>echo_tid = <span class="kw">match </span>sys_spawn_pinned(PROBE_PATH, TaskPriority::Normal <span class="kw">as </span>u8, <span class="number">0</span>) {
-<a href=#182 id=182 data-nosnippet>182</a>        SyscallResult::Ok(t) =&gt; t,
-<a href=#183 id=183 data-nosnippet>183</a>        <span class="kw">_ </span>=&gt; {
-<a href=#184 id=184 data-nosnippet>184</a>            println(<span class="string">"[smp] ipc_throughput SKIP — bench-probe not at /bin/bench-probe"</span>);
-<a href=#185 id=185 data-nosnippet>185</a>            <span class="kw">return </span><span class="prelude-val">None</span>;
-<a href=#186 id=186 data-nosnippet>186</a>        }
-<a href=#187 id=187 data-nosnippet>187</a>    };
-<a href=#188 id=188 data-nosnippet>188</a>    <span class="kw">for _ in </span><span class="number">0</span>..<span class="number">20 </span>{
-<a href=#189 id=189 data-nosnippet>189</a>        yield_now();
-<a href=#190 id=190 data-nosnippet>190</a>    } <span class="comment">// let echo reach its recv loop before measurement
-<a href=#191 id=191 data-nosnippet>191</a>
-<a href=#192 id=192 data-nosnippet>192</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>rbuf = [<span class="number">0u8</span>; <span class="number">8</span>];
-<a href=#193 id=193 data-nosnippet>193</a>    <span class="kw">let </span>t0 = sys_get_time();
-<a href=#194 id=194 data-nosnippet>194</a>    <span class="kw">for _ in </span><span class="number">0</span>..MSGS {
-<a href=#195 id=195 data-nosnippet>195</a>        <span class="kw">let _ </span>= sys_send(echo_tid, <span class="kw-2">&amp;</span>[<span class="number">1u8</span>]);
-<a href=#196 id=196 data-nosnippet>196</a>        <span class="kw">let _ </span>= sys_recv(<span class="number">0</span>, <span class="kw-2">&amp;mut </span>rbuf);
-<a href=#197 id=197 data-nosnippet>197</a>    }
-<a href=#198 id=198 data-nosnippet>198</a>    <span class="kw">let </span>dt_ns = sys_get_time()
-<a href=#199 id=199 data-nosnippet>199</a>        .saturating_sub(t0)
-<a href=#200 id=200 data-nosnippet>200</a>        .saturating_mul(NS_PER_TICK);
-<a href=#201 id=201 data-nosnippet>201</a>    <span class="kw">let _ </span>= sys_force_exit(echo_tid);
-<a href=#202 id=202 data-nosnippet>202</a>
-<a href=#203 id=203 data-nosnippet>203</a>    <span class="kw">let </span>per_sec = MSGS
-<a href=#204 id=204 data-nosnippet>204</a>        .saturating_mul(<span class="number">1_000_000_000</span>)
-<a href=#205 id=205 data-nosnippet>205</a>        .checked_div(dt_ns)
-<a href=#206 id=206 data-nosnippet>206</a>        .unwrap_or(u64::MAX);
-<a href=#207 id=207 data-nosnippet>207</a>    <span class="kw">let </span>pass = per_sec &gt;= TARGET;
-<a href=#208 id=208 data-nosnippet>208</a>    println(<span class="kw-2">&amp;</span><span class="macro">format!</span>(
-<a href=#209 id=209 data-nosnippet>209</a>        <span class="string">"[smp] ipc_throughput {}: {}/sec (target ≥{}/sec){}"</span>,
-<a href=#210 id=210 data-nosnippet>210</a>        <span class="kw">if </span>pass { <span class="string">"PASS" </span>} <span class="kw">else </span>{ <span class="string">"FAIL" </span>},
-<a href=#211 id=211 data-nosnippet>211</a>        per_sec,
-<a href=#212 id=212 data-nosnippet>212</a>        TARGET,
-<a href=#213 id=213 data-nosnippet>213</a>        CAVEAT
-<a href=#214 id=214 data-nosnippet>214</a>    ));
-<a href=#215 id=215 data-nosnippet>215</a>    <span class="prelude-val">Some</span>(pass)
-<a href=#216 id=216 data-nosnippet>216</a>}
-<a href=#217 id=217 data-nosnippet>217</a>
-<a href=#218 id=218 data-nosnippet>218</a><span class="comment">// ── Scenario 3: work_distribution ─────────────────────────────────────────────
-<a href=#219 id=219 data-nosnippet>219</a>
-<a href=#220 id=220 data-nosnippet>220</a></span><span class="doccomment">/// 2-hart scale factor: PASS iff 2×T_single / T_parallel ≥ 1.40.
-<a href=#221 id=221 data-nosnippet>221</a>///
-<a href=#222 id=222 data-nosnippet>222</a>/// T_single: orchestrator idle while 1 worker runs.
-<a href=#223 id=223 data-nosnippet>223</a>/// T_parallel: orchestrator compute + 1 worker run concurrently on 2 harts.
-<a href=#224 id=224 data-nosnippet>224</a>/// On MTTCG harts both run on separate host threads → scale ≈ 2×.
-<a href=#225 id=225 data-nosnippet>225</a></span><span class="kw">fn </span>measure_work_distribution() -&gt; <span class="prelude-ty">Option</span>&lt;bool&gt; {
-<a href=#226 id=226 data-nosnippet>226</a>    <span class="comment">// T_single: spawn + wait; orchestrator does nothing.
-<a href=#227 id=227 data-nosnippet>227</a>    </span><span class="kw">let </span>t0 = sys_get_time();
-<a href=#228 id=228 data-nosnippet>228</a>    <span class="kw">let </span>tid1 = spawn_worker().or_else(|| {
-<a href=#229 id=229 data-nosnippet>229</a>        println(<span class="string">"[smp] work_distribution SKIP — bench-probe not at /bin/bench-probe"</span>);
-<a href=#230 id=230 data-nosnippet>230</a>        <span class="prelude-val">None
-<a href=#231 id=231 data-nosnippet>231</a>    </span>})<span class="question-mark">?</span>;
-<a href=#232 id=232 data-nosnippet>232</a>    wait_exit(tid1);
-<a href=#233 id=233 data-nosnippet>233</a>    <span class="kw">let </span>t_single = sys_get_time().saturating_sub(t0);
-<a href=#234 id=234 data-nosnippet>234</a>
-<a href=#235 id=235 data-nosnippet>235</a>    <span class="comment">// T_parallel: spawn + register notify before orchestrator compute to prevent
-<a href=#236 id=236 data-nosnippet>236</a>    // a race where the worker exits before notify_on_exit is registered.
-<a href=#237 id=237 data-nosnippet>237</a>    </span><span class="kw">let </span>t1 = sys_get_time();
-<a href=#238 id=238 data-nosnippet>238</a>    <span class="kw">let </span>tid2 = spawn_worker().or_else(|| {
-<a href=#239 id=239 data-nosnippet>239</a>        println(<span class="string">"[smp] work_distribution SKIP — bench-probe unavailable for T_parallel run"</span>);
-<a href=#240 id=240 data-nosnippet>240</a>        <span class="prelude-val">None
-<a href=#241 id=241 data-nosnippet>241</a>    </span>})<span class="question-mark">?</span>;
-<a href=#242 id=242 data-nosnippet>242</a>    <span class="kw">let _ </span>= sys_notify_on_exit(tid2); <span class="comment">// must register before compute loop
-<a href=#243 id=243 data-nosnippet>243</a>    </span><span class="kw">let _ </span>= compute(SMP_WORKER_ITERS); <span class="comment">// orchestrator's contribution (hart A)
-<a href=#244 id=244 data-nosnippet>244</a>    </span>recv_exit(tid2); <span class="comment">// worker ran on hart B (or was stolen by it)
-<a href=#245 id=245 data-nosnippet>245</a>    </span><span class="kw">let </span>t_parallel = sys_get_time().saturating_sub(t1);
-<a href=#246 id=246 data-nosnippet>246</a>
-<a href=#247 id=247 data-nosnippet>247</a>    <span class="comment">// scale_x100 = 2 × T_single × 100 / T_parallel
-<a href=#248 id=248 data-nosnippet>248</a>    // (zero denominator → report 2.00×)
-<a href=#249 id=249 data-nosnippet>249</a>    </span><span class="kw">let </span>scale_x100 = t_single
-<a href=#250 id=250 data-nosnippet>250</a>        .saturating_mul(<span class="number">200</span>)
-<a href=#251 id=251 data-nosnippet>251</a>        .checked_div(t_parallel)
-<a href=#252 id=252 data-nosnippet>252</a>        .unwrap_or(<span class="number">200</span>);
-<a href=#253 id=253 data-nosnippet>253</a>    <span class="kw">let </span>pass = scale_x100 &gt;= <span class="number">140</span>;
-<a href=#254 id=254 data-nosnippet>254</a>    println(<span class="kw-2">&amp;</span><span class="macro">format!</span>(
-<a href=#255 id=255 data-nosnippet>255</a>        <span class="string">"[smp] work_distribution {}: scale={}.{:02}x T1={}t Tp={}t (target ≥1.40x){}"</span>,
-<a href=#256 id=256 data-nosnippet>256</a>        <span class="kw">if </span>pass { <span class="string">"PASS" </span>} <span class="kw">else </span>{ <span class="string">"FAIL" </span>},
-<a href=#257 id=257 data-nosnippet>257</a>        scale_x100 / <span class="number">100</span>,
-<a href=#258 id=258 data-nosnippet>258</a>        scale_x100 % <span class="number">100</span>,
-<a href=#259 id=259 data-nosnippet>259</a>        t_single,
-<a href=#260 id=260 data-nosnippet>260</a>        t_parallel,
-<a href=#261 id=261 data-nosnippet>261</a>        CAVEAT
-<a href=#262 id=262 data-nosnippet>262</a>    ));
-<a href=#263 id=263 data-nosnippet>263</a>    <span class="prelude-val">Some</span>(pass)
-<a href=#264 id=264 data-nosnippet>264</a>}
-<a href=#265 id=265 data-nosnippet>265</a>
-<a href=#266 id=266 data-nosnippet>266</a><span class="comment">// ── Suite entry ───────────────────────────────────────────────────────────────
-<a href=#267 id=267 data-nosnippet>267</a>
-<a href=#268 id=268 data-nosnippet>268</a></span><span class="doccomment">/// Run all 3 SMP throughput scenarios; returns (passed, failed).
-<a href=#269 id=269 data-nosnippet>269</a>/// SKIP scenarios count as neither.
-<a href=#270 id=270 data-nosnippet>270</a></span><span class="kw">pub fn </span>run_smp_suite() -&gt; (u32, u32) {
-<a href=#271 id=271 data-nosnippet>271</a>    <span class="kw">let </span><span class="kw-2">mut </span>passed = <span class="number">0u32</span>;
-<a href=#272 id=272 data-nosnippet>272</a>    <span class="kw">let </span><span class="kw-2">mut </span>failed = <span class="number">0u32</span>;
-<a href=#273 id=273 data-nosnippet>273</a>    <span class="kw">for </span>result <span class="kw">in </span>[
-<a href=#274 id=274 data-nosnippet>274</a>        measure_spawn_rate(),
-<a href=#275 id=275 data-nosnippet>275</a>        measure_ipc_throughput(),
-<a href=#276 id=276 data-nosnippet>276</a>        measure_work_distribution(),
-<a href=#277 id=277 data-nosnippet>277</a>    ] {
-<a href=#278 id=278 data-nosnippet>278</a>        <span class="kw">match </span>result {
-<a href=#279 id=279 data-nosnippet>279</a>            <span class="prelude-val">Some</span>(<span class="bool-val">true</span>) =&gt; passed += <span class="number">1</span>,
-<a href=#280 id=280 data-nosnippet>280</a>            <span class="prelude-val">Some</span>(<span class="bool-val">false</span>) =&gt; failed += <span class="number">1</span>,
-<a href=#281 id=281 data-nosnippet>281</a>            <span class="prelude-val">None </span>=&gt; {} <span class="comment">// SKIP
-<a href=#282 id=282 data-nosnippet>282</a>        </span>}
-<a href=#283 id=283 data-nosnippet>283</a>    }
-<a href=#284 id=284 data-nosnippet>284</a>    (passed, failed)
-<a href=#285 id=285 data-nosnippet>285</a>}
+<a href=#106 id=106 data-nosnippet>106</a>    <span class="kw">if </span>!<span class="macro">matches!</span>(sys_send(blocked_peer, <span class="kw-2">&amp;</span>[<span class="number">2</span>]), SyscallResult::Err(<span class="kw">_</span>)) {
+<a href=#107 id=107 data-nosnippet>107</a>        println(<span class="string">"[peer-death-runtime] FAIL — blocked send did not return an error"</span>);
+<a href=#108 id=108 data-nosnippet>108</a>        <span class="kw">let _ </span>= sys_force_exit(blocked_peer);
+<a href=#109 id=109 data-nosnippet>109</a>        sys_exit(<span class="number">1</span>);
+<a href=#110 id=110 data-nosnippet>110</a>    }
+<a href=#111 id=111 data-nosnippet>111</a>
+<a href=#112 id=112 data-nosnippet>112</a>    <span class="kw">if </span>!sys_set_spawn_args(<span class="string">"load"</span>) {
+<a href=#113 id=113 data-nosnippet>113</a>        println(<span class="string">"[peer-death-runtime] FAIL — force-exit child argument staging"</span>);
+<a href=#114 id=114 data-nosnippet>114</a>        sys_exit(<span class="number">1</span>);
+<a href=#115 id=115 data-nosnippet>115</a>    }
+<a href=#116 id=116 data-nosnippet>116</a>    <span class="kw">let </span>forced_tid = <span class="kw">match </span>sys_spawn_pinned(PROBE_PATH, TaskPriority::Normal <span class="kw">as </span>u8, <span class="number">0</span>) {
+<a href=#117 id=117 data-nosnippet>117</a>        SyscallResult::Ok(tid) =&gt; tid,
+<a href=#118 id=118 data-nosnippet>118</a>        <span class="kw">_ </span>=&gt; {
+<a href=#119 id=119 data-nosnippet>119</a>            println(<span class="string">"[peer-death-runtime] FAIL — ForceExit child spawn"</span>);
+<a href=#120 id=120 data-nosnippet>120</a>            sys_exit(<span class="number">1</span>);
+<a href=#121 id=121 data-nosnippet>121</a>        }
+<a href=#122 id=122 data-nosnippet>122</a>    };
+<a href=#123 id=123 data-nosnippet>123</a>    <span class="kw">if </span>!<span class="macro">matches!</span>(sys_notify_on_exit(forced_tid), SyscallResult::Ok(<span class="kw">_</span>)) {
+<a href=#124 id=124 data-nosnippet>124</a>        println(<span class="string">"[peer-death-runtime] FAIL — ForceExit watch"</span>);
+<a href=#125 id=125 data-nosnippet>125</a>        <span class="kw">let _ </span>= sys_force_exit(forced_tid);
+<a href=#126 id=126 data-nosnippet>126</a>        sys_exit(<span class="number">1</span>);
+<a href=#127 id=127 data-nosnippet>127</a>    }
+<a href=#128 id=128 data-nosnippet>128</a>    <span class="kw">for _ in </span><span class="number">0</span>..<span class="number">20 </span>{
+<a href=#129 id=129 data-nosnippet>129</a>        yield_now();
+<a href=#130 id=130 data-nosnippet>130</a>    }
+<a href=#131 id=131 data-nosnippet>131</a>    <span class="kw">if </span>!<span class="macro">matches!</span>(sys_force_exit(forced_tid), SyscallResult::Ok(<span class="kw">_</span>)) {
+<a href=#132 id=132 data-nosnippet>132</a>        println(<span class="string">"[peer-death-runtime] FAIL — ForceExit denied"</span>);
+<a href=#133 id=133 data-nosnippet>133</a>        sys_exit(<span class="number">1</span>);
+<a href=#134 id=134 data-nosnippet>134</a>    }
+<a href=#135 id=135 data-nosnippet>135</a>    <span class="kw">let _ </span>= recv_exit(forced_tid);
+<a href=#136 id=136 data-nosnippet>136</a>
+<a href=#137 id=137 data-nosnippet>137</a>    println(<span class="string">"[peer-death-runtime] PASS (blocked-send error + ForceExit notification)"</span>);
+<a href=#138 id=138 data-nosnippet>138</a>    sys_exit(<span class="number">0</span>);
+<a href=#139 id=139 data-nosnippet>139</a>}
+<a href=#140 id=140 data-nosnippet>140</a>
+<a href=#141 id=141 data-nosnippet>141</a><span class="comment">// ── Scenario results ──────────────────────────────────────────────────────────
+<a href=#142 id=142 data-nosnippet>142</a>
+<a href=#143 id=143 data-nosnippet>143</a></span><span class="kw">pub struct </span>SmpMetric {
+<a href=#144 id=144 data-nosnippet>144</a>    <span class="kw">pub </span>name: <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str,
+<a href=#145 id=145 data-nosnippet>145</a>    <span class="kw">pub </span>n: u32,
+<a href=#146 id=146 data-nosnippet>146</a>    <span class="kw">pub </span>value: u64,
+<a href=#147 id=147 data-nosnippet>147</a>    <span class="kw">pub </span>passed: bool,
+<a href=#148 id=148 data-nosnippet>148</a>}
+<a href=#149 id=149 data-nosnippet>149</a>
+<a href=#150 id=150 data-nosnippet>150</a><span class="kw">pub struct </span>SmpFailure {
+<a href=#151 id=151 data-nosnippet>151</a>    <span class="kw">pub </span>name: <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str,
+<a href=#152 id=152 data-nosnippet>152</a>    <span class="kw">pub </span>stage: <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str,
+<a href=#153 id=153 data-nosnippet>153</a>    <span class="kw">pub </span>teardown_failed: bool,
+<a href=#154 id=154 data-nosnippet>154</a>}
+<a href=#155 id=155 data-nosnippet>155</a>
+<a href=#156 id=156 data-nosnippet>156</a><span class="kw">pub enum </span>SmpOutcome {
+<a href=#157 id=157 data-nosnippet>157</a>    Metric(SmpMetric),
+<a href=#158 id=158 data-nosnippet>158</a>    Invalid(SmpFailure),
+<a href=#159 id=159 data-nosnippet>159</a>}
+<a href=#160 id=160 data-nosnippet>160</a>
+<a href=#161 id=161 data-nosnippet>161</a><span class="kw">fn </span>invalid(name: <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str, stage: <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str, teardown_failed: bool) -&gt; SmpOutcome {
+<a href=#162 id=162 data-nosnippet>162</a>    SmpOutcome::Invalid(SmpFailure {
+<a href=#163 id=163 data-nosnippet>163</a>        name,
+<a href=#164 id=164 data-nosnippet>164</a>        stage,
+<a href=#165 id=165 data-nosnippet>165</a>        teardown_failed,
+<a href=#166 id=166 data-nosnippet>166</a>    })
+<a href=#167 id=167 data-nosnippet>167</a>}
+<a href=#168 id=168 data-nosnippet>168</a>
+<a href=#169 id=169 data-nosnippet>169</a><span class="comment">// ── Scenario 1: spawn_rate ────────────────────────────────────────────────────
+<a href=#170 id=170 data-nosnippet>170</a>
+<a href=#171 id=171 data-nosnippet>171</a></span><span class="kw">fn </span>measure_spawn_rate() -&gt; SmpOutcome {
+<a href=#172 id=172 data-nosnippet>172</a>    <span class="kw">const </span>N: u64 = <span class="number">8</span>;
+<a href=#173 id=173 data-nosnippet>173</a>    <span class="kw">const </span>TARGET: u64 = <span class="number">10</span>;
+<a href=#174 id=174 data-nosnippet>174</a>    <span class="kw">const </span>NAME: <span class="kw-2">&amp;</span>str = <span class="string">"smp_spawn_rate"</span>;
+<a href=#175 id=175 data-nosnippet>175</a>
+<a href=#176 id=176 data-nosnippet>176</a>    <span class="kw">let </span>t0 = sys_get_time();
+<a href=#177 id=177 data-nosnippet>177</a>    <span class="kw">for _ in </span><span class="number">0</span>..N {
+<a href=#178 id=178 data-nosnippet>178</a>        <span class="kw">let </span>tid = <span class="kw">match </span>spawn_worker() {
+<a href=#179 id=179 data-nosnippet>179</a>            <span class="prelude-val">Ok</span>(tid) =&gt; tid,
+<a href=#180 id=180 data-nosnippet>180</a>            <span class="prelude-val">Err</span>(()) =&gt; <span class="kw">return </span>invalid(NAME, <span class="string">"setup"</span>, <span class="bool-val">false</span>),
+<a href=#181 id=181 data-nosnippet>181</a>        };
+<a href=#182 id=182 data-nosnippet>182</a>        <span class="kw">if </span>wait_exit(tid).is_err() {
+<a href=#183 id=183 data-nosnippet>183</a>            <span class="kw">return </span>invalid(NAME, <span class="string">"measure"</span>, !force_exit(tid));
+<a href=#184 id=184 data-nosnippet>184</a>        }
+<a href=#185 id=185 data-nosnippet>185</a>    }
+<a href=#186 id=186 data-nosnippet>186</a>    <span class="kw">let </span>dt_ns = sys_get_time()
+<a href=#187 id=187 data-nosnippet>187</a>        .saturating_sub(t0)
+<a href=#188 id=188 data-nosnippet>188</a>        .saturating_mul(NS_PER_TICK);
+<a href=#189 id=189 data-nosnippet>189</a>    <span class="kw">if </span>dt_ns == <span class="number">0 </span>{
+<a href=#190 id=190 data-nosnippet>190</a>        <span class="kw">return </span>invalid(NAME, <span class="string">"measure"</span>, <span class="bool-val">false</span>);
+<a href=#191 id=191 data-nosnippet>191</a>    }
+<a href=#192 id=192 data-nosnippet>192</a>    <span class="kw">let </span>per_sec = N.saturating_mul(<span class="number">1_000_000_000</span>) / dt_ns;
+<a href=#193 id=193 data-nosnippet>193</a>    <span class="kw">let </span>passed = per_sec &gt;= TARGET;
+<a href=#194 id=194 data-nosnippet>194</a>    println(<span class="kw-2">&amp;</span><span class="macro">format!</span>(
+<a href=#195 id=195 data-nosnippet>195</a>        <span class="string">"[smp] spawn_rate {}: {}/sec (target ≥{}/sec){}"</span>,
+<a href=#196 id=196 data-nosnippet>196</a>        <span class="kw">if </span>passed { <span class="string">"PASS" </span>} <span class="kw">else </span>{ <span class="string">"FAIL" </span>},
+<a href=#197 id=197 data-nosnippet>197</a>        per_sec,
+<a href=#198 id=198 data-nosnippet>198</a>        TARGET,
+<a href=#199 id=199 data-nosnippet>199</a>        CAVEAT
+<a href=#200 id=200 data-nosnippet>200</a>    ));
+<a href=#201 id=201 data-nosnippet>201</a>    SmpOutcome::Metric(SmpMetric {
+<a href=#202 id=202 data-nosnippet>202</a>        name: NAME,
+<a href=#203 id=203 data-nosnippet>203</a>        n: N <span class="kw">as </span>u32,
+<a href=#204 id=204 data-nosnippet>204</a>        value: per_sec,
+<a href=#205 id=205 data-nosnippet>205</a>        passed,
+<a href=#206 id=206 data-nosnippet>206</a>    })
+<a href=#207 id=207 data-nosnippet>207</a>}
+<a href=#208 id=208 data-nosnippet>208</a>
+<a href=#209 id=209 data-nosnippet>209</a><span class="comment">// ── Scenario 2: ipc_throughput ────────────────────────────────────────────────
+<a href=#210 id=210 data-nosnippet>210</a>
+<a href=#211 id=211 data-nosnippet>211</a></span><span class="kw">fn </span>measure_ipc_throughput() -&gt; SmpOutcome {
+<a href=#212 id=212 data-nosnippet>212</a>    <span class="kw">const </span>MSGS: u64 = <span class="number">1_000</span>;
+<a href=#213 id=213 data-nosnippet>213</a>    <span class="kw">const </span>TARGET: u64 = <span class="number">5_000</span>;
+<a href=#214 id=214 data-nosnippet>214</a>    <span class="kw">const </span>NAME: <span class="kw-2">&amp;</span>str = <span class="string">"smp_ipc_throughput"</span>;
+<a href=#215 id=215 data-nosnippet>215</a>
+<a href=#216 id=216 data-nosnippet>216</a>    <span class="kw">if </span>!sys_set_spawn_args(<span class="string">"ipc-echo"</span>) {
+<a href=#217 id=217 data-nosnippet>217</a>        <span class="kw">return </span>invalid(NAME, <span class="string">"setup"</span>, <span class="bool-val">false</span>);
+<a href=#218 id=218 data-nosnippet>218</a>    }
+<a href=#219 id=219 data-nosnippet>219</a>    <span class="kw">let </span>echo_tid = <span class="kw">match </span>sys_spawn_pinned(PROBE_PATH, TaskPriority::Normal <span class="kw">as </span>u8, <span class="number">0</span>) {
+<a href=#220 id=220 data-nosnippet>220</a>        SyscallResult::Ok(tid) <span class="kw">if </span>tid != <span class="number">0 </span>=&gt; tid,
+<a href=#221 id=221 data-nosnippet>221</a>        <span class="kw">_ </span>=&gt; <span class="kw">return </span>invalid(NAME, <span class="string">"setup"</span>, <span class="bool-val">false</span>),
+<a href=#222 id=222 data-nosnippet>222</a>    };
+<a href=#223 id=223 data-nosnippet>223</a>    <span class="kw">for _ in </span><span class="number">0</span>..<span class="number">20 </span>{
+<a href=#224 id=224 data-nosnippet>224</a>        yield_now();
+<a href=#225 id=225 data-nosnippet>225</a>    }
+<a href=#226 id=226 data-nosnippet>226</a>
+<a href=#227 id=227 data-nosnippet>227</a>    <span class="kw">let </span><span class="kw-2">mut </span>request = [<span class="number">0u8</span>; <span class="number">64</span>];
+<a href=#228 id=228 data-nosnippet>228</a>    request[<span class="number">0</span>] = <span class="number">0x42</span>;
+<a href=#229 id=229 data-nosnippet>229</a>    <span class="kw">let </span><span class="kw-2">mut </span>reply = [<span class="number">0u8</span>; <span class="number">8</span>];
+<a href=#230 id=230 data-nosnippet>230</a>    <span class="kw">let </span>t0 = sys_get_time();
+<a href=#231 id=231 data-nosnippet>231</a>    <span class="kw">let </span><span class="kw-2">mut </span>operation_failed = <span class="bool-val">false</span>;
+<a href=#232 id=232 data-nosnippet>232</a>    <span class="kw">for _ in </span><span class="number">0</span>..MSGS {
+<a href=#233 id=233 data-nosnippet>233</a>        reply.fill(<span class="number">0xa5</span>);
+<a href=#234 id=234 data-nosnippet>234</a>        <span class="kw">if </span>!<span class="macro">matches!</span>(sys_send(echo_tid, <span class="kw-2">&amp;</span>request), SyscallResult::Ok(<span class="kw">_</span>)) {
+<a href=#235 id=235 data-nosnippet>235</a>            operation_failed = <span class="bool-val">true</span>;
+<a href=#236 id=236 data-nosnippet>236</a>            <span class="kw">break</span>;
+<a href=#237 id=237 data-nosnippet>237</a>        }
+<a href=#238 id=238 data-nosnippet>238</a>        <span class="kw">match </span>sys_recv(echo_tid, <span class="kw-2">&amp;mut </span>reply) {
+<a href=#239 id=239 data-nosnippet>239</a>            SyscallResult::Ok(sender) <span class="kw">if </span>sender == echo_tid =&gt; {}
+<a href=#240 id=240 data-nosnippet>240</a>            <span class="kw">_ </span>=&gt; {
+<a href=#241 id=241 data-nosnippet>241</a>                operation_failed = <span class="bool-val">true</span>;
+<a href=#242 id=242 data-nosnippet>242</a>                <span class="kw">break</span>;
+<a href=#243 id=243 data-nosnippet>243</a>            }
+<a href=#244 id=244 data-nosnippet>244</a>        }
+<a href=#245 id=245 data-nosnippet>245</a>        <span class="kw">if </span>reply[<span class="number">0</span>] != <span class="number">0 </span>|| reply[<span class="number">1</span>..].iter().any(|<span class="kw-2">&amp;</span>byte| byte != <span class="number">0xa5</span>) {
+<a href=#246 id=246 data-nosnippet>246</a>            operation_failed = <span class="bool-val">true</span>;
+<a href=#247 id=247 data-nosnippet>247</a>            <span class="kw">break</span>;
+<a href=#248 id=248 data-nosnippet>248</a>        }
+<a href=#249 id=249 data-nosnippet>249</a>    }
+<a href=#250 id=250 data-nosnippet>250</a>    <span class="kw">let </span>dt_ns = sys_get_time()
+<a href=#251 id=251 data-nosnippet>251</a>        .saturating_sub(t0)
+<a href=#252 id=252 data-nosnippet>252</a>        .saturating_mul(NS_PER_TICK);
+<a href=#253 id=253 data-nosnippet>253</a>    <span class="kw">let </span>teardown_failed = !force_exit(echo_tid);
+<a href=#254 id=254 data-nosnippet>254</a>    <span class="kw">if </span>operation_failed || dt_ns == <span class="number">0 </span>{
+<a href=#255 id=255 data-nosnippet>255</a>        <span class="kw">return </span>invalid(NAME, <span class="string">"measure"</span>, teardown_failed);
+<a href=#256 id=256 data-nosnippet>256</a>    }
+<a href=#257 id=257 data-nosnippet>257</a>    <span class="kw">if </span>teardown_failed {
+<a href=#258 id=258 data-nosnippet>258</a>        <span class="kw">return </span>invalid(NAME, <span class="string">"teardown"</span>, <span class="bool-val">false</span>);
+<a href=#259 id=259 data-nosnippet>259</a>    }
+<a href=#260 id=260 data-nosnippet>260</a>
+<a href=#261 id=261 data-nosnippet>261</a>    <span class="kw">let </span>per_sec = MSGS.saturating_mul(<span class="number">1_000_000_000</span>) / dt_ns;
+<a href=#262 id=262 data-nosnippet>262</a>    <span class="kw">let </span>passed = per_sec &gt;= TARGET;
+<a href=#263 id=263 data-nosnippet>263</a>    println(<span class="kw-2">&amp;</span><span class="macro">format!</span>(
+<a href=#264 id=264 data-nosnippet>264</a>        <span class="string">"[smp] ipc_throughput {}: {}/sec (target ≥{}/sec){}"</span>,
+<a href=#265 id=265 data-nosnippet>265</a>        <span class="kw">if </span>passed { <span class="string">"PASS" </span>} <span class="kw">else </span>{ <span class="string">"FAIL" </span>},
+<a href=#266 id=266 data-nosnippet>266</a>        per_sec,
+<a href=#267 id=267 data-nosnippet>267</a>        TARGET,
+<a href=#268 id=268 data-nosnippet>268</a>        CAVEAT
+<a href=#269 id=269 data-nosnippet>269</a>    ));
+<a href=#270 id=270 data-nosnippet>270</a>    SmpOutcome::Metric(SmpMetric {
+<a href=#271 id=271 data-nosnippet>271</a>        name: NAME,
+<a href=#272 id=272 data-nosnippet>272</a>        n: MSGS <span class="kw">as </span>u32,
+<a href=#273 id=273 data-nosnippet>273</a>        value: per_sec,
+<a href=#274 id=274 data-nosnippet>274</a>        passed,
+<a href=#275 id=275 data-nosnippet>275</a>    })
+<a href=#276 id=276 data-nosnippet>276</a>}
+<a href=#277 id=277 data-nosnippet>277</a>
+<a href=#278 id=278 data-nosnippet>278</a><span class="comment">// ── Scenario 3: work_distribution ─────────────────────────────────────────────
+<a href=#279 id=279 data-nosnippet>279</a>
+<a href=#280 id=280 data-nosnippet>280</a></span><span class="kw">fn </span>measure_work_distribution() -&gt; SmpOutcome {
+<a href=#281 id=281 data-nosnippet>281</a>    <span class="kw">const </span>NAME: <span class="kw-2">&amp;</span>str = <span class="string">"smp_work_distribution"</span>;
+<a href=#282 id=282 data-nosnippet>282</a>
+<a href=#283 id=283 data-nosnippet>283</a>    <span class="kw">let </span>t0 = sys_get_time();
+<a href=#284 id=284 data-nosnippet>284</a>    <span class="kw">let </span>tid1 = <span class="kw">match </span>spawn_worker() {
+<a href=#285 id=285 data-nosnippet>285</a>        <span class="prelude-val">Ok</span>(tid) =&gt; tid,
+<a href=#286 id=286 data-nosnippet>286</a>        <span class="prelude-val">Err</span>(()) =&gt; <span class="kw">return </span>invalid(NAME, <span class="string">"setup"</span>, <span class="bool-val">false</span>),
+<a href=#287 id=287 data-nosnippet>287</a>    };
+<a href=#288 id=288 data-nosnippet>288</a>    <span class="kw">if </span>wait_exit(tid1).is_err() {
+<a href=#289 id=289 data-nosnippet>289</a>        <span class="kw">return </span>invalid(NAME, <span class="string">"measure"</span>, !force_exit(tid1));
+<a href=#290 id=290 data-nosnippet>290</a>    }
+<a href=#291 id=291 data-nosnippet>291</a>    <span class="kw">let </span>t_single = sys_get_time().saturating_sub(t0);
+<a href=#292 id=292 data-nosnippet>292</a>
+<a href=#293 id=293 data-nosnippet>293</a>    <span class="kw">let </span>t1 = sys_get_time();
+<a href=#294 id=294 data-nosnippet>294</a>    <span class="kw">let </span>tid2 = <span class="kw">match </span>spawn_worker() {
+<a href=#295 id=295 data-nosnippet>295</a>        <span class="prelude-val">Ok</span>(tid) =&gt; tid,
+<a href=#296 id=296 data-nosnippet>296</a>        <span class="prelude-val">Err</span>(()) =&gt; <span class="kw">return </span>invalid(NAME, <span class="string">"setup"</span>, <span class="bool-val">false</span>),
+<a href=#297 id=297 data-nosnippet>297</a>    };
+<a href=#298 id=298 data-nosnippet>298</a>    <span class="kw">if </span>!<span class="macro">matches!</span>(sys_notify_on_exit(tid2), SyscallResult::Ok(<span class="kw">_</span>)) {
+<a href=#299 id=299 data-nosnippet>299</a>        <span class="kw">return </span>invalid(NAME, <span class="string">"measure"</span>, !force_exit(tid2));
+<a href=#300 id=300 data-nosnippet>300</a>    }
+<a href=#301 id=301 data-nosnippet>301</a>    <span class="kw">let _ </span>= compute(SMP_WORKER_ITERS);
+<a href=#302 id=302 data-nosnippet>302</a>    <span class="kw">if </span>recv_exit(tid2).is_err() {
+<a href=#303 id=303 data-nosnippet>303</a>        <span class="kw">return </span>invalid(NAME, <span class="string">"measure"</span>, !force_exit(tid2));
+<a href=#304 id=304 data-nosnippet>304</a>    }
+<a href=#305 id=305 data-nosnippet>305</a>    <span class="kw">let </span>t_parallel = sys_get_time().saturating_sub(t1);
+<a href=#306 id=306 data-nosnippet>306</a>    <span class="kw">if </span>t_single == <span class="number">0 </span>|| t_parallel == <span class="number">0 </span>{
+<a href=#307 id=307 data-nosnippet>307</a>        <span class="kw">return </span>invalid(NAME, <span class="string">"measure"</span>, <span class="bool-val">false</span>);
+<a href=#308 id=308 data-nosnippet>308</a>    }
+<a href=#309 id=309 data-nosnippet>309</a>
+<a href=#310 id=310 data-nosnippet>310</a>    <span class="kw">let </span>scale_x100 = t_single.saturating_mul(<span class="number">200</span>) / t_parallel;
+<a href=#311 id=311 data-nosnippet>311</a>    <span class="kw">let </span>passed = scale_x100 &gt;= <span class="number">140</span>;
+<a href=#312 id=312 data-nosnippet>312</a>    println(<span class="kw-2">&amp;</span><span class="macro">format!</span>(
+<a href=#313 id=313 data-nosnippet>313</a>        <span class="string">"[smp] work_distribution {}: scale={}.{:02}x T1={}t Tp={}t (target ≥1.40x){}"</span>,
+<a href=#314 id=314 data-nosnippet>314</a>        <span class="kw">if </span>passed { <span class="string">"PASS" </span>} <span class="kw">else </span>{ <span class="string">"FAIL" </span>},
+<a href=#315 id=315 data-nosnippet>315</a>        scale_x100 / <span class="number">100</span>,
+<a href=#316 id=316 data-nosnippet>316</a>        scale_x100 % <span class="number">100</span>,
+<a href=#317 id=317 data-nosnippet>317</a>        t_single,
+<a href=#318 id=318 data-nosnippet>318</a>        t_parallel,
+<a href=#319 id=319 data-nosnippet>319</a>        CAVEAT
+<a href=#320 id=320 data-nosnippet>320</a>    ));
+<a href=#321 id=321 data-nosnippet>321</a>    SmpOutcome::Metric(SmpMetric {
+<a href=#322 id=322 data-nosnippet>322</a>        name: NAME,
+<a href=#323 id=323 data-nosnippet>323</a>        n: <span class="number">2</span>,
+<a href=#324 id=324 data-nosnippet>324</a>        value: scale_x100,
+<a href=#325 id=325 data-nosnippet>325</a>        passed,
+<a href=#326 id=326 data-nosnippet>326</a>    })
+<a href=#327 id=327 data-nosnippet>327</a>}
+<a href=#328 id=328 data-nosnippet>328</a>
+<a href=#329 id=329 data-nosnippet>329</a><span class="comment">// ── Suite entry ───────────────────────────────────────────────────────────────
+<a href=#330 id=330 data-nosnippet>330</a>
+<a href=#331 id=331 data-nosnippet>331</a></span><span class="kw">pub fn </span>run_smp_suite() -&gt; [SmpOutcome; <span class="number">3</span>] {
+<a href=#332 id=332 data-nosnippet>332</a>    [
+<a href=#333 id=333 data-nosnippet>333</a>        measure_spawn_rate(),
+<a href=#334 id=334 data-nosnippet>334</a>        measure_ipc_throughput(),
+<a href=#335 id=335 data-nosnippet>335</a>        measure_work_distribution(),
+<a href=#336 id=336 data-nosnippet>336</a>    ]
+<a href=#337 id=337 data-nosnippet>337</a>}
 </code></pre></div></section></main></body></html>

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["allocator","async_io","benchmark","block","cluster","config","dir_name","display","driver","fs","hotswap","input","ipc","net","posix","serde_helpers","vfs_file_handles"]};
+window.SIDEBAR_ITEMS = {"mod":["allocator","async_io","benchmark","block","cluster","config","dir_name","display","driver","fs","hostile_backend_recovery","hotswap","input","ipc","net","posix","ring_channel","serde_helpers","vfs_file_handles"]};

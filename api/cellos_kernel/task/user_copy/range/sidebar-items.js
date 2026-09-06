@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["USER_LIMIT"],"enum":["CopyError","CopyView","Direction"],"fn":["validate_range"],"struct":["UserReadSlice","UserWriteSlice"]};

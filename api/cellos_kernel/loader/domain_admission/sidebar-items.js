@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["DISABLED","DRAINING","ENABLED"],"enum":["DomainAdmissionDenial"],"fn":["begin_domain_drain","evaluate_domain_admission"],"static":["GENERATION","POLICY"],"struct":["DomainAdmissionLease","DomainAdmissionRequest"]};

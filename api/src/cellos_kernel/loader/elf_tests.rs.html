@@ -55,7 +55,7 @@
 <a href=#55 id=55 data-nosnippet>55</a>    test_signing_extract_sig_some_from_constructed_elf();
 <a href=#56 id=56 data-nosnippet>56</a>    test_signing_extract_sig_some_with_non_utf8_unrelated_section_name();
 <a href=#57 id=57 data-nosnippet>57</a>    test_signing_extract_sig_none_for_nobits_signature();
-<a href=#58 id=58 data-nosnippet>58</a>    test_signing_required_flag_off_in_dev_build();
+<a href=#58 id=58 data-nosnippet>58</a>    test_signing_required_flag_on_for_tier1();
 <a href=#59 id=59 data-nosnippet>59</a>    <span class="comment">// W^X post-relocation flag derivation.
 <a href=#60 id=60 data-nosnippet>60</a>    </span><span class="kw">super</span>::wx::run_self_tests();
 <a href=#61 id=61 data-nosnippet>61</a>    <span class="attr">#[cfg(feature = <span class="string">"test-hooks"</span>)]
@@ -708,91 +708,90 @@
 <a href=#708 id=708 data-nosnippet>708</a>    <span class="macro">log::info!</span>(<span class="string">"  [ok] extract_sig rejects NOBITS signature declaration"</span>);
 <a href=#709 id=709 data-nosnippet>709</a>}
 <a href=#710 id=710 data-nosnippet>710</a>
-<a href=#711 id=711 data-nosnippet>711</a><span class="kw">fn </span>test_signing_required_flag_off_in_dev_build() {
-<a href=#712 id=712 data-nosnippet>712</a>    <span class="comment">// In dev builds (default features) `signing-required` must be off so that
-<a href=#713 id=713 data-nosnippet>713</a>    // unsigned cell binaries can still boot. This ensures the dev build stays
-<a href=#714 id=714 data-nosnippet>714</a>    // permissive while `signing-required` in CI is explicit and deliberate.
-<a href=#715 id=715 data-nosnippet>715</a>    </span><span class="macro">assert!</span>(
-<a href=#716 id=716 data-nosnippet>716</a>        !<span class="kw">crate</span>::signing::signing_required(),
-<a href=#717 id=717 data-nosnippet>717</a>        <span class="string">"signing_required() must be false in dev builds (feature `signing-required` not set)"
-<a href=#718 id=718 data-nosnippet>718</a>    </span>);
-<a href=#719 id=719 data-nosnippet>719</a>    <span class="macro">log::info!</span>(<span class="string">"  [ok] signing_required() → false in dev build"</span>);
-<a href=#720 id=720 data-nosnippet>720</a>}
-<a href=#721 id=721 data-nosnippet>721</a>
-<a href=#722 id=722 data-nosnippet>722</a><span class="doccomment">/// Build a 408-byte minimal RISC-V ELF64 with one PT_LOAD segment and a
-<a href=#723 id=723 data-nosnippet>723</a>/// `__ViCell_sig` section carrying `sig` as its data. Used only by tests.
-<a href=#724 id=724 data-nosnippet>724</a></span><span class="kw">fn </span>build_minimal_signed_elf(sig: [u8; <span class="number">64</span>]) -&gt; alloc::vec::Vec&lt;u8&gt; {
-<a href=#725 id=725 data-nosnippet>725</a>    <span class="comment">// String table: \0__ViCell_sig\0.shstrtab\0 (24 bytes)
-<a href=#726 id=726 data-nosnippet>726</a>    //   strtab[1]  = "__ViCell_sig\0"  → sh_name for section 1
-<a href=#727 id=727 data-nosnippet>727</a>    //   strtab[14] = ".shstrtab\0"     → sh_name for section 2 (itself)
-<a href=#728 id=728 data-nosnippet>728</a>    </span><span class="kw">const </span>STRTAB: <span class="kw-2">&amp;</span>[u8] = <span class="string">b"\x00__ViCell_sig\x00.shstrtab\x00"</span>;
-<a href=#729 id=729 data-nosnippet>729</a>    <span class="kw">let </span><span class="kw-2">mut </span>v = <span class="macro">alloc::vec!</span>[<span class="number">0u8</span>; <span class="number">384 </span>+ STRTAB.len()]; <span class="comment">// 384 + 24 = 408
-<a href=#730 id=730 data-nosnippet>730</a>
-<a href=#731 id=731 data-nosnippet>731</a>    // ── ELF64 header (offset 0, 64 bytes) ────────────────────────────────────
-<a href=#732 id=732 data-nosnippet>732</a>    </span>v[<span class="number">0</span>..<span class="number">4</span>].copy_from_slice(<span class="string">b"\x7fELF"</span>);
-<a href=#733 id=733 data-nosnippet>733</a>    v[<span class="number">4</span>] = <span class="number">2</span>; <span class="comment">// ELFCLASS64
-<a href=#734 id=734 data-nosnippet>734</a>    </span>v[<span class="number">5</span>] = <span class="number">1</span>; <span class="comment">// ELFDATA2LSB
-<a href=#735 id=735 data-nosnippet>735</a>    </span>v[<span class="number">6</span>] = <span class="number">1</span>; <span class="comment">// EV_CURRENT
-<a href=#736 id=736 data-nosnippet>736</a>              // e_type=2 (ET_EXEC), e_machine=0xF3 (EM_RISCV)
-<a href=#737 id=737 data-nosnippet>737</a>    </span>v[<span class="number">16</span>..<span class="number">18</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">2u16</span>.to_le_bytes());
-<a href=#738 id=738 data-nosnippet>738</a>    v[<span class="number">18</span>..<span class="number">20</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">0xF3u16</span>.to_le_bytes());
-<a href=#739 id=739 data-nosnippet>739</a>    <span class="comment">// e_version=1
-<a href=#740 id=740 data-nosnippet>740</a>    </span>v[<span class="number">20</span>..<span class="number">24</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">1u32</span>.to_le_bytes());
-<a href=#741 id=741 data-nosnippet>741</a>    <span class="comment">// e_entry=0x1000, e_phoff=64, e_shoff=128
-<a href=#742 id=742 data-nosnippet>742</a>    </span>v[<span class="number">24</span>..<span class="number">32</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">0x1000u64</span>.to_le_bytes());
-<a href=#743 id=743 data-nosnippet>743</a>    v[<span class="number">32</span>..<span class="number">40</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">64u64</span>.to_le_bytes());
-<a href=#744 id=744 data-nosnippet>744</a>    v[<span class="number">40</span>..<span class="number">48</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">128u64</span>.to_le_bytes());
-<a href=#745 id=745 data-nosnippet>745</a>    <span class="comment">// e_flags=5 (RVC + double-float ABI), e_ehsize=64, e_phentsize=56, e_phnum=1
-<a href=#746 id=746 data-nosnippet>746</a>    </span>v[<span class="number">48</span>..<span class="number">52</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">5u32</span>.to_le_bytes());
-<a href=#747 id=747 data-nosnippet>747</a>    v[<span class="number">52</span>..<span class="number">54</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">64u16</span>.to_le_bytes());
-<a href=#748 id=748 data-nosnippet>748</a>    v[<span class="number">54</span>..<span class="number">56</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">56u16</span>.to_le_bytes());
-<a href=#749 id=749 data-nosnippet>749</a>    v[<span class="number">56</span>..<span class="number">58</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">1u16</span>.to_le_bytes());
-<a href=#750 id=750 data-nosnippet>750</a>    <span class="comment">// e_shentsize=64, e_shnum=3, e_shstrndx=2
-<a href=#751 id=751 data-nosnippet>751</a>    </span>v[<span class="number">58</span>..<span class="number">60</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">64u16</span>.to_le_bytes());
-<a href=#752 id=752 data-nosnippet>752</a>    v[<span class="number">60</span>..<span class="number">62</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">3u16</span>.to_le_bytes());
-<a href=#753 id=753 data-nosnippet>753</a>    v[<span class="number">62</span>..<span class="number">64</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">2u16</span>.to_le_bytes());
-<a href=#754 id=754 data-nosnippet>754</a>
-<a href=#755 id=755 data-nosnippet>755</a>    <span class="comment">// ── PT_LOAD program header (offset 64, 56 bytes) ─────────────────────────
-<a href=#756 id=756 data-nosnippet>756</a>    // ELF64 Phdr: p_type(4), p_flags(4), p_offset(8), p_vaddr(8), p_paddr(8),
-<a href=#757 id=757 data-nosnippet>757</a>    //             p_filesz(8), p_memsz(8), p_align(8)
-<a href=#758 id=758 data-nosnippet>758</a>    </span>v[<span class="number">64</span>..<span class="number">68</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">1u32</span>.to_le_bytes()); <span class="comment">// p_type = PT_LOAD
-<a href=#759 id=759 data-nosnippet>759</a>    </span>v[<span class="number">68</span>..<span class="number">72</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">5u32</span>.to_le_bytes()); <span class="comment">// p_flags = R|X
-<a href=#760 id=760 data-nosnippet>760</a>    </span>v[<span class="number">72</span>..<span class="number">80</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">120u64</span>.to_le_bytes()); <span class="comment">// p_offset = 120
-<a href=#761 id=761 data-nosnippet>761</a>    </span>v[<span class="number">80</span>..<span class="number">88</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">0x1000u64</span>.to_le_bytes()); <span class="comment">// p_vaddr
-<a href=#762 id=762 data-nosnippet>762</a>    </span>v[<span class="number">88</span>..<span class="number">96</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">0x1000u64</span>.to_le_bytes()); <span class="comment">// p_paddr
-<a href=#763 id=763 data-nosnippet>763</a>    </span>v[<span class="number">96</span>..<span class="number">104</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">8u64</span>.to_le_bytes()); <span class="comment">// p_filesz = 8
-<a href=#764 id=764 data-nosnippet>764</a>    </span>v[<span class="number">104</span>..<span class="number">112</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">8u64</span>.to_le_bytes()); <span class="comment">// p_memsz = 8
-<a href=#765 id=765 data-nosnippet>765</a>    </span>v[<span class="number">112</span>..<span class="number">120</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">0x1000u64</span>.to_le_bytes()); <span class="comment">// p_align
-<a href=#766 id=766 data-nosnippet>766</a>
-<a href=#767 id=767 data-nosnippet>767</a>    // [120..128]: code bytes, already zero.
-<a href=#768 id=768 data-nosnippet>768</a>
-<a href=#769 id=769 data-nosnippet>769</a>    // ── Section header 0: NULL (offset 128, 64 bytes) — all zero ─────────────
-<a href=#770 id=770 data-nosnippet>770</a>
-<a href=#771 id=771 data-nosnippet>771</a>    // ── Section header 1: __ViCell_sig (offset 192, 64 bytes) ────────────────
-<a href=#772 id=772 data-nosnippet>772</a>    // ELF64 Shdr: sh_name(4), sh_type(4), sh_flags(8), sh_addr(8), sh_offset(8),
-<a href=#773 id=773 data-nosnippet>773</a>    //             sh_size(8), sh_link(4), sh_info(4), sh_addralign(8), sh_entsize(8)
-<a href=#774 id=774 data-nosnippet>774</a>    </span>v[<span class="number">192</span>..<span class="number">196</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">1u32</span>.to_le_bytes()); <span class="comment">// sh_name = strtab[1]
-<a href=#775 id=775 data-nosnippet>775</a>    </span>v[<span class="number">196</span>..<span class="number">200</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">1u32</span>.to_le_bytes()); <span class="comment">// sh_type = SHT_PROGBITS
-<a href=#776 id=776 data-nosnippet>776</a>                                                      // sh_flags = 0 (no ALLOC — sig section must never be mapped), already zero
-<a href=#777 id=777 data-nosnippet>777</a>                                                      // sh_offset = 320 (sig data starts there)
-<a href=#778 id=778 data-nosnippet>778</a>    </span>v[<span class="number">216</span>..<span class="number">224</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">320u64</span>.to_le_bytes());
-<a href=#779 id=779 data-nosnippet>779</a>    v[<span class="number">224</span>..<span class="number">232</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">64u64</span>.to_le_bytes()); <span class="comment">// sh_size = 64
-<a href=#780 id=780 data-nosnippet>780</a>    </span>v[<span class="number">240</span>..<span class="number">248</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">1u64</span>.to_le_bytes()); <span class="comment">// sh_addralign = 1
-<a href=#781 id=781 data-nosnippet>781</a>
-<a href=#782 id=782 data-nosnippet>782</a>    // ── Section header 2: .shstrtab (offset 256, 64 bytes) ───────────────────
-<a href=#783 id=783 data-nosnippet>783</a>    </span>v[<span class="number">256</span>..<span class="number">260</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">14u32</span>.to_le_bytes()); <span class="comment">// sh_name = strtab[14]
-<a href=#784 id=784 data-nosnippet>784</a>    </span>v[<span class="number">260</span>..<span class="number">264</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">3u32</span>.to_le_bytes()); <span class="comment">// sh_type = SHT_STRTAB
-<a href=#785 id=785 data-nosnippet>785</a>                                                      // sh_offset = 384
-<a href=#786 id=786 data-nosnippet>786</a>    </span>v[<span class="number">280</span>..<span class="number">288</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">384u64</span>.to_le_bytes());
-<a href=#787 id=787 data-nosnippet>787</a>    v[<span class="number">288</span>..<span class="number">296</span>].copy_from_slice(<span class="kw-2">&amp;</span>(STRTAB.len() <span class="kw">as </span>u64).to_le_bytes()); <span class="comment">// sh_size
-<a href=#788 id=788 data-nosnippet>788</a>    </span>v[<span class="number">304</span>..<span class="number">312</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">1u64</span>.to_le_bytes()); <span class="comment">// sh_addralign = 1
-<a href=#789 id=789 data-nosnippet>789</a>
-<a href=#790 id=790 data-nosnippet>790</a>    // ── Signature bytes (offset 320, 64 bytes) ────────────────────────────────
-<a href=#791 id=791 data-nosnippet>791</a>    </span>v[<span class="number">320</span>..<span class="number">384</span>].copy_from_slice(<span class="kw-2">&amp;</span>sig);
-<a href=#792 id=792 data-nosnippet>792</a>
-<a href=#793 id=793 data-nosnippet>793</a>    <span class="comment">// ── String table (offset 384, 24 bytes) ───────────────────────────────────
-<a href=#794 id=794 data-nosnippet>794</a>    </span>v[<span class="number">384</span>..<span class="number">384 </span>+ STRTAB.len()].copy_from_slice(STRTAB);
-<a href=#795 id=795 data-nosnippet>795</a>
-<a href=#796 id=796 data-nosnippet>796</a>    v
-<a href=#797 id=797 data-nosnippet>797</a>}
+<a href=#711 id=711 data-nosnippet>711</a><span class="kw">fn </span>test_signing_required_flag_on_for_tier1() {
+<a href=#712 id=712 data-nosnippet>712</a>    <span class="comment">// Under ADR-0015 and Phase 01, `signing-required` is active by default
+<a href=#713 id=713 data-nosnippet>713</a>    // so that only verified Safe Rust / audited driver cells can be admitted to Tier 1 SAS.
+<a href=#714 id=714 data-nosnippet>714</a>    </span><span class="macro">assert!</span>(
+<a href=#715 id=715 data-nosnippet>715</a>        <span class="kw">crate</span>::signing::signing_required(),
+<a href=#716 id=716 data-nosnippet>716</a>        <span class="string">"signing_required() must be true to guard Tier 1 SAS admission (ADR-0015)"
+<a href=#717 id=717 data-nosnippet>717</a>    </span>);
+<a href=#718 id=718 data-nosnippet>718</a>    <span class="macro">log::info!</span>(<span class="string">"  [ok] signing_required() -&gt; true (Tier 1 SAS admission gate active)"</span>);
+<a href=#719 id=719 data-nosnippet>719</a>}
+<a href=#720 id=720 data-nosnippet>720</a>
+<a href=#721 id=721 data-nosnippet>721</a><span class="doccomment">/// Build a 408-byte minimal RISC-V ELF64 with one PT_LOAD segment and a
+<a href=#722 id=722 data-nosnippet>722</a>/// `__ViCell_sig` section carrying `sig` as its data. Used only by tests.
+<a href=#723 id=723 data-nosnippet>723</a></span><span class="kw">fn </span>build_minimal_signed_elf(sig: [u8; <span class="number">64</span>]) -&gt; alloc::vec::Vec&lt;u8&gt; {
+<a href=#724 id=724 data-nosnippet>724</a>    <span class="comment">// String table: \0__ViCell_sig\0.shstrtab\0 (24 bytes)
+<a href=#725 id=725 data-nosnippet>725</a>    //   strtab[1]  = "__ViCell_sig\0"  → sh_name for section 1
+<a href=#726 id=726 data-nosnippet>726</a>    //   strtab[14] = ".shstrtab\0"     → sh_name for section 2 (itself)
+<a href=#727 id=727 data-nosnippet>727</a>    </span><span class="kw">const </span>STRTAB: <span class="kw-2">&amp;</span>[u8] = <span class="string">b"\x00__ViCell_sig\x00.shstrtab\x00"</span>;
+<a href=#728 id=728 data-nosnippet>728</a>    <span class="kw">let </span><span class="kw-2">mut </span>v = <span class="macro">alloc::vec!</span>[<span class="number">0u8</span>; <span class="number">384 </span>+ STRTAB.len()]; <span class="comment">// 384 + 24 = 408
+<a href=#729 id=729 data-nosnippet>729</a>
+<a href=#730 id=730 data-nosnippet>730</a>    // ── ELF64 header (offset 0, 64 bytes) ────────────────────────────────────
+<a href=#731 id=731 data-nosnippet>731</a>    </span>v[<span class="number">0</span>..<span class="number">4</span>].copy_from_slice(<span class="string">b"\x7fELF"</span>);
+<a href=#732 id=732 data-nosnippet>732</a>    v[<span class="number">4</span>] = <span class="number">2</span>; <span class="comment">// ELFCLASS64
+<a href=#733 id=733 data-nosnippet>733</a>    </span>v[<span class="number">5</span>] = <span class="number">1</span>; <span class="comment">// ELFDATA2LSB
+<a href=#734 id=734 data-nosnippet>734</a>    </span>v[<span class="number">6</span>] = <span class="number">1</span>; <span class="comment">// EV_CURRENT
+<a href=#735 id=735 data-nosnippet>735</a>              // e_type=2 (ET_EXEC), e_machine=0xF3 (EM_RISCV)
+<a href=#736 id=736 data-nosnippet>736</a>    </span>v[<span class="number">16</span>..<span class="number">18</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">2u16</span>.to_le_bytes());
+<a href=#737 id=737 data-nosnippet>737</a>    v[<span class="number">18</span>..<span class="number">20</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">0xF3u16</span>.to_le_bytes());
+<a href=#738 id=738 data-nosnippet>738</a>    <span class="comment">// e_version=1
+<a href=#739 id=739 data-nosnippet>739</a>    </span>v[<span class="number">20</span>..<span class="number">24</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">1u32</span>.to_le_bytes());
+<a href=#740 id=740 data-nosnippet>740</a>    <span class="comment">// e_entry=0x1000, e_phoff=64, e_shoff=128
+<a href=#741 id=741 data-nosnippet>741</a>    </span>v[<span class="number">24</span>..<span class="number">32</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">0x1000u64</span>.to_le_bytes());
+<a href=#742 id=742 data-nosnippet>742</a>    v[<span class="number">32</span>..<span class="number">40</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">64u64</span>.to_le_bytes());
+<a href=#743 id=743 data-nosnippet>743</a>    v[<span class="number">40</span>..<span class="number">48</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">128u64</span>.to_le_bytes());
+<a href=#744 id=744 data-nosnippet>744</a>    <span class="comment">// e_flags=5 (RVC + double-float ABI), e_ehsize=64, e_phentsize=56, e_phnum=1
+<a href=#745 id=745 data-nosnippet>745</a>    </span>v[<span class="number">48</span>..<span class="number">52</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">5u32</span>.to_le_bytes());
+<a href=#746 id=746 data-nosnippet>746</a>    v[<span class="number">52</span>..<span class="number">54</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">64u16</span>.to_le_bytes());
+<a href=#747 id=747 data-nosnippet>747</a>    v[<span class="number">54</span>..<span class="number">56</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">56u16</span>.to_le_bytes());
+<a href=#748 id=748 data-nosnippet>748</a>    v[<span class="number">56</span>..<span class="number">58</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">1u16</span>.to_le_bytes());
+<a href=#749 id=749 data-nosnippet>749</a>    <span class="comment">// e_shentsize=64, e_shnum=3, e_shstrndx=2
+<a href=#750 id=750 data-nosnippet>750</a>    </span>v[<span class="number">58</span>..<span class="number">60</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">64u16</span>.to_le_bytes());
+<a href=#751 id=751 data-nosnippet>751</a>    v[<span class="number">60</span>..<span class="number">62</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">3u16</span>.to_le_bytes());
+<a href=#752 id=752 data-nosnippet>752</a>    v[<span class="number">62</span>..<span class="number">64</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">2u16</span>.to_le_bytes());
+<a href=#753 id=753 data-nosnippet>753</a>
+<a href=#754 id=754 data-nosnippet>754</a>    <span class="comment">// ── PT_LOAD program header (offset 64, 56 bytes) ─────────────────────────
+<a href=#755 id=755 data-nosnippet>755</a>    // ELF64 Phdr: p_type(4), p_flags(4), p_offset(8), p_vaddr(8), p_paddr(8),
+<a href=#756 id=756 data-nosnippet>756</a>    //             p_filesz(8), p_memsz(8), p_align(8)
+<a href=#757 id=757 data-nosnippet>757</a>    </span>v[<span class="number">64</span>..<span class="number">68</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">1u32</span>.to_le_bytes()); <span class="comment">// p_type = PT_LOAD
+<a href=#758 id=758 data-nosnippet>758</a>    </span>v[<span class="number">68</span>..<span class="number">72</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">5u32</span>.to_le_bytes()); <span class="comment">// p_flags = R|X
+<a href=#759 id=759 data-nosnippet>759</a>    </span>v[<span class="number">72</span>..<span class="number">80</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">120u64</span>.to_le_bytes()); <span class="comment">// p_offset = 120
+<a href=#760 id=760 data-nosnippet>760</a>    </span>v[<span class="number">80</span>..<span class="number">88</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">0x1000u64</span>.to_le_bytes()); <span class="comment">// p_vaddr
+<a href=#761 id=761 data-nosnippet>761</a>    </span>v[<span class="number">88</span>..<span class="number">96</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">0x1000u64</span>.to_le_bytes()); <span class="comment">// p_paddr
+<a href=#762 id=762 data-nosnippet>762</a>    </span>v[<span class="number">96</span>..<span class="number">104</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">8u64</span>.to_le_bytes()); <span class="comment">// p_filesz = 8
+<a href=#763 id=763 data-nosnippet>763</a>    </span>v[<span class="number">104</span>..<span class="number">112</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">8u64</span>.to_le_bytes()); <span class="comment">// p_memsz = 8
+<a href=#764 id=764 data-nosnippet>764</a>    </span>v[<span class="number">112</span>..<span class="number">120</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">0x1000u64</span>.to_le_bytes()); <span class="comment">// p_align
+<a href=#765 id=765 data-nosnippet>765</a>
+<a href=#766 id=766 data-nosnippet>766</a>    // [120..128]: code bytes, already zero.
+<a href=#767 id=767 data-nosnippet>767</a>
+<a href=#768 id=768 data-nosnippet>768</a>    // ── Section header 0: NULL (offset 128, 64 bytes) — all zero ─────────────
+<a href=#769 id=769 data-nosnippet>769</a>
+<a href=#770 id=770 data-nosnippet>770</a>    // ── Section header 1: __ViCell_sig (offset 192, 64 bytes) ────────────────
+<a href=#771 id=771 data-nosnippet>771</a>    // ELF64 Shdr: sh_name(4), sh_type(4), sh_flags(8), sh_addr(8), sh_offset(8),
+<a href=#772 id=772 data-nosnippet>772</a>    //             sh_size(8), sh_link(4), sh_info(4), sh_addralign(8), sh_entsize(8)
+<a href=#773 id=773 data-nosnippet>773</a>    </span>v[<span class="number">192</span>..<span class="number">196</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">1u32</span>.to_le_bytes()); <span class="comment">// sh_name = strtab[1]
+<a href=#774 id=774 data-nosnippet>774</a>    </span>v[<span class="number">196</span>..<span class="number">200</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">1u32</span>.to_le_bytes()); <span class="comment">// sh_type = SHT_PROGBITS
+<a href=#775 id=775 data-nosnippet>775</a>                                                      // sh_flags = 0 (no ALLOC — sig section must never be mapped), already zero
+<a href=#776 id=776 data-nosnippet>776</a>                                                      // sh_offset = 320 (sig data starts there)
+<a href=#777 id=777 data-nosnippet>777</a>    </span>v[<span class="number">216</span>..<span class="number">224</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">320u64</span>.to_le_bytes());
+<a href=#778 id=778 data-nosnippet>778</a>    v[<span class="number">224</span>..<span class="number">232</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">64u64</span>.to_le_bytes()); <span class="comment">// sh_size = 64
+<a href=#779 id=779 data-nosnippet>779</a>    </span>v[<span class="number">240</span>..<span class="number">248</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">1u64</span>.to_le_bytes()); <span class="comment">// sh_addralign = 1
+<a href=#780 id=780 data-nosnippet>780</a>
+<a href=#781 id=781 data-nosnippet>781</a>    // ── Section header 2: .shstrtab (offset 256, 64 bytes) ───────────────────
+<a href=#782 id=782 data-nosnippet>782</a>    </span>v[<span class="number">256</span>..<span class="number">260</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">14u32</span>.to_le_bytes()); <span class="comment">// sh_name = strtab[14]
+<a href=#783 id=783 data-nosnippet>783</a>    </span>v[<span class="number">260</span>..<span class="number">264</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">3u32</span>.to_le_bytes()); <span class="comment">// sh_type = SHT_STRTAB
+<a href=#784 id=784 data-nosnippet>784</a>                                                      // sh_offset = 384
+<a href=#785 id=785 data-nosnippet>785</a>    </span>v[<span class="number">280</span>..<span class="number">288</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">384u64</span>.to_le_bytes());
+<a href=#786 id=786 data-nosnippet>786</a>    v[<span class="number">288</span>..<span class="number">296</span>].copy_from_slice(<span class="kw-2">&amp;</span>(STRTAB.len() <span class="kw">as </span>u64).to_le_bytes()); <span class="comment">// sh_size
+<a href=#787 id=787 data-nosnippet>787</a>    </span>v[<span class="number">304</span>..<span class="number">312</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">1u64</span>.to_le_bytes()); <span class="comment">// sh_addralign = 1
+<a href=#788 id=788 data-nosnippet>788</a>
+<a href=#789 id=789 data-nosnippet>789</a>    // ── Signature bytes (offset 320, 64 bytes) ────────────────────────────────
+<a href=#790 id=790 data-nosnippet>790</a>    </span>v[<span class="number">320</span>..<span class="number">384</span>].copy_from_slice(<span class="kw-2">&amp;</span>sig);
+<a href=#791 id=791 data-nosnippet>791</a>
+<a href=#792 id=792 data-nosnippet>792</a>    <span class="comment">// ── String table (offset 384, 24 bytes) ───────────────────────────────────
+<a href=#793 id=793 data-nosnippet>793</a>    </span>v[<span class="number">384</span>..<span class="number">384 </span>+ STRTAB.len()].copy_from_slice(STRTAB);
+<a href=#794 id=794 data-nosnippet>794</a>
+<a href=#795 id=795 data-nosnippet>795</a>    v
+<a href=#796 id=796 data-nosnippet>796</a>}
 </code></pre></div></section></main></body></html>
