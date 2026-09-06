@@ -470,6 +470,28 @@ fn find_recursive(dir: &str, pattern: Option<&str>, depth: usize, vfs_tid: usize
     }
 }
 
+/// List entries in a directory from the Userspace VFS Service via IPC.
+pub(crate) fn vfs_list_dir(dir: &str) -> Option<alloc::vec::Vec<alloc::string::String>> {
+    use api::ipc::{VfsRequest, VfsResponse};
+    let vfs_tid = vfs_endpoint();
+    let mut send = [0u8; 512];
+    let n = api::ipc::encode(&VfsRequest::ListDir(dir), &mut send).ok()?.len();
+    ostd::syscall::sys_send(vfs_tid, &send[..n]);
+    let mut reply = [0u8; 512];
+    if let ostd::syscall::SyscallResult::Ok(_) = ostd::syscall::sys_recv(vfs_tid, &mut reply) {
+        if let Ok(VfsResponse::Data(entries)) = api::ipc::decode::<VfsResponse>(&reply) {
+            let text = core::str::from_utf8(entries).ok()?;
+            let mut list = alloc::vec::Vec::new();
+            for entry in text.lines() {
+                if let Some(name) = entry.strip_prefix("d:").or_else(|| entry.strip_prefix("f:")) {
+                    list.push(alloc::string::String::from(name));
+                }
+            }
+            return Some(list);
+        }
+    }
+    None
+}
 // ─── uniq ─────────────────────────────────────────────────────────────────────
 
 /// `uniq [file]` — filter adjacent duplicate lines.

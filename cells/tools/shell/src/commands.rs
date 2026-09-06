@@ -131,28 +131,40 @@ let vfs_cell_id = 3;
 
 pub fn cmd_ls(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
     let path = args.next().unwrap_or("/");
+    if path.starts_with("/tmp") || path.starts_with("/data") || path.starts_with("/srv") || path.starts_with("/mnt") {
+        if let Some(entries) = crate::cmd_fs::vfs_list_dir(path) {
+            for name in entries {
+                crate::executor::shell_println(&name);
+            }
+            return Ok(());
+        }
+    }
     match fs::read_dir(path) {
         Ok(iter) => {
+            let mut count = 0;
             for entry in iter {
                 let name = core::str::from_utf8(&entry.name)
                     .unwrap_or("???")
                     .trim_matches('\0');
                 crate::executor::shell_println(name);
+                count += 1;
             }
-            Ok(())
-        }
-        Err(e) => {
-            ostd::io::print("ls: cannot access '");
-            ostd::io::print(path);
-            ostd::io::print("': ");
-            match e {
-                ViError::NotFound => ostd::io::println("No such file or directory"),
-                ViError::PermissionDenied => ostd::io::println("Permission denied"),
-                _ => ostd::io::println("Error"),
+            if count > 0 {
+                return Ok(());
             }
-            Ok(())
         }
+        Err(_) => {}
     }
+    if let Some(entries) = crate::cmd_fs::vfs_list_dir(path) {
+        for name in entries {
+            crate::executor::shell_println(&name);
+        }
+        return Ok(());
+    }
+    ostd::io::print("ls: cannot access '");
+    ostd::io::print(path);
+    ostd::io::println("': No such file or directory");
+    Ok(())
 }
 
 pub fn cmd_cat(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
@@ -224,6 +236,15 @@ pub fn cmd_cat(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<(
             Ok(())
         }
         Err(_) => {
+            if let Ok(bytes) = crate::cmd_fs::read_file_vfs_owned(path, 65536) {
+                if let Ok(s) = core::str::from_utf8(&bytes) {
+                    crate::executor::shell_print(s);
+                    if !s.ends_with('\n') {
+                        crate::executor::shell_print("\n");
+                    }
+                    return Ok(());
+                }
+            }
             ostd::io::print("cat: ");
             ostd::io::print(path);
             ostd::io::println(": No such file or directory");
