@@ -16,15 +16,53 @@ use crate::framework::rt_report::RtReport;
 use alloc::vec::Vec;
 use ostd::syscall::{sys_exit, sys_get_time, sys_recv, sys_recv_timeout, sys_send, SyscallResult};
 
-/// Target loop period: 50 ms @ 10 MHz mtime (5 scheduler ticks).
-const PERIOD_TICKS: u64 = 50 * 10_000;
-/// Allowed overrun before a cycle counts as a deadline miss: 5 ms.
-const SLACK_TICKS: u64 = 5 * 10_000;
+/// Receive timeout uses 10 ms scheduler ticks; five ticks request a 50 ms period.
+const PERIOD_SCHEDULER_TICKS: u64 = 5;
+/// `sys_get_time` reports the 10 MHz hardware timebase used for measured error.
+const PERIOD_TIME_TICKS: u64 = 50 * 10_000;
+/// Allowed measured overrun before a deadline miss: 5 ms in the hardware timebase.
+const SLACK_TIME_TICKS: u64 = 5 * 10_000;
 /// Number of measured periods.
 const CL_ITERS: u32 = 200;
 
-/// RealTime probe role: learn the orchestrator's tid from its start ping, run
-/// the periodic loop, print the jitter/deadline report, then signal done + exit.
+pub const RESULT_LEN: usize = 57;
+
+fn put_u64(buf: &mut [u8; RESULT_LEN], offset: usize, value: u64) {
+    buf[offset..offset + 8].copy_from_slice(&value.to_le_bytes());
+}
+
+fn get_u64(buf: &[u8; 64], offset: usize) -> u64 {
+    u64::from_le_bytes(buf[offset..offset + 8].try_into().unwrap_or([0; 8]))
+}
+
+pub fn decode_result(buf: &[u8; 64]) -> api::ViResult<RtReport> {
+    if buf[0] != 0 || buf[RESULT_LEN..].iter().any(|&byte| byte != 0xa5) {
+        return Err(api::ViError::InvalidInput);
+    }
+    let min = get_u64(buf, 1);
+    let p50 = get_u64(buf, 9);
+    let p99 = get_u64(buf, 17);
+    let p99_9 = get_u64(buf, 25);
+    let max = get_u64(buf, 33);
+    let jitter = get_u64(buf, 41);
+    if min > p50 || p50 > p99 || p99 > p99_9 || p99_9 > max || jitter != max.saturating_sub(min) {
+        return Err(api::ViError::InvalidInput);
+    }
+    Ok(RtReport {
+        name: "control_loop",
+        n: CL_ITERS,
+        min,
+        p50,
+        p99,
+        p99_9,
+        max,
+        jitter,
+        deadline_miss: u32::try_from(get_u64(buf, 49)).map_err(|_| api::ViError::InvalidInput)?,
+    })
+}
+
+/// RealTime probe role: run the periodic loop and return a private report wire
+/// to the orchestrator, which publishes it only after cleanup succeeds.
 pub fn run_control_loop() -> ! {
     let mut buf = [0u8; 8];
     // Block for the orchestrator's start ping so we can reply "done" to it later.
@@ -37,30 +75,39 @@ pub fn run_control_loop() -> ! {
 
     let mut errors: Vec<u64> = Vec::with_capacity(CL_ITERS as usize);
     let mut miss = 0u32;
+    let mut valid = true;
     let mut prev = sys_get_time();
     for _ in 0..CL_ITERS {
-        // Sleep ~one period: recv_timeout returns on timeout (no sender) and
-        // is a real block — the scheduler is free to run load cells meanwhile.
-        let _ = sys_recv_timeout(0, &mut buf, PERIOD_TICKS);
+        match sys_recv_timeout(0, &mut buf, PERIOD_SCHEDULER_TICKS) {
+            SyscallResult::Ok(0) => {}
+            _ => {
+                valid = false;
+                break;
+            }
+        }
         let now = sys_get_time();
         let actual = now.saturating_sub(prev);
-        let err = actual.abs_diff(PERIOD_TICKS);
+        let err = actual.abs_diff(PERIOD_TIME_TICKS);
         errors.push(err);
-        if actual > PERIOD_TICKS + SLACK_TICKS {
+        if actual > PERIOD_TIME_TICKS + SLACK_TIME_TICKS {
             miss += 1;
         }
         prev = now;
     }
 
-    let r = RtReport::build("control_loop_jitter", &mut errors, miss);
-    r.print();
-    r.print_json();
-    if r.deadline_miss == 0 {
-        ostd::io::println("[rt] control_loop PASS");
+    if valid {
+        let r = RtReport::build("control_loop", &mut errors, miss);
+        let mut result = [0u8; RESULT_LEN];
+        put_u64(&mut result, 1, r.min);
+        put_u64(&mut result, 9, r.p50);
+        put_u64(&mut result, 17, r.p99);
+        put_u64(&mut result, 25, r.p99_9);
+        put_u64(&mut result, 33, r.max);
+        put_u64(&mut result, 41, r.jitter);
+        put_u64(&mut result, 49, u64::from(r.deadline_miss));
+        let _ = sys_send(orch, &result);
     } else {
-        ostd::io::println("[rt] control_loop FAIL (deadline misses)");
+        let _ = sys_send(orch, &[1u8]);
     }
-
-    let _ = sys_send(orch, &[1u8]); // signal orchestrator we are done
     sys_exit(0);
 }

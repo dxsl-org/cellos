@@ -482,8 +482,7 @@ fn parse_mcfg(virt: usize, length: usize, info: &mut AcpiInfo) {
         let segment = unsafe { core::ptr::read_unaligned((entry + 8) as *const u16) };
         let bus_start = unsafe { core::ptr::read_volatile((entry + 10) as *const u8) };
         let bus_end = unsafe { core::ptr::read_volatile((entry + 11) as *const u8) };
-        let window_len =
-            crate::task::drivers::pcie_ecam::ecam_window_size(bus_start, bus_end);
+        let window_len = crate::task::drivers::pcie_ecam::ecam_window_size(bus_start, bus_end);
         let window_base = base_addr.checked_add((bus_start as u64) << 20);
         if segment == 0
             && base_addr != 0
@@ -586,11 +585,7 @@ mod tests {
         assert_eq!(info.ecam_base, 0);
 
         let overflowing = mcfg_entry(u64::MAX & !0xF_FFFF, 0, 0, u8::MAX);
-        parse_mcfg(
-            overflowing.as_ptr() as usize,
-            overflowing.len(),
-            &mut info,
-        );
+        parse_mcfg(overflowing.as_ptr() as usize, overflowing.len(), &mut info);
         assert_eq!(info.ecam_base, 0);
     }
 }

@@ -36,7 +36,12 @@ const SURF_W: u32 = api::display::FALLBACK_WIDTH; // 1024
 const SURF_H: u32 = api::display::FALLBACK_HEIGHT; // 768
 const SCALE: u32 = 3;
 
-declare_manifest!(block_io = false, network = false, spawn = false);
+declare_manifest!(
+    block_io = false,
+    network = false,
+    spawn = false,
+    tier = api::manifest::PROTECTION_CLASS_FFI
+);
 
 // ── Compositor surface ────────────────────────────────────────────────────
 static mut SURFACE: Option<ViSurface> = None;

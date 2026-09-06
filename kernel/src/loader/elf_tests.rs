@@ -55,7 +55,7 @@ pub fn run_all() {
     test_signing_extract_sig_some_from_constructed_elf();
     test_signing_extract_sig_some_with_non_utf8_unrelated_section_name();
     test_signing_extract_sig_none_for_nobits_signature();
-    test_signing_required_flag_off_in_dev_build();
+    test_signing_required_flag_on_for_tier1();
     // W^X post-relocation flag derivation.
     super::wx::run_self_tests();
     #[cfg(feature = "test-hooks")]
@@ -708,15 +708,14 @@ fn test_signing_extract_sig_none_for_nobits_signature() {
     log::info!("  [ok] extract_sig rejects NOBITS signature declaration");
 }
 
-fn test_signing_required_flag_off_in_dev_build() {
-    // In dev builds (default features) `signing-required` must be off so that
-    // unsigned cell binaries can still boot. This ensures the dev build stays
-    // permissive while `signing-required` in CI is explicit and deliberate.
+fn test_signing_required_flag_on_for_tier1() {
+    // Under ADR-0015 and Phase 01, `signing-required` is active by default
+    // so that only verified Safe Rust / audited driver cells can be admitted to Tier 1 SAS.
     assert!(
-        !crate::signing::signing_required(),
-        "signing_required() must be false in dev builds (feature `signing-required` not set)"
+        crate::signing::signing_required(),
+        "signing_required() must be true to guard Tier 1 SAS admission (ADR-0015)"
     );
-    log::info!("  [ok] signing_required() → false in dev build");
+    log::info!("  [ok] signing_required() -> true (Tier 1 SAS admission gate active)");
 }
 
 /// Build a 408-byte minimal RISC-V ELF64 with one PT_LOAD segment and a

@@ -41,6 +41,8 @@ pub struct TaskLaunchState {
     pub(crate) argv: Option<Vec<u8>>,
     pub(crate) routes: LaunchRoutes,
     pub(crate) measurement: Option<StagedMeasurement>,
+    #[allow(dead_code)]
+    pub(crate) is_domain: bool,
 }
 
 impl TaskLaunchState {
@@ -62,6 +64,7 @@ impl TaskLaunchState {
         argv: Option<Vec<u8>>,
         routes: LaunchRoutes,
         measurement: Option<StagedMeasurement>,
+        is_domain: bool,
     ) -> Self {
         Self {
             caller,
@@ -80,6 +83,7 @@ impl TaskLaunchState {
             argv,
             routes,
             measurement,
+            is_domain,
         }
     }
 }
@@ -166,6 +170,25 @@ pub fn publish_prepared(
     }
     if let Some(replacement) = state.replacement.take() {
         replacement.commit_into(&mut task);
+    }
+    #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+    if state.is_domain {
+        if let (Some(ks), Some(us), Some(seg)) =
+            (&task.kernel_stack, &task.user_stack, &task.segment_mem)
+        {
+            if let Ok(domain) = crate::memory::address_space::create_cell_domain(ks, us, seg) {
+                log::info!(
+                    "[domain] admitted cell '{}' to Tier 2 Paged Domain (SATP isolation)",
+                    task.name
+                );
+                task.bind_address_space(domain);
+            } else {
+                log::warn!(
+                    "[domain] failed to create domain for '{}', falling back to SAS",
+                    task.name
+                );
+            }
+        }
     }
 
     sched.tasks.insert(tid, task);

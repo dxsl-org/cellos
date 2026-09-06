@@ -27,7 +27,7 @@ enum DrvOp {
 }
 
 fn parse_op(data: &[u8]) -> Option<(DrvOp, u64)> {
-    if data.len() < 10 {
+    if data.len() < 2 {
         return None;
     }
     let op = match u16::from_le_bytes([data[0], data[1]]) {

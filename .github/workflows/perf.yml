@@ -45,9 +45,10 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: perf-results/
-          # Unique key per run so save always writes; restore-keys picks the newest match.
-          key: perf-results-${{ github.run_id }}
-          restore-keys: perf-results-
+          # Attempts are immutable captures; restore-keys selects prior history.
+          key: perf-results-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            perf-results-
 
       - name: Cache Cargo registry
         uses: actions/cache@v4
@@ -70,8 +71,7 @@ jobs:
             --target riscv64gc-unknown-none-elf \
             -Z build-std=core,alloc \
             -p app-init -p app-shell -p service-vfs -p service-config \
-            -p service-platform -p driver-virtio-blk \
-            -p app-bench
+            -p service-platform -p driver-virtio-blk -p app-bench
 
       - name: Rebuild kernel with bench-aware ramdisk
         run: |
@@ -97,63 +97,77 @@ jobs:
 
       - name: Generate bench disk image
         run: |
-          # Cell-table-only disk: /bin/bench at CELL_TABLE_BASE_LBA.
-          # Kernel is passed directly as -kernel; no Limine/FAT partition needed.
+          # Cell-table-only disk retained as a hashed environment/provenance input.
+          # The benchmark itself launches from VIFS1 through the normal shell path.
           bash scripts/gen-bench-disk.sh \
             target/riscv64gc-unknown-none-elf/release/bench \
             bench-disk.img
 
-      - name: Boot QEMU and capture bench output
+      - name: Boot QEMU and collect immutable benchmark capture
         id: bench_run
         timeout-minutes: 10
+        env:
+          PROFILE_ID: rv64-qemu-virt-2h-256m-v2
+          CAPTURE_ID: ${{ github.run_id }}-${{ github.run_attempt }}-rv64-qemu-virt-2h-256m-v2-1
         run: |
-          KERNEL=target/riscv64gc-unknown-none-elf/release/cellos-kernel
-          # Direct boot: kernel ELF passed as -kernel (OpenSBI → kernel → init → bench).
-          # bench-disk.img contains only the cell bootstrap table (/bin/bench).
-          # init reads the cell table and auto-spawns /bin/bench.
-          #
-          # Capture [bench]/[rt] human-readable lines and bare JSON result lines.
-          # print_report emits "[bench] ..." — used for PDR FAIL check.
-          # print_json  emits '{"name":...}' with no prefix — used for results JSON.
-          OUTPUT=$(timeout 300 qemu-system-riscv64 \
-            -machine virt \
-            -nographic \
-            -bios default \
-            -kernel "$KERNEL" \
-            -m 256M \
-            -drive file=bench-disk.img,format=raw,id=hd0,if=none \
-            -device virtio-blk-device,drive=hd0 \
-            2>&1 | grep -E '^\[bench\]|^\[rt\]|^\{"name":|^\[boot\] kernel_phys_base' || true)
+          set -euo pipefail
+          REL=target/riscv64gc-unknown-none-elf/release
+          RESULT_FILE="perf-results/perf-${CAPTURE_ID}.json"
+          # Publish identities before collection so the always-run validation
+          # step can inspect an INVALID capture after collector failure.
+          echo "capture_id=$CAPTURE_ID" >> "$GITHUB_OUTPUT"
+          echo "current_capture=$RESULT_FILE" >> "$GITHUB_OUTPUT"
 
-          # bench_output: [bench] and [rt] lines — FAIL in either fails the PDR check below
-          BENCH_LINES=$(echo "$OUTPUT" | grep -E '^\[bench\]|^\[rt\]' || true)
-          echo "bench_output<<EOF" >> "$GITHUB_OUTPUT"
-          echo "$BENCH_LINES" >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
 
-          # Extract JSON lines from the combined output buffer.
-          JSON_LINES=$(echo "$OUTPUT" | grep '^{"name":' || echo '[]')
-          echo "bench_json<<EOF" >> "$GITHUB_OUTPUT"
-          echo "$JSON_LINES" >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
+          # bench_results.py owns the bounded producer, unfiltered raw log,
+          # producer classification, hashes, JSON serialization, and validation.
+          # The collector terminates QEMU only after retaining a complete valid
+          # guest record line; timeout, panic, malformed output, or early exit is invalid.
+          python3 scripts/bench_results.py collect \
+            --results-dir perf-results \
+            --capture-id "$CAPTURE_ID" \
+            --profile "$PROFILE_ID" \
+            --repetition 1 \
+            --repository "$GITHUB_REPOSITORY" \
+            --source-ref "$GITHUB_REF" \
+            --commit "$GITHUB_SHA" \
+            --toolchain nightly-2026-05-01 \
+            --feature release-default \
+            --source-input Cargo.lock=Cargo.lock \
+            --source-input rust-toolchain.toml=rust-toolchain.toml \
+            --artifact kernel="$REL/cellos-kernel" \
+            --artifact bench="$REL/bench" \
+            --artifact probe="$REL/bench-probe" \
+            --stdin-line bench \
+            --stdin-after "Cellos >" \
+            --artifact disk=bench-disk.img \
+            --artifact ramdisk=kernel/src/embedded/kernel_fs.img \
+            --timeout-seconds 300 \
+            -- \
+            qemu-system-riscv64 \
+              -machine virt \
+              -accel tcg \
+              -smp 2 \
+              -nographic \
+              -bios default \
+              -kernel "$REL/cellos-kernel" \
+              -m 256M \
+              -drive file=bench-disk.img,format=raw,id=hd0,if=none \
+              -device virtio-blk-device,drive=hd0
 
-      - name: Write result file
+
+      - name: Validate current capture and compare historical baseline
+        if: always()
         run: |
-          DATE=$(date -u +%Y-%m-%d)
-          mkdir -p perf-results
-          RESULT_FILE="perf-results/perf-${DATE}.json"
-          JSON_LINES='${{ steps.bench_run.outputs.bench_json }}'
-          printf '{\n  "date": "%s",\n  "commit": "%s",\n  "results": [%s]\n}\n' \
-            "$DATE" \
-            "${{ github.sha }}" \
-            "$JSON_LINES" > "$RESULT_FILE"
-          echo "[perf] Result written to $RESULT_FILE"
-          cat "$RESULT_FILE"
+          bash scripts/compare-bench-results.sh perf-results/ \
+            --current "${{ steps.bench_run.outputs.current_capture }}" \
+            --current-id "${{ steps.bench_run.outputs.capture_id }}"
 
       - name: Upload benchmark artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: bench-results-${{ github.run_id }}
+          name: bench-results-${{ github.run_id }}-${{ github.run_attempt }}
           path: perf-results/
           retention-days: 90
 
@@ -162,19 +176,5 @@ jobs:
         if: always()
         with:
           path: perf-results/
-          key: perf-results-${{ github.run_id }}
+          key: perf-results-${{ github.run_id }}-${{ github.run_attempt }}
 
-      - name: Compare against historical baseline
-        run: |
-          bash scripts/compare-bench-results.sh perf-results/
-
-      - name: Check QEMU-calibrated gates
-        run: |
-          OUTPUT="${{ steps.bench_run.outputs.bench_output }}"
-          if echo "$OUTPUT" | grep -q "FAIL"; then
-            echo "::error::One or more QEMU-calibrated gates failed — see bench output above"
-            echo "$OUTPUT"
-            exit 1
-          else
-            echo "[perf] All QEMU-calibrated gates met; IPC hardware target is informational"
-          fi

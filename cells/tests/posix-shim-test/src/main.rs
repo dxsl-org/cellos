@@ -28,7 +28,12 @@ use ostd::io::println;
 const ECHO_IP: [u8; 4] = [10, 0, 2, 2];
 const ECHO_PORT: u16 = 10009;
 
-api::declare_manifest!(block_io = false, network = false, spawn = false);
+api::declare_manifest!(
+    block_io = false,
+    network = false,
+    spawn = false,
+    tier = api::manifest::PROTECTION_CLASS_FFI
+);
 // Add only the file trio needed by the fstat smoke to the existing restrictive set.
 api::declare_syscalls![
     Send,

@@ -21,7 +21,12 @@ extern crate ostd;
 
 use ostd::syscall::sys_exit;
 
-api::declare_manifest!(block_io = false, network = false, spawn = false);
+api::declare_manifest!(
+    block_io = false,
+    network = false,
+    spawn = false,
+    tier = api::manifest::PROTECTION_CLASS_FFI
+);
 api::declare_syscalls![Write, Log, Exit, GetTime];
 
 // ─── mlibc C symbols ─────────────────────────────────────────────────────────

@@ -23,8 +23,8 @@ developer APIs.
 | Tier | Canonical name | Runtime profiles | Isolation | Current status | When to use |
 |------|----------------|------------------|-----------|----------------|-------------|
 | **Tier 1** | Trusted SAS Cell | `rust-no-std` shipped; `rust-std` planned; `ffi-posix` and `lua` trusted profiles | Shared SAS + LBI; fleet posture depends on signing/admission | Current native app path | Trusted first-party/platform cells, drivers, services, UI, embedded/robot apps. |
-| **Tier 2** | Native Domain Cell | Same native Cell shape as Tier 1 | Private MMU domain; copied/domain-explicit IPC | Accepted design, **not implemented** | Future untrusted native third-party code without source disclosure. |
-| **Tier 3** | VM Guest | `linux-guest` | Hypervisor / Stage-2 | ARM64 guest path exists; broader platform work tracked separately | Legacy Linux/POSIX stacks, fork-heavy apps, and untrusted workloads before Tier 2 exists. |
+| **Tier 2** | Native Domain Cell | Same native Cell shape as Tier 1 | Private MMU domain; copied/domain-explicit IPC | RV64/QEMU substrate and cross-hart migration implemented in internal test-hooks fixtures only; no public application admission/loader route. Physical containment, DMA quarantine and production approvals remain open | Not currently available for application deployment; untrusted native workloads remain blocked, not silently assigned to Tier 1. |
+| **Tier 3** | VM Guest | `linux-guest` | Hypervisor / Stage-2 | ARM64 guest path exists; broader platform work tracked separately | Legacy Linux/POSIX stacks, fork-heavy apps and supported untrusted guest workloads under target-specific qualification. |
 
 Legacy names: `Tier 1b` now means the Tier 1 `ffi-posix` or `lua` runtime
 profile. `Tier 3b` now means the Tier 3 `linux-guest` profile. Guide filenames
@@ -45,6 +45,12 @@ The SDK is one family, not a numbered set of tiers:
 | Guest integration | VirtIO/proxy contracts | Tier 3 VM guests | ARM64 path exists; strict guest verification is KVM/hardware-gated |
 
 ---
+Tier 1 branches below require trusted code. Tier2 substrate evidence does not
+provide an application route: `kernel/src/loader/domain_admission.rs` is
+default-off/internal-only and no public loader or manifest constructs admission.
+Use Tier3 for untrusted code only when the exact guest/target boundary is qualified
+for that workload; otherwise leave deployment blocked. Do not downgrade to SAS.
+
 
 ## Decision Tree: Which Tier?
 
@@ -66,7 +72,7 @@ The SDK is one family, not a numbered set of tiers:
 │  └─ Use Tier 1 lua profile (legacy: Tier 1b Lua)
 │
 ├─ "I need untrusted native code without a VM"
-│  └─ Tier 2 is the accepted destination, but not implemented yet.
+│  └─ Blocked: Tier 2 is internal test-hooks-only, with no application admission/loader route.
 │
 └─ "I have a legacy Linux binary / fork() is essential"
    └─ Use Tier 3 linux-guest profile (legacy: Tier 3b)

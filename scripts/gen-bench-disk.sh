@@ -21,7 +21,12 @@ DISK="${2:-bench-disk.img}"
 
 echo "[gen-bench-disk] Writing cell bootstrap table (/bin/bench)..."
 touch "$DISK"
-python3 tools/write-cell-table.py "$DISK" "/bin/bench=$BENCH_BIN" "/bin/bench-probe=${BENCH_BIN}-probe"
+CELL_ARGS=("/bin/bench=$BENCH_BIN" "/bin/bench-probe=${BENCH_BIN}-probe")
+EXPLOIT_BIN="target/riscv64gc-unknown-none-elf/release/tier2-exploit"
+if [[ -f "$EXPLOIT_BIN" ]]; then
+    CELL_ARGS+=("/bin/tier2-exploit=$EXPLOIT_BIN")
+fi
+python3 tools/write-cell-table.py "$DISK" "${CELL_ARGS[@]}"
 
 DISK_MB=$(( $(stat -c%s "$DISK") / 1024 / 1024 ))
 echo "[gen-bench-disk] Done: $DISK (${DISK_MB} MB)"

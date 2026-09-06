@@ -3,8 +3,8 @@
 > **Status**: Accepted 2026-07-30; amended 2026-08-01 by D13, again 2026-08-01 by
 > `18b-cell-admission-consent-adr.md` (§2.1, §4), and terminology-normalized on
 > 2026-08-19 by ADR 0003. Supersedes the WASM runtime tier wherever older documents mention it.
-> Tier 2 and fleet-secure Tier-1 admission are accepted designs, not current production
-> mechanisms. Spec 22 is the required Tier-2 implementation gate.
+> Tier 2 Paged Domain Engine is shipped and verified on 2026-09-06 (ADR-0015 Phase 02) via
+> negative hardware page-fault test (`tests/integration/tests/tier2_fault_isolation.rs`).
 
 ## 1. Context
 
@@ -48,19 +48,15 @@ The Tier-2 decision point arrives only when Spec 19 Layer B is implemented.
 
 | Tier | Status | Who | Isolation mechanism | Execution speed | IPC |
 |------|--------|-----|---------------------|-----------------|-----|
-| **1 — Trusted SAS cell** | SAS shipped; fleet signed-only admission **not shipped** | Operationally trusted first-party/platform cells; future fleet posture requires a controlled signing pipeline. Runtime profiles include Rust `no_std`, planned Rust `std`, trusted POSIX/FFI, and Lua. | LBI: rustc + F1 policy outside reviewed exceptions | Native or interpreter-speed by profile; zero-cost SAS boundary | Zero-copy grants |
-| **2 — Native domain cell** | **accepted, NOT implemented** | Unsigned or unverified native ELF once the mechanism exists | Hardware: private page-table view — same VA layout as the SAS, but *other cells' pages are simply not mapped* | Native inside the domain; `satp`+ASID switch at the boundary | Kernel-copied messages; grants mapped explicitly per-share |
-| **3 — VM guest** | ARM64 lane shipped; wider platform coverage staged | Whole legacy stacks, normally Linux guests | Stage-2 paging / hypervisor guest boundary | Native inside guest | virtio / proxy |
+| **1 — Trusted SAS cell** | SAS shipped; mandatory signing in Phase 01 ([ADR-0015](../decisions/0015-dual-mode-hybrid-architecture.md)) | 100% Safe Rust cells (`no_std`, planned `std`) + audited Driver Cells (e1000, NVMe, VirtIO with MMIO/DMA). Requires valid Ed25519 signature. | LBI: rustc `#![forbid(unsafe_code)]` + audited driver MMIO/DMA under IOMMU | Native zero-cost SAS boundary; no TLB flush | Zero-trap SPSC Ring Buffer / Zero-copy grants |
+| **2 — Native domain cell** | **Shipped (2026-09-06, ADR-0015 Phase 02)** — verified via negative hardware Page Fault containment test | All unsigned binaries (including unsigned Rust), all C/C++/Zig FFI profiles, Doom, Tetris-C, and Lua runtime | Hardware: private page-table (`satp`/`CR3`/`TTBR0`) — other cells' and kernel pages unmapped/NX | Native inside domain; ASID-tagged switch | Kernel-copied messages; `validate_user_buf` |
+| **3 — VM guest** | ARM64 & x86 QEMU lanes shipped | Whole legacy stacks, normally Linux guests (Alpine, Nginx, ROS2) | Stage-2 paging / hypervisor guest boundary | Native inside guest | virtio / proxy |
 
-Profiles currently planned or shipped on top of those tiers:
+Profiles under the Dual-Mode Hybrid Architecture (ADR-0015):
 
-- **Tier 1**: Rust `no_std` is the shipped native profile. Rust `std` is a planned G4
-  profile in the same tier, not a new tier. POSIX/FFI profiles for C/C++/Zig and
-  the Lua runtime profile are trusted Tier-1 profiles; legacy docs may call these
-  `Tier 1b`.
-- **Tier 2**: same native language families as Tier 1 in principle, but behind
-  a private-page-table admission path once implemented.
-- **Tier 3**: full Linux guest userspace; legacy docs may call this `Tier 3b`.
+- **Tier 1**: Strict Safe Rust (`no_std`, future `std`) + audited Driver Cells. Signed-only.
+- **Tier 2**: All C/C++/Zig FFI code (`posix-shim`, `mlibc`), dynamic runtimes (Lua), and all unsigned native binaries. Contained by hardware MMU.
+- **Tier 3**: Full Linux guest userspace via Stage-2 hypervisor.
 
 Do not define Tier 2 as "Tier 1 but unsigned". The absence of a trusted
 signature is an admission input; Tier 2 is the hardware-domain execution class

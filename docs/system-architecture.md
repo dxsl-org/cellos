@@ -3,8 +3,21 @@
 **Audience**: Developers new to Cellos
 **Level**: High-level (conceptual + key components)
 **Version**: 0.2.1-dev (Mycelium Era)
-**Last Updated**: 2026-09-03 (solo-first development and independent claim promotion adopted.)
+**Last Updated**: 2026-09-06 (ADR-0015 Dual-Mode Hybrid Architecture settled as definitive baseline.)
 
+> **Status refresh 2026-09-06 — ADR-0015 DUAL-MODE HYBRID ARCHITECTURE SETTLED:**
+> [ADR-0015](decisions/0015-dual-mode-hybrid-architecture.md) settles the long-standing
+> tension between academic pure LBI and industrial C/FFI compatibility by formalizing
+> a **Dual-Mode Hybrid Architecture**:
+> 1. **Tier 1 (Real-time SAS)**: Strict 100% Safe Rust Cells + audited Driver Cells (e1000,
+>    NVMe, VirtIO with IOMMU-authorized MMIO/DMA). Mandatory Ed25519 signing (`signing-required = ON`).
+>    Zero-trap SPSC lock-free ring buffers for ultra-low latency (P99 <= 10µs).
+> 2. **Tier 2 (Paged Domain Engine)**: Hardware page-table isolation (`satp` on RISC-V, `CR3` on x86,
+>    `TTBR0` on ARM). Mandatory destination for **all** unsigned binaries (including unsigned Rust)
+>    and **all** C-FFI, Lua runtimes, and POSIX shims. Memory violations trigger CPU page faults
+>    and safe cell reaping without corrupting the SAS. Microkernel IPC bridge with bounded copies.
+> 3. **Tier 3 (Hardware VM Guest)**: Stage-2 paging / hardware hypervisor for unmodified Linux guests.
+>
 > **Status refresh 2026-09-02 — X86_64 PER-VECTOR IDT REAL-CPL3 GATE
 > PASSED:** Hardware IDT entry changes neither GS nor PKRU. The common path now
 > uses saved CS.RPL3 to swap to kernel GS and set kernel PKRU before Rust, then
@@ -228,22 +241,34 @@ production qualification.
 
 ---
 
-## Core Philosophy
+## Core Philosophy: Dual-Mode Hybrid Architecture (ADR-0015)
 
-Cellos is **NOT** a traditional Linux-style OS. It uses:
+Cellos is a **Dual-Mode Hybrid Operating System** combining the extreme zero-copy performance of a Single Address Space with the robust fault containment of hardware paged domains:
 
-- **Cellular Architecture**: Software organized as **Cells** (not processes), all sharing one address space
-- **Language-Based Isolation**: Rust's type system (not hardware MMU) provides isolation
-- **Single Address Space (SAS)**: Kernel and all Cells live in one virtual memory space, with no process boundaries
-- **Zero-Copy IPC**: Capability-based message passing using owned buffers
+- **Tier 1: Real-Time SAS (Zero-Copy & Low Latency)**:
+  - Software organized as **Cells** sharing one virtual address space (`KERNEL_ROOT`).
+  - **Language-Based Isolation (LBI)**: Enforced via Rust's compile-time type system (`#![forbid(unsafe_code)]`) and mandatory Ed25519 signature verification at the loader.
+  - **Audited Driver Cells**: Hardware device drivers (VirtIO, NVMe, e1000) operate in Tier 1 with IOMMU-checked volatile MMIO and DMA buffers.
+  - **Fastpath IPC**: Lock-free SPSC shared-memory ring buffers between same-hart cells bypass kernel trap overhead.
 
-**Impact**: No expensive context switches, no TLB flushes, minimal privilege escalation overhead.
+- **Tier 2: Paged Domain Engine (Hardware Memory Containment)**:
+  - Dedicated per-domain hardware page tables (`satp` on RISC-V, `CR3` on x86, `TTBR0` on ARM).
+  - **Mandatory destination** for all C/FFI code (`doom`, `tetris-c`, `mlibc`), dynamic runtimes (Lua), and **all unsigned binaries** (even if written in Rust).
+  - Faults (SIGSEGV, NULL pointer, buffer overflow) trigger CPU Page Faults caught by the kernel; offending cells are terminated without touching SAS Tier 1.
+  - Microkernel IPC bridge with explicit `validate_user_buf` boundary copies.
 
-### Scope Doctrine — SAS/LBI-first (decided 2026-06-23)
+- **Tier 3: Hardware Virtual Machine Guest (Ecosystem Interop)**:
+  - Hardware hypervisor utilizing Stage-2 paging running unmodified Linux guests (Alpine, Nginx, ROS2, Docker).
 
-The architecture above is the product. **New capability is built natively only when it leverages SAS/LBI** (zero-copy IPC, type-isolation, never-die, capability model). The wider software ecosystem is **not** ported into the native/kernel layer — it runs in a **Tier 3 Linux VM** (`apk add` today on Alpine; broader package-manager coverage remains platform work), except a narrow set of trusted libraries linked into Tier 1 runtime profiles (crypto, codec, libm, sensor protocols). This keeps Cellos's identity intact and avoids re-implementing what Linux already does well.
+### Scope Doctrine — Dual-Mode Routing Framework (ADR-0015)
 
-Routing any new idea: (1) uses SAS/LBI → **Tier 1 native**; (2) trusted library a native Cell needs → **Tier 1 `ffi-posix` profile — port the library, not the feature**; (3) untrusted native code without source disclosure → **Tier 2 native domain once implemented**; (4) general Linux app / fork-based / POSIX stack → **Tier 3 VM**; (5) replicates Linux into native or erodes SAS/LBI → **reject**. Validated repeatedly: server cluster ("don't clone CNCF, Cellos is a great *node*"), nginx/postgres/CPython (Tier 3), mTLS/X.509 (Tier-3/interop, never PKI in kernel), Noise kept SAS-native, MicroPython dropped.
+The architecture above is the product. **New capability is built natively only when it leverages SAS/LBI** (zero-copy IPC, type-isolation, never-die, capability model). The wider software ecosystem is **not** ported into the native/kernel layer without containment.
+
+**Routing any new idea**:
+1. **Uses SAS/LBI with 100% Safe Rust (`#![forbid(unsafe_code)]`) or audited Driver Cell (MMIO/DMA under IOMMU) with valid Ed25519 signature** → **Tier 1 Real-Time SAS**.
+2. **C/C++/Zig libraries (`posix-shim`, `mlibc`), games/utilities (`doom`, `tetris-c`), dynamic runtimes (Lua), or unsigned native binaries** → **Tier 2 Paged Domain (Hardware MMU Contained)**.
+3. **General Linux application / fork-based / full POSIX networking or container stack (Nginx, ROS2, Alpine)** → **Tier 3 VM Guest**.
+4. **Replicates Linux monolithic complexity into the native kernel or erodes SAS/LBI guarantees** → **Reject**.
 
 ---
 
@@ -728,10 +753,11 @@ Cell-spawn allocation exhaustion is encoded additively as `-2` for the four cell
 decoded as `SyscallError::OutOfMemory`. Generic syscall errors retain the legacy `-1` sentinel.
 Source-stage and bounded caller/path logs make exhaustion diagnosable without panicking the kernel.
 
-The current RV64 benchmark measures allocator commitment directly: **135,782,400 bytes
-(129.49 MiB)** on 2026-08-01. This exceeds the unchanged `<10 MiB` performance objective; the
-measurement mechanism is complete, while memory reduction remains separate work. The destructive
-capacity probe is excluded from default images and enabled only with
+The current `rv64-qemu-virt-2h-256m-v2` benchmark measures allocator commitment directly:
+**79,773,696 bytes (76.08 MiB)** on 2026-09-05. The prior 2026-08-01 profile observed
+135,782,400 bytes. Both exceed the unchanged `<10 MiB` performance objective; evidence validity
+is complete for the current QEMU capture while memory reduction remains separate work. The
+destructive capacity probe is excluded from default images and enabled only with
 `CELLOS_INCLUDE_CAPACITY_PROBE=1` for test-mode builds.
 
 **Capability-Based Access Control**:
@@ -1208,7 +1234,7 @@ cells/runtimes/lua/       — Lua 5.4 via FFI (⚠️ milestone marked complete 
 
 **Tests**: Integration & stress test cells
 ```
-cells/tests/bench/           — RT + SMP latency benchmark (3 scenarios)
+cells/tests/bench/           — versioned 17-record latency, RT, load, SMP and stage-breakdown benchmark
 cells/tests/vfs-test/        — VFS service test suite (8 scenarios)
 cells/tests/srv-test/        — Spawn + state transfer tests
 cells/tests/hypervisor-test/ — Tier 3 VM lifecycle tests
@@ -2044,13 +2070,13 @@ Areas where the current implementation diverges from the specification or modern
 | Gap | Impact | Status / Target |
 |-----|--------|-----------------|
 | IPC is syscall-based, not direct vtable call | Direct-vtable fast-path remains unimplemented; use measured IPC results rather than an estimated multiplier | **Open** — wire contract ratified ([specs/17](specs/17-ipc-wire-contract.md)); direct vtable fast-path still Phase 27 |
-| Fixed-priority scheduler shipped; RV64 immediate preemption only | Consolidated latency baseline still pending | **Closed / verify** — architecture-scoped limit |
+| Fixed-priority scheduler shipped; RV64 immediate preemption only | Hardware-qualified latency remains pending | **QEMU baseline valid** — profile v2 is valid, target FAIL, history BASELINE_ONLY; architecture-scoped and hardware limits remain |
 | TLSF pool initialised but unused; no runtime caller or WCET qualification | RT allocation guarantee not yet established | **Open** — follow-up qualification |
 | Per-path stack sizing | Measured table now covers init/shell/vfs/vfs-test/net/virtio-net with 16 usable pages + 2 guards; unknown/risky paths remain 64 | **Closed** — shrink is now evidence-backed; no ABI/public manifest field was added |
 | Spectre v1/v2 unmitigated in SAS | Critical for untrusted code | **Mitigated by design** — untrusted code confined to Tier 3 Linux VM (Layer-2 HW mitigations for native, see Security Model) |
 | No KASLR | Kernel address predictable | ✅ **DONE** (Phase 24, 2026-06-05 — Limine boot randomization) |
 | No per-cell memory quota enforcement | Single cell can OOM system | ✅ **DONE** (Phase 26 — quota + ZST caps + panic isolation) |
-| Performance baseline unmeasured | Can't validate PDR targets | ✅ **DONE** (Phase 24 — bench cell, RT + SMP latency) |
+| Performance baseline and evidence validity | Needed to evaluate PDR targets without false green | **QEMU baseline valid; targets open** — 17-record profile v2 is VALID, target FAIL, history BASELINE_ONLY; named-board qualification pending |
 | Audit ring buffer | Forensics | Partial — reliability P06 observability shipped; full audit log G2 |
 
 ---

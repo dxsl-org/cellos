@@ -35,6 +35,18 @@ service → production`. `execution_class` describes whether a lane may run now:
 slice may truthfully claim. QEMU and host evidence never promote a lane to
 physical, service, or production qualification.
 
+[ADR-0014](decisions/0014-lab-first-robot-workflows.md) selects LAB-01 as the first
+product workflow, with BASE-01 and ASSEMBLY-01 as gated extensions in the
+[SAS/LBI plan](../.agents/260905-1139-sas-lbi-outcome-closure/plan.md).
+Organizational replacement is scoped separately to ORG-SRV-01 web/app/microservice
+servers and ORG-PC-01 ordinary office PCs. Scope definition does not activate
+three product programs or turn robot physical work into a G2 prerequisite.
+
+[ADR-0015](decisions/0015-dual-mode-hybrid-architecture.md) settles the
+Dual-Mode Hybrid Architecture (Real-time SAS Tier 1 + Paged Domain Tier 2 + VM Guest Tier 3),
+balancing pure-Rust zero-copy performance with hardware memory isolation for C-FFI
+and unsigned code, governed by the [evolution plan](../.agents/260906-dual-mode-kernel-evolution/plan.md).
+
 ### Development-first hardware-constrained decision
 
 [ADR-0007](decisions/0007-development-first-hardware-constrained-execution.md)
@@ -96,6 +108,10 @@ proposal, commit, and evidence.
 |---|---|---|---|---|---|
 | Roadmap projection | Current executable work | `ready` | `contract` | Hardware-independent roadmap Phase 01/08 | A lane emits bounded evidence/status |
 | General QEMU software and integration | Current executable work | `ready` | `qemu` | Owning runtime/platform lane | Exercise the supported software path; do not promote the result to physical, service, or production evidence |
+| RV64 performance evidence | Current executable work | `scope-gated` | `qemu` | SAS/LBI closure Phase 04 retains three structurally valid but dirty-source-unbound generic captures and three unprofiled local C2C oracle repetitions | Add immutable dirty-source provenance, rebuild canonical compatible history, then recapture before acting on the diagnostic 76.08 MiB commitment and 9/s SMP spawn-rate misses; real grant-backed VFS rows and named-board evidence remain separate |
+| LAB-01 / BASE-01 / ASSEMBLY-01 software contracts | Current executable work | `ready` | `contract`; host/QEMU only after the named milestone evidence | SAS/LBI 06A LAB-01 and 07A BASE-01 bounded private contracts pass independent host plants at the model-only ceiling; ASSEMBLY-01 is the next slice | Consume the reviewed shared identity/dispatch/observation/reconciliation contract for 08A; native QEMU roles wait for the real Phase05 backend/oracles |
+| Robot physical workflow acceptance | External-gated prerequisite | `external-gated` | `physical` development target, unexercised | SAS/LBI plan 06C/07C/08C | Exact mechanism/controller/fixture/observation/metrology/safety package and applicable activation approvals; no procurement or motion authorization from the plan alone |
+| Organizational server and office profiles | Future capability | `scope-gated` | `contract` | ORG-SRV-01 / ORG-PC-01 profile document | Actual application/hardware inventory, compatibility/disposition matrix and separately activated implementation/qualification lane; no prerequisite on physical robot completion |
 | RPi3 HDMI software and exact-device boundary | Completed / regression-only | `scope-gated` | `physical` development evidence on the prior captured revision `a22082` / Model B / serial `000000003d042795` device; mapping to current inventory unresolved | Phases 04 and 05 completed; no active HDMI slice | Reopen only for a regression: the exact mailbox unsafe island is approved by `lungmat8`, strict F1/F5 passes, and the separately recorded TFTP deployment, later UART boot block, and user visual observation close the reviewed exact-device gate |
 | RPi3 peripheral hardware integration | Current executable work | `ready` | `host` now; `physical` development evidence after exact-device exercise | G1 board/peripheral lane using the two available Raspberry Pi 3 Model B+ boards; HDMI external-display work is completed and regression-only | Reconcile each current board's exact serial, revision, and condition before attributing evidence; stop before any production-security qualification claim |
 | Camera and other sensor integration | Current executable work | `deferred` | `contract` until resumed; then exact-device `physical` development evidence | Deferred in the current session order; the available camera must be identified before use | Resume the sensor lane in a later session and record the exact sensor/interface before exercise |
@@ -130,10 +146,13 @@ authoritative routing index; the legacy roadmap remains historical only.
 
 Cellos is being shaped around product stages, not only phase numbers:
 
-- G1 Robot & Embedded: RV64/ARM64 SBC-class robot/embedded system with bounded
-  memory, hardware I/O, fast boot, and never-die supervision.
-- G2 Server & Specialized PC: x86_64/server qualification, SMP throughput,
-  large storage, zero-downtime service upgrades, desktop/tooling depth.
+- G1 Robot & Embedded: LAB-01 dry carrier transfer first on a bounded native
+  lab platform; BASE-01 tray transport and ASSEMBLY-01 stationary integration
+  follow their own exact-device gates. No general humanoid or safety claim.
+- G2 Organization Servers & Office PCs: web/app/microservice server and ordinary
+  office workflows on selected organizational cohorts. Application compatibility,
+  physical qualification, isolation and operational sovereignty are separate
+  requirements; specialist devices are not the initial target.
 - G3 NPU-native Compute OS: parked until real NPU hardware and vendor API
   experience inform the contract.
 - G4 Full Rust std for Tier 1 Cells: planned as a `rust-std` runtime profile

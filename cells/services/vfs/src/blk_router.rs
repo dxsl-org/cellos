@@ -109,3 +109,35 @@ pub fn blk_flush() -> bool {
         ostd::syscall::sys_blk_flush()
     }
 }
+
+/// Read `count` 512-byte sectors starting at absolute LBA `abs_lba` into `buf`.
+pub fn blk_read_sectors(abs_lba: u64, count: u32, buf: &mut [u8]) -> bool {
+    if buf.len() < (count as usize) * SECTOR_SIZE {
+        return false;
+    }
+    for i in 0..count {
+        let mut tmp = [0u8; SECTOR_SIZE];
+        if !blk_read(abs_lba + i as u64, &mut tmp) {
+            return false;
+        }
+        let off = (i as usize) * SECTOR_SIZE;
+        buf[off..off + SECTOR_SIZE].copy_from_slice(&tmp);
+    }
+    true
+}
+
+/// Write `count` 512-byte sectors starting at absolute LBA `abs_lba` from `data`.
+pub fn blk_write_sectors(abs_lba: u64, count: u32, data: &[u8]) -> bool {
+    if data.len() < (count as usize) * SECTOR_SIZE {
+        return false;
+    }
+    for i in 0..count {
+        let off = (i as usize) * SECTOR_SIZE;
+        let mut tmp = [0u8; SECTOR_SIZE];
+        tmp.copy_from_slice(&data[off..off + SECTOR_SIZE]);
+        if !blk_write(abs_lba + i as u64, &tmp) {
+            return false;
+        }
+    }
+    true
+}

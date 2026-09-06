@@ -25,11 +25,9 @@ static STATE: AtomicU8 = AtomicU8::new(0);
 static TIMER_COUNT: AtomicU8 = AtomicU8::new(0);
 static B_RETURN_RIP: AtomicU64 = AtomicU64::new(0);
 
-unsafe extern "Rust" {
-    safe fn vi_x86_idt_cpl3_park_b();
-    safe fn vi_x86_idt_cpl3_wake_b();
-    safe fn vi_x86_idt_cpl3_switch_to_a();
-}
+use hal_arch_trait::kernel_abi::{
+    vi_x86_idt_cpl3_park_b, vi_x86_idt_cpl3_switch_to_a, vi_x86_idt_cpl3_wake_b,
+};
 
 fn transition(from: u8, to: u8) {
     if STATE

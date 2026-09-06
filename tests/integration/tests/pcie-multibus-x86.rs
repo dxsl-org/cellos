@@ -55,8 +55,7 @@ fn make_nvme_disk() -> PathBuf {
         .truncate(true)
         .open(&path)
         .expect("create NVMe disk image");
-    file.set_len(64 * 1024 * 1024)
-        .expect("set NVMe disk size");
+    file.set_len(64 * 1024 * 1024).expect("set NVMe disk size");
     path
 }
 
@@ -66,11 +65,8 @@ fn bus1_nvme_is_discovered_and_initialized() {
         return;
     }
     let disk = make_nvme_disk();
-    let qemu = QemuRunner::boot_x86_bios_with_multibus_nvme(
-        &iso_path(),
-        &disk.to_string_lossy(),
-        false,
-    );
+    let qemu =
+        QemuRunner::boot_x86_bios_with_multibus_nvme(&iso_path(), &disk.to_string_lossy(), false);
     qemu.wait_for(BUS1_NVME, BOOT_TIMEOUT)
         .unwrap_or_else(|error| panic!("bus-1 NVMe was not registered: {error}\n{}", qemu.dump()));
     qemu.wait_for("[driver_cell] block driver registered", BOOT_TIMEOUT)
@@ -86,29 +82,38 @@ fn bus1_nvme_dma_completes_under_vtd() {
         return;
     }
     let disk = make_nvme_disk();
-    let qemu = QemuRunner::boot_x86_bios_with_multibus_nvme(
-        &iso_path(),
-        &disk.to_string_lossy(),
-        true,
-    );
+    let qemu =
+        QemuRunner::boot_x86_bios_with_multibus_nvme(&iso_path(), &disk.to_string_lossy(), true);
     qemu.wait_for("[vtd] Intel VT-d: DMA isolation ACTIVE", BOOT_TIMEOUT)
         .unwrap_or_else(|error| panic!("VT-d did not activate: {error}\n{}", qemu.dump()));
     qemu.wait_for(BUS1_NVME, BOOT_TIMEOUT)
         .unwrap_or_else(|error| panic!("bus-1 NVMe was not registered: {error}\n{}", qemu.dump()));
     qemu.wait_for(BUS1_DMA, BOOT_TIMEOUT)
-        .unwrap_or_else(|error| panic!("bus-1 VT-d DMA mapping was not authorized: {error}\n{}", qemu.dump()));
+        .unwrap_or_else(|error| {
+            panic!(
+                "bus-1 VT-d DMA mapping was not authorized: {error}\n{}",
+                qemu.dump()
+            )
+        });
     qemu.wait_for("[driver_cell] block driver registered", BOOT_TIMEOUT)
-        .unwrap_or_else(|error| panic!("bus-1 NVMe DMA did not complete: {error}\n{}", qemu.dump()));
+        .unwrap_or_else(|error| {
+            panic!("bus-1 NVMe DMA did not complete: {error}\n{}", qemu.dump())
+        });
 
     let serial = qemu.dump();
     let active = serial
         .find("[vtd] Intel VT-d: DMA isolation ACTIVE")
         .expect("VT-d marker exists");
-    let mapping = serial.find(BUS1_DMA).expect("bus-1 DMA authorization exists");
+    let mapping = serial
+        .find(BUS1_DMA)
+        .expect("bus-1 DMA authorization exists");
     let initialized = serial
         .find("[driver_cell] block driver registered")
         .expect("block driver marker exists");
-    assert!(active < mapping && mapping < initialized, "invalid VT-d/DMA order:\n{serial}");
+    assert!(
+        active < mapping && mapping < initialized,
+        "invalid VT-d/DMA order:\n{serial}"
+    );
     assert!(!serial.contains("[KERNEL PANIC]"), "{serial}");
     let _ = std::fs::remove_file(disk);
 }

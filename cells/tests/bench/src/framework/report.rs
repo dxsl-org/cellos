@@ -21,15 +21,34 @@ pub fn print_report(r: &BenchReport) {
     println(&format_report(r));
 }
 
-/// Print a machine-readable JSON line (for CI parsing).
+/// Print a machine-readable private JSON line for CI parsing.
+///
+/// Do not use the legacy `BenchReport::write_json` formatter here: the Phase01
+/// evidence contract requires strict JSON and validates this retained raw line.
 pub fn print_json(r: &BenchReport) {
-    let mut buf = [0u8; 256];
-    let len = r.write_json(&mut buf);
-    if len > 0 {
-        if let Ok(s) = core::str::from_utf8(&buf[..len]) {
-            println(s);
-        }
-    }
+    use alloc::format;
+    println(&format!(
+        "{{\"name\":\"{}\",\"n\":{},\"min\":{},\"p50\":{},\"p99\":{},\"max\":{}}}",
+        r.name, r.n, r.min, r.p50, r.p99, r.max
+    ));
+}
+
+/// Print the private footprint record without pretending bytes are latency.
+pub fn print_memory_json(name: &str, bytes: u64) {
+    use alloc::format;
+    println(&format!(
+        "{{\"name\":\"{}\",\"n\":1,\"bytes\":{}}}",
+        name, bytes
+    ));
+}
+
+/// Print a private scalar metric record.
+pub fn print_value_json(name: &str, n: u32, value: u64) {
+    use alloc::format;
+    println(&format!(
+        "{{\"name\":\"{}\",\"n\":{},\"value\":{}}}",
+        name, n, value
+    ));
 }
 
 /// Format a single-line human-readable report string.

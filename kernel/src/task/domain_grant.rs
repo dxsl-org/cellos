@@ -4,6 +4,7 @@
 //! PTE, performs the synchronous CPU shootdown, and retains the owner's frame.
 //! A grant that cannot observe safe-root quiescence remains `Revoking`.
 
+#![allow(dead_code)]
 use super::domain_switch::DomainRef;
 use crate::memory::{
     address_space::{AddressSpaceError, MappingKind},

@@ -63,6 +63,8 @@ fn main() {
                  kernel/ and the workspace root)"
             );
         }
+    } else if board_rpi3 && PathBuf::from("../target/rpi3-embedded").exists() {
+        PathBuf::from("../target/rpi3-embedded")
     } else if arch_embedded.exists() {
         arch_embedded
     } else {

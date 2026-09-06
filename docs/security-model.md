@@ -80,43 +80,32 @@ SAS is the worst-case environment for Spectre attacks. In a traditional OS, Spec
 - Medium-term: Tier 3 VM isolation for untrusted code (hardware page tables per VM)
 - Long-term: CHERIoT RISC-V hardware capabilities — see "Hardware Isolation Roadmap" section below
 
-**Do NOT use Cellos to run untrusted third-party code until either containment tier is
-implemented/available for the workload: Tier 2 native domains or Tier 3 VM guests.**
-Tier 2 does not exist today: the native kernel holds a single root page table
-(`memory/paging.rs:38` `KERNEL_ROOT`) and no native Cell context switch writes
-`satp`/`TTBR0`/`CR3`. An unsigned Cell admitted to that shared address space is
-therefore contained by nothing but the Rust type system. The Tier 3 ARM64 guest
-path exists, but its strict lane remains hardware/KVM-gated; where that VM path
-is unavailable or unqualified, untrusted third-party code must not run.
+**Settled Architecture Baseline (ADR-0015)**: [ADR-0015](decisions/0015-dual-mode-hybrid-architecture.md)
+formalizes Cellos as a **Dual-Mode Hybrid Operating System**:
 
-Terminology note: `Tier 1b` is no longer a containment tier. It is a legacy name
-for trusted Tier-1 runtime profiles such as `ffi-posix` and `lua`; it must not be
-used for hostile C/FFI code.
+1. **Tier 1 (Real-Time SAS)**:
+   - **Strict Safe Rust**: Compile-time `#![forbid(unsafe_code)]` verified via mandatory Ed25519 signatures (`signing-required = ON`).
+   - **Audited Driver Cells**: Essential hardware drivers (VirtIO, NVMe, e1000) that require raw MMIO registers and DMA pointers operate in Tier 1 under IOMMU translation authorization. They form a strictly bounded, audited kernel-driver surface distinct from user-facing applications.
+   - **Fastpath IPC**: Lock-free SPSC shared memory ring buffer between same-hart cells eliminates kernel trap overhead.
 
-> **Full analysis:** [research/research-hardware-isolation.md](research/research-hardware-isolation.md) — covers the
-> full menu of hardware supplements (CFI, MPK/PKS, MPU/PMP, RISC-V WorldGuard/Smmtt, IOMMU/IOPMP, confidential
-> computing, CHERI), each rated against the SAS "no-TLB-flush-per-Cell-switch" criterion, plus peer-OS prior art
-> (Tock, Hubris, RedLeaf, Theseus, Singularity, CheriOS) and a severity-ranked gap list.
+2. **Tier 2 (Paged Domain Engine)**:
+   - **Hardware Memory Containment**: Dedicated per-domain page tables (`satp` on RISC-V, `CR3` on x86, `TTBR0` on ARM).
+   - **Mandatory destination**: All unsigned binaries (including unsigned Rust developed during debug cycles), all C/C++ FFI applications (Doom, Tetris-C, mlibc), and dynamic runtimes (Lua).
+   - **Safe Reaping**: Memory violations (null pointer dereferences, buffer overflows) trigger CPU Page Faults caught by the kernel; the offending cell is terminated without compromising the SAS.
+   - **IPC Bridge**: Microkernel syscall traps with `validate_user_buf` boundary copying.
 
-> **Isolation strategy decision (2026-06-05):** per-Cell **SATP** isolation at Tier 1 is
-> **explicitly NOT pursued**. PMP is M-mode-only (unreachable from Cellos's S-mode without
-> custom firmware) and sPMP is unratified; per-cell SATP would break Tier 1 zero-copy IPC.
-> Hardware isolation available **today** is **Tier 3 Stage-2 paging (per-VM)**, so untrusted
-> third-party code is confined to **Tier 3 (Linux VM / hypervisor)** for now. **Tier 2**
-> (accepted, **not yet implemented**) will run an unsigned native cell in its own page-table
-> domain — same cell shape and SDK as Tier 1, contained by the MMU instead of by trust — see
-> [specs/18-cell-trust-tiers.md](specs/18-cell-trust-tiers.md) §2.2. Note that the decision
-> not to pursue per-Cell SATP applies to **Tier 1**, where it would break zero-copy IPC; it
-> is not an argument against Tier 2, which pays exactly that cost deliberately, in exchange
-> for needing no trust in the code it contains. Ed25519 verification runs at the common
-> loader spawn gate (`kernel/src/signing.rs` + `loader.rs`), but the default G1 posture is
-> **not signed-only**: an absent signature is admitted to the SAS because
-> `signing-required` is off. `/bin/` remains an authorization label, and signature status
-> does not select a memory tier. See Specs 12 and 18.
-> Spec 22 is the mandatory design and negative-test gate before Tier 2 can be implemented
-> or offered; it preserves the current truth that unsigned native code is not contained.
-> That gate also requires recoverable, domain-aware copying for every syscall user pointer:
-> an MMU root alone cannot make a raw kernel dereference of hostile user memory safe.
+3. **Tier 3 (Hardware Virtual Machine Guest)**:
+   - Full hardware virtualization via Stage-2 paging running unmodified Linux guests.
+
+#### Cell Admission Matrix (ADR-0015)
+
+| Source & Language | Signed (`__ViCell_sig`) | Target Execution Tier | Isolation Mechanism | IPC Mechanism |
+|---|:---:|:---:|---|---|
+| **Safe Rust (`#forbid(unsafe)`)** | **YES** | **Tier 1 (SAS)** | LBI (Rust ownership) + Shared Space | Zero-Trap SPSC Ring Buffer / Grant |
+| **Driver Cell (Audited MMIO/DMA)** | **YES** | **Tier 1 (SAS)** | IOMMU + Audited Unsafe Surface | Direct MMIO / DMA Buffers |
+| **Rust (Unsigned / Debug)** | **NO** | **Tier 2 (Domain)** | Hardware Page Table (`satp`/`CR3`) | Syscall Trap + Bounded Copy |
+| **C / C++ / POSIX (mlibc)** | Any | **Tier 2 (Domain)** | Hardware Page Table (`satp`/`CR3`) | Syscall Trap + Bounded Copy |
+| **Linux OS Guest Image** | Any | **Tier 3 (VM)** | Stage-2 Hypervisor Paging | VirtIO Virtual Network / Block |
 
 ### KASLR — Shipped (Phase 24)
 **Severity: Resolved**

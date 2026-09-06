@@ -150,7 +150,10 @@ mod tests {
     fn flags_round_trip() {
         let mut sample = SAMPLE;
         sample.flags = CALLER_FLAG_VFS_MUTATE;
-        assert_eq!(CallerIdentity::from_trailer(&sample.to_trailer()), Some(sample));
+        assert_eq!(
+            CallerIdentity::from_trailer(&sample.to_trailer()),
+            Some(sample)
+        );
     }
 
     #[test]

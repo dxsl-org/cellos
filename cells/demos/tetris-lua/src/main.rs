@@ -34,7 +34,12 @@ use ostd::syscall::{sys_exit, sys_get_time};
 #[cfg(not(lua_c_unavailable))]
 use ostd::task::yield_now;
 
-declare_manifest!(block_io = false, network = false, spawn = false);
+declare_manifest!(
+    block_io = false,
+    network = false,
+    spawn = false,
+    tier = api::manifest::PROTECTION_CLASS_FFI
+);
 
 #[cfg(not(lua_c_unavailable))]
 const SURF_W: u32 = api::display::FALLBACK_WIDTH;

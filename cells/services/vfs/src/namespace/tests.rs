@@ -7,9 +7,9 @@ impl NamespaceLedger {
         let entries = self.entries.lock();
         #[cfg(test)]
         let entries = self.entries.lock().unwrap();
-        entries.get(key).map(|state| {
-            (state.transient, state.service_handle, state.exclusive)
-        })
+        entries
+            .get(key)
+            .map(|state| (state.transient, state.service_handle, state.exclusive))
     }
 
     #[cfg(test)]
@@ -34,10 +34,24 @@ fn canonical_srv_keys_reject_aliases_and_invalid_paths() {
         assert_eq!(parsed.as_str(), path);
     }
     for path in [
-        "", "srv/a", "//srv/a", "/", "/srv/", "/srv//a", "/srv/a//b",
-        "/srv/./a", "/srv/a/../b", "/srv/a/", "/srv-other/a", "/srv/a\0b",
+        "",
+        "srv/a",
+        "//srv/a",
+        "/",
+        "/srv/",
+        "/srv//a",
+        "/srv/a//b",
+        "/srv/./a",
+        "/srv/a/../b",
+        "/srv/a/",
+        "/srv-other/a",
+        "/srv/a\0b",
     ] {
-        assert_eq!(NamespaceKey::parse(path), Err(InvalidNamespaceKey), "{path:?}");
+        assert_eq!(
+            NamespaceKey::parse(path),
+            Err(InvalidNamespaceKey),
+            "{path:?}"
+        );
     }
 }
 
@@ -46,13 +60,19 @@ fn shared_leases_block_exclusive_reservations() {
     let ledger = NamespaceLedger::new();
     let a = key("/srv/a");
     let transient = ledger.acquire_transient(&a).expect("transient");
-    assert!(matches!(ledger.reserve_one(&a), Err(AcquireError::Conflict)));
+    assert!(matches!(
+        ledger.reserve_one(&a),
+        Err(AcquireError::Conflict)
+    ));
     let handle = ledger
         .acquire_service_handle(&a)
         .expect("compatible shared lease");
     assert_eq!(ledger.snapshot(&a), Some((1, 1, false)));
     drop(transient);
-    assert!(matches!(ledger.reserve_one(&a), Err(AcquireError::Conflict)));
+    assert!(matches!(
+        ledger.reserve_one(&a),
+        Err(AcquireError::Conflict)
+    ));
     drop(handle);
     assert_eq!(ledger.snapshot(&a), None);
 }
@@ -99,7 +119,10 @@ fn equal_key_pair_is_deduplicated() {
     let reservation = ledger.reserve_two(&a, &a).expect("deduplicated");
     assert_eq!(ledger.snapshot(&a), Some((0, 0, true)));
     assert_eq!(ledger.entry_count(), 1);
-    assert!(matches!(ledger.reserve_one(&a), Err(AcquireError::Conflict)));
+    assert!(matches!(
+        ledger.reserve_one(&a),
+        Err(AcquireError::Conflict)
+    ));
     drop(reservation);
     assert_eq!(ledger.entry_count(), 0);
 }

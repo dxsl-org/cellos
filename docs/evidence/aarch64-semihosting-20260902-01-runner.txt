@@ -1,0 +1,291 @@
+EVENT_ID=aarch64-semihosting-20260902-01
+EVIDENCE_OWNER=Main
+LEDGER_STEWARD=Main
+EVIDENCE_RUNNER=ArmEvidenceRunner
+INDEPENDENT_REVIEWER=SixLanePlanValidator
+IDENTITY_SEPARATION=Main!=ArmEvidenceRunner!=SixLanePlanValidator
+CAPTURE_START_UTC=2026-09-02T07:55:38Z
+RESOLUTION_TTL_SECONDS=604800
+RESOLUTION_EXPIRES_UTC=2026-09-09T07:55:38Z
+GIT_HEAD=c1895c09b62c966bf152a915c34d9d803a083ecc
+GIT_TREE=ddb119da19b7413204b4ddb8d8eca74b9335aa39
+QEMU_COMMAND_PATH=/usr/bin/qemu-system-aarch64
+QEMU_RESOLVED_PATH=/usr/bin/qemu-system-aarch64
+QEMU_VERSION=QEMU emulator version 8.2.2 (Debian 1:8.2.2+ds-0ubuntu1.17)
+QEMU_SHA256=9768bf9b821acf3ce0211f76f4c5bb110508c1297e93f787e361c63934e47ede
+BUILD_COMMAND=bash scripts/build-aarch64-test-hooks-ci.sh
+RUNNER_COMMAND=bash scripts/qemu-aarch64-test-hooks.sh
+RUNNER_SCOPE=test-hooks-only; production boot defaults unchanged
+GLOBAL_FAULT_POLICY=unchanged
+BUILD_BEGIN_UTC=2026-09-02T07:55:38Z
+==> Building base cells (init, shell, config)...
+   Compiling types v0.1.0 (/home/dmin/cellos/libs/types)
+   Compiling service-config v0.1.0 (/home/dmin/cellos/cells/services/config)
+   Compiling app-shell v0.1.0 (/home/dmin/cellos/cells/tools/shell)
+   Compiling app-init v0.1.0 (/home/dmin/cellos/cells/tools/init)
+   Compiling api v0.1.0 (/home/dmin/cellos/libs/api)
+   Compiling ostd v0.2.0 (/home/dmin/cellos/libs/ostd)
+   Compiling text-engine v0.1.0 (/home/dmin/cellos/libs/text-engine)
+    Finished `release` profile [optimized] target(s) in 5.08s
+warning: the following packages contain code that will be rejected by a future version of Rust: core v0.0.0 (/home/dmin/.rustup/toolchains/nightly-2026-05-01-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core)
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+==> Building test-hooks cells (service-vfs, app-vfs-test, atomic-publication-probe)...
+   Compiling service-vfs v0.1.0 (/home/dmin/cellos/cells/services/vfs)
+   Compiling types v0.1.0 (/home/dmin/cellos/libs/types)
+   Compiling driver-disk v0.1.0 (/home/dmin/cellos/cells/drivers/disk)
+   Compiling api v0.1.0 (/home/dmin/cellos/libs/api)
+   Compiling ostd v0.2.0 (/home/dmin/cellos/libs/ostd)
+    Finished `release` profile [optimized] target(s) in 4.52s
+warning: the following packages contain code that will be rejected by a future version of Rust: core v0.0.0 (/home/dmin/.rustup/toolchains/nightly-2026-05-01-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core)
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+   Compiling app-vfs-test v0.2.0 (/home/dmin/cellos/cells/tests/vfs-test)
+    Finished `release` profile [optimized] target(s) in 0.64s
+warning: the following packages contain code that will be rejected by a future version of Rust: core v0.0.0 (/home/dmin/.rustup/toolchains/nightly-2026-05-01-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core)
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+   Compiling atomic-publication-probe v0.1.0 (/home/dmin/cellos/cells/tests/atomic-publication-probe)
+    Finished `release` profile [optimized] target(s) in 0.49s
+warning: the following packages contain code that will be rejected by a future version of Rust: core v0.0.0 (/home/dmin/.rustup/toolchains/nightly-2026-05-01-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core)
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+==> Building stack-sizing paths (service-net, driver-virtio-net, service-input)...
+   Compiling service-net v0.1.0 (/home/dmin/cellos/cells/services/net)
+   Compiling driver-virtio-net v0.1.0 (/home/dmin/cellos/cells/drivers/virtio-net)
+   Compiling service-input v0.2.0 (/home/dmin/cellos/cells/services/input)
+   Compiling api v0.1.0 (/home/dmin/cellos/libs/api)
+   Compiling ostd v0.2.0 (/home/dmin/cellos/libs/ostd)
+    Finished `release` profile [optimized] target(s) in 2.84s
+warning: the following packages contain code that will be rejected by a future version of Rust: core v0.0.0 (/home/dmin/.rustup/toolchains/nightly-2026-05-01-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core)
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+==> Verifying 9 cell binaries...
+==> Signing 9 cells (mandatory F1/F5)...
+OK:   signed 9 cell(s) with the dev key after a passing F1/F5 check
+==> Assembling kernel_fs.img (test-hooks)...
+wrote 927 bytes to /tmp/tmp.A1zMBHoWUD/POLICY.BIN
+Created FAT16 image at kernel/src/embedded-test-hooks/kernel_fs.img: 11 file(s), 2 director(ies), 8031 clusters.
+   kernel_fs.img: 2.6M
+   init: 100K
+==> Building test-hooks kernel (aarch64, PIC)...
+   Compiling types v0.1.0 (/home/dmin/cellos/libs/types)
+   Compiling api v0.1.0 (/home/dmin/cellos/libs/api)
+   Compiling cellos-boards v0.2.0 (/home/dmin/cellos/boards)
+   Compiling cellos-kernel v0.2.1 (/home/dmin/cellos/kernel)
+   Compiling hal-paging v0.1.0 (/home/dmin/cellos/hal/traits/paging)
+   Compiling hal-hypervisor v0.1.0 (/home/dmin/cellos/hal/traits/hypervisor)
+   Compiling hal-display v0.1.0 (/home/dmin/cellos/hal/traits/display)
+   Compiling hal-timer v0.1.0 (/home/dmin/cellos/hal/traits/timer)
+   Compiling hal-traits-mmc v0.1.0 (/home/dmin/cellos/hal/traits/mmc)
+   Compiling hal-uart v0.1.0 (/home/dmin/cellos/hal/traits/uart)
+   Compiling hal-interrupt v0.1.0 (/home/dmin/cellos/hal/traits/interrupt)
+   Compiling hal-arm v0.1.0 (/home/dmin/cellos/hal/arch/arm)
+   Compiling hal-core v0.2.0 (/home/dmin/cellos/hal/core)
+    Finished `release` profile [optimized] target(s) in 7.07s
+warning: the following packages contain code that will be rejected by a future version of Rust: core v0.0.0 (/home/dmin/.rustup/toolchains/nightly-2026-05-01-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core)
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+==> Done: target/aarch64-unknown-none-softfloat/release/cellos-kernel-test-hooks
+BUILD_END_UTC=2026-09-02T07:56:00Z
+ELF_PATH=target/aarch64-unknown-none-softfloat/release/cellos-kernel-test-hooks
+ELF_SHA256=607b4932b545ceef75ccdbf682416788e6e6815ca2a6ea0151223ee4949003fa
+ELF_BYTES=6045352
+RUNNER_BEGIN_UTC=2026-09-02T07:56:00Z
+[qemu-aarch64-test-hooks] Booting kernel=target/aarch64-unknown-none-softfloat/release/cellos-kernel-test-hooks (window=35s, semihosting enabled, machine=virt)
+PASS: AArch64 test-hooks self-tests passed (semihosting enabled)
+[ INFO] [wx] self-tests PASSED
+[ INFO] ATOMIC_PUBLICATION_ALIGNMENT: PASS
+[ INFO] ATOMIC_PUBLICATION_CELL_ID_REUSE: PASS
+[ INFO] ATOMIC_PUBLICATION_FIXTURE_ROUNDTRIP: PASS
+[ INFO] ATOMIC_PUBLICATION_AP-00: PASS
+[ INFO] ATOMIC_PUBLICATION_AP-01: PASS
+[ INFO] ATOMIC_PUBLICATION_AP-02: PASS
+[ INFO] ATOMIC_PUBLICATION_AP-03: PASS
+[ INFO] ATOMIC_PUBLICATION_AP-04: PASS
+[ INFO] ATOMIC_PUBLICATION_AP-05: PASS
+[ INFO] ATOMIC_PUBLICATION_AP-06: PASS
+[ INFO] ATOMIC_PUBLICATION_AP-07: PASS
+[ INFO] ATOMIC_PUBLICATION_AP-08: PASS
+[ INFO] ATOMIC_PUBLICATION_AP-09: PASS
+[ INFO] ATOMIC_PUBLICATION_AP-10: PASS
+[ INFO] ATOMIC_PUBLICATION_AP-11: PASS
+[ INFO] ATOMIC_PUBLICATION_ARMING: PASS
+[ INFO] [selftest] ELF-LOADER: PASS
+[ INFO] [selftest] THREAD-CAP: PASS (thread-inherit + honest-revoke + spawn bound)
+[INFO] thread-cap self-test PASS (thread-inherit + honest-revoke + spawn bound)
+[ INFO] [selftest] THREAD-QUOTA: PASS (charged, released, enforced)
+[INFO] thread-quota self-test PASS (charged, released, enforced)
+[ INFO] [selftest] COMPLETION-QUEUE: PASS (cap 32 slots, 624 bytes per cell)
+[INFO] completion-queue self-test PASS (reserve, land, bound, defer)
+[ INFO] [selftest] NET-RX-RESERVATION: PASS (fills, remembers, releases, IPC-safe)
+[INFO] net-rx-reservation self-test PASS (fill, remember, release)
+[ INFO] [selftest] IPC-PENDING: PASS (deferred, bounded, quota-safe, completion-wake)
+[INFO] ipc-pending self-test PASS (deferred delivery, bounds, quota)
+[ INFO] [selftest] IPC-GUARDRAILS: PASS (dead-peer bounded, RecvScatter isolated)
+[INFO] ipc-guardrail self-test PASS (dead-peer wake, RecvScatter isolated)
+[ INFO] [selftest] VFS-LIFETIME: PASS (atomic grant-table lease + teardown orders + exact quarantine + owner watch)
+[INFO] vfs-lifetime self-test PASS (exact lease, quarantine, owner watch)
+[INFO] stack-probe self-test PASS (two guards, overflow target unmapped, watermark)
+[INFO] stack-sizing policy self-test PASS (measured=16, unknown=64)
+[INFO] ed25519 verify self-test PASS (RFC 8032 + tamper)
+[INFO] policy verify+parse self-test PASS (signed blob + tamper)
+[INFO] cell signing self-test PASS
+[ INFO] [selftest] C3-ADM-001: PASS
+[ INFO] [selftest] C3-ADM-002: PASS
+[ INFO] [selftest] C3-ADM-003: PASS
+[ INFO] [selftest] C3-ADM-004: PASS
+[ INFO] [selftest] C3-ADM-005: PASS
+[ INFO] [selftest] C3-ADM-006: PASS
+[ INFO] [selftest] C3-ADM-007: PASS
+[ INFO] [selftest] C3-ADM-008: PASS
+[ INFO] [selftest] C3-ADM-009: PASS
+[ INFO] [selftest] C3-ADM-010: PASS
+[ INFO] [selftest] C3-ADM-011: PASS
+[ INFO] [selftest] C3-ADM-012: PASS
+[ INFO] [selftest] C3-ADM-013: PASS
+[ INFO] [selftest] C3-ADM-014: PASS
+[ INFO] [selftest] C3-ADM-015: PASS
+[ INFO] [selftest] C3-ADM-016: PASS
+[ INFO] [selftest] C3-ADM-017: PASS
+[ INFO] [selftest] C3-ADM-032: PASS
+[ INFO] [selftest] C3-ADM-033: PASS
+[ INFO] [selftest] C3-ADM-018: PASS
+[ INFO] [selftest] C3-ADM-019: PASS
+[ INFO] [selftest] C3-ADM-020: PASS
+[ INFO] [selftest] C3-ADM-021: PASS
+[ INFO] [selftest] C3-ADM-022: PASS
+[ INFO] [selftest] C3-ADM-023: PASS
+[ INFO] [selftest] C3-ADM-024: PASS
+[ INFO] [selftest] C3-ADM-025: PASS
+[ INFO] [selftest] C3-ADM-026: PASS
+[ INFO] [selftest] C3-ADM-027: PASS
+[ INFO] [selftest] C3-ADM-028: PASS
+[ INFO] [selftest] C3-ADM-029: PASS
+[ INFO] [selftest] C3-ADM-030: PASS
+[ INFO] [selftest] C3-ADM-031: PASS
+[INFO] admission-core self-test PASS (fail-closed A/B floor model)
+[ INFO] [selftest] P-TRUST: PASS (privileged path-caps bounded by ceiling)
+[INFO] P-TRUST self-test PASS (privileged path-caps ceiling-bounded)
+[ INFO] [selftest] boot-ceiling: PASS (per-path table, no union collapse)
+[INFO] boot-ceiling self-test PASS (per-path table, no union collapse)
+[INFO] mmio-allowlist self-test PASS (known windows live, DWC2 denied)
+[ INFO] [selftest] MANIFEST-V2: PASS (v1 upcast + v2 parse + protection-class floor invariant)
+[INFO] Manifest-v2 self-test PASS (v1 upcast + v2 parse + tier-floor)
+[ INFO] ATOMIC_PUBLICATION_AP-15: PASS
+[ INFO] Successfully spawned init with complete root authority (tid=1)
+USER: [vfs-file-handle] wrong-owner-read-close-preserves-entry PASS
+USER: [vfs-file-handle] quota-32-per-owner PASS
+USER: [vfs-file-handle] nonreuse-and-u64-exhaustion PASS
+USER: [vfs-file-handle] exact-generation-purge PASS
+USER: [vfs-file-handle] parent-cross-owner-transitive-revoke PASS
+USER: [vfs-file-handle] owner-watch-filehandle-cleanup PASS
+USER: [vfs-file-handle] higher-generation-cleanup PASS
+USER: [PASS] write /tmp/test_lifecycle.txt
+USER: [PASS] stat size=11 is_file
+USER: [PASS] unlink /tmp/test_lifecycle.txt
+USER: [PASS] stat after unlink returns Err
+USER: [PASS] mkdir /tmp/testdir
+USER: [PASS] write inside testdir
+USER: [PASS] listdir /tmp/testdir contains f:file.txt
+USER: [PASS] rmdir /tmp/testdir after cleanup
+USER: [PASS] write /bin/ returns PermissionDenied
+USER: [PASS] write /tmp/ still works
+USER: [PASS] unlink /readme.txt (read-only / prefix) → PermissionDenied
+USER: [PASS] /readme.txt survived the refused unlink
+USER: [PASS] rmdir under / → PermissionDenied (authorized before backend)
+USER: [PASS] rmdir_recursive under / → PermissionDenied (before subtree walk)
+USER: [PASS] grant-write: unknown handle is denied before grant access
+USER: [PASS] ReadGrant unknown cap returns zero bytes without faulting
+USER: [PASS] ReadGrant unknown cap returns zero bytes for size=0
+USER: [PASS] ReadGrant unknown cap returns zero bytes for oversized offset
+USER: [PASS] grant-write: create writable target
+USER: [PASS] grant-write: helper returns committed byte count
+USER: [PASS] grant-write: commits exact bytes before acknowledgement
+USER: [PASS] grant-write: invalid offset is refused before grant access
+USER: [executor] dummy-waker=absent executor=parked source=TIMER PASS
+USER: [PASS] grant-write: short grant is refused without mutation
+USER: [PASS] grant-write: grant copy denial propagates as I/O error
+USER: [PASS] grant-write: failed writes leave committed bytes unchanged
+USER: [PASS] grant-write: copies into exact bounded destination range
+USER: [PASS] grant-write: bounded copy preserves prefix and suffix
+USER: [PASS] grant-write: write authorization precedes grant access
+USER: [PASS] grant-write: quota overflow is refused before grant access
+USER: [PASS] grant-write: quota refusal leaves committed bytes unchanged
+USER: [PASS] write file for async read
+USER: [PASS] ReadAsync returns PendingHandle
+USER: [PASS] Poll returns correct data
+USER: [PASS] Poll stale handle returns Err
+USER: [PASS] write /tmp/volatile.txt
+USER: [PASS] stat /tmp/volatile.txt size=8
+USER: [PASS] stat /tmp is_dir=true
+USER: [PASS] stat /tmp is_dir=true
+USER: [PASS] stat nonexistent returns Err
+USER: [PASS] listdir nonexistent = empty
+USER: [PASS] quota write 1 (400B) fits
+USER: [PASS] quota write 2 (800B total) fits
+USER: [PASS] quota write 3 exceeds 1.1KiB limit → Err(2)
+USER: [PASS] unlink q1 releases quota
+USER: [PASS] quota write after release succeeds
+USER: [PASS] rdir-quota: mkdir
+USER: [PASS] rdir-quota: write a.bin (400B)
+USER: [PASS] rdir-quota: write b.bin (800B total)
+USER: [PASS] rdir-quota: overflow write correctly blocked before delete
+USER: [PASS] rdir-quota: RmdirRecursive releases 800B
+USER: [PASS] rdir-quota: write after recursive delete succeeds (quota freed)
+USER: [PASS] dircap: acquiring /tmp yields a directory handle
+USER: [PASS] dircap: `..` is refused
+USER: [PASS] dircap: `../..` is refused
+USER: [PASS] dircap: an absolute name is refused
+USER: [PASS] dircap: an embedded traversal is refused
+USER: [PASS] dircap: `.` is refused
+USER: [PASS] dircap: an empty name is refused
+USER: [PASS] dircap: a backslash name is refused
+USER: [PASS] dircap: a control byte is refused
+USER: [PASS] dircap: odd UTF-8 in a name is refused
+USER: [PASS] dircap: deriving a subdirectory handle
+USER: [PASS] dircap: WriteAt creates a file inside the handle
+USER: [PASS] dircap: StatAt reports the file it just wrote
+USER: [PASS] dircap: ReadAt returns the bytes written
+USER: [PASS] dircap: ListAt lists the handle's own directory
+USER: [PASS] dircap: the handle resolved inside the directory it names
+USER: [PASS] dircap: OpenFileAt yields a file handle
+USER: [PASS] dircap: a handle can be given up
+USER: [PASS] dircap: revoking a handle revokes what was derived from it
+USER: [PASS] dircap: revoking a parent dir reaps file handles opened below it
+USER: [PASS] dircap: a revoked file handle cannot be closed into success
+USER: [PASS] dircap: acquiring /tmp yields a directory handle
+USER: [PASS] dircap: deriving a subdirectory handle
+USER: [PASS] grant: ReadFileGrant clamps to grant length
+USER: [PASS] grant: ReadFileGrant copies nonzero bytes
+USER: [PASS] dircap: GetFile returns a nonempty pointer before sealing
+USER: [PASS] dircap: OpenFileAt returns a file handle for a file
+USER: [PASS] dircap: the cell gives up naming paths
+USER: [PASS] dircap: Write{path} is refused after sealing
+USER: [PASS] dircap: the refused write left nothing behind
+USER: [PASS] dircap: GetFile is refused after sealing
+USER: [PASS] dircap: Stat is refused after sealing
+USER: [PASS] dircap: ListDir is refused after sealing
+USER: [PASS] dircap: Unlink is refused after sealing
+USER: [PASS] dircap: Mkdir is refused after sealing
+USER: [PASS] dircap: ReadAsync is refused after sealing
+USER: [PASS] dircap: widening by acquiring a new root is refused after sealing
+USER: [PASS] grant: ReadFileGrant is refused after sealing
+USER: [PASS] dircap: ReadFileHandle still works after sealing
+USER: [PASS] dircap: ReadFileHandle returns EOF for an oversized offset
+USER: [PASS] dircap: ReadFileHandle returns EOF for a zero-length request
+USER: [PASS] dircap: CloseFile closes a live file handle
+USER: [PASS] dircap: a closed file handle is stale
+USER: [PASS] dircap: handle operations still work after sealing
+USER: [PASS] dircap: UnlinkAt still works after sealing
+USER: [vfs-test] Results: 96 PASS, 0 FAIL
+USER: [vfs-test] ALL TESTS PASSED
+RUNNER_END_UTC=2026-09-02T07:56:08Z
+BUILD_RC=0
+RUNNER_RC=0
+GUARDED_CHAIN_RC=0
+OUTER_RC=0
+TEE_RC=0
+CAPTURE_END_UTC=2026-09-02T07:56:08Z
+RAW_SOURCE_PATH=qemu-aarch64-test-hooks.raw.log
+RAW_EVIDENCE_PATH=docs/evidence/aarch64-semihosting-20260902-01-raw.txt
+RAW_SOURCE_REGULAR_RC=0
+RAW_FRESH_RC=0
+RAW_COPY_RC=0
+RAW_IDENTICAL_RC=0
+RAW_SHA256=4e95514712074e077fa88c871c699aa7d8fcc039b26aa3f830f266e4b2275925
+RAW_BYTES=29571

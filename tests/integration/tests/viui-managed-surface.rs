@@ -80,7 +80,6 @@ fn settle() {
     std::thread::sleep(Duration::from_millis(250));
 }
 
-
 #[test]
 fn generated_counter_survives_managed_surface_configure() {
     if !prerequisites_ok() {
@@ -123,7 +122,9 @@ fn generated_counter_survives_managed_surface_configure() {
 
     click(&mut qemu, INITIAL_CLOSE);
     qemu.wait_for("[viui-demo] close request accepted", EVENT_TIMEOUT)
-        .unwrap_or_else(|error| panic!("accepted close did not shut down: {error}\n{}", qemu.dump()));
+        .unwrap_or_else(|error| {
+            panic!("accepted close did not shut down: {error}\n{}", qemu.dump())
+        });
 
     let closed_output = qemu.dump();
     assert!(
@@ -142,22 +143,42 @@ fn generated_counter_survives_managed_surface_configure() {
         .unwrap_or_else(|error| panic!("second shell not reached: {error}\n{}", qemu.dump()));
     qemu.send_line("viui-demo &");
     qemu.wait_for("[viui-demo] managed surface ready count=0", EVENT_TIMEOUT)
-        .unwrap_or_else(|error| panic!("second managed Counter did not render: {error}\n{}", qemu.dump()));
+        .unwrap_or_else(|error| {
+            panic!(
+                "second managed Counter did not render: {error}\n{}",
+                qemu.dump()
+            )
+        });
     settle();
     click(&mut qemu, BUTTON_CLICK);
     qemu.wait_for("[viui-demo] count=1", EVENT_TIMEOUT)
-        .unwrap_or_else(|error| panic!("second pointer activation failed: {error}\n{}", qemu.dump()));
+        .unwrap_or_else(|error| {
+            panic!("second pointer activation failed: {error}\n{}", qemu.dump())
+        });
     click(&mut qemu, INITIAL_MAXIMIZE);
     settle();
     click(&mut qemu, MAXIMIZED_RESTORE);
     settle();
     qemu.send_qemu_key("ret");
     qemu.wait_for("[viui-demo] key=Enter", EVENT_TIMEOUT)
-        .unwrap_or_else(|error| panic!("keyboard activation delivery failed: {error}\n{}", qemu.dump()));
+        .unwrap_or_else(|error| {
+            panic!(
+                "keyboard activation delivery failed: {error}\n{}",
+                qemu.dump()
+            )
+        });
     qemu.wait_for("[viui-demo] count=2", EVENT_TIMEOUT)
-        .unwrap_or_else(|error| panic!("keyboard activation after restore failed: {error}\n{}", qemu.dump()));
+        .unwrap_or_else(|error| {
+            panic!(
+                "keyboard activation after restore failed: {error}\n{}",
+                qemu.dump()
+            )
+        });
 
     let output = qemu.dump();
-    assert!(!output.contains("[KERNEL PANIC]"), "kernel panic:\n{output}");
+    assert!(
+        !output.contains("[KERNEL PANIC]"),
+        "kernel panic:\n{output}"
+    );
     assert!(!output.contains("[fault] Cell"), "Cell fault:\n{output}");
 }

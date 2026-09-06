@@ -8,6 +8,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### 🚀 Improvements
+- vfs: introduce CellosFS Native pure-Rust CoW extent engine (`libs/cellos-fs`), replacing external RedoxFS and LittleFS dependencies with power-loss-resilient dual-ring superblocks and vector block DMA
+- bench: implement native stateful workload scenario (1,000 ops, checkpoints, v1->v2 hotswap, and VFS restart recovery) verified in QEMU
+- robot: implement LAB-01 carrier transfer (06B), BASE-01 tray handoff (07B), and ASSEMBLY-01 stationary coupling (08A/08B) QEMU native witnesses with real CellosFS Native trace logging
+- lab: add a bounded model-only LAB-01 carrier-transfer contract with independent host fault plants
+- base: add a bounded model-only secured-tray handoff contract and independent host fault plants
+- performance: add immutable profile-bound RV64 benchmark captures with separate validity, target, and regression verdicts
 - platform: enumerate checked inclusive MCFG ECAM ranges across buses with canonical BDFs and per-bus VT-d contexts
 - x86_64: install 256 vector/CPL-aware IDT entries and verify them with an isolated `x86-idt-cpl3-test` two-task Ring-3 QEMU oracle
 - security: land non-admissible Tier 1 admission catalog/test infrastructure; Phase 04 production evidence remains blocked
@@ -37,6 +43,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - performance: release builds for all bootstrap table entries
 
 ### 🐛 Fixes
+- lab/base: reject reactivation of retired configuration epochs so rollback cannot revive stale readiness observations
+- base: revoke stale active dispatch authority when newer authenticated cross-job evidence reports an exclusion
+- bench: propagate scenario failures, validate intended IPC peers, fix control-loop timeout units, and retain strict serial JSON evidence
+- ostd/fs: upgrade `vfs_call` to `service_call_typed_bounded` with bounded timeout, sender-masked receive, and caller generation poisoning after receive errors
+- vfs/cellos-fs: fix inode block allocation for inode numbers > 8 with multi-slot superblock tracking, and enforce strict rmdir directory checks
+- supervisor: authorize bench role for VFS restart recovery and fix 3-byte frame parsing in hostile backend recovery
+- kernel/ostd: keep grant-owner handles task-local and fix death-subscription bookkeeping quota drift across duplicate watches, delivery, cancellation, and task retirement
 - e1000: fail closed on DMA authorization/OOM and program rings/descriptors with authorized IOVAs
 - nvme: retain authorized IOVAs for queue bases, Identify PRPs, and sector I/O buffers
 - drivers: publish initialized state before registration and fail closed when registration is rejected

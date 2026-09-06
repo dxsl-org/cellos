@@ -42,7 +42,12 @@ const SCREEN_H: u32 = api::display::FALLBACK_HEIGHT; // 768
 static mut COLMAP: [u16; SCREEN_W as usize] = [0; SCREEN_W as usize];
 static mut COLMAP_READY: bool = false;
 
-declare_manifest!(block_io = false, network = false, spawn = false);
+declare_manifest!(
+    block_io = false,
+    network = false,
+    spawn = false,
+    tier = api::manifest::PROTECTION_CLASS_FFI
+);
 
 // 10 MiB static C heap — serves picolibc malloc via _sbrk.
 // Without this, _sbrk (from sysio.rs) returns NULL → malloc always fails →

@@ -111,8 +111,6 @@ pub(crate) fn handle_path_request(
             }
         }
 
-
-
         VfsRequest::Unlink(p) => unlink_file(vfs, caller, p),
 
         VfsRequest::RmdirRecursive(p) => {

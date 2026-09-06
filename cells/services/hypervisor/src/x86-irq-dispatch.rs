@@ -5,7 +5,6 @@ use crate::{
     virtio_mmio::VirtioMmio, virtio_net::NetDev, vmm,
 };
 
-
 fn drain_host_input(uart: &mut Uart16550) {
     let mut buf = [0u8; 32];
     while let Ok(n) = ostd::syscall::sys_read(0, &mut buf) {

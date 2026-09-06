@@ -1,0 +1,16 @@
+[package]
+name = "cellos-fs"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0 OR MIT"
+description = "CellosFS Native: Pure-Rust, crash-resilient CoW Extent filesystem for Cellos Single Address Space"
+
+[dependencies]
+# No external dependencies for no_std core! Pure Rust.
+
+[features]
+default = []
+std = []
+
+[dev-dependencies]
+# Host testing with std

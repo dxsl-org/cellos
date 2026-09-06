@@ -116,13 +116,6 @@ pub enum TaskState {
 #[derive(Clone)]
 pub(crate) enum TaskAddressSpace {
     Sas,
-    #[cfg_attr(
-        not(feature = "test-hooks"),
-        expect(
-            dead_code,
-            reason = "domain admission is intentionally unavailable outside native-domain test hooks"
-        )
-    )]
     Domain(Arc<crate::memory::address_space::AddressSpace>),
 }
 
@@ -546,13 +539,21 @@ impl Task {
     }
 
     #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
-    #[cfg(feature = "test-hooks")]
-    pub(crate) fn bind_address_space_for_test(
+    pub(crate) fn bind_address_space(
         &mut self,
         address_space: Arc<crate::memory::address_space::AddressSpace>,
     ) {
         assert!(matches!(self.address_space, TaskAddressSpace::Sas));
         self.address_space = TaskAddressSpace::Domain(address_space);
+    }
+
+    #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+    #[cfg(feature = "test-hooks")]
+    pub(crate) fn bind_address_space_for_test(
+        &mut self,
+        address_space: Arc<crate::memory::address_space::AddressSpace>,
+    ) {
+        self.bind_address_space(address_space);
     }
 
     /// Acquire the fail-closed execution pin for this task's root. Sas tasks

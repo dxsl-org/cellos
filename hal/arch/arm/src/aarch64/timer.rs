@@ -9,9 +9,9 @@
 //! On RPi 3 (BCM2837): CNTFRQ_EL0 = 19.2 MHz, TICKS_PER_QUANTUM = 192_000.
 //! `ticks_per_quantum()` reads CNTFRQ_EL0 at runtime to handle both.
 
+#[cfg(not(feature = "board-rpi3"))]
 /// Fallback ticks-per-quantum for QEMU virt (~10 ms @ 62.5 MHz).
 const TICKS_PER_QUANTUM_QEMU: u64 = 625_000;
-
 #[cfg(feature = "board-rpi3")]
 const RPI3_UART_IO: usize = hal_soc_bcm27xx::BCM2837.mmio.mini_uart_io;
 #[cfg(feature = "board-rpi3")]
@@ -21,6 +21,7 @@ const RPI3_LEGACY_IRQ_BASE: usize = hal_soc_bcm27xx::BCM2837.mmio.legacy_irq_bas
 #[cfg(feature = "board-rpi3")]
 const RPI3_SYSTIMER_IRQ: u32 = hal_soc_bcm27xx::BCM2837.irq.system_timer_c1;
 
+#[cfg(not(feature = "board-rpi3"))]
 /// Compute 10 ms quantum by reading the actual timer frequency from CNTFRQ_EL0.
 fn ticks_per_quantum() -> u64 {
     let freq: u64;

@@ -179,4 +179,11 @@ extern "Rust" {
 }
 
 #[cfg(target_arch = "x86_64")]
+unsafe extern "Rust" {
+    pub safe fn vi_x86_idt_cpl3_park_b();
+    pub safe fn vi_x86_idt_cpl3_wake_b();
+    pub safe fn vi_x86_idt_cpl3_switch_to_a();
+}
+
+#[cfg(target_arch = "x86_64")]
 const _: HandlePageFault = vi_handle_page_fault;

@@ -53,36 +53,41 @@ pub fn run_heartbeat_peer() -> ! {
 
 // ── Orchestrator-only helpers ─────────────────────────────────────────────────
 
-fn spawn_worker() -> Option<usize> {
-    sys_set_spawn_args("smp-worker");
+fn spawn_worker() -> Result<usize, ()> {
+    if !sys_set_spawn_args("smp-worker") {
+        return Err(());
+    }
     match sys_spawn_pinned(PROBE_PATH, TaskPriority::Normal as u8, 0) {
-        SyscallResult::Ok(tid) => Some(tid),
-        _ => None,
+        SyscallResult::Ok(tid) if tid != 0 => Ok(tid),
+        _ => Err(()),
     }
 }
 
-/// Receive the exit notification for `tid` (caller must have already called
-/// `sys_notify_on_exit(tid)`).  Loops past unrelated notifications.
-fn recv_exit(tid: usize) {
+fn recv_exit(tid: usize) -> Result<(), ()> {
     let mut buf = [0u8; 8];
-    loop {
-        if let SyscallResult::Ok(s) = sys_recv(0, &mut buf) {
-            if s == tid {
-                break;
-            }
-        }
+    match sys_recv(tid, &mut buf) {
+        SyscallResult::Ok(sender) if sender == tid => Ok(()),
+        _ => Err(()),
     }
 }
 
-/// Register and await `tid`'s exit.
-fn wait_exit(tid: usize) {
-    let _ = sys_notify_on_exit(tid);
-    recv_exit(tid);
+fn wait_exit(tid: usize) -> Result<(), ()> {
+    if !matches!(sys_notify_on_exit(tid), SyscallResult::Ok(_)) {
+        return Err(());
+    }
+    recv_exit(tid)
+}
+
+fn force_exit(tid: usize) -> bool {
+    matches!(sys_force_exit(tid), SyscallResult::Ok(_))
 }
 
 /// Prove caller-visible dead-peer error plus queued ForceExit notification.
 pub fn run_peer_death_guard() -> ! {
-    sys_set_spawn_args("heartbeat-peer");
+    if !sys_set_spawn_args("heartbeat-peer") {
+        println("[peer-death-runtime] FAIL — heartbeat child argument staging");
+        sys_exit(1);
+    }
     let blocked_peer = match sys_spawn_pinned(PROBE_PATH, TaskPriority::Normal as u8, 0) {
         SyscallResult::Ok(tid) => tid,
         _ => {
@@ -104,7 +109,10 @@ pub fn run_peer_death_guard() -> ! {
         sys_exit(1);
     }
 
-    sys_set_spawn_args("load");
+    if !sys_set_spawn_args("load") {
+        println("[peer-death-runtime] FAIL — force-exit child argument staging");
+        sys_exit(1);
+    }
     let forced_tid = match sys_spawn_pinned(PROBE_PATH, TaskPriority::Normal as u8, 0) {
         SyscallResult::Ok(tid) => tid,
         _ => {
@@ -124,162 +132,206 @@ pub fn run_peer_death_guard() -> ! {
         println("[peer-death-runtime] FAIL — ForceExit denied");
         sys_exit(1);
     }
-    recv_exit(forced_tid);
+    let _ = recv_exit(forced_tid);
 
     println("[peer-death-runtime] PASS (blocked-send error + ForceExit notification)");
     sys_exit(0);
 }
 
+// ── Scenario results ──────────────────────────────────────────────────────────
+
+pub struct SmpMetric {
+    pub name: &'static str,
+    pub n: u32,
+    pub value: u64,
+    pub passed: bool,
+}
+
+pub struct SmpFailure {
+    pub name: &'static str,
+    pub stage: &'static str,
+    pub teardown_failed: bool,
+}
+
+pub enum SmpOutcome {
+    Metric(SmpMetric),
+    Invalid(SmpFailure),
+}
+
+fn invalid(name: &'static str, stage: &'static str, teardown_failed: bool) -> SmpOutcome {
+    SmpOutcome::Invalid(SmpFailure {
+        name,
+        stage,
+        teardown_failed,
+    })
+}
+
 // ── Scenario 1: spawn_rate ────────────────────────────────────────────────────
 
-/// Sequential spawn throughput.  PASS iff ≥ 10 tasks/sec on single-hart QEMU TCG.
-///
-/// Tests that spawn+compute+exit overhead stays bounded. The 10/sec floor
-/// accommodates single-hart QEMU TCG (observed ~15/sec); real 2-hart MTTCG
-/// achieves ≥ 30/sec.
-fn measure_spawn_rate() -> Option<bool> {
+fn measure_spawn_rate() -> SmpOutcome {
     const N: u64 = 8;
-    const TARGET: u64 = 10; // ≥ 100 ms per full lifecycle budget (conservative for TCG)
+    const TARGET: u64 = 10;
+    const NAME: &str = "smp_spawn_rate";
 
     let t0 = sys_get_time();
     for _ in 0..N {
-        match spawn_worker() {
-            Some(tid) => wait_exit(tid),
-            None => {
-                println("[smp] spawn_rate SKIP — bench-probe not at /bin/bench-probe");
-                return None;
-            }
+        let tid = match spawn_worker() {
+            Ok(tid) => tid,
+            Err(()) => return invalid(NAME, "setup", false),
+        };
+        if wait_exit(tid).is_err() {
+            return invalid(NAME, "measure", !force_exit(tid));
         }
     }
     let dt_ns = sys_get_time()
         .saturating_sub(t0)
         .saturating_mul(NS_PER_TICK);
-    let per_sec = N
-        .saturating_mul(1_000_000_000)
-        .checked_div(dt_ns)
-        .unwrap_or(u64::MAX);
-    let pass = per_sec >= TARGET;
+    if dt_ns == 0 {
+        return invalid(NAME, "measure", false);
+    }
+    let per_sec = N.saturating_mul(1_000_000_000) / dt_ns;
+    let passed = per_sec >= TARGET;
     println(&format!(
         "[smp] spawn_rate {}: {}/sec (target ≥{}/sec){}",
-        if pass { "PASS" } else { "FAIL" },
+        if passed { "PASS" } else { "FAIL" },
         per_sec,
         TARGET,
         CAVEAT
     ));
-    Some(pass)
+    SmpOutcome::Metric(SmpMetric {
+        name: NAME,
+        n: N as u32,
+        value: per_sec,
+        passed,
+    })
 }
 
 // ── Scenario 2: ipc_throughput ────────────────────────────────────────────────
 
-/// Sustained IPC round-trips (orchestrator ↔ echo worker).
-/// PASS iff ≥ 5 000 msgs/sec.
-fn measure_ipc_throughput() -> Option<bool> {
+fn measure_ipc_throughput() -> SmpOutcome {
     const MSGS: u64 = 1_000;
     const TARGET: u64 = 5_000;
+    const NAME: &str = "smp_ipc_throughput";
 
-    sys_set_spawn_args("ipc-echo");
+    if !sys_set_spawn_args("ipc-echo") {
+        return invalid(NAME, "setup", false);
+    }
     let echo_tid = match sys_spawn_pinned(PROBE_PATH, TaskPriority::Normal as u8, 0) {
-        SyscallResult::Ok(t) => t,
-        _ => {
-            println("[smp] ipc_throughput SKIP — bench-probe not at /bin/bench-probe");
-            return None;
-        }
+        SyscallResult::Ok(tid) if tid != 0 => tid,
+        _ => return invalid(NAME, "setup", false),
     };
     for _ in 0..20 {
         yield_now();
-    } // let echo reach its recv loop before measurement
+    }
 
-    let mut rbuf = [0u8; 8];
+    let mut request = [0u8; 64];
+    request[0] = 0x42;
+    let mut reply = [0u8; 8];
     let t0 = sys_get_time();
+    let mut operation_failed = false;
     for _ in 0..MSGS {
-        let _ = sys_send(echo_tid, &[1u8]);
-        let _ = sys_recv(0, &mut rbuf);
+        reply.fill(0xa5);
+        if !matches!(sys_send(echo_tid, &request), SyscallResult::Ok(_)) {
+            operation_failed = true;
+            break;
+        }
+        match sys_recv(echo_tid, &mut reply) {
+            SyscallResult::Ok(sender) if sender == echo_tid => {}
+            _ => {
+                operation_failed = true;
+                break;
+            }
+        }
+        if reply[0] != 0 || reply[1..].iter().any(|&byte| byte != 0xa5) {
+            operation_failed = true;
+            break;
+        }
     }
     let dt_ns = sys_get_time()
         .saturating_sub(t0)
         .saturating_mul(NS_PER_TICK);
-    let _ = sys_force_exit(echo_tid);
+    let teardown_failed = !force_exit(echo_tid);
+    if operation_failed || dt_ns == 0 {
+        return invalid(NAME, "measure", teardown_failed);
+    }
+    if teardown_failed {
+        return invalid(NAME, "teardown", false);
+    }
 
-    let per_sec = MSGS
-        .saturating_mul(1_000_000_000)
-        .checked_div(dt_ns)
-        .unwrap_or(u64::MAX);
-    let pass = per_sec >= TARGET;
+    let per_sec = MSGS.saturating_mul(1_000_000_000) / dt_ns;
+    let passed = per_sec >= TARGET;
     println(&format!(
         "[smp] ipc_throughput {}: {}/sec (target ≥{}/sec){}",
-        if pass { "PASS" } else { "FAIL" },
+        if passed { "PASS" } else { "FAIL" },
         per_sec,
         TARGET,
         CAVEAT
     ));
-    Some(pass)
+    SmpOutcome::Metric(SmpMetric {
+        name: NAME,
+        n: MSGS as u32,
+        value: per_sec,
+        passed,
+    })
 }
 
 // ── Scenario 3: work_distribution ─────────────────────────────────────────────
 
-/// 2-hart scale factor: PASS iff 2×T_single / T_parallel ≥ 1.40.
-///
-/// T_single: orchestrator idle while 1 worker runs.
-/// T_parallel: orchestrator compute + 1 worker run concurrently on 2 harts.
-/// On MTTCG harts both run on separate host threads → scale ≈ 2×.
-fn measure_work_distribution() -> Option<bool> {
-    // T_single: spawn + wait; orchestrator does nothing.
+fn measure_work_distribution() -> SmpOutcome {
+    const NAME: &str = "smp_work_distribution";
+
     let t0 = sys_get_time();
-    let tid1 = spawn_worker().or_else(|| {
-        println("[smp] work_distribution SKIP — bench-probe not at /bin/bench-probe");
-        None
-    })?;
-    wait_exit(tid1);
+    let tid1 = match spawn_worker() {
+        Ok(tid) => tid,
+        Err(()) => return invalid(NAME, "setup", false),
+    };
+    if wait_exit(tid1).is_err() {
+        return invalid(NAME, "measure", !force_exit(tid1));
+    }
     let t_single = sys_get_time().saturating_sub(t0);
 
-    // T_parallel: spawn + register notify before orchestrator compute to prevent
-    // a race where the worker exits before notify_on_exit is registered.
     let t1 = sys_get_time();
-    let tid2 = spawn_worker().or_else(|| {
-        println("[smp] work_distribution SKIP — bench-probe unavailable for T_parallel run");
-        None
-    })?;
-    let _ = sys_notify_on_exit(tid2); // must register before compute loop
-    let _ = compute(SMP_WORKER_ITERS); // orchestrator's contribution (hart A)
-    recv_exit(tid2); // worker ran on hart B (or was stolen by it)
+    let tid2 = match spawn_worker() {
+        Ok(tid) => tid,
+        Err(()) => return invalid(NAME, "setup", false),
+    };
+    if !matches!(sys_notify_on_exit(tid2), SyscallResult::Ok(_)) {
+        return invalid(NAME, "measure", !force_exit(tid2));
+    }
+    let _ = compute(SMP_WORKER_ITERS);
+    if recv_exit(tid2).is_err() {
+        return invalid(NAME, "measure", !force_exit(tid2));
+    }
     let t_parallel = sys_get_time().saturating_sub(t1);
+    if t_single == 0 || t_parallel == 0 {
+        return invalid(NAME, "measure", false);
+    }
 
-    // scale_x100 = 2 × T_single × 100 / T_parallel
-    // (zero denominator → report 2.00×)
-    let scale_x100 = t_single
-        .saturating_mul(200)
-        .checked_div(t_parallel)
-        .unwrap_or(200);
-    let pass = scale_x100 >= 140;
+    let scale_x100 = t_single.saturating_mul(200) / t_parallel;
+    let passed = scale_x100 >= 140;
     println(&format!(
         "[smp] work_distribution {}: scale={}.{:02}x T1={}t Tp={}t (target ≥1.40x){}",
-        if pass { "PASS" } else { "FAIL" },
+        if passed { "PASS" } else { "FAIL" },
         scale_x100 / 100,
         scale_x100 % 100,
         t_single,
         t_parallel,
         CAVEAT
     ));
-    Some(pass)
+    SmpOutcome::Metric(SmpMetric {
+        name: NAME,
+        n: 2,
+        value: scale_x100,
+        passed,
+    })
 }
 
 // ── Suite entry ───────────────────────────────────────────────────────────────
 
-/// Run all 3 SMP throughput scenarios; returns (passed, failed).
-/// SKIP scenarios count as neither.
-pub fn run_smp_suite() -> (u32, u32) {
-    let mut passed = 0u32;
-    let mut failed = 0u32;
-    for result in [
+pub fn run_smp_suite() -> [SmpOutcome; 3] {
+    [
         measure_spawn_rate(),
         measure_ipc_throughput(),
         measure_work_distribution(),
-    ] {
-        match result {
-            Some(true) => passed += 1,
-            Some(false) => failed += 1,
-            None => {} // SKIP
-        }
-    }
-    (passed, failed)
+    ]
 }

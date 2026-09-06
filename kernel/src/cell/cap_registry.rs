@@ -183,8 +183,10 @@ impl CapTable {
         cap_id: CapId,
         boxed_file: alloc::boxed::Box<dyn api::fs::ViFile + Send + Sync>,
     ) {
-        if let Some(CapEntry { resource: CapResource::File { ref mut file }, .. }) =
-            self.entries.get_mut(&cap_id)
+        if let Some(CapEntry {
+            resource: CapResource::File { ref mut file },
+            ..
+        }) = self.entries.get_mut(&cap_id)
         {
             *file = Some(boxed_file);
         }

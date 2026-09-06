@@ -1,6 +1,6 @@
 # Current Focus
 
-**Last updated**: 2026-09-04
+**Last updated**: 2026-09-05
 
 ## Development-first, solo-first execution boundary
 
@@ -18,6 +18,35 @@ production promotion that requires it. When required, another repository
 member must answer explicit `YES` or `NO` through the GitHub issue or pull
 request bound to the exact proposal, commit, and evidence. It does not block
 unrelated host, QEMU, exact-device development, or documentation work.
+
+## Lab-first product workflow
+
+[ADR-0014](../decisions/0014-lab-first-robot-workflows.md) selects LAB-01:
+one identified closed inert dummy carrier transferred from indexed rack A to B,
+with confirmed placement and traceable outcome. The
+[SAS/LBI roadmap plan](../../.agents/260905-1139-sas-lbi-outcome-closure/plan.md)
+has achieved full software/QEMU closure across its active roadmap:
+- **Phase 04b (CellosFS Native & Vector DMA)**: Pure-Rust CoW extent engine (`libs/cellos-fs`) replaces RedoxFS and LittleFS; 10,000 power-cut tests pass and QEMU two-boot persistence is verified.
+- **Phase 05 (Stateful Native Workload)**: 1,000 operations executed with real VFS checkpoints to `/srv/checkpoint.log`, v1->v2 live hotswap at op 300 via cached-TID witness (op 301), and VFS service kill & restart recovery at op 600 verified in QEMU.
+- **Phase 06 (LAB-01)**: 06A pure contract and 06B native QEMU witness complete; verified with real VFS trace persistence to `/srv/lab_trace.log` and out-of-band operator reconciliation.
+- **Phase 07 (BASE-01)**: 07A shared wrapper and 07B native QEMU witness complete; verified with arm-active/stationary exclusions and VFS trace logging.
+- **Phase 08 (ASSEMBLY-01)**: 08A contract and 08B native QEMU witness complete; verified 3 operational modes (StandaloneUpper, StandaloneBase, AssembledStationary), stationary coupling lifecycle, loss-of-lock safe inhibition, and VFS trace logging.
+- **Phase 01 & 04 (Evidence & Baseline)**: Immutable source-patch bound QEMU baseline collected and validated.
+
+Physical milestones (**06C, 07C, 08C**) remain external-gated awaiting exact hardware, metrology, and safety packages; software closure alone never claims physical hardware actuation.
+
+G2 is scoped to [organizational web/app/microservice servers and ordinary office PCs](../../.agents/260905-1139-sas-lbi-outcome-closure/organization-deployment-profiles.md),
+not specialist devices. These profiles are not additional active implementation
+programs and are not technically blocked on robot physical acceptance.
+
+## Dual-Mode Hybrid Architecture baseline (ADR-0015)
+
+[ADR-0015](../decisions/0015-dual-mode-hybrid-architecture.md) settles the architectural baseline:
+- **Tier 1 (Real-Time SAS)**: 100% Safe Rust cells + audited Driver Cells (e1000, NVMe, VirtIO with IOMMU MMIO/DMA). Mandatory signing (`signing-required = ON`). Zero-trap SPSC lock-free ring buffer for same-hart cells.
+- **Tier 2 (Paged Domain Engine)**: Hardware page-table isolation (`satp`/`CR3`/`TTBR0`). Mandatory home for all unsigned binaries, C-FFI, Lua, and POSIX shims. Memory faults trigger CPU page faults and safe cell termination without corrupting the SAS.
+- **Tier 3 (Hardware VM Guest)**: Stage-2 paging for unmodified Linux guest OS.
+
+The implementation roadmap is governed by [.agents/260906-dual-mode-kernel-evolution/plan.md](../../.agents/260906-dual-mode-kernel-evolution/plan.md).
 
 ## Current executable work
 

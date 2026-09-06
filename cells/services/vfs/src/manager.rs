@@ -15,18 +15,16 @@ use alloc::vec::Vec;
 
 use crate::access::AccessTable;
 use crate::backend_bin_overlay::BinOverlay;
+use crate::backend_cellosfs::CellosFsBackend;
 use crate::backend_fat::FatBackend;
-#[cfg(feature = "littlefs")]
-use crate::backend_littlefs::LittlefsBackend;
 use crate::backend_ramfs::RamFsBackend;
-use crate::backend_redoxfs::RedoxFsBackend;
 use crate::caller::Caller;
 use crate::dirs::DirTable;
 use crate::file_handles::FileHandleTable;
 use crate::handle_table::HandleTable;
 use crate::mount::MountTable;
-use crate::pending::PendingTable;
 use crate::namespace::NamespaceLedger;
+use crate::pending::PendingTable;
 use crate::quota::QuotaTracker;
 #[derive(Clone, Copy)]
 pub(crate) struct WatchedOwner {
@@ -59,11 +57,13 @@ impl VfsManager {
             "/mnt/sd",
             api::disk::PART_FAT32_BASE_LBA,
         )));
-        // /data (littlefs, P4) is gated on the `littlefs` feature: builds without a
-        // bare-metal C toolchain (x86_64/aarch64) omit it — the persistent /data
-        // volume is simply absent there, which boot-to-shell does not require.
-        #[cfg(feature = "littlefs")]
-        let lfs = mounts.add_backend(Box::new(LittlefsBackend::mount("/data")));
+        // /data (P4): CellosFS Native (pure-Rust, power-loss resilient).
+        // Available on all architectures with zero external C toolchain dependencies.
+        let data_fs = mounts.add_backend(Box::new(CellosFsBackend::mount(
+            "/data",
+            api::disk::PART_LFS_BASE_LBA,
+            api::disk::PART_LFS_SECTORS,
+        )));
         // /bin overlay: VIFS1 ramdisk (bootstrap cells) unioned with the on-disk
         // FAT cell-store (non-bootstrap cells migrated off the raw P2 table).
         let binov = mounts.add_backend(Box::new(BinOverlay::new(
@@ -72,15 +72,16 @@ impl VfsManager {
         // Longest prefix wins: the specific mounts shadow the read-only root.
         mounts.mount("/", ram);
         mounts.mount("/tmp", ram);
-        #[cfg(feature = "littlefs")]
-        mounts.mount("/data", lfs);
+        mounts.mount("/data", data_fs);
         mounts.mount("/mnt/sd", fat);
         mounts.mount("/bin", binov);
-        // /srv: RedoxFS CoW B-tree filesystem on MBR partition P5.
-        // Degrades gracefully to empty/false if P5 is unformatted (see
-        // docs/specs/09b-vfs-native-fs-adr.md and scripts/mksrv-img.sh).
-        let srv = mounts.add_backend(Box::new(RedoxFsBackend::mount("/srv")));
-        mounts.mount("/srv", srv);
+        // /srv (P5): CellosFS Native CoW Extent volume (replaces RedoxFS).
+        let srv_fs = mounts.add_backend(Box::new(CellosFsBackend::mount(
+            "/srv",
+            api::disk::PART_SRV_BASE_LBA,
+            api::disk::PART_SRV_SECTORS,
+        )));
+        mounts.mount("/srv", srv_fs);
 
         Self {
             mounts,
@@ -106,7 +107,10 @@ impl VfsManager {
     }
 
     pub fn list_dir(&self, path: &str, out: &mut [u8]) -> usize {
-        self.mounts.backend(path).map(|b| b.list(path, out)).unwrap_or(0)
+        self.mounts
+            .backend(path)
+            .map(|b| b.list(path, out))
+            .unwrap_or(0)
     }
 
     pub fn stat(&self, path: &str) -> Option<(u64, bool)> {
@@ -118,50 +122,86 @@ impl VfsManager {
     }
 
     pub fn file_size(&self, path: &str) -> u64 {
-        self.mounts.backend(path).map(|b| b.file_size(path)).unwrap_or(0)
+        self.mounts
+            .backend(path)
+            .map(|b| b.file_size(path))
+            .unwrap_or(0)
     }
 
     pub fn read_to_vec(&self, path: &str) -> Vec<u8> {
-        self.mounts.backend(path).map(|b| b.read_to_vec(path)).unwrap_or_default()
+        self.mounts
+            .backend(path)
+            .map(|b| b.read_to_vec(path))
+            .unwrap_or_default()
     }
 
     pub fn write(&mut self, path: &str, content: &[u8]) -> bool {
-        self.mounts.backend_mut(path).map(|b| b.write(path, content)).unwrap_or(false)
+        self.mounts
+            .backend_mut(path)
+            .map(|b| b.write(path, content))
+            .unwrap_or(false)
     }
 
     pub fn read_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> usize {
-        self.mounts.backend(path).map(|b| b.read_at(path, offset, buf)).unwrap_or(0)
+        self.mounts
+            .backend(path)
+            .map(|b| b.read_at(path, offset, buf))
+            .unwrap_or(0)
     }
 
     pub fn write_at(&mut self, path: &str, offset: u64, content: &[u8]) -> bool {
-        self.mounts.backend_mut(path).map(|b| b.write_at(path, offset, content)).unwrap_or(false)
+        self.mounts
+            .backend_mut(path)
+            .map(|b| b.write_at(path, offset, content))
+            .unwrap_or(false)
     }
 
     pub fn sync(&mut self, path: &str) -> bool {
-        self.mounts.backend_mut(path).map(|b| b.sync(path)).unwrap_or(false)
+        self.mounts
+            .backend_mut(path)
+            .map(|b| b.sync(path))
+            .unwrap_or(false)
     }
 
     pub fn append(&mut self, path: &str, content: &[u8]) -> bool {
-        self.mounts.backend_mut(path).map(|b| b.append(path, content)).unwrap_or(false)
+        self.mounts
+            .backend_mut(path)
+            .map(|b| b.append(path, content))
+            .unwrap_or(false)
     }
 
     pub fn mkdir(&mut self, path: &str) -> bool {
-        self.mounts.backend_mut(path).map(|b| b.mkdir(path)).unwrap_or(false)
+        self.mounts
+            .backend_mut(path)
+            .map(|b| b.mkdir(path))
+            .unwrap_or(false)
     }
 
     pub fn rmdir(&mut self, path: &str) -> bool {
-        self.mounts.backend_mut(path).map(|b| b.rmdir(path)).unwrap_or(false)
+        self.mounts
+            .backend_mut(path)
+            .map(|b| b.rmdir(path))
+            .unwrap_or(false)
     }
 
     pub fn unlink(&mut self, path: &str) -> bool {
-        self.mounts.backend_mut(path).map(|b| b.unlink(path)).unwrap_or(false)
+        self.mounts
+            .backend_mut(path)
+            .map(|b| b.unlink(path))
+            .unwrap_or(false)
     }
 
     pub fn rmdir_recursive(&mut self, path: &str) -> bool {
-        self.mounts.backend_mut(path).map(|b| b.rmdir_recursive(path)).unwrap_or(false)
+        self.mounts
+            .backend_mut(path)
+            .map(|b| b.rmdir_recursive(path))
+            .unwrap_or(false)
     }
 
     pub fn rename_no_replace(&mut self, old: &str, new: &str) -> bool {
-        self.mounts.backend_mut(old).map(|b| b.rename_no_replace(old, new)).unwrap_or(false)
+        self.mounts
+            .backend_mut(old)
+            .map(|b| b.rename_no_replace(old, new))
+            .unwrap_or(false)
     }
 }

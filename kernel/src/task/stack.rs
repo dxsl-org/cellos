@@ -447,6 +447,13 @@ impl CellSegments {
             pie_va_base,
         }
     }
+    pub fn pages(&self) -> &[(types::VAddr, types::PhysAddr)] {
+        &self.pages
+    }
+
+    pub fn is_writable(&self, va: types::VAddr) -> bool {
+        self.writable_pages.contains(&va)
+    }
     /// Return the exclusive end of the writable page containing `ptr`.
     pub fn writable_page_end_containing(&self, ptr: usize) -> Option<usize> {
         let page = ptr & !(PAGE_SIZE - 1);

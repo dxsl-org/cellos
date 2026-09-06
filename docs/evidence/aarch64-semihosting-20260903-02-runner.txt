@@ -1,0 +1,597 @@
+EVENT_ID=aarch64-semihosting-20260903-02
+START_UTC=2026-09-03T04:53:45Z
+REVISION=5e30e702b378fd99f89155a3eb107c34c2e6ba6a
+TREE=a1177b0aedf7f6118786b22d968fadaf4f6d4e5b
+TRACKED_STATUS_BEGIN
+TRACKED_STATUS_END
+CARGO_INCREMENTAL=0
+CARGO_TARGET_RISCV64GC_UNKNOWN_NONE_ELF_RUSTFLAGS=-C relocation-model=pic
+CARGO_TARGET_X86_64_UNKNOWN_NONE_RUSTFLAGS=-C code-model=kernel -C no-redzone=yes -Z cf-protection=full -C relocation-model=static
+CARGO_TARGET_AARCH64_UNKNOWN_NONE_SOFTFLOAT_RUSTFLAGS=-C relocation-model=pic -C target-feature=+bti,+paca,+pacg
+CC_aarch64_unknown_none_softfloat=clang
+CFLAGS_aarch64_unknown_none_softfloat=--target=aarch64-unknown-none-elf -ffreestanding -mgeneral-regs-only -DLFS_NO_INTRINSICS -I/tmp/cellos-phase01-evidence/third_party/freestanding-include
+BINDGEN_EXTRA_CLANG_ARGS_aarch64_unknown_none_softfloat=--target=aarch64-linux-gnu --sysroot=/usr/aarch64-linux-gnu
+BUILD_COMMAND=bash scripts/build-aarch64-test-hooks-ci.sh
+RUNNER_COMMAND=bash scripts/qemu-aarch64-test-hooks.sh
+==> Building base cells (init, shell, config)...
+   Compiling compiler_builtins v0.1.160 (/home/dmin/.rustup/toolchains/nightly-2026-05-01-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/compiler-builtins/compiler-builtins)
+   Compiling core v0.0.0 (/home/dmin/.rustup/toolchains/nightly-2026-05-01-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core)
+   Compiling proc-macro2 v1.0.107
+   Compiling quote v1.0.47
+   Compiling unicode-ident v1.0.24
+   Compiling serde_core v1.0.229
+   Compiling thiserror v2.0.19
+   Compiling serde v1.0.229
+   Compiling cell-build v0.2.0 (/tmp/cellos-phase01-evidence/libs/cell-build)
+   Compiling libm v0.2.16
+   Compiling api v0.1.0 (/tmp/cellos-phase01-evidence/libs/api)
+   Compiling heapless v0.8.0
+   Compiling app-init v0.1.0 (/tmp/cellos-phase01-evidence/cells/tools/init)
+   Compiling service-config v0.1.0 (/tmp/cellos-phase01-evidence/cells/services/config)
+   Compiling app-shell v0.1.0 (/tmp/cellos-phase01-evidence/cells/tools/shell)
+   Compiling syn v3.0.3
+   Compiling syn v2.0.119
+   Compiling postcard-derive v0.2.2
+   Compiling thiserror-impl v2.0.19
+   Compiling serde_derive v1.0.229
+   Compiling alloc v0.0.0 (/home/dmin/.rustup/toolchains/nightly-2026-05-01-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc)
+   Compiling scopeguard v1.2.0
+   Compiling equivalent v1.0.2
+   Compiling byteorder v1.5.0
+   Compiling allocator-api2 v0.2.21
+   Compiling foldhash v0.1.5
+   Compiling types v0.1.0 (/tmp/cellos-phase01-evidence/libs/types)
+   Compiling ttf-parser v0.21.1
+   Compiling stable_deref_trait v1.2.1
+   Compiling spin v0.9.9
+   Compiling embedded-io v0.7.1
+   Compiling regex-syntax v0.8.11
+   Compiling cobs v0.3.0
+   Compiling lock_api v0.4.14
+   Compiling hash32 v0.3.1
+   Compiling spinning_top v0.2.5
+   Compiling linked_list_allocator v0.10.6
+   Compiling hashbrown v0.15.5
+   Compiling regex-automata v0.4.16
+   Compiling fontdue v0.9.3
+   Compiling postcard v1.1.3
+   Compiling ostd v0.2.0 (/tmp/cellos-phase01-evidence/libs/ostd)
+   Compiling text-engine v0.1.0 (/tmp/cellos-phase01-evidence/libs/text-engine)
+    Finished `release` profile [optimized] target(s) in 13.24s
+warning: the following packages contain code that will be rejected by a future version of Rust: core v0.0.0 (/home/dmin/.rustup/toolchains/nightly-2026-05-01-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core)
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+==> Building test-hooks cells (service-vfs, app-vfs-test, atomic-publication-probe)...
+   Compiling core v0.0.0 (/home/dmin/.rustup/toolchains/nightly-2026-05-01-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core)
+   Compiling version_check v0.9.5
+   Compiling driver-disk v0.1.0 (/tmp/cellos-phase01-evidence/cells/drivers/disk)
+   Compiling service-vfs v0.1.0 (/tmp/cellos-phase01-evidence/cells/services/vfs)
+   Compiling generic-array v0.14.7
+   Compiling compiler_builtins v0.1.160 (/home/dmin/.rustup/toolchains/nightly-2026-05-01-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/compiler-builtins/compiler-builtins)
+   Compiling alloc v0.0.0 (/home/dmin/.rustup/toolchains/nightly-2026-05-01-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc)
+   Compiling typenum v1.20.1
+   Compiling byteorder v1.5.0
+   Compiling scopeguard v1.2.0
+   Compiling serde_core v1.0.229
+   Compiling thiserror v2.0.19
+   Compiling foldhash v0.1.5
+   Compiling subtle v2.6.1
+   Compiling allocator-api2 v0.2.21
+   Compiling equivalent v1.0.2
+   Compiling bitflags v2.13.1
+   Compiling libm v0.2.16
+   Compiling types v0.1.0 (/tmp/cellos-phase01-evidence/libs/types)
+   Compiling ttf-parser v0.21.1
+   Compiling stable_deref_trait v1.2.1
+   Compiling spin v0.9.9
+   Compiling cfg-if v1.0.4
+   Compiling base64ct v1.8.3
+   Compiling cpufeatures v0.2.17
+   Compiling embedded-io v0.7.1
+   Compiling log v0.4.33
+   Compiling lz4_flex v0.11.6
+   Compiling uuid v1.24.0
+   Compiling endian-num v0.1.2
+   Compiling seahash v4.1.0
+   Compiling lock_api v0.4.14
+   Compiling cobs v0.3.0
+   Compiling redox_syscall v0.7.5
+   Compiling fatfs v0.4.0 (https://github.com/rafalh/rust-fatfs#c4b88477)
+   Compiling hash32 v0.3.1
+   Compiling heapless v0.8.0
+   Compiling spinning_top v0.2.5
+   Compiling linked_list_allocator v0.10.6
+   Compiling hashbrown v0.15.5
+   Compiling crypto-common v0.1.7
+   Compiling inout v0.1.4
+   Compiling block-buffer v0.10.4
+   Compiling cipher v0.4.4
+   Compiling digest v0.10.7
+   Compiling fontdue v0.9.3
+   Compiling blake2 v0.10.6
+   Compiling aes v0.8.4
+   Compiling xts-mode v0.5.1
+   Compiling argon2 v0.4.1
+   Compiling serde v1.0.229
+   Compiling postcard v1.1.3
+   Compiling redoxfs v0.9.0 (/tmp/cellos-phase01-evidence/third_party/redoxfs)
+   Compiling api v0.1.0 (/tmp/cellos-phase01-evidence/libs/api)
+   Compiling ostd v0.2.0 (/tmp/cellos-phase01-evidence/libs/ostd)
+    Finished `release` profile [optimized] target(s) in 12.66s
+warning: the following packages contain code that will be rejected by a future version of Rust: core v0.0.0 (/home/dmin/.rustup/toolchains/nightly-2026-05-01-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core)
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+   Compiling app-vfs-test v0.2.0 (/tmp/cellos-phase01-evidence/cells/tests/vfs-test)
+   Compiling thiserror v2.0.19
+   Compiling cobs v0.3.0
+   Compiling postcard v1.1.3
+   Compiling api v0.1.0 (/tmp/cellos-phase01-evidence/libs/api)
+   Compiling ostd v0.2.0 (/tmp/cellos-phase01-evidence/libs/ostd)
+    Finished `release` profile [optimized] target(s) in 1.68s
+warning: the following packages contain code that will be rejected by a future version of Rust: core v0.0.0 (/home/dmin/.rustup/toolchains/nightly-2026-05-01-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core)
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+   Compiling atomic-publication-probe v0.1.0 (/tmp/cellos-phase01-evidence/cells/tests/atomic-publication-probe)
+   Compiling thiserror v2.0.19
+   Compiling cobs v0.3.0
+   Compiling postcard v1.1.3
+   Compiling api v0.1.0 (/tmp/cellos-phase01-evidence/libs/api)
+   Compiling ostd v0.2.0 (/tmp/cellos-phase01-evidence/libs/ostd)
+    Finished `release` profile [optimized] target(s) in 1.54s
+warning: the following packages contain code that will be rejected by a future version of Rust: core v0.0.0 (/home/dmin/.rustup/toolchains/nightly-2026-05-01-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core)
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+==> Building stack-sizing paths (service-net, driver-virtio-net, service-input)...
+   Compiling generic-array v0.14.7
+   Compiling heapless v0.9.3
+   Compiling zerocopy v0.8.55
+   Compiling portable-atomic v1.14.0
+   Compiling smoltcp v0.11.0
+   Compiling service-net v0.1.0 (/tmp/cellos-phase01-evidence/cells/services/net)
+   Compiling driver-virtio-net v0.1.0 (/tmp/cellos-phase01-evidence/cells/drivers/virtio-net)
+   Compiling service-input v0.2.0 (/tmp/cellos-phase01-evidence/cells/services/input)
+   Compiling zeroize v1.9.0
+   Compiling typenum v1.20.1
+   Compiling subtle v2.6.1
+   Compiling const-oid v0.9.6
+   Compiling rand_core v0.6.4
+   Compiling cfg-if v1.0.4
+   Compiling cpufeatures v0.2.17
+   Compiling base16ct v0.2.0
+   Compiling opaque-debug v0.3.1
+   Compiling syn v2.0.119
+   Compiling deranged v0.5.8
+   Compiling powerfmt v0.2.0
+   Compiling num-conv v0.2.2
+   Compiling time-core v0.1.9
+   Compiling thiserror v2.0.19
+   Compiling bitflags v2.13.1
+   Compiling const-oid v0.10.2
+   Compiling log v0.4.33
+   Compiling embedded-io-async v0.7.0
+   Compiling managed v0.8.0
+   Compiling bitflags v1.3.2
+   Compiling cobs v0.3.0
+   Compiling ff v0.13.1
+   Compiling der v0.7.10
+   Compiling group v0.13.0
+   Compiling time v0.3.54
+   Compiling crypto-common v0.1.7
+   Compiling block-buffer v0.10.4
+   Compiling inout v0.1.4
+   Compiling crypto-bigint v0.5.5
+   Compiling sec1 v0.7.3
+   Compiling universal-hash v0.5.1
+   Compiling aead v0.5.2
+   Compiling cipher v0.4.4
+   Compiling digest v0.10.7
+   Compiling polyval v0.6.2
+   Compiling ghash v0.5.1
+   Compiling hmac v0.12.1
+   Compiling signature v2.2.0
+   Compiling sha2 v0.10.9
+   Compiling ctr v0.9.2
+   Compiling aes v0.8.4
+   Compiling hkdf v0.12.4
+   Compiling rfc6979 v0.4.0
+   Compiling aes-gcm v0.10.3
+   Compiling postcard-derive v0.2.2
+   Compiling zerocopy-derive v0.7.35
+   Compiling enumn v0.1.14
+   Compiling der_derive v0.8.0
+   Compiling elliptic-curve v0.13.8
+   Compiling ecdsa v0.16.9
+   Compiling primeorder v0.13.6
+   Compiling p256 v0.13.2
+   Compiling postcard v1.1.3
+   Compiling zerocopy v0.7.35
+   Compiling api v0.1.0 (/tmp/cellos-phase01-evidence/libs/api)
+   Compiling der v0.8.1
+   Compiling virtio-drivers v0.7.5 (/tmp/cellos-phase01-evidence/kernel/third_party/virtio_drivers)
+   Compiling embedded-tls v0.19.0
+   Compiling ostd v0.2.0 (/tmp/cellos-phase01-evidence/libs/ostd)
+   Compiling ppv-lite86 v0.2.21
+   Compiling rand_chacha v0.3.1
+    Finished `release` profile [optimized] target(s) in 4.77s
+warning: the following packages contain code that will be rejected by a future version of Rust: core v0.0.0 (/home/dmin/.rustup/toolchains/nightly-2026-05-01-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core)
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+==> Verifying 9 cell binaries...
+==> Signing 9 cells (mandatory F1/F5)...
+OK:   signed 9 cell(s) with the dev key after a passing F1/F5 check
+==> Assembling kernel_fs.img (test-hooks)...
+wrote 927 bytes to /tmp/tmp.n5AiewUfOW/POLICY.BIN
+Created FAT16 image at kernel/src/embedded-test-hooks/kernel_fs.img: 11 file(s), 2 director(ies), 8031 clusters.
+   kernel_fs.img: 2.6M
+   init: 100K
+==> Building test-hooks kernel (aarch64, PIC)...
+   Compiling compiler_builtins v0.1.160 (/home/dmin/.rustup/toolchains/nightly-2026-05-01-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/compiler-builtins/compiler-builtins)
+   Compiling core v0.0.0 (/home/dmin/.rustup/toolchains/nightly-2026-05-01-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core)
+   Compiling rustversion v1.0.23
+   Compiling ident_case v1.0.1
+   Compiling serde_core v1.0.229
+   Compiling fnv v1.0.7
+   Compiling strsim v0.11.1
+   Compiling memchr v2.8.3
+   Compiling zmij v1.0.23
+   Compiling anyhow v1.0.104
+   Compiling serde v1.0.229
+   Compiling thiserror v2.0.19
+   Compiling serde_json v1.0.151
+   Compiling camino v1.2.5
+   Compiling libc v0.2.189
+   Compiling itoa v1.0.18
+   Compiling regex-syntax v0.8.11
+   Compiling powerfmt v0.2.0
+   Compiling deranged v0.5.8
+   Compiling time-core v0.1.9
+   Compiling num_threads v0.1.7
+   Compiling num-conv v0.2.2
+   Compiling crc32fast v1.5.0
+   Compiling libm v0.2.16
+   Compiling syn v2.0.119
+   Compiling syn v3.0.3
+   Compiling api v0.1.0 (/tmp/cellos-phase01-evidence/libs/api)
+   Compiling aho-corasick v1.1.4
+   Compiling regex-automata v0.4.16
+   Compiling vergen-lib v9.1.0
+   Compiling vergen v9.1.0
+   Compiling vergen-lib v0.1.6
+   Compiling vergen-gitcl v1.0.8
+   Compiling time v0.3.54
+   Compiling semver v1.0.28
+   Compiling cargo-platform v0.3.3
+   Compiling thiserror-impl v2.0.19
+   Compiling serde_derive v1.0.229
+   Compiling async-trait v0.1.91
+   Compiling darling_core v0.20.11
+   Compiling zerocopy-derive v0.7.35
+   Compiling postcard-derive v0.2.2
+   Compiling enumn v0.1.14
+   Compiling regex v1.13.1
+   Compiling darling_macro v0.20.11
+   Compiling darling v0.20.11
+   Compiling derive_builder_core v0.20.2
+   Compiling cargo_metadata v0.23.1
+   Compiling derive_builder_macro v0.20.2
+   Compiling derive_builder v0.20.2
+   Compiling cellos-kernel v0.2.1 (/tmp/cellos-phase01-evidence/kernel)
+   Compiling alloc v0.0.0 (/home/dmin/.rustup/toolchains/nightly-2026-05-01-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc)
+   Compiling types v0.1.0 (/tmp/cellos-phase01-evidence/libs/types)
+   Compiling bitflags v2.13.1
+   Compiling tock-registers v0.10.1
+   Compiling scopeguard v1.2.0
+   Compiling cfg-if v1.0.4
+   Compiling hal-mte v0.1.0 (/tmp/cellos-phase01-evidence/hal/traits/mte)
+   Compiling byteorder v1.5.0
+   Compiling critical-section v1.2.0
+   Compiling volatile v0.4.6
+   Compiling log v0.4.33
+   Compiling hal-soc-arm-virt v0.2.0 (/tmp/cellos-phase01-evidence/hal/soc/arm-virt)
+   Compiling hal-arch-trait v0.1.0 (/tmp/cellos-phase01-evidence/hal/traits/arch)
+   Compiling zero v0.1.3
+   Compiling const-default v1.0.0
+   Compiling fdt v0.1.5
+   Compiling ed25519-compact v2.3.1
+   Compiling qemu-exit v4.0.0
+   Compiling hal-soc-bcm27xx v0.2.0 (/tmp/cellos-phase01-evidence/hal/soc/bcm27xx)
+   Compiling cellos-boards v0.2.0 (/tmp/cellos-phase01-evidence/boards)
+   Compiling cobs v0.3.0
+   Compiling lock_api v0.4.14
+   Compiling rlsf v0.2.3
+   Compiling aarch64-cpu v11.2.0
+   Compiling xmas-elf v0.10.0
+   Compiling fatfs v0.4.0 (https://github.com/rafalh/rust-fatfs#c4b88477)
+   Compiling zerocopy v0.7.35
+   Compiling spinning_top v0.2.5
+   Compiling hal-paging v0.1.0 (/tmp/cellos-phase01-evidence/hal/traits/paging)
+   Compiling hal-hypervisor v0.1.0 (/tmp/cellos-phase01-evidence/hal/traits/hypervisor)
+   Compiling hal-traits-mmc v0.1.0 (/tmp/cellos-phase01-evidence/hal/traits/mmc)
+   Compiling hal-interrupt v0.1.0 (/tmp/cellos-phase01-evidence/hal/traits/interrupt)
+   Compiling hal-display v0.1.0 (/tmp/cellos-phase01-evidence/hal/traits/display)
+   Compiling hal-timer v0.1.0 (/tmp/cellos-phase01-evidence/hal/traits/timer)
+   Compiling hal-uart v0.1.0 (/tmp/cellos-phase01-evidence/hal/traits/uart)
+   Compiling linked_list_allocator v0.10.6
+   Compiling virtio-drivers v0.7.5 (/tmp/cellos-phase01-evidence/kernel/third_party/virtio_drivers)
+   Compiling postcard v1.1.3
+   Compiling hal-arm v0.1.0 (/tmp/cellos-phase01-evidence/hal/arch/arm)
+   Compiling hal-core v0.2.0 (/tmp/cellos-phase01-evidence/hal/core)
+    Finished `release` profile [optimized] target(s) in 15.68s
+warning: the following packages contain code that will be rejected by a future version of Rust: core v0.0.0 (/home/dmin/.rustup/toolchains/nightly-2026-05-01-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core)
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+==> Done: target/aarch64-unknown-none-softfloat/release/cellos-kernel-test-hooks
+ELF_PATH=target/aarch64-unknown-none-softfloat/release/cellos-kernel-test-hooks
+ELF_SHA256=d231004a1747dd7fcec8e8aaa0ceb6666a296894e0dafa8f2f1584cc6fd9b448
+ELF_SIZE_BYTES=6040352
+QEMU_PATH=/usr/bin/qemu-system-aarch64
+QEMU_VERSION=QEMU emulator version 8.2.2 (Debian 1:8.2.2+ds-0ubuntu1.17)
+QEMU_SHA256=9768bf9b821acf3ce0211f76f4c5bb110508c1297e93f787e361c63934e47ede
+[format-disk-arm] Output: disk_arm_virt.img
+[format-disk-arm] Collecting cell binaries from target/aarch64-unknown-none-softfloat/release...
+  /bin/net <- target/aarch64-unknown-none-softfloat/release/service-net
+  /bin/init <- target/aarch64-unknown-none-softfloat/release/app-init
+  /bin/input <- target/aarch64-unknown-none-softfloat/release/service-input
+  /bin/vfs <- target/aarch64-unknown-none-softfloat/release/service-vfs
+  /bin/config <- target/aarch64-unknown-none-softfloat/release/service-config
+  WARNING: target/aarch64-unknown-none-softfloat/release/service-compositor not found, skipping /bin/compositor
+  /bin/shell <- target/aarch64-unknown-none-softfloat/release/app-shell
+[format-disk-arm] Formatting P1 FAT32 with tools/mkfat32.py...
+Created FAT16 image at /tmp/tmp.xNluWNuB3h/p1_fat32.img: 7 file(s), 2 director(ies), 8031 clusters.
+[format-disk-arm] Building redoxfs-ar (host x86_64-unknown-linux-gnu)...
+    Updating crates.io index
+     Locking 94 packages to latest compatible versions
+      Adding aes v0.8.4 (available: v0.9.3)
+      Adding argon2 v0.4.1 (available: v0.6.0)
+      Adding endian-num v0.1.2 (available: v0.2.0)
+      Adding fuser v0.16.0 (available: v0.18.0)
+      Adding generic-array v0.14.7 (available: v0.14.9)
+      Adding getrandom v0.2.17 (available: v0.4.3)
+      Adding lz4_flex v0.11.6 (available: v0.14.0)
+      Adding redox-path v0.3.1 (available: v0.4.1)
+      Adding redox_syscall v0.7.5 (available: v0.9.3)
+      Adding xts-mode v0.5.1 (available: v0.6.0)
+   Compiling version_check v0.9.5
+   Compiling typenum v1.20.1
+   Compiling libc v0.2.189
+   Compiling memchr v2.8.3
+   Compiling regex-syntax v0.8.11
+   Compiling cfg-if v1.0.4
+   Compiling getrandom v0.4.3
+   Compiling subtle v2.6.1
+   Compiling libm v0.2.16
+   Compiling utf8parse v0.2.2
+   Compiling anstyle-query v1.1.5
+   Compiling colorchoice v1.0.5
+   Compiling is_terminal_polyfill v1.70.2
+   Compiling jiff-core v0.1.0
+   Compiling log v0.4.34
+   Compiling anstyle v1.0.14
+   Compiling bitflags v2.13.1
+   Compiling base64ct v1.8.3
+   Compiling numtoa v0.2.4
+   Compiling cpufeatures v0.2.17
+   Compiling byteorder v1.5.0
+   Compiling seahash v4.1.0
+   Compiling endian-num v0.1.2
+   Compiling range-tree v0.1.0
+   Compiling parse-size v1.1.0
+   Compiling lz4_flex v0.11.6
+   Compiling anstyle-parse v1.0.0
+   Compiling redox_syscall v0.7.5
+   Compiling anstream v1.0.0
+   Compiling generic-array v0.14.7
+   Compiling aho-corasick v1.1.5
+   Compiling jiff v0.2.35
+   Compiling crypto-common v0.1.7
+   Compiling inout v0.1.4
+   Compiling block-buffer v0.10.4
+   Compiling humansize v2.1.3
+   Compiling cipher v0.4.4
+   Compiling digest v0.10.7
+   Compiling blake2 v0.10.6
+   Compiling aes v0.8.4
+   Compiling xts-mode v0.5.1
+   Compiling termion v4.0.6
+   Compiling getrandom v0.2.17
+   Compiling regex-automata v0.4.18
+   Compiling uuid v1.26.0
+   Compiling argon2 v0.4.1
+   Compiling regex v1.13.1
+   Compiling env_filter v2.0.0
+   Compiling env_logger v0.11.11
+   Compiling redoxfs v0.9.0 (/tmp/cellos-phase01-evidence/third_party/redoxfs)
+    Finished `release` profile [optimized] target(s) in 5.07s
+redoxfs-ar: created filesystem on /tmp/tmp.xNluWNuB3h/p5_redoxfs.img, reserved 0 blocks, size 67 MB, uuid eba3b808-4263-42af-a91c-6937544bd626
+[format-disk-arm] P5 RedoxFS formatted (64 MB)
+[format-disk-arm] Done: disk_arm_virt.img (MBR + P1 FAT32 + P5 RedoxFS)
+[qemu-aarch64-test-hooks] Booting kernel=target/aarch64-unknown-none-softfloat/release/cellos-kernel-test-hooks (window=35s, semihosting enabled, machine=virt)
+PASS: AArch64 test-hooks self-tests passed (semihosting enabled)
+[ INFO] [wx] self-tests PASSED
+[ INFO] ATOMIC_PUBLICATION_ALIGNMENT: PASS
+[ INFO] ATOMIC_PUBLICATION_CELL_ID_REUSE: PASS
+[ INFO] ATOMIC_PUBLICATION_FIXTURE_ROUNDTRIP: PASS
+[ INFO] ATOMIC_PUBLICATION_AP-00: PASS
+[ INFO] ATOMIC_PUBLICATION_AP-01: PASS
+[ INFO] ATOMIC_PUBLICATION_AP-02: PASS
+[ INFO] ATOMIC_PUBLICATION_AP-03: PASS
+[ INFO] ATOMIC_PUBLICATION_AP-04: PASS
+[ INFO] ATOMIC_PUBLICATION_AP-05: PASS
+[ INFO] ATOMIC_PUBLICATION_AP-06: PASS
+[ INFO] ATOMIC_PUBLICATION_AP-07: PASS
+[ INFO] ATOMIC_PUBLICATION_AP-08: PASS
+[ INFO] ATOMIC_PUBLICATION_AP-09: PASS
+[ INFO] ATOMIC_PUBLICATION_AP-10: PASS
+[ INFO] ATOMIC_PUBLICATION_AP-11: PASS
+[ INFO] ATOMIC_PUBLICATION_ARMING: PASS
+[ INFO] [selftest] ELF-LOADER: PASS
+[ INFO] [selftest] THREAD-CAP: PASS (thread-inherit + honest-revoke + spawn bound)
+[INFO] thread-cap self-test PASS (thread-inherit + honest-revoke + spawn bound)
+[ INFO] [selftest] THREAD-QUOTA: PASS (charged, released, enforced)
+[INFO] thread-quota self-test PASS (charged, released, enforced)
+[ INFO] [selftest] COMPLETION-QUEUE: PASS (cap 32 slots, 624 bytes per cell)
+[INFO] completion-queue self-test PASS (reserve, land, bound, defer)
+[ INFO] [selftest] NET-RX-RESERVATION: PASS (fills, remembers, releases, IPC-safe)
+[INFO] net-rx-reservation self-test PASS (fill, remember, release)
+[ INFO] [selftest] IPC-PENDING: PASS (deferred, bounded, quota-safe, completion-wake)
+[INFO] ipc-pending self-test PASS (deferred delivery, bounds, quota)
+[ INFO] [selftest] IPC-GUARDRAILS: PASS (dead-peer bounded, RecvScatter isolated)
+[INFO] ipc-guardrail self-test PASS (dead-peer wake, RecvScatter isolated)
+[ INFO] [selftest] VFS-LIFETIME: PASS (atomic grant-table lease + teardown orders + exact quarantine + owner watch)
+[INFO] vfs-lifetime self-test PASS (exact lease, quarantine, owner watch)
+[INFO] stack-probe self-test PASS (two guards, overflow target unmapped, watermark)
+[INFO] stack-sizing policy self-test PASS (measured=16, unknown=64)
+[INFO] ed25519 verify self-test PASS (RFC 8032 + tamper)
+[INFO] policy verify+parse self-test PASS (signed blob + tamper)
+[INFO] cell signing self-test PASS
+[ INFO] [selftest] C3-ADM-001: PASS
+[ INFO] [selftest] C3-ADM-002: PASS
+[ INFO] [selftest] C3-ADM-003: PASS
+[ INFO] [selftest] C3-ADM-004: PASS
+[ INFO] [selftest] C3-ADM-005: PASS
+[ INFO] [selftest] C3-ADM-006: PASS
+[ INFO] [selftest] C3-ADM-007: PASS
+[ INFO] [selftest] C3-ADM-008: PASS
+[ INFO] [selftest] C3-ADM-009: PASS
+[ INFO] [selftest] C3-ADM-010: PASS
+[ INFO] [selftest] C3-ADM-011: PASS
+[ INFO] [selftest] C3-ADM-012: PASS
+[ INFO] [selftest] C3-ADM-013: PASS
+[ INFO] [selftest] C3-ADM-014: PASS
+[ INFO] [selftest] C3-ADM-015: PASS
+[ INFO] [selftest] C3-ADM-016: PASS
+[ INFO] [selftest] C3-ADM-017: PASS
+[ INFO] [selftest] C3-ADM-032: PASS
+[ INFO] [selftest] C3-ADM-033: PASS
+[ INFO] [selftest] C3-ADM-018: PASS
+[ INFO] [selftest] C3-ADM-019: PASS
+[ INFO] [selftest] C3-ADM-020: PASS
+[ INFO] [selftest] C3-ADM-021: PASS
+[ INFO] [selftest] C3-ADM-022: PASS
+[ INFO] [selftest] C3-ADM-023: PASS
+[ INFO] [selftest] C3-ADM-024: PASS
+[ INFO] [selftest] C3-ADM-025: PASS
+[ INFO] [selftest] C3-ADM-026: PASS
+[ INFO] [selftest] C3-ADM-027: PASS
+[ INFO] [selftest] C3-ADM-028: PASS
+[ INFO] [selftest] C3-ADM-029: PASS
+[ INFO] [selftest] C3-ADM-030: PASS
+[ INFO] [selftest] C3-ADM-031: PASS
+[INFO] admission-core self-test PASS (fail-closed A/B floor model)
+[ INFO] [selftest] P-TRUST: PASS (privileged path-caps bounded by ceiling)
+[INFO] P-TRUST self-test PASS (privileged path-caps ceiling-bounded)
+[ INFO] [selftest] boot-ceiling: PASS (per-path table, no union collapse)
+[INFO] boot-ceiling self-test PASS (per-path table, no union collapse)
+[INFO] mmio-allowlist self-test PASS (known windows live, DWC2 denied)
+[ INFO] [selftest] MANIFEST-V2: PASS (v1 upcast + v2 parse + protection-class floor invariant)
+[INFO] Manifest-v2 self-test PASS (v1 upcast + v2 parse + tier-floor)
+[ INFO] ATOMIC_PUBLICATION_AP-15: PASS
+[ INFO] Successfully spawned init with complete root authority (tid=1)
+USER: [vfs-file-handle] wrong-owner-read-close-preserves-entry PASS
+USER: [vfs-file-handle] quota-32-per-owner PASS
+USER: [vfs-file-handle] nonreuse-and-u64-exhaustion PASS
+USER: [vfs-file-handle] exact-generation-purge PASS
+USER: [vfs-file-handle] parent-cross-owner-transitive-revoke PASS
+USER: [vfs-file-handle] owner-watch-filehandle-cleanup PASS
+USER: [vfs-file-handle] higher-generation-cleanup PASS
+USER: [vfs-guest-disk] fixed-capacity-boundary PASS
+USER: [PASS] write /tmp/test_lifecycle.txt
+USER: [PASS] stat size=11 is_file
+USER: [PASS] unlink /tmp/test_lifecycle.txt
+USER: [PASS] stat after unlink returns Err
+USER: [PASS] mkdir /tmp/testdir
+USER: [PASS] write inside testdir
+USER: [PASS] listdir /tmp/testdir contains f:file.txt
+USER: [PASS] rmdir /tmp/testdir after cleanup
+USER: [PASS] write /bin/ returns PermissionDenied
+USER: [PASS] write /tmp/ still works
+USER: [PASS] unlink /readme.txt (read-only / prefix) → PermissionDenied
+USER: [PASS] /readme.txt survived the refused unlink
+USER: [PASS] rmdir under / → PermissionDenied (authorized before backend)
+USER: [PASS] rmdir_recursive under / → PermissionDenied (before subtree walk)
+USER: [PASS] grant-write: unknown handle is denied before grant access
+USER: [PASS] ReadGrant unknown cap returns zero bytes without faulting
+USER: [PASS] ReadGrant unknown cap returns zero bytes for size=0
+USER: [PASS] ReadGrant unknown cap returns zero bytes for oversized offset
+USER: [PASS] grant-write: create writable target
+USER: [PASS] grant-write: helper returns committed byte count
+USER: [PASS] grant-write: commits exact bytes before acknowledgement
+USER: [PASS] grant-write: invalid offset is refused before grant access
+USER: [PASS] grant-write: short grant is refused without mutation
+USER: [PASS] grant-write: grant copy denial propagates as I/O error
+USER: [executor] dummy-waker=absent executor=parked source=TIMER PASS
+USER: [PASS] grant-write: failed writes leave committed bytes unchanged
+USER: [PASS] grant-write: copies into exact bounded destination range
+USER: [PASS] grant-write: bounded copy preserves prefix and suffix
+USER: [PASS] grant-write: write authorization precedes grant access
+USER: [PASS] grant-write: quota overflow is refused before grant access
+USER: [PASS] grant-write: quota refusal leaves committed bytes unchanged
+USER: [PASS] write file for async read
+USER: [PASS] ReadAsync returns PendingHandle
+USER: [PASS] Poll returns correct data
+USER: [PASS] Poll stale handle returns Err
+USER: [PASS] write /tmp/volatile.txt
+USER: [PASS] stat /tmp/volatile.txt size=8
+USER: [PASS] stat /tmp is_dir=true
+USER: [PASS] stat /tmp is_dir=true
+USER: [PASS] stat nonexistent returns Err
+USER: [PASS] listdir nonexistent = empty
+USER: [PASS] quota write 1 (400B) fits
+USER: [PASS] quota write 2 (800B total) fits
+USER: [PASS] quota write 3 exceeds 1.1KiB limit → Err(2)
+USER: [PASS] unlink q1 releases quota
+USER: [PASS] quota write after release succeeds
+USER: [PASS] rdir-quota: mkdir
+USER: [PASS] rdir-quota: write a.bin (400B)
+USER: [PASS] rdir-quota: write b.bin (800B total)
+USER: [PASS] rdir-quota: overflow write correctly blocked before delete
+USER: [PASS] rdir-quota: RmdirRecursive releases 800B
+USER: [PASS] rdir-quota: write after recursive delete succeeds (quota freed)
+USER: [PASS] dircap: acquiring /tmp yields a directory handle
+USER: [PASS] dircap: `..` is refused
+USER: [PASS] dircap: `../..` is refused
+USER: [PASS] dircap: an absolute name is refused
+USER: [PASS] dircap: an embedded traversal is refused
+USER: [PASS] dircap: `.` is refused
+USER: [PASS] dircap: an empty name is refused
+USER: [PASS] dircap: a backslash name is refused
+USER: [PASS] dircap: a control byte is refused
+USER: [PASS] dircap: odd UTF-8 in a name is refused
+USER: [PASS] dircap: deriving a subdirectory handle
+USER: [PASS] dircap: WriteAt creates a file inside the handle
+USER: [PASS] dircap: StatAt reports the file it just wrote
+USER: [PASS] dircap: ReadAt returns the bytes written
+USER: [PASS] dircap: ListAt lists the handle's own directory
+USER: [PASS] dircap: the handle resolved inside the directory it names
+USER: [PASS] dircap: OpenFileAt yields a file handle
+USER: [PASS] dircap: a handle can be given up
+USER: [PASS] dircap: revoking a handle revokes what was derived from it
+USER: [PASS] dircap: revoking a parent dir reaps file handles opened below it
+USER: [PASS] dircap: a revoked file handle cannot be closed into success
+USER: [PASS] dircap: acquiring /tmp yields a directory handle
+USER: [PASS] dircap: deriving a subdirectory handle
+USER: [PASS] grant: ReadFileGrant clamps to grant length
+USER: [PASS] grant: ReadFileGrant copies nonzero bytes
+USER: [PASS] dircap: GetFile returns a nonempty pointer before sealing
+USER: [PASS] dircap: OpenFileAt returns a file handle for a file
+USER: [PASS] dircap: the cell gives up naming paths
+USER: [PASS] dircap: Write{path} is refused after sealing
+USER: [PASS] dircap: the refused write left nothing behind
+USER: [PASS] dircap: GetFile is refused after sealing
+USER: [PASS] dircap: Stat is refused after sealing
+USER: [PASS] dircap: ListDir is refused after sealing
+USER: [PASS] dircap: Unlink is refused after sealing
+USER: [PASS] dircap: Mkdir is refused after sealing
+USER: [PASS] dircap: ReadAsync is refused after sealing
+USER: [PASS] dircap: widening by acquiring a new root is refused after sealing
+USER: [PASS] grant: ReadFileGrant is refused after sealing
+USER: [PASS] dircap: ReadFileHandle still works after sealing
+USER: [PASS] dircap: ReadFileHandle returns EOF for an oversized offset
+USER: [PASS] dircap: ReadFileHandle returns EOF for a zero-length request
+USER: [PASS] dircap: CloseFile closes a live file handle
+USER: [PASS] dircap: a closed file handle is stale
+USER: [PASS] dircap: handle operations still work after sealing
+USER: [PASS] dircap: UnlinkAt still works after sealing
+USER: [vfs-test] Results: 96 PASS, 0 FAIL
+USER: [vfs-test] ALL TESTS PASSED
+BUILD_RC=0
+RUNNER_RC=0
+END_UTC=2026-09-03T04:54:49Z
+RAW_PATH=docs/evidence/aarch64-semihosting-20260903-02-raw.txt
+RAW_SHA256=62dc1c33167ddb12acbaa6bc7a116c485b61fb75ed13ba3f8da0c39d4ea389f9
+RAW_SIZE_BYTES=29350
+OUTER_RC=0

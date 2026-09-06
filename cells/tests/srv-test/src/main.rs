@@ -312,7 +312,11 @@ fn test_s6_rename() {
 
     // Target exists
     match vfs_req(&api::ipc::VfsRequest::Stat("/srv/rn2.txt")) {
-        api::ipc::VfsResponse::Stat { is_dir: false, size, .. } if size == content.len() as u64 => {}
+        api::ipc::VfsResponse::Stat {
+            is_dir: false,
+            size,
+            ..
+        } if size == content.len() as u64 => {}
         _ => {
             fail("S6 rename", "target stat incorrect");
             return;

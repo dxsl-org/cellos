@@ -563,7 +563,8 @@ pub(crate) fn stack_pages_for(name: &str) -> usize {
         // RedoxFS transactions exceed the pre-RedoxFS 64 KiB measurement and
         // must retain the conservative stack until a new watermark is captured.
         "vfs" => STACK_PAGES,
-        "init" | "shell" | "vfs-test" | "net" | "virtio-net" | "thread" => MEASURED_STACK_PAGES,
+        "init" | "shell" | "vfs-test" | "net" | "virtio-net" | "thread" | "block" | "platform"
+        | "config" | "bench" | "bench-probe" => MEASURED_STACK_PAGES,
         _ => STACK_PAGES,
     }
 }

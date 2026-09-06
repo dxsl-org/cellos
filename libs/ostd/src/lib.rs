@@ -47,6 +47,8 @@ pub mod grant;
 /// Typed request/reply IPC helpers (Spec 17 — masked recv, fail-loud errors).
 pub mod ipc;
 pub mod mmio;
+/// Zero-trap fastpath SPSC ring channel for SAS inter-cell communication.
+pub mod ring_channel;
 pub mod startup;
 pub mod sync;
 pub mod syscall;

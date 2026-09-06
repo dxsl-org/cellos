@@ -159,7 +159,6 @@ impl NetDev {
     }
 }
 
-
 impl VirtioDevice for NetDev {
     fn device_id(&self) -> u32 {
         1

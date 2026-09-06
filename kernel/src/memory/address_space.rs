@@ -88,6 +88,13 @@ impl SupervisorMapping {
         })
     }
 }
+#[derive(Clone, Copy)]
+pub(crate) struct ExistingUserMapping {
+    virtual_address: VAddr,
+    physical_address: PhysAddr,
+    kind: MappingKind,
+    flags: Flags,
+}
 fn allocate_owned_frame() -> Result<OwnedFrame, AddressSpaceError> {
     #[cfg(feature = "test-hooks")]
     {
@@ -122,6 +129,7 @@ pub struct AddressSpaceBuilder {
     identity: DomainId,
     supervisor: Vec<SupervisorMapping>,
     requests: Vec<RequestedMapping>,
+    existing_user: Vec<ExistingUserMapping>,
 }
 impl Default for AddressSpaceBuilder {
     fn default() -> Self {
@@ -134,16 +142,14 @@ impl AddressSpaceBuilder {
             identity: DomainId(NEXT_DOMAIN.fetch_add(1, Ordering::Relaxed)),
             supervisor: Vec::new(),
             requests: Vec::new(),
+            existing_user: Vec::new(),
         }
     }
 
-    #[cfg(feature = "test-hooks")]
     pub(crate) fn allow_supervisor(&mut self, mapping: SupervisorMapping) {
         self.supervisor.push(mapping);
     }
 
-    /// Add the shared kernel snapshot and exactly one selected kernel stack.
-    #[cfg(feature = "test-hooks")]
     pub(crate) fn map_registered_execution(&mut self, kernel_stack: &crate::task::stack::Stack) {
         use crate::memory::domain_supervisor_registry::{shared_snapshot, SupervisorRangeKind};
 
@@ -182,6 +188,23 @@ impl AddressSpaceBuilder {
         }
     }
 
+    pub fn map_existing_user_page(
+        &mut self,
+        virtual_address: VAddr,
+        physical_address: PhysAddr,
+        kind: MappingKind,
+        flags: Flags,
+    ) -> Result<(), AddressSpaceError> {
+        validate_user_mapping(virtual_address, flags)?;
+        self.existing_user.push(ExistingUserMapping {
+            virtual_address,
+            physical_address,
+            kind,
+            flags,
+        });
+        Ok(())
+    }
+
     pub fn map_user_page(
         &mut self,
         virtual_address: VAddr,
@@ -201,6 +224,7 @@ impl AddressSpaceBuilder {
             identity,
             supervisor,
             requests,
+            existing_user,
         } = self;
         let root = allocate_owned_frame()?;
         // SAFETY: root is a zeroed private page frame and PageTable has the same page layout.
@@ -238,6 +262,21 @@ impl AddressSpaceBuilder {
                 flags: user_flags(request.flags),
             });
             frames.push(page);
+        }
+        for mapping in existing_user {
+            map_page(
+                root.physical_address(),
+                &mut table_frames,
+                mapping.virtual_address,
+                mapping.physical_address,
+                user_flags(mapping.flags),
+            )?;
+            ledger.push(MappingEntry {
+                virtual_address: mapping.virtual_address,
+                physical_address: mapping.physical_address,
+                kind: mapping.kind,
+                flags: user_flags(mapping.flags),
+            });
         }
         #[cfg(feature = "test-hooks")]
         let supervisor_registrations =
@@ -563,6 +602,39 @@ impl AddressSpace {
         self.state
             .store(AddressSpaceState::Dying as u8, Ordering::Release);
     }
+}
+
+/// Build a Tier 2 domain address space covering the kernel supervisor mapping,
+/// the cell's own kernel stack, its user stack, and its loaded ELF segments.
+pub fn create_cell_domain(
+    kstack: &crate::task::stack::Stack,
+    ustack: &crate::task::stack::Stack,
+    segments: &crate::task::stack::CellSegments,
+) -> Result<Arc<AddressSpace>, AddressSpaceError> {
+    let mut builder = AddressSpaceBuilder::new();
+    builder.map_registered_execution(kstack);
+
+    // Map user stack with User Read+Write permissions
+    let ustack_flags = Flags::from_bits(Flags::READ | Flags::WRITE);
+    for addr in (ustack.usable_start()..ustack.top).step_by(PAGE_SIZE) {
+        let phys =
+            crate::memory::paging::virt_to_phys(addr).ok_or(AddressSpaceError::InvalidMapping)?;
+        builder.map_existing_user_page(addr, phys, MappingKind::Private, ustack_flags)?;
+    }
+
+    // Map cell ELF segments with User permissions
+    for &(va, _frame) in segments.pages() {
+        let is_write = segments.is_writable(va);
+        let flags = if is_write {
+            Flags::from_bits(Flags::READ | Flags::WRITE)
+        } else {
+            Flags::from_bits(Flags::READ | Flags::EXECUTE)
+        };
+        let phys =
+            crate::memory::paging::virt_to_phys(va).ok_or(AddressSpaceError::InvalidMapping)?;
+        builder.map_existing_user_page(va, phys, MappingKind::Private, flags)?;
+    }
+    builder.build()
 }
 
 #[cfg(feature = "test-hooks")]

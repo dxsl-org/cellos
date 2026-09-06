@@ -106,6 +106,9 @@ impl fmt::Write for DirectWriter {
 
 #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
 fn write_rpi3_console_byte(byte: u8) {
+    if byte == b'\n' {
+        write_rpi3_console_byte(b'\r');
+    }
     loop {
         // Synchronous exceptions mask IRQs while `sys_log` prints. Keep draining
         // the eight-symbol RX FIFO into the 4096-byte kernel ring so full-duplex

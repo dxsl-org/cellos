@@ -3,7 +3,7 @@
 //! Reports physical frames committed by the kernel frame allocator. This
 //! includes the reserved kernel heap and is not a resident-set measurement.
 
-use api::benchmark::{BenchReport, ViBenchmark};
+use api::benchmark::ViBenchmark;
 
 pub struct MemoryFootprintBench {
     measured_bytes: u64,
@@ -17,22 +17,6 @@ impl MemoryFootprintBench {
     /// Return the last measurement in bytes (valid after `run_once`).
     pub fn bytes(&self) -> u64 {
         self.measured_bytes
-    }
-
-    /// Produce a synthetic `BenchReport` using bytes as the "latency" field.
-    ///
-    /// The caller should treat `p50` as the footprint in bytes and compare
-    /// against the 10 MB PDR target.
-    pub fn footprint_report(&self) -> BenchReport {
-        let b = self.measured_bytes;
-        BenchReport {
-            name: "memory_footprint",
-            n: 1,
-            min: b,
-            p50: b,
-            p99: b,
-            max: b,
-        }
     }
 }
 

@@ -101,7 +101,6 @@ fn meminfo_denial_and_typed_spawn_oom_are_runtime_visible() {
         .expect("standalone free checkpoint remains a UTF-8 boundary");
     assert_latest_meminfo(standalone_free_output, "/bin/free");
 
-
     qemu.send_line("capacity-probe");
     qemu.wait_for("[a2a3-probe] MEMINFO_DENIED", 30)
         .unwrap_or_else(|error| panic!("MemInfo denial: {error}\n{}", qemu.dump()));

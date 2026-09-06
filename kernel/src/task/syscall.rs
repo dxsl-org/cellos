@@ -1827,7 +1827,7 @@ fn resolve_and_lease_grant(
 ///
 /// A sender the scheduler can no longer attribute leaves the tail zeroed, which
 /// parses back as "no identity" and therefore as deny.
-fn write_caller_identity(buf_ptr: usize, buf_len: usize, sender_tid: usize) {
+fn write_caller_identity(caller_id: usize, buf_ptr: usize, buf_len: usize, sender_tid: usize) {
     let len = api::caller_identity::CALLER_IDENTITY_LEN;
     let Some(offset) = buf_len.checked_sub(len) else {
         return; // buffer cannot hold a trailer; receiver sees no identity → deny
@@ -1839,7 +1839,11 @@ fn write_caller_identity(buf_ptr: usize, buf_len: usize, sender_tid: usize) {
     let trailer = attested_identity_of(sender_tid)
         .map(|id| id.to_trailer())
         .unwrap_or([0u8; api::caller_identity::CALLER_IDENTITY_LEN]);
-    TaskCopyView::sas().write_bytes(dst, &trailer).ok(); // best-effort: if the write fails (bad ptr), receiver sees zeroed trailer → deny
+    if let Ok(view) = caller_copy_view(caller_id) {
+        view.write_bytes(dst, &trailer).ok();
+    } else {
+        TaskCopyView::sas().write_bytes(dst, &trailer).ok();
+    }
 }
 
 /// May `caller_id` read the kernel's provenance record for `target_cell`?
@@ -2677,7 +2681,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             // `attested_identity_of` takes that lock itself.
             let attest = |sender_tid: usize| {
                 if attest_caller {
-                    write_caller_identity(buf_ptr, buf_len, sender_tid);
+                    write_caller_identity(caller_id, buf_ptr, buf_len, sender_tid);
                 }
             };
 
@@ -3311,7 +3315,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                         .map_err(|_| SyscallError::InvalidInput)?;
                 }
                 if attest_caller {
-                    write_caller_identity(buf_ptr, buf_len, sender_tid);
+                    write_caller_identity(caller_id, buf_ptr, buf_len, sender_tid);
                 }
                 if let Some(sched) = super::SCHEDULER.lock().as_mut() {
                     if let Some(t) = sched.tasks.get_mut(&caller_id) {
@@ -3347,7 +3351,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             match res {
                 Ok(id) => {
                     if attest_caller && id > 0 {
-                        write_caller_identity(buf_ptr, buf_len, id);
+                        write_caller_identity(caller_id, buf_ptr, buf_len, id);
                     }
                     Ok(id)
                 }
@@ -3752,7 +3756,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 } else {
                     // Task already dead — queue synthetic death so watcher never stalls.
                     if let Some(wt) = sched.tasks.get_mut(&caller_id) {
-                        wt.pending_deaths.push((watched, 0));
+                        super::scheduler::queue_pending_death(wt, watched, 0);
                     }
                 }
             }

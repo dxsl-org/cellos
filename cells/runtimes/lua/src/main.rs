@@ -8,7 +8,15 @@ extern crate ostd;
 // Lua Cell: no direct network access — net data goes via IPC to the net Cell.
 // Scripts load from VFS only; io.popen/os.execute/debug are stripped at init.
 api::declare_manifest!(block_io = false, network = false, spawn = false);
-api::declare_syscalls![Send, Recv, Log, Heartbeat, LookupService, StateRestore, VfsMutate];
+api::declare_syscalls![
+    Send,
+    Recv,
+    Log,
+    Heartbeat,
+    LookupService,
+    StateRestore,
+    VfsMutate
+];
 
 // When no ELF-capable C compiler is available (e.g. Windows + MSVC without
 // clang installed), build.rs emits `lua_c_unavailable` and the real Lua C

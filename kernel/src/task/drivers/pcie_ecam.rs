@@ -225,6 +225,7 @@ fn config_addr_in_range(
 ///
 /// # Safety
 /// The admitted ECAM window must be identity-mapped and remain live.
+#[allow(dead_code)]
 unsafe fn read_identity_in_range(
     ecam_base: usize,
     bus_start: u8,
@@ -573,8 +574,7 @@ unsafe fn scan(ecam_base: usize, config_bus: u8, reported_bus: u8) {
             let class = unsafe { read8(ecam_base, config_bus, dev, fun, CFG_CLASS_CODE) };
 
             // Decode BARs for type-0 headers (endpoints). Skip bridges (type-1).
-            let hdr =
-                unsafe { read8(ecam_base, config_bus, dev, fun, CFG_HEADER_TYPE) } & 0x7F;
+            let hdr = unsafe { read8(ecam_base, config_bus, dev, fun, CFG_HEADER_TYPE) } & 0x7F;
             let bars = if hdr == 0 {
                 // SAFETY: the selected ECAM bus window is identity-mapped.
                 unsafe { decode_bars(ecam_base, config_bus, dev, fun) }
@@ -940,13 +940,10 @@ mod tests {
         let mut ecam = alloc::vec![0u8; 2 * ECAM_BYTES_PER_BUS];
         let function_offset = ECAM_BYTES_PER_BUS + (3usize << 15) + (2usize << 12);
         ecam[function_offset..function_offset + 2].copy_from_slice(&0x8086u16.to_ne_bytes());
-        ecam[function_offset + 2..function_offset + 4]
-            .copy_from_slice(&0x100Eu16.to_ne_bytes());
+        ecam[function_offset + 2..function_offset + 4].copy_from_slice(&0x100Eu16.to_ne_bytes());
 
         // SAFETY: the test owns a correctly sized, live in-memory ECAM stand-in.
-        let identity = unsafe {
-            read_identity_in_range(ecam.as_ptr() as usize, 64, 65, 65, 3, 2)
-        };
+        let identity = unsafe { read_identity_in_range(ecam.as_ptr() as usize, 64, 65, 65, 3, 2) };
         assert_eq!(identity, Some((0x8086, 0x100E)));
     }
 }

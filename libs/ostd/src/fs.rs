@@ -146,9 +146,12 @@ impl File {
                 content: chunk,
             };
             let mut resp_buf = [0u8; 512];
-            match vfs_call(self.vfs_tid, &req, &mut resp_buf)? {
-                VfsResponse::Ok => {}
-                _ => return Err(ViError::IO),
+            match vfs_call(self.vfs_tid, &req, &mut resp_buf) {
+                Ok(VfsResponse::Ok) => {}
+                _ => {
+                    self.vfs_tid = 0; // Poison generation after error
+                    return Err(ViError::IO);
+                }
             }
         }
         Ok(())
@@ -283,12 +286,8 @@ fn vfs_call<'r>(
     resp_buf: &'r mut [u8; 512],
 ) -> ViResult<VfsResponse<'r>> {
     let mut send_buf = [0u8; 512];
-    let n = api::ipc::encode(req, &mut send_buf)
-        .map(|s| s.len())
-        .map_err(|_| ViError::IO)?;
-    syscall::sys_send(vfs_tid, &send_buf[..n]);
-    syscall::sys_recv(0, resp_buf);
-    api::ipc::decode::<VfsResponse>(resp_buf).map_err(|_| ViError::IO)
+    crate::ipc::service_call_typed_bounded(vfs_tid, req, &mut send_buf, resp_buf, 50)
+        .map_err(|_| ViError::IO)
 }
 
 /// Read the ENTIRE file at `path` into a freshly-allocated Grant via the VFS mount

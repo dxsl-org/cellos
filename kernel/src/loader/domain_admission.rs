@@ -4,6 +4,7 @@
 //! to expose a Tier-2 route. No public loader or manifest path constructs a
 //! request; test hooks use this module solely to prove denial and drain rules.
 
+#![allow(dead_code)]
 use crate::task::cap::CapSet;
 use core::sync::atomic::{AtomicU64, Ordering};
 

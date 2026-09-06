@@ -121,8 +121,13 @@ impl FsBackend for BootFsProxy {
             Ok(c) => c,
             Err(_) => return Vec::new(),
         };
+        let size = self.file_size(path) as usize;
+        let mut result = if size > 0 {
+            Vec::with_capacity(size)
+        } else {
+            Vec::new()
+        };
         let mut buf = [0u8; 512];
-        let mut result = Vec::new();
         loop {
             match sys_read_cap(cap, &mut buf) {
                 Ok(0) => break,

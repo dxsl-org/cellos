@@ -567,9 +567,9 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     }
 
     // 4. Heap Allocator (Global) - MUST be after paging but before any allocations
-    // 32 MiB = 8192 frames. Sized to hold:
-    //   - embedded RAM disk copy (~4 MiB), VirtIO GPU framebuffer (~4 MiB), cell ELFs + kernel structures
-    const HEAP_FRAMES: usize = 8_192;
+    // 4 MiB = 1024 frames (reduced from 32 MiB / 8192 frames under Phase 01 memory footprint reduction).
+    // Sized to hold kernel structures, scheduler state, and IPC buffers.
+    const HEAP_FRAMES: usize = 1_024;
     let heap_start = {
         let mut allocator_guard = memory::frame::FRAME_ALLOCATOR.lock();
         let allocator = allocator_guard
@@ -731,6 +731,12 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     log_info("Initializing scheduler...");
     task::init();
     log_info("Scheduler initialized");
+    #[cfg(feature = "test-hooks")]
+    if task::scheduler::death_subscription_quota_self_test() {
+        log_info("death-subscriber quota self-test PASS");
+    } else {
+        log_info("death-subscriber quota self-test FAIL");
+    }
     // This test-only branch must precede every unrelated boot suite: its
     // terminal is the sole evidence for opcode 214's SAS ownership path.
     #[cfg(all(
@@ -857,24 +863,12 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
 
     #[cfg(all(target_arch = "riscv64", feature = "test-hooks"))]
     crate::loader::atomic_publication_tests::run_governed_success_after_secondaries();
-    #[cfg(all(
-        target_arch = "riscv64",
-        feature = "native-domains",
-        feature = "test-hooks"
-    ))]
+    #[cfg(all(target_arch = "riscv64", feature = "native-domains"))]
     memory::domain_supervisor_registry::activate();
-    #[cfg(all(
-        target_arch = "riscv64",
-        feature = "native-domains",
-        feature = "test-hooks"
-    ))]
+    #[cfg(all(target_arch = "riscv64", feature = "native-domains"))]
     memory::domain_supervisor_registry::register_static_image()
         .expect("kernel static ranges must be disjoint");
-    #[cfg(all(
-        target_arch = "riscv64",
-        feature = "native-domains",
-        feature = "test-hooks"
-    ))]
+    #[cfg(all(target_arch = "riscv64", feature = "native-domains"))]
     memory::domain_supervisor_registry::register(
         heap_virt,
         heap_virt
@@ -884,11 +878,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         memory::domain_supervisor_registry::SupervisorRangeOwner::SharedKernel,
     )
     .expect("kernel heap registration must be unique");
-    #[cfg(all(
-        target_arch = "riscv64",
-        feature = "native-domains",
-        feature = "test-hooks"
-    ))]
+    #[cfg(all(target_arch = "riscv64", feature = "native-domains"))]
     if let Some(guard) = memory::frame::FRAME_ALLOCATOR.lock().as_ref() {
         let (bm_start, bm_end) = guard.bitmap_range();
         memory::domain_supervisor_registry::register(
@@ -1047,8 +1037,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             );
             match crate::loader::spawn_from_path(
                 "/bin/platform",
-                crate::loader::SpawnRequest::governed_boot()
-                    .with_argv(argv_str.into_bytes()),
+                crate::loader::SpawnRequest::governed_boot().with_argv(argv_str.into_bytes()),
             ) {
                 Ok(_) => log_info("Platform Cell spawned (x86 PCIe ECAM scanner)"),
                 Err(_) => log_info("Platform Cell absent — PCIe BARs will not be pre-registered"),

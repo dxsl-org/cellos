@@ -95,6 +95,29 @@ const WATCHDOG_FAULT_CAUSE: u32 = 0x0000_DEAD;
 static DEATH_SUBSCRIBERS: crate::sync::Spinlock<BTreeMap<usize, Vec<usize>>> =
     crate::sync::Spinlock::new(BTreeMap::new());
 
+/// Lexically pins heap accounting to the kernel for scheduler-owned containers.
+///
+/// Callers must not yield or context-switch while this guard is live. Scheduler
+/// and subscriber mutations run under spinlocks with interrupts excluded, so
+/// the current hart cannot publish this temporary accounting identity.
+struct KernelAllocationContext {
+    previous_cell: usize,
+}
+
+impl KernelAllocationContext {
+    fn enter() -> Self {
+        let previous_cell = super::hart_local::current_cell_id();
+        super::hart_local::set_current_cell_id(0);
+        Self { previous_cell }
+    }
+}
+
+impl Drop for KernelAllocationContext {
+    fn drop(&mut self) {
+        super::hart_local::set_current_cell_id(self.previous_cell);
+    }
+}
+
 /// Scheduler-owned lifetime record for a bounded reusable CellId slot.
 ///
 /// This is intentionally an array, not a task-table lookup: CellIds are quota
@@ -136,11 +159,106 @@ const MAX_RETURNABLE_OWNER_WATCH_TOKEN: u64 = isize::MAX as u64;
 
 /// Register `watcher` to be notified when `watched` exits or faults.
 pub fn subscribe_death(watched: usize, watcher: usize) {
-    DEATH_SUBSCRIBERS
-        .lock()
-        .entry(watched)
-        .or_default()
-        .push(watcher);
+    let _allocation = KernelAllocationContext::enter();
+    let mut subscribers = DEATH_SUBSCRIBERS.lock();
+    let registered = subscribers.entry(watched).or_default();
+    // NotifyOnExit is one-shot state, not an event-counter subscription.
+    // Idempotence bounds kernel-funded entries to live watched/watcher pairs.
+    if !registered.contains(&watcher) {
+        registered.push(watcher);
+    }
+}
+pub(crate) fn queue_pending_death(task: &mut Task, watched: usize, exit_reason: usize) {
+    let _allocation = KernelAllocationContext::enter();
+    if !task
+        .pending_deaths
+        .iter()
+        .any(|pending| *pending == (watched, exit_reason))
+    {
+        task.pending_deaths.push((watched, exit_reason));
+    }
+}
+
+fn release_pending_deaths(task: &mut Task) {
+    let _allocation = KernelAllocationContext::enter();
+    drop(core::mem::take(&mut task.pending_deaths));
+}
+
+fn drain_death_subscribers(watched_tid: usize, mut deliver: impl FnMut(usize)) {
+    let _allocation = KernelAllocationContext::enter();
+    let watchers = {
+        let mut subscribers = DEATH_SUBSCRIBERS.lock();
+        let watchers = subscribers.remove(&watched_tid).unwrap_or_default();
+        // A dead watcher cannot retain entries until unrelated watched tasks
+        // eventually exit.
+        for registered in subscribers.values_mut() {
+            registered.retain(|watcher| *watcher != watched_tid);
+        }
+        subscribers.retain(|_, registered| !registered.is_empty());
+        watchers
+    };
+    for watcher in watchers {
+        deliver(watcher);
+    }
+}
+
+#[cfg(feature = "test-hooks")]
+pub(crate) fn death_subscription_quota_self_test() -> bool {
+    use crate::memory::cell_quota;
+    use types::CellId;
+
+    const OWNER_CELL: usize = cell_quota::MAX_CELLS - 2;
+    const EXIT_CELL: usize = cell_quota::MAX_CELLS - 1;
+    const WATCHED: usize = usize::MAX - 64;
+    const WATCHER: usize = usize::MAX - 1;
+
+    let original = super::hart_local::current_cell_id();
+    cell_quota::register(CellId(OWNER_CELL as u64), usize::MAX);
+    cell_quota::register(CellId(EXIT_CELL as u64), usize::MAX);
+    let owner_before = cell_quota::in_use(CellId(OWNER_CELL as u64));
+    let exit_before = cell_quota::in_use(CellId(EXIT_CELL as u64));
+
+    super::hart_local::set_current_cell_id(OWNER_CELL);
+    for offset in 0..32 {
+        for _ in 0..8 {
+            subscribe_death(WATCHED + offset, WATCHER);
+        }
+    }
+    let subscriptions_bounded = {
+        let subscribers = DEATH_SUBSCRIBERS.lock();
+        subscribers.len() == 32
+            && subscribers
+                .values()
+                .all(|registered| registered.as_slice() == [WATCHER])
+    };
+    let owner_after_subscribe = cell_quota::in_use(CellId(OWNER_CELL as u64));
+
+    super::hart_local::set_current_cell_id(EXIT_CELL);
+    for offset in 0..16 {
+        drain_death_subscribers(WATCHED + offset, |_| {});
+    }
+    // Simulate watcher cancellation/death; this removes its remaining entries.
+    drain_death_subscribers(WATCHER, |_| {});
+    let owner_after_remove = cell_quota::in_use(CellId(OWNER_CELL as u64));
+    let exit_after = cell_quota::in_use(CellId(EXIT_CELL as u64));
+
+    super::hart_local::set_current_cell_id(original);
+    cell_quota::deregister(CellId(OWNER_CELL as u64));
+    cell_quota::deregister(CellId(EXIT_CELL as u64));
+    let ok = subscriptions_bounded
+        && owner_after_subscribe == owner_before
+        && owner_after_remove == owner_before
+        && exit_after == exit_before;
+    log::info!(
+        "[selftest] DEATH-SUBSCRIBER-QUOTA: {} pairs=32 duplicates=8 owner {}->{}->{} exit {}->{}",
+        if ok { "PASS" } else { "FAIL" },
+        owner_before,
+        owner_after_subscribe,
+        owner_after_remove,
+        exit_before,
+        exit_after
+    );
+    ok
 }
 
 /// Central task table (Hubris-like).
@@ -923,6 +1041,10 @@ impl Scheduler {
                 t.kernel_stack.as_ref(),
                 t.user_stack.as_ref(),
             );
+            // pending_deaths is scheduler-owned and allocated under Cell 0.
+            // Destroy its backing allocation before this Task moves to zombies,
+            // where dropping the rest of the task uses its ordinary owner context.
+            release_pending_deaths(t);
             let charge = core::mem::take(&mut t.stack_quota_charge);
             if charge != 0 {
                 let cell_raw = t.cell_id.0 as usize;
@@ -1023,32 +1145,33 @@ impl Scheduler {
             }
         }
 
-        // Deliver NotifyOnExit death notifications. One-shot: the subscription is
-        // removed here. Wake a watcher parked in Recv (its Recv returns
-        // current_caller = this dead tid), else queue onto pending_deaths so the
-        // watcher gets it on its next Recv (covers a death during respawn).
-        let watchers = DEATH_SUBSCRIBERS.lock().remove(&tid).unwrap_or_default();
-        let mut woken_watchers = Vec::new();
-        for w in watchers {
+        // Deliver NotifyOnExit death notifications. The subscriber map, its
+        // nested vectors, and pending-death storage are scheduler-owned. Their
+        // complete allocate/drop lifetimes stay under kernel attribution even
+        // when ForceExit runs in another Cell context.
+        drain_death_subscribers(tid, |w| {
+            let mut wake = false;
             if let Some(wt) = self.tasks.get_mut(&w) {
+                // A retiring watcher cannot consume another notification. In
+                // particular, a self-watch must not recreate kernel-funded
+                // pending storage after exit_task destroyed it above.
+                if matches!(wt.state, TaskState::Retiring | TaskState::Terminated) {
+                    return;
+                }
                 if matches!(wt.state, TaskState::Recv { .. }) {
-                    // Stash the exit reason for delivery as the recv payload (NotifyOnExit
-                    // contract). The actual buffer write happens when the watcher's Recv
-                    // RESUMES, in the watcher's own syscall context — writing a USER buffer
-                    // from here (the trap/fault context) faults (S-mode store to a U page,
-                    // SSTATUS.SUM not set).
+                    // The actual userspace write occurs when Recv resumes.
                     wt.set_received_caller_context(tid, dead_caller.0, dead_caller.1);
                     wt.pending_exit_reason = Some(exit_reason);
                     wt.state = TaskState::Ready;
-                    woken_watchers.push(w);
+                    wake = true;
                 } else {
-                    wt.pending_deaths.push((tid, exit_reason));
+                    queue_pending_death(wt, tid, exit_reason);
                 }
             }
-        }
-        for w in woken_watchers {
-            self.push_ready(w);
-        }
+            if wake {
+                self.push_ready(w);
+            }
+        });
 
         // Owner watches are token-indexed and use a distinct delivery lane.
         // Backend receives are masked to a service TID, so only a wildcard VFS

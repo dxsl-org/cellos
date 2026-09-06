@@ -5,6 +5,13 @@
 **Scope**: Cellos G2 (Server & Specialized PC) so sánh với các hệ điều hành server/desktop phổ biến  
 **Trạng thái Cellos G2**: Đang phát triển — x86_64 full bring-up chưa hoàn thành, so sánh dựa trên kiến trúc đã thiết kế
 
+> **Historical scope notice — 2026-09-05:** This June analysis is retained as
+> historical research. Its AI/specialized-PC-only positioning below is superseded
+> by [ADR-0014](../decisions/0014-lab-first-robot-workflows.md) and the current
+> [G2 profiles](../../.agents/260905-1139-sas-lbi-outcome-closure/organization-deployment-profiles.md):
+> organizational web/app/microservice servers and ordinary office PCs. Historical
+> feature/performance comparisons are not current implementation or qualification evidence.
+
 > **Đọc trước khi tiếp tục**: Cellos **không** cố gắng thay thế Linux cho web server tổng dụng.  
 > Cellos G2 nhắm vào **niche cụ thể**: AI inference server, RT data pipeline, RISC-V AI chip (C930/P870),  
 > và specialized PC nơi latency + fault isolation là yêu cầu thực sự. Bảng so sánh dưới phản ánh điều này.

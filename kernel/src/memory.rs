@@ -5,11 +5,7 @@ use crate::*;
 #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
 pub mod address_space;
 pub mod cell_quota;
-#[cfg(all(
-    feature = "native-domains",
-    feature = "test-hooks",
-    target_arch = "riscv64"
-))]
+#[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
 #[path = "memory/domain-supervisor-registry.rs"]
 pub(crate) mod domain_supervisor_registry;
 /// x86 nested paging (EPT/NPT) — Tier 3b x86 VMM. x86_64 only.

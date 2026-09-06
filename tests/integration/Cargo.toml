@@ -24,6 +24,14 @@ name = "boot"
 path = "tests/boot.rs"
 
 [[test]]
+name = "tier2-fault-isolation"
+path = "tests/tier2_fault_isolation.rs"
+
+[[test]]
+name = "fastpath-ipc"
+path = "tests/fastpath_ipc.rs"
+
+[[test]]
 name = "handoff"
 path = "tests/handoff.rs"
 
@@ -86,6 +94,14 @@ path = "tests/periph-can-pwm-adc.rs"
 [[test]]
 name = "robot-demo-e2e"
 path = "tests/robot-demo-e2e.rs"
+
+[[test]]
+name = "lab-carrier-transfer"
+path = "tests/lab-carrier-transfer.rs"
+
+[[test]]
+name = "base-tray-handoff"
+path = "tests/base-tray-handoff.rs"
 
 [[test]]
 name = "tls-gate"
@@ -173,6 +189,7 @@ path = "tests/iommu-publication.rs"
 
 [dev-dependencies]
 tempfile = "3"
+api = { path = "../../libs/api" }
 
 # Detach from the parent workspace so the riscv64 default target is not inherited.
 [workspace]

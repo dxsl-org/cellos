@@ -3,7 +3,7 @@
 **Project Name**: Cellos (Jarvis Hybrid OS)  
 **Version**: 0.2.1-dev (Mycelium Era)  
 **Status**: Active Development (Phase 1 - Core Stability)  
-**Last Updated**: 2026-08-19 (workspace, HAL/board split, roadmap split, and active runtime status refreshed against `origin/main`)
+**Last Updated**: 2026-09-05 (product scope updated; technical sections retain their own evidence dates)
 
 ---
 
@@ -12,8 +12,8 @@
 Cellos is a next-generation operating system designed for the **Edge-to-Cloud era**. It combines innovations from Theseus (Live Evolution), Asterinas (FrameKernel Safety), and Tock (Embedded Efficiency) into a unified architecture.
 
 **Product delivery is framed by product stages** (overlay on the technical phases below — see [project-roadmap.md](project-roadmap.md) and [roadmap/product-stages.md](roadmap/product-stages.md)):
-- **Stage G1 — Robot & Embedded** (now → ~2026 Q4): complete the OS for robots/embedded. Primary target = Tier A SBC with MMU (RV64/ARM64, RPi-class robot brain); sub-track = Tier B MCU (RV32 <512KB, CHERIoT-Nano) for low-level control. Defining traits: never-die, bounded real-time, fault isolation, peripheral I/O (GPIO/I2C/SPI/UART/CAN), instant-on boot.
-- **Stage G2 — Server & Specialized PC** (~2027): expand to servers/PCs. Adds SMP multi-core, full desktop compositor, zero-downtime hot migration, x86_64 full bring-up, large storage. Untrusted code runs in the Tier 3 Linux VM.
+- **Stage G1 — Robot & Embedded**: LAB-01 dry identified carrier transfer is the first product workflow. BASE-01 tray transport and ASSEMBLY-01 stationary integration are gated extensions; exact hardware, metrology and safety requirements are not established by host/QEMU evidence. See [ADR-0014](decisions/0014-lab-first-robot-workflows.md).
+- **Stage G2 — Organization Servers & Office PCs**: bounded organizational Windows/Linux replacement for web/app/microservice hosting and ordinary office applications. Actual application/device compatibility, isolation, operations and production qualification determine acceptance; specialist equipment is not an entry requirement. These profiles are scope-defined, not active implementation or application-support claims.
 - **Stages G3-G5**: NPU-native compute, full Rust `std` as a Tier 1 runtime profile, and virtualization remain later overlays with explicit entry gates.
 
 **Key Innovation**: Cellular Single Address Space (SAS) using Language-Based Isolation (LBI) via Rust's type system. Software is organized as **Cells** (not processes) sharing one address space, isolated by Rust's compiler rather than hardware MMU.
@@ -497,9 +497,11 @@ None documented yet (Phase 1 still stabilizing).
 
 ## Development Timeline
 
-> **Use-case stage overlay** (maps onto the technical phases below):
-> - **G1 Robot & Embedded** (now → ~2026 Q4): Core Stability ✅ + Phases 24–26, 29–30 + Peripheral Driver track 🆕 + ARM64 full bring-up 🆕 + VFS robustness + RV32-Nano sub-track (tail) + reference robot demo 🆕.
-> - **G2 Server & PC** (~2027): Phase 32 (SMP), Phase 27-3 (direct IPC), full compositor/desktop, hot migration (M4.1), x86_64 full bring-up 🆕, full utilities, throughput benchmarks.
+> **Current use-case overlay** ([product stages](./roadmap/product-stages.md), [ADR-0014](./decisions/0014-lab-first-robot-workflows.md)):
+> - **G1 Robot & Embedded:** LAB-01 first, with separately gated BASE-01 and ASSEMBLY-01 extensions. No date or physical qualification follows from software closure.
+> - **G2 Organization Servers & Office PCs:** ORG-SRV-01 web/app/microservice hosting and ORG-PC-01 ordinary local-office workflows. Actual cohort/application requirements determine capability needs; implementation scheduling remains unactivated, with no robot-physical prerequisite.
+>
+> The dated technical timeline below is historical planning context, not the current G1/G2 schedule, required capability bundle, or qualification evidence.
 
 ```
 Phase 1: Core Stability

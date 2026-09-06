@@ -1,24 +1,23 @@
 //! Typed linear handles for kernel Grant regions.
 //!
 //! A [`GrantHandle<T>`] wraps a raw grant ID (physical base address in SAS).
-//! It is `!Copy + !Clone` — Rust affine ownership enforces that each grant
-//! has exactly one live owner at a time. Dropping the handle automatically
-//! calls `sys_grant_free`, returning the frames to the kernel.
+//! It is `!Copy + !Clone + !Send`: Rust affine ownership permits one wrapper,
+//! while the kernel permits only the allocating **task** to free the grant.
+//! Dropping the handle on that task calls `sys_grant_free`.
 //!
-//! This implements the Singularity "exchange heap" lesson: ownership transfer
-//! of shared memory is explicit and compile-time verifiable, not a runtime
-//! convention that can be accidentally violated.
+//! `GrantShare` grants another task bounded access; it never transfers owner
+//! authority. Cross-task users carry the raw ID only for access syscalls and
+//! leave deallocation to the allocating task.
 //!
 //! # Typical flow
 //!
 //! ```rust,no_run
 //! use ostd::grant::GrantHandle;
 //!
-//! // Allocate a 4-KiB region typed as raw bytes.
+//! // Allocate and use a 4-KiB region on one task.
 //! let mut handle = GrantHandle::<u8>::alloc(4096).expect("OOM");
-//! // ... fill with data ...
-//! let (id, len) = handle.into_raw();          // hand off to another Cell via IPC
-//! // The grant is NOT freed here — receiver calls GrantHandle::from_raw(id, len).
+//! // ... fill/share/use the grant, while retaining this owner handle ...
+//! drop(handle); // owner task frees it
 //! ```
 
 use core::marker::PhantomData;
@@ -30,23 +29,20 @@ use crate::syscall::{sys_grant_alloc, sys_grant_free, sys_grant_slice};
 /// `T` is a logical element type — the kernel manages raw byte pages and has
 /// no knowledge of `T`. The region holds `len / size_of::<T>()` elements.
 ///
-/// # Linear type invariant
-/// `!Copy + !Clone`. At most one `GrantHandle<T>` exists per `grant_id` in
-/// this cell's address space. This is enforced by Rust's affine type system
-/// (move semantics), not by hardware.
+/// # Linear task-local invariant
+/// `!Copy + !Clone + !Send`. At most one `GrantHandle<T>` exists per `grant_id`,
+/// and it remains on the task that allocated the grant. Rust move semantics
+/// prevent duplicate wrappers; kernel owner-TID checks enforce deallocation.
 ///
 /// # Drop
-/// `Drop` calls [`sys_grant_free`], releasing the frames back to the kernel.
-/// Use [`into_raw`](GrantHandle::into_raw) to transfer ownership without freeing.
+/// `Drop` calls [`sys_grant_free`] from the allocating task, releasing the
+/// frames back to the kernel. [`into_raw`](GrantHandle::into_raw) only detaches
+/// that task-local Rust wrapper; it does not transfer kernel ownership.
 pub struct GrantHandle<T> {
     id: usize,
     len: usize,
     _type: PhantomData<*mut T>,
 }
-
-// SAFETY: In SAS all cells share the address space. GrantHandle is Send because
-// only one cell can own the handle at a time (move semantics prevent aliasing).
-unsafe impl<T: Send> Send for GrantHandle<T> {}
 
 impl<T> GrantHandle<T> {
     /// Allocate a new grant region holding `count` elements of type `T`.
@@ -66,13 +62,14 @@ impl<T> GrantHandle<T> {
         })
     }
 
-    /// Wrap a raw grant ID received from another Cell via IPC.
+    /// Reconstruct a raw grant ID previously detached on this same task.
     ///
     /// # Safety
-    /// `id` must be a valid grant owned by this cell (e.g. via `sys_grant_share`
-    /// and the receiver's confirmation). `len` must equal the byte length returned
-    /// by the original `sys_grant_alloc`. Calling this twice with the same `id`
-    /// creates two owners and will double-free on drop — undefined behaviour.
+    /// `id` must name a live grant allocated by the current task, and no other
+    /// owner wrapper may exist. `len` must equal the byte length associated with
+    /// the original `sys_grant_alloc`. `GrantShare`, IPC receipt, CellId
+    /// equality, or access to the SAS address does not establish owner authority.
+    /// Calling this twice with the same `id` creates duplicate owner wrappers.
     pub unsafe fn from_raw(id: usize, len: usize) -> Self {
         Self {
             id,
@@ -83,8 +80,8 @@ impl<T> GrantHandle<T> {
 
     /// Consume the handle, returning `(grant_id, byte_len)` **without** freeing.
     ///
-    /// Use when passing grant ownership to another Cell via IPC. The receiver
-    /// must call [`GrantHandle::from_raw`] to re-wrap it.
+    /// This supports a same-task wrapper handoff to code that later reconstructs
+    /// it with [`GrantHandle::from_raw`]. It does not change the kernel owner TID.
     #[inline]
     pub fn into_raw(self) -> (usize, usize) {
         let id = self.id;

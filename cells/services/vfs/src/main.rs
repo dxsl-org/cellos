@@ -3,29 +3,20 @@
 
 extern crate alloc;
 extern crate driver_disk;
-// redox_syscall's [lib] name is "syscall"; alias so our code can use redox_syscall:: paths.
-extern crate syscall as redox_syscall;
 
 mod access;
 mod backend;
 mod backend_bin_overlay;
 mod backend_bootfs;
+mod backend_cellosfs;
 mod backend_fat;
-#[cfg(feature = "littlefs")]
-mod backend_littlefs;
 mod backend_ramfs;
-mod backend_redoxfs;
 mod blk_router;
 mod block_stream;
-mod disk_redoxfs;
-#[cfg(feature = "littlefs")]
-mod lfs_disk;
-// x86_64-only str* providers for the littlefs C core — the api POSIX shim
-// (which provides them on riscv64/aarch64) is cfg-gated off on x86_64 to
-// avoid duplicate symbols with mlibc Tier-B cells.
 mod caller;
 mod dir_admission;
 mod dirs;
+mod disk_cellosfs;
 mod dispatch;
 mod dispatch_dirs;
 mod dispatch_file_handles;
@@ -36,11 +27,9 @@ mod file_handles;
 mod grant_read;
 mod grant_write;
 mod handle_table;
-#[cfg(all(feature = "littlefs", target_arch = "x86_64"))]
-mod lfs_string_shim;
 mod manager;
-mod namespace;
 mod mount;
+mod namespace;
 mod page_cache;
 mod paths;
 mod pending;
@@ -98,8 +87,11 @@ api::declare_syscalls![
     // turns that corruption into an unbounded sleep that hangs the boot.
 ];
 
+ostd::declare_custom_heap!(4 * 1024 * 1024);
+
 #[no_mangle]
 pub fn main() {
+    init_custom_heap();
     println("VFS Service v0.2: RamFS + mkdir/rmdir/unlink IPC (typed postcard)");
     // VfsManager::new() mounts all backends, including the FAT volume on the
     // VirtIO disk (which logs its own success/fallback status).

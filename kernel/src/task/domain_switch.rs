@@ -26,10 +26,12 @@ impl DomainRef {
         (self.0.identity().raw(), self.0.generation())
     }
 
+    #[allow(dead_code)]
     pub(crate) fn from_address_space(space: &Arc<AddressSpace>) -> Self {
         Self(Arc::clone(space))
     }
 
+    #[allow(dead_code)]
     pub(crate) fn address_space(&self) -> &Arc<AddressSpace> {
         &self.0
     }

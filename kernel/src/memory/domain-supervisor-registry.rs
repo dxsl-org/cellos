@@ -7,6 +7,7 @@ use core::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use crate::{memory::paging::PAGE_SIZE, sync::Spinlock, PhysAddr};
 
+#[allow(dead_code)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum SupervisorRangeKind {
     KernelHeap,
@@ -17,6 +18,7 @@ pub(crate) enum SupervisorRangeKind {
     StaticWritable,
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum SupervisorRangeOwner {
     SharedKernel,
@@ -145,6 +147,7 @@ pub(crate) fn shared_snapshot() -> Vec<SupervisorRange> {
         .collect()
 }
 
+#[allow(dead_code)]
 pub(crate) fn contains_shared_kind(kind: SupervisorRangeKind) -> bool {
     RANGES
         .lock()

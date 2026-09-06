@@ -15,8 +15,7 @@ Prerequisites are Rust nightly, `qemu-system-x86_64`, GNU `objdump`, `xorriso`
 files.
 
 ```sh
-cargo build --release -p cellos-kernel --target x86_64-unknown-none \
-  -Z build-std=core,alloc
+cargo build -p cellos-kernel --release --target x86_64-unknown-none
 bash scripts/x86/make-iso-ci.sh
 BOOT_WINDOW=90 bash scripts/qemu-x86_64-test.sh
 ```

@@ -245,6 +245,7 @@ strengthen future promotion gates without retroactively upgrading evidence.
 ## Links
 
 - [ADR-0007: Use development-first hardware-constrained execution](./0007-development-first-hardware-constrained-execution.md) — lane-local execution and truthful evidence ceilings remain authoritative.
+- [ADR-0014](./0014-lab-first-robot-workflows.md) — product workflow approval does not replace exact-device/safety accountability or independently required production approval.
 - [Issue #47: Ratify independent AArch64 semihosting evidence](https://github.com/dxsl-org/cellos/issues/47) — the concrete independent-promotion gate clarified by this decision.
 - [Current focus: development-first, solo-first execution boundary](../roadmap/current-focus.md#development-first-solo-first-execution-boundary) — current diagnostic evidence and the affected follow-up lanes.
 - [Project roadmap: capability lanes](../project-roadmap.md#capability-lanes) — AArch64 ledger promotion and independently executable follow-up routing.

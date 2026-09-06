@@ -96,7 +96,10 @@ fn prerequisites_ok() -> bool {
         eprintln!("SKIP http-smoke: Python 3 not on PATH");
     }
     if !mock_ok {
-        eprintln!("SKIP http-smoke: {} is missing", mock_script_path().display());
+        eprintln!(
+            "SKIP http-smoke: {} is missing",
+            mock_script_path().display()
+        );
     }
     if !smoke_ok {
         eprintln!("SKIP http-smoke: app-http-smoke is not built");

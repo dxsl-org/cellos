@@ -27,6 +27,8 @@ api::declare_manifest!(block_io = false, network = false, spawn = false);
 api::declare_syscalls![
     Send,
     Recv,
+    RecvTimeout,
+    Yield,
     Log,
     LookupService,
     OpenCap,
@@ -36,6 +38,7 @@ api::declare_syscalls![
     GrantSlice,
     GrantFree,
     VfsMutate,
+    GetTime,
 ];
 
 /// Resolve the live VFS service tid via the service registry.

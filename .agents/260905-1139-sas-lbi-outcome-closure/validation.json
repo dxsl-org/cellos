@@ -1,0 +1,119 @@
+{
+  "kind": "planning_structure_only",
+  "result": "PASS",
+  "runtime_validation": false,
+  "documents": 22,
+  "plan_documents": 13,
+  "canonical_documents": 9,
+  "line_counts": {
+    "organization-deployment-profiles.md": 144,
+    "phase-01-evidence-validity.md": 70,
+    "phase-02-resource-ownership.md": 67,
+    "phase-03-stateful-hotswap.md": 71,
+    "phase-04-native-baseline.md": 64,
+    "phase-05-native-workload.md": 73,
+    "phase-06-lab-carrier-transfer.md": 83,
+    "phase-07-base-tray-handoff.md": 72,
+    "phase-08-stationary-assembly.md": 79,
+    "plan.md": 100,
+    "red-team-review.md": 40,
+    "scout-report.md": 61,
+    "workflow-extension-review.md": 39
+  },
+  "relative_links": 113,
+  "heading_fragments": 11,
+  "exact_file_references": 61,
+  "exact_file_reference_scope": "phase01-08 explicit backtick file paths; prose directories/globs excluded",
+  "proposed_new_sources": [
+    "cells/tests/bench/src/scenarios/native_stateful.rs",
+    "scripts/test_compare_bench_results.py",
+    "cells/tests/bench/src/scenarios/lab_transfer_contract.rs",
+    "cells/tests/bench/src/scenarios/lab_carrier_transfer.rs",
+    "tests/integration/tests/lab-carrier-transfer.rs",
+    "cells/tests/bench/src/scenarios/base_tray_handoff.rs",
+    "tests/integration/tests/base-tray-handoff.rs",
+    "cells/tests/bench/src/scenarios/stationary_assembly.rs",
+    "tests/integration/tests/stationary-assembly.rs"
+  ],
+  "whole_phase_dependencies": {
+    "1": [],
+    "2": [],
+    "3": [],
+    "4": [
+      1
+    ],
+    "5": [
+      2,
+      3
+    ],
+    "6": [],
+    "7": [],
+    "8": []
+  },
+  "milestone_dependencies": {
+    "01": [],
+    "02": [],
+    "03": [],
+    "04": [
+      "01"
+    ],
+    "05": [
+      "02",
+      "03"
+    ],
+    "06A": [],
+    "06B": [
+      "06A",
+      "05"
+    ],
+    "06C": [
+      "06B"
+    ],
+    "07A": [
+      "06A"
+    ],
+    "07B": [
+      "07A",
+      "06A",
+      "05"
+    ],
+    "07C": [
+      "07B"
+    ],
+    "08A": [
+      "06A",
+      "07A"
+    ],
+    "08B": [
+      "08A",
+      "06B",
+      "07B"
+    ],
+    "08C": [
+      "08B",
+      "06C",
+      "07C"
+    ]
+  },
+  "external_gates": {
+    "06C": "exact stationary LAB equipment/metrology/safety and authorization",
+    "07C": "exact base/controller/stability/protection and authorization",
+    "08C": "exact coupling/support/power/safety and authorization"
+  },
+  "row_evidence_dependencies": [
+    {
+      "from": 4,
+      "to": 5,
+      "scope": "native-workload baseline/budget rows only"
+    }
+  ],
+  "review": {
+    "parallel_reviewers": 4,
+    "accepted_findings": 7,
+    "P1": 4,
+    "P2": 3,
+    "second_reviewer_approval": false,
+    "source_runtime_defect_fixed": false
+  },
+  "findings": []
+}

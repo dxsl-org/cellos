@@ -31,6 +31,7 @@ members = [
     "libs/authority-protocol",
     "libs/viui",
     "libs/viui-macros",
+    "libs/cellos-fs",
     
     # HAL
     "hal/core",
@@ -150,6 +151,7 @@ members = [
     "cells/tests/window-policy-probe",
     "cells/tests/silo-test",
     "cells/tests/wx-test",
+    "cells/tests/tier2-exploit",
 
     # Cells - Runtimes
     "cells/runtimes/lua",

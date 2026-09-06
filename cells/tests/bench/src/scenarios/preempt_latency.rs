@@ -12,6 +12,7 @@
 extern crate alloc;
 use crate::framework::rt_report::RtReport;
 use alloc::vec::Vec;
+use api::ViError;
 use ostd::syscall::{sys_get_time, sys_recv, sys_send, SyscallResult};
 
 const WARMUP: u32 = 50;
@@ -38,16 +39,22 @@ pub fn run_probe() -> ! {
 }
 
 /// Orchestrator side: drive the probe `WARMUP + ITERS` times and report deltas.
-pub fn measure(probe_tid: usize) -> RtReport {
+pub fn measure(probe_tid: usize) -> api::ViResult<RtReport> {
     let mut samples: Vec<u64> = Vec::with_capacity(ITERS as usize);
     let mut rbuf = [0u8; 8];
     for i in 0..(WARMUP + ITERS) {
         let t0 = sys_get_time();
-        let _ = sys_send(probe_tid, &t0.to_le_bytes());
-        let _ = sys_recv(0, &mut rbuf);
+        if !matches!(sys_send(probe_tid, &t0.to_le_bytes()), SyscallResult::Ok(_)) {
+            return Err(ViError::IO);
+        }
+        match sys_recv(probe_tid, &mut rbuf) {
+            SyscallResult::Ok(sender) if sender == probe_tid => {}
+            SyscallResult::Ok(_) => return Err(ViError::InvalidInput),
+            SyscallResult::Err(_) => return Err(ViError::IO),
+        }
         if i >= WARMUP {
             samples.push(u64::from_le_bytes(rbuf));
         }
     }
-    RtReport::build("preempt_latency", &mut samples, 0)
+    Ok(RtReport::build("preempt_latency", &mut samples, 0))
 }

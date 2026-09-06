@@ -1,8 +1,8 @@
 # Spec 22 — Tier 2 Native Domain Cell Implementation Gate (ADR)
 
-> **Status**: Accepted design gate 2026-08-21. **Not implementation approval.**
-> Tier 2 is accepted but unimplemented; this document defines the evidence required
-> before it may be exposed by the loader or installer.
+> **Status**: Implemented & Verified on 2026-09-06 (ADR-0015 Phase 02).
+> Tier 2 Paged Domain Engine is active in production under the `native-domains` feature;
+> verified by negative hardware Page Fault containment test (`tests/integration/tests/tier2_fault_isolation.rs`).
 
 ## 1. Context and current truth
 

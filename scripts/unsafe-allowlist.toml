@@ -31,6 +31,13 @@ max_age_days = 90
 
 
 [[file]]
+path = "cells/tests/tier2-exploit/src/main.rs"
+class = "test-harness"
+reason = "Negative exploit test: deliberate NULL write to prove hardware Page Fault containment in Tier 2"
+approver = "dmin"
+date = "2026-09-06"
+
+[[file]]
 path = "cells/demos/doom/src/main.rs"
 class = "c-ffi"
 reason = "C FFI (Tier 1b): extern \"C\" calls across the mlibc boundary are unsafe by construction; the C side is outside the Rust type system entirely."
@@ -134,6 +141,13 @@ class = "driver-mmio"
 reason = "Driver Cell: volatile MMIO register access and DMA descriptor setup. The Kernel Boundary Law moved drivers out of the kernel, so the wall around this unsafe is the IOMMU, not LBI."
 approver = "cellos-maintainers"
 date = "2026-07-14"
+
+[[file]]
+path = "cells/drivers/e1000/src/dma_layout.rs"
+class = "driver-mmio"
+reason = "Driver Cell: volatile MMIO register access and DMA descriptor setup. The Kernel Boundary Law moved drivers out of the kernel, so the wall around this unsafe is the IOMMU, not LBI."
+approver = "cellos-maintainers"
+date = "2026-09-03"
 
 [[file]]
 path = "cells/drivers/nvme/src/controller.rs"
@@ -337,24 +351,6 @@ review_by = "2026-10-28"
 tracking = "midori-lessons phase 07 (grant/pointer audit)"
 
 [[file]]
-path = "cells/services/vfs/src/backend_redoxfs.rs"
-class = "temporary-audit"
-reason = "VFS raw-pointer I/O awaiting the grant/pointer audit. Temporary — do not treat as settled."
-approver = "cellos-maintainers"
-date = "2026-07-30"
-review_by = "2026-10-28"
-tracking = "midori-lessons phase 07 (grant/pointer audit)"
-
-[[file]]
-path = "cells/services/vfs/src/disk_redoxfs.rs"
-class = "temporary-audit"
-reason = "VFS raw-pointer I/O awaiting the grant/pointer audit. Temporary — do not treat as settled."
-approver = "cellos-maintainers"
-date = "2026-07-30"
-review_by = "2026-10-28"
-tracking = "midori-lessons phase 07 (grant/pointer audit)"
-
-[[file]]
 path = "cells/services/vfs/src/grant_read.rs"
 class = "temporary-audit"
 reason = "The two \"caller blocks\" copy_nonoverlapping writes into the caller's grant (dispatch.rs:195 ReadGrant, dispatch.rs:249 ReadFileGrant). Their whole soundness argument is \"the caller's ipc_call blocks until we reply, so it cannot free the grant\" — exactly the assumption phase 07 must audit. This entry legitimises nothing beyond that audit window."
@@ -362,15 +358,6 @@ approver = "cellos-maintainers"
 date = "2026-07-30"
 review_by = "2026-10-28"
 tracking = "midori-lessons phase 07 — audit the two caller-blocks assumptions"
-
-[[file]]
-path = "cells/services/vfs/src/lfs_string_shim.rs"
-class = "temporary-audit"
-reason = "VFS raw-pointer I/O awaiting the grant/pointer audit. Temporary — do not treat as settled."
-approver = "cellos-maintainers"
-date = "2026-07-30"
-review_by = "2026-10-28"
-tracking = "midori-lessons phase 07 (grant/pointer audit)"
 
 [[file]]
 path = "cells/services/vfs/src/fast_handler.rs"
@@ -528,6 +515,13 @@ class = "test-violation"
 reason = "Owns the deliberate W^X violation under cells/tests/wx-test/ — see the [[file]] entry of class \"test-violation\". The crate root carries #![allow(unsafe_code)] with the carve-out stated in its module docs."
 approver = "cellos-maintainers"
 date = "2026-07-30"
+
+[[crate]]
+name = "tier2-exploit"
+class = "test-violation"
+reason = "Owns deliberate NULL write in cells/tests/tier2-exploit/ to prove Tier 2 hardware Page Fault containment"
+approver = "dmin"
+date = "2026-09-06"
 
 [[crate]]
 name = "service-compositor"

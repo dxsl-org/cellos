@@ -239,8 +239,7 @@ fn iotlb_flush_domain(did: u16) -> bool {
 #[allow(dead_code)] // reason: awaits its Phase 02 caller (unmap_range_for_cell)
 fn iotlb_flush_page(did: u16, iova: u64) -> bool {
     // IVA: bits[63:12] = page address, bits[5:0] = AM (0 = one page).
-    let completed =
-        issue_iotlb_invalidation(iotlb_page_command(did), Some(iova & !0xFFF));
+    let completed = issue_iotlb_invalidation(iotlb_page_command(did), Some(iova & !0xFFF));
     if !completed {
         log::warn!(
             "[vtd] IOTLB page flush DID={} iova={:#x} timed out",
@@ -698,11 +697,7 @@ mod tests {
         );
         assert_eq!(
             iotlb_domain_command(did),
-            (1u64 << 63)
-                | (2u64 << 60)
-                | (1u64 << 49)
-                | (1u64 << 48)
-                | ((did as u64) << 32)
+            (1u64 << 63) | (2u64 << 60) | (1u64 << 49) | (1u64 << 48) | ((did as u64) << 32)
         );
     }
 

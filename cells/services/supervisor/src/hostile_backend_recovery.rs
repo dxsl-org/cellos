@@ -9,18 +9,29 @@ use ostd::io::println;
 use ostd::syscall::{sys_kill_cell, sys_lookup_service, sys_send};
 
 const HYPERVISOR_TASK_NAME: &str = "hypervisor";
+const BENCH_TASK_NAME: &str = "bench";
 const HOSTILE_BACKEND_KILL_REASON: u32 = 0x4842_4B52;
 
 pub(crate) fn handle(sender_tid: usize, data: &[u8]) {
-    if !super::sender_has_exact_name(sender_tid, HYPERVISOR_TASK_NAME) {
+    let is_hypervisor = super::sender_has_exact_name(sender_tid, HYPERVISOR_TASK_NAME);
+    let is_bench = super::sender_has_exact_name(sender_tid, BENCH_TASK_NAME);
+
+    if !is_hypervisor && !is_bench {
         reply(sender_tid, KILL_STATUS_REJECTED_CALLER);
         return;
     }
-
-    let Some(service_id) = parse_kill_request(data) else {
+    if data.len() < 3 {
+        reply(sender_tid, KILL_STATUS_INVALID_REQUEST);
+        return;
+    }
+    let Some(service_id) = parse_kill_request(&data[..3]) else {
         reply(sender_tid, KILL_STATUS_INVALID_REQUEST);
         return;
     };
+    if is_bench && service_id != service::VFS {
+        reply(sender_tid, KILL_STATUS_REJECTED_CALLER);
+        return;
+    }
     let Some(service_name) = allowed_service_name(service_id) else {
         reply(sender_tid, KILL_STATUS_SERVICE_NOT_ALLOWED);
         return;

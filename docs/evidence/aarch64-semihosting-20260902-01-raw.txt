@@ -1,0 +1,487 @@
+[INFO] CFI: BTI unavailable
+[INFO] CFI: PAC-RET unavailable
+[INFO] MTE: unavailable
+[Cellos] kernel boot v0.2.1
+Kernel started (Hart: 0, DTB: ...)
+[INFO] Limine not found, using QEMU/OpenSBI fallback
+[boot] kernel_phys_base=0x0000000040080000
+[INFO] Initializing paging...
+[INFO] Paging initialized
+[INFO] Activating paging...
+[INFO] Paging activated
+[INFO] Frame allocator initialized
+[INFO] Heap initialized
+[INFO] RT heap initialized
+[INFO] HAL initialized (PLIC enabled)
+[ INFO] [boot] DTB RAM range 0x0..0x0
+[ INFO] Console: Input Driver Initialized.
+[ INFO] RAM Disk: read-only, 4096 KB (8192 sectors)
+[ INFO] [snapshot] no block device → cold boot
+[ WARN] [mbr] LBA 0 unreadable — skipping partition verification
+[loader] WARN: cell table not found — disk image may lack bootstrap section
+[ INFO] Filesystem: Initializing...
+[ INFO] Boot Sector Debug:
+[ INFO]   Signature: 0xAA55
+[ INFO]   Bytes/Sector: 512
+[ INFO]   Sectors/Cluster: 1
+[ INFO]   Reserved Sectors: 1
+[ INFO]   FAT Count: 2
+[ INFO]   Media: 0xF8
+[ INFO]   Total Sectors: 0
+[ INFO]   Sectors/FAT (FAT16): 64
+[ INFO]   Root Entry Count: 512
+[ INFO] Filesystem: FAT16 mounted successfully.
+[ INFO] [policy] loaded + verified (37 entries, flags 0x00)
+[ INFO] state-stash: round-trip OK
+[INFO] Kernel subsystems initialized successfully.
+[INFO] Initializing scheduler...
+[ INFO] Process: Initializing Scheduler...
+[INFO] Scheduler initialized
+[ INFO] === ELF Loader Tests ===
+[ INFO]   [ok] empty path rejected
+[ INFO]   [ok] path without leading '/' rejected
+[ INFO]   [ok] path longer than MAX_CELL_PATH rejected
+[ INFO]   [ok] well-formed path passes format validation
+[ INFO]   [ok] forged "/bin/vfs" name → /mem/vfs
+[ INFO]   [ok] every label component is non-empty and separator-free
+[ INFO]   [ok] no forged name selects a path-derived capability
+[ INFO]   [ok] 300-char name truncated to 69 bytes
+[ INFO]   [ok] empty .rela.dyn → Ok
+[ERROR] [reloc] .rela.dyn size 7 not a multiple of Rela64 size 24
+[ INFO]   [ok] non-multiple rela size → InvalidInput
+[ERROR] [reloc] too many relocations: 65537 > 65536
+[ INFO]   [ok] 65537 entries (> 65536) → InvalidInput
+[ERROR] [reloc] unsupported relocation type 255
+[ INFO]   [ok] unknown reloc type 0xFF → NotSupported
+[ INFO]   [ok] R_RISCV_NONE → no-op, Ok
+[ INFO]   [ok] R_RISCV_RELATIVE patched 0x40693000 → 0x40693400
+[ INFO]   [ok] relocation target outside owned pages rejected
+[ INFO]   [ok] relocation target in owned-page hole rejected
+[ INFO]   [ok] cross-page relocation word rejected
+[ INFO]   [ok] overflowing relocation target rejected
+[ INFO]   [ok] CellManifest is 16 bytes (v2)
+[ INFO]   [ok] valid v2 manifest parses with correct flags + protection class
+[ INFO]   [ok] v1 manifest upcasts to v2 with PROTECTION_CLASS_LEGACY
+[ INFO]   [ok] bad magic rejected
+[ INFO]   [ok] short slice rejected (both v1 floor and v2 16-byte floor)
+[ INFO]   [ok] bad version rejected
+[ INFO]   [ok] reserved flag bits rejected
+[ INFO]   [ok] v2 reserved fields (cap_args_off, reserved) rejected when non-zero
+[ INFO]   [ok] out-of-range tier values rejected
+[ INFO]   [ok] PROTECTION_CLASS_LEGACY parses as a valid native v2 class (tier-less constructor output)
+[ INFO]   [ok] network=false → no NetworkCap granted
+[ INFO]   [ok] manifest-section admission corpus
+[ INFO]   [ok] opcode 61 → ForceExit
+[ INFO]   [ok] ForceExit allowlist_bit = None
+[ INFO]   [ok] signing::self_test() passed
+[ INFO]   [ok] extract_sig(&[]) → None
+[ INFO]   [ok] extract_sig(non-elf) → None
+[ INFO]   [ok] extract_sig(constructed elf) → Some([0xAB; 64])
+[ INFO]   [ok] extract_sig tolerates unrelated non-UTF-8 section name
+[ INFO]   [ok] extract_sig rejects NOBITS signature declaration
+[ INFO]   [ok] signing_required() → false in dev build
+[ERROR] [wx] refusing to spawn 'selftest': page 0x5000 is W+X after the boundary merge — two PT_LOADs with different permissions share it; align the segments to 4 KiB
+[ERROR] ELF: rejecting spawn — PT_LOAD #0 at 0x1000 declares W+X; writable code is refused (split the segment or drop PF_X in the linker script)
+[ INFO] [wx] self-tests PASSED
+[ INFO] ELF LOAD: 0x100000000-0x1000019C8 flags=R-X
+[ INFO] ELF LOAD: 0x1000019C8-0x100002468 flags=R--
+[ INFO] ELF LOAD: 0x100003000-0x100003140 flags=RW-
+[ INFO] ELF LOAD: 0x100004000-0x100005958 flags=R--
+[ INFO] [wx] 'atomic-unaligned': 5/6 cell pages lowered to read-only/execute-only
+[ INFO] ATOMIC_PUBLICATION_ALIGNMENT: PASS
+[ INFO] ATOMIC_PUBLICATION_CELL_ID_REUSE: PASS
+[ WARN] [input] registered input service TID 50102
+[ INFO] [service-registry] 32513 -> tid 50103
+[ INFO] [service-registry] cleared stale entries for dead tid 50103
+[ INFO] ATOMIC_PUBLICATION_FIXTURE_ROUNDTRIP: PASS
+[ WARN] [input] registered input service TID 50102
+[ INFO] [service-registry] 32513 -> tid 50103
+[ INFO] [service-registry] cleared stale entries for dead tid 50103
+[ INFO] ATOMIC_PUBLICATION_AP-00: PASS
+[ WARN] [input] registered input service TID 50102
+[ INFO] [service-registry] 32513 -> tid 50103
+[ INFO] [service-registry] cleared stale entries for dead tid 50103
+[ INFO] ATOMIC_PUBLICATION_AP-01: PASS
+[ WARN] [input] registered input service TID 50102
+[ INFO] [service-registry] 32513 -> tid 50103
+[ INFO] [service-registry] cleared stale entries for dead tid 50103
+[ INFO] ATOMIC_PUBLICATION_AP-02: PASS
+[ WARN] [input] registered input service TID 50102
+[ INFO] [service-registry] 32513 -> tid 50103
+[ INFO] ELF LOAD: 0x100000000-0x1000019C8 flags=R-X
+[ INFO] ELF LOAD: 0x1000019C8-0x100002468 flags=R--
+[ INFO] ELF LOAD: 0x100003000-0x100003140 flags=RW-
+[ INFO] ELF LOAD: 0x100004000-0x100005958 flags=R--
+[ INFO] [service-registry] cleared stale entries for dead tid 50103
+[ INFO] ATOMIC_PUBLICATION_AP-03: PASS
+[ WARN] [input] registered input service TID 50102
+[ INFO] [service-registry] 32513 -> tid 50103
+[ INFO] ELF LOAD: 0x100000000-0x1000019C8 flags=R-X
+[ INFO] ELF LOAD: 0x1000019C8-0x100002468 flags=R--
+[ INFO] ELF LOAD: 0x100003000-0x100003140 flags=RW-
+[ INFO] ELF LOAD: 0x100004000-0x100005958 flags=R--
+[ INFO] [wx] 'atomic-denial': 5/6 cell pages lowered to read-only/execute-only
+[ INFO] [service-registry] cleared stale entries for dead tid 50103
+[ INFO] ATOMIC_PUBLICATION_AP-04: PASS
+[ WARN] [input] registered input service TID 50102
+[ INFO] [service-registry] 32513 -> tid 50103
+[ERROR] [loader] boot-ceiling: "/bin/platform" narrowed by its row — widen the row if the cap is legitimate.
+[ERROR] [loader]   requested = CapSet { block_io: false, network: false, spawn: true, hypervisor: false, mmio_devices: 0, block_regions: 0, pcie_driver: false, platform: true, supervisor: false }
+[ERROR] [loader]   ceiling   = CapSet { block_io: false, network: false, spawn: false, hypervisor: false, mmio_devices: 0, block_regions: 0, pcie_driver: false, platform: true, supervisor: false }
+[ERROR] [loader]   granted   = CapSet { block_io: false, network: false, spawn: false, hypervisor: false, mmio_devices: 0, block_regions: 0, pcie_driver: false, platform: true, supervisor: false }
+[ERROR] [loader]   refused: spawn
+[ERROR] [loader] boot-ceiling: "/bin/platform" narrowed by its row — widen the row if the cap is legitimate.
+[ERROR] [loader]   requested = CapSet { block_io: false, network: false, spawn: true, hypervisor: false, mmio_devices: 0, block_regions: 0, pcie_driver: false, platform: true, supervisor: false }
+[ERROR] [loader]   ceiling   = CapSet { block_io: false, network: false, spawn: false, hypervisor: false, mmio_devices: 0, block_regions: 0, pcie_driver: false, platform: true, supervisor: false }
+[ERROR] [loader]   granted   = CapSet { block_io: false, network: false, spawn: false, hypervisor: false, mmio_devices: 0, block_regions: 0, pcie_driver: false, platform: true, supervisor: false }
+[ERROR] [loader]   refused: spawn
+[ INFO] [service-registry] cleared stale entries for dead tid 50103
+[ INFO] ATOMIC_PUBLICATION_AP-05: PASS
+[ WARN] [input] registered input service TID 50102
+[ INFO] [service-registry] 32513 -> tid 50103
+[ERROR] [loader] boot-ceiling: "/bin/platform" narrowed by its row — widen the row if the cap is legitimate.
+[ERROR] [loader]   requested = CapSet { block_io: false, network: false, spawn: true, hypervisor: false, mmio_devices: 0, block_regions: 0, pcie_driver: false, platform: true, supervisor: false }
+[ERROR] [loader]   ceiling   = CapSet { block_io: false, network: false, spawn: false, hypervisor: false, mmio_devices: 0, block_regions: 0, pcie_driver: false, platform: true, supervisor: false }
+[ERROR] [loader]   granted   = CapSet { block_io: false, network: false, spawn: false, hypervisor: false, mmio_devices: 0, block_regions: 0, pcie_driver: false, platform: true, supervisor: false }
+[ERROR] [loader]   refused: spawn
+[ INFO] [service-registry] cleared stale entries for dead tid 50103
+[ INFO] ATOMIC_PUBLICATION_AP-06: PASS
+[ WARN] [input] registered input service TID 50102
+[ INFO] [service-registry] 32513 -> tid 50103
+[ INFO] ELF LOAD: 0x100000000-0x1000019C8 flags=R-X
+[ INFO] ELF LOAD: 0x1000019C8-0x100002468 flags=R--
+[ INFO] ELF LOAD: 0x100003000-0x100003140 flags=RW-
+[ INFO] ELF LOAD: 0x100004000-0x100005958 flags=R--
+[ INFO] [wx] 'init': 5/6 cell pages lowered to read-only/execute-only
+[ INFO] [service-registry] cleared stale entries for dead tid 50103
+[ INFO] ATOMIC_PUBLICATION_AP-07: PASS
+[ WARN] [input] registered input service TID 50102
+[ INFO] [service-registry] 32513 -> tid 50103
+[ INFO] ELF LOAD: 0x100000000-0x1000019C8 flags=R-X
+[ INFO] ELF LOAD: 0x1000019C8-0x100002468 flags=R--
+[ INFO] ELF LOAD: 0x100003000-0x100003140 flags=RW-
+[ INFO] ELF LOAD: 0x100004000-0x100005958 flags=R--
+[ INFO] [wx] 'init': 5/6 cell pages lowered to read-only/execute-only
+[ INFO] [service-registry] cleared stale entries for dead tid 50103
+[ INFO] ATOMIC_PUBLICATION_AP-08: PASS
+[ WARN] [input] registered input service TID 50102
+[ INFO] [service-registry] 32513 -> tid 50103
+[ INFO] [early] VIFS1-first /bin/vfs <- ramdisk (634008 bytes)
+[ INFO] [service-registry] cleared stale entries for dead tid 50103
+[ INFO] ATOMIC_PUBLICATION_AP-09: PASS
+[ WARN] [input] registered input service TID 50102
+[ INFO] [service-registry] 32513 -> tid 50103
+[ERROR] [loader] boot-ceiling: "/bin/platform" narrowed by its row — widen the row if the cap is legitimate.
+[ERROR] [loader]   requested = CapSet { block_io: false, network: false, spawn: true, hypervisor: false, mmio_devices: 0, block_regions: 0, pcie_driver: false, platform: true, supervisor: false }
+[ERROR] [loader]   ceiling   = CapSet { block_io: false, network: false, spawn: false, hypervisor: false, mmio_devices: 0, block_regions: 0, pcie_driver: false, platform: true, supervisor: false }
+[ERROR] [loader]   granted   = CapSet { block_io: false, network: false, spawn: false, hypervisor: false, mmio_devices: 0, block_regions: 0, pcie_driver: false, platform: true, supervisor: false }
+[ERROR] [loader]   refused: spawn
+[ INFO] [service-registry] cleared stale entries for dead tid 50103
+[ INFO] ATOMIC_PUBLICATION_AP-10: PASS
+[ WARN] [input] registered input service TID 50102
+[ INFO] [service-registry] 32513 -> tid 50103
+[ERROR] [loader] boot-ceiling: "/bin/platform" narrowed by its row — widen the row if the cap is legitimate.
+[ERROR] [loader]   requested = CapSet { block_io: false, network: false, spawn: true, hypervisor: false, mmio_devices: 0, block_regions: 0, pcie_driver: false, platform: true, supervisor: false }
+[ERROR] [loader]   ceiling   = CapSet { block_io: false, network: false, spawn: false, hypervisor: false, mmio_devices: 0, block_regions: 0, pcie_driver: false, platform: true, supervisor: false }
+[ERROR] [loader]   granted   = CapSet { block_io: false, network: false, spawn: false, hypervisor: false, mmio_devices: 0, block_regions: 0, pcie_driver: false, platform: true, supervisor: false }
+[ERROR] [loader]   refused: spawn
+[ INFO] ELF LOAD: 0x100000000-0x1000019C8 flags=R-X
+[ INFO] ELF LOAD: 0x1000019C8-0x100002468 flags=R--
+[ INFO] ELF LOAD: 0x100003000-0x100003140 flags=RW-
+[ INFO] ELF LOAD: 0x100004000-0x100005958 flags=R--
+[ INFO] [wx] 'platform': 5/6 cell pages lowered to read-only/execute-only
+[ INFO] [service-registry] cleared stale entries for dead tid 50103
+[ INFO] ATOMIC_PUBLICATION_AP-11: PASS
+[ INFO] ATOMIC_PUBLICATION_ARMING: PASS
+[ INFO] [selftest] ELF-LOADER: PASS
+[ INFO] Thread 'thread' (ID 1): KStack 0x42691000-0x426A3000, UStackTop 0x426B5000, Entry 0x1000, Arg 0x0
+[ WARN] [kernel] CapRevoke: refused ambient-authority bits mask=0x00000008 from task 9001 (teardown not implemented)
+[ WARN] [kernel] CapRevoke: refused ambient-authority bits mask=0x0000ff00 from task 9001 (teardown not implemented)
+[ INFO] [kernel] CapRevoke: task 9001 revoked mask=0x00000004 from task 9003
+[ WARN] [sched] cell CellId(60) at thread cap (32) — refusing spawn_thread
+[ INFO] [selftest] THREAD-CAP: PASS (thread-inherit + honest-revoke + spawn bound)
+[INFO] thread-cap self-test PASS (thread-inherit + honest-revoke + spawn bound)
+[ INFO] Thread 'thread' (ID 1): KStack 0x42691000-0x426A3000, UStackTop 0x426B5000, Entry 0x1000, Arg 0x0
+[ WARN] [sched] cell CellId(63) cannot afford thread stacks (147456 bytes, 0 in use) — refusing spawn_thread
+[ INFO] [selftest] THREAD-QUOTA: PASS (charged, released, enforced)
+[INFO] thread-quota self-test PASS (charged, released, enforced)
+[INFO] thread-user-entry self-test SKIP (RV64 runtime gate only)
+[ INFO] [selftest] COMPLETION-QUEUE: PASS (cap 32 slots, 624 bytes per cell)
+[INFO] completion-queue self-test PASS (reserve, land, bound, defer)
+[ WARN] [net-rx] cell 9412 took over the reservation held by cell 9411
+[ INFO] [selftest] NET-RX-RESERVATION: PASS (fills, remembers, releases, IPC-safe)
+[INFO] net-rx-reservation self-test PASS (fill, remember, release)
+[ INFO] [selftest] IPC-PENDING: PASS (deferred, bounded, quota-safe, completion-wake)
+[INFO] ipc-pending self-test PASS (deferred delivery, bounds, quota)
+[ INFO] [selftest] IPC-GUARDRAILS: PASS (dead-peer bounded, RecvScatter isolated)
+[INFO] ipc-guardrail self-test PASS (dead-peer wake, RecvScatter isolated)
+[ WARN] [grant] GrantFree 0x426c4000 refused: region 0x426c4000+4096 overlaps a pinned region 0x426c4000+1 pages owned by task 9532 with 1 in-flight operation(s)
+[ WARN] [grant] GrantUnregister 0x426c7000 refused: region 0x426c7000+4096 overlaps a pinned region 0x426c7000+1 pages owned by task 9532 with 1 in-flight operation(s)
+[ INFO] [selftest] VFS-LIFETIME: stage=smp-stale-context-denied-capacity-preserved
+[ INFO] [grant] owner 9532 pending-revoked VFS lease holder=9522 request=1
+[ INFO] [selftest] VFS-LIFETIME: stage=dead-owner-pending-revoke-exact-release
+[ INFO] [selftest] VFS-LIFETIME: PASS (atomic grant-table lease + teardown orders + exact quarantine + owner watch)
+[INFO] vfs-lifetime self-test PASS (exact lease, quarantine, owner watch)
+[INFO] stack-probe self-test PASS (two guards, overflow target unmapped, watermark)
+[INFO] stack-sizing policy self-test PASS (measured=16, unknown=64)
+[INFO] Spawning Embedded Init...
+[INFO] ed25519 verify self-test PASS (RFC 8032 + tamper)
+[INFO] policy verify+parse self-test PASS (signed blob + tamper)
+[INFO] cell signing self-test PASS
+[ INFO] [selftest] C3-ADM-001: PASS
+[ INFO] [selftest] C3-ADM-002: PASS
+[ INFO] [selftest] C3-ADM-003: PASS
+[ INFO] [selftest] C3-ADM-004: PASS
+[ INFO] [selftest] C3-ADM-005: PASS
+[ INFO] [selftest] C3-ADM-006: PASS
+[ INFO] [selftest] C3-ADM-007: PASS
+[ INFO] [selftest] C3-ADM-008: PASS
+[ INFO] [selftest] C3-ADM-009: PASS
+[ INFO] [selftest] C3-ADM-010: PASS
+[ INFO] [selftest] C3-ADM-011: PASS
+[ INFO] [selftest] C3-ADM-012: PASS
+[ INFO] [selftest] C3-ADM-013: PASS
+[ INFO] [selftest] C3-ADM-014: PASS
+[ INFO] [selftest] C3-ADM-015: PASS
+[ INFO] [selftest] C3-ADM-016: PASS
+[ INFO] [selftest] C3-ADM-017: PASS
+[ INFO] [selftest] C3-ADM-032: PASS
+[ INFO] [selftest] C3-ADM-033: PASS
+[ INFO] [selftest] C3-ADM-018: PASS
+[ INFO] [selftest] C3-ADM-019: PASS
+[ INFO] [selftest] C3-ADM-020: PASS
+[ INFO] [selftest] C3-ADM-021: PASS
+[ INFO] [selftest] C3-ADM-022: PASS
+[ INFO] [selftest] C3-ADM-023: PASS
+[ INFO] [selftest] C3-ADM-024: PASS
+[ INFO] [selftest] C3-ADM-025: PASS
+[ INFO] [selftest] C3-ADM-026: PASS
+[ INFO] [selftest] C3-ADM-027: PASS
+[ INFO] [selftest] C3-ADM-028: PASS
+[ INFO] [selftest] C3-ADM-029: PASS
+[ INFO] [selftest] C3-ADM-030: PASS
+[ INFO] [selftest] C3-ADM-031: PASS
+[INFO] admission-core self-test PASS (fail-closed A/B floor model)
+[ INFO] [selftest] P-TRUST: PASS (privileged path-caps bounded by ceiling)
+[INFO] P-TRUST self-test PASS (privileged path-caps ceiling-bounded)
+[ INFO] [selftest] boot-ceiling: PASS (per-path table, no union collapse)
+[INFO] boot-ceiling self-test PASS (per-path table, no union collapse)
+[INFO] mmio-allowlist self-test PASS (known windows live, DWC2 denied)
+[ INFO] [selftest] MANIFEST-V2: PASS (v1 upcast + v2 parse + protection-class floor invariant)
+[INFO] Manifest-v2 self-test PASS (v1 upcast + v2 parse + tier-floor)
+[SELFTEST] MTE-SELFTEST: SKIP: MTE2 unavailable
+[INFO] ATOMIC_PUBLICATION_AP-15: arming trusted init
+[INFO] ATOMIC_PUBLICATION_AP-15: armed for trusted init
+[INFO] Publishing trusted init
+[ INFO] ELF LOAD: 0x100000000-0x1000019C8 flags=R-X
+[ INFO] ELF LOAD: 0x1000019C8-0x100002468 flags=R--
+[ INFO] ELF LOAD: 0x100003000-0x100003140 flags=RW-
+[ INFO] ELF LOAD: 0x100004000-0x100005958 flags=R--
+[ INFO] [wx] 'init': 5/6 cell pages lowered to read-only/execute-only
+[ INFO] ATOMIC_PUBLICATION_AP-15: PASS
+[ INFO] Successfully spawned init with complete root authority (tid=1)
+[INFO] Kernel initialization complete. Entering idle loop.
+[INFO] Starting scheduler...
+USER: Init: Starting Cellos Orchestrator...
+[ WARN] [early] VIFS1-first "/bin/block" missing — falling back to block table
+[ INFO] [early] VIFS1-first /bin/vfs <- ramdisk (634008 bytes)
+[ INFO] ELF LOAD: 0x102000000-0x1020350E4 flags=R-X
+[ INFO] ELF LOAD: 0x1020350E8-0x10203AF40 flags=R--
+[ INFO] ELF LOAD: 0x10203B000-0x10203E070 flags=RW-
+[ INFO] ELF LOAD: 0x10203F000-0x10283F040 flags=RW-
+[ INFO] ELF LOAD: 0x10283F040-0x10284EA80 flags=R--
+[ INFO] [wx] 'vfs': 74/2127 cell pages lowered to read-only/execute-only
+USER: VFS Service v0.2: RamFS + mkdir/rmdir/unlink IPC (typed postcard)
+USER: [vfs] WARNING: FAT32 mount failed for this volume
+USER: [vfs] WARNING: FAT32 mount failed for this volume
+USER: [vfs] WARNING: RedoxFS P5 open failed — /srv unavailable (format with redoxfs-mkfs)
+USER: [vfs-file-handle] wrong-owner-read-close-preserves-entry PASS
+USER: [vfs-file-handle] quota-32-per-owner PASS
+USER: [vfs-file-handle] nonreuse-and-u64-exhaustion PASS
+USER: [vfs-file-handle] exact-generation-purge PASS
+USER: [vfs-file-handle] parent-cross-owner-transitive-revoke PASS
+USER: [vfs] WARNING: FAT32 mount failed for this volume
+USER: [vfs] WARNING: FAT32 mount failed for this volume
+USER: [vfs] WARNING: RedoxFS P5 open failed — /srv unavailable (format with redoxfs-mkfs)
+USER: [vfs-file-handle] owner-watch-filehandle-cleanup PASS
+USER: [vfs] WARNING: FAT32 mount failed for this volume
+USER: [vfs] WARNING: FAT32 mount failed for this volume
+USER: [vfs] WARNING: RedoxFS P5 open failed — /srv unavailable (format with redoxfs-mkfs)
+USER: [vfs-file-handle] higher-generation-cleanup PASS
+[ INFO] [service-registry] 1 -> tid 2
+[ INFO] [loader] SpawnFromElf: /bin/config (109504 bytes from grant)
+[ INFO] ELF LOAD: 0x104000000-0x104002B80 flags=R-X
+[ INFO] ELF LOAD: 0x104002B80-0x1040034D0 flags=R--
+[ INFO] ELF LOAD: 0x104004000-0x1040043B0 flags=RW-
+[ INFO] ELF LOAD: 0x104005000-0x104805038 flags=RW-
+[ INFO] ELF LOAD: 0x104805038-0x104806B3C flags=R--
+[ INFO] [wx] 'config': 5/2055 cell pages lowered to read-only/execute-only
+USER: [config] Config Service v0.3 (typed IPC)
+[ INFO] [service-registry] 4 -> tid 3
+[ INFO] [loader] SpawnFromElf: /bin/input (104848 bytes from grant)
+[ WARN] [policy] narrowed "/bin/input" (tid 4): dropped 0b010000000 [regions|mmio|sup|plat|pcie|hyp|spawn|net|bio]
+[ INFO] ELF LOAD: 0x106000000-0x106002250 flags=R-X
+[ INFO] ELF LOAD: 0x106002250-0x106003A08 flags=R--
+[ INFO] ELF LOAD: 0x106004000-0x106004398 flags=RW-
+[ INFO] ELF LOAD: 0x106005000-0x106805038 flags=RW-
+[ INFO] ELF LOAD: 0x106805038-0x106806818 flags=R--
+[ INFO] [wx] 'input': 5/2055 cell pages lowered to read-only/execute-only
+[ WARN] [input] registered input service TID 4
+USER: [input] Input Service v0.3: US QWERTY + VirtIO + typed focus routing
+USER: [input] No VirtIO input device; relying on kernel push
+[ INFO] [service-registry] 3 -> tid 4
+[ INFO] [loader] SpawnFromElf: /bin/virtio-net (108072 bytes from grant)
+[ WARN] [policy] narrowed "/bin/virtio-net" (tid 5): dropped 0b010000000 [regions|mmio|sup|plat|pcie|hyp|spawn|net|bio]
+[ INFO] ELF LOAD: 0x108000000-0x108002510 flags=R-X
+[ INFO] ELF LOAD: 0x108002510-0x108003370 flags=R--
+[ INFO] ELF LOAD: 0x108004000-0x108004C28 flags=RW-
+[ INFO] ELF LOAD: 0x108005000-0x108805038 flags=RW-
+[ INFO] ELF LOAD: 0x108806000-0x108806A4C flags=R--
+[ INFO] [wx] 'virtio-net': 5/2055 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 5 exited with code 0
+[ INFO] [loader] SpawnFromElf: /bin/net (350048 bytes from grant)
+[ INFO] ELF LOAD: 0x108000000-0x108019B4C flags=R-X
+[ INFO] ELF LOAD: 0x108019B50-0x10801ECE8 flags=R--
+[ INFO] ELF LOAD: 0x10801F000-0x1080215C0 flags=RW-
+[ INFO] ELF LOAD: 0x108022000-0x108822060 flags=RW-
+[ INFO] ELF LOAD: 0x108822060-0x108829898 flags=R--
+[ INFO] [wx] 'net': 38/2090 cell pages lowered to read-only/execute-only
+USER: [net] Network Service v0.1: smoltcp + VirtIO net + DHCP
+USER: [net] Starting DHCP...
+USER: [net] DHCP: deconfigured
+[ INFO] [service-registry] 2 -> tid 6
+USER: Init: cell not found — skipping:
+USER: /bin/compositor
+USER: Init: cell not found — skipping:
+USER: /bin/kms
+USER: Init: cell not found — skipping:
+USER: /bin/supervisor
+USER: Init: services spawned.
+USER: Init: service registry verified.
+USER: Init: fb-console spawn failed.
+[ INFO] [loader] SpawnFromElf: /bin/vfs-test (131024 bytes from grant)
+[ INFO] ELF LOAD: 0x10A000000-0x10A0044F0 flags=R-X
+[ INFO] ELF LOAD: 0x10A0044F0-0x10A006A78 flags=R--
+[ INFO] ELF LOAD: 0x10A007000-0x10A007998 flags=RW-
+[ INFO] ELF LOAD: 0x10A008000-0x10A808040 flags=RW-
+[ INFO] ELF LOAD: 0x10A808040-0x10A80A0E0 flags=R--
+[ INFO] [wx] 'vfs-test': 9/2059 cell pages lowered to read-only/execute-only
+USER: [vfs-test] Starting VFS integration test suite...
+USER: [PASS] write /tmp/test_lifecycle.txt
+USER: [PASS] stat size=11 is_file
+USER: [PASS] unlink /tmp/test_lifecycle.txt
+[ INFO] [loader] SpawnFromElf: /bin/shell (929792 bytes from grant)
+[ INFO] ELF LOAD: 0x10C000000-0x10C050048 flags=R-X
+[ INFO] ELF LOAD: 0x10C050048-0x10C05D900 flags=R--
+[ INFO] ELF LOAD: 0x10C05E000-0x10C063610 flags=RW-
+[ INFO] ELF LOAD: 0x10C064000-0x10C864058 flags=RW-
+[ INFO] ELF LOAD: 0x10C864058-0x10C87A3B4 flags=R--
+[ INFO] [wx] 'shell': 116/2171 cell pages lowered to read-only/execute-only
+USER: [PASS] stat after unlink returns Err
+USER: DEBUG: Shell Started (Async Mode)
+USER: Init: supervising services (auto-restart on crash)...
+USER: DEBUG: Shell focus acquired (or timed out)
+USER: [PASS] mkdir /tmp/testdir
+USER: [PASS] write inside testdir
+USER: [PASS] listdir /tmp/testdir contains f:file.txt
+USER: [PASS] rmdir /tmp/testdir after cleanup
+USER: [PASS] write /bin/ returns PermissionDenied
+USER: [PASS] write /tmp/ still works
+USER: [PASS] unlink /readme.txt (read-only / prefix) → PermissionDenied
+USER: [PASS] /readme.txt survived the refused unlink
+USER: [PASS] rmdir under / → PermissionDenied (authorized before backend)
+USER: [PASS] rmdir_recursive under / → PermissionDenied (before subtree walk)
+USER: [PASS] grant-write: unknown handle is denied before grant access
+[ WARN] [grant] GrantFree 0x461b3000 refused: region 0x461b3000+4096 overlaps a pinned region 0x461b3000+1 pages owned by task 7 with 1 in-flight operation(s)
+USER: [PASS] ReadGrant unknown cap returns zero bytes without faulting
+[ WARN] [grant] GrantFree 0x461b4000 refused: region 0x461b4000+4096 overlaps a pinned region 0x461b4000+1 pages owned by task 7 with 1 in-flight operation(s)
+USER: [PASS] ReadGrant unknown cap returns zero bytes for size=0
+[ WARN] [grant] GrantFree 0x461b5000 refused: region 0x461b5000+4096 overlaps a pinned region 0x461b5000+1 pages owned by task 7 with 1 in-flight operation(s)
+USER: [PASS] ReadGrant unknown cap returns zero bytes for oversized offset
+USER: [PASS] grant-write: create writable target
+[ WARN] [grant] GrantFree 0x461b6000 refused: region 0x461b6000+4096 overlaps a pinned region 0x461b6000+1 pages owned by task 7 with 1 in-flight operation(s)
+USER: [PASS] grant-write: helper returns committed byte count
+USER: [PASS] grant-write: commits exact bytes before acknowledgement
+USER: [PASS] grant-write: invalid offset is refused before grant access
+USER: [executor] dummy-waker=absent executor=parked source=TIMER PASS
+USER: [PASS] grant-write: short grant is refused without mutation
+USER: [PASS] grant-write: grant copy denial propagates as I/O error
+USER: [PASS] grant-write: failed writes leave committed bytes unchanged
+[ WARN] [grant] GrantFree 0x461ba000 refused: region 0x461ba000+4096 overlaps a pinned region 0x461ba000+1 pages owned by task 7 with 1 in-flight operation(s)
+USER: [PASS] grant-write: copies into exact bounded destination range
+USER: [PASS] grant-write: bounded copy preserves prefix and suffix
+[ WARN] [grant] GrantFree 0x461bc000 refused: region 0x461bc000+4096 overlaps a pinned region 0x461bc000+1 pages owned by task 7 with 1 in-flight operation(s)
+USER: [PASS] grant-write: write authorization precedes grant access
+USER: [PASS] grant-write: quota overflow is refused before grant access
+USER: [PASS] grant-write: quota refusal leaves committed bytes unchanged
+USER: [PASS] write file for async read
+USER: [PASS] ReadAsync returns PendingHandle
+USER: [PASS] Poll returns correct data
+USER: [PASS] Poll stale handle returns Err
+USER: [PASS] write /tmp/volatile.txt
+USER: [PASS] stat /tmp/volatile.txt size=8
+USER: [PASS] stat /tmp is_dir=true
+USER: [PASS] stat /tmp is_dir=true
+USER: [PASS] stat nonexistent returns Err
+USER: [PASS] listdir nonexistent = empty
+USER: [PASS] quota write 1 (400B) fits
+USER: [PASS] quota write 2 (800B total) fits
+USER: [PASS] quota write 3 exceeds 1.1KiB limit → Err(2)
+USER: [PASS] unlink q1 releases quota
+USER: [PASS] quota write after release succeeds
+USER: [PASS] rdir-quota: mkdir
+USER: [PASS] rdir-quota: write a.bin (400B)
+USER: [PASS] rdir-quota: write b.bin (800B total)
+USER: [PASS] rdir-quota: overflow write correctly blocked before delete
+USER: [PASS] rdir-quota: RmdirRecursive releases 800B
+USER: [PASS] rdir-quota: write after recursive delete succeeds (quota freed)
+USER: [PASS] dircap: acquiring /tmp yields a directory handle
+USER: [PASS] dircap: `..` is refused
+USER: [PASS] dircap: `../..` is refused
+USER: [PASS] dircap: an absolute name is refused
+USER: [PASS] dircap: an embedded traversal is refused
+USER: [PASS] dircap: `.` is refused
+USER: [PASS] dircap: an empty name is refused
+USER: [PASS] dircap: a backslash name is refused
+USER: [PASS] dircap: a control byte is refused
+USER: [PASS] dircap: odd UTF-8 in a name is refused
+USER: [PASS] dircap: deriving a subdirectory handle
+USER: [PASS] dircap: WriteAt creates a file inside the handle
+USER: [PASS] dircap: StatAt reports the file it just wrote
+USER: [PASS] dircap: ReadAt returns the bytes written
+USER: [PASS] dircap: ListAt lists the handle's own directory
+USER: [PASS] dircap: the handle resolved inside the directory it names
+USER: [PASS] dircap: OpenFileAt yields a file handle
+USER: [PASS] dircap: a handle can be given up
+USER: [PASS] dircap: revoking a handle revokes what was derived from it
+USER: [PASS] dircap: revoking a parent dir reaps file handles opened below it
+USER: [PASS] dircap: a revoked file handle cannot be closed into success
+USER: [PASS] dircap: acquiring /tmp yields a directory handle
+USER: [PASS] dircap: deriving a subdirectory handle
+USER: [PASS] grant: ReadFileGrant clamps to grant length
+[ WARN] [grant] GrantFree 0x461bd000 refused: region 0x461bd000+4096 overlaps a pinned region 0x461bd000+1 pages owned by task 7 with 1 in-flight operation(s)
+USER: [PASS] grant: ReadFileGrant copies nonzero bytes
+USER: [PASS] dircap: GetFile returns a nonempty pointer before sealing
+USER: [PASS] dircap: OpenFileAt returns a file handle for a file
+USER: [PASS] dircap: the cell gives up naming paths
+USER: [PASS] dircap: Write{path} is refused after sealing
+USER: [PASS] dircap: the refused write left nothing behind
+USER: [PASS] dircap: GetFile is refused after sealing
+USER: [PASS] dircap: Stat is refused after sealing
+USER: [PASS] dircap: ListDir is refused after sealing
+USER: [PASS] dircap: Unlink is refused after sealing
+USER: [PASS] dircap: Mkdir is refused after sealing
+USER: [PASS] dircap: ReadAsync is refused after sealing
+USER: [PASS] dircap: widening by acquiring a new root is refused after sealing
+USER: [PASS] grant: ReadFileGrant is refused after sealing
+USER: [PASS] dircap: ReadFileHandle still works after sealing
+USER: [PASS] dircap: ReadFileHandle returns EOF for an oversized offset
+USER: [PASS] dircap: ReadFileHandle returns EOF for a zero-length request
+USER: [PASS] dircap: CloseFile closes a live file handle
+USER: [PASS] dircap: a closed file handle is stale
+USER: [PASS] dircap: handle operations still work after sealing
+USER: [PASS] dircap: UnlinkAt still works after sealing
+USER: 
+USER: [vfs-test] Results: 96 PASS, 0 FAIL
+USER: [vfs-test] ALL TESTS PASSED
+[ INFO] Syscall::Exit: task 7 exited with code 0

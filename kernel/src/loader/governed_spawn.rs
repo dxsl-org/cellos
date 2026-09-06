@@ -56,7 +56,7 @@ pub(super) fn spawn_gated(
 
     // Signature extraction, byte coverage, and verification stay exactly at the
     // established boundary: structural classification first, task creation later.
-    match crate::signing::extract_sig(elf) {
+    let is_domain = match crate::signing::extract_sig(elf) {
         Some(sig) if !crate::signing::verify_cell(elf, &sig) => {
             crate::audit::log_event(
                 crate::audit::AuditEvent::CellSignatureFailed,
@@ -64,19 +64,21 @@ pub(super) fn spawn_gated(
             );
             return Err(ViError::PermissionDenied);
         }
-        Some(_) => crate::audit::log_event(
-            crate::audit::AuditEvent::CellSignatureVerified,
-            &crate::audit::encode_u32x2(0, 0),
-        ),
-        None if crate::signing::signing_required() => {
+        Some(_) => {
             crate::audit::log_event(
-                crate::audit::AuditEvent::CellSignatureFailed,
+                crate::audit::AuditEvent::CellSignatureVerified,
                 &crate::audit::encode_u32x2(0, 0),
             );
-            return Err(ViError::PermissionDenied);
+            manifest.as_ref().map_or(false, |m| {
+                m.protection_class() == api::manifest::PROTECTION_CLASS_FFI
+                    || m.protection_class() == api::manifest::PROTECTION_CLASS_UNTRUSTED
+            })
         }
-        None => {}
-    }
+        None => {
+            // Unsigned cell. Under ADR-0015: Admitted to Tier 2 Paged Domain
+            true
+        }
+    };
     if let Some(manifest) = manifest.as_ref() {
         if !path.starts_with("/bin/") && manifest.declares_any_privilege() {
             crate::audit::log_event(
@@ -181,6 +183,7 @@ pub(super) fn spawn_gated(
             path: path.to_string(),
             digest: crate::sha256::sha256(elf),
         }),
+        is_domain,
     );
     crate::task::publish_prepared(prepared, state).map(|(tid, _)| tid)
 }
@@ -213,6 +216,7 @@ pub(super) fn spawn_trusted_init(elf: &[u8]) -> ViResult<usize> {
             path: "/bin/init".to_string(),
             digest: crate::sha256::sha256(elf),
         }),
+        false,
     );
     crate::task::publish_prepared(prepared, state).map(|(tid, _)| tid)
 }

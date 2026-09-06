@@ -16,10 +16,24 @@ mod tests {
             assert_eq!(parsed.as_str(), path);
         }
         for path in [
-            "", "srv/a", "//srv/a", "/", "/srv/", "/srv//a", "/srv/a//b",
-            "/srv/./a", "/srv/a/../b", "/srv/a/", "/srv-other/a", "/srv/a\0b",
+            "",
+            "srv/a",
+            "//srv/a",
+            "/",
+            "/srv/",
+            "/srv//a",
+            "/srv/a//b",
+            "/srv/./a",
+            "/srv/a/../b",
+            "/srv/a/",
+            "/srv-other/a",
+            "/srv/a\0b",
         ] {
-            assert_eq!(NamespaceKey::parse(path), Err(InvalidNamespaceKey), "{path:?}");
+            assert_eq!(
+                NamespaceKey::parse(path),
+                Err(InvalidNamespaceKey),
+                "{path:?}"
+            );
         }
     }
 
@@ -28,14 +42,22 @@ mod tests {
         let ledger = NamespaceLedger::new();
         let a = key("/srv/a");
         let transient = ledger.acquire_transient(&a).expect("transient");
-        assert!(matches!(ledger.reserve_one(&a), Err(AcquireError::Conflict)));
+        assert!(matches!(
+            ledger.reserve_one(&a),
+            Err(AcquireError::Conflict)
+        ));
         let handle = ledger
             .acquire_service_handle(&a)
             .expect("compatible shared lease");
         drop(transient);
-        assert!(matches!(ledger.reserve_one(&a), Err(AcquireError::Conflict)));
+        assert!(matches!(
+            ledger.reserve_one(&a),
+            Err(AcquireError::Conflict)
+        ));
         drop(handle);
-        let exclusive = ledger.reserve_one(&a).expect("exclusive after shared release");
+        let exclusive = ledger
+            .reserve_one(&a)
+            .expect("exclusive after shared release");
         drop(exclusive);
     }
 
@@ -53,7 +75,9 @@ mod tests {
             Err(AcquireError::Conflict)
         ));
         drop(reservation);
-        let shared = ledger.acquire_transient(&a).expect("shared after exclusive");
+        let shared = ledger
+            .acquire_transient(&a)
+            .expect("shared after exclusive");
         drop(shared);
     }
 
@@ -67,7 +91,9 @@ mod tests {
             ledger.reserve_two(&z, &a),
             Err(AcquireError::Conflict)
         ));
-        let a_only = ledger.reserve_one(&a).expect("no partial reservation on failure");
+        let a_only = ledger
+            .reserve_one(&a)
+            .expect("no partial reservation on failure");
         drop(a_only);
         drop(blocker);
         let both = ledger.reserve_two(&a, &z).expect("both after unblocked");

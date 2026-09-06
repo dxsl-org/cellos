@@ -1,6 +1,6 @@
 # Product Stages
 
-**Last updated**: 2026-09-04
+**Last updated**: 2026-09-05
 
 ## Execution Relationship
 
@@ -38,8 +38,8 @@ do not serialize QEMU, RPi3, sensor, or local-runtime work.
 
 ## G1 - Robot & Embedded
 
-Goal: ship a bounded, fast-booting, never-die OS for RV64/ARM64 SBC-class
-robot and embedded systems.
+Goal: a bounded, locally operated native platform for specialized laboratory
+equipment on RV64/ARM64 SBC-class systems, with measured recovery and I/O behavior.
 
 Required evidence:
 
@@ -49,10 +49,26 @@ Required evidence:
 - Bounded memory and stack posture per Cell.
 - Clear separation between QEMU integration proof and physical hardware proof.
 
-## G2 - Server & Specialized PC
+[ADR-0014](../decisions/0014-lab-first-robot-workflows.md) selects LAB-01 dry,
+identified carrier transfer as the first product workflow. BASE-01 tray transport
+and ASSEMBLY-01 stationary coupling are planned extensions, not simultaneous
+active product programs. Their [execution plan](../../.agents/260905-1139-sas-lbi-outcome-closure/plan.md)
+separates host/QEMU milestones from exact-device physical acceptance; robot
+hardware, precision, safety and production remain unqualified by software results.
 
-Goal: scale the same SAS/LBI model to x86_64 and server-class deployments with
-SMP, larger storage, desktop/tooling depth, and zero-downtime service upgrade.
+## G2 - Organization Servers & Office PCs
+
+Goal: replace Windows/Linux for the organization's selected web/application/
+microservice server and ordinary office-PC cohorts, verified against actual
+applications, peripherals, security and operational requirements. Specialist
+devices are not an entry requirement.
+
+[ORG-SRV-01 and ORG-PC-01](../../.agents/260905-1139-sas-lbi-outcome-closure/organization-deployment-profiles.md)
+define the functional floors and proposed reference applications. They are
+scope-defined future profiles, not newly activated implementation programs or
+proof of application compatibility. A Linux guest is a disclosed transition
+dependency, not elimination of Linux; native, guest and remote claims remain
+distinct. Their activation does not depend on completing physical robot workflows.
 
 Current posture:
 

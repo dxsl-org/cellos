@@ -69,7 +69,10 @@ fn sweep(
     assert!(calls[..calls.len() - 1]
         .iter()
         .all(|call| call.0 >= HEADER_RING));
-    assert!(calls.last().unwrap().0 < HEADER_RING, "header must commit last");
+    assert!(
+        calls.last().unwrap().0 < HEADER_RING,
+        "header must commit last"
+    );
     assert_eq!(calls.iter().filter(|call| call.0 < HEADER_RING).count(), 1);
     drop(fs);
 
@@ -106,9 +109,8 @@ fn validate_rejection(
     disk.restore(image);
     let mut fs = open(disk);
     disk.arm(None);
-    let result = fs.tx(|tx| {
-        tx.rename_node_no_replace(TreePtr::root(), source, TreePtr::root(), target)
-    });
+    let result =
+        fs.tx(|tx| tx.rename_node_no_replace(TreePtr::root(), source, TreePtr::root(), target));
     drop(fs);
     let trace = disk.trace();
     let mut remounted = open(disk);

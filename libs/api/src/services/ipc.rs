@@ -188,10 +188,7 @@ pub enum VfsRequest<'a> {
         file: crate::vfs_file_handles::ViVfsFileHandle,
     },
     /// Atomic rename of a file or directory from `old` to `new`.
-    Rename {
-        old: &'a str,
-        new: &'a str,
-    },
+    Rename { old: &'a str, new: &'a str },
 }
 
 impl VfsRequest<'_> {

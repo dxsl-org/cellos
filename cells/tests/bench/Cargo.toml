@@ -10,8 +10,9 @@ restart-oracle = ["service-net-broker/restart-oracle"]
 
 [dependencies]
 ostd = { path = "../../../libs/ostd", version = "0.2.0" }
-api  = { path = "../../../libs/api", version = "0.1.0" }
+api  = { path = "../../../libs/api", version = "0.1.0", features = ["hostile-backend-recovery"] }
 service-net-broker = { path = "../../services/net-broker", version = "0.1.0" }
+cellos-fs = { path = "../../../libs/cellos-fs", version = "0.1.0" }
 
 [[bin]]
 name = "bench"

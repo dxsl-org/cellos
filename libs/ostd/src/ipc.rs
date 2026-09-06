@@ -152,6 +152,39 @@ where
     api::ipc::decode::<Resp>(raw).map_err(|_| IpcError::Decode)
 }
 
+/// Fastpath zero-trap RPC service call over an established SPSC ring channel endpoint.
+///
+/// Encodes `req` into `send_buf` via postcard, transmits it directly into the SPSC
+/// ring buffer without trapping to kernel mode, spins briefly and yields if needed,
+/// and receives the reply directly from the return ring buffer.
+pub fn fastpath_call<'r, Req: Serialize>(
+    endpoint: &crate::ring_channel::FastpathEndpoint<'_>,
+    req: &Req,
+    send_buf: &mut [u8],
+    recv_buf: &'r mut [u8],
+) -> Result<&'r [u8], IpcError> {
+    let encoded = api::ipc::encode(req, send_buf).map_err(|_| IpcError::Encode)?;
+    let len = endpoint
+        .call(encoded, recv_buf)
+        .map_err(|_| IpcError::Send)?;
+    Ok(&recv_buf[..len])
+}
+
+/// Typed version of `fastpath_call` that deserializes the reply into `Resp`.
+pub fn fastpath_call_typed<'r, Req, Resp>(
+    endpoint: &crate::ring_channel::FastpathEndpoint<'_>,
+    req: &Req,
+    send_buf: &mut [u8],
+    recv_buf: &'r mut [u8],
+) -> Result<Resp, IpcError>
+where
+    Req: Serialize,
+    Resp: Deserialize<'r>,
+{
+    let raw = fastpath_call(endpoint, req, send_buf, recv_buf)?;
+    api::ipc::decode::<Resp>(raw).map_err(|_| IpcError::Decode)
+}
+
 // ── Async recv (naive-executor future) ────────────────────────────────────────
 
 /// Future that waits for a message to arrive. Returns the sender id.
