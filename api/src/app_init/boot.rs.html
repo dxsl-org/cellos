@@ -57,19 +57,23 @@
 <a href=#57 id=57 data-nosnippet>57</a>}
 <a href=#58 id=58 data-nosnippet>58</a>
 <a href=#59 id=59 data-nosnippet>59</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>spawn_optional_services() -&gt; <span class="prelude-ty">Option</span>&lt;usize&gt; {
-<a href=#60 id=60 data-nosnippet>60</a>    <span class="attr">#[cfg(not(feature = <span class="string">"hypervisor-min"</span>))]
+<a href=#60 id=60 data-nosnippet>60</a>    <span class="attr">#[cfg(all(not(feature = <span class="string">"hypervisor-min"</span>), not(feature = <span class="string">"board-rpi3"</span>)))]
 <a href=#61 id=61 data-nosnippet>61</a>    </span><span class="kw">match </span>sys_spawn_from_path(<span class="string">"/bin/fb-console"</span>) {
 <a href=#62 id=62 data-nosnippet>62</a>        SyscallResult::Ok(<span class="kw">_</span>) =&gt; ostd::io::println(<span class="string">"Init: fb-console spawned."</span>),
 <a href=#63 id=63 data-nosnippet>63</a>        SyscallResult::Err(<span class="kw">_</span>) =&gt; ostd::io::println(<span class="string">"Init: fb-console spawn failed."</span>),
 <a href=#64 id=64 data-nosnippet>64</a>    }
 <a href=#65 id=65 data-nosnippet>65</a>
-<a href=#66 id=66 data-nosnippet>66</a>    <span class="kw">let </span>hypervisor_tid = spawn_hypervisor();
-<a href=#67 id=67 data-nosnippet>67</a>    <span class="attr">#[cfg(not(feature = <span class="string">"hypervisor-min"</span>))]
-<a href=#68 id=68 data-nosnippet>68</a>    </span>{
-<a href=#69 id=69 data-nosnippet>69</a>        <span class="kw">let _ </span>= sys_spawn_from_path(<span class="string">"/bin/silo-test"</span>);
-<a href=#70 id=70 data-nosnippet>70</a>        <span class="kw">let _ </span>= sys_spawn_from_path(<span class="string">"/bin/vfs-test"</span>);
-<a href=#71 id=71 data-nosnippet>71</a>        <span class="kw">let _ </span>= sys_spawn_from_path(<span class="string">"/bin/srv-test"</span>);
-<a href=#72 id=72 data-nosnippet>72</a>    }
-<a href=#73 id=73 data-nosnippet>73</a>    hypervisor_tid
-<a href=#74 id=74 data-nosnippet>74</a>}
+<a href=#66 id=66 data-nosnippet>66</a>    <span class="attr">#[cfg(not(feature = <span class="string">"board-rpi3"</span>))]
+<a href=#67 id=67 data-nosnippet>67</a>    </span><span class="kw">let </span>hypervisor_tid = spawn_hypervisor();
+<a href=#68 id=68 data-nosnippet>68</a>    <span class="attr">#[cfg(feature = <span class="string">"board-rpi3"</span>)]
+<a href=#69 id=69 data-nosnippet>69</a>    </span><span class="kw">let </span>hypervisor_tid = <span class="prelude-val">None</span>;
+<a href=#70 id=70 data-nosnippet>70</a>
+<a href=#71 id=71 data-nosnippet>71</a>    <span class="attr">#[cfg(all(not(feature = <span class="string">"hypervisor-min"</span>), not(feature = <span class="string">"board-rpi3"</span>)))]
+<a href=#72 id=72 data-nosnippet>72</a>    </span>{
+<a href=#73 id=73 data-nosnippet>73</a>        <span class="kw">let _ </span>= sys_spawn_from_path(<span class="string">"/bin/silo-test"</span>);
+<a href=#74 id=74 data-nosnippet>74</a>        <span class="kw">let _ </span>= sys_spawn_from_path(<span class="string">"/bin/vfs-test"</span>);
+<a href=#75 id=75 data-nosnippet>75</a>        <span class="kw">let _ </span>= sys_spawn_from_path(<span class="string">"/bin/srv-test"</span>);
+<a href=#76 id=76 data-nosnippet>76</a>    }
+<a href=#77 id=77 data-nosnippet>77</a>    hypervisor_tid
+<a href=#78 id=78 data-nosnippet>78</a>}
 </code></pre></div></section></main></body></html>
