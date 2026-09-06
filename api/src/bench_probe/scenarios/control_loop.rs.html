@@ -13,15 +13,15 @@
 <a href=#13 id=13 data-nosnippet>13</a>
 <a href=#14 id=14 data-nosnippet>14</a></span><span class="kw">extern crate </span>alloc;
 <a href=#15 id=15 data-nosnippet>15</a><span class="kw">use </span><span class="kw">crate</span>::framework::rt_report::RtReport;
-<a href=#16 id=16 data-nosnippet>16</a><span class="kw">use </span>alloc::vec::Vec;
-<a href=#17 id=17 data-nosnippet>17</a><span class="kw">use </span>ostd::syscall::{sys_exit, sys_get_time, sys_recv, sys_recv_timeout, sys_send, SyscallResult};
-<a href=#18 id=18 data-nosnippet>18</a>
+<a href=#16 id=16 data-nosnippet>16</a><span class="kw">use </span><span class="kw">crate</span>::framework::timer::timer_freq_hz;
+<a href=#17 id=17 data-nosnippet>17</a><span class="kw">use </span>alloc::vec::Vec;
+<a href=#18 id=18 data-nosnippet>18</a><span class="kw">use </span>ostd::syscall::{sys_exit, sys_get_time, sys_recv, sys_recv_timeout, sys_send, SyscallResult};
 <a href=#19 id=19 data-nosnippet>19</a><span class="doccomment">/// Receive timeout uses 10 ms scheduler ticks; five ticks request a 50 ms period.
 <a href=#20 id=20 data-nosnippet>20</a></span><span class="kw">const </span>PERIOD_SCHEDULER_TICKS: u64 = <span class="number">5</span>;
-<a href=#21 id=21 data-nosnippet>21</a><span class="doccomment">/// `sys_get_time` reports the 10 MHz hardware timebase used for measured error.
-<a href=#22 id=22 data-nosnippet>22</a></span><span class="kw">const </span>PERIOD_TIME_TICKS: u64 = <span class="number">50 </span>* <span class="number">10_000</span>;
-<a href=#23 id=23 data-nosnippet>23</a><span class="doccomment">/// Allowed measured overrun before a deadline miss: 5 ms in the hardware timebase.
-<a href=#24 id=24 data-nosnippet>24</a></span><span class="kw">const </span>SLACK_TIME_TICKS: u64 = <span class="number">5 </span>* <span class="number">10_000</span>;
+<a href=#21 id=21 data-nosnippet>21</a><span class="doccomment">/// Target period duration in milliseconds (5 scheduler ticks @ 10 ms/tick = 50 ms).
+<a href=#22 id=22 data-nosnippet>22</a></span><span class="kw">const </span>PERIOD_MS: u64 = <span class="number">50</span>;
+<a href=#23 id=23 data-nosnippet>23</a><span class="doccomment">/// Allowed measured overrun before a deadline miss: 5 ms slack.
+<a href=#24 id=24 data-nosnippet>24</a></span><span class="kw">const </span>SLACK_MS: u64 = <span class="number">5</span>;
 <a href=#25 id=25 data-nosnippet>25</a><span class="doccomment">/// Number of measured periods.
 <a href=#26 id=26 data-nosnippet>26</a></span><span class="kw">const </span>CL_ITERS: u32 = <span class="number">200</span>;
 <a href=#27 id=27 data-nosnippet>27</a>
@@ -76,39 +76,42 @@
 <a href=#76 id=76 data-nosnippet>76</a>    <span class="kw">let </span><span class="kw-2">mut </span>errors: Vec&lt;u64&gt; = Vec::with_capacity(CL_ITERS <span class="kw">as </span>usize);
 <a href=#77 id=77 data-nosnippet>77</a>    <span class="kw">let </span><span class="kw-2">mut </span>miss = <span class="number">0u32</span>;
 <a href=#78 id=78 data-nosnippet>78</a>    <span class="kw">let </span><span class="kw-2">mut </span>valid = <span class="bool-val">true</span>;
-<a href=#79 id=79 data-nosnippet>79</a>    <span class="kw">let </span><span class="kw-2">mut </span>prev = sys_get_time();
-<a href=#80 id=80 data-nosnippet>80</a>    <span class="kw">for _ in </span><span class="number">0</span>..CL_ITERS {
-<a href=#81 id=81 data-nosnippet>81</a>        <span class="kw">match </span>sys_recv_timeout(<span class="number">0</span>, <span class="kw-2">&amp;mut </span>buf, PERIOD_SCHEDULER_TICKS) {
-<a href=#82 id=82 data-nosnippet>82</a>            SyscallResult::Ok(<span class="number">0</span>) =&gt; {}
-<a href=#83 id=83 data-nosnippet>83</a>            <span class="kw">_ </span>=&gt; {
-<a href=#84 id=84 data-nosnippet>84</a>                valid = <span class="bool-val">false</span>;
-<a href=#85 id=85 data-nosnippet>85</a>                <span class="kw">break</span>;
-<a href=#86 id=86 data-nosnippet>86</a>            }
-<a href=#87 id=87 data-nosnippet>87</a>        }
-<a href=#88 id=88 data-nosnippet>88</a>        <span class="kw">let </span>now = sys_get_time();
-<a href=#89 id=89 data-nosnippet>89</a>        <span class="kw">let </span>actual = now.saturating_sub(prev);
-<a href=#90 id=90 data-nosnippet>90</a>        <span class="kw">let </span>err = actual.abs_diff(PERIOD_TIME_TICKS);
-<a href=#91 id=91 data-nosnippet>91</a>        errors.push(err);
-<a href=#92 id=92 data-nosnippet>92</a>        <span class="kw">if </span>actual &gt; PERIOD_TIME_TICKS + SLACK_TIME_TICKS {
-<a href=#93 id=93 data-nosnippet>93</a>            miss += <span class="number">1</span>;
-<a href=#94 id=94 data-nosnippet>94</a>        }
-<a href=#95 id=95 data-nosnippet>95</a>        prev = now;
-<a href=#96 id=96 data-nosnippet>96</a>    }
-<a href=#97 id=97 data-nosnippet>97</a>
-<a href=#98 id=98 data-nosnippet>98</a>    <span class="kw">if </span>valid {
-<a href=#99 id=99 data-nosnippet>99</a>        <span class="kw">let </span>r = RtReport::build(<span class="string">"control_loop"</span>, <span class="kw-2">&amp;mut </span>errors, miss);
-<a href=#100 id=100 data-nosnippet>100</a>        <span class="kw">let </span><span class="kw-2">mut </span>result = [<span class="number">0u8</span>; RESULT_LEN];
-<a href=#101 id=101 data-nosnippet>101</a>        put_u64(<span class="kw-2">&amp;mut </span>result, <span class="number">1</span>, r.min);
-<a href=#102 id=102 data-nosnippet>102</a>        put_u64(<span class="kw-2">&amp;mut </span>result, <span class="number">9</span>, r.p50);
-<a href=#103 id=103 data-nosnippet>103</a>        put_u64(<span class="kw-2">&amp;mut </span>result, <span class="number">17</span>, r.p99);
-<a href=#104 id=104 data-nosnippet>104</a>        put_u64(<span class="kw-2">&amp;mut </span>result, <span class="number">25</span>, r.p99_9);
-<a href=#105 id=105 data-nosnippet>105</a>        put_u64(<span class="kw-2">&amp;mut </span>result, <span class="number">33</span>, r.max);
-<a href=#106 id=106 data-nosnippet>106</a>        put_u64(<span class="kw-2">&amp;mut </span>result, <span class="number">41</span>, r.jitter);
-<a href=#107 id=107 data-nosnippet>107</a>        put_u64(<span class="kw-2">&amp;mut </span>result, <span class="number">49</span>, u64::from(r.deadline_miss));
-<a href=#108 id=108 data-nosnippet>108</a>        <span class="kw">let _ </span>= sys_send(orch, <span class="kw-2">&amp;</span>result);
-<a href=#109 id=109 data-nosnippet>109</a>    } <span class="kw">else </span>{
-<a href=#110 id=110 data-nosnippet>110</a>        <span class="kw">let _ </span>= sys_send(orch, <span class="kw-2">&amp;</span>[<span class="number">1u8</span>]);
-<a href=#111 id=111 data-nosnippet>111</a>    }
-<a href=#112 id=112 data-nosnippet>112</a>    sys_exit(<span class="number">0</span>);
-<a href=#113 id=113 data-nosnippet>113</a>}
+<a href=#79 id=79 data-nosnippet>79</a>    <span class="kw">let </span>freq = timer_freq_hz();
+<a href=#80 id=80 data-nosnippet>80</a>    <span class="kw">let </span>period_time_ticks = (PERIOD_MS * freq) / <span class="number">1000</span>;
+<a href=#81 id=81 data-nosnippet>81</a>    <span class="kw">let </span>slack_time_ticks = (SLACK_MS * freq) / <span class="number">1000</span>;
+<a href=#82 id=82 data-nosnippet>82</a>    <span class="kw">let </span><span class="kw-2">mut </span>prev = sys_get_time();
+<a href=#83 id=83 data-nosnippet>83</a>    <span class="kw">for _ in </span><span class="number">0</span>..CL_ITERS {
+<a href=#84 id=84 data-nosnippet>84</a>        <span class="kw">match </span>sys_recv_timeout(<span class="number">0</span>, <span class="kw-2">&amp;mut </span>buf, PERIOD_SCHEDULER_TICKS) {
+<a href=#85 id=85 data-nosnippet>85</a>            SyscallResult::Ok(<span class="number">0</span>) =&gt; {}
+<a href=#86 id=86 data-nosnippet>86</a>            <span class="kw">_ </span>=&gt; {
+<a href=#87 id=87 data-nosnippet>87</a>                valid = <span class="bool-val">false</span>;
+<a href=#88 id=88 data-nosnippet>88</a>                <span class="kw">break</span>;
+<a href=#89 id=89 data-nosnippet>89</a>            }
+<a href=#90 id=90 data-nosnippet>90</a>        }
+<a href=#91 id=91 data-nosnippet>91</a>        <span class="kw">let </span>now = sys_get_time();
+<a href=#92 id=92 data-nosnippet>92</a>        <span class="kw">let </span>actual = now.saturating_sub(prev);
+<a href=#93 id=93 data-nosnippet>93</a>        <span class="kw">let </span>err = actual.abs_diff(period_time_ticks);
+<a href=#94 id=94 data-nosnippet>94</a>        errors.push(err);
+<a href=#95 id=95 data-nosnippet>95</a>        <span class="kw">if </span>actual &gt; period_time_ticks + slack_time_ticks {
+<a href=#96 id=96 data-nosnippet>96</a>            miss += <span class="number">1</span>;
+<a href=#97 id=97 data-nosnippet>97</a>        }
+<a href=#98 id=98 data-nosnippet>98</a>        prev = now;
+<a href=#99 id=99 data-nosnippet>99</a>    }
+<a href=#100 id=100 data-nosnippet>100</a>
+<a href=#101 id=101 data-nosnippet>101</a>    <span class="kw">if </span>valid {
+<a href=#102 id=102 data-nosnippet>102</a>        <span class="kw">let </span>r = RtReport::build(<span class="string">"control_loop"</span>, <span class="kw-2">&amp;mut </span>errors, miss);
+<a href=#103 id=103 data-nosnippet>103</a>        <span class="kw">let </span><span class="kw-2">mut </span>result = [<span class="number">0u8</span>; RESULT_LEN];
+<a href=#104 id=104 data-nosnippet>104</a>        put_u64(<span class="kw-2">&amp;mut </span>result, <span class="number">1</span>, r.min);
+<a href=#105 id=105 data-nosnippet>105</a>        put_u64(<span class="kw-2">&amp;mut </span>result, <span class="number">9</span>, r.p50);
+<a href=#106 id=106 data-nosnippet>106</a>        put_u64(<span class="kw-2">&amp;mut </span>result, <span class="number">17</span>, r.p99);
+<a href=#107 id=107 data-nosnippet>107</a>        put_u64(<span class="kw-2">&amp;mut </span>result, <span class="number">25</span>, r.p99_9);
+<a href=#108 id=108 data-nosnippet>108</a>        put_u64(<span class="kw-2">&amp;mut </span>result, <span class="number">33</span>, r.max);
+<a href=#109 id=109 data-nosnippet>109</a>        put_u64(<span class="kw-2">&amp;mut </span>result, <span class="number">41</span>, r.jitter);
+<a href=#110 id=110 data-nosnippet>110</a>        put_u64(<span class="kw-2">&amp;mut </span>result, <span class="number">49</span>, u64::from(r.deadline_miss));
+<a href=#111 id=111 data-nosnippet>111</a>        <span class="kw">let _ </span>= sys_send(orch, <span class="kw-2">&amp;</span>result);
+<a href=#112 id=112 data-nosnippet>112</a>    } <span class="kw">else </span>{
+<a href=#113 id=113 data-nosnippet>113</a>        <span class="kw">let _ </span>= sys_send(orch, <span class="kw-2">&amp;</span>[<span class="number">1u8</span>]);
+<a href=#114 id=114 data-nosnippet>114</a>    }
+<a href=#115 id=115 data-nosnippet>115</a>    sys_exit(<span class="number">0</span>);
+<a href=#116 id=116 data-nosnippet>116</a>}
 </code></pre></div></section></main></body></html>

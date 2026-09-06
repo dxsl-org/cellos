@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["FALLBACK_FREQ_HZ","NS_PER_TICK"],"fn":["read_ticks","ticks_to_ns"]};
+window.SIDEBAR_ITEMS = {"constant":["FALLBACK_FREQ_HZ","NS_PER_TICK"],"fn":["read_ticks","ticks_to_ns","timer_freq_hz"]};

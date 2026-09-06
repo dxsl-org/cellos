@@ -4,30 +4,38 @@
 <a href=#4 id=4 data-nosnippet>4</a>//! this corresponds to `mtime` at ~10 MHz.  Convert ticks → ns by dividing by
 <a href=#5 id=5 data-nosnippet>5</a>//! `ticks_per_ns()` (queries the Config Cell; falls back to 10 MHz assumed).
 <a href=#6 id=6 data-nosnippet>6</a>
-<a href=#7 id=7 data-nosnippet>7</a></span><span class="kw">use </span>ostd::syscall::sys_get_time;
+<a href=#7 id=7 data-nosnippet>7</a></span><span class="kw">use </span>ostd::syscall::{sys_get_time, sys_get_timer_freq};
 <a href=#8 id=8 data-nosnippet>8</a>
-<a href=#9 id=9 data-nosnippet>9</a><span class="doccomment">/// Timer frequency assumed when the Config Cell is unavailable (10 MHz).
+<a href=#9 id=9 data-nosnippet>9</a><span class="doccomment">/// Timer frequency assumed when dynamic query is unavailable (10 MHz).
 <a href=#10 id=10 data-nosnippet>10</a></span><span class="kw">const </span>FALLBACK_FREQ_HZ: u64 = <span class="number">10_000_000</span>;
 <a href=#11 id=11 data-nosnippet>11</a>
-<a href=#12 id=12 data-nosnippet>12</a><span class="doccomment">/// Nanoseconds per tick — derived from `FALLBACK_FREQ_HZ`.
-<a href=#13 id=13 data-nosnippet>13</a>/// Multiply tick deltas by this to get nanoseconds.
-<a href=#14 id=14 data-nosnippet>14</a></span><span class="kw">pub const </span>NS_PER_TICK: u64 = <span class="number">1_000_000_000 </span>/ FALLBACK_FREQ_HZ;
-<a href=#15 id=15 data-nosnippet>15</a>
-<a href=#16 id=16 data-nosnippet>16</a><span class="doccomment">/// Read the current tick counter value.
-<a href=#17 id=17 data-nosnippet>17</a>///
-<a href=#18 id=18 data-nosnippet>18</a>/// Calling this twice and subtracting gives a tick delta.  Use `ticks_to_ns`
-<a href=#19 id=19 data-nosnippet>19</a>/// to convert to nanoseconds.
-<a href=#20 id=20 data-nosnippet>20</a></span><span class="attr">#[inline(always)]
-<a href=#21 id=21 data-nosnippet>21</a></span><span class="kw">pub fn </span>read_ticks() -&gt; u64 {
-<a href=#22 id=22 data-nosnippet>22</a>    sys_get_time()
-<a href=#23 id=23 data-nosnippet>23</a>}
-<a href=#24 id=24 data-nosnippet>24</a>
-<a href=#25 id=25 data-nosnippet>25</a><span class="doccomment">/// Convert a tick delta to nanoseconds using the fallback frequency.
-<a href=#26 id=26 data-nosnippet>26</a>///
-<a href=#27 id=27 data-nosnippet>27</a>/// For accurate results on real hardware, replace `NS_PER_TICK` with a value
-<a href=#28 id=28 data-nosnippet>28</a>/// queried from the Config Cell (`system.timer_freq_hz`).
-<a href=#29 id=29 data-nosnippet>29</a></span><span class="attr">#[inline(always)]
-<a href=#30 id=30 data-nosnippet>30</a></span><span class="kw">pub fn </span>ticks_to_ns(ticks: u64) -&gt; u64 {
-<a href=#31 id=31 data-nosnippet>31</a>    ticks.saturating_mul(NS_PER_TICK)
-<a href=#32 id=32 data-nosnippet>32</a>}
+<a href=#12 id=12 data-nosnippet>12</a><span class="doccomment">/// Return the timer frequency in Hz.
+<a href=#13 id=13 data-nosnippet>13</a></span><span class="kw">pub fn </span>timer_freq_hz() -&gt; u64 {
+<a href=#14 id=14 data-nosnippet>14</a>    sys_get_timer_freq().unwrap_or(FALLBACK_FREQ_HZ)
+<a href=#15 id=15 data-nosnippet>15</a>}
+<a href=#16 id=16 data-nosnippet>16</a>
+<a href=#17 id=17 data-nosnippet>17</a><span class="doccomment">/// Nanoseconds per tick — fallback constant for compatibility.
+<a href=#18 id=18 data-nosnippet>18</a></span><span class="kw">pub const </span>NS_PER_TICK: u64 = <span class="number">1_000_000_000 </span>/ FALLBACK_FREQ_HZ;
+<a href=#19 id=19 data-nosnippet>19</a>
+<a href=#20 id=20 data-nosnippet>20</a><span class="doccomment">/// Read the current tick counter value.
+<a href=#21 id=21 data-nosnippet>21</a>///
+<a href=#22 id=22 data-nosnippet>22</a>/// Calling this twice and subtracting gives a tick delta.  Use `ticks_to_ns`
+<a href=#23 id=23 data-nosnippet>23</a>/// to convert to nanoseconds.
+<a href=#24 id=24 data-nosnippet>24</a></span><span class="attr">#[inline(always)]
+<a href=#25 id=25 data-nosnippet>25</a></span><span class="kw">pub fn </span>read_ticks() -&gt; u64 {
+<a href=#26 id=26 data-nosnippet>26</a>    sys_get_time()
+<a href=#27 id=27 data-nosnippet>27</a>}
+<a href=#28 id=28 data-nosnippet>28</a>
+<a href=#29 id=29 data-nosnippet>29</a><span class="doccomment">/// Convert a tick delta to nanoseconds using the fallback frequency.
+<a href=#30 id=30 data-nosnippet>30</a>///
+<a href=#31 id=31 data-nosnippet>31</a>/// For accurate results on real hardware, replace `NS_PER_TICK` with a value
+<a href=#32 id=32 data-nosnippet>32</a>/// queried from the Config Cell (`system.timer_freq_hz`).
+<a href=#33 id=33 data-nosnippet>33</a></span><span class="attr">#[inline(always)]
+<a href=#34 id=34 data-nosnippet>34</a></span><span class="kw">pub fn </span>ticks_to_ns(ticks: u64) -&gt; u64 {
+<a href=#35 id=35 data-nosnippet>35</a>    <span class="kw">let </span>freq = timer_freq_hz();
+<a href=#36 id=36 data-nosnippet>36</a>    <span class="kw">if </span>freq == <span class="number">0 </span>{
+<a href=#37 id=37 data-nosnippet>37</a>        <span class="kw">return </span>ticks.saturating_mul(NS_PER_TICK);
+<a href=#38 id=38 data-nosnippet>38</a>    }
+<a href=#39 id=39 data-nosnippet>39</a>    ((ticks <span class="kw">as </span>u128).saturating_mul(<span class="number">1_000_000_000</span>) / (freq <span class="kw">as </span>u128)) <span class="kw">as </span>u64
+<a href=#40 id=40 data-nosnippet>40</a>}
 </code></pre></div></section></main></body></html>
