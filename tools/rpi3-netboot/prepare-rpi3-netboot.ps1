@@ -68,7 +68,9 @@ $configLines += @(
     'kernel=u-boot.bin',
     'device_tree=bcm2710-rpi-3-b.dtb',
     'enable_uart=1',
-    'core_freq=250'
+    'core_freq=250',
+    'hdmi_ignore_edid=0xa5000020',
+    'hdmi_force_hotplug=1'
 )
 
 $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'

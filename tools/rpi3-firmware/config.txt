@@ -13,3 +13,6 @@ device_tree=bcm2710-rpi-3-b.dtb
 enable_uart=1
 uart_2ndstage=1
 core_freq=250
+# Suppress HDMI EDID polling retries to eliminate 0.5s boot delay
+hdmi_ignore_edid=0xa5000020
+hdmi_force_hotplug=1

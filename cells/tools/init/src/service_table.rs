@@ -52,10 +52,11 @@ impl Service {
 #[cfg(feature = "hypervisor-min")]
 pub(crate) const SERVICE_COUNT: usize = 2 + cfg!(feature = "hostile-backend-recovery") as usize;
 #[cfg(not(feature = "hypervisor-min"))]
-pub(crate) const SERVICE_COUNT: usize = 8
+pub(crate) const SERVICE_COUNT: usize = 6
+    + (!cfg!(feature = "board-rpi3")) as usize
+    + (!cfg!(feature = "board-rpi3")) as usize
     + cfg!(feature = "development-silo-provider") as usize
     + cfg!(feature = "c2c-broker") as usize;
-
 pub(crate) fn configured() -> [Service; SERVICE_COUNT] {
     #[cfg(feature = "hypervisor-min")]
     return [
@@ -110,6 +111,7 @@ pub(crate) fn configured() -> [Service; SERVICE_COUNT] {
             Registration::SelfReady(service::SILO),
             RestartPolicy::Permanent,
         ),
+        #[cfg(not(feature = "board-rpi3"))]
         Service::new(
             "/bin/kms",
             Registration::Init(service::KMS),
@@ -121,6 +123,7 @@ pub(crate) fn configured() -> [Service; SERVICE_COUNT] {
             Registration::Init(service::NET_BROKER),
             RestartPolicy::Permanent,
         ),
+        #[cfg(not(feature = "board-rpi3"))]
         Service::new(
             "/bin/supervisor",
             Registration::Init(service::SUPERVISOR),

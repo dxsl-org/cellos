@@ -57,14 +57,18 @@ pub(crate) fn spawn_hypervisor() -> Option<usize> {
 }
 
 pub(crate) fn spawn_optional_services() -> Option<usize> {
-    #[cfg(not(feature = "hypervisor-min"))]
+    #[cfg(all(not(feature = "hypervisor-min"), not(feature = "board-rpi3")))]
     match sys_spawn_from_path("/bin/fb-console") {
         SyscallResult::Ok(_) => ostd::io::println("Init: fb-console spawned."),
         SyscallResult::Err(_) => ostd::io::println("Init: fb-console spawn failed."),
     }
 
+    #[cfg(not(feature = "board-rpi3"))]
     let hypervisor_tid = spawn_hypervisor();
-    #[cfg(not(feature = "hypervisor-min"))]
+    #[cfg(feature = "board-rpi3")]
+    let hypervisor_tid = None;
+
+    #[cfg(all(not(feature = "hypervisor-min"), not(feature = "board-rpi3")))]
     {
         let _ = sys_spawn_from_path("/bin/silo-test");
         let _ = sys_spawn_from_path("/bin/vfs-test");
