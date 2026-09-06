@@ -465,103 +465,111 @@
 <a href=#465 id=465 data-nosnippet>465</a>        </span><span class="kw">if </span>buf.len() != <span class="number">512 </span>{
 <a href=#466 id=466 data-nosnippet>466</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(ViError::InvalidArgument);
 <a href=#467 id=467 data-nosnippet>467</a>        }
-<a href=#468 id=468 data-nosnippet>468</a>
-<a href=#469 id=469 data-nosnippet>469</a>        <span class="comment">// Wait for BUFFER_READ_READY (data available in FIFO).
-<a href=#470 id=470 data-nosnippet>470</a>        </span><span class="self">self</span>.poll_set32(SDHCI_INT_STATUS, INT_BUF_READ_READY, POLL_ITERATION_LIMIT)<span class="question-mark">?</span>;
-<a href=#471 id=471 data-nosnippet>471</a>        <span class="self">self</span>.clear_int(INT_BUF_READ_READY);
-<a href=#472 id=472 data-nosnippet>472</a>
-<a href=#473 id=473 data-nosnippet>473</a>        <span class="comment">// Read 4 bytes at a time from the BUFFER port.
-<a href=#474 id=474 data-nosnippet>474</a>        </span><span class="kw">let </span>chunks = buf.len() / <span class="number">4</span>;
-<a href=#475 id=475 data-nosnippet>475</a>        <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..chunks {
-<a href=#476 id=476 data-nosnippet>476</a>            <span class="kw">let </span>word = <span class="self">self</span>.read32(SDHCI_BUFFER);
-<a href=#477 id=477 data-nosnippet>477</a>            <span class="kw">let </span>off = i * <span class="number">4</span>;
-<a href=#478 id=478 data-nosnippet>478</a>            buf[off] = (word &amp; <span class="number">0xFF</span>) <span class="kw">as </span>u8;
-<a href=#479 id=479 data-nosnippet>479</a>            buf[off + <span class="number">1</span>] = ((word &gt;&gt; <span class="number">8</span>) &amp; <span class="number">0xFF</span>) <span class="kw">as </span>u8;
-<a href=#480 id=480 data-nosnippet>480</a>            buf[off + <span class="number">2</span>] = ((word &gt;&gt; <span class="number">16</span>) &amp; <span class="number">0xFF</span>) <span class="kw">as </span>u8;
-<a href=#481 id=481 data-nosnippet>481</a>            buf[off + <span class="number">3</span>] = ((word &gt;&gt; <span class="number">24</span>) &amp; <span class="number">0xFF</span>) <span class="kw">as </span>u8;
-<a href=#482 id=482 data-nosnippet>482</a>        }
-<a href=#483 id=483 data-nosnippet>483</a>
-<a href=#484 id=484 data-nosnippet>484</a>        <span class="comment">// Wait for TRANSFER_COMPLETE.
-<a href=#485 id=485 data-nosnippet>485</a>        </span><span class="self">self</span>.poll_set32(SDHCI_INT_STATUS, INT_XFER_COMPLETE, POLL_ITERATION_LIMIT)<span class="question-mark">?</span>;
-<a href=#486 id=486 data-nosnippet>486</a>        <span class="self">self</span>.clear_int(INT_XFER_COMPLETE);
-<a href=#487 id=487 data-nosnippet>487</a>        <span class="prelude-val">Ok</span>(())
-<a href=#488 id=488 data-nosnippet>488</a>    }
-<a href=#489 id=489 data-nosnippet>489</a>
-<a href=#490 id=490 data-nosnippet>490</a>    <span class="kw">fn </span>write_block(<span class="kw-2">&amp;mut </span><span class="self">self</span>, buf: <span class="kw-2">&amp;</span>[u8]) -&gt; ViResult&lt;()&gt; {
-<a href=#491 id=491 data-nosnippet>491</a>        <span class="kw">if </span>buf.len() != <span class="number">512 </span>{
-<a href=#492 id=492 data-nosnippet>492</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(ViError::InvalidArgument);
-<a href=#493 id=493 data-nosnippet>493</a>        }
-<a href=#494 id=494 data-nosnippet>494</a>
-<a href=#495 id=495 data-nosnippet>495</a>        <span class="comment">// Wait for BUFFER_WRITE_READY (FIFO has space).
-<a href=#496 id=496 data-nosnippet>496</a>        </span><span class="self">self</span>.wait_data_event(
-<a href=#497 id=497 data-nosnippet>497</a>            <span class="string">"buffer-write-ready"</span>,
-<a href=#498 id=498 data-nosnippet>498</a>            INT_BUF_WRITE_READY,
-<a href=#499 id=499 data-nosnippet>499</a>            BUFFER_READY_TIMEOUT_US,
-<a href=#500 id=500 data-nosnippet>500</a>            u64::from(POLL_ITERATION_LIMIT),
-<a href=#501 id=501 data-nosnippet>501</a>        )<span class="question-mark">?</span>;
-<a href=#502 id=502 data-nosnippet>502</a>        <span class="self">self</span>.clear_int(INT_BUF_WRITE_READY);
-<a href=#503 id=503 data-nosnippet>503</a>
-<a href=#504 id=504 data-nosnippet>504</a>        <span class="kw">let </span>chunks = buf.len() / <span class="number">4</span>;
-<a href=#505 id=505 data-nosnippet>505</a>        <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..chunks {
-<a href=#506 id=506 data-nosnippet>506</a>            <span class="kw">let </span>off = i * <span class="number">4</span>;
-<a href=#507 id=507 data-nosnippet>507</a>            <span class="kw">let </span>word = (buf[off] <span class="kw">as </span>u32)
-<a href=#508 id=508 data-nosnippet>508</a>                | ((buf[off + <span class="number">1</span>] <span class="kw">as </span>u32) &lt;&lt; <span class="number">8</span>)
-<a href=#509 id=509 data-nosnippet>509</a>                | ((buf[off + <span class="number">2</span>] <span class="kw">as </span>u32) &lt;&lt; <span class="number">16</span>)
-<a href=#510 id=510 data-nosnippet>510</a>                | ((buf[off + <span class="number">3</span>] <span class="kw">as </span>u32) &lt;&lt; <span class="number">24</span>);
-<a href=#511 id=511 data-nosnippet>511</a>            <span class="self">self</span>.write32(SDHCI_BUFFER, word);
-<a href=#512 id=512 data-nosnippet>512</a>        }
-<a href=#513 id=513 data-nosnippet>513</a>
-<a href=#514 id=514 data-nosnippet>514</a>        <span class="self">self</span>.wait_data_event(
-<a href=#515 id=515 data-nosnippet>515</a>            <span class="string">"write-transfer-complete"</span>,
-<a href=#516 id=516 data-nosnippet>516</a>            INT_XFER_COMPLETE,
-<a href=#517 id=517 data-nosnippet>517</a>            DATA_TRANSFER_TIMEOUT_US,
-<a href=#518 id=518 data-nosnippet>518</a>            u64::from(POLL_ITERATION_LIMIT),
-<a href=#519 id=519 data-nosnippet>519</a>        )<span class="question-mark">?</span>;
-<a href=#520 id=520 data-nosnippet>520</a>        <span class="self">self</span>.clear_int(INT_XFER_COMPLETE);
-<a href=#521 id=521 data-nosnippet>521</a>        <span class="prelude-val">Ok</span>(())
-<a href=#522 id=522 data-nosnippet>522</a>    }
-<a href=#523 id=523 data-nosnippet>523</a>
-<a href=#524 id=524 data-nosnippet>524</a>    <span class="kw">fn </span>set_clock_hz(<span class="kw-2">&amp;mut </span><span class="self">self</span>, hz: u32) -&gt; ViResult&lt;()&gt; {
-<a href=#525 id=525 data-nosnippet>525</a>        <span class="comment">// Base clock frequency (typically 200 MHz on Arasan, 50 MHz on some others).
-<a href=#526 id=526 data-nosnippet>526</a>        // We assume 200 MHz; the divider is rounded up to the nearest power-of-2 (spec v1/v2)
-<a href=#527 id=527 data-nosnippet>527</a>        // or any value (spec v3). For boot-time use we target either 400 kHz (ID) or 25 MHz (DS).
-<a href=#528 id=528 data-nosnippet>528</a>        </span><span class="kw">const </span>BASE_HZ: u32 = <span class="number">200_000_000</span>;
-<a href=#529 id=529 data-nosnippet>529</a>        <span class="kw">let </span>div = BASE_HZ.checked_div(hz).map_or(<span class="number">0</span>, |q| (q / <span class="number">2</span>).max(<span class="number">1</span>) <span class="kw">as </span>u16);
-<a href=#530 id=530 data-nosnippet>530</a>        <span class="self">self</span>.set_clock_div(div);
-<a href=#531 id=531 data-nosnippet>531</a>        <span class="prelude-val">Ok</span>(())
-<a href=#532 id=532 data-nosnippet>532</a>    }
-<a href=#533 id=533 data-nosnippet>533</a>
-<a href=#534 id=534 data-nosnippet>534</a>    <span class="kw">fn </span>set_bus_width(<span class="kw-2">&amp;mut </span><span class="self">self</span>, width: BusWidth) -&gt; ViResult&lt;()&gt; {
-<a href=#535 id=535 data-nosnippet>535</a>        <span class="kw">let </span><span class="kw-2">mut </span>hc = <span class="self">self</span>.read32(SDHCI_HOST_CONTROL) <span class="kw">as </span>u8;
-<a href=#536 id=536 data-nosnippet>536</a>        hc &amp;= !<span class="number">0x26</span>; <span class="comment">// clear 4-bit (bit1) and 8-bit (bit5) fields
-<a href=#537 id=537 data-nosnippet>537</a>        </span><span class="kw">match </span>width {
-<a href=#538 id=538 data-nosnippet>538</a>            BusWidth::One =&gt; {}
-<a href=#539 id=539 data-nosnippet>539</a>            BusWidth::Four =&gt; hc |= <span class="number">1 </span>&lt;&lt; <span class="number">1</span>,
-<a href=#540 id=540 data-nosnippet>540</a>            BusWidth::Eight =&gt; hc |= <span class="number">1 </span>&lt;&lt; <span class="number">5</span>,
-<a href=#541 id=541 data-nosnippet>541</a>        }
-<a href=#542 id=542 data-nosnippet>542</a>        <span class="self">self</span>.write8(SDHCI_HOST_CONTROL, hc);
-<a href=#543 id=543 data-nosnippet>543</a>        <span class="prelude-val">Ok</span>(())
-<a href=#544 id=544 data-nosnippet>544</a>    }
-<a href=#545 id=545 data-nosnippet>545</a>
-<a href=#546 id=546 data-nosnippet>546</a>    <span class="kw">fn </span>card_present(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
-<a href=#547 id=547 data-nosnippet>547</a>        <span class="self">self</span>.read32(SDHCI_PRESENT_STATE) &amp; PS_CARD_PRESENT != <span class="number">0
-<a href=#548 id=548 data-nosnippet>548</a>    </span>}
-<a href=#549 id=549 data-nosnippet>549</a>}
-<a href=#550 id=550 data-nosnippet>550</a>
-<a href=#551 id=551 data-nosnippet>551</a><span class="kw">impl </span>SdhciController {
-<a href=#552 id=552 data-nosnippet>552</a>    <span class="doccomment">/// Configure BLOCK_SIZE, BLOCK_COUNT, and TRANSFER_MODE for an upcoming data command.
-<a href=#553 id=553 data-nosnippet>553</a>    </span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>setup_data_transfer(
-<a href=#554 id=554 data-nosnippet>554</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
-<a href=#555 id=555 data-nosnippet>555</a>        block_size: u16,
-<a href=#556 id=556 data-nosnippet>556</a>        block_count: u16,
-<a href=#557 id=557 data-nosnippet>557</a>        transfer_mode: u16,
-<a href=#558 id=558 data-nosnippet>558</a>    ) {
-<a href=#559 id=559 data-nosnippet>559</a>        <span class="comment">// Reset leaves the timeout exponent at its minimum on Arasan. Program the
-<a href=#560 id=560 data-nosnippet>560</a>        // conservative SDHCI maximum before every data command, as U-Boot does.
-<a href=#561 id=561 data-nosnippet>561</a>        </span><span class="self">self</span>.write8(SDHCI_TIMEOUT_CONTROL, TIMEOUT_MAX);
-<a href=#562 id=562 data-nosnippet>562</a>        <span class="self">self</span>.write16(SDHCI_BLOCK_SIZE, block_size);
-<a href=#563 id=563 data-nosnippet>563</a>        <span class="self">self</span>.write16(SDHCI_BLOCK_COUNT, block_count);
-<a href=#564 id=564 data-nosnippet>564</a>        <span class="self">self</span>.write16(SDHCI_TRANSFER_MODE, transfer_mode);
-<a href=#565 id=565 data-nosnippet>565</a>    }
-<a href=#566 id=566 data-nosnippet>566</a>}
+<a href=#468 id=468 data-nosnippet>468</a>        <span class="comment">// Wait for BUFFER_READ_READY (data available in FIFO).
+<a href=#469 id=469 data-nosnippet>469</a>        </span><span class="self">self</span>.wait_data_event(
+<a href=#470 id=470 data-nosnippet>470</a>            <span class="string">"buffer-read-ready"</span>,
+<a href=#471 id=471 data-nosnippet>471</a>            INT_BUF_READ_READY,
+<a href=#472 id=472 data-nosnippet>472</a>            BUFFER_READY_TIMEOUT_US,
+<a href=#473 id=473 data-nosnippet>473</a>            u64::from(POLL_ITERATION_LIMIT),
+<a href=#474 id=474 data-nosnippet>474</a>        )<span class="question-mark">?</span>;
+<a href=#475 id=475 data-nosnippet>475</a>        <span class="self">self</span>.clear_int(INT_BUF_READ_READY);
+<a href=#476 id=476 data-nosnippet>476</a>        <span class="comment">// Read 4 bytes at a time from the BUFFER port.
+<a href=#477 id=477 data-nosnippet>477</a>        </span><span class="kw">let </span>chunks = buf.len() / <span class="number">4</span>;
+<a href=#478 id=478 data-nosnippet>478</a>        <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..chunks {
+<a href=#479 id=479 data-nosnippet>479</a>            <span class="kw">let </span>word = <span class="self">self</span>.read32(SDHCI_BUFFER);
+<a href=#480 id=480 data-nosnippet>480</a>            <span class="kw">let </span>off = i * <span class="number">4</span>;
+<a href=#481 id=481 data-nosnippet>481</a>            buf[off] = (word &amp; <span class="number">0xFF</span>) <span class="kw">as </span>u8;
+<a href=#482 id=482 data-nosnippet>482</a>            buf[off + <span class="number">1</span>] = ((word &gt;&gt; <span class="number">8</span>) &amp; <span class="number">0xFF</span>) <span class="kw">as </span>u8;
+<a href=#483 id=483 data-nosnippet>483</a>            buf[off + <span class="number">2</span>] = ((word &gt;&gt; <span class="number">16</span>) &amp; <span class="number">0xFF</span>) <span class="kw">as </span>u8;
+<a href=#484 id=484 data-nosnippet>484</a>            buf[off + <span class="number">3</span>] = ((word &gt;&gt; <span class="number">24</span>) &amp; <span class="number">0xFF</span>) <span class="kw">as </span>u8;
+<a href=#485 id=485 data-nosnippet>485</a>        }
+<a href=#486 id=486 data-nosnippet>486</a>
+<a href=#487 id=487 data-nosnippet>487</a>        <span class="comment">// Wait for TRANSFER_COMPLETE.
+<a href=#488 id=488 data-nosnippet>488</a>        </span><span class="self">self</span>.wait_data_event(
+<a href=#489 id=489 data-nosnippet>489</a>            <span class="string">"read-transfer-complete"</span>,
+<a href=#490 id=490 data-nosnippet>490</a>            INT_XFER_COMPLETE,
+<a href=#491 id=491 data-nosnippet>491</a>            DATA_TRANSFER_TIMEOUT_US,
+<a href=#492 id=492 data-nosnippet>492</a>            u64::from(POLL_ITERATION_LIMIT),
+<a href=#493 id=493 data-nosnippet>493</a>        )<span class="question-mark">?</span>;
+<a href=#494 id=494 data-nosnippet>494</a>        <span class="self">self</span>.clear_int(INT_XFER_COMPLETE);
+<a href=#495 id=495 data-nosnippet>495</a>        <span class="prelude-val">Ok</span>(())
+<a href=#496 id=496 data-nosnippet>496</a>    }
+<a href=#497 id=497 data-nosnippet>497</a>
+<a href=#498 id=498 data-nosnippet>498</a>    <span class="kw">fn </span>write_block(<span class="kw-2">&amp;mut </span><span class="self">self</span>, buf: <span class="kw-2">&amp;</span>[u8]) -&gt; ViResult&lt;()&gt; {
+<a href=#499 id=499 data-nosnippet>499</a>        <span class="kw">if </span>buf.len() != <span class="number">512 </span>{
+<a href=#500 id=500 data-nosnippet>500</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(ViError::InvalidArgument);
+<a href=#501 id=501 data-nosnippet>501</a>        }
+<a href=#502 id=502 data-nosnippet>502</a>
+<a href=#503 id=503 data-nosnippet>503</a>        <span class="comment">// Wait for BUFFER_WRITE_READY (FIFO has space).
+<a href=#504 id=504 data-nosnippet>504</a>        </span><span class="self">self</span>.wait_data_event(
+<a href=#505 id=505 data-nosnippet>505</a>            <span class="string">"buffer-write-ready"</span>,
+<a href=#506 id=506 data-nosnippet>506</a>            INT_BUF_WRITE_READY,
+<a href=#507 id=507 data-nosnippet>507</a>            BUFFER_READY_TIMEOUT_US,
+<a href=#508 id=508 data-nosnippet>508</a>            u64::from(POLL_ITERATION_LIMIT),
+<a href=#509 id=509 data-nosnippet>509</a>        )<span class="question-mark">?</span>;
+<a href=#510 id=510 data-nosnippet>510</a>        <span class="self">self</span>.clear_int(INT_BUF_WRITE_READY);
+<a href=#511 id=511 data-nosnippet>511</a>
+<a href=#512 id=512 data-nosnippet>512</a>        <span class="kw">let </span>chunks = buf.len() / <span class="number">4</span>;
+<a href=#513 id=513 data-nosnippet>513</a>        <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..chunks {
+<a href=#514 id=514 data-nosnippet>514</a>            <span class="kw">let </span>off = i * <span class="number">4</span>;
+<a href=#515 id=515 data-nosnippet>515</a>            <span class="kw">let </span>word = (buf[off] <span class="kw">as </span>u32)
+<a href=#516 id=516 data-nosnippet>516</a>                | ((buf[off + <span class="number">1</span>] <span class="kw">as </span>u32) &lt;&lt; <span class="number">8</span>)
+<a href=#517 id=517 data-nosnippet>517</a>                | ((buf[off + <span class="number">2</span>] <span class="kw">as </span>u32) &lt;&lt; <span class="number">16</span>)
+<a href=#518 id=518 data-nosnippet>518</a>                | ((buf[off + <span class="number">3</span>] <span class="kw">as </span>u32) &lt;&lt; <span class="number">24</span>);
+<a href=#519 id=519 data-nosnippet>519</a>            <span class="self">self</span>.write32(SDHCI_BUFFER, word);
+<a href=#520 id=520 data-nosnippet>520</a>        }
+<a href=#521 id=521 data-nosnippet>521</a>
+<a href=#522 id=522 data-nosnippet>522</a>        <span class="self">self</span>.wait_data_event(
+<a href=#523 id=523 data-nosnippet>523</a>            <span class="string">"write-transfer-complete"</span>,
+<a href=#524 id=524 data-nosnippet>524</a>            INT_XFER_COMPLETE,
+<a href=#525 id=525 data-nosnippet>525</a>            DATA_TRANSFER_TIMEOUT_US,
+<a href=#526 id=526 data-nosnippet>526</a>            u64::from(POLL_ITERATION_LIMIT),
+<a href=#527 id=527 data-nosnippet>527</a>        )<span class="question-mark">?</span>;
+<a href=#528 id=528 data-nosnippet>528</a>        <span class="self">self</span>.clear_int(INT_XFER_COMPLETE);
+<a href=#529 id=529 data-nosnippet>529</a>        <span class="prelude-val">Ok</span>(())
+<a href=#530 id=530 data-nosnippet>530</a>    }
+<a href=#531 id=531 data-nosnippet>531</a>
+<a href=#532 id=532 data-nosnippet>532</a>    <span class="kw">fn </span>set_clock_hz(<span class="kw-2">&amp;mut </span><span class="self">self</span>, hz: u32) -&gt; ViResult&lt;()&gt; {
+<a href=#533 id=533 data-nosnippet>533</a>        <span class="comment">// Base clock frequency (typically 200 MHz on Arasan, 50 MHz on some others).
+<a href=#534 id=534 data-nosnippet>534</a>        // We assume 200 MHz; the divider is rounded up to the nearest power-of-2 (spec v1/v2)
+<a href=#535 id=535 data-nosnippet>535</a>        // or any value (spec v3). For boot-time use we target either 400 kHz (ID) or 25 MHz (DS).
+<a href=#536 id=536 data-nosnippet>536</a>        </span><span class="kw">const </span>BASE_HZ: u32 = <span class="number">200_000_000</span>;
+<a href=#537 id=537 data-nosnippet>537</a>        <span class="kw">let </span>div = BASE_HZ.checked_div(hz).map_or(<span class="number">0</span>, |q| (q / <span class="number">2</span>).max(<span class="number">1</span>) <span class="kw">as </span>u16);
+<a href=#538 id=538 data-nosnippet>538</a>        <span class="self">self</span>.set_clock_div(div);
+<a href=#539 id=539 data-nosnippet>539</a>        <span class="prelude-val">Ok</span>(())
+<a href=#540 id=540 data-nosnippet>540</a>    }
+<a href=#541 id=541 data-nosnippet>541</a>
+<a href=#542 id=542 data-nosnippet>542</a>    <span class="kw">fn </span>set_bus_width(<span class="kw-2">&amp;mut </span><span class="self">self</span>, width: BusWidth) -&gt; ViResult&lt;()&gt; {
+<a href=#543 id=543 data-nosnippet>543</a>        <span class="kw">let </span><span class="kw-2">mut </span>hc = <span class="self">self</span>.read32(SDHCI_HOST_CONTROL) <span class="kw">as </span>u8;
+<a href=#544 id=544 data-nosnippet>544</a>        hc &amp;= !<span class="number">0x26</span>; <span class="comment">// clear 4-bit (bit1) and 8-bit (bit5) fields
+<a href=#545 id=545 data-nosnippet>545</a>        </span><span class="kw">match </span>width {
+<a href=#546 id=546 data-nosnippet>546</a>            BusWidth::One =&gt; {}
+<a href=#547 id=547 data-nosnippet>547</a>            BusWidth::Four =&gt; hc |= <span class="number">1 </span>&lt;&lt; <span class="number">1</span>,
+<a href=#548 id=548 data-nosnippet>548</a>            BusWidth::Eight =&gt; hc |= <span class="number">1 </span>&lt;&lt; <span class="number">5</span>,
+<a href=#549 id=549 data-nosnippet>549</a>        }
+<a href=#550 id=550 data-nosnippet>550</a>        <span class="self">self</span>.write8(SDHCI_HOST_CONTROL, hc);
+<a href=#551 id=551 data-nosnippet>551</a>        <span class="prelude-val">Ok</span>(())
+<a href=#552 id=552 data-nosnippet>552</a>    }
+<a href=#553 id=553 data-nosnippet>553</a>
+<a href=#554 id=554 data-nosnippet>554</a>    <span class="kw">fn </span>card_present(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
+<a href=#555 id=555 data-nosnippet>555</a>        <span class="self">self</span>.read32(SDHCI_PRESENT_STATE) &amp; PS_CARD_PRESENT != <span class="number">0
+<a href=#556 id=556 data-nosnippet>556</a>    </span>}
+<a href=#557 id=557 data-nosnippet>557</a>}
+<a href=#558 id=558 data-nosnippet>558</a>
+<a href=#559 id=559 data-nosnippet>559</a><span class="kw">impl </span>SdhciController {
+<a href=#560 id=560 data-nosnippet>560</a>    <span class="doccomment">/// Configure BLOCK_SIZE, BLOCK_COUNT, and TRANSFER_MODE for an upcoming data command.
+<a href=#561 id=561 data-nosnippet>561</a>    </span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>setup_data_transfer(
+<a href=#562 id=562 data-nosnippet>562</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+<a href=#563 id=563 data-nosnippet>563</a>        block_size: u16,
+<a href=#564 id=564 data-nosnippet>564</a>        block_count: u16,
+<a href=#565 id=565 data-nosnippet>565</a>        transfer_mode: u16,
+<a href=#566 id=566 data-nosnippet>566</a>    ) {
+<a href=#567 id=567 data-nosnippet>567</a>        <span class="comment">// Reset leaves the timeout exponent at its minimum on Arasan. Program the
+<a href=#568 id=568 data-nosnippet>568</a>        // conservative SDHCI maximum before every data command, as U-Boot does.
+<a href=#569 id=569 data-nosnippet>569</a>        </span><span class="self">self</span>.write8(SDHCI_TIMEOUT_CONTROL, TIMEOUT_MAX);
+<a href=#570 id=570 data-nosnippet>570</a>        <span class="self">self</span>.write16(SDHCI_BLOCK_SIZE, block_size);
+<a href=#571 id=571 data-nosnippet>571</a>        <span class="self">self</span>.write16(SDHCI_BLOCK_COUNT, block_count);
+<a href=#572 id=572 data-nosnippet>572</a>        <span class="self">self</span>.write16(SDHCI_TRANSFER_MODE, transfer_mode);
+<a href=#573 id=573 data-nosnippet>573</a>    }
+<a href=#574 id=574 data-nosnippet>574</a>}
 </code></pre></div></section></main></body></html>
