@@ -181,69 +181,247 @@ pub fn cmd_tail(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<
     Ok(())
 }
 
+// ─── Path Resolution ──────────────────────────────────────────────────────────
+
+/// Resolve a user-supplied path against the current shell CWD.
+pub(crate) fn resolve_shell_path(path: &str) -> String {
+    if path.is_empty() {
+        return crate::cmd_cwd::get_shell_cwd().unwrap_or_else(|_| String::from("/"));
+    }
+    let mut out = String::new();
+    out.push('/');
+    if !path.starts_with('/') {
+        if let Ok(cwd) = crate::cmd_cwd::get_shell_cwd() {
+            for comp in cwd.split('/') {
+                match comp {
+                    "" | "." => {}
+                    ".." => {
+                        if out.len() > 1 {
+                            let slash = out.rfind('/').unwrap_or(0);
+                            out.truncate(slash.max(1));
+                        }
+                    }
+                    c => {
+                        if out.len() > 1 {
+                            out.push('/');
+                        }
+                        out.push_str(c);
+                    }
+                }
+            }
+        }
+    }
+    for comp in path.split('/') {
+        match comp {
+            "" | "." => {}
+            ".." => {
+                if out.len() > 1 {
+                    let slash = out.rfind('/').unwrap_or(0);
+                    out.truncate(slash.max(1));
+                }
+            }
+            c => {
+                if out.len() > 1 {
+                    out.push('/');
+                }
+                out.push_str(c);
+            }
+        }
+    }
+    out
+}
+
 // ─── mkdir ────────────────────────────────────────────────────────────────────
 
-/// `mkdir <path>` — create a new directory via VFS IPC.
+/// `mkdir [-p] <path>...` — create a new directory via VFS IPC.
 pub fn cmd_mkdir(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
-    let path = match args.next() {
-        Some(p) => p,
-        None => {
-            ostd::io::println("Usage: mkdir <path>");
-            return Ok(());
+    let mut parents = false;
+    let mut paths = Vec::new();
+    while let Some(arg) = args.next() {
+        if arg.starts_with('-') {
+            parents |= arg.contains('p');
+        } else {
+            paths.push(arg);
         }
-    };
-    if !vfs_req_ok(&api::ipc::VfsRequest::Mkdir(path)) {
-        ostd::io::print("mkdir: cannot create directory '");
-        ostd::io::print(path);
-        ostd::io::println("'");
+    }
+    if paths.is_empty() {
+        ostd::io::println("Usage: mkdir [-p] <path>...");
+        return Ok(());
+    }
+    for path in paths {
+        let resolved = resolve_shell_path(path);
+        if parents {
+            let mut prefix = String::new();
+            for part in resolved.split('/').filter(|p| !p.is_empty()) {
+                prefix.push('/');
+                prefix.push_str(part);
+                if matches!(stat_file_vfs(&prefix), Some((_, true))) {
+                    continue;
+                }
+                let _ = vfs_req_ok(&api::ipc::VfsRequest::Mkdir(&prefix));
+            }
+        } else if !vfs_req_ok(&api::ipc::VfsRequest::Mkdir(&resolved)) {
+            ostd::io::print("mkdir: cannot create directory '");
+            ostd::io::print(path);
+            ostd::io::println("'");
+        }
     }
     Ok(())
 }
 
 // ─── rmdir ────────────────────────────────────────────────────────────────────
 
-/// `rmdir <path>` — remove an empty directory via VFS IPC.
+/// `rmdir <path>...` — remove an empty directory via VFS IPC.
 pub fn cmd_rmdir(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
-    let path = match args.next() {
-        Some(p) => p,
-        None => {
-            ostd::io::println("Usage: rmdir <path>");
-            return Ok(());
+    let mut any = false;
+    while let Some(path) = args.next() {
+        if path.starts_with('-') {
+            continue;
         }
-    };
-    if !vfs_req_ok(&api::ipc::VfsRequest::Rmdir(path)) {
-        ostd::io::print("rmdir: failed to remove '");
-        ostd::io::print(path);
-        ostd::io::println("' (not empty or not found)");
+        any = true;
+        let resolved = resolve_shell_path(path);
+        if !vfs_req_ok(&api::ipc::VfsRequest::Rmdir(&resolved)) {
+            ostd::io::print("rmdir: failed to remove '");
+            ostd::io::print(path);
+            ostd::io::println("' (not empty or not found)");
+        }
+    }
+    if !any {
+        ostd::io::println("Usage: rmdir <path>...");
     }
     Ok(())
 }
 
 // ─── rm ───────────────────────────────────────────────────────────────────────
 
-/// `rm [-r] [-f] <path>` — remove a file, or (with -r on /data) a directory tree.
+/// `rm [-r] [-f] <path>...` — remove a file, or (with -r on /data) a directory tree.
 pub fn cmd_rm(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
     let mut recursive = false;
-    let path = loop {
-        match args.next() {
-            Some(a) if a.starts_with('-') => {
-                recursive |= a.contains('r');
-            }
-            Some(a) => break a,
-            None => {
-                ostd::io::println("Usage: rm [-r] <path>");
-                return Ok(());
+    let mut force = false;
+    let mut paths = Vec::new();
+    while let Some(arg) = args.next() {
+        if arg.starts_with('-') {
+            recursive |= arg.contains('r') || arg.contains('R');
+            force |= arg.contains('f');
+        } else {
+            paths.push(arg);
+        }
+    }
+    if paths.is_empty() {
+        if !force {
+            ostd::io::println("Usage: rm [-r] [-f] <path>...");
+        }
+        return Ok(());
+    }
+    for path in paths {
+        let resolved = resolve_shell_path(path);
+        let ok = if recursive && resolved.starts_with("/data/") {
+            rm_recursive(&resolved)
+        } else {
+            vfs_req_ok(&api::ipc::VfsRequest::Unlink(&resolved))
+        };
+        if !ok && !force {
+            ostd::io::print("rm: cannot remove '");
+            ostd::io::print(path);
+            ostd::io::println("'");
+        }
+    }
+    Ok(())
+}
+
+// ─── touch ────────────────────────────────────────────────────────────────────
+
+/// `touch <path>...` — create an empty file or update timestamp via VFS IPC.
+pub fn cmd_touch(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
+    let mut any = false;
+    while let Some(path) = args.next() {
+        if path.starts_with('-') {
+            continue;
+        }
+        any = true;
+        let resolved = resolve_shell_path(path);
+        if stat_file_vfs(&resolved).is_none() {
+            if !write_file(&resolved, &[]) {
+                ostd::io::print("touch: cannot touch '");
+                ostd::io::print(path);
+                ostd::io::println("'");
             }
         }
+    }
+    if !any {
+        ostd::io::println("Usage: touch <path>...");
+    }
+    Ok(())
+}
+
+// ─── mv ───────────────────────────────────────────────────────────────────────
+
+/// `mv <source> <target>` — rename/move a file or directory via VFS IPC (atomic rename).
+pub fn cmd_mv(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
+    let old = match args.next() {
+        Some(o) => o,
+        None => {
+            ostd::io::println("Usage: mv <source> <target>");
+            return Ok(());
+        }
     };
-    let ok = if recursive && path.starts_with("/data/") {
-        rm_recursive(path)
-    } else {
-        vfs_req_ok(&api::ipc::VfsRequest::Unlink(path))
+    let new = match args.next() {
+        Some(n) => n,
+        None => {
+            ostd::io::println("Usage: mv <source> <target>");
+            return Ok(());
+        }
     };
-    if !ok {
-        ostd::io::print("rm: cannot remove '");
-        ostd::io::print(path);
+    let old_resolved = resolve_shell_path(old);
+    let new_resolved = resolve_shell_path(new);
+    if !vfs_req_ok(&api::ipc::VfsRequest::Rename {
+        old: &old_resolved,
+        new: &new_resolved,
+    }) {
+        ostd::io::print("mv: cannot move '");
+        ostd::io::print(old);
+        ostd::io::print("' to '");
+        ostd::io::print(new);
+        ostd::io::println("'");
+    }
+    Ok(())
+}
+
+// ─── cp ───────────────────────────────────────────────────────────────────────
+
+/// `cp <source> <target>` — copy a file via VFS IPC.
+pub fn cmd_cp(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
+    let src = match args.next() {
+        Some(s) => s,
+        None => {
+            ostd::io::println("Usage: cp <source> <target>");
+            return Ok(());
+        }
+    };
+    let dst = match args.next() {
+        Some(d) => d,
+        None => {
+            ostd::io::println("Usage: cp <source> <target>");
+            return Ok(());
+        }
+    };
+    let src_resolved = resolve_shell_path(src);
+    let dst_resolved = resolve_shell_path(dst);
+    let data = match read_file_vfs_owned(&src_resolved, 1024 * 1024) {
+        Ok(d) => d,
+        Err(_) => match read_file_bytes(&src_resolved) {
+            Ok(d) => d,
+            Err(_) => {
+                ostd::io::print("cp: cannot open '");
+                ostd::io::print(src);
+                ostd::io::println("'");
+                return Ok(());
+            }
+        },
+    };
+    if !vfs_write_chunked(&dst_resolved, &data, false) {
+        ostd::io::print("cp: cannot copy to '");
+        ostd::io::print(dst);
         ostd::io::println("'");
     }
     Ok(())

@@ -473,6 +473,32 @@ fn test_shell_cwd(jobs: &mut Jobs) {
     );
 }
 
+fn test_shell_vfs_ops(jobs: &mut Jobs) {
+    // touch creates file
+    exec(jobs, "touch /tmp/st_touch.txt");
+    assert_status(jobs, "shell touch creates file", "test -f /tmp/st_touch.txt", 0);
+
+    // cp copies file
+    exec(jobs, "cp /tmp/st_touch.txt /tmp/st_copied.txt");
+    assert_status(jobs, "shell cp copies file", "test -f /tmp/st_copied.txt", 0);
+
+    // rm deletes file
+    exec(jobs, "rm /tmp/st_touch.txt");
+    assert_status(jobs, "shell rm deletes file", "test -f /tmp/st_touch.txt", 1);
+
+    // mkdir creates directory
+    exec(jobs, "mkdir -p /tmp/st_mkdir_dir/sub");
+    assert_status(jobs, "shell mkdir -p creates directory", "test -d /tmp/st_mkdir_dir/sub", 0);
+
+    // rmdir removes directory
+    exec(jobs, "rmdir /tmp/st_mkdir_dir/sub");
+    assert_status(jobs, "shell rmdir removes directory", "test -d /tmp/st_mkdir_dir/sub", 1);
+
+    // clean up
+    exec(jobs, "rm /tmp/st_copied.txt");
+    exec(jobs, "rmdir /tmp/st_mkdir_dir");
+}
+
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 /// Test harness entry point — called from `main()` when feature `shell_test` is set.
@@ -498,6 +524,7 @@ pub fn run() {
     test_awk(&mut jobs);
     test_fg_bg(&mut jobs);
     test_top_batch(&mut jobs);
+    test_shell_vfs_ops(&mut jobs);
     test_vfs_bounded_grant_read(&mut jobs);
     test_shell_cwd(&mut jobs);
 

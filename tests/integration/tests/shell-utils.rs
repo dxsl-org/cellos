@@ -114,6 +114,11 @@ fn shell_utils_all_scenarios_pass() {
         "[shell-test] PASS  shell cwd restore root cd succeeds",
         "[shell-test] PASS  shell cwd restored root direct",
         "[shell-test] PASS  shell cwd restored root captured",
+        "[shell-test] PASS  shell touch creates file",
+        "[shell-test] PASS  shell cp copies file",
+        "[shell-test] PASS  shell rm deletes file",
+        "[shell-test] PASS  shell mkdir -p creates directory",
+        "[shell-test] PASS  shell rmdir removes directory",
     ] {
         assert!(
             output.contains(marker),

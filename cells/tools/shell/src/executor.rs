@@ -608,6 +608,9 @@ fn dispatch_builtin(prog: &str, args: &[String], jobs: &mut Jobs) -> i32 {
         "mkdir" => Some(with_legacy_parts(args, crate::cmd_fs::cmd_mkdir)),
         "rmdir" => Some(with_legacy_parts(args, crate::cmd_fs::cmd_rmdir)),
         "rm" => Some(with_legacy_parts(args, crate::cmd_fs::cmd_rm)),
+        "touch" => Some(with_legacy_parts(args, crate::cmd_fs::cmd_touch)),
+        "mv" => Some(with_legacy_parts(args, crate::cmd_fs::cmd_mv)),
+        "cp" => Some(with_legacy_parts(args, crate::cmd_fs::cmd_cp)),
         "vcat" => Some(with_legacy_parts(args, crate::cmd_fs::cmd_vcat)),
         "vwrite" => Some(with_legacy_parts(args, crate::cmd_fs::cmd_vwrite)),
         "vappend" => Some(with_legacy_parts(args, crate::cmd_fs::cmd_vappend)),
@@ -763,6 +766,20 @@ fn cmd_test(args: &[&str]) -> ViResult<()> {
     match args {
         ["-f", path] => {
             if matches!(crate::cmd_fs::stat_file_vfs(path), Some((_, false))) {
+                ok
+            } else {
+                fail
+            }
+        }
+        ["-d", path] => {
+            if matches!(crate::cmd_fs::stat_file_vfs(path), Some((_, true))) {
+                ok
+            } else {
+                fail
+            }
+        }
+        ["-e", path] => {
+            if crate::cmd_fs::stat_file_vfs(path).is_some() {
                 ok
             } else {
                 fail

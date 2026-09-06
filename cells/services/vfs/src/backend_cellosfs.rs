@@ -15,7 +15,6 @@ pub struct CellosFsBackend {
     fs: Mutex<Option<CellosFs<CellosPartitionDisk>>>,
 }
 
-unsafe impl Send for CellosFsBackend {}
 
 impl CellosFsBackend {
     /// Mount a CellosFS partition at `prefix`.
