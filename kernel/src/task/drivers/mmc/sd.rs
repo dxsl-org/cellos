@@ -62,7 +62,29 @@ impl SdBlock {
             has_data: true,
         };
         self.core.host.send_cmd(cmd)?;
-        self.core.host.read_block(buf)
+        match self.core.host.read_block(buf) {
+            Ok(()) => Ok(()),
+            Err(e) => {
+                log::warn!("[sd] block read failed at sector {}, retrying at 12.5 MHz", sector);
+                let _ = self.core.host.set_clock_hz(12_500_000);
+                self.core
+                    .host
+                    .setup_data_transfer(0x0200, 1, single_block_transfer_mode(true));
+                let retry_cmd = hal_traits_mmc::MmcCmd {
+                    index: 17,
+                    arg,
+                    resp_type: hal_traits_mmc::RespType::R1,
+                    has_data: true,
+                };
+                if self.core.host.send_cmd(retry_cmd).is_ok()
+                    && self.core.host.read_block(buf).is_ok()
+                {
+                    log::info!("[sd] block read recovered at 12.5 MHz");
+                    return Ok(());
+                }
+                Err(e)
+            }
+        }
     }
 
     pub fn write_sector(&mut self, sector: u64, buf: &[u8]) -> ViResult<()> {

@@ -56,12 +56,13 @@ fn build_hw_cursor_sprite() -> [u8; 64 * 64 * 4] {
     }
     buf
 }
+ostd::declare_custom_heap!(24 * 1024 * 1024);
 
 #[cfg(not(test))]
 #[no_mangle]
 pub fn main() {
+    init_custom_heap();
     println("[compositor] Compositor v0.2: software blending, VirtIO GPU, input routing");
-
     let (w, h) = framebuffer::default_screen_size();
     let mut fb = ScreenFb::new(w, h);
     let mut table = SurfaceTable::new();

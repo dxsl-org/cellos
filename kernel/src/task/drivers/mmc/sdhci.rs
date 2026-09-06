@@ -465,11 +465,14 @@ impl ViMmcHost for SdhciController {
         if buf.len() != 512 {
             return Err(ViError::InvalidArgument);
         }
-
         // Wait for BUFFER_READ_READY (data available in FIFO).
-        self.poll_set32(SDHCI_INT_STATUS, INT_BUF_READ_READY, POLL_ITERATION_LIMIT)?;
+        self.wait_data_event(
+            "buffer-read-ready",
+            INT_BUF_READ_READY,
+            BUFFER_READY_TIMEOUT_US,
+            u64::from(POLL_ITERATION_LIMIT),
+        )?;
         self.clear_int(INT_BUF_READ_READY);
-
         // Read 4 bytes at a time from the BUFFER port.
         let chunks = buf.len() / 4;
         for i in 0..chunks {
@@ -482,7 +485,12 @@ impl ViMmcHost for SdhciController {
         }
 
         // Wait for TRANSFER_COMPLETE.
-        self.poll_set32(SDHCI_INT_STATUS, INT_XFER_COMPLETE, POLL_ITERATION_LIMIT)?;
+        self.wait_data_event(
+            "read-transfer-complete",
+            INT_XFER_COMPLETE,
+            DATA_TRANSFER_TIMEOUT_US,
+            u64::from(POLL_ITERATION_LIMIT),
+        )?;
         self.clear_int(INT_XFER_COMPLETE);
         Ok(())
     }
