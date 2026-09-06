@@ -1,10 +1,10 @@
 [CmdletBinding()]
 param(
     [string]$InterfaceAlias = 'Ethernet',
-    [int]$ExpectedInterfaceIndex = 14,
+    [int]$ExpectedInterfaceIndex = 26,
     [string]$ServerAddress = '192.168.42.1',
     [string]$ClientAddress = '192.168.42.2',
-    [string]$Root = (Join-Path $PSScriptRoot 'root'),
+    [string]$Root = '',
     [switch]$ApplyNetworkConfig,
     [switch]$ApplyFirewall,
     [switch]$RestoreNetwork,
@@ -12,9 +12,11 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+$scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
+if (-not $Root) { $Root = Join-Path $scriptDir 'root' }
 $prefixLength = 24
-$stateDir = Join-Path $PSScriptRoot 'state'
-$logsDir = Join-Path $PSScriptRoot 'logs'
+$stateDir = Join-Path $scriptDir 'state'
+$logsDir = Join-Path $scriptDir 'logs'
 $statePath = Join-Path $stateDir 'network-before.json'
 $firewallName = 'Cellos-RPi3-Netboot-Ethernet'
 $required = @('cellos.uimg')
