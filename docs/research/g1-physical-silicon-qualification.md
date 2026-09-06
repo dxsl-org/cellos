@@ -79,17 +79,22 @@ Mọi ảnh đĩa nạp cho thẻ nhớ MicroSD vật lý đều tuân thủ chu
      - Hoàn thành đủ 5 chu trình đọc cảm biến, tính toán ngưỡng nhiệt độ và điều khiển rơ-le chấp hành.
      - Thoát an toàn với mã lỗi 0 (`Syscall::Exit: task 9 exited with code 0`).
    - **Đo đạc hiệu năng thời gian thực trên vi kiến trúc Cortex-A53 thật (`bench`)**:
-     - **Context Switch Latency**: P50 = **$50.6\ \mu\text{s}$**, P99 = **$51.0\ \mu\text{s}$** (Đạt tiêu chuẩn hệ thống).
-     - **Syscall Yield Latency**: P50 = **$27.1\ \mu\text{s}$**, P99 = **$27.4\ \mu\text{s}$** (Đạt tiêu chuẩn).
+     - **Context Switch Latency**: P50 = **$19.58\ \mu\text{s}$**, P99 = **$19.95\ \mu\text{s}$** (Đạt chuẩn < $100\ \mu\text{s}$).
+     - **Syscall Yield Latency**: P50 = **$11.67\ \mu\text{s}$**, P99 = **$11.88\ \mu\text{s}$** (Đạt chuẩn < $40\ \mu\text{s}$).
      - **Preemption Latency dưới tải nặng (4 Load Worker Cells chạy song song)**:
-       - P50 = **$36.6\ \mu\text{s}$**, P99 = **$38.6\ \mu\text{s}$**, P99.9 = **$49.7\ \mu\text{s}$**.
+       - P50 = **$38.23\ \mu\text{s}$**, P99 = **$38.91\ \mu\text{s}$**, P99.9 = **$40.21\ \mu\text{s}$**.
        - **Số lượng vi phạm Deadline (`miss`) = 0 / 500 mẫu**.
-       - Độ dao động trễ tối đa (`jitter`) = **$13.9\ \mu\text{s}$**.
+       - Độ dao động trễ tối đa (`jitter`) = **$2.60\ \mu\text{s}$**.
+     - **Vòng lặp điều khiển Robot (`control_loop` periodic 50 ms)**:
+       - P50 = **$24.58\ \mu\text{s}$**, P99 = **$40.63\ \mu\text{s}$**.
+       - **Số lượng vi phạm Deadline (`miss`) = 0 / 200 mẫu** (Đạt tiêu chuẩn cứng thời gian thực).
      - **Độ song song phần cứng đa lõi SMP (Multi-Core Scalability)**:
-       - Hệ số tăng tốc độ xử lý trên lõi CPU thật: **$2.14\times$** (Vượt xa mục tiêu tối thiểu $\ge 1.40\times$).
-       - Thông lượng IPC đa lõi: **6,053 msg/sec** (Vượt mục tiêu $\ge 5,000$).
+       - Hệ số tăng tốc độ xử lý trên lõi CPU thật: **$1.99\times$** (Vượt xa mục tiêu tối thiểu $\ge 1.40\times$).
+       - Thông lượng IPC đa lõi: **6,915 msg/sec** (Vượt mục tiêu $\ge 5,000$).
      - **Kênh truyền siêu tốc Fastpath SPSC IPC**:
-       - P50 = **$42.8\ \mu\text{s}$**, P99 = **$43.3\ \mu\text{s}$** (Tăng tốc **$2.56\times$** so với IPC tiêu chuẩn $109.4\ \mu\text{s}$).
+       - P50 = **$28.33\ \mu\text{s}$**, P99 = **$28.75\ \mu\text{s}$** (Tăng tốc **$2.86\times$** so với IPC tiêu chuẩn $82.40\ \mu\text{s}$).
+     - **Tối ưu hóa bộ nhớ RAM vật lý (Physical Footprint)**:
+       - Mức chiếm dụng RAM giảm từ $56.40\text{ MB}$ xuống **$35.59\text{ MB}$** (tiết kiệm **$20.81\text{ MB}$** RAM vật lý sau khi thu gọn heap mặc định của các Cell).
      - **Tổng số tác vụ**: Điều phối và dọn dẹp sạch sẽ 36 Task mà không xảy ra bất kỳ lỗi hoảng loạn nhân (Panic) hay rò rỉ bộ nhớ nào.
 ### Giao Thức 4: Kiểm Thử Cắt Nguồn Đột Ngột (G1-PHYS-04: Sudden Power-Loss & Recovery)
 **Trạng thái**: **ĐẠT (PASSED) — Ngày 2026-09-06**
