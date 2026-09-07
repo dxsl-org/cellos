@@ -90,7 +90,11 @@ pub(crate) fn handle_path_request(
         }
 
         VfsRequest::Rmdir(p) => {
-            if !vfs.access.can_remove_dir(caller, p) {
+            if !vfs.access.can_remove_dir(caller, p)
+                || *p == *"/"
+                || vfs.is_mount_point(p)
+                || vfs.is_mount_ancestor(p)
+            {
                 return Some(VfsResponse::Err(ERR_DENIED));
             }
             let _res = if p == "/srv" || p.starts_with("/srv/") {
@@ -114,7 +118,11 @@ pub(crate) fn handle_path_request(
         VfsRequest::Unlink(p) => unlink_file(vfs, caller, p),
 
         VfsRequest::RmdirRecursive(p) => {
-            if !vfs.access.can_remove_tree(caller, p) {
+            if !vfs.access.can_remove_tree(caller, p)
+                || *p == *"/"
+                || vfs.is_mount_point(p)
+                || vfs.is_mount_ancestor(p)
+            {
                 return Some(VfsResponse::Err(ERR_DENIED));
             }
             let files = crate::subtree::files_under(vfs, p, 32);

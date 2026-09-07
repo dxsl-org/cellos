@@ -82,7 +82,12 @@ pub(crate) fn unlink_file<'a>(
     caller: Caller,
     path: &str,
 ) -> api::ipc::VfsResponse<'a> {
-    if crate::access::is_guest_disk_path(path) || !vfs.access.can_write(caller, path) {
+    if crate::access::is_guest_disk_path(path)
+        || !vfs.access.can_write(caller, path)
+        || path == "/"
+        || vfs.is_mount_point(path)
+        || vfs.is_mount_ancestor(path)
+    {
         return api::ipc::VfsResponse::Err(ERR_DENIED);
     }
     let _res = if path == "/srv" || path.starts_with("/srv/") {

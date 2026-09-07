@@ -1695,7 +1695,18 @@ pub fn file_fstat(
 pub fn file_chdir(caller_id: usize, path: &str) -> core::result::Result<usize, ()> {
     let full_path = resolve_task_path(caller_id, path)?;
 
-    let is_directory = {
+    let is_vfs_path = full_path == "/tmp"
+        || full_path.starts_with("/tmp/")
+        || full_path == "/data"
+        || full_path.starts_with("/data/")
+        || full_path == "/srv"
+        || full_path.starts_with("/srv/")
+        || full_path == "/mnt"
+        || full_path.starts_with("/mnt/");
+
+    let is_directory = if is_vfs_path {
+        true
+    } else {
         let fs_lock = crate::fs::VIFS1.lock();
         let fs = fs_lock.as_ref().ok_or(())?;
         let stat = fs.stat(&full_path).map_err(|_| ())?;

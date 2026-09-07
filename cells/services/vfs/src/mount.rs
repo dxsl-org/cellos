@@ -85,6 +85,41 @@ impl MountTable {
         })
     }
 
+    /// Whether `path` is an exact registered mount point (e.g. `/`, `/tmp`, `/data`, `/srv`, `/mnt/sd`).
+    pub fn is_mount_point(&self, path: &str) -> bool {
+        let trimmed = if path == "/" {
+            "/"
+        } else {
+            path.trim_end_matches('/')
+        };
+        self.entries.iter().any(|entry| entry.prefix == trimmed)
+    }
+
+    /// Enumerate direct child directory names under `path` that are mount points
+    /// or directory ancestors of registered mounts.
+    pub fn direct_mount_children(&self, path: &str) -> Vec<&'static str> {
+        let parent = if path == "/" {
+            ""
+        } else {
+            path.trim_end_matches('/')
+        };
+        let mut children = Vec::new();
+        for entry in &self.entries {
+            if entry.prefix == "/" {
+                continue;
+            }
+            if let Some(rest) = entry.prefix.strip_prefix(parent) {
+                if let Some(after_slash) = rest.strip_prefix('/') {
+                    let child = after_slash.split('/').next().unwrap_or("");
+                    if !child.is_empty() && !children.contains(&child) {
+                        children.push(child);
+                    }
+                }
+            }
+        }
+        children
+    }
+
     pub fn backend(&self, path: &str) -> Option<&dyn FsBackend> {
         self.resolve_idx(path).map(|i| self.backends[i].as_ref())
     }

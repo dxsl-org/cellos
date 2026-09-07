@@ -107,18 +107,60 @@ impl VfsManager {
     }
 
     pub fn list_dir(&self, path: &str, out: &mut [u8]) -> usize {
-        self.mounts
+        let mut pos = self
+            .mounts
             .backend(path)
             .map(|b| b.list(path, out))
-            .unwrap_or(0)
+            .unwrap_or(0);
+
+        let cap = out.len().min(480);
+        for child in self.mounts.direct_mount_children(path) {
+            let child_b = child.as_bytes();
+            let entry_len = 2 + child_b.len() + 1; // "d:" + name + "\n"
+            if pos + entry_len > cap {
+                break;
+            }
+
+            let mut already_present = false;
+            let current = &out[..pos];
+            for line in current.split(|&b| b == b'\n') {
+                if let Some(name) = line
+                    .strip_prefix(b"d:")
+                    .or_else(|| line.strip_prefix(b"f:"))
+                {
+                    if name == child_b {
+                        already_present = true;
+                        break;
+                    }
+                }
+            }
+
+            if !already_present {
+                out[pos..pos + 2].copy_from_slice(b"d:");
+                out[pos + 2..pos + 2 + child_b.len()].copy_from_slice(child_b);
+                out[pos + 2 + child_b.len()] = b'\n';
+                pos += entry_len;
+            }
+        }
+        pos
     }
 
     pub fn stat(&self, path: &str) -> Option<(u64, bool)> {
-        self.mounts.backend(path)?.stat(path)
+        if let Some(res) = self.mounts.backend(path).and_then(|b| b.stat(path)) {
+            return Some(res);
+        }
+        if self.mounts.is_mount_ancestor(path) {
+            return Some((0, true));
+        }
+        None
     }
 
     pub fn is_mount_ancestor(&self, path: &str) -> bool {
         self.mounts.is_mount_ancestor(path)
+    }
+
+    pub fn is_mount_point(&self, path: &str) -> bool {
+        self.mounts.is_mount_point(path)
     }
 
     pub fn file_size(&self, path: &str) -> u64 {
