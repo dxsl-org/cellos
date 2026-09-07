@@ -138,6 +138,21 @@ Write-Host "Building spi-demo (RPi3 BCM SPI0 gate)..."
 cargo build --release -p spi-demo --target $target 2>&1 | Select-Object -Last 5
 Assert-CellBuild 'spi-demo' $LASTEXITCODE
 
+Write-Host "Building driver-virtio-net (VirtIO NIC driver)..."
+cargo build --release -p driver-virtio-net --target $target 2>&1 | Select-Object -Last 5
+Assert-CellBuild 'driver-virtio-net' $LASTEXITCODE
+Write-Host "Building service-net (network stack)..."
+cargo build --release -p service-net --target $target 2>&1 | Select-Object -Last 5
+Assert-CellBuild 'service-net' $LASTEXITCODE
+
+Write-Host "Building service-httpd (Mini-Server Web Cell)..."
+cargo build --release -p service-httpd --target $target 2>&1 | Select-Object -Last 5
+Assert-CellBuild 'service-httpd' $LASTEXITCODE
+if ($BoardRpi3) {
+    Write-Host "Building driver-dwc2-usb (USB host controller)..."
+    cargo build --release -p driver-dwc2-usb --target $target 2>&1 | Select-Object -Last 5
+    Assert-CellBuild 'driver-dwc2-usb' $LASTEXITCODE
+}
 Write-Host "Building app-init..."
 if ($BoardRpi3) {
     foreach ($artifact in @('app-init', 'driver-bcm-display', 'service-compositor', 'fb-console')) {
@@ -185,10 +200,14 @@ $cells = @(
     @{ Bin = "cat";            Dst = "/bin/cat"         },
     @{ Bin = "echo";           Dst = "/bin/echo"        },
     @{ Bin = "ps";             Dst = "/bin/ps"          },
-    @{ Bin = "kill";           Dst = "/bin/kill"        }
+    @{ Bin = "kill";           Dst = "/bin/kill"        },
+    @{ Bin = "service-net";    Dst = "/bin/net"         },
+    @{ Bin = "driver-virtio-net"; Dst = "/bin/virtio-net" },
+    @{ Bin = "service-httpd";  Dst = "/bin/httpd"       }
 )
 if ($BoardRpi3) {
     $cells += @(
+        @{ Bin = "driver-dwc2-usb";    Dst = "/bin/dwc2-usb"    },
         @{ Bin = "driver-bcm-display"; Dst = "/bin/bcm-display" },
         @{ Bin = "service-compositor"; Dst = "/bin/compositor"  },
         @{ Bin = "fb-console";          Dst = "/bin/fb-console"  }
