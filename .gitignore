@@ -124,3 +124,6 @@ cells/apps/vove/
 /build/*.iso
 /.ci-cache/
 /build/x86-virtio-*
+/build/x86-idt-test/
+/test_ls*
+/run_test.sh
