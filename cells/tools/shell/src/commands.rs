@@ -12,7 +12,7 @@ pub fn cmd_help() -> ViResult<()> {
         "  System:  ps  top  kill  pwd  uname  free  env  uptime  sleep  clear  exec",
     );
     crate::executor::shell_println(
-        "  Shell:   help  echo  export  alias  unalias  jobs  source  .",
+        "  Shell:   help  history  echo  export  alias  unalias  jobs  source  .",
     );
     crate::executor::shell_println("");
     crate::executor::shell_println("Syntax:  cmd | cmd2      (pipe)");
@@ -129,128 +129,295 @@ fn exec_load_and_spawn(mut file: ostd::fs::File, path: &str, cmd_argv: &[String]
 let vfs_cell_id = 3;
 */
 
+struct LsEntry {
+    name: alloc::string::String,
+    is_dir: bool,
+    size: u64,
+}
+
 pub fn cmd_ls(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
-    let path = args.next().unwrap_or("/");
-    if path.starts_with("/tmp") || path.starts_with("/data") || path.starts_with("/srv") || path.starts_with("/mnt") {
-        if let Some(entries) = crate::cmd_fs::vfs_list_dir(path) {
-            for name in entries {
-                crate::executor::shell_println(&name);
+    let mut all = false;
+    let mut long = false;
+    let mut classify = false;
+    let mut raw_path = "";
+
+    while let Some(arg) = args.next() {
+        if arg.starts_with('-') && arg.len() > 1 {
+            for c in arg.chars().skip(1) {
+                match c {
+                    'a' | 'A' => all = true,
+                    'l' => long = true,
+                    'F' => classify = true,
+                    _ => {}
+                }
             }
-            return Ok(());
+        } else if raw_path.is_empty() {
+            raw_path = arg;
         }
     }
-    match fs::read_dir(path) {
-        Ok(iter) => {
-            let mut count = 0;
+
+    let resolved = crate::cmd_fs::resolve_shell_path(raw_path);
+    let mut dir_found = false;
+    let mut entries: alloc::vec::Vec<LsEntry> = alloc::vec::Vec::new();
+
+    if resolved == "/" {
+        dir_found = true;
+        // 1. Collect from Userspace VFS service (mount points and root files)
+        if let Some(vfs_list) = crate::cmd_fs::vfs_list_dir_details("/") {
+            for (name, is_dir) in vfs_list {
+                if !entries.iter().any(|e| e.name == name) {
+                    let full_path = alloc::format!("/{name}");
+                    let size = if long {
+                        crate::cmd_fs::stat_file_vfs(&full_path)
+                            .map(|(s, _)| s as u64)
+                            .unwrap_or(0)
+                    } else {
+                        0
+                    };
+                    entries.push(LsEntry { name, is_dir, size });
+                }
+            }
+        }
+
+        // 2. Collect from Kernel BootFS (VIFS1), deduplicating case-insensitively
+        if let Ok(iter) = fs::read_dir("/") {
             for entry in iter {
                 let name = core::str::from_utf8(&entry.name)
                     .unwrap_or("???")
                     .trim_matches('\0');
-                crate::executor::shell_println(name);
-                count += 1;
-            }
-            if count > 0 {
-                return Ok(());
+                if name.is_empty() {
+                    continue;
+                }
+                let already = entries.iter().any(|e| e.name.eq_ignore_ascii_case(name));
+                if !already {
+                    let is_dir = matches!(entry.file_type, ostd::FileType::Directory);
+                    entries.push(LsEntry {
+                        name: alloc::string::String::from(name),
+                        is_dir,
+                        size: entry.size,
+                    });
+                }
             }
         }
-        Err(_) => {}
+    } else {
+        // Specific path: query Userspace VFS first
+        if let Some(vfs_list) = crate::cmd_fs::vfs_list_dir_details(&resolved) {
+            dir_found = true;
+            for (name, is_dir) in vfs_list {
+                let full_path = alloc::format!("{}/{}", resolved.trim_end_matches('/'), name);
+                let size = if long {
+                    crate::cmd_fs::stat_file_vfs(&full_path)
+                        .map(|(s, _)| s as u64)
+                        .unwrap_or(0)
+                } else {
+                    0
+                };
+                entries.push(LsEntry { name, is_dir, size });
+            }
+        } else {
+            // Fallback to Kernel BootFS with resolved path
+            let mut found = false;
+            if let Ok(iter) = fs::read_dir(&resolved) {
+                dir_found = true;
+                for entry in iter {
+                    let name = core::str::from_utf8(&entry.name)
+                        .unwrap_or("???")
+                        .trim_matches('\0');
+                    if name.is_empty() {
+                        continue;
+                    }
+                    let is_dir = matches!(entry.file_type, ostd::FileType::Directory);
+                    entries.push(LsEntry {
+                        name: alloc::string::String::from(name),
+                        is_dir,
+                        size: entry.size,
+                    });
+                    found = true;
+                }
+            }
+            if !found && !raw_path.is_empty() && raw_path != resolved {
+                if let Ok(iter) = fs::read_dir(raw_path) {
+                    dir_found = true;
+                    for entry in iter {
+                        let name = core::str::from_utf8(&entry.name)
+                            .unwrap_or("???")
+                            .trim_matches('\0');
+                        if name.is_empty() {
+                            continue;
+                        }
+                        let is_dir = matches!(entry.file_type, ostd::FileType::Directory);
+                        entries.push(LsEntry {
+                            name: alloc::string::String::from(name),
+                            is_dir,
+                            size: entry.size,
+                        });
+                    }
+                }
+            }
+        }
     }
-    if let Some(entries) = crate::cmd_fs::vfs_list_dir(path) {
-        for name in entries {
-            crate::executor::shell_println(&name);
+
+    if !dir_found && entries.is_empty() {
+        if let Some((size, is_dir)) = crate::cmd_fs::stat_file_vfs(&resolved) {
+            if is_dir {
+                dir_found = true;
+            } else {
+                let name = resolved.rsplit('/').next().unwrap_or(&resolved);
+                entries.push(LsEntry {
+                    name: alloc::string::String::from(name),
+                    is_dir: false,
+                    size: size as u64,
+                });
+            }
         }
+    }
+
+    if !dir_found && entries.is_empty() {
+        let display_path = if raw_path.is_empty() { "/" } else { raw_path };
+        ostd::io::print("ls: cannot access '");
+        ostd::io::print(display_path);
+        ostd::io::println("': No such file or directory");
         return Ok(());
     }
-    ostd::io::print("ls: cannot access '");
-    ostd::io::print(path);
-    ostd::io::println("': No such file or directory");
+    if all {
+        let mut with_dots = alloc::vec::Vec::new();
+        with_dots.push(LsEntry {
+            name: alloc::string::String::from("."),
+            is_dir: true,
+            size: 0,
+        });
+        with_dots.push(LsEntry {
+            name: alloc::string::String::from(".."),
+            is_dir: true,
+            size: 0,
+        });
+        entries.sort_by(|a, b| a.name.cmp(&b.name));
+        with_dots.extend(entries);
+        entries = with_dots;
+    } else {
+        entries.retain(|e| !e.name.starts_with('.'));
+        entries.sort_by(|a, b| a.name.cmp(&b.name));
+    }
+
+    for entry in entries {
+        let mut display_name = entry.name;
+        if classify && entry.is_dir {
+            display_name.push('/');
+        }
+
+        if long {
+            let type_char = if entry.is_dir { 'd' } else { '-' };
+            crate::executor::shell_println(&alloc::format!(
+                "{type_char} {:>8} {}",
+                entry.size,
+                display_name
+            ));
+        } else {
+            crate::executor::shell_println(&display_name);
+        }
+    }
+
     Ok(())
 }
 
 pub fn cmd_cat(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
-    let path = args.next();
-    if path.is_none() {
-        ostd::io::println("Usage: cat <filename>");
+    let mut paths = Vec::new();
+    while let Some(path) = args.next() {
+        paths.push(path);
+    }
+
+    if paths.is_empty() {
+        let stdin_bytes = crate::executor::shell_stdin();
+        if !stdin_bytes.is_empty() {
+            if let Ok(s) = core::str::from_utf8(&stdin_bytes) {
+                crate::executor::shell_print(s);
+            }
+        }
         return Ok(());
     }
-    let path = path.unwrap();
 
-    match syscall::sys_open(path) {
-        Ok(fd) => {
-            let mut buffer = [0u8; 256]; // Stack buffer
-            let mut pending = 0; // Number of bytes pending from previous read
-            loop {
-                let _max_read = buffer.len() - pending;
-                match syscall::sys_read(fd, &mut buffer[pending..]) {
-                    Ok(n) if n > 0 => {
-                        let total = pending + n;
-
-                        match core::str::from_utf8(&buffer[..total]) {
-                            Ok(s) => {
-                                crate::executor::shell_print(s);
-                                pending = 0;
-                            }
-                            Err(e) => {
-                                let valid_len = e.valid_up_to();
-                                if valid_len > 0 {
-                                    // `valid_up_to()` is by definition the length of
-                                    // the longest valid prefix, so this never fails.
-                                    let s =
-                                        core::str::from_utf8(&buffer[..valid_len]).unwrap_or("");
-                                    crate::executor::shell_print(s);
-                                }
-
-                                if let Some(error_len) = e.error_len() {
-                                    crate::executor::shell_print("\u{FFFD}"); // Replacement char
-                                    let start = valid_len + error_len;
-                                    let remaining = total - start;
-                                    for i in 0..remaining {
-                                        buffer[i] = buffer[start + i];
-                                    }
-                                    pending = remaining;
-                                } else {
-                                    let remaining = total - valid_len;
-                                    for i in 0..remaining {
-                                        buffer[i] = buffer[valid_len + i];
-                                    }
-                                    pending = remaining;
-                                }
-                            }
-                        }
-                    }
-                    Ok(0) => {
-                        if pending > 0 {
-                            crate::executor::shell_print("\u{FFFD}");
-                        }
-                        break;
-                    }
-                    Err(_) => {
-                        ostd::io::println("cat: read error"); // error → bypass sink
-                        break;
-                    }
-                    _ => break,
-                }
-            }
-            syscall::sys_close(fd);
-            crate::executor::shell_print("\n");
-            Ok(())
-        }
-        Err(_) => {
-            if let Ok(bytes) = crate::cmd_fs::read_file_vfs_owned(path, 65536) {
-                if let Ok(s) = core::str::from_utf8(&bytes) {
+    for path in paths {
+        if path == "-" {
+            let stdin_bytes = crate::executor::shell_stdin();
+            if !stdin_bytes.is_empty() {
+                if let Ok(s) = core::str::from_utf8(&stdin_bytes) {
                     crate::executor::shell_print(s);
-                    if !s.ends_with('\n') {
-                        crate::executor::shell_print("\n");
-                    }
-                    return Ok(());
                 }
             }
-            ostd::io::print("cat: ");
-            ostd::io::print(path);
-            ostd::io::println(": No such file or directory");
-            Ok(())
+            continue;
+        }
+
+        let resolved = crate::cmd_fs::resolve_shell_path(path);
+        // 1. Try VFS read first (covers /tmp, /data, /srv, etc.)
+        if let Ok(bytes) = crate::cmd_fs::read_file_vfs_owned(&resolved, 1024 * 1024) {
+            if let Ok(s) = core::str::from_utf8(&bytes) {
+                crate::executor::shell_print(s);
+                continue;
+            }
+        }
+
+        // 2. Fallback to kernel sys_open (covers kernel BootFS /bin, /etc)
+        match syscall::sys_open(&resolved) {
+            Ok(fd) => {
+                let mut buffer = [0u8; 256];
+                let mut pending = 0;
+                loop {
+                    match syscall::sys_read(fd, &mut buffer[pending..]) {
+                        Ok(n) if n > 0 => {
+                            let total = pending + n;
+                            match core::str::from_utf8(&buffer[..total]) {
+                                Ok(s) => {
+                                    crate::executor::shell_print(s);
+                                    pending = 0;
+                                }
+                                Err(e) => {
+                                    let valid_len = e.valid_up_to();
+                                    if valid_len > 0 {
+                                        let s =
+                                            core::str::from_utf8(&buffer[..valid_len]).unwrap_or("");
+                                        crate::executor::shell_print(s);
+                                    }
+                                    if let Some(error_len) = e.error_len() {
+                                        crate::executor::shell_print("\u{FFFD}");
+                                        let start = valid_len + error_len;
+                                        let remaining = total - start;
+                                        for i in 0..remaining {
+                                            buffer[i] = buffer[start + i];
+                                        }
+                                        pending = remaining;
+                                    } else {
+                                        let remaining = total - valid_len;
+                                        for i in 0..remaining {
+                                            buffer[i] = buffer[valid_len + i];
+                                        }
+                                        pending = remaining;
+                                    }
+                                }
+                            }
+                        }
+                        Ok(0) => {
+                            if pending > 0 {
+                                crate::executor::shell_print("\u{FFFD}");
+                            }
+                            break;
+                        }
+                        Err(_) => {
+                            ostd::io::println("cat: read error");
+                            break;
+                        }
+                        _ => break,
+                    }
+                }
+                syscall::sys_close(fd);
+            }
+            Err(_) => {
+                ostd::io::print("cat: ");
+                ostd::io::print(path);
+                ostd::io::println(": No such file or directory");
+            }
         }
     }
+    Ok(())
 }
 
 fn state_order(state: usize) -> usize {

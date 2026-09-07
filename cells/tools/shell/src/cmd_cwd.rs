@@ -40,7 +40,24 @@ pub fn cmd_cd(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()
         ostd::io::println("cd: too many arguments");
         return Err(ViError::InvalidArgument);
     }
-    match ostd::syscall::sys_chdir(target) {
+    let resolved = crate::cmd_fs::resolve_shell_path(target);
+    let is_vfs_subpath = (resolved.starts_with("/tmp/") && resolved != "/tmp/")
+        || (resolved.starts_with("/data/") && resolved != "/data/")
+        || (resolved.starts_with("/srv/") && resolved != "/srv/")
+        || (resolved.starts_with("/mnt/") && resolved != "/mnt/" && resolved != "/mnt/sd");
+    if is_vfs_subpath {
+        match crate::cmd_fs::stat_file_vfs(&resolved) {
+            Some((_, true)) => {}
+            _ => {
+                ostd::io::print("cd: cannot change directory to '");
+                ostd::io::print(target);
+                ostd::io::println("'");
+                return Err(ViError::NotFound);
+            }
+        }
+    }
+
+    match ostd::syscall::sys_chdir(&resolved) {
         Ok(()) => Ok(()),
         Err(_) => {
             ostd::io::print("cd: cannot change directory to '");

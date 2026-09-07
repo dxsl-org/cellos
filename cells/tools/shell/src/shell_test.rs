@@ -476,27 +476,230 @@ fn test_shell_cwd(jobs: &mut Jobs) {
 fn test_shell_vfs_ops(jobs: &mut Jobs) {
     // touch creates file
     exec(jobs, "touch /tmp/st_touch.txt");
-    assert_status(jobs, "shell touch creates file", "test -f /tmp/st_touch.txt", 0);
+    assert_status(
+        jobs,
+        "shell touch creates file",
+        "test -f /tmp/st_touch.txt",
+        0,
+    );
 
     // cp copies file
     exec(jobs, "cp /tmp/st_touch.txt /tmp/st_copied.txt");
-    assert_status(jobs, "shell cp copies file", "test -f /tmp/st_copied.txt", 0);
+    assert_status(
+        jobs,
+        "shell cp copies file",
+        "test -f /tmp/st_copied.txt",
+        0,
+    );
 
     // rm deletes file
     exec(jobs, "rm /tmp/st_touch.txt");
-    assert_status(jobs, "shell rm deletes file", "test -f /tmp/st_touch.txt", 1);
+    assert_status(
+        jobs,
+        "shell rm deletes file",
+        "test -f /tmp/st_touch.txt",
+        1,
+    );
 
     // mkdir creates directory
     exec(jobs, "mkdir -p /tmp/st_mkdir_dir/sub");
-    assert_status(jobs, "shell mkdir -p creates directory", "test -d /tmp/st_mkdir_dir/sub", 0);
+    assert_status(
+        jobs,
+        "shell mkdir -p creates directory",
+        "test -d /tmp/st_mkdir_dir/sub",
+        0,
+    );
 
     // rmdir removes directory
     exec(jobs, "rmdir /tmp/st_mkdir_dir/sub");
-    assert_status(jobs, "shell rmdir removes directory", "test -d /tmp/st_mkdir_dir/sub", 1);
+    assert_status(
+        jobs,
+        "shell rmdir removes directory",
+        "test -d /tmp/st_mkdir_dir/sub",
+        1,
+    );
+
+    // rm -i declines deletion on 'n'
+    exec(jobs, "touch /tmp/st_rm_i.txt");
+    exec(jobs, "echo n | rm -i /tmp/st_rm_i.txt");
+    assert_status(
+        jobs,
+        "shell rm -i keeps file on decline",
+        "test -f /tmp/st_rm_i.txt",
+        0,
+    );
+
+    // rm -i accepts deletion on 'y'
+    exec(jobs, "echo y | rm -i /tmp/st_rm_i.txt");
+    assert_status(
+        jobs,
+        "shell rm -i deletes file on confirm",
+        "test -f /tmp/st_rm_i.txt",
+        1,
+    );
+    // ls lists root mount points
+    let ls_out = crate::executor::capture_line("ls /", jobs);
+    let ls_str = core::str::from_utf8(&ls_out).unwrap_or("");
+    if ls_str.contains("tmp") && ls_str.contains("data") && ls_str.contains("srv") {
+        pass("shell ls lists root mount points");
+    } else {
+        fail(
+            "shell ls lists root mount points",
+            ls_str,
+            "contains tmp, data, srv",
+        );
+    }
+
+    // rmdir cannot remove protected mount point
+    exec(jobs, "rmdir /tmp");
+    assert_status(
+        jobs,
+        "shell rmdir protected mount point fails",
+        "test -d /tmp",
+        0,
+    );
+
+    // mkdir -v outputs diagnostic
+    let mk_v = crate::executor::capture_line("mkdir -v /tmp/st_mkdir_v", jobs);
+    let mk_str = core::str::from_utf8(&mk_v).unwrap_or("");
+    if mk_str.contains("created directory") {
+        pass("shell mkdir -v outputs diagnostic");
+    } else {
+        fail(
+            "shell mkdir -v outputs diagnostic",
+            mk_str,
+            "contains 'created directory'",
+        );
+    }
+
+    // rmdir -p removes parent directories
+    exec(jobs, "mkdir -p /tmp/st_p1/p2/p3");
+    exec(jobs, "rmdir -p /tmp/st_p1/p2/p3");
+    assert_status(
+        jobs,
+        "shell rmdir -p removes parent directories",
+        "test -d /tmp/st_p1",
+        1,
+    );
+
+    // ls -F appends slash to dirs
+    let lsf = crate::executor::capture_line("ls -F /", jobs);
+    let lsf_str = core::str::from_utf8(&lsf).unwrap_or("");
+    if lsf_str.contains("tmp/") && lsf_str.contains("data/") {
+        pass("shell ls -F appends slash to dirs");
+    } else {
+        fail(
+            "shell ls -F appends slash to dirs",
+            lsf_str,
+            "contains 'tmp/' and 'data/'",
+        );
+    }
+
+    // ls -l prints type and size
+    let lsl = crate::executor::capture_line("ls -l /", jobs);
+    let lsl_str = core::str::from_utf8(&lsl).unwrap_or("");
+    if lsl_str.contains("d ") && lsl_str.contains("tmp") {
+        pass("shell ls -l prints type and size");
+    } else {
+        fail(
+            "shell ls -l prints type and size",
+            lsl_str,
+            "contains 'd ' and 'tmp'",
+        );
+    }
+
+    // cp file into existing directory
+    exec(jobs, "mkdir -p /tmp/st_cp_dir");
+    exec(jobs, "touch /tmp/st_file.txt");
+    exec(jobs, "cp /tmp/st_file.txt /tmp/st_cp_dir");
+    assert_status(
+        jobs,
+        "shell cp copies file into target directory",
+        "test -f /tmp/st_cp_dir/st_file.txt",
+        0,
+    );
+
+    // cp -r copies directory recursively
+    exec(jobs, "mkdir -p /tmp/st_src_tree/sub");
+    exec(jobs, "touch /tmp/st_src_tree/sub/f.txt");
+    exec(jobs, "cp -r /tmp/st_src_tree /tmp/st_dst_tree");
+    assert_status(
+        jobs,
+        "shell cp -r copies directory recursively",
+        "test -f /tmp/st_dst_tree/sub/f.txt",
+        0,
+    );
+
+    // mv moves file into target directory
+    exec(jobs, "touch /tmp/st_mv_src.txt");
+    exec(jobs, "mv /tmp/st_mv_src.txt /tmp/st_cp_dir");
+    assert_status(
+        jobs,
+        "shell mv moves file into target directory",
+        "test -f /tmp/st_cp_dir/st_mv_src.txt",
+        0,
+    );
+    assert_status(
+        jobs,
+        "shell mv removes original file",
+        "test -f /tmp/st_mv_src.txt",
+        1,
+    );
+
+    // history records commands and clears with -c
+    crate::history::record_history("echo hist_test1");
+    crate::history::record_history("echo hist_test2");
+    let hist_out = crate::executor::capture_line("history", jobs);
+    let hist_str = core::str::from_utf8(&hist_out).unwrap_or("");
+    if hist_str.contains("hist_test1") && hist_str.contains("hist_test2") {
+        pass("shell history lists recorded commands");
+    } else {
+        fail(
+            "shell history lists recorded commands",
+            hist_str,
+            "contains 'hist_test1' and 'hist_test2'",
+        );
+    }
+    exec(jobs, "history -c");
+    let hist_c_out = crate::executor::capture_line("history", jobs);
+    let hist_c_str = core::str::from_utf8(&hist_c_out).unwrap_or("");
+    if !hist_c_str.contains("hist_test1") {
+        pass("shell history -c clears history");
+    } else {
+        fail(
+            "shell history -c clears history",
+            hist_c_str,
+            "does not contain 'hist_test1'",
+        );
+    }
+
+    // cat reads from pipeline stdin
+    let cat_pipe = crate::executor::capture_line("echo hello_cat | cat", jobs);
+    let cat_str = core::str::from_utf8(&cat_pipe).unwrap_or("");
+    if cat_str.contains("hello_cat") {
+        pass("shell cat reads from pipeline stdin");
+    } else {
+        fail(
+            "shell cat reads from pipeline stdin",
+            cat_str,
+            "contains 'hello_cat'",
+        );
+    }
 
     // clean up
     exec(jobs, "rm /tmp/st_copied.txt");
+    exec(jobs, "rmdir /tmp/st_mkdir_v");
     exec(jobs, "rmdir /tmp/st_mkdir_dir");
+    exec(jobs, "rm /tmp/st_cp_dir/st_file.txt");
+    exec(jobs, "rm /tmp/st_cp_dir/st_mv_src.txt");
+    exec(jobs, "rmdir /tmp/st_cp_dir");
+    exec(jobs, "rm /tmp/st_file.txt");
+    exec(jobs, "rm /tmp/st_dst_tree/sub/f.txt");
+    exec(jobs, "rmdir /tmp/st_dst_tree/sub");
+    exec(jobs, "rmdir /tmp/st_dst_tree");
+    exec(jobs, "rm /tmp/st_src_tree/sub/f.txt");
+    exec(jobs, "rmdir /tmp/st_src_tree/sub");
+    exec(jobs, "rmdir /tmp/st_src_tree");
 }
 
 // ── Entry point ───────────────────────────────────────────────────────────────

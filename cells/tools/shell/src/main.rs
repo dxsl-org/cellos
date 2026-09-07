@@ -83,8 +83,7 @@ mod aliases;
 mod async_utils;
 #[cfg(not(feature = "shell_test"))]
 mod config_client;
-#[cfg(not(feature = "shell_test"))]
-mod history;
+pub mod history;
 #[cfg(not(feature = "shell_test"))]
 mod shell;
 // Hot-swap session transfer serialises the history + alias table, both of which

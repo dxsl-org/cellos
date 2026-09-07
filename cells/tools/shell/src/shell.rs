@@ -69,10 +69,11 @@ impl<'a> ViShell<'a> {
                     if !trim_line.is_empty()
                         && self.history.back().map(|s| s.as_str()) != Some(trim_line)
                     {
-                        if self.history.len() >= 32 {
+                        if self.history.len() >= 128 {
                             self.history.pop_front();
                         }
                         self.history.push_back(String::from(trim_line));
+                        crate::history::record_history(trim_line);
                     }
 
                     let _ = self.dispatch(line).await;
@@ -115,6 +116,11 @@ impl<'a> ViShell<'a> {
         let first = parts.next().unwrap_or("");
 
         match first {
+            "history" if parts.next() == Some("-c") => {
+                self.history.clear();
+                crate::history::clear_history();
+                return Ok(());
+            }
             "alias" => {
                 if let Some(arg) = parts.next() {
                     if let Some((k, v)) = arg.split_once('=') {

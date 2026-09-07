@@ -233,19 +233,26 @@ pub(crate) fn resolve_shell_path(path: &str) -> String {
 
 // ─── mkdir ────────────────────────────────────────────────────────────────────
 
-/// `mkdir [-p] <path>...` — create a new directory via VFS IPC.
+/// `mkdir [-p] [-v] <path>...` — create a new directory via VFS IPC.
 pub fn cmd_mkdir(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
     let mut parents = false;
+    let mut verbose = false;
     let mut paths = Vec::new();
     while let Some(arg) = args.next() {
-        if arg.starts_with('-') {
-            parents |= arg.contains('p');
+        if arg.starts_with('-') && arg.len() > 1 {
+            for c in arg.chars().skip(1) {
+                match c {
+                    'p' => parents = true,
+                    'v' => verbose = true,
+                    _ => {}
+                }
+            }
         } else {
             paths.push(arg);
         }
     }
     if paths.is_empty() {
-        ostd::io::println("Usage: mkdir [-p] <path>...");
+        ostd::io::println("Usage: mkdir [-p] [-v] <path>...");
         return Ok(());
     }
     for path in paths {
@@ -258,9 +265,21 @@ pub fn cmd_mkdir(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult
                 if matches!(stat_file_vfs(&prefix), Some((_, true))) {
                     continue;
                 }
-                let _ = vfs_req_ok(&api::ipc::VfsRequest::Mkdir(&prefix));
+                if vfs_req_ok(&api::ipc::VfsRequest::Mkdir(&prefix)) {
+                    if verbose {
+                        crate::executor::shell_println(&alloc::format!(
+                            "mkdir: created directory '{prefix}'"
+                        ));
+                    }
+                }
             }
-        } else if !vfs_req_ok(&api::ipc::VfsRequest::Mkdir(&resolved)) {
+        } else if vfs_req_ok(&api::ipc::VfsRequest::Mkdir(&resolved)) {
+            if verbose {
+                crate::executor::shell_println(&alloc::format!(
+                    "mkdir: created directory '{path}'"
+                ));
+            }
+        } else {
             ostd::io::print("mkdir: cannot create directory '");
             ostd::io::print(path);
             ostd::io::println("'");
@@ -271,50 +290,141 @@ pub fn cmd_mkdir(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult
 
 // ─── rmdir ────────────────────────────────────────────────────────────────────
 
-/// `rmdir <path>...` — remove an empty directory via VFS IPC.
+/// `rmdir [-p] [-v] <path>...` — remove empty directories via VFS IPC.
 pub fn cmd_rmdir(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
-    let mut any = false;
-    while let Some(path) = args.next() {
-        if path.starts_with('-') {
-            continue;
-        }
-        any = true;
-        let resolved = resolve_shell_path(path);
-        if !vfs_req_ok(&api::ipc::VfsRequest::Rmdir(&resolved)) {
-            ostd::io::print("rmdir: failed to remove '");
-            ostd::io::print(path);
-            ostd::io::println("' (not empty or not found)");
+    let mut parents = false;
+    let mut verbose = false;
+    let mut paths = Vec::new();
+
+    while let Some(arg) = args.next() {
+        if arg.starts_with('-') && arg.len() > 1 {
+            for c in arg.chars().skip(1) {
+                match c {
+                    'p' => parents = true,
+                    'v' => verbose = true,
+                    _ => {}
+                }
+            }
+        } else {
+            paths.push(arg);
         }
     }
-    if !any {
-        ostd::io::println("Usage: rmdir <path>...");
+
+    if paths.is_empty() {
+        ostd::io::println("Usage: rmdir [-p] [-v] <path>...");
+        return Ok(());
+    }
+
+    for path in paths {
+        if parents {
+            let mut cur = path;
+            while !cur.is_empty() && cur != "/" && cur != "." {
+                let resolved = resolve_shell_path(cur);
+                if vfs_req_ok(&api::ipc::VfsRequest::Rmdir(&resolved)) {
+                    if verbose {
+                        crate::executor::shell_println(&alloc::format!(
+                            "rmdir: removing directory, '{cur}'"
+                        ));
+                    }
+                } else {
+                    ostd::io::print("rmdir: failed to remove '");
+                    ostd::io::print(cur);
+                    ostd::io::println("' (not empty, protected, or not found)");
+                    break;
+                }
+                let trimmed = cur.trim_end_matches('/');
+                if let Some(pos) = trimmed.rfind('/') {
+                    if pos == 0 {
+                        cur = "/";
+                    } else {
+                        cur = &trimmed[..pos];
+                    }
+                } else {
+                    break;
+                }
+            }
+        } else {
+            let resolved = resolve_shell_path(path);
+            if vfs_req_ok(&api::ipc::VfsRequest::Rmdir(&resolved)) {
+                if verbose {
+                    crate::executor::shell_println(&alloc::format!(
+                        "rmdir: removing directory, '{path}'"
+                    ));
+                }
+            } else {
+                ostd::io::print("rmdir: failed to remove '");
+                ostd::io::print(path);
+                ostd::io::println("' (not empty, protected, or not found)");
+            }
+        }
     }
     Ok(())
 }
 
 // ─── rm ───────────────────────────────────────────────────────────────────────
 
-/// `rm [-r] [-f] <path>...` — remove a file, or (with -r on /data) a directory tree.
+/// `rm [-r] [-f] [-i] <path>...` — remove a file, or (with -r on /data) a directory tree.
 pub fn cmd_rm(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
     let mut recursive = false;
     let mut force = false;
+    let mut interactive = false;
     let mut paths = Vec::new();
     while let Some(arg) = args.next() {
-        if arg.starts_with('-') {
-            recursive |= arg.contains('r') || arg.contains('R');
-            force |= arg.contains('f');
+        if arg.starts_with('-') && arg.len() > 1 {
+            for c in arg.chars().skip(1) {
+                match c {
+                    'r' | 'R' => recursive = true,
+                    'f' => {
+                        force = true;
+                        interactive = false;
+                    }
+                    'i' => {
+                        interactive = true;
+                        force = false;
+                    }
+                    _ => {}
+                }
+            }
         } else {
             paths.push(arg);
         }
     }
     if paths.is_empty() {
         if !force {
-            ostd::io::println("Usage: rm [-r] [-f] <path>...");
+            ostd::io::println("Usage: rm [-r] [-f] [-i] <path>...");
         }
         return Ok(());
     }
+
+    let pipe = crate::executor::shell_stdin();
+    let mut pipe_lines = if !pipe.is_empty() {
+        let text = alloc::string::String::from_utf8_lossy(&pipe);
+        let lines: Vec<String> = text.lines().map(String::from).collect();
+        Some(lines.into_iter())
+    } else {
+        None
+    };
+
     for path in paths {
         let resolved = resolve_shell_path(path);
+        if interactive && !force {
+            ostd::io::print("rm: remove '");
+            ostd::io::print(path);
+            ostd::io::print("'? (y/n) ");
+            let line = if let Some(iter) = &mut pipe_lines {
+                iter.next().unwrap_or_default()
+            } else {
+                let mut l = alloc::string::String::new();
+                if ostd::io::stdin().read_line(&mut l).is_err() {
+                    continue;
+                }
+                l
+            };
+            let trimmed = line.trim();
+            if !trimmed.eq_ignore_ascii_case("y") && !trimmed.eq_ignore_ascii_case("yes") {
+                continue;
+            }
+        }
         let ok = if recursive && resolved.starts_with("/data/") {
             rm_recursive(&resolved)
         } else {
@@ -356,73 +466,200 @@ pub fn cmd_touch(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult
 
 // ─── mv ───────────────────────────────────────────────────────────────────────
 
-/// `mv <source> <target>` — rename/move a file or directory via VFS IPC (atomic rename).
+fn is_directory_target(resolved: &str) -> bool {
+    resolved.ends_with('/')
+        || resolved == "/"
+        || resolved == "/tmp"
+        || resolved == "/data"
+        || resolved == "/srv"
+        || resolved == "/mnt"
+        || resolved == "/mnt/sd"
+        || resolved == "/bin"
+        || resolved == "/etc"
+        || matches!(stat_file_vfs(resolved), Some((_, true)))
+}
+
+fn copy_single_file(src: &str, dst: &str) -> bool {
+    let data = match read_file_vfs_owned(src, 1024 * 1024) {
+        Ok(d) => d,
+        Err(_) => match read_file_bytes(src) {
+            Ok(d) => d,
+            Err(_) => return false,
+        },
+    };
+    vfs_write_chunked(dst, &data, false)
+}
+
+fn copy_dir_recursive(src: &str, dst: &str) -> bool {
+    let _ = vfs_req_ok(&api::ipc::VfsRequest::Mkdir(dst));
+    let entries = match vfs_list_dir_details(src) {
+        Some(e) => e,
+        None => return false,
+    };
+    let mut ok = true;
+    for (name, is_dir) in entries {
+        let child_src = if src == "/" {
+            alloc::format!("/{}", name)
+        } else {
+            alloc::format!("{}/{}", src.trim_end_matches('/'), name)
+        };
+        let child_dst = if dst == "/" {
+            alloc::format!("/{}", name)
+        } else {
+            alloc::format!("{}/{}", dst.trim_end_matches('/'), name)
+        };
+        if is_dir {
+            ok &= copy_dir_recursive(&child_src, &child_dst);
+        } else {
+            ok &= copy_single_file(&child_src, &child_dst);
+        }
+    }
+    ok
+}
+
+/// `mv <source>... <target>` — rename/move files or directories via VFS IPC (atomic rename).
 pub fn cmd_mv(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
-    let old = match args.next() {
-        Some(o) => o,
-        None => {
-            ostd::io::println("Usage: mv <source> <target>");
-            return Ok(());
+    let mut paths = Vec::new();
+    while let Some(arg) = args.next() {
+        if !arg.starts_with('-') || arg.len() == 1 {
+            paths.push(arg);
         }
-    };
-    let new = match args.next() {
-        Some(n) => n,
-        None => {
-            ostd::io::println("Usage: mv <source> <target>");
-            return Ok(());
+    }
+    if paths.len() < 2 {
+        ostd::io::println("Usage: mv <source>... <target>");
+        return Ok(());
+    }
+
+    let target = paths.pop().unwrap();
+    let target_resolved = resolve_shell_path(target);
+    let target_is_dir = target.ends_with('/') || is_directory_target(&target_resolved);
+
+    if paths.len() > 1 && !target_is_dir {
+        ostd::io::print("mv: target '");
+        ostd::io::print(target);
+        ostd::io::println("' is not a directory");
+        return Ok(());
+    }
+
+    for src in paths {
+        let src_resolved = resolve_shell_path(src);
+        let final_dst = if target_is_dir {
+            let file_name = src_resolved.rsplit('/').next().unwrap_or(&src_resolved);
+            if target_resolved == "/" {
+                alloc::format!("/{}", file_name)
+            } else {
+                alloc::format!("{}/{}", target_resolved.trim_end_matches('/'), file_name)
+            }
+        } else {
+            target_resolved.clone()
+        };
+
+        let moved = if src_resolved.starts_with("/srv/") && final_dst.starts_with("/srv/") {
+            vfs_req_ok(&api::ipc::VfsRequest::Rename {
+                old: &src_resolved,
+                new: &final_dst,
+            })
+        } else {
+            false
+        };
+
+        let ok = if moved {
+            true
+        } else {
+            let is_dir = stat_file_vfs(&src_resolved).map(|(_, d)| d).unwrap_or(false);
+            if is_dir {
+                if copy_dir_recursive(&src_resolved, &final_dst) {
+                    if src_resolved.starts_with("/data/") {
+                        rm_recursive(&src_resolved)
+                    } else {
+                        vfs_req_ok(&api::ipc::VfsRequest::Rmdir(&src_resolved))
+                    }
+                } else {
+                    false
+                }
+            } else if copy_single_file(&src_resolved, &final_dst) {
+                vfs_req_ok(&api::ipc::VfsRequest::Unlink(&src_resolved))
+            } else {
+                false
+            }
+        };
+
+        if !ok {
+            ostd::io::print("mv: cannot move '");
+            ostd::io::print(src);
+            ostd::io::print("' to '");
+            ostd::io::print(&final_dst);
+            ostd::io::println("'");
         }
-    };
-    let old_resolved = resolve_shell_path(old);
-    let new_resolved = resolve_shell_path(new);
-    if !vfs_req_ok(&api::ipc::VfsRequest::Rename {
-        old: &old_resolved,
-        new: &new_resolved,
-    }) {
-        ostd::io::print("mv: cannot move '");
-        ostd::io::print(old);
-        ostd::io::print("' to '");
-        ostd::io::print(new);
-        ostd::io::println("'");
     }
     Ok(())
 }
 
 // ─── cp ───────────────────────────────────────────────────────────────────────
 
-/// `cp <source> <target>` — copy a file via VFS IPC.
+/// `cp [-r] [-R] <source>... <target>` — copy files or directories via VFS IPC.
 pub fn cmd_cp(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
-    let src = match args.next() {
-        Some(s) => s,
-        None => {
-            ostd::io::println("Usage: cp <source> <target>");
-            return Ok(());
+    let mut recursive = false;
+    let mut paths = Vec::new();
+    while let Some(arg) = args.next() {
+        if arg.starts_with('-') && arg.len() > 1 {
+            recursive |= arg.contains('r') || arg.contains('R');
+        } else {
+            paths.push(arg);
         }
-    };
-    let dst = match args.next() {
-        Some(d) => d,
-        None => {
-            ostd::io::println("Usage: cp <source> <target>");
-            return Ok(());
-        }
-    };
-    let src_resolved = resolve_shell_path(src);
-    let dst_resolved = resolve_shell_path(dst);
-    let data = match read_file_vfs_owned(&src_resolved, 1024 * 1024) {
-        Ok(d) => d,
-        Err(_) => match read_file_bytes(&src_resolved) {
-            Ok(d) => d,
-            Err(_) => {
-                ostd::io::print("cp: cannot open '");
+    }
+    if paths.len() < 2 {
+        ostd::io::println("Usage: cp [-r] <source>... <target>");
+        return Ok(());
+    }
+
+    let target = paths.pop().unwrap();
+    let target_resolved = resolve_shell_path(target);
+    let target_is_dir = target.ends_with('/') || is_directory_target(&target_resolved);
+
+    if paths.len() > 1 && !target_is_dir {
+        ostd::io::print("cp: target '");
+        ostd::io::print(target);
+        ostd::io::println("' is not a directory");
+        return Ok(());
+    }
+
+    for src in paths {
+        let src_resolved = resolve_shell_path(src);
+        let is_dir = stat_file_vfs(&src_resolved).map(|(_, d)| d).unwrap_or(false);
+
+        let final_dst = if target_is_dir {
+            let file_name = src_resolved.rsplit('/').next().unwrap_or(&src_resolved);
+            if target_resolved == "/" {
+                alloc::format!("/{}", file_name)
+            } else {
+                alloc::format!("{}/{}", target_resolved.trim_end_matches('/'), file_name)
+            }
+        } else {
+            target_resolved.clone()
+        };
+
+        if is_dir {
+            if !recursive {
+                ostd::io::print("cp: -r not specified; omitting directory '");
                 ostd::io::print(src);
                 ostd::io::println("'");
-                return Ok(());
+                continue;
             }
-        },
-    };
-    if !vfs_write_chunked(&dst_resolved, &data, false) {
-        ostd::io::print("cp: cannot copy to '");
-        ostd::io::print(dst);
-        ostd::io::println("'");
+            if !copy_dir_recursive(&src_resolved, &final_dst) {
+                ostd::io::print("cp: failed to copy directory '");
+                ostd::io::print(src);
+                ostd::io::println("'");
+            }
+        } else {
+            if !copy_single_file(&src_resolved, &final_dst) {
+                ostd::io::print("cp: cannot copy '");
+                ostd::io::print(src);
+                ostd::io::print("' to '");
+                ostd::io::print(&final_dst);
+                ostd::io::println("'");
+            }
+        }
     }
     Ok(())
 }
@@ -648,12 +885,16 @@ fn find_recursive(dir: &str, pattern: Option<&str>, depth: usize, vfs_tid: usize
     }
 }
 
-/// List entries in a directory from the Userspace VFS Service via IPC.
-pub(crate) fn vfs_list_dir(dir: &str) -> Option<alloc::vec::Vec<alloc::string::String>> {
+/// List entries with directory metadata from the Userspace VFS Service via IPC.
+pub(crate) fn vfs_list_dir_details(
+    dir: &str,
+) -> Option<alloc::vec::Vec<(alloc::string::String, bool)>> {
     use api::ipc::{VfsRequest, VfsResponse};
     let vfs_tid = vfs_endpoint();
     let mut send = [0u8; 512];
-    let n = api::ipc::encode(&VfsRequest::ListDir(dir), &mut send).ok()?.len();
+    let n = api::ipc::encode(&VfsRequest::ListDir(dir), &mut send)
+        .ok()?
+        .len();
     ostd::syscall::sys_send(vfs_tid, &send[..n]);
     let mut reply = [0u8; 512];
     if let ostd::syscall::SyscallResult::Ok(_) = ostd::syscall::sys_recv(vfs_tid, &mut reply) {
@@ -661,14 +902,22 @@ pub(crate) fn vfs_list_dir(dir: &str) -> Option<alloc::vec::Vec<alloc::string::S
             let text = core::str::from_utf8(entries).ok()?;
             let mut list = alloc::vec::Vec::new();
             for entry in text.lines() {
-                if let Some(name) = entry.strip_prefix("d:").or_else(|| entry.strip_prefix("f:")) {
-                    list.push(alloc::string::String::from(name));
+                if let Some(name) = entry.strip_prefix("d:") {
+                    list.push((alloc::string::String::from(name), true));
+                } else if let Some(name) = entry.strip_prefix("f:") {
+                    list.push((alloc::string::String::from(name), false));
                 }
             }
             return Some(list);
         }
     }
     None
+}
+
+/// List entries in a directory from the Userspace VFS Service via IPC.
+#[allow(dead_code)]
+pub(crate) fn vfs_list_dir(dir: &str) -> Option<alloc::vec::Vec<alloc::string::String>> {
+    vfs_list_dir_details(dir).map(|entries| entries.into_iter().map(|(name, _)| name).collect())
 }
 // ─── uniq ─────────────────────────────────────────────────────────────────────
 

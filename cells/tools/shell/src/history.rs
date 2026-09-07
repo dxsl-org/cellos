@@ -73,6 +73,50 @@ impl History {
     }
 }
 
+static GLOBAL_HISTORY: ostd::sync::Mutex<History> = ostd::sync::Mutex::new(History {
+    entries: VecDeque::new(),
+    dirty: false,
+});
+
+/// Add a command to the global history.
+pub fn record_history(line: &str) {
+    GLOBAL_HISTORY.lock().push(line);
+}
+
+/// Clear global history.
+pub fn clear_history() {
+    let mut h = GLOBAL_HISTORY.lock();
+    h.entries.clear();
+    h.dirty = true;
+}
+
+/// Built-in `history [-c] [n]` command.
+pub fn cmd_history(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ostd::prelude::ViResult<()> {
+    let arg = args.next();
+    if arg == Some("-c") {
+        clear_history();
+        return Ok(());
+    }
+    let limit = arg.and_then(|s| s.parse::<usize>().ok());
+    let h = GLOBAL_HISTORY.lock();
+    let total = h.entries.len();
+    let start = if let Some(n) = limit {
+        if n < total {
+            total - n
+        } else {
+            0
+        }
+    } else {
+        0
+    };
+    for (idx, entry) in h.entries.iter().enumerate() {
+        if idx >= start {
+            crate::executor::shell_println(&alloc::format!("{:5}  {}", idx + 1, entry));
+        }
+    }
+    Ok(())
+}
+
 impl Default for History {
     fn default() -> Self {
         Self::new()

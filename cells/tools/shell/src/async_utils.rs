@@ -51,6 +51,51 @@ impl AsyncStdin {
                                 if !matches!(k.state, KeyState::Pressed | KeyState::Repeated) {
                                     continue 'read;
                                 }
+
+                                // ANSI escape sequence state machine (for UART terminal via input service)
+                                if escape_state == 0 {
+                                    if k.keysym == KeySym::Escape || k.character == 0x1B {
+                                        escape_state = 1;
+                                        continue 'read;
+                                    }
+                                } else if escape_state == 1 {
+                                    if k.character == b'[' as u32 || k.character == b'O' as u32 {
+                                        escape_state = 2;
+                                        continue 'read;
+                                    } else {
+                                        escape_state = 0;
+                                    }
+                                } else if escape_state == 2 {
+                                    escape_state = 0;
+                                    if k.character == b'A' as u32 {
+                                        if history_idx > 0 {
+                                            history_idx -= 1;
+                                            Self::clear_line(&buffer);
+                                            buffer.clear();
+                                            if let Some(cmd) = history.get(history_idx) {
+                                                ostd::io::print(cmd);
+                                                buffer.extend_from_slice(cmd.as_bytes());
+                                            }
+                                        }
+                                        continue 'read;
+                                    } else if k.character == b'B' as u32 {
+                                        if history_idx < history.len() {
+                                            history_idx += 1;
+                                            Self::clear_line(&buffer);
+                                            buffer.clear();
+                                            if history_idx < history.len() {
+                                                if let Some(cmd) = history.get(history_idx) {
+                                                    ostd::io::print(cmd);
+                                                    buffer.extend_from_slice(cmd.as_bytes());
+                                                }
+                                            }
+                                        }
+                                        continue 'read;
+                                    } else {
+                                        continue 'read;
+                                    }
+                                }
+
                                 match k.keysym {
                                     KeySym::Return => {
                                         ostd::io::print("\n");
@@ -139,8 +184,12 @@ impl AsyncStdin {
                             continue;
                         }
                     } else if escape_state == 1 {
-                        escape_state = if ch == b'[' { 2 } else { 0 };
-                        continue;
+                        if ch == b'[' || ch == b'O' {
+                            escape_state = 2;
+                            continue;
+                        } else {
+                            escape_state = 0;
+                        }
                     } else if escape_state == 2 {
                         escape_state = 0;
                         match ch {

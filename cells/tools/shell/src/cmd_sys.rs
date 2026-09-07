@@ -175,3 +175,35 @@ mod tests {
         assert_eq!(validated_kib(u64::MAX, u64::MAX, 0, 2), None);
     }
 }
+
+/// `ifconfig` / `ip` — query and print the network interface IP address from service-net.
+pub fn cmd_ifconfig(_args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
+    use api::ipc::{NetRequest, NetResponse};
+    use ostd::syscall::sys_lookup_service;
+
+    let Some(net_tid) = sys_lookup_service(api::syscall::service::NET) else {
+        crate::executor::shell_println("ifconfig: network service (/bin/net) is not running");
+        return Ok(());
+    };
+
+    let mut send = [0u8; 512];
+    let mut reply = [0u8; 512];
+    let len = api::ipc::encode(&NetRequest::GetLocalIp, &mut send).map(|b| b.len()).unwrap_or(0);
+    ostd::syscall::sys_send(net_tid, &send[..len]);
+
+    if let ostd::syscall::SyscallResult::Ok(_) = ostd::syscall::sys_recv(net_tid, &mut reply) {
+        if let Ok(NetResponse::Addr(ip)) = api::ipc::decode::<NetResponse>(&reply) {
+            if ip == [0, 0, 0, 0] {
+                crate::executor::shell_println("eth0: link up, waiting for DHCP lease...");
+            } else {
+                crate::executor::shell_println(&alloc::format!(
+                    "eth0: inet {}.{}.{}.{}  netmask 255.255.255.0  (DHCP)",
+                    ip[0], ip[1], ip[2], ip[3]
+                ));
+            }
+            return Ok(());
+        }
+    }
+    crate::executor::shell_println("ifconfig: no response from network service");
+    Ok(())
+}

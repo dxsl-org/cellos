@@ -49,7 +49,7 @@ pub fn shell_stdin() -> Vec<u8> {
 #[cfg(not(feature = "shell_test"))] // reason: tab completion only exists in the interactive REPL
 pub const BUILTINS: &[&str] = &[
     "alias", "awk", "bg", "blktest", "break", "cat", "cd", "clear", "continue", "echo", "env",
-    "exec", "exit", "export", "fg", "find", "free", "grep", "head", "help", "jobs", "kill", "ls",
+    "exec", "exit", "export", "fg", "find", "free", "grep", "head", "help", "history", "ifconfig", "ip", "jobs", "kill", "ls",
     "mkdir", "ps", "pwd", "read", "rm", "rmdir", "sed", "shutdown", "sleep", "snapshot", "sort",
     "source", "tail", "tee", "test", "top", "unalias", "uniq", "unset", "uname", "uptime",
     "vappend", "vcat", "vwrite", "wc",
@@ -626,6 +626,8 @@ fn dispatch_builtin(prog: &str, args: &[String], jobs: &mut Jobs) -> i32 {
         "blktest" => Some(with_legacy_parts(args, crate::cmd_sys::cmd_blkio_test)),
         "echo" => Some(with_legacy_parts(args, crate::commands::cmd_echo)),
         "exec" => Some(with_legacy_parts(args, crate::commands::cmd_exec)),
+        "history" => Some(with_legacy_parts(args, crate::history::cmd_history)),
+        "ifconfig" | "ip" => Some(with_legacy_parts(args, crate::cmd_sys::cmd_ifconfig)),
         _ => None,
     };
     if let Some(result) = legacy_result {
