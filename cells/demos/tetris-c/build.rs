@@ -55,6 +55,7 @@ fn main() {
 
     // Make tetris-os headers visible for both tetris.c and vicell_platform.c
     build.include(TETRIS_OS_DIR);
+    build.include(format!("{TETRIS_OS_DIR}/src"));
     // Make src/c/ visible so vicell_platform.c can #include local helpers if needed
     build.include("src/c");
 
@@ -62,13 +63,14 @@ fn main() {
     // Excluded: vga.c, keyboard.c, timer.c, speaker.c (replaced by vicell_platform.c)
     //           main.c (entry provided by Rust main())
     //           Any x86 kernel bootstrap files (idt.c, gdt.c, isr.c, etc.)
-    let tetris_c = Path::new(TETRIS_OS_DIR).join("tetris.c");
-    if tetris_c.exists() {
-        build.file(&tetris_c);
+    let tetris_c = if Path::new(TETRIS_OS_DIR).join("tetris.c").exists() {
+        Path::new(TETRIS_OS_DIR).join("tetris.c")
+    } else if Path::new(TETRIS_OS_DIR).join("src/tetris.c").exists() {
+        Path::new(TETRIS_OS_DIR).join("src/tetris.c")
     } else {
         panic!("required source missing: {TETRIS_OS_DIR}/tetris.c");
-    }
-
+    };
+    build.file(&tetris_c);
     // Our ViCell platform implementation replaces all hardware drivers
     build.file("src/c/vicell_platform.c");
 

@@ -10,6 +10,8 @@
 /* Use the C89-compatible code paths inside Lua. */
 #define LUA_USE_C89
 
+/* Avoid <signal.h> in freestanding targets where sig_atomic_t is unavailable. */
+#define l_signalT int
 /* Route Lua's string I/O through our serial shim.
  * vios_write is defined in lua_vios_glue.c. */
 void vios_write(const char *s, size_t n);

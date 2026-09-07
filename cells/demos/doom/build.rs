@@ -89,6 +89,16 @@ fn main() {
         let sysroot = run_gcc(&["--print-sysroot"]);
         if !sysroot.is_empty() && sysroot != "." {
             build.flag(format!("-I{}/include", sysroot));
+        } else {
+            for inc in [
+                "/mnt/c/RISCV/xpack-riscv-none-elf-gcc-15.2.0-1/riscv-none-elf/include",
+                "/mnt/c/RISCV/riscv-none-elf-gcc-15.2.0-1/riscv-none-elf/include",
+            ] {
+                if std::path::Path::new(inc).exists() {
+                    build.flag(format!("-isystem{inc}"));
+                    break;
+                }
+            }
         }
     }
 

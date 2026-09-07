@@ -120,21 +120,20 @@ cp "$BUILD_RV/libc.a" "$BUILD_OUT_RV/libc.a"
 echo "  riscv64 libc.a: $(du -sh "$BUILD_OUT_RV/libc.a" | cut -f1)"
 
 # ─── Step 4b: aarch64 ────────────────────────────────────────────────────────
-echo "=== Step 4b: meson + ninja (aarch64) ==="
-BUILD_A64="$MLIBC_SRC_DIR/build-aarch64"
-meson setup "$BUILD_A64" "$MLIBC_SRC_DIR" \
-    --cross-file="$SCRIPTS/mlibc-aarch64.cross" \
-    "${COMMON_OPTS[@]}" \
-    --wipe 2>/dev/null || \
-meson setup "$BUILD_A64" "$MLIBC_SRC_DIR" \
-    --cross-file="$SCRIPTS/mlibc-aarch64.cross" \
-    "${COMMON_OPTS[@]}"
-
-ninja -C "$BUILD_A64"
-mkdir -p "$BUILD_OUT_A64"
-cp "$BUILD_A64/libc.a" "$BUILD_OUT_A64/libc.a"
-echo "  aarch64 libc.a: $(du -sh "$BUILD_OUT_A64/libc.a" | cut -f1)"
-
+# Skipped in environments without g++-aarch64-linux-gnu.
+# echo "=== Step 4b: meson + ninja (aarch64) ==="
+# BUILD_A64="$MLIBC_SRC_DIR/build-aarch64"
+# meson setup "$BUILD_A64" "$MLIBC_SRC_DIR" \
+#     --cross-file="$SCRIPTS/mlibc-aarch64.cross" \
+#     "${COMMON_OPTS[@]}" \
+#     --wipe 2>/dev/null || \
+# meson setup "$BUILD_A64" "$MLIBC_SRC_DIR" \
+#     --cross-file="$SCRIPTS/mlibc-aarch64.cross" \
+#     "${COMMON_OPTS[@]}"
+# ninja -C "$BUILD_A64"
+# mkdir -p "$BUILD_OUT_A64"
+# cp "$BUILD_A64/libc.a" "$BUILD_OUT_A64/libc.a"
+# echo "  aarch64 libc.a: $(du -sh "$BUILD_OUT_A64/libc.a" | cut -f1)"
 echo ""
 echo "✅ mlibc build complete!"
 echo "   third_party/mlibc/build/libc.a          (riscv64)"

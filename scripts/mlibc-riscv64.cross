@@ -5,12 +5,12 @@
 # Usage: bash scripts/build-mlibc.sh (handles clone + patch automatically)
 
 [binaries]
-c       = '/mnt/c/RISCV/riscv-none-elf-gcc-15.2.0-1/bin/riscv-none-elf-gcc'
-cpp     = '/mnt/c/RISCV/riscv-none-elf-gcc-15.2.0-1/bin/riscv-none-elf-g++'
-ar      = '/mnt/c/RISCV/riscv-none-elf-gcc-15.2.0-1/bin/riscv-none-elf-ar'
-ld      = '/mnt/c/RISCV/riscv-none-elf-gcc-15.2.0-1/bin/riscv-none-elf-ld'
-strip   = '/mnt/c/RISCV/riscv-none-elf-gcc-15.2.0-1/bin/riscv-none-elf-strip'
-objcopy = '/mnt/c/RISCV/riscv-none-elf-gcc-15.2.0-1/bin/riscv-none-elf-objcopy'
+c       = 'riscv64-unknown-elf-gcc'
+cpp     = 'riscv64-unknown-elf-g++'
+ar      = 'riscv64-unknown-elf-ar'
+ld      = 'riscv64-unknown-elf-ld'
+strip   = 'riscv64-unknown-elf-strip'
+objcopy = 'riscv64-unknown-elf-objcopy'
 
 [host_machine]
 # 'vicell' triggers the vicell branch in third_party/mlibc/meson.build.
@@ -21,5 +21,5 @@ cpu        = 'riscv64'
 endian     = 'little'
 
 [built-in options]
-c_args   = ['-march=rv64imac_zicsr', '-mabi=lp64']
-cpp_args = ['-march=rv64imac_zicsr', '-mabi=lp64']
+c_args   = ['-march=rv64gc', '-mabi=lp64d', '-mcmodel=medany']
+cpp_args = ['-march=rv64gc', '-mabi=lp64d', '-mcmodel=medany']

@@ -85,8 +85,17 @@ fn compile_lua(target: &str, manifest: &str) {
     build.flag_if_supported("-std=c99");
     build.include(&src_dir);
     build.include(&glue_dir);
+    for inc in [
+        "/mnt/c/RISCV/xpack-riscv-none-elf-gcc-15.2.0-1/riscv-none-elf/include",
+        "/mnt/c/RISCV/riscv-none-elf-gcc-15.2.0-1/riscv-none-elf/include",
+    ] {
+        if std::path::Path::new(inc).exists() {
+            build.include(inc);
+            break;
+        }
+    }
     build.define("LUA_USE_C89", None);
-
+    build.define("l_signalT", "int");
     for file in LUA_SRC {
         build.file(format!("{src_dir}/{file}"));
     }

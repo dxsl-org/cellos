@@ -122,8 +122,19 @@ fn compile_lua_c(target: &str) {
     // Use the portable glue config instead of Lua's default luaconf.h macros.
     build.include(src_dir);
     build.include(glue_dir);
+    for inc in [
+        "/mnt/c/RISCV/xpack-riscv-none-elf-gcc-15.2.0-1/riscv-none-elf/include",
+        "/mnt/c/RISCV/riscv-none-elf-gcc-15.2.0-1/riscv-none-elf/include",
+    ] {
+        if std::path::Path::new(inc).exists() {
+            build.include(inc);
+            break;
+        }
+    }
     build.define("LUA_USE_C89", None); // Disables POSIX-only features
-
+    build.define("l_signalT", "int");
+    build.flag_if_supported("-include");
+    build.flag_if_supported("lua_vios_config.h");
     for file in &lua_src {
         build.file(format!("{src_dir}/{file}"));
     }
