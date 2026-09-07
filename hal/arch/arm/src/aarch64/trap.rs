@@ -9,6 +9,8 @@ use core::arch::global_asm;
 use hal_arch_trait::vi_handle_uart_irq;
 #[cfg(all(not(feature = "board-rpi3"), not(feature = "board-rpi4")))]
 use hal_arch_trait::vi_handle_virtio_irq;
+#[cfg(feature = "board-rpi3")]
+use hal_arch_trait::vi_signal_usb_irq;
 use hal_arch_trait::{
     vi_current_cell_id, vi_gpio_notify_irq, vi_terminate_on_fault_aarch64, vi_timer_tick,
     ViCell_syscall_dispatch, ViTrapFrame,
@@ -352,7 +354,18 @@ pub extern "C" fn vi_aarch64_irq_handler(_frame: &mut TrapFrame) {
             return;
         }
         // GPU peripheral IRQs that are not the systimer.
-        if src & super::bcm2836_irq::IRQ_SRC_GPU != 0 {
+        if src & super::bcm2836_irq::IRQ_SRC_GPU != 0 || super::bcm2835_legacy_irq::is_usb_irq_pending() {
+            // USB DWC2 interrupt via BCM2835 IRQ controller (legacy IRQ 9).
+            if super::bcm2835_legacy_irq::is_usb_irq_pending() {
+                // ONE-SHOT PROTOCOL:
+                // Mask IRQ 9 immediately to prevent interrupt storm while driver cell runs.
+                super::bcm2835_legacy_irq::disable_irq(super::bcm2835_legacy_irq::USB_IRQ);
+                // Signal WaitIrq waiter for USB_IRQ
+                unsafe {
+                    vi_signal_usb_irq();
+                }
+                return;
+            }
             // GPIO banks via BCM2835 IRQ controller.
             if super::bcm2835_legacy_irq::identify_gpio_irq().is_some() {
                 // SAFETY: vi_gpio_notify_irq is #[no_mangle] in kernel/src/task/drivers/gpio_irq.rs.

@@ -80,6 +80,7 @@ members = [
     "cells/drivers/imu-mpu6050",
     "cells/drivers/display-ssd1306",
     "cells/drivers/bcm-display",
+    "cells/drivers/dwc2-usb",
     
     # Cells - Services
     "cells/services/platform",

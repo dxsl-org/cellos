@@ -67,6 +67,7 @@ pub fn lookup(path: &str) -> Option<CapSet> {
             pcie_driver: true,          // delegated to the block/NIC/GPU/input drivers
             platform: false,
             supervisor: true, // delegated to /bin/supervisor
+            usb_driver: true, // delegated to /bin/dwc2-usb
         },
         // PCIe ECAM enumeration + BAR registration. Kernel-spawned before init.
         // Its manifest declares nothing; `with_path_caps` is the request signal,
@@ -117,11 +118,13 @@ pub fn lookup(path: &str) -> Option<CapSet> {
             mmio_devices: DEV_DISPLAY,
             ..CapSet::EMPTY
         },
-        // USB driver cells: intentionally EMPTY until policy v3 introduces a
-        // signed USB host authority byte. `with_path_caps` grants them nothing;
-        // the ceiling here is the cross-check. Listed explicitly (not `_ => None`)
-        // so a boot-log denial can report "row intentionally empty" vs "row missing".
-        "/bin/dwc2-usb" | "/bin/lan9514" => CapSet::EMPTY,
+        // USB host driver cell (/bin/dwc2-usb) receives usb_driver authority.
+        // /bin/lan9514 communicates with dwc2-usb via IPC and holds no direct hardware caps.
+        "/bin/dwc2-usb" => CapSet {
+            usb_driver: true,
+            ..CapSet::EMPTY
+        },
+        "/bin/lan9514" => CapSet::EMPTY,
         // Known boot cells that need no authority at all: pure IPC clients. They
         // are listed rather than left to the unknown-path fallback so a denial
         // report can distinguish "needs nothing" from "row missing".
@@ -175,6 +178,9 @@ pub fn log_refusal(path: &str, requested: CapSet, ceiling: CapSet, granted: CapS
     }
     if requested.platform && !granted.platform {
         log::error!("[loader]   refused: platform");
+    }
+    if requested.usb_driver && !granted.usb_driver {
+        log::error!("[loader]   refused: usb_driver");
     }
     if requested.supervisor && !granted.supervisor {
         log::error!("[loader]   refused: supervisor");

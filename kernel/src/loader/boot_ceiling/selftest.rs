@@ -88,7 +88,7 @@ pub fn run() -> bool {
 
     // Positive direction: each privileged boot cell must still receive the cap
     // its install path requests once the ceiling is intersected.
-    let privileged: [PrivCapCase; 8] = [
+    let privileged: [PrivCapCase; 9] = [
         ("/bin/platform", |c| c.platform),
         ("/bin/supervisor", |c| c.supervisor),
         ("/bin/block", |c| c.pcie_driver),
@@ -97,6 +97,7 @@ pub fn run() -> bool {
         ("/bin/virtio-net", |c| c.pcie_driver),
         ("/bin/virtio-gpu", |c| c.pcie_driver),
         ("/bin/input", |c| c.pcie_driver),
+        ("/bin/dwc2-usb", |c| c.usb_driver),
     ];
     for (path, held) in privileged {
         let requested = CapSet::EMPTY.with_path_caps(path);
@@ -119,21 +120,26 @@ pub fn run() -> bool {
         );
     }
 
-    // Negative direction: the USB driver cells hold NO authority until policy v3
-    // adds a signed USB host byte. `with_path_caps` mints nothing for them and
-    // their ceiling rows are EMPTY; if either side starts granting `pcie_driver`
-    // or `DEV_DISPLAY`, this fails the power-on self-test.
-    for path in ["/bin/dwc2-usb", "/bin/lan9514"] {
-        let requested = CapSet::EMPTY.with_path_caps(path);
-        let granted = requested.intersect(boot_ceiling(path));
-        if granted != CapSet::EMPTY {
-            ok = false;
-            log::error!(
-                "[selftest] boot-ceiling: {} granted {:?} without USB policy v3 — must stay EMPTY",
-                path,
-                granted
-            );
-        }
+    // Scope check: /bin/dwc2-usb holds ONLY usb_driver under policy v3, never pcie_driver or DEV_DISPLAY.
+    let dwc2 = CapSet::EMPTY
+        .with_path_caps("/bin/dwc2-usb")
+        .intersect(boot_ceiling("/bin/dwc2-usb"));
+    if !dwc2.usb_driver || dwc2.pcie_driver || dwc2.mmio_devices != 0 {
+        ok = false;
+        log::error!(
+            "[selftest] boot-ceiling: /bin/dwc2-usb must hold usb_driver only (no pcie or display)"
+        );
+    }
+    // /bin/lan9514 holds NO direct hardware authority (pure IPC client to dwc2-usb).
+    let lan = CapSet::EMPTY
+        .with_path_caps("/bin/lan9514")
+        .intersect(boot_ceiling("/bin/lan9514"));
+    if lan != CapSet::EMPTY {
+        ok = false;
+        log::error!(
+            "[selftest] boot-ceiling: /bin/lan9514 granted {:?} — must stay EMPTY",
+            lan
+        );
     }
 
     if authorize(SHELL, LaunchRoute::Mem, "/mem/demo").is_some() {

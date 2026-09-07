@@ -39,7 +39,7 @@ except ImportError:
     sys.exit("error: pip install cryptography")
 
 MAGIC = b"VPOL"
-VERSION = 2
+VERSION = 3
 DEV_SEED = bytes([0x42] * 32)  # fixed dev seed → deterministic dev keypair
 
 FLAG_MAINTENANCE_PERMITTED = 1 << 0
@@ -103,7 +103,8 @@ DEV_POLICY = [
     ("/bin/e1000",       0, 0, 0, 0, 0, 0,     1, 0, 0),
     ("/bin/virtio-gpu",  0, 0, 0, 0, 0, 0,     1, 0, 0),
     ("/bin/bcm-display", 0, 0, 0, 0, DEV_DISPLAY, 0,     0, 0, 0),
-    # ── shell-launched cells that need MMIO or spawn ──────────────────────────
+    ("/bin/dwc2-usb",    0, 0, 0, 0, 0, 0,     0, 0, 0, 1),
+    ("/bin/lan9514",     0, 0, 0, 0, 0, 0,     0, 0, 0, 0),
     ("/bin/periph-demo", 0, 0, 0, 0, 3, 0,     0, 0, 0),
     ("/bin/periph-test", 0, 0, 0, 0, 3, 0,     0, 0, 0),
     ("/bin/robot-demo",  0, 1, 0, 0, 2, 0,     0, 0, 0),
@@ -134,7 +135,12 @@ def build_body(entries, flags=0):
     out += MAGIC
     out += struct.pack("<BBH", VERSION, flags, len(entries))
     seen = set()
-    for (path, bio, net, spawn, hyp, mmio, regions, pcie, plat, sup) in entries:
+    for row in entries:
+        if len(row) == 10:
+            (path, bio, net, spawn, hyp, mmio, regions, pcie, plat, sup) = row
+            usb = 0
+        else:
+            (path, bio, net, spawn, hyp, mmio, regions, pcie, plat, sup, usb) = row
         pb = path.encode("ascii")
         if len(pb) > 255:
             sys.exit(f"path too long: {path}")
@@ -148,12 +154,17 @@ def build_body(entries, flags=0):
             sys.exit(f"{path}: mmio {mmio:#b} outside MMIO_MASK {MMIO_MASK:#b} — blob would be Invalid")
         if regions & ~REGION_MASK:
             sys.exit(f"{path}: block_regions {regions:#b} outside REGION_MASK {REGION_MASK:#b} — blob would be Invalid")
-        for name, v in (("pcie_driver", pcie), ("platform", plat), ("supervisor", sup)):
+        for name, v in (("pcie_driver", pcie), ("platform", plat), ("supervisor", sup), ("usb_driver", usb)):
             if v not in (0, 1):
                 sys.exit(f"{path}: {name} must be 0 or 1, got {v} — blob would be Invalid")
         out.append(len(pb))
         out += pb
-        out += bytes([bio, net, spawn, hyp, mmio, regions, pcie, plat, sup])
+        if VERSION == 3:
+            out += bytes([bio, net, spawn, hyp, mmio, regions, pcie, plat, sup, usb])
+        elif VERSION == 2:
+            out += bytes([bio, net, spawn, hyp, mmio, regions, pcie, plat, sup])
+        else:
+            out += bytes([bio, net, spawn, hyp, mmio, regions])
     return bytes(out)
 
 
@@ -174,7 +185,7 @@ def decode_body(body):
     if body[:4] != MAGIC:
         raise ValueError("bad magic")
     version = body[4]
-    cap_bytes = {1: 6, 2: 9}.get(version)
+    cap_bytes = {1: 6, 2: 9, 3: 10}.get(version)
     if cap_bytes is None:
         raise ValueError(f"unknown version {version}")
     flags = body[5]
@@ -200,13 +211,18 @@ def decode_body(body):
             raise ValueError(f"{path}: mmio {caps[4]:#b} out of domain")
         if caps[5] & ~REGION_MASK:
             raise ValueError(f"{path}: block_regions {caps[5]:#b} out of domain")
-        if cap_bytes == 9:
+        if cap_bytes == 10:
+            for name, v in (("pcie_driver", caps[6]), ("platform", caps[7]), ("supervisor", caps[8]), ("usb_driver", caps[9])):
+                if v > 1:
+                    raise ValueError(f"{path}: {name}={v} out of domain")
+            priv = (caps[6], caps[7], caps[8], caps[9])
+        elif cap_bytes == 9:
             for name, v in (("pcie_driver", caps[6]), ("platform", caps[7]), ("supervisor", caps[8])):
                 if v > 1:
                     raise ValueError(f"{path}: {name}={v} out of domain")
-            priv = (caps[6], caps[7], caps[8])
+            priv = (caps[6], caps[7], caps[8], 0)
         else:
-            priv = (0, 0, 0)
+            priv = (0, 0, 0, 0)
         out.append((path, caps[0], caps[1], caps[2], caps[3], caps[4], caps[5], *priv))
     if off != len(body):
         raise ValueError(f"{len(body) - off} trailing bytes after {count} entries")
@@ -221,9 +237,9 @@ def assert_round_trip(body, entries, flags):
     checked contained no cells at all.
     """
     got_flags, got = decode_body(body)
+    want = [e if len(e) == 11 else (*e, 0) for e in entries]
     if got_flags != flags:
         sys.exit(f"round-trip: flags {got_flags:#04x} != {flags:#04x}")
-    want = [tuple(e) for e in entries]
     if got != want:
         for i, (g, w) in enumerate(zip(got, want)):
             if g != w:

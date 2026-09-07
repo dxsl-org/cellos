@@ -108,6 +108,9 @@ pub type HandleVirtioIrq = unsafe extern "Rust" fn(irq: u32);
 /// AArch64 GPIO interrupt callback supplied by the kernel driver layer.
 pub type GpioNotifyIrq = unsafe extern "Rust" fn();
 
+/// AArch64 USB interrupt callback supplied by the kernel driver layer.
+pub type UsbSignalIrq = unsafe extern "Rust" fn();
+
 #[cfg(target_arch = "x86_64")]
 /// x86_64 page-fault callback supplied by the kernel memory layer.
 pub type HandlePageFault =
@@ -164,6 +167,7 @@ extern "Rust" {
     );
     pub fn vi_handle_virtio_irq(irq: u32);
     pub fn vi_gpio_notify_irq();
+    pub fn vi_signal_usb_irq();
 }
 
 #[cfg(target_arch = "aarch64")]
@@ -172,6 +176,8 @@ const _: TerminateOnFaultAarch64 = vi_terminate_on_fault_aarch64;
 const _: HandleVirtioIrq = vi_handle_virtio_irq;
 #[cfg(target_arch = "aarch64")]
 const _: GpioNotifyIrq = vi_gpio_notify_irq;
+#[cfg(target_arch = "aarch64")]
+const _: UsbSignalIrq = vi_signal_usb_irq;
 
 #[cfg(target_arch = "x86_64")]
 extern "Rust" {

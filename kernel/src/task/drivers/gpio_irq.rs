@@ -63,3 +63,15 @@ pub extern "Rust" fn vi_gpio_notify_irq() {
 
 #[cfg(target_arch = "aarch64")]
 const _: crate::hal::GpioNotifyIrq = vi_gpio_notify_irq;
+
+/// Signal USB DWC2 hardware interrupt to the driver cell waiting on USB_IRQ.
+#[no_mangle]
+pub extern "Rust" fn vi_signal_usb_irq() {
+    #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+    {
+        crate::task::drivers::irq_wait::signal_irq(hal_soc_bcm27xx::BCM2837.irq.usb as u8);
+    }
+}
+
+#[cfg(target_arch = "aarch64")]
+const _: crate::hal::UsbSignalIrq = vi_signal_usb_irq;

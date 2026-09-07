@@ -107,6 +107,19 @@ impl PcieDriverCap {
     }
 }
 
+/// Permits USB Host Controller operation and DWC2 MMIO/IRQ access.
+///
+/// Required before `RequestMmio` can claim the DWC2 host controller register aperture.
+#[derive(Copy, Clone, Debug)]
+pub struct UsbDriverCap(());
+
+impl UsbDriverCap {
+    /// Create a `UsbDriverCap` token. Only callable within the kernel crate.
+    pub(crate) fn new() -> Self {
+        Self(())
+    }
+}
+
 /// Permits PCIe ECAM enumeration and BAR registration via `sys_register_pcie_bar`.
 ///
 /// Granted by exact path match in `loader.rs` to `/bin/platform` ONLY, and is a
@@ -197,6 +210,7 @@ pub struct CapSet {
     pub pcie_driver: bool,
     pub platform: bool,
     pub supervisor: bool,
+    pub usb_driver: bool,
 }
 
 impl CapSet {
@@ -211,6 +225,7 @@ impl CapSet {
         pcie_driver: false,
         platform: false,
         supervisor: false,
+        usb_driver: false,
     };
 
     /// Every cap this kernel can express — a **reference upper bound for
@@ -238,6 +253,7 @@ impl CapSet {
         pcie_driver: true,
         platform: true,
         supervisor: true,
+        usb_driver: true,
     };
 
     /// Snapshot a (running) Task's current capabilities.
@@ -252,6 +268,7 @@ impl CapSet {
             pcie_driver: t.pcie_driver_cap.is_some(),
             platform: t.platform_cap.is_some(),
             supervisor: t.supervisor_cap.is_some(),
+            usb_driver: t.usb_driver_cap.is_some(),
         }
     }
 
@@ -298,6 +315,7 @@ impl CapSet {
             pcie_driver: false,
             platform: false,
             supervisor: false,
+            usb_driver: false,
         }
     }
 
@@ -330,10 +348,9 @@ impl CapSet {
         if path == "/bin/bcm-display" {
             self.mmio_devices |= crate::resource_registry::DEV_DISPLAY;
         }
-        // NOTE: /bin/dwc2-usb and /bin/lan9514 intentionally receive NO path-triggered
-        // caps here. USB host controller authority (DWC2 MMIO + IRQ) requires policy v3
-        // with a signed USB byte before it can be expressed through the capability system.
-        // Gate with a test matrix in policy::self_test first. See resource_registry.rs.
+        if path == "/bin/dwc2-usb" {
+            self.usb_driver = true;
+        }
         if path == "/bin/platform" {
             self.platform = true;
         }
@@ -354,7 +371,7 @@ impl CapSet {
     /// so they must fail closed where an ordinary path may not.
     pub fn path_mints_ptrust(path: &str) -> bool {
         let requested = CapSet::EMPTY.with_path_caps(path);
-        requested.pcie_driver || requested.platform || requested.supervisor
+        requested.pcie_driver || requested.platform || requested.supervisor || requested.usb_driver
     }
 
     /// Drop every privileged (P-TRUST) cap, keeping the ordinary ones.
@@ -367,6 +384,7 @@ impl CapSet {
             pcie_driver: false,
             platform: false,
             supervisor: false,
+            usb_driver: false,
             ..self
         }
     }
@@ -383,6 +401,7 @@ impl CapSet {
             pcie_driver: self.pcie_driver && o.pcie_driver,
             platform: self.platform && o.platform,
             supervisor: self.supervisor && o.supervisor,
+            usb_driver: self.usb_driver && o.usb_driver,
         }
     }
 
@@ -398,6 +417,7 @@ impl CapSet {
         t.block_regions = self.block_regions;
         t.pcie_driver_cap = self.pcie_driver.then(PcieDriverCap::new);
         t.supervisor_cap = self.supervisor.then(SupervisorCap::new);
+        t.usb_driver_cap = self.usb_driver.then(UsbDriverCap::new);
         // `platform_cap` is transferred only from `PlatformCapReservation`.
         // Applying a plain capability snapshot must never bypass the singleton.
     }

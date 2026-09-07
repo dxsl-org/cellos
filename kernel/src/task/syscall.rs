@@ -980,6 +980,10 @@ fn caller_has_pcie_driver(caller_id: usize) -> bool {
     caller_has_cap(caller_id, |t| t.pcie_driver_cap.is_some())
 }
 
+fn caller_has_usb_driver(caller_id: usize) -> bool {
+    caller_has_cap(caller_id, |t| t.usb_driver_cap.is_some())
+}
+
 fn register_driver_service(
     caller_id: usize,
     service_id: u16,
@@ -991,7 +995,7 @@ fn register_driver_service(
         .as_ref()
         .and_then(|scheduler| scheduler.tasks.get(&caller_id))
         .is_some_and(|task| {
-            task.pcie_driver_cap.is_some()
+            (task.pcie_driver_cap.is_some() || task.usb_driver_cap.is_some())
                 && !matches!(
                     &task.state,
                     crate::task::tcb::TaskState::Retiring | crate::task::tcb::TaskState::Terminated
@@ -5404,8 +5408,16 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         // ISR calls irq_wait::signal_irq (atomic only; no lock, no scheduler access).
         // Scheduler sweep (pick_next) does the actual Ready transition.
         Syscall::WaitIrq { irq, mmio_base } => {
-            if !caller_has_pcie_driver(caller_id) && !caller_has_platform(caller_id) {
+            if !caller_has_pcie_driver(caller_id)
+                && !caller_has_platform(caller_id)
+                && !caller_has_usb_driver(caller_id)
+            {
                 return Err(SyscallError::PermissionDenied);
+            }
+            #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+            if caller_has_usb_driver(caller_id) && irq == hal_soc_bcm27xx::BCM2837.irq.usb as u8 {
+                // One-shot unmask: re-enable USB legacy IRQ 9 after driver has cleared GINTSTS
+                hal::bcm2835_legacy_irq::enable_irq(hal_soc_bcm27xx::BCM2837.irq.usb);
             }
             // Lost-wakeup guard: if IRQ already fired before this call, return immediately.
             if crate::task::drivers::irq_wait::take_pending(irq) {
@@ -6009,6 +6021,23 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     base,
                     len,
                     crate::resource_registry::DEV_PCIE,
+                ) {
+                    Ok(()) => {
+                        user_map(base, len);
+                        Ok(0)
+                    }
+                    Err(types::ViError::PermissionDenied) => Ok(1),
+                    Err(types::ViError::AlreadyExists) => Ok(2),
+                    Err(_) => Ok(3),
+                };
+            }
+            // USB Host path: cells with UsbDriverCap may claim the DWC2 MMIO aperture.
+            if caller_has_usb_driver(caller_id) && crate::resource_registry::is_dwc2_mmio(base, len)
+            {
+                return match crate::resource_registry::request_dwc2_mmio(
+                    types::CellId(caller_id as u64),
+                    base,
+                    len,
                 ) {
                     Ok(()) => {
                         user_map(base, len);

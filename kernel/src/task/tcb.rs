@@ -266,6 +266,9 @@ pub struct Task {
     /// Platform Cell: singleton capability gating `sys_register_pcie_bar`.
     /// Granted by path match `/bin/platform` in loader.rs; at most one holder ever.
     pub platform_cap: Option<super::cap::PlatformCap>,
+    /// USB Host Driver Cell: claim DWC2 MMIO + manage USB IRQ.
+    /// Granted when manifest/policy grants `usb_driver = true`.
+    pub usb_driver_cap: Option<super::cap::UsbDriverCap>,
 
     /// MMIO device-class capability bitmask (`DEV_*` from
     /// [`crate::resource_registry`]). Set from the ELF manifest's hardware flags.
@@ -511,6 +514,7 @@ impl Task {
             supervisor_cap: None,
             pcie_driver_cap: None,
             platform_cap: None,
+            usb_driver_cap: None,
             mmio_devices: 0,
             block_regions: 0,
             pku_key: 0,

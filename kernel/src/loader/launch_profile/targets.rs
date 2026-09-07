@@ -40,6 +40,10 @@ pub(super) fn reviewed_user_target_ceiling(target: &str) -> Option<CapSet> {
             network: true,
             ..CapSet::EMPTY
         },
+        "/bin/dwc2-usb" => CapSet {
+            usb_driver: true,
+            ..CapSet::EMPTY
+        },
         "/bin/periph-demo" | "/bin/periph-test" => console_mmio_capset(),
         "/bin/pwm-demo" => gpio_mmio_capset(),
         "/bin/sensor-demo" => sensor_mmio_capset(),

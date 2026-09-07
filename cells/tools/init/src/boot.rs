@@ -24,6 +24,7 @@ pub(crate) fn prepare_service(path: &str) {
     if path == "/bin/net" {
         let _ = sys_spawn_from_path("/bin/virtio-net");
         let _ = sys_spawn_from_path("/bin/e1000");
+        let _ = sys_spawn_from_path("/bin/dwc2-usb");
         if sys_lookup_service(service::BLOCK_DRIVER).is_none() {
             let _ = sys_spawn_from_path("/bin/nvme");
         }

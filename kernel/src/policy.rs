@@ -37,10 +37,13 @@ const VERSION_V1: u8 = 1;
 /// them at all. Under v1 they parse as `false`, and since `Permit` *intersects*,
 /// that means a v1 entry silently STRIPS them — see `parse`.
 const VERSION_V2: u8 = 2;
+/// v3: 10 cap bytes; adds usb_driver for USB host authority.
+const VERSION_V3: u8 = 3;
 const SIG_LEN: usize = 64;
 const HEADER_LEN: usize = 8; // magic(4) + version(1) + flags(1) + entry_count(2)
 const CAP_BYTES_V1: usize = 6; // block_io, network, spawn, hyp, mmio_devices, block_regions
 const CAP_BYTES_V2: usize = 9; // + pcie_driver, platform, supervisor
+const CAP_BYTES_V3: usize = 10; // + usb_driver
 /// 8.3-safe, root-level path (VIFS1 uppercases + is FAT16 8.3).
 const POLICY_PATH: &str = "/POLICY.BIN";
 
@@ -54,6 +57,7 @@ const fn cap_bytes_for(version: u8) -> Option<usize> {
     match version {
         VERSION_V1 => Some(CAP_BYTES_V1),
         VERSION_V2 => Some(CAP_BYTES_V2),
+        VERSION_V3 => Some(CAP_BYTES_V3),
         _ => None,
     }
 }
@@ -266,14 +270,23 @@ fn parse(body: &[u8]) -> Option<LoadedPolicy> {
         // rather than something to coerce with `!= 0`. The older bools keep
         // `!= 0` because tightening them could reject a v1 blob that boots today,
         // and a rejected blob is `DenyAll` — a brick, not a safe default.
-        let (pcie_driver, platform, supervisor) = if cap_bytes == CAP_BYTES_V2 {
+        let (pcie_driver, platform, supervisor, usb_driver) = if cap_bytes >= CAP_BYTES_V2 {
             let (p, pl, s) = (caps_raw[6], caps_raw[7], caps_raw[8]);
             if p > 1 || pl > 1 || s > 1 {
                 return None;
             }
-            (p == 1, pl == 1, s == 1)
+            let u = if cap_bytes >= CAP_BYTES_V3 {
+                let u_val = caps_raw[9];
+                if u_val > 1 {
+                    return None;
+                }
+                u_val == 1
+            } else {
+                false
+            };
+            (p == 1, pl == 1, s == 1, u)
         } else {
-            (false, false, false)
+            (false, false, false, false)
         };
         entries.push(PolicyEntry {
             path: String::from(path),
@@ -287,6 +300,7 @@ fn parse(body: &[u8]) -> Option<LoadedPolicy> {
                 pcie_driver,
                 platform,
                 supervisor,
+                usb_driver,
             },
         });
     }
@@ -336,10 +350,13 @@ pub fn self_test() -> bool {
     // v1 has no privileged bytes: they parse false, and because Permit intersects
     // that means a v1 entry STRIPS them. Pinned so the compat path cannot silently
     // start granting authority a v1 operator never wrote.
-    if vfs.caps.pcie_driver || vfs.caps.platform || vfs.caps.supervisor {
+    if vfs.caps.pcie_driver || vfs.caps.platform || vfs.caps.supervisor || vfs.caps.usb_driver {
         return false;
     }
     if !v2_parse_cases() {
+        return false;
+    }
+    if !v3_parse_cases() {
         return false;
     }
     // 2. Tampered blob: a flipped body byte must FAIL verification.
@@ -517,12 +534,34 @@ fn v2_parse_cases() -> bool {
     }
     // Unknown version → Invalid. Guessing the stride would misread every field.
     let mut bad_ver = V2;
-    bad_ver[4] = 3;
+    bad_ver[4] = 4;
     if parse(&bad_ver).is_some() {
         return false;
     }
     // Truncated entry (the 9-byte stride does not fit) → None, not a panic.
     if parse(&V2[..V2.len() - 1]).is_some() {
+        return false;
+    }
+    true
+}
+
+/// v3 layout coverage for `self_test`: checks that the 10-byte stride arrives,
+/// `usb_driver` parses true for `/bin/dwc2-usb`, and other privileged caps stay false.
+fn v3_parse_cases() -> bool {
+    // magic | version=3 | flags=0 | count=1 | len=13 "/bin/dwc2-usb" | 10 cap bytes
+    const V3: [u8; 32] = [
+        0x56, 0x50, 0x4f, 0x4c, 0x03, 0x00, 0x01, 0x00, 0x0d, 0x2f, 0x62, 0x69, 0x6e, 0x2f, 0x64,
+        0x77, 0x63, 0x32, 0x2d, 0x75, 0x73, 0x62, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x01,
+    ];
+    let Some(p) = parse(&V3) else {
+        return false;
+    };
+    if p.flags != 0 || p.entries.len() != 1 {
+        return false;
+    }
+    let c = p.entries[0].caps;
+    if !c.usb_driver || c.pcie_driver || c.platform || c.supervisor {
         return false;
     }
     true

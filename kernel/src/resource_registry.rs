@@ -281,6 +281,40 @@ pub fn request_mmio_unchecked(cell_id: CellId, base: usize, len: usize) -> ViRes
     Ok(())
 }
 
+/// Check if `[base, base + len)` falls inside the platform's DWC2 host controller MMIO window.
+pub fn is_dwc2_mmio(base: usize, len: usize) -> bool {
+    #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+    {
+        let dwc2_base = hal_soc_bcm27xx::BCM2837.mmio.dwc2_base;
+        let dwc2_len = hal_soc_bcm27xx::BCM2837.mmio.dwc2_grant_size;
+        len > 0
+            && base >= dwc2_base
+            && base.checked_add(len).is_some_and(|end| end <= dwc2_base + dwc2_len)
+    }
+    #[cfg(not(all(target_arch = "aarch64", feature = "board-rpi3")))]
+    {
+        let _ = (base, len);
+        false
+    }
+}
+
+/// Request exclusive ownership of a DWC2 MMIO region for a driver cell holding `UsbDriverCap`.
+pub fn request_dwc2_mmio(cell_id: CellId, base: usize, len: usize) -> ViResult<()> {
+    if !is_dwc2_mmio(base, len) {
+        return Err(ViError::PermissionDenied);
+    }
+    let end = checked_mmio_end(base, len)?;
+    let mut reg = REGISTRY.lock();
+    for (&eb, &(el, _)) in reg.iter() {
+        let ee = eb + el;
+        if !(end <= eb || base >= ee) {
+            return Err(ViError::AlreadyExists);
+        }
+    }
+    reg.insert(base, (len, cell_id));
+    Ok(())
+}
+
 /// Request exclusive ownership of `[base, base+len)` for `cell_id`.
 ///
 /// Returns:
