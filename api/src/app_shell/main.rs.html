@@ -83,44 +83,43 @@
 <a href=#83 id=83 data-nosnippet>83</a></span><span class="kw">mod </span>async_utils;
 <a href=#84 id=84 data-nosnippet>84</a><span class="attr">#[cfg(not(feature = <span class="string">"shell_test"</span>))]
 <a href=#85 id=85 data-nosnippet>85</a></span><span class="kw">mod </span>config_client;
-<a href=#86 id=86 data-nosnippet>86</a><span class="attr">#[cfg(not(feature = <span class="string">"shell_test"</span>))]
-<a href=#87 id=87 data-nosnippet>87</a></span><span class="kw">mod </span>history;
-<a href=#88 id=88 data-nosnippet>88</a><span class="attr">#[cfg(not(feature = <span class="string">"shell_test"</span>))]
-<a href=#89 id=89 data-nosnippet>89</a></span><span class="kw">mod </span>shell;
-<a href=#90 id=90 data-nosnippet>90</a><span class="comment">// Hot-swap session transfer serialises the history + alias table, both of which
-<a href=#91 id=91 data-nosnippet>91</a>// only exist in the interactive build.
-<a href=#92 id=92 data-nosnippet>92</a></span><span class="attr">#[cfg(not(feature = <span class="string">"shell_test"</span>))]
-<a href=#93 id=93 data-nosnippet>93</a></span><span class="kw">mod </span>state_transfer;
-<a href=#94 id=94 data-nosnippet>94</a>
-<a href=#95 id=95 data-nosnippet>95</a><span class="attr">#[cfg(feature = <span class="string">"shell_test"</span>)]
-<a href=#96 id=96 data-nosnippet>96</a></span><span class="kw">mod </span>shell_test;
-<a href=#97 id=97 data-nosnippet>97</a>
-<a href=#98 id=98 data-nosnippet>98</a><span class="attr">#[cfg(not(feature = <span class="string">"shell_test"</span>))]
-<a href=#99 id=99 data-nosnippet>99</a></span><span class="kw">use </span>shell::ViShell;
-<a href=#100 id=100 data-nosnippet>100</a>
-<a href=#101 id=101 data-nosnippet>101</a><span class="attr">#[cfg(not(test))]
-<a href=#102 id=102 data-nosnippet>102</a>#[no_mangle]
-<a href=#103 id=103 data-nosnippet>103</a></span><span class="kw">pub fn </span>main() {
-<a href=#104 id=104 data-nosnippet>104</a>    <span class="attr">#[cfg(feature = <span class="string">"shell_test"</span>)]
-<a href=#105 id=105 data-nosnippet>105</a>    </span>shell_test::run();
-<a href=#106 id=106 data-nosnippet>106</a>
-<a href=#107 id=107 data-nosnippet>107</a>    <span class="attr">#[cfg(not(feature = <span class="string">"shell_test"</span>))]
-<a href=#108 id=108 data-nosnippet>108</a>    </span>{
-<a href=#109 id=109 data-nosnippet>109</a>        <span class="kw">let _ </span>= ostd::syscall::sys_log(<span class="string">"DEBUG: Shell Started (Async Mode)\n"</span>);
-<a href=#110 id=110 data-nosnippet>110</a>        <span class="comment">// Claim keyboard focus so VirtIO keyboard events are routed here via
-<a href=#111 id=111 data-nosnippet>111</a>        // the input service (fb_console keyboard relay).  Spin-wait for the
-<a href=#112 id=112 data-nosnippet>112</a>        // input service to come online — it races with shell at boot.
-<a href=#113 id=113 data-nosnippet>113</a>        // Don't spin indefinitely — attempt up to 50 times (~25 seconds),
-<a href=#114 id=114 data-nosnippet>114</a>        // then proceed without focus (UART fallback still works).
-<a href=#115 id=115 data-nosnippet>115</a>        </span><span class="kw">for _ in </span><span class="number">0</span>..<span class="number">50 </span>{
-<a href=#116 id=116 data-nosnippet>116</a>            <span class="kw">if </span>ostd::input::request_focus() {
-<a href=#117 id=117 data-nosnippet>117</a>                <span class="kw">break</span>;
-<a href=#118 id=118 data-nosnippet>118</a>            }
-<a href=#119 id=119 data-nosnippet>119</a>            ostd::task::yield_now();
-<a href=#120 id=120 data-nosnippet>120</a>        }
-<a href=#121 id=121 data-nosnippet>121</a>        <span class="kw">let _ </span>= ostd::syscall::sys_log(<span class="string">"DEBUG: Shell focus acquired (or timed out)\n"</span>);
-<a href=#122 id=122 data-nosnippet>122</a>        <span class="kw">let </span><span class="kw-2">mut </span>shell = ViShell::new();
-<a href=#123 id=123 data-nosnippet>123</a>        ostd::executor::block_on(shell.run());
-<a href=#124 id=124 data-nosnippet>124</a>    }
-<a href=#125 id=125 data-nosnippet>125</a>}
+<a href=#86 id=86 data-nosnippet>86</a><span class="kw">pub mod </span>history;
+<a href=#87 id=87 data-nosnippet>87</a><span class="attr">#[cfg(not(feature = <span class="string">"shell_test"</span>))]
+<a href=#88 id=88 data-nosnippet>88</a></span><span class="kw">mod </span>shell;
+<a href=#89 id=89 data-nosnippet>89</a><span class="comment">// Hot-swap session transfer serialises the history + alias table, both of which
+<a href=#90 id=90 data-nosnippet>90</a>// only exist in the interactive build.
+<a href=#91 id=91 data-nosnippet>91</a></span><span class="attr">#[cfg(not(feature = <span class="string">"shell_test"</span>))]
+<a href=#92 id=92 data-nosnippet>92</a></span><span class="kw">mod </span>state_transfer;
+<a href=#93 id=93 data-nosnippet>93</a>
+<a href=#94 id=94 data-nosnippet>94</a><span class="attr">#[cfg(feature = <span class="string">"shell_test"</span>)]
+<a href=#95 id=95 data-nosnippet>95</a></span><span class="kw">mod </span>shell_test;
+<a href=#96 id=96 data-nosnippet>96</a>
+<a href=#97 id=97 data-nosnippet>97</a><span class="attr">#[cfg(not(feature = <span class="string">"shell_test"</span>))]
+<a href=#98 id=98 data-nosnippet>98</a></span><span class="kw">use </span>shell::ViShell;
+<a href=#99 id=99 data-nosnippet>99</a>
+<a href=#100 id=100 data-nosnippet>100</a><span class="attr">#[cfg(not(test))]
+<a href=#101 id=101 data-nosnippet>101</a>#[no_mangle]
+<a href=#102 id=102 data-nosnippet>102</a></span><span class="kw">pub fn </span>main() {
+<a href=#103 id=103 data-nosnippet>103</a>    <span class="attr">#[cfg(feature = <span class="string">"shell_test"</span>)]
+<a href=#104 id=104 data-nosnippet>104</a>    </span>shell_test::run();
+<a href=#105 id=105 data-nosnippet>105</a>
+<a href=#106 id=106 data-nosnippet>106</a>    <span class="attr">#[cfg(not(feature = <span class="string">"shell_test"</span>))]
+<a href=#107 id=107 data-nosnippet>107</a>    </span>{
+<a href=#108 id=108 data-nosnippet>108</a>        <span class="kw">let _ </span>= ostd::syscall::sys_log(<span class="string">"DEBUG: Shell Started (Async Mode)\n"</span>);
+<a href=#109 id=109 data-nosnippet>109</a>        <span class="comment">// Claim keyboard focus so VirtIO keyboard events are routed here via
+<a href=#110 id=110 data-nosnippet>110</a>        // the input service (fb_console keyboard relay).  Spin-wait for the
+<a href=#111 id=111 data-nosnippet>111</a>        // input service to come online — it races with shell at boot.
+<a href=#112 id=112 data-nosnippet>112</a>        // Don't spin indefinitely — attempt up to 50 times (~25 seconds),
+<a href=#113 id=113 data-nosnippet>113</a>        // then proceed without focus (UART fallback still works).
+<a href=#114 id=114 data-nosnippet>114</a>        </span><span class="kw">for _ in </span><span class="number">0</span>..<span class="number">50 </span>{
+<a href=#115 id=115 data-nosnippet>115</a>            <span class="kw">if </span>ostd::input::request_focus() {
+<a href=#116 id=116 data-nosnippet>116</a>                <span class="kw">break</span>;
+<a href=#117 id=117 data-nosnippet>117</a>            }
+<a href=#118 id=118 data-nosnippet>118</a>            ostd::task::yield_now();
+<a href=#119 id=119 data-nosnippet>119</a>        }
+<a href=#120 id=120 data-nosnippet>120</a>        <span class="kw">let _ </span>= ostd::syscall::sys_log(<span class="string">"DEBUG: Shell focus acquired (or timed out)\n"</span>);
+<a href=#121 id=121 data-nosnippet>121</a>        <span class="kw">let </span><span class="kw-2">mut </span>shell = ViShell::new();
+<a href=#122 id=122 data-nosnippet>122</a>        ostd::executor::block_on(shell.run());
+<a href=#123 id=123 data-nosnippet>123</a>    }
+<a href=#124 id=124 data-nosnippet>124</a>}
 </code></pre></div></section></main></body></html>

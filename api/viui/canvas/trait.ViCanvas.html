@@ -19,7 +19,7 @@
         text: &amp;str,
         _px: f32,
         color: <a class="struct" href="struct.Color.html" title="struct viui::canvas::Color">Color</a>,
-        _atlas: &amp;mut <a class="struct" href="../../ostd/font_atlas/struct.GlyphAtlas.html" title="struct ostd::font_atlas::GlyphAtlas">GlyphAtlas</a>,
+        _atlas: &amp;mut GlyphAtlas,
     ) { ... }
 <span class="item-spacer"></span>    fn <a href="#method.draw_rect_border" class="fn">draw_rect_border</a>(&amp;mut self, rect: <a class="struct" href="../layout/struct.Rect.html" title="struct viui::layout::Rect">Rect</a>, color: <a class="struct" href="struct.Color.html" title="struct viui::canvas::Color">Color</a>, thickness: f32) { ... }
 </details>}</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Abstract pixel drawing surface.</p>
@@ -41,7 +41,7 @@ Clip stack: operations outside the current clip rect are silently discarded.</p>
     text: &amp;str,
     _px: f32,
     color: <a class="struct" href="struct.Color.html" title="struct viui::canvas::Color">Color</a>,
-    _atlas: &amp;mut <a class="struct" href="../../ostd/font_atlas/struct.GlyphAtlas.html" title="struct ostd::font_atlas::GlyphAtlas">GlyphAtlas</a>,
+    _atlas: &amp;mut GlyphAtlas,
 )</h4></section></summary><div class="docblock"><p>Draw scalable text at <code>pos</code> (top-left) using a GlyphAtlas.</p>
 <p><code>px</code> is the font size in pixels. Default impl falls back to bitmap 8×8.</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.draw_rect_border" class="method"><a class="src rightside" href="../../src/viui/canvas.rs.html#161-203">Source</a><h4 class="code-header">fn <a href="#method.draw_rect_border" class="fn">draw_rect_border</a>(&amp;mut self, rect: <a class="struct" href="../layout/struct.Rect.html" title="struct viui::layout::Rect">Rect</a>, color: <a class="struct" href="struct.Color.html" title="struct viui::canvas::Color">Color</a>, thickness: f32)</h4></section></summary><div class="docblock"><p>Draw a rectangular border using 4 <code>fill_rect</code> calls.</p>

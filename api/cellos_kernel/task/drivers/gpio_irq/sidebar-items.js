@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["GPIO_IRQ_NOTIFY","GPIO_MMIO_BASE"],"fn":["vi_gpio_notify_irq"]};
+window.SIDEBAR_ITEMS = {"constant":["GPIO_IRQ_NOTIFY","GPIO_MMIO_BASE"],"fn":["vi_gpio_notify_irq","vi_signal_usb_irq"]};

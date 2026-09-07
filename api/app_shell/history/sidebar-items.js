@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["HISTORY_FILE","MAX_HISTORY"],"struct":["History"]};
+window.SIDEBAR_ITEMS = {"constant":["HISTORY_FILE","MAX_HISTORY"],"fn":["clear_history","cmd_history","record_history"],"static":["GLOBAL_HISTORY"],"struct":["History"]};

@@ -34,7 +34,7 @@
 <a href=#34 id=34 data-nosnippet>34</a>        }
 <a href=#35 id=35 data-nosnippet>35</a>
 <a href=#36 id=36 data-nosnippet>36</a>        <span class="comment">// JSON REST API
-<a href=#37 id=37 data-nosnippet>37</a>        </span>(<span class="string">"GET"</span>, <span class="string">"/api/status"</span>) =&gt; handlers::api_status(cap, net_ep),
+<a href=#37 id=37 data-nosnippet>37</a>        </span>(<span class="string">"GET"</span>, <span class="string">"/api/status"</span>) | (<span class="string">"GET"</span>, <span class="string">"/api/system"</span>) =&gt; handlers::api_status(cap, net_ep),
 <a href=#38 id=38 data-nosnippet>38</a>        (<span class="string">"GET"</span>, <span class="string">"/api/cells"</span>) =&gt; handlers::api_cells(cap, net_ep),
 <a href=#39 id=39 data-nosnippet>39</a>        (<span class="string">"GET"</span>, <span class="string">"/api/files"</span>) =&gt; {
 <a href=#40 id=40 data-nosnippet>40</a>            <span class="kw">let </span>vfs_path = extract_query_param(path, <span class="string">"path"</span>).unwrap_or(<span class="string">"/"</span>);

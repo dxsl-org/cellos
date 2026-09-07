@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["FRAME_BUF","REPLY_BUF"],"enum":["NicReply"],"fn":["handle"]};

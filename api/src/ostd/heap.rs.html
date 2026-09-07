@@ -25,7 +25,7 @@
 <a href=#25 id=25 data-nosnippet>25</a><span class="doccomment">/// Default per-cell heap size: 512 KiB gives ample headroom for normal cells
 <a href=#26 id=26 data-nosnippet>26</a>/// while keeping footprint minimal. Cells needing larger heaps (e.g. VFS, compositor)
 <a href=#27 id=27 data-nosnippet>27</a>/// can initialize their own static arena via `declare_custom_heap!()`.
-<a href=#28 id=28 data-nosnippet>28</a></span><span class="kw">const </span>HEAP_SIZE: usize = <span class="number">512 </span>* <span class="number">1024</span>;
+<a href=#28 id=28 data-nosnippet>28</a></span><span class="kw">const </span>HEAP_SIZE: usize = <span class="number">1024 </span>* <span class="number">1024</span>;
 <a href=#29 id=29 data-nosnippet>29</a><span class="doccomment">/// Backing arena for the cell heap. 16-byte aligned so the allocator can satisfy
 <a href=#30 id=30 data-nosnippet>30</a>/// the largest natural alignment without wasting the first bytes.
 <a href=#31 id=31 data-nosnippet>31</a></span><span class="attr">#[repr(align(<span class="number">16</span>))]
