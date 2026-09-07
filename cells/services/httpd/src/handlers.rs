@@ -49,10 +49,10 @@ pub fn send_response(
         content_type,
         body.len()
     );
-    net_ipc::tcp_send_all(cap, net_ep, header.as_bytes())
-        && net_ipc::tcp_send_all(cap, net_ep, body)
+    let mut payload = header.into_bytes();
+    payload.extend_from_slice(body);
+    net_ipc::tcp_send_all(cap, net_ep, &payload)
 }
-
 fn send_json(cap: u32, net_ep: usize, status: u16, json: &str) -> bool {
     let body = json.as_bytes();
     let status_text = if status == 200 { "OK" } else { "Not Found" };
@@ -60,10 +60,9 @@ fn send_json(cap: u32, net_ep: usize, status: u16, json: &str) -> bool {
         "HTTP/1.1 {} {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nAccess-Control-Allow-Origin: *\r\nConnection: close\r\n\r\n",
         status, status_text, body.len()
     );
-    net_ipc::tcp_send_all(cap, net_ep, header.as_bytes())
-        && net_ipc::tcp_send_all(cap, net_ep, body)
+    let payload = format!("{header}{json}");
+    net_ipc::tcp_send_all(cap, net_ep, payload.as_bytes())
 }
-
 // ── HTML pages ────────────────────────────────────────────────────────────────
 
 // Note: askama compile-time templates are the intended long-term approach.
@@ -72,24 +71,34 @@ fn send_json(cap: u32, net_ep: usize, status: u16, json: &str) -> bool {
 pub fn index(cap: u32, net_ep: usize) -> bool {
     let html = format!(
         r#"<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>ViCell Dashboard</title>
+<html><head><meta charset="utf-8"><title>Cellos Mini-Server Dashboard</title>
 <style>
-  body{{font-family:monospace;background:#1a1a2e;color:#e0e0e0;margin:0;padding:2rem}}
-  h1{{color:#a0c4ff;margin-bottom:0.5rem}}
-  .card{{background:#16213e;padding:1.2rem;border-radius:8px;margin:1rem 0}}
-  a{{color:#a0c4ff;text-decoration:none}} a:hover{{text-decoration:underline}}
-  .badge{{display:inline-block;background:#0f3460;padding:2px 8px;border-radius:4px;font-size:0.85em}}
+  body{{font-family:system-ui,-apple-system,sans-serif;background:#0d1117;color:#c9d1d9;margin:0;padding:2rem}}
+  h1{{color:#58a6ff;margin-bottom:0.25rem}}
+  p.sub{{color:#8b949e;margin-top:0;margin-bottom:1.5rem}}
+  .card{{background:#161b22;border:1px solid #30363d;padding:1.2rem;border-radius:8px;margin:1rem 0}}
+  a{{color:#58a6ff;text-decoration:none}} a:hover{{text-decoration:underline}}
+  .badge{{display:inline-block;background:#238636;color:#ffffff;padding:2px 8px;border-radius:4px;font-size:0.85em;font-weight:bold}}
+  ul{{list-style-type:none;padding-left:0}}
+  li{{margin:0.5rem 0}}
 </style></head>
 <body>
-<h1>ViCell Dashboard</h1>
+<h1>Cellos Mini-Server Dashboard</h1>
+<p class="sub">Stage G2 &bull; Cellular Single Address Space OS</p>
 <div class="card">
-  <p>Status: <span class="badge">Running</span></p>
-  <p>Architecture: <strong>{}</strong></p>
+  <p>Server Status: <span class="badge">ONLINE</span></p>
+  <p>Hardware Architecture: <strong>{}</strong></p>
+  <p>HTTP Endpoint: <strong>Port 8080 (HTTP/1.1)</strong></p>
 </div>
 <div class="card">
-  <p><a href="/status">&#9658; System Status</a></p>
-  <p><a href="/api/status">&#9658; JSON API: /api/status</a></p>
-  <p><a href="/api/cells">&#9658; JSON API: /api/cells</a></p>
+  <h3>Endpoints &amp; Navigation</h3>
+  <ul>
+    <li><a href="/status">&#9658; System Status</a></li>
+    <li><a href="/api/system">&#9658; REST API: /api/system</a></li>
+    <li><a href="/api/cells">&#9658; REST API: /api/cells (Active Services)</a></li>
+    <li><a href="/api/files?path=/tmp">&#9658; REST API: /api/files?path=/tmp (VFS Browser)</a></li>
+    <li><a href="/files/readme.txt">&#9658; Static File: /files/readme.txt</a></li>
+  </ul>
 </div>
 </body></html>"#,
         ARCH
@@ -106,13 +115,13 @@ pub fn index(cap: u32, net_ep: usize) -> bool {
 pub fn status_page(cap: u32, net_ep: usize) -> bool {
     let html = format!(
         r#"<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>ViCell Status</title>
+<html><head><meta charset="utf-8"><title>Cellos - System Status</title>
 <style>
-  body{{font-family:monospace;background:#1a1a2e;color:#e0e0e0;margin:0;padding:2rem}}
-  h1{{color:#a0c4ff}} .card{{background:#16213e;padding:1.2rem;border-radius:8px;margin:1rem 0}}
-  a{{color:#a0c4ff}}
-  table{{border-collapse:collapse;width:100%}} td{{padding:4px 8px}}
-  tr:nth-child(even){{background:#0f3460}}
+  body{{font-family:system-ui,-apple-system,sans-serif;background:#0d1117;color:#c9d1d9;margin:0;padding:2rem}}
+  h1{{color:#58a6ff;margin-bottom:1rem}}
+  .card{{background:#161b22;border:1px solid #30363d;padding:1.2rem;border-radius:8px;margin:1rem 0}}
+  table{{border-collapse:collapse;width:100%}} td{{padding:8px 12px;border-bottom:1px solid #21262d}}
+  a{{color:#58a6ff;text-decoration:none}} a:hover{{text-decoration:underline}}
 </style></head>
 <body>
 <h1>System Status</h1>
@@ -121,6 +130,7 @@ pub fn status_page(cap: u32, net_ep: usize) -> bool {
   <tr><td>Architecture</td><td><strong>{}</strong></td></tr>
   <tr><td>HTTP Server</td><td><strong>port 8080</strong></td></tr>
   <tr><td>Protocol</td><td><strong>HTTP/1.1</strong></td></tr>
+  <tr><td>Isolation Model</td><td><strong>SAS / Language-Based Isolation (LBI)</strong></td></tr>
 </table>
 </div>
 <p><a href="/">&#8592; Back to Dashboard</a></p>

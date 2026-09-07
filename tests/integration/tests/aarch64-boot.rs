@@ -274,3 +274,84 @@ fn aarch64_uart_input_delivery() {
             )
         });
 }
+
+/// The httpd web server cell must serve HTTP/1.1 requests over VirtIO-Net on AArch64.
+///
+/// Exercises the full network stack:
+///   QEMU virtio-net-device (SLIRP) -> driver-virtio-net -> service-net (smoltcp + DHCP) ->
+///   service-httpd (port 8080) -> host HTTP client via hostfwd.
+#[test]
+fn aarch64_httpd_web_server_serves_requests() {
+    use std::io::{Read, Write};
+    use std::net::TcpStream;
+    use std::time::Duration;
+
+    if !prerequisites_ok() {
+        return;
+    }
+
+    let (mut qemu, host_port) =
+        QemuRunner::boot_aarch64_with_hostfwd(&kernel_path(), &disk_path(), 8080);
+
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("shell not reached: {e}\n--- output ---\n{}", qemu.dump()));
+
+    qemu.wait_for("DHCP acquired", 30)
+        .unwrap_or_else(|e| panic!("DHCP not acquired: {e}\n--- output ---\n{}", qemu.dump()));
+
+    std::thread::sleep(Duration::from_millis(500));
+
+    // Spawn httpd in the background
+    qemu.send_line("httpd &");
+    qemu.wait_for("httpd: listening on :8080", 15)
+        .unwrap_or_else(|e| panic!("httpd did not listen: {e}\n--- output ---\n{}", qemu.dump()));
+
+    std::thread::sleep(Duration::from_millis(300));
+
+    // 1. Test GET / -> HTML Dashboard
+    let mut stream = TcpStream::connect(format!("127.0.0.1:{host_port}"))
+        .unwrap_or_else(|e| panic!("host connect to httpd failed: {e}\n{}", qemu.dump()));
+    stream
+        .write_all(b"GET / HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
+        .expect("write GET /");
+    stream.flush().expect("flush");
+
+    let mut response = Vec::new();
+    stream.set_read_timeout(Some(Duration::from_secs(10))).ok();
+    let _ = stream.read_to_end(&mut response);
+
+    let body = String::from_utf8_lossy(&response);
+    assert!(
+        body.contains("Cellos Mini-Server Dashboard"),
+        "response did not contain dashboard title\n--- response ---\n{body}\n--- QEMU ---\n{}",
+        qemu.dump()
+    );
+    assert!(
+        body.contains("HTTP/1.1 200 OK"),
+        "response was not 200 OK\n--- response ---\n{body}"
+    );
+
+    std::thread::sleep(Duration::from_millis(300));
+
+    // 2. Test GET /api/system -> REST API JSON
+    let mut stream2 = TcpStream::connect(format!("127.0.0.1:{host_port}"))
+        .unwrap_or_else(|e| panic!("host connect 2 failed: {e}\n{}", qemu.dump()));
+    stream2
+        .write_all(b"GET /api/system HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
+        .expect("write GET /api/system");
+    stream2.flush().expect("flush");
+
+    let mut response2 = Vec::new();
+    stream2.set_read_timeout(Some(Duration::from_secs(10))).ok();
+    let _ = stream2.read_to_end(&mut response2);
+
+    let body2 = String::from_utf8_lossy(&response2);
+    assert!(
+        body2.contains(r#""status":"running""#),
+        "response did not contain status:running\n--- response ---\n{body2}"
+    );
+    assert!(
+        body2.contains(r#""arch":"aarch64""#),
+        "response did not contain arch:aarch64\n--- response ---\n{body2}"
+    );
+}

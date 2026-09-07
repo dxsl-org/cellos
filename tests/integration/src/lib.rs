@@ -603,13 +603,24 @@ impl QemuRunner {
     /// net SLIRP, RNG) so init can load /bin/vfs, /bin/shell, etc. from the disk.
     /// The guest serial is bridged to a TCP socket for bidirectional I/O as usual.
     pub fn boot_aarch64_with_disk(kernel: &str, disk: &str) -> Self {
+        Self::boot_aarch64_with_disk_and_netdev(kernel, disk, "user,id=net0")
+    }
+
+    pub fn boot_aarch64_with_hostfwd(kernel: &str, disk: &str, guest_port: u16) -> (Self, u16) {
+        let probe = TcpListener::bind("127.0.0.1:0").expect("probe bind");
+        let host_port = probe.local_addr().unwrap().port();
+        drop(probe);
+
+        let netdev = format!("user,id=net0,hostfwd=tcp:127.0.0.1:{host_port}-:{guest_port}");
+        (Self::boot_aarch64_with_disk_and_netdev(kernel, disk, &netdev), host_port)
+    }
+
+    pub fn boot_aarch64_with_disk_and_netdev(kernel: &str, disk: &str, netdev: &str) -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind serial socket");
         let port = listener.local_addr().unwrap().port();
 
         let mut child = Command::new(qemu_binary_aarch64())
             .args([
-                // gic-version=2: QEMU 7+ defaults to GICv3 on virt; our GIC driver
-                // targets GICv2 MMIO (GICC at 0x08010000, GICD at 0x08000000).
                 "-machine",
                 "virt,gic-version=2",
                 "-cpu",
@@ -624,7 +635,7 @@ impl QemuRunner {
                 "-device",
                 "virtio-blk-device,drive=hd0",
                 "-netdev",
-                "user,id=net0",
+                netdev,
                 "-device",
                 "virtio-net-device,netdev=net0",
                 // rng-builtin is the cross-platform RNG (rng-random dropped in QEMU 9.x on Windows);

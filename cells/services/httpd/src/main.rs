@@ -8,8 +8,8 @@
 //! embedded-io-async 0.7 while edge-http 0.7 requires 0.6, and implementing
 //! TcpSplit over ViCell's synchronous IPC adds complexity with no G1 benefit.
 
-#![no_std]
-#![no_main]
+#![cfg_attr(not(test), no_std)]
+#![cfg_attr(not(test), no_main)]
 #![forbid(unsafe_code)]
 
 extern crate alloc;
@@ -29,6 +29,7 @@ api::declare_syscalls![Send, Recv, Log, LookupService, StateRestore];
 
 const HTTPD_PORT: u16 = 8080;
 
+#[cfg(not(test))]
 ostd::cell_main!(cell_main);
 
 fn cell_main() {

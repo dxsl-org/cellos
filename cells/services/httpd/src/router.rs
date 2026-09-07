@@ -34,7 +34,7 @@ pub fn handle_connection(cap: u32, net_ep: usize, vfs_ep: usize) -> bool {
         }
 
         // JSON REST API
-        ("GET", "/api/status") => handlers::api_status(cap, net_ep),
+        ("GET", "/api/status") | ("GET", "/api/system") => handlers::api_status(cap, net_ep),
         ("GET", "/api/cells") => handlers::api_cells(cap, net_ep),
         ("GET", "/api/files") => {
             let vfs_path = extract_query_param(path, "path").unwrap_or("/");
