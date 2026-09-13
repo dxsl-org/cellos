@@ -35,11 +35,11 @@ use alloc::vec::Vec;
 
 use ai_proto::{AiError, AiRequest, AiResponse, Describe, FinishReason, Quant, MAX_SESSIONS};
 
-pub mod transport;
 #[cfg(all(feature = "ostd-transport", target_os = "none"))]
 pub mod ostd_transport;
 #[cfg(test)]
 mod testing;
+pub mod transport;
 
 pub use transport::AiTransport;
 
@@ -64,7 +64,9 @@ pub type AiResult<T> = Result<T, AiClientError>;
 impl From<AiClientError> for crate::types::ViError {
     fn from(error: AiClientError) -> Self {
         match error {
-            AiClientError::Transport | AiClientError::PollLimitExceeded => crate::types::ViError::IO,
+            AiClientError::Transport | AiClientError::PollLimitExceeded => {
+                crate::types::ViError::IO
+            }
             AiClientError::NoService => crate::types::ViError::NotFound,
             AiClientError::Protocol => crate::types::ViError::InvalidInput,
             AiClientError::Service(error) => match error {
@@ -72,7 +74,9 @@ impl From<AiClientError> for crate::types::ViError {
                 AiError::Busy => crate::types::ViError::WouldBlock,
                 AiError::NoModel => crate::types::ViError::NotFound,
                 AiError::NotSupported => crate::types::ViError::NotSupported,
-                AiError::UnknownRequest | AiError::NotRunning => crate::types::ViError::InvalidArgument,
+                AiError::UnknownRequest | AiError::NotRunning => {
+                    crate::types::ViError::InvalidArgument
+                }
                 AiError::Internal => crate::types::ViError::IO,
             },
         }
@@ -289,7 +293,10 @@ impl<T: AiTransport> AiClient<T> {
             // The service answers a cancel with the final chunk state, an empty chunk, or a
             // refusal; treating "finished" as success keeps cancel idempotent for callers.
             AiResponse::TokenChunk { .. } => Ok(()),
-            AiResponse::Failed { error: AiError::UnknownRequest, .. } => Ok(()),
+            AiResponse::Failed {
+                error: AiError::UnknownRequest,
+                ..
+            } => Ok(()),
             AiResponse::Failed { error, .. } => Err(AiClientError::Service(error)),
             _ => Err(AiClientError::Protocol),
         }
@@ -426,7 +433,10 @@ impl<T: AiTransport> Iterator for TokenStream<'_, T> {
         if self.finished {
             return None;
         }
-        match self.client.poll(self.request_id, ai_proto::MAX_TOKENS_PER_POLL) {
+        match self
+            .client
+            .poll(self.request_id, ai_proto::MAX_TOKENS_PER_POLL)
+        {
             Ok(chunk) => {
                 self.text.push_str(&chunk.text);
                 if chunk.done {
@@ -468,8 +478,8 @@ pub fn has_free_session(info: &ServiceInfo) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use alloc::vec;
     use crate::testing::{Reply, ScriptedTransport};
+    use alloc::vec;
 
     fn params(prompt: &str) -> InferParams {
         InferParams::greedy(prompt, 4)
@@ -478,7 +488,10 @@ mod tests {
     #[test]
     fn drives_a_full_generation_from_accepted_to_done() {
         let transport = ScriptedTransport::new(vec![
-            (ai_proto::opcode::INFER_SUBMIT, Reply::Accepted { request_id: 3 }),
+            (
+                ai_proto::opcode::INFER_SUBMIT,
+                Reply::Accepted { request_id: 3 },
+            ),
             (
                 ai_proto::opcode::INFER_STREAM_POLL,
                 Reply::Chunk {
@@ -524,7 +537,10 @@ mod tests {
     fn describe_and_embed_round_trip_typed_payloads() {
         let transport = ScriptedTransport::new(vec![
             (ai_proto::opcode::DESCRIBE, Reply::Description),
-            (ai_proto::opcode::INFER_EMBED, Reply::Embedding(vec![0.5, -0.25])),
+            (
+                ai_proto::opcode::INFER_EMBED,
+                Reply::Embedding(vec![0.5, -0.25]),
+            ),
         ]);
         let mut client = AiClient::new(transport);
         let info = client.describe().expect("describe");
@@ -537,10 +553,8 @@ mod tests {
     #[test]
     fn rejects_a_reply_that_does_not_match_the_request() {
         // The scripted service answers a cancel with a description: protocol mismatch.
-        let transport = ScriptedTransport::new(vec![(
-            ai_proto::opcode::INFER_CANCEL,
-            Reply::Description,
-        )]);
+        let transport =
+            ScriptedTransport::new(vec![(ai_proto::opcode::INFER_CANCEL, Reply::Description)]);
         let mut client = AiClient::new(transport);
         assert_eq!(client.cancel(1).unwrap_err(), AiClientError::Protocol);
     }
@@ -558,9 +572,18 @@ mod tests {
     #[test]
     fn generate_cancels_on_a_late_failure_and_reports_the_poll_limit() {
         let transport = ScriptedTransport::new(vec![
-            (ai_proto::opcode::INFER_SUBMIT, Reply::Accepted { request_id: 1 }),
-            (ai_proto::opcode::INFER_STREAM_POLL, Reply::Failed(AiError::Internal)),
-            (ai_proto::opcode::INFER_CANCEL, Reply::Failed(AiError::UnknownRequest)),
+            (
+                ai_proto::opcode::INFER_SUBMIT,
+                Reply::Accepted { request_id: 1 },
+            ),
+            (
+                ai_proto::opcode::INFER_STREAM_POLL,
+                Reply::Failed(AiError::Internal),
+            ),
+            (
+                ai_proto::opcode::INFER_CANCEL,
+                Reply::Failed(AiError::UnknownRequest),
+            ),
         ]);
         let mut client = AiClient::new(transport);
         assert_eq!(
@@ -569,14 +592,9 @@ mod tests {
         );
 
         let transport = ScriptedTransport::new(vec![
-            (ai_proto::opcode::INFER_SUBMIT, Reply::Accepted { request_id: 1 }),
             (
-                ai_proto::opcode::INFER_STREAM_POLL,
-                Reply::Chunk {
-                    ids: vec![],
-                    text: "",
-                    done: false,
-                },
+                ai_proto::opcode::INFER_SUBMIT,
+                Reply::Accepted { request_id: 1 },
             ),
             (
                 ai_proto::opcode::INFER_STREAM_POLL,
@@ -586,7 +604,18 @@ mod tests {
                     done: false,
                 },
             ),
-            (ai_proto::opcode::INFER_CANCEL, Reply::Failed(AiError::UnknownRequest)),
+            (
+                ai_proto::opcode::INFER_STREAM_POLL,
+                Reply::Chunk {
+                    ids: vec![],
+                    text: "",
+                    done: false,
+                },
+            ),
+            (
+                ai_proto::opcode::INFER_CANCEL,
+                Reply::Failed(AiError::UnknownRequest),
+            ),
         ]);
         let mut client = AiClient::new(transport);
         assert_eq!(
@@ -609,13 +638,20 @@ mod tests {
             client.poll(1, 0).unwrap_err(),
             AiClientError::Service(AiError::BadRequest(_))
         ));
-        assert_eq!(calls.borrow().len(), 0, "no transport traffic for invalid calls");
+        assert_eq!(
+            calls.borrow().len(),
+            0,
+            "no transport traffic for invalid calls"
+        );
     }
 
     #[test]
     fn token_stream_yields_ids_then_text_and_can_be_cancelled() {
         let transport = ScriptedTransport::new(vec![
-            (ai_proto::opcode::INFER_SUBMIT, Reply::Accepted { request_id: 5 }),
+            (
+                ai_proto::opcode::INFER_SUBMIT,
+                Reply::Accepted { request_id: 5 },
+            ),
             (
                 ai_proto::opcode::INFER_STREAM_POLL,
                 Reply::Chunk {
@@ -624,7 +660,10 @@ mod tests {
                     done: false,
                 },
             ),
-            (ai_proto::opcode::INFER_CANCEL, Reply::Failed(AiError::UnknownRequest)),
+            (
+                ai_proto::opcode::INFER_CANCEL,
+                Reply::Failed(AiError::UnknownRequest),
+            ),
         ]);
         let mut client = AiClient::new(transport);
         let mut stream = block_on(client.prompt(&params("hello"))).expect("prompt");

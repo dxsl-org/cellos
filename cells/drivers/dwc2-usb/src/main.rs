@@ -38,8 +38,12 @@ declare_syscalls![
 const DWC2_BASE: usize = 0x3F98_0000;
 const DWC2_LEN: usize = 0x20000;
 
-#[no_mangle]
-pub fn main() {
+// `cell_main!` exports the linker-visible `main` symbol from an external macro
+// expansion, which is how a cell keeps `#![forbid(unsafe_code)]`: rustc treats a
+// hand-written `#[no_mangle]` as an unsafe attribute (see libs/ostd/src/entry.rs).
+ostd::cell_main!(cell_main);
+
+fn cell_main() {
     println("[dwc2] Synopsys DWC2 USB Host & SMSC LAN9514 Driver starting...");
 
     let dwc2 = match Dwc2Controller::open(DWC2_BASE, DWC2_LEN) {

@@ -28,8 +28,8 @@ extern crate ostd;
 
 use ai_engine::{Engine, EngineError, SamplingParams};
 use ai_proto::{
-    self, backend, limit, AiError, AiRequest, AiResponse, DeviceTarget, FinishReason, MAX_EMBED_DIM,
-    MAX_SESSIONS, MAX_TOKENS_PER_POLL,
+    self, backend, limit, AiError, AiRequest, AiResponse, DeviceTarget, FinishReason,
+    MAX_EMBED_DIM, MAX_SESSIONS, MAX_TOKENS_PER_POLL,
 };
 use ostd::io::{print, print_usize, println};
 use ostd::syscall::SyscallResult;
@@ -111,7 +111,7 @@ impl AiService {
             Ok(bytes) => bytes,
             Err(_) => {
                 print("[ai] no model at ");
-        print_usize(MODEL_PATH.len());
+                print_usize(MODEL_PATH.len());
                 println(" — inference will be refused");
                 return service;
             }
@@ -123,11 +123,11 @@ impl AiService {
             Ok(engine) => {
                 let describe = engine.describe();
                 print("[ai] model ready: ");
-        print_usize(describe.vocab_size as usize);
+                print_usize(describe.vocab_size as usize);
                 print(" vocab, context ");
-        print_usize(describe.context_tokens as usize);
+                print_usize(describe.context_tokens as usize);
                 print(", resident bytes ");
-        print_usize(describe.resident_bytes as usize);
+                print_usize(describe.resident_bytes as usize);
                 println("");
                 service.engine = Some(engine);
             }
@@ -173,12 +173,7 @@ impl AiService {
     }
 
     /// Answer one request. `None` when the request must be ignored (nothing can be replied to it).
-    fn handle<'r>(
-        &mut self,
-        sender: usize,
-        buf: &[u8],
-        reply: &'r mut [u8],
-    ) -> Option<&'r [u8]> {
+    fn handle<'r>(&mut self, sender: usize, buf: &[u8], reply: &'r mut [u8]) -> Option<&'r [u8]> {
         let request = match ai_proto::decode::<AiRequest<'_>>(buf) {
             Ok(request) => request,
             Err(_) => {
@@ -194,9 +189,11 @@ impl AiService {
 
         match request {
             AiRequest::Describe => match self.engine.as_ref() {
-                Some(engine) => ai_proto::encode(&AiResponse::Description(engine.describe()), reply)
-                    .ok()
-                    .map(|encoded| &*encoded),
+                Some(engine) => {
+                    ai_proto::encode(&AiResponse::Description(engine.describe()), reply)
+                        .ok()
+                        .map(|encoded| &*encoded)
+                }
                 None => Some(encode_failure(reply, 0, self.unavailable)),
             },
             AiRequest::InferSubmit(submit) => {
@@ -398,13 +395,7 @@ fn log_refusal(stage: &str, error: AiError) {
 
 /// Encode a typed refusal.
 fn encode_failure(reply: &mut [u8], request_id: u32, error: AiError) -> &[u8] {
-    ai_proto::encode(
-        &AiResponse::Failed {
-            request_id,
-            error,
-        },
-        reply,
-    )
-    .map(|encoded| &*encoded)
-    .unwrap_or(&[])
+    ai_proto::encode(&AiResponse::Failed { request_id, error }, reply)
+        .map(|encoded| &*encoded)
+        .unwrap_or(&[])
 }

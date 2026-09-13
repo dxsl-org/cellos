@@ -219,10 +219,9 @@ impl Tokenizer {
             let Some((left, right)) = merge.split_once(' ') else {
                 continue;
             };
-            let (Some(first), Some(second)) = (
-                lookup(&order, &owned, left),
-                lookup(&order, &owned, right),
-            ) else {
+            let (Some(first), Some(second)) =
+                (lookup(&order, &owned, left), lookup(&order, &owned, right))
+            else {
                 // A symbol the vocabulary does not define can never be produced.
                 continue;
             };
@@ -286,8 +285,8 @@ impl Tokenizer {
         let strings = self.tokens.capacity() * size_of::<String>()
             + self.tokens.iter().map(String::capacity).sum::<usize>();
         let index = self.order.capacity() * size_of::<u32>();
-        let merges = self.merges.len()
-            * (size_of::<((u32, u32), (u32, Option<u32>))>() + MAP_ENTRY_SLACK);
+        let merges =
+            self.merges.len() * (size_of::<((u32, u32), (u32, Option<u32>))>() + MAP_ENTRY_SLACK);
         strings + index + merges
     }
 
@@ -447,11 +446,7 @@ impl Tokenizer {
 /// in the vocabulary therefore resolves to its lowest id.
 fn lookup(order: &[u32], tokens: &[String], token: &str) -> Option<u32> {
     let position = order.partition_point(|&index| {
-        tokens
-            .get(index as usize)
-            .map(String::as_str)
-            .unwrap_or("")
-            < token
+        tokens.get(index as usize).map(String::as_str).unwrap_or("") < token
     });
     let index = *order.get(position)?;
     if tokens.get(index as usize).map(String::as_str)? == token {
@@ -686,7 +681,7 @@ mod tests {
             bytes.extend_from_slice(&0u64.to_le_bytes()); // tensor count
             bytes.extend_from_slice(&self.entries.to_le_bytes());
             bytes.extend_from_slice(&self.metadata);
-            while bytes.len() % 32 != 0 {
+            while !bytes.len().is_multiple_of(32) {
                 bytes.push(0);
             }
             bytes
@@ -932,15 +927,24 @@ mod tests {
             assert_eq!(tokenizer.encode("hello"), [vocab.id_of(&mapped(b"hello"))]);
             assert_eq!(
                 tokenizer.encode("hello world"),
-                [vocab.id_of(&mapped(b"hello")), vocab.id_of(&mapped(b" world"))]
+                [
+                    vocab.id_of(&mapped(b"hello")),
+                    vocab.id_of(&mapped(b" world"))
+                ]
             );
             // The merge across the bytes of a multi-byte character applies too.
-            assert_eq!(tokenizer.encode("é"), [vocab.id_of(&mapped("é".as_bytes()))]);
+            assert_eq!(
+                tokenizer.encode("é"),
+                [vocab.id_of(&mapped("é".as_bytes()))]
+            );
             assert_eq!(tokenizer.token_str(vocab.id_of("hello")), Some("hello"));
             // Unmerged text falls back to byte tokens.
             assert_eq!(
                 tokenizer.encode("hi"),
-                [mapped(b"h"), mapped(b"i")].iter().map(|t| vocab.id_of(t)).collect::<Vec<_>>()
+                [mapped(b"h"), mapped(b"i")]
+                    .iter()
+                    .map(|t| vocab.id_of(t))
+                    .collect::<Vec<_>>()
             );
         });
     }
@@ -1093,7 +1097,10 @@ mod tests {
                 [1, body[0], body[1], 2]
             );
             assert_eq!(tokenizer.encode_with_specials("hi", false, false), body);
-            assert_eq!(tokenizer.encode_with_specials("hi", true, false), [1, body[0], body[1]]);
+            assert_eq!(
+                tokenizer.encode_with_specials("hi", true, false),
+                [1, body[0], body[1]]
+            );
         });
 
         // A model without BOS/EOS metadata inserts nothing even when asked.
@@ -1132,7 +1139,10 @@ mod tests {
             // "é" is the two byte tokens 0xC3 and 0xA9, in ids 0xC3/0xA9 here.
             assert_eq!(tokenizer.decode(&[0xC3]), "\u{FFFD}");
             assert_eq!(tokenizer.decode(&[0xC3, 0xA9]), "é");
-            assert_eq!(tokenizer.decode_bytes(&[0xC3, 0xA9]), "é".as_bytes().to_vec());
+            assert_eq!(
+                tokenizer.decode_bytes(&[0xC3, 0xA9]),
+                "é".as_bytes().to_vec()
+            );
         });
     }
 

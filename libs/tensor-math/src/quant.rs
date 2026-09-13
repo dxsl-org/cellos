@@ -21,7 +21,10 @@ pub const Q8_0_BLOCK_BYTES: usize = 34;
 ///
 /// `block` must hold at least [`Q8_0_BLOCK_BYTES`] bytes; trailing bytes are ignored so the
 /// function can be applied straight to a sub-slice of a tensor buffer.
-pub fn q8_0_block_to_f32(block: &[u8], out: &mut [f32; Q8_0_BLOCK_WEIGHTS]) -> Result<(), MathError> {
+pub fn q8_0_block_to_f32(
+    block: &[u8],
+    out: &mut [f32; Q8_0_BLOCK_WEIGHTS],
+) -> Result<(), MathError> {
     let raw = block
         .get(..Q8_0_BLOCK_BYTES)
         .ok_or(MathError::ShapeMismatch)?;

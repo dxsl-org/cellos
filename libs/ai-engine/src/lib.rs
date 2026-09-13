@@ -42,7 +42,7 @@ use core::ops::Range;
 
 use ai_proto::{backend, limit, AiError, Describe, FinishReason, Quant, MAX_SESSIONS};
 use ai_tokenizer::Tokenizer;
-use gguf_rs::{GgmlDType, GgufFile, GgufError};
+use gguf_rs::{GgmlDType, GgufError, GgufFile};
 use tensor_math::{quant, MathError, Rng};
 
 /// Largest context window this engine will allocate for, whatever a file claims.
@@ -144,10 +144,7 @@ impl ModelConfig {
 /// A weight matrix, kept in whichever layout the file stored it in.
 enum Matrix {
     /// Row-major `rows × cols` f32.
-    F32 {
-        rows: usize,
-        data: Vec<f32>,
-    },
+    F32 { rows: usize, data: Vec<f32> },
     /// `rows` rows of Q8_0 blocks (`cols` a multiple of 32).
     Q8_0 {
         rows: usize,
@@ -164,12 +161,7 @@ impl Matrix {
     }
 
     /// Write `W · x` into `out[..rows]`, using `scratch` (length ≥ rows) as the kernel output.
-    fn project(
-        &self,
-        out: &mut [f32],
-        x: &[f32],
-        scratch: &mut [f32],
-    ) -> Result<(), MathError> {
+    fn project(&self, out: &mut [f32], x: &[f32], scratch: &mut [f32]) -> Result<(), MathError> {
         let rows = self.rows();
         if out.len() < rows || scratch.len() < rows {
             return Err(MathError::ShapeMismatch);
@@ -316,10 +308,7 @@ impl Session {
     }
 
     fn bytes(&self) -> usize {
-        self.tokens.len() * 4
-            + self.pending.len() * 4
-            + self.pending_bytes.len()
-            + self.kv.bytes()
+        self.tokens.len() * 4 + self.pending.len() * 4 + self.pending_bytes.len() + self.kv.bytes()
     }
 }
 
@@ -493,9 +482,9 @@ impl Engine {
             return Err(AiError::BadRequest(limit::Violation::MaxTokensOutOfRange));
         }
 
-        let mut tokens = self
-            .tokenizer
-            .encode_with_specials(prompt, self.tokenizer.add_bos(), false);
+        let mut tokens =
+            self.tokenizer
+                .encode_with_specials(prompt, self.tokenizer.add_bos(), false);
         if tokens.is_empty() {
             return Err(AiError::BadRequest(limit::Violation::PromptTooLong));
         }
@@ -742,15 +731,21 @@ fn forward(
             cfg.rms_eps,
         )?;
 
-        layer
-            .wq
-            .project(&mut scratch.q[..cfg.n_embd], &scratch.xb[..cfg.n_embd], &mut scratch.proj)?;
-        layer
-            .wk
-            .project(&mut scratch.k[..cfg.kv_dim()], &scratch.xb[..cfg.n_embd], &mut scratch.proj)?;
-        layer
-            .wv
-            .project(&mut scratch.v[..cfg.kv_dim()], &scratch.xb[..cfg.n_embd], &mut scratch.proj)?;
+        layer.wq.project(
+            &mut scratch.q[..cfg.n_embd],
+            &scratch.xb[..cfg.n_embd],
+            &mut scratch.proj,
+        )?;
+        layer.wk.project(
+            &mut scratch.k[..cfg.kv_dim()],
+            &scratch.xb[..cfg.n_embd],
+            &mut scratch.proj,
+        )?;
+        layer.wv.project(
+            &mut scratch.v[..cfg.kv_dim()],
+            &scratch.xb[..cfg.n_embd],
+            &mut scratch.proj,
+        )?;
 
         rope(&mut scratch.q[..cfg.n_embd], cfg, position)?;
         rope(&mut scratch.k[..cfg.kv_dim()], cfg, position)?;
@@ -760,9 +755,11 @@ fn forward(
         kv.v[slot].copy_from_slice(&scratch.v[..cfg.kv_dim()]);
 
         attention(cfg, kv, layer_index, scratch, position)?;
-        layer
-            .wo
-            .project(&mut scratch.down[..cfg.n_embd], &scratch.attn[..cfg.n_embd], &mut scratch.proj)?;
+        layer.wo.project(
+            &mut scratch.down[..cfg.n_embd],
+            &scratch.attn[..cfg.n_embd],
+            &mut scratch.proj,
+        )?;
         tensor_math::add_in_place(&mut scratch.x[..cfg.n_embd], &scratch.down[..cfg.n_embd])?;
 
         tensor_math::rms_norm(
@@ -771,16 +768,22 @@ fn forward(
             &layer.ffn_norm,
             cfg.rms_eps,
         )?;
-        layer
-            .w_gate
-            .project(&mut scratch.gate[..cfg.n_ff], &scratch.xb[..cfg.n_embd], &mut scratch.proj)?;
-        layer
-            .w_up
-            .project(&mut scratch.up[..cfg.n_ff], &scratch.xb[..cfg.n_embd], &mut scratch.proj)?;
+        layer.w_gate.project(
+            &mut scratch.gate[..cfg.n_ff],
+            &scratch.xb[..cfg.n_embd],
+            &mut scratch.proj,
+        )?;
+        layer.w_up.project(
+            &mut scratch.up[..cfg.n_ff],
+            &scratch.xb[..cfg.n_embd],
+            &mut scratch.proj,
+        )?;
         tensor_math::swiglu_in_place(&mut scratch.gate[..cfg.n_ff], &scratch.up[..cfg.n_ff])?;
-        layer
-            .w_down
-            .project(&mut scratch.down[..cfg.n_embd], &scratch.gate[..cfg.n_ff], &mut scratch.proj)?;
+        layer.w_down.project(
+            &mut scratch.down[..cfg.n_embd],
+            &scratch.gate[..cfg.n_ff],
+            &mut scratch.proj,
+        )?;
         tensor_math::add_in_place(&mut scratch.x[..cfg.n_embd], &scratch.down[..cfg.n_embd])?;
     }
 
@@ -804,8 +807,7 @@ fn attention(
         let q = &scratch.q[head * head_dim..(head + 1) * head_dim];
         for key_position in 0..=position {
             let slot = kv.slot(cfg, layer, key_position);
-            let k = &kv.k
-                [slot.start + kv_head * head_dim..slot.start + (kv_head + 1) * head_dim];
+            let k = &kv.k[slot.start + kv_head * head_dim..slot.start + (kv_head + 1) * head_dim];
             scratch.scores[key_position] = tensor_math::dot(q, k)?;
         }
         tensor_math::softmax_in_place(&mut scratch.scores[..=position]);
@@ -814,8 +816,7 @@ fn attention(
         out.iter_mut().for_each(|value| *value = 0.0);
         for key_position in 0..=position {
             let slot = kv.slot(cfg, layer, key_position);
-            let v = &kv.v
-                [slot.start + kv_head * head_dim..slot.start + (kv_head + 1) * head_dim];
+            let v = &kv.v[slot.start + kv_head * head_dim..slot.start + (kv_head + 1) * head_dim];
             tensor_math::scaled_add_in_place(out, v, scratch.scores[key_position])?;
         }
     }
@@ -847,12 +848,8 @@ fn sample(
             .map_err(|_| AiError::Internal)?,
         None => {
             for token in 0..cfg.vocab_size {
-                row_to_f32(
-                    &weights.token_embd,
-                    token,
-                    &mut scratch.row[..cfg.n_embd],
-                )
-                .map_err(|_| AiError::Internal)?;
+                row_to_f32(&weights.token_embd, token, &mut scratch.row[..cfg.n_embd])
+                    .map_err(|_| AiError::Internal)?;
                 scratch.logits[token] =
                     tensor_math::dot(&scratch.row[..cfg.n_embd], &scratch.xb[..cfg.n_embd])
                         .map_err(|_| AiError::Internal)?;
@@ -980,7 +977,9 @@ fn read_config(file: &GgufFile<'_>, vocab_size: usize) -> Result<ModelConfig, En
         return Err(EngineError::InvalidMetadata("llama.embedding_length"));
     }
     if n_head_kv == 0 || n_head % n_head_kv != 0 {
-        return Err(EngineError::InvalidMetadata("llama.attention.head_count_kv"));
+        return Err(EngineError::InvalidMetadata(
+            "llama.attention.head_count_kv",
+        ));
     }
     if n_layer == 0 || n_ff == 0 {
         return Err(EngineError::InvalidMetadata("llama.block_count"));
@@ -988,7 +987,7 @@ fn read_config(file: &GgufFile<'_>, vocab_size: usize) -> Result<ModelConfig, En
     if n_ctx == 0 || n_ctx > MAX_CONTEXT_TOKENS {
         return Err(EngineError::InvalidMetadata("llama.context_length"));
     }
-    if (n_embd / n_head) % 2 != 0 {
+    if !(n_embd / n_head).is_multiple_of(2) {
         return Err(EngineError::InvalidMetadata("llama.attention.head_count"));
     }
 
@@ -1006,7 +1005,9 @@ fn read_config(file: &GgufFile<'_>, vocab_size: usize) -> Result<ModelConfig, En
         rms_eps: file
             .metadata_f32("llama.attention.layer_norm_rms_epsilon")
             .unwrap_or(1e-5),
-        rope_freq_base: file.metadata_f32("llama.rope.freq_base").unwrap_or(10_000.0),
+        rope_freq_base: file
+            .metadata_f32("llama.rope.freq_base")
+            .unwrap_or(10_000.0),
         vocab_size,
     })
 }
@@ -1024,7 +1025,12 @@ fn read_weights(file: &GgufFile<'_>, cfg: &ModelConfig) -> Result<Weights, Engin
     let output_norm = read_vector(file, "output_norm.weight", cfg.n_embd)?;
     // Tied-embedding checkpoints omit `output.weight`.
     let output = if file.tensor("output.weight").is_some() {
-        Some(read_matrix(file, "output.weight", cfg.vocab_size, cfg.n_embd)?)
+        Some(read_matrix(
+            file,
+            "output.weight",
+            cfg.vocab_size,
+            cfg.n_embd,
+        )?)
     } else {
         None
     };
@@ -1092,10 +1098,7 @@ fn read_matrix(
             let mut values = vec![0.0f32; rows * cols];
             file.dequant_row(info.dtype, data, rows * cols, &mut values)
                 .map_err(EngineError::Gguf)?;
-            Ok(Matrix::F32 {
-                rows,
-                data: values,
-            })
+            Ok(Matrix::F32 { rows, data: values })
         }
         GgmlDType::Unsupported(dtype) => Err(EngineError::UnsupportedDType(dtype)),
     }
@@ -1222,8 +1225,14 @@ mod tests {
         let golden = golden();
         let engine = Engine::load(MODEL, LIMIT).expect("fixture loads");
         assert_eq!(engine.tokenizer().encode(&golden.prompt), golden.prompt_ids);
-        assert_eq!(engine.tokenizer().encode(&golden.embed_text), golden.embed_ids);
-        assert!(!engine.tokenizer().add_bos(), "fixture declares add_bos = false");
+        assert_eq!(
+            engine.tokenizer().encode(&golden.embed_text),
+            golden.embed_ids
+        );
+        assert!(
+            !engine.tokenizer().add_bos(),
+            "fixture declares add_bos = false"
+        );
         assert_eq!(engine.tokenizer().vocab_size(), 270);
     }
 
@@ -1234,7 +1243,10 @@ mod tests {
         let golden = golden();
         let mut engine = Engine::load(MODEL, LIMIT).expect("fixture loads");
         let request_id = engine
-            .submit(&golden.prompt, greedy_params(golden.greedy_ids.len() as u16))
+            .submit(
+                &golden.prompt,
+                greedy_params(golden.greedy_ids.len() as u16),
+            )
             .expect("submit");
 
         let mut produced: Vec<u32> = Vec::new();
@@ -1253,7 +1265,8 @@ mod tests {
         assert_eq!(produced.len(), golden.greedy_ids.len());
         // The engine reports finish reasons, and a length-capped run must say so.
         assert_eq!(
-            engine.describe().live_sessions, 1u8,
+            engine.describe().live_sessions,
+            1u8,
             "session stays live until released"
         );
         engine.release(request_id).expect("release");
@@ -1289,7 +1302,11 @@ mod tests {
         let mut engine = Engine::load(MODEL, LIMIT).expect("fixture loads");
         let mut ids = Vec::new();
         for _ in 0..MAX_SESSIONS {
-            ids.push(engine.submit(&golden.prompt, greedy_params(4)).expect("submit"));
+            ids.push(
+                engine
+                    .submit(&golden.prompt, greedy_params(4))
+                    .expect("submit"),
+            );
         }
         assert_eq!(
             engine.submit(&golden.prompt, greedy_params(4)).unwrap_err(),
@@ -1302,9 +1319,14 @@ mod tests {
         assert_eq!(engine.cancel(9_999).unwrap_err(), AiError::UnknownRequest);
 
         engine.cancel(ids[0]).expect("cancel");
-        assert_eq!(usize::from(engine.describe().live_sessions), usize::from(MAX_SESSIONS) - 1);
+        assert_eq!(
+            usize::from(engine.describe().live_sessions),
+            usize::from(MAX_SESSIONS) - 1
+        );
         // The freed slot is reusable.
-        let replacement = engine.submit(&golden.prompt, greedy_params(4)).expect("submit");
+        let replacement = engine
+            .submit(&golden.prompt, greedy_params(4))
+            .expect("submit");
         assert_ne!(replacement, ids[0], "ids are never reused");
         assert!(engine.cancel(replacement).is_ok());
     }
@@ -1378,7 +1400,10 @@ mod tests {
         };
 
         let mut engine = Engine::load(&bytes, 1 << 30).expect("checkpoint loads");
-        assert!(engine.config().vocab_size > 40_000, "expected a real tokenizer");
+        assert!(
+            engine.config().vocab_size > 40_000,
+            "expected a real tokenizer"
+        );
         assert!(engine.config().n_layer >= 8, "expected a real transformer");
 
         let prompt = "The capital of France is";
@@ -1456,4 +1481,3 @@ mod tests {
         assert!(text.ends_with('a'));
     }
 }
-

@@ -122,7 +122,7 @@ pub fn matvec_q8_0(
 /// Row bytes for a Q8_0 tensor with `cols` columns, or `None` when `cols` is not a multiple of
 /// [`quant::Q8_0_BLOCK_WEIGHTS`].
 pub fn q8_0_row_bytes(cols: usize) -> Option<usize> {
-    if cols % quant::Q8_0_BLOCK_WEIGHTS != 0 {
+    if !cols.is_multiple_of(quant::Q8_0_BLOCK_WEIGHTS) {
         return None;
     }
     (cols / quant::Q8_0_BLOCK_WEIGHTS).checked_mul(quant::Q8_0_BLOCK_BYTES)
@@ -133,12 +133,7 @@ pub fn q8_0_row_bytes(cols: usize) -> Option<usize> {
 /// Computed with one reciprocal square root, so the stored value is
 /// `(x[i] * (1 / sqrt(mean + eps))) * weight[i]`; `eps` is the caller's numerical floor (use
 /// `0.0` for an exact normalisation).
-pub fn rms_norm(
-    out: &mut [f32],
-    x: &[f32],
-    weight: &[f32],
-    eps: f32,
-) -> Result<(), MathError> {
+pub fn rms_norm(out: &mut [f32], x: &[f32], weight: &[f32], eps: f32) -> Result<(), MathError> {
     if x.is_empty() {
         return Err(MathError::Empty);
     }
@@ -168,7 +163,7 @@ pub fn rope_normal(head: &mut [f32], pos: usize, freq_base: f32) -> Result<(), M
         return Err(MathError::Empty);
     }
     let dim = head.len();
-    if dim % 2 != 0 {
+    if !dim.is_multiple_of(2) {
         return Err(MathError::NotDivisible);
     }
     if pos == 0 {
@@ -283,9 +278,14 @@ pub fn add_in_place(out: &mut [f32], src: &[f32]) -> Result<(), MathError> {
 pub fn argmax(x: &[f32]) -> Option<usize> {
     let mut best: Option<(usize, f32)> = None;
     for (index, &value) in x.iter().enumerate() {
-        match best {
-            Some((_, best_value)) if !(value > best_value) => {}
-            _ => best = Some((index, value)),
+        // "Keep the incumbent unless the candidate is strictly greater" is what NaN requires:
+        // NaN never compares greater, so an all-NaN slice keeps index 0.
+        let replace = match best {
+            Some((_, best_value)) => value > best_value,
+            None => true,
+        };
+        if replace {
+            best = Some((index, value));
         }
     }
     best.map(|(index, _)| index)
@@ -302,7 +302,11 @@ impl Rng {
     /// same sequence.
     pub fn new(seed: u64) -> Self {
         // xorshift64* has a fixed point at zero; substitute the golden ratio instead.
-        Rng(if seed == 0 { 0x9E37_79B9_7F4A_7C15 } else { seed })
+        Rng(if seed == 0 {
+            0x9E37_79B9_7F4A_7C15
+        } else {
+            seed
+        })
     }
 
     /// Next 32 bits of the output stream (the high half of the xorshift64* output).
@@ -341,7 +345,8 @@ pub fn sample_top_k(
     if logits.is_empty() {
         return None;
     }
-    if !(temperature > 0.0) {
+    // A non-positive or NaN temperature means greedy decoding (see the crate docs).
+    if temperature.is_nan() || temperature <= 0.0 {
         return argmax(logits);
     }
     let inverse_temperature = 1.0 / temperature;
@@ -349,7 +354,11 @@ pub fn sample_top_k(
         *value *= inverse_temperature;
     }
 
-    let keep = if k == 0 { logits.len() } else { k.min(logits.len()) };
+    let keep = if k == 0 {
+        logits.len()
+    } else {
+        k.min(logits.len())
+    };
     if keep < logits.len() {
         let threshold = kth_largest(logits, keep);
         let mut above = 0usize;
@@ -483,7 +492,10 @@ mod tests {
 
     /// Packs 32 f32 weights into one Q8_0 block with an f16-exact power-of-two scale, and
     /// returns the block's bytes alongside the weights it dequantizes to.
-    fn quantize_block(values: &[f32], scale_bits: u16) -> ([u8; quant::Q8_0_BLOCK_BYTES], Vec<f32>) {
+    fn quantize_block(
+        values: &[f32],
+        scale_bits: u16,
+    ) -> ([u8; quant::Q8_0_BLOCK_BYTES], Vec<f32>) {
         let scale = quant::f16_to_f32(scale_bits);
         let mut block = [0u8; quant::Q8_0_BLOCK_BYTES];
         block[..2].copy_from_slice(&scale_bits.to_le_bytes());
@@ -523,7 +535,11 @@ mod tests {
         matvec(&mut out, &w, &x, rows, cols).expect("shapes agree");
         for r in 0..rows {
             let naive: f32 = (0..cols).map(|c| w[r * cols + c] * x[c]).sum();
-            assert!((out[r] - naive).abs() < 1e-5, "row {r}: {} vs {naive}", out[r]);
+            assert!(
+                (out[r] - naive).abs() < 1e-5,
+                "row {r}: {} vs {naive}",
+                out[r]
+            );
         }
     }
 
@@ -553,7 +569,10 @@ mod tests {
         for r in 0..2 {
             assert!((quantized_out[r] - dense_out[r]).abs() < 1e-4);
         }
-        assert_eq!(quantized_out, dense_out, "the lane order is shared, so this is exact");
+        assert_eq!(
+            quantized_out, dense_out,
+            "the lane order is shared, so this is exact"
+        );
     }
 
     #[test]
@@ -578,8 +597,7 @@ mod tests {
                 let values = random_values(&mut rng, quant::Q8_0_BLOCK_WEIGHTS, amplitude);
                 let (block, dequantized) = quantize_block(&values, bits);
                 let byte_offset = r * row_bytes + b * quant::Q8_0_BLOCK_BYTES;
-                weights[byte_offset..byte_offset + quant::Q8_0_BLOCK_BYTES]
-                    .copy_from_slice(&block);
+                weights[byte_offset..byte_offset + quant::Q8_0_BLOCK_BYTES].copy_from_slice(&block);
                 let float_offset = r * cols + b * quant::Q8_0_BLOCK_WEIGHTS;
                 dense[float_offset..float_offset + quant::Q8_0_BLOCK_WEIGHTS]
                     .copy_from_slice(&dequantized);
@@ -600,7 +618,10 @@ mod tests {
                 dense_out[r]
             );
         }
-        assert!(magnitude > 1e-3, "the fixture must produce non-trivial activations");
+        assert!(
+            magnitude > 1e-3,
+            "the fixture must produce non-trivial activations"
+        );
     }
 
     #[test]
@@ -623,9 +644,18 @@ mod tests {
         let x = [0.0f32; 4];
         // matvec
         assert_eq!(matvec(&mut out[..2], &w, &x, 2, 4), Ok(()));
-        assert_eq!(matvec(&mut out[..2], &w, &x, 3, 4), Err(MathError::ShapeMismatch));
-        assert_eq!(matvec(&mut out[..2], &w, &[0.0; 3], 2, 4), Err(MathError::ShapeMismatch));
-        assert_eq!(matvec(&mut out[..1], &w, &x, 2, 4), Err(MathError::ShapeMismatch));
+        assert_eq!(
+            matvec(&mut out[..2], &w, &x, 3, 4),
+            Err(MathError::ShapeMismatch)
+        );
+        assert_eq!(
+            matvec(&mut out[..2], &w, &[0.0; 3], 2, 4),
+            Err(MathError::ShapeMismatch)
+        );
+        assert_eq!(
+            matvec(&mut out[..1], &w, &x, 2, 4),
+            Err(MathError::ShapeMismatch)
+        );
         assert_eq!(matvec(&mut out, &[], &[], 0, 4), Err(MathError::Empty));
         assert_eq!(matvec(&mut out, &[], &[], 2, 0), Err(MathError::Empty));
         // matvec_q8_0
@@ -654,18 +684,33 @@ mod tests {
         assert_eq!(matvec_q8_0(&mut out, &[], &[], 2, 0), Err(MathError::Empty));
         // rms_norm
         assert_eq!(rms_norm(&mut out, &x, &x, 0.0), Ok(()));
-        assert_eq!(rms_norm(&mut out[..3], &x, &x, 0.0), Err(MathError::ShapeMismatch));
-        assert_eq!(rms_norm(&mut out, &x, &x[..3], 0.0), Err(MathError::ShapeMismatch));
-        assert_eq!(rms_norm(&mut out[..0], &[], &[], 0.0), Err(MathError::Empty));
+        assert_eq!(
+            rms_norm(&mut out[..3], &x, &x, 0.0),
+            Err(MathError::ShapeMismatch)
+        );
+        assert_eq!(
+            rms_norm(&mut out, &x, &x[..3], 0.0),
+            Err(MathError::ShapeMismatch)
+        );
+        assert_eq!(
+            rms_norm(&mut out[..0], &[], &[], 0.0),
+            Err(MathError::Empty)
+        );
         // rope_normal
         let mut head = [0.0f32; 4];
         assert_eq!(rope_normal(&mut head, 3, 10_000.0), Ok(()));
-        assert_eq!(rope_normal(&mut head[..3], 3, 10_000.0), Err(MathError::NotDivisible));
+        assert_eq!(
+            rope_normal(&mut head[..3], 3, 10_000.0),
+            Err(MathError::NotDivisible)
+        );
         assert_eq!(rope_normal(&mut [], 3, 10_000.0), Err(MathError::Empty));
         // swiglu_in_place
         let mut gate = [0.0f32; 4];
         assert_eq!(swiglu_in_place(&mut gate, &x), Ok(()));
-        assert_eq!(swiglu_in_place(&mut gate[..3], &x), Err(MathError::ShapeMismatch));
+        assert_eq!(
+            swiglu_in_place(&mut gate[..3], &x),
+            Err(MathError::ShapeMismatch)
+        );
         assert_eq!(swiglu_in_place(&mut [], &[]), Ok(()));
         // dot
         assert_eq!(dot(&x, &x), Ok(0.0));
@@ -674,9 +719,15 @@ mod tests {
         assert_eq!(dot(&x, &[]), Err(MathError::Empty));
         // scaled_add_in_place / add_in_place
         assert_eq!(scaled_add_in_place(&mut gate, &x, 0.5), Ok(()));
-        assert_eq!(scaled_add_in_place(&mut gate, &x[..2], 0.5), Err(MathError::ShapeMismatch));
+        assert_eq!(
+            scaled_add_in_place(&mut gate, &x[..2], 0.5),
+            Err(MathError::ShapeMismatch)
+        );
         assert_eq!(add_in_place(&mut gate, &x), Ok(()));
-        assert_eq!(add_in_place(&mut gate, &x[..2]), Err(MathError::ShapeMismatch));
+        assert_eq!(
+            add_in_place(&mut gate, &x[..2]),
+            Err(MathError::ShapeMismatch)
+        );
         assert_eq!(scaled_add_in_place(&mut [], &[], 0.5), Ok(()));
         assert_eq!(add_in_place(&mut [], &[]), Ok(()));
     }
@@ -858,7 +909,10 @@ mod tests {
             }
             previous = value;
         }
-        assert!(distinct > 900, "the stream is degenerate: {distinct} changes");
+        assert!(
+            distinct > 900,
+            "the stream is degenerate: {distinct} changes"
+        );
     }
 
     #[test]
@@ -867,8 +921,14 @@ mod tests {
         let mut rng = Rng::new(1);
         assert_eq!(sample_top_k(&mut logits.clone(), 0, 0.0, &mut rng), Some(1));
         assert_eq!(sample_top_k(&mut logits.clone(), 2, 0.0, &mut rng), Some(1));
-        assert_eq!(sample_top_k(&mut logits.clone(), 0, -1.0, &mut rng), Some(1));
-        assert_eq!(sample_top_k(&mut logits.clone(), 0, f32::NAN, &mut rng), Some(1));
+        assert_eq!(
+            sample_top_k(&mut logits.clone(), 0, -1.0, &mut rng),
+            Some(1)
+        );
+        assert_eq!(
+            sample_top_k(&mut logits.clone(), 0, f32::NAN, &mut rng),
+            Some(1)
+        );
         assert_eq!(sample_top_k(&mut [], 0, 0.0, &mut rng), None);
     }
 
@@ -907,7 +967,10 @@ mod tests {
         for index in &drawn {
             assert!(top_three.contains(index), "drew {index} outside the top-3");
         }
-        assert!(drawn.iter().any(|i| *i != 1), "k = 3 must not collapse onto one token");
+        assert!(
+            drawn.iter().any(|i| *i != 1),
+            "k = 3 must not collapse onto one token"
+        );
 
         // Once restricted, the buffer holds the sampling distribution.
         let mut working = logits;

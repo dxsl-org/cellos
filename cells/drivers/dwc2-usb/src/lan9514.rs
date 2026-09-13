@@ -222,7 +222,9 @@ impl<'a> Lan9514Device<'a> {
         packet[8..8 + frame.len()].copy_from_slice(frame);
 
         let total = 8 + frame.len();
-        self.engine.bulk_transmit(self.dev_addr, 2, &packet[..total]).is_ok()
+        self.engine
+            .bulk_transmit(self.dev_addr, 2, &packet[..total])
+            .is_ok()
     }
 
     /// Receive a raw Ethernet frame from Bulk IN EP 1.

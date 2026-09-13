@@ -519,10 +519,7 @@ mod tests {
 
         let mut embed_bytes = [0u8; 3 * EMBED_VALUE_BYTES];
         let values = encode_embedding_values(&[0.5, -1.25, 3.0], &mut embed_bytes).expect("fits");
-        let embedding = AiResponse::Embedding {
-            dim: 3,
-            values,
-        };
+        let embedding = AiResponse::Embedding { dim: 3, values };
         let encoded = encode(&embedding, &mut buf).expect("fits");
         let decoded: AiResponse<'_> = decode(encoded).expect("decodes");
         match decoded {

@@ -59,13 +59,13 @@ fn cell_main() {
         Err(error) => fail_with("describe", error),
     };
     print("[ai-test] model=");
-        println(info.model.as_str());
+    println(info.model.as_str());
     print("[ai-test] vocab=");
-        print_usize(info.vocab_size as usize);
+    print_usize(info.vocab_size as usize);
     print(" context=");
-        print_usize(info.context_tokens as usize);
+    print_usize(info.context_tokens as usize);
     print(" sessions=");
-        print_usize(info.max_sessions as usize);
+    print_usize(info.max_sessions as usize);
     println("");
     if info.active_backend != backend::CPU {
         fail("service did not report the CPU backend");
@@ -89,9 +89,9 @@ fn cell_main() {
         fail("greedy token ids differ from the reference");
     }
     print("[ai-test] greedy ids matched: ");
-        print_usize(generation.ids.len());
+    print_usize(generation.ids.len());
     print(" tokens over ");
-        print_usize(generation.polls);
+    print_usize(generation.polls);
     println(" polls");
 
     // 2. The embedding path must match the reference vector.
@@ -113,7 +113,7 @@ fn cell_main() {
         fail("embedding vector differs from the reference");
     }
     print("[ai-test] embedding matched: ");
-        print_usize(values.len());
+    print_usize(values.len());
     println(" dims");
 
     // 3. An abandoned session must not wedge the service.

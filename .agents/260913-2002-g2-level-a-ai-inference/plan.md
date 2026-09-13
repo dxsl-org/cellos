@@ -67,7 +67,7 @@ service/IPC/oracle path. No physical, production, admission, or G3 claim is made
 |---|---|
 | G-A contract | `libs/ai-proto` 6/6, `libs/ai-sdk` 8/8 host tests; Spec 17 §3 registry row |
 | G-B engine | `libs/ai-engine` golden-oracle test (independent Python reference in `scripts/gen-ai-test-model.py`); `gguf-rs` 20/20, `ai-tokenizer` 19/19, `tensor-math` 22/22 |
-| G-C service path | `evidence/ai-oracle-20260913T225328Z.log` — QEMU RV64, one `[ai-test] PASS`, no cell fault or panic; runner `scripts/run-ai-inference-oracle-qemu.sh` |
+| G-C service path | `evidence/ai-oracle-20260913T230711Z.log` — QEMU RV64, one `[ai-test] PASS`, no cell fault or panic; runner `scripts/run-ai-inference-oracle-qemu.sh` |
 | G-D real weights | `evidence/ai-engine-real-weights.txt` — 30-layer Q8_0 checkpoint, 16 tokens at 3.97 tok/s, 229 MiB resident, non-degenerate text |
 
 ## 5. Non-claims

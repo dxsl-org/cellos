@@ -162,7 +162,7 @@ impl GgmlDType {
             GgmlDType::F32 => cols.checked_mul(4),
             GgmlDType::F16 => cols.checked_mul(2),
             GgmlDType::Q8_0 => {
-                if cols % Q8_0_BLOCK_WEIGHTS != 0 {
+                if !cols.is_multiple_of(Q8_0_BLOCK_WEIGHTS) {
                     return None;
                 }
                 (cols / Q8_0_BLOCK_WEIGHTS).checked_mul(Q8_0_BLOCK_BYTES)
@@ -357,8 +357,8 @@ impl<'a> GgufFile<'a> {
             // GGML tensors have 1..=4 dimensions; a file claiming anything else is rejected
             // instead of being silently truncated to the four inline slots.
             let claimed_dims = reader.u32()?;
-            let n_dims =
-                usize::try_from(claimed_dims).map_err(|_| GgufError::BadTensorShape(claimed_dims))?;
+            let n_dims = usize::try_from(claimed_dims)
+                .map_err(|_| GgufError::BadTensorShape(claimed_dims))?;
             if n_dims == 0 || n_dims > GGML_MAX_DIMS {
                 return Err(GgufError::BadTensorShape(claimed_dims));
             }
@@ -558,7 +558,9 @@ impl<'a> GgufFile<'a> {
     pub fn tensor_data(&self, info: &TensorInfo<'a>) -> Result<&'a [u8], GgufError> {
         let expected = match info.dtype {
             GgmlDType::Unsupported(raw) => return Err(GgufError::UnsupportedDType(raw)),
-            dtype => tensor_byte_len(dtype, info.dims.as_slice()).ok_or(GgufError::BadTensorData)?,
+            dtype => {
+                tensor_byte_len(dtype, info.dims.as_slice()).ok_or(GgufError::BadTensorData)?
+            }
         };
         if expected != info.byte_len {
             return Err(GgufError::BadTensorData);
@@ -603,7 +605,7 @@ impl<'a> GgufFile<'a> {
                 Ok(())
             }
             GgmlDType::Q8_0 => {
-                if count % Q8_0_BLOCK_WEIGHTS != 0 {
+                if !count.is_multiple_of(Q8_0_BLOCK_WEIGHTS) {
                     return Err(GgufError::BadTensorData);
                 }
                 let blocks = count / Q8_0_BLOCK_WEIGHTS;
@@ -753,9 +755,7 @@ fn read_metadata_value<'a>(reader: &mut Reader<'a>) -> Result<MetadataValue<'a>,
                         .checked_mul(size as u64)
                         .and_then(|total| usize::try_from(total).ok())
                         .ok_or(GgufError::BadArrayLength)?;
-                    reader
-                        .take(total)
-                        .map_err(|_| GgufError::BadArrayLength)?
+                    reader.take(total).map_err(|_| GgufError::BadArrayLength)?
                 }
                 None if elem_type == value_type::STRING => {
                     let start = reader.pos;
@@ -785,10 +785,7 @@ fn fixed_element_size(elem_type: u32) -> Option<usize> {
         value_type::UINT8 | value_type::INT8 => Some(1),
         value_type::UINT16 | value_type::INT16 => Some(2),
         value_type::UINT32 | value_type::INT32 | value_type::FLOAT32 => Some(4),
-        value_type::BOOL
-        | value_type::UINT64
-        | value_type::INT64
-        | value_type::FLOAT64 => Some(8),
+        value_type::BOOL | value_type::UINT64 | value_type::INT64 | value_type::FLOAT64 => Some(8),
         _ => None,
     }
 }
@@ -1147,7 +1144,10 @@ mod tests {
             file.metadata("test.u8"),
             Some(MetadataValue::U8(0xAB))
         ));
-        assert!(matches!(file.metadata("test.i8"), Some(MetadataValue::I8(-7))));
+        assert!(matches!(
+            file.metadata("test.i8"),
+            Some(MetadataValue::I8(-7))
+        ));
         assert!(matches!(
             file.metadata("test.u16"),
             Some(MetadataValue::U16(0xBEEF))
@@ -1189,7 +1189,11 @@ mod tests {
         assert_eq!(file.metadata_u32("general.alignment"), Some(32));
         assert_eq!(file.metadata_u32("test.u8"), Some(0xAB));
         assert_eq!(file.metadata_u32("test.i8"), None, "negative must not wrap");
-        assert_eq!(file.metadata_u32("test.u64"), None, "value does not fit u32");
+        assert_eq!(
+            file.metadata_u32("test.u64"),
+            None,
+            "value does not fit u32"
+        );
         assert_eq!(file.metadata_u32("test.str"), None);
         assert_eq!(file.metadata_u32("missing.key"), None);
 
@@ -1380,7 +1384,10 @@ mod tests {
         let mut bad = bytes.clone();
         bad[0] = b'X';
         assert_eq!(GgufFile::parse(&bad).err(), Some(GgufError::BadMagic));
-        assert_eq!(GgufFile::parse(&bytes[..3]).err(), Some(GgufError::TooShort));
+        assert_eq!(
+            GgufFile::parse(&bytes[..3]).err(),
+            Some(GgufError::TooShort)
+        );
     }
 
     #[test]
@@ -1487,13 +1494,19 @@ mod tests {
         let mut tensors = full_tensors();
         tensors[0].offset = 0xFFFF;
         let bytes = build_image(3, b"GGUF", &full_metadata(), &tensors, &full_data());
-        assert_eq!(GgufFile::parse(&bytes).err(), Some(GgufError::BadTensorData));
+        assert_eq!(
+            GgufFile::parse(&bytes).err(),
+            Some(GgufError::BadTensorData)
+        );
 
         // The last supported tensor is two bytes too long for the data section.
         let mut tensors = full_tensors();
         tensors[2].offset = full_data().len() as u64 - 2;
         let bytes = build_image(3, b"GGUF", &full_metadata(), &tensors, &full_data());
-        assert_eq!(GgufFile::parse(&bytes).err(), Some(GgufError::BadTensorData));
+        assert_eq!(
+            GgufFile::parse(&bytes).err(),
+            Some(GgufError::BadTensorData)
+        );
 
         // A directory entry with more than four dimensions is rejected, not truncated.
         let mut tensors = full_tensors();
@@ -1517,14 +1530,20 @@ mod tests {
         let mut tensors = full_tensors();
         tensors[1].dims = vec![33, 2];
         let bytes = build_image(3, b"GGUF", &full_metadata(), &tensors, &full_data());
-        assert_eq!(GgufFile::parse(&bytes).err(), Some(GgufError::BadTensorData));
+        assert_eq!(
+            GgufFile::parse(&bytes).err(),
+            Some(GgufError::BadTensorData)
+        );
     }
 
     #[test]
     fn rejects_zero_alignment() {
         let metadata = vec![("general.alignment", enc_u32(0))];
         let bytes = build_image(3, b"GGUF", &metadata, &[], &[]);
-        assert_eq!(GgufFile::parse(&bytes).err(), Some(GgufError::BadTensorData));
+        assert_eq!(
+            GgufFile::parse(&bytes).err(),
+            Some(GgufError::BadTensorData)
+        );
     }
 
     #[test]

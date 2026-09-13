@@ -34,8 +34,8 @@ impl<'a> UsbHub<'a> {
     /// Set device address on USB bus for a device currently at address 0.
     pub fn set_address(engine: &UsbHostEngine<'_>, new_addr: u8) -> ViResult<()> {
         engine.control_transfer(
-            0,                     // Target currently at Address 0
-            0x00,                  // Standard Device OUT
+            0,    // Target currently at Address 0
+            0x00, // Standard Device OUT
             USB_REQ_SET_ADDRESS,
             new_addr as u16,
             0,

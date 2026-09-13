@@ -19,7 +19,7 @@
 
 ## Result
 
-Evidence: `evidence/ai-oracle-20260913T225328Z.log` (runner `scripts/run-ai-inference-oracle-qemu.sh`).
+Evidence: `evidence/ai-oracle-20260913T230711Z.log` (runner `scripts/run-ai-inference-oracle-qemu.sh`).
 
 ```
 [ai] model ready: 270 vocab, context 128, resident bytes 111608
