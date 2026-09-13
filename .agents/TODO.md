@@ -66,7 +66,10 @@ Manifest v2 và tooling tương thích đã [done]. Việc đổi field vật l�
     - Tier 2 chỉ được công bố khi private-domain containment đã có negative evidence.
     - SDK có module/profile matrix và examples khớp code./
 
-21. [blocked] AI inference server demo (HTTP → NPU cell → response, P99 bound) = G2 Level A, chính là bước cần board RK3588 — đây là mắt xích nối G2 sang G3.
+21. [partial] AI inference server demo = G2 Level A:
+    - [done] Đường CPU (Spec 24 CP-1..CP-3): service `/bin/ai` (`service::AI = 15`) + engine GGUF/Q8_0/Rust, oracle QEMU PASS, model thật 30 layer chạy trên host (3.97 tok/s). Kế hoạch + bằng chứng: `.agents/260913-2002-g2-level-a-ai-inference/`.
+    - [blocked] Phần NPU (RK3588) + P99 bound + front HTTP vẫn cần board RK3588 — mắt xích nối G2 sang G3.
+    - [owed] Law 1 xác nhận 2 lần cho interface AI trước khi coi ABI là frozen.
 
 22. [in-progress] Desktop compositor & ViUI:
     - [done] Scope bounded đã phê duyệt: exact clipped damage, một `ManagedSurfaceApp`
