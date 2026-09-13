@@ -1,0 +1,12 @@
+[package]
+name = "tensor-math"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+description = "f32 tensor kernels for the Cellos native CPU inference engine (Spec 24 §4)"
+
+[lints.rust]
+unsafe_code = "deny"
+
+[dependencies]
+libm = "0.2.15"

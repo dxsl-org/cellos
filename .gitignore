@@ -127,3 +127,6 @@ cells/apps/vove/
 /build/x86-idt-test/
 /test_ls*
 /run_test.sh
+
+# Real-weight AI validation checkpoints (scripts/fetch-ai-test-model.sh)
+.ai-models/

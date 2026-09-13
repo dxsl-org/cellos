@@ -1,0 +1,16 @@
+[package]
+name = "ai-engine"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+description = "Native CPU transformer engine for the Cellos unified inference service (Spec 24 §4)"
+
+[lints.rust]
+unsafe_code = "deny"
+
+[dependencies]
+ai-proto = { path = "../ai-proto", version = "0.1.0" }
+gguf-rs = { path = "../gguf-rs", version = "0.1.0" }
+ai-tokenizer = { path = "../ai-tokenizer", version = "0.1.0" }
+tensor-math = { path = "../tensor-math", version = "0.1.0" }
+libm = "0.2.15"

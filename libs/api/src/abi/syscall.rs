@@ -1069,6 +1069,10 @@ pub mod service {
     /// Key-management service for stable Cell-to-Cell node identity and opaque
     /// static DH operations.
     pub const KMS: u16 = 13;
+    /// Unified AI inference service (`/bin/ai`) — Spec 24. Clients resolve the live
+    /// provider tid, submit a prompt over typed IPC (`ai_proto::AiRequest`), and poll
+    /// the session for generated tokens.
+    pub const AI: u16 = 15;
 }
 
 /// Arguments for `SpawnFromMem`.

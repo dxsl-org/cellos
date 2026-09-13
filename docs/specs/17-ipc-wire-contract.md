@@ -72,7 +72,7 @@ so the allocation is **global and must not collide**. Current owners:
 
 | byte 0 | Namespace | Direction | Notes |
 |--------|-----------|-----------|-------|
-| `0x00`–`0x19` | **postcard enum variant index** (VfsRequest, NetRequest, ConfigRequest, …) | client → service | Self-delimiting; variant 0 is the first arm of each enum. Range widened from `0x0F` on 2026-07-31 by the `VfsRequest` directory-capability variants (14–22), then on 2026-08-09 by the file-handle variants (23–25) — see the note below |
+| `0x00`–`0x19` | **postcard enum variant index** (VfsRequest, NetRequest, ConfigRequest, AiRequest, …) | client → service | Self-delimiting; variant 0 is the first arm of each enum. Range widened from `0x0F` on 2026-07-31 by the `VfsRequest` directory-capability variants (14–22), then on 2026-08-09 by the file-handle variants (23–25) — see the note below. The AI inference service (`service::AI = 15`) joined on 2026-09-13 with `AiRequest`/`AiResponse` in `libs/ai-proto`: five request variants (`Describe`, `InferSubmit`, `InferStreamPoll`, `InferCancel`, `InferEmbed`) and five reply variants, all inside `0x00`–`0x04`, and it is the only protocol on its receiver (Spec 24 §6) |
 | `0x04` | `WIRE_ASCII` — kernel UART relay | kernel → input service | Overlaps the postcard range **but is disambiguated by sender** (kernel sender id `isize::MAX`), not by byte value |
 | `0x10` | `INPUT_EVENT_OPCODE` | input service → focused cell | |
 | `0x11` | **Reserved:** proposed `NET_READY` readiness edge (§10, Draft) | net service → interest-owner tid | No implementation exists. Held against reuse under ADR 0001; the proposed collision rules remain design constraints, not runtime claims |

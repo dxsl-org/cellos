@@ -87,6 +87,52 @@ dependencies = [
 ]
 
 [[package]]
+name = "ai-engine"
+version = "0.1.0"
+dependencies = [
+ "ai-proto",
+ "ai-tokenizer",
+ "gguf-rs",
+ "libm",
+ "tensor-math",
+]
+
+[[package]]
+name = "ai-proto"
+version = "0.1.0"
+dependencies = [
+ "postcard",
+ "serde",
+]
+
+[[package]]
+name = "ai-sdk"
+version = "0.1.0"
+dependencies = [
+ "ai-proto",
+ "api",
+ "ostd",
+]
+
+[[package]]
+name = "ai-test"
+version = "0.1.0"
+dependencies = [
+ "ai-proto",
+ "ai-sdk",
+ "api",
+ "cell-build",
+ "ostd",
+]
+
+[[package]]
+name = "ai-tokenizer"
+version = "0.1.0"
+dependencies = [
+ "gguf-rs",
+]
+
+[[package]]
 name = "allocator-api2"
 version = "0.2.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1251,6 +1297,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "gguf-rs"
+version = "0.1.0"
+dependencies = [
+ "tensor-math",
+]
+
+[[package]]
 name = "ghash"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2279,6 +2332,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "service-ai"
+version = "0.1.0"
+dependencies = [
+ "ai-engine",
+ "ai-proto",
+ "api",
+ "cell-build",
+ "ostd",
+]
+
+[[package]]
 name = "service-compositor"
 version = "0.1.0"
 dependencies = [
@@ -2567,6 +2631,13 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-ident",
+]
+
+[[package]]
+name = "tensor-math"
+version = "0.1.0"
+dependencies = [
+ "libm",
 ]
 
 [[package]]

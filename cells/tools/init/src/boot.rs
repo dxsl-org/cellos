@@ -72,6 +72,8 @@ pub(crate) fn spawn_optional_services() -> Option<usize> {
     #[cfg(all(not(feature = "hypervisor-min"), not(feature = "board-rpi3")))]
     {
         let _ = sys_spawn_from_path("/bin/silo-test");
+        // Spec 24 G2 Level A oracle: exercises the inference service over typed IPC.
+        let _ = sys_spawn_from_path("/bin/ai-test");
         let _ = sys_spawn_from_path("/bin/vfs-test");
         let _ = sys_spawn_from_path("/bin/srv-test");
     }

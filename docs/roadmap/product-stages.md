@@ -76,6 +76,12 @@ Current posture:
   qualification remains target-specific.
 - Untrusted Linux/POSIX application compatibility belongs in Tier 3 VM paths,
   not native Tier 1 cells.
+- A native CPU inference path exists at the `host` and `qemu` ceilings
+  ([Spec 24](../specs/24-ai-inference-architecture.md) CP-1..CP-3): the
+  `/bin/ai` service answers typed-IPC inference requests and generates tokens
+  from real GGUF weights with no Linux guest. This is a capability, not an
+  application-compatibility or performance qualification result; NPU and GPU
+  backends remain gated, and no organization cohort has been activated.
 
 ## G3 - NPU-native Compute OS
 

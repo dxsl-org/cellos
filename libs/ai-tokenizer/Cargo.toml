@@ -1,0 +1,12 @@
+[package]
+name = "ai-tokenizer"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+description = "Byte-level BPE tokenizer built from GGUF metadata for the Cellos AI engine"
+
+[lints.rust]
+unsafe_code = "deny"
+
+[dependencies]
+gguf-rs = { path = "../gguf-rs", version = "0.1.0" }

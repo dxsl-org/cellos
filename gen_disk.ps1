@@ -118,6 +118,9 @@ Build-Cargo -What "core services + drivers" -Tail 5 -Packages @(
     'service-vfs', 'service-config',
     'service-input', 'service-net', 'service-compositor', 'service-kms', 'service-net-broker',
     'supervisor', 'driver-nvme', 'driver-e1000', 'driver-virtio-net', 'driver-virtio-blk', 'driver-virtio-gpu')
+# Spec 24 unified inference service + its QEMU oracle cell. The model fixture is
+# the deterministic tiny GGUF built by scripts/gen-ai-test-model.py.
+Build-Cargo -What "ai inference service + oracle" -Tail 3 -Packages @('service-ai', 'ai-test')
 Build-Cargo -What "app-bench"      -Packages @('app-bench')       # builds bench + bench-probe
 Build-Cargo -What "app-net-tools"  -Packages @('app-net-tools')
 Build-Cargo -What "app-sys-tools"  -Packages @('app-sys-tools')
@@ -253,6 +256,8 @@ Add-CellToSign "$rel_dir/driver-e1000"
 Add-CellToSign "$rel_dir/driver-virtio-net"
 Add-CellToSign "$rel_dir/driver-virtio-blk"
 Add-CellToSign "$rel_dir/driver-virtio-gpu"
+Add-CellToSign "$rel_dir/service-ai"
+Add-CellToSign "$rel_dir/ai-test"
 Add-CellToSign "$rel_dir/service-input"
 Add-RequiredCellToSign "$rel_dir/bench" "app-bench (bench binary)"
 Add-CellToSign "$rel_dir/bench-probe"
@@ -346,6 +351,9 @@ $virtio_net_bin   = "$rel_dir/driver-virtio-net"  # Kernel Boundary Law: VirtIO 
 $virtio_blk_bin   = "$rel_dir/driver-virtio-blk"  # G2 loader redesign: VirtIO MMIO Block Driver Cell
 $virtio_gpu_bin   = "$rel_dir/driver-virtio-gpu"  # Kernel Boundary Law: VirtIO GPU Driver Cell
 $comp_bin      = "$rel_dir/service-compositor" # Phase 16: compositor + GPU
+$ai_bin        = "$rel_dir/service-ai"        # Spec 24: unified AI inference service
+$ai_test_bin   = "$rel_dir/ai-test"           # Spec 24: inference oracle cell
+$ai_model      = "models/tiny-llama-64.gguf"  # Spec 24: deterministic tiny model fixture
 $fb_console_bin = "$rel_dir/fb-console"       # HMI: mirror kernel log to HDMI screen
 $robot_demo_bin = "$rel_dir/robot-demo"       # G1 sensor→actuator reference demo
 $dashboard_bin = "$rel_dir/robot-dashboard"  # G1 ViUI v2 dashboard demo
@@ -597,6 +605,11 @@ if (Test-Path $wget_bin)  { $table_args += "/bin/wget=$wget_bin" }
 if (Test-Path $httpd_bin) { $table_args += "/bin/httpd=$httpd_bin" }
 if (Test-Path $mqtt_bin)  { $table_args += "/bin/mqtt=$mqtt_bin" }
 if (Test-Path $posix_shim_test_bin) { $table_args += "/bin/posix-shim-test=$posix_shim_test_bin" }
+# Spec 24: the inference service resolves /bin/ai-model.gguf through the /bin overlay.
+# The FAT cell-store keeps files at its root, so the basename IS the overlay name.
+if (Test-Path $ai_bin)      { $table_args += "/bin/ai=$ai_bin" }
+if (Test-Path $ai_test_bin) { $table_args += "/bin/ai-test=$ai_test_bin" }
+if (Test-Path $ai_model)    { $table_args += "/bin/ai-model.gguf=$ai_model" }
 if (Test-Path $input_test_bin)      { $table_args += "/bin/input-test=$input_test_bin" }
 if (Test-Path $window_policy_probe_bin) { $table_args += "/bin/window-policy-probe=$window_policy_probe_bin" }
 $table_args += "/bin/viui-demo=$viui_demo_bin"

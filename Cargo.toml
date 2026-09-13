@@ -23,6 +23,12 @@ members = [
     "libs/types",
     "libs/api",
     "libs/ostd",
+    "libs/ai-proto",
+    "libs/tensor-math",
+    "libs/gguf-rs",
+    "libs/ai-tokenizer",
+    "libs/ai-engine",
+    "libs/ai-sdk",
     "libs/attestation",
     "libs/http-core",
     "libs/text-engine",
@@ -96,6 +102,7 @@ members = [
     "cells/services/silo",
     "cells/services/supervisor",
     "cells/services/httpd",
+    "cells/services/ai",
 
     # Cells - Tools (system + CLI)
     "cells/tools/init",
@@ -153,6 +160,7 @@ members = [
     "cells/tests/silo-test",
     "cells/tests/wx-test",
     "cells/tests/tier2-exploit",
+    "cells/tests/ai-test",
 
     # Cells - Runtimes
     "cells/runtimes/lua",

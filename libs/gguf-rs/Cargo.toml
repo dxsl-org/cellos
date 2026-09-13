@@ -1,0 +1,12 @@
+[package]
+name = "gguf-rs"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+description = "GGUF v3 reader and weight decoding for the Cellos native CPU inference engine"
+
+[lints.rust]
+unsafe_code = "deny"
+
+[dependencies]
+tensor-math = { path = "../tensor-math", version = "0.1.0" }

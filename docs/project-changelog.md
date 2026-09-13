@@ -3,6 +3,32 @@
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
 ## [Unreleased] Development-first hardware-constrained execution
+## [2026-09-13] G2 Level A: native CPU AI inference service (Spec 24 CP-1..CP-3)
+- Landed a native, no-guest, no-NPU inference path behind Spec 24's ratified interface:
+  `libs/ai-proto` (typed wire contract), `libs/ai-sdk` (`AiClient`), `libs/gguf-rs`,
+  `libs/ai-tokenizer`, `libs/tensor-math`, `libs/ai-engine`, and `cells/services/ai` registered as
+  `service::AI = 15` (`/bin/ai`). Spec 17 §3 gained the AI namespace row.
+- Engine: GGUF v3 reader with `F32`/`F16`/`Q8_0` weights, byte-level BPE tokenizer, Llama-architecture
+  forward pass (RMSNorm, RoPE, GQA, SwiGLU) with a per-session KV cache, greedy/top-k sampling, and
+  bounded cooperative generation (the caller sets a step budget per poll, so one request cannot
+  monopolise the service loop; sessions are per-sender, cancellable, and reclaimed after 30 s idle).
+- Verification at two ceilings. Host: golden-oracle agreement with an independent Python reference
+  (`scripts/gen-ai-test-model.py`) on a deterministic tiny checkpoint — identical greedy ids and
+  embeddings within 1e-3 — plus 75 host tests across the six crates, and real-weight generation from
+  a 30-layer Q8_0 checkpoint (16 tokens, 3.97 tok/s, 229 MiB resident). QEMU RV64:
+  `scripts/run-ai-inference-oracle-qemu.sh` boots an isolated signed image and the `/bin/ai-test`
+  oracle reproduces the reference ids and embedding over typed IPC, releases an abandoned session,
+  and prints one `[ai-test] PASS` (evidence in `.agents/260913-2002-g2-level-a-ai-inference/evidence/`).
+- Defects found and fixed on the way: the engine's SwiGLU applied SiLU to the wrong branch (caught by
+  the golden oracle); `cells/drivers/dwc2-usb` was missing `#![forbid(unsafe_code)]`, which blocked
+  every signed image build via the repo-wide F1 scan; `init`'s launch-edge table could not spawn
+  `/bin/ai-test`.
+- Non-claims: this is CPU-only. Tier 2 GGML (CP-2), NPU/GPU backends (CP-4/CP-5), the Rust-native
+  kernel migration (CP-6), and G4 `std` modernisation (CP-7) remain gated; a cancel answered with the
+  terminal chunk and the synchronous `TokenStream` are recorded deviations from the ratified
+  signature. Law 1 confirmations for the AI interface are still owed before the ABI is treated as
+  frozen.
+
 - Implemented Phase 1 of POSIX completion: added truthful `_stat`/`stat` and
   `_unlink`/`unlink` to the POSIX services shim
   (`libs/api/src/services/posix/sysio.rs`), routing unified VFS namespaces

@@ -52,7 +52,7 @@ impl Service {
 #[cfg(feature = "hypervisor-min")]
 pub(crate) const SERVICE_COUNT: usize = 2 + cfg!(feature = "hostile-backend-recovery") as usize;
 #[cfg(not(feature = "hypervisor-min"))]
-pub(crate) const SERVICE_COUNT: usize = 6
+pub(crate) const SERVICE_COUNT: usize = 7
     + (!cfg!(feature = "board-rpi3")) as usize
     + (!cfg!(feature = "board-rpi3")) as usize
     + cfg!(feature = "development-silo-provider") as usize
@@ -103,6 +103,14 @@ pub(crate) fn configured() -> [Service; SERVICE_COUNT] {
         Service::new(
             "/bin/compositor",
             Registration::Init(service::COMPOSITOR),
+            RestartPolicy::Permanent,
+        ),
+        // Spec 24 unified inference service. Fail-soft: when the image has no
+        // /bin/ai (or no model), init skips it with a log line and the service,
+        // if present without a model, refuses inference truthfully.
+        Service::new(
+            "/bin/ai",
+            Registration::Init(service::AI),
             RestartPolicy::Permanent,
         ),
         #[cfg(feature = "development-silo-provider")]

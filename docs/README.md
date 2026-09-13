@@ -97,3 +97,4 @@ Internal design docs — read before implementing a subsystem.
 | [specs/16-rustc-tcb.md](specs/16-rustc-tcb.md) | rustc as TCB — LBI guarantees, limits, policies |
 | [specs/17-ipc-wire-contract.md](specs/17-ipc-wire-contract.md) | Cell IPC: framing, recv-mask, byte-0 registry |
 | [specs/23-native-sdk-contract.md](specs/23-native-sdk-contract.md) | Ratified Native SDK family contract and evidence matrix |
+| [specs/24-ai-inference-architecture.md](specs/24-ai-inference-architecture.md) | Ratified AI Inference & Small Language Model Architecture |

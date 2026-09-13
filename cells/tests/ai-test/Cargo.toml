@@ -1,0 +1,15 @@
+[package]
+name = "ai-test"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+description = "QEMU oracle for the unified AI inference service (Spec 24 G2 Level A)"
+
+[dependencies]
+ostd = { path = "../../../libs/ostd", version = "0.2.0" }
+api = { path = "../../../libs/api", version = "0.1.0" }
+ai-proto = { path = "../../../libs/ai-proto", version = "0.1.0" }
+ai-sdk = { path = "../../../libs/ai-sdk", version = "0.1.0", features = ["ostd-transport"] }
+
+[build-dependencies]
+cell-build = { path = "../../../libs/cell-build", version = "0.2.0" }

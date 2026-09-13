@@ -10,6 +10,8 @@ promoted through this index.
 
 ## Active
 
+- `260913-2002-g2-level-a-ai-inference` — Spec 24 CPU inference path (CP-1..CP-3); phases
+  01-04 complete at the host/QEMU ceilings, NPU/GPU/Tier 2 checkpoints remain gated.
 - `260727-2101-midori-lessons-cellos` — sole active feature program. Exit gate:
   runtime-close phase 02 and complete phases 04/07/08.
 

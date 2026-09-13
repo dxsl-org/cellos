@@ -1,0 +1,13 @@
+[package]
+name = "ai-proto"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+description = "Typed wire contract for the Cellos unified AI inference service (Spec 24 §6)"
+
+[lints.rust]
+unsafe_code = "deny"
+
+[dependencies]
+postcard = { version = "1", default-features = false, features = ["postcard-derive"] }
+serde = { version = "1", default-features = false, features = ["derive"] }
