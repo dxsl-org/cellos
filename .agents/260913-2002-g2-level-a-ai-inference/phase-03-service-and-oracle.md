@@ -26,8 +26,15 @@ Evidence: `evidence/ai-oracle-20260913T230711Z.log` (runner `scripts/run-ai-infe
 [ai-test] greedy ids matched: 8 tokens over 6 polls
 [ai-test] embedding matched: 64 dims
 [ai-test] abandoned session released; service still serving
+[ai-test] prompt stream matched: 8 tokens
 [ai-test] PASS
 ```
+
+The fourth scenario drives the ratified streaming surface (`AiClient::prompt` -> `TokenStream`) against
+the real service, not only against the mock transport the host tests use. The oracle polls the future
+once with `Waker::noop()` (the future resolves on the first poll, because submission is a synchronous
+IPC round trip), iterates the stream, and requires both the streamed ids and the accumulated text to
+match the `generate` path. Closing that gap was the last thing the QEMU ceiling could still prove.
 
 Fixes the run forced (all real defects, not test scaffolding):
 1. Unsigned cells are admitted to a Tier 2 paged domain under the kernel's default feature set, and

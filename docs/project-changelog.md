@@ -17,8 +17,9 @@
   embeddings within 1e-3 — plus 75 host tests across the six crates, and real-weight generation from
   a 30-layer Q8_0 checkpoint (16 tokens, 3.97 tok/s, 229 MiB resident). QEMU RV64:
   `scripts/run-ai-inference-oracle-qemu.sh` boots an isolated signed image and the `/bin/ai-test`
-  oracle reproduces the reference ids and embedding over typed IPC, releases an abandoned session,
-  and prints one `[ai-test] PASS` (evidence in `.agents/260913-2002-g2-level-a-ai-inference/evidence/`).
+  oracle reproduces the reference ids and embedding over typed IPC (through both the synchronous
+  `generate` path and the ratified `prompt` token stream), releases an abandoned session, and prints
+  one `[ai-test] PASS` (evidence in `.agents/260913-2002-g2-level-a-ai-inference/evidence/`).
 - Defects found and fixed on the way: the engine's SwiGLU applied SiLU to the wrong branch (caught by
   the golden oracle); `cells/drivers/dwc2-usb` was missing `#![forbid(unsafe_code)]`, which blocked
   every signed image build via the repo-wide F1 scan; `init`'s launch-edge table could not spawn

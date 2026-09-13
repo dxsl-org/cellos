@@ -220,6 +220,7 @@ for marker in \
     "[ai-test] greedy ids matched:" \
     "[ai-test] embedding matched:" \
     "[ai-test] abandoned session released; service still serving" \
+    "[ai-test] prompt stream matched:" \
     "[ai-test] PASS"; do
     grep -a -Fq -- "$marker" "$LOG" || {
         echo "FAIL: missing marker: $marker" >&2

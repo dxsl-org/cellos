@@ -22,6 +22,7 @@ extern crate ostd;
 
 use alloc::string::String;
 use alloc::vec::Vec;
+use core::future::Future;
 
 use ai_proto::backend;
 use ai_sdk::{AiClient, AiClientError, InferParams};
@@ -136,6 +137,34 @@ fn cell_main() {
         fail("the service did not recover after an abandoned session");
     }
     println("[ai-test] abandoned session released; service still serving");
+
+    // 4. The ratified streaming surface: `AiClient::prompt` returns a token stream. Only the
+    //    mock-transport host tests exercise it today, so drive it against the real service here.
+    let future = client.prompt(&params);
+    let mut future = core::pin::pin!(future);
+    let waker = core::task::Waker::noop();
+    let mut context = core::task::Context::from_waker(waker);
+    let mut stream = match future.as_mut().poll(&mut context) {
+        core::task::Poll::Ready(Ok(stream)) => stream,
+        core::task::Poll::Ready(Err(error)) => fail_with("prompt", error),
+        core::task::Poll::Pending => fail("prompt did not resolve on its first poll"),
+    };
+    let mut streamed = Vec::new();
+    for item in &mut stream {
+        match item {
+            Ok(token) => streamed.push(token.id),
+            Err(error) => fail_with("prompt stream", error),
+        }
+    }
+    if streamed != golden.greedy_ids {
+        fail("the token stream did not reproduce the reference ids");
+    }
+    if stream.text() != after.text {
+        fail("the token stream text differs from the drained generation text");
+    }
+    print("[ai-test] prompt stream matched: ");
+    print_usize(streamed.len());
+    println(" tokens");
 
     println("[ai-test] PASS");
     sys_exit(0);
