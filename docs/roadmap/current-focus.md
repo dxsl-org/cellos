@@ -48,6 +48,19 @@ programs and are not technically blocked on robot physical acceptance.
 
 The implementation roadmap is governed by [.agents/260906-dual-mode-kernel-evolution/plan.md](../../.agents/260906-dual-mode-kernel-evolution/plan.md).
 
+## Native CPU AI inference (Spec 24)
+
+[Spec 24](../specs/24-ai-inference-architecture.md) CP-1..CP-3 landed at the `host` and `qemu`
+ceilings: `/bin/ai` (`service::AI = 15`) serves typed-IPC inference from a GGUF checkpoint with no
+Linux guest, backed by `libs/ai-proto`, `libs/ai-sdk`, `libs/gguf-rs`, `libs/ai-tokenizer`,
+`libs/tensor-math`, and `libs/ai-engine`
+([plan](../../.agents/260913-2002-g2-level-a-ai-inference/plan.md)). The QEMU RV64 oracle
+(`scripts/run-ai-inference-oracle-qemu.sh`) reproduces the reference token ids and embedding over
+typed IPC and prints one `[ai-test] PASS`; a 30-layer Q8_0 checkpoint generates text on the host at
+3.97 tok/s. Tier 2 GGML (CP-2) stays blocked on the Tier 2 admission route, NPU/GPU backends
+(CP-4/CP-5) stay behind the G3 accelerator envelope, and CP-6/CP-7 remain future work. The AI
+interface's Law 1 confirmations are still owed before it is treated as frozen.
+
 ## Current executable work
 
 - Continue useful QEMU software and integration work to the `qemu` ceiling.
