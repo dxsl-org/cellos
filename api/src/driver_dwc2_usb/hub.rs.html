@@ -34,8 +34,8 @@
 <a href=#34 id=34 data-nosnippet>34</a>    <span class="doccomment">/// Set device address on USB bus for a device currently at address 0.
 <a href=#35 id=35 data-nosnippet>35</a>    </span><span class="kw">pub fn </span>set_address(engine: <span class="kw-2">&amp;</span>UsbHostEngine&lt;<span class="lifetime">'_</span>&gt;, new_addr: u8) -&gt; ViResult&lt;()&gt; {
 <a href=#36 id=36 data-nosnippet>36</a>        engine.control_transfer(
-<a href=#37 id=37 data-nosnippet>37</a>            <span class="number">0</span>,                     <span class="comment">// Target currently at Address 0
-<a href=#38 id=38 data-nosnippet>38</a>            </span><span class="number">0x00</span>,                  <span class="comment">// Standard Device OUT
+<a href=#37 id=37 data-nosnippet>37</a>            <span class="number">0</span>,    <span class="comment">// Target currently at Address 0
+<a href=#38 id=38 data-nosnippet>38</a>            </span><span class="number">0x00</span>, <span class="comment">// Standard Device OUT
 <a href=#39 id=39 data-nosnippet>39</a>            </span>USB_REQ_SET_ADDRESS,
 <a href=#40 id=40 data-nosnippet>40</a>            new_addr <span class="kw">as </span>u16,
 <a href=#41 id=41 data-nosnippet>41</a>            <span class="number">0</span>,

@@ -2,7 +2,7 @@
 <p>The supervisor (init) respawns a dead service under a NEW tid. Clients that
 addressed the service by its old tid would break. This registry adds an
 indirection: the supervisor registers each service’s tid under a well-known
-<code>service_id</code> ([<code>api::syscall::service</code>]) and re-registers the new tid on
+<code>service_id</code> (<a href="../../../api/abi/syscall/service/index.html" title="mod api::abi::syscall::service"><code>api::syscall::service</code></a>) and re-registers the new tid on
 respawn; a client resolves <code>service_id → tid</code> right before sending, so it
 reconnects transparently. Keeping the map in the kernel (the never-die core)
 means it survives any service’s death, and a dead provider is auto-cleared

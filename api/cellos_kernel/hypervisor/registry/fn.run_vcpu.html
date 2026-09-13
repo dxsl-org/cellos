@@ -3,7 +3,7 @@
     vm_id: usize,
     vcpu_id: usize,
     _budget_ns: u64,
-    exit_out: *mut ViVmExit,
+    exit_out: *mut <a class="enum" href="../../../api/abi/hypervisor/enum.ViVmExit.html" title="enum api::abi::hypervisor::ViVmExit">ViVmExit</a>,
 ) -&gt; <a class="type" href="../../type.ViResult.html" title="type cellos_kernel::ViResult">ViResult</a>&lt;usize&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>World-switch into vCPU; write <code>ViVmExit</code> to <code>exit_out</code>.</p>
 <h2 id="safety"><a class="doc-anchor" href="#safety">§</a>Safety</h2>
 <p><code>exit_out</code> must point to a valid, writable <code>ViVmExit</code>-sized buffer in the
