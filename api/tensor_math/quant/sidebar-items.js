@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["Q8_0_BLOCK_BYTES","Q8_0_BLOCK_WEIGHTS"],"fn":["f16_to_f32","q8_0_block_to_f32"]};

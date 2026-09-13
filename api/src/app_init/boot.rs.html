@@ -72,9 +72,11 @@
 <a href=#72 id=72 data-nosnippet>72</a>    <span class="attr">#[cfg(all(not(feature = <span class="string">"hypervisor-min"</span>), not(feature = <span class="string">"board-rpi3"</span>)))]
 <a href=#73 id=73 data-nosnippet>73</a>    </span>{
 <a href=#74 id=74 data-nosnippet>74</a>        <span class="kw">let _ </span>= sys_spawn_from_path(<span class="string">"/bin/silo-test"</span>);
-<a href=#75 id=75 data-nosnippet>75</a>        <span class="kw">let _ </span>= sys_spawn_from_path(<span class="string">"/bin/vfs-test"</span>);
-<a href=#76 id=76 data-nosnippet>76</a>        <span class="kw">let _ </span>= sys_spawn_from_path(<span class="string">"/bin/srv-test"</span>);
-<a href=#77 id=77 data-nosnippet>77</a>    }
-<a href=#78 id=78 data-nosnippet>78</a>    hypervisor_tid
-<a href=#79 id=79 data-nosnippet>79</a>}
+<a href=#75 id=75 data-nosnippet>75</a>        <span class="comment">// Spec 24 G2 Level A oracle: exercises the inference service over typed IPC.
+<a href=#76 id=76 data-nosnippet>76</a>        </span><span class="kw">let _ </span>= sys_spawn_from_path(<span class="string">"/bin/ai-test"</span>);
+<a href=#77 id=77 data-nosnippet>77</a>        <span class="kw">let _ </span>= sys_spawn_from_path(<span class="string">"/bin/vfs-test"</span>);
+<a href=#78 id=78 data-nosnippet>78</a>        <span class="kw">let _ </span>= sys_spawn_from_path(<span class="string">"/bin/srv-test"</span>);
+<a href=#79 id=79 data-nosnippet>79</a>    }
+<a href=#80 id=80 data-nosnippet>80</a>    hypervisor_tid
+<a href=#81 id=81 data-nosnippet>81</a>}
 </code></pre></div></section></main></body></html>

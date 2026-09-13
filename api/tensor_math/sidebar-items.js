@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["MathError"],"fn":["add_in_place","argmax","dot","matvec","matvec_q8_0","q8_0_row_bytes","rms_norm","rope_normal","sample_top_k","scaled_add_in_place","silu","softmax_in_place","swiglu_in_place"],"mod":["quant"],"struct":["Rng"]};

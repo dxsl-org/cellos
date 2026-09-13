@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["EMBED_TOLERANCE","GOLDEN","MAX_POLLS"],"fn":["cell_main","fail","fail_with","init_custom_heap","main","parse_ids","parse_values"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS","__CUSTOM_HEAP_ARENA"],"struct":["Golden","__CustomHeapArena"]};

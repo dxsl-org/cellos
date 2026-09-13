@@ -1,0 +1,64 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Byte-level BPE tokenizer (GPT-2 family) built from GGUF metadata."><title>ai_tokenizer - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="ai_tokenizer" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.0-nightly (f53b654a8 2026-04-30)" data-channel="nightly" data-search-js="search-b5634cc7.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../static.files/storage-41dd4d93.js"></script><script defer src="../crates.js"></script><script defer src="../static.files/main-aa4d37ac.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-044be391.svg"></head><body class="rustdoc mod crate"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Crate ai_tokenizer</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../ai_tokenizer/index.html">ai_<wbr>tokenizer</a><span class="version">0.1.0</span></h2></div><div class="sidebar-elems"><ul class="block"><li><a id="all-types" href="all.html">All Items</a></li></ul><section id="rustdoc-toc"><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#invariants" title="Invariants">Invariants</a></li><li><a href="#memory" title="Memory">Memory</a></li><li><a href="#byte-level-alphabet" title="Byte-level alphabet">Byte-level alphabet</a></li><li><a href="#pre-tokenization" title="Pre-tokenization">Pre-tokenization</a></li><li><a href="#merges" title="Merges">Merges</a></li><li><a href="#unknown-symbols" title="Unknown symbols">Unknown symbols</a></li></ul><h3><a href="#structs">Crate Items</a></h3><ul class="block"><li><a href="#structs" title="Structs">Structs</a></li><li><a href="#enums" title="Enums">Enums</a></li></ul></section><div id="rustdoc-modnav"></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1>Crate <span>ai_<wbr>tokenizer</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../src/ai_tokenizer/lib.rs.html#1-1173">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Byte-level BPE tokenizer (GPT-2 family) built from GGUF metadata.</p>
+<p>A <a href="struct.Tokenizer.html" title="struct ai_tokenizer::Tokenizer"><code>Tokenizer</code></a> is built once from a parsed [<code>GgufFile</code>] and then owns everything it needs:
+the vocabulary strings, the merge table and the byte-level alphabet. The GGUF file it was
+built from is not referenced afterwards, so the engine may drop or move the model buffer
+while a tokenizer is alive.</p>
+<h2 id="invariants"><a class="doc-anchor" href="#invariants">§</a>Invariants</h2>
+<ul>
+<li>Construction succeeds only when <code>tokenizer.ggml.model</code> is <code>"gpt2"</code>; every other model
+(notably <code>"llama"</code> SentencePiece) is refused with <a href="enum.TokenizerError.html#variant.UnsupportedModel" title="variant ai_tokenizer::TokenizerError::UnsupportedModel"><code>TokenizerError::UnsupportedModel</code></a>
+instead of being misread as byte-level BPE.</li>
+<li>Every id returned by <a href="struct.Tokenizer.html#method.encode" title="method ai_tokenizer::Tokenizer::encode"><code>Tokenizer::encode</code></a> is a valid index into <code>tokenizer.ggml.tokens</code>,
+and <code>tok.decode(&amp;tok.encode(text)) == text</code> whenever the vocabulary contains byte-level
+tokens for every byte of <code>text</code> (which a GPT-2 vocabulary always does).</li>
+<li>No input, however malformed or hostile, panics: failures are <a href="enum.TokenizerError.html" title="enum ai_tokenizer::TokenizerError"><code>TokenizerError</code></a> values,
+out-of-range ids are skipped, bytes without a vocabulary token are skipped, and decoding
+rejoins incomplete UTF-8 sequences lossily.</li>
+</ul>
+<h2 id="memory"><a class="doc-anchor" href="#memory">§</a>Memory</h2>
+<p>The tables are owned, so a tokenizer costs roughly <code>len(vocab) + len(merges)</code> times a small
+constant: one <code>String</code> per vocabulary entry, one <code>u32</code> per vocabulary entry for the reverse
+index (the token strings are not duplicated to build it), and one map node per merge. For a
+50k-token GPT-2 vocabulary with ~50k merges that is a few megabytes; <a href="struct.Tokenizer.html#method.bytes" title="method ai_tokenizer::Tokenizer::bytes"><code>Tokenizer::bytes</code></a>
+reports the estimate and <a href="struct.Tokenizer.html#method.merge_count" title="method ai_tokenizer::Tokenizer::merge_count"><code>Tokenizer::merge_count</code></a> the merge count, both of which the engine
+adds to its <code>resident_bytes()</code>. Sharing the tokenizer instead of cloning it is the intended way
+to avoid paying that cost twice.</p>
+<h2 id="byte-level-alphabet"><a class="doc-anchor" href="#byte-level-alphabet">§</a>Byte-level alphabet</h2>
+<p>Text is treated as bytes. Each byte maps to one <code>char</code> through the canonical GPT-2
+<code>bytes_to_unicode</code> table: the printable ASCII range <code>0x21..=0x7E</code>, <code>0xA1..=0xAC</code> and
+<code>0xAE..=0xFF</code> map to themselves, and the remaining 68 bytes (<code>0x00..=0x20</code>, <code>0x7F..=0xA0</code> and
+<code>0xAD</code>) map to U+0100..=U+0143 in increasing byte order. Vocabulary entries are strings of
+mapped characters (so a space in text is the single char <code>Ġ</code>, U+0120); <a href="struct.Tokenizer.html#method.token_bytes" title="method ai_tokenizer::Tokenizer::token_bytes"><code>Tokenizer::token_bytes</code></a>
+and <a href="struct.Tokenizer.html#method.decode" title="method ai_tokenizer::Tokenizer::decode"><code>Tokenizer::decode</code></a> apply the inverse mapping.</p>
+<h2 id="pre-tokenization"><a class="doc-anchor" href="#pre-tokenization">§</a>Pre-tokenization</h2>
+<p>Chunks are produced left to right with the same alternatives, in the same order, as the
+reference GPT-2 regex</p>
+<div class="example-wrap"><pre class="language-text"><code>&#39;s|&#39;t|&#39;re|&#39;ve|&#39;m|&#39;ll|&#39;d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+</code></pre></div>
+<p>so contractions, an optional literal space plus a run of letters, a run of digits, a run of
+anything else that is not whitespace, and whitespace runs are grouped as in GPT-2. Two
+classes come from <code>core</code> instead of a regex engine, and that is the only divergence:</p>
+<ul>
+<li><code>char::is_alphabetic</code> is the Unicode <code>Alphabetic</code> property, which also holds for
+<code>Other_Alphabetic</code> marks (e.g. U+0345 COMBINING GREEK YPOGEGRAMMENI) and for <code>Nl</code> letter
+numbers (e.g. U+2167 ROMAN NUMERAL EIGHT) that are not <code>\p{L}</code>. Such a code point groups
+with letters here, and with the <code>other</code> or <code>digit</code> alternative in the reference regex.</li>
+<li><code>char::is_numeric</code> is exactly <code>Nd | Nl | No</code>, i.e. <code>\p{N}</code>, and <code>char::is_whitespace</code> is
+exactly <code>White_Space</code>, i.e. <code>\s</code>, so those two classes do not diverge.</li>
+</ul>
+<p>The whitespace alternative (<code>\s+(?!\S)|\s+</code>) is emulated exactly rather than approximated: a
+whitespace run followed by a non-whitespace character yields a chunk with everything but the
+final whitespace character, and that final character either becomes the optional leading space
+of the following group (when it is a literal U+0020 space) or a chunk of its own. A whitespace
+run at the end of the text is one chunk.</p>
+<h2 id="merges"><a class="doc-anchor" href="#merges">§</a>Merges</h2>
+<p>Each chunk starts as one symbol per byte of its UTF-8 encoding, and byte symbols are merged by
+rank: the lowest-ranked adjacent pair is merged everywhere it occurs, and the scan repeats
+until no recorded merge applies. A merge is only usable when both operands and the
+concatenated result are in the vocabulary; unusable merges are ignored, and a pair recorded
+twice is refused as <a href="enum.TokenizerError.html#variant.DuplicateMerge" title="variant ai_tokenizer::TokenizerError::DuplicateMerge"><code>TokenizerError::DuplicateMerge</code></a> because its rank would be ambiguous.</p>
+<h2 id="unknown-symbols"><a class="doc-anchor" href="#unknown-symbols">§</a>Unknown symbols</h2>
+<p>The byte-level alphabet makes one symbol per byte, so the constituent byte tokens of a symbol
+are the symbol itself: a byte whose token string is absent from the vocabulary (a vocabulary
+that is not byte-complete) is skipped instead of panicking, and a character of a vocabulary
+entry that is not in the byte-level alphabet contributes no byte to decoding.</p>
+</div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.Tokenizer.html" title="struct ai_tokenizer::Tokenizer">Tokenizer</a></dt><dd>Byte-level BPE tokenizer with owned tables.</dd></dl><h2 id="enums" class="section-header">Enums<a href="#enums" class="anchor">§</a></h2><dl class="item-table"><dt><a class="enum" href="enum.TokenizerError.html" title="enum ai_tokenizer::TokenizerError">Tokenizer<wbr>Error</a></dt><dd>Errors a <a href="struct.Tokenizer.html" title="struct ai_tokenizer::Tokenizer"><code>Tokenizer</code></a> can be built from.</dd></dl></section></div></main></body></html>

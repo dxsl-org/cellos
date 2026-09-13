@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["AiClientError"],"fn":["has_free_session"],"mod":["ostd_transport","transport"],"struct":["AiClient","Chunk","Generation","InferParams","ServiceInfo","Token","TokenStream"],"type":["AiResult"]};
