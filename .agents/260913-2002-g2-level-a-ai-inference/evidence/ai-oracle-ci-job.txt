@@ -1,0 +1,20 @@
+# Hosted CI: 'AI Inference Oracle (riscv64 QEMU)' job — PASS
+# run 34789481225, job 103810927829, commit a1557518
+# url: https://github.com/dxsl-org/cellos/actions/runs/34789481225
+
+[ai-oracle] building RV64 cells
+[ai-oracle] signing cells (dev key, F1/F5 checked)
+[ai-oracle] assembling VIFS1
+[ai-oracle] building RV64 kernel
+[ai-oracle] booting QEMU (timeout 300s)
+[ai-oracle] serial log: /home/runner/work/cellos/cellos/.agents/260913-2002-g2-level-a-ai-inference/evidence/ai-oracle-20260913T232423Z.log
+USER: [ai] inference service starting
+USER: [ai-test] AI inference oracle starting
+USER: Cellos > [ai] model bytes: 102744[ai] model ready: 270 vocab, context 128, resident bytes 111608
+USER: [ai-test] model=tiny-llama-64
+USER: [ai-test] vocab=270 context=128 sessions=4
+USER: [ai-test] greedy ids matched: 8 tokens over 6 polls
+USER: [ai-test] embedding matched: 64 dims
+USER: [ai-test] abandoned session released; service still serving
+USER: [ai-test] PASS
+[ai-oracle] PASS
