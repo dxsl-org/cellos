@@ -23,6 +23,11 @@
   the golden oracle); `cells/drivers/dwc2-usb` was missing `#![forbid(unsafe_code)]`, which blocked
   every signed image build via the repo-wide F1 scan; `init`'s launch-edge table could not spawn
   `/bin/ai-test`.
+- Deployment path verified twice: the isolated VIFS1 runner
+  (`scripts/run-ai-inference-oracle-qemu.sh`) and a canonical `gen_disk.ps1` image, where `/bin/ai`
+  resolves the model through the VFS `/bin` overlay into the P6 FAT cell-store
+  (`evidence/ai-oracle-canonical-image.log`). `gen_disk.ps1` now builds and signs `service-ai`/`ai-test`,
+  and places `models/tiny-llama-64.gguf` as `/bin/ai-model.gguf` in the cell-store.
 - Non-claims: this is CPU-only. Tier 2 GGML (CP-2), NPU/GPU backends (CP-4/CP-5), the Rust-native
   kernel migration (CP-6), and G4 `std` modernisation (CP-7) remain gated; a cancel answered with the
   terminal chunk and the synchronous `TokenStream` are recorded deviations from the ratified

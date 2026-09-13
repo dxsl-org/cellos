@@ -41,6 +41,16 @@ Fixes the run forced (all real defects, not test scaffolding):
 5. A cancel is answered with the session's terminal `TokenChunk`, which `ai_proto::AiResponse::matches`
    now accepts for `InferCancel`.
 
+## Canonical image (gen_disk) result
+
+`pwsh -NoProfile -File ./gen_disk.ps1` rebuilt `disk_v3.img` with `/bin/ai` (195,248 B), `/bin/ai-test`
+(99,080 B) and `/bin/ai-model.gguf` (102,744 B) in the P6 FAT cell-store and in the P2 bootstrap table
+(optional `doom`/`tetris-lua` absent — pre-existing toolchain gaps). Booting that image
+(`evidence/ai-oracle-canonical-image.log`) exercises a path the isolated runner does not: the service
+resolves the model through the VFS `/bin` overlay into the FAT cell-store instead of VIFS1, alongside
+the full service set. It prints the same markers and `[ai-test] PASS` with zero cell faults or panics.
+`kernel/src/embedded/init` is the regenerated embedded init blob carrying the new service-table entry.
+
 ## Gates (G-C)
 
 - One QEMU RV64 run shows exactly one `[ai-test] PASS`, no `Cell fault`, no kernel panic.
