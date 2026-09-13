@@ -75,6 +75,14 @@ cleanup() {
     exit "$status"
 }
 trap cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+# Ownership marker: `cleanup_stale_run_scoped_workspaces` (sourced above) only reclaims
+# a directory whose owner pid is gone, so a killed run cannot leave a private
+# workspace behind forever.
+chmod 0700 "$WORK"
+printf '%s\n' "$$" > "$WORK/owner.pid"
 
 export CARGO_TARGET_DIR="$WORK/target"
 export CC_riscv64gc_unknown_none_elf="${CC_riscv64gc_unknown_none_elf:-riscv64-unknown-elf-gcc}"

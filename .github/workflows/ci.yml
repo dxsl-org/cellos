@@ -983,6 +983,54 @@ jobs:
           cargo test --test vfs-quota
           cargo test --test pcie-bar-window
 
+  ai-inference-oracle:
+    name: AI Inference Oracle (riscv64 QEMU)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-05-01
+          components: rust-src
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+          key: ai-inference-oracle
+
+      - name: Install dependencies
+        timeout-minutes: 20
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q qemu-system-misc gcc-riscv64-unknown-elf libclang-dev
+
+      # The runner signs its cells through scripts/lib-sign-cells.sh, which needs
+      # the policy signer too (cryptography). Own step for the same reason the
+      # vfs-quota job separates it: the apt step above can consume its whole budget.
+      - name: Install Python cryptography (cell + policy signing)
+        timeout-minutes: 5
+        run: python3 -m pip install --user --quiet cryptography
+
+      # Builds an isolated signed image (bootstrap cells + /bin/ai + /bin/ai-test +
+      # the deterministic tiny model), boots it, and requires the oracle cell to
+      # reproduce the reference token ids and embedding over typed IPC before it
+      # prints [ai-test] PASS. Not part of the shared build job: this gate owns its
+      # own image so a stale target/ artifact cannot make it pass.
+      - name: Run the inference oracle
+        timeout-minutes: 25
+        run: bash scripts/run-ai-inference-oracle-qemu.sh --boot-timeout 300
+
+      - name: Upload oracle evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-inference-oracle-${{ github.run_number }}
+          path: .agents/260913-2002-g2-level-a-ai-inference/evidence/ai-oracle-*.log
+          if-no-files-found: warn
+
   redoxfs-srv:
     name: RedoxFS /srv Integration Test
     runs-on: ubuntu-24.04
