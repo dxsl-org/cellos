@@ -160,24 +160,24 @@ impl Matrix {
         }
     }
 
-    /// Write `W · x` into `out[..rows]`, using `scratch` (length ≥ rows) as the kernel output.
-    fn project(&self, out: &mut [f32], x: &[f32], scratch: &mut [f32]) -> Result<(), MathError> {
+    /// Write `W · x` into `out[..rows]`.
+    ///
+    /// The kernel writes straight into the destination: every call site passes an exactly-sized
+    /// slice, so a staging buffer would only add a full copy per projection — and for the tied
+    /// output projection (a `vocab × n_embd` matrix) that copy is what forced a per-row
+    /// dequantise of the whole vocabulary on every generated token.
+    fn project(&self, out: &mut [f32], x: &[f32]) -> Result<(), MathError> {
         let rows = self.rows();
-        if out.len() < rows || scratch.len() < rows {
+        if out.len() < rows {
             return Err(MathError::ShapeMismatch);
         }
-        let buffer = &mut scratch[..rows];
+        let out = &mut out[..rows];
         match self {
-            Matrix::F32 { rows, data, .. } => {
-                let cols = x.len();
-                tensor_math::matvec(buffer, data, x, *rows, cols)?
-            }
+            Matrix::F32 { rows, data } => tensor_math::matvec(out, data, x, *rows, x.len()),
             Matrix::Q8_0 { rows, cols, data } => {
-                tensor_math::matvec_q8_0(buffer, data, x, *rows, *cols)?
+                tensor_math::matvec_q8_0(out, data, x, *rows, *cols)
             }
         }
-        out[..rows].copy_from_slice(buffer);
-        Ok(())
     }
 
     fn bytes(&self) -> usize {
@@ -343,17 +343,14 @@ struct Scratch {
     v: Vec<f32>,
     attn: Vec<f32>,
     down: Vec<f32>,
-    proj: Vec<f32>,
     gate: Vec<f32>,
     up: Vec<f32>,
     logits: Vec<f32>,
     scores: Vec<f32>,
-    row: Vec<f32>,
 }
 
 impl Scratch {
     fn new(cfg: &ModelConfig) -> Self {
-        let projection = cfg.n_embd.max(cfg.n_ff).max(cfg.kv_dim());
         Self {
             x: vec![0.0; cfg.n_embd],
             xb: vec![0.0; cfg.n_embd],
@@ -362,12 +359,10 @@ impl Scratch {
             v: vec![0.0; cfg.kv_dim()],
             attn: vec![0.0; cfg.n_embd],
             down: vec![0.0; cfg.n_embd],
-            proj: vec![0.0; projection],
             gate: vec![0.0; cfg.n_ff],
             up: vec![0.0; cfg.n_ff],
             logits: vec![0.0; cfg.vocab_size],
             scores: vec![0.0; cfg.n_ctx],
-            row: vec![0.0; cfg.n_embd.max(cfg.n_ff)],
         }
     }
 
@@ -379,12 +374,10 @@ impl Scratch {
             + self.v.len()
             + self.attn.len()
             + self.down.len()
-            + self.proj.len()
             + self.gate.len()
             + self.up.len()
             + self.logits.len()
-            + self.scores.len()
-            + self.row.len())
+            + self.scores.len())
             * 4
     }
 }
@@ -731,21 +724,15 @@ fn forward(
             cfg.rms_eps,
         )?;
 
-        layer.wq.project(
-            &mut scratch.q[..cfg.n_embd],
-            &scratch.xb[..cfg.n_embd],
-            &mut scratch.proj,
-        )?;
-        layer.wk.project(
-            &mut scratch.k[..cfg.kv_dim()],
-            &scratch.xb[..cfg.n_embd],
-            &mut scratch.proj,
-        )?;
-        layer.wv.project(
-            &mut scratch.v[..cfg.kv_dim()],
-            &scratch.xb[..cfg.n_embd],
-            &mut scratch.proj,
-        )?;
+        layer
+            .wq
+            .project(&mut scratch.q[..cfg.n_embd], &scratch.xb[..cfg.n_embd])?;
+        layer
+            .wk
+            .project(&mut scratch.k[..cfg.kv_dim()], &scratch.xb[..cfg.n_embd])?;
+        layer
+            .wv
+            .project(&mut scratch.v[..cfg.kv_dim()], &scratch.xb[..cfg.n_embd])?;
 
         rope(&mut scratch.q[..cfg.n_embd], cfg, position)?;
         rope(&mut scratch.k[..cfg.kv_dim()], cfg, position)?;
@@ -755,11 +742,9 @@ fn forward(
         kv.v[slot].copy_from_slice(&scratch.v[..cfg.kv_dim()]);
 
         attention(cfg, kv, layer_index, scratch, position)?;
-        layer.wo.project(
-            &mut scratch.down[..cfg.n_embd],
-            &scratch.attn[..cfg.n_embd],
-            &mut scratch.proj,
-        )?;
+        layer
+            .wo
+            .project(&mut scratch.down[..cfg.n_embd], &scratch.attn[..cfg.n_embd])?;
         tensor_math::add_in_place(&mut scratch.x[..cfg.n_embd], &scratch.down[..cfg.n_embd])?;
 
         tensor_math::rms_norm(
@@ -768,22 +753,16 @@ fn forward(
             &layer.ffn_norm,
             cfg.rms_eps,
         )?;
-        layer.w_gate.project(
-            &mut scratch.gate[..cfg.n_ff],
-            &scratch.xb[..cfg.n_embd],
-            &mut scratch.proj,
-        )?;
-        layer.w_up.project(
-            &mut scratch.up[..cfg.n_ff],
-            &scratch.xb[..cfg.n_embd],
-            &mut scratch.proj,
-        )?;
+        layer
+            .w_gate
+            .project(&mut scratch.gate[..cfg.n_ff], &scratch.xb[..cfg.n_embd])?;
+        layer
+            .w_up
+            .project(&mut scratch.up[..cfg.n_ff], &scratch.xb[..cfg.n_embd])?;
         tensor_math::swiglu_in_place(&mut scratch.gate[..cfg.n_ff], &scratch.up[..cfg.n_ff])?;
-        layer.w_down.project(
-            &mut scratch.down[..cfg.n_embd],
-            &scratch.gate[..cfg.n_ff],
-            &mut scratch.proj,
-        )?;
+        layer
+            .w_down
+            .project(&mut scratch.down[..cfg.n_embd], &scratch.gate[..cfg.n_ff])?;
         tensor_math::add_in_place(&mut scratch.x[..cfg.n_embd], &scratch.down[..cfg.n_embd])?;
     }
 
@@ -843,18 +822,17 @@ fn sample(
             .project(
                 &mut scratch.logits[..cfg.vocab_size],
                 &scratch.xb[..cfg.n_embd],
-                &mut scratch.proj,
             )
             .map_err(|_| AiError::Internal)?,
-        None => {
-            for token in 0..cfg.vocab_size {
-                row_to_f32(&weights.token_embd, token, &mut scratch.row[..cfg.n_embd])
-                    .map_err(|_| AiError::Internal)?;
-                scratch.logits[token] =
-                    tensor_math::dot(&scratch.row[..cfg.n_embd], &scratch.xb[..cfg.n_embd])
-                        .map_err(|_| AiError::Internal)?;
-            }
-        }
+        // Tied embedding: `logits = token_embd · xb` — the same projection every other matrix
+        // uses, over the packed Q8_0 weights the file already stores.
+        None => weights
+            .token_embd
+            .project(
+                &mut scratch.logits[..cfg.vocab_size],
+                &scratch.xb[..cfg.n_embd],
+            )
+            .map_err(|_| AiError::Internal)?,
     }
 
     let temperature = f32::from(session.params.temperature_milli) / 1000.0;
