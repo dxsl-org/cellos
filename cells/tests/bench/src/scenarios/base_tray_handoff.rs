@@ -3,6 +3,8 @@
 //! This is a model-only contract. It does not command a drive, establish
 //! physical station arrival, or provide a safety mechanism.
 
+use alloc::string::ToString;
+
 use super::lab_transfer_contract::{
     validate_provenance, Admission, AdmissionObservation, Configuration, ContractError, JobState,
     PlacementObservation, Principal, ReconcileDecision, TransferContract, TransferRequest,
@@ -561,7 +563,7 @@ mod runner {
 
         // Real VFS Trace Write and Readback
         let trace_record_1 =
-            alloc::format!("TRACE:job=2001,tray=55,src=1,dst=2,items=4,digest=0xE00D_0001\n");
+            "TRACE:job=2001,tray=55,src=1,dst=2,items=4,digest=0xE00D_0001\n".to_string();
         if vfs_client
             .append_file(TRACE_LOG_PATH, trace_record_1.as_bytes())
             .is_err()
@@ -720,7 +722,7 @@ mod runner {
         assert_eq!(contract.retained_count(), 2);
 
         let trace_record_2 =
-            alloc::format!("RECONCILE:job=2002,decision=ConfirmedAtSource,tray=56,station=3\n");
+            "RECONCILE:job=2002,decision=ConfirmedAtSource,tray=56,station=3\n".to_string();
         if vfs_client
             .append_file(TRACE_LOG_PATH, trace_record_2.as_bytes())
             .is_err()

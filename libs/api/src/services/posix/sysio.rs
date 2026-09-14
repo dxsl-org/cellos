@@ -277,8 +277,8 @@ pub unsafe extern "C" fn _rename(old: *const c_char, new: *const c_char) -> c_in
     }
     let old_len = strlen(old);
     let new_len = strlen(new);
-    let old_bytes = core::slice::from_raw_parts(old as *const u8, old_len);
-    let new_bytes = core::slice::from_raw_parts(new as *const u8, new_len);
+    let old_bytes = core::slice::from_raw_parts(old.cast::<u8>(), old_len);
+    let new_bytes = core::slice::from_raw_parts(new.cast::<u8>(), new_len);
     let (Ok(old_str), Ok(new_str)) = (
         core::str::from_utf8(old_bytes),
         core::str::from_utf8(new_bytes),
@@ -305,7 +305,7 @@ pub unsafe extern "C" fn _mkdir(name: *const c_char, _mode: c_int) -> c_int {
         return -1;
     }
     let len = strlen(name);
-    let bytes = core::slice::from_raw_parts(name as *const u8, len);
+    let bytes = core::slice::from_raw_parts(name.cast::<u8>(), len);
     let Ok(path_str) = core::str::from_utf8(bytes) else {
         return -1;
     };
@@ -327,7 +327,7 @@ pub unsafe extern "C" fn _rmdir(name: *const c_char) -> c_int {
         return -1;
     }
     let len = strlen(name);
-    let bytes = core::slice::from_raw_parts(name as *const u8, len);
+    let bytes = core::slice::from_raw_parts(name.cast::<u8>(), len);
     let Ok(path_str) = core::str::from_utf8(bytes) else {
         return -1;
     };
@@ -388,8 +388,8 @@ pub(super) unsafe fn vfs_stat(path: &str, st: *mut stat) -> c_int {
             core::ptr::addr_of_mut!((*translated_ptr).st_mode).write(mode);
             core::ptr::addr_of_mut!((*translated_ptr).st_size).write(c_size);
             core::ptr::copy_nonoverlapping(
-                translated_ptr as *const u8,
-                st as *mut u8,
+                translated_ptr.cast::<u8>(),
+                st.cast::<u8>(),
                 core::mem::size_of::<stat>(),
             );
             0
@@ -408,7 +408,7 @@ pub unsafe extern "C" fn _unlink(name: *const c_char) -> c_int {
         return -1;
     }
     let len = strlen(name);
-    let bytes = core::slice::from_raw_parts(name as *const u8, len);
+    let bytes = core::slice::from_raw_parts(name.cast::<u8>(), len);
     let Ok(path_str) = core::str::from_utf8(bytes) else {
         return -1;
     };
@@ -527,8 +527,8 @@ pub unsafe extern "C" fn _fstat(handle: c_int, st: *mut stat) -> c_int {
     core::ptr::addr_of_mut!((*translated_ptr).st_mode).write(mode);
     core::ptr::addr_of_mut!((*translated_ptr).st_size).write(size);
     core::ptr::copy_nonoverlapping(
-        translated_ptr as *const u8,
-        st as *mut u8,
+        translated_ptr.cast::<u8>(),
+        st.cast::<u8>(),
         core::mem::size_of::<stat>(),
     );
     0
@@ -553,7 +553,7 @@ pub unsafe extern "C" fn _stat(name: *const c_char, st: *mut stat) -> c_int {
         return -1;
     }
     let len = strlen(name);
-    let bytes = core::slice::from_raw_parts(name as *const u8, len);
+    let bytes = core::slice::from_raw_parts(name.cast::<u8>(), len);
     if let Ok(path_str) = core::str::from_utf8(bytes) {
         let ret = vfs_stat(path_str, st);
         if ret == 0 {

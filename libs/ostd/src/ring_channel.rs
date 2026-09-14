@@ -191,7 +191,7 @@ impl ChannelClient {
     /// Returns None if the handle is null or misaligned.
     pub fn connect(handle: u64) -> Option<Self> {
         let addr = handle as usize;
-        if addr == 0 || addr % core::mem::align_of::<BiRingChannel>() != 0 {
+        if addr == 0 || !addr.is_multiple_of(core::mem::align_of::<BiRingChannel>()) {
             return None;
         }
         Some(Self {

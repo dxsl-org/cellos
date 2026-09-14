@@ -27,7 +27,7 @@ impl<D: BlockDevice> CellosFs<D> {
         }
 
         // Calculate bitmap blocks: 1 block covers 32,768 blocks (128 MiB)
-        let bitmap_blocks = ((total_blocks + 32767) / 32768) as u32;
+        let bitmap_blocks = total_blocks.div_ceil(32_768) as u32;
         let mut allocator = BitmapAllocator::new(FIRST_USABLE_BLOCK, bitmap_blocks, total_blocks);
 
         // Allocate root inode block (FIRST_USABLE_BLOCK + bitmap_blocks)
@@ -329,7 +329,7 @@ impl<D: BlockDevice> CellosFs<D> {
             inode.flags &= !INODE_FLAG_INLINE;
         }
         // Allocate additional blocks for incoming data
-        let blocks_needed = ((new_size + BLOCK_SIZE as u64 - 1) / BLOCK_SIZE as u64) as u32;
+        let blocks_needed = new_size.div_ceil(BLOCK_SIZE as u64) as u32;
         let mut extents = self.read_extents(&inode);
 
         let current_blocks: u32 = extents.iter().map(|e| e.block_count).sum();

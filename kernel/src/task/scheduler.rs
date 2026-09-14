@@ -170,11 +170,7 @@ pub fn subscribe_death(watched: usize, watcher: usize) {
 }
 pub(crate) fn queue_pending_death(task: &mut Task, watched: usize, exit_reason: usize) {
     let _allocation = KernelAllocationContext::enter();
-    if !task
-        .pending_deaths
-        .iter()
-        .any(|pending| *pending == (watched, exit_reason))
-    {
+    if !task.pending_deaths.contains(&(watched, exit_reason)) {
         task.pending_deaths.push((watched, exit_reason));
     }
 }

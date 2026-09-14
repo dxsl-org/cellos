@@ -58,10 +58,14 @@ impl<'a, T: VfsReadOps> ReadSession<'a, T> {
     /// answer the stat leaves this at zero and the old growth applies.
     fn file_size_capacity(&mut self, dir: ViDirHandle, name: &str, max_bytes: usize) -> usize {
         let mut resp_buf = [0u8; IPC_BUF_SIZE];
-        match self.ops.call(&VfsRequest::StatAt { dir, name }, &mut resp_buf) {
-            Ok(VfsResponse::Stat { size, is_dir: false }) => usize::try_from(size)
-                .unwrap_or(max_bytes)
-                .min(max_bytes),
+        match self
+            .ops
+            .call(&VfsRequest::StatAt { dir, name }, &mut resp_buf)
+        {
+            Ok(VfsResponse::Stat {
+                size,
+                is_dir: false,
+            }) => usize::try_from(size).unwrap_or(max_bytes).min(max_bytes),
             _ => 0,
         }
     }

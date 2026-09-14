@@ -40,6 +40,12 @@ static mut HEAP_INIT: bool = false;
 
 /// Initialize the cell heap with a custom static arena before any allocation occurs.
 /// If called before the first allocation, the default `HEAP_MEM` is never touched.
+///
+/// # Safety
+///
+/// `ptr` must point to `len` bytes of memory that stays mapped and exclusively owned by this cell
+/// for the rest of the program: the allocator hands out sub-slices of exactly that region, and a
+/// second call (or any earlier allocation) would leave live blocks outside the new arena.
 pub unsafe fn init_custom_heap_raw(ptr: *mut u8, len: usize) {
     let heap = &mut *addr_of_mut!(HEAP);
     heap.init(ptr, len);

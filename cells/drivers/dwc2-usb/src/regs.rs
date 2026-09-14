@@ -62,7 +62,7 @@ pub const HPRT0: usize = 0x440;
 // ── Host Channel Registers (0x500 + ch * 0x20) ────────────────────────────────
 
 pub const fn hcchar(ch: usize) -> usize {
-    0x500 + ch * 0x20 + 0x00
+    0x500 + ch * 0x20
 }
 pub const fn hcsplt(ch: usize) -> usize {
     0x500 + ch * 0x20 + 0x04

@@ -52,7 +52,7 @@ impl CheckpointRecord {
         }
     }
 
-    fn to_bytes(&self) -> [u8; 12] {
+    fn to_bytes(self) -> [u8; 12] {
         let mut b = [0u8; 12];
         b[0..4].copy_from_slice(&self.seq.to_le_bytes());
         b[4..8].copy_from_slice(&self.counter.to_le_bytes());

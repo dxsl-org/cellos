@@ -135,13 +135,13 @@ struct LsEntry {
     size: u64,
 }
 
-pub fn cmd_ls(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
+pub fn cmd_ls(args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
     let mut all = false;
     let mut long = false;
     let mut classify = false;
     let mut raw_path = "";
 
-    while let Some(arg) = args.next() {
+    for arg in args {
         if arg.starts_with('-') && arg.len() > 1 {
             for c in arg.chars().skip(1) {
                 match c {
@@ -320,9 +320,9 @@ pub fn cmd_ls(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()
     Ok(())
 }
 
-pub fn cmd_cat(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
+pub fn cmd_cat(args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
     let mut paths = Vec::new();
-    while let Some(path) = args.next() {
+    for path in args {
         paths.push(path);
     }
 
@@ -373,8 +373,8 @@ pub fn cmd_cat(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<(
                                 Err(e) => {
                                     let valid_len = e.valid_up_to();
                                     if valid_len > 0 {
-                                        let s =
-                                            core::str::from_utf8(&buffer[..valid_len]).unwrap_or("");
+                                        let s = core::str::from_utf8(&buffer[..valid_len])
+                                            .unwrap_or("");
                                         crate::executor::shell_print(s);
                                     }
                                     if let Some(error_len) = e.error_len() {

@@ -49,14 +49,9 @@ impl<'a> UsbHostEngine<'a> {
         self.write32(hctsiz(ch), sctsiz);
 
         // 3. Configure Channel Characteristics (HCCHAR):
-        // DEVADDR = dev_addr, EPNUM = 0, EPDIR = 0 (OUT), EPTYPE = 0 (Control), MPS = 64, MC = 1, CHENA = 1
-        let scchar = 64
-            | (0 << 11) // EPNUM
-            | (0 << 15) // EPDIR OUT
-            | (0 << 18) // EPTYPE Control
-            | (1 << 20) // MC = 1
-            | ((dev_addr as u32) << 22)
-            | (1 << 31); // CHENA
+        // HCCHAR fields (bits 0-10 MPS, 11-14 EPNUM, 15 EPDIR, 18-19 EPTYPE, 20 MC, 22-28 DEVADDR,
+        // 31 CHENA): EPNUM = 0, EPDIR = 0 (OUT), EPTYPE = 0 (Control), MPS = 64, MC = 1, CHENA = 1.
+        let scchar = 64 | (1 << 20) | ((dev_addr as u32) << 22) | (1 << 31);
         self.write32(hcchar(ch), scchar);
 
         // 4. Push 8 bytes (2 x 32-bit words) into FIFO
@@ -84,27 +79,20 @@ impl<'a> UsbHostEngine<'a> {
             let sctsiz = (chunk as u32) | (1 << 19) | ((toggle as u32) << 29);
             self.write32(hctsiz(ch), sctsiz);
 
-            // HCCHAR: EPDIR = 1 (IN)
-            let scchar = 64
-                | (0 << 11)
-                | (1 << 15) // EPDIR IN
-                | (0 << 18)
-                | (1 << 20)
-                | ((dev_addr as u32) << 22)
-                | (1 << 31); // CHENA
+            // HCCHAR: EPNUM = 0, EPDIR = 1 (IN), EPTYPE = 0 (Control), MPS = 64, MC = 1, CHENA = 1.
+            let scchar = 64 | (1 << 15) | (1 << 20) | ((dev_addr as u32) << 22) | (1 << 31);
             self.write32(hcchar(ch), scchar);
 
             self.wait_channel(ch)?;
 
             // Read words from FIFO
-            let words = (chunk + 3) / 4;
-            for i in 0..words {
-                let w = self.read_fifo(ch);
-                let b = w.to_le_bytes();
-                for j in 0..4 {
-                    let idx = received + i * 4 + j;
-                    if idx < buf.len() && (i * 4 + j) < chunk {
-                        buf[idx] = b[j];
+            let words = chunk.div_ceil(4);
+            for (i, word) in (0..words).map(|i| (i, self.read_fifo(ch))) {
+                for (j, byte) in word.to_le_bytes().iter().enumerate() {
+                    let offset = i * 4 + j;
+                    let idx = received + offset;
+                    if idx < buf.len() && offset < chunk {
+                        buf[idx] = *byte;
                     }
                 }
             }
@@ -126,14 +114,9 @@ impl<'a> UsbHostEngine<'a> {
         let sctsiz = (1 << 19) | (2 << 29);
         self.write32(hctsiz(ch), sctsiz);
 
+        // HCCHAR: EPNUM = 0, EPTYPE = 0 (Control), MPS = 64, MC = 1, CHENA = 1, EPDIR from the caller.
         let epdir = if is_in { 1 } else { 0 };
-        let scchar = 64
-            | (0 << 11)
-            | (epdir << 15)
-            | (0 << 18)
-            | (1 << 20)
-            | ((dev_addr as u32) << 22)
-            | (1 << 31);
+        let scchar = 64 | (epdir << 15) | (1 << 20) | ((dev_addr as u32) << 22) | (1 << 31);
         self.write32(hcchar(ch), scchar);
 
         self.wait_channel(ch)
@@ -198,22 +181,18 @@ impl<'a> UsbHostEngine<'a> {
             let sctsiz = (chunk as u32) | (1 << 19) | ((toggle as u32) << 29);
             self.write32(hctsiz(ch), sctsiz);
 
-            let scchar = 64
-                | (0 << 11)
-                | (0 << 15) // EPDIR OUT
-                | (0 << 18)
-                | (1 << 20)
-                | ((dev_addr as u32) << 22)
-                | (1 << 31);
+            // HCCHAR: EPNUM = 0, EPDIR = 0 (OUT), EPTYPE = 0 (Control), MPS = 64, MC = 1, CHENA = 1.
+            let scchar = 64 | (1 << 20) | ((dev_addr as u32) << 22) | (1 << 31);
             self.write32(hcchar(ch), scchar);
 
             // Push words to FIFO
-            let words = (chunk + 3) / 4;
+            let words = chunk.div_ceil(4);
             for i in 0..words {
                 let mut b = [0u8; 4];
-                for j in 0..4 {
-                    if (sent + i * 4 + j) < data.len() && (i * 4 + j) < chunk {
-                        b[j] = data[sent + i * 4 + j];
+                for (j, byte) in b.iter_mut().enumerate() {
+                    let offset = i * 4 + j;
+                    if sent + offset < data.len() && offset < chunk {
+                        *byte = data[sent + offset];
                     }
                 }
                 self.write_fifo(ch, u32::from_le_bytes(b));
@@ -236,14 +215,14 @@ impl<'a> UsbHostEngine<'a> {
 
         while sent < packet.len() {
             let chunk = (packet.len() - sent).min(512); // 512 bytes for High-Speed Bulk
-            let words_count = (chunk + 3) / 4;
+            let words_count = chunk.div_ceil(4);
 
             let sctsiz = (chunk as u32) | (1 << 19) | ((toggle as u32) << 29);
+            // HCCHAR: EPDIR = 0 (OUT), EPTYPE = 2 (Bulk), MC = 1 packet, MPS = 512 (HS Bulk).
             let scchar = 512
                 | ((ep_num as u32) << 11)
-                | (0 << 15) // OUT
-                | (2 << 18) // Bulk
-                | (1 << 20) // MC = 1 packet
+                | (2 << 18)
+                | (1 << 20)
                 | ((dev_addr as u32) << 22)
                 | (1 << 31);
 
@@ -256,10 +235,11 @@ impl<'a> UsbHostEngine<'a> {
                 self.write32(hcchar(ch), scchar);
                 for i in 0..words_count {
                     let mut b = [0u8; 4];
-                    for j in 0..4 {
-                        let idx = sent + i * 4 + j;
-                        if idx < packet.len() && (i * 4 + j) < chunk {
-                            b[j] = packet[idx];
+                    for (j, byte) in b.iter_mut().enumerate() {
+                        let offset = i * 4 + j;
+                        let idx = sent + offset;
+                        if idx < packet.len() && offset < chunk {
+                            *byte = packet[idx];
                         }
                     }
                     self.write_fifo(ch, u32::from_le_bytes(b));
@@ -311,14 +291,12 @@ impl<'a> UsbHostEngine<'a> {
             let int = self.read32(hcint(ch));
             if int & (1 << 0) != 0 {
                 // XFERCOMPL: read data from FIFO
-                let words = (want + 3) / 4;
-                for i in 0..words {
-                    let w = self.read_fifo(ch);
-                    let b = w.to_le_bytes();
-                    for j in 0..4 {
+                let words = want.div_ceil(4);
+                for (i, word) in (0..words).map(|i| (i, self.read_fifo(ch))) {
+                    for (j, byte) in word.to_le_bytes().iter().enumerate() {
                         let idx = i * 4 + j;
                         if idx < buf.len() && idx < want {
-                            buf[idx] = b[j];
+                            buf[idx] = *byte;
                         }
                     }
                 }

@@ -76,11 +76,7 @@ fn cell_main() {
             let mut req_buf = [0u8; 64];
             let mut resp_buf = [0u8; 1];
 
-            loop {
-                let meta = match endpoint.rx.recv_blocking(&mut req_buf) {
-                    Ok(m) => m,
-                    Err(_) => break,
-                };
+            while let Ok(meta) = endpoint.rx.recv_blocking(&mut req_buf) {
                 let valid = req_buf[0] == 0x42 && req_buf[1..meta.len].iter().all(|&b| b == 0);
                 resp_buf[0] = if valid { 0 } else { 1 };
                 if endpoint.tx.send_blocking(&resp_buf, meta.seq, 0).is_err() {

@@ -85,7 +85,7 @@ pub unsafe extern "C" fn vsnprintf(
     fmt: *const c_char,
     args: VaList<'_>,
 ) -> c_int {
-    vsnprintf_core(buf as *mut u8, size, fmt as *const u8, args) as c_int
+    vsnprintf_core(buf.cast::<u8>(), size, fmt.cast::<u8>(), args) as c_int
 }
 
 /// Formats `fmt` with `args` into `buf` with no length limit (C `sprintf` semantics).
@@ -97,7 +97,7 @@ pub unsafe extern "C" fn vsnprintf(
 /// point to a valid NUL-terminated C string; `args` must match `fmt`'s specifiers.
 #[no_mangle]
 pub unsafe extern "C" fn vsprintf(buf: *mut c_char, fmt: *const c_char, args: VaList<'_>) -> c_int {
-    vsnprintf_core(buf as *mut u8, usize::MAX / 2, fmt as *const u8, args) as c_int
+    vsnprintf_core(buf.cast::<u8>(), usize::MAX / 2, fmt.cast::<u8>(), args) as c_int
 }
 
 /// Formats `fmt` with `args` and writes the result to stdout (fd 1).
@@ -108,7 +108,7 @@ pub unsafe extern "C" fn vsprintf(buf: *mut c_char, fmt: *const c_char, args: Va
 #[no_mangle]
 pub unsafe extern "C" fn vprintf(fmt: *const c_char, args: VaList<'_>) -> c_int {
     let mut tmp = [0u8; 1024];
-    let n = vsnprintf_core(tmp.as_mut_ptr(), tmp.len(), fmt as *const u8, args);
+    let n = vsnprintf_core(tmp.as_mut_ptr(), tmp.len(), fmt.cast::<u8>(), args);
     _write(1, tmp.as_ptr() as *const c_void, n.min(tmp.len()));
     n as c_int
 }
@@ -128,7 +128,7 @@ pub unsafe extern "C" fn vfprintf(
 ) -> c_int {
     let fd = fd_of(stream);
     let mut tmp = [0u8; 1024];
-    let n = vsnprintf_core(tmp.as_mut_ptr(), tmp.len(), fmt as *const u8, args);
+    let n = vsnprintf_core(tmp.as_mut_ptr(), tmp.len(), fmt.cast::<u8>(), args);
     _write(fd, tmp.as_ptr() as *const c_void, n.min(tmp.len()));
     n as c_int
 }
@@ -260,7 +260,11 @@ pub unsafe extern "C" fn fread(
     // or EOF/error. A single _read may return fewer bytes than requested.
     let mut done = 0usize;
     while done < total {
-        let n = _read(fd, (ptr as *mut u8).add(done) as *mut c_void, total - done);
+        let n = _read(
+            fd,
+            (ptr.cast::<u8>()).add(done) as *mut c_void,
+            total - done,
+        );
         if n <= 0 {
             break;
         }
@@ -331,7 +335,7 @@ pub unsafe extern "C" fn fgetc(stream: *mut FILE) -> c_int {
     let mut b = 0u8;
     // For reads, fd_of returns 2 for unknown streams, but 0 (stdin) for stdin.
     let fd = if stream.is_null() { 0 } else { fd_of(stream) };
-    if _read(fd, &mut b as *mut u8 as *mut c_void, 1) == 1 {
+    if _read(fd, (&raw mut b).cast::<c_void>(), 1) == 1 {
         b as c_int
     } else {
         -1

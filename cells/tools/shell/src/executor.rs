@@ -49,10 +49,10 @@ pub fn shell_stdin() -> Vec<u8> {
 #[cfg(not(feature = "shell_test"))] // reason: tab completion only exists in the interactive REPL
 pub const BUILTINS: &[&str] = &[
     "alias", "awk", "bg", "blktest", "break", "cat", "cd", "clear", "continue", "echo", "env",
-    "exec", "exit", "export", "fg", "find", "free", "grep", "head", "help", "history", "ifconfig", "ip", "jobs", "kill", "ls",
-    "mkdir", "ps", "pwd", "read", "rm", "rmdir", "sed", "shutdown", "sleep", "snapshot", "sort",
-    "source", "tail", "tee", "test", "top", "unalias", "uniq", "unset", "uname", "uptime",
-    "vappend", "vcat", "vwrite", "wc",
+    "exec", "exit", "export", "fg", "find", "free", "grep", "head", "help", "history", "ifconfig",
+    "ip", "jobs", "kill", "ls", "mkdir", "ps", "pwd", "read", "rm", "rmdir", "sed", "shutdown",
+    "sleep", "snapshot", "sort", "source", "tail", "tee", "test", "top", "unalias", "uniq",
+    "unset", "uname", "uptime", "vappend", "vcat", "vwrite", "wc",
 ];
 
 // ── Shell-global state ────────────────────────────────────────────────────────

@@ -108,7 +108,7 @@ impl<D: BlockDevice> BlockDevice for BoundedDisk<D> {
     }
 }
 
-use alloc::sync::Arc;
+use alloc::rc::Rc;
 use core::cell::RefCell;
 
 struct MemDiskInner {
@@ -122,13 +122,15 @@ struct MemDiskInner {
 /// Clones share the same underlying storage medium, modeling a persistent hardware disk.
 #[derive(Clone)]
 pub struct MemDisk {
-    inner: Arc<RefCell<MemDiskInner>>,
+    // `Rc`, not `Arc`: this device exists for single-threaded host tests and power-cut fuzzing,
+    // and `Arc` here would assert a `Send + Sync` that `RefCell` cannot provide.
+    inner: Rc<RefCell<MemDiskInner>>,
 }
 
 impl MemDisk {
     pub fn new(total_blocks: usize) -> Self {
         Self {
-            inner: Arc::new(RefCell::new(MemDiskInner {
+            inner: Rc::new(RefCell::new(MemDiskInner {
                 blocks: alloc::vec![[0u8; BLOCK_SIZE]; total_blocks],
                 write_count: 0,
                 flush_count: 0,

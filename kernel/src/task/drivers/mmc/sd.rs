@@ -65,7 +65,10 @@ impl SdBlock {
         match self.core.host.read_block(buf) {
             Ok(()) => Ok(()),
             Err(e) => {
-                log::warn!("[sd] block read failed at sector {}, retrying at 12.5 MHz", sector);
+                log::warn!(
+                    "[sd] block read failed at sector {}, retrying at 12.5 MHz",
+                    sector
+                );
                 let _ = self.core.host.set_clock_hz(12_500_000);
                 self.core
                     .host

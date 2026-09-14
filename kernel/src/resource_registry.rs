@@ -289,7 +289,9 @@ pub fn is_dwc2_mmio(base: usize, len: usize) -> bool {
         let dwc2_len = hal_soc_bcm27xx::BCM2837.mmio.dwc2_grant_size;
         len > 0
             && base >= dwc2_base
-            && base.checked_add(len).is_some_and(|end| end <= dwc2_base + dwc2_len)
+            && base
+                .checked_add(len)
+                .is_some_and(|end| end <= dwc2_base + dwc2_len)
     }
     #[cfg(not(all(target_arch = "aarch64", feature = "board-rpi3")))]
     {

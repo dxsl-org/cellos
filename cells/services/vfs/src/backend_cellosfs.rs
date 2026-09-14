@@ -15,7 +15,6 @@ pub struct CellosFsBackend {
     fs: Mutex<Option<CellosFs<CellosPartitionDisk>>>,
 }
 
-
 impl CellosFsBackend {
     /// Mount a CellosFS partition at `prefix`.
     /// Attempts `open`; if unformatted, automatically formats with `format`.

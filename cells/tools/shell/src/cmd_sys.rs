@@ -188,7 +188,9 @@ pub fn cmd_ifconfig(_args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult
 
     let mut send = [0u8; 512];
     let mut reply = [0u8; 512];
-    let len = api::ipc::encode(&NetRequest::GetLocalIp, &mut send).map(|b| b.len()).unwrap_or(0);
+    let len = api::ipc::encode(&NetRequest::GetLocalIp, &mut send)
+        .map(|b| b.len())
+        .unwrap_or(0);
     ostd::syscall::sys_send(net_tid, &send[..len]);
 
     if let ostd::syscall::SyscallResult::Ok(_) = ostd::syscall::sys_recv(net_tid, &mut reply) {
@@ -198,7 +200,10 @@ pub fn cmd_ifconfig(_args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult
             } else {
                 crate::executor::shell_println(&alloc::format!(
                     "eth0: inet {}.{}.{}.{}  netmask 255.255.255.0  (DHCP)",
-                    ip[0], ip[1], ip[2], ip[3]
+                    ip[0],
+                    ip[1],
+                    ip[2],
+                    ip[3]
                 ));
             }
             return Ok(());

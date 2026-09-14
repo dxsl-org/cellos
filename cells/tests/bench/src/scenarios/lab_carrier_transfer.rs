@@ -12,6 +12,7 @@
 extern crate alloc;
 
 use alloc::format;
+use alloc::string::ToString;
 use api::syscall::service;
 use ostd::io::println;
 use ostd::syscall::{sys_heartbeat, sys_lookup_service};
@@ -124,7 +125,7 @@ pub fn run() {
     assert_eq!(contract.active_state(), Some(JobState::PlacementObserved));
 
     // Real VFS Trace Write and Readback
-    let trace_record_1 = format!("TRACE:job=1001,carrier=42,src=1,dst=2,digest=0xD00D_0001\n");
+    let trace_record_1 = "TRACE:job=1001,carrier=42,src=1,dst=2,digest=0xD00D_0001\n".to_string();
     if vfs_client
         .append_file(TRACE_LOG_PATH, trace_record_1.as_bytes())
         .is_err()
@@ -254,7 +255,7 @@ pub fn run() {
     assert_eq!(contract.retained_count(), 2);
 
     let trace_record_2 =
-        format!("RECONCILE:job=1002,decision=ConfirmedAtSource,carrier=43,slot=3\n");
+        "RECONCILE:job=1002,decision=ConfirmedAtSource,carrier=43,slot=3\n".to_string();
     if vfs_client
         .append_file(TRACE_LOG_PATH, trace_record_2.as_bytes())
         .is_err()

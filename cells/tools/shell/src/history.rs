@@ -50,6 +50,11 @@ impl History {
         self.entries.len()
     }
 
+    /// Whether the history holds no entries.
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
     /// Access by 0-based index (0 = oldest).
     pub fn get(&self, idx: usize) -> Option<&str> {
         self.entries.get(idx).map(String::as_str)
@@ -91,7 +96,9 @@ pub fn clear_history() {
 }
 
 /// Built-in `history [-c] [n]` command.
-pub fn cmd_history(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ostd::prelude::ViResult<()> {
+pub fn cmd_history(
+    mut args: crate::text_engine::args::LegacyArgs<'_>,
+) -> ostd::prelude::ViResult<()> {
     let arg = args.next();
     if arg == Some("-c") {
         clear_history();
@@ -101,11 +108,7 @@ pub fn cmd_history(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ostd::
     let h = GLOBAL_HISTORY.lock();
     let total = h.entries.len();
     let start = if let Some(n) = limit {
-        if n < total {
-            total - n
-        } else {
-            0
-        }
+        total.saturating_sub(n)
     } else {
         0
     };

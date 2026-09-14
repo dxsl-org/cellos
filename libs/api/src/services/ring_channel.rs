@@ -97,15 +97,13 @@ pub struct SpscRing {
 impl SpscRing {
     /// Construct a new empty ring buffer.
     pub const fn new() -> Self {
-        const EMPTY_SLOT: SpscSlot = SpscSlot::new();
         Self {
             producer_idx: AtomicU32::new(0),
             consumer_idx: AtomicU32::new(0),
-            slots: [
-                EMPTY_SLOT, EMPTY_SLOT, EMPTY_SLOT, EMPTY_SLOT, EMPTY_SLOT, EMPTY_SLOT, EMPTY_SLOT,
-                EMPTY_SLOT, EMPTY_SLOT, EMPTY_SLOT, EMPTY_SLOT, EMPTY_SLOT, EMPTY_SLOT, EMPTY_SLOT,
-                EMPTY_SLOT, EMPTY_SLOT,
-            ],
+            // An inline const block rather than a `const EMPTY_SLOT` item: a named const of a type
+            // holding atomics is a footgun (every use is a fresh, easy-to-confuse value), and the
+            // inline form also takes the capacity from `RING_CAPACITY` instead of a literal list.
+            slots: [const { SpscSlot::new() }; RING_CAPACITY],
         }
     }
 
@@ -157,8 +155,8 @@ impl SpscRing {
             i += 1;
         }
 
-        for w in 0..RING_WORDS_PER_SLOT {
-            slot.data[w].store(words[w], Ordering::Relaxed);
+        for (cell, word) in slot.data.iter().zip(words) {
+            cell.store(word, Ordering::Relaxed);
         }
 
         slot.len.store(msg.len() as u32, Ordering::Relaxed);
@@ -197,8 +195,8 @@ impl SpscRing {
         let flags = slot.flags.load(Ordering::Relaxed);
 
         let mut words = [0u64; RING_WORDS_PER_SLOT];
-        for w in 0..RING_WORDS_PER_SLOT {
-            words[w] = slot.data[w].load(Ordering::Relaxed);
+        for (word, cell) in words.iter_mut().zip(&slot.data) {
+            *word = cell.load(Ordering::Relaxed);
         }
 
         let mut i = 0;

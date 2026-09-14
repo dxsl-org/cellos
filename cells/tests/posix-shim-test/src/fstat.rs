@@ -135,12 +135,7 @@ pub(super) fn test_stat() {
     let mut invalid = filled_stat(0xA5);
     let null_path = unsafe { stat(core::ptr::null(), invalid.as_mut_ptr()) };
     let null_buf = unsafe { stat(PATH.as_ptr() as *const c_char, core::ptr::null_mut()) };
-    let non_existent = unsafe {
-        stat(
-            b"/NONEXISTENT_FILE_12345\0".as_ptr() as *const c_char,
-            invalid.as_mut_ptr(),
-        )
-    };
+    let non_existent = unsafe { stat(c"/NONEXISTENT_FILE_12345".as_ptr(), invalid.as_mut_ptr()) };
 
     if null_path == -1
         && null_buf == -1
@@ -161,8 +156,7 @@ pub(super) fn test_unlink() {
         return;
     }
 
-    let non_existent =
-        unsafe { unlink(b"/tmp/nonexistent_posix_unlink_12345\0".as_ptr() as *const c_char) };
+    let non_existent = unsafe { unlink(c"/tmp/nonexistent_posix_unlink_12345".as_ptr()) };
     if non_existent != -1 {
         println("[posix-shim] POSIX-UNLINK: FAIL non_existent != -1");
         return;
@@ -345,8 +339,8 @@ pub(super) fn test_rename() {
 
     let non_existent_src = unsafe {
         rename(
-            b"/srv/nonexistent_src_12345\0".as_ptr() as *const c_char,
-            b"/srv/nonexistent_dst_12345\0".as_ptr() as *const c_char,
+            c"/srv/nonexistent_src_12345".as_ptr(),
+            c"/srv/nonexistent_dst_12345".as_ptr(),
         )
     };
     if non_existent_src != -1 {
@@ -355,12 +349,7 @@ pub(super) fn test_rename() {
     }
 
     // Calling rename on non-/srv path must fail closed (-1) (VFS backend constraint)
-    let non_srv = unsafe {
-        rename(
-            b"/tmp/non_srv_src\0".as_ptr() as *const c_char,
-            b"/tmp/non_srv_dst\0".as_ptr() as *const c_char,
-        )
-    };
+    let non_srv = unsafe { rename(c"/tmp/non_srv_src".as_ptr(), c"/tmp/non_srv_dst".as_ptr()) };
     if non_srv != -1 {
         println("[posix-shim] POSIX-RENAME: FAIL non_srv != -1");
         return;

@@ -253,6 +253,7 @@ pub use runner::run;
 mod runner {
     use super::*;
     use alloc::format;
+    use alloc::string::ToString;
 
     const TRACE_LOG_PATH: &str = "/srv/assembly_trace.log";
 
@@ -299,7 +300,7 @@ mod runner {
             .unwrap_or_else(|_| fail("start arm failed"));
         contract.stop_arm_activity();
 
-        let trace_1 = format!("MODE:StandaloneUpper,task=LAB-01,status=Completed\n");
+        let trace_1 = "MODE:StandaloneUpper,task=LAB-01,status=Completed\n".to_string();
         if vfs_client
             .append_file(TRACE_LOG_PATH, trace_1.as_bytes())
             .is_err()
@@ -318,7 +319,7 @@ mod runner {
             .unwrap_or_else(|_| fail("start base failed"));
         contract.stop_base_motion();
 
-        let trace_2 = format!("MODE:StandaloneBase,task=BASE-01,status=Completed\n");
+        let trace_2 = "MODE:StandaloneBase,task=BASE-01,status=Completed\n".to_string();
         if vfs_client
             .append_file(TRACE_LOG_PATH, trace_2.as_bytes())
             .is_err()
@@ -354,7 +355,7 @@ mod runner {
         assert_eq!(contract.coupling_state(), CouplingState::Enabled);
         assert_eq!(contract.active_mode(), AssemblyMode::AssembledStationary);
 
-        let trace_3 = format!("COUPLING:status=Enabled,mode=AssembledStationary,authority=60\n");
+        let trace_3 = "COUPLING:status=Enabled,mode=AssembledStationary,authority=60\n".to_string();
         if vfs_client
             .append_file(TRACE_LOG_PATH, trace_3.as_bytes())
             .is_err()
@@ -372,7 +373,7 @@ mod runner {
             .unwrap_or_else(|_| fail("assembled arm start failed"));
         contract.stop_arm_activity();
 
-        let trace_4 = format!("ASSEMBLED_LAB:status=Completed,base_immobilized=true\n");
+        let trace_4 = "ASSEMBLED_LAB:status=Completed,base_immobilized=true\n".to_string();
         if vfs_client
             .append_file(TRACE_LOG_PATH, trace_4.as_bytes())
             .is_err()
@@ -420,7 +421,7 @@ mod runner {
             .unwrap_or_else(|_| fail("complete decoupling failed"));
         assert_eq!(contract.coupling_state(), CouplingState::Decoupled);
 
-        let trace_5 = format!("DECOUPLING:status=Decoupled,mode=StandaloneUpper\n");
+        let trace_5 = "DECOUPLING:status=Decoupled,mode=StandaloneUpper\n".to_string();
         if vfs_client
             .append_file(TRACE_LOG_PATH, trace_5.as_bytes())
             .is_err()

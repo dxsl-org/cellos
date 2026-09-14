@@ -69,7 +69,7 @@ pub(super) fn spawn_gated(
                 crate::audit::AuditEvent::CellSignatureVerified,
                 &crate::audit::encode_u32x2(0, 0),
             );
-            manifest.as_ref().map_or(false, |m| {
+            manifest.as_ref().is_some_and(|m| {
                 m.protection_class() == api::manifest::PROTECTION_CLASS_FFI
                     || m.protection_class() == api::manifest::PROTECTION_CLASS_UNTRUSTED
             })

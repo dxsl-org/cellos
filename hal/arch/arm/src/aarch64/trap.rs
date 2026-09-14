@@ -354,7 +354,9 @@ pub extern "C" fn vi_aarch64_irq_handler(_frame: &mut TrapFrame) {
             return;
         }
         // GPU peripheral IRQs that are not the systimer.
-        if src & super::bcm2836_irq::IRQ_SRC_GPU != 0 || super::bcm2835_legacy_irq::is_usb_irq_pending() {
+        if src & super::bcm2836_irq::IRQ_SRC_GPU != 0
+            || super::bcm2835_legacy_irq::is_usb_irq_pending()
+        {
             // USB DWC2 interrupt via BCM2835 IRQ controller (legacy IRQ 9).
             if super::bcm2835_legacy_irq::is_usb_irq_pending() {
                 // ONE-SHOT PROTOCOL:
