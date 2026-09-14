@@ -71,6 +71,7 @@ service/IPC/oracle path. No physical, production, admission, or G3 claim is made
 | G-A contract | `libs/ai-proto` 6/6, `libs/ai-sdk` 8/8 host tests; Spec 17 §3 registry row |
 | G-B engine | `libs/ai-engine` golden-oracle test (independent Python reference in `scripts/gen-ai-test-model.py`); `gguf-rs` 20/20, `ai-tokenizer` 19/19, `tensor-math` 22/22 |
 | G-C service path | `evidence/ai-oracle-20260913T230711Z.log` — QEMU RV64, one `[ai-test] PASS`, no cell fault or panic; runner `scripts/run-ai-inference-oracle-qemu.sh` |
+| G-G model load path | `evidence/ai-model-load-paths.txt` — same 25.5 MB model in the same Cell: 150,126 ms through the VFS service, **2,978 ms** through the kernel capability path (the first hypothesis, a per-chunk re-seek, measured at only 2.4%); cell-store deployments keep the VFS fallback |
 | G-F zero-copy | `evidence/ai-15m-model-in-cell.txt` — `stories15M` (25 MiB, 15M parameters) served from `/bin/ai` in QEMU: 28 MB resident, `[ai-test] PASS`; host acceptance test refuses to pass unless a 26.7 MB checkpoint loads under 30 MiB and stays within file + 6 MiB |
 | G-E real checkpoint in a Cell | `evidence/ai-real-model-in-cell.txt` — `stories260K` (SentencePiece, real trained weights) read, loaded and served from `/bin/ai` in QEMU RV64: 24-token continuation, all four oracle scenarios `PASS` |
 | G-D real weights | `evidence/ai-engine-real-weights.txt` — 30-layer Q8_0 checkpoint, 16 tokens at ~3.9 tok/s (scalar kernels; SIMD is the lever), 229 MiB resident, non-degenerate text |
