@@ -223,14 +223,17 @@ echo "[ai-oracle] assembling VIFS1"
     "$REL/driver-virtio-blk"   /bin/block \
     "$REL/service-ai"          /bin/ai \
     "$REL/ai-test"             /bin/ai-test \
-    "$MODEL"                   /bin/ai-model.gguf \
+    "$MODEL"                   "${CELLOS_AI_MODEL_DEST:-/bin/ai-model.gguf}" \
     "$WORK/hostname"           /etc/hostname \
     "$WORK/readme.txt"         /readme.txt \
     "$WORK/POLICY.BIN"         /POLICY.BIN
 cp -- "$REL/app-init" "$EMBEDDED/init"
 
 "$PYTHON_BIN" tools/inspect_fat.py "$EMBEDDED/kernel_fs.img" > "$WORK/fat-layout.txt"
-for required in "LFN 'ai'" "LFN 'ai-test'" "LFN 'ai-model.gguf'" "LFN 'vfs'"; do
+# The model may be packed into a subdirectory (CELLOS_AI_MODEL_DEST), where the listing shows it as
+# an LFN entry under its own section rather than as a root entry, so match on the quoted leaf name.
+MODEL_LEAF="$(basename "${CELLOS_AI_MODEL_DEST:-/bin/ai-model.gguf}")"
+for required in "LFN 'ai'" "LFN 'ai-test'" "'$MODEL_LEAF'" "LFN 'vfs'"; do
     grep -a -Fq -- "$required" "$WORK/fat-layout.txt" || {
         echo "FAIL: VIFS1 is missing $required" >&2
         exit 1

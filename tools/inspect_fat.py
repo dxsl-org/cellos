@@ -65,20 +65,49 @@ def parse_dir(data, offset, label):
 
 parse_dir(data, root_off, 'root')
 
-# Find BIN dir cluster
-for i in range(re):
-    e = data[root_off + i*32: root_off + (i+1)*32]
-    if e[0] == 0:
-        break
-    if e[0] == 0xE5:
+# Walk every subdirectory, not just /bin: images are packed from a list that can put entries
+# anywhere (`mkfat32.py <src> /mnt/sd/ai-model.gguf`), and an inspector that silently ignores a
+# directory makes a packed file look absent to every caller that greps this output.
+def subdirectories(data, offset, entries):
+    """Return (long name when present, short name, first cluster) for each subdirectory."""
+    found = []
+    pending = ''
+    for i in range(entries):
+        e = data[offset + i*32: offset + (i+1)*32]
+        if e[0] == 0:
+            break
+        if e[0] == 0xE5:
+            continue
+        if e[11] == 0x0F:
+            n1 = e[1:11].decode('utf-16-le', errors='replace').rstrip('￿')
+            n2 = e[14:26].decode('utf-16-le', errors='replace').rstrip('￿')
+            n3 = e[28:32].decode('utf-16-le', errors='replace').rstrip('￿')
+            pending = (n1 + n2 + n3).rstrip('\x00') + pending
+            continue
+        name = e[:8].rstrip(b' ')
+        long_name = pending
+        pending = ''
+        if (e[11] & 0x10) and name not in (b'.', b'..'):
+            found.append((long_name, name, struct.unpack_from('<H', e, 26)[0]))
+    return found
+
+seen = set()
+def label(long_name, short_name):
+    return long_name if long_name else short_name.decode(errors='replace')
+
+for long_name, short_name, clus in subdirectories(data, root_off, re):
+    if clus < 2 or clus in seen:
         continue
-    if e[11] == 0x0F:
-        continue
-    name = e[:8].rstrip(b' ')
-    attr = e[11]
-    if (attr & 0x10) and name not in (b'.', b'..'):
-        clus = struct.unpack_from('<H', e, 26)[0]
-        bin_off = data_off + (clus - 2) * spc * bps
-        print('BIN dir (SFN=%r) at cluster %d, offset %d' % (name.decode(errors='replace'), clus, bin_off))
-        parse_dir(data, bin_off, '/bin')
-        break
+    seen.add(clus)
+    offset = data_off + (clus - 2) * spc * bps
+    top = label(long_name, short_name)
+    print('%s dir (SFN=%r) at cluster %d, offset %d' % (top, short_name.decode(errors='replace'), clus, offset))
+    parse_dir(data, offset, '/' + top)
+    for sub_long, sub_short, sub_clus in subdirectories(data, offset, re):
+        if sub_clus < 2 or sub_clus in seen:
+            continue
+        seen.add(sub_clus)
+        sub_off = data_off + (sub_clus - 2) * spc * bps
+        sub = label(sub_long, sub_short)
+        print('%s dir (SFN=%r) at cluster %d, offset %d' % (sub, sub_short.decode(errors='replace'), sub_clus, sub_off))
+        parse_dir(data, sub_off, '/' + top + '/' + sub)

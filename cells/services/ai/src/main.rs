@@ -67,9 +67,15 @@ ostd::declare_custom_heap!(29 * 1024 * 1024);
 #[cfg(not(feature = "large-arena"))]
 ostd::declare_custom_heap!(16 * 1024 * 1024);
 
-/// Model path. The P6 FAT cell-store is mounted at `/bin`, so this is the FAT root entry
-/// `ai-model.gguf` (deployed by `gen_disk.ps1`).
-const MODEL_PATH: &str = "/bin/ai-model.gguf";
+/// Where the service looks for its checkpoint, in order.
+///
+/// `/bin` is the P6 FAT cell-store `gen_disk.ps1` deploys into (and on a netboot image it is the
+/// VIFS1 ramdisk). `/mnt/sd` is the board's own FAT partition: keeping the checkpoint there keeps
+/// the *image* small, which matters where the kernel's memory layout is what breaks first — a
+/// 43.6 MB payload (this checkpoint embedded in VIFS1) panics the Raspberry Pi 3 kernel while the
+/// same cells with the checkpoint on the card boot and serve it. The resident cost inside the Cell
+/// is identical either way, so a deployment should prefer the card.
+const MODEL_PATHS: [&str; 2] = ["/bin/ai-model.gguf", "/mnt/sd/ai-model.gguf"];
 
 /// Ceiling handed to the engine: the arena above minus room for the loader's bookkeeping and the
 /// session table.
@@ -140,15 +146,26 @@ impl AiService {
         // read on a given board is an operational fact, and without the number the only symptom is
         // a silent stall on the serial console.
         let read_started = ostd::syscall::sys_get_time_ms().unwrap_or(0);
-        let bytes = match read_model(MODEL_PATH, ENGINE_LIMIT) {
+        let mut model_path = MODEL_PATHS[0];
+        let mut found = None;
+        for candidate in MODEL_PATHS {
+            if let Some(bytes) = read_model(candidate, ENGINE_LIMIT) {
+                model_path = candidate;
+                found = Some(bytes);
+                break;
+            }
+        }
+        let bytes = match found {
             Some(bytes) => bytes,
             None => {
-                print("[ai] no model at ");
-                print_usize(MODEL_PATH.len());
-                println(" — inference will be refused");
+                print("[ai] no model at any of ");
+                print_usize(MODEL_PATHS.len());
+                println(" candidate paths — inference will be refused");
                 return service;
             }
         };
+        print("[ai] model path: ");
+        println(model_path);
         let read_ms = ostd::syscall::sys_get_time_ms()
             .unwrap_or(0)
             .saturating_sub(read_started);

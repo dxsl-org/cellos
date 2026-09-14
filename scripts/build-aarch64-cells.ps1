@@ -13,7 +13,12 @@ param(
     # Opt-in AI lane (Spec 24): path to a GGUF checkpoint. Adds /bin/ai, /bin/ai-test and
     # /bin/ai-model.gguf to the image so a board image can serve inference and self-test it from
     # the shell. Off by default -- a 26 MB checkpoint has no business in every aarch64 image.
-    [string]$AiModel = ''
+    [string]$AiModel = '',
+    # Build the AI cells but pack no checkpoint: the board then reads one from `/mnt/sd` (its own
+    # FAT partition, i.e. the card's boot volume) instead of carrying it inside the kernel image.
+    # A 43.6 MB image panics the RPi3 kernel at compositor setup, while the same cells with the
+    # checkpoint on the card boot and serve it (`/mnt/sd/ai-model.gguf`).
+    [switch]$AiCells
 )
 
 Set-StrictMode -Version Latest
@@ -35,6 +40,7 @@ $python = if ($IsWindows -and (Get-Command py -ErrorAction SilentlyContinue)) {
 # Cell's 32 MiB VA slot): a checkpoint above it cannot be resident, so refuse it here rather than
 # shipping an image whose AI service truthfully refuses every request.
 $aiModelLimitBytes = 29MB
+if ($AiModel -and $AiCells) { throw 'AiModel and AiCells are mutually exclusive' }
 if ($AiModel) {
     if (-not (Test-Path -LiteralPath $AiModel)) {
         throw "AiModel not found: $AiModel"
@@ -172,7 +178,7 @@ if ($BoardRpi3) {
     cargo build --release -p driver-dwc2-usb --target $target 2>&1 | Select-Object -Last 5
     Assert-CellBuild 'driver-dwc2-usb' $LASTEXITCODE
 }
-if ($AiModel) {
+if ($AiModel -or $AiCells) {
     # The inference service needs `large-arena` for a checkpoint this side of 8 MiB, and the oracle
     # cell is the same binary the QEMU gates run.
     Write-Host "Building service-ai (Spec 24 inference service, large arena)..."
@@ -247,7 +253,7 @@ if ($BoardRpi3) {
 if ($StorageTest) {
     $cells += @(@{ Bin = "vfs-test"; Dst = "/bin/vfs-test" })
 }
-if ($AiModel) {
+if ($AiModel -or $AiCells) {
     $cells += @(
         @{ Bin = "service-ai"; Dst = "/bin/ai"      },
         @{ Bin = "ai-test";    Dst = "/bin/ai-test" }
@@ -274,14 +280,19 @@ foreach ($c in $cells) {
     }
 }
 
-if ($AiModel) {
-    # The checkpoint is data, not a built artifact, so it is added straight from its path.
-    $imgArgs += @($AiModel, "/bin/ai-model.gguf")
+if ($AiModel -or $AiCells) {
     foreach ($required in @('service-ai', 'ai-test')) {
         if ($required -notin $found) {
             throw "AI lane requested but $required is missing from the image inputs"
         }
     }
+}
+if ($AiModel) {
+    # The checkpoint is data, not a built artifact, so it is added straight from its path.
+    $imgArgs += @($AiModel, "/bin/ai-model.gguf")
+}
+if ($AiCells) {
+    Write-Host '  AI cells packed without a checkpoint: the service will read /mnt/sd/ai-model.gguf'
 }
 
 foreach ($required in @('app-shell', 'service-vfs', 'service-config', 'service-input', 'periph-demo', 'sensor-demo', 'spi-demo')) {
