@@ -9,7 +9,11 @@
 
 param(
     [switch]$BoardRpi3,
-    [switch]$StorageTest
+    [switch]$StorageTest,
+    # Opt-in AI lane (Spec 24): path to a GGUF checkpoint. Adds /bin/ai, /bin/ai-test and
+    # /bin/ai-model.gguf to the image so a board image can serve inference and self-test it from
+    # the shell. Off by default -- a 26 MB checkpoint has no business in every aarch64 image.
+    [string]$AiModel = ''
 )
 
 Set-StrictMode -Version Latest
@@ -25,6 +29,21 @@ $python = if ($IsWindows -and (Get-Command py -ErrorAction SilentlyContinue)) {
     'python'
 } else {
     throw 'Python 3 is required to build the embedded image'
+}
+
+# Mirror `cells/services/ai/src/main.rs`'s `ENGINE_LIMIT` (29 MiB with `large-arena`, inside the
+# Cell's 32 MiB VA slot): a checkpoint above it cannot be resident, so refuse it here rather than
+# shipping an image whose AI service truthfully refuses every request.
+$aiModelLimitBytes = 29MB
+if ($AiModel) {
+    if (-not (Test-Path -LiteralPath $AiModel)) {
+        throw "AiModel not found: $AiModel"
+    }
+    $aiModelSize = (Get-Item -LiteralPath $AiModel).Length
+    if ($aiModelSize -gt $aiModelLimitBytes) {
+        throw ("AiModel is {0:N1} MB, above the {1:N0} MB the Cell's arena can hold" -f ($aiModelSize / 1MB), ($aiModelLimitBytes / 1MB))
+    }
+    Write-Host ("[aarch64] AI lane enabled: {0} ({1:N1} MB)" -f $AiModel, ($aiModelSize / 1MB))
 }
 
 $target   = "aarch64-unknown-none-softfloat"
@@ -153,6 +172,18 @@ if ($BoardRpi3) {
     cargo build --release -p driver-dwc2-usb --target $target 2>&1 | Select-Object -Last 5
     Assert-CellBuild 'driver-dwc2-usb' $LASTEXITCODE
 }
+if ($AiModel) {
+    # The inference service needs `large-arena` for a checkpoint this side of 8 MiB, and the oracle
+    # cell is the same binary the QEMU gates run.
+    Write-Host "Building service-ai (Spec 24 inference service, large arena)..."
+    cargo build --release -p service-ai --features large-arena --target $target 2>&1 | Select-Object -Last 5
+    Assert-CellBuild 'service-ai' $LASTEXITCODE
+
+    Write-Host "Building ai-test (Spec 24 oracle cell)..."
+    cargo build --release -p ai-test --target $target 2>&1 | Select-Object -Last 5
+    Assert-CellBuild 'ai-test' $LASTEXITCODE
+}
+
 Write-Host "Building app-init..."
 if ($BoardRpi3) {
     foreach ($artifact in @('app-init', 'driver-bcm-display', 'service-compositor', 'fb-console')) {
@@ -216,6 +247,12 @@ if ($BoardRpi3) {
 if ($StorageTest) {
     $cells += @(@{ Bin = "vfs-test"; Dst = "/bin/vfs-test" })
 }
+if ($AiModel) {
+    $cells += @(
+        @{ Bin = "service-ai"; Dst = "/bin/ai"      },
+        @{ Bin = "ai-test";    Dst = "/bin/ai-test" }
+    )
+}
 
 $imagePath = Join-Path $embeddedDir 'kernel_fs.img'
 $imgArgs = @($imagePath)
@@ -234,6 +271,16 @@ foreach ($c in $cells) {
         $found += $c.Bin
     } else {
         Write-Warning "  Not found: $src (will be absent from kernel_fs.img)"
+    }
+}
+
+if ($AiModel) {
+    # The checkpoint is data, not a built artifact, so it is added straight from its path.
+    $imgArgs += @($AiModel, "/bin/ai-model.gguf")
+    foreach ($required in @('service-ai', 'ai-test')) {
+        if ($required -notin $found) {
+            throw "AI lane requested but $required is missing from the image inputs"
+        }
     }
 }
 
