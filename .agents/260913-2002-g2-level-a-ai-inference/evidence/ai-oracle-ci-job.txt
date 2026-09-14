@@ -6,5 +6,8 @@
 # 2026-09-13 run 34790421863 job 103813474752 @ ddadee3e  PASS  (streaming scenario:
 #   the log carries "[ai-test] prompt stream matched: 8 tokens")
 #
+# 2026-09-14 run 34792883121 job 103820323671 @ 829ae42b  PASS  (Law 1 freeze check added;
+#   the log carries "OK: the frozen AI interface matches its Law 1 record" before the boot)
+#
 # not recorded here by design: each run uploads its own serial log as the
 # 'ai-inference-oracle-<run_number>' artifact, which carries the raw markers.
