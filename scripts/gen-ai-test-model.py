@@ -180,8 +180,22 @@ def generate_weights() -> dict[str, tuple[list[int], list[float]]]:
     return tensors
 
 
+def round_half_away(value: float) -> int:
+    """C's `roundf`: the halfway case leaves zero, as GGML's quantizer does.
+
+    Python's built-in `round` breaks ties to even instead, which would put the reference and the
+    engine on different rules for exactly-representable halfway values.
+    """
+    return math.floor(value + 0.5) if value >= 0 else math.ceil(value - 0.5)
+
+
 def quantize_q8_0(values: list[float]) -> bytes:
-    """GGML Q8_0: one f16 scale + 32 int8 per 34-byte block."""
+    """GGML Q8_0: one f16 scale + 32 int8 per 34-byte block.
+
+    The quantizer divides by the *stored* (f16-rounded) scale, so a reader multiplying by that scale
+    sees an error inside half a step — the same convention `tensor_math::quant::q8_0_row_from_f32`
+    uses.
+    """
     assert len(values) % 32 == 0
     out = bytearray()
     for offset in range(0, len(values), 32):
@@ -190,10 +204,25 @@ def quantize_q8_0(values: list[float]) -> bytes:
         scale = f16_round(peak / 127.0) if peak > 0 else 0.0
         out += struct.pack("<e", scale)
         for value in block:
-            quantized = int(round(value / scale)) if scale > 0 else 0
+            quantized = round_half_away(value / scale) if scale > 0 else 0
             quantized = max(-128, min(127, quantized))
             out += struct.pack("<b", quantized)
     return bytes(out)
+
+
+def quantize_activation(x: list[float]) -> tuple[list[float], list[int]]:
+    """Quantize one activation row exactly as the engine does: (block scales, i8 weights)."""
+    scales: list[float] = []
+    quants: list[int] = []
+    for offset in range(0, len(x), 32):
+        block = x[offset : offset + 32]
+        peak = max(abs(value) for value in block)
+        scale = f16_round(peak / 127.0) if peak > 0 else 0.0
+        scales.append(scale)
+        for value in block:
+            quantized = round_half_away(value / scale) if scale > 0 else 0
+            quants.append(max(-128, min(127, quantized)))
+    return scales, quants
 
 
 def dequantize_q8_0(data: bytes, count: int) -> list[float]:
@@ -209,6 +238,12 @@ def dequantize_q8_0(data: bytes, count: int) -> list[float]:
     return out
 
 
+def embedding_row(packed: bytes, row: int, cols: int) -> list[float]:
+    """One row of a Q8_0 matrix, dequantized — the token embedding lookup."""
+    row_bytes = cols // 32 * 34
+    return dequantize_q8_0(packed[row * row_bytes : (row + 1) * row_bytes], cols)
+
+
 # ── Reference forward pass ───────────────────────────────────────────────────────────────────────
 def rms_norm(x: list[float], weight: list[float], eps: float) -> list[float]:
     mean_square = sum(value * value for value in x) / len(x)
@@ -216,10 +251,29 @@ def rms_norm(x: list[float], weight: list[float], eps: float) -> list[float]:
     return [value * scale * weight[index] for index, value in enumerate(x)]
 
 
-def matvec(weights: list[float], rows: int, cols: int, x: list[float]) -> list[float]:
-    return [
-        sum(weights[row * cols + col] * x[col] for col in range(cols)) for row in range(rows)
-    ]
+def matvec(packed: bytes, rows: int, cols: int, x: list[float]) -> list[float]:
+    """Q8_0 × Q8_0 matvec: integer dot per 32-weight block, scaled by d_w·d_a.
+
+    This is the arithmetic `tensor_math::matvec_q8_0_int8` performs, so the golden values describe the
+    engine's contract rather than a different (f32) one. The 32-term integer sums are exact in both
+    implementations; only the f32 accumulation order across blocks can differ.
+    """
+    scales_a, quants_a = quantize_activation(x)
+    blocks_per_row = cols // 32
+    row_bytes = blocks_per_row * 34
+    out: list[float] = []
+    for row in range(rows):
+        acc = 0.0
+        for block in range(blocks_per_row):
+            base = row * row_bytes + block * 34
+            scale_w = struct.unpack_from("<e", packed, base)[0]
+            total = 0
+            for index in range(32):
+                weight = struct.unpack_from("<b", packed, base + 2 + index)[0]
+                total += weight * quants_a[block * 32 + index]
+            acc += scale_w * scales_a[block] * total
+        out.append(acc)
+    return out
 
 
 def rope(vector: list[float], position: int, base: float) -> list[float]:
@@ -245,21 +299,28 @@ def silu(value: float) -> float:
     return value / (1.0 + math.exp(-value))
 
 
-def forward_hidden(tokens: list[int], weights: dict[str, list[float]], dims: dict[str, list[int]]) -> list[list[float]]:
+def forward_hidden(
+    tokens: list[int],
+    packed: dict[str, bytes],
+    norms: dict[str, list[float]],
+    dims: dict[str, list[int]],
+) -> list[list[float]]:
     """Reference Llama forward pass; returns the hidden state (before output norm) per position."""
-    del dims
+    n_vocab = dims["token_embd.weight"][1]
     kv_cache_k = [[0.0] * KV_DIM for _ in range(N_LAYER * N_CTX)]
     kv_cache_v = [[0.0] * KV_DIM for _ in range(N_LAYER * N_CTX)]
     hidden_states: list[list[float]] = []
 
     for position, token in enumerate(tokens):
-        x = weights["token_embd.weight"][token * N_EMBD : (token + 1) * N_EMBD]
+        if not 0 <= token < n_vocab:
+            raise SystemExit(f"token {token} is outside the fixture vocabulary")
+        x = embedding_row(packed["token_embd.weight"], token, N_EMBD)
         for layer in range(N_LAYER):
             prefix = f"blk.{layer}."
-            xb = rms_norm(x, weights[prefix + "attn_norm.weight"], RMS_EPS)
-            q = matvec(weights[prefix + "attn_q.weight"], N_EMBD, N_EMBD, xb)
-            k = matvec(weights[prefix + "attn_k.weight"], KV_DIM, N_EMBD, xb)
-            v = matvec(weights[prefix + "attn_v.weight"], KV_DIM, N_EMBD, xb)
+            xb = rms_norm(x, norms[prefix + "attn_norm.weight"], RMS_EPS)
+            q = matvec(packed[prefix + "attn_q.weight"], N_EMBD, N_EMBD, xb)
+            k = matvec(packed[prefix + "attn_k.weight"], KV_DIM, N_EMBD, xb)
+            v = matvec(packed[prefix + "attn_v.weight"], KV_DIM, N_EMBD, xb)
             q = [
                 rotated
                 for head in range(N_HEAD)
@@ -294,16 +355,16 @@ def forward_hidden(tokens: list[int], weights: dict[str, list[float]], dims: dic
                     for index in range(HEAD_DIM):
                         attn[head * HEAD_DIM + index] += score * v_head[index]
 
-            projected = matvec(weights[prefix + "attn_output.weight"], N_EMBD, N_EMBD, attn)
+            projected = matvec(packed[prefix + "attn_output.weight"], N_EMBD, N_EMBD, attn)
             x = [a + b for a, b in zip(x, projected)]
 
-            xb = rms_norm(x, weights[prefix + "ffn_norm.weight"], RMS_EPS)
-            gate = matvec(weights[prefix + "ffn_gate.weight"], N_FF, N_EMBD, xb)
-            up = matvec(weights[prefix + "ffn_up.weight"], N_FF, N_EMBD, xb)
+            xb = rms_norm(x, norms[prefix + "ffn_norm.weight"], RMS_EPS)
+            gate = matvec(packed[prefix + "ffn_gate.weight"], N_FF, N_EMBD, xb)
+            up = matvec(packed[prefix + "ffn_up.weight"], N_FF, N_EMBD, xb)
             hidden = [
                 silu(gate[index]) * up[index] for index in range(N_FF)
             ]
-            down = matvec(weights[prefix + "ffn_down.weight"], N_EMBD, N_FF, hidden)
+            down = matvec(packed[prefix + "ffn_down.weight"], N_EMBD, N_FF, hidden)
             x = [a + b for a, b in zip(x, down)]
 
         hidden_states.append(list(x))
@@ -311,28 +372,27 @@ def forward_hidden(tokens: list[int], weights: dict[str, list[float]], dims: dic
     return hidden_states
 
 
-def logits_of(hidden: list[float], weights: dict[str, list[float]], dims: dict[str, list[int]]) -> list[float]:
-    """Output norm + tied output embedding: logits[v] = dot(token_embd[v], norm(hidden))."""
+def logits_of(
+    hidden: list[float],
+    packed: dict[str, bytes],
+    norms: dict[str, list[float]],
+    dims: dict[str, list[int]],
+) -> list[float]:
+    """Output norm + tied output embedding: logits = token_embd · norm(hidden), Q8_0 × Q8_0."""
     n_vocab = dims["token_embd.weight"][1]
-    final = rms_norm(hidden, weights["output_norm.weight"], RMS_EPS)
-    return [
-        sum(
-            weights["token_embd.weight"][v * N_EMBD + index] * final[index]
-            for index in range(N_EMBD)
-        )
-        for v in range(n_vocab)
-    ]
+    final = rms_norm(hidden, norms["output_norm.weight"], RMS_EPS)
+    return matvec(packed["token_embd.weight"], n_vocab, N_EMBD, final)
 
 
-def forward(tokens: list[int], weights, dims) -> list[float]:
+def forward(tokens: list[int], packed, norms, dims) -> list[float]:
     """Logits of the last position."""
-    hidden = forward_hidden(tokens, weights, dims)
-    return logits_of(hidden[-1], weights, dims)
+    hidden = forward_hidden(tokens, packed, norms, dims)
+    return logits_of(hidden[-1], packed, norms, dims)
 
 
-def embed(text: str, weights, dims) -> list[float]:
+def embed(text: str, packed, norms, dims) -> list[float]:
     """Mean-pooled, L2-normalized hidden state — the reference for `Engine::embed`."""
-    hidden = forward_hidden(encode(text), weights, dims)
+    hidden = forward_hidden(encode(text), packed, norms, dims)
     pooled = [
         sum(state[index] for state in hidden) / len(hidden) for index in range(N_EMBD)
     ]
@@ -440,20 +500,25 @@ def is_norm(name: str) -> bool:
     return name.endswith("_norm.weight")
 
 
-def reference_weights() -> tuple[dict[str, list[float]], dict[str, list[int]]]:
-    """Model as the engine will see it: Q8_0 tensors dequantized, norms as written."""
-    weights: dict[str, list[float]] = {}
+def reference_weights() -> tuple[dict[str, bytes], dict[str, list[float]], dict[str, list[int]]]:
+    """Model as the engine consumes it: Q8_0 *bytes* per matrix, exact values for the norms.
+
+    Keeping the packed bytes (rather than a dequantized copy) is what lets the reference run the same
+    Q8_0 × Q8_0 integer arithmetic the engine runs.
+    """
+    packed: dict[str, bytes] = {}
+    norms: dict[str, list[float]] = {}
     dims: dict[str, list[int]] = {}
     for name, (dims_value, values) in generate_weights().items():
         dims[name] = dims_value
         if is_norm(name):
-            weights[name] = list(values)
+            norms[name] = list(values)
         else:
-            weights[name] = dequantize_q8_0(quantize_q8_0(values), len(values))
-    return weights, dims
+            packed[name] = quantize_q8_0(values)
+    return packed, norms, dims
 
 
-def greedy_with_margin(tokens: list[int], weights, dims, count: int) -> tuple[list[int], list[float]]:
+def greedy_with_margin(tokens: list[int], packed, norms, dims, count: int) -> tuple[list[int], list[float]]:
     """Greedy decode and report the argmax margin per step.
 
     A margin test keeps the fixture honest: if two logits are within numerical noise, the golden ids
@@ -463,7 +528,7 @@ def greedy_with_margin(tokens: list[int], weights, dims, count: int) -> tuple[li
     produced: list[int] = []
     margins: list[float] = []
     for _ in range(count):
-        logits = forward(sequence, weights, dims)
+        logits = forward(sequence, packed, norms, dims)
         ordered = sorted(range(len(logits)), key=lambda index: logits[index], reverse=True)
         best, runner_up = ordered[0], ordered[1]
         produced.append(best)
@@ -472,10 +537,10 @@ def greedy_with_margin(tokens: list[int], weights, dims, count: int) -> tuple[li
     return produced, margins
 
 
-def golden_text(weights, dims) -> str:
+def golden_text(packed, norms, dims) -> str:
     prompt_ids = encode(GOLDEN_PROMPT)
-    logits = forward(prompt_ids, weights, dims)
-    produced, margins = greedy_with_margin(prompt_ids, weights, dims, GOLDEN_MAX_TOKENS)
+    logits = forward(prompt_ids, packed, norms, dims)
+    produced, margins = greedy_with_margin(prompt_ids, packed, norms, dims, GOLDEN_MAX_TOKENS)
     weakest = min(margins) if margins else 0.0
     if weakest < 0.05:
         raise SystemExit(
@@ -493,7 +558,8 @@ def golden_text(weights, dims) -> str:
         "# Engine::embed reference: mean-pooled, L2-normalized hidden state of `embed_text`.",
         f"embed_text={GOLDEN_EMBED_TEXT}",
         "embed_ids=" + ",".join(str(token) for token in encode(GOLDEN_EMBED_TEXT)),
-        "embed_values=" + ",".join(f"{value:.6f}" for value in embed(GOLDEN_EMBED_TEXT, weights, dims)),
+        "embed_values="
+        + ",".join(f"{value:.6f}" for value in embed(GOLDEN_EMBED_TEXT, packed, norms, dims)),
         "",
     ]
     return "\n".join(lines)
@@ -501,9 +567,9 @@ def golden_text(weights, dims) -> str:
 
 def main() -> int:
     check = "--check" in sys.argv
-    weights, dims = reference_weights()
+    packed, norms, dims = reference_weights()
     blob = build_gguf()
-    golden = golden_text(weights, dims)
+    golden = golden_text(packed, norms, dims)
 
     if check:
         ok = True

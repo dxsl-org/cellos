@@ -282,6 +282,28 @@ fn main() -> ExitCode {
         });
     }
 
+    // The shipped path: the same shapes with the activation quantized to Q8_0 first, so the inner
+    // loop is an integer dot product. The activation quantization is included in the measurement,
+    // because that is what a real forward pass pays.
+    let quantized_shapes = [
+        ("int8_attn_q", embd, embd),
+        ("int8_attn_o", embd, embd),
+        ("int8_ffn_gate", ffn, embd),
+        ("int8_ffn_down", embd, ffn),
+        ("int8_logits", vocab, embd),
+    ];
+    for (label, rows, cols) in quantized_shapes {
+        let packed = synthetic_q8(rows, cols);
+        let mut slots = vec![0.0f32; rows];
+        let row_bytes = tensor_math::q8_0_row_bytes(cols).expect("cols is a multiple of 32");
+        let mut activation = vec![0u8; row_bytes];
+        report_kernel(label, scale, 2.0 * (rows * cols) as f64, || {
+            tensor_math::quant::q8_0_row_from_f32(&x[..cols], &mut activation).unwrap();
+            tensor_math::matvec_q8_0_int8(&mut slots, &packed, &activation, rows, cols).unwrap();
+            row_out[0] = slots[0];
+        });
+    }
+
     let dense = vec![0.25f32; embd * embd];
     let mut dense_out = vec![0.0f32; embd];
     report_kernel("matvec_f32", scale, 2.0 * (embd * embd) as f64, || {

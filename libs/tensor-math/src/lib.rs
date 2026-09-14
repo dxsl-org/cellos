@@ -87,10 +87,12 @@ pub fn matvec(
 /// [`matvec`], so `matvec_q8_0(out, q, x, r, c)` and `matvec(out, dequantize(q), x, r, c)`
 /// agree bit for bit when the dequantized weights are produced from the same block bytes.
 ///
-/// The staging block is not redundant work to be fused away: decoding into a contiguous
-/// `[f32; 32]` and then dotting it lets the optimiser widen both loops (measured 10.3 GFLOP/s
-/// with the staging block, 7.5 GFLOP/s converting i8 inside the accumulation loop, on the
-/// benchmark host at `-O3`). Keep the two stages.
+/// The engine ships [`matvec_q8_0_int8`] instead, because decoding a block to f32 costs more per MAC
+/// than the integer dot product (measured: 6.8 vs 12.8 GFLOP/s for the decode, and the decode is the
+/// dense kernel's equal — see `libs/ai-engine/benches/cpu_engine.rs`). This kernel is kept as the
+/// f32 reference the integer kernel is bounded against, and as the benchmark's comparison row; its
+/// own staging block still beats converting i8 inside the accumulation loop (10.3 vs 7.5 GFLOP/s at
+/// `-O3`), so do not "simplify" it into the loop.
 pub fn matvec_q8_0(
     out: &mut [f32],
     w: &[u8],
@@ -131,6 +133,70 @@ pub fn q8_0_row_bytes(cols: usize) -> Option<usize> {
         return None;
     }
     (cols / quant::Q8_0_BLOCK_WEIGHTS).checked_mul(quant::Q8_0_BLOCK_BYTES)
+}
+
+/// Same as [`matvec_q8_0`] with a Q8_0-quantized activation row instead of an f32 vector.
+///
+/// `x_q8` is `q8_0_row_bytes(x.len())` bytes as produced by [`quant::q8_0_row_from_f32`], so the
+/// activation is rounded once per projection and each block of 32 weights is then a single integer
+/// dot product:
+///
+/// ```text
+/// block part = d_w · d_a · Σ (wᵢ · aᵢ)      (Σ in i32, so it is exact)
+/// ```
+///
+/// `|Σ| ≤ 32 · 128² = 524_288`, four orders of magnitude inside `i32`, so the integer part never
+/// overflows and carries no rounding at all; the only error against [`matvec_q8_0`] is the half-step
+/// of the activation quantization. The per-block parts of one row are summed in four f32 lanes and
+/// collapsed with [`reduce_lanes`], the same order both f32 kernels use.
+///
+/// This is the shipped engine path: it removes the 32-element f32 decode (i8→f32 convert, scale
+/// multiply, store) that made the f32-staging kernel ~2× slower per MAC than the dense one, and it
+/// removes every f32 multiply and add from the inner loop — which is what decides cost on the cell,
+/// where softfloat is emulated.
+pub fn matvec_q8_0_int8(
+    out: &mut [f32],
+    w: &[u8],
+    x_q8: &[u8],
+    rows: usize,
+    cols: usize,
+) -> Result<(), MathError> {
+    if rows == 0 || cols == 0 {
+        return Err(MathError::Empty);
+    }
+    let Some(row_bytes) = q8_0_row_bytes(cols) else {
+        return Err(MathError::NotDivisible);
+    };
+    let Some(bytes) = rows.checked_mul(row_bytes) else {
+        return Err(MathError::ShapeMismatch);
+    };
+    if w.len() != bytes || x_q8.len() != row_bytes || out.len() != rows {
+        return Err(MathError::ShapeMismatch);
+    }
+    for (row, slot) in w.chunks_exact(row_bytes).zip(out.iter_mut()) {
+        let mut acc = [0.0f32; 4];
+        for (index, (block, vector)) in row
+            .chunks_exact(quant::Q8_0_BLOCK_BYTES)
+            .zip(x_q8.chunks_exact(quant::Q8_0_BLOCK_BYTES))
+            .enumerate()
+        {
+            let (Some(&w_lo), Some(&w_hi)) = (block.first(), block.get(1)) else {
+                return Err(MathError::ShapeMismatch);
+            };
+            let (Some(&a_lo), Some(&a_hi)) = (vector.first(), vector.get(1)) else {
+                return Err(MathError::ShapeMismatch);
+            };
+            let d_w = quant::f16_to_f32(u16::from_le_bytes([w_lo, w_hi]));
+            let d_a = quant::f16_to_f32(u16::from_le_bytes([a_lo, a_hi]));
+            let mut sum = 0i32;
+            for (&weight, &activation) in block[2..].iter().zip(&vector[2..]) {
+                sum += i32::from(weight as i8) * i32::from(activation as i8);
+            }
+            acc[index % 4] += (d_w * d_a) * sum as f32;
+        }
+        *slot = reduce_lanes(acc);
+    }
+    Ok(())
 }
 
 /// `out[i] = x[i] / sqrt(mean(x²) + eps) * weight[i]`.
@@ -626,6 +692,143 @@ mod tests {
         assert!(
             magnitude > 1e-3,
             "the fixture must produce non-trivial activations"
+        );
+    }
+
+    #[test]
+    fn matvec_q8_0_int8_is_exact_when_quantization_is_exact() {
+        // Both operands exactly representable at scale 0.5: the weights are 0.5·q with q = 1..=32 and
+        // 2..=33, the activations are multiples of 0.5 whose peak is 63.5 (so amax/127 = 0.5 exactly).
+        // Every product is a multiple of 0.25 well inside f32's exact range, so the integer kernel and
+        // the dense kernel must agree bit for bit: the integer dot and the block scale add nothing.
+        let mut weights = Vec::new();
+        for shift in 0..2i32 {
+            weights.extend_from_slice(&0x3800u16.to_le_bytes());
+            for i in 1..=32i32 {
+                weights.push((i + shift) as i8 as u8);
+            }
+        }
+        let x: Vec<f32> = (0..32).map(|i| 63.5 - i as f32).collect();
+        let mut x_q8 = vec![0u8; q8_0_row_bytes(32).expect("32 columns is one block")];
+        quant::q8_0_row_from_f32(&x, &mut x_q8).expect("32 values is one block");
+        assert_eq!(
+            u16::from_le_bytes([x_q8[0], x_q8[1]]),
+            quant::f32_to_f16(0.5),
+            "the fixture's activation scale must be exact, or the test proves nothing"
+        );
+
+        let mut int8_out = [0.0f32; 2];
+        matvec_q8_0_int8(&mut int8_out, &weights, &x_q8, 2, 32).expect("shapes agree");
+
+        let mut dense = vec![0.0f32; 2 * 32];
+        for r in 0..2 {
+            for c in 0..32 {
+                dense[r * 32 + c] = 0.5 * (c as i32 + 1 + r as i32) as f32;
+            }
+        }
+        let mut dense_out = [0.0f32; 2];
+        matvec(&mut dense_out, &dense, &x, 2, 32).expect("shapes agree");
+        assert_eq!(int8_out, dense_out);
+    }
+
+    #[test]
+    fn matvec_q8_0_int8_stays_within_the_activation_quantization_bound() {
+        // The only difference from the f32-staging kernel is that the activation is rounded to i8:
+        // each element moves by at most d_a/2, which the row scales by |wᵢ| = d_w·|qᵢ|. Summing
+        // d_w·d_a·0.5·Σ|qᵢ| over the row's blocks is therefore a hard bound on the difference.
+        for &(rows, cols, seed) in &[(1usize, 32usize, 11u64), (3, 64, 12), (5, 160, 13)] {
+            let blocks_per_row = cols / quant::Q8_0_BLOCK_WEIGHTS;
+            let row_bytes = q8_0_row_bytes(cols).expect("cols is a multiple of 32");
+            let scale_bits = [0x2000u16, 0x1C00, 0x2400, 0x1800]; // 2^-7, 2^-9, 2^-6, 2^-11
+            let mut rng = Rng::new(seed);
+            let mut weights = vec![0u8; rows * row_bytes];
+            let mut bound = 0.0f32;
+            for r in 0..rows {
+                for b in 0..blocks_per_row {
+                    let bits = scale_bits[(r + b) % scale_bits.len()];
+                    let amplitude = quant::f16_to_f32(bits) * 126.0;
+                    let values = random_values(&mut rng, quant::Q8_0_BLOCK_WEIGHTS, amplitude);
+                    let (block, _) = quantize_block(&values, bits);
+                    let byte_offset = r * row_bytes + b * quant::Q8_0_BLOCK_BYTES;
+                    weights[byte_offset..byte_offset + quant::Q8_0_BLOCK_BYTES]
+                        .copy_from_slice(&block);
+                }
+            }
+            let x = random_values(&mut rng, cols, 1.0);
+            let mut x_q8 = vec![0u8; row_bytes];
+            quant::q8_0_row_from_f32(&x, &mut x_q8).expect("cols is a whole number of blocks");
+            for r in 0..rows {
+                for b in 0..blocks_per_row {
+                    let base = r * row_bytes + b * quant::Q8_0_BLOCK_BYTES;
+                    let d_w =
+                        quant::f16_to_f32(u16::from_le_bytes([weights[base], weights[base + 1]]));
+                    let d_a = quant::f16_to_f32(u16::from_le_bytes([
+                        x_q8[b * quant::Q8_0_BLOCK_BYTES],
+                        x_q8[b * quant::Q8_0_BLOCK_BYTES + 1],
+                    ]));
+                    let sum_abs: f32 = weights[base + 2..base + quant::Q8_0_BLOCK_BYTES]
+                        .iter()
+                        .map(|byte| (*byte as i8 as f32).abs())
+                        .sum();
+                    bound += d_w * d_a * 0.5 * sum_abs;
+                }
+            }
+
+            let mut int8_out = vec![0.0f32; rows];
+            matvec_q8_0_int8(&mut int8_out, &weights, &x_q8, rows, cols).expect("shapes agree");
+            let mut staging_out = vec![0.0f32; rows];
+            matvec_q8_0(&mut staging_out, &weights, &x, rows, cols).expect("shapes agree");
+
+            for r in 0..rows {
+                let error = (int8_out[r] - staging_out[r]).abs();
+                assert!(
+                    error <= bound + 1e-5,
+                    "rows {rows}, cols {cols}, row {r}: error {error} exceeds the bound {bound}"
+                );
+                assert!(
+                    int8_out[r] != 0.0 && staging_out[r] != 0.0,
+                    "row {r} must be non-trivial for the comparison to mean anything"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn matvec_q8_0_int8_checks_its_shapes() {
+        let weights = vec![0u8; q8_0_row_bytes(32).expect("one block")];
+        let activations = vec![0u8; q8_0_row_bytes(32).expect("one block")];
+        let mut out = [0.0f32; 1];
+        assert_eq!(
+            matvec_q8_0_int8(&mut out, &weights, &activations, 0, 32),
+            Err(MathError::Empty)
+        );
+        assert_eq!(
+            matvec_q8_0_int8(&mut out, &weights, &activations, 1, 0),
+            Err(MathError::Empty)
+        );
+        assert_eq!(
+            matvec_q8_0_int8(&mut out, &weights, &activations, 1, 33),
+            Err(MathError::NotDivisible)
+        );
+        assert_eq!(
+            matvec_q8_0_int8(&mut out, &weights, &activations, 2, 32),
+            Err(MathError::ShapeMismatch),
+            "out must hold one value per row"
+        );
+        assert_eq!(
+            matvec_q8_0_int8(&mut out, &weights[..33], &activations, 1, 32),
+            Err(MathError::ShapeMismatch),
+            "w must hold one whole row"
+        );
+        assert_eq!(
+            matvec_q8_0_int8(&mut out, &weights, &activations[..33], 1, 32),
+            Err(MathError::ShapeMismatch),
+            "x_q8 must hold one whole row"
+        );
+        assert_eq!(
+            matvec_q8_0_int8(&mut [0.0f32; 2], &weights, &activations, 1, 32),
+            Err(MathError::ShapeMismatch),
+            "out must be exactly one value per row, as in the sibling kernels"
         );
     }
 

@@ -13,7 +13,9 @@
 //! - **Both tokenizer families**: byte-level BPE (`gpt2`) and SentencePiece (`llama`), including
 //!   control-token matching for chat templates. See `ai-tokenizer`.
 //! - **Two weight layouts**: `Q8_0` tensors stay quantized and run through
-//!   [`tensor_math::matvec_q8_0`]; `F32`/`F16` tensors are materialized as `f32` at load time.
+//!   [`tensor_math::matvec_q8_0_int8`] with the activation quantized to Q8_0 as well, so the inner
+//!   loop is an integer dot product and two f32 multiplies per 32 weights; `F32`/`F16` tensors are
+//!   materialized as `f32` at load time and run through the dense kernel.
 //! - **Zero-copy weights**: [`Engine::load`] takes ownership of the model file and addresses every
 //!   tensor in place, so a model costs its file size and nothing more. A tensor the kernels cannot
 //!   consume as stored — F16, or a float region that is not 4-byte aligned — is converted once at
@@ -247,11 +249,18 @@ fn norm_values<'a>(buffer: &'a [u8], norm: &'a Norm) -> Result<&'a [f32], MathEr
 /// so a staging buffer would only add a copy per projection — and for the tied output projection
 /// (a `vocab × n_embd` matrix) that copy is what forced a per-row dequantise of the whole
 /// vocabulary on every generated token.
+///
+/// The activation is the operand that *is* staged: for a `Q8_0` matrix it is quantized into `xq`
+/// (one row, sized by `Scratch::new`) and the kernel then runs an integer dot product per 32-weight
+/// block. Callers whose matrices share an input (attention `q`/`k`/`v`, then `gate`/`up`) pass the
+/// same vector again; re-quantizing a `n_embd`-wide row costs one pass over it, against `rows` passes
+/// for the projection itself, so the redundancy is not worth a second code path.
 fn matvec_into(
     buffer: &[u8],
     matrix: &Matrix,
     out: &mut [f32],
     x: &[f32],
+    xq: &mut [u8],
 ) -> Result<(), MathError> {
     let rows = matrix.rows();
     if out.len() < rows {
@@ -266,7 +275,10 @@ fn matvec_into(
             len,
         } => {
             let data = tensor_bytes(buffer, *offset, *len)?;
-            tensor_math::matvec_q8_0(out, data, x, *rows, *cols)
+            let row_bytes = tensor_math::q8_0_row_bytes(*cols).ok_or(MathError::NotDivisible)?;
+            let activation = xq.get_mut(..row_bytes).ok_or(MathError::ShapeMismatch)?;
+            quant::q8_0_row_from_f32(x, activation)?;
+            tensor_math::matvec_q8_0_int8(out, data, activation, *rows, *cols)
         }
         Matrix::F32 { rows, cols, offset } => {
             let data = f32_values(buffer, *offset, rows * cols)?;
@@ -515,10 +527,19 @@ struct Scratch {
     up: Vec<f32>,
     logits: Vec<f32>,
     scores: Vec<f32>,
+    /// One Q8_0-quantized activation row, as wide as the widest projection input.
+    xq: Vec<u8>,
 }
 
 impl Scratch {
     fn new(cfg: &ModelConfig) -> Self {
+        // The quantized row must cover the widest `Q8_0` projection input: `n_embd` for
+        // attention/MLP inputs and the output projection, `n_ff` for the down projection. The width
+        // is rounded up to a whole block because a model whose `n_embd` is not a multiple of 32 is
+        // still loadable when its tensors are stored as f32; each call slices exactly `row_bytes`.
+        let widest = cfg.n_embd.max(cfg.n_ff);
+        let xq = tensor_math::q8_0_row_bytes(widest.next_multiple_of(quant::Q8_0_BLOCK_WEIGHTS))
+            .expect("rounding a width up to a block is always representable");
         Self {
             x: vec![0.0; cfg.n_embd],
             xb: vec![0.0; cfg.n_embd],
@@ -531,6 +552,7 @@ impl Scratch {
             up: vec![0.0; cfg.n_ff],
             logits: vec![0.0; cfg.vocab_size],
             scores: vec![0.0; cfg.n_ctx],
+            xq: vec![0u8; xq],
         }
     }
 
@@ -547,6 +569,7 @@ impl Scratch {
             + self.logits.len()
             + self.scores.len())
             * 4
+            + self.xq.len()
     }
 }
 
@@ -943,18 +966,21 @@ fn forward(
             &layer.wq,
             &mut scratch.q[..cfg.n_embd],
             &scratch.xb[..cfg.n_embd],
+            &mut scratch.xq,
         )?;
         matvec_into(
             buffer,
             &layer.wk,
             &mut scratch.k[..cfg.kv_dim()],
             &scratch.xb[..cfg.n_embd],
+            &mut scratch.xq,
         )?;
         matvec_into(
             buffer,
             &layer.wv,
             &mut scratch.v[..cfg.kv_dim()],
             &scratch.xb[..cfg.n_embd],
+            &mut scratch.xq,
         )?;
 
         rope(&mut scratch.q[..cfg.n_embd], cfg, position)?;
@@ -971,6 +997,7 @@ fn forward(
             &layer.wo,
             &mut scratch.down[..cfg.n_embd],
             &scratch.attn[..cfg.n_embd],
+            &mut scratch.xq,
         )?;
         tensor_math::add_in_place(&mut scratch.x[..cfg.n_embd], &scratch.down[..cfg.n_embd])?;
 
@@ -985,12 +1012,14 @@ fn forward(
             &layer.w_gate,
             &mut scratch.gate[..cfg.n_ff],
             &scratch.xb[..cfg.n_embd],
+            &mut scratch.xq,
         )?;
         matvec_into(
             buffer,
             &layer.w_up,
             &mut scratch.up[..cfg.n_ff],
             &scratch.xb[..cfg.n_embd],
+            &mut scratch.xq,
         )?;
         tensor_math::swiglu_in_place(&mut scratch.gate[..cfg.n_ff], &scratch.up[..cfg.n_ff])?;
         matvec_into(
@@ -998,6 +1027,7 @@ fn forward(
             &layer.w_down,
             &mut scratch.down[..cfg.n_embd],
             &scratch.gate[..cfg.n_ff],
+            &mut scratch.xq,
         )?;
         tensor_math::add_in_place(&mut scratch.x[..cfg.n_embd], &scratch.down[..cfg.n_embd])?;
     }
@@ -1066,6 +1096,7 @@ fn sample(
         output,
         &mut scratch.logits[..cfg.vocab_size],
         &scratch.xb[..cfg.n_embd],
+        &mut scratch.xq,
     )
     .map_err(|_| AiError::Internal)?;
 

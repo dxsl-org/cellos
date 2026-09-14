@@ -85,6 +85,17 @@ it was measured and rejected; both numbers live in that phase doc. A bench
 (`libs/ai-engine/benches/cpu_engine.rs`) is the instrument, and `tensor-math`/`ai-engine` now run
 their numerics tests in CI.
 
+The kernel *shape* was fixed next (`.agents/260914-q8-integer-activations/`): activations are now
+quantized to Q8_0 once per projection and the inner loop is an exact integer dot product per 32-weight
+block scaled by `d_w·d_a`, instead of decoding every block to f32. That is **1.9× per kernel** on the
+host (135M decode 41.6 → 23.6 ms/token, 42.5 tokens/s; the integer kernel now beats the *dense* f32
+kernel in the same crate), and it removes ~2/3 of the inner loop's f32 operations, which is what the
+cell actually pays for. Cost, recorded rather than hidden: the engine is no longer bit-exact against
+f32 accumulation over dequantized weights — the integer sum is exact and the only error is the
+activation's half-step, pinned by a derived-bound test — and the golden reference in
+`scripts/gen-ai-test-model.py` now mirrors the shipped arithmetic while keeping the same eight token
+ids (weakest greedy margin 0.38 vs the fixture's 0.05 floor).
+
 ## Current executable work
 
 - Continue useful QEMU software and integration work to the `qemu` ceiling.

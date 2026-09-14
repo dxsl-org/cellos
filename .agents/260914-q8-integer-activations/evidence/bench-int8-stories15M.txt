@@ -1,0 +1,17 @@
+[bench] model=llama file=26671328 layers=6 embd=288 ffn=768 heads=6 kv_heads=6 vocab=32000 ctx=128 resident_mib=26 load_ms=4.5
+[bench] prefill prompt_tokens=5 ms=5.5 ms_per_token=1.10
+[bench] decode tokens=16 ms_min=2.53 ms_median=2.58 tps_min=394.48 tps_median=387.64
+[bench] kernel=matvec_q8_0_attn_q iters=64 ns_min=24465 ns_median=24532 gflops=6.78
+[bench] kernel=matvec_q8_0_attn_o iters=64 ns_min=24456 ns_median=24549 gflops=6.78
+[bench] kernel=matvec_q8_0_ffn_gate iters=64 ns_min=65375 ns_median=65611 gflops=6.77
+[bench] kernel=matvec_q8_0_ffn_down iters=64 ns_min=65153 ns_median=65368 gflops=6.79
+[bench] kernel=matvec_q8_0_logits iters=64 ns_min=2711013 ns_median=2850396 gflops=6.80
+[bench] kernel=int8_attn_q iters=64 ns_min=13359 ns_median=13420 gflops=12.42
+[bench] kernel=int8_attn_o iters=64 ns_min=13355 ns_median=13397 gflops=12.42
+[bench] kernel=int8_ffn_gate iters=64 ns_min=35378 ns_median=35428 gflops=12.50
+[bench] kernel=int8_ffn_down iters=64 ns_min=36469 ns_median=36898 gflops=12.13
+[bench] kernel=int8_logits iters=64 ns_min=1481938 ns_median=1519047 gflops=12.44
+[bench] kernel=matvec_f32 iters=64 ns_min=15656 ns_median=15753 gflops=10.60
+[bench] kernel=rms_norm iters=1024 ns_min=145 ns_median=147 gflops=1.99
+[bench] kernel=softmax iters=64 ns_min=74359 ns_median=75681 gflops=0.43
+[bench] kernel=sample_top_k iters=64 ns_min=1067896 ns_median=1119841 gflops=0.03

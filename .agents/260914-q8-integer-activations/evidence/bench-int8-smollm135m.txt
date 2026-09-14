@@ -1,0 +1,17 @@
+[bench] model=Cosmo2 135M Webinst Sc2 file=144810912 layers=30 embd=576 ffn=1536 heads=9 kv_heads=3 vocab=49152 ctx=2048 resident_mib=141 load_ms=58.3
+[bench] prefill prompt_tokens=4 ms=74.3 ms_per_token=18.58
+[bench] decode tokens=12 ms_min=23.18 ms_median=23.56 tps_min=43.14 tps_median=42.45
+[bench] kernel=matvec_q8_0_attn_q iters=64 ns_min=97812 ns_median=98023 gflops=6.78
+[bench] kernel=matvec_q8_0_attn_o iters=64 ns_min=97858 ns_median=98011 gflops=6.78
+[bench] kernel=matvec_q8_0_ffn_gate iters=64 ns_min=261212 ns_median=261711 gflops=6.77
+[bench] kernel=matvec_q8_0_ffn_down iters=64 ns_min=260606 ns_median=261075 gflops=6.79
+[bench] kernel=matvec_q8_0_logits iters=64 ns_min=8526692 ns_median=8714316 gflops=6.64
+[bench] kernel=int8_attn_q iters=64 ns_min=52311 ns_median=53453 gflops=12.68
+[bench] kernel=int8_attn_o iters=64 ns_min=52475 ns_median=53507 gflops=12.65
+[bench] kernel=int8_ffn_gate iters=64 ns_min=142304 ns_median=144777 gflops=12.43
+[bench] kernel=int8_ffn_down iters=64 ns_min=142835 ns_median=144734 gflops=12.39
+[bench] kernel=int8_logits iters=64 ns_min=4705740 ns_median=4797474 gflops=12.03
+[bench] kernel=matvec_f32 iters=64 ns_min=56474 ns_median=60473 gflops=11.75
+[bench] kernel=rms_norm iters=1024 ns_min=267 ns_median=271 gflops=2.16
+[bench] kernel=softmax iters=64 ns_min=116332 ns_median=116549 gflops=0.42
+[bench] kernel=sample_top_k iters=64 ns_min=1667315 ns_median=1684776 gflops=0.03

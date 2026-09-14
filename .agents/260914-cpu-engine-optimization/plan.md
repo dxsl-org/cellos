@@ -45,7 +45,9 @@ is that kernel: 30 layers of projections plus the tied output projection. Nothin
 ## Non-goals
 
 - No numerics change: no FMA contraction, no integer Q8×Q8 accumulation, no reordering of the
-  accumulation lanes.
+  accumulation lanes. (The accumulation lane order and the `-O2`-versus-`-O3` code shape are still
+  the shipped contract; the *activation* side was taken up separately in
+  `.agents/260914-q8-integer-activations/`, which is why the two slices have separate evidence.)
 - No target-feature changes. AVX2/NEON/RVV kernels need a per-target build decision (the cells also
   run on CPUs without those features, and on a kernel that does not save vector state), so they stay
   open in the roadmap rather than being smuggled into the default profile.

@@ -3,6 +3,35 @@
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
 ## [Unreleased] Development-first hardware-constrained execution
+## [2026-09-14] Integer Q8_0 activations: 4.3× in the cell, 1.8× on the host
+- Root cause of the remaining gap was the kernel's *shape*, not its optimisation level: every weight
+  block was decoded to `[f32; 32]` on the stack (i8→f32 convert, scale multiply, store) and then
+  dotted with the activation vector — 32 converts + 32 multiplies + 32 loads + 32 f32 MACs per 32
+  weights. The dense kernel in the same crate was 1.9× faster per MAC for exactly that reason, and in
+  the cell each of those f32 operations is a softfloat call under QEMU's TCG.
+- The shipped path is now the one every production CPU inference stack uses for Q8_0 weights:
+  quantize the activation to Q8_0 (`d = amax/127` stored as f16, `q = roundf(x/d)` clamped), sum the
+  32 products of each block exactly in `i32`, scale by `d_w·d_a`. Per block: 32 integer MACs and 2
+  f32 multiplies, no decode.
+- Measured (host: 135M Q8_0 decode 41.6 → 23.6 ms/token, `stories15M` 4.67 → 2.53 ms/token, kernel
+  6.8 → 12.5 GFLOP/s, now faster than the dense f32 kernel at 11.7; cell: 24 tokens in 6709/6986 ms →
+  1595/1601 ms, `ai-test` PASS both runs, `service-ai` 230 288 → 225 048 bytes).
+- Numerics: the integer part is exact (`|Σ| ≤ 32·128² = 524 288`, four orders of magnitude inside
+  `i32`), so the only error is the activation's half-step. Tests pin it both ways: a derived-bound test
+  over randomized blocks, and an exact case where both operands are exactly representable and the
+  integer kernel matches the dense kernel bit for bit. The engine is *no longer* bit-exact against f32
+  accumulation over dequantized weights, and that loss is recorded rather than papered over.
+- Fixture: the independent reference in `scripts/gen-ai-test-model.py` now runs the same Q8_0 × Q8_0
+  integer arithmetic (packed weight bytes, quantized activations), so a numeric difference between it
+  and the engine is a defect rather than a modelling choice. The eight golden token ids are unchanged;
+  the weakest greedy margin moves 0.44 → 0.38 against the fixture's 0.05 fragility floor; the frozen
+  model bytes are untouched. `quant::f32_to_f16` was added and checked against all 65 536 half
+  patterns.
+- Non-claims: host x86_64 and QEMU TCG only. The in-cell magnitudes are an emulator property (softfloat
+  cost per f32 op); silicon can only be measured on silicon. The activation quantizer divides by the
+  stored f16 scale where GGML divides by its unrounded register value — a documented divergence that
+  matters only if a future CP-6 claims bit-exactness with GGML itself.
+
 ## [2026-09-14] CPU inference engine: 5.1× on the host, 13% in-cell, and a smaller cell
 - The engine's Q8_0 matvec kernel *was* the decode: 30 layers of projections plus the tied output
   projection (21% of a 135M checkpoint's weights at vocab 49152), 43.4 ms of a 211.5 ms token, with
