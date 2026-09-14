@@ -27,6 +27,16 @@ fixture that was invisible; at 1.18 MB the service stalled for minutes. Fixed by
 requested range (`VfsManager::read_at`) and giving the VIFS1 backend a positional read on the
 `SeekCap` syscall (which shares `ReadCap`'s allowlist bit, so no new authority).
 
+That first cut was itself incomplete, and CI said so: `RamFsBackend` (the `/tmp` scratch space the
+shell writes and reads back) left `read_at` at the trait default, so every redirected write read
+back as empty — 10 shell-utility scenarios went red. The backend now implements the positional read,
+and the dispatch path falls back to the whole-file copy when a backend answers a non-empty request
+with nothing, so a future backend cannot silently truncate. Re-running the CI commands locally:
+shell-utils PASS (was 81 PASS / 10 FAIL), vfs-quota 2/2, oracle PASS on both paths; and on the
+hosted runner the three jobs are green again (`Shell Utilities`, `VFS Quota`, `AI Inference
+Oracle`), with `redoxfs-srv`'s `degrade_no_disk` confirmed pre-existing by re-running it against the
+pre-change VFS cell.
+
 ## Deliverables
 
 - `libs/ai-tokenizer`: SentencePiece (`llama`) family — U+2581 escaping, per-character symbols, byte
