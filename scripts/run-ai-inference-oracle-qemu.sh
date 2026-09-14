@@ -132,6 +132,21 @@ export CC_riscv64gc_unknown_none_elf="${CC_riscv64gc_unknown_none_elf:-riscv64-u
 export CFLAGS_riscv64gc_unknown_none_elf="${CFLAGS_riscv64gc_unknown_none_elf:--march=rv64gc -mabi=lp64d -mcmodel=medany -ffreestanding -DLFS_NO_INTRINSICS -I$ROOT/third_party/freestanding-include}"
 export CARGO_TARGET_RISCV64GC_UNKNOWN_NONE_ELF_RUSTFLAGS="${CARGO_TARGET_RISCV64GC_UNKNOWN_NONE_ELF_RUSTFLAGS:--C relocation-model=pic}"
 
+# `aarch64-unknown-none-softfloat` is deliberately absent from `rust-toolchain.toml`'s target list, so
+# core/alloc for it come from source, exactly as every other aarch64 lane in this repo builds them.
+# Without this the aarch64 leg only compiles on a machine that happens to have the target rustup-added.
+BUILD_STD=()
+AARCH64_CFLAGS=()
+if [[ "$ARCH" == "aarch64" ]]; then
+    BUILD_STD=(-Z build-std=core,alloc)
+    # The C core (littlefs) cross-compiles with clang; the include path is derived from the repo root
+    # because `.cargo/config.toml` pins a developer-machine path and CI checks out somewhere else.
+    AARCH64_CFLAGS=(
+        "CC_aarch64_unknown_none_softfloat=clang"
+        "CFLAGS_aarch64_unknown_none_softfloat=--target=aarch64-unknown-none-elf -ffreestanding -mgeneral-regs-only -DLFS_NO_INTRINSICS -I$ROOT/third_party/freestanding-include"
+    )
+fi
+
 # `lib-sign-cells.sh` resolves a cross objcopy for the *rv64* candidates unless `OBJCOPY` is already
 # set, and a host objcopy refuses a foreign ELF.
 if [[ "$ARCH" == "aarch64" && -z "${OBJCOPY:-}" ]]; then
@@ -164,10 +179,11 @@ if [[ -n "$REAL_MODEL" ]]; then
 fi
 
 echo "[ai-oracle] building $ARCH cells"
-cargo build --quiet --locked --release --target "$TARGET" \
+env "${AARCH64_CFLAGS[@]}" cargo build --quiet --locked --release --target "$TARGET" "${BUILD_STD[@]}" \
     -p app-init -p app-shell -p service-vfs -p service-config -p service-platform \
     -p driver-virtio-blk -p ai-test
-cargo build --quiet --locked --release --target "$TARGET" -p service-ai "${AI_FEATURES[@]}"
+env "${AARCH64_CFLAGS[@]}" cargo build --quiet --locked --release --target "$TARGET" "${BUILD_STD[@]}" \
+    -p service-ai "${AI_FEATURES[@]}"
 
 REL="$CARGO_TARGET_DIR/$TARGET/release"
 CELL_BINARIES=(
@@ -222,7 +238,8 @@ for required in "LFN 'ai'" "LFN 'ai-test'" "LFN 'ai-model.gguf'" "LFN 'vfs'"; do
 done
 
 echo "[ai-oracle] building $ARCH kernel"
-EMBEDDED_OVERRIDE="$EMBEDDED" cargo build --quiet --locked --release --target "$TARGET" -p cellos-kernel
+EMBEDDED_OVERRIDE="$EMBEDDED" env "${AARCH64_CFLAGS[@]}" cargo build --quiet --locked --release \
+    --target "$TARGET" "${BUILD_STD[@]}" -p cellos-kernel
 KERNEL="$REL/cellos-kernel"
 [[ -s "$KERNEL" ]] || {
     echo "FAIL: kernel build produced no image" >&2
