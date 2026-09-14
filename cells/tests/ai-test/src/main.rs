@@ -1,14 +1,18 @@
 //! QEMU oracle for the unified AI inference service (`/bin/ai`) — Spec 24 G2 Level A.
 //!
 //! The oracle drives the *public* SDK path a real application uses (`AiClient` over typed IPC) and
-//! compares the result against the golden values produced by `scripts/gen-ai-test-model.py`, whose
-//! reference forward pass shares no code with the engine:
+//! asserts whichever contract the deployed model can actually support. Which model is deployed is
+//! decided by the service's own truthful `Describe`, never by an assumption baked into this cell:
 //!
-//! 1. `Describe` must report the deployed model, the CPU backend, and this build's limits.
-//! 2. A greedy generation of the golden prompt must return the golden token ids, exactly.
-//! 3. `embed` must return the golden vector within `1e-3` per component.
-//! 4. A session abandoned mid-stream must not wedge the service: the next caller still gets a
-//!    session and a full generation.
+//! * **The deterministic fixture** (`models/tiny-llama-64.gguf`, 270-token vocabulary) must
+//!   reproduce the golden token ids and embedding from `scripts/gen-ai-test-model.py`, whose
+//!   reference forward pass shares no code with the engine.
+//! * **A real checkpoint** (anything else — the llama2.c story models are SentencePiece, 512 or
+//!   32000 tokens) must round-trip text through its tokenizer and produce a text-like continuation
+//!   from a story prompt. Golden ids cannot be asserted for a model nobody has pinned.
+//!
+//! Scenarios common to both: an abandoned session must not wedge the service, and the ratified
+//! streaming surface (`AiClient::prompt` → `TokenStream`) must agree with the drained generation.
 //!
 //! Prints exactly one `[ai-test] PASS` line on success; any deviation prints `[ai-test] FAIL …`
 //! and exits non-zero so the QEMU harness cannot mistake a partial run for a pass.
@@ -34,15 +38,25 @@ api::declare_syscalls![Send, Recv, TryRecv, Log, LookupService, Yield];
 
 ostd::declare_custom_heap!(2 * 1024 * 1024);
 
-/// Golden values from the fixture generator (same file the deployed model was built from).
+/// Golden values from the fixture generator (same file the deployed fixture was built from).
 const GOLDEN: &str = include_str!("../../../../models/tiny-llama-64.golden.txt");
 
-/// Poll round trips allowed for one 8-token generation. The service advances four model steps per
-/// poll, so a 7-token prompt plus 8 generated tokens needs about four.
-const MAX_POLLS: usize = 32;
+/// Poll round trips allowed for one generation. The service advances four model steps per poll, so
+/// a short prompt plus the generated tokens needs a handful.
+const MAX_POLLS: usize = 64;
 
-/// Embedding tolerance per component (f32 engine vs the f64 reference).
+/// Embedding tolerance per component for the fixture (f32 engine vs the f64 reference).
 const EMBED_TOLERANCE: f32 = 1e-3;
+
+/// Vocabulary size identifying the deterministic fixture.
+const FIXTURE_VOCAB_SIZE: u32 = 270;
+
+/// Prompt used when a real checkpoint is deployed: the story models are trained on exactly this
+/// opening, so a working tokenizer plus forward pass continues it as prose.
+const REAL_PROMPT: &str = "Once upon a time";
+
+/// Tokens requested from a real checkpoint.
+const REAL_TOKENS: u16 = 24;
 
 ostd::cell_main!(cell_main);
 
@@ -75,47 +89,85 @@ fn cell_main() {
         fail("service has no model resident");
     }
 
-    // 1. Greedy generation must reproduce the reference token ids exactly.
-    let params = InferParams::greedy(golden.prompt.as_str(), golden.greedy_ids.len() as u16);
+    let fixture = info.vocab_size == FIXTURE_VOCAB_SIZE;
+    let params = if fixture {
+        InferParams::greedy(golden.prompt.as_str(), golden.greedy_ids.len() as u16)
+    } else {
+        InferParams::greedy(REAL_PROMPT, REAL_TOKENS)
+    };
+
+    // 1. Generation. The fixture is checked against pinned ids; a real checkpoint is checked for
+    //    the properties a wrong tokenizer or forward pass destroys — distinct tokens and text.
     let generation = match client.generate(&params, MAX_POLLS) {
         Ok(generation) => generation,
         Err(error) => fail_with("generate", error),
     };
-    if generation.ids != golden.greedy_ids {
-        print("[ai-test] expected tokens ");
-        print_usize(golden.greedy_ids.len());
-        print(" got ");
-        print_usize(generation.ids.len());
-        println("");
-        fail("greedy token ids differ from the reference");
-    }
-    print("[ai-test] greedy ids matched: ");
-    print_usize(generation.ids.len());
-    print(" tokens over ");
-    print_usize(generation.polls);
-    println(" polls");
-
-    // 2. The embedding path must match the reference vector.
-    let values = match client.embed(golden.embed_text.as_str()) {
-        Ok(values) => values,
-        Err(error) => fail_with("embed", error),
-    };
-    if values.len() != golden.embed_values.len() {
-        fail("embedding dimension differs from the reference");
-    }
-    let mut worst = 0.0f32;
-    for (actual, expected) in values.iter().zip(&golden.embed_values) {
-        let delta = (actual - expected).abs();
-        if delta > worst {
-            worst = delta;
+    if fixture {
+        if generation.ids != golden.greedy_ids {
+            print("[ai-test] expected tokens ");
+            print_usize(golden.greedy_ids.len());
+            print(" got ");
+            print_usize(generation.ids.len());
+            println("");
+            fail("greedy token ids differ from the reference");
         }
+        print("[ai-test] greedy ids matched: ");
+        print_usize(generation.ids.len());
+        print(" tokens over ");
+        print_usize(generation.polls);
+        println(" polls");
+    } else {
+        assert_text_like("real-model generation", &generation.ids, &generation.text, REAL_TOKENS);
+        print("[ai-test] real model continuation: ");
+        print_usize(generation.ids.len());
+        println(" tokens");
+        print("[ai-test] text:");
+        println(generation.text.as_str());
+        print("[ai-test] model vocab ");
+        print_usize(info.vocab_size as usize);
+        println("");
     }
-    if worst > EMBED_TOLERANCE {
-        fail("embedding vector differs from the reference");
+
+    // 2. Embeddings. The fixture is compared against the reference vector; a real checkpoint is
+    //    only required to embed distinct inputs without failing.
+    if fixture {
+        let values = match client.embed(golden.embed_text.as_str()) {
+            Ok(values) => values,
+            Err(error) => fail_with("embed", error),
+        };
+        if values.len() != golden.embed_values.len() {
+            fail("embedding dimension differs from the reference");
+        }
+        let mut worst = 0.0f32;
+        for (actual, expected) in values.iter().zip(&golden.embed_values) {
+            let delta = (actual - expected).abs();
+            if delta > worst {
+                worst = delta;
+            }
+        }
+        if worst > EMBED_TOLERANCE {
+            fail("embedding vector differs from the reference");
+        }
+        print("[ai-test] embedding matched: ");
+        print_usize(values.len());
+        println(" dims");
+    } else {
+        let mut embeddings = 0usize;
+        for text in [
+            "Once upon a time",
+            "The little girl said: \"hello!\"",
+            "numbers 1 2 3 and symbols %$#",
+        ] {
+            match client.embed(text) {
+                Ok(values) if !values.is_empty() => embeddings += 1,
+                Ok(_) => fail("embedding came back empty for a real checkpoint"),
+                Err(error) => fail_with("real-model embed", error),
+            }
+        }
+        print("[ai-test] real model embeddings ok: ");
+        print_usize(embeddings);
+        println(" texts");
     }
-    print("[ai-test] embedding matched: ");
-    print_usize(values.len());
-    println(" dims");
 
     // 3. An abandoned session must not wedge the service.
     let abandoned = match client.submit(&params) {
@@ -133,41 +185,66 @@ fn cell_main() {
         Ok(generation) => generation,
         Err(error) => fail_with("generate", error),
     };
-    if after.ids != golden.greedy_ids {
+    if after.ids != generation.ids {
         fail("the service did not recover after an abandoned session");
     }
     println("[ai-test] abandoned session released; service still serving");
 
-    // 4. The ratified streaming surface: `AiClient::prompt` returns a token stream. Only the
-    //    mock-transport host tests exercise it today, so drive it against the real service here.
-    let future = client.prompt(&params);
-    let mut future = core::pin::pin!(future);
-    let waker = core::task::Waker::noop();
-    let mut context = core::task::Context::from_waker(waker);
-    let mut stream = match future.as_mut().poll(&mut context) {
-        core::task::Poll::Ready(Ok(stream)) => stream,
-        core::task::Poll::Ready(Err(error)) => fail_with("prompt", error),
-        core::task::Poll::Pending => fail("prompt did not resolve on its first poll"),
-    };
-    let mut streamed = Vec::new();
-    for item in &mut stream {
-        match item {
-            Ok(token) => streamed.push(token.id),
-            Err(error) => fail_with("prompt stream", error),
+    // 4. The ratified streaming surface: `AiClient::prompt` returns a token stream. Scoped so the
+    //    future's borrow of the client ends before anything else runs.
+    {
+        let future = client.prompt(&params);
+        let mut future = core::pin::pin!(future);
+        let waker = core::task::Waker::noop();
+        let mut context = core::task::Context::from_waker(waker);
+        let mut stream = match future.as_mut().poll(&mut context) {
+            core::task::Poll::Ready(Ok(stream)) => stream,
+            core::task::Poll::Ready(Err(error)) => fail_with("prompt", error),
+            core::task::Poll::Pending => fail("prompt did not resolve on its first poll"),
+        };
+        let mut streamed = Vec::new();
+        for item in &mut stream {
+            match item {
+                Ok(token) => streamed.push(token.id),
+                Err(error) => fail_with("prompt stream", error),
+            }
         }
+        if streamed != generation.ids {
+            fail("the token stream did not reproduce the generation ids");
+        }
+        if stream.text() != after.text {
+            fail("the token stream text differs from the drained generation text");
+        }
+        print("[ai-test] prompt stream matched: ");
+        print_usize(streamed.len());
+        println(" tokens");
     }
-    if streamed != golden.greedy_ids {
-        fail("the token stream did not reproduce the reference ids");
-    }
-    if stream.text() != after.text {
-        fail("the token stream text differs from the drained generation text");
-    }
-    print("[ai-test] prompt stream matched: ");
-    print_usize(streamed.len());
-    println(" tokens");
 
     println("[ai-test] PASS");
     sys_exit(0);
+}
+
+/// Assert that a generation is neither degenerate nor noise.
+fn assert_text_like(what: &str, ids: &[u32], text: &str, expected_tokens: u16) {
+    if ids.len() != usize::from(expected_tokens) {
+        fail(what);
+    }
+    let distinct = {
+        let mut sorted = Vec::from(ids);
+        sorted.sort_unstable();
+        sorted.dedup();
+        sorted.len()
+    };
+    if distinct < 6 {
+        fail("generation collapsed into a repetition loop");
+    }
+    if text.contains('\u{FFFD}') {
+        fail("generated text contains a replacement character");
+    }
+    let letters = text.chars().filter(|c| c.is_ascii_alphabetic()).count();
+    if letters * 3 < text.chars().count() {
+        fail("generated continuation is not text-like");
+    }
 }
 
 /// Print a failure line and exit non-zero: the harness must never read a partial run as a pass.
@@ -185,7 +262,7 @@ fn fail_with(context: &str, error: AiClientError) -> ! {
     sys_exit(1);
 }
 
-/// The golden expectations the deployed model must reproduce.
+/// The golden expectations the fixture must reproduce.
 struct Golden {
     prompt: String,
     greedy_ids: Vec<u32>,

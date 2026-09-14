@@ -9,6 +9,10 @@
 > `libs/tensor-math`, `libs/ai-engine`, and `cells/services/ai` registered as `service::AI = 15`.
 > CP-2 (Tier 2 GGML) stays blocked on the Tier 2 application admission route, CP-4/CP-5 (NPU/GPU)
 > stay behind the G3 accelerator envelope and GPU capability gate, and CP-6/CP-7 remain future work.
+> Phase 05 (2026-09-14) added the SentencePiece tokenizer family, control-token matching for chat
+> templates, and scaled dot-product attention, and now serves a real checkpoint (llama2.c
+> `stories260K`) from `/bin/ai` inside a QEMU Cell. `stories15M` still exceeds a Cell's VA slot
+> because weight loading copies tensors; zero-copy loading is the next step.
 > Two deviations from §6 are deliberate and recorded, not oversights: `AiClient::prompt` keeps the
 > async signature shape but streams through a bounded poll loop (the async reactor is not landed),
 > and errors are the richer `AiClientError` with a `From` conversion into `ViError`. Evidence and

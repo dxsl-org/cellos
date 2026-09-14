@@ -15,7 +15,9 @@
 use alloc::vec::Vec;
 
 use crate::backend::FsBackend;
-use ostd::syscall::{sys_close, sys_close_cap, sys_open, sys_open_cap, sys_read_cap, sys_readdir};
+use ostd::syscall::{
+    sys_close, sys_close_cap, sys_open, sys_open_cap, sys_read_cap, sys_readdir, sys_seek_cap,
+};
 
 pub struct BootFsProxy;
 
@@ -137,6 +139,26 @@ impl FsBackend for BootFsProxy {
         }
         sys_close_cap(cap);
         result
+    }
+
+    /// Positional read: open, seek, read once.
+    ///
+    /// The kernel exposes `SeekCap` on the same allowlist bit as `ReadCap`, so a positional read
+    /// costs one seek plus one read instead of re-reading the file from the start. Callers that
+    /// read a file in chunks (the AI service reading a model, the shell copying one) depend on
+    /// this: without it the only option was to re-read the whole file per chunk.
+    fn read_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> usize {
+        let upper: alloc::string::String = path.chars().map(|c| c.to_ascii_uppercase()).collect();
+        let cap = match sys_open_cap(&upper) {
+            Ok(c) => c,
+            Err(_) => return 0,
+        };
+        let read = match sys_seek_cap(cap, offset as i64, 0) {
+            Ok(_) => sys_read_cap(cap, buf).unwrap_or_default(),
+            Err(_) => 0,
+        };
+        sys_close_cap(cap);
+        read
     }
 
     fn write(&mut self, _path: &str, _content: &[u8]) -> bool {

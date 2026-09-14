@@ -1,0 +1,32 @@
+# Real SentencePiece checkpoint running inside a Cell (QEMU RV64)
+# date: 2026-09-14T01:08:16Z
+# model: .ai-models/stories260K.gguf (llama2.c, real trained weights, 260K params, F32)
+# sha256: 270cba1bd5109f42d03350f60406024560464db173c0e387d91f0426d3bd256d
+# command: CELLOS_AI_REAL_MODEL=$PWD/.ai-models/stories260K.gguf \
+#            scripts/run-ai-inference-oracle-qemu.sh --boot-timeout 300
+# raw log: ai-oracle-20260914T010806Z.log
+
+[ai] inference service starting
+[ai-test] AI inference oracle starting
+[ai] model bytes: 1185376 read in 5405 ms
+[ai] engine load: 8 ms
+[ai] model ready: 512 vocab, context 2048, resident bytes 1205736
+[ai-test] model=llama
+[ai-test] vocab=512 context=2048 sessions=4
+[ai-test] real model continuation: 24 tokens
+[ai-test] text:, there was a little goth mist fearddownely thing was
+[ai-test] model vocab 512
+[ai-test] real model embeddings ok: 3 texts
+[ai-test] abandoned session released; service still serving
+[ai-test] prompt stream matched: 24 tokens
+[ai-test] PASS
+
+# Fixture regression (same code, deterministic model): ai-oracle-20260914T010742Z.log
+[ai-test] AI inference oracle starting
+[ai-test] model=tiny-llama-64
+[ai-test] vocab=270 context=128 sessions=4
+[ai-test] greedy ids matched: 8 tokens over 6 polls
+[ai-test] embedding matched: 64 dims
+[ai-test] abandoned session released; service still serving
+[ai-test] prompt stream matched: 8 tokens
+[ai-test] PASS

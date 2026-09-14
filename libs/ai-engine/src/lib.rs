@@ -8,8 +8,10 @@
 //! # Scope and invariants
 //!
 //! - **One architecture**: `general.architecture == "llama"` (Llama/Mistral/Qwen-style: RMSNorm,
-//!   RoPE, grouped-query attention, SwiGLU MLP). Any other architecture is refused with
-//!   [`EngineError::UnsupportedArchitecture`] rather than guessed at.
+//!   RoPE, scaled dot-product attention, grouped-query attention, SwiGLU MLP). Any other
+//!   architecture is refused with [`EngineError::UnsupportedArchitecture`] rather than guessed at.
+//! - **Both tokenizer families**: byte-level BPE (`gpt2`) and SentencePiece (`llama`), including
+//!   control-token matching for chat templates. See `ai-tokenizer`.
 //! - **Two weight layouts**: `Q8_0` tensors stay quantized and run through
 //!   [`tensor_math::matvec_q8_0`]; `F32`/`F16` tensors are materialized as `f32` at load time.
 //! - **Owned after load**: [`Engine::load`] copies everything it needs out of the caller's model
@@ -780,6 +782,11 @@ fn attention(
 ) -> Result<(), MathError> {
     let head_dim = cfg.head_dim();
     let group = cfg.group_size();
+    // Scaled dot-product attention. Every Llama-family implementation divides the scores by
+    // `sqrt(head_dim)` before the softmax (llama.cpp folds the factor into q; llama2.c multiplies
+    // the accumulated score). Omitting it sharpens every attention distribution by that factor and
+    // degrades generation to word salad on real weights, which is exactly how this was found.
+    let scale = 1.0 / libm::sqrtf(head_dim as f32);
 
     for head in 0..cfg.n_head {
         let kv_head = head / group;
@@ -787,7 +794,7 @@ fn attention(
         for key_position in 0..=position {
             let slot = kv.slot(cfg, layer, key_position);
             let k = &kv.k[slot.start + kv_head * head_dim..slot.start + (kv_head + 1) * head_dim];
-            scratch.scores[key_position] = tensor_math::dot(q, k)?;
+            scratch.scores[key_position] = tensor_math::dot(q, k)? * scale;
         }
         tensor_math::softmax_in_place(&mut scratch.scores[..=position]);
 
@@ -1384,7 +1391,11 @@ mod tests {
         );
         assert!(engine.config().n_layer >= 8, "expected a real transformer");
 
-        let prompt = "The capital of France is";
+        // This checkpoint is instruction-tuned and declares its own chat template, so the prompt
+        // is formatted the way the model expects: a raw completion prompt makes it emit junk
+        // (measured: repeated ids, then punctuation soup), which is the model's contract, not an
+        // engine defect — `stories15M`, a base model, produces clean prose on the same code path.
+        let prompt = "<|im_start|>user\nThe capital of France is<|im_end|>\n<|im_start|>assistant\n";
         let params = SamplingParams {
             max_tokens: 16,
             temperature_milli: 0,
@@ -1419,7 +1430,7 @@ mod tests {
             sorted.dedup();
             sorted.len()
         };
-        assert!(distinct >= 4, "degenerate generation: {ids:?}");
+        assert!(distinct >= 4, "degenerate sampled generation: {ids:?}");
         let printable: usize = text
             .chars()
             .filter(|c| c.is_ascii_alphanumeric() || *c == ' ')
@@ -1439,6 +1450,112 @@ mod tests {
             engine.resident_bytes() / (1024 * 1024),
             ids.len(),
             ids.len() as f64 / seconds.max(f64::MIN_POSITIVE),
+            text,
+        );
+    }
+
+    /// Real SentencePiece checkpoint validation (`CELLOS_AI_SPM_MODEL`).
+    ///
+    /// Written for the llama2.c story models (`stories260K`, `stories15M-q8_0`), which are real
+    /// trained weights with a `tokenizer.ggml.model = "llama"` vocabulary. It checks the two things
+    /// a wrong SentencePiece implementation would break: text must round-trip through
+    /// encode/decode, and a plain story prompt must produce English-like text rather than noise.
+    #[test]
+    fn tokenizes_and_generates_with_a_real_sentencepiece_checkpoint() {
+        let path = match std::env::var("CELLOS_AI_SPM_MODEL") {
+            Ok(path) => path,
+            Err(_) => {
+                eprintln!(
+                    "SKIP tokenizes_and_generates_with_a_real_sentencepiece_checkpoint: set \
+                     CELLOS_AI_SPM_MODEL to an SPM GGUF (see scripts/fetch-ai-test-model.sh)"
+                );
+                return;
+            }
+        };
+        let bytes = match std::fs::read(&path) {
+            Ok(bytes) => bytes,
+            Err(error) => {
+                eprintln!("SKIP: {path}: {error}");
+                return;
+            }
+        };
+
+        let mut engine = Engine::load(&bytes, 1 << 30).expect("checkpoint loads");
+
+        // Round-trip: a SentencePiece encoder that disagrees with its own decoder fails here. The
+        // vocabulary declares the U+2581 space prefix (llama.cpp's default for SPM), so the decoded
+        // text carries one leading space: that is the documented SentencePiece contract, not drift.
+        assert!(
+            engine.tokenizer().add_bos(),
+            "the story models declare BOS insertion"
+        );
+        for text in [
+            "Once upon a time",
+            "The little girl said: \"hello!\"",
+            "caf\u{e9} cr\u{e8}me",
+            "numbers 1 2 3 and symbols %$#",
+            "  two leading spaces",
+        ] {
+            let decoded = engine.tokenizer().decode(&engine.tokenizer().encode(text));
+            // The marker is added only when the text does not already start with a space.
+            let expected = if text.starts_with(' ') {
+                alloc::string::String::from(text)
+            } else {
+                alloc::format!(" {text}")
+            };
+            assert_eq!(decoded, expected, "round-trip failed for {text:?}");
+        }
+
+        let params = SamplingParams {
+            max_tokens: 24,
+            temperature_milli: 0,
+            top_k: 0,
+            seed: 7,
+        };
+        let request_id = engine.submit("Once upon a time", params).expect("submit");
+        let started = std::time::Instant::now();
+        let mut ids = Vec::new();
+        let mut text = String::new();
+        for _ in 0..128 {
+            let _ = engine.generate(request_id, 8).expect("generate");
+            let drained = engine.drain(request_id, 16).expect("drain");
+            ids.extend(drained.ids.iter().copied());
+            text.push_str(&drained.text);
+            if drained.done {
+                break;
+            }
+        }
+        let elapsed = started.elapsed();
+        assert_eq!(ids.len(), 24, "requested 24 tokens: {ids:?}");
+
+        let distinct = {
+            let mut sorted = ids.clone();
+            sorted.sort_unstable();
+            sorted.dedup();
+            sorted.len()
+        };
+        assert!(distinct >= 6, "degenerate generation: {ids:?}");
+        assert!(
+            !text.contains('\u{FFFD}'),
+            "the tokenizer or decoder produced a replacement character: {text:?}"
+        );
+        let letters = text.chars().filter(|c| c.is_ascii_alphabetic()).count();
+        let spaces = text.chars().filter(|c| *c == ' ').count();
+        assert!(
+            letters * 3 >= text.chars().count(),
+            "generated text is not text-like: {text:?}"
+        );
+        assert!(spaces >= 2, "generated text has no word structure: {text:?}");
+
+        std::println!(
+            "[ai-engine] real SPM checkpoint: model={} layers={} vocab={} resident={} MiB \
+             tokens={} tps={:.2} text={:?}",
+            engine.config().name,
+            engine.config().n_layer,
+            engine.config().vocab_size,
+            engine.resident_bytes() / (1024 * 1024),
+            ids.len(),
+            ids.len() as f64 / elapsed.as_secs_f64().max(f64::MIN_POSITIVE),
             text,
         );
     }

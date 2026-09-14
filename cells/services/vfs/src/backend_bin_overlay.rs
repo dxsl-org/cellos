@@ -70,6 +70,16 @@ impl FsBackend for BinOverlay {
         }
     }
 
+    /// Positional read: VIFS1 answers first, then the on-disk cell-store — the same precedence
+    /// `read_to_vec` uses, so the overlay never serves a cell-store copy of a bootstrap file.
+    fn read_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> usize {
+        let n = self.boot.read_at(path, offset, buf);
+        if n > 0 {
+            return n;
+        }
+        self.store.read_at(path, offset, buf)
+    }
+
     fn write(&mut self, _path: &str, _content: &[u8]) -> bool {
         false
     }

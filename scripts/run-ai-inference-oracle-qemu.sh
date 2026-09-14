@@ -64,6 +64,19 @@ MODEL="models/tiny-llama-64.gguf"
     exit 2
 }
 
+# A real checkpoint may be deployed instead of the fixture: the oracle decides which scenario to
+# run from the vocabulary the service reports, so the image simply carries whichever model is
+# named here. `scripts/fetch-ai-test-model.sh` prints the path of the pinned one.
+REAL_MODEL="${CELLOS_AI_REAL_MODEL:-}"
+if [[ -n "$REAL_MODEL" ]]; then
+    [[ -s "$REAL_MODEL" ]] || {
+        echo "FAIL: CELLOS_AI_REAL_MODEL points at a missing file: $REAL_MODEL" >&2
+        exit 2
+    }
+    MODEL="$REAL_MODEL"
+    echo "[ai-oracle] deploying real checkpoint: $(basename "$REAL_MODEL")"
+fi
+
 source scripts/lib-run-scoped-workspace.sh
 cleanup_stale_run_scoped_workspaces "${TMPDIR:-/tmp}/cellos-ai-oracle"
 
@@ -215,13 +228,29 @@ if [[ "$status" -ne 0 ]]; then
     exit 1
 fi
 
-for marker in \
-    "[ai] model ready:" \
-    "[ai-test] greedy ids matched:" \
-    "[ai-test] embedding matched:" \
-    "[ai-test] abandoned session released; service still serving" \
-    "[ai-test] prompt stream matched:" \
-    "[ai-test] PASS"; do
+MARKERS=(
+    "[ai] model ready:"
+    "[ai-test] PASS"
+)
+if [[ -n "$REAL_MODEL" ]]; then
+    # With a real checkpoint deployed the oracle asserts text-likeness and round-trips instead of
+    # the fixture's golden ids; both paths must still reach every earlier scenario.
+    MARKERS+=(
+        "[ai-test] real model continuation:"
+        "[ai-test] abandoned session released; service still serving"
+        "[ai-test] prompt stream matched:"
+        "[ai-test] model vocab "
+    )
+else
+    MARKERS+=(
+        "[ai-test] greedy ids matched:"
+        "[ai-test] embedding matched:"
+        "[ai-test] abandoned session released; service still serving"
+        "[ai-test] prompt stream matched:"
+    )
+fi
+
+for marker in "${MARKERS[@]}"; do
     grep -a -Fq -- "$marker" "$LOG" || {
         echo "FAIL: missing marker: $marker" >&2
         exit 1

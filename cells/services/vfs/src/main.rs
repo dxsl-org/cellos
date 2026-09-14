@@ -79,6 +79,9 @@ api::declare_syscalls![
     ReadDir,
     OpenCap,
     ReadCap,
+    // SeekCap shares ReadCap's allowlist bit (bit 16), so positional reads add no authority; it
+    // is the difference between a chunked read costing O(file) and O(file^2).
+    SeekCap,
     CloseCap,
     // NOTE: deliberately NO SetTimer. VFS never calls it — a "SetTimer (bit 11)
     // denied for tid <vfs>" kernel warn on x86 is the CANARY for the known x86

@@ -38,15 +38,20 @@ api::declare_manifest!(block_io = false, network = false, spawn = false);
 api::declare_syscalls![Send, Recv, TryRecv, Log, LookupService, GetTime, Yield];
 
 // Cell heap. Holds the model bytes, the engine's weights/scratch, and the session KV caches.
-ostd::declare_custom_heap!(8 * 1024 * 1024);
+//
+// Sized for the largest model this slice deploys in a Cell (llama2.c `stories260K`: 1.2 MB of F32
+// weights) plus four sessions of its 2048-token context (2.6 MB of KV each) with headroom. The
+// Cell's virtual-address slot is 32 MiB (`kernel/src/loader/va_alloc.rs`), so a model that needs
+// more weight memory than this belongs in a bigger slot, not in an unbounded heap here.
+ostd::declare_custom_heap!(16 * 1024 * 1024);
 
 /// Model path. The P6 FAT cell-store is mounted at `/bin`, so this is the FAT root entry
 /// `ai-model.gguf` (deployed by `gen_disk.ps1`).
 const MODEL_PATH: &str = "/bin/ai-model.gguf";
 
-/// Ceiling handed to the engine. Must stay below the arena above, leaving room for the read
-/// buffer and the session table.
-const ENGINE_LIMIT: usize = 6 * 1024 * 1024;
+/// Ceiling handed to the engine: the arena above minus room for the model buffer during load and
+/// the session table.
+const ENGINE_LIMIT: usize = 14 * 1024 * 1024;
 
 /// Model steps advanced per poll. Bounds one session's share of the event loop; a longer
 /// generation simply takes more polls.
@@ -106,6 +111,10 @@ impl AiService {
             unavailable: AiError::NoModel,
         };
 
+        // Read timing is part of the service's contract with its operators: a model that is slow to
+        // read on a given board is an operational fact, and without the number the only symptom is
+        // a silent stall on the serial console.
+        let read_started = ostd::syscall::sys_get_time_ms().unwrap_or(0);
         let mut vfs = ostd::clients::VfsClient::new();
         let bytes = match vfs.read_file_bounded(MODEL_PATH, ENGINE_LIMIT) {
             Ok(bytes) => bytes,
@@ -116,11 +125,24 @@ impl AiService {
                 return service;
             }
         };
+        let read_ms = ostd::syscall::sys_get_time_ms()
+            .unwrap_or(0)
+            .saturating_sub(read_started);
 
         print("[ai] model bytes: ");
         print_usize(bytes.len());
+        print(" read in ");
+        print_usize(read_ms as usize);
+        println(" ms");
+        let load_started = ostd::syscall::sys_get_time_ms().unwrap_or(0);
         match Engine::load(&bytes, ENGINE_LIMIT) {
             Ok(engine) => {
+                let load_ms = ostd::syscall::sys_get_time_ms()
+                    .unwrap_or(0)
+                    .saturating_sub(load_started);
+                print("[ai] engine load: ");
+                print_usize(load_ms as usize);
+                println(" ms");
                 let describe = engine.describe();
                 print("[ai] model ready: ");
                 print_usize(describe.vocab_size as usize);

@@ -46,7 +46,7 @@ ROPE_BASE = 10_000.0
 HEAD_DIM = N_EMBD // N_HEAD
 KV_DIM = N_HEAD_KV * HEAD_DIM
 ALIGNMENT = 32
-SEED = 0xFD24_79B1
+SEED = 0x67BE_2DFD
 
 BASE_VOCAB = 256
 MERGES = [
@@ -274,6 +274,9 @@ def forward_hidden(tokens: list[int], weights: dict[str, list[float]], dims: dic
             kv_cache_v[layer * N_CTX + position] = v
 
             attn = [0.0] * N_EMBD
+            # Scaled dot-product attention: 1/sqrt(head_dim), as every Llama-family implementation
+            # applies it (llama.cpp folds it into q, llama2.c multiplies the accumulated score).
+            scale = 1.0 / math.sqrt(HEAD_DIM)
             for head in range(N_HEAD):
                 kv_head = head // (N_HEAD // N_HEAD_KV)
                 q_head = q[head * HEAD_DIM : (head + 1) * HEAD_DIM]
@@ -282,7 +285,7 @@ def forward_hidden(tokens: list[int], weights: dict[str, list[float]], dims: dic
                     k_head = kv_cache_k[layer * N_CTX + key_position][
                         kv_head * HEAD_DIM : (kv_head + 1) * HEAD_DIM
                     ]
-                    scores.append(sum(a * b for a, b in zip(q_head, k_head)))
+                    scores.append(sum(a * b for a, b in zip(q_head, k_head)) * scale)
                 weights_scores = softmax(scores)
                 for key_position, score in enumerate(weights_scores):
                     v_head = kv_cache_v[layer * N_CTX + key_position][

@@ -1,9 +1,12 @@
-# Real-weight validation after the projection change (plan Phase 04, gate G-D)
-# date: 2026-09-13T23:29:49Z
-# sha256: 76520babb0daebccb6e17d2f38504ece61356a0ca958d8e8795ef4d23c23c1f0
-# command: CELLOS_AI_MODEL=$PWD/.ai-models/SmolLM-135M-Instruct.Q8_0.gguf \
-#            CARGO_TARGET_DIR=/tmp/target-ai-engine cargo test --release -p ai-engine \
-#            --target x86_64-unknown-linux-gnu generates_text_from_a_real_checkpoint -- --nocapture
+# Real-weight validation after the attention-scale and tokenizer fixes (gate G-D)
+# date: 2026-09-14T01:08:23Z
+# checkpoints:
+#   SmolLM-135M-Instruct.Q8_0.gguf  sha256 76520babb0daebccb6e17d2f38504ece61356a0ca958d8e8795ef4d23c23c1f0  (instruct, gpt2/chat template, 30 layers, tied output)
+#   stories15M-q8_0.gguf            sha256 2eda49203f2f044f3dddf29a7dd7cc861ef5a0340f518a19613d73ba6d9c06b6  (base, SentencePiece, 6 layers, untied output)
+# command: CELLOS_AI_MODEL=.../<ckpt> CARGO_TARGET_DIR=/tmp/target-ai-engine cargo test --release \
+#            -p ai-engine --target x86_64-unknown-linux-gnu -- --nocapture
 
-[ai-engine] real checkpoint: model=Cosmo2 135M Webinst Sc2 layers=30 vocab=49152 resident=229 MiB tokens=16 tps=3.90 text=" the same as the numeral, as the number of people who are not in"
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; finished in 4.27s
+[ai-engine] real checkpoint: model=Cosmo2 135M Webinst Sc2 layers=30 vocab=49152 resident=229 MiB tokens=16 tps=2.87 text="I am having trouble with this question. I have a question. I have a"
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 10 filtered out; finished in 5.74s
+[ai-engine] real SPM checkpoint: model=llama layers=6 vocab=32000 resident=27 MiB tokens=24 tps=38.70 text=", there was a big bear named Benny was a very big bear. He was a bear. He was very brave"
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 10 filtered out; finished in 0.64s

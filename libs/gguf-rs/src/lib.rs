@@ -537,6 +537,108 @@ impl<'a> GgufFile<'a> {
         Some(out)
     }
 
+    /// Integer-array metadata as `i32` (`tokenizer.ggml.token_type`).
+    ///
+    /// Accepts every integer element width the format allows and widens exactly: a value that does
+    /// not fit `i32` makes the whole accessor return `None` rather than wrapping, so a caller can
+    /// never mistake a truncated classification for a real one.
+    pub fn metadata_i32_array(&self, key: &str) -> Option<Vec<i32>> {
+        let (elem_type, count, data) = match self.metadata(key)? {
+            MetadataValue::Array {
+                elem_type,
+                count,
+                data,
+            } => (elem_type, count, data),
+            _ => return None,
+        };
+        let count = usize::try_from(count).ok()?;
+        let mut out = Vec::new();
+        let mut push = |value: i64| -> bool {
+            match i32::try_from(value) {
+                Ok(value) => {
+                    out.push(value);
+                    true
+                }
+                Err(_) => false,
+            }
+        };
+        match elem_type {
+            value_type::INT8 => {
+                let bytes = data.get(..count)?;
+                for &byte in bytes {
+                    if !push(i64::from(byte as i8)) {
+                        return None;
+                    }
+                }
+            }
+            value_type::UINT8 => {
+                let bytes = data.get(..count)?;
+                for &byte in bytes {
+                    if !push(i64::from(byte)) {
+                        return None;
+                    }
+                }
+            }
+            value_type::INT16 => {
+                let bytes = data.get(..count.checked_mul(2)?)?;
+                for chunk in bytes.chunks_exact(2) {
+                    let word: [u8; 2] = chunk.try_into().ok()?;
+                    if !push(i64::from(i16::from_le_bytes(word))) {
+                        return None;
+                    }
+                }
+            }
+            value_type::UINT16 => {
+                let bytes = data.get(..count.checked_mul(2)?)?;
+                for chunk in bytes.chunks_exact(2) {
+                    let word: [u8; 2] = chunk.try_into().ok()?;
+                    if !push(i64::from(u16::from_le_bytes(word))) {
+                        return None;
+                    }
+                }
+            }
+            value_type::INT32 => {
+                let bytes = data.get(..count.checked_mul(4)?)?;
+                for chunk in bytes.chunks_exact(4) {
+                    let word: [u8; 4] = chunk.try_into().ok()?;
+                    if !push(i64::from(i32::from_le_bytes(word))) {
+                        return None;
+                    }
+                }
+            }
+            value_type::UINT32 => {
+                let bytes = data.get(..count.checked_mul(4)?)?;
+                for chunk in bytes.chunks_exact(4) {
+                    let word: [u8; 4] = chunk.try_into().ok()?;
+                    if !push(i64::from(u32::from_le_bytes(word))) {
+                        return None;
+                    }
+                }
+            }
+            value_type::INT64 => {
+                let bytes = data.get(..count.checked_mul(8)?)?;
+                for chunk in bytes.chunks_exact(8) {
+                    let word: [u8; 8] = chunk.try_into().ok()?;
+                    if !push(i64::from_le_bytes(word)) {
+                        return None;
+                    }
+                }
+            }
+            value_type::UINT64 => {
+                let bytes = data.get(..count.checked_mul(8)?)?;
+                for chunk in bytes.chunks_exact(8) {
+                    let word: [u8; 8] = chunk.try_into().ok()?;
+                    let value = u64::from_le_bytes(word);
+                    if !push(i64::try_from(value).ok()?) {
+                        return None;
+                    }
+                }
+            }
+            _ => return None,
+        }
+        Some(out)
+    }
+
     /// Iterate the tensor directory in file order.
     pub fn tensors(&self) -> impl Iterator<Item = &TensorInfo<'a>> + '_ {
         self.tensors.iter()
@@ -1006,6 +1108,23 @@ mod tests {
         u32_array.u32(7);
         u32_array.u32(9);
 
+        // Array of i32: [1, -2, 6] — the shape `tokenizer.ggml.token_type` uses.
+        let mut i32_array = Builder::new();
+        i32_array.u32(value_type::ARRAY);
+        i32_array.u32(value_type::INT32);
+        i32_array.u64(3);
+        i32_array.i32(1);
+        i32_array.i32(-2);
+        i32_array.i32(6);
+
+        // Array of u64 with one value that cannot fit i32, so widening must refuse it.
+        let mut u64_overflow_array = Builder::new();
+        u64_overflow_array.u32(value_type::ARRAY);
+        u64_overflow_array.u32(value_type::UINT64);
+        u64_overflow_array.u64(2);
+        u64_overflow_array.u64(5);
+        u64_overflow_array.u64(u64::MAX);
+
         let mut u32_value = Builder::new();
         u32_value.u32(value_type::UINT32);
         u32_value.u32(0xDEAD_BEEF);
@@ -1027,6 +1146,8 @@ mod tests {
             ("test.empty_str_array", empty_str_array.buf),
             ("test.f32_array", f32_array.buf),
             ("test.u32_array", u32_array.buf),
+            ("test.i32_array", i32_array.buf),
+            ("test.u64_overflow_array", u64_overflow_array.buf),
             ("test.u32", u32_value.buf),
         ]
     }
@@ -1232,6 +1353,22 @@ mod tests {
             Some(vec![1.0, -2.5, 3.25])
         );
         assert!(file.metadata_f32_array("test.u32_array").is_none());
+        assert_eq!(
+            file.metadata_i32_array("test.i32_array"),
+            Some(vec![1, -2, 6])
+        );
+        assert_eq!(
+            file.metadata_i32_array("test.u32_array"),
+            Some(vec![7, 9]),
+            "unsigned values that fit i32 widen without loss"
+        );
+        assert!(
+            file.metadata_i32_array("test.u64_overflow_array").is_none(),
+            "a value that cannot fit i32 refuses the whole array instead of truncating"
+        );
+        assert!(file.metadata_i32_array("test.f32_array").is_none());
+        assert!(file.metadata_i32_array("test.str_array").is_none());
+        assert!(file.metadata_i32_array("missing.key").is_none());
         assert!(matches!(
             file.metadata("test.u32_array"),
             Some(MetadataValue::Array {

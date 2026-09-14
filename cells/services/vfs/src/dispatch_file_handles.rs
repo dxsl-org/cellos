@@ -60,8 +60,16 @@ pub fn read_file<'a>(
         let _ = vfs.files.finish_sync_read(caller, file);
         return VfsResponse::Err(ERR_DENIED);
     }
-    let data = vfs.read_to_vec(&path);
-    if vfs.stat(&path).is_none() {
+    // Read only the requested range. This used to load the whole file into a fresh `Vec` and slice
+    // it, once per request: a client reading in 4 KiB chunks paid `file_size` of copying and one
+    // file-sized allocation per chunk. At 103 KB that was invisible; at 1.18 MB it drove a cell
+    // read from the AI inference service into a multi-minute stall (`read_at` is the ranged
+    // backend operation the whole time).
+    let Some((size, is_dir)) = vfs.stat(&path) else {
+        let _ = vfs.files.finish_sync_read(caller, file);
+        return VfsResponse::Err(ERR_IO);
+    };
+    if is_dir {
         let _ = vfs.files.finish_sync_read(caller, file);
         return VfsResponse::Err(ERR_IO);
     }
@@ -72,17 +80,21 @@ pub fn read_file<'a>(
             return VfsResponse::Err(ERR_IO);
         }
     };
-    if max == 0 || start >= data.len() {
+    let size = match usize::try_from(size) {
+        Ok(size) => size,
+        Err(_) => usize::MAX,
+    };
+    if max == 0 || start >= size {
         let _ = vfs.files.finish_sync_read(caller, file);
         return VfsResponse::Data(&[]);
     }
     let n = usize::try_from(max)
         .unwrap_or(MAX_INLINE_PAYLOAD)
         .min(MAX_INLINE_PAYLOAD)
-        .min(data.len() - start);
-    resp_buf[..n].copy_from_slice(&data[start..start + n]);
+        .min(size - start);
+    let read = vfs.read_at(&path, offset, &mut resp_buf[..n]);
     let _ = vfs.files.finish_sync_read(caller, file);
-    VfsResponse::Data(&resp_buf[..n])
+    VfsResponse::Data(&resp_buf[..read])
 }
 
 pub fn close_file<'a>(

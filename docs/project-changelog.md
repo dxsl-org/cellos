@@ -3,6 +3,40 @@
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
 ## [Unreleased] Development-first hardware-constrained execution
+## [2026-09-14] Real checkpoints in a Cell: SentencePiece, special tokens, scaled attention (Spec 24 Phase 05)
+- `/bin/ai` now serves a **real trained checkpoint inside a Cell** on QEMU RV64: llama2.c
+  `stories260K` (SentencePiece vocabulary, 260K parameters) is read from the `/bin` overlay in 5.4 s,
+  loaded in 8 ms, and continues `"Once upon a time"` as prose — the oracle's four scenarios pass
+  (`.agents/260913-2002-g2-level-a-ai-inference/evidence/ai-real-model-in-cell.txt`).
+- Three defects that only real weights could expose, all fixed:
+  - **Attention was unscaled.** The engine omitted the `1/sqrt(head_dim)` factor every Llama-family
+    implementation applies. The deterministic fixture matched its (equally unscaled) reference
+    throughout, so the golden oracle stayed green while real weights produced word salad; the same
+    model now produces clean prose. The engine and the fixture's Python reference were corrected
+    together and the fixture regenerated with a re-validated numerical margin.
+  - **SentencePiece vocabularies were refused**, excluding Llama-2/TinyLlama/llama2.c — the models
+    small enough to fit a Cell. `libs/ai-tokenizer` now implements the `llama` family: U+2581
+    escaping, per-character symbols with byte fallback, score-ordered merges, and control/unknown/
+    unused-aware decoding.
+  - **Control tokens were not matched before pre-tokenization.** `<|im_start|>` is a single vocabulary
+    token; splitting it into characters fed an instruction-tuned checkpoint noise (measured: repeated
+    newline ids). Both tokenizer families now split on control and user-defined tokens first, which
+    makes the model's own chat template work.
+- A shared defect surfaced by the same work: VFS `ReadFileHandle` re-read the **whole file per chunk**
+  (O(file²) chunked reads, one file-sized allocation per request). Invisible at the 103 KB fixture,
+  it stalled the service for minutes at 1.18 MB. `dispatch_file_handles` now reads the requested range
+  through `VfsManager::read_at`, and the VIFS1 backend gained a positional read built on `SeekCap`
+  (which shares `ReadCap`'s allowlist bit, so no new cell authority).
+- `gguf-rs` gained `metadata_i32_array` (`tokenizer.ggml.token_type`), with tests that refuse a value
+  that would not widen into `i32`.
+- Verification: 94 host tests across the six AI crates; oracle PASS on three paths (deterministic
+  fixture via VIFS1, real SentencePiece checkpoint via VIFS1, both via the canonical `gen_disk.ps1`
+  image); real-weight host runs for a 30-layer instruction-tuned checkpoint and a 6-layer base model.
+- Non-claims: the in-Cell model is a 260K-parameter story model — real weights, toddler-level text.
+  `stories15M` (26.7 MB) still exceeds a Cell's 32 MiB VA slot because the engine copies weights out of
+  the model buffer; zero-copy loading is the recorded next lever. CPU only, QEMU only, no accelerator
+  or hardware qualification.
+
 ## [2026-09-13] G2 Level A: native CPU AI inference service (Spec 24 CP-1..CP-3)
 - Landed a native, no-guest, no-NPU inference path behind Spec 24's ratified interface:
   `libs/ai-proto` (typed wire contract), `libs/ai-sdk` (`AiClient`), `libs/gguf-rs`,
