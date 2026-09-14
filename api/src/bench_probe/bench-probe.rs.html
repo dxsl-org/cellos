@@ -76,22 +76,18 @@
 <a href=#76 id=76 data-nosnippet>76</a>            <span class="kw">let </span><span class="kw-2">mut </span>req_buf = [<span class="number">0u8</span>; <span class="number">64</span>];
 <a href=#77 id=77 data-nosnippet>77</a>            <span class="kw">let </span><span class="kw-2">mut </span>resp_buf = [<span class="number">0u8</span>; <span class="number">1</span>];
 <a href=#78 id=78 data-nosnippet>78</a>
-<a href=#79 id=79 data-nosnippet>79</a>            <span class="kw">loop </span>{
-<a href=#80 id=80 data-nosnippet>80</a>                <span class="kw">let </span>meta = <span class="kw">match </span>endpoint.rx.recv_blocking(<span class="kw-2">&amp;mut </span>req_buf) {
-<a href=#81 id=81 data-nosnippet>81</a>                    <span class="prelude-val">Ok</span>(m) =&gt; m,
-<a href=#82 id=82 data-nosnippet>82</a>                    <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; <span class="kw">break</span>,
-<a href=#83 id=83 data-nosnippet>83</a>                };
-<a href=#84 id=84 data-nosnippet>84</a>                <span class="kw">let </span>valid = req_buf[<span class="number">0</span>] == <span class="number">0x42 </span>&amp;&amp; req_buf[<span class="number">1</span>..meta.len].iter().all(|<span class="kw-2">&amp;</span>b| b == <span class="number">0</span>);
-<a href=#85 id=85 data-nosnippet>85</a>                resp_buf[<span class="number">0</span>] = <span class="kw">if </span>valid { <span class="number">0 </span>} <span class="kw">else </span>{ <span class="number">1 </span>};
-<a href=#86 id=86 data-nosnippet>86</a>                <span class="kw">if </span>endpoint.tx.send_blocking(<span class="kw-2">&amp;</span>resp_buf, meta.seq, <span class="number">0</span>).is_err() {
-<a href=#87 id=87 data-nosnippet>87</a>                    <span class="kw">break</span>;
-<a href=#88 id=88 data-nosnippet>88</a>                }
-<a href=#89 id=89 data-nosnippet>89</a>            }
-<a href=#90 id=90 data-nosnippet>90</a>        }
-<a href=#91 id=91 data-nosnippet>91</a>        <span class="string">"resp-echo" </span>=&gt; scenarios::vfs_getfile_breakdown::run_resp_echo(),
-<a href=#92 id=92 data-nosnippet>92</a>        <span class="string">"smp-worker" </span>=&gt; scenarios::smp::run_worker(),
-<a href=#93 id=93 data-nosnippet>93</a>        <span class="string">"heartbeat-peer" </span>=&gt; scenarios::smp::run_heartbeat_peer(),
-<a href=#94 id=94 data-nosnippet>94</a>        <span class="kw">_ </span>=&gt; {} <span class="comment">// unknown role: exit cleanly
-<a href=#95 id=95 data-nosnippet>95</a>    </span>}
-<a href=#96 id=96 data-nosnippet>96</a>}
+<a href=#79 id=79 data-nosnippet>79</a>            <span class="kw">while let </span><span class="prelude-val">Ok</span>(meta) = endpoint.rx.recv_blocking(<span class="kw-2">&amp;mut </span>req_buf) {
+<a href=#80 id=80 data-nosnippet>80</a>                <span class="kw">let </span>valid = req_buf[<span class="number">0</span>] == <span class="number">0x42 </span>&amp;&amp; req_buf[<span class="number">1</span>..meta.len].iter().all(|<span class="kw-2">&amp;</span>b| b == <span class="number">0</span>);
+<a href=#81 id=81 data-nosnippet>81</a>                resp_buf[<span class="number">0</span>] = <span class="kw">if </span>valid { <span class="number">0 </span>} <span class="kw">else </span>{ <span class="number">1 </span>};
+<a href=#82 id=82 data-nosnippet>82</a>                <span class="kw">if </span>endpoint.tx.send_blocking(<span class="kw-2">&amp;</span>resp_buf, meta.seq, <span class="number">0</span>).is_err() {
+<a href=#83 id=83 data-nosnippet>83</a>                    <span class="kw">break</span>;
+<a href=#84 id=84 data-nosnippet>84</a>                }
+<a href=#85 id=85 data-nosnippet>85</a>            }
+<a href=#86 id=86 data-nosnippet>86</a>        }
+<a href=#87 id=87 data-nosnippet>87</a>        <span class="string">"resp-echo" </span>=&gt; scenarios::vfs_getfile_breakdown::run_resp_echo(),
+<a href=#88 id=88 data-nosnippet>88</a>        <span class="string">"smp-worker" </span>=&gt; scenarios::smp::run_worker(),
+<a href=#89 id=89 data-nosnippet>89</a>        <span class="string">"heartbeat-peer" </span>=&gt; scenarios::smp::run_heartbeat_peer(),
+<a href=#90 id=90 data-nosnippet>90</a>        <span class="kw">_ </span>=&gt; {} <span class="comment">// unknown role: exit cleanly
+<a href=#91 id=91 data-nosnippet>91</a>    </span>}
+<a href=#92 id=92 data-nosnippet>92</a>}
 </code></pre></div></section></main></body></html>

@@ -52,7 +52,7 @@
 <a href=#52 id=52 data-nosnippet>52</a>        }
 <a href=#53 id=53 data-nosnippet>53</a>    }
 <a href=#54 id=54 data-nosnippet>54</a>
-<a href=#55 id=55 data-nosnippet>55</a>    <span class="kw">fn </span>to_bytes(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; [u8; <span class="number">12</span>] {
+<a href=#55 id=55 data-nosnippet>55</a>    <span class="kw">fn </span>to_bytes(<span class="self">self</span>) -&gt; [u8; <span class="number">12</span>] {
 <a href=#56 id=56 data-nosnippet>56</a>        <span class="kw">let </span><span class="kw-2">mut </span>b = [<span class="number">0u8</span>; <span class="number">12</span>];
 <a href=#57 id=57 data-nosnippet>57</a>        b[<span class="number">0</span>..<span class="number">4</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="self">self</span>.seq.to_le_bytes());
 <a href=#58 id=58 data-nosnippet>58</a>        b[<span class="number">4</span>..<span class="number">8</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="self">self</span>.counter.to_le_bytes());

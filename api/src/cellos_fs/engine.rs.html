@@ -27,7 +27,7 @@
 <a href=#27 id=27 data-nosnippet>27</a>        }
 <a href=#28 id=28 data-nosnippet>28</a>
 <a href=#29 id=29 data-nosnippet>29</a>        <span class="comment">// Calculate bitmap blocks: 1 block covers 32,768 blocks (128 MiB)
-<a href=#30 id=30 data-nosnippet>30</a>        </span><span class="kw">let </span>bitmap_blocks = ((total_blocks + <span class="number">32767</span>) / <span class="number">32768</span>) <span class="kw">as </span>u32;
+<a href=#30 id=30 data-nosnippet>30</a>        </span><span class="kw">let </span>bitmap_blocks = total_blocks.div_ceil(<span class="number">32_768</span>) <span class="kw">as </span>u32;
 <a href=#31 id=31 data-nosnippet>31</a>        <span class="kw">let </span><span class="kw-2">mut </span>allocator = BitmapAllocator::new(FIRST_USABLE_BLOCK, bitmap_blocks, total_blocks);
 <a href=#32 id=32 data-nosnippet>32</a>
 <a href=#33 id=33 data-nosnippet>33</a>        <span class="comment">// Allocate root inode block (FIRST_USABLE_BLOCK + bitmap_blocks)
@@ -329,7 +329,7 @@
 <a href=#329 id=329 data-nosnippet>329</a>            inode.flags &amp;= !INODE_FLAG_INLINE;
 <a href=#330 id=330 data-nosnippet>330</a>        }
 <a href=#331 id=331 data-nosnippet>331</a>        <span class="comment">// Allocate additional blocks for incoming data
-<a href=#332 id=332 data-nosnippet>332</a>        </span><span class="kw">let </span>blocks_needed = ((new_size + BLOCK_SIZE <span class="kw">as </span>u64 - <span class="number">1</span>) / BLOCK_SIZE <span class="kw">as </span>u64) <span class="kw">as </span>u32;
+<a href=#332 id=332 data-nosnippet>332</a>        </span><span class="kw">let </span>blocks_needed = new_size.div_ceil(BLOCK_SIZE <span class="kw">as </span>u64) <span class="kw">as </span>u32;
 <a href=#333 id=333 data-nosnippet>333</a>        <span class="kw">let </span><span class="kw-2">mut </span>extents = <span class="self">self</span>.read_extents(<span class="kw-2">&amp;</span>inode);
 <a href=#334 id=334 data-nosnippet>334</a>
 <a href=#335 id=335 data-nosnippet>335</a>        <span class="kw">let </span>current_blocks: u32 = extents.iter().map(|e| e.block_count).sum();

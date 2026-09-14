@@ -85,7 +85,7 @@
 <a href=#85 id=85 data-nosnippet>85</a>    fmt: <span class="kw-2">*const </span>c_char,
 <a href=#86 id=86 data-nosnippet>86</a>    args: VaList&lt;<span class="lifetime">'_</span>&gt;,
 <a href=#87 id=87 data-nosnippet>87</a>) -&gt; c_int {
-<a href=#88 id=88 data-nosnippet>88</a>    vsnprintf_core(buf <span class="kw">as </span><span class="kw-2">*mut </span>u8, size, fmt <span class="kw">as </span><span class="kw-2">*const </span>u8, args) <span class="kw">as </span>c_int
+<a href=#88 id=88 data-nosnippet>88</a>    vsnprintf_core(buf.cast::&lt;u8&gt;(), size, fmt.cast::&lt;u8&gt;(), args) <span class="kw">as </span>c_int
 <a href=#89 id=89 data-nosnippet>89</a>}
 <a href=#90 id=90 data-nosnippet>90</a>
 <a href=#91 id=91 data-nosnippet>91</a><span class="doccomment">/// Formats `fmt` with `args` into `buf` with no length limit (C `sprintf` semantics).
@@ -97,7 +97,7 @@
 <a href=#97 id=97 data-nosnippet>97</a>/// point to a valid NUL-terminated C string; `args` must match `fmt`'s specifiers.
 <a href=#98 id=98 data-nosnippet>98</a></span><span class="attr">#[no_mangle]
 <a href=#99 id=99 data-nosnippet>99</a></span><span class="kw">pub unsafe extern </span><span class="string">"C" </span><span class="kw">fn </span>vsprintf(buf: <span class="kw-2">*mut </span>c_char, fmt: <span class="kw-2">*const </span>c_char, args: VaList&lt;<span class="lifetime">'_</span>&gt;) -&gt; c_int {
-<a href=#100 id=100 data-nosnippet>100</a>    vsnprintf_core(buf <span class="kw">as </span><span class="kw-2">*mut </span>u8, usize::MAX / <span class="number">2</span>, fmt <span class="kw">as </span><span class="kw-2">*const </span>u8, args) <span class="kw">as </span>c_int
+<a href=#100 id=100 data-nosnippet>100</a>    vsnprintf_core(buf.cast::&lt;u8&gt;(), usize::MAX / <span class="number">2</span>, fmt.cast::&lt;u8&gt;(), args) <span class="kw">as </span>c_int
 <a href=#101 id=101 data-nosnippet>101</a>}
 <a href=#102 id=102 data-nosnippet>102</a>
 <a href=#103 id=103 data-nosnippet>103</a><span class="doccomment">/// Formats `fmt` with `args` and writes the result to stdout (fd 1).
@@ -108,7 +108,7 @@
 <a href=#108 id=108 data-nosnippet>108</a></span><span class="attr">#[no_mangle]
 <a href=#109 id=109 data-nosnippet>109</a></span><span class="kw">pub unsafe extern </span><span class="string">"C" </span><span class="kw">fn </span>vprintf(fmt: <span class="kw-2">*const </span>c_char, args: VaList&lt;<span class="lifetime">'_</span>&gt;) -&gt; c_int {
 <a href=#110 id=110 data-nosnippet>110</a>    <span class="kw">let </span><span class="kw-2">mut </span>tmp = [<span class="number">0u8</span>; <span class="number">1024</span>];
-<a href=#111 id=111 data-nosnippet>111</a>    <span class="kw">let </span>n = vsnprintf_core(tmp.as_mut_ptr(), tmp.len(), fmt <span class="kw">as </span><span class="kw-2">*const </span>u8, args);
+<a href=#111 id=111 data-nosnippet>111</a>    <span class="kw">let </span>n = vsnprintf_core(tmp.as_mut_ptr(), tmp.len(), fmt.cast::&lt;u8&gt;(), args);
 <a href=#112 id=112 data-nosnippet>112</a>    _write(<span class="number">1</span>, tmp.as_ptr() <span class="kw">as </span><span class="kw-2">*const </span>c_void, n.min(tmp.len()));
 <a href=#113 id=113 data-nosnippet>113</a>    n <span class="kw">as </span>c_int
 <a href=#114 id=114 data-nosnippet>114</a>}
@@ -128,7 +128,7 @@
 <a href=#128 id=128 data-nosnippet>128</a>) -&gt; c_int {
 <a href=#129 id=129 data-nosnippet>129</a>    <span class="kw">let </span>fd = fd_of(stream);
 <a href=#130 id=130 data-nosnippet>130</a>    <span class="kw">let </span><span class="kw-2">mut </span>tmp = [<span class="number">0u8</span>; <span class="number">1024</span>];
-<a href=#131 id=131 data-nosnippet>131</a>    <span class="kw">let </span>n = vsnprintf_core(tmp.as_mut_ptr(), tmp.len(), fmt <span class="kw">as </span><span class="kw-2">*const </span>u8, args);
+<a href=#131 id=131 data-nosnippet>131</a>    <span class="kw">let </span>n = vsnprintf_core(tmp.as_mut_ptr(), tmp.len(), fmt.cast::&lt;u8&gt;(), args);
 <a href=#132 id=132 data-nosnippet>132</a>    _write(fd, tmp.as_ptr() <span class="kw">as </span><span class="kw-2">*const </span>c_void, n.min(tmp.len()));
 <a href=#133 id=133 data-nosnippet>133</a>    n <span class="kw">as </span>c_int
 <a href=#134 id=134 data-nosnippet>134</a>}
@@ -260,223 +260,227 @@
 <a href=#260 id=260 data-nosnippet>260</a>    // or EOF/error. A single _read may return fewer bytes than requested.
 <a href=#261 id=261 data-nosnippet>261</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>done = <span class="number">0usize</span>;
 <a href=#262 id=262 data-nosnippet>262</a>    <span class="kw">while </span>done &lt; total {
-<a href=#263 id=263 data-nosnippet>263</a>        <span class="kw">let </span>n = _read(fd, (ptr <span class="kw">as </span><span class="kw-2">*mut </span>u8).add(done) <span class="kw">as </span><span class="kw-2">*mut </span>c_void, total - done);
-<a href=#264 id=264 data-nosnippet>264</a>        <span class="kw">if </span>n &lt;= <span class="number">0 </span>{
-<a href=#265 id=265 data-nosnippet>265</a>            <span class="kw">break</span>;
-<a href=#266 id=266 data-nosnippet>266</a>        }
-<a href=#267 id=267 data-nosnippet>267</a>        done += n <span class="kw">as </span>usize;
-<a href=#268 id=268 data-nosnippet>268</a>    }
-<a href=#269 id=269 data-nosnippet>269</a>    done / size.max(<span class="number">1</span>)
-<a href=#270 id=270 data-nosnippet>270</a>}
-<a href=#271 id=271 data-nosnippet>271</a>
-<a href=#272 id=272 data-nosnippet>272</a><span class="doccomment">/// Writes `size * nmemb` bytes from `ptr` to `stream`.
-<a href=#273 id=273 data-nosnippet>273</a>///
-<a href=#274 id=274 data-nosnippet>274</a>/// # Safety
-<a href=#275 id=275 data-nosnippet>275</a>/// `ptr` must be null or valid for reads of at least `size * nmemb` bytes;
-<a href=#276 id=276 data-nosnippet>276</a>/// `stream` must be null or a valid `FILE*` (dereferenced by [`fd_of`]).
-<a href=#277 id=277 data-nosnippet>277</a></span><span class="attr">#[no_mangle]
-<a href=#278 id=278 data-nosnippet>278</a></span><span class="kw">pub unsafe extern </span><span class="string">"C" </span><span class="kw">fn </span>fwrite(
-<a href=#279 id=279 data-nosnippet>279</a>    ptr: <span class="kw-2">*const </span>c_void,
-<a href=#280 id=280 data-nosnippet>280</a>    size: usize,
-<a href=#281 id=281 data-nosnippet>281</a>    nmemb: usize,
-<a href=#282 id=282 data-nosnippet>282</a>    stream: <span class="kw-2">*mut </span>FILE,
-<a href=#283 id=283 data-nosnippet>283</a>) -&gt; usize {
-<a href=#284 id=284 data-nosnippet>284</a>    <span class="kw">if </span>stream.is_null() || ptr.is_null() {
-<a href=#285 id=285 data-nosnippet>285</a>        <span class="kw">return </span><span class="number">0</span>;
-<a href=#286 id=286 data-nosnippet>286</a>    }
-<a href=#287 id=287 data-nosnippet>287</a>    <span class="kw">let </span>total = size.saturating_mul(nmemb);
-<a href=#288 id=288 data-nosnippet>288</a>    <span class="kw">let </span>n = _write(fd_of(stream), ptr, total);
-<a href=#289 id=289 data-nosnippet>289</a>    <span class="kw">if </span>n &lt;= <span class="number">0 </span>{
-<a href=#290 id=290 data-nosnippet>290</a>        <span class="number">0
-<a href=#291 id=291 data-nosnippet>291</a>    </span>} <span class="kw">else </span>{
-<a href=#292 id=292 data-nosnippet>292</a>        n <span class="kw">as </span>usize / size.max(<span class="number">1</span>)
-<a href=#293 id=293 data-nosnippet>293</a>    }
-<a href=#294 id=294 data-nosnippet>294</a>}
-<a href=#295 id=295 data-nosnippet>295</a>
-<a href=#296 id=296 data-nosnippet>296</a><span class="doccomment">/// Writes the NUL-terminated string `s` to `stream` (no trailing newline added).
-<a href=#297 id=297 data-nosnippet>297</a>///
-<a href=#298 id=298 data-nosnippet>298</a>/// # Safety
-<a href=#299 id=299 data-nosnippet>299</a>/// `s` must point to a valid NUL-terminated C string; `stream` must be null
-<a href=#300 id=300 data-nosnippet>300</a>/// or a valid `FILE*` (dereferenced by [`fd_of`]).
-<a href=#301 id=301 data-nosnippet>301</a></span><span class="attr">#[no_mangle]
-<a href=#302 id=302 data-nosnippet>302</a></span><span class="kw">pub unsafe extern </span><span class="string">"C" </span><span class="kw">fn </span>fputs(s: <span class="kw-2">*const </span>c_char, stream: <span class="kw-2">*mut </span>FILE) -&gt; c_int {
-<a href=#303 id=303 data-nosnippet>303</a>    <span class="kw">if </span>s.is_null() {
-<a href=#304 id=304 data-nosnippet>304</a>        <span class="kw">return </span>-<span class="number">1</span>;
-<a href=#305 id=305 data-nosnippet>305</a>    }
-<a href=#306 id=306 data-nosnippet>306</a>    <span class="kw">let </span>len = <span class="kw">super</span>::strings::strlen(s);
-<a href=#307 id=307 data-nosnippet>307</a>    _write(fd_of(stream), s <span class="kw">as </span><span class="kw-2">*const </span>c_void, len)
-<a href=#308 id=308 data-nosnippet>308</a>}
-<a href=#309 id=309 data-nosnippet>309</a>
-<a href=#310 id=310 data-nosnippet>310</a><span class="doccomment">/// Writes the single byte `c` to `stream`.
-<a href=#311 id=311 data-nosnippet>311</a>///
-<a href=#312 id=312 data-nosnippet>312</a>/// # Safety
-<a href=#313 id=313 data-nosnippet>313</a>/// `stream` must be null or a valid `FILE*` (dereferenced by [`fd_of`]).
-<a href=#314 id=314 data-nosnippet>314</a></span><span class="attr">#[no_mangle]
-<a href=#315 id=315 data-nosnippet>315</a></span><span class="kw">pub unsafe extern </span><span class="string">"C" </span><span class="kw">fn </span>fputc(c: c_int, stream: <span class="kw-2">*mut </span>FILE) -&gt; c_int {
-<a href=#316 id=316 data-nosnippet>316</a>    <span class="kw">let </span>b = [c <span class="kw">as </span>u8];
-<a href=#317 id=317 data-nosnippet>317</a>    <span class="kw">if </span>_write(fd_of(stream), b.as_ptr() <span class="kw">as </span><span class="kw-2">*const </span>c_void, <span class="number">1</span>) == <span class="number">1 </span>{
-<a href=#318 id=318 data-nosnippet>318</a>        c
-<a href=#319 id=319 data-nosnippet>319</a>    } <span class="kw">else </span>{
-<a href=#320 id=320 data-nosnippet>320</a>        -<span class="number">1
-<a href=#321 id=321 data-nosnippet>321</a>    </span>}
-<a href=#322 id=322 data-nosnippet>322</a>}
-<a href=#323 id=323 data-nosnippet>323</a>
-<a href=#324 id=324 data-nosnippet>324</a><span class="doccomment">/// Reads a single byte from `stream`, returning it as an unsigned `c_int` or
-<a href=#325 id=325 data-nosnippet>325</a>/// `-1` on EOF/error.
-<a href=#326 id=326 data-nosnippet>326</a>///
-<a href=#327 id=327 data-nosnippet>327</a>/// # Safety
-<a href=#328 id=328 data-nosnippet>328</a>/// `stream` must be null or a valid `FILE*` (dereferenced by [`fd_of`]).
-<a href=#329 id=329 data-nosnippet>329</a></span><span class="attr">#[no_mangle]
-<a href=#330 id=330 data-nosnippet>330</a></span><span class="kw">pub unsafe extern </span><span class="string">"C" </span><span class="kw">fn </span>fgetc(stream: <span class="kw-2">*mut </span>FILE) -&gt; c_int {
-<a href=#331 id=331 data-nosnippet>331</a>    <span class="kw">let </span><span class="kw-2">mut </span>b = <span class="number">0u8</span>;
-<a href=#332 id=332 data-nosnippet>332</a>    <span class="comment">// For reads, fd_of returns 2 for unknown streams, but 0 (stdin) for stdin.
-<a href=#333 id=333 data-nosnippet>333</a>    </span><span class="kw">let </span>fd = <span class="kw">if </span>stream.is_null() { <span class="number">0 </span>} <span class="kw">else </span>{ fd_of(stream) };
-<a href=#334 id=334 data-nosnippet>334</a>    <span class="kw">if </span>_read(fd, <span class="kw-2">&amp;mut </span>b <span class="kw">as </span><span class="kw-2">*mut </span>u8 <span class="kw">as </span><span class="kw-2">*mut </span>c_void, <span class="number">1</span>) == <span class="number">1 </span>{
-<a href=#335 id=335 data-nosnippet>335</a>        b <span class="kw">as </span>c_int
-<a href=#336 id=336 data-nosnippet>336</a>    } <span class="kw">else </span>{
-<a href=#337 id=337 data-nosnippet>337</a>        -<span class="number">1
-<a href=#338 id=338 data-nosnippet>338</a>    </span>}
-<a href=#339 id=339 data-nosnippet>339</a>}
-<a href=#340 id=340 data-nosnippet>340</a>
-<a href=#341 id=341 data-nosnippet>341</a><span class="doccomment">/// Reads up to `n - 1` bytes from `stream` into `buf` and NUL-terminates the result.
-<a href=#342 id=342 data-nosnippet>342</a>///
-<a href=#343 id=343 data-nosnippet>343</a>/// # Safety
-<a href=#344 id=344 data-nosnippet>344</a>/// `buf` must be valid for writes of at least `n` bytes when `n &gt; 0`; `stream`
-<a href=#345 id=345 data-nosnippet>345</a>/// must be null or a valid `FILE*` (dereferenced by [`fd_of`]).
-<a href=#346 id=346 data-nosnippet>346</a></span><span class="attr">#[no_mangle]
-<a href=#347 id=347 data-nosnippet>347</a></span><span class="kw">pub unsafe extern </span><span class="string">"C" </span><span class="kw">fn </span>fgets(buf: <span class="kw-2">*mut </span>c_char, n: c_int, stream: <span class="kw-2">*mut </span>FILE) -&gt; <span class="kw-2">*mut </span>c_char {
-<a href=#348 id=348 data-nosnippet>348</a>    <span class="kw">if </span>buf.is_null() || n &lt;= <span class="number">0 </span>{
-<a href=#349 id=349 data-nosnippet>349</a>        <span class="kw">return </span>core::ptr::null_mut();
-<a href=#350 id=350 data-nosnippet>350</a>    }
-<a href=#351 id=351 data-nosnippet>351</a>    <span class="kw">let </span>fd = <span class="kw">if </span>stream.is_null() { <span class="number">0 </span>} <span class="kw">else </span>{ fd_of(stream) };
-<a href=#352 id=352 data-nosnippet>352</a>    <span class="kw">let </span>r = _read(fd, buf <span class="kw">as </span><span class="kw-2">*mut </span>c_void, (n - <span class="number">1</span>) <span class="kw">as </span>usize);
-<a href=#353 id=353 data-nosnippet>353</a>    <span class="kw">if </span>r &lt;= <span class="number">0 </span>{
-<a href=#354 id=354 data-nosnippet>354</a>        <span class="kw">return </span>core::ptr::null_mut();
-<a href=#355 id=355 data-nosnippet>355</a>    }
-<a href=#356 id=356 data-nosnippet>356</a>    <span class="kw-2">*</span>buf.add(r <span class="kw">as </span>usize) = <span class="number">0</span>;
-<a href=#357 id=357 data-nosnippet>357</a>    buf
-<a href=#358 id=358 data-nosnippet>358</a>}
-<a href=#359 id=359 data-nosnippet>359</a>
-<a href=#360 id=360 data-nosnippet>360</a><span class="doccomment">/// Writes the single byte `c` to stdout (fd 1).
-<a href=#361 id=361 data-nosnippet>361</a>///
-<a href=#362 id=362 data-nosnippet>362</a>/// # Safety
-<a href=#363 id=363 data-nosnippet>363</a>/// No pointer preconditions beyond the C ABI; safe to call with any `c`.
-<a href=#364 id=364 data-nosnippet>364</a></span><span class="attr">#[no_mangle]
-<a href=#365 id=365 data-nosnippet>365</a></span><span class="kw">pub unsafe extern </span><span class="string">"C" </span><span class="kw">fn </span>putchar(c: c_int) -&gt; c_int {
-<a href=#366 id=366 data-nosnippet>366</a>    <span class="kw">let </span>b = [c <span class="kw">as </span>u8];
-<a href=#367 id=367 data-nosnippet>367</a>    _write(<span class="number">1</span>, b.as_ptr() <span class="kw">as </span><span class="kw-2">*const </span>c_void, <span class="number">1</span>);
-<a href=#368 id=368 data-nosnippet>368</a>    c
-<a href=#369 id=369 data-nosnippet>369</a>}
-<a href=#370 id=370 data-nosnippet>370</a>
-<a href=#371 id=371 data-nosnippet>371</a><span class="doccomment">/// Writes the NUL-terminated string `s` followed by a newline to stdout.
-<a href=#372 id=372 data-nosnippet>372</a>///
-<a href=#373 id=373 data-nosnippet>373</a>/// # Safety
-<a href=#374 id=374 data-nosnippet>374</a>/// `s` must point to a valid NUL-terminated C string.
-<a href=#375 id=375 data-nosnippet>375</a></span><span class="attr">#[no_mangle]
-<a href=#376 id=376 data-nosnippet>376</a></span><span class="kw">pub unsafe extern </span><span class="string">"C" </span><span class="kw">fn </span>puts(s: <span class="kw-2">*const </span>c_char) -&gt; c_int {
-<a href=#377 id=377 data-nosnippet>377</a>    <span class="kw">if </span>s.is_null() {
-<a href=#378 id=378 data-nosnippet>378</a>        <span class="kw">return </span>-<span class="number">1</span>;
-<a href=#379 id=379 data-nosnippet>379</a>    }
-<a href=#380 id=380 data-nosnippet>380</a>    <span class="kw">let </span>len = <span class="kw">super</span>::strings::strlen(s);
-<a href=#381 id=381 data-nosnippet>381</a>    _write(<span class="number">1</span>, s <span class="kw">as </span><span class="kw-2">*const </span>c_void, len);
-<a href=#382 id=382 data-nosnippet>382</a>    _write(<span class="number">1</span>, <span class="string">b"\n"</span>.as_ptr() <span class="kw">as </span><span class="kw-2">*const </span>c_void, <span class="number">1</span>);
-<a href=#383 id=383 data-nosnippet>383</a>    <span class="number">1
-<a href=#384 id=384 data-nosnippet>384</a></span>}
-<a href=#385 id=385 data-nosnippet>385</a>
-<a href=#386 id=386 data-nosnippet>386</a><span class="comment">// ---------------------------------------------------------------------------
-<a href=#387 id=387 data-nosnippet>387</a>// File positioning — fseek / ftell / rewind
-<a href=#388 id=388 data-nosnippet>388</a>// ---------------------------------------------------------------------------
+<a href=#263 id=263 data-nosnippet>263</a>        <span class="kw">let </span>n = _read(
+<a href=#264 id=264 data-nosnippet>264</a>            fd,
+<a href=#265 id=265 data-nosnippet>265</a>            (ptr.cast::&lt;u8&gt;()).add(done) <span class="kw">as </span><span class="kw-2">*mut </span>c_void,
+<a href=#266 id=266 data-nosnippet>266</a>            total - done,
+<a href=#267 id=267 data-nosnippet>267</a>        );
+<a href=#268 id=268 data-nosnippet>268</a>        <span class="kw">if </span>n &lt;= <span class="number">0 </span>{
+<a href=#269 id=269 data-nosnippet>269</a>            <span class="kw">break</span>;
+<a href=#270 id=270 data-nosnippet>270</a>        }
+<a href=#271 id=271 data-nosnippet>271</a>        done += n <span class="kw">as </span>usize;
+<a href=#272 id=272 data-nosnippet>272</a>    }
+<a href=#273 id=273 data-nosnippet>273</a>    done / size.max(<span class="number">1</span>)
+<a href=#274 id=274 data-nosnippet>274</a>}
+<a href=#275 id=275 data-nosnippet>275</a>
+<a href=#276 id=276 data-nosnippet>276</a><span class="doccomment">/// Writes `size * nmemb` bytes from `ptr` to `stream`.
+<a href=#277 id=277 data-nosnippet>277</a>///
+<a href=#278 id=278 data-nosnippet>278</a>/// # Safety
+<a href=#279 id=279 data-nosnippet>279</a>/// `ptr` must be null or valid for reads of at least `size * nmemb` bytes;
+<a href=#280 id=280 data-nosnippet>280</a>/// `stream` must be null or a valid `FILE*` (dereferenced by [`fd_of`]).
+<a href=#281 id=281 data-nosnippet>281</a></span><span class="attr">#[no_mangle]
+<a href=#282 id=282 data-nosnippet>282</a></span><span class="kw">pub unsafe extern </span><span class="string">"C" </span><span class="kw">fn </span>fwrite(
+<a href=#283 id=283 data-nosnippet>283</a>    ptr: <span class="kw-2">*const </span>c_void,
+<a href=#284 id=284 data-nosnippet>284</a>    size: usize,
+<a href=#285 id=285 data-nosnippet>285</a>    nmemb: usize,
+<a href=#286 id=286 data-nosnippet>286</a>    stream: <span class="kw-2">*mut </span>FILE,
+<a href=#287 id=287 data-nosnippet>287</a>) -&gt; usize {
+<a href=#288 id=288 data-nosnippet>288</a>    <span class="kw">if </span>stream.is_null() || ptr.is_null() {
+<a href=#289 id=289 data-nosnippet>289</a>        <span class="kw">return </span><span class="number">0</span>;
+<a href=#290 id=290 data-nosnippet>290</a>    }
+<a href=#291 id=291 data-nosnippet>291</a>    <span class="kw">let </span>total = size.saturating_mul(nmemb);
+<a href=#292 id=292 data-nosnippet>292</a>    <span class="kw">let </span>n = _write(fd_of(stream), ptr, total);
+<a href=#293 id=293 data-nosnippet>293</a>    <span class="kw">if </span>n &lt;= <span class="number">0 </span>{
+<a href=#294 id=294 data-nosnippet>294</a>        <span class="number">0
+<a href=#295 id=295 data-nosnippet>295</a>    </span>} <span class="kw">else </span>{
+<a href=#296 id=296 data-nosnippet>296</a>        n <span class="kw">as </span>usize / size.max(<span class="number">1</span>)
+<a href=#297 id=297 data-nosnippet>297</a>    }
+<a href=#298 id=298 data-nosnippet>298</a>}
+<a href=#299 id=299 data-nosnippet>299</a>
+<a href=#300 id=300 data-nosnippet>300</a><span class="doccomment">/// Writes the NUL-terminated string `s` to `stream` (no trailing newline added).
+<a href=#301 id=301 data-nosnippet>301</a>///
+<a href=#302 id=302 data-nosnippet>302</a>/// # Safety
+<a href=#303 id=303 data-nosnippet>303</a>/// `s` must point to a valid NUL-terminated C string; `stream` must be null
+<a href=#304 id=304 data-nosnippet>304</a>/// or a valid `FILE*` (dereferenced by [`fd_of`]).
+<a href=#305 id=305 data-nosnippet>305</a></span><span class="attr">#[no_mangle]
+<a href=#306 id=306 data-nosnippet>306</a></span><span class="kw">pub unsafe extern </span><span class="string">"C" </span><span class="kw">fn </span>fputs(s: <span class="kw-2">*const </span>c_char, stream: <span class="kw-2">*mut </span>FILE) -&gt; c_int {
+<a href=#307 id=307 data-nosnippet>307</a>    <span class="kw">if </span>s.is_null() {
+<a href=#308 id=308 data-nosnippet>308</a>        <span class="kw">return </span>-<span class="number">1</span>;
+<a href=#309 id=309 data-nosnippet>309</a>    }
+<a href=#310 id=310 data-nosnippet>310</a>    <span class="kw">let </span>len = <span class="kw">super</span>::strings::strlen(s);
+<a href=#311 id=311 data-nosnippet>311</a>    _write(fd_of(stream), s <span class="kw">as </span><span class="kw-2">*const </span>c_void, len)
+<a href=#312 id=312 data-nosnippet>312</a>}
+<a href=#313 id=313 data-nosnippet>313</a>
+<a href=#314 id=314 data-nosnippet>314</a><span class="doccomment">/// Writes the single byte `c` to `stream`.
+<a href=#315 id=315 data-nosnippet>315</a>///
+<a href=#316 id=316 data-nosnippet>316</a>/// # Safety
+<a href=#317 id=317 data-nosnippet>317</a>/// `stream` must be null or a valid `FILE*` (dereferenced by [`fd_of`]).
+<a href=#318 id=318 data-nosnippet>318</a></span><span class="attr">#[no_mangle]
+<a href=#319 id=319 data-nosnippet>319</a></span><span class="kw">pub unsafe extern </span><span class="string">"C" </span><span class="kw">fn </span>fputc(c: c_int, stream: <span class="kw-2">*mut </span>FILE) -&gt; c_int {
+<a href=#320 id=320 data-nosnippet>320</a>    <span class="kw">let </span>b = [c <span class="kw">as </span>u8];
+<a href=#321 id=321 data-nosnippet>321</a>    <span class="kw">if </span>_write(fd_of(stream), b.as_ptr() <span class="kw">as </span><span class="kw-2">*const </span>c_void, <span class="number">1</span>) == <span class="number">1 </span>{
+<a href=#322 id=322 data-nosnippet>322</a>        c
+<a href=#323 id=323 data-nosnippet>323</a>    } <span class="kw">else </span>{
+<a href=#324 id=324 data-nosnippet>324</a>        -<span class="number">1
+<a href=#325 id=325 data-nosnippet>325</a>    </span>}
+<a href=#326 id=326 data-nosnippet>326</a>}
+<a href=#327 id=327 data-nosnippet>327</a>
+<a href=#328 id=328 data-nosnippet>328</a><span class="doccomment">/// Reads a single byte from `stream`, returning it as an unsigned `c_int` or
+<a href=#329 id=329 data-nosnippet>329</a>/// `-1` on EOF/error.
+<a href=#330 id=330 data-nosnippet>330</a>///
+<a href=#331 id=331 data-nosnippet>331</a>/// # Safety
+<a href=#332 id=332 data-nosnippet>332</a>/// `stream` must be null or a valid `FILE*` (dereferenced by [`fd_of`]).
+<a href=#333 id=333 data-nosnippet>333</a></span><span class="attr">#[no_mangle]
+<a href=#334 id=334 data-nosnippet>334</a></span><span class="kw">pub unsafe extern </span><span class="string">"C" </span><span class="kw">fn </span>fgetc(stream: <span class="kw-2">*mut </span>FILE) -&gt; c_int {
+<a href=#335 id=335 data-nosnippet>335</a>    <span class="kw">let </span><span class="kw-2">mut </span>b = <span class="number">0u8</span>;
+<a href=#336 id=336 data-nosnippet>336</a>    <span class="comment">// For reads, fd_of returns 2 for unknown streams, but 0 (stdin) for stdin.
+<a href=#337 id=337 data-nosnippet>337</a>    </span><span class="kw">let </span>fd = <span class="kw">if </span>stream.is_null() { <span class="number">0 </span>} <span class="kw">else </span>{ fd_of(stream) };
+<a href=#338 id=338 data-nosnippet>338</a>    <span class="kw">if </span>_read(fd, (<span class="kw-2">&amp;</span><span class="kw">raw </span><span class="kw-2">mut </span>b).cast::&lt;c_void&gt;(), <span class="number">1</span>) == <span class="number">1 </span>{
+<a href=#339 id=339 data-nosnippet>339</a>        b <span class="kw">as </span>c_int
+<a href=#340 id=340 data-nosnippet>340</a>    } <span class="kw">else </span>{
+<a href=#341 id=341 data-nosnippet>341</a>        -<span class="number">1
+<a href=#342 id=342 data-nosnippet>342</a>    </span>}
+<a href=#343 id=343 data-nosnippet>343</a>}
+<a href=#344 id=344 data-nosnippet>344</a>
+<a href=#345 id=345 data-nosnippet>345</a><span class="doccomment">/// Reads up to `n - 1` bytes from `stream` into `buf` and NUL-terminates the result.
+<a href=#346 id=346 data-nosnippet>346</a>///
+<a href=#347 id=347 data-nosnippet>347</a>/// # Safety
+<a href=#348 id=348 data-nosnippet>348</a>/// `buf` must be valid for writes of at least `n` bytes when `n &gt; 0`; `stream`
+<a href=#349 id=349 data-nosnippet>349</a>/// must be null or a valid `FILE*` (dereferenced by [`fd_of`]).
+<a href=#350 id=350 data-nosnippet>350</a></span><span class="attr">#[no_mangle]
+<a href=#351 id=351 data-nosnippet>351</a></span><span class="kw">pub unsafe extern </span><span class="string">"C" </span><span class="kw">fn </span>fgets(buf: <span class="kw-2">*mut </span>c_char, n: c_int, stream: <span class="kw-2">*mut </span>FILE) -&gt; <span class="kw-2">*mut </span>c_char {
+<a href=#352 id=352 data-nosnippet>352</a>    <span class="kw">if </span>buf.is_null() || n &lt;= <span class="number">0 </span>{
+<a href=#353 id=353 data-nosnippet>353</a>        <span class="kw">return </span>core::ptr::null_mut();
+<a href=#354 id=354 data-nosnippet>354</a>    }
+<a href=#355 id=355 data-nosnippet>355</a>    <span class="kw">let </span>fd = <span class="kw">if </span>stream.is_null() { <span class="number">0 </span>} <span class="kw">else </span>{ fd_of(stream) };
+<a href=#356 id=356 data-nosnippet>356</a>    <span class="kw">let </span>r = _read(fd, buf <span class="kw">as </span><span class="kw-2">*mut </span>c_void, (n - <span class="number">1</span>) <span class="kw">as </span>usize);
+<a href=#357 id=357 data-nosnippet>357</a>    <span class="kw">if </span>r &lt;= <span class="number">0 </span>{
+<a href=#358 id=358 data-nosnippet>358</a>        <span class="kw">return </span>core::ptr::null_mut();
+<a href=#359 id=359 data-nosnippet>359</a>    }
+<a href=#360 id=360 data-nosnippet>360</a>    <span class="kw-2">*</span>buf.add(r <span class="kw">as </span>usize) = <span class="number">0</span>;
+<a href=#361 id=361 data-nosnippet>361</a>    buf
+<a href=#362 id=362 data-nosnippet>362</a>}
+<a href=#363 id=363 data-nosnippet>363</a>
+<a href=#364 id=364 data-nosnippet>364</a><span class="doccomment">/// Writes the single byte `c` to stdout (fd 1).
+<a href=#365 id=365 data-nosnippet>365</a>///
+<a href=#366 id=366 data-nosnippet>366</a>/// # Safety
+<a href=#367 id=367 data-nosnippet>367</a>/// No pointer preconditions beyond the C ABI; safe to call with any `c`.
+<a href=#368 id=368 data-nosnippet>368</a></span><span class="attr">#[no_mangle]
+<a href=#369 id=369 data-nosnippet>369</a></span><span class="kw">pub unsafe extern </span><span class="string">"C" </span><span class="kw">fn </span>putchar(c: c_int) -&gt; c_int {
+<a href=#370 id=370 data-nosnippet>370</a>    <span class="kw">let </span>b = [c <span class="kw">as </span>u8];
+<a href=#371 id=371 data-nosnippet>371</a>    _write(<span class="number">1</span>, b.as_ptr() <span class="kw">as </span><span class="kw-2">*const </span>c_void, <span class="number">1</span>);
+<a href=#372 id=372 data-nosnippet>372</a>    c
+<a href=#373 id=373 data-nosnippet>373</a>}
+<a href=#374 id=374 data-nosnippet>374</a>
+<a href=#375 id=375 data-nosnippet>375</a><span class="doccomment">/// Writes the NUL-terminated string `s` followed by a newline to stdout.
+<a href=#376 id=376 data-nosnippet>376</a>///
+<a href=#377 id=377 data-nosnippet>377</a>/// # Safety
+<a href=#378 id=378 data-nosnippet>378</a>/// `s` must point to a valid NUL-terminated C string.
+<a href=#379 id=379 data-nosnippet>379</a></span><span class="attr">#[no_mangle]
+<a href=#380 id=380 data-nosnippet>380</a></span><span class="kw">pub unsafe extern </span><span class="string">"C" </span><span class="kw">fn </span>puts(s: <span class="kw-2">*const </span>c_char) -&gt; c_int {
+<a href=#381 id=381 data-nosnippet>381</a>    <span class="kw">if </span>s.is_null() {
+<a href=#382 id=382 data-nosnippet>382</a>        <span class="kw">return </span>-<span class="number">1</span>;
+<a href=#383 id=383 data-nosnippet>383</a>    }
+<a href=#384 id=384 data-nosnippet>384</a>    <span class="kw">let </span>len = <span class="kw">super</span>::strings::strlen(s);
+<a href=#385 id=385 data-nosnippet>385</a>    _write(<span class="number">1</span>, s <span class="kw">as </span><span class="kw-2">*const </span>c_void, len);
+<a href=#386 id=386 data-nosnippet>386</a>    _write(<span class="number">1</span>, <span class="string">b"\n"</span>.as_ptr() <span class="kw">as </span><span class="kw-2">*const </span>c_void, <span class="number">1</span>);
+<a href=#387 id=387 data-nosnippet>387</a>    <span class="number">1
+<a href=#388 id=388 data-nosnippet>388</a></span>}
 <a href=#389 id=389 data-nosnippet>389</a>
-<a href=#390 id=390 data-nosnippet>390</a></span><span class="doccomment">/// fseek: seek fd to `offset` from `whence` (SEEK_SET=0, SEEK_CUR=1, SEEK_END=2).
-<a href=#391 id=391 data-nosnippet>391</a>/// We implement this ourselves so our simple FILE* (fd at offset 0) is used
-<a href=#392 id=392 data-nosnippet>392</a>/// correctly — picolibc's fseek reads _file from a different offset and would
-<a href=#393 id=393 data-nosnippet>393</a>/// call lseek(0, ...) instead of the real fd.
-<a href=#394 id=394 data-nosnippet>394</a>/// Seeks `stream` to `offset` from `whence` (SEEK_SET=0, SEEK_CUR=1, SEEK_END=2).
-<a href=#395 id=395 data-nosnippet>395</a>///
-<a href=#396 id=396 data-nosnippet>396</a>/// # Safety
-<a href=#397 id=397 data-nosnippet>397</a>/// `stream` must be null or a valid `FILE*` (dereferenced by [`fd_of`]).
-<a href=#398 id=398 data-nosnippet>398</a></span><span class="attr">#[no_mangle]
-<a href=#399 id=399 data-nosnippet>399</a></span><span class="kw">pub unsafe extern </span><span class="string">"C" </span><span class="kw">fn </span>fseek(stream: <span class="kw-2">*mut </span>FILE, offset: c_long, whence: c_int) -&gt; c_int {
-<a href=#400 id=400 data-nosnippet>400</a>    <span class="kw">if </span>stream.is_null() {
-<a href=#401 id=401 data-nosnippet>401</a>        <span class="kw">return </span>-<span class="number">1</span>;
-<a href=#402 id=402 data-nosnippet>402</a>    }
-<a href=#403 id=403 data-nosnippet>403</a>    <span class="kw">let </span>fd = fd_of(stream);
-<a href=#404 id=404 data-nosnippet>404</a>    <span class="kw">let </span>r = <span class="kw">super</span>::sysio::_lseek(fd, offset, whence);
-<a href=#405 id=405 data-nosnippet>405</a>    <span class="kw">if </span>r &lt; <span class="number">0 </span>{
-<a href=#406 id=406 data-nosnippet>406</a>        -<span class="number">1
-<a href=#407 id=407 data-nosnippet>407</a>    </span>} <span class="kw">else </span>{
-<a href=#408 id=408 data-nosnippet>408</a>        <span class="number">0
-<a href=#409 id=409 data-nosnippet>409</a>    </span>}
-<a href=#410 id=410 data-nosnippet>410</a>}
-<a href=#411 id=411 data-nosnippet>411</a>
-<a href=#412 id=412 data-nosnippet>412</a><span class="doccomment">/// Returns the current seek position of `stream`.
-<a href=#413 id=413 data-nosnippet>413</a>///
-<a href=#414 id=414 data-nosnippet>414</a>/// # Safety
-<a href=#415 id=415 data-nosnippet>415</a>/// `stream` must be null or a valid `FILE*` (dereferenced by [`fd_of`]).
-<a href=#416 id=416 data-nosnippet>416</a></span><span class="attr">#[no_mangle]
-<a href=#417 id=417 data-nosnippet>417</a></span><span class="kw">pub unsafe extern </span><span class="string">"C" </span><span class="kw">fn </span>ftell(stream: <span class="kw-2">*mut </span>FILE) -&gt; c_long {
-<a href=#418 id=418 data-nosnippet>418</a>    <span class="kw">if </span>stream.is_null() {
-<a href=#419 id=419 data-nosnippet>419</a>        <span class="kw">return </span>-<span class="number">1</span>;
-<a href=#420 id=420 data-nosnippet>420</a>    }
-<a href=#421 id=421 data-nosnippet>421</a>    <span class="kw">super</span>::sysio::_lseek(fd_of(stream), <span class="number">0</span>, <span class="number">1</span>) <span class="comment">// SEEK_CUR
-<a href=#422 id=422 data-nosnippet>422</a></span>}
-<a href=#423 id=423 data-nosnippet>423</a>
-<a href=#424 id=424 data-nosnippet>424</a><span class="doccomment">/// Resets `stream`'s seek position to the beginning.
-<a href=#425 id=425 data-nosnippet>425</a>///
-<a href=#426 id=426 data-nosnippet>426</a>/// # Safety
-<a href=#427 id=427 data-nosnippet>427</a>/// `stream` must be null or a valid `FILE*` (dereferenced by [`fd_of`]).
-<a href=#428 id=428 data-nosnippet>428</a></span><span class="attr">#[no_mangle]
-<a href=#429 id=429 data-nosnippet>429</a></span><span class="kw">pub unsafe extern </span><span class="string">"C" </span><span class="kw">fn </span>rewind(stream: <span class="kw-2">*mut </span>FILE) {
-<a href=#430 id=430 data-nosnippet>430</a>    <span class="kw">if </span>stream.is_null() {
-<a href=#431 id=431 data-nosnippet>431</a>        <span class="kw">return</span>;
-<a href=#432 id=432 data-nosnippet>432</a>    }
-<a href=#433 id=433 data-nosnippet>433</a>    <span class="kw">super</span>::sysio::_lseek(fd_of(stream), <span class="number">0</span>, <span class="number">0</span>); <span class="comment">// SEEK_SET
-<a href=#434 id=434 data-nosnippet>434</a></span>}
-<a href=#435 id=435 data-nosnippet>435</a>
-<a href=#436 id=436 data-nosnippet>436</a><span class="comment">// ---------------------------------------------------------------------------
-<a href=#437 id=437 data-nosnippet>437</a>// Error / state stubs
-<a href=#438 id=438 data-nosnippet>438</a>// ---------------------------------------------------------------------------
+<a href=#390 id=390 data-nosnippet>390</a><span class="comment">// ---------------------------------------------------------------------------
+<a href=#391 id=391 data-nosnippet>391</a>// File positioning — fseek / ftell / rewind
+<a href=#392 id=392 data-nosnippet>392</a>// ---------------------------------------------------------------------------
+<a href=#393 id=393 data-nosnippet>393</a>
+<a href=#394 id=394 data-nosnippet>394</a></span><span class="doccomment">/// fseek: seek fd to `offset` from `whence` (SEEK_SET=0, SEEK_CUR=1, SEEK_END=2).
+<a href=#395 id=395 data-nosnippet>395</a>/// We implement this ourselves so our simple FILE* (fd at offset 0) is used
+<a href=#396 id=396 data-nosnippet>396</a>/// correctly — picolibc's fseek reads _file from a different offset and would
+<a href=#397 id=397 data-nosnippet>397</a>/// call lseek(0, ...) instead of the real fd.
+<a href=#398 id=398 data-nosnippet>398</a>/// Seeks `stream` to `offset` from `whence` (SEEK_SET=0, SEEK_CUR=1, SEEK_END=2).
+<a href=#399 id=399 data-nosnippet>399</a>///
+<a href=#400 id=400 data-nosnippet>400</a>/// # Safety
+<a href=#401 id=401 data-nosnippet>401</a>/// `stream` must be null or a valid `FILE*` (dereferenced by [`fd_of`]).
+<a href=#402 id=402 data-nosnippet>402</a></span><span class="attr">#[no_mangle]
+<a href=#403 id=403 data-nosnippet>403</a></span><span class="kw">pub unsafe extern </span><span class="string">"C" </span><span class="kw">fn </span>fseek(stream: <span class="kw-2">*mut </span>FILE, offset: c_long, whence: c_int) -&gt; c_int {
+<a href=#404 id=404 data-nosnippet>404</a>    <span class="kw">if </span>stream.is_null() {
+<a href=#405 id=405 data-nosnippet>405</a>        <span class="kw">return </span>-<span class="number">1</span>;
+<a href=#406 id=406 data-nosnippet>406</a>    }
+<a href=#407 id=407 data-nosnippet>407</a>    <span class="kw">let </span>fd = fd_of(stream);
+<a href=#408 id=408 data-nosnippet>408</a>    <span class="kw">let </span>r = <span class="kw">super</span>::sysio::_lseek(fd, offset, whence);
+<a href=#409 id=409 data-nosnippet>409</a>    <span class="kw">if </span>r &lt; <span class="number">0 </span>{
+<a href=#410 id=410 data-nosnippet>410</a>        -<span class="number">1
+<a href=#411 id=411 data-nosnippet>411</a>    </span>} <span class="kw">else </span>{
+<a href=#412 id=412 data-nosnippet>412</a>        <span class="number">0
+<a href=#413 id=413 data-nosnippet>413</a>    </span>}
+<a href=#414 id=414 data-nosnippet>414</a>}
+<a href=#415 id=415 data-nosnippet>415</a>
+<a href=#416 id=416 data-nosnippet>416</a><span class="doccomment">/// Returns the current seek position of `stream`.
+<a href=#417 id=417 data-nosnippet>417</a>///
+<a href=#418 id=418 data-nosnippet>418</a>/// # Safety
+<a href=#419 id=419 data-nosnippet>419</a>/// `stream` must be null or a valid `FILE*` (dereferenced by [`fd_of`]).
+<a href=#420 id=420 data-nosnippet>420</a></span><span class="attr">#[no_mangle]
+<a href=#421 id=421 data-nosnippet>421</a></span><span class="kw">pub unsafe extern </span><span class="string">"C" </span><span class="kw">fn </span>ftell(stream: <span class="kw-2">*mut </span>FILE) -&gt; c_long {
+<a href=#422 id=422 data-nosnippet>422</a>    <span class="kw">if </span>stream.is_null() {
+<a href=#423 id=423 data-nosnippet>423</a>        <span class="kw">return </span>-<span class="number">1</span>;
+<a href=#424 id=424 data-nosnippet>424</a>    }
+<a href=#425 id=425 data-nosnippet>425</a>    <span class="kw">super</span>::sysio::_lseek(fd_of(stream), <span class="number">0</span>, <span class="number">1</span>) <span class="comment">// SEEK_CUR
+<a href=#426 id=426 data-nosnippet>426</a></span>}
+<a href=#427 id=427 data-nosnippet>427</a>
+<a href=#428 id=428 data-nosnippet>428</a><span class="doccomment">/// Resets `stream`'s seek position to the beginning.
+<a href=#429 id=429 data-nosnippet>429</a>///
+<a href=#430 id=430 data-nosnippet>430</a>/// # Safety
+<a href=#431 id=431 data-nosnippet>431</a>/// `stream` must be null or a valid `FILE*` (dereferenced by [`fd_of`]).
+<a href=#432 id=432 data-nosnippet>432</a></span><span class="attr">#[no_mangle]
+<a href=#433 id=433 data-nosnippet>433</a></span><span class="kw">pub unsafe extern </span><span class="string">"C" </span><span class="kw">fn </span>rewind(stream: <span class="kw-2">*mut </span>FILE) {
+<a href=#434 id=434 data-nosnippet>434</a>    <span class="kw">if </span>stream.is_null() {
+<a href=#435 id=435 data-nosnippet>435</a>        <span class="kw">return</span>;
+<a href=#436 id=436 data-nosnippet>436</a>    }
+<a href=#437 id=437 data-nosnippet>437</a>    <span class="kw">super</span>::sysio::_lseek(fd_of(stream), <span class="number">0</span>, <span class="number">0</span>); <span class="comment">// SEEK_SET
+<a href=#438 id=438 data-nosnippet>438</a></span>}
 <a href=#439 id=439 data-nosnippet>439</a>
-<a href=#440 id=440 data-nosnippet>440</a></span><span class="doccomment">/// Stub: always reports no error.
-<a href=#441 id=441 data-nosnippet>441</a>///
-<a href=#442 id=442 data-nosnippet>442</a>/// # Safety
-<a href=#443 id=443 data-nosnippet>443</a>/// `_stream` is unused; no preconditions.
-<a href=#444 id=444 data-nosnippet>444</a></span><span class="attr">#[no_mangle]
-<a href=#445 id=445 data-nosnippet>445</a></span><span class="kw">pub unsafe extern </span><span class="string">"C" </span><span class="kw">fn </span>ferror(_stream: <span class="kw-2">*mut </span>FILE) -&gt; c_int {
-<a href=#446 id=446 data-nosnippet>446</a>    <span class="number">0
-<a href=#447 id=447 data-nosnippet>447</a></span>}
-<a href=#448 id=448 data-nosnippet>448</a><span class="doccomment">/// Stub: always reports not-at-EOF.
-<a href=#449 id=449 data-nosnippet>449</a>///
-<a href=#450 id=450 data-nosnippet>450</a>/// # Safety
-<a href=#451 id=451 data-nosnippet>451</a>/// `_stream` is unused; no preconditions.
-<a href=#452 id=452 data-nosnippet>452</a></span><span class="attr">#[no_mangle]
-<a href=#453 id=453 data-nosnippet>453</a></span><span class="kw">pub unsafe extern </span><span class="string">"C" </span><span class="kw">fn </span>feof(_stream: <span class="kw-2">*mut </span>FILE) -&gt; c_int {
-<a href=#454 id=454 data-nosnippet>454</a>    <span class="number">0
-<a href=#455 id=455 data-nosnippet>455</a></span>}
-<a href=#456 id=456 data-nosnippet>456</a><span class="doccomment">/// Stub: no-op (no error state is tracked).
-<a href=#457 id=457 data-nosnippet>457</a>///
-<a href=#458 id=458 data-nosnippet>458</a>/// # Safety
-<a href=#459 id=459 data-nosnippet>459</a>/// `_stream` is unused; no preconditions.
-<a href=#460 id=460 data-nosnippet>460</a></span><span class="attr">#[no_mangle]
-<a href=#461 id=461 data-nosnippet>461</a></span><span class="kw">pub unsafe extern </span><span class="string">"C" </span><span class="kw">fn </span>clearerr(_stream: <span class="kw-2">*mut </span>FILE) {}
-<a href=#462 id=462 data-nosnippet>462</a><span class="doccomment">/// Stub: no-op (writes are unbuffered).
-<a href=#463 id=463 data-nosnippet>463</a>///
-<a href=#464 id=464 data-nosnippet>464</a>/// # Safety
-<a href=#465 id=465 data-nosnippet>465</a>/// `_stream` is unused; no preconditions.
-<a href=#466 id=466 data-nosnippet>466</a></span><span class="attr">#[no_mangle]
-<a href=#467 id=467 data-nosnippet>467</a></span><span class="kw">pub unsafe extern </span><span class="string">"C" </span><span class="kw">fn </span>fflush(_stream: <span class="kw-2">*mut </span>FILE) -&gt; c_int {
-<a href=#468 id=468 data-nosnippet>468</a>    <span class="number">0
-<a href=#469 id=469 data-nosnippet>469</a></span>}
-<a href=#470 id=470 data-nosnippet>470</a><span class="doccomment">/// Returns the underlying file descriptor for `stream`.
-<a href=#471 id=471 data-nosnippet>471</a>///
-<a href=#472 id=472 data-nosnippet>472</a>/// # Safety
-<a href=#473 id=473 data-nosnippet>473</a>/// `stream` must be null or a valid `FILE*` (dereferenced by [`fd_of`]).
-<a href=#474 id=474 data-nosnippet>474</a></span><span class="attr">#[no_mangle]
-<a href=#475 id=475 data-nosnippet>475</a></span><span class="kw">pub unsafe extern </span><span class="string">"C" </span><span class="kw">fn </span>fileno(stream: <span class="kw-2">*mut </span>FILE) -&gt; c_int {
-<a href=#476 id=476 data-nosnippet>476</a>    <span class="kw">if </span>stream.is_null() {
-<a href=#477 id=477 data-nosnippet>477</a>        -<span class="number">1
-<a href=#478 id=478 data-nosnippet>478</a>    </span>} <span class="kw">else </span>{
-<a href=#479 id=479 data-nosnippet>479</a>        fd_of(stream)
-<a href=#480 id=480 data-nosnippet>480</a>    }
-<a href=#481 id=481 data-nosnippet>481</a>}
+<a href=#440 id=440 data-nosnippet>440</a><span class="comment">// ---------------------------------------------------------------------------
+<a href=#441 id=441 data-nosnippet>441</a>// Error / state stubs
+<a href=#442 id=442 data-nosnippet>442</a>// ---------------------------------------------------------------------------
+<a href=#443 id=443 data-nosnippet>443</a>
+<a href=#444 id=444 data-nosnippet>444</a></span><span class="doccomment">/// Stub: always reports no error.
+<a href=#445 id=445 data-nosnippet>445</a>///
+<a href=#446 id=446 data-nosnippet>446</a>/// # Safety
+<a href=#447 id=447 data-nosnippet>447</a>/// `_stream` is unused; no preconditions.
+<a href=#448 id=448 data-nosnippet>448</a></span><span class="attr">#[no_mangle]
+<a href=#449 id=449 data-nosnippet>449</a></span><span class="kw">pub unsafe extern </span><span class="string">"C" </span><span class="kw">fn </span>ferror(_stream: <span class="kw-2">*mut </span>FILE) -&gt; c_int {
+<a href=#450 id=450 data-nosnippet>450</a>    <span class="number">0
+<a href=#451 id=451 data-nosnippet>451</a></span>}
+<a href=#452 id=452 data-nosnippet>452</a><span class="doccomment">/// Stub: always reports not-at-EOF.
+<a href=#453 id=453 data-nosnippet>453</a>///
+<a href=#454 id=454 data-nosnippet>454</a>/// # Safety
+<a href=#455 id=455 data-nosnippet>455</a>/// `_stream` is unused; no preconditions.
+<a href=#456 id=456 data-nosnippet>456</a></span><span class="attr">#[no_mangle]
+<a href=#457 id=457 data-nosnippet>457</a></span><span class="kw">pub unsafe extern </span><span class="string">"C" </span><span class="kw">fn </span>feof(_stream: <span class="kw-2">*mut </span>FILE) -&gt; c_int {
+<a href=#458 id=458 data-nosnippet>458</a>    <span class="number">0
+<a href=#459 id=459 data-nosnippet>459</a></span>}
+<a href=#460 id=460 data-nosnippet>460</a><span class="doccomment">/// Stub: no-op (no error state is tracked).
+<a href=#461 id=461 data-nosnippet>461</a>///
+<a href=#462 id=462 data-nosnippet>462</a>/// # Safety
+<a href=#463 id=463 data-nosnippet>463</a>/// `_stream` is unused; no preconditions.
+<a href=#464 id=464 data-nosnippet>464</a></span><span class="attr">#[no_mangle]
+<a href=#465 id=465 data-nosnippet>465</a></span><span class="kw">pub unsafe extern </span><span class="string">"C" </span><span class="kw">fn </span>clearerr(_stream: <span class="kw-2">*mut </span>FILE) {}
+<a href=#466 id=466 data-nosnippet>466</a><span class="doccomment">/// Stub: no-op (writes are unbuffered).
+<a href=#467 id=467 data-nosnippet>467</a>///
+<a href=#468 id=468 data-nosnippet>468</a>/// # Safety
+<a href=#469 id=469 data-nosnippet>469</a>/// `_stream` is unused; no preconditions.
+<a href=#470 id=470 data-nosnippet>470</a></span><span class="attr">#[no_mangle]
+<a href=#471 id=471 data-nosnippet>471</a></span><span class="kw">pub unsafe extern </span><span class="string">"C" </span><span class="kw">fn </span>fflush(_stream: <span class="kw-2">*mut </span>FILE) -&gt; c_int {
+<a href=#472 id=472 data-nosnippet>472</a>    <span class="number">0
+<a href=#473 id=473 data-nosnippet>473</a></span>}
+<a href=#474 id=474 data-nosnippet>474</a><span class="doccomment">/// Returns the underlying file descriptor for `stream`.
+<a href=#475 id=475 data-nosnippet>475</a>///
+<a href=#476 id=476 data-nosnippet>476</a>/// # Safety
+<a href=#477 id=477 data-nosnippet>477</a>/// `stream` must be null or a valid `FILE*` (dereferenced by [`fd_of`]).
+<a href=#478 id=478 data-nosnippet>478</a></span><span class="attr">#[no_mangle]
+<a href=#479 id=479 data-nosnippet>479</a></span><span class="kw">pub unsafe extern </span><span class="string">"C" </span><span class="kw">fn </span>fileno(stream: <span class="kw-2">*mut </span>FILE) -&gt; c_int {
+<a href=#480 id=480 data-nosnippet>480</a>    <span class="kw">if </span>stream.is_null() {
+<a href=#481 id=481 data-nosnippet>481</a>        -<span class="number">1
+<a href=#482 id=482 data-nosnippet>482</a>    </span>} <span class="kw">else </span>{
+<a href=#483 id=483 data-nosnippet>483</a>        fd_of(stream)
+<a href=#484 id=484 data-nosnippet>484</a>    }
+<a href=#485 id=485 data-nosnippet>485</a>}
 </code></pre></div></section></main></body></html>

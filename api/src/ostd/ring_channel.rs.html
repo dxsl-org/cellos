@@ -191,7 +191,7 @@
 <a href=#191 id=191 data-nosnippet>191</a>    /// Returns None if the handle is null or misaligned.
 <a href=#192 id=192 data-nosnippet>192</a>    </span><span class="kw">pub fn </span>connect(handle: u64) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="self">Self</span>&gt; {
 <a href=#193 id=193 data-nosnippet>193</a>        <span class="kw">let </span>addr = handle <span class="kw">as </span>usize;
-<a href=#194 id=194 data-nosnippet>194</a>        <span class="kw">if </span>addr == <span class="number">0 </span>|| addr % core::mem::align_of::&lt;BiRingChannel&gt;() != <span class="number">0 </span>{
+<a href=#194 id=194 data-nosnippet>194</a>        <span class="kw">if </span>addr == <span class="number">0 </span>|| !addr.is_multiple_of(core::mem::align_of::&lt;BiRingChannel&gt;()) {
 <a href=#195 id=195 data-nosnippet>195</a>            <span class="kw">return </span><span class="prelude-val">None</span>;
 <a href=#196 id=196 data-nosnippet>196</a>        }
 <a href=#197 id=197 data-nosnippet>197</a>        <span class="prelude-val">Some</span>(<span class="self">Self </span>{
