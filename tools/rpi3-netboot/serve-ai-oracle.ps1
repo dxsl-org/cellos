@@ -29,6 +29,10 @@ param(
     [int]$Baud = 115200,
     [switch]$DriveShell = $true,
     [int]$TimeoutSec = 420,
+    # The shell resolves a bare name under /bin itself; an explicit /bin/<name> arrives at the loader
+    # as /bin//bin/<name> and is refused ("DENY launch edge ... spawn_cap=false"), which reads as a
+    # missing command.
+    [string]$ShellCommand = 'ai-test',
     [string]$InterfaceAlias = 'Ethernet',
     [int]$ExpectedInterfaceIndex = 26,
     [switch]$ApplyNetworkConfig,
@@ -62,7 +66,8 @@ if (($ApplyNetworkConfig -or $ApplyFirewall) -and -not (Test-Administrator)) {
     throw 'ApplyNetworkConfig/-ApplyFirewall require Administrator PowerShell'
 }
 if (-not $EvidenceDir) {
-    $EvidenceDir = Join-Path (Split-Path -Parent $scriptDir) '.agents\260914-ai-oracle-arm64\evidence'
+    $repoRoot = Split-Path -Parent (Split-Path -Parent $scriptDir)
+    $EvidenceDir = Join-Path $repoRoot '.agents\260914-ai-oracle-arm64\evidence'
 }
 New-Item -ItemType Directory -Path $EvidenceDir -Force | Out-Null
 
@@ -91,19 +96,29 @@ if (-not $ComPort) {
     }
 }
 
-# 3. NIC + firewall preflight through the lane's own script, so the rules stay in one place.
-& pwsh -NoProfile -File $serveScript -InterfaceAlias $InterfaceAlias `
-    -ExpectedInterfaceIndex $ExpectedInterfaceIndex -ApplyNetworkConfig:$ApplyNetworkConfig `
-    -ApplyFirewall:$ApplyFirewall -PreflightOnly
-if ($LASTEXITCODE -ne 0) { throw 'network preflight failed' }
+# 3. NIC + firewall preflight. With -SkipServer the lane's own script cannot be asked to preflight:
+# it treats a busy UDP 69 as a failure precisely because it wants to bind that port, and here the
+# busy port *is* the server we are borrowing. So check the two facts we actually need instead.
+if ($SkipServer) {
+    $bound = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+        Where-Object { $_.IPAddress -eq '192.168.42.1' -and $_.InterfaceIndex -eq $ExpectedInterfaceIndex }
+    if (-not $bound) { throw 'netboot address 192.168.42.1 is not assigned to the expected interface' }
+    $holder = Get-NetUDPEndpoint -LocalPort 69 -ErrorAction SilentlyContinue
+    if (-not $holder) { throw 'SkipServer was requested but nothing is serving UDP 69' }
+    Write-Host ("[ai-oracle] preflight: 192.168.42.1 on ifIndex {0}, UDP 69 held by pid {1}" -f `
+        $ExpectedInterfaceIndex, (($holder | ForEach-Object OwningProcess) -join ', '))
+} else {
+    & pwsh -NoProfile -File $serveScript -InterfaceAlias $InterfaceAlias `
+        -ExpectedInterfaceIndex $ExpectedInterfaceIndex -ApplyNetworkConfig:$ApplyNetworkConfig `
+        -ApplyFirewall:$ApplyFirewall -PreflightOnly
+    if ($LASTEXITCODE -ne 0) { throw 'network preflight failed' }
+}
 
 $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $logPath = Join-Path $EvidenceDir "rpi3-$Variant-$stamp.log"
 $server = $null
 if ($SkipServer) {
-    $holder = Get-NetUDPEndpoint -LocalPort 69 -ErrorAction SilentlyContinue
-    if (-not $holder) { throw 'SkipServer was requested but nothing is serving UDP 69' }
-    Write-Host ("[ai-oracle] using the running TFTP server (pid(s) {0}); log {1}" -f (($holder | ForEach-Object OwningProcess) -join ', '), $logPath)
+    Write-Host ("[ai-oracle] using the running TFTP server; log {0}" -f $logPath)
 } else {
     $server = Start-Process -FilePath 'pwsh' -PassThru -WindowStyle Hidden -ArgumentList @(
         '-NoProfile', '-File', $serveScript,
@@ -112,6 +127,16 @@ if ($SkipServer) {
     Write-Host ("[ai-oracle] TFTP server pid {0}; log {1}" -f $server.Id, $logPath)
 }
 
+$header = @(
+    "# Cellos AI inference oracle over RPi3 netboot",
+    "# variant: $Variant",
+    "# payload: $staged ($((Get-Item $staged).Length) bytes, sha256 $stagedHash)",
+    "# serial: $ComPort at $Baud baud, driven=$DriveShell, command=$ShellCommand",
+    "# lines below are streamed as they arrive; the verdict is appended at the end",
+    ''
+)
+Set-Content -LiteralPath $logPath -Value ($header -join "`n") -Encoding utf8
+
 $serial = New-Object System.IO.Ports.SerialPort $ComPort, $Baud, 'None', 8, 'One'
 $serial.NewLine = "`n"
 $transcript = New-Object System.Collections.Generic.List[string]
@@ -119,6 +144,9 @@ $sentOracle = $false
 $verdict = 'TIMEOUT'
 $started = Get-Date
 $promptSeenAt = $null
+$bytesSeen = 0
+$lastWakeAt = $null
+$bootSent = $false
 
 function Write-Transcript([string]$text) {
     if (-not $text) { return }
@@ -126,6 +154,7 @@ function Write-Transcript([string]$text) {
         if ($line.Trim().Length -eq 0) { continue }
         $stamped = '{0:HH:mm:ss.fff} {1}' -f (Get-Date), $line
         $transcript.Add($stamped)
+        Add-Content -LiteralPath $script:logPath -Value $stamped -ErrorAction SilentlyContinue
         Write-Host $stamped
     }
 }
@@ -139,6 +168,17 @@ try {
     Write-Host '============================================================'
     while (((Get-Date) - $started).TotalSeconds -lt $TimeoutSec) {
         $chunk = $serial.ReadExisting()
+        if ($chunk) { $bytesSeen += $chunk.Length }
+        # A board that is already sitting at a bootloader prompt prints nothing until it is spoken to,
+        # and one that is mid-countdown stops autobooting on the first byte it receives. Both are
+        # recovered by the same move: nudge the line (a bare CR), then, if that lands on a U-Boot
+        # prompt, ask it to boot. Nothing is sent while the console is quiet and the Pi is off.
+        if ($bytesSeen -eq 0 -and -not $lastWakeAt -and
+            ((Get-Date) - $started).TotalSeconds -ge 45) {
+            $serial.Write("`r")
+            $lastWakeAt = Get-Date
+            Write-Transcript '[ai-oracle] no console output yet; sent a CR to wake the line'
+        }
         if ($chunk) {
             Write-Transcript $chunk
             $all = ($transcript -join "`n")
@@ -148,13 +188,13 @@ try {
             # (a board that already booted before the capture opened the port prints nothing until
             # it is spoken to), fall back to the prompt alone after 20 s: the oracle reports what
             # the service actually has, so a stale-but-real console still produces real evidence.
-            if ($all -match 'Cellos\s*>\s*$' -and -not $promptSeenAt) { $promptSeenAt = Get-Date }
+            if ($all -match 'Cellos\s*>' -and -not $promptSeenAt) { $promptSeenAt = Get-Date }
             $ready = ($all -match '\[ai\] model ready') -or
                      ($promptSeenAt -and ((Get-Date) - $promptSeenAt).TotalSeconds -ge 20)
-            if ($DriveShell -and -not $sentOracle -and $all -match 'Cellos\s*>\s*$' -and $ready) {
+            if ($DriveShell -and -not $sentOracle -and $all -match 'Cellos\s*>' -and $ready) {
                 Start-Sleep -Milliseconds 700
-                $serial.Write("/bin/ai-test`r")
-                Write-Transcript '[ai-oracle] sent: /bin/ai-test'
+                $serial.Write("$ShellCommand`r")
+                Write-Transcript "[ai-oracle] sent: $ShellCommand"
                 $sentOracle = $true
             }
             if ($all -match '\[ai\] model ready') {
@@ -162,6 +202,13 @@ try {
                     $script:modelReadyLogged = $true
                     Write-Host '[ai-oracle] service reported its model resident'
                 }
+            }
+            if ($all -match '(?m)(=>|U-Boot>)\s*$' -and -not $bootSent) {
+                Start-Sleep -Milliseconds 400
+                $serial.Write("boot`r")
+                Write-Transcript '[ai-oracle] U-Boot prompt detected; sent: boot'
+                $bootSent = $true
+                $promptSeenAt = $null
             }
             if ($all -match '\[ai-test\] PASS') { $verdict = 'PASS'; break }
             if ($all -match '\[ai-test\] FAIL|KERNEL PANIC') { $verdict = 'FAIL'; break }
@@ -175,16 +222,12 @@ try {
     # A server we did not start keeps running: it is the operator's, not ours to kill.
 }
 
-$header = @(
-    "# Cellos AI inference oracle over RPi3 netboot",
-    "# variant: $Variant",
-    "# payload: $staged ($((Get-Item $staged).Length) bytes, sha256 $stagedHash)",
-    "# serial: $ComPort at $Baud baud, driven=$DriveShell",
-    "# verdict: $verdict",
-    "# elapsed: $([int]((Get-Date) - $started).TotalSeconds) s",
-    ''
+$trailer = @(
+    '',
+    ("# verdict: {0}" -f $verdict),
+    ("# elapsed: {0} s" -f [int]((Get-Date) - $started).TotalSeconds)
 )
-Set-Content -LiteralPath $logPath -Value (($header + $transcript) -join "`n") -Encoding utf8
+Add-Content -LiteralPath $logPath -Value ($trailer -join "`n") -Encoding utf8
 Write-Host ''
 Write-Host ("[ai-oracle] verdict: {0}  (log: {1})" -f $verdict, $logPath)
 if ($verdict -ne 'PASS') { exit 1 }
