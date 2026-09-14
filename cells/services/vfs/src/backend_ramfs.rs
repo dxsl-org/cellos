@@ -215,6 +215,27 @@ impl FsBackend for RamFsBackend {
             .unwrap_or_default()
     }
 
+    /// Positional read out of the in-memory node.
+    ///
+    /// Required: the handle-read path (`ReadFileHandle`) is ranged, and a backend that leaves this
+    /// at the trait default hands every caller zero bytes — silently truncating every file the
+    /// shell writes under `/tmp` and reads back.
+    fn read_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> usize {
+        let Some(data) = self.get_file_data(path) else {
+            return 0;
+        };
+        let start = match usize::try_from(offset) {
+            Ok(start) => start,
+            Err(_) => return 0,
+        };
+        if start >= data.len() {
+            return 0;
+        }
+        let n = buf.len().min(data.len() - start);
+        buf[..n].copy_from_slice(&data[start..start + n]);
+        n
+    }
+
     fn write(&mut self, path: &str, content: &[u8]) -> bool {
         // Embedded catalog is immutable; only the volatile scratch space accepts writes.
         if !path.starts_with("/tmp/") {

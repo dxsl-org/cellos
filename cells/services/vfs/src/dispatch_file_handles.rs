@@ -92,7 +92,20 @@ pub fn read_file<'a>(
         .unwrap_or(MAX_INLINE_PAYLOAD)
         .min(MAX_INLINE_PAYLOAD)
         .min(size - start);
-    let read = vfs.read_at(&path, offset, &mut resp_buf[..n]);
+    let mut read = vfs.read_at(&path, offset, &mut resp_buf[..n]);
+    if read == 0 && n > 0 {
+        // A backend that does not implement ranged reads returns nothing. Falling back to the
+        // whole-file copy keeps such a backend correct (at its old cost) instead of silently
+        // truncating every chunked read; `BootFsProxy`, `BinOverlay`, `FatBackend`, `CellosFs` and
+        // `RamFsBackend` all implement `read_at` today, so this path is for future ones.
+        let data = vfs.read_to_vec(&path);
+        if offset < data.len() as u64 {
+            let start = offset as usize;
+            let take = n.min(data.len() - start);
+            resp_buf[..take].copy_from_slice(&data[start..start + take]);
+            read = take;
+        }
+    }
     let _ = vfs.files.finish_sync_read(caller, file);
     VfsResponse::Data(&resp_buf[..read])
 }
