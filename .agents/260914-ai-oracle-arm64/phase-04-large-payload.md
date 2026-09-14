@@ -40,6 +40,39 @@ The failing boot is normal until the compositor is spawned, then repeats forever
   and the ramdisk is a `include_bytes!` static in `.rodata` with no heap copy
   (`kernel/src/task/drivers/ramdisk.rs` says so explicitly).
 
+## Narrowed further (static analysis)
+
+The board's boot log carries **no** `[boot] RPi3 DTB memory map rejected` / `conservative fallback`
+line, so the running map came from the firmware DTB with `kernel_end = __stack_top`
+(`kernel/src/boot.rs`, the `board-rpi3` variant of `fallback_boot_info`) — i.e. from a kernel range
+that *does* grow with the image. That removes the simplest explanation and leaves the static
+descriptor as the prime suspect for any path that still reads it:
+
+```rust
+// boards/raspberry-pi/3-model-b/board.rs
+MemoryRange { name: "kernel", base: 0x0008_0000, size: 0x0100_0000, .. },   // 16 MiB, fixed
+MemoryRange { name: "usable", base: 0x0108_0000, size: 0x39F8_0000, .. },
+```
+
+A 16 MiB claim is correct for the 10 MB payloads (the fixture and `260k` ones boot) and wrong for a
+43.6 MB one — its "usable" region would start at 16.5 MB, *inside* the image, and the frame allocator
+(next-fit, ascending — `kernel/src/memory/frame.rs::allocate_frame`) would hand out frames holding
+`.rodata` (the kernel's own code and the embedded VIFS1). The first heavy allocator user is exactly
+where the panic lands: the compositor cell.
+
+**The decisive measurement is one boot with the allocator range printed.** The kernel already logs it
+for other architectures:
+
+```rust
+// kernel/src/main.rs, right after FrameAllocator::new_from_map
+log::info!("[boot] allocator range {:#x}..{:#x} ({} bytes)", …);
+```
+
+That call sits behind a `cfg` that excludes aarch64. Widening it (or adding the same line under
+`feature = "board-rpi3"`) and booting the 43.6 MB payload prints either a kernel range ending at
+~16 MiB — confirming this — or one ending at ~44 MiB, which sends the search back to
+`dtb_memory::build`'s reserved list.
+
 ## What is left for the owning lane
 
 The failure is at compositor cell setup on the board only. The most likely remaining shapes are the
