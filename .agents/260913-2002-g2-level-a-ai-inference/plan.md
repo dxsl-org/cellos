@@ -5,7 +5,7 @@ in-tree client Cell can submit a prompt to a native AI inference service Cell an
 generated tokens, with no Linux guest, no NPU, and no vendor runtime.
 **Stage**: G2 Level A (per [project-roadmap-legacy.md §G3 NPU path](../../docs/project-roadmap-legacy.md)).
 **Plan owner**: Main (solo maintainer, ADR-0013).
-**Status**: completed (phases 01-04; CP-2/CP-4/CP-5/CP-6/CP-7 remain gated)
+**Status**: completed (phases 01-07; CP-2/CP-4/CP-5/CP-6/CP-7 remain gated)
 **Priority**: P1
 **Evidence ceiling**: `host` for engine numerics and real-weight generation; `qemu` for the
 service/IPC/oracle path. No physical, production, admission, or G3 claim is made by this plan.
@@ -27,6 +27,7 @@ service/IPC/oracle path. No physical, production, admission, or G3 claim is made
 - `cells/tests/ai-test` — QEMU oracle client cell (spawns/uses the service, asserts tokens).
 - Image/launch wiring: kernel launch profile, init service table entry, `gen_disk.ps1`,
   `scripts/build-boot-ramdisk-ci.sh`.
+- Consumer path: `cells/services/httpd` exposes `POST /api/infer` through `AiClient`; the canonical QEMU image and hostfwd integration gate cover HTTP → inference Cell → JSON response.
 
 ### Explicitly out of scope (documented, not stubbed)
 
@@ -50,6 +51,7 @@ service/IPC/oracle path. No physical, production, admission, or G3 claim is made
 | 04 | [Real-weight validation](./phase-04-real-weight-validation.md) | Real GGUF weights generated on the host; tokens/sec + memory recorded | completed | 02 | host |
 | 05 | [Real checkpoints in a Cell](./phase-05-real-model-in-cell.md) | SentencePiece + special tokens; attention scaling; a real checkpoint served from `/bin/ai` in QEMU | completed | 01-03 | qemu |
 | 06 | [Zero-copy weights and demand-sized KV](./phase-06-zero-copy-weights.md) | Weights addressed in place; KV allocated on demand; a 25 MiB 15M-parameter checkpoint served from a Cell | completed | 05 | qemu |
+| 07 | HTTP consumer front end | `POST /api/infer` in `service-httpd`, canonical image packaging, and hostfwd QEMU integration | completed | 03, 06 | qemu |
 
 ## 3. Hard Gates
 
@@ -75,6 +77,7 @@ service/IPC/oracle path. No physical, production, admission, or G3 claim is made
 | G-F zero-copy | `evidence/ai-15m-model-in-cell.txt` — `stories15M` (25 MiB, 15M parameters) served from `/bin/ai` in QEMU: 28 MB resident, `[ai-test] PASS`; host acceptance test refuses to pass unless a 26.7 MB checkpoint loads under 30 MiB and stays within file + 6 MiB |
 | G-E real checkpoint in a Cell | `evidence/ai-real-model-in-cell.txt` — `stories260K` (SentencePiece, real trained weights) read, loaded and served from `/bin/ai` in QEMU RV64: 24-token continuation, all four oracle scenarios `PASS` |
 | G-D real weights | `evidence/ai-engine-real-weights.txt` — 30-layer Q8_0 checkpoint, 16 tokens at ~3.9 tok/s (scalar kernels; SIMD is the lever), 229 MiB resident, non-degenerate text |
+| G-H HTTP consumer | `evidence/http-infer-qemu.txt` — canonical `disk_v3.img`, `POST /api/infer`, bounded `max_tokens`, and empty-body rejection pass end to end through hostfwd |
 
 ## 5. Non-claims
 
@@ -85,3 +88,4 @@ service/IPC/oracle path. No physical, production, admission, or G3 claim is made
 - The AI interface is **frozen** as of 2026-09-14 (Law 1, 2 of 2 confirmations —
   [record](./law1-confirmation.md)). Changing it now requires the ABI process; that is a governance
   fact about the interface, not evidence that any accelerator, hardware, or application path works.
+- The HTTP front door is intentionally one-shot JSON, not a streaming API: generated text is bounded to 64 tokens and the request body is capped by `ai-proto::MAX_PROMPT_BYTES`; P99, throughput, and language-quality claims remain out of scope.

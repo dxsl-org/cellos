@@ -2366,6 +2366,8 @@ dependencies = [
 name = "service-httpd"
 version = "0.1.0"
 dependencies = [
+ "ai-proto",
+ "ai-sdk",
  "api",
  "cell-build",
  "httparse",

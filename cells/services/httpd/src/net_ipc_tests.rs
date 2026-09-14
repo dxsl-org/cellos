@@ -1,6 +1,8 @@
 #[cfg(test)]
 mod tests {
-    use crate::net_ipc::{decode_net_send_progress, map_tcp_recv_response, tcp_send_all_with};
+    use crate::net_ipc::{
+        decode_net_send_progress, map_tcp_recv_response, request_complete_len, tcp_send_all_with,
+    };
     use alloc::vec;
     use ostd::ipc::IpcError;
 
@@ -15,6 +17,28 @@ mod tests {
             map_tcp_recv_response(Ok(api::ipc::NetResponse::Data(&[]))),
             Some(None)
         );
+    }
+
+    #[test]
+    fn recv_request_waits_for_content_length_body() {
+        let request = b"POST /api/infer HTTP/1.1\r\nContent-Length: 5\r\n\r\nhello";
+        let header_end = request
+            .windows(4)
+            .position(|window| window == b"\r\n\r\n")
+            .unwrap()
+            + 4;
+
+        assert_eq!(
+            request_complete_len(&request[..header_end]),
+            Some(header_end + 5)
+        );
+        assert_eq!(request_complete_len(request), Some(header_end + 5));
+    }
+
+    #[test]
+    fn recv_request_without_body_finishes_at_headers() {
+        let request = b"GET /status HTTP/1.1\r\nHost: localhost\r\n\r\n";
+        assert_eq!(request_complete_len(request), Some(request.len()));
     }
 
     #[test]

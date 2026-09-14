@@ -1,6 +1,8 @@
 // HTTP response handlers: HTML pages, VFS file serving, and JSON REST API.
 
 extern crate alloc;
+use ai_proto::MAX_PROMPT_BYTES;
+use ai_sdk::AiClient;
 use alloc::{format, string::String, vec::Vec};
 use api::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
 use ostd::clients::VfsClient;
@@ -40,6 +42,7 @@ pub fn send_response(
         400 => "Bad Request",
         404 => "Not Found",
         500 => "Internal Server Error",
+        503 => "Service Unavailable",
         _ => "OK",
     };
     let header = format!(
@@ -55,7 +58,15 @@ pub fn send_response(
 }
 fn send_json(cap: u32, net_ep: usize, status: u16, json: &str) -> bool {
     let body = json.as_bytes();
-    let status_text = if status == 200 { "OK" } else { "Not Found" };
+    let status_text = match status {
+        200 => "OK",
+        204 => "No Content",
+        400 => "Bad Request",
+        404 => "Not Found",
+        500 => "Internal Server Error",
+        503 => "Service Unavailable",
+        _ => "OK",
+    };
     let header = format!(
         "HTTP/1.1 {} {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nAccess-Control-Allow-Origin: *\r\nConnection: close\r\n\r\n",
         status, status_text, body.len()
@@ -238,6 +249,109 @@ pub fn api_files(cap: u32, net_ep: usize, vfs_ep: usize, path: &str) -> bool {
     let list = entries.join(",");
     let json = format!(r#"{{"path":"{}","entries":[{}]}}"#, path, list);
     send_json(cap, net_ep, 200, &json)
+}
+
+/// `POST /api/infer` — run the local AI inference service and return the completion as JSON.
+///
+/// The request body is the prompt, verbatim: no JSON envelope and therefore no parser in the trusted
+/// path. `?max_tokens=N` sets the cap (default [`INFER_DEFAULT_TOKENS`], clamped to
+/// [`INFER_MAX_TOKENS`] so the reply fits one TCP payload).
+/// The prompt is bounded by the AI wire limit and the generated text is capped at 64 tokens, so the
+/// JSON reply remains a bounded one-shot response. Callers that need streaming use the service's
+/// poll API directly (`ai_sdk::AiClient`) rather than this front door.
+pub fn api_infer(cap: u32, net_ep: usize, request: &[u8], path: &str) -> bool {
+    let prompt = match request_body(request) {
+        Some(body) if !body.is_empty() => {
+            if body.len() > MAX_PROMPT_BYTES {
+                return send_json(cap, net_ep, 400, r#"{"error":"prompt is too large"}"#);
+            }
+            match core::str::from_utf8(body) {
+                Ok(text) => text,
+                Err(_) => {
+                    return send_json(cap, net_ep, 400, r#"{"error":"prompt is not UTF-8"}"#);
+                }
+            }
+        }
+        _ => {
+            return send_json(
+                cap,
+                net_ep,
+                400,
+                r#"{"error":"body must contain the prompt"}"#,
+            );
+        }
+    };
+
+    let max_tokens = crate::router::extract_query_param(path, "max_tokens")
+        .and_then(|value| value.parse::<u16>().ok())
+        .unwrap_or(INFER_DEFAULT_TOKENS)
+        .clamp(1, INFER_MAX_TOKENS);
+
+    // The client resolves the service through the registry, so this works whether init or the shell
+    // spawned the inference cell.
+    let mut client = AiClient::new(ai_sdk::ostd_transport::OstdTransport::new());
+    // The reply names the model that actually served it, so a caller can tell which deployment it
+    // reached without a second endpoint.
+    let model = client.describe().map(|info| info.model).unwrap_or_default();
+    let params = ai_sdk::InferParams::greedy(prompt, max_tokens);
+    let generation = match client.generate(&params, INFER_MAX_POLLS) {
+        Ok(generation) => generation,
+        Err(error) => {
+            // Report the typed refusal instead of an empty 200: a caller must be able to tell
+            // "no model" from "no service" from "generation failed".
+            let json = format!(
+                r#"{{"error":"inference unavailable","cause":"{:?}"}}"#,
+                error
+            );
+            return send_json(cap, net_ep, 503, &json);
+        }
+    };
+
+    let json = format!(
+        r#"{{"model":"{}","prompt_bytes":{},"tokens":{},"finish":"{:?}","text":"{}"}}"#,
+        json_escape(model.as_str()),
+        prompt.len(),
+        generation.ids.len(),
+        generation.finish,
+        json_escape(generation.text.as_str())
+    );
+    send_json(cap, net_ep, 200, &json)
+}
+
+/// Tokens generated when the request does not ask for a count.
+const INFER_DEFAULT_TOKENS: u16 = 24;
+
+/// Hard cap for this endpoint: the reply has to fit one inline TCP payload alongside its JSON.
+const INFER_MAX_TOKENS: u16 = 64;
+
+/// Poll round trips allowed per request; the service advances four model steps per poll.
+const INFER_MAX_POLLS: usize = 96;
+
+/// The request body: everything after the header terminator.
+fn request_body(request: &[u8]) -> Option<&[u8]> {
+    let separator = b"\r\n\r\n";
+    let start = request
+        .windows(separator.len())
+        .position(|window| window == separator)?
+        + separator.len();
+    request.get(start..)
+}
+
+/// Escape a string for a JSON string literal.
+fn json_escape(text: &str) -> String {
+    let mut out = String::with_capacity(text.len() + 8);
+    for ch in text.chars() {
+        match ch {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            ch if (ch as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", ch as u32)),
+            ch => out.push(ch),
+        }
+    }
+    out
 }
 
 pub fn api_restart(cap: u32, net_ep: usize, _cell_name: &str) -> bool {

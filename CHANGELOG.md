@@ -8,6 +8,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### 🚀 Improvements
+- ai/httpd: expose `POST /api/infer` as a bounded JSON consumer of the frozen `AiClient`; canonical RV64 hostfwd QEMU coverage proves prompt → inference Cell → response, `max_tokens`, and caller-error handling.
+- httpd/build: wait for `Content-Length` bodies across TCP segments, reject prompts over the AI wire limit, and build/sign the current `service-httpd` binary into `gen_disk.ps1` instead of packaging a stale `/bin/httpd`.
 - vfs: introduce CellosFS Native pure-Rust CoW extent engine (`libs/cellos-fs`), replacing external RedoxFS and LittleFS dependencies with power-loss-resilient dual-ring superblocks and vector block DMA
 - bench: implement native stateful workload scenario (1,000 ops, checkpoints, v1->v2 hotswap, and VFS restart recovery) verified in QEMU
 - robot: implement LAB-01 carrier transfer (06B), BASE-01 tray handoff (07B), and ASSEMBLY-01 stationary coupling (08A/08B) QEMU native witnesses with real CellosFS Native trace logging

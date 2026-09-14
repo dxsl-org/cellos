@@ -62,6 +62,10 @@ typed IPC and prints one `[ai-test] PASS`; a 30-layer Q8_0 checkpoint generates 
 interface is frozen under Law 1 (2 of 2 confirmations recorded 2026-09-14; changing it now requires the
 ABI process).
 
+The next consumer slice is now shipped at the same ceiling: `service-httpd` accepts a prompt in
+`POST /api/infer`, calls the frozen `AiClient` over typed IPC, and returns bounded JSON; the canonical
+RV64 image passes the hostfwd QEMU gate. This proves wiring, not latency, streaming, or model quality.
+
 ## Current executable work
 
 - Continue useful QEMU software and integration work to the `qemu` ceiling.

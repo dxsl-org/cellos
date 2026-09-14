@@ -41,6 +41,9 @@ pub fn handle_connection(cap: u32, net_ep: usize, vfs_ep: usize) -> bool {
             handlers::api_files(cap, net_ep, vfs_ep, vfs_path)
         }
 
+        // POST /api/infer — body carries the prompt (see `handlers::api_infer`).
+        ("POST", "/api/infer") => handlers::api_infer(cap, net_ep, &raw, path),
+
         // POST /api/cells/<name>/restart
         ("POST", p) if p.starts_with("/api/cells/") && p.ends_with("/restart") => {
             let inner = &p["/api/cells/".len()..];
@@ -53,7 +56,7 @@ pub fn handle_connection(cap: u32, net_ep: usize, vfs_ep: usize) -> bool {
 }
 
 /// Extract `?key=value` from a query string. Returns the value or None.
-fn extract_query_param<'a>(url: &'a str, key: &str) -> Option<&'a str> {
+pub fn extract_query_param<'a>(url: &'a str, key: &str) -> Option<&'a str> {
     let query = url.split('?').nth(1)?;
     for pair in query.split('&') {
         if let Some((k, v)) = pair.split_once('=') {

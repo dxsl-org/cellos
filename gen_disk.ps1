@@ -121,6 +121,7 @@ Build-Cargo -What "core services + drivers" -Tail 5 -Packages @(
 # Spec 24 unified inference service + its QEMU oracle cell. The model fixture is
 # the deterministic tiny GGUF built by scripts/gen-ai-test-model.py.
 Build-Cargo -What "ai inference service + oracle" -Tail 3 -Packages @('service-ai', 'ai-test')
+Build-Cargo -What "httpd" -Packages @('service-httpd')
 Build-Cargo -What "app-bench"      -Packages @('app-bench')       # builds bench + bench-probe
 Build-Cargo -What "app-net-tools"  -Packages @('app-net-tools')
 Build-Cargo -What "app-sys-tools"  -Packages @('app-sys-tools')
@@ -257,6 +258,7 @@ Add-CellToSign "$rel_dir/driver-virtio-net"
 Add-CellToSign "$rel_dir/driver-virtio-blk"
 Add-CellToSign "$rel_dir/driver-virtio-gpu"
 Add-CellToSign "$rel_dir/service-ai"
+Add-CellToSign "$rel_dir/service-httpd"
 Add-CellToSign "$rel_dir/ai-test"
 Add-CellToSign "$rel_dir/service-input"
 Add-RequiredCellToSign "$rel_dir/bench" "app-bench (bench binary)"
@@ -365,7 +367,7 @@ $hypha_tool_spawn_bin = "$rel_dir/hypha-tool-spawn" # Hypha P3 — cell lifecycl
 $nc_bin     = "$rel_dir/nc"               # Phase A: TCP netcat tool
 $curl_bin   = "$rel_dir/curl"             # Phase B: HTTP GET client
 $wget_bin   = "$rel_dir/wget"             # Phase U: HTTP wget tool
-$httpd_bin  = "$rel_dir/httpd"            # Phase U: HTTP server
+$httpd_bin  = "$rel_dir/service-httpd"   # Phase U: HTTP server
 $mqtt_bin   = "$rel_dir/mqtt"             # Phase X-5: MQTT client
 $posix_shim_test_bin = "$rel_dir/posix-shim-test"  # Tier 1b POSIX shim test cell
 $input_test_bin      = "$rel_dir/input-test"       # P05 bare-cell input delivery test

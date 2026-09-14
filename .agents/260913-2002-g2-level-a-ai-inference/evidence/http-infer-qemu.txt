@@ -1,0 +1,33 @@
+HTTP inference front end — QEMU evidence
+Date: 2026-09-14
+
+Image preparation
+-----------------
+Command: pwsh -NoProfile -File ./gen_disk.ps1
+Result: completed with `Done. disk_v3.img is ready.`
+The canonical cell table contained `/bin/httpd` at 128064 bytes. The image build signed 49 cells and passed the F1/F5 scan. Optional DOOM and Tetris-Lua builds were omitted, as the generator reported; they are unrelated to this gate.
+
+End-to-end gate
+---------------
+Command:
+  cd tests/integration
+  CARGO_BUILD_TARGET=x86_64-unknown-linux-gnu cargo test --test http-infer -- --nocapture
+
+Result: 1 passed, 0 failed; elapsed 89.87 s.
+
+The test booted the canonical RV64 kernel plus `disk_v3.img`, waited for the AI service and spawned `httpd`. It drove host TCP through QEMU SLIRP `hostfwd` to guest port 8080 and asserted:
+
+* `POST /api/infer` returns HTTP 200 with model `tiny-llama-64`, non-empty generated text, a bounded token count, and a terminal `Stop` or `Length` finish reason.
+* `?max_tokens=4` returns exactly four generated tokens.
+* An empty prompt returns HTTP 400.
+* A 2049-byte prompt returns HTTP 400 before inference because it exceeds `ai-proto::MAX_PROMPT_BYTES` (2048 bytes).
+* The AI oracle reaches `[ai-test] PASS` after the HTTP requests.
+
+Additional checks
+-----------------
+* `cargo build --release -p service-httpd --target riscv64gc-unknown-none-elf`: PASS.
+* `rustfmt --edition 2021 --check` on all touched Rust sources: PASS.
+* `bash scripts/check-ai-law1-digests.sh`: PASS.
+* `git diff --check`: PASS.
+
+Ceiling: QEMU software integration only. This evidence makes no latency, throughput, streaming, board, accelerator, or production claim.

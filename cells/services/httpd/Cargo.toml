@@ -9,6 +9,8 @@ name = "service-httpd"
 path = "src/main.rs"
 
 [dependencies]
+ai-proto = { path = "../../../libs/ai-proto", version = "0.1.0" }
+ai-sdk = { path = "../../../libs/ai-sdk", version = "0.1.0", features = ["ostd-transport"] }
 ostd     = { path = "../../../libs/ostd", version = "0.2.0" }
 api      = { path = "../../../libs/api", version = "0.1.0" }
 # httparse: no_std HTTP/1.1 request parser (no edge-http: embedded-io-async 0.6 vs workspace 0.7 conflict)

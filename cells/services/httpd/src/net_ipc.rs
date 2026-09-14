@@ -121,7 +121,32 @@ pub fn tcp_send_all(cap: u32, net_ep: usize, data: &[u8]) -> bool {
     )
 }
 
-/// Receive incoming HTTP request bytes until `\r\n\r\n` or max 4096 bytes is reached.
+const MAX_HTTP_REQUEST_BYTES: usize = 4096;
+
+/// Return the number of bytes needed for one complete HTTP request.
+///
+/// Headers without a `Content-Length` are complete at `\r\n\r\n` (the existing GET path). For
+/// bodies, retain the connection until the advertised bytes have arrived; TCP segmentation must
+/// not turn a valid POST into an empty prompt.
+pub(crate) fn request_complete_len(buf: &[u8]) -> Option<usize> {
+    let header_end = buf
+        .windows(4)
+        .position(|window| window == b"\r\n\r\n")?
+        .checked_add(4)?;
+    let mut headers = [httparse::EMPTY_HEADER; 16];
+    let mut request = httparse::Request::new(&mut headers);
+    request.parse(&buf[..header_end]).ok()?;
+    let body_len = request
+        .headers
+        .iter()
+        .find(|header| header.name.eq_ignore_ascii_case("Content-Length"))
+        .and_then(|header| core::str::from_utf8(header.value).ok())
+        .and_then(|value| value.trim().parse::<usize>().ok())
+        .unwrap_or(0);
+    header_end.checked_add(body_len)
+}
+
+/// Receive incoming HTTP request bytes until the complete request or 4096 bytes is reached.
 pub fn recv_request(cap: u32, net_ep: usize) -> Vec<u8> {
     let mut buf: Vec<u8> = Vec::with_capacity(512);
     let mut req = [0u8; IPC_BUF_SIZE];
@@ -131,13 +156,19 @@ pub fn recv_request(cap: u32, net_ep: usize) -> Vec<u8> {
         buf_len: 256,
     };
     for _ in 0..200 {
-        if buf.len() > 4096 {
+        if buf.len() >= MAX_HTTP_REQUEST_BYTES {
             break;
         }
         match map_tcp_recv_response(net_call(net_ep, &recv_req, &mut req, &mut resp)) {
             Some(Some(data)) => {
                 buf.extend_from_slice(data);
-                if buf.windows(4).any(|w| w == b"\r\n\r\n") {
+                let header_complete = buf.windows(4).any(|window| window == b"\r\n\r\n");
+                if let Some(expected_len) = request_complete_len(&buf) {
+                    if buf.len() >= expected_len {
+                        break;
+                    }
+                } else if header_complete {
+                    // Malformed headers are handed to httparse in the router for a 400 response.
                     break;
                 }
             }

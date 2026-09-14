@@ -3,6 +3,21 @@
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
 ## [Unreleased] Development-first hardware-constrained execution
+## [2026-09-14] HTTP inference front end: HTTP → Cell → JSON (Spec 24 consumer)
+- `cells/services/httpd` now routes `POST /api/infer` to the frozen `ai-sdk::AiClient`. The raw UTF-8
+  request body is the prompt; `max_tokens` defaults to 24 and is clamped to 1–64. The response names
+  the resident model and reports generated token count, finish reason, and escaped text; empty,
+  malformed, oversized, and unavailable requests return explicit 400/503 responses.
+- The HTTP receiver now honors `Content-Length` across TCP segments instead of treating the header
+  terminator as the end of a POST. `gen_disk.ps1` builds, signs, and packages the current
+  `service-httpd` artifact as `/bin/httpd`; the previous `$rel_dir/httpd` stale-artifact path is gone.
+- Verification: `CARGO_BUILD_TARGET=x86_64-unknown-linux-gnu cargo test --test http-infer -- --nocapture`
+  passed 1/1 in 89.87 s against canonical `disk_v3.img`; the test drove hostfwd TCP, the HTTP route,
+  the AI service, the model cell-store path, `max_tokens=4`, empty-body rejection, and the oversized
+  prompt boundary.
+- Non-claims: one-shot JSON only; no streaming, P99, throughput, board, accelerator, or production
+  qualification follows from this QEMU gate.
+
 ## [2026-09-14] Zero-copy weights and demand-sized KV: a 15M-parameter model served from a Cell (Spec 24 Phase 06)
 - The engine no longer copies tensors out of the model file. `Engine::load` takes ownership of the
   buffer and describes every tensor in place (`offset`, shape, dtype), so a model costs its file size
