@@ -52,7 +52,8 @@ service/IPC/oracle path. No physical, production, admission, or G3 claim is made
 ## 3. Hard Gates
 
 - **G-A (contract)**: `AiRequest`/`AiResponse` encode/decode round-trips, bounded-payload rejection,
-  and byte-0 registry amendment; Law 1 double confirmation recorded before the ABI const lands.
+  and byte-0 registry amendment — verified. Law 1: confirmation #1 recorded 2026-09-14
+  ([record](./law1-confirmation.md)); #2 pending, so the interface is not yet FROZEN.
 - **G-B (engine correctness)**: engine output must match an independent reference implementation on
   a deterministic tiny model — same logits within `1e-4`, same greedy token ids exactly.
 - **G-C (service path)**: QEMU RV64 oracle prints exactly one `[ai-test] PASS` marker; no cell fault,
@@ -76,3 +77,6 @@ service/IPC/oracle path. No physical, production, admission, or G3 claim is made
 - Random/synthetic test models prove machinery and numerics only; language quality is claimed only
   for the real-weight host run (G-D) at the `host` ceiling.
 - This plan does not activate ORG-SRV-01/ORG-PC-01 application compatibility work.
+- The AI interface is **not frozen**: one of the two Law 1 confirmations is recorded
+  ([record](./law1-confirmation.md)); until the second is given, Spec 23 §2.1 leaves it
+  STABLE-but-revisable and no downstream contract may cite it as frozen evidence.
