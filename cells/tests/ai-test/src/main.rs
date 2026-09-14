@@ -34,7 +34,7 @@ use ostd::io::{print, print_usize, println};
 use ostd::syscall::sys_exit;
 
 api::declare_manifest!(block_io = false, network = false, spawn = false);
-api::declare_syscalls![Send, Recv, TryRecv, Log, LookupService, Yield];
+api::declare_syscalls![Send, Recv, TryRecv, Log, LookupService, GetTime, Yield];
 
 ostd::declare_custom_heap!(2 * 1024 * 1024);
 
@@ -98,10 +98,30 @@ fn cell_main() {
 
     // 1. Generation. The fixture is checked against pinned ids; a real checkpoint is checked for
     //    the properties a wrong tokenizer or forward pass destroys — distinct tokens and text.
+    //    The elapsed time is the cell's own view of the whole generation: submit, every poll, the
+    //    service's forward passes, and the IPC between them. It is a QEMU TCG number on QEMU and a
+    //    board number on a board — a regression signal, not a product claim.
+    let started_ms = ostd::syscall::sys_get_time_ms().unwrap_or(0);
     let generation = match client.generate(&params, MAX_POLLS) {
         Ok(generation) => generation,
         Err(error) => fail_with("generate", error),
     };
+    let elapsed_ms = ostd::syscall::sys_get_time_ms()
+        .unwrap_or(started_ms)
+        .saturating_sub(started_ms);
+    print("[ai-test] generate: ");
+    print_usize(generation.ids.len());
+    print(" tokens in ");
+    print_usize(elapsed_ms as usize);
+    print(" ms (");
+    print_usize(if elapsed_ms == 0 {
+        0
+    } else {
+        (generation.ids.len() as u128 * 1_000_000 / elapsed_ms as u128) as usize
+    });
+    print(" tokens/s x1000, ");
+    print_usize(generation.polls);
+    println(" polls)");
     if fixture {
         if generation.ids != golden.greedy_ids {
             print("[ai-test] expected tokens ");
@@ -117,7 +137,12 @@ fn cell_main() {
         print_usize(generation.polls);
         println(" polls");
     } else {
-        assert_text_like("real-model generation", &generation.ids, &generation.text, REAL_TOKENS);
+        assert_text_like(
+            "real-model generation",
+            &generation.ids,
+            &generation.text,
+            REAL_TOKENS,
+        );
         print("[ai-test] real model continuation: ");
         print_usize(generation.ids.len());
         println(" tokens");

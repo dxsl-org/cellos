@@ -1,0 +1,27 @@
+[ai-oracle] deploying real checkpoint: stories15M-q8_0.gguf
+[ai-oracle] model is 25 MiB — building the service with large-arena
+[ai-oracle] building RV64 cells
+wrote 1011 bytes to /tmp/cellos-ai-oracle.raXJhoNa/POLICY.BIN
+[ai-oracle] signing cells (dev key, F1/F5 checked)
+OK:   signed 8 cell(s) with the dev key after a passing F1/F5 check
+[ai-oracle] assembling VIFS1
+Created FAT16 image at /tmp/cellos-ai-oracle.raXJhoNa/embedded/kernel_fs.img: 12 file(s), 2 director(ies), 36687 clusters.
+[ai-oracle] building RV64 kernel
+[ai-oracle] booting QEMU (timeout 300s)
+[ai-oracle] serial log: /home/dmin/cellos/.agents/260913-2002-g2-level-a-ai-inference/evidence/ai-oracle-20260914T095204Z.log
+USER: [ai] inference service starting
+USER: [ai-test] AI inference oracle starting
+USER: [ai] model bytes: 26671328 read in 2953 ms
+USER: [ai] engine load: 206 ms
+USER: [ai] model ready: 32000 vocab, context 128, resident bytes 28086222
+USER: [ai-test] model=llama
+USER: [ai-test] vocab=32000 context=128 sessions=4
+USER: Cellos > [ai-test] generate: 24 tokens in 7916 ms (3031 tokens/s x1000, 13 polls)
+USER: [ai-test] real model continuation: 24 tokens
+USER: [ai-test] text:, there was a big bear named Benny was a very big bear. He was a bear. He was very brave
+USER: [ai-test] model vocab 32000
+USER: [ai-test] real model embeddings ok: 3 texts
+USER: [ai-test] abandoned session released; service still serving
+USER: [ai-test] prompt stream matched: 24 tokens
+USER: [ai-test] PASS
+[ai-oracle] PASS

@@ -86,6 +86,11 @@ pub fn matvec(
 /// Each 34-byte block is decoded to f32 on the stack and accumulated in the same lane order as
 /// [`matvec`], so `matvec_q8_0(out, q, x, r, c)` and `matvec(out, dequantize(q), x, r, c)`
 /// agree bit for bit when the dequantized weights are produced from the same block bytes.
+///
+/// The staging block is not redundant work to be fused away: decoding into a contiguous
+/// `[f32; 32]` and then dotting it lets the optimiser widen both loops (measured 10.3 GFLOP/s
+/// with the staging block, 7.5 GFLOP/s converting i8 inside the accumulation loop, on the
+/// benchmark host at `-O3`). Keep the two stages.
 pub fn matvec_q8_0(
     out: &mut [f32],
     w: &[u8],

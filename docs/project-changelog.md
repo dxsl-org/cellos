@@ -3,6 +3,32 @@
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
 ## [Unreleased] Development-first hardware-constrained execution
+## [2026-09-14] CPU inference engine: 5.1× on the host, 13% in-cell, and a smaller cell
+- The engine's Q8_0 matvec kernel *was* the decode: 30 layers of projections plus the tied output
+  projection (21% of a 135M checkpoint's weights at vocab 49152), 43.4 ms of a 211.5 ms token, with
+  `softmax` at 127 µs and `rms_norm` at 370 ns. Structural, not quantized-format, cost: at the
+  workspace's size default (`-Oz`), LLVM left `q8_0_block_to_f32`, `accumulate_products` and
+  `chunks_exact` **out of line** — six calls per 32-weight block, verified in the emitted assembly,
+  same shape on riscv64.
+- Fix: `[profile.release.package.{tensor-math,ai-engine}] opt-level = 2`. Measured (host: Q8_0
+  matvec 1.35 → 6.8 GFLOP/s, 135M decode 211.5 → 41.6 ms/token, `stories15M` 24.1 → 4.7 ms/token;
+  cell: 24 tokens in 7.89 → 6.85 s, `service-ai` 236,328 → 230,288 bytes). `-O3` measured and
+  rejected: 10.5 GFLOP/s on the host but 8.77 s in the cell — under TCG every f32 op goes through
+  softfloat, so the unrolled body's translation shape costs more than its inlining saves. Both
+  targets were measured; neither was extrapolated.
+- Instrument: `libs/ai-engine/benches/cpu_engine.rs` (engine load, prompt processing, per-token
+  decode rate, per-kernel GFLOP/s at the resident model's shapes) and a `GetTime`-based timer in
+  `cells/tests/ai-test` that prints `[ai-test] generate: N tokens in X ms` on every oracle run.
+- Reverted after measuring: fusing the decode into the accumulation loop (10.3 → 7.5 GFLOP/s at
+  `-O3`), row pairing for ILP (no change), and `#[inline(always)]` on the helpers at `-Oz` (no
+  change — inlining without the unroll is not the win).
+- CI: `tensor-math` and `ai-engine` host tests now run in the unit-test job (they pin the kernel's
+  bit-exact agreement with the dense path, which is exactly what a performance change can break) and
+  the bench is compiled there so the instrument cannot rot.
+- Non-claims: host x86_64 and QEMU TCG only. The `-O2`-over-`-O3` ordering in the cell is an
+  emulator property (softfloat), so a silicon re-measurement is the way to settle it; no board,
+  accelerator, or production claim follows.
+
 ## [2026-09-14] Hypha answers from the local inference Cell (Spec 24 second consumer)
 - `cells/apps/hypha/llm-gateway` is local-first: it probes `service::AI`, asks `/bin/ai` for a
   completion when a model is resident and the prompt fits one AI IPC message, and prints the backend

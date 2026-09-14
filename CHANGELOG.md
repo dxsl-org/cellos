@@ -8,6 +8,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### 🚀 Improvements
+- ai-engine/tensor-math: the inference engine now builds at `-O2` instead of the workspace's size default. The Q8_0 matvec kernel — which is the entire decode path — was spending its time in out-of-line helper calls per 32-weight block. Measured: **5.1× on the host** (135M-parameter Q8_0 checkpoint 4.7 → 24.0 tokens/s; `stories15M` 24.1 → 4.7 ms/token) and **13% faster in the QEMU RV64 cell** (24 tokens in 6.85 s vs 7.89 s), with the `service-ai` image 6 KB smaller. `-O3` was measured too: faster on the host, 11% slower in the cell (TCG softfloat dominates), so it was rejected.
+- ai-engine: host benchmark `cargo bench -p ai-engine --target x86_64-unknown-linux-gnu --bench cpu_engine` reports load, prompt-processing, per-token decode rate, and per-kernel GFLOP/s at the model's own shapes — the instrument behind those numbers, never asserted in CI.
+- ai-test: the in-cell oracle prints its own generation timing (`[ai-test] generate: N tokens in X ms`), so cell-side inference speed is visible on every oracle run.
 - hypha: `llm-gateway` now asks the on-device inference Cell first (`/bin/ai`, Spec 24 `service::AI`) and names the backend and model it used per turn; the OpenAI-compatible network endpoint stays as the fallback for images with no local model, and only absence (`NoService`/`NoModel`) or a prompt above `ai_proto::MAX_PROMPT_BYTES` reaches it.
 - ai/httpd: expose `POST /api/infer` as a bounded JSON consumer of the frozen `AiClient`; canonical RV64 hostfwd QEMU coverage proves prompt → inference Cell → response, `max_tokens`, and caller-error handling.
 - httpd/build: wait for `Content-Length` bodies across TCP segments, reject prompts over the AI wire limit, and build/sign the current `service-httpd` binary into `gen_disk.ps1` instead of packaging a stale `/bin/httpd`.

@@ -1116,12 +1116,19 @@ jobs:
         # (whose local-backend decision table is policy, not plumbing) are host-testable
         # for the same reason: ai-sdk keeps `ostd` behind the `ostd-transport` feature,
         # which stays off for host tests, and the gateway links ostd only in its binary.
+        # tensor-math and ai-engine carry the inference numerics — the Q8_0 kernel's
+        # bit-exact agreement with the dense kernel, the sampler, and the model reader —
+        # so they belong here too; the checkpoint tests inside ai-engine skip when no
+        # model is provided. The bench build keeps the throughput instrument compiling
+        # (its numbers are host-dependent and are never asserted).
         run: |
           cargo test -p types       --target x86_64-unknown-linux-gnu
           cargo test -p api         --target x86_64-unknown-linux-gnu
           cargo test -p text-engine --target x86_64-unknown-linux-gnu
           cargo test -p ai-proto -p ai-sdk -p hypha-llm-gateway \
             --target x86_64-unknown-linux-gnu
+          cargo test -p tensor-math -p ai-engine --target x86_64-unknown-linux-gnu
+          cargo bench -p ai-engine --target x86_64-unknown-linux-gnu --no-run
 
   f1-admission:
     # Tier-1 admission gate (Spec 18 §2.1): the same `cellos-sign --check` that

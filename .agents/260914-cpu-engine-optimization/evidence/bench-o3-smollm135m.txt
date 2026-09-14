@@ -1,0 +1,12 @@
+[bench] model=Cosmo2 135M Webinst Sc2 file=144810912 layers=30 embd=576 ffn=1536 heads=9 kv_heads=3 vocab=49152 ctx=2048 resident_mib=141 load_ms=61.6
+[bench] prefill prompt_tokens=4 ms=96.0 ms_per_token=24.01
+[bench] decode tokens=12 ms_min=26.99 ms_median=28.63 tps_min=37.05 tps_median=34.93
+[bench] kernel=matvec_q8_0_attn_q iters=64 ns_min=63170 ns_median=63336 gflops=10.50
+[bench] kernel=matvec_q8_0_attn_o iters=64 ns_min=62997 ns_median=63190 gflops=10.53
+[bench] kernel=matvec_q8_0_ffn_gate iters=64 ns_min=170779 ns_median=171275 gflops=10.36
+[bench] kernel=matvec_q8_0_ffn_down iters=64 ns_min=168833 ns_median=169292 gflops=10.48
+[bench] kernel=matvec_q8_0_logits iters=64 ns_min=5620184 ns_median=5880965 gflops=10.07
+[bench] kernel=matvec_f32 iters=64 ns_min=55031 ns_median=56389 gflops=12.06
+[bench] kernel=rms_norm iters=1024 ns_min=266 ns_median=268 gflops=2.17
+[bench] kernel=softmax iters=8 ns_min=72826 ns_median=72882 gflops=0.67
+[bench] kernel=sample_top_k iters=8 ns_min=1388597 ns_median=1396969 gflops=0.04

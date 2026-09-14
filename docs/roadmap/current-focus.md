@@ -75,6 +75,16 @@ from the console, because the reviewed shell launch edge carries `spawn`, the EL
 capability-bearing targets, and the documented raw-path fallback resolves only through the kernel
 loader's VIFS1 — where the app was not staged.
 
+Engine throughput was measured and fixed next (`.agents/260914-cpu-engine-optimization/`): the Q8_0
+matvec was the whole decode, and it was 7× slower per MAC than the dense kernel in the same crate
+because the workspace's size profile (`-Oz`) leaves the per-block helpers out of line. The two hot
+crates now build at `-O2`: **5.1× on the host** (135M checkpoint 4.7 → 24.0 tokens/s; 4.7 ms/token
+on `stories15M`), **13% faster in the QEMU cell** (7.89 → 6.85 s for 24 tokens), and the cell image
+is 6 KB smaller. `-O3` is faster on the host but 11% slower in the cell (TCG softfloat dominates), so
+it was measured and rejected; both numbers live in that phase doc. A bench
+(`libs/ai-engine/benches/cpu_engine.rs`) is the instrument, and `tensor-math`/`ai-engine` now run
+their numerics tests in CI.
+
 ## Current executable work
 
 - Continue useful QEMU software and integration work to the `qemu` ceiling.

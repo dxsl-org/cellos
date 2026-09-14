@@ -1,0 +1,12 @@
+[bench] model=llama file=26671328 layers=6 embd=288 ffn=768 heads=6 kv_heads=6 vocab=32000 ctx=128 resident_mib=26 load_ms=5.5
+[bench] prefill prompt_tokens=5 ms=6.6 ms_per_token=1.31
+[bench] decode tokens=16 ms_min=3.03 ms_median=3.33 tps_min=330.06 tps_median=300.44
+[bench] kernel=matvec_q8_0_attn_q iters=64 ns_min=16137 ns_median=16197 gflops=10.28
+[bench] kernel=matvec_q8_0_attn_o iters=64 ns_min=16152 ns_median=16203 gflops=10.27
+[bench] kernel=matvec_q8_0_ffn_gate iters=64 ns_min=42281 ns_median=43476 gflops=10.46
+[bench] kernel=matvec_q8_0_ffn_down iters=64 ns_min=41897 ns_median=43332 gflops=10.56
+[bench] kernel=matvec_q8_0_logits iters=64 ns_min=1765301 ns_median=1901164 gflops=10.44
+[bench] kernel=matvec_f32 iters=64 ns_min=15358 ns_median=15443 gflops=10.80
+[bench] kernel=rms_norm iters=1024 ns_min=142 ns_median=144 gflops=2.03
+[bench] kernel=softmax iters=8 ns_min=46507 ns_median=46637 gflops=0.69
+[bench] kernel=sample_top_k iters=8 ns_min=889750 ns_median=902080 gflops=0.04

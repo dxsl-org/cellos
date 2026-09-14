@@ -5,6 +5,10 @@ edition = "2021"
 license.workspace = true
 description = "Native CPU transformer engine for the Cellos unified inference service (Spec 24 §4)"
 
+[[bench]]
+name = "cpu_engine"
+harness = false
+
 [lints.rust]
 unsafe_code = "deny"
 

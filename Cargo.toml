@@ -191,4 +191,26 @@ panic = "abort"
 [profile.release]
 panic = "abort"
 lto = true
-opt-level = "z"
+opt-level = 2
+
+# The workspace default is size, because cell and kernel images are flash- and RAM-bounded. The
+# inference engine's kernels are the exception: at `-Oz` LLVM leaves the per-block helpers
+# (`q8_0_block_to_f32`, `accumulate_products`, `chunks_exact`) as out-of-line calls — verified in
+# the emitted assembly, six calls per 32-weight block — which is the entire gap to a tuned kernel.
+#
+# `opt-level = 2` is the measured optimum for both targets, not a compromise:
+#
+#   config          Q8_0 matvec (host)   135M decode (host)   in-cell QEMU RV64   service-ai image
+#   -Oz (default)   1.35 GFLOP/s         209 ms/token        7.89 s              236,328 B
+#   -O2 (this)      6.8 GFLOP/s          42 ms/token         6.85 s              230,288 B
+#   -O3             10.5 GFLOP/s         29 ms/token         8.77 s              228,392 B
+#
+# The engine and the benchmark that produced these numbers live in
+# .agents/260914-cpu-engine-optimization/. Both numbers matter: the cell is what ships today, and
+# `-O3`'s longer unrolled body costs 11% under QEMU's TCG because every f32 op goes through
+# softfloat while code shape decides the rest.
+[profile.release.package.tensor-math]
+opt-level = 2
+
+[profile.release.package.ai-engine]
+opt-level = 2
