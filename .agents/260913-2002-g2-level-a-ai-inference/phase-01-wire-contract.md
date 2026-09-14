@@ -27,9 +27,9 @@
 - Deviations from the ratified signature, recorded deliberately: `prompt()` keeps the async shape
   but returns a synchronous `TokenStream` (no async reactor yet), and errors are `AiClientError`
   with `From<AiClientError> for ViError` instead of a bare `ViResult`.
-- **Law 1: 1 of 2 confirmations recorded** (2026-09-14, owner). The item list, the source digests the
-  confirmation binds to, and the required statement for #2 are in
-  [`law1-confirmation.md`](./law1-confirmation.md). The interface is not frozen until #2 is given.
+- **Law 1: FROZEN** — 2 of 2 confirmations recorded on 2026-09-14 (owner). The item list, the source
+  digests both confirmations bind to, and the digest check that keeps the record honest are in
+  [`law1-confirmation.md`](./law1-confirmation.md).
 
 ## Notes
 

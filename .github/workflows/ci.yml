@@ -1014,6 +1014,11 @@ jobs:
         timeout-minutes: 5
         run: python3 -m pip install --user --quiet cryptography
 
+      # Cheap pre-check: the AI interface is frozen under Law 1, so a change to a confirmed
+      # item must be an explicit ABI decision rather than an unnoticed edit here.
+      - name: Assert the frozen AI interface
+        run: bash scripts/check-ai-law1-digests.sh
+
       # Builds an isolated signed image (bootstrap cells + /bin/ai + /bin/ai-test +
       # the deterministic tiny model), boots it, and requires the oracle cell to
       # reproduce the reference token ids and embedding over typed IPC before it

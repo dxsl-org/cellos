@@ -1,6 +1,6 @@
 # Law 1 record — AI inference service interface (Spec 24 §6)
 
-**Status**: 1 of 2 confirmations recorded. **Not yet frozen.**
+**Status**: 2 of 2 confirmations recorded. **FROZEN** (2026-09-14).
 **Owner**: sole accountable maintainer (ADR-0013).
 **Baseline revision**: `4d385c92` (the interface below is exactly the code at this revision).
 
@@ -51,8 +51,26 @@ Both were shipped in the first implementation commit and are part of what this c
 | # | Date (UTC) | Statement | Binds to |
 |---|---|---|---|
 | 1 | 2026-09-14 | Owner instruction: "xác nhận Law 1 cho interface AI" — confirmed against the item list above as presented in-session at revision `4d385c92` | `libs/ai-proto/src/lib.rs` sha256 `3d555d58…`, `libs/ai-sdk/src/lib.rs` sha256 `7e4c0fbb…`, `libs/api/src/abi/syscall.rs` sha256 `bc203ac4…`, Spec 24 sha256 `88f7a065…` |
-| 2 | *(pending)* | Second explicit confirmation of the **same** list and digests | — |
+| 2 | 2026-09-14 | Second explicit owner confirmation of the **same** list and digests (selected through an explicit yes/no prompt, not inferred from the first instruction) | identical digests to #1 |
 
-Confirmation #2 has not been given. Until it is, this interface must be treated as STABLE-but-revisable
-in the terms of Spec 23 §2.1: additive changes are allowed, but the AI surface may not be described as
-FROZEN, and no downstream contract may cite it as frozen evidence.
+Both confirmations are recorded, so the surface above is **FROZEN** under Spec 23 §2.1: removal,
+rename, layout/discriminant change, or addition requires the ABI process (including two fresh explicit
+confirmations) before it lands. The `libs/api/src/abi/syscall.rs` row is part of the FROZEN `api::abi`
+surface already; the two crates listed here are frozen by this record, whose digests pin exactly which
+revision was confirmed — a later commit that changes those files without a new ABI confirmation leaves
+this record stale by construction, and CI's digest check (see §4) fails.
+
+## 4. Keeping the record honest
+
+The record is only meaningful while the confirmed surface is unchanged. `scripts/check-ai-law1-digests.sh`
+asserts every item in §1 that is expressible as code text — the ten constants and their values, the five
+opcode numbers, all ten wire variants, `service::AI = 15`, the Spec 17 row, the `AiClient` methods,
+`TokenStream`, `AiClientError` with its `ViError` conversion, `AiTransport::round_trip`, and the two
+pinned reply-matching rules — and fails with a per-item message. It is wired into CI (job *AI Inference
+Oracle*), so drift is a check failure rather than a claim nobody re-reads. Verified both ways: it passes
+on the frozen tree and fails on a one-value mutation (`MAX_SESSIONS: u8 = 4` -> `8`).
+
+Whole-file digests above are provenance for *which revision* was confirmed, not the gate: an unrelated
+edit elsewhere in one of those files must not require an ABI confirmation, while a change to a confirmed
+item must. After a *confirmed* ABI change, update the table, the digests, and this check in the same
+commit as the change.

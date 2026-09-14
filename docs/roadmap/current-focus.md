@@ -59,7 +59,8 @@ Linux guest, backed by `libs/ai-proto`, `libs/ai-sdk`, `libs/gguf-rs`, `libs/ai-
 typed IPC and prints one `[ai-test] PASS`; a 30-layer Q8_0 checkpoint generates text on the host at
 3.97 tok/s. Tier 2 GGML (CP-2) stays blocked on the Tier 2 admission route, NPU/GPU backends
 (CP-4/CP-5) stay behind the G3 accelerator envelope, and CP-6/CP-7 remain future work. The AI
-interface's Law 1 confirmations are still owed before it is treated as frozen.
+interface is frozen under Law 1 (2 of 2 confirmations recorded 2026-09-14; changing it now requires the
+ABI process).
 
 ## Current executable work
 

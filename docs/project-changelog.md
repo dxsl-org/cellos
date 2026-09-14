@@ -29,18 +29,19 @@
   resolves the model through the VFS `/bin` overlay into the P6 FAT cell-store
   (`evidence/ai-oracle-canonical-image.log`). `gen_disk.ps1` now builds and signs `service-ai`/`ai-test`,
   and places `models/tiny-llama-64.gguf` as `/bin/ai-model.gguf` in the cell-store.
-- **Law 1 (AI interface): confirmation 1 of 2 recorded** on 2026-09-14 by the sole accountable
-  maintainer. The confirmation binds to an explicit item list and to source digests at revision
-  `4d385c92` (`libs/ai-proto/src/lib.rs` `3d555d58…`, `libs/ai-sdk/src/lib.rs` `7e4c0fbb…`,
-  `libs/api/src/abi/syscall.rs` `bc203ac4…`, Spec 24 `88f7a065…`) and covers the two shipped
-  deviations from the ratified §6 signature (synchronous `TokenStream`, `AiClientError`). The
-  interface is **not** frozen until confirmation #2 is recorded; the record and the pending slot are
-  in `.agents/260913-2002-g2-level-a-ai-inference/law1-confirmation.md`.
+- **Law 1 (AI interface): FROZEN** — 2 of 2 explicit confirmations recorded on 2026-09-14 by the sole
+  accountable maintainer. The confirmations bind to an explicit item list and to source digests at
+  revision `4d385c92` (`libs/ai-proto/src/lib.rs` `3d555d58…`, `libs/ai-sdk/src/lib.rs` `7e4c0fbb…`,
+  `libs/api/src/abi/syscall.rs` `bc203ac4…`, Spec 24 `88f7a065…`) and cover the two shipped deviations
+  from the ratified §6 signature (synchronous `TokenStream`, `AiClientError`). Record:
+  `.agents/260913-2002-g2-level-a-ai-inference/law1-confirmation.md`; `scripts/check-ai-law1-digests.sh`
+  asserts every confirmed item (constants, opcodes, wire variants, service id, client surface,
+  reply-matching rules), is wired into the AI CI job, and was verified to fail on a one-value mutation. Removal, rename, layout/discriminant change, or addition to this
+  surface now requires the ABI process.
 - Non-claims: this is CPU-only. Tier 2 GGML (CP-2), NPU/GPU backends (CP-4/CP-5), the Rust-native
   kernel migration (CP-6), and G4 `std` modernisation (CP-7) remain gated; a cancel answered with the
   terminal chunk and the synchronous `TokenStream` are recorded deviations from the ratified
-  signature. Law 1 confirmations for the AI interface are still owed before the ABI is treated as
-  frozen.
+  signature. The interface is frozen under Law 1 (2 of 2 confirmations).
 
 - Implemented Phase 1 of POSIX completion: added truthful `_stat`/`stat` and
   `_unlink`/`unlink` to the POSIX services shim
