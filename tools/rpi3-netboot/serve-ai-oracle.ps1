@@ -23,7 +23,7 @@
 
 [CmdletBinding()]
 param(
-    [ValidateSet('fixture', '15m', 'nomodel')]
+    [ValidateSet('fixture', '15m', 'nomodel', '260k')]
     [string]$Variant = 'fixture',
     [string]$ComPort = '',
     [int]$Baud = 115200,
@@ -55,6 +55,10 @@ $payload = switch ($Variant) {
     # AI cells with no checkpoint in the image; the service reads /mnt/sd/ai-model.gguf, which is
     # the card's own FAT volume (P1). This is the variant a board runs.
     'nomodel' { Join-Path $root 'cellos-ai-nomodel.uimg' }
+    # A real checkpoint small enough to embed and still keep the payload in the size class that
+    # boots: stories260K (1.1 MB). The card path (`nomodel`) is real but reads 4 KiB per VFS round
+    # trip, which has not completed 26.7 MB in ten minutes on the board.
+    '260k' { Join-Path $root 'cellos-ai-260k.uimg' }
 }
 if (-not (Test-Path -LiteralPath $payload)) {
     throw "payload missing: $payload (build it with scripts/build-aarch64-cells.ps1 -BoardRpi3 -AiModel <gguf>, then rpi3-uimage.py)"
