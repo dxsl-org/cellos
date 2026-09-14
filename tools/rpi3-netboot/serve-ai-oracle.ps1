@@ -23,7 +23,7 @@
 
 [CmdletBinding()]
 param(
-    [ValidateSet('fixture', '15m')]
+    [ValidateSet('fixture', '15m', 'nomodel')]
     [string]$Variant = 'fixture',
     [string]$ComPort = '',
     [int]$Baud = 115200,
@@ -52,6 +52,9 @@ $serveScript = Join-Path $scriptDir 'serve-rpi3-netboot.ps1'
 $payload = switch ($Variant) {
     'fixture' { Join-Path $root 'cellos-ai-fixture.uimg' }
     '15m' { Join-Path $root 'cellos-ai-15m.uimg' }
+    # AI cells with no checkpoint in the image; the service reads /mnt/sd/ai-model.gguf, which is
+    # the card's own FAT volume (P1). This is the variant a board runs.
+    'nomodel' { Join-Path $root 'cellos-ai-nomodel.uimg' }
 }
 if (-not (Test-Path -LiteralPath $payload)) {
     throw "payload missing: $payload (build it with scripts/build-aarch64-cells.ps1 -BoardRpi3 -AiModel <gguf>, then rpi3-uimage.py)"
