@@ -104,6 +104,16 @@ makes that leg a numerics cross-check on a second ISA rather than a second boot 
 image generates coherent prose from a real 26.7 MB checkpoint on both. CP-3's RPi3 memory-budget leg
 stays open: it needs the board, and a QEMU result is not a substitute for it.
 
+The board leg is now running over the existing static-TFTP netboot lane
+(`tools/rpi3-netboot/serve-ai-oracle.ps1`): U-Boot pulls the payload, init starts `/bin/ai`, and the
+oracle is driven from the board's console. **The fixture passes on real Cortex-A53 silicon**
+(golden ids and embedding reproduced, 8 tokens in 59 ms, `.agents/260914-ai-oracle-arm64/`), which is
+the lane's first exact-device evidence. Two board-only findings are recorded there: a 43.6 MB payload
+(model embedded in VIFS1) panics the kernel at compositor setup where the same image passes on QEMU
+aarch64 virt — reported to the board lane — and the shell mangles a path argument into
+`/bin//bin/<name>`, so the console command is the bare `ai-test`. The checkpoint therefore lives on
+the card (`/mnt/sd/ai-model.gguf`, the service's second candidate path) instead of inside the image.
+
 ## Current executable work
 
 - Continue useful QEMU software and integration work to the `qemu` ceiling.
