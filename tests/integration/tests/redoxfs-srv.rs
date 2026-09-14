@@ -181,10 +181,12 @@ fn riscv64_redoxfs_srv_degrade_no_disk() {
         return;
     }
 
-    // boot_rv64 attaches NO block device — VFS falls back to None on P5 open.
+    // boot_rv64 attaches NO block device — VFS falls back to None on the /srv open. The message is
+    // the CellosFS backend's: the external RedoxFS dependency this test was named for is gone
+    // (`libs/cellos-fs` replaced it), so the old "RedoxFS P5 open failed" string can never appear.
     let runner = QemuRunner::boot_rv64(kernel.to_str().unwrap());
     runner
-        .wait_for("[vfs] WARNING: RedoxFS P5 open failed", 60)
+        .wait_for("[vfs] WARNING: CellosFS mount/format failed", 60)
         .unwrap_or_else(|e| {
             eprintln!("--- serial output ---\n{}\n---", runner.dump());
             panic!("{e}");
