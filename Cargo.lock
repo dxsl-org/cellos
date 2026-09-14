@@ -95,6 +95,7 @@ dependencies = [
  "gguf-rs",
  "libm",
  "tensor-math",
+ "zerocopy 0.8.55",
 ]
 
 [[package]]

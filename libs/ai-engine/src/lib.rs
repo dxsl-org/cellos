@@ -14,8 +14,10 @@
 //!   control-token matching for chat templates. See `ai-tokenizer`.
 //! - **Two weight layouts**: `Q8_0` tensors stay quantized and run through
 //!   [`tensor_math::matvec_q8_0`]; `F32`/`F16` tensors are materialized as `f32` at load time.
-//! - **Owned after load**: [`Engine::load`] copies everything it needs out of the caller's model
-//!   buffer, so the caller may drop or reuse that buffer. No borrowing, no leaking.
+//! - **Zero-copy weights**: [`Engine::load`] takes ownership of the model file and addresses every
+//!   tensor in place, so a model costs its file size and nothing more. A tensor the kernels cannot
+//!   consume as stored — F16, or a float region that is not 4-byte aligned — is converted once at
+//!   load and accounted by [`Engine::resident_bytes`].
 //! - **Bounded work per call**: [`Engine::generate`] performs at most the caller's step budget.
 //!   One request can never monopolise the Cell's event loop, which is what makes cancel, fairness
 //!   between sessions, and bounded reply latency possible.
@@ -26,8 +28,10 @@
 //!
 //! # Memory
 //!
-//! [`Engine::resident_bytes`] reports weights + tokenizer tables + KV cache + scratch. [`Engine::load`]
-//! refuses a model above the caller's `memory_limit` instead of failing later mid-request.
+//! [`Engine::resident_bytes`] reports the model buffer + converted tensors + tokenizer tables + KV
+//! caches + scratch. [`Engine::load`] refuses a model above the caller's `memory_limit` instead of
+//! failing later mid-request — with zero-copy weights that ceiling is closer to the file size than
+//! it used to be, which is what lets a 26.7 MB model live in a Cell whose VA slot is 32 MiB.
 
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
@@ -143,96 +147,233 @@ impl ModelConfig {
     }
 }
 
-/// A weight matrix, kept in whichever layout the file stored it in.
+/// Where a weight matrix's values live.
+///
+/// The engine owns the model file and addresses tensors by offset, so a weight costs nothing beyond
+/// the file itself: no per-tensor copy, and no second copy of the file in flight during load. That
+/// is what lets a model fit a Cell whose virtual-address slot is 32 MiB — the previous design held
+/// the file *and* a copy of every tensor at the same time, roughly doubling the requirement.
+///
+/// The one exception is a tensor whose stored layout the kernels cannot consume — F16, or an
+/// unaligned float region — which is converted once into an owned `f32` buffer.
 enum Matrix {
-    /// Row-major `rows × cols` f32.
-    F32 { rows: usize, data: Vec<f32> },
-    /// `rows` rows of Q8_0 blocks (`cols` a multiple of 32).
+    /// `rows` rows of packed Q8_0 blocks (`cols` a multiple of 32) at `offset`.
     Q8_0 {
         rows: usize,
         cols: usize,
-        data: Vec<u8>,
+        offset: usize,
+        len: usize,
+    },
+    /// Row-major `rows × cols` f32 at `offset`, viewed without copying.
+    F32 {
+        rows: usize,
+        cols: usize,
+        offset: usize,
+    },
+    /// f32 rows converted at load time because the file stored them as F16 or unaligned.
+    F32Owned {
+        rows: usize,
+        cols: usize,
+        data: Vec<f32>,
     },
 }
 
 impl Matrix {
     fn rows(&self) -> usize {
         match self {
-            Matrix::F32 { rows, .. } | Matrix::Q8_0 { rows, .. } => *rows,
+            Matrix::F32Owned { rows, .. }
+            | Matrix::F32 { rows, .. }
+            | Matrix::Q8_0 { rows, .. } => *rows,
         }
     }
 
-    /// Write `W · x` into `out[..rows]`.
-    ///
-    /// The kernel writes straight into the destination: every call site passes an exactly-sized
-    /// slice, so a staging buffer would only add a full copy per projection — and for the tied
-    /// output projection (a `vocab × n_embd` matrix) that copy is what forced a per-row
-    /// dequantise of the whole vocabulary on every generated token.
-    fn project(&self, out: &mut [f32], x: &[f32]) -> Result<(), MathError> {
-        let rows = self.rows();
-        if out.len() < rows {
-            return Err(MathError::ShapeMismatch);
-        }
-        let out = &mut out[..rows];
+    /// Bytes this matrix holds *of its own*; borrowed tensors are accounted by the model buffer.
+    fn owned_bytes(&self) -> usize {
         match self {
-            Matrix::F32 { rows, data } => tensor_math::matvec(out, data, x, *rows, x.len()),
-            Matrix::Q8_0 { rows, cols, data } => {
-                tensor_math::matvec_q8_0(out, data, x, *rows, *cols)
+            Matrix::F32Owned { data, .. } => data.len() * 4,
+            Matrix::F32 { .. } | Matrix::Q8_0 { .. } => 0,
+        }
+    }
+}
+
+/// Norm weights: a borrowed f32 view of the model buffer, or a converted copy.
+enum Norm {
+    /// `len` f32 values at `offset`.
+    F32 { offset: usize, len: usize },
+    /// Converted at load time (F16 or unaligned input).
+    Owned(Vec<f32>),
+}
+
+impl Norm {
+    fn owned_bytes(&self) -> usize {
+        match self {
+            Norm::Owned(data) => data.len() * 4,
+            Norm::F32 { .. } => 0,
+        }
+    }
+}
+
+/// Tensor bytes at `[offset, offset + len)` inside the model buffer.
+fn tensor_bytes(buffer: &[u8], offset: usize, len: usize) -> Result<&[u8], MathError> {
+    buffer
+        .get(offset..offset.checked_add(len).ok_or(MathError::ShapeMismatch)?)
+        .ok_or(MathError::ShapeMismatch)
+}
+
+/// Borrowed f32 view of `count` values at `offset`, refusing an unaligned region.
+///
+/// The view is what makes zero-copy loading safe without `unsafe`: `zerocopy` checks the alignment
+/// and hands back a reference into the model buffer.
+fn f32_values(buffer: &[u8], offset: usize, count: usize) -> Result<&[f32], MathError> {
+    let bytes = tensor_bytes(
+        buffer,
+        offset,
+        count.checked_mul(4).ok_or(MathError::ShapeMismatch)?,
+    )?;
+    zerocopy::FromBytes::ref_from_bytes(bytes).map_err(|_| MathError::ShapeMismatch)
+}
+
+/// Borrowed values of a norm weight.
+fn norm_values<'a>(buffer: &'a [u8], norm: &'a Norm) -> Result<&'a [f32], MathError> {
+    match norm {
+        Norm::Owned(data) => Ok(data),
+        Norm::F32 { offset, len } => f32_values(buffer, *offset, *len),
+    }
+}
+
+/// Write `W · x` into `out[..rows]` for one stored matrix.
+///
+/// The kernel writes straight into the destination: every call site passes an exactly-sized slice,
+/// so a staging buffer would only add a copy per projection — and for the tied output projection
+/// (a `vocab × n_embd` matrix) that copy is what forced a per-row dequantise of the whole
+/// vocabulary on every generated token.
+fn matvec_into(
+    buffer: &[u8],
+    matrix: &Matrix,
+    out: &mut [f32],
+    x: &[f32],
+) -> Result<(), MathError> {
+    let rows = matrix.rows();
+    if out.len() < rows {
+        return Err(MathError::ShapeMismatch);
+    }
+    let out = &mut out[..rows];
+    match matrix {
+        Matrix::Q8_0 {
+            rows,
+            cols,
+            offset,
+            len,
+        } => {
+            let data = tensor_bytes(buffer, *offset, *len)?;
+            tensor_math::matvec_q8_0(out, data, x, *rows, *cols)
+        }
+        Matrix::F32 { rows, cols, offset } => {
+            let data = f32_values(buffer, *offset, rows * cols)?;
+            tensor_math::matvec(out, data, x, *rows, *cols)
+        }
+        Matrix::F32Owned { rows, data, .. } => tensor_math::matvec(out, data, x, *rows, x.len()),
+    }
+}
+
+/// Copy one matrix row into `out[..cols]`, dequantizing when the row is packed.
+fn row_f32(buffer: &[u8], matrix: &Matrix, row: usize, out: &mut [f32]) -> Result<(), MathError> {
+    match matrix {
+        Matrix::F32 { rows, cols, offset } => {
+            if row >= *rows || out.len() < *cols {
+                return Err(MathError::ShapeMismatch);
             }
+            let data = f32_values(buffer, offset + row * cols, *cols)?;
+            out[..*cols].copy_from_slice(data);
+            Ok(())
         }
-    }
-
-    fn bytes(&self) -> usize {
-        match self {
-            Matrix::F32 { data, .. } => data.len() * 4,
-            Matrix::Q8_0 { data, .. } => data.len(),
+        Matrix::F32Owned { rows, cols, data } => {
+            if row >= *rows || out.len() < *cols {
+                return Err(MathError::ShapeMismatch);
+            }
+            out[..*cols].copy_from_slice(&data[row * cols..(row + 1) * cols]);
+            Ok(())
+        }
+        Matrix::Q8_0 {
+            rows, cols, offset, ..
+        } => {
+            if row >= *rows || out.len() < *cols {
+                return Err(MathError::ShapeMismatch);
+            }
+            let row_bytes = tensor_math::q8_0_row_bytes(*cols).ok_or(MathError::NotDivisible)?;
+            let start = offset
+                .checked_add(row.checked_mul(row_bytes).ok_or(MathError::ShapeMismatch)?)
+                .ok_or(MathError::ShapeMismatch)?;
+            let slice = tensor_bytes(buffer, start, row_bytes)?;
+            for (block, out_block) in slice
+                .chunks_exact(quant::Q8_0_BLOCK_BYTES)
+                .zip(out.chunks_exact_mut(quant::Q8_0_BLOCK_WEIGHTS))
+            {
+                let mut decoded = [0f32; quant::Q8_0_BLOCK_WEIGHTS];
+                quant::q8_0_block_to_f32(block, &mut decoded)?;
+                out_block.copy_from_slice(&decoded);
+            }
+            Ok(())
         }
     }
 }
 
 /// One transformer block's weights.
 struct Layer {
-    attn_norm: Vec<f32>,
+    attn_norm: Norm,
     wq: Matrix,
     wk: Matrix,
     wv: Matrix,
     wo: Matrix,
-    ffn_norm: Vec<f32>,
+    ffn_norm: Norm,
     w_gate: Matrix,
     w_up: Matrix,
     w_down: Matrix,
 }
 
-/// All weights of one model.
+/// All weights of one model, described rather than copied.
 struct Weights {
     token_embd: Matrix,
-    output_norm: Vec<f32>,
+    output_norm: Norm,
     /// `None` when the checkpoint ties output to the token embedding.
     output: Option<Matrix>,
     layers: Vec<Layer>,
 }
 
 impl Weights {
-    fn bytes(&self) -> usize {
-        let mut total = self.token_embd.bytes() + self.output_norm.len() * 4;
+    /// Bytes held outside the model buffer (converted tensors only).
+    fn owned_bytes(&self) -> usize {
+        let mut total = self.token_embd.owned_bytes() + self.output_norm.owned_bytes();
         if let Some(output) = &self.output {
-            total += output.bytes();
+            total += output.owned_bytes();
         }
         for layer in &self.layers {
-            total += layer.attn_norm.len() * 4 + layer.ffn_norm.len() * 4;
-            total += layer.wq.bytes()
-                + layer.wk.bytes()
-                + layer.wv.bytes()
-                + layer.wo.bytes()
-                + layer.w_gate.bytes()
-                + layer.w_up.bytes()
-                + layer.w_down.bytes();
+            total += layer.attn_norm.owned_bytes() + layer.ffn_norm.owned_bytes();
+            total += layer.wq.owned_bytes()
+                + layer.wk.owned_bytes()
+                + layer.wv.owned_bytes()
+                + layer.wo.owned_bytes()
+                + layer.w_gate.owned_bytes()
+                + layer.w_up.owned_bytes()
+                + layer.w_down.owned_bytes();
         }
         total
     }
 }
 
-/// Key/value cache for one session: `n_layer × n_ctx × kv_dim` f32, filled left to right.
+/// Positions a fresh session pre-allocates before growing on demand.
+const KV_INITIAL_POSITIONS: usize = 64;
+
+/// Key/value cache for one session.
+///
+/// **Position-major layout**: `pos * (n_layer * kv_dim) + layer * kv_dim`. A session grows its
+/// cache as it advances, and this ordering makes growth a plain `Vec::resize` — a layer-major
+/// layout would have to repack every cached vector whenever the position stride changed.
+///
+/// The cache starts small on purpose. Allocating the model's full declared context up front costs
+/// real memory per session for no benefit — a 30-layer model with a 2048-token context reserved
+/// 94 MB before its first token, which is what made a resident-set measurement look like the
+/// weights had been copied.
 struct KvCache {
     k: Vec<f32>,
     v: Vec<f32>,
@@ -240,23 +381,48 @@ struct KvCache {
 }
 
 impl KvCache {
-    fn new(cfg: &ModelConfig) -> Self {
-        let size = cfg.n_layer * cfg.n_ctx * cfg.kv_dim();
+    fn new(_cfg: &ModelConfig) -> Self {
         Self {
-            k: vec![0.0; size],
-            v: vec![0.0; size],
+            k: Vec::new(),
+            v: Vec::new(),
             len: 0,
         }
     }
 
     fn bytes(&self) -> usize {
-        (self.k.len() + self.v.len()) * 4
+        (self.k.capacity() + self.v.capacity()) * 4
+    }
+
+    /// Positions this cache has room for.
+    fn capacity(&self, cfg: &ModelConfig) -> usize {
+        let per_position = cfg.n_layer * cfg.kv_dim();
+        if per_position == 0 {
+            return 0;
+        }
+        self.k.len() / per_position
+    }
+
+    /// Make room for `needed` positions, growing geometrically up to the model's context window.
+    fn ensure(&mut self, cfg: &ModelConfig, needed: usize) -> Result<(), MathError> {
+        if needed > cfg.n_ctx {
+            return Err(MathError::ShapeMismatch);
+        }
+        if needed <= self.capacity(cfg) {
+            return Ok(());
+        }
+        let target = needed
+            .max(self.capacity(cfg).saturating_mul(2))
+            .max(KV_INITIAL_POSITIONS)
+            .min(cfg.n_ctx);
+        let values = target * cfg.n_layer * cfg.kv_dim();
+        self.k.resize(values, 0.0);
+        self.v.resize(values, 0.0);
+        Ok(())
     }
 
     /// Cache slot for layer `layer` at position `pos`.
     fn slot(&self, cfg: &ModelConfig, layer: usize, pos: usize) -> Range<usize> {
-        let stride = cfg.n_ctx * cfg.kv_dim();
-        let base = layer * stride + pos * cfg.kv_dim();
+        let base = (pos * cfg.n_layer + layer) * cfg.kv_dim();
         base..base + cfg.kv_dim()
     }
 }
@@ -384,8 +550,12 @@ impl Scratch {
     }
 }
 
-/// The engine: model weights plus a bounded session table.
+/// The engine: the model file, descriptors into it, and a bounded session table.
 pub struct Engine {
+    /// The model file. Weights address it by offset, so this is the *only* copy of the weights.
+    buffer: Vec<u8>,
+    /// Offset of the tensor-data section inside `buffer` (see [`GgufFile::data_section_offset`]).
+    data_section: usize,
     cfg: ModelConfig,
     tokenizer: Tokenizer,
     weights: Weights,
@@ -395,19 +565,23 @@ pub struct Engine {
 }
 
 impl Engine {
-    /// Load a model from a GGUF image.
+    /// Load a model from an owned GGUF image.
     ///
-    /// Everything the engine needs is copied out of `bytes`, so the caller keeps ownership of the
-    /// buffer and may drop it (freeing the transient copy) once this returns. A model whose resident
-    /// size would exceed `memory_limit` is refused with [`EngineError::TooLarge`].
-    pub fn load(bytes: &[u8], memory_limit: usize) -> Result<Self, EngineError> {
-        let file = GgufFile::parse(bytes).map_err(EngineError::Gguf)?;
+    /// The buffer becomes the engine's weight storage — nothing is copied out of it. A model whose
+    /// resident size would exceed `memory_limit` is refused with [`EngineError::TooLarge`], and the
+    /// buffer is dropped with the error.
+    pub fn load(buffer: Vec<u8>, memory_limit: usize) -> Result<Self, EngineError> {
+        let file = GgufFile::parse(&buffer).map_err(EngineError::Gguf)?;
         let tokenizer = Tokenizer::from_gguf(&file).map_err(EngineError::Tokenizer)?;
         let cfg = read_config(&file, tokenizer.vocab_size())?;
-        let weights = read_weights(&file, &cfg)?;
+        let data_section = file.data_section_offset();
+        let weights = read_weights(&file, &cfg, data_section)?;
+        drop(file);
         let scratch = Scratch::new(&cfg);
 
         let engine = Self {
+            buffer,
+            data_section,
             cfg,
             tokenizer,
             weights,
@@ -426,6 +600,20 @@ impl Engine {
         Ok(engine)
     }
 
+    /// Load a model from a borrowed image, copying it once into the engine's own buffer.
+    ///
+    /// For callers that hold a `&'static [u8]` (a fixture compiled into a test binary) rather than a
+    /// freshly read file. One copy of the file is the whole cost; the weights are still addressed in
+    /// place afterwards.
+    pub fn load_from_slice(bytes: &[u8], memory_limit: usize) -> Result<Self, EngineError> {
+        Self::load(bytes.to_vec(), memory_limit)
+    }
+
+    /// The model file this engine serves.
+    pub fn model_bytes(&self) -> &[u8] {
+        &self.buffer
+    }
+
     /// Model geometry.
     pub fn config(&self) -> &ModelConfig {
         &self.cfg
@@ -436,10 +624,26 @@ impl Engine {
         &self.tokenizer
     }
 
-    /// Bytes held by weights, tokenizer tables, KV caches, and scratch buffers.
+    /// Bytes held by the model buffer, converted tensors, tokenizer tables, KV caches, and scratch.
+    ///
+    /// The weights themselves are counted once, as the model buffer they live in.
     pub fn resident_bytes(&self) -> usize {
         let sessions: usize = self.sessions.iter().flatten().map(Session::bytes).sum();
-        self.weights.bytes() + self.tokenizer.bytes() + sessions + self.scratch.bytes()
+        self.buffer.len()
+            + self.weights.owned_bytes()
+            + self.tokenizer.bytes()
+            + sessions
+            + self.scratch.bytes()
+    }
+
+    /// The model file this engine was loaded from, in bytes.
+    pub fn model_len(&self) -> usize {
+        self.buffer.len()
+    }
+
+    /// Tensor-data section offset, exposed for tests and diagnostics.
+    pub fn data_section_offset(&self) -> usize {
+        self.data_section
     }
 
     /// Capability description for [`ai_proto::AiRequest::Describe`].
@@ -464,7 +668,7 @@ impl Engine {
     fn quant_label(&self) -> Quant {
         match &self.weights.token_embd {
             Matrix::Q8_0 { .. } => Quant::Q8_0,
-            Matrix::F32 { .. } => Quant::F32,
+            Matrix::F32 { .. } | Matrix::F32Owned { .. } => Quant::F32,
         }
     }
 
@@ -515,6 +719,7 @@ impl Engine {
     /// Returns [`AiError::UnknownRequest`] for an id this engine does not own.
     pub fn generate(&mut self, request_id: u32, budget: usize) -> Result<Progress, AiError> {
         let Engine {
+            buffer,
             cfg,
             weights,
             scratch,
@@ -543,7 +748,7 @@ impl Engine {
                 let token = session.tokens[session.computed];
                 let position = session.computed;
                 let kv = &mut session.kv;
-                forward(cfg, weights, scratch, kv, token, position)
+                forward(buffer, cfg, weights, scratch, kv, token, position)
                     .map_err(|_| AiError::Internal)?;
                 session.computed += 1;
                 steps += 1;
@@ -555,7 +760,7 @@ impl Engine {
                 session.finish = Some(FinishReason::ContextFull);
                 break;
             }
-            let sampled = sample(cfg, weights, scratch, session)?;
+            let sampled = sample(buffer, cfg, weights, scratch, session)?;
             session.tokens.push(sampled);
             session.pending.push(sampled);
             steps += 1;
@@ -659,6 +864,7 @@ impl Engine {
         }
 
         let Engine {
+            buffer,
             cfg,
             weights,
             scratch,
@@ -668,7 +874,7 @@ impl Engine {
         let mut pooled = vec![0.0f32; cfg.n_embd];
 
         for (position, token) in tokens.iter().enumerate() {
-            forward(cfg, weights, scratch, &mut kv, *token, position)
+            forward(buffer, cfg, weights, scratch, &mut kv, *token, position)
                 .map_err(|_| AiError::Internal)?;
             tensor_math::add_in_place(&mut pooled, &scratch.x).map_err(|_| AiError::Internal)?;
         }
@@ -704,6 +910,7 @@ impl Engine {
 
 /// One forward pass for `token` at `position`, updating the KV cache.
 fn forward(
+    buffer: &[u8],
     cfg: &ModelConfig,
     weights: &Weights,
     scratch: &mut Scratch,
@@ -716,55 +923,82 @@ fn forward(
         return Err(MathError::ShapeMismatch);
     }
 
-    row_to_f32(&weights.token_embd, token, &mut scratch.x[..cfg.n_embd])?;
+    row_f32(
+        buffer,
+        &weights.token_embd,
+        token,
+        &mut scratch.x[..cfg.n_embd],
+    )?;
 
     for (layer_index, layer) in weights.layers.iter().enumerate() {
         tensor_math::rms_norm(
             &mut scratch.xb[..cfg.n_embd],
             &scratch.x[..cfg.n_embd],
-            &layer.attn_norm,
+            norm_values(buffer, &layer.attn_norm)?,
             cfg.rms_eps,
         )?;
 
-        layer
-            .wq
-            .project(&mut scratch.q[..cfg.n_embd], &scratch.xb[..cfg.n_embd])?;
-        layer
-            .wk
-            .project(&mut scratch.k[..cfg.kv_dim()], &scratch.xb[..cfg.n_embd])?;
-        layer
-            .wv
-            .project(&mut scratch.v[..cfg.kv_dim()], &scratch.xb[..cfg.n_embd])?;
+        matvec_into(
+            buffer,
+            &layer.wq,
+            &mut scratch.q[..cfg.n_embd],
+            &scratch.xb[..cfg.n_embd],
+        )?;
+        matvec_into(
+            buffer,
+            &layer.wk,
+            &mut scratch.k[..cfg.kv_dim()],
+            &scratch.xb[..cfg.n_embd],
+        )?;
+        matvec_into(
+            buffer,
+            &layer.wv,
+            &mut scratch.v[..cfg.kv_dim()],
+            &scratch.xb[..cfg.n_embd],
+        )?;
 
         rope(&mut scratch.q[..cfg.n_embd], cfg, position)?;
         rope(&mut scratch.k[..cfg.kv_dim()], cfg, position)?;
 
+        kv.ensure(cfg, position + 1)?;
         let slot = kv.slot(cfg, layer_index, position);
         kv.k[slot.clone()].copy_from_slice(&scratch.k[..cfg.kv_dim()]);
         kv.v[slot].copy_from_slice(&scratch.v[..cfg.kv_dim()]);
 
         attention(cfg, kv, layer_index, scratch, position)?;
-        layer
-            .wo
-            .project(&mut scratch.down[..cfg.n_embd], &scratch.attn[..cfg.n_embd])?;
+        matvec_into(
+            buffer,
+            &layer.wo,
+            &mut scratch.down[..cfg.n_embd],
+            &scratch.attn[..cfg.n_embd],
+        )?;
         tensor_math::add_in_place(&mut scratch.x[..cfg.n_embd], &scratch.down[..cfg.n_embd])?;
 
         tensor_math::rms_norm(
             &mut scratch.xb[..cfg.n_embd],
             &scratch.x[..cfg.n_embd],
-            &layer.ffn_norm,
+            norm_values(buffer, &layer.ffn_norm)?,
             cfg.rms_eps,
         )?;
-        layer
-            .w_gate
-            .project(&mut scratch.gate[..cfg.n_ff], &scratch.xb[..cfg.n_embd])?;
-        layer
-            .w_up
-            .project(&mut scratch.up[..cfg.n_ff], &scratch.xb[..cfg.n_embd])?;
+        matvec_into(
+            buffer,
+            &layer.w_gate,
+            &mut scratch.gate[..cfg.n_ff],
+            &scratch.xb[..cfg.n_embd],
+        )?;
+        matvec_into(
+            buffer,
+            &layer.w_up,
+            &mut scratch.up[..cfg.n_ff],
+            &scratch.xb[..cfg.n_embd],
+        )?;
         tensor_math::swiglu_in_place(&mut scratch.gate[..cfg.n_ff], &scratch.up[..cfg.n_ff])?;
-        layer
-            .w_down
-            .project(&mut scratch.down[..cfg.n_embd], &scratch.gate[..cfg.n_ff])?;
+        matvec_into(
+            buffer,
+            &layer.w_down,
+            &mut scratch.down[..cfg.n_embd],
+            &scratch.gate[..cfg.n_ff],
+        )?;
         tensor_math::add_in_place(&mut scratch.x[..cfg.n_embd], &scratch.down[..cfg.n_embd])?;
     }
 
@@ -811,6 +1045,7 @@ fn attention(
 
 /// Sample the next token from the logits of the current hidden state.
 fn sample(
+    buffer: &[u8],
     cfg: &ModelConfig,
     weights: &Weights,
     scratch: &mut Scratch,
@@ -819,28 +1054,20 @@ fn sample(
     tensor_math::rms_norm(
         &mut scratch.xb[..cfg.n_embd],
         &scratch.x[..cfg.n_embd],
-        &weights.output_norm,
+        norm_values(buffer, &weights.output_norm).map_err(|_| AiError::Internal)?,
         cfg.rms_eps,
     )
     .map_err(|_| AiError::Internal)?;
 
-    match &weights.output {
-        Some(output) => output
-            .project(
-                &mut scratch.logits[..cfg.vocab_size],
-                &scratch.xb[..cfg.n_embd],
-            )
-            .map_err(|_| AiError::Internal)?,
-        // Tied embedding: `logits = token_embd · xb` — the same projection every other matrix
-        // uses, over the packed Q8_0 weights the file already stores.
-        None => weights
-            .token_embd
-            .project(
-                &mut scratch.logits[..cfg.vocab_size],
-                &scratch.xb[..cfg.n_embd],
-            )
-            .map_err(|_| AiError::Internal)?,
-    }
+    // Tied embedding (`output.weight` absent) uses the token embedding as the output projection.
+    let output = weights.output.as_ref().unwrap_or(&weights.token_embd);
+    matvec_into(
+        buffer,
+        output,
+        &mut scratch.logits[..cfg.vocab_size],
+        &scratch.xb[..cfg.n_embd],
+    )
+    .map_err(|_| AiError::Internal)?;
 
     let temperature = f32::from(session.params.temperature_milli) / 1000.0;
     let index = tensor_math::sample_top_k(
@@ -860,42 +1087,6 @@ fn rope(vector: &mut [f32], cfg: &ModelConfig, position: usize) -> Result<(), Ma
         tensor_math::rope_normal(head, position, cfg.rope_freq_base)?;
     }
     Ok(())
-}
-
-/// Copy one matrix row into f32, dequantizing when needed.
-fn row_to_f32(matrix: &Matrix, row: usize, out: &mut [f32]) -> Result<(), MathError> {
-    match matrix {
-        Matrix::F32 { rows, data } => {
-            if row >= *rows || out.is_empty() {
-                return Err(MathError::ShapeMismatch);
-            }
-            let cols = data.len() / rows;
-            if out.len() < cols {
-                return Err(MathError::ShapeMismatch);
-            }
-            out[..cols].copy_from_slice(&data[row * cols..(row + 1) * cols]);
-            Ok(())
-        }
-        Matrix::Q8_0 { rows, cols, data } => {
-            if row >= *rows || out.len() < *cols {
-                return Err(MathError::ShapeMismatch);
-            }
-            let row_bytes = tensor_math::q8_0_row_bytes(*cols).ok_or(MathError::NotDivisible)?;
-            let start = row.checked_mul(row_bytes).ok_or(MathError::ShapeMismatch)?;
-            let slice = data
-                .get(start..start + row_bytes)
-                .ok_or(MathError::ShapeMismatch)?;
-            for (block, out_block) in slice
-                .chunks_exact(quant::Q8_0_BLOCK_BYTES)
-                .zip(out.chunks_exact_mut(quant::Q8_0_BLOCK_WEIGHTS))
-            {
-                let mut decoded = [0f32; quant::Q8_0_BLOCK_WEIGHTS];
-                quant::q8_0_block_to_f32(block, &mut decoded)?;
-                out_block.copy_from_slice(&decoded);
-            }
-            Ok(())
-        }
-    }
 }
 
 /// Split the longest complete-UTF-8 prefix out of `buffer`, leaving the partial tail behind.
@@ -1004,14 +1195,28 @@ fn meta_usize(file: &GgufFile<'_>, key: &'static str) -> Result<usize, EngineErr
         .ok_or(EngineError::MissingMetadata(key))
 }
 
-/// Load every weight tensor the Llama forward pass needs.
-fn read_weights(file: &GgufFile<'_>, cfg: &ModelConfig) -> Result<Weights, EngineError> {
-    let token_embd = read_matrix(file, "token_embd.weight", cfg.vocab_size, cfg.n_embd)?;
-    let output_norm = read_vector(file, "output_norm.weight", cfg.n_embd)?;
+/// Load every weight tensor the Llama forward pass needs, as descriptors into `buffer`.
+///
+/// Only tensors the kernels cannot consume in place are converted: F16 (no F16 kernel) and float
+/// tensors whose offset is not 4-byte aligned. Everything else stays where the file put it.
+fn read_weights(
+    file: &GgufFile<'_>,
+    cfg: &ModelConfig,
+    data_section: usize,
+) -> Result<Weights, EngineError> {
+    let token_embd = read_matrix(
+        file,
+        data_section,
+        "token_embd.weight",
+        cfg.vocab_size,
+        cfg.n_embd,
+    )?;
+    let output_norm = read_norm(file, data_section, "output_norm.weight", cfg.n_embd)?;
     // Tied-embedding checkpoints omit `output.weight`.
     let output = if file.tensor("output.weight").is_some() {
         Some(read_matrix(
             file,
+            data_section,
             "output.weight",
             cfg.vocab_size,
             cfg.n_embd,
@@ -1024,15 +1229,57 @@ fn read_weights(file: &GgufFile<'_>, cfg: &ModelConfig) -> Result<Weights, Engin
     for index in 0..cfg.n_layer {
         let name = |suffix: &str| format!("blk.{index}.{suffix}");
         layers.push(Layer {
-            attn_norm: read_vector(file, &name("attn_norm.weight"), cfg.n_embd)?,
-            wq: read_matrix(file, &name("attn_q.weight"), cfg.n_embd, cfg.n_embd)?,
-            wk: read_matrix(file, &name("attn_k.weight"), cfg.kv_dim(), cfg.n_embd)?,
-            wv: read_matrix(file, &name("attn_v.weight"), cfg.kv_dim(), cfg.n_embd)?,
-            wo: read_matrix(file, &name("attn_output.weight"), cfg.n_embd, cfg.n_embd)?,
-            ffn_norm: read_vector(file, &name("ffn_norm.weight"), cfg.n_embd)?,
-            w_gate: read_matrix(file, &name("ffn_gate.weight"), cfg.n_ff, cfg.n_embd)?,
-            w_up: read_matrix(file, &name("ffn_up.weight"), cfg.n_ff, cfg.n_embd)?,
-            w_down: read_matrix(file, &name("ffn_down.weight"), cfg.n_embd, cfg.n_ff)?,
+            attn_norm: read_norm(file, data_section, &name("attn_norm.weight"), cfg.n_embd)?,
+            wq: read_matrix(
+                file,
+                data_section,
+                &name("attn_q.weight"),
+                cfg.n_embd,
+                cfg.n_embd,
+            )?,
+            wk: read_matrix(
+                file,
+                data_section,
+                &name("attn_k.weight"),
+                cfg.kv_dim(),
+                cfg.n_embd,
+            )?,
+            wv: read_matrix(
+                file,
+                data_section,
+                &name("attn_v.weight"),
+                cfg.kv_dim(),
+                cfg.n_embd,
+            )?,
+            wo: read_matrix(
+                file,
+                data_section,
+                &name("attn_output.weight"),
+                cfg.n_embd,
+                cfg.n_embd,
+            )?,
+            ffn_norm: read_norm(file, data_section, &name("ffn_norm.weight"), cfg.n_embd)?,
+            w_gate: read_matrix(
+                file,
+                data_section,
+                &name("ffn_gate.weight"),
+                cfg.n_ff,
+                cfg.n_embd,
+            )?,
+            w_up: read_matrix(
+                file,
+                data_section,
+                &name("ffn_up.weight"),
+                cfg.n_ff,
+                cfg.n_embd,
+            )?,
+            w_down: read_matrix(
+                file,
+                data_section,
+                &name("ffn_down.weight"),
+                cfg.n_embd,
+                cfg.n_ff,
+            )?,
         });
     }
 
@@ -1044,46 +1291,105 @@ fn read_weights(file: &GgufFile<'_>, cfg: &ModelConfig) -> Result<Weights, Engin
     })
 }
 
-/// Load one 1-D tensor (norm weights) as f32.
-fn read_vector(file: &GgufFile<'_>, name: &str, len: usize) -> Result<Vec<f32>, EngineError> {
+/// Absolute offset of a tensor's bytes inside the model file.
+fn tensor_offset(
+    file: &GgufFile<'_>,
+    data_section: usize,
+    name: &str,
+) -> Result<(usize, GgmlDType, TensorDims), EngineError> {
     let info = file
         .tensor(name)
         .ok_or_else(|| EngineError::MissingTensor(name.to_owned()))?;
-    if info.dims.len() != 1 || info.dims[0] as usize != len {
-        return Err(EngineError::BadTensorShape(name.to_owned()));
-    }
     let data = file.tensor_data(info).map_err(EngineError::Gguf)?;
-    let mut values = vec![0.0f32; len];
-    file.dequant_row(info.dtype, data, len, &mut values)
-        .map_err(EngineError::Gguf)?;
-    Ok(values)
+    let relative = data.as_ptr() as usize - file.bytes().as_ptr() as usize;
+    let _ = data_section;
+    let dims = if info.dims.len() >= 2 {
+        TensorDims {
+            first: info.dims[0] as usize,
+            second: info.dims[1] as usize,
+        }
+    } else {
+        TensorDims {
+            first: info.dims.first().copied().unwrap_or(0) as usize,
+            second: 1,
+        }
+    };
+    Ok((relative, info.dtype, dims))
 }
 
-/// Load one 2-D tensor, keeping Q8_0 in its packed form.
+/// First two tensor dimensions, in GGUF order.
+struct TensorDims {
+    first: usize,
+    second: usize,
+}
+
+/// Describe one 1-D tensor (norm weights).
+fn read_norm(
+    file: &GgufFile<'_>,
+    data_section: usize,
+    name: &str,
+    len: usize,
+) -> Result<Norm, EngineError> {
+    let (offset, dtype, dims) = tensor_offset(file, data_section, name)?;
+    let info = file
+        .tensor(name)
+        .ok_or_else(|| EngineError::MissingTensor(name.to_owned()))?;
+    if info.dims.len() != 1 || dims.first != len {
+        return Err(EngineError::BadTensorShape(name.to_owned()));
+    }
+    match dtype {
+        // A float view is free but needs 4-byte alignment; the buffer's base is page-aligned, so the
+        // tensor offset decides.
+        GgmlDType::F32 if offset.is_multiple_of(4) => Ok(Norm::F32 { offset, len }),
+        GgmlDType::F32 | GgmlDType::F16 => {
+            let data = file.tensor_data(info).map_err(EngineError::Gguf)?;
+            let mut values = vec![0.0f32; len];
+            file.dequant_row(dtype, data, len, &mut values)
+                .map_err(EngineError::Gguf)?;
+            Ok(Norm::Owned(values))
+        }
+        GgmlDType::Q8_0 => Err(EngineError::BadTensorShape(name.to_owned())),
+        GgmlDType::Unsupported(dtype) => Err(EngineError::UnsupportedDType(dtype)),
+    }
+}
+
+/// Describe one 2-D tensor, keeping Q8_0 packed and float rows in place where the layout allows.
 fn read_matrix(
     file: &GgufFile<'_>,
+    data_section: usize,
     name: &str,
     rows: usize,
     cols: usize,
 ) -> Result<Matrix, EngineError> {
+    let (offset, dtype, dims) = tensor_offset(file, data_section, name)?;
     let info = file
         .tensor(name)
         .ok_or_else(|| EngineError::MissingTensor(name.to_owned()))?;
-    if info.dims.len() != 2 || info.dims[0] as usize != cols || info.dims[1] as usize != rows {
+    if info.dims.len() != 2 || dims.first != cols || dims.second != rows {
         return Err(EngineError::BadTensorShape(name.to_owned()));
     }
-    let data = file.tensor_data(info).map_err(EngineError::Gguf)?;
-    match info.dtype {
-        GgmlDType::Q8_0 => Ok(Matrix::Q8_0 {
-            rows,
-            cols,
-            data: data.to_vec(),
-        }),
+    match dtype {
+        GgmlDType::Q8_0 => {
+            let row_bytes = tensor_math::q8_0_row_bytes(cols)
+                .ok_or_else(|| EngineError::BadTensorShape(name.to_owned()))?;
+            Ok(Matrix::Q8_0 {
+                rows,
+                cols,
+                offset,
+                len: row_bytes * rows,
+            })
+        }
+        GgmlDType::F32 if offset.is_multiple_of(4) => Ok(Matrix::F32 { rows, cols, offset }),
         GgmlDType::F32 | GgmlDType::F16 => {
+            let data = file.tensor_data(info).map_err(EngineError::Gguf)?;
             let mut values = vec![0.0f32; rows * cols];
-            file.dequant_row(info.dtype, data, rows * cols, &mut values)
+            file.dequant_row(dtype, data, rows * cols, &mut values)
                 .map_err(EngineError::Gguf)?;
-            Ok(Matrix::F32 { rows, data: values })
+            Ok(Matrix::F32Owned {
+                rows,
+                cols,
+                data: values,
+            })
         }
         GgmlDType::Unsupported(dtype) => Err(EngineError::UnsupportedDType(dtype)),
     }
@@ -1169,7 +1475,7 @@ mod tests {
 
     #[test]
     fn loads_the_fixture_with_the_expected_geometry() {
-        let engine = Engine::load(MODEL, LIMIT).expect("fixture loads");
+        let engine = Engine::load_from_slice(MODEL, LIMIT).expect("fixture loads");
         let config = engine.config();
         assert_eq!(config.n_layer, 2);
         assert_eq!(config.n_embd, 64);
@@ -1192,7 +1498,7 @@ mod tests {
 
     #[test]
     fn refuses_a_model_that_exceeds_the_memory_ceiling() {
-        let error = match Engine::load(MODEL, 64 * 1024) {
+        let error = match Engine::load_from_slice(MODEL, 64 * 1024) {
             Ok(_) => panic!("a 64 KiB ceiling must refuse the fixture"),
             Err(error) => error,
         };
@@ -1208,7 +1514,7 @@ mod tests {
     #[test]
     fn tokenizer_agrees_with_the_independent_reference_encoder() {
         let golden = golden();
-        let engine = Engine::load(MODEL, LIMIT).expect("fixture loads");
+        let engine = Engine::load_from_slice(MODEL, LIMIT).expect("fixture loads");
         assert_eq!(engine.tokenizer().encode(&golden.prompt), golden.prompt_ids);
         assert_eq!(
             engine.tokenizer().encode(&golden.embed_text),
@@ -1226,7 +1532,7 @@ mod tests {
     #[test]
     fn greedy_decode_matches_the_reference_ids() {
         let golden = golden();
-        let mut engine = Engine::load(MODEL, LIMIT).expect("fixture loads");
+        let mut engine = Engine::load_from_slice(MODEL, LIMIT).expect("fixture loads");
         let request_id = engine
             .submit(
                 &golden.prompt,
@@ -1268,7 +1574,7 @@ mod tests {
     #[test]
     fn embedding_matches_the_reference_vector() {
         let golden = golden();
-        let mut engine = Engine::load(MODEL, LIMIT).expect("fixture loads");
+        let mut engine = Engine::load_from_slice(MODEL, LIMIT).expect("fixture loads");
         let values = engine.embed(&golden.embed_text).expect("embed");
         assert_eq!(values.len(), golden.embed_values.len());
         for (index, (actual, expected)) in values.iter().zip(&golden.embed_values).enumerate() {
@@ -1284,7 +1590,7 @@ mod tests {
     #[test]
     fn sessions_are_bounded_cancellable_and_truthful_about_unknown_ids() {
         let golden = golden();
-        let mut engine = Engine::load(MODEL, LIMIT).expect("fixture loads");
+        let mut engine = Engine::load_from_slice(MODEL, LIMIT).expect("fixture loads");
         let mut ids = Vec::new();
         for _ in 0..MAX_SESSIONS {
             ids.push(
@@ -1318,7 +1624,7 @@ mod tests {
 
     #[test]
     fn refuses_a_submit_that_breaks_the_contract() {
-        let engine_result = Engine::load(MODEL, LIMIT);
+        let engine_result = Engine::load_from_slice(MODEL, LIMIT);
         let mut engine = engine_result.expect("fixture loads");
         assert_eq!(
             engine.submit("xyz", greedy_params(0)).unwrap_err(),
@@ -1338,7 +1644,7 @@ mod tests {
 
         let mut runs = Vec::new();
         for _ in 0..2 {
-            let mut engine = Engine::load(MODEL, LIMIT).expect("fixture loads");
+            let mut engine = Engine::load_from_slice(MODEL, LIMIT).expect("fixture loads");
             let request_id = engine.submit(&golden.prompt, params).expect("submit");
             let mut produced = Vec::new();
             for _ in 0..64 {
@@ -1384,7 +1690,7 @@ mod tests {
             }
         };
 
-        let mut engine = Engine::load(&bytes, 1 << 30).expect("checkpoint loads");
+        let mut engine = Engine::load(bytes, 1 << 30).expect("checkpoint loads");
         assert!(
             engine.config().vocab_size > 40_000,
             "expected a real tokenizer"
@@ -1395,7 +1701,8 @@ mod tests {
         // is formatted the way the model expects: a raw completion prompt makes it emit junk
         // (measured: repeated ids, then punctuation soup), which is the model's contract, not an
         // engine defect — `stories15M`, a base model, produces clean prose on the same code path.
-        let prompt = "<|im_start|>user\nThe capital of France is<|im_end|>\n<|im_start|>assistant\n";
+        let prompt =
+            "<|im_start|>user\nThe capital of France is<|im_end|>\n<|im_start|>assistant\n";
         let params = SamplingParams {
             max_tokens: 16,
             temperature_milli: 0,
@@ -1460,6 +1767,60 @@ mod tests {
     /// trained weights with a `tokenizer.ggml.model = "llama"` vocabulary. It checks the two things
     /// a wrong SentencePiece implementation would break: text must round-trip through
     /// encode/decode, and a plain story prompt must produce English-like text rather than noise.
+    /// Zero-copy acceptance: a 26.7 MB checkpoint must fit inside a Cell's 32 MiB VA slot.
+    ///
+    /// The engine used to hold the file *and* a copy of every tensor while loading, so this model
+    /// needed roughly 55 MB and could not be served from a Cell at all. With weights addressed in
+    /// place the requirement is the file plus the session and scratch buffers, which is what this
+    /// test pins: loading under a ceiling that a Cell slot can hold.
+    #[test]
+    fn a_real_checkpoint_fits_a_cell_slot() {
+        let path = match std::env::var("CELLOS_AI_SPM_MODEL") {
+            Ok(path) => path,
+            Err(_) => {
+                eprintln!(
+                    "SKIP a_real_checkpoint_fits_a_cell_slot: set CELLOS_AI_SPM_MODEL to an SPM GGUF"
+                );
+                return;
+            }
+        };
+        let bytes = match std::fs::read(&path) {
+            Ok(bytes) => bytes,
+            Err(error) => {
+                eprintln!("SKIP a_real_checkpoint_fits_a_cell_slot: {path}: {error}");
+                return;
+            }
+        };
+        let file_len = bytes.len();
+
+        // A Cell slot is 32 MiB (`kernel/src/loader/va_alloc.rs`); leave headroom for the cell's own
+        // code, stack, and the session table.
+        const CELL_SLOT_BUDGET: usize = 30 * 1024 * 1024;
+        let engine = match Engine::load(bytes, CELL_SLOT_BUDGET) {
+            Ok(engine) => engine,
+            Err(error) => panic!(
+                "a {file_len}-byte checkpoint must load under {CELL_SLOT_BUDGET} bytes: {error:?}"
+            ),
+        };
+
+        assert_eq!(engine.model_len(), file_len, "the whole file is resident");
+        let resident = engine.resident_bytes();
+        assert!(
+            resident < CELL_SLOT_BUDGET,
+            "resident {resident} must stay under the Cell budget"
+        );
+        // The point of zero-copy: resident memory tracks the file, not twice the file.
+        assert!(
+            resident < file_len + 6 * 1024 * 1024,
+            "resident {resident} should be the file plus buffers, not a second copy of {file_len}"
+        );
+        std::println!(
+            "[ai-engine] zero-copy: file={} MiB resident={} MiB (weights accounted once)",
+            file_len / (1024 * 1024),
+            resident / (1024 * 1024),
+        );
+    }
+
     #[test]
     fn tokenizes_and_generates_with_a_real_sentencepiece_checkpoint() {
         let path = match std::env::var("CELLOS_AI_SPM_MODEL") {
@@ -1480,7 +1841,7 @@ mod tests {
             }
         };
 
-        let mut engine = Engine::load(&bytes, 1 << 30).expect("checkpoint loads");
+        let mut engine = Engine::load(bytes, 1 << 30).expect("checkpoint loads");
 
         // Round-trip: a SentencePiece encoder that disagrees with its own decoder fails here. The
         // vocabulary declares the U+2581 space prefix (llama.cpp's default for SPM), so the decoded
@@ -1545,7 +1906,10 @@ mod tests {
             letters * 3 >= text.chars().count(),
             "generated text is not text-like: {text:?}"
         );
-        assert!(spaces >= 2, "generated text has no word structure: {text:?}");
+        assert!(
+            spaces >= 2,
+            "generated text has no word structure: {text:?}"
+        );
 
         std::println!(
             "[ai-engine] real SPM checkpoint: model={} layers={} vocab={} resident={} MiB \

@@ -14,3 +14,6 @@ gguf-rs = { path = "../gguf-rs", version = "0.1.0" }
 ai-tokenizer = { path = "../ai-tokenizer", version = "0.1.0" }
 tensor-math = { path = "../tensor-math", version = "0.1.0" }
 libm = "0.2.15"
+# Safe, alignment-checked byte→f32 views. The unsafe lives in the crate, not here, so the engine
+# keeps `#![forbid(unsafe_code)]` while reading weights in place.
+zerocopy = { version = "0.8", default-features = false }

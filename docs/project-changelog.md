@@ -3,6 +3,26 @@
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
 ## [Unreleased] Development-first hardware-constrained execution
+## [2026-09-14] Zero-copy weights and demand-sized KV: a 15M-parameter model served from a Cell (Spec 24 Phase 06)
+- The engine no longer copies tensors out of the model file. `Engine::load` takes ownership of the
+  buffer and describes every tensor in place (`offset`, shape, dtype), so a model costs its file size
+  and nothing more; the byte→`f32` view uses `zerocopy`'s alignment-checked API, keeping the engine
+  `#![forbid(unsafe_code)]`. Only F16 tensors and misaligned float regions are converted once.
+- Sessions no longer reserve the model's whole declared context: the KV cache is position-major and
+  grows from 64 positions on demand, which removes a 94 MB reservation on a 30-layer model before its
+  first token. Measured: SmolLM-135M resident **231 MiB → 144 MiB** for a 138 MiB file.
+- `cells/services/ai` keeps a 16 MiB arena by default and gains a `large-arena` feature for a 25 MB
+  checkpoint; the oracle runner selects it from the deployed model's size.
+- Result: llama2.c `stories15M` (25 MiB, 15M parameters, SentencePiece) is now read, loaded (99 ms) and
+  served from `/bin/ai` inside a QEMU Cell — 28 MB resident, all four oracle scenarios pass
+  (`evidence/ai-15m-model-in-cell.txt`). Host acceptance test `a_real_checkpoint_fits_a_cell_slot`
+  pins the property: a 26.7 MB checkpoint must load under a 30 MiB budget and stay within file + 6 MiB.
+- Known limitation recorded at the source: VIFS1 positional reads open a fresh capability per call, so
+  the 25 MB read takes ~150 s in TCG (linear in chunk count, ~23 ms per 4 KB chunk). Keeping the
+  capability and cursor per VFS file handle is the fix; it is not a correctness issue.
+- Non-claims: memory figures are host/QEMU TCG; `stories15M` is a 15M-parameter story model, so its
+  text quality is small-model quality. No accelerator, board, or production qualification.
+
 ## [2026-09-14] Real checkpoints in a Cell: SentencePiece, special tokens, scaled attention (Spec 24 Phase 05)
 - `/bin/ai` now serves a **real trained checkpoint inside a Cell** on QEMU RV64: llama2.c
   `stories260K` (SentencePiece vocabulary, 260K parameters) is read from the `/bin` overlay in 5.4 s,

@@ -1,0 +1,23 @@
+# A 15M-parameter real checkpoint served from a Cell (QEMU RV64) — zero-copy weights
+# date: 2026-09-14T01:59:24Z
+# model: .ai-models/stories15M-q8_0.gguf sha256 2eda49203f2f044f3dddf29a7dd7cc861ef5a0340f518a19613d73ba6d9c06b6
+#        llama2.c stories15M, SentencePiece, 6 layers, untied output, 25 MiB of Q8_0 weights
+# command: CELLOS_AI_REAL_MODEL=$PWD/.ai-models/stories15M-q8_0.gguf \
+#            scripts/run-ai-inference-oracle-qemu.sh --boot-timeout 1800
+#          (the runner builds service-ai with --features large-arena for a model this size)
+# raw log: ai-oracle-20260914T015902Z.log
+
+[ai] inference service starting
+[ai-test] AI inference oracle starting
+Cellos > [ai] model bytes: 26671328 read in 150126 ms
+[ai] engine load: 99 ms
+[ai] model ready: 32000 vocab, context 128, resident bytes 28086222
+[ai-test] model=llama
+[ai-test] vocab=32000 context=128 sessions=4
+[ai-test] real model continuation: 24 tokens
+[ai-test] text:, there was a big bear named Benny was a very big bear. He was a bear. He was very brave
+[ai-test] model vocab 32000
+[ai-test] real model embeddings ok: 3 texts
+[ai-test] abandoned session released; service still serving
+[ai-test] prompt stream matched: 24 tokens
+[ai-test] PASS

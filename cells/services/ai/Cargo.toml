@@ -11,5 +11,11 @@ api = { path = "../../../libs/api", version = "0.1.0" }
 ai-proto = { path = "../../../libs/ai-proto", version = "0.1.0" }
 ai-engine = { path = "../../../libs/ai-engine", version = "0.1.0" }
 
+[features]
+default = []
+# Size the cell arena for a ~25 MB checkpoint (llama2.c `stories15M`). The default arena serves the
+# small checkpoints; this exists so one deployment can opt into the larger footprint.
+large-arena = []
+
 [build-dependencies]
 cell-build = { path = "../../../libs/cell-build", version = "0.2.0" }

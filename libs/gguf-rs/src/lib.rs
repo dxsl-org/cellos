@@ -430,6 +430,18 @@ impl<'a> GgufFile<'a> {
     }
 
     /// `general.alignment`, default 32.
+    /// The bytes this file was parsed from.
+    pub fn bytes(&self) -> &'a [u8] {
+        self.bytes
+    }
+
+    /// Offset of the tensor-data section: the tensor directory padded to `alignment`.
+    ///
+    /// A tensor's absolute position in [`Self::bytes`] is this plus its [`TensorInfo::offset`].
+    pub fn data_section_offset(&self) -> usize {
+        self.data_start
+    }
+
     pub fn alignment(&self) -> u64 {
         self.alignment
     }

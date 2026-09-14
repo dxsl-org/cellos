@@ -39,18 +39,28 @@ api::declare_syscalls![Send, Recv, TryRecv, Log, LookupService, GetTime, Yield];
 
 // Cell heap. Holds the model bytes, the engine's weights/scratch, and the session KV caches.
 //
-// Sized for the largest model this slice deploys in a Cell (llama2.c `stories260K`: 1.2 MB of F32
-// weights) plus four sessions of its 2048-token context (2.6 MB of KV each) with headroom. The
-// Cell's virtual-address slot is 32 MiB (`kernel/src/loader/va_alloc.rs`), so a model that needs
-// more weight memory than this belongs in a bigger slot, not in an unbounded heap here.
+// The engine addresses weights in place inside the model buffer, so the arena needs the file plus
+// the per-session and scratch buffers — not a second copy of the file.
+//
+// Default sizing serves the small checkpoints (llama2.c `stories260K`, the deterministic fixture)
+// with room for four sessions. `large-arena` sizes it for a 25 MB checkpoint, which the Cell's
+// 32 MiB virtual-address slot (`kernel/src/loader/va_alloc.rs`) holds but the default arena does
+// not; a deployment that serves a model that size builds the cell with that feature instead of
+// making every image pay 29 MB of resident RAM.
+#[cfg(feature = "large-arena")]
+ostd::declare_custom_heap!(29 * 1024 * 1024);
+#[cfg(not(feature = "large-arena"))]
 ostd::declare_custom_heap!(16 * 1024 * 1024);
 
 /// Model path. The P6 FAT cell-store is mounted at `/bin`, so this is the FAT root entry
 /// `ai-model.gguf` (deployed by `gen_disk.ps1`).
 const MODEL_PATH: &str = "/bin/ai-model.gguf";
 
-/// Ceiling handed to the engine: the arena above minus room for the model buffer during load and
-/// the session table.
+/// Ceiling handed to the engine: the arena above minus room for the loader's bookkeeping and the
+/// session table.
+#[cfg(feature = "large-arena")]
+const ENGINE_LIMIT: usize = 29 * 1024 * 1024;
+#[cfg(not(feature = "large-arena"))]
 const ENGINE_LIMIT: usize = 14 * 1024 * 1024;
 
 /// Model steps advanced per poll. Bounds one session's share of the event loop; a longer
@@ -135,7 +145,9 @@ impl AiService {
         print_usize(read_ms as usize);
         println(" ms");
         let load_started = ostd::syscall::sys_get_time_ms().unwrap_or(0);
-        match Engine::load(&bytes, ENGINE_LIMIT) {
+        // The engine takes ownership of the model bytes and addresses the weights in place, so this
+        // is the only copy of the file in the cell.
+        match Engine::load(bytes, ENGINE_LIMIT) {
             Ok(engine) => {
                 let load_ms = ostd::syscall::sys_get_time_ms()
                     .unwrap_or(0)

@@ -115,10 +115,22 @@ truncate -s 32M "$DISK"
 # reviewed wrapper (scripts/lib-sign-cells.sh -> scripts/cellos-sign, which runs the
 # F1/F5 checks). Signing here is image assembly, not a production-gate claim.
 
+# A checkpoint larger than the default arena needs the service's `large-arena` feature; the default
+# build keeps every other image lean.
+AI_FEATURES=()
+if [[ -n "$REAL_MODEL" ]]; then
+    model_bytes=$(wc -c < "$REAL_MODEL")
+    if [[ "$model_bytes" -gt $((8 * 1024 * 1024)) ]]; then
+        AI_FEATURES=(--features service-ai/large-arena)
+        echo "[ai-oracle] model is $((model_bytes / 1048576)) MiB — building the service with large-arena"
+    fi
+fi
+
 echo "[ai-oracle] building RV64 cells"
 cargo build --quiet --locked --release --target "$TARGET" \
     -p app-init -p app-shell -p service-vfs -p service-config -p service-platform \
-    -p driver-virtio-blk -p service-ai -p ai-test
+    -p driver-virtio-blk -p ai-test
+cargo build --quiet --locked --release --target "$TARGET" -p service-ai "${AI_FEATURES[@]}"
 
 REL="$CARGO_TARGET_DIR/$TARGET/release"
 CELL_BINARIES=(

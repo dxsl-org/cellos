@@ -144,9 +144,13 @@ impl FsBackend for BootFsProxy {
     /// Positional read: open, seek, read once.
     ///
     /// The kernel exposes `SeekCap` on the same allowlist bit as `ReadCap`, so a positional read
-    /// costs one seek plus one read instead of re-reading the file from the start. Callers that
-    /// read a file in chunks (the AI service reading a model, the shell copying one) depend on
-    /// this: without it the only option was to re-read the whole file per chunk.
+    /// costs one seek plus one read instead of re-reading the file from the start.
+    ///
+    /// **Known limitation (measured, not theoretical).** This opens a fresh capability per call, so
+    /// every chunk seeks from the start of the file and the VIFS1 read is O(offset) per chunk —
+    /// O(n²) for a whole-file chunked read. It is invisible for the sizes this path normally sees
+    /// (a 1.2 MB model reads in 5.4 s) and it is why a 25 MB model read stalls: the fix is to keep
+    /// the capability and its cursor per VFS file handle instead of per call.
     fn read_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> usize {
         let upper: alloc::string::String = path.chars().map(|c| c.to_ascii_uppercase()).collect();
         let cap = match sys_open_cap(&upper) {

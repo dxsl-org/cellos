@@ -324,7 +324,7 @@ impl Tokenizer {
         };
 
         let spm = if model == MODEL_SPM {
-            Some(build_spm_tables(&file, &owned, &order, scores)?)
+            Some(build_spm_tables(file, &owned, &order, scores)?)
         } else {
             None
         };
@@ -340,17 +340,13 @@ impl Tokenizer {
                 }
             }
             specials.sort_unstable_by(|left, right| {
-                right
-                    .0
-                    .len()
-                    .cmp(&left.0.len())
-                    .then(left.1.cmp(&right.1))
+                right.0.len().cmp(&left.0.len()).then(left.1.cmp(&right.1))
             });
         }
 
         // llama.cpp inserts BOS for SentencePiece vocabularies unless the file says otherwise, and
         // never for byte-level BPE; an explicit metadata flag wins in both cases.
-        let add_bos_default = matches!(spm, Some(_));
+        let add_bos_default = spm.is_some();
 
         Ok(Tokenizer {
             tokens: owned,
@@ -565,7 +561,12 @@ impl Tokenizer {
             for byte in text.bytes() {
                 match spm.byte_ids[byte as usize] {
                     Some(id) => fallback.push((
-                        String::from(self.tokens.get(id as usize).map(String::as_str).unwrap_or("")),
+                        String::from(
+                            self.tokens
+                                .get(id as usize)
+                                .map(String::as_str)
+                                .unwrap_or(""),
+                        ),
                         Some(id),
                     )),
                     None => {
@@ -715,14 +716,14 @@ fn build_spm_tables(
     };
 
     let mut byte_ids = [None; BYTE_ALPHABET];
-    for index in 0..tokens.len() {
+    for (index, text) in tokens.iter().enumerate() {
         let is_byte = token_type
             .get(index)
             .is_some_and(|kind| *kind == token_type::BYTE);
         if !is_byte && !token_type.is_empty() {
             continue;
         }
-        if let Some(byte) = parse_byte_token(tokens[index].as_str()) {
+        if let Some(byte) = parse_byte_token(text.as_str()) {
             byte_ids[byte as usize].get_or_insert(index as u32);
         }
     }
@@ -1674,11 +1675,7 @@ mod tests {
             // No leading marker and no "th"/"he" tokens, so each character stands alone.
             assert_eq!(
                 tokenizer.encode("the"),
-                vec![
-                    vocab.id_of("t"),
-                    vocab.id_of("h"),
-                    vocab.id_of("e")
-                ]
+                vec![vocab.id_of("t"), vocab.id_of("h"), vocab.id_of("e")]
             );
             assert!(!tokenizer.add_bos() || tokenizer.bos_id().is_some());
         });
@@ -1694,7 +1691,14 @@ mod tests {
                 tokenizer.encode("\u{e9}"),
                 vec![vocab.id_of("<0xC3>"), vocab.id_of("<0xA9>")]
             );
-            for text in ["the", "the the", "\u{e9}", "a\u{e9}b", "日本語", "  two spaces"] {
+            for text in [
+                "the",
+                "the the",
+                "\u{e9}",
+                "a\u{e9}b",
+                "日本語",
+                "  two spaces",
+            ] {
                 assert_eq!(tokenizer.decode(&tokenizer.encode(text)), text, "{text:?}");
             }
             // U+2581 is the marker, not content: it always decodes back to a space.
@@ -1702,7 +1706,10 @@ mod tests {
             // Control tokens carry structure, not text.
             assert_eq!(tokenizer.decode(&[1, 2]), "");
             assert_eq!(tokenizer.token_bytes(1), Some(Vec::new()));
-            assert_eq!(tokenizer.token_bytes(vocab.id_of("<0x41>")), Some(vec![0x41]));
+            assert_eq!(
+                tokenizer.token_bytes(vocab.id_of("<0x41>")),
+                Some(vec![0x41])
+            );
         });
     }
 
@@ -1804,6 +1811,4 @@ mod tests {
             );
         });
     }
-
 }
-

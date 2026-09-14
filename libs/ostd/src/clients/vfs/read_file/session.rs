@@ -47,7 +47,23 @@ impl<'a, T: VfsReadOps> ReadSession<'a, T> {
             .iter()
             .try_fold(root, |current, name| self.open_dir(current, name))?;
         self.file = Some(self.open_file(dir, plan.file_name)?);
-        self.read_chunks(max_bytes)
+        let capacity = self.file_size_capacity(dir, plan.file_name, max_bytes);
+        self.read_chunks(max_bytes, capacity)
+    }
+
+    /// Bytes to reserve up front, from the file's own size.
+    ///
+    /// Without this the buffer grows by doubling, so a 27 MB read transiently needs ~40 MB — the
+    /// difference between a model that fits a Cell and one that does not. A backend that cannot
+    /// answer the stat leaves this at zero and the old growth applies.
+    fn file_size_capacity(&mut self, dir: ViDirHandle, name: &str, max_bytes: usize) -> usize {
+        let mut resp_buf = [0u8; IPC_BUF_SIZE];
+        match self.ops.call(&VfsRequest::StatAt { dir, name }, &mut resp_buf) {
+            Ok(VfsResponse::Stat { size, is_dir: false }) => usize::try_from(size)
+                .unwrap_or(max_bytes)
+                .min(max_bytes),
+            _ => 0,
+        }
     }
 
     pub(super) fn cleanup(&mut self) -> ViResult<()> {
@@ -98,9 +114,14 @@ impl<'a, T: VfsReadOps> ReadSession<'a, T> {
         }
     }
 
-    fn read_chunks(&mut self, max_bytes: usize) -> ViResult<Vec<u8>> {
+    fn read_chunks(&mut self, max_bytes: usize, capacity: usize) -> ViResult<Vec<u8>> {
         let file = self.file.ok_or(ViError::IO)?;
-        let mut bytes = Vec::with_capacity(max_bytes.min(MAX_READ_CHUNK as usize));
+        let reserve = if capacity > 0 {
+            capacity
+        } else {
+            max_bytes.min(MAX_READ_CHUNK as usize)
+        };
+        let mut bytes = Vec::with_capacity(reserve);
         let mut offset = 0u64;
         loop {
             let remaining = max_bytes.saturating_sub(bytes.len());
