@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["network_fallback_allowed","prompt_fits_wire"]};
