@@ -48,6 +48,7 @@ become the active phase* (incremental planning — we do not pre-spec everything
 | **P4** | `tool-peripheral` 🎯 | Robot demo: NL sensor/actuator control (SHT3x I2C + GPIO/PWM). **G1 showcase.** | 🔜 Ready (plan written 2026-07-12) — see [phase-04](./phase-04-tool-peripheral.md) |
 | **P5** | persistence/memory | Conversation + facts to `/data`; context trimming. (Haily KMS analog) | 📋 Planned |
 | **P6** | ViUI chat (optional) | On-screen chat surface (robot-dashboard pattern). | 📋 Backlog |
+| **P7a** | local CPU inference backend | [Phase 07a](./phase-07a-local-inference-backend.md): `llm-gateway` asks `/bin/ai` (Spec 24 `service::AI`) first, network endpoint second; printed per turn. | ✅ **COMPLETE** — `hypha-local-ai` QEMU gate green; also fixed `/bin/hypha` being unlaunchable |
 | **P7** | G3 NPU backend | Swap llm-gateway backend to local NPU model via Tier 1b. | 📋 G3 |
 
 ## Key dependencies & decisions

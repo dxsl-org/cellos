@@ -8,6 +8,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### 🚀 Improvements
+- hypha: `llm-gateway` now asks the on-device inference Cell first (`/bin/ai`, Spec 24 `service::AI`) and names the backend and model it used per turn; the OpenAI-compatible network endpoint stays as the fallback for images with no local model, and only absence (`NoService`/`NoModel`) or a prompt above `ai_proto::MAX_PROMPT_BYTES` reaches it.
 - ai/httpd: expose `POST /api/infer` as a bounded JSON consumer of the frozen `AiClient`; canonical RV64 hostfwd QEMU coverage proves prompt → inference Cell → response, `max_tokens`, and caller-error handling.
 - httpd/build: wait for `Content-Length` bodies across TCP segments, reject prompts over the AI wire limit, and build/sign the current `service-httpd` binary into `gen_disk.ps1` instead of packaging a stale `/bin/httpd`.
 - vfs: introduce CellosFS Native pure-Rust CoW extent engine (`libs/cellos-fs`), replacing external RedoxFS and LittleFS dependencies with power-loss-resilient dual-ring superblocks and vector block DMA
@@ -45,6 +46,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - performance: release builds for all bootstrap table entries
 
 ### 🐛 Fixes
+- hypha: restore `/bin/hypha` launchability. The reviewed `(shell, Path, /bin/hypha)` launch edge carries `spawn`, but the shell's VFS+grant spawn takes the ELF route, which `launch_profile::authorize` refuses for capability-bearing targets, and the raw-path fallback resolves only through the kernel loader's VIFS1 (the block table is never probed on RV64). Both routes failed, so the app printed `command not found`; `gen_disk.ps1` now stages `/bin/hypha` and `/bin/tool-spawn` into VIFS1, the same class as `/bin/bench`.
 - lab/base: reject reactivation of retired configuration epochs so rollback cannot revive stale readiness observations
 - base: revoke stale active dispatch authority when newer authenticated cross-job evidence reports an exclusion
 - bench: propagate scenario failures, validate intended IPC peers, fix control-loop timeout units, and retain strict serial JSON evidence

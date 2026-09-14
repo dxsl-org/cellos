@@ -1112,10 +1112,16 @@ jobs:
         # and define no panic/alloc lang items, so they run on the host without a
         # bare-metal target. text-engine holds the pure grep/sed/awk/top logic that
         # app-shell cannot host-test itself (it links ostd, which owns those items).
+        # ai-proto/ai-sdk (the frozen AI wire contract and client) and hypha-llm-gateway
+        # (whose local-backend decision table is policy, not plumbing) are host-testable
+        # for the same reason: ai-sdk keeps `ostd` behind the `ostd-transport` feature,
+        # which stays off for host tests, and the gateway links ostd only in its binary.
         run: |
           cargo test -p types       --target x86_64-unknown-linux-gnu
           cargo test -p api         --target x86_64-unknown-linux-gnu
           cargo test -p text-engine --target x86_64-unknown-linux-gnu
+          cargo test -p ai-proto -p ai-sdk -p hypha-llm-gateway \
+            --target x86_64-unknown-linux-gnu
 
   f1-admission:
     # Tier-1 admission gate (Spec 18 §2.1): the same `cellos-sign --check` that
@@ -1289,6 +1295,23 @@ jobs:
           cd tests/integration
           cargo test --test http-smoke -- --test-threads=1 \
             2>&1 | tee "$GITHUB_WORKSPACE/software-evidence/http-smoke.log"
+      - name: Run AI consumer evidence (HTTP front end + Hypha local backend)
+        shell: bash
+        env:
+          CARGO_BUILD_TARGET: x86_64-unknown-linux-gnu
+        # These gates drive the canonical disk_v3.img built above, through the shipped consumer
+        # paths rather than the service's own oracle: `http-infer` POSTs /api/infer over SLIRP
+        # hostfwd, `hypha-local-ai` types turns the gateway answers from the /bin/ai Cell, and the
+        # two P1/P3 suites are the spawn-path regression guard for the launch edge that decides
+        # whether /bin/hypha can start at all (they were stale — nothing ran them — until that edge
+        # was fixed). --test-threads=1: each boots its own TCG QEMU and TCG is CPU-bound.
+        run: |
+          set -o pipefail
+          cd tests/integration
+          for gate in http-infer hypha-local-ai hypha-boot hypha-p3-boot; do
+            cargo test --test "$gate" -- --test-threads=1 \
+              2>&1 | tee "$GITHUB_WORKSPACE/software-evidence/$gate.log"
+          done
       - name: Run boot + network + shell + VFS tests
         shell: bash
         env:

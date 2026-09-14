@@ -19,6 +19,9 @@ doc = false
 ostd        = { path = "../../../../libs/ostd", version = "0.2.0", features = ["json"] }
 api         = { path = "../../../../libs/api", version = "0.1.0" }
 agent-proto = { path = "../../../../libs/agent-proto", version = "0.1.0" }
+# Spec 24 consumer path: the gateway asks the on-device inference service (`service::AI`) first.
+ai-proto    = { path = "../../../../libs/ai-proto", version = "0.1.0" }
+ai-sdk      = { path = "../../../../libs/ai-sdk", version = "0.1.0", features = ["ostd-transport"] }
 postcard    = { version = "1", default-features = false, features = ["alloc"] }
 
 [build-dependencies]

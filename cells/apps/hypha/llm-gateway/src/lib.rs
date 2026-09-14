@@ -8,3 +8,4 @@ extern crate alloc;
 pub mod http;
 #[path = "json-validation.rs"]
 mod json_validation;
+pub mod local;

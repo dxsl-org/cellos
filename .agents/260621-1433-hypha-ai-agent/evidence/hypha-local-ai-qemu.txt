@@ -1,0 +1,90 @@
+Hypha local-inference backend — QEMU evidence
+Date: 2026-09-14
+
+Image preparation
+-----------------
+Command: pwsh -NoProfile -File ./gen_disk.ps1
+Result: `Done. disk_v3.img is ready.` The generator signed 49 cells after a passing F1/F5 scan and
+reported `Created FAT16 image at kernel/src/embedded/kernel_fs.img: 17 file(s)` — the two extra
+files are `/bin/hypha` and `/bin/tool-spawn`, staged into VIFS1 because the kernel-resolved path
+route is the only one that may carry a capability-bearing target (see the launch-edge finding
+below). `/bin/llm-gateway` in the cell table is 180912 bytes, the local-backend build.
+
+Host checks
+-----------
+* `cargo build --release -p hypha-llm-gateway` (riscv64gc-unknown-none-elf): PASS.
+* `cargo test -p hypha-llm-gateway --target x86_64-unknown-linux-gnu`: 9 passed, 0 failed —
+  7 pre-existing protocol tests plus `wire_budget_boundary_is_the_ai_message_limit` and
+  `only_missing_local_inference_falls_back_to_the_network`.
+* `cargo test -p ai-proto -p ai-sdk --target x86_64-unknown-linux-gnu`: 6 + 8 passed.
+
+End-to-end gate
+---------------
+Command:
+  cd tests/integration
+  CARGO_BUILD_TARGET=x86_64-unknown-linux-gnu cargo test --test hypha-local-ai -- --nocapture
+
+Result: PASS. The test boots the canonical RV64 image, launches `/bin/hypha` from the shell, and
+types two turns. Observed serial:
+
+  Hypha — Cellos AI agent (P3: fs+sys+spawn tools). Type 'exit' to quit.
+  [hypha/llm-gateway] service ready
+  [hypha] tool-fs ready
+  [hypha] tool-sys ready
+  [hypha] tool-spawn ready
+  you> hello
+  [gw] local AI backend: tiny-llama-64, 1 tokens
+  hypha> ~
+  you> again
+  [gw] local AI backend: tiny-llama-64, 1 tokens
+  hypha> ~
+  you> exit
+  [hypha] bye
+
+Assertions: the gateway names the local backend and the resident model; both turns produce a reply
+line; the finished session slot is released so the second turn is seated; the network transport
+marker (`plaintext mode`) never appears, so no turn reached the network backend; and `exit` still
+returns to the shell.
+
+Launch-edge finding (reproduced, then fixed)
+--------------------------------------------
+First gate run, before the VIFS1 staging:
+
+  [loader] DENY launch edge: caller=18 name=shell route=Elf target=/bin/hypha
+           spawn_cap=false supervisor_cap=false
+  shell: command not found: hypha
+
+The reviewed `(shell, Path, /bin/hypha)` edge exists and carries `spawn`, but the shell's VFS+grant
+spawn attempts the ELF route first, and `launch_profile::authorize` refuses any capability-bearing
+ELF route ("caller-owned bytes must not borrow authority"). The documented fallback is the raw
+`SpawnFromPath` route, which resolves through the kernel loader: VIFS1 first, then the block table.
+`EarlyLoader::probe()` however runs before any block driver exists on RV64 and is never retried, so
+the block table stays unprobed and VIFS1 is the only source that answers. `/bin/hypha` was in
+neither — every route failed. `/bin/tool-spawn` is the same case on Hypha's own child edge (its
+reviewed ceiling is `{spawn}`), and `gen_disk.ps1` now stages both into VIFS1, the same class as
+`/bin/bench`.
+
+Root cause of the now-common `DENY ... route=Elf target=/bin/hypha` line in a passing run: the shell
+tries the ELF route first and falls back; the denial and the successful path spawn are one event.
+
+Regression guard
+----------------
+The two Hypha suites that already existed but ran nowhere now pass again after the staging, so they
+are wired into CI beside this gate:
+
+  cargo test --test hypha-boot      1 passed, 8.10 s
+  cargo test --test hypha-p3-boot   1 passed, 8.08 s
+
+  cargo test --test http-infer      1 passed, 89.82 s (unchanged by this slice; re-run because the
+                                    image build changed)
+
+Harness note
+------------
+One harness serial write of `exit` was observed to vanish (no kernel echo of the keystrokes) while
+the same input typed over QEMU's stdio console is read normally, so the gate retries that line once.
+Serial write errors are swallowed by the harness, which is why the log cannot distinguish a dropped
+write from an ignored command.
+
+Ceiling: QEMU software integration only. The resident model is the deterministic fixture, whose
+output is not language — this evidence covers wiring, not text quality, latency, throughput, board,
+accelerator, or production qualification.

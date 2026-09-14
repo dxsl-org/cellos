@@ -73,7 +73,9 @@ fn prerequisites_ok() -> bool {
     if !qemu_ok {
         eprintln!("SKIP http-infer: qemu-system-riscv64 not on PATH");
     }
-    kernel_ok && disk_ok && qemu_ok
+    // Host/QEMU prerequisites missing must fail — not silently pass — in CI, where the
+    // canonical image is built by the same job.
+    vicell_integration_tests::ci_guard(kernel_ok && disk_ok && qemu_ok)
 }
 
 /// One HTTP/1.1 request; returns the raw response bytes.

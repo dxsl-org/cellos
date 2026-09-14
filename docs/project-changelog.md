@@ -3,6 +3,35 @@
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
 ## [Unreleased] Development-first hardware-constrained execution
+## [2026-09-14] Hypha answers from the local inference Cell (Spec 24 second consumer)
+- `cells/apps/hypha/llm-gateway` is local-first: it probes `service::AI`, asks `/bin/ai` for a
+  completion when a model is resident and the prompt fits one AI IPC message, and prints the backend
+  and the model it used. The OpenAI-compatible network endpoint remains the second backend, reached
+  only when local inference is absent (`NoService`/`NoModel`) or the prompt exceeds
+  `ai_proto::MAX_PROMPT_BYTES`; a failed local attempt (`Busy`, transport, poll limit) is reported
+  rather than silently retried over the network. The two rules are policy, so they live in
+  `local.rs` with host tests, not only in the QEMU gate.
+- The gate `tests/integration/tests/hypha-local-ai.rs` boots the canonical image, launches
+  `/bin/hypha`, and types two turns: both are answered by `[gw] local AI backend: tiny-llama-64`,
+  each prints a reply line, the second turn proves the service released the finished session slot,
+  and the network transport marker never appears.
+- Defect found and fixed on the way: **`/bin/hypha` could not be launched at all.** The reviewed
+  `(shell, Path, /bin/hypha)` launch edge carries `spawn`, but the shell's spawn takes the ELF route
+  (VFS + grant), which `launch_profile::authorize` refuses for capability-bearing targets
+  ("caller-owned bytes must not borrow authority"), and the documented raw-path fallback resolves
+  only through the kernel loader's VIFS1 — the block table is never probed on RV64, because
+  `EarlyLoader::probe()` runs before any block driver exists and is never retried. Both routes
+  failed and the shell printed `command not found: hypha`. `gen_disk.ps1` now stages `/bin/hypha`
+  and `/bin/tool-spawn` (the same case on Hypha's child edge) into VIFS1, the same class as
+  `/bin/bench`. The stale `hypha-boot`/`hypha-p3-boot` suites never caught it because no CI job runs
+  them.
+- CI: `boot-suite` now runs the canonical-image consumer gates (`http-infer`, `hypha-local-ai`) and
+  uploads their logs as software evidence; `unit-tests` gained the `ai-proto`, `ai-sdk`, and
+  `hypha-llm-gateway` host suites, and both new QEMU gates fail (not skip) when their image
+  prerequisites are missing under CI.
+- Non-claims: the canonical image carries the deterministic fixture, so this evidence covers wiring,
+  not text quality, latency, or throughput. QEMU only — no board, accelerator, or production claim.
+
 ## [2026-09-14] HTTP inference front end: HTTP → Cell → JSON (Spec 24 consumer)
 - `cells/services/httpd` now routes `POST /api/infer` to the frozen `ai-sdk::AiClient`. The raw UTF-8
   request body is the prompt; `max_tokens` defaults to 24 and is clamped to 1–64. The response names

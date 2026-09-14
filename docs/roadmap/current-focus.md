@@ -66,6 +66,15 @@ The next consumer slice is now shipped at the same ceiling: `service-httpd` acce
 `POST /api/infer`, calls the frozen `AiClient` over typed IPC, and returns bounded JSON; the canonical
 RV64 image passes the hostfwd QEMU gate. This proves wiring, not latency, streaming, or model quality.
 
+Hypha is the second consumer: its `llm-gateway` Cell answers a turn from `/bin/ai` (local-first) and
+only falls back to the OpenAI-compatible network endpoint when no local inference is registered or
+loaded (`.agents/260621-1433-hypha-ai-agent/phase-07a-local-inference-backend.md`). The
+`hypha-local-ai` gate types two turns in QEMU and requires the local backend line, a reply line, and
+no network marker. That gate also reproduced and fixed a real defect: `/bin/hypha` was unreachable
+from the console, because the reviewed shell launch edge carries `spawn`, the ELF route refuses
+capability-bearing targets, and the documented raw-path fallback resolves only through the kernel
+loader's VIFS1 — where the app was not staged.
+
 ## Current executable work
 
 - Continue useful QEMU software and integration work to the `qemu` ceiling.

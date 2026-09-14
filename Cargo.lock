@@ -1640,6 +1640,8 @@ name = "hypha-llm-gateway"
 version = "0.1.0"
 dependencies = [
  "agent-proto",
+ "ai-proto",
+ "ai-sdk",
  "api",
  "cell-build",
  "ostd",

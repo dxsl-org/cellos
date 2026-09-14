@@ -496,6 +496,19 @@ $kfs_args += @($free_bin, "/bin/free")
 # the KERNEL loader (VIFS1/P2 only, no VFS), so the child spawns need VIFS1.
 if ($bench_bin)                       { $kfs_args += @($bench_bin,       "/bin/bench") }
 if (Test-Path "$rel_dir/bench-probe") { $kfs_args += @($bench_probe_bin, "/bin/bench-probe") }
+# hypha + tool-spawn: the reviewed shell/hypha launch edges carry `spawn`, and
+# `launch_profile::authorize` refuses a capability-bearing ELF route
+# ("caller-owned bytes must not borrow authority"), so the shell's VFS+grant
+# attempt is denied and the spawn falls back to the raw SpawnFromPath route —
+# which resolves through the KERNEL loader. That loader reads VIFS1 and, for
+# non-bootstrap paths, the block table; but `EarlyLoader::probe()` runs before
+# any block driver exists on RV64 and is never retried, so the block table stays
+# unprobed and VIFS1 is the only source that answers. Without these two rows
+# `/bin/hypha` is denied on both routes ("command not found") and the app is
+# unreachable from the console; `/bin/tool-spawn` is the same case one level
+# down, on Hypha's own child edge.
+if (Test-Path $hypha_core_bin)        { $kfs_args += @($hypha_core_bin,  "/bin/hypha") }
+if (Test-Path $hypha_tool_spawn_bin)  { $kfs_args += @($hypha_tool_spawn_bin, "/bin/tool-spawn") }
 if ($include_capacity_probe -and (Test-Path $capacity_probe_bin)) {
     $kfs_args += @($capacity_probe_bin, "/bin/capacity-probe")
 }
