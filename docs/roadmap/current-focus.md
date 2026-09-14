@@ -112,7 +112,11 @@ the lane's first exact-device evidence. Two board-only findings are recorded the
 (model embedded in VIFS1) panics the kernel at compositor setup where the same image passes on QEMU
 aarch64 virt — reported to the board lane — and the shell mangles a path argument into
 `/bin//bin/<name>`, so the console command is the bare `ai-test`. The checkpoint therefore lives on
-the card (`/mnt/sd/ai-model.gguf`, the service's second candidate path) instead of inside the image.
+the card (`/mnt/sd/ai-model.gguf`, the service's second candidate path) instead of inside the image —
+and a third board run with a real 1.1 MB checkpoint (`stories260K`) reproduced the whole path at the
+board ceiling: `[ai] model bytes: 1185376 read in 70 ms`, `model ready: 512 vocab, context 2048,
+resident bytes 1220116`, `[ai-test] PASS`. That is the RPi3 memory-budget datapoint for a real
+checkpoint; the 25.6 MiB case stays blocked by the two board defects above.
 
 ## Current executable work
 

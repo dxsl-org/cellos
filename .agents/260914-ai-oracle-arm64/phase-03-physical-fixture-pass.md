@@ -35,6 +35,24 @@ This is the lane's first exact-device evidence: the same golden ids and embeddin
 reproduce, produced by the real service on real silicon, with the real console path. Artifacts:
 `evidence/board-fixture-boot.log` (boot + service) and `evidence/board-fixture-run.log` (the oracle).
 
+A second board run followed with a **real checkpoint** small enough to embed and still keep the
+payload in the size class that boots (`stories260K.gguf`, 1 185 376 B; payload
+`cellos-ai-260k.uimg`, 10 027 072 B):
+
+```
+[ai] model path: /bin/ai-model.gguf
+[ai] model bytes: 1185376 read in 70 ms
+[ai] model ready: 512 vocab, context 2048, resident bytes 1220116
+[ai-test] generate: 24 tokens in 739 ms
+[ai-test] PASS
+```
+
+`resident bytes 1220116` is the AI cell's physical footprint on the board for that checkpoint, inside
+the 32 MiB Cell VA slot — the memory-budget number this leg exists for. The 25.6 MiB-checkpoint case
+is *not* covered: it is blocked by phase 04 (a 43.6 MB embedded payload panics the kernel) and phase 05
+(a 26.7 MB card-resident checkpoint does not finish loading). Both are board-path defects with
+reproductions, reported rather than worked around silently.
+
 ## Three defects the board found that QEMU could not
 
 1. **The shell never accepts a path argument.** Typing `/bin/ai-test` produced

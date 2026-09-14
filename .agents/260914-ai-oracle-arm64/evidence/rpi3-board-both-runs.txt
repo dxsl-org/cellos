@@ -1,0 +1,57 @@
+Cellos AI inference oracle on physical Raspberry Pi 3 — evidence summary
+=======================================================================
+
+Two board runs over the existing static-TFTP netboot lane, both driven from the board's own console
+(`ai-test`) with a timestamped transcript captured by `tools/rpi3-netboot/serve-ai-oracle.ps1`.
+Board: Raspberry Pi 3 Model B+ (U-Boot reports `RPI 3 Model B (0xa22082)`, `DRAM: 948 MiB`).
+
+Run 1 — deterministic fixture (2026-09-14T22:02Z, payload `cellos-ai-fixture.uimg`, 10 027 072 B)
+---------------------------------------------------------------------------------------------------
+Boot: `[service-registry] 15 -> tid 10` — the AI service came up under init supervision.
+
+    [ai] model ready: 270 vocab, context 128, resident bytes 115488
+    [ai-test] model=tiny-llama-64
+    [ai-test] generate: 8 tokens in 59 ms (135593 tokens/s x1000, 6 polls)
+    [ai-test] greedy ids matched: 8 tokens over 6 polls
+    [ai-test] embedding matched: 64 dims
+    [ai-test] abandoned session released; service still serving
+    [ai-test] prompt stream matched: 8 tokens
+    [ai-test] PASS
+
+Run 2 — real checkpoint (2026-09-15T06:18Z, payload `cellos-ai-260k.uimg`, 10 027 072 B)
+----------------------------------------------------------------------------------------
+`stories260K.gguf`, 1 185 376 B, a real llama2.c checkpoint (512-token SentencePiece vocabulary).
+
+    [ai] model path: /bin/ai-model.gguf
+    [ai] model bytes: 1185376 read in 70 ms
+    [ai] engine load: 1 ms
+    [ai] model ready: 512 vocab, context 2048, resident bytes 1220116
+    [ai-test] model=llama
+    [ai-test] vocab=512 context=2048 sessions=4
+    [ai-test] generate: 24 tokens in 739 ms (32476 tokens/s x1000, 13 polls)
+    [ai-test] real model continuation: 24 tokens
+    [ai-test] text:outing.ouleyouf andlleleolf,.lllllloulf,
+    [ai-test] model vocab 512
+    [ai-test] real model embeddings ok: 3 texts
+    [ai-test] abandoned session released; service still serving
+    [ai-test] prompt stream matched: 24 tokens
+    [ai-test] PASS
+
+What these numbers are
+----------------------
+- `resident bytes 1220116` for a 1 185 376 B checkpoint is the AI cell's footprint on the board:
+  weights + KV cache + scratch, inside the 32 MiB Cell VA slot and the 29 MiB `large-arena`.
+- 70 ms to read 1.2 MB through the kernel capability path, against 20+ minutes that never completed
+  for 26.7 MB through the VFS IPC path (4000 B per round trip; phase-05).
+- 24 tokens in 739 ms is a QEMU-free, TCG-free number on real Cortex-A53 silicon for that checkpoint.
+
+What these numbers are not
+--------------------------
+No production, security, or fleet claim, and not the 25.6 MiB-checkpoint case: that size is blocked
+on this board by two reproduced defects of the board path — a 43.6 MB embedded payload panics the
+kernel at compositor setup (phase-04), and a 26.7 MB card-resident checkpoint does not finish loading
+(phase-05). Both are reported with their reproductions; neither is a property of the engine.
+
+Also recorded from these runs: the console command is the bare `ai-test` (the shell prefixes `/bin/`
+and mangles an explicit path into `/bin//bin/<name>`), and the board's USB/Ethernet driver retries
+`[dwc2] TIMEOUT … TX packet transmission failed` continuously once the NIC cell is up.
