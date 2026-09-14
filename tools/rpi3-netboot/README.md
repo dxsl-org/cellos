@@ -102,6 +102,24 @@ and `N` hot-path bring-up probes. Static guards reject their return while keepin
 the fault-only `FS0`-`FS3` diagnostics. The real-board 30-second boot and `help`
 gate contained zero `T15` or `ANM` sequences.
 
+## AI inference oracle over this lane
+
+`serve-ai-oracle.ps1` drives the lane for the Spec 24 board run: it stages a chosen payload as
+`cellos.uimg` (keeping the previous one as `cellos.uimg.before-ai-<stamp>`), applies the same NIC and
+firewall preflight, starts the server, reads the board's UART, waits for `[ai] model ready` before
+typing `/bin/ai-test` at the shell, and writes a timestamped transcript with the verdict to
+`.agents/260914-ai-oracle-arm64/evidence/`.
+
+```powershell
+pwsh -File .\tools\rpi3-netboot\serve-ai-oracle.ps1 -Variant fixture -ApplyNetworkConfig -ApplyFirewall
+pwsh -File .\tools\rpi3-netboot\serve-ai-oracle.ps1 -Variant 15m -ComPort COM3
+```
+
+`fixture` (10.0 MB) is the deterministic tiny checkpoint; `15m` (43.6 MB) is the real 25.6 MiB
+checkpoint whose resident-bytes line is the RPi3 memory-budget evidence. Writing to the Pi needs the
+adapter's TX on pin 10; with the unattended wiring (Pi TXD0 -> adapter RX only) pass
+`-DriveShell:$false` and type `/bin/ai-test` yourself.
+
 ## Restore the host network
 
 ```powershell
