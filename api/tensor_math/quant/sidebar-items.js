@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["Q8_0_BLOCK_BYTES","Q8_0_BLOCK_WEIGHTS"],"fn":["f16_to_f32","q8_0_block_to_f32"]};
+window.SIDEBAR_ITEMS = {"constant":["Q8_0_BLOCK_BYTES","Q8_0_BLOCK_WEIGHTS"],"fn":["f16_to_f32","f32_to_f16","q8_0_block_to_f32","q8_0_row_from_f32"]};
