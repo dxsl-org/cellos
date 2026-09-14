@@ -144,40 +144,44 @@
 <a href=#144 id=144 data-nosnippet>144</a>    <span class="doccomment">/// Positional read: open, seek, read once.
 <a href=#145 id=145 data-nosnippet>145</a>    ///
 <a href=#146 id=146 data-nosnippet>146</a>    /// The kernel exposes `SeekCap` on the same allowlist bit as `ReadCap`, so a positional read
-<a href=#147 id=147 data-nosnippet>147</a>    /// costs one seek plus one read instead of re-reading the file from the start. Callers that
-<a href=#148 id=148 data-nosnippet>148</a>    /// read a file in chunks (the AI service reading a model, the shell copying one) depend on
-<a href=#149 id=149 data-nosnippet>149</a>    /// this: without it the only option was to re-read the whole file per chunk.
-<a href=#150 id=150 data-nosnippet>150</a>    </span><span class="kw">fn </span>read_at(<span class="kw-2">&amp;</span><span class="self">self</span>, path: <span class="kw-2">&amp;</span>str, offset: u64, buf: <span class="kw-2">&amp;mut </span>[u8]) -&gt; usize {
-<a href=#151 id=151 data-nosnippet>151</a>        <span class="kw">let </span>upper: alloc::string::String = path.chars().map(|c| c.to_ascii_uppercase()).collect();
-<a href=#152 id=152 data-nosnippet>152</a>        <span class="kw">let </span>cap = <span class="kw">match </span>sys_open_cap(<span class="kw-2">&amp;</span>upper) {
-<a href=#153 id=153 data-nosnippet>153</a>            <span class="prelude-val">Ok</span>(c) =&gt; c,
-<a href=#154 id=154 data-nosnippet>154</a>            <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; <span class="kw">return </span><span class="number">0</span>,
-<a href=#155 id=155 data-nosnippet>155</a>        };
-<a href=#156 id=156 data-nosnippet>156</a>        <span class="kw">let </span>read = <span class="kw">match </span>sys_seek_cap(cap, offset <span class="kw">as </span>i64, <span class="number">0</span>) {
-<a href=#157 id=157 data-nosnippet>157</a>            <span class="prelude-val">Ok</span>(<span class="kw">_</span>) =&gt; sys_read_cap(cap, buf).unwrap_or_default(),
-<a href=#158 id=158 data-nosnippet>158</a>            <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; <span class="number">0</span>,
+<a href=#147 id=147 data-nosnippet>147</a>    /// costs one seek plus one read instead of re-reading the file from the start.
+<a href=#148 id=148 data-nosnippet>148</a>    ///
+<a href=#149 id=149 data-nosnippet>149</a>    /// **Known limitation (measured, not theoretical).** This opens a fresh capability per call, so
+<a href=#150 id=150 data-nosnippet>150</a>    /// every chunk seeks from the start of the file and the VIFS1 read is O(offset) per chunk —
+<a href=#151 id=151 data-nosnippet>151</a>    /// O(n²) for a whole-file chunked read. It is invisible for the sizes this path normally sees
+<a href=#152 id=152 data-nosnippet>152</a>    /// (a 1.2 MB model reads in 5.4 s) and it is why a 25 MB model read stalls: the fix is to keep
+<a href=#153 id=153 data-nosnippet>153</a>    /// the capability and its cursor per VFS file handle instead of per call.
+<a href=#154 id=154 data-nosnippet>154</a>    </span><span class="kw">fn </span>read_at(<span class="kw-2">&amp;</span><span class="self">self</span>, path: <span class="kw-2">&amp;</span>str, offset: u64, buf: <span class="kw-2">&amp;mut </span>[u8]) -&gt; usize {
+<a href=#155 id=155 data-nosnippet>155</a>        <span class="kw">let </span>upper: alloc::string::String = path.chars().map(|c| c.to_ascii_uppercase()).collect();
+<a href=#156 id=156 data-nosnippet>156</a>        <span class="kw">let </span>cap = <span class="kw">match </span>sys_open_cap(<span class="kw-2">&amp;</span>upper) {
+<a href=#157 id=157 data-nosnippet>157</a>            <span class="prelude-val">Ok</span>(c) =&gt; c,
+<a href=#158 id=158 data-nosnippet>158</a>            <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; <span class="kw">return </span><span class="number">0</span>,
 <a href=#159 id=159 data-nosnippet>159</a>        };
-<a href=#160 id=160 data-nosnippet>160</a>        sys_close_cap(cap);
-<a href=#161 id=161 data-nosnippet>161</a>        read
-<a href=#162 id=162 data-nosnippet>162</a>    }
-<a href=#163 id=163 data-nosnippet>163</a>
-<a href=#164 id=164 data-nosnippet>164</a>    <span class="kw">fn </span>write(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _path: <span class="kw-2">&amp;</span>str, _content: <span class="kw-2">&amp;</span>[u8]) -&gt; bool {
-<a href=#165 id=165 data-nosnippet>165</a>        <span class="bool-val">false
-<a href=#166 id=166 data-nosnippet>166</a>    </span>}
-<a href=#167 id=167 data-nosnippet>167</a>    <span class="kw">fn </span>append(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _path: <span class="kw-2">&amp;</span>str, _content: <span class="kw-2">&amp;</span>[u8]) -&gt; bool {
-<a href=#168 id=168 data-nosnippet>168</a>        <span class="bool-val">false
-<a href=#169 id=169 data-nosnippet>169</a>    </span>}
-<a href=#170 id=170 data-nosnippet>170</a>    <span class="kw">fn </span>mkdir(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _path: <span class="kw-2">&amp;</span>str) -&gt; bool {
-<a href=#171 id=171 data-nosnippet>171</a>        <span class="bool-val">false
-<a href=#172 id=172 data-nosnippet>172</a>    </span>}
-<a href=#173 id=173 data-nosnippet>173</a>    <span class="kw">fn </span>rmdir(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _path: <span class="kw-2">&amp;</span>str) -&gt; bool {
-<a href=#174 id=174 data-nosnippet>174</a>        <span class="bool-val">false
-<a href=#175 id=175 data-nosnippet>175</a>    </span>}
-<a href=#176 id=176 data-nosnippet>176</a>    <span class="kw">fn </span>unlink(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _path: <span class="kw-2">&amp;</span>str) -&gt; bool {
-<a href=#177 id=177 data-nosnippet>177</a>        <span class="bool-val">false
-<a href=#178 id=178 data-nosnippet>178</a>    </span>}
-<a href=#179 id=179 data-nosnippet>179</a>    <span class="kw">fn </span>rmdir_recursive(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _path: <span class="kw-2">&amp;</span>str) -&gt; bool {
-<a href=#180 id=180 data-nosnippet>180</a>        <span class="bool-val">false
-<a href=#181 id=181 data-nosnippet>181</a>    </span>}
-<a href=#182 id=182 data-nosnippet>182</a>}
+<a href=#160 id=160 data-nosnippet>160</a>        <span class="kw">let </span>read = <span class="kw">match </span>sys_seek_cap(cap, offset <span class="kw">as </span>i64, <span class="number">0</span>) {
+<a href=#161 id=161 data-nosnippet>161</a>            <span class="prelude-val">Ok</span>(<span class="kw">_</span>) =&gt; sys_read_cap(cap, buf).unwrap_or_default(),
+<a href=#162 id=162 data-nosnippet>162</a>            <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; <span class="number">0</span>,
+<a href=#163 id=163 data-nosnippet>163</a>        };
+<a href=#164 id=164 data-nosnippet>164</a>        sys_close_cap(cap);
+<a href=#165 id=165 data-nosnippet>165</a>        read
+<a href=#166 id=166 data-nosnippet>166</a>    }
+<a href=#167 id=167 data-nosnippet>167</a>
+<a href=#168 id=168 data-nosnippet>168</a>    <span class="kw">fn </span>write(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _path: <span class="kw-2">&amp;</span>str, _content: <span class="kw-2">&amp;</span>[u8]) -&gt; bool {
+<a href=#169 id=169 data-nosnippet>169</a>        <span class="bool-val">false
+<a href=#170 id=170 data-nosnippet>170</a>    </span>}
+<a href=#171 id=171 data-nosnippet>171</a>    <span class="kw">fn </span>append(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _path: <span class="kw-2">&amp;</span>str, _content: <span class="kw-2">&amp;</span>[u8]) -&gt; bool {
+<a href=#172 id=172 data-nosnippet>172</a>        <span class="bool-val">false
+<a href=#173 id=173 data-nosnippet>173</a>    </span>}
+<a href=#174 id=174 data-nosnippet>174</a>    <span class="kw">fn </span>mkdir(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _path: <span class="kw-2">&amp;</span>str) -&gt; bool {
+<a href=#175 id=175 data-nosnippet>175</a>        <span class="bool-val">false
+<a href=#176 id=176 data-nosnippet>176</a>    </span>}
+<a href=#177 id=177 data-nosnippet>177</a>    <span class="kw">fn </span>rmdir(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _path: <span class="kw-2">&amp;</span>str) -&gt; bool {
+<a href=#178 id=178 data-nosnippet>178</a>        <span class="bool-val">false
+<a href=#179 id=179 data-nosnippet>179</a>    </span>}
+<a href=#180 id=180 data-nosnippet>180</a>    <span class="kw">fn </span>unlink(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _path: <span class="kw-2">&amp;</span>str) -&gt; bool {
+<a href=#181 id=181 data-nosnippet>181</a>        <span class="bool-val">false
+<a href=#182 id=182 data-nosnippet>182</a>    </span>}
+<a href=#183 id=183 data-nosnippet>183</a>    <span class="kw">fn </span>rmdir_recursive(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _path: <span class="kw-2">&amp;</span>str) -&gt; bool {
+<a href=#184 id=184 data-nosnippet>184</a>        <span class="bool-val">false
+<a href=#185 id=185 data-nosnippet>185</a>    </span>}
+<a href=#186 id=186 data-nosnippet>186</a>}
 </code></pre></div></section></main></body></html>
