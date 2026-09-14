@@ -79,97 +79,100 @@
 <a href=#79 id=79 data-nosnippet>79</a>    ReadDir,
 <a href=#80 id=80 data-nosnippet>80</a>    OpenCap,
 <a href=#81 id=81 data-nosnippet>81</a>    ReadCap,
-<a href=#82 id=82 data-nosnippet>82</a>    CloseCap,
-<a href=#83 id=83 data-nosnippet>83</a>    <span class="comment">// NOTE: deliberately NO SetTimer. VFS never calls it — a "SetTimer (bit 11)
-<a href=#84 id=84 data-nosnippet>84</a>    // denied for tid &lt;vfs&gt;" kernel warn on x86 is the CANARY for the known x86
-<a href=#85 id=85 data-nosnippet>85</a>    // syscall-redispatch corruption (syscall number read as user CS = 0x23 = 35
-<a href=#86 id=86 data-nosnippet>86</a>    // with a pointer as the tick count; see TODO #9 / x86 q35 P02). Allowing it
-<a href=#87 id=87 data-nosnippet>87</a>    // turns that corruption into an unbounded sleep that hangs the boot.
-<a href=#88 id=88 data-nosnippet>88</a></span>];
-<a href=#89 id=89 data-nosnippet>89</a>
-<a href=#90 id=90 data-nosnippet>90</a><span class="macro">ostd::declare_custom_heap!</span>(<span class="number">4 </span>* <span class="number">1024 </span>* <span class="number">1024</span>);
-<a href=#91 id=91 data-nosnippet>91</a>
-<a href=#92 id=92 data-nosnippet>92</a><span class="attr">#[no_mangle]
-<a href=#93 id=93 data-nosnippet>93</a></span><span class="kw">pub fn </span>main() {
-<a href=#94 id=94 data-nosnippet>94</a>    init_custom_heap();
-<a href=#95 id=95 data-nosnippet>95</a>    println(<span class="string">"VFS Service v0.2: RamFS + mkdir/rmdir/unlink IPC (typed postcard)"</span>);
-<a href=#96 id=96 data-nosnippet>96</a>    <span class="comment">// VfsManager::new() mounts all backends, including the FAT volume on the
-<a href=#97 id=97 data-nosnippet>97</a>    // VirtIO disk (which logs its own success/fallback status).
-<a href=#98 id=98 data-nosnippet>98</a>    </span><span class="kw">let </span>vfs = VfsManager::new();
-<a href=#99 id=99 data-nosnippet>99</a>    <span class="attr">#[cfg(feature = <span class="string">"test-hooks"</span>)]
-<a href=#100 id=100 data-nosnippet>100</a>    </span>{
-<a href=#101 id=101 data-nosnippet>101</a>        file_handles::selftest::run();
-<a href=#102 id=102 data-nosnippet>102</a>        access::selftest::run();
-<a href=#103 id=103 data-nosnippet>103</a>    }
-<a href=#104 id=104 data-nosnippet>104</a>    <span class="kw-2">*</span>GLOBAL_VFS.lock() = <span class="prelude-val">Some</span>(vfs);
-<a href=#105 id=105 data-nosnippet>105</a>
-<a href=#106 id=106 data-nosnippet>106</a>    <span class="comment">// Register the fast-IPC handler so trusted Cells can bypass ecall for VFS reads.
-<a href=#107 id=107 data-nosnippet>107</a>    // The kernel records the VFS cell's ID at spawn time so it can clear this
-<a href=#108 id=108 data-nosnippet>108</a>    // pointer if VFS crashes — see loader.rs fast_ipc::set_vfs_handler_cell call.
-<a href=#109 id=109 data-nosnippet>109</a>    </span>ostd::fast_ipc::register_vfs(vfs_fast_handler);
-<a href=#110 id=110 data-nosnippet>110</a>    <span class="kw">let </span><span class="kw-2">mut </span>buf = [<span class="number">0u8</span>; api::ipc::IPC_BUF_SIZE];
-<a href=#111 id=111 data-nosnippet>111</a>
-<a href=#112 id=112 data-nosnippet>112</a>    <span class="kw">loop </span>{
-<a href=#113 id=113 data-nosnippet>113</a>        <span class="comment">// `sys_recv_attested` asks the kernel to state which cell sent the
-<a href=#114 id=114 data-nosnippet>114</a>        // message, in the tail of `buf`.  VFS cannot derive that itself: `sender`
-<a href=#115 id=115 data-nosnippet>115</a>        // is a tid, and a thread has its own tid while belonging to its parent
-<a href=#116 id=116 data-nosnippet>116</a>        // cell, so a cell id built from that tid named a cell that does not exist
-<a href=#117 id=117 data-nosnippet>117</a>        // and charged its quota to a ledger row nothing owned.
-<a href=#118 id=118 data-nosnippet>118</a>        </span><span class="kw">match </span>ostd::syscall::sys_recv_attested(<span class="number">0</span>, <span class="kw-2">&amp;mut </span>buf) {
-<a href=#119 id=119 data-nosnippet>119</a>            ostd::syscall::SyscallResult::Ok(sender) <span class="kw">if </span>sender &gt; <span class="number">0 </span>=&gt; {
-<a href=#120 id=120 data-nosnippet>120</a>                <span class="kw">let </span><span class="prelude-val">Some</span>(identity) = api::caller_identity::CallerIdentity::from_recv_buf(<span class="kw-2">&amp;</span>buf)
-<a href=#121 id=121 data-nosnippet>121</a>                <span class="kw">else </span>{
-<a href=#122 id=122 data-nosnippet>122</a>                    <span class="kw">let </span>cancellations = GLOBAL_VFS
-<a href=#123 id=123 data-nosnippet>123</a>                        .lock()
-<a href=#124 id=124 data-nosnippet>124</a>                        .as_mut()
-<a href=#125 id=125 data-nosnippet>125</a>                        .map(|vfs| {
-<a href=#126 id=126 data-nosnippet>126</a>                            <span class="kw">let _ </span>= vfs.handle_unattributed_owner_death(sender);
-<a href=#127 id=127 data-nosnippet>127</a>                            vfs.take_owner_watch_cancellations()
-<a href=#128 id=128 data-nosnippet>128</a>                        })
-<a href=#129 id=129 data-nosnippet>129</a>                        .unwrap_or_default();
-<a href=#130 id=130 data-nosnippet>130</a>                    <span class="kw">for </span>token <span class="kw">in </span>cancellations {
-<a href=#131 id=131 data-nosnippet>131</a>                        ostd::syscall::sys_cancel_cell_owner_watch(token);
-<a href=#132 id=132 data-nosnippet>132</a>                    }
-<a href=#133 id=133 data-nosnippet>133</a>                    buf = [<span class="number">0u8</span>; api::ipc::IPC_BUF_SIZE];
-<a href=#134 id=134 data-nosnippet>134</a>                    <span class="kw">continue</span>;
-<a href=#135 id=135 data-nosnippet>135</a>                };
-<a href=#136 id=136 data-nosnippet>136</a>                <span class="kw">let </span>caller = caller::Caller::from_attested(identity);
-<a href=#137 id=137 data-nosnippet>137</a>                <span class="comment">// The atomic kernel operation verifies this exact receive context
-<a href=#138 id=138 data-nosnippet>138</a>                // and registers root death before VFS can persist any state.
-<a href=#139 id=139 data-nosnippet>139</a>                </span><span class="kw">let </span><span class="prelude-val">Some</span>((owner, token)) =
-<a href=#140 id=140 data-nosnippet>140</a>                    ostd::syscall::sys_watch_cell_owner(caller.cell.<span class="number">0</span>, caller.generation)
-<a href=#141 id=141 data-nosnippet>141</a>                <span class="kw">else </span>{
-<a href=#142 id=142 data-nosnippet>142</a>                    <span class="kw">let </span><span class="kw-2">mut </span>encoded = [<span class="number">0u8</span>; api::ipc::IPC_BUF_SIZE];
-<a href=#143 id=143 data-nosnippet>143</a>                    <span class="kw">let </span>len = api::ipc::encode(<span class="kw-2">&amp;</span>api::ipc::VfsResponse::Err(<span class="number">3</span>), <span class="kw-2">&amp;mut </span>encoded)
-<a href=#144 id=144 data-nosnippet>144</a>                        .map(|bytes| bytes.len())
-<a href=#145 id=145 data-nosnippet>145</a>                        .unwrap_or(<span class="number">0</span>);
-<a href=#146 id=146 data-nosnippet>146</a>                    ostd::syscall::sys_send(sender, <span class="kw-2">&amp;</span>encoded[..len]);
-<a href=#147 id=147 data-nosnippet>147</a>                    buf = [<span class="number">0u8</span>; api::ipc::IPC_BUF_SIZE];
-<a href=#148 id=148 data-nosnippet>148</a>                    <span class="kw">continue</span>;
-<a href=#149 id=149 data-nosnippet>149</a>                };
-<a href=#150 id=150 data-nosnippet>150</a>                <span class="kw">let </span><span class="kw-2">mut </span>encoded = [<span class="number">0u8</span>; api::ipc::IPC_BUF_SIZE];
-<a href=#151 id=151 data-nosnippet>151</a>                <span class="kw">let </span>(encoded_len, cancellations) = {
-<a href=#152 id=152 data-nosnippet>152</a>                    <span class="kw">let </span><span class="kw-2">mut </span>resp_buf = [<span class="number">0u8</span>; api::ipc::IPC_BUF_SIZE];
-<a href=#153 id=153 data-nosnippet>153</a>                    <span class="kw">let </span><span class="kw-2">mut </span>guard = GLOBAL_VFS.lock();
-<a href=#154 id=154 data-nosnippet>154</a>                    <span class="kw">let </span>vfs = guard
-<a href=#155 id=155 data-nosnippet>155</a>                        .as_mut()
-<a href=#156 id=156 data-nosnippet>156</a>                        .expect(<span class="string">"VFS initialized before serving requests"</span>);
-<a href=#157 id=157 data-nosnippet>157</a>                    vfs.install_owner_watch(caller, owner.root_tid <span class="kw">as </span>usize, token);
-<a href=#158 id=158 data-nosnippet>158</a>                    <span class="kw">let </span>response = dispatch::handle_request(vfs, <span class="kw-2">&amp;</span>buf, <span class="prelude-val">Some</span>(caller), <span class="kw-2">&amp;mut </span>resp_buf);
-<a href=#159 id=159 data-nosnippet>159</a>                    <span class="kw">let </span>len = api::ipc::encode(<span class="kw-2">&amp;</span>response, <span class="kw-2">&amp;mut </span>encoded)
-<a href=#160 id=160 data-nosnippet>160</a>                        .map(|bytes| bytes.len())
-<a href=#161 id=161 data-nosnippet>161</a>                        .unwrap_or(<span class="number">0</span>);
-<a href=#162 id=162 data-nosnippet>162</a>                    (len, vfs.take_owner_watch_cancellations())
-<a href=#163 id=163 data-nosnippet>163</a>                };
-<a href=#164 id=164 data-nosnippet>164</a>                <span class="kw">for </span>cancelled <span class="kw">in </span>cancellations {
-<a href=#165 id=165 data-nosnippet>165</a>                    ostd::syscall::sys_cancel_cell_owner_watch(cancelled);
-<a href=#166 id=166 data-nosnippet>166</a>                }
-<a href=#167 id=167 data-nosnippet>167</a>                <span class="comment">// `GLOBAL_VFS` is unlocked for every kernel call and send.
-<a href=#168 id=168 data-nosnippet>168</a>                </span>ostd::syscall::sys_send(sender, <span class="kw-2">&amp;</span>encoded[..encoded_len]);
-<a href=#169 id=169 data-nosnippet>169</a>                buf = [<span class="number">0u8</span>; api::ipc::IPC_BUF_SIZE];
-<a href=#170 id=170 data-nosnippet>170</a>            }
-<a href=#171 id=171 data-nosnippet>171</a>            <span class="kw">_ </span>=&gt; ostd::task::yield_now(),
-<a href=#172 id=172 data-nosnippet>172</a>        }
-<a href=#173 id=173 data-nosnippet>173</a>    }
-<a href=#174 id=174 data-nosnippet>174</a>}
+<a href=#82 id=82 data-nosnippet>82</a>    <span class="comment">// SeekCap shares ReadCap's allowlist bit (bit 16), so positional reads add no authority; it
+<a href=#83 id=83 data-nosnippet>83</a>    // is the difference between a chunked read costing O(file) and O(file^2).
+<a href=#84 id=84 data-nosnippet>84</a>    </span>SeekCap,
+<a href=#85 id=85 data-nosnippet>85</a>    CloseCap,
+<a href=#86 id=86 data-nosnippet>86</a>    <span class="comment">// NOTE: deliberately NO SetTimer. VFS never calls it — a "SetTimer (bit 11)
+<a href=#87 id=87 data-nosnippet>87</a>    // denied for tid &lt;vfs&gt;" kernel warn on x86 is the CANARY for the known x86
+<a href=#88 id=88 data-nosnippet>88</a>    // syscall-redispatch corruption (syscall number read as user CS = 0x23 = 35
+<a href=#89 id=89 data-nosnippet>89</a>    // with a pointer as the tick count; see TODO #9 / x86 q35 P02). Allowing it
+<a href=#90 id=90 data-nosnippet>90</a>    // turns that corruption into an unbounded sleep that hangs the boot.
+<a href=#91 id=91 data-nosnippet>91</a></span>];
+<a href=#92 id=92 data-nosnippet>92</a>
+<a href=#93 id=93 data-nosnippet>93</a><span class="macro">ostd::declare_custom_heap!</span>(<span class="number">4 </span>* <span class="number">1024 </span>* <span class="number">1024</span>);
+<a href=#94 id=94 data-nosnippet>94</a>
+<a href=#95 id=95 data-nosnippet>95</a><span class="attr">#[no_mangle]
+<a href=#96 id=96 data-nosnippet>96</a></span><span class="kw">pub fn </span>main() {
+<a href=#97 id=97 data-nosnippet>97</a>    init_custom_heap();
+<a href=#98 id=98 data-nosnippet>98</a>    println(<span class="string">"VFS Service v0.2: RamFS + mkdir/rmdir/unlink IPC (typed postcard)"</span>);
+<a href=#99 id=99 data-nosnippet>99</a>    <span class="comment">// VfsManager::new() mounts all backends, including the FAT volume on the
+<a href=#100 id=100 data-nosnippet>100</a>    // VirtIO disk (which logs its own success/fallback status).
+<a href=#101 id=101 data-nosnippet>101</a>    </span><span class="kw">let </span>vfs = VfsManager::new();
+<a href=#102 id=102 data-nosnippet>102</a>    <span class="attr">#[cfg(feature = <span class="string">"test-hooks"</span>)]
+<a href=#103 id=103 data-nosnippet>103</a>    </span>{
+<a href=#104 id=104 data-nosnippet>104</a>        file_handles::selftest::run();
+<a href=#105 id=105 data-nosnippet>105</a>        access::selftest::run();
+<a href=#106 id=106 data-nosnippet>106</a>    }
+<a href=#107 id=107 data-nosnippet>107</a>    <span class="kw-2">*</span>GLOBAL_VFS.lock() = <span class="prelude-val">Some</span>(vfs);
+<a href=#108 id=108 data-nosnippet>108</a>
+<a href=#109 id=109 data-nosnippet>109</a>    <span class="comment">// Register the fast-IPC handler so trusted Cells can bypass ecall for VFS reads.
+<a href=#110 id=110 data-nosnippet>110</a>    // The kernel records the VFS cell's ID at spawn time so it can clear this
+<a href=#111 id=111 data-nosnippet>111</a>    // pointer if VFS crashes — see loader.rs fast_ipc::set_vfs_handler_cell call.
+<a href=#112 id=112 data-nosnippet>112</a>    </span>ostd::fast_ipc::register_vfs(vfs_fast_handler);
+<a href=#113 id=113 data-nosnippet>113</a>    <span class="kw">let </span><span class="kw-2">mut </span>buf = [<span class="number">0u8</span>; api::ipc::IPC_BUF_SIZE];
+<a href=#114 id=114 data-nosnippet>114</a>
+<a href=#115 id=115 data-nosnippet>115</a>    <span class="kw">loop </span>{
+<a href=#116 id=116 data-nosnippet>116</a>        <span class="comment">// `sys_recv_attested` asks the kernel to state which cell sent the
+<a href=#117 id=117 data-nosnippet>117</a>        // message, in the tail of `buf`.  VFS cannot derive that itself: `sender`
+<a href=#118 id=118 data-nosnippet>118</a>        // is a tid, and a thread has its own tid while belonging to its parent
+<a href=#119 id=119 data-nosnippet>119</a>        // cell, so a cell id built from that tid named a cell that does not exist
+<a href=#120 id=120 data-nosnippet>120</a>        // and charged its quota to a ledger row nothing owned.
+<a href=#121 id=121 data-nosnippet>121</a>        </span><span class="kw">match </span>ostd::syscall::sys_recv_attested(<span class="number">0</span>, <span class="kw-2">&amp;mut </span>buf) {
+<a href=#122 id=122 data-nosnippet>122</a>            ostd::syscall::SyscallResult::Ok(sender) <span class="kw">if </span>sender &gt; <span class="number">0 </span>=&gt; {
+<a href=#123 id=123 data-nosnippet>123</a>                <span class="kw">let </span><span class="prelude-val">Some</span>(identity) = api::caller_identity::CallerIdentity::from_recv_buf(<span class="kw-2">&amp;</span>buf)
+<a href=#124 id=124 data-nosnippet>124</a>                <span class="kw">else </span>{
+<a href=#125 id=125 data-nosnippet>125</a>                    <span class="kw">let </span>cancellations = GLOBAL_VFS
+<a href=#126 id=126 data-nosnippet>126</a>                        .lock()
+<a href=#127 id=127 data-nosnippet>127</a>                        .as_mut()
+<a href=#128 id=128 data-nosnippet>128</a>                        .map(|vfs| {
+<a href=#129 id=129 data-nosnippet>129</a>                            <span class="kw">let _ </span>= vfs.handle_unattributed_owner_death(sender);
+<a href=#130 id=130 data-nosnippet>130</a>                            vfs.take_owner_watch_cancellations()
+<a href=#131 id=131 data-nosnippet>131</a>                        })
+<a href=#132 id=132 data-nosnippet>132</a>                        .unwrap_or_default();
+<a href=#133 id=133 data-nosnippet>133</a>                    <span class="kw">for </span>token <span class="kw">in </span>cancellations {
+<a href=#134 id=134 data-nosnippet>134</a>                        ostd::syscall::sys_cancel_cell_owner_watch(token);
+<a href=#135 id=135 data-nosnippet>135</a>                    }
+<a href=#136 id=136 data-nosnippet>136</a>                    buf = [<span class="number">0u8</span>; api::ipc::IPC_BUF_SIZE];
+<a href=#137 id=137 data-nosnippet>137</a>                    <span class="kw">continue</span>;
+<a href=#138 id=138 data-nosnippet>138</a>                };
+<a href=#139 id=139 data-nosnippet>139</a>                <span class="kw">let </span>caller = caller::Caller::from_attested(identity);
+<a href=#140 id=140 data-nosnippet>140</a>                <span class="comment">// The atomic kernel operation verifies this exact receive context
+<a href=#141 id=141 data-nosnippet>141</a>                // and registers root death before VFS can persist any state.
+<a href=#142 id=142 data-nosnippet>142</a>                </span><span class="kw">let </span><span class="prelude-val">Some</span>((owner, token)) =
+<a href=#143 id=143 data-nosnippet>143</a>                    ostd::syscall::sys_watch_cell_owner(caller.cell.<span class="number">0</span>, caller.generation)
+<a href=#144 id=144 data-nosnippet>144</a>                <span class="kw">else </span>{
+<a href=#145 id=145 data-nosnippet>145</a>                    <span class="kw">let </span><span class="kw-2">mut </span>encoded = [<span class="number">0u8</span>; api::ipc::IPC_BUF_SIZE];
+<a href=#146 id=146 data-nosnippet>146</a>                    <span class="kw">let </span>len = api::ipc::encode(<span class="kw-2">&amp;</span>api::ipc::VfsResponse::Err(<span class="number">3</span>), <span class="kw-2">&amp;mut </span>encoded)
+<a href=#147 id=147 data-nosnippet>147</a>                        .map(|bytes| bytes.len())
+<a href=#148 id=148 data-nosnippet>148</a>                        .unwrap_or(<span class="number">0</span>);
+<a href=#149 id=149 data-nosnippet>149</a>                    ostd::syscall::sys_send(sender, <span class="kw-2">&amp;</span>encoded[..len]);
+<a href=#150 id=150 data-nosnippet>150</a>                    buf = [<span class="number">0u8</span>; api::ipc::IPC_BUF_SIZE];
+<a href=#151 id=151 data-nosnippet>151</a>                    <span class="kw">continue</span>;
+<a href=#152 id=152 data-nosnippet>152</a>                };
+<a href=#153 id=153 data-nosnippet>153</a>                <span class="kw">let </span><span class="kw-2">mut </span>encoded = [<span class="number">0u8</span>; api::ipc::IPC_BUF_SIZE];
+<a href=#154 id=154 data-nosnippet>154</a>                <span class="kw">let </span>(encoded_len, cancellations) = {
+<a href=#155 id=155 data-nosnippet>155</a>                    <span class="kw">let </span><span class="kw-2">mut </span>resp_buf = [<span class="number">0u8</span>; api::ipc::IPC_BUF_SIZE];
+<a href=#156 id=156 data-nosnippet>156</a>                    <span class="kw">let </span><span class="kw-2">mut </span>guard = GLOBAL_VFS.lock();
+<a href=#157 id=157 data-nosnippet>157</a>                    <span class="kw">let </span>vfs = guard
+<a href=#158 id=158 data-nosnippet>158</a>                        .as_mut()
+<a href=#159 id=159 data-nosnippet>159</a>                        .expect(<span class="string">"VFS initialized before serving requests"</span>);
+<a href=#160 id=160 data-nosnippet>160</a>                    vfs.install_owner_watch(caller, owner.root_tid <span class="kw">as </span>usize, token);
+<a href=#161 id=161 data-nosnippet>161</a>                    <span class="kw">let </span>response = dispatch::handle_request(vfs, <span class="kw-2">&amp;</span>buf, <span class="prelude-val">Some</span>(caller), <span class="kw-2">&amp;mut </span>resp_buf);
+<a href=#162 id=162 data-nosnippet>162</a>                    <span class="kw">let </span>len = api::ipc::encode(<span class="kw-2">&amp;</span>response, <span class="kw-2">&amp;mut </span>encoded)
+<a href=#163 id=163 data-nosnippet>163</a>                        .map(|bytes| bytes.len())
+<a href=#164 id=164 data-nosnippet>164</a>                        .unwrap_or(<span class="number">0</span>);
+<a href=#165 id=165 data-nosnippet>165</a>                    (len, vfs.take_owner_watch_cancellations())
+<a href=#166 id=166 data-nosnippet>166</a>                };
+<a href=#167 id=167 data-nosnippet>167</a>                <span class="kw">for </span>cancelled <span class="kw">in </span>cancellations {
+<a href=#168 id=168 data-nosnippet>168</a>                    ostd::syscall::sys_cancel_cell_owner_watch(cancelled);
+<a href=#169 id=169 data-nosnippet>169</a>                }
+<a href=#170 id=170 data-nosnippet>170</a>                <span class="comment">// `GLOBAL_VFS` is unlocked for every kernel call and send.
+<a href=#171 id=171 data-nosnippet>171</a>                </span>ostd::syscall::sys_send(sender, <span class="kw-2">&amp;</span>encoded[..encoded_len]);
+<a href=#172 id=172 data-nosnippet>172</a>                buf = [<span class="number">0u8</span>; api::ipc::IPC_BUF_SIZE];
+<a href=#173 id=173 data-nosnippet>173</a>            }
+<a href=#174 id=174 data-nosnippet>174</a>            <span class="kw">_ </span>=&gt; ostd::task::yield_now(),
+<a href=#175 id=175 data-nosnippet>175</a>        }
+<a href=#176 id=176 data-nosnippet>176</a>    }
+<a href=#177 id=177 data-nosnippet>177</a>}
 </code></pre></div></section></main></body></html>
