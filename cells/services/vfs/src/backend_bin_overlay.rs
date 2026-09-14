@@ -24,7 +24,7 @@ impl BinOverlay {
     /// root — matching the layout gen_disk writes into the cell-store.
     pub fn new(store_base_lba: u64) -> Self {
         Self {
-            boot: BootFsProxy,
+            boot: BootFsProxy::new(),
             store: FatBackend::mount("/bin", store_base_lba),
         }
     }

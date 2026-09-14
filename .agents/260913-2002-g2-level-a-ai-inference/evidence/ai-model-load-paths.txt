@@ -1,0 +1,21 @@
+# Model load: kernel capability path vs VFS service, measured in a Cell (QEMU RV64 TCG)
+# date: 2026-09-14T03:54:21Z
+# model: .ai-models/stories15M-q8_0.gguf (25.5 MB, served from /bin inside the Cell)
+
+| path | read time | note |
+|---|---|---|
+| VFS ReadFileHandle, 4 KiB chunks | 150,126 ms | one IPC round trip per chunk, ~6,700 round trips |
+| + retained cap/cursor in BootFsProxy | 146,484 ms | 2.4%: the cost is per-round-trip latency, not the seek |
+| + kernel cap path (OpenCap/ReadCap) | **2,978 ms** | ~100 syscalls, no IPC; the service's read_model() tries this first |
+
+# raw logs:
+#   ai-oracle-20260914T035052Z.log
+#   ai-oracle-20260914T035028Z.log
+#   ai-oracle-20260914T034951Z.log
+#   ai-oracle-20260914T021108Z.log
+
+# Other sizes through the cap path (same run family):
+#   fixture 102,744 B in 4 ms; stories260K 1,185,376 B in 29 ms
+
+# Cell-store fallback (canonical gen_disk image, model in P6 not VIFS1): oracle PASS with the
+# VFS path, which is the only one that can see the cell-store.

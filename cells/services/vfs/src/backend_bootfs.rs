@@ -12,14 +12,70 @@
 //! which runs with interrupts disabled in the CALLER's context — never
 //! blocks inside this backend; readers fall back to the ReadAsync copy path.
 
+use alloc::string::String;
 use alloc::vec::Vec;
+use core::cell::RefCell;
 
 use crate::backend::FsBackend;
 use ostd::syscall::{
     sys_close, sys_close_cap, sys_open, sys_open_cap, sys_read_cap, sys_readdir, sys_seek_cap,
 };
 
-pub struct BootFsProxy;
+/// An open `OpenCap` plus the position it has read up to.
+struct ReadCursor {
+    /// Uppercased path the capability was opened for.
+    path: String,
+    cap: u64,
+    /// Byte position the capability is positioned at.
+    offset: u64,
+}
+
+/// Serves `/bin` from VIFS1, keeping one read capability open between calls.
+///
+/// The capability cache exists because a chunked read otherwise re-opens and re-seeks the file per
+/// chunk, and a `SeekFrom::Start` on a FAT file walks the cluster chain from the beginning: reading
+/// a file in 4 KiB chunks cost O(offset) per chunk, i.e. O(n²) per file. Measured on the AI service
+/// reading a 25 MB model: 150 s, against ~23 ms of unavoidable per-chunk IPC. With the cursor the
+/// same read reuses the open capability and only seeks when the caller jumps.
+///
+/// Bounded by construction: exactly one capability is retained, and it is closed when a different
+/// path is read. A deployment that never reads a second file keeps one extra kernel handle open,
+/// which is the trade this makes for linear reads.
+pub struct BootFsProxy {
+    cursor: RefCell<Option<ReadCursor>>,
+}
+
+impl BootFsProxy {
+    pub const fn new() -> Self {
+        Self {
+            cursor: RefCell::new(None),
+        }
+    }
+
+    /// The retained capability for `path`, opening (and re-opening when the path changed) as needed.
+    fn cursor_for(&self, path: &str) -> Option<u64> {
+        let mut slot = self.cursor.borrow_mut();
+        let reusable = matches!(slot.as_ref(), Some(cursor) if cursor.path == path);
+        if !reusable {
+            if let Some(old) = slot.take() {
+                sys_close_cap(old.cap);
+            }
+            let cap = sys_open_cap(path).ok()?;
+            *slot = Some(ReadCursor {
+                path: String::from(path),
+                cap,
+                offset: 0,
+            });
+        }
+        slot.as_ref().map(|cursor| cursor.cap)
+    }
+}
+
+impl Default for BootFsProxy {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 /// RAII guard: kernel FDs live in the VFS task's TCB; leaking them across
 /// requests would exhaust the per-task handle map.
@@ -141,28 +197,38 @@ impl FsBackend for BootFsProxy {
         result
     }
 
-    /// Positional read: open, seek, read once.
+    /// Positional read that reuses the retained capability.
     ///
-    /// The kernel exposes `SeekCap` on the same allowlist bit as `ReadCap`, so a positional read
-    /// costs one seek plus one read instead of re-reading the file from the start.
-    ///
-    /// **Known limitation (measured, not theoretical).** This opens a fresh capability per call, so
-    /// every chunk seeks from the start of the file and the VIFS1 read is O(offset) per chunk —
-    /// O(n²) for a whole-file chunked read. It is invisible for the sizes this path normally sees
-    /// (a 1.2 MB model reads in 5.4 s) and it is why a 25 MB model read stalls: the fix is to keep
-    /// the capability and its cursor per VFS file handle instead of per call.
+    /// Sequential chunked reads (the shape every file copy, model load, and shell redirect uses)
+    /// cost one `ReadCap` per chunk: the capability is already positioned, so no seek happens. A
+    /// caller that jumps re-seeks the retained capability, which is correct for any offset and only
+    /// pays the FAT walk when it moves backwards.
     fn read_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> usize {
         let upper: alloc::string::String = path.chars().map(|c| c.to_ascii_uppercase()).collect();
-        let cap = match sys_open_cap(&upper) {
-            Ok(c) => c,
-            Err(_) => return 0,
+        let Some(cap) = self.cursor_for(&upper) else {
+            return 0;
         };
-        let read = match sys_seek_cap(cap, offset as i64, 0) {
-            Ok(_) => sys_read_cap(cap, buf).unwrap_or_default(),
+
+        let mut slot = self.cursor.borrow_mut();
+        let Some(cursor) = slot.as_mut() else {
+            return 0;
+        };
+        if cursor.offset != offset {
+            match sys_seek_cap(cap, offset as i64, 0) {
+                Ok(_) => cursor.offset = offset,
+                Err(_) => {
+                    cursor.offset = 0;
+                    return 0;
+                }
+            }
+        }
+        match sys_read_cap(cap, buf) {
+            Ok(n) => {
+                cursor.offset = cursor.offset.saturating_add(n as u64);
+                n
+            }
             Err(_) => 0,
-        };
-        sys_close_cap(cap);
-        read
+        }
     }
 
     fn write(&mut self, _path: &str, _content: &[u8]) -> bool {

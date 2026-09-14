@@ -17,9 +17,15 @@
   served from `/bin/ai` inside a QEMU Cell — 28 MB resident, all four oracle scenarios pass
   (`evidence/ai-15m-model-in-cell.txt`). Host acceptance test `a_real_checkpoint_fits_a_cell_slot`
   pins the property: a 26.7 MB checkpoint must load under a 30 MiB budget and stay within file + 6 MiB.
-- Known limitation recorded at the source: VIFS1 positional reads open a fresh capability per call, so
-  the 25 MB read takes ~150 s in TCG (linear in chunk count, ~23 ms per 4 KB chunk). Keeping the
-  capability and cursor per VFS file handle is the fix; it is not a correctness issue.
+- Model load path corrected by measurement. The 25 MB read took ~150 s because it moved one 4 KiB VFS
+  message per chunk (~6,700 IPC round trips at ~22 ms each in TCG). Keeping a retained capability and
+  cursor in `BootFsProxy` recovered only 2.4% — the first hypothesis (per-chunk FAT re-seek) was wrong.
+  The fix that worked is the kernel capability path: `OpenCap`/`ReadCap` move up to the kernel's 64 MiB
+  user-buffer ceiling per syscall, so `cells/services/ai` now reads the model through it (~100 syscalls)
+  and falls back to the VFS service for a cell-store deployment. Measured: 150,126 ms to **2,978 ms**
+  for the same 25.5 MB model in the same Cell (`evidence/ai-model-load-paths.txt`); the fixture and
+  `stories260K` read in 4 ms and 29 ms, and the canonical `gen_disk` image still passes through the
+  fallback.
 - Non-claims: memory figures are host/QEMU TCG; `stories15M` is a 15M-parameter story model, so its
   text quality is small-model quality. No accelerator, board, or production qualification.
 

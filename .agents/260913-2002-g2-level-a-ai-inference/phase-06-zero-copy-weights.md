@@ -47,13 +47,23 @@ checkpoint loads under 30 MiB *and* stays within `file + 6 MiB` resident.
 the service with `large-arena` and serves the 25 MiB SentencePiece checkpoint from `/bin/ai`:
 read 25.5 MB in ~150 s, engine load ~86 ms, **28 MB resident**, and the oracle's scenarios pass.
 
-## Known limitation, measured and left open
+## Model load: a hypothesis, a measurement, and the fix that worked
 
-Reading 25 MB through VIFS1 takes ~150 s because `BootFsProxy::read_at` opens a fresh capability per
-call and therefore seeks from the start of the file each time. It is not the o(n²) shape the earlier
-whole-file read had (150 s for 25 MB is linear in the chunk count), but per-chunk cost is ~23 ms in
-TCG. The fix is to keep the capability and its cursor per VFS file handle instead of per call; until
-then, a large model's load time is bounded by that and the readiness budget must allow for it.
+The 25 MB load took ~150 s, and the first explanation — `BootFsProxy::read_at` re-opens and re-seeks
+per call, so every chunk pays a FAT walk — was **wrong**. Retaining the capability and its cursor in
+the backend (`BootFsProxy` now keeps one open `OpenCap` plus its position, re-seeking only when the
+caller jumps) recovered 2.4%: 150,126 ms to 146,484 ms. The cost is per *IPC round trip* (~22 ms in
+TCG), and there are ~6,700 of them at one 4 KiB message each.
+
+The fix that worked reads the model through the **kernel capability path** instead: `OpenCap` +
+`ReadCap` move up to the kernel's 64 MiB user-buffer ceiling per *syscall*, so a 25 MB model needs
+~100 syscalls and no cell-to-cell IPC at all — **2,978 ms**, a 49× improvement. `cells/services/ai`
+tries that path first (uppercasing for FAT16) and falls back to the VFS service, which is the only
+path that can see the on-disk cell-store; the canonical `gen_disk` image exercises exactly that
+fallback and still passes. The retained cursor stays: it is correct, and it removes the backwards-seek
+shape for callers that jump around a file.
+
+Evidence: `evidence/ai-model-load-paths.txt`.
 
 ## Non-claims
 

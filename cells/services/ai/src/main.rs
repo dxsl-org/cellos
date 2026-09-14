@@ -31,11 +31,26 @@ use ai_proto::{
     self, backend, limit, AiError, AiRequest, AiResponse, DeviceTarget, FinishReason,
     MAX_EMBED_DIM, MAX_SESSIONS, MAX_TOKENS_PER_POLL,
 };
+use alloc::vec::Vec;
 use ostd::io::{print, print_usize, println};
 use ostd::syscall::SyscallResult;
 
 api::declare_manifest!(block_io = false, network = false, spawn = false);
-api::declare_syscalls![Send, Recv, TryRecv, Log, LookupService, GetTime, Yield];
+api::declare_syscalls![
+    Send,
+    Recv,
+    TryRecv,
+    Log,
+    LookupService,
+    GetTime,
+    Yield,
+    // Model load prefers the kernel capability path: `ReadCap` moves a large buffer per *syscall*,
+    // where the VFS service moves one 4 KiB IPC message per round trip. See `read_model`.
+    OpenCap,
+    ReadCap,
+    StatCap,
+    CloseCap
+];
 
 // Cell heap. Holds the model bytes, the engine's weights/scratch, and the session KV caches.
 //
@@ -125,10 +140,9 @@ impl AiService {
         // read on a given board is an operational fact, and without the number the only symptom is
         // a silent stall on the serial console.
         let read_started = ostd::syscall::sys_get_time_ms().unwrap_or(0);
-        let mut vfs = ostd::clients::VfsClient::new();
-        let bytes = match vfs.read_file_bounded(MODEL_PATH, ENGINE_LIMIT) {
-            Ok(bytes) => bytes,
-            Err(_) => {
+        let bytes = match read_model(MODEL_PATH, ENGINE_LIMIT) {
+            Some(bytes) => bytes,
+            None => {
                 print("[ai] no model at ");
                 print_usize(MODEL_PATH.len());
                 println(" — inference will be refused");
@@ -416,6 +430,58 @@ impl AiService {
                 session.last_activity = now;
             }
         }
+    }
+}
+
+/// Bytes moved per capability read. `ReadCap` accepts up to the kernel's 64 MiB user-buffer ceiling,
+/// so this trades syscall count against a stack/heap buffer: 256 KiB reads a 25 MB model in ~100
+/// syscalls instead of ~6,700 IPC round trips.
+const MODEL_READ_CHUNK: usize = 256 * 1024;
+
+/// Read the model file, preferring the kernel capability path.
+///
+/// Two paths exist and they cost very different things:
+///
+/// * **Kernel cap path** (`OpenCap`/`SeekCap`/`ReadCap`): a handful of syscalls for the whole file.
+///   It resolves the kernel's VIFS1 ramdisk — where a development image puts the model — and needs
+///   the uppercase path FAT16 uses.
+/// * **VFS service**: the only path for a model deployed in the on-disk cell-store. It moves one
+///   4 KiB IPC message per round trip, so a 25 MB model costs thousands of round trips (measured:
+///   146 s in QEMU TCG against a few seconds for the cap path). Kept as the fallback because a
+///   cell-store deployment is the shape a released image has.
+///
+/// Returns `None` when the file does not exist or exceeds `limit`.
+fn read_model(path: &str, limit: usize) -> Option<Vec<u8>> {
+    let upper: alloc::string::String = path.chars().map(|c| c.to_ascii_uppercase()).collect();
+    if let Some(bytes) = read_model_cap(&upper, limit) {
+        return Some(bytes);
+    }
+    let mut vfs = ostd::clients::VfsClient::new();
+    vfs.read_file_bounded(path, limit).ok()
+}
+
+/// One whole-file read through the kernel capability syscalls.
+fn read_model_cap(path: &str, limit: usize) -> Option<Vec<u8>> {
+    let mut file = ostd::fs::File::open(path).ok()?;
+    let size = usize::try_from(file.size().ok()?).ok()?;
+    if size == 0 || size > limit {
+        return None;
+    }
+    let mut bytes = Vec::with_capacity(size);
+    let mut chunk = alloc::vec![0u8; MODEL_READ_CHUNK.min(size)];
+    while bytes.len() < size {
+        let want = (size - bytes.len()).min(chunk.len());
+        match file.read_at(bytes.len() as u64, &mut chunk[..want]) {
+            Ok(0) => break,
+            Ok(n) => bytes.extend_from_slice(&chunk[..n]),
+            Err(_) => return None,
+        }
+    }
+    let _ = file.close();
+    if bytes.len() == size {
+        Some(bytes)
+    } else {
+        None
     }
 }
 
