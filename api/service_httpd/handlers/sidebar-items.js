@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["ARCH"],"fn":["api_cells","api_files","api_restart","api_status","index","mime_from_ext","not_found","send_json","send_response","serve_file","status_page"]};
+window.SIDEBAR_ITEMS = {"constant":["ARCH","INFER_DEFAULT_TOKENS","INFER_MAX_POLLS","INFER_MAX_TOKENS"],"fn":["api_cells","api_files","api_infer","api_restart","api_status","index","json_escape","mime_from_ext","not_found","request_body","send_json","send_response","serve_file","status_page"]};
