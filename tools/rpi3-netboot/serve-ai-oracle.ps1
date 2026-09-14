@@ -33,6 +33,10 @@ param(
     [int]$ExpectedInterfaceIndex = 26,
     [switch]$ApplyNetworkConfig,
     [switch]$ApplyFirewall,
+    # Use a TFTP server that is already serving this lane (it re-reads cellos.uimg per request, so a
+    # running server picks up a swapped payload). Skips starting a second one -- only one process can
+    # hold UDP 69.
+    [switch]$SkipServer,
     [string]$EvidenceDir = ''
 )
 
@@ -95,11 +99,18 @@ if ($LASTEXITCODE -ne 0) { throw 'network preflight failed' }
 
 $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $logPath = Join-Path $EvidenceDir "rpi3-$Variant-$stamp.log"
-$server = Start-Process -FilePath 'pwsh' -PassThru -WindowStyle Hidden -ArgumentList @(
-    '-NoProfile', '-File', $serveScript,
-    '-InterfaceAlias', $InterfaceAlias, '-ExpectedInterfaceIndex', "$ExpectedInterfaceIndex"
-)
-Write-Host ("[ai-oracle] TFTP server pid {0}; log {1}" -f $server.Id, $logPath)
+$server = $null
+if ($SkipServer) {
+    $holder = Get-NetUDPEndpoint -LocalPort 69 -ErrorAction SilentlyContinue
+    if (-not $holder) { throw 'SkipServer was requested but nothing is serving UDP 69' }
+    Write-Host ("[ai-oracle] using the running TFTP server (pid(s) {0}); log {1}" -f (($holder | ForEach-Object OwningProcess) -join ', '), $logPath)
+} else {
+    $server = Start-Process -FilePath 'pwsh' -PassThru -WindowStyle Hidden -ArgumentList @(
+        '-NoProfile', '-File', $serveScript,
+        '-InterfaceAlias', $InterfaceAlias, '-ExpectedInterfaceIndex', "$ExpectedInterfaceIndex"
+    )
+    Write-Host ("[ai-oracle] TFTP server pid {0}; log {1}" -f $server.Id, $logPath)
+}
 
 $serial = New-Object System.IO.Ports.SerialPort $ComPort, $Baud, 'None', 8, 'One'
 $serial.NewLine = "`n"
@@ -107,6 +118,7 @@ $transcript = New-Object System.Collections.Generic.List[string]
 $sentOracle = $false
 $verdict = 'TIMEOUT'
 $started = Get-Date
+$promptSeenAt = $null
 
 function Write-Transcript([string]$text) {
     if (-not $text) { return }
@@ -132,9 +144,14 @@ try {
             $all = ($transcript -join "`n")
             # Wait for the service to have a model before typing the command: `describe` reports
             # zero vocabulary until the load finishes, and the oracle would fail on a boot race
-            # rather than on anything it is meant to measure.
-            if ($DriveShell -and -not $sentOracle -and $all -match 'Cellos\s*>\s*$' -and
-                $all -match '\[ai\] model ready') {
+            # rather than on anything it is meant to measure. If the readiness line never arrives
+            # (a board that already booted before the capture opened the port prints nothing until
+            # it is spoken to), fall back to the prompt alone after 20 s: the oracle reports what
+            # the service actually has, so a stale-but-real console still produces real evidence.
+            if ($all -match 'Cellos\s*>\s*$' -and -not $promptSeenAt) { $promptSeenAt = Get-Date }
+            $ready = ($all -match '\[ai\] model ready') -or
+                     ($promptSeenAt -and ((Get-Date) - $promptSeenAt).TotalSeconds -ge 20)
+            if ($DriveShell -and -not $sentOracle -and $all -match 'Cellos\s*>\s*$' -and $ready) {
                 Start-Sleep -Milliseconds 700
                 $serial.Write("/bin/ai-test`r")
                 Write-Transcript '[ai-oracle] sent: /bin/ai-test'
@@ -155,6 +172,7 @@ try {
     if ($serial.IsOpen) { $serial.Close() }
     $serial.Dispose()
     if ($server -and -not $server.HasExited) { Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue }
+    # A server we did not start keeps running: it is the operator's, not ours to kill.
 }
 
 $header = @(
