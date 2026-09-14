@@ -29,6 +29,9 @@
   (which shares `ReadCap`'s allowlist bit, so no new cell authority).
 - `gguf-rs` gained `metadata_i32_array` (`tokenizer.ggml.token_type`), with tests that refuse a value
   that would not widen into `i32`.
+- `scripts/fetch-ai-test-model.sh` now fetches all three validation checkpoints by name
+  (`--model smollm|stories260k|stories15m`) with pinned digests, so the evidence above is
+  reproducible from a clean checkout.
 - Verification: 94 host tests across the six AI crates; oracle PASS on three paths (deterministic
   fixture via VIFS1, real SentencePiece checkpoint via VIFS1, both via the canonical `gen_disk.ps1`
   image); real-weight host runs for a 30-layer instruction-tuned checkpoint and a 6-layer base model.
