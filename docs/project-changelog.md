@@ -3,6 +3,26 @@
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
 ## [Unreleased] Development-first hardware-constrained execution
+## [2026-09-14] The AI oracle runs on the ARM64 leg of the CP-3 gate
+- Spec 24's CP-3 gate reads "QEMU RV64/ARM64 and RPi3 memory budget validation", and only RV64 had ever
+  run: the oracle script hardcoded the target, the QEMU binary, and the RISC-V `objcopy`. The script is
+  now parameterized (`--arch riscv64|aarch64`, riscv64 still the default), the aarch64 leg selects
+  `aarch64-unknown-none-softfloat` + `qemu-system-aarch64 -machine virt -cpu cortex-a57`, the signing
+  helper gets `OBJCOPY=aarch64-linux-gnu-objcopy` (a host `objcopy` refuses a foreign ELF), and the
+  run deliberately does *not* set a bare `RUSTFLAGS`, which would replace the `pic +bti,+paca,+pacg`
+  flags `.cargo/config.toml` supplies for that target.
+- Evidence artifacts became self-describing (header naming architecture, target, model, boot timeout;
+  architecture in the filename), and the CI job became a two-leg matrix with per-arch caches and
+  artifacts, so both halves of the requirement are gated continuously.
+- What it proves: the aarch64 cell target is *softfloat*, so its f32/f64 arithmetic is the compiler's
+  software routines — the fixture's eight golden token ids and 64-component embedding reproduce there
+  exactly, which makes the leg a numerics cross-check of the integer Q8_0 kernels on a second ISA and
+  a second float ABI, not a second boot test. The same image loads a real 26.7 MB checkpoint
+  (`stories15M-q8_0`) on both ISAs and generates coherent prose (24 tokens in 3355 ms on aarch64,
+  1595 ms on riscv64 — emulator observations, not hardware claims).
+- Still open, named rather than implied: CP-3's RPi3 memory-budget leg needs the physical board; a
+  QEMU result is not a substitute, and the roadmap row keeps it open.
+
 ## [2026-09-14] Integer Q8_0 activations: 4.3× in the cell, 1.8× on the host
 - Root cause of the remaining gap was the kernel's *shape*, not its optimisation level: every weight
   block was decoded to `[f32; 32]` on the stack (i8→f32 convert, scale multiply, store) and then

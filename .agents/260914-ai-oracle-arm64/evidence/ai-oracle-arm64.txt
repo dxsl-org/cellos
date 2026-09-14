@@ -1,0 +1,70 @@
+Cellos AI inference oracle on the ARM64 leg — raw evidence
+==========================================================
+
+Produced by:
+  scripts/run-ai-inference-oracle-qemu.sh --arch aarch64            (fixture model)
+  CELLOS_AI_REAL_MODEL=$PWD/.ai-models/stories15M-q8_0.gguf \
+    scripts/run-ai-inference-oracle-qemu.sh --arch riscv64|aarch64  (real checkpoint)
+an empty VIFS1 image of bootstrap cells + /bin/ai + /bin/ai-test + the model, booted as:
+
+  qemu-system-aarch64 -machine virt -cpu cortex-a57 -m 256M -smp 1 -nographic -monitor none \
+    -kernel target/aarch64-unknown-none-softfloat/release/cellos-kernel \
+    -drive file=disk.img,format=raw,if=none,id=hd0 -device virtio-blk-device,drive=hd0
+
+Each run also writes its own serial log into
+.agents/260913-2002-g2-level-a-ai-inference/evidence/ai-oracle-<arch>-<stamp>.log (gitignored; the
+CI job uploads the same glob as an artifact). The excerpts below are the marker lines of those logs.
+
+aarch64, fixture (models/tiny-llama-64.gguf) — 2026-09-14T13:17Z
+----------------------------------------------------------------
+[ai] model bytes: 102744 read in 4 ms
+[ai] engine load: 9 ms
+[ai] model ready: 270 vocab, context 128, resident bytes 115488
+[ai-test] model=tiny-llama-64
+[ai-test] vocab=270 context=128 sessions=4
+[ai-test] generate: 8 tokens in 122 ms (65573 tokens/s x1000, 6 polls)
+[ai-test] greedy ids matched: 8 tokens over 6 polls
+[ai-test] embedding matched: 64 dims
+[ai-test] abandoned session released; service still serving
+[ai-test] prompt stream matched: 8 tokens
+[ai-test] PASS
+[ai-oracle] PASS
+
+riscv64, fixture — 2026-09-14T13:11Z (regression run after the script was parameterized)
+-------------------------------------------------------------------------------------
+[ai-test] generate: 8 tokens in 109 ms (73394 tokens/s x1000, 6 polls)
+[ai-test] greedy ids matched: 8 tokens over 6 polls
+[ai-test] embedding matched: 64 dims
+[ai-test] PASS
+[ai-oracle] PASS
+
+aarch64, real checkpoint (.ai-models/stories15M-q8_0.gguf, 26.7 MB) — 2026-09-14T13:12Z
+---------------------------------------------------------------------------------------
+[ai] model bytes: 26671328 read in 3006 ms
+[ai] engine load: 64 ms
+[ai] model ready: 32000 vocab, context 128, resident bytes 28087038
+[ai-test] model=llama
+[ai-test] vocab=32000 context=128 sessions=4
+[ai-test] generate: 24 tokens in 3355 ms (7153 tokens/s x1000, 13 polls)
+[ai-test] real model continuation: 24 tokens
+[ai-test] text:, there was a big bear named Benny was a very big bear. He was a bear. He was very brave
+[ai-test] real model embeddings ok: 3 texts
+[ai-test] abandoned session released; service still serving
+[ai-test] prompt stream matched: 24 tokens
+[ai-test] PASS
+[ai-oracle] PASS
+
+Cross-architecture comparison, same fixture and flow
+----------------------------------------------------
+                           riscv64 TCG      aarch64 TCG
+fixture, 8 tokens          109 ms           122 ms
+stories15M, 24 tokens      1595 / 1601 ms   3355 ms
+service load (26.7 MB)     ~4 ms wall       model read 3006 ms, engine load 64 ms
+
+The aarch64 cell target is softfloat, so its f32/f64 arithmetic is the compiler's software routines.
+The fixture's golden token ids and embedding reproduce there exactly, which is what makes this leg a
+numerics cross-check and not just a boot test. The ~2× token-rate difference is an emulator
+observation (TCG translation + softfloat + cortex-a57 model), not a hardware claim; no board was run.
+
+Remaining gap, named rather than implied: CP-3's gate also says "RPi3 memory budget validation".
+That is a physical-board leg and stays open — QEMU aarch64 is not a substitute for it.

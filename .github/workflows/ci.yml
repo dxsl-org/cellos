@@ -984,7 +984,14 @@ jobs:
           cargo test --test pcie-bar-window
 
   ai-inference-oracle:
-    name: AI Inference Oracle (riscv64 QEMU)
+    # Both architecture legs of Spec 24 CP-3's gate ("QEMU RV64/ARM64"): the fixture's golden ids and
+    # embedding must reproduce on each, which is also what checks the integer kernels against the
+    # reference on a second ISA and a second float ABI (the aarch64 cell target is softfloat).
+    name: AI Inference Oracle (${{ matrix.arch }} QEMU)
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [riscv64, aarch64]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -999,13 +1006,13 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
-          key: ai-inference-oracle
+          key: ai-inference-oracle-${{ matrix.arch }}
 
       - name: Install dependencies
         timeout-minutes: 20
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y -q qemu-system-misc gcc-riscv64-unknown-elf libclang-dev
+          sudo apt-get install -y -q qemu-system-misc qemu-system-arm gcc-riscv64-unknown-elf gcc-aarch64-linux-gnu libclang-dev
 
       # The runner signs its cells through scripts/lib-sign-cells.sh, which needs
       # the policy signer too (cryptography). Own step for the same reason the
@@ -1026,13 +1033,13 @@ jobs:
       # own image so a stale target/ artifact cannot make it pass.
       - name: Run the inference oracle
         timeout-minutes: 25
-        run: bash scripts/run-ai-inference-oracle-qemu.sh --boot-timeout 300
+        run: bash scripts/run-ai-inference-oracle-qemu.sh --arch ${{ matrix.arch }} --boot-timeout 300
 
       - name: Upload oracle evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ai-inference-oracle-${{ github.run_number }}
+          name: ai-inference-oracle-${{ matrix.arch }}-${{ github.run_number }}
           path: .agents/260913-2002-g2-level-a-ai-inference/evidence/ai-oracle-*.log
           if-no-files-found: warn
 

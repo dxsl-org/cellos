@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Boot the RV64 image in QEMU and run the Spec 24 AI inference oracle.
+# Boot a Cellos image in QEMU and run the Spec 24 AI inference oracle.
 #
 # Builds a private, isolated image (no shared build artifacts are touched):
 #   * VIFS1 ramdisk carries the bootstrap cells, /bin/ai, /bin/ai-test, and the
@@ -11,7 +11,14 @@
 # The oracle cell is spawned by init (`/bin/ai-test`) and prints `[ai-test] PASS`
 # only after the service reproduced the reference token ids and embedding.
 #
-# Usage: scripts/run-ai-inference-oracle-qemu.sh [--boot-timeout SECONDS]
+# Two architectures run the same oracle, which is what Spec 24 CP-3's gate asks for
+# (QEMU RV64/ARM64): the fixture's golden ids must reproduce on both, so the engine's
+# integer kernels are checked against the reference on a second ISA and a second
+# float ABI (the aarch64 cell target is softfloat, so its f32/f64 arithmetic is the
+# compiler's software routines rather than FP instructions).
+#
+# Usage: scripts/run-ai-inference-oracle-qemu.sh [--boot-timeout SECONDS] [--arch riscv64|aarch64]
+#        CELLOS_AI_ARCH=riscv64|aarch64 selects the architecture too (default riscv64).
 # Exit codes: 0 PASS, 1 FAIL (oracle or marker missing), 2 precondition missing.
 
 set -euo pipefail
@@ -19,8 +26,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-TARGET="riscv64gc-unknown-none-elf"
-QEMU_BIN="${ViCell_QEMU:-qemu-system-riscv64}"
+ARCH="${CELLOS_AI_ARCH:-riscv64}"
 BOOT_TIMEOUT=300
 
 while [[ $# -gt 0 ]]; do
@@ -29,12 +35,32 @@ while [[ $# -gt 0 ]]; do
             BOOT_TIMEOUT="$2"
             shift 2
             ;;
+        --arch)
+            ARCH="$2"
+            shift 2
+            ;;
         *)
-            echo "usage: $0 [--boot-timeout SECONDS]" >&2
+            echo "usage: $0 [--boot-timeout SECONDS] [--arch riscv64|aarch64]" >&2
             exit 2
             ;;
     esac
 done
+
+case "$ARCH" in
+    riscv64)
+        TARGET="riscv64gc-unknown-none-elf"
+        QEMU_BIN="${ViCell_QEMU:-qemu-system-riscv64}"
+        ;;
+    aarch64)
+        TARGET="aarch64-unknown-none-softfloat"
+        QEMU_BIN="${ViCell_QEMU:-qemu-system-aarch64}"
+        ;;
+    *)
+        echo "FAIL: unsupported --arch: $ARCH (riscv64 or aarch64)" >&2
+        exit 2
+        ;;
+esac
+echo "[ai-oracle] architecture: $ARCH ($TARGET)"
 
 for tool in cargo rustc mktemp truncate timeout grep "$QEMU_BIN"; do
     command -v "$tool" >/dev/null 2>&1 || {
@@ -98,9 +124,20 @@ chmod 0700 "$WORK"
 printf '%s\n' "$$" > "$WORK/owner.pid"
 
 export CARGO_TARGET_DIR="$WORK/target"
+# `relocation-model=pic` is required for every RISC-V crate here. These variables are
+# target-scoped (`CARGO_TARGET_<TARGET>_RUSTFLAGS`, `CC_<target>`), so leaving them set for an
+# aarch64 run is inert; the aarch64 flags come from `.cargo/config.toml`, which a bare `RUSTFLAGS`
+# would *replace*, so nothing here may set that.
 export CC_riscv64gc_unknown_none_elf="${CC_riscv64gc_unknown_none_elf:-riscv64-unknown-elf-gcc}"
 export CFLAGS_riscv64gc_unknown_none_elf="${CFLAGS_riscv64gc_unknown_none_elf:--march=rv64gc -mabi=lp64d -mcmodel=medany -ffreestanding -DLFS_NO_INTRINSICS -I$ROOT/third_party/freestanding-include}"
 export CARGO_TARGET_RISCV64GC_UNKNOWN_NONE_ELF_RUSTFLAGS="${CARGO_TARGET_RISCV64GC_UNKNOWN_NONE_ELF_RUSTFLAGS:--C relocation-model=pic}"
+
+# `lib-sign-cells.sh` resolves a cross objcopy for the *rv64* candidates unless `OBJCOPY` is already
+# set, and a host objcopy refuses a foreign ELF.
+if [[ "$ARCH" == "aarch64" && -z "${OBJCOPY:-}" ]]; then
+    OBJCOPY="aarch64-linux-gnu-objcopy"
+    export OBJCOPY
+fi
 
 EMBEDDED="$WORK/embedded"
 DISK="$WORK/disk.img"
@@ -126,7 +163,7 @@ if [[ -n "$REAL_MODEL" ]]; then
     fi
 fi
 
-echo "[ai-oracle] building RV64 cells"
+echo "[ai-oracle] building $ARCH cells"
 cargo build --quiet --locked --release --target "$TARGET" \
     -p app-init -p app-shell -p service-vfs -p service-config -p service-platform \
     -p driver-virtio-blk -p ai-test
@@ -184,7 +221,7 @@ for required in "LFN 'ai'" "LFN 'ai-test'" "LFN 'ai-model.gguf'" "LFN 'vfs'"; do
     }
 done
 
-echo "[ai-oracle] building RV64 kernel"
+echo "[ai-oracle] building $ARCH kernel"
 EMBEDDED_OVERRIDE="$EMBEDDED" cargo build --quiet --locked --release --target "$TARGET" -p cellos-kernel
 KERNEL="$REL/cellos-kernel"
 [[ -s "$KERNEL" ]] || {
@@ -192,18 +229,27 @@ KERNEL="$REL/cellos-kernel"
     exit 1
 }
 
+# QEMU arguments differ per architecture: riscv64 virt boots the kernel ELF with the default
+# firmware, aarch64 virt takes the ELF directly and needs a CPU model that has the features the
+# kernel enables at runtime (cortex-a57 is what scripts/qemu-aarch64-test.sh boots).
+QEMU_ARGS=(
+    -machine virt
+    -m 256M
+    -smp 1
+    -nographic
+    -monitor none
+    -kernel "$KERNEL"
+    -drive "file=$DISK,format=raw,if=none,id=hd0"
+    -device virtio-blk-device,drive=hd0
+)
+if [[ "$ARCH" == "riscv64" ]]; then
+    QEMU_ARGS+=(-bios default)
+else
+    QEMU_ARGS+=(-cpu cortex-a57)
+fi
+
 echo "[ai-oracle] booting QEMU (timeout ${BOOT_TIMEOUT}s)"
-timeout --foreground "$BOOT_TIMEOUT" "$QEMU_BIN" \
-    -machine virt \
-    -m 256M \
-    -smp 1 \
-    -nographic \
-    -bios default \
-    -kernel "$KERNEL" \
-    -monitor none \
-    -drive "file=$DISK,format=raw,if=none,id=hd0" \
-    -device virtio-blk-device,drive=hd0 \
-    > "$LOG" 2>&1 &
+timeout --foreground "$BOOT_TIMEOUT" "$QEMU_BIN" "${QEMU_ARGS[@]}" > "$LOG" 2>&1 &
 QEMU_PID=$!
 
 status=1
@@ -229,8 +275,15 @@ wait "$QEMU_PID" 2>/dev/null || true
 EVIDENCE_DIR="$ROOT/.agents/260913-2002-g2-level-a-ai-inference/evidence"
 mkdir -p "$EVIDENCE_DIR"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
-EVIDENCE="$EVIDENCE_DIR/ai-oracle-$STAMP.log"
-cp -- "$LOG" "$EVIDENCE"
+EVIDENCE="$EVIDENCE_DIR/ai-oracle-$ARCH-$STAMP.log"
+# The artifact is the QEMU serial log, so the architecture and the model it ran against are written
+# into it: a log that cannot say which ISA produced it is not evidence of anything.
+{
+    echo "# Cellos AI inference oracle — $ARCH ($TARGET)"
+    echo "# model: $MODEL"
+    echo "# boot timeout: ${BOOT_TIMEOUT}s"
+    tr -d '\000' < "$LOG"
+} > "$EVIDENCE"
 echo "[ai-oracle] serial log: $EVIDENCE"
 
 if [[ "$status" -ne 0 ]]; then

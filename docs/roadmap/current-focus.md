@@ -96,6 +96,14 @@ activation's half-step, pinned by a derived-bound test — and the golden refere
 `scripts/gen-ai-test-model.py` now mirrors the shipped arithmetic while keeping the same eight token
 ids (weakest greedy margin 0.38 vs the fixture's 0.05 floor).
 
+Spec 24 CP-3's gate asks for "QEMU RV64/ARM64 and RPi3 memory budget validation", and only the RV64
+half had ever run. The oracle is now parameterized by architecture (`--arch riscv64|aarch64`) and the
+CI job is a two-leg matrix (`.agents/260914-ai-oracle-arm64/`): the golden ids reproduce on aarch64 —
+whose cell target is *softfloat*, so its float arithmetic is the compiler's software routines — which
+makes that leg a numerics cross-check on a second ISA rather than a second boot test, and the same
+image generates coherent prose from a real 26.7 MB checkpoint on both. CP-3's RPi3 memory-budget leg
+stays open: it needs the board, and a QEMU result is not a substitute for it.
+
 ## Current executable work
 
 - Continue useful QEMU software and integration work to the `qemu` ceiling.
