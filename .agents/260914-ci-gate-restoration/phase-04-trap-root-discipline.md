@@ -101,6 +101,30 @@ N=10 python3 /tmp/rv64-root-accept.py          # 10 consecutive boots, zero kern
 cd tests/integration && cargo test --test srv-cellosfs
 ```
 
+## Hosted confirmation (the gate itself)
+
+Pushed as `bc97e394b` (plus `bc7be77ea`, the regenerated code-metrics counters the Lint job's
+`generate-code-metrics.py --check` gate requires):
+
+| job | revision | result |
+|---|---|---|
+| `CellosFS /srv Integration Test` | `bc97e394b` | **success** — run [34933281918](https://github.com/dxsl-org/cellos/actions/runs/34933281918), job `104265780294`, every step green including `Run CellosFS /srv integration tests` (05:34:24Z → 05:37:39Z). This is the job phase 03 reproduced the fault in, and it had been red on every push. |
+| `C2C Broker Oracle` | `bc97e394b` | still **failure**, but for a different reason: the artifact contains **zero** `Kernel exception` lines where run `34927425974` had 487 copies of the PLIC fault (`stval=0xc201004`, `satp` ASID 1). The oracle now boots the kernel through to `Spawning Embedded Init` and dies on a *cell* fault instead — `Cell 1 (task 4) cause=0xf addr=0x80cbe000` after two MMIO-denial faults — so the shell never reaches `Cellos >`. The trap-root defect is out of that path; what remains is cell-side and belongs to the C2C lane (`fix/c2c-soak-liveness`). Control measured on this workstation: rebuilding the same oracle with this phase's files reverted to `040b05aeb` gives **923** `Kernel exception` lines and **zero** `[fault] Cell` lines — the cell fault is newly *observable*, not newly introduced. |
+| `Lint (fmt + clippy)` | `bc97e394b` | failure on the generated-code-metrics gate only (kernel nLOC 35313 → 35314); `cargo fmt --all --check` and the riscv64 workspace clippy with `-D warnings` pass locally, and `bc7be77ea` regenerates the counters. |
+| `Network Data-Path Integration (riscv64)` | `bc7be77ea` | still **failure**, but 6 failed tests → **2**, and **zero** `Kernel exception` lines in the whole suite (`test result: FAILED. 52 passed; 2 failed`, 669 s, artifact `software-evidence-34933484310-1`). The four failures that carried the UART fault — `mqtt_subscribe`, `network_tcp_listen_accept`, `posix_shim_getentropy`, `posix_shim_net` — are gone. What remains is the pair flagged below as a separate symptom: `network_httpd_serves_file` and `network_httpd_dynamic_content`, both failing on an empty HTTP response with no panic in their captured output. |
+
+Pre-fix artifacts for the two integration jobs that share this fault (downloaded from run
+`34928299105`, revision `040b05aeb`):
+
+- C2C: `scause=13 sepc=0x802ac966 stval=0xc201004 satp=0x8000100000080d65 kernel_satp=0x800000000008076c`
+  — a load of **PLIC MMIO** (`0xc201004`, the S-mode context's enable region) under a Cell root. The
+  job failed with `oracle shell did not boot: pattern "Cellos >" not seen in 120s`.
+- Network: 48 passed / 6 failed, of which four (`mqtt_subscribe`, `network_tcp_listen_accept`,
+  `posix_shim_getentropy`, `posix_shim_net`) carry four copies of the UART fault
+  (`stval=0x10000005`, the same offset phase 03 measured) in their QEMU output. The other two
+  (`network_httpd_serves_file`, `network_httpd_dynamic_content`) failed on missing HTTPD content with
+  no panic in their captured output — a separate symptom that this phase does not claim.
+
 ## A runner defect found while measuring — not caused by this change
 
 `scripts/qemu-native-domain-test.sh` classifies every `[fault] Cell` line against an allowlist, and it
@@ -120,8 +144,16 @@ with the measurement in the comment, so a correct kernel cannot be failed by a t
 
 ## Limits
 
-- Software evidence on qemu/TCG, local and (pending the next push) hosted — not a board or production
-  claim.
+- Trap entry pays one full `sfence.vma zero, zero` **only** on the transitions where the live root is not
+  the kernel root (i.e. traps taken from a private domain). A narrower fence is defensible — ASIDs
+  separate the two roots, and the kernel root is ASID 0, which is never recycled — but a full flush is
+  the conservative choice at a boundary whose failure mode is a silent isolation break. It is a
+  candidate for narrowing once the invariant has more service time, and it is a deliberate cost, not
+  an oversight.
+
+- Software evidence: local qemu/TCG plus the hosted run above (the `/srv` job green on the hosted
+  runner). Not a board or production claim — the ARM64 hardware lane and the AMD/Intel qualification
+  remain separate gates.
 - No x86_64/aarch64 boot smoke was run here: the change is `cfg(target_arch = "riscv64")`, those two
   kernels build, and their frame layout is asserted unchanged. The doc's §B "option A/B needs a
   cross-arch review" does not apply to a cfg'd field, but a reviewer should confirm that reading.
