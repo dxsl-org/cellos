@@ -3,7 +3,6 @@
 //! The scheduler must not write SATP directly. These operations keep the PTE-store,
 //! SATP, and `sfence.vma` ordering at the architecture boundary.
 
-#[cfg(feature = "test-hooks")]
 use core::sync::atomic::{AtomicUsize, Ordering};
 
 #[cfg(feature = "test-hooks")]
@@ -36,6 +35,23 @@ pub fn observe_switch_activation() {
     }
 }
 use crate::common::sbi;
+
+/// The kernel's own root, recorded when its paging is activated.
+///
+/// A trap taken from a Cell leaves that Cell's private root installed, so the
+/// kernel can run under a root that does not map its own MMIO. Naming both
+/// values is what makes a kernel fault diagnosable.
+static KERNEL_SATP: AtomicUsize = AtomicUsize::new(0);
+
+/// Record the SATP value the kernel activated for itself.
+pub fn record_kernel_satp(satp: usize) {
+    KERNEL_SATP.store(satp, Ordering::Release);
+}
+
+/// Return the recorded kernel SATP value, or 0 before paging is activated.
+pub fn kernel_satp() -> usize {
+    KERNEL_SATP.load(Ordering::Acquire)
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DomainPagingError {

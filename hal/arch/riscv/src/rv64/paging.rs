@@ -236,6 +236,7 @@ impl PageTableTrait for PageTable {
     unsafe fn activate(&self) {
         let root_addr = self as *const _ as usize;
         let satp_val = (8usize << 60) | (root_addr >> 12);
+        crate::rv64::domain::record_kernel_satp(satp_val);
         // SAFETY: fence ensures all PTE stores reach the memory system before the
         // SATP write, preventing the hardware page-walker from seeing stale entries.
         // Required by RISC-V privileged spec §4.3 (sfence.vma ordering).
