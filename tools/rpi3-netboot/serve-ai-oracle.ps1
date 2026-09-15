@@ -23,7 +23,7 @@
 
 [CmdletBinding()]
 param(
-    [ValidateSet('fixture', '15m', 'nomodel', '260k')]
+    [ValidateSet('fixture', '15m', 'nomodel', '260k', '15m-diag')]
     [string]$Variant = 'fixture',
     [string]$ComPort = '',
     [int]$Baud = 115200,
@@ -59,6 +59,9 @@ $payload = switch ($Variant) {
     # boots: stories260K (1.1 MB). The card path (`nomodel`) is real but reads 4 KiB per VFS round
     # trip, which has not completed 26.7 MB in ten minutes on the board.
     '260k' { Join-Path $root 'cellos-ai-260k.uimg' }
+    # The 43.6 MB payload that panics at compositor setup, carrying temporary boot-time diagnostics
+    # (memory map entries, allocator range, which boot path produced the map).
+    '15m-diag' { Join-Path $root 'cellos-ai-15m-diag.uimg' }
 }
 if (-not (Test-Path -LiteralPath $payload)) {
     throw "payload missing: $payload (build it with scripts/build-aarch64-cells.ps1 -BoardRpi3 -AiModel <gguf>, then rpi3-uimage.py)"
