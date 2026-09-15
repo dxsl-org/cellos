@@ -1,7 +1,8 @@
 //! S-mode trap handling for ViCell RV32 Nano.
 //!
 //! Mirrors `rv64/trap.rs` with RV32-specific differences:
-//! - `ViTrapFrame32`: 32-bit register slots (144 bytes vs 288 bytes on RV64)
+//! - `ViTrapFrame32`: 32-bit register slots (144 bytes vs 304 bytes on RV64,
+//!   which also carries the interrupted `satp` and its alignment padding)
 //! - Interrupt bit is bit 31 of scause (not bit 63)
 //! - No PLIC claim in Phase 31 Nano (timer/software interrupts only)
 

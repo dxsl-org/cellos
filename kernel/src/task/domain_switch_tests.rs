@@ -34,7 +34,7 @@ pub(crate) fn run_primary() -> bool {
     else {
         return false;
     };
-    if !sas_plan.is_sas_fast_path() || sas_plan.root_switch() != (0, 0) {
+    if !sas_plan.writes_no_root() || sas_plan.root_switch() != (0, 0) {
         return false;
     }
     let (roots, flushes) = crate::hal::domain::switch_counters();
@@ -73,7 +73,7 @@ pub(crate) fn run_primary() -> bool {
     domain_task.bind_address_space_for_test(address_space);
     let (root_ppn, asid) =
         match SwitchPlan::new(core::ptr::null_mut(), core::ptr::null(), Some(&domain_task)) {
-            Some(plan) if !plan.is_sas_fast_path() => plan.root_switch(),
+            Some(plan) if !plan.writes_no_root() => plan.root_switch(),
             _ => {
                 log::error!("S22-RV64-PLAN: FAIL");
                 return false;
@@ -96,7 +96,35 @@ pub(crate) fn run_primary() -> bool {
     } else {
         log::error!("S22-RV64-PLAN: FAIL");
     }
-    plan_ok && run_pinned_retire_regression()
+
+    // Re-derivation for the trap-root discipline: a domain re-selected while it
+    // is still the hart's current domain must program its root again, because
+    // trap entry installs the kernel root. Collapsing this plan to the no-write
+    // path would resume the Cell under the kernel root, so the fixture asserts
+    // the write happens, that it names THIS domain, and that the published
+    // domain identity is left alone.
+    let mut resume_ok = false;
+    if let Some(resume_plan) =
+        SwitchPlan::new(core::ptr::null_mut(), core::ptr::null(), Some(&domain_task))
+    {
+        let resume_root = resume_plan.root_switch();
+        let (resume_roots, resume_flushes) = crate::hal::domain::switch_counters();
+        resume_ok = !resume_plan.writes_no_root()
+            && resume_root == (root_ppn, asid)
+            && resume_roots == 2
+            && resume_flushes == 2
+            && hart_local::current_domain() == (domain_id, domain_generation);
+    }
+    if resume_ok {
+        log::info!(
+            "S22-RV64-RESUME-ROOT: PASS harts={}",
+            super::smp::online_hart_count()
+        );
+    } else {
+        log::error!("S22-RV64-RESUME-ROOT: FAIL");
+    }
+
+    plan_ok && resume_ok && run_pinned_retire_regression()
 }
 
 /// Regression for the pin→plan window: `retire()` is a bare atomic store that
@@ -149,7 +177,7 @@ pub(crate) fn run_pinned_retire_regression() -> bool {
         log::error!("S22-RV64-PIN-DYING: FAIL plan-rejected-after-pin");
         return false;
     };
-    if plan.is_sas_fast_path() {
+    if plan.writes_no_root() {
         log::error!("S22-RV64-PIN-DYING: FAIL diverted-to-fast-path");
         return false;
     }

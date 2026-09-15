@@ -40,17 +40,23 @@ use crate::common::sbi;
 ///
 /// A trap taken from a Cell leaves that Cell's private root installed, so the
 /// kernel can run under a root that does not map its own MMIO. Naming both
-/// values is what makes a kernel fault diagnosable.
-static KERNEL_SATP: AtomicUsize = AtomicUsize::new(0);
+/// values is what makes a kernel fault diagnosable, and `asm/trap.S` reads this
+/// one at trap entry to install the kernel root before any kernel code runs.
+///
+/// The name is fixed on purpose: trap entry runs before Rust, so the value has
+/// to be reachable without a call. Zero means "not recorded yet" — the assembly
+/// then keeps whatever root is live.
+#[no_mangle]
+pub static VI_KERNEL_SATP: AtomicUsize = AtomicUsize::new(0);
 
 /// Record the SATP value the kernel activated for itself.
 pub fn record_kernel_satp(satp: usize) {
-    KERNEL_SATP.store(satp, Ordering::Release);
+    VI_KERNEL_SATP.store(satp, Ordering::Release);
 }
 
 /// Return the recorded kernel SATP value, or 0 before paging is activated.
 pub fn kernel_satp() -> usize {
-    KERNEL_SATP.load(Ordering::Acquire)
+    VI_KERNEL_SATP.load(Ordering::Acquire)
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

@@ -49,7 +49,7 @@ pub(crate) struct SwitchPlan {
 enum DomainTransition {
     SasToSas,
     Activate(DomainRef),
-    SameDomain,
+    SameDomain(DomainRef),
     ToSafeRoot,
 }
 
@@ -66,7 +66,7 @@ impl SwitchPlan {
         // Dying after acquisition is legal and drain-safe.
         let transition = match task.and_then(DomainRef::from_task) {
             Some(domain) if hart_local::current_domain() == domain.tuple() => {
-                DomainTransition::SameDomain
+                DomainTransition::SameDomain(domain)
             }
             Some(domain) => {
                 hart_local::advance_execution_pin(Some(Arc::clone(&domain.0)));
@@ -88,7 +88,8 @@ impl SwitchPlan {
     }
 
     /// Return the root switch that assembly must issue after saving `outgoing`.
-    /// A zero PPN is the explicit no-write SAS/same-domain fast path.
+    /// A zero PPN is the explicit no-write path, and it now means exactly one
+    /// thing: SAS to SAS, where the kernel root is already live.
     pub(crate) fn root_switch(&self) -> (usize, usize) {
         match &self.transition {
             DomainTransition::Activate(domain) => {
@@ -106,6 +107,15 @@ impl SwitchPlan {
                 );
                 root
             }
+            DomainTransition::SameDomain(domain) => {
+                // Same-domain resume must still program the root. Trap entry
+                // installs the kernel root, so "same domain" no longer implies
+                // "the root is already live"; skipping the write would resume a
+                // Cell under the kernel root with the kernel's mappings visible
+                // to its S-mode code — a silent isolation failure.
+                crate::hal::domain::observe_switch_activation();
+                (domain.0.root_ppn(), domain.0.asid())
+            }
             DomainTransition::ToSafeRoot => {
                 let root = crate::memory::paging::KERNEL_ROOT
                     .lock()
@@ -114,15 +124,15 @@ impl SwitchPlan {
                 crate::hal::domain::observe_switch_activation();
                 (root >> 12, 0)
             }
-            DomainTransition::SasToSas | DomainTransition::SameDomain => (0, 0),
+            DomainTransition::SasToSas => (0, 0),
         }
     }
 
+    /// True only for the plan that writes no root: SAS to SAS, where the kernel
+    /// root is already live. Every private-root transition — activate *and*
+    /// same-domain resume — programs SATP.
     #[cfg(feature = "test-hooks")]
-    pub(crate) fn is_sas_fast_path(&self) -> bool {
-        matches!(
-            self.transition,
-            DomainTransition::SasToSas | DomainTransition::SameDomain
-        )
+    pub(crate) fn writes_no_root(&self) -> bool {
+        matches!(self.transition, DomainTransition::SasToSas)
     }
 }

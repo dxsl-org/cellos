@@ -15,6 +15,19 @@ pub struct ViTrapFrame {
     pub sepc: usize,
     pub stval: usize,
     pub scause: usize,
+    /// RV64 only: the `satp` that was live when the trap was taken.
+    ///
+    /// Trap entry parks it here and installs the kernel root before calling the
+    /// handler, because a private Cell root maps no MMIO; `__trap_exit`
+    /// restores it. A frame that never took a trap (a task's primed
+    /// first-entry frame) carries 0, meaning "the scheduler already installed
+    /// the root for this context — do not touch `satp`".
+    #[cfg(target_arch = "riscv64")]
+    pub satp: usize,
+    /// RV64 only: keeps the frame 16-byte aligned (304 bytes) for the
+    /// `call vi_trap_handler` ABI. Unused, and never read.
+    #[cfg(target_arch = "riscv64")]
+    pub reserved: usize,
 }
 
 impl ViTrapFrame {
@@ -25,6 +38,10 @@ impl ViTrapFrame {
             sepc: 0,
             stval: 0,
             scause: 0,
+            #[cfg(target_arch = "riscv64")]
+            satp: 0,
+            #[cfg(target_arch = "riscv64")]
+            reserved: 0,
         }
     }
 }
@@ -52,7 +69,12 @@ impl ViTrapFrame32 {
     }
 }
 
+#[cfg(not(target_arch = "riscv64"))]
 const _: () = assert!(core::mem::size_of::<ViTrapFrame>() == 36 * core::mem::size_of::<usize>());
+/// RV64 carries the interrupted `satp` plus alignment padding: 38 words, so the
+/// frame base stays 16-byte aligned at the handler call.
+#[cfg(target_arch = "riscv64")]
+const _: () = assert!(core::mem::size_of::<ViTrapFrame>() == 38 * core::mem::size_of::<usize>());
 const _: () = assert!(core::mem::size_of::<ViTrapFrame32>() == 144);
 
 /// Timer interrupt callback supplied by the kernel scheduler.

@@ -27,9 +27,11 @@ that job as evidence until it is fixed.
 - [phase-03-console-fault.md](phase-03-console-fault.md) — the `console_drv::poll` fault: the
   measurement is applied and the mechanism is proven (the fault runs with a private Cell root live,
   ASID 1, while the kernel root is ASID 0).
-- [phase-04-trap-root-discipline.md](phase-04-trap-root-discipline.md) — the fix as a design: the
-  invariant, the three places that must change (trap entry, trap exit storage, scheduler resume), and
-  the verification matrix. Nothing written yet.
+- [phase-04-trap-root-discipline.md](phase-04-trap-root-discipline.md) — the fix, implemented and
+  measured: trap entry installs the kernel root (parking the interrupted root in the frame), trap
+  exit restores it when it differs, and same-domain resume re-programs its root. 10/10 clean boots on
+  the phase-03 driver, 10/10 green `srv-cellosfs` runs, RV64 domain regressions re-derived with a new
+  `S22-RV64-RESUME-ROOT` fixture. Hosted confirmation lands with the next push.
 
 ## Non-goals
 

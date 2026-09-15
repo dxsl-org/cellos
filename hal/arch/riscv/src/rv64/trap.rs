@@ -167,12 +167,12 @@ pub extern "C" fn vi_trap_handler(frame: &mut ViTrapFrame) {
                     // safely if we do.
                 } else {
                     // True kernel fault (S-mode) or U-mode fault without a registered Cell.
-                    // A trap taken from a Cell leaves that Cell's private root
-                    // installed, so the faulting instruction may have been executed
-                    // under a root that does not map kernel MMIO. Both values belong
-                    // in the record: the live SATP is what the faulting access used,
-                    // and the recorded kernel SATP is what the kernel should have
-                    // been running under.
+                    // Trap entry parks the root the faulting access ran under in
+                    // the frame and installs the kernel root, so the record
+                    // names three values: the live SATP (which must equal the
+                    // recorded kernel root once the entry discipline holds),
+                    // the kernel root itself, and the interrupted Cell root the
+                    // faulting instruction was actually executed under.
                     let live_satp: usize;
                     // SAFETY: SATP reads have no side effects.
                     unsafe {
@@ -185,15 +185,17 @@ pub extern "C" fn vi_trap_handler(frame: &mut ViTrapFrame) {
                     #[cfg(feature = "test-hooks")]
                     {
                         // SAFETY: the snapshot is allocation-free, and it is
-                        // handed the live SATP captured above.
+                        // handed the interrupted root — the one whose page
+                        // tables explain the faulting address.
                         unsafe {
-                            vi_rv64_kernel_fault_snapshot(live_satp, frame.stval);
+                            vi_rv64_kernel_fault_snapshot(frame.satp, frame.stval);
                         }
                     }
                     panic!(
-                        "Cellos: Kernel exception: scause={} sepc={:#x} stval={:#x} sstatus={:#x} satp={:#x} kernel_satp={:#x}",
+                        "Cellos: Kernel exception: scause={} sepc={:#x} stval={:#x} sstatus={:#x} satp={:#x} kernel_satp={:#x} interrupted_satp={:#x}",
                         code, frame.sepc, frame.stval, frame.sstatus, live_satp,
-                        crate::rv64::domain::kernel_satp()
+                        crate::rv64::domain::kernel_satp(),
+                        frame.satp
                     );
                 }
             }

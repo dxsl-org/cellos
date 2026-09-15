@@ -18,8 +18,8 @@ usage() {
     cat <<'USAGE'
 Usage: scripts/qemu-native-domain-test.sh --harts {1|2} --case <csv>
 
-Cases: switch, sas-fastpath, migration, user-copy, user-copy-race, admission,
-rollback, grant-revoke
+Cases: switch, resume-root, sas-fastpath, migration, user-copy, user-copy-race,
+admission, rollback, grant-revoke
 
 Each requested case gets a separate fresh QEMU log directory. `migration`
 requires two harts; it asserts the domain-switch terminal from the cross-hart
@@ -61,7 +61,7 @@ declare -A seen=()
 for case_id in "${REQUESTED_CASES[@]}"; do
     [[ -n "$case_id" ]] || { echo "FAIL: empty case in --case" >&2; exit 2; }
     case "$case_id" in
-        switch|sas-fastpath|migration|user-copy|user-copy-race|ipc-copy|ipc-copy-race|admission|rollback|grant-revoke) ;;
+        switch|resume-root|sas-fastpath|migration|user-copy|user-copy-race|ipc-copy|ipc-copy-race|admission|rollback|grant-revoke) ;;
         *) echo "FAIL: unknown native-domain case: $case_id" >&2; exit 2 ;;
     esac
     [[ -z "${seen[$case_id]:-}" ]] || { echo "FAIL: duplicate native-domain case: $case_id" >&2; exit 2; }
@@ -92,6 +92,7 @@ ELF_DIGEST="$(sha256sum "$KERNEL" | awk '{print $1}')"
 marker_for() {
     case "$1" in
         switch) printf 'S22-RV64-SWITCH: PASS harts=%s' "$HARTS" ;;
+        resume-root) printf 'S22-RV64-RESUME-ROOT: PASS harts=%s' "$HARTS" ;;
         migration) printf 'S22-RV64-MIGRATION: PASS harts=2' ;;
         sas-fastpath) printf 'S22-RV64-SAS-FASTPATH: PASS roots=0 flushes=0 harts=%s' "$HARTS" ;;
         user-copy) printf 'S22-RV64-COPY: PASS harts=%s' "$HARTS" ;;
@@ -106,6 +107,7 @@ marker_for() {
 terminal_pattern_for() {
     case "$1" in
         switch) printf '(^|\\] )S22-RV64-SWITCH: PASS harts=%s$' "$HARTS" ;;
+        resume-root) printf '(^|\\] )S22-RV64-RESUME-ROOT: PASS harts=%s$' "$HARTS" ;;
         migration) printf '(^|\\] )S22-RV64-MIGRATION: PASS harts=2$' ;;
         sas-fastpath) printf '(^|\\] )S22-RV64-SAS-FASTPATH: PASS roots=0 flushes=0 harts=%s$' "$HARTS" ;;
         user-copy) printf '(^|\\] )S22-RV64-COPY: PASS harts=%s$' "$HARTS" ;;
@@ -181,8 +183,21 @@ terminal_min_for() {
     fi
     while IFS= read -r fault_line; do
         [[ -z "$fault_line" ]] && continue
+        # Two injected canaries are expected, and each is identified by its
+        # cause rather than by counters that record how far the concurrent
+        # campaign had progressed:
+        #   - Cell 254 / any task, cause=0xf, address in the campaign's scratch
+        #     page — the user-copy fault fixture;
+        #   - Cell 63 / task 6, cause=0xdead, null pc/addr — the SMP
+        #     fault-retirement selftest's synthetic trap. Its `generation` is
+        #     `NEXT_DOMAIN`, i.e. how many private AddressSpaces had been built
+        #     when the record was published. The phase-07 captures read 99 there;
+        #     this workstation reads 133 today **on the unmodified kernel too**
+        #     (measured 2026-09-15: pre-change build, harts=2, same line), so the
+        #     number is a timing artifact of the boot, not a contract. Pinning it
+        #     back would fail a correct kernel.
         if [[ ! "$fault_line" =~ ^\[ERROR\]\ \[fault\]\ Cell\ 254\ \(task\ [0-9]+\ generation\ [0-9]+\)\ terminated:\ cause=0xf\ pc=0x[0-9a-f]+\ addr=0x[0-9a-f]+$ ]] \
-            && [[ ! "$fault_line" =~ ^\[ERROR\]\ \[fault\]\ Cell\ 63\ \(task\ 6\ generation\ 99\)\ terminated:\ cause=0xdead\ pc=0x0\ addr=0x0$ ]]; then
+            && [[ ! "$fault_line" =~ ^\[ERROR\]\ \[fault\]\ Cell\ 63\ \(task\ 6\ generation\ [0-9]+\)\ terminated:\ cause=0xdead\ pc=0x0\ addr=0x0$ ]]; then
             echo "FAIL: unclassified cell fault for case=$case_id: $fault_line; see $normalized_log" >&2
             exit 1
         fi

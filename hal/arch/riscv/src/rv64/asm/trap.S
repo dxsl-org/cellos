@@ -15,9 +15,11 @@
 # sepc     = 8 bytes
 # stval    = 8 bytes
 # scause   = 8 bytes
-# Total    = 288 bytes
+# satp     = 8 bytes   (root that must be live when this frame is resumed)
+# reserved = 8 bytes   (padding: 304 = 19 * 16 keeps the frame 16-byte aligned)
+# Total    = 304 bytes
 
-.equ TRAP_FRAME_SIZE, 288
+.equ TRAP_FRAME_SIZE, 304
 
 .macro HART_TRAP_ENTRY pointer_offset
     # Swap user tp with the kernel stack pointer without clobbering either.
@@ -113,13 +115,54 @@ __trap_entry_hart1:
     sd t0, 2*8(sp)
 
 .call_handler:
-    # === STEP 6: Call Rust trap handler ===
+    # === STEP 6: Install the kernel root, then call the Rust handler ===
+    # A trap taken from a private native domain leaves that Cell's root
+    # installed. The domain root maps the kernel's registered ranges but no
+    # MMIO, so kernel code that touches the UART or the PLIC — the timer tick's
+    # console poll, and the external-interrupt claim — would fault. Park the
+    # interrupted root in the frame (`__trap_exit` restores it) and install the
+    # kernel root before any kernel code runs.
+    #
+    # VI_KERNEL_SATP is 0 until the kernel records its own root: keep the live
+    # root then, which is the pre-fix behaviour and keeps configurations
+    # without private domains (ASID 0 always) on a single path.
+    csrr t0, satp
+    sd t0, 36*8(sp)
+    .option push
+    .option norelax
+    lla t1, VI_KERNEL_SATP
+    .option pop
+    ld t1, 0(t1)
+    beqz t1, .Lroot_settled
+    beq t0, t1, .Lroot_settled
+    fence rw, rw
+    csrw satp, t1
+    sfence.vma zero, zero
+.Lroot_settled:
+
     mv a0, sp               # a0 = &ViTrapFrame (borrowed, not owned)
     call vi_trap_handler    # Rust function with Vi prefix
     
     # === STEP 7: Restore CSRs ===
     .global __trap_exit
 __trap_exit:
+    # === Root restore ===
+    # The frame carries the root that must be live for the context being
+    # resumed. Zero means the frame never took a trap (a primed first-entry
+    # frame): the scheduler already installed that task's root, so leave it.
+    # A frame that yielded mid-handler is resumed with its root already
+    # programmed by the switch plan, and the values compare equal here.
+    ld t1, 36*8(sp)
+    beqz t1, .Lroot_ready
+    csrr t0, satp
+    beq t0, t1, .Lroot_ready
+    fence rw, rw
+    csrw satp, t1
+    srli t2, t1, 44
+    li t3, 0xffff
+    and t2, t2, t3
+    sfence.vma zero, t2
+.Lroot_ready:
     ld t0, 32*8(sp)
     csrw sstatus, t0
     ld t0, 33*8(sp)
