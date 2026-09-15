@@ -917,8 +917,8 @@
     },
     {
       "phase": 4,
-      "status": "PLANNED",
-      "event_id": null
+      "status": "IMPLEMENTED",
+      "event_id": "phase-04-implemented"
     },
     {
       "phase": 5,
@@ -1290,11 +1290,61 @@
       },
       "state_digest": "e6c85fc6c09c48c090a0b628a90e343816ac4c8fb627418874019ac77e62e109",
       "hash": "7af1cad06815e64f6cba51e950651eae75087589a00ff000d35eb4a93fac9d09"
+    },
+    {
+      "sequence": 10,
+      "event_id": "phase-04-implemented",
+      "previous_hash": "7af1cad06815e64f6cba51e950651eae75087589a00ff000d35eb4a93fac9d09",
+      "steward": "lungmat8",
+      "reviewer": "datgausaigon",
+      "recorded_at": "2026-09-15T01:55:41Z",
+      "action": {
+        "kind": "lifecycle_transition",
+        "phase": 4,
+        "from_status": "PLANNED",
+        "to_status": "IMPLEMENTED",
+        "changes": [
+          {
+            "section": "phase_lifecycle",
+            "before_sha256": "5ea8d45d342a61cb985e9309e1dec4e3eae6d6146bb19a43c89fdc0b3790401d",
+            "after_sha256": "959c5446990e5ec98eb37c48688dc9a7b4a227e2801b9da9aefb321758ea0ea3"
+          }
+        ],
+        "evidence": [
+          {
+            "path": "docs/evidence/app-tier-phase04-implementation.log",
+            "sha256": "dcf83c683a1145e8f183816be688c8f75d00fb3f4c5b9beb4acebc6bcf55e1e0",
+            "size_bytes": 1494,
+            "kind": "log"
+          },
+          {
+            "path": "scripts/admission_prequalification/catalog.json",
+            "sha256": "cde941aa5430fb07f66e5052431ea1d5a1c1e9523b9973b220acad33f0c954d3",
+            "size_bytes": 11742,
+            "kind": "artifact"
+          }
+        ],
+        "implementation": {
+          "revision": "0dcab15e22c242d88a408bb50093302b5601945a",
+          "base_tree": "40e8ac45f3591a8e3b49e8d6949e919d638f0379",
+          "command": "python3 scripts/validate-admission-prequalification.py",
+          "target": "app-tier-prequalification",
+          "result": "PASS",
+          "artifact": {
+            "path": "scripts/admission_prequalification/catalog.json",
+            "sha256": "cde941aa5430fb07f66e5052431ea1d5a1c1e9523b9973b220acad33f0c954d3",
+            "size_bytes": 11742,
+            "kind": "artifact"
+          }
+        }
+      },
+      "state_digest": "8715d97e1cb6d01c40495a9274bb985da5ccff47bf4bc170a2d1d2dff60a6dd9",
+      "hash": "b165025a460771deecf9b62887d665e1eb22e83ccabfb002e9265563cbd332d7"
     }
   ],
   "baseline_prefix": {
-    "event_count": 9,
-    "tip_hash": "7af1cad06815e64f6cba51e950651eae75087589a00ff000d35eb4a93fac9d09"
+    "event_count": 10,
+    "tip_hash": "b165025a460771deecf9b62887d665e1eb22e83ccabfb002e9265563cbd332d7"
   },
   "source_binding": {
     "path": "docs/specs/23-native-sdk-contract.md",

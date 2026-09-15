@@ -1,0 +1,26 @@
+# Phase 04 implementation — admission prequalification infrastructure
+# captured: 2026-09-15T00:44:20Z on Linux 6.18.40.1-microsoft-standard-WSL2
+# revision: 0dcab15e22c242d88a408bb50093302b5601945a (feat(app-tier): add admission prequalification infrastructure)
+# tree: 40e8ac45f3591a8e3b49e8d6949e919d638f0379
+$ git show --stat --format='%H %ad %s' --date=iso-strict 0dcab15e22c242d88a408bb50093302b5601945a
+0dcab15e22c242d88a408bb50093302b5601945a 2026-08-21T19:13:40+07:00 feat(app-tier): add admission prequalification infrastructure
+
+ .../phase-03-tier1-baseline-admission.md           |  15 +-
+ .agents/260821-0642-app-tiers-completion/plan.md   |  12 +-
+ .../260821-1700-tier1-baseline-admission/plan.md   |  18 +-
+ CHANGELOG.md                                       |   1 +
+ docs/project-changelog.md                          |  23 +++
+ docs/project-roadmap.md                            |  26 +--
+ docs/roadmap/current-focus.md                      |  12 +-
+ docs/roadmap/open-risk-register.md                 |  18 +-
+ docs/system-architecture.md                        |  17 +-
+ kernel/src/admission/mod.rs                        |  10 ++
+
+$ python3 scripts/validate-admission-prequalification.py
+PASS: PREQUALIFICATION INFRASTRUCTURE COMPLETE; authoritative Phase 04 catalog pin matches; ADMISSIBLE EVIDENCE BLOCKED; production remains BLOCKED
+# exit: 0
+
+$ python3 -m unittest discover -s tests/admission-prequalification -p 'test_*.py' 2>&1 | tail -3
+Ran 13 tests in 0.206s
+
+OK
