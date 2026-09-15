@@ -69,7 +69,8 @@ pub trait FsBackend: Send {
 
     /// Atomic no-replace rename from `old` to `new`.
     ///
-    /// Backends that do not support it return false (only RedoxFS supports this).
+    /// Backends that do not support it return false; the `/srv` backend
+    /// (CellosFS Native) implements it.
     fn rename_no_replace(&mut self, old: &str, new: &str) -> bool {
         let _ = (old, new);
         false

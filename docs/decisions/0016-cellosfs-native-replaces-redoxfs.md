@@ -47,3 +47,6 @@ Two things did not follow the switch and are corrected here:
   `phase-03-console-fault.md`.
 - G2 production qualification for `/srv` remains open, as does the measured NVMe/hardware evidence
   ADR 09b called for; that gate now applies to CellosFS Native, not RedoxFS.
+- `cells/services/vfs/src/backend_stub.rs` (the `/srv` `StubBackend` placeholder) was no longer
+  declared in the VFS crate root and is removed; `backend_cellosfs.rs` is the only `/srv` backend.
+  `access/stub.rs` is unrelated (a guest-disk fixture for the access self-test) and stays.

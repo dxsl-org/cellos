@@ -1,9 +1,16 @@
 # ADR 0002: Activate `/srv` RedoxFS in two qualification stages
 
 - **Date:** 2026-08-01
-- **Status:** Accepted
+- **Status:** Superseded in part by [ADR 0016](0016-cellosfs-native-replaces-redoxfs.md) (2026-09-15): the `/srv` backend is CellosFS Native, not RedoxFS. The two-stage qualification policy below still governs `/srv`.
 - **Decision:** D10
 - **Scope:** `/srv` filesystem activation and G2 storage qualification
+
+> **Backend note (2026-09-15):** the filesystem this ADR activated is no longer in the image.
+> `/srv` is served by CellosFS Native (`libs/cellos-fs`; see [ADR 0016](0016-cellosfs-native-replaces-redoxfs.md)),
+> `third_party/redoxfs` is vendored for reference only, and no Cellos component depends on it. What
+> survives here is the policy: G1 functional availability through the generic block Driver Cell path
+> is authorized, while G2 production qualification (NVMe, real hardware, a defined read benchmark)
+> remains gated. Read "RedoxFS" below as "the `/srv` backend at the time of writing".
 
 ## Context
 

@@ -560,8 +560,10 @@ pub fn tick() {
 
 pub(crate) fn stack_pages_for(name: &str) -> usize {
     match name {
-        // RedoxFS transactions exceed the pre-RedoxFS 64 KiB measurement and
-        // must retain the conservative stack until a new watermark is captured.
+        // The VFS stack was sized from a transaction-path measurement taken
+        // while RedoxFS still served /srv; the current backend is CellosFS
+        // Native, so the conservative value stays until a new watermark is
+        // captured against it.
         "vfs" => STACK_PAGES,
         "init" | "shell" | "vfs-test" | "net" | "virtio-net" | "thread" | "block" | "platform"
         | "config" | "bench" | "bench-probe" => MEASURED_STACK_PAGES,

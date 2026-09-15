@@ -79,9 +79,9 @@ pub static PREFIX_RULES: &[PathRule] = &[
         allow_read_all: true,
         allow_write_all: true,
     },
-    // RedoxFS service volume. Writable like /data: without this rule every /srv
-    // write fell through to the read-only "/" rule and failed before reaching the
-    // backend.
+    // /srv service volume (CellosFS Native on P5). Writable like /data: without
+    // this rule every /srv write fell through to the read-only "/" rule and
+    // failed before reaching the backend.
     PathRule {
         prefix: "/srv/cellos/",
         allow_read_all: false,

@@ -13,7 +13,7 @@ archived traceability notes.
 | HAL/arch | RV64, AArch64, and x86_64 have implementation and smoke/build evidence; RV32/AArch32 remain separate qualification tracks |
 | HAL to kernel Rust ABI | Centralized in `hal/traits/arch/src/kernel_abi.rs`; boundary script rejects local HAL declarations |
 | Boards | Seven active descriptors in `boards/`; placeholder-only docs for `q35-x86_32`, `virt-riscv32`, `virt-aarch32` |
-| VFS and storage | Service path active; FAT/littlefs/redoxfs-related work remains split by backend maturity |
+| VFS and storage | Service path active; FAT32 (`/mnt/sd`), littlefs2 (`/data`), and CellosFS Native (`/srv`) remain split by backend maturity |
 | Networking | Net service and net-broker pieces exist; broker routing/beacon/lease/enrollment wiring remains incomplete |
 | Scripting | Lua is active; MicroPython is historical and absent from current workspace members |
 | Hotswap/supervisor | Supervisor hotswap path has QEMU smoke evidence; continue keeping authority gates explicit |
