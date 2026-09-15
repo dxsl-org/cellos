@@ -88,7 +88,7 @@ buffers instead of accepting them because a domain root happens to map them.
 | 3 | RV64 domain regressions, one hart | `scripts/qemu-native-domain-test.sh --harts 1 --case switch,resume-root,sas-fastpath,user-copy,ipc-copy,admission,rollback,grant-revoke` | **suite PASS**; every marker green, including `S22-RV64-SWITCH`, `S22-RV64-RESUME-ROOT`, `S22-RV64-SAS-FASTPATH roots=0 flushes=0`, `S22-RV64-PLAN`, `S22-RV64-PIN-DYING`, `S22-RV64-COPY`, `S22-RV64-IPC-{COPY,SCATTER,NO-PEER-MAP}`, `S22-RV64-GRANT-REVOKE`, `S22-RV64-ADMISSION-{DENY,DRAIN}`, `S22-RV64-DYING-NONSCHEDULABLE`, `S22-RV64-ASID-REUSE`, `S22-RV64-ASPACE` |
 | 4 | RV64 domain regressions, two harts (the interleaving cases) | `scripts/qemu-native-domain-test.sh --harts 2 --case switch,resume-root,migration,user-copy-race,ipc-copy-race` | **suite PASS** — `S22-RV64-RESUME-ROOT: PASS harts=2` in every run, plus `SWITCH`, `PLAN`, `PIN-DYING`, `MIGRATION`, `COPY`, `COPY-RACE`, `IPC-COPY`, `IPC-COPY-RACE`, `IPC-SCATTER`, `IPC-NO-PEER-MAP`, all at `harts=2`, no `FAIL` and no panic in any log |
 | 5 | negative isolation after a trap round-trip | inside the same suite: `S22-RV64-COPY` (`kernel/src/task/user_copy_tests.rs`) requires a kernel-range-style pointer inside the canonical user half to be rejected with the destination untouched | PASS — and the handler now takes the stricter branch: the probe/commit walk the Cell's Sv39 tables and cross-check the mapping ledger instead of trusting the resident root |
-| 6 | cross-arch containment | `cargo build --release -p cellos-kernel --target x86_64-unknown-none -Z build-std=core,alloc` and the same for `aarch64-unknown-none-softfloat` | both kernels build; the RV64-only field is not compiled there and their 36-word frame assertion still holds |
+| 6 | cross-arch containment | locally: `cargo build --release -p cellos-kernel --target x86_64-unknown-none -Z build-std=core,alloc` and the same for `aarch64-unknown-none-softfloat`; on the hosted run `bc7be77ea`: the `QEMU Boot Test (x86_64)`, `QEMU Boot Test (aarch64)`, `QEMU Boot Test (512M RAM)` (riscv64), `Host unit tests`, `AI Inference Oracle` (both ISA legs) and `F1/F5 admission check` jobs | both kernels build locally, and every hosted cross-arch gate is green on the revision that carries the fix — the RV64-only field is not compiled for those targets and their 36-word frame assertion still holds |
 
 Raw serial transcripts: `/tmp/rv64-root-accept/serial-{1..10}.log`; domain-run logs:
 `.logs/native-domain-qemu/h1-*` and `h2-*` (gitignored).
@@ -144,6 +144,10 @@ with the measurement in the comment, so a correct kernel cannot be failed by a t
 
 ## Limits
 
+- Same-domain resume now pays a `satp` write plus `sfence.vma zero, {asid}` per switch, where it used
+  to be a sentinel that wrote nothing. That is the price of dropping the assumption "the root is
+  already live", and `S22-RV64-RESUME-ROOT` asserts the counter advances by exactly one so the cost
+  cannot grow silently into extra writes.
 - Trap entry pays one full `sfence.vma zero, zero` **only** on the transitions where the live root is not
   the kernel root (i.e. traps taken from a private domain). A narrower fence is defensible — ASIDs
   separate the two roots, and the kernel root is ASID 0, which is never recycled — but a full flush is
