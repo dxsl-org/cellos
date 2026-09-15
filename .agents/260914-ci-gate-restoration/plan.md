@@ -18,6 +18,20 @@ four integration jobs as separately-reported defects — with one exception: the
 kernel fault was investigated here (phases 02-04) because it halts the kernel, so no lane can consume
 that job as evidence until it is fixed.
 
+## Outcome (2026-09-15)
+
+The lane's own target is met: the three lint jobs are green, and `CellosFS /srv Integration Test` is
+green on every push from `bc97e394b` onward. The trap-root fault also accounted for most of two other
+integration jobs, which changed but did not close:
+
+| job | state after phase 04 |
+|---|---|
+| `Lint (fmt + clippy)`, `Clippy (x86_64)`, `Clippy (aarch64)` | green (phase 01; the metrics gate needs `scripts/generate-code-metrics.py` re-run whenever kernel nLOC moves) |
+| `CellosFS /srv Integration Test` | **green** on `bc97e394b`, `bc7be77ea`, `c5e92f0f1` |
+| `Network Data-Path Integration (riscv64)` | 6 failures (4 of them the UART kernel fault) → 2, zero kernel exceptions; the remainder is the HTTP-server pair |
+| `C2C Broker Oracle` | PLIC kernel fault gone (487 hosted / 923 local control → 0); now fails on a cell fault at `0x80cbe000` — C2C lane's own defect |
+| `QEMU Hypervisor Boot-to-Shell (x86_64)` | unchanged: `Init: fb-console spawn failed` / shell focus timeout, no panic |
+
 ## Phases
 
 - [phase-01-lint-jobs.md](phase-01-lint-jobs.md) — the lint debt, what was fixed, what was found
