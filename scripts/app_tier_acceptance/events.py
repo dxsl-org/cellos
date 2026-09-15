@@ -7,6 +7,7 @@ from pathlib import Path
 
 from .checks import GIT, HEX, canonical_digest, exact, integer, safe_file, text, timestamp
 LIFE = ["PLANNED", "IMPLEMENTED", "VERIFIED", "LEDGER_RECORDED"]
+MIGRATABLE = ("source_binding", "blockers", "security_negatives", "claims")
 
 
 def artifacts(root: Path, value: object, label: str) -> None:
@@ -55,13 +56,27 @@ def action(root: Path, value: object, states: dict[int, str], event: dict | None
         raise ValueError("event action kind invalid")
     if value["kind"] == "schema_migration":
         item = exact(value, {"kind", "from_version", "to_version", "changes", "evidence"}, "schema migration action")
-        if integer(item["from_version"], "from_version") != 3 or integer(item["to_version"], "to_version") != 4:
-            raise ValueError("schema migration must be from 3 to 4")
-        if not isinstance(item["changes"], list) or len(item["changes"]) != 1:
-            raise ValueError("schema migration requires exactly one change")
-        change = exact(item["changes"][0], {"section", "before_sha256", "after_sha256"}, "migration change")
-        if change["section"] != "schema_version" or change["before_sha256"] != canonical_digest(3) or change["after_sha256"] != canonical_digest(4):
-            raise ValueError("schema migration change invalid")
+        version = (integer(item["from_version"], "from_version"), integer(item["to_version"], "to_version"))
+        if version == (3, 4):
+            if not isinstance(item["changes"], list) or len(item["changes"]) != 1:
+                raise ValueError("schema migration requires exactly one change")
+            change = exact(item["changes"][0], {"section", "before_sha256", "after_sha256"}, "migration change")
+            if change["section"] != "schema_version" or change["before_sha256"] != canonical_digest(3) or change["after_sha256"] != canonical_digest(4):
+                raise ValueError("schema migration change invalid")
+        elif version == (4, 5):
+            if not isinstance(item["changes"], list) or not item["changes"]:
+                raise ValueError("schema migration requires changes")
+            sections = []
+            for change in item["changes"]:
+                exact(change, {"section", "before_sha256", "after_sha256"}, "migration change")
+                text(change["section"], "migration change section")
+                if not HEX.fullmatch(text(change["before_sha256"], "before digest")) or not HEX.fullmatch(text(change["after_sha256"], "after digest")):
+                    raise ValueError("migration change digest invalid")
+                sections.append(change["section"])
+            if len(set(sections)) != len(sections) or sections[0] != "schema_version" or sections[1:] != [key for key in MIGRATABLE if key in set(sections)]:
+                raise ValueError("schema migration sections invalid")
+        else:
+            raise ValueError("schema migration version must be 3 to 4 or 4 to 5")
         artifacts(root, item["evidence"], "schema migration evidence")
         return 0, "schema_migration"
     if value["kind"] == "record_correction":
@@ -175,9 +190,13 @@ def history(root: dict, path: Path, digest, as_of) -> tuple[dict[int, str], dict
     if schema_version == 3:
         if migration_indices or any(ev["action"]["kind"] in {"record_correction", "blocker_resolution"} for ev in events):
             raise ValueError("schema 3 ledger cannot contain v4 events")
-    elif schema_version == 4:
-        if len(migration_indices) != 1:
-            raise ValueError("schema 4 ledger must contain exactly one schema_migration event")
+    elif schema_version in {4, 5}:
+        expected = 1 if schema_version == 4 else 2
+        if len(migration_indices) != expected:
+            raise ValueError(f"schema {schema_version} ledger must contain exactly {expected} schema_migration event(s)")
+        moves = [(events[idx]["action"]["from_version"], events[idx]["action"]["to_version"]) for idx in migration_indices]
+        if moves != ([(3, 4)] if schema_version == 4 else [(3, 4), (4, 5)]):
+            raise ValueError("schema migration sequence invalid")
         mig_idx = migration_indices[0]
         if any(events[idx]["action"]["kind"] in {"record_correction", "blocker_resolution"} for idx in range(mig_idx)):
             raise ValueError("v4 actions must appear after schema migration")

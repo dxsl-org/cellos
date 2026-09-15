@@ -1,0 +1,26 @@
+# App-tier acceptance ledger — schema v5 migration (content-addressed source snapshots)
+# captured: 2026-09-15T00:53:46Z
+#
+# Why: schema v4 pinned the *live* Spec 23 bytes as raw evidence in 18 places. The
+# contract is amendable by design (Spec 23 section 5.1 requires an amendment before a
+# ledger applicability change), so amending it broke every pin at once, and no legal
+# event could repair the seed event's pin without rewriting the hash chain.
+#
+# v5 rule: kind="source" evidence resolves against the archived revision named by its
+# digest, never against the working tree:
+#   docs/specs/23-native-sdk-contract.md -> docs/evidence/spec23-native-sdk-contract-<sha12>.md
+#   every other source file            -> docs/evidence/source/<path>
+#
+$ git show 798e8b04:docs/specs/23-native-sdk-contract.md | sha256sum
+027e1a2bbfb19f55dec326a0588a459ff635f24f136ad0f6a971d67e93ca9e42  -
+$ sha256sum docs/specs/23-native-sdk-contract.md
+99146be984d6d12ca3112b59ae2d8102824165566592247aa3f74c4bf8121f96  docs/specs/23-native-sdk-contract.md
+$ git show 81dbb81ce7036411f4aa5df1617a6973ca3fccaf:docs/specs/23-native-sdk-contract.md | sha256sum
+99146be984d6d12ca3112b59ae2d8102824165566592247aa3f74c4bf8121f96  -
+# the amendment commit carries the exact current bytes; the ratified matrix is unchanged
+$ git diff --stat 798e8b04..HEAD -- docs/specs/23-native-sdk-contract.md
+ docs/specs/23-native-sdk-contract.md | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+$ ls -l docs/evidence/spec23-native-sdk-contract-*.md
+-rw-r--r-- 1 dmin dmin 30313 Sep 15 07:51 docs/evidence/spec23-native-sdk-contract-027e1a2bbfb1.md
+-rw-r--r-- 1 dmin dmin 30415 Sep 15 07:51 docs/evidence/spec23-native-sdk-contract-99146be984d6.md

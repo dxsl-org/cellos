@@ -1,5 +1,5 @@
 {
-  "schema_version": 4,
+  "schema_version": 5,
   "authoritative": true,
   "projection": "docs/app-tier-acceptance-matrix.md is review-only; build denominators are derived only from Spec 23 by the validator.",
   "axes": [
@@ -1203,16 +1203,57 @@
       },
       "state_digest": "8e315bbad59405e21b203546375d5058bde667b3d9fcb4790c884befa8e68b78",
       "hash": "e3e31c56db4fcfeec26ff4cbfe4db309930ddcc4bb5a6e4ecf6acbbcac1fc017"
+    },
+    {
+      "sequence": 8,
+      "event_id": "schema-v5-source-snapshots",
+      "previous_hash": "e3e31c56db4fcfeec26ff4cbfe4db309930ddcc4bb5a6e4ecf6acbbcac1fc017",
+      "steward": "lungmat8",
+      "reviewer": "datgausaigon",
+      "recorded_at": "2026-09-15T00:53:52Z",
+      "action": {
+        "kind": "schema_migration",
+        "from_version": 4,
+        "to_version": 5,
+        "changes": [
+          {
+            "section": "schema_version",
+            "before_sha256": "4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a",
+            "after_sha256": "ef2d127de37b942baad06145e54b0c619a1f22327b2ebbcfbec78f5564afe39d"
+          },
+          {
+            "section": "source_binding",
+            "before_sha256": "6172dd40a74ec3d1197d75a24576829edf9a304dfbc9347690bfa31d71b15cac",
+            "after_sha256": "b7c20f2f256e7504d1ccf2ebad63de613bcffc28fa55de5bce44695d54142a3d"
+          }
+        ],
+        "evidence": [
+          {
+            "path": "docs/specs/23-native-sdk-contract.md",
+            "sha256": "99146be984d6d12ca3112b59ae2d8102824165566592247aa3f74c4bf8121f96",
+            "size_bytes": 30415,
+            "kind": "source"
+          },
+          {
+            "path": "docs/evidence/app-tier-schema-v5-migration.log",
+            "sha256": "30396d5c802ebef07bd5c1005ae8a34f400df76ea575e1a018acc2aa542f9e11",
+            "size_bytes": 1717,
+            "kind": "log"
+          }
+        ]
+      },
+      "state_digest": "8a9f9b590c6ba2ca48a8063a81fc56ca9bd756a74fb956c51b2a2bf43cca8816",
+      "hash": "bfb86d4f1bc520197384685af99df8b04f45e1cddd192084d758bd9677f2edfb"
     }
   ],
   "baseline_prefix": {
-    "event_count": 7,
-    "tip_hash": "e3e31c56db4fcfeec26ff4cbfe4db309930ddcc4bb5a6e4ecf6acbbcac1fc017"
+    "event_count": 8,
+    "tip_hash": "bfb86d4f1bc520197384685af99df8b04f45e1cddd192084d758bd9677f2edfb"
   },
   "source_binding": {
     "path": "docs/specs/23-native-sdk-contract.md",
-    "sha256": "027e1a2bbfb19f55dec326a0588a459ff635f24f136ad0f6a971d67e93ca9e42",
+    "sha256": "99146be984d6d12ca3112b59ae2d8102824165566592247aa3f74c4bf8121f96",
     "matrix_sha256": "f742a6ec1f5a0110bbe4882028ac32fbdd9c884307d207171519919704ca7ece",
-    "ratified_revision": "798e8b04e75b6ea787d7b5882da4f64359ed7974"
+    "ratified_revision": "81dbb81ce7036411f4aa5df1617a6973ca3fccaf"
   }
 }

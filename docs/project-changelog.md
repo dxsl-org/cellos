@@ -3,6 +3,27 @@
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
 ## [Unreleased] Development-first hardware-constrained execution
+
+## [2026-09-15] Acceptance ledger schema v5: source evidence binds archived revisions
+- The ledger pinned the *live* `docs/specs/23-native-sdk-contract.md` as `source` evidence in 18
+  places, but Spec 23 section 5.1 makes the contract amendable by design. The C2-MID witness and gap
+  prose amendment at `81dbb81c` therefore broke every pin at once, and no schema v4 event could repair
+  the seed event's pin without rewriting the hash chain — a migration may not touch history, as the
+  v3→v4 migration itself demonstrates (it preserved all four prior events byte for byte).
+- Schema v5 resolves `kind: "source"` evidence against the content-addressed revision named by its
+  digest — `docs/evidence/spec23-native-sdk-contract-<sha12>.md` for the contract,
+  `docs/evidence/source/<path>` for every other source file — and never against the working tree, so
+  archived evidence keeps validating after the file it was written against is legitimately amended.
+- A v4→v5 migration re-bases `source_binding` onto the amended revision (`81dbb81c`, which contains
+  the exact current bytes), requires that revision to be archived itself, and is the only allowed
+  carrier for the re-bind. Claims bind the revision their evidence was produced against while their
+  ratified *matrix* digest must still match the live contract, so an amendment can no longer change a
+  ratified availability value unnoticed. `cargo`-free: 13 new adversarial tests, plus the existing 68.
+- The 18 pins and the seed fixture were re-pointed; `docs/evidence/spec23-native-sdk-contract-027e1a2bbfb1.md`
+  preserves the ratified revision and `…-99146be984d6.md` the amended one. Independent of this, the
+  `B-AARCH64-SEMHOSTING` resolution's TTL expired on 2026-09-05, which is why the ledger validation job
+  went red before the amendment landed; that resolution needs a fresh QEMU semihosting run and is tracked
+  separately.
 ## [2026-09-14] The AI oracle runs on the ARM64 leg of the CP-3 gate
 - Spec 24's CP-3 gate reads "QEMU RV64/ARM64 and RPi3 memory budget validation", and only RV64 had ever
   run: the oracle script hardcoded the target, the QEMU binary, and the RISC-V `objcopy`. The script is

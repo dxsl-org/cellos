@@ -9,6 +9,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE_PATH = "docs/specs/23-native-sdk-contract.md"
+SNAPSHOT_DIR = "docs/evidence"
+SNAPSHOT_PREFIX = "spec23-native-sdk-contract-"
+SOURCE_MIRROR = "docs/evidence/source"
 CELL_AXES = ("rust-no-std", "rust-std", "ffi-posix", "lua", "T1", "T2")
 
 
@@ -22,9 +25,25 @@ def source_file(root: Path = ROOT) -> Path:
     return root / SOURCE_PATH
 
 
-def matrix(root: Path = ROOT) -> list[list[object]]:
-    """Import all ten rows and six original cells without normalising wording."""
-    text = source_file(root).read_text(encoding="utf-8")
+def snapshot_path(digest: str) -> str:
+    """Return the content-addressed snapshot path that preserves a contract revision.
+
+    The live contract is amendable, so it can never be raw evidence: every pin
+    names the immutable copy of the revision its witness was produced against.
+    """
+    if not re.fullmatch(r"[0-9a-f]{64}", digest):
+        raise ValueError("contract snapshot digest invalid")
+    return f"{SNAPSHOT_DIR}/{SNAPSHOT_PREFIX}{digest[:12]}.md"
+
+
+def snapshot(root: Path = ROOT, digest: str = "") -> Path:
+    """Return the preserved contract revision, or the whole contract snapshot set."""
+    return root / (snapshot_path(digest) if digest else SNAPSHOT_DIR)
+
+
+def matrix_at(path: Path) -> list[list[object]]:
+    """Import all ten rows and six original cells from one contract revision."""
+    text = path.read_text(encoding="utf-8")
     try:
         section = text.split("## 5. Capability matrix", 1)[1].split("### 5.1", 1)[0]
     except IndexError as error:
@@ -39,9 +58,19 @@ def matrix(root: Path = ROOT) -> list[list[object]]:
     return rows
 
 
+def matrix(root: Path = ROOT) -> list[list[object]]:
+    """Import the matrix of the live contract."""
+    return matrix_at(source_file(root))
+
+
 def matrix_digest(root: Path = ROOT) -> str:
     """Hash the canonical, complete imported matrix."""
-    return sha256_bytes(json.dumps(matrix(root), sort_keys=True, separators=(",", ":")).encode())
+    return matrix_digest_at(source_file(root))
+
+
+def matrix_digest_at(path: Path) -> str:
+    """Hash the canonical, complete matrix of one contract revision."""
+    return sha256_bytes(json.dumps(matrix_at(path), sort_keys=True, separators=(",", ":")).encode())
 
 
 def availability(value: str) -> str:

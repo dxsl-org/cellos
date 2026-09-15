@@ -40,6 +40,9 @@ def bind_source(root: Path, value: object, require_ratified: bool) -> None:
     raw = source.source_file(root).read_bytes()
     if item["path"] != source.SOURCE_PATH or item["sha256"] != source.sha256_bytes(raw) or item["matrix_sha256"] != source.matrix_digest(root):
         raise ValueError("source import or digest drift")
+    preserved = source.snapshot(root, item["sha256"])
+    if not preserved.is_file() or source.sha256_bytes(preserved.read_bytes()) != item["sha256"]:
+        raise ValueError("bound contract revision is not preserved")
     revision = item["ratified_revision"]
     if not isinstance(revision, str) or (revision and not GIT.fullmatch(revision)):
         raise ValueError("ratified revision invalid")
@@ -98,8 +101,11 @@ def claims(value: object, subject_map: dict[str, dict], root: Path) -> dict[str,
             raise ValueError("admitted claim requires verified lifecycle")
         if (item["status"] == "PASS") != (item["completion"] == "COMPLETE"):
             raise ValueError("PASS claim completion mismatch")
-        if item["source_sha256"] != source.sha256_bytes(source.source_file(root).read_bytes()) or item["matrix_sha256"] != source.matrix_digest(root):
+        preserved = source.snapshot(root, item["source_sha256"])
+        if not preserved.is_file() or source.sha256_bytes(preserved.read_bytes()) != item["source_sha256"]:
             raise ValueError("claim source digest drift")
+        if item["matrix_sha256"] != source.matrix_digest(root) or source.matrix_digest_at(preserved) != item["matrix_sha256"]:
+            raise ValueError("claim matrix drift")
         canonical = (item["subject"], tuple(tuple_[axis] for axis in AXES))
         if any((claim["subject"], tuple(claim["tuple"][axis] for axis in AXES)) == canonical for claim in found.values()):
             raise ValueError("contradictory duplicate claim tuple")
@@ -113,7 +119,7 @@ def _validate_snapshot(data: object, as_of: dt.datetime, root: Path) -> str:
 
     value = exact(data, ROOT_KEYS, "ledger")
     schema_version = integer(value["schema_version"], "schema version")
-    if schema_version not in {3, 4} or value["authoritative"] is not True or value["axes"] != AXES:
+    if schema_version not in {3, 4, 5} or value["authoritative"] is not True or value["axes"] != AXES:
         raise ValueError("ledger root schema invalid")
     subject_map = subjects(value["subjects"])
     progressed = any(item.get("status") != "PLANNED" for item in value["phase_lifecycle"] if item.get("phase") != 1)

@@ -17,6 +17,8 @@ HEX = re.compile(r"^[0-9a-f]{64}$")
 GIT = re.compile(r"^[0-9a-f]{40}$")
 _CACHE: ContextVar[dict | None] = ContextVar("app_tier_acceptance_cache", default=None)
 
+from . import source as sdk_source
+
 
 def begin_context():
     """Start an isolated cache for one top-level validator invocation."""
@@ -72,12 +74,30 @@ def canonical_digest(value: object) -> str:
     return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
+def preserve(root: Path, rel: str, digest: object) -> Path:
+    """Return the archived copy of the source revision behind a recorded digest.
+
+    Source files are amendable in place, so a witness can never be verified
+    against the working tree: the contract keeps one archived revision per
+    digest and every other source file is mirrored under `docs/evidence/source/`.
+    """
+    if rel == sdk_source.SOURCE_PATH:
+        return root / sdk_source.snapshot_path(text(digest, "artifact.sha256"))
+    if rel.startswith(f"{sdk_source.SNAPSHOT_DIR}/{sdk_source.SNAPSHOT_PREFIX}"):
+        return root / rel
+    return root / sdk_source.SOURCE_MIRROR / rel
+
+
 def safe_file(root: Path, path: object, digest: object, size: object, kind: object) -> None:
     """Verify a repository-contained regular evidence file and its exact digest."""
     rel = text(path, "artifact.path")
     if "\\" in rel or "\x00" in rel or rel.startswith("/") or ".." in Path(rel).parts:
         raise ValueError("artifact path is not safe repository-relative")
     target = root / rel
+    if kind == "source":
+        target = preserve(root, rel, digest)
+        if not target.is_file():
+            raise ValueError("preserved source revision is missing")
     if target.is_symlink() or not target.is_file() or root not in target.resolve().parents:
         raise ValueError("artifact path is missing, outside root, or a symlink")
     if not HEX.fullmatch(text(digest, "artifact.sha256")) or integer(size, "artifact.size_bytes") != target.stat().st_size:

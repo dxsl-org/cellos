@@ -276,8 +276,11 @@ Cellos is being shaped around product stages, not only phase numbers:
   [acceptance ledger](app-tier-acceptance-ledger.json) is recorded through
   `LEDGER_RECORDED`. The ratified revision is `798e8b04`; the implemented,
   verified, and attested lifecycle commits are `92340d05`, `635600c8`, and
-  `c538df84`. Phase 03 remains `PLANNED`; its production-admission work remains
-  blocked. The qualification
+  `c538df84`. The ledger is schema v5: `source` witnesses bind archived contract
+  revisions by digest instead of the amendable working file, and the live binding
+  was re-based onto the contract as amended at `81dbb81c` (C2-MID witness and gap
+  prose only; the ratified matrix digest is unchanged). Phase 03 remains
+  `PLANNED`; its production-admission work remains blocked. The qualification
   result remains `NOT_COMPLETE`: compile, test/runtime, delivery, hardware,
   admission, and hostile-test witnesses remain mandatory before any applicable
   SDK cell can be promoted to `USABLE`; FFI, `rust-std`, and Tier-2 scopes

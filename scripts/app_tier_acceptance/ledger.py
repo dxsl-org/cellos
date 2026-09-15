@@ -6,6 +6,7 @@ import datetime as dt
 from pathlib import Path
 
 from . import cohort, security_negative, source
+from .events import MIGRATABLE
 from .checks import canonical_digest, exact, integer, text, timestamp
 from .validator import LIFE, STATUS, artifact_list
 
@@ -114,7 +115,7 @@ def blockers(root: dict, subject_map: dict, path: Path, as_of) -> bool:
             event = next((event for event in root["events"] if event["event_id"] == event_id), None)
             if event is None or not any(change["section"] == "blockers" for change in event["action"].get("changes", [])):
                 raise ValueError("blocker resolution event is missing or unrelated")
-            if root.get("schema_version") == 4:
+            if root.get("schema_version") in {4, 5}:
                 if event["action"].get("kind") != "blocker_resolution":
                     raise ValueError("schema 4 blocker resolution requires blocker_resolution event")
                 if item["id"] == "B-AARCH64-SEMHOSTING" and (item["subject"] != "qemu-arm64" or item["resolution"]["architecture"] != "aarch64"):
@@ -174,21 +175,32 @@ def baseline(current: dict, prior: object) -> None:
     kind = action.get("kind")
 
     if kind == "schema_migration":
-        if prior.get("schema_version") != 3 or current.get("schema_version") != 4:
-            raise ValueError("schema migration must transition schema_version 3 to 4")
+        version = (prior.get("schema_version"), current.get("schema_version"))
+        if version == (3, 4):
+            immutable = set(current) - {"events", "baseline_prefix", "schema_version"}
+            allowed = set()
+        elif version == (4, 5):
+            immutable = set(current) - {"events", "baseline_prefix", "schema_version", *MIGRATABLE}
+            allowed = set(MIGRATABLE)
+        else:
+            raise ValueError("schema migration must transition schema_version 3 to 4 or 4 to 5")
         if current["phase_lifecycle"] != prior.get("phase_lifecycle"):
             raise ValueError("schema migration cannot modify phase lifecycle")
-        immutable = set(current) - {"events", "baseline_prefix", "schema_version"}
         if any(current[key] != prior.get(key) for key in immutable):
             raise ValueError("schema migration changed unauthorized section")
-        expected = [{"section": "schema_version", "before_sha256": canonical_digest(3), "after_sha256": canonical_digest(4)}]
-        if action.get("changes") != expected:
+        changes = [{"section": "schema_version", "before_sha256": canonical_digest(prior["schema_version"]), "after_sha256": canonical_digest(current["schema_version"])}]
+        changes.extend(
+            {"section": key, "before_sha256": canonical_digest(prior[key]), "after_sha256": canonical_digest(current[key])}
+            for key in MIGRATABLE
+            if key in allowed and current[key] != prior[key]
+        )
+        if action.get("changes") != changes:
             raise ValueError("schema migration changes mismatch")
         return
 
     if kind == "record_correction":
-        if prior.get("schema_version") != 4 or current.get("schema_version") != 4:
-            raise ValueError("record correction requires schema version 4")
+        if prior.get("schema_version") not in {4, 5} or current.get("schema_version") != prior.get("schema_version"):
+            raise ValueError("record correction requires schema version 4 or 5")
         if current["phase_lifecycle"] != prior.get("phase_lifecycle"):
             raise ValueError("record correction cannot modify phase lifecycle")
         allowed = {"events", "baseline_prefix", "subjects", "blockers"}
@@ -214,8 +226,8 @@ def baseline(current: dict, prior: object) -> None:
         return
 
     if kind == "blocker_resolution":
-        if prior.get("schema_version") != 4 or current.get("schema_version") != 4:
-            raise ValueError("blocker resolution requires schema version 4")
+        if prior.get("schema_version") not in {4, 5} or current.get("schema_version") != prior.get("schema_version"):
+            raise ValueError("blocker resolution requires schema version 4 or 5")
         if current["phase_lifecycle"] != prior.get("phase_lifecycle"):
             raise ValueError("blocker resolution cannot modify phase lifecycle")
         allowed = {"events", "baseline_prefix", "blockers"}
@@ -254,7 +266,7 @@ def baseline(current: dict, prior: object) -> None:
     changed = [(before, after) for before, after in zip(old, current["phase_lifecycle"]) if before["status"] != after["status"]]
     if len(changed) != 1 or changed[0][0]["phase"] != changed[0][1]["phase"] or LIFE.index(changed[0][1]["status"]) != LIFE.index(changed[0][0]["status"]) + 1:
         raise ValueError("lifecycle must advance one external-baseline step")
-    if prior.get("schema_version") == 4 and (current["subjects"] != prior["subjects"] or current["blockers"] != prior["blockers"]):
+    if prior.get("schema_version") in {4, 5} and (current["subjects"] != prior["subjects"] or current["blockers"] != prior["blockers"]):
         raise ValueError("lifecycle transition cannot bundle correction or resolution")
     mutable = ("source_binding", "subjects", "blockers", "rows", "security_negatives", "claims", "c9")
     immutable = set(current) - {"events", "baseline_prefix", "phase_lifecycle", *mutable}

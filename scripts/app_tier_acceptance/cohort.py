@@ -91,7 +91,7 @@ def validate(root: Path, value: object, claim: dict, subject: dict, as_of: dt.da
     actual_key = "|".join((denominator["compiler"], denominator["target"], denominator["language"], denominator["cfg"], denominator["rustflags"], denominator["feature_selection"], denominator["cargo_features"], denominator["cargo_profile"], denominator["runtime_profile"], claim["tuple"]["tier"]))
     if actual_key != source.denominator(denominator["target"], denominator["feature_selection"]):
         raise ValueError("denominator is not a ratified canonical tuple")
-    if denominator["source_path"] != source.SOURCE_PATH or denominator["source_sha256"] != claim["source_sha256"]:
+    if denominator["source_path"] != source.snapshot_path(claim["source_sha256"]) or denominator["source_sha256"] != claim["source_sha256"]:
         raise ValueError("denominator source anchor mismatch")
     if not HEX.fullmatch(denominator["public_api_sha256"]):
         raise ValueError("denominator public API digest invalid")

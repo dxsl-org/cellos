@@ -17,7 +17,15 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from app_tier_acceptance import public_api as sdk_source  # noqa: E402
 from app_tier_acceptance import source, validator  # noqa: E402
 from app_tier_acceptance.checks import canonical_digest  # noqa: E402
-from fixtures import append_event, claim, cohort, refresh_event  # noqa: E402
+from fixtures import (  # noqa: E402
+    append_event,
+    archive_contract,
+    claim,
+    cohort,
+    mirror_sources,
+    preserve_spec,
+    refresh_event,
+)
 
 NOW = dt.datetime(2026, 8, 21, 12, tzinfo=dt.timezone.utc)
 SEED = json.loads(
@@ -115,6 +123,8 @@ class LedgerTests(unittest.TestCase):
         baseline_spec = baseline_root / source.SOURCE_PATH
         baseline_spec.parent.mkdir(parents=True)
         baseline_spec.write_bytes((ROOT / source.SOURCE_PATH).read_bytes())
+        archive_contract(baseline_root)
+        preserve_spec(baseline_root)
         (baseline_root / "evidence").mkdir()
         (baseline_root / "evidence/baseline.log").write_text("baseline evidence\n")
         spec = root / source.SOURCE_PATH
@@ -137,6 +147,7 @@ class LedgerTests(unittest.TestCase):
             target = root / public_path
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes((ROOT / public_path).read_bytes())
+        mirror_sources(root)
         (root / "evidence").mkdir()
         (root / "evidence/trace.log").write_text("clean\n")
         (root / "evidence/baseline.log").write_text("baseline evidence\n")
