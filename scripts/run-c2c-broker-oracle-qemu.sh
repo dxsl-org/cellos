@@ -128,10 +128,10 @@ for binary in "${CELL_BINARIES[@]}"; do
     }
 done
 
-# This local dev kernel intentionally keeps `signing-required` disabled. Signing
-# would claim the repository-wide F1/F5 production gate passed; unrelated open
-# governance findings must remain fail-closed instead of being bypassed here.
-
+# shellcheck source=scripts/lib-sign-cells.sh
+source scripts/lib-sign-cells.sh
+echo "[c2c-oracle-runner] signing cells (dev key, F1/F5 checked)"
+sign_cells "${CELL_BINARIES[@]}"
 
 "$PYTHON_BIN" scripts/sign-policy.py --out "$WORK/POLICY.BIN" >/dev/null
 printf 'Cellos-C2C-Oracle\n' > "$WORK/hostname"

@@ -4,13 +4,20 @@ extern crate alloc;
 
 use crate::{handlers, net_ipc};
 
-/// Dispatch one HTTP/1.1 request received on `cap` to the appropriate handler.
-pub fn handle_connection(cap: u32, net_ep: usize, vfs_ep: usize) -> bool {
+/// Dispatch one HTTP request received on `cap` to the appropriate handler.
+pub fn handle_connection(
+    cap: u32,
+    net_ep: usize,
+    vfs_ep: usize,
+    file_to_serve: Option<&str>,
+) -> bool {
     let raw = net_ipc::recv_request(cap, net_ep);
+    if let Some(target_file) = file_to_serve {
+        return handlers::serve_file(cap, net_ep, vfs_ep, target_file);
+    }
     if raw.is_empty() {
         return true;
     }
-
     let mut header_buf = [httparse::EMPTY_HEADER; 16];
     let mut req = httparse::Request::new(&mut header_buf);
 

@@ -45,8 +45,10 @@ integration jobs, which changed but did not close:
   measured: trap entry installs the kernel root (parking the interrupted root in the frame), trap
   exit restores it when it differs, and same-domain resume re-programs its root. 10/10 clean boots on
   the phase-03 driver, 10/10 green `srv-cellosfs` runs, RV64 domain regressions re-derived with a new
-  `S22-RV64-RESUME-ROOT` fixture. Hosted confirmation lands with the next push.
-
+- [phase-05-full-gate-closure.md](phase-05-full-gate-closure.md) — the remaining three jobs:
+  (1) `service-httpd` CLI args support closes the two HTTPD test failures in `Network Data-Path`;
+  (2) cell signing in `run-c2c-broker-oracle-qemu.sh` closes the C2C Oracle failure;
+  (3) 10 MiB custom heap in `service-hypervisor` closes the x86 hypervisor OOM crash loop.
 ## Non-goals
 
 - No behaviour change in other lanes' code: every fix is a lint's own suggestion or an equivalent

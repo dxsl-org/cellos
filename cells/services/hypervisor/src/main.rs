@@ -128,11 +128,13 @@ mod pit_8253;
 mod run_loop_x86;
 #[cfg(target_arch = "x86_64")]
 mod uart_16550;
+ostd::declare_custom_heap!(10 * 1024 * 1024);
 
 /// Entry: dispatch to the arch personality that has a VMM backend.
 #[cfg(not(test))]
 #[no_mangle]
 pub fn main() -> ! {
+    init_custom_heap();
     #[cfg(target_arch = "aarch64")]
     boot_arm::boot_arm();
     #[cfg(target_arch = "x86_64")]
