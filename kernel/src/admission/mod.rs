@@ -4,10 +4,12 @@
 //! This module is intentionally not connected to loader or boot admission. It
 //! models the fail-closed decision that a future qualified backend may consume.
 
+pub mod gate;
 #[cfg(feature = "test-hooks")]
 mod hostile;
 pub mod owner_key;
 pub mod slot_format;
+pub use gate::evaluate_owner_admission;
 #[cfg(feature = "test-hooks")]
 mod slot_selftest;
 #[cfg(feature = "test-hooks")]
@@ -29,6 +31,7 @@ pub(crate) struct FloorState {
 }
 
 /// Result taxonomy of the future external-floor port.
+#[allow(dead_code)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum FloorPortOutcome {
     Authenticated(FloorState),
@@ -40,6 +43,7 @@ pub(crate) enum FloorPortOutcome {
 }
 
 /// Authentication and commit state observed for a replaceable local slot.
+#[allow(dead_code)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum SlotObservation {
     AuthenticatedCommitted(FloorState),
@@ -54,6 +58,7 @@ pub(crate) enum SlotId {
     B,
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum DenyReason {
     FloorMissing,
@@ -63,6 +68,7 @@ pub(crate) enum DenyReason {
     BackendReplaced,
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum RecoveryReason {
     SlotMissing,
@@ -76,6 +82,7 @@ pub(crate) enum RecoveryReason {
 }
 
 /// Pure result: deliberately has no variant capable of advancing the floor.
+#[allow(dead_code)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum AdmissionDecision {
     Admit(SlotId),
@@ -83,6 +90,7 @@ pub(crate) enum AdmissionDecision {
     RecoveryRequired(RecoveryReason),
 }
 
+#[allow(dead_code)]
 fn committed(slot: &SlotObservation) -> Result<&FloorState, RecoveryReason> {
     match slot {
         SlotObservation::AuthenticatedCommitted(state) => Ok(state),
@@ -96,7 +104,7 @@ fn committed(slot: &SlotObservation) -> Result<&FloorState, RecoveryReason> {
 ///
 /// Admission requires exactly one current committed slot and one authenticated
 /// stale committed partner from the same backend. Local bytes never select the
-/// highest generation and this function has no floor-advance capability.
+#[allow(dead_code)]
 pub(crate) fn decide(floor: &FloorPortOutcome, slots: &[SlotObservation; 2]) -> AdmissionDecision {
     let floor = match floor {
         FloorPortOutcome::Authenticated(state) => state,
@@ -130,7 +138,7 @@ pub(crate) fn decide(floor: &FloorPortOutcome, slots: &[SlotObservation; 2]) -> 
         (false, false) => classify_mismatch(a, b, floor),
     }
 }
-
+#[allow(dead_code)]
 fn classify_partner(
     current: SlotId,
     partner: &FloorState,
@@ -144,7 +152,7 @@ fn classify_partner(
         AdmissionDecision::RecoveryRequired(RecoveryReason::ConflictingBinding)
     }
 }
-
+#[allow(dead_code)]
 fn classify_mismatch(a: &FloorState, b: &FloorState, floor: &FloorState) -> AdmissionDecision {
     if a.generation > floor.generation || b.generation > floor.generation {
         AdmissionDecision::RecoveryRequired(RecoveryReason::SlotAhead)

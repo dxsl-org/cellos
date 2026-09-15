@@ -119,6 +119,40 @@ pub(super) fn run() -> bool {
         ok = false;
     }
 
+    // 8. Integration with common task-creation admission gate (Step 6)
+    {
+        use super::gate::{evaluate_owner_admission, ADMISSION_REGISTRY};
+        use types::ViError;
+
+        // Permissive mode: unadmitted ELF allowed
+        if evaluate_owner_admission(&[0x99u8; 32]).is_err() {
+            log::error!("[selftest] OWNER-SLOT: permissive mode denied unadmitted ELF");
+            ok = false;
+        }
+
+        // Enforce production admission with Slot A active
+        {
+            let mut registry = ADMISSION_REGISTRY.lock();
+            registry.update(floor_outcome, Some(slot_a), None);
+            registry.set_production_enforced(true);
+        }
+
+        // Admitted ELF (0xAA) must succeed
+        if evaluate_owner_admission(&[0xAAu8; 32]).is_err() {
+            log::error!("[selftest] OWNER-SLOT: admitted ELF was refused in production mode");
+            ok = false;
+        }
+
+        // Unadmitted ELF (0xBB) must be denied
+        if evaluate_owner_admission(&[0xBBu8; 32]) != Err(ViError::PermissionDenied) {
+            log::error!("[selftest] OWNER-SLOT: unadmitted ELF was not denied in production mode");
+            ok = false;
+        }
+
+        // Restore permissive mode
+        ADMISSION_REGISTRY.lock().set_production_enforced(false);
+    }
+
     if ok {
         log::info!("[selftest] OWNER-SLOT: PASS (parser, signature validation, tamper rejection, admission)");
     } else {

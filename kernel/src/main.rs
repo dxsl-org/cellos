@@ -37,8 +37,7 @@ static TEST_SAFE_ROOT: core::sync::atomic::AtomicUsize = core::sync::atomic::Ato
 
 // Core kernel modules
 pub mod acpi;
-#[cfg(feature = "test-hooks")]
-mod admission;
+pub mod admission;
 pub mod audit;
 mod board;
 pub mod boot;

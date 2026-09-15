@@ -28,6 +28,7 @@ pub fn verify_owner_signature(payload: &[u8], sig: &[u8; 64]) -> bool {
 
 /// Boot-time self-test for the owner trust anchor.
 pub fn self_test() -> bool {
+    #[cfg(feature = "dev-signing-key")]
     const TEST_PAYLOAD: &[u8] = b"CellosOwnerAnchorTest";
     #[cfg(feature = "dev-signing-key")]
     const TEST_SIG: [u8; 64] = [

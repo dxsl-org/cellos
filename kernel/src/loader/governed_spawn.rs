@@ -41,6 +41,7 @@ pub(super) fn spawn_gated(
     use crate::task::cap::{CapSet, Spawner};
     let aligned = super::aligned_elf::bytes(elf);
     let elf = aligned.as_ref();
+    let elf_digest = crate::sha256::sha256(elf);
     let manifest = match super::manifest_section::classify(elf) {
         super::manifest_section::ManifestSection::Absent => None,
         super::manifest_section::ManifestSection::Valid { manifest, .. } => Some(manifest),
@@ -79,6 +80,16 @@ pub(super) fn spawn_gated(
             true
         }
     };
+
+    // Common owner admission gate: verify owner authorization for this ELF
+    // before capability derivation or task creation.
+    if let Err(err) = crate::admission::evaluate_owner_admission(&elf_digest) {
+        crate::audit::log_event(
+            crate::audit::AuditEvent::CellSpawnDenied,
+            &crate::audit::encode_u32x2(0, 2),
+        );
+        return Err(err);
+    }
     if let Some(manifest) = manifest.as_ref() {
         if !path.starts_with("/bin/") && manifest.declares_any_privilege() {
             crate::audit::log_event(
@@ -181,7 +192,7 @@ pub(super) fn spawn_gated(
         },
         Some(crate::task::StagedMeasurement {
             path: path.to_string(),
-            digest: crate::sha256::sha256(elf),
+            digest: elf_digest,
         }),
         is_domain,
     );

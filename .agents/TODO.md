@@ -38,7 +38,7 @@
 3. [done 2026-09-16] Fix loader signature boundary (CELLOS-LOADER-SIG-001): xác thực toàn bộ metadata container ELF, .rela.dyn và section headers trước khi cấp phát/relocation; kiểm thử âm bản trên host (test-cell-signing.sh) và boot QEMU (elf_tests)
 4. [done 2026-09-16] Implement floor persistence/recovery: định dạng nhị phân A/B slot record (`VI_OWNER_SLOT_V1`), parser fail-closed kiểm tra chữ ký trước khi parse, kiểm thử âm bản tamper và tích hợp với `AdmissionDecision::decide()`
 5. [done 2026-09-16] Provision publisher/owner anchors: bổ sung anchor thứ 3 `OWNER_SIGNER_PUBKEY` độc lập với fleet policy và publisher key, hàm `verify_owner_signature` và self-test khởi động
-6. Wire mọi task-creation path
+6. [done 2026-09-16] Wire mọi task-creation path: tính SHA-256 toàn bộ ELF một lần tại đầu spawn_gated, kết nối kiểm tra evaluate_owner_admission trước khi cấp phát/tạo task và tái sử dụng digest cho measurement
 7. Thiết lập production-admission authenticated runner; software-only authenticated evidence runner đã hoàn tất riêng ở Phase 07
 8. Chạy hostile + physical power-loss matrix
 9. Retain immutable evidence bundle

@@ -29,16 +29,17 @@ pub enum SlotParseError {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ParsedSlot {
-    pub slot_id: SlotId,
+    pub(crate) slot_id: SlotId,
     pub is_committed: bool,
-    pub floor_state: FloorState,
+    pub(crate) floor_state: FloorState,
     pub expected_generation: u64,
     pub provenance_envelope_digest: [u8; 32],
     pub admitted_elfs: Vec<[u8; 32]>,
 }
 
 impl ParsedSlot {
-    pub fn observation(&self) -> SlotObservation {
+    #[allow(dead_code)]
+    pub(crate) fn observation(&self) -> SlotObservation {
         if self.is_committed {
             SlotObservation::AuthenticatedCommitted(self.floor_state)
         } else {
