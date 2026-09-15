@@ -6,6 +6,10 @@
 
 #[cfg(feature = "test-hooks")]
 mod hostile;
+pub mod owner_key;
+pub mod slot_format;
+#[cfg(feature = "test-hooks")]
+mod slot_selftest;
 #[cfg(feature = "test-hooks")]
 mod state_selftest;
 #[cfg(feature = "test-hooks")]
@@ -163,5 +167,8 @@ fn report_selftest_case(id: &str, passed: bool) -> bool {
 
 #[cfg(feature = "test-hooks")]
 pub(crate) fn self_test() -> bool {
-    state_selftest::run() & transaction_selftest::run()
+    owner_key::self_test()
+        & slot_selftest::run()
+        & state_selftest::run()
+        & transaction_selftest::run()
 }
