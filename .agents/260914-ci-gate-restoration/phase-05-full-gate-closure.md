@@ -1,7 +1,7 @@
 # Phase 05 — Full Gate Closure: Network HTTPD, C2C Oracle, and x86 Hypervisor
 
-**Status**: implemented and verified locally; ready for hosted push
-**Ceiling**: hosted CI gate across all 23 jobs
+**Status**: completed and verified — 23/23 jobs SUCCESS on hosted CI (Run `34964009461` on commit `2bb82e50a`)
+**Ceiling**: hosted CI gate across all 23 jobs — 100% green
 
 ## 1. Network Data-Path Integration: HTTPD Test Failures
 
@@ -54,3 +54,21 @@ Under `HV_VOLATILE_DISK=1` (set by CI in `ci.yml:894`), `cells/services/hypervis
 ### Verification
 - `HV_SMOKE_MODE=machinery`: **PASS** in 30s.
 - `HV_SMOKE_MODE=boot`: OOM crash loop eliminated; Alpine Linux kernel boots through SMP, devtmpfs, and cpuidle continuously without a single restart.
+
+---
+
+## 4. Hosted CI Verification (Run `34964009461`, commit `2bb82e50a`)
+
+Every job in the CI workflow completed with **`success`** (23/23):
+- `C2C Broker Oracle (single-guest local-runtime QEMU)`: **success**
+- `Network Data-Path Integration (riscv64)`: **success** (54/54 tests passed)
+- `CellosFS /srv Integration Test`: **success**
+- `QEMU Hypervisor Machinery Smoke (TCG)`: **success**
+- `QEMU Hypervisor Boot-to-Shell (x86_64)`: **success**
+- `Lint (fmt + clippy)`: **success**
+- `Clippy (x86_64)` & `Clippy (aarch64)`: **success**
+- All QEMU Boot Tests (512M RAM, aarch64, x86_64): **success**
+- All AI Inference Oracles (riscv64, aarch64): **success**
+- All cross-compilation builds, F1/F5 admission, VFS quota, Shell utilities, Security scan: **success**
+
+The repository's hosted pipeline is now **100% green**.

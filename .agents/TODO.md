@@ -1,13 +1,13 @@
 # TODO
-- CI gate restoration [in-progress 2026-09-15]: lint jobs đã xong (phase-01). Job
-  `CellosFS /srv` có hai nguyên nhân tách biệt: assertion cũ đã sửa (phase-02) và một kernel fault
-  thật đã được đo (phase-03) — panic chạy dưới private Cell root (`satp` ASID=1,
-  root PA `0x827c0000`) trong khi kernel root là ASID=0, `scause=13 stval=0x10000005`
-  (UART LSR) `sepc=console_drv::viConsole::poll+0x210`; fault intermittent, suite `srv-cellosfs`
-  xanh không chứng minh gì. Fix được thiết kế ở phase-04 (trap entry trả kernel root + scheduler
-  phải re-activate khi resume domain, nếu không là lỗi cô lập im lặng) nhưng chưa viết code, nên
-  gate vẫn đỏ. Hosted run `34927079141` (job `104247291496`) xác nhận lại đúng các giá trị đó.
-  Kế hoạch: `.agents/260914-ci-gate-restoration/`.
+- CI gate restoration [completed 2026-09-15]: toàn bộ pipeline CI 23/23 jobs đã XANH
+  hoàn toàn trên hosted runner (GitHub Actions Run `34964009461` tại commit `2bb82e50a`).
+  Toàn bộ 7 job đỏ ban đầu đã được giải quyết:
+  1. `Lint (fmt + clippy)`, `Clippy (x86_64)`, `Clippy (aarch64)`: sạch nLOC metrics, formatting và clippy (phase-01 & fix).
+  2. `CellosFS /srv Integration Test`: sửa assertion cũ (phase-02) và sửa dứt điểm kernel fault qua trap-root discipline (phase-04).
+  3. `C2C Broker Oracle`: ký dev cells trong `run-c2c-broker-oracle-qemu.sh` để driver được nhận vào Tier 1 SAS thay vì Tier 2 Paged Domain thiếu MMIO (phase-05).
+  4. `Network Data-Path Integration (riscv64)`: bổ sung hỗ trợ tham số CLI `<port> [path]` cho `service-httpd` (phase-05), toàn bộ 54/54 test pass.
+  5. `QEMU Hypervisor Boot-to-Shell (x86_64)`: khắc phục OOM crash loop của hypervisor cell với 10 MiB custom heap, thêm `pci=off`, thêm cơ chế thoát sớm khi thấy prompt (phase-05).
+  Kế hoạch và bằng chứng lưu tại `.agents/260914-ci-gate-restoration/`.
 - Phase 07 authenticated software evidence [completed/regression-only] tại trần
   `host`: GitHub-hosted run `33251921677:1` đã được verify, consume qua durable
   operator-owned replay state và replay chính xác bị từ chối. Mở lại chỉ khi

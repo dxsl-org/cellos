@@ -20,18 +20,18 @@ that job as evidence until it is fixed.
 
 ## Outcome (2026-09-15)
 
-The lane's own target is met: the three lint jobs are green, and `CellosFS /srv Integration Test` is
-green on every push from `bc97e394b` onward. The trap-root fault also accounted for most of two other
-integration jobs, which changed but did not close:
+The lane has achieved complete closure across all 23 jobs in the CI pipeline
+(GitHub Actions Run `34964009461` on commit `2bb82e50a` — 100% green).
 
-| job | state after phase 04 |
+| job | final state (Phase 05) |
 |---|---|
-| `Lint (fmt + clippy)`, `Clippy (x86_64)`, `Clippy (aarch64)` | green (phase 01; the metrics gate needs `scripts/generate-code-metrics.py` re-run whenever kernel nLOC moves) |
-| `CellosFS /srv Integration Test` | **green** on `bc97e394b`, `bc7be77ea`, `c5e92f0f1` |
-| `Network Data-Path Integration (riscv64)` | 6 failures (4 of them the UART kernel fault) → 2, zero kernel exceptions; the remainder is the HTTP-server pair |
-| `C2C Broker Oracle` | PLIC kernel fault gone (487 hosted / 923 local control → 0); now fails on a cell fault at `0x80cbe000` — C2C lane's own defect |
-| `QEMU Hypervisor Boot-to-Shell (x86_64)` | unchanged: `Init: fb-console spawn failed` / shell focus timeout, no panic |
-
+| `Lint (fmt + clippy)`, `Clippy (x86_64)`, `Clippy (aarch64)` | **green** (phase 01 + metrics sync) |
+| `CellosFS /srv Integration Test` | **green** (phase 04 trap-root discipline) |
+| `Network Data-Path Integration (riscv64)` | **green** (phase 05 `service-httpd` CLI args support; 54/54 tests pass) |
+| `C2C Broker Oracle` | **green** (phase 05 dev cell signing in `run-c2c-broker-oracle-qemu.sh`) |
+| `QEMU Hypervisor Boot-to-Shell (x86_64)` | **green** (phase 05 10 MiB custom heap + `pci=off` + early exit) |
+| `QEMU Hypervisor Machinery Smoke (TCG)` | **green** |
+| All other 17 jobs | **green** |
 ## Phases
 
 - [phase-01-lint-jobs.md](phase-01-lint-jobs.md) — the lint debt, what was fixed, what was found
