@@ -7,11 +7,11 @@ Recommendation: **CONDITIONAL GO only after every blocker is implemented and evi
 
 | Input manifest | SHA-256 | Inputs | State |
 |---|---|---:|---|
-| `artifacts/approval-input-manifest.json` | `ddbc1c293416bbd8c73a3e72e81c7b9a09a82db5209f6e6228a151ea40105a8f` | 106 | package and GetRandom technical backing verified; human approval blocked |
+| `artifacts/approval-input-manifest.json` | `99cf7d24cd14c3b862959d17b499053735bbefded850202fa72b9eb8509129b3` | 106 | package and GetRandom technical backing verified; human approval blocked |
 
 The canonical manifest binds all six package plans, three upstream plans, six contracts including the hook/source map and governed GetRandom hostile-evidence report, 46 pinned Rust sources, nine other cited Cellos backing sources, the exact six-file kernel security-backing inventory, three hostile-evidence fixture sources, the hostile-evidence runner, eight benchmark sources, six tools, both tests, all eight fixtures, and both expected reports. It explicitly excludes itself, this decision record, and all approval/checkpoint records so those records can embed the manifest digest without a hash cycle. No individual digest substitution outside that manifest is an approval input.
 
-Pinned source identity is nightly `2026-05-01`, rustc `1.97.0-nightly (f53b654a8)`. The support map's 46-file source-manifest digest is `b984d50da89e342974ada8822321edd6b1d091d1da3dcf8ec1819a8986a4b105`; its six-entry kernel security-backing inventory digest is `62c7149a522a94c148da318ec1a1846985d78f7b23d0d5e03bb9e7fd95c03df6`; and the support-map file digest bound by the canonical manifest is `d5c8171ff7afece75190fd0b3ab416e1b20a39cb78beb14c31a57f4c16d70027`.
+Pinned source identity is nightly `2026-05-01`, rustc `1.97.0-nightly (f53b654a8)`. The support map's 46-file source-manifest digest is `b984d50da89e342974ada8822321edd6b1d091d1da3dcf8ec1819a8986a4b105`; its six-entry kernel security-backing inventory digest is `8072176363ec085cf8f6fb64097a3fe16484926a3cb644c00d19b2f52056b153`; and the support-map file digest bound by the canonical manifest is `4f9be4139916ab7eccdc10ec9f0548c2b7e099eeac8bb1603656fd5d7fbbd412`.
 
 ## Reconciliation
 
@@ -36,7 +36,7 @@ Final verification passed 33/33 feasibility tests, 57/57 validator adversarial a
 | `BENCHMARK-CONTRACT-APPROVAL` | performance owner; independent measurement reviewer | NOT GRANTED — human signatures absent |
 | `PAL-IMPLEMENTATION-CHECKPOINT` | all six roles above plus umbrella Phase 03 production-gate owner | BLOCKED |
 
-Approval absence is a hard blocker and is never inferred. All six approval rows are unsigned `NOT GRANTED` records bound to approval-input-manifest digest `ddbc1c293416bbd8c73a3e72e81c7b9a09a82db5209f6e6228a151ea40105a8f`; package verification, completed GetRandom technical backing, a conditional recommendation, or either independent review grants no human approval.
+Approval absence is a hard blocker and is never inferred. All six approval rows are unsigned `NOT GRANTED` records bound to approval-input-manifest digest `99cf7d24cd14c3b862959d17b499053735bbefded850202fa72b9eb8509129b3`; package verification, completed GetRandom technical backing, a conditional recommendation, or either independent review grants no human approval.
 
 ## Non-Waivable Blockers and Risks
 

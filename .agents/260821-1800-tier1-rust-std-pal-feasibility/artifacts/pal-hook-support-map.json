@@ -1379,7 +1379,7 @@
     "closure": "exact-set",
     "digest_algorithm": "sha256(canonical-json(entries))",
     "entry_count": 6,
-    "inventory_digest": "62c7149a522a94c148da318ec1a1846985d78f7b23d0d5e03bb9e7fd95c03df6",
+    "inventory_digest": "8072176363ec085cf8f6fb64097a3fe16484926a3cb644c00d19b2f52056b153",
     "entries": [
       {
         "path": "kernel/Cargo.toml",
@@ -1387,14 +1387,14 @@
           "kernel feature defaults",
           "production dev-weak-rng exclusion"
         ],
-        "sha256": "2ad36b128edcef499e1f23720d988a85b8f9630a80543588aac59ba83a119682"
+        "sha256": "9f412ad52bbba55759825383f28a3f9706570d284f522c98449a40d34541a7e5"
       },
       {
         "path": "kernel/src/task/drivers.rs",
         "roles": [
           "VirtIO RNG module wiring"
         ],
-        "sha256": "2a28bba0f6d552e0f607ecf7f909b9287a1d6b09af8e9c2579f5ed8e3d06bbd6"
+        "sha256": "91d42efb24257e86ee5be941472aa3d2de5c62a643f2589f86d4c1172d2687b5"
       },
       {
         "path": "kernel/src/task/drivers/virtio_rng.rs",
@@ -1402,7 +1402,7 @@
           "current entropy source implementation",
           "zero-byte unavailable behavior"
         ],
-        "sha256": "c87842af651f43e056f131074cc70b9d82a922ef6f39fcfc29c0ec8a25159cbc"
+        "sha256": "7334551f927d79336f9722c799eb5d06c48c88d76efe6fd4150d1a0d58e92465"
       },
       {
         "path": "kernel/src/task/syscall.rs",
@@ -1413,7 +1413,7 @@
           "GetRandom handler",
           "user-buffer validation primitives"
         ],
-        "sha256": "2057e681d9fa2580d835e30c510c7e102a9e98a7210e80f4e2fa6c13cee16e3d"
+        "sha256": "2022f769374306ce73cfa6a6e838e67ec564e9e9aa3cbafd82f393b738b8e081"
       },
       {
         "path": "libs/api/src/abi/syscall.rs",
@@ -1421,14 +1421,14 @@
           "frozen syscall opcode decoder",
           "GetRandom allowlist-bit mapping"
         ],
-        "sha256": "7dc2fd0ddd17af6874cf2183a531a4dd9e5bdc59f7a1965034722b85e45eb0ef"
+        "sha256": "bc203ac476ef9472df0e64c0a734238ebd0052a1af290f06e63f8af1dd846dc4"
       },
       {
         "path": "libs/ostd/src/syscall.rs",
         "roles": [
           "typed GetRandom caller wrapper"
         ],
-        "sha256": "97bab1b31947662cf8a50bb288472ba5e78e83b9e2266d2039fee79ad614b7de"
+        "sha256": "38fee2ffafea83eb91fda651f916a82dd6cd51b2465999d8e61d0cac9a370fde"
       }
     ],
     "required_paths": [
