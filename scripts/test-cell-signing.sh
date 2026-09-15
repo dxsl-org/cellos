@@ -38,8 +38,10 @@ TMP_DIR="$REPO_ROOT/target"
 TMP_SIGNED="$TMP_DIR/test-signing-signed.elf"
 TMP_TAMPERED="$TMP_DIR/test-signing-tampered.elf"
 TMP_METADATA_TAMPERED="$TMP_DIR/test-signing-metadata-tampered.elf"
+TMP_RELA_TAMPERED="$TMP_DIR/test-signing-rela-tampered.elf"
+TMP_RELASH_TAMPERED="$TMP_DIR/test-signing-relash-tampered.elf"
 
-cleanup() { rm -f "$TMP_SIGNED" "$TMP_TAMPERED" "$TMP_METADATA_TAMPERED"; }
+cleanup() { rm -f "$TMP_SIGNED" "$TMP_TAMPERED" "$TMP_METADATA_TAMPERED" "$TMP_RELA_TAMPERED" "$TMP_RELASH_TAMPERED"; }
 trap cleanup EXIT
 
 echo "--- test-cell-signing ---"
@@ -142,5 +144,72 @@ if OBJCOPY="$OBJCOPY" python3 "$SIGN" --verify --in "$TMP_METADATA_TAMPERED" 2>/
 fi
 echo "PASS: verify (metadata correctly rejected)"
 
+# ── Step 5: CELLOS-LOADER-SIG-001 .rela.dyn entries are signed ──────────────
+cp "$TMP_SIGNED" "$TMP_RELA_TAMPERED"
+python3 - "$TMP_RELA_TAMPERED" <<'PYEOF'
+import struct, sys
+with open(sys.argv[1], "r+b") as f:
+    data = bytearray(f.read())
+e_shoff = struct.unpack_from("<Q", data, 40)[0]
+e_shentsize = struct.unpack_from("<H", data, 58)[0]
+e_shnum = struct.unpack_from("<H", data, 60)[0]
+e_shstrndx = struct.unpack_from("<H", data, 62)[0]
+shstr_base = e_shoff + e_shstrndx * e_shentsize
+shstr_offset = struct.unpack_from("<Q", data, shstr_base + 24)[0]
+rela_found = False
+for i in range(e_shnum):
+    base = e_shoff + i * e_shentsize
+    sh_name = struct.unpack_from("<I", data, base)[0]
+    end = data.find(b"\x00", shstr_offset + sh_name)
+    if data[shstr_offset + sh_name:end] == b".rela.dyn":
+        sh_offset = struct.unpack_from("<Q", data, base + 24)[0]
+        sh_size = struct.unpack_from("<Q", data, base + 32)[0]
+        if sh_size >= 8:
+            data[sh_offset + 4] ^= 0x55
+            rela_found = True
+            break
+if not rela_found:
+    raise SystemExit("ERROR: .rela.dyn section not found or empty")
+with open(sys.argv[1], "wb") as f:
+    f.write(data)
+PYEOF
+if OBJCOPY="$OBJCOPY" python3 "$SIGN" --verify --in "$TMP_RELA_TAMPERED" 2>/dev/null; then
+    echo "FAIL: CELLOS-LOADER-SIG-001: modified .rela.dyn entry should NOT verify"
+    exit 1
+fi
+echo "PASS: verify (CELLOS-LOADER-SIG-001 .rela.dyn entry tamper correctly rejected)"
+
+# ── Step 6: CELLOS-LOADER-SIG-001 .rela.dyn section header is signed ─────────
+cp "$TMP_SIGNED" "$TMP_RELASH_TAMPERED"
+python3 - "$TMP_RELASH_TAMPERED" <<'PYEOF'
+import struct, sys
+with open(sys.argv[1], "r+b") as f:
+    data = bytearray(f.read())
+e_shoff = struct.unpack_from("<Q", data, 40)[0]
+e_shentsize = struct.unpack_from("<H", data, 58)[0]
+e_shnum = struct.unpack_from("<H", data, 60)[0]
+e_shstrndx = struct.unpack_from("<H", data, 62)[0]
+shstr_base = e_shoff + e_shstrndx * e_shentsize
+shstr_offset = struct.unpack_from("<Q", data, shstr_base + 24)[0]
+shdr_found = False
+for i in range(e_shnum):
+    base = e_shoff + i * e_shentsize
+    sh_name = struct.unpack_from("<I", data, base)[0]
+    end = data.find(b"\x00", shstr_offset + sh_name)
+    if data[shstr_offset + sh_name:end] == b".rela.dyn":
+        sh_offset = struct.unpack_from("<Q", data, base + 24)[0]
+        struct.pack_into("<Q", data, base + 24, sh_offset + 8)
+        shdr_found = True
+        break
+if not shdr_found:
+    raise SystemExit("ERROR: .rela.dyn section header not found")
+with open(sys.argv[1], "wb") as f:
+    f.write(data)
+PYEOF
+if OBJCOPY="$OBJCOPY" python3 "$SIGN" --verify --in "$TMP_RELASH_TAMPERED" 2>/dev/null; then
+    echo "FAIL: CELLOS-LOADER-SIG-001: modified .rela.dyn section header should NOT verify"
+    exit 1
+fi
+echo "PASS: verify (CELLOS-LOADER-SIG-001 .rela.dyn section header tamper correctly rejected)"
 echo
 echo "--- test-cell-signing: ALL PASS ---"

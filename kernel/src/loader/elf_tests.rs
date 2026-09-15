@@ -56,6 +56,8 @@ pub fn run_all() {
     test_signing_extract_sig_some_with_non_utf8_unrelated_section_name();
     test_signing_extract_sig_none_for_nobits_signature();
     test_signing_required_flag_on_for_tier1();
+    #[cfg(feature = "dev-signing-key")]
+    test_signing_metadata_tamper_rejected();
     // W^X post-relocation flag derivation.
     super::wx::run_self_tests();
     #[cfg(feature = "test-hooks")]
@@ -793,4 +795,86 @@ fn build_minimal_signed_elf(sig: [u8; 64]) -> alloc::vec::Vec<u8> {
     v[384..384 + STRTAB.len()].copy_from_slice(STRTAB);
 
     v
+}
+
+/// Precomputed Ed25519 dev signature over the 344-byte canonical payload of `build_minimal_signed_elf`.
+/// Generated offline via `sign-cell.py` using `DEV_SEED = [0x43; 32]`.
+#[cfg(feature = "dev-signing-key")]
+const MINIMAL_ELF_DEV_SIG: [u8; 64] = [
+    0x48, 0x26, 0x58, 0xf3, 0x2f, 0x69, 0xc6, 0xcc, 0x24, 0xa3, 0x61, 0x17, 0x15, 0x72, 0xa8, 0xf4,
+    0x1a, 0x7e, 0xd5, 0xca, 0x3a, 0xf4, 0x63, 0xe1, 0x2c, 0xbd, 0x94, 0x1a, 0x5c, 0xde, 0x3e, 0x95,
+    0x43, 0xa5, 0xd4, 0x24, 0x2c, 0xf7, 0x4f, 0x13, 0x10, 0xb1, 0x92, 0x7c, 0xe8, 0x31, 0x0e, 0xb2,
+    0x54, 0x4c, 0x07, 0x96, 0xf8, 0xfb, 0x87, 0xfa, 0x9f, 0x08, 0x61, 0x2a, 0xf0, 0xbc, 0x41, 0x05,
+];
+
+/// CELLOS-LOADER-SIG-001 negative tests: authenticates all load-affecting ELF section and
+/// relocation metadata, including e_flags, e_entry, p_flags, sh_offset, and section names,
+/// proving that tampering with any load-affecting metadata causes `verify_cell` to reject
+/// the binary BEFORE any relocation or mapping can take place.
+#[cfg(feature = "dev-signing-key")]
+fn test_signing_metadata_tamper_rejected() {
+    let elf = build_minimal_signed_elf(MINIMAL_ELF_DEV_SIG);
+    let sig = crate::signing::extract_sig(&elf).expect("sig present");
+    assert!(
+        crate::signing::verify_cell(&elf, &sig),
+        "unmodified minimal signed ELF must pass verification"
+    );
+
+    // 1. Mutate ELF header e_flags (offset 48)
+    let mut elf_bad = elf.clone();
+    elf_bad[48] ^= 1;
+    assert!(
+        !crate::signing::verify_cell(&elf_bad, &sig),
+        "CELLOS-LOADER-SIG-001: mutated e_flags must be rejected"
+    );
+
+    // 2. Mutate ELF header e_entry (offset 24)
+    let mut elf_bad = elf.clone();
+    elf_bad[24] ^= 0x40;
+    assert!(
+        !crate::signing::verify_cell(&elf_bad, &sig),
+        "CELLOS-LOADER-SIG-001: mutated e_entry must be rejected"
+    );
+
+    // 3. Mutate Phdr p_flags (offset 68)
+    let mut elf_bad = elf.clone();
+    elf_bad[68] ^= 2;
+    assert!(
+        !crate::signing::verify_cell(&elf_bad, &sig),
+        "CELLOS-LOADER-SIG-001: mutated Phdr p_flags must be rejected"
+    );
+
+    // 4. Mutate Section Header __ViCell_sig sh_offset (offset 216)
+    let mut elf_bad = elf.clone();
+    elf_bad[216] ^= 1;
+    assert!(
+        !crate::signing::verify_cell(&elf_bad, &sig),
+        "CELLOS-LOADER-SIG-001: mutated sig sh_offset must be rejected"
+    );
+
+    // 5. Mutate Section Header .shstrtab sh_offset (offset 280)
+    let mut elf_bad = elf.clone();
+    elf_bad[280] ^= 1;
+    assert!(
+        !crate::signing::verify_cell(&elf_bad, &sig),
+        "CELLOS-LOADER-SIG-001: mutated shstrtab sh_offset must be rejected"
+    );
+
+    // 6. Mutate Section name string in .shstrtab (offset 385)
+    let mut elf_bad = elf.clone();
+    elf_bad[385] ^= b'x';
+    assert!(
+        !crate::signing::verify_cell(&elf_bad, &sig),
+        "CELLOS-LOADER-SIG-001: mutated section name must be rejected"
+    );
+
+    // 7. Mutate PT_LOAD code byte (offset 120)
+    let mut elf_bad = elf.clone();
+    elf_bad[120] ^= 0xFF;
+    assert!(
+        !crate::signing::verify_cell(&elf_bad, &sig),
+        "CELLOS-LOADER-SIG-001: mutated PT_LOAD code byte must be rejected"
+    );
+
+    log::info!("  [ok] CELLOS-LOADER-SIG-001: metadata and segment mutations rejected");
 }

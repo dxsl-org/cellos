@@ -35,7 +35,7 @@
 
 1. Chọn floor backend + production hardware
 2. Security review thiết kế floor/A-B protocol
-3. Fix loader signature boundary
+3. [done 2026-09-16] Fix loader signature boundary (CELLOS-LOADER-SIG-001): xác thực toàn bộ metadata container ELF, .rela.dyn và section headers trước khi cấp phát/relocation; kiểm thử âm bản trên host (test-cell-signing.sh) và boot QEMU (elf_tests)
 4. Implement floor persistence/recovery
 5. Provision publisher/owner anchors
 6. Wire mọi task-creation path
