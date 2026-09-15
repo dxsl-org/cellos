@@ -79,9 +79,9 @@
 <a href=#79 id=79 data-nosnippet>79</a>        allow_read_all: <span class="bool-val">true</span>,
 <a href=#80 id=80 data-nosnippet>80</a>        allow_write_all: <span class="bool-val">true</span>,
 <a href=#81 id=81 data-nosnippet>81</a>    },
-<a href=#82 id=82 data-nosnippet>82</a>    <span class="comment">// RedoxFS service volume. Writable like /data: without this rule every /srv
-<a href=#83 id=83 data-nosnippet>83</a>    // write fell through to the read-only "/" rule and failed before reaching the
-<a href=#84 id=84 data-nosnippet>84</a>    // backend.
+<a href=#82 id=82 data-nosnippet>82</a>    <span class="comment">// /srv service volume (CellosFS Native on P5). Writable like /data: without
+<a href=#83 id=83 data-nosnippet>83</a>    // this rule every /srv write fell through to the read-only "/" rule and
+<a href=#84 id=84 data-nosnippet>84</a>    // failed before reaching the backend.
 <a href=#85 id=85 data-nosnippet>85</a>    </span>PathRule {
 <a href=#86 id=86 data-nosnippet>86</a>        prefix: <span class="string">"/srv/cellos/"</span>,
 <a href=#87 id=87 data-nosnippet>87</a>        allow_read_all: <span class="bool-val">false</span>,
