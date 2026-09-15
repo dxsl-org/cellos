@@ -1,28 +1,24 @@
-# Phase 03 — The `console_drv::poll` kernel fault: mechanism and the one measurement left
+# Phase 03 — The `console_drv::poll` kernel fault: mechanism proven by measurement
 
-**Status**: reproduced deterministically, mechanism identified, proof step prepared (not applied)
+**Status**: measurement applied and run — the fault reproduces with a private cell root live;
+the fix is designed in [phase-04-trap-root-discipline.md](phase-04-trap-root-discipline.md)
 **Ceiling**: qemu (riscv64) — local repro, no board needed
 
-## The fault, deterministically
+## The fault
 
-`cargo test --test redoxfs-srv srv_basic` after `scripts/build-test-hooks-ci.sh` and
-`scripts/build-srv-test-ci.sh` reproduces the CI failure byte for byte, including the faulting
-address:
+`cargo test --test srv-cellosfs riscv64_cellosfs_srv_basic` after `scripts/build-srv-test-ci.sh`
+reproduces the CI failure. Before this phase the panic named only the registers:
 
 ```
 USER: Cellos > posix-shim-test
-USER: [posix-shim] POSIX-FSTAT-OPEN: OK
 [KERNEL PANIC] Critical failure.
 Cellos: Kernel exception: scause=13 sepc=0x8023d708 stval=0x10000005 sstatus=0x8000000200006100
 ```
 
 - `scause=13` — load page fault. `sstatus.SPP = 1` — the fault came from **S-mode** (kernel code).
-- `sepc=0x8023d708` — inside `console_drv::viConsole::poll` (symbolized from the kernel that produced
-  it, +0x210 into the function).
-- The instruction there is `lbu a0, 5(a1)` with `a1 = 0x10000000`: a load of the **8250 UART's
-  line-status register** (`0x10000000 + 5`) on the riscv-virt machine.
-
-So the kernel executed an MMIO read while the live address space did not map the UART.
+- `sepc` — inside `console_drv::viConsole::poll` (+0x210), at `lbu a0, 5(a1)` with
+  `a1 = 0x10000000`: a load of the **8250 UART's line-status register** on the riscv-virt machine.
+- So the kernel executed an MMIO read while the live address space did not map the UART.
 
 ## The mechanism this points at
 
@@ -34,37 +30,85 @@ So the kernel executed an MMIO read while the live address space did not map the
   comment says a zero PPN "preserves the SAS/same-domain path" — so the address space is whatever the
   previous context left behind unless someone explicitly switches.
 - `asm/trap.S` (`__trap_entry`) saves the frame and calls into Rust with the **interrupted context's
-  `satp` still live**. There is no restore-to-kernel-root step on entry.
+  `satp` still live**. There is no restore-to-kernel-root step on entry, and `__trap_exit` never
+  restores one either.
+- A timer-driven path that touches the console runs in the *cell's* address space whenever the
+  interrupted context was a private native domain. `vi_timer_tick` polls the console directly
+  (`kernel/src/task.rs:832` → `console_drv::CONSOLE.lock().poll()`), before the scheduler switch that
+  would have installed another root. A domain root exists to contain a cell, so it does not map the
+  UART: exactly the fault above.
 
-A timer-driven path that touches the console (`viTimerTick` → executor → `console_drv::poll`) therefore
-runs in the *cell's* address space whenever the interrupted context was a private native domain — and
-a domain root, which exists to contain a cell, does not map the UART. That is exactly the fault above,
-and it is also why the symptom only appears for cells admitted as domains.
+## The measurement (applied, and what it printed)
 
-## The one measurement that closes it
+The panic path now names both roots, and the kernel records its own root when it activates its page
+table:
 
-Print the live `satp` in the kernel-fault panic path. `hal/arch/riscv/src/rv64/trap.rs` already reads
-it for the test-hooks snapshot; the patch used to reproduce this phase's run was:
+- `hal/arch/riscv/src/rv64/paging.rs::PageTable::activate` calls
+  `domain::record_kernel_satp(satp_val)` — the only caller of `activate` is
+  `kernel/src/memory/paging.rs` for the kernel root, and the cell path
+  (`domain::activate_address_space`) deliberately does not touch it.
+- `hal/arch/riscv/src/rv64/domain.rs` keeps that value in `KERNEL_SATP` and exposes it as
+  `kernel_satp()`.
+- `hal/arch/riscv/src/rv64/trap.rs` reads the live `satp` (`csrr satp`) before the kernel-fault panic
+  and prints it beside `kernel_satp()`.
 
-```rust
-let live_satp: usize;
-unsafe {
-    core::arch::asm!("csrr {satp}, satp", satp = out(reg) live_satp, options(nostack, nomem));
-}
-panic!("Cellos: Kernel exception: scause={} sepc={:#x} stval={:#x} sstatus={:#x} satp={:#x}",
-       code, frame.sepc, frame.stval, frame.sstatus, live_satp);
+Reproduced by driving the kernel directly — `qemu-system-riscv64 -machine virt -m 256M -nographic
+-bios default -kernel target/riscv64gc-unknown-none-elf/release/cellos-kernel-srv-test -drive
+file=<copy of build/disk_srv.img>,format=raw,if=none,id=hd0 -device virtio-blk-device,drive=hd0
+-monitor none`, typing `posix-shim-test` into the serial stream after `[srv-test] ALL TESTS PASSED`,
+and keeping the transcript. First attempt:
+
+```
+USER: Cellos > posix-shim-test
+
+[KERNEL PANIC] Critical failure.
+panicked at hal/arch/riscv/src/rv64/trap.rs:193:21:
+Cellos: Kernel exception: scause=13 sepc=0x80242cd2 stval=0x10000005 sstatus=0x8000000200006100 satp=0x80001000000827c0 kernel_satp=0x800000000008076f
 ```
 
-If `satp` is non-zero and not the kernel root (`(8 << 60) | (kernel_root >> 12)`), the mechanism is
-proven and the fix is in the trap entry: restore the kernel's root after the frame is saved, and
-return to the interrupted root on the way out (or re-activate it in the scheduler's resume path).
-Mapping the UART into every domain root is *not* an acceptable shortcut — cells run in S-mode under
-that same root, so it would hand them the console's MMIO.
+| value | decode |
+|---|---|
+| `satp=0x80001000000827c0` | MODE=8 (Sv39), **ASID=1**, root PA `0x827c0000` — a private cell root |
+| `kernel_satp=0x800000000008076f` | MODE=8, **ASID=0**, root PA `0x8076f000` — the kernel's own root |
+| `sepc=0x80242cd2` | `console_drv::viConsole::poll` + `0x210` (the offset phase 02 reported) |
+| `stval=0x10000005` | the 8250 line-status register |
+
+`riscv64-unknown-elf-addr2line -f -C -e <that kernel> 0x80242cd2` and `nm` put `poll` at
+`0x80242ac2`, so the faulting instruction is the same `+0x210` MMIO load as phase 02, executed while
+`satp` named a **cell** root (ASID 1, not the kernel's ASID 0). The mechanism is proof, not inference:
+the kernel touched the UART under a root that contains the cell.
+
+The fault fires in the cell-spawn window, not after it: the transcript of this run shows
+`[srv-test] ALL TESTS PASSED`, the shell prompt, the typed command, and then the panic — with no
+`[posix-shim]` marker. A freshly admitted private domain is enough; the cell does not have to do
+anything hostile to expose it.
 
 ## Caveat for whoever runs the repro
 
-Repeated local runs of this suite can report `ok` in ~5 s without booting: the test copies a 543 MB
-disk image and its serial log handling appears to tolerate a stale log, so a run that races a
-previous one may "pass" without having executed anything. Run it once, sequentially, and confirm the
-serial transcript in the failure dump before believing a green result. That is worth its own look —
-a suite that silently passes locally is worse than one that fails.
+The fault is **intermittent**, and the suite is a weak detector of it. Two facts, both measured on
+the same kernel (the one above):
+
+- A full boot is genuinely fast enough for a 5 s green: disk copy 0.15 s (page cache), boot to
+  `[srv-test] ALL TESTS PASSED` 2.82 s, shell prompt 4.64 s, `[posix-shim] POSIX-MKDIR-RMDIR: OK`
+  4.86 s. The "5 s `ok` without booting" that phase 02 flagged is explained by the boot really taking
+  ~5 s — it is not a stale log.
+- The same commands on the same kernel panicked on one boot (the capture above) and completed
+  cleanly on the next. A green `cargo test --test srv-cellosfs riscv64_cellosfs_srv_basic` therefore
+  says nothing about this fault.
+
+Use the direct QEMU drive (as above) when measuring it: it keeps the serial transcript and stops at
+the panic, so one attempt either produces the measurement or provably completes without it.
+
+## Why the next phase is a design, not a one-line patch
+
+- Restoring the kernel root on trap entry is only half the invariant: `switch.S` treats
+  `root_ppn == 0` — which is what `SwitchPlan` returns for `SameDomain` — as "leave `satp` alone", so
+  a cell resumed on the same domain would keep running under the kernel root with the kernel's
+  mappings visible to it. That is a silent isolation failure, worse than the fault being fixed.
+- The obvious shortcut — mapping the UART into every domain root — is not acceptable: cells run in
+  S-mode under that same root, so it would hand them the console's MMIO.
+- `ViTrapFrame` is a 288-byte layout shared with x86_64 and aarch64; the interrupted root has to be
+  parked somewhere that does not change that ABI.
+
+[phase-04-trap-root-discipline.md](phase-04-trap-root-discipline.md) states the invariant, the three
+places that must be changed, and the verification matrix.

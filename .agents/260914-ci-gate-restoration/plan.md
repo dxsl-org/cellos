@@ -14,12 +14,22 @@ and the repository's own roadmap ties hosted-run evidence to a passing pipeline 
 prerequisite for any lane, including the G2 AI lane, to claim anything above `host`.
 
 This plan takes the three lint jobs (the ones with a single, mechanical root cause) and leaves the
-four integration jobs as separately-reported defects.
+four integration jobs as separately-reported defects — with one exception: the CellosFS `/srv` job's
+kernel fault was investigated here (phases 02-04) because it halts the kernel, so no lane can consume
+that job as evidence until it is fixed.
 
 ## Phases
 
 - [phase-01-lint-jobs.md](phase-01-lint-jobs.md) — the lint debt, what was fixed, what was found
   that should not have been fixed mechanically, and what remains red elsewhere.
+- [phase-02-srv-fault.md](phase-02-srv-fault.md) — the CellosFS `/srv` job: one stale assertion
+  fixed, one real kernel fault reproduced and handed to its owning lane.
+- [phase-03-console-fault.md](phase-03-console-fault.md) — the `console_drv::poll` fault: the
+  measurement is applied and the mechanism is proven (the fault runs with a private Cell root live,
+  ASID 1, while the kernel root is ASID 0).
+- [phase-04-trap-root-discipline.md](phase-04-trap-root-discipline.md) — the fix as a design: the
+  invariant, the three places that must change (trap entry, trap exit storage, scheduler resume), and
+  the verification matrix. Nothing written yet.
 
 ## Non-goals
 
