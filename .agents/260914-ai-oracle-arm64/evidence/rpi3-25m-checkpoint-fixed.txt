@@ -1,0 +1,48 @@
+Cellos AI inference on physical RPi3 with the 25.6 MiB checkpoint — evidence
+===========================================================================
+
+Board: Raspberry Pi 3 Model B+ (U-Boot: `RPI 3 Model B (0xa22082)`, `DRAM: 948 MiB`).
+Payload: `cellos-ai-15m-diag.uimg` = the 43.6 MB netboot payload (AI cells + `stories15M-q8_0`,
+26 671 328 B, embedded in VIFS1) carrying the image-sized memory-map fix plus temporary boot
+diagnostics. Transcript: `rpi3-15m-diag-20260915-073106.log`.
+
+Boot-time memory map after the fix (the same payload panicked before it)
+
+    [boot] kernel_phys_base=0x0000000000080000
+    [boot] map base=0x0000000000080000 len=0x0000000002a00000 ty=Kernel     <- 42 MiB, covers the image
+    [boot] map base=0x0000000002a80000 ... ty=Usable
+    [boot] allocator range 0x0000000002a80000..0x000000003b000000 bytes=0x0000000038580000
+
+Before the fix the same boot printed `len=0x01000000 ty=Kernel` (a fixed 16 MiB) and an allocator
+range starting at `0x01080000` — inside a 43.6 MB image — which is why the compositor cell's first
+pages overwrote the kernel and every run panicked.
+
+Service and oracle on the board
+
+    [ai] model path: /bin/ai-model.gguf
+    [ai] model bytes: 26671328 read in 4367 ms
+    [ai] model ready: 32000 vocab, context 128, resident bytes 28087038
+    [ai-test] model=llama
+    [ai-test] vocab=32000 context=128 sessions=4
+    [ai-test] generate: 24 tokens in 3995 ms (6007 tokens/s x1000, 13 polls)
+    [ai-test] real model continuation: 24 tokens
+    [ai-test] text:, there was a big bear named Benny was a very big bear. He was a bear. He was very brave
+    [ai-test] model vocab 32000
+    [ai-test] real model embeddings ok: 3 texts
+    [ai-test] abandoned session released; service still serving
+    [ai-test] prompt stream matched: 24 tokens
+    [ai-test] PASS
+
+What this is
+------------
+CP-3's third leg at the `physical` development-hardware ceiling, with the checkpoint the leg is about:
+a 25.6 MiB Q8_0 checkpoint resident inside the AI Cell — `resident bytes 28 087 038`, the same number
+the QEMU legs predicted — generating coherent prose on real Cortex-A53 silicon at ~6 tokens/s, over
+typed IPC, with init supervising the service.
+
+What it is not
+--------------
+No production, security, or fleet claim. RPi3 remains a development board and never a
+production-security qualification target. The ~6 tok/s is this board with this checkpoint, not a
+product throughput claim. The fix under test is in the board's fallback memory map; the QEMU legs
+(aarch64 virt / riscv64) and their kernels are untouched.

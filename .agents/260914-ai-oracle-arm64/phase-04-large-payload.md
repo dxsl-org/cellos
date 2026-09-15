@@ -1,6 +1,7 @@
-# Phase 04 — A large payload panics the board (reported, worked around)
+# Phase 04 — A large payload panics the board (root cause found, fixed, verified)
 
-**Status**: defect reproduced on the RPi3, handed to that lane; the AI lane takes the workaround
+**Status**: root cause proven on the hardware and fixed in `kernel/src/boot.rs`; the 43.6 MB payload
+now boots and serves the real 25.6 MiB checkpoint (`evidence/rpi3-25m-checkpoint-fixed.txt`)
 **Ceiling**: `physical` development hardware (Raspberry Pi 3 Model B+)
 
 ## The observation
@@ -40,7 +41,35 @@ The failing boot is normal until the compositor is spawned, then repeats forever
   and the ramdisk is a `include_bytes!` static in `.rodata` with no heap copy
   (`kernel/src/task/drivers/ramdisk.rs` says so explicitly).
 
-## Narrowed further (static analysis)
+## Root cause, proven by printing the board's own map
+
+The diagnostic boot (temporary `puts`-based prints, since `log::info!` has no logger that early on
+this path) settled it in one run:
+
+```
+[boot] map base=0x80000    len=0x01000000 ty=Kernel     <- FIXED 16 MiB
+[boot] map base=0x01080000 len=0x39f80000 ty=Usable
+[boot] allocator range 0x01080000..0x3b000000
+```
+
+Those two entries are the board descriptor's `FALLBACK_MEMORY` verbatim, so the board was running on
+the **static fallback map**, not on the DTB-derived one — `fallback_boot_info`'s DTB branch is
+invisible when it fails (`log::warn!` before the logger exists), which is why the earlier logs showed
+no rejection line. `FrameAllocator::new_from_map` takes the largest `Usable` region
+(`kernel/src/memory/frame.rs:58`), so it started handing out frames at 16.5 MB — inside a 43.6 MB
+image — and the first cell that mapped a lot of memory (the compositor) overwrote the kernel's code
+and embedded ramdisk.
+
+**Fix** (`kernel/src/boot.rs`, board-lane file, verified on the device): the RPi3 fallback now sizes
+the kernel region from the linker end symbol (`__stack_top`), exactly as the QEMU-virt path already
+did, with the descriptor's span as the usable ceiling:
+
+```
+[boot] map base=0x80000    len=0x2a00000 ty=Kernel      <- 42 MiB, covers the image
+[boot] allocator range 0x2a80000..0x3b000000
+```
+
+## Earlier narrowing (static analysis)
 
 The board's boot log carries **no** `[boot] RPi3 DTB memory map rejected` / `conservative fallback`
 line, so the running map came from the firmware DTB with `kernel_end = __stack_top`

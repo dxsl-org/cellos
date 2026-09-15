@@ -116,7 +116,11 @@ the card (`/mnt/sd/ai-model.gguf`, the service's second candidate path) instead 
 and a third board run with a real 1.1 MB checkpoint (`stories260K`) reproduced the whole path at the
 board ceiling: `[ai] model bytes: 1185376 read in 70 ms`, `model ready: 512 vocab, context 2048,
 resident bytes 1220116`, `[ai-test] PASS`. That is the RPi3 memory-budget datapoint for a real
-checkpoint; the 25.6 MiB case stays blocked by the two board defects above.
+checkpoint, and the 25.6 MiB case followed: the large-payload panic turned out to be the board's
+*static* fallback memory map declaring a fixed 16 MiB kernel region (proven by printing the map on
+the board), fixed by sizing that region from the linker end symbol — after which the 43.6 MB payload
+boots and reports `[ai] model ready: 32000 vocab, context 128, resident bytes 28087038` with
+`[ai-test] PASS`.
 
 ## Current executable work
 

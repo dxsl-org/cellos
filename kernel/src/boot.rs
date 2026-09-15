@@ -629,7 +629,45 @@ pub fn fallback_boot_info(dtb: usize) -> &'static SimpleBootInfo {
     } else {
         log::warn!("[boot] no RPi3 DTB memory map; using conservative fallback");
     }
-    &FALLBACK_BOOT_INFO
+
+    // Fallback path: no usable firmware DTB. The board descriptor's static spans are audited but
+    // assume a small image — `kernel` is a fixed 16 MiB from 0x80000 and `usable` starts at
+    // 0x1080000 — which is wrong for any payload that carries real data. A 43.6 MB payload (a real
+    // checkpoint inside VIFS1) panicked at compositor setup because the frame allocator's first
+    // frames landed inside the image, and the cell overwrote the kernel's own code and ramdisk.
+    // Size the kernel region from the linker end symbol instead, exactly as the QEMU-virt path does;
+    // the descriptor's spans stay the *ceiling* for usable RAM.
+    {
+        const ALIGN_2M: usize = 0x20_0000;
+        let ram_base = FALLBACK_BOOT_INFO.kernel_phys_base as usize;
+        let descriptor_usable = DEFAULT_RPI3_BOARD.fallback_memory[1];
+        let ram_end = (descriptor_usable.base + descriptor_usable.size) as usize;
+        // SAFETY: single-hart early boot; the statics are written once here, before any other
+        // reader exists, then only shared immutably.
+        unsafe {
+            let end = addr_of!(__stack_top) as usize;
+            let kernel_len = if end > ram_base {
+                (end as usize - ram_base + ALIGN_2M - 1) & !(ALIGN_2M - 1)
+            } else {
+                descriptor_usable.base as usize - ram_base
+            };
+            let map = &mut *addr_of_mut!(DTB_MEMORY_MAP);
+            map[0] = MemoryMapEntry {
+                base: ram_base,
+                length: kernel_len,
+                ty: MemoryType::Kernel,
+            };
+            map[1] = MemoryMapEntry {
+                base: ram_base + kernel_len,
+                length: ram_end.saturating_sub(ram_base + kernel_len),
+                ty: MemoryType::Usable,
+            };
+            (*addr_of_mut!(DTB_BOOT_INFO)).memory_map =
+                core::slice::from_raw_parts(addr_of!(DTB_MEMORY_MAP) as *const MemoryMapEntry, 2);
+            (*addr_of_mut!(DTB_BOOT_INFO)).kernel_phys_base = ram_base as u64;
+            &*addr_of!(DTB_BOOT_INFO)
+        }
+    }
 }
 
 #[cfg(not(any(
