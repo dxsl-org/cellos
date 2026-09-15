@@ -236,16 +236,17 @@
 <a href=#236 id=236 data-nosnippet>236</a>    <span class="kw">unsafe fn </span>activate(<span class="kw-2">&amp;</span><span class="self">self</span>) {
 <a href=#237 id=237 data-nosnippet>237</a>        <span class="kw">let </span>root_addr = <span class="self">self </span><span class="kw">as </span><span class="kw-2">*const </span><span class="kw">_ as </span>usize;
 <a href=#238 id=238 data-nosnippet>238</a>        <span class="kw">let </span>satp_val = (<span class="number">8usize </span>&lt;&lt; <span class="number">60</span>) | (root_addr &gt;&gt; <span class="number">12</span>);
-<a href=#239 id=239 data-nosnippet>239</a>        <span class="comment">// SAFETY: fence ensures all PTE stores reach the memory system before the
-<a href=#240 id=240 data-nosnippet>240</a>        // SATP write, preventing the hardware page-walker from seeing stale entries.
-<a href=#241 id=241 data-nosnippet>241</a>        // Required by RISC-V privileged spec §4.3 (sfence.vma ordering).
-<a href=#242 id=242 data-nosnippet>242</a>        </span><span class="macro">core::arch::asm!</span>(
-<a href=#243 id=243 data-nosnippet>243</a>            <span class="string">"fence rw, rw"</span>,
-<a href=#244 id=244 data-nosnippet>244</a>            <span class="string">"csrw satp, {satp}"</span>,
-<a href=#245 id=245 data-nosnippet>245</a>            <span class="string">"sfence.vma zero, zero"</span>,
-<a href=#246 id=246 data-nosnippet>246</a>            satp = <span class="kw">in</span>(reg) satp_val,
-<a href=#247 id=247 data-nosnippet>247</a>            options(nostack),
-<a href=#248 id=248 data-nosnippet>248</a>        );
-<a href=#249 id=249 data-nosnippet>249</a>    }
-<a href=#250 id=250 data-nosnippet>250</a>}
+<a href=#239 id=239 data-nosnippet>239</a>        <span class="kw">crate</span>::rv64::domain::record_kernel_satp(satp_val);
+<a href=#240 id=240 data-nosnippet>240</a>        <span class="comment">// SAFETY: fence ensures all PTE stores reach the memory system before the
+<a href=#241 id=241 data-nosnippet>241</a>        // SATP write, preventing the hardware page-walker from seeing stale entries.
+<a href=#242 id=242 data-nosnippet>242</a>        // Required by RISC-V privileged spec §4.3 (sfence.vma ordering).
+<a href=#243 id=243 data-nosnippet>243</a>        </span><span class="macro">core::arch::asm!</span>(
+<a href=#244 id=244 data-nosnippet>244</a>            <span class="string">"fence rw, rw"</span>,
+<a href=#245 id=245 data-nosnippet>245</a>            <span class="string">"csrw satp, {satp}"</span>,
+<a href=#246 id=246 data-nosnippet>246</a>            <span class="string">"sfence.vma zero, zero"</span>,
+<a href=#247 id=247 data-nosnippet>247</a>            satp = <span class="kw">in</span>(reg) satp_val,
+<a href=#248 id=248 data-nosnippet>248</a>            options(nostack),
+<a href=#249 id=249 data-nosnippet>249</a>        );
+<a href=#250 id=250 data-nosnippet>250</a>    }
+<a href=#251 id=251 data-nosnippet>251</a>}
 </code></pre></div></section></main></body></html>
