@@ -12,7 +12,7 @@ pub const VMLINUX_PATH: &str = "/vmlinux";
 pub const INITRD_PATH: &str = "/initrd.gz";
 
 #[cfg(not(feature = "ubuntu-wide-guest"))]
-const CMDLINE: &str = "earlycon=uart8250,io,0x3f8,115200 console=ttyS0 nox2apic lpj=4000000 nohz=off highres=off rdinit=/bin/sh panic=1 virtio_mmio.device=512@0xd0000000:5 virtio_mmio.device=512@0xd0000200:6 -- -i";
+const CMDLINE: &str = "earlycon=uart8250,io,0x3f8,115200 console=ttyS0 nox2apic pci=off lpj=4000000 nohz=off highres=off rdinit=/bin/sh panic=1 virtio_mmio.device=512@0xd0000000:5 virtio_mmio.device=512@0xd0000200:6 -- -i";
 #[cfg(not(feature = "ubuntu-wide-guest"))]
 const E2E_CMDLINE: &str = "earlycon=uart8250,io,0x3f8,115200 console=ttyS0 nox2apic pci=off lpj=4000000 nohz=off highres=off rdinit=/bin/virtio-e2e-init panic=1 virtio_mmio.device=512@0xd0000000:5 virtio_mmio.device=512@0xd0000200:6";
 #[cfg(feature = "ubuntu-wide-guest")]

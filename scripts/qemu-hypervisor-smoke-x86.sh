@@ -94,8 +94,9 @@ QEMU_VERSION="$("$QEMU_X86_BIN" --version | sed -n '1p')"
 echo "[hv-smoke-x86] mode=$HV_SMOKE_MODE iso=$ISO memory=$QEMU_MEMORY (window=${BOOT_WINDOW}s)"
 echo "[hv-smoke-x86] $QEMU_VERSION"
 
-# Kill QEMU at the exact deadline so post-window output cannot satisfy a gate.
-timeout --signal=KILL "$BOOT_WINDOW" "$QEMU_X86_BIN" \
+# Spawn QEMU and poll for the required terminal marker.
+# Early exit on success avoids waiting out the full BOOT_WINDOW under TCG.
+"$QEMU_X86_BIN" \
     -machine q35 \
     -accel tcg \
     -cpu qemu64,+pdpe1gb,+svm \
@@ -104,8 +105,24 @@ timeout --signal=KILL "$BOOT_WINDOW" "$QEMU_X86_BIN" \
     -cdrom "$QEMU_ISO" \
     -boot d \
     -no-reboot \
-    < /dev/null > qemu-hv-x86.raw.log 2>&1 || true
+    < /dev/null > qemu-hv-x86.raw.log 2>&1 &
+QEMU_PID=$!
 
+deadline=$((SECONDS + BOOT_WINDOW))
+while kill -0 "$QEMU_PID" 2>/dev/null && (( SECONDS < deadline )); do
+    if [[ "$HV_SMOKE_MODE" == "boot" ]] && grep -qE "(^|/ )#|~ #|localhost:~#" qemu-hv-x86.raw.log 2>/dev/null; then
+        break
+    elif [[ "$HV_SMOKE_MODE" == "machinery" ]] && grep -qF "[hv-x86] vCPU ready" qemu-hv-x86.raw.log 2>/dev/null; then
+        sleep 5
+        break
+    elif [[ "$HV_SMOKE_MODE" == "host-shell" ]] && grep -qF "Cellos > " qemu-hv-x86.raw.log 2>/dev/null; then
+        break
+    fi
+    sleep 2
+done
+
+kill -KILL "$QEMU_PID" 2>/dev/null || true
+wait "$QEMU_PID" 2>/dev/null || true
 # Strip NULs and ANSI escapes.
 tr -d '\000' < qemu-hv-x86.raw.log | sed 's/\x1b\[[0-9;]*m//g' > qemu-hv-x86.log
 

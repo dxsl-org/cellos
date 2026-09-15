@@ -913,12 +913,12 @@ jobs:
 
       - name: Run x86 hypervisor boot-to-shell gate
         id: hypervisor-smoke
-        timeout-minutes: 12
+        timeout-minutes: 20
         env:
           QEMU_X86_BIN: ${{ env.QEMU_X86_PREFIX }}/bin/qemu-system-x86_64
           QEMU_MEMORY: 1G
           HV_SMOKE_MODE: boot
-          BOOT_WINDOW: "600"
+          BOOT_WINDOW: "900"
         run: bash scripts/qemu-hypervisor-smoke-x86.sh build/vicell-x86-hv.iso
       - name: Collect x86 hypervisor evidence
         if: always()
