@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["main","quiesce"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS"]};
+window.SIDEBAR_ITEMS = {"fn":["init_custom_heap","main","quiesce"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS","__CUSTOM_HEAP_ARENA"],"struct":["__CustomHeapArena"]};

@@ -128,24 +128,26 @@
 <a href=#128 id=128 data-nosnippet>128</a></span><span class="kw">mod </span>run_loop_x86;
 <a href=#129 id=129 data-nosnippet>129</a><span class="attr">#[cfg(target_arch = <span class="string">"x86_64"</span>)]
 <a href=#130 id=130 data-nosnippet>130</a></span><span class="kw">mod </span>uart_16550;
-<a href=#131 id=131 data-nosnippet>131</a>
-<a href=#132 id=132 data-nosnippet>132</a><span class="doccomment">/// Entry: dispatch to the arch personality that has a VMM backend.
-<a href=#133 id=133 data-nosnippet>133</a></span><span class="attr">#[cfg(not(test))]
-<a href=#134 id=134 data-nosnippet>134</a>#[no_mangle]
-<a href=#135 id=135 data-nosnippet>135</a></span><span class="kw">pub fn </span>main() -&gt; ! {
-<a href=#136 id=136 data-nosnippet>136</a>    <span class="attr">#[cfg(target_arch = <span class="string">"aarch64"</span>)]
-<a href=#137 id=137 data-nosnippet>137</a>    </span>boot_arm::boot_arm();
-<a href=#138 id=138 data-nosnippet>138</a>    <span class="attr">#[cfg(target_arch = <span class="string">"x86_64"</span>)]
-<a href=#139 id=139 data-nosnippet>139</a>    </span>boot_x86::run();
-<a href=#140 id=140 data-nosnippet>140</a>    <span class="attr">#[cfg(not(any(target_arch = <span class="string">"aarch64"</span>, target_arch = <span class="string">"x86_64"</span>)))]
-<a href=#141 id=141 data-nosnippet>141</a>    </span>ostd::io::println(<span class="string">"[hv] no VMM personality for this architecture"</span>);
-<a href=#142 id=142 data-nosnippet>142</a>    quiesce()
-<a href=#143 id=143 data-nosnippet>143</a>}
-<a href=#144 id=144 data-nosnippet>144</a>
-<a href=#145 id=145 data-nosnippet>145</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>quiesce() -&gt; ! {
-<a href=#146 id=146 data-nosnippet>146</a>    ostd::io::println(<span class="string">"[hv] service quiesced"</span>);
-<a href=#147 id=147 data-nosnippet>147</a>    <span class="kw">loop </span>{
-<a href=#148 id=148 data-nosnippet>148</a>        <span class="kw">let _ </span>= ostd::syscall::sys_wait_for_event(<span class="number">0</span>, <span class="number">0</span>);
-<a href=#149 id=149 data-nosnippet>149</a>    }
-<a href=#150 id=150 data-nosnippet>150</a>}
+<a href=#131 id=131 data-nosnippet>131</a><span class="macro">ostd::declare_custom_heap!</span>(<span class="number">10 </span>* <span class="number">1024 </span>* <span class="number">1024</span>);
+<a href=#132 id=132 data-nosnippet>132</a>
+<a href=#133 id=133 data-nosnippet>133</a><span class="doccomment">/// Entry: dispatch to the arch personality that has a VMM backend.
+<a href=#134 id=134 data-nosnippet>134</a></span><span class="attr">#[cfg(not(test))]
+<a href=#135 id=135 data-nosnippet>135</a>#[no_mangle]
+<a href=#136 id=136 data-nosnippet>136</a></span><span class="kw">pub fn </span>main() -&gt; ! {
+<a href=#137 id=137 data-nosnippet>137</a>    init_custom_heap();
+<a href=#138 id=138 data-nosnippet>138</a>    <span class="attr">#[cfg(target_arch = <span class="string">"aarch64"</span>)]
+<a href=#139 id=139 data-nosnippet>139</a>    </span>boot_arm::boot_arm();
+<a href=#140 id=140 data-nosnippet>140</a>    <span class="attr">#[cfg(target_arch = <span class="string">"x86_64"</span>)]
+<a href=#141 id=141 data-nosnippet>141</a>    </span>boot_x86::run();
+<a href=#142 id=142 data-nosnippet>142</a>    <span class="attr">#[cfg(not(any(target_arch = <span class="string">"aarch64"</span>, target_arch = <span class="string">"x86_64"</span>)))]
+<a href=#143 id=143 data-nosnippet>143</a>    </span>ostd::io::println(<span class="string">"[hv] no VMM personality for this architecture"</span>);
+<a href=#144 id=144 data-nosnippet>144</a>    quiesce()
+<a href=#145 id=145 data-nosnippet>145</a>}
+<a href=#146 id=146 data-nosnippet>146</a>
+<a href=#147 id=147 data-nosnippet>147</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>quiesce() -&gt; ! {
+<a href=#148 id=148 data-nosnippet>148</a>    ostd::io::println(<span class="string">"[hv] service quiesced"</span>);
+<a href=#149 id=149 data-nosnippet>149</a>    <span class="kw">loop </span>{
+<a href=#150 id=150 data-nosnippet>150</a>        <span class="kw">let _ </span>= ostd::syscall::sys_wait_for_event(<span class="number">0</span>, <span class="number">0</span>);
+<a href=#151 id=151 data-nosnippet>151</a>    }
+<a href=#152 id=152 data-nosnippet>152</a>}
 </code></pre></div></section></main></body></html>
