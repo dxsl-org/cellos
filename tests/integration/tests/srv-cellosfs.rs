@@ -1,14 +1,14 @@
-//! RedoxFS /srv integration tests.
+//! CellosFS Native /srv integration tests.
 //!
 //! Three test functions:
 //!
-//! 1. `riscv64_redoxfs_srv_basic` — single boot with a P5-formatted disk;
+//! 1. `riscv64_cellosfs_srv_basic` — single boot with a P5-formatted disk;
 //!    waits for all six srv-test scenarios, then runs the POSIX rename smoke.
 //!
-//! 2. `riscv64_redoxfs_srv_degrade_no_disk` — boot with no VirtIO-BLK; confirms
+//! 2. `riscv64_cellosfs_srv_degrade_no_disk` — boot with no VirtIO-BLK; confirms
 //!    the VFS service warns and degrades gracefully instead of panicking.
 //!
-//! 3. `riscv64_redoxfs_srv_persistence` — two sequential boots against the same
+//! 3. `riscv64_cellosfs_srv_persistence` — two sequential boots against the same
 //!    temp disk; the srv-test cell writes a persist marker in boot 1 and the
 //!    harness verifies it is announced as found in boot 2.
 //!
@@ -17,7 +17,7 @@
 //!   scripts/mksrv-img.sh          →  build/disk_srv.img
 //!
 //! Run:
-//!   cargo test --manifest-path tests/integration/Cargo.toml --test redoxfs-srv
+//!   cargo test --manifest-path tests/integration/Cargo.toml --test srv-cellosfs
 
 use std::path::PathBuf;
 use vicell_integration_tests::{qemu_binary, QemuRunner};
@@ -86,7 +86,7 @@ fn prerequisites_ok_with_disk() -> bool {
 /// The test creates a temp copy of the base disk image so repeated runs do not
 /// accumulate state in `build/disk_srv.img`.
 #[test]
-fn riscv64_redoxfs_srv_basic() {
+fn riscv64_cellosfs_srv_basic() {
     if !prerequisites_ok_with_disk() {
         return;
     }
@@ -108,7 +108,7 @@ fn riscv64_redoxfs_srv_basic() {
             panic!("{e}");
         });
 
-    // Exercise live POSIX directory lifecycle and rename on RedoxFS P5 (/srv)
+    // Exercise live POSIX directory lifecycle and rename on the CellosFS P5 (/srv)
     // via posix-shim-test.
     std::thread::sleep(std::time::Duration::from_millis(500));
     runner.send_line("posix-shim-test");
@@ -167,7 +167,7 @@ fn riscv64_redoxfs_srv_basic() {
 /// S6: boot with no VirtIO-BLK → VFS must warn that /srv is unavailable but
 /// must NOT panic.  Uses the vfs-quota test-hooks kernel (smallest env).
 #[test]
-fn riscv64_redoxfs_srv_degrade_no_disk() {
+fn riscv64_cellosfs_srv_degrade_no_disk() {
     let kernel = PathBuf::from(test_hooks_kernel());
     if !kernel.exists() {
         eprintln!(
@@ -182,8 +182,8 @@ fn riscv64_redoxfs_srv_degrade_no_disk() {
     }
 
     // boot_rv64 attaches NO block device — VFS falls back to None on the /srv open. The message is
-    // the CellosFS backend's: the external RedoxFS dependency this test was named for is gone
-    // (`libs/cellos-fs` replaced it), so the old "RedoxFS P5 open failed" string can never appear.
+    // the CellosFS backend's: `libs/cellos-fs` is the only /srv backend since the CellosFS Native
+    // switch, so the old "RedoxFS P5 open failed" string can never appear.
     let runner = QemuRunner::boot_rv64(kernel.to_str().unwrap());
     runner
         .wait_for("[vfs] WARNING: CellosFS mount/format failed", 60)
@@ -197,9 +197,9 @@ fn riscv64_redoxfs_srv_degrade_no_disk() {
 /// confirm the marker is detected by the cell.
 ///
 /// Both boots share one `NamedTempFile` for the disk image.  `boot_rv64_with_disk`
-/// does not copy the disk, so RedoxFS writes from boot 1 survive into boot 2.
+/// does not copy the disk, so CellosFS writes from boot 1 survive into boot 2.
 #[test]
-fn riscv64_redoxfs_srv_persistence() {
+fn riscv64_cellosfs_srv_persistence() {
     if !prerequisites_ok_with_disk() {
         return;
     }

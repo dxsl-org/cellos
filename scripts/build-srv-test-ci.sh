@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# build-srv-test-ci.sh — Build the srv-test kernel for the RedoxFS /srv
+# build-srv-test-ci.sh — Build the srv-test kernel for the CellosFS /srv
 # integration test (Linux CI).
 #
 # Produces: target/riscv64gc-unknown-none-elf/release/cellos-kernel-srv-test
 #
 # Key difference from build-test-hooks-ci.sh:
 #   - service-vfs is built WITHOUT --features test-hooks (full quota + full
-#     RedoxFS backend — no artificial 1.1 KiB limit).
+#     CellosFS backend — no artificial 1.1 KiB limit).
 #   - app-srv-test replaces app-vfs-test in the embedded kernel_fs.img.
 #
 # Prerequisites (the CI job installs these):
@@ -42,14 +42,14 @@ export CFLAGS_riscv64gc_unknown_none_elf="${CFLAGS_riscv64gc_unknown_none_elf:--
 echo "==> Building base cells (init, shell, config, platform, block)..."
 # platform + virtio-blk are REQUIRED: the /srv tests attach a disk, and
 # without /bin/platform + /bin/block in VIFS1 the VFS has no block driver —
-# every sector read fails and RedoxFS P5 can never open.
+# every sector read fails and CellosFS P5 can never open.
 cargo build --release \
     --target riscv64gc-unknown-none-elf \
     -Z build-std=core,alloc \
     -p app-init -p app-shell -p service-config \
     -p service-platform -p driver-virtio-blk
 
-echo "==> Building service-vfs (full — no test-hooks, full quota, RedoxFS enabled)..."
+echo "==> Building service-vfs (full — no test-hooks, full quota, CellosFS Native)..."
 cargo build --release \
     --target riscv64gc-unknown-none-elf \
     -Z build-std=core,alloc \

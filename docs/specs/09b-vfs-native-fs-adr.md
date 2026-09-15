@@ -1,7 +1,11 @@
 # ADR: Native filesystem for `/srv`
 
-**Date**: 2026-06-11 | **Status**: Accepted, amended 2026-08-01 | **Authors**: Cellos core team
+**Date**: 2026-06-11 | **Status**: Superseded by [ADR 0016](../decisions/0016-cellosfs-native-replaces-redoxfs.md) (2026-09-15); accepted, amended 2026-08-01 | **Authors**: Cellos core team
 
+> **Superseded 2026-09-15**: `/srv` is served by CellosFS Native (`libs/cellos-fs`); the RedoxFS
+> decision below is kept as the historical record, and the phased activation policy it delegated to
+> ADR 0002 now applies to that backend.
+>
 > Activation policy was amended by [ADR 0002](../decisions/0002-phased-srv-redoxfs-activation.md):
 > G1 functional availability is active; G2 production qualification remains gated.
 
@@ -80,7 +84,7 @@ Relevant implementation anchors:
 
 RedoxFS remains mounted on P5. RV64 QEMU with VirtIO-BLK verifies basic filesystem
 operations, graceful degradation without a disk, and persistence across two boots in
-`tests/integration/tests/redoxfs-srv.rs`.
+`tests/integration/tests/srv-cellosfs.rs`.
 
 These tests prove behavior, not G2 latency or hardware readiness.
 

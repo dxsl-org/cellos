@@ -190,10 +190,10 @@ jobs:
           cache-on-failure: true
           key: ${{ matrix.short }}
 
-      # littlefs2-sys (pulled in via redoxfs) compiles a vendored C shim for
-      # whatever target `-Z build-std` is cross-compiling to; cc-rs looks for a
-      # <target>-gcc by convention and finds nothing on a bare `-none` target
-      # unless we install and point it at a matching cross compiler.
+      # C cells built through `cc` (the Lua runtime and the C/Lua demos) compile a
+      # vendored C shim for whatever target `-Z build-std` is cross-compiling to;
+      # cc-rs looks for a <target>-gcc by convention and finds nothing on a bare
+      # `-none` target unless we install and point it at a matching cross compiler.
       - name: Install cross C compiler for littlefs2-sys
         if: matrix.cc_pkg != ''
         timeout-minutes: 10
@@ -1043,8 +1043,8 @@ jobs:
           path: .agents/260913-2002-g2-level-a-ai-inference/evidence/ai-oracle-*.log
           if-no-files-found: warn
 
-  redoxfs-srv:
-    name: RedoxFS /srv Integration Test
+  srv-cellosfs:
+    name: CellosFS /srv Integration Test
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -1058,7 +1058,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
-          key: redoxfs-srv
+          key: srv-cellosfs
 
       - name: Install dependencies
         timeout-minutes: 20
@@ -1089,14 +1089,13 @@ jobs:
           chmod +x scripts/mksrv-img.sh
           bash scripts/mksrv-img.sh build/disk_srv.img
 
-      - name: Run RedoxFS /srv integration tests
+      - name: Run CellosFS /srv integration tests
         env:
           CARGO_BUILD_TARGET: x86_64-unknown-linux-gnu
-        # Full suite again: the S2–S5 write failures were the access table
-        # missing a /srv/ rule (writes fell through to the read-only "/"
-        # catch-all), fixed in cells/services/vfs/src/access.rs and verified
-        # 3/3 locally.
-        run: cd tests/integration && cargo test --test redoxfs-srv
+        # Full suite: S1–S6 on the CellosFS Native /srv backend, the no-disk
+        # degrade path, and the two-boot persistence check. The image's P5 is a
+        # raw partition the guest formats itself (scripts/mksrv-img.sh).
+        run: cd tests/integration && cargo test --test srv-cellosfs
 
   unit-tests:
     name: Host unit tests (types + api)

@@ -64,8 +64,8 @@ name = "x86_64-boot"
 path = "tests/x86_64-boot.rs"
 
 [[test]]
-name = "redoxfs-srv"
-path = "tests/redoxfs-srv.rs"
+name = "srv-cellosfs"
+path = "tests/srv-cellosfs.rs"
 
 [[test]]
 name = "nvme-x86"

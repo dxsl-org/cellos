@@ -63,5 +63,5 @@ pub(crate) fn run() {
     ostd::io::println("[rpi3-storage] physical persistence gate starting");
     exercise("/mnt/sd/rpi3-storage-marker.txt", "FAT");
     exercise("/data/rpi3-storage-marker.txt", "littlefs");
-    exercise("/srv/rpi3-storage-marker.txt", "RedoxFS");
+    exercise("/srv/rpi3-storage-marker.txt", "CellosFS");
 }

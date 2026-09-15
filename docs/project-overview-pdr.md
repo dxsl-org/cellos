@@ -214,7 +214,7 @@ production qualification remains per architecture and board.
 **Requirement**: Full filesystem abstraction (FAT32, ext4 support planned).
 
 **Current Status**: MountTable VFS with BootFS, RamFS, FAT write support, default-enabled
-littlefs at `/data`, and staged RedoxFS activation. QEMU evidence does not replace
+littlefs at `/data`, and CellosFS Native at `/srv`. QEMU evidence does not replace
 real-board power-cut qualification.
 
 **Acceptance Criteria**:
@@ -423,7 +423,7 @@ hardware-gated.
 | Bootloader | Limine | Latest | ✅ Working |
 | Kernel | Rust nightly | 2024+ | ✅ Compiling |
 | HAL | Custom traits | N/A | RV64/AArch64/x86_64 implemented with different smoke/qualification levels |
-| Filesystems | MountTable: BootFS/RamFS/FAT/littlefs/RedoxFS | Existing | FAT writes and littlefs `/data` shipped; RedoxFS and hardware qualification are phased |
+| Filesystems | MountTable: BootFS/RamFS/FAT/littlefs/CellosFS Native | Existing | FAT writes and littlefs `/data` shipped; `/srv` runs CellosFS Native with hardware qualification still phased |
 | Runtimes | Lua active; MicroPython historical | 5.4 / archived 1.24.1 text | Python = Tier 3 VM |
 
 ### Key Dependencies

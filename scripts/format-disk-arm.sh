@@ -4,7 +4,8 @@
 # Generates a partitioned disk image:
 #   MBR: LBA 0 (tools/write-mbr.py)
 #   P1:  LBA 2048, 256 MB FAT32 interop volume (/mnt/sd, /bin)
-#   P5:  LBA 931072, 64 MB RedoxFS persistent volume (/srv)
+#   P5:  LBA 931072, 64 MB raw persistent partition (/srv; the VFS formats it as
+#        CellosFS Native on first mount)
 #
 # Usage: bash scripts/format-disk-arm.sh [output.img]
 #   output.img  default: disk_arm_virt.img
@@ -60,37 +61,16 @@ P1_IMG="$TMPDIR_WORK/p1_fat32.img"
 echo "[format-disk-arm] Formatting P1 FAT32 with tools/mkfat32.py..."
 python3 tools/mkfat32.py "$P1_IMG" "${MKFAT_ARGS[@]}"
 
-# ---------- 2. Build P5 RedoxFS Partition Image ----------
-HOST_TRIPLE="$(rustc -vV | sed -n 's/^host: //p')"
-REDOXFS_TARGET_DIR="third_party/redoxfs/target"
-REDOXFS_AR="$REDOXFS_TARGET_DIR/$HOST_TRIPLE/release/redoxfs-ar"
-[[ -x "$REDOXFS_AR" ]] || REDOXFS_AR="$REDOXFS_TARGET_DIR/release/redoxfs-ar"
-if [[ ! -x "$REDOXFS_AR" ]]; then
-    echo "[format-disk-arm] Building redoxfs-ar (host $HOST_TRIPLE)..."
-    cargo build \
-        --manifest-path third_party/redoxfs/Cargo.toml \
-        --features std --release --bin redoxfs-ar \
-        --target "$HOST_TRIPLE" \
-        --target-dir "$REDOXFS_TARGET_DIR"
-    REDOXFS_AR="$REDOXFS_TARGET_DIR/$HOST_TRIPLE/release/redoxfs-ar"
-fi
-
-P5_IMG="$TMPDIR_WORK/p5_redoxfs.img"
-SEED_DIR="$TMPDIR_WORK/seed"
-mkdir -p "$SEED_DIR"
-printf 'ViCell RedoxFS /srv persistent storage on RPi3\n' > "$SEED_DIR/hello.txt"
-dd if=/dev/zero of="$P5_IMG" bs=512 count="$PART_SRV_SECTORS" status=none
-"$REDOXFS_AR" "$P5_IMG" "$SEED_DIR"
-truncate -s "$((PART_SRV_SECTORS * 512))" "$P5_IMG"
-echo "[format-disk-arm] P5 RedoxFS formatted (64 MB)"
-
-# ---------- 3. Assemble Full Sparse MBR Disk Image ----------
+# ---------- 2. Assemble Full Sparse MBR Disk Image ----------
+# Recreate, never reuse: a previous image's P5 bytes must not survive, because P5
+# is now a raw partition the guest formats itself.
+rm -f "$OUT"
 truncate -s "$((FULL_SECTORS * 512))" "$OUT"
 python3 tools/write-mbr.py "$OUT" >/dev/null
 
-# Splice P1 at LBA 2048
+# Splice P1 at LBA 2048. P5 stays a raw zero partition: the VFS formats it as
+# CellosFS Native on first mount (host-side RedoxFS formatting was dead weight —
+# the VFS could not read it and re-formatted on every first boot).
 dd if="$P1_IMG" of="$OUT" bs=512 seek="$PART_FAT32_BASE_LBA" conv=notrunc status=none
-# Splice P5 at LBA 931072
-dd if="$P5_IMG" of="$OUT" bs=512 seek="$PART_SRV_BASE_LBA" conv=notrunc status=none
 
-echo "[format-disk-arm] Done: $OUT (MBR + P1 FAT32 + P5 RedoxFS)"
+echo "[format-disk-arm] Done: $OUT (MBR + P1 FAT32 + P5 raw/CellosFS)"

@@ -34,15 +34,15 @@ pub const PART_LFS_BASE_LBA: u64 = 800_000;
 /// P4 size in sectors (64 MB).
 pub const PART_LFS_SECTORS: u64 = 131_072;
 
-/// P5: RedoxFS native filesystem — VFS `/srv` (G1+, spec §09b).
+/// P5: CellosFS Native filesystem — VFS `/srv` (G1+, ADR 0016).
 ///
-/// Follows immediately after P4.  Pre-formatted offline with `redoxfs-mkfs`;
-/// opened at runtime with `FileSystem::open()` (no_std, read-write).
+/// Follows immediately after P4.  Shipped as a raw partition; the VFS formats it
+/// with CellosFS Native on first mount and mounts an existing volume after that.
 /// Partition-capability gating (`MANIFEST_FLAG_PART_SRV`) requires expanding
 /// `flags` to `u16` in a future manifest version; until then, `/srv` access is
 /// controlled exclusively by the VFS `AccessTable`.
 pub const PART_SRV_BASE_LBA: u64 = 931_072; // LBA 800_000 + 131_072
-/// P5 size in sectors (64 MB RedoxFS volume).
+/// P5 size in sectors (64 MB CellosFS volume).
 pub const PART_SRV_SECTORS: u64 = 131_072;
 
 /// P6: FAT cell-store — non-bootstrap cell ELFs served under VFS `/bin`

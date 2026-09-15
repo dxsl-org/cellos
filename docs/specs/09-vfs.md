@@ -37,7 +37,7 @@ VFS service (MountTable, longest-prefix match)
 ├── /tmp         → RamFS   (tmpfs, volatile, read-write)
 ├── /data        → littlefs (default-enabled persistent store)
 ├── /mnt/sd      → FAT32   (interop thẻ SD/PC)
-└── /srv         → RedoxFS (G1 functional; G2 production qualification pending)
+└── /srv         → CellosFS Native (G1 functional; G2 production qualification pending)
 ```
 
 ### Vai trò từng backend
@@ -48,7 +48,7 @@ VFS service (MountTable, longest-prefix match)
 | **RamFS** | `/tmp` | tmpfs chuẩn — scratch space volatile | Có rồi |
 | **FAT32** (crate `fatfs`, có LFN/VFAT) | `/mnt/sd` | Interop thẻ SD ≤32GB / boot partition RPi / trao đổi dữ liệu với PC. **Không journaling — không dùng làm persistent store chính cho robot** | Shipped |
 | **littlefs** | `/data` | Default-enabled persistent store for config/log/model. Backend and block adapter are shipped; QEMU functional and power-loss suites pass. Repeated real-board power-cut qualification remains required before production robot claims | Shipped software path; hardware qualification pending |
-| **RedoxFS** | `/srv` | CoW + checksum. [ADR 09b](09b-vfs-native-fs-adr.md) + [ADR 0002](../decisions/0002-phased-srv-redoxfs-activation.md) cho phép G1/QEMU proof-of-function qua block Driver Cell; G2 production vẫn cần RedoxFS-on-NVMe test, benchmark `<100 us`, hardware thật, và quyết định capability P5. Mount hiện tại degrade về empty/false nếu P5 thiếu hoặc chưa format | G1 functional; G2 pending |
+| **CellosFS Native** (`libs/cellos-fs`) | `/srv` | CoW extent engine, dual superblock ring, packed inode, checksum; thay RedoxFS theo [ADR 0016](../decisions/0016-cellosfs-native-replaces-redoxfs.md) (ADR cũ [09b](09b-vfs-native-fs-adr.md) đã superseded, chính sách kích hoạt theo [ADR 0002](../decisions/0002-phased-srv-redoxfs-activation.md)). Mount hiện tại format volume mới hoặc mount volume sẵn có, và degrade về empty/false nếu P5 thiếu | G1 functional; G2 pending |
 | **exFAT** | `/mnt/sd` (mở rộng) | Thẻ SDXC >32GB nguyên bản (xuất xưởng exFAT, `fatfs` không đọc được). `FatBackend::mount()` tự detect OEM-Name `"EXFAT   "` và log cảnh báo rõ thay vì lỗi cryptic. Full support chỉ khi có nhu cầu thật | Theo nhu cầu |
 
 ### Quyết định đã chốt (2026-06-10)

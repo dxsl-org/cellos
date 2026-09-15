@@ -1,6 +1,6 @@
-//! RedoxFS /srv integration test cell.
+//! CellosFS Native /srv integration test cell.
 //!
-//! Verifies the VFS /srv backend (RedoxFS on MBR partition P5) by exercising
+//! Verifies the VFS /srv backend (CellosFS Native on MBR partition P5) by exercising
 //! six scenarios over IPC, then writes a persistence marker for the two-boot
 //! persistence integration test.
 //!
@@ -85,7 +85,7 @@ fn test_s1_mount() {
 
 /// S2: Write a file and read it back using ReadAsync + Poll.
 fn test_s2_write_read() {
-    let content = b"ViCell RedoxFS";
+    let content = b"ViCell CellosFS";
 
     match vfs_req(&api::ipc::VfsRequest::Write {
         path: "/srv/test.txt",
@@ -374,7 +374,7 @@ fn write_persist_marker() {
 ostd::cell_main!(cell_main);
 
 fn cell_main() {
-    ostd::io::println("[srv-test] Starting RedoxFS /srv test suite...");
+    ostd::io::println("[srv-test] Starting CellosFS /srv test suite...");
 
     // Check for persist marker from a previous boot BEFORE running any tests
     // (so the integration harness sees PERSIST_READ_OK early in the output).

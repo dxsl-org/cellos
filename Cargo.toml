@@ -7,7 +7,7 @@ resolver = "2"
 exclude = [
     "tools/vi-compiler",
     "tools/viui-build",
-    "third_party/redoxfs",   # vendored fork — own resolver; consumed via path dep
+    "third_party/redoxfs",   # vendored fork — own resolver; unused since the CellosFS Native switch
     "third_party/mlibc",     # mlibc vendored copy — built with Meson, not Cargo
     # cell-build is a build-script helper (uses std) — it compiles only for the host
     # as a [build-dependency]; excluding it keeps `cargo check` from trying to
