@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["DomainPagingError"],"fn":["activate_address_space","flush_all","flush_asid","flush_asid_remote","kernel_satp","observe_switch_activation","record_kernel_satp"]};
+window.SIDEBAR_ITEMS = {"enum":["DomainPagingError"],"fn":["activate_address_space","flush_all","flush_asid","flush_asid_remote","kernel_satp","observe_switch_activation","record_kernel_satp"],"static":["VI_KERNEL_SATP"]};

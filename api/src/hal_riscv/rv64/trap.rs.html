@@ -167,12 +167,12 @@
 <a href=#167 id=167 data-nosnippet>167</a>                    // safely if we do.
 <a href=#168 id=168 data-nosnippet>168</a>                </span>} <span class="kw">else </span>{
 <a href=#169 id=169 data-nosnippet>169</a>                    <span class="comment">// True kernel fault (S-mode) or U-mode fault without a registered Cell.
-<a href=#170 id=170 data-nosnippet>170</a>                    // A trap taken from a Cell leaves that Cell's private root
-<a href=#171 id=171 data-nosnippet>171</a>                    // installed, so the faulting instruction may have been executed
-<a href=#172 id=172 data-nosnippet>172</a>                    // under a root that does not map kernel MMIO. Both values belong
-<a href=#173 id=173 data-nosnippet>173</a>                    // in the record: the live SATP is what the faulting access used,
-<a href=#174 id=174 data-nosnippet>174</a>                    // and the recorded kernel SATP is what the kernel should have
-<a href=#175 id=175 data-nosnippet>175</a>                    // been running under.
+<a href=#170 id=170 data-nosnippet>170</a>                    // Trap entry parks the root the faulting access ran under in
+<a href=#171 id=171 data-nosnippet>171</a>                    // the frame and installs the kernel root, so the record
+<a href=#172 id=172 data-nosnippet>172</a>                    // names three values: the live SATP (which must equal the
+<a href=#173 id=173 data-nosnippet>173</a>                    // recorded kernel root once the entry discipline holds),
+<a href=#174 id=174 data-nosnippet>174</a>                    // the kernel root itself, and the interrupted Cell root the
+<a href=#175 id=175 data-nosnippet>175</a>                    // faulting instruction was actually executed under.
 <a href=#176 id=176 data-nosnippet>176</a>                    </span><span class="kw">let </span>live_satp: usize;
 <a href=#177 id=177 data-nosnippet>177</a>                    <span class="comment">// SAFETY: SATP reads have no side effects.
 <a href=#178 id=178 data-nosnippet>178</a>                    </span><span class="kw">unsafe </span>{
@@ -185,38 +185,40 @@
 <a href=#185 id=185 data-nosnippet>185</a>                    <span class="attr">#[cfg(feature = <span class="string">"test-hooks"</span>)]
 <a href=#186 id=186 data-nosnippet>186</a>                    </span>{
 <a href=#187 id=187 data-nosnippet>187</a>                        <span class="comment">// SAFETY: the snapshot is allocation-free, and it is
-<a href=#188 id=188 data-nosnippet>188</a>                        // handed the live SATP captured above.
-<a href=#189 id=189 data-nosnippet>189</a>                        </span><span class="kw">unsafe </span>{
-<a href=#190 id=190 data-nosnippet>190</a>                            vi_rv64_kernel_fault_snapshot(live_satp, frame.stval);
-<a href=#191 id=191 data-nosnippet>191</a>                        }
-<a href=#192 id=192 data-nosnippet>192</a>                    }
-<a href=#193 id=193 data-nosnippet>193</a>                    <span class="macro">panic!</span>(
-<a href=#194 id=194 data-nosnippet>194</a>                        <span class="string">"Cellos: Kernel exception: scause={} sepc={:#x} stval={:#x} sstatus={:#x} satp={:#x} kernel_satp={:#x}"</span>,
-<a href=#195 id=195 data-nosnippet>195</a>                        code, frame.sepc, frame.stval, frame.sstatus, live_satp,
-<a href=#196 id=196 data-nosnippet>196</a>                        <span class="kw">crate</span>::rv64::domain::kernel_satp()
-<a href=#197 id=197 data-nosnippet>197</a>                    );
-<a href=#198 id=198 data-nosnippet>198</a>                }
-<a href=#199 id=199 data-nosnippet>199</a>            }
-<a href=#200 id=200 data-nosnippet>200</a>        }
-<a href=#201 id=201 data-nosnippet>201</a>    }
-<a href=#202 id=202 data-nosnippet>202</a>}
-<a href=#203 id=203 data-nosnippet>203</a>
-<a href=#204 id=204 data-nosnippet>204</a><span class="kw">fn </span>plic_claim() -&gt; <span class="prelude-ty">Option</span>&lt;(usize, u32)&gt; {
-<a href=#205 id=205 data-nosnippet>205</a>    <span class="comment">// SAFETY: the kernel exports a no-allocation hart-local lookup. `usize::MAX`
-<a href=#206 id=206 data-nosnippet>206</a>    // is its fail-closed sentinel when no SoC context mapping is available.
-<a href=#207 id=207 data-nosnippet>207</a>    </span><span class="kw">let </span>context = <span class="kw">unsafe </span>{ vi_riscv_plic_context() };
-<a href=#208 id=208 data-nosnippet>208</a>    <span class="kw">if </span>context == usize::MAX {
-<a href=#209 id=209 data-nosnippet>209</a>        <span class="kw">return </span><span class="prelude-val">None</span>;
-<a href=#210 id=210 data-nosnippet>210</a>    }
-<a href=#211 id=211 data-nosnippet>211</a>    <span class="kw">crate</span>::common::plic::claim(context).map(|irq| (context, irq))
-<a href=#212 id=212 data-nosnippet>212</a>}
-<a href=#213 id=213 data-nosnippet>213</a>
-<a href=#214 id=214 data-nosnippet>214</a><span class="kw">fn </span>plic_complete(context: usize, irq: u32) {
-<a href=#215 id=215 data-nosnippet>215</a>    <span class="kw">crate</span>::common::plic::complete(context, irq);
-<a href=#216 id=216 data-nosnippet>216</a>}
-<a href=#217 id=217 data-nosnippet>217</a>
-<a href=#218 id=218 data-nosnippet>218</a><span class="doccomment">/// Handle syscall from userspace (Vi prefix per Luật 6)
-<a href=#219 id=219 data-nosnippet>219</a></span><span class="kw">fn </span>vi_handle_syscall(frame: <span class="kw-2">&amp;mut </span>ViTrapFrame) {
-<a href=#220 id=220 data-nosnippet>220</a>    ViCell_syscall_dispatch(frame);
-<a href=#221 id=221 data-nosnippet>221</a>}
+<a href=#188 id=188 data-nosnippet>188</a>                        // handed the interrupted root — the one whose page
+<a href=#189 id=189 data-nosnippet>189</a>                        // tables explain the faulting address.
+<a href=#190 id=190 data-nosnippet>190</a>                        </span><span class="kw">unsafe </span>{
+<a href=#191 id=191 data-nosnippet>191</a>                            vi_rv64_kernel_fault_snapshot(frame.satp, frame.stval);
+<a href=#192 id=192 data-nosnippet>192</a>                        }
+<a href=#193 id=193 data-nosnippet>193</a>                    }
+<a href=#194 id=194 data-nosnippet>194</a>                    <span class="macro">panic!</span>(
+<a href=#195 id=195 data-nosnippet>195</a>                        <span class="string">"Cellos: Kernel exception: scause={} sepc={:#x} stval={:#x} sstatus={:#x} satp={:#x} kernel_satp={:#x} interrupted_satp={:#x}"</span>,
+<a href=#196 id=196 data-nosnippet>196</a>                        code, frame.sepc, frame.stval, frame.sstatus, live_satp,
+<a href=#197 id=197 data-nosnippet>197</a>                        <span class="kw">crate</span>::rv64::domain::kernel_satp(),
+<a href=#198 id=198 data-nosnippet>198</a>                        frame.satp
+<a href=#199 id=199 data-nosnippet>199</a>                    );
+<a href=#200 id=200 data-nosnippet>200</a>                }
+<a href=#201 id=201 data-nosnippet>201</a>            }
+<a href=#202 id=202 data-nosnippet>202</a>        }
+<a href=#203 id=203 data-nosnippet>203</a>    }
+<a href=#204 id=204 data-nosnippet>204</a>}
+<a href=#205 id=205 data-nosnippet>205</a>
+<a href=#206 id=206 data-nosnippet>206</a><span class="kw">fn </span>plic_claim() -&gt; <span class="prelude-ty">Option</span>&lt;(usize, u32)&gt; {
+<a href=#207 id=207 data-nosnippet>207</a>    <span class="comment">// SAFETY: the kernel exports a no-allocation hart-local lookup. `usize::MAX`
+<a href=#208 id=208 data-nosnippet>208</a>    // is its fail-closed sentinel when no SoC context mapping is available.
+<a href=#209 id=209 data-nosnippet>209</a>    </span><span class="kw">let </span>context = <span class="kw">unsafe </span>{ vi_riscv_plic_context() };
+<a href=#210 id=210 data-nosnippet>210</a>    <span class="kw">if </span>context == usize::MAX {
+<a href=#211 id=211 data-nosnippet>211</a>        <span class="kw">return </span><span class="prelude-val">None</span>;
+<a href=#212 id=212 data-nosnippet>212</a>    }
+<a href=#213 id=213 data-nosnippet>213</a>    <span class="kw">crate</span>::common::plic::claim(context).map(|irq| (context, irq))
+<a href=#214 id=214 data-nosnippet>214</a>}
+<a href=#215 id=215 data-nosnippet>215</a>
+<a href=#216 id=216 data-nosnippet>216</a><span class="kw">fn </span>plic_complete(context: usize, irq: u32) {
+<a href=#217 id=217 data-nosnippet>217</a>    <span class="kw">crate</span>::common::plic::complete(context, irq);
+<a href=#218 id=218 data-nosnippet>218</a>}
+<a href=#219 id=219 data-nosnippet>219</a>
+<a href=#220 id=220 data-nosnippet>220</a><span class="doccomment">/// Handle syscall from userspace (Vi prefix per Luật 6)
+<a href=#221 id=221 data-nosnippet>221</a></span><span class="kw">fn </span>vi_handle_syscall(frame: <span class="kw-2">&amp;mut </span>ViTrapFrame) {
+<a href=#222 id=222 data-nosnippet>222</a>    ViCell_syscall_dispatch(frame);
+<a href=#223 id=223 data-nosnippet>223</a>}
 </code></pre></div></section></main></body></html>
