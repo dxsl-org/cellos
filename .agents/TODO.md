@@ -10,6 +10,16 @@
 - Phase 06 còn [blocked] riêng trên ARM64 vì synchronous TCG fault xảy ra trước
   guest probe; không hạ gate hoặc suy diễn PASS từ kết quả x86.
 - Qualification AMD/Intel thật vẫn là hardware gate độc lập.
+- App-tier acceptance ledger [completed 2026-09-15]: schema v5 bind `source` evidence vào revision
+  đã lưu trữ theo digest (contract + mirror cho mọi file nguồn khác), thay vì file sống có thể
+  amendment; migration v4→v5 re-base `source_binding` sang contract đã amendment tại `81dbb81c`
+  (chỉ prose/witness C2-MID, matrix digest không đổi) và archive cả hai revision. Blocker
+  `B-AARCH64-SEMHOSTING` được resolve lại bằng lần chạy QEMU semihosting thật (RC 0, vfs-test
+  96 PASS / 0 FAIL), TTL nâng từ 2 ngày lên 30 ngày (hết hạn 2026-10-15) vì TTL 2 ngày làm gate đỏ
+  theo cấu trúc. Phase 04 ghi `IMPLEMENTED` với artifact prequalification đã pin; `c9` vẫn
+  NOT_COMPLETE và cả ba blocker vẫn BLOCKED. Lưu ý: chuỗi append-only chỉ hồi phục được sau một
+  push trung gian đỏ (baseline `994c0b01` invalid tại tip của chính nó) — xem
+  `.agents/logs/260915-app-tier-ledger-schema-v5.md`.
 - Ngoài lane này còn các việc lớn như x86 Platform Cell discovery [completed], kernel-owned x86 paging, per-vector IDT stubs [completed] và production
   trust keys.
 - Phase 04 two-node/direct-LAN vẫn được ghi blocked riêng theo authority mTLS; không chặn single-guest gate.
