@@ -6,7 +6,8 @@
   (UART LSR) `sepc=console_drv::viConsole::poll+0x210`; fault intermittent, suite `srv-cellosfs`
   xanh không chứng minh gì. Fix được thiết kế ở phase-04 (trap entry trả kernel root + scheduler
   phải re-activate khi resume domain, nếu không là lỗi cô lập im lặng) nhưng chưa viết code, nên
-  gate vẫn đỏ. Kế hoạch: `.agents/260914-ci-gate-restoration/`.
+  gate vẫn đỏ. Hosted run `34927079141` (job `104247291496`) xác nhận lại đúng các giá trị đó.
+  Kế hoạch: `.agents/260914-ci-gate-restoration/`.
 - Phase 07 authenticated software evidence [completed/regression-only] tại trần
   `host`: GitHub-hosted run `33251921677:1` đã được verify, consume qua durable
   operator-owned replay state và replay chính xác bị từ chối. Mở lại chỉ khi

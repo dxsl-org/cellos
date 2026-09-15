@@ -78,10 +78,34 @@ Cellos: Kernel exception: scause=13 sepc=0x80242cd2 stval=0x10000005 sstatus=0x8
 `satp` named a **cell** root (ASID 1, not the kernel's ASID 0). The mechanism is proof, not inference:
 the kernel touched the UART under a root that contains the cell.
 
-The fault fires in the cell-spawn window, not after it: the transcript of this run shows
-`[srv-test] ALL TESTS PASSED`, the shell prompt, the typed command, and then the panic — with no
-`[posix-shim]` marker. A freshly admitted private domain is enough; the cell does not have to do
-anything hostile to expose it.
+The window is "any time a private domain is running", not a specific syscall. In this capture the
+panic came before any `[posix-shim]` marker — a freshly admitted domain was enough — while the hosted
+capture below fires between `POSIX-MKDIR-RMDIR` and `POSIX-RENAME`. What both share is the only thing
+that matters: a Cell's private root was live when the timer ISR ran kernel code that touches MMIO.
+
+## Hosted confirmation (the gate itself)
+
+The next push reproduced the fault on the hosted runner with the same values, so this is not a local
+artifact of TCG or of this workstation — it is the `CellosFS /srv Integration Test` job's own
+failure. Job `104247291496` of run `34927079141` (revision `e6d992d53`), step "Run CellosFS /srv
+integration tests":
+
+```
+USER: [srv-test] ALL TESTS PASSED
+USER: [posix-shim] POSIX-FSTAT-OPEN: OK
+...
+USER: [posix-shim] POSIX-MKDIR-RMDIR: OK
+[KERNEL PANIC] Critical failure.
+panicked at hal/arch/riscv/src/rv64/trap.rs:193:21:
+Cellos: Kernel exception: scause=13 sepc=0x80242cd2 stval=0x10000005 sstatus=0x8000000200006100 satp=0x80001000000827c0 kernel_satp=0x800000000008076f
+[KERNEL PANIC] halting...
+thread 'riscv64_cellosfs_srv_basic' (7198) panicked at tests/srv-cellosfs.rs:125:13:
+timeout: pattern "[posix-shim] POSIX-RENAME: OK" not seen in 60s
+```
+
+`sepc`, `stval`, `satp`, and `kernel_satp` are identical to the local capture, and the fault again
+lands between `POSIX-MKDIR-RMDIR` and `POSIX-RENAME` — the mkdir/rmdir window phase 02 described. The
+job is red because the kernel halts, and it stays red until phase 04 lands.
 
 ## Caveat for whoever runs the repro
 
