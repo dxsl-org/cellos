@@ -34,15 +34,15 @@
 <a href=#34 id=34 data-nosnippet>34</a><span class="doccomment">/// P4 size in sectors (64 MB).
 <a href=#35 id=35 data-nosnippet>35</a></span><span class="kw">pub const </span>PART_LFS_SECTORS: u64 = <span class="number">131_072</span>;
 <a href=#36 id=36 data-nosnippet>36</a>
-<a href=#37 id=37 data-nosnippet>37</a><span class="doccomment">/// P5: RedoxFS native filesystem — VFS `/srv` (G1+, spec §09b).
+<a href=#37 id=37 data-nosnippet>37</a><span class="doccomment">/// P5: CellosFS Native filesystem — VFS `/srv` (G1+, ADR 0016).
 <a href=#38 id=38 data-nosnippet>38</a>///
-<a href=#39 id=39 data-nosnippet>39</a>/// Follows immediately after P4.  Pre-formatted offline with `redoxfs-mkfs`;
-<a href=#40 id=40 data-nosnippet>40</a>/// opened at runtime with `FileSystem::open()` (no_std, read-write).
+<a href=#39 id=39 data-nosnippet>39</a>/// Follows immediately after P4.  Shipped as a raw partition; the VFS formats it
+<a href=#40 id=40 data-nosnippet>40</a>/// with CellosFS Native on first mount and mounts an existing volume after that.
 <a href=#41 id=41 data-nosnippet>41</a>/// Partition-capability gating (`MANIFEST_FLAG_PART_SRV`) requires expanding
 <a href=#42 id=42 data-nosnippet>42</a>/// `flags` to `u16` in a future manifest version; until then, `/srv` access is
 <a href=#43 id=43 data-nosnippet>43</a>/// controlled exclusively by the VFS `AccessTable`.
 <a href=#44 id=44 data-nosnippet>44</a></span><span class="kw">pub const </span>PART_SRV_BASE_LBA: u64 = <span class="number">931_072</span>; <span class="comment">// LBA 800_000 + 131_072
-<a href=#45 id=45 data-nosnippet>45</a></span><span class="doccomment">/// P5 size in sectors (64 MB RedoxFS volume).
+<a href=#45 id=45 data-nosnippet>45</a></span><span class="doccomment">/// P5 size in sectors (64 MB CellosFS volume).
 <a href=#46 id=46 data-nosnippet>46</a></span><span class="kw">pub const </span>PART_SRV_SECTORS: u64 = <span class="number">131_072</span>;
 <a href=#47 id=47 data-nosnippet>47</a>
 <a href=#48 id=48 data-nosnippet>48</a><span class="doccomment">/// P6: FAT cell-store — non-bootstrap cell ELFs served under VFS `/bin`

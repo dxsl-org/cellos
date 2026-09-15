@@ -88,7 +88,7 @@
 <a href=#88 id=88 data-nosnippet>88</a><span class="kw">const _</span>: () = <span class="macro">assert!</span>(core::mem::size_of::&lt;CellEntry&gt;() == SECTOR_SIZE);
 <a href=#89 id=89 data-nosnippet>89</a>
 <a href=#90 id=90 data-nosnippet>90</a><span class="doccomment">/// Expected MBR partition map: `(slot, type, start_lba, sectors)`.
-<a href=#91 id=91 data-nosnippet>91</a>/// P5 (SRV/RedoxFS) is outside the legacy 4-partition MBR limit — verified
+<a href=#91 id=91 data-nosnippet>91</a>/// P5 (SRV/CellosFS) is outside the legacy 4-partition MBR limit — verified
 <a href=#92 id=92 data-nosnippet>92</a>/// separately by the VFS service's partition constants.
 <a href=#93 id=93 data-nosnippet>93</a></span><span class="kw">const </span>EXPECTED_PARTS: [(usize, u8, u64, u64); <span class="number">4</span>] = [
 <a href=#94 id=94 data-nosnippet>94</a>    (<span class="number">0</span>, <span class="number">0x0C</span>, PART_FAT32_BASE_LBA, PART_FAT32_SECTORS),
