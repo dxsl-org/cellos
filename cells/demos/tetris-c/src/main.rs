@@ -8,7 +8,9 @@
 //!   - `vicell_draw_char`     render one 8×8 glyph (scaled 3×) using ostd FONT8X8
 //!
 //! ## Setup
-//! 1. Clone Tetris-OS: `git clone https://github.com/Banaxi-Tech/Tetris-OS cells/games/tetris-c/src/c/tetris-os`
+//! 1. Nothing to fetch: the Tetris-OS source is vendored at `src/c/tetris-os/`
+//!    (MIT, upstream commit `66c4466`; see the build script header for the one
+//!    RISC-V change we carry).
 //! 2. Verify the game entry name (see vicell_platform.c bottom section).
 //! 3. Build and run: the compositor must be active; compositor+tetris share keyboard focus.
 

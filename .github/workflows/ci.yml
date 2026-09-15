@@ -255,8 +255,12 @@ jobs:
         # --exclude app-mlibc-smoke: links a pre-built mlibc libc.a
         #   (scripts/setup-mlibc.ps1 / build-mlibc.sh) that CI does not have —
         #   without it the link dies on undefined puts/printf/clock_gettime.
-        # --exclude doom / tetris-c: link C objects from source clones
-        #   (cells/demos/*/build.rs) that CI checkouts do not populate.
+        # --exclude doom: links C objects from the doomgeneric clone a checkout
+        #   cannot fetch (bare gitlink, no .gitmodules).
+        # --exclude tetris-c: its Tetris-OS source is vendored in-tree now, but
+        #   on riscv64 it links picolibc/newlib libc.a from the local xpack
+        #   toolchain (same reason as lua below). It builds for x86_64 with the
+        #   host cc, as the row above shows.
         # --exclude lua / tetris-lua: on riscv64 they link picolibc/newlib
         #   libc.a from the local xpack toolchain — Ubuntu's bare-elf gcc ships
         #   no libc.a, and newlib's locale/timelocal objects are non-PIC anyway.

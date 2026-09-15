@@ -1,16 +1,26 @@
 // Build script for the Tetris cell.
 //
-// Prerequisites (one-time manual steps):
-//   Clone Banaxi-Tech/Tetris-OS into src/c/tetris-os/:
-//     git clone https://github.com/Banaxi-Tech/Tetris-OS cells/demos/tetris-c/src/c/tetris-os
+// The upstream source is vendored in-tree: `src/c/tetris-os/` carries the files
+// copied from Banaxi-Tech/Tetris-OS (MIT, Copyright (c) 2026 Banaxi; the licence
+// text ships alongside as `src/c/tetris-os/LICENSE`) at commit 66c4466
+// ("Initial Tetris OS kernel"). It used to be a bare gitlink with no
+// `.gitmodules` entry, which no checkout could fetch, and the tree carried an
+// uncommitted local edit for RISC-V. Both are fixed by vendoring:
+//
+//   * `src/tetris.c`'s idle loop now selects the wait instruction per ISA
+//     (`hlt` on x86, `wfi` on RISC-V). Upstream has the x86 form unconditionally,
+//     which does not assemble for riscv64 — the target this cell builds for.
+//     That is the only change against upstream; keep it when re-syncing.
+//   * Nothing else in the upstream tree is compiled, but the rest of `src/` is
+//     kept so a future diff against upstream stays honest.
 //
 // Compiles tetris.c from Tetris-OS plus our vicell_platform.c.
 // Platform hooks (vga_*, timer_*, keyboard_*, speaker_*) are implemented
 // in src/c/vicell_platform.c — the original hardware drivers are NOT compiled.
 //
-// The game entry point is tetris_run() declared in tetris.h.  If the clone
-// exposes a different symbol, update the extern "C" declaration in src/main.rs
-// and the call in vicell_platform.c accordingly.
+// The game entry point is tetris_run() declared in tetris.h. If upstream ever
+// renames it, update the extern "C" declaration in src/main.rs and the call in
+// vicell_platform.c accordingly.
 
 use std::path::Path;
 
@@ -20,7 +30,7 @@ fn main() {
     let dir = Path::new(TETRIS_OS_DIR);
     if !dir.exists() {
         panic!(
-            "Tetris-OS source missing at {TETRIS_OS_DIR}; clone it into cells/demos/tetris-c/{TETRIS_OS_DIR}"
+            "vendored Tetris-OS source missing at {TETRIS_OS_DIR}; restore it from Banaxi-Tech/Tetris-OS (MIT) — see the header of this build script"
         );
     }
 

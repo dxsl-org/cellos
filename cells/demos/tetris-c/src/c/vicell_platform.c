@@ -3,9 +3,9 @@
  *
  * Replaces the following files from tetris-os (DO NOT compile them):
  *   vga.c / vga.h       → vga_fill_rect, vga_clear, vga_present, vga_draw_*
- *   keyboard.c / .h     → keyboard_init, keyboard_get_key
+ *   keyboard.c / .h     → keyboard_init, keyboard_set_layout, keyboard_get_key
  *   timer.c / .h        → timer_init, timer_get_ticks
- *   speaker.c / .h      → speaker_music_start, speaker_music_stop, speaker_music_tick
+ *   speaker.c / .h      → speaker_music_start, speaker_music_stop, speaker_music_update
  *   main.c              → entry provided by Rust src/main.rs
  *
  * Rendering: VGA 320×200 scaled 3× → 960×600, centred in 1024×768 BGRA surface.
@@ -174,6 +174,15 @@ void vga_draw_number(uint32_t x, uint32_t y, uint32_t num, uint8_t color) {
 
 void keyboard_init(void) { /* no-op */ }
 
+/* Tetris-OS toggles DE/US layouts for its own scancode→character table. This
+ * port never consults that table: `vicell_poll_key` already returns decoded
+ * KEY_* codes from the Cellos input service, so the layout is recorded only. */
+static int active_keyboard_layout;
+
+void keyboard_set_layout(int layout) {
+    active_keyboard_layout = layout;
+}
+
 int keyboard_get_key(void) {
     return vicell_poll_key();
 }
@@ -191,7 +200,8 @@ uint32_t timer_get_ticks(void) {
 void speaker_init(void)          { /* no audio hardware */ }
 void speaker_music_start(void)   { }
 void speaker_music_stop(void)    { }
-void speaker_music_tick(void)    { }
+/* Upstream's name for the music scheduler tick (it drove the PC speaker). */
+void speaker_music_update(void)  { }
 /* Some Tetris-OS builds also call speaker_beep / speaker_off: */
 void speaker_beep(uint32_t freq) { (void)freq; }
 void speaker_off(void)           { }

@@ -11,7 +11,10 @@ set -euo pipefail
 #
 #   lua / tetris-lua      need a full libc (signal.h, stdio.h) — the vendored
 #                         freestanding headers supply only string.h
-#   doom / tetris-c       link C objects from source clones a checkout lacks
+#   doom                  links C objects from the doomgeneric clone a checkout
+#                         cannot fetch (bare gitlink, no .gitmodules)
+#   tetris-c              source is vendored in-tree, but riscv64 links
+#                         picolibc from the local xpack toolchain (same as lua)
 #   app-mlibc-smoke       links a pre-built mlibc libc.a
 EXCLUDES=(
   --exclude app-mlibc-smoke

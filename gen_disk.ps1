@@ -170,18 +170,19 @@ Write-Host "Building Tetris (pure Rust)..."
 Remove-Item "$rel_dir/tetris" -Force -ErrorAction SilentlyContinue
 Build-Cargo -What "tetris" -Mode optional -Tail 3 -Packages @('tetris')
 
-# Tetris-C — needs Banaxi-Tech/Tetris-OS cloned into src/c/tetris-os/.
+# Tetris-C — the Banaxi-Tech/Tetris-OS source is vendored in-tree (MIT; see
+# cells/demos/tetris-c/build.rs for provenance and the one RISC-V change).
 $tetris_os_src = "cells/demos/tetris-c/src/c/tetris-os"
-$tetris_c_source = Join-Path $tetris_os_src "tetris.c"
+$tetris_c_source = Join-Path $tetris_os_src "src/tetris.c"
 # Never package a prior binary when the optional source checkout is incomplete.
 Remove-Item "$rel_dir/tetris-c" -Force -ErrorAction SilentlyContinue
 if (Test-Path $tetris_c_source -PathType Leaf) {
     Write-Host "Building Tetris-C cell (Banaxi-Tech/Tetris-OS port)..."
     Build-Cargo -What "tetris-c" -Mode optional -Tail 3 -Packages @('tetris-c')
 } elseif (Test-Path $tetris_os_src) {
-    Write-Host "Skipping Tetris-C (incomplete checkout: $tetris_c_source is missing)."
+    Write-Host "Skipping Tetris-C (vendored source incomplete: $tetris_c_source is missing)."
 } else {
-    Write-Host "Skipping Tetris-C (clone to $tetris_os_src first)."
+    Write-Host "Skipping Tetris-C (vendored source missing at $tetris_os_src)."
 }
 
 # Tetris-Lua — embeds Lua 5.4 + tetris.lua via include_bytes!, shared C sources from lua runtime.
