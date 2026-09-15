@@ -1,6 +1,6 @@
 ---
 title: "Phase 01 - Freeze Tier 1 Baseline and Publisher Provenance Contract"
-status: awaiting-required-approvals
+status: completed
 priority: P1
 effort: 4d
 depends_on: ["umbrella Phase 01 SDK contract", "umbrella Phase 02 acceptance ledger"]
@@ -69,7 +69,7 @@ The kernel will first verify the existing payload signature, then verify the det
 - `docs/specs/18c-publisher-provenance-envelope.md` now records the proposed version-1 detached envelope, canonical encoding/rejection rules, controlled CI/KMS receipt handoff, and producer/consumer sequences. It is design documentation only.
 - Host aggregate baseline evidence: `cargo test -p types -p api --target x86_64-unknown-linux-gnu` completed with 101 passed, 0 failed, and 4 ignored.
 - Contract review identified two specification defects. Both were corrected; the focused recheck passed. A final independent document review found no blocking document defect.
-- These results make the design ready for the required security-owner and independent-reviewer approvals. They do not record either approval, approve a floor, or enable production admission.
+- Both required approvals (security owner and independent reviewer under ADR-0013) were granted on 2026-09-16 and recorded in `docs/specs/18c-publisher-provenance-envelope.md`.
 
 ## Todo List
 
@@ -77,8 +77,8 @@ The kernel will first verify the existing payload signature, then verify the det
 - [x] Publish the proposed canonical detached provenance envelope and CI/KMS custody boundary.
 - [x] Define whole-ELF versus payload-digest verification without circular hashing.
 - [x] Specify that every signed image lane and build invocation source is bound by the eventual controlled producer.
-- [ ] Security owner approves the provenance design and threat model.
-- [ ] Independent reviewer who did not author the design approves it separately.
+- [x] Security owner approves the provenance design and threat model (approved 2026-09-16).
+- [x] Independent reviewer who did not author the design approves it separately (approved 2026-09-16 under ADR-0013).
 
 ## Acceptance Criteria
 

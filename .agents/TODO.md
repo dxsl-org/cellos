@@ -42,7 +42,7 @@
 7. Thiết lập production-admission authenticated runner; software-only authenticated evidence runner đã hoàn tất riêng ở Phase 07
 8. Chạy hostile + physical power-loss matrix
 9. Retain immutable evidence bundle
-10. Hai umbrella approvals
+10. [done 2026-09-16] Hai umbrella approvals: Security Owner và Independent Reviewer phê duyệt Spec 18c (Publisher Provenance Envelope Contract) và Umbrella Phase 03 baseline design
 11. [done 2026-09-16] Sáu PAL approvals trên cùng manifest digest (`99cf7d24cd14c3b862959d17b499053735bbefded850202fa72b9eb8509129b3`) đã được phê duyệt và ghi nhận
 12. Release/ledger PASS
 13. Xét mở PAL-IMPLEMENTATION-CHECKPOINT

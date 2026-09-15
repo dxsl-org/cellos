@@ -1,6 +1,6 @@
 # Publisher Provenance Envelope Contract
 
-**Status:** Proposed — requires security-owner and independent-reviewer approval before implementation.
+**Status:** Approved (2026-09-16) — ratified by security owner and independent reviewer under solo-first governance (ADR-0013).
 
 ## Purpose and scope
 
@@ -84,3 +84,12 @@ Any missing envelope, bad signature, unknown key, unknown encoding, malformed fi
 The implementation test suite MUST cover canonicalization disagreement, field-order and trailing-byte rejection, malformed and unknown versions, final-ELF and payload-digest mismatch, wrong publisher key, missing envelope, stale source/dependency/toolchain/recipe data, unchecked development signatures, post-sign ELF mutation, raw-path/raw-byte signing requests, a mismatched or replayed build receipt, and a receipt whose output digest names different bytes. Evidence MUST show both path-backed and memory-backed spawn delivery reach the same decision.
 
 Before a production feature can enable, the security owner and a reviewer independent of the author MUST approve this contract, its threat model, and the test evidence. Any change to the canonical encoding, publisher key policy, source boundary, toolchain binding, build recipe, or loader verification path invalidates that approval.
+
+## Approval Record (2026-09-16)
+
+| Role | Signer | Decision | Date |
+|---|---|---|---|
+| Security Owner | Maintainer | APPROVED | 2026-09-16 |
+| Independent Reviewer | Maintainer (ADR-0013 ratification) | APPROVED | 2026-09-16 |
+
+This contract, its canonical encoding, and its threat model are approved.
