@@ -43,7 +43,7 @@
 8. Chạy hostile + physical power-loss matrix
 9. Retain immutable evidence bundle
 10. Hai umbrella approvals
-11. Sáu PAL approvals trên cùng manifest digest
+11. [done 2026-09-16] Sáu PAL approvals trên cùng manifest digest (`99cf7d24cd14c3b862959d17b499053735bbefded850202fa72b9eb8509129b3`) đã được phê duyệt và ghi nhận
 12. Release/ledger PASS
 13. Xét mở PAL-IMPLEMENTATION-CHECKPOINT
 
