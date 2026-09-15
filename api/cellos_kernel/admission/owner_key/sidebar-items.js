@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["DEV_OWNER_SIGNER_PUBKEY","OWNER_SIGNER_PUBKEY"],"fn":["owner_signer_pubkey","self_test","verify_owner_signature"]};

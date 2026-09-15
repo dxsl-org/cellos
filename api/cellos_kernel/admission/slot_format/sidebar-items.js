@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["ENTRY_SIZE","FLAG_COMMITTED","HEADER_SIZE","MAX_ADMISSIONS","MIN_SLOT_SIZE","SIG_SIZE","SLOT_MAGIC","SLOT_VERSION_1"],"enum":["SlotParseError"],"fn":["parse_slot"],"struct":["ParsedSlot"]};

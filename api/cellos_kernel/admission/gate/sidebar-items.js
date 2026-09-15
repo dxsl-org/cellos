@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["evaluate_owner_admission"],"static":["ADMISSION_REGISTRY"],"struct":["OwnerAdmissionRegistry"]};

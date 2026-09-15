@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["AdmissionDecision","DenyReason","FloorPortOutcome","RecoveryReason","SlotId","SlotObservation"],"fn":["classify_mismatch","classify_partner","committed","decide"],"mod":["gate","owner_key","slot_format"],"struct":["FloorState"],"type":["BackendIdentity","IntentDigest","TransactionId"]};
