@@ -112,9 +112,23 @@ fn poll_sensor(
     i2c: &mut impl ViI2c<Error = hal_i2c::I2cError>,
     tick: u32,
 ) -> Result<sht3x::Reading, hal_i2c::I2cError> {
-    // SHT3x high-precision single-shot: write [0x2C, 0x06], read 6 bytes.
+    // SHT3x high-precision single-shot measurement command [0x2C, 0x06].
+    // Try primary address 0x44; fall back to 0x45 if unacknowledged.
+    let addr = if i2c.write(0x44, &[0x2C, 0x06]).is_ok() {
+        0x44
+    } else {
+        i2c.write(0x45, &[0x2C, 0x06])?;
+        0x45
+    };
+
+    // SHT30 requires up to 15 ms for high-repeatability ADC conversion.
+    // Sleep 3 scheduler ticks (30 ms) so measurement data is ready.
+    let mut discard = [0u8; 16];
+    let _ = sys_recv_timeout(0, &mut discard, 3);
+
+    // Read 6 bytes: [T_MSB, T_LSB, T_CRC, H_MSB, H_LSB, H_CRC]
     let mut buf = [0u8; 6];
-    i2c.write_read(0x44, &[0x2C, 0x06], &mut buf)?;
+    i2c.read(addr, &mut buf)?;
     Ok(sht3x::parse(&buf).unwrap_or_else(|| sht3x::synthetic(tick)))
 }
 

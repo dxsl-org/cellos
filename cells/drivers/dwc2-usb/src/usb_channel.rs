@@ -373,13 +373,17 @@ impl<'a> UsbHostEngine<'a> {
         let int = self.read32(hcint(ch));
         let char_val = self.read32(hcchar(ch));
         self.halt_channel(ch);
-        ostd::io::print("[dwc2] TIMEOUT ch=");
-        print_hex_val(ch as u32);
-        ostd::io::print(" hcint=0x");
-        print_hex_val(int);
-        ostd::io::print(" hcchar=0x");
-        print_hex_val(char_val);
-        ostd::io::println("");
+        static TIMEOUT_COUNT: core::sync::atomic::AtomicUsize =
+            core::sync::atomic::AtomicUsize::new(0);
+        if TIMEOUT_COUNT.fetch_add(1, core::sync::atomic::Ordering::Relaxed) < 3 {
+            ostd::io::print("[dwc2] TIMEOUT ch=");
+            print_hex_val(ch as u32);
+            ostd::io::print(" hcint=0x");
+            print_hex_val(int);
+            ostd::io::print(" hcchar=0x");
+            print_hex_val(char_val);
+            ostd::io::println("");
+        }
         Err(ViError::IO)
     }
 

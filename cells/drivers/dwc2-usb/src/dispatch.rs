@@ -40,12 +40,8 @@ pub fn handle<'a>(
             }
             let frame = &data[3..3 + len];
             let ok = dev.send_frame(frame);
-            ostd::io::println(if ok {
-                "[dwc2-usb] TX packet transmitted OK"
-            } else {
-                "[dwc2-usb] TX packet transmission failed"
-            });
             if ok {
+                ostd::io::println("[dwc2-usb] TX packet transmitted OK");
                 NicReply::Status(0)
             } else {
                 NicReply::Status(1)
