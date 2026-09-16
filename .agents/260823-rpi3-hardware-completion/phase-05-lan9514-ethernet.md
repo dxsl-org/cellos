@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: "LAN9514 Ethernet via DWC2 USB Host"
-status: blocked
+status: in-progress (substrate and policy-v3/one-shot-irq unblocked; physical link verification pending)
 priority: P3
 effort: "15d"
 dependencies: []
@@ -118,31 +118,25 @@ RJ45 Ethernet
 4. Add `DriverId::UsbDwc2` and `DriverId::EthernetLan9514` to board catalog.
    Add both to RPi3's enabled-driver list.
 
-5. [BLOCKED] Add `DEV_USB` MMIO device class to resource registry with the DWC2
-   window for RPi3. Add boot ceiling entry.
-   Blocked on: policy v3 with a signed USB-host authority byte. The v1/v2
-   manifest `mmio_devices` byte is full (bits 0–7) and a plain bool cap would be
-   zeroed by every `Permit` intersection (`decision_to_caps`). Until then the
-   DWC2 window is intentionally absent from the allowlist and denied for all
-   classes (locked by negative tests in `resource_registry_tests.rs`); boot
-   ceiling rows for `/bin/dwc2-usb` and `/bin/lan9514` are `CapSet::EMPTY` and
-   pinned by the boot selftest.
+5. [RESOLVED 2026-09-16] Dedicated DWC2 MMIO allocation via `request_dwc2_mmio`
+   and boot ceiling entry for `/bin/dwc2-usb`.
+   Resolved by: Policy v3 (`VERSION_V3 = 3`, `CAP_BYTES_V3 = 10`) signed with
+   `usb_driver` authority byte in `kernel/src/policy.rs` and `scripts/sign-policy.py`.
+   `/bin/dwc2-usb` receives `usb_driver: true` from `boot_ceiling` and claims the
+   exclusive DWC2 MMIO aperture (`0x3F98_0000..0x3F9A_0000`) via `sys_request_mmio`.
 
-6. [BLOCKED] Update AArch64 trap dispatch to handle USB IRQ (currently falls
-   through as unhandled GPU peripheral interrupt).
-   Blocked on: an owned one-shot IRQ contract. DWC2 asserts legacy IRQ 9
-   level-style and self-clears only via W1C writes to its own GINTSTS/HCINT
-   registers, so a naive `irq_wait::signal_irq` route storms before the driver
-   cell runs. Requires: USB authority cap (same as step 5), WaitIrq ownership
-   verification of `(irq, mmio_base)` (the current gate checks only
-   PcieDriver/Platform caps and ACKs a hardcoded VirtIO offset), and a one-shot
-   mask/unmask protocol — ISR masks IRQ 9 in `bcm2835_legacy_irq.rs`, the
-   driver's next `sys_wait_irq` unmasks after clearing GINTSTS. Read-only facts
-   shipped: `USB_IRQ` const + `is_usb_irq_pending()` in
-   `hal/arch/arm/src/aarch64/bcm2835_legacy_irq.rs`.
+6. [RESOLVED 2026-09-16] AArch64 trap dispatch and one-shot Level IRQ 9 protocol.
+   Resolved by: One-shot protocol implemented in `hal/arch/arm/src/aarch64/trap.rs`
+   and `kernel/src/task/syscall.rs`:
+   - ISR detects pending IRQ 9, masks it immediately via
+     `bcm2835_legacy_irq::disable_irq(USB_IRQ)` to prevent interrupt storm,
+     and calls `vi_signal_usb_irq()`.
+   - Driver cell clears GINTSTS and issues `sys_wait_irq(9)`.
+   - Syscall handler verifies `caller_has_usb_driver` and re-enables IRQ 9 via
+     `bcm2835_legacy_irq::enable_irq(USB_IRQ)`.
 
-   Status of 5a: steps 1–4 complete; steps 5–6 blocked as above. Phase 05
-   remains gated on these two before any 5b+ work can claim MMIO or IRQs.
+   Status of 5a: steps 1–6 complete. Driver cell `cells/drivers/dwc2-usb`
+   compiles cleanly for `aarch64-unknown-none-softfloat`.
 
 ### 5b: DWC2 Host Controller Core (4d)
 

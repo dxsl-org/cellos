@@ -48,9 +48,9 @@
 13. [done 2026-09-16] Mở PAL-IMPLEMENTATION-CHECKPOINT: cả 6 điều kiện tiên quyết đã thỏa mãn, chuyển trạng thái sang UNBLOCKED / CONDITIONAL GO
 
 14. [in-progress] RPi3:
-    - SD Storage và HDMI trên RPi3-B [completed]; I2C/SPI [in-progress]
-    - Phase 05: Gỡ nghẽn USB Policy v3 & Level IRQ 9
-    - cần sensor như SHT3x hoặc MPU6050
+    - SD Storage và HDMI trên RPi3-B [completed]
+    - I2C/SPI: Controller BCM BSC1 và SPI0 loopback [completed trên board thật]; cần sensor vật lý (SHT3x/MPU6050) để đọc dữ liệu cảm biến trực tiếp
+    - USB DWC2 & LAN9514 (Phase 05): Logic USB Policy v3, cấp quyền DWC2 MMIO và One-shot Level IRQ 9 đã [gỡ nghẽn 100% trong mã nguồn]; chờ cắm cáp Ethernet kiểm thử thực địa
 15. [in-progress] RISC-V/x86 Board: Bringup thực tế trên VF2, Pioneer, MiniPC
 16. [blocked] SDK relay client mutual TLS: only this two-real-broker relay path is blocked by the protected-persistence, authenticated-time, and reviewed pending-key-binding entry gates under frozen KMS opcodes 9–14 in `.agents/260825-1726-kms-silo-production-root/phase-04-service-net-mutual-tls-integration.md`; reopen only when DEV_REFERENCE Phase 8 emits exact `GO: PHASE4_ENTRY_GATES_SATISFIED`. This is not a global blocker for single-guest or other approved local work; the attempted protocol scaffold was fully reverted after governance review, with no dead or unwired implementation remaining.
  
