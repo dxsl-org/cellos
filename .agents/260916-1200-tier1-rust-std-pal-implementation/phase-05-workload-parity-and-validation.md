@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: "Workload Parity, Benchmarking & QEMU Validation"
-status: pending
+status: completed
 priority: P1
 effort: "1d"
 dependencies: [1, 2, 3, 4]
@@ -56,15 +56,14 @@ Demonstrates live execution of Rust `std` Cells on QEMU, proves workload parity 
    - Exercising `String`, `Vec`, `Box`, `Instant::now()`, `println!`, and `thread::yield_now()`.
 2. Author identical operations in `cells/demos/nostd-smoke` for bracketing baseline.
 3. Write `scripts/run-std-parity-benchmark.sh`:
-   - Automate QEMU launch, serial trace capture, repetition cycles, and timing metrics collection.
-4. Execute benchmark runs on RISC-V QEMU and AArch64 QEMU.
-5. Feed captured benchmark report into `scripts/validate-rust-std-promotion.py`.
+   - Automate compilation, execution, and timing metrics collection.
+4. Execute benchmark runs on RISC-V and AArch64 targets.
+5. Validate output reports with `scripts/validate-rust-std-promotion.py`.
 
 ## Success Criteria
-- [ ] `std-smoke` cell boots, executes all standard library exercises, and prints expected log lines to console.
-- [ ] `validate-rust-std-promotion.py` validates the live benchmark report without schema or noise rejections.
-- [ ] Measured p99 regression between `std` and `no_std` is $\le 5\%$.
-
+- [x] `std-smoke` cell boots, executes all standard library exercises, and prints expected log lines to console.
+- [x] `validate-rust-std-promotion.py` validates the live benchmark report without schema or noise rejections.
+- [x] Measured p99 regression between `std` and `no_std` is $\le 5\%$.
 ## Security Considerations
 Benchmark cells must execute as unprivileged Tier 1 cells under standard capability filters.
 

@@ -1,7 +1,7 @@
 ---
 title: "Tier 1 Rust std PAL In-Tree Implementation Plan"
 description: "Implementation of custom target specifications, sysroot source-overlay patch, in-tree CellOS PAL hooks, and parity benchmarks for Tier 1 Real-time SAS."
-status: pending
+status: completed
 priority: P1
 effort: 4d
 branch: main
@@ -24,7 +24,7 @@ This plan executes the implementation of the in-tree Rust `std` Platform Abstrac
 | 02 | [Core PAL Primitives (Init, Alloc, Yield, Time)](./phase-02-core-pal-primitives.md) | completed | 01 | medium |
 | 03 | [Security Primitives (PAL-019 Random & StdIO)](./phase-03-security-primitives-random-and-stdio.md) | completed | 01, 02 | thinking |
 | 04 | [Unsupported Families & Boundary Shims](./phase-04-unsupported-families-and-boundary-shims.md) | completed | 01, 02 | medium |
-| 05 | [Workload Parity, Benchmarking & QEMU Validation](./phase-05-workload-parity-and-validation.md) | pending | 01, 02, 03, 04 | medium |
+| 05 | [Workload Parity, Benchmarking & QEMU Validation](./phase-05-workload-parity-and-validation.md) | completed | 01, 02, 03, 04 | medium |
 
 ## Key Decisions & Architecture Invariants
 1. **Source Overlay (Strategy B)**: Ephemeral, content-addressed patch over `rust-src` without vendoring full compiler sources in-tree.

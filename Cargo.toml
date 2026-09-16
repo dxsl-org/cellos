@@ -16,6 +16,8 @@ exclude = [
     # vove is a restricted private sub-repo (git submodule) — separate license,
     # excluded from the public Cellos workspace to prevent accidental inclusion.
     "cells/apps/vove",
+    # std-smoke is a Tier 1 std cell built with custom sysroot and json-target-spec
+    "cells/demos/std-smoke",
 ]
 members = [
     "kernel",

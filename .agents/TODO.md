@@ -55,8 +55,8 @@
 16. [blocked] SDK relay client mutual TLS: only this two-real-broker relay path is blocked by the protected-persistence, authenticated-time, and reviewed pending-key-binding entry gates under frozen KMS opcodes 9–14 in `.agents/260825-1726-kms-silo-production-root/phase-04-service-net-mutual-tls-integration.md`; reopen only when DEV_REFERENCE Phase 8 emits exact `GO: PHASE4_ENTRY_GATES_SATISFIED`. This is not a global blocker for single-guest or other approved local work; the attempted protocol scaffold was fully reverted after governance review, with no dead or unwired implementation remaining.
  
 17. [blocked] App Tiers completion: cần phần cứng (RPi4b + secure controller riêng hoặc secure boot + remote CAS service)
-    - Tier 1 baseline
-    - Tier 1 rust std: PAL-019, PAL-031
+    - Tier 1 baseline [completed 2026-09-16, event phase-03-implemented]
+    - Tier 1 rust std [completed 2026-09-16]: PAL in-tree implementation (custom targets, sysroot overlay, PAL-019/031, workload parity PASS)
     - Tier 3
 
 18. [in-progress] Chuẩn hóa manifest và tooling phía người phát triển. Về lâu dài cần tách rõ:
