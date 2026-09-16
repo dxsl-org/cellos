@@ -1,3 +1,15 @@
+diff --git a/library/std/build.rs b/library/std/build.rs
+index 5f2e441..b19ec03 100644
+--- a/library/std/build.rs
++++ b/library/std/build.rs
+@@ -57,6 +57,7 @@ fn main() {
+         || target_os == "nuttx"
+         || target_os == "cygwin"
+         || target_os == "vexos"
++        || target_os == "cellos"
+ 
+         // See src/bootstrap/src/core/build_steps/synthetic_targets.rs
+         || env::var("RUSTC_BOOTSTRAP_SYNTHETIC_TARGET").is_ok()
 diff --git a/library/std/src/sys/alloc/cellos.rs b/library/std/src/sys/alloc/cellos.rs
 new file mode 100644
 index 0000000..8824f29
@@ -67,25 +79,40 @@ index 4fca658..2b27fbe 100644
          pub use generic::*;
 diff --git a/library/std/src/sys/pal/cellos/alloc.rs b/library/std/src/sys/pal/cellos/alloc.rs
 new file mode 100644
-index 0000000..41961b1
+index 0000000..ef7cf20
 --- /dev/null
 +++ b/library/std/src/sys/pal/cellos/alloc.rs
-@@ -0,0 +1,16 @@
+@@ -0,0 +1,31 @@
 +use crate::alloc::Layout;
 +
-+unsafe extern "C" {
-+    fn vi_alloc(size: usize, align: usize) -> *mut u8;
-+    fn vi_dealloc(ptr: *mut u8, size: usize, align: usize);
-+}
++// CellOS Tier 1 SAS Per-Cell Heap Arena (1 MiB, 16-byte aligned)
++const HEAP_SIZE: usize = 1024 * 1024;
++
++#[repr(align(16))]
++struct HeapMemory([u8; HEAP_SIZE]);
++static mut HEAP_MEM: HeapMemory = HeapMemory([0; HEAP_SIZE]);
++static mut HEAP_OFFSET: usize = 0;
 +
 +#[inline]
 +pub unsafe fn alloc(layout: Layout) -> *mut u8 {
-+    unsafe { vi_alloc(layout.size(), layout.align()) }
++    let align = layout.align();
++    let size = layout.size();
++    if size == 0 {
++        return align as *mut u8;
++    }
++    let current = HEAP_OFFSET;
++    let aligned = (current + align - 1) & !(align - 1);
++    let next = aligned + size;
++    if next > HEAP_SIZE {
++        return core::ptr::null_mut();
++    }
++    HEAP_OFFSET = next;
++    core::ptr::addr_of_mut!(HEAP_MEM.0).cast::<u8>().add(aligned)
 +}
 +
 +#[inline]
-+pub unsafe fn dealloc(ptr: *mut u8, layout: Layout) {
-+    unsafe { vi_dealloc(ptr, layout.size(), layout.align()) }
++pub unsafe fn dealloc(_ptr: *mut u8, _layout: Layout) {
++    // Per-cell allocator lifecycle is bounded to cell lifetime.
 +}
 diff --git a/library/std/src/sys/pal/cellos/common.rs b/library/std/src/sys/pal/cellos/common.rs
 new file mode 100644
@@ -135,46 +162,72 @@ index 0000000..18c8ccb
 +pub use random::fill_bytes;
 diff --git a/library/std/src/sys/pal/cellos/random.rs b/library/std/src/sys/pal/cellos/random.rs
 new file mode 100644
-index 0000000..076602d
+index 0000000..ee84e94
 --- /dev/null
 +++ b/library/std/src/sys/pal/cellos/random.rs
-@@ -0,0 +1,28 @@
+@@ -0,0 +1,52 @@
++const SYS_GET_RANDOM: usize = 37;
++
 +pub fn fill_bytes(bytes: &mut [u8]) {
 +    let mut offset = 0;
 +    while offset < bytes.len() {
 +        let chunk_len = core::cmp::min(bytes.len() - offset, 64);
 +        let chunk = &mut bytes[offset..offset + chunk_len];
++        let ret: isize;
 +        #[cfg(target_arch = "riscv64")]
 +        unsafe {
-+            let ret: isize;
 +            core::arch::asm!(
 +                "ecall",
 +                inlateout("a0") chunk.as_mut_ptr() as usize => ret,
 +                in("a1") chunk.len(),
 +                in("a2") 0usize,
 +                in("a3") 0usize,
-+                in("a7") 37usize, // ViSyscall::GetRandom
-+                options(nostack)
++                in("a7") SYS_GET_RANDOM,
++                options(nostack, preserves_flags)
 +            );
-+            if ret <= 0 {
-+                panic!("GetRandom failed");
-+            }
-+            offset += ret as usize;
 +        }
-+        #[cfg(not(target_arch = "riscv64"))]
-+        {
-+            panic!("GetRandom unsupported architecture");
++        #[cfg(target_arch = "aarch64")]
++        unsafe {
++            core::arch::asm!(
++                "svc #0",
++                inlateout("x0") SYS_GET_RANDOM => ret,
++                in("x1") chunk.as_mut_ptr() as usize,
++                in("x2") chunk.len(),
++                in("x3") 0usize,
++                in("x4") 0usize,
++                options(nostack, preserves_flags)
++            );
 +        }
++        #[cfg(target_arch = "x86_64")]
++        unsafe {
++            core::arch::asm!(
++                "syscall",
++                inlateout("rax") SYS_GET_RANDOM => ret,
++                in("rdi") chunk.as_mut_ptr() as usize,
++                in("rsi") chunk.len(),
++                in("rdx") 0usize,
++                in("r10") 0usize,
++                lateout("rcx") _,
++                lateout("r11") _,
++                options(nostack, preserves_flags)
++            );
++        }
++        if ret <= 0 {
++            panic!("GetRandom failed or unavailable");
++        }
++        offset += ret as usize;
 +    }
 +}
 diff --git a/library/std/src/sys/pal/cellos/thread.rs b/library/std/src/sys/pal/cellos/thread.rs
 new file mode 100644
-index 0000000..fa44dd9
+index 0000000..5c2c2f0
 --- /dev/null
 +++ b/library/std/src/sys/pal/cellos/thread.rs
-@@ -0,0 +1,13 @@
+@@ -0,0 +1,49 @@
 +use crate::io;
 +use crate::num::NonZeroUsize;
++
++const SYS_YIELD: usize = 104;
 +
 +pub fn available_parallelism() -> io::Result<NonZeroUsize> {
 +    Ok(NonZeroUsize::new(1).unwrap())
@@ -183,46 +236,102 @@ index 0000000..fa44dd9
 +pub fn yield_now() {
 +    #[cfg(target_arch = "riscv64")]
 +    unsafe {
-+        core::arch::asm!("ecall", in("a7") 0usize, options(nostack));
++        core::arch::asm!(
++            "ecall",
++            in("a0") 0usize,
++            in("a1") 0usize,
++            in("a2") 0usize,
++            in("a3") 0usize,
++            in("a7") SYS_YIELD,
++            options(nostack, preserves_flags)
++        );
++    }
++    #[cfg(target_arch = "aarch64")]
++    unsafe {
++        core::arch::asm!(
++            "svc #0",
++            in("x0") SYS_YIELD,
++            in("x1") 0usize,
++            in("x2") 0usize,
++            in("x3") 0usize,
++            in("x4") 0usize,
++            options(nostack, preserves_flags)
++        );
++    }
++    #[cfg(target_arch = "x86_64")]
++    unsafe {
++        core::arch::asm!(
++            "syscall",
++            in("rax") SYS_YIELD,
++            in("rdi") 0usize,
++            in("rsi") 0usize,
++            in("rdx") 0usize,
++            in("r10") 0usize,
++            lateout("rcx") _,
++            lateout("r11") _,
++            options(nostack, preserves_flags)
++        );
 +    }
 +}
 diff --git a/library/std/src/sys/pal/cellos/time.rs b/library/std/src/sys/pal/cellos/time.rs
 new file mode 100644
-index 0000000..8dfb89c
+index 0000000..96bf687
 --- /dev/null
 +++ b/library/std/src/sys/pal/cellos/time.rs
-@@ -0,0 +1,39 @@
+@@ -0,0 +1,61 @@
 +use crate::time::Duration;
++
++const SYS_GET_TIME: usize = 120;
++
++#[inline(always)]
++unsafe fn sys_get_time() -> u64 {
++    let ret: isize;
++    #[cfg(target_arch = "riscv64")]
++    core::arch::asm!(
++        "ecall",
++        inlateout("a0") 0usize => ret,
++        in("a1") 0usize,
++        in("a2") 0usize,
++        in("a3") 0usize,
++        in("a7") SYS_GET_TIME,
++        options(nostack, preserves_flags)
++    );
++    #[cfg(target_arch = "aarch64")]
++    core::arch::asm!(
++        "svc #0",
++        inlateout("x0") SYS_GET_TIME => ret,
++        in("x1") 0usize,
++        in("x2") 0usize,
++        in("x3") 0usize,
++        in("x4") 0usize,
++        options(nostack, preserves_flags)
++    );
++    #[cfg(target_arch = "x86_64")]
++    core::arch::asm!(
++        "syscall",
++        inlateout("rax") SYS_GET_TIME => ret,
++        in("rdi") 0usize,
++        in("rsi") 0usize,
++        in("rdx") 0usize,
++        in("r10") 0usize,
++        lateout("rcx") _,
++        lateout("r11") _,
++        options(nostack, preserves_flags)
++    );
++    if ret >= 0 { ret as u64 } else { 0 }
++}
 +
 +#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
 +pub struct Instant(u64);
 +
 +impl Instant {
 +    pub fn now() -> Instant {
-+        let ticks: u64;
-+        #[cfg(target_arch = "riscv64")]
-+        unsafe {
-+            let mut ret: isize;
-+            core::arch::asm!(
-+                "ecall",
-+                inlateout("a0") 0usize => ret,
-+                in("a1") 0usize,
-+                in("a2") 0usize,
-+                in("a3") 0usize,
-+                in("a7") 17usize,
-+                options(nostack)
-+            );
-+            ticks = if ret >= 0 { ret as u64 } else { 0 };
-+        }
-+        #[cfg(not(target_arch = "riscv64"))]
-+        {
-+            ticks = 0;
-+        }
-+        Instant(ticks)
++        Instant(unsafe { sys_get_time() })
 +    }
 +
 +    pub fn checked_sub_instant(&self, other: &Instant) -> Option<Duration> {
 +        let diff_ticks = self.0.checked_sub(other.0)?;
++        // 10 MHz clock: 1 tick = 100 ns
 +        Some(Duration::from_nanos(diff_ticks.saturating_mul(100)))
 +    }
 +

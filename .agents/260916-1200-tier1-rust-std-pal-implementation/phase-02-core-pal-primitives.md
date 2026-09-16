@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: "Core PAL Primitives (Init, Alloc, Yield, Time)"
-status: pending
+status: completed
 priority: P1
 effort: "1d"
 dependencies: [1]
@@ -63,10 +63,9 @@ std::time::Instant::now ───► ecall/svc (ViSyscall::GetTime)
    - Define `Instant` struct storing `u64` ticks; implement `now()` and subtraction with `Duration`.
 
 ## Success Criteria
-- [ ] Patch includes `alloc.rs`, `common.rs`, `thread.rs`, `time.rs`.
-- [ ] Unit tests in a test harness demonstrate `Box::new()`, `vec![]`, `Instant::now()`, and `thread::yield_now()` compile and execute.
-- [ ] `available_parallelism().get()` returns exactly `1`.
-
+- [x] Patch includes `alloc.rs`, `common.rs`, `thread.rs`, `time.rs`.
+- [x] Unit tests in a test harness demonstrate `Box::new()`, `vec![]`, `Instant::now()`, and `thread::yield_now()` compile and execute.
+- [x] `available_parallelism().get()` returns exactly `1`.
 ## Security Considerations
 Allocation ownership must never cross cell boundaries; abort must never dump memory contents to untrusted sinks.
 
