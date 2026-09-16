@@ -1,0 +1,27 @@
+# Phase 03 implementation — Tier 1 baseline and production admission gate
+# captured: 2026-09-16T00:00:00Z on Linux 6.18.40.1-microsoft-standard-WSL2
+# revision: 39610dc19ae39062bc430888d42183cd136183de (docs(admission): record umbrella Phase 03 design approvals for Spec 18c provenance contract)
+# tree: 4f4903c3e95e0d0db00add36bff9a0705eab2833
+$ git show --stat --format=%H %ad %s 39610dc19ae39062bc430888d42183cd136183de
+39610dc19ae39062bc430888d42183cd136183de 2026-09-16T06:56:47+07:00 docs(admission): record umbrella Phase 03 design approvals for Spec 18c provenance contract
+
+ .../phase-01-freeze-baseline-and-provenance-contract.md       |  8 ++++----
+ .agents/TODO.md                                               |  2 +-
+ docs/specs/18c-publisher-provenance-envelope.md               | 11 ++++++++++-
+ 3 files changed, 15 insertions(+), 6 deletions(-)
+
+$ python3 scripts/validate-admission-prequalification.py
+PASS: PREQUALIFICATION INFRASTRUCTURE COMPLETE; authoritative Phase 04 catalog pin matches; ADMISSIBLE EVIDENCE BLOCKED; production remains BLOCKED
+# exit: 0
+
+$ bash scripts/test-cell-signing.sh | tail -5
+PASS: verify (metadata correctly rejected)
+PASS: verify (CELLOS-LOADER-SIG-001 .rela.dyn entry tamper correctly rejected)
+PASS: verify (CELLOS-LOADER-SIG-001 .rela.dyn section header tamper correctly rejected)
+
+--- test-cell-signing: ALL PASS ---
+# exit: 0
+
+$ python3 -m unittest discover -s tests/rust-std-promotion 2>&1 | tail -3
+Ran 33 tests in 0.370s
+OK

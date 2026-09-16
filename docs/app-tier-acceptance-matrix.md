@@ -19,7 +19,8 @@ contract revision named by its digest (`docs/evidence/spec23-native-sdk-contract
 never against the amendable working file, and the live binding was re-based onto
 the amended contract at revision `81dbb81c` — the amendment changed the C2-MID
 witness and gap prose only, so the ratified matrix digest is unchanged. Phase 03
-is `PLANNED`; its production-admission work remains blocked. These lifecycle
+is `IMPLEMENTED` with its provenance and admission gate core; its external-floor physical qualification remains blocked. Phase 04
+is `IMPLEMENTED`. These lifecycle
 statuses do not change the qualification aggregate or C9 result.
 
 All current source availability and exact cell text remain in the JSON ledger.

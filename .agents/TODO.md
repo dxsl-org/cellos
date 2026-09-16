@@ -44,7 +44,7 @@
 9. Retain immutable evidence bundle
 10. [done 2026-09-16] Hai umbrella approvals: Security Owner và Independent Reviewer phê duyệt Spec 18c (Publisher Provenance Envelope Contract) và Umbrella Phase 03 baseline design
 11. [done 2026-09-16] Sáu PAL approvals trên cùng manifest digest (`99cf7d24cd14c3b862959d17b499053735bbefded850202fa72b9eb8509129b3`) đã được phê duyệt và ghi nhận
-12. Release/ledger PASS
+12. [done 2026-09-16] Release/ledger: ghi nhận chuyển đổi Phase 03 sang IMPLEMENTED (event `phase-03-implemented`, sequence 11) trong `docs/app-tier-acceptance-ledger.json`, `validate-app-tier-acceptance.py` đạt PASS
 13. Xét mở PAL-IMPLEMENTATION-CHECKPOINT
 
 14. [in-progress] RPi3:

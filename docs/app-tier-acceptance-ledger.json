@@ -912,8 +912,8 @@
     },
     {
       "phase": 3,
-      "status": "PLANNED",
-      "event_id": null
+      "status": "IMPLEMENTED",
+      "event_id": "phase-03-implemented"
     },
     {
       "phase": 4,
@@ -1340,11 +1340,61 @@
       },
       "state_digest": "8715d97e1cb6d01c40495a9274bb985da5ccff47bf4bc170a2d1d2dff60a6dd9",
       "hash": "b165025a460771deecf9b62887d665e1eb22e83ccabfb002e9265563cbd332d7"
+    },
+    {
+      "sequence": 11,
+      "event_id": "phase-03-implemented",
+      "previous_hash": "b165025a460771deecf9b62887d665e1eb22e83ccabfb002e9265563cbd332d7",
+      "steward": "lungmat8",
+      "reviewer": "datgausaigon",
+      "recorded_at": "2026-09-16T00:00:00Z",
+      "action": {
+        "kind": "lifecycle_transition",
+        "phase": 3,
+        "from_status": "PLANNED",
+        "to_status": "IMPLEMENTED",
+        "changes": [
+          {
+            "section": "phase_lifecycle",
+            "before_sha256": "959c5446990e5ec98eb37c48688dc9a7b4a227e2801b9da9aefb321758ea0ea3",
+            "after_sha256": "cf23dc24de9e6b81e70e67075c2ec1be5242f71d3c29456f73dba31ee891df30"
+          }
+        ],
+        "evidence": [
+          {
+            "path": "docs/evidence/app-tier-phase03-implementation.log",
+            "sha256": "31dde724bc312d95f57b06fc20b7a07973f868eea84ea1c029729a1fbfe05116",
+            "size_bytes": 1486,
+            "kind": "log"
+          },
+          {
+            "path": "docs/specs/18c-publisher-provenance-envelope.md",
+            "sha256": "d8ff74cefcb37df95c031a00ed3e707e5f55e81c2eaf77e1a9263c06dd5785c9",
+            "size_bytes": 9432,
+            "kind": "artifact"
+          }
+        ],
+        "implementation": {
+          "revision": "39610dc19ae39062bc430888d42183cd136183de",
+          "base_tree": "2fe8d36df613d9692489c6292b3cf40989f6b5b5",
+          "command": "python3 scripts/validate-admission-prequalification.py",
+          "target": "tier1-baseline-admission",
+          "result": "PASS",
+          "artifact": {
+            "path": "docs/specs/18c-publisher-provenance-envelope.md",
+            "sha256": "d8ff74cefcb37df95c031a00ed3e707e5f55e81c2eaf77e1a9263c06dd5785c9",
+            "size_bytes": 9432,
+            "kind": "artifact"
+          }
+        }
+      },
+      "state_digest": "256fd83c955b1021900592e0932882382b3c2addcc77c8d21adc0a03049d808c",
+      "hash": "01705e25ca2e76cd884c803f87345314846ee5d0bb4aeea183d051d69decccf4"
     }
   ],
   "baseline_prefix": {
-    "event_count": 10,
-    "tip_hash": "b165025a460771deecf9b62887d665e1eb22e83ccabfb002e9265563cbd332d7"
+    "event_count": 11,
+    "tip_hash": "01705e25ca2e76cd884c803f87345314846ee5d0bb4aeea183d051d69decccf4"
   },
   "source_binding": {
     "path": "docs/specs/23-native-sdk-contract.md",
