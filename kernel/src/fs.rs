@@ -33,7 +33,8 @@ pub fn read_file_from_vifs1(path: &str) -> ViResult<Box<[u8]>> {
     let mut file = {
         let guard = VIFS1.lock();
         let fs = guard.as_ref().ok_or(ViError::NotFound)?;
-        fs.open(upper_path, OpenMode::Read)?
+        fs.open(path, OpenMode::Read)
+            .or_else(|_| fs.open(upper_path, OpenMode::Read))?
     };
 
     let size = usize::try_from(file.size()?).map_err(|_| ViError::InvalidInput)?;
