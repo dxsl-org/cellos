@@ -1,5 +1,5 @@
 use crate::registers::{
-    A, C, CLKT, C_CLEAR, C_I2CEN, C_READ, C_ST, DIV, DLEN, FIFO, POLL_BUDGET, S, S_CLEAR, S_CLKT,
+    A, C, CLKT, C_CLEAR, C_I2CEN, C_READ, C_ST, DLEN, FIFO, POLL_BUDGET, S, S_CLEAR, S_CLKT,
     S_DONE, S_ERR, S_RXD, S_TXD, S_TXW,
 };
 use hal_i2c::I2cError;
@@ -101,7 +101,6 @@ impl<I: RegisterIo> BcmBscCore<I> {
         self.write_reg(C, C_I2CEN | C_CLEAR)?;
         self.write_reg(S, S_CLEAR)?;
         self.write_reg(CLKT, 0)?;
-        self.write_reg(DIV, 2500)?;
         self.write_reg(A, addr as u32)?;
         self.write_reg(DLEN, len as u32)?;
         self.write_reg(C, C_I2CEN | C_CLEAR | if read { C_READ } else { 0 } | C_ST)

@@ -3,8 +3,8 @@ pub const S: usize = 0x04;
 pub const DLEN: usize = 0x08;
 pub const A: usize = 0x0C;
 pub const FIFO: usize = 0x10;
-pub const DIV: usize = 0x14;
 pub const CLKT: usize = 0x1C;
+
 pub const C_READ: u32 = 1 << 0;
 pub const C_CLEAR: u32 = 0b11 << 4;
 pub const C_ST: u32 = 1 << 7;
