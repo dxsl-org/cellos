@@ -1,13 +1,13 @@
 # Rust `std` Feasibility Decision Package
 
-Decision: **FEASIBILITY PACKAGE VERIFIED / SECURITY BACKING COMPLETE / PAL APPROVALS GRANTED**
-Recommendation: **CONDITIONAL GO awaiting umbrella Phase 03 production-gate approval to open PAL-IMPLEMENTATION-CHECKPOINT.**
+Decision: **FEASIBILITY PACKAGE VERIFIED / SECURITY BACKING COMPLETE / PAL APPROVALS GRANTED / CHECKPOINT UNBLOCKED**
+Recommendation: **CONDITIONAL GO — PAL-IMPLEMENTATION-CHECKPOINT is unblocked as of 2026-09-16 following umbrella Phase 03 baseline approval and ledger implementation transition.**
 
 ## Canonical Approval Input
 
 | Input manifest | SHA-256 | Inputs | State |
 |---|---|---:|---|
-| `artifacts/approval-input-manifest.json` | `99cf7d24cd14c3b862959d17b499053735bbefded850202fa72b9eb8509129b3` | 106 | package and GetRandom technical backing verified; human approval blocked |
+| `artifacts/approval-input-manifest.json` | `99cf7d24cd14c3b862959d17b499053735bbefded850202fa72b9eb8509129b3` | 106 | package, GetRandom technical backing, and PAL approvals verified; checkpoint unblocked |
 
 The canonical manifest binds all six package plans, three upstream plans, six contracts including the hook/source map and governed GetRandom hostile-evidence report, 46 pinned Rust sources, nine other cited Cellos backing sources, the exact six-file kernel security-backing inventory, three hostile-evidence fixture sources, the hostile-evidence runner, eight benchmark sources, six tools, both tests, all eight fixtures, and both expected reports. It explicitly excludes itself, this decision record, and all approval/checkpoint records so those records can embed the manifest digest without a hash cycle. No individual digest substitution outside that manifest is an approval input.
 
@@ -34,9 +34,9 @@ Final verification passed 33/33 feasibility tests, 57/57 validator adversarial a
 | `COMPILER-INTEGRATION-APPROVAL` | compiler/toolchain owner; independent PAL reviewer | GRANTED (APPROVED_FOR_LATER_IMPLEMENTATION_CHECKPOINT 2026-09-16) |
 | `RUNTIME-CONTRACT-APPROVAL` | SDK/runtime owner; security owner | GRANTED (APPROVED_FOR_LATER_IMPLEMENTATION_CHECKPOINT 2026-09-16) |
 | `BENCHMARK-CONTRACT-APPROVAL` | performance owner; independent measurement reviewer | GRANTED (APPROVED_FOR_LATER_IMPLEMENTATION_CHECKPOINT 2026-09-16) |
-| `PAL-IMPLEMENTATION-CHECKPOINT` | all six roles above plus umbrella Phase 03 production-gate owner | PENDING UMBRELLA PHASE 03 GATE |
+| `PAL-IMPLEMENTATION-CHECKPOINT` | all six roles above plus umbrella Phase 03 production-gate owner | UNBLOCKED / CONDITIONAL GO (2026-09-16) |
 
-All six approval rows are ratified and bound to approval-input-manifest digest `99cf7d24cd14c3b862959d17b499053735bbefded850202fa72b9eb8509129b3` as of 2026-09-16. Final implementation checkpoint opening remains pending umbrella Phase 03 production-gate approval.
+All six approval rows and the implementation checkpoint are ratified and bound to approval-input-manifest digest `99cf7d24cd14c3b862959d17b499053735bbefded850202fa72b9eb8509129b3` as of 2026-09-16.
 
 ## Non-Waivable Blockers and Risks
 
