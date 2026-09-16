@@ -1,7 +1,7 @@
 ---
 phase: 1
 title: "Private Target Spec & Sysroot Overlay Pipeline"
-status: pending
+status: completed
 priority: P1
 effort: "1d"
 dependencies: []
@@ -60,9 +60,9 @@ targets/*-unknown-cellos.json ┴─► cargo -Z build-std ─► target/sysroot
    - Run `cargo build -Z build-std=core,alloc,std --target targets/riscv64gc-unknown-cellos.json`.
 
 ## Success Criteria
-- [ ] `targets/riscv64gc-unknown-cellos.json` and sibling arch targets are validated by `rustc`.
-- [ ] `scripts/build-cellos-sysroot.sh` executes and outputs compiled `libstd.rlib` for `riscv64gc-unknown-cellos`.
-- [ ] Base hash verification rejects modified or drifting `rust-src`.
+- [x] `targets/riscv64gc-unknown-cellos.json` and sibling arch targets are validated by `rustc`.
+- [x] `scripts/build-cellos-sysroot.sh` executes and outputs compiled `libstd.rlib` for `riscv64gc-unknown-cellos`.
+- [x] Base hash verification rejects modified or drifting `rust-src`.
 
 ## Security Considerations
 Deterministic build prevents toolchain poisoning; `target_os="cellos"` prevents unintentional inheritance of host Linux/Unix assumptions.

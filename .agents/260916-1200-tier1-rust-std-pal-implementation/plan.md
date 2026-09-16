@@ -20,7 +20,7 @@ This plan executes the implementation of the in-tree Rust `std` Platform Abstrac
 
 | Phase | Title | Status | Dependencies | Tier |
 |---|---|---|---|---|
-| 01 | [Private Target Spec & Sysroot Overlay Pipeline](./phase-01-private-target-spec-and-sysroot-overlay.md) | pending | — | thinking |
+| 01 | [Private Target Spec & Sysroot Overlay Pipeline](./phase-01-private-target-spec-and-sysroot-overlay.md) | completed | — | thinking |
 | 02 | [Core PAL Primitives (Init, Alloc, Yield, Time)](./phase-02-core-pal-primitives.md) | pending | 01 | medium |
 | 03 | [Security Primitives (PAL-019 Random & StdIO)](./phase-03-security-primitives-random-and-stdio.md) | pending | 01, 02 | thinking |
 | 04 | [Unsupported Families & Boundary Shims](./phase-04-unsupported-families-and-boundary-shims.md) | pending | 01, 02 | medium |

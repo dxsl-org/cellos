@@ -1,0 +1,307 @@
+diff --git a/library/std/src/sys/alloc/cellos.rs b/library/std/src/sys/alloc/cellos.rs
+new file mode 100644
+index 0000000..8824f29
+--- /dev/null
++++ b/library/std/src/sys/alloc/cellos.rs
+@@ -0,0 +1,15 @@
++use crate::alloc::{GlobalAlloc, Layout, System};
++use crate::sys::pal::alloc as pal_alloc;
++
++#[stable(feature = "alloc_system_type", since = "1.28.0")]
++unsafe impl GlobalAlloc for System {
++    #[inline]
++    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
++        unsafe { pal_alloc::alloc(layout) }
++    }
++
++    #[inline]
++    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
++        unsafe { pal_alloc::dealloc(ptr, layout) }
++    }
++}
+diff --git a/library/std/src/sys/alloc/mod.rs b/library/std/src/sys/alloc/mod.rs
+index f2f1d1c..29d6921 100644
+--- a/library/std/src/sys/alloc/mod.rs
++++ b/library/std/src/sys/alloc/mod.rs
+@@ -107,4 +107,7 @@ cfg_select! {
+     target_os = "zkvm" => {
+         mod zkvm;
+     }
++    target_os = "cellos" => {
++        mod cellos;
++    }
+ }
+diff --git a/library/std/src/sys/env_consts.rs b/library/std/src/sys/env_consts.rs
+index 573f540..b966ea9 100644
+--- a/library/std/src/sys/env_consts.rs
++++ b/library/std/src/sys/env_consts.rs
+@@ -37,6 +37,17 @@ pub mod os {
+     pub const EXE_EXTENSION: &str = "";
+ }
+ 
++
++#[cfg(target_os = "cellos")]
++pub mod os {
++    pub const FAMILY: &str = "";
++    pub const OS: &str = "cellos";
++    pub const DLL_PREFIX: &str = "";
++    pub const DLL_SUFFIX: &str = "";
++    pub const DLL_EXTENSION: &str = "";
++    pub const EXE_SUFFIX: &str = "";
++    pub const EXE_EXTENSION: &str = "";
++}
+ #[cfg(target_os = "cygwin")]
+ pub mod os {
+     pub const FAMILY: &str = "unix";
+diff --git a/library/std/src/sys/io/error/mod.rs b/library/std/src/sys/io/error/mod.rs
+index 4fca658..2b27fbe 100644
+--- a/library/std/src/sys/io/error/mod.rs
++++ b/library/std/src/sys/io/error/mod.rs
+@@ -43,6 +43,7 @@ cfg_select! {
+         target_os = "vexos",
+         target_family = "wasm",
+         target_os = "zkvm",
++        target_os = "cellos",
+     ) => {
+         mod generic;
+         pub use generic::*;
+diff --git a/library/std/src/sys/pal/cellos/alloc.rs b/library/std/src/sys/pal/cellos/alloc.rs
+new file mode 100644
+index 0000000..41961b1
+--- /dev/null
++++ b/library/std/src/sys/pal/cellos/alloc.rs
+@@ -0,0 +1,16 @@
++use crate::alloc::Layout;
++
++unsafe extern "C" {
++    fn vi_alloc(size: usize, align: usize) -> *mut u8;
++    fn vi_dealloc(ptr: *mut u8, size: usize, align: usize);
++}
++
++#[inline]
++pub unsafe fn alloc(layout: Layout) -> *mut u8 {
++    unsafe { vi_alloc(layout.size(), layout.align()) }
++}
++
++#[inline]
++pub unsafe fn dealloc(ptr: *mut u8, layout: Layout) {
++    unsafe { vi_dealloc(ptr, layout.size(), layout.align()) }
++}
+diff --git a/library/std/src/sys/pal/cellos/common.rs b/library/std/src/sys/pal/cellos/common.rs
+new file mode 100644
+index 0000000..eb94fd7
+--- /dev/null
++++ b/library/std/src/sys/pal/cellos/common.rs
+@@ -0,0 +1,16 @@
++use crate::io as std_io;
++
++pub unsafe fn init(_argc: isize, _argv: *const *const u8, _sigpipe: u8) {}
++pub unsafe fn cleanup() {}
++
++pub fn unsupported<T>() -> std_io::Result<T> {
++    Err(unsupported_err())
++}
++
++pub fn unsupported_err() -> std_io::Error {
++    std_io::Error::UNSUPPORTED_PLATFORM
++}
++
++pub fn abort_internal() -> ! {
++    core::intrinsics::abort();
++}
+diff --git a/library/std/src/sys/pal/cellos/env.rs b/library/std/src/sys/pal/cellos/env.rs
+new file mode 100644
+index 0000000..13df19e
+--- /dev/null
++++ b/library/std/src/sys/pal/cellos/env.rs
+@@ -0,0 +1,3 @@
++pub mod os {
++    pub use crate::sys::env_consts::os::*;
++}
+diff --git a/library/std/src/sys/pal/cellos/mod.rs b/library/std/src/sys/pal/cellos/mod.rs
+new file mode 100644
+index 0000000..18c8ccb
+--- /dev/null
++++ b/library/std/src/sys/pal/cellos/mod.rs
+@@ -0,0 +1,9 @@
++pub mod alloc;
++pub mod common;
++pub mod env;
++pub mod random;
++pub mod thread;
++pub mod time;
++
++pub use common::*;
++pub use random::fill_bytes;
+diff --git a/library/std/src/sys/pal/cellos/random.rs b/library/std/src/sys/pal/cellos/random.rs
+new file mode 100644
+index 0000000..076602d
+--- /dev/null
++++ b/library/std/src/sys/pal/cellos/random.rs
+@@ -0,0 +1,28 @@
++pub fn fill_bytes(bytes: &mut [u8]) {
++    let mut offset = 0;
++    while offset < bytes.len() {
++        let chunk_len = core::cmp::min(bytes.len() - offset, 64);
++        let chunk = &mut bytes[offset..offset + chunk_len];
++        #[cfg(target_arch = "riscv64")]
++        unsafe {
++            let ret: isize;
++            core::arch::asm!(
++                "ecall",
++                inlateout("a0") chunk.as_mut_ptr() as usize => ret,
++                in("a1") chunk.len(),
++                in("a2") 0usize,
++                in("a3") 0usize,
++                in("a7") 37usize, // ViSyscall::GetRandom
++                options(nostack)
++            );
++            if ret <= 0 {
++                panic!("GetRandom failed");
++            }
++            offset += ret as usize;
++        }
++        #[cfg(not(target_arch = "riscv64"))]
++        {
++            panic!("GetRandom unsupported architecture");
++        }
++    }
++}
+diff --git a/library/std/src/sys/pal/cellos/thread.rs b/library/std/src/sys/pal/cellos/thread.rs
+new file mode 100644
+index 0000000..fa44dd9
+--- /dev/null
++++ b/library/std/src/sys/pal/cellos/thread.rs
+@@ -0,0 +1,13 @@
++use crate::io;
++use crate::num::NonZeroUsize;
++
++pub fn available_parallelism() -> io::Result<NonZeroUsize> {
++    Ok(NonZeroUsize::new(1).unwrap())
++}
++
++pub fn yield_now() {
++    #[cfg(target_arch = "riscv64")]
++    unsafe {
++        core::arch::asm!("ecall", in("a7") 0usize, options(nostack));
++    }
++}
+diff --git a/library/std/src/sys/pal/cellos/time.rs b/library/std/src/sys/pal/cellos/time.rs
+new file mode 100644
+index 0000000..8dfb89c
+--- /dev/null
++++ b/library/std/src/sys/pal/cellos/time.rs
+@@ -0,0 +1,39 @@
++use crate::time::Duration;
++
++#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
++pub struct Instant(u64);
++
++impl Instant {
++    pub fn now() -> Instant {
++        let ticks: u64;
++        #[cfg(target_arch = "riscv64")]
++        unsafe {
++            let mut ret: isize;
++            core::arch::asm!(
++                "ecall",
++                inlateout("a0") 0usize => ret,
++                in("a1") 0usize,
++                in("a2") 0usize,
++                in("a3") 0usize,
++                in("a7") 17usize,
++                options(nostack)
++            );
++            ticks = if ret >= 0 { ret as u64 } else { 0 };
++        }
++        #[cfg(not(target_arch = "riscv64"))]
++        {
++            ticks = 0;
++        }
++        Instant(ticks)
++    }
++
++    pub fn checked_sub_instant(&self, other: &Instant) -> Option<Duration> {
++        let diff_ticks = self.0.checked_sub(other.0)?;
++        Some(Duration::from_nanos(diff_ticks.saturating_mul(100)))
++    }
++
++    pub fn checked_add_duration(&self, other: &Duration) -> Option<Instant> {
++        let add_ticks = (other.as_nanos() / 100) as u64;
++        self.0.checked_add(add_ticks).map(Instant)
++    }
++}
+diff --git a/library/std/src/sys/pal/mod.rs b/library/std/src/sys/pal/mod.rs
+index 88d9d42..ac80e3e 100644
+--- a/library/std/src/sys/pal/mod.rs
++++ b/library/std/src/sys/pal/mod.rs
+@@ -60,6 +60,10 @@ cfg_select! {
+         mod zkvm;
+         pub use self::zkvm::*;
+     }
++    target_os = "cellos" => {
++        mod cellos;
++        pub use self::cellos::*;
++    }
+     _ => {
+         mod unsupported;
+         pub use self::unsupported::*;
+diff --git a/library/std/src/sys/personality/mod.rs b/library/std/src/sys/personality/mod.rs
+index eabef92..400cbe5 100644
+--- a/library/std/src/sys/personality/mod.rs
++++ b/library/std/src/sys/personality/mod.rs
+@@ -17,7 +17,7 @@ cfg_select! {
+     target_os = "emscripten" => {
+         mod emcc;
+     }
+-    any(target_env = "msvc", target_family = "wasm", target_os = "motor") => {
++    any(target_env = "msvc", target_family = "wasm", target_os = "motor", target_os = "cellos") => {
+         // This is required by the compiler to exist (e.g., it's a lang item),
+         // but it's never actually called by the compiler because
+         // __CxxFrameHandler3 (msvc) / __gxx_wasm_personality_v0 (wasm) is the
+diff --git a/library/std/src/sys/random/cellos.rs b/library/std/src/sys/random/cellos.rs
+new file mode 100644
+index 0000000..2aec620
+--- /dev/null
++++ b/library/std/src/sys/random/cellos.rs
+@@ -0,0 +1,5 @@
++use crate::sys::pal::random;
++
++pub fn fill_bytes(bytes: &mut [u8]) {
++    random::fill_bytes(bytes);
++}
+diff --git a/library/std/src/sys/random/mod.rs b/library/std/src/sys/random/mod.rs
+index 12346ef..7ed0f00 100644
+--- a/library/std/src/sys/random/mod.rs
++++ b/library/std/src/sys/random/mod.rs
+@@ -102,6 +102,10 @@ cfg_select! {
+         mod zkvm;
+         pub use zkvm::fill_bytes;
+     }
++    target_os = "cellos" => {
++        mod cellos;
++        pub use cellos::fill_bytes;
++    }
+     any(
+         all(target_family = "wasm", target_os = "unknown"),
+         target_os = "xous",
+diff --git a/library/std/src/sys/thread_local/mod.rs b/library/std/src/sys/thread_local/mod.rs
+index e88011a..782de96 100644
+--- a/library/std/src/sys/thread_local/mod.rs
++++ b/library/std/src/sys/thread_local/mod.rs
+@@ -30,6 +30,7 @@ cfg_select! {
+         target_os = "zkvm",
+         target_os = "trusty",
+         target_os = "vexos",
++        target_os = "cellos",
+     ) => {
+         mod no_threads;
+         pub use no_threads::{EagerStorage, LazyStorage, thread_local_inner};
+@@ -100,6 +101,7 @@ pub(crate) mod guard {
+             target_os = "zkvm",
+             target_os = "trusty",
+             target_os = "vexos",
++            target_os = "cellos",
+         ) => {
+             pub(crate) fn enable() {
+                 // FIXME: Right now there is no concept of "thread exit" on
