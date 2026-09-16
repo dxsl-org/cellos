@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "Unsupported Families & Boundary Shims"
-status: pending
+status: completed
 priority: P2
 effort: "1d"
 dependencies: [1, 2]
@@ -62,10 +62,9 @@ std::process::Command::spawn ──► io::Error::from(io::ErrorKind::Unsupporte
    - Provide minimal aborting personality stub for compiler linking.
 
 ## Success Criteria
-- [ ] Attempts to call `std::fs::read` fail cleanly with `ErrorKind::Unsupported` without panicking.
-- [ ] `std::env::consts::OS` evaluates to `"cellos"`.
-- [ ] Binary links successfully with `panic=abort` without unresolved personality or unwind symbols.
-
+- [x] Attempts to call `std::fs::read` fail cleanly with `ErrorKind::Unsupported` without panicking.
+- [x] `std::env::consts::OS` evaluates to `"cellos"`.
+- [x] Binary links successfully with `panic=abort` without unresolved personality or unwind symbols.
 ## Security Considerations
 Fail-closed behavior guarantees that untrusted or unreviewed crates using standard library APIs cannot bypass CellOS capability gates.
 
