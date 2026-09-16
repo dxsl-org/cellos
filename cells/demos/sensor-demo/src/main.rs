@@ -59,6 +59,7 @@ fn cell_main() {
     };
 
     println("[sensor-demo] using BCM BSC1 hardware controller");
+    report_i2c_idle_levels();
     scan_i2c_bus(&mut i2c);
     match run_with_i2c(&mut i2c, false) {
         Ok(()) => {
@@ -75,6 +76,35 @@ fn cell_main() {
     }
     run_bcm_actuator();
     ostd::syscall::sys_exit(0);
+}
+
+/// Inspect the two physical header lines without changing their ALT0 routing.
+///
+/// A low idle level proves a stuck/shorted bus; two high levels prove only that
+/// the header pull-ups are present, not that a slave acknowledged.
+fn report_i2c_idle_levels() {
+    let gpio = match BcmGpio::open() {
+        Ok(gpio) => gpio,
+        Err(_) => {
+            println("[i2c-electrical] GPIO lines unavailable");
+            return;
+        }
+    };
+    match (gpio.read_pin(2), gpio.read_pin(3)) {
+        (Ok(true), Ok(true)) => {
+            println("[i2c-electrical] GPIO2/SDA=high GPIO3/SCL=high (idle)");
+        }
+        (Ok(false), Ok(true)) => {
+            println("[i2c-electrical] GPIO2/SDA=low GPIO3/SCL=high (SDA stuck low)");
+        }
+        (Ok(true), Ok(false)) => {
+            println("[i2c-electrical] GPIO2/SDA=high GPIO3/SCL=low (SCL stuck low)");
+        }
+        (Ok(false), Ok(false)) => {
+            println("[i2c-electrical] GPIO2/SDA=low GPIO3/SCL=low (bus stuck low)");
+        }
+        _ => println("[i2c-electrical] GPIO line read failed"),
+    }
 }
 // Bounded so GPIO is released for other Driver Cells (e.g. pwm-demo, spi-demo).
 const DEMO_CYCLES: u32 = 3;
