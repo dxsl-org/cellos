@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["DEMO_CYCLES"],"fn":["cell_main","main","poll_sensor","print_reading","run_bcm_actuator","run_synthetic","run_with_gpio","run_with_i2c","sleep_1s"],"mod":["sht3x"],"static":["VICELL_MANIFEST"]};
+window.SIDEBAR_ITEMS = {"constant":["DEMO_CYCLES"],"fn":["cell_main","main","poll_sensor","print_hex_u8","print_reading","run_bcm_actuator","run_synthetic","run_with_gpio","run_with_i2c","scan_i2c_bus","sleep_1s"],"mod":["sht3x"],"static":["VICELL_MANIFEST"]};
