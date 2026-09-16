@@ -373,41 +373,45 @@
 <a href=#373 id=373 data-nosnippet>373</a>        </span><span class="kw">let </span>int = <span class="self">self</span>.read32(hcint(ch));
 <a href=#374 id=374 data-nosnippet>374</a>        <span class="kw">let </span>char_val = <span class="self">self</span>.read32(hcchar(ch));
 <a href=#375 id=375 data-nosnippet>375</a>        <span class="self">self</span>.halt_channel(ch);
-<a href=#376 id=376 data-nosnippet>376</a>        ostd::io::print(<span class="string">"[dwc2] TIMEOUT ch="</span>);
-<a href=#377 id=377 data-nosnippet>377</a>        print_hex_val(ch <span class="kw">as </span>u32);
-<a href=#378 id=378 data-nosnippet>378</a>        ostd::io::print(<span class="string">" hcint=0x"</span>);
-<a href=#379 id=379 data-nosnippet>379</a>        print_hex_val(int);
-<a href=#380 id=380 data-nosnippet>380</a>        ostd::io::print(<span class="string">" hcchar=0x"</span>);
-<a href=#381 id=381 data-nosnippet>381</a>        print_hex_val(char_val);
-<a href=#382 id=382 data-nosnippet>382</a>        ostd::io::println(<span class="string">""</span>);
-<a href=#383 id=383 data-nosnippet>383</a>        <span class="prelude-val">Err</span>(ViError::IO)
-<a href=#384 id=384 data-nosnippet>384</a>    }
-<a href=#385 id=385 data-nosnippet>385</a>
-<a href=#386 id=386 data-nosnippet>386</a>    <span class="doccomment">/// Explicitly halt a host channel (required in DWC2 Slave mode).
-<a href=#387 id=387 data-nosnippet>387</a>    </span><span class="kw">fn </span>halt_channel(<span class="kw-2">&amp;</span><span class="self">self</span>, ch: usize) {
-<a href=#388 id=388 data-nosnippet>388</a>        <span class="kw">let </span>reg = hcchar(ch);
-<a href=#389 id=389 data-nosnippet>389</a>        <span class="kw">let </span><span class="kw-2">mut </span>val = <span class="self">self</span>.read32(reg);
-<a href=#390 id=390 data-nosnippet>390</a>        val |= (<span class="number">1 </span>&lt;&lt; <span class="number">30</span>) | (<span class="number">1 </span>&lt;&lt; <span class="number">31</span>); <span class="comment">// CHDIS | CHENA
-<a href=#391 id=391 data-nosnippet>391</a>        </span><span class="self">self</span>.write32(reg, val);
-<a href=#392 id=392 data-nosnippet>392</a>        <span class="comment">// Wait for CHHLTD (bit 1) with a short timeout
-<a href=#393 id=393 data-nosnippet>393</a>        </span><span class="kw">for _ in </span><span class="number">0</span>..<span class="number">10_000 </span>{
-<a href=#394 id=394 data-nosnippet>394</a>            <span class="kw">if </span><span class="self">self</span>.read32(hcint(ch)) &amp; (<span class="number">1 </span>&lt;&lt; <span class="number">1</span>) != <span class="number">0 </span>{
-<a href=#395 id=395 data-nosnippet>395</a>                <span class="kw">break</span>;
-<a href=#396 id=396 data-nosnippet>396</a>            }
-<a href=#397 id=397 data-nosnippet>397</a>            sys_yield();
-<a href=#398 id=398 data-nosnippet>398</a>        }
-<a href=#399 id=399 data-nosnippet>399</a>        <span class="self">self</span>.write32(hcint(ch), <span class="number">0xFFFF_FFFF</span>);
-<a href=#400 id=400 data-nosnippet>400</a>    }
-<a href=#401 id=401 data-nosnippet>401</a>}
-<a href=#402 id=402 data-nosnippet>402</a>
-<a href=#403 id=403 data-nosnippet>403</a><span class="kw">fn </span>print_hex_val(val: u32) {
-<a href=#404 id=404 data-nosnippet>404</a>    <span class="kw">const </span>HEX: <span class="kw-2">&amp;</span>[u8; <span class="number">16</span>] = <span class="string">b"0123456789ABCDEF"</span>;
-<a href=#405 id=405 data-nosnippet>405</a>    <span class="kw">let </span><span class="kw-2">mut </span>buf = [<span class="number">0u8</span>; <span class="number">8</span>];
-<a href=#406 id=406 data-nosnippet>406</a>    <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..<span class="number">8 </span>{
-<a href=#407 id=407 data-nosnippet>407</a>        buf[<span class="number">7 </span>- i] = HEX[((val &gt;&gt; (i * <span class="number">4</span>)) &amp; <span class="number">0xF</span>) <span class="kw">as </span>usize];
-<a href=#408 id=408 data-nosnippet>408</a>    }
-<a href=#409 id=409 data-nosnippet>409</a>    <span class="kw">if let </span><span class="prelude-val">Ok</span>(s) = core::str::from_utf8(<span class="kw-2">&amp;</span>buf) {
-<a href=#410 id=410 data-nosnippet>410</a>        ostd::io::print(s);
-<a href=#411 id=411 data-nosnippet>411</a>    }
-<a href=#412 id=412 data-nosnippet>412</a>}
+<a href=#376 id=376 data-nosnippet>376</a>        <span class="kw">static </span>TIMEOUT_COUNT: core::sync::atomic::AtomicUsize =
+<a href=#377 id=377 data-nosnippet>377</a>            core::sync::atomic::AtomicUsize::new(<span class="number">0</span>);
+<a href=#378 id=378 data-nosnippet>378</a>        <span class="kw">if </span>TIMEOUT_COUNT.fetch_add(<span class="number">1</span>, core::sync::atomic::Ordering::Relaxed) &lt; <span class="number">3 </span>{
+<a href=#379 id=379 data-nosnippet>379</a>            ostd::io::print(<span class="string">"[dwc2] TIMEOUT ch="</span>);
+<a href=#380 id=380 data-nosnippet>380</a>            print_hex_val(ch <span class="kw">as </span>u32);
+<a href=#381 id=381 data-nosnippet>381</a>            ostd::io::print(<span class="string">" hcint=0x"</span>);
+<a href=#382 id=382 data-nosnippet>382</a>            print_hex_val(int);
+<a href=#383 id=383 data-nosnippet>383</a>            ostd::io::print(<span class="string">" hcchar=0x"</span>);
+<a href=#384 id=384 data-nosnippet>384</a>            print_hex_val(char_val);
+<a href=#385 id=385 data-nosnippet>385</a>            ostd::io::println(<span class="string">""</span>);
+<a href=#386 id=386 data-nosnippet>386</a>        }
+<a href=#387 id=387 data-nosnippet>387</a>        <span class="prelude-val">Err</span>(ViError::IO)
+<a href=#388 id=388 data-nosnippet>388</a>    }
+<a href=#389 id=389 data-nosnippet>389</a>
+<a href=#390 id=390 data-nosnippet>390</a>    <span class="doccomment">/// Explicitly halt a host channel (required in DWC2 Slave mode).
+<a href=#391 id=391 data-nosnippet>391</a>    </span><span class="kw">fn </span>halt_channel(<span class="kw-2">&amp;</span><span class="self">self</span>, ch: usize) {
+<a href=#392 id=392 data-nosnippet>392</a>        <span class="kw">let </span>reg = hcchar(ch);
+<a href=#393 id=393 data-nosnippet>393</a>        <span class="kw">let </span><span class="kw-2">mut </span>val = <span class="self">self</span>.read32(reg);
+<a href=#394 id=394 data-nosnippet>394</a>        val |= (<span class="number">1 </span>&lt;&lt; <span class="number">30</span>) | (<span class="number">1 </span>&lt;&lt; <span class="number">31</span>); <span class="comment">// CHDIS | CHENA
+<a href=#395 id=395 data-nosnippet>395</a>        </span><span class="self">self</span>.write32(reg, val);
+<a href=#396 id=396 data-nosnippet>396</a>        <span class="comment">// Wait for CHHLTD (bit 1) with a short timeout
+<a href=#397 id=397 data-nosnippet>397</a>        </span><span class="kw">for _ in </span><span class="number">0</span>..<span class="number">10_000 </span>{
+<a href=#398 id=398 data-nosnippet>398</a>            <span class="kw">if </span><span class="self">self</span>.read32(hcint(ch)) &amp; (<span class="number">1 </span>&lt;&lt; <span class="number">1</span>) != <span class="number">0 </span>{
+<a href=#399 id=399 data-nosnippet>399</a>                <span class="kw">break</span>;
+<a href=#400 id=400 data-nosnippet>400</a>            }
+<a href=#401 id=401 data-nosnippet>401</a>            sys_yield();
+<a href=#402 id=402 data-nosnippet>402</a>        }
+<a href=#403 id=403 data-nosnippet>403</a>        <span class="self">self</span>.write32(hcint(ch), <span class="number">0xFFFF_FFFF</span>);
+<a href=#404 id=404 data-nosnippet>404</a>    }
+<a href=#405 id=405 data-nosnippet>405</a>}
+<a href=#406 id=406 data-nosnippet>406</a>
+<a href=#407 id=407 data-nosnippet>407</a><span class="kw">fn </span>print_hex_val(val: u32) {
+<a href=#408 id=408 data-nosnippet>408</a>    <span class="kw">const </span>HEX: <span class="kw-2">&amp;</span>[u8; <span class="number">16</span>] = <span class="string">b"0123456789ABCDEF"</span>;
+<a href=#409 id=409 data-nosnippet>409</a>    <span class="kw">let </span><span class="kw-2">mut </span>buf = [<span class="number">0u8</span>; <span class="number">8</span>];
+<a href=#410 id=410 data-nosnippet>410</a>    <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..<span class="number">8 </span>{
+<a href=#411 id=411 data-nosnippet>411</a>        buf[<span class="number">7 </span>- i] = HEX[((val &gt;&gt; (i * <span class="number">4</span>)) &amp; <span class="number">0xF</span>) <span class="kw">as </span>usize];
+<a href=#412 id=412 data-nosnippet>412</a>    }
+<a href=#413 id=413 data-nosnippet>413</a>    <span class="kw">if let </span><span class="prelude-val">Ok</span>(s) = core::str::from_utf8(<span class="kw-2">&amp;</span>buf) {
+<a href=#414 id=414 data-nosnippet>414</a>        ostd::io::print(s);
+<a href=#415 id=415 data-nosnippet>415</a>    }
+<a href=#416 id=416 data-nosnippet>416</a>}
 </code></pre></div></section></main></body></html>
