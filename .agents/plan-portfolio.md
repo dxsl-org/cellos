@@ -10,11 +10,10 @@ promoted through this index.
 
 ## Active
 
+- `260916-1200-tier1-rust-std-pal-implementation` — Tier 1 Rust `std` PAL in-tree implementation (custom target specs, sysroot overlay, PAL primitives, workload parity).
 - `260913-2002-g2-level-a-ai-inference` — Spec 24 CPU inference path (CP-1..CP-3); phases
   01-04 complete at the host/QEMU ceilings, NPU/GPU/Tier 2 checkpoints remain gated.
-- `260727-2101-midori-lessons-cellos` — sole active feature program. Exit gate:
-  runtime-close phase 02 and complete phases 04/07/08.
-
+- `260727-2101-midori-lessons-cellos` — complete convergence program (D39).
 Allowed side work is limited to P0 security fixes, broken-build/CI repairs, and
 verification-only closure that opens no new feature program.
 
