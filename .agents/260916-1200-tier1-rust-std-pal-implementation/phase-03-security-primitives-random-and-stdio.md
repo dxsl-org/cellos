@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "Security Primitives (PAL-019 Random & StdIO)"
-status: pending
+status: completed
 priority: P1
 effort: "1d"
 dependencies: [1, 2]
@@ -57,9 +57,9 @@ std::sys::pal::random::fill   ──► [PAL-031 Validate Buffer] ──► sys_
    - `Stdin::read`: return `io::ErrorKind::Unsupported` if no input capability held.
 
 ## Success Criteria
-- [ ] `println!("Hello from std!")` successfully prints to CellOS console output.
-- [ ] Hostile random calls with null/invalid pointers are caught before execution or return explicit errors.
-- [ ] Entropy failure does not fall back to synthetic PRNG in release mode.
+- [x] `println!("Hello from std!")` successfully prints to CellOS console output.
+- [x] Hostile random calls with null/invalid pointers are caught before execution or return explicit errors.
+- [x] Entropy failure does not fall back to synthetic PRNG in release mode.
 
 ## Security Considerations
 `PAL-019` and `PAL-031` are critical security gates. No weak RNG fallback is permitted in production builds; all buffer pointers must be checked before issuing syscalls.

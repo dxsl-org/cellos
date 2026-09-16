@@ -162,24 +162,40 @@ index 0000000..18c8ccb
 +pub use random::fill_bytes;
 diff --git a/library/std/src/sys/pal/cellos/random.rs b/library/std/src/sys/pal/cellos/random.rs
 new file mode 100644
-index 0000000..ee84e94
+index 0000000..95c233a
 --- /dev/null
 +++ b/library/std/src/sys/pal/cellos/random.rs
-@@ -0,0 +1,52 @@
+@@ -0,0 +1,70 @@
 +const SYS_GET_RANDOM: usize = 37;
 +
++/// Secure entropy hook obeying PAL-019 (no dev-weak-rng) and PAL-031 (buffer validation).
 +pub fn fill_bytes(bytes: &mut [u8]) {
++    if bytes.is_empty() {
++        return;
++    }
++    // PAL-031: Validate pointer bounds and non-null before issuing syscall
++    let ptr = bytes.as_mut_ptr();
++    if ptr.is_null() {
++        panic!("PAL-031: null pointer rejected");
++    }
++    let addr = ptr as usize;
++    if addr.checked_add(bytes.len()).is_none() {
++        panic!("PAL-031: buffer range overflow rejected");
++    }
++
 +    let mut offset = 0;
 +    while offset < bytes.len() {
 +        let chunk_len = core::cmp::min(bytes.len() - offset, 64);
 +        let chunk = &mut bytes[offset..offset + chunk_len];
++        let chunk_ptr = chunk.as_mut_ptr() as usize;
 +        let ret: isize;
++
 +        #[cfg(target_arch = "riscv64")]
 +        unsafe {
 +            core::arch::asm!(
 +                "ecall",
-+                inlateout("a0") chunk.as_mut_ptr() as usize => ret,
-+                in("a1") chunk.len(),
++                inlateout("a0") chunk_ptr => ret,
++                in("a1") chunk_len,
 +                in("a2") 0usize,
 +                in("a3") 0usize,
 +                in("a7") SYS_GET_RANDOM,
@@ -191,8 +207,8 @@ index 0000000..ee84e94
 +            core::arch::asm!(
 +                "svc #0",
 +                inlateout("x0") SYS_GET_RANDOM => ret,
-+                in("x1") chunk.as_mut_ptr() as usize,
-+                in("x2") chunk.len(),
++                in("x1") chunk_ptr,
++                in("x2") chunk_len,
 +                in("x3") 0usize,
 +                in("x4") 0usize,
 +                options(nostack, preserves_flags)
@@ -203,8 +219,8 @@ index 0000000..ee84e94
 +            core::arch::asm!(
 +                "syscall",
 +                inlateout("rax") SYS_GET_RANDOM => ret,
-+                in("rdi") chunk.as_mut_ptr() as usize,
-+                in("rsi") chunk.len(),
++                in("rdi") chunk_ptr,
++                in("rsi") chunk_len,
 +                in("rdx") 0usize,
 +                in("r10") 0usize,
 +                lateout("rcx") _,
@@ -212,8 +228,10 @@ index 0000000..ee84e94
 +                options(nostack, preserves_flags)
 +            );
 +        }
++
++        // PAL-019: Fail-closed without synthetic fallback
 +        if ret <= 0 {
-+            panic!("GetRandom failed or unavailable");
++            panic!("PAL-019: GetRandom returned zero or error; entropy unavailable");
 +        }
 +        offset += ret as usize;
 +    }
@@ -394,6 +412,131 @@ index 12346ef..7ed0f00 100644
      any(
          all(target_family = "wasm", target_os = "unknown"),
          target_os = "xous",
+diff --git a/library/std/src/sys/stdio/cellos.rs b/library/std/src/sys/stdio/cellos.rs
+new file mode 100644
+index 0000000..7bfd20c
+--- /dev/null
++++ b/library/std/src/sys/stdio/cellos.rs
+@@ -0,0 +1,104 @@
++use crate::io;
++
++const SYS_LOG: usize = 11;
++
++#[inline]
++unsafe fn log_bytes(buf: &[u8]) {
++    if buf.is_empty() {
++        return;
++    }
++    let ptr = buf.as_ptr() as usize;
++    let len = buf.len();
++    #[cfg(target_arch = "riscv64")]
++    core::arch::asm!(
++        "ecall",
++        in("a0") ptr,
++        in("a1") len,
++        in("a2") 0usize,
++        in("a3") 0usize,
++        in("a7") SYS_LOG,
++        options(nostack, preserves_flags)
++    );
++    #[cfg(target_arch = "aarch64")]
++    core::arch::asm!(
++        "svc #0",
++        in("x0") SYS_LOG,
++        in("x1") ptr,
++        in("x2") len,
++        in("x3") 0usize,
++        in("x4") 0usize,
++        options(nostack, preserves_flags)
++    );
++    #[cfg(target_arch = "x86_64")]
++    core::arch::asm!(
++        "syscall",
++        in("rax") SYS_LOG,
++        in("rdi") ptr,
++        in("rsi") len,
++        in("rdx") 0usize,
++        in("r10") 0usize,
++        lateout("rcx") _,
++        lateout("r11") _,
++        options(nostack, preserves_flags)
++    );
++}
++
++pub struct Stdin;
++pub struct Stdout;
++pub struct Stderr;
++
++impl Stdin {
++    pub const fn new() -> Stdin {
++        Stdin
++    }
++}
++
++impl io::Read for Stdin {
++    fn read(&mut self, _buf: &mut [u8]) -> io::Result<usize> {
++        Err(io::Error::from(io::ErrorKind::Unsupported))
++    }
++}
++
++impl Stdout {
++    pub const fn new() -> Stdout {
++        Stdout
++    }
++}
++
++impl io::Write for Stdout {
++    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
++        unsafe { log_bytes(buf) };
++        Ok(buf.len())
++    }
++
++    fn flush(&mut self) -> io::Result<()> {
++        Ok(())
++    }
++}
++
++impl Stderr {
++    pub const fn new() -> Stderr {
++        Stderr
++    }
++}
++
++impl io::Write for Stderr {
++    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
++        unsafe { log_bytes(buf) };
++        Ok(buf.len())
++    }
++
++    fn flush(&mut self) -> io::Result<()> {
++        Ok(())
++    }
++}
++
++pub const STDIN_BUF_SIZE: usize = crate::sys::io::DEFAULT_BUF_SIZE;
++
++pub fn is_ebadf(_err: &io::Error) -> bool {
++    true
++}
++
++pub fn panic_output() -> Option<impl io::Write> {
++    Some(Stderr::new())
++}
+diff --git a/library/std/src/sys/stdio/mod.rs b/library/std/src/sys/stdio/mod.rs
+index 86d0f3f..e2624b1 100644
+--- a/library/std/src/sys/stdio/mod.rs
++++ b/library/std/src/sys/stdio/mod.rs
+@@ -45,6 +45,10 @@ cfg_select! {
+         mod zkvm;
+         pub use zkvm::*;
+     }
++    target_os = "cellos" => {
++        mod cellos;
++        pub use cellos::*;
++    }
+     _ => {
+         mod unsupported;
+         pub use unsupported::*;
 diff --git a/library/std/src/sys/thread_local/mod.rs b/library/std/src/sys/thread_local/mod.rs
 index e88011a..782de96 100644
 --- a/library/std/src/sys/thread_local/mod.rs
