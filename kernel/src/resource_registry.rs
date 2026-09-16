@@ -343,16 +343,30 @@ pub fn request_mmio(cell_id: CellId, base: usize, len: usize, allowed_devices: u
         return Err(ViError::PermissionDenied);
     }
 
-    // 2. Overlap check — no two cells may share a byte
+    // 2. Overlap check — no two live cells may share a byte
     let mut reg = REGISTRY.lock();
-    for (&eb, &(el, _owner)) in reg.iter() {
+    reg.retain(|&eb, &mut (el, owner)| {
         let ee = eb + el;
-        // Ranges overlap when NOT (end ≤ eb OR base ≥ ee)
+        if !(end <= eb || base >= ee) && owner == cell_id {
+            return false;
+        }
+        true
+    });
+    for (&eb, &(el, owner)) in reg.iter() {
+        let ee = eb + el;
         if !(end <= eb || base >= ee) {
+            if let Some(sched) = crate::task::SCHEDULER.lock().as_ref() {
+                if let Some(task) = sched.tasks.get(&(owner.0 as usize)) {
+                    if matches!(task.state, crate::task::tcb::TaskState::Terminated { .. }) {
+                        continue;
+                    }
+                } else {
+                    continue;
+                }
+            }
             return Err(ViError::AlreadyExists);
         }
     }
-
     reg.insert(base, (len, cell_id));
     Ok(())
 }

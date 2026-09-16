@@ -33,35 +33,49 @@ ostd::cell_main!(cell_main);
 fn cell_main() {
     println("[sensor-demo] SHT3x I2C probe (addr 0x44)");
 
-    if let Ok(mut i2c) = BcmBscI2c::open() {
-        println("[sensor-demo] using BCM BSC1 hardware controller");
-        scan_i2c_bus(&mut i2c);
-        match run_with_i2c(&mut i2c, false) {
-            Ok(()) => {
-                println("[phase03-i2c] PASS: SHT3x read via BCM BSC1");
-                return;
+    let mut i2c = match BcmBscI2c::open() {
+        Ok(i2c) => i2c,
+        Err(e) => {
+            ostd::io::print("[sensor-demo] BcmBscI2c::open failed: ");
+            match e {
+                types::ViError::AlreadyExists => {
+                    ostd::io::println("AlreadyExists (MMIO held by previous run)");
+                }
+                types::ViError::PermissionDenied => ostd::io::println("PermissionDenied"),
+                types::ViError::NotFound => ostd::io::println("NotFound"),
+                _ => ostd::io::println("Unknown error"),
             }
-            Err(hal_i2c::I2cError::NackAddress) => {
-                println("[phase03-i2c] PASS: explicit address NACK from BCM BSC1")
+            match Pl061Gpio::open() {
+                Ok(gpio) => {
+                    run_with_gpio(gpio);
+                }
+                Err(_) => {
+                    println("[sensor-demo] Hardware I2C/GPIO unavailable — synthetic-only mode");
+                    run_synthetic();
+                }
             }
-            Err(hal_i2c::I2cError::NackData) => {
-                println("[phase03-i2c] PASS: explicit data NACK from BCM BSC1")
-            }
-            Err(hal_i2c::I2cError::BusError) => println("[phase03-i2c] FAIL: BCM BSC1 bus error"),
+            ostd::syscall::sys_exit(0);
         }
-        run_bcm_actuator();
-        return;
-    }
+    };
 
-    match Pl061Gpio::open() {
-        Ok(gpio) => run_with_gpio(gpio),
-        Err(_) => {
-            println("[sensor-demo] GPIO unavailable — synthetic-only mode");
-            run_synthetic();
+    println("[sensor-demo] using BCM BSC1 hardware controller");
+    scan_i2c_bus(&mut i2c);
+    match run_with_i2c(&mut i2c, false) {
+        Ok(()) => {
+            println("[phase03-i2c] PASS: SHT3x read via BCM BSC1");
+            ostd::syscall::sys_exit(0);
         }
+        Err(hal_i2c::I2cError::NackAddress) => {
+            println("[phase03-i2c] PASS: explicit address NACK from BCM BSC1");
+        }
+        Err(hal_i2c::I2cError::NackData) => {
+            println("[phase03-i2c] PASS: explicit data NACK from BCM BSC1");
+        }
+        Err(hal_i2c::I2cError::BusError) => println("[phase03-i2c] FAIL: BCM BSC1 bus error"),
     }
+    run_bcm_actuator();
+    ostd::syscall::sys_exit(0);
 }
-
 // Bounded so GPIO is released for other Driver Cells (e.g. pwm-demo, spi-demo).
 const DEMO_CYCLES: u32 = 3;
 
