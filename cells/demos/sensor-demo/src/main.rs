@@ -35,6 +35,7 @@ fn cell_main() {
 
     if let Ok(mut i2c) = BcmBscI2c::open() {
         println("[sensor-demo] using BCM BSC1 hardware controller");
+        scan_i2c_bus(&mut i2c);
         match run_with_i2c(&mut i2c, false) {
             Ok(()) => {
                 println("[phase03-i2c] PASS: SHT3x read via BCM BSC1");
@@ -172,4 +173,32 @@ fn run_synthetic() {
 fn sleep_1s() {
     let mut buf = [0u8; 64];
     let _ = sys_recv_timeout(0, &mut buf, 100);
+}
+
+fn print_hex_u8(val: u8) {
+    const HEX: &[u8; 16] = b"0123456789ABCDEF";
+    let h = [HEX[(val >> 4) as usize], HEX[(val & 0xF) as usize]];
+    if let Ok(s) = core::str::from_utf8(&h) {
+        ostd::io::print(s);
+    }
+}
+
+fn scan_i2c_bus(i2c: &mut impl ViI2c<Error = hal_i2c::I2cError>) {
+    println("[i2c-scan] Scanning I2C bus (addresses 0x03..0x77)...");
+    let mut found = 0;
+    for addr in 0x03..=0x77 {
+        let mut buf = [0u8; 1];
+        if i2c.read(addr, &mut buf).is_ok() {
+            ostd::io::print("[i2c-scan] -> Device detected at address 0x");
+            print_hex_u8(addr);
+            println("");
+            found += 1;
+        }
+    }
+    if found == 0 {
+        println("[i2c-scan] No I2C devices answered ACK.");
+        println("[i2c-scan] Check wires: SDA->Pin 3, SCL->Pin 5, VCC->Pin 1, GND->Pin 9");
+    } else {
+        println("[i2c-scan] Scan completed.");
+    }
 }
