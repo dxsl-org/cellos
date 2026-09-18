@@ -307,7 +307,7 @@ pub(crate) fn reusable_cell_id_contract() -> bool {
     loop {
         match QuotaReservation::reserve_next(DEFAULT_QUOTA_BYTES) {
             Ok(reservation) => held.push(reservation),
-            Err(types::ViError::PermissionDenied) => break,
+            Err(types::ViError::OutOfMemory) | Err(types::ViError::PermissionDenied) => break,
             Err(_) => return false,
         }
     }

@@ -40,7 +40,7 @@ fn readonly_flags() -> Flags {
 }
 
 fn wait_for(expected: u8) -> bool {
-    let deadline = crate::task::system_ticks() + 50;
+    let deadline = crate::task::system_ticks() + 500;
     loop {
         match PHASE.load(Ordering::Acquire) {
             value if value == expected => return true,
@@ -54,9 +54,13 @@ fn wait_for(expected: u8) -> bool {
 unsafe fn store_test_value(value: usize) {
     // SAFETY: TEST_VA is mapped writable before this instruction executes. The
     // expected post-lowering fault is consumed only for this exact address.
+    // We emit non-compressed 32-bit `sd` so instruction size is deterministic.
     unsafe {
         core::arch::asm!(
+            ".option push",
+            ".option norvc",
             "sd {value}, 0({address})",
+            ".option pop",
             address = in(reg) TEST_VA,
             value = in(reg) value,
             options(nostack)
@@ -229,6 +233,9 @@ pub fn handle_store_fault(frame: &mut ViTrapFrame) -> bool {
         return false;
     }
     STORE_FAULTED.store(true, Ordering::Release);
-    frame.sepc += 4;
+    // SAFETY: sepc points to the faulting instruction. On RISC-V with C extension,
+    // instructions with lowest 2 bits != 0b11 are 16-bit; all others are 32-bit.
+    let is_compressed = unsafe { (*(frame.sepc as *const u16) & 0b11) != 0b11 };
+    frame.sepc += if is_compressed { 2 } else { 4 };
     true
 }

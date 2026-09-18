@@ -3,6 +3,13 @@
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
 ## [Unreleased] Development-first hardware-constrained execution
+## [2026-09-18] Fix RV64 compressed instruction trap decoding in TLB shootdown self-test and align quota exhaustion contract
+- Fixed `handle_store_fault` in `kernel/src/memory/tlb_shootdown_selftest.rs`: dynamically detect instruction width (`is_compressed ? 2 : 4`) from opcode bits `insn & 0b11 != 0b11` rather than hardcoding `frame.sepc += 4`. When the compiler emits 16-bit compressed `c.sd`, advancing 4 bytes previously desynchronized execution into the middle of the next instruction, corrupting `PHASE` with `0xC0` (192).
+- Added `.option push; .option norvc; sd ...; .option pop` in `store_test_value` to guarantee 32-bit store emission on RV64.
+- Increased `wait_for` timeout in `tlb_shootdown_selftest.rs` from 50 to 500 ticks to avoid premature timeouts under QEMU multi-hart TCG scheduling.
+- Aligned `reusable_cell_id_contract` in `kernel/src/memory/cell_quota.rs` to handle `ViError::OutOfMemory` when all 64 CellId slots are saturated, matching `QuotaReservation::reserve_next` return contract.
+- Synchronized signed `wx-test` into `disk_v3.img` and refreshed embedded bootstrap chain.
+- Verified: `tests/integration/tests/wx-cross-hart-tlb.rs` (1/1 PASS in 2.23s), `wx-text-write.rs` (2/2 PASS in 7.54s), `atomic-publication.rs` (1/1 PASS in 6.23s), and all 16 contract tests in `tests/integration` (PASS).
 
 ## [2026-09-18] Complete AArch64 peripheral demo packaging, launch profiles, and QEMU integration suites
 - Added `/bin/adc-demo` and `/bin/can-demo` to `reviewed_user_target_ceiling` in `kernel/src/loader/launch_profile/targets.rs` with `CapSet::EMPTY`.
