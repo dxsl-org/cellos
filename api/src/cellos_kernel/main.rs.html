@@ -504,7 +504,7 @@
 <a href=#504 id=504 data-nosnippet>504</a>            <span class="macro">log::error!</span>(<span class="string">"[x86-gate] timer CLOSED: validated MADT + HPET required"</span>);
 <a href=#505 id=505 data-nosnippet>505</a>        }
 <a href=#506 id=506 data-nosnippet>506</a>
-<a href=#507 id=507 data-nosnippet>507</a>        <span class="comment">// Tier 3b x86 VMM P01: enter root-of-virtualization on the BSP.
+<a href=#507 id=507 data-nosnippet>507</a>        <span class="comment">// Tier 3 x86 VMM P01: enter root-of-virtualization on the BSP.
 <a href=#508 id=508 data-nosnippet>508</a>        // SVM first (TCG-testable); VMX only on genuine Intel (KVM/HW lane).
 <a href=#509 id=509 data-nosnippet>509</a>        // Failure is non-fatal — the kernel runs fine without virt; the
 <a href=#510 id=510 data-nosnippet>510</a>        // HypervisorCap gate simply stays closed (has_x86_virt() == false).
@@ -996,7 +996,7 @@
 <a href=#996 id=996 data-nosnippet>996</a>            </span><span class="kw">crate</span>::layer2_selftest::run_mte_selftest();
 <a href=#997 id=997 data-nosnippet>997</a>            <span class="attr">#[cfg(target_arch = <span class="string">"x86_64"</span>)]
 <a href=#998 id=998 data-nosnippet>998</a>            </span><span class="kw">crate</span>::layer2_selftest::run_pku_selftest();
-<a href=#999 id=999 data-nosnippet>999</a>            <span class="comment">// Tier 3b x86 VMM P03 M1: SVM world-switch smoke (port-out 'K' + HLT).
+<a href=#999 id=999 data-nosnippet>999</a>            <span class="comment">// Tier 3 x86 VMM P03 M1: SVM world-switch smoke (port-out 'K' + HLT).
 <a href=#1000 id=1000 data-nosnippet>1000</a>            // Only meaningful when SVM root operation was entered at boot.
 <a href=#1001 id=1001 data-nosnippet>1001</a>            </span><span class="attr">#[cfg(target_arch = <span class="string">"x86_64"</span>)]
 <a href=#1002 id=1002 data-nosnippet>1002</a>            </span><span class="kw">if </span>cpu_features::has_x86_virt() {

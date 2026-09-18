@@ -13,7 +13,7 @@
 <a href=#13 id=13 data-nosnippet>13</a>/// QEMU `virtualization=on`).  Always `false` on non-aarch64 targets.
 <a href=#14 id=14 data-nosnippet>14</a></span><span class="kw">static </span>HAS_EL2: AtomicBool = AtomicBool::new(<span class="bool-val">false</span>);
 <a href=#15 id=15 data-nosnippet>15</a>
-<a href=#16 id=16 data-nosnippet>16</a><span class="doccomment">/// x86 hardware-virtualization vendor detected via CPUID (Tier 3b x86 VMM).
+<a href=#16 id=16 data-nosnippet>16</a><span class="doccomment">/// x86 hardware-virtualization vendor detected via CPUID (Tier 3 x86 VMM).
 <a href=#17 id=17 data-nosnippet>17</a></span><span class="attr">#[cfg(target_arch = <span class="string">"x86_64"</span>)]
 <a href=#18 id=18 data-nosnippet>18</a>#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 <a href=#19 id=19 data-nosnippet>19</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">enum </span>X86Virt {
