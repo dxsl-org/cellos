@@ -357,7 +357,7 @@ pub fn request_mmio(cell_id: CellId, base: usize, len: usize, allowed_devices: u
         if !(end <= eb || base >= ee) {
             if let Some(sched) = crate::task::SCHEDULER.lock().as_ref() {
                 if let Some(task) = sched.tasks.get(&(owner.0 as usize)) {
-                    if matches!(task.state, crate::task::tcb::TaskState::Terminated { .. }) {
+                    if matches!(task.state, crate::task::tcb::TaskState::Terminated) {
                         continue;
                     }
                 } else {

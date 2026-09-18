@@ -176,19 +176,28 @@ pub fn publish_prepared(
         if let (Some(ks), Some(us), Some(seg)) =
             (&task.kernel_stack, &task.user_stack, &task.segment_mem)
         {
-            if let Ok(domain) = crate::memory::address_space::create_cell_domain(ks, us, seg) {
-                log::info!(
-                    "[domain] admitted cell '{}' to Tier 2 Paged Domain (SATP isolation)",
-                    task.name
-                );
-                task.bind_address_space(domain);
-            } else {
-                log::warn!(
-                    "[domain] failed to create domain for '{}', falling back to SAS",
-                    task.name
-                );
-            }
+            let domain = crate::memory::address_space::create_cell_domain(ks, us, seg)
+                .map_err(|_| ViError::OutOfMemory)?;
+            log::info!(
+                "[domain] admitted cell '{}' to Tier 2 Paged Domain (SATP isolation)",
+                task.name
+            );
+            task.bind_address_space(domain);
+        } else {
+            log::error!(
+                "[domain] cannot create Tier 2 domain for '{}': missing stacks or segments",
+                task.name
+            );
+            return Err(ViError::InvalidInput);
         }
+    }
+    #[cfg(not(all(feature = "native-domains", target_arch = "riscv64")))]
+    if state.is_domain {
+        log::error!(
+            "[domain] Tier 2 Native Domain requested for '{}' but unsupported on this architecture/configuration",
+            task.name
+        );
+        return Err(ViError::NotSupported);
     }
 
     sched.tasks.insert(tid, task);

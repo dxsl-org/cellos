@@ -130,6 +130,9 @@ impl EarlyLoader {
     /// `ViError::NotFound` if the table is unprobed or lacks `path`;
     /// `ViError::InvalidInput` if the entry has zero size.
     fn read_from_block_table(path: &str) -> ViResult<Box<[u8]>> {
+        if CELL_TABLE.lock().is_none() {
+            let _ = Self::probe();
+        }
         let (data_lba, size) = {
             let guard = CELL_TABLE.lock();
             let table = guard.as_ref().ok_or(ViError::NotFound)?;
