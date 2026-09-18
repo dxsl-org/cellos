@@ -114,7 +114,11 @@ impl QuotaReservation {
                 Err(error) => return Err(error),
             }
         }
-        Err(types::ViError::PermissionDenied)
+        log::error!(
+            "Stack alloc failed: cell quota table exhausted (max={})",
+            MAX_CELLS
+        );
+        Err(types::ViError::OutOfMemory)
     }
 
     pub(crate) fn cell_id(&self) -> CellId {

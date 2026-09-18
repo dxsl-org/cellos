@@ -40,12 +40,18 @@ export CC_riscv64gc_unknown_none_elf="${CC_riscv64gc_unknown_none_elf:-riscv64-u
 # (already used for aarch64/x86_64 clang builds) fills the gap.
 export CFLAGS_riscv64gc_unknown_none_elf="${CFLAGS_riscv64gc_unknown_none_elf:--march=rv64gc -mabi=lp64d -mcmodel=medany -ffreestanding -DLFS_NO_INTRINSICS -I$(pwd)/third_party/freestanding-include}"
 
+EXTRA_PACKAGES=()
+if [[ "${CELLOS_INCLUDE_CAPACITY_PROBE:-0}" == "1" ]]; then
+    EXTRA_PACKAGES+=(-p app-sys-tools -p app-bench)
+fi
+
 echo "==> Building bootstrap cells (init, shell, vfs, config, platform, block)..."
 cargo build --release \
     --target riscv64gc-unknown-none-elf \
     -Z build-std=core,alloc \
     -p app-init -p app-shell -p service-vfs -p service-config \
-    -p service-platform -p driver-virtio-blk
+    -p service-platform -p driver-virtio-blk \
+    "${EXTRA_PACKAGES[@]}"
 
 for bin in app-init app-shell service-vfs service-config platform driver-virtio-blk; do
     if [[ ! -f "$REL/$bin" ]]; then
@@ -56,10 +62,28 @@ done
 # shellcheck source=scripts/lib-sign-cells.sh
 source scripts/lib-sign-cells.sh
 
-echo "==> Signing cells..."
-sign_cells "$REL/app-init" "$REL/app-shell" "$REL/service-vfs" \
-           "$REL/service-config" "$REL/platform" "$REL/driver-virtio-blk"
+CELLS_TO_SIGN=(
+    "$REL/app-init" "$REL/app-shell" "$REL/service-vfs"
+    "$REL/service-config" "$REL/platform" "$REL/driver-virtio-blk"
+)
+EXTRA_FAT_ARGS=()
+if [[ "${CELLOS_INCLUDE_CAPACITY_PROBE:-0}" == "1" ]]; then
+    if [[ -f "$REL/free" ]]; then
+        CELLS_TO_SIGN+=("$REL/free")
+        EXTRA_FAT_ARGS+=("$REL/free" "/bin/free")
+    fi
+    if [[ -f "$REL/capacity-probe" ]]; then
+        CELLS_TO_SIGN+=("$REL/capacity-probe")
+        EXTRA_FAT_ARGS+=("$REL/capacity-probe" "/bin/capacity-probe")
+    fi
+    if [[ -f "$REL/bench-probe" ]]; then
+        CELLS_TO_SIGN+=("$REL/bench-probe")
+        EXTRA_FAT_ARGS+=("$REL/bench-probe" "/bin/bench-probe")
+    fi
+fi
 
+echo "==> Signing cells..."
+sign_cells "${CELLS_TO_SIGN[@]}"
 echo "==> Assembling $EMB/kernel_fs.img..."
 TMPDIR_KFS=$(mktemp -d)
 trap 'rm -rf "$TMPDIR_KFS"' EXIT
@@ -86,8 +110,8 @@ printf 'Welcome to ViCell!' > "$TMPDIR_KFS/readme"
     "$REL/driver-virtio-blk" /bin/block \
     "$TMPDIR_KFS/hostname"   /etc/hostname \
     "$TMPDIR_KFS/readme"     /readme.txt \
-    "$TMPDIR_KFS/POLICY.BIN" /POLICY.BIN
-
+    "$TMPDIR_KFS/POLICY.BIN" /POLICY.BIN \
+    "${EXTRA_FAT_ARGS[@]}"
 # Prove the layout rather than trusting the exit code. mkfat32.py exits 0 for a
 # well-formed image whose destination paths went astray, so a /bin-less image
 # only surfaces later as a confusing "cell not found" at boot.

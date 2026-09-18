@@ -4,6 +4,11 @@
 
 ## [Unreleased] Development-first hardware-constrained execution
 
+## [2026-09-18] Fix cell quota table exhaustion error classification & capacity observability gate
+- Fixed `QuotaReservation::reserve_next` in `kernel/src/memory/cell_quota.rs`: when all `MAX_CELLS` (64) slots are occupied, the kernel now truthfully returns `ViError::OutOfMemory` (capacity exhaustion) instead of `ViError::PermissionDenied`.
+- Enhanced `scripts/build-boot-ramdisk-ci.sh` to support `CELLOS_INCLUDE_CAPACITY_PROBE=1`, building and signing `free`, `capacity-probe`, and `bench-probe` into `kernel_fs.img`.
+- Verified `tests/integration/tests/capacity-observability.rs`: 100% PASS in 9.38s on QEMU, correctly verifying `free` memory reporting, bit-56 MemInfo denial, typed `OutOfMemory` spawn failure, allocation failure source logging, and post-OOM shell recovery.
+
 ## [2026-09-18] Tier 3 hypervisor cell signing pipeline and vCPU preemption yield enforcement
 - Updated `scripts/lib-sign-cells.sh` with architecture-aware cross `objcopy` detection (`readelf` Machine check for AArch64, RISC-V, and x86_64) and automatic `PYTHON_BIN` fallback.
 - Integrated mandatory F1/F5 cell signing into `scripts/make-hypervisor-fs.sh` (AArch64) and `scripts/make-hypervisor-fs-x86.sh` (x86_64). This resolved the `[ERROR] [domain] Tier 2 Native Domain requested but unsupported` failure on AArch64, ensuring all hypervisor cells are signed and admitted cleanly under fail-closed security policy.
