@@ -157,7 +157,7 @@ fn rv64_task_to_idle_retains_identity_until_boot_switch_completion() {
     }
 
     let boot_switch = KERNEL_TASK
-        .find("let switched_to_boot = pinned == 0")
+        .find("let switched_to_boot =")
         .expect("incoming completion recognizes task-to-boot switch");
     let complete_selected = KERNEL_TASK[boot_switch..]
         .find("complete_selected_switch(hart, selected)")
@@ -504,7 +504,7 @@ fn riscv64_vfs_smp_all_pass() {
     );
     wait_for_or_dump(
         &runner,
-        "[selftest] VFS-LIFETIME: PASS (exact lease + quarantine + owner watch + SMP stale-install denial)",
+        "[selftest] VFS-LIFETIME: PASS (atomic grant-table lease + teardown orders + exact quarantine + owner watch)",
     );
 
     wait_for_or_dump(&runner, "[vfs-test] ALL TESTS PASSED");

@@ -1946,7 +1946,7 @@ fn vfs_lifetime_selftest_passes() {
     }
     let qemu = QemuRunner::boot_with_fresh_disk(&test_hooks_kernel_path(), &disk_path());
     qemu.wait_for(
-        "[selftest] VFS-LIFETIME: PASS (exact lease + quarantine + owner watch + SMP stale-install denial)",
+        "[selftest] VFS-LIFETIME: PASS (atomic grant-table lease + teardown orders + exact quarantine + owner watch)",
         BOOT_TIMEOUT,
     )
     .unwrap_or_else(|e| {

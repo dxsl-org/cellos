@@ -3,7 +3,13 @@
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
 ## [Unreleased] Development-first hardware-constrained execution
-## [2026-09-18] Fix RV64 compressed instruction trap decoding in TLB shootdown self-test and align quota exhaustion contract
+## [2026-09-18] Enhance SMP atomic publication IPI scheduling and synchronize VFS-LIFETIME assertions
+- Enhanced `competing_hart_schedule_attempt` in `kernel/src/loader/atomic_publication_tests/harness.rs`: sliced the polling loop into 10,000-spin intervals with periodic `sbi_send_ipi` ecalls (500 outer iterations), ensuring QEMU TCG exits its translation blocks to service pending IPIs on the secondary vCPU rather than burning through a tight 5,000,000-spin window.
+- Synchronized `tests/integration/tests/vfs-smp.rs` and `tests/integration/tests/boot.rs`: updated expected `VFS-LIFETIME` verdict string to `[selftest] VFS-LIFETIME: PASS (atomic grant-table lease + teardown orders + exact quarantine + owner watch)` matching `vfs_lifecycle_selftest.rs`.
+- Fixed brittle multiline substring assertion in `vfs-smp.rs` (`rv64_task_to_idle_retains_identity_until_boot_switch_completion`).
+- Rebuilt production `cellos-kernel` with `/bin/block` Driver Cell in embedded VIFS1 ramdisk, enabling VirtIO block mount across integration suites.
+- Verified: `tests/integration/tests/vfs-smp.rs` (7/7 PASS in 4.58s), `http-infer.rs` (1/1 PASS in 28.19s), `http-smoke.rs` (1/1 PASS in 143.36s), `native-domain-qemu.rs` (both 1-hart and 2-hart migration PASS in 247.38s), and `srv-cellosfs.rs` (3/3 PASS in 5.15s).
+
 - Fixed `handle_store_fault` in `kernel/src/memory/tlb_shootdown_selftest.rs`: dynamically detect instruction width (`is_compressed ? 2 : 4`) from opcode bits `insn & 0b11 != 0b11` rather than hardcoding `frame.sepc += 4`. When the compiler emits 16-bit compressed `c.sd`, advancing 4 bytes previously desynchronized execution into the middle of the next instruction, corrupting `PHASE` with `0xC0` (192).
 - Added `.option push; .option norvc; sd ...; .option pop` in `store_test_value` to guarantee 32-bit store emission on RV64.
 - Increased `wait_for` timeout in `tlb_shootdown_selftest.rs` from 50 to 500 ticks to avoid premature timeouts under QEMU multi-hart TCG scheduling.

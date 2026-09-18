@@ -137,8 +137,8 @@ fn competing_hart_schedule_attempt(tid: usize) -> bool {
         disarm_competing_hart();
         return false;
     }
-    for _ in 0..20 {
-        for _ in 0..5_000_000 {
+    for _ in 0..500 {
+        for _ in 0..10_000 {
             match AP13_REMOTE_ACK.load(Ordering::Acquire) {
                 1 => return true,
                 2 => {
@@ -154,7 +154,6 @@ fn competing_hart_schedule_attempt(tid: usize) -> bool {
     disarm_competing_hart();
     false
 }
-
 #[cfg(not(target_arch = "riscv64"))]
 fn competing_hart_schedule_attempt(_tid: usize) -> bool {
     false
