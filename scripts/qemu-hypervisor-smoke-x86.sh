@@ -67,7 +67,7 @@ if ! command -v "$QEMU_X86_BIN" &>/dev/null; then
 fi
 
 QEMU_VERSION_LINE="$("$QEMU_X86_BIN" --version 2>&1 | sed -n '1p')"
-if [[ "$QEMU_VERSION_LINE" != "QEMU emulator version 10.2.0" ]]; then
+if [[ "$QEMU_VERSION_LINE" != "QEMU emulator version 10.2.0"* ]]; then
     echo "BLOCKED_ENVIRONMENT: requires exact 'QEMU emulator version 10.2.0' (got '$QEMU_VERSION_LINE' from $QEMU_X86_BIN)" >&2
     exit 1
 fi
