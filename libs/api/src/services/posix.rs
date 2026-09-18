@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
-//! POSIX shim layer — Tier 1b C library support for ViCell cells.
+//! POSIX shim layer — Tier 1 (ffi-posix) C library support for ViCell cells.
 //!
 //! Provides `malloc`, string ops, file I/O, network sockets, entropy, math,
 //! stdio, and setjmp as `#[no_mangle]` C-ABI symbols.  No picolibc or

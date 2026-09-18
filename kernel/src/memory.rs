@@ -8,7 +8,7 @@ pub mod cell_quota;
 #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
 #[path = "memory/domain-supervisor-registry.rs"]
 pub(crate) mod domain_supervisor_registry;
-/// x86 nested paging (EPT/NPT) — Tier 3b x86 VMM. x86_64 only.
+/// x86 nested paging (EPT/NPT) — Tier 3 x86 VMM. x86_64 only.
 #[cfg(target_arch = "x86_64")]
 pub mod ept;
 pub mod frame;

@@ -1,4 +1,4 @@
-//! AMD SVM root-operation enablement (Tier 3b x86 VMM, phase 01).
+//! AMD SVM root-operation enablement (Tier 3 x86 VMM, phase 01).
 //!
 //! Entering SVM "root operation" means setting `EFER.SVME` so the CPU accepts
 //! `VMRUN`/`VMLOAD`/`VMSAVE`, and pointing `VM_HSAVE_PA` at a 4 KiB host save

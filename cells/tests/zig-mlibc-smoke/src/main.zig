@@ -1,4 +1,4 @@
-// zig-mlibc-smoke — Tier 1b Zig Level B smoke test.
+// zig-mlibc-smoke — Tier 1 (ffi-posix) Zig Level B smoke test.
 //
 // Links against third_party/mlibc/build/libc.a.
 // Prerequisite: pwsh scripts/setup-mlibc.ps1  (riscv64)

@@ -2153,7 +2153,7 @@ fn input_bare_cell() {
         });
 }
 
-// ── Tier 1b: POSIX C shim integration tests ───────────────────────────────────
+// ── Tier 1: POSIX C shim (ffi-posix) integration tests ───────────────────
 
 /// Truthful `_fstat` must traverse open → fixed-width kernel metadata → C
 /// translation, then close the descriptor before its terminal marker.
@@ -2194,7 +2194,7 @@ fn posix_shim_fstat() {
     );
 }
 
-/// Tier 1b: `getentropy(2)` shim via sys_get_random (opcode 214).
+/// Tier 1 (ffi-posix): `getentropy(2)` shim via sys_get_random (opcode 214).
 ///
 /// Boots QEMU, runs `posix-shim-test` binary, expects "[posix-shim] POSIX-ENTROPY: OK".
 /// No echo server needed — getentropy is pure kernel RNG.
@@ -2217,7 +2217,7 @@ fn posix_shim_getentropy() {
         });
 }
 
-/// Tier 1b: BSD socket shims (socket / connect / send / recv / close) via Net IPC.
+/// Tier 1 (ffi-posix): BSD socket shims (socket / connect / send / recv / close) via Net IPC.
 ///
 /// Starts a TCP echo server on host port 10009 (matches `ECHO_PORT` hardcoded in
 /// `cells/tests/posix-shim-test/src/main.rs`). QEMU SLIRP routes guest→10.0.2.2:10009

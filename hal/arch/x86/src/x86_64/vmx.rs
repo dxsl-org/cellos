@@ -1,4 +1,4 @@
-//! Intel VT-x root-operation enablement (Tier 3b x86 VMM, phase 01).
+//! Intel VT-x root-operation enablement (Tier 3 x86 VMM, phase 01).
 //!
 //! `enter_root` performs the full VMXON sequence: `CR4.VMXE`, the
 //! `IA32_FEATURE_CONTROL` firmware-lock dance, revision-ID stamping of the

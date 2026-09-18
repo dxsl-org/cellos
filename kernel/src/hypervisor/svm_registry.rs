@@ -1,4 +1,4 @@
-//! x86 SVM VM store + run loop (Tier 3b P03) — the x86 twin of the aarch64
+//! x86 SVM VM store + run loop (Tier 3 P03) — the x86 twin of the aarch64
 //! branch in [`super::registry`].
 //!
 //! The kernel owns all frame allocation (VMCB + IOPM/MSRPM + guest RAM + NPT);

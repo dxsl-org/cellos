@@ -504,7 +504,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             log::error!("[x86-gate] timer CLOSED: validated MADT + HPET required");
         }
 
-        // Tier 3b x86 VMM P01: enter root-of-virtualization on the BSP.
+        // Tier 3 x86 VMM P01: enter root-of-virtualization on the BSP.
         // SVM first (TCG-testable); VMX only on genuine Intel (KVM/HW lane).
         // Failure is non-fatal — the kernel runs fine without virt; the
         // HypervisorCap gate simply stays closed (has_x86_virt() == false).
@@ -996,7 +996,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             crate::layer2_selftest::run_mte_selftest();
             #[cfg(target_arch = "x86_64")]
             crate::layer2_selftest::run_pku_selftest();
-            // Tier 3b x86 VMM P03 M1: SVM world-switch smoke (port-out 'K' + HLT).
+            // Tier 3 x86 VMM P03 M1: SVM world-switch smoke (port-out 'K' + HLT).
             // Only meaningful when SVM root operation was entered at boot.
             #[cfg(target_arch = "x86_64")]
             if cpu_features::has_x86_virt() {

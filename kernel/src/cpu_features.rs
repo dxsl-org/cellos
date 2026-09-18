@@ -13,7 +13,7 @@ static HAS_H_EXT: AtomicBool = AtomicBool::new(false);
 /// QEMU `virtualization=on`).  Always `false` on non-aarch64 targets.
 static HAS_EL2: AtomicBool = AtomicBool::new(false);
 
-/// x86 hardware-virtualization vendor detected via CPUID (Tier 3b x86 VMM).
+/// x86 hardware-virtualization vendor detected via CPUID (Tier 3 x86 VMM).
 #[cfg(target_arch = "x86_64")]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub(crate) enum X86Virt {

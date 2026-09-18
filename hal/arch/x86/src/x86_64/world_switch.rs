@@ -1,4 +1,4 @@
-//! SVM world-switch: the `VMRUN` coroutine stub (Tier 3b P03).
+//! SVM world-switch: the `VMRUN` coroutine stub (Tier 3 P03).
 //!
 //! `svm_vmrun` enters the guest and returns only on `#VMEXIT` (which resumes at
 //! the instruction after `VMRUN` — no separate trap vector, unlike ARM's EL2

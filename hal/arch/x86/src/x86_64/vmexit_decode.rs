@@ -1,4 +1,4 @@
-//! SVM `#VMEXIT` EXITCODE → HAL [`ViVmExit`] decoder (Tier 3b P03).
+//! SVM #VMEXIT EXITCODE → HAL [`ViVmExit`] decoder (Tier 3 P03).
 //!
 //! Codes from AMD APM Vol.2 Appendix C. Only the exits surfaced to the
 //! hypervisor cell are decoded here; the run loop ([`super::svm_vcpu`]) handles

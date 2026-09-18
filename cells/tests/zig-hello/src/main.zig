@@ -1,4 +1,4 @@
-// zig-hello — Tier 1b Zig Level A smoke test.
+// zig-hello — Tier 1 (ffi-posix) Zig Level A smoke test.
 //
 // No mlibc dependency. Uses libs/zig-syscall for raw Cellos syscalls.
 // Expected output:

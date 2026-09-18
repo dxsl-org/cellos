@@ -1,4 +1,4 @@
-//! SVM vCPU state + host-side run loop (Tier 3b P03).
+//! SVM vCPU state + host-side run loop (Tier 3 P03).
 //!
 //! [`SvmVcpu`] owns the guest GPR bank and a [`VmcbView`] over the kernel-owned
 //! VMCB frame. [`SvmVcpu::run`] performs the world-switch ([`svm_vmrun`]),

@@ -3,7 +3,7 @@
 //!
 //! SAFETY: These stubs ONLY support -fno-exceptions -fno-rtti compiled C++ code.
 //! Do NOT attempt to use exceptions, RTTI, or STL containers — they require
-//! full libcxxabi/libstdc++ which is SAS-unsafe. Use Tier 3b Linux VM instead.
+//! full libcxxabi/libstdc++ which is SAS-unsafe. Use Tier 3 Linux VM instead.
 
 #![allow(unsafe_code)]
 

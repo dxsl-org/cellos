@@ -1,4 +1,4 @@
-//! AMD SVM VMCB (Virtual Machine Control Block) layout + setup (Tier 3b P03).
+//! AMD SVM VMCB (Virtual Machine Control Block) layout + setup (Tier 3 P03).
 //!
 //! One 4 KiB page split into a **Control Area** (0x000–0x3FF) and a
 //! **State-Save Area** (0x400–0xFFF). `VMRUN`'s operand (RAX) is the VMCB

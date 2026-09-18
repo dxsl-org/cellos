@@ -33,7 +33,7 @@ pub enum ViVmExit {
         rt: u8,
         is_write: bool,
     },
-    // ── x86 (SVM/VT-x) exit variants (Tier 3b x86 VMM, P03) ─────────────────
+    // ── x86 (SVM/VT-x) exit variants (Tier 3 x86 VMM, P03) ─────────────────
     /// Guest executed `IN` from an I/O port (x86 IOIO exit).
     PortIn {
         port: u16,
