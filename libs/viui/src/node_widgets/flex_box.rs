@@ -599,9 +599,12 @@ impl FlexBox {
             let mut max_cross = 0.0f32;
             for (slot, &ci) in indices.iter().enumerate() {
                 let main_w = il[slot].main;
-                let sz = self.children[ci]
-                    .node
-                    .layout(Constraints::new(dummy, Size::new(main_w, available_cross)));
+                let min_w = if self.children[ci].flex_grow > 0.0 { main_w } else { 0.0 };
+                let sz = self.children[ci].node.layout(Constraints {
+                    origin: dummy,
+                    min: Size::new(min_w, 0.0),
+                    max: Size::new(main_w, available_cross),
+                });
                 max_cross = max_cross.max(sz.h);
             }
             line_cross_sizes[li] = max_cross;
@@ -647,21 +650,23 @@ impl FlexBox {
                 } else {
                     available_cross
                 };
-
-                let sz = self.children[ci].node.layout(Constraints::new(
-                    Point::new(x, cross_y),
-                    Size::new(main_w, child_cross),
-                ));
+                let min_w = if item.flex_grow > 0.0 { main_w } else { 0.0 };
+                let sz = self.children[ci].node.layout(Constraints {
+                    origin: Point::new(x, cross_y),
+                    min: Size::new(min_w, 0.0),
+                    max: Size::new(main_w, child_cross),
+                });
 
                 // Cross-axis positioning.
                 let real_item_cross = sz.h;
                 let cy_off = self.cross_offset(real_item_cross, line_cross, eff_align);
                 if cy_off.abs() > 0.01 {
                     // Re-layout at corrected y (cross offset inside line).
-                    self.children[ci].node.layout(Constraints::new(
-                        Point::new(x, cross_y + cy_off),
-                        Size::new(main_w, child_cross),
-                    ));
+                    self.children[ci].node.layout(Constraints {
+                        origin: Point::new(x, cross_y + cy_off),
+                        min: Size::new(min_w, 0.0),
+                        max: Size::new(main_w, child_cross),
+                    });
                 }
 
                 x += main_w + self.gap_main + between;
@@ -716,9 +721,12 @@ impl FlexBox {
             let mut max_cross = 0.0f32;
             for (slot, &ci) in indices.iter().enumerate() {
                 let main_h = layouts[slot].main;
-                let sz = self.children[ci]
-                    .node
-                    .layout(Constraints::new(dummy, Size::new(available_cross, main_h)));
+                let min_h = if self.children[ci].flex_grow > 0.0 { main_h } else { 0.0 };
+                let sz = self.children[ci].node.layout(Constraints {
+                    origin: dummy,
+                    min: Size::new(0.0, min_h),
+                    max: Size::new(available_cross, main_h),
+                });
                 max_cross = max_cross.max(sz.w);
             }
             line_cross_sizes[li] = max_cross;
@@ -758,18 +766,21 @@ impl FlexBox {
                     available_cross
                 };
 
-                let sz = self.children[ci].node.layout(Constraints::new(
-                    Point::new(cross_x, y),
-                    Size::new(child_cross, main_h),
-                ));
+                let min_h = if item.flex_grow > 0.0 { main_h } else { 0.0 };
+                let sz = self.children[ci].node.layout(Constraints {
+                    origin: Point::new(cross_x, y),
+                    min: Size::new(0.0, min_h),
+                    max: Size::new(child_cross, main_h),
+                });
 
                 let real_item_cross = sz.w;
                 let cx_off = self.cross_offset(real_item_cross, line_cross, eff_align);
                 if cx_off.abs() > 0.01 {
-                    self.children[ci].node.layout(Constraints::new(
-                        Point::new(cross_x + cx_off, y),
-                        Size::new(child_cross, main_h),
-                    ));
+                    self.children[ci].node.layout(Constraints {
+                        origin: Point::new(cross_x + cx_off, y),
+                        min: Size::new(0.0, min_h),
+                        max: Size::new(child_cross, main_h),
+                    });
                 }
 
                 y += main_h + self.gap_main + between;

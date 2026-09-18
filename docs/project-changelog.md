@@ -3,7 +3,12 @@
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
 ## [Unreleased] Development-first hardware-constrained execution
-## [2026-09-19] Expand Tier 3 hypervisor guest persistent storage capacity & ext4 pre-formatting
+## [2026-09-19] Fix ViUI FlexBox layout constraints & multi-line wrap tracking
+- Fixed `libs/viui/src/node_widgets/flex_box.rs`:
+  - Enforced `min` constraint on the main axis (`main_w` for rows, `main_h` for columns) when child item has `flex_grow > 0.0`, ensuring flexible children expand to fill their distributed flex space instead of collapsing to unconstrained bounds.
+  - Fixed line cross-size accumulation in `layout_row` and `layout_column` measurement pass by updating `max_cross = max_cross.max(sz.h)` and `max_cross = max_cross.max(sz.w)`, resolving broken cross-axis line offsets on wrapping layouts.
+  - Verified: all 46/46 unit tests in `libs/viui` PASS (previously 6 failing), and `tests/integration/tests/viui-managed-surface.rs` passes end-to-end pixel and window interaction checks in QEMU (44.46s).
+
 - Enhanced `scripts/format-disk-hv-arm.sh` with configurable guest disk capacity via `--guest-disk-size <size>` and `HV_GUEST_DISK_SIZE` (defaulting to 64M, supporting up to 220M within P1 partition bounds).
 - Integrated host-side `mkfs.ext4` formatting (with volume label `CELLOS_GUEST`) when available, providing the Linux guest with an immediately mountable ext4 block device (`/dev/vda`) without requiring in-guest filesystem creation.
 - Retained clean fallback to unformatted sparse image when `mkfs.ext4` is unavailable or when `--no-ext4` is passed.
