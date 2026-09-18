@@ -81,7 +81,22 @@ if [[ "${CELLOS_INCLUDE_CAPACITY_PROBE:-0}" == "1" ]]; then
         EXTRA_FAT_ARGS+=("$REL/bench-probe" "/bin/bench-probe")
     fi
 fi
-
+if [[ -f "$REL/bench" ]]; then
+    CELLS_TO_SIGN+=("$REL/bench")
+    EXTRA_FAT_ARGS+=("$REL/bench" "/bin/bench")
+fi
+if [[ -f "$REL/hotswap" ]]; then
+    CELLS_TO_SIGN+=("$REL/hotswap")
+    EXTRA_FAT_ARGS+=("$REL/hotswap" "/bin/hotswap")
+fi
+if [[ -f "$REL/hotswap-demo-v1" ]]; then
+    CELLS_TO_SIGN+=("$REL/hotswap-demo-v1")
+    EXTRA_FAT_ARGS+=("$REL/hotswap-demo-v1" "/bin/hotswap-demo-v1")
+fi
+if [[ -f "$REL/hotswap-demo-v2" ]]; then
+    CELLS_TO_SIGN+=("$REL/hotswap-demo-v2")
+    EXTRA_FAT_ARGS+=("$REL/hotswap-demo-v2" "/bin/hotswap-demo-v2")
+fi
 echo "==> Signing cells..."
 sign_cells "${CELLS_TO_SIGN[@]}"
 echo "==> Assembling $EMB/kernel_fs.img..."

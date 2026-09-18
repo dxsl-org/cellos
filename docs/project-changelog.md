@@ -4,6 +4,13 @@
 
 ## [Unreleased] Development-first hardware-constrained execution
 
+## [2026-09-18] Fix hotswap state restoration heap exhaustion and restore caller security check
+- Fixed `libs/ostd/src/hotswap.rs`: replaced 1 MiB heap buffer in `restore(key)` with a 4 KiB stack buffer and exact-length heap boxing, eliminating cell heap OOM during live migration and hot-swap restore.
+- Configured `spawn: true` in `kernel/src/loader/launch_profile/targets.rs` for `/bin/hotswap-demo-v1` and `/bin/hotswap-demo-v2` matching their manifests and `RegisterService(HOTSWAP_DEMO)` requirements.
+- Restored strict supervisor caller authentication in `cells/services/supervisor/src/main.rs`: hotswap requests are accepted solely from `hotswap` CLI; direct requests from unauthorized senders (`bench`) are truthfully rejected with `STATUS_REJECTED_CALLER`.
+- Added `/bin/bench` and `/bin/hotswap` to `scripts/build-boot-ramdisk-ci.sh`.
+- Verified `tests/integration/tests/hotswap-smoke.rs`: all 15/15 tests PASS in 9.01s on QEMU.
+
 ## [2026-09-18] Fix cell quota table exhaustion error classification & capacity observability gate
 - Fixed `QuotaReservation::reserve_next` in `kernel/src/memory/cell_quota.rs`: when all `MAX_CELLS` (64) slots are occupied, the kernel now truthfully returns `ViError::OutOfMemory` (capacity exhaustion) instead of `ViError::PermissionDenied`.
 - Enhanced `scripts/build-boot-ramdisk-ci.sh` to support `CELLOS_INCLUDE_CAPACITY_PROBE=1`, building and signing `free`, `capacity-probe`, and `bench-probe` into `kernel_fs.img`.

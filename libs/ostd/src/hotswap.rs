@@ -96,16 +96,26 @@ pub fn stash(key: u64, data: &[u8]) -> Result<(), HotswapError> {
 /// # Panics
 /// Never (OOM panics are handled by the cell allocator, not here).
 pub fn restore(key: u64) -> Result<Box<[u8]>, HotswapError> {
-    // Allocate a full-sized receive buffer. This is the upper bound set by
-    // MAX_STASH_LEN in the kernel; we shrink the result to the actual payload.
-    const MAX: usize = 1024 * 1024;
-    let mut buf = alloc::vec![0u8; MAX];
-    let n = syscall::sys_state_restore(key, &mut buf);
+    // Use a stack buffer first to avoid heap fragmentation and allocation pressure.
+    // Typical migration state (counter, small structs) is tens to hundreds of bytes.
+    let mut stack_buf = [0u8; 4096];
+    let n = syscall::sys_state_restore(key, &mut stack_buf);
     if n == 0 {
         return Err(HotswapError::NoState);
     }
-    buf.truncate(n);
-    Ok(buf.into_boxed_slice())
+    if n < stack_buf.len() {
+        return Ok(Box::from(&stack_buf[..n]));
+    }
+    // If the payload filled the entire stack buffer, dynamically allocate
+    // only as much as needed up to 64 KiB.
+    const MAX: usize = 64 * 1024;
+    let mut big_buf = alloc::vec![0u8; MAX];
+    let n2 = syscall::sys_state_restore(key, &mut big_buf);
+    if n2 == 0 {
+        return Err(HotswapError::NoState);
+    }
+    big_buf.truncate(n2);
+    Ok(big_buf.into_boxed_slice())
 }
 
 // ── clear() ───────────────────────────────────────────────────────────────────

@@ -31,8 +31,6 @@ pub(super) fn reviewed_user_target_ceiling(target: &str) -> Option<CapSet> {
         | "/bin/wx-test"
         | "/bin/tier2-exploit"
         | "/bin/tier2-smoke"
-        | "/bin/hotswap-demo-v1"
-        | "/bin/hotswap-demo-v2"
         | "/bin/std-smoke" => CapSet::EMPTY,
         // These clients and servers use typed IPC to the net service; they do
         // not hold NetworkCap themselves. Keeping their launch ceiling empty
@@ -51,7 +49,12 @@ pub(super) fn reviewed_user_target_ceiling(target: &str) -> Option<CapSet> {
         "/bin/pwm-demo" => gpio_mmio_capset(),
         "/bin/sensor-demo" => sensor_mmio_capset(),
         "/bin/spi-demo" => spi_demo_mmio_capset(),
-        "/bin/bench" | "/bin/capacity-probe" | "/bin/hypha" | "/bin/tool-spawn" => CapSet {
+        "/bin/bench"
+        | "/bin/capacity-probe"
+        | "/bin/hypha"
+        | "/bin/tool-spawn"
+        | "/bin/hotswap-demo-v1"
+        | "/bin/hotswap-demo-v2" => CapSet {
             spawn: true,
             ..CapSet::EMPTY
         },
