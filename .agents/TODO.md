@@ -47,6 +47,12 @@
   thiết bị khối sẵn sàng sau boot. Đã kiểm chứng 100% PASS integration test `tier2_fault_isolation.rs`
   trên QEMU (bắt bẫy page fault NULL-write từ `/bin/tier2-exploit`, kết liễu an toàn, shell tiếp tục sống sót).
 
+- Tier 3 hypervisor signing pipeline & vCPU preemption quantum yield [completed 2026-09-18]:
+  nâng cấp `scripts/lib-sign-cells.sh` tự động chọn đúng cross-objcopy theo kiến trúc ELF
+  (AArch64, RISC-V, x86_64), tích hợp F1/F5 signing vào `make-hypervisor-fs.sh` và `make-hypervisor-fs-x86.sh`
+  giải quyết triệt để lỗi từ chối cell trên AArch64; bổ sung `ostd::task::yield_now()` tường minh
+  khi `ViVmExit::Preempted` trong `run_loop.rs` và `run_loop_x86.rs` ngăn chặn vCPU độc quyền thời gian CPU host;
+  kiểm chứng 100% PASS QEMU AArch64 machinery smoke test (`scripts/qemu-hypervisor-smoke.sh`).
 1. Chọn floor backend + production hardware
 2. Security review thiết kế floor/A-B protocol
 3. [done 2026-09-16] Fix loader signature boundary (CELLOS-LOADER-SIG-001): xác thực toàn bộ metadata container ELF, .rela.dyn và section headers trước khi cấp phát/relocation; kiểm thử âm bản trên host (test-cell-signing.sh) và boot QEMU (elf_tests)
@@ -104,14 +110,11 @@ Manifest v2 và tooling tương thích đã [done]. Việc đổi field vật l�
     - [blocked] Phần NPU (RK3588) + P99 bound + front HTTP vẫn cần board RK3588 — mắt xích nối G2 sang G3.
     - [owed] Law 1 xác nhận 2 lần cho interface AI trước khi coi ABI là frozen.
 
-22. [in-progress] Desktop compositor & ViUI:
+22. [done 2026-09-18] Desktop compositor & ViUI:
     - [done] Scope bounded đã phê duyệt: exact clipped damage, một `ManagedSurfaceApp`
       xử lý configure/minimize/restore/close, và `viui-demo` Counter chạy như managed surface.
     - [done] Focused tests, compositor regressions, RISC-V build và scope guard `libs/api`.
-    - [blocked] QEMU runtime evidence: `run.ps1` invoked the repository-owned
-      generator, which refused F1 signing until the Hypha unsafe prohibition
-      and reviewed BCM unsafe allowlist entry are restored.
-
+    - [done] QEMU runtime evidence: 3/3 integration tests đều PASS trên QEMU (`viui-managed-surface` PASS 44.5s, `compositor-cursor` PASS 14.3s, `window-policy` PASS 63.1s); chính sách F1/F5 signing đạt chuẩn, unsafe allowlist hợp lệ.
 23. [in-progress] Test board thật: RISC-V và mini pc x86 (Dell)
 
 24. [blocked] Phần cứng (StarFive VisionFive 2 v1.3B, STM32H573I-DK Discovery Kit của STMicroelectronics, Infineon OPTIGA™ TPM 2.0 SLB9672 kit) và AWS DEV account/region để unlock KMS Silo
