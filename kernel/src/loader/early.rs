@@ -45,8 +45,13 @@ pub const BOOTSTRAP_CELLS: &[&str] = &[
 /// Phase03 hardware demos live here so a TFTP kernel update cannot silently run
 /// stale copies from the removable-media bootstrap table. They are not boot
 /// dependencies and therefore remain separate from [`BOOTSTRAP_CELLS`].
-const EMBEDDED_DEVELOPMENT_CELLS: &[&str] =
-    &["/bin/periph-demo", "/bin/sensor-demo", "/bin/spi-demo"];
+const EMBEDDED_DEVELOPMENT_CELLS: &[&str] = &[
+    "/bin/periph-demo",
+    "/bin/sensor-demo",
+    "/bin/spi-demo",
+    "/bin/pwm-demo",
+    "/bin/robot-demo",
+];
 
 /// True if `path` is a bootstrap cell that must resolve from the VIFS1 ramdisk
 /// before the block device, so boot does not depend on a kernel block driver.

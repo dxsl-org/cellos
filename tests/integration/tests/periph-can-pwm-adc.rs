@@ -14,7 +14,8 @@
 use std::path::PathBuf;
 use vicell_integration_tests::{qemu_binary_aarch64, QemuRunner};
 
-const BOOT_TIMEOUT: u64 = 90; // Extra time for 3 additional demo cells.
+const BOOT_TIMEOUT: u64 = 60;
+const CMD_TIMEOUT: u64 = 30;
 
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -70,8 +71,11 @@ fn aarch64_pwm_demo() {
     if !prerequisites_ok() {
         return;
     }
-    let qemu = QemuRunner::boot_aarch64_with_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("[pwm-demo] duty=", BOOT_TIMEOUT)
+    let mut qemu = QemuRunner::boot_aarch64_with_disk(&kernel_path(), &disk_path());
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("shell not reached: {e}\n--- output ---\n{}", qemu.dump()));
+    qemu.send_line("pwm-demo &");
+    qemu.wait_for("[pwm-demo] duty=", CMD_TIMEOUT)
         .unwrap_or_else(|e| {
             panic!(
                 "pwm-demo probe not seen: {e}\n--- output ---\n{}",
@@ -87,8 +91,11 @@ fn aarch64_adc_demo() {
     if !prerequisites_ok() {
         return;
     }
-    let qemu = QemuRunner::boot_aarch64_with_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("[adc-demo] ch0=", BOOT_TIMEOUT)
+    let mut qemu = QemuRunner::boot_aarch64_with_disk(&kernel_path(), &disk_path());
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("shell not reached: {e}\n--- output ---\n{}", qemu.dump()));
+    qemu.send_line("adc-demo &");
+    qemu.wait_for("[adc-demo] step=0 ch0=", CMD_TIMEOUT)
         .unwrap_or_else(|e| {
             panic!(
                 "adc-demo probe not seen: {e}\n--- output ---\n{}",
@@ -104,8 +111,11 @@ fn aarch64_can_demo() {
     if !prerequisites_ok() {
         return;
     }
-    let qemu = QemuRunner::boot_aarch64_with_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("[can-demo] RX id=", BOOT_TIMEOUT)
+    let mut qemu = QemuRunner::boot_aarch64_with_disk(&kernel_path(), &disk_path());
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("shell not reached: {e}\n--- output ---\n{}", qemu.dump()));
+    qemu.send_line("can-demo &");
+    qemu.wait_for("[can-demo] RX id=", CMD_TIMEOUT)
         .unwrap_or_else(|e| {
             panic!(
                 "can-demo RX probe not seen: {e}\n--- output ---\n{}",

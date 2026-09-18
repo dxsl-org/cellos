@@ -32,6 +32,7 @@ PACKAGES=(
   app-init app-shell service-platform service-vfs service-config
   driver-virtio-blk driver-virtio-net driver-virtio-gpu
   service-input service-net service-compositor service-net-broker supervisor
+  periph-demo sensor-demo spi-demo pwm-demo adc-demo can-demo robot-demo
 )
 
 PACKAGE_ARGS=()
@@ -56,6 +57,13 @@ PAIRS=(
   service-compositor /bin/compositor
   service-net-broker /bin/net-broker
   supervisor /bin/supervisor
+  periph-demo /bin/periph-demo
+  sensor-demo /bin/sensor-demo
+  spi-demo /bin/spi-demo
+  pwm-demo /bin/pwm-demo
+  adc-demo /bin/adc-demo
+  can-demo /bin/can-demo
+  robot-demo /bin/robot-demo
 )
 
 for ((index = 0; index < ${#PAIRS[@]}; index += 2)); do
@@ -67,9 +75,16 @@ for ((index = 0; index < ${#PAIRS[@]}; index += 2)); do
 done
 [[ -f "$REL/app-init" ]] || { echo "FAIL: app-init missing" >&2; exit 1; }
 
+# shellcheck source=scripts/lib-sign-cells.sh
+source scripts/lib-sign-cells.sh
+CELLS_TO_SIGN=("$REL/app-init")
+for ((index = 0; index < ${#PAIRS[@]}; index += 2)); do
+  CELLS_TO_SIGN+=("$REL/${PAIRS[index]}")
+done
+sign_cells "${CELLS_TO_SIGN[@]}"
+
 mkdir -p "$EMBEDDED"
 cp "$REL/app-init" "$EMBEDDED/init"
-
 TEMP_DIR="$(mktemp -d)"
 trap 'rm -rf -- "$TEMP_DIR"' EXIT
 python3 scripts/sign-policy.py --out "$TEMP_DIR/POLICY.BIN" >/dev/null

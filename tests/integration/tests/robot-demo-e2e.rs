@@ -86,10 +86,13 @@ fn aarch64_robot_demo_e2e() {
     if !prerequisites_ok() {
         return;
     }
-    let qemu = QemuRunner::boot_aarch64_with_disk(&kernel_path(), &disk_path());
+    let mut qemu = QemuRunner::boot_aarch64_with_disk(&kernel_path(), &disk_path());
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("shell not reached: {e}\n--- output ---\n{}", qemu.dump()));
+    qemu.send_line("robot-demo &");
 
     // Anchor on the completion line first — proves the full loop ran.
-    qemu.wait_for("[robot-demo] done (5 cycles)", BOOT_TIMEOUT)
+    qemu.wait_for("[robot-demo] done (5 cycles)", 60)
         .unwrap_or_else(|e| {
             panic!(
                 "robot-demo did not complete all 5 cycles: {e}\n--- output ---\n{}",
@@ -100,7 +103,8 @@ fn aarch64_robot_demo_e2e() {
     let out = qemu.dump();
 
     assert!(
-        out.contains("[robot-demo] ViCell reference robot demo"),
+        out.contains("[robot-demo] Cellos reference robot demo")
+            || out.contains("[robot-demo] ViCell reference robot demo"),
         "robot-demo banner missing\n--- output ---\n{out}"
     );
     assert!(

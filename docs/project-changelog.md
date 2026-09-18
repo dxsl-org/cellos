@@ -4,6 +4,14 @@
 
 ## [Unreleased] Development-first hardware-constrained execution
 
+## [2026-09-18] Complete AArch64 peripheral demo packaging, launch profiles, and QEMU integration suites
+- Added `/bin/adc-demo` and `/bin/can-demo` to `reviewed_user_target_ceiling` in `kernel/src/loader/launch_profile/targets.rs` with `CapSet::EMPTY`.
+- Added `/bin/pwm-demo` and `/bin/robot-demo` to `EMBEDDED_DEVELOPMENT_CELLS` in `kernel/src/loader/early.rs`, ensuring MMIO-capable peripheral cells are safely loaded from trusted VIFS1 ramdisk under `SpawnFromPath`.
+- Upgraded `scripts/format-disk-arm.sh` to construct the complete AArch64 storage layout: MBR, P1 FAT32 (/mnt/sd), P5 CellosFS (/srv), P6 FAT cell-store (/bin at LBA 1,062,144), and bootstrap cell table (LBA 526,336).
+- Enhanced `scripts/build-phase04-qemu-image.sh` to package and sign all peripheral demo cells into `kernel/src/embedded-aarch64/kernel_fs.img`.
+- Updated `tests/integration/tests/periph-can-pwm-adc.rs` and `robot-demo-e2e.rs` to launch user demo cells through the interactive shell prompt, matching modern launch-profile security rules, and rebranded the robot-demo banner assertion to Cellos.
+- Verified: `periph-can-pwm-adc.rs` (3/3 PASS), `periph-i2c-spi.rs` (2/2 PASS), and `robot-demo-e2e.rs` (1/1 PASS in 6.98s).
+
 ## [2026-09-18] Fix hotswap state restoration heap exhaustion and restore caller security check
 - Fixed `libs/ostd/src/hotswap.rs`: replaced 1 MiB heap buffer in `restore(key)` with a 4 KiB stack buffer and exact-length heap boxing, eliminating cell heap OOM during live migration and hot-swap restore.
 - Configured `spawn: true` in `kernel/src/loader/launch_profile/targets.rs` for `/bin/hotswap-demo-v1` and `/bin/hotswap-demo-v2` matching their manifests and `RegisterService(HOTSWAP_DEMO)` requirements.

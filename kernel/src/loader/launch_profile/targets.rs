@@ -6,9 +6,11 @@ use super::profiles::{
 
 pub(super) fn reviewed_user_target_ceiling(target: &str) -> Option<CapSet> {
     let caps = match target {
-        "/bin/ai-test"
+        "/bin/adc-demo"
+        | "/bin/ai-test"
         | "/bin/audio-demo"
         | "/bin/bench-probe"
+        | "/bin/can-demo"
         | "/bin/cat"
         | "/bin/cfi-test"
         | "/bin/curl"
