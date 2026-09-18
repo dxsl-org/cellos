@@ -3,7 +3,12 @@
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
 ## [Unreleased] Development-first hardware-constrained execution
-## [2026-09-18] Enhance SMP atomic publication IPI scheduling and synchronize VFS-LIFETIME assertions
+## [2026-09-19] Expand Tier 3 hypervisor guest persistent storage capacity & ext4 pre-formatting
+- Enhanced `scripts/format-disk-hv-arm.sh` with configurable guest disk capacity via `--guest-disk-size <size>` and `HV_GUEST_DISK_SIZE` (defaulting to 64M, supporting up to 220M within P1 partition bounds).
+- Integrated host-side `mkfs.ext4` formatting (with volume label `CELLOS_GUEST`) when available, providing the Linux guest with an immediately mountable ext4 block device (`/dev/vda`) without requiring in-guest filesystem creation.
+- Retained clean fallback to unformatted sparse image when `mkfs.ext4` is unavailable or when `--no-ext4` is passed.
+- Verified: formatted and verified 64M and 128M ext4 guest disks in `disk_hv_arm.img`, with `scripts/qemu-hypervisor-smoke.sh` cleanly discovering and opening `/mnt/sd/guest_disk.img` (PASS).
+
 - Enhanced `competing_hart_schedule_attempt` in `kernel/src/loader/atomic_publication_tests/harness.rs`: sliced the polling loop into 10,000-spin intervals with periodic `sbi_send_ipi` ecalls (500 outer iterations), ensuring QEMU TCG exits its translation blocks to service pending IPIs on the secondary vCPU rather than burning through a tight 5,000,000-spin window.
 - Synchronized `tests/integration/tests/vfs-smp.rs` and `tests/integration/tests/boot.rs`: updated expected `VFS-LIFETIME` verdict string to `[selftest] VFS-LIFETIME: PASS (atomic grant-table lease + teardown orders + exact quarantine + owner watch)` matching `vfs_lifecycle_selftest.rs`.
 - Fixed brittle multiline substring assertion in `vfs-smp.rs` (`rv64_task_to_idle_retains_identity_until_boot_switch_completion`).

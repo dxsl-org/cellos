@@ -4,13 +4,15 @@
 # /mnt/sd. Alpine boot assets and bootstrap cells stay in the kernel's VIFS1
 # image assembled by make-hypervisor-fs.sh.
 #
-# Usage: bash scripts/format-disk-hv-arm.sh [--gui] [output.img]
+# Usage: bash scripts/format-disk-hv-arm.sh [--gui] [--guest-disk-size SIZE] [--ext4|--no-ext4] [output.img]
 
 set -euo pipefail
 
 GUI=0
 OUT="disk_hv_arm.img"
 OUT_EXPLICIT=0
+GUEST_DISK_SIZE="${HV_GUEST_DISK_SIZE:-64M}"
+FORMAT_EXT4=1
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -18,14 +20,27 @@ while [[ $# -gt 0 ]]; do
             GUI=1
             shift
             ;;
+        --guest-disk-size)
+            [[ $# -ge 2 ]] || { echo "ERROR: --guest-disk-size requires a value" >&2; exit 1; }
+            GUEST_DISK_SIZE="$2"
+            shift 2
+            ;;
+        --ext4)
+            FORMAT_EXT4=1
+            shift
+            ;;
+        --no-ext4)
+            FORMAT_EXT4=0
+            shift
+            ;;
         -h|--help)
-            echo "Usage: bash scripts/format-disk-hv-arm.sh [--gui] [output.img]"
+            echo "Usage: bash scripts/format-disk-hv-arm.sh [--gui] [--guest-disk-size SIZE] [--ext4|--no-ext4] [output.img]"
             exit 0
             ;;
         *)
             if [[ "$OUT" != "disk_hv_arm.img" ]]; then
                 echo "ERROR: unexpected argument: $1" >&2
-                echo "Usage: bash scripts/format-disk-hv-arm.sh [--gui] [output.img]" >&2
+                echo "Usage: bash scripts/format-disk-hv-arm.sh [--gui] [--guest-disk-size SIZE] [--ext4|--no-ext4] [output.img]" >&2
                 exit 1
             fi
             OUT="$1"
@@ -34,7 +49,6 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
-
 if [[ "$GUI" -eq 1 && "$OUT_EXPLICIT" -eq 0 ]]; then
     OUT="disk_hv_arm_gui.img"
 fi
@@ -99,8 +113,28 @@ else
     echo "ViCell-HV" > "$HOSTNAME_TMP"
 fi
 MKFAT_ARGS+=("$HOSTNAME_TMP" "etc/hostname")
+GUEST_DISK_SIZE_CLEAN="${GUEST_DISK_SIZE^^}"
+GUEST_DISK_SIZE_CLEAN="${GUEST_DISK_SIZE_CLEAN%M}"
+if [[ "$GUEST_DISK_SIZE_CLEAN" =~ ^[0-9]+$ ]]; then
+    GUEST_DISK_SIZE_MB="$GUEST_DISK_SIZE_CLEAN"
+else
+    echo "ERROR: invalid guest disk size: $GUEST_DISK_SIZE (expected e.g. 64M, 128M)" >&2
+    exit 1
+fi
+if [[ "$GUEST_DISK_SIZE_MB" -lt 8 || "$GUEST_DISK_SIZE_MB" -gt 220 ]]; then
+    echo "ERROR: guest disk size must be between 8M and 220M (P1 max capacity)" >&2
+    exit 1
+fi
+
 GUEST_DISK_TMP=$(mktemp)
-dd if=/dev/zero of="$GUEST_DISK_TMP" bs=1M count=8 status=none
+echo "[format-disk-hv] Allocating ${GUEST_DISK_SIZE_MB}M guest disk image..."
+truncate -s "${GUEST_DISK_SIZE_MB}M" "$GUEST_DISK_TMP"
+if [[ "$FORMAT_EXT4" -eq 1 ]] && command -v mkfs.ext4 >/dev/null 2>&1; then
+    echo "[format-disk-hv] Formatting guest_disk.img with ext4 (label: CELLOS_GUEST)..."
+    mkfs.ext4 -q -F -L CELLOS_GUEST "$GUEST_DISK_TMP"
+else
+    echo "[format-disk-hv] Leaving guest_disk.img as unformatted block device"
+fi
 MKFAT_ARGS+=("$GUEST_DISK_TMP" "guest_disk.img")
 
 

@@ -136,7 +136,7 @@ Manifest v2 và tooling tương thích đã [done]. Việc đổi field vật l�
 
 3. **Tier 3** - Virtual Machine - VM
     - Gate “nginx chạy thật trong Linux VM” chưa được xác minh
-    - Storage hiện là RAM disk nhỏ, volatile: VFS scale (ext4/large disk)
+    - Storage guest: Đã mở rộng persistent disk `/mnt/sd/guest_disk.img` với dung lượng tùy biến (`--guest-disk-size`, mặc định 64M - 220M) và pre-format sẵn ext4 (`CELLOS_GUEST`) qua `scripts/format-disk-hv-arm.sh` (AArch64) và `scripts/build-ubuntu-wide-guest-x86.sh` (x86 3G ext4); VFS grant-addressed read/write mapping sạch sẽ.
     - Intel VMX chưa có VMCS/world-switch hoàn chỉnh.
     - RunVcpu scheduler preemption: Đã bổ sung `ostd::task::yield_now()` trong `ViVmExit::Preempted` ở cả `run_loop.rs` (AArch64) và `run_loop_x86.rs` (x86_64), đảm bảo hypervisor nhường thời gian CPU cho các cell khác (VFS, Net, Compositor) khi hết tick budget.
     - Pipeline ký cell cho hypervisor: Đã tích hợp `sign_cells` tự động nhận diện cross-objcopy (`aarch64`, `riscv64`, `x86_64`) vào `make-hypervisor-fs.sh` và `make-hypervisor-fs-x86.sh`, khắc phục lỗi cell unsigned bị kernel từ chối trên AArch64.
