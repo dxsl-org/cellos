@@ -67,6 +67,17 @@ RUSTFLAGS="-C relocation-model=pic" cargo build --release \
     -p service-net -p service-hypervisor \
     "${HOSTILE_PACKAGE_ARGS[@]}"
 
+# shellcheck source=scripts/lib-sign-cells.sh
+source "$(dirname "$0")/lib-sign-cells.sh"
+echo "[make-hv-fs-x86] Signing x86_64 cells..."
+SIGN_TARGETS=()
+for b in app-init service-vfs service-config app-shell platform driver-nvme driver-e1000 service-net hypervisor supervisor; do
+    if [[ -f "$BIN_DIR/$b" ]]; then
+        SIGN_TARGETS+=("$BIN_DIR/$b")
+    fi
+done
+sign_cells "${SIGN_TARGETS[@]}"
+
 # ── Step 3: Assemble kernel_fs.img ──────────────────────────────────────────
 mkdir -p "$EMBEDDED_HV"
 # /bin/shell remains available to the ordinary profile. The hypervisor-min

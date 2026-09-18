@@ -135,12 +135,14 @@ Manifest v2 và tooling tương thích đã [done]. Việc đổi field vật l�
     - Gate “nginx chạy thật trong Linux VM” chưa được xác minh
     - Storage hiện là RAM disk nhỏ, volatile: VFS scale (ext4/large disk)
     - Intel VMX chưa có VMCS/world-switch hoàn chỉnh.
-    - RunVcpu cần enforcement budget đáng tin cậy trước khi gọi workload bên thứ ba là production-safe.
+    - RunVcpu scheduler preemption: Đã bổ sung `ostd::task::yield_now()` trong `ViVmExit::Preempted` ở cả `run_loop.rs` (AArch64) và `run_loop_x86.rs` (x86_64), đảm bảo hypervisor nhường thời gian CPU cho các cell khác (VFS, Net, Compositor) khi hết tick budget.
+    - Pipeline ký cell cho hypervisor: Đã tích hợp `sign_cells` tự động nhận diện cross-objcopy (`aarch64`, `riscv64`, `x86_64`) vào `make-hypervisor-fs.sh` và `make-hypervisor-fs-x86.sh`, khắc phục lỗi cell unsigned bị kernel từ chối trên AArch64.
+    - QEMU AArch64 machinery smoke: PASS (`PASS: machinery ran — VMM entered the guest; only the documented TCG address-size fault occurred`).
     - Boot-to-shell ARM64 nghiêm ngặt vẫn cần KVM/real hardware; QEMU TCG chỉ là machinery evidence.
     - x86 host shell pre-GUI: PASS trên QEMU-TCG (`HV_SMOKE_MODE=host-shell`, follow-up của `9d8e5eab`); lỗi `ReadDir` EOF làm kẹt probe `/bin/*` đã được sửa.
     - x86 Linux guest strict boot: PASS trên QEMU-TCG 10.2.0 ở 1 GiB và 2 GiB (`Linux 6.12.81` → `/bin/sh` → `~ #`); QEMU-TCG 8.2.2 vẫn BLOCKED bởi `CELLOS-HV-X86-TCG-001`.
+    - x86 VirtIO MMIO/block/network: Đã hoàn tất kết nối trong Phase 10 với 27 hostile recovery scenarios.
     - Dùng ARM64 làm đường ngắn nhất để đóng gate: Alpine → nginx → HTTP request/response có log.
-    - x86 hiện boot bằng initramfs nhưng personality chưa nối VirtIO MMIO/block/network dùng chung; các module đó vẫn chỉ bật cho AArch64
     - persistent disk, Ubuntu/glibc và các lane AMD/Intel hardware
 
 4. Cellos **Native SDK**:

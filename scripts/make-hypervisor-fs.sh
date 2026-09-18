@@ -80,6 +80,17 @@ cargo build --release \
     -p service-net -p service-input -p service-compositor -p supervisor \
     -p driver-virtio-blk -p driver-virtio-gpu -p service-hypervisor
 
+# shellcheck source=scripts/lib-sign-cells.sh
+source "$(dirname "$0")/lib-sign-cells.sh"
+echo "[make-hv-fs] Signing aarch64 cells..."
+SIGN_TARGETS=()
+for b in app-init app-shell service-vfs service-config service-net service-input service-compositor supervisor driver-virtio-blk driver-virtio-gpu hypervisor; do
+    if [[ -f "$BIN_DIR/$b" ]]; then
+        SIGN_TARGETS+=("$BIN_DIR/$b")
+    fi
+done
+sign_cells "${SIGN_TARGETS[@]}"
+
 # ── Step 3: Build hypervisor kernel_fs.img ──────────────────────────────────
 mkdir -p "$EMBEDDED_HV"
 

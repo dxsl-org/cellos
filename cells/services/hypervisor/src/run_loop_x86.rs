@@ -117,6 +117,7 @@ pub fn run(
                     &mut net_vmio,
                     &mut net_poll_turn,
                 );
+                ostd::task::yield_now();
             }
 
             // ── MSR — never surfaced anymore (the kernel emulates all MSR exits

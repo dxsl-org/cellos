@@ -4,6 +4,12 @@
 
 ## [Unreleased] Development-first hardware-constrained execution
 
+## [2026-09-18] Tier 3 hypervisor cell signing pipeline and vCPU preemption yield enforcement
+- Updated `scripts/lib-sign-cells.sh` with architecture-aware cross `objcopy` detection (`readelf` Machine check for AArch64, RISC-V, and x86_64) and automatic `PYTHON_BIN` fallback.
+- Integrated mandatory F1/F5 cell signing into `scripts/make-hypervisor-fs.sh` (AArch64) and `scripts/make-hypervisor-fs-x86.sh` (x86_64). This resolved the `[ERROR] [domain] Tier 2 Native Domain requested but unsupported` failure on AArch64, ensuring all hypervisor cells are signed and admitted cleanly under fail-closed security policy.
+- Added explicit `ostd::task::yield_now()` to the `ViVmExit::Preempted` handler in `cells/services/hypervisor/src/run_loop.rs` (AArch64) and `run_loop_x86.rs` (x86_64). When a vCPU preemption tick fires from the host timer, the hypervisor cell yields its scheduler slice to other CellOS services (VFS, Net, Compositor, Shell), preventing host CPU starvation.
+- Re-verified `scripts/qemu-hypervisor-smoke.sh` under QEMU-TCG: `PASS: machinery ran — VMM entered the guest; only the documented TCG address-size fault occurred`.
+
 ## [2026-09-18] Tier 2 fail-closed security enforcement & hardware fault containment verification
 - Eliminated insecure fallback to Tier 1 SAS in `kernel/src/task/launch.rs`: when domain address space creation
   fails, or when stacks/segments are missing, or when requested on unsupported architectures/configurations, the

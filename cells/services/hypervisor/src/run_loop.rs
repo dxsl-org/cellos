@@ -161,6 +161,7 @@ pub fn run(
                         net_vmio.signal_used();
                     }
                 }
+                ostd::task::yield_now();
             }
 
             // ── Guest shutdown ────────────────────────────────────────────────

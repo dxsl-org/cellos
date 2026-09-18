@@ -20,10 +20,30 @@
 #
 # $1: optional space-separated candidate list, for callers targeting another arch.
 resolve_objcopy() {
-    local candidates="${1:-riscv64-unknown-elf-objcopy riscv-none-elf-objcopy}"
     if [[ -n "${OBJCOPY:-}" ]]; then
         export OBJCOPY
         return 0
+    fi
+    local candidates
+    if [[ $# -gt 0 && -f "$1" ]]; then
+        local machine
+        machine=$(readelf -h "$1" 2>/dev/null | grep -i "Machine:" || true)
+        case "$machine" in
+            *AArch64*)
+                candidates="aarch64-linux-gnu-objcopy llvm-objcopy objcopy"
+                ;;
+            *RISC-V*)
+                candidates="riscv64-unknown-elf-objcopy riscv-none-elf-objcopy llvm-objcopy"
+                ;;
+            *X86-64*|*x86-64*)
+                candidates="objcopy llvm-objcopy"
+                ;;
+            *)
+                candidates="riscv64-unknown-elf-objcopy riscv-none-elf-objcopy aarch64-linux-gnu-objcopy llvm-objcopy objcopy"
+                ;;
+        esac
+    else
+        candidates="${1:-riscv64-unknown-elf-objcopy riscv-none-elf-objcopy aarch64-linux-gnu-objcopy llvm-objcopy objcopy}"
     fi
     local cand
     for cand in $candidates; do
@@ -53,7 +73,7 @@ resolve_objcopy() {
 # without failing the embed.
 sign_cells() {
     [[ $# -gt 0 ]] || return 0
-    resolve_objcopy || return 1
+    resolve_objcopy "$1" || return 1
     local bin
     for bin in "$@"; do
         if [[ ! -f "$bin" ]]; then
@@ -61,5 +81,6 @@ sign_cells() {
             return 1
         fi
     done
-    "$PYTHON_BIN" scripts/cellos-sign --quiet --objcopy "$OBJCOPY" --sign "$@"
+    local python_bin="${PYTHON_BIN:-python3}"
+    "$python_bin" scripts/cellos-sign --quiet --objcopy "$OBJCOPY" --sign "$@"
 }
