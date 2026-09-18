@@ -162,6 +162,7 @@ members = [
     "cells/tests/silo-test",
     "cells/tests/wx-test",
     "cells/tests/tier2-exploit",
+    "cells/tests/tier2-smoke",
     "cells/tests/ai-test",
 
     # Cells - Runtimes

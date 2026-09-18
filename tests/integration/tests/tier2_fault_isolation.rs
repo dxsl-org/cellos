@@ -112,3 +112,57 @@ fn tier2_hardware_page_fault_terminates_cell_cleanly() {
             )
         });
 }
+
+#[test]
+fn tier2_positive_execution_runs_cleanly() {
+    if !prerequisites_ok() {
+        return;
+    }
+
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("shell not reached: {e}\n{}", qemu.dump()));
+
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    send_command(&mut qemu, "tier2-smoke");
+
+    // 1. Verify admission to Tier 2 Paged Domain (SATP isolation)
+    qemu.wait_for("[domain] admitted cell 'tier2-smoke'", FAULT_TIMEOUT)
+        .unwrap_or_else(|e| {
+            panic!(
+                "tier2-smoke was not admitted to Tier 2 Paged Domain: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
+
+    // 2. Verify heap allocation and execution under private SATP
+    qemu.wait_for("[tier2-smoke] Heap allocation verified", FAULT_TIMEOUT)
+        .unwrap_or_else(|e| {
+            panic!(
+                "tier2-smoke heap allocation failed: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
+
+    qemu.wait_for(
+        "[tier2-smoke] PASS: All Tier 2 runtime invariants verified successfully!",
+        FAULT_TIMEOUT,
+    )
+    .unwrap_or_else(|e| {
+        panic!(
+            "tier2-smoke did not complete PASS: {e}\n--- output ---\n{}",
+            qemu.dump()
+        )
+    });
+
+    // 3. Verify clean exit and shell survivability
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    send_command(&mut qemu, "echo tier2-positive-ok");
+    qemu.wait_for("tier2-positive-ok", FAULT_TIMEOUT)
+        .unwrap_or_else(|e| {
+            panic!(
+                "shell not responding after tier2-smoke exit: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
+}

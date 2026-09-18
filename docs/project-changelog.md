@@ -16,7 +16,11 @@
 - Verified Tier 2 hardware MMU fault containment via QEMU integration test `tier2_fault_isolation.rs`:
   `/bin/tier2-exploit` running under private SATP isolation attempted a NULL write, CPU triggered Page Fault (scause 15),
   kernel caught the trap, terminated the cell safely, and the shell prompt remained interactive and functional.
-
+- Implemented and verified Tier 2 positive runtime execution via `/bin/tier2-smoke`:
+  exercised dynamic heap allocation (Vec sum=1050), formatted String buffers, scheduler yield, and clean exit code 0
+  under private SATP isolation without SAS fallback, verified by integration test `tier2_positive_execution_runs_cleanly`.
+- Enhanced `tools/add-cell-to-disk.py` to synchronize both the early bootstrap cell table (LBA 526,336) and the
+  FAT cell-store volume (LBA 1,062,144 / `PART_CELLSTORE_BASE_LBA`), ensuring dynamic cell launches resolve cleanly across VFS.
 ## [2026-09-18] Tier 1 pure-Rust std PAL and custom targets complete
 - Landed the pure-Rust PAL and target specifications (`targets/*-unknown-cellos.json`) across three architectures:
   `riscv64gc-unknown-cellos`, `aarch64-unknown-cellos`, and `x86_64-unknown-cellos`.

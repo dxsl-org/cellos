@@ -9,7 +9,7 @@ CELL_TABLE_BASE_LBA = 526_336
 CELL_TABLE_MAGIC = 0x5649_4F53_5F43_454C
 CELL_PATH_LEN = 64
 MAX_CELL_ENTRIES = 64
-
+CELLSTORE_BASE_LBA = 1_062_144
 def pack_header(count: int) -> bytes:
     return struct.pack("<QI", CELL_TABLE_MAGIC, count) + b"\x00" * 500
 
@@ -91,6 +91,37 @@ def main():
                 f.write(b"\x00" * (SECTOR_SIZE - remainder))
 
     print(f"Successfully updated {disk_img} with {len(cell_list)} cells.")
+    # 4. Also rebuild FAT cell-store at CELLSTORE_BASE_LBA if disk is large enough
+    import subprocess
+    import tempfile
+    import shutil
+
+    with open(disk_img, "rb") as f:
+        f.seek(0, 2)
+        disk_len = f.tell()
+
+    if disk_len >= (CELLSTORE_BASE_LBA + 100) * SECTOR_SIZE:
+        tmp_dir = tempfile.mkdtemp(prefix="cellstore_build_")
+        try:
+            cs_path = os.path.join(tmp_dir, "cell_store.img")
+            mkfat_path = os.path.join(os.path.dirname(__file__), "mkfat32.py")
+            mkfat_args = [sys.executable, mkfat_path, cs_path]
+            for cell_path, data in cell_list:
+                basename = cell_path.replace("/bin/", "")
+                fpath = os.path.join(tmp_dir, basename)
+                with open(fpath, "wb") as cf:
+                    cf.write(data)
+                mkfat_args.extend([fpath, "/" + basename])
+
+            subprocess.run(mkfat_args, check=True)
+            with open(cs_path, "rb") as cs:
+                cs_data = cs.read()
+            with open(disk_img, "r+b") as f:
+                f.seek(CELLSTORE_BASE_LBA * SECTOR_SIZE)
+                f.write(cs_data)
+            print(f"Successfully updated FAT cell-store at LBA {CELLSTORE_BASE_LBA} ({len(cs_data)} bytes).")
+        finally:
+            shutil.rmtree(tmp_dir)
 
 if __name__ == "__main__":
     main()

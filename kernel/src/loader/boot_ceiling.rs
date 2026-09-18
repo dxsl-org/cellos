@@ -129,7 +129,8 @@ pub fn lookup(path: &str) -> Option<CapSet> {
         // are listed rather than left to the unknown-path fallback so a denial
         // report can distinguish "needs nothing" from "row missing".
         "/bin/config" | "/bin/compositor" | "/bin/fb-console" | "/bin/kms" | "/bin/silo-test"
-        | "/bin/vfs-test" | "/bin/srv-test" | "/bin/std-smoke" => CapSet::EMPTY,
+        | "/bin/vfs-test" | "/bin/srv-test" | "/bin/std-smoke" | "/bin/tier2-exploit"
+        | "/bin/tier2-smoke" => CapSet::EMPTY,
         _ => return None,
     };
     Some(caps)

@@ -30,6 +30,7 @@ pub(super) fn reviewed_user_target_ceiling(target: &str) -> Option<CapSet> {
         | "/bin/vfs-test"
         | "/bin/wx-test"
         | "/bin/tier2-exploit"
+        | "/bin/tier2-smoke"
         | "/bin/hotswap-demo-v1"
         | "/bin/hotswap-demo-v2"
         | "/bin/std-smoke" => CapSet::EMPTY,

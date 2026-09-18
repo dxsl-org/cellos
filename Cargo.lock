@@ -2742,6 +2742,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "tier2-smoke"
+version = "0.1.0"
+dependencies = [
+ "api",
+ "cell-build",
+ "ostd",
+]
+
+[[package]]
 name = "time"
 version = "0.3.54"
 source = "registry+https://github.com/rust-lang/crates.io-index"
