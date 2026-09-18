@@ -76,6 +76,7 @@ pub(crate) fn spawn_optional_services() -> Option<usize> {
         let _ = sys_spawn_from_path("/bin/ai-test");
         let _ = sys_spawn_from_path("/bin/vfs-test");
         let _ = sys_spawn_from_path("/bin/srv-test");
+        let _ = sys_spawn_from_path("/bin/std-smoke");
     }
     hypervisor_tid
 }

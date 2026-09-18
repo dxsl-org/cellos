@@ -82,38 +82,110 @@ new file mode 100644
 index 0000000..ef7cf20
 --- /dev/null
 +++ b/library/std/src/sys/pal/cellos/alloc.rs
-@@ -0,0 +1,31 @@
-+use crate::alloc::Layout;
-+
-+// CellOS Tier 1 SAS Per-Cell Heap Arena (1 MiB, 16-byte aligned)
-+const HEAP_SIZE: usize = 1024 * 1024;
-+
-+#[repr(align(16))]
-+struct HeapMemory([u8; HEAP_SIZE]);
-+static mut HEAP_MEM: HeapMemory = HeapMemory([0; HEAP_SIZE]);
-+static mut HEAP_OFFSET: usize = 0;
-+
-+#[inline]
-+pub unsafe fn alloc(layout: Layout) -> *mut u8 {
-+    let align = layout.align();
-+    let size = layout.size();
-+    if size == 0 {
-+        return align as *mut u8;
-+    }
-+    let current = HEAP_OFFSET;
-+    let aligned = (current + align - 1) & !(align - 1);
-+    let next = aligned + size;
-+    if next > HEAP_SIZE {
-+        return core::ptr::null_mut();
-+    }
-+    HEAP_OFFSET = next;
-+    core::ptr::addr_of_mut!(HEAP_MEM.0).cast::<u8>().add(aligned)
-+}
-+
-+#[inline]
-+pub unsafe fn dealloc(_ptr: *mut u8, _layout: Layout) {
-+    // Per-cell allocator lifecycle is bounded to cell lifetime.
-+}
+@@ -0,0 +1,99 @@
+// SPDX-License-Identifier: MPL-2.0
+// CellOS Tier 1 SAS Per-Cell Freeing Heap Allocator (4 MiB, 16-byte aligned, coalescing).
+use crate::alloc::Layout;
+
+const HEAP_SIZE: usize = 4 * 1024 * 1024;
+const ALIGN: usize = 16;
+const HEADER_SIZE: usize = 16;
+
+#[repr(align(16))]
+struct HeapStorage([u8; HEAP_SIZE]);
+static mut HEAP_MEM: HeapStorage = HeapStorage([0; HEAP_SIZE]);
+static mut INITIALIZED: bool = false;
+
+#[repr(C)]
+struct BlockHeader {
+    size: usize,
+    is_free: usize,
+}
+
+unsafe fn init_heap() {
+    let base = core::ptr::addr_of_mut!(HEAP_MEM.0) as *mut BlockHeader;
+    (*base).size = HEAP_SIZE;
+    (*base).is_free = 1;
+    INITIALIZED = true;
+}
+
+#[inline]
+pub unsafe fn alloc(layout: Layout) -> *mut u8 {
+    let size = layout.size();
+    if size == 0 {
+        return layout.align().max(ALIGN) as *mut u8;
+    }
+    if !INITIALIZED {
+        init_heap();
+    }
+
+    let req_payload = (size + ALIGN - 1) & !(ALIGN - 1);
+    let needed = req_payload + HEADER_SIZE;
+
+    let heap_start = core::ptr::addr_of_mut!(HEAP_MEM.0) as usize;
+    let heap_end = heap_start + HEAP_SIZE;
+
+    let mut curr = heap_start;
+    while curr < heap_end {
+        let hdr = curr as *mut BlockHeader;
+        let bsize = (*hdr).size;
+        if bsize < HEADER_SIZE || curr + bsize > heap_end {
+            return core::ptr::null_mut();
+        }
+
+        if (*hdr).is_free == 1 && bsize >= needed {
+            if bsize >= needed + HEADER_SIZE + ALIGN {
+                let next = (curr + needed) as *mut BlockHeader;
+                (*next).size = bsize - needed;
+                (*next).is_free = 1;
+                (*hdr).size = needed;
+            }
+            (*hdr).is_free = 0;
+            return (curr + HEADER_SIZE) as *mut u8;
+        }
+
+        curr += bsize;
+    }
+
+    core::ptr::null_mut()
+}
+
+#[inline]
+pub unsafe fn dealloc(ptr: *mut u8, layout: Layout) {
+    if layout.size() == 0 || ptr.is_null() {
+        return;
+    }
+    let heap_start = core::ptr::addr_of_mut!(HEAP_MEM.0) as usize;
+    let heap_end = heap_start + HEAP_SIZE;
+    let p = ptr as usize;
+
+    if p < heap_start + HEADER_SIZE || p >= heap_end {
+        return;
+    }
+
+    let hdr = (p - HEADER_SIZE) as *mut BlockHeader;
+    (*hdr).is_free = 1;
+
+    let mut curr = heap_start;
+    while curr < heap_end {
+        let cur_hdr = curr as *mut BlockHeader;
+        let bsize = (*cur_hdr).size;
+        if bsize < HEADER_SIZE || curr + bsize > heap_end {
+            break;
+        }
+
+        let next = curr + bsize;
+        if next < heap_end {
+            let next_hdr = next as *mut BlockHeader;
+            if (*cur_hdr).is_free == 1 && (*next_hdr).is_free == 1 {
+                (*cur_hdr).size += (*next_hdr).size;
+                continue;
+            }
+        }
+
+        curr += (*cur_hdr).size;
+    }
+}
 diff --git a/library/std/src/sys/pal/cellos/common.rs b/library/std/src/sys/pal/cellos/common.rs
 new file mode 100644
 index 0000000..eb94fd7
@@ -166,7 +238,7 @@ index 0000000..95c233a
 --- /dev/null
 +++ b/library/std/src/sys/pal/cellos/random.rs
 @@ -0,0 +1,70 @@
-+const SYS_GET_RANDOM: usize = 37;
+const SYS_GET_RANDOM: usize = 214;
 +
 +/// Secure entropy hook obeying PAL-019 (no dev-weak-rng) and PAL-031 (buffer validation).
 +pub fn fill_bytes(bytes: &mut [u8]) {
@@ -242,14 +314,14 @@ index 0000000..5c2c2f0
 --- /dev/null
 +++ b/library/std/src/sys/pal/cellos/thread.rs
 @@ -0,0 +1,49 @@
-+use crate::io;
-+use crate::num::NonZeroUsize;
-+
-+const SYS_YIELD: usize = 104;
-+
-+pub fn available_parallelism() -> io::Result<NonZeroUsize> {
-+    Ok(NonZeroUsize::new(1).unwrap())
-+}
+use crate::io;
+use crate::num::NonZero;
+
+const SYS_YIELD: usize = 104;
+
+pub fn available_parallelism() -> io::Result<NonZero<usize>> {
+    Ok(NonZero::new(1).unwrap())
+}
 +
 +pub fn yield_now() {
 +    #[cfg(target_arch = "riscv64")]
@@ -353,11 +425,16 @@ index 0000000..96bf687
 +        Some(Duration::from_nanos(diff_ticks.saturating_mul(100)))
 +    }
 +
-+    pub fn checked_add_duration(&self, other: &Duration) -> Option<Instant> {
-+        let add_ticks = (other.as_nanos() / 100) as u64;
-+        self.0.checked_add(add_ticks).map(Instant)
-+    }
-+}
+    pub fn checked_add_duration(&self, other: &Duration) -> Option<Instant> {
+        let add_ticks = (other.as_nanos() / 100) as u64;
+        self.0.checked_add(add_ticks).map(Instant)
+    }
+
+    pub fn checked_sub_duration(&self, other: &Duration) -> Option<Instant> {
+        let sub_ticks = (other.as_nanos() / 100) as u64;
+        self.0.checked_sub(sub_ticks).map(Instant)
+    }
+}
 diff --git a/library/std/src/sys/pal/mod.rs b/library/std/src/sys/pal/mod.rs
 index 88d9d42..ac80e3e 100644
 --- a/library/std/src/sys/pal/mod.rs
@@ -557,3 +634,134 @@ index e88011a..782de96 100644
          ) => {
              pub(crate) fn enable() {
                  // FIXME: Right now there is no concept of "thread exit" on
+diff --git a/library/std/src/sys/time/mod.rs b/library/std/src/sys/time/mod.rs
+index 91113b2..ea5b263 100644
+--- a/library/std/src/sys/time/mod.rs
++++ b/library/std/src/sys/time/mod.rs
+@@ -36,6 +36,15 @@ cfg_select! {
+             pub use super::unsupported::{SystemTime, UNIX_EPOCH};
+         }
+     }
++    target_os = "cellos" => {
++        #[expect(unused)]
++        mod unsupported;
++
++        mod imp {
++            pub use crate::sys::pal::time::Instant;
++            pub use super::unsupported::{SystemTime, UNIX_EPOCH};
++        }
++    }
+     target_os = "windows" => {
+         mod windows;
+         use windows as imp;
+diff --git a/library/std/src/sys/thread/mod.rs b/library/std/src/sys/thread/mod.rs
+index e048259..a1acb42 100644
+--- a/library/std/src/sys/thread/mod.rs
++++ b/library/std/src/sys/thread/mod.rs
+@@ -95,6 +95,12 @@ cfg_select! {
+         mod unsupported;
+         pub use unsupported::{Thread, available_parallelism, current_os_id, set_name, DEFAULT_MIN_STACK_SIZE};
+     }
++    target_os = "cellos" => {
++        pub use crate::sys::pal::thread::{available_parallelism, yield_now};
++        #[expect(dead_code)]
++        mod unsupported;
++        pub use unsupported::{Thread, current_os_id, set_name, sleep, DEFAULT_MIN_STACK_SIZE};
++    }
+     all(target_family = "wasm", target_feature = "atomics") => {
+         mod wasm;
+         pub use wasm::sleep;
+diff --git a/library/std/src/sys/args/cellos.rs b/library/std/src/sys/args/cellos.rs
+new file mode 100644
+index 0000000..c1c1c1c
+--- /dev/null
++++ b/library/std/src/sys/args/cellos.rs
+@@ -0,0 +1,65 @@
++// SPDX-License-Identifier: MPL-2.0
++// CellOS Tier 1 Rust std command-line arguments implementation.
++pub use super::common::Args;
++use crate::ffi::OsString;
++use crate::vec::Vec;
++
++const SYS_STATE_RESTORE: usize = 411;
++const ARGV_STASH_KEY: usize = 0x0061_7267_7600_0000;
++
++pub fn args() -> Args {
++    let mut buf = [0u8; 1024];
++    let ret: isize;
++    #[cfg(target_arch = "riscv64")]
++    unsafe {
++        core::arch::asm!(
++            "ecall",
++            inlateout("a0") ARGV_STASH_KEY => ret,
++            in("a1") buf.as_mut_ptr() as usize,
++            in("a2") buf.len(),
++            in("a3") 0usize,
++            in("a7") SYS_STATE_RESTORE,
++            options(nostack, preserves_flags)
++        );
++    }
++    #[cfg(target_arch = "aarch64")]
++    unsafe {
++        core::arch::asm!(
++            "svc #0",
++            inlateout("x0") SYS_STATE_RESTORE => ret,
++            in("x1") ARGV_STASH_KEY,
++            in("x2") buf.as_mut_ptr() as usize,
++            in("x3") buf.len(),
++            in("x4") 0usize,
++            options(nostack, preserves_flags)
++        );
++    }
++    #[cfg(target_arch = "x86_64")]
++    unsafe {
++        core::arch::asm!(
++            "syscall",
++            inlateout("rax") SYS_STATE_RESTORE => ret,
++            in("rdi") ARGV_STASH_KEY,
++            in("rsi") buf.as_mut_ptr() as usize,
++            in("rdx") buf.len(),
++            in("r10") 0usize,
++            lateout("rcx") _,
++            lateout("r11") _,
++            options(nostack, preserves_flags)
++        );
++    }
++
++    let mut args = Vec::new();
++    if ret > 0 {
++        let n = ret as usize;
++        if let Ok(cmdline) = core::str::from_utf8(&buf[..n]) {
++            for part in cmdline.split_whitespace() {
++                args.push(OsString::from(part));
++            }
++        }
++    }
++    if args.is_empty() {
++        args.push(OsString::from("cell"));
++    }
++    Args::new(args)
++}
+diff --git a/library/std/src/sys/args/mod.rs b/library/std/src/sys/args/mod.rs
+index 8a7ea39..fc95e12 100644
+--- a/library/std/src/sys/args/mod.rs
++++ b/library/std/src/sys/args/mod.rs
+@@ -10,6 +10,7 @@
+     target_os = "uefi",
+     target_os = "wasi",
+     target_os = "xous",
++    target_os = "cellos",
+ ))]
+ mod common;
+ 
+@@ -53,6 +54,10 @@
+         mod zkvm;
+         pub use zkvm::*;
+     }
++    target_os = "cellos" => {
++        mod cellos;
++        pub use cellos::*;
++    }
+     _ => {
+         mod unsupported;
+         pub use unsupported::*;

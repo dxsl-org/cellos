@@ -127,6 +127,7 @@ DEV_POLICY = [
     ("/bin/posix-shim-test", 0, 1, 0, 0, 0, 0, 0, 0, 0),
     ("/bin/https-demo",  0, 1, 0, 0, 0, 0,     0, 0, 0),
     ("/bin/http-smoke",  0, 1, 0, 0, 0, 0,     0, 0, 0),
+    ("/bin/std-smoke",   0, 0, 0, 0, 0, 0,     0, 0, 0),
 ]
 
 

@@ -31,7 +31,8 @@ pub(super) fn reviewed_user_target_ceiling(target: &str) -> Option<CapSet> {
         | "/bin/wx-test"
         | "/bin/tier2-exploit"
         | "/bin/hotswap-demo-v1"
-        | "/bin/hotswap-demo-v2" => CapSet::EMPTY,
+        | "/bin/hotswap-demo-v2"
+        | "/bin/std-smoke" => CapSet::EMPTY,
         // These clients and servers use typed IPC to the net service; they do
         // not hold NetworkCap themselves. Keeping their launch ceiling empty
         // also lets exact shell SpawnFromElf edges remain capability-free.

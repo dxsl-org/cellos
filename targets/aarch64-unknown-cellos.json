@@ -25,7 +25,7 @@
       "--fix-cortex-a53-843419"
     ]
   },
-  "relocation-model": "static",
+  "relocation-model": "pic",
   "stack-probes": {
     "kind": "inline"
   },

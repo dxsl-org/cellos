@@ -48,7 +48,7 @@ pub fn emit_linker_script() {
 /// define `_start` or `cell_main`).
 pub fn emit_linker_script_entry(entry: &str) {
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
-    if target_os != "none" {
+    if target_os != "none" && target_os != "cellos" {
         return;
     }
     let arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();

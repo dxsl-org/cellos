@@ -12,7 +12,7 @@ use core::panic::PanicInfo;
 /// `main`. This `#[used]` pointer creates a real relocation to `_start` from an
 /// object that is always linked (this module holds the `#[panic_handler]`),
 /// keeping it against GC. Belt-and-suspenders alongside `ENTRY(_start)`.
-#[cfg(target_os = "none")]
+#[cfg(any(target_os = "none", target_os = "cellos"))]
 #[used]
 static _KEEP_START: unsafe extern "C" fn() -> ! = _start;
 
@@ -21,7 +21,7 @@ static _KEEP_START: unsafe extern "C" fn() -> ! = _start;
 /// # Safety
 /// Never call from Rust: the kernel loader jumps here exactly once on a fresh
 /// stack; the naked asm assumes registers per the cell spawn ABI.
-#[cfg(target_os = "none")]
+#[cfg(any(target_os = "none", target_os = "cellos"))]
 #[no_mangle]
 #[unsafe(naked)]
 #[link_section = ".text.boot"]

@@ -31,3 +31,6 @@ json = ["dep:http-core"]
 # `http` exposes `ostd::http` (RequestBuilder, header parse, BodyReader,
 # HttpClient, TlsStream). Pulls http-core; works over TcpStream or TlsStream.
 http = ["dep:http-core"]
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("cellos"))'] }

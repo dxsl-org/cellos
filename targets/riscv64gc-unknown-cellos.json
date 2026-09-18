@@ -20,6 +20,6 @@
   },
   "os": "cellos",
   "panic-strategy": "abort",
-  "relocation-model": "static",
+  "relocation-model": "pic",
   "target-pointer-width": 64
 }
