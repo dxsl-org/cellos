@@ -12,7 +12,7 @@ stacks and hardware-isolation layers. Do not use numbered SDK tiers.
 
 | Tier | Canonical name | Runtime profiles | Isolation | Status |
 | :--- | :--- | :--- | :--- | :--- |
-| **Tier 1** | Trusted SAS Cell | `rust-no-std`, future `rust-std`, `ffi-posix`, `lua` | Shared SAS + LBI; fleet posture depends on signing/admission | Shipped for current native Cells; future `rust-std` is G4 |
+| **Tier 1** | Trusted SAS Cell | `rust-no-std`, `rust-std` (pure-Rust PAL), `ffi-posix`, `lua` | Shared SAS + LBI; fleet posture depends on signing/admission | Shipped for native Cells (`rust-no-std` & pure-Rust `rust-std`) |
 | **Tier 2** | Native Domain Cell | Same native Cell shape as Tier 1 | Private MMU domain, explicit mapped grants, copied/domain-aware IPC | Accepted design, **not implemented** |
 | **Tier 3** | VM Guest | `linux-guest` | Hypervisor / Stage-2 | ARM64 guest path exists; broader platform work tracked separately |
 
@@ -40,8 +40,8 @@ Dành cho kernel, drivers, services, RT control — bất cứ thứ gì cần h
 - Isolation: Rust type system (Language-Based Isolation)
 - Bắt buộc: `#![forbid(unsafe_code)]` cho Cells; `unsafe` chỉ trong kernel/HAL
 - Không giới hạn file count — full Cargo crate với submodules
-- Runtime profile mặc định hiện tại: `rust-no-std`; `rust-std` là G4 và phải đi
-  qua pure-Rust PAL/custom target, không đi qua mlibc.
+- Runtime profile mặc định: `rust-no-std`; `rust-std` được hỗ trợ qua
+  pure-Rust PAL và custom target `*-unknown-cellos` (không đi qua mlibc).
 
 ### 2.1 Hardware-Assisted Infrastructure Used by Tier 1 Services
 

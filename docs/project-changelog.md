@@ -4,6 +4,32 @@
 
 ## [Unreleased] Development-first hardware-constrained execution
 
+## [2026-09-18] Tier 2 fail-closed security enforcement & hardware fault containment verification
+- Eliminated insecure fallback to Tier 1 SAS in `kernel/src/task/launch.rs`: when domain address space creation
+  fails, or when stacks/segments are missing, or when requested on unsupported architectures/configurations, the
+  kernel strictly fails closed with `OutOfMemory`, `InvalidInput`, or `NotSupported` respectively. Unsigned and FFI
+  cells are guaranteed never to execute uncontained in the shared SAS.
+- Fixed lazy bootstrap cell probing in `kernel/src/loader/early.rs`: `read_from_block_table` now re-probes the cell table
+  when block devices become available after early boot, ensuring dynamic cell launches resolve successfully.
+- Created `tools/add-cell-to-disk.py` for cleanly updating the cell bootstrap table on Cellos disk images without
+  touching user data partitions.
+- Verified Tier 2 hardware MMU fault containment via QEMU integration test `tier2_fault_isolation.rs`:
+  `/bin/tier2-exploit` running under private SATP isolation attempted a NULL write, CPU triggered Page Fault (scause 15),
+  kernel caught the trap, terminated the cell safely, and the shell prompt remained interactive and functional.
+
+## [2026-09-18] Tier 1 pure-Rust std PAL and custom targets complete
+- Landed the pure-Rust PAL and target specifications (`targets/*-unknown-cellos.json`) across three architectures:
+  `riscv64gc-unknown-cellos`, `aarch64-unknown-cellos`, and `x86_64-unknown-cellos`.
+- Replaced the initial bump allocator with a 4 MiB boundary-tag freeing allocator (`sys/pal/cellos/alloc.rs`)
+  featuring 16-byte alignment, block splitting, and linear contiguous free-block coalescing, eliminating memory
+  leaks in long-running allocation loops. Verified with 1,000 cycles of allocate/free stress testing in QEMU.
+- Implemented command-line argument parsing in `sys/args/cellos.rs` backed by `ViSyscall::StateRestore` and
+  `ARGV_STASH_KEY` (0x0061_7267_7600_0000), feeding parsed strings to `std::env::args()` and `std::env::args_os()`.
+- Preserved strict SAS fail-closed boundaries: ungranted networking, filesystem, and process execution fail with
+  `ErrorKind::Unsupported`.
+- Maintained full F1/F5 compliance (`python3 scripts/cellos-sign --check`), passed p99 latency regression gates
+  (<= 5%) across all three architectures, and verified end-to-end execution in QEMU via `scripts/run-std-smoke-qemu.sh`.
+
 ## [2026-09-15] Acceptance ledger schema v5: source evidence binds archived revisions
 - The ledger pinned the *live* `docs/specs/23-native-sdk-contract.md` as `source` evidence in 18
   places, but Spec 23 section 5.1 makes the contract amendable by design. The C2-MID witness and gap

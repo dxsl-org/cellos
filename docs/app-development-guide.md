@@ -22,7 +22,7 @@ developer APIs.
 
 | Tier | Canonical name | Runtime profiles | Isolation | Current status | When to use |
 |------|----------------|------------------|-----------|----------------|-------------|
-| **Tier 1** | Trusted SAS Cell | `rust-no-std` shipped; `rust-std` planned; `ffi-posix` and `lua` trusted profiles | Shared SAS + LBI; fleet posture depends on signing/admission | Current native app path | Trusted first-party/platform cells, drivers, services, UI, embedded/robot apps. |
+| **Tier 1** | Trusted SAS Cell | `rust-no-std` shipped; pure-Rust `rust-std` in-tree; `ffi-posix` and `lua` trusted profiles | Shared SAS + LBI; fleet posture depends on signing/admission | Current native app path | Trusted first-party/platform cells, drivers, services, UI, embedded/robot apps. |
 | **Tier 2** | Native Domain Cell | Same native Cell shape as Tier 1 | Private MMU domain; copied/domain-explicit IPC | RV64/QEMU substrate and cross-hart migration implemented in internal test-hooks fixtures only; no public application admission/loader route. Physical containment, DMA quarantine and production approvals remain open | Not currently available for application deployment; untrusted native workloads remain blocked, not silently assigned to Tier 1. |
 | **Tier 3** | VM Guest | `linux-guest` | Hypervisor / Stage-2 | ARM64 guest path exists; broader platform work tracked separately | Legacy Linux/POSIX stacks, fork-heavy apps and supported untrusted guest workloads under target-specific qualification. |
 
@@ -37,7 +37,7 @@ The SDK is one family, not a numbered set of tiers:
 | SDK area | Examples | Applies to | Current maturity |
 |---|---|---|---|
 | Foundation | manifest, syscall ABI, lifecycle entrypoint | Tier 1 and future Tier 2 native Cells | Shipped for current native Cells |
-| Runtime profiles | `rust-no-std`, future `rust-std`, `ffi-posix`, `lua` | Profile-specific setup | `rust-no-std`, trusted `ffi-posix`, and Lua exist; `rust-std` is planned for G4 |
+| Runtime profiles | `rust-no-std`, `rust-std`, `ffi-posix`, `lua` | Profile-specific setup | `rust-no-std`, in-tree `rust-std` (pure-Rust PAL), trusted `ffi-posix`, and Lua exist |
 | Service clients | VFS, net, IPC, service discovery | Tier 1 and future Tier 2 native Cells | Available in the native SDK; coverage remains service-specific |
 | UI/graphics | ViUI, signal API, surfaces | Native UI Cells | ViUI path exists |
 | Middleware/helpers | AppContext, wrappers, RAII handles | Native app ergonomics | Available incrementally; not a separate SDK tier |

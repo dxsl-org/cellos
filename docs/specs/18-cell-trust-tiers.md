@@ -48,13 +48,13 @@ The Tier-2 decision point arrives only when Spec 19 Layer B is implemented.
 
 | Tier | Status | Who | Isolation mechanism | Execution speed | IPC |
 |------|--------|-----|---------------------|-----------------|-----|
-| **1 — Trusted SAS cell** | SAS shipped; mandatory signing in Phase 01 ([ADR-0015](../decisions/0015-dual-mode-hybrid-architecture.md)) | 100% Safe Rust cells (`no_std`, planned `std`) + audited Driver Cells (e1000, NVMe, VirtIO with MMIO/DMA). Requires valid Ed25519 signature. | LBI: rustc `#![forbid(unsafe_code)]` + audited driver MMIO/DMA under IOMMU | Native zero-cost SAS boundary; no TLB flush | Zero-trap SPSC Ring Buffer / Zero-copy grants |
+| **1 — Trusted SAS cell** | SAS shipped; mandatory signing in Phase 01 ([ADR-0015](../decisions/0015-dual-mode-hybrid-architecture.md)) | 100% Safe Rust cells (`no_std` and in-tree pure-Rust `std`) + audited Driver Cells (e1000, NVMe, VirtIO with MMIO/DMA). Requires valid Ed25519 signature. | LBI: rustc `#![forbid(unsafe_code)]` + audited driver MMIO/DMA under IOMMU | Native zero-cost SAS boundary; no TLB flush | Zero-trap SPSC Ring Buffer / Zero-copy grants |
 | **2 — Native domain cell** | **Shipped (2026-09-06, ADR-0015 Phase 02)** — verified via negative hardware Page Fault containment test | All unsigned binaries (including unsigned Rust), all C/C++/Zig FFI profiles, Doom, Tetris-C, and Lua runtime | Hardware: private page-table (`satp`/`CR3`/`TTBR0`) — other cells' and kernel pages unmapped/NX | Native inside domain; ASID-tagged switch | Kernel-copied messages; `validate_user_buf` |
 | **3 — VM guest** | ARM64 & x86 QEMU lanes shipped | Whole legacy stacks, normally Linux guests (Alpine, Nginx, ROS2) | Stage-2 paging / hypervisor guest boundary | Native inside guest | virtio / proxy |
 
 Profiles under the Dual-Mode Hybrid Architecture (ADR-0015):
 
-- **Tier 1**: Strict Safe Rust (`no_std`, future `std`) + audited Driver Cells. Signed-only.
+- **Tier 1**: Strict Safe Rust (`no_std` and in-tree pure-Rust `std`) + audited Driver Cells. Signed-only.
 - **Tier 2**: All C/C++/Zig FFI code (`posix-shim`, `mlibc`), dynamic runtimes (Lua), and all unsigned native binaries. Contained by hardware MMU.
 - **Tier 3**: Full Linux guest userspace via Stage-2 hypervisor.
 

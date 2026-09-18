@@ -32,6 +32,20 @@
 - Ngoài lane này còn các việc lớn như x86 Platform Cell discovery [completed], kernel-owned x86 paging, per-vector IDT stubs [completed] và production
   trust keys.
 - Phase 04 two-node/direct-LAN vẫn được ghi blocked riêng theo authority mTLS; không chặn single-guest gate.
+- Tier 1 Rust `std` PAL [completed 2026-09-18]: hoàn tất lõi PAL thuần Rust và target specs
+  `*-unknown-cellos` cho cả 3 kiến trúc (riscv64, aarch64, x86_64). Đã hiện thực bộ cấp phát
+  heap tự do có ghép khối liền kề (4 MiB boundary-tag coalescing allocator), phục hồi tham số dòng
+  lệnh qua `ViSyscall::StateRestore` (`ARGV_STASH_KEY`), đơn điệu `Instant::now()`, điều phối
+  `yield_now()`, stdout log và các API không cấp quyền fail-closed. Đã kiểm chứng stress test
+  1.000 chu kỳ alloc/dealloc không rò rỉ RAM, parity benchmark p99 regression <= 5%, và boot
+  end-to-end PASS trên QEMU (`scripts/run-std-smoke-qemu.sh`).
+- Tier 2 fail-closed security & hardware containment [completed 2026-09-18]: xóa bỏ hoàn toàn
+  cơ chế fallback ngầm sang SAS trong `kernel/src/task/launch.rs`; mã unsigned hoặc FFI khi tạo
+  domain thất bại hoặc thiếu metadata/không hỗ trợ kiến trúc bắt buộc fail-closed (`OutOfMemory`,
+  `InvalidInput`, `NotSupported`), bảo đảm bất biến Spec 22 không bao giờ để mã unverified chạy
+  trần trong SAS. Khắc phục lazy re-probe cho `EarlyLoader` trong `kernel/src/loader/early.rs` khi
+  thiết bị khối sẵn sàng sau boot. Đã kiểm chứng 100% PASS integration test `tier2_fault_isolation.rs`
+  trên QEMU (bắt bẫy page fault NULL-write từ `/bin/tier2-exploit`, kết liễu an toàn, shell tiếp tục sống sót).
 
 1. Chọn floor backend + production hardware
 2. Security review thiết kế floor/A-B protocol
