@@ -22,7 +22,7 @@ from . import source as sdk_source
 
 def begin_context():
     """Start an isolated cache for one top-level validator invocation."""
-    return _CACHE.set({"files": {}, "paths": {}})
+    return _CACHE.set({"files": {}, "paths": {}, "git": {}})
 
 
 def end_context(token) -> None:
@@ -34,7 +34,7 @@ def cached_paths(root: Path, namespace: str, discover: Callable[[], set[str]]) -
     cache = _CACHE.get()
     if cache is None:
         return discover()
-    key = (namespace, str(root.resolve()))
+    key = (namespace, str(root))
     if key not in cache["paths"]:
         cache["paths"][key] = frozenset(discover())
     return set(cache["paths"][key])
@@ -93,6 +93,15 @@ def safe_file(root: Path, path: object, digest: object, size: object, kind: obje
     rel = text(path, "artifact.path")
     if "\\" in rel or "\x00" in rel or rel.startswith("/") or ".." in Path(rel).parts:
         raise ValueError("artifact path is not safe repository-relative")
+    if not HEX.fullmatch(text(digest, "artifact.sha256")):
+        raise ValueError("artifact size or digest schema is invalid")
+    int_size = integer(size, "artifact.size_bytes")
+    if kind not in {"log", "artifact", "source"}:
+        raise ValueError("artifact digest or kind is invalid")
+    key = (str(root), rel, digest, int_size, kind)
+    cache = _CACHE.get()
+    if cache is not None and key in cache["files"]:
+        return
     target = root / rel
     if kind == "source":
         target = preserve(root, rel, digest)
@@ -100,13 +109,9 @@ def safe_file(root: Path, path: object, digest: object, size: object, kind: obje
             raise ValueError("preserved source revision is missing")
     if target.is_symlink() or not target.is_file() or root not in target.resolve().parents:
         raise ValueError("artifact path is missing, outside root, or a symlink")
-    if not HEX.fullmatch(text(digest, "artifact.sha256")) or integer(size, "artifact.size_bytes") != target.stat().st_size:
+    if int_size != target.stat().st_size:
         raise ValueError("artifact size or digest schema is invalid")
-    key = (str(root.resolve()), rel, digest, size, kind)
-    cache = _CACHE.get()
-    if cache is not None and key in cache["files"]:
-        return
-    if hashlib.sha256(target.read_bytes()).hexdigest() != digest or kind not in {"log", "artifact", "source"}:
+    if hashlib.sha256(target.read_bytes()).hexdigest() != digest:
         raise ValueError("artifact digest or kind is invalid")
     if cache is not None:
         cache["files"][key] = True

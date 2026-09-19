@@ -36,8 +36,11 @@ def mirror_sources(root: Path) -> None:
     """Preserve the contract revision and every public SDK file under the temp root.
 
     Schema v5 binds source evidence to archived revisions, so a fixture root needs
-    the same preservation layout the repository keeps.
+    the same preservation layout the repository keeps. Idempotent: skips if the
+    mirror directory already exists.
     """
+    if (root / source.SOURCE_MIRROR).exists():
+        return
     archive_contract(root)
     preserve_spec(root)
     for path in sorted(sdk_source.paths(root)):

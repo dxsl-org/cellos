@@ -57,7 +57,18 @@ def dirty_bundle(root: Path, bundle: object, dirty: object, revision: object, tr
     patch = item["patch"]
     exact(patch, {"path", "sha256", "size_bytes", "kind"}, "dirty patch")
     safe_file(root, patch["path"], patch["sha256"], patch["size_bytes"], patch["kind"])
-    if (root / patch["path"]).read_bytes() != subprocess.run(["git", "diff", "--binary", revision], cwd=root, capture_output=True).stdout:
+    root_str = str(root)
+    from .checks import _CACHE
+    cache = _CACHE.get()
+    git_cache = cache["git"] if cache is not None else None
+    diff_key = (root_str, revision, "diff")
+    if git_cache is not None and diff_key in git_cache:
+        expected_diff = git_cache[diff_key]
+    else:
+        expected_diff = subprocess.run(["git", "diff", "--binary", revision], cwd=root, capture_output=True).stdout
+        if git_cache is not None:
+            git_cache[diff_key] = expected_diff
+    if (root / patch["path"]).read_bytes() != expected_diff:
         raise ValueError("dirty patch bytes do not match worktree")
     blobs = item["untracked"]
     if not isinstance(blobs, list) or [blob.get("path") for blob in blobs] != sorted(blob.get("path") for blob in blobs):
@@ -65,10 +76,26 @@ def dirty_bundle(root: Path, bundle: object, dirty: object, revision: object, tr
     for blob in blobs:
         exact(blob, {"path", "sha256", "size_bytes", "kind"}, "dirty blob")
         safe_file(root, blob["path"], blob["sha256"], blob["size_bytes"], blob["kind"])
-        if subprocess.run(["git", "cat-file", "-e", f"{revision}:{blob['path']}"], cwd=root, capture_output=True).returncode == 0:
+        cat_key = (root_str, revision, "cat", blob["path"])
+        if git_cache is not None and cat_key in git_cache:
+            has_blob = git_cache[cat_key]
+        else:
+            has_blob = subprocess.run(["git", "cat-file", "-e", f"{revision}:{blob['path']}"], cwd=root, capture_output=True).returncode == 0
+            if git_cache is not None:
+                git_cache[cat_key] = has_blob
+        if has_blob:
             raise ValueError("dirty untracked blob exists at base")
-    actual_untracked = subprocess.run(["git", "ls-files", "--others", "--exclude-standard"], cwd=root, capture_output=True, text=True)
-    if actual_untracked.returncode or [blob["path"] for blob in blobs] != sorted(filter(None, actual_untracked.stdout.splitlines())):
+    untracked_key = (root_str, "ls-files")
+    if git_cache is not None and untracked_key in git_cache:
+        actual_lines = git_cache[untracked_key]
+        returncode = 0
+    else:
+        actual_untracked = subprocess.run(["git", "ls-files", "--others", "--exclude-standard"], cwd=root, capture_output=True, text=True)
+        returncode = actual_untracked.returncode
+        actual_lines = sorted(filter(None, actual_untracked.stdout.splitlines()))
+        if git_cache is not None:
+            git_cache[untracked_key] = actual_lines
+    if returncode or [blob["path"] for blob in blobs] != actual_lines:
         raise ValueError("dirty bundle does not enumerate current untracked files")
     material = {key: item[key] for key in ("base_revision", "base_tree", "patch", "untracked")}
     if item["digest"] != canonical_digest(material):
