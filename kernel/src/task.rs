@@ -11,7 +11,14 @@ pub(crate) mod copy_glue;
 pub mod dir_inherit;
 #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
 pub(crate) mod domain_grant;
-#[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+#[cfg(all(
+    feature = "native-domains",
+    any(
+        target_arch = "riscv64",
+        target_arch = "aarch64",
+        target_arch = "x86_64"
+    )
+))]
 pub(crate) mod domain_switch;
 #[cfg(all(
     feature = "native-domains",
@@ -1196,13 +1203,27 @@ pub fn yield_cpu() {
     }
 
     let hart_id = hart_local::current_hart_id();
-    #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+    #[cfg(all(
+        feature = "native-domains",
+        any(
+            target_arch = "riscv64",
+            target_arch = "aarch64",
+            target_arch = "x86_64"
+        )
+    ))]
     let switch_info = if let Some(sched) = SCHEDULER.lock().as_mut() {
         sched.pick_next_domain(hart_id)
     } else {
         None
     };
-    #[cfg(not(all(feature = "native-domains", target_arch = "riscv64")))]
+    #[cfg(not(all(
+        feature = "native-domains",
+        any(
+            target_arch = "riscv64",
+            target_arch = "aarch64",
+            target_arch = "x86_64"
+        )
+    )))]
     let switch_info = if let Some(sched) = SCHEDULER.lock().as_mut() {
         sched.pick_next(hart_id)
     } else {
@@ -1254,35 +1275,83 @@ pub fn yield_cpu() {
             core::arch::asm!("sti", options(nomem, nostack));
         }
     }
-    #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+    #[cfg(all(
+        feature = "native-domains",
+        any(
+            target_arch = "riscv64",
+            target_arch = "aarch64",
+            target_arch = "x86_64"
+        )
+    ))]
     if let Some(plan) = switch_info {
         unsafe {
             let final_curr = if plan.outgoing.is_null() {
-                &raw mut BOOT_CONTEXTS[hart_id]
+                #[cfg(target_arch = "riscv64")]
+                {
+                    &raw mut BOOT_CONTEXTS[hart_id]
+                }
+                #[cfg(not(target_arch = "riscv64"))]
+                {
+                    &raw mut BOOT_CONTEXT
+                }
             } else {
                 plan.outgoing
             };
             let final_next = if plan.incoming.is_null() {
-                &raw const BOOT_CONTEXTS[hart_id]
+                #[cfg(target_arch = "riscv64")]
+                {
+                    &raw const BOOT_CONTEXTS[hart_id]
+                }
+                #[cfg(not(target_arch = "riscv64"))]
+                {
+                    &raw const BOOT_CONTEXT
+                }
             } else {
                 plan.incoming
             };
             if !plan.incoming.is_null() {
+                #[cfg(target_arch = "riscv64")]
                 crate::hal::arch::set_kernel_stack((&*plan.incoming).sp);
+                #[cfg(target_arch = "aarch64")]
+                crate::hal::arch::set_kernel_stack((&*plan.incoming).sp as usize);
+                #[cfg(target_arch = "x86_64")]
+                crate::hal::arch::set_kernel_stack((&*plan.incoming).kernel_trap_sp as usize);
             }
-            #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
-            retirement_selftest::hold_after_selection_before_switch(hart_id);
-            let (root_ppn, asid) = plan.root_switch();
-            crate::hal::arch::Context::switch_with_saved_sstatus(
-                final_curr,
-                final_next,
-                outgoing_sstatus,
-                root_ppn,
-                asid,
-            );
+            #[cfg(target_arch = "riscv64")]
+            {
+                #[cfg(feature = "test-hooks")]
+                retirement_selftest::hold_after_selection_before_switch(hart_id);
+                let (root_ppn, asid) = plan.root_switch();
+                crate::hal::arch::Context::switch_with_saved_sstatus(
+                    final_curr,
+                    final_next,
+                    outgoing_sstatus,
+                    root_ppn,
+                    asid,
+                );
+            }
+            #[cfg(not(target_arch = "riscv64"))]
+            {
+                let (root_addr, asid) = plan.root_switch();
+                if root_addr != 0 {
+                    crate::hal::domain::activate_address_space(root_addr, asid);
+                }
+                crate::hal::arch::Context::switch(final_curr, final_next);
+                let (cur_id, _) = hart_local::current_domain();
+                if cur_id == 0 {
+                    hart_local::acknowledge_safe_root();
+                }
+            }
         }
     }
-    #[cfg(not(all(feature = "native-domains", target_arch = "riscv64")))]
+    #[cfg(not(all(
+        feature = "native-domains",
+        any(
+            target_arch = "riscv64",
+            target_arch = "aarch64",
+            target_arch = "x86_64"
+        )
+    )))]
     if let Some((curr, next)) = switch_info {
         unsafe {
             let final_curr = if curr.is_null() {

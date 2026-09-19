@@ -94,13 +94,16 @@ impl SwitchPlan {
         match &self.transition {
             DomainTransition::Activate(domain) => {
                 let (id, generation) = domain.tuple();
+                #[cfg(target_arch = "riscv64")]
                 let root = (domain.0.root_ppn(), domain.0.asid());
+                #[cfg(not(target_arch = "riscv64"))]
+                let root = (domain.0.root_ppn() << 12, domain.0.asid());
                 // The execution pin was acquired at selection time under
                 // scheduler-stable state; programming the dead root's SATP here
                 // is exactly what begin_execution's recheck prevents.
                 hart_local::set_current_domain(id, generation);
                 crate::hal::domain::observe_switch_activation();
-                #[cfg(feature = "test-hooks")]
+                #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
                 log::info!(
                     "S22-RV64-SWITCH: PASS harts={}",
                     super::smp::online_hart_count()
@@ -114,7 +117,11 @@ impl SwitchPlan {
                 // Cell under the kernel root with the kernel's mappings visible
                 // to its S-mode code — a silent isolation failure.
                 crate::hal::domain::observe_switch_activation();
-                (domain.0.root_ppn(), domain.0.asid())
+                #[cfg(target_arch = "riscv64")]
+                let root = (domain.0.root_ppn(), domain.0.asid());
+                #[cfg(not(target_arch = "riscv64"))]
+                let root = (domain.0.root_ppn() << 12, domain.0.asid());
+                root
             }
             DomainTransition::ToSafeRoot => {
                 let root = crate::memory::paging::KERNEL_ROOT
@@ -122,12 +129,15 @@ impl SwitchPlan {
                     .expect("native domain requires SAS root");
                 hart_local::mark_safe_root_pending();
                 crate::hal::domain::observe_switch_activation();
-                (root >> 12, 0)
+                #[cfg(target_arch = "riscv64")]
+                let res = (root >> 12, 0);
+                #[cfg(not(target_arch = "riscv64"))]
+                let res = (root, 0);
+                res
             }
             DomainTransition::SasToSas => (0, 0),
         }
     }
-
     /// True only for the plan that writes no root: SAS to SAS, where the kernel
     /// root is already live. Every private-root transition — activate *and*
     /// same-domain resume — programs SATP.

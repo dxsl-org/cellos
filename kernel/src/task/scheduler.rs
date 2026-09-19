@@ -1602,7 +1602,14 @@ impl Scheduler {
 
     /// Convert the stable scheduler choice into the RV64-only root plan.  The
     /// plan owns any private-root reference until the raw-switch boundary.
-    #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+    #[cfg(all(
+        feature = "native-domains",
+        any(
+            target_arch = "riscv64",
+            target_arch = "aarch64",
+            target_arch = "x86_64"
+        )
+    ))]
     pub(crate) fn pick_next_domain(
         &mut self,
         hart_id: usize,

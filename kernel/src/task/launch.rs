@@ -171,16 +171,30 @@ pub fn publish_prepared(
     if let Some(replacement) = state.replacement.take() {
         replacement.commit_into(&mut task);
     }
-    #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+    #[cfg(all(
+        feature = "native-domains",
+        any(
+            target_arch = "riscv64",
+            target_arch = "aarch64",
+            target_arch = "x86_64"
+        )
+    ))]
     if state.is_domain {
         if let (Some(ks), Some(us), Some(seg)) =
             (&task.kernel_stack, &task.user_stack, &task.segment_mem)
         {
             let domain = crate::memory::address_space::create_cell_domain(ks, us, seg)
                 .map_err(|_| ViError::OutOfMemory)?;
+            #[cfg(target_arch = "riscv64")]
+            let arch_tag = "SATP";
+            #[cfg(target_arch = "aarch64")]
+            let arch_tag = "TTBR0";
+            #[cfg(target_arch = "x86_64")]
+            let arch_tag = "CR3";
             log::info!(
-                "[domain] admitted cell '{}' to Tier 2 Paged Domain (SATP isolation)",
-                task.name
+                "[domain] admitted cell '{}' to Tier 2 Paged Domain ({} isolation)",
+                task.name,
+                arch_tag
             );
             task.bind_address_space(domain);
         } else {
@@ -191,7 +205,14 @@ pub fn publish_prepared(
             return Err(ViError::InvalidInput);
         }
     }
-    #[cfg(not(all(feature = "native-domains", target_arch = "riscv64")))]
+    #[cfg(not(all(
+        feature = "native-domains",
+        any(
+            target_arch = "riscv64",
+            target_arch = "aarch64",
+            target_arch = "x86_64"
+        )
+    )))]
     if state.is_domain {
         log::error!(
             "[domain] Tier 2 Native Domain requested for '{}' but unsupported on this architecture/configuration",
