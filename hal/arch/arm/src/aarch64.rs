@@ -21,6 +21,8 @@ pub mod cfi;
 #[cfg(target_arch = "aarch64")]
 pub mod context;
 #[cfg(target_arch = "aarch64")]
+pub mod domain;
+#[cfg(target_arch = "aarch64")]
 pub mod el2;
 #[cfg(target_arch = "aarch64")]
 pub mod gic;

@@ -14,6 +14,8 @@ pub mod cet;
 #[cfg(target_arch = "x86_64")]
 pub mod context;
 #[cfg(target_arch = "x86_64")]
+pub mod domain;
+#[cfg(target_arch = "x86_64")]
 pub mod gdt;
 #[cfg(target_arch = "x86_64")]
 pub mod hpet;

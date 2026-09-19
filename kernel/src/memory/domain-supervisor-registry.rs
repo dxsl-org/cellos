@@ -2,6 +2,7 @@
 //!
 //! A range has an owner and lifetime token. Builders may snapshot only shared
 //! kernel ranges; selected stacks and private tables stay owner-scoped.
+#![allow(dead_code)]
 use alloc::vec::Vec;
 use core::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 

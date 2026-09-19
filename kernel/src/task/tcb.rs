@@ -5,7 +5,14 @@ use crate::hal::arch::ViTrapFrame;
 use alloc::string::String;
 use alloc::vec::Vec;
 // use alloc::sync::Arc;
-#[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+#[cfg(all(
+    feature = "native-domains",
+    any(
+        target_arch = "riscv64",
+        target_arch = "aarch64",
+        target_arch = "x86_64"
+    )
+))]
 use alloc::sync::Arc;
 use types::*;
 
@@ -112,7 +119,15 @@ pub enum TaskState {
 ///
 /// Native domains are deliberately unavailable on every non-RV64 target and
 /// default to SAS until a test-only fixture binds a private root.
-#[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+#[cfg(all(
+    feature = "native-domains",
+    any(
+        target_arch = "riscv64",
+        target_arch = "aarch64",
+        target_arch = "x86_64"
+    )
+))]
+#[allow(dead_code)]
 #[derive(Clone)]
 pub(crate) enum TaskAddressSpace {
     Sas,
@@ -168,7 +183,14 @@ pub struct Task {
     pub state: TaskState,
     pub context: Context,
     /// Immutable scheduler dispatch binding; no loader or syscall may replace it.
-    #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+    #[cfg(all(
+        feature = "native-domains",
+        any(
+            target_arch = "riscv64",
+            target_arch = "aarch64",
+            target_arch = "x86_64"
+        )
+    ))]
     pub(crate) address_space: TaskAddressSpace,
     pub trap_frame: ViTrapFrame,
     pub allowed_drivers: Vec<usize>,
@@ -479,7 +501,14 @@ impl Task {
             name: String::from(name),
             state: TaskState::Ready,
             context: Context::default(),
-            #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+            #[cfg(all(
+                feature = "native-domains",
+                any(
+                    target_arch = "riscv64",
+                    target_arch = "aarch64",
+                    target_arch = "x86_64"
+                )
+            ))]
             address_space: TaskAddressSpace::Sas,
             trap_frame: ViTrapFrame::default(),
             allowed_drivers,
@@ -542,7 +571,15 @@ impl Task {
         }
     }
 
-    #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+    #[cfg(all(
+        feature = "native-domains",
+        any(
+            target_arch = "riscv64",
+            target_arch = "aarch64",
+            target_arch = "x86_64"
+        )
+    ))]
+    #[allow(dead_code)]
     pub(crate) fn bind_address_space(
         &mut self,
         address_space: Arc<crate::memory::address_space::AddressSpace>,
@@ -551,7 +588,14 @@ impl Task {
         self.address_space = TaskAddressSpace::Domain(address_space);
     }
 
-    #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+    #[cfg(all(
+        feature = "native-domains",
+        any(
+            target_arch = "riscv64",
+            target_arch = "aarch64",
+            target_arch = "x86_64"
+        )
+    ))]
     #[cfg(feature = "test-hooks")]
     pub(crate) fn bind_address_space_for_test(
         &mut self,
@@ -564,7 +608,15 @@ impl Task {
     /// carry no private root and pass trivially. Must run under `SCHEDULER`
     /// before the task is dequeued or attributed: a Dying root rejects here,
     /// while retirement after a successful pin is legal and drain-safe.
-    #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+    #[cfg(all(
+        feature = "native-domains",
+        any(
+            target_arch = "riscv64",
+            target_arch = "aarch64",
+            target_arch = "x86_64"
+        )
+    ))]
+    #[allow(dead_code)]
     pub(crate) fn begin_execution(
         &self,
         hart_id: usize,

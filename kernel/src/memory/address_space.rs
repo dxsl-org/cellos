@@ -359,6 +359,7 @@ impl AddressSpace {
     /// Ledger record (flags + physical frame) for one mapped page base,
     /// without cloning the whole ledger. Used by the user-copy probe pass;
     /// the caller still confirms the live PTE before moving bytes.
+    #[allow(dead_code)]
     pub(crate) fn page_proof_for(&self, virtual_address: VAddr) -> Option<(Flags, PhysAddr)> {
         self.ledger.lock().iter().find_map(|entry| {
             (entry.virtual_address == virtual_address)
@@ -511,12 +512,7 @@ impl AddressSpace {
         table
             .unmap(virtual_address)
             .map_err(|_| AddressSpaceError::NotFound)?;
-        #[cfg(target_arch = "riscv64")]
-        // SAFETY: sfence.vma on a single virtual address is a pure TLB
-        // invalidation from S-mode.
-        unsafe {
-            core::arch::asm!("sfence.vma zero, {va}", va = in(reg) virtual_address);
-        }
+        crate::hal::paging::flush_tlb_page(virtual_address);
         table.prune_empty(virtual_address, &mut |physical_address| {
             if let Some(index) = table_frames
                 .iter()

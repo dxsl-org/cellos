@@ -311,6 +311,9 @@ impl PageTable {
             entries: [0u64; 512],
         }
     }
+    pub const fn empty() -> Self {
+        Self::zero()
+    }
 }
 
 impl PageTable {

@@ -97,6 +97,9 @@ impl PageTable {
             entries: [0u64; 512],
         }
     }
+    pub const fn empty() -> Self {
+        Self::zero()
+    }
 
     /// Reclaim empty intermediate tables on an already-unmapped 4 KiB path.
     pub fn prune_empty(&mut self, virt: VAddr, dealloc: &mut dyn FnMut(PhysAddr)) {
