@@ -633,9 +633,14 @@ pub fn create_cell_domain(
     builder.build()
 }
 
-#[cfg(feature = "test-hooks")]
 impl Drop for AddressSpace {
     fn drop(&mut self) {
+        // Invalidate all translations tagged with this domain's ASID across
+        // local and remote harts so no stale TLB entry survives past domain teardown.
+        hal::domain::flush_asid(self.asid.value);
+        let _ = hal::domain::flush_asid_remote(usize::MAX, self.asid.value);
+
+        #[cfg(feature = "test-hooks")]
         for id in self.supervisor_registrations.drain(..) {
             let unregistered = crate::memory::domain_supervisor_registry::unregister(id);
             assert!(unregistered);
