@@ -16,46 +16,132 @@ pub(super) const SV39_USER: usize = 1 << 4;
 /// for the leaf translating `va`. Reads page-table memory through the kernel
 /// linear mapping, so the walk itself can never take a user page fault.
 pub(crate) fn sv39_leaf(root_pa: usize, va: usize) -> Option<(usize, usize)> {
-    let mut table_pa = root_pa;
-    for level in 0..3usize {
-        let index = (va >> (30 - 9 * level)) & 0x1FF;
-        // SAFETY: page-table frames are owned by the address space and stay
-        // resident for the walk's lifetime; reads are plain loads through the
-        // kernel linear alias.
-        let pte = unsafe {
-            core::ptr::read_volatile(
-                crate::memory::frame::phys_to_virt(table_pa + index * 8) as *const u64
-            )
-        } as usize;
-        if pte & SV39_VALID == 0 {
-            return None;
+    #[cfg(target_arch = "riscv64")]
+    {
+        let mut table_pa = root_pa;
+        for level in 0..3usize {
+            let index = (va >> (30 - 9 * level)) & 0x1FF;
+            let pte = unsafe {
+                core::ptr::read_volatile(
+                    crate::memory::frame::phys_to_virt(table_pa + index * 8) as *const u64
+                )
+            } as usize;
+            if pte & SV39_VALID == 0 {
+                return None;
+            }
+            if pte & (SV39_READ | SV39_WRITE | (1 << 3)) != 0 {
+                let shift = 12 + 9 * (2 - level);
+                let off_mask = (1usize << shift) - 1;
+                let pa = (((pte >> 10) & ((1usize << 44) - 1)) << 12) | (va & off_mask);
+                return Some((pte & 0xFF, pa));
+            }
+            table_pa = ((pte >> 10) & ((1usize << 44) - 1)) << 12;
         }
-        if pte & (SV39_READ | SV39_WRITE | (1 << 3)) != 0 {
-            let shift = 12 + 9 * (2 - level);
-            let off_mask = (1usize << shift) - 1;
-            let pa = (((pte >> 10) & ((1usize << 44) - 1)) << 12) | (va & off_mask);
-            return Some((pte & 0xFF, pa));
-        }
-        table_pa = ((pte >> 10) & ((1usize << 44) - 1)) << 12;
+        None
     }
+    #[cfg(target_arch = "aarch64")]
+    {
+        let table =
+            unsafe { &*(crate::memory::frame::phys_to_virt(root_pa) as *const hal::PageTable) };
+        let leaf = table.leaf_entry(va)?;
+        let pa = (leaf as usize) & 0x0000_ffff_ffff_f000;
+        let mut bits = 0usize;
+        if leaf & 1 != 0 {
+            bits |= SV39_VALID;
+        }
+        if leaf & (1 << 6) != 0 {
+            bits |= SV39_USER;
+        }
+        bits |= SV39_READ;
+        if leaf & (1 << 7) == 0 {
+            bits |= SV39_WRITE;
+        }
+        Some((bits, pa))
+    }
+    #[cfg(target_arch = "x86_64")]
+    {
+        let mut table_pa = root_pa;
+        for level in 0..4usize {
+            let shift = 39 - 9 * level;
+            let index = (va >> shift) & 0x1FF;
+            let pte = unsafe {
+                core::ptr::read_volatile(
+                    crate::memory::frame::phys_to_virt(table_pa + index * 8) as *const u64
+                )
+            } as usize;
+            if pte & 1 == 0 {
+                return None;
+            }
+            if level == 3 || pte & (1 << 7) != 0 {
+                let pa = pte & 0x000f_ffff_ffff_f000;
+                let mut bits = SV39_VALID | SV39_READ;
+                if pte & (1 << 1) != 0 {
+                    bits |= SV39_WRITE;
+                }
+                if pte & (1 << 2) != 0 {
+                    bits |= SV39_USER;
+                }
+                return Some((bits, pa));
+            }
+            table_pa = pte & 0x000f_ffff_ffff_f000;
+        }
+        None
+    }
+    #[cfg(not(any(
+        target_arch = "riscv64",
+        target_arch = "aarch64",
+        target_arch = "x86_64"
+    )))]
     None
 }
 
-/// Physical root of the currently resident Sv39 table, if paging is active.
+/// Physical root of the currently resident domain table, if paging is active.
 pub(crate) fn current_satp_root() -> Option<usize> {
-    let satp: usize;
-    // SAFETY: CSR reads have no side effects.
-    unsafe {
-        core::arch::asm!(
-            "csrr {satp}, satp",
-            satp = out(reg) satp,
-            options(nostack, nomem)
-        );
+    #[cfg(target_arch = "riscv64")]
+    {
+        let satp: usize;
+        unsafe {
+            core::arch::asm!(
+                "csrr {satp}, satp",
+                satp = out(reg) satp,
+                options(nostack, nomem)
+            );
+        }
+        if (satp >> 60) != 8 {
+            return None;
+        }
+        Some((satp & ((1usize << 44) - 1)) << 12)
     }
-    if (satp >> 60) != 8 {
-        return None;
+    #[cfg(target_arch = "aarch64")]
+    {
+        let ttbr0: usize;
+        unsafe {
+            core::arch::asm!(
+                "mrs {ttbr0}, ttbr0_el1",
+                ttbr0 = out(reg) ttbr0,
+                options(nostack, nomem)
+            );
+        }
+        Some(ttbr0 & 0x0000_ffff_ffff_f000)
     }
-    Some((satp & ((1usize << 44) - 1)) << 12)
+    #[cfg(target_arch = "x86_64")]
+    {
+        let cr3: usize;
+        unsafe {
+            core::arch::asm!(
+                "mov {cr3}, cr3",
+                cr3 = out(reg) cr3,
+                options(nostack, nomem)
+            );
+        }
+        Some(cr3 & !0xFFF)
+    }
+    #[cfg(not(any(
+        target_arch = "riscv64",
+        target_arch = "aarch64",
+        target_arch = "x86_64"
+    )))]
+    None
 }
 
 /// Probe every page of `[ptr, ptr+len)` against BOTH the mapping ledger and

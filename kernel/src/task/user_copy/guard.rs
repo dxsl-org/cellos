@@ -54,8 +54,9 @@ impl GuardWindow {
         hart.user_copy_guard_end.store(hi, Ordering::Relaxed);
         hart.user_copy_guard_resume_pc.store(0, Ordering::Relaxed);
         let saved_sstatus = crate::hal::arch::save_and_disable_interrupts();
-        let sum_bit: usize = 1 << 18;
+        #[cfg(target_arch = "riscv64")]
         unsafe {
+            let sum_bit: usize = 1 << 18;
             core::arch::asm!(
                 "csrs sstatus, {sum}",
                 sum = in(reg) sum_bit,
@@ -101,38 +102,103 @@ unsafe fn guarded_byte_copy(
 ) -> usize {
     let ret;
     // SAFETY: see the function contract above.
-    unsafe {
-        core::arch::asm!(
-            "la   {tmp}, 3f",
-            "sd   {tmp}, 0({slot})",
-            "li   {idx}, 0",
-            "2:",
-            "bgeu {idx}, {cnt}, 1f",
-            "add  {sa}, {sptr}, {idx}",
-            "lbu  {byte}, 0({sa})",
-            "add  {da}, {dptr}, {idx}",
-            "sb   {byte}, 0({da})",
-            "addi {idx}, {idx}, 1",
-            "j    2b",
-            "1:",
-            "li   {out}, 0",
-            "j    4f",
-            "3:",
-            "li   {out}, 1",
-            "4:",
-            "sd   zero, 0({slot})",
-            sptr = in(reg) src,
-            dptr = in(reg) dst,
-            cnt = in(reg) len,
-            slot = in(reg) resume_slot,
-            tmp = out(reg) _,
-            idx = out(reg) _,
-            sa = out(reg) _,
-            da = out(reg) _,
-            byte = out(reg) _,
-            out = lateout(reg) ret,
-            options(nostack)
-        );
+    #[cfg(target_arch = "riscv64")]
+    core::arch::asm!(
+        "la   {tmp}, 3f",
+        "sd   {tmp}, 0({slot})",
+        "li   {idx}, 0",
+        "2:",
+        "bgeu {idx}, {cnt}, 1f",
+        "add  {sa}, {sptr}, {idx}",
+        "lbu  {byte}, 0({sa})",
+        "add  {da}, {dptr}, {idx}",
+        "sb   {byte}, 0({da})",
+        "addi {idx}, {idx}, 1",
+        "j    2b",
+        "1:",
+        "li   {out}, 0",
+        "j    4f",
+        "3:",
+        "li   {out}, 1",
+        "4:",
+        "sd   zero, 0({slot})",
+        sptr = in(reg) src,
+        dptr = in(reg) dst,
+        cnt = in(reg) len,
+        slot = in(reg) resume_slot,
+        tmp = out(reg) _,
+        idx = out(reg) _,
+        sa = out(reg) _,
+        da = out(reg) _,
+        byte = out(reg) _,
+        out = lateout(reg) ret,
+        options(nostack)
+    );
+    #[cfg(target_arch = "aarch64")]
+    core::arch::asm!(
+        "adr  {tmp}, 3f",
+        "str  {tmp}, [{slot}]",
+        "mov  {idx}, #0",
+        "2:",
+        "cmp  {idx}, {cnt}",
+        "b.ge 1f",
+        "ldrb {byte:w}, [{sptr}, {idx}]",
+        "strb {byte:w}, [{dptr}, {idx}]",
+        "add  {idx}, {idx}, #1",
+        "b    2b",
+        "1:",
+        "mov  {out:w}, #0",
+        "b    4f",
+        "3:",
+        "mov  {out:w}, #1",
+        "4:",
+        "str  xzr, [{slot}]",
+        sptr = in(reg) src,
+        dptr = in(reg) dst,
+        cnt = in(reg) len,
+        slot = in(reg) resume_slot,
+        tmp = out(reg) _,
+        idx = out(reg) _,
+        byte = out(reg) _,
+        out = lateout(reg) ret,
+        options(nostack)
+    );
+    #[cfg(target_arch = "x86_64")]
+    core::arch::asm!(
+        "lea  rax, [rip + 4f]",
+        "mov  [{slot}], rax",
+        "xor  {idx}, {idx}",
+        "2:",
+        "cmp  {idx}, {cnt}",
+        "jae  3f",
+        "mov  al, byte ptr [{sptr} + {idx}]",
+        "mov  byte ptr [{dptr} + {idx}], al",
+        "inc  {idx}",
+        "jmp  2b",
+        "3:",
+        "xor  {out:e}, {out:e}",
+        "jmp  5f",
+        "4:",
+        "mov  {out:e}, 1",
+        "5:",
+        "mov  qword ptr [{slot}], 0",
+        sptr = in(reg) src,
+        dptr = in(reg) dst,
+        cnt = in(reg) len,
+        slot = in(reg) resume_slot,
+        idx = out(reg) _,
+        out = lateout(reg) ret,
+        out("rax") _,
+        options(nostack)
+    );
+    #[cfg(not(any(
+        target_arch = "riscv64",
+        target_arch = "aarch64",
+        target_arch = "x86_64"
+    )))]
+    {
+        let _ = (src, dst, len, resume_slot);
+        ret = 1;
     }
     ret
 }
@@ -141,6 +207,7 @@ unsafe fn guarded_byte_copy(
 /// into the next task. The guarded window masks interrupts, so in the current
 /// design this can only fire if a future change reintroduces preemption
 /// mid-window; clearing costs one store either way.
+#[allow(dead_code)]
 pub(crate) fn clear_guard_for_context_switch() {
     let hart = unsafe { hart_local::current_hart() };
     hart.user_copy_guard_active.store(0, Ordering::Release);

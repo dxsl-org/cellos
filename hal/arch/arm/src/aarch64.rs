@@ -202,6 +202,7 @@ impl ViHypervisor for AArch64Hypervisor {
 #[cfg(target_arch = "aarch64")]
 pub mod arch {
     pub use super::context::CpuContext as Context;
+    pub use super::context::{restore_sstatus, save_and_disable_interrupts};
     pub use hal_arch_trait::ViTrapFrame;
 
     /// Initialise the ARM64 exception vector table.

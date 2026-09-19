@@ -68,7 +68,14 @@ pub mod scheduler;
 pub mod stack;
 #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
 pub mod stack_overflow_probe;
-#[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+#[cfg(all(
+    feature = "native-domains",
+    any(
+        target_arch = "riscv64",
+        target_arch = "aarch64",
+        target_arch = "x86_64"
+    )
+))]
 pub(crate) mod user_copy;
 #[cfg(all(
     feature = "native-domains",
@@ -356,7 +363,11 @@ pub extern "Rust" fn vi_tlb_shootdown_test_fault(
 #[cfg(target_arch = "riscv64")]
 const _: crate::hal::TlbShootdownTestFault = vi_tlb_shootdown_test_fault;
 
-#[cfg(target_arch = "riscv64")]
+#[cfg(any(
+    target_arch = "riscv64",
+    target_arch = "aarch64",
+    target_arch = "x86_64"
+))]
 #[no_mangle]
 pub extern "Rust" fn vi_user_copy_guard_fault(frame: &mut crate::hal::arch::ViTrapFrame) -> bool {
     #[cfg(feature = "native-domains")]
@@ -393,7 +404,11 @@ pub extern "Rust" fn vi_user_copy_guard_fault(frame: &mut crate::hal::arch::ViTr
     }
 }
 
-#[cfg(target_arch = "riscv64")]
+#[cfg(any(
+    target_arch = "riscv64",
+    target_arch = "aarch64",
+    target_arch = "x86_64"
+))]
 const _: crate::hal::UserCopyGuardFault = vi_user_copy_guard_fault;
 
 // Global Scheduler Instance

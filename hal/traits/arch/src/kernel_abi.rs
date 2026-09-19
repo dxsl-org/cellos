@@ -106,7 +106,11 @@ pub type HandleRiscvExternalIrq = unsafe extern "Rust" fn(irq: u32);
 #[cfg(target_arch = "riscv64")]
 /// Test-hook callback that consumes an expected RV64 shootdown fault.
 pub type TlbShootdownTestFault = unsafe extern "Rust" fn(&mut ViTrapFrame) -> bool;
-#[cfg(target_arch = "riscv64")]
+#[cfg(any(
+    target_arch = "riscv64",
+    target_arch = "aarch64",
+    target_arch = "x86_64"
+))]
 /// Recoverable user-copy guard-fault hook supplied by the kernel task layer.
 ///
 /// Returns `true` when the faulting access belonged to an armed copy guard on
@@ -167,7 +171,6 @@ extern "Rust" {
     pub fn vi_riscv_plic_context() -> usize;
     pub fn vi_handle_riscv_external_irq(irq: u32);
     pub fn vi_tlb_shootdown_test_fault(frame: &mut ViTrapFrame) -> bool;
-    pub fn vi_user_copy_guard_fault(frame: &mut ViTrapFrame) -> bool;
 }
 
 #[cfg(target_arch = "riscv64")]
@@ -176,7 +179,20 @@ const _: RiscvPlicContext = vi_riscv_plic_context;
 const _: HandleRiscvExternalIrq = vi_handle_riscv_external_irq;
 #[cfg(target_arch = "riscv64")]
 const _: TlbShootdownTestFault = vi_tlb_shootdown_test_fault;
-#[cfg(target_arch = "riscv64")]
+
+#[cfg(any(
+    target_arch = "riscv64",
+    target_arch = "aarch64",
+    target_arch = "x86_64"
+))]
+extern "Rust" {
+    pub fn vi_user_copy_guard_fault(frame: &mut ViTrapFrame) -> bool;
+}
+#[cfg(any(
+    target_arch = "riscv64",
+    target_arch = "aarch64",
+    target_arch = "x86_64"
+))]
 const _: UserCopyGuardFault = vi_user_copy_guard_fault;
 #[cfg(target_arch = "aarch64")]
 extern "Rust" {

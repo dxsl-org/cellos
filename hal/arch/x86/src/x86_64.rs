@@ -64,6 +64,7 @@ pub use paging::PAGE_SIZE;
 #[cfg(target_arch = "x86_64")]
 pub mod arch {
     pub use super::context::CpuContext as Context;
+    pub use super::context::{restore_sstatus, save_and_disable_interrupts};
     pub use super::set_kernel_stack;
     pub use super::trap::{get_gp_tp, ViTrapFrame};
 

@@ -22,6 +22,36 @@ pub struct CpuContext {
     pub kernel_trap_sp: u64,
 }
 
+/// Atomically capture RFLAGS and disable interrupts (CLI).
+#[inline(always)]
+pub fn save_and_disable_interrupts() -> usize {
+    let rflags: usize;
+    unsafe {
+        core::arch::asm!(
+            "pushfq",
+            "pop {saved}",
+            "cli",
+            saved = out(reg) rflags,
+            options(nomem, nostack),
+        );
+    }
+    rflags
+}
+
+/// Restore RFLAGS returned by [`save_and_disable_interrupts`].
+///
+/// # Safety
+/// `rflags` must be a valid RFLAGS state captured on this CPU.
+#[inline(always)]
+pub unsafe fn restore_sstatus(rflags: usize) {
+    core::arch::asm!(
+        "push {saved}",
+        "popfq",
+        saved = in(reg) rflags,
+        options(nomem, nostack),
+    );
+}
+
 impl CpuContext {
     /// Cooperative context switch — associated-function form used by the kernel.
     ///

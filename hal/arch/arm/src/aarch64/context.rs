@@ -51,6 +51,33 @@ pub struct CpuContext {
     pub daif: u64, // offset 128
 }
 
+/// Atomically capture DAIF and mask IRQs (DAIF.I = 1).
+#[inline(always)]
+pub fn save_and_disable_interrupts() -> usize {
+    let daif: usize;
+    unsafe {
+        core::arch::asm!(
+            "mrs {saved}, daif",
+            "msr daifset, #2",
+            saved = out(reg) daif,
+            options(nostack),
+        );
+    }
+    daif
+}
+/// Restore a value returned by [`save_and_disable_interrupts`].
+///
+/// # Safety
+/// `daif` must be a valid DAIF state captured on this PE.
+#[inline(always)]
+pub unsafe fn restore_sstatus(daif: usize) {
+    core::arch::asm!(
+        "msr daif, {saved}",
+        saved = in(reg) daif,
+        options(nostack),
+    );
+}
+
 impl CpuContext {
     /// Perform a context switch from `old` to `new`.
     ///

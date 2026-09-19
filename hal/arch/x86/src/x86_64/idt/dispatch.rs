@@ -23,6 +23,17 @@ pub(super) extern "C" fn x86_64_idt_dispatch(frame: &mut EntryFrame) {
             debug_assert_eq!(selected.eoi, Eoi::None);
             let cr2: u64;
             unsafe { core::arch::asm!("mov {}, cr2", out(reg) cr2, options(nomem, nostack)) };
+            let mut vtf = hal_arch_trait::ViTrapFrame {
+                stval: cr2 as usize,
+                sepc: frame.rip as usize,
+                scause: frame.vector as usize,
+                sstatus: 0,
+                ..hal_arch_trait::ViTrapFrame::default()
+            };
+            if unsafe { hal_arch_trait::vi_user_copy_guard_fault(&mut vtf) } {
+                frame.rip = vtf.sepc as u64;
+                return;
+            }
             unsafe {
                 vi_handle_page_fault(
                     cr2 as usize,

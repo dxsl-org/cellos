@@ -240,6 +240,19 @@ pub extern "C" fn vi_aarch64_trap_handler(frame: &mut TrapFrame) {
         // and misreading that as a cell fault would silently kill the cell and
         // bury the kernel bug.
         _ => {
+            if matches!(ec, 0x21 | 0x25) {
+                let mut vtf = ViTrapFrame {
+                    stval: frame.far_el1 as usize,
+                    sepc: frame.elr_el1 as usize,
+                    scause: esr as usize,
+                    sstatus: frame.spsr_el1 as usize,
+                    ..ViTrapFrame::default()
+                };
+                if unsafe { hal_arch_trait::vi_user_copy_guard_fault(&mut vtf) } {
+                    frame.elr_el1 = vtf.sepc as u64;
+                    return;
+                }
+            }
             // SAFETY: both are #[no_mangle] in kernel::task and linked via
             // extern "Rust"; see the 0x20 | 0x24 arm for the teardown contract.
             let cell_id = unsafe { vi_current_cell_id() };
