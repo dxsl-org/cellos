@@ -65,10 +65,9 @@ vào `.text` của chính nó → fault → cell bị terminate, kernel tiếp t
 Ba giới hạn dưới đây là giới hạn của *bảo đảm*, không phải chi tiết hiện thực — đọc §5 mà
 thiếu chúng sẽ dẫn tới kết luận sai về mức cô lập:
 
-* **Chỉ là code integrity, không phải data confidentiality.** Stack, heap, grant page và
-  MMIO window vẫn `USER+RW` **xuyên cell**: một cell có `unsafe` vẫn đọc/ghi được *dữ liệu*
-  của cell khác. Tường cho dữ liệu là Layer B (per-domain page table, Tier 2 — chưa hiện
-  thực). Điều §5 bảo đảm là không cell nào sửa được **code hoặc hằng** của cell nào.
+* **Chỉ là code integrity, không phải data confidentiality trong SAS.** Stack, heap, grant page và
+  MMIO window trong SAS vẫn `USER+RW` **xuyên cell** đối với các Cell cùng chia sẻ `KERNEL_ROOT`.
+  Tường cách ly dữ liệu vật lý là Layer B (per-domain page table, Tier 2 — đã hiện thực hóa theo Spec 22).
 * **Cross-hart / cross-core closure còn phụ thuộc arch.**
   - `RV64`: W^X order PTE update, local `sfence.vma`, rồi SBI RFENCE tới mọi hart online từ xa;
     firmware không probe được RFENCE phải giữ kernel single-hart. QEMU 8.2/OpenSBI đã PASS oracle
@@ -81,3 +80,18 @@ thiếu chúng sẽ dẫn tới kết luận sai về mức cô lập:
 * **Arch bare-physical không enforce.** riscv32 Nano, x86_32, arm32 chạy không page table;
   `wx::enforce` ghi log khoảng trống thay vì áp đặt. Câu "protection vẫn được bật" chỉ đúng
   với các arch có MMU.
+
+## 6. Addendum: Tier 2 Paged Domain Memory Architecture (Layer B)
+
+**Amended 2026-09-19** (ADR-0015 & Spec 22 Gate):
+Tier 2 cung cấp ranh giới cô lập phần cứng hoàn toàn (Hardware MMU Isolation) cho mã không tin cậy (C/C++ FFI, mlibc, Lua, hoặc unsigned binaries):
+
+1. **Bảng trang riêng (`AddressSpace`)**:
+   - Mỗi Tier 2 Cell sở hữu một gốc bảng trang Sv39 (`satp`) riêng biệt, được gán ASID độc lập (`AsidLease`).
+   - **User space**: Chỉ ánh xạ private ELF segments, stack và heap của chính cell đó. Toàn bộ không gian bộ nhớ của các Cell khác (bao gồm cả Tier 1 SAS) đều **unmapped**; bất kỳ hành vi đọc/ghi/thực thi trái phép nào ra ngoài đều kích hoạt Store/Load/Instruction Page Fault (`scause = 0xd, 0xf, 0xc`) và cell bị terminate an toàn mà không ảnh hưởng tới kernel.
+   - **Kernel space**: Ánh xạ supervisor-only (không có cờ `USER`). U-mode không thể truy cập HHDM hay kernel text/data.
+2. **Quản lý Vòng đời & Teardown**:
+   - Chuyển trạng thái `Live` → `Dying` theo thế hệ (`generation`).
+   - Thu hồi toàn bộ khung trang trung gian và trang lá khi cell kết thúc.
+3. **Cơ chế Grant liên Domain (Domain Grants)**:
+   - Zero-copy grant pages (`Syscall::GrantRegister` / `Syscall::GrantSlice`) được ánh xạ trực tiếp vào bảng trang riêng của domain qua `map_grant_page` với cờ `USER+RW` và được thu hồi qua `unmap_grant_page` khi gọi `Syscall::GrantUnregister`.

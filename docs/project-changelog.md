@@ -3,6 +3,31 @@
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
 ## [Unreleased] Development-first hardware-constrained execution
+## [2026-09-19] Complete Tier 2 hardware memory fault isolation matrix, packaging, and CI integration
+- **Enhanced Negative Exploit Matrix (`cells/tests/tier2-exploit`)**:
+  - Upgraded test harness to support 3 distinct probe modes:
+    - NULL write (`0x0`): confirms NULL trap zone protection.
+    - Peer cell memory probe (`0x0800_0000`): attempts to write to `/bin/shell` code in SAS, proving unmapped peer memory triggers CPU Store Page Fault (`scause = 0xf`).
+    - Kernel memory probe (`0x8020_0000`): attempts to write to kernel supervisor memory, proving supervisor-only pages trigger Page Fault from U-mode.
+  - Converted `tier2-exploit` to use `declare_syscalls![Log, Exit, StateRestore]` and `ostd::cell_main!`, permitting CLI argument parsing via `ostd::args()`.
+- **Integration Test Suite Extension (`tests/integration/tests/tier2_fault_isolation.rs`)**:
+  - Added `tier2_peer_memory_isolation_terminates_cell_cleanly`.
+  - Added `tier2_kernel_memory_isolation_terminates_cell_cleanly`.
+  - Added `tier2_posix_ffi_execution_runs_in_paged_domain` proving C-FFI cells (`PROTECTION_CLASS_FFI`) run under private SATP isolation.
+  - Verified: all 5/5 tests pass cleanly in QEMU (10.39s).
+- **Automated Packaging & Disk Generation (`gen_disk.ps1`)**:
+  - Added automated build for `tier2-smoke` and `tier2-exploit` via `Build-Cargo`.
+  - Registered both binaries into bootstrap table and FAT cell-store (P6 @ LBA 1,062,144).
+- **CI Pipeline Gate (`.github/workflows/ci.yml`)**:
+  - Integrated `tier2-fault-isolation` into the CI `boot-suite` job to continuously gate Tier 2 hardware memory isolation and prevent regression.
+- **Inter-Domain Zero-Copy Grants (`kernel/src/task/syscall.rs`)**:
+  - Wired `task_domain_space` into `Syscall::GrantRegister`, `Syscall::GrantSlice`, and `unregister_registered_grant`.
+  - Allowed Tier 2 domain cells to register, slice, read, write, and unregister zero-copy Grant pages mapped in their private SATP Sv39 page tables (`space.map_grant_page`), unlocking `ViSurface` shared memory creation for Tier 2 apps.
+  - Extended `cells/tests/tier2-smoke` to verify end-to-end safe grant payload writing (`sys_grant_copy_from_slice`), reading (`sys_grant_copy_to_slice`), and unregistration under private SATP.
+- **Spec Documentation Addenda**:
+  - Added Section 6 to `docs/specs/02-memory.md` detailing the Tier 2 Paged Domain Memory Architecture (Layer B).
+  - Added Section 12 to `docs/specs/17-ipc-wire-contract.md` standardizing cross-domain copied IPC (`TaskCopyView` / `user_copy`) and inter-domain zero-copy grant mappings.
+
 ## [2026-09-19] CellOS Desktop environment with Taskbar, Spotlight Search, and App Launcher
 - Implemented pure-Rust Tier 1 desktop cell (`cells/apps/desktop/`):
   - **Taskbar (`src/taskbar.rs`)**: bottom-anchored 40px taskbar with CellOS branding button, Spotlight search launcher, pinned application icons with pager navigation (`<` / `>`) and overflow management, real-time system tray service health indicators (`[NET]`, `[VFS]`, `[AI]`), and monotonic digital clock (`HH:MM`).

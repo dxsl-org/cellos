@@ -1404,6 +1404,15 @@ jobs:
             generated_counter_survives_managed_surface_configure \
             2>&1 | tee "$GITHUB_WORKSPACE/software-evidence/viui-managed-surface.log"
 
+      - name: Run Tier 2 hardware fault isolation evidence
+        shell: bash
+        env:
+          CARGO_BUILD_TARGET: x86_64-unknown-linux-gnu
+        run: |
+          cd tests/integration
+          cargo test --test tier2-fault-isolation -- --test-threads=1 \
+            2>&1 | tee "$GITHUB_WORKSPACE/software-evidence/tier2-fault-isolation.log"
+
       - name: Upload software evidence logs
         id: upload-software-evidence
         if: always()

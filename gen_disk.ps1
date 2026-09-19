@@ -149,6 +149,7 @@ Build-Cargo -What "hotswap demos" -Packages @('hotswap-demo-v1', 'hotswap-demo-v
 # gen_disk on a fresh target/ and the posix_shim_* boot tests spawn it from
 # the shell ("command not found" on CI was exactly this gap).
 Build-Cargo -What "posix-shim-test" -Packages @('app-posix-shim-test')
+Build-Cargo -What "tier2 test cells" -Packages @('tier2-smoke', 'tier2-exploit')
 
 # DOOM — only if doomgeneric sources have been cloned. Custom --target + -Z so
 # it can't use Build-Cargo; capture the exit code BEFORE the pipe (see Build-Cargo).
@@ -385,6 +386,8 @@ $wx_test_bin    = "$rel_dir/wx-test"         # W^X violation test (shell: `wx-te
 $vfs_test_bin   = "$rel_dir/vfs-test"        # directory-capability pioneer (shell: `vfs-test`)
 $hotswap_demo_v1_bin = "$rel_dir/hotswap-demo-v1"  # M4.1 hotswap demo cell v1
 $hotswap_demo_v2_bin = "$rel_dir/hotswap-demo-v2"  # M4.1 hotswap demo cell v2
+$tier2_smoke_bin   = "$rel_dir/tier2-smoke"
+$tier2_exploit_bin = "$rel_dir/tier2-exploit"
 $ls_bin   = "$rel_dir/ls"    # M3.2 embedded debug utils
 $cat_bin  = "$rel_dir/cat"
 $echo_bin = "$rel_dir/echo"
@@ -640,6 +643,8 @@ if (Test-Path $wx_test_bin)    { $table_args += "/bin/wx-test=$wx_test_bin" }
 if (Test-Path $vfs_test_bin)   { $table_args += "/bin/vfs-test=$vfs_test_bin" }
 if (Test-Path $hotswap_demo_v1_bin) { $table_args += "/bin/hotswap-demo-v1=$hotswap_demo_v1_bin" }
 if (Test-Path $hotswap_demo_v2_bin) { $table_args += "/bin/hotswap-demo-v2=$hotswap_demo_v2_bin" }
+if (Test-Path $tier2_smoke_bin)   { $table_args += "/bin/tier2-smoke=$tier2_smoke_bin" }
+if (Test-Path $tier2_exploit_bin) { $table_args += "/bin/tier2-exploit=$tier2_exploit_bin" }
 # Zig cells (Tier 1b) — added when zig is in PATH and build-zig-cells.ps1 succeeds
 foreach ($kv in $zig_elfs.GetEnumerator()) {
     $table_args += "/bin/$($kv.Key)=$($kv.Value)"

@@ -112,6 +112,127 @@ fn tier2_hardware_page_fault_terminates_cell_cleanly() {
             )
         });
 }
+#[test]
+fn tier2_peer_memory_isolation_terminates_cell_cleanly() {
+    if !prerequisites_ok() {
+        return;
+    }
+
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("shell not reached: {e}\n{}", qemu.dump()));
+
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    send_command(&mut qemu, "tier2-exploit peer");
+
+    // 1. Verify admission to Tier 2 Paged Domain (SATP isolation)
+    qemu.wait_for("[domain] admitted cell", FAULT_TIMEOUT)
+        .unwrap_or_else(|e| {
+            panic!(
+                "tier2-exploit peer was not admitted to Tier 2 Paged Domain: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
+
+    // 2. Verify deliberate peer write attempt
+    qemu.wait_for(
+        "[tier2-exploit] deliberately writing to peer cell memory at 0x08000000",
+        FAULT_TIMEOUT,
+    )
+    .unwrap_or_else(|e| {
+        panic!(
+            "tier2-exploit never reached the peer write: {e}\n--- output ---\n{}",
+            qemu.dump()
+        )
+    });
+
+    // 3. Verify that CPU triggered page fault and kernel terminated the cell
+    qemu.wait_for("[fault] Cell", FAULT_TIMEOUT)
+        .unwrap_or_else(|e| {
+            panic!(
+                "kernel did not catch the peer-memory page fault or terminate the cell: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
+
+    let log = qemu.dump();
+    assert!(
+        !log.contains("write to peer cell succeeded"),
+        "illegal peer memory write succeeded — peer isolation breached!\n--- output ---\n{log}"
+    );
+
+    // 4. Verify shell survivability
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    send_command(&mut qemu, "echo tier2-peer-ok");
+    qemu.wait_for("tier2-peer-ok", FAULT_TIMEOUT)
+        .unwrap_or_else(|e| {
+            panic!(
+                "kernel crashed or shell hung after Tier 2 peer memory fault: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
+}
+
+#[test]
+fn tier2_kernel_memory_isolation_terminates_cell_cleanly() {
+    if !prerequisites_ok() {
+        return;
+    }
+
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("shell not reached: {e}\n{}", qemu.dump()));
+
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    send_command(&mut qemu, "tier2-exploit kernel");
+
+    // 1. Verify admission to Tier 2 Paged Domain (SATP isolation)
+    qemu.wait_for("[domain] admitted cell", FAULT_TIMEOUT)
+        .unwrap_or_else(|e| {
+            panic!(
+                "tier2-exploit kernel was not admitted to Tier 2 Paged Domain: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
+
+    // 2. Verify deliberate kernel write attempt
+    qemu.wait_for(
+        "[tier2-exploit] deliberately writing to kernel memory at 0x80200000",
+        FAULT_TIMEOUT,
+    )
+    .unwrap_or_else(|e| {
+        panic!(
+            "tier2-exploit never reached the kernel write: {e}\n--- output ---\n{}",
+            qemu.dump()
+        )
+    });
+
+    // 3. Verify that CPU triggered page fault and kernel terminated the cell
+    qemu.wait_for("[fault] Cell", FAULT_TIMEOUT)
+        .unwrap_or_else(|e| {
+            panic!(
+                "kernel did not catch the kernel-memory page fault or terminate the cell: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
+
+    let log = qemu.dump();
+    assert!(
+        !log.contains("write to kernel memory succeeded"),
+        "illegal kernel memory write succeeded — kernel isolation breached!\n--- output ---\n{log}"
+    );
+
+    // 4. Verify shell survivability
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    send_command(&mut qemu, "echo tier2-kernel-ok");
+    qemu.wait_for("tier2-kernel-ok", FAULT_TIMEOUT)
+        .unwrap_or_else(|e| {
+            panic!(
+                "kernel crashed or shell hung after Tier 2 kernel memory fault: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
+}
 
 #[test]
 fn tier2_positive_execution_runs_cleanly() {
@@ -144,6 +265,29 @@ fn tier2_positive_execution_runs_cleanly() {
             )
         });
 
+    // 3. Verify zero-copy grant allocation, private SATP mapping, write, read, and unmapping
+    qemu.wait_for(
+        "[tier2-smoke] Grant allocation, private SATP mapping, and RW verified in Tier 2 domain",
+        FAULT_TIMEOUT,
+    )
+    .unwrap_or_else(|e| {
+        panic!(
+            "tier2-smoke grant allocation/mapping failed: {e}\n--- output ---\n{}",
+            qemu.dump()
+        )
+    });
+
+    qemu.wait_for(
+        "[tier2-smoke] Grant unregister and unmapping verified in Tier 2 domain",
+        FAULT_TIMEOUT,
+    )
+    .unwrap_or_else(|e| {
+        panic!(
+            "tier2-smoke grant unregister/unmapping failed: {e}\n--- output ---\n{}",
+            qemu.dump()
+        )
+    });
+
     qemu.wait_for(
         "[tier2-smoke] PASS: All Tier 2 runtime invariants verified successfully!",
         FAULT_TIMEOUT,
@@ -162,6 +306,60 @@ fn tier2_positive_execution_runs_cleanly() {
         .unwrap_or_else(|e| {
             panic!(
                 "shell not responding after tier2-smoke exit: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
+}
+
+#[test]
+fn tier2_posix_ffi_execution_runs_in_paged_domain() {
+    if !prerequisites_ok() {
+        return;
+    }
+
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("shell not reached: {e}\n{}", qemu.dump()));
+
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    send_command(&mut qemu, "posix-shim-test");
+
+    // 1. Verify admission to Tier 2 Paged Domain under private SATP
+    qemu.wait_for(
+        "[domain] admitted cell 'posix-shim-test' to Tier 2 Paged Domain (SATP isolation)",
+        FAULT_TIMEOUT,
+    )
+    .unwrap_or_else(|e| {
+        panic!(
+            "posix-shim-test was not admitted to Tier 2 Paged Domain: {e}\n--- output ---\n{}",
+            qemu.dump()
+        )
+    });
+
+    // 2. Verify C-FFI POSIX filesystem & random shims execute cleanly behind private SATP
+    qemu.wait_for("POSIX-FSTAT: OK", FAULT_TIMEOUT)
+        .unwrap_or_else(|e| {
+            panic!(
+                "posix-shim-test fstat failed under private SATP: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
+
+    qemu.wait_for("POSIX-ENTROPY: OK", FAULT_TIMEOUT)
+        .unwrap_or_else(|e| {
+            panic!(
+                "posix-shim-test getentropy failed under private SATP: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
+
+    // 3. Verify shell survivability
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    send_command(&mut qemu, "echo tier2-ffi-ok");
+    qemu.wait_for("tier2-ffi-ok", FAULT_TIMEOUT)
+        .unwrap_or_else(|e| {
+            panic!(
+                "shell not responding after posix-shim-test exit: {e}\n--- output ---\n{}",
                 qemu.dump()
             )
         });

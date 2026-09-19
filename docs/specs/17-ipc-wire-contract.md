@@ -475,3 +475,26 @@ Before any Tier-2/Layer-B domain is enabled, `GetFile`/`DataPtr` must be removed
 replaced by a representable revocable handle/grant contract. The detailed Layer-B grant
 mapping ADR is intentionally deferred to that implementation window; this prerequisite
 does not approve a new Law-1 ABI by itself.
+
+---
+
+## 12. Addendum: Tier 2 Native Domain IPC & Boundary Contracts
+
+**Ratified 2026-09-19** (ADR-0015 & Spec 22 Gate):
+
+### 12.1 Copied IPC across Domain Boundaries
+1. **`TaskCopyView` Contract**:
+   - Khi một tác vụ gửi hoặc nhận thông điệp IPC (`sys_send`, `sys_recv`), kernel sử dụng `TaskCopyView::of(task)`.
+   - Đối với **Tier 1 SAS**: Dữ liệu có thể đọc/ghi trực tiếp qua con trỏ bộ nhớ dùng chung.
+   - Đối với **Tier 2 Domain**: Toàn bộ thao tác sao chép con trỏ người dùng (`user_copy`) phải chạy qua hai pha:
+     - **Probe pass**: Kiểm tra tính hợp lệ số học của dải địa chỉ (không tràn số, không null, không trỏ vào dải kernel/supervisor, thuộc vùng địa chỉ hợp lệ của domain).
+     - **Guarded copy pass**: Bọc việc dereference con trỏ trong rào chắn lỗi có thể phục hồi (`user_copy_guard`). Nếu người dùng truyền địa chỉ unmapped, lỗi Page Fault sẽ kích hoạt cơ chế rewind thanh ghi `sepc` về landing pad của kernel và trả về mã lỗi `SyscallError::InvalidInput` thay vì gây kernel panic.
+2. **Loại bỏ con trỏ thô xuyên ranh giới**:
+   - Các quy ước con trỏ nhận dạng thô (như `DataPtr` cũ) bị cấm xuyên qua ranh giới Domain. Mọi trao đổi đều thông qua thông điệp sao chép qua buffer của kernel.
+
+### 12.2 Inter-Domain Zero-Copy Grants
+1. **Ánh xạ trang Grant vào Domain**:
+   - Khi Domain cell phân bổ grant thông qua `Syscall::GrantRegister`, kernel phân bổ khung trang vật lý và ánh xạ trực tiếp vào bảng trang Sv39 của Domain dưới dạng `USER+RW` qua `space.map_grant_page(va, pa, flags)`.
+   - Khi giải phóng grant qua `Syscall::GrantUnregister`, kernel thu hồi ánh xạ khỏi bảng trang domain qua `space.unmap_grant_page(va)` trước khi hoàn trả khung trang vật lý về `FRAME_ALLOCATOR`.
+2. **Grantee Domain Slicing**:
+   - Khi một Domain cell là người thụ hưởng (grantee) gọi `Syscall::GrantSlice` đối với grant được cấp quyền, kernel ánh xạ các trang nhớ của grant vào bảng trang domain của grantee.

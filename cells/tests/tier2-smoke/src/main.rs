@@ -14,27 +14,32 @@
 extern crate alloc;
 
 use alloc::vec::Vec;
-use ostd::app::{AppContext, AppEvent};
 use ostd::io::println;
-use ostd::syscall::sys_exit;
+use ostd::syscall::{
+    sys_exit, sys_grant_copy_from_slice, sys_grant_copy_to_slice, sys_grant_register,
+    sys_grant_unregister,
+};
 
-ostd::app_entry!(
+api::declare_manifest!(
     block_io = false,
     network = false,
     spawn = false,
-    tier = api::manifest::PROTECTION_CLASS_UNTRUSTED,
-    handler = smoke_handler,
+    tier = api::manifest::PROTECTION_CLASS_UNTRUSTED
 );
 
-fn smoke_handler(_ctx: &mut AppContext, event: AppEvent) {
-    match event {
-        AppEvent::Init => run_smoke(),
-        AppEvent::Shutdown | AppEvent::ShutdownWith { .. } => sys_exit(0),
-        _ => {}
-    }
-}
+api::declare_syscalls![
+    Log,
+    Yield,
+    GetTime,
+    Exit,
+    GrantRegister,
+    GrantSlice,
+    GrantUnregister
+];
 
-fn run_smoke() {
+ostd::cell_main!(cell_main);
+
+fn cell_main() {
     println("[tier2-smoke] Starting Tier 2 Native Domain Cell execution under private SATP!");
 
     // 1. Dynamic allocation in private domain heap (.bss arena)
@@ -54,6 +59,27 @@ fn run_smoke() {
     // 3. Syscalls: Yield and Time
     ostd::task::yield_now();
     println("[tier2-smoke] Scheduler yield completed in Tier 2 domain");
+
+    // 4. Grant allocation, private SATP mapping, write, read, and unregister
+    let grant_size = 4096;
+    let reg_id = sys_grant_register(grant_size).expect("GrantRegister failed in Tier 2 domain");
+    let test_payload = b"Tier 2 Domain Grant Zero-Copy Buffer Content!";
+    let copied_in =
+        sys_grant_copy_from_slice(reg_id, test_payload).expect("sys_grant_copy_from_slice failed");
+    assert_eq!(copied_in, test_payload.len());
+
+    let mut read_buf = [0u8; 45];
+    let copied_out =
+        sys_grant_copy_to_slice(reg_id, &mut read_buf).expect("sys_grant_copy_to_slice failed");
+    assert_eq!(copied_out, test_payload.len());
+    assert_eq!(&read_buf, test_payload);
+    println(
+        "[tier2-smoke] Grant allocation, private SATP mapping, and RW verified in Tier 2 domain",
+    );
+
+    let unregistered = sys_grant_unregister(reg_id);
+    assert!(unregistered, "GrantUnregister failed in Tier 2 domain");
+    println("[tier2-smoke] Grant unregister and unmapping verified in Tier 2 domain");
 
     println("[tier2-smoke] PASS: All Tier 2 runtime invariants verified successfully!");
     sys_exit(0);

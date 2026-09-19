@@ -158,6 +158,22 @@ fn grant_allocated_bytes(size: usize) -> usize {
     grant_pages_for_size(size) * 4096
 }
 
+#[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+fn task_domain_space(
+    tid: usize,
+) -> Option<alloc::sync::Arc<crate::memory::address_space::AddressSpace>> {
+    let guard = super::SCHEDULER.lock();
+    guard.as_ref().and_then(|sched| {
+        sched
+            .tasks
+            .get(&tid)
+            .and_then(|task| match &task.address_space {
+                super::tcb::TaskAddressSpace::Domain(space) => Some(alloc::sync::Arc::clone(space)),
+                super::tcb::TaskAddressSpace::Sas => None,
+            })
+    })
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum DmaGrantError {
     NotOwned,
@@ -466,7 +482,16 @@ fn unregister_registered_grant(caller_id: usize, reg_id: usize) -> Result<(), Sy
         }
     }
     .ok_or(SyscallError::PermissionDenied)?;
-    free_grant_pages(entry.base, grant_pages_for_size(entry.size));
+    let n_pages = grant_pages_for_size(entry.size);
+    #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+    if let Some(space) = task_domain_space(caller_id) {
+        const PAGE_SIZE: usize = 4096;
+        for i in 0..n_pages {
+            let v = entry.base + i * PAGE_SIZE;
+            let _ = space.unmap_grant_page(v);
+        }
+    }
+    free_grant_pages(entry.base, n_pages);
     Ok(())
 }
 
@@ -1772,6 +1797,20 @@ fn authorize_grant_slice_locked(
         !install_vfs_lease_if_context_live(request.caller_id, context, base, size, request.grant_id)
     }) {
         return Ok(None);
+    }
+    #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+    if request.caller_id != grant_owner {
+        if let Some(space) = task_domain_space(request.caller_id) {
+            const PAGE_SIZE: usize = 4096;
+            let n_pages = grant_pages_for_size(size);
+            let user_rw = crate::memory::paging::Flags::from_bits(
+                crate::memory::paging::Flags::READ | crate::memory::paging::Flags::WRITE,
+            );
+            for i in 0..n_pages {
+                let v = base + i * PAGE_SIZE;
+                let _ = space.map_grant_page(v, v, user_rw);
+            }
+        }
     }
     Ok(Some(GrantSliceAccess {
         base,
@@ -5929,6 +5968,23 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     return Err(SyscallError::PermissionDenied);
                 }
             };
+            #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+            if let Some(space) = task_domain_space(caller_id) {
+                let user_rw = crate::memory::paging::Flags::from_bits(
+                    crate::memory::paging::Flags::READ | crate::memory::paging::Flags::WRITE,
+                );
+                for i in 0..n_pages {
+                    let v = paddr + i * PAGE_SIZE;
+                    if space.map_grant_page(v, v, user_rw).is_err() {
+                        for j in 0..i {
+                            let _ = space.unmap_grant_page(paddr + j * PAGE_SIZE);
+                        }
+                        drop(table);
+                        free_grant_pages(paddr, n_pages);
+                        return Ok(0);
+                    }
+                }
+            }
             if table.is_none() {
                 *table = Some(BTreeMap::new());
             }
