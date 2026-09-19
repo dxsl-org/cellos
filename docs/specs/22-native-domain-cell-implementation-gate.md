@@ -1,9 +1,9 @@
 # Spec 22 — Tier 2 Native Domain Cell Implementation Gate (ADR)
 
-> **Status**: Implemented & Verified on 2026-09-06 (ADR-0015 Phase 02).
+> **Status**: Implemented & Verified (ADR-0015 Phase 02; Multi-Arch extended 2026-09-19).
 > Tier 2 Paged Domain Engine is active in production under the `native-domains` feature;
-> verified by negative hardware Page Fault containment test (`tests/integration/tests/tier2_fault_isolation.rs`).
-
+> verified by negative hardware Page Fault containment test suite and positive execution suite
+> across RISC-V 64, AArch64, and x86_64 (`tests/integration/tests/tier2_fault_isolation.rs`).
 ## 1. Context and current truth
 
 Tier 1 Cells share the SAS page-table view and rely on Rust LBI. The native loader has

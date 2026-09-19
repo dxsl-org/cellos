@@ -42,9 +42,9 @@ standard library surface, SDK generation, or roadmap stage.
 | **Layer** | Internal implementation layer | Spec 19 Layer A/B/C, kernel/HAL/system layers |
 | **Stage** | Product roadmap maturity overlay | G1..G5 |
 
-The accepted destination is three execution tiers. The current loader does **not** assign a
-memory tier from signature verification: every admitted native cell uses the shared SAS.
-The Tier-2 decision point arrives only when Spec 19 Layer B is implemented.
+The accepted destination is three execution tiers. Under the Dual-Mode Hybrid Architecture (ADR-0015),
+the loader assigns unsigned and FFI native cells into Tier 2 Paged Domains (`PROTECTION_CLASS_UNTRUSTED`
+and `PROTECTION_CLASS_FFI`), while signed Safe Rust cells execute in Tier 1 SAS.
 
 | Tier | Status | Who | Isolation mechanism | Execution speed | IPC |
 |------|--------|-----|---------------------|-----------------|-----|
@@ -65,12 +65,12 @@ that can contain that native code once implemented.
 Silo is **not** its own execution tier. It is Tier-1-facing service/hypervisor
 infrastructure that exposes a hardware-fenced API to trusted cells.
 
-Tier 2 **adds** a containment option; it does not retract the standing advice that untrusted
-third-party code belongs in Tier 3 **until Tier 2's mechanism exists**. Today the kernel has
-one root page table (`kernel/src/memory/paging.rs:38`) and no context switch writes
-`satp`/`TTBR0`/`CR3`, so there is no domain to place a cell in. The operative rule until then
-is Tier 3 or nothing (`docs/security-model.md`).
-
+Tier 2 **adds** a hardware containment option under Spec 19 Layer B and Spec 22:
+the kernel allocates an `AddressSpace` per domain cell with a private page table (`satp` on RV64,
+`TTBR0_EL1` on AArch64, `CR3` on x86_64). During scheduling, transitions into or between domain
+cells activate the respective hardware root and flush translations, while SAS-to-SAS switches
+remain on the zero-cost fast path without MMU root writes. Unverified native code and C-FFI
+runtimes are safely contained behind hardware page faults.
 A note on an apparent conflict: `security-model.md` records a 2026-06-05 decision that
 per-Cell SATP isolation is "explicitly NOT pursued". That decision is about **Tier 1**, where
 a page-table switch per cell would destroy zero-copy IPC and the SAS economy. Tier 2 pays
