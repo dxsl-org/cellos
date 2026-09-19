@@ -173,6 +173,11 @@ Assert-CellBuild 'service-net' $LASTEXITCODE
 Write-Host "Building service-httpd (Mini-Server Web Cell)..."
 cargo build --release -p service-httpd --target $target 2>&1 | Select-Object -Last 5
 Assert-CellBuild 'service-httpd' $LASTEXITCODE
+Write-Host "Building tier2 test cells..."
+cargo build --release -p tier2-smoke --target $target 2>&1 | Select-Object -Last 5
+Assert-CellBuild 'tier2-smoke' $LASTEXITCODE
+cargo build --release -p tier2-exploit --target $target 2>&1 | Select-Object -Last 5
+Assert-CellBuild 'tier2-exploit' $LASTEXITCODE
 if ($BoardRpi3) {
     Write-Host "Building driver-dwc2-usb (USB host controller)..."
     cargo build --release -p driver-dwc2-usb --target $target 2>&1 | Select-Object -Last 5
@@ -240,7 +245,9 @@ $cells = @(
     @{ Bin = "kill";           Dst = "/bin/kill"        },
     @{ Bin = "service-net";    Dst = "/bin/net"         },
     @{ Bin = "driver-virtio-net"; Dst = "/bin/virtio-net" },
-    @{ Bin = "service-httpd";  Dst = "/bin/httpd"       }
+    @{ Bin = "service-httpd";  Dst = "/bin/httpd"       },
+    @{ Bin = "tier2-smoke";    Dst = "/bin/tier2-smoke"   },
+    @{ Bin = "tier2-exploit";  Dst = "/bin/tier2-exploit" }
 )
 if ($BoardRpi3) {
     $cells += @(
