@@ -138,6 +138,14 @@ if (Test-Path $initSrc) {
     Write-Host "  Refreshed kernel\src\embedded-x86_64\init"
 }
 
+# Build tier2 test cells
+Write-Host "Building tier2 test cells..."
+$env:RUSTFLAGS = $rustflags
+$cmd = "cargo build --release -p tier2-smoke -p tier2-exploit --target $target $buildStd 2>&1"
+Invoke-Expression $cmd | Select-Object -Last 5
+if ($LASTEXITCODE -ne 0) { Write-Warning "tier2 test cells build failed" }
+$env:RUSTFLAGS = ""
+
 # Collect available binaries
 $cells = @(
     @{ Bin = "app-shell";      Dst = "/bin/shell"  },
@@ -152,6 +160,8 @@ $cells = @(
     @{ Bin = "echo";           Dst = "/bin/echo"   },
     @{ Bin = "ps";             Dst = "/bin/ps"     },
     @{ Bin = "kill";           Dst = "/bin/kill"   }
+    @{ Bin = "tier2-smoke";    Dst = "/bin/tier2-smoke" },
+    @{ Bin = "tier2-exploit";  Dst = "/bin/tier2-exploit" },
 )
 
 $imgArgs = @((Convert-ToolPath $imagePath))
