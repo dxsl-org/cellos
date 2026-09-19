@@ -28,6 +28,12 @@
   - Added Section 6 to `docs/specs/02-memory.md` detailing the Tier 2 Paged Domain Memory Architecture (Layer B).
   - Added Section 12 to `docs/specs/17-ipc-wire-contract.md` standardizing cross-domain copied IPC (`TaskCopyView` / `user_copy`) and inter-domain zero-copy grant mappings.
 
+- **Multi-Architecture Tier 2 Domain Engine (AArch64 & x86_64)**:
+  - Ported `hal::domain` operations to AArch64 (`TTBR0_EL1` + ASID via `tlbi aside1is` inner-shareable hardware broadcast) and x86_64 (`CR3` + PCID).
+  - Generalized `vi_user_copy_guard_fault` and `guarded_byte_copy` inline assembly to handle recoverable page-fault traps across RISC-V, AArch64, and x86_64 without kernel panic.
+  - Enabled multi-arch domain admission and context switching in `kernel/src/task/launch.rs`, `scheduler.rs`, and `task.rs` preserving the zero-cost SAS-to-SAS switch invariant.
+  - Implemented unconditional domain teardown ASID flush in `AddressSpace::drop` preventing stale translation leakage.
+  - Packaged `tier2-smoke` and `tier2-exploit` into both `build-aarch64-cells.ps1` and `build-x86_64-cells.ps1`.
 ## [2026-09-19] CellOS Desktop environment with Taskbar, Spotlight Search, and App Launcher
 - Implemented pure-Rust Tier 1 desktop cell (`cells/apps/desktop/`):
   - **Taskbar (`src/taskbar.rs`)**: bottom-anchored 40px taskbar with CellOS branding button, Spotlight search launcher, pinned application icons with pager navigation (`<` / `>`) and overflow management, real-time system tray service health indicators (`[NET]`, `[VFS]`, `[AI]`), and monotonic digital clock (`HH:MM`).
