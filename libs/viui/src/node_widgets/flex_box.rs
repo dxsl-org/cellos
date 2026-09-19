@@ -599,7 +599,11 @@ impl FlexBox {
             let mut max_cross = 0.0f32;
             for (slot, &ci) in indices.iter().enumerate() {
                 let main_w = il[slot].main;
-                let min_w = if self.children[ci].flex_grow > 0.0 { main_w } else { 0.0 };
+                let min_w = if self.children[ci].flex_grow > 0.0 {
+                    main_w
+                } else {
+                    0.0
+                };
                 let sz = self.children[ci].node.layout(Constraints {
                     origin: dummy,
                     min: Size::new(min_w, 0.0),
@@ -721,7 +725,11 @@ impl FlexBox {
             let mut max_cross = 0.0f32;
             for (slot, &ci) in indices.iter().enumerate() {
                 let main_h = layouts[slot].main;
-                let min_h = if self.children[ci].flex_grow > 0.0 { main_h } else { 0.0 };
+                let min_h = if self.children[ci].flex_grow > 0.0 {
+                    main_h
+                } else {
+                    0.0
+                };
                 let sz = self.children[ci].node.layout(Constraints {
                     origin: dummy,
                     min: Size::new(0.0, min_h),

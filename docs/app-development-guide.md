@@ -39,7 +39,7 @@ The SDK is one family, not a numbered set of tiers:
 | Foundation | manifest, syscall ABI, lifecycle entrypoint | Tier 1 and future Tier 2 native Cells | Shipped for current native Cells |
 | Runtime profiles | `rust-no-std`, `rust-std`, `ffi-posix`, `lua` | Profile-specific setup | `rust-no-std`, in-tree `rust-std` (pure-Rust PAL), trusted `ffi-posix`, and Lua exist |
 | Service clients | VFS, net, IPC, service discovery | Tier 1 and future Tier 2 native Cells | Available in the native SDK; coverage remains service-specific |
-| UI/graphics | ViUI, signal API, surfaces | Native UI Cells | ViUI path exists |
+| UI/graphics | ViUI, signal API, surfaces, desktop environment | Native UI Cells | ViUI and Desktop environment (`desktop`) exist |
 | Middleware/helpers | AppContext, wrappers, RAII handles | Native app ergonomics | Available incrementally; not a separate SDK tier |
 | Tooling | signing, manifest checks, image/build helpers | Build and release | Development tooling exists; fleet production key/admission provisioning is not complete |
 | Guest integration | VirtIO/proxy contracts | Tier 3 VM guests | ARM64 path exists; strict guest verification is KVM/hardware-gated |

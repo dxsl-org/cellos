@@ -1,4 +1,13 @@
 # TODO
+- CellOS Desktop Environment [completed 2026-09-19]: hoàn thành cell desktop (`cells/apps/desktop/`)
+  thuần Rust Tier 1 SAS với Taskbar (bottom 40px, CellOS start menu, Spotlight search button,
+  pinned apps pager navigation `<` / `>`, real-time sys-tray daemon indicators `[NET]`, `[VFS]`,
+  `[AI]`, clock `HH:MM`), Spotlight Search modal (500x280 floating modal, tìm kiếm ứng dụng tức thì,
+  keyboard / mouse navigation, `[Open]` app launching via `sys_spawn_from_path`, và taskbar
+  `[+Pin]` / `[Unpin]` toggling). Hỗ trợ phím tắt đóng mở Spotlight (`Esc`, `F1`, `Ctrl+Space`).
+  Toàn bộ compile sạch trên 3 target (`riscv64`, `aarch64`, `x86_64`), clippy sạch với `-D warnings`,
+  đã tích hợp vào launch profile kernel (`desktop_profile`), boot ceiling, sign-policy, và disk/init.
+  Pass 100% integration test `tests/integration/tests/desktop-shell.rs` trên QEMU với screendump capture.
 - CI gate restoration [completed 2026-09-15]: toàn bộ pipeline CI 23/23 jobs đã XANH
   hoàn toàn trên hosted runner (GitHub Actions Run `34964009461` tại commit `2bb82e50a`).
   Toàn bộ 7 job đỏ ban đầu đã được giải quyết:

@@ -126,7 +126,7 @@ Build-Cargo -What "app-bench"      -Packages @('app-bench')       # builds bench
 Build-Cargo -What "app-net-tools"  -Packages @('app-net-tools')
 Build-Cargo -What "app-sys-tools"  -Packages @('app-sys-tools')
 Build-Cargo -What "robot-demo + robot-dashboard" -Packages @('robot-demo', 'robot-dashboard')
-Build-Cargo -What "fb-console"     -Packages @('fb-console')
+Build-Cargo -What "fb-console + desktop" -Packages @('fb-console', 'desktop')
 Build-Cargo -What "hypha cells"    -Packages @('hypha-llm-gateway', 'hypha-core', 'hypha-tool-fs', 'hypha-tool-sys', 'hypha-tool-spawn')
 Build-Cargo -What "input-test"     -Packages @('input-test')
 Build-Cargo -What "window-policy-probe" -Packages @('window-policy-probe')
@@ -270,6 +270,7 @@ Add-CellToSign "$rel_dir/app-sys-tools"
 Add-CellToSign "$rel_dir/robot-demo"
 Add-CellToSign "$rel_dir/robot-dashboard"
 Add-CellToSign "$rel_dir/fb-console"
+Add-CellToSign "$rel_dir/desktop"
 Add-CellToSign "$rel_dir/hypha-llm-gateway"
 Add-CellToSign "$rel_dir/hypha-core"
 Add-CellToSign "$rel_dir/hypha-tool-fs"
@@ -358,6 +359,7 @@ $ai_bin        = "$rel_dir/service-ai"        # Spec 24: unified AI inference se
 $ai_test_bin   = "$rel_dir/ai-test"           # Spec 24: inference oracle cell
 $ai_model      = "models/tiny-llama-64.gguf"  # Spec 24: deterministic tiny model fixture
 $fb_console_bin = "$rel_dir/fb-console"       # HMI: mirror kernel log to HDMI screen
+$desktop_bin   = "$rel_dir/desktop"
 $robot_demo_bin = "$rel_dir/robot-demo"       # G1 sensor→actuator reference demo
 $dashboard_bin = "$rel_dir/robot-dashboard"  # G1 ViUI v2 dashboard demo
 $hypha_llm_bin = "$rel_dir/hypha-llm-gateway" # Hypha P0 — LLM network gateway
@@ -608,6 +610,7 @@ if (Test-Path $virtio_blk_bin) { $table_args += "/bin/block=$virtio_blk_bin" }
 if (Test-Path $virtio_gpu_bin) { $table_args += "/bin/virtio-gpu=$virtio_gpu_bin" }
 if (Test-Path $comp_bin)        { $table_args += "/bin/compositor=$comp_bin" }
 if (Test-Path $fb_console_bin)  { $table_args += "/bin/fb-console=$fb_console_bin" }
+if (Test-Path $desktop_bin)     { $table_args += "/bin/desktop=$desktop_bin" }
 if (Test-Path $robot_demo_bin)  { $table_args += "/bin/robot-demo=$robot_demo_bin" }
 if (Test-Path $dashboard_bin)   { $table_args += "/bin/robot-dashboard=$dashboard_bin" }
 if (Test-Path $hypha_llm_bin)      { $table_args += "/bin/llm-gateway=$hypha_llm_bin" }

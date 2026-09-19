@@ -116,6 +116,7 @@ members = [
     # Cells - Apps (user applications)
     "cells/apps/fb-console",
     "cells/apps/robot-dashboard",
+    "cells/apps/desktop",
     "cells/apps/hypha/llm-gateway",   # Hypha P0 — LLM network gateway
     "cells/apps/hypha/core",          # Hypha P1 — agent brain (chat loop)
     "cells/apps/hypha/tools/fs",      # Hypha P2 — filesystem tool cell

@@ -187,6 +187,10 @@ path = "tests/iommu-riscv-command.rs"
 name = "iommu-publication"
 path = "tests/iommu-publication.rs"
 
+[[test]]
+name = "desktop-shell"
+path = "tests/desktop-shell.rs"
+
 [dev-dependencies]
 tempfile = "3"
 api = { path = "../../libs/api" }

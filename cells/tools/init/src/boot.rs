@@ -63,6 +63,11 @@ pub(crate) fn spawn_optional_services() -> Option<usize> {
         SyscallResult::Ok(_) => ostd::io::println("Init: fb-console spawned."),
         SyscallResult::Err(_) => ostd::io::println("Init: fb-console spawn failed."),
     }
+    #[cfg(all(not(feature = "hypervisor-min"), not(feature = "board-rpi3")))]
+    match sys_spawn_from_path("/bin/desktop") {
+        SyscallResult::Ok(_) => ostd::io::println("Init: desktop spawned."),
+        SyscallResult::Err(_) => ostd::io::println("Init: desktop spawn failed."),
+    }
 
     #[cfg(not(feature = "board-rpi3"))]
     let hypervisor_tid = spawn_hypervisor();

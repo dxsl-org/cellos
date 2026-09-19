@@ -1,0 +1,18 @@
+[package]
+name = "desktop"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+
+[[bin]]
+name = "desktop"
+path = "src/main.rs"
+
+[dependencies]
+ostd = { path = "../../../libs/ostd", version = "0.2.0" }
+api = { path = "../../../libs/api", version = "0.1.0" }
+text-engine = { path = "../../../libs/text-engine", version = "0.1.0" }
+viui = { path = "../../../libs/viui", version = "0.2.0" }
+
+[build-dependencies]
+cell-build = { path = "../../../libs/cell-build", version = "0.2.0" }

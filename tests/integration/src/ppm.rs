@@ -2,8 +2,8 @@
 
 /// Decoded binary PPM frame.
 pub struct PpmFrame {
-    width: usize,
-    height: usize,
+    pub width: usize,
+    pub height: usize,
     pub pixels: Vec<u8>,
 }
 

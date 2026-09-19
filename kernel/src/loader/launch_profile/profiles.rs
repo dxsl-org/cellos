@@ -20,7 +20,7 @@ pub(super) fn init_profile(route: LaunchRoute, target: &str) -> Option<LaunchPro
         | "/bin/kms" | "/bin/net" | "/bin/net-broker" | "/bin/nvme" | "/bin/shell"
         | "/bin/silo" | "/bin/ai-test" | "/bin/silo-test" | "/bin/srv-test" | "/bin/supervisor"
         | "/bin/vfs" | "/bin/vfs-test" | "/bin/virtio-gpu" | "/bin/virtio-net"
-        | "/bin/std-smoke" => Some(LaunchProfile::new(
+        | "/bin/std-smoke" | "/bin/desktop" => Some(LaunchProfile::new(
             boot_ceiling::boot_ceiling(target),
             "init-launch-edge",
             true,
@@ -36,6 +36,13 @@ pub(super) fn shell_profile(route: LaunchRoute, target: &str) -> Option<LaunchPr
         LaunchRoute::Mem | LaunchRoute::Pinned => return None,
     };
     Some(LaunchProfile::new(ceiling, "shell-launch-edge", false))
+}
+pub(super) fn desktop_profile(route: LaunchRoute, target: &str) -> Option<LaunchProfile> {
+    let ceiling = match route {
+        LaunchRoute::Path | LaunchRoute::Elf => reviewed_user_target_ceiling(target)?,
+        LaunchRoute::Mem | LaunchRoute::Pinned => return None,
+    };
+    Some(LaunchProfile::new(ceiling, "desktop-launch-edge", false))
 }
 
 pub(super) fn hypha_profile(route: LaunchRoute, target: &str) -> Option<LaunchProfile> {

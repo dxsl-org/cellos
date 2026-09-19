@@ -3,6 +3,21 @@
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
 ## [Unreleased] Development-first hardware-constrained execution
+## [2026-09-19] CellOS Desktop environment with Taskbar, Spotlight Search, and App Launcher
+- Implemented pure-Rust Tier 1 desktop cell (`cells/apps/desktop/`):
+  - **Taskbar (`src/taskbar.rs`)**: bottom-anchored 40px taskbar with CellOS branding button, Spotlight search launcher, pinned application icons with pager navigation (`<` / `>`) and overflow management, real-time system tray service health indicators (`[NET]`, `[VFS]`, `[AI]`), and monotonic digital clock (`HH:MM`).
+  - **Spotlight Search (`src/spotlight.rs`)**: macOS/Raycast-inspired modal window (500x280) with instant substring search across application catalog, arrow key / mouse navigation, one-click `[Open]` launching via `sys_spawn_from_path`, and taskbar pin/unpin toggles (`[+Pin]` / `[Unpin]`).
+  - **Drawing primitives (`src/draw.rs`)**: 2D bitmap drawing pipeline using `ViSurface` (BGRA8888) with rounded borders, accent color themes, and bitmap typography.
+  - **Architecture & Security**: pure Rust `#![no_std]`, `#![forbid(unsafe_code)]`, Tier 1 Single Address Space (SAS), and exact launch profile authorization without ambient lifecycle capability escalation.
+- Integrated into kernel launch profiles and boot ceiling:
+  - Configured `desktop_profile` in `kernel/src/loader/launch_profile/profiles.rs` and `targets.rs` granting reviewed user application launch rights.
+  - Configured `/bin/desktop` in `kernel/src/loader/boot_ceiling.rs` and signed operator policy in `scripts/sign-policy.py`.
+  - Wired `init` orchestrator in `cells/tools/init/src/boot.rs` and disk generation script `gen_disk.ps1`.
+- Verified:
+  - Clean compilation across all 3 architectures (`riscv64gc-unknown-none-elf`, `aarch64-unknown-none-softfloat`, `x86_64-unknown-none`).
+  - Zero clippy warnings with `-D warnings` and clean `cargo fmt`.
+  - New integration test `tests/integration/tests/desktop-shell.rs` passes 100% in QEMU, verifying screen capture, bottom taskbar scanout, mouse pointer activation, and Spotlight modal interaction.
+
 ## [2026-09-19] Fix ViUI FlexBox layout constraints & multi-line wrap tracking
 - Fixed `libs/viui/src/node_widgets/flex_box.rs`:
   - Enforced `min` constraint on the main axis (`main_w` for rows, `main_h` for columns) when child item has `flex_grow > 0.0`, ensuring flexible children expand to fill their distributed flex space instead of collapsing to unconstrained bounds.

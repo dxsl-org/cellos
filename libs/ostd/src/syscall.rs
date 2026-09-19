@@ -1363,7 +1363,7 @@ pub fn sys_get_resolution() -> (u32, u32) {
     let ret = unsafe { syscall(ViSyscall::GpuGetResolution, 0, 0, 0, 0) } as usize;
     let w = (ret >> 32) as u32;
     let h = (ret & 0xFFFF_FFFF) as u32;
-    if w == 0 || h == 0 {
+    if w == 0 || h == 0 || ret == usize::MAX || (ret as isize) < 0 {
         (1280, 800)
     } else {
         (w, h)

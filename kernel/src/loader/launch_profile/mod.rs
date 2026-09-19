@@ -59,6 +59,7 @@ pub fn authorize(
     let profile = match caller.name {
         "init" if caller.has_spawn => profiles::init_profile(route, target),
         "shell" => profiles::shell_profile(route, target),
+        "desktop" => profiles::desktop_profile(route, target),
         "hypha" if caller.has_spawn => profiles::hypha_profile(route, target),
         "tool-spawn" if caller.has_spawn => profiles::tool_spawn_profile(route, target),
         "supervisor" if caller.has_spawn && caller.has_supervisor => {

@@ -128,6 +128,7 @@ DEV_POLICY = [
     ("/bin/https-demo",  0, 1, 0, 0, 0, 0,     0, 0, 0),
     ("/bin/http-smoke",  0, 1, 0, 0, 0, 0,     0, 0, 0),
     ("/bin/std-smoke",   0, 0, 0, 0, 0, 0,     0, 0, 0),
+    ("/bin/desktop",     0, 0, 0, 0, 0, 0,     0, 0, 0),
 ]
 
 
