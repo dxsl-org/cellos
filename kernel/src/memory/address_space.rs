@@ -621,14 +621,20 @@ pub fn create_cell_domain(
     // Map cell ELF segments with User permissions
     for &(va, _frame) in segments.pages() {
         let is_write = segments.is_writable(va);
-        let flags = if is_write {
-            Flags::from_bits(Flags::READ | Flags::WRITE)
+        let (kind, flags) = if is_write {
+            (
+                MappingKind::Private,
+                Flags::from_bits(Flags::READ | Flags::WRITE),
+            )
         } else {
-            Flags::from_bits(Flags::READ | Flags::EXECUTE)
+            (
+                MappingKind::ImmutableImage,
+                Flags::from_bits(Flags::READ | Flags::EXECUTE),
+            )
         };
         let phys =
             crate::memory::paging::virt_to_phys(va).ok_or(AddressSpaceError::InvalidMapping)?;
-        builder.map_existing_user_page(va, phys, MappingKind::Private, flags)?;
+        builder.map_existing_user_page(va, phys, kind, flags)?;
     }
     builder.build()
 }
