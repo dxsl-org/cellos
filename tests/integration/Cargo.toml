@@ -191,6 +191,10 @@ path = "tests/iommu-publication.rs"
 name = "desktop-shell"
 path = "tests/desktop-shell.rs"
 
+[[test]]
+name = "ocel-browser"
+path = "tests/ocel-browser.rs"
+
 [dev-dependencies]
 tempfile = "3"
 api = { path = "../../libs/api" }
