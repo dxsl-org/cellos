@@ -71,6 +71,12 @@ for that workload; otherwise leave deployment blocked. Do not downgrade to SAS.
 ├─ "I want quick scripting / dynamic code"
 │  └─ Use Tier 1 lua profile (legacy: Tier 1b Lua)
 │
+├─ "I need to view documents (HTML, PDF, Markdown, text, images)"
+│  └─ Use Ocel (Tier 2, cells/apps/ocel). See ADR-0017.
+│
+├─ "I need a full web browser (Gmail, YouTube, web apps)"
+│  └─ Use Tier 3 Chrome via hypervisor. See ADR-0017.
+│
 ├─ "I need untrusted native code without a VM"
 │  └─ Blocked: Tier 2 is internal test-hooks-only, with no application admission/loader route.
 │
