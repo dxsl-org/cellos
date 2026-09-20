@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_VISIBLE_APPS","TASKBAR_HEIGHT"],"enum":["TaskbarAction"],"fn":["handle_click","is_inside","render"],"struct":["TaskbarState"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["RESP_BUF"],"fn":["close_socket","fetch_http","fetch_https","parse_ipv4","parse_octet","parse_u16","parse_url","parse_url_scheme","query_state","resolve_host"]};

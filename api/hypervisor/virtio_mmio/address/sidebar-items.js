@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["BASE","SLOTS","STRIDE"],"fn":["owns","slot_and_offset"]};

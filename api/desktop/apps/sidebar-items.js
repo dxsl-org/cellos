@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["DEFAULT_CATALOG"],"fn":["contains_case_insensitive"],"struct":["AppInfo","AppRegistry"]};

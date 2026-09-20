@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["HtmlToken"],"fn":["arena_to_doc_nodes","collect_inline_spans","decode_entities","parse_html","parse_table_node","render_children","strip_tags","tokenize_html"],"struct":["HtmlOutput"]};

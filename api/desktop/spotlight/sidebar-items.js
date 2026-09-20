@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_RESULTS","SPOTLIGHT_HEIGHT","SPOTLIGHT_WIDTH"],"enum":["SpotlightAction"],"fn":["handle_click","handle_key","is_inside","render"],"struct":["SpotlightState"]};

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["cmd_blkio_test","cmd_env","cmd_free","cmd_ifconfig","cmd_shutdown","cmd_sleep","cmd_uname","cmd_uptime","decimal","frames_to_kib","validated_kib"]};
+window.SIDEBAR_ITEMS = {"fn":["cmd_blkio_test","cmd_date","cmd_env","cmd_free","cmd_ifconfig","cmd_shutdown","cmd_sleep","cmd_uname","cmd_uptime","decimal","epoch_to_datetime","frames_to_kib","pad2","validated_kib"]};

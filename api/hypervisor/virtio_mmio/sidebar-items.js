@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["INVALID_QUEUE","MAX_QUEUES","QUEUE_SIZE_MAX","STATUS_DRIVER_OK","STATUS_FAILED","STATUS_NEEDS_RESET","VIRTIO_F_VERSION_1_HI"],"fn":["set_hi","set_lo"],"mod":["address"],"struct":["QueueCfg","VirtioMmio"],"trait":["VirtioDevice"]};

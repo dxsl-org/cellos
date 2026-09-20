@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["init_custom_heap","main","quiesce"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS","__CUSTOM_HEAP_ARENA"],"struct":["__CustomHeapArena"]};
+window.SIDEBAR_ITEMS = {"fn":["init_custom_heap","main","quiesce"],"mod":["virtio_mmio"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS","__CUSTOM_HEAP_ARENA"],"struct":["__CustomHeapArena"]};

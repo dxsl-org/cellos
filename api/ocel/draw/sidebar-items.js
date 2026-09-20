@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["clear","draw_char","draw_image","draw_str","fill_rect","stroke_rect"],"mod":["theme"],"struct":["Color"]};
