@@ -1,0 +1,9 @@
+[package]
+name = "dom-arena"
+version = "0.1.0"
+edition = "2021"
+description = "Gosub-style Arena-backed DOM tree with NodeId and DOM mutation protocol for CellOS"
+
+[dependencies]
+serde = { version = "1.0", default-features = false, features = ["alloc", "derive"] }
+postcard = { version = "1.0", default-features = false, features = ["alloc"] }

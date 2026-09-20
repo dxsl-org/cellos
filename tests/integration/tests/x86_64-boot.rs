@@ -207,3 +207,122 @@ fn x86_ps_command() {
         )
     });
 }
+
+#[test]
+fn x86_tier2_smoke_positive_execution() {
+    if !prerequisites_ok() {
+        return;
+    }
+    let mut qemu = QemuRunner::boot_x86_bios(&iso_path());
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("shell prompt: {e}\n{}", qemu.dump()));
+
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    qemu.send_line("tier2-smoke &");
+
+    let timeout = 30;
+    // 1. Verify admission to Tier 2 Paged Domain under CR3 isolation
+    qemu.wait_for(
+        "[domain] admitted cell 'tier2-smoke' to Tier 2 Paged Domain (CR3 isolation)",
+        timeout,
+    )
+    .unwrap_or_else(|e| {
+        panic!(
+            "tier2-smoke was not admitted to Tier 2 Paged Domain on x86_64: {e}\n--- output ---\n{}",
+            qemu.dump()
+        )
+    });
+
+    // 2. Verify heap allocation
+    qemu.wait_for("[tier2-smoke] Heap allocation verified", timeout)
+        .unwrap_or_else(|e| {
+            panic!(
+                "tier2-smoke heap allocation failed on x86_64: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
+
+    // 3. Verify PASS
+    qemu.wait_for(
+        "[tier2-smoke] PASS: All Tier 2 runtime invariants verified successfully!",
+        timeout,
+    )
+    .unwrap_or_else(|e| {
+        panic!(
+            "tier2-smoke did not complete PASS on x86_64: {e}\n--- output ---\n{}",
+            qemu.dump()
+        )
+    });
+
+    // 4. Verify shell interactive
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    qemu.send_line("echo x86-tier2-ok");
+    qemu.wait_for("x86-tier2-ok", timeout)
+        .unwrap_or_else(|e| {
+            panic!(
+                "shell not responding after tier2-smoke exit on x86_64: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
+}
+
+#[test]
+fn x86_tier2_fault_isolation() {
+    if !prerequisites_ok() {
+        return;
+    }
+    let mut qemu = QemuRunner::boot_x86_bios(&iso_path());
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("shell prompt: {e}\n{}", qemu.dump()));
+
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    qemu.send_line("tier2-exploit");
+
+    let timeout = 30;
+    // 1. Verify admission to Tier 2 Paged Domain
+    qemu.wait_for(
+        "[domain] admitted cell 'tier2-exploit' to Tier 2 Paged Domain (CR3 isolation)",
+        timeout,
+    )
+    .unwrap_or_else(|e| {
+        panic!(
+            "tier2-exploit was not admitted to Tier 2 Paged Domain on x86_64: {e}\n--- output ---\n{}",
+            qemu.dump()
+        )
+    });
+
+    // 2. Verify exploit attempts NULL write
+    qemu.wait_for("[tier2-exploit] deliberately writing to NULL", timeout)
+        .unwrap_or_else(|e| {
+            panic!(
+                "tier2-exploit never reached NULL write on x86_64: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
+
+    // 3. Verify CPU generated page fault and kernel terminated the cell
+    qemu.wait_for("[fault] Cell", timeout)
+        .unwrap_or_else(|e| {
+            panic!(
+                "kernel did not catch page fault or terminate cell on x86_64: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
+
+    let log = qemu.dump();
+    assert!(
+        !log.contains("write to NULL succeeded"),
+        "illegal NULL write succeeded — CR3 hardware isolation was NOT active!\n--- output ---\n{log}"
+    );
+
+    // 4. Verify kernel survivability: shell returns
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    qemu.send_line("echo x86-tier2-alive");
+    qemu.wait_for("x86-tier2-alive", timeout)
+        .unwrap_or_else(|e| {
+            panic!(
+                "kernel crashed or shell hung after fault on x86_64: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
+}

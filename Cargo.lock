@@ -864,6 +864,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "dom-arena"
+version = "0.1.0"
+dependencies = [
+ "postcard",
+ "serde",
+]
+
+[[package]]
 name = "doom"
 version = "0.1.0"
 dependencies = [
@@ -1852,6 +1860,29 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5c7398b9c8b70908f6371f47ed36737907c87c52af34c268fed0bf0ceb92ead9"
 dependencies = [
  "libc",
+]
+
+[[package]]
+name = "ocel"
+version = "0.1.0"
+dependencies = [
+ "api",
+ "cell-build",
+ "dom-arena",
+ "ostd",
+ "postcard",
+ "viui",
+]
+
+[[package]]
+name = "ocel-js"
+version = "0.1.0"
+dependencies = [
+ "api",
+ "dom-arena",
+ "ostd",
+ "postcard",
+ "serde",
 ]
 
 [[package]]

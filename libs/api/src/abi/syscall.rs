@@ -1073,6 +1073,9 @@ pub mod service {
     /// provider tid, submit a prompt over typed IPC (`ai_proto::AiRequest`), and poll
     /// the session for generated tokens.
     pub const AI: u16 = 15;
+    /// Ocel Tier 2 JavaScript engine service (`/bin/ocel-js`).
+    /// Executes untrusted web scripts in a hardware MMU-isolated domain.
+    pub const OCEL_JS: u16 = 16;
 }
 
 /// Arguments for `SpawnFromMem`.

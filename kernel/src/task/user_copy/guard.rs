@@ -131,7 +131,7 @@ unsafe fn guarded_byte_copy(
         sa = out(reg) _,
         da = out(reg) _,
         byte = out(reg) _,
-        out = lateout(reg) ret,
+        out = out(reg) ret,
         options(nostack)
     );
     #[cfg(target_arch = "aarch64")]
@@ -160,7 +160,7 @@ unsafe fn guarded_byte_copy(
         tmp = out(reg) _,
         idx = out(reg) _,
         byte = out(reg) _,
-        out = lateout(reg) ret,
+        out = out(reg) ret,
         options(nostack)
     );
     #[cfg(target_arch = "x86_64")]
@@ -187,7 +187,7 @@ unsafe fn guarded_byte_copy(
         cnt = in(reg) len,
         slot = in(reg) resume_slot,
         idx = out(reg) _,
-        out = lateout(reg) ret,
+        out = out(reg) ret,
         out("rax") _,
         options(nostack)
     );

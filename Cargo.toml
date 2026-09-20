@@ -40,6 +40,7 @@ members = [
     "libs/viui",
     "libs/viui-macros",
     "libs/cellos-fs",
+    "libs/dom-arena",
     
     # HAL
     "hal/core",
@@ -105,6 +106,7 @@ members = [
     "cells/services/supervisor",
     "cells/services/httpd",
     "cells/services/ai",
+    "cells/services/ocel-js",
 
     # Cells - Tools (system + CLI)
     "cells/tools/init",
@@ -117,6 +119,7 @@ members = [
     "cells/apps/fb-console",
     "cells/apps/robot-dashboard",
     "cells/apps/desktop",
+    "cells/apps/ocel",
     "cells/apps/hypha/llm-gateway",   # Hypha P0 — LLM network gateway
     "cells/apps/hypha/core",          # Hypha P1 — agent brain (chat loop)
     "cells/apps/hypha/tools/fs",      # Hypha P2 — filesystem tool cell

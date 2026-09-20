@@ -34,7 +34,9 @@ pub(super) fn reviewed_user_target_ceiling(target: &str) -> Option<CapSet> {
         | "/bin/tier2-exploit"
         | "/bin/tier2-smoke"
         | "/bin/std-smoke"
-        | "/bin/desktop" => CapSet::EMPTY,
+        | "/bin/desktop"
+        | "/bin/ocel"
+        | "/bin/ocel-js" => CapSet::EMPTY,
         // These clients and servers use typed IPC to the net service; they do
         // not hold NetworkCap themselves. Keeping their launch ceiling empty
         // also lets exact shell SpawnFromElf edges remain capability-free.

@@ -24,6 +24,14 @@ pub const DEFAULT_CATALOG: &[AppInfo] = &[
         is_pinned: true,
     },
     AppInfo {
+        id: "ocel",
+        name: "Ocel Viewer",
+        path: "/bin/ocel",
+        icon: "(O)",
+        description: "Document & Web Viewer",
+        is_pinned: true,
+    },
+    AppInfo {
         id: "dashboard",
         name: "Robot Dash",
         path: "/bin/robot-dashboard",

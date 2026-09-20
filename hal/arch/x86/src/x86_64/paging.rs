@@ -314,6 +314,9 @@ impl PageTable {
     pub const fn empty() -> Self {
         Self::zero()
     }
+    pub fn copy_kernel_higher_half(&mut self, src: &PageTable) {
+        self.entries[256..512].copy_from_slice(&src.entries[256..512]);
+    }
 }
 
 impl PageTable {
@@ -712,12 +715,15 @@ impl PageTable {
         idx: usize,
         alloc_fn: &mut dyn FnMut() -> Option<PhysAddr>,
     ) -> ViResult<&mut PageTable> {
+        let us_bit = if idx < 256 { PTE_US } else { 0 };
         if self.entries[idx] & PTE_P == 0 {
             let f = alloc_fn().ok_or(ViError::OutOfMemory)?;
             // SAFETY: f is a freshly allocated 4KB physical frame. Accessed via
             // HHDM virtual address so it is dereferenceable under Limine's PML4.
             unsafe { core::ptr::write_bytes(phys_to_virt_ptr(f) as *mut u8, 0, PAGE_SIZE) };
-            self.entries[idx] = f as u64 | PTE_P | PTE_RW;
+            self.entries[idx] = f as u64 | PTE_P | PTE_RW | us_bit;
+        } else if us_bit != 0 {
+            self.entries[idx] |= us_bit;
         }
         let next_phys = (self.entries[idx] & !0xFFF) as PhysAddr;
         // SAFETY: next_phys is a valid page table frame; HHDM offset makes it accessible.

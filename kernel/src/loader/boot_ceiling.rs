@@ -128,6 +128,7 @@ pub fn lookup(path: &str) -> Option<CapSet> {
         // Known boot cells that need no authority at all: pure IPC clients. They
         // are listed rather than left to the unknown-path fallback so a denial
         // report can distinguish "needs nothing" from "row missing".
+        "/bin/ocel" | "/bin/ocel-js" => CapSet::EMPTY,
         "/bin/config" | "/bin/compositor" | "/bin/fb-console" | "/bin/kms" | "/bin/silo-test"
         | "/bin/vfs-test" | "/bin/srv-test" | "/bin/std-smoke" | "/bin/desktop"
         | "/bin/tier2-exploit" | "/bin/tier2-smoke" => CapSet::EMPTY,

@@ -1,0 +1,12 @@
+[package]
+name = "ocel-js"
+version = "0.1.0"
+edition = "2021"
+description = "Ocel Tier 2 JavaScript Service Cell for CellOS"
+
+[dependencies]
+api = { path = "../../../libs/api" }
+ostd = { path = "../../../libs/ostd" }
+dom-arena = { path = "../../../libs/dom-arena" }
+postcard = { version = "1.0", default-features = false, features = ["alloc"] }
+serde = { version = "1.0", default-features = false, features = ["alloc", "derive"] }

@@ -10,9 +10,9 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $target    = "x86_64-unknown-none"
-$buildDir  = "target\$target\release"
-$embedded  = "kernel\src\embedded-x86_64"
-$imagePath = "$embedded\kernel_fs.img"
+$buildDir  = "target/$target/release"
+$embedded  = "kernel/src/embedded-x86_64"
+$imagePath = "$embedded/kernel_fs.img"
 $buildStd  = "-Z build-std=core,alloc"
 # Cells link at CELL_VA_START (0x1_0000_0000 = 4 GiB) since 2026-06-19; a small
 # code-model with relocation-model=static cannot materialise that address
@@ -132,11 +132,7 @@ $cmd = "cargo build --release -p app-init --target $target $buildStd 2>&1"
 Invoke-Expression $cmd | Select-Object -Last 5
 if ($LASTEXITCODE -ne 0) { Write-Warning "app-init build failed" }
 $env:RUSTFLAGS = ""
-$initSrc = "$buildDir\app-init"
-if (Test-Path $initSrc) {
-    Copy-Item $initSrc "kernel\src\embedded-x86_64\init" -Force
-    Write-Host "  Refreshed kernel\src\embedded-x86_64\init"
-}
+# Refresh of init will happen after signing below
 
 # Build tier2 test cells
 Write-Host "Building tier2 test cells..."
@@ -161,13 +157,43 @@ $cells = @(
     @{ Bin = "ps";             Dst = "/bin/ps"     },
     @{ Bin = "kill";           Dst = "/bin/kill"   }
     @{ Bin = "tier2-smoke";    Dst = "/bin/tier2-smoke" },
-    @{ Bin = "tier2-exploit";  Dst = "/bin/tier2-exploit" },
+    @{ Bin = "tier2-exploit";  Dst = "/bin/tier2-exploit" }
 )
 
+# Sign all cells (except tier2 untrusted test cells) before packaging
+$initSrc = "$buildDir/app-init"
+$cellsToSign = @()
+foreach ($c in $cells) {
+    if ($c.Bin -in @('tier2-smoke', 'tier2-exploit')) {
+        continue
+    }
+    $src = "$buildDir/$($c.Bin)"
+    if (Test-Path $src) {
+        $cellsToSign += (Convert-ToolPath $src)
+    }
+}
+if (Test-Path $initSrc) {
+    $cellsToSign += (Convert-ToolPath $initSrc)
+}
+
+if ($cellsToSign.Count -gt 0) {
+    Write-Host "Signing x86_64 cell binaries ($($cellsToSign.Count) cells)..."
+    $objcopyBin = if (Get-Command llvm-objcopy -ErrorAction SilentlyContinue) { "llvm-objcopy" } else { "objcopy" }
+    & $python (Join-Path 'scripts' 'cellos-sign') --objcopy $objcopyBin --sign @cellsToSign
+    if ($LASTEXITCODE -ne 0) {
+        throw "cellos-sign failed on x86_64 cells"
+    }
+}
+
+# Refresh the separately-embedded init ELF after signing
+if (Test-Path $initSrc) {
+    Copy-Item $initSrc "kernel/src/embedded-x86_64/init" -Force
+    Write-Host "  Refreshed kernel/src/embedded-x86_64/init"
+}
 $imgArgs = @((Convert-ToolPath $imagePath))
 $found   = @()
 foreach ($c in $cells) {
-    $src = "$buildDir\$($c.Bin)"
+    $src = "$buildDir/$($c.Bin)"
     if (Test-Path $src) {
         $kb = [Math]::Round((Get-Item $src).Length / 1KB, 0)
         Write-Host "  Found: $($c.Bin) (${kb} KB) -> $($c.Dst)"
