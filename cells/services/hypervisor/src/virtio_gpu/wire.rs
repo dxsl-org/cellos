@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Pure VirtIO-GPU wire codecs shared by the device and host-side tests.
 
 extern crate alloc;

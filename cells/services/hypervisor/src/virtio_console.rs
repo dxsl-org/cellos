@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! virtio-console device model (DeviceID=3, virtio-mmio slot 0 → SPI 16).
 //!
 //! Queue 0 (rx): host → guest (stub — keyboard input is a future phase).

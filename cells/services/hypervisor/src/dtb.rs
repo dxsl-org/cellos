@@ -196,6 +196,14 @@ pub fn build_dtb(
     fdt.property_array_u32("reg", &[0x0, 0x0a00_0600, 0x0, 0x200])?;
     fdt.end_node(vio_gpu)?;
 
+    // ── 12. /virtio_mmio@a000800 — input device (slot 4, SPI 20) ─────────────
+    let vio_input = fdt.begin_node("virtio_mmio@a000800")?;
+    fdt.property_string("compatible", "virtio,mmio")?;
+    fdt.property_u32("interrupt-parent", 1)?;
+    fdt.property_array_u32("interrupts", &[0, 20, 1])?;
+    fdt.property_array_u32("reg", &[0x0, 0x0a00_0800, 0x0, 0x200])?;
+    fdt.end_node(vio_input)?;
+
     fdt.end_node(root)?;
     fdt.finish()
 }

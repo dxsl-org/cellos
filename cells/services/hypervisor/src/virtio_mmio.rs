@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! virtio-mmio Version=2 register-block emulator for one device slot.
 //!
 //! Handshake: ACK(1)→DRIVER(2)→feature exchange→FEATURES_OK(8)→queue setup→DRIVER_OK(4).
@@ -6,7 +7,11 @@ use ostd::io::println;
 
 /// Maximum queues per device.
 pub const MAX_QUEUES: usize = 2;
+#[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
 const QUEUE_SIZE_MAX: u16 = crate::virtqueue_guard::MAX_QUEUE_SIZE as u16;
+#[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
+const QUEUE_SIZE_MAX: u16 = 256;
+#[allow(dead_code)]
 const INVALID_QUEUE: usize = MAX_QUEUES;
 const STATUS_DRIVER_OK: u32 = 0x04;
 const STATUS_NEEDS_RESET: u32 = 0x40;
@@ -27,12 +32,15 @@ pub struct QueueCfg {
 
 impl QueueCfg {
     pub fn is_valid(&self) -> bool {
-        crate::virtqueue_guard::valid_queue_config(
+        #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
+        return crate::virtqueue_guard::valid_queue_config(
             self.num,
             self.desc_gpa,
             self.avail_gpa,
             self.used_gpa,
-        )
+        );
+        #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
+        return self.num > 0 && self.desc_gpa != 0 && self.avail_gpa != 0 && self.used_gpa != 0;
     }
 }
 
@@ -52,6 +60,7 @@ pub trait VirtioDevice {
     fn config_read(&self, _offset: usize) -> u32 {
         0
     }
+    fn config_write(&mut self, _offset: usize, _val: u32) {}
     fn reset(&mut self) {}
     #[cfg(feature = "hostile-backend-recovery")]
     fn hostile_backend_fault(&mut self, _command: u32) {}
@@ -123,10 +132,16 @@ impl VirtioMmio {
             0x038 if q < MAX_QUEUES => {
                 let queue = &mut self.queues[q];
                 queue.ready = false;
-                queue.num = if crate::virtqueue_guard::valid_queue_size(val as usize) {
-                    val as u16
-                } else {
-                    0
+                queue.num = {
+                    #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
+                    let ok = crate::virtqueue_guard::valid_queue_size(val as usize);
+                    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
+                    let ok = val > 0 && val <= QUEUE_SIZE_MAX as u32;
+                    if ok {
+                        val as u16
+                    } else {
+                        0
+                    }
                 };
             }
             0x044 => {
@@ -205,6 +220,7 @@ impl VirtioMmio {
                 self.queues[q].ready = false;
                 set_hi(&mut self.queues[q].used_gpa, val);
             }
+            o if o >= 0x100 => dev.config_write((o - 0x100) as usize, val),
             _ => {}
         }
     }
@@ -239,6 +255,7 @@ fn set_hi(v: &mut u64, hi: u32) {
 
 #[path = "virtio-mmio-address.rs"]
 mod address;
+#[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
 pub use address::{owns, slot_and_offset};
 
 #[cfg(test)]

@@ -21,11 +21,19 @@ mod x86_mmio_dispatch;
 mod x86_port_dispatch;
 
 use crate::{
-    cmos_rtc::CmosRtc, pic_8259::Pic8259, pit_8253::Pit8253, uart_16550::Uart16550,
-    virtio_blk::BlkDisk, virtio_mmio::VirtioMmio, virtio_net::NetDev, vmm,
+    cmos_rtc::CmosRtc,
+    pic_8259::Pic8259,
+    pit_8253::Pit8253,
+    uart_16550::Uart16550,
+    virtio_blk::BlkDisk,
+    virtio_input::{InputDev, INPUT_SPI},
+    virtio_mmio::VirtioMmio,
+    virtio_net::NetDev,
+    vmm,
 };
 use api::hypervisor::ViVmExit;
 use ostd::io::println;
+use x86_mmio_dispatch::{MmioDevices, MmioDevicesMut};
 
 #[cfg(feature = "hostile-backend-recovery")]
 const HOSTILE_PREEMPTION_PORT: u16 = 0x5050;
@@ -47,6 +55,8 @@ pub fn run(
     let mut blk_vmio = VirtioMmio::default();
     let mut net = NetDev::new(net_tid, None);
     let mut net_vmio = VirtioMmio::default();
+    let mut input = InputDev::new(Some(INPUT_SPI));
+    let mut input_vmio = VirtioMmio::default();
     let mut uart = Uart16550::new();
     let mut pic = Pic8259::new();
     let mut pit = Pit8253::new();
@@ -80,7 +90,6 @@ pub fn run(
                 let value = x86_port_dispatch::read(port, &mut uart, &pic, &mut pit, &mut rtc);
                 write_rax(vm_id, vcpu_id, value, size);
             }
-            // HLT is a safe record boundary only after the UART drains THRE.
             ViVmExit::Hlt => {
                 uart.flush_tx_if_quiescent();
                 x86_irq_dispatch::service_idle(
@@ -94,6 +103,7 @@ pub fn run(
                     &mut net_vmio,
                     &mut net_poll_turn,
                 );
+                forward_input_events(&mut input, &mut input_vmio, vm_id, vcpu_id);
             }
 
             // ── Host-interrupt preemption — the guest was mid-execution (maybe
@@ -117,6 +127,7 @@ pub fn run(
                     &mut net_vmio,
                     &mut net_poll_turn,
                 );
+                forward_input_events(&mut input, &mut input_vmio, vm_id, vcpu_id);
                 ostd::task::yield_now();
             }
 
@@ -140,19 +151,32 @@ pub fn run(
                     val as u32,
                     vm_id,
                     vcpu_id,
-                    &mut blk,
-                    &mut blk_vmio,
-                    &mut net,
-                    &mut net_vmio,
+                    &mut MmioDevicesMut {
+                        block: &mut blk,
+                        block_mmio: &mut blk_vmio,
+                        net: &mut net,
+                        net_mmio: &mut net_vmio,
+                        input: &mut input,
+                        input_mmio: &mut input_vmio,
+                    },
                 ) {
                     return RunOutcome::Shutdown;
                 }
             }
 
             ViVmExit::MmioRead { ipa, size, reg } => {
-                let Some(value) =
-                    x86_mmio_dispatch::read(ipa, size, &blk, &blk_vmio, &net, &net_vmio)
-                else {
+                let Some(value) = x86_mmio_dispatch::read(
+                    ipa,
+                    size,
+                    &MmioDevices {
+                        block: &blk,
+                        block_mmio: &blk_vmio,
+                        net: &net,
+                        net_mmio: &net_vmio,
+                        input: &input,
+                        input_mmio: &input_vmio,
+                    },
+                ) else {
                     return RunOutcome::Shutdown;
                 };
                 write_gpr(vm_id, vcpu_id, reg, value, size);
@@ -178,6 +202,47 @@ pub fn run(
                 return RunOutcome::Shutdown;
             }
         }
+    }
+}
+
+fn forward_input_events(
+    input: &mut InputDev,
+    input_vmio: &mut VirtioMmio,
+    vm_id: usize,
+    vcpu_id: usize,
+) {
+    for ev in ostd::input::poll_events(16) {
+        match ev {
+            api::input::InputEvent::Key(ke) => {
+                let pressed = ke.state == api::input::KeyState::Pressed
+                    || ke.state == api::input::KeyState::Repeated;
+                let code = if ke.scancode > 0 {
+                    ke.scancode as u16
+                } else {
+                    ke.keysym as u16
+                };
+                input.push_key(code, pressed);
+            }
+            api::input::InputEvent::MouseMove { dx, dy, .. } => {
+                input.push_mouse_move(dx, dy);
+            }
+            api::input::InputEvent::MouseButton { button, state } => {
+                let pressed = state == api::input::KeyState::Pressed;
+                let btn = match button {
+                    api::input::MouseButton::Left => crate::virtio_input::BTN_LEFT,
+                    api::input::MouseButton::Right => crate::virtio_input::BTN_RIGHT,
+                    api::input::MouseButton::Middle => crate::virtio_input::BTN_MIDDLE,
+                    _ => crate::virtio_input::BTN_LEFT,
+                };
+                input.push_mouse_button(btn, pressed);
+            }
+            api::input::InputEvent::MouseScroll { dy, .. } => {
+                input.push_mouse_scroll(dy);
+            }
+        }
+    }
+    if input.flush_events(&input_vmio.queue_cfg(0), vm_id, vcpu_id) {
+        input_vmio.signal_used();
     }
 }
 

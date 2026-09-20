@@ -1,9 +1,12 @@
+#![allow(dead_code)]
 //! Architecture-specific VirtIO-MMIO guest address window.
 
 #[cfg(target_arch = "aarch64")]
 pub const BASE: u64 = 0x0a00_0000;
 #[cfg(target_arch = "x86_64")]
 pub const BASE: u64 = 0xd000_0000;
+#[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
+pub const BASE: u64 = 0;
 pub const STRIDE: u64 = 0x200;
 const SLOTS: u64 = 32;
 

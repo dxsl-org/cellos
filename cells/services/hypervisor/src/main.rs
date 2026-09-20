@@ -100,6 +100,7 @@ mod virtio_console;
 #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
 mod virtio_gpu;
 #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
+mod virtio_input;
 mod virtio_mmio;
 #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
 mod virtio_net;

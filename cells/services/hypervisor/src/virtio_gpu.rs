@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! VirtIO-GPU 2D device model (DeviceID=16, MMIO slot 3, SPI 19).
 
 mod command;

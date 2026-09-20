@@ -13,6 +13,7 @@ use crate::{
     virtio_blk::BlkDisk,
     virtio_console::Console,
     virtio_gpu::GpuDev,
+    virtio_input::{InputDev, INPUT_SPI},
     virtio_mmio::{self, VirtioMmio},
     virtio_net::NetDev,
     vmm,
@@ -49,6 +50,8 @@ pub fn run(
         if height == 0 { 768 } else { height },
     );
     let mut gpu_vmio = VirtioMmio::default();
+    let mut input = InputDev::new(Some(INPUT_SPI));
+    let mut input_vmio = VirtioMmio::default();
     gpu.bring_up();
     let mut exit = ViVmExit::Unknown { ec: 0, iss: 0 };
 
@@ -100,6 +103,7 @@ pub fn run(
                         1 => blk_vmio.mmio_write(off, val as u32, &mut blk, vm_id, vcpu_id),
                         2 => net_vmio.mmio_write(off, val as u32, &mut net, vm_id, vcpu_id),
                         3 => gpu_vmio.mmio_write(off, val as u32, &mut gpu, vm_id, vcpu_id),
+                        4 => input_vmio.mmio_write(off, val as u32, &mut input, vm_id, vcpu_id),
                         _ => {}
                     }
                 } else {
@@ -127,6 +131,7 @@ pub fn run(
                         1 => blk_vmio.mmio_read(off, &blk),
                         2 => net_vmio.mmio_read(off, &net),
                         3 => gpu_vmio.mmio_read(off, &gpu),
+                        4 => input_vmio.mmio_read(off, &input),
                         _ => 0,
                     }
                 } else {
@@ -151,6 +156,7 @@ pub fn run(
                         net_vmio.signal_used();
                     }
                 }
+                forward_input_events(&mut input, &mut input_vmio, vm_id, vcpu_id);
             }
 
             // ── Preemption budget expired (C2 yield) — poll RX before re-enter
@@ -161,6 +167,7 @@ pub fn run(
                         net_vmio.signal_used();
                     }
                 }
+                forward_input_events(&mut input, &mut input_vmio, vm_id, vcpu_id);
                 ostd::task::yield_now();
             }
 
@@ -211,6 +218,47 @@ pub fn run(
                 return RunOutcome::Shutdown;
             }
         }
+    }
+}
+
+fn forward_input_events(
+    input: &mut InputDev,
+    input_vmio: &mut VirtioMmio,
+    vm_id: usize,
+    vcpu_id: usize,
+) {
+    for ev in ostd::input::poll_events(16) {
+        match ev {
+            api::input::InputEvent::Key(ke) => {
+                let pressed = ke.state == api::input::KeyState::Pressed
+                    || ke.state == api::input::KeyState::Repeated;
+                let code = if ke.scancode > 0 {
+                    ke.scancode as u16
+                } else {
+                    ke.keysym as u16
+                };
+                input.push_key(code, pressed);
+            }
+            api::input::InputEvent::MouseMove { dx, dy, .. } => {
+                input.push_mouse_move(dx, dy);
+            }
+            api::input::InputEvent::MouseButton { button, state } => {
+                let pressed = state == api::input::KeyState::Pressed;
+                let btn = match button {
+                    api::input::MouseButton::Left => crate::virtio_input::BTN_LEFT,
+                    api::input::MouseButton::Right => crate::virtio_input::BTN_RIGHT,
+                    api::input::MouseButton::Middle => crate::virtio_input::BTN_MIDDLE,
+                    _ => crate::virtio_input::BTN_LEFT,
+                };
+                input.push_mouse_button(btn, pressed);
+            }
+            api::input::InputEvent::MouseScroll { dy, .. } => {
+                input.push_mouse_scroll(dy);
+            }
+        }
+    }
+    if input.flush_events(&input_vmio.queue_cfg(0), vm_id, vcpu_id) {
+        input_vmio.signal_used();
     }
 }
 

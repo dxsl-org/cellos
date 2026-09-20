@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! VirtIO-GPU queue I/O around the pure wire codecs.
 
 extern crate alloc;
