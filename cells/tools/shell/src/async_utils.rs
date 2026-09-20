@@ -246,17 +246,39 @@ impl AsyncStdin {
         buffer
     }
 
-    /// TAB completion: complete the last token against built-in command names.
+    /// TAB completion: complete the last token against built-in command names
+    /// and external programs in `/bin/`.
+    ///
+    /// Priority: builtins first (in-process, zero IPC cost). When no builtin
+    /// matches, query VFS `ListDir("/bin")` for external program names.
+    /// Single unique match → complete inline; multiple matches → print list.
     fn handle_tab(buffer: &mut Vec<u8>) {
         let line = core::str::from_utf8(buffer).unwrap_or("");
+        // Only complete the first token (command name), not arguments.
+        let is_first_token = !line.trim_start().contains(' ');
         let token = line.split_whitespace().last().unwrap_or("");
         let token_bytes = token.len();
 
-        let matches: alloc::vec::Vec<&str> = crate::executor::BUILTINS
+        // 1. Match builtins.
+        let mut matches: alloc::vec::Vec<alloc::string::String> = crate::executor::BUILTINS
             .iter()
             .filter(|b| b.starts_with(token))
-            .copied()
+            .map(|b| alloc::string::String::from(*b))
             .collect();
+
+        // 2. If completing a command (first token) and no builtin matched,
+        //    query VFS for /bin/* entries.
+        if matches.is_empty() && (is_first_token || token_bytes > 0) {
+            if let Some(bins) = crate::cmd_fs::vfs_list_dir("/bin") {
+                for name in &bins {
+                    if name.starts_with(token) {
+                        matches.push(name.clone());
+                    }
+                }
+                matches.sort_unstable();
+                matches.dedup();
+            }
+        }
 
         match matches.len() {
             0 => {}
@@ -265,7 +287,7 @@ impl AsyncStdin {
                     ostd::io::print("\x08 \x08");
                     buffer.pop();
                 }
-                let completed = matches[0];
+                let completed = &matches[0];
                 ostd::io::print(completed);
                 ostd::io::print(" ");
                 buffer.extend_from_slice(completed.as_bytes());

@@ -212,3 +212,94 @@ pub fn cmd_ifconfig(_args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult
     crate::executor::shell_println("ifconfig: no response from network service");
     Ok(())
 }
+
+// ─── date ─────────────────────────────────────────────────────────────────────
+
+/// Convert Unix epoch seconds to calendar fields (UTC, proleptic Gregorian).
+fn epoch_to_datetime(mut secs: u64) -> (u64, u8, u8, u8, u8, u8) {
+    fn is_leap(y: u64) -> bool {
+        (y.is_multiple_of(4) && !y.is_multiple_of(100)) || y.is_multiple_of(400)
+    }
+    fn days_in_month(m: u8, y: u64) -> u64 {
+        match m {
+            1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+            4 | 6 | 9 | 11 => 30,
+            2 if is_leap(y) => 29,
+            2 => 28,
+            _ => 30,
+        }
+    }
+    let mut year = 1970u64;
+    loop {
+        let days = if is_leap(year) { 366 } else { 365 };
+        if secs < days * 86400 {
+            break;
+        }
+        secs -= days * 86400;
+        year += 1;
+    }
+    let mut month = 1u8;
+    loop {
+        let d = days_in_month(month, year) * 86400;
+        if secs < d {
+            break;
+        }
+        secs -= d;
+        month += 1;
+    }
+    let day = (secs / 86400 + 1) as u8;
+    secs %= 86400;
+    let hour = (secs / 3600) as u8;
+    secs %= 3600;
+    let min = (secs / 60) as u8;
+    let sec = (secs % 60) as u8;
+    (year, month, day, hour, min, sec)
+}
+
+fn pad2(buf: &mut [u8; 2], n: u8) -> &str {
+    buf[0] = b'0' + n / 10;
+    buf[1] = b'0' + n % 10;
+    core::str::from_utf8(buf).unwrap_or("??")
+}
+
+/// `date` — print the current UTC date and time from the hardware RTC.
+///
+/// Falls back to the monotonic timer if no RTC is present (epoch = 0).
+pub fn cmd_date(_args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
+    let epoch_secs = ostd::syscall::sys_get_wall_secs();
+    if epoch_secs == 0 {
+        // No RTC available — show uptime instead
+        let ticks = syscall::sys_get_time();
+        let secs = ticks / 10_000_000;
+        crate::executor::shell_println(&alloc::format!("date: no RTC — uptime {} seconds", secs));
+        return Ok(());
+    }
+
+    let month_names = [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    ];
+
+    let (year, month, day, hour, min, sec) = epoch_to_datetime(epoch_secs);
+    let month_name = month_names
+        .get((month as usize).saturating_sub(1))
+        .copied()
+        .unwrap_or("???");
+
+    let mut h2 = [0u8; 2];
+    let mut m2 = [0u8; 2];
+    let mut s2 = [0u8; 2];
+    let mut d2 = [0u8; 2];
+
+    // Output: "Sep 03 14:35:22 UTC 2026"
+    let out = alloc::format!(
+        "{} {} {}:{}:{} UTC {}",
+        month_name,
+        pad2(&mut d2, day),
+        pad2(&mut h2, hour),
+        pad2(&mut m2, min),
+        pad2(&mut s2, sec),
+        year,
+    );
+    crate::executor::shell_println(&out);
+    Ok(())
+}

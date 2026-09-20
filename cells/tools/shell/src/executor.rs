@@ -48,11 +48,12 @@ pub fn shell_stdin() -> Vec<u8> {
 /// All recognized shell built-in names, used by tab completion.
 #[cfg(not(feature = "shell_test"))] // reason: tab completion only exists in the interactive REPL
 pub const BUILTINS: &[&str] = &[
-    "alias", "awk", "bg", "blktest", "break", "cat", "cd", "clear", "continue", "echo", "env",
-    "exec", "exit", "export", "fg", "find", "free", "grep", "head", "help", "history", "ifconfig",
-    "ip", "jobs", "kill", "ls", "mkdir", "ps", "pwd", "read", "rm", "rmdir", "sed", "shutdown",
-    "sleep", "snapshot", "sort", "source", "tail", "tee", "test", "top", "unalias", "uniq",
-    "unset", "uname", "uptime", "vappend", "vcat", "vwrite", "wc",
+    "alias", "awk", "bg", "blktest", "break", "cat", "cd", "clear", "continue", "date", "echo",
+    "env", "exec", "exit", "export", "fg", "find", "free", "grep", "head", "help", "history",
+    "ifconfig", "ip", "jobs", "kill", "ls", "mkdir", "mv", "ps", "pwd", "read", "rm", "rmdir",
+    "sed", "shutdown", "sleep", "snapshot", "sort", "source", "tail", "tee", "test", "top",
+    "touch", "unalias", "uniq", "unset", "uname", "uptime", "vappend", "vcat", "vwrite", "wc",
+    "cp",
 ];
 
 // ── Shell-global state ────────────────────────────────────────────────────────
@@ -628,6 +629,7 @@ fn dispatch_builtin(prog: &str, args: &[String], jobs: &mut Jobs) -> i32 {
         "exec" => Some(with_legacy_parts(args, crate::commands::cmd_exec)),
         "history" => Some(with_legacy_parts(args, crate::history::cmd_history)),
         "ifconfig" | "ip" => Some(with_legacy_parts(args, crate::cmd_sys::cmd_ifconfig)),
+        "date" => Some(with_legacy_parts(args, crate::cmd_sys::cmd_date)),
         _ => None,
     };
     if let Some(result) = legacy_result {
