@@ -167,6 +167,14 @@ impl AddressSpaceBuilder {
                 | SupervisorRangeKind::PrivatePageTable => Flags::from_bits(
                     Flags::VALID | Flags::READ | Flags::WRITE | Flags::ACCESSED | Flags::DIRTY,
                 ),
+                SupervisorRangeKind::DeviceMmio => Flags::from_bits(
+                    Flags::VALID
+                        | Flags::READ
+                        | Flags::WRITE
+                        | Flags::DEVICE
+                        | Flags::ACCESSED
+                        | Flags::DIRTY,
+                ),
             };
             for address in (range.start..range.end).step_by(PAGE_SIZE) {
                 self.allow_supervisor(SupervisorMapping {

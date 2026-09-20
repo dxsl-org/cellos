@@ -51,6 +51,8 @@ const EMBEDDED_DEVELOPMENT_CELLS: &[&str] = &[
     "/bin/spi-demo",
     "/bin/pwm-demo",
     "/bin/robot-demo",
+    "/bin/tier2-smoke",
+    "/bin/tier2-exploit",
 ];
 
 /// True if `path` is a bootstrap cell that must resolve from the VIFS1 ramdisk

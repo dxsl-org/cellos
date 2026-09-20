@@ -158,7 +158,14 @@ fn grant_allocated_bytes(size: usize) -> usize {
     grant_pages_for_size(size) * 4096
 }
 
-#[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+#[cfg(all(
+    feature = "native-domains",
+    any(
+        target_arch = "riscv64",
+        target_arch = "aarch64",
+        target_arch = "x86_64"
+    )
+))]
 fn task_domain_space(
     tid: usize,
 ) -> Option<alloc::sync::Arc<crate::memory::address_space::AddressSpace>> {
@@ -483,7 +490,14 @@ fn unregister_registered_grant(caller_id: usize, reg_id: usize) -> Result<(), Sy
     }
     .ok_or(SyscallError::PermissionDenied)?;
     let n_pages = grant_pages_for_size(entry.size);
-    #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+    #[cfg(all(
+        feature = "native-domains",
+        any(
+            target_arch = "riscv64",
+            target_arch = "aarch64",
+            target_arch = "x86_64"
+        )
+    ))]
     if let Some(space) = task_domain_space(caller_id) {
         const PAGE_SIZE: usize = 4096;
         for i in 0..n_pages {
@@ -1096,13 +1110,27 @@ fn live_task_binding(task_id: usize) -> Option<(CellId, u64)> {
         .map(|task| (task.cell_id, task.cell_generation))
 }
 
-#[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+#[cfg(all(
+    feature = "native-domains",
+    any(
+        target_arch = "riscv64",
+        target_arch = "aarch64",
+        target_arch = "x86_64"
+    )
+))]
 fn record_end_containing(base: usize, size: usize, ptr: usize) -> Option<usize> {
     let end = base.checked_add(size)?;
     (base <= ptr && ptr < end).then_some(end)
 }
 
-#[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+#[cfg(all(
+    feature = "native-domains",
+    any(
+        target_arch = "riscv64",
+        target_arch = "aarch64",
+        target_arch = "x86_64"
+    )
+))]
 fn sas_record_end(
     sched: &super::scheduler::Scheduler,
     page_grants: Option<&BTreeMap<usize, PageGrant>>,
@@ -1173,7 +1201,14 @@ fn sas_record_end(
 /// Each loop consumes at least one record. A gap, peer record, stale root, or
 /// overflow fails closed without allocating or consulting page writability as
 /// an ownership signal.
-#[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+#[cfg(all(
+    feature = "native-domains",
+    any(
+        target_arch = "riscv64",
+        target_arch = "aarch64",
+        target_arch = "x86_64"
+    )
+))]
 fn sas_caller_owned_span(
     sched: &super::scheduler::Scheduler,
     page_grants: Option<&BTreeMap<usize, PageGrant>>,
@@ -1206,7 +1241,14 @@ fn sas_caller_owned_span(
 /// ownership check under their operation-specific final-commit lock set.
 fn preflight_user_output(caller_id: usize, ptr: usize, len: usize) -> Result<(), SyscallError> {
     let view = caller_copy_view(caller_id)?;
-    #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+    #[cfg(all(
+        feature = "native-domains",
+        any(
+            target_arch = "riscv64",
+            target_arch = "aarch64",
+            target_arch = "x86_64"
+        )
+    ))]
     if view.is_sas() {
         // Lease order: PAGE_GRANT_TABLE → REG_GRANT_TABLE → SCHEDULER. This
         // extends the established grant-table → scheduler order used by
@@ -1315,7 +1357,14 @@ fn verify_getrandom_revoke_race_done_state(was_armed: bool) {
 
 fn write_getrandom_output(caller_id: usize, ptr: usize, bytes: &[u8]) -> Result<(), SyscallError> {
     let view = caller_copy_view(caller_id)?;
-    #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+    #[cfg(all(
+        feature = "native-domains",
+        any(
+            target_arch = "riscv64",
+            target_arch = "aarch64",
+            target_arch = "x86_64"
+        )
+    ))]
     if view.is_sas() {
         // This scoped, no-allocation lease covers every record contributing to
         // a contiguous span. Removal waits for its member lock before it can
@@ -1798,7 +1847,14 @@ fn authorize_grant_slice_locked(
     }) {
         return Ok(None);
     }
-    #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+    #[cfg(all(
+        feature = "native-domains",
+        any(
+            target_arch = "riscv64",
+            target_arch = "aarch64",
+            target_arch = "x86_64"
+        )
+    ))]
     if request.caller_id != grant_owner {
         if let Some(space) = task_domain_space(request.caller_id) {
             const PAGE_SIZE: usize = 4096;
@@ -5968,7 +6024,14 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     return Err(SyscallError::PermissionDenied);
                 }
             };
-            #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+            #[cfg(all(
+                feature = "native-domains",
+                any(
+                    target_arch = "riscv64",
+                    target_arch = "aarch64",
+                    target_arch = "x86_64"
+                )
+            ))]
             if let Some(space) = task_domain_space(caller_id) {
                 let user_rw = crate::memory::paging::Flags::from_bits(
                     crate::memory::paging::Flags::READ | crate::memory::paging::Flags::WRITE,

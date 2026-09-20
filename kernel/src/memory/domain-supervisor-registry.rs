@@ -17,6 +17,7 @@ pub(crate) enum SupervisorRangeKind {
     StaticText,
     StaticReadOnly,
     StaticWritable,
+    DeviceMmio,
 }
 
 #[allow(dead_code)]

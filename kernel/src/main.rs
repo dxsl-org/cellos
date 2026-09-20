@@ -433,6 +433,8 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             memory::paging::activate_paging(root_table_phys);
         }
         *memory::paging::KERNEL_ROOT.lock() = Some(root_table_phys);
+        #[cfg(target_arch = "aarch64")]
+        crate::hal::domain::record_kernel_ttbr0(root_table_phys);
         #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
         TEST_SAFE_ROOT.store(root_table_phys, core::sync::atomic::Ordering::Release);
         unsafe {
@@ -862,12 +864,33 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
 
     #[cfg(all(target_arch = "riscv64", feature = "test-hooks"))]
     crate::loader::atomic_publication_tests::run_governed_success_after_secondaries();
-    #[cfg(all(target_arch = "riscv64", feature = "native-domains"))]
+    #[cfg(all(
+        feature = "native-domains",
+        any(
+            target_arch = "riscv64",
+            target_arch = "aarch64",
+            target_arch = "x86_64"
+        )
+    ))]
     memory::domain_supervisor_registry::activate();
-    #[cfg(all(target_arch = "riscv64", feature = "native-domains"))]
+    #[cfg(all(
+        feature = "native-domains",
+        any(
+            target_arch = "riscv64",
+            target_arch = "aarch64",
+            target_arch = "x86_64"
+        )
+    ))]
     memory::domain_supervisor_registry::register_static_image()
         .expect("kernel static ranges must be disjoint");
-    #[cfg(all(target_arch = "riscv64", feature = "native-domains"))]
+    #[cfg(all(
+        feature = "native-domains",
+        any(
+            target_arch = "riscv64",
+            target_arch = "aarch64",
+            target_arch = "x86_64"
+        )
+    ))]
     memory::domain_supervisor_registry::register(
         heap_virt,
         heap_virt
@@ -877,16 +900,107 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         memory::domain_supervisor_registry::SupervisorRangeOwner::SharedKernel,
     )
     .expect("kernel heap registration must be unique");
-    #[cfg(all(target_arch = "riscv64", feature = "native-domains"))]
+    #[cfg(all(
+        feature = "native-domains",
+        any(
+            target_arch = "riscv64",
+            target_arch = "aarch64",
+            target_arch = "x86_64"
+        )
+    ))]
     if let Some(guard) = memory::frame::FRAME_ALLOCATOR.lock().as_ref() {
-        let (bm_start, bm_end) = guard.bitmap_range();
+        let (bm_start, _) = guard.bitmap_range();
         memory::domain_supervisor_registry::register(
             bm_start,
-            bm_end,
+            heap_virt,
             memory::domain_supervisor_registry::SupervisorRangeKind::StaticWritable,
             memory::domain_supervisor_registry::SupervisorRangeOwner::SharedKernel,
         )
-        .expect("frame allocator bitmap registration must succeed");
+        .expect("frame allocator bitmap and early paging registration must succeed");
+    }
+    #[cfg(all(
+        feature = "native-domains",
+        target_arch = "aarch64",
+        not(feature = "board-rpi3"),
+        not(feature = "board-rpi4")
+    ))]
+    {
+        let arm_virt = hal_soc_arm_virt::QEMU_ARM_VIRT;
+        let _ = memory::domain_supervisor_registry::register(
+            arm_virt.gic_map.base,
+            arm_virt.gic_map.end(),
+            memory::domain_supervisor_registry::SupervisorRangeKind::DeviceMmio,
+            memory::domain_supervisor_registry::SupervisorRangeOwner::SharedKernel,
+        );
+        let _ = memory::domain_supervisor_registry::register(
+            arm_virt.peripheral_map.base,
+            arm_virt.peripheral_map.end(),
+            memory::domain_supervisor_registry::SupervisorRangeKind::DeviceMmio,
+            memory::domain_supervisor_registry::SupervisorRangeOwner::SharedKernel,
+        );
+    }
+    #[cfg(all(
+        feature = "native-domains",
+        target_arch = "aarch64",
+        feature = "board-rpi3"
+    ))]
+    {
+        let mmio = hal_soc_bcm27xx::BCM2837.mmio;
+        if let (Some(peripheral_end), Some(local_controller_end)) =
+            (mmio.peripheral_end(), mmio.local_controller_end())
+        {
+            let _ = memory::domain_supervisor_registry::register(
+                mmio.peripheral_base,
+                peripheral_end,
+                memory::domain_supervisor_registry::SupervisorRangeKind::DeviceMmio,
+                memory::domain_supervisor_registry::SupervisorRangeOwner::SharedKernel,
+            );
+            let _ = memory::domain_supervisor_registry::register(
+                mmio.local_controller_base,
+                local_controller_end,
+                memory::domain_supervisor_registry::SupervisorRangeKind::DeviceMmio,
+                memory::domain_supervisor_registry::SupervisorRangeOwner::SharedKernel,
+            );
+        }
+    }
+    #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+    {
+        let (clint_base, plic_base, plic_size, uart_region, rtc_region) =
+            crate::platform::with(|p| {
+                (
+                    p.clint_base,
+                    p.plic_base,
+                    p.plic_size,
+                    p.uart_base & !0xFFFF,
+                    p.rtc_base & !0xFFF,
+                )
+            });
+        let _ = memory::domain_supervisor_registry::register(
+            clint_base,
+            clint_base + 0x10000,
+            memory::domain_supervisor_registry::SupervisorRangeKind::DeviceMmio,
+            memory::domain_supervisor_registry::SupervisorRangeOwner::SharedKernel,
+        );
+        let _ = memory::domain_supervisor_registry::register(
+            plic_base,
+            plic_base + plic_size,
+            memory::domain_supervisor_registry::SupervisorRangeKind::DeviceMmio,
+            memory::domain_supervisor_registry::SupervisorRangeOwner::SharedKernel,
+        );
+        if uart_region != 0 {
+            let _ = memory::domain_supervisor_registry::register(
+                uart_region,
+                uart_region + 0x1000,
+                memory::domain_supervisor_registry::SupervisorRangeKind::DeviceMmio,
+                memory::domain_supervisor_registry::SupervisorRangeOwner::SharedKernel,
+            );
+        }
+        let _ = memory::domain_supervisor_registry::register(
+            rtc_region,
+            rtc_region + 0x1000,
+            memory::domain_supervisor_registry::SupervisorRangeKind::DeviceMmio,
+            memory::domain_supervisor_registry::SupervisorRangeOwner::SharedKernel,
+        );
     }
     #[cfg(all(
         target_arch = "riscv64",

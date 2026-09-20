@@ -26,10 +26,11 @@ use hal_arch_trait::{
 #[repr(C)]
 pub struct TrapFrame {
     pub regs: [u64; 31],
-    pub elr_el1: u64,  // offset 248 — holds ELR_EL2 at runtime when EL2 active
-    pub spsr_el1: u64, // offset 256
-    pub far_el1: u64,  // offset 264
-    pub esr_el1: u64,  // offset 272
+    pub elr_el1: u64,   // offset 248 — holds ELR_EL2 at runtime when EL2 active
+    pub spsr_el1: u64,  // offset 256
+    pub far_el1: u64,   // offset 264
+    pub esr_el1: u64,   // offset 272
+    pub ttbr0_el1: u64, // offset 280
 }
 
 /// Bridge ARM64 SVC registers into the kernel's generic syscall dispatcher.
@@ -621,8 +622,29 @@ vt_sync_el0:
     mrs  x12, esr_el1
     stp  x9,  x10, [sp, #248]
     stp  x11, x12, [sp, #264]
+    mrs  x9,  ttbr0_el1
+    str  x9,  [sp, #280]
+    adrp x10, VI_KERNEL_TTBR0
+    add  x10, x10, :lo12:VI_KERNEL_TTBR0
+    ldr  x10, [x10]
+    cbz  x10, 1f
+    cmp  x9,  x10
+    b.eq 1f
+    dsb  ishst
+    msr  ttbr0_el1, x10
+    isb
+1:
     mov  x0,  sp
     bl   vi_aarch64_trap_handler
+    ldr  x10, [sp, #280]
+    cbz  x10, 2f
+    mrs  x9,  ttbr0_el1
+    cmp  x9,  x10
+    b.eq 2f
+    dsb  ishst
+    msr  ttbr0_el1, x10
+    isb
+2:
     ldp  x9,  x10, [sp, #248]
     msr  elr_el1,  x9
     msr  spsr_el1, x10
@@ -674,8 +696,29 @@ vt_irq_el0:
     mrs  x12, esr_el1
     stp  x9,  x10, [sp, #248]
     stp  x11, x12, [sp, #264]
+    mrs  x9,  ttbr0_el1
+    str  x9,  [sp, #280]
+    adrp x10, VI_KERNEL_TTBR0
+    add  x10, x10, :lo12:VI_KERNEL_TTBR0
+    ldr  x10, [x10]
+    cbz  x10, 1f
+    cmp  x9,  x10
+    b.eq 1f
+    dsb  ishst
+    msr  ttbr0_el1, x10
+    isb
+1:
     mov  x0,  sp
     bl   vi_aarch64_irq_handler
+    ldr  x10, [sp, #280]
+    cbz  x10, 2f
+    mrs  x9,  ttbr0_el1
+    cmp  x9,  x10
+    b.eq 2f
+    dsb  ishst
+    msr  ttbr0_el1, x10
+    isb
+2:
     ldp  x9,  x10, [sp, #248]
     msr  elr_el1,  x9
     msr  spsr_el1, x10

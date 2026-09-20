@@ -355,3 +355,121 @@ fn aarch64_httpd_web_server_serves_requests() {
         "response did not contain arch:aarch64\n--- response ---\n{body2}"
     );
 }
+
+/// The tier2-smoke cell must be admitted to Tier 2 Paged Domain (TTBR0 isolation)
+/// and execute safely on AArch64.
+#[test]
+fn aarch64_tier2_smoke_positive_execution() {
+    if !prerequisites_ok() {
+        return;
+    }
+    let mut qemu = QemuRunner::boot_aarch64_with_disk(&kernel_path(), &disk_path());
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("shell prompt: {e}\n{}", qemu.dump()));
+
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    qemu.send_line("tier2-smoke &");
+
+    let timeout = 30;
+    // 1. Verify admission to Tier 2 Paged Domain under TTBR0 isolation
+    qemu.wait_for(
+        "[domain] admitted cell 'tier2-smoke' to Tier 2 Paged Domain (TTBR0 isolation)",
+        timeout,
+    )
+    .unwrap_or_else(|e| {
+        panic!(
+            "tier2-smoke was not admitted to Tier 2 Paged Domain on AArch64: {e}\n--- output ---\n{}",
+            qemu.dump()
+        )
+    });
+
+    // 2. Verify heap allocation
+    qemu.wait_for("[tier2-smoke] Heap allocation verified", timeout)
+        .unwrap_or_else(|e| {
+            panic!(
+                "tier2-smoke heap allocation failed on AArch64: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
+
+    // 3. Verify PASS
+    qemu.wait_for(
+        "[tier2-smoke] PASS: All Tier 2 runtime invariants verified successfully!",
+        timeout,
+    )
+    .unwrap_or_else(|e| {
+        panic!(
+            "tier2-smoke did not complete PASS on AArch64: {e}\n--- output ---\n{}",
+            qemu.dump()
+        )
+    });
+
+    // 4. Verify shell interactive
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    for b in b"echo aarch64-tier2-ok\n" {
+        qemu.send_bytes(&[*b]);
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    }
+    qemu.wait_for("aarch64-tier2-ok", timeout)
+        .unwrap_or_else(|e| {
+            panic!(
+                "shell not responding after tier2-smoke exit on AArch64: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
+}
+
+#[test]
+fn aarch64_tier2_fault_isolation() {
+    if !prerequisites_ok() {
+        return;
+    }
+    let mut qemu = QemuRunner::boot_aarch64_with_disk(&kernel_path(), &disk_path());
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("shell prompt: {e}\n{}", qemu.dump()));
+
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    qemu.send_line("tier2-exploit");
+
+    let timeout = 30;
+    // 1. Verify admission to Tier 2 Paged Domain
+    qemu.wait_for(
+        "[domain] admitted cell 'tier2-exploit' to Tier 2 Paged Domain (TTBR0 isolation)",
+        timeout,
+    )
+    .unwrap_or_else(|e| {
+        panic!(
+            "tier2-exploit was not admitted to Tier 2 Paged Domain on AArch64: {e}\n--- output ---\n{}",
+            qemu.dump()
+        )
+    });
+
+    // 2. Verify exploit attempts NULL write
+    qemu.wait_for("[tier2-exploit] deliberately writing to NULL", timeout)
+        .unwrap_or_else(|e| {
+            panic!(
+                "tier2-exploit never reached NULL write on AArch64: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
+
+    // 3. Verify CPU generated page fault and kernel terminated the cell
+    qemu.wait_for("[fault] Cell", timeout)
+        .unwrap_or_else(|e| {
+            panic!(
+                "kernel did not catch page fault or terminate cell on AArch64: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
+
+    // 4. Verify kernel survivability: shell returns
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    qemu.send_line("echo tier2-aarch64-alive");
+    qemu.wait_for("tier2-aarch64-alive", timeout)
+        .unwrap_or_else(|e| {
+            panic!(
+                "kernel crashed or shell hung after fault on AArch64: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
+}

@@ -1712,7 +1712,14 @@ impl Scheduler {
         // root that died earlier, so no task is ever selected-attributed
         // without its pin. After this point retirement of the pinned root is
         // legal and drain-safe; the switch plan must proceed.
-        #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+        #[cfg(all(
+            feature = "native-domains",
+            any(
+                target_arch = "riscv64",
+                target_arch = "aarch64",
+                target_arch = "x86_64"
+            )
+        ))]
         let next_id = next_id.filter(|id| {
             let selected = self
                 .tasks

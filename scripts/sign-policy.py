@@ -129,6 +129,8 @@ DEV_POLICY = [
     ("/bin/http-smoke",  0, 1, 0, 0, 0, 0,     0, 0, 0),
     ("/bin/std-smoke",   0, 0, 0, 0, 0, 0,     0, 0, 0),
     ("/bin/desktop",     0, 0, 0, 0, 0, 0,     0, 0, 0),
+    ("/bin/tier2-smoke", 0, 0, 0, 0, 0, 0,     0, 0, 0),
+    ("/bin/tier2-exploit", 0, 0, 0, 0, 0, 0,   0, 0, 0),
 ]
 
 

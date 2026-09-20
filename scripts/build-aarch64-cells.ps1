@@ -166,6 +166,9 @@ Assert-CellBuild 'spi-demo' $LASTEXITCODE
 Write-Host "Building driver-virtio-net (VirtIO NIC driver)..."
 cargo build --release -p driver-virtio-net --target $target 2>&1 | Select-Object -Last 5
 Assert-CellBuild 'driver-virtio-net' $LASTEXITCODE
+Write-Host "Building driver-virtio-blk (VirtIO block driver)..."
+cargo build --release -p driver-virtio-blk --target $target 2>&1 | Select-Object -Last 5
+Assert-CellBuild 'driver-virtio-blk' $LASTEXITCODE
 Write-Host "Building service-net (network stack)..."
 cargo build --release -p service-net --target $target 2>&1 | Select-Object -Last 5
 Assert-CellBuild 'service-net' $LASTEXITCODE
@@ -217,18 +220,11 @@ if ($BoardRpi3) {
     $env:RUSTFLAGS = $previousRustflags
 }
 
-# Refresh the separately-embedded init ELF (kernel spawns it from embedded bytes).
 $initSrc = if ($BoardRpi3) {
     Join-Path $rpi3BuildDir 'app-init'
 } else {
     Join-Path $buildDir 'app-init'
 }
-if (Test-Path $initSrc) {
-    New-Item -ItemType Directory -Path $embeddedDir -Force | Out-Null
-    Copy-Item $initSrc (Join-Path $embeddedDir 'init') -Force
-    Write-Host "  Refreshed $embeddedDir\init"
-}
-
 $cells = @(
     @{ Bin = "app-shell";      Dst = "/bin/shell"       },
     @{ Bin = "service-vfs";    Dst = "/bin/vfs"         },
@@ -245,6 +241,7 @@ $cells = @(
     @{ Bin = "kill";           Dst = "/bin/kill"        },
     @{ Bin = "service-net";    Dst = "/bin/net"         },
     @{ Bin = "driver-virtio-net"; Dst = "/bin/virtio-net" },
+    @{ Bin = "driver-virtio-blk"; Dst = "/bin/block"         },
     @{ Bin = "service-httpd";  Dst = "/bin/httpd"       },
     @{ Bin = "tier2-smoke";    Dst = "/bin/tier2-smoke"   },
     @{ Bin = "tier2-exploit";  Dst = "/bin/tier2-exploit" }
@@ -265,6 +262,47 @@ if ($AiModel -or $AiCells) {
         @{ Bin = "service-ai"; Dst = "/bin/ai"      },
         @{ Bin = "ai-test";    Dst = "/bin/ai-test" }
     )
+}
+
+# Sign cell binaries with Ed25519 dev key (F1/F5 policy check)
+$objcopyBin = if ($env:OBJCOPY) {
+    $env:OBJCOPY
+} elseif (Get-Command aarch64-linux-gnu-objcopy -ErrorAction SilentlyContinue) {
+    "aarch64-linux-gnu-objcopy"
+} elseif (Get-Command llvm-objcopy -ErrorAction SilentlyContinue) {
+    "llvm-objcopy"
+} else {
+    "objcopy"
+}
+
+$cellsToSign = @()
+foreach ($c in $cells) {
+    $src = if ($BoardRpi3 -and $c.Bin -in @('service-input', 'driver-bcm-display', 'service-compositor', 'fb-console', 'vfs-test')) {
+        Join-Path $rpi3BuildDir $c.Bin
+    } else {
+        Join-Path $buildDir $c.Bin
+    }
+    if (Test-Path $src) {
+        $cellsToSign += $src
+    }
+}
+if (Test-Path $initSrc) {
+    $cellsToSign += $initSrc
+}
+
+if ($cellsToSign.Count -gt 0) {
+    Write-Host "Signing AArch64 cell binaries ($($cellsToSign.Count) cells)..."
+    & $python (Join-Path 'scripts' 'cellos-sign') --objcopy $objcopyBin --sign @cellsToSign
+    if ($LASTEXITCODE -ne 0) {
+        throw "cellos-sign failed on AArch64 cells"
+    }
+}
+
+# Refresh the separately-embedded init ELF after signing
+if (Test-Path $initSrc) {
+    New-Item -ItemType Directory -Path $embeddedDir -Force | Out-Null
+    Copy-Item $initSrc (Join-Path $embeddedDir 'init') -Force
+    Write-Host "  Refreshed $embeddedDir\init"
 }
 
 $imagePath = Join-Path $embeddedDir 'kernel_fs.img'

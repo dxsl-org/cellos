@@ -7,6 +7,7 @@ SECTIONS {
 
     /* R E — executable code. */
     .text : {
+        __domain_text_start = .;
         KEEP(*(.text.boot))
         *(.text .text.*)
         /* Pad to a page boundary so LLD does not place the R-only LOAD
@@ -14,11 +15,15 @@ SECTIONS {
          * Limine 8.x panics when two PHDRs with different flags (R E vs R)
          * share the same 4 KiB page. */
         . = ALIGN(4096);
+        __domain_text_end = .;
     }
 
     /* R — read-only data, isolated on its own page(s) from .text (R E). */
     .rodata : ALIGN(4096) {
+        __domain_readonly_start = .;
         *(.rodata .rodata.*)
+        . = ALIGN(4096);
+        __domain_readonly_end = .;
     }
 
     /* RW — Limine request block.  All three input sections are merged here
@@ -27,6 +32,7 @@ SECTIONS {
      * this region, so it MUST be writable.  Order is preserved so Limine
      * can scan from start_marker → requests → end_marker correctly. */
     .requests : ALIGN(4096) {
+        __domain_writable_start = .;
         KEEP(*(.requests_start_marker))
         KEEP(*(.requests))
         KEEP(*(.requests_end_marker))
@@ -54,5 +60,7 @@ SECTIONS {
     .stack : ALIGN(4096) {
         . = . + 0x10000;
         __stack_top = .;
+        . = ALIGN(4096);
+        __domain_writable_end = .;
     }
 }

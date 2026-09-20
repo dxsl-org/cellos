@@ -191,7 +191,7 @@ pub fn publish_prepared(
             let arch_tag = "TTBR0";
             #[cfg(target_arch = "x86_64")]
             let arch_tag = "CR3";
-            log::info!(
+            log::warn!(
                 "[domain] admitted cell '{}' to Tier 2 Paged Domain ({} isolation)",
                 task.name,
                 arch_tag
