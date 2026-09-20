@@ -4,6 +4,7 @@ extern crate alloc;
 
 use crate::{
     virtio_blk::BlkDisk,
+    virtio_gpu::GpuDev,
     virtio_input::InputDev,
     virtio_mmio::{self, VirtioMmio},
     virtio_net::NetDev,
@@ -16,6 +17,8 @@ pub struct MmioDevicesMut<'a> {
     pub block_mmio: &'a mut VirtioMmio,
     pub net: &'a mut NetDev,
     pub net_mmio: &'a mut VirtioMmio,
+    pub gpu: &'a mut GpuDev,
+    pub gpu_mmio: &'a mut VirtioMmio,
     pub input: &'a mut InputDev,
     pub input_mmio: &'a mut VirtioMmio,
 }
@@ -26,6 +29,8 @@ pub struct MmioDevices<'a> {
     pub block_mmio: &'a VirtioMmio,
     pub net: &'a NetDev,
     pub net_mmio: &'a VirtioMmio,
+    pub gpu: &'a GpuDev,
+    pub gpu_mmio: &'a VirtioMmio,
     pub input: &'a InputDev,
     pub input_mmio: &'a VirtioMmio,
 }
@@ -68,6 +73,9 @@ pub fn write(
         1 => dev
             .net_mmio
             .mmio_write(offset, value, dev.net, vm_id, vcpu_id),
+        3 => dev
+            .gpu_mmio
+            .mmio_write(offset, value, dev.gpu, vm_id, vcpu_id),
         4 => dev
             .input_mmio
             .mmio_write(offset, value, dev.input, vm_id, vcpu_id),
@@ -109,6 +117,12 @@ pub fn read(ipa: u64, size: u8, dev: &MmioDevices<'_>) -> Option<u32> {
                 println("[hv-x86] virtio-mmio net probe");
             }
             dev.net_mmio.mmio_read(aligned, dev.net) as u32
+        }
+        3 => {
+            if offset == 0 {
+                println("[hv-x86] virtio-mmio gpu probe");
+            }
+            dev.gpu_mmio.mmio_read(aligned, dev.gpu) as u32
         }
         4 => {
             if offset == 0 {

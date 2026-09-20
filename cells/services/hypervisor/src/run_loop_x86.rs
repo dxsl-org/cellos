@@ -26,6 +26,7 @@ use crate::{
     pit_8253::Pit8253,
     uart_16550::Uart16550,
     virtio_blk::BlkDisk,
+    virtio_gpu::GpuDev,
     virtio_input::{InputDev, INPUT_SPI},
     virtio_mmio::VirtioMmio,
     virtio_net::NetDev,
@@ -55,6 +56,16 @@ pub fn run(
     let mut blk_vmio = VirtioMmio::default();
     let mut net = NetDev::new(net_tid, None);
     let mut net_vmio = VirtioMmio::default();
+    let comp_tid =
+        ostd::syscall::sys_lookup_service(api::syscall::service::COMPOSITOR).unwrap_or(0);
+    let (width, height) = ostd::syscall::sys_get_resolution();
+    let mut gpu = GpuDev::new(
+        comp_tid,
+        if width == 0 { 1024 } else { width },
+        if height == 0 { 768 } else { height },
+    );
+    let mut gpu_vmio = VirtioMmio::default();
+    gpu.bring_up();
     let mut input = InputDev::new(Some(INPUT_SPI));
     let mut input_vmio = VirtioMmio::default();
     let mut uart = Uart16550::new();
@@ -67,9 +78,11 @@ pub fn run(
     let mut hostile_preemption_armed = false;
 
     loop {
+        gpu.poll_damage();
         let ret = vmm::run_vcpu(vm_id, vcpu_id, &mut exit);
         if ret == usize::MAX {
             println("[hv-x86] run_vcpu kernel error — aborting");
+            gpu.shutdown();
             return RunOutcome::Shutdown;
         }
 
@@ -104,6 +117,10 @@ pub fn run(
                     &mut net_poll_turn,
                 );
                 forward_input_events(&mut input, &mut input_vmio, vm_id, vcpu_id);
+                gpu.reconnect_compositor(
+                    ostd::syscall::sys_lookup_service(api::syscall::service::COMPOSITOR)
+                        .unwrap_or(0),
+                );
             }
 
             // ── Host-interrupt preemption — the guest was mid-execution (maybe
@@ -128,6 +145,10 @@ pub fn run(
                     &mut net_poll_turn,
                 );
                 forward_input_events(&mut input, &mut input_vmio, vm_id, vcpu_id);
+                gpu.reconnect_compositor(
+                    ostd::syscall::sys_lookup_service(api::syscall::service::COMPOSITOR)
+                        .unwrap_or(0),
+                );
                 ostd::task::yield_now();
             }
 
@@ -141,6 +162,7 @@ pub fn run(
                     index,
                     is_write
                 ));
+                gpu.shutdown();
                 return RunOutcome::Shutdown;
             }
 
@@ -156,6 +178,8 @@ pub fn run(
                         block_mmio: &mut blk_vmio,
                         net: &mut net,
                         net_mmio: &mut net_vmio,
+                        gpu: &mut gpu,
+                        gpu_mmio: &mut gpu_vmio,
                         input: &mut input,
                         input_mmio: &mut input_vmio,
                     },
@@ -173,6 +197,8 @@ pub fn run(
                         block_mmio: &blk_vmio,
                         net: &net,
                         net_mmio: &net_vmio,
+                        gpu: &gpu,
+                        gpu_mmio: &gpu_vmio,
                         input: &input,
                         input_mmio: &input_vmio,
                     },
@@ -184,6 +210,7 @@ pub fn run(
 
             ViVmExit::Shutdown => {
                 println("[hv-x86] guest shutdown");
+                gpu.shutdown();
                 return RunOutcome::Shutdown;
             }
 
@@ -193,12 +220,14 @@ pub fn run(
                     ec,
                     iss
                 ));
+                gpu.shutdown();
                 return RunOutcome::Shutdown;
             }
 
             // ── aarch64-only exits — never emitted on the x86 world-switch ────
             ViVmExit::Hvc { .. } | ViVmExit::Wfi | ViVmExit::SysReg { .. } => {
                 println("[hv-x86] unexpected aarch64 vmexit — shutting down VM");
+                gpu.shutdown();
                 return RunOutcome::Shutdown;
             }
         }
