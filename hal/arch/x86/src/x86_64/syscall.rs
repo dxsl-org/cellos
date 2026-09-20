@@ -47,6 +47,7 @@ const IA32_KERNEL_GSBASE: u32 = 0xC000_0102; // Swapped into GS_BASE by swapgs
 ///   gs:0  = kernel RSP (loaded on syscall entry)
 ///   gs:8  = scratch (user RSP saved here during syscall)
 ///   gs:16 = PKU value for the selected task (loaded on every Ring-3 return)
+///   gs:24 = user CR3 saved on IDT entry from user mode (Tier 2 domain isolation)
 ///
 /// Kernel state is GS_BASE=`&CPU_LOCAL`, KERNEL_GS_BASE=user GS (currently 0).
 /// User state is the swapped pair. Context switches preserve the physical pair;
@@ -57,12 +58,14 @@ struct CpuLocal {
     user_rsp: u64,   // offset 8  — gs:8
     pku_value: u32,  // offset 16 — gs:16 (restored to PKRU on ring-3 re-entry)
     _pad: u32,       // offset 20 — alignment padding
+    user_cr3: u64,   // offset 24 — gs:24 (user CR3 saved on IDT user entry; 0 if SAS)
 }
 static mut CPU_LOCAL: CpuLocal = CpuLocal {
     kernel_rsp: 0,
     user_rsp: 0,
     pku_value: 0,
     _pad: 0,
+    user_cr3: 0,
 };
 #[cfg(feature = "x86-idt-cpl3-test")]
 pub(crate) fn cpu_local_addr_for_test() -> u64 {
@@ -244,7 +247,7 @@ syscall_entry:
     movq $0, 232(%rsp)
     movq $0, 240(%rsp)
     movq $0, 248(%rsp)
-    # stval (+272) and scause (+280): 0 for syscall path
+    # stval (+272) = 0; scause (+280) = saved user CR3 (filled below after regs saved)
     movq $0, 272(%rsp)
     movq $0, 280(%rsp)
 
@@ -281,6 +284,17 @@ syscall_entry:
     xorl %edx, %edx
     wrpkru
 .Lpku_entry_skip:
+    # CR3 switch: save user CR3, switch to kernel root.
+    # %rax and %rcx are scratch here (already committed to frame above).
+    movq %cr3, %rax
+    movq %rax, 280(%rsp)
+    movq VI_KERNEL_CR3(%rip), %rcx
+    testq %rcx, %rcx
+    jz .Lkernel_cr3_entry_skip
+    cmpq %rax, %rcx
+    je .Lkernel_cr3_entry_skip
+    movq %rcx, %cr3
+.Lkernel_cr3_entry_skip:
 
     # Call ViCell_syscall_dispatch(&mut frame).
     # RSP is 16-byte aligned here (288 % 16 == 0); the CALL pushes 8 bytes
@@ -305,7 +319,15 @@ syscall_entry:
     xorl %edx, %edx
     wrpkru
 .Lpku_exit_skip:
-
+    # Restore user CR3 if different from kernel CR3
+    movq 280(%rsp), %rax
+    testq %rax, %rax
+    jz .Luser_cr3_exit_skip
+    movq %cr3, %rcx
+    cmpq %rax, %rcx
+    je .Luser_cr3_exit_skip
+    movq %rax, %cr3
+.Luser_cr3_exit_skip:
     # Restore all user-visible registers only after WRPKRU's clobbers.
     movq 144(%rsp), %r12
     movq 152(%rsp), %r13

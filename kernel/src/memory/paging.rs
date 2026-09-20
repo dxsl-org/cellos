@@ -618,6 +618,7 @@ pub fn init_kernel_paging_x86(
     log::info!("[kernel] x86_64 paging: kernel PML4 built");
 
     *KERNEL_ROOT.lock() = Some(pml4_phys);
+    crate::hal::domain::record_kernel_cr3(pml4_phys);
     Ok(pml4_phys)
 }
 
@@ -1166,34 +1167,34 @@ pub fn virt_to_phys(vaddr: VAddr) -> Option<PhysAddr> {
 pub extern "Rust" fn vi_handle_page_fault(va: usize, error_code: u64, rip: u64, cs: u64, rsp: u64) {
     use crate::task::SCHEDULER;
 
+    log::warn!(
+        "[#PF-debug] va={:#x} err={:#x} rip={:#x} cs={:#x} rsp={:#x}",
+        va,
+        error_code,
+        rip,
+        cs,
+        rsp
+    );
     // Bit 2 of the error code = U/S: fault originated from user mode.
     let user_fault = error_code & (1 << 2) != 0;
 
     if !user_fault {
-        // NOTE: the IDT routes EVERY error-code vector (#DF/#TS/#NP/#SS/#GP/
-        // #PF/#AC) through this handler, so `va` (CR2) may be STALE — a #GP
-        // with error_code=0 (e.g. a non-canonical address access) shows up
-        // here as "va=0x0 error_code=0x0". rip/cs identify the real faulting
-        // instruction; symbolize rip against the kernel ELF.
-        //
-        // Poor-man's backtrace: scan the faulting stack for kernel-text
-        // return addresses so the memcpy-style builtins (which fault deep
-        // inside compiler_builtins) can be attributed to their caller.
         let mut callers: [u64; 6] = [0; 6];
         let mut n = 0;
-        // SAFETY: rsp is the faulting kernel stack (cs=8); reading a few
-        // qwords above it is safe — the stack is mapped or we would have
-        // double-faulted before reaching this handler.
-        if rsp != 0 && rsp.is_multiple_of(8) {
-            for i in 0..64usize {
-                if n >= callers.len() {
-                    break;
-                }
-                let q = unsafe { core::ptr::read_volatile((rsp as *const u64).add(i)) };
-                if (0xffff_ffff_8000_0000..0xffff_ffff_9000_0000).contains(&q) {
-                    callers[n] = q;
-                    n += 1;
-                }
+        let page_end = (rsp | 0xFFF) + 1;
+        let max_words = if rsp != 0 && rsp.is_multiple_of(8) {
+            (((page_end - rsp) / 8) as usize).min(64)
+        } else {
+            0
+        };
+        for i in 0..max_words {
+            if n >= callers.len() {
+                break;
+            }
+            let q = unsafe { core::ptr::read_volatile((rsp as *const u64).add(i)) };
+            if (0xffff_ffff_8000_0000..0xffff_ffff_9000_0000).contains(&q) {
+                callers[n] = q;
+                n += 1;
             }
         }
         panic!(

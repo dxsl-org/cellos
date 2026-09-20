@@ -3,6 +3,20 @@
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
 ## [Unreleased] Development-first hardware-constrained execution
+## [2026-09-20] x86_64 Tier 2 domain: correct CR3 switch on syscall and IDT interrupt entry/exit
+- **Root cause**: Tier 2 domain cells run under a private PML4 (CR3). On x86_64 neither `syscall` nor hardware IDT interrupts switch CR3 automatically (unlike RISC-V `sysret` / AArch64 `eret` context). Kernel code executing while the CPU is under the domain's CR3 faulted on HHDM addresses (grant page allocation, LAPIC EOI write) not mapped in the domain PML4.
+- **`hal/arch/x86/src/x86_64/syscall.rs`**:
+  - Added `user_cr3: u64` field at offset 24 (`gs:24`) to `CpuLocal` per-CPU struct.
+  - After all user registers and return state are saved (post-`wrpkru`), save `%cr3` into `280(%rsp)` (frame `scause` slot) and into `%gs:24`, then `mov VI_KERNEL_CR3 → %cr3` if non-zero and different.
+  - On syscall exit (after `wrpkru` restore), reload domain CR3 from `280(%rsp)` before `sysretq`.
+  - **Critical ordering fix**: initial placement clobbered `%rax` (syscall number) and `%rcx` (return RIP) before they were saved — moved the CR3 switch to after the PKU entry skip label where both are already committed to frame.
+- **`hal/arch/x86/src/x86_64/idt/entry.rs`** (`x86_64_idt_common`):
+  - On IDT entry from user mode (CPL3), after `swapgs`, save `%cr3` into `%gs:24` and switch to `VI_KERNEL_CR3`.
+  - On IDT exit to user mode, after `wrpkru`, restore user CR3 from `%gs:24` before `iretq`.
+- **`hal/arch/x86/src/x86_64/domain.rs`**: added `#[no_mangle]` to `VI_KERNEL_CR3` so it is reachable from the `global_asm!` CR3 switch code in both `syscall.rs` and `idt/entry.rs`.
+- **`kernel/src/memory/paging.rs`**: added `log::warn!` debug line before the kernel-mode `#PF` panic to emit VA/err/RIP/CS/RSP before halting (aids future diagnosis); replaced unbounded `rsp + 64*8` stack scan with single-page-bounded `max_words` to eliminate cross-page read risk.
+- **Verified**: `x86_tier2_smoke_positive_execution` and `x86_tier2_fault_isolation` both PASS; all 9/9 `x86_64-boot` integration tests pass (26s).
+
 ## [2026-09-19] Complete Tier 2 hardware memory fault isolation matrix, packaging, and CI integration
 - **Enhanced Negative Exploit Matrix (`cells/tests/tier2-exploit`)**:
   - Upgraded test harness to support 3 distinct probe modes:

@@ -3,6 +3,7 @@
 
 use core::sync::atomic::{AtomicUsize, Ordering};
 
+#[no_mangle]
 pub static VI_KERNEL_CR3: AtomicUsize = AtomicUsize::new(0);
 
 pub fn record_kernel_cr3(cr3: usize) {

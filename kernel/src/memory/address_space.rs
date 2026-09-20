@@ -67,6 +67,7 @@ pub struct MappingEntry {
 }
 /// A supervisor page can only be supplied by kernel code as part of its narrow map list.
 #[derive(Clone, Copy)]
+#[allow(dead_code)]
 pub(crate) struct SupervisorMapping {
     virtual_address: VAddr,
     physical_address: PhysAddr,
@@ -230,6 +231,7 @@ impl AddressSpaceBuilder {
     pub fn build(self) -> Result<Arc<AddressSpace>, AddressSpaceError> {
         let AddressSpaceBuilder {
             identity,
+            #[allow(unused_variables)]
             supervisor,
             requests,
             existing_user,
@@ -242,17 +244,27 @@ impl AddressSpaceBuilder {
                 hal::PageTable::empty(),
             );
         }
+        #[cfg(target_arch = "x86_64")]
+        if let Some(kernel_root_phys) = *crate::memory::paging::KERNEL_ROOT.lock() {
+            let kernel_pml4 =
+                unsafe { &*(phys_to_virt(kernel_root_phys) as *const hal::PageTable) };
+            let new_pml4 =
+                unsafe { &mut *(phys_to_virt(root.physical_address()) as *mut hal::PageTable) };
+            new_pml4.copy_kernel_higher_half(kernel_pml4);
+        }
         let mut table_frames = Vec::new();
         let mut frames = Vec::new();
         let mut ledger = Vec::new();
         for mapping in supervisor {
-            map_page(
-                root.physical_address(),
-                &mut table_frames,
-                mapping.virtual_address,
-                mapping.physical_address,
-                mapping.flags,
-            )?;
+            if mapping.virtual_address < 0x0000_8000_0000_0000 {
+                map_page(
+                    root.physical_address(),
+                    &mut table_frames,
+                    mapping.virtual_address,
+                    mapping.physical_address,
+                    mapping.flags,
+                )?;
+            }
         }
         for request in requests {
             let page = allocate_owned_frame()?;

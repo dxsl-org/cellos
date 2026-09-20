@@ -115,6 +115,16 @@ x86_64_idt_common:
     testb $3,144(%rsp)
     jz .Lidt_kernel_entry
     swapgs
+    # CR3 switch: user→kernel root. %rax/%rcx are saved on stack, safe as scratch.
+    movq %cr3, %rax
+    movq %rax, %gs:24               # stash user CR3 in per-cpu slot 24
+    movq VI_KERNEL_CR3(%rip), %rcx
+    testq %rcx, %rcx
+    jz .Lidt_kcr3_skip
+    cmpq %rax, %rcx
+    je .Lidt_kcr3_skip
+    movq %rcx, %cr3
+.Lidt_kcr3_skip:
     cmpb $0,ViCell_pku_active(%rip)
     je .Lidt_kernel_entry
     xorl %eax,%eax
@@ -138,6 +148,15 @@ x86_64_idt_common:
     xorl %ecx,%ecx
     xorl %edx,%edx
     wrpkru
+    # Restore user CR3 from per-cpu slot 24. %rax/%rcx still saved on stack.
+    movq %gs:24, %rax
+    testq %rax, %rax
+    jz .Lidt_ucr3_skip
+    movq %cr3, %rcx
+    cmpq %rax, %rcx
+    je .Lidt_ucr3_skip
+    movq %rax, %cr3
+.Lidt_ucr3_skip:
 .Lidt_restore_gprs:
     popq %r15
     popq %r14
