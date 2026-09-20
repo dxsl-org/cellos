@@ -11,6 +11,7 @@ SECTIONS {
     . = 0x80000;
 
     .text.boot : {
+        __domain_text_start = .;
         KEEP(*(.text.boot))
     }
 
@@ -20,13 +21,20 @@ SECTIONS {
 
     .text : ALIGN(4096) {
         *(.text .text.*)
+        . = ALIGN(4096);
+        __domain_text_end = .;
     }
 
     .rodata : ALIGN(4096) {
+        __domain_readonly_start = .;
         *(.rodata .rodata.*)
+        . = ALIGN(4096);
+        __domain_readonly_end = .;
     }
 
     .data : ALIGN(4096) {
+        __domain_writable_start = .;
+        *(.got .got.*)
         *(.data .data.*)
         *(.sdata .sdata.*)
     }
@@ -43,5 +51,7 @@ SECTIONS {
     .bss.stack : ALIGN(4096) {
         . = . + 0x10000;
         __stack_top = .;
+        . = ALIGN(4096);
+        __domain_writable_end = .;
     }
 }

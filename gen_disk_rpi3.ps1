@@ -160,7 +160,7 @@ echo "[rpi3]   boot: bootcode.bin start.elf fixup.dat config.txt kernel8.img"
 
 # Cell partition: copy cell binaries built for aarch64
 CELL_DIR="target/aarch64-unknown-none-softfloat/release"
-for cell in app-init service-vfs service-net app-shell service-compositor service-input driver-gpio-bcm service-power service-config supervisor; do
+for cell in app-init service-vfs service-net app-shell service-compositor service-input driver-gpio-bcm service-power service-config supervisor desktop ocel ocel-js; do
     if [ -f "$CELL_DIR/$cell" ]; then
         cp "$CELL_DIR/$cell" "$DATA/"
         echo "[rpi3]   cell: $cell"
