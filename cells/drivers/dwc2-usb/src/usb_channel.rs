@@ -92,6 +92,13 @@ const CHANNEL_HALT_POLLS: usize = 64;
 /// on, because the caller cannot be handed "not yet".
 const SPLIT_COMPLETE_ATTEMPTS: usize = 2;
 
+/// Complete-splits the core is allowed to run inside one frame for this channel.
+///
+/// The hub answers NYET until its translator has finished the full- or low-speed
+/// transaction, so one attempt is not enough to reach the data; this is the budget
+/// the core is given for the retries it makes on its own.
+const SPLIT_MULTICNT: u8 = 3;
+
 /// Frames a complete-split may still belong to the start-split that began it.
 ///
 /// The pairing is only meaningful inside the hub's frame budget, so a
@@ -194,7 +201,8 @@ impl<'a> UsbHostEngine<'a> {
         let mut value = HCSPLT_SPLTENA
             | ((split.hub_addr as u32 & HCSPLT_HUBADDR_MASK >> HCSPLT_HUBADDR_SHIFT)
                 << HCSPLT_HUBADDR_SHIFT)
-            | (split.port as u32 & HCSPLT_PRTADDR_MASK);
+            | (split.port as u32 & HCSPLT_PRTADDR_MASK)
+            | ((SPLIT_MULTICNT as u32) << HCSPLT_MULTICNT_SHIFT);
         if complete {
             value |= HCSPLT_COMPSPLT;
         }
