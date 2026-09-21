@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["CONTROL_MPS_DEFAULT","DMA_SLOT_BYTES"],"enum":["TransferMode"],"struct":["UsbHostEngine"]};
+window.SIDEBAR_ITEMS = {"constant":["CONTROL_MPS_DEFAULT"],"struct":["UsbHostEngine"]};
