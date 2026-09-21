@@ -448,11 +448,24 @@ impl<'a> UsbHostEngine<'a> {
         self.wait_channel(ch)?;
 
         let started = self.frame_number();
+        trace::record(
+            trace::TAG_ARM_SSPLIT,
+            self.read32(HFNUM),
+            self.read32(hcchar(ch)),
+            self.read32(hcsplt(ch)),
+        );
         for _ in 0..SPLIT_COMPLETE_ATTEMPTS {
             // Straight back out, and short: the reference is explicit that a
             // non-periodic split is asked again immediately rather than waited on.
             arm(true);
-            match self.wait_channel_spin(ch, CONTROL_SPIN_POLLS) {
+            let outcome = self.wait_channel_spin(ch, CONTROL_SPIN_POLLS);
+            trace::record(
+                trace::TAG_AFTER_CSPLIT,
+                self.last_hcint.get(),
+                self.read32(hcchar(ch)),
+                self.read32(hcsplt(ch)),
+            );
+            match outcome {
                 // Only a real transfer completion is the result. An ACK here is
                 // the hub acknowledging the request, not delivering it.
                 Ok(()) if self.last_reported_complete() => return Ok(()),
@@ -462,9 +475,11 @@ impl<'a> UsbHostEngine<'a> {
             }
             if self.frame_number().wrapping_sub(started) & HFNUM_FRNUM_MASK > SPLIT_COMPLETE_FRAMES
             {
+                trace::dump_once();
                 return Err(ViError::IO);
             }
         }
+        trace::dump_once();
         Err(ViError::IO)
     }
 
