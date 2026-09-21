@@ -1,6 +1,5 @@
 //! DWC2 Host Channel transaction engine (Control and Bulk transfers via Data FIFO).
 
-use crate::delay_ms;
 use crate::regs::*;
 use core::cell::{Cell, RefCell};
 use ostd::dma::DmaBuf;
@@ -59,12 +58,16 @@ pub fn initial_control_mps(speed: u32) -> u8 {
     }
 }
 
-/// Halves a split poll will issue before giving the hub up for this round.
+/// Complete-splits a periodic poll will issue before giving the hub up.
+const SPLIT_ATTEMPTS: usize = 2;
+
+/// Frame-counter reads allowed while waiting out one microframe.
 ///
-/// A start-split and the complete-splits that collect it; the count is small
-/// because each attempt spends a millisecond giving the hub's translator time to
-/// run the transaction.
-const SPLIT_ATTEMPTS: usize = 3;
+/// This is a read of the counter and nothing else -- no yield -- because the wait
+/// it measures is a microframe of 125 us. Yielding cannot express a wait that
+/// short: a yield hands the CPU away for far longer, which is how an earlier
+/// attempt at this ended up spending hundreds of milliseconds per poll.
+const MICROFRAME_SPINS: usize = 3_000;
 
 /// Poll budget for a channel that is part of a periodic poll.
 ///
@@ -207,6 +210,34 @@ impl<'a> UsbHostEngine<'a> {
     /// Current USB frame number, used to bound a complete-split.
     pub fn frame_number(&self) -> u32 {
         self.read32(HFNUM) & HFNUM_FRNUM_MASK
+    }
+
+    /// Wait out one microframe boundary, without yielding.
+    ///
+    /// A complete-split has to reach the hub in a later microframe than the
+    /// start-split it belongs to, and -- for a periodic transfer -- inside the
+    /// same millisecond frame, because the hub stops pairing the two across a
+    /// frame boundary and the driver treats that as a transaction error.
+    ///
+    /// Returns false once the frame number has moved, which is the signal that
+    /// the pairing is gone and the next poll has to start over. `FRREM` counts
+    /// down through a microframe, so its wrap is the boundary.
+    fn await_microframe(&self) -> bool {
+        let frame = self.frame_number();
+        let mut last = (self.read32(HFNUM) >> 16) & 0xFFFF;
+        for _ in 0..MICROFRAME_SPINS {
+            let now = self.read32(HFNUM);
+            if self.frame_number() != frame {
+                return false;
+            }
+            let frrem = (now >> 16) & 0xFFFF;
+            if frrem > last {
+                return true;
+            }
+            last = frrem;
+            sys_yield();
+        }
+        false
     }
 
     /// The last channel outcome reported `XFERCOMPL`.
@@ -1108,7 +1139,6 @@ impl<'a> UsbHostEngine<'a> {
             | (3 << 20)
             | ((dev_addr as u32) << 22)
             | (1 << 31);
-        let mut complete = *pending;
         let arm = |complete: bool| {
             self.write32(hcsplt(ch), self.hcsplt_value(complete));
             self.write32(hctsiz(ch), sctsiz);
@@ -1117,16 +1147,45 @@ impl<'a> UsbHostEngine<'a> {
             self.write32(hcchar(ch), self.start_hcchar(scchar));
         };
 
-        // Both halves are issued here. Handing the second half to a later poll
-        // was tried and does not work in this loop: the serving loop's
-        // RecvTimeout puts hundreds of frames between polls, and the hub only
-        // pairs a split across a handful, so the complete-split always arrived
-        // after the pairing was long discarded.
+        // Both halves are issued here, one microframe apart and inside a single
+        // frame. The second half cannot be handed to a later poll: this loop's
+        // RecvTimeout puts hundreds of frames between polls and the hub pairs a
+        // split for less than one, which is what made every complete-split here
+        // answer NYET.
+        let frame = self.frame_number();
+        arm(false);
+        let outcome = self.wait_channel_with(ch, SPLIT_WAIT_POLLS);
+        report_split_progress(
+            false,
+            &outcome,
+            self.last_hcint.get(),
+            self.last_was_nyet(),
+            want,
+            frame,
+        );
+        if !matches!(outcome, Ok(())) {
+            *pending = false;
+            return match outcome {
+                Err(e) => Err(e),
+                _ => Ok(0),
+            };
+        }
+
         for _ in 0..SPLIT_ATTEMPTS {
-            arm(complete);
+            // The hub needs the full- or low-speed transaction run before it can
+            // answer; that is what its NYET reports. One microframe is the unit
+            // it is measured in.
+            if !self.await_microframe() {
+                // The frame moved, so the pairing is gone whether or not the hub
+                // ever answered.
+                *pending = false;
+                return Ok(0);
+            }
+
+            arm(true);
             let outcome = self.wait_channel_with(ch, SPLIT_WAIT_POLLS);
             report_split_progress(
-                complete,
+                true,
                 &outcome,
                 self.last_hcint.get(),
                 self.last_was_nyet(),
@@ -1135,12 +1194,12 @@ impl<'a> UsbHostEngine<'a> {
             );
 
             match outcome {
-                Ok(()) if complete && !self.last_reported_complete() => {
+                Ok(()) if !self.last_reported_complete() => {
                     // ACK on a complete-split carries no data.
                     *pending = false;
                     return Ok(0);
                 }
-                Ok(()) if complete => {
+                Ok(()) => {
                     *pending = false;
                     let remaining = (self.read32(hctsiz(ch)) & 0x7FFFF) as usize;
                     let got = want.saturating_sub(remaining);
@@ -1166,27 +1225,13 @@ impl<'a> UsbHostEngine<'a> {
                     }
                     return Ok(got.min(buf.len()));
                 }
-                Ok(()) => {
-                    // Start-split accepted. The hub needs to run the full- or
-                    // low-speed transaction before it can answer, which is what
-                    // NYET reports; `delay_ms` gives it that time while yielding
-                    // the CPU rather than holding an MMIO poll loop open.
-                    complete = true;
-                    delay_ms(1);
-                }
-                Err(ViError::WouldBlock) if complete && self.last_was_nyet() => {
-                    // Still working. The pairing is alive, so keep asking.
-                    delay_ms(1);
-                }
-                Err(ViError::WouldBlock) if !complete => {
-                    // The device had nothing to hand over.
-                    *pending = false;
-                    return Ok(0);
-                }
+                // Still working, or NAK which ends the pairing. Either way the
+                // next poll starts over rather than asking again here.
                 Err(ViError::WouldBlock) => {
-                    // NAK on a complete-split ends the pairing.
-                    *pending = false;
-                    return Ok(0);
+                    if !self.last_was_nyet() {
+                        *pending = false;
+                        return Ok(0);
+                    }
                 }
                 Err(e) => {
                     *pending = false;
@@ -1195,9 +1240,9 @@ impl<'a> UsbHostEngine<'a> {
             }
         }
 
-        // The hub never finished. Leave the pairing for the next poll rather
-        // than starting a new one that would replace what it is working on.
-        *pending = complete;
+        // The hub never finished. Starting over on the next poll is the only
+        // thing left: the frame this pairing belonged to is gone with it.
+        *pending = false;
         Ok(0)
     }
 
