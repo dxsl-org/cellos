@@ -549,6 +549,19 @@ pub fn poll_interface(
     }
 
     iface.reports_seen = iface.reports_seen.saturating_add(1);
+    // Whether the reports keep arriving is the first thing to know when input
+    // stops reaching the shell: a driver that has gone quiet and a shell that
+    // has stopped consuming look identical from the console, and they are
+    // different bugs. The first few are listed, then a periodic tally.
+    if iface.reports_seen <= 4 || iface.reports_seen.is_multiple_of(512) {
+        print("[usb-hid] iface ");
+        print_u8(iface.interface);
+        print(" reports=");
+        print_usize_hid(iface.reports_seen as usize);
+        print(" len=");
+        print_usize_hid(got);
+        println("");
+    }
 
     match iface.decoder.as_mut() {
         Some(dec) => dec.process(&buf[..got], out),
@@ -610,6 +623,25 @@ pub fn register_as_source(tid: usize, kind: u8) -> bool {
 }
 
 // ─── Tiny formatting helpers (no `format!` in the report hot path) ────────────
+
+fn print_usize_hid(v: usize) {
+    let mut out = [0u8; 20];
+    let mut n = v;
+    let mut len = 0;
+    if n == 0 {
+        print("0");
+        return;
+    }
+    while n > 0 && len < out.len() {
+        out[len] = b'0' + (n % 10) as u8;
+        n /= 10;
+        len += 1;
+    }
+    out[..len].reverse();
+    if let Ok(s) = core::str::from_utf8(&out[..len]) {
+        print(s);
+    }
+}
 
 fn print_hex16(v: u16) {
     const HEX: &[u8; 16] = b"0123456789abcdef";

@@ -352,8 +352,18 @@ fn cell_main() {
         }
         if !events.is_empty() {
             if input_tid != 0 {
+                let mut dropped = 0usize;
                 for ev in events.iter() {
-                    usb_hid::forward_event(input_tid, ev);
+                    if !usb_hid::forward_event(input_tid, ev) {
+                        dropped += 1;
+                    }
+                }
+                // A refused send means the event never reaches the service, and
+                // the shell then looks like it is ignoring the keyboard.
+                if dropped > 0 {
+                    print("[usb-hid] WARN: ");
+                    print_usize(dropped);
+                    println(" event(s) refused by the input service");
                 }
             } else {
                 // No consumer yet: drop rather than grow without bound. The
