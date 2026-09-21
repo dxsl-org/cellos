@@ -93,49 +93,54 @@
 <a href=#93 id=93 data-nosnippet>93</a>
 <a href=#94 id=94 data-nosnippet>94</a>// GAHBCFG bits
 <a href=#95 id=95 data-nosnippet>95</a></span><span class="kw">pub const </span>GAHBCFG_GLBLINTRMSK: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">0</span>; <span class="comment">// Global Interrupt Mask (1 = unmask)
-<a href=#96 id=96 data-nosnippet>96</a></span><span class="kw">pub const </span>GAHBCFG_DMAEN: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">5</span>; <span class="comment">// DMA Enable
-<a href=#97 id=97 data-nosnippet>97</a>
-<a href=#98 id=98 data-nosnippet>98</a>// GUSBCFG bits
-<a href=#99 id=99 data-nosnippet>99</a></span><span class="kw">pub const </span>GUSBCFG_PHYIF16: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">3</span>; <span class="comment">// 16-bit UTMI+ Interface
-<a href=#100 id=100 data-nosnippet>100</a></span><span class="kw">pub const </span>GUSBCFG_ULPI_UTMI_SEL: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">4</span>;
-<a href=#101 id=101 data-nosnippet>101</a><span class="kw">pub const </span>GUSBCFG_TRD_TIM_MASK: u32 = <span class="number">0xF </span>&lt;&lt; <span class="number">10</span>;
-<a href=#102 id=102 data-nosnippet>102</a><span class="kw">pub const </span>GUSBCFG_TRD_TIM_9: u32 = <span class="number">9 </span>&lt;&lt; <span class="number">10</span>; <span class="comment">// Turnaround time for 30-60MHz AHB
-<a href=#103 id=103 data-nosnippet>103</a></span><span class="kw">pub const </span>GUSBCFG_FORCEDEVMODE: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">30</span>;
-<a href=#104 id=104 data-nosnippet>104</a><span class="kw">pub const </span>GUSBCFG_FORCEHOSTMODE: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">29</span>;
-<a href=#105 id=105 data-nosnippet>105</a>
-<a href=#106 id=106 data-nosnippet>106</a><span class="comment">// GINTSTS / GINTMSK bits
-<a href=#107 id=107 data-nosnippet>107</a></span><span class="kw">pub const </span>GINTSTS_CURMODE_HOST: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">0</span>; <span class="comment">// Current Mode: 1 = Host, 0 = Device
-<a href=#108 id=108 data-nosnippet>108</a></span><span class="kw">pub const </span>GINTSTS_MODEMIS: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">1</span>;
-<a href=#109 id=109 data-nosnippet>109</a><span class="kw">pub const </span>GINTSTS_OTGINT: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">2</span>;
-<a href=#110 id=110 data-nosnippet>110</a><span class="kw">pub const </span>GINTSTS_SOF: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">3</span>;
-<a href=#111 id=111 data-nosnippet>111</a><span class="kw">pub const </span>GINTSTS_RXFLVL: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">4</span>;
-<a href=#112 id=112 data-nosnippet>112</a><span class="kw">pub const </span>GINTSTS_NPTXFEMP: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">5</span>;
-<a href=#113 id=113 data-nosnippet>113</a><span class="kw">pub const </span>GINTSTS_HPRTINT: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">24</span>; <span class="comment">// Host Port Interrupt
-<a href=#114 id=114 data-nosnippet>114</a></span><span class="kw">pub const </span>GINTSTS_HCHINT: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">25</span>; <span class="comment">// Host Channels Interrupt
-<a href=#115 id=115 data-nosnippet>115</a></span><span class="kw">pub const </span>GINTSTS_PTXFEMP: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">26</span>;
-<a href=#116 id=116 data-nosnippet>116</a><span class="kw">pub const </span>GINTSTS_CONIDSTSCHNG: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">28</span>;
-<a href=#117 id=117 data-nosnippet>117</a><span class="kw">pub const </span>GINTSTS_DISCONNINT: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">29</span>;
-<a href=#118 id=118 data-nosnippet>118</a><span class="kw">pub const </span>GINTSTS_SESSREQINT: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">30</span>;
-<a href=#119 id=119 data-nosnippet>119</a><span class="kw">pub const </span>GINTSTS_WKUPINT: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">31</span>;
-<a href=#120 id=120 data-nosnippet>120</a>
-<a href=#121 id=121 data-nosnippet>121</a><span class="comment">// HPRT0 bits (Host Port 0 Control and Status)
-<a href=#122 id=122 data-nosnippet>122</a></span><span class="kw">pub const </span>HPRT0_PRTCONNSTS: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">0</span>; <span class="comment">// Port Connect Status (RO)
-<a href=#123 id=123 data-nosnippet>123</a></span><span class="kw">pub const </span>HPRT0_PRTCONNDET: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">1</span>; <span class="comment">// Port Connect Detected (W1C)
-<a href=#124 id=124 data-nosnippet>124</a></span><span class="kw">pub const </span>HPRT0_PRTENA: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">2</span>; <span class="comment">// Port Enable (W1C to disable)
-<a href=#125 id=125 data-nosnippet>125</a></span><span class="kw">pub const </span>HPRT0_PRTENCHNG: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">3</span>; <span class="comment">// Port Enable/Disable Change (W1C)
-<a href=#126 id=126 data-nosnippet>126</a></span><span class="kw">pub const </span>HPRT0_PRTOVRCURRACT: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">4</span>; <span class="comment">// Port Overcurrent Active
-<a href=#127 id=127 data-nosnippet>127</a></span><span class="kw">pub const </span>HPRT0_PRTOVRCURRCHNG: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">5</span>; <span class="comment">// Port Overcurrent Change (W1C)
-<a href=#128 id=128 data-nosnippet>128</a></span><span class="kw">pub const </span>HPRT0_PRTRES: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">6</span>; <span class="comment">// Port Resume
-<a href=#129 id=129 data-nosnippet>129</a></span><span class="kw">pub const </span>HPRT0_PRTSUSP: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">7</span>; <span class="comment">// Port Suspend
-<a href=#130 id=130 data-nosnippet>130</a></span><span class="kw">pub const </span>HPRT0_PRTRST: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">8</span>; <span class="comment">// Port Reset
-<a href=#131 id=131 data-nosnippet>131</a></span><span class="kw">pub const </span>HPRT0_PRTPWR: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">12</span>; <span class="comment">// Port Power
-<a href=#132 id=132 data-nosnippet>132</a></span><span class="kw">pub const </span>HPRT0_PRTSPD_MASK: u32 = <span class="number">0x3 </span>&lt;&lt; <span class="number">17</span>; <span class="comment">// Port Speed bits
-<a href=#133 id=133 data-nosnippet>133</a></span><span class="kw">pub const </span>HPRT0_PRTSPD_HIGH: u32 = <span class="number">0x0 </span>&lt;&lt; <span class="number">17</span>; <span class="comment">// High Speed (480 Mbps)
-<a href=#134 id=134 data-nosnippet>134</a></span><span class="kw">pub const </span>HPRT0_PRTSPD_FULL: u32 = <span class="number">0x1 </span>&lt;&lt; <span class="number">17</span>; <span class="comment">// Full Speed (12 Mbps)
-<a href=#135 id=135 data-nosnippet>135</a></span><span class="kw">pub const </span>HPRT0_PRTSPD_LOW: u32 = <span class="number">0x2 </span>&lt;&lt; <span class="number">17</span>; <span class="comment">// Low Speed (1.5 Mbps)
-<a href=#136 id=136 data-nosnippet>136</a>
-<a href=#137 id=137 data-nosnippet>137</a></span><span class="doccomment">/// Mask of W1C bits in HPRT0. When writing to HPRT0 (e.g. to set PRTRST or PRTPWR),
-<a href=#138 id=138 data-nosnippet>138</a>/// these bits must be written as ZERO to prevent inadvertently clearing port events!
-<a href=#139 id=139 data-nosnippet>139</a></span><span class="kw">pub const </span>HPRT0_W1C_MASK: u32 =
-<a href=#140 id=140 data-nosnippet>140</a>    HPRT0_PRTCONNDET | HPRT0_PRTENA | HPRT0_PRTENCHNG | HPRT0_PRTOVRCURRCHNG;
+<a href=#96 id=96 data-nosnippet>96</a></span><span class="kw">pub const </span>GAHBCFG_HBSTLEN_INCR16: u32 = <span class="number">7 </span>&lt;&lt; <span class="number">1</span>; <span class="comment">// AHB burst length: INCR16
+<a href=#97 id=97 data-nosnippet>97</a></span><span class="kw">pub const </span>GAHBCFG_DMAEN: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">5</span>; <span class="comment">// DMA Enable
+<a href=#98 id=98 data-nosnippet>98</a>
+<a href=#99 id=99 data-nosnippet>99</a>// HCFG bits
+<a href=#100 id=100 data-nosnippet>100</a></span><span class="kw">pub const </span>HCFG_FSLSPCLKSEL_MASK: u32 = <span class="number">0x3</span>;
+<a href=#101 id=101 data-nosnippet>101</a><span class="kw">pub const </span>HCFG_FSLSPCLKSEL_48MHZ: u32 = <span class="number">0x1</span>; <span class="comment">// 48 MHz PHY clock
+<a href=#102 id=102 data-nosnippet>102</a>
+<a href=#103 id=103 data-nosnippet>103</a>// GUSBCFG bits
+<a href=#104 id=104 data-nosnippet>104</a></span><span class="kw">pub const </span>GUSBCFG_PHYIF16: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">3</span>; <span class="comment">// 16-bit UTMI+ Interface
+<a href=#105 id=105 data-nosnippet>105</a></span><span class="kw">pub const </span>GUSBCFG_ULPI_UTMI_SEL: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">4</span>;
+<a href=#106 id=106 data-nosnippet>106</a><span class="kw">pub const </span>GUSBCFG_TRD_TIM_MASK: u32 = <span class="number">0xF </span>&lt;&lt; <span class="number">10</span>;
+<a href=#107 id=107 data-nosnippet>107</a><span class="kw">pub const </span>GUSBCFG_TRD_TIM_9: u32 = <span class="number">9 </span>&lt;&lt; <span class="number">10</span>; <span class="comment">// Turnaround time for 30-60MHz AHB
+<a href=#108 id=108 data-nosnippet>108</a></span><span class="kw">pub const </span>GUSBCFG_FORCEDEVMODE: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">30</span>;
+<a href=#109 id=109 data-nosnippet>109</a><span class="kw">pub const </span>GUSBCFG_FORCEHOSTMODE: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">29</span>;
+<a href=#110 id=110 data-nosnippet>110</a>
+<a href=#111 id=111 data-nosnippet>111</a><span class="comment">// GINTSTS / GINTMSK bits
+<a href=#112 id=112 data-nosnippet>112</a></span><span class="kw">pub const </span>GINTSTS_CURMODE_HOST: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">0</span>; <span class="comment">// Current Mode: 1 = Host, 0 = Device
+<a href=#113 id=113 data-nosnippet>113</a></span><span class="kw">pub const </span>GINTSTS_MODEMIS: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">1</span>;
+<a href=#114 id=114 data-nosnippet>114</a><span class="kw">pub const </span>GINTSTS_OTGINT: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">2</span>;
+<a href=#115 id=115 data-nosnippet>115</a><span class="kw">pub const </span>GINTSTS_SOF: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">3</span>;
+<a href=#116 id=116 data-nosnippet>116</a><span class="kw">pub const </span>GINTSTS_RXFLVL: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">4</span>;
+<a href=#117 id=117 data-nosnippet>117</a><span class="kw">pub const </span>GINTSTS_NPTXFEMP: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">5</span>;
+<a href=#118 id=118 data-nosnippet>118</a><span class="kw">pub const </span>GINTSTS_HPRTINT: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">24</span>; <span class="comment">// Host Port Interrupt
+<a href=#119 id=119 data-nosnippet>119</a></span><span class="kw">pub const </span>GINTSTS_HCHINT: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">25</span>; <span class="comment">// Host Channels Interrupt
+<a href=#120 id=120 data-nosnippet>120</a></span><span class="kw">pub const </span>GINTSTS_PTXFEMP: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">26</span>;
+<a href=#121 id=121 data-nosnippet>121</a><span class="kw">pub const </span>GINTSTS_CONIDSTSCHNG: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">28</span>;
+<a href=#122 id=122 data-nosnippet>122</a><span class="kw">pub const </span>GINTSTS_DISCONNINT: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">29</span>;
+<a href=#123 id=123 data-nosnippet>123</a><span class="kw">pub const </span>GINTSTS_SESSREQINT: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">30</span>;
+<a href=#124 id=124 data-nosnippet>124</a><span class="kw">pub const </span>GINTSTS_WKUPINT: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">31</span>;
+<a href=#125 id=125 data-nosnippet>125</a>
+<a href=#126 id=126 data-nosnippet>126</a><span class="comment">// HPRT0 bits (Host Port 0 Control and Status)
+<a href=#127 id=127 data-nosnippet>127</a></span><span class="kw">pub const </span>HPRT0_PRTCONNSTS: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">0</span>; <span class="comment">// Port Connect Status (RO)
+<a href=#128 id=128 data-nosnippet>128</a></span><span class="kw">pub const </span>HPRT0_PRTCONNDET: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">1</span>; <span class="comment">// Port Connect Detected (W1C)
+<a href=#129 id=129 data-nosnippet>129</a></span><span class="kw">pub const </span>HPRT0_PRTENA: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">2</span>; <span class="comment">// Port Enable (W1C to disable)
+<a href=#130 id=130 data-nosnippet>130</a></span><span class="kw">pub const </span>HPRT0_PRTENCHNG: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">3</span>; <span class="comment">// Port Enable/Disable Change (W1C)
+<a href=#131 id=131 data-nosnippet>131</a></span><span class="kw">pub const </span>HPRT0_PRTOVRCURRACT: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">4</span>; <span class="comment">// Port Overcurrent Active
+<a href=#132 id=132 data-nosnippet>132</a></span><span class="kw">pub const </span>HPRT0_PRTOVRCURRCHNG: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">5</span>; <span class="comment">// Port Overcurrent Change (W1C)
+<a href=#133 id=133 data-nosnippet>133</a></span><span class="kw">pub const </span>HPRT0_PRTRES: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">6</span>; <span class="comment">// Port Resume
+<a href=#134 id=134 data-nosnippet>134</a></span><span class="kw">pub const </span>HPRT0_PRTSUSP: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">7</span>; <span class="comment">// Port Suspend
+<a href=#135 id=135 data-nosnippet>135</a></span><span class="kw">pub const </span>HPRT0_PRTRST: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">8</span>; <span class="comment">// Port Reset
+<a href=#136 id=136 data-nosnippet>136</a></span><span class="kw">pub const </span>HPRT0_PRTPWR: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">12</span>; <span class="comment">// Port Power
+<a href=#137 id=137 data-nosnippet>137</a></span><span class="kw">pub const </span>HPRT0_PRTSPD_MASK: u32 = <span class="number">0x3 </span>&lt;&lt; <span class="number">17</span>; <span class="comment">// Port Speed bits
+<a href=#138 id=138 data-nosnippet>138</a></span><span class="kw">pub const </span>HPRT0_PRTSPD_HIGH: u32 = <span class="number">0x0 </span>&lt;&lt; <span class="number">17</span>; <span class="comment">// High Speed (480 Mbps)
+<a href=#139 id=139 data-nosnippet>139</a></span><span class="kw">pub const </span>HPRT0_PRTSPD_FULL: u32 = <span class="number">0x1 </span>&lt;&lt; <span class="number">17</span>; <span class="comment">// Full Speed (12 Mbps)
+<a href=#140 id=140 data-nosnippet>140</a></span><span class="kw">pub const </span>HPRT0_PRTSPD_LOW: u32 = <span class="number">0x2 </span>&lt;&lt; <span class="number">17</span>; <span class="comment">// Low Speed (1.5 Mbps)
+<a href=#141 id=141 data-nosnippet>141</a>
+<a href=#142 id=142 data-nosnippet>142</a></span><span class="doccomment">/// Mask of W1C bits in HPRT0. When writing to HPRT0 (e.g. to set PRTRST or PRTPWR),
+<a href=#143 id=143 data-nosnippet>143</a>/// these bits must be written as ZERO to prevent inadvertently clearing port events!
+<a href=#144 id=144 data-nosnippet>144</a></span><span class="kw">pub const </span>HPRT0_W1C_MASK: u32 =
+<a href=#145 id=145 data-nosnippet>145</a>    HPRT0_PRTCONNDET | HPRT0_PRTENA | HPRT0_PRTENCHNG | HPRT0_PRTOVRCURRCHNG;
 </code></pre></div></section></main></body></html>
