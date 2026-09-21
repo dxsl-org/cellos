@@ -176,15 +176,27 @@
 <a href=#176 id=176 data-nosnippet>176</a>        }
 <a href=#177 id=177 data-nosnippet>177</a>    }
 <a href=#178 id=178 data-nosnippet>178</a>
-<a href=#179 id=179 data-nosnippet>179</a>    <span class="doccomment">/// True when the port reports a device at full/low speed (status bit 9).
-<a href=#180 id=180 data-nosnippet>180</a>    ///
-<a href=#181 id=181 data-nosnippet>181</a>    /// LAN9514 is a high-speed hub, so a full-speed device behind it comes from
-<a href=#182 id=182 data-nosnippet>182</a>    /// its own transaction translator. Diagnostics only.
-<a href=#183 id=183 data-nosnippet>183</a>    </span><span class="kw">pub fn </span>is_port_low_speed(<span class="kw-2">&amp;</span><span class="self">self</span>, port: u16) -&gt; bool {
-<a href=#184 id=184 data-nosnippet>184</a>        <span class="kw">match </span><span class="self">self</span>.get_port_status(port) {
-<a href=#185 id=185 data-nosnippet>185</a>            <span class="prelude-val">Ok</span>((status, <span class="kw">_</span>)) =&gt; status &amp; (<span class="number">1 </span>&lt;&lt; <span class="number">9</span>) != <span class="number">0</span>,
-<a href=#186 id=186 data-nosnippet>186</a>            <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; <span class="bool-val">false</span>,
-<a href=#187 id=187 data-nosnippet>187</a>        }
-<a href=#188 id=188 data-nosnippet>188</a>    }
-<a href=#189 id=189 data-nosnippet>189</a>}
+<a href=#179 id=179 data-nosnippet>179</a>    <span class="doccomment">/// Negotiated speed of the device on `port`, as USB 2.0 hub port status
+<a href=#180 id=180 data-nosnippet>180</a>    /// bits 10:9 encode it: 0 = full, 1 = low, 2 = high.
+<a href=#181 id=181 data-nosnippet>181</a>    ///
+<a href=#182 id=182 data-nosnippet>182</a>    /// A downstream device can be slower than the hub, so its EP0 packet size
+<a href=#183 id=183 data-nosnippet>183</a>    /// cannot be assumed from the hub's own speed.
+<a href=#184 id=184 data-nosnippet>184</a>    </span><span class="kw">pub fn </span>port_speed(<span class="kw-2">&amp;</span><span class="self">self</span>, port: u16) -&gt; u8 {
+<a href=#185 id=185 data-nosnippet>185</a>        <span class="kw">match </span><span class="self">self</span>.get_port_status(port) {
+<a href=#186 id=186 data-nosnippet>186</a>            <span class="prelude-val">Ok</span>((status, <span class="kw">_</span>)) =&gt; ((status &gt;&gt; <span class="number">9</span>) &amp; <span class="number">0x3</span>) <span class="kw">as </span>u8,
+<a href=#187 id=187 data-nosnippet>187</a>            <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; <span class="number">0</span>,
+<a href=#188 id=188 data-nosnippet>188</a>        }
+<a href=#189 id=189 data-nosnippet>189</a>    }
+<a href=#190 id=190 data-nosnippet>190</a>
+<a href=#191 id=191 data-nosnippet>191</a>    <span class="doccomment">/// True when the port reports a device at full/low speed (status bit 9).
+<a href=#192 id=192 data-nosnippet>192</a>    ///
+<a href=#193 id=193 data-nosnippet>193</a>    /// LAN9514 is a high-speed hub, so a full-speed device behind it comes from
+<a href=#194 id=194 data-nosnippet>194</a>    /// its own transaction translator. Diagnostics only.
+<a href=#195 id=195 data-nosnippet>195</a>    </span><span class="kw">pub fn </span>is_port_low_speed(<span class="kw-2">&amp;</span><span class="self">self</span>, port: u16) -&gt; bool {
+<a href=#196 id=196 data-nosnippet>196</a>        <span class="kw">match </span><span class="self">self</span>.get_port_status(port) {
+<a href=#197 id=197 data-nosnippet>197</a>            <span class="prelude-val">Ok</span>((status, <span class="kw">_</span>)) =&gt; status &amp; (<span class="number">1 </span>&lt;&lt; <span class="number">9</span>) != <span class="number">0</span>,
+<a href=#198 id=198 data-nosnippet>198</a>            <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; <span class="bool-val">false</span>,
+<a href=#199 id=199 data-nosnippet>199</a>        }
+<a href=#200 id=200 data-nosnippet>200</a>    }
+<a href=#201 id=201 data-nosnippet>201</a>}
 </code></pre></div></section></main></body></html>
