@@ -419,6 +419,17 @@ impl<'a> UsbHostEngine<'a> {
         self.last_hcint.get() & (1 << 6) != 0
     }
 
+    /// The last channel failure was the device stalling the endpoint.
+    ///
+    /// Only this one means the endpoint is halted and needs clearing. A NYET is
+    /// the hub asking for time, a NAK is a device with nothing to send, and a bare
+    /// halt is the core ending a periodic channel at its frame boundary -- none of
+    /// them is a stall, and clearing one that was never set costs a control
+    /// transfer on every poll.
+    pub fn last_was_stall(&self) -> bool {
+        self.last_hcint.get() & (1 << 3) != 0
+    }
+
     /// `HCCHAR` for this instant, with `ODDFRM` set from the frame the transfer
     /// will be sent in.
     ///

@@ -555,6 +555,16 @@ pub fn poll_interface(
 
     let got = match result {
         Ok(n) => n,
+        // Only a stall needs clearing. Everything else a poll can end on is a
+        // transfer that did not deliver this time: a NYET is the hub asking for
+        // time, a NAK is a keyboard with no key down, and a halt with no status is
+        // the core ending a periodic channel at its frame boundary. Clearing a
+        // halt that was never set cost a control transfer on every poll and
+        // interrupted the polling it was meant to help.
+        Err(_) if !engine.last_was_stall() => {
+            engine.set_split(None);
+            return;
+        }
         Err(_) => {
             // A STALL leaves the endpoint halted until the host clears it.
             // Dropping the device here would lose a working keyboard over one
