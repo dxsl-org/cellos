@@ -185,6 +185,13 @@ if ($BoardRpi3) {
     Write-Host "Building driver-dwc2-usb (USB host controller)..."
     cargo build --release -p driver-dwc2-usb --target $target 2>&1 | Select-Object -Last 5
     Assert-CellBuild 'driver-dwc2-usb' $LASTEXITCODE
+
+    # Browser stack: desktop shell + native Ocel viewer + its Tier 2 JS engine service.
+    # All three talk to the compositor over ViSurface IPC, so they are board-agnostic
+    # aarch64 cells (no RPi3-specific device model needed).
+    Write-Host "Building desktop + ocel + ocel-js (browser stack)..."
+    cargo build --release -p desktop -p ocel -p ocel-js --target $target 2>&1 | Select-Object -Last 5
+    Assert-CellBuild 'desktop/ocel/ocel-js' $LASTEXITCODE
 }
 if ($AiModel -or $AiCells) {
     # The inference service needs `large-arena` for a checkpoint this side of 8 MiB, and the oracle
@@ -225,6 +232,10 @@ $initSrc = if ($BoardRpi3) {
 } else {
     Join-Path $buildDir 'app-init'
 }
+# QEMU-virt VirtIO driver cells are NOT packaged for board-rpi3: BCM2837 has no
+# VirtIO MMIO window, so /bin/block and /bin/virtio-net can only fault there
+# (data abort at 0x0A000000). RPi3 storage is the in-kernel Arasan SDHCI path and
+# its NIC is the LAN9514 reached through /bin/dwc2-usb.
 $cells = @(
     @{ Bin = "app-shell";      Dst = "/bin/shell"       },
     @{ Bin = "service-vfs";    Dst = "/bin/vfs"         },
@@ -240,18 +251,25 @@ $cells = @(
     @{ Bin = "ps";             Dst = "/bin/ps"          },
     @{ Bin = "kill";           Dst = "/bin/kill"        },
     @{ Bin = "service-net";    Dst = "/bin/net"         },
-    @{ Bin = "driver-virtio-net"; Dst = "/bin/virtio-net" },
-    @{ Bin = "driver-virtio-blk"; Dst = "/bin/block"         },
     @{ Bin = "service-httpd";  Dst = "/bin/httpd"       },
     @{ Bin = "tier2-smoke";    Dst = "/bin/tier2-smoke"   },
     @{ Bin = "tier2-exploit";  Dst = "/bin/tier2-exploit" }
 )
+if (-not $BoardRpi3) {
+    $cells += @(
+        @{ Bin = "driver-virtio-net"; Dst = "/bin/virtio-net" },
+        @{ Bin = "driver-virtio-blk"; Dst = "/bin/block"         }
+    )
+}
 if ($BoardRpi3) {
     $cells += @(
         @{ Bin = "driver-dwc2-usb";    Dst = "/bin/dwc2-usb"    },
         @{ Bin = "driver-bcm-display"; Dst = "/bin/bcm-display" },
         @{ Bin = "service-compositor"; Dst = "/bin/compositor"  },
-        @{ Bin = "fb-console";          Dst = "/bin/fb-console"  }
+        @{ Bin = "fb-console";          Dst = "/bin/fb-console"  },
+        @{ Bin = "desktop";            Dst = "/bin/desktop"     },
+        @{ Bin = "ocel";               Dst = "/bin/ocel"        },
+        @{ Bin = "ocel-js";            Dst = "/bin/ocel-js"     }
     )
 }
 if ($StorageTest) {

@@ -9,8 +9,17 @@ const DISPLAY_DRIVER_PATH: &str = "/bin/bcm-display";
 #[cfg(not(feature = "board-rpi3"))]
 const DISPLAY_DRIVER_PATH: &str = "/bin/virtio-gpu";
 
+// QEMU-virt VirtIO drivers. BCM2837 exposes no VirtIO MMIO window, so probing
+// them on board-rpi3 is a guaranteed data abort at 0x0A000000; storage is the
+// in-kernel Arasan SDHCI path and networking is the LAN9514 via /bin/dwc2-usb.
+#[cfg(not(feature = "board-rpi3"))]
+const VIRTIO_BLOCK_DRIVER: &str = "/bin/block";
+#[cfg(not(feature = "board-rpi3"))]
+const VIRTIO_NET_DRIVER: &str = "/bin/virtio-net";
+
 pub(crate) fn start_block_drivers() {
-    let _ = sys_spawn_from_path("/bin/block");
+    #[cfg(not(feature = "board-rpi3"))]
+    let _ = sys_spawn_from_path(VIRTIO_BLOCK_DRIVER);
     let _ = sys_spawn_from_path("/bin/nvme");
     for _ in 0..400 {
         if sys_lookup_service(service::BLOCK_DRIVER).is_some() {
@@ -22,7 +31,8 @@ pub(crate) fn start_block_drivers() {
 
 pub(crate) fn prepare_service(path: &str) {
     if path == "/bin/net" {
-        let _ = sys_spawn_from_path("/bin/virtio-net");
+        #[cfg(not(feature = "board-rpi3"))]
+        let _ = sys_spawn_from_path(VIRTIO_NET_DRIVER);
         let _ = sys_spawn_from_path("/bin/e1000");
         let _ = sys_spawn_from_path("/bin/dwc2-usb");
         if sys_lookup_service(service::BLOCK_DRIVER).is_none() {
@@ -63,7 +73,10 @@ pub(crate) fn spawn_optional_services() -> Option<usize> {
         SyscallResult::Ok(_) => ostd::io::println("Init: fb-console spawned."),
         SyscallResult::Err(_) => ostd::io::println("Init: fb-console spawn failed."),
     }
-    #[cfg(all(not(feature = "hypervisor-min"), not(feature = "board-rpi3")))]
+    // Desktop shell auto-starts on RPi3 too: board-rpi3 has a real display path
+    // (/bin/bcm-display -> compositor -> HDMI), so the taskbar + Spotlight
+    // launcher are the intended way to start Ocel on the board.
+    #[cfg(not(feature = "hypervisor-min"))]
     match sys_spawn_from_path("/bin/desktop") {
         SyscallResult::Ok(_) => ostd::io::println("Init: desktop spawned."),
         SyscallResult::Err(_) => ostd::io::println("Init: desktop spawn failed."),
