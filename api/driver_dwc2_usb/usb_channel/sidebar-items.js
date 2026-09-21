@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["CONTROL_MPS_LOW_FULL_SPEED","DMA_SLOT_BYTES","PORT_SPEED_FULL","PORT_SPEED_HIGH","PORT_SPEED_LOW"],"enum":["TransferMode"],"fn":["initial_control_mps"],"struct":["UsbHostEngine"]};
+window.SIDEBAR_ITEMS = {"constant":["CONTROL_MPS_LOW_FULL_SPEED","DMA_SLOT_BYTES","PORT_SPEED_FULL","PORT_SPEED_HIGH","PORT_SPEED_LOW"],"enum":["TransferMode"],"fn":["initial_control_mps"],"struct":["Split","UsbHostEngine"]};

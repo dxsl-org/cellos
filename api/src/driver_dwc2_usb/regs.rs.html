@@ -139,8 +139,20 @@
 <a href=#139 id=139 data-nosnippet>139</a></span><span class="kw">pub const </span>HPRT0_PRTSPD_FULL: u32 = <span class="number">0x1 </span>&lt;&lt; <span class="number">17</span>; <span class="comment">// Full Speed (12 Mbps)
 <a href=#140 id=140 data-nosnippet>140</a></span><span class="kw">pub const </span>HPRT0_PRTSPD_LOW: u32 = <span class="number">0x2 </span>&lt;&lt; <span class="number">17</span>; <span class="comment">// Low Speed (1.5 Mbps)
 <a href=#141 id=141 data-nosnippet>141</a>
-<a href=#142 id=142 data-nosnippet>142</a></span><span class="doccomment">/// Mask of W1C bits in HPRT0. When writing to HPRT0 (e.g. to set PRTRST or PRTPWR),
-<a href=#143 id=143 data-nosnippet>143</a>/// these bits must be written as ZERO to prevent inadvertently clearing port events!
-<a href=#144 id=144 data-nosnippet>144</a></span><span class="kw">pub const </span>HPRT0_W1C_MASK: u32 =
-<a href=#145 id=145 data-nosnippet>145</a>    HPRT0_PRTCONNDET | HPRT0_PRTENA | HPRT0_PRTENCHNG | HPRT0_PRTOVRCURRCHNG;
+<a href=#142 id=142 data-nosnippet>142</a>// HCSPLT bits (Host Channel Split Control). A channel that talks to a full- or
+<a href=#143 id=143 data-nosnippet>143</a>// low-speed device behind a high-speed hub addresses it through these fields;
+<a href=#144 id=144 data-nosnippet>144</a>// the bit layout is from the core's own header (dwc2_core.h).
+<a href=#145 id=145 data-nosnippet>145</a></span><span class="kw">pub const </span>HCSPLT_PRTADDR_MASK: u32 = <span class="number">0x7F</span>; <span class="comment">// hub port, bits 6:0
+<a href=#146 id=146 data-nosnippet>146</a></span><span class="kw">pub const </span>HCSPLT_HUBADDR_SHIFT: u32 = <span class="number">7</span>; <span class="comment">// hub device address, bits 13:7
+<a href=#147 id=147 data-nosnippet>147</a></span><span class="kw">pub const </span>HCSPLT_HUBADDR_MASK: u32 = <span class="number">0x7F </span>&lt;&lt; HCSPLT_HUBADDR_SHIFT;
+<a href=#148 id=148 data-nosnippet>148</a><span class="kw">pub const </span>HCSPLT_COMPSPLT: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">16</span>; <span class="comment">// 1 = complete split, 0 = start split
+<a href=#149 id=149 data-nosnippet>149</a></span><span class="kw">pub const </span>HCSPLT_SPLTENA: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">31</span>; <span class="comment">// split enable
+<a href=#150 id=150 data-nosnippet>150</a>
+<a href=#151 id=151 data-nosnippet>151</a></span><span class="doccomment">/// `HFNUM.FRNUM` — the USB frame counter, in 125 us frames.
+<a href=#152 id=152 data-nosnippet>152</a></span><span class="kw">pub const </span>HFNUM_FRNUM_MASK: u32 = <span class="number">0xFFFF</span>;
+<a href=#153 id=153 data-nosnippet>153</a>
+<a href=#154 id=154 data-nosnippet>154</a><span class="doccomment">/// Mask of W1C bits in HPRT0. When writing to HPRT0 (e.g. to set PRTRST or PRTPWR),
+<a href=#155 id=155 data-nosnippet>155</a>/// these bits must be written as ZERO to prevent inadvertently clearing port events!
+<a href=#156 id=156 data-nosnippet>156</a></span><span class="kw">pub const </span>HPRT0_W1C_MASK: u32 =
+<a href=#157 id=157 data-nosnippet>157</a>    HPRT0_PRTCONNDET | HPRT0_PRTENA | HPRT0_PRTENCHNG | HPRT0_PRTOVRCURRCHNG;
 </code></pre></div></section></main></body></html>
