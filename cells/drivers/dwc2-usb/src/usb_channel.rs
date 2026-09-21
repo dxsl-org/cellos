@@ -1,36 +1,10 @@
 //! DWC2 Host Channel transaction engine (Control and Bulk transfers via Data FIFO).
 
 use crate::regs::*;
-use core::cell::{Cell, RefCell};
-use ostd::dma::DmaBuf;
+use core::cell::Cell;
 use ostd::mmio::MmioRegion;
 use ostd::syscall::sys_yield;
 use types::{ViError, ViResult};
-
-/// How host channels move payload bytes.
-///
-/// The BCM2837 DWC2 supports both; which one a given environment implements is
-/// not discoverable from the register file, so the driver tries FIFO first and
-/// falls back to DMA. FIFO is the board-proven path (the LAN9514 Ethernet runs
-/// there); DMA is what QEMU's `hcd-dwc2` model implements, since it sources
-/// payloads from guest memory at `HCDMA` and ignores host-channel FIFO writes
-/// entirely.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum TransferMode {
-    /// Programmed I/O: payload goes through the channel's data FIFO.
-    Fifo,
-    /// The core reads/writes payloads directly from/to guest memory at `HCDMA`.
-    Dma,
-}
-
-/// Bytes reserved per host channel inside the DMA scratch region.
-///
-/// Sized for the largest payload this driver moves: a full configuration
-/// descriptor (≤512 bytes) and an Ethernet frame. One slot per channel keeps two
-/// in-flight channels from aliasing the same memory.
-pub const DMA_SLOT_BYTES: usize = 4096;
-/// Host channels that get a DMA slot (DWC2 implements up to 16; this driver uses 8).
-const DMA_CHANNELS: usize = 8;
 
 /// Control-endpoint max packet size assumed before a device reports its own.
 ///
@@ -45,9 +19,6 @@ pub struct UsbHostEngine<'a> {
     /// Max packet size for control transfers on endpoint 0. Updated from the
     /// device descriptor's `bMaxPacketSize0` once it has been read.
     ctrl_mps: Cell<u8>,
-    mode: Cell<TransferMode>,
-    /// Per-channel DMA scratch, allocated on first use in DMA mode.
-    dma: RefCell<Option<DmaBuf>>,
 }
 
 impl<'a> UsbHostEngine<'a> {
@@ -55,8 +26,6 @@ impl<'a> UsbHostEngine<'a> {
         Self {
             mmio,
             ctrl_mps: Cell::new(CONTROL_MPS_DEFAULT),
-            mode: Cell::new(TransferMode::Fifo),
-            dma: RefCell::new(None),
         }
     }
 
@@ -77,118 +46,6 @@ impl<'a> UsbHostEngine<'a> {
             _ => 64,
         };
         self.ctrl_mps.set(clamped);
-    }
-
-    /// Current payload-transfer mode.
-    pub fn mode(&self) -> TransferMode {
-        self.mode.get()
-    }
-
-    /// Select the payload-transfer mode.
-    ///
-    /// Switching to DMA allocates the scratch region on first use; a failed
-    /// allocation leaves the engine in FIFO mode rather than half-configured.
-    pub fn set_mode(&self, mode: TransferMode) -> bool {
-        if mode == TransferMode::Dma && self.dma.borrow().is_none() {
-            let Some(buf) = DmaBuf::alloc(DMA_SLOT_BYTES * DMA_CHANNELS / 4096) else {
-                return false;
-            };
-            *self.dma.borrow_mut() = Some(buf);
-        }
-        self.mode.set(mode);
-        true
-    }
-
-    /// Guest-physical base of `ch`'s DMA slot, or `None` outside DMA mode.
-    ///
-    /// In SAS grant pages are identity-mapped, so the value programmed into
-    /// `HCDMA` is the same address the CPU uses.
-    fn dma_slot(&self, ch: usize) -> Option<usize> {
-        if self.mode.get() != TransferMode::Dma || ch >= DMA_CHANNELS {
-            return None;
-        }
-        let guard = self.dma.borrow();
-        guard.as_ref().map(|b| b.phys() + ch * DMA_SLOT_BYTES)
-    }
-
-    /// Point the channel's DMA engine at `offset` bytes into its slot.
-    ///
-    /// Programmed **once per transfer**, never per packet. The DWC2 advances
-    /// `HCDMA` itself as it moves each packet (`hcdma += actual`), so a
-    /// multi-packet transfer walks the slot on its own. Re-arming mid-transfer
-    /// both defeats that walk and races the core's asynchronous completion,
-    /// which latches `HCDMA` when it retires the packet.
-    fn program_hcdma(&self, ch: usize, offset: usize) {
-        if let Some(base) = self.dma_slot(ch) {
-            let addr = base + offset.min(DMA_SLOT_BYTES);
-            self.write32(hcdma(ch), addr as u32);
-        }
-    }
-
-    /// Publish CPU writes in `[offset, offset+len)` to the device.
-    fn cache_clean(&self, ch: usize, offset: usize, len: usize) {
-        let guard = self.dma.borrow();
-        if let Some(buf) = guard.as_ref() {
-            let start = ch * DMA_SLOT_BYTES + offset.min(DMA_SLOT_BYTES);
-            let end = (start + len).min((ch + 1) * DMA_SLOT_BYTES);
-            if let Some(token) = buf.begin_cache_sync(start, end.saturating_sub(start)) {
-                let _ = buf.complete_cache_sync(token);
-            }
-        }
-    }
-
-    /// Drop stale cache lines over a range the device just wrote.
-    fn cache_invalidate(&self, ch: usize, offset: usize, len: usize) {
-        self.cache_clean(ch, offset, len);
-    }
-
-    /// Copy an outgoing payload into the channel slot at `offset` and publish it.
-    ///
-    /// This is one of the crate's two `allow(unsafe_code)` islands (see
-    /// `scripts/unsafe-allowlist.toml`): the destination is a grant region this
-    /// cell owns for its whole lifetime, `n` is bounded by the slot size and the
-    /// source length, and the region is not aliased by any other live reference.
-    #[allow(unsafe_code)]
-    fn stage_out(&self, ch: usize, offset: usize, data: &[u8]) {
-        let guard = self.dma.borrow();
-        let n = data.len().min(DMA_SLOT_BYTES - offset.min(DMA_SLOT_BYTES));
-        if let Some(buf) = guard.as_ref() {
-            // SAFETY: destination is this cell's grant slot at a bounded
-            // offset; `n` is bounded by the remaining slot and by `data`.
-            unsafe {
-                core::ptr::copy_nonoverlapping(
-                    data.as_ptr(),
-                    buf.virt().wrapping_add(ch * DMA_SLOT_BYTES + offset),
-                    n,
-                );
-            }
-        }
-        drop(guard);
-        self.cache_clean(ch, offset, n);
-    }
-
-    /// Copy a received payload out of the channel slot at `offset`.
-    ///
-    /// The second `allow(unsafe_code)` island: same owned-grant argument as
-    /// [`Self::stage_out`], with `n` additionally bounded by the destination.
-    #[allow(unsafe_code)]
-    fn collect_in(&self, ch: usize, offset: usize, dst: &mut [u8], len: usize) {
-        self.cache_invalidate(ch, offset, len);
-        let guard = self.dma.borrow();
-        if let Some(buf) = guard.as_ref() {
-            let n = len
-                .min(dst.len())
-                .min(DMA_SLOT_BYTES.saturating_sub(offset.min(DMA_SLOT_BYTES)));
-            // SAFETY: source is this cell's grant slot at a bounded offset;
-            // `n` is bounded by the slot remainder and the destination.
-            unsafe {
-                core::ptr::copy_nonoverlapping(
-                    buf.virt().wrapping_add(ch * DMA_SLOT_BYTES + offset) as *const u8,
-                    dst.as_mut_ptr(),
-                    n,
-                );
-            }
-        }
     }
 
     #[inline(always)]
@@ -232,17 +89,11 @@ impl<'a> UsbHostEngine<'a> {
             (self.control_mps() as u32) | (1 << 20) | ((dev_addr as u32) << 22) | (1 << 31);
         self.write32(hcchar(ch), scchar);
 
-        // 4. Hand the 8 setup bytes to the core. In DMA mode it reads them from
-        //    guest memory at HCDMA; the FIFO is not consulted at all.
-        if self.dma_slot(ch).is_some() {
-            self.program_hcdma(ch, 0);
-            self.stage_out(ch, 0, setup);
-        } else {
-            let w0 = u32::from_le_bytes([setup[0], setup[1], setup[2], setup[3]]);
-            let w1 = u32::from_le_bytes([setup[4], setup[5], setup[6], setup[7]]);
-            self.write_fifo(ch, w0);
-            self.write_fifo(ch, w1);
-        }
+        // 4. Push 8 bytes (2 x 32-bit words) into the channel's data FIFO.
+        let w0 = u32::from_le_bytes([setup[0], setup[1], setup[2], setup[3]]);
+        let w1 = u32::from_le_bytes([setup[4], setup[5], setup[6], setup[7]]);
+        self.write_fifo(ch, w0);
+        self.write_fifo(ch, w1);
 
         // 5. Poll for completion
         self.wait_channel(ch)
@@ -260,8 +111,6 @@ impl<'a> UsbHostEngine<'a> {
         let mps = (self.control_mps() as usize).max(1);
         let mut received = 0;
         let mut toggle = 2u32; // PID 2 = DATA1 for the first data packet
-                               // Arm the DMA engine once; the core advances it per packet.
-        self.program_hcdma(ch, 0);
 
         while received < buf.len() {
             let chunk = (buf.len() - received).min(mps);
@@ -298,13 +147,6 @@ impl<'a> UsbHostEngine<'a> {
                 break;
             }
             toggle = if toggle == 2 { 0 } else { 2 }; // DATA1 <-> DATA0
-        }
-
-        if self.dma_slot(ch).is_some() && received > 0 {
-            let mut tmp = [0u8; DMA_SLOT_BYTES];
-            let n = received.min(buf.len()).min(DMA_SLOT_BYTES);
-            self.collect_in(ch, 0, &mut tmp, n);
-            buf[..n].copy_from_slice(&tmp[..n]);
         }
 
         Ok(received)
@@ -431,12 +273,6 @@ impl<'a> UsbHostEngine<'a> {
         let mps = (self.control_mps() as usize).max(1);
         let mut sent = 0;
         let mut toggle = 2; // PID 2 = DATA1
-                            // Stage the whole payload once and arm DMA once: the core reads it
-                            // packet by packet, advancing HCDMA itself.
-        if self.dma_slot(ch).is_some() {
-            self.stage_out(ch, 0, data);
-            self.program_hcdma(ch, 0);
-        }
 
         while sent < data.len() {
             let chunk = (data.len() - sent).min(mps);
@@ -450,20 +286,16 @@ impl<'a> UsbHostEngine<'a> {
             let scchar = (mps as u32) | (1 << 20) | ((dev_addr as u32) << 22) | (1 << 31);
             self.write32(hcchar(ch), scchar);
 
-            if self.dma_slot(ch).is_some() {
-                // Payload already staged and HCDMA already armed.
-            } else {
-                let words = chunk.div_ceil(4);
-                for i in 0..words {
-                    let mut b = [0u8; 4];
-                    for (j, byte) in b.iter_mut().enumerate() {
-                        let offset = i * 4 + j;
-                        if sent + offset < data.len() && offset < chunk {
-                            *byte = data[sent + offset];
-                        }
+            let words = chunk.div_ceil(4);
+            for i in 0..words {
+                let mut b = [0u8; 4];
+                for (j, byte) in b.iter_mut().enumerate() {
+                    let offset = i * 4 + j;
+                    if sent + offset < data.len() && offset < chunk {
+                        *byte = data[sent + offset];
                     }
-                    self.write_fifo(ch, u32::from_le_bytes(b));
                 }
+                self.write_fifo(ch, u32::from_le_bytes(b));
             }
 
             self.wait_channel(ch)?;
@@ -481,11 +313,6 @@ impl<'a> UsbHostEngine<'a> {
         let mut sent = 0;
         let mut toggle = 0; // Starts at DATA0
 
-        let use_dma = self.dma_slot(ch).is_some();
-        if use_dma {
-            self.stage_out(ch, 0, packet);
-            self.program_hcdma(ch, 0);
-        }
         while sent < packet.len() {
             let chunk = (packet.len() - sent).min(512); // 512 bytes for High-Speed Bulk
 
@@ -506,21 +333,17 @@ impl<'a> UsbHostEngine<'a> {
                 self.write32(hctsiz(ch), sctsiz);
                 self.write32(hcchar(ch), scchar);
 
-                if use_dma {
-                    // Staged and armed before the loop; the core walks it.
-                } else {
-                    let words_count = chunk.div_ceil(4);
-                    for i in 0..words_count {
-                        let mut b = [0u8; 4];
-                        for (j, byte) in b.iter_mut().enumerate() {
-                            let offset = i * 4 + j;
-                            let idx = sent + offset;
-                            if idx < packet.len() && offset < chunk {
-                                *byte = packet[idx];
-                            }
+                let words_count = chunk.div_ceil(4);
+                for i in 0..words_count {
+                    let mut b = [0u8; 4];
+                    for (j, byte) in b.iter_mut().enumerate() {
+                        let offset = i * 4 + j;
+                        let idx = sent + offset;
+                        if idx < packet.len() && offset < chunk {
+                            *byte = packet[idx];
                         }
-                        self.write_fifo(ch, u32::from_le_bytes(b));
                     }
+                    self.write_fifo(ch, u32::from_le_bytes(b));
                 }
 
                 match self.wait_channel(ch) {
@@ -562,7 +385,6 @@ impl<'a> UsbHostEngine<'a> {
             | ((dev_addr as u32) << 22)
             | (1 << 31);
         self.write32(hcchar(ch), scchar);
-        self.program_hcdma(ch, 0);
 
         // Non-blocking wait: check if transfer completed or NAK
         let mut count = 0;
@@ -573,16 +395,12 @@ impl<'a> UsbHostEngine<'a> {
                 // only DMA deposits the payload outside the FIFO.
                 let remaining = (self.read32(hctsiz(ch)) & 0x7FFFF) as usize;
                 let got = want.saturating_sub(remaining);
-                if self.dma_slot(ch).is_some() {
-                    self.collect_in(ch, 0, buf, got);
-                } else {
-                    let words = want.div_ceil(4);
-                    for (i, word) in (0..words).map(|i| (i, self.read_fifo(ch))) {
-                        for (j, byte) in word.to_le_bytes().iter().enumerate() {
-                            let idx = i * 4 + j;
-                            if idx < buf.len() && idx < want {
-                                buf[idx] = *byte;
-                            }
+                let words = want.div_ceil(4);
+                for (i, word) in (0..words).map(|i| (i, self.read_fifo(ch))) {
+                    for (j, byte) in word.to_le_bytes().iter().enumerate() {
+                        let idx = i * 4 + j;
+                        if idx < buf.len() && idx < want {
+                            buf[idx] = *byte;
                         }
                     }
                 }
@@ -642,7 +460,6 @@ impl<'a> UsbHostEngine<'a> {
             | ((dev_addr as u32) << 22)
             | (1 << 31); // CHENA
         self.write32(hcchar(ch), scchar);
-        self.program_hcdma(ch, 0);
 
         let mut polls = 0u32;
         while polls < 2_000 {
@@ -666,27 +483,19 @@ impl<'a> UsbHostEngine<'a> {
                 self.halt_channel(ch);
 
                 if got > 0 {
-                    if self.dma_slot(ch).is_some() {
-                        // DMA deposited the report in the channel slot.
-                        let mut tmp = [0u8; DMA_SLOT_BYTES];
-                        self.collect_in(ch, 0, &mut tmp, got);
-                        let n = got.min(buf.len());
-                        buf[..n].copy_from_slice(&tmp[..n]);
-                    } else {
-                        // Drain ceil(got/4) FIFO words; only the first `got`
-                        // bytes are meaningful (the tail word is padding).
-                        let words = got.div_ceil(4);
-                        for w in 0..words {
-                            let word = self.read_fifo(ch);
-                            for (j, byte) in word.to_le_bytes().iter().enumerate() {
-                                let idx = w * 4 + j;
-                                if idx < got && idx < buf.len() {
-                                    buf[idx] = *byte;
-                                }
+                    // Drain ceil(got/4) FIFO words; only the first `got` bytes
+                    // are meaningful (the tail word is padding).
+                    let words = got.div_ceil(4);
+                    for w in 0..words {
+                        let word = self.read_fifo(ch);
+                        for (j, byte) in word.to_le_bytes().iter().enumerate() {
+                            let idx = w * 4 + j;
+                            if idx < got && idx < buf.len() {
+                                buf[idx] = *byte;
                             }
                         }
                     }
-                } else if self.dma_slot(ch).is_none() {
+                } else {
                     // A zero-length packet still has a FIFO word to retire on
                     // some revisions; drain one so the channel is clean.
                     let _ = self.read_fifo(ch);
