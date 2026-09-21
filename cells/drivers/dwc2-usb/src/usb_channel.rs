@@ -19,7 +19,11 @@ mod trace {
     use core::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
     use ostd::io::print;
 
-    pub const RECORDS: usize = 24;
+    /// Deep enough to hold a full enumeration and the first polls after it. At
+    /// twenty-four the ring was filled by enumeration alone, so the registers of
+    /// the first interrupt poll -- the one that finds an endpoint already halted --
+    /// were pushed out before anything read them.
+    pub const RECORDS: usize = 160;
     const WORDS: usize = 5;
     /// Tag of the record the dump stops after, so a single event can be followed.
     pub const TAG_ARM_SSPLIT: u32 = 1;
