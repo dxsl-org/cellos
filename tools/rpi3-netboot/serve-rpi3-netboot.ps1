@@ -1,7 +1,11 @@
 [CmdletBinding()]
 param(
     [string]$InterfaceAlias = 'Ethernet',
-    [int]$ExpectedInterfaceIndex = 26,
+    # Stable physical identity of the netboot NIC. An interface *index* is not
+    # an identity: Windows reassigns it across reboots, driver updates, and
+    # re-plugs, which is exactly what turned a correct safety guard into a
+    # spurious failure. The MAC is fixed to the adapter.
+    [string]$ExpectedMacAddress = '',
     [string]$ServerAddress = '192.168.42.1',
     [string]$ClientAddress = '192.168.42.2',
     [string]$Root = '',
@@ -21,11 +25,29 @@ $statePath = Join-Path $stateDir 'network-before.json'
 $firewallName = 'Cellos-RPi3-Netboot-Ethernet'
 $required = @('cellos.uimg')
 $adapter = Get-NetAdapter -Name $InterfaceAlias
-if ($adapter.ifIndex -ne $ExpectedInterfaceIndex) {
-    throw "Interface index changed: $($adapter.ifIndex), expected $ExpectedInterfaceIndex"
-}
 if ($adapter.InterfaceDescription -notmatch 'Ethernet') {
     throw "Refusing non-Ethernet adapter: $($adapter.InterfaceDescription)"
+}
+
+# Normalising both sides keeps the pin independent of the adapter's MAC
+# formatting (dashes, colons, or none).
+function Get-NormalizedMac([string]$Mac) {
+    return ($Mac -replace '[^0-9A-Fa-f]', '').ToUpperInvariant()
+}
+$adapterMac = Get-NormalizedMac $adapter.MacAddress
+$macPinned = -not [string]::IsNullOrWhiteSpace($ExpectedMacAddress)
+Write-Host "[netboot] adapter: alias=$($adapter.Alias) mac=$($adapter.MacAddress) ifIndex=$($adapter.ifIndex) status=$($adapter.Status)"
+
+# Every action below that changes host network state must be aimed at an adapter
+# the operator has identified by its physical address. Read-only runs print the
+# identity instead, so a first run tells you the MAC to pin.
+$mutatesNetwork = $ApplyNetworkConfig -or $ApplyFirewall -or $RestoreNetwork
+if ($macPinned -and (Get-NormalizedMac $ExpectedMacAddress) -ne $adapterMac) {
+    throw "Adapter MAC mismatch: $($adapter.MacAddress) is not $ExpectedMacAddress"
+}
+if ($mutatesNetwork -and -not $macPinned) {
+    throw ("Refusing to reconfigure an unidentified adapter.`n" +
+           "  Re-run with: -ExpectedMacAddress $($adapter.MacAddress)")
 }
 
 function Test-Administrator {
@@ -62,8 +84,11 @@ if ($ApplyNetworkConfig) {
         $manual = Get-NetIPAddress -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4 |
             Where-Object PrefixOrigin -eq 'Manual' |
             ForEach-Object { [pscustomobject]@{ ip = $_.IPAddress; prefix = $_.PrefixLength } }
-        [ordered]@{ dhcp = $ipInterface.Dhcp.ToString(); manualAddresses = @($manual) } |
-            ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $statePath -Encoding utf8
+        [ordered]@{
+            dhcp = $ipInterface.Dhcp.ToString()
+            manualAddresses = @($manual)
+            macAddress = $adapter.MacAddress
+        } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $statePath -Encoding utf8
     }
     Set-NetIPInterface -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4 -Dhcp Disabled
     Get-NetIPAddress -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
@@ -82,11 +107,12 @@ if ($ApplyFirewall) {
 $boundAddress = Get-NetIPAddress -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
     Where-Object IPAddress -eq $ServerAddress
 if (-not $boundAddress) {
-    throw "Assign $ServerAddress first: rerun as Admin with -ApplyNetworkConfig -ApplyFirewall"
+    throw ("Assign $ServerAddress first: rerun as Admin with " +
+           "-ExpectedMacAddress $($adapter.MacAddress) -ApplyNetworkConfig -ApplyFirewall")
 }
 $conflicts = Get-NetUDPEndpoint -LocalPort 69 -ErrorAction SilentlyContinue
 if ($conflicts) { throw "UDP port already in use on target address: $($conflicts.LocalPort -join ', ')" }
-Write-Host "Preflight PASS: $InterfaceAlias ifIndex=$($adapter.ifIndex) $ServerAddress/$prefixLength status=$($adapter.Status)"
+Write-Host "Preflight PASS: $InterfaceAlias mac=$($adapter.MacAddress) ifIndex=$($adapter.ifIndex) $ServerAddress/$prefixLength status=$($adapter.Status)"
 if ($PreflightOnly) { return }
 
 New-Item -ItemType Directory -Path $logsDir -Force | Out-Null

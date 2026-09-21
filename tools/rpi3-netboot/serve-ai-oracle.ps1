@@ -34,7 +34,9 @@ param(
     # missing command.
     [string]$ShellCommand = 'ai-test',
     [string]$InterfaceAlias = 'Ethernet',
-    [int]$ExpectedInterfaceIndex = 26,
+    # Physical identity of the netboot NIC; interface indices are reassigned by
+    # Windows across reboots, so they cannot serve as one.
+    [string]$ExpectedMacAddress = '',
     [switch]$ApplyNetworkConfig,
     [switch]$ApplyFirewall,
     # Use a TFTP server that is already serving this lane (it re-reads cellos.uimg per request, so a
@@ -110,16 +112,22 @@ if (-not $ComPort) {
 # it treats a busy UDP 69 as a failure precisely because it wants to bind that port, and here the
 # busy port *is* the server we are borrowing. So check the two facts we actually need instead.
 if ($SkipServer) {
-    $bound = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
-        Where-Object { $_.IPAddress -eq '192.168.42.1' -and $_.InterfaceIndex -eq $ExpectedInterfaceIndex }
+    $nic = Get-NetAdapter -Name $InterfaceAlias
+    if ($ExpectedMacAddress -and
+        (($nic.MacAddress -replace '[^0-9A-Fa-f]', '') -ne
+         ($ExpectedMacAddress -replace '[^0-9A-Fa-f]', ''))) {
+        throw "Adapter MAC mismatch: $($nic.MacAddress) is not $ExpectedMacAddress"
+    }
+    $bound = Get-NetIPAddress -InterfaceIndex $nic.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+        Where-Object { $_.IPAddress -eq '192.168.42.1' }
     if (-not $bound) { throw 'netboot address 192.168.42.1 is not assigned to the expected interface' }
     $holder = Get-NetUDPEndpoint -LocalPort 69 -ErrorAction SilentlyContinue
     if (-not $holder) { throw 'SkipServer was requested but nothing is serving UDP 69' }
-    Write-Host ("[ai-oracle] preflight: 192.168.42.1 on ifIndex {0}, UDP 69 held by pid {1}" -f `
-        $ExpectedInterfaceIndex, (($holder | ForEach-Object OwningProcess) -join ', '))
+    Write-Host ("[ai-oracle] preflight: 192.168.42.1 on {0} (mac {1}), UDP 69 held by pid {2}" -f `
+        $InterfaceAlias, $nic.MacAddress, (($holder | ForEach-Object OwningProcess) -join ', '))
 } else {
     & pwsh -NoProfile -File $serveScript -InterfaceAlias $InterfaceAlias `
-        -ExpectedInterfaceIndex $ExpectedInterfaceIndex -ApplyNetworkConfig:$ApplyNetworkConfig `
+        -ExpectedMacAddress $ExpectedMacAddress -ApplyNetworkConfig:$ApplyNetworkConfig `
         -ApplyFirewall:$ApplyFirewall -PreflightOnly
     if ($LASTEXITCODE -ne 0) { throw 'network preflight failed' }
 }
@@ -132,7 +140,7 @@ if ($SkipServer) {
 } else {
     $server = Start-Process -FilePath 'pwsh' -PassThru -WindowStyle Hidden -ArgumentList @(
         '-NoProfile', '-File', $serveScript,
-        '-InterfaceAlias', $InterfaceAlias, '-ExpectedInterfaceIndex', "$ExpectedInterfaceIndex"
+        '-InterfaceAlias', $InterfaceAlias, '-ExpectedMacAddress', "$ExpectedMacAddress"
     )
     Write-Host ("[ai-oracle] TFTP server pid {0}; log {1}" -f $server.Id, $logPath)
 }
