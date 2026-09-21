@@ -1696,9 +1696,31 @@ impl<'a> UsbHostEngine<'a> {
             return Some(Ok(()));
         }
 
-        // ── ACK = device accepted the packet (BCM2837 primary path)
+        // ── ACK = the packet was accepted
+        //
+        // No halt here. On a split, an ACK to the start-split means the hub has
+        // taken the transaction and its translator is running it -- the pair is
+        // live at that moment and the complete-split is what collects it.
+        // Disabling the channel in between asks the core to abandon a transfer
+        // that is still in flight, and the trace shows where that lands: the
+        // channel is armed for the complete-split with CHDIS already set, and it
+        // comes back halted with no status at all, on the very first poll, on both
+        // endpoints, before the device has had any chance to refuse anything. A
+        // transfer the core has finished needs no halt; a transfer being abandoned
+        // gets one from its caller.
         if int & (1 << 5) != 0 {
-            self.halt_channel(ch);
+            // A transfer that is not part of a split is over when the packet is
+            // accepted, and halting it is the ordinary end of it. A split is a
+            // different thing: the ACK belongs to the start-split, the hub's
+            // translator is running the transaction because of it, and the pair is
+            // live. Disabling the channel in that moment asks the core to abandon
+            // a transfer that is still in flight, and the trace shows where that
+            // lands -- the channel armed for the complete-split with CHDIS already
+            // set, coming back halted with no status at all, on the very first
+            // poll, on both endpoints, before the device has refused anything.
+            if self.split.get().is_none() {
+                self.halt_channel(ch);
+            }
             self.last_hcint.set(int);
             return Some(Ok(()));
         }
