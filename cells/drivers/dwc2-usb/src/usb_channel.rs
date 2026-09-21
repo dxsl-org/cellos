@@ -1487,8 +1487,17 @@ impl<'a> UsbHostEngine<'a> {
                 self.last_hcint.set(int);
                 return Some(Err(ViError::WouldBlock));
             }
+            // A halt carrying nothing else is not a result. CHHLTD says the channel
+            // stopped -- at a frame boundary, or because it was disabled -- and
+            // answering "done" to it hands the caller an empty buffer for a transfer
+            // that never completed. Linux is explicit that the only completion is
+            // XFERCOMPL, with ACK belonging to the start-split.
+            if int & ((1 << 0) | (1 << 5)) != 0 {
+                self.last_hcint.set(int);
+                return Some(Ok(()));
+            }
             self.last_hcint.set(int);
-            return Some(Ok(()));
+            return Some(Err(ViError::WouldBlock));
         }
 
         // ── Transfer complete ─────────────────────────────────────
