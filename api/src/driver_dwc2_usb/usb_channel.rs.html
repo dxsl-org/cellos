@@ -1444,212 +1444,215 @@
 <a href=#1444 id=1444 data-nosnippet>1444</a>    /// The bound is the frame itself rather than a count: past that the pairing is
 <a href=#1445 id=1445 data-nosnippet>1445</a>    /// gone and starting over on the next poll is the only useful thing left. This
 <a href=#1446 id=1446 data-nosnippet>1446</a>    /// runs only when a device has something to report.
-<a href=#1447 id=1447 data-nosnippet>1447</a>    /// Bounded to the millisecond frame it started in, which is what a periodic
-<a href=#1448 id=1448 data-nosnippet>1448</a>    /// split needs: past that frame the pairing is gone.
-<a href=#1449 id=1449 data-nosnippet>1449</a>    </span><span class="kw">fn </span>wait_channel_spin(<span class="kw-2">&amp;</span><span class="self">self</span>, ch: usize) -&gt; ViResult&lt;()&gt; {
-<a href=#1450 id=1450 data-nosnippet>1450</a>        <span class="kw">let </span>frame = <span class="self">self</span>.full_frame();
-<a href=#1451 id=1451 data-nosnippet>1451</a>        <span class="kw">for _ in </span><span class="number">0</span>..SPIN_POLLS {
-<a href=#1452 id=1452 data-nosnippet>1452</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(outcome) = <span class="self">self</span>.channel_outcome(ch) {
-<a href=#1453 id=1453 data-nosnippet>1453</a>                <span class="kw">return </span>outcome;
-<a href=#1454 id=1454 data-nosnippet>1454</a>            }
-<a href=#1455 id=1455 data-nosnippet>1455</a>            <span class="kw">if </span><span class="self">self</span>.full_frame() != frame {
-<a href=#1456 id=1456 data-nosnippet>1456</a>                <span class="self">self</span>.halt_channel(ch);
-<a href=#1457 id=1457 data-nosnippet>1457</a>                <span class="self">self</span>.last_hcint.set(<span class="self">self</span>.read32(hcint(ch)));
-<a href=#1458 id=1458 data-nosnippet>1458</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(ViError::WouldBlock);
-<a href=#1459 id=1459 data-nosnippet>1459</a>            }
-<a href=#1460 id=1460 data-nosnippet>1460</a>        }
-<a href=#1461 id=1461 data-nosnippet>1461</a>        <span class="self">self</span>.channel_timeout(ch)
-<a href=#1462 id=1462 data-nosnippet>1462</a>    }
-<a href=#1463 id=1463 data-nosnippet>1463</a>
-<a href=#1464 id=1464 data-nosnippet>1464</a>    <span class="doccomment">/// Classify a channel's interrupt register, or `None` while it is still running.
-<a href=#1465 id=1465 data-nosnippet>1465</a>    </span><span class="kw">fn </span>channel_outcome(<span class="kw-2">&amp;</span><span class="self">self</span>, ch: usize) -&gt; <span class="prelude-ty">Option</span>&lt;ViResult&lt;()&gt;&gt; {
-<a href=#1466 id=1466 data-nosnippet>1466</a>        <span class="kw">let </span>int = <span class="self">self</span>.read32(hcint(ch));
-<a href=#1467 id=1467 data-nosnippet>1467</a>        <span class="kw">if </span>int == <span class="number">0 </span>{
-<a href=#1468 id=1468 data-nosnippet>1468</a>            <span class="kw">return </span><span class="prelude-val">None</span>;
-<a href=#1469 id=1469 data-nosnippet>1469</a>        }
-<a href=#1470 id=1470 data-nosnippet>1470</a>
-<a href=#1471 id=1471 data-nosnippet>1471</a>        <span class="comment">// ── Hardware-generated halt ───────────────────────────────
-<a href=#1472 id=1472 data-nosnippet>1472</a>        </span><span class="kw">if </span>int &amp; (<span class="number">1 </span>&lt;&lt; <span class="number">1</span>) != <span class="number">0 </span>{
-<a href=#1473 id=1473 data-nosnippet>1473</a>            <span class="comment">// CHHLTD
-<a href=#1474 id=1474 data-nosnippet>1474</a>            </span><span class="self">self</span>.write32(hcint(ch), <span class="number">0xFFFF_FFFF</span>);
-<a href=#1475 id=1475 data-nosnippet>1475</a>            <span class="comment">// Babble (8) and data-toggle error (10) end a transfer just as
-<a href=#1476 id=1476 data-nosnippet>1476</a>            // surely as the bits that were already checked.
-<a href=#1477 id=1477 data-nosnippet>1477</a>            </span><span class="kw">if </span>int &amp; ((<span class="number">1 </span>&lt;&lt; <span class="number">2</span>) | (<span class="number">1 </span>&lt;&lt; <span class="number">3</span>) | (<span class="number">1 </span>&lt;&lt; <span class="number">7</span>) | (<span class="number">1 </span>&lt;&lt; <span class="number">8</span>) | (<span class="number">1 </span>&lt;&lt; <span class="number">10</span>)) != <span class="number">0 </span>{
-<a href=#1478 id=1478 data-nosnippet>1478</a>                <span class="self">self</span>.report_channel_error(ch, int);
-<a href=#1479 id=1479 data-nosnippet>1479</a>                <span class="self">self</span>.last_hcint.set(int);
-<a href=#1480 id=1480 data-nosnippet>1480</a>                <span class="kw">return </span><span class="prelude-val">Some</span>(<span class="prelude-val">Err</span>(ViError::IO));
-<a href=#1481 id=1481 data-nosnippet>1481</a>            }
-<a href=#1482 id=1482 data-nosnippet>1482</a>            <span class="comment">// NAK and NYET both mean "ask again", and both have to be reported
-<a href=#1483 id=1483 data-nosnippet>1483</a>            // rather than folded into success: a hub answering a complete-split
-<a href=#1484 id=1484 data-nosnippet>1484</a>            // with NYET has not produced a result yet, and returning Ok there
-<a href=#1485 id=1485 data-nosnippet>1485</a>            // hands the caller an empty buffer as if the transfer had happened.
-<a href=#1486 id=1486 data-nosnippet>1486</a>            </span><span class="kw">if </span>int &amp; ((<span class="number">1 </span>&lt;&lt; <span class="number">4</span>) | (<span class="number">1 </span>&lt;&lt; <span class="number">6</span>)) != <span class="number">0 </span>{
-<a href=#1487 id=1487 data-nosnippet>1487</a>                <span class="self">self</span>.last_hcint.set(int);
-<a href=#1488 id=1488 data-nosnippet>1488</a>                <span class="kw">return </span><span class="prelude-val">Some</span>(<span class="prelude-val">Err</span>(ViError::WouldBlock));
-<a href=#1489 id=1489 data-nosnippet>1489</a>            }
-<a href=#1490 id=1490 data-nosnippet>1490</a>            <span class="comment">// A halt carrying nothing else is not a result. CHHLTD says the channel
-<a href=#1491 id=1491 data-nosnippet>1491</a>            // stopped -- at a frame boundary, or because it was disabled -- and
-<a href=#1492 id=1492 data-nosnippet>1492</a>            // answering "done" to it hands the caller an empty buffer for a transfer
-<a href=#1493 id=1493 data-nosnippet>1493</a>            // that never completed. Linux is explicit that the only completion is
-<a href=#1494 id=1494 data-nosnippet>1494</a>            // XFERCOMPL, with ACK belonging to the start-split.
-<a href=#1495 id=1495 data-nosnippet>1495</a>            </span><span class="kw">if </span>int &amp; ((<span class="number">1 </span>&lt;&lt; <span class="number">0</span>) | (<span class="number">1 </span>&lt;&lt; <span class="number">5</span>)) != <span class="number">0 </span>{
-<a href=#1496 id=1496 data-nosnippet>1496</a>                <span class="self">self</span>.last_hcint.set(int);
-<a href=#1497 id=1497 data-nosnippet>1497</a>                <span class="kw">return </span><span class="prelude-val">Some</span>(<span class="prelude-val">Ok</span>(()));
-<a href=#1498 id=1498 data-nosnippet>1498</a>            }
-<a href=#1499 id=1499 data-nosnippet>1499</a>            <span class="self">self</span>.last_hcint.set(int);
-<a href=#1500 id=1500 data-nosnippet>1500</a>            <span class="kw">return </span><span class="prelude-val">Some</span>(<span class="prelude-val">Err</span>(ViError::WouldBlock));
-<a href=#1501 id=1501 data-nosnippet>1501</a>        }
-<a href=#1502 id=1502 data-nosnippet>1502</a>
-<a href=#1503 id=1503 data-nosnippet>1503</a>        <span class="comment">// ── Transfer complete ─────────────────────────────────────
-<a href=#1504 id=1504 data-nosnippet>1504</a>        </span><span class="kw">if </span>int &amp; (<span class="number">1 </span>&lt;&lt; <span class="number">0</span>) != <span class="number">0 </span>{
-<a href=#1505 id=1505 data-nosnippet>1505</a>            <span class="self">self</span>.halt_channel(ch);
-<a href=#1506 id=1506 data-nosnippet>1506</a>            <span class="self">self</span>.last_hcint.set(int);
-<a href=#1507 id=1507 data-nosnippet>1507</a>            <span class="kw">return </span><span class="prelude-val">Some</span>(<span class="prelude-val">Ok</span>(()));
-<a href=#1508 id=1508 data-nosnippet>1508</a>        }
-<a href=#1509 id=1509 data-nosnippet>1509</a>
-<a href=#1510 id=1510 data-nosnippet>1510</a>        <span class="comment">// ── ACK = device accepted the packet (BCM2837 primary path)
-<a href=#1511 id=1511 data-nosnippet>1511</a>        </span><span class="kw">if </span>int &amp; (<span class="number">1 </span>&lt;&lt; <span class="number">5</span>) != <span class="number">0 </span>{
-<a href=#1512 id=1512 data-nosnippet>1512</a>            <span class="self">self</span>.halt_channel(ch);
-<a href=#1513 id=1513 data-nosnippet>1513</a>            <span class="self">self</span>.last_hcint.set(int);
-<a href=#1514 id=1514 data-nosnippet>1514</a>            <span class="kw">return </span><span class="prelude-val">Some</span>(<span class="prelude-val">Ok</span>(()));
-<a href=#1515 id=1515 data-nosnippet>1515</a>        }
-<a href=#1516 id=1516 data-nosnippet>1516</a>
-<a href=#1517 id=1517 data-nosnippet>1517</a>        <span class="comment">// ── Error conditions ──────────────────────────────────────
-<a href=#1518 id=1518 data-nosnippet>1518</a>        </span><span class="kw">if </span>int &amp; ((<span class="number">1 </span>&lt;&lt; <span class="number">2</span>) | (<span class="number">1 </span>&lt;&lt; <span class="number">3</span>) | (<span class="number">1 </span>&lt;&lt; <span class="number">7</span>) | (<span class="number">1 </span>&lt;&lt; <span class="number">8</span>) | (<span class="number">1 </span>&lt;&lt; <span class="number">10</span>)) != <span class="number">0 </span>{
-<a href=#1519 id=1519 data-nosnippet>1519</a>            <span class="self">self</span>.report_channel_error(ch, int);
-<a href=#1520 id=1520 data-nosnippet>1520</a>            <span class="self">self</span>.halt_channel(ch);
-<a href=#1521 id=1521 data-nosnippet>1521</a>            <span class="self">self</span>.last_hcint.set(int);
-<a href=#1522 id=1522 data-nosnippet>1522</a>            <span class="kw">return </span><span class="prelude-val">Some</span>(<span class="prelude-val">Err</span>(ViError::IO));
-<a href=#1523 id=1523 data-nosnippet>1523</a>        }
-<a href=#1524 id=1524 data-nosnippet>1524</a>        <span class="kw">if </span>int &amp; ((<span class="number">1 </span>&lt;&lt; <span class="number">4</span>) | (<span class="number">1 </span>&lt;&lt; <span class="number">6</span>)) != <span class="number">0 </span>{
-<a href=#1525 id=1525 data-nosnippet>1525</a>            <span class="self">self</span>.halt_channel(ch);
-<a href=#1526 id=1526 data-nosnippet>1526</a>            <span class="self">self</span>.last_hcint.set(int);
-<a href=#1527 id=1527 data-nosnippet>1527</a>            <span class="kw">return </span><span class="prelude-val">Some</span>(<span class="prelude-val">Err</span>(ViError::WouldBlock));
-<a href=#1528 id=1528 data-nosnippet>1528</a>        }
-<a href=#1529 id=1529 data-nosnippet>1529</a>
-<a href=#1530 id=1530 data-nosnippet>1530</a>        <span class="prelude-val">None
-<a href=#1531 id=1531 data-nosnippet>1531</a>    </span>}
+<a href=#1447 id=1447 data-nosnippet>1447</a>    /// The channel is left to report for itself. The frame check this used to
+<a href=#1448 id=1448 data-nosnippet>1448</a>    /// carry halted the channel the moment the frame turned over, which is exactly
+<a href=#1449 id=1449 data-nosnippet>1449</a>    /// when a full- or low-speed transaction behind a hub is finishing -- and the
+<a href=#1450 id=1450 data-nosnippet>1450</a>    /// halt it issued was then read straight back as the outcome, so every split
+<a href=#1451 id=1451 data-nosnippet>1451</a>    /// came back as a halt carrying no status:
+<a href=#1452 id=1452 data-nosnippet>1452</a>    ///
+<a href=#1453 id=1453 data-nosnippet>1453</a>    ///     half=ssplit outcome=NAK hcint=0x00000002
+<a href=#1454 id=1454 data-nosnippet>1454</a>    ///     half=csplit outcome=NAK hcint=0x00000002
+<a href=#1455 id=1455 data-nosnippet>1455</a>    ///
+<a href=#1456 id=1456 data-nosnippet>1456</a>    /// The core halts a periodic channel at its own frame boundary and says so, so
+<a href=#1457 id=1457 data-nosnippet>1457</a>    /// nothing here needs to do it, and nothing here should.
+<a href=#1458 id=1458 data-nosnippet>1458</a>    </span><span class="kw">fn </span>wait_channel_spin(<span class="kw-2">&amp;</span><span class="self">self</span>, ch: usize) -&gt; ViResult&lt;()&gt; {
+<a href=#1459 id=1459 data-nosnippet>1459</a>        <span class="kw">for _ in </span><span class="number">0</span>..SPIN_POLLS {
+<a href=#1460 id=1460 data-nosnippet>1460</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(outcome) = <span class="self">self</span>.channel_outcome(ch) {
+<a href=#1461 id=1461 data-nosnippet>1461</a>                <span class="kw">return </span>outcome;
+<a href=#1462 id=1462 data-nosnippet>1462</a>            }
+<a href=#1463 id=1463 data-nosnippet>1463</a>        }
+<a href=#1464 id=1464 data-nosnippet>1464</a>        <span class="self">self</span>.channel_timeout(ch)
+<a href=#1465 id=1465 data-nosnippet>1465</a>    }
+<a href=#1466 id=1466 data-nosnippet>1466</a>
+<a href=#1467 id=1467 data-nosnippet>1467</a>    <span class="doccomment">/// Classify a channel's interrupt register, or `None` while it is still running.
+<a href=#1468 id=1468 data-nosnippet>1468</a>    </span><span class="kw">fn </span>channel_outcome(<span class="kw-2">&amp;</span><span class="self">self</span>, ch: usize) -&gt; <span class="prelude-ty">Option</span>&lt;ViResult&lt;()&gt;&gt; {
+<a href=#1469 id=1469 data-nosnippet>1469</a>        <span class="kw">let </span>int = <span class="self">self</span>.read32(hcint(ch));
+<a href=#1470 id=1470 data-nosnippet>1470</a>        <span class="kw">if </span>int == <span class="number">0 </span>{
+<a href=#1471 id=1471 data-nosnippet>1471</a>            <span class="kw">return </span><span class="prelude-val">None</span>;
+<a href=#1472 id=1472 data-nosnippet>1472</a>        }
+<a href=#1473 id=1473 data-nosnippet>1473</a>
+<a href=#1474 id=1474 data-nosnippet>1474</a>        <span class="comment">// ── Hardware-generated halt ───────────────────────────────
+<a href=#1475 id=1475 data-nosnippet>1475</a>        </span><span class="kw">if </span>int &amp; (<span class="number">1 </span>&lt;&lt; <span class="number">1</span>) != <span class="number">0 </span>{
+<a href=#1476 id=1476 data-nosnippet>1476</a>            <span class="comment">// CHHLTD
+<a href=#1477 id=1477 data-nosnippet>1477</a>            </span><span class="self">self</span>.write32(hcint(ch), <span class="number">0xFFFF_FFFF</span>);
+<a href=#1478 id=1478 data-nosnippet>1478</a>            <span class="comment">// Babble (8) and data-toggle error (10) end a transfer just as
+<a href=#1479 id=1479 data-nosnippet>1479</a>            // surely as the bits that were already checked.
+<a href=#1480 id=1480 data-nosnippet>1480</a>            </span><span class="kw">if </span>int &amp; ((<span class="number">1 </span>&lt;&lt; <span class="number">2</span>) | (<span class="number">1 </span>&lt;&lt; <span class="number">3</span>) | (<span class="number">1 </span>&lt;&lt; <span class="number">7</span>) | (<span class="number">1 </span>&lt;&lt; <span class="number">8</span>) | (<span class="number">1 </span>&lt;&lt; <span class="number">10</span>)) != <span class="number">0 </span>{
+<a href=#1481 id=1481 data-nosnippet>1481</a>                <span class="self">self</span>.report_channel_error(ch, int);
+<a href=#1482 id=1482 data-nosnippet>1482</a>                <span class="self">self</span>.last_hcint.set(int);
+<a href=#1483 id=1483 data-nosnippet>1483</a>                <span class="kw">return </span><span class="prelude-val">Some</span>(<span class="prelude-val">Err</span>(ViError::IO));
+<a href=#1484 id=1484 data-nosnippet>1484</a>            }
+<a href=#1485 id=1485 data-nosnippet>1485</a>            <span class="comment">// NAK and NYET both mean "ask again", and both have to be reported
+<a href=#1486 id=1486 data-nosnippet>1486</a>            // rather than folded into success: a hub answering a complete-split
+<a href=#1487 id=1487 data-nosnippet>1487</a>            // with NYET has not produced a result yet, and returning Ok there
+<a href=#1488 id=1488 data-nosnippet>1488</a>            // hands the caller an empty buffer as if the transfer had happened.
+<a href=#1489 id=1489 data-nosnippet>1489</a>            </span><span class="kw">if </span>int &amp; ((<span class="number">1 </span>&lt;&lt; <span class="number">4</span>) | (<span class="number">1 </span>&lt;&lt; <span class="number">6</span>)) != <span class="number">0 </span>{
+<a href=#1490 id=1490 data-nosnippet>1490</a>                <span class="self">self</span>.last_hcint.set(int);
+<a href=#1491 id=1491 data-nosnippet>1491</a>                <span class="kw">return </span><span class="prelude-val">Some</span>(<span class="prelude-val">Err</span>(ViError::WouldBlock));
+<a href=#1492 id=1492 data-nosnippet>1492</a>            }
+<a href=#1493 id=1493 data-nosnippet>1493</a>            <span class="comment">// A halt carrying nothing else is not a result. CHHLTD says the channel
+<a href=#1494 id=1494 data-nosnippet>1494</a>            // stopped -- at a frame boundary, or because it was disabled -- and
+<a href=#1495 id=1495 data-nosnippet>1495</a>            // answering "done" to it hands the caller an empty buffer for a transfer
+<a href=#1496 id=1496 data-nosnippet>1496</a>            // that never completed. Linux is explicit that the only completion is
+<a href=#1497 id=1497 data-nosnippet>1497</a>            // XFERCOMPL, with ACK belonging to the start-split.
+<a href=#1498 id=1498 data-nosnippet>1498</a>            </span><span class="kw">if </span>int &amp; ((<span class="number">1 </span>&lt;&lt; <span class="number">0</span>) | (<span class="number">1 </span>&lt;&lt; <span class="number">5</span>)) != <span class="number">0 </span>{
+<a href=#1499 id=1499 data-nosnippet>1499</a>                <span class="self">self</span>.last_hcint.set(int);
+<a href=#1500 id=1500 data-nosnippet>1500</a>                <span class="kw">return </span><span class="prelude-val">Some</span>(<span class="prelude-val">Ok</span>(()));
+<a href=#1501 id=1501 data-nosnippet>1501</a>            }
+<a href=#1502 id=1502 data-nosnippet>1502</a>            <span class="self">self</span>.last_hcint.set(int);
+<a href=#1503 id=1503 data-nosnippet>1503</a>            <span class="kw">return </span><span class="prelude-val">Some</span>(<span class="prelude-val">Err</span>(ViError::WouldBlock));
+<a href=#1504 id=1504 data-nosnippet>1504</a>        }
+<a href=#1505 id=1505 data-nosnippet>1505</a>
+<a href=#1506 id=1506 data-nosnippet>1506</a>        <span class="comment">// ── Transfer complete ─────────────────────────────────────
+<a href=#1507 id=1507 data-nosnippet>1507</a>        </span><span class="kw">if </span>int &amp; (<span class="number">1 </span>&lt;&lt; <span class="number">0</span>) != <span class="number">0 </span>{
+<a href=#1508 id=1508 data-nosnippet>1508</a>            <span class="self">self</span>.halt_channel(ch);
+<a href=#1509 id=1509 data-nosnippet>1509</a>            <span class="self">self</span>.last_hcint.set(int);
+<a href=#1510 id=1510 data-nosnippet>1510</a>            <span class="kw">return </span><span class="prelude-val">Some</span>(<span class="prelude-val">Ok</span>(()));
+<a href=#1511 id=1511 data-nosnippet>1511</a>        }
+<a href=#1512 id=1512 data-nosnippet>1512</a>
+<a href=#1513 id=1513 data-nosnippet>1513</a>        <span class="comment">// ── ACK = device accepted the packet (BCM2837 primary path)
+<a href=#1514 id=1514 data-nosnippet>1514</a>        </span><span class="kw">if </span>int &amp; (<span class="number">1 </span>&lt;&lt; <span class="number">5</span>) != <span class="number">0 </span>{
+<a href=#1515 id=1515 data-nosnippet>1515</a>            <span class="self">self</span>.halt_channel(ch);
+<a href=#1516 id=1516 data-nosnippet>1516</a>            <span class="self">self</span>.last_hcint.set(int);
+<a href=#1517 id=1517 data-nosnippet>1517</a>            <span class="kw">return </span><span class="prelude-val">Some</span>(<span class="prelude-val">Ok</span>(()));
+<a href=#1518 id=1518 data-nosnippet>1518</a>        }
+<a href=#1519 id=1519 data-nosnippet>1519</a>
+<a href=#1520 id=1520 data-nosnippet>1520</a>        <span class="comment">// ── Error conditions ──────────────────────────────────────
+<a href=#1521 id=1521 data-nosnippet>1521</a>        </span><span class="kw">if </span>int &amp; ((<span class="number">1 </span>&lt;&lt; <span class="number">2</span>) | (<span class="number">1 </span>&lt;&lt; <span class="number">3</span>) | (<span class="number">1 </span>&lt;&lt; <span class="number">7</span>) | (<span class="number">1 </span>&lt;&lt; <span class="number">8</span>) | (<span class="number">1 </span>&lt;&lt; <span class="number">10</span>)) != <span class="number">0 </span>{
+<a href=#1522 id=1522 data-nosnippet>1522</a>            <span class="self">self</span>.report_channel_error(ch, int);
+<a href=#1523 id=1523 data-nosnippet>1523</a>            <span class="self">self</span>.halt_channel(ch);
+<a href=#1524 id=1524 data-nosnippet>1524</a>            <span class="self">self</span>.last_hcint.set(int);
+<a href=#1525 id=1525 data-nosnippet>1525</a>            <span class="kw">return </span><span class="prelude-val">Some</span>(<span class="prelude-val">Err</span>(ViError::IO));
+<a href=#1526 id=1526 data-nosnippet>1526</a>        }
+<a href=#1527 id=1527 data-nosnippet>1527</a>        <span class="kw">if </span>int &amp; ((<span class="number">1 </span>&lt;&lt; <span class="number">4</span>) | (<span class="number">1 </span>&lt;&lt; <span class="number">6</span>)) != <span class="number">0 </span>{
+<a href=#1528 id=1528 data-nosnippet>1528</a>            <span class="self">self</span>.halt_channel(ch);
+<a href=#1529 id=1529 data-nosnippet>1529</a>            <span class="self">self</span>.last_hcint.set(int);
+<a href=#1530 id=1530 data-nosnippet>1530</a>            <span class="kw">return </span><span class="prelude-val">Some</span>(<span class="prelude-val">Err</span>(ViError::WouldBlock));
+<a href=#1531 id=1531 data-nosnippet>1531</a>        }
 <a href=#1532 id=1532 data-nosnippet>1532</a>
-<a href=#1533 id=1533 data-nosnippet>1533</a>    <span class="doccomment">/// Give up on a channel that reported nothing within its budget.
-<a href=#1534 id=1534 data-nosnippet>1534</a>    </span><span class="kw">fn </span>channel_timeout(<span class="kw-2">&amp;</span><span class="self">self</span>, ch: usize) -&gt; ViResult&lt;()&gt; {
-<a href=#1535 id=1535 data-nosnippet>1535</a>        <span class="comment">// Timeout — capture hcint BEFORE halt clears it
-<a href=#1536 id=1536 data-nosnippet>1536</a>        </span><span class="kw">let </span>int = <span class="self">self</span>.read32(hcint(ch));
-<a href=#1537 id=1537 data-nosnippet>1537</a>        <span class="kw">let </span>char_val = <span class="self">self</span>.read32(hcchar(ch));
-<a href=#1538 id=1538 data-nosnippet>1538</a>        <span class="self">self</span>.halt_channel(ch);
-<a href=#1539 id=1539 data-nosnippet>1539</a>        <span class="kw">static </span>TIMEOUT_COUNT: core::sync::atomic::AtomicUsize =
-<a href=#1540 id=1540 data-nosnippet>1540</a>            core::sync::atomic::AtomicUsize::new(<span class="number">0</span>);
-<a href=#1541 id=1541 data-nosnippet>1541</a>        <span class="kw">let </span>attempt = TIMEOUT_COUNT.fetch_add(<span class="number">1</span>, core::sync::atomic::Ordering::Relaxed);
-<a href=#1542 id=1542 data-nosnippet>1542</a>        <span class="kw">if </span>attempt &lt; <span class="number">3 </span>{
-<a href=#1543 id=1543 data-nosnippet>1543</a>            ostd::io::print(<span class="string">"[dwc2] TIMEOUT ch="</span>);
-<a href=#1544 id=1544 data-nosnippet>1544</a>            print_hex_val(ch <span class="kw">as </span>u32);
-<a href=#1545 id=1545 data-nosnippet>1545</a>            ostd::io::print(<span class="string">" hcint=0x"</span>);
-<a href=#1546 id=1546 data-nosnippet>1546</a>            print_hex_val(int);
-<a href=#1547 id=1547 data-nosnippet>1547</a>            ostd::io::print(<span class="string">" hcchar=0x"</span>);
-<a href=#1548 id=1548 data-nosnippet>1548</a>            print_hex_val(char_val);
-<a href=#1549 id=1549 data-nosnippet>1549</a>            ostd::io::println(<span class="string">""</span>);
-<a href=#1550 id=1550 data-nosnippet>1550</a>            <span class="self">self</span>.dump_transfer_state(ch, <span class="string">"timeout"</span>);
-<a href=#1551 id=1551 data-nosnippet>1551</a>        }
-<a href=#1552 id=1552 data-nosnippet>1552</a>        <span class="self">self</span>.last_hcint.set(int);
-<a href=#1553 id=1553 data-nosnippet>1553</a>        <span class="prelude-val">Err</span>(ViError::IO)
-<a href=#1554 id=1554 data-nosnippet>1554</a>    }
-<a href=#1555 id=1555 data-nosnippet>1555</a>
-<a href=#1556 id=1556 data-nosnippet>1556</a>    <span class="doccomment">/// Explicitly halt a host channel (required in DWC2 Slave mode).
-<a href=#1557 id=1557 data-nosnippet>1557</a>    ///
-<a href=#1558 id=1558 data-nosnippet>1558</a>    /// `CHDIS` and `CHENA` must never be set together. The core reads
-<a href=#1559 id=1559 data-nosnippet>1559</a>    /// `CHENA=1` as a fresh enable, so raising it while requesting a disable
-<a href=#1560 id=1560 data-nosnippet>1560</a>    /// **re-arms the channel with the parameters still in `HCCHAR`/`HCTSIZ`** --
-<a href=#1561 id=1561 data-nosnippet>1561</a>    /// a second, unwanted transaction launched from a completed one. Only
-<a href=#1562 id=1562 data-nosnippet>1562</a>    /// `CHDIS` is raised; the core clears `CHENA` and reports `CHHLTD`.
-<a href=#1563 id=1563 data-nosnippet>1563</a>    </span><span class="kw">fn </span>halt_channel(<span class="kw-2">&amp;</span><span class="self">self</span>, ch: usize) {
-<a href=#1564 id=1564 data-nosnippet>1564</a>        <span class="kw">let </span>reg = hcchar(ch);
-<a href=#1565 id=1565 data-nosnippet>1565</a>        <span class="kw">let </span><span class="kw-2">mut </span>val = <span class="self">self</span>.read32(reg);
-<a href=#1566 id=1566 data-nosnippet>1566</a>        val |= <span class="number">1 </span>&lt;&lt; <span class="number">30</span>; <span class="comment">// CHDIS
-<a href=#1567 id=1567 data-nosnippet>1567</a>        </span>val &amp;= !(<span class="number">1 </span>&lt;&lt; <span class="number">31</span>); <span class="comment">// CHENA
-<a href=#1568 id=1568 data-nosnippet>1568</a>        </span><span class="self">self</span>.write32(reg, val);
-<a href=#1569 id=1569 data-nosnippet>1569</a>        <span class="comment">// Wait for CHHLTD (bit 1) with a short timeout. The core clears CHENA in
-<a href=#1570 id=1570 data-nosnippet>1570</a>        // microseconds, so this only has to be long enough not to be missed --
-<a href=#1571 id=1571 data-nosnippet>1571</a>        // and it runs on the serving thread, so it must not be long enough to be
-<a href=#1572 id=1572 data-nosnippet>1572</a>        // felt if the core never answers.
-<a href=#1573 id=1573 data-nosnippet>1573</a>        </span><span class="kw">for _ in </span><span class="number">0</span>..CHANNEL_HALT_POLLS {
-<a href=#1574 id=1574 data-nosnippet>1574</a>            <span class="kw">if </span><span class="self">self</span>.read32(hcint(ch)) &amp; (<span class="number">1 </span>&lt;&lt; <span class="number">1</span>) != <span class="number">0 </span>{
-<a href=#1575 id=1575 data-nosnippet>1575</a>                <span class="kw">break</span>;
-<a href=#1576 id=1576 data-nosnippet>1576</a>            }
-<a href=#1577 id=1577 data-nosnippet>1577</a>            sys_yield();
-<a href=#1578 id=1578 data-nosnippet>1578</a>        }
-<a href=#1579 id=1579 data-nosnippet>1579</a>        <span class="self">self</span>.write32(hcint(ch), <span class="number">0xFFFF_FFFF</span>);
-<a href=#1580 id=1580 data-nosnippet>1580</a>    }
-<a href=#1581 id=1581 data-nosnippet>1581</a>}
-<a href=#1582 id=1582 data-nosnippet>1582</a>
-<a href=#1583 id=1583 data-nosnippet>1583</a><span class="doccomment">/// Report the first split poll in full, once.
-<a href=#1584 id=1584 data-nosnippet>1584</a>///
-<a href=#1585 id=1585 data-nosnippet>1585</a>/// Report how each half of a split ended, a few times per half.
-<a href=#1586 id=1586 data-nosnippet>1586</a>///
-<a href=#1587 id=1587 data-nosnippet>1587</a>/// Which half ran and how it ended is the whole question when a split does not
-<a href=#1588 id=1588 data-nosnippet>1588</a>/// deliver: a start-split the hub refuses, a complete-split it is not ready for,
-<a href=#1589 id=1589 data-nosnippet>1589</a>/// and a complete-split that ends without data are three different faults, and
-<a href=#1590 id=1590 data-nosnippet>1590</a>/// nothing else in the driver tells them apart. Both halves are reported
-<a href=#1591 id=1591 data-nosnippet>1591</a>/// separately -- a single shared flag reports one half and hides the other, which
-<a href=#1592 id=1592 data-nosnippet>1592</a>/// is exactly the one worth seeing. The frame number comes along so the gap
-<a href=#1593 id=1593 data-nosnippet>1593</a>/// between the halves is visible rather than inferred.
-<a href=#1594 id=1594 data-nosnippet>1594</a></span><span class="kw">fn </span>report_split_progress(
-<a href=#1595 id=1595 data-nosnippet>1595</a>    complete: bool,
-<a href=#1596 id=1596 data-nosnippet>1596</a>    outcome: <span class="kw-2">&amp;</span>ViResult&lt;()&gt;,
-<a href=#1597 id=1597 data-nosnippet>1597</a>    hcint: u32,
-<a href=#1598 id=1598 data-nosnippet>1598</a>    nyet: bool,
-<a href=#1599 id=1599 data-nosnippet>1599</a>    want: usize,
-<a href=#1600 id=1600 data-nosnippet>1600</a>    frame: u32,
-<a href=#1601 id=1601 data-nosnippet>1601</a>) {
-<a href=#1602 id=1602 data-nosnippet>1602</a>    <span class="kw">static </span>SEEN: [core::sync::atomic::AtomicUsize; <span class="number">2</span>] =
-<a href=#1603 id=1603 data-nosnippet>1603</a>        [<span class="kw">const </span>{ core::sync::atomic::AtomicUsize::new(<span class="number">0</span>) }; <span class="number">2</span>];
-<a href=#1604 id=1604 data-nosnippet>1604</a>    <span class="kw">let </span>slot = usize::from(complete);
-<a href=#1605 id=1605 data-nosnippet>1605</a>    <span class="kw">if </span>SEEN[slot].fetch_add(<span class="number">1</span>, core::sync::atomic::Ordering::Relaxed) &gt;= <span class="number">3 </span>{
-<a href=#1606 id=1606 data-nosnippet>1606</a>        <span class="kw">return</span>;
-<a href=#1607 id=1607 data-nosnippet>1607</a>    }
-<a href=#1608 id=1608 data-nosnippet>1608</a>    ostd::io::print(<span class="string">"[dwc2] split: half="</span>);
-<a href=#1609 id=1609 data-nosnippet>1609</a>    ostd::io::print(<span class="kw">if </span>complete { <span class="string">"csplit" </span>} <span class="kw">else </span>{ <span class="string">"ssplit" </span>});
-<a href=#1610 id=1610 data-nosnippet>1610</a>    ostd::io::print(<span class="string">" outcome="</span>);
-<a href=#1611 id=1611 data-nosnippet>1611</a>    <span class="kw">match </span>outcome {
-<a href=#1612 id=1612 data-nosnippet>1612</a>        <span class="prelude-val">Ok</span>(()) =&gt; ostd::io::print(<span class="string">"Ok"</span>),
-<a href=#1613 id=1613 data-nosnippet>1613</a>        <span class="prelude-val">Err</span>(ViError::WouldBlock) <span class="kw">if </span>nyet =&gt; ostd::io::print(<span class="string">"NYET"</span>),
-<a href=#1614 id=1614 data-nosnippet>1614</a>        <span class="prelude-val">Err</span>(ViError::WouldBlock) =&gt; ostd::io::print(<span class="string">"NAK"</span>),
-<a href=#1615 id=1615 data-nosnippet>1615</a>        <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; ostd::io::print(<span class="string">"error"</span>),
-<a href=#1616 id=1616 data-nosnippet>1616</a>    }
-<a href=#1617 id=1617 data-nosnippet>1617</a>    ostd::io::print(<span class="string">" hcint=0x"</span>);
-<a href=#1618 id=1618 data-nosnippet>1618</a>    print_hex_val(hcint);
-<a href=#1619 id=1619 data-nosnippet>1619</a>    ostd::io::print(<span class="string">" frame=0x"</span>);
-<a href=#1620 id=1620 data-nosnippet>1620</a>    print_hex_val(frame);
-<a href=#1621 id=1621 data-nosnippet>1621</a>    ostd::io::print(<span class="string">" want="</span>);
-<a href=#1622 id=1622 data-nosnippet>1622</a>    print_usize_val(want);
-<a href=#1623 id=1623 data-nosnippet>1623</a>    ostd::io::println(<span class="string">""</span>);
-<a href=#1624 id=1624 data-nosnippet>1624</a>}
-<a href=#1625 id=1625 data-nosnippet>1625</a>
-<a href=#1626 id=1626 data-nosnippet>1626</a><span class="kw">fn </span>print_usize_val(v: usize) {
-<a href=#1627 id=1627 data-nosnippet>1627</a>    <span class="kw">let </span><span class="kw-2">mut </span>out = [<span class="number">0u8</span>; <span class="number">20</span>];
-<a href=#1628 id=1628 data-nosnippet>1628</a>    <span class="kw">let </span><span class="kw-2">mut </span>n = v;
-<a href=#1629 id=1629 data-nosnippet>1629</a>    <span class="kw">let </span><span class="kw-2">mut </span>len = <span class="number">0</span>;
-<a href=#1630 id=1630 data-nosnippet>1630</a>    <span class="kw">if </span>n == <span class="number">0 </span>{
-<a href=#1631 id=1631 data-nosnippet>1631</a>        ostd::io::print(<span class="string">"0"</span>);
-<a href=#1632 id=1632 data-nosnippet>1632</a>        <span class="kw">return</span>;
-<a href=#1633 id=1633 data-nosnippet>1633</a>    }
-<a href=#1634 id=1634 data-nosnippet>1634</a>    <span class="kw">while </span>n &gt; <span class="number">0 </span>&amp;&amp; len &lt; out.len() {
-<a href=#1635 id=1635 data-nosnippet>1635</a>        out[len] = <span class="string">b'0' </span>+ (n % <span class="number">10</span>) <span class="kw">as </span>u8;
-<a href=#1636 id=1636 data-nosnippet>1636</a>        n /= <span class="number">10</span>;
-<a href=#1637 id=1637 data-nosnippet>1637</a>        len += <span class="number">1</span>;
-<a href=#1638 id=1638 data-nosnippet>1638</a>    }
-<a href=#1639 id=1639 data-nosnippet>1639</a>    out[..len].reverse();
-<a href=#1640 id=1640 data-nosnippet>1640</a>    <span class="kw">if let </span><span class="prelude-val">Ok</span>(s) = core::str::from_utf8(<span class="kw-2">&amp;</span>out[..len]) {
-<a href=#1641 id=1641 data-nosnippet>1641</a>        ostd::io::print(s);
-<a href=#1642 id=1642 data-nosnippet>1642</a>    }
-<a href=#1643 id=1643 data-nosnippet>1643</a>}
-<a href=#1644 id=1644 data-nosnippet>1644</a>
-<a href=#1645 id=1645 data-nosnippet>1645</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>print_hex_val(val: u32) {
-<a href=#1646 id=1646 data-nosnippet>1646</a>    <span class="kw">const </span>HEX: <span class="kw-2">&amp;</span>[u8; <span class="number">16</span>] = <span class="string">b"0123456789ABCDEF"</span>;
-<a href=#1647 id=1647 data-nosnippet>1647</a>    <span class="kw">let </span><span class="kw-2">mut </span>buf = [<span class="number">0u8</span>; <span class="number">8</span>];
-<a href=#1648 id=1648 data-nosnippet>1648</a>    <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..<span class="number">8 </span>{
-<a href=#1649 id=1649 data-nosnippet>1649</a>        buf[<span class="number">7 </span>- i] = HEX[((val &gt;&gt; (i * <span class="number">4</span>)) &amp; <span class="number">0xF</span>) <span class="kw">as </span>usize];
-<a href=#1650 id=1650 data-nosnippet>1650</a>    }
-<a href=#1651 id=1651 data-nosnippet>1651</a>    <span class="kw">if let </span><span class="prelude-val">Ok</span>(s) = core::str::from_utf8(<span class="kw-2">&amp;</span>buf) {
-<a href=#1652 id=1652 data-nosnippet>1652</a>        ostd::io::print(s);
+<a href=#1533 id=1533 data-nosnippet>1533</a>        <span class="prelude-val">None
+<a href=#1534 id=1534 data-nosnippet>1534</a>    </span>}
+<a href=#1535 id=1535 data-nosnippet>1535</a>
+<a href=#1536 id=1536 data-nosnippet>1536</a>    <span class="doccomment">/// Give up on a channel that reported nothing within its budget.
+<a href=#1537 id=1537 data-nosnippet>1537</a>    </span><span class="kw">fn </span>channel_timeout(<span class="kw-2">&amp;</span><span class="self">self</span>, ch: usize) -&gt; ViResult&lt;()&gt; {
+<a href=#1538 id=1538 data-nosnippet>1538</a>        <span class="comment">// Timeout — capture hcint BEFORE halt clears it
+<a href=#1539 id=1539 data-nosnippet>1539</a>        </span><span class="kw">let </span>int = <span class="self">self</span>.read32(hcint(ch));
+<a href=#1540 id=1540 data-nosnippet>1540</a>        <span class="kw">let </span>char_val = <span class="self">self</span>.read32(hcchar(ch));
+<a href=#1541 id=1541 data-nosnippet>1541</a>        <span class="self">self</span>.halt_channel(ch);
+<a href=#1542 id=1542 data-nosnippet>1542</a>        <span class="kw">static </span>TIMEOUT_COUNT: core::sync::atomic::AtomicUsize =
+<a href=#1543 id=1543 data-nosnippet>1543</a>            core::sync::atomic::AtomicUsize::new(<span class="number">0</span>);
+<a href=#1544 id=1544 data-nosnippet>1544</a>        <span class="kw">let </span>attempt = TIMEOUT_COUNT.fetch_add(<span class="number">1</span>, core::sync::atomic::Ordering::Relaxed);
+<a href=#1545 id=1545 data-nosnippet>1545</a>        <span class="kw">if </span>attempt &lt; <span class="number">3 </span>{
+<a href=#1546 id=1546 data-nosnippet>1546</a>            ostd::io::print(<span class="string">"[dwc2] TIMEOUT ch="</span>);
+<a href=#1547 id=1547 data-nosnippet>1547</a>            print_hex_val(ch <span class="kw">as </span>u32);
+<a href=#1548 id=1548 data-nosnippet>1548</a>            ostd::io::print(<span class="string">" hcint=0x"</span>);
+<a href=#1549 id=1549 data-nosnippet>1549</a>            print_hex_val(int);
+<a href=#1550 id=1550 data-nosnippet>1550</a>            ostd::io::print(<span class="string">" hcchar=0x"</span>);
+<a href=#1551 id=1551 data-nosnippet>1551</a>            print_hex_val(char_val);
+<a href=#1552 id=1552 data-nosnippet>1552</a>            ostd::io::println(<span class="string">""</span>);
+<a href=#1553 id=1553 data-nosnippet>1553</a>            <span class="self">self</span>.dump_transfer_state(ch, <span class="string">"timeout"</span>);
+<a href=#1554 id=1554 data-nosnippet>1554</a>        }
+<a href=#1555 id=1555 data-nosnippet>1555</a>        <span class="self">self</span>.last_hcint.set(int);
+<a href=#1556 id=1556 data-nosnippet>1556</a>        <span class="prelude-val">Err</span>(ViError::IO)
+<a href=#1557 id=1557 data-nosnippet>1557</a>    }
+<a href=#1558 id=1558 data-nosnippet>1558</a>
+<a href=#1559 id=1559 data-nosnippet>1559</a>    <span class="doccomment">/// Explicitly halt a host channel (required in DWC2 Slave mode).
+<a href=#1560 id=1560 data-nosnippet>1560</a>    ///
+<a href=#1561 id=1561 data-nosnippet>1561</a>    /// `CHDIS` and `CHENA` must never be set together. The core reads
+<a href=#1562 id=1562 data-nosnippet>1562</a>    /// `CHENA=1` as a fresh enable, so raising it while requesting a disable
+<a href=#1563 id=1563 data-nosnippet>1563</a>    /// **re-arms the channel with the parameters still in `HCCHAR`/`HCTSIZ`** --
+<a href=#1564 id=1564 data-nosnippet>1564</a>    /// a second, unwanted transaction launched from a completed one. Only
+<a href=#1565 id=1565 data-nosnippet>1565</a>    /// `CHDIS` is raised; the core clears `CHENA` and reports `CHHLTD`.
+<a href=#1566 id=1566 data-nosnippet>1566</a>    </span><span class="kw">fn </span>halt_channel(<span class="kw-2">&amp;</span><span class="self">self</span>, ch: usize) {
+<a href=#1567 id=1567 data-nosnippet>1567</a>        <span class="kw">let </span>reg = hcchar(ch);
+<a href=#1568 id=1568 data-nosnippet>1568</a>        <span class="kw">let </span><span class="kw-2">mut </span>val = <span class="self">self</span>.read32(reg);
+<a href=#1569 id=1569 data-nosnippet>1569</a>        val |= <span class="number">1 </span>&lt;&lt; <span class="number">30</span>; <span class="comment">// CHDIS
+<a href=#1570 id=1570 data-nosnippet>1570</a>        </span>val &amp;= !(<span class="number">1 </span>&lt;&lt; <span class="number">31</span>); <span class="comment">// CHENA
+<a href=#1571 id=1571 data-nosnippet>1571</a>        </span><span class="self">self</span>.write32(reg, val);
+<a href=#1572 id=1572 data-nosnippet>1572</a>        <span class="comment">// Wait for CHHLTD (bit 1) with a short timeout. The core clears CHENA in
+<a href=#1573 id=1573 data-nosnippet>1573</a>        // microseconds, so this only has to be long enough not to be missed --
+<a href=#1574 id=1574 data-nosnippet>1574</a>        // and it runs on the serving thread, so it must not be long enough to be
+<a href=#1575 id=1575 data-nosnippet>1575</a>        // felt if the core never answers.
+<a href=#1576 id=1576 data-nosnippet>1576</a>        </span><span class="kw">for _ in </span><span class="number">0</span>..CHANNEL_HALT_POLLS {
+<a href=#1577 id=1577 data-nosnippet>1577</a>            <span class="kw">if </span><span class="self">self</span>.read32(hcint(ch)) &amp; (<span class="number">1 </span>&lt;&lt; <span class="number">1</span>) != <span class="number">0 </span>{
+<a href=#1578 id=1578 data-nosnippet>1578</a>                <span class="kw">break</span>;
+<a href=#1579 id=1579 data-nosnippet>1579</a>            }
+<a href=#1580 id=1580 data-nosnippet>1580</a>            sys_yield();
+<a href=#1581 id=1581 data-nosnippet>1581</a>        }
+<a href=#1582 id=1582 data-nosnippet>1582</a>        <span class="self">self</span>.write32(hcint(ch), <span class="number">0xFFFF_FFFF</span>);
+<a href=#1583 id=1583 data-nosnippet>1583</a>    }
+<a href=#1584 id=1584 data-nosnippet>1584</a>}
+<a href=#1585 id=1585 data-nosnippet>1585</a>
+<a href=#1586 id=1586 data-nosnippet>1586</a><span class="doccomment">/// Report the first split poll in full, once.
+<a href=#1587 id=1587 data-nosnippet>1587</a>///
+<a href=#1588 id=1588 data-nosnippet>1588</a>/// Report how each half of a split ended, a few times per half.
+<a href=#1589 id=1589 data-nosnippet>1589</a>///
+<a href=#1590 id=1590 data-nosnippet>1590</a>/// Which half ran and how it ended is the whole question when a split does not
+<a href=#1591 id=1591 data-nosnippet>1591</a>/// deliver: a start-split the hub refuses, a complete-split it is not ready for,
+<a href=#1592 id=1592 data-nosnippet>1592</a>/// and a complete-split that ends without data are three different faults, and
+<a href=#1593 id=1593 data-nosnippet>1593</a>/// nothing else in the driver tells them apart. Both halves are reported
+<a href=#1594 id=1594 data-nosnippet>1594</a>/// separately -- a single shared flag reports one half and hides the other, which
+<a href=#1595 id=1595 data-nosnippet>1595</a>/// is exactly the one worth seeing. The frame number comes along so the gap
+<a href=#1596 id=1596 data-nosnippet>1596</a>/// between the halves is visible rather than inferred.
+<a href=#1597 id=1597 data-nosnippet>1597</a></span><span class="kw">fn </span>report_split_progress(
+<a href=#1598 id=1598 data-nosnippet>1598</a>    complete: bool,
+<a href=#1599 id=1599 data-nosnippet>1599</a>    outcome: <span class="kw-2">&amp;</span>ViResult&lt;()&gt;,
+<a href=#1600 id=1600 data-nosnippet>1600</a>    hcint: u32,
+<a href=#1601 id=1601 data-nosnippet>1601</a>    nyet: bool,
+<a href=#1602 id=1602 data-nosnippet>1602</a>    want: usize,
+<a href=#1603 id=1603 data-nosnippet>1603</a>    frame: u32,
+<a href=#1604 id=1604 data-nosnippet>1604</a>) {
+<a href=#1605 id=1605 data-nosnippet>1605</a>    <span class="kw">static </span>SEEN: [core::sync::atomic::AtomicUsize; <span class="number">2</span>] =
+<a href=#1606 id=1606 data-nosnippet>1606</a>        [<span class="kw">const </span>{ core::sync::atomic::AtomicUsize::new(<span class="number">0</span>) }; <span class="number">2</span>];
+<a href=#1607 id=1607 data-nosnippet>1607</a>    <span class="kw">let </span>slot = usize::from(complete);
+<a href=#1608 id=1608 data-nosnippet>1608</a>    <span class="kw">if </span>SEEN[slot].fetch_add(<span class="number">1</span>, core::sync::atomic::Ordering::Relaxed) &gt;= <span class="number">3 </span>{
+<a href=#1609 id=1609 data-nosnippet>1609</a>        <span class="kw">return</span>;
+<a href=#1610 id=1610 data-nosnippet>1610</a>    }
+<a href=#1611 id=1611 data-nosnippet>1611</a>    ostd::io::print(<span class="string">"[dwc2] split: half="</span>);
+<a href=#1612 id=1612 data-nosnippet>1612</a>    ostd::io::print(<span class="kw">if </span>complete { <span class="string">"csplit" </span>} <span class="kw">else </span>{ <span class="string">"ssplit" </span>});
+<a href=#1613 id=1613 data-nosnippet>1613</a>    ostd::io::print(<span class="string">" outcome="</span>);
+<a href=#1614 id=1614 data-nosnippet>1614</a>    <span class="kw">match </span>outcome {
+<a href=#1615 id=1615 data-nosnippet>1615</a>        <span class="prelude-val">Ok</span>(()) =&gt; ostd::io::print(<span class="string">"Ok"</span>),
+<a href=#1616 id=1616 data-nosnippet>1616</a>        <span class="prelude-val">Err</span>(ViError::WouldBlock) <span class="kw">if </span>nyet =&gt; ostd::io::print(<span class="string">"NYET"</span>),
+<a href=#1617 id=1617 data-nosnippet>1617</a>        <span class="prelude-val">Err</span>(ViError::WouldBlock) =&gt; ostd::io::print(<span class="string">"NAK"</span>),
+<a href=#1618 id=1618 data-nosnippet>1618</a>        <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; ostd::io::print(<span class="string">"error"</span>),
+<a href=#1619 id=1619 data-nosnippet>1619</a>    }
+<a href=#1620 id=1620 data-nosnippet>1620</a>    ostd::io::print(<span class="string">" hcint=0x"</span>);
+<a href=#1621 id=1621 data-nosnippet>1621</a>    print_hex_val(hcint);
+<a href=#1622 id=1622 data-nosnippet>1622</a>    ostd::io::print(<span class="string">" frame=0x"</span>);
+<a href=#1623 id=1623 data-nosnippet>1623</a>    print_hex_val(frame);
+<a href=#1624 id=1624 data-nosnippet>1624</a>    ostd::io::print(<span class="string">" want="</span>);
+<a href=#1625 id=1625 data-nosnippet>1625</a>    print_usize_val(want);
+<a href=#1626 id=1626 data-nosnippet>1626</a>    ostd::io::println(<span class="string">""</span>);
+<a href=#1627 id=1627 data-nosnippet>1627</a>}
+<a href=#1628 id=1628 data-nosnippet>1628</a>
+<a href=#1629 id=1629 data-nosnippet>1629</a><span class="kw">fn </span>print_usize_val(v: usize) {
+<a href=#1630 id=1630 data-nosnippet>1630</a>    <span class="kw">let </span><span class="kw-2">mut </span>out = [<span class="number">0u8</span>; <span class="number">20</span>];
+<a href=#1631 id=1631 data-nosnippet>1631</a>    <span class="kw">let </span><span class="kw-2">mut </span>n = v;
+<a href=#1632 id=1632 data-nosnippet>1632</a>    <span class="kw">let </span><span class="kw-2">mut </span>len = <span class="number">0</span>;
+<a href=#1633 id=1633 data-nosnippet>1633</a>    <span class="kw">if </span>n == <span class="number">0 </span>{
+<a href=#1634 id=1634 data-nosnippet>1634</a>        ostd::io::print(<span class="string">"0"</span>);
+<a href=#1635 id=1635 data-nosnippet>1635</a>        <span class="kw">return</span>;
+<a href=#1636 id=1636 data-nosnippet>1636</a>    }
+<a href=#1637 id=1637 data-nosnippet>1637</a>    <span class="kw">while </span>n &gt; <span class="number">0 </span>&amp;&amp; len &lt; out.len() {
+<a href=#1638 id=1638 data-nosnippet>1638</a>        out[len] = <span class="string">b'0' </span>+ (n % <span class="number">10</span>) <span class="kw">as </span>u8;
+<a href=#1639 id=1639 data-nosnippet>1639</a>        n /= <span class="number">10</span>;
+<a href=#1640 id=1640 data-nosnippet>1640</a>        len += <span class="number">1</span>;
+<a href=#1641 id=1641 data-nosnippet>1641</a>    }
+<a href=#1642 id=1642 data-nosnippet>1642</a>    out[..len].reverse();
+<a href=#1643 id=1643 data-nosnippet>1643</a>    <span class="kw">if let </span><span class="prelude-val">Ok</span>(s) = core::str::from_utf8(<span class="kw-2">&amp;</span>out[..len]) {
+<a href=#1644 id=1644 data-nosnippet>1644</a>        ostd::io::print(s);
+<a href=#1645 id=1645 data-nosnippet>1645</a>    }
+<a href=#1646 id=1646 data-nosnippet>1646</a>}
+<a href=#1647 id=1647 data-nosnippet>1647</a>
+<a href=#1648 id=1648 data-nosnippet>1648</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>print_hex_val(val: u32) {
+<a href=#1649 id=1649 data-nosnippet>1649</a>    <span class="kw">const </span>HEX: <span class="kw-2">&amp;</span>[u8; <span class="number">16</span>] = <span class="string">b"0123456789ABCDEF"</span>;
+<a href=#1650 id=1650 data-nosnippet>1650</a>    <span class="kw">let </span><span class="kw-2">mut </span>buf = [<span class="number">0u8</span>; <span class="number">8</span>];
+<a href=#1651 id=1651 data-nosnippet>1651</a>    <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..<span class="number">8 </span>{
+<a href=#1652 id=1652 data-nosnippet>1652</a>        buf[<span class="number">7 </span>- i] = HEX[((val &gt;&gt; (i * <span class="number">4</span>)) &amp; <span class="number">0xF</span>) <span class="kw">as </span>usize];
 <a href=#1653 id=1653 data-nosnippet>1653</a>    }
-<a href=#1654 id=1654 data-nosnippet>1654</a>}
+<a href=#1654 id=1654 data-nosnippet>1654</a>    <span class="kw">if let </span><span class="prelude-val">Ok</span>(s) = core::str::from_utf8(<span class="kw-2">&amp;</span>buf) {
+<a href=#1655 id=1655 data-nosnippet>1655</a>        ostd::io::print(s);
+<a href=#1656 id=1656 data-nosnippet>1656</a>    }
+<a href=#1657 id=1657 data-nosnippet>1657</a>}
 </code></pre></div></section></main></body></html>
