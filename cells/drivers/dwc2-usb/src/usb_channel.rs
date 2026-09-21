@@ -168,17 +168,6 @@ const FULL_FRAME_SHIFT: u32 = 3;
 /// that never reports anything from spinning forever.
 const SPIN_POLLS: usize = 200_000;
 
-/// Register reads one attempt at a control split's complete-split makes.
-///
-/// Short on purpose. The hub pairs a split's halves for less than a frame, so a
-/// complete-split that waits twenty milliseconds for its own completion has
-/// already lost the pairing by the time it goes out -- which is why the stalled
-/// endpoint this path clears could never be cleared, and the keyboard stayed
-/// halted. The attempt is short and the retry loop is what covers the wait, and
-/// the two together are bounded so no single transfer can hold the CPU the way an
-/// unbounded version of this did.
-const CONTROL_SPIN_POLLS: usize = 2_000;
-
 /// Poll budget for the ordinary `wait_channel`.
 const WAIT_POLLS: usize = 50_000;
 
@@ -195,7 +184,7 @@ const CHANNEL_HALT_POLLS: usize = 4_000;
 /// completion here rather than spread across calls the way the interrupt poll is.
 /// The attempts are issued back to back and bounded by frames rather than spun
 /// on, because the caller cannot be handed "not yet".
-const SPLIT_COMPLETE_ATTEMPTS: usize = 8;
+const SPLIT_COMPLETE_ATTEMPTS: usize = 2;
 
 /// Frames a complete-split may still belong to the start-split that began it.
 ///
@@ -447,13 +436,13 @@ impl<'a> UsbHostEngine<'a> {
         }
 
         arm(false);
-        // Not the yielding wait. The start-split opens the frame the hub pairs its
-        // two halves within, so twenty milliseconds spent waiting here -- which is
-        // one yield -- puts the first complete-split twenty frames past the
-        // start-split it belongs to. The pairing is gone before the retry loop
-        // below gets to ask, which is why every retry in it answers NYET or halts,
-        // and why the stage that needs data never gets any.
-        self.wait_channel_spin(ch, CONTROL_SPIN_POLLS)?;
+        // The yielding wait, which is what this path had when enumeration last
+        // worked. The same-frame rule that made the periodic path's wait short is
+        // a periodic rule -- NetBSD guards it behind INT and ISOC -- and a
+        // non-periodic complete-split is free to go out later: the hub buffers
+        // what its translator fetched, so patience here collects it, and a tight
+        // budget spends the transfer before the translator is done.
+        self.wait_channel(ch)?;
 
         let started = self.frame_number();
         trace::record(
@@ -471,16 +460,8 @@ impl<'a> UsbHostEngine<'a> {
             self.read32(hctsiz(ch)),
         );
         for _ in 0..SPLIT_COMPLETE_ATTEMPTS {
-            // Straight back out, and short: the reference is explicit that a
-            // non-periodic split is asked again immediately rather than waited on.
             arm(true);
-            let outcome = self.wait_channel_spin(ch, CONTROL_SPIN_POLLS);
-            // Ask again after the translator has had a microframe to work in,
-            // rather than immediately: NYET is an answer about time, and eight
-            // retries inside one frame is not a budget, it is one attempt.
-            if matches!(outcome, Err(ViError::WouldBlock)) && self.last_was_nyet() {
-                self.let_frames_pass(2);
-            }
+            let outcome = self.wait_channel(ch);
             trace::record(
                 trace::TAG_AFTER_CSPLIT,
                 self.last_hcint.get(),
@@ -1722,23 +1703,6 @@ impl<'a> UsbHostEngine<'a> {
         }
 
         None
-    }
-
-    /// Let `frames` microframes pass, without yielding.
-    ///
-    /// A hub that answers NYET is asking to be asked again, and the translator it
-    /// is standing in for needs a millisecond frame to run the transaction in.
-    /// Retrying microseconds later spends the whole budget before that frame is
-    /// over, which is what the trace showed: eight complete-splits, every one of
-    /// them NYET, all of them inside a single frame. The wait here is measured on
-    /// the frame counter and capped, so it costs at most the budget it protects.
-    fn let_frames_pass(&self, frames: u32) {
-        let start = self.frame_number();
-        for _ in 0..SPIN_POLLS {
-            if self.frame_number().wrapping_sub(start) & HFNUM_FRNUM_MASK >= frames {
-                return;
-            }
-        }
     }
 
     /// Give up on a channel that reported nothing within its budget.
