@@ -185,7 +185,7 @@
 <a href=#185 id=185 data-nosnippet>185</a>/// The core clears `CHENA` in microseconds; this only has to be long enough not
 <a href=#186 id=186 data-nosnippet>186</a>/// to be missed, and every iteration of it is a yield handed to the rest of the
 <a href=#187 id=187 data-nosnippet>187</a>/// system.
-<a href=#188 id=188 data-nosnippet>188</a></span><span class="kw">const </span>CHANNEL_HALT_POLLS: usize = <span class="number">64</span>;
+<a href=#188 id=188 data-nosnippet>188</a></span><span class="kw">const </span>CHANNEL_HALT_POLLS: usize = <span class="number">4_000</span>;
 <a href=#189 id=189 data-nosnippet>189</a>
 <a href=#190 id=190 data-nosnippet>190</a><span class="doccomment">/// Complete-split attempts a synchronous transfer will make.
 <a href=#191 id=191 data-nosnippet>191</a>///
@@ -1733,90 +1733,96 @@
 <a href=#1733 id=1733 data-nosnippet>1733</a>        val |= <span class="number">1 </span>&lt;&lt; <span class="number">30</span>; <span class="comment">// CHDIS
 <a href=#1734 id=1734 data-nosnippet>1734</a>        </span>val &amp;= !(<span class="number">1 </span>&lt;&lt; <span class="number">31</span>); <span class="comment">// CHENA
 <a href=#1735 id=1735 data-nosnippet>1735</a>        </span><span class="self">self</span>.write32(reg, val);
-<a href=#1736 id=1736 data-nosnippet>1736</a>        <span class="comment">// Wait for CHHLTD (bit 1) with a short timeout. The core clears CHENA in
-<a href=#1737 id=1737 data-nosnippet>1737</a>        // microseconds, so this only has to be long enough not to be missed --
-<a href=#1738 id=1738 data-nosnippet>1738</a>        // and it runs on the serving thread, so it must not be long enough to be
-<a href=#1739 id=1739 data-nosnippet>1739</a>        // felt if the core never answers.
-<a href=#1740 id=1740 data-nosnippet>1740</a>        </span><span class="kw">for _ in </span><span class="number">0</span>..CHANNEL_HALT_POLLS {
-<a href=#1741 id=1741 data-nosnippet>1741</a>            <span class="kw">if </span><span class="self">self</span>.read32(hcint(ch)) &amp; (<span class="number">1 </span>&lt;&lt; <span class="number">1</span>) != <span class="number">0 </span>{
-<a href=#1742 id=1742 data-nosnippet>1742</a>                <span class="kw">break</span>;
-<a href=#1743 id=1743 data-nosnippet>1743</a>            }
-<a href=#1744 id=1744 data-nosnippet>1744</a>            sys_yield();
-<a href=#1745 id=1745 data-nosnippet>1745</a>        }
-<a href=#1746 id=1746 data-nosnippet>1746</a>        <span class="self">self</span>.write32(hcint(ch), <span class="number">0xFFFF_FFFF</span>);
-<a href=#1747 id=1747 data-nosnippet>1747</a>    }
-<a href=#1748 id=1748 data-nosnippet>1748</a>}
-<a href=#1749 id=1749 data-nosnippet>1749</a>
-<a href=#1750 id=1750 data-nosnippet>1750</a><span class="doccomment">/// Report the first split poll in full, once.
-<a href=#1751 id=1751 data-nosnippet>1751</a>///
-<a href=#1752 id=1752 data-nosnippet>1752</a>/// Report how each half of a split ended, a few times per half.
-<a href=#1753 id=1753 data-nosnippet>1753</a>///
-<a href=#1754 id=1754 data-nosnippet>1754</a>/// Which half ran and how it ended is the whole question when a split does not
-<a href=#1755 id=1755 data-nosnippet>1755</a>/// deliver: a start-split the hub refuses, a complete-split it is not ready for,
-<a href=#1756 id=1756 data-nosnippet>1756</a>/// and a complete-split that ends without data are three different faults, and
-<a href=#1757 id=1757 data-nosnippet>1757</a>/// nothing else in the driver tells them apart. Both halves are reported
-<a href=#1758 id=1758 data-nosnippet>1758</a>/// separately -- a single shared flag reports one half and hides the other, which
-<a href=#1759 id=1759 data-nosnippet>1759</a>/// is exactly the one worth seeing. The frame number comes along so the gap
-<a href=#1760 id=1760 data-nosnippet>1760</a>/// between the halves is visible rather than inferred.
-<a href=#1761 id=1761 data-nosnippet>1761</a></span><span class="kw">fn </span>report_split_progress(
-<a href=#1762 id=1762 data-nosnippet>1762</a>    complete: bool,
-<a href=#1763 id=1763 data-nosnippet>1763</a>    outcome: <span class="kw-2">&amp;</span>ViResult&lt;()&gt;,
-<a href=#1764 id=1764 data-nosnippet>1764</a>    hcint: u32,
-<a href=#1765 id=1765 data-nosnippet>1765</a>    nyet: bool,
-<a href=#1766 id=1766 data-nosnippet>1766</a>    want: usize,
-<a href=#1767 id=1767 data-nosnippet>1767</a>    frame: u32,
-<a href=#1768 id=1768 data-nosnippet>1768</a>) {
-<a href=#1769 id=1769 data-nosnippet>1769</a>    <span class="kw">static </span>SEEN: [core::sync::atomic::AtomicUsize; <span class="number">2</span>] =
-<a href=#1770 id=1770 data-nosnippet>1770</a>        [<span class="kw">const </span>{ core::sync::atomic::AtomicUsize::new(<span class="number">0</span>) }; <span class="number">2</span>];
-<a href=#1771 id=1771 data-nosnippet>1771</a>    <span class="kw">let </span>slot = usize::from(complete);
-<a href=#1772 id=1772 data-nosnippet>1772</a>    <span class="kw">if </span>SEEN[slot].fetch_add(<span class="number">1</span>, core::sync::atomic::Ordering::Relaxed) &gt;= <span class="number">3 </span>{
-<a href=#1773 id=1773 data-nosnippet>1773</a>        <span class="kw">return</span>;
-<a href=#1774 id=1774 data-nosnippet>1774</a>    }
-<a href=#1775 id=1775 data-nosnippet>1775</a>    ostd::io::print(<span class="string">"[dwc2] split: half="</span>);
-<a href=#1776 id=1776 data-nosnippet>1776</a>    ostd::io::print(<span class="kw">if </span>complete { <span class="string">"csplit" </span>} <span class="kw">else </span>{ <span class="string">"ssplit" </span>});
-<a href=#1777 id=1777 data-nosnippet>1777</a>    ostd::io::print(<span class="string">" outcome="</span>);
-<a href=#1778 id=1778 data-nosnippet>1778</a>    <span class="kw">match </span>outcome {
-<a href=#1779 id=1779 data-nosnippet>1779</a>        <span class="prelude-val">Ok</span>(()) =&gt; ostd::io::print(<span class="string">"Ok"</span>),
-<a href=#1780 id=1780 data-nosnippet>1780</a>        <span class="prelude-val">Err</span>(ViError::WouldBlock) <span class="kw">if </span>nyet =&gt; ostd::io::print(<span class="string">"NYET"</span>),
-<a href=#1781 id=1781 data-nosnippet>1781</a>        <span class="prelude-val">Err</span>(ViError::WouldBlock) =&gt; ostd::io::print(<span class="string">"NAK"</span>),
-<a href=#1782 id=1782 data-nosnippet>1782</a>        <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; ostd::io::print(<span class="string">"error"</span>),
-<a href=#1783 id=1783 data-nosnippet>1783</a>    }
-<a href=#1784 id=1784 data-nosnippet>1784</a>    ostd::io::print(<span class="string">" hcint=0x"</span>);
-<a href=#1785 id=1785 data-nosnippet>1785</a>    print_hex_val(hcint);
-<a href=#1786 id=1786 data-nosnippet>1786</a>    ostd::io::print(<span class="string">" frame=0x"</span>);
-<a href=#1787 id=1787 data-nosnippet>1787</a>    print_hex_val(frame);
-<a href=#1788 id=1788 data-nosnippet>1788</a>    ostd::io::print(<span class="string">" want="</span>);
-<a href=#1789 id=1789 data-nosnippet>1789</a>    print_usize_val(want);
-<a href=#1790 id=1790 data-nosnippet>1790</a>    ostd::io::println(<span class="string">""</span>);
-<a href=#1791 id=1791 data-nosnippet>1791</a>}
-<a href=#1792 id=1792 data-nosnippet>1792</a>
-<a href=#1793 id=1793 data-nosnippet>1793</a><span class="kw">fn </span>print_usize_val(v: usize) {
-<a href=#1794 id=1794 data-nosnippet>1794</a>    <span class="kw">let </span><span class="kw-2">mut </span>out = [<span class="number">0u8</span>; <span class="number">20</span>];
-<a href=#1795 id=1795 data-nosnippet>1795</a>    <span class="kw">let </span><span class="kw-2">mut </span>n = v;
-<a href=#1796 id=1796 data-nosnippet>1796</a>    <span class="kw">let </span><span class="kw-2">mut </span>len = <span class="number">0</span>;
-<a href=#1797 id=1797 data-nosnippet>1797</a>    <span class="kw">if </span>n == <span class="number">0 </span>{
-<a href=#1798 id=1798 data-nosnippet>1798</a>        ostd::io::print(<span class="string">"0"</span>);
-<a href=#1799 id=1799 data-nosnippet>1799</a>        <span class="kw">return</span>;
-<a href=#1800 id=1800 data-nosnippet>1800</a>    }
-<a href=#1801 id=1801 data-nosnippet>1801</a>    <span class="kw">while </span>n &gt; <span class="number">0 </span>&amp;&amp; len &lt; out.len() {
-<a href=#1802 id=1802 data-nosnippet>1802</a>        out[len] = <span class="string">b'0' </span>+ (n % <span class="number">10</span>) <span class="kw">as </span>u8;
-<a href=#1803 id=1803 data-nosnippet>1803</a>        n /= <span class="number">10</span>;
-<a href=#1804 id=1804 data-nosnippet>1804</a>        len += <span class="number">1</span>;
-<a href=#1805 id=1805 data-nosnippet>1805</a>    }
-<a href=#1806 id=1806 data-nosnippet>1806</a>    out[..len].reverse();
-<a href=#1807 id=1807 data-nosnippet>1807</a>    <span class="kw">if let </span><span class="prelude-val">Ok</span>(s) = core::str::from_utf8(<span class="kw-2">&amp;</span>out[..len]) {
-<a href=#1808 id=1808 data-nosnippet>1808</a>        ostd::io::print(s);
-<a href=#1809 id=1809 data-nosnippet>1809</a>    }
-<a href=#1810 id=1810 data-nosnippet>1810</a>}
-<a href=#1811 id=1811 data-nosnippet>1811</a>
-<a href=#1812 id=1812 data-nosnippet>1812</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>print_hex_val(val: u32) {
-<a href=#1813 id=1813 data-nosnippet>1813</a>    <span class="kw">const </span>HEX: <span class="kw-2">&amp;</span>[u8; <span class="number">16</span>] = <span class="string">b"0123456789ABCDEF"</span>;
-<a href=#1814 id=1814 data-nosnippet>1814</a>    <span class="kw">let </span><span class="kw-2">mut </span>buf = [<span class="number">0u8</span>; <span class="number">8</span>];
-<a href=#1815 id=1815 data-nosnippet>1815</a>    <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..<span class="number">8 </span>{
-<a href=#1816 id=1816 data-nosnippet>1816</a>        buf[<span class="number">7 </span>- i] = HEX[((val &gt;&gt; (i * <span class="number">4</span>)) &amp; <span class="number">0xF</span>) <span class="kw">as </span>usize];
-<a href=#1817 id=1817 data-nosnippet>1817</a>    }
-<a href=#1818 id=1818 data-nosnippet>1818</a>    <span class="kw">if let </span><span class="prelude-val">Ok</span>(s) = core::str::from_utf8(<span class="kw-2">&amp;</span>buf) {
-<a href=#1819 id=1819 data-nosnippet>1819</a>        ostd::io::print(s);
-<a href=#1820 id=1820 data-nosnippet>1820</a>    }
-<a href=#1821 id=1821 data-nosnippet>1821</a>}
+<a href=#1736 id=1736 data-nosnippet>1736</a>        <span class="comment">// Wait for CHHLTD (bit 1), and only then clear it. Clearing the interrupt
+<a href=#1737 id=1737 data-nosnippet>1737</a>        // unconditionally returns while the core is still finishing the halt, and
+<a href=#1738 id=1738 data-nosnippet>1738</a>        // the CHHLTD it sets afterwards survives into the next arm -- where the
+<a href=#1739 id=1739 data-nosnippet>1739</a>        // wait reads it and reports a halt that belongs to the transfer before.
+<a href=#1740 id=1740 data-nosnippet>1740</a>        // The trace made that plain: the records alternate between an ACK, whose
+<a href=#1741 id=1741 data-nosnippet>1741</a>        // channel carries CHDIS because this function set it, and a halt whose
+<a href=#1742 id=1742 data-nosnippet>1742</a>        // channel carries no CHDIS at all, which is this function's own halt
+<a href=#1743 id=1743 data-nosnippet>1743</a>        // arriving late.
+<a href=#1744 id=1744 data-nosnippet>1744</a>        //
+<a href=#1745 id=1745 data-nosnippet>1745</a>        // The wait reads the register rather than yielding: a yield is around
+<a href=#1746 id=1746 data-nosnippet>1746</a>        // twenty milliseconds, and four of them is the whole budget a split has.
+<a href=#1747 id=1747 data-nosnippet>1747</a>        </span><span class="kw">for _ in </span><span class="number">0</span>..CHANNEL_HALT_POLLS {
+<a href=#1748 id=1748 data-nosnippet>1748</a>            <span class="kw">if </span><span class="self">self</span>.read32(hcint(ch)) &amp; (<span class="number">1 </span>&lt;&lt; <span class="number">1</span>) != <span class="number">0 </span>{
+<a href=#1749 id=1749 data-nosnippet>1749</a>                <span class="kw">break</span>;
+<a href=#1750 id=1750 data-nosnippet>1750</a>            }
+<a href=#1751 id=1751 data-nosnippet>1751</a>        }
+<a href=#1752 id=1752 data-nosnippet>1752</a>        <span class="self">self</span>.write32(hcint(ch), <span class="number">0xFFFF_FFFF</span>);
+<a href=#1753 id=1753 data-nosnippet>1753</a>    }
+<a href=#1754 id=1754 data-nosnippet>1754</a>}
+<a href=#1755 id=1755 data-nosnippet>1755</a>
+<a href=#1756 id=1756 data-nosnippet>1756</a><span class="doccomment">/// Report the first split poll in full, once.
+<a href=#1757 id=1757 data-nosnippet>1757</a>///
+<a href=#1758 id=1758 data-nosnippet>1758</a>/// Report how each half of a split ended, a few times per half.
+<a href=#1759 id=1759 data-nosnippet>1759</a>///
+<a href=#1760 id=1760 data-nosnippet>1760</a>/// Which half ran and how it ended is the whole question when a split does not
+<a href=#1761 id=1761 data-nosnippet>1761</a>/// deliver: a start-split the hub refuses, a complete-split it is not ready for,
+<a href=#1762 id=1762 data-nosnippet>1762</a>/// and a complete-split that ends without data are three different faults, and
+<a href=#1763 id=1763 data-nosnippet>1763</a>/// nothing else in the driver tells them apart. Both halves are reported
+<a href=#1764 id=1764 data-nosnippet>1764</a>/// separately -- a single shared flag reports one half and hides the other, which
+<a href=#1765 id=1765 data-nosnippet>1765</a>/// is exactly the one worth seeing. The frame number comes along so the gap
+<a href=#1766 id=1766 data-nosnippet>1766</a>/// between the halves is visible rather than inferred.
+<a href=#1767 id=1767 data-nosnippet>1767</a></span><span class="kw">fn </span>report_split_progress(
+<a href=#1768 id=1768 data-nosnippet>1768</a>    complete: bool,
+<a href=#1769 id=1769 data-nosnippet>1769</a>    outcome: <span class="kw-2">&amp;</span>ViResult&lt;()&gt;,
+<a href=#1770 id=1770 data-nosnippet>1770</a>    hcint: u32,
+<a href=#1771 id=1771 data-nosnippet>1771</a>    nyet: bool,
+<a href=#1772 id=1772 data-nosnippet>1772</a>    want: usize,
+<a href=#1773 id=1773 data-nosnippet>1773</a>    frame: u32,
+<a href=#1774 id=1774 data-nosnippet>1774</a>) {
+<a href=#1775 id=1775 data-nosnippet>1775</a>    <span class="kw">static </span>SEEN: [core::sync::atomic::AtomicUsize; <span class="number">2</span>] =
+<a href=#1776 id=1776 data-nosnippet>1776</a>        [<span class="kw">const </span>{ core::sync::atomic::AtomicUsize::new(<span class="number">0</span>) }; <span class="number">2</span>];
+<a href=#1777 id=1777 data-nosnippet>1777</a>    <span class="kw">let </span>slot = usize::from(complete);
+<a href=#1778 id=1778 data-nosnippet>1778</a>    <span class="kw">if </span>SEEN[slot].fetch_add(<span class="number">1</span>, core::sync::atomic::Ordering::Relaxed) &gt;= <span class="number">3 </span>{
+<a href=#1779 id=1779 data-nosnippet>1779</a>        <span class="kw">return</span>;
+<a href=#1780 id=1780 data-nosnippet>1780</a>    }
+<a href=#1781 id=1781 data-nosnippet>1781</a>    ostd::io::print(<span class="string">"[dwc2] split: half="</span>);
+<a href=#1782 id=1782 data-nosnippet>1782</a>    ostd::io::print(<span class="kw">if </span>complete { <span class="string">"csplit" </span>} <span class="kw">else </span>{ <span class="string">"ssplit" </span>});
+<a href=#1783 id=1783 data-nosnippet>1783</a>    ostd::io::print(<span class="string">" outcome="</span>);
+<a href=#1784 id=1784 data-nosnippet>1784</a>    <span class="kw">match </span>outcome {
+<a href=#1785 id=1785 data-nosnippet>1785</a>        <span class="prelude-val">Ok</span>(()) =&gt; ostd::io::print(<span class="string">"Ok"</span>),
+<a href=#1786 id=1786 data-nosnippet>1786</a>        <span class="prelude-val">Err</span>(ViError::WouldBlock) <span class="kw">if </span>nyet =&gt; ostd::io::print(<span class="string">"NYET"</span>),
+<a href=#1787 id=1787 data-nosnippet>1787</a>        <span class="prelude-val">Err</span>(ViError::WouldBlock) =&gt; ostd::io::print(<span class="string">"NAK"</span>),
+<a href=#1788 id=1788 data-nosnippet>1788</a>        <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; ostd::io::print(<span class="string">"error"</span>),
+<a href=#1789 id=1789 data-nosnippet>1789</a>    }
+<a href=#1790 id=1790 data-nosnippet>1790</a>    ostd::io::print(<span class="string">" hcint=0x"</span>);
+<a href=#1791 id=1791 data-nosnippet>1791</a>    print_hex_val(hcint);
+<a href=#1792 id=1792 data-nosnippet>1792</a>    ostd::io::print(<span class="string">" frame=0x"</span>);
+<a href=#1793 id=1793 data-nosnippet>1793</a>    print_hex_val(frame);
+<a href=#1794 id=1794 data-nosnippet>1794</a>    ostd::io::print(<span class="string">" want="</span>);
+<a href=#1795 id=1795 data-nosnippet>1795</a>    print_usize_val(want);
+<a href=#1796 id=1796 data-nosnippet>1796</a>    ostd::io::println(<span class="string">""</span>);
+<a href=#1797 id=1797 data-nosnippet>1797</a>}
+<a href=#1798 id=1798 data-nosnippet>1798</a>
+<a href=#1799 id=1799 data-nosnippet>1799</a><span class="kw">fn </span>print_usize_val(v: usize) {
+<a href=#1800 id=1800 data-nosnippet>1800</a>    <span class="kw">let </span><span class="kw-2">mut </span>out = [<span class="number">0u8</span>; <span class="number">20</span>];
+<a href=#1801 id=1801 data-nosnippet>1801</a>    <span class="kw">let </span><span class="kw-2">mut </span>n = v;
+<a href=#1802 id=1802 data-nosnippet>1802</a>    <span class="kw">let </span><span class="kw-2">mut </span>len = <span class="number">0</span>;
+<a href=#1803 id=1803 data-nosnippet>1803</a>    <span class="kw">if </span>n == <span class="number">0 </span>{
+<a href=#1804 id=1804 data-nosnippet>1804</a>        ostd::io::print(<span class="string">"0"</span>);
+<a href=#1805 id=1805 data-nosnippet>1805</a>        <span class="kw">return</span>;
+<a href=#1806 id=1806 data-nosnippet>1806</a>    }
+<a href=#1807 id=1807 data-nosnippet>1807</a>    <span class="kw">while </span>n &gt; <span class="number">0 </span>&amp;&amp; len &lt; out.len() {
+<a href=#1808 id=1808 data-nosnippet>1808</a>        out[len] = <span class="string">b'0' </span>+ (n % <span class="number">10</span>) <span class="kw">as </span>u8;
+<a href=#1809 id=1809 data-nosnippet>1809</a>        n /= <span class="number">10</span>;
+<a href=#1810 id=1810 data-nosnippet>1810</a>        len += <span class="number">1</span>;
+<a href=#1811 id=1811 data-nosnippet>1811</a>    }
+<a href=#1812 id=1812 data-nosnippet>1812</a>    out[..len].reverse();
+<a href=#1813 id=1813 data-nosnippet>1813</a>    <span class="kw">if let </span><span class="prelude-val">Ok</span>(s) = core::str::from_utf8(<span class="kw-2">&amp;</span>out[..len]) {
+<a href=#1814 id=1814 data-nosnippet>1814</a>        ostd::io::print(s);
+<a href=#1815 id=1815 data-nosnippet>1815</a>    }
+<a href=#1816 id=1816 data-nosnippet>1816</a>}
+<a href=#1817 id=1817 data-nosnippet>1817</a>
+<a href=#1818 id=1818 data-nosnippet>1818</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>print_hex_val(val: u32) {
+<a href=#1819 id=1819 data-nosnippet>1819</a>    <span class="kw">const </span>HEX: <span class="kw-2">&amp;</span>[u8; <span class="number">16</span>] = <span class="string">b"0123456789ABCDEF"</span>;
+<a href=#1820 id=1820 data-nosnippet>1820</a>    <span class="kw">let </span><span class="kw-2">mut </span>buf = [<span class="number">0u8</span>; <span class="number">8</span>];
+<a href=#1821 id=1821 data-nosnippet>1821</a>    <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..<span class="number">8 </span>{
+<a href=#1822 id=1822 data-nosnippet>1822</a>        buf[<span class="number">7 </span>- i] = HEX[((val &gt;&gt; (i * <span class="number">4</span>)) &amp; <span class="number">0xF</span>) <span class="kw">as </span>usize];
+<a href=#1823 id=1823 data-nosnippet>1823</a>    }
+<a href=#1824 id=1824 data-nosnippet>1824</a>    <span class="kw">if let </span><span class="prelude-val">Ok</span>(s) = core::str::from_utf8(<span class="kw-2">&amp;</span>buf) {
+<a href=#1825 id=1825 data-nosnippet>1825</a>        ostd::io::print(s);
+<a href=#1826 id=1826 data-nosnippet>1826</a>    }
+<a href=#1827 id=1827 data-nosnippet>1827</a>}
 </code></pre></div></section></main></body></html>
