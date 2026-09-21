@@ -81,18 +81,29 @@ pub struct Split {
 /// Complete-split attempts before a buffered transaction is given up on.
 ///
 /// A hub answers a complete-split with NYET while the result is still coming;
-/// it is not an error, just "not yet".
-const SPLIT_COMPLETE_ATTEMPTS: usize = 4;
+/// it is not an error, just "not yet". Each attempt costs a microframe, and a
+/// low-speed transaction can take the hub's transaction translator a whole
+/// millisecond to run, so the budget has to cover several of them rather than
+/// only the first.
+const SPLIT_COMPLETE_ATTEMPTS: usize = 16;
 
 /// Start-split attempts per poll.
 const SPLIT_ATTEMPTS: usize = 3;
+
+/// Spins allowed while waiting for the frame counter to advance.
+///
+/// One microframe is 125 us; this is a generous multiple of that in yields, and
+/// exhausting it means the counter stalled rather than that more time was needed.
+const SPLIT_FRAME_SPINS: usize = 200_000;
 
 /// Frames a complete-split may still belong to the start-split that began it.
 ///
 /// The pairing is only meaningful inside the hub's frame budget, so a
 /// complete-split issued after this many frames is retried from the start
-/// instead of being taken for a result.
-const SPLIT_COMPLETE_FRAMES: u32 = 4;
+/// instead of being taken for a result. `HFNUM` counts microframes at high
+/// speed, and a low-speed transaction behind the hub's translator takes up to a
+/// full millisecond, so this covers it with room to spare.
+const SPLIT_COMPLETE_FRAMES: u32 = 12;
 
 pub struct UsbHostEngine<'a> {
     mmio: &'a MmioRegion,
@@ -105,12 +116,14 @@ pub struct UsbHostEngine<'a> {
     /// Hub the device currently being addressed sits behind, when it is not on
     /// the root port itself.
     split: Cell<Option<Split>>,
-    /// `HCINT` captured at the last channel failure.
+    /// `HCINT` captured at the last channel outcome, success or failure.
     ///
-    /// `wait_channel` collapses every hardware outcome into `ViError::IO`, and
-    /// a device refusing a request, the bus failing to carry it, and the core
+    /// `wait_channel` collapses every hardware result into an error kind, and a
+    /// device refusing a request, the bus failing to carry it, and the core
     /// never finishing look identical from the caller's side. Keeping the raw
-    /// register lets `report_failure` name which one actually happened.
+    /// register lets `report_failure` name which one happened -- and lets the
+    /// split paths tell a completed complete-split from one that ended on a
+    /// handshake that carries no data.
     last_hcint: Cell<u32>,
 }
 
@@ -176,6 +189,33 @@ impl<'a> UsbHostEngine<'a> {
     /// Current USB frame number, used to bound a complete-split.
     pub fn frame_number(&self) -> u32 {
         self.read32(HFNUM) & HFNUM_FRNUM_MASK
+    }
+
+    /// The last channel outcome reported `XFERCOMPL`.
+    ///
+    /// A complete-split that ends on ACK has delivered nothing: Linux is
+    /// explicit that ACK belongs to the start-split and "should not occur in
+    /// CSPLIT". Reading the raw bit is the only way to tell, because every
+    /// completion collapses into the same `Ok` on the way out.
+    fn last_reported_complete(&self) -> bool {
+        self.last_hcint.get() & (1 << 0) != 0
+    }
+
+    /// Wait until the frame counter moves past `from`.
+    ///
+    /// A complete-split is only meaningful in a later microframe than the
+    /// start-split it belongs to: the hub's transaction translator has to run
+    /// the full- or low-speed transaction first, which is exactly what its NYET
+    /// is reporting. Retrying inside the same microframe collects another NYET
+    /// and burns the attempt without asking the question again.
+    fn await_frame_change(&self, from: u32) -> bool {
+        for _ in 0..SPLIT_FRAME_SPINS {
+            if self.frame_number() != from {
+                return true;
+            }
+            sys_yield();
+        }
+        false
     }
 
     /// The last channel failure was NYET rather than NAK.
@@ -1085,19 +1125,32 @@ impl<'a> UsbHostEngine<'a> {
 
             let started = self.frame_number();
             let mut collected = false;
+            let mut frame = started;
             for _ in 0..SPLIT_COMPLETE_ATTEMPTS {
+                // Ask in a later microframe than the start-split it belongs to.
+                if !self.await_frame_change(frame) {
+                    break;
+                }
+                frame = self.frame_number();
+
                 arm(true);
                 match self.wait_channel(ch) {
-                    Ok(()) => {
+                    Ok(()) if self.last_reported_complete() => {
                         SPLIT_STATS[2].fetch_add(1, core::sync::atomic::Ordering::Relaxed);
                         collected = true;
                         break;
                     }
+                    // ACK carries no data on a complete-split; the hub is only
+                    // acknowledging the request, not the result.
+                    Ok(()) => {
+                        SPLIT_STATS[3].fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+                        if frame.wrapping_sub(started) & HFNUM_FRNUM_MASK > SPLIT_COMPLETE_FRAMES {
+                            break;
+                        }
+                    }
                     Err(ViError::WouldBlock) if self.last_was_nyet() => {
                         SPLIT_STATS[3].fetch_add(1, core::sync::atomic::Ordering::Relaxed);
-                        if self.frame_number().wrapping_sub(started) & HFNUM_FRNUM_MASK
-                            > SPLIT_COMPLETE_FRAMES
-                        {
+                        if frame.wrapping_sub(started) & HFNUM_FRNUM_MASK > SPLIT_COMPLETE_FRAMES {
                             break;
                         }
                     }
@@ -1272,18 +1325,21 @@ impl<'a> UsbHostEngine<'a> {
                     self.last_hcint.set(int);
                     return Err(ViError::WouldBlock);
                 }
+                self.last_hcint.set(int);
                 return Ok(());
             }
 
             // ── Transfer complete ─────────────────────────────────────
             if int & (1 << 0) != 0 {
                 self.halt_channel(ch);
+                self.last_hcint.set(int);
                 return Ok(());
             }
 
             // ── ACK = device accepted the packet (BCM2837 primary path)
             if int & (1 << 5) != 0 {
                 self.halt_channel(ch);
+                self.last_hcint.set(int);
                 return Ok(());
             }
 
