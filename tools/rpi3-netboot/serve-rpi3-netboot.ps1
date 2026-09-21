@@ -36,7 +36,14 @@ function Get-NormalizedMac([string]$Mac) {
 }
 $adapterMac = Get-NormalizedMac $adapter.MacAddress
 $macPinned = -not [string]::IsNullOrWhiteSpace($ExpectedMacAddress)
-Write-Host "[netboot] adapter: alias=$($adapter.Alias) mac=$($adapter.MacAddress) ifIndex=$($adapter.ifIndex) status=$($adapter.Status)"
+Write-Host ("[netboot] adapter: name={0} desc={1} mac={2} ifIndex={3} status={4}" -f `
+    $adapter.Name, $adapter.InterfaceDescription, $adapter.MacAddress,
+    $adapter.ifIndex, $adapter.Status)
+# A netboot needs an established link: the Pi is the only client, and a
+# disconnected port serves nobody however correct the address and firewall are.
+if ($adapter.Status -ne 'Up') {
+    Write-Warning ("$($adapter.Name) is $($adapter.Status) — connect the Pi (or a switch between them) before booting it over TFTP")
+}
 
 # Every action below that changes host network state must be aimed at an adapter
 # the operator has identified by its physical address. Read-only runs print the
