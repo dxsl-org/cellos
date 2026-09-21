@@ -157,11 +157,17 @@ impl<'a> UsbHostEngine<'a> {
 
     /// Point the channel's DMA engine at `offset` bytes into its slot.
     ///
-    /// Programmed **once per transfer**, never per packet. The DWC2 advances
-    /// `HCDMA` itself as it moves each packet (`hcdma += actual`), so a
-    /// multi-packet transfer walks the slot on its own. Re-arming mid-transfer
-    /// both defeats that walk and races the core's asynchronous completion,
-    /// which latches `HCDMA` when it retires the packet.
+    /// Programmed **once per transfer, and always before `CHENA`**. The DWC2
+    /// advances `HCDMA` itself as it moves each packet (`hcdma += actual`), so a
+    /// multi-packet transfer walks the slot on its own; re-arming mid-transfer
+    /// both defeats that walk and races the core's asynchronous completion.
+    ///
+    /// The ordering against `CHENA` is not a preference. The core latches its
+    /// DMA address when the channel is enabled, so a start that arms `HCDMA`
+    /// afterwards -- or never -- sends the first transaction of the transfer to
+    /// whatever address the previous one left behind. On a SETUP that is a
+    /// request the device ACKs and then STALLs one stage later, and the retry
+    /// succeeds because by then the register holds the right address.
     fn program_hcdma(&self, ch: usize, offset: usize) {
         if let Some(base) = self.dma_slot(ch) {
             let addr = base + offset.min(DMA_SLOT_BYTES);
@@ -314,15 +320,17 @@ impl<'a> UsbHostEngine<'a> {
         let sctsiz = 8 | (1 << 19) | (3 << 29);
         self.write32(hctsiz(ch), sctsiz);
 
-        // 3. Configure Channel Characteristics (HCCHAR):
-        // HCCHAR fields (bits 0-10 MPS, 11-14 EPNUM, 15 EPDIR, 18-19 EPTYPE, 20 MC, 22-28 DEVADDR,
-        // 31 CHENA): EPNUM = 0, EPDIR = 0 (OUT), EPTYPE = 0 (Control), MC = 1, CHENA = 1.
-        let scchar =
-            (self.control_mps() as u32) | (1 << 20) | ((dev_addr as u32) << 22) | (1 << 31);
-        self.write32(hcchar(ch), scchar);
-
-        // 4. Hand the 8 setup bytes to the core. In DMA mode it reads them from
-        //    guest memory at HCDMA; the FIFO is not consulted at all.
+        // 3. Hand the 8 setup bytes to the core *before* the channel starts. In
+        //    DMA mode the core reads them from guest memory at HCDMA; the FIFO is
+        //    not consulted at all.
+        //
+        //    This order is the whole ballgame. Enabling the channel first makes
+        //    the core latch the previous transfer's HCDMA, so this SETUP is read
+        //    from the wrong place, the device ACKs eight bytes it never looked
+        //    at, and the data stage that follows is STALLed. The retry passes,
+        //    because the failed attempt has since written the right address --
+        //    which is exactly why every first attempt failed and every second one
+        //    worked.
         if self.dma_slot(ch).is_some() {
             self.program_hcdma(ch, 0);
             self.stage_out(ch, 0, setup);
@@ -337,6 +345,13 @@ impl<'a> UsbHostEngine<'a> {
             self.write_fifo(ch, w0);
             self.write_fifo(ch, w1);
         }
+
+        // 4. Start the channel last: HCCHAR fields (bits 0-10 MPS, 11-14 EPNUM,
+        //    15 EPDIR, 18-19 EPTYPE, 20 MC, 22-28 DEVADDR, 31 CHENA): EPNUM = 0,
+        //    EPDIR = 0 (OUT), EPTYPE = 0 (Control), MC = 1, CHENA = 1.
+        let scchar =
+            (self.control_mps() as u32) | (1 << 20) | ((dev_addr as u32) << 22) | (1 << 31);
+        self.write32(hcchar(ch), scchar);
 
         // 5. Poll for completion
         self.wait_channel(ch)
@@ -413,6 +428,11 @@ impl<'a> UsbHostEngine<'a> {
         // XFERSIZE = 0, PKTCNT = 1, PID = 2 (DATA1)
         let sctsiz = (1 << 19) | (2 << 29);
         self.write32(hctsiz(ch), sctsiz);
+
+        // A zero-length handshake moves no bytes, but the channel still latches
+        // an address when it starts and the previous transfer's is not a
+        // position this stage is allowed to begin from.
+        self.program_hcdma(ch, 0);
 
         // HCCHAR: EPNUM = 0, EPTYPE = 0 (Control), MPS = 64, MC = 1, CHENA = 1, EPDIR from the caller.
         let epdir = if is_in { 1 } else { 0 };
@@ -660,8 +680,8 @@ impl<'a> UsbHostEngine<'a> {
             | (1 << 20) // MC = 1
             | ((dev_addr as u32) << 22)
             | (1 << 31);
-        self.write32(hcchar(ch), scchar);
         self.program_hcdma(ch, 0);
+        self.write32(hcchar(ch), scchar);
 
         // Non-blocking wait: check if transfer completed or NAK
         let mut count = 0;
@@ -740,8 +760,8 @@ impl<'a> UsbHostEngine<'a> {
             | (1 << 20) // MC = 1
             | ((dev_addr as u32) << 22)
             | (1 << 31); // CHENA
-        self.write32(hcchar(ch), scchar);
         self.program_hcdma(ch, 0);
+        self.write32(hcchar(ch), scchar);
 
         let mut polls = 0u32;
         while polls < 2_000 {
