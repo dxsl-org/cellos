@@ -386,8 +386,14 @@ impl<'a> UsbHostEngine<'a> {
             if counter >> FULL_FRAME_SHIFT != frame {
                 return false;
             }
-            if counter & microframe >= leave_for_complete_split {
-                return true;
+            let at = counter & microframe;
+            if at >= leave_for_complete_split {
+                // A window, not a threshold. Past it there is no room left for the
+                // complete-split to be answered in, and the core halts the channel
+                // at the frame boundary instead -- which is the bare CHHLTD the
+                // recording keeps showing. Reporting "no room" is what tells the
+                // caller to end the poll and open a fresh pair next time.
+                return at < microframe;
             }
         }
         false
