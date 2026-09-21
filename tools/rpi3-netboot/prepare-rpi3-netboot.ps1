@@ -70,7 +70,8 @@ $configLines += @(
     'enable_uart=1',
     'core_freq=250',
     'hdmi_ignore_edid=0xa5000020',
-    'hdmi_force_hotplug=1'
+    'hdmi_force_hotplug=1',
+    'disable_overscan=1'
 )
 
 $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'

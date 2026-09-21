@@ -68,7 +68,10 @@ pub(crate) fn spawn_hypervisor() -> Option<usize> {
 }
 
 pub(crate) fn spawn_optional_services() -> Option<usize> {
-    #[cfg(all(not(feature = "hypervisor-min"), not(feature = "board-rpi3")))]
+    // fb-console mirrors the kernel user log to the display, so it stays on for
+    // RPi3: a board whose only console is the serial header shows nothing on
+    // HDMI otherwise. Bitmap text on a compositor surface, not a TTY.
+    #[cfg(not(feature = "hypervisor-min"))]
     match sys_spawn_from_path("/bin/fb-console") {
         SyscallResult::Ok(_) => ostd::io::println("Init: fb-console spawned."),
         SyscallResult::Err(_) => ostd::io::println("Init: fb-console spawn failed."),
