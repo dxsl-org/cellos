@@ -259,15 +259,21 @@ impl<'a> UsbHostEngine<'a> {
     /// pairing is gone and the next poll has to start over. Both the frame that
     /// must not move and the position inside it come from the shifted counter: it
     /// advances every microframe, so comparing it raw would fail on the first read.
+    ///
+    /// The point waited for leaves room for the complete-split itself. Waiting for
+    /// the last microframe of the frame leaves it none, and the core halts the
+    /// channel at the frame boundary before the hub can answer -- a halt carrying
+    /// no status at all, which is what `hcint=0x02` on its own is.
     fn await_frame_end(&self) -> bool {
         let frame = self.full_frame();
-        let last_microframe = (1 << FULL_FRAME_SHIFT) - 1;
+        let microframe: u32 = (1 << FULL_FRAME_SHIFT) - 1;
+        let leave_for_complete_split = microframe.saturating_sub(2);
         for _ in 0..SPIN_POLLS {
             let counter = self.read32(HFNUM) & HFNUM_FRNUM_MASK;
             if counter >> FULL_FRAME_SHIFT != frame {
                 return false;
             }
-            if counter & last_microframe == last_microframe {
+            if counter & microframe >= leave_for_complete_split {
                 return true;
             }
         }
