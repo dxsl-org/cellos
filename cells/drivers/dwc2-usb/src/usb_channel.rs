@@ -91,10 +91,9 @@ impl<'a> UsbHostEngine<'a> {
     /// Execute a standard 8-byte USB SETUP packet on Channel 0.
     pub fn send_setup(&self, dev_addr: u8, setup: &[u8; 8]) -> ViResult<()> {
         let ch = 0;
+        self.prepare_channel(ch);
         self.write32(hcsplt(ch), 0);
         self.write32(hcintmsk(ch), 0x07FF);
-        // 1. Clear pending channel interrupts
-        self.write32(hcint(ch), 0xFFFF_FFFF);
         // 2. Configure Transfer Size (HCTSIZ):
         // XFERSIZE = 8, PKTCNT = 1, PID = 3 (SETUP)
         let sctsiz = 8 | (1 << 19) | (3 << 29);
@@ -132,9 +131,9 @@ impl<'a> UsbHostEngine<'a> {
 
         while received < buf.len() {
             let chunk = (buf.len() - received).min(mps);
+            self.prepare_channel(ch);
             self.write32(hcsplt(ch), 0);
             self.write32(hcintmsk(ch), 0x07FF);
-            self.write32(hcint(ch), 0xFFFF_FFFF);
             let sctsiz = (chunk as u32) | (1 << 19) | (toggle << 29);
             self.write32(hctsiz(ch), sctsiz);
 
@@ -173,9 +172,9 @@ impl<'a> UsbHostEngine<'a> {
     /// Send STATUS handshake on Channel 0 (0-byte packet with DATA1).
     pub fn send_status(&self, dev_addr: u8, is_in: bool) -> ViResult<()> {
         let ch = 0;
+        self.prepare_channel(ch);
         self.write32(hcsplt(ch), 0);
         self.write32(hcintmsk(ch), 0x07FF);
-        self.write32(hcint(ch), 0xFFFF_FFFF);
         // XFERSIZE = 0, PKTCNT = 1, PID = 2 (DATA1)
         let sctsiz = (1 << 19) | (2 << 29);
         self.write32(hctsiz(ch), sctsiz);
@@ -294,9 +293,9 @@ impl<'a> UsbHostEngine<'a> {
 
         while sent < data.len() {
             let chunk = (data.len() - sent).min(mps);
+            self.prepare_channel(ch);
             self.write32(hcsplt(ch), 0);
             self.write32(hcintmsk(ch), 0x07FF);
-            self.write32(hcint(ch), 0xFFFF_FFFF);
             let sctsiz = (chunk as u32) | (1 << 19) | ((toggle as u32) << 29);
             self.write32(hctsiz(ch), sctsiz);
 
@@ -345,9 +344,9 @@ impl<'a> UsbHostEngine<'a> {
 
             let mut retries = 0;
             loop {
+                self.prepare_channel(ch);
                 self.write32(hcsplt(ch), 0);
                 self.write32(hcintmsk(ch), 0x07FF);
-                self.write32(hcint(ch), 0xFFFF_FFFF);
                 self.write32(hctsiz(ch), sctsiz);
                 self.write32(hcchar(ch), scchar);
 
@@ -388,9 +387,9 @@ impl<'a> UsbHostEngine<'a> {
     /// Receive a raw packet via Bulk IN (Channel 1, EP 1). Returns received length or 0 if nothing.
     pub fn bulk_receive(&self, dev_addr: u8, ep_num: u8, buf: &mut [u8]) -> ViResult<usize> {
         let ch = 1;
+        self.prepare_channel(ch);
         self.write32(hcsplt(ch), 0);
         self.write32(hcintmsk(ch), 0x07FF);
-        self.write32(hcint(ch), 0xFFFF_FFFF);
         let want = buf.len().min(512);
         let sctsiz = (want as u32) | (1 << 19);
         self.write32(hctsiz(ch), sctsiz);
@@ -459,9 +458,9 @@ impl<'a> UsbHostEngine<'a> {
             return Ok(0);
         }
 
+        self.prepare_channel(ch);
         self.write32(hcsplt(ch), 0);
         self.write32(hcintmsk(ch), 0x07FF);
-        self.write32(hcint(ch), 0xFFFF_FFFF);
 
         // HCTSIZ: XFERSIZE (= want), PKTCNT = 1, PID = DATA0 (0). The core
         // overwrites XFERSIZE with the remaining count as it transfers.
@@ -604,10 +603,20 @@ impl<'a> UsbHostEngine<'a> {
     }
 
     /// Explicitly halt a host channel (required in DWC2 Slave mode).
+    ///
+    /// `CHDIS` and `CHENA` must never be set together. The core reads
+    /// `CHENA=1` as a fresh enable, so raising it while requesting a disable
+    /// **re-arms the channel with the parameters still in `HCCHAR`/`HCTSIZ`** —
+    /// which starts a second, unwanted transaction from a completed one. That
+    /// stray transfer then holds the channel forever, and every later transfer
+    /// on it times out with no status bit set, because the channel never
+    /// becomes free. Only `CHDIS` is raised here; the core clears `CHENA` and
+    /// reports `CHHLTD` when it has actually stopped.
     fn halt_channel(&self, ch: usize) {
         let reg = hcchar(ch);
         let mut val = self.read32(reg);
-        val |= (1 << 30) | (1 << 31); // CHDIS | CHENA
+        val |= 1 << 30; // CHDIS
+        val &= !(1 << 31); // CHENA
         self.write32(reg, val);
         // Wait for CHHLTD (bit 1) with a short timeout
         for _ in 0..10_000 {
@@ -615,6 +624,18 @@ impl<'a> UsbHostEngine<'a> {
                 break;
             }
             sys_yield();
+        }
+        self.write32(hcint(ch), 0xFFFF_FFFF);
+    }
+
+    /// Leave `ch` disabled before arming it, whatever state it was left in.
+    ///
+    /// A channel that is still enabled from an abandoned transfer ignores the
+    /// next `CHENA`, so each transfer starts by making sure the core has really
+    /// stopped and its interrupt bits are cleared.
+    fn prepare_channel(&self, ch: usize) {
+        if self.read32(hcchar(ch)) & (1 << 31) != 0 {
+            self.halt_channel(ch);
         }
         self.write32(hcint(ch), 0xFFFF_FFFF);
     }

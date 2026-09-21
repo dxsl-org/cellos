@@ -73,10 +73,10 @@ pub(crate) fn spawn_optional_services() -> Option<usize> {
         SyscallResult::Ok(_) => ostd::io::println("Init: fb-console spawned."),
         SyscallResult::Err(_) => ostd::io::println("Init: fb-console spawn failed."),
     }
-    // Desktop shell auto-starts on RPi3 too: board-rpi3 has a real display path
-    // (/bin/bcm-display -> compositor -> HDMI), so the taskbar + Spotlight
-    // launcher are the intended way to start Ocel on the board.
-    #[cfg(not(feature = "hypervisor-min"))]
+    // The desktop shell is not auto-started on RPi3: it is packaged in the
+    // image and launched on demand (`desktop &`), which keeps the board's
+    // console and compositor free during device bring-up.
+    #[cfg(all(not(feature = "hypervisor-min"), not(feature = "board-rpi3")))]
     match sys_spawn_from_path("/bin/desktop") {
         SyscallResult::Ok(_) => ostd::io::println("Init: desktop spawned."),
         SyscallResult::Err(_) => ostd::io::println("Init: desktop spawn failed."),
