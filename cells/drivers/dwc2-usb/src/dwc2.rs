@@ -125,21 +125,43 @@ impl Dwc2Controller {
             gintsts = self.read32(GINTSTS);
         }
 
-        // 4. Configure Host Clock in HCFG (30-60 MHz High-Speed PHY)
-        self.write32(HCFG, 0);
+        // 4. Configure the full/low-speed PHY clock in HCFG.
+        //
+        // FSLSPCLKSEL selects the clock used for full/low-speed signalling; the
+        // BCM2837's internal PHY runs at 48 MHz and Linux selects that value for
+        // this core. Leaving the field at 0 (30/60 MHz) mismatches the PHY, and
+        // a speed handshake sampled against the wrong clock is a plausible way
+        // for the port to come up "enabled" while the link is not really usable.
+        let hcfg = (self.read32(HCFG) & !HCFG_FSLSPCLKSEL_MASK) | HCFG_FSLSPCLKSEL_48MHZ;
+        self.write32(HCFG, hcfg);
 
-        // 5. Configure dynamic Host FIFOs (total capacity on BCM2837 is 4096 words):
-        // Rx FIFO: 1024 words
-        self.write32(GRXFSIZ, 1024);
-        // Non-Periodic Tx FIFO: start at 1024, depth 1024 words
-        self.write32(GNPTXFSIZ, (1024 << 16) | 1024);
-        // Periodic Tx FIFO: start at 2048, depth 1024 words
-        self.write32(HPTXFSIZ, (1024 << 16) | 2048);
+        // 5. Host FIFO split.
+        //
+        // Both Tx FIFOs encode start in the high half and depth in the low half,
+        // so the periodic FIFO's start must follow the non-periodic one's end.
+        // The previous values gave the periodic FIFO start=1024, depth=2048 --
+        // on top of the non-periodic FIFO, contradicting the comment right above
+        // them -- which leaves the core with an incoherent FIFO map.
+        //
+        // These are Linux's BCM2837 host values (rx 774, non-periodic tx 256,
+        // periodic tx 512): a split known to work on this exact core.
+        const RX_FIFO_WORDS: u32 = 774;
+        const NPTX_FIFO_WORDS: u32 = 256;
+        const PTX_FIFO_WORDS: u32 = 512;
+        self.write32(GRXFSIZ, RX_FIFO_WORDS);
+        self.write32(GNPTXFSIZ, (RX_FIFO_WORDS << 16) | NPTX_FIFO_WORDS);
+        self.write32(
+            HPTXFSIZ,
+            ((RX_FIFO_WORDS + NPTX_FIFO_WORDS) << 16) | PTX_FIFO_WORDS,
+        );
 
         // 6. Configure AHB bus in GAHBCFG. DMA is enabled only in DMA mode; the
         //    FIFO depths above still apply then, because the RX FIFO stages
         //    inbound packets either way.
-        let mut ahbcfg = GAHBCFG_GLBLINTRMSK;
+        // AHB burst INCR16 is Linux's BCM2837 value for this core; the reset
+        // default (single beat) is legal but not what this SoC is configured
+        // with anywhere else.
+        let mut ahbcfg = GAHBCFG_GLBLINTRMSK | GAHBCFG_HBSTLEN_INCR16;
         if mode == TransferMode::Dma {
             ahbcfg |= GAHBCFG_DMAEN;
         }

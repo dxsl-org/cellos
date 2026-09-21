@@ -93,7 +93,12 @@ pub const GRSTCTL_AHBIDL: u32 = 1 << 31; // AHB Master Idle
 
 // GAHBCFG bits
 pub const GAHBCFG_GLBLINTRMSK: u32 = 1 << 0; // Global Interrupt Mask (1 = unmask)
+pub const GAHBCFG_HBSTLEN_INCR16: u32 = 7 << 1; // AHB burst length: INCR16
 pub const GAHBCFG_DMAEN: u32 = 1 << 5; // DMA Enable
+
+// HCFG bits
+pub const HCFG_FSLSPCLKSEL_MASK: u32 = 0x3;
+pub const HCFG_FSLSPCLKSEL_48MHZ: u32 = 0x1; // 48 MHz PHY clock
 
 // GUSBCFG bits
 pub const GUSBCFG_PHYIF16: u32 = 1 << 3; // 16-bit UTMI+ Interface
