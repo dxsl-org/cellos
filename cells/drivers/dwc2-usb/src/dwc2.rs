@@ -1,5 +1,6 @@
 //! DWC2 Host Controller hardware abstraction and initialization.
 
+use crate::delay_ms;
 use crate::regs::*;
 use crate::usb_channel::TransferMode;
 use ostd::io::println;
@@ -219,9 +220,7 @@ impl Dwc2Controller {
         self.write32(HPRT0, hprt0);
 
         // Settle delay for power rail stabilization
-        for _ in 0..1000 {
-            sys_yield();
-        }
+        delay_ms(50);
     }
 
     /// Check if a downstream device (e.g. LAN9514 Hub) is connected to Root Port 0.
@@ -236,10 +235,8 @@ impl Dwc2Controller {
         hprt0 |= HPRT0_PRTRST;
         self.write32(HPRT0, hprt0);
 
-        // Keep reset asserted for ~50ms
-        for _ in 0..5000 {
-            sys_yield();
-        }
+        // USB 2.0 7.1.7.5: the reset must be held for at least 10 ms.
+        delay_ms(50);
 
         // De-assert reset
         hprt0 = self.read32(HPRT0);
@@ -254,6 +251,13 @@ impl Dwc2Controller {
             if status & HPRT0_PRTENA != 0 {
                 let speed = (status & HPRT0_PRTSPD_MASK) >> 17;
                 Self::dump_reg("HPRT0-R", status);
+                // A port that reads back enabled is not yet a device that
+                // answers. USB 2.0 7.1.7.5 gives the device a reset recovery
+                // interval (TRSTRCY = 10 ms minimum) before it must respond, and
+                // the first request sent inside that window is answered by a
+                // STALL rather than by the device. Returning the instant PRTENA
+                // latches hands the caller exactly that premature first request.
+                delay_ms(50);
                 return Ok(speed);
             }
             count += 1;

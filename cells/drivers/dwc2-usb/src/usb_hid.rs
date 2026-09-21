@@ -27,6 +27,7 @@ extern crate alloc;
 
 use alloc::vec::Vec;
 
+use crate::delay_ms;
 use crate::hid::{decode_boot_report, BootState, EvdevEvent, HidDecoder, HidKind, INPUT_EVENT_LEN};
 use crate::hub::UsbHub;
 use crate::usb_channel::UsbHostEngine;
@@ -34,7 +35,7 @@ use crate::usb_desc::{
     self, EndpointDesc, InterfaceDesc, RT_CLASS_INTERFACE_OUT, RT_DEV_TO_HOST_STANDARD,
 };
 use ostd::io::{print, println};
-use ostd::syscall::{sys_yield, SyscallResult};
+use ostd::syscall::SyscallResult;
 
 /// First host channel reserved for HID. Channels 0-2 are control and the
 /// Ethernet bulk pair, so HID devices take 3..=6 (four concurrently attached).
@@ -171,9 +172,7 @@ pub fn read_device_descriptor(
             }
             _ => {
                 if attempt + 1 < ENUM_ATTEMPTS {
-                    for _ in 0..200 {
-                        sys_yield();
-                    }
+                    delay_ms(10);
                 }
             }
         }
@@ -209,9 +208,7 @@ pub fn read_configuration(
             }
             _ => {
                 if attempt + 1 < ENUM_ATTEMPTS {
-                    for _ in 0..200 {
-                        sys_yield();
-                    }
+                    delay_ms(10);
                 }
             }
         }
@@ -241,9 +238,7 @@ pub fn read_configuration(
             }
             _ => {
                 if attempt + 1 < ENUM_ATTEMPTS {
-                    for _ in 0..200 {
-                        sys_yield();
-                    }
+                    delay_ms(10);
                 }
             }
         }

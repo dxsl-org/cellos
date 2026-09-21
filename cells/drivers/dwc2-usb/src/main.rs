@@ -41,6 +41,7 @@ declare_syscalls![
     WaitIrq,
     LookupService,
     RegisterNicDriver,
+    GetTime,
     // DMA payload slots: the core reads and writes them directly.
     GrantAlloc,
     GrantFree,

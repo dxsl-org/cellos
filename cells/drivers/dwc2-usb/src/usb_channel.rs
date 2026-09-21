@@ -66,6 +66,13 @@ pub struct UsbHostEngine<'a> {
     mode: Cell<TransferMode>,
     /// Per-channel DMA scratch, allocated on first use in DMA mode.
     dma: RefCell<Option<DmaBuf>>,
+    /// `HCINT` captured at the last channel failure.
+    ///
+    /// `wait_channel` collapses every hardware outcome into `ViError::IO`, and
+    /// a device refusing a request, the bus failing to carry it, and the core
+    /// never finishing look identical from the caller's side. Keeping the raw
+    /// register lets `report_failure` name which one actually happened.
+    last_hcint: Cell<u32>,
 }
 
 impl<'a> UsbHostEngine<'a> {
@@ -75,6 +82,7 @@ impl<'a> UsbHostEngine<'a> {
             ctrl_mps: Cell::new(CONTROL_MPS_LOW_FULL_SPEED),
             mode: Cell::new(TransferMode::Fifo),
             dma: RefCell::new(None),
+            last_hcint: Cell::new(0),
         }
     }
 
@@ -505,7 +513,12 @@ impl<'a> UsbHostEngine<'a> {
         print_hex_val(dev_addr as u32);
         ostd::io::print(" err=");
         match error {
-            ViError::IO => ostd::io::println("IO (stall/babble/timeout)"),
+            ViError::IO => {
+                // The raw outcome, not a bucket: a STALL, an AHB error and a
+                // core that never finished all used to print the same word.
+                ostd::io::print("IO - ");
+                ostd::io::println(self.describe_hcint(self.last_hcint.get()));
+            }
             ViError::WouldBlock => ostd::io::println("WouldBlock (NAK)"),
             _ => ostd::io::println("other"),
         }
@@ -902,9 +915,11 @@ impl<'a> UsbHostEngine<'a> {
                 // surely as the bits that were already checked.
                 if int & ((1 << 2) | (1 << 3) | (1 << 7) | (1 << 8) | (1 << 10)) != 0 {
                     self.report_channel_error(ch, int);
+                    self.last_hcint.set(int);
                     return Err(ViError::IO);
                 }
                 if int & (1 << 4) != 0 {
+                    self.last_hcint.set(int);
                     return Err(ViError::WouldBlock);
                 }
                 return Ok(());
@@ -926,10 +941,12 @@ impl<'a> UsbHostEngine<'a> {
             if int & ((1 << 2) | (1 << 3) | (1 << 7) | (1 << 8) | (1 << 10)) != 0 {
                 self.report_channel_error(ch, int);
                 self.halt_channel(ch);
+                self.last_hcint.set(int);
                 return Err(ViError::IO);
             }
             if int & (1 << 4) != 0 {
                 self.halt_channel(ch);
+                self.last_hcint.set(int);
                 return Err(ViError::WouldBlock);
             }
 
@@ -953,6 +970,7 @@ impl<'a> UsbHostEngine<'a> {
             ostd::io::println("");
             self.dump_transfer_state(ch, "timeout");
         }
+        self.last_hcint.set(int);
         Err(ViError::IO)
     }
 

@@ -1,8 +1,15 @@
 //! USB 2.0 Hub configuration and port management (for LAN9514 internal hub).
 
+use crate::delay_ms;
 use crate::usb_channel::UsbHostEngine;
-use ostd::syscall::sys_yield;
-use types::ViResult;
+use types::{ViError, ViResult};
+
+/// Attempts at `SetAddress()` before the addressing stage gives up.
+const SET_ADDRESS_ATTEMPTS: usize = 5;
+
+/// USB 2.0 9.4.6 `TDSETADDR`: after the status stage the device answers at its
+/// new address within 2 ms.
+const SET_ADDRESS_SETTLE_MS: u64 = 2;
 
 // Hub Class Feature Selectors
 pub const PORT_CONNECTION: u16 = 0;
@@ -36,20 +43,38 @@ impl<'a> UsbHub<'a> {
     }
 
     /// Set device address on USB bus for a device currently at address 0.
+    ///
+    /// `SetAddress()` is the one request that cannot be retried where it was
+    /// sent: until the status stage completes the device is still at address 0,
+    /// so a failed attempt is simply repeated against address 0. Leaving it
+    /// un-retried is not survivable -- the device never leaves address 0, and
+    /// every later request addressed to the new number is answered by nobody,
+    /// which is what makes the whole enumeration collapse rather than one step
+    /// of it.
     pub fn set_address(engine: &UsbHostEngine<'_>, new_addr: u8) -> ViResult<()> {
-        engine.control_transfer(
-            0,    // Target currently at Address 0
-            0x00, // Standard Device OUT
-            USB_REQ_SET_ADDRESS,
-            new_addr as u16,
-            0,
-            &mut [],
-        )?;
-        // Allow time for address to latch
-        for _ in 0..1000 {
-            sys_yield();
+        for attempt in 0..SET_ADDRESS_ATTEMPTS {
+            let result = engine.control_transfer(
+                0,    // Target currently at Address 0
+                0x00, // Standard Device OUT
+                USB_REQ_SET_ADDRESS,
+                new_addr as u16,
+                0,
+                &mut [],
+            );
+            match result {
+                Ok(_) => {
+                    delay_ms(SET_ADDRESS_SETTLE_MS);
+                    return Ok(());
+                }
+                Err(e) => {
+                    if attempt + 1 == SET_ADDRESS_ATTEMPTS {
+                        return Err(e);
+                    }
+                    delay_ms(10);
+                }
+            }
         }
-        Ok(())
+        Err(ViError::IO)
     }
 
     /// Set active configuration on a USB device.
@@ -62,9 +87,7 @@ impl<'a> UsbHub<'a> {
             0,
             &mut [],
         )?;
-        for _ in 0..1000 {
-            sys_yield();
-        }
+        delay_ms(10);
         Ok(())
     }
 
@@ -78,10 +101,9 @@ impl<'a> UsbHub<'a> {
             port,
             &mut [],
         )?;
-        // Wait for power stabilization
-        for _ in 0..5000 {
-            sys_yield();
-        }
+        // USB 2.0 7.1.7.4: the hub must not report the port as ready before
+        // downstream power has stabilized.
+        delay_ms(100);
         Ok(())
     }
 
@@ -96,10 +118,8 @@ impl<'a> UsbHub<'a> {
             &mut [],
         )?;
 
-        // Hold reset for ~50ms
-        for _ in 0..5000 {
-            sys_yield();
-        }
+        // USB 2.0 7.1.7.5: hold the reset for at least 10 ms.
+        delay_ms(50);
 
         // Clear reset change flag
         let _ = self.engine.control_transfer(
@@ -111,9 +131,8 @@ impl<'a> UsbHub<'a> {
             &mut [],
         );
 
-        for _ in 0..1000 {
-            sys_yield();
-        }
+        // Reset recovery (TRSTRCY) for whatever now sits behind the port.
+        delay_ms(50);
         Ok(())
     }
 
