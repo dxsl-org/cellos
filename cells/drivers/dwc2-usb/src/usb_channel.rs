@@ -144,13 +144,28 @@ impl<'a> UsbHostEngine<'a> {
     }
 
     /// Publish CPU writes in `[offset, offset+len)` to the device.
+    ///
+    /// A refused sync is reported, never skipped: without the clean the core
+    /// reads stale memory, so the device receives a request whose bytes are not
+    /// the ones staged and answers with a STALL -- a failure that looks like a
+    /// protocol problem and is actually a missing cache operation.
     fn cache_clean(&self, ch: usize, offset: usize, len: usize) {
         let guard = self.dma.borrow();
         if let Some(buf) = guard.as_ref() {
             let start = ch * DMA_SLOT_BYTES + offset.min(DMA_SLOT_BYTES);
             let end = (start + len).min((ch + 1) * DMA_SLOT_BYTES);
-            if let Some(token) = buf.begin_cache_sync(start, end.saturating_sub(start)) {
-                let _ = buf.complete_cache_sync(token);
+            let span = end.saturating_sub(start);
+            match buf.begin_cache_sync(start, span) {
+                Some(token) => {
+                    if !buf.complete_cache_sync(token) {
+                        ostd::io::println("[dwc2] WARN: cache sync completion refused");
+                    }
+                }
+                None => {
+                    ostd::io::println(
+                        "[dwc2] WARN: cache sync refused - device may read stale memory",
+                    );
+                }
             }
         }
     }
@@ -183,6 +198,36 @@ impl<'a> UsbHostEngine<'a> {
         }
         drop(guard);
         self.cache_clean(ch, offset, n);
+    }
+
+    /// The third `allow(unsafe_code)` island: a volatile read of this cell's
+    /// own grant slot at a bounded offset, used only for the trace below.
+    #[allow(unsafe_code)]
+    /// Print the first bytes staged in a channel slot.
+    ///
+    /// Proves what the core is about to hand the device. If these are not the
+    /// request the caller built, the fault is in staging or cache maintenance;
+    /// if they are, the fault is between memory and the bus.
+    pub fn trace_slot(&self, ch: usize, label: &str, len: usize) {
+        let guard = self.dma.borrow();
+        let Some(buf) = guard.as_ref() else {
+            return;
+        };
+        ostd::io::print("[dwc2] slot ");
+        ostd::io::print(label);
+        ostd::io::print(" =");
+        let n = len.min(16).min(DMA_SLOT_BYTES);
+        for i in 0..n {
+            // SAFETY: reading this cell's own grant slot at a bounded offset.
+            let byte = unsafe {
+                core::ptr::read_volatile(
+                    buf.virt().wrapping_add(ch * DMA_SLOT_BYTES).wrapping_add(i),
+                )
+            };
+            ostd::io::print(" ");
+            print_hex_val(byte as u32);
+        }
+        ostd::io::println("");
     }
 
     /// Copy a received payload out of the channel slot at `offset`.
@@ -255,6 +300,11 @@ impl<'a> UsbHostEngine<'a> {
         if self.dma_slot(ch).is_some() {
             self.program_hcdma(ch, 0);
             self.stage_out(ch, 0, setup);
+            static SETUP_TRACED: core::sync::atomic::AtomicBool =
+                core::sync::atomic::AtomicBool::new(false);
+            if !SETUP_TRACED.swap(true, core::sync::atomic::Ordering::Relaxed) {
+                self.trace_slot(ch, "setup", setup.len());
+            }
         } else {
             let w0 = u32::from_le_bytes([setup[0], setup[1], setup[2], setup[3]]);
             let w1 = u32::from_le_bytes([setup[4], setup[5], setup[6], setup[7]]);
@@ -778,11 +828,12 @@ impl<'a> UsbHostEngine<'a> {
         for (name, offset) in [
             ("HCCHAR", hcchar(ch)),
             ("HCTSIZ", hctsiz(ch)),
-            ("HCINT", hcint(ch)),
+            ("HCDMA", hcdma(ch)),
             ("HCINTMSK", hcintmsk(ch)),
         ] {
             self.dump_reg(name, self.read32(offset));
         }
+        self.dump_reg("HCINT", self.read32(hcint(ch)));
         self.dump_reg("HAINT", self.read32(HAINT));
         self.dump_reg("GINTSTS", self.read32(GINTSTS));
         self.dump_reg("GINTMSK", self.read32(GINTMSK));
