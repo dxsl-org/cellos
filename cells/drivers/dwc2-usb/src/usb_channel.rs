@@ -440,7 +440,12 @@ impl<'a> UsbHostEngine<'a> {
     /// takes before it starts a channel.
     #[inline]
     fn start_hcchar(&self, base: u32) -> u32 {
-        if self.frame_number() & 1 == 0 {
+        // The parity of the millisecond frame, not of the microframe underneath it.
+        // `frame_number` counts microframes and its low bit changes every 125 us,
+        // so taking the parity straight from it is wrong seven times in eight --
+        // and a transfer the core refuses for parity comes back as a halt with no
+        // transaction outcome, which is what a retried complete-split kept getting.
+        if self.full_frame() & 1 == 0 {
             base | HCCHAR_ODDFRM
         } else {
             base & !HCCHAR_ODDFRM
