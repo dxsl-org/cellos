@@ -1166,19 +1166,26 @@ impl<'a> UsbHostEngine<'a> {
         // RecvTimeout puts hundreds of frames between polls and the hub pairs a
         // split for less than one, which is what made every complete-split here
         // answer NYET.
+        // Both halves are issued here, one microframe apart and inside a single
+        // frame, and nothing is written to the console between them. A line of
+        // console output costs about seven milliseconds at this baud, which is
+        // seven of the frames the hub pairs a split within -- printing the first
+        // half before issuing the second is what kept the pair apart. Every report
+        // below therefore sits on a path where no further channel work depends on
+        // it, and the retry path has none at all.
         let frame = self.frame_number();
         arm(false);
         let outcome = self.wait_channel_spin(ch);
-        report_split_progress(
-            false,
-            &outcome,
-            self.last_hcint.get(),
-            self.last_was_nyet(),
-            want,
-            frame,
-        );
         if !matches!(outcome, Ok(())) {
             *pending = false;
+            report_split_progress(
+                false,
+                &outcome,
+                self.last_hcint.get(),
+                self.last_was_nyet(),
+                want,
+                frame,
+            );
             return match outcome {
                 Err(e) => Err(e),
                 _ => Ok(0),
@@ -1198,19 +1205,13 @@ impl<'a> UsbHostEngine<'a> {
 
             arm(true);
             let outcome = self.wait_channel_spin(ch);
-            report_split_progress(
-                true,
-                &outcome,
-                self.last_hcint.get(),
-                self.last_was_nyet(),
-                want,
-                self.frame_number(),
-            );
+            let int = self.last_hcint.get();
 
             match outcome {
                 Ok(()) if !self.last_reported_complete() => {
                     // ACK on a complete-split carries no data.
                     *pending = false;
+                    report_split_progress(true, &outcome, int, self.last_was_nyet(), want, frame);
                     return Ok(0);
                 }
                 Ok(()) => {
@@ -1218,6 +1219,14 @@ impl<'a> UsbHostEngine<'a> {
                     let remaining = (self.read32(hctsiz(ch)) & 0x7FFFF) as usize;
                     let got = want.saturating_sub(remaining);
                     if got == 0 {
+                        report_split_progress(
+                            true,
+                            &outcome,
+                            int,
+                            self.last_was_nyet(),
+                            want,
+                            frame,
+                        );
                         return Ok(0);
                     }
                     if self.dma_slot(ch).is_some() {
@@ -1240,15 +1249,26 @@ impl<'a> UsbHostEngine<'a> {
                     return Ok(got.min(buf.len()));
                 }
                 // Still working, or NAK which ends the pairing. Either way the
-                // next poll starts over rather than asking again here.
+                // next poll starts over rather than asking again here -- and a
+                // hub that answered NYET is asked again below, with nothing
+                // written in between for the same reason as above.
                 Err(ViError::WouldBlock) => {
                     if !self.last_was_nyet() {
                         *pending = false;
+                        report_split_progress(
+                            true,
+                            &outcome,
+                            int,
+                            self.last_was_nyet(),
+                            want,
+                            frame,
+                        );
                         return Ok(0);
                     }
                 }
                 Err(e) => {
                     *pending = false;
+                    report_split_progress(true, &outcome, int, self.last_was_nyet(), want, frame);
                     return Err(e);
                 }
             }
