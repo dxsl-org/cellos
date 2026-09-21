@@ -148,6 +148,14 @@ pub const HCSPLT_HUBADDR_MASK: u32 = 0x7F << HCSPLT_HUBADDR_SHIFT;
 pub const HCSPLT_COMPSPLT: u32 = 1 << 16; // 1 = complete split, 0 = start split
 pub const HCSPLT_SPLTENA: u32 = 1 << 31; // split enable
 
+/// `HCCHAR.LSPDDEV` — the target is a low-speed device.
+///
+/// Not a cosmetic hint: a low-speed device only understands transactions
+/// preceded by a full-speed preamble. Behind a hub the same bit tells the hub's
+/// transaction translator to use that preamble, and without it the hub runs a
+/// full-speed transaction to a device that cannot hear it.
+pub const HCCHAR_LSPDDEV: u32 = 1 << 17;
+
 /// `HFNUM.FRNUM` — the USB frame counter, in 125 us frames.
 pub const HFNUM_FRNUM_MASK: u32 = 0xFFFF;
 

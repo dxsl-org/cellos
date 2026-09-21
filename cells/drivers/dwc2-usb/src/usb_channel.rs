@@ -74,6 +74,8 @@ pub struct Split {
     pub hub_addr: u8,
     /// The downstream port on that hub holding the device.
     pub port: u8,
+    /// The device is low-speed and needs the preamble its speed requires.
+    pub low_speed: bool,
 }
 
 /// Complete-split attempts before a buffered transaction is given up on.
@@ -138,6 +140,19 @@ impl<'a> UsbHostEngine<'a> {
     /// The split context transfers are currently addressed with.
     pub fn split(&self) -> Option<Split> {
         self.split.get()
+    }
+
+    /// `HCCHAR` bits that describe the device rather than the endpoint.
+    ///
+    /// A low-speed device needs `HCCHAR.LSPDDEV` on every transfer, including
+    /// the ones a hub relays, because that is what selects the preamble. It is
+    /// carried on the split context because that is where the port's negotiated
+    /// speed is known.
+    fn device_flags(&self) -> u32 {
+        match self.split.get() {
+            Some(split) if split.low_speed => HCCHAR_LSPDDEV,
+            _ => 0,
+        }
     }
 
     /// `HCSPLT` for the current context; `complete` selects the second pass.
@@ -433,8 +448,11 @@ impl<'a> UsbHostEngine<'a> {
         // HCTSIZ: XFERSIZE = 8, PKTCNT = 1, PID = 3 (SETUP).
         // HCCHAR: EPNUM = 0, EPDIR = 0 (OUT), EPTYPE = 0 (Control), MC = 1.
         let sctsiz = 8 | (1 << 19) | (3 << 29);
-        let scchar =
-            (self.control_mps() as u32) | (1 << 20) | ((dev_addr as u32) << 22) | (1 << 31);
+        let scchar = (self.control_mps() as u32)
+            | self.device_flags()
+            | (1 << 20)
+            | ((dev_addr as u32) << 22)
+            | (1 << 31);
         let dma = self.dma_slot(ch).is_some();
 
         // Stage once up front so the trace has something to show. Each pass
@@ -495,8 +513,12 @@ impl<'a> UsbHostEngine<'a> {
 
             // HCCHAR: EPNUM = 0, EPDIR = 1 (IN), EPTYPE = 0 (Control), MC = 1.
             let sctsiz = (chunk as u32) | (1 << 19) | (toggle << 29);
-            let scchar =
-                (mps as u32) | (1 << 15) | (1 << 20) | ((dev_addr as u32) << 22) | (1 << 31);
+            let scchar = (mps as u32)
+                | self.device_flags()
+                | (1 << 15)
+                | (1 << 20)
+                | ((dev_addr as u32) << 22)
+                | (1 << 31);
 
             self.run_packet(ch, |complete| {
                 self.write32(hcsplt(ch), self.hcsplt_value(complete));
@@ -558,6 +580,7 @@ impl<'a> UsbHostEngine<'a> {
         let sctsiz = (1 << 19) | (2 << 29);
         let epdir = if is_in { 1 } else { 0 };
         let scchar = (self.control_mps() as u32)
+            | self.device_flags()
             | (epdir << 15)
             | (1 << 20)
             | ((dev_addr as u32) << 22)
@@ -695,7 +718,11 @@ impl<'a> UsbHostEngine<'a> {
             self.write32(hctsiz(ch), sctsiz);
 
             // HCCHAR: EPNUM = 0, EPDIR = 0 (OUT), EPTYPE = 0 (Control), MC = 1, CHENA = 1.
-            let scchar = (mps as u32) | (1 << 20) | ((dev_addr as u32) << 22) | (1 << 31);
+            let scchar = (mps as u32)
+                | self.device_flags()
+                | (1 << 20)
+                | ((dev_addr as u32) << 22)
+                | (1 << 31);
             self.write32(hcchar(ch), scchar);
 
             if self.dma_slot(ch).is_some() {
@@ -890,6 +917,7 @@ impl<'a> UsbHostEngine<'a> {
         // EPTYPE = 3 (Interrupt), MC = 1, DEVADDR, CHENA.
         let scchar = (mps as u32 & 0x7FF)
             | ((ep_num as u32) << 11)
+            | self.device_flags()
             | (1 << 15) // EPDIR = IN
             | (3 << 18) // EPTYPE = Interrupt
             | (1 << 20) // MC = 1
@@ -979,6 +1007,7 @@ impl<'a> UsbHostEngine<'a> {
         let sctsiz = (want as u32) | (1 << 19);
         let scchar = (mps as u32 & 0x7FF)
             | ((ep_num as u32) << 11)
+            | self.device_flags()
             | (1 << 15)
             | (3 << 18)
             | (1 << 20)
@@ -1105,6 +1134,8 @@ impl<'a> UsbHostEngine<'a> {
             ("HCTSIZ", hctsiz(ch)),
             ("HCDMA", hcdma(ch)),
             ("HCINTMSK", hcintmsk(ch)),
+            ("HCSPLT", hcsplt(ch)),
+            ("HFNUM", HFNUM),
         ] {
             self.dump_reg(name, self.read32(offset));
         }

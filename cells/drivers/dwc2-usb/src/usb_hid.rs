@@ -72,8 +72,9 @@ pub struct HidInterface {
     pub split: Option<crate::usb_channel::Split>,
 }
 
-/// Hub port status speed code for a high-speed device (bits 9:10 of `wPortStatus`).
+/// Hub port status speed codes (bits 9:10 of `wPortStatus`).
 const HUB_PORT_SPEED_HIGH: u8 = 2;
+const HUB_PORT_SPEED_LOW: u8 = 1;
 
 /// Probe `port` for a device, reset it, and assign the next free address.
 ///
@@ -141,28 +142,45 @@ pub fn attach_port(
         Some(crate::usb_channel::Split {
             hub_addr: hub.address(),
             port: port as u8,
+            low_speed: hub_speed == HUB_PORT_SPEED_LOW,
         })
     };
     engine.set_split(split);
 
-    // The device answers at address 0 until SET_ADDRESS latches.
-    let device = read_device_descriptor(engine, 0)?;
-    print("[usb-hid] vendor:product ");
-    print_hex16(device.vendor_id);
-    print(":");
-    print_hex16(device.product_id);
-    println("");
+    // Bring the device up. Every failure past this point has to clear the split
+    // context on its way out: leaving it set routes the *next* transfer -- which
+    // is hub traffic for the next port -- through a hub port, and the hub then
+    // reports transaction errors for requests it never received.
+    let brought_up = (|| -> Option<Vec<InterfaceDesc>> {
+        // The device answers at address 0 until SET_ADDRESS latches.
+        let device = read_device_descriptor(engine, 0)?;
+        print("[usb-hid] vendor:product ");
+        print_hex16(device.vendor_id);
+        print(":");
+        print_hex16(device.product_id);
+        println("");
 
-    UsbHub::set_address(engine, addr).ok()?;
-    *next_addr = next_addr.saturating_add(1);
+        UsbHub::set_address(engine, addr).ok()?;
+        let (config_value, descriptors) = read_configuration(engine, addr)?;
 
-    let (config_value, descriptors) = read_configuration(engine, addr)?;
+        // Activate the configuration before any interface-level request: SET_IDLE
+        // and SET_PROTOCOL are only answered in the configured state.
+        UsbHub::set_configuration(engine, addr, config_value).ok()?;
 
-    // Activate the configuration before any interface-level request: SET_IDLE
-    // and SET_PROTOCOL are only answered in the configured state.
-    UsbHub::set_configuration(engine, addr, config_value).ok()?;
+        Some(descriptors)
+    })();
 
-    Some((addr, descriptors, split))
+    match brought_up {
+        Some(descriptors) => {
+            // Only a device that came all the way up consumes its address.
+            *next_addr = next_addr.saturating_add(1);
+            Some((addr, descriptors, split))
+        }
+        None => {
+            engine.set_split(None);
+            None
+        }
+    }
 }
 
 /// Read a device descriptor from `addr`, retrying the short-read case.
