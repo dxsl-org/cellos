@@ -79,6 +79,16 @@ mod trace {
         }
     }
 
+    /// Begin a fresh recording.
+    ///
+    /// Enumeration is hundreds of records on its own, so a ring read after it
+    /// describes enumeration and never the polls that come next -- which is the
+    /// question now. Starting over when the polls begin puts them at the front.
+    pub fn reset() {
+        NEXT.store(0, Ordering::Relaxed);
+        DUMPED.store(false, Ordering::Relaxed);
+    }
+
     /// Write the recording out, once, outside any transfer.
     pub fn dump_once() {
         if DUMPED.swap(true, Ordering::Relaxed) {
@@ -1825,6 +1835,14 @@ fn print_usize_val(v: usize) {
     if let Ok(s) = core::str::from_utf8(&out[..len]) {
         ostd::io::print(s);
     }
+}
+
+/// Start a fresh register recording.
+///
+/// Called when the polls begin, so the ring describes the polls rather than the
+/// enumeration that came before them.
+pub fn trace_reset() {
+    trace::reset();
 }
 
 pub(crate) fn print_hex_val(val: u32) {

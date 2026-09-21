@@ -314,6 +314,9 @@ fn cell_main() {
     let mut out_buf = [0u8; REPLY_BUF];
 
     println("[dwc2-usb] Entering NIC + HID serving loop...");
+    // Everything the trace holds so far is enumeration; the polls are what the
+    // next reading is for.
+    crate::usb_channel::trace_reset();
 
     loop {
         // Re-resolve both endpoints: the input service restarts under a new tid.
