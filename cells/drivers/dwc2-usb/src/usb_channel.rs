@@ -1,5 +1,6 @@
 //! DWC2 Host Channel transaction engine (Control and Bulk transfers via Data FIFO).
 
+use crate::delay_ms;
 use crate::regs::*;
 use core::cell::{Cell, RefCell};
 use ostd::dma::DmaBuf;
@@ -57,6 +58,13 @@ pub fn initial_control_mps(speed: u32) -> u8 {
         _ => CONTROL_MPS_LOW_FULL_SPEED,
     }
 }
+
+/// Halves a split poll will issue before giving the hub up for this round.
+///
+/// A start-split and the complete-splits that collect it; the count is small
+/// because each attempt spends a millisecond giving the hub's translator time to
+/// run the transaction.
+const SPLIT_ATTEMPTS: usize = 3;
 
 /// Poll budget for a channel that is part of a periodic poll.
 ///
@@ -1094,7 +1102,7 @@ impl<'a> UsbHostEngine<'a> {
             | (3 << 20)
             | ((dev_addr as u32) << 22)
             | (1 << 31);
-        let complete = *pending;
+        let mut complete = *pending;
         let arm = |complete: bool| {
             self.write32(hcsplt(ch), self.hcsplt_value(complete));
             self.write32(hctsiz(ch), sctsiz);
@@ -1103,66 +1111,88 @@ impl<'a> UsbHostEngine<'a> {
             self.write32(hcchar(ch), self.start_hcchar(scchar));
         };
 
-        arm(complete);
-        let outcome = self.wait_channel_with(ch, SPLIT_WAIT_POLLS);
-        report_split_progress(
-            complete,
-            &outcome,
-            self.last_hcint.get(),
-            self.last_was_nyet(),
-            want,
-            self.frame_number(),
-        );
-        match outcome {
-            Ok(()) => {}
-            Err(ViError::WouldBlock) => {
-                // NYET leaves the pairing live for the next poll; NAK ends it.
-                if !self.last_was_nyet() {
+        // Both halves are issued here. Handing the second half to a later poll
+        // was tried and does not work in this loop: the serving loop's
+        // RecvTimeout puts hundreds of frames between polls, and the hub only
+        // pairs a split across a handful, so the complete-split always arrived
+        // after the pairing was long discarded.
+        for _ in 0..SPLIT_ATTEMPTS {
+            arm(complete);
+            let outcome = self.wait_channel_with(ch, SPLIT_WAIT_POLLS);
+            report_split_progress(
+                complete,
+                &outcome,
+                self.last_hcint.get(),
+                self.last_was_nyet(),
+                want,
+                self.frame_number(),
+            );
+
+            match outcome {
+                Ok(()) if complete && !self.last_reported_complete() => {
+                    // ACK on a complete-split carries no data.
                     *pending = false;
+                    return Ok(0);
                 }
-                return Ok(0);
-            }
-            Err(e) => {
-                *pending = false;
-                return Err(e);
-            }
-        }
-
-        if !complete {
-            // The hub has the transaction and will run it; the next poll
-            // collects the result.
-            *pending = true;
-            return Ok(0);
-        }
-
-        *pending = false;
-        if !self.last_reported_complete() {
-            return Ok(0);
-        }
-
-        let remaining = (self.read32(hctsiz(ch)) & 0x7FFFF) as usize;
-        let got = want.saturating_sub(remaining);
-        if got == 0 {
-            return Ok(0);
-        }
-        if self.dma_slot(ch).is_some() {
-            let mut tmp = [0u8; DMA_SLOT_BYTES];
-            self.collect_in(ch, 0, &mut tmp, got.min(DMA_SLOT_BYTES));
-            let n = got.min(buf.len());
-            buf[..n].copy_from_slice(&tmp[..n]);
-            return Ok(n);
-        }
-        let words = got.div_ceil(4);
-        for w in 0..words {
-            let word = self.read_fifo(ch);
-            for (j, byte) in word.to_le_bytes().iter().enumerate() {
-                let idx = w * 4 + j;
-                if idx < got && idx < buf.len() {
-                    buf[idx] = *byte;
+                Ok(()) if complete => {
+                    *pending = false;
+                    let remaining = (self.read32(hctsiz(ch)) & 0x7FFFF) as usize;
+                    let got = want.saturating_sub(remaining);
+                    if got == 0 {
+                        return Ok(0);
+                    }
+                    if self.dma_slot(ch).is_some() {
+                        let mut tmp = [0u8; DMA_SLOT_BYTES];
+                        self.collect_in(ch, 0, &mut tmp, got.min(DMA_SLOT_BYTES));
+                        let n = got.min(buf.len());
+                        buf[..n].copy_from_slice(&tmp[..n]);
+                        return Ok(n);
+                    }
+                    let words = got.div_ceil(4);
+                    for w in 0..words {
+                        let word = self.read_fifo(ch);
+                        for (j, byte) in word.to_le_bytes().iter().enumerate() {
+                            let idx = w * 4 + j;
+                            if idx < got && idx < buf.len() {
+                                buf[idx] = *byte;
+                            }
+                        }
+                    }
+                    return Ok(got.min(buf.len()));
+                }
+                Ok(()) => {
+                    // Start-split accepted. The hub needs to run the full- or
+                    // low-speed transaction before it can answer, which is what
+                    // NYET reports; `delay_ms` gives it that time while yielding
+                    // the CPU rather than holding an MMIO poll loop open.
+                    complete = true;
+                    delay_ms(1);
+                }
+                Err(ViError::WouldBlock) if complete && self.last_was_nyet() => {
+                    // Still working. The pairing is alive, so keep asking.
+                    delay_ms(1);
+                }
+                Err(ViError::WouldBlock) if !complete => {
+                    // The device had nothing to hand over.
+                    *pending = false;
+                    return Ok(0);
+                }
+                Err(ViError::WouldBlock) => {
+                    // NAK on a complete-split ends the pairing.
+                    *pending = false;
+                    return Ok(0);
+                }
+                Err(e) => {
+                    *pending = false;
+                    return Err(e);
                 }
             }
         }
-        Ok(got.min(buf.len()))
+
+        // The hub never finished. Leave the pairing for the next poll rather
+        // than starting a new one that would replace what it is working on.
+        *pending = complete;
+        Ok(0)
     }
 
     /// Name the host-channel interrupt bit that ended a transfer.
