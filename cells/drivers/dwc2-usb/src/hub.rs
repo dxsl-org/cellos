@@ -42,6 +42,11 @@ impl<'a> UsbHub<'a> {
         Self { engine, hub_addr }
     }
 
+    /// The address this hub was assigned, needed to address devices behind it.
+    pub fn address(&self) -> u8 {
+        self.hub_addr
+    }
+
     /// Set device address on USB bus for a device currently at address 0.
     ///
     /// `SetAddress()` is the one request that cannot be retried where it was

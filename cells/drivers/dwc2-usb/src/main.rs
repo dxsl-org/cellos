@@ -207,11 +207,16 @@ fn cell_main() {
             for port in 1..=ports as u16 {
                 let _ = hub.power_on_port(port);
 
-                let Some((addr, ifaces)) =
+                let Some((addr, ifaces, split)) =
                     usb_hid::attach_port(&engine, &hub, port, &mut next_addr)
                 else {
                     continue;
                 };
+
+                // Address whatever is on this port the way the port is wired:
+                // a full- or low-speed device behind the hub is reached only
+                // through it.
+                engine.set_split(split);
 
                 // A HID device is claimed here; anything else on this port is
                 // the hub's own function device — on the LAN9514 that is the
@@ -224,6 +229,7 @@ fn cell_main() {
                     &mut hid_interfaces,
                 );
                 if started > 0 {
+                    engine.set_split(None);
                     continue;
                 }
 
@@ -240,6 +246,9 @@ fn cell_main() {
                         println("[lan9514] WARN: Ethernet MAC init failed on this port");
                     }
                 }
+
+                // Back to direct addressing for the next port's hub traffic.
+                engine.set_split(None);
             }
         }
 

@@ -58,6 +58,37 @@ pub fn initial_control_mps(speed: u32) -> u8 {
     }
 }
 
+/// Where a device sits when it has to be reached through a hub.
+///
+/// A high-speed hub does not pass full- and low-speed traffic through, so a
+/// device behind one is addressed in two transactions: a **start-split** the hub
+/// buffers, then a **complete-split** that collects the result. The core
+/// expresses both through `HCSPLT`.
+///
+/// This is per device, not per transfer, which is why the engine carries it the
+/// same way it carries `ctrl_mps`: both are facts about whoever is being
+/// addressed right now.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Split {
+    /// The address the hub itself was assigned.
+    pub hub_addr: u8,
+    /// The downstream port on that hub holding the device.
+    pub port: u8,
+}
+
+/// Complete-split attempts before a buffered transaction is given up on.
+///
+/// A hub answers a complete-split with NYET while the result is still coming;
+/// it is not an error, just "not yet".
+const SPLIT_COMPLETE_ATTEMPTS: usize = 4;
+
+/// Frames a complete-split may still belong to the start-split that began it.
+///
+/// The pairing is only meaningful inside the hub's frame budget, so a
+/// complete-split issued after this many frames is retried from the start
+/// instead of being taken for a result.
+const SPLIT_COMPLETE_FRAMES: u32 = 4;
+
 pub struct UsbHostEngine<'a> {
     mmio: &'a MmioRegion,
     /// Max packet size for control transfers on endpoint 0. Updated from the
@@ -66,6 +97,9 @@ pub struct UsbHostEngine<'a> {
     mode: Cell<TransferMode>,
     /// Per-channel DMA scratch, allocated on first use in DMA mode.
     dma: RefCell<Option<DmaBuf>>,
+    /// Hub the device currently being addressed sits behind, when it is not on
+    /// the root port itself.
+    split: Cell<Option<Split>>,
     /// `HCINT` captured at the last channel failure.
     ///
     /// `wait_channel` collapses every hardware outcome into `ViError::IO`, and
@@ -82,6 +116,7 @@ impl<'a> UsbHostEngine<'a> {
             ctrl_mps: Cell::new(CONTROL_MPS_LOW_FULL_SPEED),
             mode: Cell::new(TransferMode::Fifo),
             dma: RefCell::new(None),
+            split: Cell::new(None),
             last_hcint: Cell::new(0),
         }
     }
@@ -89,6 +124,80 @@ impl<'a> UsbHostEngine<'a> {
     /// Max packet size currently used for control transfers.
     pub fn control_mps(&self) -> u8 {
         self.ctrl_mps.get()
+    }
+
+    /// Address the next transfers through `split`, or the root port when `None`.
+    ///
+    /// Set before bringing up a device behind a hub and cleared when addressing
+    /// something that is not, because a stale context routes traffic through a
+    /// hub port it does not belong to.
+    pub fn set_split(&self, split: Option<Split>) {
+        self.split.set(split);
+    }
+
+    /// The split context transfers are currently addressed with.
+    pub fn split(&self) -> Option<Split> {
+        self.split.get()
+    }
+
+    /// `HCSPLT` for the current context; `complete` selects the second pass.
+    fn hcsplt_value(&self, complete: bool) -> u32 {
+        let Some(split) = self.split.get() else {
+            return 0;
+        };
+        let mut value = HCSPLT_SPLTENA
+            | ((split.hub_addr as u32 & HCSPLT_HUBADDR_MASK >> HCSPLT_HUBADDR_SHIFT)
+                << HCSPLT_HUBADDR_SHIFT)
+            | (split.port as u32 & HCSPLT_PRTADDR_MASK);
+        if complete {
+            value |= HCSPLT_COMPSPLT;
+        }
+        value
+    }
+
+    /// Current USB frame number, used to bound a complete-split.
+    fn frame_number(&self) -> u32 {
+        self.read32(HFNUM) & HFNUM_FRNUM_MASK
+    }
+
+    /// Start a channel and, behind a hub, run the split handshake that reaches
+    /// the device at all.
+    ///
+    /// Every packet takes two passes over the channel: the start-split hands the
+    /// transaction to the hub, and the complete-split collects what it buffered.
+    /// A hub that has not finished answers the complete-split with NYET, which is
+    /// why that is a retry here rather than a failure.
+    ///
+    /// Without this a full- or low-speed device on a hub port is never reached:
+    /// nothing on the bus answers, and the channel comes back with XACTERR. That
+    /// reads like a protocol error and is really a missing transaction.
+    ///
+    /// `arm(complete)` stages the payload and starts the channel for one pass.
+    fn run_packet(&self, ch: usize, arm: impl Fn(bool)) -> ViResult<()> {
+        if self.split.get().is_none() {
+            arm(false);
+            return self.wait_channel(ch);
+        }
+
+        arm(false);
+        self.wait_channel(ch)?;
+
+        let started = self.frame_number();
+        for _ in 0..SPLIT_COMPLETE_ATTEMPTS {
+            arm(true);
+            match self.wait_channel(ch) {
+                Ok(()) => return Ok(()),
+                Err(ViError::WouldBlock) => {
+                    if self.frame_number().wrapping_sub(started) & HFNUM_FRNUM_MASK
+                        > SPLIT_COMPLETE_FRAMES
+                    {
+                        return Err(ViError::IO);
+                    }
+                }
+                Err(e) => return Err(e),
+            }
+        }
+        Err(ViError::IO)
     }
 
     /// Adopt a device's control-endpoint max packet size.
@@ -318,50 +427,50 @@ impl<'a> UsbHostEngine<'a> {
     /// Execute a standard 8-byte USB SETUP packet on Channel 0.
     pub fn send_setup(&self, dev_addr: u8, setup: &[u8; 8]) -> ViResult<()> {
         let ch = 0;
-        self.write32(hcsplt(ch), 0);
+        self.prepare_channel(ch);
         self.write32(hcintmsk(ch), 0x07FF);
-        // 1. Clear pending channel interrupts
-        self.write32(hcint(ch), 0xFFFF_FFFF);
-        // 2. Configure Transfer Size (HCTSIZ):
-        // XFERSIZE = 8, PKTCNT = 1, PID = 3 (SETUP)
-        let sctsiz = 8 | (1 << 19) | (3 << 29);
-        self.write32(hctsiz(ch), sctsiz);
 
-        // 3. Hand the 8 setup bytes to the core *before* the channel starts. In
-        //    DMA mode the core reads them from guest memory at HCDMA; the FIFO is
-        //    not consulted at all.
-        //
-        //    This order is the whole ballgame. Enabling the channel first makes
-        //    the core latch the previous transfer's HCDMA, so this SETUP is read
-        //    from the wrong place, the device ACKs eight bytes it never looked
-        //    at, and the data stage that follows is STALLed. The retry passes,
-        //    because the failed attempt has since written the right address --
-        //    which is exactly why every first attempt failed and every second one
-        //    worked.
-        if self.dma_slot(ch).is_some() {
-            self.program_hcdma(ch, 0);
+        // HCTSIZ: XFERSIZE = 8, PKTCNT = 1, PID = 3 (SETUP).
+        // HCCHAR: EPNUM = 0, EPDIR = 0 (OUT), EPTYPE = 0 (Control), MC = 1.
+        let sctsiz = 8 | (1 << 19) | (3 << 29);
+        let scchar =
+            (self.control_mps() as u32) | (1 << 20) | ((dev_addr as u32) << 22) | (1 << 31);
+        let dma = self.dma_slot(ch).is_some();
+
+        // Stage once up front so the trace has something to show. Each pass
+        // stages again, which is also what hands the bytes to the core.
+        if dma {
             self.stage_out(ch, 0, setup);
             static SETUP_TRACED: core::sync::atomic::AtomicBool =
                 core::sync::atomic::AtomicBool::new(false);
             if !SETUP_TRACED.swap(true, core::sync::atomic::Ordering::Relaxed) {
                 self.trace_slot(ch, "setup", setup.len());
             }
-        } else {
-            let w0 = u32::from_le_bytes([setup[0], setup[1], setup[2], setup[3]]);
-            let w1 = u32::from_le_bytes([setup[4], setup[5], setup[6], setup[7]]);
-            self.write_fifo(ch, w0);
-            self.write_fifo(ch, w1);
         }
 
-        // 4. Start the channel last: HCCHAR fields (bits 0-10 MPS, 11-14 EPNUM,
-        //    15 EPDIR, 18-19 EPTYPE, 20 MC, 22-28 DEVADDR, 31 CHENA): EPNUM = 0,
-        //    EPDIR = 0 (OUT), EPTYPE = 0 (Control), MC = 1, CHENA = 1.
-        let scchar =
-            (self.control_mps() as u32) | (1 << 20) | ((dev_addr as u32) << 22) | (1 << 31);
-        self.write32(hcchar(ch), scchar);
-
-        // 5. Poll for completion
-        self.wait_channel(ch)
+        // The payload is staged and HCDMA armed *before* CHENA on every pass:
+        // the core latches its DMA address when the channel starts, so enabling
+        // first reads the previous transfer's address and the device ACKs eight
+        // bytes it never looked at.
+        self.run_packet(ch, |complete| {
+            self.write32(hcsplt(ch), self.hcsplt_value(complete));
+            self.write32(hctsiz(ch), sctsiz);
+            if dma {
+                self.program_hcdma(ch, 0);
+                self.stage_out(ch, 0, setup);
+            } else {
+                self.write_fifo(
+                    ch,
+                    u32::from_le_bytes([setup[0], setup[1], setup[2], setup[3]]),
+                );
+                self.write_fifo(
+                    ch,
+                    u32::from_le_bytes([setup[4], setup[5], setup[6], setup[7]]),
+                );
+            }
+            self.write32(hcint(ch), 0xFFFF_FFFF);
+            self.write32(hcchar(ch), scchar);
+        })
     }
 
     /// Receive the DATA IN phase of a control transfer on Channel 0.
@@ -382,17 +491,27 @@ impl<'a> UsbHostEngine<'a> {
         while received < buf.len() {
             let chunk = (buf.len() - received).min(mps);
             self.prepare_channel(ch);
-            self.write32(hcsplt(ch), 0);
             self.write32(hcintmsk(ch), 0x07FF);
-            let sctsiz = (chunk as u32) | (1 << 19) | (toggle << 29);
-            self.write32(hctsiz(ch), sctsiz);
 
-            // HCCHAR: EPNUM = 0, EPDIR = 1 (IN), EPTYPE = 0 (Control), MC = 1, CHENA = 1.
+            // HCCHAR: EPNUM = 0, EPDIR = 1 (IN), EPTYPE = 0 (Control), MC = 1.
+            let sctsiz = (chunk as u32) | (1 << 19) | (toggle << 29);
             let scchar =
                 (mps as u32) | (1 << 15) | (1 << 20) | ((dev_addr as u32) << 22) | (1 << 31);
-            self.write32(hcchar(ch), scchar);
 
-            self.wait_channel(ch)?;
+            self.run_packet(ch, |complete| {
+                self.write32(hcsplt(ch), self.hcsplt_value(complete));
+                self.write32(hctsiz(ch), sctsiz);
+                // Directly, the address is armed once before the loop and the
+                // core walks the slot itself, so re-arming per packet would
+                // overwrite what it has already written. Behind a hub the core
+                // moves a single packet per pass, so the address is re-armed
+                // every pass and advanced by what has arrived so far.
+                if complete || self.split.get().is_some() {
+                    self.program_hcdma(ch, received);
+                }
+                self.write32(hcint(ch), 0xFFFF_FFFF);
+                self.write32(hcchar(ch), scchar);
+            })?;
 
             // The core writes the *remaining* count back into HCTSIZ.
             let remaining = (self.read32(hctsiz(ch)) & 0x7FFFF) as usize;
@@ -433,24 +552,27 @@ impl<'a> UsbHostEngine<'a> {
         self.write32(hcsplt(ch), 0);
         self.write32(hcintmsk(ch), 0x07FF);
         // XFERSIZE = 0, PKTCNT = 1, PID = 2 (DATA1)
+        // HCTSIZ: XFERSIZE = 0, PKTCNT = 1, PID = 2 (DATA1).
+        // HCCHAR: EPNUM = 0, EPTYPE = 0 (Control), MPS = 64, MC = 1, EPDIR from
+        // the caller.
         let sctsiz = (1 << 19) | (2 << 29);
-        self.write32(hctsiz(ch), sctsiz);
-
-        // A zero-length handshake moves no bytes, but the channel still latches
-        // an address when it starts and the previous transfer's is not a
-        // position this stage is allowed to begin from.
-        self.program_hcdma(ch, 0);
-
-        // HCCHAR: EPNUM = 0, EPTYPE = 0 (Control), MPS = 64, MC = 1, CHENA = 1, EPDIR from the caller.
         let epdir = if is_in { 1 } else { 0 };
         let scchar = (self.control_mps() as u32)
             | (epdir << 15)
             | (1 << 20)
             | ((dev_addr as u32) << 22)
             | (1 << 31);
-        self.write32(hcchar(ch), scchar);
 
-        self.wait_channel(ch)
+        self.run_packet(ch, |complete| {
+            self.write32(hcsplt(ch), self.hcsplt_value(complete));
+            self.write32(hctsiz(ch), sctsiz);
+            // A zero-length handshake moves no bytes, but the channel still
+            // latches an address when it starts and the previous transfer's is
+            // not a position this stage may begin from.
+            self.program_hcdma(ch, 0);
+            self.write32(hcint(ch), 0xFFFF_FFFF);
+            self.write32(hcchar(ch), scchar);
+        })
     }
 
     /// Execute a complete synchronous USB Control Transfer.
@@ -749,6 +871,12 @@ impl<'a> UsbHostEngine<'a> {
             return Ok(0);
         }
 
+        // Behind a hub the poll is two transactions rather than one, and the
+        // "nothing queued" case arrives as a NAK on the start-split.
+        if self.split.get().is_some() {
+            return self.poll_split(ch, dev_addr, ep_num, mps, want, buf);
+        }
+
         self.prepare_channel(ch);
         self.write32(hcsplt(ch), 0);
         self.write32(hcintmsk(ch), 0x07FF);
@@ -826,6 +954,95 @@ impl<'a> UsbHostEngine<'a> {
 
         self.halt_channel(ch);
         Ok(0)
+    }
+
+    /// Interrupt IN poll for a device behind a hub.
+    ///
+    /// A hub with no report queued answers the start-split with NAK, which is
+    /// the same idle case the direct path reports as zero bytes. When it has
+    /// one, it buffers the transaction and answers the complete-split with the
+    /// report, answering NYET until it is ready.
+    fn poll_split(
+        &self,
+        ch: usize,
+        dev_addr: u8,
+        ep_num: u8,
+        mps: u16,
+        want: usize,
+        buf: &mut [u8],
+    ) -> ViResult<usize> {
+        self.prepare_channel(ch);
+        self.write32(hcintmsk(ch), 0x07FF);
+
+        // HCTSIZ: XFERSIZE = want, PKTCNT = 1, PID = DATA0.
+        // HCCHAR: MPS, EPNUM, IN, EPTYPE = 3 (Interrupt), MC = 1.
+        let sctsiz = (want as u32) | (1 << 19);
+        let scchar = (mps as u32 & 0x7FF)
+            | ((ep_num as u32) << 11)
+            | (1 << 15)
+            | (3 << 18)
+            | (1 << 20)
+            | ((dev_addr as u32) << 22)
+            | (1 << 31);
+        let arm = |complete: bool| {
+            self.write32(hcsplt(ch), self.hcsplt_value(complete));
+            self.write32(hctsiz(ch), sctsiz);
+            self.program_hcdma(ch, 0);
+            self.write32(hcint(ch), 0xFFFF_FFFF);
+            self.write32(hcchar(ch), scchar);
+        };
+
+        arm(false);
+        match self.wait_channel(ch) {
+            Ok(()) => {}
+            // Nothing queued on the device — the ordinary idle case.
+            Err(ViError::WouldBlock) => return Ok(0),
+            Err(e) => return Err(e),
+        }
+
+        let started = self.frame_number();
+        for _ in 0..SPLIT_COMPLETE_ATTEMPTS {
+            arm(true);
+            match self.wait_channel(ch) {
+                Ok(()) => break,
+                Err(ViError::WouldBlock) => {
+                    // Still not ready. Past the frame budget the pairing is
+                    // gone, so the poll simply reports no report this round.
+                    if self.frame_number().wrapping_sub(started) & HFNUM_FRNUM_MASK
+                        > SPLIT_COMPLETE_FRAMES
+                    {
+                        return Ok(0);
+                    }
+                }
+                Err(e) => return Err(e),
+            }
+        }
+
+        let remaining = (self.read32(hctsiz(ch)) & 0x7FFFF) as usize;
+        let got = want.saturating_sub(remaining);
+        if got == 0 {
+            return Ok(0);
+        }
+
+        if self.dma_slot(ch).is_some() {
+            let mut tmp = [0u8; DMA_SLOT_BYTES];
+            self.collect_in(ch, 0, &mut tmp, got.min(DMA_SLOT_BYTES));
+            let n = got.min(buf.len());
+            buf[..n].copy_from_slice(&tmp[..n]);
+            Ok(n)
+        } else {
+            let words = got.div_ceil(4);
+            for w in 0..words {
+                let word = self.read_fifo(ch);
+                for (j, byte) in word.to_le_bytes().iter().enumerate() {
+                    let idx = w * 4 + j;
+                    if idx < got && idx < buf.len() {
+                        buf[idx] = *byte;
+                    }
+                }
+            }
+            Ok(got.min(buf.len()))
+        }
     }
 
     /// Name the host-channel interrupt bit that ended a transfer.
@@ -945,7 +1162,12 @@ impl<'a> UsbHostEngine<'a> {
                     self.last_hcint.set(int);
                     return Err(ViError::IO);
                 }
-                if int & (1 << 4) != 0 {
+                // NAK and NYET both mean "ask again", and both have to be
+                // reported rather than folded into success: a hub answering a
+                // complete-split with NYET has not produced a result yet, and
+                // returning Ok there hands the caller an empty buffer as if the
+                // transfer had happened.
+                if int & ((1 << 4) | (1 << 6)) != 0 {
                     self.last_hcint.set(int);
                     return Err(ViError::WouldBlock);
                 }
@@ -971,7 +1193,7 @@ impl<'a> UsbHostEngine<'a> {
                 self.last_hcint.set(int);
                 return Err(ViError::IO);
             }
-            if int & (1 << 4) != 0 {
+            if int & ((1 << 4) | (1 << 6)) != 0 {
                 self.halt_channel(ch);
                 self.last_hcint.set(int);
                 return Err(ViError::WouldBlock);

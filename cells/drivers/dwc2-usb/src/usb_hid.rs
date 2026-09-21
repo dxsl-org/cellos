@@ -64,7 +64,16 @@ pub struct HidInterface {
     pub kind: HidKind,
     /// Packets received (diagnostics).
     pub reports_seen: u32,
+    /// How this device is reached: through the hub, or directly.
+    ///
+    /// Carried per interface because polling sets the context on the engine
+    /// before each poll, and a full- or low-speed device behind a hub is not
+    /// reachable without it.
+    pub split: Option<crate::usb_channel::Split>,
 }
+
+/// Hub port status speed code for a high-speed device (bits 9:10 of `wPortStatus`).
+const HUB_PORT_SPEED_HIGH: u8 = 2;
 
 /// Probe `port` for a device, reset it, and assign the next free address.
 ///
@@ -80,7 +89,12 @@ pub fn attach_port(
     hub: &UsbHub<'_>,
     port: u16,
     next_addr: &mut u8,
-) -> Option<(u8, Vec<InterfaceDesc>)> {
+) -> Option<(u8, Vec<InterfaceDesc>, Option<crate::usb_channel::Split>)> {
+    // Everything before the device answers is traffic to the hub itself, which
+    // sits on the root port and must not be reached through a split. Whatever
+    // the previous port left behind is cleared before the first of them.
+    engine.set_split(None);
+
     if !hub.is_port_connected(port) {
         return None;
     }
@@ -108,10 +122,28 @@ pub fn attach_port(
     // starting size from this port's negotiated speed.
     let hub_speed = hub.port_speed(port);
     let ep0_mps = match hub_speed {
-        2 => crate::usb_channel::initial_control_mps(crate::usb_channel::PORT_SPEED_HIGH),
+        HUB_PORT_SPEED_HIGH => {
+            crate::usb_channel::initial_control_mps(crate::usb_channel::PORT_SPEED_HIGH)
+        }
         _ => crate::usb_channel::initial_control_mps(crate::usb_channel::PORT_SPEED_FULL),
     };
     engine.set_control_mps(ep0_mps);
+
+    // A full- or low-speed device behind this high-speed hub can only be reached
+    // through it: the host asks the hub to buffer each transaction and then asks
+    // for the result. Nothing on the bus answers otherwise, and the channel
+    // reports XACTERR, which reads like a protocol error and is really a missing
+    // transaction. A high-speed device is addressed directly and needs none of
+    // this.
+    let split = if hub_speed == HUB_PORT_SPEED_HIGH {
+        None
+    } else {
+        Some(crate::usb_channel::Split {
+            hub_addr: hub.address(),
+            port: port as u8,
+        })
+    };
+    engine.set_split(split);
 
     // The device answers at address 0 until SET_ADDRESS latches.
     let device = read_device_descriptor(engine, 0)?;
@@ -130,7 +162,7 @@ pub fn attach_port(
     // and SET_PROTOCOL are only answered in the configured state.
     UsbHub::set_configuration(engine, addr, config_value).ok()?;
 
-    Some((addr, descriptors))
+    Some((addr, descriptors, split))
 }
 
 /// Read a device descriptor from `addr`, retrying the short-read case.
@@ -366,6 +398,7 @@ fn start_interface(
     }
 
     Some(HidInterface {
+        split: engine.split(),
         channel: 0, // assigned by the caller
         dev_addr,
         interface: iface.number,
@@ -419,10 +452,15 @@ pub fn enumerate(
         if out.len() >= MAX_HID_INTERFACES {
             return;
         }
-        let Some((addr, descriptors)) = attach_port(engine, hub, port, next_addr) else {
+        let Some((addr, descriptors, split)) = attach_port(engine, hub, port, next_addr) else {
             continue;
         };
+        // The interfaces are brought up through the same path the device was.
+        engine.set_split(split);
         let started = start_hid_interfaces(engine, addr, &descriptors, HID_CHANNEL_BASE, out);
+        // Back to direct addressing: the next thing talked to may be the hub
+        // itself, and a stale context would send that through a hub port.
+        engine.set_split(None);
         if started == 0 {
             println("[usb-hid] port holds no drivable HID interface");
         }
@@ -438,13 +476,19 @@ pub fn poll_interface(
     out: &mut Vec<EvdevEvent>,
 ) {
     let mut buf = [0u8; REPORT_BUF];
-    let got = match engine.interrupt_receive(
+    // Poll the device the way it is wired, then restore direct addressing so a
+    // later transfer to the hub or the controller's own device is not routed
+    // through a hub port.
+    engine.set_split(iface.split);
+    let result = engine.interrupt_receive(
         iface.channel,
         iface.dev_addr,
         iface.endpoint.number(),
         iface.endpoint.max_packet_size,
         &mut buf,
-    ) {
+    );
+    engine.set_split(None);
+    let got = match result {
         Ok(n) => n,
         Err(_) => {
             // A STALL leaves the endpoint halted until the host clears it.

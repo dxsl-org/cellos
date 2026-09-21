@@ -139,6 +139,18 @@ pub const HPRT0_PRTSPD_HIGH: u32 = 0x0 << 17; // High Speed (480 Mbps)
 pub const HPRT0_PRTSPD_FULL: u32 = 0x1 << 17; // Full Speed (12 Mbps)
 pub const HPRT0_PRTSPD_LOW: u32 = 0x2 << 17; // Low Speed (1.5 Mbps)
 
+// HCSPLT bits (Host Channel Split Control). A channel that talks to a full- or
+// low-speed device behind a high-speed hub addresses it through these fields;
+// the bit layout is from the core's own header (dwc2_core.h).
+pub const HCSPLT_PRTADDR_MASK: u32 = 0x7F; // hub port, bits 6:0
+pub const HCSPLT_HUBADDR_SHIFT: u32 = 7; // hub device address, bits 13:7
+pub const HCSPLT_HUBADDR_MASK: u32 = 0x7F << HCSPLT_HUBADDR_SHIFT;
+pub const HCSPLT_COMPSPLT: u32 = 1 << 16; // 1 = complete split, 0 = start split
+pub const HCSPLT_SPLTENA: u32 = 1 << 31; // split enable
+
+/// `HFNUM.FRNUM` — the USB frame counter, in 125 us frames.
+pub const HFNUM_FRNUM_MASK: u32 = 0xFFFF;
+
 /// Mask of W1C bits in HPRT0. When writing to HPRT0 (e.g. to set PRTRST or PRTPWR),
 /// these bits must be written as ZERO to prevent inadvertently clearing port events!
 pub const HPRT0_W1C_MASK: u32 =
