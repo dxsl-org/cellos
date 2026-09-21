@@ -1,17 +1,51 @@
 //! DWC2 Host Channel transaction engine (Control and Bulk transfers via Data FIFO).
 
 use crate::regs::*;
+use core::cell::Cell;
 use ostd::mmio::MmioRegion;
 use ostd::syscall::sys_yield;
 use types::{ViError, ViResult};
 
+/// Control-endpoint max packet size assumed before a device reports its own.
+///
+/// USB 2.0 §5.5.3 fixes low-speed control endpoints at 8 bytes and allows
+/// full-speed ones 8/16/32/64, so 8 is the only value safe to assume for the
+/// first descriptor read. Declaring 64 there makes the host expect 64-byte
+/// packets from a device that sends 8, and the read fails.
+pub const CONTROL_MPS_DEFAULT: u8 = 8;
+
 pub struct UsbHostEngine<'a> {
     mmio: &'a MmioRegion,
+    /// Max packet size for control transfers on endpoint 0. Updated from the
+    /// device descriptor's `bMaxPacketSize0` once it has been read.
+    ctrl_mps: Cell<u8>,
 }
 
 impl<'a> UsbHostEngine<'a> {
     pub fn new(mmio: &'a MmioRegion) -> Self {
-        Self { mmio }
+        Self {
+            mmio,
+            ctrl_mps: Cell::new(CONTROL_MPS_DEFAULT),
+        }
+    }
+
+    /// Max packet size currently used for control transfers.
+    pub fn control_mps(&self) -> u8 {
+        self.ctrl_mps.get()
+    }
+
+    /// Adopt a device's control-endpoint max packet size.
+    ///
+    /// Clamped to the legal 8/16/32/64 set: a device reporting 0 or a bogus
+    /// value must not produce a zero-length packet size that hangs the engine.
+    pub fn set_control_mps(&self, mps: u8) {
+        let clamped = match mps {
+            0..=8 => 8,
+            9..=16 => 16,
+            17..=32 => 32,
+            _ => 64,
+        };
+        self.ctrl_mps.set(clamped);
     }
 
     #[inline(always)]
@@ -50,8 +84,9 @@ impl<'a> UsbHostEngine<'a> {
 
         // 3. Configure Channel Characteristics (HCCHAR):
         // HCCHAR fields (bits 0-10 MPS, 11-14 EPNUM, 15 EPDIR, 18-19 EPTYPE, 20 MC, 22-28 DEVADDR,
-        // 31 CHENA): EPNUM = 0, EPDIR = 0 (OUT), EPTYPE = 0 (Control), MPS = 64, MC = 1, CHENA = 1.
-        let scchar = 64 | (1 << 20) | ((dev_addr as u32) << 22) | (1 << 31);
+        // 31 CHENA): EPNUM = 0, EPDIR = 0 (OUT), EPTYPE = 0 (Control), MC = 1, CHENA = 1.
+        let scchar =
+            (self.control_mps() as u32) | (1 << 20) | ((dev_addr as u32) << 22) | (1 << 31);
         self.write32(hcchar(ch), scchar);
 
         // 4. Push 8 bytes (2 x 32-bit words) into FIFO
@@ -64,41 +99,54 @@ impl<'a> UsbHostEngine<'a> {
         self.wait_channel(ch)
     }
 
-    /// Receive data in the DATA IN phase on Channel 0.
+    /// Receive the DATA IN phase of a control transfer on Channel 0.
+    ///
+    /// Returns the bytes actually received. Packets are sized by the control
+    /// endpoint's MPS and the transfer ends at the first **short** packet
+    /// (USB 2.0 §8.5.3.1) — a device answering an 18-byte descriptor request
+    /// with its real 8-byte report must not be read as if it had 18 bytes
+    /// available, which is what a fixed-size read would do.
     pub fn recv_data(&self, dev_addr: u8, buf: &mut [u8]) -> ViResult<usize> {
         let ch = 0;
+        let mps = (self.control_mps() as usize).max(1);
         let mut received = 0;
-        let mut toggle = 2; // PID 2 = DATA1 for first data packet
+        let mut toggle = 2u32; // PID 2 = DATA1 for the first data packet
 
         while received < buf.len() {
-            let chunk = (buf.len() - received).min(64);
+            let chunk = (buf.len() - received).min(mps);
             self.write32(hcsplt(ch), 0);
             self.write32(hcintmsk(ch), 0x07FF);
             self.write32(hcint(ch), 0xFFFF_FFFF);
-            // XFERSIZE = chunk, PKTCNT = 1, PID = toggle
-            let sctsiz = (chunk as u32) | (1 << 19) | ((toggle as u32) << 29);
+            let sctsiz = (chunk as u32) | (1 << 19) | (toggle << 29);
             self.write32(hctsiz(ch), sctsiz);
 
-            // HCCHAR: EPNUM = 0, EPDIR = 1 (IN), EPTYPE = 0 (Control), MPS = 64, MC = 1, CHENA = 1.
-            let scchar = 64 | (1 << 15) | (1 << 20) | ((dev_addr as u32) << 22) | (1 << 31);
+            // HCCHAR: EPNUM = 0, EPDIR = 1 (IN), EPTYPE = 0 (Control), MC = 1, CHENA = 1.
+            let scchar =
+                (mps as u32) | (1 << 15) | (1 << 20) | ((dev_addr as u32) << 22) | (1 << 31);
             self.write32(hcchar(ch), scchar);
 
             self.wait_channel(ch)?;
 
-            // Read words from FIFO
-            let words = chunk.div_ceil(4);
+            // The core writes the *remaining* count back into HCTSIZ.
+            let remaining = (self.read32(hctsiz(ch)) & 0x7FFFF) as usize;
+            let got = chunk.saturating_sub(remaining).min(chunk);
+
+            let words = got.div_ceil(4);
             for (i, word) in (0..words).map(|i| (i, self.read_fifo(ch))) {
                 for (j, byte) in word.to_le_bytes().iter().enumerate() {
                     let offset = i * 4 + j;
                     let idx = received + offset;
-                    if idx < buf.len() && offset < chunk {
+                    if idx < buf.len() && offset < got {
                         buf[idx] = *byte;
                     }
                 }
             }
 
-            received += chunk;
-            toggle = if toggle == 2 { 0 } else { 2 }; // Toggle DATA1 (2) <-> DATA0 (0)
+            received += got;
+            if got < chunk {
+                break;
+            }
+            toggle = if toggle == 2 { 0 } else { 2 }; // DATA1 <-> DATA0
         }
 
         Ok(received)
@@ -116,7 +164,11 @@ impl<'a> UsbHostEngine<'a> {
 
         // HCCHAR: EPNUM = 0, EPTYPE = 0 (Control), MPS = 64, MC = 1, CHENA = 1, EPDIR from the caller.
         let epdir = if is_in { 1 } else { 0 };
-        let scchar = 64 | (epdir << 15) | (1 << 20) | ((dev_addr as u32) << 22) | (1 << 31);
+        let scchar = (self.control_mps() as u32)
+            | (epdir << 15)
+            | (1 << 20)
+            | ((dev_addr as u32) << 22)
+            | (1 << 31);
         self.write32(hcchar(ch), scchar);
 
         self.wait_channel(ch)
@@ -170,19 +222,20 @@ impl<'a> UsbHostEngine<'a> {
     /// Send DATA OUT phase on Channel 0.
     fn send_data(&self, dev_addr: u8, data: &[u8]) -> ViResult<()> {
         let ch = 0;
+        let mps = (self.control_mps() as usize).max(1);
         let mut sent = 0;
         let mut toggle = 2; // PID 2 = DATA1
 
         while sent < data.len() {
-            let chunk = (data.len() - sent).min(64);
+            let chunk = (data.len() - sent).min(mps);
             self.write32(hcsplt(ch), 0);
             self.write32(hcintmsk(ch), 0x07FF);
             self.write32(hcint(ch), 0xFFFF_FFFF);
             let sctsiz = (chunk as u32) | (1 << 19) | ((toggle as u32) << 29);
             self.write32(hctsiz(ch), sctsiz);
 
-            // HCCHAR: EPNUM = 0, EPDIR = 0 (OUT), EPTYPE = 0 (Control), MPS = 64, MC = 1, CHENA = 1.
-            let scchar = 64 | (1 << 20) | ((dev_addr as u32) << 22) | (1 << 31);
+            // HCCHAR: EPNUM = 0, EPDIR = 0 (OUT), EPTYPE = 0 (Control), MC = 1, CHENA = 1.
+            let scchar = (mps as u32) | (1 << 20) | ((dev_addr as u32) << 22) | (1 << 31);
             self.write32(hcchar(ch), scchar);
 
             // Push words to FIFO
@@ -310,6 +363,100 @@ impl<'a> UsbHostEngine<'a> {
             sys_yield();
         }
 
+        Ok(0)
+    }
+
+    /// Receive up to one packet via Interrupt IN on `ch`.
+    ///
+    /// HID input reports ride interrupt endpoints. The device NAKs until it has
+    /// a report, so a NAK is a normal "no data yet" answer, not an error — the
+    /// caller polls. Returns the *actual* transferred length, read back from
+    /// `HCTSIZ` rather than assumed: a HID report can be shorter than the buffer
+    /// (an 8-byte keyboard report into a 64-byte buffer), and using the request
+    /// length would hand the decoder trailing garbage.
+    ///
+    /// `ch` must not collide with the control (0) or Ethernet bulk (1, 2)
+    /// channels.
+    pub fn interrupt_receive(
+        &self,
+        ch: usize,
+        dev_addr: u8,
+        ep_num: u8,
+        mps: u16,
+        buf: &mut [u8],
+    ) -> ViResult<usize> {
+        let want = buf.len().min(mps.max(1) as usize).min(1024);
+        if want == 0 {
+            return Ok(0);
+        }
+
+        self.write32(hcsplt(ch), 0);
+        self.write32(hcintmsk(ch), 0x07FF);
+        self.write32(hcint(ch), 0xFFFF_FFFF);
+
+        // HCTSIZ: XFERSIZE (= want), PKTCNT = 1, PID = DATA0 (0). The core
+        // overwrites XFERSIZE with the remaining count as it transfers.
+        let sctsiz = (want as u32) | (1 << 19);
+        self.write32(hctsiz(ch), sctsiz);
+
+        // HCCHAR: MPS from the endpoint descriptor, EPNUM, IN direction,
+        // EPTYPE = 3 (Interrupt), MC = 1, DEVADDR, CHENA.
+        let scchar = (mps as u32 & 0x7FF)
+            | ((ep_num as u32) << 11)
+            | (1 << 15) // EPDIR = IN
+            | (3 << 18) // EPTYPE = Interrupt
+            | (1 << 20) // MC = 1
+            | ((dev_addr as u32) << 22)
+            | (1 << 31); // CHENA
+        self.write32(hcchar(ch), scchar);
+
+        let mut polls = 0u32;
+        while polls < 2_000 {
+            let int = self.read32(hcint(ch));
+
+            // NAK — device has no report queued. Halt and report "no data".
+            if int & (1 << 4) != 0 {
+                self.halt_channel(ch);
+                return Ok(0);
+            }
+            // Errors (STALL / babble / transaction error) end the poll cycle.
+            if int & ((1 << 2) | (1 << 3) | (1 << 7)) != 0 {
+                self.halt_channel(ch);
+                return Err(ViError::IO);
+            }
+
+            let complete = int & (1 << 0) != 0 || int & (1 << 1) != 0 || int & (1 << 5) != 0;
+            if complete {
+                let remaining = (self.read32(hctsiz(ch)) & 0x7FFFF) as usize;
+                let got = want.saturating_sub(remaining);
+                self.halt_channel(ch);
+
+                if got > 0 {
+                    // Drain ceil(got/4) FIFO words; only the first `got` bytes
+                    // are meaningful (the tail word is padding).
+                    let words = got.div_ceil(4);
+                    for w in 0..words {
+                        let word = self.read_fifo(ch);
+                        for (j, byte) in word.to_le_bytes().iter().enumerate() {
+                            let idx = w * 4 + j;
+                            if idx < got && idx < buf.len() {
+                                buf[idx] = *byte;
+                            }
+                        }
+                    }
+                } else {
+                    // A zero-length packet still has a FIFO word to retire on
+                    // some revisions; drain one so the channel is clean.
+                    let _ = self.read_fifo(ch);
+                }
+                return Ok(got);
+            }
+
+            polls += 1;
+            sys_yield();
+        }
+
+        self.halt_channel(ch);
         Ok(0)
     }
 

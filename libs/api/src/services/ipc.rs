@@ -402,6 +402,26 @@ pub enum InputRequest {
     GetFocus,
     /// Unregister `cell_tid` from receiving events.  No-op if not currently focused.
     ClearFocus { cell_tid: u32 },
+    /// Announce the caller as a **producer** of raw input events.
+    ///
+    /// A driver cell that owns a physical device the kernel cannot see (the
+    /// DWC2/LAN9514 USB host behind a HID keyboard or mouse) has no kernel push
+    /// path, so it feeds the service the same `[opcode][code][value]` stream the
+    /// kernel emits. The service records the kernel-verified sender TID — never
+    /// a TID named in the payload — so a cell cannot impersonate another
+    /// producer, and it treats that sender's later messages as raw events
+    /// rather than as requests.
+    ///
+    /// `kind` is informational ([`input_source`]); the service accepts any
+    /// registered producer because the authorization that matters is that a
+    /// cell reached this request at all.
+    RegisterEventSource { kind: u8 },
+}
+
+/// `RegisterEventSource` producer classes. Informational — logged, not enforced.
+pub mod input_source {
+    /// A USB HID keyboard/mouse driver cell.
+    pub const USB_HID: u8 = 1;
 }
 
 /// Responses from the input service.

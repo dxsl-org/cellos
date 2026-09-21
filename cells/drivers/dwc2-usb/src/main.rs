@@ -4,14 +4,20 @@
 
 extern crate alloc;
 
+use api::syscall::service;
 use api::{declare_manifest, declare_syscalls};
 use driver_dwc2_usb::dispatch::{handle, NicReply, REPLY_BUF};
+use driver_dwc2_usb::hid::EvdevEvent;
 use driver_dwc2_usb::hub::UsbHub;
 use driver_dwc2_usb::lan9514::Lan9514Device;
 use driver_dwc2_usb::usb_channel::UsbHostEngine;
+use driver_dwc2_usb::usb_hid;
 use driver_dwc2_usb::Dwc2Controller;
 use ostd::io::{print, println};
-use ostd::syscall::{sys_recv, sys_register_nic_driver, sys_try_send, sys_yield, SyscallResult};
+use ostd::syscall::{
+    sys_lookup_service, sys_recv_timeout, sys_register_nic_driver, sys_try_send, sys_yield,
+    SyscallResult,
+};
 
 declare_manifest!(
     block_io = false,
@@ -28,12 +34,21 @@ declare_syscalls![
     Send,
     TrySend,
     Recv,
+    RecvTimeout,
     Reply,
     Log,
     RequestMmio,
     WaitIrq,
+    LookupService,
     RegisterNicDriver
 ];
+
+/// Poll budget for the NIC IPC receive, in 10 ms ticks.
+///
+/// One tick keeps the HID poll loop at ~100 Hz while an idle NIC costs the
+/// driver nothing: `RecvTimeout` returns as soon as a message arrives, so the
+/// delay only applies when there is no traffic to service.
+const NIC_RECV_TICKS: u64 = 1;
 
 const DWC2_BASE: usize = 0x3F98_0000;
 const DWC2_LEN: usize = 0x20000;
@@ -105,53 +120,169 @@ fn cell_main() {
 
     let engine = UsbHostEngine::new(dwc2.mmio());
 
-    // ── Phase 1: Enumerate LAN9514 USB Hub (Root device at Address 0) ─────────
-    println("[dwc2-usb] Configuring LAN9514 internal USB 2.0 Hub (Address 1)...");
-    let _ = UsbHub::set_address(&engine, 1);
-    let _ = UsbHub::set_configuration(&engine, 1, 1);
-    let hub = UsbHub::new(&engine, 1);
-    println("[dwc2-usb] LAN9514 Hub active at USB Address 1");
+    // ── Classify the root device ─────────────────────────────────────────────
+    //
+    // The root port does not always hold a hub: on a Pi 3 it holds the LAN9514
+    // compound hub, but a bare controller (and QEMU's `raspi3b`, which models no
+    // LAN9514) can have a device attached directly. Reading the descriptors
+    // first and branching on the class is what keeps both cases working — the
+    // previous flow assumed a hub and silently talked to nothing when there
+    // was not one.
+    let root_device = usb_hid::read_device_descriptor(&engine, 0);
+    let root_interfaces = usb_hid::read_configuration(&engine, 0).map(|(_, ifaces)| ifaces);
+    let root_class = match (root_device.as_ref(), root_interfaces.as_ref()) {
+        (Some(dev), Some(ifaces)) => {
+            print("[dwc2-usb] root device class=");
+            print_usize(dev.class as usize);
+            println("");
+            usb_hid::classify(dev, ifaces)
+        }
+        _ => {
+            println("[dwc2-usb] WARN: root device did not answer its descriptors");
+            usb_hid::RootClass::Other
+        }
+    };
 
-    // ── Phase 2: Power on and Reset Hub Downstream Port 1 (Ethernet) ───────────
-    println("[dwc2-usb] Powering ON Hub Downstream Port 1 (Internal Ethernet)...");
-    let _ = hub.power_on_port(1);
-    println("[dwc2-usb] Resetting Hub Downstream Port 1...");
-    let _ = hub.reset_port(1);
-    println("[dwc2-usb] Hub Port 1 active (Internal Ethernet connected)");
+    let mut hid_interfaces: alloc::vec::Vec<usb_hid::HidInterface> = alloc::vec::Vec::new();
+    let mut lan: Option<Lan9514Device<'_>> = None;
 
-    // ── Phase 3: Enumerate Ethernet Controller (Now at Address 0 on Port 1) ───
-    println("[dwc2-usb] Configuring LAN9514 Ethernet Controller (Address 2)...");
-    let _ = UsbHub::set_address(&engine, 2);
-    let _ = UsbHub::set_configuration(&engine, 2, 1);
-    println("[dwc2-usb] LAN9514 Ethernet Controller active at USB Address 2");
+    match root_class {
+        // ── Hub: scan its downstream ports ───────────────────────────────────
+        usb_hid::RootClass::Hub => {
+            println("[dwc2-usb] Configuring USB hub at Address 1...");
+            let _ = UsbHub::set_address(&engine, 1);
+            let _ = UsbHub::set_configuration(&engine, 1, 1);
+            let hub = UsbHub::new(&engine, 1);
 
-    // ── Phase 4: Initialize LAN9514 MAC, PHY and Read Hardware MAC ───────────
-    let mut lan = Lan9514Device::new(&engine, 2);
-    println("[lan9514] Initializing SMSC LAN9514 Ethernet Controller...");
-    if lan.init().is_ok() {
-        let mac = lan.mac_address();
-        print("[lan9514] Hardware MAC: ");
-        print_mac(&mac);
-        println(" (Ready)");
+            let port_count = hub.num_ports();
+            if port_count == 0 {
+                println("[dwc2-usb] WARN: hub descriptor unavailable; assuming 1 port");
+            }
+            let ports = if port_count == 0 { 1 } else { port_count };
 
-        // Register as the active NIC Driver Cell in kernel
+            print("[dwc2-usb] hub reports ");
+            print_usize(ports as usize);
+            println(" downstream port(s)");
+
+            // Addresses 1 is the hub; downstream devices start at 2.
+            let mut next_addr: u8 = 2;
+            for port in 1..=ports as u16 {
+                let _ = hub.power_on_port(port);
+
+                let Some((addr, ifaces)) =
+                    usb_hid::attach_port(&engine, &hub, port, &mut next_addr)
+                else {
+                    continue;
+                };
+
+                // A HID device is claimed here; anything else on this port is
+                // the hub's own function device — on the LAN9514 that is the
+                // Ethernet controller, which owns no HID interface.
+                let started = usb_hid::start_hid_interfaces(
+                    &engine,
+                    addr,
+                    &ifaces,
+                    usb_hid::HID_CHANNEL_BASE,
+                    &mut hid_interfaces,
+                );
+                if started > 0 {
+                    continue;
+                }
+
+                if lan.is_none() {
+                    println("[lan9514] Initializing SMSC LAN9514 Ethernet Controller...");
+                    let mut candidate = Lan9514Device::new(&engine, addr);
+                    if candidate.init().is_ok() {
+                        let mac = candidate.mac_address();
+                        print("[lan9514] Hardware MAC: ");
+                        print_mac(&mac);
+                        println(" (Ready)");
+                        lan = Some(candidate);
+                    } else {
+                        println("[lan9514] WARN: Ethernet MAC init failed on this port");
+                    }
+                }
+            }
+        }
+
+        // ── HID device directly on the root port ─────────────────────────────
+        usb_hid::RootClass::Hid => {
+            println("[dwc2-usb] HID device attached directly to the root port");
+            if UsbHub::set_address(&engine, 1).is_ok() {
+                if let Some((config_value, ifaces)) = usb_hid::read_configuration(&engine, 1) {
+                    let _ = UsbHub::set_configuration(&engine, 1, config_value);
+                    let started = usb_hid::start_hid_interfaces(
+                        &engine,
+                        1,
+                        &ifaces,
+                        usb_hid::HID_CHANNEL_BASE,
+                        &mut hid_interfaces,
+                    );
+                    if started == 0 {
+                        println("[usb-hid] WARN: no drivable HID interface on the root device");
+                    }
+                }
+            }
+        }
+
+        usb_hid::RootClass::Other => {
+            println("[dwc2-usb] root device is not a hub or HID device; no NIC/HID to drive");
+        }
+    }
+
+    if let Some(dev) = lan.as_ref() {
+        let mac = dev.mac_address();
+        let _ = mac;
         if sys_register_nic_driver().is_ok() {
             println("[dwc2-usb] Successfully registered as system NIC Driver Cell!");
         } else {
             println("[dwc2-usb] WARN: sys_register_nic_driver failed");
         }
     } else {
-        println("[lan9514] WARN: Ethernet MAC init deferred/failed");
+        println("[dwc2-usb] no LAN9514 Ethernet controller found");
     }
 
-    println("[dwc2-usb] Entering NIC IPC serving loop...");
+    if hid_interfaces.is_empty() {
+        println("[usb-hid] no HID device attached");
+    } else {
+        print("[usb-hid] driving ");
+        print_usize(hid_interfaces.len());
+        println(" HID interface(s)");
+    }
 
-    // ── Phase 5: Serving loop for raw NIC IPC protocol from service-net ───────
+    // The NIC dispatch path needs a device even when none was found, so an
+    // unattached controller answers net-service requests with a failure instead
+    // of faulting on a missing endpoint.
+    let mut lan = match lan {
+        Some(dev) => dev,
+        None => Lan9514Device::new(&engine, 0),
+    };
+
+    // Input-service endpoint, re-resolved whenever it is missing: the service is
+    // supervised and comes back under a new tid after a restart.
+    let mut input_tid = sys_lookup_service(service::INPUT).unwrap_or(0);
+    let mut source_registered = false;
+    let mut events: alloc::vec::Vec<EvdevEvent> = alloc::vec::Vec::new();
     let mut in_buf = [0u8; 4096];
     let mut out_buf = [0u8; REPLY_BUF];
 
+    println("[dwc2-usb] Entering NIC + HID serving loop...");
+
     loop {
-        match sys_recv(0, &mut in_buf) {
+        // Re-resolve both endpoints: the input service restarts under a new tid.
+        if input_tid == 0 {
+            input_tid = sys_lookup_service(service::INPUT).unwrap_or(0);
+            source_registered = false;
+        }
+        if input_tid != 0 && !source_registered {
+            source_registered =
+                usb_hid::register_as_source(input_tid, api::ipc::input_source::USB_HID);
+            if source_registered {
+                println("[usb-hid] registered as an input event source");
+            }
+        }
+
+        match sys_recv_timeout(0, &mut in_buf, NIC_RECV_TICKS) {
             SyscallResult::Ok(sender_tid) if sender_tid > 0 => {
                 match handle(&mut lan, &in_buf, &mut out_buf) {
                     NicReply::Status(code) => {
@@ -165,10 +296,46 @@ fn cell_main() {
                     }
                 }
             }
-            _ => {
-                sys_yield();
-            }
+            _ => {}
         }
+
+        // Poll every HID interface, then flush the batch to the input service.
+        for iface in hid_interfaces.iter_mut() {
+            usb_hid::poll_interface(&engine, iface, &mut events);
+        }
+        if !events.is_empty() {
+            if input_tid != 0 {
+                for ev in events.iter() {
+                    usb_hid::forward_event(input_tid, ev);
+                }
+            } else {
+                // No consumer yet: drop rather than grow without bound. The
+                // next loop iteration retries the lookup.
+                let _ = sys_lookup_service(service::INPUT);
+            }
+            events.clear();
+        }
+
+        sys_yield();
+    }
+}
+
+fn print_usize(v: usize) {
+    let mut out = [0u8; 20];
+    let mut n = v;
+    let mut len = 0;
+    if n == 0 {
+        print("0");
+        return;
+    }
+    while n > 0 && len < out.len() {
+        out[len] = b'0' + (n % 10) as u8;
+        n /= 10;
+        len += 1;
+    }
+    out[..len].reverse();
+    if let Ok(s) = core::str::from_utf8(&out[..len]) {
+        print(s);
     }
 }
 

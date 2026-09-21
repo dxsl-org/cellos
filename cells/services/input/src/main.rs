@@ -40,7 +40,7 @@ use dispatcher::Dispatcher;
 use layout_us_qwerty::{key_state_from_evdev, translate};
 use modifier_state::ModifierState;
 use mouse_state::{btn_to_mouse_button, MouseState, BTN_LEFT};
-use ostd::io::println;
+use ostd::io::{print, print_usize, println};
 use ostd::syscall::{sys_get_time, sys_heartbeat, sys_recv_timeout, sys_try_send, SyscallResult};
 use virtio_device::{find_and_init_inputs, InputDevice};
 
@@ -107,6 +107,7 @@ pub fn main() {
     // succeeds inside find_and_init_inputs, the kernel migration guard in
     // virtio_input.rs sees the MMIO owner and stops pushing events via
     // dispatch_pending — so every unclaimed device would be polled by nobody.
+    let mut sources = EventSources::new();
     let mut devices: Vec<InputDevice> = find_and_init_inputs();
     if !devices.is_empty() {
         println("[input] VirtIO input device claimed; polling virtqueue directly");
@@ -143,10 +144,59 @@ pub fn main() {
                 handle_kernel_event(&buf, &mut modifiers, &mut mouse, &mut dispatcher);
             }
             SyscallResult::Ok(sender) => {
-                handle_message(&buf, sender, &mut modifiers, &mut mouse, &mut dispatcher);
+                handle_message(
+                    &buf,
+                    sender,
+                    &mut modifiers,
+                    &mut mouse,
+                    &mut dispatcher,
+                    &mut sources,
+                );
             }
             _ => {}
         }
+    }
+}
+
+/// Maximum concurrently registered raw event producers.
+const MAX_EVENT_SOURCES: usize = 4;
+
+/// TIDs allowed to push raw `[opcode][code][value]` events.
+///
+/// Sender 0 is the kernel and is implicit. A driver cell owning a physical
+/// device the kernel cannot see (USB HID behind the DWC2 host controller)
+/// announces itself through `InputRequest::RegisterEventSource`; the tid kept
+/// is the one the kernel reported on receive, never one named in the payload,
+/// so a cell cannot register as — or impersonate — another producer.
+///
+/// A registered tid stays valid because this kernel hands out fresh tids rather
+/// than recycling them; if that ever changes, this list needs an exit watch.
+struct EventSources {
+    tids: [usize; MAX_EVENT_SOURCES],
+    len: usize,
+}
+
+impl EventSources {
+    const fn new() -> Self {
+        Self {
+            tids: [0; MAX_EVENT_SOURCES],
+            len: 0,
+        }
+    }
+
+    fn is_source(&self, tid: usize) -> bool {
+        tid != 0 && self.tids[..self.len].contains(&tid)
+    }
+
+    /// Record `tid` as a producer. Returns false when it already is one, when
+    /// the table is full, or for the kernel's reserved sender id.
+    fn register(&mut self, tid: usize) -> bool {
+        if tid == 0 || self.is_source(tid) || self.len == MAX_EVENT_SOURCES {
+            return false;
+        }
+        self.tids[self.len] = tid;
+        self.len += 1;
+        true
     }
 }
 
@@ -184,11 +234,14 @@ fn handle_message(
     modifiers: &mut ModifierState,
     mouse: &mut MouseState,
     dispatcher: &mut Dispatcher,
+    sources: &mut EventSources,
 ) {
-    if sender == 0 {
+    // A registered producer's messages are events, never requests — the check
+    // precedes decoding so an event can never be misread as a `InputRequest`.
+    if sender == 0 || sources.is_source(sender) {
         handle_kernel_event(buf, modifiers, mouse, dispatcher);
     } else {
-        handle_typed_request(buf, sender, modifiers, dispatcher);
+        handle_typed_request(buf, sender, modifiers, dispatcher, sources);
     }
 }
 
@@ -287,6 +340,7 @@ fn handle_typed_request(
     sender: usize,
     modifiers: &mut ModifierState,
     dispatcher: &mut Dispatcher,
+    sources: &mut EventSources,
 ) {
     let mut resp_buf = [0u8; 64];
     match api::ipc::decode::<InputRequest>(buf) {
@@ -314,6 +368,15 @@ fn handle_typed_request(
                 dispatcher.set_focus(0);
             }
             // Fire-and-forget: no reply. Same rationale as SetFocus.
+        }
+        Ok(InputRequest::RegisterEventSource { kind }) => {
+            if sources.register(sender) {
+                print("[input] registered raw event source kind=");
+                print_usize(kind as usize);
+                println("");
+            } else {
+                println("[input] WARN: event-source registration refused");
+            }
         }
         Err(_) => {} // unknown message — drop silently
     }
