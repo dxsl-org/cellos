@@ -445,12 +445,24 @@ impl<'a> UsbHostEngine<'a> {
         }
 
         arm(false);
-        self.wait_channel(ch)?;
+        // Not the yielding wait. The start-split opens the frame the hub pairs its
+        // two halves within, so twenty milliseconds spent waiting here -- which is
+        // one yield -- puts the first complete-split twenty frames past the
+        // start-split it belongs to. The pairing is gone before the retry loop
+        // below gets to ask, which is why every retry in it answers NYET or halts,
+        // and why the stage that needs data never gets any.
+        self.wait_channel_spin(ch, CONTROL_SPIN_POLLS)?;
 
         let started = self.frame_number();
         trace::record(
             trace::TAG_ARM_SSPLIT,
             self.read32(HFNUM),
+            self.read32(hcchar(ch)),
+            self.read32(hcsplt(ch)),
+        );
+        trace::record(
+            trace::TAG_AFTER_SSPLIT,
+            self.last_hcint.get(),
             self.read32(hcchar(ch)),
             self.read32(hcsplt(ch)),
         );
