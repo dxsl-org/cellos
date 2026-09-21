@@ -329,6 +329,16 @@ impl<'a> UsbHostEngine<'a> {
         self.frame_number() >> FULL_FRAME_SHIFT
     }
 
+    /// The millisecond frame, for callers outside this module.
+    ///
+    /// An endpoint states its interval in milliseconds, so anything comparing
+    /// against that number has to count the same unit. `frame_number` counts
+    /// microframes, and a gate that compares the two directly opens eight times
+    /// too often and at whatever phase the serving loop happens to arrive at.
+    pub fn full_frame_number(&self) -> u32 {
+        self.full_frame()
+    }
+
     /// Wait until a frame has just started, without yielding.
     ///
     /// The hub's translator runs a periodic transaction inside a frame slot, and

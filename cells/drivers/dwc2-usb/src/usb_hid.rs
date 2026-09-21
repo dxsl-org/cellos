@@ -527,7 +527,12 @@ pub fn poll_interface(
     //
     // A poll with half a split outstanding is exempt, because its other half is
     // what collects the report and the hub pairs the two for only a few frames.
-    let now = engine.frame_number();
+    // Frames, not microframes. The endpoint's interval is a millisecond count, and
+    // a poll loop that ignores it polls at whatever phase it happens to arrive at --
+    // which is what kept the hub's translator without a schedule to run the
+    // transaction on. It answered every complete-split with NYET, because at that
+    // point in the transfer it had nothing to collect.
+    let now = engine.full_frame_number();
     let interval = (iface.endpoint.interval as u32).max(1);
     if !iface.split_pending
         && iface.last_poll_frame != 0
