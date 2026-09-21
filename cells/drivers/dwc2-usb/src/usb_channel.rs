@@ -235,7 +235,6 @@ impl<'a> UsbHostEngine<'a> {
                 return true;
             }
             last = frrem;
-            sys_yield();
         }
         false
     }
