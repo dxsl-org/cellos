@@ -63,7 +63,22 @@ pub fn initial_control_mps(speed: u32) -> u8 {
 /// One microframe is 125 us. This is a bounded approximation of it: long enough
 /// to cross the boundary in practice, short enough that a stalled counter costs
 /// a fraction of a millisecond rather than the machine.
-const SPLIT_FRAME_SPINS: usize = 4_000;
+const SPLIT_FRAME_SPINS: usize = 1_200;
+
+/// Poll budget for a channel that is part of a periodic poll.
+///
+/// `WAIT_POLLS` is sized for a control transfer with a caller waiting on it.
+/// The interrupt poll runs on the same thread as everything else this driver
+/// serves, and it runs whenever the device has something to say -- so a transfer
+/// that reports nothing has to give up quickly there rather than spending the
+/// whole control-transfer budget.
+const SPLIT_WAIT_POLLS: usize = 1_200;
+
+/// Poll budget for the ordinary `wait_channel`.
+const WAIT_POLLS: usize = 50_000;
+
+/// Poll budget for waiting out a channel halt.
+const CHANNEL_HALT_POLLS: usize = 2_000;
 
 /// Complete-split attempts a synchronous transfer will make.
 ///
@@ -71,7 +86,7 @@ const SPLIT_FRAME_SPINS: usize = 4_000;
 /// completion here rather than spread across calls the way the interrupt poll is.
 /// The attempts are issued back to back and bounded by frames rather than spun
 /// on, because the caller cannot be handed "not yet".
-const SPLIT_COMPLETE_ATTEMPTS: usize = 4;
+const SPLIT_COMPLETE_ATTEMPTS: usize = 2;
 
 /// Frames a complete-split may still belong to the start-split that began it.
 ///
@@ -1115,9 +1130,34 @@ impl<'a> UsbHostEngine<'a> {
             return Ok(0);
         }
 
+        static FIRST_SPLIT: core::sync::atomic::AtomicBool =
+            core::sync::atomic::AtomicBool::new(false);
+        let first = !FIRST_SPLIT.swap(true, core::sync::atomic::Ordering::Relaxed);
+
         for _ in 0..SPLIT_COMPLETE_ATTEMPTS {
             arm(true);
-            match self.wait_channel(ch) {
+            let outcome = self.wait_channel_with(ch, SPLIT_WAIT_POLLS);
+            if first {
+                ostd::io::print("[dwc2] first split: csplit=");
+                match &outcome {
+                    Ok(()) => {
+                        if self.last_reported_complete() {
+                            ostd::io::print("XFERCOMPL");
+                        } else {
+                            ostd::io::print("ACK (no data)");
+                        }
+                    }
+                    Err(ViError::WouldBlock) if self.last_was_nyet() => ostd::io::print("NYET"),
+                    Err(ViError::WouldBlock) => ostd::io::print("NAK"),
+                    Err(_) => ostd::io::print("error"),
+                }
+                ostd::io::print(" hcint=0x");
+                print_hex_val(self.last_hcint.get());
+                ostd::io::print(" want=");
+                print_usize_val(want);
+                ostd::io::println("");
+            }
+            match outcome {
                 Ok(()) if self.last_reported_complete() => {
                     let remaining = (self.read32(hctsiz(ch)) & 0x7FFFF) as usize;
                     let got = want.saturating_sub(remaining);
@@ -1261,8 +1301,17 @@ impl<'a> UsbHostEngine<'a> {
     /// device is the definitive completion signal; we halt the channel
     /// manually after seeing it.
     fn wait_channel(&self, ch: usize) -> ViResult<()> {
+        self.wait_channel_with(ch, WAIT_POLLS)
+    }
+
+    /// Wait for channel completion or error, spending at most `budget` polls.
+    ///
+    /// The budget is a real cost rather than a formality: every poll yields, and
+    /// a transfer that never reports anything spends the whole of it before it is
+    /// given up on. Callers on the driver's own serving thread want a small one.
+    fn wait_channel_with(&self, ch: usize, budget: usize) -> ViResult<()> {
         let mut count = 0;
-        while count < 50_000 {
+        while count < budget {
             let int = self.read32(hcint(ch));
 
             // ── Hardware-generated halt ───────────────────────────────
@@ -1353,14 +1402,36 @@ impl<'a> UsbHostEngine<'a> {
         val |= 1 << 30; // CHDIS
         val &= !(1 << 31); // CHENA
         self.write32(reg, val);
-        // Wait for CHHLTD (bit 1) with a short timeout
-        for _ in 0..10_000 {
+        // Wait for CHHLTD (bit 1) with a short timeout. The core clears CHENA in
+        // microseconds, so this only has to be long enough not to be missed --
+        // and it runs on the serving thread, so it must not be long enough to be
+        // felt if the core never answers.
+        for _ in 0..CHANNEL_HALT_POLLS {
             if self.read32(hcint(ch)) & (1 << 1) != 0 {
                 break;
             }
             sys_yield();
         }
         self.write32(hcint(ch), 0xFFFF_FFFF);
+    }
+}
+
+fn print_usize_val(v: usize) {
+    let mut out = [0u8; 20];
+    let mut n = v;
+    let mut len = 0;
+    if n == 0 {
+        ostd::io::print("0");
+        return;
+    }
+    while n > 0 && len < out.len() {
+        out[len] = b'0' + (n % 10) as u8;
+        n /= 10;
+        len += 1;
+    }
+    out[..len].reverse();
+    if let Ok(s) = core::str::from_utf8(&out[..len]) {
+        ostd::io::print(s);
     }
 }
 
