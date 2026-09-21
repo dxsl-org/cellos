@@ -76,16 +76,11 @@ const MICROFRAME_SPINS: usize = 3_000;
 /// Both reference drivers derive the frame the same way.
 const FULL_FRAME_SHIFT: u32 = 3;
 
-/// Poll budget for a channel that is part of a periodic poll.
+/// Register reads a non-yielding channel wait will make before giving up.
 ///
-/// A poll iteration is not free: each one yields, and a yield hands the CPU to
-/// whatever else is runnable before this cell comes back. Measured against the
-/// frame counter, a complete-split that ends in NYET spent about three hundred
-/// milliseconds inside a budget of twelve hundred -- the budget was never the
-/// limit that mattered, and sizing it as though a yield were cheap is what made
-/// a poll able to hold the machine. It is small now so that a channel which is
-/// not answering is abandoned quickly and asked again next poll.
-const SPLIT_WAIT_POLLS: usize = 8;
+/// The frame check inside that wait is the real bound; this only stops a core
+/// that never reports anything from spinning forever.
+const SPIN_POLLS: usize = 200_000;
 
 /// Poll budget for the ordinary `wait_channel`.
 const WAIT_POLLS: usize = 50_000;
@@ -1173,7 +1168,7 @@ impl<'a> UsbHostEngine<'a> {
         // answer NYET.
         let frame = self.frame_number();
         arm(false);
-        let outcome = self.wait_channel_with(ch, SPLIT_WAIT_POLLS);
+        let outcome = self.wait_channel_spin(ch);
         report_split_progress(
             false,
             &outcome,
@@ -1202,7 +1197,7 @@ impl<'a> UsbHostEngine<'a> {
             }
 
             arm(true);
-            let outcome = self.wait_channel_with(ch, SPLIT_WAIT_POLLS);
+            let outcome = self.wait_channel_spin(ch);
             report_split_progress(
                 true,
                 &outcome,
@@ -1378,64 +1373,103 @@ impl<'a> UsbHostEngine<'a> {
     /// a transfer that never reports anything spends the whole of it before it is
     /// given up on. Callers on the driver's own serving thread want a small one.
     fn wait_channel_with(&self, ch: usize, budget: usize) -> ViResult<()> {
-        let mut count = 0;
-        while count < budget {
-            let int = self.read32(hcint(ch));
-
-            // ── Hardware-generated halt ───────────────────────────────
-            if int & (1 << 1) != 0 {
-                // CHHLTD
-                self.write32(hcint(ch), 0xFFFF_FFFF);
-                // Babble (8) and data-toggle error (10) end a transfer just as
-                // surely as the bits that were already checked.
-                if int & ((1 << 2) | (1 << 3) | (1 << 7) | (1 << 8) | (1 << 10)) != 0 {
-                    self.report_channel_error(ch, int);
-                    self.last_hcint.set(int);
-                    return Err(ViError::IO);
-                }
-                // NAK and NYET both mean "ask again", and both have to be
-                // reported rather than folded into success: a hub answering a
-                // complete-split with NYET has not produced a result yet, and
-                // returning Ok there hands the caller an empty buffer as if the
-                // transfer had happened.
-                if int & ((1 << 4) | (1 << 6)) != 0 {
-                    self.last_hcint.set(int);
-                    return Err(ViError::WouldBlock);
-                }
-                self.last_hcint.set(int);
-                return Ok(());
+        for _ in 0..budget {
+            if let Some(outcome) = self.channel_outcome(ch) {
+                return outcome;
             }
-
-            // ── Transfer complete ─────────────────────────────────────
-            if int & (1 << 0) != 0 {
-                self.halt_channel(ch);
-                self.last_hcint.set(int);
-                return Ok(());
-            }
-
-            // ── ACK = device accepted the packet (BCM2837 primary path)
-            if int & (1 << 5) != 0 {
-                self.halt_channel(ch);
-                self.last_hcint.set(int);
-                return Ok(());
-            }
-
-            // ── Error conditions ──────────────────────────────────────
-            if int & ((1 << 2) | (1 << 3) | (1 << 7) | (1 << 8) | (1 << 10)) != 0 {
-                self.report_channel_error(ch, int);
-                self.halt_channel(ch);
-                self.last_hcint.set(int);
-                return Err(ViError::IO);
-            }
-            if int & ((1 << 4) | (1 << 6)) != 0 {
-                self.halt_channel(ch);
-                self.last_hcint.set(int);
-                return Err(ViError::WouldBlock);
-            }
-
-            count += 1;
             sys_yield();
         }
+        self.channel_timeout(ch)
+    }
+
+    /// Wait for a channel without handing the CPU away.
+    ///
+    /// A periodic split has to keep both halves inside one millisecond frame. The
+    /// yielding wait gives the CPU away for around twenty milliseconds per poll,
+    /// which put the complete-split twenty frames past the start-split it belongs
+    /// to -- outside the window the hub pairs them within, so it came back as a
+    /// transaction error however many times it was tried.
+    ///
+    /// The bound is the frame itself rather than a count: past that the pairing is
+    /// gone and starting over on the next poll is the only useful thing left. This
+    /// runs only when a device has something to report.
+    fn wait_channel_spin(&self, ch: usize) -> ViResult<()> {
+        let frame = self.full_frame();
+        for _ in 0..SPIN_POLLS {
+            if let Some(outcome) = self.channel_outcome(ch) {
+                return outcome;
+            }
+            if self.full_frame() != frame {
+                self.halt_channel(ch);
+                self.last_hcint.set(self.read32(hcint(ch)));
+                return Err(ViError::WouldBlock);
+            }
+        }
+        self.channel_timeout(ch)
+    }
+
+    /// Classify a channel's interrupt register, or `None` while it is still running.
+    fn channel_outcome(&self, ch: usize) -> Option<ViResult<()>> {
+        let int = self.read32(hcint(ch));
+        if int == 0 {
+            return None;
+        }
+
+        // ── Hardware-generated halt ───────────────────────────────
+        if int & (1 << 1) != 0 {
+            // CHHLTD
+            self.write32(hcint(ch), 0xFFFF_FFFF);
+            // Babble (8) and data-toggle error (10) end a transfer just as
+            // surely as the bits that were already checked.
+            if int & ((1 << 2) | (1 << 3) | (1 << 7) | (1 << 8) | (1 << 10)) != 0 {
+                self.report_channel_error(ch, int);
+                self.last_hcint.set(int);
+                return Some(Err(ViError::IO));
+            }
+            // NAK and NYET both mean "ask again", and both have to be reported
+            // rather than folded into success: a hub answering a complete-split
+            // with NYET has not produced a result yet, and returning Ok there
+            // hands the caller an empty buffer as if the transfer had happened.
+            if int & ((1 << 4) | (1 << 6)) != 0 {
+                self.last_hcint.set(int);
+                return Some(Err(ViError::WouldBlock));
+            }
+            self.last_hcint.set(int);
+            return Some(Ok(()));
+        }
+
+        // ── Transfer complete ─────────────────────────────────────
+        if int & (1 << 0) != 0 {
+            self.halt_channel(ch);
+            self.last_hcint.set(int);
+            return Some(Ok(()));
+        }
+
+        // ── ACK = device accepted the packet (BCM2837 primary path)
+        if int & (1 << 5) != 0 {
+            self.halt_channel(ch);
+            self.last_hcint.set(int);
+            return Some(Ok(()));
+        }
+
+        // ── Error conditions ──────────────────────────────────────
+        if int & ((1 << 2) | (1 << 3) | (1 << 7) | (1 << 8) | (1 << 10)) != 0 {
+            self.report_channel_error(ch, int);
+            self.halt_channel(ch);
+            self.last_hcint.set(int);
+            return Some(Err(ViError::IO));
+        }
+        if int & ((1 << 4) | (1 << 6)) != 0 {
+            self.halt_channel(ch);
+            self.last_hcint.set(int);
+            return Some(Err(ViError::WouldBlock));
+        }
+
+        None
+    }
+
+    /// Give up on a channel that reported nothing within its budget.
+    fn channel_timeout(&self, ch: usize) -> ViResult<()> {
         // Timeout — capture hcint BEFORE halt clears it
         let int = self.read32(hcint(ch));
         let char_val = self.read32(hcchar(ch));
