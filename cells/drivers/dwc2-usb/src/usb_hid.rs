@@ -553,6 +553,10 @@ pub fn poll_interface(
         &mut iface.split_pending,
     );
 
+    // Written here, after the poll has finished and before anything else touches
+    // the channel, so reading it cannot move what it describes.
+    crate::usb_channel::trace_dump();
+
     let got = match result {
         Ok(n) => n,
         // Only a stall needs clearing. Everything else a poll can end on is a

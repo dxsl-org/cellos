@@ -1876,6 +1876,16 @@ pub fn trace_reset() {
     trace::reset();
 }
 
+/// Write the register recording out, once, at a point the caller knows is safe.
+///
+/// It used to be written only when the control path failed, and gating the
+/// stalled-endpoint recovery on a real stall removed that failure -- so the
+/// recording stopped being written at all just when the polls went quiet enough to
+/// need it.
+pub fn trace_dump() {
+    trace::dump_once();
+}
+
 pub(crate) fn print_hex_val(val: u32) {
     const HEX: &[u8; 16] = b"0123456789ABCDEF";
     let mut buf = [0u8; 8];
