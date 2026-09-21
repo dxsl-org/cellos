@@ -1096,15 +1096,24 @@ impl<'a> UsbHostEngine<'a> {
         self.prepare_channel(ch);
         self.write32(hcintmsk(ch), 0x07FF);
 
-        // HCTSIZ: XFERSIZE = want, PKTCNT = 1, PID = DATA0.
-        // HCCHAR: MPS, EPNUM, IN, EPTYPE = 3 (Interrupt), MC = 1.
+        // HCTSIZ: XFERSIZE = one max packet, PKTCNT = 1, PID = DATA0. A split
+        // carries exactly one packet, whatever the caller asked for.
+        //
+        // HCCHAR: MPS, EPNUM, IN, EPTYPE = 3 (Interrupt), and MC = 3. The
+        // multicount is the number of times the core retries the transaction
+        // itself before giving up, and for a periodic split it has to be more
+        // than one: the hub's translator answers NYET until it has run the
+        // full- or low-speed transaction, so a single attempt meets that NYET and
+        // ends the transfer with nothing. At three the core rides out the first
+        // answers inside one channel operation instead of software coming back
+        // for a pairing the hub has since discarded.
         let sctsiz = (want as u32) | (1 << 19);
         let scchar = (mps as u32 & 0x7FF)
             | ((ep_num as u32) << 11)
             | self.device_flags()
             | (1 << 15)
             | (3 << 18)
-            | (1 << 20)
+            | (3 << 20)
             | ((dev_addr as u32) << 22)
             | (1 << 31);
         let arm = |complete: bool| {
