@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["array_slots","decode_auto","decode_report"],"struct":["HidValue"]};

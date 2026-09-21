@@ -402,67 +402,87 @@
 <a href=#402 id=402 data-nosnippet>402</a>    </span>GetFocus,
 <a href=#403 id=403 data-nosnippet>403</a>    <span class="doccomment">/// Unregister `cell_tid` from receiving events.  No-op if not currently focused.
 <a href=#404 id=404 data-nosnippet>404</a>    </span>ClearFocus { cell_tid: u32 },
-<a href=#405 id=405 data-nosnippet>405</a>}
-<a href=#406 id=406 data-nosnippet>406</a>
-<a href=#407 id=407 data-nosnippet>407</a><span class="doccomment">/// Responses from the input service.
-<a href=#408 id=408 data-nosnippet>408</a></span><span class="attr">#[derive(Debug, Serialize, Deserialize)]
-<a href=#409 id=409 data-nosnippet>409</a></span><span class="kw">pub enum </span>InputResponse {
-<a href=#410 id=410 data-nosnippet>410</a>    <span class="doccomment">/// Currently focused cell tid (0 = none).
-<a href=#411 id=411 data-nosnippet>411</a>    </span>Focus(u32),
-<a href=#412 id=412 data-nosnippet>412</a>    <span class="prelude-val">Ok</span>,
-<a href=#413 id=413 data-nosnippet>413</a>    <span class="prelude-val">Err</span>(u8),
-<a href=#414 id=414 data-nosnippet>414</a>}
-<a href=#415 id=415 data-nosnippet>415</a>
-<a href=#416 id=416 data-nosnippet>416</a><span class="comment">// ── Config service ────────────────────────────────────────────────────────────
-<a href=#417 id=417 data-nosnippet>417</a>
-<a href=#418 id=418 data-nosnippet>418</a></span><span class="doccomment">/// Requests sent to the config service (`/bin/config`).
-<a href=#419 id=419 data-nosnippet>419</a></span><span class="attr">#[derive(Debug, Serialize, Deserialize)]
-<a href=#420 id=420 data-nosnippet>420</a></span><span class="kw">pub enum </span>ConfigRequest&lt;<span class="lifetime">'a</span>&gt; {
-<a href=#421 id=421 data-nosnippet>421</a>    <span class="doccomment">/// Read the value for `key`.  Returns `ConfigResponse::Value` or `NotFound`.
-<a href=#422 id=422 data-nosnippet>422</a>    </span>Get(<span class="kw-2">&amp;</span><span class="lifetime">'a </span>str),
-<a href=#423 id=423 data-nosnippet>423</a>    <span class="doccomment">/// Write `value` for `key` (insert or overwrite).  Returns `Ok`.
-<a href=#424 id=424 data-nosnippet>424</a>    </span>Set { key: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>str, value: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>str },
-<a href=#425 id=425 data-nosnippet>425</a>    <span class="doccomment">/// Remove `key`.  Returns `Ok` even if absent (idempotent).
-<a href=#426 id=426 data-nosnippet>426</a>    </span>Delete(<span class="kw-2">&amp;</span><span class="lifetime">'a </span>str),
-<a href=#427 id=427 data-nosnippet>427</a>    <span class="doccomment">/// List all registered keys as a newline-separated string.
-<a href=#428 id=428 data-nosnippet>428</a>    </span>List,
-<a href=#429 id=429 data-nosnippet>429</a>}
-<a href=#430 id=430 data-nosnippet>430</a>
-<a href=#431 id=431 data-nosnippet>431</a><span class="doccomment">/// Responses from the config service.
-<a href=#432 id=432 data-nosnippet>432</a></span><span class="attr">#[derive(Debug, Serialize, Deserialize)]
-<a href=#433 id=433 data-nosnippet>433</a></span><span class="kw">pub enum </span>ConfigResponse&lt;<span class="lifetime">'a</span>&gt; {
-<a href=#434 id=434 data-nosnippet>434</a>    <span class="doccomment">/// Value associated with a key.
-<a href=#435 id=435 data-nosnippet>435</a>    </span>Value(<span class="kw-2">&amp;</span><span class="lifetime">'a </span>str),
-<a href=#436 id=436 data-nosnippet>436</a>    <span class="doccomment">/// Newline-separated list of all keys.
-<a href=#437 id=437 data-nosnippet>437</a>    </span>Keys(<span class="kw-2">&amp;</span><span class="lifetime">'a </span>str),
-<a href=#438 id=438 data-nosnippet>438</a>    <span class="prelude-val">Ok</span>,
-<a href=#439 id=439 data-nosnippet>439</a>    NotFound,
-<a href=#440 id=440 data-nosnippet>440</a>    <span class="prelude-val">Err</span>(u8),
-<a href=#441 id=441 data-nosnippet>441</a>}
-<a href=#442 id=442 data-nosnippet>442</a>
-<a href=#443 id=443 data-nosnippet>443</a><span class="comment">// ── Serialization helpers ─────────────────────────────────────────────────────
-<a href=#444 id=444 data-nosnippet>444</a>
-<a href=#445 id=445 data-nosnippet>445</a></span><span class="doccomment">/// Serialize `msg` into `buf`.
-<a href=#446 id=446 data-nosnippet>446</a>///
-<a href=#447 id=447 data-nosnippet>447</a>/// Returns a slice of the bytes actually written.
-<a href=#448 id=448 data-nosnippet>448</a>///
-<a href=#449 id=449 data-nosnippet>449</a>/// # Errors
-<a href=#450 id=450 data-nosnippet>450</a>/// Returns `postcard::Error` if the encoded message exceeds `buf.len()`.
-<a href=#451 id=451 data-nosnippet>451</a></span><span class="kw">pub fn </span>encode&lt;<span class="lifetime">'a</span>, T: Serialize&gt;(msg: <span class="kw-2">&amp;</span>T, buf: <span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="kw-2">mut </span>[u8]) -&gt; postcard::Result&lt;<span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="kw-2">mut </span>[u8]&gt; {
-<a href=#452 id=452 data-nosnippet>452</a>    postcard::to_slice(msg, buf)
-<a href=#453 id=453 data-nosnippet>453</a>}
-<a href=#454 id=454 data-nosnippet>454</a>
-<a href=#455 id=455 data-nosnippet>455</a><span class="doccomment">/// Deserialize a typed message from the START of `buf`, tolerating trailing bytes.
-<a href=#456 id=456 data-nosnippet>456</a>///
-<a href=#457 id=457 data-nosnippet>457</a>/// The IPC receive buffer is fixed at 512 bytes; the sender may have encoded a
-<a href=#458 id=458 data-nosnippet>458</a>/// shorter message.  `take_from_bytes` reads exactly what the message needs and
-<a href=#459 id=459 data-nosnippet>459</a>/// ignores the rest — unlike `from_bytes` which requires the entire slice to be
-<a href=#460 id=460 data-nosnippet>460</a>/// consumed.
-<a href=#461 id=461 data-nosnippet>461</a>///
-<a href=#462 id=462 data-nosnippet>462</a>/// For types with borrowed fields (`&amp;str`, `&amp;[u8]`), the returned value borrows
-<a href=#463 id=463 data-nosnippet>463</a>/// from `buf` — it must be consumed before `buf` is reused or overwritten.
-<a href=#464 id=464 data-nosnippet>464</a></span><span class="kw">pub fn </span>decode&lt;<span class="lifetime">'de</span>, T: Deserialize&lt;<span class="lifetime">'de</span>&gt;&gt;(buf: <span class="kw-2">&amp;</span><span class="lifetime">'de </span>[u8]) -&gt; postcard::Result&lt;T&gt; {
-<a href=#465 id=465 data-nosnippet>465</a>    <span class="kw">let </span>(msg, _remaining) = postcard::take_from_bytes(buf)<span class="question-mark">?</span>;
-<a href=#466 id=466 data-nosnippet>466</a>    <span class="prelude-val">Ok</span>(msg)
-<a href=#467 id=467 data-nosnippet>467</a>}
+<a href=#405 id=405 data-nosnippet>405</a>    <span class="doccomment">/// Announce the caller as a **producer** of raw input events.
+<a href=#406 id=406 data-nosnippet>406</a>    ///
+<a href=#407 id=407 data-nosnippet>407</a>    /// A driver cell that owns a physical device the kernel cannot see (the
+<a href=#408 id=408 data-nosnippet>408</a>    /// DWC2/LAN9514 USB host behind a HID keyboard or mouse) has no kernel push
+<a href=#409 id=409 data-nosnippet>409</a>    /// path, so it feeds the service the same `[opcode][code][value]` stream the
+<a href=#410 id=410 data-nosnippet>410</a>    /// kernel emits. The service records the kernel-verified sender TID — never
+<a href=#411 id=411 data-nosnippet>411</a>    /// a TID named in the payload — so a cell cannot impersonate another
+<a href=#412 id=412 data-nosnippet>412</a>    /// producer, and it treats that sender's later messages as raw events
+<a href=#413 id=413 data-nosnippet>413</a>    /// rather than as requests.
+<a href=#414 id=414 data-nosnippet>414</a>    ///
+<a href=#415 id=415 data-nosnippet>415</a>    /// `kind` is informational ([`input_source`]); the service accepts any
+<a href=#416 id=416 data-nosnippet>416</a>    /// registered producer because the authorization that matters is that a
+<a href=#417 id=417 data-nosnippet>417</a>    /// cell reached this request at all.
+<a href=#418 id=418 data-nosnippet>418</a>    </span>RegisterEventSource { kind: u8 },
+<a href=#419 id=419 data-nosnippet>419</a>}
+<a href=#420 id=420 data-nosnippet>420</a>
+<a href=#421 id=421 data-nosnippet>421</a><span class="doccomment">/// `RegisterEventSource` producer classes. Informational — logged, not enforced.
+<a href=#422 id=422 data-nosnippet>422</a></span><span class="kw">pub mod </span>input_source {
+<a href=#423 id=423 data-nosnippet>423</a>    <span class="doccomment">/// A USB HID keyboard/mouse driver cell.
+<a href=#424 id=424 data-nosnippet>424</a>    </span><span class="kw">pub const </span>USB_HID: u8 = <span class="number">1</span>;
+<a href=#425 id=425 data-nosnippet>425</a>}
+<a href=#426 id=426 data-nosnippet>426</a>
+<a href=#427 id=427 data-nosnippet>427</a><span class="doccomment">/// Responses from the input service.
+<a href=#428 id=428 data-nosnippet>428</a></span><span class="attr">#[derive(Debug, Serialize, Deserialize)]
+<a href=#429 id=429 data-nosnippet>429</a></span><span class="kw">pub enum </span>InputResponse {
+<a href=#430 id=430 data-nosnippet>430</a>    <span class="doccomment">/// Currently focused cell tid (0 = none).
+<a href=#431 id=431 data-nosnippet>431</a>    </span>Focus(u32),
+<a href=#432 id=432 data-nosnippet>432</a>    <span class="prelude-val">Ok</span>,
+<a href=#433 id=433 data-nosnippet>433</a>    <span class="prelude-val">Err</span>(u8),
+<a href=#434 id=434 data-nosnippet>434</a>}
+<a href=#435 id=435 data-nosnippet>435</a>
+<a href=#436 id=436 data-nosnippet>436</a><span class="comment">// ── Config service ────────────────────────────────────────────────────────────
+<a href=#437 id=437 data-nosnippet>437</a>
+<a href=#438 id=438 data-nosnippet>438</a></span><span class="doccomment">/// Requests sent to the config service (`/bin/config`).
+<a href=#439 id=439 data-nosnippet>439</a></span><span class="attr">#[derive(Debug, Serialize, Deserialize)]
+<a href=#440 id=440 data-nosnippet>440</a></span><span class="kw">pub enum </span>ConfigRequest&lt;<span class="lifetime">'a</span>&gt; {
+<a href=#441 id=441 data-nosnippet>441</a>    <span class="doccomment">/// Read the value for `key`.  Returns `ConfigResponse::Value` or `NotFound`.
+<a href=#442 id=442 data-nosnippet>442</a>    </span>Get(<span class="kw-2">&amp;</span><span class="lifetime">'a </span>str),
+<a href=#443 id=443 data-nosnippet>443</a>    <span class="doccomment">/// Write `value` for `key` (insert or overwrite).  Returns `Ok`.
+<a href=#444 id=444 data-nosnippet>444</a>    </span>Set { key: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>str, value: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>str },
+<a href=#445 id=445 data-nosnippet>445</a>    <span class="doccomment">/// Remove `key`.  Returns `Ok` even if absent (idempotent).
+<a href=#446 id=446 data-nosnippet>446</a>    </span>Delete(<span class="kw-2">&amp;</span><span class="lifetime">'a </span>str),
+<a href=#447 id=447 data-nosnippet>447</a>    <span class="doccomment">/// List all registered keys as a newline-separated string.
+<a href=#448 id=448 data-nosnippet>448</a>    </span>List,
+<a href=#449 id=449 data-nosnippet>449</a>}
+<a href=#450 id=450 data-nosnippet>450</a>
+<a href=#451 id=451 data-nosnippet>451</a><span class="doccomment">/// Responses from the config service.
+<a href=#452 id=452 data-nosnippet>452</a></span><span class="attr">#[derive(Debug, Serialize, Deserialize)]
+<a href=#453 id=453 data-nosnippet>453</a></span><span class="kw">pub enum </span>ConfigResponse&lt;<span class="lifetime">'a</span>&gt; {
+<a href=#454 id=454 data-nosnippet>454</a>    <span class="doccomment">/// Value associated with a key.
+<a href=#455 id=455 data-nosnippet>455</a>    </span>Value(<span class="kw-2">&amp;</span><span class="lifetime">'a </span>str),
+<a href=#456 id=456 data-nosnippet>456</a>    <span class="doccomment">/// Newline-separated list of all keys.
+<a href=#457 id=457 data-nosnippet>457</a>    </span>Keys(<span class="kw-2">&amp;</span><span class="lifetime">'a </span>str),
+<a href=#458 id=458 data-nosnippet>458</a>    <span class="prelude-val">Ok</span>,
+<a href=#459 id=459 data-nosnippet>459</a>    NotFound,
+<a href=#460 id=460 data-nosnippet>460</a>    <span class="prelude-val">Err</span>(u8),
+<a href=#461 id=461 data-nosnippet>461</a>}
+<a href=#462 id=462 data-nosnippet>462</a>
+<a href=#463 id=463 data-nosnippet>463</a><span class="comment">// ── Serialization helpers ─────────────────────────────────────────────────────
+<a href=#464 id=464 data-nosnippet>464</a>
+<a href=#465 id=465 data-nosnippet>465</a></span><span class="doccomment">/// Serialize `msg` into `buf`.
+<a href=#466 id=466 data-nosnippet>466</a>///
+<a href=#467 id=467 data-nosnippet>467</a>/// Returns a slice of the bytes actually written.
+<a href=#468 id=468 data-nosnippet>468</a>///
+<a href=#469 id=469 data-nosnippet>469</a>/// # Errors
+<a href=#470 id=470 data-nosnippet>470</a>/// Returns `postcard::Error` if the encoded message exceeds `buf.len()`.
+<a href=#471 id=471 data-nosnippet>471</a></span><span class="kw">pub fn </span>encode&lt;<span class="lifetime">'a</span>, T: Serialize&gt;(msg: <span class="kw-2">&amp;</span>T, buf: <span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="kw-2">mut </span>[u8]) -&gt; postcard::Result&lt;<span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="kw-2">mut </span>[u8]&gt; {
+<a href=#472 id=472 data-nosnippet>472</a>    postcard::to_slice(msg, buf)
+<a href=#473 id=473 data-nosnippet>473</a>}
+<a href=#474 id=474 data-nosnippet>474</a>
+<a href=#475 id=475 data-nosnippet>475</a><span class="doccomment">/// Deserialize a typed message from the START of `buf`, tolerating trailing bytes.
+<a href=#476 id=476 data-nosnippet>476</a>///
+<a href=#477 id=477 data-nosnippet>477</a>/// The IPC receive buffer is fixed at 512 bytes; the sender may have encoded a
+<a href=#478 id=478 data-nosnippet>478</a>/// shorter message.  `take_from_bytes` reads exactly what the message needs and
+<a href=#479 id=479 data-nosnippet>479</a>/// ignores the rest — unlike `from_bytes` which requires the entire slice to be
+<a href=#480 id=480 data-nosnippet>480</a>/// consumed.
+<a href=#481 id=481 data-nosnippet>481</a>///
+<a href=#482 id=482 data-nosnippet>482</a>/// For types with borrowed fields (`&amp;str`, `&amp;[u8]`), the returned value borrows
+<a href=#483 id=483 data-nosnippet>483</a>/// from `buf` — it must be consumed before `buf` is reused or overwritten.
+<a href=#484 id=484 data-nosnippet>484</a></span><span class="kw">pub fn </span>decode&lt;<span class="lifetime">'de</span>, T: Deserialize&lt;<span class="lifetime">'de</span>&gt;&gt;(buf: <span class="kw-2">&amp;</span><span class="lifetime">'de </span>[u8]) -&gt; postcard::Result&lt;T&gt; {
+<a href=#485 id=485 data-nosnippet>485</a>    <span class="kw">let </span>(msg, _remaining) = postcard::take_from_bytes(buf)<span class="question-mark">?</span>;
+<a href=#486 id=486 data-nosnippet>486</a>    <span class="prelude-val">Ok</span>(msg)
+<a href=#487 id=487 data-nosnippet>487</a>}
 </code></pre></div></section></main></body></html>

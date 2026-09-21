@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["HidCollection"],"fn":["parse_report_descriptor"],"struct":["HidField","HidReportMap","ReportLayout"]};

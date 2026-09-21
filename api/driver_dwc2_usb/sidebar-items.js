@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["dispatch","dwc2","hub","lan9514","regs","usb_channel"]};
+window.SIDEBAR_ITEMS = {"mod":["dispatch","dwc2","hid","hub","lan9514","regs","usb_channel","usb_desc","usb_hid"]};

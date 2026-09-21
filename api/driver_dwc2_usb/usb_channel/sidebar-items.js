@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["UsbHostEngine"]};
+window.SIDEBAR_ITEMS = {"constant":["CONTROL_MPS_DEFAULT"],"struct":["UsbHostEngine"]};

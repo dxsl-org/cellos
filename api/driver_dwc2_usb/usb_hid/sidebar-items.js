@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["HID_CHANNEL_BASE","MAX_HID_INTERFACES"],"enum":["RootClass"],"fn":["attach_port","classify","enumerate","forward_event","poll_interface","read_configuration","read_device_descriptor","register_as_source","start_hid_interfaces"],"struct":["HidInterface"]};
