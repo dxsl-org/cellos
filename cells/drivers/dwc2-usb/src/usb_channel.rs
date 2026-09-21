@@ -90,7 +90,7 @@ const CHANNEL_HALT_POLLS: usize = 64;
 /// completion here rather than spread across calls the way the interrupt poll is.
 /// The attempts are issued back to back and bounded by frames rather than spun
 /// on, because the caller cannot be handed "not yet".
-const SPLIT_COMPLETE_ATTEMPTS: usize = 2;
+const SPLIT_COMPLETE_ATTEMPTS: usize = 8;
 
 /// Frames a complete-split may still belong to the start-split that began it.
 ///
@@ -306,8 +306,13 @@ impl<'a> UsbHostEngine<'a> {
 
         let started = self.frame_number();
         for _ in 0..SPLIT_COMPLETE_ATTEMPTS {
+            // Put the complete-split straight back out. The reference is explicit
+            // that a non-periodic split is asked again immediately rather than
+            // waited on, and everything a yield would add here is time the pairing
+            // does not survive -- which is why the stalled-endpoint recovery this
+            // path carries could never clear a stall.
             arm(true);
-            match self.wait_channel(ch) {
+            match self.wait_channel_spin(ch, false) {
                 // Only a real transfer completion is the result. An ACK here is
                 // the hub acknowledging the request, not delivering it.
                 Ok(()) if self.last_reported_complete() => return Ok(()),
@@ -1166,7 +1171,7 @@ impl<'a> UsbHostEngine<'a> {
         // it, and the retry path has none at all.
         let frame = self.frame_number();
         arm(false);
-        let outcome = self.wait_channel_spin(ch);
+        let outcome = self.wait_channel_spin(ch, true);
         if !matches!(outcome, Ok(())) {
             *pending = false;
             report_split_progress(
@@ -1192,7 +1197,7 @@ impl<'a> UsbHostEngine<'a> {
             }
 
             arm(true);
-            let outcome = self.wait_channel_spin(ch);
+            let outcome = self.wait_channel_spin(ch, true);
             let int = self.last_hcint.get();
 
             match outcome {
@@ -1401,13 +1406,17 @@ impl<'a> UsbHostEngine<'a> {
     /// The bound is the frame itself rather than a count: past that the pairing is
     /// gone and starting over on the next poll is the only useful thing left. This
     /// runs only when a device has something to report.
-    fn wait_channel_spin(&self, ch: usize) -> ViResult<()> {
+    /// `keep_frame` bounds the wait to the millisecond frame it started in, which
+    /// is what a periodic split needs. A control or bulk transfer legitimately
+    /// spans frames, so its callers ask for the unbounded wait and keep their own
+    /// budget.
+    fn wait_channel_spin(&self, ch: usize, keep_frame: bool) -> ViResult<()> {
         let frame = self.full_frame();
         for _ in 0..SPIN_POLLS {
             if let Some(outcome) = self.channel_outcome(ch) {
                 return outcome;
             }
-            if self.full_frame() != frame {
+            if keep_frame && self.full_frame() != frame {
                 self.halt_channel(ch);
                 self.last_hcint.set(self.read32(hcint(ch)));
                 return Err(ViError::WouldBlock);
