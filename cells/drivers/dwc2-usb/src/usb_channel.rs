@@ -58,6 +58,22 @@ pub fn initial_control_mps(speed: u32) -> u8 {
     }
 }
 
+/// Complete-split attempts a synchronous transfer will make.
+///
+/// A control transfer has a caller waiting on its result, so its split is run to
+/// completion here rather than spread across calls the way the interrupt poll is.
+/// The attempts are issued back to back and bounded by frames rather than spun
+/// on, because the caller cannot be handed "not yet".
+const SPLIT_COMPLETE_ATTEMPTS: usize = 16;
+
+/// Frames a complete-split may still belong to the start-split that began it.
+///
+/// The pairing is only meaningful inside the hub's frame budget, so a
+/// complete-split issued after this many is started over instead of being taken
+/// for a result. `HFNUM` counts microframes at high speed, and a low-speed
+/// transaction behind the hub's translator takes up to a full millisecond.
+const SPLIT_COMPLETE_FRAMES: u32 = 12;
+
 /// Where a device sits when it has to be reached through a hub.
 ///
 /// A high-speed hub does not pass full- and low-speed traffic through, so a
@@ -77,33 +93,6 @@ pub struct Split {
     /// The device is low-speed and needs the preamble its speed requires.
     pub low_speed: bool,
 }
-
-/// Complete-split attempts before a buffered transaction is given up on.
-///
-/// A hub answers a complete-split with NYET while the result is still coming;
-/// it is not an error, just "not yet". Each attempt costs a microframe, and a
-/// low-speed transaction can take the hub's transaction translator a whole
-/// millisecond to run, so the budget has to cover several of them rather than
-/// only the first.
-const SPLIT_COMPLETE_ATTEMPTS: usize = 16;
-
-/// Start-split attempts per poll.
-const SPLIT_ATTEMPTS: usize = 3;
-
-/// Spins allowed while waiting for the frame counter to advance.
-///
-/// One microframe is 125 us; this is a generous multiple of that in yields, and
-/// exhausting it means the counter stalled rather than that more time was needed.
-const SPLIT_FRAME_SPINS: usize = 200_000;
-
-/// Frames a complete-split may still belong to the start-split that began it.
-///
-/// The pairing is only meaningful inside the hub's frame budget, so a
-/// complete-split issued after this many frames is retried from the start
-/// instead of being taken for a result. `HFNUM` counts microframes at high
-/// speed, and a low-speed transaction behind the hub's translator takes up to a
-/// full millisecond, so this covers it with room to spare.
-const SPLIT_COMPLETE_FRAMES: u32 = 12;
 
 pub struct UsbHostEngine<'a> {
     mmio: &'a MmioRegion,
@@ -201,23 +190,6 @@ impl<'a> UsbHostEngine<'a> {
         self.last_hcint.get() & (1 << 0) != 0
     }
 
-    /// Wait until the frame counter moves past `from`.
-    ///
-    /// A complete-split is only meaningful in a later microframe than the
-    /// start-split it belongs to: the hub's transaction translator has to run
-    /// the full- or low-speed transaction first, which is exactly what its NYET
-    /// is reporting. Retrying inside the same microframe collects another NYET
-    /// and burns the attempt without asking the question again.
-    fn await_frame_change(&self, from: u32) -> bool {
-        for _ in 0..SPLIT_FRAME_SPINS {
-            if self.frame_number() != from {
-                return true;
-            }
-            sys_yield();
-        }
-        false
-    }
-
     /// The last channel failure was NYET rather than NAK.
     ///
     /// Both arrive as `WouldBlock` and they mean opposite things for a split: a
@@ -271,15 +243,16 @@ impl<'a> UsbHostEngine<'a> {
         for _ in 0..SPLIT_COMPLETE_ATTEMPTS {
             arm(true);
             match self.wait_channel(ch) {
-                Ok(()) => return Ok(()),
-                Err(ViError::WouldBlock) => {
-                    if self.frame_number().wrapping_sub(started) & HFNUM_FRNUM_MASK
-                        > SPLIT_COMPLETE_FRAMES
-                    {
-                        return Err(ViError::IO);
-                    }
-                }
+                // Only a real transfer completion is the result. An ACK here is
+                // the hub acknowledging the request, not delivering it.
+                Ok(()) if self.last_reported_complete() => return Ok(()),
+                Ok(()) => {}
+                Err(ViError::WouldBlock) => {}
                 Err(e) => return Err(e),
+            }
+            if self.frame_number().wrapping_sub(started) & HFNUM_FRNUM_MASK > SPLIT_COMPLETE_FRAMES
+            {
+                return Err(ViError::IO);
             }
         }
         Err(ViError::IO)
@@ -962,16 +935,16 @@ impl<'a> UsbHostEngine<'a> {
         ep_num: u8,
         mps: u16,
         buf: &mut [u8],
+        split_pending: &mut bool,
     ) -> ViResult<usize> {
         let want = buf.len().min(mps.max(1) as usize).min(1024);
         if want == 0 {
             return Ok(0);
         }
 
-        // Behind a hub the poll is two transactions rather than one, and the
-        // "nothing queued" case arrives as a NAK on the start-split.
+        // Behind a hub the poll is two transactions spread across two calls.
         if self.split.get().is_some() {
-            return self.poll_split(ch, dev_addr, ep_num, mps, want, buf);
+            return self.poll_split(ch, dev_addr, ep_num, mps, want, buf, split_pending);
         }
 
         self.prepare_channel(ch);
@@ -1054,22 +1027,28 @@ impl<'a> UsbHostEngine<'a> {
         Ok(0)
     }
 
-    /// Interrupt IN poll for a device behind a hub.
+    /// One half of an interrupt IN split, for a device behind a hub.
     ///
-    /// The transaction is handed to the hub by a start-split and collected by a
-    /// complete-split, and the two halves have to be paired the way the hub
-    /// expects:
+    /// A split is a pair of transactions the hub has to see in two different
+    /// microframes: a start-split that hands it the request, and a complete-split
+    /// issued later that collects the result. Only one half is issued per call,
+    /// with the pairing's state carried in `pending`, because the alternative --
+    /// issuing both here -- means waiting out the hub's transaction translator on
+    /// this thread, and that wait is longer than everything else this driver has
+    /// to do. Linux does the same: the second half is re-queued for the scheduler
+    /// rather than spun on.
     ///
-    /// * a start-split NAK means the device had nothing, and the pair is simply
-    ///   retried;
-    /// * a complete-split NYET means the hub has not finished and is worth
-    ///   asking again;
-    /// * a complete-split NAK means the pairing is over -- the next attempt has
-    ///   to begin with a fresh start-split.
+    /// The three ways a complete-split can end mean different things:
     ///
-    /// Treating the last two as one case re-issues complete-splits against a
-    /// pairing the hub has already discarded, which never yields a report.
-    #[allow(clippy::too_many_lines, clippy::too_many_arguments)]
+    /// * `XFERCOMPL` is the report, and ends the pairing;
+    /// * `NYET` is the hub still working, so the pairing stays live for the next
+    ///   poll to collect;
+    /// * `NAK` ends the pairing with nothing, and the next poll starts over.
+    ///
+    /// ACK carries no data here -- Linux is explicit that it "should not occur in
+    /// CSPLIT" -- so it ends the pairing without producing a report rather than
+    /// being taken for one.
+    #[allow(clippy::too_many_arguments)]
     fn poll_split(
         &self,
         ch: usize,
@@ -1078,6 +1057,7 @@ impl<'a> UsbHostEngine<'a> {
         mps: u16,
         want: usize,
         buf: &mut [u8],
+        pending: &mut bool,
     ) -> ViResult<usize> {
         self.prepare_channel(ch);
         self.write32(hcintmsk(ch), 0x07FF);
@@ -1093,6 +1073,7 @@ impl<'a> UsbHostEngine<'a> {
             | (1 << 20)
             | ((dev_addr as u32) << 22)
             | (1 << 31);
+        let complete = *pending;
         let arm = |complete: bool| {
             self.write32(hcsplt(ch), self.hcsplt_value(complete));
             self.write32(hctsiz(ch), sctsiz);
@@ -1101,100 +1082,60 @@ impl<'a> UsbHostEngine<'a> {
             self.write32(hcchar(ch), self.start_hcchar(scchar));
         };
 
-        // A split poll either moves a report or reports nothing, and "nothing"
-        // has four different causes that are indistinguishable from the caller.
-        // Tally them once so a run says which one it is.
-        static SPLIT_STATS: [core::sync::atomic::AtomicUsize; 5] =
-            [const { core::sync::atomic::AtomicUsize::new(0) }; 5];
-        static REPORTED: core::sync::atomic::AtomicBool =
-            core::sync::atomic::AtomicBool::new(false);
-
-        for _ in 0..SPLIT_ATTEMPTS {
-            arm(false);
-            match self.wait_channel(ch) {
-                Ok(()) => {
-                    SPLIT_STATS[0].fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+        arm(complete);
+        match self.wait_channel(ch) {
+            Ok(()) => {}
+            Err(ViError::WouldBlock) => {
+                // Either the device had nothing to hand over (start-split) or the
+                // hub is not finished (complete-split). Both leave no report here;
+                // the second keeps the pairing so the next poll can collect it.
+                if !self.last_was_nyet() {
+                    *pending = false;
                 }
-                // The device has nothing queued — this is the idle case.
-                Err(ViError::WouldBlock) => {
-                    SPLIT_STATS[1].fetch_add(1, core::sync::atomic::Ordering::Relaxed);
-                    continue;
-                }
-                Err(e) => return Err(e),
+                return Ok(0);
             }
-
-            let started = self.frame_number();
-            let mut collected = false;
-            let mut frame = started;
-            for _ in 0..SPLIT_COMPLETE_ATTEMPTS {
-                // Ask in a later microframe than the start-split it belongs to.
-                if !self.await_frame_change(frame) {
-                    break;
-                }
-                frame = self.frame_number();
-
-                arm(true);
-                match self.wait_channel(ch) {
-                    Ok(()) if self.last_reported_complete() => {
-                        SPLIT_STATS[2].fetch_add(1, core::sync::atomic::Ordering::Relaxed);
-                        collected = true;
-                        break;
-                    }
-                    // ACK carries no data on a complete-split; the hub is only
-                    // acknowledging the request, not the result.
-                    Ok(()) => {
-                        SPLIT_STATS[3].fetch_add(1, core::sync::atomic::Ordering::Relaxed);
-                        if frame.wrapping_sub(started) & HFNUM_FRNUM_MASK > SPLIT_COMPLETE_FRAMES {
-                            break;
-                        }
-                    }
-                    Err(ViError::WouldBlock) if self.last_was_nyet() => {
-                        SPLIT_STATS[3].fetch_add(1, core::sync::atomic::Ordering::Relaxed);
-                        if frame.wrapping_sub(started) & HFNUM_FRNUM_MASK > SPLIT_COMPLETE_FRAMES {
-                            break;
-                        }
-                    }
-                    // NAK: the pairing is finished. Only a fresh start-split
-                    // can ask the device again.
-                    Err(ViError::WouldBlock) => {
-                        SPLIT_STATS[4].fetch_add(1, core::sync::atomic::Ordering::Relaxed);
-                        break;
-                    }
-                    Err(e) => return Err(e),
-                }
-            }
-
-            if collected {
-                let remaining = (self.read32(hctsiz(ch)) & 0x7FFFF) as usize;
-                let got = want.saturating_sub(remaining);
-                if !REPORTED.swap(true, core::sync::atomic::Ordering::Relaxed) {
-                    report_split_stats(&SPLIT_STATS, want, remaining);
-                }
-                if got == 0 {
-                    return Ok(0);
-                }
-                if self.dma_slot(ch).is_some() {
-                    let mut tmp = [0u8; DMA_SLOT_BYTES];
-                    self.collect_in(ch, 0, &mut tmp, got.min(DMA_SLOT_BYTES));
-                    let n = got.min(buf.len());
-                    buf[..n].copy_from_slice(&tmp[..n]);
-                    return Ok(n);
-                }
-                let words = got.div_ceil(4);
-                for w in 0..words {
-                    let word = self.read_fifo(ch);
-                    for (j, byte) in word.to_le_bytes().iter().enumerate() {
-                        let idx = w * 4 + j;
-                        if idx < got && idx < buf.len() {
-                            buf[idx] = *byte;
-                        }
-                    }
-                }
-                return Ok(got.min(buf.len()));
+            Err(e) => {
+                *pending = false;
+                return Err(e);
             }
         }
 
-        Ok(0)
+        if !complete {
+            // The hub now has the transaction and will run it; the result is
+            // collected by a later call.
+            *pending = true;
+            return Ok(0);
+        }
+
+        *pending = false;
+        if !self.last_reported_complete() {
+            return Ok(0);
+        }
+
+        let remaining = (self.read32(hctsiz(ch)) & 0x7FFFF) as usize;
+        let got = want.saturating_sub(remaining);
+        if got == 0 {
+            return Ok(0);
+        }
+
+        if self.dma_slot(ch).is_some() {
+            let mut tmp = [0u8; DMA_SLOT_BYTES];
+            self.collect_in(ch, 0, &mut tmp, got.min(DMA_SLOT_BYTES));
+            let n = got.min(buf.len());
+            buf[..n].copy_from_slice(&tmp[..n]);
+            return Ok(n);
+        }
+        let words = got.div_ceil(4);
+        for w in 0..words {
+            let word = self.read_fifo(ch);
+            for (j, byte) in word.to_le_bytes().iter().enumerate() {
+                let idx = w * 4 + j;
+                if idx < got && idx < buf.len() {
+                    buf[idx] = *byte;
+                }
+            }
+        }
+        Ok(got.min(buf.len()))
     }
 
     /// Name the host-channel interrupt bit that ended a transfer.
@@ -1401,46 +1342,6 @@ impl<'a> UsbHostEngine<'a> {
             sys_yield();
         }
         self.write32(hcint(ch), 0xFFFF_FFFF);
-    }
-}
-
-/// Print the split-poll tallies once, in the form the questions are asked in.
-#[allow(clippy::type_complexity)]
-fn report_split_stats(stats: &[core::sync::atomic::AtomicUsize; 5], want: usize, remaining: usize) {
-    use core::sync::atomic::Ordering;
-    ostd::io::print("[dwc2] split poll: ssplit_ok=");
-    print_usize_val(stats[0].load(Ordering::Relaxed));
-    ostd::io::print(" ssplit_nak=");
-    print_usize_val(stats[1].load(Ordering::Relaxed));
-    ostd::io::print(" csplit_ok=");
-    print_usize_val(stats[2].load(Ordering::Relaxed));
-    ostd::io::print(" csplit_nyet=");
-    print_usize_val(stats[3].load(Ordering::Relaxed));
-    ostd::io::print(" csplit_nak=");
-    print_usize_val(stats[4].load(Ordering::Relaxed));
-    ostd::io::print(" want=");
-    print_usize_val(want);
-    ostd::io::print(" remaining=");
-    print_usize_val(remaining);
-    ostd::io::println("");
-}
-
-fn print_usize_val(v: usize) {
-    let mut out = [0u8; 20];
-    let mut n = v;
-    let mut len = 0;
-    if n == 0 {
-        ostd::io::print("0");
-        return;
-    }
-    while n > 0 && len < out.len() {
-        out[len] = b'0' + (n % 10) as u8;
-        n /= 10;
-        len += 1;
-    }
-    out[..len].reverse();
-    if let Ok(s) = core::str::from_utf8(&out[..len]) {
-        ostd::io::print(s);
     }
 }
 
