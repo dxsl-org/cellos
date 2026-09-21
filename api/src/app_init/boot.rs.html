@@ -68,34 +68,37 @@
 <a href=#68 id=68 data-nosnippet>68</a>}
 <a href=#69 id=69 data-nosnippet>69</a>
 <a href=#70 id=70 data-nosnippet>70</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>spawn_optional_services() -&gt; <span class="prelude-ty">Option</span>&lt;usize&gt; {
-<a href=#71 id=71 data-nosnippet>71</a>    <span class="attr">#[cfg(all(not(feature = <span class="string">"hypervisor-min"</span>), not(feature = <span class="string">"board-rpi3"</span>)))]
-<a href=#72 id=72 data-nosnippet>72</a>    </span><span class="kw">match </span>sys_spawn_from_path(<span class="string">"/bin/fb-console"</span>) {
-<a href=#73 id=73 data-nosnippet>73</a>        SyscallResult::Ok(<span class="kw">_</span>) =&gt; ostd::io::println(<span class="string">"Init: fb-console spawned."</span>),
-<a href=#74 id=74 data-nosnippet>74</a>        SyscallResult::Err(<span class="kw">_</span>) =&gt; ostd::io::println(<span class="string">"Init: fb-console spawn failed."</span>),
-<a href=#75 id=75 data-nosnippet>75</a>    }
-<a href=#76 id=76 data-nosnippet>76</a>    <span class="comment">// The desktop shell is not auto-started on RPi3: it is packaged in the
-<a href=#77 id=77 data-nosnippet>77</a>    // image and launched on demand (`desktop &amp;`), which keeps the board's
-<a href=#78 id=78 data-nosnippet>78</a>    // console and compositor free during device bring-up.
-<a href=#79 id=79 data-nosnippet>79</a>    </span><span class="attr">#[cfg(all(not(feature = <span class="string">"hypervisor-min"</span>), not(feature = <span class="string">"board-rpi3"</span>)))]
-<a href=#80 id=80 data-nosnippet>80</a>    </span><span class="kw">match </span>sys_spawn_from_path(<span class="string">"/bin/desktop"</span>) {
-<a href=#81 id=81 data-nosnippet>81</a>        SyscallResult::Ok(<span class="kw">_</span>) =&gt; ostd::io::println(<span class="string">"Init: desktop spawned."</span>),
-<a href=#82 id=82 data-nosnippet>82</a>        SyscallResult::Err(<span class="kw">_</span>) =&gt; ostd::io::println(<span class="string">"Init: desktop spawn failed."</span>),
-<a href=#83 id=83 data-nosnippet>83</a>    }
-<a href=#84 id=84 data-nosnippet>84</a>
-<a href=#85 id=85 data-nosnippet>85</a>    <span class="attr">#[cfg(not(feature = <span class="string">"board-rpi3"</span>))]
-<a href=#86 id=86 data-nosnippet>86</a>    </span><span class="kw">let </span>hypervisor_tid = spawn_hypervisor();
-<a href=#87 id=87 data-nosnippet>87</a>    <span class="attr">#[cfg(feature = <span class="string">"board-rpi3"</span>)]
-<a href=#88 id=88 data-nosnippet>88</a>    </span><span class="kw">let </span>hypervisor_tid = <span class="prelude-val">None</span>;
-<a href=#89 id=89 data-nosnippet>89</a>
-<a href=#90 id=90 data-nosnippet>90</a>    <span class="attr">#[cfg(all(not(feature = <span class="string">"hypervisor-min"</span>), not(feature = <span class="string">"board-rpi3"</span>)))]
-<a href=#91 id=91 data-nosnippet>91</a>    </span>{
-<a href=#92 id=92 data-nosnippet>92</a>        <span class="kw">let _ </span>= sys_spawn_from_path(<span class="string">"/bin/silo-test"</span>);
-<a href=#93 id=93 data-nosnippet>93</a>        <span class="comment">// Spec 24 G2 Level A oracle: exercises the inference service over typed IPC.
-<a href=#94 id=94 data-nosnippet>94</a>        </span><span class="kw">let _ </span>= sys_spawn_from_path(<span class="string">"/bin/ai-test"</span>);
-<a href=#95 id=95 data-nosnippet>95</a>        <span class="kw">let _ </span>= sys_spawn_from_path(<span class="string">"/bin/vfs-test"</span>);
-<a href=#96 id=96 data-nosnippet>96</a>        <span class="kw">let _ </span>= sys_spawn_from_path(<span class="string">"/bin/srv-test"</span>);
-<a href=#97 id=97 data-nosnippet>97</a>        <span class="kw">let _ </span>= sys_spawn_from_path(<span class="string">"/bin/std-smoke"</span>);
-<a href=#98 id=98 data-nosnippet>98</a>    }
-<a href=#99 id=99 data-nosnippet>99</a>    hypervisor_tid
-<a href=#100 id=100 data-nosnippet>100</a>}
+<a href=#71 id=71 data-nosnippet>71</a>    <span class="comment">// fb-console mirrors the kernel user log to the display, so it stays on for
+<a href=#72 id=72 data-nosnippet>72</a>    // RPi3: a board whose only console is the serial header shows nothing on
+<a href=#73 id=73 data-nosnippet>73</a>    // HDMI otherwise. Bitmap text on a compositor surface, not a TTY.
+<a href=#74 id=74 data-nosnippet>74</a>    </span><span class="attr">#[cfg(not(feature = <span class="string">"hypervisor-min"</span>))]
+<a href=#75 id=75 data-nosnippet>75</a>    </span><span class="kw">match </span>sys_spawn_from_path(<span class="string">"/bin/fb-console"</span>) {
+<a href=#76 id=76 data-nosnippet>76</a>        SyscallResult::Ok(<span class="kw">_</span>) =&gt; ostd::io::println(<span class="string">"Init: fb-console spawned."</span>),
+<a href=#77 id=77 data-nosnippet>77</a>        SyscallResult::Err(<span class="kw">_</span>) =&gt; ostd::io::println(<span class="string">"Init: fb-console spawn failed."</span>),
+<a href=#78 id=78 data-nosnippet>78</a>    }
+<a href=#79 id=79 data-nosnippet>79</a>    <span class="comment">// The desktop shell is not auto-started on RPi3: it is packaged in the
+<a href=#80 id=80 data-nosnippet>80</a>    // image and launched on demand (`desktop &amp;`), which keeps the board's
+<a href=#81 id=81 data-nosnippet>81</a>    // console and compositor free during device bring-up.
+<a href=#82 id=82 data-nosnippet>82</a>    </span><span class="attr">#[cfg(all(not(feature = <span class="string">"hypervisor-min"</span>), not(feature = <span class="string">"board-rpi3"</span>)))]
+<a href=#83 id=83 data-nosnippet>83</a>    </span><span class="kw">match </span>sys_spawn_from_path(<span class="string">"/bin/desktop"</span>) {
+<a href=#84 id=84 data-nosnippet>84</a>        SyscallResult::Ok(<span class="kw">_</span>) =&gt; ostd::io::println(<span class="string">"Init: desktop spawned."</span>),
+<a href=#85 id=85 data-nosnippet>85</a>        SyscallResult::Err(<span class="kw">_</span>) =&gt; ostd::io::println(<span class="string">"Init: desktop spawn failed."</span>),
+<a href=#86 id=86 data-nosnippet>86</a>    }
+<a href=#87 id=87 data-nosnippet>87</a>
+<a href=#88 id=88 data-nosnippet>88</a>    <span class="attr">#[cfg(not(feature = <span class="string">"board-rpi3"</span>))]
+<a href=#89 id=89 data-nosnippet>89</a>    </span><span class="kw">let </span>hypervisor_tid = spawn_hypervisor();
+<a href=#90 id=90 data-nosnippet>90</a>    <span class="attr">#[cfg(feature = <span class="string">"board-rpi3"</span>)]
+<a href=#91 id=91 data-nosnippet>91</a>    </span><span class="kw">let </span>hypervisor_tid = <span class="prelude-val">None</span>;
+<a href=#92 id=92 data-nosnippet>92</a>
+<a href=#93 id=93 data-nosnippet>93</a>    <span class="attr">#[cfg(all(not(feature = <span class="string">"hypervisor-min"</span>), not(feature = <span class="string">"board-rpi3"</span>)))]
+<a href=#94 id=94 data-nosnippet>94</a>    </span>{
+<a href=#95 id=95 data-nosnippet>95</a>        <span class="kw">let _ </span>= sys_spawn_from_path(<span class="string">"/bin/silo-test"</span>);
+<a href=#96 id=96 data-nosnippet>96</a>        <span class="comment">// Spec 24 G2 Level A oracle: exercises the inference service over typed IPC.
+<a href=#97 id=97 data-nosnippet>97</a>        </span><span class="kw">let _ </span>= sys_spawn_from_path(<span class="string">"/bin/ai-test"</span>);
+<a href=#98 id=98 data-nosnippet>98</a>        <span class="kw">let _ </span>= sys_spawn_from_path(<span class="string">"/bin/vfs-test"</span>);
+<a href=#99 id=99 data-nosnippet>99</a>        <span class="kw">let _ </span>= sys_spawn_from_path(<span class="string">"/bin/srv-test"</span>);
+<a href=#100 id=100 data-nosnippet>100</a>        <span class="kw">let _ </span>= sys_spawn_from_path(<span class="string">"/bin/std-smoke"</span>);
+<a href=#101 id=101 data-nosnippet>101</a>    }
+<a href=#102 id=102 data-nosnippet>102</a>    hypervisor_tid
+<a href=#103 id=103 data-nosnippet>103</a>}
 </code></pre></div></section></main></body></html>
