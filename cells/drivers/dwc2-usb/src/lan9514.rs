@@ -141,7 +141,11 @@ impl<'a> Lan9514Device<'a> {
         let id = self.read_reg(ID_REV);
         let chip = id >> 16;
         if chip != 0x9514 && chip != 0x9500 && chip != 0x950A {
-            println("[lan9514] WARN: unexpected chip ID: 0x");
+            // Print the value: a warning that hides the number it is warning
+            // about cannot be acted on.
+            ostd::io::print("[lan9514] WARN: unexpected chip ID: 0x");
+            crate::usb_channel::print_hex_val(id);
+            println("");
         } else {
             println("[lan9514] Verified SMSC/Microchip LAN9514 Ethernet Controller");
         }

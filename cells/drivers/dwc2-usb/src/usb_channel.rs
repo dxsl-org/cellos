@@ -187,6 +187,13 @@ impl<'a> UsbHostEngine<'a> {
             let start = ch * DMA_SLOT_BYTES + offset.min(DMA_SLOT_BYTES);
             let end = (start + len).min((ch + 1) * DMA_SLOT_BYTES);
             let span = end.saturating_sub(start);
+            if span == 0 {
+                // Nothing to publish. The kernel rejects a zero-length sync as
+                // an invalid range, so asking for one turns a no-op into a
+                // reported failure -- and a transfer that legitimately moves no
+                // bytes (an idle bulk-IN poll) would warn on every poll.
+                return;
+            }
             match buf.begin_cache_sync(start, span) {
                 Some(token) => {
                     if !buf.complete_cache_sync(token) {
@@ -1018,7 +1025,7 @@ impl<'a> UsbHostEngine<'a> {
     }
 }
 
-fn print_hex_val(val: u32) {
+pub(crate) fn print_hex_val(val: u32) {
     const HEX: &[u8; 16] = b"0123456789ABCDEF";
     let mut buf = [0u8; 8];
     for i in 0..8 {
