@@ -72,13 +72,6 @@ pub struct HidInterface {
     pub split: Option<crate::usb_channel::Split>,
     /// Frame number of the last poll, so the endpoint's interval is honoured.
     pub last_poll_frame: u32,
-    /// A start-split is outstanding and the next poll collects its result.
-    ///
-    /// The two halves of a split have to reach the hub in different microframes,
-    /// so behind a hub one poll hands it the request and the next collects the
-    /// answer. Waiting for that here would hold the CPU for as long as the hub
-    /// takes.
-    pub split_pending: bool,
 }
 
 /// Hub port status speed codes (bits 9:10 of `wPortStatus`).
@@ -427,7 +420,6 @@ fn start_interface(
     Some(HidInterface {
         split: engine.split(),
         last_poll_frame: 0,
-        split_pending: false,
         channel: 0, // assigned by the caller
         dev_addr,
         interface: iface.number,
@@ -510,16 +502,14 @@ pub fn poll_interface(
     // hub still had buffered for this endpoint -- so a report that arrives
     // between two polls is overwritten before the complete-split collects it,
     // and the endpoint reads as permanently idle.
-    //
-    // An interface with half a split outstanding is exempt: its other half is
-    // what collects the report, the hub only holds a buffered transaction for a
-    // few frames, and waiting a whole interval to ask for it would let it go.
+    // A full- or low-speed device states its interval in frames, and the frame
+    // counter runs in microframes behind a high-speed hub.
     let now = engine.frame_number();
-    let interval = (iface.endpoint.interval as u32).max(1);
-    if !iface.split_pending
-        && iface.last_poll_frame != 0
-        && now.wrapping_sub(iface.last_poll_frame) & 0xFFFF < interval
-    {
+    let mut interval = (iface.endpoint.interval as u32).max(1);
+    if iface.split.is_some() {
+        interval = interval.saturating_mul(8);
+    }
+    if iface.last_poll_frame != 0 && now.wrapping_sub(iface.last_poll_frame) & 0xFFFF < interval {
         return;
     }
     iface.last_poll_frame = now;
@@ -535,7 +525,6 @@ pub fn poll_interface(
         iface.endpoint.number(),
         iface.endpoint.max_packet_size,
         &mut buf,
-        &mut iface.split_pending,
     );
     engine.set_split(None);
     let got = match result {
