@@ -471,6 +471,12 @@ impl<'a> UsbHostEngine<'a> {
             // non-periodic split is asked again immediately rather than waited on.
             arm(true);
             let outcome = self.wait_channel_spin(ch, CONTROL_SPIN_POLLS);
+            // Ask again after the translator has had a microframe to work in,
+            // rather than immediately: NYET is an answer about time, and eight
+            // retries inside one frame is not a budget, it is one attempt.
+            if matches!(outcome, Err(ViError::WouldBlock)) && self.last_was_nyet() {
+                self.let_frames_pass(2);
+            }
             trace::record(
                 trace::TAG_AFTER_CSPLIT,
                 self.last_hcint.get(),
@@ -1707,6 +1713,23 @@ impl<'a> UsbHostEngine<'a> {
         }
 
         None
+    }
+
+    /// Let `frames` microframes pass, without yielding.
+    ///
+    /// A hub that answers NYET is asking to be asked again, and the translator it
+    /// is standing in for needs a millisecond frame to run the transaction in.
+    /// Retrying microseconds later spends the whole budget before that frame is
+    /// over, which is what the trace showed: eight complete-splits, every one of
+    /// them NYET, all of them inside a single frame. The wait here is measured on
+    /// the frame counter and capped, so it costs at most the budget it protects.
+    fn let_frames_pass(&self, frames: u32) {
+        let start = self.frame_number();
+        for _ in 0..SPIN_POLLS {
+            if self.frame_number().wrapping_sub(start) & HFNUM_FRNUM_MASK >= frames {
+                return;
+            }
+        }
     }
 
     /// Give up on a channel that reported nothing within its budget.
