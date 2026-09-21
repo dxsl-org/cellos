@@ -1,4 +1,4 @@
-# serve-ai-oracle.ps1 — netboot the Spec 24 AI image over the static TFTP lane and capture the
+# serve-ai-oracle.ps1 -- netboot the Spec 24 AI image over the static TFTP lane and capture the
 # oracle's own output from the board's UART.
 #
 # This is a driver for tools/rpi3-netboot/serve-rpi3-netboot.ps1, not a replacement: it selects the
@@ -84,7 +84,7 @@ if (-not $EvidenceDir) {
 New-Item -ItemType Directory -Path $EvidenceDir -Force | Out-Null
 
 # 1. Point the lane at the chosen payload. The server serves exactly `cellos.uimg`, so the payload
-# already staged there is kept aside first — the lane's other users should not lose their image to an
+# already staged there is kept aside first -- the lane's other users should not lose their image to an
 # AI run.
 $staged = Join-Path $root 'cellos.uimg'
 if (Test-Path -LiteralPath $staged) {

@@ -28,6 +28,24 @@ $ast = [Management.Automation.Language.Parser]::ParseFile(
 if ($errors) {
     throw "PowerShell parse failed: $($errors[0].Message)"
 }
+
+# These two scripts are invoked with Windows PowerShell 5.1, which reads a
+# BOM-less .ps1 as ANSI. A UTF-8 character then arrives as mojibake, and the
+# 0x94 byte of an em dash decodes to the curly quote that PowerShell accepts as
+# a string delimiter -- so an em dash inside a string ends the string early and
+# the file stops parsing. Keep them ASCII; PowerShell 7 would hide the problem.
+foreach ($asciiOnly in @($script, (Join-Path $PSScriptRoot 'serve-ai-oracle.ps1'))) {
+    $bytes = [IO.File]::ReadAllBytes($asciiOnly)
+    $bad = for ($i = 0; $i -lt $bytes.Length; $i++) {
+        if ($bytes[$i] -gt 126 -and $bytes[$i] -ne 9 -and $bytes[$i] -ne 10 -and $bytes[$i] -ne 13) {
+            "offset $i (0x$($bytes[$i].ToString('x2')))"
+        }
+    }
+    if ($bad) {
+        throw ("$(Split-Path -Leaf $asciiOnly) must stay ASCII for PowerShell 5.1; " +
+               "non-ASCII at: $($bad -join ', ')")
+    }
+}
 $firewall = $ast.FindAll({
     param($node)
     $node -is [Management.Automation.Language.CommandAst] -and
@@ -117,8 +135,15 @@ if ($manifestSource -notmatch '(?m)^default = \["virtio-mmio"\]$') {
     throw 'Ordinary input builds must retain VirtIO MMIO by default'
 }
 $inputRustSource = Get-Content -Raw -LiteralPath $inputSource
-if ($inputRustSource -notmatch 'cfg\(all\(target_arch = "aarch64", feature = "virtio-mmio"\)\)') {
-    throw 'AArch64 QEMU slot iteration must be feature-gated'
+# Collapse whitespace before matching: rustfmt wraps the nested cfg over several
+# lines, so a pattern written against the unwrapped form silently stops matching
+# and the check degrades into a false failure.
+$inputRustFlat = ($inputRustSource -replace '\s+', ' ')
+if ($inputRustFlat -notmatch 'not\(any\(feature = "board-rpi3", feature = "board-rpi4"\)\), all\(target_arch = "aarch64", feature = "virtio-mmio"\)') {
+    throw 'AArch64 QEMU slot iteration must be feature-gated and excluded from board builds'
+}
+if ($inputRustFlat -notmatch 'any\(feature = "board-rpi3", feature = "board-rpi4"\)') {
+    throw 'Board builds must fall through to an empty VirtIO slot iterator'
 }
 $consoleRustSource = Get-Content -Raw -LiteralPath $consoleSource
 if ($consoleRustSource -notmatch '(?s)cfg\(all\(target_arch = "aarch64", feature = "board-rpi3"\)\).*?uart_bcm_mini::poll_rx') {

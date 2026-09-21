@@ -42,7 +42,7 @@ Write-Host ("[netboot] adapter: name={0} desc={1} mac={2} ifIndex={3} status={4}
 # A netboot needs an established link: the Pi is the only client, and a
 # disconnected port serves nobody however correct the address and firewall are.
 if ($adapter.Status -ne 'Up') {
-    Write-Warning ("$($adapter.Name) is $($adapter.Status) — connect the Pi (or a switch between them) before booting it over TFTP")
+    Write-Warning ("$($adapter.Name) is $($adapter.Status) -- connect the Pi (or a switch between them) before booting it over TFTP")
 }
 
 # Every action below that changes host network state must be aimed at an adapter
