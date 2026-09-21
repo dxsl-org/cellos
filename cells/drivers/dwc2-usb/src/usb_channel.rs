@@ -84,6 +84,9 @@ pub struct Split {
 /// it is not an error, just "not yet".
 const SPLIT_COMPLETE_ATTEMPTS: usize = 4;
 
+/// Start-split attempts per poll.
+const SPLIT_ATTEMPTS: usize = 3;
+
 /// Frames a complete-split may still belong to the start-split that began it.
 ///
 /// The pairing is only meaningful inside the hub's frame budget, so a
@@ -171,8 +174,18 @@ impl<'a> UsbHostEngine<'a> {
     }
 
     /// Current USB frame number, used to bound a complete-split.
-    fn frame_number(&self) -> u32 {
+    pub fn frame_number(&self) -> u32 {
         self.read32(HFNUM) & HFNUM_FRNUM_MASK
+    }
+
+    /// The last channel failure was NYET rather than NAK.
+    ///
+    /// Both arrive as `WouldBlock` and they mean opposite things for a split: a
+    /// hub answering NYET has not finished the transaction and is worth asking
+    /// again, while a NAK ends the pairing and the next attempt has to begin
+    /// with a fresh start-split.
+    fn last_was_nyet(&self) -> bool {
+        self.last_hcint.get() & (1 << 6) != 0
     }
 
     /// `HCCHAR` for this instant, with `ODDFRM` set from the frame the transfer
@@ -1003,10 +1016,20 @@ impl<'a> UsbHostEngine<'a> {
 
     /// Interrupt IN poll for a device behind a hub.
     ///
-    /// A hub with no report queued answers the start-split with NAK, which is
-    /// the same idle case the direct path reports as zero bytes. When it has
-    /// one, it buffers the transaction and answers the complete-split with the
-    /// report, answering NYET until it is ready.
+    /// The transaction is handed to the hub by a start-split and collected by a
+    /// complete-split, and the two halves have to be paired the way the hub
+    /// expects:
+    ///
+    /// * a start-split NAK means the device had nothing, and the pair is simply
+    ///   retried;
+    /// * a complete-split NYET means the hub has not finished and is worth
+    ///   asking again;
+    /// * a complete-split NAK means the pairing is over -- the next attempt has
+    ///   to begin with a fresh start-split.
+    ///
+    /// Treating the last two as one case re-issues complete-splits against a
+    /// pairing the hub has already discarded, which never yields a report.
+    #[allow(clippy::too_many_lines, clippy::too_many_arguments)]
     fn poll_split(
         &self,
         ch: usize,
@@ -1038,57 +1061,87 @@ impl<'a> UsbHostEngine<'a> {
             self.write32(hcchar(ch), self.start_hcchar(scchar));
         };
 
-        arm(false);
-        match self.wait_channel(ch) {
-            Ok(()) => {}
-            // Nothing queued on the device — the ordinary idle case.
-            Err(ViError::WouldBlock) => return Ok(0),
-            Err(e) => return Err(e),
-        }
+        // A split poll either moves a report or reports nothing, and "nothing"
+        // has four different causes that are indistinguishable from the caller.
+        // Tally them once so a run says which one it is.
+        static SPLIT_STATS: [core::sync::atomic::AtomicUsize; 5] =
+            [const { core::sync::atomic::AtomicUsize::new(0) }; 5];
+        static REPORTED: core::sync::atomic::AtomicBool =
+            core::sync::atomic::AtomicBool::new(false);
 
-        let started = self.frame_number();
-        for _ in 0..SPLIT_COMPLETE_ATTEMPTS {
-            arm(true);
+        for _ in 0..SPLIT_ATTEMPTS {
+            arm(false);
             match self.wait_channel(ch) {
-                Ok(()) => break,
+                Ok(()) => {
+                    SPLIT_STATS[0].fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+                }
+                // The device has nothing queued — this is the idle case.
                 Err(ViError::WouldBlock) => {
-                    // Still not ready. Past the frame budget the pairing is
-                    // gone, so the poll simply reports no report this round.
-                    if self.frame_number().wrapping_sub(started) & HFNUM_FRNUM_MASK
-                        > SPLIT_COMPLETE_FRAMES
-                    {
-                        return Ok(0);
-                    }
+                    SPLIT_STATS[1].fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+                    continue;
                 }
                 Err(e) => return Err(e),
             }
-        }
 
-        let remaining = (self.read32(hctsiz(ch)) & 0x7FFFF) as usize;
-        let got = want.saturating_sub(remaining);
-        if got == 0 {
-            return Ok(0);
-        }
-
-        if self.dma_slot(ch).is_some() {
-            let mut tmp = [0u8; DMA_SLOT_BYTES];
-            self.collect_in(ch, 0, &mut tmp, got.min(DMA_SLOT_BYTES));
-            let n = got.min(buf.len());
-            buf[..n].copy_from_slice(&tmp[..n]);
-            Ok(n)
-        } else {
-            let words = got.div_ceil(4);
-            for w in 0..words {
-                let word = self.read_fifo(ch);
-                for (j, byte) in word.to_le_bytes().iter().enumerate() {
-                    let idx = w * 4 + j;
-                    if idx < got && idx < buf.len() {
-                        buf[idx] = *byte;
+            let started = self.frame_number();
+            let mut collected = false;
+            for _ in 0..SPLIT_COMPLETE_ATTEMPTS {
+                arm(true);
+                match self.wait_channel(ch) {
+                    Ok(()) => {
+                        SPLIT_STATS[2].fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+                        collected = true;
+                        break;
                     }
+                    Err(ViError::WouldBlock) if self.last_was_nyet() => {
+                        SPLIT_STATS[3].fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+                        if self.frame_number().wrapping_sub(started) & HFNUM_FRNUM_MASK
+                            > SPLIT_COMPLETE_FRAMES
+                        {
+                            break;
+                        }
+                    }
+                    // NAK: the pairing is finished. Only a fresh start-split
+                    // can ask the device again.
+                    Err(ViError::WouldBlock) => {
+                        SPLIT_STATS[4].fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+                        break;
+                    }
+                    Err(e) => return Err(e),
                 }
             }
-            Ok(got.min(buf.len()))
+
+            if collected {
+                let remaining = (self.read32(hctsiz(ch)) & 0x7FFFF) as usize;
+                let got = want.saturating_sub(remaining);
+                if !REPORTED.swap(true, core::sync::atomic::Ordering::Relaxed) {
+                    report_split_stats(&SPLIT_STATS, want, remaining);
+                }
+                if got == 0 {
+                    return Ok(0);
+                }
+                if self.dma_slot(ch).is_some() {
+                    let mut tmp = [0u8; DMA_SLOT_BYTES];
+                    self.collect_in(ch, 0, &mut tmp, got.min(DMA_SLOT_BYTES));
+                    let n = got.min(buf.len());
+                    buf[..n].copy_from_slice(&tmp[..n]);
+                    return Ok(n);
+                }
+                let words = got.div_ceil(4);
+                for w in 0..words {
+                    let word = self.read_fifo(ch);
+                    for (j, byte) in word.to_le_bytes().iter().enumerate() {
+                        let idx = w * 4 + j;
+                        if idx < got && idx < buf.len() {
+                            buf[idx] = *byte;
+                        }
+                    }
+                }
+                return Ok(got.min(buf.len()));
+            }
         }
+
+        Ok(0)
     }
 
     /// Name the host-channel interrupt bit that ended a transfer.
@@ -1292,6 +1345,46 @@ impl<'a> UsbHostEngine<'a> {
             sys_yield();
         }
         self.write32(hcint(ch), 0xFFFF_FFFF);
+    }
+}
+
+/// Print the split-poll tallies once, in the form the questions are asked in.
+#[allow(clippy::type_complexity)]
+fn report_split_stats(stats: &[core::sync::atomic::AtomicUsize; 5], want: usize, remaining: usize) {
+    use core::sync::atomic::Ordering;
+    ostd::io::print("[dwc2] split poll: ssplit_ok=");
+    print_usize_val(stats[0].load(Ordering::Relaxed));
+    ostd::io::print(" ssplit_nak=");
+    print_usize_val(stats[1].load(Ordering::Relaxed));
+    ostd::io::print(" csplit_ok=");
+    print_usize_val(stats[2].load(Ordering::Relaxed));
+    ostd::io::print(" csplit_nyet=");
+    print_usize_val(stats[3].load(Ordering::Relaxed));
+    ostd::io::print(" csplit_nak=");
+    print_usize_val(stats[4].load(Ordering::Relaxed));
+    ostd::io::print(" want=");
+    print_usize_val(want);
+    ostd::io::print(" remaining=");
+    print_usize_val(remaining);
+    ostd::io::println("");
+}
+
+fn print_usize_val(v: usize) {
+    let mut out = [0u8; 20];
+    let mut n = v;
+    let mut len = 0;
+    if n == 0 {
+        ostd::io::print("0");
+        return;
+    }
+    while n > 0 && len < out.len() {
+        out[len] = b'0' + (n % 10) as u8;
+        n /= 10;
+        len += 1;
+    }
+    out[..len].reverse();
+    if let Ok(s) = core::str::from_utf8(&out[..len]) {
+        ostd::io::print(s);
     }
 }
 

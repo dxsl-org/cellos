@@ -70,6 +70,8 @@ pub struct HidInterface {
     /// before each poll, and a full- or low-speed device behind a hub is not
     /// reachable without it.
     pub split: Option<crate::usb_channel::Split>,
+    /// Frame number of the last poll, so the endpoint's interval is honoured.
+    pub last_poll_frame: u32,
 }
 
 /// Hub port status speed codes (bits 9:10 of `wPortStatus`).
@@ -417,6 +419,7 @@ fn start_interface(
 
     Some(HidInterface {
         split: engine.split(),
+        last_poll_frame: 0,
         channel: 0, // assigned by the caller
         dev_addr,
         interface: iface.number,
@@ -493,6 +496,19 @@ pub fn poll_interface(
     iface: &mut HidInterface,
     out: &mut Vec<EvdevEvent>,
 ) {
+    // An interrupt endpoint states how often it wants to be asked, and the host
+    // is expected to honour it. Polling as fast as the CPU runs issues thousands
+    // of split pairs per microframe, and each start-split replaces whatever the
+    // hub still had buffered for this endpoint -- so a report that arrives
+    // between two polls is overwritten before the complete-split collects it,
+    // and the endpoint reads as permanently idle.
+    let now = engine.frame_number();
+    let interval = (iface.endpoint.interval as u32).max(1);
+    if iface.last_poll_frame != 0 && now.wrapping_sub(iface.last_poll_frame) & 0xFFFF < interval {
+        return;
+    }
+    iface.last_poll_frame = now;
+
     let mut buf = [0u8; REPORT_BUF];
     // Poll the device the way it is wired, then restore direct addressing so a
     // later transfer to the hub or the controller's own device is not routed
