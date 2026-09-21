@@ -148,6 +148,14 @@ pub const HCSPLT_HUBADDR_MASK: u32 = 0x7F << HCSPLT_HUBADDR_SHIFT;
 pub const HCSPLT_COMPSPLT: u32 = 1 << 16; // 1 = complete split, 0 = start split
 pub const HCSPLT_SPLTENA: u32 = 1 << 31; // split enable
 
+/// `HCCHAR.ODDFRM` — the frame the transfer goes on the wire is an odd one.
+///
+/// The core latches this at channel start and refuses a transfer whose parity
+/// disagrees with the frame it lands in. Behind a hub that breaks the pairing
+/// between a start-split and the complete-split that collects it, and the
+/// channel reports a transaction error for a sequence the bus never saw.
+pub const HCCHAR_ODDFRM: u32 = 1 << 29;
+
 /// `HCCHAR.LSPDDEV` — the target is a low-speed device.
 ///
 /// Not a cosmetic hint: a low-speed device only understands transactions

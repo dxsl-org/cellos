@@ -175,6 +175,23 @@ impl<'a> UsbHostEngine<'a> {
         self.read32(HFNUM) & HFNUM_FRNUM_MASK
     }
 
+    /// `HCCHAR` for this instant, with `ODDFRM` set from the frame the transfer
+    /// will be sent in.
+    ///
+    /// The core latches the parity of the frame a transfer lands in when the
+    /// channel starts, and a transfer whose parity disagrees is refused. The
+    /// frame read here is the one just started, and the transfer goes out in the
+    /// next, which is why the parity is inverted -- the same reading U-Boot
+    /// takes before it starts a channel.
+    #[inline]
+    fn start_hcchar(&self, base: u32) -> u32 {
+        if self.frame_number() & 1 == 0 {
+            base | HCCHAR_ODDFRM
+        } else {
+            base & !HCCHAR_ODDFRM
+        }
+    }
+
     /// Start a channel and, behind a hub, run the split handshake that reaches
     /// the device at all.
     ///
@@ -487,7 +504,7 @@ impl<'a> UsbHostEngine<'a> {
                 );
             }
             self.write32(hcint(ch), 0xFFFF_FFFF);
-            self.write32(hcchar(ch), scchar);
+            self.write32(hcchar(ch), self.start_hcchar(scchar));
         })
     }
 
@@ -532,7 +549,7 @@ impl<'a> UsbHostEngine<'a> {
                     self.program_hcdma(ch, received);
                 }
                 self.write32(hcint(ch), 0xFFFF_FFFF);
-                self.write32(hcchar(ch), scchar);
+                self.write32(hcchar(ch), self.start_hcchar(scchar));
             })?;
 
             // The core writes the *remaining* count back into HCTSIZ.
@@ -594,7 +611,7 @@ impl<'a> UsbHostEngine<'a> {
             // not a position this stage may begin from.
             self.program_hcdma(ch, 0);
             self.write32(hcint(ch), 0xFFFF_FFFF);
-            self.write32(hcchar(ch), scchar);
+            self.write32(hcchar(ch), self.start_hcchar(scchar));
         })
     }
 
@@ -723,7 +740,7 @@ impl<'a> UsbHostEngine<'a> {
                 | (1 << 20)
                 | ((dev_addr as u32) << 22)
                 | (1 << 31);
-            self.write32(hcchar(ch), scchar);
+            self.write32(hcchar(ch), self.start_hcchar(scchar));
 
             if self.dma_slot(ch).is_some() {
                 // Payload already staged and HCDMA already armed.
@@ -779,7 +796,7 @@ impl<'a> UsbHostEngine<'a> {
                 self.write32(hcsplt(ch), 0);
                 self.write32(hcintmsk(ch), 0x07FF);
                 self.write32(hctsiz(ch), sctsiz);
-                self.write32(hcchar(ch), scchar);
+                self.write32(hcchar(ch), self.start_hcchar(scchar));
 
                 if use_dma {
                     // Staged and armed before the loop; the core walks it.
@@ -837,7 +854,7 @@ impl<'a> UsbHostEngine<'a> {
             | ((dev_addr as u32) << 22)
             | (1 << 31);
         self.program_hcdma(ch, 0);
-        self.write32(hcchar(ch), scchar);
+        self.write32(hcchar(ch), self.start_hcchar(scchar));
 
         // Non-blocking wait: check if transfer completed or NAK
         let mut count = 0;
@@ -924,7 +941,7 @@ impl<'a> UsbHostEngine<'a> {
             | ((dev_addr as u32) << 22)
             | (1 << 31); // CHENA
         self.program_hcdma(ch, 0);
-        self.write32(hcchar(ch), scchar);
+        self.write32(hcchar(ch), self.start_hcchar(scchar));
 
         let mut polls = 0u32;
         while polls < 2_000 {
@@ -1018,7 +1035,7 @@ impl<'a> UsbHostEngine<'a> {
             self.write32(hctsiz(ch), sctsiz);
             self.program_hcdma(ch, 0);
             self.write32(hcint(ch), 0xFFFF_FFFF);
-            self.write32(hcchar(ch), scchar);
+            self.write32(hcchar(ch), self.start_hcchar(scchar));
         };
 
         arm(false);
