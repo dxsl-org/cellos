@@ -10,7 +10,7 @@ use driver_dwc2_usb::dispatch::{handle, NicReply, REPLY_BUF};
 use driver_dwc2_usb::hid::EvdevEvent;
 use driver_dwc2_usb::hub::UsbHub;
 use driver_dwc2_usb::lan9514::Lan9514Device;
-use driver_dwc2_usb::usb_channel::{self, UsbHostEngine};
+use driver_dwc2_usb::usb_channel::{self, TransferMode, UsbHostEngine};
 use driver_dwc2_usb::usb_hid;
 use driver_dwc2_usb::Dwc2Controller;
 use ostd::io::{print, println};
@@ -40,7 +40,12 @@ declare_syscalls![
     RequestMmio,
     WaitIrq,
     LookupService,
-    RegisterNicDriver
+    RegisterNicDriver,
+    // DMA payload slots: the core reads and writes them directly.
+    GrantAlloc,
+    GrantFree,
+    GrantCacheSyncBegin,
+    GrantCacheSyncComplete
 ];
 
 /// Poll budget for the NIC IPC receive, in 10 ms ticks.
@@ -88,43 +93,83 @@ fn cell_main() {
     let engine = UsbHostEngine::new(dwc2.mmio());
 
     // ── Bring the bus up ─────────────────────────────────────────────────────
-    if dwc2.init_host().is_err() {
-        println("[dwc2] ERROR: DWC2 host mode initialization failed");
-        loop {
+    //
+    // DMA first, FIFO as fallback. Linux drives this SoC's DWC2 in DMA mode,
+    // and the board has only ever completed control transfers that carry no
+    // data phase in FIFO mode: every data-phase read stalled with the channel
+    // enabled and no status bit set. Each mode is therefore tried against a
+    // real descriptor read rather than assumed.
+    let mut root_class = usb_hid::RootClass::Other;
+
+    for mode in [TransferMode::Dma, TransferMode::Fifo] {
+        if !engine.set_mode(mode) {
+            println("[dwc2] DMA scratch allocation failed; falling back to FIFO");
+            continue;
+        }
+
+        if dwc2.init_host(mode).is_err() {
+            println("[dwc2] host mode initialization failed");
+            continue;
+        }
+
+        dwc2.power_on_port();
+
+        let mut connected = false;
+        for _ in 0..10_000 {
+            if dwc2.is_port_connected() {
+                connected = true;
+                break;
+            }
             sys_yield();
         }
-    }
-
-    dwc2.power_on_port();
-
-    let mut connected = false;
-    for _ in 0..10_000 {
-        if dwc2.is_port_connected() {
-            connected = true;
-            break;
-        }
-        sys_yield();
-    }
-    if !connected {
-        println("[dwc2] WARN: no downstream connection on Root Port 0");
-    } else {
-        println("[dwc2] Downstream connection detected on Root Port 0; resetting...");
-        match dwc2.reset_port() {
-            Ok(speed) => {
-                match speed {
-                    0 => println("[dwc2] Port 0 enabled: High-Speed (480 Mbps)"),
-                    1 => println("[dwc2] Port 0 enabled: Full-Speed (12 Mbps)"),
-                    2 => println("[dwc2] Port 0 enabled: Low-Speed (1.5 Mbps)"),
-                    _ => println("[dwc2] Port 0 enabled: Unknown speed"),
+        if !connected {
+            println("[dwc2] WARN: no downstream connection on Root Port 0");
+        } else {
+            match dwc2.reset_port() {
+                Ok(speed) => {
+                    match speed {
+                        0 => println("[dwc2] Port 0 enabled: High-Speed (480 Mbps)"),
+                        1 => println("[dwc2] Port 0 enabled: Full-Speed (12 Mbps)"),
+                        2 => println("[dwc2] Port 0 enabled: Low-Speed (1.5 Mbps)"),
+                        _ => println("[dwc2] Port 0 enabled: Unknown speed"),
+                    }
+                    engine.set_control_mps(usb_channel::initial_control_mps(speed));
                 }
-                // EP0's packet size follows the link speed, and the core will
-                // not run a high-speed channel programmed for 8-byte packets.
-                engine.set_control_mps(usb_channel::initial_control_mps(speed));
-                print("[dwc2] control endpoint MPS=");
-                print_usize(engine.control_mps() as usize);
-                println("");
+                Err(_) => println("[dwc2] WARN: port reset failed"),
             }
-            Err(_) => println("[dwc2] WARN: port reset failed"),
+        }
+
+        print("[dwc2] mode=");
+        print(match mode {
+            TransferMode::Dma => "dma",
+            TransferMode::Fifo => "fifo",
+        });
+        print(" ep0_mps=");
+        print_usize(engine.control_mps() as usize);
+        println("");
+
+        // A readable device descriptor proves this mode moves bytes.
+        let root_device = usb_hid::read_device_descriptor(&engine, 0);
+        let root_interfaces = usb_hid::read_configuration(&engine, 0).map(|(_, i)| i);
+
+        match (root_device.as_ref(), root_interfaces.as_ref()) {
+            (Some(dev), Some(ifaces)) => {
+                print("[dwc2] root device class=");
+                print_usize(dev.class as usize);
+                print(" mps0=");
+                print_usize(dev.max_packet_size_0 as usize);
+                println("");
+                root_class = usb_hid::classify(dev, ifaces);
+                /* keep this mode */
+                break;
+            }
+            _ => {
+                println(match mode {
+                    TransferMode::Dma => "[dwc2] DMA mode did not enumerate; retrying with FIFO",
+                    TransferMode::Fifo => "[dwc2] FIFO mode did not enumerate either",
+                });
+                root_class = usb_hid::RootClass::Other;
+            }
         }
     }
 
@@ -135,23 +180,6 @@ fn cell_main() {
     // branching on the class keeps a directly attached device working too, and
     // — more importantly — turns "nothing answered" into a printed diagnostic
     // instead of a silent no-op.
-    let root_device = usb_hid::read_device_descriptor(&engine, 0);
-    let root_interfaces = usb_hid::read_configuration(&engine, 0).map(|(_, ifaces)| ifaces);
-    let root_class = match (root_device.as_ref(), root_interfaces.as_ref()) {
-        (Some(dev), Some(ifaces)) => {
-            print("[dwc2] root device class=");
-            print_usize(dev.class as usize);
-            print(" mps0=");
-            print_usize(dev.max_packet_size_0 as usize);
-            println("");
-            usb_hid::classify(dev, ifaces)
-        }
-        _ => {
-            println("[dwc2] WARN: root device did not answer its descriptors");
-            usb_hid::RootClass::Other
-        }
-    };
-
     let mut hid_interfaces: alloc::vec::Vec<usb_hid::HidInterface> = alloc::vec::Vec::new();
     let mut lan: Option<Lan9514Device<'_>> = None;
 

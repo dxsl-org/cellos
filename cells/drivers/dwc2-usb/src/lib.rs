@@ -1,5 +1,7 @@
+// `deny`, not `forbid`: the DMA payload copies need a documented `allow`
+// island under the F1 allowlist (scripts/unsafe-allowlist.toml).
 #![no_std]
-#![forbid(unsafe_code)]
+#![deny(unsafe_code)]
 
 pub mod dispatch;
 pub mod dwc2;
