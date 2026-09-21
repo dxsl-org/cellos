@@ -147,15 +147,13 @@ pub const HCSPLT_HUBADDR_SHIFT: u32 = 7; // hub device address, bits 13:7
 pub const HCSPLT_HUBADDR_MASK: u32 = 0x7F << HCSPLT_HUBADDR_SHIFT;
 pub const HCSPLT_COMPSPLT: u32 = 1 << 16; // 1 = complete split, 0 = start split
 pub const HCSPLT_SPLTENA: u32 = 1 << 31; // split enable
-/// Complete-splits the core may run in one frame for this channel, bits 10:8.
+/// Which part of the payload a split transaction carries, bits 15:14.
 ///
-/// Zero means none: the field was never written, so every channel that asked for
-/// a split asked for it with no complete-splits budget at all. The core accepted
-/// the channel, then halted it with no status -- a bare CHHLTD on both halves of
-/// every split -- which is what a split transaction with nothing to run it looks
-/// like from the outside.
-pub const HCSPLT_MULTICNT_SHIFT: u32 = 8;
-pub const HCSPLT_MULTICNT_MASK: u32 = 0x7 << HCSPLT_MULTICNT_SHIFT;
+/// Zero is `MID` -- the middle of a payload -- and this driver never wrote the
+/// field, so every split it issued asked the hub for the middle of a transfer
+/// that is one packet long, which is nothing the hub can return.
+pub const HCSPLT_XACTPOS_SHIFT: u32 = 14;
+pub const HCSPLT_XACTPOS_ALL: u32 = 3 << HCSPLT_XACTPOS_SHIFT;
 
 /// `HCCHAR.ODDFRM` — the frame the transfer goes on the wire is an odd one.
 ///
