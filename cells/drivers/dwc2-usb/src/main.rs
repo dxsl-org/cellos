@@ -10,7 +10,7 @@ use driver_dwc2_usb::dispatch::{handle, NicReply, REPLY_BUF};
 use driver_dwc2_usb::hid::EvdevEvent;
 use driver_dwc2_usb::hub::UsbHub;
 use driver_dwc2_usb::lan9514::Lan9514Device;
-use driver_dwc2_usb::usb_channel::UsbHostEngine;
+use driver_dwc2_usb::usb_channel::{self, UsbHostEngine};
 use driver_dwc2_usb::usb_hid;
 use driver_dwc2_usb::Dwc2Controller;
 use ostd::io::{print, println};
@@ -110,10 +110,21 @@ fn cell_main() {
     } else {
         println("[dwc2] Downstream connection detected on Root Port 0; resetting...");
         match dwc2.reset_port() {
-            Ok(0) => println("[dwc2] Port 0 enabled: High-Speed (480 Mbps)"),
-            Ok(1) => println("[dwc2] Port 0 enabled: Full-Speed (12 Mbps)"),
-            Ok(2) => println("[dwc2] Port 0 enabled: Low-Speed (1.5 Mbps)"),
-            _ => println("[dwc2] Port 0 enabled: Unknown speed"),
+            Ok(speed) => {
+                match speed {
+                    0 => println("[dwc2] Port 0 enabled: High-Speed (480 Mbps)"),
+                    1 => println("[dwc2] Port 0 enabled: Full-Speed (12 Mbps)"),
+                    2 => println("[dwc2] Port 0 enabled: Low-Speed (1.5 Mbps)"),
+                    _ => println("[dwc2] Port 0 enabled: Unknown speed"),
+                }
+                // EP0's packet size follows the link speed, and the core will
+                // not run a high-speed channel programmed for 8-byte packets.
+                engine.set_control_mps(usb_channel::initial_control_mps(speed));
+                print("[dwc2] control endpoint MPS=");
+                print_usize(engine.control_mps() as usize);
+                println("");
+            }
+            Err(_) => println("[dwc2] WARN: port reset failed"),
         }
     }
 

@@ -176,6 +176,18 @@ impl<'a> UsbHub<'a> {
         }
     }
 
+    /// Negotiated speed of the device on `port`, as USB 2.0 hub port status
+    /// bits 10:9 encode it: 0 = full, 1 = low, 2 = high.
+    ///
+    /// A downstream device can be slower than the hub, so its EP0 packet size
+    /// cannot be assumed from the hub's own speed.
+    pub fn port_speed(&self, port: u16) -> u8 {
+        match self.get_port_status(port) {
+            Ok((status, _)) => ((status >> 9) & 0x3) as u8,
+            Err(_) => 0,
+        }
+    }
+
     /// True when the port reports a device at full/low speed (status bit 9).
     ///
     /// LAN9514 is a high-speed hub, so a full-speed device behind it comes from

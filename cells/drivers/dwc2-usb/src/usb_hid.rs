@@ -101,6 +101,17 @@ pub fn attach_port(
         return None;
     }
 
+    // A device behind the hub can be slower than the hub itself, and the core
+    // will not run a high-speed channel programmed with 8-byte packets (nor
+    // frame a full-speed device that answers in 8 bytes at 64). Take EP0's
+    // starting size from this port's negotiated speed.
+    let hub_speed = hub.port_speed(port);
+    let ep0_mps = match hub_speed {
+        2 => crate::usb_channel::initial_control_mps(crate::usb_channel::PORT_SPEED_HIGH),
+        _ => crate::usb_channel::initial_control_mps(crate::usb_channel::PORT_SPEED_FULL),
+    };
+    engine.set_control_mps(ep0_mps);
+
     // The device answers at address 0 until SET_ADDRESS latches.
     let device = read_device_descriptor(engine, 0)?;
     print("[usb-hid] vendor:product ");

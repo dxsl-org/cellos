@@ -8,11 +8,29 @@ use types::{ViError, ViResult};
 
 /// Control-endpoint max packet size assumed before a device reports its own.
 ///
-/// USB 2.0 §5.5.3 fixes low-speed control endpoints at 8 bytes and allows
-/// full-speed ones 8/16/32/64, so 8 is the only value safe to assume for the
-/// first descriptor read. Declaring 64 there makes the host expect 64-byte
-/// packets from a device that sends 8, and the read fails.
-pub const CONTROL_MPS_DEFAULT: u8 = 8;
+/// USB 2.0 §5.5.3: a low-speed control endpoint is 8 bytes, a full-speed one is
+/// 8/16/32/64, and a **high-speed one is 64**. The assumption therefore has to
+/// follow the negotiated port speed — a fixed 8 makes the core program a
+/// high-speed channel the hardware will not run (`HCINT` never sets a single
+/// bit and the transfer hangs until timeout), while a fixed 64 mis-frames a
+/// full-speed device that answers in 8-byte packets.
+pub const CONTROL_MPS_LOW_FULL_SPEED: u8 = 8;
+
+/// HPRT0 `PRTSPD` encoding (DWC2 databook): the value `reset_port` returns.
+pub const PORT_SPEED_HIGH: u32 = 0;
+pub const PORT_SPEED_FULL: u32 = 1;
+pub const PORT_SPEED_LOW: u32 = 2;
+
+/// Control-endpoint packet size to assume for a device on a port at `speed`.
+///
+/// This is only the starting value: `read_device_descriptor` replaces it with
+/// the device's real `bMaxPacketSize0` as soon as it has read one.
+pub fn initial_control_mps(speed: u32) -> u8 {
+    match speed {
+        PORT_SPEED_HIGH => 64,
+        _ => CONTROL_MPS_LOW_FULL_SPEED,
+    }
+}
 
 pub struct UsbHostEngine<'a> {
     mmio: &'a MmioRegion,
@@ -25,7 +43,7 @@ impl<'a> UsbHostEngine<'a> {
     pub fn new(mmio: &'a MmioRegion) -> Self {
         Self {
             mmio,
-            ctrl_mps: Cell::new(CONTROL_MPS_DEFAULT),
+            ctrl_mps: Cell::new(CONTROL_MPS_LOW_FULL_SPEED),
         }
     }
 
