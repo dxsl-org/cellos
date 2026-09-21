@@ -1876,14 +1876,24 @@
 <a href=#1876 id=1876 data-nosnippet>1876</a>    trace::reset();
 <a href=#1877 id=1877 data-nosnippet>1877</a>}
 <a href=#1878 id=1878 data-nosnippet>1878</a>
-<a href=#1879 id=1879 data-nosnippet>1879</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>print_hex_val(val: u32) {
-<a href=#1880 id=1880 data-nosnippet>1880</a>    <span class="kw">const </span>HEX: <span class="kw-2">&amp;</span>[u8; <span class="number">16</span>] = <span class="string">b"0123456789ABCDEF"</span>;
-<a href=#1881 id=1881 data-nosnippet>1881</a>    <span class="kw">let </span><span class="kw-2">mut </span>buf = [<span class="number">0u8</span>; <span class="number">8</span>];
-<a href=#1882 id=1882 data-nosnippet>1882</a>    <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..<span class="number">8 </span>{
-<a href=#1883 id=1883 data-nosnippet>1883</a>        buf[<span class="number">7 </span>- i] = HEX[((val &gt;&gt; (i * <span class="number">4</span>)) &amp; <span class="number">0xF</span>) <span class="kw">as </span>usize];
-<a href=#1884 id=1884 data-nosnippet>1884</a>    }
-<a href=#1885 id=1885 data-nosnippet>1885</a>    <span class="kw">if let </span><span class="prelude-val">Ok</span>(s) = core::str::from_utf8(<span class="kw-2">&amp;</span>buf) {
-<a href=#1886 id=1886 data-nosnippet>1886</a>        ostd::io::print(s);
-<a href=#1887 id=1887 data-nosnippet>1887</a>    }
-<a href=#1888 id=1888 data-nosnippet>1888</a>}
+<a href=#1879 id=1879 data-nosnippet>1879</a><span class="doccomment">/// Write the register recording out, once, at a point the caller knows is safe.
+<a href=#1880 id=1880 data-nosnippet>1880</a>///
+<a href=#1881 id=1881 data-nosnippet>1881</a>/// It used to be written only when the control path failed, and gating the
+<a href=#1882 id=1882 data-nosnippet>1882</a>/// stalled-endpoint recovery on a real stall removed that failure -- so the
+<a href=#1883 id=1883 data-nosnippet>1883</a>/// recording stopped being written at all just when the polls went quiet enough to
+<a href=#1884 id=1884 data-nosnippet>1884</a>/// need it.
+<a href=#1885 id=1885 data-nosnippet>1885</a></span><span class="kw">pub fn </span>trace_dump() {
+<a href=#1886 id=1886 data-nosnippet>1886</a>    trace::dump_once();
+<a href=#1887 id=1887 data-nosnippet>1887</a>}
+<a href=#1888 id=1888 data-nosnippet>1888</a>
+<a href=#1889 id=1889 data-nosnippet>1889</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>print_hex_val(val: u32) {
+<a href=#1890 id=1890 data-nosnippet>1890</a>    <span class="kw">const </span>HEX: <span class="kw-2">&amp;</span>[u8; <span class="number">16</span>] = <span class="string">b"0123456789ABCDEF"</span>;
+<a href=#1891 id=1891 data-nosnippet>1891</a>    <span class="kw">let </span><span class="kw-2">mut </span>buf = [<span class="number">0u8</span>; <span class="number">8</span>];
+<a href=#1892 id=1892 data-nosnippet>1892</a>    <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..<span class="number">8 </span>{
+<a href=#1893 id=1893 data-nosnippet>1893</a>        buf[<span class="number">7 </span>- i] = HEX[((val &gt;&gt; (i * <span class="number">4</span>)) &amp; <span class="number">0xF</span>) <span class="kw">as </span>usize];
+<a href=#1894 id=1894 data-nosnippet>1894</a>    }
+<a href=#1895 id=1895 data-nosnippet>1895</a>    <span class="kw">if let </span><span class="prelude-val">Ok</span>(s) = core::str::from_utf8(<span class="kw-2">&amp;</span>buf) {
+<a href=#1896 id=1896 data-nosnippet>1896</a>        ostd::io::print(s);
+<a href=#1897 id=1897 data-nosnippet>1897</a>    }
+<a href=#1898 id=1898 data-nosnippet>1898</a>}
 </code></pre></div></section></main></body></html>
