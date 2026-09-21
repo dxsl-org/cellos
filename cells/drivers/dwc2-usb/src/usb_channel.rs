@@ -185,7 +185,7 @@ const WAIT_POLLS: usize = 50_000;
 /// The core clears `CHENA` in microseconds; this only has to be long enough not
 /// to be missed, and every iteration of it is a yield handed to the rest of the
 /// system.
-const CHANNEL_HALT_POLLS: usize = 64;
+const CHANNEL_HALT_POLLS: usize = 4_000;
 
 /// Complete-split attempts a synchronous transfer will make.
 ///
@@ -1733,15 +1733,21 @@ impl<'a> UsbHostEngine<'a> {
         val |= 1 << 30; // CHDIS
         val &= !(1 << 31); // CHENA
         self.write32(reg, val);
-        // Wait for CHHLTD (bit 1) with a short timeout. The core clears CHENA in
-        // microseconds, so this only has to be long enough not to be missed --
-        // and it runs on the serving thread, so it must not be long enough to be
-        // felt if the core never answers.
+        // Wait for CHHLTD (bit 1), and only then clear it. Clearing the interrupt
+        // unconditionally returns while the core is still finishing the halt, and
+        // the CHHLTD it sets afterwards survives into the next arm -- where the
+        // wait reads it and reports a halt that belongs to the transfer before.
+        // The trace made that plain: the records alternate between an ACK, whose
+        // channel carries CHDIS because this function set it, and a halt whose
+        // channel carries no CHDIS at all, which is this function's own halt
+        // arriving late.
+        //
+        // The wait reads the register rather than yielding: a yield is around
+        // twenty milliseconds, and four of them is the whole budget a split has.
         for _ in 0..CHANNEL_HALT_POLLS {
             if self.read32(hcint(ch)) & (1 << 1) != 0 {
                 break;
             }
-            sys_yield();
         }
         self.write32(hcint(ch), 0xFFFF_FFFF);
     }
