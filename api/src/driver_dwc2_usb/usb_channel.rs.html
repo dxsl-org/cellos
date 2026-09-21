@@ -1696,163 +1696,185 @@
 <a href=#1696 id=1696 data-nosnippet>1696</a>            <span class="kw">return </span><span class="prelude-val">Some</span>(<span class="prelude-val">Ok</span>(()));
 <a href=#1697 id=1697 data-nosnippet>1697</a>        }
 <a href=#1698 id=1698 data-nosnippet>1698</a>
-<a href=#1699 id=1699 data-nosnippet>1699</a>        <span class="comment">// ── ACK = device accepted the packet (BCM2837 primary path)
-<a href=#1700 id=1700 data-nosnippet>1700</a>        </span><span class="kw">if </span>int &amp; (<span class="number">1 </span>&lt;&lt; <span class="number">5</span>) != <span class="number">0 </span>{
-<a href=#1701 id=1701 data-nosnippet>1701</a>            <span class="self">self</span>.halt_channel(ch);
-<a href=#1702 id=1702 data-nosnippet>1702</a>            <span class="self">self</span>.last_hcint.set(int);
-<a href=#1703 id=1703 data-nosnippet>1703</a>            <span class="kw">return </span><span class="prelude-val">Some</span>(<span class="prelude-val">Ok</span>(()));
-<a href=#1704 id=1704 data-nosnippet>1704</a>        }
-<a href=#1705 id=1705 data-nosnippet>1705</a>
-<a href=#1706 id=1706 data-nosnippet>1706</a>        <span class="comment">// ── Error conditions ──────────────────────────────────────
-<a href=#1707 id=1707 data-nosnippet>1707</a>        </span><span class="kw">if </span>int &amp; ((<span class="number">1 </span>&lt;&lt; <span class="number">2</span>) | (<span class="number">1 </span>&lt;&lt; <span class="number">3</span>) | (<span class="number">1 </span>&lt;&lt; <span class="number">7</span>) | (<span class="number">1 </span>&lt;&lt; <span class="number">8</span>) | (<span class="number">1 </span>&lt;&lt; <span class="number">10</span>)) != <span class="number">0 </span>{
-<a href=#1708 id=1708 data-nosnippet>1708</a>            <span class="self">self</span>.report_channel_error(ch, int);
-<a href=#1709 id=1709 data-nosnippet>1709</a>            <span class="self">self</span>.halt_channel(ch);
-<a href=#1710 id=1710 data-nosnippet>1710</a>            <span class="self">self</span>.last_hcint.set(int);
-<a href=#1711 id=1711 data-nosnippet>1711</a>            <span class="kw">return </span><span class="prelude-val">Some</span>(<span class="prelude-val">Err</span>(ViError::IO));
-<a href=#1712 id=1712 data-nosnippet>1712</a>        }
-<a href=#1713 id=1713 data-nosnippet>1713</a>        <span class="kw">if </span>int &amp; ((<span class="number">1 </span>&lt;&lt; <span class="number">4</span>) | (<span class="number">1 </span>&lt;&lt; <span class="number">6</span>)) != <span class="number">0 </span>{
-<a href=#1714 id=1714 data-nosnippet>1714</a>            <span class="self">self</span>.halt_channel(ch);
-<a href=#1715 id=1715 data-nosnippet>1715</a>            <span class="self">self</span>.last_hcint.set(int);
-<a href=#1716 id=1716 data-nosnippet>1716</a>            <span class="kw">return </span><span class="prelude-val">Some</span>(<span class="prelude-val">Err</span>(ViError::WouldBlock));
-<a href=#1717 id=1717 data-nosnippet>1717</a>        }
-<a href=#1718 id=1718 data-nosnippet>1718</a>
-<a href=#1719 id=1719 data-nosnippet>1719</a>        <span class="prelude-val">None
-<a href=#1720 id=1720 data-nosnippet>1720</a>    </span>}
-<a href=#1721 id=1721 data-nosnippet>1721</a>
-<a href=#1722 id=1722 data-nosnippet>1722</a>    <span class="doccomment">/// Give up on a channel that reported nothing within its budget.
-<a href=#1723 id=1723 data-nosnippet>1723</a>    </span><span class="kw">fn </span>channel_timeout(<span class="kw-2">&amp;</span><span class="self">self</span>, ch: usize) -&gt; ViResult&lt;()&gt; {
-<a href=#1724 id=1724 data-nosnippet>1724</a>        <span class="comment">// Timeout — capture hcint BEFORE halt clears it
-<a href=#1725 id=1725 data-nosnippet>1725</a>        </span><span class="kw">let </span>int = <span class="self">self</span>.read32(hcint(ch));
-<a href=#1726 id=1726 data-nosnippet>1726</a>        <span class="kw">let </span>char_val = <span class="self">self</span>.read32(hcchar(ch));
-<a href=#1727 id=1727 data-nosnippet>1727</a>        <span class="self">self</span>.halt_channel(ch);
-<a href=#1728 id=1728 data-nosnippet>1728</a>        <span class="kw">static </span>TIMEOUT_COUNT: core::sync::atomic::AtomicUsize =
-<a href=#1729 id=1729 data-nosnippet>1729</a>            core::sync::atomic::AtomicUsize::new(<span class="number">0</span>);
-<a href=#1730 id=1730 data-nosnippet>1730</a>        <span class="kw">let </span>attempt = TIMEOUT_COUNT.fetch_add(<span class="number">1</span>, core::sync::atomic::Ordering::Relaxed);
-<a href=#1731 id=1731 data-nosnippet>1731</a>        <span class="kw">if </span>attempt &lt; <span class="number">3 </span>{
-<a href=#1732 id=1732 data-nosnippet>1732</a>            ostd::io::print(<span class="string">"[dwc2] TIMEOUT ch="</span>);
-<a href=#1733 id=1733 data-nosnippet>1733</a>            print_hex_val(ch <span class="kw">as </span>u32);
-<a href=#1734 id=1734 data-nosnippet>1734</a>            ostd::io::print(<span class="string">" hcint=0x"</span>);
-<a href=#1735 id=1735 data-nosnippet>1735</a>            print_hex_val(int);
-<a href=#1736 id=1736 data-nosnippet>1736</a>            ostd::io::print(<span class="string">" hcchar=0x"</span>);
-<a href=#1737 id=1737 data-nosnippet>1737</a>            print_hex_val(char_val);
-<a href=#1738 id=1738 data-nosnippet>1738</a>            ostd::io::println(<span class="string">""</span>);
-<a href=#1739 id=1739 data-nosnippet>1739</a>            <span class="self">self</span>.dump_transfer_state(ch, <span class="string">"timeout"</span>);
-<a href=#1740 id=1740 data-nosnippet>1740</a>        }
-<a href=#1741 id=1741 data-nosnippet>1741</a>        <span class="self">self</span>.last_hcint.set(int);
-<a href=#1742 id=1742 data-nosnippet>1742</a>        <span class="prelude-val">Err</span>(ViError::IO)
-<a href=#1743 id=1743 data-nosnippet>1743</a>    }
-<a href=#1744 id=1744 data-nosnippet>1744</a>
-<a href=#1745 id=1745 data-nosnippet>1745</a>    <span class="doccomment">/// Explicitly halt a host channel (required in DWC2 Slave mode).
-<a href=#1746 id=1746 data-nosnippet>1746</a>    ///
-<a href=#1747 id=1747 data-nosnippet>1747</a>    /// `CHDIS` and `CHENA` must never be set together. The core reads
-<a href=#1748 id=1748 data-nosnippet>1748</a>    /// `CHENA=1` as a fresh enable, so raising it while requesting a disable
-<a href=#1749 id=1749 data-nosnippet>1749</a>    /// **re-arms the channel with the parameters still in `HCCHAR`/`HCTSIZ`** --
-<a href=#1750 id=1750 data-nosnippet>1750</a>    /// a second, unwanted transaction launched from a completed one. Only
-<a href=#1751 id=1751 data-nosnippet>1751</a>    /// `CHDIS` is raised; the core clears `CHENA` and reports `CHHLTD`.
-<a href=#1752 id=1752 data-nosnippet>1752</a>    </span><span class="kw">fn </span>halt_channel(<span class="kw-2">&amp;</span><span class="self">self</span>, ch: usize) {
-<a href=#1753 id=1753 data-nosnippet>1753</a>        <span class="kw">let </span>reg = hcchar(ch);
-<a href=#1754 id=1754 data-nosnippet>1754</a>        <span class="kw">let </span><span class="kw-2">mut </span>val = <span class="self">self</span>.read32(reg);
-<a href=#1755 id=1755 data-nosnippet>1755</a>        val |= <span class="number">1 </span>&lt;&lt; <span class="number">30</span>; <span class="comment">// CHDIS
-<a href=#1756 id=1756 data-nosnippet>1756</a>        </span>val &amp;= !(<span class="number">1 </span>&lt;&lt; <span class="number">31</span>); <span class="comment">// CHENA
-<a href=#1757 id=1757 data-nosnippet>1757</a>        </span><span class="self">self</span>.write32(reg, val);
-<a href=#1758 id=1758 data-nosnippet>1758</a>        <span class="comment">// Wait for CHHLTD (bit 1), and only then clear it. Clearing the interrupt
-<a href=#1759 id=1759 data-nosnippet>1759</a>        // unconditionally returns while the core is still finishing the halt, and
-<a href=#1760 id=1760 data-nosnippet>1760</a>        // the CHHLTD it sets afterwards survives into the next arm -- where the
-<a href=#1761 id=1761 data-nosnippet>1761</a>        // wait reads it and reports a halt that belongs to the transfer before.
-<a href=#1762 id=1762 data-nosnippet>1762</a>        // The trace made that plain: the records alternate between an ACK, whose
-<a href=#1763 id=1763 data-nosnippet>1763</a>        // channel carries CHDIS because this function set it, and a halt whose
-<a href=#1764 id=1764 data-nosnippet>1764</a>        // channel carries no CHDIS at all, which is this function's own halt
-<a href=#1765 id=1765 data-nosnippet>1765</a>        // arriving late.
-<a href=#1766 id=1766 data-nosnippet>1766</a>        //
-<a href=#1767 id=1767 data-nosnippet>1767</a>        // The wait reads the register rather than yielding: a yield is around
-<a href=#1768 id=1768 data-nosnippet>1768</a>        // twenty milliseconds, and four of them is the whole budget a split has.
-<a href=#1769 id=1769 data-nosnippet>1769</a>        </span><span class="kw">for _ in </span><span class="number">0</span>..CHANNEL_HALT_POLLS {
-<a href=#1770 id=1770 data-nosnippet>1770</a>            <span class="kw">if </span><span class="self">self</span>.read32(hcint(ch)) &amp; (<span class="number">1 </span>&lt;&lt; <span class="number">1</span>) != <span class="number">0 </span>{
-<a href=#1771 id=1771 data-nosnippet>1771</a>                <span class="kw">break</span>;
-<a href=#1772 id=1772 data-nosnippet>1772</a>            }
-<a href=#1773 id=1773 data-nosnippet>1773</a>        }
-<a href=#1774 id=1774 data-nosnippet>1774</a>        <span class="self">self</span>.write32(hcint(ch), <span class="number">0xFFFF_FFFF</span>);
-<a href=#1775 id=1775 data-nosnippet>1775</a>    }
-<a href=#1776 id=1776 data-nosnippet>1776</a>}
-<a href=#1777 id=1777 data-nosnippet>1777</a>
-<a href=#1778 id=1778 data-nosnippet>1778</a><span class="doccomment">/// Report the first split poll in full, once.
-<a href=#1779 id=1779 data-nosnippet>1779</a>///
-<a href=#1780 id=1780 data-nosnippet>1780</a>/// Report how each half of a split ended, a few times per half.
-<a href=#1781 id=1781 data-nosnippet>1781</a>///
-<a href=#1782 id=1782 data-nosnippet>1782</a>/// Which half ran and how it ended is the whole question when a split does not
-<a href=#1783 id=1783 data-nosnippet>1783</a>/// deliver: a start-split the hub refuses, a complete-split it is not ready for,
-<a href=#1784 id=1784 data-nosnippet>1784</a>/// and a complete-split that ends without data are three different faults, and
-<a href=#1785 id=1785 data-nosnippet>1785</a>/// nothing else in the driver tells them apart. Both halves are reported
-<a href=#1786 id=1786 data-nosnippet>1786</a>/// separately -- a single shared flag reports one half and hides the other, which
-<a href=#1787 id=1787 data-nosnippet>1787</a>/// is exactly the one worth seeing. The frame number comes along so the gap
-<a href=#1788 id=1788 data-nosnippet>1788</a>/// between the halves is visible rather than inferred.
-<a href=#1789 id=1789 data-nosnippet>1789</a></span><span class="kw">fn </span>report_split_progress(
-<a href=#1790 id=1790 data-nosnippet>1790</a>    complete: bool,
-<a href=#1791 id=1791 data-nosnippet>1791</a>    outcome: <span class="kw-2">&amp;</span>ViResult&lt;()&gt;,
-<a href=#1792 id=1792 data-nosnippet>1792</a>    hcint: u32,
-<a href=#1793 id=1793 data-nosnippet>1793</a>    nyet: bool,
-<a href=#1794 id=1794 data-nosnippet>1794</a>    want: usize,
-<a href=#1795 id=1795 data-nosnippet>1795</a>    frame: u32,
-<a href=#1796 id=1796 data-nosnippet>1796</a>) {
-<a href=#1797 id=1797 data-nosnippet>1797</a>    <span class="kw">static </span>SEEN: [core::sync::atomic::AtomicUsize; <span class="number">2</span>] =
-<a href=#1798 id=1798 data-nosnippet>1798</a>        [<span class="kw">const </span>{ core::sync::atomic::AtomicUsize::new(<span class="number">0</span>) }; <span class="number">2</span>];
-<a href=#1799 id=1799 data-nosnippet>1799</a>    <span class="kw">let </span>slot = usize::from(complete);
-<a href=#1800 id=1800 data-nosnippet>1800</a>    <span class="kw">if </span>SEEN[slot].fetch_add(<span class="number">1</span>, core::sync::atomic::Ordering::Relaxed) &gt;= <span class="number">3 </span>{
-<a href=#1801 id=1801 data-nosnippet>1801</a>        <span class="kw">return</span>;
-<a href=#1802 id=1802 data-nosnippet>1802</a>    }
-<a href=#1803 id=1803 data-nosnippet>1803</a>    ostd::io::print(<span class="string">"[dwc2] split: half="</span>);
-<a href=#1804 id=1804 data-nosnippet>1804</a>    ostd::io::print(<span class="kw">if </span>complete { <span class="string">"csplit" </span>} <span class="kw">else </span>{ <span class="string">"ssplit" </span>});
-<a href=#1805 id=1805 data-nosnippet>1805</a>    ostd::io::print(<span class="string">" outcome="</span>);
-<a href=#1806 id=1806 data-nosnippet>1806</a>    <span class="kw">match </span>outcome {
-<a href=#1807 id=1807 data-nosnippet>1807</a>        <span class="prelude-val">Ok</span>(()) =&gt; ostd::io::print(<span class="string">"Ok"</span>),
-<a href=#1808 id=1808 data-nosnippet>1808</a>        <span class="prelude-val">Err</span>(ViError::WouldBlock) <span class="kw">if </span>nyet =&gt; ostd::io::print(<span class="string">"NYET"</span>),
-<a href=#1809 id=1809 data-nosnippet>1809</a>        <span class="prelude-val">Err</span>(ViError::WouldBlock) =&gt; ostd::io::print(<span class="string">"NAK"</span>),
-<a href=#1810 id=1810 data-nosnippet>1810</a>        <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; ostd::io::print(<span class="string">"error"</span>),
-<a href=#1811 id=1811 data-nosnippet>1811</a>    }
-<a href=#1812 id=1812 data-nosnippet>1812</a>    ostd::io::print(<span class="string">" hcint=0x"</span>);
-<a href=#1813 id=1813 data-nosnippet>1813</a>    print_hex_val(hcint);
-<a href=#1814 id=1814 data-nosnippet>1814</a>    ostd::io::print(<span class="string">" frame=0x"</span>);
-<a href=#1815 id=1815 data-nosnippet>1815</a>    print_hex_val(frame);
-<a href=#1816 id=1816 data-nosnippet>1816</a>    ostd::io::print(<span class="string">" want="</span>);
-<a href=#1817 id=1817 data-nosnippet>1817</a>    print_usize_val(want);
-<a href=#1818 id=1818 data-nosnippet>1818</a>    ostd::io::println(<span class="string">""</span>);
-<a href=#1819 id=1819 data-nosnippet>1819</a>}
-<a href=#1820 id=1820 data-nosnippet>1820</a>
-<a href=#1821 id=1821 data-nosnippet>1821</a><span class="kw">fn </span>print_usize_val(v: usize) {
-<a href=#1822 id=1822 data-nosnippet>1822</a>    <span class="kw">let </span><span class="kw-2">mut </span>out = [<span class="number">0u8</span>; <span class="number">20</span>];
-<a href=#1823 id=1823 data-nosnippet>1823</a>    <span class="kw">let </span><span class="kw-2">mut </span>n = v;
-<a href=#1824 id=1824 data-nosnippet>1824</a>    <span class="kw">let </span><span class="kw-2">mut </span>len = <span class="number">0</span>;
-<a href=#1825 id=1825 data-nosnippet>1825</a>    <span class="kw">if </span>n == <span class="number">0 </span>{
-<a href=#1826 id=1826 data-nosnippet>1826</a>        ostd::io::print(<span class="string">"0"</span>);
-<a href=#1827 id=1827 data-nosnippet>1827</a>        <span class="kw">return</span>;
-<a href=#1828 id=1828 data-nosnippet>1828</a>    }
-<a href=#1829 id=1829 data-nosnippet>1829</a>    <span class="kw">while </span>n &gt; <span class="number">0 </span>&amp;&amp; len &lt; out.len() {
-<a href=#1830 id=1830 data-nosnippet>1830</a>        out[len] = <span class="string">b'0' </span>+ (n % <span class="number">10</span>) <span class="kw">as </span>u8;
-<a href=#1831 id=1831 data-nosnippet>1831</a>        n /= <span class="number">10</span>;
-<a href=#1832 id=1832 data-nosnippet>1832</a>        len += <span class="number">1</span>;
+<a href=#1699 id=1699 data-nosnippet>1699</a>        <span class="comment">// ── ACK = the packet was accepted
+<a href=#1700 id=1700 data-nosnippet>1700</a>        //
+<a href=#1701 id=1701 data-nosnippet>1701</a>        // No halt here. On a split, an ACK to the start-split means the hub has
+<a href=#1702 id=1702 data-nosnippet>1702</a>        // taken the transaction and its translator is running it -- the pair is
+<a href=#1703 id=1703 data-nosnippet>1703</a>        // live at that moment and the complete-split is what collects it.
+<a href=#1704 id=1704 data-nosnippet>1704</a>        // Disabling the channel in between asks the core to abandon a transfer
+<a href=#1705 id=1705 data-nosnippet>1705</a>        // that is still in flight, and the trace shows where that lands: the
+<a href=#1706 id=1706 data-nosnippet>1706</a>        // channel is armed for the complete-split with CHDIS already set, and it
+<a href=#1707 id=1707 data-nosnippet>1707</a>        // comes back halted with no status at all, on the very first poll, on both
+<a href=#1708 id=1708 data-nosnippet>1708</a>        // endpoints, before the device has had any chance to refuse anything. A
+<a href=#1709 id=1709 data-nosnippet>1709</a>        // transfer the core has finished needs no halt; a transfer being abandoned
+<a href=#1710 id=1710 data-nosnippet>1710</a>        // gets one from its caller.
+<a href=#1711 id=1711 data-nosnippet>1711</a>        </span><span class="kw">if </span>int &amp; (<span class="number">1 </span>&lt;&lt; <span class="number">5</span>) != <span class="number">0 </span>{
+<a href=#1712 id=1712 data-nosnippet>1712</a>            <span class="comment">// A transfer that is not part of a split is over when the packet is
+<a href=#1713 id=1713 data-nosnippet>1713</a>            // accepted, and halting it is the ordinary end of it. A split is a
+<a href=#1714 id=1714 data-nosnippet>1714</a>            // different thing: the ACK belongs to the start-split, the hub's
+<a href=#1715 id=1715 data-nosnippet>1715</a>            // translator is running the transaction because of it, and the pair is
+<a href=#1716 id=1716 data-nosnippet>1716</a>            // live. Disabling the channel in that moment asks the core to abandon
+<a href=#1717 id=1717 data-nosnippet>1717</a>            // a transfer that is still in flight, and the trace shows where that
+<a href=#1718 id=1718 data-nosnippet>1718</a>            // lands -- the channel armed for the complete-split with CHDIS already
+<a href=#1719 id=1719 data-nosnippet>1719</a>            // set, coming back halted with no status at all, on the very first
+<a href=#1720 id=1720 data-nosnippet>1720</a>            // poll, on both endpoints, before the device has refused anything.
+<a href=#1721 id=1721 data-nosnippet>1721</a>            </span><span class="kw">if </span><span class="self">self</span>.split.get().is_none() {
+<a href=#1722 id=1722 data-nosnippet>1722</a>                <span class="self">self</span>.halt_channel(ch);
+<a href=#1723 id=1723 data-nosnippet>1723</a>            }
+<a href=#1724 id=1724 data-nosnippet>1724</a>            <span class="self">self</span>.last_hcint.set(int);
+<a href=#1725 id=1725 data-nosnippet>1725</a>            <span class="kw">return </span><span class="prelude-val">Some</span>(<span class="prelude-val">Ok</span>(()));
+<a href=#1726 id=1726 data-nosnippet>1726</a>        }
+<a href=#1727 id=1727 data-nosnippet>1727</a>
+<a href=#1728 id=1728 data-nosnippet>1728</a>        <span class="comment">// ── Error conditions ──────────────────────────────────────
+<a href=#1729 id=1729 data-nosnippet>1729</a>        </span><span class="kw">if </span>int &amp; ((<span class="number">1 </span>&lt;&lt; <span class="number">2</span>) | (<span class="number">1 </span>&lt;&lt; <span class="number">3</span>) | (<span class="number">1 </span>&lt;&lt; <span class="number">7</span>) | (<span class="number">1 </span>&lt;&lt; <span class="number">8</span>) | (<span class="number">1 </span>&lt;&lt; <span class="number">10</span>)) != <span class="number">0 </span>{
+<a href=#1730 id=1730 data-nosnippet>1730</a>            <span class="self">self</span>.report_channel_error(ch, int);
+<a href=#1731 id=1731 data-nosnippet>1731</a>            <span class="self">self</span>.halt_channel(ch);
+<a href=#1732 id=1732 data-nosnippet>1732</a>            <span class="self">self</span>.last_hcint.set(int);
+<a href=#1733 id=1733 data-nosnippet>1733</a>            <span class="kw">return </span><span class="prelude-val">Some</span>(<span class="prelude-val">Err</span>(ViError::IO));
+<a href=#1734 id=1734 data-nosnippet>1734</a>        }
+<a href=#1735 id=1735 data-nosnippet>1735</a>        <span class="kw">if </span>int &amp; ((<span class="number">1 </span>&lt;&lt; <span class="number">4</span>) | (<span class="number">1 </span>&lt;&lt; <span class="number">6</span>)) != <span class="number">0 </span>{
+<a href=#1736 id=1736 data-nosnippet>1736</a>            <span class="self">self</span>.halt_channel(ch);
+<a href=#1737 id=1737 data-nosnippet>1737</a>            <span class="self">self</span>.last_hcint.set(int);
+<a href=#1738 id=1738 data-nosnippet>1738</a>            <span class="kw">return </span><span class="prelude-val">Some</span>(<span class="prelude-val">Err</span>(ViError::WouldBlock));
+<a href=#1739 id=1739 data-nosnippet>1739</a>        }
+<a href=#1740 id=1740 data-nosnippet>1740</a>
+<a href=#1741 id=1741 data-nosnippet>1741</a>        <span class="prelude-val">None
+<a href=#1742 id=1742 data-nosnippet>1742</a>    </span>}
+<a href=#1743 id=1743 data-nosnippet>1743</a>
+<a href=#1744 id=1744 data-nosnippet>1744</a>    <span class="doccomment">/// Give up on a channel that reported nothing within its budget.
+<a href=#1745 id=1745 data-nosnippet>1745</a>    </span><span class="kw">fn </span>channel_timeout(<span class="kw-2">&amp;</span><span class="self">self</span>, ch: usize) -&gt; ViResult&lt;()&gt; {
+<a href=#1746 id=1746 data-nosnippet>1746</a>        <span class="comment">// Timeout — capture hcint BEFORE halt clears it
+<a href=#1747 id=1747 data-nosnippet>1747</a>        </span><span class="kw">let </span>int = <span class="self">self</span>.read32(hcint(ch));
+<a href=#1748 id=1748 data-nosnippet>1748</a>        <span class="kw">let </span>char_val = <span class="self">self</span>.read32(hcchar(ch));
+<a href=#1749 id=1749 data-nosnippet>1749</a>        <span class="self">self</span>.halt_channel(ch);
+<a href=#1750 id=1750 data-nosnippet>1750</a>        <span class="kw">static </span>TIMEOUT_COUNT: core::sync::atomic::AtomicUsize =
+<a href=#1751 id=1751 data-nosnippet>1751</a>            core::sync::atomic::AtomicUsize::new(<span class="number">0</span>);
+<a href=#1752 id=1752 data-nosnippet>1752</a>        <span class="kw">let </span>attempt = TIMEOUT_COUNT.fetch_add(<span class="number">1</span>, core::sync::atomic::Ordering::Relaxed);
+<a href=#1753 id=1753 data-nosnippet>1753</a>        <span class="kw">if </span>attempt &lt; <span class="number">3 </span>{
+<a href=#1754 id=1754 data-nosnippet>1754</a>            ostd::io::print(<span class="string">"[dwc2] TIMEOUT ch="</span>);
+<a href=#1755 id=1755 data-nosnippet>1755</a>            print_hex_val(ch <span class="kw">as </span>u32);
+<a href=#1756 id=1756 data-nosnippet>1756</a>            ostd::io::print(<span class="string">" hcint=0x"</span>);
+<a href=#1757 id=1757 data-nosnippet>1757</a>            print_hex_val(int);
+<a href=#1758 id=1758 data-nosnippet>1758</a>            ostd::io::print(<span class="string">" hcchar=0x"</span>);
+<a href=#1759 id=1759 data-nosnippet>1759</a>            print_hex_val(char_val);
+<a href=#1760 id=1760 data-nosnippet>1760</a>            ostd::io::println(<span class="string">""</span>);
+<a href=#1761 id=1761 data-nosnippet>1761</a>            <span class="self">self</span>.dump_transfer_state(ch, <span class="string">"timeout"</span>);
+<a href=#1762 id=1762 data-nosnippet>1762</a>        }
+<a href=#1763 id=1763 data-nosnippet>1763</a>        <span class="self">self</span>.last_hcint.set(int);
+<a href=#1764 id=1764 data-nosnippet>1764</a>        <span class="prelude-val">Err</span>(ViError::IO)
+<a href=#1765 id=1765 data-nosnippet>1765</a>    }
+<a href=#1766 id=1766 data-nosnippet>1766</a>
+<a href=#1767 id=1767 data-nosnippet>1767</a>    <span class="doccomment">/// Explicitly halt a host channel (required in DWC2 Slave mode).
+<a href=#1768 id=1768 data-nosnippet>1768</a>    ///
+<a href=#1769 id=1769 data-nosnippet>1769</a>    /// `CHDIS` and `CHENA` must never be set together. The core reads
+<a href=#1770 id=1770 data-nosnippet>1770</a>    /// `CHENA=1` as a fresh enable, so raising it while requesting a disable
+<a href=#1771 id=1771 data-nosnippet>1771</a>    /// **re-arms the channel with the parameters still in `HCCHAR`/`HCTSIZ`** --
+<a href=#1772 id=1772 data-nosnippet>1772</a>    /// a second, unwanted transaction launched from a completed one. Only
+<a href=#1773 id=1773 data-nosnippet>1773</a>    /// `CHDIS` is raised; the core clears `CHENA` and reports `CHHLTD`.
+<a href=#1774 id=1774 data-nosnippet>1774</a>    </span><span class="kw">fn </span>halt_channel(<span class="kw-2">&amp;</span><span class="self">self</span>, ch: usize) {
+<a href=#1775 id=1775 data-nosnippet>1775</a>        <span class="kw">let </span>reg = hcchar(ch);
+<a href=#1776 id=1776 data-nosnippet>1776</a>        <span class="kw">let </span><span class="kw-2">mut </span>val = <span class="self">self</span>.read32(reg);
+<a href=#1777 id=1777 data-nosnippet>1777</a>        val |= <span class="number">1 </span>&lt;&lt; <span class="number">30</span>; <span class="comment">// CHDIS
+<a href=#1778 id=1778 data-nosnippet>1778</a>        </span>val &amp;= !(<span class="number">1 </span>&lt;&lt; <span class="number">31</span>); <span class="comment">// CHENA
+<a href=#1779 id=1779 data-nosnippet>1779</a>        </span><span class="self">self</span>.write32(reg, val);
+<a href=#1780 id=1780 data-nosnippet>1780</a>        <span class="comment">// Wait for CHHLTD (bit 1), and only then clear it. Clearing the interrupt
+<a href=#1781 id=1781 data-nosnippet>1781</a>        // unconditionally returns while the core is still finishing the halt, and
+<a href=#1782 id=1782 data-nosnippet>1782</a>        // the CHHLTD it sets afterwards survives into the next arm -- where the
+<a href=#1783 id=1783 data-nosnippet>1783</a>        // wait reads it and reports a halt that belongs to the transfer before.
+<a href=#1784 id=1784 data-nosnippet>1784</a>        // The trace made that plain: the records alternate between an ACK, whose
+<a href=#1785 id=1785 data-nosnippet>1785</a>        // channel carries CHDIS because this function set it, and a halt whose
+<a href=#1786 id=1786 data-nosnippet>1786</a>        // channel carries no CHDIS at all, which is this function's own halt
+<a href=#1787 id=1787 data-nosnippet>1787</a>        // arriving late.
+<a href=#1788 id=1788 data-nosnippet>1788</a>        //
+<a href=#1789 id=1789 data-nosnippet>1789</a>        // The wait reads the register rather than yielding: a yield is around
+<a href=#1790 id=1790 data-nosnippet>1790</a>        // twenty milliseconds, and four of them is the whole budget a split has.
+<a href=#1791 id=1791 data-nosnippet>1791</a>        </span><span class="kw">for _ in </span><span class="number">0</span>..CHANNEL_HALT_POLLS {
+<a href=#1792 id=1792 data-nosnippet>1792</a>            <span class="kw">if </span><span class="self">self</span>.read32(hcint(ch)) &amp; (<span class="number">1 </span>&lt;&lt; <span class="number">1</span>) != <span class="number">0 </span>{
+<a href=#1793 id=1793 data-nosnippet>1793</a>                <span class="kw">break</span>;
+<a href=#1794 id=1794 data-nosnippet>1794</a>            }
+<a href=#1795 id=1795 data-nosnippet>1795</a>        }
+<a href=#1796 id=1796 data-nosnippet>1796</a>        <span class="self">self</span>.write32(hcint(ch), <span class="number">0xFFFF_FFFF</span>);
+<a href=#1797 id=1797 data-nosnippet>1797</a>    }
+<a href=#1798 id=1798 data-nosnippet>1798</a>}
+<a href=#1799 id=1799 data-nosnippet>1799</a>
+<a href=#1800 id=1800 data-nosnippet>1800</a><span class="doccomment">/// Report the first split poll in full, once.
+<a href=#1801 id=1801 data-nosnippet>1801</a>///
+<a href=#1802 id=1802 data-nosnippet>1802</a>/// Report how each half of a split ended, a few times per half.
+<a href=#1803 id=1803 data-nosnippet>1803</a>///
+<a href=#1804 id=1804 data-nosnippet>1804</a>/// Which half ran and how it ended is the whole question when a split does not
+<a href=#1805 id=1805 data-nosnippet>1805</a>/// deliver: a start-split the hub refuses, a complete-split it is not ready for,
+<a href=#1806 id=1806 data-nosnippet>1806</a>/// and a complete-split that ends without data are three different faults, and
+<a href=#1807 id=1807 data-nosnippet>1807</a>/// nothing else in the driver tells them apart. Both halves are reported
+<a href=#1808 id=1808 data-nosnippet>1808</a>/// separately -- a single shared flag reports one half and hides the other, which
+<a href=#1809 id=1809 data-nosnippet>1809</a>/// is exactly the one worth seeing. The frame number comes along so the gap
+<a href=#1810 id=1810 data-nosnippet>1810</a>/// between the halves is visible rather than inferred.
+<a href=#1811 id=1811 data-nosnippet>1811</a></span><span class="kw">fn </span>report_split_progress(
+<a href=#1812 id=1812 data-nosnippet>1812</a>    complete: bool,
+<a href=#1813 id=1813 data-nosnippet>1813</a>    outcome: <span class="kw-2">&amp;</span>ViResult&lt;()&gt;,
+<a href=#1814 id=1814 data-nosnippet>1814</a>    hcint: u32,
+<a href=#1815 id=1815 data-nosnippet>1815</a>    nyet: bool,
+<a href=#1816 id=1816 data-nosnippet>1816</a>    want: usize,
+<a href=#1817 id=1817 data-nosnippet>1817</a>    frame: u32,
+<a href=#1818 id=1818 data-nosnippet>1818</a>) {
+<a href=#1819 id=1819 data-nosnippet>1819</a>    <span class="kw">static </span>SEEN: [core::sync::atomic::AtomicUsize; <span class="number">2</span>] =
+<a href=#1820 id=1820 data-nosnippet>1820</a>        [<span class="kw">const </span>{ core::sync::atomic::AtomicUsize::new(<span class="number">0</span>) }; <span class="number">2</span>];
+<a href=#1821 id=1821 data-nosnippet>1821</a>    <span class="kw">let </span>slot = usize::from(complete);
+<a href=#1822 id=1822 data-nosnippet>1822</a>    <span class="kw">if </span>SEEN[slot].fetch_add(<span class="number">1</span>, core::sync::atomic::Ordering::Relaxed) &gt;= <span class="number">3 </span>{
+<a href=#1823 id=1823 data-nosnippet>1823</a>        <span class="kw">return</span>;
+<a href=#1824 id=1824 data-nosnippet>1824</a>    }
+<a href=#1825 id=1825 data-nosnippet>1825</a>    ostd::io::print(<span class="string">"[dwc2] split: half="</span>);
+<a href=#1826 id=1826 data-nosnippet>1826</a>    ostd::io::print(<span class="kw">if </span>complete { <span class="string">"csplit" </span>} <span class="kw">else </span>{ <span class="string">"ssplit" </span>});
+<a href=#1827 id=1827 data-nosnippet>1827</a>    ostd::io::print(<span class="string">" outcome="</span>);
+<a href=#1828 id=1828 data-nosnippet>1828</a>    <span class="kw">match </span>outcome {
+<a href=#1829 id=1829 data-nosnippet>1829</a>        <span class="prelude-val">Ok</span>(()) =&gt; ostd::io::print(<span class="string">"Ok"</span>),
+<a href=#1830 id=1830 data-nosnippet>1830</a>        <span class="prelude-val">Err</span>(ViError::WouldBlock) <span class="kw">if </span>nyet =&gt; ostd::io::print(<span class="string">"NYET"</span>),
+<a href=#1831 id=1831 data-nosnippet>1831</a>        <span class="prelude-val">Err</span>(ViError::WouldBlock) =&gt; ostd::io::print(<span class="string">"NAK"</span>),
+<a href=#1832 id=1832 data-nosnippet>1832</a>        <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; ostd::io::print(<span class="string">"error"</span>),
 <a href=#1833 id=1833 data-nosnippet>1833</a>    }
-<a href=#1834 id=1834 data-nosnippet>1834</a>    out[..len].reverse();
-<a href=#1835 id=1835 data-nosnippet>1835</a>    <span class="kw">if let </span><span class="prelude-val">Ok</span>(s) = core::str::from_utf8(<span class="kw-2">&amp;</span>out[..len]) {
-<a href=#1836 id=1836 data-nosnippet>1836</a>        ostd::io::print(s);
-<a href=#1837 id=1837 data-nosnippet>1837</a>    }
-<a href=#1838 id=1838 data-nosnippet>1838</a>}
-<a href=#1839 id=1839 data-nosnippet>1839</a>
-<a href=#1840 id=1840 data-nosnippet>1840</a><span class="doccomment">/// Start a fresh register recording.
-<a href=#1841 id=1841 data-nosnippet>1841</a>///
-<a href=#1842 id=1842 data-nosnippet>1842</a>/// Called when the polls begin, so the ring describes the polls rather than the
-<a href=#1843 id=1843 data-nosnippet>1843</a>/// enumeration that came before them.
-<a href=#1844 id=1844 data-nosnippet>1844</a></span><span class="kw">pub fn </span>trace_reset() {
-<a href=#1845 id=1845 data-nosnippet>1845</a>    trace::reset();
-<a href=#1846 id=1846 data-nosnippet>1846</a>}
-<a href=#1847 id=1847 data-nosnippet>1847</a>
-<a href=#1848 id=1848 data-nosnippet>1848</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>print_hex_val(val: u32) {
-<a href=#1849 id=1849 data-nosnippet>1849</a>    <span class="kw">const </span>HEX: <span class="kw-2">&amp;</span>[u8; <span class="number">16</span>] = <span class="string">b"0123456789ABCDEF"</span>;
-<a href=#1850 id=1850 data-nosnippet>1850</a>    <span class="kw">let </span><span class="kw-2">mut </span>buf = [<span class="number">0u8</span>; <span class="number">8</span>];
-<a href=#1851 id=1851 data-nosnippet>1851</a>    <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..<span class="number">8 </span>{
-<a href=#1852 id=1852 data-nosnippet>1852</a>        buf[<span class="number">7 </span>- i] = HEX[((val &gt;&gt; (i * <span class="number">4</span>)) &amp; <span class="number">0xF</span>) <span class="kw">as </span>usize];
-<a href=#1853 id=1853 data-nosnippet>1853</a>    }
-<a href=#1854 id=1854 data-nosnippet>1854</a>    <span class="kw">if let </span><span class="prelude-val">Ok</span>(s) = core::str::from_utf8(<span class="kw-2">&amp;</span>buf) {
-<a href=#1855 id=1855 data-nosnippet>1855</a>        ostd::io::print(s);
-<a href=#1856 id=1856 data-nosnippet>1856</a>    }
-<a href=#1857 id=1857 data-nosnippet>1857</a>}
+<a href=#1834 id=1834 data-nosnippet>1834</a>    ostd::io::print(<span class="string">" hcint=0x"</span>);
+<a href=#1835 id=1835 data-nosnippet>1835</a>    print_hex_val(hcint);
+<a href=#1836 id=1836 data-nosnippet>1836</a>    ostd::io::print(<span class="string">" frame=0x"</span>);
+<a href=#1837 id=1837 data-nosnippet>1837</a>    print_hex_val(frame);
+<a href=#1838 id=1838 data-nosnippet>1838</a>    ostd::io::print(<span class="string">" want="</span>);
+<a href=#1839 id=1839 data-nosnippet>1839</a>    print_usize_val(want);
+<a href=#1840 id=1840 data-nosnippet>1840</a>    ostd::io::println(<span class="string">""</span>);
+<a href=#1841 id=1841 data-nosnippet>1841</a>}
+<a href=#1842 id=1842 data-nosnippet>1842</a>
+<a href=#1843 id=1843 data-nosnippet>1843</a><span class="kw">fn </span>print_usize_val(v: usize) {
+<a href=#1844 id=1844 data-nosnippet>1844</a>    <span class="kw">let </span><span class="kw-2">mut </span>out = [<span class="number">0u8</span>; <span class="number">20</span>];
+<a href=#1845 id=1845 data-nosnippet>1845</a>    <span class="kw">let </span><span class="kw-2">mut </span>n = v;
+<a href=#1846 id=1846 data-nosnippet>1846</a>    <span class="kw">let </span><span class="kw-2">mut </span>len = <span class="number">0</span>;
+<a href=#1847 id=1847 data-nosnippet>1847</a>    <span class="kw">if </span>n == <span class="number">0 </span>{
+<a href=#1848 id=1848 data-nosnippet>1848</a>        ostd::io::print(<span class="string">"0"</span>);
+<a href=#1849 id=1849 data-nosnippet>1849</a>        <span class="kw">return</span>;
+<a href=#1850 id=1850 data-nosnippet>1850</a>    }
+<a href=#1851 id=1851 data-nosnippet>1851</a>    <span class="kw">while </span>n &gt; <span class="number">0 </span>&amp;&amp; len &lt; out.len() {
+<a href=#1852 id=1852 data-nosnippet>1852</a>        out[len] = <span class="string">b'0' </span>+ (n % <span class="number">10</span>) <span class="kw">as </span>u8;
+<a href=#1853 id=1853 data-nosnippet>1853</a>        n /= <span class="number">10</span>;
+<a href=#1854 id=1854 data-nosnippet>1854</a>        len += <span class="number">1</span>;
+<a href=#1855 id=1855 data-nosnippet>1855</a>    }
+<a href=#1856 id=1856 data-nosnippet>1856</a>    out[..len].reverse();
+<a href=#1857 id=1857 data-nosnippet>1857</a>    <span class="kw">if let </span><span class="prelude-val">Ok</span>(s) = core::str::from_utf8(<span class="kw-2">&amp;</span>out[..len]) {
+<a href=#1858 id=1858 data-nosnippet>1858</a>        ostd::io::print(s);
+<a href=#1859 id=1859 data-nosnippet>1859</a>    }
+<a href=#1860 id=1860 data-nosnippet>1860</a>}
+<a href=#1861 id=1861 data-nosnippet>1861</a>
+<a href=#1862 id=1862 data-nosnippet>1862</a><span class="doccomment">/// Start a fresh register recording.
+<a href=#1863 id=1863 data-nosnippet>1863</a>///
+<a href=#1864 id=1864 data-nosnippet>1864</a>/// Called when the polls begin, so the ring describes the polls rather than the
+<a href=#1865 id=1865 data-nosnippet>1865</a>/// enumeration that came before them.
+<a href=#1866 id=1866 data-nosnippet>1866</a></span><span class="kw">pub fn </span>trace_reset() {
+<a href=#1867 id=1867 data-nosnippet>1867</a>    trace::reset();
+<a href=#1868 id=1868 data-nosnippet>1868</a>}
+<a href=#1869 id=1869 data-nosnippet>1869</a>
+<a href=#1870 id=1870 data-nosnippet>1870</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>print_hex_val(val: u32) {
+<a href=#1871 id=1871 data-nosnippet>1871</a>    <span class="kw">const </span>HEX: <span class="kw-2">&amp;</span>[u8; <span class="number">16</span>] = <span class="string">b"0123456789ABCDEF"</span>;
+<a href=#1872 id=1872 data-nosnippet>1872</a>    <span class="kw">let </span><span class="kw-2">mut </span>buf = [<span class="number">0u8</span>; <span class="number">8</span>];
+<a href=#1873 id=1873 data-nosnippet>1873</a>    <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..<span class="number">8 </span>{
+<a href=#1874 id=1874 data-nosnippet>1874</a>        buf[<span class="number">7 </span>- i] = HEX[((val &gt;&gt; (i * <span class="number">4</span>)) &amp; <span class="number">0xF</span>) <span class="kw">as </span>usize];
+<a href=#1875 id=1875 data-nosnippet>1875</a>    }
+<a href=#1876 id=1876 data-nosnippet>1876</a>    <span class="kw">if let </span><span class="prelude-val">Ok</span>(s) = core::str::from_utf8(<span class="kw-2">&amp;</span>buf) {
+<a href=#1877 id=1877 data-nosnippet>1877</a>        ostd::io::print(s);
+<a href=#1878 id=1878 data-nosnippet>1878</a>    }
+<a href=#1879 id=1879 data-nosnippet>1879</a>}
 </code></pre></div></section></main></body></html>
