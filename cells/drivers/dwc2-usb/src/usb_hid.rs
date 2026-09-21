@@ -519,17 +519,14 @@ pub fn poll_interface(
     iface: &mut HidInterface,
     out: &mut Vec<EvdevEvent>,
 ) {
-    // An interrupt endpoint states how often it wants to be asked, and the host
-    // is expected to honour it. Polling as fast as the CPU runs issues thousands
-    // of split pairs per microframe, and each start-split replaces whatever the
-    // hub still had buffered for this endpoint -- so a report that arrives
-    // between two polls is overwritten before the complete-split collects it,
-    // and the endpoint reads as permanently idle.
-    // An endpoint states its interval in frames, and `HFNUM` counts the same
-    // frames, so the value is used as given.
+    // The endpoint states how often it wants to be asked and the host is expected
+    // to honour it: polling faster than that replaces whatever the hub still has
+    // buffered before a complete-split can collect it, and the endpoint then reads
+    // as permanently idle. `HFNUM` counts the same frames the interval is stated
+    // in, so the value is used as given.
     //
-    // A poll with half a split outstanding is exempt: its other half is what
-    // collects the report, and the hub only pairs the two for a few frames.
+    // A poll with half a split outstanding is exempt, because its other half is
+    // what collects the report and the hub pairs the two for only a few frames.
     let now = engine.frame_number();
     let interval = (iface.endpoint.interval as u32).max(1);
     if !iface.split_pending
@@ -541,9 +538,11 @@ pub fn poll_interface(
     iface.last_poll_frame = now;
 
     let mut buf = [0u8; REPORT_BUF];
-    // Poll the device the way it is wired, then restore direct addressing so a
-    // later transfer to the hub or the controller's own device is not routed
-    // through a hub port.
+    // The device is addressed the way it is wired for the whole of this call,
+    // including the recovery below. A full- or low-speed device behind a hub is
+    // reached only through a split, and a transfer sent without one is answered
+    // by nobody -- so clearing the context before the recovery turns one stalled
+    // endpoint into a device that can never be reached again.
     engine.set_split(iface.split);
     let result = engine.interrupt_receive(
         iface.channel,
@@ -553,7 +552,7 @@ pub fn poll_interface(
         &mut buf,
         &mut iface.split_pending,
     );
-    engine.set_split(None);
+
     let got = match result {
         Ok(n) => n,
         Err(_) => {
@@ -568,9 +567,14 @@ pub fn poll_interface(
                 iface.endpoint.address as u16,
                 &mut [],
             );
+            engine.set_split(None);
             return;
         }
     };
+
+    // Back to direct addressing: a later transfer to the hub or to the
+    // controller's own device must not be routed through a hub port.
+    engine.set_split(None);
     if got == 0 {
         return;
     }
