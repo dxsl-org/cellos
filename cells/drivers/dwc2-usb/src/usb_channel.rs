@@ -68,18 +68,24 @@ const SPLIT_ATTEMPTS: usize = 3;
 
 /// Poll budget for a channel that is part of a periodic poll.
 ///
-/// `WAIT_POLLS` is sized for a control transfer with a caller waiting on it.
-/// The interrupt poll runs on the same thread as everything else this driver
-/// serves, and it runs whenever the device has something to say -- so a transfer
-/// that reports nothing has to give up quickly there rather than spending the
-/// whole control-transfer budget.
-const SPLIT_WAIT_POLLS: usize = 1_200;
+/// A poll iteration is not free: each one yields, and a yield hands the CPU to
+/// whatever else is runnable before this cell comes back. Measured against the
+/// frame counter, a complete-split that ends in NYET spent about three hundred
+/// milliseconds inside a budget of twelve hundred -- the budget was never the
+/// limit that mattered, and sizing it as though a yield were cheap is what made
+/// a poll able to hold the machine. It is small now so that a channel which is
+/// not answering is abandoned quickly and asked again next poll.
+const SPLIT_WAIT_POLLS: usize = 8;
 
 /// Poll budget for the ordinary `wait_channel`.
 const WAIT_POLLS: usize = 50_000;
 
 /// Poll budget for waiting out a channel halt.
-const CHANNEL_HALT_POLLS: usize = 2_000;
+///
+/// The core clears `CHENA` in microseconds; this only has to be long enough not
+/// to be missed, and every iteration of it is a yield handed to the rest of the
+/// system.
+const CHANNEL_HALT_POLLS: usize = 64;
 
 /// Complete-split attempts a synchronous transfer will make.
 ///
