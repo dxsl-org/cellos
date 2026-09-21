@@ -216,6 +216,35 @@ impl<'a> UsbHostEngine<'a> {
         self.frame_number() >> FULL_FRAME_SHIFT
     }
 
+    /// Wait until a frame has just started, without yielding.
+    ///
+    /// The hub's translator runs a periodic transaction inside a frame slot, and
+    /// the start-split is what places it there -- so the start-split has to go out
+    /// at the beginning of a frame, with the complete-split collecting the result
+    /// at the end of that same frame. Issuing the start-split wherever the poll
+    /// happened to fall leaves the translator without the frame it was asked to
+    /// work in, and it answers every complete-split with NYET because the
+    /// transaction never had the time to run.
+    ///
+    /// Returns false if the frame moves while waiting, meaning the poll is starting
+    /// too close to a boundary to do anything useful with the frame it found.
+    fn await_frame_start(&self) -> bool {
+        let frame = self.full_frame();
+        let last_microframe = (1 << FULL_FRAME_SHIFT) - 1;
+        for _ in 0..SPIN_POLLS {
+            let counter = self.read32(HFNUM) & HFNUM_FRNUM_MASK;
+            if counter >> FULL_FRAME_SHIFT != frame {
+                // A frame has just turned over, which is the moment asked for.
+                return true;
+            }
+            if counter & last_microframe == 0 {
+                // First microframe of the frame: nothing asked for it to end.
+                return true;
+            }
+        }
+        false
+    }
+
     /// Wait until the current frame is nearly over, without yielding.
     ///
     /// The hub does not pass the full- or low-speed transaction through: it runs
@@ -1169,6 +1198,14 @@ impl<'a> UsbHostEngine<'a> {
         // half before issuing the second is what kept the pair apart. Every report
         // below therefore sits on a path where no further channel work depends on
         // it, and the retry path has none at all.
+        // The start-split opens the frame the hub will run the transaction in, so
+        // it is issued at the frame's start; the complete-split below collects the
+        // result at the frame's end.
+        if !self.await_frame_start() {
+            *pending = false;
+            return Ok(0);
+        }
+
         let frame = self.frame_number();
         arm(false);
         let outcome = self.wait_channel_spin(ch, true);
