@@ -20,7 +20,7 @@ mod trace {
     use ostd::io::print;
 
     pub const RECORDS: usize = 24;
-    const WORDS: usize = 4;
+    const WORDS: usize = 5;
     /// Tag of the record the dump stops after, so a single event can be followed.
     pub const TAG_ARM_SSPLIT: u32 = 1;
     pub const TAG_AFTER_SSPLIT: u32 = 2;
@@ -31,14 +31,14 @@ mod trace {
     static NEXT: AtomicUsize = AtomicUsize::new(0);
     static DUMPED: AtomicBool = AtomicBool::new(false);
 
-    /// Record `tag` beside three registers. Never blocks and never allocates.
-    pub fn record(tag: u32, a: u32, b: u32, c: u32) {
+    /// Record `tag` beside four registers. Never blocks and never allocates.
+    pub fn record(tag: u32, a: u32, b: u32, c: u32, d: u32) {
         let i = NEXT.fetch_add(1, Ordering::Relaxed);
         if i >= RECORDS {
             return;
         }
         let base = i * WORDS;
-        for (off, v) in [tag, a, b, c].into_iter().enumerate() {
+        for (off, v) in [tag, a, b, c, d].into_iter().enumerate() {
             CELLS[base + off].store(v, Ordering::Relaxed);
         }
     }
@@ -83,7 +83,7 @@ mod trace {
         let n = NEXT.load(Ordering::Relaxed).min(RECORDS);
         print("[dwc2-trace] records=");
         decimal(n);
-        print(" (tag hcint hcchar hcsplt hfnum)\n");
+        print(" (tag hcint hcchar hcsplt hctsiz)\n");
         for i in 0..n {
             let base = i * WORDS;
             print("  ");
@@ -94,6 +94,8 @@ mod trace {
             hex(CELLS[base + 2].load(Ordering::Relaxed));
             print(" ");
             hex(CELLS[base + 3].load(Ordering::Relaxed));
+            print(" ");
+            hex(CELLS[base + 4].load(Ordering::Relaxed));
             print("\n");
         }
     }
@@ -459,12 +461,14 @@ impl<'a> UsbHostEngine<'a> {
             self.read32(HFNUM),
             self.read32(hcchar(ch)),
             self.read32(hcsplt(ch)),
+            self.read32(hctsiz(ch)),
         );
         trace::record(
             trace::TAG_AFTER_SSPLIT,
             self.last_hcint.get(),
             self.read32(hcchar(ch)),
             self.read32(hcsplt(ch)),
+            self.read32(hctsiz(ch)),
         );
         for _ in 0..SPLIT_COMPLETE_ATTEMPTS {
             // Straight back out, and short: the reference is explicit that a
@@ -482,6 +486,7 @@ impl<'a> UsbHostEngine<'a> {
                 self.last_hcint.get(),
                 self.read32(hcchar(ch)),
                 self.read32(hcsplt(ch)),
+                self.read32(hctsiz(ch)),
             );
             match outcome {
                 // Only a real transfer completion is the result. An ACK here is
@@ -1368,7 +1373,8 @@ impl<'a> UsbHostEngine<'a> {
             trace::TAG_ARM_SSPLIT,
             self.read32(HFNUM),
             self.read32(hcchar(ch)),
-            0,
+            self.read32(hcsplt(ch)),
+            self.read32(hctsiz(ch)),
         );
         arm(false);
         let outcome = self.wait_channel_spin(ch, SPIN_POLLS);
@@ -1377,6 +1383,7 @@ impl<'a> UsbHostEngine<'a> {
             self.last_hcint.get(),
             self.read32(hcchar(ch)),
             self.read32(hcsplt(ch)),
+            self.read32(hctsiz(ch)),
         );
         if !matches!(outcome, Ok(())) {
             *pending = false;
@@ -1407,6 +1414,7 @@ impl<'a> UsbHostEngine<'a> {
                 self.read32(HFNUM),
                 self.read32(hcchar(ch)),
                 self.read32(hcsplt(ch)),
+                self.read32(hctsiz(ch)),
             );
             arm(true);
             let outcome = self.wait_channel_spin(ch, SPIN_POLLS);
@@ -1416,6 +1424,7 @@ impl<'a> UsbHostEngine<'a> {
                 int,
                 self.read32(hcchar(ch)),
                 self.read32(hcsplt(ch)),
+                self.read32(hctsiz(ch)),
             );
 
             match outcome {
