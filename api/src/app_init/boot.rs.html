@@ -73,10 +73,10 @@
 <a href=#73 id=73 data-nosnippet>73</a>        SyscallResult::Ok(<span class="kw">_</span>) =&gt; ostd::io::println(<span class="string">"Init: fb-console spawned."</span>),
 <a href=#74 id=74 data-nosnippet>74</a>        SyscallResult::Err(<span class="kw">_</span>) =&gt; ostd::io::println(<span class="string">"Init: fb-console spawn failed."</span>),
 <a href=#75 id=75 data-nosnippet>75</a>    }
-<a href=#76 id=76 data-nosnippet>76</a>    <span class="comment">// Desktop shell auto-starts on RPi3 too: board-rpi3 has a real display path
-<a href=#77 id=77 data-nosnippet>77</a>    // (/bin/bcm-display -&gt; compositor -&gt; HDMI), so the taskbar + Spotlight
-<a href=#78 id=78 data-nosnippet>78</a>    // launcher are the intended way to start Ocel on the board.
-<a href=#79 id=79 data-nosnippet>79</a>    </span><span class="attr">#[cfg(not(feature = <span class="string">"hypervisor-min"</span>))]
+<a href=#76 id=76 data-nosnippet>76</a>    <span class="comment">// The desktop shell is not auto-started on RPi3: it is packaged in the
+<a href=#77 id=77 data-nosnippet>77</a>    // image and launched on demand (`desktop &amp;`), which keeps the board's
+<a href=#78 id=78 data-nosnippet>78</a>    // console and compositor free during device bring-up.
+<a href=#79 id=79 data-nosnippet>79</a>    </span><span class="attr">#[cfg(all(not(feature = <span class="string">"hypervisor-min"</span>), not(feature = <span class="string">"board-rpi3"</span>)))]
 <a href=#80 id=80 data-nosnippet>80</a>    </span><span class="kw">match </span>sys_spawn_from_path(<span class="string">"/bin/desktop"</span>) {
 <a href=#81 id=81 data-nosnippet>81</a>        SyscallResult::Ok(<span class="kw">_</span>) =&gt; ostd::io::println(<span class="string">"Init: desktop spawned."</span>),
 <a href=#82 id=82 data-nosnippet>82</a>        SyscallResult::Err(<span class="kw">_</span>) =&gt; ostd::io::println(<span class="string">"Init: desktop spawn failed."</span>),
