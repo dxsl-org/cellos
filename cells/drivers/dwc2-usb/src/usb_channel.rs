@@ -7,6 +7,98 @@ use ostd::mmio::MmioRegion;
 use ostd::syscall::sys_yield;
 use types::{ViError, ViResult};
 
+/// Register snapshots taken around a split, recorded as it runs and written out
+/// afterwards.
+///
+/// Nothing can be printed inside a split: one line of console output costs about
+/// seven milliseconds at this baud, which is seven of the frames a split has to
+/// live in, and printing between the halves is what kept them from pairing at all.
+/// The registers are captured here instead and read back once the transfer is
+/// over, which is the closest thing to watching the bus that the console allows.
+mod trace {
+    use core::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
+    use ostd::io::print;
+
+    pub const RECORDS: usize = 24;
+    const WORDS: usize = 4;
+    /// Tag of the record the dump stops after, so a single event can be followed.
+    pub const TAG_ARM_SSPLIT: u32 = 1;
+    pub const TAG_AFTER_SSPLIT: u32 = 2;
+    pub const TAG_ARM_CSPLIT: u32 = 3;
+    pub const TAG_AFTER_CSPLIT: u32 = 4;
+
+    static CELLS: [AtomicU32; RECORDS * WORDS] = [const { AtomicU32::new(0) }; RECORDS * WORDS];
+    static NEXT: AtomicUsize = AtomicUsize::new(0);
+    static DUMPED: AtomicBool = AtomicBool::new(false);
+
+    /// Record `tag` beside three registers. Never blocks and never allocates.
+    pub fn record(tag: u32, a: u32, b: u32, c: u32) {
+        let i = NEXT.fetch_add(1, Ordering::Relaxed);
+        if i >= RECORDS {
+            return;
+        }
+        let base = i * WORDS;
+        for (off, v) in [tag, a, b, c].into_iter().enumerate() {
+            CELLS[base + off].store(v, Ordering::Relaxed);
+        }
+    }
+
+    fn hex(v: u32) {
+        const D: &[u8; 16] = b"0123456789abcdef";
+        let mut buf = [0u8; 8];
+        let mut i = 0;
+        while i < 8 {
+            buf[i] = D[((v >> (28 - i * 4)) & 0xF) as usize];
+            i += 1;
+        }
+        if let Ok(t) = core::str::from_utf8(&buf) {
+            print(t);
+        }
+    }
+
+    fn decimal(v: usize) {
+        let mut buf = [0u8; 20];
+        let mut n = v;
+        let mut len = 0;
+        if n == 0 {
+            print("0");
+            return;
+        }
+        while n > 0 && len < buf.len() {
+            buf[len] = b'0' + (n % 10) as u8;
+            n /= 10;
+            len += 1;
+        }
+        buf[..len].reverse();
+        if let Ok(t) = core::str::from_utf8(&buf[..len]) {
+            print(t);
+        }
+    }
+
+    /// Write the recording out, once, outside any transfer.
+    pub fn dump_once() {
+        if DUMPED.swap(true, Ordering::Relaxed) {
+            return;
+        }
+        let n = NEXT.load(Ordering::Relaxed).min(RECORDS);
+        print("[dwc2-trace] records=");
+        decimal(n);
+        print(" (tag hcint hcchar hcsplt hfnum)\n");
+        for i in 0..n {
+            let base = i * WORDS;
+            print("  ");
+            hex(CELLS[base].load(Ordering::Relaxed));
+            print(" ");
+            hex(CELLS[base + 1].load(Ordering::Relaxed));
+            print(" ");
+            hex(CELLS[base + 2].load(Ordering::Relaxed));
+            print(" ");
+            hex(CELLS[base + 3].load(Ordering::Relaxed));
+            print("\n");
+        }
+    }
+}
+
 /// How host channels move payload bytes.
 ///
 /// The BCM2837 DWC2 supports both; which one a given environment implements is
@@ -1226,8 +1318,20 @@ impl<'a> UsbHostEngine<'a> {
         }
 
         let frame = self.frame_number();
+        trace::record(
+            trace::TAG_ARM_SSPLIT,
+            self.read32(HFNUM),
+            self.read32(hcchar(ch)),
+            0,
+        );
         arm(false);
         let outcome = self.wait_channel_spin(ch);
+        trace::record(
+            trace::TAG_AFTER_SSPLIT,
+            self.last_hcint.get(),
+            self.read32(hcchar(ch)),
+            self.read32(hcsplt(ch)),
+        );
         if !matches!(outcome, Ok(())) {
             *pending = false;
             report_split_progress(
@@ -1252,15 +1356,28 @@ impl<'a> UsbHostEngine<'a> {
                 return Ok(0);
             }
 
+            trace::record(
+                trace::TAG_ARM_CSPLIT,
+                self.read32(HFNUM),
+                self.read32(hcchar(ch)),
+                self.read32(hcsplt(ch)),
+            );
             arm(true);
             let outcome = self.wait_channel_spin(ch);
             let int = self.last_hcint.get();
+            trace::record(
+                trace::TAG_AFTER_CSPLIT,
+                int,
+                self.read32(hcchar(ch)),
+                self.read32(hcsplt(ch)),
+            );
 
             match outcome {
                 Ok(()) if !self.last_reported_complete() => {
                     // ACK on a complete-split carries no data.
                     *pending = false;
                     report_split_progress(true, &outcome, int, self.last_was_nyet(), want, frame);
+                    trace::dump_once();
                     return Ok(0);
                 }
                 Ok(()) => {
@@ -1326,6 +1443,7 @@ impl<'a> UsbHostEngine<'a> {
         // The hub never finished. Starting over on the next poll is the only
         // thing left: the frame this pairing belonged to is gone with it.
         *pending = false;
+        trace::dump_once();
         Ok(0)
     }
 
