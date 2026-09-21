@@ -1199,29 +1199,21 @@ impl<'a> UsbHostEngine<'a> {
         let sctsiz = (want as u32) | (1 << 19);
         self.write32(hctsiz(ch), sctsiz);
 
-        // HCCHAR: MPS from the endpoint descriptor, EPNUM, IN direction, DEVADDR,
-        // CHENA.
+        // HCCHAR: MPS from the endpoint descriptor, EPNUM, IN direction, DEVCTL,
+        // and EPTYPE = Interrupt, which is what the endpoint is.
         //
-        // EPTYPE is Bulk rather than Interrupt. Interrupt puts the transfer in the
-        // core's periodic class, which is scheduled from the periodic frame list --
-        // and this core is run without one, so a periodic channel has no frame to
-        // run in and the core halts it with no status at all:
-        //
-        //     half=ssplit outcome=NAK hcint=0x00000002
-        //     half=csplit outcome=NAK hcint=0x00000002
-        //
-        // Every transfer this driver gets through the hub is non-periodic: the
-        // control transfers that read the device's descriptors, and the bulk
-        // transfers that carry Ethernet. The hub's translator does not care which
-        // class the host called the transfer -- it runs the full- or low-speed
-        // transaction for the split either way -- and the poll interval this
-        // endpoint asks for is honoured by the serving loop, which is where it was
-        // always honoured.
+        // EPTYPE was briefly Bulk here, to move the transfer out of the core's
+        // periodic class while it was thought the missing periodic frame list was
+        // the problem. It is not: a low-speed device has no bulk endpoints at all.
+        // USB 2.0 gives low speed control and interrupt transfers and nothing else,
+        // and the hub's translator refuses a bulk transaction aimed at one -- which
+        // the trace shows as a STALL on the very first poll of both endpoints, long
+        // before the device has had any reason to refuse anything.
         let scchar = (mps as u32 & 0x7FF)
             | ((ep_num as u32) << 11)
             | self.device_flags()
             | (1 << 15) // EPDIR = IN
-            | (2 << 18) // EPTYPE = Bulk: non-periodic, like every path that works
+            | (3 << 18) // EPTYPE = Interrupt: the only type a low-speed endpoint has
             | (1 << 20) // MC = 1
             | ((dev_addr as u32) << 22)
             | (1 << 31); // CHENA
@@ -1324,14 +1316,14 @@ impl<'a> UsbHostEngine<'a> {
         // HCTSIZ: XFERSIZE = one max packet, PKTCNT = 1, PID = DATA0. A split
         // carries exactly one packet, whatever the caller asked for.
         //
-        // HCCHAR: MPS, EPNUM, IN, and EPTYPE = Bulk for the same reason as the
-        // channel above: periodic transfers need a schedule this core is not given.
+        // HCCHAR: MPS, EPNUM, IN, and EPTYPE = Interrupt, for the same reason as
+        // the channel above: a low-speed endpoint has no other type.
         let sctsiz = (want as u32) | (1 << 19);
         let scchar = (mps as u32 & 0x7FF)
             | ((ep_num as u32) << 11)
             | self.device_flags()
             | (1 << 15)
-            | (2 << 18)
+            | (3 << 18)
             | (3 << 20)
             | ((dev_addr as u32) << 22)
             | (1 << 31);
