@@ -61,14 +61,6 @@ pub fn initial_control_mps(speed: u32) -> u8 {
 /// Complete-splits a periodic poll will issue before giving the hub up.
 const SPLIT_ATTEMPTS: usize = 2;
 
-/// Frame-counter reads allowed while waiting out one microframe.
-///
-/// This is a read of the counter and nothing else -- no yield -- because the wait
-/// it measures is a microframe of 125 us. Yielding cannot express a wait that
-/// short: a yield hands the CPU away for far longer, which is how an earlier
-/// attempt at this ended up spending hundreds of milliseconds per poll.
-const MICROFRAME_SPINS: usize = 3_000;
-
 /// Microframes in one full-speed frame.
 ///
 /// `HFNUM` counts microframes, and a hub pairs the two halves of a split inside
@@ -224,30 +216,29 @@ impl<'a> UsbHostEngine<'a> {
         self.frame_number() >> FULL_FRAME_SHIFT
     }
 
-    /// Wait out one microframe boundary, without yielding.
+    /// Wait until the current frame is nearly over, without yielding.
     ///
-    /// A complete-split has to reach the hub in a later microframe than the
-    /// start-split it belongs to, and -- for a periodic transfer -- inside the
-    /// same millisecond frame, because the hub stops pairing the two across a
-    /// frame boundary and the driver treats that as a transaction error.
+    /// The hub does not pass the full- or low-speed transaction through: it runs
+    /// one of its own and buffers the result, and that transaction takes a whole
+    /// millisecond frame. A complete-split issued one microframe after its
+    /// start-split therefore asks before there is anything to hand back, and the
+    /// answer is a channel that halts carrying nothing. The complete-split has to
+    /// arrive late in the frame the start-split opened, because the hub stops
+    /// pairing the two the moment that frame ends.
     ///
-    /// Returns false once the millisecond frame has moved, which is the signal
-    /// that the pairing is gone and the next poll has to start over. The frame
-    /// that must not move is the shifted one: the counter underneath it moves
-    /// every microframe, so comparing that directly would fail on the first read
-    /// and no complete-split would ever be sent.
-    fn await_microframe(&self) -> bool {
+    /// Returns false once the frame has moved, which is the signal that the
+    /// pairing is gone and the next poll has to start over. Both the frame that
+    /// must not move and the position inside it come from the shifted counter: it
+    /// advances every microframe, so comparing it raw would fail on the first read.
+    fn await_frame_end(&self) -> bool {
         let frame = self.full_frame();
-        let start = self.frame_number();
-        for _ in 0..MICROFRAME_SPINS {
+        let last_microframe = (1 << FULL_FRAME_SHIFT) - 1;
+        for _ in 0..SPIN_POLLS {
             let counter = self.read32(HFNUM) & HFNUM_FRNUM_MASK;
             if counter >> FULL_FRAME_SHIFT != frame {
                 return false;
             }
-            // The counter advances once per microframe, so a change in it is the
-            // boundary itself. `FRREM` would say the same thing and depends on
-            // the core filling the field in, which this does not.
-            if counter != start {
+            if counter & last_microframe == last_microframe {
                 return true;
             }
         }
@@ -1193,10 +1184,7 @@ impl<'a> UsbHostEngine<'a> {
         }
 
         for _ in 0..SPLIT_ATTEMPTS {
-            // The hub needs the full- or low-speed transaction run before it can
-            // answer; that is what its NYET reports. One microframe is the unit
-            // it is measured in.
-            if !self.await_microframe() {
+            if !self.await_frame_end() {
                 // The frame moved, so the pairing is gone whether or not the hub
                 // ever answered.
                 *pending = false;
