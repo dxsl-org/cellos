@@ -108,16 +108,21 @@ impl Dwc2Controller {
         usbcfg |= GUSBCFG_TRD_TIM_9;
         self.write32(GUSBCFG, usbcfg);
 
-        // Allow 50ms for host mode to take effect
-        for _ in 0..500 {
+        // 3. Wait for the mode change to take effect, then verify.
+        //
+        // A fixed 50 ms was not always enough: re-initializing the core after a
+        // previous session (the FIFO fallback) failed here while the mode change
+        // was still settling. Poll for the bit instead of guessing a delay.
+        let mut count = 0;
+        let mut gintsts = self.read32(GINTSTS);
+        while gintsts & GINTSTS_CURMODE_HOST == 0 {
+            count += 1;
+            if count > 100_000 {
+                println("[dwc2] ERROR: failed to force Host Mode");
+                return Err(ViError::IO);
+            }
             sys_yield();
-        }
-
-        // 3. Verify current mode is Host mode (GINTSTS bit 0)
-        let gintsts = self.read32(GINTSTS);
-        if gintsts & GINTSTS_CURMODE_HOST == 0 {
-            println("[dwc2] ERROR: failed to force Host Mode");
-            return Err(ViError::IO);
+            gintsts = self.read32(GINTSTS);
         }
 
         // 4. Configure Host Clock in HCFG (30-60 MHz High-Speed PHY)

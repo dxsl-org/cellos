@@ -720,6 +720,42 @@ impl<'a> UsbHostEngine<'a> {
         Ok(0)
     }
 
+    /// Name the host-channel interrupt bit that ended a transfer.
+    ///
+    /// The DWC2 encodes one cause per bit and they need different fixes:
+    /// `AHBERR` is the core failing to reach memory at `HCDMA`, `XACTERR` is a
+    /// bus protocol error, `BBLERR` is the device sending more than the
+    /// programmed packet size, `DTERR` is a data-toggle mismatch, and `STALL`
+    /// is the device itself refusing. Collapsing them into one "IO error" hides
+    /// which of those actually happened.
+    fn describe_hcint(&self, int: u32) -> &'static str {
+        if int & (1 << 2) != 0 {
+            return "AHBERR - core could not reach memory at HCDMA";
+        }
+        if int & (1 << 8) != 0 {
+            return "BBLERR - babble, device exceeded the packet size";
+        }
+        if int & (1 << 3) != 0 {
+            return "STALL - endpoint refused the request";
+        }
+        if int & (1 << 7) != 0 {
+            return "XACTERR - transaction error";
+        }
+        if int & (1 << 10) != 0 {
+            return "DTERR - data toggle mismatch";
+        }
+        if int & (1 << 9) != 0 {
+            return "FRMOVRN - frame overrun";
+        }
+        if int & (1 << 6) != 0 {
+            return "NYET - not ready";
+        }
+        if int & (1 << 4) != 0 {
+            return "NAK";
+        }
+        "unknown"
+    }
+
     /// Print one register as `[dwc2]   NAME=0xVALUE`.
     fn dump_reg(&self, name: &str, val: u32) {
         ostd::io::print("[dwc2]   ");
@@ -756,6 +792,16 @@ impl<'a> UsbHostEngine<'a> {
         self.dump_reg("MODE", self.mode.get() as u32);
     }
 
+    /// Log a channel error once per distinct cause, with the register state.
+    fn report_channel_error(&self, ch: usize, int: u32) {
+        static REPORTED: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
+        if REPORTED.fetch_add(1, core::sync::atomic::Ordering::Relaxed) < 4 {
+            ostd::io::print("[dwc2] channel error: ");
+            ostd::io::println(self.describe_hcint(int));
+            self.dump_transfer_state(ch, "error");
+        }
+    }
+
     /// Leave `ch` disabled before arming it, whatever state it was left in.
     ///
     /// A channel that is still enabled from an abandoned transfer ignores the
@@ -783,10 +829,10 @@ impl<'a> UsbHostEngine<'a> {
             if int & (1 << 1) != 0 {
                 // CHHLTD
                 self.write32(hcint(ch), 0xFFFF_FFFF);
-                if int & (1 << 7) != 0 || int & (1 << 2) != 0 {
-                    return Err(ViError::IO);
-                }
-                if int & (1 << 3) != 0 {
+                // Babble (8) and data-toggle error (10) end a transfer just as
+                // surely as the bits that were already checked.
+                if int & ((1 << 2) | (1 << 3) | (1 << 7) | (1 << 8) | (1 << 10)) != 0 {
+                    self.report_channel_error(ch, int);
                     return Err(ViError::IO);
                 }
                 if int & (1 << 4) != 0 {
@@ -808,11 +854,8 @@ impl<'a> UsbHostEngine<'a> {
             }
 
             // ── Error conditions ──────────────────────────────────────
-            if int & (1 << 7) != 0 || int & (1 << 2) != 0 {
-                self.halt_channel(ch);
-                return Err(ViError::IO);
-            }
-            if int & (1 << 3) != 0 {
+            if int & ((1 << 2) | (1 << 3) | (1 << 7) | (1 << 8) | (1 << 10)) != 0 {
+                self.report_channel_error(ch, int);
                 self.halt_channel(ch);
                 return Err(ViError::IO);
             }
