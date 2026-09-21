@@ -166,6 +166,17 @@ const FULL_FRAME_SHIFT: u32 = 3;
 /// that never reports anything from spinning forever.
 const SPIN_POLLS: usize = 200_000;
 
+/// Register reads one attempt at a control split's complete-split makes.
+///
+/// Short on purpose. The hub pairs a split's halves for less than a frame, so a
+/// complete-split that waits twenty milliseconds for its own completion has
+/// already lost the pairing by the time it goes out -- which is why the stalled
+/// endpoint this path clears could never be cleared, and the keyboard stayed
+/// halted. The attempt is short and the retry loop is what covers the wait, and
+/// the two together are bounded so no single transfer can hold the CPU the way an
+/// unbounded version of this did.
+const CONTROL_SPIN_POLLS: usize = 2_000;
+
 /// Poll budget for the ordinary `wait_channel`.
 const WAIT_POLLS: usize = 50_000;
 
@@ -182,7 +193,7 @@ const CHANNEL_HALT_POLLS: usize = 64;
 /// completion here rather than spread across calls the way the interrupt poll is.
 /// The attempts are issued back to back and bounded by frames rather than spun
 /// on, because the caller cannot be handed "not yet".
-const SPLIT_COMPLETE_ATTEMPTS: usize = 2;
+const SPLIT_COMPLETE_ATTEMPTS: usize = 8;
 
 /// Frames a complete-split may still belong to the start-split that began it.
 ///
@@ -438,8 +449,10 @@ impl<'a> UsbHostEngine<'a> {
 
         let started = self.frame_number();
         for _ in 0..SPLIT_COMPLETE_ATTEMPTS {
+            // Straight back out, and short: the reference is explicit that a
+            // non-periodic split is asked again immediately rather than waited on.
             arm(true);
-            match self.wait_channel(ch) {
+            match self.wait_channel_spin(ch, CONTROL_SPIN_POLLS) {
                 // Only a real transfer completion is the result. An ACK here is
                 // the hub acknowledging the request, not delivering it.
                 Ok(()) if self.last_reported_complete() => return Ok(()),
@@ -1325,7 +1338,7 @@ impl<'a> UsbHostEngine<'a> {
             0,
         );
         arm(false);
-        let outcome = self.wait_channel_spin(ch);
+        let outcome = self.wait_channel_spin(ch, SPIN_POLLS);
         trace::record(
             trace::TAG_AFTER_SSPLIT,
             self.last_hcint.get(),
@@ -1363,7 +1376,7 @@ impl<'a> UsbHostEngine<'a> {
                 self.read32(hcsplt(ch)),
             );
             arm(true);
-            let outcome = self.wait_channel_spin(ch);
+            let outcome = self.wait_channel_spin(ch, SPIN_POLLS);
             let int = self.last_hcint.get();
             trace::record(
                 trace::TAG_AFTER_CSPLIT,
@@ -1591,8 +1604,8 @@ impl<'a> UsbHostEngine<'a> {
     ///
     /// The core halts a periodic channel at its own frame boundary and says so, so
     /// nothing here needs to do it, and nothing here should.
-    fn wait_channel_spin(&self, ch: usize) -> ViResult<()> {
-        for _ in 0..SPIN_POLLS {
+    fn wait_channel_spin(&self, ch: usize, polls: usize) -> ViResult<()> {
+        for _ in 0..polls {
             if let Some(outcome) = self.channel_outcome(ch) {
                 return outcome;
             }
