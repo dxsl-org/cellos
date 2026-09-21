@@ -423,8 +423,24 @@ fn start_interface(
         );
     }
 
+    // The split context is captured here and re-applied before every poll, so a
+    // context that does not match the device is a split aimed at the wrong hub
+    // port -- which the hub answers NYET forever, because the translator there
+    // has no such device. That is indistinguishable from a slow device unless
+    // the pairing is printed.
+    let split = engine.split();
+    print("[usb-hid] iface ");
+    print_u8(iface.number);
+    print(" addr=");
+    print_usize_hid(dev_addr as usize);
+    print(" port=");
+    print_usize_hid(split.map_or(0, |s| s.port as usize));
+    print(" hub=");
+    print_usize_hid(split.map_or(0, |s| s.hub_addr as usize));
+    println("");
+
     Some(HidInterface {
-        split: engine.split(),
+        split,
         last_poll_frame: 0,
         split_pending: false,
         channel: 0, // assigned by the caller
