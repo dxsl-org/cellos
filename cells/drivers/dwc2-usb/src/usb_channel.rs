@@ -1056,13 +1056,29 @@ impl<'a> UsbHostEngine<'a> {
         let sctsiz = (want as u32) | (1 << 19);
         self.write32(hctsiz(ch), sctsiz);
 
-        // HCCHAR: MPS from the endpoint descriptor, EPNUM, IN direction,
-        // EPTYPE = 3 (Interrupt), MC = 1, DEVADDR, CHENA.
+        // HCCHAR: MPS from the endpoint descriptor, EPNUM, IN direction, DEVADDR,
+        // CHENA.
+        //
+        // EPTYPE is Bulk rather than Interrupt. Interrupt puts the transfer in the
+        // core's periodic class, which is scheduled from the periodic frame list --
+        // and this core is run without one, so a periodic channel has no frame to
+        // run in and the core halts it with no status at all:
+        //
+        //     half=ssplit outcome=NAK hcint=0x00000002
+        //     half=csplit outcome=NAK hcint=0x00000002
+        //
+        // Every transfer this driver gets through the hub is non-periodic: the
+        // control transfers that read the device's descriptors, and the bulk
+        // transfers that carry Ethernet. The hub's translator does not care which
+        // class the host called the transfer -- it runs the full- or low-speed
+        // transaction for the split either way -- and the poll interval this
+        // endpoint asks for is honoured by the serving loop, which is where it was
+        // always honoured.
         let scchar = (mps as u32 & 0x7FF)
             | ((ep_num as u32) << 11)
             | self.device_flags()
             | (1 << 15) // EPDIR = IN
-            | (3 << 18) // EPTYPE = Interrupt
+            | (2 << 18) // EPTYPE = Bulk: non-periodic, like every path that works
             | (1 << 20) // MC = 1
             | ((dev_addr as u32) << 22)
             | (1 << 31); // CHENA
@@ -1165,17 +1181,14 @@ impl<'a> UsbHostEngine<'a> {
         // HCTSIZ: XFERSIZE = one max packet, PKTCNT = 1, PID = DATA0. A split
         // carries exactly one packet, whatever the caller asked for.
         //
-        // HCCHAR: MPS, EPNUM, IN, EPTYPE = 3 (Interrupt), and MC = 3. The
-        // multicount is how many times the core retries the transaction itself,
-        // and for a periodic split it is more than one: the hub answers NYET
-        // until it has run the full- or low-speed transaction, so a single
-        // attempt meets that NYET and ends the transfer with nothing.
+        // HCCHAR: MPS, EPNUM, IN, and EPTYPE = Bulk for the same reason as the
+        // channel above: periodic transfers need a schedule this core is not given.
         let sctsiz = (want as u32) | (1 << 19);
         let scchar = (mps as u32 & 0x7FF)
             | ((ep_num as u32) << 11)
             | self.device_flags()
             | (1 << 15)
-            | (3 << 18)
+            | (2 << 18)
             | (3 << 20)
             | ((dev_addr as u32) << 22)
             | (1 << 31);
