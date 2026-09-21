@@ -1444,18 +1444,21 @@ impl<'a> UsbHostEngine<'a> {
     /// The bound is the frame itself rather than a count: past that the pairing is
     /// gone and starting over on the next poll is the only useful thing left. This
     /// runs only when a device has something to report.
-    /// Bounded to the millisecond frame it started in, which is what a periodic
-    /// split needs: past that frame the pairing is gone.
+    /// The channel is left to report for itself. The frame check this used to
+    /// carry halted the channel the moment the frame turned over, which is exactly
+    /// when a full- or low-speed transaction behind a hub is finishing -- and the
+    /// halt it issued was then read straight back as the outcome, so every split
+    /// came back as a halt carrying no status:
+    ///
+    ///     half=ssplit outcome=NAK hcint=0x00000002
+    ///     half=csplit outcome=NAK hcint=0x00000002
+    ///
+    /// The core halts a periodic channel at its own frame boundary and says so, so
+    /// nothing here needs to do it, and nothing here should.
     fn wait_channel_spin(&self, ch: usize) -> ViResult<()> {
-        let frame = self.full_frame();
         for _ in 0..SPIN_POLLS {
             if let Some(outcome) = self.channel_outcome(ch) {
                 return outcome;
-            }
-            if self.full_frame() != frame {
-                self.halt_channel(ch);
-                self.last_hcint.set(self.read32(hcint(ch)));
-                return Err(ViError::WouldBlock);
             }
         }
         self.channel_timeout(ch)
