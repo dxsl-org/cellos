@@ -127,12 +127,10 @@ impl Dwc2Controller {
 
         // 4. Configure the full/low-speed PHY clock in HCFG.
         //
-        // FSLSPCLKSEL selects the clock used for full/low-speed signalling; the
-        // BCM2837's internal PHY runs at 48 MHz and Linux selects that value for
-        // this core. Leaving the field at 0 (30/60 MHz) mismatches the PHY, and
-        // a speed handshake sampled against the wrong clock is a plausible way
-        // for the port to come up "enabled" while the link is not really usable.
-        let hcfg = (self.read32(HCFG) & !HCFG_FSLSPCLKSEL_MASK) | HCFG_FSLSPCLKSEL_48MHZ;
+        // FSLSPCLKSEL applies to full/low-speed signalling only. U-Boot selects
+        // 30/60 MHz for a high-speed PHY (and 48 MHz only for a dedicated FS
+        // PHY), which is this core, so the field stays at its reset value.
+        let hcfg = self.read32(HCFG) & !HCFG_FSLSPCLKSEL_MASK;
         self.write32(HCFG, hcfg);
 
         // 5. Host FIFO split.

@@ -129,6 +129,24 @@ impl<'a> UsbHostEngine<'a> {
         guard.as_ref().map(|b| b.phys() + ch * DMA_SLOT_BYTES)
     }
 
+    /// Bus address of a RAM physical address on this SoC.
+    ///
+    /// A bus master does not see ARM physical addresses. On the BCM283x the
+    /// Raspberry Pi device tree's `_DMA` resource states the translation
+    /// outright: "Bus 0xC0000000 -> CPU 0x00000000", over the first gigabyte
+    /// and marked NonCacheable. U-Boot's working dwc2 driver programs `HCDMA`
+    /// through exactly this translation (`phys_to_bus`).
+    ///
+    /// Programming the raw ARM physical address asks the core to read and write
+    /// a different location, and the failure is quiet: the address still lands
+    /// in mapped memory, so no AHB error is raised, and the CPU-side read-back
+    /// of the slot looks correct because the CPU and the core are simply
+    /// looking at different bytes.
+    #[inline]
+    fn bus_address(phys: usize) -> u32 {
+        (phys | 0xC000_0000) as u32
+    }
+
     /// Point the channel's DMA engine at `offset` bytes into its slot.
     ///
     /// Programmed **once per transfer**, never per packet. The DWC2 advances
@@ -139,7 +157,7 @@ impl<'a> UsbHostEngine<'a> {
     fn program_hcdma(&self, ch: usize, offset: usize) {
         if let Some(base) = self.dma_slot(ch) {
             let addr = base + offset.min(DMA_SLOT_BYTES);
-            self.write32(hcdma(ch), addr as u32);
+            self.write32(hcdma(ch), Self::bus_address(addr));
         }
     }
 
