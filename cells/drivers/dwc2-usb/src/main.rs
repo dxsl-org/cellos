@@ -10,7 +10,7 @@ use driver_dwc2_usb::dispatch::{handle, NicReply, REPLY_BUF};
 use driver_dwc2_usb::hid::EvdevEvent;
 use driver_dwc2_usb::hub::UsbHub;
 use driver_dwc2_usb::lan9514::Lan9514Device;
-use driver_dwc2_usb::usb_channel::UsbHostEngine;
+use driver_dwc2_usb::usb_channel::{TransferMode, UsbHostEngine};
 use driver_dwc2_usb::usb_hid;
 use driver_dwc2_usb::Dwc2Controller;
 use ostd::io::{print, println};
@@ -40,7 +40,12 @@ declare_syscalls![
     RequestMmio,
     WaitIrq,
     LookupService,
-    RegisterNicDriver
+    RegisterNicDriver,
+    // DMA-mode payload slots: the DWC2 core reads and writes them directly.
+    GrantAlloc,
+    GrantFree,
+    GrantCacheSyncBegin,
+    GrantCacheSyncComplete
 ];
 
 /// Poll budget for the NIC IPC receive, in 10 ms ticks.
@@ -85,63 +90,83 @@ fn cell_main() {
     print_hex_u32(core_id);
     println(" (OTG Host Core Verified)");
 
-    if dwc2.init_host().is_err() {
-        println("[dwc2] ERROR: DWC2 host mode initialization failed");
-        loop {
-            sys_yield();
-        }
-    }
-    println("[dwc2] Host Mode configured successfully");
-
-    dwc2.power_on_port();
-    println("[dwc2] Root Port 0 powered ON");
-
-    // Wait for downstream connection
-    let mut connected = false;
-    for _ in 0..10_000 {
-        if dwc2.is_port_connected() {
-            connected = true;
-            break;
-        }
-        sys_yield();
-    }
-
-    if connected {
-        println("[dwc2] Downstream connection detected on Root Port 0! Resetting port...");
-        match dwc2.reset_port() {
-            Ok(0) => println("[dwc2] Port 0 enabled: High-Speed (480 Mbps) - LAN9514 Hub attached"),
-            Ok(1) => println("[dwc2] Port 0 enabled: Full-Speed (12 Mbps)"),
-            Ok(2) => println("[dwc2] Port 0 enabled: Low-Speed (1.5 Mbps)"),
-            _ => println("[dwc2] Port 0 enabled: Unknown speed"),
-        }
-    } else {
-        println("[dwc2] WARN: No connection detected on Root Port 0");
-    }
-
     let engine = UsbHostEngine::new(dwc2.mmio());
 
-    // ── Classify the root device ─────────────────────────────────────────────
+    // ── Bring the bus up, trying FIFO first then DMA ─────────────────────────
     //
-    // The root port does not always hold a hub: on a Pi 3 it holds the LAN9514
-    // compound hub, but a bare controller (and QEMU's `raspi3b`, which models no
-    // LAN9514) can have a device attached directly. Reading the descriptors
-    // first and branching on the class is what keeps both cases working — the
-    // previous flow assumed a hub and silently talked to nothing when there
-    // was not one.
-    let root_device = usb_hid::read_device_descriptor(&engine, 0);
-    let root_interfaces = usb_hid::read_configuration(&engine, 0).map(|(_, ifaces)| ifaces);
-    let root_class = match (root_device.as_ref(), root_interfaces.as_ref()) {
-        (Some(dev), Some(ifaces)) => {
-            print("[dwc2-usb] root device class=");
-            print_usize(dev.class as usize);
-            println("");
-            usb_hid::classify(dev, ifaces)
+    // Which payload-transfer mode a given environment implements is not
+    // discoverable from the register file, and the two differ in a way that
+    // fails silently: the core accepts the channel programming either way and
+    // only the payload is missing. So each mode is tried end-to-end against a
+    // real descriptor read.
+    //
+    // FIFO first because it is the board-proven path — the LAN9514 Ethernet runs
+    // there — and DMA second because QEMU's `hcd-dwc2` model sources payloads
+    // from guest memory at `HCDMA` and ignores host-channel FIFO writes.
+    let mut root_class = usb_hid::RootClass::Other;
+    let mut active_mode = TransferMode::Fifo;
+
+    for mode in [TransferMode::Fifo, TransferMode::Dma] {
+        if !engine.set_mode(mode) {
+            println("[dwc2] DMA scratch allocation failed; staying in FIFO mode");
+            continue;
         }
-        _ => {
-            println("[dwc2-usb] WARN: root device did not answer its descriptors");
-            usb_hid::RootClass::Other
+
+        if dwc2.init_host(mode).is_err() {
+            println("[dwc2] host mode initialization failed");
+            continue;
         }
-    };
+
+        dwc2.power_on_port();
+
+        let mut connected = false;
+        for _ in 0..10_000 {
+            if dwc2.is_port_connected() {
+                connected = true;
+                break;
+            }
+            sys_yield();
+        }
+        if !connected {
+            println("[dwc2] WARN: no downstream connection on Root Port 0");
+        } else {
+            match dwc2.reset_port() {
+                Ok(0) => println("[dwc2] Port 0 enabled: High-Speed (480 Mbps)"),
+                Ok(1) => println("[dwc2] Port 0 enabled: Full-Speed (12 Mbps)"),
+                Ok(2) => println("[dwc2] Port 0 enabled: Low-Speed (1.5 Mbps)"),
+                _ => println("[dwc2] Port 0 enabled: Unknown speed"),
+            }
+        }
+
+        // A readable device descriptor is the proof that this mode moves bytes.
+        let root_device = usb_hid::read_device_descriptor(&engine, 0);
+        let root_interfaces = usb_hid::read_configuration(&engine, 0).map(|(_, i)| i);
+
+        match (root_device.as_ref(), root_interfaces.as_ref()) {
+            (Some(dev), Some(ifaces)) => {
+                print("[dwc2] root device class=");
+                print_usize(dev.class as usize);
+                print(" mps0=");
+                print_usize(dev.max_packet_size_0 as usize);
+                print(" mode=");
+                println(match mode {
+                    TransferMode::Fifo => "fifo",
+                    TransferMode::Dma => "dma",
+                });
+                root_class = usb_hid::classify(dev, ifaces);
+                active_mode = mode;
+                break;
+            }
+            _ => {
+                println(match mode {
+                    TransferMode::Fifo => "[dwc2] FIFO mode did not enumerate; retrying with DMA",
+                    TransferMode::Dma => "[dwc2] DMA mode did not enumerate either",
+                });
+            }
+        }
+    }
+
+    let _ = active_mode;
 
     let mut hid_interfaces: alloc::vec::Vec<usb_hid::HidInterface> = alloc::vec::Vec::new();
     let mut lan: Option<Lan9514Device<'_>> = None;

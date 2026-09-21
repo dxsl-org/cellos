@@ -206,6 +206,13 @@ approver = "cellos-maintainers"
 date = "2026-07-14"
 
 [[file]]
+path = "cells/drivers/dwc2-usb/src/usb_channel.rs"
+class = "driver-mmio"
+reason = "Driver Cell: stages payloads into and collects them out of the cell-owned per-channel DmaBuf slots that the DWC2 core reads and writes directly in DMA mode. The grant region is owned by this cell for its lifetime, every copy length is bounded by DMA_SLOT_BYTES and the caller's slice, and exact cache-sync tokens pin each range across device access."
+approver = "cellos-maintainers"
+date = "2026-09-21"
+
+[[file]]
 path = "cells/drivers/bcm-display/src/mailbox.rs"
 class = "driver-mmio"
 reason = "Driver Cell: bounded copies marshal property words into and out of the cell-owned persistent DmaBuf; exact cache-sync tokens pin the page across VideoCore access, and post-submit uncertainty poisons the transport until reboot."
@@ -466,6 +473,13 @@ reason = "Owns allowlisted unsafe under cells/services/input/ — see the [[file
 approver = "cellos-maintainers"
 date = "2026-07-14"
 
+
+[[crate]]
+name = "driver-dwc2-usb"
+class = "driver-mmio"
+reason = "Owns allowlisted unsafe under cells/drivers/dwc2-usb/ — see the [[file]] entry for cells/drivers/dwc2-usb/src/usb_channel.rs, which needs a bounded copy into and out of the DMA payload slots the controller accesses directly."
+approver = "cellos-maintainers"
+date = "2026-09-21"
 
 [[crate]]
 name = "driver-bcm-display"

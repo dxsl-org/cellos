@@ -1,6 +1,7 @@
 //! DWC2 Host Controller hardware abstraction and initialization.
 
 use crate::regs::*;
+use crate::usb_channel::TransferMode;
 use ostd::io::println;
 use ostd::mmio::MmioRegion;
 use ostd::syscall::sys_yield;
@@ -85,8 +86,11 @@ impl Dwc2Controller {
         Ok(())
     }
 
-    /// Initialize the DWC2 core into Host Mode.
-    pub fn init_host(&self) -> ViResult<()> {
+    /// Initialize the DWC2 core into Host Mode using `mode` for payload transfer.
+    ///
+    /// The core is reset by this call, so it must be re-run to switch modes —
+    /// which is exactly what the driver does when one mode's enumeration fails.
+    pub fn init_host(&self, mode: TransferMode) -> ViResult<()> {
         // 0. Restart PHY clock by clearing Power and Clock Gating Control (PCGCCTL)
         self.write32(PCGCCTL, 0);
 
@@ -128,9 +132,13 @@ impl Dwc2Controller {
         // Periodic Tx FIFO: start at 2048, depth 1024 words
         self.write32(HPTXFSIZ, (1024 << 16) | 2048);
 
-        // 6. Configure AHB bus in GAHBCFG:
-        // Enable global interrupts, disable DMA initially (PIO mode for clean bring-up)
-        let ahbcfg = GAHBCFG_GLBLINTRMSK;
+        // 6. Configure AHB bus in GAHBCFG: unmask global interrupts, and enable
+        //    DMA only in DMA mode. The FIFO depths above still apply in DMA mode
+        //    (the RX FIFO stages inbound packets either way).
+        let mut ahbcfg = GAHBCFG_GLBLINTRMSK;
+        if mode == TransferMode::Dma {
+            ahbcfg |= GAHBCFG_DMAEN;
+        }
         self.write32(GAHBCFG, ahbcfg);
 
         // 7. Flush RX and TX FIFOs

@@ -34,7 +34,7 @@ use crate::usb_desc::{
     self, EndpointDesc, InterfaceDesc, RT_CLASS_INTERFACE_OUT, RT_DEV_TO_HOST_STANDARD,
 };
 use ostd::io::{print, println};
-use ostd::syscall::SyscallResult;
+use ostd::syscall::{sys_yield, SyscallResult};
 
 /// First host channel reserved for HID. Channels 0-2 are control and the
 /// Ethernet bulk pair, so HID devices take 3..=6 (four concurrently attached).
@@ -43,6 +43,12 @@ pub const HID_CHANNEL_BASE: usize = 3;
 pub const MAX_HID_INTERFACES: usize = 4;
 /// Buffer size for one interrupt IN report.
 const REPORT_BUF: usize = 64;
+/// Control-transfer attempts before an enumeration stage gives up.
+///
+/// A port reset and a mode switch are both followed by a brief window where the
+/// first SETUP is lost, so one attempt is not enough to tell a dead device from
+/// a slow one.
+const ENUM_ATTEMPTS: usize = 3;
 
 /// One enumerated HID interface with its own endpoint and decoder.
 pub struct HidInterface {
@@ -124,25 +130,41 @@ pub fn read_device_descriptor(
     engine: &UsbHostEngine<'_>,
     addr: u8,
 ) -> Option<usb_desc::DeviceDescriptor> {
-    for _ in 0..2 {
+    // The first SETUP after a port reset is regularly lost, and a failed
+    // transfer must be retried rather than abandoned: an abandoned control
+    // transaction leaves the device mid-stage, and its *next* transaction then
+    // stalls in the status phase. A `.ok()?` here would end the whole
+    // enumeration on that one transient failure.
+    for attempt in 0..ENUM_ATTEMPTS {
         let mut buf = [0u8; 18];
-        let n = engine
-            .control_transfer(
-                addr,
-                RT_DEV_TO_HOST_STANDARD,
-                usb_desc::REQ_GET_DESCRIPTOR,
-                (usb_desc::DT_DEVICE as u16) << 8,
-                0,
-                &mut buf,
-            )
-            .ok()?;
-        if n >= 18 {
-            let device = usb_desc::DeviceDescriptor::parse(&buf)?;
-            // The device descriptor is the only place a device reports its
-            // control-endpoint packet size, and every later transfer on this
-            // engine depends on it — adopt it before returning.
-            engine.set_control_mps(device.max_packet_size_0);
-            return Some(device);
+        let result = engine.control_transfer(
+            addr,
+            RT_DEV_TO_HOST_STANDARD,
+            usb_desc::REQ_GET_DESCRIPTOR,
+            (usb_desc::DT_DEVICE as u16) << 8,
+            0,
+            &mut buf,
+        );
+
+        match result {
+            // USB 2.0 §9.6.1 lets a device answer the first 8 bytes of its
+            // device descriptor and expect a second request for the full 18;
+            // a short reply is therefore normal and worth retrying.
+            Ok(n) if n >= 18 => {
+                let device = usb_desc::DeviceDescriptor::parse(&buf)?;
+                // The device descriptor is the only place a device reports its
+                // control-endpoint packet size, and every later transfer on this
+                // engine depends on it — adopt it before returning.
+                engine.set_control_mps(device.max_packet_size_0);
+                return Some(device);
+            }
+            _ => {
+                if attempt + 1 < ENUM_ATTEMPTS {
+                    for _ in 0..200 {
+                        sys_yield();
+                    }
+                }
+            }
         }
     }
     None
@@ -159,17 +181,31 @@ pub fn read_configuration(
     addr: u8,
 ) -> Option<(u8, Vec<InterfaceDesc>)> {
     let mut header = [0u8; 9];
-    let hn = engine
-        .control_transfer(
+    let mut header_len = 0usize;
+    for attempt in 0..ENUM_ATTEMPTS {
+        header = [0u8; 9];
+        match engine.control_transfer(
             addr,
             RT_DEV_TO_HOST_STANDARD,
             usb_desc::REQ_GET_DESCRIPTOR,
             (usb_desc::DT_CONFIGURATION as u16) << 8,
             0,
             &mut header,
-        )
-        .ok()?;
-    if hn < 9 {
+        ) {
+            Ok(n) if n >= 9 => {
+                header_len = n;
+                break;
+            }
+            _ => {
+                if attempt + 1 < ENUM_ATTEMPTS {
+                    for _ in 0..200 {
+                        sys_yield();
+                    }
+                }
+            }
+        }
+    }
+    if header_len < 9 {
         return None;
     }
     let total = usb_desc::configuration_total_length(&header)? as usize;
@@ -178,16 +214,29 @@ pub fn read_configuration(
     }
 
     let mut cfg = alloc::vec![0u8; total];
-    let cn = engine
-        .control_transfer(
+    let mut cn = 0usize;
+    for attempt in 0..ENUM_ATTEMPTS {
+        match engine.control_transfer(
             addr,
             RT_DEV_TO_HOST_STANDARD,
             usb_desc::REQ_GET_DESCRIPTOR,
             (usb_desc::DT_CONFIGURATION as u16) << 8,
             0,
             &mut cfg,
-        )
-        .ok()?;
+        ) {
+            Ok(n) if n >= 9 => {
+                cn = n;
+                break;
+            }
+            _ => {
+                if attempt + 1 < ENUM_ATTEMPTS {
+                    for _ in 0..200 {
+                        sys_yield();
+                    }
+                }
+            }
+        }
+    }
     if cn < 9 {
         return None;
     }
