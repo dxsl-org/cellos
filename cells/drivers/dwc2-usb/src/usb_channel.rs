@@ -69,6 +69,13 @@ const SPLIT_ATTEMPTS: usize = 2;
 /// attempt at this ended up spending hundreds of milliseconds per poll.
 const MICROFRAME_SPINS: usize = 3_000;
 
+/// Microframes in one full-speed frame.
+///
+/// `HFNUM` counts microframes, and a hub pairs the two halves of a split inside
+/// one millisecond frame, so the counter has to be shifted to ask that question.
+/// Both reference drivers derive the frame the same way.
+const FULL_FRAME_SHIFT: u32 = 3;
+
 /// Poll budget for a channel that is part of a periodic poll.
 ///
 /// A poll iteration is not free: each one yields, and a yield hands the CPU to
@@ -212,6 +219,16 @@ impl<'a> UsbHostEngine<'a> {
         self.read32(HFNUM) & HFNUM_FRNUM_MASK
     }
 
+    /// The millisecond frame a periodic split is paired within.
+    ///
+    /// `HFNUM` counts microframes, so the raw counter advances every 125 us and
+    /// cannot answer a question about millisecond frames. Both reference drivers
+    /// shift it right three for exactly this check.
+    #[inline]
+    fn full_frame(&self) -> u32 {
+        self.frame_number() >> FULL_FRAME_SHIFT
+    }
+
     /// Wait out one microframe boundary, without yielding.
     ///
     /// A complete-split has to reach the hub in a later microframe than the
@@ -219,22 +236,25 @@ impl<'a> UsbHostEngine<'a> {
     /// same millisecond frame, because the hub stops pairing the two across a
     /// frame boundary and the driver treats that as a transaction error.
     ///
-    /// Returns false once the frame number has moved, which is the signal that
-    /// the pairing is gone and the next poll has to start over. `FRREM` counts
-    /// down through a microframe, so its wrap is the boundary.
+    /// Returns false once the millisecond frame has moved, which is the signal
+    /// that the pairing is gone and the next poll has to start over. The frame
+    /// that must not move is the shifted one: the counter underneath it moves
+    /// every microframe, so comparing that directly would fail on the first read
+    /// and no complete-split would ever be sent.
     fn await_microframe(&self) -> bool {
-        let frame = self.frame_number();
-        let mut last = (self.read32(HFNUM) >> 16) & 0xFFFF;
+        let frame = self.full_frame();
+        let start = self.frame_number();
         for _ in 0..MICROFRAME_SPINS {
-            let now = self.read32(HFNUM);
-            if self.frame_number() != frame {
+            let counter = self.read32(HFNUM) & HFNUM_FRNUM_MASK;
+            if counter >> FULL_FRAME_SHIFT != frame {
                 return false;
             }
-            let frrem = (now >> 16) & 0xFFFF;
-            if frrem > last {
+            // The counter advances once per microframe, so a change in it is the
+            // boundary itself. `FRREM` would say the same thing and depends on
+            // the core filling the field in, which this does not.
+            if counter != start {
                 return true;
             }
-            last = frrem;
         }
         false
     }
