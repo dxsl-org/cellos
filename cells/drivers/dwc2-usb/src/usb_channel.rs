@@ -587,10 +587,10 @@ impl<'a> UsbHostEngine<'a> {
         // Timeout — capture hcint BEFORE halt clears it
         let int = self.read32(hcint(ch));
         let char_val = self.read32(hcchar(ch));
-        self.halt_channel(ch);
         static TIMEOUT_COUNT: core::sync::atomic::AtomicUsize =
             core::sync::atomic::AtomicUsize::new(0);
-        if TIMEOUT_COUNT.fetch_add(1, core::sync::atomic::Ordering::Relaxed) < 3 {
+        let attempt = TIMEOUT_COUNT.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+        if attempt < 3 {
             ostd::io::print("[dwc2] TIMEOUT ch=");
             print_hex_val(ch as u32);
             ostd::io::print(" hcint=0x");
@@ -598,7 +598,11 @@ impl<'a> UsbHostEngine<'a> {
             ostd::io::print(" hcchar=0x");
             print_hex_val(char_val);
             ostd::io::println("");
+            // Only the first stalls are interesting; a retry storm would bury
+            // the console otherwise.
+            self.dump_transfer_state(ch, "timeout");
         }
+        self.halt_channel(ch);
         Err(ViError::IO)
     }
 
@@ -626,6 +630,44 @@ impl<'a> UsbHostEngine<'a> {
             sys_yield();
         }
         self.write32(hcint(ch), 0xFFFF_FFFF);
+    }
+
+    /// Print one register as `[dwc2]   NAME=0xVALUE`.
+    fn dump_reg(&self, name: &str, val: u32) {
+        ostd::io::print("[dwc2]   ");
+        ostd::io::print(name);
+        ostd::io::print("=0x");
+        print_hex_val(val);
+        ostd::io::println("");
+    }
+
+    /// Dump the channel and core registers that explain a stalled transfer.
+    ///
+    /// A timeout with no status bit set (`HCINT == 0`) is ambiguous from the
+    /// outside: the channel may never have been issued, may have been issued and
+    /// silently abandoned by the core, or the port may have dropped underneath
+    /// it. These registers distinguish those cases, and the RX FIFO status says
+    /// whether payload is sitting unread.
+    pub fn dump_transfer_state(&self, ch: usize, why: &str) {
+        ostd::io::print("[dwc2] state at ");
+        ostd::io::print(why);
+        ostd::io::println(":");
+        for (name, offset) in [
+            ("HCCHAR", hcchar(ch)),
+            ("HCTSIZ", hctsiz(ch)),
+            ("HCINT", hcint(ch)),
+            ("HCINTMSK", hcintmsk(ch)),
+        ] {
+            self.dump_reg(name, self.read32(offset));
+        }
+        self.dump_reg("HAINT", self.read32(HAINT));
+        self.dump_reg("HAINTMSK", self.read32(0x418));
+        self.dump_reg("GINTSTS", self.read32(GINTSTS));
+        self.dump_reg("GINTMSK", self.read32(GINTMSK));
+        self.dump_reg("HPRT0", self.read32(HPRT0));
+        self.dump_reg("GRSTCTL", self.read32(GRSTCTL));
+        self.dump_reg("GRXSTSR", self.read32(0x01C));
+        self.dump_reg("GNPTXSTS", self.read32(GNPTXSTS));
     }
 
     /// Leave `ch` disabled before arming it, whatever state it was left in.
