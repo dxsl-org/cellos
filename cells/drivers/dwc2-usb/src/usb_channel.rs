@@ -1105,12 +1105,13 @@ impl<'a> UsbHostEngine<'a> {
 
         arm(complete);
         let outcome = self.wait_channel_with(ch, SPLIT_WAIT_POLLS);
-        report_first_split(
+        report_split_progress(
             complete,
             &outcome,
             self.last_hcint.get(),
             self.last_was_nyet(),
             want,
+            self.frame_number(),
         );
         match outcome {
             Ok(()) => {}
@@ -1385,16 +1386,30 @@ impl<'a> UsbHostEngine<'a> {
 
 /// Report the first split poll in full, once.
 ///
+/// Report how each half of a split ended, a few times per half.
+///
 /// Which half ran and how it ended is the whole question when a split does not
-/// deliver: a start-split the hub refuses, a complete-split the hub is not ready
-/// for, and a complete-split that ends without data are three different faults
-/// and this is the only place that distinguishes them.
-fn report_first_split(complete: bool, outcome: &ViResult<()>, hcint: u32, nyet: bool, want: usize) {
-    static FIRST: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
-    if FIRST.swap(true, core::sync::atomic::Ordering::Relaxed) {
+/// deliver: a start-split the hub refuses, a complete-split it is not ready for,
+/// and a complete-split that ends without data are three different faults, and
+/// nothing else in the driver tells them apart. Both halves are reported
+/// separately -- a single shared flag reports one half and hides the other, which
+/// is exactly the one worth seeing. The frame number comes along so the gap
+/// between the halves is visible rather than inferred.
+fn report_split_progress(
+    complete: bool,
+    outcome: &ViResult<()>,
+    hcint: u32,
+    nyet: bool,
+    want: usize,
+    frame: u32,
+) {
+    static SEEN: [core::sync::atomic::AtomicUsize; 2] =
+        [const { core::sync::atomic::AtomicUsize::new(0) }; 2];
+    let slot = usize::from(complete);
+    if SEEN[slot].fetch_add(1, core::sync::atomic::Ordering::Relaxed) >= 3 {
         return;
     }
-    ostd::io::print("[dwc2] first split: half=");
+    ostd::io::print("[dwc2] split: half=");
     ostd::io::print(if complete { "csplit" } else { "ssplit" });
     ostd::io::print(" outcome=");
     match outcome {
@@ -1405,6 +1420,8 @@ fn report_first_split(complete: bool, outcome: &ViResult<()>, hcint: u32, nyet: 
     }
     ostd::io::print(" hcint=0x");
     print_hex_val(hcint);
+    ostd::io::print(" frame=0x");
+    print_hex_val(frame);
     ostd::io::print(" want=");
     print_usize_val(want);
     ostd::io::println("");
