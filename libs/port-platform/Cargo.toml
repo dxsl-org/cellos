@@ -1,0 +1,13 @@
+[package]
+name = "port-platform"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+description = "Safe Rust host services for Cellos C application ports"
+
+[dependencies]
+api = { path = "../api", version = "0.1.0" }
+ostd = { path = "../ostd", version = "0.2.0" }
+
+[lints.rust]
+unsafe_code = "forbid"

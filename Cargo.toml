@@ -40,6 +40,7 @@ members = [
     "libs/viui",
     "libs/viui-macros",
     "libs/cellos-fs",
+    "libs/port-platform",
     "libs/dom-arena",
     
     # HAL
@@ -168,6 +169,14 @@ members = [
     "cells/tests/tier2-exploit",
     "cells/tests/tier2-smoke",
     "cells/tests/ai-test",
+    "cells/tests/cpp-smoke",
+    "cells/tests/tls-test",
+    "cells/tests/futex-test",
+    "cells/tests/pipe-test",
+    "cells/tests/pipe-peer",
+    "cells/tests/c-pthread",
+    "cells/tests/c-spawn",
+    "cells/tests/c-spawn-child",
 
     # Cells - Runtimes
     "cells/runtimes/lua",

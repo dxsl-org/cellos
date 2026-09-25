@@ -1,0 +1,18 @@
+[package]
+name = "c-pthread"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+description = "Tier-2 C pthread adapter witness"
+
+[[bin]]
+name = "c-pthread"
+path = "src/main.rs"
+
+[dependencies]
+api = { path = "../../../libs/api", version = "0.1.0" }
+ostd = { path = "../../../libs/ostd", version = "0.2.0" }
+
+[build-dependencies]
+cc = "1.0"
+cell-build = { path = "../../../libs/cell-build", version = "0.2.0" }

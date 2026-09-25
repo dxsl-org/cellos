@@ -176,6 +176,45 @@ dependencies = [
 ]
 
 [[package]]
+name = "app-c-spawn"
+version = "0.1.0"
+dependencies = [
+ "api",
+ "cc",
+ "cell-build",
+ "ostd",
+]
+
+[[package]]
+name = "app-c-spawn-child"
+version = "0.1.0"
+dependencies = [
+ "api",
+ "cc",
+ "cell-build",
+ "ostd",
+]
+
+[[package]]
+name = "app-cpp-smoke"
+version = "0.1.0"
+dependencies = [
+ "api",
+ "cc",
+ "cell-build",
+ "ostd",
+]
+
+[[package]]
+name = "app-futex-test"
+version = "0.1.0"
+dependencies = [
+ "api",
+ "cell-build",
+ "ostd",
+]
+
+[[package]]
 name = "app-hello"
 version = "0.1.0"
 dependencies = [
@@ -232,12 +271,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "app-pipe-peer"
+version = "0.1.0"
+dependencies = [
+ "api",
+ "cell-build",
+ "ostd",
+]
+
+[[package]]
+name = "app-pipe-test"
+version = "0.1.0"
+dependencies = [
+ "api",
+ "cell-build",
+ "ostd",
+]
+
+[[package]]
 name = "app-posix-shim-test"
 version = "0.1.0"
 dependencies = [
  "api",
  "cell-build",
  "ostd",
+ "port-platform",
 ]
 
 [[package]]
@@ -278,6 +336,15 @@ dependencies = [
  "cell-build",
  "ostd",
  "types",
+]
+
+[[package]]
+name = "app-tls-test"
+version = "0.1.0"
+dependencies = [
+ "api",
+ "cell-build",
+ "ostd",
 ]
 
 [[package]]
@@ -406,6 +473,16 @@ name = "byteorder"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1fd0f2584146f6f2ef48085050886acf353beff7305ebd1ae69500e27c67f64b"
+
+[[package]]
+name = "c-pthread"
+version = "0.1.0"
+dependencies = [
+ "api",
+ "cc",
+ "cell-build",
+ "ostd",
+]
 
 [[package]]
 name = "camino"
@@ -2017,6 +2094,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "port-platform"
+version = "0.1.0"
+dependencies = [
+ "api",
+ "ostd",
+]
+
+[[package]]
 name = "portable-atomic"
 version = "1.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2713,6 +2798,7 @@ dependencies = [
  "cc",
  "cell-build",
  "ostd",
+ "port-platform",
 ]
 
 [[package]]
