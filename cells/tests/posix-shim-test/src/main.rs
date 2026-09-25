@@ -41,6 +41,10 @@ api::declare_syscalls![
     Log,
     LookupService,
     GetTime,
+    // The entropy smoke calls `getentropy`, which the shim implements over
+    // `GetRandom` (opcode 214). Without the allowlist bit the call is denied and
+    // the smoke can only ever report `POSIX-ENTROPY: FAIL ret=-1`.
+    GetRandom,
     Open,
     Fstat,
     Rename,
