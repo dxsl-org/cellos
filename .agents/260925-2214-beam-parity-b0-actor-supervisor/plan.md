@@ -177,6 +177,38 @@ nothing else.
    The same lint job also warns `fatal: No url found for submodule path
    'cells/demos/doom/src/c/doomgeneric' in .gitmodules` — the orphan gitlink reported earlier.
 
+   **End state of that repair, verified on run `36163927858` (commit `1aab7cf82`)**: 21 of 23 jobs
+   completed, **all 21 green** — including every job that was red at the baseline (`Lint`,
+   `Build` rv64/aarch64/x86_64, `Clippy` aarch64/x86_64, `Host unit tests`, `Security Scan`,
+   `CellosFS /srv`, the three `QEMU Boot Test`s and `QEMU Hypervisor Machinery Smoke`). The two
+   remaining failures belong to other lanes and are recorded below: `Network Data-Path
+   Integration (riscv64)` (`45 passed / 9 failed`, all of them the argv regression in finding 9) and
+   `C2C Broker Oracle` (its idle-IPC wake drain came out `INCONCLUSIVE` at
+   `elapsed_ticks=1452030` against a `900000` proof ceiling, and an INCONCLUSIVE-only run cannot
+   pass by the gate's own rule).
+
+9. **A shell→cell command-line regression is live in the tree and breaks at least four lanes.**
+   `network_httpd_serves_file` (boot suite) sends `httpd 9091 /tmp/resp.txt &`, the shell spawns the
+   cell, and the cell logs `httpd: listening on :8080` — it never saw its arguments, so the test's
+   request to port 9091 gets an empty response. The same shape explains the other boot-suite
+   failures (`network_tcp_listen_accept`, `network_tcp_send_recv`, `network_wget_downloads_to_vfs`),
+   the Tier-2 cases that pass an argument (`tier2-exploit peer` running its default NULL mode), and
+   the four `hotswap-smoke` cases — one root cause, not five bugs. Reproduction is 13 s locally and
+   does **not** need CI:
+   `cd tests/integration && cargo test --target x86_64-unknown-linux-gnu --test boot network_httpd_serves_file -- --test-threads=1 --nocapture`.
+   Falsified against B0: the identical failure occurs with the kernel change stashed and rebuilt, so
+   it is a pre-existing regression from another lane (the argv storage rework of
+   `kernel/src/task/{launch,tcb}.rs` + `kernel/src/cell/state_stash.rs` is the prime suspect; the
+   last recorded green for this suite is the 2026-09-15 CI-gate closure).
+   Where the chain stands after reading it end to end — shell publishes with
+   `ostd::set_spawn_argv` (`cells/tools/shell/src/executor.rs:884`), kernel allows the shell's
+   `StateStash` for that key and stages it (`kernel/src/task/syscall.rs:5747-5761`), the spawn
+   request consumes it (`:1019`, `:1041`), launch installs it as `Task::inherited_argv`
+   (`kernel/src/task/launch.rs:154`), and the child's `StateRestore` returns it (`:5777`): every
+   link matches on paper, and the shell reports no failure, so the break is in the data actually
+   crossing one of those links (structured encode/decode in `libs/ostd/src/args.rs`, or which route's
+   request consumes the staged bytes) — that is the next step, and it is its own investigation.
+
 ## Assumptions
 - A supervisor Cell is a signed, `SpawnCap`-bearing cell; monitoring stays gated on `SpawnCap`, so
   no ABI widening was needed (ADR-0021 §2.4).

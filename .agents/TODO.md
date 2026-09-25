@@ -151,6 +151,13 @@ Manifest v2 và tooling tương thích đã [done]. Việc đổi field vật l�
       op 4 (`ActorCtx::now_ticks`); `init` cố ý để nguyên vì đổi hành vi boot supervisor cần review riêng.
     - B1 (concurrency trong cell + cancellation, cần ADR cancellation) và B2 (cost/scale per-request,
       đang WIP-limited cùng D5) là các phase kế tiếp theo `docs/roadmap/beam-parity-backend-roadmap.md`.
+    - **Regression đang sống (cần lane riêng): argv của shell không tới cell.** `network_httpd_serves_file`
+      gửi `httpd 9091 /tmp/resp.txt &` nhưng cell log `httpd: listening on :8080` (không nhận tham số) →
+      response rỗng. Cùng một gốc giải thích `network_tcp_*`, `network_wget_*`, `posix_shim_getentropy`,
+      tier2 (`tier2-exploit peer` chạy mode NULL mặc định) và 4 case `hotswap-smoke`. Repro local 13 s:
+      `cd tests/integration && cargo test --target x86_64-unknown-linux-gnu --test boot network_httpd_serves_file -- --test-threads=1 --nocapture`.
+      Đã falsify: fail y hệt khi stash thay đổi kernel của B0 ⇒ không phải do B0; nghi lane rework argv
+      (23–25/09) trong `kernel/src/task/{launch,tcb}.rs` + `kernel/src/cell/state_stash.rs`.
 
 ### App Layers
 1. **Tier 1** - Trusted Native SAS Cell
