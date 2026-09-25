@@ -117,6 +117,11 @@ jobs:
       - name: Clippy (riscv64 target)
         env:
           CC_riscv64gc_unknown_none_elf: riscv64-unknown-elf-gcc
+          # The gitignored .cargo/config.toml also pins the archiver; without this
+          # mirror cc-rs probes for the xpack name (`riscv-none-elf-ar`) and every
+          # cell that compiles C in its build script fails with
+          # `failed to find tool "riscv-none-elf-ar"`.
+          AR_riscv64gc_unknown_none_elf: riscv64-unknown-elf-ar
           # -I …/freestanding-include: Ubuntu's bare-metal gcc ships no libc
           # headers; littlefs includes <string.h>, served by the vendored set.
           CFLAGS_riscv64gc_unknown_none_elf: -march=rv64gc -mabi=lp64d -mcmodel=medany -ffreestanding -DLFS_NO_INTRINSICS -I${{ github.workspace }}/third_party/freestanding-include
@@ -247,6 +252,9 @@ jobs:
           # matrix rows, which never build the x86_64 target.
           CARGO_TARGET_X86_64_UNKNOWN_NONE_RUSTFLAGS: "-C relocation-model=pic"
           CC_riscv64gc_unknown_none_elf: ${{ matrix.short == 'rv64' && matrix.cc_bin || '' }}
+          # Mirror of the gitignored .cargo/config.toml entries: cc-rs needs the
+          # archiver spelled out or it probes the xpack name and fails.
+          AR_riscv64gc_unknown_none_elf: ${{ matrix.short == 'rv64' && 'riscv64-unknown-elf-ar' || '' }}
           # littlefs2-sys also runs bindgen (for the LFS C struct layout), which
           # uses libclang independently of the CC_* override above and derives
           # its --target from the Rust target triple — pointing it at a bare
@@ -1287,6 +1295,9 @@ jobs:
           # cells silently build for the HOST and fail to link.
           CARGO_BUILD_TARGET: riscv64gc-unknown-none-elf
           CC_riscv64gc_unknown_none_elf: riscv64-unknown-elf-gcc
+          # Same mirror as the clippy/build jobs: the local .cargo/config.toml
+          # names the archiver, so CI has to name it too.
+          AR_riscv64gc_unknown_none_elf: riscv64-unknown-elf-ar
           # Ubuntu's bare-elf cross gcc ships no libc headers; littlefs (via
           # service-vfs) includes <string.h> — vendored freestanding set.
           CFLAGS_riscv64gc_unknown_none_elf: -march=rv64gc -mabi=lp64d -mcmodel=medany -ffreestanding -DLFS_NO_INTRINSICS -I${{ github.workspace }}/third_party/freestanding-include
