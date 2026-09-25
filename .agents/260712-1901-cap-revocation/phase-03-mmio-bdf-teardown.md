@@ -5,7 +5,7 @@
 - Design authority: dossier §"Class 2 — Mapped MMIO" — "Revoke must unmap the region from the cell's page tables + `release_for` or the cell keeps poking hardware."
 
 ## Overview
-- **Priority:** P1. **Speed:** G2. **Status:** pending. **Law 1:** none. **Effort:** M.
+- **Priority:** P1. **Speed:** G2. **Status:** completed (2026-09-25). **Law 1:** none. **Effort:** M.
 - Build the selective MMIO + BDF teardown that revoke invokes: unmap the granted MMIO window from the page table (so the ring-3 cell faults on next touch) and release the resource-registry ownership; release PCIe BDF ownership.
 
 ## Key Insights
@@ -64,3 +64,49 @@ Without page-table teardown, `mmio_devices` revoke is a label change — the cel
 ## Next Steps
 - Consumed by P04 (MMIO bits) and P05 (`pcie_driver` → BDF + DMA + its MMIO BARs).
 - Rollback: revoke stops calling these; primitives are inert if uncalled.
+
+---
+
+## Closure (2026-09-25)
+
+**Verified on:** RV64 QEMU TCG 8.2.2, `harts=1`, kernel `76832e05…`, feature tuple
+`native-domains,test-hooks` — raw log `docs/evidence/cap-revoke-qemu.{log,txt}`.
+
+### Delivered
+- `resource_registry` now stores the **device class with the region**:
+  `MmioRegion { len, owner, class }`, `MmioClass = u16`. `request_mmio` records the class
+  the allowlist matched; `request_mmio_unchecked` records `CLASS_ECAM` (the Platform
+  Cell's config-space window has no `DEV_*` bit); `request_dwc2_mmio` records `CLASS_DWC2`.
+- `static_range_class` returns the matched window's class; the bool wrapper was deleted
+  (the RPi3 boot self-test now reads `.is_some()`), so there is one derivation.
+- `revoke_mmio_for(cell_id, device_mask) -> Vec<(base, len)>`: releases exactly the
+  windows owned by that cell whose class is in the mask and returns them for page-table
+  teardown. `release_for` (all classes, cell death) is unchanged.
+- `paging::unmap_mmio_user_x86` (clears the user leaf PTE per page, idempotent),
+  `paging::clear_mmio_user` (riscv64/aarch64: `protect_page` with the boot MMIO flags
+  minus `USER`, keeping `DEVICE` on aarch64 — the frame stays identity-mapped for the
+  kernel), and `paging::revoke_mmio_user` as the arch dispatcher. All three return the
+  pages changed and `Err` when a mapped page could not be re-protected (fail-closed).
+- BDF release reuses `release_bdfs_for` (P05 wires it to `pcie_driver`).
+
+### Evidence (markers in the published log)
+| Property | Marker |
+|---|---|
+| Revoking one class releases exactly that window and leaves another class owned | `MMIO-REVOKE-CLASS: PASS` |
+| The real allowlist path: class derived by `request_mmio`, matched by the revoke | `MMIO-REVOKE-ALLOWLIST: PASS` |
+| After revoke the page is still mapped for the kernel but no longer user-accessible | `MMIO-REVOKE-USERBIT: PASS` |
+
+### Deviations from the plan
+- **Class stored at grant time, not re-derived by containment.** The plan's risk table
+  proposed matching a region base against `ALLOWED`/`PCIE_BARS`. That cannot be correct:
+  a PCIe BAR is in neither allowlist, and a granted sub-window is *contained in* rather
+  than equal to its window. Recording the class where it is decided removes the whole
+  failure class instead of mitigating it.
+- `revoke_mmio_user` is proven on a user-mapped grant page: the change it makes is the
+  same one an MMIO window gets, and a grant page is user-mapped on every board — the
+  QEMU targets' allowlisted windows are not mapped in the kernel page table at all.
+
+### Not verified here
+- The x86 leg is compile-verified only in this lane (`x86_64-unknown-none` builds clean);
+  the aarch64/x86 test-hooks lanes were not run. Both legs share the
+  `revoke_mmio_user` contract with the riscv leg that is exercised.

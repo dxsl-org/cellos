@@ -185,6 +185,28 @@ the class-B and class-C selections and published raw logs under `docs/evidence/`
 needs a `fork`/`exec` process tree remains a recorded class-D blocker. No phase carries a physical,
 fleet-secure, or production claim.
 
+## Runtime capability revocation (completed)
+
+`sys_cap_revoke` (219) used to be a label change: it cleared TCB fields and left every
+authority already handed out live — exactly the stale-authority retention Spec 16 cites the
+J-Kernel proof for (LBI prevents forgery, not revocation). The program in
+[.agents/260712-1901-cap-revocation/plan.md](../../.agents/260712-1901-cap-revocation/plan.md)
+is closed at the `qemu` ceiling. `iommu::unmap_dma` is real (lookup-only leaf clear plus
+IOTLB/IOFENCE acknowledgement, with `iommu::revoke_dma_for_cell` shared by cell death and
+runtime revoke), `reclaim_owned_grants` reclaims a live Cell's owned grants while
+quarantining frames an in-flight pin still holds, MMIO revocation releases the window in the
+resource registry and removes its *user* accessibility (`paging::revoke_mmio_user`: user PTE
+cleared on x86, permission lowered on riscv64/aarch64 so the kernel keeps its identity
+mapping), and `pcie_driver`/`platform`/`supervisor` became revocable through three additive
+`cap_mask` bits (Law-1 confirmed twice) with their DMA-domain/BDF/BAR/ECAM teardown. The
+victim is told with `AppEvent::CapRevoked` on the newly registered `0xF2` envelope.
+`HYPERVISOR` stays refused — the one ambient authority with no teardown path. Evidence: one
+RV64 QEMU run (`scripts/qemu-native-domain-test.sh --harts 1`, kernel `76832e05…`) carrying
+`IOMMU-TEARDOWN-*`, `GRANT-RECLAIM-*`, `MMIO-REVOKE-*` and the `thread-cap` revoke aggregate;
+raw log `docs/evidence/cap-revoke-qemu.{log,txt}`. Recorded, not hidden: no Cell issues
+`CapRevoke` yet (the end-to-end path is witnessed in-kernel), the DMA-fault oracle needs real
+IOMMU hardware, and the x86/aarch64 MMIO legs are compile-verified only.
+
 ## Cell scale profiles (D5)
 
 The per-request server profile (Spec 19 §3) is an accepted goal, not current capacity, and the

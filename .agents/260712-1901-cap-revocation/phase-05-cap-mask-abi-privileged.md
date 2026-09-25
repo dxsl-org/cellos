@@ -5,7 +5,7 @@
 - Design authority: dossier §"Two-speed recommendation" #2 (widen back to those bits) + §"Reachability today".
 
 ## Overview
-- **Priority:** P2 (last; needs ABI change + P-TRUST landed). **Speed:** G2. **Status:** pending. **Effort:** S.
+- **Priority:** P2 (last; needs ABI change + P-TRUST landed). **Speed:** G2. **Status:** completed (2026-09-25). **Effort:** S.
 - **🔴 LAW 1 — requires 2x user confirmation.** Adds new capability-mask bits to `libs/api/src/abi/syscall.rs` (`cap_mask`), the frozen kernel↔cell ABI. Do NOT proceed without explicit double confirmation.
 - Make `pcie_driver`, `platform`, `supervisor` revocable end-to-end: define their mask bits, then dispatch their eager teardown (DMA domain + BDF + their MMIO BARs).
 
@@ -69,3 +69,46 @@ This closes the runtime half of the DMA-anywhere invariant: P-TRUST prevents a c
 - Completes runtime revocation; `sys_cap_revoke` now honestly revokes every capability it accepts.
 - Rollback: remove the 3-bit dispatch + reinstate P00 rejects; revert the `libs/api` bits (additive, safe to drop if unused).
 - Follow-up (out of scope): dossier's "service RegisterService stale-tid" is Class-1 partial (`clear_tid` on death) — a lazy re-lookup on the client side, not part of this plan.
+
+---
+
+## Closure (2026-09-25)
+
+**Law-1 confirmation:** granted twice, as this phase requires — the user's instruction to
+implement P01-P05, and an explicit second confirmation on 2026-09-25 of the exact three-bit
+diff (`PCIE_DRIVER = 1<<4`, `PLATFORM = 1<<5`, `SUPERVISOR = 1<<6`).
+
+**Verified on:** RV64 QEMU TCG 8.2.2, `harts=1`, kernel `76832e05…`, feature tuple
+`native-domains,test-hooks` — raw log `docs/evidence/cap-revoke-qemu.{log,txt}`.
+
+### Delivered
+- `libs/api/src/abi/syscall.rs::cap_mask`: the three bits, each documented with the
+  teardown it triggers, and `cap_mask::ALL` extended. Strictly additive — no existing bit
+  moved, no reader other than the kernel revoke arm exists, and a cell that does not know
+  the bits is unaffected.
+- Revoke dispatch: `PCIE_DRIVER` → `task::teardown_dma_authority(tid)` (IOMMU domain +
+  requester entries + the frames a driver was holding) then `revoke_mmio_classes(DEV_PCIE)`
+  then owned-grant reclaim; `PLATFORM` → `revoke_mmio_classes(CLASS_ECAM)`; `SUPERVISOR` →
+  field clear (kernel-minted, never propagated, no ambient resource behind it).
+- `task::teardown_dma_authority` extracted from the retirement path, so **cell death and a
+  runtime `pcie_driver` revoke run one DMA teardown** and a revoked driver Cell ends in
+  exactly the hardware state it would reach by dying. The retirement retry policy stays in
+  the retirement funnel; the revoke path fails closed instead of queueing a retry.
+
+### Evidence (markers in the published log)
+`thread-cap self-test PASS` includes `REVOKE-PRIVILEGED`, which asserts on one call
+revoking `PCIE_DRIVER | PLATFORM | SUPERVISOR`: all three TCB fields cleared, the claimed
+BDF released (`owner_of_bdf` → `None`), the claimed BAR window released under the
+`test-hooks` registration hook, and the notification carrying the new mask.
+
+### Deviations from the plan
+- **F3 was vacuous.** The plan said to remove these three from P00's reject-filter; they
+  were never in it — P00's own note records that they had no `cap_mask` bit and so were
+  not encodable. Nothing to remove; the filter now holds `HYPERVISOR` alone.
+- `git diff libs/api` is exactly the three constants plus `ALL`.
+
+### Gate decision (recorded)
+`SUPERVISOR` revoke keeps the existing Gate-1 (`SpawnCap`) plus the existing
+`target_tid == caller_id` self-revoke guard. No higher gate was added: `supervisor_cap` is
+kernel-minted and never propagated, and a supervisor revoking a peer supervisor is the
+intended use (that is the authority that can already `ForceExit` it).

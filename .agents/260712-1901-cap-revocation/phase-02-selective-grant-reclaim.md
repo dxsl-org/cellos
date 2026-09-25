@@ -5,7 +5,7 @@
 - Design authority: dossier §"The derivation-tree question" — "reuse the grant table's existing `owner → shared_to` link as the minimal derivation record; do NOT build a general seL4-style CDT."
 
 ## Overview
-- **Priority:** P1. **Speed:** G2. **Status:** pending. **Law 1:** none. **Effort:** S.
+- **Priority:** P1. **Speed:** G2. **Status:** completed (2026-09-25). **Law 1:** none. **Effort:** S.
 - Reclaim page/reg grants **owned by** a revoked cell without waiting for its death, reusing the reaper's owner-side unmap path. Reclaiming the owner's grant unmaps the grantee too (the `shared_to` link is the derivation breadcrumb).
 
 > **D36 precedence ruling (2026-08-01):** Midori phase 07 owns pin/quarantine
@@ -71,3 +71,48 @@ The shared grant is the ONLY surface that needs a derivation breadcrumb, and it 
 ## Next Steps
 - Consumed by P04's Class-2 teardown dispatch.
 - Rollback: revoke stops calling `reclaim_owned_grants`; the refactor itself is behavior-preserving and can stay.
+
+---
+
+## Closure (2026-09-25)
+
+**Verified on:** RV64 QEMU TCG 8.2.2, `harts=1`, kernel `76832e05…`, feature tuple
+`native-domains,test-hooks` — raw log `docs/evidence/cap-revoke-qemu.{log,txt}`.
+
+### Delivered
+- `reclaim_owned_grants(tid)` — the owner-side pass of the reaper, extracted so death and
+  runtime revoke call ONE implementation (both tables). It carries the reaper's lock order
+  verbatim (grant table collect → `FRAME_ALLOCATOR` → `KERNEL_ROOT`), never holds
+  `FRAME_ALLOCATOR` across `free_grant_pages`, and keeps the registered-grant
+  transfer-to-live-grantee rule.
+- `clear_grantee_refs(tid)` — pass (a), death-only: a grant the dead task *received*
+  becomes unshared again while its owner keeps the entry and the frames.
+- `sweep_orphan_reg_grants()` — the death-only sweep of entries with neither owner nor
+  grantee (the residue of a transfer that found no live grantee). Kept out of the shared
+  path: a revoke neither creates nor resolves that state.
+- `reap_grants_for_task` recomposed from the three, so the death path's behavior is
+  unchanged by construction.
+
+### D36 (in-flight pins) — satisfied by construction
+The reclaim routes every frame through the same `withhold_pinned_frames` transaction the
+death path uses (`withhold_or_free`): a region an in-flight operation still holds is
+**quarantined, not freed**, and `release_acked_frames` returns it once the driver
+acknowledges. The plan's historical "immediate free/fault" wording is not implemented
+anywhere.
+
+### Evidence (markers in the published log)
+| Property | Marker |
+|---|---|
+| Owned grant removed; its frames return to the allocator; the owner can no longer free it | `GRANT-RECLAIM-OWNED: PASS` |
+| A grant the target *received* (owned by another Cell) survives, still owned by that Cell | `GRANT-RECLAIM-RECEIVED: PASS` |
+| A pinned owned grant is withheld, then released by driver acknowledgement | `GRANT-RECLAIM-PINNED: PASS` |
+
+Regression: `S22-RV64-GRANT-REVOKE: PASS` (the pre-existing grant-revoke fixture) and the
+VFS lifetime fixture stay green in the same run.
+
+### Deviations from the plan
+- The plan's oracle was "the grantee faults on next access". What is asserted instead:
+  the entry is gone, the frames are back, the received grant survives, and the pinned case
+  quarantines. The fault itself is the same mechanism P03 proves directly on the page
+  table (`MMIO-REVOKE-USERBIT`), and a synthetic grantee cannot take a real fault in a
+  boot self-test.

@@ -24,7 +24,6 @@ verification-only closure that opens no new feature program.
   redesign; ambient or name-authorized `/bin` writes are forbidden.
 - **Trust & Identity program** (one portfolio group, separate child plans):
   - `260712-1900-manifest-v2` — P00-P02 complete; P03 deferred.
-  - `260712-1901-cap-revocation` — P00 complete; pin-aware P01-P05 queued.
   - `260712-1902-dice-attestation-identity` — P00 complete; P01-P05 queued.
 - `260624-cell-to-cell-anywhere` — partial; foundation complete, integration blocked.
   Promotion requires a two-node remote-call oracle and Spec 20 ratification gates.
@@ -48,6 +47,19 @@ verification-only closure that opens no new feature program.
 
 ## Completed / closed records
 
+- `260712-1901-cap-revocation` (P00-P05) — closed 2026-09-25 at the `qemu` ceiling.
+  `sys_cap_revoke` no longer label-changes: MMIO windows lose user accessibility
+  (`unmap_mmio_user_x86` / `clear_mmio_user`), owned grants are reclaimed with in-flight
+  pins quarantined rather than freed, `iommu::unmap_dma` is real (leaf cleared + IOTLB /
+  IOFENCE acknowledged) and the whole-domain teardown is shared with cell death, and
+  `pcie_driver`/`platform`/`supervisor` became revocable via three additive `cap_mask`
+  bits (Law-1 confirmed twice) with their DMA/BDF/BAR/ECAM teardown. The victim is told
+  with `AppEvent::CapRevoked` on the newly registered `0xF2` envelope. Witnessed by one
+  RV64 QEMU run (`qemu-native-domain-test --harts 1`, kernel `e1ec27a0…`): IOMMU-TEARDOWN,
+  GRANT-RECLAIM and MMIO-REVOKE markers plus the `thread-cap` revoke aggregate. Raw log:
+  `docs/evidence/cap-revoke-qemu.{log,txt}`. Residual recorded, not hidden: no Cell issues
+  `CapRevoke` yet (the end-to-end path is witnessed in-kernel), the DMA-fault oracle needs
+  real IOMMU hardware, and the x86/aarch64 MMIO legs are compile-verified only.
 - `260922-1549-cell-native-portability-program` (7 phases, ADR-0018/ADR-0019) — closed
   2026-09-25 at the `qemu` ceiling. Tier 2 admission on the path, `cpp-freestanding`, per-task TLS,
   futex ABI + wait queues, the kernel pipe object, the generated porting kit, and the three

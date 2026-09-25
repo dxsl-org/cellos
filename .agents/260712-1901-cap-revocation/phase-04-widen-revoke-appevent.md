@@ -5,7 +5,7 @@
 - Design authority: dossier §"Class 2 … must be EAGER" + §"Victim notification — needs an AppEvent".
 
 ## Overview
-- **Priority:** P1. **Speed:** G2. **Status:** pending. **Effort:** M.
+- **Priority:** P1. **Speed:** G2. **Status:** completed (2026-09-25). **Effort:** M.
 - **Law 1:** none to `libs/api`. **Law-1-adjacent:** adds an `AppEvent` variant in `libs/ostd` (Cellos std, NOT the frozen ABI) AND reserves a new byte-1 envelope discriminant `0xF2` in the IPC wire contract (`spec/17`). Flag both.
 - Replace P00's `NotSupported` rejection for the **MMIO** bits with real eager teardown (the only Class-2 surface encodable without new ABI), and notify the victim cell so it can shut a subsystem down gracefully instead of faulting.
 
@@ -71,3 +71,51 @@ Notification is a courtesy, not a security boundary — the teardown (P01-P03) i
 ## Next Steps
 - P05 extends this dispatch to `pcie_driver`/`platform`/`supervisor` once their ABI mask bits exist.
 - Rollback: re-instate P00's MMIO reject and drop the dispatch; `AppEvent`/spec changes are additive and harmless if unused.
+
+---
+
+## Closure (2026-09-25)
+
+**Verified on:** RV64 QEMU TCG 8.2.2, `harts=1`, kernel `76832e05…`, feature tuple
+`native-domains,test-hooks` — raw log `docs/evidence/cap-revoke-qemu.{log,txt}`, plus
+`cargo test -p ostd --target x86_64-unknown-linux-gnu app::` (2 passed).
+
+### Delivered
+- **Class-2 teardown dispatch in the revoke arm**, before any TCB field is touched:
+  MMIO classes are released from the registry and unmapped from the page table, then the
+  target's owned grants are reclaimed (a revoked device class can be the authority behind
+  a grant, and grants carry no source-cap tag). Fail-closed: a window that cannot be made
+  unreachable returns `NotSupported` with the capability intact.
+- `cap_revoke_gate`: Gate 1 (`SpawnCap`), Gate 1b (ambient bits with no teardown —
+  `HYPERVISOR` only now), Gate 2 (system service cells). P00's blanket MMIO refusal is
+  gone; `HYPERVISOR` is still refused.
+- `send_cap_revoked_event(target_tid, mask)`: best-effort `[0xAC, 0xF2, mask_le4]` over
+  the existing fire-and-forget IPC (`ipc_post_nonblock`, kernel sender id 0). Delivery
+  failure is logged, never returned: the teardown already happened.
+- `libs/ostd`: `AppEvent::CapRevoked { mask }` (additive; `#[non_exhaustive]` already
+  requires cells to carry a wildcard arm) and the `0xF2` decode arm, with host unit tests
+  pinning the wire contract and the truncated-envelope case.
+- `docs/specs/17-ipc-wire-contract.md` §3: the `0xAC` row now registers `0xF2 CapRevoked`
+  and its payload.
+
+### Evidence (markers in the published log)
+`thread-cap self-test PASS` now covers, on the real syscall arm:
+| Property | Marker (logged on failure; aggregate PASS reported) |
+|---|---|
+| `HYPERVISOR` still refused, cap intact | `REVOKE-HYPERVISOR` |
+| MMIO revoke returns Ok, releases the window, reclaims the owned grant, clears the field, leaves the hypervisor cap, and queues `[0xAC, 0xF2, mask_le4]` to the victim | `REVOKE-MMIO` |
+| `SPAWN` (lazy bit) still revokes and clears its field | `REVOKE-ALLOW` |
+
+The notification assertion reads the victim's mailbox and compares the exact six envelope
+bytes, so "the victim was told" is observed, not assumed.
+
+### Deviations from the plan
+- **The arm no longer holds `SCHEDULER` across the teardown.** The grant reclaim reaches
+  `live_task_binding` and the notify reaches `ipc_post_nonblock`; both take `SCHEDULER`,
+  and this spinlock is not reentrant. The arm therefore reads the target's cell id under
+  the lock, releases it, tears down, then re-acquires it, **re-runs the gates** (so a
+  `SpawnCap` withdrawn mid-teardown cannot authorize the clear) and clears the fields.
+- A target that dies while its authority is being torn down returns `Ok(0)` with its
+  audit record: its exit path already cleared every capability, so the revocation holds.
+  A target that was already gone before the call still returns `InvalidCommand`.
+- Ordering is unchanged in the direction that matters: teardown → clear → audit → notify.

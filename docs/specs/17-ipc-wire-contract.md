@@ -78,7 +78,7 @@ so the allocation is **global and must not collide**. Current owners:
 | `0x11` | **Reserved:** proposed `NET_READY` readiness edge (§10, Draft) | net service → interest-owner tid | No implementation exists. Held against reuse under ADR 0001; the proposed collision rules remain design constraints, not runtime claims |
 | `0x12` | **Reserved:** proposed `REACTOR_WAKE` (§10.5, Draft) | same-cell thread → reactor tid | No implementation exists. Held against reuse under ADR 0001; no same-cell pending-message fallback is claimed yet |
 | `0x30`–`0x32` | legacy TLS raw ops (connect/send/recv) in the net service | client → net | Predates typed `NetRequest`; kept for `ostd::tls`. **Client→net only — the net service never emits these toward a client** (§10.2) |
-| `0xAC` | `APP_MSG_MAGIC` — App SDK envelope | any → `run_app!`/`app_entry!` cell | byte 1 = event type (`0x00` Message, `0xFF` Shutdown, `0xF0`/`0xF1` hotswap) |
+| `0xAC` | `APP_MSG_MAGIC` — App SDK envelope | any → `run_app!`/`app_entry!` cell | byte 1 = event type (`0x00` Message, `0xFF` Shutdown, `0xF0`/`0xF1` hotswap, `0xF2` **CapRevoked** — kernel-sent after a runtime capability revocation, payload `[0xAC, 0xF2, mask_le4]`) |
 
 **Hazard:** the NIC Driver-Cell raw ops (`OP_TX=0`, `OP_RX=1`, `OP_GETMAC=2`)
 live in the SAME low range as postcard variant indices. They do not collide

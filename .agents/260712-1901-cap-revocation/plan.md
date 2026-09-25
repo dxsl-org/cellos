@@ -1,7 +1,7 @@
 ---
 title: "Runtime capability revocation completion (close the J-Kernel stale-authority hole)"
 description: "sys_cap_revoke (219) already ships but only clears TCB cap fields — every derived authority stays live. G1 narrows the syscall to be honest; G2 builds eager Class-2 teardown (DMA/IOMMU, grants, MMIO, BDF) + victim notification."
-status: queued (P00 complete; P01-P05 pending)
+status: completed (2026-09-25) — P00-P05 landed
 priority: P1
 effort: 6
 branch: main
@@ -62,3 +62,45 @@ P-TRUST (260712-1100) ──▶ P00 (G1, standalone-shippable) ──▶ P01 ─
 1. **Hypervisor cap** — dossier does not classify it. Ambient (H-ext CSR access is not syscall-gated) → treat Class-2-ish. P00 default: reject `HYPERVISOR` revoke conservatively; confirm no caller needs it. (flagged in P00)
 2. **riscv64/aarch64 MMIO unmap** — MMIO is boot-mapped user for all cells (SAS single page table); x86 maps on-demand via `map_mmio_user_x86`. x86 reverses cleanly with `unmap_page_x86`; riscv/aarch64 need a new per-arch clear-user helper. (flagged in P03)
 3. **Which revoked bit triggers grant reclaim?** Grants carry no source-cap tag. P02 scopes reclaim to grants *owned by the target* and invokes it on any Class-2 revoke. (resolved in P02)
+
+---
+
+## Closure (2026-09-25)
+
+**Status:** completed. P00 landed earlier (`4b8f1543`); P01-P05 landed together on
+2026-09-25 and are witnessed by one RV64 QEMU run.
+
+**Evidence.** `docs/evidence/cap-revoke-qemu.{log,txt}` — RV64 QEMU TCG 8.2.2, `harts=1`,
+kernel `76832e05…`, feature tuple `native-domains,test-hooks`
+(`scripts/qemu-native-domain-test.sh --harts 1 --case admission`). The markers that carry
+each phase:
+
+| Phase | Markers |
+|---|---|
+| P01 | `IOMMU-TEARDOWN-LEAF`, `IOMMU-TEARDOWN-IDEMPOTENT`, `IOMMU-TEARDOWN-LOOKUP-ONLY`, `IOMMU-TEARDOWN-REMAPPABLE` |
+| P02 | `GRANT-RECLAIM-OWNED`, `GRANT-RECLAIM-RECEIVED`, `GRANT-RECLAIM-PINNED` (+ `S22-RV64-GRANT-REVOKE` regression) |
+| P03 | `MMIO-REVOKE-CLASS`, `MMIO-REVOKE-ALLOWLIST`, `MMIO-REVOKE-USERBIT` |
+| P04 | `thread-cap self-test PASS` covering `REVOKE-HYPERVISOR`, `REVOKE-MMIO` (teardown + exact `[0xAC,0xF2,mask_le4]` queued to the victim), `REVOKE-ALLOW`; plus `cargo test -p ostd --target x86_64-unknown-linux-gnu app::` |
+| P05 | the same `thread-cap` aggregate covering `REVOKE-PRIVILEGED` (fields cleared, BDF released, BAR window released, notification carries the new mask) |
+
+**The hole is closed.** `sys_cap_revoke` now tears down every surface it accepts:
+mapped MMIO windows lose user accessibility, owned grants are reclaimed (pinned frames
+quarantined, not freed), `pcie_driver` drains the whole DMA domain plus its BDFs and BARs,
+and `platform` releases the ECAM window. `HYPERVISOR` remains refused — it is the one
+ambient authority with no teardown path, and refusing is still the honest answer.
+
+**Law 1:** the `cap_mask` addition (`PCIE_DRIVER`/`PLATFORM`/`SUPERVISOR`, bits 4-6) was
+confirmed twice as the plan requires; `git diff libs/api` is exactly those constants plus
+`ALL`.
+
+**Not claimed.**
+- No Cell issues `CapRevoke` today, so there is no cell-level witness: the end-to-end path
+  is witnessed in-kernel against the real syscall arm, registry, page tables, grant
+  tables, IOMMU module and IPC queue.
+- The hardware oracle (a device DMA actually faulting after `unmap_dma`) needs a real
+  IOMMU; the RV64 lane has none. The x86 VT-d suites remain that witness and were not
+  re-run.
+- The x86/aarch64 `revoke_mmio_user` legs are compile-verified in this pass, not run.
+- Pre-existing, unrelated to this program and visible in the same log: `[selftest]
+  OWNER-SLOT: FAIL` and `admission-core self-test FAIL` (both present in logs predating
+  this work).

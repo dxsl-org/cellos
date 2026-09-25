@@ -5,7 +5,7 @@
 - Design authority: dossier §"Class 2 … IOMMU/DMA" — "`iommu.rs:51 unmap_dma` is a no-op stub … implementing it (+ IOTLB flush) is the FIRST thing; everything else assumes DMA can actually be torn down."
 
 ## Overview
-- **Priority:** P1 (foundational). **Speed:** G2. **Status:** pending. **Law 1:** none. **Effort:** S.
+- **Priority:** P1 (foundational). **Speed:** G2. **Status:** completed (2026-09-25). **Law 1:** none. **Effort:** S.
 - Turn the `unmap_dma` no-op stub into a real per-range teardown (zero the IOMMU PT/SLPT entry + IOTLB-flush the page) on both arches, and expose a **selective** whole-domain teardown callable from revoke (not only from cell death).
 
 ## Key Insights
@@ -66,3 +66,56 @@ This is the single most dangerous surface (dossier): until `unmap_dma` is real, 
 ## Next Steps
 - Enables P04/P05 to wire DMA teardown into revoke.
 - Rollback: revert `unmap_dma` to the stub — cell-death `cleanup_cell` still works; only runtime revoke loses the primitive.
+
+---
+
+## Closure (2026-09-25)
+
+**Verified on:** RV64 QEMU TCG 8.2.2, `harts=1`, kernel `76832e05…`, feature tuple
+`native-domains,test-hooks` — raw log `docs/evidence/cap-revoke-qemu.{log,txt}`
+(`scripts/qemu-native-domain-test.sh --harts 1 --case admission`).
+
+### Delivered
+- `Sv39IommuPt::unmap_range` / `unmap_page` and `VtdSlpt::unmap_range` / `unmap_page`:
+  mirror `map_range` page-for-page, **lookup-only** (a missing child table is skipped,
+  never allocated) and **leaf-only** (no intermediate table is ever freed, so a sibling
+  range keeps its mapping). Return the number of leaves actually cleared.
+- `iommu_x86::unmap_range_for_cell(tid, iova, size)`: zeroes the SLPT leaves, publishes
+  them, then drops the domain's IOTLB entries; returns `DmaUnmapResult`
+  (`NothingMapped` / `Unmapped { pages }` / `PublishedUnconfirmed { pages }`), mirroring
+  `DmaMapResult`.
+- `iommu_riscv::unmap_range_for_cell(tid, iova, size)`: same, with one `IOTINVAL.VMA`
+  (PSCID) + one IOFENCE acknowledging the batch under `CQ_TRANSACTION`, preserving the
+  `RISCV_DOMAINS → CQ_TRANSACTION` order the map path documents.
+- `iommu::unmap_dma(tid, iova, size)`: the stub is gone. The entry point is now
+  tid-aware (its only prior state was a no-op with no callers).
+- `iommu::cleanup_cell` renamed **`iommu::revoke_dma_for_cell`**: one name for one
+  teardown, reached from cell death and from a runtime `pcie_driver` revoke (P05). The
+  single death-path caller and the doc reference in `syscall.rs` were updated with it.
+
+### Evidence (markers in the published log)
+| Property | Marker |
+|---|---|
+| Cleared leaf reads absent; its two neighbours in the same table stay present | `IOMMU-TEARDOWN-LEAF: PASS` |
+| Clearing the same page twice clears nothing the second time | `IOMMU-TEARDOWN-IDEMPOTENT: PASS` |
+| Unmapping a never-mapped range allocates no table and clears nothing | `IOMMU-TEARDOWN-LOOKUP-ONLY: PASS` |
+| The cleared page can be mapped again (no table was freed) | `IOMMU-TEARDOWN-REMAPPABLE: PASS` |
+
+Both page-table types are probed in the same run (`Sv39IommuPt` and `VtdSlpt` are plain
+kernel-heap memory, so the test needs no IOMMU hardware).
+
+### Deviations from the plan (recorded, not hidden)
+- **x86 flushes the domain, not the page.** `iotlb_flush_page` needs the IVA register,
+  which `ECAP.IRO` makes optional; a revoke that silently lost its flush would leave DMA
+  reachable, so the range path uses `iotlb_flush_domain` — always available, covers every
+  leaf just cleared, and cannot disturb another Cell's domain. `iotlb_flush_page` and its
+  IVA path are retained for a future precision caller and now say so.
+- **No production caller for the per-range API yet.** Runtime revoke tears down whole
+  domains (P04/P05); `unmap_dma` exists so the stub stops lying and so a partial DMA-grant
+  revoke has its primitive.
+
+### Not verified here
+- The hardware half — a device DMA actually faulting after the unmap — needs a real
+  IOMMU. The RV64 QEMU lane has none, so it is not claimed. The x86 VT-d suites
+  (`qemu-x86-virtio-e2e.sh`, `qemu-tier3-hostile-runner-x86.sh`, both `-device intel-iommu`)
+  remain the hardware witness and were not re-run for this phase.
