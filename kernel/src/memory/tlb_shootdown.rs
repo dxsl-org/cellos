@@ -56,6 +56,12 @@ pub fn flush_page(vaddr: VAddr) {
 
 /// Invalidate a page-aligned range after its PTEs have changed.
 pub fn flush_range(start: VAddr, size: usize) {
+    debug_assert!(start & (PAGE_SIZE - 1) == 0);
+    debug_assert!(size & (PAGE_SIZE - 1) == 0);
+    let end = start
+        .checked_add(size)
+        .expect("TLB flush range must not wrap the address space");
+
     #[cfg(target_arch = "riscv64")]
     {
         // Keep the PTE write visible to both the compiler and remote table walkers
@@ -67,7 +73,9 @@ pub fn flush_range(start: VAddr, size: usize) {
             core::arch::asm!("fence rw, rw", options(nostack));
         }
 
-        hal::paging::flush_tlb_page(start);
+        for page in (start..end).step_by(PAGE_SIZE) {
+            hal::paging::flush_tlb_page(page);
+        }
         let Some((remote_mask, remote_base)) = crate::task::smp::remote_online_sbi_target() else {
             return;
         };
@@ -83,14 +91,12 @@ pub fn flush_range(start: VAddr, size: usize) {
     }
 
     #[cfg(not(any(target_arch = "riscv64", target_arch = "riscv32")))]
-    {
-        let _ = size;
-        hal::paging::flush_tlb_page(start);
+    for page in (start..end).step_by(PAGE_SIZE) {
+        hal::paging::flush_tlb_page(page);
     }
 
     #[cfg(target_arch = "riscv32")]
     {
-        // RV32 boards use the bare-physical SATP=0 contract and have no TLB.
-        let _ = (start, size);
+        let _ = end;
     }
 }

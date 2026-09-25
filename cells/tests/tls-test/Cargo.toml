@@ -1,0 +1,17 @@
+[package]
+name = "app-tls-test"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+description = "Per-task TLS base (SetTlsBase) smoke test: per-thread thread pointer across context switches"
+
+[[bin]]
+name = "tls-test"
+path = "src/main.rs"
+
+[dependencies]
+api  = { path = "../../../libs/api", version = "0.1.0" }
+ostd = { path = "../../../libs/ostd", version = "0.2.0" }
+
+[build-dependencies]
+cell-build = { path = "../../../libs/cell-build", version = "0.2.0" }

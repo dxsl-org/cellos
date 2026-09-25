@@ -28,6 +28,10 @@ fn shell_reviewed_capability_free_edges_remain_empty() {
     for (route, target) in [
         (LaunchRoute::Path, "/bin/httpd"),
         (LaunchRoute::Elf, "/bin/httpd"),
+        // Phase 02 ships this edge as part of the `cpp-freestanding` profile; a
+        // silent drop here is what made its runner fail.
+        (LaunchRoute::Path, "/bin/cpp-smoke"),
+        (LaunchRoute::Elf, "/bin/cpp-smoke"),
         (LaunchRoute::Elf, "/bin/vfs-test"),
         (LaunchRoute::Path, "/bin/free"),
         (LaunchRoute::Elf, "/bin/free"),
@@ -44,6 +48,27 @@ fn shell_reviewed_capability_free_edges_remain_empty() {
     assert!(
         authorize(caller("shell", false, false), LaunchRoute::Elf, "/bin/vfs").is_none(),
         "shell must not launch privileged services by path forgery"
+    );
+}
+
+#[test]
+fn pipe_test_has_only_its_capability_free_peer_edge() {
+    for route in [LaunchRoute::Path, LaunchRoute::Elf] {
+        assert_eq!(
+            authorize(caller("pipe-test", false, false), route, "/bin/pipe-peer")
+                .expect("pipe witness peer edge must exist")
+                .child_ceiling,
+            CapSet::EMPTY
+        );
+    }
+    assert!(
+        authorize(
+            caller("pipe-test", false, false),
+            LaunchRoute::Elf,
+            "/bin/anything-else"
+        )
+        .is_none(),
+        "the pipe witness must not gain an ambient launcher edge"
     );
 }
 
@@ -66,6 +91,56 @@ fn capacity_probe_path_grants_only_spawn_and_elf_is_denied() {
         .is_none(),
         "caller-owned ELF bytes must not receive the denial probe's spawn authority"
     );
+}
+
+#[test]
+fn c_pthread_witness_has_no_process_lifecycle_authority() {
+    for route in [LaunchRoute::Path, LaunchRoute::Elf] {
+        assert_eq!(
+            shell_edge(route, "/bin/c-pthread").child_ceiling,
+            CapSet::EMPTY,
+            "the pthread witness only creates in-cell tasks"
+        );
+    }
+}
+
+#[test]
+fn c_spawn_adapter_has_only_its_capability_free_child_edge() {
+    for route in [LaunchRoute::Path, LaunchRoute::Elf] {
+        assert_eq!(
+            authorize(caller("c-spawn", false, false), route, "/bin/c-spawn-child")
+                .expect("the C spawn witness child edge must exist")
+                .child_ceiling,
+            CapSet::EMPTY,
+            "the launched child must hold no authority of its own on {route:?}"
+        );
+    }
+    for target in [
+        "/bin/pipe-peer",
+        "/bin/init",
+        "/bin/c-spawn",
+        "/bin/c-spawn-child/../init",
+    ] {
+        assert!(
+            authorize(caller("c-spawn", false, false), LaunchRoute::Path, target).is_none(),
+            "the C spawn adapter must not gain an ambient launcher edge to {target}"
+        );
+    }
+}
+
+#[test]
+fn c_spawn_child_cannot_relaunch_anything() {
+    for route in [LaunchRoute::Path, LaunchRoute::Elf] {
+        assert!(
+            authorize(
+                caller("c-spawn-child", false, false),
+                route,
+                "/bin/c-spawn-child"
+            )
+            .is_none(),
+            "the granted child must not hold a launch edge of its own on {route:?}"
+        );
+    }
 }
 
 #[test]

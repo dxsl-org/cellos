@@ -15,7 +15,8 @@ pub(crate) mod aligned_elf;
 pub mod atomic_publication_tests;
 pub mod boot_ceiling;
 pub mod disk_layout;
-/// Internal, default-off RV64 domain-admission policy. It has no loader route.
+/// The single on-path Tier 2 admission policy (ADR-0019). Consulted by the
+/// publication point in `task::launch`, never by a second route.
 #[cfg(feature = "native-domains")]
 pub(crate) mod domain_admission;
 pub mod early;

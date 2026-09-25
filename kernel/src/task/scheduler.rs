@@ -141,7 +141,15 @@ pub(crate) struct RootRetirement {
     /// Matching zombies move with their generation's resource release, rather
     /// than waiting for a later global zombie sweep after quota is reusable.
     pub zombies: Vec<Task>,
+    /// Waiters are retained locally until this generation's tasks have dropped.
+    pub waiter_wakes: Vec<(usize, usize)>,
     requested_switch_completion: [usize; super::smp::MAX_HARTS],
+}
+
+/// A task removed from the scheduler with its waiters held until teardown.
+pub(crate) struct ReapedTask {
+    pub task: Box<Task>,
+    pub waiter_wakes: Vec<(usize, usize)>,
 }
 
 /// Exact VFS lease release deferred after a holder abandons its request context.
@@ -679,12 +687,46 @@ impl Scheduler {
     /// Spawn a thread only after resolving the Cell's live root record.
     pub fn spawn_thread(
         &mut self,
+        parent_id: usize,
         name: &str,
-        cell_id: CellId,
-        allowed_drivers: alloc::vec::Vec<usize>,
         entry: usize,
         arg: usize,
     ) -> Result<usize, ViError> {
+        #[cfg(all(
+            feature = "native-domains",
+            any(
+                target_arch = "riscv64",
+                target_arch = "aarch64",
+                target_arch = "x86_64"
+            )
+        ))]
+        let parent_address_space = self
+            .tasks
+            .get(&parent_id)
+            .ok_or(ViError::PermissionDenied)?
+            .address_space
+            .clone();
+        let (
+            cell_id,
+            parent_caps,
+            parent_allowlist,
+            parent_pku,
+            parent_tls,
+            parent_allowed_drivers,
+        ) = {
+            let parent = self
+                .tasks
+                .get(&parent_id)
+                .ok_or(ViError::PermissionDenied)?;
+            (
+                parent.cell_id,
+                super::cap::CapSet::of_task(parent),
+                parent.syscall_allowlist,
+                (parent.pku_key, parent.pku_value),
+                parent.tls_base,
+                parent.allowed_drivers.clone(),
+            )
+        };
         let owner = self
             .cell_owners
             .get(cell_id.0 as usize)
@@ -713,10 +755,30 @@ impl Scheduler {
             return Err(ViError::OutOfMemory);
         }
 
-        let mut task = Box::new(Task::new(self.next_task_id, cell_id, name, allowed_drivers));
+        let mut task = Box::new(Task::new(
+            self.next_task_id,
+            cell_id,
+            name,
+            parent_allowed_drivers,
+        ));
         task.state = TaskState::Ready;
         task.cell_generation = owner.generation;
         task.root_tid = owner.root_tid as usize;
+        parent_caps.apply_to(&mut task);
+        task.syscall_allowlist = parent_allowlist;
+        task.pku_key = parent_pku.0;
+        task.pku_value = parent_pku.1;
+        #[cfg(all(
+            feature = "native-domains",
+            any(
+                target_arch = "riscv64",
+                target_arch = "aarch64",
+                target_arch = "x86_64"
+            )
+        ))]
+        {
+            task.address_space = parent_address_space;
+        }
         let id = task.id;
 
         let kstack = crate::task::stack::Stack::new_kernel(crate::task::stack_pages_for(name))?;
@@ -741,6 +803,38 @@ impl Scheduler {
             return Err(ViError::OutOfMemory);
         }
         task.stack_quota_charge = stack_bytes;
+
+        #[cfg(all(
+            feature = "native-domains",
+            any(
+                target_arch = "riscv64",
+                target_arch = "aarch64",
+                target_arch = "x86_64"
+            )
+        ))]
+        if let super::tcb::TaskAddressSpace::Domain(space) = &task.address_space {
+            if let Err(error) = space.map_existing_task_stacks(&kstack, &ustack) {
+                log::warn!(
+                    "[sched] cell {:?} cannot map thread stacks into its domain: {:?}",
+                    cell_id,
+                    error
+                );
+                crate::memory::cell_quota::refund(cell_id.0 as usize, stack_bytes);
+                task.stack_quota_charge = 0;
+                return Err(ViError::OutOfMemory);
+            }
+        }
+        #[cfg(all(
+            feature = "native-domains",
+            any(
+                target_arch = "riscv64",
+                target_arch = "aarch64",
+                target_arch = "x86_64"
+            )
+        ))]
+        if matches!(task.address_space, super::tcb::TaskAddressSpace::Domain(_)) {
+            task.has_dynamic_stack_mapping = true;
+        }
 
         let user_stack_top = ustack.top;
         let stack_base = kstack.base;
@@ -770,6 +864,7 @@ impl Scheduler {
             task.kernel_stack = Some(kstack);
             task.user_stack = Some(ustack);
             super::prime_user_mode_entry(&mut task, entry, arg);
+            super::tls::inherit_from(&mut task, parent_tls);
 
             info!(
                 "Thread '{}' (ID {}): KStack 0x{:X}-0x{:X}, UStackTop 0x{:X}, Entry 0x{:X}, Arg 0x{:X}",
@@ -895,15 +990,15 @@ impl Scheduler {
         self.exit_task(exit.tid, exit.code);
     }
 
-    /// Reap a task: move it to the zombie list, purge ready queues, unblock
-    /// senders stuck on it, and wake any `Wait`-ers with `exit_reason`.
+    /// Retire a task: move it to the zombie list, purge ready queues, unblock
+    /// senders stuck on it, and defer `Wait`-er wakeup until the saved context
+    /// is no longer selected or executing on any hart.
     ///
     /// `exit_reason` is delivered to waiters as their `reply_value` — the exit
     /// code for a clean `Exit`, or `usize::MAX` for a fault / force-kill.
-    /// Centralizing the waiter-wake here is the contract that ALL death paths
-    /// (clean `Exit`, `ForceExit`, AND hardware faults) notify waiters uniformly;
-    /// the fault path previously skipped it, so `Wait(tid)` hung forever when the
-    /// target died by fault.
+    /// Centralizing terminal status here keeps all death paths (clean `Exit`,
+    /// `ForceExit`, and hardware faults) consistent; the reaper alone publishes
+    /// completion to waiters after the cross-hart quiescence proof.
     pub fn exit_task(&mut self, tid: usize, exit_reason: usize) {
         // A deferred fault can arrive from a Context whose root retirement
         // already marked it terminal. Its task record stays in `tasks` until
@@ -914,6 +1009,33 @@ impl Scheduler {
             .is_some_and(|task| task.state == TaskState::Retiring)
         {
             return;
+        }
+        if let Some(task) = self.tasks.get_mut(&tid) {
+            task.exit_code = Some(exit_reason);
+        }
+        // A task can die before consuming its staged or inherited argv. Both
+        // live on the task record, so release them here rather than waiting for
+        // the reaper: a zombie may sit unreaped while its command line occupies
+        // kernel memory.
+        if let Some(task) = self.tasks.get_mut(&tid) {
+            task.staged_argv = None;
+            task.inherited_argv = None;
+        }
+        // A dying waiter must not leave a queue entry behind: a later wake on the
+        // same key would otherwise spend a wake slot on a task that no longer waits.
+        super::futex::on_task_leaves_wait(tid);
+        // A dying pipe owner must not leave an endpoint behind either: closing its
+        // ends is what turns a faulted writer into an EOF for its readers.
+        let owned: alloc::vec::Vec<super::pipe::PipeHandle> = self
+            .tasks
+            .get(&tid)
+            .map(|task| task.pipe_handles.iter().copied().collect())
+            .unwrap_or_default();
+        if !owned.is_empty() {
+            super::pipe::on_task_leaves(tid, &owned);
+            if let Some(task) = self.tasks.get_mut(&tid) {
+                task.pipe_handles.clear();
+            }
         }
         #[cfg(all(feature = "test-hooks", target_arch = "aarch64"))]
         {
@@ -965,6 +1087,7 @@ impl Scheduler {
                 owner,
                 member_tids: members,
                 zombies: Vec::new(),
+                waiter_wakes: Vec::new(),
                 requested_switch_completion: [0; super::smp::MAX_HARTS],
             });
         }
@@ -1015,13 +1138,6 @@ impl Scheduler {
         if let Some(release) = timer_release {
             self.pending_completion_release.push(release);
         }
-
-        // Capture waiters BEFORE the task is removed from the table.
-        let waiters: Vec<usize> = self
-            .tasks
-            .get_mut(&tid)
-            .map(|t| core::mem::take(&mut t.waiters))
-            .unwrap_or_default();
 
         // Give the cell back the quota its thread stack was charged. Every death
         // path — clean Exit, ForceExit, hardware fault, CPU watchdog, heartbeat
@@ -1130,17 +1246,6 @@ impl Scheduler {
             self.push_ready(id);
         }
 
-        // Wake tasks blocked on Wait(tid).  Last use of `w` ends its borrow of
-        // self.tasks before push_ready re-borrows self (NLL) — mirrors the
-        // former in-handler pattern, now the single source of truth.
-        for wid in waiters {
-            if let Some(w) = self.tasks.get_mut(&wid) {
-                w.state = TaskState::Ready;
-                w.reply_value = Some(exit_reason);
-                self.push_ready(wid);
-            }
-        }
-
         // Deliver NotifyOnExit death notifications. The subscriber map, its
         // nested vectors, and pending-death storage are scheduler-owned. Their
         // complete allocate/drop lifetimes stay under kernel attribution even
@@ -1219,14 +1324,14 @@ impl Scheduler {
     /// This is what actually frees a dead cell's kernel + user stack frames (the
     /// largest per-cell allocation) — without it, zombies accumulate forever and
     /// `Stack::drop` never runs (every cell death leaked its stacks).
-    pub fn take_reapable_zombies(&mut self) -> Vec<Box<super::tcb::Task>> {
+    pub(crate) fn take_reapable_zombies(&mut self) -> Vec<ReapedTask> {
         if self.zombies.is_empty() {
             return Vec::new();
         }
 
         let mut keep = Vec::new();
         let mut reap = Vec::new();
-        for z in core::mem::take(&mut self.zombies) {
+        for mut z in core::mem::take(&mut self.zombies) {
             let retained_by_root_retirement = self
                 .pending_root_retirements
                 .iter()
@@ -1234,13 +1339,45 @@ impl Scheduler {
             if super::hart_local::ready::any_hart_running(z.id) || retained_by_root_retirement {
                 keep.push(z);
             } else {
-                reap.push(z);
+                let waiter_wakes = Self::take_waiters_after_quiescence(&mut z);
+                reap.push(ReapedTask {
+                    task: z,
+                    waiter_wakes,
+                });
             }
         }
         self.zombies = keep;
         reap
     }
 
+    /// Detach a quiescent task's waiters for publication after resource teardown.
+    fn take_waiters_after_quiescence(task: &mut super::tcb::Task) -> Vec<(usize, usize)> {
+        let exit_reason = task.exit_code.unwrap_or(0);
+        core::mem::take(&mut task.waiters)
+            .into_iter()
+            .map(|waiter_id| (waiter_id, exit_reason))
+            .collect()
+    }
+
+    /// Publish waits only after the target task's resources have been released.
+    pub(crate) fn release_waiters_after_resource_drop(
+        &mut self,
+        waiter_wakes: Vec<(usize, usize)>,
+    ) {
+        for (waiter_id, exit_reason) in waiter_wakes {
+            if self
+                .tasks
+                .get(&waiter_id)
+                .is_some_and(|waiter| matches!(waiter.state, TaskState::Waiting { .. }))
+            {
+                if let Some(waiter) = self.tasks.get_mut(&waiter_id) {
+                    waiter.state = TaskState::Ready;
+                    waiter.reply_value = Some(exit_reason);
+                }
+                self.push_ready(waiter_id);
+            }
+        }
+    }
     /// Take task IDs whose resources can be reaped outside SCHEDULER. A task
     /// remains pending until its outgoing saved context has stopped executing
     /// and every DMA publication reservation has committed or rolled back.
@@ -1313,13 +1450,19 @@ impl Scheduler {
                 // the owner slot can be released.
                 let mut retirement_zombies = Vec::new();
                 for member_tid in &retirement.member_tids {
-                    if let Some(task) = self.tasks.remove(member_tid) {
+                    if let Some(mut task) = self.tasks.remove(member_tid) {
+                        retirement
+                            .waiter_wakes
+                            .extend(Self::take_waiters_after_quiescence(&mut task));
                         retirement_zombies.push(*task);
                     }
                 }
                 let mut other_zombies = Vec::new();
-                for zombie in core::mem::take(&mut self.zombies) {
+                for mut zombie in core::mem::take(&mut self.zombies) {
                     if retirement.member_tids.contains(&zombie.id) {
+                        retirement
+                            .waiter_wakes
+                            .extend(Self::take_waiters_after_quiescence(&mut zombie));
                         retirement_zombies.push(*zombie);
                     } else {
                         other_zombies.push(zombie);
@@ -1414,6 +1557,36 @@ impl Scheduler {
                     } if now as u64 >= *d => {
                         should_wake = true;
                         timed_out = true;
+                    }
+                    // Pipe reader/writer whose deadline elapsed: drop the queue entry
+                    // and hand the task a 0-byte result so it re-checks.
+                    TaskState::PipeRead { handle, deadline }
+                        if deadline.map(|d| now as u64 >= d).unwrap_or(false) =>
+                    {
+                        super::pipe::on_deadline(*handle, *id, super::pipe::PipeEnd::Read);
+                        task.trap_frame.regs[10] = 0;
+                        should_wake = true;
+                    }
+                    TaskState::PipeWrite { handle, deadline }
+                        if deadline.map(|d| now as u64 >= d).unwrap_or(false) =>
+                    {
+                        super::pipe::on_deadline(*handle, *id, super::pipe::PipeEnd::Write);
+                        task.trap_frame.regs[10] = 0;
+                        should_wake = true;
+                    }
+                    // Futex waiter whose deadline elapsed: drop its queue entry and
+                    // hand it the timed-out outcome.
+                    //
+                    // `timed_out` stays false on purpose: the shared timeout block
+                    // below owns `regs[10]` for the Recv/WaitEvent convention
+                    // (Ok(0) on timeout) and would clobber the futex outcome. This
+                    // arm publishes its own result in `on_deadline`, so it only has
+                    // to request the wake.
+                    TaskState::FutexWait { key, deadline }
+                        if deadline.map(|d| now as u64 >= d).unwrap_or(false) =>
+                    {
+                        super::futex::on_deadline(task, *id, *key);
+                        should_wake = true;
                     }
                     TaskState::WaitEvent { mask, deadline } => {
                         let fired = super::waker::consume_pending(*mask);
@@ -1763,6 +1936,11 @@ impl Scheduler {
                 // we still hold a reference to the task (before releasing the lock).
                 #[cfg(target_arch = "x86_64")]
                 crate::hal::syscall::set_task_pku(next_task.pku_value);
+
+                // Publish the incoming task's user thread pointer for the resume
+                // path (`task::tls::apply_on_resume`). Same lock-held window as
+                // the other incoming-task state above.
+                super::hart_local::set_current_tls_base(next_task.tls_base);
             }
 
             // A controlled test reservation protects only the queued interval:
@@ -2043,6 +2221,7 @@ mod retirement_tests {
             owner,
             member_tids: members,
             zombies: Vec::new(),
+            waiter_wakes: Vec::new(),
             requested_switch_completion: [0; super::super::smp::MAX_HARTS],
         });
 

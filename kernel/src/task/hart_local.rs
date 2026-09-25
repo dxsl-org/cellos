@@ -133,6 +133,12 @@ pub struct ViHartLocal {
         target_arch = "x86_64"
     ))]
     pub user_copy_guard_end: AtomicUsize,
+    /// User thread pointer (TLS base) of the task selected for this hart. Written
+    /// by the scheduler under `SCHEDULER` alongside the other incoming-task state
+    /// and read by `task::tls::apply_on_resume` after the raw switch, so the resume
+    /// path needs no scheduler lock. Unused on riscv64, where the trap frame
+    /// carries the user `tp`.
+    pub current_tls_base: AtomicUsize,
 }
 
 /// Static array of per-hart local state, one entry per supported hart.
@@ -214,6 +220,7 @@ pub static HART_LOCALS: [ViHartLocal; MAX_HARTS] = {
             target_arch = "x86_64"
         ))]
         user_copy_guard_end: AtomicUsize::new(0),
+        current_tls_base: AtomicUsize::new(0),
     };
     [ZERO; MAX_HARTS]
 };
@@ -533,6 +540,20 @@ pub fn set_current_cell_context(id: usize, generation: u64) {
     hart.current_cell_generation
         .store(generation, Ordering::Relaxed);
     hart.current_cell_id.store(id, Ordering::Relaxed);
+}
+
+/// Publish the incoming task's user thread pointer for this hart. Called by the
+/// scheduler while it still holds `SCHEDULER`, so the resume path can install the
+/// register without taking a lock.
+pub fn set_current_tls_base(base: usize) {
+    let hart = unsafe { current_hart() };
+    hart.current_tls_base.store(base, Ordering::Relaxed);
+}
+
+/// The base published by [`set_current_tls_base`].
+pub fn current_tls_base() -> usize {
+    let hart = unsafe { current_hart() };
+    hart.current_tls_base.load(Ordering::Relaxed)
 }
 
 /// Publish the private root selected while the scheduler state was stable.

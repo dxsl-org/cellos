@@ -61,7 +61,7 @@ declare -A seen=()
 for case_id in "${REQUESTED_CASES[@]}"; do
     [[ -n "$case_id" ]] || { echo "FAIL: empty case in --case" >&2; exit 2; }
     case "$case_id" in
-        switch|resume-root|sas-fastpath|migration|user-copy|user-copy-race|ipc-copy|ipc-copy-race|admission|rollback|grant-revoke) ;;
+        switch|resume-root|sas-fastpath|migration|user-copy|user-copy-race|ipc-copy|ipc-copy-race|admission|admission-enabled|admission-publication|admission-ceiling|futex-key|rollback|grant-revoke) ;;
         *) echo "FAIL: unknown native-domain case: $case_id" >&2; exit 2 ;;
     esac
     [[ -z "${seen[$case_id]:-}" ]] || { echo "FAIL: duplicate native-domain case: $case_id" >&2; exit 2; }
@@ -100,6 +100,10 @@ marker_for() {
         ipc-copy) printf 'S22-RV64-IPC-COPY: PASS harts=%s' "$HARTS" ;;
         ipc-copy-race) printf 'S22-RV64-IPC-COPY-RACE: PASS harts=2' ;;
         admission) printf 'S22-RV64-ADMISSION-DENY: PASS' ;;
+        admission-enabled) printf 'S22-RV64-ADMISSION-ENABLED: PASS' ;;
+        admission-publication) printf 'S22-RV64-ADMISSION-PUBLICATION-DENY: PASS' ;;
+        admission-ceiling) printf 'S22-RV64-ADMISSION-CEILING: PASS' ;;
+        futex-key) printf 'S22-RV64-FUTEX-KEY: PASS' ;;
         rollback) printf 'S22-RV64-ADMISSION-DRAIN: PASS' ;;
         grant-revoke) printf 'S22-RV64-GRANT-REVOKE: PASS' ;;
     esac
@@ -115,6 +119,10 @@ terminal_pattern_for() {
         ipc-copy) printf '(^|\\] )S22-RV64-IPC-COPY: PASS harts=%s$' "$HARTS" ;;
         ipc-copy-race) printf '(^|\\] )S22-RV64-IPC-COPY-RACE: PASS harts=2$' ;;
         admission) printf '(^|\\] )S22-RV64-ADMISSION-DENY: PASS$' ;;
+        admission-enabled) printf '(^|\\] )S22-RV64-ADMISSION-ENABLED: PASS$' ;;
+        admission-publication) printf '(^|\\] )S22-RV64-ADMISSION-PUBLICATION-DENY: PASS$' ;;
+        admission-ceiling) printf '(^|\\] )S22-RV64-ADMISSION-CEILING: PASS$' ;;
+        futex-key) printf '(^|\\] )S22-RV64-FUTEX-KEY: PASS$' ;;
         rollback) printf '(^|\\] )S22-RV64-ADMISSION-DRAIN: PASS$' ;;
         grant-revoke) printf '(^|\\] )S22-RV64-GRANT-REVOKE: PASS$' ;;
     esac

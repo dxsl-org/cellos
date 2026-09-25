@@ -12,6 +12,13 @@ const ASID_MASK: usize = 0xffff;
 static NEXT_DOMAIN: AtomicU64 = AtomicU64::new(1);
 static NEXT_ASID: AtomicUsize = AtomicUsize::new(1);
 static ASID_EPOCH: AtomicU64 = AtomicU64::new(0);
+
+/// Test-hooks view of how many domain identities have been issued. The admission
+/// selftest uses it to prove a refused launch creates no domain at all.
+#[cfg(feature = "test-hooks")]
+pub(crate) fn domain_identity_counter() -> u64 {
+    NEXT_DOMAIN.load(Ordering::Relaxed)
+}
 #[cfg(feature = "test-hooks")]
 static FAIL_ALLOCATION_AFTER: AtomicUsize = AtomicUsize::new(usize::MAX);
 #[cfg(feature = "test-hooks")]
@@ -467,6 +474,159 @@ impl AddressSpace {
         frames.push(page);
         Ok(())
     }
+
+    /// Map a newly allocated task's existing stack frames into this live domain
+    /// before that task becomes runnable. Kernel stacks remain supervisor-only;
+    /// user stacks receive the normal private writable user mapping.
+    pub(crate) fn map_existing_task_stacks(
+        &self,
+        kernel_stack: &crate::task::stack::Stack,
+        user_stack: &crate::task::stack::Stack,
+    ) -> Result<(), AddressSpaceError> {
+        if self.state.load(Ordering::Acquire) != AddressSpaceState::Live as u8 {
+            return Err(AddressSpaceError::Dying);
+        }
+
+        let supervisor_flags = Flags::from_bits(
+            Flags::VALID | Flags::READ | Flags::WRITE | Flags::ACCESSED | Flags::DIRTY,
+        );
+        let user_stack_flags = Flags::from_bits(
+            Flags::VALID | Flags::READ | Flags::WRITE | Flags::ACCESSED | Flags::DIRTY,
+        );
+        let mut mapped = Vec::new();
+        mapped
+            .try_reserve_exact(kernel_stack.pages + user_stack.pages)
+            .map_err(|_| AddressSpaceError::OutOfMemory)?;
+
+        let mut ledger = self.ledger.lock();
+        if self.state.load(Ordering::Acquire) != AddressSpaceState::Live as u8 {
+            return Err(AddressSpaceError::Dying);
+        }
+        if (user_stack.usable_start()..user_stack.top)
+            .step_by(PAGE_SIZE)
+            .any(|address| ledger.iter().any(|entry| entry.virtual_address == address))
+        {
+            return Err(AddressSpaceError::InvalidMapping);
+        }
+
+        let mut table_frames = self.table_frames.lock();
+        let mut pruned_table_frames = Vec::new();
+        let result = (|| {
+            for address in (kernel_stack.usable_start()..kernel_stack.top).step_by(PAGE_SIZE) {
+                let physical_address = crate::memory::paging::virt_to_phys(address)
+                    .ok_or(AddressSpaceError::InvalidMapping)?;
+                map_page_retaining_pruned_tables(
+                    self.root.physical_address(),
+                    &mut table_frames,
+                    &mut pruned_table_frames,
+                    address,
+                    physical_address,
+                    supervisor_flags,
+                )?;
+                mapped.push(address);
+            }
+            for address in (user_stack.usable_start()..user_stack.top).step_by(PAGE_SIZE) {
+                let physical_address = crate::memory::paging::virt_to_phys(address)
+                    .ok_or(AddressSpaceError::InvalidMapping)?;
+                map_page_retaining_pruned_tables(
+                    self.root.physical_address(),
+                    &mut table_frames,
+                    &mut pruned_table_frames,
+                    address,
+                    physical_address,
+                    user_flags(user_stack_flags),
+                )?;
+                ledger.push(MappingEntry {
+                    virtual_address: address,
+                    physical_address,
+                    kind: MappingKind::Private,
+                    flags: user_flags(user_stack_flags),
+                });
+                mapped.push(address);
+            }
+            Ok(())
+        })();
+        if result.is_err() {
+            for address in mapped.into_iter().rev() {
+                unmap_existing_page(
+                    self.root.physical_address(),
+                    &mut table_frames,
+                    &mut pruned_table_frames,
+                    address,
+                );
+            }
+            ledger.retain(|entry| {
+                entry.virtual_address < user_stack.usable_start()
+                    || entry.virtual_address >= user_stack.top
+            });
+            // This address space can already be active on sibling threads.
+            // Invalidate both reserved stack ranges before freeing any table or
+            // backing frame from a partially published map operation.
+            crate::memory::tlb_shootdown::flush_range(
+                kernel_stack.usable_start(),
+                kernel_stack.top - kernel_stack.usable_start(),
+            );
+            crate::memory::tlb_shootdown::flush_range(
+                user_stack.usable_start(),
+                user_stack.top - user_stack.usable_start(),
+            );
+        }
+        drop(pruned_table_frames);
+        result
+    }
+
+    /// Remove a reaped worker's stack mappings before its frames return to the
+    /// global allocator.
+    ///
+    /// Close new user-copy proofs for a reaped worker's stack mappings, drain
+    /// proofs already in flight, then remove the PTEs before the frames return
+    /// to the global allocator.
+    pub(crate) fn unmap_existing_task_stacks(
+        &self,
+        kernel_stack: &crate::task::stack::Stack,
+        user_stack: &crate::task::stack::Stack,
+    ) {
+        // User-copy takes its mapping proof from this ledger while holding a
+        // CopyReader. Removing the entries first prevents a reader admitted
+        // after this point from reaching the PTE; a reader that already proved
+        // one keeps its lease and must drain before unmapping can begin.
+        self.ledger.lock().retain(|entry| {
+            entry.virtual_address < user_stack.usable_start()
+                || entry.virtual_address >= user_stack.top
+        });
+        while self.copy_readers.load(Ordering::Acquire) > 0 {
+            core::hint::spin_loop();
+        }
+
+        let mut table_frames = self.table_frames.lock();
+        let mut pruned_table_frames = Vec::new();
+        for address in (kernel_stack.usable_start()..kernel_stack.top).step_by(PAGE_SIZE) {
+            unmap_existing_page(
+                self.root.physical_address(),
+                &mut table_frames,
+                &mut pruned_table_frames,
+                address,
+            );
+        }
+        crate::memory::tlb_shootdown::flush_range(
+            kernel_stack.usable_start(),
+            kernel_stack.top - kernel_stack.usable_start(),
+        );
+        for address in (user_stack.usable_start()..user_stack.top).step_by(PAGE_SIZE) {
+            unmap_existing_page(
+                self.root.physical_address(),
+                &mut table_frames,
+                &mut pruned_table_frames,
+                address,
+            );
+        }
+        crate::memory::tlb_shootdown::flush_range(
+            user_stack.usable_start(),
+            user_stack.top - user_stack.usable_start(),
+        );
+        drop(pruned_table_frames);
+    }
+
     pub fn unmap_private_page(&self, virtual_address: VAddr) -> Result<(), AddressSpaceError> {
         let entry = {
             let mut ledger = self.ledger.lock();
@@ -751,6 +911,42 @@ fn map_page(
     physical_address: PhysAddr,
     flags: Flags,
 ) -> Result<(), AddressSpaceError> {
+    map_page_inner(
+        root,
+        table_frames,
+        None,
+        virtual_address,
+        physical_address,
+        flags,
+    )
+}
+
+fn map_page_retaining_pruned_tables(
+    root: PhysAddr,
+    table_frames: &mut Vec<OwnedFrame>,
+    pruned_table_frames: &mut Vec<OwnedFrame>,
+    virtual_address: VAddr,
+    physical_address: PhysAddr,
+    flags: Flags,
+) -> Result<(), AddressSpaceError> {
+    map_page_inner(
+        root,
+        table_frames,
+        Some(pruned_table_frames),
+        virtual_address,
+        physical_address,
+        flags,
+    )
+}
+
+fn map_page_inner(
+    root: PhysAddr,
+    table_frames: &mut Vec<OwnedFrame>,
+    mut pruned_table_frames: Option<&mut Vec<OwnedFrame>>,
+    virtual_address: VAddr,
+    physical_address: PhysAddr,
+    flags: Flags,
+) -> Result<(), AddressSpaceError> {
     #[cfg(feature = "test-hooks")]
     if FAIL_NEXT_MAP.swap(0, Ordering::AcqRel) != 0 {
         return Err(AddressSpaceError::OutOfMemory);
@@ -777,12 +973,35 @@ fn map_page(
                 .iter()
                 .position(|frame| frame.physical_address() == physical_address)
             {
-                table_frames.remove(index);
+                let frame = table_frames.remove(index);
+                if let Some(pruned) = pruned_table_frames.as_deref_mut() {
+                    pruned.push(frame);
+                }
             }
         });
         return Err(AddressSpaceError::OutOfMemory);
     }
     Ok(())
+}
+
+fn unmap_existing_page(
+    root: PhysAddr,
+    table_frames: &mut Vec<OwnedFrame>,
+    pruned_table_frames: &mut Vec<OwnedFrame>,
+    virtual_address: VAddr,
+) {
+    // SAFETY: this address space owns its private root and the caller retains
+    // pruned page-table frames until its translation teardown is complete.
+    let table = unsafe { &mut *(phys_to_virt(root) as *mut hal::PageTable) };
+    let _ = table.unmap(virtual_address);
+    table.prune_empty(virtual_address, &mut |physical_address| {
+        if let Some(index) = table_frames
+            .iter()
+            .position(|frame| frame.physical_address() == physical_address)
+        {
+            pruned_table_frames.push(table_frames.remove(index));
+        }
+    });
 }
 
 #[cfg(feature = "test-hooks")]

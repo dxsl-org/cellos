@@ -60,8 +60,11 @@ pub fn authorize(
         "init" if caller.has_spawn => profiles::init_profile(route, target),
         "shell" => profiles::shell_profile(route, target),
         "desktop" => profiles::desktop_profile(route, target),
+        "pipe-test" => profiles::pipe_test_profile(route, target),
+        "c-spawn" => profiles::c_spawn_profile(route, target),
         "hypha" if caller.has_spawn => profiles::hypha_profile(route, target),
         "tool-spawn" if caller.has_spawn => profiles::tool_spawn_profile(route, target),
+        "dwc2-usb" if caller.has_spawn => profiles::dwc2_function_worker_profile(route, target),
         "supervisor" if caller.has_spawn && caller.has_supervisor => {
             profiles::supervisor_profile(route, target)
         }
@@ -85,4 +88,3 @@ pub fn authorize(
 
     Some(profile)
 }
-        "dwc2-usb" if caller.has_spawn => profiles::dwc2_function_worker_profile(route, target),

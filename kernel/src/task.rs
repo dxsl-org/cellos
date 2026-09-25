@@ -29,16 +29,22 @@ pub(crate) mod domain_switch_tests;
 mod elf_prepare;
 #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
 pub mod fstat_selftest;
+/// Futex wait queues — wait-on-address for cell threads (ADR-0018 §2.1).
+pub(crate) mod futex;
 pub mod hart_local;
 pub mod manifest_v2_selftest;
 pub mod net_rx_selftest;
 pub mod p_trust_selftest;
+/// Kernel-owned pipes — one-way byte streams between tasks (ADR-0018 §2.1).
+pub(crate) mod pipe;
 pub mod smp;
 pub mod syscall;
 pub mod tcb;
 pub mod thread_cap_selftest;
 pub mod thread_quota_selftest;
 pub mod thread_user_entry_selftest;
+/// Per-task user thread pointer (TLS base) — ADR-0018 §2.1 primitive.
+pub(crate) mod tls;
 #[cfg(all(feature = "x86-idt-cpl3-test", target_arch = "x86_64"))]
 mod x86_idt_cpl3;
 pub use elf_prepare::{prepare_elf_task, PreparedElfTask};
@@ -1078,7 +1084,14 @@ pub fn yield_cpu() {
             alloc::vec::Vec::new()
         }
     };
-    drop(reaped);
+    let mut waiter_wakes = alloc::vec::Vec::new();
+    for reaped_task in reaped {
+        drop(reaped_task.task);
+        waiter_wakes.extend(reaped_task.waiter_wakes);
+    }
+    if let Some(sched) = SCHEDULER.lock().as_mut() {
+        sched.release_waiters_after_resource_drop(waiter_wakes);
+    }
 
     // A task can die while its TIMER completion is parked. The queue is shared
     // by every thread in the cell, so task teardown alone does not free that
@@ -1118,7 +1131,7 @@ pub fn yield_cpu() {
             alloc::vec::Vec::new()
         }
     };
-    for retirement in root_retirements {
+    for mut retirement in root_retirements {
         for tid in retirement.member_tids.iter().copied() {
             reap_retired_task_resources(tid);
             crate::task::syscall::release_vfs_holder_leases(tid);
@@ -1126,7 +1139,11 @@ pub fn yield_cpu() {
         // `take_quiescent_root_retirements` removed these exact zombies while
         // holding SCHEDULER after all remote switch proofs completed. Drop their
         // stacks before exposing the CellId or quota to a new generation.
+        let waiter_wakes = core::mem::take(&mut retirement.waiter_wakes);
         drop(retirement.zombies);
+        if let Some(sched) = SCHEDULER.lock().as_mut() {
+            sched.release_waiters_after_resource_drop(waiter_wakes);
+        }
         crate::cell::cap_registry::CAP_TABLE
             .lock()
             .revoke_all_for(types::CellId(retirement.owner.cell_id));
@@ -1316,6 +1333,8 @@ pub fn yield_cpu() {
                 crate::hal::arch::set_kernel_stack((&*plan.incoming).sp as usize);
                 #[cfg(target_arch = "x86_64")]
                 crate::hal::arch::set_kernel_stack((&*plan.incoming).kernel_trap_sp as usize);
+                #[cfg(not(target_arch = "riscv64"))]
+                tls::install_published_base();
             }
             #[cfg(target_arch = "riscv64")]
             {
@@ -1400,6 +1419,8 @@ pub fn yield_cpu() {
                 crate::hal::arch::set_kernel_stack(next_ref.sp as usize);
                 #[cfg(target_arch = "x86_64")]
                 crate::hal::arch::set_kernel_stack(next_ref.kernel_trap_sp as usize);
+                #[cfg(not(target_arch = "riscv64"))]
+                tls::install_published_base();
             }
             #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
             retirement_selftest::hold_after_selection_before_switch(hart_id);
@@ -1422,6 +1443,32 @@ pub fn yield_cpu() {
             #[cfg(target_arch = "x86_64")]
             core::arch::asm!("sti", options(nomem, nostack));
         }
+    }
+
+    // The incoming task is now the running one. Install its user thread pointer
+    // (aarch64/x86_64; riscv64 carries it in the trap frame) from the hart-local
+    // value the scheduler published, so this stays lock-free.
+    tls::apply_on_resume();
+}
+
+/// Wake a parked task with a syscall result, if it is still parked.
+///
+/// Used by kernel objects that complete a peer's blocking call (a pipe write
+/// handing bytes to a parked reader, a writer seeing EOF). Takes `SCHEDULER`, so
+/// callers must release any object lock first: the lock order is
+/// `SCHEDULER → object`, never the reverse.
+pub(crate) fn wake_task(tid: usize, result: usize) {
+    let mut scheduler = SCHEDULER.lock();
+    let Some(sched) = scheduler.as_mut() else {
+        return;
+    };
+    if let Some(task) = sched.tasks.get_mut(&tid) {
+        if matches!(task.state, TaskState::Ready) {
+            return;
+        }
+        task.state = TaskState::Ready;
+        task.trap_frame.regs[10] = result as _;
+        sched.push_ready(tid);
     }
 }
 
@@ -1494,14 +1541,13 @@ pub fn spawn_with_stacks(
 }
 
 pub fn spawn_with_arg(
+    caller_id: usize,
     name: &str,
-    cell_id: CellId,
-    allowed_drivers: alloc::vec::Vec<usize>,
     entry: VAddr,
     arg: usize,
 ) -> Result<usize, ViError> {
     match SCHEDULER.lock().as_mut() {
-        Some(sched) => sched.spawn_thread(name, cell_id, allowed_drivers, entry, arg),
+        Some(sched) => sched.spawn_thread(caller_id, name, entry, arg),
         None => Err(ViError::Unknown),
     }
 }
@@ -2471,55 +2517,6 @@ pub fn scheduler_stats() -> (usize, usize) {
         0
     };
     (task_count, hart_local::ready::total_ready_count())
-}
-
-pub fn futex_wait(caller_id: usize, addr: VAddr, val: u32) -> core::result::Result<usize, ()> {
-    // Check condition
-    unsafe {
-        let current_val = *(addr as *const u32);
-        if current_val != val {
-            return Err(()); // EAGAIN
-        }
-    }
-
-    if let Some(sched) = SCHEDULER.lock().as_mut() {
-        if let Some(task) = sched.tasks.get_mut(&caller_id) {
-            task.state = TaskState::FutexWait { addr };
-            return Ok(0);
-        }
-    }
-    Err(())
-}
-
-pub fn futex_wake(_caller_id: usize, addr: VAddr, count: usize) -> core::result::Result<usize, ()> {
-    let mut woken = 0;
-    if let Some(sched) = SCHEDULER.lock().as_mut() {
-        let mut to_wake = alloc::vec::Vec::new();
-
-        // Scan for waiting tasks
-        for (tid, task) in sched.tasks.iter() {
-            // Skip self? Futex wake usually doesn't wake self (self is running).
-            if let TaskState::FutexWait { addr: wa_addr } = task.state {
-                if wa_addr == addr {
-                    to_wake.push(*tid);
-                    if to_wake.len() >= count {
-                        break;
-                    }
-                }
-            }
-        }
-
-        woken = to_wake.len();
-
-        // Wake them up
-        for tid in to_wake {
-            if let Some(task) = sched.tasks.get_mut(&tid) {
-                task.state = TaskState::Ready;
-                sched.push_ready(tid);
-            }
-        }
-    }
-    Ok(woken)
 }
 
 /// 8 KB circular ring buffer for `ReadLog = 237` syscall.

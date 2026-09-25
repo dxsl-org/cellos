@@ -21,25 +21,74 @@ pub const MAX_STASH_LEN: usize = 1024 * 1024;
 /// cannot exhaust the heap by stashing under unboundedly many keys.
 pub const MAX_ENTRIES: usize = 64;
 
-/// key → serialized state bytes. Keys are cell-chosen (typically a stable
+/// Key → serialized state bytes. Keys are cell-chosen (typically a stable
 /// FNV hash of the cell name), so a replacement instance reads the same slot.
 static STASH: Spinlock<BTreeMap<u64, Vec<u8>>> = Spinlock::new(BTreeMap::new());
 
-const SPAWN_ARGV_KEY: u64 = 0x0061_7267_7600_0000;
+/// Upper bound for a command line carried by one launch transaction.
+pub(crate) const MAX_SPAWN_ARGV_LEN: usize = 512;
 
-pub(crate) fn spawn_argv_key(task_id: usize) -> u64 {
-    SPAWN_ARGV_KEY ^ ((task_id as u64) << 32)
+/// Stage `bytes` as the command line for this task's next launch.
+///
+/// The value lives on the task itself rather than in a keyed table: a staged
+/// command line is one task's own state, so no other task's syscall — and no
+/// cleanup for another task's failed launch — can address it. Returns the
+/// number of bytes stored, or 0 when the payload exceeds the bound or the task
+/// has no live record.
+pub(crate) fn stage_spawn_argv(task_id: usize, bytes: &[u8]) -> usize {
+    if bytes.len() > MAX_SPAWN_ARGV_LEN {
+        return 0;
+    }
+    let mut guard = crate::task::SCHEDULER.lock();
+    let Some(sched) = guard.as_mut() else {
+        return 0;
+    };
+    let Some(task) = sched.tasks.get_mut(&task_id) else {
+        return 0;
+    };
+    task.staged_argv = Some(bytes.to_vec());
+    bytes.len()
 }
 
-/// Consume argv at the syscall boundary so a failed attempt cannot leak it to a
-/// later child. The returned allocation is owned by the unpublished launch.
+/// Consume the command line this task staged, at the launch boundary, so a
+/// failed attempt cannot leak it to a later child. The returned allocation is
+/// owned by the unpublished launch.
 pub(crate) fn take_spawn_argv(task_id: usize) -> Option<Vec<u8>> {
-    STASH.lock().remove(&spawn_argv_key(task_id))
+    take_task_argv(task_id, |task| &mut task.staged_argv)
 }
 
-/// Install already-owned argv before the child reaches a ready queue.
-pub(crate) fn install_spawn_argv(task_id: usize, argv: Vec<u8>) {
-    STASH.lock().insert(spawn_argv_key(task_id), argv);
+/// Consume the command line this task's spawner handed it before it became
+/// runnable. One-shot: the child reads it at most once.
+pub(crate) fn take_inherited_argv(task_id: usize) -> Option<Vec<u8>> {
+    take_task_argv(task_id, |task| &mut task.inherited_argv)
+}
+
+fn take_task_argv(
+    task_id: usize,
+    select: impl FnOnce(&mut crate::task::tcb::Task) -> &mut Option<Vec<u8>>,
+) -> Option<Vec<u8>> {
+    crate::task::SCHEDULER
+        .lock()
+        .as_mut()
+        .and_then(|sched| sched.tasks.get_mut(&task_id))
+        .and_then(|task| select(task).take())
+}
+
+/// Discard a task's staged, not-yet-launched command line.
+///
+/// Used after a rejected launch attempt so no command line can survive to a
+/// later child. An *inherited* command line is never touched here: it belongs to
+/// the receiving task until that task reads it or dies.
+///
+/// Lock contract: every caller of `handle_syscall` drops its own lock guards
+/// before the staged-argv cleanup runs, because a guard created inside the
+/// dispatch is dropped before the cleanup that was created ahead of the match.
+pub(crate) fn discard_spawn_argv(task_id: usize) {
+    if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {
+        if let Some(task) = sched.tasks.get_mut(&task_id) {
+            task.staged_argv = None;
+        }
+    }
 }
 
 /// Store `bytes` under `key`, replacing any previous value. Returns the number
@@ -124,7 +173,19 @@ mod tests {
     #[test]
     fn restore_missing_key_returns_zero() {
         let mut out = [0u8; 8];
+
         assert_eq!(restore(0xDEAD_0000_0000_0001, &mut out), 0);
+    }
+    #[test]
+    fn spawn_argv_is_private_and_one_shot() {
+        const TID: usize = 0x1234;
+        const FORMER_DERIVED_KEY: u64 = 0x0061_7267_7600_0000 ^ ((TID as u64) << 32);
+
+        assert_eq!(stage_spawn_argv(TID, b"argv"), 0);
+
+        let mut ambient = [0u8; 4];
+        assert_eq!(restore(FORMER_DERIVED_KEY, &mut ambient), 0);
+        assert_eq!(take_spawn_argv(TID), None);
     }
 
     #[test]

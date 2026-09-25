@@ -1002,6 +1002,37 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             memory::domain_supervisor_registry::SupervisorRangeOwner::SharedKernel,
         );
     }
+    // Tier 2 admission posture (ADR-0019 §2.3). The build feature selects the
+    // backend; this call is the enablement decision, and it is made explicitly
+    // per profile. A development build runs unsigned and FFI/UNTRUSTED cells in
+    // private domains; a fleet-secure profile leaves admission disabled, so a
+    // domain-class artifact is denied rather than silently admitted anywhere.
+    #[cfg(all(
+        feature = "native-domains",
+        any(
+            target_arch = "riscv64",
+            target_arch = "aarch64",
+            target_arch = "x86_64"
+        ),
+        not(any(feature = "policy-required", feature = "production-relay-image"))
+    ))]
+    {
+        if crate::loader::domain_admission::enable_for_boot() {
+            log_info("Tier 2 admission: ENABLED (development profile)");
+        }
+    }
+    #[cfg(all(
+        feature = "native-domains",
+        any(
+            target_arch = "riscv64",
+            target_arch = "aarch64",
+            target_arch = "x86_64"
+        ),
+        any(feature = "policy-required", feature = "production-relay-image")
+    ))]
+    {
+        log_info("Tier 2 admission: DISABLED (fleet profile) — domain-class artifacts are denied");
+    }
     #[cfg(all(
         target_arch = "riscv64",
         feature = "native-domains",
@@ -1027,6 +1058,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         task::user_copy_tests::run_primary();
         task::ipc_wire_selftest::run_primary(task::smp::online_hart_count());
         crate::loader::domain_admission::run_selftest();
+        task::futex::run_selftest();
         task::domain_grant::run_selftest();
     }
 

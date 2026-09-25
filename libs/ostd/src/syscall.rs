@@ -41,6 +41,8 @@ pub enum SyscallError {
 
 const SYSCALL_OOM: isize = -2;
 const SYSCALL_DENIED: isize = -1;
+/// `error_sentinel - 2`: a stream write with no reader end left.
+const SYSCALL_BROKEN_PIPE: isize = -3;
 
 fn decode_spawn_result(ret: isize) -> SyscallResult {
     if ret > 0 {
@@ -280,6 +282,188 @@ pub fn sys_exec(path: &str) -> SyscallResult {
         let ret = syscall(ViSyscall::Exec, path.as_ptr() as usize, path.len(), 0, 0);
         if ret != -1 {
             SyscallResult::Ok(ret as usize)
+        } else {
+            SyscallResult::Err(SyscallError::Unknown)
+        }
+    }
+}
+
+/// Outcome of a futex wait.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum FutexWaitOutcome {
+    /// Another task woke this wait.
+    Woken,
+    /// The word did not hold the expected value, so the caller never parked (or
+    /// was woken without the value changing). Callers loop and re-check.
+    ValueMismatch,
+    /// The deadline elapsed before any wake.
+    TimedOut,
+}
+
+/// Park the calling task until another task wakes the same word, the word no
+/// longer holds `expected`, or `timeout_ticks` (10 ms ticks) elapse. A zero
+/// timeout blocks indefinitely.
+///
+/// Waiters are matched by `(address space, generation, address)`: two Tier 2
+/// domains that use the same virtual address never wake each other.
+pub fn sys_futex_wait(
+    addr: usize,
+    expected: u32,
+    timeout_ticks: u64,
+) -> Result<FutexWaitOutcome, SyscallError> {
+    unsafe {
+        let ret = syscall(
+            ViSyscall::FutexWait,
+            addr,
+            expected as usize,
+            timeout_ticks as usize,
+            0,
+        );
+        match ret {
+            0 => Ok(FutexWaitOutcome::Woken),
+            1 => Ok(FutexWaitOutcome::ValueMismatch),
+            2 => Ok(FutexWaitOutcome::TimedOut),
+            SYSCALL_DENIED => Err(SyscallError::PermissionDenied),
+            _ => Err(SyscallError::Unknown),
+        }
+    }
+}
+
+/// Wake up to `count` waiters on the calling task's key (`count == 0` wakes every
+/// waiter). Returns how many were woken.
+pub fn sys_futex_wake(addr: usize, count: usize) -> Result<usize, SyscallError> {
+    unsafe {
+        let ret = syscall(ViSyscall::FutexWake, addr, count, 0, 0);
+        if ret >= 0 {
+            Ok(ret as usize)
+        } else if ret == SYSCALL_DENIED {
+            Err(SyscallError::PermissionDenied)
+        } else {
+            Err(SyscallError::Unknown)
+        }
+    }
+}
+
+/// A pipe endpoint handle as the ABI carries it (pipe identity + end kind).
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct PipeHandle(pub usize);
+
+/// Why a pipe call failed.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum PipeError {
+    /// The other end is gone: a write with no reader left.
+    BrokenPipe,
+    /// The handle is not this task's, or it names a pipe that no longer exists.
+    NotOwned,
+    /// Anything else.
+    Other,
+}
+
+/// Create a pipe. Returns `(read_handle, write_handle)`; `capacity == 0` asks for
+/// the default (4 KiB), and the kernel clamps to `[64, 65536]`.
+pub fn sys_pipe_create(capacity: usize) -> Result<(PipeHandle, PipeHandle), SyscallError> {
+    let mut out = [0usize; 2];
+    unsafe {
+        let ret = syscall(
+            ViSyscall::PipeCreate,
+            capacity,
+            out.as_mut_ptr() as usize,
+            0,
+            0,
+        );
+        if ret == 0 {
+            Ok((PipeHandle(out[0]), PipeHandle(out[1])))
+        } else if ret == SYSCALL_DENIED {
+            Err(SyscallError::PermissionDenied)
+        } else {
+            Err(SyscallError::Unknown)
+        }
+    }
+}
+
+/// Read up to `buf.len()` bytes. Returns 0 at EOF or when the deadline expires;
+/// the caller distinguishes the two by its own deadline bookkeeping.
+pub fn sys_pipe_read(
+    handle: PipeHandle,
+    buf: &mut [u8],
+    timeout_ticks: u64,
+) -> Result<usize, PipeError> {
+    unsafe {
+        let ret = syscall(
+            ViSyscall::PipeRead,
+            handle.0,
+            buf.as_mut_ptr() as usize,
+            buf.len(),
+            timeout_ticks as usize,
+        );
+        decode_pipe_count(ret)
+    }
+}
+
+/// Write up to `buf.len()` bytes. A zero-length slice closes the writer end.
+pub fn sys_pipe_write(
+    handle: PipeHandle,
+    buf: &[u8],
+    timeout_ticks: u64,
+) -> Result<usize, PipeError> {
+    unsafe {
+        let ret = syscall(
+            ViSyscall::PipeWrite,
+            handle.0,
+            buf.as_ptr() as usize,
+            buf.len(),
+            timeout_ticks as usize,
+        );
+        decode_pipe_count(ret)
+    }
+}
+
+fn decode_pipe_count(ret: isize) -> Result<usize, PipeError> {
+    match ret {
+        value if value >= 0 => Ok(value as usize),
+        SYSCALL_BROKEN_PIPE => Err(PipeError::BrokenPipe),
+        SYSCALL_DENIED => Err(PipeError::NotOwned),
+        _ => Err(PipeError::Other),
+    }
+}
+
+/// Close one endpoint this task owns.
+pub fn sys_pipe_close(handle: PipeHandle) -> Result<(), SyscallError> {
+    unsafe {
+        let ret = syscall(ViSyscall::PipeClose, handle.0, 0, 0, 0);
+        if ret == 0 {
+            Ok(())
+        } else {
+            Err(SyscallError::PermissionDenied)
+        }
+    }
+}
+
+/// Duplicate an endpoint into another task's table. Owner-only.
+pub fn sys_pipe_share(handle: PipeHandle, target_tid: usize) -> Result<(), SyscallError> {
+    unsafe {
+        let ret = syscall(ViSyscall::PipeShare, handle.0, target_tid, 0, 0);
+        if ret == 0 {
+            Ok(())
+        } else {
+            Err(SyscallError::PermissionDenied)
+        }
+    }
+}
+
+/// Set this task's user thread pointer (TLS base). Returns the previous base, or
+/// `Err` when the kernel refused (the call is self-only and carries no authority,
+/// so a refusal means the caller has no live task record).
+///
+/// The kernel owns the register: this syscall — not a direct register write — is
+/// how a cell sets its base, because the value is reinstalled on every resume.
+pub fn sys_set_tls_base(base: usize) -> SyscallResult {
+    unsafe {
+        let ret = syscall(ViSyscall::SetTlsBase, base, 0, 0, 0);
+        if ret >= 0 {
+            SyscallResult::Ok(ret as usize)
+        } else if ret == SYSCALL_DENIED {
+            SyscallResult::Err(SyscallError::PermissionDenied)
         } else {
             SyscallResult::Err(SyscallError::Unknown)
         }

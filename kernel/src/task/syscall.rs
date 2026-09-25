@@ -785,6 +785,8 @@ pub type SyscallResult = core::result::Result<usize, SyscallError>;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum SyscallError {
+    /// The other end of a stream is gone: a pipe write with no reader left.
+    BrokenPipe,
     InvalidDriverId,
     InvalidCommand,
     BufferTooSmall,
@@ -806,6 +808,9 @@ fn encode_syscall_result(
     match result {
         Ok(value) => value,
         Err(SyscallError::OutOfMemory) if supports_typed_oom => error_sentinel - 1,
+        // A broken pipe is a distinct, actionable condition for a stream write, so
+        // it gets its own sentinel rather than collapsing into the generic error.
+        Err(SyscallError::BrokenPipe) => error_sentinel - 2,
         Err(_) => error_sentinel,
     }
 }
@@ -910,10 +915,32 @@ fn caller_has_spawn(caller_id: usize) -> bool {
 }
 
 const SPAWN_ARGV_KEY: u64 = 0x0061_7267_7600_0000;
-const SPAWN_ARGV_MAX: usize = 512;
 
-fn spawn_argv_slot(task_id: usize) -> u64 {
-    crate::cell::state_stash::spawn_argv_key(task_id)
+fn consumes_staged_spawn_argv(syscall: &Syscall) -> bool {
+    matches!(
+        syscall,
+        Syscall::SpawnFromPath { .. }
+            | Syscall::SpawnFromElf { .. }
+            | Syscall::SpawnPinned { .. }
+            | Syscall::SpawnFromMem { .. }
+    )
+}
+
+/// Clears the caller's own *staged* command line after every external-launch
+/// attempt, including preflight and allowlist failures before
+/// `governed_spawn_request` can consume it.
+///
+/// It clears only what this task staged for this attempt. A command line the
+/// loader handed to a child lives on that child's task record, so no other
+/// task's failed attempt can reach it.
+struct StagedSpawnArgvCleanup {
+    caller_id: usize,
+}
+
+impl Drop for StagedSpawnArgvCleanup {
+    fn drop(&mut self) {
+        crate::cell::state_stash::discard_spawn_argv(self.caller_id);
+    }
 }
 
 fn governed_spawn_request(
@@ -1095,6 +1122,22 @@ pub(super) fn validate_user_buf(ptr: usize, len: usize, max: usize) -> Result<()
 /// is rejected so an unavailable task record cannot become SAS authority.
 fn caller_copy_view(caller_id: usize) -> Result<TaskCopyView, SyscallError> {
     TaskCopyView::for_task(caller_id).ok_or(SyscallError::InvalidInput)
+}
+
+/// Does this task hold the pipe endpoint? Takes `SCHEDULER`, so it must not be
+/// called while that lock is held.
+fn caller_owns_pipe(caller_id: usize, handle: super::pipe::PipeHandle) -> bool {
+    super::SCHEDULER
+        .lock()
+        .as_ref()
+        .and_then(|sched| sched.tasks.get(&caller_id))
+        .is_some_and(|task| task.pipe_handles.contains(&handle))
+}
+
+/// Copy view for a caller, for kernel-internal users outside this module (the
+/// futex word read). Same validation as every other user-pointer access.
+pub(crate) fn caller_copy_view_for(caller_id: usize) -> Result<TaskCopyView, SyscallError> {
+    caller_copy_view(caller_id)
 }
 /// Return the live Cell-generation binding for a task.
 ///
@@ -2135,9 +2178,14 @@ pub enum Syscall {
     },
     /// 8: Spawn (Create new Task/Thread) - Returns Task ID
     Spawn { entry: usize, arg: usize },
-    /// 9: FutexWait (Wait for value at address)
-    FutexWait { addr: usize, val: u32 },
-    /// 10: FutexWake (Wake up waiting tasks)
+    /// ViSyscall 17: FutexWait — park until woken, the word changes, or the
+    /// deadline elapses. `timeout_ticks == 0` blocks indefinitely.
+    FutexWait {
+        addr: usize,
+        expected: u32,
+        timeout_ticks: u64,
+    },
+    /// ViSyscall 18: FutexWake — wake up to `count` waiters on the caller's key.
     FutexWake { addr: usize, count: usize },
     /// 11: Log (Debug Print)
     Log { msg_ptr: usize, msg_len: usize },
@@ -2544,6 +2592,34 @@ pub enum Syscall {
     /// ABI: a0 = buf_ptr, a1 = max → bytes_copied.
     /// Gated by allowlist bit 54 (ReadLog).
     ReadLog { buf_ptr: usize, max: usize },
+    /// ViSyscall 9: SetTlsBase — set the caller's own user thread pointer and
+    /// return the previous value. Self-only (no target parameter) and always
+    /// permitted: it carries no authority.
+    SetTlsBase { base: usize },
+    /// ViSyscall 19: PipeCreate — create a pipe and write both endpoint handles
+    /// into the caller's 2-word buffer.
+    PipeCreate { capacity: usize, out_ptr: usize },
+    /// ViSyscall 22: PipeRead — read up to `len` bytes, blocking (with an optional
+    /// deadline) while the ring is empty and a writer end is still open.
+    PipeRead {
+        handle: usize,
+        buf_ptr: usize,
+        len: usize,
+        timeout_ticks: u64,
+    },
+    /// ViSyscall 23: PipeWrite — write up to `len` bytes, blocking while the ring
+    /// is full. A zero-length write closes the writer end.
+    PipeWrite {
+        handle: usize,
+        buf_ptr: usize,
+        len: usize,
+        timeout_ticks: u64,
+    },
+    /// ViSyscall 24: PipeClose — close one endpoint this task owns.
+    PipeClose { handle: usize },
+    /// ViSyscall 25: PipeShare — duplicate an endpoint into another task's table.
+    /// Owner-only: a task cannot share an endpoint it does not hold.
+    PipeShare { handle: usize, target_tid: usize },
 }
 
 /// Return the syscall allowlist only for an active caller.
@@ -2588,6 +2664,14 @@ fn syscall_to_vi(syscall: &Syscall) -> Option<api::syscall::ViSyscall> {
         Syscall::SpawnFromElf { .. } => V::SpawnFromElf,
         Syscall::SpawnPinned { .. } => V::SpawnPinned,
         Syscall::Wait { .. } => V::Wait,
+        Syscall::SetTlsBase { .. } => V::SetTlsBase,
+        Syscall::FutexWait { .. } => V::FutexWait,
+        Syscall::FutexWake { .. } => V::FutexWake,
+        Syscall::PipeCreate { .. } => V::PipeCreate,
+        Syscall::PipeRead { .. } => V::PipeRead,
+        Syscall::PipeWrite { .. } => V::PipeWrite,
+        Syscall::PipeClose { .. } => V::PipeClose,
+        Syscall::PipeShare { .. } => V::PipeShare,
         Syscall::Log { .. } => V::Log,
         Syscall::SetTimer { .. } => V::SetTimer,
         Syscall::ShmAlloc { .. } => V::ShmAlloc,
@@ -2698,6 +2782,9 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         log::warn!("[kernel] syscall denied for non-live tid {}", caller_id);
         return Err(SyscallError::PermissionDenied);
     };
+
+    let _staged_spawn_argv_cleanup =
+        consumes_staged_spawn_argv(&syscall).then_some(StagedSpawnArgvCleanup { caller_id });
 
     // Syscall allowlist enforcement: reject if this syscall's bit is not set in
     // the per-Cell bitset loaded from ELF section `__ViCell_syscalls`.
@@ -3458,88 +3545,291 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             }
         }
         Syscall::Spawn { entry, arg } => {
-            let drivers = alloc::vec::Vec::new();
-            let name = "thread";
-            // A spawned thread is the same cell running more TIDs: it inherits the
-            // parent cell's identity on every axis the kernel gates — CellId (so its
-            // allocations charge the parent's quota, not the unlimited CellId(0) slot),
-            // the transferable CapSet, the syscall allowlist, and the PKU protection
-            // domain. Singleton caps (supervisor/pcie_driver/platform) are deliberately
-            // NOT propagated: they carry a one-holder invariant.
+            // Build and fully inherit the child under one scheduler lock before
+            // publication. A runnable thread must never observe Task defaults
+            // (SAS, permissive allowlist, or zero PKU state) between construction
+            // and its creator's authority transfer.
+            match super::spawn_with_arg(caller_id, "thread", entry, arg) {
+                Ok(tid) => Ok(tid),
+                Err(ViError::OutOfMemory) => Err(SyscallError::TryAgain),
+                Err(_) => Err(SyscallError::Unknown),
+            }
+        }
+        Syscall::SetTlsBase { base } => {
+            // Self-only by construction: the ABI has no target task parameter, so
+            // this can only ever change the caller's own thread pointer, and the
+            // base carries no authority — the kernel never dereferences it. A bad
+            // value is contained by the cell's own tier (LBI on Tier 1, an MMU
+            // fault on Tier 2).
             //
-            // Snapshot the parent identity under the lock, then DROP it before
-            // spawn_with_arg (which re-locks SCHEDULER — Spinlock is not reentrant),
-            // then re-lock to apply. Mirrors the CellId fix-up on the cell-spawn path
-            // (loader.rs:174-186). Fail-safe: an unresolved caller DENIES the spawn —
-            // it must never fall back to CellId(0), which is exactly the quota-escape
-            // this closes.
-            let (parent_cell_id, parent_caps, parent_allowlist, parent_pku) = {
-                let mut sched_opt = super::SCHEDULER.lock();
-                let sched = match sched_opt.as_mut() {
-                    Some(s) => s,
-                    None => return Err(SyscallError::Unknown),
-                };
-                match sched.tasks.get(&caller_id) {
-                    Some(t) => (
-                        t.cell_id,
-                        super::cap::CapSet::of_task(t),
-                        t.syscall_allowlist,
-                        (t.pku_key, t.pku_value),
-                    ),
-                    None => return Err(SyscallError::Unknown),
-                }
+            // The previous value is returned so a cell can read its base back
+            // without touching the register, which the kernel owns (a direct user
+            // write is overwritten on the next resume).
+            if let Some(task) = super::SCHEDULER
+                .lock()
+                .as_mut()
+                .and_then(|sched| sched.tasks.get_mut(&caller_id))
+            {
+                let previous = task.tls_base;
+                super::tls::set_base(task, base);
+                Ok(previous)
+            } else {
+                Err(SyscallError::PermissionDenied)
+            }
+        }
+        Syscall::PipeCreate { capacity, out_ptr } => {
+            // The ring is charged to the creating cell, so a pipe is not a way to
+            // hold memory outside the per-cell quota.
+            let owner_cell = super::SCHEDULER
+                .lock()
+                .as_ref()
+                .and_then(|sched| sched.tasks.get(&caller_id))
+                .map(|task| task.cell_id.0 as usize)
+                .ok_or(SyscallError::PermissionDenied)?;
+            let (read_handle, write_handle) = super::pipe::create(capacity, owner_cell)?;
+            let mut out = [0u8; 16];
+            let mut offset = 0usize;
+            for word in [read_handle.to_raw(), write_handle.to_raw()] {
+                let bytes = word.to_ne_bytes();
+                out[offset..offset + bytes.len()].copy_from_slice(&bytes);
+                offset += bytes.len();
+            }
+            if let Err(error) = write_user_slice(caller_id, out_ptr, &out[..offset], 64) {
+                super::pipe::close_end(read_handle, caller_id);
+                super::pipe::close_end(write_handle, caller_id);
+                return Err(error);
+            }
+            let installed = super::SCHEDULER
+                .lock()
+                .as_mut()
+                .and_then(|sched| sched.tasks.get_mut(&caller_id))
+                .map(|task| {
+                    task.pipe_handles.insert(read_handle);
+                    task.pipe_handles.insert(write_handle);
+                })
+                .is_some();
+            if !installed {
+                super::pipe::close_end(read_handle, caller_id);
+                super::pipe::close_end(write_handle, caller_id);
+                return Err(SyscallError::PermissionDenied);
+            }
+            Ok(0)
+        }
+        Syscall::PipeRead {
+            handle,
+            buf_ptr,
+            len,
+            timeout_ticks,
+        } => {
+            const CHUNK: usize = 512;
+            let Some(handle) = super::pipe::PipeHandle::from_raw(handle) else {
+                return Err(SyscallError::InvalidInput);
             };
-
-            // A refused thread spawn is `TryAgain`, not a fault: both the per-cell
-            // thread cap and a fragmented allocator surface as OutOfMemory, and
-            // both must leave the caller running. This path used to reach an
-            // `.expect` in the scheduler, so an unprivileged cell looping here
-            // could panic the kernel — never-die broken from userspace.
-            let tid = match super::spawn_with_arg(name, parent_cell_id, drivers, entry, arg) {
-                Ok(t) => t,
-                Err(ViError::OutOfMemory) => return Err(SyscallError::TryAgain),
-                Err(_) => return Err(SyscallError::Unknown),
+            if handle.end != super::pipe::PipeEnd::Read || !caller_owns_pipe(caller_id, handle) {
+                crate::audit::log_event(
+                    crate::audit::AuditEvent::SyscallDenied,
+                    &crate::audit::encode_u32x2(caller_id as u32, handle.to_raw() as u32),
+                );
+                return Err(SyscallError::PermissionDenied);
+            }
+            if len == 0 {
+                return Ok(0);
+            }
+            let deadline = if timeout_ticks == 0 {
+                None
+            } else {
+                Some(super::system_ticks() as u64 + timeout_ticks)
             };
-
-            if let Some(sched) = super::SCHEDULER.lock().as_mut() {
-                if let Some(t) = sched.tasks.get_mut(&tid) {
-                    parent_caps.apply_to(t);
-                    t.syscall_allowlist = parent_allowlist;
-                    t.pku_key = parent_pku.0;
-                    t.pku_value = parent_pku.1;
+            let count = len.min(CHUNK);
+            let mut scratch = [0u8; CHUNK];
+            loop {
+                match super::pipe::try_read(handle, &mut scratch[..count], caller_id) {
+                    Some(super::pipe::ReadOutcome::Read(read)) => {
+                        write_user_slice(caller_id, buf_ptr, &scratch[..read], MAX_USER_BUF)?;
+                        return Ok(read);
+                    }
+                    // EOF: the ring is empty and no writer end remains.
+                    Some(super::pipe::ReadOutcome::Eof) => return Ok(0),
+                    Some(super::pipe::ReadOutcome::Empty) => {
+                        if deadline.is_some_and(|d| super::system_ticks() as u64 >= d) {
+                            return Ok(0);
+                        }
+                        // Enqueue and park under one lock: a writer that drains the
+                        // queue takes `SCHEDULER` to wake us, so either it sees our
+                        // entry and wakes a parked task, or we see its bytes on the
+                        // next `try_read`. Lock order stays SCHEDULER -> PIPES.
+                        if let Some(sched) = super::SCHEDULER.lock().as_mut() {
+                            match sched.tasks.get_mut(&caller_id) {
+                                Some(task) => {
+                                    super::pipe::park_reader(handle, caller_id);
+                                    task.state =
+                                        super::tcb::TaskState::PipeRead { handle, deadline };
+                                }
+                                None => return Err(SyscallError::PermissionDenied),
+                            }
+                        }
+                        super::yield_cpu();
+                    }
+                    None => return Err(SyscallError::InvalidInput),
                 }
             }
-            Ok(tid)
+        }
+        Syscall::PipeWrite {
+            handle,
+            buf_ptr,
+            len,
+            timeout_ticks,
+        } => {
+            const CHUNK: usize = 512;
+            let Some(handle) = super::pipe::PipeHandle::from_raw(handle) else {
+                return Err(SyscallError::InvalidInput);
+            };
+            if handle.end != super::pipe::PipeEnd::Write || !caller_owns_pipe(caller_id, handle) {
+                crate::audit::log_event(
+                    crate::audit::AuditEvent::SyscallDenied,
+                    &crate::audit::encode_u32x2(caller_id as u32, handle.to_raw() as u32),
+                );
+                return Err(SyscallError::PermissionDenied);
+            }
+            if len == 0 {
+                // A zero-length write closes the writer end: readers then observe
+                // EOF once they have drained the ring.
+                if let Some(sched) = super::SCHEDULER.lock().as_mut() {
+                    if let Some(task) = sched.tasks.get_mut(&caller_id) {
+                        task.pipe_handles.remove(&handle);
+                    }
+                }
+                super::pipe::close_end(handle, caller_id);
+                return Ok(0);
+            }
+            let deadline = if timeout_ticks == 0 {
+                None
+            } else {
+                Some(super::system_ticks() as u64 + timeout_ticks)
+            };
+            let count = len.min(CHUNK);
+            let mut scratch = [0u8; CHUNK];
+            {
+                let view = caller_copy_view_for(caller_id)?;
+                view.read_into(buf_ptr, &mut scratch[..count])
+                    .map_err(|_| SyscallError::InvalidInput)?;
+            }
+            loop {
+                match super::pipe::try_write(handle, &scratch[..count], caller_id) {
+                    Some(super::pipe::WriteOutcome::Wrote(written)) => return Ok(written),
+                    // No reader end remains: the stream is broken, not full.
+                    Some(super::pipe::WriteOutcome::NoReader) => {
+                        return Err(SyscallError::BrokenPipe);
+                    }
+                    Some(super::pipe::WriteOutcome::Full) => {
+                        if deadline.is_some_and(|d| super::system_ticks() as u64 >= d) {
+                            return Ok(0);
+                        }
+                        if let Some(sched) = super::SCHEDULER.lock().as_mut() {
+                            match sched.tasks.get_mut(&caller_id) {
+                                Some(task) => {
+                                    super::pipe::park_writer(handle, caller_id);
+                                    task.state =
+                                        super::tcb::TaskState::PipeWrite { handle, deadline };
+                                }
+                                None => return Err(SyscallError::PermissionDenied),
+                            }
+                        }
+                        super::yield_cpu();
+                    }
+                    None => return Err(SyscallError::InvalidInput),
+                }
+            }
+        }
+        Syscall::PipeClose { handle } => {
+            let Some(handle) = super::pipe::PipeHandle::from_raw(handle) else {
+                return Err(SyscallError::InvalidInput);
+            };
+            let owned = super::SCHEDULER
+                .lock()
+                .as_mut()
+                .and_then(|sched| sched.tasks.get_mut(&caller_id))
+                .map(|task| task.pipe_handles.remove(&handle))
+                .unwrap_or(false);
+            if !owned {
+                crate::audit::log_event(
+                    crate::audit::AuditEvent::SyscallDenied,
+                    &crate::audit::encode_u32x2(caller_id as u32, handle.to_raw() as u32),
+                );
+                return Err(SyscallError::PermissionDenied);
+            }
+            super::pipe::close_end(handle, caller_id);
+            Ok(0)
+        }
+        Syscall::PipeShare { handle, target_tid } => {
+            let Some(handle) = super::pipe::PipeHandle::from_raw(handle) else {
+                return Err(SyscallError::InvalidInput);
+            };
+            // Owner-only: a task cannot hand out an endpoint it does not hold. That
+            // ownership rule is the whole authorization model for pipes. The
+            // endpoint count and target table change together while SCHEDULER is
+            // held, preserving the documented SCHEDULER -> PIPES lock order.
+            let mut sched = super::SCHEDULER.lock();
+            let sched = sched.as_mut().ok_or(SyscallError::Unknown)?;
+            let owned = sched
+                .tasks
+                .get(&caller_id)
+                .is_some_and(|task| task.pipe_handles.contains(&handle));
+            if !owned {
+                crate::audit::log_event(
+                    crate::audit::AuditEvent::SyscallDenied,
+                    &crate::audit::encode_u32x2(caller_id as u32, handle.to_raw() as u32),
+                );
+                return Err(SyscallError::PermissionDenied);
+            }
+            let already_granted = sched
+                .tasks
+                .get(&target_tid)
+                .ok_or(SyscallError::InvalidInput)?
+                .pipe_handles
+                .contains(&handle);
+            if already_granted {
+                return Ok(0);
+            }
+            if !super::pipe::duplicate_end(handle) {
+                return Err(SyscallError::InvalidInput);
+            }
+            let target = sched
+                .tasks
+                .get_mut(&target_tid)
+                .expect("target task remained live while holding SCHEDULER");
+            target.pipe_handles.insert(handle);
+            Ok(0)
         }
         Syscall::Wait { pid } => {
             if let Some(sched) = super::SCHEDULER.lock().as_mut() {
-                if let Some(target) = sched.tasks.get_mut(&pid) {
-                    if matches!(target.state, TaskState::Terminated | TaskState::Retiring) {
-                        // A retiring root-generation record is terminal even
-                        // while it remains dispatch-visible for remote
-                        // quiescence.
-                        let code = target.exit_code.unwrap_or(0);
-                        return Ok(code);
-                    } else {
-                        // Add to waiters
-                        target.waiters.push(caller_id);
-                    }
+                let already_reaped = if let Some(target) = sched.tasks.get_mut(&pid) {
+                    target.waiters.push(caller_id);
+                    false
+                } else if let Some(zombie) = sched.zombies.iter_mut().find(|task| task.id == pid) {
+                    // It exited but a hart may still hold its saved context.
+                    // The zombie reaper transfers these waiters only after the
+                    // exact selected/executing quiescence proof.
+                    zombie.waiters.push(caller_id);
+                    false
                 } else {
-                    return Err(SyscallError::InvalidDriverId); // Task not found
+                    true
+                };
+                if already_reaped {
+                    return Err(SyscallError::InvalidDriverId);
                 }
 
-                // Block caller
                 if let Some(caller) = sched.tasks.get_mut(&caller_id) {
                     caller.state = TaskState::Waiting { target: pid };
                 }
             }
-            super::yield_cpu(); // Block
-                                // Resume with exit code (set by Exit handler)
+            super::yield_cpu();
+            // Resume with exit code published by the quiescent zombie reaper.
             if let Some(sched) = super::SCHEDULER.lock().as_ref() {
                 return Ok(sched
                     .tasks
                     .get(&caller_id)
-                    .and_then(|t| t.reply_value)
+                    .and_then(|task| task.reply_value)
                     .unwrap_or(0));
             }
             Ok(0)
@@ -3590,18 +3880,19 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             }
             Err(SyscallError::Unknown)
         }
-        Syscall::FutexWait { addr, val } => {
-            // Returns Ok(0) if blocked (then yield), Err(TryAgain) if val mismatch
-            match super::futex_wait(caller_id, addr, val) {
-                Ok(_) => {
-                    super::yield_cpu(); // Block
-                    Ok(0)
-                }
-                Err(_) => Err(SyscallError::TryAgain),
-            }
+        Syscall::FutexWait {
+            addr,
+            expected,
+            timeout_ticks,
+        } => {
+            // The wait parks the caller inside `futex::wait`; the outcome
+            // (woken / value mismatch / timed out) is the syscall's return value,
+            // so it needs no error encoding. An invalid address is a recoverable
+            // error, never a kernel fault.
+            super::futex::wait(caller_id, addr, expected, timeout_ticks)
         }
         Syscall::FutexWake { addr, count } => {
-            if let Ok(n) = super::futex_wake(caller_id, addr, count) {
+            if let Ok(n) = super::futex::wake(caller_id, addr, count) {
                 Ok(n)
             } else {
                 Err(SyscallError::Unknown) // Should not fail typically
@@ -4161,17 +4452,25 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             // a set left staged by a spawn that never produced a child would be
             // handed to whichever child this caller created next.
             crate::task::dir_inherit::clear_staged(caller_id);
-            let task_id = spawned.map_err(|e| match e {
-                types::ViError::NotFound => SyscallError::FileNotFound,
-                types::ViError::OutOfMemory => {
-                    log::warn!(
-                        "[loader] spawn OOM: op=SpawnFromPath caller={} path={}",
-                        caller_id,
-                        path_str
-                    );
-                    SyscallError::OutOfMemory
+            let task_id = spawned.map_err(|e| {
+                log::warn!(
+                    "[loader] SpawnFromPath refused: caller={} path={} error={:?}",
+                    caller_id,
+                    path_str,
+                    e
+                );
+                match e {
+                    types::ViError::NotFound => SyscallError::FileNotFound,
+                    types::ViError::OutOfMemory => {
+                        log::warn!(
+                            "[loader] spawn OOM: op=SpawnFromPath caller={} path={}",
+                            caller_id,
+                            path_str
+                        );
+                        SyscallError::OutOfMemory
+                    }
+                    _ => SyscallError::InvalidInput,
                 }
-                _ => SyscallError::InvalidInput,
             })?;
             Ok(task_id)
         }
@@ -5188,46 +5487,61 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             let raw_key = key as u64;
             let is_shell =
                 caller_launch_state(caller_id).is_some_and(|(name, _, _)| name.as_str() == "shell");
-            if is_shell && (raw_key != SPAWN_ARGV_KEY || buf_len > SPAWN_ARGV_MAX) {
+            if is_shell
+                && (raw_key != SPAWN_ARGV_KEY
+                    || buf_len > crate::cell::state_stash::MAX_SPAWN_ARGV_LEN)
+            {
                 return Err(SyscallError::PermissionDenied);
             }
-            let stash_key = if raw_key == SPAWN_ARGV_KEY {
-                spawn_argv_slot(caller_id)
-            } else {
-                raw_key
-            };
+            if raw_key == SPAWN_ARGV_KEY {
+                let bytes = read_user_slice(
+                    caller_id,
+                    buf_ptr,
+                    buf_len,
+                    crate::cell::state_stash::MAX_SPAWN_ARGV_LEN,
+                )?;
+                return Ok(crate::cell::state_stash::stage_spawn_argv(
+                    caller_id, &bytes,
+                ));
+            }
             let bytes = read_user_slice(
                 caller_id,
                 buf_ptr,
                 buf_len,
                 crate::cell::state_stash::MAX_STASH_LEN,
             )?;
-            Ok(crate::cell::state_stash::stash(stash_key, &bytes))
+            Ok(crate::cell::state_stash::stash(raw_key, &bytes))
         }
         Syscall::StateRestore {
             key,
             buf_ptr,
             buf_len,
         } => {
+            if key as u64 == SPAWN_ARGV_KEY {
+                validate_user_buf(
+                    buf_ptr,
+                    buf_len,
+                    crate::cell::state_stash::MAX_SPAWN_ARGV_LEN,
+                )?;
+                let Some(argv) = crate::cell::state_stash::take_inherited_argv(caller_id) else {
+                    return Ok(0);
+                };
+                let n = argv.len().min(buf_len);
+                if n > 0 {
+                    write_user_slice(
+                        caller_id,
+                        buf_ptr,
+                        &argv[..n],
+                        crate::cell::state_stash::MAX_SPAWN_ARGV_LEN,
+                    )?;
+                }
+                return Ok(n);
+            }
             validate_user_buf(buf_ptr, buf_len, crate::cell::state_stash::MAX_STASH_LEN)?;
             let mut kbuf = alloc::vec::Vec::new();
             kbuf.try_reserve_exact(buf_len)
                 .map_err(|_| SyscallError::OutOfMemory)?;
             kbuf.resize(buf_len, 0);
-            if key as u64 == SPAWN_ARGV_KEY {
-                let personal_key = spawn_argv_slot(caller_id);
-                let n = crate::cell::state_stash::restore(personal_key, &mut kbuf);
-                if n > 0 {
-                    crate::cell::state_stash::remove(personal_key);
-                    write_user_slice(
-                        caller_id,
-                        buf_ptr,
-                        &kbuf[..n],
-                        crate::cell::state_stash::MAX_STASH_LEN,
-                    )?;
-                }
-                return Ok(n);
-            }
             let n = crate::cell::state_stash::restore(key as u64, &mut kbuf);
             if n > 0 {
                 write_user_slice(
@@ -5242,13 +5556,11 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         // 412: StateStashClear — delete the stash entry for `key`, freeing its slot.
         // No-op when the key is absent (idempotent). Returns 0 always.
         Syscall::StateStashClear { key } => {
-            let raw_key = key as u64;
-            let stash_key = if raw_key == SPAWN_ARGV_KEY {
-                spawn_argv_slot(caller_id)
+            if key as u64 == SPAWN_ARGV_KEY {
+                crate::cell::state_stash::discard_spawn_argv(caller_id);
             } else {
-                raw_key
-            };
-            crate::cell::state_stash::remove(stash_key);
+                crate::cell::state_stash::remove(key as u64);
+            }
             Ok(0)
         }
 
@@ -6553,6 +6865,37 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
             size: a2,
         },
         ViSyscall::Wait => Syscall::Wait { pid: a0 },
+        ViSyscall::SetTlsBase => Syscall::SetTlsBase { base: a0 },
+        ViSyscall::FutexWait => Syscall::FutexWait {
+            addr: a0,
+            expected: a1 as u32,
+            timeout_ticks: a2 as u64,
+        },
+        ViSyscall::FutexWake => Syscall::FutexWake {
+            addr: a0,
+            count: a1,
+        },
+        ViSyscall::PipeCreate => Syscall::PipeCreate {
+            capacity: a0,
+            out_ptr: a1,
+        },
+        ViSyscall::PipeRead => Syscall::PipeRead {
+            handle: a0,
+            buf_ptr: a1,
+            len: a2,
+            timeout_ticks: a3 as u64,
+        },
+        ViSyscall::PipeWrite => Syscall::PipeWrite {
+            handle: a0,
+            buf_ptr: a1,
+            len: a2,
+            timeout_ticks: a3 as u64,
+        },
+        ViSyscall::PipeClose => Syscall::PipeClose { handle: a0 },
+        ViSyscall::PipeShare => Syscall::PipeShare {
+            handle: a0,
+            target_tid: a1,
+        },
         ViSyscall::ShmAlloc => Syscall::ShmAlloc { size: a0 },
         ViSyscall::ShmMap => Syscall::ShmMap {
             handle: a0,
@@ -7116,9 +7459,10 @@ const _: crate::hal::SyscallDispatch = ViCell_syscall_dispatch;
 #[cfg(test)]
 mod tests {
     use super::{
-        check_allowlist, encode_syscall_result, map_syscall, page_grant_authorizes_dma,
-        reg_grant_authorizes_dma, supports_typed_spawn_oom, syscall_to_vi, withhold_or_free,
-        PageGrant, RegGrant, Syscall, SyscallError,
+        check_allowlist, consumes_staged_spawn_argv, encode_syscall_result, map_syscall,
+        page_grant_authorizes_dma, reg_grant_authorizes_dma, supports_typed_spawn_oom,
+        syscall_to_vi, withhold_or_free, PageGrant, RegGrant, StagedSpawnArgvCleanup, Syscall,
+        SyscallError,
     };
     use crate::task::{scheduler::Scheduler, tcb::Task, SCHEDULER};
     use api::syscall::ViSyscall;
@@ -7148,6 +7492,23 @@ mod tests {
 
         let mut restore = SCHEDULER.lock();
         *restore = saved;
+    }
+
+    #[test]
+    fn rejected_external_spawn_discards_staged_argv() {
+        const TID: usize = 0x1235;
+        crate::cell::state_stash::discard_spawn_argv(TID);
+        assert_eq!(crate::cell::state_stash::stage_spawn_argv(TID, b"argv"), 4);
+
+        let syscall = Syscall::SpawnFromPath {
+            path_ptr: 0,
+            path_len: 0,
+        };
+        assert!(consumes_staged_spawn_argv(&syscall));
+        {
+            let _cleanup = StagedSpawnArgvCleanup { caller_id: TID };
+        }
+        assert_eq!(crate::cell::state_stash::take_spawn_argv(TID), None);
     }
 
     #[test]

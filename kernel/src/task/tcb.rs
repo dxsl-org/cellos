@@ -69,10 +69,23 @@ pub enum TaskState {
     /// stale remote Context is denied rather than treated as an early-boot
     /// kernel caller.
     Retiring,
-    /// Blocked on a Futex wait.
-    /// `addr`: The address being waited on.
+    /// Blocked in a pipe read (ring empty, a writer end still open).
+    PipeRead {
+        handle: super::pipe::PipeHandle,
+        deadline: Option<u64>,
+    },
+    /// Blocked in a pipe write (ring full).
+    PipeWrite {
+        handle: super::pipe::PipeHandle,
+        deadline: Option<u64>,
+    },
+    /// Blocked on a futex wait.
+    /// `key`: `(address-space identity, generation, word address)` — see
+    ///        [`super::futex`] for why the identity is part of the key.
+    /// `deadline`: absolute `system_ticks`; `None` blocks indefinitely.
     FutexWait {
-        addr: VAddr,
+        key: super::futex::FutexKey,
+        deadline: Option<u64>,
     },
     /// Waiting for another task to exit (Join).
     Waiting {
@@ -192,7 +205,32 @@ pub struct Task {
         )
     ))]
     pub(crate) address_space: TaskAddressSpace,
+    /// Whether this worker's stacks were dynamically inserted into its domain.
+    #[cfg(all(
+        feature = "native-domains",
+        any(
+            target_arch = "riscv64",
+            target_arch = "aarch64",
+            target_arch = "x86_64"
+        )
+    ))]
+    pub(crate) has_dynamic_stack_mapping: bool,
     pub trap_frame: ViTrapFrame,
+    /// Pipe endpoints this task owns. A handle is usable by exactly the task that
+    /// holds it; `PipeShare` moves a copy into another task's table.
+    pub pipe_handles: alloc::collections::BTreeSet<super::pipe::PipeHandle>,
+    /// User thread pointer (TLS base) for this task. Opaque to the kernel: the cell
+    /// allocates its own TLS blocks and sets the value with `SetTlsBase`. See
+    /// [`tls`](super::tls) for which register carries it per architecture.
+    pub tls_base: usize,
+    /// Command line this task staged for its own next launch. Task-local by
+    /// construction: it is this task's own state, so no other task's syscall —
+    /// and no cleanup for another task's failed launch — can address it.
+    pub staged_argv: Option<Vec<u8>>,
+    /// Command line this task's spawner handed it before it became runnable.
+    /// Read once by `StateRestore` on the reserved argv key; dropped with the
+    /// task record, exactly like any other terminal-state resource.
+    pub inherited_argv: Option<Vec<u8>>,
     pub allowed_drivers: Vec<usize>,
     // Maps LeaseID -> Lease
     pub leases: alloc::collections::BTreeMap<usize, Lease>,
@@ -510,7 +548,20 @@ impl Task {
                 )
             ))]
             address_space: TaskAddressSpace::Sas,
+            #[cfg(all(
+                feature = "native-domains",
+                any(
+                    target_arch = "riscv64",
+                    target_arch = "aarch64",
+                    target_arch = "x86_64"
+                )
+            ))]
+            has_dynamic_stack_mapping: false,
             trap_frame: ViTrapFrame::default(),
+            pipe_handles: alloc::collections::BTreeSet::new(),
+            tls_base: 0,
+            staged_argv: None,
+            inherited_argv: None,
             allowed_drivers,
             leases: alloc::collections::BTreeMap::new(),
             next_lease_id: 1, // Start efficiently
@@ -749,5 +800,25 @@ impl Task {
             return true;
         }
         false
+    }
+}
+
+impl Drop for Task {
+    fn drop(&mut self) {
+        #[cfg(all(
+            feature = "native-domains",
+            any(
+                target_arch = "riscv64",
+                target_arch = "aarch64",
+                target_arch = "x86_64"
+            )
+        ))]
+        if self.has_dynamic_stack_mapping {
+            if let (TaskAddressSpace::Domain(space), Some(kernel_stack), Some(user_stack)) =
+                (&self.address_space, &self.kernel_stack, &self.user_stack)
+            {
+                space.unmap_existing_task_stacks(kernel_stack, user_stack);
+            }
+        }
     }
 }

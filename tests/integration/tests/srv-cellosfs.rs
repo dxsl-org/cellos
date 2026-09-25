@@ -124,6 +124,12 @@ fn riscv64_cellosfs_srv_basic() {
             eprintln!("--- serial output ---\n{}\n---", runner.dump());
             panic!("{e}");
         });
+    runner
+        .wait_for("[posix-shim] PORTING-SMOKE: OK", 60)
+        .unwrap_or_else(|e| {
+            eprintln!("--- serial output ---\n{}\n---", runner.dump());
+            panic!("{e}");
+        });
     let serial = runner.dump();
     assert_eq!(
         serial

@@ -69,6 +69,57 @@ pub(super) fn tool_spawn_profile(route: LaunchRoute, target: &str) -> Option<Lau
     Some(LaunchProfile::new(ceiling, "tool-spawn-launch-edge", false))
 }
 
+/// The DWC2 transport cell may create only its capability-free LAN front-end.
+///
+/// The narrow launch edge prevents a compromised USB device from converting the
+/// host cell's lifecycle authority into arbitrary process creation.
+pub(super) fn dwc2_function_worker_profile(
+    route: LaunchRoute,
+    target: &str,
+) -> Option<LaunchProfile> {
+    if !matches!(route, LaunchRoute::Path | LaunchRoute::Elf) || target != "/bin/lan9514" {
+        return None;
+    }
+    Some(LaunchProfile::new(
+        CapSet::EMPTY,
+        "dwc2-function-worker-edge",
+        true,
+    ))
+}
+
+/// The pipe witness needs one exact, capability-free child edge. Keeping it
+/// separate from the general shell and tool-spawn profiles proves that a Tier 2
+/// cell can grant a pipe endpoint across domains without acquiring ambient
+/// lifecycle authority.
+pub(super) fn pipe_test_profile(route: LaunchRoute, target: &str) -> Option<LaunchProfile> {
+    if !matches!(route, LaunchRoute::Path | LaunchRoute::Elf) || target != "/bin/pipe-peer" {
+        return None;
+    }
+    Some(LaunchProfile::new(
+        CapSet::EMPTY,
+        "pipe-test-peer-edge",
+        false,
+    ))
+}
+
+/// The C spawn adapter needs one exact, capability-free child edge. Both routes
+/// are allowed because they resolve the same reviewed row: the kernel-resolved
+/// path form is the one a board with a kernel block device can use, and the
+/// caller-supplied-ELF form is the only one that reaches the VFS-served cell
+/// store post-boot, where the kernel deliberately drives no block hardware. The
+/// child holds no authority of its own, so a compromised child cannot escalate
+/// through the edge it was started with.
+pub(super) fn c_spawn_profile(route: LaunchRoute, target: &str) -> Option<LaunchProfile> {
+    if !matches!(route, LaunchRoute::Path | LaunchRoute::Elf) || target != "/bin/c-spawn-child" {
+        return None;
+    }
+    Some(LaunchProfile::new(
+        CapSet::EMPTY,
+        "c-spawn-child-edge",
+        false,
+    ))
+}
+
 pub(super) fn supervisor_profile(route: LaunchRoute, target: &str) -> Option<LaunchProfile> {
     if !matches!(route, LaunchRoute::Path | LaunchRoute::Elf) || !target.starts_with("/bin/") {
         return None;
@@ -126,21 +177,4 @@ pub(super) const fn spi_demo_mmio_capset() -> CapSet {
         mmio_devices: SPI_DEMO_MMIO,
         ..CapSet::EMPTY
     }
-}
-/// The DWC2 transport cell may create only its capability-free LAN front-end.
-///
-/// The narrow launch edge prevents a compromised USB device from converting the
-/// host cell's lifecycle authority into arbitrary process creation.
-pub(super) fn dwc2_function_worker_profile(
-    route: LaunchRoute,
-    target: &str,
-) -> Option<LaunchProfile> {
-    if !matches!(route, LaunchRoute::Path | LaunchRoute::Elf) || target != "/bin/lan9514" {
-        return None;
-    }
-    Some(LaunchProfile::new(
-        CapSet::EMPTY,
-        "dwc2-function-worker-edge",
-        true,
-    ))
 }

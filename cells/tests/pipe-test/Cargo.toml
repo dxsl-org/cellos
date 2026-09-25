@@ -1,0 +1,17 @@
+[package]
+name = "app-pipe-test"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+description = "Pipe smoke test: backpressure, EOF, broken pipe, per-task handle ownership"
+
+[[bin]]
+name = "pipe-test"
+path = "src/main.rs"
+
+[dependencies]
+api  = { path = "../../../libs/api", version = "0.1.0" }
+ostd = { path = "../../../libs/ostd", version = "0.2.0" }
+
+[build-dependencies]
+cell-build = { path = "../../../libs/cell-build", version = "0.2.0" }

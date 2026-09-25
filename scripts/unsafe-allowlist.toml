@@ -108,6 +108,20 @@ approver = "cellos-maintainers"
 date = "2026-07-14"
 
 [[file]]
+path = "cells/tests/tls-test/src/regs.rs"
+class = "test-harness"
+reason = "Per-task TLS base test: reading the user thread pointer register (tp / TPIDR_EL0) and touching the thread's own TLS block through it are exactly what the test proves; both are confined to this file behind safe wrappers."
+approver = "dmin"
+date = "2026-09-22"
+
+[[file]]
+path = "cells/tests/cpp-smoke/src/cpp.rs"
+class = "c-ffi"
+reason = "C++ FFI (cpp-freestanding profile): extern \"C\" calls into the cell's C++ translation units are unsafe by construction; the C++ side is outside the Rust type system entirely. All unsafe in this crate is confined to this file behind safe wrappers."
+approver = "dmin"
+date = "2026-09-22"
+
+[[file]]
 path = "cells/tests/c-math-smoke/src/main.rs"
 class = "c-ffi"
 reason = "C FFI (Tier 1b): extern \"C\" calls across the mlibc boundary are unsafe by construction; the C side is outside the Rust type system entirely."
@@ -381,6 +395,20 @@ tracking = "midori-lessons phase 07 (grant/pointer audit)"
 # file cannot carry #![forbid(unsafe_code)] on its root. Removing the last
 # [[file]] entry for a crate means this entry must go too — `--check`
 # reports it as unused.
+
+[[crate]]
+name = "app-tls-test"
+class = "test-harness"
+reason = "Owns allowlisted unsafe under cells/tests/tls-test/ — see the [[file]] entry for the justification."
+approver = "dmin"
+date = "2026-09-22"
+
+[[crate]]
+name = "app-cpp-smoke"
+class = "c-ffi"
+reason = "Owns allowlisted unsafe under cells/tests/cpp-smoke/ — see the [[file]] entry of class \"c-ffi\" for the justification."
+approver = "dmin"
+date = "2026-09-22"
 
 [[crate]]
 name = "app-c-math-smoke"

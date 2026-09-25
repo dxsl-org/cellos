@@ -148,6 +148,10 @@ pub fn publish_prepared(
     let inherited_dirs = super::dir_inherit::take_for_launch(sched, state.inherit_from);
     let (mut task, load_base) = prepared.into_task(tid, cell_id);
     task.inherited_dirs = inherited_dirs;
+    // The command line lives on the task record itself, so it is reachable by
+    // this task's own `StateRestore` and by nothing else, and it is installed
+    // before the task can ever be selected.
+    task.inherited_argv = state.argv.take();
     task.syscall_allowlist = state.syscall_allowlist;
     task.cluster_mode = state.cluster_mode;
     task.cluster_id = state.cluster_id;
@@ -180,11 +184,20 @@ pub fn publish_prepared(
         )
     ))]
     if state.is_domain {
+        // ADR-0019 §2.1 — the single on-path admission control. The lease is
+        // taken before anything is created and re-checked immediately before the
+        // task becomes runnable, so a concurrent drain either linearizes before
+        // this admission or is observed by it. A denial is final: no task, no
+        // domain, and no SAS fallback.
+        let lease = crate::loader::domain_admission::admit_for_launch(state.granted)?;
         if let (Some(ks), Some(us), Some(seg)) =
             (&task.kernel_stack, &task.user_stack, &task.segment_mem)
         {
             let domain = crate::memory::address_space::create_cell_domain(ks, us, seg)
                 .map_err(|_| ViError::OutOfMemory)?;
+            if !lease.remains_enabled() {
+                return Err(crate::loader::domain_admission::drain_refusal());
+            }
             #[cfg(target_arch = "riscv64")]
             let arch_tag = "SATP";
             #[cfg(target_arch = "aarch64")]
@@ -229,9 +242,6 @@ pub fn publish_prepared(
     sched.next_task_id = tid.checked_add(1).expect("task id space exhausted");
     quota.commit();
     crate::loader::commit_launch_routes(tid, cell_id, state.routes);
-    if let Some(argv) = state.argv.take() {
-        crate::cell::state_stash::install_spawn_argv(tid, argv);
-    }
     if let Some(measurement) = state.measurement.take() {
         crate::measurement_log::commit_staged(tid, measurement.path, measurement.digest);
     }

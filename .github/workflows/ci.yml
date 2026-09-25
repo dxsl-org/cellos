@@ -59,6 +59,19 @@ jobs:
       - name: Check generated code metrics
         run: python3 scripts/generate-code-metrics.py --check
 
+      # Spec 21 Layer 3: resolve every `Anchor:` line in docs/specs/ against the
+      # tree and keep docs/spec-status.generated.md current. Anchor *violations*
+      # (missing file/symbol/test, drifted const, planned-on-ratified,
+      # absent-but-present) are reported here without failing — that is Spec 21
+      # rollout step 1, warn-only, because specs 00-18 and 20 are not anchored
+      # yet (256 ratified sections).
+      # What IS enforced today: the generated status file must be current, so a
+      # code rename that breaks an anchor cannot land silently. Turn on full
+      # enforcement with `--strict` once the step-2 backfill reaches zero
+      # coverage gaps.
+      - name: Check spec anchors and generated status
+        run: python3 scripts/check-spec-anchors.py --check
+
       - name: Validate app-tier acceptance ledger
         run: |
           baseline_dir="$RUNNER_TEMP/app-tier-acceptance-baseline"
@@ -157,14 +170,14 @@ jobs:
           # cells (c-math-smoke, posix shims) are riscv/aarch64-only.
           - target: riscv64gc-unknown-none-elf
             short: rv64
-            cc_pkg: gcc-riscv64-unknown-elf
+            cc_pkg: gcc-riscv64-unknown-elf g++-riscv64-unknown-elf
             cc_bin: riscv64-unknown-elf-gcc
             cells_args: >-
               --workspace --exclude cellos-kernel --exclude app-mlibc-smoke
               --exclude doom --exclude tetris-c --exclude lua --exclude tetris-lua
           - target: aarch64-unknown-none-softfloat
             short: aarch64
-            cc_pkg: gcc-aarch64-linux-gnu
+            cc_pkg: gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
             cc_bin: aarch64-linux-gnu-gcc
             cells_args: >-
               --workspace --exclude cellos-kernel --exclude app-mlibc-smoke

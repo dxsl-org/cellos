@@ -157,7 +157,66 @@ pub enum ViSyscall {
     /// Serialize all allocated physical frames to the snapshot sector range.
     /// Triggers a warm-boot-capable snapshot.  Returns frame count on success.
     Snapshot = 420,
-    Wait = 8,      // Wait for task
+    Wait = 8, // Wait for task
+    /// Set this task's user thread pointer (TLS base) and return the previous value.
+    ///
+    /// ABI: a0 = base → previous base (> 0), 0 when there was none, or `usize::MAX`
+    /// on error. Self-only by construction — there is no target task parameter, so
+    /// it can only change the caller's own thread pointer, and the value carries no
+    /// authority. Always permitted (no allowlist bit).
+    ///
+    /// The kernel owns the register: a cell must set its base through this syscall
+    /// rather than writing the register directly, because the value is reinstalled
+    /// on every resume. The cell allocates its own TLS block; the kernel never
+    /// dereferences the base.
+    SetTlsBase = 9,
+    /// Park the caller until another task wakes the same word, the word no longer
+    /// holds `expected`, or the deadline elapses.
+    ///
+    /// ABI: a0 = word address (must be 4-byte aligned, mapped, caller-owned),
+    ///      a1 = expected value, a2 = timeout in 10 ms ticks (0 = block forever)
+    ///      → 0 = woken, 1 = value mismatch (never parked, or woken without a
+    ///        change), 2 = timed out; `usize::MAX` when the address is not a valid
+    ///        caller word or the caller has no live task record.
+    ///
+    /// Waiters are matched by `(address space, generation, address)`, so two Tier 2
+    /// domains using the same virtual address never wake each other. Always
+    /// permitted: a caller can already write any word it can wait on, so the
+    /// authority is the memory, not the syscall.
+    FutexWait = 17,
+    /// Wake up to `count` waiters on the caller's key.
+    ///
+    /// ABI: a0 = word address, a1 = count (0 wakes every waiter on the key)
+    ///      → number woken; `usize::MAX` on error.
+    FutexWake = 18,
+    /// Create a pipe and write both endpoint handles into the caller's 2-word buffer.
+    ///
+    /// ABI: a0 = capacity in bytes (0 = default 4096, clamped to [64, 65536]),
+    ///      a1 = out_ptr (16 bytes on rv64, 8 on rv32) → 0 on success.
+    /// The ring is kernel memory charged to the creating cell's quota.
+    PipeCreate = 19,
+    /// Read up to `len` bytes from a pipe.
+    ///
+    /// ABI: a0 = handle, a1 = buf_ptr, a2 = len, a3 = timeout in 10 ms ticks
+    ///      (0 = block forever) → bytes read (0 = EOF or deadline), `usize::MAX`
+    ///      when the handle is not this task's.
+    /// Blocks while the ring is empty and a writer end remains.
+    PipeRead = 22,
+    /// Write up to `len` bytes to a pipe.
+    ///
+    /// ABI: a0 = handle, a1 = buf_ptr, a2 = len, a3 = timeout in 10 ms ticks
+    ///      (0 = block forever) → bytes written (0 = deadline), `usize::MAX - 2`
+    ///      when no reader end remains (broken pipe).
+    /// Blocks while the ring is full; a zero-length write closes the writer end.
+    PipeWrite = 23,
+    /// Close one endpoint this task owns. ABI: a0 = handle → 0.
+    /// Closing the last writer end makes readers observe EOF.
+    PipeClose = 24,
+    /// Duplicate an endpoint into another task's table.
+    ///
+    /// ABI: a0 = handle, a1 = target tid → 0 on success. Owner-only: a task cannot
+    /// share an endpoint it does not hold.
+    PipeShare = 25,
     Yield = 104,   // Linux sched_yield is 24, but we use 104 in current code
     SetTimer = 35, // Added SetTimer
     ShmAlloc = 20, // Allocate Shared Memory
@@ -892,6 +951,28 @@ impl ViSyscall {
             | Self::CancelCellOwnerWatch
             | Self::ResolveCellOwnerRecord
             | Self::WatchCellOwnerRecord
+            // SetTlsBase is self-only and carries no authority: it changes one word
+            // of the caller's own register state, and the allowlist bitmap is full
+            // (bits 0-62 assigned, 63 is the VFS-mutate declaration bit). Giving it
+            // a bit would silently deny every cell whose `__ViCell_syscalls` section
+            // predates it, for no authority reason.
+            | Self::SetTlsBase
+            // Futex wait/wake are keyed by (address space, generation, address) and
+            // carry no authority of their own: a caller can already write any word
+            // it can wait on, and the domain identity keeps a Tier 2 peer from
+            // waking a wait it does not share.
+            | Self::FutexWait
+            | Self::FutexWake
+            // Pipe endpoints carry their authority in ownership, not in a bit: a
+            // task can only use a handle it holds, and only the owner can share it.
+            // The allowlist bitmap is full (bits 0-62 assigned, 63 is the
+            // VFS-mutate declaration bit), so a bit would deny every cell whose
+            // `__ViCell_syscalls` section predates the opcode.
+            | Self::PipeCreate
+            | Self::PipeRead
+            | Self::PipeWrite
+            | Self::PipeClose
+            | Self::PipeShare
             | Self::Unknown => None,
         }
     }
@@ -918,6 +999,14 @@ impl From<usize> for ViSyscall {
             16 => ViSyscall::SpawnPinned,
             420 => ViSyscall::Snapshot,
             8 => ViSyscall::Wait,
+            9 => ViSyscall::SetTlsBase,
+            17 => ViSyscall::FutexWait,
+            18 => ViSyscall::FutexWake,
+            19 => ViSyscall::PipeCreate,
+            22 => ViSyscall::PipeRead,
+            23 => ViSyscall::PipeWrite,
+            24 => ViSyscall::PipeClose,
+            25 => ViSyscall::PipeShare,
             104 => ViSyscall::Yield,
             35 => ViSyscall::SetTimer,
             20 => ViSyscall::ShmAlloc,

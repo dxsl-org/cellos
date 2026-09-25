@@ -135,15 +135,9 @@ pub mod json {
 #[cfg(feature = "http")]
 pub mod http;
 
-/// Task spawning.
-pub mod task {
-    use crate::*;
-
-    /// Yield current task.
-    pub fn yield_now() {
-        syscall::sys_yield();
-    }
-}
+/// Task spawning and yielding — [`task::spawn`] runs a closure on a second
+/// thread of the same Cell (same CellId, capabilities, syscall allowlist).
+pub mod task;
 
 /// Convenience entry-point macro for App SDK cells.
 ///
