@@ -1,6 +1,6 @@
 # Current Focus
 
-**Last updated**: 2026-09-05
+**Last updated**: 2026-09-22 (cell scale profile status projected; Spec 19 §3 amended)
 
 ## Development-first, solo-first execution boundary
 
@@ -121,6 +121,89 @@ checkpoint, and the 25.6 MiB case followed: the large-payload panic turned out t
 the board), fixed by sizing that region from the linker end symbol — after which the 43.6 MB payload
 boots and reports `[ai] model ready: 32000 vocab, context 128, resident bytes 28087038` with
 `[ai-test] PASS`.
+
+## Cell-native portability program (completed)
+
+[ADR-0018](../decisions/0018-cell-native-portability-and-runtime-profiles.md) settles how Linux
+applications become native Cellos applications without a Linux personality: POSIX is translated in
+userspace, porting has three lanes (relink / embed the library / Tier 3 guest) selected by the
+application's POSIX profile, a language is admitted as a runtime profile under five conditions
+(`cpp-freestanding` is next), and the kernel gains exactly three primitives — per-task TLS, a futex
+ABI, and a pipe object. [ADR-0019](../decisions/0019-tier2-admission-control-on-path.md) settles the
+control that gates Tier 2: one on-path policy, feature-selected capability only, an explicit default
+posture per build profile, and predicates that cover the architectures the route supports. It also
+records the shipped truth: the policy module is not on the path today, while the class-based route
+runs on the default `native-domains` feature.
+
+Execution is queued in
+[.agents/260922-1549-cell-native-portability-program/plan.md](../../.agents/260922-1549-cell-native-portability-program/plan.md)
+(7 phases). **Phase 01 is complete** at the `qemu` ceiling: the admission control now sits at the
+single publication point (`task::launch::publish_prepared`) with a held-and-rechecked lease, a
+denial that never falls back to SAS, architecture coverage that matches the route, a
+MMIO/DMA/device-authority ceiling, and an explicit per-profile posture (development enables;
+`policy-required`/`production-relay-image` leave admission disabled and deny domain-class
+artifacts). Evidence: `S22-RV64-ADMISSION-{ENABLED,DENY,DRAIN,PUBLICATION-DENY,CEILING}: PASS`
+across five cases of `scripts/qemu-native-domain-test.sh`, and `tier2-fault-isolation` 5/5 PASS
+against a rebuilt kernel. The operator-facing `DRAINING` trigger is still absent (the transition
+is in-kernel and selftest-exercised). **Phase 02 is complete**: `cpp-freestanding` ships as a
+language subset whose C++ ABI runtime is the POSIX shim itself, with reference cell
+`cells/tests/cpp-smoke` and runner `scripts/qemu-cpp-smoke.sh` (`CPP-SMOKE-QEMU: PASS`, 9/9
+assertions on RV64; AArch64 build clean; x86_64 refused by design because the shim's C++ ABI layer
+is complete**. **Phase 03 is complete**: `SetTlsBase` gives each task its own user thread pointer
+(RV64 trap-frame `tp`, AArch64 `TPIDR_EL0`, x86_64 `FS_BASE`), and a thread inherits its creator's
+base. The scheduler publishes it under lock; AArch64/x86 install it before fresh `__trap_exit`
+entry and after switched-back resume; RV64 writes the child trap-frame carrier before scheduling.
+`scripts/qemu-tls-test.sh` verifies the RV64 one- and two-hart cases; its domain switch,
+migration, and fast-path regression suite stays green. C `__thread` remains a documented gap: it
+needs loader `PT_TLS` exposure plus per-thread block placement, which the kernel primitive unblocks.
+**Phase 04 is complete**: `FutexWait`/`FutexWake` (17/18) park and
+wake by `(address space, generation, address)` — a Tier 2 peer cannot wake a wait it does not
+share — with the deciding read under `SCHEDULER` through a validated copy view, deadlines on the
+existing sweep, and waiter cleanup on exit. Verified on RV64 with one and two harts
+(`scripts/qemu-futex-test.sh`: 10 000 serialised increments and 2 000 ping-pong rounds with zero
+deadline expiries, plus timeout/mismatch/invalid-address cases), and the `futex-key` boot selftest
+proves the key's domain discrimination. Two self-inflicted bugs were found and fixed during the
+phase (a copy-view self-deadlock under `SCHEDULER`, and the shared timeout block clobbering the
+futex outcome). The shim-level pthread surface stays with the porting kit (phase 06). **Phase 05
+is complete**: fixed-capacity kernel pipes and endpoint ownership cross two independently admitted
+Tier 2 domains through `/bin/pipe-test` and `/bin/pipe-peer`; RV64 QEMU harts 1/2 pass 1,024
+ordered bytes through a 256-byte ring, exact EOF, `BrokenPipe`, unauthorized denial, and measured
+drain/wake markers. **Phase 06 is complete**: the generated 200-symbol shim contract has
+injected-drift checks; `port-platform` safely owns VFS/TCP/compositor/input/time clients; and the
+external CMake/Meson smoke archive runs through `posix-shim-test` in RV64 QEMU. **Phase 07 is
+complete**: Tetris-C is the Class-A witness, `c-pthread` is the Class-B witness
+(`scripts/qemu-c-pthread.sh`: `C-PTHREAD-QEMU: PASS` after a two-worker condition-variable handoff
+and 32 immediate create/join reuse cycles), and the follow-on C child-process adapter is the
+Class-C witness (`libs/port-platform/{include/,}cellos_spawn.{h,c}`; `scripts/qemu-c-spawn.sh`:
+`C-SPAWN-QEMU: PASS` on harts 1 and 2). The adapter composes an exact reviewed launch edge with the
+staged command line, explicit `PipeShare` endpoint grants, and `Wait`, and proves argv delivery, an
+ordered endpoint payload, the child's status, a denied unreviewed target, and the refusal of an
+over-long command line; it is not `fork`/`exec`/`posix_spawn`. The reference-port closure re-ran
+the class-B and class-C selections and published raw logs under `docs/evidence/`
+(`c-pthread-qemu.*`, `c-spawn-harts{1,2}-qemu.*`) with Tier-2 admission markers, artifact sizes, a
+1,307-line phase-authored surface, and a 3.29 h measured artifact window. A third-party port that
+needs a `fork`/`exec` process tree remains a recorded class-D blocker. No phase carries a physical,
+fleet-secure, or production claim.
+
+## Cell scale profiles (D5)
+
+The per-request server profile (Spec 19 §3) is an accepted goal, not current capacity, and the
+large-app profile remains the default with `MAX_CELLS = 64`. The 2026-07-31 measurement stopped
+at **n = 8–9** parked cells with `MAX_CELLS` already raised to 512 and all 512 VA slots free; the
+binding ceiling was a **hardcoded 190 MiB RAM map**, not per-cell cost — so the profile "cannot be
+reached by raising constants". That prerequisite has since landed: RISC-V builds its memory map
+from the firmware DTB (`kernel/src/boot/dtb_memory.rs`) and `MemInfo = 243` returns
+`ViMemInfoV1 { total, used, free }`, so capacity is measurable from userspace for the first time.
+
+Still open, in the order the measurement established: shared immutable `.text`/`.rodata` frames
+(the loader still copies the whole ELF per spawn), demand-paged stacks, and — last — raised
+`MAX_CELLS`/`MAX_SLOTS`. The staged N = 64/128/256/512 gate has not been re-run since the memory
+map landed, and it must be measured **with heavy cells resident** to describe a mixed deployment;
+a variable VA budget (fixed 32 MiB stride today, `kernel/src/loader/va_alloc.rs:47`) is an
+additional prerequisite for data cells. Runnable instrument: `cells/tests/bench/src/capacity-probe.rs`
+(built only with `CELLOS_INCLUDE_CAPACITY_PROBE=1`) plus
+`tests/integration/tests/capacity-observability.rs`; no committed N-sweep scenario exists.
+This remains `qemu`-ceiling work.
 
 ## Current executable work
 
@@ -286,7 +369,8 @@ boots and reports `[ai] model ready: 32000 vocab, context 128, resident bytes 28
   remediation tracked by the [open risk register](open-risk-register.md). This
   label does not apply to completed/regression-only lanes or all advanced work.
 - **Future capability:** remote/public Cell-to-Cell operation, additional
-  desktop and x86 platform depth, G3 accelerators, G4 `rust-std`, and G5
+  desktop and x86 platform depth, per-request cell scale (D5, Spec 19 §3),
+  G3 accelerators, G4 `rust-std`, and G5
   virtualization expansion.
 - **External-gated prerequisite:** unavailable exact boards, protected relay
   assets/cloud identity, and an exact production-root vendor evidence package.
@@ -399,6 +483,17 @@ events are maintained in
 
 ## Current Documentation Corrections
 
+- Spec 21's Layer-3 mechanism is live: `scripts/check-spec-anchors.py` resolves every
+  `Anchor:` line under `docs/specs/` against the tree and generates
+  `docs/spec-status.generated.md`, which is now the status home specs link to instead of
+  carrying status prose. The `lint` CI job runs it warn-only plus a staleness gate;
+  `--strict` turns on enforcement once the rollout step-2 backfill reaches zero coverage
+  gaps. At 2026-09-22: 19 sections anchored (`19-` and `21-`), 0 anchor violations, 256
+  ratified sections still unanchored, 81 status-prose hits remaining.
+- Spec 19's §2 previously named `task::spawn_from_mem`, which does not exist; the
+  enforcement path is `kernel/src/loader/wx.rs::enforce`, called from `task::elf_prepare`
+  with the gated entry `loader::mem_spawn_gate::spawn_from_mem_gated`. The section now
+  carries `impl` and `test` anchors so a rename cannot land silently.
 - MicroPython is historical, not an active workspace runtime.
 - Cargo workspace count is generated/discovered data; avoid hardcoding old
   counts except in generated metrics.

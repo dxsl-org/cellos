@@ -1,6 +1,6 @@
 # Open Risk Register
 
-**Last updated**: 2026-09-04
+**Last updated**: 2026-09-22 (cell scale and mixed-profile limits recorded)
 
 This register tracks confirmed readiness gaps found while syncing docs to code.
 It is not a global bug-fix queue, and it does not turn all future or
@@ -213,6 +213,24 @@ those remain fail-closed production gates.
   test-hook semihosting debt at the QEMU ceiling; acceptance-ledger production
   Phase 3 remains PLANNED, and physical AArch64 hardware qualification remains an
   external-gated prerequisite.
+
+- **Cell scale profiles and mixed-profile limits (D5).** The per-request server
+  profile is an accepted goal, not capacity: the 2026-07-31 measurement refused at
+  n = 8–9 parked cells with `MAX_CELLS` already raised to 512 and all 512 VA slots
+  free, and the binding ceiling was a hardcoded 190 MiB RAM map rather than
+  per-cell cost. Firmware DTB memory discovery has since landed
+  (`kernel/src/boot/dtb_memory.rs`) and `MemInfo = 243` makes capacity measurable,
+  but the staged N = 64/128/256/512 gate has not been re-run and must be measured
+  with heavy cells resident to describe a mixed deployment. Two further limits are
+  confirmed in the current tree: the per-cell VA stride is a fixed 32 MiB
+  (`kernel/src/loader/va_alloc.rs:47`), so a data cell whose code + data + heap
+  exceeds it cannot exist today and bulk data must travel through grants
+  (identity-mapped, ≤ 16 MiB per grant) or VFS; and every thread's stacks require a
+  contiguous `STACK_PAGES + 1` frame run (`kernel/src/task/scheduler.rs:9-13`), so
+  long-lived heavy cells and churning light cells compete for contiguous frames.
+  Image sharing, demand-paged stacks, dynamic tables, a variable VA budget, and a
+  userspace supervisor for churn classes remain open. [Spec 19 §3](../specs/19-hardware-isolation-layers.md)
+  (amendment 2026-09-22) owns the prerequisites; all of this remains `qemu`-ceiling work.
 
 ## Low
 

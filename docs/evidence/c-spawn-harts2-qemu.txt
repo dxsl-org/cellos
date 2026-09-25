@@ -1,0 +1,345 @@
+
+OpenSBI v1.3
+   ____                    _____ ____ _____
+  / __ \                  / ____|  _ \_   _|
+ | |  | |_ __   ___ _ __ | (___ | |_) || |
+ | |  | | '_ \ / _ \ '_ \ \___ \|  _ < | |
+ | |__| | |_) |  __/ | | |____) | |_) || |_
+  \____/| .__/ \___|_| |_|_____/|___/_____|
+        | |
+        |_|
+
+Platform Name             : riscv-virtio,qemu
+Platform Features         : medeleg
+Platform HART Count       : 2
+Platform IPI Device       : aclint-mswi
+Platform Timer Device     : aclint-mtimer @ 10000000Hz
+Platform Console Device   : uart8250
+Platform HSM Device       : ---
+Platform PMU Device       : ---
+Platform Reboot Device    : sifive_test
+Platform Shutdown Device  : sifive_test
+Platform Suspend Device   : ---
+Platform CPPC Device      : ---
+Firmware Base             : 0x80000000
+Firmware Size             : 332 KB
+Firmware RW Offset        : 0x40000
+Firmware RW Size          : 76 KB
+Firmware Heap Offset      : 0x4a000
+Firmware Heap Size        : 36 KB (total), 2 KB (reserved), 9 KB (used), 24 KB (free)
+Firmware Scratch Size     : 4096 B (total), 760 B (used), 3336 B (free)
+Runtime SBI Version       : 1.0
+
+Domain0 Name              : root
+Domain0 Boot HART         : 1
+Domain0 HARTs             : 0*,1*
+Domain0 Region00          : 0x0000000002000000-0x000000000200ffff M: (I,R,W) S/U: ()
+Domain0 Region01          : 0x0000000080040000-0x000000008005ffff M: (R,W) S/U: ()
+Domain0 Region02          : 0x0000000080000000-0x000000008003ffff M: (R,X) S/U: ()
+Domain0 Region03          : 0x0000000000000000-0xffffffffffffffff M: (R,W,X) S/U: (R,W,X)
+Domain0 Next Address      : 0x0000000080200000
+Domain0 Next Arg1         : 0x000000008fe00000
+Domain0 Next Mode         : S-mode
+Domain0 SysReset          : yes
+Domain0 SysSuspend        : yes
+
+Boot HART ID              : 1
+Boot HART Domain          : root
+Boot HART Priv Version    : v1.12
+Boot HART Base ISA        : rv64imafdch
+Boot HART ISA Extensions  : time,sstc
+Boot HART PMP Count       : 16
+Boot HART PMP Granularity : 4
+Boot HART PMP Address Bits: 54
+Boot HART MHPM Count      : 16
+Boot HART MIDELEG         : 0x0000000000001666
+Boot HART MEDELEG         : 0x0000000000f0b509
+[ INFO] [uart] RX/TX base = 0x10000000
+[Cellos] kernel boot v0.2.1
+Kernel started (Hart: 0, DTB: ...)
+[cpu] H-extension: detected
+[INFO] Limine not found, using QEMU/OpenSBI fallback
+[boot] kernel_phys_base=0x0000000080200000
+[ INFO] [boot] allocator range 0x82b7d000..0x90000000 (222834688 bytes)
+[INFO] Initializing paging...
+[INFO] Paging initialized
+[INFO] Activating paging...
+[INFO] Paging activated
+[INFO] Frame allocator initialized
+[INFO] Heap initialized
+[ INFO] [rt-heap] TLSF pool ready — 256 KiB, O(1) alloc/dealloc
+[INFO] RT heap initialized
+[INFO] HAL initialized (PLIC enabled)
+[ INFO] [uart] RX/TX base = 0x10000000
+[ INFO] UART Input Buffer Initialized
+[ INFO] [input_irq_ack] input device at 0x10007000 irq=7
+[ INFO] Console: Input Driver Initialized.
+[ INFO] RAM Disk: read-only, 40960 KB (81920 sectors)
+[ INFO] [snapshot] no block device → cold boot
+[ WARN] [mbr] LBA 0 unreadable — skipping partition verification
+[loader] WARN: cell table not found — disk image may lack bootstrap section
+[ INFO] Filesystem: Initializing...
+[ INFO] Boot Sector Debug:
+[ INFO]   Signature: 0xAA55
+[ INFO]   Bytes/Sector: 512
+[ INFO]   Sectors/Cluster: 2
+[ INFO]   Reserved Sectors: 1
+[ INFO]   FAT Count: 2
+[ INFO]   Media: 0xF8
+[ INFO]   Total Sectors: 81920
+[ INFO]   Sectors/FAT (FAT16): 192
+[ INFO]   Root Entry Count: 512
+[ INFO] Filesystem: FAT16 mounted successfully.
+[ INFO] [policy] loaded + verified (45 entries, flags 0x00)
+[ INFO] state-stash: round-trip OK
+[INFO] Kernel subsystems initialized successfully.
+[INFO] Initializing scheduler...
+[ INFO] Process: Initializing Scheduler...
+[ INFO] Timer preemption enabled (10 ms timeslice)
+[INFO] Scheduler initialized
+[ INFO] Thread 'thread' (ID 1): KStack 0x83009000-0x8301B000, UStackTop 0x8302D000, Entry 0x1000, Arg 0x0
+[ WARN] [kernel] CapRevoke: refused ambient-authority bits mask=0x00000008 from task 9001 (teardown not implemented)
+[ WARN] [kernel] CapRevoke: refused ambient-authority bits mask=0x0000ff00 from task 9001 (teardown not implemented)
+[ INFO] [kernel] CapRevoke: task 9001 revoked mask=0x00000004 from task 9003
+[ WARN] [sched] cell CellId(60) at thread cap (32) — refusing spawn_thread
+[ INFO] [selftest] THREAD-CAP: PASS (thread-inherit + honest-revoke + spawn bound)
+[INFO] thread-cap self-test PASS (thread-inherit + honest-revoke + spawn bound)
+[ INFO] Thread 'thread' (ID 1): KStack 0x83009000-0x8301B000, UStackTop 0x8302D000, Entry 0x1000, Arg 0x0
+[ WARN] [sched] cell CellId(63) cannot afford thread stacks (147456 bytes, 0 in use) — refusing spawn_thread
+[ INFO] [selftest] THREAD-QUOTA: PASS (charged, released, enforced)
+[INFO] thread-quota self-test PASS (charged, released, enforced)
+[INFO] thread-user-entry self-test SKIP (RV64 runtime gate only)
+[ INFO] [selftest] COMPLETION-QUEUE: PASS (cap 32 slots, 624 bytes per cell)
+[INFO] completion-queue self-test PASS (reserve, land, bound, defer)
+[ WARN] [net-rx] cell 9412 took over the reservation held by cell 9411
+[ INFO] [selftest] NET-RX-RESERVATION: PASS (fills, remembers, releases, IPC-safe)
+[INFO] net-rx-reservation self-test PASS (fill, remember, release)
+[ INFO] [selftest] IPC-PENDING: PASS (deferred, bounded, quota-safe, completion-wake)
+[INFO] ipc-pending self-test PASS (deferred delivery, bounds, quota)
+[INFO] cap-file self-test PASS (read-only enforcement)
+[ INFO] [selftest] IPC-GUARDRAILS: PASS (dead-peer bounded, RecvScatter isolated)
+[INFO] ipc-guardrail self-test PASS (dead-peer wake, RecvScatter isolated)
+[ INFO] [smp] physical 1 -> logical 0 boot
+[ INFO] [smp] physical 0 -> logical 1 HSM state = 1
+[ INFO] [smp] hart 0 start requested (entry=0x80200090)
+[ INFO] [smp] physical 0 -> logical 1 trap-ready, interrupts-enabled
+[ INFO] [smp] hart 1 online, parked
+[INFO] Tier 2 admission: ENABLED (development profile)
+[INFO] Spawning Embedded Init...
+[INFO] ed25519 verify self-test PASS (RFC 8032 + tamper)
+[INFO] policy verify+parse self-test PASS (signed blob + tamper)
+[INFO] cell signing self-test PASS
+[ INFO] [selftest] P-TRUST: PASS (privileged path-caps bounded by ceiling)
+[INFO] P-TRUST self-test PASS (privileged path-caps ceiling-bounded)
+[ INFO] [selftest] boot-ceiling: PASS (per-path table, no union collapse)
+[INFO] boot-ceiling self-test PASS (per-path table, no union collapse)
+[INFO] mmio-allowlist self-test PASS (known windows live, DWC2 denied)
+[ INFO] [selftest] MANIFEST-V2: PASS (v1 upcast + v2 parse + protection-class floor invariant)
+[INFO] Manifest-v2 self-test PASS (v1 upcast + v2 parse + tier-floor)
+[ INFO] [early] VIFS1-first /bin/platform <- ramdisk (47376 bytes)
+[ INFO] ELF LOAD: 0x100000000-0x100002B0E flags=R-X
+[ INFO] ELF LOAD: 0x100002B10-0x100003590 flags=R--
+[ INFO] ELF LOAD: 0x100004000-0x100004240 flags=RW-
+[ INFO] ELF LOAD: 0x100005000-0x100105060 flags=RW-
+[ INFO] ELF LOAD: 0x100105060-0x1001064E8 flags=R--
+[ INFO] [wx] 'platform': 5/263 cell pages lowered to read-only/execute-only
+[INFO] Platform Cell spawned (PCIe ECAM scanner)
+[INFO] Publishing trusted init
+[ INFO] ELF LOAD: 0x102000000-0x10200244A flags=R-X
+[ INFO] ELF LOAD: 0x102002450-0x1020034E0 flags=R--
+[ INFO] ELF LOAD: 0x102004000-0x102004108 flags=RW-
+[ INFO] ELF LOAD: 0x102005000-0x102006248 flags=R--
+[ INFO] [wx] 'init': 6/7 cell pages lowered to read-only/execute-only
+[ INFO] Successfully spawned init with complete root authority (tid=2)
+[INFO] Kernel initialization complete. Entering idle loop.
+[INFO] Starting scheduler...
+USER: Init: Starting Cellos Orchestrator...[platform] ECAM scan buses 
+USER: 0-0 starting
+[ INFO] [pcie] platform-reg 00:00.0 class=06:00:00 bar0=0x0
+[ WARN] [iommu] RISC-V IOMMU not found (needs QEMU ≥8.2 + -device riscv-iommu-pci,bus=pcie.0)
+USER: [platform] registered bus 0 device 0 function 0 class 6:0:0
+USER: [platform] ECAM scan complete
+[ INFO] Syscall::Exit: task 1 exited with code 0
+[ WARN] [policy] narrowed "/bin/block" (tid 3): dropped 0b010000000 [regions|mmio|sup|plat|pcie|hyp|spawn|net|bio]
+[ WARN] [driver_cell] block driver registered: tid=3
+USER: [virtio-blk] ready
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/nvme error=NotFound
+USER: VFS Service v0.2: RamFS + mkdir/rmdir/unlink IPC (typed postcard)
+USER: [vfs] FAT32 /mnt/sd volume mounted
+USER: [vfs] CellosFS Native mounted at existing volume
+USER: [vfs] FAT32 /bin volume mounted
+USER: [vfs] CellosFS Native mounted at existing volume
+USER: [config] Config Service v0.3 (typed IPC)
+[ WARN] [policy] narrowed "/bin/input" (tid 6): dropped 0b010000000 [regions|mmio|sup|plat|pcie|hyp|spawn|net|bio]
+[ WARN] [input] registered input service TID 6
+USER: [input] Input Service v0.3: US QWERTY + VirtIO + typed focus routing
+USER: [input] VirtIO input device claimed; polling virtqueue directly
+[ WARN] [policy] narrowed "/bin/virtio-net" (tid 7): dropped 0b010000000 [regions|mmio|sup|plat|pcie|hyp|spawn|net|bio]
+[ WARN] [driver_cell] NIC driver registered: tid=7
+USER: [virtio-net] ready
+[ WARN] [policy] narrowed "/bin/e1000" (tid 8): dropped 0b010000000 [regions|mmio|sup|plat|pcie|hyp|spawn|net|bio]
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/dwc2-usb error=NotFound
+USER: [net] Network Service v0.1: smoltcp + NIC Driver Cell + DHCP
+USER: [net] Starting DHCP...
+USER: [net-bridge] first e1000 TX len=304 accepted=true
+USER: [net] DHCP: deconfigured
+USER: [net-bridge] first e1000 RX len=590
+USER: [net-rx-producer] irq->completion PASS
+USER: [net] DHCP acquired — IP configured
+USER: [net] IP address: 10.0.2.15
+[ WARN] [policy] narrowed "/bin/virtio-gpu" (tid 10): dropped 0b010000000 [regions|mmio|sup|plat|pcie|hyp|spawn|net|bio]
+USER: [virtio-gpu] VirtIO GPU Driver Cell registered
+USER: [compositor] Compositor v0.2: software blending, VirtIO GPU, input routing
+USER: [compositor] hardware cursor active
+USER: [ai] inference service starting
+USER: [kms] fail-closed node identity service starting
+USER: Init: services spawned.
+USER: Init: service registry verified.
+USER: Init: fb-console spawned.
+USER: [fb-console] starting
+USER: [fb-console] compositor found
+USER: [fb-console] background surface created
+USER: [fb-console] initial damage submitted
+USER: [fb-console] first log batch received
+USER: [compositor] first scanout flush submitted
+USER: Init: desktop spawned.
+USER: [desktop] CellOS Desktop initializing...
+USER: [desktop] Display resolution confirmed.
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/hypervisor error=NotFound
+USER: [desktop] Taskbar surface ready.
+USER: [desktop] Ready. Entering event loop.
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/silo-test error=NotFound
+USER: [ai-test] AI inference oracle starting
+USER: [vfs-test] Starting VFS integration test suite...
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/srv-test error=NotFound
+USER: [PASS] write /tmp/test_lifecycle.txt
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/std-smoke error=NotFound
+USER: [PASS] stat size=11 is_file
+USER: [PASS] unlink /tmp/test_lifecycle.txt
+USER: [PASS] stat after unlink returns Err
+USER: DEBUG: Shell Started (Async Mode)
+USER: Init: supervising services (auto-restart on crash)...
+USER: DEBUG: Shell focus acquired (or timed out)
+USER: [executor] dummy-waker=absent executor=parked source=TIMER PASS
+USER: [PASS] mkdir /tmp/testdir
+USER: [PASS] write inside testdir
+USER: [PASS] listdir /tmp/testdir contains f:file.txt
+USER: [PASS] rmdir /tmp/testdir after cleanup
+USER: [PASS] write /bin/ returns PermissionDenied
+USER: [PASS] write /tmp/ still works
+USER: [PASS] unlink /readme.txt (read-only / prefix) → PermissionDenied
+USER: [PASS] /readme.txt survived the refused unlink
+USER: [PASS] rmdir under / → PermissionDenied (authorized before backend)
+USER: [PASS] rmdir_recursive under / → PermissionDenied (before subtree walk)
+USER: [PASS] grant-write: unknown handle is denied before grant access
+[ WARN] [grant] GrantFree 0x88a7b000 refused: region 0x88a7b000+4096 overlaps a pinned region 0x88a7b000+1 pages owned by task 18 with 1 in-flight operation(s)
+USER: [PASS] ReadGrant unknown cap returns zero bytes without faulting
+USER: [ai] model path: /bin/ai-model.gguf
+USER: [ai] model bytes: 102744 read in 2524 ms
+USER: [ai] engine load: 7 ms
+USER: [ai] model ready: 270 vocab, context 128, resident bytes 115488
+[ WARN] [grant] GrantFree 0x88a7c000 refused: region 0x88a7c000+4096 overlaps a pinned region 0x88a7c000+1 pages owned by task 18 with 1 in-flight operation(s)
+USER: [PASS] ReadGrant unknown cap returns zero bytes for size=0
+USER: [ai-test] model=tiny-llama-64
+USER: [ai-test] vocab=270 context=128 sessions=4
+[ WARN] [grant] GrantFree 0x88a7d000 refused: region 0x88a7d000+4096 overlaps a pinned region 0x88a7d000+1 pages owned by task 18 with 1 in-flight operation(s)
+USER: [PASS] ReadGrant unknown cap returns zero bytes for oversized offset
+USER: [PASS] grant-write: create writable target
+USER: [PASS] grant-write: helper returns committed byte count
+USER: [PASS] grant-write: commits exact bytes before acknowledgement
+USER: [PASS] grant-write: invalid offset is refused before grant access
+USER: [ai-test] generate: 8 tokens in 12 ms (666666 tokens/s x1000, 6 polls)
+USER: [ai-test] greedy ids matched: 8 tokens over 6 polls
+USER: [ai-test] embedding matched: 64 dims
+USER: [PASS] grant-write: short grant is refused without mutation
+USER: [PASS] grant-write: grant copy denial propagates as I/O error
+USER: [PASS] grant-write: failed writes leave committed bytes unchanged
+USER: [PASS] grant-write: copies into exact bounded destination range
+USER: [PASS] grant-write: bounded copy preserves prefix and suffix
+USER: [PASS] grant-write: write authorization precedes grant access
+USER: [ai-test] abandoned session released; service still serving
+USER: [PASS] write file for async read
+USER: [PASS] ReadAsync returns PendingHandle
+USER: [ai-test] prompt stream matched: 8 tokens
+USER: [ai-test] PASS
+USER: [PASS] Poll returns correct data
+USER: [PASS] Poll stale handle returns Err
+USER: [PASS] write /tmp/volatile.txt
+USER: [PASS] stat /tmp/volatile.txt size=8
+USER: [PASS] stat /tmp is_dir=true
+USER: [PASS] stat /tmp is_dir=true
+USER: [PASS] stat nonexistent returns Err
+USER: [PASS] listdir nonexistent = empty
+USER: [PASS] dircap: acquiring /tmp yields a directory handle
+USER: [PASS] dircap: `..` is refused
+USER: [PASS] dircap: `../..` is refused
+USER: [PASS] dircap: an absolute name is refused
+USER: [PASS] dircap: an embedded traversal is refused
+USER: [PASS] dircap: `.` is refused
+USER: [PASS] dircap: an empty name is refused
+USER: [PASS] dircap: a backslash name is refused
+USER: [PASS] dircap: a control byte is refused
+USER: [PASS] dircap: odd UTF-8 in a name is refused
+USER: [PASS] dircap: deriving a subdirectory handle
+USER: [PASS] dircap: WriteAt creates a file inside the handle
+USER: [PASS] dircap: StatAt reports the file it just wrote
+USER: [PASS] dircap: ReadAt returns the bytes written
+USER: [PASS] dircap: ListAt lists the handle's own directory
+USER: [PASS] dircap: the handle resolved inside the directory it names
+USER: [PASS] dircap: OpenFileAt yields a file handle
+USER: [PASS] dircap: a handle can be given up
+USER: [PASS] dircap: revoking a handle revokes what was derived from it
+USER: [PASS] dircap: revoking a parent dir reaps file handles opened below it
+USER: [PASS] dircap: a revoked file handle cannot be closed into success
+USER: [PASS] dircap: acquiring /tmp yields a directory handle
+USER: [PASS] dircap: deriving a subdirectory handle
+USER: [PASS] grant: ReadFileGrant clamps to grant length
+USER: [PASS] grant: ReadFileGrant copies nonzero bytes
+USER: [PASS] dircap: GetFile returns a nonempty pointer before sealing
+USER: [PASS] dircap: OpenFileAt returns a file handle for a file
+USER: [PASS] dircap: the cell gives up naming paths
+USER: [PASS] dircap: Write{path} is refused after sealing
+USER: [PASS] dircap: the refused write left nothing behind
+USER: [PASS] dircap: GetFile is refused after sealing
+USER: [PASS] dircap: Stat is refused after sealing
+USER: [PASS] dircap: ListDir is refused after sealing
+USER: [PASS] dircap: Unlink is refused after sealing
+USER: [PASS] dircap: Mkdir is refused after sealing
+USER: [PASS] dircap: ReadAsync is refused after sealing
+USER: [PASS] dircap: widening by acquiring a new root is refused after sealing
+USER: [PASS] grant: ReadFileGrant is refused after sealing
+USER: [PASS] dircap: ReadFileHandle still works after sealing
+USER: [PASS] dircap: ReadFileHandle returns EOF for an oversized offset
+USER: [PASS] dircap: ReadFileHandle returns EOF for a zero-length request
+USER: [PASS] dircap: CloseFile closes a live file handle
+USER: [PASS] dircap: a closed file handle is stale
+USER: [PASS] dircap: handle operations still work after sealing
+USER: [PASS] dircap: UnlinkAt still works after sealing
+USER: 
+USER: [vfs-test] Results: 83 PASS, 0 FAIL
+USER: [vfs-test] ALL TESTS PASSED
+USER: 
+USER: === Cellos shell ready — type 'help' for commands ===
+USER: Cellos > c-spawn
+[ WARN] [domain] admitted cell 'c-spawn' to Tier 2 Paged Domain (SATP isolation)
+[ WARN] [domain] admitted cell 'c-spawn-child' to Tier 2 Paged Domain (SATP isolation)
+USER: [c-spawn-child] argv items=2
+USER: [c-spawn-child] payload bytes=192
+USER: [c-spawn] launched tid=21
+USER: [c-spawn] route elf-bytes reviewed edge
+USER: [c-spawn] wait already-terminal
+USER: [c-spawn] ordered payload bytes=192
+USER: [c-spawn] child reported status=42
+USER: [c-spawn] child argv items=2
+[ WARN] [loader] DENY launch edge: caller=20 name=c-spawn route=Elf target=/bin/pipe-peer spawn_cap=false supervisor_cap=false
+USER: [c-spawn] unreviewed target denied
+USER: [c-spawn] overlong argv rejected
+[ WARN] [domain] admitted cell 'c-spawn-child' to Tier 2 Paged Domain (SATP isolation)
+USER: [c-spawn-child] argv items=0
+USER: [c-spawn-child] payload bytes=192
+USER: [c-spawn] wait already-terminal
+USER: [c-spawn] ordered payload bytes=192
+USER: [c-spawn] child reported status=42
+USER: [c-spawn] denied launch left no staged argv
+USER: C-SPAWN-QEMU: PASS
+USER: Cellos > qemu-system-riscv64: terminating on signal 15 from pid 1808166 (timeout)

@@ -23,7 +23,7 @@ developer APIs.
 | Tier | Canonical name | Runtime profiles | Isolation | Current status | When to use |
 |------|----------------|------------------|-----------|----------------|-------------|
 | **Tier 1** | Trusted SAS Cell | `rust-no-std` shipped; pure-Rust `rust-std` in-tree; `ffi-posix` and `lua` trusted profiles | Shared SAS + LBI; fleet posture depends on signing/admission | Current native app path | Trusted first-party/platform cells, drivers, services, UI, embedded/robot apps. |
-| **Tier 2** | Native Domain Cell | Same native Cell shape as Tier 1 | Private MMU domain; copied/domain-explicit IPC | RV64/QEMU substrate and cross-hart migration implemented in internal test-hooks fixtures only; no public application admission/loader route. Physical containment, DMA quarantine and production approvals remain open | Not currently available for application deployment; untrusted native workloads remain blocked, not silently assigned to Tier 1. |
+| **Tier 2** | Native Domain Cell | Same native Cell shape as Tier 1; `cpp-freestanding` (planned) | Private MMU domain; copied/domain-explicit IPC | Paged-domain mechanism is shipped and routed by artifact class (unsigned, `FFI`, `UNTRUSTED`) on RV64/AArch64/x86_64, and the on-path admission control landed ([ADR-0019](decisions/0019-tier2-admission-control-on-path.md)): one policy gate at the publication point, explicit per-profile posture, device/DMA authority refused. Physical containment, DMA quarantine and production approvals remain open, and no capability is qualified in the ledger yet | Containment target for untrusted/FFI native code in development profiles; fleet profiles deny domain-class artifacts. Treat deployment as gated by the acceptance ledger, and never silently assign such code to Tier 1. |
 | **Tier 3** | VM Guest | `linux-guest` | Hypervisor / Stage-2 | ARM64 guest path exists; broader platform work tracked separately | Legacy Linux/POSIX stacks, fork-heavy apps and supported untrusted guest workloads under target-specific qualification. |
 
 Legacy names: `Tier 1b` now means the Tier 1 `ffi-posix` or `lua` runtime
@@ -37,7 +37,7 @@ The SDK is one family, not a numbered set of tiers:
 | SDK area | Examples | Applies to | Current maturity |
 |---|---|---|---|
 | Foundation | manifest, syscall ABI, lifecycle entrypoint | Tier 1 and future Tier 2 native Cells | Shipped for current native Cells |
-| Runtime profiles | `rust-no-std`, `rust-std`, `ffi-posix`, `lua` | Profile-specific setup | `rust-no-std`, in-tree `rust-std` (pure-Rust PAL), trusted `ffi-posix`, and Lua exist |
+| Runtime profiles | `rust-no-std`, `rust-std`, `ffi-posix`, `lua`, `cpp-freestanding` (planned) | Profile-specific setup | `rust-no-std`, in-tree `rust-std` (pure-Rust PAL), trusted `ffi-posix`, and Lua exist; `cpp-freestanding` is planned (ADR-0018 §2.3) |
 | Service clients | VFS, net, IPC, service discovery | Tier 1 and future Tier 2 native Cells | Available in the native SDK; coverage remains service-specific |
 | UI/graphics | ViUI, signal API, surfaces, desktop environment | Native UI Cells | ViUI and Desktop environment (`desktop`) exist |
 | Middleware/helpers | AppContext, wrappers, RAII handles | Native app ergonomics | Available incrementally; not a separate SDK tier |
@@ -45,18 +45,26 @@ The SDK is one family, not a numbered set of tiers:
 | Guest integration | VirtIO/proxy contracts | Tier 3 VM guests | ARM64 path exists; strict guest verification is KVM/hardware-gated |
 
 ---
-Tier 1 branches below require trusted code. Tier2 substrate evidence does not
-provide an application route: `kernel/src/loader/domain_admission.rs` is
-default-off/internal-only and no public loader or manifest constructs admission.
-Use Tier3 for untrusted code only when the exact guest/target boundary is qualified
-for that workload; otherwise leave deployment blocked. Do not downgrade to SAS.
+Tier 1 branches below require trusted code. Tier 2 routing exists and is exercised — a signed
+`FFI`/`UNTRUSTED` cell or an unsigned cell runs in a private domain, asserted by
+`tests/integration/tests/tier2_fault_isolation.rs`, `aarch64-boot.rs`, and `x86_64-boot.rs` —
+and the admission control that gates it is on the path since
+[ADR-0019](decisions/0019-tier2-admission-control-on-path.md) landed: one policy evaluated at
+the publication point, explicit posture per build profile, and device/DMA authority refused
+because a domain root cannot map it. A denial is final — no task, no domain, no SAS fallback.
+Development profiles enable admission; a fleet-secure profile leaves it disabled, so a
+domain-class artifact is denied rather than admitted anywhere. Qualification claims (`PASS`) are
+still gated by the acceptance ledger, so treat Tier 2 deployment as gated by evidence, never by
+this paragraph.
 
 
 ## Decision Tree: Which Tier?
 
 ```
 ┌─ "I have existing C/C++/Zig code"
-│  └─ Use Tier 1 ffi-posix profile (legacy: Tier 1b) if trusted.
+│  └─ Use Tier 1 ffi-posix profile (legacy: Tier 1b) if the code is trusted.
+│     C++ uses the `cpp-freestanding` subset profile (planned, ADR-0018 §2.3).
+│     Untrusted C/C++ belongs in Tier 2 once its admission control lands (ADR-0019).
 │
 ├─ "I want to write Rust"
 │  ├─ "Need VFS, network, or IPC?"
@@ -78,7 +86,8 @@ for that workload; otherwise leave deployment blocked. Do not downgrade to SAS.
 │  └─ Use Tier 3 Chrome via hypervisor. See ADR-0017.
 │
 ├─ "I need untrusted native code without a VM"
-│  └─ Blocked: Tier 2 is internal test-hooks-only, with no application admission/loader route.
+│  └─ Tier 2 is the target: routing and the on-path admission control are live in development
+│     profiles (ADR-0019). Claims remain ledger-gated, so check the acceptance matrix first.
 │
 └─ "I have a legacy Linux binary / fork() is essential"
    └─ Use Tier 3 linux-guest profile (legacy: Tier 3b)

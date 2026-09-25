@@ -55,7 +55,11 @@ and `PROTECTION_CLASS_FFI`), while signed Safe Rust cells execute in Tier 1 SAS.
 Profiles under the Dual-Mode Hybrid Architecture (ADR-0015):
 
 - **Tier 1**: Strict Safe Rust (`no_std` and in-tree pure-Rust `std`) + audited Driver Cells. Signed-only.
-- **Tier 2**: All C/C++/Zig FFI code (`posix-shim`, `mlibc`), dynamic runtimes (Lua), and all unsigned native binaries. Contained by hardware MMU.
+- **Tier 2**: All C/C++/Zig FFI code (`posix-shim`, `mlibc`), the `cpp-freestanding` C++ subset
+  profile ([ADR-0018](../decisions/0018-cell-native-portability-and-runtime-profiles.md) §2.3),
+  dynamic runtimes (Lua), and all unsigned native binaries. Contained by hardware MMU. Admission
+  is gated by the on-path policy ruled in
+  [ADR-0019](../decisions/0019-tier2-admission-control-on-path.md).
 - **Tier 3**: Full Linux guest userspace via Stage-2 hypervisor.
 
 Do not define Tier 2 as "Tier 1 but unsigned". The absence of a trusted

@@ -211,6 +211,75 @@ Cellos Native SDK
     - **Stage G1–G5**: giai đoạn sản phẩm/roadmap, hoàn toàn độc lập với app tier.
 
 
+[2026-09-22] Docs projection — cell scale profiles (D5): Spec 19 §3 amended with the measured
+n=8–9 ceiling, the revised order (firmware memory discovery first — now landed via
+`kernel/src/boot/dtb_memory.rs`), and the mixed-profile constraints (fixed 32 MiB VA stride,
+static tables, userspace supervisor for churn classes, Tier-2 required for untrusted light cells,
+contiguous-stack fragmentation). Detail: `docs/roadmap/beam-parity-backend-roadmap.md` §2.2–2.3.
+Open: N=64/128/256/512 baselines re-run **with heavy cells resident**; image sharing; demand stacks.
+
+[2026-09-22] Cell-native portability program [queued, phase 01 done] — quyết định đã ghi: ADR-0018
+(dịch POSIX sang primitive cell trong userspace; ba lane port L1/L2/L3; ngôn ngữ = runtime profile
+với 5 điều kiện admission; kế tiếp là `cpp-freestanding`; kernel chỉ nhận đúng 3 primitive: per-task
+TLS, futex ABI, pipe object) và ADR-0019 (một admission control duy nhất, nằm trên đường đi của route
+tạo domain). Kế hoạch 7 phase: `.agents/260922-1549-cell-native-portability-program/plan.md`.
+**Phase 01 [completed]**: gate nằm ở `task::launch::publish_prepared` (điểm publish duy nhất, phủ
+`spawn_gated`/`mem_spawn_gate`/trusted init), lease giữ qua bước tạo domain và recheck trước khi
+publish, denial audit `CellSpawnDenied` + code, không fallback SAS; arch gate mở đúng tập 3 arch của
+route; predicate đổi từ "mọi cap đều bị từ chối" sang ceiling MMIO/DMA/device (network/spawn/
+service-registration vẫn hợp lệ); posture theo profile (dev ENABLE, fleet để disabled → fail-closed);
+`begin_domain_drain` giữ nguyên một chiều, chưa có kênh operator (đã ghi lý do `dead_code`).
+Bằng chứng: 5 case `admission-enabled|publication|ceiling|admission|rollback` PASS trên
+`scripts/qemu-native-domain-test.sh` (`.logs/native-domain-qemu/h1-admission*/`) và
+`tier2-fault-isolation` 5/5 PASS với kernel build lại. **Phase 02 [completed]**: profile
+`cpp-freestanding` ship dưới dạng *language subset* — runtime C++ ABI (`operator new/delete` 6
+dạng, `__cxa_pure_virtual`, `__cxa_guard_*`, `abort`) đã có sẵn trong POSIX shim
+(`libs/api/src/services/posix/{alloc,cxxabi}.rs`), phase chỉ thêm `atexit`/`__cxa_atexit`; không
+có header chuẩn C++ trên cả hai toolchain nên cell dùng compiler builtins qua
+`cpp/cxx_support.hpp`; admit trên RV64+AArch64 (module posix bị cfg theo arch), x86_64 bị từ chối
+có chủ đích kèm lý do. Bằng chứng: `scripts/qemu-cpp-smoke.sh` → `CPP-SMOKE-QEMU: PASS` với 9/9
+assert (Tier 2 admission, static ctor, virtual dispatch/delete, templates, heap churn, VFS round
+trip, C-ABI read, PASS marker) trên RV64; AArch64 build sạch; `cellos-sign --check` OK. Phát hiện
+phụ: cell mới cần một dòng launch edge đã review trong
+`kernel/src/loader/launch_profile/targets.rs`; `ViSyscall::Open` đi qua kernel file table còn
+`/srv` thuộc VFS service. Ledger row hoãn có lý do (schema v5 bind contract revision + witness).
+**Phase 03 [completed]**: primitive `SetTlsBase` (opcode 9, self-only, always-permitted vì bitmap
+allowlist đã đầy) + `tls_base` per-task (mặc định 0, thread thừa hưởng base của creator);
+carrier theo arch — riscv64 dùng slot `tp` trong trap frame (không cần đổi switch), aarch64
+`TPIDR_EL0`, x86_64 `FS_BASE`, cả hai cài lại trên resume qua slot hart-local (lock-free).
+Kèm sửa dead code: `ostd::task::spawn` trước đây không reachable (file bị inline module che) và
+thread entry cũ spin mãi sau khi closure xong → giờ `Exit` đúng (worker exit chỉ kết thúc thread
+đó). Bằng chứng: `scripts/qemu-tls-test.sh` PASS trên RV64 với `--harts 1` và `--harts 2` (9/9
+assert gồm đọc lại *register*, sentinel qua 64 lần yield, 2 base khác nhau), và suite regression
+2 hart `switch,sas-fastpath,migration,user-copy,admission` vẫn PASS. **Hoãn có ghi chép**: C
+`__thread`/`thread_local` cần TLS runtime (loader expose `PT_TLS` + cấp block per-thread +
+đặt offset `initial-exec`) — primitive ở phase này chính là phần runtime đó phụ thuộc.
+**Phase 04 [completed]**: `FutexWait`/`FutexWake` (opcode 17/18, self-only-keyed, always-permitted
+như phase 03 vì bitmap allowlist đã đầy) với key `(address space, generation, address)` — hai
+domain Tier 2 dùng cùng VA không đánh thức nhau (chứng minh ở mức queue bằng selftest
+`S22-RV64-FUTEX-KEY: PASS`); quyết định park nằm dưới `SCHEDULER` với word đọc qua copy view đã
+validate (không deref con trỏ thô), deadline dùng sweep có sẵn, waiter chết không để lại entry.
+Hai bug tự tìm và sửa trong phase: (1) tạo copy view *trong lúc giữ* `SCHEDULER` → self-deadlock
+(`TaskCopyView::for_task` cũng lock SCHEDULER); (2) block timeout dùng chung ghi đè `regs[10]`
+thành 0 làm mất outcome `TimedOut`. Bằng chứng: `scripts/qemu-futex-test.sh` PASS trên RV64 với
+`--harts 1` và `--harts 2` (mutex 10.000 increment `timeouts=0`, ping-pong 2.000 round
+`timeouts=0`, timeout, mismatch, invalid-address, invalid-wake no-op). **Phase 05 [completed]**:
+the `Pipe*` object passes a two-domain RV64 QEMU witness; **Phase 06 [completed]**: generated
+shim contract, CMake/Meson toolchain, and safe port host are verified; **Phase 07 [completed]**:
+Tetris-C is the Class-A QEMU witness (`TETRIS-C-PORT-QEMU`), `c-pthread` the Class-B witness
+(`C-PTHREAD-QEMU: PASS`, 25.912 B ELF), và `c-spawn`/`c-spawn-child` là Class-C witness
+(`C-SPAWN-QEMU: PASS` trên harts 1 và 2; launcher 43.944 B + child 27.904 B). Closure record:
+`.agents/260922-1549-cell-native-portability-program/phase-07-reference-ports-and-cost.md`
+§ Reference-port closure — raw log ở `docs/evidence/`, Tier-2 admission marker, 1.307 dòng bề mặt
+do phase tự viết, cửa sổ artifact đo được 3,29 h. Follow-on
+`.agents/260922-1549-cell-native-portability-program/follow-on-c-thread-spawn-abi-proposal.md`
+đã **[completed]** (P1 pthread, P2 adapter C `cellos_spawn.h`, P3 closure); hai quyết định nền
+tảng ghi trong đó: route `SpawnFromPath` thô không giải được cell trên đĩa vì kernel không điều
+khiển block device trên QEMU (dùng reviewed **ELF** edge), và command line đã stage chuyển từ map
+khoá `tid` sang hai trường task-local (`Task::staged_argv`/`Task::inherited_argv`) vì map cũ cho
+phép cleanup của task khác xoá argv đang chờ của con. Blocker class D còn lại: port bên thứ ba cần
+`fork`/`exec` (process tree).
+
 # BLOCKERS
 1. Port Drivers - phase 06:
     - cần board RK3588 (SoC ARM của Rockchip: 4× Cortex-A76 + 4× Cortex-A55, GPU Mali-G610 và NPU 3 lõi khoảng 6 TOPS. Board Radxa ROCK 5B 8 GB hoặc 16 GB) để boot và giữ lại UART log 

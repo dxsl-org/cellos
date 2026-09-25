@@ -1,0 +1,522 @@
+
+OpenSBI v1.3
+   ____                    _____ ____ _____
+  / __ \                  / ____|  _ \_   _|
+ | |  | |_ __   ___ _ __ | (___ | |_) || |
+ | |  | | '_ \ / _ \ '_ \ \___ \|  _ < | |
+ | |__| | |_) |  __/ | | |____) | |_) || |_
+  \____/| .__/ \___|_| |_|_____/|___/_____|
+        | |
+        |_|
+
+Platform Name             : riscv-virtio,qemu
+Platform Features         : medeleg
+Platform HART Count       : 1
+Platform IPI Device       : aclint-mswi
+Platform Timer Device     : aclint-mtimer @ 10000000Hz
+Platform Console Device   : uart8250
+Platform HSM Device       : ---
+Platform PMU Device       : ---
+Platform Reboot Device    : sifive_test
+Platform Shutdown Device  : sifive_test
+Platform Suspend Device   : ---
+Platform CPPC Device      : ---
+Firmware Base             : 0x80000000
+Firmware Size             : 322 KB
+Firmware RW Offset        : 0x40000
+Firmware RW Size          : 66 KB
+Firmware Heap Offset      : 0x48000
+Firmware Heap Size        : 34 KB (total), 2 KB (reserved), 9 KB (used), 22 KB (free)
+Firmware Scratch Size     : 4096 B (total), 760 B (used), 3336 B (free)
+Runtime SBI Version       : 1.0
+
+Domain0 Name              : root
+Domain0 Boot HART         : 0
+Domain0 HARTs             : 0*
+Domain0 Region00          : 0x0000000002000000-0x000000000200ffff M: (I,R,W) S/U: ()
+Domain0 Region01          : 0x0000000080040000-0x000000008005ffff M: (R,W) S/U: ()
+Domain0 Region02          : 0x0000000080000000-0x000000008003ffff M: (R,X) S/U: ()
+Domain0 Region03          : 0x0000000000000000-0xffffffffffffffff M: (R,W,X) S/U: (R,W,X)
+Domain0 Next Address      : 0x0000000080200000
+Domain0 Next Arg1         : 0x000000008fe00000
+Domain0 Next Mode         : S-mode
+Domain0 SysReset          : yes
+Domain0 SysSuspend        : yes
+
+Boot HART ID              : 0
+Boot HART Domain          : root
+Boot HART Priv Version    : v1.12
+Boot HART Base ISA        : rv64imafdch
+Boot HART ISA Extensions  : time,sstc
+Boot HART PMP Count       : 16
+Boot HART PMP Granularity : 4
+Boot HART PMP Address Bits: 54
+Boot HART MHPM Count      : 16
+Boot HART MIDELEG         : 0x0000000000001666
+Boot HART MEDELEG         : 0x0000000000f0b509
+[ INFO] [uart] RX/TX base = 0x10000000
+[Cellos] kernel boot v0.2.1
+Kernel started (Hart: 0, DTB: ...)
+[cpu] H-extension: detected
+[INFO] Limine not found, using QEMU/OpenSBI fallback
+[boot] kernel_phys_base=0x0000000080200000
+[ INFO] [boot] allocator range 0x82b7d000..0x90000000 (222834688 bytes)
+[INFO] Initializing paging...
+[INFO] Paging initialized
+[INFO] Activating paging...
+[INFO] Paging activated
+[INFO] Frame allocator initialized
+[INFO] Heap initialized
+[ INFO] [rt-heap] TLSF pool ready — 256 KiB, O(1) alloc/dealloc
+[INFO] RT heap initialized
+[INFO] HAL initialized (PLIC enabled)
+[ INFO] [uart] RX/TX base = 0x10000000
+[ INFO] UART Input Buffer Initialized
+[ INFO] Console: Input Driver Initialized.
+[ INFO] RAM Disk: read-only, 40960 KB (81920 sectors)
+[ INFO] [snapshot] no block device → cold boot
+[ WARN] [mbr] LBA 0 unreadable — skipping partition verification
+[loader] WARN: cell table not found — disk image may lack bootstrap section
+[ INFO] Filesystem: Initializing...
+[ INFO] Boot Sector Debug:
+[ INFO]   Signature: 0xAA55
+[ INFO]   Bytes/Sector: 512
+[ INFO]   Sectors/Cluster: 2
+[ INFO]   Reserved Sectors: 1
+[ INFO]   FAT Count: 2
+[ INFO]   Media: 0xF8
+[ INFO]   Total Sectors: 81920
+[ INFO]   Sectors/FAT (FAT16): 192
+[ INFO]   Root Entry Count: 512
+[ INFO] Filesystem: FAT16 mounted successfully.
+[ INFO] [policy] loaded + verified (45 entries, flags 0x00)
+[ INFO] state-stash: round-trip OK
+[INFO] Kernel subsystems initialized successfully.
+[INFO] Initializing scheduler...
+[ INFO] Process: Initializing Scheduler...
+[ INFO] Timer preemption enabled (10 ms timeslice)
+[INFO] Scheduler initialized
+[ INFO] Thread 'thread' (ID 1): KStack 0x83009000-0x8301B000, UStackTop 0x8302D000, Entry 0x1000, Arg 0x0
+[ WARN] [kernel] CapRevoke: refused ambient-authority bits mask=0x00000008 from task 9001 (teardown not implemented)
+[ WARN] [kernel] CapRevoke: refused ambient-authority bits mask=0x0000ff00 from task 9001 (teardown not implemented)
+[ INFO] [kernel] CapRevoke: task 9001 revoked mask=0x00000004 from task 9003
+[ WARN] [sched] cell CellId(60) at thread cap (32) — refusing spawn_thread
+[ INFO] [selftest] THREAD-CAP: PASS (thread-inherit + honest-revoke + spawn bound)
+[INFO] thread-cap self-test PASS (thread-inherit + honest-revoke + spawn bound)
+[ INFO] Thread 'thread' (ID 1): KStack 0x83009000-0x8301B000, UStackTop 0x8302D000, Entry 0x1000, Arg 0x0
+[ WARN] [sched] cell CellId(63) cannot afford thread stacks (147456 bytes, 0 in use) — refusing spawn_thread
+[ INFO] [selftest] THREAD-QUOTA: PASS (charged, released, enforced)
+[INFO] thread-quota self-test PASS (charged, released, enforced)
+[INFO] thread-user-entry self-test SKIP (RV64 runtime gate only)
+[ INFO] [selftest] COMPLETION-QUEUE: PASS (cap 32 slots, 624 bytes per cell)
+[INFO] completion-queue self-test PASS (reserve, land, bound, defer)
+[ WARN] [net-rx] cell 9412 took over the reservation held by cell 9411
+[ INFO] [selftest] NET-RX-RESERVATION: PASS (fills, remembers, releases, IPC-safe)
+[INFO] net-rx-reservation self-test PASS (fill, remember, release)
+[ INFO] [selftest] IPC-PENDING: PASS (deferred, bounded, quota-safe, completion-wake)
+[INFO] ipc-pending self-test PASS (deferred delivery, bounds, quota)
+[INFO] cap-file self-test PASS (read-only enforcement)
+[ INFO] [selftest] IPC-GUARDRAILS: PASS (dead-peer bounded, RecvScatter isolated)
+[INFO] ipc-guardrail self-test PASS (dead-peer wake, RecvScatter isolated)
+[ INFO] [smp] physical 0 -> logical 0 boot
+[ WARN] [smp] physical hart 1 HSM status unavailable
+[INFO] Tier 2 admission: ENABLED (development profile)
+[INFO] Spawning Embedded Init...
+[INFO] ed25519 verify self-test PASS (RFC 8032 + tamper)
+[INFO] policy verify+parse self-test PASS (signed blob + tamper)
+[INFO] cell signing self-test PASS
+[ INFO] [selftest] P-TRUST: PASS (privileged path-caps bounded by ceiling)
+[INFO] P-TRUST self-test PASS (privileged path-caps ceiling-bounded)
+[ INFO] [selftest] boot-ceiling: PASS (per-path table, no union collapse)
+[INFO] boot-ceiling self-test PASS (per-path table, no union collapse)
+[INFO] mmio-allowlist self-test PASS (known windows live, DWC2 denied)
+[ INFO] [selftest] MANIFEST-V2: PASS (v1 upcast + v2 parse + protection-class floor invariant)
+[INFO] Manifest-v2 self-test PASS (v1 upcast + v2 parse + tier-floor)
+[ INFO] [early] VIFS1-first /bin/platform <- ramdisk (47376 bytes)
+[ INFO] ELF LOAD: 0x100000000-0x100002B0E flags=R-X
+[ INFO] ELF LOAD: 0x100002B10-0x100003590 flags=R--
+[ INFO] ELF LOAD: 0x100004000-0x100004240 flags=RW-
+[ INFO] ELF LOAD: 0x100005000-0x100105060 flags=RW-
+[ INFO] ELF LOAD: 0x100105060-0x1001064E8 flags=R--
+[ INFO] [wx] 'platform': 5/263 cell pages lowered to read-only/execute-only
+[INFO] Platform Cell spawned (PCIe ECAM scanner)
+[INFO] Publishing trusted init
+[ INFO] ELF LOAD: 0x102000000-0x10200244A flags=R-X
+[ INFO] ELF LOAD: 0x102002450-0x1020034E0 flags=R--
+[ INFO] ELF LOAD: 0x102004000-0x102004108 flags=RW-
+[ INFO] ELF LOAD: 0x102005000-0x102006248 flags=R--
+[ INFO] [wx] 'init': 6/7 cell pages lowered to read-only/execute-only
+[ INFO] Successfully spawned init with complete root authority (tid=2)
+[INFO] Kernel initialization complete. Entering idle loop.
+[INFO] Starting scheduler...
+USER: [platform] ECAM scan buses 0-0 starting
+[ INFO] [pcie] platform-reg 00:00.0 class=06:00:00 bar0=0x0
+[ WARN] [iommu] RISC-V IOMMU not found (needs QEMU ≥8.2 + -device riscv-iommu-pci,bus=pcie.0)
+USER: [platform] registered bus 0 device 0 function 0 class 6:0:0
+USER: [platform] ECAM scan complete
+[ INFO] Syscall::Exit: task 1 exited with code 0
+USER: Init: Starting Cellos Orchestrator...
+[ INFO] [early] VIFS1-first /bin/block <- ramdisk (41120 bytes)
+[ WARN] [policy] narrowed "/bin/block" (tid 3): dropped 0b010000000 [regions|mmio|sup|plat|pcie|hyp|spawn|net|bio]
+[ INFO] ELF LOAD: 0x104000000-0x104001E34 flags=R-X
+[ INFO] ELF LOAD: 0x104001E38-0x104003360 flags=R--
+[ INFO] ELF LOAD: 0x104004000-0x104004408 flags=RW-
+[ INFO] ELF LOAD: 0x104005000-0x104105300 flags=RW-
+[ INFO] ELF LOAD: 0x104106000-0x10410635C flags=R--
+[ INFO] [wx] 'block': 5/263 cell pages lowered to read-only/execute-only
+[ WARN] [driver_cell] block driver registered: tid=3
+[ INFO] [service-registry] 9 -> tid 3
+USER: [virtio-blk] ready
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/nvme error=NotFound
+[ INFO] [early] VIFS1-first /bin/vfs <- ramdisk (407728 bytes)
+[ INFO] ELF LOAD: 0x100000000-0x1000363D8 flags=R-X
+[ INFO] ELF LOAD: 0x1000363D8-0x100039BD8 flags=R--
+[ INFO] ELF LOAD: 0x10003A000-0x10003B308 flags=RW-
+[ INFO] ELF LOAD: 0x10003C000-0x10053C068 flags=RW-
+[ INFO] ELF LOAD: 0x10053C068-0x100541184 flags=R--
+[ INFO] [wx] 'vfs': 63/1346 cell pages lowered to read-only/execute-only
+USER: VFS Service v0.2: RamFS + mkdir/rmdir/unlink IPC (typed postcard)
+[ INFO] [service-registry] 1 -> tid 4
+USER: [vfs] FAT32 /mnt/sd volume mounted
+USER: [vfs] CellosFS Native mounted at existing volume
+USER: [vfs] FAT32 /bin volume mounted
+USER: [vfs] CellosFS Native mounted at existing volume
+[ INFO] [loader] SpawnFromElf: /bin/config (49712 bytes from grant)
+[ INFO] ELF LOAD: 0x106000000-0x106002EC6 flags=R-X
+[ INFO] ELF LOAD: 0x106002EC8-0x106004410 flags=R--
+[ INFO] ELF LOAD: 0x106005000-0x106005378 flags=RW-
+[ INFO] ELF LOAD: 0x106006000-0x106106060 flags=RW-
+[ INFO] ELF LOAD: 0x106106060-0x106107460 flags=R--
+[ INFO] [wx] 'config': 6/264 cell pages lowered to read-only/execute-only
+[ INFO] [service-registry] 4 -> tid 5
+USER: [config] Config Service v0.3 (typed IPC)
+[ INFO] [loader] SpawnFromElf: /bin/input (45152 bytes from grant)
+[ WARN] [policy] narrowed "/bin/input" (tid 6): dropped 0b010000000 [regions|mmio|sup|plat|pcie|hyp|spawn|net|bio]
+[ INFO] ELF LOAD: 0x108000000-0x108002380 flags=R-X
+[ INFO] ELF LOAD: 0x108002380-0x108003BE0 flags=R--
+[ INFO] ELF LOAD: 0x108004000-0x108004330 flags=RW-
+[ INFO] ELF LOAD: 0x108005000-0x108105060 flags=RW-
+[ INFO] ELF LOAD: 0x108105060-0x1081063BC flags=R--
+[ INFO] [wx] 'input': 5/263 cell pages lowered to read-only/execute-only
+[ WARN] [input] registered input service TID 6
+USER: [input] Input Service v0.3: US QWERTY + VirtIO + typed focus routing
+USER: [input] No VirtIO input device; relying on kernel push
+[ INFO] [service-registry] 3 -> tid 6
+[ INFO] [loader] SpawnFromElf: /bin/virtio-net (43616 bytes from grant)
+[ WARN] [policy] narrowed "/bin/virtio-net" (tid 7): dropped 0b010000000 [regions|mmio|sup|plat|pcie|hyp|spawn|net|bio]
+[ INFO] ELF LOAD: 0x10A000000-0x10A0026B0 flags=R-X
+[ INFO] ELF LOAD: 0x10A0026B0-0x10A003398 flags=R--
+[ INFO] ELF LOAD: 0x10A004000-0x10A004C28 flags=RW-
+[ INFO] ELF LOAD: 0x10A005000-0x10A105060 flags=RW-
+[ INFO] ELF LOAD: 0x10A106000-0x10A10648C flags=R--
+[ INFO] [wx] 'virtio-net': 5/263 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 7 exited with code 0
+[ INFO] [loader] SpawnFromElf: /bin/e1000 (36736 bytes from grant)
+[ WARN] [policy] narrowed "/bin/e1000" (tid 8): dropped 0b010000000 [regions|mmio|sup|plat|pcie|hyp|spawn|net|bio]
+[ INFO] ELF LOAD: 0x10A000000-0x10A00194A flags=R-X
+[ INFO] ELF LOAD: 0x10A001950-0x10A002440 flags=R--
+[ INFO] ELF LOAD: 0x10A003000-0x10A003310 flags=RW-
+[ INFO] ELF LOAD: 0x10A004000-0x10A1043D0 flags=RW-
+[ INFO] ELF LOAD: 0x10A105000-0x10A1053A0 flags=R--
+[ INFO] [wx] 'e1000': 4/262 cell pages lowered to read-only/execute-only
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/dwc2-usb error=NotFound
+[ INFO] Syscall::Exit: task 8 exited with code 0
+[ INFO] [loader] SpawnFromElf: /bin/net (272216 bytes from grant)
+[ INFO] ELF LOAD: 0x10A000000-0x10A0204E2 flags=R-X
+[ INFO] ELF LOAD: 0x10A0204E8-0x10A024218 flags=R--
+[ INFO] ELF LOAD: 0x10A025000-0x10A026268 flags=RW-
+[ INFO] ELF LOAD: 0x10A027000-0x10A127080 flags=RW-
+[ INFO] ELF LOAD: 0x10A127080-0x10A129E3C flags=R--
+[ INFO] [wx] 'net': 39/298 cell pages lowered to read-only/execute-only
+USER: [net] Network Service v0.1: smoltcp + NIC Driver Cell + DHCP
+USER: [net] Starting DHCP...
+USER: [net] DHCP: deconfigured
+[ INFO] [service-registry] 2 -> tid 9
+[ INFO] [loader] SpawnFromElf: /bin/virtio-gpu (48768 bytes from grant)
+[ WARN] [policy] narrowed "/bin/virtio-gpu" (tid 10): dropped 0b010000000 [regions|mmio|sup|plat|pcie|hyp|spawn|net|bio]
+[ INFO] ELF LOAD: 0x10C000000-0x10C002D78 flags=R-X
+[ INFO] ELF LOAD: 0x10C002D78-0x10C0043A8 flags=R--
+[ INFO] ELF LOAD: 0x10C005000-0x10C005420 flags=RW-
+[ INFO] ELF LOAD: 0x10C006000-0x10C106270 flags=RW-
+[ INFO] ELF LOAD: 0x10C107000-0x10C10755C flags=R--
+[ INFO] [wx] 'virtio-gpu': 6/264 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 10 exited with code 0
+[ INFO] [loader] SpawnFromElf: /bin/compositor (84712 bytes from grant)
+[ INFO] ELF LOAD: 0x10C000000-0x10C0096C6 flags=R-X
+[ INFO] ELF LOAD: 0x10C0096C8-0x10C00B060 flags=R--
+[ INFO] ELF LOAD: 0x10C00C000-0x10C00C540 flags=RW-
+[ INFO] ELF LOAD: 0x10C00D000-0x10CB0D060 flags=RW-
+[ INFO] [wx] 'compositor': 12/2830 cell pages lowered to read-only/execute-only
+USER: [compositor] Compositor v0.2: software blending, VirtIO GPU, input routing
+[ INFO] [service-registry] 5 -> tid 11
+[ WARN] [gpu_cursor] GPU Driver Cell not registered
+USER: [compositor] hardware cursor unavailable — using software cursor
+[ INFO] [loader] SpawnFromElf: /bin/ai (228776 bytes from grant)
+[ INFO] ELF LOAD: 0x10E000000-0x10E01A9F6 flags=R-X
+[ INFO] ELF LOAD: 0x10E01A9F8-0x10E01E7C8 flags=R--
+[ INFO] ELF LOAD: 0x10E01F000-0x10E01F918 flags=RW-
+[ INFO] ELF LOAD: 0x10E020000-0x10F120060 flags=RW-
+[ INFO] ELF LOAD: 0x10F120060-0x10F122AF4 flags=R--
+[ INFO] [wx] 'ai': 33/4387 cell pages lowered to read-only/execute-only
+USER: [ai] inference service starting
+[ INFO] [service-registry] 15 -> tid 12
+[ INFO] [loader] SpawnFromElf: /bin/kms (41752 bytes from grant)
+[ INFO] ELF LOAD: 0x110000000-0x110003726 flags=R-X
+[ INFO] ELF LOAD: 0x110003728-0x1100041A8 flags=R--
+[ INFO] ELF LOAD: 0x110005000-0x110005150 flags=RW-
+[ INFO] ELF LOAD: 0x110006000-0x1100071A4 flags=R--
+[ INFO] [wx] 'kms': 7/8 cell pages lowered to read-only/execute-only
+[ INFO] [service-registry] 13 -> tid 13
+USER: [kms] fail-closed node identity service starting
+[ INFO] [loader] SpawnFromElf: /bin/supervisor (34048 bytes from grant)
+[ INFO] ELF LOAD: 0x112000000-0x112001B12 flags=R-X
+[ INFO] ELF LOAD: 0x112001B18-0x112002338 flags=R--
+[ INFO] ELF LOAD: 0x112003000-0x112003260 flags=RW-
+[ INFO] ELF LOAD: 0x112004000-0x112104060 flags=RW-
+[ INFO] ELF LOAD: 0x112105000-0x112105390 flags=R--
+[ INFO] [wx] 'supervisor': 4/262 cell pages lowered to read-only/execute-only
+[ INFO] [service-registry] 11 -> tid 14
+USER: Init: services spawned.
+USER: Init: service registry verified.
+[ INFO] [loader] SpawnFromElf: /bin/fb-console (37256 bytes from grant)
+[ INFO] ELF LOAD: 0x114000000-0x114001188 flags=R-X
+[ INFO] ELF LOAD: 0x114001188-0x114002488 flags=R--
+[ INFO] ELF LOAD: 0x114003000-0x1140042B0 flags=RW-
+[ INFO] ELF LOAD: 0x114005000-0x1140061A0 flags=R--
+[ INFO] [wx] 'fb-console': 5/7 cell pages lowered to read-only/execute-only
+USER: Init: fb-console spawned.
+USER: [fb-console] starting
+USER: [fb-console] compositor found
+USER: [fb-console] background surface created
+USER: [fb-console] initial damage submitted
+USER: [fb-console] first log batch received
+USER: [compositor] first scanout flush submitted
+[ WARN] [gpu_flush] GPU Driver Cell not registered — software fallback active
+[ INFO] [loader] SpawnFromElf: /bin/desktop (76320 bytes from grant)
+[ INFO] ELF LOAD: 0x116000000-0x116006058 flags=R-X
+[ INFO] ELF LOAD: 0x116006058-0x116007AB8 flags=R--
+[ INFO] ELF LOAD: 0x116008000-0x116009730 flags=RW-
+[ INFO] ELF LOAD: 0x11600A000-0x11610A060 flags=RW-
+[ INFO] ELF LOAD: 0x11610A060-0x11610B670 flags=R--
+[ INFO] [wx] 'desktop': 9/268 cell pages lowered to read-only/execute-only
+USER: Init: desktop spawned.
+USER: [desktop] CellOS Desktop initializing...
+USER: [desktop] Display resolution confirmed.
+USER: [desktop] Taskbar surface ready.
+USER: [desktop] Ready. Entering event loop.
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/hypervisor error=NotFound
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/silo-test error=NotFound
+[ INFO] [loader] SpawnFromElf: /bin/ai-test (108984 bytes from grant)
+[ INFO] ELF LOAD: 0x118000000-0x118007292 flags=R-X
+[ INFO] ELF LOAD: 0x118007298-0x11800BEE0 flags=R--
+[ INFO] ELF LOAD: 0x11800C000-0x11800C4A8 flags=RW-
+[ INFO] ELF LOAD: 0x11800D000-0x11810D060 flags=RW-
+[ INFO] ELF LOAD: 0x11810D060-0x11810E92C flags=R--
+[ INFO] [wx] 'ai-test': 13/271 cell pages lowered to read-only/execute-only
+USER: [ai-test] AI inference oracle starting
+[ INFO] [loader] SpawnFromElf: /bin/vfs-test (103016 bytes from grant)
+[ INFO] ELF LOAD: 0x11A000000-0x11A008B02 flags=R-X
+[ INFO] ELF LOAD: 0x11A008B08-0x11A00A8A8 flags=R--
+[ INFO] ELF LOAD: 0x11A00B000-0x11A00B780 flags=RW-
+[ INFO] ELF LOAD: 0x11A00C000-0x11A10C068 flags=RW-
+[ INFO] ELF LOAD: 0x11A10C068-0x11A10D50C flags=R--
+[ INFO] [wx] 'vfs-test': 12/270 cell pages lowered to read-only/execute-only
+USER: [vfs-test] Starting VFS integration test suite...
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/srv-test error=NotFound
+USER: [PASS] write /tmp/test_lifecycle.txt
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/std-smoke error=NotFound
+USER: [PASS] stat size=11 is_file
+USER: [PASS] unlink /tmp/test_lifecycle.txt
+[ INFO] [loader] SpawnFromElf: /bin/shell (1051112 bytes from grant)
+[ INFO] ELF LOAD: 0x11C000000-0x11C0790CA flags=R-X
+[ INFO] ELF LOAD: 0x11C0790D0-0x11C085D88 flags=R--
+[ INFO] ELF LOAD: 0x11C086000-0x11C08A8C8 flags=RW-
+[ INFO] ELF LOAD: 0x11C08B000-0x11C18B070 flags=RW-
+[ INFO] ELF LOAD: 0x11C18B070-0x11C195728 flags=R--
+[ INFO] [wx] 'shell': 144/406 cell pages lowered to read-only/execute-only
+USER: [PASS] stat after unlink returns Err
+USER: DEBUG: Shell Started (Async Mode)
+USER: Init: supervising services (auto-restart on crash)...
+USER: DEBUG: Shell focus acquired (or timed out)
+USER: [executor] dummy-waker=absent executor=parked source=TIMER PASS
+USER: [PASS] mkdir /tmp/testdir
+USER: [PASS] write inside testdir
+USER: [PASS] listdir /tmp/testdir contains f:file.txt
+USER: [PASS] rmdir /tmp/testdir after cleanup
+USER: [PASS] write /bin/ returns PermissionDenied
+USER: [PASS] write /tmp/ still works
+USER: [PASS] unlink /readme.txt (read-only / prefix) → PermissionDenied
+USER: [PASS] /readme.txt survived the refused unlink
+USER: [PASS] rmdir under / → PermissionDenied (authorized before backend)
+USER: [PASS] rmdir_recursive under / → PermissionDenied (before subtree walk)
+USER: [PASS] grant-write: unknown handle is denied before grant access
+[ WARN] [grant] GrantFree 0x88970000 refused: region 0x88970000+4096 overlaps a pinned region 0x88970000+1 pages owned by task 18 with 1 in-flight operation(s)
+USER: [PASS] ReadGrant unknown cap returns zero bytes without faulting
+USER: [ai] model path: /bin/ai-model.gguf
+USER: [ai] model bytes: 102744 read in 3354 ms
+USER: [ai] engine load: 7 ms
+USER: [ai] model ready: 270 vocab, context 128, resident bytes 115488
+USER: [ai-test] model=tiny-llama-64
+USER: [ai-test] vocab=270 context=128 sessions=4
+[ WARN] [grant] GrantFree 0x88971000 refused: region 0x88971000+4096 overlaps a pinned region 0x88971000+1 pages owned by task 18 with 1 in-flight operation(s)
+USER: [PASS] ReadGrant unknown cap returns zero bytes for size=0
+[ WARN] [grant] GrantFree 0x88972000 refused: region 0x88972000+4096 overlaps a pinned region 0x88972000+1 pages owned by task 18 with 1 in-flight operation(s)
+USER: [PASS] ReadGrant unknown cap returns zero bytes for oversized offset
+USER: [PASS] grant-write: create writable target
+USER: [PASS] grant-write: helper returns committed byte count
+USER: [PASS] grant-write: commits exact bytes before acknowledgement
+USER: [ai-test] generate: 8 tokens in 141 ms (56737 tokens/s x1000, 6 polls)
+USER: [ai-test] greedy ids matched: 8 tokens over 6 polls
+USER: [PASS] grant-write: invalid offset is refused before grant access
+USER: [ai-test] embedding matched: 64 dims
+USER: [PASS] grant-write: short grant is refused without mutation
+USER: [PASS] grant-write: grant copy denial propagates as I/O error
+USER: [PASS] grant-write: failed writes leave committed bytes unchanged
+USER: [PASS] grant-write: copies into exact bounded destination range
+USER: [PASS] grant-write: bounded copy preserves prefix and suffix
+USER: [PASS] grant-write: write authorization precedes grant access
+USER: [ai-test] abandoned session released; service still serving
+USER: [PASS] write file for async read
+USER: [PASS] ReadAsync returns PendingHandle
+USER: [ai-test] prompt stream matched: 8 tokens
+USER: [ai-test] PASS
+[ INFO] Syscall::Exit: task 17 exited with code 0
+USER: [PASS] Poll returns correct data
+USER: [PASS] Poll stale handle returns Err
+USER: [PASS] write /tmp/volatile.txt
+USER: [PASS] stat /tmp/volatile.txt size=8
+USER: [PASS] stat /tmp is_dir=true
+USER: [PASS] stat /tmp is_dir=true
+USER: [PASS] stat nonexistent returns Err
+USER: [PASS] listdir nonexistent = empty
+USER: [PASS] dircap: acquiring /tmp yields a directory handle
+USER: [PASS] dircap: `..` is refused
+USER: [PASS] dircap: `../..` is refused
+USER: [PASS] dircap: an absolute name is refused
+USER: [PASS] dircap: an embedded traversal is refused
+USER: [PASS] dircap: `.` is refused
+USER: [PASS] dircap: an empty name is refused
+USER: [PASS] dircap: a backslash name is refused
+USER: [PASS] dircap: a control byte is refused
+USER: [PASS] dircap: odd UTF-8 in a name is refused
+USER: [PASS] dircap: deriving a subdirectory handle
+USER: [PASS] dircap: WriteAt creates a file inside the handle
+USER: [PASS] dircap: StatAt reports the file it just wrote
+USER: [PASS] dircap: ReadAt returns the bytes written
+USER: [PASS] dircap: ListAt lists the handle's own directory
+USER: [PASS] dircap: the handle resolved inside the directory it names
+USER: [PASS] dircap: OpenFileAt yields a file handle
+USER: [PASS] dircap: a handle can be given up
+USER: [PASS] dircap: revoking a handle revokes what was derived from it
+USER: [PASS] dircap: revoking a parent dir reaps file handles opened below it
+USER: [PASS] dircap: a revoked file handle cannot be closed into success
+USER: [PASS] dircap: acquiring /tmp yields a directory handle
+USER: 
+USER: === Cellos shell ready — type 'help' for commands ===
+USER: Cellos > [PASS] dircap: deriving a subdirectory handle
+USER: [PASS] grant: ReadFileGrant clamps to grant length
+USER: [PASS] grant: ReadFileGrant copies nonzero bytes
+USER: [PASS] dircap: GetFile returns a nonempty pointer before sealing
+USER: [PASS] dircap: OpenFileAt returns a file handle for a file
+USER: [PASS] dircap: the cell gives up naming paths
+USER: [PASS] dircap: Write{path} is refused after sealing
+USER: [PASS] dircap: the refused write left nothing behind
+USER: [PASS] dircap: GetFile is refused after sealing
+USER: [PASS] dircap: Stat is refused after sealing
+USER: [PASS] dircap: ListDir is refused after sealing
+USER: [PASS] dircap: Unlink is refused after sealing
+USER: [PASS] dircap: Mkdir is refused after sealing
+USER: [PASS] dircap: ReadAsync is refused after sealing
+USER: [PASS] dircap: widening by acquiring a new root is refused after sealing
+USER: [PASS] grant: ReadFileGrant is refused after sealing
+USER: [PASS] dircap: ReadFileHandle still works after sealing
+USER: [PASS] dircap: ReadFileHandle returns EOF for an oversized offset
+USER: [PASS] dircap: ReadFileHandle returns EOF for a zero-length request
+USER: [PASS] dircap: CloseFile closes a live file handle
+USER: [PASS] dircap: a closed file handle is stale
+USER: [PASS] dircap: handle operations still work after sealing
+USER: [PASS] dircap: UnlinkAt still works after sealing
+USER: 
+USER: [vfs-test] Results: 83 PASS, 0 FAIL
+USER: [vfs-test] ALL TESTS PASSED
+[ INFO] Syscall::Exit: task 18 exited with code 0
+USER: c-pthread
+[ INFO] [loader] SpawnFromElf: /bin/c-pthread (25184 bytes from grant)
+[ INFO] ELF LOAD: 0x118000000-0x11800066E flags=R-X
+[ INFO] ELF LOAD: 0x118000670-0x118001030 flags=R--
+[ INFO] ELF LOAD: 0x118002000-0x118002108 flags=RW-
+[ INFO] ELF LOAD: 0x118003000-0x1180032A0 flags=RW-
+[ INFO] ELF LOAD: 0x118004000-0x118004040 flags=R--
+[ INFO] [wx] 'c-pthread': 3/5 cell pages lowered to read-only/execute-only
+[ WARN] [domain] admitted cell 'c-pthread' to Tier 2 Paged Domain (SATP isolation)
+[ INFO] Thread 'thread' (ID 21): KStack 0x83857000-0x83869000, UStackTop 0x842FF000, Entry 0x1180002E0, Arg 0x118003020
+[ INFO] Thread 'thread' (ID 22): KStack 0x842FF000-0x84311000, UStackTop 0x84323000, Entry 0x1180002E0, Arg 0x118003048
+[ INFO] Syscall::Exit: task 21 exited with code 0
+[ INFO] Syscall::Exit: task 22 exited with code 0
+[ INFO] Thread 'thread' (ID 23): KStack 0x83857000-0x83869000, UStackTop 0x842FF000, Entry 0x1180002E0, Arg 0x118003020
+[ INFO] Syscall::Exit: task 23 exited with code 0
+[ INFO] Thread 'thread' (ID 24): KStack 0x83857000-0x83869000, UStackTop 0x842FF000, Entry 0x1180002E0, Arg 0x118003020
+[ INFO] Syscall::Exit: task 24 exited with code 0
+[ INFO] Thread 'thread' (ID 25): KStack 0x83857000-0x83869000, UStackTop 0x842FF000, Entry 0x1180002E0, Arg 0x118003020
+[ INFO] Syscall::Exit: task 25 exited with code 0
+[ INFO] Thread 'thread' (ID 26): KStack 0x83857000-0x83869000, UStackTop 0x842FF000, Entry 0x1180002E0, Arg 0x118003020
+[ INFO] Syscall::Exit: task 26 exited with code 0
+[ INFO] Thread 'thread' (ID 27): KStack 0x83857000-0x83869000, UStackTop 0x842FF000, Entry 0x1180002E0, Arg 0x118003020
+[ INFO] Syscall::Exit: task 27 exited with code 0
+[ INFO] Thread 'thread' (ID 28): KStack 0x83857000-0x83869000, UStackTop 0x842FF000, Entry 0x1180002E0, Arg 0x118003020
+[ INFO] Syscall::Exit: task 28 exited with code 0
+[ INFO] Thread 'thread' (ID 29): KStack 0x83857000-0x83869000, UStackTop 0x842FF000, Entry 0x1180002E0, Arg 0x118003020
+[ INFO] Syscall::Exit: task 29 exited with code 0
+[ INFO] Thread 'thread' (ID 30): KStack 0x83857000-0x83869000, UStackTop 0x842FF000, Entry 0x1180002E0, Arg 0x118003020
+[ INFO] Syscall::Exit: task 30 exited with code 0
+[ INFO] Thread 'thread' (ID 31): KStack 0x83857000-0x83869000, UStackTop 0x842FF000, Entry 0x1180002E0, Arg 0x118003020
+[ INFO] Syscall::Exit: task 31 exited with code 0
+[ INFO] Thread 'thread' (ID 32): KStack 0x83857000-0x83869000, UStackTop 0x842FF000, Entry 0x1180002E0, Arg 0x118003020
+[ INFO] Syscall::Exit: task 32 exited with code 0
+[ INFO] Thread 'thread' (ID 33): KStack 0x83857000-0x83869000, UStackTop 0x842FF000, Entry 0x1180002E0, Arg 0x118003020
+[ INFO] Syscall::Exit: task 33 exited with code 0
+[ INFO] Thread 'thread' (ID 34): KStack 0x83857000-0x83869000, UStackTop 0x842FF000, Entry 0x1180002E0, Arg 0x118003020
+[ INFO] Syscall::Exit: task 34 exited with code 0
+[ INFO] Thread 'thread' (ID 35): KStack 0x83857000-0x83869000, UStackTop 0x842FF000, Entry 0x1180002E0, Arg 0x118003020
+[ INFO] Syscall::Exit: task 35 exited with code 0
+[ INFO] Thread 'thread' (ID 36): KStack 0x83857000-0x83869000, UStackTop 0x842FF000, Entry 0x1180002E0, Arg 0x118003020
+[ INFO] Syscall::Exit: task 36 exited with code 0
+[ INFO] Thread 'thread' (ID 37): KStack 0x83857000-0x83869000, UStackTop 0x842FF000, Entry 0x1180002E0, Arg 0x118003020
+[ INFO] Syscall::Exit: task 37 exited with code 0
+[ INFO] Thread 'thread' (ID 38): KStack 0x83857000-0x83869000, UStackTop 0x842FF000, Entry 0x1180002E0, Arg 0x118003020
+[ INFO] Syscall::Exit: task 38 exited with code 0
+[ INFO] Thread 'thread' (ID 39): KStack 0x83857000-0x83869000, UStackTop 0x842FF000, Entry 0x1180002E0, Arg 0x118003020
+[ INFO] Syscall::Exit: task 39 exited with code 0
+[ INFO] Thread 'thread' (ID 40): KStack 0x83857000-0x83869000, UStackTop 0x842FF000, Entry 0x1180002E0, Arg 0x118003020
+[ INFO] Syscall::Exit: task 40 exited with code 0
+[ INFO] Thread 'thread' (ID 41): KStack 0x83857000-0x83869000, UStackTop 0x842FF000, Entry 0x1180002E0, Arg 0x118003020
+[ INFO] Syscall::Exit: task 41 exited with code 0
+[ INFO] Thread 'thread' (ID 42): KStack 0x83857000-0x83869000, UStackTop 0x842FF000, Entry 0x1180002E0, Arg 0x118003020
+[ INFO] Syscall::Exit: task 42 exited with code 0
+[ INFO] Thread 'thread' (ID 43): KStack 0x83857000-0x83869000, UStackTop 0x842FF000, Entry 0x1180002E0, Arg 0x118003020
+[ INFO] Syscall::Exit: task 43 exited with code 0
+[ INFO] Thread 'thread' (ID 44): KStack 0x83857000-0x83869000, UStackTop 0x842FF000, Entry 0x1180002E0, Arg 0x118003020
+[ INFO] Syscall::Exit: task 44 exited with code 0
+[ INFO] Thread 'thread' (ID 45): KStack 0x83857000-0x83869000, UStackTop 0x842FF000, Entry 0x1180002E0, Arg 0x118003020
+[ INFO] Syscall::Exit: task 45 exited with code 0
+[ INFO] Thread 'thread' (ID 46): KStack 0x83857000-0x83869000, UStackTop 0x842FF000, Entry 0x1180002E0, Arg 0x118003020
+[ INFO] Syscall::Exit: task 46 exited with code 0
+[ INFO] Thread 'thread' (ID 47): KStack 0x83857000-0x83869000, UStackTop 0x842FF000, Entry 0x1180002E0, Arg 0x118003020
+[ INFO] Syscall::Exit: task 47 exited with code 0
+[ INFO] Thread 'thread' (ID 48): KStack 0x83857000-0x83869000, UStackTop 0x842FF000, Entry 0x1180002E0, Arg 0x118003020
+[ INFO] Syscall::Exit: task 48 exited with code 0
+[ INFO] Thread 'thread' (ID 49): KStack 0x83857000-0x83869000, UStackTop 0x842FF000, Entry 0x1180002E0, Arg 0x118003020
+[ INFO] Syscall::Exit: task 49 exited with code 0
+[ INFO] Thread 'thread' (ID 50): KStack 0x83857000-0x83869000, UStackTop 0x842FF000, Entry 0x1180002E0, Arg 0x118003020
+[ INFO] Syscall::Exit: task 50 exited with code 0
+[ INFO] Thread 'thread' (ID 51): KStack 0x83857000-0x83869000, UStackTop 0x842FF000, Entry 0x1180002E0, Arg 0x118003020
+[ INFO] Syscall::Exit: task 51 exited with code 0
+[ INFO] Thread 'thread' (ID 52): KStack 0x83857000-0x83869000, UStackTop 0x842FF000, Entry 0x1180002E0, Arg 0x118003020
+[ INFO] Syscall::Exit: task 52 exited with code 0
+[ INFO] Thread 'thread' (ID 53): KStack 0x83857000-0x83869000, UStackTop 0x842FF000, Entry 0x1180002E0, Arg 0x118003020
+[ INFO] Syscall::Exit: task 53 exited with code 0
+[ INFO] Thread 'thread' (ID 54): KStack 0x83857000-0x83869000, UStackTop 0x842FF000, Entry 0x1180002E0, Arg 0x118003020
+[ INFO] Syscall::Exit: task 54 exited with code 0
+USER: C-PTHREAD-QEMU: PASS
+[ INFO] Syscall::Exit: task 20 exited with code 0
+USER: Cellos > qemu-system-riscv64: terminating on signal 15 from pid 1802964 (timeout)

@@ -207,6 +207,41 @@ is default-off and is the sole persisted enablement control. Enabling it require
 into a build with the backend capability; installer UI remains hidden unless both controls
 and the required test suite are present.
 
+> **Amendment 2026-09-22 — [ADR-0019](../decisions/0019-tier2-admission-control-on-path.md);
+> wiring landed by
+> [phase 01](../../.agents/260922-1549-cell-native-portability-program/phase-01-tier2-admission-control-on-path.md).**
+> The policy above is now the on-path control, and the shipped semantics are:
+>
+> - **Single publication gate.** `task::launch::publish_prepared` — the one point where an ELF
+>   task becomes runnable — evaluates the policy (`domain_admission::admit_for_launch`) before
+>   creating anything, holds the returned lease across domain creation, and re-checks it
+>   immediately before publication (`lease.remains_enabled()`). A denial returns a final error
+>   with no task, no domain, and no SAS fallback, and is audited as `CellSpawnDenied` with the
+>   denial code (`domain_admission.rs::DomainAdmissionDenial::audit_code`).
+> - **Feature selects capability only.** `native-domains` compiles a backend; it is never an
+>   admission decision. `architecture_covered()` uses the same cfg set as the route
+>   (`riscv64`/`aarch64`/`x86_64`), so policy and route cannot disagree about coverage.
+> - **Posture is explicit per profile.** Boot calls `enable_for_boot()` for a development
+>   profile; a fleet-secure profile (`policy-required` / `production-relay-image`) leaves
+>   admission disabled, so a domain-class artifact is denied rather than admitted elsewhere
+>   (`kernel/src/main.rs`, "Tier 2 admission" log line).
+> - **Predicate ceiling.** A domain root maps only the cell's own image, stack, heap, and
+>   explicit grants, so MMIO/DMA/device authority (`mmio_devices`, `pcie_driver`, `usb_driver`,
+>   `platform`, `block_io`, `block_regions`, `hypervisor`, `supervisor`) is refused at
+>   admission instead of granted as dead authority. Authority a domain can enforce — network
+>   client capability, spawn authority (each child is admitted by this same policy), and
+>   service registration — remains admissible. The previous "any capability at all is refused"
+>   predicate described no launch the route actually supports.
+> - **Evidence.** Boot selftest markers `S22-RV64-ADMISSION-ENABLED`,
+>   `S22-RV64-ADMISSION-DENY`, `S22-RV64-ADMISSION-DRAIN`,
+>   `S22-RV64-ADMISSION-PUBLICATION-DENY`, and `S22-RV64-ADMISSION-CEILING`, driven as cases
+>   `admission-enabled`, `admission`, `rollback`, `admission-publication`, and
+>   `admission-ceiling` by `scripts/qemu-native-domain-test.sh`. The publication case drives the
+>   real publication path while the policy is draining and asserts that nothing is published.
+> - **Still absent.** The operator-facing trigger for `DRAINING` (a supervisor-visible control);
+>   today the transition is reachable in-kernel and exercised by the boot selftest, and the
+>   function carries an explicit `dead_code` reason until that channel lands.
+
 An emergency runtime disable is deliberately one-way for the current boot: atomically
 change the admission policy from `ENABLED` to `DRAINING`, which linearizes before new
 admission publication. An admission in progress holds the policy read generation through

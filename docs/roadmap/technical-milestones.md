@@ -1,6 +1,6 @@
 # Technical Milestones
 
-**Last updated**: 2026-08-23
+**Last updated**: 2026-09-22
 
 This file is a compact status map. See
 [completed-history.md](completed-history.md) for the condensed completion
@@ -18,6 +18,7 @@ archived traceability notes.
 | Scripting | Lua is active; MicroPython is historical and absent from current workspace members |
 | Hotswap/supervisor | Supervisor hotswap path has QEMU smoke evidence; continue keeping authority gates explicit |
 | Security/trust | Signing mechanism exists; fleet enforcement and production key provisioning remain open; Tier 2 native domains have RV64 QEMU evidence behind `native-domains`, while production release remains gated by [Spec 22](../specs/22-native-domain-cell-implementation-gate.md) |
+| Cell scale profiles (D5) | Large-app profile stays the default (`MAX_CELLS = 64`); the per-request server profile is an accepted goal, not capacity. The 2026-07-31 ceiling (n = 8–9) was a hardcoded 190 MiB memory map — now replaced by firmware DTB discovery (`kernel/src/boot/dtb_memory.rs`) with `MemInfo = 243` making capacity measurable. Still open: shared immutable image frames, demand-paged stacks, dynamic tables, a variable VA budget, and the N = 64/128/256/512 baselines re-measured with heavy cells resident. See [Spec 19 §3](../specs/19-hardware-isolation-layers.md) |
 
 ## Historical Milestones
 

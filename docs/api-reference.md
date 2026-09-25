@@ -64,6 +64,31 @@ pub enum ViSyscall {
     Exit = 60,      // Terminate task
     Yield = 104,    // Voluntary context switch
 
+    /// Set this task's user thread pointer (TLS base) and return the previous
+    /// value. Self-only (no target parameter) and always permitted: the base is
+    /// one word of the caller's own register state and carries no authority.
+    /// ABI: a0 = base → previous base (0 when none), or usize::MAX on error.
+    ///
+    /// The kernel owns the register — a cell must use this syscall rather than
+    /// writing it directly, because the value is reinstalled on every resume. The
+    /// cell allocates its own TLS blocks; the kernel never dereferences the base.
+    SetTlsBase = 9,
+
+    /// Park the caller until another task wakes the same word, the word no longer
+    /// holds `expected`, or the deadline elapses.
+    /// ABI: a0 = word address, a1 = expected value, a2 = timeout in 10 ms ticks
+    ///      (0 = block forever) → 0 = woken, 1 = value mismatch, 2 = timed out;
+    ///      `usize::MAX` when the word is null, misaligned, or not a mapped caller
+    ///      word. Waiters are matched by `(address space, generation, address)`, so
+    ///      two Tier 2 domains using the same virtual address never wake each other.
+    FutexWait = 17,
+
+    /// Wake up to `count` waiters on the caller's key (`count = 0` wakes every
+    /// waiter). ABI: a0 = word address, a1 = count → number woken; `usize::MAX` on
+    /// error. The word need not be mapped: waiters are selected by key, so an
+    /// address with no waiters is a no-op returning 0.
+    FutexWake = 18,
+
     /// Spawn a cell from ELF bytes already in a page grant (G2 loader redesign).
     /// The primary path for non-bootstrap cells: VFS reads the ELF from the disk
     /// cell-store into a grant, then the kernel gates + loads the BYTES (same

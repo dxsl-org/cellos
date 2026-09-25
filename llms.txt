@@ -1,29 +1,138 @@
 # ViOS
 
-> ViOS is a Rust no_std OS using Cellular Single Address Space + Language-Based Isolation.
+> ViOS is a Rust no_std OS using Cellular SAS + LBI.
 
-## Core
+## Docs
 
-- [Architecture Overview](docs/ARCHITECTURE.md): System design and Cell lifecycle
-- [Coding Guide](docs/CODING_GUIDE.md): How to write ViOS code
-- [Patterns](docs/PATTERNS.md): Common design patterns
-- [API Reference](docs/API.md): Public API for Cells and the kernel
-- [Onboarding](docs/ONBOARDING.md): Getting started
-
-## Technical Design
-
-- [Memory Model](docs/02-memory.md): SAS, frame allocator, capability system
-- [Hardware Abstraction](docs/04-hardware.md): Multi-arch HAL
-- [VFS Architecture](docs/09-vfs.md): Virtual filesystem design
-- [Testing Strategy](docs/10-testing.md): Test pyramid and QEMU harness
-
-## Security
-
-- [Security Model](docs/security-model.md): STRIDE threat model
-- [Code Standards](docs/code-standards.md): Unsafe management
-
-## Optional
-
-- [System Architecture](docs/system-architecture.md): VirtIO, interrupts, paging
-- [Project Roadmap](docs/development-roadmap.md): v0.2 to v1.0 milestones
-- [Changelog](CHANGELOG.md): Version history
+- [Cellos — Frequently Asked Questions](docs/FAQ.md)
+- [Ideas](docs/IDEAS.md)
+- [Cellos Patterns](docs/PATTERNS.md)
+- [Cellos Documentation Index](docs/README.md)
+- [Cellos API Reference](docs/api-reference.md)
+- [Cellos App Development Guide](docs/app-development-guide.md)
+- [App-tier acceptance matrix (review projection)](docs/app-tier-acceptance-matrix.md)
+- [Generated code metrics](docs/code-metrics.generated.md)
+- [Cellos Code Standards](docs/code-standards.md)
+- [Cellos Codebase Summary](docs/codebase-summary.md)
+- [Cellos Display / Compositor API](docs/display-api.md)
+- [Getting Started with Cellos](docs/getting-started.md)
+- [Hardware Development Guide — Real Board Workflow](docs/hardware-dev-guide.md)
+- [Cellos Hot-Swap Guide](docs/hotswap-guide.md)
+- [Cellos Input Service API](docs/input-api.md)
+- [mlibc Build Guide — Cellos Tier B C Library](docs/mlibc-build.md)
+- [Cellos Network Service API](docs/network-api.md)
+- [Cellos Performance Baseline Report](docs/performance-report.md)
+- [Cellos on Milk-V Pioneer (SG2042) — Board Bring-Up Guide](docs/pioneer-bringup.md)
+- [Cellos Project Changelog](docs/project-changelog.md)
+- [Cellos Project Overview & PDR](docs/project-overview-pdr.md)
+- [Cellos Project Roadmap](docs/project-roadmap-legacy.md)
+- [Cellos Project Roadmap](docs/project-roadmap.md)
+- [Cellos Scripting Guide](docs/scripting-guide.md)
+- [Cellos Security Model](docs/security-model.md)
+- [Generated spec anchor status](docs/spec-status.generated.md)
+- [Cellos System Architecture](docs/system-architecture.md)
+- [Cellos on VisionFive2 — Board Bring-Up Guide](docs/vf2-bringup.md)
+- [VFS IPC API Reference](docs/vfs-api.md)
+- [Cellos Bare-Metal Debugging Guide](docs/baremetal/debug.md)
+- [Cellos Bare-Metal Installation Guide](docs/baremetal/load-cellos.md)
+- [ADR 0001: Readiness notifications remain Draft until implemented](docs/decisions/0001-readiness-notifications-remain-draft-until-implemented.md)
+- [ADR 0002: Activate `/srv` RedoxFS in two qualification stages](docs/decisions/0002-phased-srv-redoxfs-activation.md)
+- [ADR-0003: Standardize application tiers, runtime profiles, and SDK modules](docs/decisions/0003-application-tier-taxonomy.md)
+- [ADR-0004: Sign the final ELF container except the signature payload](docs/decisions/0004-sign-final-elf-container-excluding-signature-payload.md)
+- [ADR-0005: Use mutual TLS for external relay identity](docs/decisions/0005-mutual-tls-relay-identity.md)
+- [ADR-0006: Block production root selection pending exact product evidence](docs/decisions/0006-block-production-root-pending-exact-product-evidence.md)
+- [ADR-0007: Use development-first hardware-constrained execution](docs/decisions/0007-development-first-hardware-constrained-execution.md)
+- [ADR-0008: Keep the relay TLS client endpoint inside the protected authority](docs/decisions/0008-protected-relay-tls-endpoint-ownership.md)
+- [ADR-0009: Correlate relay packet failures without legacy framing](docs/decisions/0009-correlate-relay-packet-failures.md)
+- [ADR-0010: Use deterministic CBOR and COSE_Sign1 for VF2 root-stream manifests](docs/decisions/0010-use-canonical-cbor-cose-for-vf2-root-stream-manifests.md)
+- [ADR-0011: Use Cloudflare Roughtime for DEV_REFERENCE signed time](docs/decisions/0011-use-cloudflare-roughtime-for-dev-signed-time.md)
+- [ADR-0012: Use an external lineage table and KMS key for signed-time epochs](docs/decisions/0012-use-external-lineage-table-and-kms-key.md)
+- [ADR-0013: Use solo-first development with independent claim promotion](docs/decisions/0013-solo-first-development-independent-promotion.md)
+- [ADR-0014: Choose lab-first workflows with gated base and assembly extensions](docs/decisions/0014-lab-first-robot-workflows.md)
+- [ADR-0015: Settle on Dual-Mode Hybrid Architecture (Real-time SAS Tier 1 + Paged Domain Tier 2 + VM Guest Tier 3)](docs/decisions/0015-dual-mode-hybrid-architecture.md)
+- [ADR 0016: CellosFS Native replaces RedoxFS as the `/srv` backend](docs/decisions/0016-cellosfs-native-replaces-redoxfs.md)
+- [ADR-0017 — Dual Browser Strategy: Ocel + Tier 3 Chrome](docs/decisions/0017-dual-browser-strategy-ocel-and-tier3-chrome.md)
+- [ADR-0018 — Translate POSIX onto cell primitives; add runtime profiles instead of emulating Linux](docs/decisions/0018-cell-native-portability-and-runtime-profiles.md)
+- [ADR-0019 — One Tier 2 admission control, on the path](docs/decisions/0019-tier2-admission-control-on-path.md)
+- [Spec 23 — Native SDK Contract](docs/evidence/spec23-native-sdk-contract-027e1a2bbfb1.md)
+- [Spec 23 — Native SDK Contract](docs/evidence/spec23-native-sdk-contract-99146be984d6.md)
+- [Porting C applications to Cellos](docs/guides/porting-c-apps.md)
+- [POSIX shim export contract (generated)](docs/guides/posix-shim-contract.generated.md)
+- [Tier 1 `rust-no-std` Profile — Minimal Cell Apps](docs/guides/tier1-rust-bare.md)
+- [Tier 1 Rust + SDK Service Clients — Apps with Services](docs/guides/tier1-rust-sdk.md)
+- [Development Silo Provider — KMS-Mediated AArch64 QEMU Reference](docs/guides/tier1-silo.md)
+- [Tier 1 `ffi-posix` Profile — C ABI via POSIX or mlibc](docs/guides/tier1b-c-zig.md)
+- [Tier 1 `lua` Profile — Dynamic Scripting](docs/guides/tier1b-lua.md)
+- [Tier 3 `linux-guest` Profile — Full Kernel Guest](docs/guides/tier3b-linux-vm.md)
+- [ViUI Reactive-v2 Guide](docs/guides/viui-guide.md)
+- [Anti-Patterns to Avoid](docs/patterns/anti-patterns.md)
+- [API Design Patterns](docs/patterns/api-design.md)
+- [Architectural Patterns](docs/patterns/architectural.md)
+- [Concurrency Patterns](docs/patterns/concurrency.md)
+- [Error Handling Patterns](docs/patterns/error-handling.md)
+- [Initialization Patterns](docs/patterns/initialization.md)
+- [Memory Management Patterns](docs/patterns/memory.md)
+- [Research Learnings & External References](docs/patterns/research-learnings.md)
+- [Testing Patterns](docs/patterns/testing.md)
+- [Cellos vs. Embedded Systems — Competitive Analysis](docs/research/competitive-analysis-embedded.md)
+- [Cellos vs. Server & PC Operating Systems — Competitive Analysis](docs/research/competitive-analysis-server-pc.md)
+- [Phân tích khả năng chạy C++ code trên Cellos](docs/research/cpp_analysis.md)
+- [Kết luận cốt lõi](docs/research/ecosystem.md)
+- [G1 Robot Physical Silicon Qualification Specification & Report](docs/research/g1-physical-silicon-qualification.md)
+- [G3 Accelerator Evidence Envelope](docs/research/g3-accelerator-evidence.md)
+- [Cellos — Innovation Proposals](docs/research/innovation-proposals.md)
+- [Moved](docs/research/references.md)
+- [Research: AI Inference Infrastructure Pain Points](docs/research/research-ai-inference.md)
+- [Research: ARM64 G2 Near-Term Hardware — RK3588 + Alternatives](docs/research/research-arm64-g2-hardware.md)
+- [Research: AUTOSAR Classic vs Adaptive — OS Requirements và Pain Points](docs/research/research-autosar.md)
+- [Cellos — Research-Backed Feature Proposals](docs/research/research-backed-proposals.md)
+- [Cellos Cell Security: Permission Model + Hardware Attestation — Nghiên cứu](docs/research/research-cell-security-permissions.md)
+- [Research: Distributed Cells — Internet Connectivity](docs/research/research-distributed-cells-internet.md)
+- [Hardware-Assisted Isolation cho Cellos SAS — Nghiên cứu](docs/research/research-hardware-isolation.md)
+- [Research: Thị trường Embedded/IoT OS — Eclipse Foundation Survey 2024](docs/research/research-market-survey.md)
+- [Research: RISC-V AI Accelerator Ecosystem — 2025–2026](docs/research/research-riscv-ai-ecosystem.md)
+- [Research: ROS 2 Architectural Pain Points](docs/research/research-ros2.md)
+- [Research: Rust Embedded Ecosystem — Trạng thái 2025–2026](docs/research/research-rust-embedded-2025.md)
+- [Research: Microsoft Singularity và Midori OS — LBI Prior Art Post-Mortem](docs/research/research-singularity-midori.md)
+- [Research: Theseus OS — LBI Academic Kin, Competitive Analysis](docs/research/research-theseus-os.md)
+- [Roadmap Folder](docs/roadmap/README.md)
+- [Cellos → runtime kiểu BEAM/OTP cho backend — phân tích tính năng & roadmap](docs/roadmap/beam-parity-backend-roadmap.md)
+- [Completed History](docs/roadmap/completed-history.md)
+- [Current Focus](docs/roadmap/current-focus.md)
+- [Hardware Tracks](docs/roadmap/hardware-tracks.md)
+- [Open Risk Register](docs/roadmap/open-risk-register.md)
+- [Product Stages](docs/roadmap/product-stages.md)
+- [Runtime and Platform Tracks](docs/roadmap/runtime-and-platform-tracks.md)
+- [Technical Milestones](docs/roadmap/technical-milestones.md)
+- [Cellos system context & design rules](docs/specs/00-context.md)
+- [🛸 Cellos - FORK & REFERENCE STRATEGY](docs/specs/00-fork.md)
+- [Cellos Architecture: Core System](docs/specs/01-core.md)
+- [Cellos Architecture: Memory Model](docs/specs/02-memory.md)
+- [Cellos Architecture: Runtime & SDK](docs/specs/03-runtime.md)
+- [ADR: Completion Queues and the Async Reactor](docs/specs/03b-async-reactor-adr.md)
+- [Cellos Architecture: Hardware Layer](docs/specs/04-hardware.md)
+- [Cellos Architecture: Application Tiers](docs/specs/05-application.md)
+- [Cellos Architecture: Graphics & Input](docs/specs/06-graphics.md)
+- [Cellos Architecture: Networking Stack](docs/specs/07-networking.md)
+- [Cellos Architecture: Power Management](docs/specs/08-power.md)
+- [Cellos Architecture: VFS & Filesystems](docs/specs/09-vfs.md)
+- [ADR: Native filesystem for `/srv`](docs/specs/09b-vfs-native-fs-adr.md)
+- [ADR: Directory Capabilities for the VFS](docs/specs/09c-vfs-directory-capabilities-adr.md)
+- [Cellos Architecture: Testing & Verification](docs/specs/10-testing.md)
+- [Incremental Native Shell (Shell bản địa tăng trưởng)](docs/specs/11-shell.md)
+- [Cellos Reliability Model — The "Never-Die" Spec](docs/specs/12-reliability.md)
+- [13 — Peripheral Driver Bus (HAL + Driver Cells)](docs/specs/13-peripherals.md)
+- [Distributed Cells — Lifecycle, Lease, and Split-Brain Spec](docs/specs/14-distributed.md)
+- [Cellos UI Toolkit: ViUI v2](docs/specs/14-viui.md)
+- [Spec 15 — Kernel Boundary Law](docs/specs/15-kernel-boundary.md)
+- [Spec 16 — rustc as Cellos Trusted Computing Base](docs/specs/16-rustc-tcb.md)
+- [Spec 17 — Cell IPC Wire Contract](docs/specs/17-ipc-wire-contract.md)
+- [Spec 18 — Cell Execution Tiers, Runtime Profiles, and Admission (ADR)](docs/specs/18-cell-trust-tiers.md)
+- [ADR: Cell Admission — Build-Time Attestation vs Install-Time Consent](docs/specs/18b-cell-admission-consent-adr.md)
+- [Publisher Provenance Envelope Contract](docs/specs/18c-publisher-provenance-envelope.md)
+- [Spec 19 — Hardware Isolation Layers & Concurrency Scale Model (ADR)](docs/specs/19-hardware-isolation-layers.md)
+- [Spec 20 — Unified IPC Contract: One Backbone at Three Ranges (DRAFT v2)](docs/specs/20-unified-ipc-contract.md)
+- [Spec 21 — Documentation Architecture: Anchored Specs, Generated Status (ADR)](docs/specs/21-documentation-architecture.md)
+- [Spec 22 — Tier 2 Native Domain Cell Implementation Gate (ADR)](docs/specs/22-native-domain-cell-implementation-gate.md)
+- [Spec 23 — Native SDK Contract](docs/specs/23-native-sdk-contract.md)
+- [Spec 24 — Unified Native AI Inference Architecture](docs/specs/24-ai-inference-architecture.md)

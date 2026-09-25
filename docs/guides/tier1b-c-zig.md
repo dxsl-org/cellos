@@ -44,19 +44,14 @@ extern "C" {
 
 ### Available Functions
 
-- `malloc(size)` → heap allocation via `sys_anon_allocate`
-- `free(ptr)` → deallocate
-- `printf(fmt, ...)` → formatted output
-- `socket(domain, socktype, protocol)` → TCP stream socket (`AF_INET`/`SOCK_STREAM` only)
-- `connect(fd, addr, addrlen)` → connect to peer
-- `send(fd, buf, len, flags)` → send bytes
-- `recv(fd, buf, len, flags)` → receive bytes
-- `close(fd)` → close socket
-- `getentropy(buf, len)` → random bytes (via `sys_get_random`)
-- `_time(tloc)` → epoch seconds (via `ViSyscall::GetTime`)
-- `_gettimeofday(tv, tz)` → wall-clock time (seconds, microseconds=0)
+The generated, checked symbol-and-failure table is
+[POSIX shim export contract](posix-shim-contract.generated.md). It is the source of truth:
+an absent symbol is unsupported rather than an invitation to discover an ABI boundary at final
+link time.
 
-For the full list, see `libs/api/src/services/posix.rs`.
+For a C application port, use the [C porting guide](porting-c-apps.md) and its
+`port-platform` host API. That guide defines the C hook boundary, CMake/Meson cross recipes, and
+the explicit static-native refusals (`fork`, dynamic loading, `mprotect`, and `mmap`).
 
 ### Example: Getentropy
 
@@ -220,7 +215,9 @@ api::declare_syscalls![
 ✅ Interfacing with a library (zlib, curl, etc.)
 
 ❌ Building from scratch in Rust → stay with Tier 1
-❌ Need untrusted code isolation → use Tier 3 Linux guest today; Tier 2 native domains are not implemented yet.
+❌ Need untrusted code isolation → Tier 2 contains native FFI code (private page table) and its
+admission control is on the path ([ADR-0019](../decisions/0019-tier2-admission-control-on-path.md));
+a fleet-secure profile denies domain-class artifacts, and qualification claims stay ledger-gated.
 
 ---
 
@@ -257,6 +254,88 @@ cargo build --release --target riscv64gc-unknown-none-elf
 - Need a protected relay key? → use the purpose-specific KMS client; the [development Silo provider](tier1-silo.md) is not an app API.
 - See [mlibc-build.md](../mlibc-build.md) for mlibc compilation details.
 - Want to write a cell in Zig? → See **Pure Zig Cells** section below.
+
+---
+
+## C++ (freestanding subset) — `cpp-freestanding`
+
+C++ is a **language subset** profile, not hosted C++
+([ADR-0018](../../docs/decisions/0018-cell-native-portability-and-runtime-profiles.md) §2.3).
+Reference cell: [cells/tests/cpp-smoke](../../cells/tests/cpp-smoke/); runner:
+[scripts/qemu-cpp-smoke.sh](../../scripts/qemu-cpp-smoke.sh).
+
+**Required flags:** `-fPIC -ffreestanding -fno-exceptions -fno-rtti -fno-threadsafe-statics
+-fno-use-cxa-atexit`, plus `cc::Build::cpp_link_stdlib(None)` so no `-lstdc++` directive is
+emitted.
+
+**Runtime:** you do not supply it. The POSIX shim already provides the C++ ABI layer —
+`operator new`/`delete` (all six forms) in `libs/api/src/services/posix/alloc.rs`,
+`__cxa_pure_virtual`, `__cxa_guard_*`, `abort`, and `atexit`/`__cxa_atexit` in
+`libs/api/src/services/posix/cxxabi.rs`. Static destructors never run (registration is accepted
+and ignored — a cell has no process teardown). Static constructors do run: `ostd` crt0 walks
+`__init_array` (`libs/ostd/src/startup.rs:42-43,67-70,91-92`).
+
+**No C++ standard headers.** Neither cross toolchain ships them (`riscv64-unknown-elf-g++` has no
+libstdc++ headers; `clang++ --target=aarch64-unknown-none-elf` has no libc++ sysroot), so
+`#include <cstdint>` fails on both. Use compiler builtins (`__UINT32_TYPE__`, `__SIZE_TYPE__`, …)
+as `cpp/cxx_support.hpp` does. Language features — classes, virtual dispatch, templates, static
+construction, `new`/`delete` — are all available.
+
+**Not available:** exceptions, RTTI, thread-safe statics, and the STL runtime (`std::string`,
+`std::vector`, iostreams, locale). Do not link libstdc++/libc++ silently — the runner asserts
+`__cxa_throw`/`_Unwind_*`/`_ZSt*` are absent from the linked cell.
+
+**Architectures:** RV64 and AArch64 only, because the profile's runtime layer is the POSIX shim
+(`#![cfg(any(riscv64, aarch64, wasm32, doc))]`). The build script fails with that reason on other
+targets.
+
+**Launch edge:** a new `/bin/<cell>` path needs a reviewed row in
+`kernel/src/loader/launch_profile/targets.rs` before the shell or desktop may launch it —
+`c-ffi` cells take a `CapSet::EMPTY` ceiling there unless the cell genuinely needs authority.
+
+---
+
+## TLS (thread-local storage) contract
+
+Cellos gives each **task** its own user thread pointer; the kernel never
+dereferences it. The contract is short, and it is the same on every architecture:
+
+| Step | Who does it |
+|---|---|
+| Allocate a TLS block | the cell (heap, static arena — its choice) |
+| Claim it as this thread's base | `sys_set_tls_base(base)` → returns the previous base |
+| Read the base back | the return value of a re-set, or the register where the architecture allows an unprivileged read |
+| Per-thread isolation across switches | the kernel reinstalls the base on every resume |
+
+Reference cell: [cells/tests/tls-test](../../cells/tests/tls-test/); runner:
+[scripts/qemu-tls-test.sh](../../scripts/qemu-tls-test.sh) (`--harts 2` repeats the
+run with a second hart online).
+
+**The kernel owns the register.** A cell must set its base through the syscall, not
+by writing `tp`/`TPIDR_EL0`/`FS_BASE` itself: a direct write is overwritten on the
+next resume. `SetTlsBase` is self-only (the ABI has no target parameter) and always
+permitted, because one word of the caller's own register state carries no authority.
+
+**Per-architecture carrier:**
+
+| Arch | Where the value lives |
+|---|---|
+| riscv64 | the user `tp` (x4) slot of the task's trap frame; `__trap_exit` restores it. The kernel's own `tp` (the HartLocal pointer) is a different value, reloaded on every U→S transition. |
+| aarch64 | `TPIDR_EL0`, written by the kernel on every resume (`TPIDR_EL1` stays the kernel's). |
+| x86_64 | `FS_BASE` (`IA32_FS_BASE`), written on every resume; `GS_BASE`/`KERNEL_GS_BASE` stay kernel context state. |
+
+**Threads inherit their creator's base** until they set their own — a thread started
+inside a runtime that already set one up keeps working. A worker thread's `Exit`
+terminates only that thread (and wakes a `Wait` joiner); only the cell's root task
+exit retires the cell generation.
+
+**C/C++ `__thread` / `thread_local` is not supported yet.** It needs a TLS runtime:
+the loader must expose the program's `PT_TLS` segment (size + initial image) and the
+userspace side must allocate a block per thread and place it so the linker's
+`initial-exec` offsets resolve. The kernel primitive here is the part that runtime
+needs; the block management is a separate piece of work, tracked in
+`.agents/260922-1549-cell-native-portability-program/phase-03-per-task-tls-base.md`
+§ Deviation Log.
 
 ---
 

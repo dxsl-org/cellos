@@ -1,12 +1,15 @@
 # Spec 19 — Hardware Isolation Layers & Concurrency Scale Model (ADR)
 
-> **Status**: Accepted 2026-07-30; amended 2026-08-01 by D12. **Layer A is implemented**
-> (`midori-lessons` phase 10, 2026-07-30); per-domain page tables belong to the
+> **Status**: Accepted 2026-07-30; amended 2026-08-01 by D12; amended 2026-09-22 by the
+> measured per-request scale review (§3). Layer A carries implementation and test
+> anchors in §2; per-domain page tables belong to the
 > following plan (they are the Tier-2 mechanism of Spec 18). Spec 22 is the
 > required pre-implementation design gate. This is the
 > "layer2_hw_security" document that Spec 16 §8 reserved.
 
 ## 1. Context
+
+Anchor: design
 
 LBI protects cell↔cell memory only where F1 holds (Spec 16, Spec 18 §1). Kernel↔cell
 is hardware-protected (U/S privilege); cell↔cell was not: every cell page used to be
@@ -22,10 +25,15 @@ the A76/A55 complex, and both Arm core TRMs specify Armv8.2-A with the
 
 ## 2. Decision — three layers, in delivery order
 
-### Layer A — Software W^X after relocation (all arches) — IMPLEMENTED
+Anchor: design
 
-Implemented by `kernel/src/loader/wx.rs`, driven from `task::spawn_from_mem` as the
-last step of a spawn. The ordering is the whole design:
+### Layer A — Software W^X after relocation (all arches)
+
+Anchor: impl kernel/src/loader/wx.rs::enforce · test tests/integration/tests/wx-text-write.rs::text_write_faults_and_terminates_cell
+
+Implemented by `kernel/src/loader/wx.rs`, driven from `task::elf_prepare` (the gated
+entry point is `loader::mem_spawn_gate::spawn_from_mem_gated`) as the last step of a
+spawn preparation. The ordering is the whole design:
 
 1. `loader::elf::load_segments` maps every page `USER+WRITE` (relocation needs it) and
    records each page's *target* flags derived from `p_flags`, OR-ed across PT_LOADs
@@ -62,6 +70,11 @@ gap instead of enforcing.
 
 ### Layer B — Per-domain page tables (Tier-2 mechanism, next plan)
 
+Anchor: planned .agents/260906-dual-mode-kernel-evolution/phase-02-tier2-paged-domain-engine.md
+
+> **Status**: Planned — the RV64 substrate exists behind the `native-domains` feature;
+> production release is gated by Spec 22.
+
 Classic SASOS design (Opal, Nemesis): one address-space *layout*, several protection
 *domains*. A domain gets its own root table mapping the same VA→PA as the SAS view,
 minus every page that doesn't belong to it. ASIDs avoid full TLB flushes on switch.
@@ -74,6 +87,8 @@ authorize a Layer-B implementation.
 
 ### Layer C — Per-arch hardening (opportunistic, G2+)
 
+Anchor: design
+
 Where hardware exists, cheap extra walls may be added: x86 MPK after PTE-key and
 shared/grant-page semantics are designed, and ARM MTE on future ≥v8.5 silicon. Current
 x86 code enables CR4.PKE, computes task PKRU values, and writes PKRU on ring-3 return,
@@ -85,6 +100,8 @@ These are lane-specific bonuses, never load-bearing — the boards named in §1 
 provide them, and Layer B remains the wall where native code is untrusted.
 
 ## 3. Concurrency scale model — two profiles, not one number
+
+Anchor: const kernel/src/memory/cell_quota.rs::MAX_CELLS=64 · const kernel/src/loader/va_alloc.rs::MAX_SLOTS=512 · const kernel/src/loader/va_alloc.rs::CELL_VA_STRIDE=0x200_0000
 
 > **Revised 2026-07-31.** An earlier version of this section committed to a single
 > two-level model — tens of cells, thousands of async tasks inside them — and rejected
@@ -122,6 +139,53 @@ additionally requires immutable-frame refcounts to survive spawn/reap, W^X to pr
 remain read-only, stacks to grow on demand without crossing guards, and mutable data/heap/grants
 to remain per cell. The current large-app profile and 64-cell default do not change meanwhile.
 
+> **Amendment 2026-09-22 — order of work, and the constraints bounding a mixed deployment.**
+> Evidence for the ruling: `.agents/reports/d5-cell-scale-measurement-260731.md` (method and
+> numbers) and `.agents/260801-d1b-d3-d5-closure/phase-04-cell-scale-profile.md` (D5 closure).
+> Where this amendment and the three-change list above disagree, this amendment governs.
+>
+> **Ruling 1 — firmware memory discovery is prerequisite zero.** The 2026-07-31 measurement
+> refused a ninth parked cell on a 2 GiB guest while `MAX_CELLS` had been raised to 512 and all
+> 512 VA slots were free; the binding ceiling was a compile-time 190 MiB memory map, not per-cell
+> cost. Raising the cell/VA constants is therefore not a path to this profile: the map the kernel
+> sees must be the firmware's before any per-cell cost work is evaluated. Order of work:
+> (1) firmware memory discovery (`kernel/src/boot/dtb_memory.rs`, `boot::fallback_boot_info`);
+> (2) shared immutable `.text`/`.rodata` frames; (3) demand-paged stacks; (4) `MAX_CELLS` and
+> `MAX_SLOTS`, last and only after (2)–(3).
+>
+> **Ruling 2 — mixed deployment is a per-cell resource policy, not a partition.** Stack pages,
+> heap quota, priority and execution tier are already per-cell parameters
+> (`kernel/src/task.rs:583-594`, `kernel/src/task/launch.rs:32-39`), and heterogeneous cells
+> coexist today. Five constraints bound what "on demand" can mean, and each is an invariant of
+> this section:
+> - **Cell VA stride is fixed at 32 MiB** (`CELL_VA_STRIDE`, `kernel/src/loader/va_alloc.rs:47`).
+>   It bounds a cell's private code + data + heap; bulk data must travel through grants
+>   (identity-mapped, ≤ 4096 pages = 16 MiB per grant, `kernel/src/task/syscall.rs:150-151`) or
+>   VFS. A variable VA budget is a named prerequisite of this profile.
+> - **Slot accounting is profile-blind.** `MAX_CELLS = 64` (`kernel/src/memory/cell_quota.rs:15`)
+>   and `MAX_SLOTS = 512` give a heavy cell exactly one slot, so any N-gate measurement for the
+>   per-request profile MUST be taken with M heavy cells resident; a homogeneous light-cell sweep
+>   does not describe a deployment.
+> - **A churn class cannot be supervised by `init`.** `init`'s child table is static
+>   (`service_table::configured()`) with per-service restart intensity, and `NotifyOnExit`
+>   requires `SpawnCap` (`kernel/src/task/syscall.rs:3829-3855`); a high-churn class needs a
+>   userspace supervisor with its own rate limiting.
+> - **Isolation of a light cell.** LBI covers trusted first-party handlers only; a light cell
+>   handling untrusted input MUST be a Tier-2 domain (Spec 22), so mixed deployment of untrusted
+>   handlers is gated on Tier-2 admission, not on this section.
+> - **Contiguity binds.** Every thread's stacks need a contiguous `STACK_PAGES + 1` frame run
+>   (`kernel/src/task/scheduler.rs:9-13`), so heavy resident cells and churning light cells
+>   compete for contiguous frames; the largest satisfiable run is the measurement, not free-byte
+>   totals.
+>
+> **Deliberate absences (checked 2026-09-22).** None of the following exists in the tree, and each
+> is required before this profile is claimable: shared immutable image frames, demand-paged
+> stacks, dynamically sized cell/VA tables, a variable VA budget, a userspace supervisor for
+> churn classes, and a mixed-occupancy N-gate measurement. Per Spec 21, status for these is
+> maintained outside this spec — `docs/roadmap/current-focus.md` (§ Cell scale profiles) and
+> `docs/roadmap/beam-parity-backend-roadmap.md` §2.2–§2.3; this section records only the ruling,
+> its rationale, the constraints, and the absences.
+
 **Where this can beat BEAM rather than imitate it.** BEAM processes are lightweight but share
 one VM: a single faulty NIF takes neighbours with it. A per-request Cellos cell is separated
 by W^X (Layer A), capabilities, and — for unverified code — a Tier-2 domain page table
@@ -135,6 +199,8 @@ two profiles compose: a large-app cell may still run many futures internally.
 
 ## 4. Rejected alternatives
 
+Anchor: design
+
 - **MTE/PKU as the primary cell↔cell wall** — absent on all current deployment
   hardware; would make isolation a QEMU-only property.
 - **Full per-cell address spaces (classic processes)** — abandons SAS's transferable
@@ -146,6 +212,8 @@ two profiles compose: a large-app cell may still run many futures internally.
   per-request server profile in §3.
 
 ## 5. Cross-references
+
+Anchor: design
 
 | Topic | Document |
 |-------|----------|

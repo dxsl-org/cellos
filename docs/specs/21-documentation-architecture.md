@@ -7,6 +7,8 @@
 
 ## 1. Context — what actually causes drift
 
+Anchor: design
+
 Two candidate diagnoses were considered.
 
 **"Specs live too far from the code."** Partly true, but insufficient as a cure. Comments
@@ -47,9 +49,13 @@ absent mechanisms, or facts about hardware.
 
 ## 2. Decision — three layers with a strict allocation rule
 
+Anchor: design
+
 Overlap between layers is where drift breeds, so each fact has exactly one home.
 
 ### Layer 1 — Specs and ADRs (`docs/specs/`), hand-written, few, stable
+
+Anchor: design
 
 Contains **only**: decisions and their rationale, **rejected alternatives**, invariants
 that span files, hardware and certification constraints, and deliberate absences. This
@@ -60,6 +66,8 @@ counts, no coverage percentages, no "works today" tables. Those belong to Layer 
 
 ### Layer 2 — Code comments, per the existing Rust standards
 
+Anchor: design
+
 Contract, not narration: preconditions, invariants, non-obvious side effects, lock
 ordering, `// SAFETY:`. One rule added by this ADR:
 
@@ -69,12 +77,16 @@ ordering, `// SAFETY:`. One rule added by this ADR:
 
 ### Layer 3 — Status, **generated, never hand-written**
 
+Anchor: impl scripts/check-spec-anchors.py::render_status
+
 `docs/spec-status.generated.md` is produced by `scripts/check-spec-anchors.py` and is not
 edited by hand. It lists every anchored spec section, its anchor, and the resolved state.
 Kernel LOC, cell-crate compliance counts, and "what works today" tables are derived the
 same way. Any document that needs to state status **links** to the generated file.
 
 ## 3. The anchor mechanism
+
+Anchor: impl scripts/check-spec-anchors.py::resolve_anchor
 
 Every spec section that makes a normative claim carries exactly one `Anchor:` line
 directly beneath its heading. The checker resolves it against the tree.
@@ -104,6 +116,8 @@ implements it without amending the spec.
 
 ### Failure modes the checker catches
 
+Anchor: impl scripts/check-spec-anchors.py::collect
+
 1. A section marked Ratified/Accepted/Definitive with **no** `Anchor:` line.
 2. An anchor pointing at a missing file, symbol, or test — the mechanism was renamed or
    removed and the spec was not updated. *(This is the class behind D8 and ADR 0001:
@@ -128,6 +142,8 @@ a *test* rather than an implementation narrows the gap where it matters most.
 
 ### What the anchor deliberately does not do
 
+Anchor: design
+
 It proves a mechanism **exists**, not that it is **correct** or **exercised at runtime**.
 `test` anchors raise the bar to "a test names this behaviour"; they do not prove the test
 ran on hardware. Runtime verification stays the job of the suite and the per-plan
@@ -136,6 +152,8 @@ test exist, while runtime verification is still pending — an honest anchor plu
 generated status row expresses exactly that, where a hand-written "✅" would not.
 
 ## 4. Rollout
+
+Anchor: design
 
 1. **Checker first**, warn-only: `scripts/check-spec-anchors.py`, plus the generated
    status file. Nothing fails yet.
@@ -155,6 +173,8 @@ impossible to ignore.
 
 ## 5. Rejected alternatives
 
+Anchor: design
+
 - **Move all specs into code comments.** Cannot express absent mechanisms, rejected
   alternatives, cross-file invariants, or hardware constraints; and comments drift
   silently, as `handle_table.rs:2` demonstrates. It would have addressed roughly a fifth of
@@ -169,9 +189,11 @@ impossible to ignore.
 
 ## 6. Cross-references
 
+Anchor: design
+
 | Topic | Document |
 |---|---|
 | Code comment standards (Layer 2 detail) | `~/.claude/rules/haily-coding.md`, `docs/code-standards.md` |
-| Existing CI invariant checkers (the pattern this follows) | `scripts/cellos-sign --check`, `scripts/check-cell-va-layout.py`, `scripts/check-cargo-config-parity.py` |
+| Existing CI invariant checkers (the pattern this follows) | `scripts/cellos-sign --check`, `scripts/check-cell-va-layout.py`, `scripts/check-cargo-config-parity.py`, `scripts/check-spec-anchors.py` |
 | The 39 open rulings this mechanism surfaces | `.agents/reports/decision-docket-260730.md` |
 | Spec inventory that motivated this ADR | `.agents/reports/spec-unresolved-inventory-260730.md` |

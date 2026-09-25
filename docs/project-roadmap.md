@@ -3,7 +3,7 @@
 **Project**: Cellos (Jarvis Hybrid OS)
 **Current version**: 0.2.1-dev (Mycelium Era)
 **Current phase**: Phase 1 - Core Stability; active product stage G1 Robot & Embedded
-**Last updated**: 2026-09-04
+**Last updated**: 2026-09-22 (BEAM/OTP parity analysis linked from this index)
 This file is the roadmap entrypoint. The previous all-in-one roadmap is
 preserved as a read-only content snapshot at
 [project-roadmap-legacy.md](project-roadmap-legacy.md). Use it only when a
@@ -18,6 +18,7 @@ historical decision is not represented by the current topic pages.
 | Product-stage overlay G1-G5 | [roadmap/product-stages.md](roadmap/product-stages.md) |
 | Runtime and platform overlays | [roadmap/runtime-and-platform-tracks.md](roadmap/runtime-and-platform-tracks.md) |
 | Technical milestones and historical status | [roadmap/technical-milestones.md](roadmap/technical-milestones.md) |
+| BEAM/OTP parity and backend roadmap (analysis) | [roadmap/beam-parity-backend-roadmap.md](roadmap/beam-parity-backend-roadmap.md) |
 | Completed history ledger | [roadmap/completed-history.md](roadmap/completed-history.md) |
 | Known open risks and deferred gates | [roadmap/open-risk-register.md](roadmap/open-risk-register.md) |
 | Immutable pre-split snapshot | [project-roadmap-legacy.md](project-roadmap-legacy.md) |

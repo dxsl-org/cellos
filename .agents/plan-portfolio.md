@@ -31,8 +31,13 @@ verification-only closure that opens no new feature program.
 - `260605-1406-phase28-wasm-cells-epmp` — partial/suspect: WASM crates are present but
   retain-vs-remove and runtime qualification are unresolved; ePMP is M-mode-blocked.
 - Per-request server scale (D5) — accepted goal, WIP-limited behind Midori. Promotion requires
-  N=64/128/256/512 memory/spawn/isolation baselines before image sharing, demand stacks, profile
-  quotas, or dynamic cell tables are implemented.
+  N=64/128/256/512 memory/spawn/isolation baselines **measured with M heavy cells resident**
+  (mixed occupancy, not a homogeneous light sweep) before image sharing, demand stacks, profile
+  quotas, or dynamic cell tables are implemented. Firmware memory discovery landed
+  (`kernel/src/boot/dtb_memory.rs`), so the hardcoded 190 MiB map that capped the 2026-07-31
+  measurement (n=8–9) no longer binds; those baselines have not been re-run. A variable VA budget
+  (fixed 32 MiB stride today) is an additional named prerequisite — Spec 19 §3 amendment,
+  2026-09-22.
 
 ## Explicitly deferred
 
@@ -43,6 +48,16 @@ verification-only closure that opens no new feature program.
 
 ## Completed / closed records
 
+- `260922-1549-cell-native-portability-program` (7 phases, ADR-0018/ADR-0019) — closed
+  2026-09-25 at the `qemu` ceiling. Tier 2 admission on the path, `cpp-freestanding`, per-task TLS,
+  futex ABI + wait queues, the kernel pipe object, the generated porting kit, and the three
+  reference-port classes are all witnessed by RV64 QEMU runners
+  (`qemu-native-domain-test`, `qemu-cpp-smoke`, `qemu-tls-test`, `qemu-futex-test`,
+  `qemu-pipe-test`, `qemu-c-pthread`, `qemu-c-spawn`); the follow-on C thread/process
+  proposal closed with it. Raw logs: `docs/evidence/`; closure record:
+  `.agents/260922-1549-cell-native-portability-program/phase-07-reference-ports-and-cost.md`.
+  Residual recorded, not hidden: a third-party port needing a `fork`/`exec` process tree stays
+  class D, and class C is witnessed by an in-tree workload rather than vendored third-party code.
 - `260616-0755-viui-completion` — canonical ViUI v2 implementation record.
 - `260712-1100-loader-trust-repair` — P-TRUST landed in `721e1f6f`.
 - `260712-1900-manifest-v2` implementation P00-P02 — landed in `c25f3185`.

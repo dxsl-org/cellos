@@ -13,7 +13,7 @@ stacks and hardware-isolation layers. Do not use numbered SDK tiers.
 | Tier | Canonical name | Runtime profiles | Isolation | Status |
 | :--- | :--- | :--- | :--- | :--- |
 | **Tier 1** | Trusted SAS Cell | `rust-no-std`, `rust-std` (pure-Rust PAL), `ffi-posix`, `lua` | Shared SAS + LBI; fleet posture depends on signing/admission | Shipped for native Cells (`rust-no-std` & pure-Rust `rust-std`) |
-| **Tier 2** | Native Domain Cell | Same native Cell shape as Tier 1 | Private MMU domain, explicit mapped grants, copied/domain-aware IPC | Accepted design, **not implemented** |
+| **Tier 2** | Native Domain Cell | Same native Cell shape as Tier 1 | Private MMU domain, explicit mapped grants, copied/domain-aware IPC | Implemented development/QEMU lane; physical and fleet qualification remain blocked |
 | **Tier 3** | VM Guest | `linux-guest` | Hypervisor / Stage-2 | ARM64 guest path exists; broader platform work tracked separately |
 
 Legacy aliases:
@@ -182,6 +182,54 @@ See `docs/mlibc-build.md` for the full mlibc build guide.
 | fork/exec | ❌ By design | ✅ Full Linux |
 | Phù hợp | Vendor SDK, validated C lib | Full Linux ecosystem, fork-heavy apps |
 | Trust requirement | Must be trusted (cùng SAS với kernel) | Untrusted OK (hardware fence) |
+
+### 3.2 C++ profile: `cpp-freestanding` (ADR-0018 §2.3) — shipped 2026-09-22
+
+C++ enters as a **language subset**, not as hosted C++: `-fno-exceptions -fno-rtti
+-fno-threadsafe-statics -fno-use-cxa-atexit`, static PIC PIE, landing as an `FFI`-class Tier 2
+cell. What the profile actually provides, and where:
+
+| Concern | Where it lives |
+|---|---|
+| `operator new`/`delete` (all six forms), `__cxa_pure_virtual`, `__cxa_guard_*`, `abort` | The POSIX shim's C++ ABI layer: `libs/api/src/services/posix/alloc.rs`, `cxxabi.rs` |
+| `atexit` / `__cxa_atexit` | Same layer; registration is accepted and never fires (a cell has no process teardown — the kernel reclaims the address space) |
+| Static constructors | `ostd` crt0 walks `__init_array` on all three architectures (`libs/ostd/src/startup.rs:42-43,67-70,91-92`) |
+| Types and helpers | The cell's own `cpp/cxx_support.hpp` (compiler builtins; see below) |
+| Build recipe | `cells/tests/cpp-smoke/build.rs` (`cc` with `cpp(true)`, `.cpp_link_stdlib(None)`, per-arch compiler selection) |
+
+**No C++ standard headers.** Neither cross toolchain in the supported environment ships them:
+`riscv64-unknown-elf-g++` has no libstdc++ headers and `clang++ --target=aarch64-unknown-none-elf`
+has no libc++ sysroot, so `#include <cstdint>` fails on both. The v1 contract is therefore
+*language-only* — classes, inheritance, virtual dispatch, templates, static construction,
+`new`/`delete` — with types taken from compiler builtins. Vendoring a libc++ header subset is a
+separate decision with its own size measurement.
+
+**Admitted on RV64 and AArch64 only**, because the profile's runtime layer is the POSIX shim,
+whose module is `#![cfg(any(riscv64, aarch64, wasm32, doc))]`
+(`libs/api/src/services/posix.rs:13-22`). The cell's build script fails with that reason on any
+other target instead of leaving an undefined-symbol dump.
+
+Exceptions, RTTI, thread-safe statics, and the STL runtime (`std::string`, `std::vector`,
+iostreams) need an unwinder and per-task TLS and remain separate decisions. Reference cell:
+`cells/tests/cpp-smoke`; runner: `scripts/qemu-cpp-smoke.sh`.
+
+### 3.3 Porting lanes for existing Linux applications
+
+[ADR-0018](../decisions/0018-cell-native-portability-and-runtime-profiles.md) §2.2 fixes three
+lanes, selected by what the application actually uses:
+
+| Lane | Method | Cost | Precondition |
+|---|---|---|---|
+| **L1 relink** | Rebuild against the shim; rewrite only the platform layer | days → weeks | source available, single process, no JIT/dynamic plugin |
+| **L2 embed** | Link the library into a Rust cell (`ffi-posix`) | hours → days | the value is in the library, not the process model |
+| **L3 guest** | Unmodified binary in a Tier 3 Linux VM | zero code change | accepts 2-10 s boot and the volatile guest disk |
+
+Class A (stdio/file/heap/math, single-threaded) and class C (`fork`+`exec` for subprocesses)
+are L1; class B (OS threads) is L1 but gated on the per-task TLS and futex primitives; class D
+(`fork` without `exec`, `dlopen`, JIT, file-backed `MAP_SHARED`, closed-source binaries) is L3
+only. Unsupported entry points fail loudly (`ENOSYS`); they are never approximated silently.
+Porting cost is made predictable by a published shim contract and platform layer, not by
+per-port discovery (program phase 06).
 
 ---
 
