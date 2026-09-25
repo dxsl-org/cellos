@@ -120,6 +120,27 @@ pub(super) fn c_spawn_profile(route: LaunchRoute, target: &str) -> Option<Launch
     ))
 }
 
+/// The B0 supervisor library needs exactly one exact child edge: its worker.
+///
+/// Lifecycle authority is required because this edge exists so a supervisor can
+/// spawn *and* watch/restart children (`NotifyOnExit`/`ForceExit` are `SpawnCap`
+/// gated); the child itself is capability-free, so a compromised worker cannot
+/// escalate through the edge it was started with. Keeping the row exact means a
+/// supervisor cannot convert its authority into arbitrary process creation.
+pub(super) fn backend_supervisor_profile(
+    route: LaunchRoute,
+    target: &str,
+) -> Option<LaunchProfile> {
+    if !matches!(route, LaunchRoute::Path | LaunchRoute::Elf) || target != "/bin/backend-worker" {
+        return None;
+    }
+    Some(LaunchProfile::new(
+        CapSet::EMPTY,
+        "backend-supervisor-worker-edge",
+        true,
+    ))
+}
+
 pub(super) fn supervisor_profile(route: LaunchRoute, target: &str) -> Option<LaunchProfile> {
     if !matches!(route, LaunchRoute::Path | LaunchRoute::Elf) || !target.starts_with("/bin/") {
         return None;

@@ -220,6 +220,92 @@ See [cells/demos/sdk-demo/src/main.rs](../../cells/demos/sdk-demo/src/main.rs) �
 
 ---
 
+## Supervisor Trees (actors)
+
+An app can declare its own supervision tree instead of relying on `/bin/init`
+([ADR-0021](../decisions/0021-actor-supervisor-library-in-userspace.md)). The library is userspace-only:
+no new syscall, opcode, or message byte.
+
+```rust
+use ostd::actor::{self, Actor, ActorCtx, Backoff, ChildSpec, Policy, Strategy, Tree};
+use ostd::app::AppEvent;
+use serde::{Deserialize, Serialize};
+
+#[derive(Serialize, Deserialize, Debug)]
+enum Msg { Ping { seq: u32 } }
+#[derive(Serialize, Deserialize, Debug)]
+enum Reply { Pong { seq: u32 } }
+
+/// An ordinary child: answer typed calls.
+struct Worker;
+impl Actor for Worker {
+    type Msg = Msg;
+    fn on_message(&mut self, ctx: &mut ActorCtx<'_>, from: usize, msg: Msg) {
+        match msg {
+            Msg::Ping { seq } => { let _ = ctx.reply(from, &Reply::Pong { seq }); }
+        }
+    }
+}
+
+/// A supervisor: one `one_for_one` tree over three children.
+struct Boss { tree: Tree }
+impl Actor for Boss {
+    type Msg = Msg;                                   // what this actor receives
+    fn on_start(&mut self, ctx: &mut ActorCtx<'_>) { self.tree.start_all(ctx); }
+    fn on_message(&mut self, _ctx: &mut ActorCtx<'_>, _from: usize, _msg: Msg) {}
+    fn on_event(&mut self, ctx: &mut ActorCtx<'_>, ev: AppEvent) {
+        // A watched child's death arrives as a raw message: tid + 8-byte reason.
+        if let AppEvent::RawMessage { sender_tid, data } = ev {
+            if let Some(reason) = actor::exit_reason(&data) {
+                self.tree.handle_exit(ctx, sender_tid, reason);
+            }
+        }
+    }
+    fn on_tick(&mut self, ctx: &mut ActorCtx<'_>) {
+        let now = ctx.now_ticks();
+        self.tree.handle_tick(ctx, now);               // fires backoff timers
+    }
+}
+
+// Declare the tree; `run` owns the mailbox loop and never returns.
+let tree = Tree::new(Strategy::OneForOne, [
+    ChildSpec::new("w0", "/bin/my-worker").with_policy(Policy::Transient)
+        .with_backoff(Backoff { base_ticks: 50, cap_ticks: 200 }),
+    ChildSpec::new("w1", "/bin/my-worker").with_policy(Policy::Transient),
+]);
+actor::run(Boss { tree });
+```
+
+| Concept | Values / default |
+|---|---|
+| `Policy` | `Permanent` (always), `Transient` (only abnormal exit — non-zero reason), `Temporary` (never) |
+| `ChildSpec::intensity` / `window_ticks` | ≤5 restarts per 1 000 ticks (~10 s); the sixth abnormal exit inside the window **gives up on that child only** and logs it |
+| `Backoff` | `base_ticks << (consecutive failures - 1)`, capped by `cap_ticks`; `Backoff::NONE` respawns immediately |
+| `Strategy` | `OneForOne`, `OneForAll`, `RestForOne` (expansion is in child declaration order) |
+| Deadlines | `on_tick` every `actor::ACTOR_TICK_TICKS` (5 ticks ≈ 50 ms) |
+
+Rules that come from the IPC contract (Spec 17) and are enforced by the library:
+
+- actor messages ride the existing `0xAC 0x00` envelope, so `Shutdown`, `CapRevoked`, and hot-swap
+  events still arrive on the same mailbox (§3);
+- `ActorCtx::call` recvs **masked to the peer tid** (§2) and a reply is a **blocking** send, so the
+  peer must be waiting — do not answer a caller that may have timed out with a bare `sys_send`;
+- an undecodable message is logged with its sender and length, never dropped silently (§7);
+- there is no fire-and-forget send and no per-actor mailbox: the kernel mailbox stays bounded and
+  backpressured (§6).
+
+**Placement matters for a supervisor.** A supervisor holds `SpawnCap` (declare
+`spawn = true` in its manifest), and the kernel refuses a non-empty child ceiling on the
+caller-supplied-bytes (`SpawnFromElf`) route — so an authority-bearing cell must be staged in
+**VIFS1**, not only in the disk cell-store (`gen_disk.ps1` does this for the B0 witness). Children
+are usually capability-free and are reached through VFS from the ordinary cell-store, which is what
+`sys_spawn_from_path` does automatically.
+
+Working example: `cells/tests/backend` (supervisor + worker) driven by
+`scripts/qemu-actor-supervisor.sh`.
+
+---
+
 ## Common Errors
 
 **VFS not registered?** —  The service may not be running. Check kernel boot output and catch `Err(_)` gracefully.

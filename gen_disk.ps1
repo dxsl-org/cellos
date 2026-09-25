@@ -150,6 +150,10 @@ Build-Cargo -What "hotswap demos" -Packages @('hotswap-demo-v1', 'hotswap-demo-v
 # the shell ("command not found" on CI was exactly this gap).
 Build-Cargo -What "posix-shim-test" -Packages @('app-posix-shim-test')
 Build-Cargo -What "tier2 test cells" -Packages @('tier2-smoke', 'tier2-exploit')
+# B0 actor/supervisor witness (ADR-0021). The supervisor must be in VIFS1 (see
+# the kfs_args note below), so leaving it out of this build step would make the
+# VIFS1 row silently absent and the QEMU witness fail as "command not found".
+Build-Cargo -What "backend supervisor witness" -Packages @('app-backend')
 
 # DOOM — only if doomgeneric sources have been cloned. Custom --target + -Z so
 # it can't use Build-Cargo; capture the exit code BEFORE the pipe (see Build-Cargo).
@@ -288,6 +292,8 @@ Add-CellToSign "$rel_dir/http-smoke"
 Add-CellToSign "$rel_dir/cfi-test"
 Add-CellToSign "$rel_dir/wx-test"
 Add-CellToSign "$rel_dir/vfs-test"
+Add-RequiredCellToSign "$rel_dir/backend-supervisor" "backend-supervisor"
+Add-RequiredCellToSign "$rel_dir/backend-worker" "backend-worker"
 Add-RequiredCellToSign "$rel_dir/hotswap-demo-v1" "hotswap-demo-v1"
 Add-RequiredCellToSign "$rel_dir/hotswap-demo-v2" "hotswap-demo-v2"
 Add-CellToSign "$rel_dir/ls"
@@ -390,6 +396,8 @@ $wx_test_bin    = "$rel_dir/wx-test"         # W^X violation test (shell: `wx-te
 $vfs_test_bin   = "$rel_dir/vfs-test"        # directory-capability pioneer (shell: `vfs-test`)
 $hotswap_demo_v1_bin = "$rel_dir/hotswap-demo-v1"  # M4.1 hotswap demo cell v1
 $hotswap_demo_v2_bin = "$rel_dir/hotswap-demo-v2"  # M4.1 hotswap demo cell v2
+$backend_supervisor_bin = "$rel_dir/backend-supervisor"  # B0 actor/supervisor witness (shell: `backend-supervisor`)
+$backend_worker_bin     = "$rel_dir/backend-worker"      # B0 supervised worker (spawned by the supervisor)
 $tier2_smoke_bin   = "$rel_dir/tier2-smoke"
 $tier2_exploit_bin = "$rel_dir/tier2-exploit"
 $ls_bin   = "$rel_dir/ls"    # M3.2 embedded debug utils
@@ -500,6 +508,14 @@ if (Test-Path $virtio_blk_bin) { $kfs_args += @($virtio_blk_bin, "/bin/block") }
 if ($doom_wad)  { $kfs_args += @($doom_wad, "/doom1.wad") }
 if (Test-Path $hotswap_demo_v1_bin) { $kfs_args += @($hotswap_demo_v1_bin, "/bin/hotswap-demo-v1") }
 if (Test-Path $hotswap_demo_v2_bin) { $kfs_args += @($hotswap_demo_v2_bin, "/bin/hotswap-demo-v2") }
+# B0 actor/supervisor witness: the supervisor carries SpawnCap, and the shell's
+# ELF route deliberately refuses a non-empty ceiling to caller-supplied bytes
+# (launch_profile::authorize). An authority-bearing cell therefore has to resolve
+# through the kernel loader, i.e. live in VIFS1 — the same class as the hotswap
+# demos above. The worker stays out of VIFS1: it is capability-free and the
+# supervisor spawns it through VFS + SpawnFromElf, so it belongs in the disk
+# cell-store with everything else.
+if (Test-Path $backend_supervisor_bin) { $kfs_args += @($backend_supervisor_bin, "/bin/backend-supervisor") }
 $kfs_args += @($free_bin, "/bin/free")
 # bench + bench-probe: same kernel-spawn-bound class as the hotswap demos —
 # bench re-spawns itself/its probe via sys_spawn_pinned, which resolves through
@@ -651,6 +667,8 @@ if (Test-Path $hotswap_demo_v1_bin) { $table_args += "/bin/hotswap-demo-v1=$hots
 if (Test-Path $hotswap_demo_v2_bin) { $table_args += "/bin/hotswap-demo-v2=$hotswap_demo_v2_bin" }
 if (Test-Path $tier2_smoke_bin)   { $table_args += "/bin/tier2-smoke=$tier2_smoke_bin" }
 if (Test-Path $tier2_exploit_bin) { $table_args += "/bin/tier2-exploit=$tier2_exploit_bin" }
+if (Test-Path $backend_supervisor_bin) { $table_args += "/bin/backend-supervisor=$backend_supervisor_bin" }
+if (Test-Path $backend_worker_bin)     { $table_args += "/bin/backend-worker=$backend_worker_bin" }
 # Zig cells (Tier 1b) — added when zig is in PATH and build-zig-cells.ps1 succeeds
 foreach ($kv in $zig_elfs.GetEnumerator()) {
     $table_args += "/bin/$($kv.Key)=$($kv.Value)"

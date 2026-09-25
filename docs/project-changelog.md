@@ -4,6 +4,35 @@
 
 ## [Unreleased] Development-first hardware-constrained execution
 
+- **Actor/supervisor library (B0 of the backend roadmap, ADR-0021):** an application can declare a
+  supervision tree instead of editing `/bin/init`. `ostd::actor` is a typed mailbox loop over the
+  existing `0xAC` envelope — no new syscall, opcode, or byte-0 discriminant — with masked call/reply
+  (Spec 17 §2), a deadline tick, and loud handling of undecodable traffic instead of a silent drop
+  (§7). `ostd::actor::supervisor` adds a **dynamic** child table with Permanent/Transient/Temporary
+  policy, per-child intensity checked *before* the increment exactly as `init` does (five restarts,
+  the sixth abnormal exit gives up on that child alone), capped exponential backoff, and
+  one_for_one/one_for_all/rest_for_one. Eight host tests cover the pure decisions
+  (`cargo test -p ostd --target x86_64-unknown-linux-gnu --lib actor::`); `ostd` now builds a host
+  test harness under the same `#![cfg_attr(not(test), no_std)]` pattern as `libs/api`.
+- **B0 witness on RV64 QEMU:** `scripts/qemu-actor-supervisor.sh` runs `/bin/backend-supervisor`
+  against three `/bin/backend-worker` children: typed ping, a self-inflicted `ForceExit` restarted
+  inside the 100-tick (1 s) bound with the exit reason logged, six abnormal exits in one window
+  producing a give-up that leaves the other children answering, and a second two-child tree proving
+  `one_for_all`. The new launch edge is one exact row
+  (`backend-supervisor → /bin/backend-worker`, empty ceiling, lifecycle-gated).
+- **Placement rule found and recorded:** an authority-bearing cell cannot be launched from the
+  caller-supplied-bytes (`SpawnFromElf`) route — the kernel refuses a non-empty child ceiling there —
+  so the supervisor is staged in VIFS1, the same place the hotswap demos live, while its
+  capability-free worker stays in the disk cell-store and is reached through VFS.
+- **Findings recorded while building B0:** the kernel's `#[cfg(test)]` launch-profile pins cannot
+  execute (`cargo test -p cellos-kernel` has no test harness to link and CI excludes the kernel from
+  `cargo test --workspace`), so those pins document intent and the edge is enforced end to end by the
+  witness; `libs/ostd/src/console.rs` defines `print!`/`println!` macros in a module that is never
+  declared (cells log through `ostd::io::println`); enabling the host harness for `ostd` exposed six
+  pre-existing failures in `clients::vfs::read_file::tests::bounds::*` that had never been linkable;
+  and the roadmap's "add auto-`invalidate()` to `ServiceRef`" item was already shipped
+  (`libs/ostd/src/service.rs:120-129`), so B0 documented it rather than re-implementing it.
+
 - **RPi3 DWC2 embedded profile:** HID polling, descriptor parsing, and decoding
   return to one ordered `/bin/dwc2-usb` loop. Device-identified events and
   per-device held-key cleanup remain; the lossy report-to-worker IPC boundary,

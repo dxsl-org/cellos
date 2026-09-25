@@ -5,7 +5,10 @@
 // Cell Linking Exception: see LICENSE-EXCEPTION for permission to ship
 // proprietary Cells that link against this crate.
 
-#![no_std]
+// Disable `no_std` when running the test harness so `#[test]` can link (same
+// pattern as `libs/api/src/lib.rs`). Normal `riscv64gc-unknown-none-elf` builds
+// keep `no_std`.
+#![cfg_attr(not(test), no_std)]
 #![cfg_attr(target_os = "none", feature(alloc_error_handler))]
 
 extern crate alloc;
@@ -107,6 +110,11 @@ pub mod app;
 
 /// Typed local/remote endpoint descriptors with explicit locality.
 pub mod cluster_endpoint;
+
+/// Actor runtime — typed mailbox loop (`implements Actor`) plus a supervisor
+/// [`actor::Tree`] with restart policy, intensity, backoff, and strategies.
+/// See ADR-0021; userspace-only, no ABI change.
+pub mod actor;
 
 /// Service-side message dispatch: [`MessageHandler`] trait + [`dispatch::run_service`] loop.
 pub mod dispatch;

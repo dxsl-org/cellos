@@ -1,0 +1,627 @@
+
+OpenSBI v1.3
+   ____                    _____ ____ _____
+  / __ \                  / ____|  _ \_   _|
+ | |  | |_ __   ___ _ __ | (___ | |_) || |
+ | |  | | '_ \ / _ \ '_ \ \___ \|  _ < | |
+ | |__| | |_) |  __/ | | |____) | |_) || |_
+  \____/| .__/ \___|_| |_|_____/|___/_____|
+        | |
+        |_|
+
+Platform Name             : riscv-virtio,qemu
+Platform Features         : medeleg
+Platform HART Count       : 1
+Platform IPI Device       : aclint-mswi
+Platform Timer Device     : aclint-mtimer @ 10000000Hz
+Platform Console Device   : uart8250
+Platform HSM Device       : ---
+Platform PMU Device       : ---
+Platform Reboot Device    : sifive_test
+Platform Shutdown Device  : sifive_test
+Platform Suspend Device   : ---
+Platform CPPC Device      : ---
+Firmware Base             : 0x80000000
+Firmware Size             : 322 KB
+Firmware RW Offset        : 0x40000
+Firmware RW Size          : 66 KB
+Firmware Heap Offset      : 0x48000
+Firmware Heap Size        : 34 KB (total), 2 KB (reserved), 9 KB (used), 22 KB (free)
+Firmware Scratch Size     : 4096 B (total), 760 B (used), 3336 B (free)
+Runtime SBI Version       : 1.0
+
+Domain0 Name              : root
+Domain0 Boot HART         : 0
+Domain0 HARTs             : 0*
+Domain0 Region00          : 0x0000000002000000-0x000000000200ffff M: (I,R,W) S/U: ()
+Domain0 Region01          : 0x0000000080040000-0x000000008005ffff M: (R,W) S/U: ()
+Domain0 Region02          : 0x0000000080000000-0x000000008003ffff M: (R,X) S/U: ()
+Domain0 Region03          : 0x0000000000000000-0xffffffffffffffff M: (R,W,X) S/U: (R,W,X)
+Domain0 Next Address      : 0x0000000080200000
+Domain0 Next Arg1         : 0x000000008fe00000
+Domain0 Next Mode         : S-mode
+Domain0 SysReset          : yes
+Domain0 SysSuspend        : yes
+
+Boot HART ID              : 0
+Boot HART Domain          : root
+Boot HART Priv Version    : v1.12
+Boot HART Base ISA        : rv64imafdch
+Boot HART ISA Extensions  : time,sstc
+Boot HART PMP Count       : 16
+Boot HART PMP Granularity : 4
+Boot HART PMP Address Bits: 54
+Boot HART MHPM Count      : 16
+Boot HART MIDELEG         : 0x0000000000001666
+Boot HART MEDELEG         : 0x0000000000f0b509
+[ INFO] [uart] RX/TX base = 0x10000000
+[Cellos] kernel boot v0.2.1
+Kernel started (Hart: 0, DTB: ...)
+[cpu] H-extension: detected
+[INFO] Limine not found, using QEMU/OpenSBI fallback
+[boot] kernel_phys_base=0x0000000080200000
+[ INFO] [boot] allocator range 0x82b7f000..0x90000000 (222826496 bytes)
+[INFO] Initializing paging...
+[INFO] Paging initialized
+[INFO] Activating paging...
+[INFO] Paging activated
+[INFO] Frame allocator initialized
+[INFO] Heap initialized
+[ INFO] [rt-heap] TLSF pool ready — 256 KiB, O(1) alloc/dealloc
+[INFO] RT heap initialized
+[INFO] HAL initialized (PLIC enabled)
+[ INFO] [uart] RX/TX base = 0x10000000
+[ INFO] UART Input Buffer Initialized
+[ INFO] [input_irq_ack] input device at 0x10007000 irq=7
+[ INFO] Console: Input Driver Initialized.
+[ INFO] RAM Disk: read-only, 40960 KB (81920 sectors)
+[ INFO] [snapshot] no block device → cold boot
+[ WARN] [mbr] LBA 0 unreadable — skipping partition verification
+[loader] WARN: cell table not found — disk image may lack bootstrap section
+[ INFO] Filesystem: Initializing...
+[ INFO] Boot Sector Debug:
+[ INFO]   Signature: 0xAA55
+[ INFO]   Bytes/Sector: 512
+[ INFO]   Sectors/Cluster: 2
+[ INFO]   Reserved Sectors: 1
+[ INFO]   FAT Count: 2
+[ INFO]   Media: 0xF8
+[ INFO]   Total Sectors: 81920
+[ INFO]   Sectors/FAT (FAT16): 192
+[ INFO]   Root Entry Count: 512
+[ INFO] Filesystem: FAT16 mounted successfully.
+[ INFO] [policy] loaded + verified (45 entries, flags 0x00)
+[ INFO] state-stash: round-trip OK
+[INFO] Kernel subsystems initialized successfully.
+[INFO] Initializing scheduler...
+[ INFO] Process: Initializing Scheduler...
+[ INFO] Timer preemption enabled (10 ms timeslice)
+[INFO] Scheduler initialized
+[ INFO] Thread 'thread' (ID 1): KStack 0x8300B000-0x8301D000, UStackTop 0x8302F000, Entry 0x1000, Arg 0x0
+[ WARN] [kernel] CapRevoke: refused ambient-authority bits mask=0x00000008 from task 9001 (no teardown for hypervisor authority)
+[ INFO] [kernel] CapRevoke: task 9001 revoked mask=0x0000ff00 from task 9002
+[ INFO] [kernel] CapRevoke: task 9001 revoked mask=0x00000004 from task 9003
+[ INFO] [kernel] CapRevoke: task 9001 revoked mask=0x00000070 from task 9004
+[ WARN] [sched] cell CellId(60) at thread cap (32) — refusing spawn_thread
+[ INFO] [selftest] THREAD-CAP: PASS (thread-inherit + honest-revoke + spawn bound)
+[INFO] thread-cap self-test PASS (thread-inherit + honest-revoke + spawn bound)
+[ INFO] [grant] task 9201 acknowledged: releasing 1 quarantined page(s) at 0x8300e000
+[ INFO] GRANT-RECLAIM-OWNED: PASS
+[ INFO] GRANT-RECLAIM-RECEIVED: PASS
+[ INFO] GRANT-RECLAIM-PINNED: PASS
+[INFO] grant-reclaim self-test PASS (owned reclaimed, received kept, pin withheld)
+[ INFO] Thread 'thread' (ID 1): KStack 0x8300B000-0x8301D000, UStackTop 0x8302F000, Entry 0x1000, Arg 0x0
+[ WARN] [sched] cell CellId(63) cannot afford thread stacks (147456 bytes, 0 in use) — refusing spawn_thread
+[ INFO] [selftest] THREAD-QUOTA: PASS (charged, released, enforced)
+[INFO] thread-quota self-test PASS (charged, released, enforced)
+[INFO] thread-user-entry self-test SKIP (RV64 runtime gate only)
+[ INFO] [selftest] COMPLETION-QUEUE: PASS (cap 32 slots, 624 bytes per cell)
+[INFO] completion-queue self-test PASS (reserve, land, bound, defer)
+[ WARN] [net-rx] cell 9412 took over the reservation held by cell 9411
+[ INFO] [selftest] NET-RX-RESERVATION: PASS (fills, remembers, releases, IPC-safe)
+[INFO] net-rx-reservation self-test PASS (fill, remember, release)
+[ INFO] [selftest] IPC-PENDING: PASS (deferred, bounded, quota-safe, completion-wake)
+[INFO] ipc-pending self-test PASS (deferred delivery, bounds, quota)
+[INFO] cap-file self-test PASS (read-only enforcement)
+[ INFO] [selftest] IPC-GUARDRAILS: PASS (dead-peer bounded, RecvScatter isolated)
+[INFO] ipc-guardrail self-test PASS (dead-peer wake, RecvScatter isolated)
+[ INFO] [smp] physical 0 -> logical 0 boot
+[ WARN] [smp] physical hart 1 HSM status unavailable
+[INFO] Tier 2 admission: ENABLED (development profile)
+[INFO] Spawning Embedded Init...
+[INFO] ed25519 verify self-test PASS (RFC 8032 + tamper)
+[INFO] policy verify+parse self-test PASS (signed blob + tamper)
+[INFO] cell signing self-test PASS
+[ INFO] [selftest] P-TRUST: PASS (privileged path-caps bounded by ceiling)
+[INFO] P-TRUST self-test PASS (privileged path-caps ceiling-bounded)
+[ INFO] [selftest] boot-ceiling: PASS (per-path table, no union collapse)
+[INFO] boot-ceiling self-test PASS (per-path table, no union collapse)
+[INFO] mmio-allowlist self-test PASS (known windows live, DWC2 denied)
+[ INFO] [selftest] MANIFEST-V2: PASS (v1 upcast + v2 parse + protection-class floor invariant)
+[INFO] Manifest-v2 self-test PASS (v1 upcast + v2 parse + tier-floor)
+[ INFO] [early] VIFS1-first /bin/platform <- ramdisk (47384 bytes)
+[ INFO] ELF LOAD: 0x100000000-0x100002B34 flags=R-X
+[ INFO] ELF LOAD: 0x100002B38-0x100003590 flags=R--
+[ INFO] ELF LOAD: 0x100004000-0x100004240 flags=RW-
+[ INFO] ELF LOAD: 0x100005000-0x100105060 flags=RW-
+[ INFO] ELF LOAD: 0x100105060-0x1001064EC flags=R--
+[ INFO] [wx] 'platform': 5/263 cell pages lowered to read-only/execute-only
+[INFO] Platform Cell spawned (PCIe ECAM scanner)
+[INFO] Publishing trusted init
+[ INFO] ELF LOAD: 0x102000000-0x102002516 flags=R-X
+[ INFO] ELF LOAD: 0x102002518-0x1020034E0 flags=R--
+[ INFO] ELF LOAD: 0x102004000-0x102004108 flags=RW-
+[ INFO] ELF LOAD: 0x102005000-0x102006248 flags=R--
+[ INFO] [wx] 'init': 6/7 cell pages lowered to read-only/execute-only
+[ INFO] Successfully spawned init with complete root authority (tid=2)
+[INFO] Kernel initialization complete. Entering idle loop.
+[INFO] Starting scheduler...
+USER: [platform] ECAM scan buses 0-0 starting
+[ INFO] [pcie] platform-reg 00:00.0 class=06:00:00 bar0=0x0
+[ WARN] [iommu] RISC-V IOMMU not found (needs QEMU ≥8.2 + -device riscv-iommu-pci,bus=pcie.0)
+USER: [platform] registered bus 0 device 0 function 0 class 6:0:0
+USER: [platform] ECAM scan complete
+[ INFO] Syscall::Exit: task 1 exited with code 0
+USER: Init: Starting Cellos Orchestrator...
+[ INFO] [early] VIFS1-first /bin/block <- ramdisk (41120 bytes)
+[ WARN] [policy] narrowed "/bin/block" (tid 3): dropped 0b010000000 [regions|mmio|sup|plat|pcie|hyp|spawn|net|bio]
+[ INFO] ELF LOAD: 0x104000000-0x104001E5A flags=R-X
+[ INFO] ELF LOAD: 0x104001E60-0x104003360 flags=R--
+[ INFO] ELF LOAD: 0x104004000-0x104004408 flags=RW-
+[ INFO] ELF LOAD: 0x104005000-0x104105300 flags=RW-
+[ INFO] ELF LOAD: 0x104106000-0x10410635C flags=R--
+[ INFO] [wx] 'block': 5/263 cell pages lowered to read-only/execute-only
+[ WARN] [driver_cell] block driver registered: tid=3
+[ INFO] [service-registry] 9 -> tid 3
+USER: [virtio-blk] ready
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/nvme error=NotFound
+[ INFO] [early] VIFS1-first /bin/vfs <- ramdisk (407736 bytes)
+[ INFO] ELF LOAD: 0x100000000-0x1000364B4 flags=R-X
+[ INFO] ELF LOAD: 0x1000364B8-0x100039BD8 flags=R--
+[ INFO] ELF LOAD: 0x10003A000-0x10003B308 flags=RW-
+[ INFO] ELF LOAD: 0x10003C000-0x10053C068 flags=RW-
+[ INFO] ELF LOAD: 0x10053C068-0x10054118C flags=R--
+[ INFO] [wx] 'vfs': 63/1346 cell pages lowered to read-only/execute-only
+USER: VFS Service v0.2: RamFS + mkdir/rmdir/unlink IPC (typed postcard)
+[ INFO] [service-registry] 1 -> tid 4
+USER: [vfs] FAT32 /mnt/sd volume mounted
+USER: [vfs] CellosFS Native mounted at existing volume
+USER: [vfs] FAT32 /bin volume mounted
+USER: [vfs] CellosFS Native mounted at existing volume
+[ INFO] [loader] SpawnFromElf: /bin/config (49712 bytes from grant)
+[ INFO] ELF LOAD: 0x106000000-0x106002EC6 flags=R-X
+[ INFO] ELF LOAD: 0x106002EC8-0x106004410 flags=R--
+[ INFO] ELF LOAD: 0x106005000-0x106005378 flags=RW-
+[ INFO] ELF LOAD: 0x106006000-0x106106060 flags=RW-
+[ INFO] ELF LOAD: 0x106106060-0x106107460 flags=R--
+[ INFO] [wx] 'config': 6/264 cell pages lowered to read-only/execute-only
+[ INFO] [service-registry] 4 -> tid 5
+USER: [config] Config Service v0.3 (typed IPC)
+[ INFO] [loader] SpawnFromElf: /bin/input (55792 bytes from grant)
+[ WARN] [policy] narrowed "/bin/input" (tid 6): dropped 0b010000000 [regions|mmio|sup|plat|pcie|hyp|spawn|net|bio]
+[ INFO] ELF LOAD: 0x108000000-0x108002E22 flags=R-X
+[ INFO] ELF LOAD: 0x108002E28-0x1080050A8 flags=R--
+[ INFO] ELF LOAD: 0x108006000-0x1080063D8 flags=RW-
+[ INFO] ELF LOAD: 0x108007000-0x108107060 flags=RW-
+[ INFO] ELF LOAD: 0x108107060-0x108108464 flags=R--
+[ INFO] [wx] 'input': 7/265 cell pages lowered to read-only/execute-only
+[ WARN] [input] registered input service TID 6
+USER: [input] Input Service v0.3: US QWERTY + VirtIO + typed focus routing
+USER: [input] VirtIO input device claimed; polling virtqueue directly
+[ INFO] [service-registry] 3 -> tid 6
+[ INFO] [loader] SpawnFromElf: /bin/virtio-net (43608 bytes from grant)
+[ WARN] [policy] narrowed "/bin/virtio-net" (tid 7): dropped 0b010000000 [regions|mmio|sup|plat|pcie|hyp|spawn|net|bio]
+[ INFO] ELF LOAD: 0x10A000000-0x10A0026D6 flags=R-X
+[ INFO] ELF LOAD: 0x10A0026D8-0x10A003398 flags=R--
+[ INFO] ELF LOAD: 0x10A004000-0x10A004C28 flags=RW-
+[ INFO] ELF LOAD: 0x10A005000-0x10A105060 flags=RW-
+[ INFO] ELF LOAD: 0x10A106000-0x10A10648C flags=R--
+[ INFO] [wx] 'virtio-net': 5/263 cell pages lowered to read-only/execute-only
+[ WARN] [driver_cell] NIC driver registered: tid=7
+[ INFO] [service-registry] 10 -> tid 7
+USER: [virtio-net] ready
+[ INFO] [loader] SpawnFromElf: /bin/e1000 (36744 bytes from grant)
+[ WARN] [policy] narrowed "/bin/e1000" (tid 8): dropped 0b010000000 [regions|mmio|sup|plat|pcie|hyp|spawn|net|bio]
+[ INFO] ELF LOAD: 0x10C000000-0x10C001970 flags=R-X
+[ INFO] ELF LOAD: 0x10C001970-0x10C002440 flags=R--
+[ INFO] ELF LOAD: 0x10C003000-0x10C003310 flags=RW-
+[ INFO] ELF LOAD: 0x10C004000-0x10C1043D0 flags=RW-
+[ INFO] ELF LOAD: 0x10C105000-0x10C1053A4 flags=R--
+[ INFO] [wx] 'e1000': 4/262 cell pages lowered to read-only/execute-only
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/dwc2-usb error=NotFound
+[ INFO] Syscall::Exit: task 8 exited with code 0
+[ INFO] [loader] SpawnFromElf: /bin/net (272208 bytes from grant)
+[ INFO] ELF LOAD: 0x10C000000-0x10C0204E2 flags=R-X
+[ INFO] ELF LOAD: 0x10C0204E8-0x10C024218 flags=R--
+[ INFO] ELF LOAD: 0x10C025000-0x10C026268 flags=RW-
+[ INFO] ELF LOAD: 0x10C027000-0x10C127080 flags=RW-
+[ INFO] ELF LOAD: 0x10C127080-0x10C129E3C flags=R--
+[ INFO] [wx] 'net': 39/298 cell pages lowered to read-only/execute-only
+USER: [net] Network Service v0.1: smoltcp + NIC Driver Cell + DHCP
+USER: [net] Starting DHCP...
+[ INFO] [service-registry] 2 -> tid 9
+USER: [net-bridge] first e1000 TX len=304 accepted=true
+USER: [net] DHCP: deconfigured
+USER: [net-bridge] first e1000 RX len=590
+USER: [net-rx-producer] irq->completion PASS
+USER: [net] DHCP acquired — IP configured
+USER: [net] IP address: 10.0.2.15
+[ INFO] [loader] SpawnFromElf: /bin/virtio-gpu (48768 bytes from grant)
+[ WARN] [policy] narrowed "/bin/virtio-gpu" (tid 10): dropped 0b010000000 [regions|mmio|sup|plat|pcie|hyp|spawn|net|bio]
+[ INFO] ELF LOAD: 0x10E000000-0x10E002D9E flags=R-X
+[ INFO] ELF LOAD: 0x10E002DA0-0x10E0043A8 flags=R--
+[ INFO] ELF LOAD: 0x10E005000-0x10E005420 flags=RW-
+[ INFO] ELF LOAD: 0x10E006000-0x10E106270 flags=RW-
+[ INFO] ELF LOAD: 0x10E107000-0x10E10755C flags=R--
+[ INFO] [wx] 'virtio-gpu': 6/264 cell pages lowered to read-only/execute-only
+[ INFO] [driver_cell] GPU driver registered: tid=10
+[ INFO] [service-registry] 12 -> tid 10
+USER: [virtio-gpu] VirtIO GPU Driver Cell registered
+[ INFO] [loader] SpawnFromElf: /bin/compositor (86280 bytes from grant)
+[ INFO] ELF LOAD: 0x110000000-0x110009262 flags=R-X
+[ INFO] ELF LOAD: 0x110009268-0x11000B148 flags=R--
+[ INFO] ELF LOAD: 0x11000C000-0x11000C528 flags=RW-
+[ INFO] ELF LOAD: 0x11000D000-0x110B0D060 flags=RW-
+[ INFO] [wx] 'compositor': 12/2830 cell pages lowered to read-only/execute-only
+USER: [compositor] Compositor v0.2: software blending, VirtIO GPU, input routing
+[ INFO] [service-registry] 5 -> tid 11
+USER: [compositor] hardware cursor active
+[ INFO] [loader] SpawnFromElf: /bin/ai (228776 bytes from grant)
+[ INFO] ELF LOAD: 0x112000000-0x11201AA9A flags=R-X
+[ INFO] ELF LOAD: 0x11201AAA0-0x11201E7C8 flags=R--
+[ INFO] ELF LOAD: 0x11201F000-0x11201F918 flags=RW-
+[ INFO] ELF LOAD: 0x112020000-0x113120060 flags=RW-
+[ INFO] ELF LOAD: 0x113120060-0x113122AF4 flags=R--
+[ INFO] [wx] 'ai': 33/4387 cell pages lowered to read-only/execute-only
+USER: [ai] inference service starting
+[ INFO] [service-registry] 15 -> tid 12
+[ INFO] [loader] SpawnFromElf: /bin/kms (41776 bytes from grant)
+[ INFO] ELF LOAD: 0x114000000-0x11400380E flags=R-X
+[ INFO] ELF LOAD: 0x114003810-0x1140041A8 flags=R--
+[ INFO] ELF LOAD: 0x114005000-0x114005150 flags=RW-
+[ INFO] ELF LOAD: 0x114006000-0x1140071A4 flags=R--
+[ INFO] [wx] 'kms': 7/8 cell pages lowered to read-only/execute-only
+[ INFO] [service-registry] 13 -> tid 13
+USER: [kms] fail-closed node identity service starting
+[ INFO] [loader] SpawnFromElf: /bin/supervisor (34048 bytes from grant)
+[ INFO] ELF LOAD: 0x116000000-0x116001B38 flags=R-X
+[ INFO] ELF LOAD: 0x116001B38-0x116002338 flags=R--
+[ INFO] ELF LOAD: 0x116003000-0x116003260 flags=RW-
+[ INFO] ELF LOAD: 0x116004000-0x116104060 flags=RW-
+[ INFO] ELF LOAD: 0x116105000-0x116105390 flags=R--
+[ INFO] [wx] 'supervisor': 4/262 cell pages lowered to read-only/execute-only
+[ INFO] [service-registry] 11 -> tid 14
+USER: Init: services spawned.
+USER: Init: service registry verified.
+[ INFO] [loader] SpawnFromElf: /bin/fb-console (37256 bytes from grant)
+[ INFO] ELF LOAD: 0x118000000-0x118001182 flags=R-X
+[ INFO] ELF LOAD: 0x118001188-0x118002488 flags=R--
+[ INFO] ELF LOAD: 0x118003000-0x1180042B0 flags=RW-
+[ INFO] ELF LOAD: 0x118005000-0x1180061A0 flags=R--
+[ INFO] [wx] 'fb-console': 5/7 cell pages lowered to read-only/execute-only
+USER: Init: fb-console spawned.
+USER: [fb-console] starting
+USER: [fb-console] compositor found
+USER: [fb-console] background surface created
+USER: [fb-console] initial damage submitted
+USER: [fb-console] first log batch received
+USER: [compositor] first scanout flush submitted
+[ INFO] [loader] SpawnFromElf: /bin/desktop (76328 bytes from grant)
+[ INFO] ELF LOAD: 0x11A000000-0x11A006106 flags=R-X
+[ INFO] ELF LOAD: 0x11A006108-0x11A007AB8 flags=R--
+[ INFO] ELF LOAD: 0x11A008000-0x11A009730 flags=RW-
+[ INFO] ELF LOAD: 0x11A00A000-0x11A10A060 flags=RW-
+[ INFO] ELF LOAD: 0x11A10A060-0x11A10B674 flags=R--
+[ INFO] [wx] 'desktop': 9/268 cell pages lowered to read-only/execute-only
+USER: Init: desktop spawned.
+USER: [desktop] CellOS Desktop initializing...
+USER: [desktop] Display resolution confirmed.
+USER: [desktop] Taskbar surface ready.
+USER: [desktop] Ready. Entering event loop.
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/hypervisor error=NotFound
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/silo-test error=NotFound
+[ INFO] [loader] SpawnFromElf: /bin/ai-test (108976 bytes from grant)
+[ INFO] ELF LOAD: 0x11C000000-0x11C007292 flags=R-X
+[ INFO] ELF LOAD: 0x11C007298-0x11C00BEE0 flags=R--
+[ INFO] ELF LOAD: 0x11C00C000-0x11C00C4A8 flags=RW-
+[ INFO] ELF LOAD: 0x11C00D000-0x11C10D060 flags=RW-
+[ INFO] ELF LOAD: 0x11C10D060-0x11C10E930 flags=R--
+[ INFO] [wx] 'ai-test': 13/271 cell pages lowered to read-only/execute-only
+USER: [ai-test] AI inference oracle starting
+[ INFO] [loader] SpawnFromElf: /bin/vfs-test (107112 bytes from grant)
+[ INFO] ELF LOAD: 0x11E000000-0x11E008B8A flags=R-X
+[ INFO] ELF LOAD: 0x11E008B90-0x11E00B8A8 flags=R--
+[ INFO] ELF LOAD: 0x11E00C000-0x11E00C780 flags=RW-
+[ INFO] ELF LOAD: 0x11E00D000-0x11E10D068 flags=RW-
+[ INFO] ELF LOAD: 0x11E10D068-0x11E10E50C flags=R--
+[ INFO] [wx] 'vfs-test': 13/271 cell pages lowered to read-only/execute-only
+USER: [vfs-test] Starting VFS integration test suite...
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/srv-test error=NotFound
+USER: [PASS] write /tmp/test_lifecycle.txt
+USER: [PASS] stat size=11 is_file
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/std-smoke error=NotFound
+USER: [PASS] unlink /tmp/test_lifecycle.txt
+USER: [PASS] stat after unlink returns Err
+[ INFO] [loader] SpawnFromElf: /bin/shell (1046304 bytes from grant)
+[ INFO] ELF LOAD: 0x120000000-0x12007863A flags=R-X
+[ INFO] ELF LOAD: 0x120078640-0x120084D10 flags=R--
+[ INFO] ELF LOAD: 0x120085000-0x1200898C8 flags=RW-
+[ INFO] ELF LOAD: 0x12008A000-0x12018A070 flags=RW-
+[ INFO] ELF LOAD: 0x12018A070-0x120194738 flags=R--
+[ INFO] [wx] 'shell': 143/405 cell pages lowered to read-only/execute-only
+USER: DEBUG: Shell Started (Async Mode)
+USER: Init: supervising services (auto-restart on crash)...
+USER: DEBUG: Shell focus acquired (or timed out)
+USER: [executor] dummy-waker=absent executor=parked source=TIMER PASS
+USER: [PASS] mkdir /tmp/testdir
+USER: [PASS] write inside testdir
+USER: [PASS] listdir /tmp/testdir contains f:file.txt
+USER: [PASS] rmdir /tmp/testdir after cleanup
+USER: [PASS] write /bin/ returns PermissionDenied
+USER: [PASS] write /tmp/ still works
+USER: [PASS] unlink /readme.txt (read-only / prefix) → PermissionDenied
+USER: [PASS] /readme.txt survived the refused unlink
+USER: [PASS] rmdir under / → PermissionDenied (authorized before backend)
+USER: [PASS] rmdir_recursive under / → PermissionDenied (before subtree walk)
+USER: [PASS] grant-write: unknown handle is denied before grant access
+[ WARN] [grant] GrantFree 0x88b33000 refused: region 0x88b33000+4096 overlaps a pinned region 0x88b33000+1 pages owned by task 18 with 1 in-flight operation(s)
+USER: [PASS] ReadGrant unknown cap returns zero bytes without faulting
+USER: [ai] model path: /bin/ai-model.gguf
+USER: [ai] model bytes: 102744 read in 3608 ms
+USER: [ai] engine load: 7 ms
+USER: [ai] model ready: 270 vocab, context 128, resident bytes 115488
+USER: [ai-test] model=tiny-llama-64
+USER: [ai-test] vocab=270 context=128 sessions=4
+[ WARN] [grant] GrantFree 0x88b40000 refused: region 0x88b40000+4096 overlaps a pinned region 0x88b40000+1 pages owned by task 18 with 1 in-flight operation(s)
+USER: [PASS] ReadGrant unknown cap returns zero bytes for size=0
+[ WARN] [grant] GrantFree 0x88b47000 refused: region 0x88b47000+4096 overlaps a pinned region 0x88b47000+1 pages owned by task 18 with 1 in-flight operation(s)
+USER: [PASS] ReadGrant unknown cap returns zero bytes for oversized offset
+USER: [PASS] grant-write: create writable target
+USER: [PASS] grant-write: helper returns committed byte count
+USER: [PASS] grant-write: commits exact bytes before acknowledgement
+USER: [ai-test] generate: 8 tokens in 140 ms (57142 tokens/s x1000, 6 polls)
+USER: [ai-test] greedy ids matched: 8 tokens over 6 polls
+USER: [PASS] grant-write: invalid offset is refused before grant access
+USER: [ai-test] embedding matched: 64 dims
+USER: [PASS] grant-write: short grant is refused without mutation
+USER: [PASS] grant-write: grant copy denial propagates as I/O error
+USER: [PASS] grant-write: failed writes leave committed bytes unchanged
+USER: [PASS] grant-write: copies into exact bounded destination range
+USER: [PASS] grant-write: bounded copy preserves prefix and suffix
+USER: [PASS] grant-write: write authorization precedes grant access
+USER: [ai-test] abandoned session released; service still serving
+USER: [PASS] write file for async read
+USER: [PASS] ReadAsync returns PendingHandle
+USER: [ai-test] prompt stream matched: 8 tokens
+USER: [ai-test] PASS
+[ INFO] Syscall::Exit: task 17 exited with code 0
+USER: [PASS] Poll returns correct data
+USER: [PASS] Poll stale handle returns Err
+USER: [PASS] write /tmp/volatile.txt
+USER: [PASS] stat /tmp/volatile.txt size=8
+USER: [PASS] stat /tmp is_dir=true
+USER: [PASS] stat /tmp is_dir=true
+USER: [PASS] stat nonexistent returns Err
+USER: [PASS] listdir nonexistent = empty
+USER: [PASS] dircap: acquiring /tmp yields a directory handle
+USER: [PASS] dircap: `..` is refused
+USER: [PASS] dircap: `../..` is refused
+USER: [PASS] dircap: an absolute name is refused
+USER: [PASS] dircap: an embedded traversal is refused
+USER: [PASS] dircap: `.` is refused
+USER: [PASS] dircap: an empty name is refused
+USER: [PASS] dircap: a backslash name is refused
+USER: [PASS] dircap: a control byte is refused
+USER: [PASS] dircap: odd UTF-8 in a name is refused
+USER: [PASS] dircap: deriving a subdirectory handle
+USER: [PASS] dircap: WriteAt creates a file inside the handle
+USER: [PASS] dircap: StatAt reports the file it just wrote
+USER: 
+USER: === Cellos shell ready — type 'help' for commands ===
+USER: Cellos > [PASS] dircap: ReadAt returns the bytes written
+USER: [PASS] dircap: ListAt lists the handle's own directory
+USER: [PASS] dircap: the handle resolved inside the directory it names
+USER: [PASS] dircap: OpenFileAt yields a file handle
+USER: [PASS] dircap: a handle can be given up
+USER: [PASS] dircap: revoking a handle revokes what was derived from it
+USER: [PASS] dircap: revoking a parent dir reaps file handles opened below it
+USER: [PASS] dircap: a revoked file handle cannot be closed into success
+USER: [PASS] dircap: acquiring /tmp yields a directory handle
+USER: [PASS] dircap: deriving a subdirectory handle
+USER: [PASS] grant: ReadFileGrant clamps to grant length
+USER: [PASS] grant: ReadFileGrant copies nonzero bytes
+USER: [PASS] dircap: GetFile returns a nonempty pointer before sealing
+USER: [PASS] dircap: OpenFileAt returns a file handle for a file
+USER: [PASS] dircap: the cell gives up naming paths
+USER: [PASS] dircap: Write{path} is refused after sealing
+USER: [PASS] dircap: the refused write left nothing behind
+USER: [PASS] dircap: GetFile is refused after sealing
+USER: [PASS] dircap: Stat is refused after sealing
+USER: [PASS] dircap: ListDir is refused after sealing
+USER: [PASS] dircap: Unlink is refused after sealing
+USER: [PASS] dircap: Mkdir is refused after sealing
+USER: [PASS] dircap: ReadAsync is refused after sealing
+USER: [PASS] dircap: widening by acquiring a new root is refused after sealing
+USER: [PASS] grant: ReadFileGrant is refused after sealing
+USER: [PASS] dircap: ReadFileHandle still works after sealing
+USER: [PASS] dircap: ReadFileHandle returns EOF for an oversized offset
+USER: [PASS] dircap: ReadFileHandle returns EOF for a zero-length request
+USER: [PASS] dircap: CloseFile closes a live file handle
+USER: [PASS] dircap: a closed file handle is stale
+USER: [PASS] dircap: handle operations still work after sealing
+USER: [PASS] dircap: UnlinkAt still works after sealing
+USER: 
+USER: [vfs-test] Results: 83 PASS, 0 FAIL
+USER: [vfs-test] ALL TESTS PASSED
+[ INFO] Syscall::Exit: task 18 exited with code 0
+USER: backend-supervisor
+[ WARN] [loader] DENY launch edge: caller=19 name=shell route=Elf target=/bin/backend-supervisor spawn_cap=false supervisor_cap=false
+[ INFO] ELF LOAD: 0x11C000000-0x11C0075A0 flags=R-X
+[ INFO] ELF LOAD: 0x11C0075A0-0x11C009528 flags=R--
+[ INFO] ELF LOAD: 0x11C00A000-0x11C00A520 flags=RW-
+[ INFO] ELF LOAD: 0x11C00B000-0x11C10B060 flags=RW-
+[ INFO] ELF LOAD: 0x11C10B060-0x11C10CE30 flags=R--
+[ INFO] [wx] 'backend-supervisor': 11/269 cell pages lowered to read-only/execute-only
+USER: [backend-supervisor] starting
+[ INFO] [loader] SpawnFromElf: /bin/backend-worker (79024 bytes from grant)
+[ INFO] ELF LOAD: 0x11E000000-0x11E0038EA flags=R-X
+[ INFO] ELF LOAD: 0x11E0038F0-0x11E004AB8 flags=R--
+[ INFO] ELF LOAD: 0x11E005000-0x11E005408 flags=RW-
+[ INFO] ELF LOAD: 0x11E006000-0x11E106060 flags=RW-
+[ INFO] ELF LOAD: 0x11E106060-0x11E1079F0 flags=R--
+[ INFO] [wx] 'backend-worker': 6/264 cell pages lowered to read-only/execute-only
+USER: [backend-worker] up
+USER: [supervisor] start: child w0 up tid=21 policy=Transient
+[ INFO] [loader] SpawnFromElf: /bin/backend-worker (79024 bytes from grant)
+[ INFO] ELF LOAD: 0x122000000-0x1220038EA flags=R-X
+[ INFO] ELF LOAD: 0x1220038F0-0x122004AB8 flags=R--
+[ INFO] ELF LOAD: 0x122005000-0x122005408 flags=RW-
+[ INFO] ELF LOAD: 0x122006000-0x122106060 flags=RW-
+[ INFO] ELF LOAD: 0x122106060-0x1221079F0 flags=R--
+[ INFO] [wx] 'backend-worker': 6/264 cell pages lowered to read-only/execute-only
+USER: [backend-worker] up
+USER: [supervisor] start: child w1 up tid=22 policy=Transient
+[ INFO] [loader] SpawnFromElf: /bin/backend-worker (79024 bytes from grant)
+[ INFO] ELF LOAD: 0x124000000-0x1240038EA flags=R-X
+[ INFO] ELF LOAD: 0x1240038F0-0x124004AB8 flags=R--
+[ INFO] ELF LOAD: 0x124005000-0x124005408 flags=RW-
+[ INFO] ELF LOAD: 0x124006000-0x124106060 flags=RW-
+[ INFO] ELF LOAD: 0x124106060-0x1241079F0 flags=R--
+[ INFO] [wx] 'backend-worker': 6/264 cell pages lowered to read-only/execute-only
+USER: [backend-worker] up
+USER: [supervisor] start: child w2 up tid=23 policy=Transient
+USER: [backend] supervisor up: children w0 w1 w2 path=/bin/backend-worker
+USER: [backend] typed call to w0 ok
+[ INFO] [kernel] ForceExit: task 21 killed by task 20
+USER: [backend] killed w0 tid=21
+USER: [backend] exit observed child=w0 tid=21 reason=0xffffffffffffffff
+USER: [supervisor] child w0 exited reason=0xffffffffffffffff policy=Transient → restart in 50 ticks
+[ INFO] [loader] SpawnFromElf: /bin/backend-worker (79024 bytes from grant)
+[ INFO] ELF LOAD: 0x11E000000-0x11E0038EA flags=R-X
+[ INFO] ELF LOAD: 0x11E0038F0-0x11E004AB8 flags=R--
+[ INFO] ELF LOAD: 0x11E005000-0x11E005408 flags=RW-
+[ INFO] ELF LOAD: 0x11E006000-0x11E106060 flags=RW-
+[ INFO] ELF LOAD: 0x11E106060-0x11E1079F0 flags=R--
+[ INFO] [wx] 'backend-worker': 6/264 cell pages lowered to read-only/execute-only
+USER: [supervisor] backoff-elapsed: child w0 up tid=24 policy=Transient
+USER: [backend] restart-latency ticks=50 bound=100[backend-worker] up
+USER: 
+USER: [backend] restart-latency OK (<1s)
+[ INFO] [kernel] ForceExit: task 22 killed by task 20
+USER: [backend] storm kill 1/6 on w1 tid=22
+USER: [backend] exit observed child=w1 tid=22 reason=0xffffffffffffffff
+USER: [supervisor] child w1 exited reason=0xffffffffffffffff policy=Transient → restart in 10 ticks
+[ INFO] [loader] SpawnFromElf: /bin/backend-worker (79024 bytes from grant)
+[ INFO] ELF LOAD: 0x122000000-0x1220038EA flags=R-X
+[ INFO] ELF LOAD: 0x1220038F0-0x122004AB8 flags=R--
+[ INFO] ELF LOAD: 0x122005000-0x122005408 flags=RW-
+[ INFO] ELF LOAD: 0x122006000-0x122106060 flags=RW-
+[ INFO] ELF LOAD: 0x122106060-0x1221079F0 flags=R--
+[ INFO] [wx] 'backend-worker': 6/264 cell pages lowered to read-only/execute-only
+USER: [supervisor] backoff-elapsed: child w1 up tid=25 policy=Transient
+[ INFO] [kernel] ForceExit: task 25 killed by task 20
+USER: [backend] storm kill 2/6 on w1 tid=25
+USER: [backend] exit observed child=w1 tid=25 reason=0xffffffffffffffff
+USER: [supervisor] child w1 exited reason=0xffffffffffffffff policy=Transient → restart in 10 ticks
+[ INFO] [loader] SpawnFromElf: /bin/backend-worker (79024 bytes from grant)
+[ INFO] ELF LOAD: 0x122000000-0x1220038EA flags=R-X
+[ INFO] ELF LOAD: 0x1220038F0-0x122004AB8 flags=R--
+[ INFO] ELF LOAD: 0x122005000-0x122005408 flags=RW-
+[ INFO] ELF LOAD: 0x122006000-0x122106060 flags=RW-
+[ INFO] ELF LOAD: 0x122106060-0x1221079F0 flags=R--
+[ INFO] [wx] 'backend-worker': 6/264 cell pages lowered to read-only/execute-only
+USER: [supervisor] backoff-elapsed: child w1 up tid=26 policy=Transient
+[ INFO] [kernel] ForceExit: task 26 killed by task 20
+USER: [backend] storm kill 3/6 on w1 tid=26
+USER: [backend] exit observed child=w1 tid=26 reason=0xffffffffffffffff
+USER: [supervisor] child w1 exited reason=0xffffffffffffffff policy=Transient → restart in 10 ticks
+[ INFO] [loader] SpawnFromElf: /bin/backend-worker (79024 bytes from grant)
+[ INFO] ELF LOAD: 0x122000000-0x1220038EA flags=R-X
+[ INFO] ELF LOAD: 0x1220038F0-0x122004AB8 flags=R--
+[ INFO] ELF LOAD: 0x122005000-0x122005408 flags=RW-
+[ INFO] ELF LOAD: 0x122006000-0x122106060 flags=RW-
+[ INFO] ELF LOAD: 0x122106060-0x1221079F0 flags=R--
+[ INFO] [wx] 'backend-worker': 6/264 cell pages lowered to read-only/execute-only
+USER: [supervisor] backoff-elapsed: child w1 up tid=27 policy=Transient
+[ INFO] [kernel] ForceExit: task 27 killed by task 20
+USER: [backend] storm kill 4/6 on w1 tid=27
+USER: [backend] exit observed child=w1 tid=27 reason=0xffffffffffffffff
+USER: [supervisor] child w1 exited reason=0xffffffffffffffff policy=Transient → restart in 10 ticks
+[ INFO] [loader] SpawnFromElf: /bin/backend-worker (79024 bytes from grant)
+[ INFO] ELF LOAD: 0x122000000-0x1220038EA flags=R-X
+[ INFO] ELF LOAD: 0x1220038F0-0x122004AB8 flags=R--
+[ INFO] ELF LOAD: 0x122005000-0x122005408 flags=RW-
+[ INFO] ELF LOAD: 0x122006000-0x122106060 flags=RW-
+[ INFO] ELF LOAD: 0x122106060-0x1221079F0 flags=R--
+[ INFO] [wx] 'backend-worker': 6/264 cell pages lowered to read-only/execute-only
+USER: [supervisor] backoff-elapsed: child w1 up tid=28 policy=Transient
+[ INFO] [kernel] ForceExit: task 28 killed by task 20
+USER: [backend] storm kill 5/6 on w1 tid=28
+USER: [backend] exit observed child=w1 tid=28 reason=0xffffffffffffffff
+USER: [supervisor] child w1 exited reason=0xffffffffffffffff policy=Transient → restart in 10 ticks
+[ INFO] [loader] SpawnFromElf: /bin/backend-worker (79024 bytes from grant)
+[ INFO] ELF LOAD: 0x122000000-0x1220038EA flags=R-X
+[ INFO] ELF LOAD: 0x1220038F0-0x122004AB8 flags=R--
+[ INFO] ELF LOAD: 0x122005000-0x122005408 flags=RW-
+[ INFO] ELF LOAD: 0x122006000-0x122106060 flags=RW-
+[ INFO] ELF LOAD: 0x122106060-0x1221079F0 flags=R--
+[ INFO] [wx] 'backend-worker': 6/264 cell pages lowered to read-only/execute-only
+USER: [backend-worker] up
+USER: [supervisor] backoff-elapsed: child w1 up tid=29 policy=Transient
+[ INFO] [kernel] ForceExit: task 29 killed by task 20
+USER: [backend] storm kill 6/6 on w1 tid=29
+USER: [backend] exit observed child=w1 tid=29 reason=0xffffffffffffffff
+USER: [supervisor] restart storm on child w1: 5 restarts in window — GIVING UP on w1 (other children keep running)
+USER: [backend] give-up OK: w1 abandoned after the restart budget was exhausted
+USER: [backend] typed call to w0 ok
+USER: [backend] typed call to w2 ok
+USER: [backend] survivors OK: w0 and w2 answered after the give-up
+[ INFO] [loader] SpawnFromElf: /bin/backend-worker (79024 bytes from grant)
+[ INFO] ELF LOAD: 0x122000000-0x1220038EA flags=R-X
+[ INFO] ELF LOAD: 0x1220038F0-0x122004AB8 flags=R--
+[ INFO] ELF LOAD: 0x122005000-0x122005408 flags=RW-
+[ INFO] ELF LOAD: 0x122006000-0x122106060 flags=RW-
+[ INFO] ELF LOAD: 0x122106060-0x1221079F0 flags=R--
+[ INFO] [wx] 'backend-worker': 6/264 cell pages lowered to read-only/execute-only
+USER: [backend-worker] up
+USER: [supervisor] start: child w3 up tid=30 policy=Transient
+[ INFO] [loader] SpawnFromElf: /bin/backend-worker (79024 bytes from grant)
+[ INFO] ELF LOAD: 0x126000000-0x1260038EA flags=R-X
+[ INFO] ELF LOAD: 0x1260038F0-0x126004AB8 flags=R--
+[ INFO] ELF LOAD: 0x126005000-0x126005408 flags=RW-
+[ INFO] ELF LOAD: 0x126006000-0x126106060 flags=RW-
+[ INFO] ELF LOAD: 0x126106060-0x1261079F0 flags=R--
+[ INFO] [wx] 'backend-worker': 6/264 cell pages lowered to read-only/execute-only
+USER: [supervisor] start: child w4 up tid=31 policy=Transient
+USER: [backend] one-for-all tree up: w3 tid=30 w4 tid=31
+USER: [backend-worker] up
+USER: [backend] typed call to w3 ok
+[ INFO] [kernel] ForceExit: task 30 killed by task 20
+USER: [backend] one-for-all: killed w3 tid=30
+USER: [backend] exit observed child=w3 tid=30 reason=0xffffffffffffffff
+USER: [supervisor] child w3 exited reason=0xffffffffffffffff policy=Transient → restart in 0 ticks
+[ INFO] [loader] SpawnFromElf: /bin/backend-worker (79024 bytes from grant)
+[ INFO] ELF LOAD: 0x122000000-0x1220038EA flags=R-X
+[ INFO] ELF LOAD: 0x1220038F0-0x122004AB8 flags=R--
+[ INFO] ELF LOAD: 0x122005000-0x122005408 flags=RW-
+[ INFO] ELF LOAD: 0x122006000-0x122106060 flags=RW-
+[ INFO] ELF LOAD: 0x122106060-0x1221079F0 flags=R--
+[ INFO] [wx] 'backend-worker': 6/264 cell pages lowered to read-only/execute-only
+USER: [backend-worker] up
+USER: [supervisor] restart: child w3 up tid=32 policy=Transient
+[ INFO] [kernel] ForceExit: task 31 killed by task 20
+USER: [backend] exit observed child=w4 tid=31 reason=0xffffffffffffffff
+USER: [supervisor] child w4 terminated by scope, respawning
+[ INFO] [loader] SpawnFromElf: /bin/backend-worker (79024 bytes from grant)
+[ INFO] ELF LOAD: 0x126000000-0x1260038EA flags=R-X
+[ INFO] ELF LOAD: 0x1260038F0-0x126004AB8 flags=R--
+[ INFO] ELF LOAD: 0x126005000-0x126005408 flags=RW-
+[ INFO] ELF LOAD: 0x126006000-0x126106060 flags=RW-
+[ INFO] ELF LOAD: 0x126106060-0x1261079F0 flags=R--
+[ INFO] [wx] 'backend-worker': 6/264 cell pages lowered to read-only/execute-only
+USER: [backend-worker] up
+USER: [supervisor] scope-restart: child w4 up tid=33 policy=Transient
+USER: [backend] one-for-all OK: w3 30 -> 32, w4 31 -> 33
+USER: ACTOR-SUPERVISOR: PASS
+[ INFO] Syscall::Exit: task 20 exited with code 0
+USER: Cellos > qemu-system-riscv64: terminating on signal 15 from pid 2194687 (timeout)

@@ -260,3 +260,67 @@ fn supervisor_requires_supervisor_cap_for_hotswap_route() {
     )
     .is_some());
 }
+
+#[test]
+fn backend_supervisor_edge_is_exact_and_lifecycle_gated() {
+    for route in [LaunchRoute::Path, LaunchRoute::Elf] {
+        let profile = authorize(
+            caller("backend-supervisor", true, false),
+            route,
+            "/bin/backend-worker",
+        )
+        .expect("the B0 supervisor must be able to launch its worker");
+        assert_eq!(
+            profile.child_ceiling,
+            CapSet::EMPTY,
+            "the worker is capability-free on {route:?}"
+        );
+        assert!(
+            profile.requires_lifecycle_authority,
+            "the edge exists so a SpawnCap holder can watch and restart the child"
+        );
+    }
+
+    assert!(
+        authorize(
+            caller("backend-supervisor", false, false),
+            LaunchRoute::Path,
+            "/bin/backend-worker"
+        )
+        .is_none(),
+        "a task named backend-supervisor without SpawnCap must not borrow the edge"
+    );
+    assert!(
+        authorize(
+            caller("backend-supervisor", true, false),
+            LaunchRoute::Path,
+            "/bin/vfs"
+        )
+        .is_none(),
+        "the edge is exact: the worker path only"
+    );
+    assert!(
+        authorize(
+            caller("backend-supervisor", true, false),
+            LaunchRoute::Mem,
+            "/bin/backend-worker"
+        )
+        .is_none(),
+        "no memory launch edge"
+    );
+}
+
+#[test]
+fn shell_reaches_the_backend_cells_with_the_intended_ceilings() {
+    assert!(
+        shell_edge(LaunchRoute::Path, "/bin/backend-supervisor")
+            .child_ceiling
+            .spawn,
+        "the shell edge must not strip the supervisor's SpawnCap"
+    );
+    assert_eq!(
+        shell_edge(LaunchRoute::Path, "/bin/backend-worker").child_ceiling,
+        CapSet::EMPTY,
+        "the worker stays capability-free when launched by hand"
+    );
+}

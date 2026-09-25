@@ -195,6 +195,10 @@ path = "tests/desktop-shell.rs"
 name = "ocel-browser"
 path = "tests/ocel-browser.rs"
 
+[[test]]
+name = "actor-supervisor"
+path = "tests/actor-supervisor.rs"
+
 [dev-dependencies]
 tempfile = "3"
 api = { path = "../../libs/api" }

@@ -153,6 +153,7 @@ members = [
     # Cells - Tests
     "cells/tests/atomic-publication-probe",
     "cells/tests/bench",
+    "cells/tests/backend",
     "cells/tests/vfs-test",
     "cells/tests/srv-test",
     "cells/tests/hypervisor-test",

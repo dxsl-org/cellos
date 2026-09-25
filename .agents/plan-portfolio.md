@@ -1,7 +1,7 @@
 # Cellos plan portfolio
 
 **Status:** Canonical scheduling index
-**Updated:** 2026-08-01 (D34-D39)
+**Updated:** 2026-09-25 (B0 actor/supervisor program promoted; cap-revocation and portability closures recorded)
 
 This file owns scheduling intent. Source/tests own implementation truth; individual plan
 files preserve detailed scope and provenance. Untouched checkboxes are not proof that code
@@ -14,6 +14,15 @@ promoted through this index.
 - `260913-2002-g2-level-a-ai-inference` — Spec 24 CPU inference path (CP-1..CP-3); phases
   01-04 complete at the host/QEMU ceilings, NPU/GPU/Tier 2 checkpoints remain gated.
 - `260727-2101-midori-lessons-cellos` — complete convergence program (D39).
+- `260925-2214-beam-parity-b0-actor-supervisor` — B0 of the BEAM/OTP backend roadmap
+  (`docs/roadmap/beam-parity-backend-roadmap.md` §5): a userspace actor + supervisor library
+  (`ostd::actor`, `ostd::actor::supervisor`) so an application declares its own supervision tree
+  instead of editing `/bin/init`. No `libs/api` change; design in
+  [ADR-0021](../docs/decisions/0021-actor-supervisor-library-in-userspace.md). Witnessed at the
+  `qemu` ceiling (`scripts/qemu-actor-supervisor.sh`, evidence under `docs/evidence/`). B1 (in-cell
+  concurrency and cancellation) and B2 (per-request cell cost/scale, which keeps D5 WIP-limited)
+  stay queued behind their own triggers; this promotion opens no ABI and touches no
+  capability-scheduling boundary.
 Allowed side work is limited to P0 security fixes, broken-build/CI repairs, and
 verification-only closure that opens no new feature program.
 

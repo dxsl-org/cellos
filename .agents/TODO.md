@@ -128,6 +128,30 @@ Manifest v2 và tooling tương thích đã [done]. Việc đổi field vật l�
 
 24. [blocked] Phần cứng (StarFive VisionFive 2 v1.3B, STM32H573I-DK Discovery Kit của STMicroelectronics, Infineon OPTIGA™ TPM 2.0 SLB9672 kit) và AWS DEV account/region để unlock KMS Silo
 
+25. [done 2026-09-25] Beam-parity backend B0 — actor & supervisor library (userspace, không đổi ABI):
+    `ostd::actor` (mailbox loop trên envelope `0xAC`, dispatch postcard, call/reply recv masked theo
+    peer tid, lifecycle + tick) và `ostd::actor::supervisor` (bảng con động, Policy
+    Permanent/Transient/Temporary, intensity ≤5/~10 s kiểm tra *trước* khi tăng đúng như `init`,
+    give-up chỉ với đứa con đó, backoff mũ có trần, strategy one_for_one/one_for_all/rest_for_one).
+    ADR-0021; 8 host test cho quyết định thuần; witness RV64 QEMU
+    (`scripts/qemu-actor-supervisor.sh`, `tests/integration/tests/actor-supervisor.rs`) chứng minh
+    kill→restart ≤100 tick (<1 s) kèm exit reason, crash-storm 6 lần → give-up mà các worker khác
+    vẫn sống, và `one_for_all` dựng lại cả kẻ lỗi lẫn anh em. Bằng chứng:
+    `docs/evidence/actor-supervisor-harts1-qemu.{log,txt}`; kế hoạch:
+    `.agents/260925-2214-beam-parity-b0-actor-supervisor/`.
+    - Ghi nhận (chưa sửa, ngoài scope B0): `cargo test -p cellos-kernel` không link được harness nên
+      các pin trong `kernel/src/loader/launch_profile/tests.rs` chỉ là tài liệu; `libs/ostd/src/console.rs`
+      là file chết (`print!`/`println!` không được declare; cell log qua `ostd::io::println`); bật host
+      harness cho `ostd` làm lộ 6 test cũ đã mục ở `clients::vfs::read_file::tests::bounds::*`.
+    - **Phát hiện cần xử lý ở lane khác:** give-up chống crash-storm của `init` **không bao giờ kích hoạt**
+      — `cells/tools/init/src/supervisor.rs` so cửa sổ 1 000 đơn vị với `sys_get_time()` = `GetTime` **op 0**
+      (counter thô, 10 MHz `mtime` trên QEMU RV64), không phải scheduler tick (`op 4`), nên cửa sổ thực chất
+      ~0,1 ms và bị roll mỗi lần exit → `restart_count` không bao giờ đạt 5 → service crash-loop được respawn
+      mãi mãi (Spec 12 §4.3 "≤5/~10 s rồi bỏ mặc" không có hiệu lực trong thực tế). Thư viện B0 đã dùng đúng
+      op 4 (`ActorCtx::now_ticks`); `init` cố ý để nguyên vì đổi hành vi boot supervisor cần review riêng.
+    - B1 (concurrency trong cell + cancellation, cần ADR cancellation) và B2 (cost/scale per-request,
+      đang WIP-limited cùng D5) là các phase kế tiếp theo `docs/roadmap/beam-parity-backend-roadmap.md`.
+
 ### App Layers
 1. **Tier 1** - Trusted Native SAS Cell
 **Profile:**

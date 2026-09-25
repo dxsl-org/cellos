@@ -1,0 +1,26 @@
+[package]
+name = "app-backend"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+description = "B0 witness: a declared supervisor tree over worker cells (ostd::actor + ostd::actor::supervisor)"
+
+[lib]
+name = "app_backend"
+path = "src/lib.rs"
+
+[[bin]]
+name = "backend-supervisor"
+path = "src/bin/backend-supervisor.rs"
+
+[[bin]]
+name = "backend-worker"
+path = "src/bin/backend-worker.rs"
+
+[dependencies]
+api    = { path = "../../../libs/api", version = "0.1.0" }
+ostd   = { path = "../../../libs/ostd", version = "0.2.0" }
+serde  = { version = "1", default-features = false, features = ["derive"] }
+
+[build-dependencies]
+cell-build = { path = "../../../libs/cell-build", version = "0.2.0" }

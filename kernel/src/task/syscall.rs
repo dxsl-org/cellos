@@ -1701,6 +1701,68 @@ pub(super) fn commit_resume(task: &mut super::Task, snap: &ResumeSnapshot) {
     }
 }
 
+/// Consume-and-deliver a queued death record for a receive that is **not** the
+/// plain blocking `Recv`.
+///
+/// `Recv` checks `pending_deaths` before ordinary messages and *mask-agnostically*
+/// (`Syscall::Recv`, first delivery branch). `RecvTimeout` used to skip that queue
+/// entirely: `snapshot_resume` only knew owner-deaths, `pending_exit_reason`, and
+/// `pending_msgs`, so a death queued while the watcher was running was never
+/// delivered to a watcher that polls with a deadline. That breaks the
+/// `NotifyOnExit` contract (Spec 12 §4.3) for exactly the loop shape a supervisor
+/// uses — a mailbox with a deadline for its backoff timers — and the loss is
+/// silent: the supervisor just never restarts the child.
+///
+/// Keep the order and the mask rule in step with the plain `Recv` arm.
+fn take_queued_death(
+    caller_id: usize,
+    mask: usize,
+    buf_ptr: usize,
+    buf_len: usize,
+) -> Result<Option<usize>, SyscallError> {
+    let pending = {
+        let mut guard = super::SCHEDULER.lock();
+        guard.as_mut().and_then(|sched| {
+            let t = sched.tasks.get_mut(&caller_id)?;
+            let owner_death = super::Task::owner_death_matches_receive_mask(mask)
+                .then(|| t.pending_owner_deaths.first().copied())
+                .flatten()
+                .map(|(_, dead_tid, reason)| (true, dead_tid, reason));
+            owner_death.or_else(|| {
+                t.pending_deaths
+                    .first()
+                    .copied()
+                    .map(|(dead_tid, reason)| (false, dead_tid, reason))
+            })
+        })
+    };
+
+    let Some((is_owner_death, dead_tid, reason)) = pending else {
+        return Ok(None);
+    };
+
+    if buf_len >= core::mem::size_of::<u64>() {
+        validate_user_buf(buf_ptr, core::mem::size_of::<u64>(), MAX_USER_BUF)?;
+        let view = caller_copy_view(caller_id)?;
+        view.write_bytes(buf_ptr, &(reason as u64).to_ne_bytes())
+            .map_err(|_| SyscallError::InvalidInput)?;
+    }
+
+    if let Some(sched) = super::SCHEDULER.lock().as_mut() {
+        if let Some(t) = sched.tasks.get_mut(&caller_id) {
+            if is_owner_death {
+                if !t.pending_owner_deaths.is_empty() {
+                    t.pending_owner_deaths.remove(0);
+                }
+            } else if !t.pending_deaths.is_empty() {
+                t.pending_deaths.remove(0);
+            }
+        }
+    }
+
+    Ok(Some(dead_tid))
+}
+
 /// Legacy owned-removal delivery enum; used by selftests that consume the
 /// event and immediately inspect it. Production paths use `snapshot_resume` +
 /// `commit_resume` instead. Do not add new callers.
@@ -3399,6 +3461,12 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             buf_len,
             deadline,
         } => {
+            // Queued death records first, exactly as the plain `Recv` arm delivers
+            // them: a supervised loop that polls with a deadline (a supervisor with
+            // backoff timers) must still see its children exit.
+            if let Some(dead_tid) = take_queued_death(caller_id, mask, buf_ptr, buf_len)? {
+                return Ok(dead_tid);
+            }
             let mut vfs_context_drop = None;
             let pending_msg_info: Result<Option<_>, ()> = {
                 let mut guard = super::SCHEDULER.lock();

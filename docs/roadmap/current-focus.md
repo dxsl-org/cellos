@@ -1,6 +1,6 @@
 # Current Focus
 
-**Last updated**: 2026-09-22 (cell scale profile status projected; Spec 19 §3 amended)
+**Last updated**: 2026-09-25 (backend actor/supervisor library B0 closed at the `qemu` ceiling)
 
 ## Development-first, solo-first execution boundary
 
@@ -206,6 +206,32 @@ RV64 QEMU run (`scripts/qemu-native-domain-test.sh --harts 1`, kernel `76832e05�
 raw log `docs/evidence/cap-revoke-qemu.{log,txt}`. Recorded, not hidden: no Cell issues
 `CapRevoke` yet (the end-to-end path is witnessed in-kernel), the DMA-fault oracle needs real
 IOMMU hardware, and the x86/aarch64 MMIO legs are compile-verified only.
+
+## Backend actor/supervisor library (B0, completed)
+
+B0 of the [BEAM/OTP backend roadmap](beam-parity-backend-roadmap.md) is closed at the `qemu`
+ceiling. `ostd::actor` is a typed mailbox loop over the existing `0xAC` envelope — no new syscall,
+opcode, or byte-0 discriminant — with masked call/reply (Spec 17 §2), a 5-tick deadline so a cell
+can hold timers, and loud rejection of undecodable traffic; `ostd::actor::supervisor` adds a
+**dynamic** child table with Permanent/Transient/Temporary policy, per-child intensity
+(≤5 restarts / ~10 s, checked before the increment) with **give-up on that child only**, capped
+exponential backoff, and one_for_one/one_for_all/rest_for_one. Design: [ADR-0021](../decisions/0021-actor-supervisor-library-in-userspace.md).
+
+Witness (`scripts/qemu-actor-supervisor.sh --harts 1`, raw log
+`docs/evidence/actor-supervisor-harts1-qemu.{log,txt}`): one supervisor over three workers — typed
+ping, a self-inflicted `ForceExit` restarted in **50 ticks (bound 100)**, six abnormal exits inside
+one window giving up on that child while the other two still answered, and a two-child `one_for_all`
+tree that brought both the failed child and its sibling back. The kernel prerequisite was also
+fixed there: `RecvTimeout` never delivered `pending_deaths` (the queue filled when the watcher is
+running rather than parked), so a supervisor polling with a deadline silently lost every exit
+notification — `Recv` delivered them, `RecvTimeout` did not.
+
+Recorded, not hidden: `rest_for_one` and the capped backoff are library-complete and unit-verified
+but not driven end to end in QEMU; the library is single-threaded until B1's reactor, so there is no
+intra-cell concurrency and no fire-and-forget send; B1 (in-cell concurrency/cancellation) and B2
+(per-request cell cost, which keeps D5 WIP-limited) remain open. While building B0, `init`'s own
+restart-storm give-up was found to be inert — it compares its 1 000-unit window against `GetTime`
+op 0 (raw counter, ~0.1 ms) instead of scheduler ticks — and is left for its own lane.
 
 ## Cell scale profiles (D5)
 

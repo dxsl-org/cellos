@@ -21,6 +21,7 @@ pub(super) fn reviewed_user_target_ceiling(target: &str) -> Option<CapSet> {
         | "/bin/pipe-test"
         | "/bin/pipe-peer"
         | "/bin/c-spawn"
+        | "/bin/backend-worker"
         | "/bin/doom"
         | "/bin/echo"
         | "/bin/free"
@@ -65,6 +66,10 @@ pub(super) fn reviewed_user_target_ceiling(target: &str) -> Option<CapSet> {
         | "/bin/capacity-probe"
         | "/bin/hypha"
         | "/bin/tool-spawn"
+        // The B0 supervisor witnesses the actor/supervisor library: it must reach
+        // the shell edge with its SpawnCap intact, or it cannot spawn or watch
+        // children at all (ADR-0021 §2.4).
+        | "/bin/backend-supervisor"
         | "/bin/hotswap-demo-v1"
         | "/bin/hotswap-demo-v2" => CapSet {
             spawn: true,

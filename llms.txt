@@ -54,6 +54,8 @@
 - [ADR-0017 — Dual Browser Strategy: Ocel + Tier 3 Chrome](docs/decisions/0017-dual-browser-strategy-ocel-and-tier3-chrome.md)
 - [ADR-0018 — Translate POSIX onto cell primitives; add runtime profiles instead of emulating Linux](docs/decisions/0018-cell-native-portability-and-runtime-profiles.md)
 - [ADR-0019 — One Tier 2 admission control, on the path](docs/decisions/0019-tier2-admission-control-on-path.md)
+- [ADR-0020 — Stage USB HID isolation behind a reliable transport](docs/decisions/0020-staged-usb-hid-isolation.md)
+- [ADR-0021 — Give applications an actor/supervisor library in userspace, not a supervision ABI](docs/decisions/0021-actor-supervisor-library-in-userspace.md)
 - [Spec 23 — Native SDK Contract](docs/evidence/spec23-native-sdk-contract-027e1a2bbfb1.md)
 - [Spec 23 — Native SDK Contract](docs/evidence/spec23-native-sdk-contract-99146be984d6.md)
 - [Porting C applications to Cellos](docs/guides/porting-c-apps.md)
