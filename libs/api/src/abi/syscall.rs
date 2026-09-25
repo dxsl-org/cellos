@@ -650,6 +650,22 @@ pub mod cap_mask {
     pub const SPAWN: u32 = 1 << 2;
     /// Revoke RISC-V H-extension / ARM64 EL2 hypervisor access.
     pub const HYPERVISOR: u32 = 1 << 3;
+    /// Revoke PCIe driver authority: the Cell's whole DMA domain is torn down
+    /// (IOMMU domain + requester entries), its BDFs are released, and the BAR
+    /// windows it claimed are unmapped from its page tables.
+    ///
+    /// A revoked Cell ends in the same hardware state as a dead one — that is
+    /// what makes this a revocation rather than a label change.
+    pub const PCIE_DRIVER: u32 = 1 << 4;
+    /// Revoke Platform authority: the ECAM config-space window it claimed is
+    /// released and unmapped, and the next `RegisterPciDevice`/`RegisterPcieBar`
+    /// from the Cell fails closed.
+    pub const PLATFORM: u32 = 1 << 5;
+    /// Revoke Supervisor authority: lifecycle control (`ForceExit`,
+    /// `NotifyOnExit`, `RegisterService`, snapshot control) stops being
+    /// authorized. Kernel-minted and never propagated, so this is a field clear
+    /// with no ambient resource behind it.
+    pub const SUPERVISOR: u32 = 1 << 6;
 
     /// Bit offset of the `mmio_devices` sub-field within the mask.
     pub const MMIO_SHIFT: u32 = 8;
@@ -663,7 +679,15 @@ pub mod cap_mask {
     pub const BLKREGION_MASK: u32 = 0xFF << BLKREGION_SHIFT;
 
     /// Revoke all capability classes at once.
-    pub const ALL: u32 = BLOCK_IO | NETWORK | SPAWN | HYPERVISOR | MMIO_MASK | BLKREGION_MASK;
+    pub const ALL: u32 = BLOCK_IO
+        | NETWORK
+        | SPAWN
+        | HYPERVISOR
+        | PCIE_DRIVER
+        | PLATFORM
+        | SUPERVISOR
+        | MMIO_MASK
+        | BLKREGION_MASK;
 }
 
 /// Compact bitset of permitted syscalls, stored as a `u64`.
