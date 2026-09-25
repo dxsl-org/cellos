@@ -141,8 +141,9 @@ nothing else.
    handling mangles it). Recorded so the next reader does not attribute it to B0; the cell-death
    paths B0 actually depends on are covered by the B0 witness, which passes on the same kernel.
 
-8. **The organisation's CI is red at HEAD for an infrastructure reason, not for code.** The matrix
-   jobs install `gcc-riscv64-unknown-elf g++-riscv64-unknown-elf` and the runner now reports
+8. **The organisation's CI was red at HEAD for a mix of one-line defects and one infrastructure gap;
+   the defects are now fixed here.** The matrix
+   jobs used to install `gcc-riscv64-unknown-elf g++-riscv64-unknown-elf` and the runner answered
    `E: Unable to locate package g++-riscv64-unknown-elf`, so every job behind that install step fails
    before it compiles anything (`Build (riscv64/aarch64)`, `Clippy (aarch64/x86_64)`,
    `Host unit tests (types + api)`, `Security Scan`, `CellosFS /srv`, `Network Data-Path`) — the same
@@ -155,11 +156,26 @@ nothing else.
    the workspace's only `-D warnings` clippy failure (`manual_is_multiple_of`, `kernel/src/task/futex.rs`
    from `4884ace5e`); a stale duplicate doc comment in `cells/drivers/dwc2-usb/src/hid/mod.rs` from
    `f20f2d19d`; and `needless_range_loop` in `cells/tests/tls-test/src/main.rs` (also `4884ace5e`).
-   With those, CI's own clippy command (workspace, rv64, `-D warnings`) is clean locally. What remains
-   red is infrastructure: the runner cannot install `g++-riscv64-unknown-elf`, so the Build/Clippy/Host
-   unit tests/Security Scan jobs fail at the install step. The same lint job also warns
-   `fatal: No url found for submodule path 'cells/demos/doom/src/c/doomgeneric' in .gitmodules` — the
-   orphan gitlink reported earlier.
+   Clearing those exposed one more layer in the same job: `cc-rs: failed to find tool
+   "riscv-none-elf-ar"`, because the cross-toolchain names live in the **gitignored**
+   `.cargo/config.toml` and CI mirrors only `CC_*`. `riscv64-unknown-elf-ar` ships with the gcc the
+   runner installs while `riscv-none-elf-ar` exists nowhere (verified in this workspace too), so the
+   archiver is now mirrored in the three jobs that already set `CC_*`.
+
+   Two more repairs in the same family, both verified locally:
+   `cells/tests/posix-shim-test/build.rs` hardcoded the RV64 CMake toolchain, so the **aarch64** leg
+   linked a riscv64 object (`smoke.c.obj is incompatible with symbols.o`) — it now selects the
+   toolchain from cargo's `TARGET`, `cmake/cellos-aarch64.cmake` names the aarch64 compiler, and both
+   cmake invocations export `CELLOS_C_TARGET` (a toolchain file's `set(ENV{...})` only reaches the
+   configure process, not the generated Makefiles). And the rv64 matrix row asked apt for
+   `g++-riscv64-unknown-elf`, which Ubuntu noble does not ship, so every job in that row died at the
+   install step before compiling anything; the row now installs `gcc-riscv64-unknown-elf clang`, and
+   the C++ cells' `clang++` fallback was exercised locally by shadowing the gnu g++ out of `PATH`.
+   Verified: `cargo build --release -p app-posix-shim-test --target {riscv64gc-unknown-none-elf,
+   aarch64-unknown-none-softfloat}` both succeed, fmt and the generated metrics check are clean.
+
+   The same lint job also warns `fatal: No url found for submodule path
+   'cells/demos/doom/src/c/doomgeneric' in .gitmodules` — the orphan gitlink reported earlier.
 
 ## Assumptions
 - A supervisor Cell is a signed, `SpawnCap`-bearing cell; monitoring stays gated on `SpawnCap`, so

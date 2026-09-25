@@ -175,7 +175,14 @@ jobs:
           # cells (c-math-smoke, posix shims) are riscv/aarch64-only.
           - target: riscv64gc-unknown-none-elf
             short: rv64
-            cc_pkg: gcc-riscv64-unknown-elf g++-riscv64-unknown-elf
+            # Bare-metal RISC-V C toolchain plus clang for the C++ path. Ubuntu
+            # noble ships no `g++-riscv64-unknown-elf`, and asking apt for it
+            # failed the whole step with "Unable to locate package", taking every
+            # job in this row down before it compiled anything. The C++ cells
+            # probe `riscv64-unknown-elf-g++` first and fall back to `clang++`
+            # (cells/tests/cpp-smoke/build.rs) — which is exactly what this row
+            # exercises.
+            cc_pkg: gcc-riscv64-unknown-elf clang
             cc_bin: riscv64-unknown-elf-gcc
             cells_args: >-
               --workspace --exclude cellos-kernel --exclude app-mlibc-smoke
