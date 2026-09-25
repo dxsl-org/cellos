@@ -113,7 +113,7 @@ pub(crate) fn read_word(
     view: &super::copy_glue::TaskCopyView,
     addr: VAddr,
 ) -> Result<u32, super::syscall::SyscallError> {
-    if addr == 0 || addr % core::mem::align_of::<u32>() != 0 {
+    if addr == 0 || !addr.is_multiple_of(core::mem::align_of::<u32>()) {
         return Err(super::syscall::SyscallError::InvalidInput);
     }
     let mut bytes = [0u8; 4];

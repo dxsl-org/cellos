@@ -75,8 +75,6 @@ pub enum EvdevEvent {
 }
 
 impl EvdevEvent {
-    /// Serialise with the originating logical-interface identity.
-
     /// Serialise an event with its originating HID logical-interface identity.
     pub fn encode_device(&self, device: HidDeviceId, buf: &mut [u8; DEVICE_EVENT_LEN]) {
         match *self {

@@ -141,14 +141,14 @@ fn cell_main() {
 
     // Each thread owns a real TLS block; the kernel only carries the pointer.
     let mut handles = [0usize; THREADS];
-    for id in 0..THREADS {
+    for (id, handle) in handles.iter_mut().enumerate() {
         let block = Box::new([0u8; 64]);
         let base = block.as_ptr() as usize;
         // Leak the block deliberately: the thread owns it for the cell's lifetime,
         // and the cell exits at the end of the test.
         core::mem::forget(block);
         match ostd::task::spawn(move || thread_body(id, base)) {
-            SyscallResult::Ok(tid) => handles[id] = tid,
+            SyscallResult::Ok(tid) => *handle = tid,
             SyscallResult::Err(_) => {
                 fail("spawn", id as u64);
                 return;
