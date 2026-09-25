@@ -2,6 +2,7 @@
 name = "dom-arena"
 version = "0.1.0"
 edition = "2021"
+license.workspace = true
 description = "Gosub-style Arena-backed DOM tree with NodeId and DOM mutation protocol for CellOS"
 
 [dependencies]
