@@ -31,8 +31,12 @@ mod elf_prepare;
 pub mod fstat_selftest;
 /// Futex wait queues — wait-on-address for cell threads (ADR-0018 §2.1).
 pub(crate) mod futex;
+pub mod grant_reclaim_selftest;
 pub mod hart_local;
 pub mod manifest_v2_selftest;
+/// Selective MMIO revocation for runtime revocation (`.agents/260712-1901` P03).
+#[cfg(feature = "test-hooks")]
+pub mod mmio_revoke_selftest;
 pub mod net_rx_selftest;
 pub mod p_trust_selftest;
 /// Kernel-owned pipes — one-way byte streams between tasks (ADR-0018 §2.1).
@@ -1472,12 +1476,19 @@ pub(crate) fn wake_task(tid: usize, result: usize) {
     }
 }
 
-/// Reap state keyed by a concrete task TID. This is intentionally shared by
-/// worker and root retirement so a root cannot leave a member's grant, pin,
-/// IOMMU domain, BDF, VM, or VFS lease behind for a reused CellId.
-fn release_retired_dma_after_ack(tid: usize) -> bool {
+/// Tear down `tid`'s DMA authority: its IOMMU domain, its requester entries, and
+/// the frames a driver was still holding.
+///
+/// One implementation for both callers — cell death and a runtime
+/// `pcie_driver` revoke — so a Cell that loses DMA authority mid-life ends in
+/// exactly the hardware state it would reach by dying. Serialized against the
+/// other teardowns: a timed-out invalidation must be retried, not interleaved.
+///
+/// Returns `false` when hardware did not acknowledge the teardown; the caller
+/// must then keep the authority (and the frames) fail-closed.
+pub(crate) fn teardown_dma_authority(tid: usize) -> bool {
     let _cleanup = IOMMU_CLEANUP_SERIAL.lock();
-    if !crate::task::drivers::iommu::cleanup_cell(tid as u64) {
+    if !crate::task::drivers::iommu::revoke_dma_for_cell(tid as u64) {
         return false;
     }
     crate::resource_registry::release_bdfs_for(tid);
@@ -1494,7 +1505,7 @@ fn queue_retired_dma_cleanup(tid: usize) {
 fn retry_retired_dma_cleanup() {
     let retry = IOMMU_CLEANUP_RETRIES.lock().pop_front();
     if let Some(tid) = retry {
-        if !release_retired_dma_after_ack(tid) {
+        if !teardown_dma_authority(tid) {
             queue_retired_dma_cleanup(tid);
         }
     }
@@ -1505,7 +1516,7 @@ fn reap_retired_task_resources(tid: usize) {
     // Driver Cell may claim the BDF or pinned frames may leave quarantine.
     // On timeout both ownership and still-pinned frames remain fail-closed and
     // one deferred teardown is retried on each scheduler pass.
-    if !release_retired_dma_after_ack(tid) {
+    if !teardown_dma_authority(tid) {
         queue_retired_dma_cleanup(tid);
     }
     crate::task::syscall::reap_grants_for_task(tid);

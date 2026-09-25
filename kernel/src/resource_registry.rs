@@ -50,6 +50,19 @@ pub const DEV_I2C: u8 = 1 << 5;
 pub const DEV_SPI: u8 = 1 << 6;
 /// Firmware / display controller window.
 pub const DEV_DISPLAY: u8 = 1 << 7;
+
+/// Class of an owned MMIO window: the `DEV_*` bits, plus window kinds that have
+/// no `DEV_*` bit because they are not manifest-declared devices.
+///
+/// The class is stored with the region when it is granted. Re-deriving it at
+/// revoke time would have to guess: a PCIe BAR is in neither allowlist, and a
+/// granted sub-window is contained in — not equal to — the window it came from.
+pub type MmioClass = u16;
+
+/// The Platform Cell's ECAM config-space window (`request_mmio_unchecked`).
+pub const CLASS_ECAM: MmioClass = 1 << 8;
+/// The DWC2 USB host aperture (`request_dwc2_mmio`).
+pub const CLASS_DWC2: MmioClass = 1 << 9;
 // DEV_USB is intentionally absent: the u8 manifest byte is full (bits 0–7 used).
 // USB host controller authority requires policy v3 with an explicit signed byte.
 // Gate with a test matrix in policy::self_test before implementing.
@@ -147,8 +160,16 @@ const ALLOWED: &[(usize, usize, u8)] = &[];
 // Registry state
 // ---------------------------------------------------------------------------
 
-/// Maps MMIO base address → (len, owner CellId).
-static REGISTRY: Spinlock<BTreeMap<usize, (usize, CellId)>> = Spinlock::new(BTreeMap::new());
+/// Maps MMIO base address → the window's ownership record.
+static REGISTRY: Spinlock<BTreeMap<usize, MmioRegion>> = Spinlock::new(BTreeMap::new());
+
+/// One owned MMIO window.
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct MmioRegion {
+    len: usize,
+    owner: CellId,
+    class: MmioClass,
+}
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 struct DisplayFramebuffer {
@@ -179,19 +200,61 @@ static DISPLAY_FRAMEBUFFER: Spinlock<DisplayFramebufferState> =
 /// `request_mmio` when the caller holds `PcieDriverCap` (DEV_PCIE).
 static PCIE_BARS: Spinlock<BTreeMap<usize, usize>> = Spinlock::new(BTreeMap::new());
 
-fn static_range_allowed(
+/// Test-hooks only: register a window with an explicit class, so a boot
+/// self-test can prove class-selective revocation on boards whose allowlist
+/// has no window of the class it needs.
+#[cfg(feature = "test-hooks")]
+pub(crate) fn test_register_region(
+    cell_id: CellId,
+    base: usize,
+    len: usize,
+    class: MmioClass,
+) -> bool {
+    if checked_mmio_end(base, len).is_err() {
+        return false;
+    }
+    REGISTRY
+        .lock()
+        .insert(
+            base,
+            MmioRegion {
+                len,
+                owner: cell_id,
+                class,
+            },
+        )
+        .is_none()
+}
+
+/// The per-arch static allowlist, for callers that must reason about which
+/// windows this board can grant at all (the boot self-tests, which have to stay
+/// board-agnostic, and `request_mmio`'s class derivation below).
+pub(crate) fn allowed_windows() -> &'static [(usize, usize, u8)] {
+    ALLOWED
+}
+
+/// Device class of the allowlist window containing `[base, end)`, when the
+/// caller declared that class.
+///
+/// Returns the class rather than a bool because the grant records it: a revoke
+/// must be able to tell which device class a window belongs to without
+/// re-deriving it from a table that may have changed since.
+fn static_range_class(
     allowed: &[(usize, usize, u8)],
     base: usize,
     end: usize,
     allowed_devices: u8,
-) -> bool {
-    allowed.iter().any(|&(window_base, window_len, class)| {
-        window_base
-            .checked_add(window_len)
-            .is_some_and(|window_end| {
-                base >= window_base && end <= window_end && class & allowed_devices != 0
-            })
-    })
+) -> Option<u8> {
+    allowed
+        .iter()
+        .find(|&&(window_base, window_len, class)| {
+            window_base
+                .checked_add(window_len)
+                .is_some_and(|window_end| {
+                    base >= window_base && end <= window_end && class & allowed_devices != 0
+                })
+        })
+        .map(|&(_, _, class)| class)
 }
 
 // ---------------------------------------------------------------------------
@@ -271,13 +334,20 @@ fn checked_mmio_end(base: usize, len: usize) -> ViResult<usize> {
 pub fn request_mmio_unchecked(cell_id: CellId, base: usize, len: usize) -> ViResult<()> {
     let end = checked_mmio_end(base, len)?;
     let mut reg = REGISTRY.lock();
-    for (&eb, &(el, _)) in reg.iter() {
-        let ee = eb + el;
+    for (&eb, region) in reg.iter() {
+        let ee = eb + region.len;
         if !(end <= eb || base >= ee) {
             return Err(ViError::AlreadyExists);
         }
     }
-    reg.insert(base, (len, cell_id));
+    reg.insert(
+        base,
+        MmioRegion {
+            len,
+            owner: cell_id,
+            class: CLASS_ECAM,
+        },
+    );
     Ok(())
 }
 
@@ -307,13 +377,20 @@ pub fn request_dwc2_mmio(cell_id: CellId, base: usize, len: usize) -> ViResult<(
     }
     let end = checked_mmio_end(base, len)?;
     let mut reg = REGISTRY.lock();
-    for (&eb, &(el, _)) in reg.iter() {
-        let ee = eb + el;
+    for (&eb, region) in reg.iter() {
+        let ee = eb + region.len;
         if !(end <= eb || base >= ee) {
             return Err(ViError::AlreadyExists);
         }
     }
-    reg.insert(base, (len, cell_id));
+    reg.insert(
+        base,
+        MmioRegion {
+            len,
+            owner: cell_id,
+            class: CLASS_DWC2,
+        },
+    );
     Ok(())
 }
 
@@ -332,31 +409,34 @@ pub fn request_mmio(cell_id: CellId, base: usize, len: usize, allowed_devices: u
     let end = checked_mmio_end(base, len)?;
 
     // PCIe path: validate against the dynamic BAR table populated by pcie_ecam.
-    let in_allowlist = if allowed_devices & DEV_PCIE != 0 {
+    let class: MmioClass = if allowed_devices & DEV_PCIE != 0 {
         let bars = PCIE_BARS.lock();
-        bars.get(&base).is_some_and(|&bar_len| len <= bar_len)
+        if !bars.get(&base).is_some_and(|&bar_len| len <= bar_len) {
+            return Err(ViError::PermissionDenied);
+        }
+        DEV_PCIE as MmioClass
     } else {
         // SoC peripheral path: static per-arch allowlist.
-        static_range_allowed(ALLOWED, base, end, allowed_devices)
+        match static_range_class(ALLOWED, base, end, allowed_devices) {
+            Some(class) => class as MmioClass,
+            None => return Err(ViError::PermissionDenied),
+        }
     };
-    if !in_allowlist {
-        return Err(ViError::PermissionDenied);
-    }
 
     // 2. Overlap check — no two live cells may share a byte
     let mut reg = REGISTRY.lock();
-    reg.retain(|&eb, &mut (el, owner)| {
-        let ee = eb + el;
-        if !(end <= eb || base >= ee) && owner == cell_id {
+    reg.retain(|&eb, region| {
+        let ee = eb + region.len;
+        if !(end <= eb || base >= ee) && region.owner == cell_id {
             return false;
         }
         true
     });
-    for (&eb, &(el, owner)) in reg.iter() {
-        let ee = eb + el;
+    for (&eb, region) in reg.iter() {
+        let ee = eb + region.len;
         if !(end <= eb || base >= ee) {
             if let Some(sched) = crate::task::SCHEDULER.lock().as_ref() {
-                if let Some(task) = sched.tasks.get(&(owner.0 as usize)) {
+                if let Some(task) = sched.tasks.get(&(region.owner.0 as usize)) {
                     if matches!(task.state, crate::task::tcb::TaskState::Terminated) {
                         continue;
                     }
@@ -367,7 +447,14 @@ pub fn request_mmio(cell_id: CellId, base: usize, len: usize, allowed_devices: u
             return Err(ViError::AlreadyExists);
         }
     }
-    reg.insert(base, (len, cell_id));
+    reg.insert(
+        base,
+        MmioRegion {
+            len,
+            owner: cell_id,
+            class,
+        },
+    );
     Ok(())
 }
 
@@ -400,7 +487,7 @@ pub fn self_test() -> bool {
     // 1. Positive control: the table is live.
     let mbox_base = mmio.mailbox_base;
     let mbox_end = mbox_base + mmio.mailbox_grant_size;
-    if !static_range_allowed(ALLOWED, mbox_base, mbox_end, DEV_DISPLAY) {
+    if static_range_class(ALLOWED, mbox_base, mbox_end, DEV_DISPLAY).is_none() {
         log::error!("[selftest] mmio-allowlist: FAIL — mailbox window no longer authorized");
         return false;
     }
@@ -420,7 +507,7 @@ pub fn self_test() -> bool {
         0xFF,
     ];
     for class in classes {
-        if static_range_allowed(ALLOWED, dwc2_base, dwc2_end, class) {
+        if static_range_class(ALLOWED, dwc2_base, dwc2_end, class).is_some() {
             log::error!(
                 "[selftest] mmio-allowlist: FAIL — DWC2 window authorized for class {class:#04x}"
             );
@@ -433,7 +520,7 @@ pub fn self_test() -> bool {
     let last_word = dwc2_end - 4;
     for addr in [dwc2_base, last_word] {
         for class in classes {
-            if static_range_allowed(ALLOWED, addr, addr + 4, class) {
+            if static_range_class(ALLOWED, addr, addr + 4, class).is_some() {
                 log::error!(
                     "[selftest] mmio-allowlist: FAIL — DWC2 edge word {addr:#x} authorized \
                      for class {class:#04x}"
@@ -451,10 +538,32 @@ pub fn self_test() -> bool {
 pub fn release_for(cell_id: CellId) {
     REGISTRY
         .lock()
-        .retain(|_base, &mut (_len, owner)| owner != cell_id);
+        .retain(|_base, region| region.owner != cell_id);
     // A VideoCore allocation and its USER mapping remain valid until reboot.
     // Do not clear Active metadata or permit a restarted cell to replace it:
     // restart is fail-stop for display after registration.
+}
+
+/// Release the regions owned by `cell_id` whose class is in `device_mask`, and
+/// return their `(base, len)` so the caller can remove user accessibility.
+///
+/// Selective by construction: a class the caller did not name stays owned and
+/// mapped, so revoking one device class never disarms another. Used by runtime
+/// revocation (`sys_cap_revoke`); Cell death uses [`release_for`], which drops
+/// every region regardless of class.
+pub fn revoke_mmio_for(cell_id: CellId, device_mask: MmioClass) -> alloc::vec::Vec<(usize, usize)> {
+    let mut revoked = alloc::vec::Vec::new();
+    if device_mask == 0 {
+        return revoked;
+    }
+    REGISTRY.lock().retain(|&base, region| {
+        let hit = region.owner == cell_id && region.class & device_mask != 0;
+        if hit {
+            revoked.push((base, region.len));
+        }
+        !hit
+    });
+    revoked
 }
 
 /// Return the task ID (TID) of the cell that currently owns the MMIO region
@@ -466,7 +575,7 @@ pub fn lookup_mmio_owner(base: usize) -> Option<usize> {
     REGISTRY
         .lock()
         .get(&base)
-        .map(|&(_len, cell_id)| cell_id.0 as usize)
+        .map(|region| region.owner.0 as usize)
 }
 
 /// Return whether `cell_id` owns exactly `[base, base + len)`.
@@ -478,7 +587,7 @@ pub fn owns_exact_mmio(cell_id: CellId, base: usize, len: usize) -> bool {
     REGISTRY
         .lock()
         .get(&base)
-        .is_some_and(|&(owned_len, owner)| owned_len == len && owner == cell_id)
+        .is_some_and(|region| region.len == len && region.owner == cell_id)
 }
 
 /// Outcome of atomically reserving one framebuffer mapping transaction.

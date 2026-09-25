@@ -17,6 +17,21 @@ pub enum DmaMapResult {
     PublishedUnconfirmed,
 }
 
+/// Outcome of a per-range DMA teardown.
+///
+/// Mirrors [`DmaMapResult`]: a teardown that zeroed leaves the hardware may
+/// still translate is reported as unconfirmed, never as done — the caller must
+/// keep the frames quarantined until the invalidation is retried.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DmaUnmapResult {
+    /// Nothing was mapped in the range: no teardown was needed.
+    NothingMapped,
+    /// Every cleared leaf's translation is gone from hardware.
+    Unmapped { pages: usize },
+    /// Leaves were zeroed but the IOMMU did not acknowledge the invalidation.
+    PublishedUnconfirmed { pages: usize },
+}
+
 /// Classify a mapping whose device context was written before invalidation.
 ///
 /// Either a command-queue publication failure or a missing IOFENCE
@@ -93,15 +108,40 @@ pub fn map_dma_for_cell(tid: u64, bdf: u32, phys: u64, size: usize) -> DmaMapRes
     mapped
 }
 
-/// No-op stub. Per-Cell IOTLB invalidation is handled by `cleanup_cell` on Cell exit.
+/// Tear down `[iova, iova+size)` from Cell `tid`'s DMA domain.
+///
+/// Zeros the leaf entries and invalidates the translations covering them, so a
+/// device the Cell authorised faults on its next access to the range. Cell-death
+/// teardown uses [`revoke_dma_for_cell`] instead: same invalidation, but it also
+/// drops the requester entries and the domain itself.
 #[inline]
-pub fn unmap_dma(_iova: u64, _size: usize) {}
+pub fn unmap_dma(tid: u64, iova: u64, size: usize) -> DmaUnmapResult {
+    #[cfg(target_arch = "riscv64")]
+    {
+        super::iommu_riscv::unmap_range_for_cell(tid, iova, size)
+    }
+    #[cfg(target_arch = "x86_64")]
+    {
+        super::iommu_x86::unmap_range_for_cell(tid, iova, size)
+    }
+    #[cfg(not(any(target_arch = "riscv64", target_arch = "x86_64")))]
+    {
+        let _ = (tid, iova, size);
+        DmaUnmapResult::NothingMapped
+    }
+}
 
-/// Flush IOTLB and zero DDT/context entries for `tid`'s DMA domain.
+/// Tear down `tid`'s whole DMA domain: clear its requester entries, zero its
+/// DDT/context, and invalidate its cached translations.
+///
+/// The single domain-teardown path, reached from two callers: Cell death (the
+/// task-exit sequence, before grant frames are released) and a runtime revoke
+/// of `pcie_driver` — a Cell that loses DMA authority mid-life gets exactly the
+/// teardown it would get by dying.
 ///
 /// Returns `true` only when hardware acknowledged teardown. Callers must keep
 /// pinned frames quarantined when it returns `false`.
-pub fn cleanup_cell(tid: u64) -> bool {
+pub fn revoke_dma_for_cell(tid: u64) -> bool {
     #[cfg(target_arch = "riscv64")]
     {
         super::iommu_riscv::unmap_cell(tid)

@@ -18,7 +18,7 @@ use alloc::{
 };
 // RV32 lacks native 64-bit atomics; portable-atomic polyfills AtomicU64 there
 // via the critical-section impl hal/arch/riscv registers.
-use super::iommu::{classify_dma_publication, DmaMapResult};
+use super::iommu::{classify_dma_publication, DmaMapResult, DmaUnmapResult};
 use super::iommu_pt::Sv39IommuPt;
 use super::iommu_riscv_cmd::{
     encode_cqb, encode_iodir_inval_ddt, encode_iofence_c, encode_iotinval_vma,
@@ -510,6 +510,57 @@ pub(super) fn unmap_cell(tid: u64) -> bool {
         domain.pscid
     );
     true
+}
+
+/// Zero Cell `tid`'s Sv39 leaves for `[iova, iova+size)` and invalidate its
+/// first-stage translations. Runtime-revoke counterpart of `unmap_cell`: same
+/// PSCID, but the Cell keeps running and keeps its other ranges.
+///
+/// One IOFENCE acknowledges the whole batch, mirroring the map path: the leaves
+/// are zeroed before the command is enqueued, and a fence that never drains
+/// leaves the range unlinked but not yet unreachable.
+pub(super) fn unmap_range_for_cell(tid: u64, iova: u64, size: usize) -> DmaUnmapResult {
+    let bar0 = BAR0.load(Ordering::Relaxed);
+    let cq_virt = CQ_VIRT.load(Ordering::Relaxed);
+
+    // Lock order: RISCV_DOMAINS → CQ_TRANSACTION (same as map_range_for_cell).
+    let domains = RISCV_DOMAINS.lock();
+    let Some(domain) = domains.get(&tid) else {
+        return DmaUnmapResult::NothingMapped;
+    };
+
+    let pages = domain.pt.unmap_range(iova, size);
+    if pages == 0 {
+        return DmaUnmapResult::NothingMapped;
+    }
+    // No remapping hardware: no cached translation can exist for the leaves.
+    if bar0 == 0 {
+        return DmaUnmapResult::Unmapped { pages };
+    }
+    if cq_virt == 0 {
+        return DmaUnmapResult::PublishedUnconfirmed { pages };
+    }
+
+    let acknowledged = {
+        let _transaction = CQ_TRANSACTION.lock();
+        invalidate_pscid_tlb(bar0, cq_virt, domain.pscid) && issue_iofence(bar0, cq_virt)
+    };
+    if acknowledged {
+        log::info!(
+            "[iommu] Cell {} PSCID={} unlinked {pages} page(s) at {iova:#x}",
+            tid,
+            domain.pscid
+        );
+        DmaUnmapResult::Unmapped { pages }
+    } else {
+        log::warn!(
+            "[iommu] Cell {} PSCID={} unlinked {pages} page(s) at {iova:#x} but the IOFENCE \
+             never drained",
+            tid,
+            domain.pscid
+        );
+        DmaUnmapResult::PublishedUnconfirmed { pages }
+    }
 }
 
 // ── Phase 3: activate enforcement ────────────────────────────────────────────

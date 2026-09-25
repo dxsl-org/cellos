@@ -623,21 +623,64 @@ pub(crate) fn reap_grants_for_task(dead_tid: usize) {
         );
     }
 
+    clear_grantee_refs(dead_tid);
+    reclaim_owned_grants(dead_tid);
+    sweep_orphan_reg_grants();
+}
+
+/// Drop `tid`'s grantee-side references in both tables: a grant it *received*
+/// becomes unshared again and its owner keeps both the entry and the frames.
+///
+/// Death only. A runtime revoke must not touch the target's received grants —
+/// those are governed by the granter's authority, not by the target's.
+fn clear_grantee_refs(tid: usize) {
+    {
+        let mut tbl = grant_table_lock().lock();
+        if let Some(map) = tbl.as_mut() {
+            for grant in map.values_mut() {
+                if grant.shared_to.is_some_and(|(grantee, _)| grantee == tid) {
+                    grant.shared_to = None;
+                }
+            }
+        }
+    } // PAGE_GRANT_TABLE lock released
+
+    {
+        let mut tbl = reg_grant_table_lock().lock();
+        if let Some(map) = tbl.as_mut() {
+            for grant in map.values_mut() {
+                if grant.shared_to.is_some_and(|(grantee, _)| grantee == tid) {
+                    grant.shared_to = None;
+                }
+            }
+        }
+    } // REG_GRANT_TABLE lock released
+}
+
+/// Remove and release every grant `tid` **owns**, in both tables.
+///
+/// The owner-side half of the reaper, shared by cell death and by runtime
+/// revocation: a revoked Cell loses its owned grants while it keeps running.
+/// Reclaiming an owned grant is also what unmaps it from a grantee — the
+/// `shared_to` link is the derivation record, so no separate CDT is needed.
+///
+/// Frames an in-flight operation still holds are withheld (quarantine) instead
+/// of freed, exactly as on the death path: the device the grant authorised may
+/// still be programmed against them, and [`release_acked_frames`] returns them
+/// once the driver acknowledges the teardown.
+///
+/// Lock order (identical to the reaper's): PIN_TABLE (leaf) → grant table
+/// collect → FRAME_ALLOCATOR → KERNEL_ROOT inside `free_grant_pages`. Never
+/// holds FRAME_ALLOCATOR while calling `free_grant_pages`.
+pub(crate) fn reclaim_owned_grants(tid: usize) {
     // ── PAGE_GRANT_TABLE pass ─────────────────────────────────────────────────
     let owned: alloc::vec::Vec<PageGrant> = {
         let mut tbl = grant_table_lock().lock();
         let mut owned = alloc::vec::Vec::new();
         if let Some(map) = tbl.as_mut() {
-            // Clear grantee references (no removal needed — owner keeps the entry).
-            for grant in map.values_mut() {
-                if grant.shared_to.is_some_and(|(tid, _)| tid == dead_tid) {
-                    grant.shared_to = None;
-                }
-            }
-            // Collect and remove owned entries.
             let owned_keys: alloc::vec::Vec<usize> = map
                 .iter()
-                .filter(|(_, g)| g.owner == dead_tid)
+                .filter(|(_, g)| g.owner == tid)
                 .map(|(k, _)| *k)
                 .collect();
             owned = owned_keys.iter().filter_map(|k| map.remove(k)).collect();
@@ -657,56 +700,75 @@ pub(crate) fn reap_grants_for_task(dead_tid: usize) {
         let mut tbl = reg_grant_table_lock().lock();
         let mut removed = alloc::vec::Vec::new();
         if let Some(map) = tbl.as_mut() {
-            // Clear grantee references when the grantee dies.
-            for grant in map.values_mut() {
-                if grant.shared_to.is_some_and(|(tid, _)| tid == dead_tid) {
-                    grant.shared_to = None;
-                }
-            }
             let mut owned_keys = alloc::vec::Vec::new();
-            let mut orphan_keys = alloc::vec::Vec::new();
             for (&key, grant) in map.iter_mut() {
-                if grant.owner == dead_tid {
-                    if let Some((grantee, _)) = grant.shared_to {
-                        if crate::memory::pin::vfs_holder_of_owner(
-                            grant.base,
-                            grant_allocated_bytes(grant.size),
-                            dead_tid,
-                        )
-                        .is_some()
-                        {
-                            grant.owner = 0;
-                            grant.owner_cell = CellId(0);
-                            grant.owner_generation = 0;
-                            grant.shared_to = None;
-                            owned_keys.push(key);
-                        } else if let Some((cell_id, generation)) = live_task_binding(grantee) {
-                            // Preserve the legacy transfer only to a live,
-                            // generation-attested grantee.
-                            grant.owner = grantee;
-                            grant.owner_cell = cell_id;
-                            grant.owner_generation = generation;
-                        } else {
-                            grant.owner = 0;
-                            grant.owner_cell = CellId(0);
-                            grant.owner_generation = 0;
-                            grant.shared_to = None;
-                            owned_keys.push(key);
-                        }
+                if grant.owner != tid {
+                    continue;
+                }
+                if let Some((grantee, _)) = grant.shared_to {
+                    if crate::memory::pin::vfs_holder_of_owner(
+                        grant.base,
+                        grant_allocated_bytes(grant.size),
+                        tid,
+                    )
+                    .is_some()
+                    {
+                        grant.owner = 0;
+                        grant.owner_cell = CellId(0);
+                        grant.owner_generation = 0;
+                        grant.shared_to = None;
+                        owned_keys.push(key);
+                    } else if let Some((cell_id, generation)) = live_task_binding(grantee) {
+                        // Preserve the legacy transfer only to a live,
+                        // generation-attested grantee.
+                        grant.owner = grantee;
+                        grant.owner_cell = cell_id;
+                        grant.owner_generation = generation;
                     } else {
+                        grant.owner = 0;
+                        grant.owner_cell = CellId(0);
+                        grant.owner_generation = 0;
+                        grant.shared_to = None;
                         owned_keys.push(key);
                     }
-                } else if grant.owner == 0 && grant.shared_to.is_none() {
-                    orphan_keys.push(key);
+                } else {
+                    owned_keys.push(key);
                 }
             }
-            owned_keys.extend(orphan_keys);
             removed = owned_keys.iter().filter_map(|k| map.remove(k)).collect();
         }
         removed
     }; // REG_GRANT_TABLE lock released
 
     for reg in &reg_owned {
+        if withhold_or_free(reg.base, grant_pages_for_size(reg.size)) {
+            continue;
+        }
+        free_grant_pages(reg.base, grant_pages_for_size(reg.size));
+    }
+}
+
+/// Release registered grants with neither owner nor grantee: the residue of a
+/// transfer that found no live grantee.
+///
+/// Death-only sweep — the state it clears is created by owner death, and a
+/// runtime revoke neither creates nor resolves it.
+fn sweep_orphan_reg_grants() {
+    let removed: alloc::vec::Vec<RegGrant> = {
+        let mut tbl = reg_grant_table_lock().lock();
+        let mut removed = alloc::vec::Vec::new();
+        if let Some(map) = tbl.as_mut() {
+            let orphan_keys: alloc::vec::Vec<usize> = map
+                .iter()
+                .filter(|(_, g)| g.owner == 0 && g.shared_to.is_none())
+                .map(|(k, _)| *k)
+                .collect();
+            removed = orphan_keys.iter().filter_map(|k| map.remove(k)).collect();
+        }
+        removed
+    }; // REG_GRANT_TABLE lock released
+
+    for reg in &removed {
         if withhold_or_free(reg.base, grant_pages_for_size(reg.size)) {
             continue;
         }
@@ -740,7 +802,7 @@ fn withhold_or_free(base: usize, pages: usize) -> bool {
 /// Return quarantined frames owned by `tid` to the allocator once the driver has
 /// acknowledged that nothing can still reach them.
 ///
-/// The acknowledgement point is `iommu::cleanup_cell(tid)`: with the cell's IOTLB
+/// The acknowledgement point is `iommu::revoke_dma_for_cell(tid)`: with the cell's IOTLB
 /// entries flushed and its DDT/context entries zeroed, no device it authorised
 /// can address the frames. Call this immediately after that teardown, and only
 /// with a task id — the pin registry is keyed by task, not by cell.
@@ -2774,6 +2836,95 @@ fn syscall_to_vi(syscall: &Syscall) -> Option<api::syscall::ViSyscall> {
     })
 }
 
+/// Authority gates for `CapRevoke`.
+///
+/// Runs twice — before the teardown and before the fields are cleared — so a
+/// `SpawnCap` withdrawn while the teardown runs cannot authorize the clear.
+///
+/// Gate 1: the caller must hold `SpawnCap`, the same authority `ForceExit` needs.
+/// Gate 1b: refuse bits whose authority is AMBIENT with no teardown path —
+///   `HYPERVISOR` (H-extension CSR access is not syscall-gated). MMIO device
+///   windows and the privileged path caps are torn down by the revoke itself.
+/// Gate 2: a system service cell (block_io/network) is refused — revoking I/O
+///   authority from a running VFS/net service mid-flight corrupts driver state;
+///   the supervisor freeze/replace flow is the supported path.
+fn cap_revoke_gate(
+    sched: &mut super::scheduler::Scheduler,
+    caller_id: usize,
+    target_tid: usize,
+    cap_mask: u32,
+) -> Result<(), SyscallError> {
+    use api::syscall::cap_mask as CM;
+
+    let has_spawn = sched
+        .tasks
+        .get(&caller_id)
+        .map(|t| t.spawn_cap.is_some())
+        .unwrap_or(false);
+    if !has_spawn {
+        return Err(SyscallError::PermissionDenied);
+    }
+
+    if cap_mask & CM::HYPERVISOR != 0 {
+        crate::audit::log_event(
+            crate::audit::AuditEvent::CapRevoked,
+            &crate::audit::encode_u32x2(target_tid as u32, cap_mask),
+        );
+        log::warn!(
+            "[kernel] CapRevoke: refused ambient-authority bits mask={:#010x} from task {} \
+             (no teardown for hypervisor authority)",
+            cap_mask,
+            caller_id
+        );
+        return Err(SyscallError::NotSupported);
+    }
+
+    let target_is_system = sched
+        .tasks
+        .get(&target_tid)
+        .map(|t| t.block_io_cap.is_some() || t.network_cap.is_some())
+        .unwrap_or(false);
+    if target_is_system {
+        return Err(SyscallError::PermissionDenied);
+    }
+    Ok(())
+}
+
+/// Release `cell`'s MMIO windows of `classes` and take their user accessibility
+/// away.
+///
+/// Fail-closed: an error means a window the Cell can still reach, so the caller
+/// returns without clearing the capability.
+fn revoke_mmio_classes(
+    cell: CellId,
+    classes: crate::resource_registry::MmioClass,
+) -> Result<(), SyscallError> {
+    for (base, len) in crate::resource_registry::revoke_mmio_for(cell, classes) {
+        if let Err(e) = crate::memory::paging::revoke_mmio_user(base, len) {
+            log::error!(
+                "[kernel] CapRevoke: MMIO window {base:#x}+{len:#x} is still user-reachable \
+                 ({e:?}); capability left intact"
+            );
+            return Err(SyscallError::NotSupported);
+        }
+    }
+    Ok(())
+}
+
+/// Notify `target_tid` that `mask` was revoked: `[0xAC, 0xF2, mask_le4]`, the
+/// byte-1 discriminant `0xF2` reserved in `spec/17` §3.
+///
+/// Best-effort by design: the teardown already happened, and a Cell that ignores
+/// the event still lost the hardware. Returns `false` when the target is gone or
+/// its mailbox is full.
+pub(crate) fn send_cap_revoked_event(target_tid: usize, mask: u32) -> bool {
+    let mut msg = [0u8; 6];
+    msg[0] = 0xAC; // App SDK envelope magic
+    msg[1] = 0xF2; // CapRevoked
+    msg[2..6].copy_from_slice(&mask.to_le_bytes());
+    super::ipc_post_nonblock(0, target_tid, &msg).is_ok()
+}
+
 /// Dispatches a system call to the appropriate handler.
 ///
 /// `caller_id` is the ID of the task invoking the syscall.
@@ -4027,80 +4178,109 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 return Err(SyscallError::InvalidCommand);
             }
 
-            if let Some(sched) = super::SCHEDULER.lock().as_mut() {
-                // Gate 1: caller must hold SpawnCap (same authority as ForceExit).
-                let has_spawn = sched
-                    .tasks
-                    .get(&caller_id)
-                    .map(|t| t.spawn_cap.is_some())
-                    .unwrap_or(false);
-                if !has_spawn {
-                    return Err(SyscallError::PermissionDenied);
+            // Gates, then the facts the teardown needs. The teardown itself runs
+            // with SCHEDULER released: the grant reclaim reaches
+            // `live_task_binding` and the notify reaches `ipc_post_nonblock`, and
+            // this spinlock is not reentrant. Both passes re-run the gates, so
+            // nothing is revoked on authority withdrawn while it ran.
+            let target_cell = {
+                let mut sched_opt = super::SCHEDULER.lock();
+                let sched = match sched_opt.as_mut() {
+                    Some(s) => s,
+                    None => return Err(SyscallError::InvalidCommand),
+                };
+                cap_revoke_gate(sched, caller_id, target_tid, cap_mask)?;
+                match sched.tasks.get(&target_tid) {
+                    Some(t) => t.cell_id,
+                    None => return Err(SyscallError::InvalidCommand),
                 }
+            };
 
-                // Gate 1b: refuse bits whose authority is AMBIENT — already handed out
-                // and exercised WITHOUT a per-use syscall re-check, so clearing the TCB
-                // field does not actually revoke it. HYPERVISOR (H-ext CSR access) and
-                // MMIO device windows (mapped into the cell's page tables) both persist
-                // after the field is cleared: the cell keeps poking the hardware. Until
-                // the eager teardown lands (unmap_dma + IOTLB flush, MMIO page-table
-                // unmap — .agents/260712-1901 P01-P05), revoking these would be a lie.
-                // Refuse them so the shipped syscall is honest. block_io/network are
-                // refused by Gate 2 below; SPAWN and BLKREGION are re-checked at each
-                // use (lazy revocation is sound for them).
-                const AMBIENT_UNTIL_TEARDOWN: u32 = CM::HYPERVISOR | CM::MMIO_MASK;
-                if cap_mask & AMBIENT_UNTIL_TEARDOWN != 0 {
-                    crate::audit::log_event(
-                        crate::audit::AuditEvent::CapRevoked,
-                        &crate::audit::encode_u32x2(target_tid as u32, cap_mask),
-                    );
-                    log::warn!(
-                        "[kernel] CapRevoke: refused ambient-authority bits \
-                        mask={:#010x} from task {} (teardown not implemented)",
-                        cap_mask,
-                        caller_id
+            // ── Class-2 teardown, BEFORE any TCB field changes ────────────────
+            // Ambient authority — a mapped MMIO window, an already-shared grant —
+            // is exercised without a per-use syscall re-check, so clearing the
+            // TCB field alone would leave it live. Fail-closed: a teardown that
+            // cannot finish returns with the capability intact.
+            let mmio_revoke = ((cap_mask >> CM::MMIO_SHIFT) & 0xFF) as u8;
+            if mmio_revoke != 0 {
+                revoke_mmio_classes(
+                    target_cell,
+                    mmio_revoke as crate::resource_registry::MmioClass,
+                )?;
+                // A revoked device class can be the authority behind a grant the
+                // target owns (grants carry no source-cap tag), so its owned
+                // grants are reclaimed with it. Frames a live pin still protects
+                // are quarantined rather than freed.
+                reclaim_owned_grants(target_tid);
+            }
+
+            if cap_mask & CM::PCIE_DRIVER != 0 {
+                // The DMA-anywhere surface: the whole domain, its requester
+                // entries, and the BAR windows the Cell claimed. Exactly the
+                // teardown a dying driver Cell gets.
+                if !crate::task::teardown_dma_authority(target_tid) {
+                    log::error!(
+                        "[kernel] CapRevoke: DMA teardown for task {target_tid} was not \
+                         acknowledged; capability left intact"
                     );
                     return Err(SyscallError::NotSupported);
                 }
+                revoke_mmio_classes(
+                    target_cell,
+                    crate::resource_registry::DEV_PCIE as crate::resource_registry::MmioClass,
+                )?;
+                reclaim_owned_grants(target_tid);
+            }
 
-                // Gate 2: protect system service cells — revoking I/O caps from a
-                // running VFS/net service mid-flight corrupts driver state. Use
-                // the supervisor freeze/pause/replacement flow instead.
-                let target_is_system = sched
-                    .tasks
-                    .get(&target_tid)
-                    .map(|t| t.block_io_cap.is_some() || t.network_cap.is_some())
-                    .unwrap_or(false);
-                if target_is_system {
-                    return Err(SyscallError::PermissionDenied);
-                }
+            if cap_mask & CM::PLATFORM != 0 {
+                // The Platform Cell's ECAM config-space window.
+                revoke_mmio_classes(target_cell, crate::resource_registry::CLASS_ECAM)?;
+            }
 
-                let task = match sched.tasks.get_mut(&target_tid) {
-                    Some(t) => t,
+            let mut target_present = true;
+            {
+                let mut sched_opt = super::SCHEDULER.lock();
+                let sched = match sched_opt.as_mut() {
+                    Some(s) => s,
                     None => return Err(SyscallError::InvalidCommand),
                 };
+                cap_revoke_gate(sched, caller_id, target_tid, cap_mask)?;
 
-                // Apply revocation — clear each indicated cap field.
-                if cap_mask & CM::BLOCK_IO != 0 {
-                    task.block_io_cap = None;
-                }
-                if cap_mask & CM::NETWORK != 0 {
-                    task.network_cap = None;
-                }
-                if cap_mask & CM::SPAWN != 0 {
-                    task.spawn_cap = None;
-                }
-                if cap_mask & CM::HYPERVISOR != 0 {
-                    task.hypervisor_cap = None;
-                }
+                match sched.tasks.get_mut(&target_tid) {
+                    Some(task) => {
+                        // Apply revocation — clear each indicated cap field.
+                        if cap_mask & CM::BLOCK_IO != 0 {
+                            task.block_io_cap = None;
+                        }
+                        if cap_mask & CM::NETWORK != 0 {
+                            task.network_cap = None;
+                        }
+                        if cap_mask & CM::SPAWN != 0 {
+                            task.spawn_cap = None;
+                        }
+                        if cap_mask & CM::HYPERVISOR != 0 {
+                            task.hypervisor_cap = None;
+                        }
+                        if cap_mask & CM::PCIE_DRIVER != 0 {
+                            task.pcie_driver_cap = None;
+                        }
+                        if cap_mask & CM::PLATFORM != 0 {
+                            task.platform_cap = None;
+                        }
+                        if cap_mask & CM::SUPERVISOR != 0 {
+                            task.supervisor_cap = None;
+                        }
 
-                // Parameterised sub-fields: clear the indicated bits, preserving the rest.
-                let mmio_revoke = ((cap_mask >> CM::MMIO_SHIFT) & 0xFF) as u8;
-                task.mmio_devices &= !mmio_revoke;
-                let blk_revoke = ((cap_mask >> CM::BLKREGION_SHIFT) & 0xFF) as u8;
-                task.block_regions &= !blk_revoke;
-            } else {
-                return Err(SyscallError::InvalidCommand);
+                        // Parameterised sub-fields: clear the indicated bits,
+                        // preserving the rest.
+                        task.mmio_devices &= !mmio_revoke;
+                        let blk_revoke = ((cap_mask >> CM::BLKREGION_SHIFT) & 0xFF) as u8;
+                        task.block_regions &= !blk_revoke;
+                    }
+                    // The target died while its authority was being torn down.
+                    // Its exit path cleared every capability, so the revoke holds.
+                    None => target_present = false,
+                }
             }
 
             crate::audit::log_event(
@@ -4113,6 +4293,15 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 cap_mask,
                 target_tid
             );
+
+            // Courtesy notification, last and best-effort: the teardown above is
+            // what enforces the revocation, so a target that is gone or whose
+            // mailbox is full does not fail the call.
+            if target_present && !send_cap_revoked_event(target_tid, cap_mask) {
+                log::warn!(
+                    "[kernel] CapRevoke: task {target_tid} not notified (exited or mailbox full)"
+                );
+            }
 
             Ok(0)
         }

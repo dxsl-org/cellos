@@ -236,7 +236,10 @@ fn iotlb_flush_domain(did: u16) -> bool {
 }
 
 /// Issue a page-selective IOTLB flush for a single page `iova` in domain `did`.
-#[allow(dead_code)] // reason: awaits its Phase 02 caller (unmap_range_for_cell)
+///
+/// Returns `false` when the hardware exposes no IVA register (`ECAP.IRO` = 0),
+/// so a caller that must not miss an invalidation flushes the domain instead.
+#[allow(dead_code)] // reason: precision path; every teardown path flushes the domain
 fn iotlb_flush_page(did: u16, iova: u64) -> bool {
     // IVA: bits[63:12] = page address, bits[5:0] = AM (0 = one page).
     let completed = issue_iotlb_invalidation(iotlb_page_command(did), Some(iova & !0xFFF));
@@ -638,12 +641,45 @@ pub(super) fn unmap_cell_domain(tid: u64) -> bool {
     }
 }
 
-/// Issue a page-selective IOTLB flush for a specific IOVA owned by `tid`.
-#[allow(dead_code)] // reason: finer-grained per-IOVA unmap; iommu.rs currently only wires full-cell unmap_cell_domain (Phase 02)
-pub(super) fn unmap_range_for_cell(tid: u64, iova: u64, _size: usize) {
+/// Zero Cell `tid`'s SLPT leaves for `[iova, iova+size)` and drop its cached
+/// translations. Runtime-revoke counterpart of `unmap_cell_domain`: same
+/// requester/domain, but the Cell keeps running and keeps its other ranges.
+///
+/// Leaves are zeroed first and the invalidation follows, because a translation
+/// that is still cached when this returns is the one way DMA can still reach the
+/// range. The domain-wide flush is deliberate: it needs no IVA register
+/// (`ECAP.IRO` is optional), covers every leaf cleared above, and cannot disturb
+/// another Cell's domain.
+pub(super) fn unmap_range_for_cell(
+    tid: u64,
+    iova: u64,
+    size: usize,
+) -> super::iommu::DmaUnmapResult {
     let domains = VTD_DOMAINS.lock();
-    if let Some(domain) = domains.get(&tid) {
-        iotlb_flush_page(domain.did, iova);
+    let Some(domain) = domains.get(&tid) else {
+        return super::iommu::DmaUnmapResult::NothingMapped;
+    };
+
+    let pages = domain.slpt.unmap_range(iova, size);
+    if pages == 0 {
+        return super::iommu::DmaUnmapResult::NothingMapped;
+    }
+    // Publish the zeroed leaves before the invalidation command is issued.
+    fence(Ordering::SeqCst);
+    if iotlb_flush_domain(domain.did) {
+        log::info!(
+            "[vtd] Cell {} DID={} unlinked {pages} page(s) at {iova:#x}",
+            tid,
+            domain.did
+        );
+        super::iommu::DmaUnmapResult::Unmapped { pages }
+    } else {
+        log::warn!(
+            "[vtd] Cell {} DID={} unlinked {pages} page(s) at {iova:#x} but the IOTLB flush timed out",
+            tid,
+            domain.did
+        );
+        super::iommu::DmaUnmapResult::PublishedUnconfirmed { pages }
     }
 }
 

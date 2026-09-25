@@ -1,8 +1,10 @@
 //! Boot self-tests for two trust-model fixes (2026-07-13):
 //!   #7 — spawned threads inherit the parent cell's identity (CellId + CapSet +
 //!        syscall_allowlist + PKU domain), closing the `CellId(0)` quota escape.
-//!   #5 — `sys_cap_revoke` refuses ambient-authority bits (HYPERVISOR, MMIO) with
-//!        `NotSupported` instead of silently clearing a field it cannot truly revoke.
+//!   #5 — `sys_cap_revoke` is honest about ambient authority: MMIO windows are
+//!        torn down (unmapped + released, `.agents/260712-1901` P01-P04) and the
+//!        victim is notified, while HYPERVISOR — which has no teardown path — is
+//!        still refused with `NotSupported`.
 //!
 //! Runs in the single-hart window AFTER `task::init()` but BEFORE
 //! `smp::start_secondaries()` (see `main.rs`), so a synthetic thread inserted into
@@ -26,6 +28,14 @@ use types::CellId;
 const PARENT_TID: usize = 9001;
 const TARGET_TID: usize = 9002;
 const CTRL_TID: usize = 9003;
+/// Target of the privileged-cap revoke (P05): holds pcie_driver/platform/supervisor.
+const DRIVER_TID: usize = 9004;
+/// A synthetic BAR window, registered only under `test-hooks` so the global
+/// BAR table keeps exactly what the ECAM scan put in it.
+#[cfg(feature = "test-hooks")]
+const DRIVER_BAR: usize = 0x5100_0000;
+/// A synthetic requester ID; nothing else claims it during the boot window.
+const DRIVER_BDF: u32 = 0x02_00_00;
 /// Separate cell for the thread-cap section, so its fillers cannot be mistaken
 /// for (or collide with) the identity-inheritance section's parent cell.
 const DOS_CELL_ID: u64 = (crate::memory::cell_quota::MAX_CELLS - 4) as u64;
@@ -42,9 +52,12 @@ const TEST_ALLOWLIST: u64 = !(1u64 << 63);
 const TEST_PKU_KEY: u8 = 2;
 const TEST_PKU_VALUE: u32 = 0xABCD_1234;
 
-/// Build a bare task with the given tid/cell and no caps. Only the fields this
+/// Build a bare task with the given tid/cell and no caps. Only the fields a
 /// test reads/writes need to be meaningful; the task is never scheduled.
-fn mk_task(tid: usize, cell: u64) -> alloc::boxed::Box<Task> {
+///
+/// Shared with the sibling boot self-tests (`grant_reclaim_selftest`,
+/// `mmio_revoke_selftest`) so each keeps one fixture implementation.
+pub(crate) fn mk_task(tid: usize, cell: u64) -> alloc::boxed::Box<Task> {
     let mut task = alloc::boxed::Box::new(Task::new(
         tid,
         CellId(cell),
@@ -57,7 +70,7 @@ fn mk_task(tid: usize, cell: u64) -> alloc::boxed::Box<Task> {
 }
 
 /// Insert a task into the scheduler map (no ready-queue push — never scheduled).
-fn insert(task: alloc::boxed::Box<Task>) {
+pub(crate) fn insert(task: alloc::boxed::Box<Task>) {
     if let Some(sched) = super::SCHEDULER.lock().as_mut() {
         if (task.cell_id.0 as usize) < crate::memory::cell_quota::MAX_CELLS {
             let owner = api::cell_owner::CellOwner::new(
@@ -72,7 +85,7 @@ fn insert(task: alloc::boxed::Box<Task>) {
 }
 
 /// Remove a tid from the scheduler map AND every hart's ready queue.
-fn remove(tid: usize) {
+pub(crate) fn remove(tid: usize) {
     if let Some(sched) = super::SCHEDULER.lock().as_mut() {
         if let Some(task) = sched.tasks.remove(&tid) {
             if (task.cell_id.0 as usize) < crate::memory::cell_quota::MAX_CELLS {
@@ -159,11 +172,14 @@ pub fn self_test() -> bool {
         remove(PARENT_TID);
     }
 
-    // ── #5: honest revoke (ambient bits refused, lazy bits still work) ──────────
+    // ── #5: honest revoke (ambient bits torn down, hypervisor still refused) ────
     {
-        // Caller holds SpawnCap (Gate 1). Target holds an ambient cap (hypervisor)
-        // and an MMIO device bit — neither is truly revocable yet, so revoke must
-        // REFUSE with NotSupported and leave the fields intact.
+        // Caller holds SpawnCap (Gate 1). The target holds an MMIO device bit, an
+        // owned grant and a hypervisor cap. An MMIO window is ambient authority —
+        // a mapped window is reachable with no syscall on the access path — so
+        // revoking it must tear the window down, not just clear the field
+        // (`.agents/260712-1901` P01-P04 replaced P00's blanket refusal).
+        // HYPERVISOR has no teardown path and must still be refused.
         let mut caller = mk_task(PARENT_TID, TEST_CELL_ID);
         caller.spawn_cap = Some(super::cap::SpawnCap::new());
         insert(caller);
@@ -181,7 +197,39 @@ pub fn self_test() -> bool {
                 cap_mask: CM::HYPERVISOR,
             },
         );
-        // (b) MMIO bits → NotSupported, device mask untouched.
+        let hyp_refused = matches!(r_hyp, Err(SyscallError::NotSupported))
+            && if let Some(sched) = super::SCHEDULER.lock().as_ref() {
+                sched
+                    .tasks
+                    .get(&TARGET_TID)
+                    .map(|t| t.hypervisor_cap.is_some())
+                    .unwrap_or(false)
+            } else {
+                false
+            };
+        if !hyp_refused {
+            ok = false;
+            log::error!("[selftest] REVOKE-HYPERVISOR: FAIL r={:?}", r_hyp);
+        }
+
+        // The target owns a grant, and — where the board has an allowlisted
+        // window — an MMIO region of the class it is about to lose.
+        let owned_grant = match handle_syscall(TARGET_TID, Syscall::GrantAlloc { size: 4096 }) {
+            Ok(base) if base != 0 => Some(base),
+            _ => None,
+        };
+        let window = crate::resource_registry::allowed_windows()
+            .first()
+            .copied()
+            .and_then(|(base, len, class)| {
+                crate::resource_registry::request_mmio(CellId(0x1111), base, len, class)
+                    .is_ok()
+                    .then_some((base, len))
+            });
+
+        // (b) MMIO bits → Ok, window released, owned grant reclaimed, the MMIO
+        //     field cleared (the hypervisor cap untouched), and the victim
+        //     notified with `[0xAC, 0xF2, mask_le4]`.
         let r_mmio = handle_syscall(
             PARENT_TID,
             Syscall::CapRevoke {
@@ -189,29 +237,49 @@ pub fn self_test() -> bool {
                 cap_mask: CM::MMIO_MASK,
             },
         );
+        let target_state = super::SCHEDULER.lock().as_ref().and_then(|sched| {
+            sched.tasks.get(&TARGET_TID).map(|t| {
+                let notified = t
+                    .pending_msgs
+                    .as_slice()
+                    .iter()
+                    .filter_map(|msg| msg.wire.as_ref())
+                    .any(|wire| {
+                        let payload = wire.as_slice();
+                        payload.len() == 6
+                            && payload[0] == 0xAC
+                            && payload[1] == 0xF2
+                            && u32::from_le_bytes([payload[2], payload[3], payload[4], payload[5]])
+                                == CM::MMIO_MASK
+                    });
+                (t.mmio_devices, t.hypervisor_cap.is_some(), notified)
+            })
+        });
+        let window_released = window
+            .map(|(base, _)| crate::resource_registry::lookup_mmio_owner(base).is_none())
+            .unwrap_or(true);
+        let grant_reclaimed = owned_grant
+            .map(|base| {
+                matches!(
+                    handle_syscall(TARGET_TID, Syscall::GrantFree { grant_id: base }),
+                    Err(SyscallError::PermissionDenied)
+                )
+            })
+            .unwrap_or(true);
 
-        let refused = matches!(r_hyp, Err(SyscallError::NotSupported))
-            && matches!(r_mmio, Err(SyscallError::NotSupported));
-        let intact = if let Some(sched) = super::SCHEDULER.lock().as_ref() {
-            sched
-                .tasks
-                .get(&TARGET_TID)
-                .map(|t| {
-                    t.hypervisor_cap.is_some()
-                        && t.mmio_devices == crate::resource_registry::DEV_GPIO
-                })
-                .unwrap_or(false)
-        } else {
-            false
-        };
-        if !(refused && intact) {
+        let mmio_ok = r_mmio.is_ok()
+            && target_state.is_some_and(|(devices, hyp, notified)| devices == 0 && hyp && notified)
+            && window_released
+            && grant_reclaimed;
+        if !mmio_ok {
             ok = false;
             log::error!(
-                "[selftest] REVOKE-REFUSE: FAIL refused={} intact={} (hyp={:?} mmio={:?})",
-                refused,
-                intact,
-                r_hyp,
-                r_mmio
+                "[selftest] REVOKE-MMIO: FAIL r={:?} state={:?} window_released={} \
+                 grant_reclaimed={}",
+                r_mmio,
+                target_state,
+                window_released,
+                grant_reclaimed
             );
         }
 
@@ -245,9 +313,86 @@ pub fn self_test() -> bool {
             );
         }
 
+        // (d) Privileged caps are revocable end to end (`.agents/260712-1901`
+        //     P05): `pcie_driver` drains the DMA authority and releases the BDF,
+        //     `platform` releases the ECAM window, `supervisor` is a field clear.
+        let mut driver = mk_task(DRIVER_TID, 0x3333);
+        driver.pcie_driver_cap = Some(super::cap::PcieDriverCap::new());
+        driver.platform_cap = Some(super::cap::PlatformCap::new());
+        driver.supervisor_cap = Some(super::cap::SupervisorCap::new());
+        insert(driver);
+
+        let bdf_claimed = crate::resource_registry::claim_bdf_owner(DRIVER_BDF, DRIVER_TID);
+        // The BAR table is boot-discovered data with no removal path, so the
+        // synthetic window is registered only where the test hook exists.
+        #[cfg(feature = "test-hooks")]
+        let bar_claimed = crate::resource_registry::test_register_region(
+            CellId(0x3333),
+            DRIVER_BAR,
+            0x1000,
+            crate::resource_registry::DEV_PCIE as crate::resource_registry::MmioClass,
+        );
+
+        let r_priv = handle_syscall(
+            PARENT_TID,
+            Syscall::CapRevoke {
+                target_tid: DRIVER_TID,
+                cap_mask: CM::PCIE_DRIVER | CM::PLATFORM | CM::SUPERVISOR,
+            },
+        );
+        let priv_state = super::SCHEDULER.lock().as_ref().and_then(|sched| {
+            sched.tasks.get(&DRIVER_TID).map(|t| {
+                let notified = t
+                    .pending_msgs
+                    .as_slice()
+                    .iter()
+                    .filter_map(|msg| msg.wire.as_ref())
+                    .any(|wire| {
+                        let payload = wire.as_slice();
+                        payload.len() == 6
+                            && payload[0] == 0xAC
+                            && payload[1] == 0xF2
+                            && u32::from_le_bytes([payload[2], payload[3], payload[4], payload[5]])
+                                == CM::PCIE_DRIVER | CM::PLATFORM | CM::SUPERVISOR
+                    });
+                (
+                    t.pcie_driver_cap.is_none(),
+                    t.platform_cap.is_none(),
+                    t.supervisor_cap.is_none(),
+                    notified,
+                )
+            })
+        });
+        let bdf_released =
+            bdf_claimed && crate::resource_registry::owner_of_bdf(DRIVER_BDF).is_none();
+        #[cfg(feature = "test-hooks")]
+        let bar_released =
+            bar_claimed && crate::resource_registry::lookup_mmio_owner(DRIVER_BAR).is_none();
+        #[cfg(not(feature = "test-hooks"))]
+        let bar_released = true;
+
+        let priv_ok = r_priv.is_ok()
+            && priv_state.is_some_and(|(pcie, platform, supervisor, notified)| {
+                pcie && platform && supervisor && notified
+            })
+            && bdf_released
+            && bar_released;
+        if !priv_ok {
+            ok = false;
+            log::error!(
+                "[selftest] REVOKE-PRIVILEGED: FAIL r={:?} state={:?} bdf_released={} \
+                 bar_released={}",
+                r_priv,
+                priv_state,
+                bdf_released,
+                bar_released
+            );
+        }
+
         remove(PARENT_TID);
         remove(TARGET_TID);
         remove(CTRL_TID);
+        remove(DRIVER_TID);
     }
 
     // ── thread-spawn DoS bound ─────────────────────────────────────────────────

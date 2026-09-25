@@ -793,6 +793,17 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         } else {
             log_info("thread-cap self-test FAIL");
         }
+        if task::grant_reclaim_selftest::self_test() {
+            log_info("grant-reclaim self-test PASS (owned reclaimed, received kept, pin withheld)");
+        } else {
+            log_info("grant-reclaim self-test FAIL");
+        }
+        #[cfg(feature = "test-hooks")]
+        if task::mmio_revoke_selftest::self_test() {
+            log_info("mmio-revoke self-test PASS (class selective, user access removed)");
+        } else {
+            log_info("mmio-revoke self-test FAIL");
+        }
         if task::thread_quota_selftest::self_test() {
             log_info("thread-quota self-test PASS (charged, released, enforced)");
         } else {
@@ -1061,6 +1072,12 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         task::futex::run_selftest();
         task::domain_grant::run_selftest();
     }
+
+    // Page-table teardown primitives behind runtime cap revoke (`.agents/260712-1901`
+    // P01). The tables are plain kernel-heap memory, so this needs no IOMMU
+    // hardware and runs on every arch whose lane enables hooks.
+    #[cfg(feature = "test-hooks")]
+    crate::task::drivers::iommu_pt::run_selftest();
 
     // 8. Spawn Embedded Init
     // RV32 Nano bring-up: no init binary — boot to idle loop.

@@ -762,6 +762,179 @@ pub fn unmap_page_x86(vaddr: VAddr) -> PagingResult<()> {
     Ok(())
 }
 
+// ─── MMIO user-access teardown (runtime revocation) ─────────────────────────
+//
+// The revoke counterpart of the `RequestMmio` mapping path: granting a window
+// makes it reachable from ring 3, these take that reach away. Every leg keeps
+// the frame identity-mapped for the kernel — SAS requires it, and the kernel
+// keeps using MMIO windows after a Cell loses them.
+
+/// Remove *user* accessibility from `[base, base+len)` (x86_64).
+///
+/// x86 maps a claimed window on demand (`map_mmio_user_x86`), so revoking it
+/// clears the user leaf PTE; the boot identity map still serves the kernel.
+/// Pages that were never user-mapped are skipped — `unmap_page_x86` is
+/// idempotent. Returns the number of pages that lost user access.
+#[cfg(target_arch = "x86_64")]
+pub fn unmap_mmio_user_x86(base: usize, len: usize) -> PagingResult<usize> {
+    use crate::memory::frame::phys_to_virt;
+    use hal::paging::{walk_read, PTE_PRESENT, PTE_USER};
+
+    let Some(end) = checked_page_end(base, len) else {
+        return Ok(0);
+    };
+    let root_phys = match *KERNEL_ROOT.lock() {
+        Some(p) => p,
+        None => return Ok(0), // paging inactive: nothing is user-reachable
+    };
+    let pml4 = phys_to_virt(root_phys) as *const u64;
+
+    let mut cleared = 0;
+    let mut va = base & !(PAGE_SIZE - 1);
+    while va < end {
+        // SAFETY: pml4 is the kernel's active root table, identity-mapped, and
+        // the walk only reads it.
+        let user_mapped = unsafe { walk_read(pml4, va) }
+            .is_some_and(|pte| pte & (PTE_PRESENT | PTE_USER) == (PTE_PRESENT | PTE_USER));
+        if user_mapped {
+            unmap_page_x86(va)?;
+            cleared += 1;
+        }
+        va += PAGE_SIZE;
+    }
+    Ok(cleared)
+}
+
+/// Remove *user* accessibility from `[base, base+len)` (riscv64 / aarch64).
+///
+/// These arches boot-map MMIO USER for every Cell in the single SAS page table,
+/// so the frame cannot be unmapped — the kernel still uses the window. The
+/// page's permissions are lowered instead, and the Cell's next access faults.
+/// Pages that are not mapped are skipped; a mapped page that cannot be
+/// re-protected is an error, because that page would stay user-reachable.
+#[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
+pub fn clear_mmio_user(base: usize, len: usize) -> PagingResult<usize> {
+    let Some(end) = checked_page_end(base, len) else {
+        return Ok(0);
+    };
+    let mut cleared = 0;
+    let mut va = base & !(PAGE_SIZE - 1);
+    while va < end {
+        match protect_page(va, mmio_kernel_flags()) {
+            Ok(()) => cleared += 1,
+            // Not mapped: nothing to take away.
+            Err(PageTableError::InvalidAddress) => {}
+            Err(e) => {
+                log::error!("[paging] clear_mmio_user: {va:#x} still user-reachable ({e:?})");
+                return Err(e);
+            }
+        }
+        va += PAGE_SIZE;
+    }
+    Ok(cleared)
+}
+
+/// Boot MMIO mapping flags with `USER` removed — what the kernel keeps after a
+/// Cell's access to the window is revoked.
+#[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
+fn mmio_kernel_flags() -> Flags {
+    #[cfg(target_arch = "riscv64")]
+    let bits = Flags::VALID | Flags::READ | Flags::WRITE | Flags::ACCESSED | Flags::DIRTY;
+    #[cfg(target_arch = "aarch64")]
+    let bits =
+        Flags::VALID | Flags::READ | Flags::WRITE | Flags::DEVICE | Flags::ACCESSED | Flags::DIRTY;
+    Flags::from_bits(bits)
+}
+
+/// End of the page-rounded range, or `None` when `base + len` overflows.
+fn checked_page_end(base: usize, len: usize) -> Option<usize> {
+    let page_mask = PAGE_SIZE - 1;
+    base.checked_add(len)
+        .map(|end| (end + page_mask) & !page_mask)
+}
+
+/// Test-hooks only: `(mapped, user_accessible)` for `vaddr`.
+///
+/// Reads the leaf the hardware walks, so a teardown assertion observes the
+/// permission bits a revoked Cell would hit rather than a kernel-side flag.
+#[cfg(feature = "test-hooks")]
+pub fn mapping_state(vaddr: VAddr) -> (bool, bool) {
+    #[cfg(target_arch = "x86_64")]
+    {
+        use crate::memory::frame::phys_to_virt;
+        use hal::paging::{walk_read, PTE_PRESENT, PTE_USER};
+        let Some(root_phys) = *KERNEL_ROOT.lock() else {
+            return (false, false);
+        };
+        let pml4 = phys_to_virt(root_phys) as *const u64;
+        // SAFETY: the live kernel root table, walked read-only.
+        let Some(pte) = (unsafe { walk_read(pml4, vaddr) }) else {
+            return (false, false);
+        };
+        (
+            pte & PTE_PRESENT != 0,
+            pte & (PTE_PRESENT | PTE_USER) == (PTE_PRESENT | PTE_USER),
+        )
+    }
+    #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
+    {
+        use hal::PageTable;
+        // The bits `hal` programs from `Flags::USER`: RISC-V leaf U = bit 4,
+        // AArch64 leaf AP_EL0 = bit 6. Both keep V/VALID = bit 0.
+        const LEAF_VALID: usize = 1 << 0;
+        #[cfg(target_arch = "riscv64")]
+        const LEAF_USER: usize = 1 << 4;
+        #[cfg(target_arch = "aarch64")]
+        const LEAF_USER: usize = 1 << 6;
+
+        let Some(root_phys) = *KERNEL_ROOT.lock() else {
+            return (false, false);
+        };
+        // SAFETY: KERNEL_ROOT holds the live root table's physical address,
+        // identity-mapped on both arches; the walk only reads.
+        let root = unsafe { &mut *(root_phys as *mut PageTable) };
+        let Some(leaf) = root.leaf_entry(vaddr) else {
+            return (false, false);
+        };
+        (leaf & LEAF_VALID != 0, leaf & LEAF_USER != 0)
+    }
+    #[cfg(not(any(
+        target_arch = "riscv64",
+        target_arch = "aarch64",
+        target_arch = "x86_64"
+    )))]
+    {
+        let _ = vaddr;
+        (false, false)
+    }
+}
+
+/// Remove user accessibility from `[base, base+len)` on the running arch.
+///
+/// Used by runtime capability revocation: after this returns `Ok`, the next
+/// access from the revoked Cell to the window faults, and the kernel's own
+/// mapping of the frame is unchanged. `Err` means at least one mapped page is
+/// still user-reachable and the caller must not report the revoke as complete.
+pub fn revoke_mmio_user(base: usize, len: usize) -> PagingResult<usize> {
+    #[cfg(target_arch = "x86_64")]
+    {
+        unmap_mmio_user_x86(base, len)
+    }
+    #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
+    {
+        clear_mmio_user(base, len)
+    }
+    #[cfg(not(any(
+        target_arch = "riscv64",
+        target_arch = "aarch64",
+        target_arch = "x86_64"
+    )))]
+    {
+        let _ = (base, len);
+        Ok(0)
+    }
+}
+
 // ─── Generic map_page / unmap_page wrappers (called from kernel code) ────────
 //
 // These forward to the correct arch implementation. x86_64 versions take raw
