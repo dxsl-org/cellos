@@ -10,7 +10,8 @@
 //!
 //! Messages sent through [`AppContext::send_msg`] carry a 2-byte header:
 //! - byte 0: [`APP_MSG_MAGIC`] (0xAC) — namespace guard, prevents raw-protocol collisions
-//! - byte 1: event type discriminant (0x00 = Message, 0xFF = Shutdown)
+//! - byte 1: event type discriminant (0x00 = Message, 0xFF = Shutdown,
+//!   0xF0 = Snapshot, 0xF1 = Restore, 0xF2 = CapRevoked)
 //! - bytes 2..: payload (caller-defined)
 //!
 //! Messages that do not start with `APP_MSG_MAGIC` are delivered as raw
@@ -123,6 +124,21 @@ pub enum AppEvent {
     Restore {
         /// Fixed-size stash key (null-terminated, decimal swap_id).
         key: [u8; 64],
+    },
+
+    // ── Runtime authority events ─────────────────────────────────────────────
+    /// The kernel revoked capabilities from this cell at runtime.
+    ///
+    /// Sent after the kernel has already torn the authority down: a revoked
+    /// MMIO window is unmapped and a revoked DMA domain is drained, so the cell
+    /// cannot keep using what it lost. The event is a courtesy — drop the
+    /// subsystem that depended on the capability and stop retrying it, rather
+    /// than discovering the loss through a fault.
+    ///
+    /// `mask` uses the `api::syscall::cap_mask` bits the kernel revoked.
+    CapRevoked {
+        /// The revoked capability mask.
+        mask: u32,
     },
 }
 
@@ -311,6 +327,15 @@ impl AppContext {
                     key.copy_from_slice(&buf[2..66]);
                     AppEvent::Restore { key }
                 }
+                // Runtime capability revocation.
+                // Envelope: [0xAC, 0xF2, mask_le4 (4 bytes)]
+                0xF2 if buf.len() >= 6 => {
+                    let mut mask_bytes = [0u8; 4];
+                    mask_bytes.copy_from_slice(&buf[2..6]);
+                    AppEvent::CapRevoked {
+                        mask: u32::from_le_bytes(mask_bytes),
+                    }
+                }
                 _ => AppEvent::Message {
                     sender_tid,
                     data: buf[2..].to_vec(),
@@ -346,6 +371,37 @@ impl AppContext {
 
 /// Re-export `CellRuntime` into the `app` module namespace for convenience.
 pub use crate::runtime::CellRuntime;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The wire contract the kernel's `send_cap_revoked_event` produces:
+    /// `[0xAC, 0xF2, mask_le4]` (spec/17 §3).
+    #[test]
+    fn cap_revoked_envelope_decodes_to_the_revoked_mask() {
+        let mut buf = [0u8; 6];
+        buf[0] = APP_MSG_MAGIC;
+        buf[1] = 0xF2;
+        buf[2..6].copy_from_slice(&0x0000_0504u32.to_le_bytes());
+
+        match AppContext::parse_event_owned(7, &buf) {
+            AppEvent::CapRevoked { mask } => assert_eq!(mask, 0x0000_0504),
+            other => panic!("expected CapRevoked, got {other:?}"),
+        }
+    }
+
+    /// A truncated `0xF2` envelope is not an event: it falls through to a
+    /// Message rather than reporting a mask it never received.
+    #[test]
+    fn truncated_cap_revoked_envelope_is_not_decoded() {
+        let buf = [APP_MSG_MAGIC, 0xF2, 0x04];
+        assert!(matches!(
+            AppContext::parse_event_owned(7, &buf),
+            AppEvent::Message { .. }
+        ));
+    }
+}
 
 impl Default for AppContext {
     fn default() -> Self {
