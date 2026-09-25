@@ -141,8 +141,27 @@ nothing else.
    handling mangles it). Recorded so the next reader does not attribute it to B0; the cell-death
    paths B0 actually depends on are covered by the B0 witness, which passes on the same kernel.
 
-## Assumptions
+8. **The organisation's CI is red at HEAD for an infrastructure reason, not for code.** The matrix
+   jobs install `gcc-riscv64-unknown-elf g++-riscv64-unknown-elf` and the runner now reports
+   `E: Unable to locate package g++-riscv64-unknown-elf`, so every job behind that install step fails
+   before it compiles anything (`Build (riscv64/aarch64)`, `Clippy (aarch64/x86_64)`,
+   `Host unit tests (types + api)`, `Security Scan`, `CellosFS /srv`, `Network Data-Path`) — the same
+   set was already failing on the pre-B0 tip (`199a802bc`), which is the baseline this programme was
+   compared against. Six CI-visible problems *were* fixed (the first two are B0's own, the rest are
+   one-line blockers from earlier lanes): `cargo fmt` on the new files (the job checks formatting);
+   `docs/code-metrics.generated.md` (that job runs `generate-code-metrics.py --check`, and the file
+   was already ~2.1k kernel lines stale before B0 added 68 more); `tools/cellos-cc` committed mode
+   `100644` by `b9a32ad69`, which made a fresh checkout fail its CMake probe with `Permission denied`;
+   the workspace's only `-D warnings` clippy failure (`manual_is_multiple_of`, `kernel/src/task/futex.rs`
+   from `4884ace5e`); a stale duplicate doc comment in `cells/drivers/dwc2-usb/src/hid/mod.rs` from
+   `f20f2d19d`; and `needless_range_loop` in `cells/tests/tls-test/src/main.rs` (also `4884ace5e`).
+   With those, CI's own clippy command (workspace, rv64, `-D warnings`) is clean locally. What remains
+   red is infrastructure: the runner cannot install `g++-riscv64-unknown-elf`, so the Build/Clippy/Host
+   unit tests/Security Scan jobs fail at the install step. The same lint job also warns
+   `fatal: No url found for submodule path 'cells/demos/doom/src/c/doomgeneric' in .gitmodules` — the
+   orphan gitlink reported earlier.
 
+## Assumptions
 - A supervisor Cell is a signed, `SpawnCap`-bearing cell; monitoring stays gated on `SpawnCap`, so
   no ABI widening was needed (ADR-0021 §2.4).
 - Restart semantics mirror the ones the project already proved in `init` (Spec 12 §4.3): Permanent /
