@@ -137,7 +137,7 @@ guarantee the kernel does not offer (Spec 17 §6).
 | Item | Location |
 |---|---|
 | Program roadmap (B0 scope, §8 open decisions) | `docs/roadmap/beam-parity-backend-roadmap.md` |
-| Implementation plan | `.agents/260925-2130-beam-parity-b0-actor-supervisor/plan.md` |
+| Implementation plan | `.agents/260925-2214-beam-parity-b0-actor-supervisor/plan.md` |
 | Supervisor semantics precedent | `docs/specs/12-reliability.md` §4.3, `cells/tools/init/src/{supervisor,service_table}.rs` |
 | IPC rules this design obeys | `docs/specs/17-ipc-wire-contract.md` §2, §3, §5, §6, §7, §9, §10.6 |
 | Tier model | `docs/decisions/0015-dual-mode-hybrid-architecture.md` |
