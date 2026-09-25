@@ -187,27 +187,21 @@ nothing else.
    `elapsed_ticks=1452030` against a `900000` proof ceiling, and an INCONCLUSIVE-only run cannot
    pass by the gate's own rule).
 
-9. **A shell→cell command-line regression is live in the tree and breaks at least four lanes.**
-   `network_httpd_serves_file` (boot suite) sends `httpd 9091 /tmp/resp.txt &`, the shell spawns the
-   cell, and the cell logs `httpd: listening on :8080` — it never saw its arguments, so the test's
-   request to port 9091 gets an empty response. The same shape explains the other boot-suite
-   failures (`network_tcp_listen_accept`, `network_tcp_send_recv`, `network_wget_downloads_to_vfs`),
-   the Tier-2 cases that pass an argument (`tier2-exploit peer` running its default NULL mode), and
-   the four `hotswap-smoke` cases — one root cause, not five bugs. Reproduction is 13 s locally and
-   does **not** need CI:
-   `cd tests/integration && cargo test --target x86_64-unknown-linux-gnu --test boot network_httpd_serves_file -- --test-threads=1 --nocapture`.
-   Falsified against B0: the identical failure occurs with the kernel change stashed and rebuilt, so
-   it is a pre-existing regression from another lane (the argv storage rework of
-   `kernel/src/task/{launch,tcb}.rs` + `kernel/src/cell/state_stash.rs` is the prime suspect; the
-   last recorded green for this suite is the 2026-09-15 CI-gate closure).
-   Where the chain stands after reading it end to end — shell publishes with
-   `ostd::set_spawn_argv` (`cells/tools/shell/src/executor.rs:884`), kernel allows the shell's
-   `StateStash` for that key and stages it (`kernel/src/task/syscall.rs:5747-5761`), the spawn
-   request consumes it (`:1019`, `:1041`), launch installs it as `Task::inherited_argv`
-   (`kernel/src/task/launch.rs:154`), and the child's `StateRestore` returns it (`:5777`): every
-   link matches on paper, and the shell reports no failure, so the break is in the data actually
-   crossing one of those links (structured encode/decode in `libs/ostd/src/args.rs`, or which route's
-   request consumes the staged bytes) — that is the next step, and it is its own investigation.
+9. **FIXED — a staged command line was discarded by the next syscall that followed it.**
+   `StagedSpawnArgvCleanup` was built with
+   `bool::then_some(StagedSpawnArgvCleanup { .. })`, and `then_some` takes its argument **by
+   value**: the guard was therefore constructed for *every* syscall and dropped again immediately
+   when the predicate was false, and its `Drop` discards the caller's staged command line. The
+   shell's sequence (`set_spawn_argv` → the VFS read `sys_spawn_from_path` performs → `SpawnFromElf`)
+   lost the argv every time, so cells started with defaults: `httpd 9091 /tmp/resp.txt` listened on
+   :8080 and `tier2-exploit peer` ran its NULL-write mode. Found with temporary logging at each hop
+   — `stage caller=19 len=26` immediately followed by `take caller=19 present=0` — and fixed in
+   `982ccfd94` by building the guard only for the four spawn syscalls.
+   Recovered, verified locally: `network_httpd_serves_file` (the 13 s reproducer now passes) and two
+   of the three `tier2-fault-isolation` cases (2/5 → 4/5).
+   **Not explained by it, still open**: four `hotswap-smoke` cases (unchanged at 11/15),
+   `posix_shim_getentropy`, and one boot/network case. The earlier note in this plan claiming one root
+   cause covered five lanes was too broad; these need their own diagnosis.
 
 ## Assumptions
 - A supervisor Cell is a signed, `SpawnCap`-bearing cell; monitoring stays gated on `SpawnCap`, so
