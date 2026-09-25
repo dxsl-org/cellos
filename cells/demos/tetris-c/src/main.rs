@@ -28,7 +28,8 @@ use api::input::{InputEvent, KeyState, KeySym};
 use ostd::display::{wait_for_compositor, ViSurface};
 use ostd::font::FONT8X8;
 use ostd::input::{poll_events, request_focus};
-use ostd::syscall::{sys_exit, sys_get_time};
+use ostd::io::println;
+use ostd::syscall::sys_exit;
 use ostd::task::yield_now;
 
 // ── Screen geometry ───────────────────────────────────────────────────────
@@ -87,6 +88,7 @@ pub extern "C" fn main() {
                 sys_exit(1);
             }
         }
+        println("[tetris-c] TETRIS-PORT: READY");
         while !request_focus() {
             yield_now();
         }
@@ -110,7 +112,7 @@ extern "C" {
 /// C callback — must only be called from the single-threaded tetris C core.
 #[no_mangle]
 pub unsafe extern "C" fn vicell_get_ticks_ms() -> u32 {
-    (sys_get_time() / 10_000) as u32
+    port_platform::PlatformHost::new().time_ms() as u32
 }
 
 /// Dequeue one pending key event.  Drains new ViCell input events first.

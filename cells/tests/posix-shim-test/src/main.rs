@@ -40,7 +40,7 @@ api::declare_syscalls![
     Recv,
     Log,
     LookupService,
-    GetRandom,
+    GetTime,
     Open,
     Fstat,
     Rename,
@@ -68,6 +68,16 @@ extern "C" {
     fn close(fd: i32) -> i32;
 }
 
+extern "C" {
+    fn cellos_porting_smoke() -> i32;
+}
+
+/// Platform-host hook consumed by the external CMake/Meson smoke source.
+#[no_mangle]
+pub extern "C" fn cellos_time_ms() -> u64 {
+    port_platform::PlatformHost::new().time_ms()
+}
+
 #[no_mangle]
 pub fn main() {
     fstat::test_fstat();
@@ -78,6 +88,17 @@ pub fn main() {
     fstat::test_rename();
     test_getentropy();
     test_net();
+    test_porting_smoke();
+}
+
+fn test_porting_smoke() {
+    // SAFETY: the external static C archive is linked by build.rs and has no
+    // preconditions beyond the Rust host callback above.
+    if unsafe { cellos_porting_smoke() } == 0 {
+        println("[posix-shim] PORTING-SMOKE: OK");
+    } else {
+        println("[posix-shim] PORTING-SMOKE: FAIL");
+    }
 }
 
 fn test_getentropy() {

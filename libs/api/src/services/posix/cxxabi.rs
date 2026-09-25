@@ -69,6 +69,37 @@ pub unsafe extern "C" fn __cxa_guard_abort(_guard: *mut u64) {
     // Init failed — leave guard at 0 so next attempt retries
 }
 
+/// Static-destructor registration — accepted and ignored.
+///
+/// A C++ compiler emits `atexit` (GCC/clang with `-fno-use-cxa-atexit`) or
+/// `__cxa_atexit` to run global destructors at process exit. A Cell has no
+/// process teardown to run them in: the kernel reclaims the address space on
+/// exit, and there is no `exit`-with-destructors path to hang them on. The
+/// registration therefore succeeds and never fires, which makes static
+/// destructors a documented non-feature of the freestanding C++ profile rather
+/// than a silent leak (the frames are reclaimed by the kernel either way).
+///
+/// # Safety
+/// Both functions only accept a callback and return 0; no pointer is
+/// dereferenced and no callback is ever invoked.
+#[no_mangle]
+pub unsafe extern "C" fn atexit(_handler: Option<extern "C" fn()>) -> core::ffi::c_int {
+    0
+}
+
+/// `__cxa_atexit` — the C++ ABI form of [`atexit`], with the same semantics.
+///
+/// # Safety
+/// As [`atexit`]: arguments are ignored and the handler never runs.
+#[no_mangle]
+pub unsafe extern "C" fn __cxa_atexit(
+    _handler: Option<extern "C" fn(*mut core::ffi::c_void)>,
+    _arg: *mut core::ffi::c_void,
+    _dso: *mut core::ffi::c_void,
+) -> core::ffi::c_int {
+    0
+}
+
 /// abort() — terminates cell immediately. No cleanup, no atexit handlers.
 /// This is the correct behavior for SAS: kernel reclaims all resources.
 ///

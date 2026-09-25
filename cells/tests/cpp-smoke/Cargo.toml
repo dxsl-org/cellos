@@ -1,18 +1,17 @@
 [package]
-name = "tetris-c"
+name = "app-cpp-smoke"
 version = "0.1.0"
 edition = "2021"
 license.workspace = true
-description = "Tetris-C port via Banaxi-Tech/Tetris-OS — runs on the Cellos compositor with keyboard input"
+description = "cpp-freestanding runtime profile smoke test (language subset + shim allocator + VFS read)"
 
 [[bin]]
-name = "tetris-c"
+name = "cpp-smoke"
 path = "src/main.rs"
 
 [dependencies]
 api  = { path = "../../../libs/api", version = "0.1.0" }
 ostd = { path = "../../../libs/ostd", version = "0.2.0" }
-port-platform = { path = "../../../libs/port-platform", version = "0.1.0" }
 
 [build-dependencies]
 cc         = "1.0"

@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MPL-2.0
+# Compile C sources for a Cellos cell. Linking belongs to the Rust cell host,
+# which supplies crt0, the PIE linker script, and declared-capability runtime.
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+TARGET="${CELLOS_C_TARGET:-riscv64gc-unknown-none-elf}"
+case "$TARGET" in
+  riscv64gc-unknown-none-elf)
+    CC="${CELLOS_CC_REAL:-riscv64-unknown-elf-gcc}"
+    ARCH=(-march=rv64gc -mabi=lp64d -mcmodel=medany)
+    ;;
+  aarch64-unknown-none-softfloat)
+    CC="${CELLOS_CC_REAL:-clang}"
+    ARCH=(--target=aarch64-unknown-none-elf -mgeneral-regs-only)
+    ;;
+  *) echo "cellos-cc: unsupported CELLOS_C_TARGET=$TARGET" >&2; exit 64 ;;
+esac
+case " $* " in
+  *" --version "*|*" -v "*|*" -dumpmachine "*|*" -print-search-dirs "*|*" -E "*|*" -Wl,--version "*)
+    exec "$CC" "${ARCH[@]}" "$@"
+    ;;
+  *" -c "*) ;;
+  *) echo "cellos-cc: compiling only; link C objects from a Rust Cell host" >&2; exit 64 ;;
+esac
+exec "$CC" "${ARCH[@]}" -fPIC -ffreestanding -fno-stack-protector \
+  -I"$ROOT/libs/port-platform/include" -I"$ROOT/third_party/freestanding-include" "$@"

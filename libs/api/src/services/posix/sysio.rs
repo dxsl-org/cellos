@@ -132,10 +132,11 @@ pub unsafe extern "C" fn open(name: *const c_char, flags: c_int, mode: c_int) ->
 }
 
 /// # Safety
-/// No pointers are dereferenced; all arguments are ignored by this stub.
+/// No pointers are dereferenced. `fcntl` commands are unsupported by the shim,
+/// so this fails rather than falsely reporting a successful descriptor change.
 #[no_mangle]
 pub unsafe extern "C" fn _fcntl(_fd: c_int, _cmd: c_int, _arg: c_int) -> c_int {
-    0
+    -1
 }
 
 /// # Safety
@@ -154,6 +155,43 @@ pub unsafe extern "C" fn _execve(
 #[no_mangle]
 pub unsafe extern "C" fn _fork() -> c_int {
     -1
+}
+
+/// # Safety
+/// No preconditions; fork is unsupported in SAS and always fails.
+#[no_mangle]
+pub unsafe extern "C" fn fork() -> c_int {
+    _fork()
+}
+
+/// # Safety
+/// Arguments are ignored: Cellos cells are statically linked and cannot load
+/// runtime libraries.
+#[no_mangle]
+pub unsafe extern "C" fn dlopen(_filename: *const c_char, _flags: c_int) -> *mut c_void {
+    core::ptr::null_mut()
+}
+
+/// # Safety
+/// Arguments are ignored: a native cell cannot mutate page permissions.
+#[no_mangle]
+pub unsafe extern "C" fn mprotect(_addr: *mut c_void, _len: usize, _prot: c_int) -> c_int {
+    -1
+}
+
+/// # Safety
+/// Arguments are ignored: mappings, including file-backed `MAP_SHARED`, are
+/// unsupported by the native-cell ABI.
+#[no_mangle]
+pub unsafe extern "C" fn mmap(
+    _addr: *mut c_void,
+    _len: usize,
+    _prot: c_int,
+    _flags: c_int,
+    _fd: c_int,
+    _offset: c_long,
+) -> *mut c_void {
+    core::ptr::null_mut()
 }
 
 /// # Safety

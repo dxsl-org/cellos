@@ -89,38 +89,15 @@ fn main() {
     // PIE linker script — kernel assigns VA at spawn time.
     cell_build::emit_linker_script();
 
-    // RISC-V: link picolibc for memset/memcpy builtins used in rendering
-    if target.contains("riscv") {
-        link_picolibc();
-    }
-
     println!("cargo:rerun-if-changed={TETRIS_OS_DIR}");
     println!("cargo:rerun-if-changed=src/c/vicell_platform.c");
 }
 
-fn link_picolibc() {
-    let libc = run_riscv_gcc(&["--print-file-name=libc.a"]);
-    let libgcc = run_riscv_gcc(&["--print-libgcc-file-name"]);
-    for p in [&libc, &libgcc] {
-        if let Some(dir) = std::path::Path::new(p).parent() {
-            let d = dir.to_string_lossy();
-            if !d.is_empty() && d != "." {
-                println!("cargo:rustc-link-search=native={d}");
-            }
-        }
-    }
-    println!("cargo:rustc-link-lib=static=c");
-    println!("cargo:rustc-link-lib=static=m");
-    println!("cargo:rustc-link-lib=static=gcc");
-    println!("cargo:rustc-link-arg=--allow-multiple-definition");
-}
-
 fn run_riscv_gcc(args: &[&str]) -> String {
-    let mut all = vec!["-march=rv64gc", "-mabi=lp64d"];
-    all.extend_from_slice(args);
-    std::process::Command::new("riscv-none-elf-gcc")
-        .args(&all)
+    std::process::Command::new("riscv64-unknown-elf-gcc")
+        .args(["-march=rv64gc", "-mabi=lp64d"])
+        .args(args)
         .output()
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_owned())
         .unwrap_or_default()
 }
