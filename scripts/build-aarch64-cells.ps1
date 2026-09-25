@@ -182,9 +182,9 @@ Assert-CellBuild 'tier2-smoke' $LASTEXITCODE
 cargo build --release -p tier2-exploit --target $target 2>&1 | Select-Object -Last 5
 Assert-CellBuild 'tier2-exploit' $LASTEXITCODE
 if ($BoardRpi3) {
-    Write-Host "Building driver-dwc2-usb (USB host controller)..."
-    cargo build --release -p driver-dwc2-usb --target $target 2>&1 | Select-Object -Last 5
-    Assert-CellBuild 'driver-dwc2-usb' $LASTEXITCODE
+    Write-Host "Building DWC2 host and isolated LAN9514 front-end..."
+    cargo build --release -p driver-dwc2-usb --bin driver-dwc2-usb --bin driver-lan9514 --target $target 2>&1 | Select-Object -Last 5
+    Assert-CellBuild 'driver-dwc2-usb/driver-lan9514' $LASTEXITCODE
 
     # Browser stack: desktop shell + native Ocel viewer + its Tier 2 JS engine service.
     # All three talk to the compositor over ViSurface IPC, so they are board-agnostic
@@ -264,12 +264,13 @@ if (-not $BoardRpi3) {
 if ($BoardRpi3) {
     $cells += @(
         @{ Bin = "driver-dwc2-usb";    Dst = "/bin/dwc2-usb"    },
+        @{ Bin = "driver-lan9514";     Dst = "/bin/lan9514"     },
         @{ Bin = "driver-bcm-display"; Dst = "/bin/bcm-display" },
         @{ Bin = "service-compositor"; Dst = "/bin/compositor"  },
         @{ Bin = "fb-console";          Dst = "/bin/fb-console"  },
-        @{ Bin = "desktop";            Dst = "/bin/desktop"     },
-        @{ Bin = "ocel";               Dst = "/bin/ocel"        },
-        @{ Bin = "ocel-js";            Dst = "/bin/ocel-js"     }
+        @{ Bin = "desktop";             Dst = "/bin/desktop"     },
+        @{ Bin = "ocel";                Dst = "/bin/ocel"        },
+        @{ Bin = "ocel-js";             Dst = "/bin/ocel-js"     }
     )
 }
 if ($StorageTest) {

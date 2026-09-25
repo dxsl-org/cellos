@@ -106,7 +106,11 @@ pub struct ReportLayout {
 /// Parse result for a whole report descriptor.
 #[derive(Clone, Debug, Default)]
 pub struct HidReportMap {
+    /// Input reports — what the device sends (keys, buttons, axes).
     pub reports: Vec<ReportLayout>,
+    /// Output reports — what the host sends the device. A keyboard's LED bitmap
+    /// is the one this driver writes; anything else declared here is ignored.
+    pub outputs: Vec<ReportLayout>,
     /// True when the descriptor declares any Report ID — reports then carry a
     /// leading report-ID byte that the caller must strip.
     pub uses_report_ids: bool,
@@ -175,6 +179,27 @@ fn clamp_logical(value: i32, size_bits: u32) -> i32 {
     (value as i64).clamp(min, max) as i32
 }
 
+/// Append one main item's field to its report's layout, extending the report's
+/// total bit length.
+///
+/// A report is built in declaration order, so a field's bit offset is wherever
+/// the previous fields of the same report ended — which is why the length is
+/// carried per report rather than derived from the fields on demand.
+fn append_field(reports: &mut Vec<ReportLayout>, field: HidField) {
+    let bits = field.size_bits.saturating_mul(field.count);
+    match reports.iter_mut().find(|r| r.report_id == field.report_id) {
+        Some(r) => {
+            r.fields.push(field);
+            r.total_bits = r.total_bits.saturating_add(bits);
+        }
+        None => reports.push(ReportLayout {
+            report_id: field.report_id,
+            fields: alloc::vec![field],
+            total_bits: bits,
+        }),
+    }
+}
+
 /// Parse a HID report descriptor into a field map.
 ///
 /// Unknown items are skipped by size, which is what makes this tolerant of
@@ -225,26 +250,22 @@ pub fn parse_report_descriptor(data: &[u8]) -> HidReportMap {
         match item_type {
             // ── Main items ─────────────────────────────────────────────────
             0 => match tag {
-                0x8 | 0x9 | 0xB => {
-                    // Input / Output / Feature. Only Input carries device→host
-                    // data; Output (LEDs) and Feature are not decoded.
-                    if tag == 0x8 && globals.report_size > 0 && globals.report_count > 0 {
-                        let flags = raw;
-                        let is_variable = flags & 0x02 != 0;
-
-                        let report_id = globals.report_id;
-                        let offset = match map.reports.iter().find(|r| r.report_id == report_id) {
-                            Some(r) => r.total_bits,
-                            None => {
-                                map.reports.push(ReportLayout {
-                                    report_id,
-                                    fields: Vec::new(),
-                                    total_bits: 0,
-                                });
-                                0
-                            }
+                0x8 | 0x9 => {
+                    // Input / Output. Input is what the device sends — keys,
+                    // buttons, axes — and Output is what the host sends it,
+                    // which for a keyboard is the LED bitmap. Feature reports
+                    // travel in neither direction's report and are dropped.
+                    if globals.report_size > 0 && globals.report_count > 0 {
+                        let reports = if tag == 0x8 {
+                            &mut map.reports
+                        } else {
+                            &mut map.outputs
                         };
-
+                        let report_id = globals.report_id;
+                        let offset = reports
+                            .iter()
+                            .find(|r| r.report_id == report_id)
+                            .map_or(0, |r| r.total_bits);
                         let collection = classify_collection(&collections);
                         let field = HidField {
                             report_id,
@@ -254,18 +275,18 @@ pub fn parse_report_descriptor(data: &[u8]) -> HidReportMap {
                             usages: locals.usages.clone(),
                             usage_min: locals.usage_min,
                             usage_max: locals.usage_max,
-                            is_variable,
+                            is_variable: raw & 0x02 != 0,
                             logical_min: globals.logical_min,
                             logical_max: globals.logical_max,
                             collection,
                         };
-
-                        let bits = globals.report_size.saturating_mul(globals.report_count);
-                        if let Some(r) = map.reports.iter_mut().find(|r| r.report_id == report_id) {
-                            r.fields.push(field);
-                            r.total_bits = r.total_bits.saturating_add(bits);
-                        }
+                        append_field(reports, field);
                     }
+                    locals = Locals::default();
+                }
+                0xB => {
+                    // Feature reports are read and written by the caller's own
+                    // control transfers, never decoded here.
                     locals = Locals::default();
                 }
                 0xA => {
@@ -341,7 +362,7 @@ pub fn parse_report_descriptor(data: &[u8]) -> HidReportMap {
 
     // Logical bounds were parsed before `report_size` may have been finalised;
     // clamp them now against each field's own width.
-    for r in map.reports.iter_mut() {
+    for r in map.reports.iter_mut().chain(map.outputs.iter_mut()) {
         for f in r.fields.iter_mut() {
             f.logical_min = clamp_logical(f.logical_min, f.size_bits);
             f.logical_max = clamp_logical(f.logical_max, f.size_bits);

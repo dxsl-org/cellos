@@ -28,7 +28,10 @@ extern crate alloc;
 use alloc::vec::Vec;
 
 use crate::delay_ms;
-use crate::hid::{decode_boot_report, BootState, EvdevEvent, HidDecoder, HidKind, INPUT_EVENT_LEN};
+use crate::hid::{
+    decode_boot_report, BootState, EvdevEvent, HidDecoder, HidDeviceId, HidKind, LedOutput,
+    DEVICE_EVENT_LEN, MAX_LED_REPORT,
+};
 use crate::hub::UsbHub;
 use crate::usb_channel::UsbHostEngine;
 use crate::usb_desc::{
@@ -50,20 +53,54 @@ const REPORT_BUF: usize = 64;
 /// first SETUP is lost, so one attempt is not enough to tell a dead device from
 /// a slow one.
 const ENUM_ATTEMPTS: usize = 3;
+/// Frame interval between retried HID Output reports.
+///
+/// A split-control request can transiently receive NYET while the hub's
+/// translator is serving the interrupt endpoint. Retrying at 20 Hz keeps a
+/// failed LED update visible to the user without competing continuously with
+/// keyboard polling.
+const LED_RETRY_FRAMES: u32 = 50;
 
-/// One enumerated HID interface with its own endpoint and decoder.
+/// The retry disposition for a failed HID Output report.
+///
+/// A STALL is the device rejecting this report request; only bus or hub
+/// availability failures are eligible for the bounded retry queue.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum LedFailureDisposition {
+    Retry,
+    Reject,
+}
+
+#[inline]
+fn led_failure_disposition(stalled: bool) -> LedFailureDisposition {
+    if stalled {
+        LedFailureDisposition::Reject
+    } else {
+        LedFailureDisposition::Retry
+    }
+}
+
+/// One enumerated HID interface with one in-host decoder state.
 pub struct HidInterface {
+    /// Host-local logical interface identity, scoped to this host-cell lifetime.
+    pub device: HidDeviceId,
     pub channel: usize,
     pub dev_addr: u8,
     pub interface: u8,
     pub endpoint: EndpointDesc,
-    /// Descriptor-driven decoder, when the report descriptor parsed.
     pub decoder: Option<HidDecoder>,
-    /// Boot-protocol state, used when `decoder` is `None`.
     pub boot_state: BootState,
     pub kind: HidKind,
-    /// Packets received (diagnostics).
-    pub reports_seen: u32,
+    /// The output report that lights this device's lock LEDs, when it has one.
+    pub leds: Option<LedOutput>,
+    /// Last LED bitmap programmed into the device, so a repeat costs no traffic.
+    pub leds_set: Option<u8>,
+    /// Latest lock bitmap requested by the input service, retained until it is
+    /// accepted by the device.
+    pub desired_leds: Option<u8>,
+    /// Full USB frame of the most recent Output-report attempt.
+    led_retry_frame: Option<u32>,
+
     /// How this device is reached: through the hub, or directly.
     ///
     /// Carried per interface because polling sets the context on the engine
@@ -120,10 +157,6 @@ pub fn attach_port(
     hub.clear_port_change(port, crate::hub::C_PORT_CONNECTION);
 
     let addr = *next_addr;
-    if addr == 0 {
-        println("[usb-hid] WARN: address space exhausted");
-        return None;
-    }
 
     // A device behind the hub can be slower than the hub itself, and the core
     // will not run a high-speed channel programmed with 8-byte packets (nor
@@ -180,7 +213,6 @@ pub fn attach_port(
 
     match brought_up {
         Some(descriptors) => {
-            // Only a device that came all the way up consumes its address.
             *next_addr = next_addr.saturating_add(1);
             Some((addr, descriptors, split))
         }
@@ -366,6 +398,7 @@ fn start_interface(
     // The HID descriptor's wDescriptorLength is authoritative; the same request
     // with a short buffer is what truncated descriptors come from.
     let mut decoder = None;
+    let mut descriptor_leds = None;
     if let Some(len) = iface.report_descriptor_len {
         let len = len as usize;
         if len > 0 && len <= 1024 {
@@ -383,16 +416,37 @@ fn start_interface(
             if got > 0 {
                 let map = crate::hid::parse_report_descriptor(&rd[..got]);
                 if !map.reports.is_empty() {
-                    let parsed_kind = HidKind::from_map(&map);
                     println("[usb-hid] report descriptor parsed");
+                    descriptor_leds = LedOutput::from_map(&map);
                     decoder = Some(HidDecoder::new(map));
-                    // A descriptor that names no collection still decodes; the
-                    // interface's own protocol then supplies the class.
-                    let _ = parsed_kind;
                 } else {
                     println("[usb-hid] WARN: report descriptor declared no fields");
                 }
             }
+        }
+    }
+
+    // ── Lock LEDs ────────────────────────────────────────────────────────────
+    //
+    // The keyboard lights Caps/Num/Scroll Lock itself, and nothing but an Output
+    // report can set them. The report the descriptor declares wins, report ID
+    // and bit order included; a boot-capable interface that declared none takes
+    // the fixed boot byte, which is what the fallback path is polling through.
+    let leds = descriptor_leds.or_else(|| iface.supports_boot().then(LedOutput::boot));
+    match leds.as_ref() {
+        Some(l) => {
+            print("[usb-hid] iface ");
+            print_u8(iface.number);
+            print(" LED output report=");
+            print_usize_hid(l.report_id() as usize);
+            print(" len=");
+            print_usize_hid(l.payload_len());
+            println("");
+        }
+        None => {
+            print("[usb-hid] iface ");
+            print_u8(iface.number);
+            println(" declares no LED output report");
         }
     }
 
@@ -440,6 +494,7 @@ fn start_interface(
     println("");
 
     Some(HidInterface {
+        device: HidDeviceId(0),
         split,
         last_poll_frame: 0,
         split_pending: false,
@@ -450,14 +505,14 @@ fn start_interface(
         decoder,
         boot_state: BootState::default(),
         kind,
-        reports_seen: 0,
+        leds,
+        leds_set: None,
+        desired_leds: None,
+        led_retry_frame: None,
     })
 }
 
 /// Start every drivable HID interface of one already-configured device.
-///
-/// Returns how many were started. `channel_cursor` is the next free host
-/// channel so two devices never share one.
 pub fn start_hid_interfaces(
     engine: &UsbHostEngine<'_>,
     addr: u8,
@@ -473,6 +528,7 @@ pub fn start_hid_interfaces(
         let Some(mut hid) = start_interface(engine, addr, iface) else {
             continue;
         };
+        hid.device = HidDeviceId((out.len() + 1) as u32);
         hid.channel = channel_cursor + out.len();
         out.push(hid);
         started += 1;
@@ -558,10 +614,6 @@ pub fn poll_interface(
         &mut iface.split_pending,
     );
 
-    // Written here, after the poll has finished and before anything else touches
-    // the channel, so reading it cannot move what it describes.
-    crate::usb_channel::trace_dump();
-
     let got = match result {
         Ok(n) => n,
         // Only a stall needs clearing. Everything else a poll can end on is a
@@ -598,21 +650,6 @@ pub fn poll_interface(
         return;
     }
 
-    iface.reports_seen = iface.reports_seen.saturating_add(1);
-    // Whether the reports keep arriving is the first thing to know when input
-    // stops reaching the shell: a driver that has gone quiet and a shell that
-    // has stopped consuming look identical from the console, and they are
-    // different bugs. The first few are listed, then a periodic tally.
-    if iface.reports_seen <= 4 || iface.reports_seen.is_multiple_of(512) {
-        print("[usb-hid] iface ");
-        print_u8(iface.interface);
-        print(" reports=");
-        print_usize_hid(iface.reports_seen as usize);
-        print(" len=");
-        print_usize_hid(got);
-        println("");
-    }
-
     match iface.decoder.as_mut() {
         Some(dec) => dec.process(&buf[..got], out),
         None => {
@@ -637,17 +674,100 @@ fn detect_boot_kind(report: &[u8]) -> HidKind {
     }
 }
 
-/// Send one event to the input service.
+/// Retain the latest lock bitmap requested by the input service.
 ///
-/// `tid` is the input service's current tid; a failed send means it is not
-/// accepting right now (restarting, or not yet up), which the caller tolerates
-/// by dropping the event rather than spinning.
-pub fn forward_event(tid: usize, ev: &EvdevEvent) -> bool {
+/// A failed Output transfer is transient on a split hub path. Keeping only the
+/// latest desired state means rapid CAPS/NUM presses never replay stale states,
+/// while the next service pass can retry the state the user actually sees.
+pub fn request_leds(iface: &mut HidInterface, leds: u8) {
+    if iface.leds.is_none() || iface.leds_set == Some(leds) {
+        iface.desired_leds = None;
+        return;
+    }
+    iface.desired_leds = Some(leds);
+    // A changed lock state is eligible immediately; only failed retries are
+    // rate-limited.
+    iface.led_retry_frame = None;
+}
+
+/// Retry the latest pending lock-key LED state after HID polling.
+///
+/// The retry is deliberately serviced after interrupt IN polling, so the
+/// complete-split of an in-flight keyboard report cannot be displaced by an
+/// endpoint-zero transaction. `desired_leds` clears only after the keyboard
+/// accepts the report.
+pub fn flush_leds(engine: &UsbHostEngine<'_>, iface: &mut HidInterface) {
+    let Some(leds) = iface.desired_leds else {
+        return;
+    };
+    let Some(output) = iface.leds.as_ref() else {
+        iface.desired_leds = None;
+        return;
+    };
+
+    let now = engine.full_frame_number();
+    if let Some(last) = iface.led_retry_frame {
+        if now.wrapping_sub(last) & 0xFFFF < LED_RETRY_FRAMES {
+            return;
+        }
+    }
+    iface.led_retry_frame = Some(now);
+
+    let mut payload = [0u8; MAX_LED_REPORT];
+    let len = output.encode(leds, &mut payload);
+    let report_id = output.report_id() as u16;
+
+    // The device is addressed the way it is wired, exactly as polling addresses
+    // it: a full- or low-speed keyboard behind a hub is unreachable without the
+    // split context, and this request would be answered by nobody.
+    engine.set_split(iface.split);
+    let result = engine.control_transfer(
+        iface.dev_addr,
+        RT_CLASS_INTERFACE_OUT,
+        usb_desc::REQ_HID_SET_REPORT,
+        ((usb_desc::REPORT_TYPE_OUTPUT as u16) << 8) | report_id,
+        iface.interface as u16,
+        &mut payload[..len],
+    );
+    engine.set_split(None);
+
+    match result {
+        Ok(_) => {
+            iface.leds_set = Some(leds);
+            iface.desired_leds = None;
+            print("[usb-hid] iface ");
+            print_u8(iface.interface);
+            print(" LEDs 0x");
+            print_hex_u8(leds);
+            println("");
+        }
+        Err(_) => match led_failure_disposition(engine.last_was_stall()) {
+            LedFailureDisposition::Retry => {
+                print("[usb-hid] WARN: iface ");
+                print_u8(iface.interface);
+                println(" deferred the LED output report");
+            }
+            LedFailureDisposition::Reject => {
+                // USB STALL is the device declining this report, not a busy hub.
+                // Do not repeatedly consume endpoint zero or flood the console;
+                // a later lock-state transition is still a fresh request.
+                iface.desired_leds = None;
+                iface.led_retry_frame = None;
+                print("[usb-hid] WARN: iface ");
+                print_u8(iface.interface);
+                println(" rejected the LED output report; waiting for lock-state change");
+            }
+        },
+    }
+}
+
+/// Send one device-identified event to the input service.
+pub fn forward_device_event(tid: usize, device: HidDeviceId, ev: &EvdevEvent) -> bool {
     if tid == 0 {
         return false;
     }
-    let mut buf = [0u8; INPUT_EVENT_LEN];
-    ev.encode(&mut buf);
+    let mut buf = [0u8; DEVICE_EVENT_LEN];
+    ev.encode_device(device, &mut buf);
     matches!(ostd::syscall::sys_send(tid, &buf), SyscallResult::Ok(_))
 }
 
@@ -664,9 +784,12 @@ pub fn register_as_source(tid: usize, kind: u8) -> bool {
         &api::ipc::InputRequest::RegisterEventSource { kind },
         &mut buf,
     ) {
+        // TrySend reports a refused non-blocking delivery as Ok(usize::MAX),
+        // not Err. Only Ok(0) means the input service received or queued the
+        // registration; otherwise the serving loop must retry it.
         Ok(encoded) => matches!(
             ostd::syscall::sys_try_send(tid, encoded),
-            SyscallResult::Ok(_)
+            SyscallResult::Ok(0)
         ),
         Err(_) => false,
     }
@@ -689,6 +812,14 @@ fn print_usize_hid(v: usize) {
     }
     out[..len].reverse();
     if let Ok(s) = core::str::from_utf8(&out[..len]) {
+        print(s);
+    }
+}
+
+fn print_hex_u8(v: u8) {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let out = [HEX[(v >> 4) as usize], HEX[(v & 0xF) as usize]];
+    if let Ok(s) = core::str::from_utf8(&out) {
         print(s);
     }
 }
@@ -729,4 +860,27 @@ fn print_u8(v: u8) {
 #[allow(dead_code)]
 fn _assert_desc_used(e: &EndpointDesc) -> u8 {
     e.interval
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{led_failure_disposition, LedFailureDisposition};
+
+    #[test]
+    fn stalled_led_output_is_terminal_for_the_current_lock_state() {
+        assert_eq!(
+            led_failure_disposition(true),
+            LedFailureDisposition::Reject,
+            "a device-rejected SET_REPORT must not remain in the retry queue"
+        );
+    }
+
+    #[test]
+    fn transient_led_output_failure_remains_retryable() {
+        assert_eq!(
+            led_failure_disposition(false),
+            LedFailureDisposition::Retry,
+            "a non-STALL transfer failure can be retried after the hub is ready"
+        );
+    }
 }

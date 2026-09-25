@@ -412,16 +412,46 @@ pub enum InputRequest {
     /// producer, and it treats that sender's later messages as raw events
     /// rather than as requests.
     ///
-    /// `kind` is informational ([`input_source`]); the service accepts any
-    /// registered producer because the authorization that matters is that a
-    /// cell reached this request at all.
+    /// `kind` identifies the producer class ([`input_source`]); Input validates
+    /// the caller against the kernel service identity for that class.
     RegisterEventSource { kind: u8 },
 }
 
-/// `RegisterEventSource` producer classes. Informational — logged, not enforced.
+/// `RegisterEventSource` producer classes.
 pub mod input_source {
-    /// A USB HID keyboard/mouse driver cell.
-    pub const USB_HID: u8 = 1;
+    /// The privileged DWC2 transport and HID driver for the embedded profile.
+    pub const USB_HID_HOST: u8 = 2;
+}
+
+/// Raw frame a USB host sends when one logical HID interface is removed.
+///
+/// Layout: `[OP_HID_DEVICE_REMOVED][device:u32 LE]`. Input releases only that
+/// interface's held keys.
+pub const OP_HID_DEVICE_REMOVED: u8 = 0x07;
+
+/// Raw frame the input service sends **to** a registered producer to program the
+/// keyboard's lock-key LEDs.
+///
+/// Layout: `[OP_SET_LEDS][leds]`, where `leds` is a [`led_bits`] bitmap. The
+/// service owns lock state — it is the cell that sees the lock keys — and the
+/// device is the only place that state is visible to a user, so the producer is
+/// told whenever it changes and once when it registers.
+///
+/// Fire-and-forget: the service has nothing to do with an answer, and a producer
+/// that is restarting drops the frame and gets the current state again when it
+/// re-registers. The opcode lives above the producer's own protocol space, so a
+/// driver can tell this frame from its other traffic by its first byte.
+pub const OP_SET_LEDS: u8 = 0x03;
+
+/// Lock-key bits as they travel on the wire, in HID LED page usage order
+/// (HID 1.11 Appendix B.1 — Num Lock 0x01, Caps Lock 0x02, Scroll Lock 0x03).
+///
+/// This is the order a boot-protocol keyboard's LED byte uses, and the order
+/// [`OP_SET_LEDS`] carries, so a producer never has to translate between the two.
+pub mod led_bits {
+    pub const NUM_LOCK: u8 = 1 << 0;
+    pub const CAPS_LOCK: u8 = 1 << 1;
+    pub const SCROLL_LOCK: u8 = 1 << 2;
 }
 
 /// Responses from the input service.

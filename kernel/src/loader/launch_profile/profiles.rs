@@ -127,3 +127,20 @@ pub(super) const fn spi_demo_mmio_capset() -> CapSet {
         ..CapSet::EMPTY
     }
 }
+/// The DWC2 transport cell may create only its capability-free LAN front-end.
+///
+/// The narrow launch edge prevents a compromised USB device from converting the
+/// host cell's lifecycle authority into arbitrary process creation.
+pub(super) fn dwc2_function_worker_profile(
+    route: LaunchRoute,
+    target: &str,
+) -> Option<LaunchProfile> {
+    if !matches!(route, LaunchRoute::Path | LaunchRoute::Elf) || target != "/bin/lan9514" {
+        return None;
+    }
+    Some(LaunchProfile::new(
+        CapSet::EMPTY,
+        "dwc2-function-worker-edge",
+        true,
+    ))
+}

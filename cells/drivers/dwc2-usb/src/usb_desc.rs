@@ -44,7 +44,14 @@ pub const REQ_SET_ADDRESS: u8 = 0x05;
 pub const REQ_HID_SET_PROTOCOL: u8 = 0x0B;
 /// HID class request `SET_IDLE` (`HID 1.11` §7.2.4).
 pub const REQ_HID_SET_IDLE: u8 = 0x0A;
+/// HID class request `SET_REPORT` (`HID 1.11` §7.2.2) — how a keyboard's LED
+/// output report reaches the device when it declares no interrupt OUT endpoint.
+pub const REQ_HID_SET_REPORT: u8 = 0x09;
 pub const REQ_HID_GET_REPORT: u8 = 0x01;
+
+/// `wValue` high byte of a `GET_REPORT`/`SET_REPORT`: which report kind the
+/// request carries (`HID 1.11` §7.2.1).
+pub const REPORT_TYPE_OUTPUT: u8 = 0x02;
 
 /// `bmRequestType` for a device→host standard request.
 pub const RT_DEV_TO_HOST_STANDARD: u8 = 0x80;

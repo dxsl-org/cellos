@@ -25,6 +25,32 @@ Focused Cell (shell, compositor surface, …)
   handles KeyEvent variants
 ```
 
+### USB HID behind the Pi 3 DWC2 host
+
+The Raspberry Pi 3 has one shared DWC2 controller. For the constrained embedded
+profile, `/bin/dwc2-usb` owns USB MMIO/DMA, enumerates the LAN9514 hub at boot,
+and decodes HID reports synchronously in one ordered loop. It is Input's sole
+DWC2 event source and emits device-identified frames. `/bin/lan9514` remains a
+capability-free protocol front-end. The current profile does not support runtime
+USB reconnect: after a keyboard or mouse is unplugged, reboot before using it
+again. Full HID plug-and-play is a future design in
+`docs/roadmap/usb-isolation.md`; the current profile assumes controlled
+peripherals.
+
+HID frames use the per-device layout below; kernel VirtIO and UART frames retain
+the legacy layout:
+
+| Offset | Size | Field | Description |
+|--------|------|-------|-------------|
+| 0 | 1 | opcode | `0x05` = per-device HID event |
+| 1 | 4 | device | Logical HID interface ID (u32 LE) |
+| 5 | 1 | event type | `0`=EV_KEY, `1`=EV_REL, `2`=EV_ABS |
+| 6 | 4 | code | evdev code (u32 LE) |
+| 10 | 4 | value | event value (i32 LE) |
+
+`[0x07][device:u32 LE]` is reserved for the future HID lifecycle implementation;
+the current boot-time DWC2 host does not emit it.
+
 ---
 
 ## Inbound IPC (kernel → input cell)
@@ -91,6 +117,40 @@ Discriminant byte at `payload[0]` selects the variant:
 
 ---
 
+## Lock Keys
+
+Caps Lock, Num Lock and Scroll Lock are toggles: pressing one flips its bit in
+the modifier mask and no `KeyEvent` is emitted for the key itself. The two that
+change what *other* keys mean are resolved in the layout table:
+
+| Lock | Effect |
+|------|--------|
+| Caps Lock | Shifts the **alphabetic** keys only (`a` → `A`). Digits and punctuation are Shift's, so `1` stays `1` with Caps Lock on. Shift and Caps Lock cancel on a letter. |
+| Num Lock | Chooses the keypad's face. On: `KEY_KP7` types `7`, `KEY_KP0` types `0`, `KEY_KPDOT` types `.`. Off: the same keys are Home/Insert/Delete and the rest of the navigation cluster. Keypad 5 has no navigation key of its own and is inert with Num Lock off; keypad `/ * - + =` and keypad Enter are the same key either way. |
+| Scroll Lock | Tracked and reported; nothing consumes it. |
+
+---
+
+## Outbound IPC (input cell → registered producer)
+
+A producer that announced itself with `InputRequest::RegisterEventSource`
+receives the lock-key LED state as a two-byte raw frame, whenever a lock changes
+and once at registration:
+
+| Offset | Size | Field | Description |
+|--------|------|-------|-------------|
+| 0 | 1 | opcode | `0x03` = `api::ipc::OP_SET_LEDS` |
+| 1 | 1 | leds | `api::ipc::led_bits` bitmap: bit 0 Num Lock, bit 1 Caps Lock, bit 2 Scroll Lock |
+
+Fire-and-forget — the service owns lock state and has nothing to do with a
+reply. The HID driver turns the bitmap into the device's own LED output report
+and sends it with `SET_REPORT`; a producer with no LED output report drops it.
+For a device reached through a hub transaction translator, transient NAK/NYET
+does not discard the update: the HID driver retains only the newest bitmap and
+retries it after input polling until the device accepts it.
+
+---
+
 ## Modifier Bitmask
 
 | Bit | Flag | Key(s) |
@@ -147,8 +207,8 @@ IPC message using `api::input::InputEvent`.
 
 | File | Purpose |
 |------|---------|
-| `libs/api/src/input.rs` | Type definitions (`InputEvent`, `KeyEvent`, `Modifiers`, …) |
-| `cells/services/input/src/lib.rs` | Cell entry point + IPC receive loop |
+| `libs/api/src/services/input.rs` | Type definitions (`InputEvent`, `KeyEvent`, `Modifiers`, …) |
+| `cells/services/input/src/main.rs` | Cell entry point + IPC receive loop |
 | `cells/services/input/src/layout_us_qwerty.rs` | Scancode → KeySym table |
 | `cells/services/input/src/modifier_state.rs` | Modifier state machine |
 | `cells/services/input/src/dispatcher.rs` | Focus-based event routing |

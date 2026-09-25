@@ -3,6 +3,95 @@
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
 ## [Unreleased] Development-first hardware-constrained execution
+
+- **RPi3 DWC2 embedded profile:** HID polling, descriptor parsing, and decoding
+  return to one ordered `/bin/dwc2-usb` loop. Device-identified events and
+  per-device held-key cleanup remain; the lossy report-to-worker IPC boundary,
+  duplicated decoder state, and `/bin/dwc2-hid` lifecycle are removed.
+  `/bin/lan9514` remains the host's sole capability-free child.
+- **Security direction:** ADR-0020 records why the current single-cell profile is
+  for controlled embedded peripherals and gates future full isolation on
+  reliable ordered queues, generation-scoped authority, non-blocking HCD
+  operation, DMA confinement, and bounded controller recovery. The roadmap also
+  states the two limits a HID worker cannot remove: Pi 3's shared physical
+  NIC/HID controller fault domain and hostile USB processing inside the HCD
+  before class dispatch.
+- **LED retry containment:** a HID `SET_REPORT` status-stage STALL is now
+  terminal for that requested lock bitmap. The host clears the pending request
+  rather than retrying it every 50 frames; a later lock-state change remains a
+  new request. Transient non-STALL failures retain the bounded retry behavior.
+- **Runtime HID reconnect omitted:** the limited boot-port rescan prototype
+  detected physical reconnect but could exhaust configuration-descriptor retries
+  after hub `NYET`/`DTERR` responses. It is removed by product decision rather
+  than presented as partial plug-and-play. The embedded profile enumerates
+  controlled HID at boot; physical detach requires reboot.
+- **Full plug-and-play deferred:** `docs/roadmap/usb-isolation.md` now specifies
+  the required authorized-port topology, debounce, lifecycle state machine,
+  bounded retry/backoff, generation/lease revocation, policy admission, and
+  concurrent-Ethernet qualification. ADR-0020 records why periodic rescan is
+  rejected until that design lands.
+- **Verification:** `driver-dwc2-usb` host tests pass 12/12; AArch64 DWC2 and
+  Input checks pass. The RPi3 builder signs and packages 26 cells, containing
+  `/bin/dwc2-usb` and `/bin/lan9514` with no `/bin/dwc2-hid`. The published
+  uImage verifies at 10,129,408 payload bytes, SHA-256
+  `dec6d94199401abef9d2c7106fa774ebbe3f026dec1601db10177c67b9783f45`.
+  Post-rollback RPi3 boot on this image executes `help` and `ls` from the USB
+  keyboard, emits compositor cursor-motion logs from the USB mouse, and keeps
+  DWC2 Ethernet TX active. Prior physical evidence covers lock LEDs and all
+  three mouse buttons. Runtime HID reconnect, controller-reset recovery, and
+  arbitrary/hostile hot-plug remain unclaimed.
+
+## [2026-09-25] Cell-native C pthread runtime (portability follow-on P1)
+- **Runtime:** added the narrow `libs/port-platform/include/cellos_pthread.h` and C implementation for in-cell `pthread_create`, one-shot `pthread_join`, non-recursive mutexes, and condition variables. `pthread_join` consumes the userspace result only after kernel `Wait` has crossed the target task's terminal lifecycle; the slot cannot be reused while its worker remains live.
+- **Domain lifecycle:** reaped dynamic worker stacks first close new user-copy proofs, then drain existing copy readers and synchronously invalidate every changed translation before stack frames return to the allocator. Child TLS inheritance occurs after user-entry priming; on AArch64/x86 the scheduler installs the selected base before the fresh `__trap_exit` entry without changing the creator's register, while RV64 writes the child trap-frame `tp`.
+- **Verification:** `scripts/qemu-c-pthread.sh` built, signed, admitted `/bin/c-pthread` to the Tier 2 Paged Domain, and reported `C-PTHREAD-QEMU: PASS` after two condition-variable workers and 32 immediate create/join reuse cycles.
+- **Not claimed:** no `__thread`, TLS destructors, cancellation, detachment, full POSIX thread personality, physical/fleet qualification, or production claim.
+
+
+## [2026-09-22] Cell-native portability: ADR-0018 + ADR-0019 and a 7-phase program
+- **ADR-0018** (`docs/decisions/0018-cell-native-portability-and-runtime-profiles.md`): POSIX is translated onto cell primitives in userspace; the kernel gains exactly three primitives (per-task TLS, futex ABI, pipe object). Porting has three lanes — L1 relink, L2 embed the library, L3 Tier 3 guest — selected by the application's POSIX profile (class A/B/C/D). A language is admitted as a runtime profile under five conditions; `cpp-freestanding` is next. The porting kit (published shim contract, platform layer, CMake/Meson cross files) is a deliverable, not documentation debt, and unsupported calls fail loudly (`ENOSYS`).
+- **ADR-0019** (`docs/decisions/0019-tier2-admission-control-on-path.md`): Tier 2 has exactly one admission control and it must sit on the path that creates a domain; `native-domains` selects capability only; the default posture is stated per build profile; the control's predicates must cover the architectures the route supports. It records the verified shipped truth — `evaluate_domain_admission` has no production caller (`kernel/src/loader/domain_admission.rs`, sole invocation is the `test-hooks` selftest at `kernel/src/main.rs:1029`) while the class-based route runs on the default feature (`kernel/src/loader/governed_spawn.rs:60-81` → `kernel/src/task/launch.rs:182-221`).
+- **Docs**: Spec 18 §2 (Tier 2 profile list + admission pointer), Spec 05 §3.2-3.3 (`cpp-freestanding` profile and porting lanes), Spec 22 §4 (amendment stating the policy is not yet on the path), `docs/app-development-guide.md` (the stale "Tier 2 has no application admission/loader route" text is replaced by the actual gate), `docs/guides/tier1b-c-zig.md` (C++ freestanding section).
+- **Plan**: `.agents/260922-1549-cell-native-portability-program/` — phase 01 wires the admission control, its drain, and the three-architecture reconciliation plus the docs/ledger repair; 02 admits `cpp-freestanding`; 03-05 add per-task TLS, the futex ABI, and the pipe object; 06 ships the porting kit and shim contract; 07 proves it with three reference ports and a measured cost table. Queued in `.agents/plan-portfolio.md`; phase 01 is submitted as P0 truth/security repair.
+- **Runtime unchanged**: no kernel, ABI, or manifest change lands with this entry; every phase is scoped to the `qemu` ceiling with no physical, fleet-secure, or production claim.
+
+## [2026-09-22] Tier 2 admission control on the path (portability program phase 01)
+- **Kernel**: the Tier 2 admission policy is now the single on-path control. `kernel/src/task/launch.rs::publish_prepared` — the one publication point for every ELF route (`spawn_gated`, `mem_spawn_gate`, trusted init) — evaluates the policy before creating anything (`domain_admission::admit_for_launch`), holds the lease across domain creation, and re-checks it immediately before the task becomes runnable (`lease.remains_enabled()` → `drain_refusal()`). A denial is final: no task, no domain, no SAS fallback, and it is audited as `CellSpawnDenied` with a stable denial code.
+- **Predicate ceiling**: `requested_caps != CapSet::EMPTY` (which described no launch the route supports — every domain-class cell in the tree declares no caps) is replaced by MMIO/DMA/device authority (`mmio_devices`, `pcie_driver`, `usb_driver`, `platform`, `block_io`, `block_regions`, `hypervisor`, `supervisor`), which a domain root cannot map or enforce. Network client, spawn, and service-registration authority stay admissible.
+- **Architecture coverage**: the policy's RV64-only gate is widened to the route's cfg set (`riscv64`/`aarch64`/`x86_64`), so policy and route cannot disagree about coverage.
+- **Boot posture**: `kernel/src/main.rs` enables admission explicitly for development profiles and leaves it disabled for `policy-required`/`production-relay-image`, logging which posture is in force. `native-domains` now selects capability only, never admission.
+- **Verification**: `scripts/qemu-native-domain-test.sh --harts 1 --case admission-enabled,admission-publication,admission-ceiling,admission,rollback` → `S22-RV64-QEMU-SUITE: PASS` with `S22-RV64-ADMISSION-{ENABLED,DENY,DRAIN,PUBLICATION-DENY,CEILING}: PASS` and no FAIL marker (logs in `.logs/native-domain-qemu/h1-admission*/`); `cargo test --manifest-path tests/integration/Cargo.toml --test tier2-fault-isolation` → 5 passed / 0 failed against a rebuilt `cellos-kernel`; `-D warnings` compile coverage on riscv64 (default and `test-hooks,native-domains`), aarch64, and x86_64.
+- **Docs**: Spec 22 §4 amendment rewritten to the shipped semantics (gate placement, posture, predicate ceiling, evidence, and the still-absent operator drain channel); `docs/app-development-guide.md` and `docs/guides/tier1b-c-zig.md` now state the wired control instead of "not on the path".
+- **Not claimed**: no ledger `PASS` is seeded, and the fleet posture (admission disabled) is compile-verified only. `test-hooks,native-domains` still does not build on AArch64/x86_64 (pre-existing: RV64-only `smp::online_hart_count` and RV64-only re-exports in `task/user_copy`), so the new boot selftest is RV64-only.
+
+## [2026-09-22] `cpp-freestanding` runtime profile (portability program phase 02)
+- **Profile**: C++ enters as a *language subset* on RV64/AArch64 — `-fPIC -ffreestanding -fno-exceptions -fno-rtti -fno-threadsafe-statics -fno-use-cxa-atexit`, static PIC PIE, `cc::Build::cpp_link_stdlib(None)` so no `-lstdc++` directive is emitted, landing as an `FFI`-class Tier 2 cell. Reference cell `cells/tests/cpp-smoke/` (Rust host + `cpp/engine.cpp` + `cpp/cxx_support.hpp`), runner `scripts/qemu-cpp-smoke.sh`.
+- **Runtime**: the C++ ABI layer was already in the shim — `operator new/delete` (all six forms) at `libs/api/src/services/posix/alloc.rs:148-205`, `__cxa_pure_virtual`/`__cxa_guard_*`/`abort` at `cxxabi.rs`. The phase adds only `atexit`/`__cxa_atexit` (clang emits `atexit` from `_GLOBAL__sub_I_*`; registration is accepted and never fires because a cell has no process teardown). A cell-local runtime copy was deleted after it produced six duplicate symbols on the AArch64 link.
+- **No C++ standard headers**: neither cross toolchain ships them (`riscv64-unknown-elf-g++` has no libstdc++ headers, `clang++ --target=aarch64-unknown-none-elf` has no libc++ sysroot), so `#include <cstdint>` fails on both; the profile takes its types from compiler builtins. Documented in `docs/specs/05-application.md` § 3.2 and `docs/guides/tier1b-c-zig.md`.
+- **Integration findings**: a new cell path needs a reviewed launch edge in `kernel/src/loader/launch_profile/targets.rs` (the shell refused `/bin/cpp-smoke` until it was added, with a `CapSet::EMPTY` ceiling); and the two file paths differ — `ViSyscall::Open` resolves through the kernel file table (`/BIN/INIT`), while `/srv` belongs to the VFS service over typed IPC. The cell proves both separately.
+- **Verification**: `scripts/qemu-cpp-smoke.sh` → `CPP-SMOKE-QEMU: PASS` on RV64 (QEMU 8.2.2, default-feature kernel) with nine assertions: Tier 2 paged-domain admission, static constructor (`__init_array`), virtual dispatch, virtual destructor + `operator delete`, template instantiation, `operator new/delete` checksum over the shim allocator, VFS round trip, C-ABI read (ELF magic from `/BIN/INIT`), and the PASS marker. The runner also asserts no `__cxa_throw`/`_Unwind_*`/`__gxx_personality`/`_ZSt*` symbols; the cell carries only `R_RISCV_RELATIVE` relocations and a non-empty `.init_array`. AArch64 builds clean; x86_64 is refused with a stated reason. `python3 scripts/cellos-sign --check` → OK (95 crates, 640 files, unsafe confined to 49 allowlisted files).
+- **Not claimed**: no AArch64 boot evidence for this cell, no ledger `PASS`, no physical/production claim.
+
+## [2026-09-22] Per-task TLS base (portability program phase 03)
+- **Kernel primitive**: `SetTlsBase` (ViSyscall 9) sets the caller's own user thread pointer and returns the previous value. It is self-only by construction (the ABI has no target parameter) and *always permitted* — the allowlist bitmap is full (bits 0-62 assigned, 63 is the VFS-mutate declaration bit), and one word of the caller's own register state carries no authority. `Task.tls_base` defaults to 0 and a thread inherits its creator's base until it sets its own (`kernel/src/task/tls.rs`, `kernel/src/task/tcb.rs`, `kernel/src/task/syscall.rs`).
+- **Per-architecture carrier**: riscv64 keeps the user `tp` (x4) in the task's trap frame — `HART_TRAP_ENTRY` parks it there and `__trap_exit` restores it, so no switch change was needed and the kernel's own `tp` (HartLocal) stays a separate value; aarch64 writes `TPIDR_EL0`; x86_64 writes `FS_BASE` (`IA32_FS_BASE`), leaving `GS_BASE`/`KERNEL_GS_BASE` as kernel context state. Both non-RV64 carriers are reinstalled on every resume from a hart-local slot the scheduler publishes under `SCHEDULER`, so the hot path stays lock-free (`kernel/src/task/hart_local.rs`, `kernel/src/task/scheduler.rs`, `kernel/src/task.rs`).
+- **Reachable thread API**: `libs/ostd/src/task.rs` was shadowed by an inline `pub mod task` that exported only `yield_now`, so `spawn` was dead code; the file is now the real module (with `yield_now` moved in), and a finished thread exits instead of spinning on `yield` forever — worker `Exit` terminates only that thread, which this phase verified in the scheduler.
+- **Verification**: `scripts/qemu-tls-test.sh` → `TLS-TEST-QEMU: PASS` on RV64 (QEMU 8.2.2, default-feature kernel) with `--harts 1` and `--harts 2`: Tier 2 admission, both threads claim a base, the *register* reads back per thread, a sentinel written through the base survives 64 forced yields, two threads hold two distinct bases, and the two-hart run also asserts hart 1 online. Regression on the switch path: `scripts/qemu-native-domain-test.sh --harts 2 --case switch,sas-fastpath,migration,user-copy,admission` → suite PASS. Kernel compiles clean with `-D warnings` on riscv64/aarch64/x86_64.
+- **Deferred, recorded**: C `__thread` / C++ `thread_local` need a TLS runtime — the loader must expose `PT_TLS` (size + initial image) and userspace must allocate a block per thread placed so the linker's `initial-exec` offsets resolve. The kernel primitive delivered here is that runtime's dependency; the contract and the gap are documented in `docs/guides/tier1b-c-zig.md` § "TLS (thread-local storage) contract".
+- **Not claimed**: no runtime evidence for the AArch64/x86_64 carriers (compile-verified only), no `__thread` support, no physical/production claim.
+
+## [2026-09-22] Futex wait/wake (portability program phase 04)
+- **Kernel**: `FutexWait` (17) and `FutexWake` (18) park and wake by key `(address space, generation, address)`, so two Tier 2 domains that use the same virtual address never wake each other while Tier 1 cells share the SAS key as the standard shared-memory contract. The deciding read of the caller's word happens **under `SCHEDULER`** through the validated domain-aware copy view (no raw pointer dereference, no allocation), the enqueue happens under the same lock, and a waker takes that lock to select waiters — the classic compare-and-park with no lost-wakeup window. Wait outcomes are return values (`0` woken, `1` value mismatch, `2` timed out) rather than error codes, so the ABI stays inside the existing single-sentinel error encoding. Deadlines ride the existing global sweep; `exit_task` drops a dying waiter's queue entry (`kernel/src/task/futex.rs`, `kernel/src/task/scheduler.rs`, `kernel/src/task/tcb.rs`, `libs/api/src/abi/syscall.rs`, `libs/ostd/src/syscall.rs`).
+- **Consumer proof**: `cells/tests/futex-test` + `scripts/qemu-futex-test.sh` → `FUTEX-TEST-QEMU: PASS` on RV64 (QEMU 8.2.2) with `--harts 1` and `--harts 2`: a futex mutex serialises 10 000 increments (`timeouts=0`), a 2 000-round ping-pong handoff completes (`timeouts=0`), a deadline with no waker returns `TimedOut`, a mismatched word returns without parking, and null/unmapped words return recoverable errors. Every wait carries a deadline so a lost wake would show as a retry and a wrong counter, never as a hang.
+- **Key discrimination**: new boot selftest `S22-RV64-FUTEX-KEY: PASS` (case `futex-key` in `scripts/qemu-native-domain-test.sh`) enqueues a waiter under one `(space, generation, address)` and asserts that another space, and a later generation of the same space, see nothing while the owning key does.
+- **Bugs found and fixed in-phase**: building the copy view while holding `SCHEDULER` self-deadlocked the machine (`TaskCopyView::for_task` locks the scheduler too) — the view is now taken before the lock; and the shared timeout block wrote `regs[10] = 0` over the futex outcome, so a timed-out wait reported `Woken` — the futex sweep arm now publishes its own outcome. `FutexWake` deliberately does not require a mapped word (no-op returning 0), matching the Linux contract; the first cell version asserted an error and was corrected.
+- **Deferred, recorded**: the shim-level `pthread_mutex`/`pthread_cond`/`pthread_once` surface lands with the porting kit (phase 06); a runtime two-cell cross-domain test needs two cooperating cells (the launch path is path-only today).
+- **Not claimed**: no physical/production claim; AArch64/x86_64 futex behaviour is compile-verified only.
+
+
+
+
+
 ## [2026-09-20] x86_64 Tier 2 domain: correct CR3 switch on syscall and IDT interrupt entry/exit
 - **Root cause**: Tier 2 domain cells run under a private PML4 (CR3). On x86_64 neither `syscall` nor hardware IDT interrupts switch CR3 automatically (unlike RISC-V `sysret` / AArch64 `eret` context). Kernel code executing while the CPU is under the domain's CR3 faulted on HHDM addresses (grant page allocation, LAPIC EOI write) not mapped in the domain PML4.
 - **`hal/arch/x86/src/x86_64/syscall.rs`**:

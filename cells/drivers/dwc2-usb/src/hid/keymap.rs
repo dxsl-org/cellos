@@ -33,6 +33,12 @@ pub const PAGE_LED: u32 = 0x08;
 pub const PAGE_BUTTON: u32 = 0x09;
 pub const PAGE_CONSUMER: u32 = 0x0C;
 
+// ─── LED-page usages (HID 1.11 §11.7, the host→device direction) ─────────────
+/// Keyboard LED usages, in the order the boot-protocol LED byte reports them.
+pub const LED_NUM_LOCK: u32 = 0x01;
+pub const LED_CAPS_LOCK: u32 = 0x02;
+pub const LED_SCROLL_LOCK: u32 = 0x03;
+
 // ─── Generic Desktop usages ──────────────────────────────────────────────────
 pub const GD_POINTER: u32 = 0x01;
 pub const GD_MOUSE: u32 = 0x02;

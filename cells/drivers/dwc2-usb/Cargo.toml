@@ -18,6 +18,11 @@ hal-soc-bcm27xx = { path = "../../../hal/soc/bcm27xx", version = "0.2.0", option
 name = "driver-dwc2-usb"
 path = "src/main.rs"
 
+
+[[bin]]
+name = "driver-lan9514"
+path = "src/lan_worker.rs"
+
 [lib]
 name = "driver_dwc2_usb"
 path = "src/lib.rs"

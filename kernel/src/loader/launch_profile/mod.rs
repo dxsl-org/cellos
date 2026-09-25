@@ -85,3 +85,4 @@ pub fn authorize(
 
     Some(profile)
 }
+        "dwc2-usb" if caller.has_spawn => profiles::dwc2_function_worker_profile(route, target),

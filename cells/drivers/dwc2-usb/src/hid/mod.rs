@@ -22,6 +22,7 @@
 
 pub mod decode;
 pub mod keymap;
+pub mod leds;
 pub mod report;
 
 extern crate alloc;
@@ -29,6 +30,7 @@ extern crate alloc;
 use alloc::vec::Vec;
 
 pub use decode::{decode_auto, decode_report, HidValue};
+pub use leds::{LedOutput, MAX_LED_REPORT};
 pub use report::{parse_report_descriptor, HidCollection, HidReportMap};
 
 // ─── Input-service wire opcodes (must match cells/services/input) ─────────────
@@ -38,18 +40,31 @@ pub const EV_KEY: u8 = 0;
 pub const EV_REL: u8 = 1;
 /// `EV_ABS` — an absolute pointer position (unused by this driver).
 pub const EV_ABS: u8 = 2;
+/// A HID event with a stable logical-device identity.
+pub const EV_DEVICE: u8 = 0x05;
 
-/// Length of one input-service event message.
-pub const INPUT_EVENT_LEN: usize = 9;
+/// Host-local logical HID interface identity.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct HidDeviceId(pub u32);
 
-/// Serialise one event as the input service expects it.
+/// Length of a device-identified input event.
 ///
-/// Wire format: `[opcode:1][code:4 LE][value:4 LE]`, identical to the kernel's
-/// VirtIO push, so the service needs no USB-specific case.
-pub fn encode_event(opcode: u8, code: u32, value: i32, buf: &mut [u8; INPUT_EVENT_LEN]) {
-    buf[0] = opcode;
-    buf[1..5].copy_from_slice(&code.to_le_bytes());
-    buf[5..9].copy_from_slice(&value.to_le_bytes());
+/// Layout: `[EV_DEVICE][device:u32][event_type][code:u32][value:i32]`.
+pub const DEVICE_EVENT_LEN: usize = 14;
+
+/// Serialise an event from one logical HID interface.
+pub fn encode_device_event(
+    device: HidDeviceId,
+    opcode: u8,
+    code: u32,
+    value: i32,
+    buf: &mut [u8; DEVICE_EVENT_LEN],
+) {
+    buf[0] = EV_DEVICE;
+    buf[1..5].copy_from_slice(&device.0.to_le_bytes());
+    buf[5] = opcode;
+    buf[6..10].copy_from_slice(&code.to_le_bytes());
+    buf[10..14].copy_from_slice(&value.to_le_bytes());
 }
 
 /// One decoded event, in evdev terms.
@@ -60,13 +75,17 @@ pub enum EvdevEvent {
 }
 
 impl EvdevEvent {
-    /// Serialise into the input-service wire format.
-    pub fn encode(&self, buf: &mut [u8; INPUT_EVENT_LEN]) {
+    /// Serialise with the originating logical-interface identity.
+
+    /// Serialise an event with its originating HID logical-interface identity.
+    pub fn encode_device(&self, device: HidDeviceId, buf: &mut [u8; DEVICE_EVENT_LEN]) {
         match *self {
             EvdevEvent::Key { code, pressed } => {
-                encode_event(EV_KEY, code, if pressed { 1 } else { 0 }, buf)
+                encode_device_event(device, EV_KEY, code, if pressed { 1 } else { 0 }, buf)
             }
-            EvdevEvent::Rel { code, value } => encode_event(EV_REL, code, value, buf),
+            EvdevEvent::Rel { code, value } => {
+                encode_device_event(device, EV_REL, code, value, buf)
+            }
         }
     }
 }

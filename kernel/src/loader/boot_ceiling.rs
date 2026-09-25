@@ -118,9 +118,10 @@ pub fn lookup(path: &str) -> Option<CapSet> {
             mmio_devices: DEV_DISPLAY,
             ..CapSet::EMPTY
         },
-        // USB host driver cell (/bin/dwc2-usb) receives usb_driver authority.
-        // /bin/lan9514 communicates with dwc2-usb via IPC and holds no direct hardware caps.
+        // The host owns the only DWC2 MMIO/DMA authority. Its sole child is the
+        // capability-free LAN9514 protocol front-end.
         "/bin/dwc2-usb" => CapSet {
+            spawn: true,
             usb_driver: true,
             ..CapSet::EMPTY
         },

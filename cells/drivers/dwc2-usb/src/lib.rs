@@ -10,6 +10,7 @@ pub mod dwc2;
 pub mod hid;
 pub mod hub;
 pub mod lan9514;
+pub mod lan_ipc;
 pub mod regs;
 pub mod usb_channel;
 pub mod usb_desc;

@@ -10,19 +10,20 @@ use driver_dwc2_usb::dispatch::{handle, NicReply, REPLY_BUF};
 use driver_dwc2_usb::hid::EvdevEvent;
 use driver_dwc2_usb::hub::UsbHub;
 use driver_dwc2_usb::lan9514::Lan9514Device;
+use driver_dwc2_usb::lan_ipc;
 use driver_dwc2_usb::usb_channel::{self, TransferMode, UsbHostEngine};
 use driver_dwc2_usb::usb_hid;
 use driver_dwc2_usb::Dwc2Controller;
 use ostd::io::{print, println};
 use ostd::syscall::{
-    sys_lookup_service, sys_recv_timeout, sys_register_nic_driver, sys_try_send, sys_yield,
-    SyscallResult,
+    sys_force_exit, sys_lookup_service, sys_notify_on_exit, sys_recv_timeout,
+    sys_register_nic_driver, sys_spawn_from_path, sys_try_send, sys_yield, SyscallResult,
 };
 
 declare_manifest!(
     block_io = false,
     network = false,
-    spawn = false,
+    spawn = true,
     gpio = false,
     uart = false,
     hypervisor = false,
@@ -39,9 +40,12 @@ declare_syscalls![
     Log,
     RequestMmio,
     WaitIrq,
+    GetTime,
+    SpawnFromPath,
     LookupService,
     RegisterNicDriver,
-    GetTime,
+    NotifyOnExit,
+    ForceExit,
     // DMA payload slots: the core reads and writes them directly.
     GrantAlloc,
     GrantFree,
@@ -183,7 +187,6 @@ fn cell_main() {
     // instead of a silent no-op.
     let mut hid_interfaces: alloc::vec::Vec<usb_hid::HidInterface> = alloc::vec::Vec::new();
     let mut lan: Option<Lan9514Device<'_>> = None;
-
     match root_class {
         // ── Hub: scan its downstream ports ───────────────────────────────────
         usb_hid::RootClass::Hub => {
@@ -277,14 +280,8 @@ fn cell_main() {
         }
     }
 
-    if let Some(dev) = lan.as_ref() {
-        let mac = dev.mac_address();
-        let _ = mac;
-        if sys_register_nic_driver().is_ok() {
-            println("[dwc2-usb] Successfully registered as system NIC Driver Cell!");
-        } else {
-            println("[dwc2-usb] WARN: sys_register_nic_driver failed");
-        }
+    if lan.is_some() {
+        println("[dwc2-usb] LAN9514 transport ready for isolated NIC front-end");
     } else {
         println("[dwc2-usb] no LAN9514 Ethernet controller found");
     }
@@ -297,6 +294,10 @@ fn cell_main() {
         println(" HID interface(s)");
     }
 
+    // HID polling and decoding stay in this controller cell for the constrained
+    // embedded profile. This preserves report ordering without cross-cell IPC.
+
+    let lan_present = lan.is_some();
     // The NIC dispatch path needs a device even when none was found, so an
     // unattached controller answers net-service requests with a failure instead
     // of faulting on a missing endpoint.
@@ -304,6 +305,15 @@ fn cell_main() {
         Some(dev) => dev,
         None => Lan9514Device::new(&engine, 0),
     };
+
+    // This host is the single kernel NIC endpoint even without an attached
+    // LAN9514. The kernel-authenticated identity also authorizes its direct HID
+    // event stream into Input.
+    if sys_register_nic_driver().is_err() {
+        println("[dwc2-usb] ERROR: failed to register DWC2 NIC endpoint");
+    }
+    let mut lan_worker_tid = if lan_present { spawn_lan_worker() } else { 0 };
+    let mut lan_attach_pending = lan_worker_tid != 0;
 
     // Input-service endpoint, re-resolved whenever it is missing: the service is
     // supervised and comes back under a new tid after a restart.
@@ -314,9 +324,6 @@ fn cell_main() {
     let mut out_buf = [0u8; REPLY_BUF];
 
     println("[dwc2-usb] Entering NIC + HID serving loop...");
-    // Everything the trace holds so far is enumeration; the polls are what the
-    // next reading is for.
-    crate::usb_channel::trace_reset();
 
     loop {
         // Re-resolve both endpoints: the input service restarts under a new tid.
@@ -326,57 +333,122 @@ fn cell_main() {
         }
         if input_tid != 0 && !source_registered {
             source_registered =
-                usb_hid::register_as_source(input_tid, api::ipc::input_source::USB_HID);
+                usb_hid::register_as_source(input_tid, api::ipc::input_source::USB_HID_HOST);
             if source_registered {
                 println("[usb-hid] registered as an input event source");
             }
         }
+        if lan_attach_pending {
+            let mut attach = [0u8; 1];
+            lan_ipc::encode_attach(&mut attach);
+            if matches!(sys_try_send(lan_worker_tid, &attach), SyscallResult::Ok(0)) {
+                lan_attach_pending = false;
+            }
+        }
 
+        // Exit-watch wakeups name the dead LAN child but do not write a message.
+        // Clearing the buffer keeps that distinct from a valid worker frame.
+        in_buf.fill(0);
         match sys_recv_timeout(0, &mut in_buf, NIC_RECV_TICKS) {
             SyscallResult::Ok(sender_tid) if sender_tid > 0 => {
-                match handle(&mut lan, &in_buf, &mut out_buf) {
-                    NicReply::Status(code) => {
-                        let _ = sys_try_send(sender_tid, &[code]);
+                if sender_tid == lan_worker_tid {
+                    if let Some((client_tid, request)) = lan_ipc::decode_request(&in_buf) {
+                        match handle(&mut lan, request, &mut out_buf) {
+                            NicReply::Status(code) => {
+                                send_lan_response(lan_worker_tid, client_tid, &[code]);
+                            }
+                            NicReply::Frame { len, buf } => {
+                                send_lan_response(lan_worker_tid, client_tid, &buf[..2 + len]);
+                            }
+                            NicReply::Mac(mac) => {
+                                send_lan_response(lan_worker_tid, client_tid, &mac);
+                            }
+                        }
+                    } else if in_buf.iter().all(|&byte| byte == 0) {
+                        // A zeroed receive buffer is the kernel exit-watch
+                        // shape. Force-exit makes a malicious all-zero payload
+                        // non-orphaning before the replacement is published.
+                        let _ = sys_force_exit(lan_worker_tid);
+                        lan_worker_tid = spawn_lan_worker();
+                        lan_attach_pending = lan_worker_tid != 0;
                     }
-                    NicReply::Frame { len, buf } => {
-                        let _ = sys_try_send(sender_tid, &buf[..2 + len]);
+                    continue;
+                }
+
+                // Input owns lock state; the host translates it to each
+                // keyboard's descriptor-defined Output report.
+                if sender_tid == input_tid && in_buf[0] == api::ipc::OP_SET_LEDS {
+                    let leds = in_buf[1];
+                    for iface in hid_interfaces.iter_mut() {
+                        usb_hid::request_leds(iface, leds);
                     }
-                    NicReply::Mac(mac) => {
-                        let _ = sys_try_send(sender_tid, &mac);
+                } else if lan_worker_tid != 0 {
+                    if let Some(request_len) = nic_request_len(&in_buf) {
+                        let mut request = [0u8; api::ipc::IPC_BUF_SIZE];
+                        if let Some(len) = lan_ipc::encode_request(
+                            sender_tid,
+                            &in_buf[..request_len],
+                            &mut request,
+                        ) {
+                            let _ = sys_try_send(lan_worker_tid, &request[..len]);
+                        }
                     }
                 }
             }
             _ => {}
         }
 
-        // Poll every HID interface, then flush the batch to the input service.
+        // Poll and decode one interface at a time so device identity remains
+        // attached to every event and press/release ordering is preserved.
         for iface in hid_interfaces.iter_mut() {
-            usb_hid::poll_interface(&engine, iface, &mut events);
-        }
-        if !events.is_empty() {
-            if input_tid != 0 {
-                let mut dropped = 0usize;
-                for ev in events.iter() {
-                    if !usb_hid::forward_event(input_tid, ev) {
-                        dropped += 1;
-                    }
-                }
-                // A refused send means the event never reaches the service, and
-                // the shell then looks like it is ignoring the keyboard.
-                if dropped > 0 {
-                    print("[usb-hid] WARN: ");
-                    print_usize(dropped);
-                    println(" event(s) refused by the input service");
-                }
-            } else {
-                // No consumer yet: drop rather than grow without bound. The
-                // next loop iteration retries the lookup.
-                let _ = sys_lookup_service(service::INPUT);
-            }
             events.clear();
+            usb_hid::poll_interface(&engine, iface, &mut events);
+            if input_tid != 0 {
+                for event in events.drain(..) {
+                    let _ = usb_hid::forward_device_event(input_tid, iface.device, &event);
+                }
+            }
+        }
+
+        // Output reports share endpoint zero with HID polling, so run the retry
+        // queue only after every interrupt-IN poll has completed.
+        for iface in hid_interfaces.iter_mut() {
+            usb_hid::flush_leds(&engine, iface);
         }
 
         sys_yield();
+    }
+}
+
+/// Spawn the LAN9514 front-end. It receives no USB/DMA capability and can
+/// restart without disturbing HID polling or the DWC2 controller.
+fn spawn_lan_worker() -> usize {
+    match sys_spawn_from_path("/bin/lan9514") {
+        SyscallResult::Ok(tid) => {
+            let _ = sys_notify_on_exit(tid);
+            tid
+        }
+        _ => {
+            println("[dwc2-usb] WARN: LAN9514 worker spawn failed");
+            0
+        }
+    }
+}
+
+/// Exact byte length of a raw NIC request inside a padded IPC receive buffer.
+fn nic_request_len(frame: &[u8]) -> Option<usize> {
+    match *frame.first()? {
+        0 => {
+            if frame.len() < 3 {
+                return None;
+            }
+            let bytes = u16::from_le_bytes([frame[1], frame[2]]) as usize;
+            let len = 3 + bytes;
+            (bytes > 0 && bytes <= driver_dwc2_usb::dispatch::FRAME_BUF && len <= frame.len())
+                .then_some(len)
+        }
+        1 | 2 => Some(1),
+        _ => None,
     }
 }
 
@@ -396,6 +468,13 @@ fn print_usize(v: usize) {
     out[..len].reverse();
     if let Ok(s) = core::str::from_utf8(&out[..len]) {
         print(s);
+    }
+}
+
+fn send_lan_response(worker_tid: usize, client_tid: usize, payload: &[u8]) {
+    let mut response = [0u8; REPLY_BUF + 9];
+    if let Some(len) = lan_ipc::encode_response(client_tid, payload, &mut response) {
+        let _ = sys_try_send(worker_tid, &response[..len]);
     }
 }
 

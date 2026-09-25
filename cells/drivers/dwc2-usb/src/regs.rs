@@ -155,6 +155,15 @@ pub const HCSPLT_SPLTENA: u32 = 1 << 31; // split enable
 pub const HCSPLT_XACTPOS_SHIFT: u32 = 14;
 pub const HCSPLT_XACTPOS_ALL: u32 = 3 << HCSPLT_XACTPOS_SHIFT;
 
+/// `HCCHAR.CHDIS` requests that an active host channel stop.
+pub const HCCHAR_CHDIS: u32 = 1 << 30;
+/// `HCCHAR.CHENA` marks a host channel active and is also required alongside
+/// `CHDIS` when requesting an active-channel halt.
+pub const HCCHAR_CHENA: u32 = 1 << 31;
+/// `HCCHAR.EPDIR` selects IN when set. Halt requests clear it, matching the
+/// DWC2 reference sequence.
+pub const HCCHAR_EPDIR: u32 = 1 << 15;
+
 /// `HCCHAR.ODDFRM` — the frame the transfer goes on the wire is an odd one.
 ///
 /// The core latches this at channel start and refuses a transfer whose parity

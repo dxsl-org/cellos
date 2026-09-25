@@ -7,114 +7,6 @@ use ostd::mmio::MmioRegion;
 use ostd::syscall::sys_yield;
 use types::{ViError, ViResult};
 
-/// Register snapshots taken around a split, recorded as it runs and written out
-/// afterwards.
-///
-/// Nothing can be printed inside a split: one line of console output costs about
-/// seven milliseconds at this baud, which is seven of the frames a split has to
-/// live in, and printing between the halves is what kept them from pairing at all.
-/// The registers are captured here instead and read back once the transfer is
-/// over, which is the closest thing to watching the bus that the console allows.
-mod trace {
-    use core::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
-    use ostd::io::print;
-
-    /// Deep enough to hold a full enumeration and the first polls after it. At
-    /// twenty-four the ring was filled by enumeration alone, so the registers of
-    /// the first interrupt poll -- the one that finds an endpoint already halted --
-    /// were pushed out before anything read them.
-    pub const RECORDS: usize = 160;
-    const WORDS: usize = 5;
-    /// Tag of the record the dump stops after, so a single event can be followed.
-    pub const TAG_ARM_SSPLIT: u32 = 1;
-    pub const TAG_AFTER_SSPLIT: u32 = 2;
-    pub const TAG_ARM_CSPLIT: u32 = 3;
-    pub const TAG_AFTER_CSPLIT: u32 = 4;
-
-    static CELLS: [AtomicU32; RECORDS * WORDS] = [const { AtomicU32::new(0) }; RECORDS * WORDS];
-    static NEXT: AtomicUsize = AtomicUsize::new(0);
-    static DUMPED: AtomicBool = AtomicBool::new(false);
-
-    /// Record `tag` beside four registers. Never blocks and never allocates.
-    pub fn record(tag: u32, a: u32, b: u32, c: u32, d: u32) {
-        let i = NEXT.fetch_add(1, Ordering::Relaxed);
-        if i >= RECORDS {
-            return;
-        }
-        let base = i * WORDS;
-        for (off, v) in [tag, a, b, c, d].into_iter().enumerate() {
-            CELLS[base + off].store(v, Ordering::Relaxed);
-        }
-    }
-
-    fn hex(v: u32) {
-        const D: &[u8; 16] = b"0123456789abcdef";
-        let mut buf = [0u8; 8];
-        let mut i = 0;
-        while i < 8 {
-            buf[i] = D[((v >> (28 - i * 4)) & 0xF) as usize];
-            i += 1;
-        }
-        if let Ok(t) = core::str::from_utf8(&buf) {
-            print(t);
-        }
-    }
-
-    fn decimal(v: usize) {
-        let mut buf = [0u8; 20];
-        let mut n = v;
-        let mut len = 0;
-        if n == 0 {
-            print("0");
-            return;
-        }
-        while n > 0 && len < buf.len() {
-            buf[len] = b'0' + (n % 10) as u8;
-            n /= 10;
-            len += 1;
-        }
-        buf[..len].reverse();
-        if let Ok(t) = core::str::from_utf8(&buf[..len]) {
-            print(t);
-        }
-    }
-
-    /// Begin a fresh recording.
-    ///
-    /// Enumeration is hundreds of records on its own, so a ring read after it
-    /// describes enumeration and never the polls that come next -- which is the
-    /// question now. Starting over when the polls begin puts them at the front.
-    pub fn reset() {
-        NEXT.store(0, Ordering::Relaxed);
-        DUMPED.store(false, Ordering::Relaxed);
-    }
-
-    /// Write the recording out, once, outside any transfer.
-    pub fn dump_once() {
-        if DUMPED.swap(true, Ordering::Relaxed) {
-            return;
-        }
-        let n = NEXT.load(Ordering::Relaxed).min(RECORDS);
-        print("[dwc2-trace] records=");
-        decimal(n);
-        print(" (tag hcint hcchar hcsplt hctsiz)\n");
-        for i in 0..n {
-            let base = i * WORDS;
-            print("  ");
-            hex(CELLS[base].load(Ordering::Relaxed));
-            print(" ");
-            hex(CELLS[base + 1].load(Ordering::Relaxed));
-            print(" ");
-            hex(CELLS[base + 2].load(Ordering::Relaxed));
-            print(" ");
-            hex(CELLS[base + 3].load(Ordering::Relaxed));
-            print(" ");
-            hex(CELLS[base + 4].load(Ordering::Relaxed));
-            print("\n");
-        }
-    }
-}
-
 /// How host channels move payload bytes.
 ///
 /// The BCM2837 DWC2 supports both; which one a given environment implements is
@@ -166,8 +58,11 @@ pub fn initial_control_mps(speed: u32) -> u8 {
     }
 }
 
-/// Complete-splits a periodic poll will issue before giving the hub up.
-const SPLIT_ATTEMPTS: usize = 2;
+/// Maximum complete-splits issued while the accepted start-split is still live.
+const SPLIT_ATTEMPTS: usize = 8;
+
+/// U-Boot's working DWC2 path abandons a split after four raw HFNUM ticks.
+const PERIODIC_SPLIT_MICROFRAMES: u32 = 4;
 
 /// Microframes in one full-speed frame.
 ///
@@ -192,21 +87,13 @@ const WAIT_POLLS: usize = 50_000;
 /// system.
 const CHANNEL_HALT_POLLS: usize = 4_000;
 
-/// Complete-split attempts a synchronous transfer will make.
+/// Complete-split attempts for a synchronous control transfer.
 ///
-/// A control transfer has a caller waiting on its result, so its split is run to
-/// completion here rather than spread across calls the way the interrupt poll is.
-/// The attempts are issued back to back and bounded by frames rather than spun
-/// on, because the caller cannot be handed "not yet".
+/// Control traffic is non-periodic. Its start and completion therefore use the
+/// normal yielding channel wait; forcing it through the tight periodic-poll
+/// schedule prevents the LAN9514 translator from completing endpoint-zero
+/// enumeration on this board.
 const SPLIT_COMPLETE_ATTEMPTS: usize = 2;
-
-/// Frames a complete-split may still belong to the start-split that began it.
-///
-/// The pairing is only meaningful inside the hub's frame budget, so a
-/// complete-split issued after this many is started over instead of being taken
-/// for a result. `HFNUM` counts microframes at high speed, and a low-speed
-/// transaction behind the hub's translator takes up to a full millisecond.
-const SPLIT_COMPLETE_FRAMES: u32 = 12;
 
 /// Where a device sits when it has to be reached through a hub.
 ///
@@ -296,22 +183,7 @@ impl<'a> UsbHostEngine<'a> {
 
     /// `HCSPLT` for the current context; `complete` selects the second pass.
     fn hcsplt_value(&self, complete: bool) -> u32 {
-        let Some(split) = self.split.get() else {
-            return 0;
-        };
-        let mut value = HCSPLT_SPLTENA
-            | ((split.hub_addr as u32 & HCSPLT_HUBADDR_MASK >> HCSPLT_HUBADDR_SHIFT)
-                << HCSPLT_HUBADDR_SHIFT)
-            | (split.port as u32 & HCSPLT_PRTADDR_MASK)
-            // Every split this driver issues carries one packet, so the whole
-            // payload is what the complete-split collects. Linux programs this
-            // field for both halves, next to the split address it is easy to
-            // mistake for the whole of HCSPLT.
-            | HCSPLT_XACTPOS_ALL;
-        if complete {
-            value |= HCSPLT_COMPSPLT;
-        }
-        value
+        hcsplt_for(self.split.get(), complete)
     }
 
     /// Current USB frame number, used to bound a complete-split.
@@ -337,76 +209,6 @@ impl<'a> UsbHostEngine<'a> {
     /// too often and at whatever phase the serving loop happens to arrive at.
     pub fn full_frame_number(&self) -> u32 {
         self.full_frame()
-    }
-
-    /// Wait until a frame has just started, without yielding.
-    ///
-    /// The hub's translator runs a periodic transaction inside a frame slot, and
-    /// the start-split is what places it there -- so the start-split has to go out
-    /// at the beginning of a frame, with the complete-split collecting the result
-    /// at the end of that same frame. Issuing the start-split wherever the poll
-    /// happened to fall leaves the translator without the frame it was asked to
-    /// work in, and it answers every complete-split with NYET because the
-    /// transaction never had the time to run.
-    ///
-    /// Returns false if the frame moves while waiting, meaning the poll is starting
-    /// too close to a boundary to do anything useful with the frame it found.
-    fn await_frame_start(&self) -> bool {
-        let frame = self.full_frame();
-        let last_microframe = (1 << FULL_FRAME_SHIFT) - 1;
-        for _ in 0..SPIN_POLLS {
-            let counter = self.read32(HFNUM) & HFNUM_FRNUM_MASK;
-            if counter >> FULL_FRAME_SHIFT != frame {
-                // A frame has just turned over, which is the moment asked for.
-                return true;
-            }
-            if counter & last_microframe == 0 {
-                // First microframe of the frame: nothing asked for it to end.
-                return true;
-            }
-        }
-        false
-    }
-
-    /// Wait until the current frame is nearly over, without yielding.
-    ///
-    /// The hub does not pass the full- or low-speed transaction through: it runs
-    /// one of its own and buffers the result, and that transaction takes a whole
-    /// millisecond frame. A complete-split issued one microframe after its
-    /// start-split therefore asks before there is anything to hand back, and the
-    /// answer is a channel that halts carrying nothing. The complete-split has to
-    /// arrive late in the frame the start-split opened, because the hub stops
-    /// pairing the two the moment that frame ends.
-    ///
-    /// Returns false once the frame has moved, which is the signal that the
-    /// pairing is gone and the next poll has to start over. Both the frame that
-    /// must not move and the position inside it come from the shifted counter: it
-    /// advances every microframe, so comparing it raw would fail on the first read.
-    ///
-    /// The point waited for leaves room for the complete-split itself. Waiting for
-    /// the last microframe of the frame leaves it none, and the core halts the
-    /// channel at the frame boundary before the hub can answer -- a halt carrying
-    /// no status at all, which is what `hcint=0x02` on its own is.
-    fn await_frame_end(&self) -> bool {
-        let frame = self.full_frame();
-        let microframe: u32 = (1 << FULL_FRAME_SHIFT) - 1;
-        let leave_for_complete_split = microframe.saturating_sub(2);
-        for _ in 0..SPIN_POLLS {
-            let counter = self.read32(HFNUM) & HFNUM_FRNUM_MASK;
-            if counter >> FULL_FRAME_SHIFT != frame {
-                return false;
-            }
-            let at = counter & microframe;
-            if at >= leave_for_complete_split {
-                // A window, not a threshold. Past it there is no room left for the
-                // complete-split to be answered in, and the core halts the channel
-                // at the frame boundary instead -- which is the bare CHHLTD the
-                // recording keeps showing. Reporting "no room" is what tells the
-                // caller to end the poll and open a fresh pair next time.
-                return at < microframe;
-            }
-        }
-        false
     }
 
     /// The last channel outcome reported `XFERCOMPL`.
@@ -480,55 +282,26 @@ impl<'a> UsbHostEngine<'a> {
             return self.wait_channel(ch);
         }
 
+        // Endpoint-zero control traffic uses the normal wait rather than the
+        // tight periodic split-polling wait. The latter is required for
+        // interrupt-IN reports, but makes this board's LAN9514 translator return
+        // NYET throughout HID enumeration.
         arm(false);
-        // The yielding wait, which is what this path had when enumeration last
-        // worked. The same-frame rule that made the periodic path's wait short is
-        // a periodic rule -- NetBSD guards it behind INT and ISOC -- and a
-        // non-periodic complete-split is free to go out later: the hub buffers
-        // what its translator fetched, so patience here collects it, and a tight
-        // budget spends the transfer before the translator is done.
         self.wait_channel(ch)?;
 
-        let started = self.frame_number();
-        trace::record(
-            trace::TAG_ARM_SSPLIT,
-            self.read32(HFNUM),
-            self.read32(hcchar(ch)),
-            self.read32(hcsplt(ch)),
-            self.read32(hctsiz(ch)),
-        );
-        trace::record(
-            trace::TAG_AFTER_SSPLIT,
-            self.last_hcint.get(),
-            self.read32(hcchar(ch)),
-            self.read32(hcsplt(ch)),
-            self.read32(hctsiz(ch)),
-        );
+        // A complete-split can return NYET while the translator finishes the
+        // low-speed transaction. The old board-working path retried that answer
+        // through the scheduler; keep that bounded behavior for synchronous
+        // control traffic.
         for _ in 0..SPLIT_COMPLETE_ATTEMPTS {
             arm(true);
-            let outcome = self.wait_channel(ch);
-            trace::record(
-                trace::TAG_AFTER_CSPLIT,
-                self.last_hcint.get(),
-                self.read32(hcchar(ch)),
-                self.read32(hcsplt(ch)),
-                self.read32(hctsiz(ch)),
-            );
-            match outcome {
-                // Only a real transfer completion is the result. An ACK here is
-                // the hub acknowledging the request, not delivering it.
+            match self.wait_channel(ch) {
                 Ok(()) if self.last_reported_complete() => return Ok(()),
-                Ok(()) => {}
-                Err(ViError::WouldBlock) => {}
+                Ok(()) | Err(ViError::WouldBlock) if self.last_was_nyet() => {}
                 Err(e) => return Err(e),
-            }
-            if self.frame_number().wrapping_sub(started) & HFNUM_FRNUM_MASK > SPLIT_COMPLETE_FRAMES
-            {
-                trace::dump_once();
-                return Err(ViError::IO);
+                Ok(()) => return Err(ViError::IO),
             }
         }
-        trace::dump_once();
         Err(ViError::IO)
     }
 
@@ -680,36 +453,6 @@ impl<'a> UsbHostEngine<'a> {
         self.cache_clean(ch, offset, n);
     }
 
-    /// The third `allow(unsafe_code)` island: a volatile read of this cell's
-    /// own grant slot at a bounded offset, used only for the trace below.
-    #[allow(unsafe_code)]
-    /// Print the first bytes staged in a channel slot.
-    ///
-    /// Proves what the core is about to hand the device. If these are not the
-    /// request the caller built, the fault is in staging or cache maintenance;
-    /// if they are, the fault is between memory and the bus.
-    pub fn trace_slot(&self, ch: usize, label: &str, len: usize) {
-        let guard = self.dma.borrow();
-        let Some(buf) = guard.as_ref() else {
-            return;
-        };
-        ostd::io::print("[dwc2] slot ");
-        ostd::io::print(label);
-        ostd::io::print(" =");
-        let n = len.min(16).min(DMA_SLOT_BYTES);
-        for i in 0..n {
-            // SAFETY: reading this cell's own grant slot at a bounded offset.
-            let byte = unsafe {
-                core::ptr::read_volatile(
-                    buf.virt().wrapping_add(ch * DMA_SLOT_BYTES).wrapping_add(i),
-                )
-            };
-            ostd::io::print(" ");
-            print_hex_val(byte as u32);
-        }
-        ostd::io::println("");
-    }
-
     /// Copy a received payload out of the channel slot at `offset`.
     ///
     /// The second `allow(unsafe_code)` island: same owned-grant argument as
@@ -771,17 +514,6 @@ impl<'a> UsbHostEngine<'a> {
             | ((dev_addr as u32) << 22)
             | (1 << 31);
         let dma = self.dma_slot(ch).is_some();
-
-        // Stage once up front so the trace has something to show. Each pass
-        // stages again, which is also what hands the bytes to the core.
-        if dma {
-            self.stage_out(ch, 0, setup);
-            static SETUP_TRACED: core::sync::atomic::AtomicBool =
-                core::sync::atomic::AtomicBool::new(false);
-            if !SETUP_TRACED.swap(true, core::sync::atomic::Ordering::Relaxed) {
-                self.trace_slot(ch, "setup", setup.len());
-            }
-        }
 
         // The payload is staged and HCDMA armed *before* CHENA on every pass:
         // the core latches its DMA address when the channel starts, so enabling
@@ -1028,11 +760,7 @@ impl<'a> UsbHostEngine<'a> {
 
         while sent < data.len() {
             let chunk = (data.len() - sent).min(mps);
-            self.prepare_channel(ch);
-            self.write32(hcsplt(ch), 0);
-            self.write32(hcintmsk(ch), 0x07FF);
             let sctsiz = (chunk as u32) | (1 << 19) | ((toggle as u32) << 29);
-            self.write32(hctsiz(ch), sctsiz);
 
             // HCCHAR: EPNUM = 0, EPDIR = 0 (OUT), EPTYPE = 0 (Control), MC = 1, CHENA = 1.
             let scchar = (mps as u32)
@@ -1040,25 +768,39 @@ impl<'a> UsbHostEngine<'a> {
                 | (1 << 20)
                 | ((dev_addr as u32) << 22)
                 | (1 << 31);
-            self.write32(hcchar(ch), self.start_hcchar(scchar));
 
-            if self.dma_slot(ch).is_some() {
-                // Payload already staged and HCDMA already armed.
-            } else {
-                let words = chunk.div_ceil(4);
-                for i in 0..words {
-                    let mut b = [0u8; 4];
-                    for (j, byte) in b.iter_mut().enumerate() {
-                        let offset = i * 4 + j;
-                        if sent + offset < data.len() && offset < chunk {
-                            *byte = data[sent + offset];
+            // Through `run_packet`, like the setup and status stages: a data
+            // stage that programs `HCSPLT` itself is only right for a device on
+            // the root port. Behind a hub the channel would address the
+            // low-speed device on the high-speed bus, which nothing answers --
+            // the request reaches the keyboard as XACTERR and its LEDs never
+            // move. Staging the payload on both passes matches what U-Boot does
+            // for an OUT split: the start-split delivers the bytes and the
+            // complete-split collects the handshake.
+            self.run_packet(ch, |complete| {
+                self.write32(hcsplt(ch), self.hcsplt_value(complete));
+                self.write32(hcintmsk(ch), 0x07FF);
+                self.write32(hctsiz(ch), sctsiz);
+
+                if self.dma_slot(ch).is_some() {
+                    // Payload already staged and HCDMA already armed.
+                } else {
+                    let words = chunk.div_ceil(4);
+                    for i in 0..words {
+                        let mut b = [0u8; 4];
+                        for (j, byte) in b.iter_mut().enumerate() {
+                            let offset = i * 4 + j;
+                            if sent + offset < data.len() && offset < chunk {
+                                *byte = data[sent + offset];
+                            }
                         }
+                        self.write_fifo(ch, u32::from_le_bytes(b));
                     }
-                    self.write_fifo(ch, u32::from_le_bytes(b));
                 }
-            }
 
-            self.wait_channel(ch)?;
+                self.write32(hcint(ch), 0xFFFF_FFFF);
+                self.write32(hcchar(ch), self.start_hcchar(scchar));
+            })?;
 
             sent += chunk;
             toggle = if toggle == 2 { 0 } else { 2 };
@@ -1309,18 +1051,14 @@ impl<'a> UsbHostEngine<'a> {
         Ok(0)
     }
 
-    /// One half of an interrupt IN split, for a device behind a hub.
+    /// Poll one interrupt-IN packet through a high-speed hub's translator.
     ///
-    /// A split is a pair of transactions the hub has to see in different
-    /// microframes: a start-split that hands it the request, and a complete-split
-    /// issued later that collects the result. One half is issued per call, with
-    /// the pairing carried in `pending`, so the gap between them is the gap
-    /// between two polls rather than a wait taken here.
-    ///
-    /// Waiting here is what this used to do, and it cost the machine: `HFNUM`
-    /// counts frames of a millisecond, not microframes, so crossing one boundary
-    /// meant spinning for a whole millisecond of system calls -- every poll, on
-    /// every interface, exactly when a device had something to say.
+    /// DWC2 runs the start- and complete-splits as separate host-channel
+    /// transactions. In DMA mode each transaction is complete only once CHHLTD
+    /// arrives. After an accepted start-split the complete-split is armed
+    /// immediately; ODDFRM schedules it into the following microframe. A NYET is
+    /// retried while the original start-split remains within U-Boot's
+    /// board-proven four-microframe budget.
     ///
     /// The three ways a complete-split can end mean different things:
     ///
@@ -1366,91 +1104,31 @@ impl<'a> UsbHostEngine<'a> {
             self.write32(hcchar(ch), self.start_hcchar(scchar));
         };
 
-        // Both halves are issued here, one microframe apart and inside a single
-        // frame. The second half cannot be handed to a later poll: this loop's
-        // RecvTimeout puts hundreds of frames between polls and the hub pairs a
-        // split for less than one, which is what made every complete-split here
-        // answer NYET.
-        // Both halves are issued here, one microframe apart and inside a single
-        // frame, and nothing is written to the console between them. A line of
-        // console output costs about seven milliseconds at this baud, which is
-        // seven of the frames the hub pairs a split within -- printing the first
-        // half before issuing the second is what kept the pair apart. Every report
-        // below therefore sits on a path where no further channel work depends on
-        // it, and the retry path has none at all.
-        // The start-split opens the frame the hub will run the transaction in, so
-        // it is issued at the frame's start; the complete-split below collects the
-        // result at the frame's end.
-        if !self.await_frame_start() {
-            *pending = false;
-            return Ok(0);
-        }
+        // Match U-Boot's working channel loop on this controller: complete the
+        // start-split channel, then arm the complete-split immediately. The old
+        // path forced SSPLIT into microframe 0 and waited until microframe 5 for
+        // CSPLIT. That schedule is the reverse of USB interrupt-IN split
+        // scheduling and left only the frame boundary for retries.
 
-        let frame = self.frame_number();
-        trace::record(
-            trace::TAG_ARM_SSPLIT,
-            self.read32(HFNUM),
-            self.read32(hcchar(ch)),
-            self.read32(hcsplt(ch)),
-            self.read32(hctsiz(ch)),
-        );
         arm(false);
         let outcome = self.wait_channel_spin(ch, SPIN_POLLS);
-        trace::record(
-            trace::TAG_AFTER_SSPLIT,
-            self.last_hcint.get(),
-            self.read32(hcchar(ch)),
-            self.read32(hcsplt(ch)),
-            self.read32(hctsiz(ch)),
-        );
         if !matches!(outcome, Ok(())) {
             *pending = false;
-            report_split_progress(
-                false,
-                &outcome,
-                self.last_hcint.get(),
-                self.last_was_nyet(),
-                want,
-                frame,
-            );
             return match outcome {
                 Err(e) => Err(e),
                 _ => Ok(0),
             };
         }
 
+        let started = self.frame_number();
         for _ in 0..SPLIT_ATTEMPTS {
-            if !self.await_frame_end() {
-                // The frame moved, so the pairing is gone whether or not the hub
-                // ever answered.
-                *pending = false;
-                return Ok(0);
-            }
-
-            trace::record(
-                trace::TAG_ARM_CSPLIT,
-                self.read32(HFNUM),
-                self.read32(hcchar(ch)),
-                self.read32(hcsplt(ch)),
-                self.read32(hctsiz(ch)),
-            );
             arm(true);
             let outcome = self.wait_channel_spin(ch, SPIN_POLLS);
-            let int = self.last_hcint.get();
-            trace::record(
-                trace::TAG_AFTER_CSPLIT,
-                int,
-                self.read32(hcchar(ch)),
-                self.read32(hcsplt(ch)),
-                self.read32(hctsiz(ch)),
-            );
 
             match outcome {
                 Ok(()) if !self.last_reported_complete() => {
                     // ACK on a complete-split carries no data.
                     *pending = false;
-                    report_split_progress(true, &outcome, int, self.last_was_nyet(), want, frame);
-                    trace::dump_once();
                     return Ok(0);
                 }
                 Ok(()) => {
@@ -1458,14 +1136,6 @@ impl<'a> UsbHostEngine<'a> {
                     let remaining = (self.read32(hctsiz(ch)) & 0x7FFFF) as usize;
                     let got = want.saturating_sub(remaining);
                     if got == 0 {
-                        report_split_progress(
-                            true,
-                            &outcome,
-                            int,
-                            self.last_was_nyet(),
-                            want,
-                            frame,
-                        );
                         return Ok(0);
                     }
                     if self.dma_slot(ch).is_some() {
@@ -1487,27 +1157,20 @@ impl<'a> UsbHostEngine<'a> {
                     }
                     return Ok(got.min(buf.len()));
                 }
-                // Still working, or NAK which ends the pairing. Either way the
-                // next poll starts over rather than asking again here -- and a
-                // hub that answered NYET is asked again below, with nothing
-                // written in between for the same reason as above.
                 Err(ViError::WouldBlock) => {
                     if !self.last_was_nyet() {
                         *pending = false;
-                        report_split_progress(
-                            true,
-                            &outcome,
-                            int,
-                            self.last_was_nyet(),
-                            want,
-                            frame,
-                        );
+                        return Ok(0);
+                    }
+                    if self.frame_number().wrapping_sub(started) & HFNUM_FRNUM_MASK
+                        > PERIODIC_SPLIT_MICROFRAMES
+                    {
+                        *pending = false;
                         return Ok(0);
                     }
                 }
                 Err(e) => {
                     *pending = false;
-                    report_split_progress(true, &outcome, int, self.last_was_nyet(), want, frame);
                     return Err(e);
                 }
             }
@@ -1516,7 +1179,6 @@ impl<'a> UsbHostEngine<'a> {
         // The hub never finished. Starting over on the next poll is the only
         // thing left: the frame this pairing belonged to is gone with it.
         *pending = false;
-        trace::dump_once();
         Ok(0)
     }
 
@@ -1619,10 +1281,10 @@ impl<'a> UsbHostEngine<'a> {
 
     /// Wait for channel transfer completion or error with timeout.
     ///
-    /// BCM2837 DWC2 Slave mode: the core does NOT reliably set XFERCOMPL
-    /// or CHHLTD after a successful transaction.  ACK (bit 5) from the
-    /// device is the definitive completion signal; we halt the channel
-    /// manually after seeing it.
+    /// In DMA mode `CHHLTD` is the completion event. Handshake bits can become
+    /// visible first, but the channel still owns its registers until the halt
+    /// arrives; [`Self::channel_outcome`] keeps waiting rather than letting the
+    /// caller re-arm the channel against that delayed completion.
     fn wait_channel(&self, ch: usize) -> ViResult<()> {
         self.wait_channel_with(ch, WAIT_POLLS)
     }
@@ -1677,6 +1339,17 @@ impl<'a> UsbHostEngine<'a> {
     fn channel_outcome(&self, ch: usize) -> Option<ViResult<()>> {
         let int = self.read32(hcint(ch));
         if int == 0 {
+            return None;
+        }
+
+        // Buffer-DMA completion is reported by CHHLTD. ACK, NAK, NYET, and even
+        // XFERCOMPL may be visible before it; treating that prefix as the final
+        // result races the old channel's delayed halt against the next arm. The
+        // observed sequence was ACK (0x20), NYET (0x40), then a stale bare
+        // CHHLTD (0x02) immediately after re-arm. U-Boot waits for CHHLTD before
+        // interpreting the same bits, and Linux masks every DMA channel event
+        // except CHHLTD and AHBERR for this reason.
+        if self.mode.get() == TransferMode::Dma && int & ((1 << 1) | (1 << 2)) == 0 {
             return None;
         }
 
@@ -1787,117 +1460,134 @@ impl<'a> UsbHostEngine<'a> {
         Err(ViError::IO)
     }
 
-    /// Explicitly halt a host channel (required in DWC2 Slave mode).
+    /// Halt an active host channel before it can be reused.
     ///
-    /// `CHDIS` and `CHENA` must never be set together. The core reads
-    /// `CHENA=1` as a fresh enable, so raising it while requesting a disable
-    /// **re-arms the channel with the parameters still in `HCCHAR`/`HCTSIZ`** --
-    /// a second, unwanted transaction launched from a completed one. Only
-    /// `CHDIS` is raised; the core clears `CHENA` and reports `CHHLTD`.
+    /// DWC2 accepts a halt request as `CHDIS|CHENA` while the channel is
+    /// active, then clears `CHENA` when stopping has completed. Both U-Boot and
+    /// Linux use that sequence and wait for `CHENA` to clear. Writing `CHDIS`
+    /// while clearing `CHENA` is not an active-channel halt request.
+    ///
+    /// A channel which has already stopped needs no request: setting `CHENA` in
+    /// that state can start a spurious transaction. Its pending W1C status is
+    /// cleared below so it cannot be mistaken for a later transfer's result.
     fn halt_channel(&self, ch: usize) {
         let reg = hcchar(ch);
-        let mut val = self.read32(reg);
-        val |= 1 << 30; // CHDIS
-        val &= !(1 << 31); // CHENA
-        self.write32(reg, val);
-        // Wait for CHHLTD (bit 1), and only then clear it. Clearing the interrupt
-        // unconditionally returns while the core is still finishing the halt, and
-        // the CHHLTD it sets afterwards survives into the next arm -- where the
-        // wait reads it and reports a halt that belongs to the transfer before.
-        // The trace made that plain: the records alternate between an ACK, whose
-        // channel carries CHDIS because this function set it, and a halt whose
-        // channel carries no CHDIS at all, which is this function's own halt
-        // arriving late.
-        //
-        // The wait reads the register rather than yielding: a yield is around
-        // twenty milliseconds, and four of them is the whole budget a split has.
-        for _ in 0..CHANNEL_HALT_POLLS {
-            if self.read32(hcint(ch)) & (1 << 1) != 0 {
-                break;
+        let current = self.read32(reg);
+        if let Some(request) = active_halt_request(current) {
+            self.write32(reg, request);
+
+            // This is deliberately a short non-yielding wait: yielding costs
+            // multiple USB frames. The next prepare_channel() retries the halt
+            // if a faulty core leaves CHENA asserted beyond this bound.
+            for _ in 0..CHANNEL_HALT_POLLS {
+                if self.read32(reg) & HCCHAR_CHENA == 0 {
+                    break;
+                }
             }
         }
         self.write32(hcint(ch), 0xFFFF_FFFF);
     }
 }
 
-/// Report the first split poll in full, once.
+/// Build a DWC2 halt request only for a channel that is actually active.
 ///
-/// Report how each half of a split ended, a few times per half.
-///
-/// Which half ran and how it ended is the whole question when a split does not
-/// deliver: a start-split the hub refuses, a complete-split it is not ready for,
-/// and a complete-split that ends without data are three different faults, and
-/// nothing else in the driver tells them apart. Both halves are reported
-/// separately -- a single shared flag reports one half and hides the other, which
-/// is exactly the one worth seeing. The frame number comes along so the gap
-/// between the halves is visible rather than inferred.
-fn report_split_progress(
-    complete: bool,
-    outcome: &ViResult<()>,
-    hcint: u32,
-    nyet: bool,
-    want: usize,
-    frame: u32,
-) {
-    static SEEN: [core::sync::atomic::AtomicUsize; 2] =
-        [const { core::sync::atomic::AtomicUsize::new(0) }; 2];
-    let slot = usize::from(complete);
-    if SEEN[slot].fetch_add(1, core::sync::atomic::Ordering::Relaxed) >= 3 {
-        return;
-    }
-    ostd::io::print("[dwc2] split: half=");
-    ostd::io::print(if complete { "csplit" } else { "ssplit" });
-    ostd::io::print(" outcome=");
-    match outcome {
-        Ok(()) => ostd::io::print("Ok"),
-        Err(ViError::WouldBlock) if nyet => ostd::io::print("NYET"),
-        Err(ViError::WouldBlock) => ostd::io::print("NAK"),
-        Err(_) => ostd::io::print("error"),
-    }
-    ostd::io::print(" hcint=0x");
-    print_hex_val(hcint);
-    ostd::io::print(" frame=0x");
-    print_hex_val(frame);
-    ostd::io::print(" want=");
-    print_usize_val(want);
-    ostd::io::println("");
+/// `CHDIS|CHENA` requests the active-channel halt; a stopped channel must not
+/// receive `CHENA`, because that would begin a new transaction.
+#[inline]
+fn active_halt_request(hcchar: u32) -> Option<u32> {
+    (hcchar & HCCHAR_CHENA != 0).then_some((hcchar | HCCHAR_CHDIS | HCCHAR_CHENA) & !HCCHAR_EPDIR)
 }
 
-fn print_usize_val(v: usize) {
-    let mut out = [0u8; 20];
-    let mut n = v;
-    let mut len = 0;
-    if n == 0 {
-        ostd::io::print("0");
-        return;
+/// `HCSPLT` for a transfer addressed through `split`, or 0 when there is none.
+///
+/// Every transfer to a device behind a hub needs this, not just the periodic
+/// poll: a channel armed without it addresses the low-speed device on the
+/// high-speed bus, which nothing answers and the core reports as XACTERR. The
+/// value is built here rather than read from the engine so a stage that forgets
+/// to program it can be caught by a test instead of by a keyboard whose LEDs
+/// never light.
+#[inline]
+fn hcsplt_for(split: Option<Split>, complete: bool) -> u32 {
+    let Some(split) = split else {
+        return 0;
+    };
+    let mut value = HCSPLT_SPLTENA
+        | ((split.hub_addr as u32 & HCSPLT_HUBADDR_MASK >> HCSPLT_HUBADDR_SHIFT)
+            << HCSPLT_HUBADDR_SHIFT)
+        | (split.port as u32 & HCSPLT_PRTADDR_MASK)
+        // Every split this driver issues carries one packet, so the whole
+        // payload is what the complete-split collects. Linux programs this
+        // field for both halves, next to the split address it is easy to
+        // mistake for the whole of HCSPLT.
+        | HCSPLT_XACTPOS_ALL;
+    if complete {
+        value |= HCSPLT_COMPSPLT;
     }
-    while n > 0 && len < out.len() {
-        out[len] = b'0' + (n % 10) as u8;
-        n /= 10;
-        len += 1;
-    }
-    out[..len].reverse();
-    if let Ok(s) = core::str::from_utf8(&out[..len]) {
-        ostd::io::print(s);
-    }
+    value
 }
 
-/// Start a fresh register recording.
-///
-/// Called when the polls begin, so the ring describes the polls rather than the
-/// enumeration that came before them.
-pub fn trace_reset() {
-    trace::reset();
-}
+#[cfg(test)]
+mod tests {
+    use super::{
+        active_halt_request, hcsplt_for, Split, HCCHAR_CHDIS, HCCHAR_CHENA, HCCHAR_EPDIR,
+        HCSPLT_COMPSPLT, HCSPLT_HUBADDR_MASK, HCSPLT_HUBADDR_SHIFT, HCSPLT_PRTADDR_MASK,
+        HCSPLT_SPLTENA, HCSPLT_XACTPOS_ALL,
+    };
 
-/// Write the register recording out, once, at a point the caller knows is safe.
-///
-/// It used to be written only when the control path failed, and gating the
-/// stalled-endpoint recovery on a real stall removed that failure -- so the
-/// recording stopped being written at all just when the polls went quiet enough to
-/// need it.
-pub fn trace_dump() {
-    trace::dump_once();
+    #[test]
+    fn active_halt_request_requests_halt_without_changing_channel_configuration() {
+        let channel_config = 0x0123_4567 | HCCHAR_CHENA | HCCHAR_EPDIR;
+        let request = active_halt_request(channel_config).expect("active channel");
+
+        assert_eq!(request & HCCHAR_CHENA, HCCHAR_CHENA);
+        assert_eq!(request & HCCHAR_CHDIS, HCCHAR_CHDIS);
+        assert_eq!(request & HCCHAR_EPDIR, 0);
+        assert_eq!(
+            request & !(HCCHAR_CHENA | HCCHAR_CHDIS | HCCHAR_EPDIR),
+            channel_config & !(HCCHAR_CHENA | HCCHAR_CHDIS | HCCHAR_EPDIR)
+        );
+    }
+
+    #[test]
+    fn stopped_channel_does_not_receive_a_halt_request() {
+        assert_eq!(active_halt_request(0x0123_4567 & !HCCHAR_CHENA), None);
+    }
+
+    /// Every pass of a split names the hub and port it is addressed through, and
+    /// only the second pass asks for a complete-split.
+    #[test]
+    fn split_register_addresses_the_hub_on_both_halves() {
+        let split = Split {
+            hub_addr: 1,
+            port: 5,
+            low_speed: true,
+        };
+
+        let start = hcsplt_for(Some(split), false);
+        assert_eq!(start & HCSPLT_SPLTENA, HCSPLT_SPLTENA);
+        assert_eq!(start & HCSPLT_COMPSPLT, 0);
+        assert_eq!(
+            (start & HCSPLT_HUBADDR_MASK) >> HCSPLT_HUBADDR_SHIFT,
+            split.hub_addr as u32
+        );
+        assert_eq!(start & HCSPLT_PRTADDR_MASK, split.port as u32);
+        assert_eq!(start & HCSPLT_XACTPOS_ALL, HCSPLT_XACTPOS_ALL);
+
+        let complete = hcsplt_for(Some(split), true);
+        assert_eq!(complete & HCSPLT_COMPSPLT, HCSPLT_COMPSPLT);
+        assert_eq!(
+            complete & !HCSPLT_COMPSPLT,
+            start & !HCSPLT_COMPSPLT,
+            "the two halves address the same hub and port"
+        );
+    }
+
+    /// A device on the root port must not be sent a split at all.
+    #[test]
+    fn no_split_context_disables_the_split_register() {
+        assert_eq!(hcsplt_for(None, false), 0);
+        assert_eq!(hcsplt_for(None, true), 0);
+    }
 }
 
 pub(crate) fn print_hex_val(val: u32) {
