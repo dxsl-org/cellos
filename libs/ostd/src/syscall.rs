@@ -529,6 +529,18 @@ pub fn sys_spawn_from_path(path: &str) -> SyscallResult {
         }
     }
     // Bootstrap path: raw SpawnFromPath syscall (VIFS1 / P2 table, VFS-independent).
+    sys_spawn_from_path_raw(path)
+}
+
+/// The kernel's own path route, with no VFS read in front of it.
+///
+/// This resolves VIFS1 and the P2 table without any block driver, which makes it the
+/// only route that can launch a cell whose reviewed launch edge carries authority —
+/// the VFS-loaded (`SpawnFromElf`) route refuses a non-empty child ceiling on
+/// caller-supplied bytes. A caller that must fall back between the two routes has to
+/// re-publish its command line between attempts: a rejected attempt discards the
+/// staged argv by design (`StagedSpawnArgvCleanup`).
+pub fn sys_spawn_from_path_raw(path: &str) -> SyscallResult {
     // SAFETY: path is a valid UTF-8 str; kernel copies it out before returning.
     unsafe {
         let ret = syscall(

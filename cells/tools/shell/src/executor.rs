@@ -889,7 +889,23 @@ fn spawn_external(prog: &str, args: &[String]) -> i32 {
 
     let mut path = alloc::string::String::from("/bin/");
     path.push_str(prog);
-    match syscall::sys_spawn_from_path(&path) {
+
+    // Try the kernel's own path route first: it is the only route that reaches a
+    // cell whose reviewed launch edge carries authority (the VFS-loaded route
+    // refuses a non-empty child ceiling), and for VIFS1-resident cells it is also
+    // the first one that can succeed. A *rejected* attempt discards the staged
+    // command line by design, and the fallback below may need a second attempt, so
+    // the argv is published again in between — `args` is still owned here, which is
+    // the only place that can do it.
+    let mut spawned = syscall::sys_spawn_from_path_raw(&path);
+    if matches!(spawned, syscall::SyscallResult::Err(_)) {
+        if !ostd::set_spawn_argv(args) {
+            shell_println("shell: external argv exceeds 512-byte transport limit");
+            return 1;
+        }
+        spawned = syscall::sys_spawn_from_path(&path);
+    }
+    match spawned {
         syscall::SyscallResult::Ok(tid) => {
             // Backgrounded (`cmd &`): do NOT sys_wait. A long-running external
             // cell (httpd) would otherwise park the shell forever, so no later
