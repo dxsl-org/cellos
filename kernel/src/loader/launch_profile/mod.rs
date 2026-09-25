@@ -65,7 +65,9 @@ pub fn authorize(
         "hypha" if caller.has_spawn => profiles::hypha_profile(route, target),
         "tool-spawn" if caller.has_spawn => profiles::tool_spawn_profile(route, target),
         "dwc2-usb" if caller.has_spawn => profiles::dwc2_function_worker_profile(route, target),
-        "backend-supervisor" if caller.has_spawn => profiles::backend_supervisor_profile(route, target),
+        "backend-supervisor" if caller.has_spawn => {
+            profiles::backend_supervisor_profile(route, target)
+        }
         "supervisor" if caller.has_spawn && caller.has_supervisor => {
             profiles::supervisor_profile(route, target)
         }

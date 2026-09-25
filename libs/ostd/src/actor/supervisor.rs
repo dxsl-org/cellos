@@ -365,7 +365,10 @@ impl Tree {
             Ok(tid) => match ctx.watch(tid) {
                 Ok(()) => {
                     self.children[index].set_tid(tid);
-                    log!("[supervisor] {why}: child {name} up tid={tid} policy={:?}", self.children[index].spec().policy);
+                    log!(
+                        "[supervisor] {why}: child {name} up tid={tid} policy={:?}",
+                        self.children[index].spec().policy
+                    );
                 }
                 Err(e) => {
                     log!("[supervisor] child {name} spawned tid={tid} but NotifyOnExit failed: {e:?}");
@@ -477,7 +480,10 @@ mod tests {
         assert!(Policy::Permanent.restarts(u64::MAX));
         assert!(!Policy::Transient.restarts(0), "clean exit stays down");
         assert!(Policy::Transient.restarts(1), "abnormal exit restarts");
-        assert!(Policy::Transient.restarts(u64::MAX), "fault/ForceExit restarts");
+        assert!(
+            Policy::Transient.restarts(u64::MAX),
+            "fault/ForceExit restarts"
+        );
         assert!(!Policy::Temporary.restarts(u64::MAX));
     }
 
@@ -489,7 +495,10 @@ mod tests {
             child.record_exit(u64::MAX, 100),
             Decision::Restart { delay_ticks: 0 }
         );
-        assert!(!child.is_live(), "a dead child has no tid until it is respawned");
+        assert!(
+            !child.is_live(),
+            "a dead child has no tid until it is respawned"
+        );
     }
 
     #[test]
@@ -506,7 +515,11 @@ mod tests {
         // Same window for all six: the window is 1_000 ticks and `now` stays inside it.
         let decisions: Vec<Decision> = (0..6).map(|_| child.record_exit(u64::MAX, 10)).collect();
         for (i, decision) in decisions.iter().enumerate().take(5) {
-            assert_eq!(*decision, Decision::Restart { delay_ticks: 0 }, "restart #{i}");
+            assert_eq!(
+                *decision,
+                Decision::Restart { delay_ticks: 0 },
+                "restart #{i}"
+            );
         }
         assert_eq!(decisions[5], Decision::GiveUp);
         assert!(child.gave_up());
@@ -578,6 +591,9 @@ mod tests {
         let rest_for_one = tree(Strategy::RestForOne, &["a", "b", "c"]);
         assert_eq!(rest_for_one.scope(1), vec![1, 2]);
         assert_eq!(rest_for_one.scope(2), vec![2]);
-        assert!(rest_for_one.scope(9).is_empty(), "out of range has no scope");
+        assert!(
+            rest_for_one.scope(9).is_empty(),
+            "out of range has no scope"
+        );
     }
 }
