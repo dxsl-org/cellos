@@ -323,7 +323,11 @@ mod tests {
     #[test]
     fn unknown_id_decodes_to_unknown_variant() {
         // IDs that have no assigned meaning must produce Unknown, not panic.
-        let unassigned = [9, 50, 99, 100, 108, 256, 999, usize::MAX];
+        //
+        // If a future opcode claims one of these numbers, drop it here and pick
+        // another free one — id 9 was in this list until `SetTlsBase` took it
+        // (ADR-0018's per-task TLS base), which is what broke this test.
+        let unassigned = [50, 99, 100, 108, 256, 999, usize::MAX];
         for id in unassigned {
             let got = ViSyscall::from(id);
             assert_eq!(
