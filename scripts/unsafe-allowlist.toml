@@ -389,6 +389,27 @@ date = "2026-07-30"
 review_by = "2026-10-28"
 tracking = "midori-lessons phase 07 (grant/pointer audit)"
 
+[[file]]
+path = "cells/tests/c-pthread/src/main.rs"
+class = "c-ffi"
+reason = "C FFI witness for the port-platform pthread runtime: the `unsafe extern \"C\"` block is the only way to call `cellos_pthread_witness` in the linked C runtime, which is outside the Rust type system entirely."
+approver = "dmin"
+date = "2026-09-25"
+
+[[file]]
+path = "cells/tests/c-spawn/src/main.rs"
+class = "c-ffi"
+reason = "C FFI witness for the port-platform spawn adapter: the `unsafe extern \"C\"` block is the only way to call `cellos_spawn_witness` in the linked C runtime, which is outside the Rust type system entirely."
+approver = "dmin"
+date = "2026-09-25"
+
+[[file]]
+path = "cells/tests/c-spawn-child/src/main.rs"
+class = "c-ffi"
+reason = "C FFI child witness for the port-platform spawn adapter: the `unsafe extern \"C\"` block is the only way to call `cellos_spawn_child_witness` in the linked C runtime, which is outside the Rust type system entirely."
+approver = "dmin"
+date = "2026-09-25"
+
 # ── Crate exemptions from the attribute rule ─────────────────────────────────────
 #
 # Derived from the [[file]] entries above: a crate owning an allowlisted
@@ -605,3 +626,24 @@ approver = "cellos-maintainers"
 date = "2026-07-30"
 review_by = "2026-10-28"
 tracking = "midori-lessons phase 07 (grant/pointer audit)"
+
+[[crate]]
+name = "c-pthread"
+class = "c-ffi"
+reason = "Owns allowlisted unsafe under cells/tests/c-pthread/ — see the [[file]] entry for the justification."
+approver = "dmin"
+date = "2026-09-25"
+
+[[crate]]
+name = "app-c-spawn"
+class = "c-ffi"
+reason = "Owns allowlisted unsafe under cells/tests/c-spawn/ — see the [[file]] entry for the justification."
+approver = "dmin"
+date = "2026-09-25"
+
+[[crate]]
+name = "app-c-spawn-child"
+class = "c-ffi"
+reason = "Owns allowlisted unsafe under cells/tests/c-spawn-child/ — see the [[file]] entry for the justification."
+approver = "dmin"
+date = "2026-09-25"
