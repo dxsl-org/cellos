@@ -187,21 +187,36 @@ nothing else.
    `elapsed_ticks=1452030` against a `900000` proof ceiling, and an INCONCLUSIVE-only run cannot
    pass by the gate's own rule).
 
-9. **FIXED — a staged command line was discarded by the next syscall that followed it.**
-   `StagedSpawnArgvCleanup` was built with
-   `bool::then_some(StagedSpawnArgvCleanup { .. })`, and `then_some` takes its argument **by
-   value**: the guard was therefore constructed for *every* syscall and dropped again immediately
-   when the predicate was false, and its `Drop` discards the caller's staged command line. The
-   shell's sequence (`set_spawn_argv` → the VFS read `sys_spawn_from_path` performs → `SpawnFromElf`)
-   lost the argv every time, so cells started with defaults: `httpd 9091 /tmp/resp.txt` listened on
-   :8080 and `tier2-exploit peer` ran its NULL-write mode. Found with temporary logging at each hop
-   — `stage caller=19 len=26` immediately followed by `take caller=19 present=0` — and fixed in
-   `982ccfd94` by building the guard only for the four spawn syscalls.
-   Recovered, verified locally: `network_httpd_serves_file` (the 13 s reproducer now passes) and two
-   of the three `tier2-fault-isolation` cases (2/5 → 4/5).
-   **Not explained by it, still open**: four `hotswap-smoke` cases (unchanged at 11/15),
-   `posix_shim_getentropy`, and one boot/network case. The earlier note in this plan claiming one root
-   cause covered five lanes was too broad; these need their own diagnosis.
+9. **FIXED (two bugs) — the shell's command line never reached the cell.**
+   Symptom: every cell launched from the shell started with default arguments
+   (`httpd 9091 /tmp/resp.txt` listened on :8080, `tier2-exploit peer` ran its NULL mode,
+   `bench peer-death-guard` ran the default benchmark suite). Two independent defects sat on
+   the same path:
+
+   * **Any syscall after staging discarded the command line.** `StagedSpawnArgvCleanup` was
+     built as `bool::then_some(StagedSpawnArgvCleanup { .. })`, and `then_some` takes its
+     argument **by value** — so the guard existed for every syscall and was dropped
+     immediately when the predicate was false, and its `Drop` discards the caller's staged
+     argv. The shell's sequence (`set_spawn_argv` → the VFS read inside
+     `sys_spawn_from_path` → the spawn) lost it every time. Fixed in `982ccfd94`; found with
+     temporary logging at each hop, which printed `stage caller=19 len=26` immediately
+     followed by `take caller=19 present=0`.
+   * **A rejected attempt discarded the line the fallback needed.** VIFS1-resident targets
+     whose ceiling carries authority (the `bench` cell the hotswap cases drive) are refused on
+     the VFS/ELF route, so the shell fell back to the kernel's path route — but the rejected
+     first attempt had already discarded the argv, and the fallback launched the cell without
+     it. Fixed in `6b311e44e`: the shell tries `sys_spawn_from_path_raw` first and re-publishes
+     `args` before the VFS/ELF fallback (only the caller can re-publish — `set_spawn_argv` is
+     its own staging slot and `sys_spawn_args` is one-shot by design).
+
+   Verified locally after re-staging the image: `hotswap-smoke` **15/15**, `tier2-fault-isolation`
+   **5/5**, boot `network_*` **7/7**, `mqtt_publish`/`mqtt_subscribe` **2/2**, and both
+   `posix_shim_*` cases pass. `cells/tests/posix-shim-test` also needed `GetRandom` in its
+   syscall allowlist (`fcf9615ca`) — the cell was assembled for the fstat smoke and the later
+   entropy/socket smokes were denied.
+   **Still open, not explained by any of this**: `C2C Broker Oracle`'s idle-IPC wake drain
+   (`INCONCLUSIVE` at 1 452 030 ticks against a 900 000 ceiling), and the four
+   `hotswap-smoke`-adjacent failures recorded earlier in finding 7 are now closed.
 
 ## Assumptions
 - A supervisor Cell is a signed, `SpawnCap`-bearing cell; monitoring stays gated on `SpawnCap`, so

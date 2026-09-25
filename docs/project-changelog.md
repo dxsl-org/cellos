@@ -4,6 +4,22 @@
 
 ## [Unreleased] Development-first hardware-constrained execution
 
+- **Command lines reach cells again (two independent defects on one path).** Cells launched from
+  the shell started with default arguments: `httpd 9091 /tmp/resp.txt` listened on :8080,
+  `tier2-exploit peer` ran its NULL-write mode, and `bench peer-death-guard` ran the default
+  benchmark suite. First, `StagedSpawnArgvCleanup` was built with
+  `bool::then_some(StagedSpawnArgvCleanup { .. })` — `then_some` takes its argument by value, so
+  the guard existed for every syscall and its `Drop` discarded the staged command line whenever the
+  predicate was false; the shell's `set_spawn_argv` → VFS-read → spawn sequence lost the argv every
+  time. Second, a *rejected* launch attempt also discards the argv by design, so falling back from
+  the refused VFS/ELF route (which refuses a non-empty ceiling on caller-supplied bytes) to the
+  kernel's path route lost the command line; the shell now tries `sys_spawn_from_path_raw` first and
+  re-publishes its arguments before the fallback. `cells/tests/posix-shim-test` also gained the
+  `GetRandom` allowlist bit its entropy/socket smokes need. Verified: `hotswap-smoke` 15/15,
+  `tier2-fault-isolation` 5/5, `network_*` 7/7 (one wget case is flaky), `mqtt_*` 2/2,
+  `posix_shim_*` 3/3 — with `network_wget_downloads_to_vfs` recorded as intermittent rather than
+  claimed stable.
+
 - **Actor/supervisor library (B0 of the backend roadmap, ADR-0021):** an application can declare a
   supervision tree instead of editing `/bin/init`. `ostd::actor` is a typed mailbox loop over the
   existing `0xAC` envelope — no new syscall, opcode, or byte-0 discriminant — with masked call/reply
