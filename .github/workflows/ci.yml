@@ -191,13 +191,14 @@ jobs:
             short: aarch64
             cc_pkg: gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
             cc_bin: aarch64-linux-gnu-gcc
-            # `app-c-pthread` / `app-c-spawn` compile the port-platform C thunk,
-            # whose header says "Cell builds require RISC-V" and whose non-RISC-V
-            # branch expects a host-test backend (`cellos_test_syscall4`), so the
-            # AArch64 leg excludes them the way it already excludes lua/doom.
+            # The port-platform C witnesses (`c-pthread`, `app-c-spawn`,
+            # `app-c-spawn-child`) compile a thunk whose header says "Cell builds
+            # require RISC-V" and whose non-RISC-V branch expects a host-test
+            # backend (`cellos_test_syscall4`), so the AArch64 leg excludes them
+            # the way it already excludes lua/doom/tetris-c.
             cells_args: >-
               --workspace --exclude cellos-kernel --exclude app-mlibc-smoke
-              --exclude app-c-pthread --exclude app-c-spawn
+              --exclude c-pthread --exclude app-c-spawn --exclude app-c-spawn-child
               --exclude doom --exclude tetris-c --exclude lua --exclude tetris-lua
           - target: x86_64-unknown-none
             short: x86_64
