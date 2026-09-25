@@ -1005,6 +1005,26 @@ impl Drop for StagedSpawnArgvCleanup {
     }
 }
 
+/// Build the guard only for a spawn syscall.
+///
+/// `consumes_staged_spawn_argv(&syscall).then_some(StagedSpawnArgvCleanup { .. })`
+/// looks equivalent but is not: `then_some` takes its argument **by value**, so the
+/// guard was constructed for *every* syscall and dropped again immediately when the
+/// predicate was false — its `Drop` then discarded the caller's staged command
+/// line. Staging an argv and then issuing any other syscall before the spawn (the
+/// shell's VFS read is exactly that) silently lost the command line; the cell then
+/// started with no arguments at all (`httpd 9091 /tmp/resp.txt` listened on :8080).
+fn staged_spawn_argv_cleanup(
+    syscall: &Syscall,
+    caller_id: usize,
+) -> Option<StagedSpawnArgvCleanup> {
+    if consumes_staged_spawn_argv(syscall) {
+        Some(StagedSpawnArgvCleanup { caller_id })
+    } else {
+        None
+    }
+}
+
 fn governed_spawn_request(
     caller_id: usize,
     child_ceiling: super::cap::CapSet,
@@ -2996,8 +3016,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         return Err(SyscallError::PermissionDenied);
     };
 
-    let _staged_spawn_argv_cleanup =
-        consumes_staged_spawn_argv(&syscall).then_some(StagedSpawnArgvCleanup { caller_id });
+    let _staged_spawn_argv_cleanup = staged_spawn_argv_cleanup(&syscall, caller_id);
 
     // Syscall allowlist enforcement: reject if this syscall's bit is not set in
     // the per-Cell bitset loaded from ELF section `__ViCell_syscalls`.
