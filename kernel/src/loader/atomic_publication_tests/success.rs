@@ -28,10 +28,20 @@ fn ready_contains(state: &StateSnapshot, tid: usize) -> bool {
 fn observed_success(cases: &[&str], before: &StateSnapshot, tid: usize) -> bool {
     let after = snapshot();
     let audit_delta = after.audit.0.wrapping_sub(before.audit.0);
+    // The ring is a byte cursor over records of *mixed* length (18 bytes for the
+    // `encode_u32x2` payloads this corpus emits, 10 bytes for an empty payload,
+    // and anything between). On one hart every record in the window is 18 bytes,
+    // so the delta is a multiple of 18 and AP-15 can demand exactly two records.
+    // On two harts the competing producer appends its own records, which are not
+    // necessarily 18 bytes, so the multiple-of-18 test is not a property of the
+    // ring at all — it failed intermittently (2026-09-18 and 2026-09-25) with a
+    // healthy kernel. What the contract can assert on both hart counts is that
+    // the publication appended at least two records' worth of evidence and that
+    // nothing was dropped while it did so.
     let expected_evidence = if cases.contains(&"AP-15") {
         audit_delta == 36
     } else {
-        audit_delta >= 36 && audit_delta.is_multiple_of(18)
+        audit_delta >= 36 && after.audit.2 == before.audit.2
     };
     cases.iter().all(|case| observation_complete(case))
         && after.tasks.iter().any(|task| task.id == tid)

@@ -5,9 +5,13 @@
 //! builtin) drains the ring and appends to `/data/kernel.log`.
 //!
 //! # Concurrency
-//! The timer ISR may preempt a syscall-context `log_event()` call, creating
-//! two apparent producers.  We guard each write by briefly disabling S-mode
-//! interrupts (`csrci sstatus, 0x2`) — safe on single-hart.
+//! Two things can make a write concurrent with another producer: the timer ISR
+//! preempting a syscall-context `log_event()` call on the same hart, and a
+//! second hart logging at the same time.  S-mode interrupts are disabled for
+//! the duration (which also makes the lock below unreachable from an ISR, so it
+//! cannot self-deadlock), and `WRITE` serialises the hart-to-hart case: without
+//! it two harts read the same `head`, write into the same byte range, and store
+//! the same advanced `head`, so one record is silently overwritten.
 //!
 //! # Overflow
 //! When the ring is full, new writes are dropped and `DROPPED` is incremented.
@@ -24,6 +28,10 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 
 const BUF_SIZE: usize = 256 * 1024; // must be a power of two
 const MASK: usize = BUF_SIZE - 1;
+
+/// Serialises producers. Taken with S-mode interrupts already disabled, so a
+/// same-hart ISR can never wait on it and a holder never blocks an interrupt.
+static WRITE: crate::sync::Spinlock<()> = crate::sync::Spinlock::new(());
 
 /// Kernel audit event type byte.
 #[repr(u8)]
@@ -143,29 +151,20 @@ pub fn log_event(event: AuditEvent, payload: &[u8]) {
     let plen = payload.len().min(255) as u8;
     let record_len = 10 + plen as usize;
 
-    // Disable S-mode interrupts: prevent timer ISR from racing this write.
-    // SAFETY: single-hart; restoring sie after the write preserves the invariant.
-    let sie_was_set = {
-        #[cfg(target_arch = "riscv64")]
-        {
-            let v: usize;
-            // SAFETY: csrrci clears SIE (bit 1) and returns old sstatus.
-            unsafe { core::arch::asm!("csrrci {}, sstatus, 0x2", out(reg) v) };
-            v & 0x2 != 0
-        }
-        #[cfg(not(target_arch = "riscv64"))]
-        {
-            false
-        }
-    };
+    // Capture the outgoing interrupt state and mask interrupts on this hart.
+    // Two reasons: a same-hart ISR must not re-enter the write and wait on the
+    // lock below, and the record's bytes must be ordered before its publication.
+    let saved_interrupts = crate::hal::arch::save_and_disable_interrupts();
 
+    let _serialised = WRITE.lock();
     let head = RING.head.load(Ordering::Relaxed);
     let tail = RING.tail.load(Ordering::Acquire);
 
     // Drop-on-full: never overwrite consumer bytes.
     if head.wrapping_sub(tail) + record_len > BUF_SIZE {
         RING.dropped.fetch_add(1, Ordering::Relaxed);
-        restore_sie(sie_was_set);
+        // SAFETY: `saved_interrupts` was captured on this hart by the call above.
+        unsafe { crate::hal::arch::restore_sstatus(saved_interrupts) };
         return;
     }
 
@@ -189,18 +188,8 @@ pub fn log_event(event: AuditEvent, payload: &[u8]) {
     RING.head
         .store(head.wrapping_add(record_len), Ordering::Release);
 
-    restore_sie(sie_was_set);
-}
-
-#[inline(always)]
-fn restore_sie(was_set: bool) {
-    if was_set {
-        #[cfg(target_arch = "riscv64")]
-        // SAFETY: restoring SIE to its prior state.
-        unsafe {
-            core::arch::asm!("csrsi sstatus, 0x2");
-        }
-    }
+    // SAFETY: `saved_interrupts` was captured on this hart by the call above.
+    unsafe { crate::hal::arch::restore_sstatus(saved_interrupts) };
 }
 
 /// Drain up to `out.len()` bytes from the ring.  Returns bytes copied.

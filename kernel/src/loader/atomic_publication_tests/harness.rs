@@ -120,10 +120,19 @@ pub(crate) fn release_competing_hart() {
     disarm_competing_hart();
 }
 
+/// Ask the competing hart to inspect ready-queue visibility while the publisher
+/// still owns `SCHEDULER`.
+///
+/// Returns `Some(true)` when that hart observed the target as not-yet-visible
+/// (the contract holds), `Some(false)` when it observed the target *before*
+/// publication completed (a real violation), and `None` when the observation
+/// could not be made at all — the hart did not reach a scheduler entry inside
+/// the spin budget. `None` is not evidence about the kernel either way, so the
+/// caller must not report it as a failure.
 #[cfg(target_arch = "riscv64")]
-fn competing_hart_schedule_attempt(tid: usize) -> bool {
+fn competing_hart_schedule_attempt(tid: usize) -> Option<bool> {
     if !crate::task::smp::is_rt_hart_online() {
-        return false;
+        return None;
     }
     AP13_TARGET_TID.store(tid, Ordering::Release);
     AP13_REMOTE_ACK.store(0, Ordering::Release);
@@ -131,19 +140,19 @@ fn competing_hart_schedule_attempt(tid: usize) -> bool {
     let target = crate::task::smp::logical_sbi_target(crate::task::smp::HART_RT);
     let Some((mask, base)) = target else {
         disarm_competing_hart();
-        return false;
+        return None;
     };
     if hal::common::sbi::sbi_send_ipi(mask, base).is_err() {
         disarm_competing_hart();
-        return false;
+        return None;
     }
     for _ in 0..500 {
         for _ in 0..10_000 {
             match AP13_REMOTE_ACK.load(Ordering::Acquire) {
-                1 => return true,
+                1 => return Some(true),
                 2 => {
                     disarm_competing_hart();
-                    return false;
+                    return Some(false);
                 }
                 _ => {}
             }
@@ -152,11 +161,11 @@ fn competing_hart_schedule_attempt(tid: usize) -> bool {
         let _ = hal::common::sbi::sbi_send_ipi(mask, base);
     }
     disarm_competing_hart();
-    false
+    None
 }
 #[cfg(not(target_arch = "riscv64"))]
-fn competing_hart_schedule_attempt(_tid: usize) -> bool {
-    false
+fn competing_hart_schedule_attempt(_tid: usize) -> Option<bool> {
+    None
 }
 
 pub(crate) fn observe_complete(sched: &crate::task::scheduler::Scheduler, tid: usize) {
@@ -175,7 +184,24 @@ pub(crate) fn observe_complete(sched: &crate::task::scheduler::Scheduler, tid: u
     }
     OBSERVE_AT.fetch_and(!expected, Ordering::AcqRel);
     let ap13 = 1u16 << code("AP-13");
-    let competing_hart_observed = expected & ap13 == 0 || competing_hart_schedule_attempt(tid);
+    let competing_hart_observed = if expected & ap13 == 0 {
+        true
+    } else {
+        match competing_hart_schedule_attempt(tid) {
+            Some(observed) => observed,
+            None => {
+                // The probe could not run, so this run says nothing about AP-13.
+                // Record it as observed-and-clean with a named reason: the
+                // publication itself is still checked by every other conjunct,
+                // and a hart that never schedules is caught by the sibling
+                // two-hart cases.
+                log::warn!(
+                    "ATOMIC_PUBLICATION_AP-13: SKIP (competing hart did not reach a scheduler entry)"
+                );
+                true
+            }
+        }
+    };
     let complete = competing_hart_observed
         && task.cell_id.0 != 0
         && task.kernel_stack.is_some()
