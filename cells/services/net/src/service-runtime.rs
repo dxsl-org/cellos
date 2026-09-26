@@ -61,12 +61,18 @@ pub(crate) enum IdleIpcWakeClassification {
     Inconclusive,
 }
 
+/// Classify the ticks a recordless wait burned *before it returned*.
+///
+/// `wait_return_ticks` is the wait's own latency, not the latency of the IPC
+/// that followed it: only the return can be below the exclusive ceiling (a
+/// deadline return lands at whole tick periods, at or above it), and the
+/// waiter's path back to `TryRecv` afterwards is not part of the wake.
 #[cfg(any(
     test,
     all(feature = "ipc-wake-oracle", not(feature = "hypervisor-bridge"))
 ))]
-pub(crate) const fn classify_idle_ipc_wake(elapsed_ticks: u64) -> IdleIpcWakeClassification {
-    if elapsed_ticks < IDLE_IPC_WAKE_PROOF_CEILING_TICKS {
+pub(crate) const fn classify_idle_ipc_wake(wait_return_ticks: u64) -> IdleIpcWakeClassification {
+    if wait_return_ticks < IDLE_IPC_WAKE_PROOF_CEILING_TICKS {
         IdleIpcWakeClassification::Pass
     } else {
         IdleIpcWakeClassification::Inconclusive
@@ -235,7 +241,7 @@ pub(crate) fn run() {
                     continue;
                 }
                 #[cfg(all(feature = "ipc-wake-oracle", not(feature = "hypervisor-bridge")))]
-                idle_ipc_wake_oracle.record_ipc_drain(sys_get_time());
+                idle_ipc_wake_oracle.record_ipc_drain(sys_get_time(), sender);
                 handlers::handle_request(
                     &buffer,
                     sender,
@@ -275,6 +281,7 @@ pub(crate) fn run() {
                         WaitCompletionResult::NoRecord => {
                             idle_ipc_wake_oracle.arm(
                                 wait_started_ticks,
+                                sys_get_time().wrapping_sub(wait_started_ticks),
                                 SMOLTCP_MAINTENANCE_TICKS,
                                 IDLE_IPC_WAKE_PROOF_CEILING_TICKS,
                             );

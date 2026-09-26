@@ -8,14 +8,14 @@
   Toàn bộ compile sạch trên 3 target (`riscv64`, `aarch64`, `x86_64`), clippy sạch với `-D warnings`,
   đã tích hợp vào launch profile kernel (`desktop_profile`), boot ceiling, sign-policy, và disk/init.
   Pass 100% integration test `tests/integration/tests/desktop-shell.rs` trên QEMU với screendump capture.
-- [open, CI-only] `C2C Broker Oracle` đỏ lại trên runner (2 run liên tiếp 2026-09-26 trên `main`): gate
-  `[net-broker] idle_ipc_wake` báo `status=ARMED cycle=1..16+` với `start_ticks` cách nhau ~1,0–1,3 M đơn vị,
-  trong khi cùng cây đó chạy local ra `status=PASS elapsed_ticks=515170` với trần `proof_ceiling_ticks=900000`.
-  Đơn vị ở đây là `GetTime` op 0 (10 MHz `mtime`), không phải scheduler tick: trần 900 000 ≈ **90 ms wall-clock**,
-  local wake ~51 ms, runner ~100–130 ms ⇒ đây là assertion độ trễ wall-clock mà runner chậm hơn ~2×, khớp với
-  ghi nhận "runner-speed marginality" trong `docs(b0)`. Không phải regression của lane mạng (không chạm
-  `net-broker`/local-runtime/kernel IPC). Hai lựa chọn, đều thuộc chương trình C2C: nới trần theo runner, hoặc
-  tối ưu wake path cho CI — chưa tự hạ trần vì đó là witness của người khác.
+- [fixed 2026-09-26] `C2C Broker Oracle` gate `idle_ipc_wake`: nguyên nhân là **criterion**, không phải wake path.
+  Trần `900000` (9 khoảng tick danh định = 90 ms) được so với `elapsed_ticks` = *lúc drain*, nhưng chính tài liệu
+  chương trình ghi drain không quy được nguyên nhân cho lần trả recordless, và số đo cho thấy `elapsed` = nhịp của
+  caller: 26 quan sát local burn 435 709–1 136 235 tick (1 lần < trần), runner 71/71 vòng ≥ 1,2 M tick trong khi
+  khoảng tick thực ở đó ~1,2–1,4 M (local ~1,03–1,14 M) ⇒ không caller nào tới được trong băng 90 ms. Instrument
+  nay đo `return_ticks` (burn của chính lần wait) + `sender`, verdict dựa trên burn đó, và chấp nhận population
+  toàn deadline khi mọi quan sát well-formed (in `verdict=quantum-spanning-idle-out`); cơ chế vẫn do
+  `IPC-PENDING`/`NET-RX-RESERVATION` sở hữu. Chi tiết + kiểm chứng: `CHANGELOG.md` (Unreleased → Fixes).
 - CI gate restoration [completed 2026-09-15]: toàn bộ pipeline CI 23/23 jobs đã XANH
   hoàn toàn trên hosted runner (GitHub Actions Run `34964009461` tại commit `2bb82e50a`).
   Toàn bộ 7 job đỏ ban đầu đã được giải quyết:

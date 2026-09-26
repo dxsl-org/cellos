@@ -28,11 +28,11 @@ fn idle_ipc_wake_classifier_is_exclusive_at_proof_ceiling() {
         classify_idle_ipc_wake(899_999),
         IdleIpcWakeClassification::Pass
     );
-    for elapsed_ticks in [900_000, 1_000_000, 1_473_679] {
+    for wait_return_ticks in [900_000, 1_000_000, 1_473_679] {
         assert_eq!(
-            classify_idle_ipc_wake(elapsed_ticks),
+            classify_idle_ipc_wake(wait_return_ticks),
             IdleIpcWakeClassification::Inconclusive,
-            "elapsed_ticks={elapsed_ticks} must not imply a wake cause"
+            "wait_return_ticks={wait_return_ticks} must not imply a wake cause"
         );
     }
 }

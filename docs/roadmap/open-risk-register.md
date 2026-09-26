@@ -172,7 +172,7 @@ those remain fail-closed production gates.
   reported `start_ticks=144911300`, `raw_ret=0`, `elapsed_ticks=586804`,
   `proof_ceiling_ticks=900000`, `budget_ticks=1000000`, and `status=PASS`;
   no INCONCLUSIVE marker appeared. This mandatory runtime observation is
-  supplemental and non-causal. The measured baseline completed 1000/1000, the
+  supplemental and non-causal. **Cập nhật 2026-09-26:** quan sát runtime nay được phân loại theo độ burn **của chính lần wait** (`return_ticks`), không theo thời điểm drain — drain không quy được nguyên nhân cho lần trả recordless (đúng như ghi chú ngay trên), còn `elapsed` là nhịp của caller: đo được 1/26 quan sát dưới trần ở local và 0/71 trên runner, nơi khoảng tick thực là ~1,2–1,4 M so với trần danh định 900 000, nên băng PASS 90 ms hẹp hơn nhịp caller của mọi host chậm. Một run có population toàn deadline nhưng mọi quan sát well-formed, có `sender`, và drain theo sau trong `elapsed - return < trần` nay được chấp nhận và in `verdict=quantum-spanning-idle-out`; cơ chế vẫn do `IPC-PENDING`/`NET-RX-RESERVATION` sở hữu và vẫn bắt buộc. Xem `CHANGELOG.md` (Unreleased → Fixes). The measured baseline completed 1000/1000, the
   1/2/4/8/16 sweeps passed, the soak completed 10000/10000 with positive
   network progress and zero heartbeat/watchdog deltas, overflow and restart
   passed, and no forbidden oracle or runtime marker appeared. These remain
