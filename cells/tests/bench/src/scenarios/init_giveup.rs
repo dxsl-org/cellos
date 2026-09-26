@@ -48,6 +48,15 @@ const ABSENT_TICKS: u64 = 200;
 /// keep restarting, so the scenario reports `SKIP` with its measurement instead of a verdict
 /// it cannot support.
 const WINDOW_TICKS: u64 = 1000;
+/// Extra quiet ticks on top of one window before the storm starts.
+///
+/// `init` anchors its window when it *processes* a death, a few ticks after the
+/// exit this scenario delivered — and on a loaded runner the observed
+/// kill→process latency reaches 85 ticks. Without the margin the storm's first
+/// death can land exactly on the boundary (`window_age=1000`, measured on CI
+/// 2026-09-26), where the roll slips to the *second* death and the storm still
+/// loses one count. 200 ticks covers that latency with room to spare.
+const ANCHOR_MARGIN_TICKS: u64 = 200;
 
 fn now() -> u64 {
     sys_get_scheduler_ticks().unwrap_or(0)
@@ -105,14 +114,16 @@ pub fn run() -> ! {
     // ~150 ticks, no give-up; locally the same storm runs with the first death
     // at tick 1642 and the give-up lands exactly at the sixth.
     //
-    // One warm-up exit plus one full window of quiet makes the anchor certain:
-    // `window_start <= warmup_death < storm_start - WINDOW_TICKS`, so the storm's
-    // first death is guaranteed to be the roll and the storm fits one window.
-    // A death *inside* the quiet window moves the anchor, so the window restarts
-    // from the last absence observed — the observed time is never earlier than
-    // init's own anchor, so the guarantee survives.
+    // One warm-up exit plus one full window of quiet (plus a margin for the
+    // kill→process latency `init` adds on top of our own clock) makes the anchor
+    // certain: `window_start <= warmup_death < storm_start - WINDOW_TICKS`, so
+    // the storm's first death is guaranteed to be the roll and all six exits fit
+    // one window. A death *inside* the quiet window moves the anchor, so the
+    // window restarts from the last absence observed — the observed time is never
+    // earlier than init's own anchor, so the guarantee survives.
+    let quiet_ticks = WINDOW_TICKS + ANCHOR_MARGIN_TICKS;
     let mut window_start = force_exit_and_await_restart("warmup");
-    while now().wrapping_sub(window_start) <= WINDOW_TICKS {
+    while now().wrapping_sub(window_start) <= quiet_ticks {
         if sys_lookup_service(TARGET_SERVICE).is_none() {
             window_start = now();
         }
