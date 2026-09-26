@@ -252,7 +252,9 @@ macro_rules! app_entry {
         #[link_section = "__ViCell_syscalls"]
         pub static VICELL_SYSCALLS: u64 = $crate::runtime::app_syscall_set($bio, $net, $spawn);
 
-        #[no_mangle]
+        // The attribute belongs to the bare-metal target only: a hosted test
+        // build must get libtest's entry, not this one (see ostd::cell_main!).
+        #[cfg_attr(target_os = "none", no_mangle)]
         pub fn main() {
             $crate::runtime::CellRuntime::new().run($handler);
         }
@@ -271,7 +273,9 @@ macro_rules! app_entry {
         #[link_section = "__ViCell_syscalls"]
         pub static VICELL_SYSCALLS: u64 = $crate::runtime::app_syscall_set($bio, $net, $spawn);
 
-        #[no_mangle]
+        // The attribute belongs to the bare-metal target only: a hosted test
+        // build must get libtest's entry, not this one (see ostd::cell_main!).
+        #[cfg_attr(target_os = "none", no_mangle)]
         pub fn main() {
             $crate::runtime::CellRuntime::new()
                 .help($help)
@@ -300,7 +304,9 @@ macro_rules! app_entry {
         #[link_section = "__ViCell_syscalls"]
         pub static VICELL_SYSCALLS: u64 = $crate::runtime::app_syscall_set($bio, $net, $spawn);
 
-        #[no_mangle]
+        // The attribute belongs to the bare-metal target only: a hosted test
+        // build must get libtest's entry, not this one (see ostd::cell_main!).
+        #[cfg_attr(target_os = "none", no_mangle)]
         pub fn main() {
             $crate::runtime::CellRuntime::new().run($handler);
         }
@@ -414,7 +420,9 @@ macro_rules! service_entry {
         #[link_section = "__ViCell_syscalls"]
         pub static VICELL_SYSCALLS: u64 = $crate::runtime::service_syscall_set($bio, $net, $spawn);
 
-        #[no_mangle]
+        // The attribute belongs to the bare-metal target only: a hosted test
+        // build must get libtest's entry, not this one (see ostd::cell_main!).
+        #[cfg_attr(target_os = "none", no_mangle)]
         pub fn main() {
             $crate::runtime::CellRuntime::new().run($handler);
         }

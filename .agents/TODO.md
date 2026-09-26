@@ -18,12 +18,13 @@ không phải bởi dòng chữ ở đây.
   vừa được bật lại và đã vào job host unit tests (xem mục "Đã đóng"); đừng để drift lại — một import
   cũ đủ để cả harness `cellos-kernel` không build, và 6 test chunking của `ostd` đã lệch khỏi session
   mà không ai thấy trong lúc chúng không chạy.
-- **[2026-09-26] 43 `#[test]` trong `cells/` vẫn không chạy ở đâu** (số đo: 438 tổng, 395 đã vào CI). Ba
-  nhóm chính: `service-httpd` 15 (handler dùng `ai-sdk/ostd-transport` chỉ tồn tại ở `target_os = "none"` —
-  cần tách transport khỏi handler mới host-test được), `service-supervisor` 9, `app-hypha` 9. Công thức đã
-  kiểm hai lần: gate `no_std`/`no_main`/entry/heap-macro theo **target** (không theo `cfg(test)`), cho dep
-  bare-metal một host shim nếu nó ship staticlib, rồi sửa drift trong test module (import thiếu, chữ ký đổi).
-- **[2026-09-26] `cargo test -p app-wasm` (không `--lib`) abort.** Bin target là entry bare-metal gọi
+- **[2026-09-26] 15 `#[test]` trong `cells/` vẫn không chạy ở đâu** (438 tổng, **423 đã vào CI**; số còn lại
+  chỉ là `service-httpd`). Chặn: handler AI của httpd dựng `AiClient` từ `ai_sdk::ostd_transport`, mà module đó
+  chỉ tồn tại ở `target_os = "none"`; muốn host-test thì phải tách transport khỏi handler (hoặc một trait trung
+  gian) — đó là thay đổi thiết kế của cell, không phải một dòng gate. Công thức đã dùng bốn lần, ghi ở đây để
+  lần sau khỏi dò: gate `no_std`/`no_main`/entry/heap-macro theo **target** (mọi macro emit `#[no_mangle]` trong
+  `ostd`: `cell_main!`, `run_app!`, `app_entry!`, `service_entry!`), host shim cho dep ship staticlib, rồi sửa
+  drift trong test module.- **[2026-09-26] `cargo test -p app-wasm` (không `--lib`) abort.** Bin target là entry bare-metal gọi
   `sys_exit`, nên test harness thoát process trước khi libtest báo cáo; CI phải gọi `--lib` (3 test ở lib).
   Muốn `cargo test` mặc định chạy được thì bin cần tách cổng vào khỏi entry.
 - [in-progress] **RPi3**: SD storage + HDMI [done]; I2C/SPI BSC1 + SPI0 loopback [done trên board

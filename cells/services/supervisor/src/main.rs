@@ -10,8 +10,8 @@
 //! On crash: init restarts the Supervisor Cell (never-die). Frozen target cells
 //! survive the restart because `sys_freeze_cell` state persists in the kernel.
 
-#![no_std]
-#![no_main]
+#![cfg_attr(target_os = "none", no_std)]
+#![cfg_attr(target_os = "none", no_main)]
 #![forbid(unsafe_code)]
 extern crate alloc;
 

@@ -1209,6 +1209,10 @@ jobs:
           # the cell's. Before that, the C runtime called the cell entry and the
           # harness died (exit 224) before reporting anything.
           cargo test -p app-net-tools -p app-wasm --target x86_64-unknown-linux-gnu
+          # `supervisor` and `robot-demo`: the same target gate, for the entry
+          # macros in ostd (`run_app!`, `app_entry!`, `service_entry!`) and for
+          # the cell headers. `robot-demo` already used the test-profile form.
+          cargo test -p supervisor -p robot-demo --target x86_64-unknown-linux-gnu
           cargo test -p service-silo -p driver-dwc2-usb -p driver-bcm-display \
             --lib --target x86_64-unknown-linux-gnu
           cargo test -p service-net-broker --lib --target x86_64-unknown-linux-gnu
