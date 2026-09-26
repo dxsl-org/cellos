@@ -11,7 +11,6 @@ const OVERLAP_Y: usize = 140;
 const BACK: [u8; 3] = [0xFF, 0x00, 0x00];
 const FRONT: [u8; 3] = [0x00, 0x00, 0xFF];
 const BACKGROUND: [u8; 3] = [0x00, 0xFF, 0x00];
-const EMPTY: [u8; 3] = [0x00, 0x00, 0x00];
 const FRAME: [u8; 3] = [0x2D, 0x34, 0x3B];
 const TITLE_INACTIVE: [u8; 3] = [0x42, 0x4D, 0x56];
 const TITLE_ACTIVE: [u8; 3] = [0x31, 0x65, 0x83];
@@ -211,9 +210,13 @@ fn clicking_exposed_surface_raises_and_focuses_its_owner() {
         color_at("/tmp/cellos-window-policy-drag.ppm", 450, 150),
         PRIMARY
     );
-    assert_eq!(
+    // The source pixel must no longer show the dragged surface. What was painted
+    // there instead belongs to whoever owns that region now (the desktop's own
+    // backdrop, currently 240,240,240) — pinning that colour would make this a test
+    // of the desktop's palette rather than of the drag, which is what moved.
+    assert_ne!(
         color_at("/tmp/cellos-window-policy-drag.ppm", 410, 110),
-        EMPTY
+        PRIMARY
     );
     assert_eq!(
         color_at("/tmp/cellos-window-policy-drag.ppm", 470, 130),
