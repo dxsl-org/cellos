@@ -35,6 +35,12 @@ jobs:
       - name: Build rustdoc
         env:
           CC_riscv64gc_unknown_none_elf: riscv64-unknown-elf-gcc
+          # The gitignored .cargo/config.toml also pins the archiver; without this
+          # cc-rs probes for the xpack name (`riscv-none-elf-ar`) and every crate
+          # that compiles C in its build script fails the whole doc build with
+          # `failed to find tool "riscv-none-elf-ar"`. Same mirror as the CI lint
+          # job — and the same reason it is spelled out there.
+          AR_riscv64gc_unknown_none_elf: riscv64-unknown-elf-ar
           CFLAGS_riscv64gc_unknown_none_elf: -march=rv64gc -mabi=lp64d -mcmodel=medany -ffreestanding -DLFS_NO_INTRINSICS -I${{ github.workspace }}/third_party/freestanding-include
         run: >
           cargo doc --workspace --no-deps
