@@ -155,27 +155,36 @@
 <a href=#155 id=155 data-nosnippet>155</a></span><span class="kw">pub const </span>HCSPLT_XACTPOS_SHIFT: u32 = <span class="number">14</span>;
 <a href=#156 id=156 data-nosnippet>156</a><span class="kw">pub const </span>HCSPLT_XACTPOS_ALL: u32 = <span class="number">3 </span>&lt;&lt; HCSPLT_XACTPOS_SHIFT;
 <a href=#157 id=157 data-nosnippet>157</a>
-<a href=#158 id=158 data-nosnippet>158</a><span class="doccomment">/// `HCCHAR.ODDFRM` — the frame the transfer goes on the wire is an odd one.
-<a href=#159 id=159 data-nosnippet>159</a>///
-<a href=#160 id=160 data-nosnippet>160</a>/// The core latches this at channel start and refuses a transfer whose parity
-<a href=#161 id=161 data-nosnippet>161</a>/// disagrees with the frame it lands in. Behind a hub that breaks the pairing
-<a href=#162 id=162 data-nosnippet>162</a>/// between a start-split and the complete-split that collects it, and the
-<a href=#163 id=163 data-nosnippet>163</a>/// channel reports a transaction error for a sequence the bus never saw.
-<a href=#164 id=164 data-nosnippet>164</a></span><span class="kw">pub const </span>HCCHAR_ODDFRM: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">29</span>;
-<a href=#165 id=165 data-nosnippet>165</a>
-<a href=#166 id=166 data-nosnippet>166</a><span class="doccomment">/// `HCCHAR.LSPDDEV` — the target is a low-speed device.
-<a href=#167 id=167 data-nosnippet>167</a>///
-<a href=#168 id=168 data-nosnippet>168</a>/// Not a cosmetic hint: a low-speed device only understands transactions
-<a href=#169 id=169 data-nosnippet>169</a>/// preceded by a full-speed preamble. Behind a hub the same bit tells the hub's
-<a href=#170 id=170 data-nosnippet>170</a>/// transaction translator to use that preamble, and without it the hub runs a
-<a href=#171 id=171 data-nosnippet>171</a>/// full-speed transaction to a device that cannot hear it.
-<a href=#172 id=172 data-nosnippet>172</a></span><span class="kw">pub const </span>HCCHAR_LSPDDEV: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">17</span>;
-<a href=#173 id=173 data-nosnippet>173</a>
-<a href=#174 id=174 data-nosnippet>174</a><span class="doccomment">/// `HFNUM.FRNUM` — the USB frame counter, in 125 us frames.
-<a href=#175 id=175 data-nosnippet>175</a></span><span class="kw">pub const </span>HFNUM_FRNUM_MASK: u32 = <span class="number">0xFFFF</span>;
-<a href=#176 id=176 data-nosnippet>176</a>
-<a href=#177 id=177 data-nosnippet>177</a><span class="doccomment">/// Mask of W1C bits in HPRT0. When writing to HPRT0 (e.g. to set PRTRST or PRTPWR),
-<a href=#178 id=178 data-nosnippet>178</a>/// these bits must be written as ZERO to prevent inadvertently clearing port events!
-<a href=#179 id=179 data-nosnippet>179</a></span><span class="kw">pub const </span>HPRT0_W1C_MASK: u32 =
-<a href=#180 id=180 data-nosnippet>180</a>    HPRT0_PRTCONNDET | HPRT0_PRTENA | HPRT0_PRTENCHNG | HPRT0_PRTOVRCURRCHNG;
+<a href=#158 id=158 data-nosnippet>158</a><span class="doccomment">/// `HCCHAR.CHDIS` requests that an active host channel stop.
+<a href=#159 id=159 data-nosnippet>159</a></span><span class="kw">pub const </span>HCCHAR_CHDIS: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">30</span>;
+<a href=#160 id=160 data-nosnippet>160</a><span class="doccomment">/// `HCCHAR.CHENA` marks a host channel active and is also required alongside
+<a href=#161 id=161 data-nosnippet>161</a>/// `CHDIS` when requesting an active-channel halt.
+<a href=#162 id=162 data-nosnippet>162</a></span><span class="kw">pub const </span>HCCHAR_CHENA: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">31</span>;
+<a href=#163 id=163 data-nosnippet>163</a><span class="doccomment">/// `HCCHAR.EPDIR` selects IN when set. Halt requests clear it, matching the
+<a href=#164 id=164 data-nosnippet>164</a>/// DWC2 reference sequence.
+<a href=#165 id=165 data-nosnippet>165</a></span><span class="kw">pub const </span>HCCHAR_EPDIR: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">15</span>;
+<a href=#166 id=166 data-nosnippet>166</a>
+<a href=#167 id=167 data-nosnippet>167</a><span class="doccomment">/// `HCCHAR.ODDFRM` — the frame the transfer goes on the wire is an odd one.
+<a href=#168 id=168 data-nosnippet>168</a>///
+<a href=#169 id=169 data-nosnippet>169</a>/// The core latches this at channel start and refuses a transfer whose parity
+<a href=#170 id=170 data-nosnippet>170</a>/// disagrees with the frame it lands in. Behind a hub that breaks the pairing
+<a href=#171 id=171 data-nosnippet>171</a>/// between a start-split and the complete-split that collects it, and the
+<a href=#172 id=172 data-nosnippet>172</a>/// channel reports a transaction error for a sequence the bus never saw.
+<a href=#173 id=173 data-nosnippet>173</a></span><span class="kw">pub const </span>HCCHAR_ODDFRM: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">29</span>;
+<a href=#174 id=174 data-nosnippet>174</a>
+<a href=#175 id=175 data-nosnippet>175</a><span class="doccomment">/// `HCCHAR.LSPDDEV` — the target is a low-speed device.
+<a href=#176 id=176 data-nosnippet>176</a>///
+<a href=#177 id=177 data-nosnippet>177</a>/// Not a cosmetic hint: a low-speed device only understands transactions
+<a href=#178 id=178 data-nosnippet>178</a>/// preceded by a full-speed preamble. Behind a hub the same bit tells the hub's
+<a href=#179 id=179 data-nosnippet>179</a>/// transaction translator to use that preamble, and without it the hub runs a
+<a href=#180 id=180 data-nosnippet>180</a>/// full-speed transaction to a device that cannot hear it.
+<a href=#181 id=181 data-nosnippet>181</a></span><span class="kw">pub const </span>HCCHAR_LSPDDEV: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">17</span>;
+<a href=#182 id=182 data-nosnippet>182</a>
+<a href=#183 id=183 data-nosnippet>183</a><span class="doccomment">/// `HFNUM.FRNUM` — the USB frame counter, in 125 us frames.
+<a href=#184 id=184 data-nosnippet>184</a></span><span class="kw">pub const </span>HFNUM_FRNUM_MASK: u32 = <span class="number">0xFFFF</span>;
+<a href=#185 id=185 data-nosnippet>185</a>
+<a href=#186 id=186 data-nosnippet>186</a><span class="doccomment">/// Mask of W1C bits in HPRT0. When writing to HPRT0 (e.g. to set PRTRST or PRTPWR),
+<a href=#187 id=187 data-nosnippet>187</a>/// these bits must be written as ZERO to prevent inadvertently clearing port events!
+<a href=#188 id=188 data-nosnippet>188</a></span><span class="kw">pub const </span>HPRT0_W1C_MASK: u32 =
+<a href=#189 id=189 data-nosnippet>189</a>    HPRT0_PRTCONNDET | HPRT0_PRTENA | HPRT0_PRTENCHNG | HPRT0_PRTOVRCURRCHNG;
 </code></pre></div></section></main></body></html>

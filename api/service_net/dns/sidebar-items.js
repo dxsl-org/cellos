@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["RESOLVE_BUDGET","RESOLVE_POLL_CEILING","RX_POLL_TICKS","SLIRP_DNS_SERVER","SLIRP_HOST"],"fn":["first_ipv4","ip_address","parse_ipv4","parse_octet","static_lookup","wait_for_frame"],"struct":["Resolver"]};

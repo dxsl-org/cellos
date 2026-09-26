@@ -1,384 +1,594 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `cells/services/input/src/main.rs`."><title>main.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="service_input" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.0-nightly (f53b654a8 2026-04-30)" data-channel="nightly" data-search-js="search-b5634cc7.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-aa4d37ac.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">service_input/</div>main.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="attr">#![no_std]
-<a href=#2 id=2 data-nosnippet>2</a>#![no_main]
-<a href=#3 id=3 data-nosnippet>3</a></span><span class="comment">// The crate cannot carry `#![forbid(unsafe_code)]`: `virtio_device.rs` needs MMIO
-<a href=#4 id=4 data-nosnippet>4</a>// access (allowlisted, class driver-mmio). All other submodules are unsafe-free.
-<a href=#5 id=5 data-nosnippet>5</a>
-<a href=#6 id=6 data-nosnippet>6</a></span><span class="doccomment">//! Input Service Cell.
-<a href=#7 id=7 data-nosnippet>7</a>//!
-<a href=#8 id=8 data-nosnippet>8</a>//! Receives raw EV_KEY events from the kernel VirtIO input driver via IPC,
-<a href=#9 id=9 data-nosnippet>9</a>//! translates scancodes to `InputEvent`s using the US QWERTY layout, and
-<a href=#10 id=10 data-nosnippet>10</a>//! dispatches them to the currently focused cell.
-<a href=#11 id=11 data-nosnippet>11</a>//!
-<a href=#12 id=12 data-nosnippet>12</a>//! ## IPC protocol (inbound from kernel, sender == 0)
-<a href=#13 id=13 data-nosnippet>13</a>//! ```text
-<a href=#14 id=14 data-nosnippet>14</a>//! byte[0]   = event type: 0=EV_KEY, 1=EV_REL, 2=EV_ABS
-<a href=#15 id=15 data-nosnippet>15</a>//! byte[1..5]= code  (u32 LE: scancode, REL_*, ABS_* axis)
-<a href=#16 id=16 data-nosnippet>16</a>//! byte[5..9]= value (u32 LE: key state, signed rel delta, abs coord)
-<a href=#17 id=17 data-nosnippet>17</a>//! ```
-<a href=#18 id=18 data-nosnippet>18</a>//! Sender 0 is the kernel; these raw frames bypass postcard decoding entirely.
-<a href=#19 id=19 data-nosnippet>19</a>//!
-<a href=#20 id=20 data-nosnippet>20</a>//! ## Focus IPC (inbound from compositor/shell, sender &gt; 0)
-<a href=#21 id=21 data-nosnippet>21</a>//! Typed `InputRequest` encoded with postcard — see `api::ipc::InputRequest`.
-<a href=#22 id=22 data-nosnippet>22</a>//! Sender &gt; 0 always routes to postcard decode; opcode collisions with kernel
-<a href=#23 id=23 data-nosnippet>23</a>//! frames are impossible by construction.
-<a href=#24 id=24 data-nosnippet>24</a>//!
-<a href=#25 id=25 data-nosnippet>25</a>//! ## IPC protocol (outbound to focused cell)
-<a href=#26 id=26 data-nosnippet>26</a>//! See `dispatcher::Dispatcher::dispatch` and `api::input::encode_event`.
-<a href=#27 id=27 data-nosnippet>27</a>
-<a href=#28 id=28 data-nosnippet>28</a></span><span class="kw">extern crate </span>alloc;
-<a href=#29 id=29 data-nosnippet>29</a>
-<a href=#30 id=30 data-nosnippet>30</a><span class="kw">mod </span>dispatcher;
-<a href=#31 id=31 data-nosnippet>31</a><span class="kw">mod </span>layout_us_qwerty;
-<a href=#32 id=32 data-nosnippet>32</a><span class="kw">mod </span>modifier_state;
-<a href=#33 id=33 data-nosnippet>33</a><span class="kw">mod </span>mouse_state;
-<a href=#34 id=34 data-nosnippet>34</a><span class="kw">mod </span>virtio_device;
-<a href=#35 id=35 data-nosnippet>35</a>
-<a href=#36 id=36 data-nosnippet>36</a><span class="kw">use </span>alloc::vec::Vec;
-<a href=#37 id=37 data-nosnippet>37</a><span class="kw">use </span>api::input::{InputEvent, KeyEvent, KeyState, KeySym};
-<a href=#38 id=38 data-nosnippet>38</a><span class="kw">use </span>api::ipc::{InputRequest, InputResponse, IPC_BUF_SIZE};
-<a href=#39 id=39 data-nosnippet>39</a><span class="kw">use </span>dispatcher::Dispatcher;
-<a href=#40 id=40 data-nosnippet>40</a><span class="kw">use </span>layout_us_qwerty::{key_state_from_evdev, translate};
-<a href=#41 id=41 data-nosnippet>41</a><span class="kw">use </span>modifier_state::ModifierState;
-<a href=#42 id=42 data-nosnippet>42</a><span class="kw">use </span>mouse_state::{btn_to_mouse_button, MouseState, BTN_LEFT};
-<a href=#43 id=43 data-nosnippet>43</a><span class="kw">use </span>ostd::io::{print, print_usize, println};
-<a href=#44 id=44 data-nosnippet>44</a><span class="kw">use </span>ostd::syscall::{sys_get_time, sys_heartbeat, sys_recv_timeout, sys_try_send, SyscallResult};
-<a href=#45 id=45 data-nosnippet>45</a><span class="kw">use </span>virtio_device::{find_and_init_inputs, InputDevice};
-<a href=#46 id=46 data-nosnippet>46</a>
-<a href=#47 id=47 data-nosnippet>47</a><span class="macro">api::declare_manifest!</span>(block_io = <span class="bool-val">false</span>, network = <span class="bool-val">false</span>, spawn = <span class="bool-val">false</span>);
-<a href=#48 id=48 data-nosnippet>48</a><span class="comment">// LookupService: the dispatcher resolves the compositor TID for mouse routing.
-<a href=#49 id=49 data-nosnippet>49</a></span><span class="macro">api::declare_syscalls!</span>[
-<a href=#50 id=50 data-nosnippet>50</a>    Send,
-<a href=#51 id=51 data-nosnippet>51</a>    TrySend,
-<a href=#52 id=52 data-nosnippet>52</a>    Recv,
-<a href=#53 id=53 data-nosnippet>53</a>    RecvTimeout,
-<a href=#54 id=54 data-nosnippet>54</a>    Log,
-<a href=#55 id=55 data-nosnippet>55</a>    Heartbeat,
-<a href=#56 id=56 data-nosnippet>56</a>    GetTime,
-<a href=#57 id=57 data-nosnippet>57</a>    RequestMmio,
-<a href=#58 id=58 data-nosnippet>58</a>    GrantAlloc,
-<a href=#59 id=59 data-nosnippet>59</a>    GrantFree,
-<a href=#60 id=60 data-nosnippet>60</a>    LookupService
-<a href=#61 id=61 data-nosnippet>61</a>];
-<a href=#62 id=62 data-nosnippet>62</a>
-<a href=#63 id=63 data-nosnippet>63</a><span class="doccomment">/// Raw event type discriminant for keyboard events (kernel VirtIO push).
-<a href=#64 id=64 data-nosnippet>64</a></span><span class="kw">const </span>EV_KEY: u8 = <span class="number">0</span>;
-<a href=#65 id=65 data-nosnippet>65</a><span class="doccomment">/// Raw event type for UART ASCII relay from the kernel console driver.
-<a href=#66 id=66 data-nosnippet>66</a>/// The code field carries the raw ASCII byte; no scancode translation needed.
-<a href=#67 id=67 data-nosnippet>67</a></span><span class="kw">const </span>EV_ASCII: u8 = <span class="number">0x04</span>;
-<a href=#68 id=68 data-nosnippet>68</a>
-<a href=#69 id=69 data-nosnippet>69</a><span class="doccomment">/// Linux evdev event types used by VirtIO input device.
-<a href=#70 id=70 data-nosnippet>70</a></span><span class="kw">const </span>EVDEV_KEY: u16 = <span class="number">1</span>;
-<a href=#71 id=71 data-nosnippet>71</a><span class="kw">const </span>EVDEV_REL: u16 = <span class="number">2</span>;
-<a href=#72 id=72 data-nosnippet>72</a><span class="kw">const </span>EVDEV_ABS: u16 = <span class="number">3</span>;
-<a href=#73 id=73 data-nosnippet>73</a>
-<a href=#74 id=74 data-nosnippet>74</a><span class="doccomment">/// Poll the VirtIO virtqueue once per scheduler tick (≈10 ms).
-<a href=#75 id=75 data-nosnippet>75</a>/// Using scheduler-tick units (not mtime); see net service UNIT TRAP note.
-<a href=#76 id=76 data-nosnippet>76</a></span><span class="kw">const </span>POLL_SCHED_TICKS: u64 = <span class="number">1</span>;
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `cells/services/input/src/main.rs`."><title>main.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="service_input" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.0-nightly (f53b654a8 2026-04-30)" data-channel="nightly" data-search-js="search-b5634cc7.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-aa4d37ac.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">service_input/</div>main.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="comment">// The layout and lock-key logic is pure and is unit-tested on the host, where
+<a href=#2 id=2 data-nosnippet>2</a>// `no_std`/`no_main` would only get in the way (same arrangement as
+<a href=#3 id=3 data-nosnippet>3</a>// `cells/services/httpd`).
+<a href=#4 id=4 data-nosnippet>4</a></span><span class="attr">#![cfg_attr(not(test), no_std)]
+<a href=#5 id=5 data-nosnippet>5</a>#![cfg_attr(not(test), no_main)]
+<a href=#6 id=6 data-nosnippet>6</a></span><span class="comment">// The crate cannot carry `#![forbid(unsafe_code)]`: `virtio_device.rs` needs MMIO
+<a href=#7 id=7 data-nosnippet>7</a>// access (allowlisted, class driver-mmio). All other submodules are unsafe-free.
+<a href=#8 id=8 data-nosnippet>8</a>
+<a href=#9 id=9 data-nosnippet>9</a></span><span class="doccomment">//! Input Service Cell.
+<a href=#10 id=10 data-nosnippet>10</a>//!
+<a href=#11 id=11 data-nosnippet>11</a>//! Receives raw EV_KEY events from the kernel VirtIO input driver via IPC,
+<a href=#12 id=12 data-nosnippet>12</a>//! translates scancodes to `InputEvent`s using the US QWERTY layout, and
+<a href=#13 id=13 data-nosnippet>13</a>//! dispatches them to the currently focused cell.
+<a href=#14 id=14 data-nosnippet>14</a>//!
+<a href=#15 id=15 data-nosnippet>15</a>//! ## IPC protocol (inbound from kernel, sender == 0)
+<a href=#16 id=16 data-nosnippet>16</a>//! ```text
+<a href=#17 id=17 data-nosnippet>17</a>//! byte[0]   = event type: 0=EV_KEY, 1=EV_REL, 2=EV_ABS
+<a href=#18 id=18 data-nosnippet>18</a>//! byte[1..5]= code  (u32 LE: scancode, REL_*, ABS_* axis)
+<a href=#19 id=19 data-nosnippet>19</a>//! byte[5..9]= value (u32 LE: key state, signed rel delta, abs coord)
+<a href=#20 id=20 data-nosnippet>20</a>//! ```
+<a href=#21 id=21 data-nosnippet>21</a>//! Sender 0 is the kernel; these raw frames bypass postcard decoding entirely.
+<a href=#22 id=22 data-nosnippet>22</a>//!
+<a href=#23 id=23 data-nosnippet>23</a>//! ## Focus IPC (inbound from compositor/shell, sender &gt; 0)
+<a href=#24 id=24 data-nosnippet>24</a>//! Typed `InputRequest` encoded with postcard — see `api::ipc::InputRequest`.
+<a href=#25 id=25 data-nosnippet>25</a>//! Sender &gt; 0 always routes to postcard decode; opcode collisions with kernel
+<a href=#26 id=26 data-nosnippet>26</a>//! frames are impossible by construction.
+<a href=#27 id=27 data-nosnippet>27</a>//!
+<a href=#28 id=28 data-nosnippet>28</a>//! ## IPC protocol (outbound to focused cell)
+<a href=#29 id=29 data-nosnippet>29</a>//! See `dispatcher::Dispatcher::dispatch` and `api::input::encode_event`.
+<a href=#30 id=30 data-nosnippet>30</a>
+<a href=#31 id=31 data-nosnippet>31</a></span><span class="kw">extern crate </span>alloc;
+<a href=#32 id=32 data-nosnippet>32</a>
+<a href=#33 id=33 data-nosnippet>33</a><span class="kw">mod </span>dispatcher;
+<a href=#34 id=34 data-nosnippet>34</a><span class="kw">mod </span>layout_us_qwerty;
+<a href=#35 id=35 data-nosnippet>35</a><span class="kw">mod </span>modifier_state;
+<a href=#36 id=36 data-nosnippet>36</a><span class="kw">mod </span>mouse_state;
+<a href=#37 id=37 data-nosnippet>37</a><span class="kw">mod </span>virtio_device;
+<a href=#38 id=38 data-nosnippet>38</a>
+<a href=#39 id=39 data-nosnippet>39</a><span class="kw">use </span>alloc::vec::Vec;
+<a href=#40 id=40 data-nosnippet>40</a><span class="kw">use </span>api::input::{InputEvent, KeyEvent, KeyState, KeySym};
+<a href=#41 id=41 data-nosnippet>41</a><span class="kw">use </span>api::ipc::{InputRequest, InputResponse, IPC_BUF_SIZE, OP_HID_DEVICE_REMOVED};
+<a href=#42 id=42 data-nosnippet>42</a><span class="kw">use </span>api::syscall::service;
+<a href=#43 id=43 data-nosnippet>43</a><span class="kw">use </span>dispatcher::Dispatcher;
+<a href=#44 id=44 data-nosnippet>44</a><span class="kw">use </span>layout_us_qwerty::{key_state_from_evdev, modifier_for_scancode, translate};
+<a href=#45 id=45 data-nosnippet>45</a><span class="kw">use </span>modifier_state::ModifierState;
+<a href=#46 id=46 data-nosnippet>46</a><span class="kw">use </span>mouse_state::{btn_to_mouse_button, MouseState, BTN_LEFT};
+<a href=#47 id=47 data-nosnippet>47</a><span class="kw">use </span>ostd::io::{print, print_usize, println};
+<a href=#48 id=48 data-nosnippet>48</a><span class="kw">use </span>ostd::syscall::{
+<a href=#49 id=49 data-nosnippet>49</a>    sys_get_time, sys_heartbeat, sys_lookup_service, sys_recv_timeout, sys_try_send, SyscallResult,
+<a href=#50 id=50 data-nosnippet>50</a>};
+<a href=#51 id=51 data-nosnippet>51</a><span class="kw">use </span>virtio_device::{find_and_init_inputs, InputDevice};
+<a href=#52 id=52 data-nosnippet>52</a><span class="macro">api::declare_manifest!</span>(block_io = <span class="bool-val">false</span>, network = <span class="bool-val">false</span>, spawn = <span class="bool-val">false</span>);
+<a href=#53 id=53 data-nosnippet>53</a><span class="comment">// LookupService: the dispatcher resolves the compositor TID for mouse routing.
+<a href=#54 id=54 data-nosnippet>54</a></span><span class="macro">api::declare_syscalls!</span>[
+<a href=#55 id=55 data-nosnippet>55</a>    Send,
+<a href=#56 id=56 data-nosnippet>56</a>    TrySend,
+<a href=#57 id=57 data-nosnippet>57</a>    Recv,
+<a href=#58 id=58 data-nosnippet>58</a>    RecvTimeout,
+<a href=#59 id=59 data-nosnippet>59</a>    Log,
+<a href=#60 id=60 data-nosnippet>60</a>    Heartbeat,
+<a href=#61 id=61 data-nosnippet>61</a>    GetTime,
+<a href=#62 id=62 data-nosnippet>62</a>    RequestMmio,
+<a href=#63 id=63 data-nosnippet>63</a>    GrantAlloc,
+<a href=#64 id=64 data-nosnippet>64</a>    GrantFree,
+<a href=#65 id=65 data-nosnippet>65</a>    LookupService
+<a href=#66 id=66 data-nosnippet>66</a>];
+<a href=#67 id=67 data-nosnippet>67</a>
+<a href=#68 id=68 data-nosnippet>68</a><span class="doccomment">/// Raw event type discriminant for keyboard events (kernel VirtIO push).
+<a href=#69 id=69 data-nosnippet>69</a></span><span class="kw">const </span>EV_KEY: u8 = <span class="number">0</span>;
+<a href=#70 id=70 data-nosnippet>70</a><span class="doccomment">/// Raw event type for UART ASCII relay from the kernel console driver.
+<a href=#71 id=71 data-nosnippet>71</a>/// The code field carries the raw ASCII byte; no scancode translation needed.
+<a href=#72 id=72 data-nosnippet>72</a></span><span class="kw">const </span>EV_ASCII: u8 = <span class="number">0x04</span>;
+<a href=#73 id=73 data-nosnippet>73</a><span class="doccomment">/// A per-interface HID worker event carrying a logical-device ID.
+<a href=#74 id=74 data-nosnippet>74</a>///
+<a href=#75 id=75 data-nosnippet>75</a>/// Layout: `[EV_DEVICE][device:u32][event_type][code:u32][value:i32]`.
+<a href=#76 id=76 data-nosnippet>76</a></span><span class="kw">const </span>EV_DEVICE: u8 = <span class="number">0x05</span>;
 <a href=#77 id=77 data-nosnippet>77</a>
-<a href=#78 id=78 data-nosnippet>78</a><span class="doccomment">/// Watchdog interval: 5000 scheduler ticks × 10ms = 50 seconds.
-<a href=#79 id=79 data-nosnippet>79</a>/// Must match DISPATCH_HEARTBEAT in dispatcher.rs — they share the same timeline.
-<a href=#80 id=80 data-nosnippet>80</a></span><span class="kw">const </span>HEARTBEAT_TICKS: u64 = <span class="number">5_000</span>;
-<a href=#81 id=81 data-nosnippet>81</a>
-<a href=#82 id=82 data-nosnippet>82</a><span class="doccomment">/// Input Cell entry point.
-<a href=#83 id=83 data-nosnippet>83</a>///
-<a href=#84 id=84 data-nosnippet>84</a>/// On startup, attempts to probe and claim a VirtIO input device. Once claimed,
-<a href=#85 id=85 data-nosnippet>85</a>/// the kernel's `virtio_input::poll_events` / `dispatch_pending` migrate guard
-<a href=#86 id=86 data-nosnippet>86</a>/// detects the MMIO owner and stops pushing kernel-side events — this service
-<a href=#87 id=87 data-nosnippet>87</a>/// then owns the virtqueue exclusively.
-<a href=#88 id=88 data-nosnippet>88</a>///
-<a href=#89 id=89 data-nosnippet>89</a>/// Until the device is claimed (or if no VirtIO input is present), the kernel
-<a href=#90 id=90 data-nosnippet>90</a>/// continues to push raw IPC events (sender=0) as before.
-<a href=#91 id=91 data-nosnippet>91</a></span><span class="attr">#[no_mangle]
-<a href=#92 id=92 data-nosnippet>92</a></span><span class="kw">pub fn </span>main() {
-<a href=#93 id=93 data-nosnippet>93</a>    println(<span class="string">"[input] Input Service v0.3: US QWERTY + VirtIO + typed focus routing"</span>);
-<a href=#94 id=94 data-nosnippet>94</a>
-<a href=#95 id=95 data-nosnippet>95</a>    <span class="kw">let </span><span class="kw-2">mut </span>modifiers = ModifierState::new();
-<a href=#96 id=96 data-nosnippet>96</a>    <span class="kw">let </span><span class="kw-2">mut </span>mouse = MouseState::new();
-<a href=#97 id=97 data-nosnippet>97</a>    <span class="kw">let </span><span class="kw-2">mut </span>dispatcher = Dispatcher::new();
-<a href=#98 id=98 data-nosnippet>98</a>    <span class="kw">let </span><span class="kw-2">mut </span>buf = [<span class="number">0u8</span>; IPC_BUF_SIZE];
-<a href=#99 id=99 data-nosnippet>99</a>
-<a href=#100 id=100 data-nosnippet>100</a>    <span class="comment">// Renew the watchdog before the potentially slow VirtIO MMIO probe — the
-<a href=#101 id=101 data-nosnippet>101</a>    // cell is spawned with a default deadline and find_and_init_input can take
-<a href=#102 id=102 data-nosnippet>102</a>    // several scheduling cycles before we reach the loop's sys_heartbeat call.
-<a href=#103 id=103 data-nosnippet>103</a>    </span>sys_heartbeat(HEARTBEAT_TICKS);
+<a href=#78 id=78 data-nosnippet>78</a><span class="doccomment">/// Linux evdev event types used by VirtIO input device.
+<a href=#79 id=79 data-nosnippet>79</a></span><span class="kw">const </span>EVDEV_KEY: u16 = <span class="number">1</span>;
+<a href=#80 id=80 data-nosnippet>80</a><span class="kw">const </span>EVDEV_REL: u16 = <span class="number">2</span>;
+<a href=#81 id=81 data-nosnippet>81</a><span class="kw">const </span>EVDEV_ABS: u16 = <span class="number">3</span>;
+<a href=#82 id=82 data-nosnippet>82</a>
+<a href=#83 id=83 data-nosnippet>83</a><span class="doccomment">/// Poll the VirtIO virtqueue once per scheduler tick (≈10 ms).
+<a href=#84 id=84 data-nosnippet>84</a>/// Using scheduler-tick units (not mtime); see net service UNIT TRAP note.
+<a href=#85 id=85 data-nosnippet>85</a></span><span class="kw">const </span>POLL_SCHED_TICKS: u64 = <span class="number">1</span>;
+<a href=#86 id=86 data-nosnippet>86</a>
+<a href=#87 id=87 data-nosnippet>87</a><span class="doccomment">/// Watchdog interval: 5000 scheduler ticks × 10ms = 50 seconds.
+<a href=#88 id=88 data-nosnippet>88</a>/// Must match DISPATCH_HEARTBEAT in dispatcher.rs — they share the same timeline.
+<a href=#89 id=89 data-nosnippet>89</a></span><span class="kw">const </span>HEARTBEAT_TICKS: u64 = <span class="number">5_000</span>;
+<a href=#90 id=90 data-nosnippet>90</a>
+<a href=#91 id=91 data-nosnippet>91</a><span class="doccomment">/// Input Cell entry point.
+<a href=#92 id=92 data-nosnippet>92</a>///
+<a href=#93 id=93 data-nosnippet>93</a>/// On startup, attempts to probe and claim a VirtIO input device. Once claimed,
+<a href=#94 id=94 data-nosnippet>94</a>/// the kernel's `virtio_input::poll_events` / `dispatch_pending` migrate guard
+<a href=#95 id=95 data-nosnippet>95</a>/// detects the MMIO owner and stops pushing kernel-side events — this service
+<a href=#96 id=96 data-nosnippet>96</a>/// then owns the virtqueue exclusively.
+<a href=#97 id=97 data-nosnippet>97</a>///
+<a href=#98 id=98 data-nosnippet>98</a>/// Until the device is claimed (or if no VirtIO input is present), the kernel
+<a href=#99 id=99 data-nosnippet>99</a>/// continues to push raw IPC events (sender=0) as before.
+<a href=#100 id=100 data-nosnippet>100</a></span><span class="attr">#[cfg(not(test))]
+<a href=#101 id=101 data-nosnippet>101</a>#[no_mangle]
+<a href=#102 id=102 data-nosnippet>102</a></span><span class="kw">pub fn </span>main() {
+<a href=#103 id=103 data-nosnippet>103</a>    println(<span class="string">"[input] Input Service v0.3: US QWERTY + VirtIO + typed focus routing"</span>);
 <a href=#104 id=104 data-nosnippet>104</a>
-<a href=#105 id=105 data-nosnippet>105</a>    <span class="comment">// Probe and claim ALL VirtIO input devices (QEMU exposes keyboard, tablet,
-<a href=#106 id=106 data-nosnippet>106</a>    // mouse as separate virtio-input MMIO slots).  After sys_request_mmio
-<a href=#107 id=107 data-nosnippet>107</a>    // succeeds inside find_and_init_inputs, the kernel migration guard in
-<a href=#108 id=108 data-nosnippet>108</a>    // virtio_input.rs sees the MMIO owner and stops pushing events via
-<a href=#109 id=109 data-nosnippet>109</a>    // dispatch_pending — so every unclaimed device would be polled by nobody.
-<a href=#110 id=110 data-nosnippet>110</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>sources = EventSources::new();
-<a href=#111 id=111 data-nosnippet>111</a>    <span class="kw">let </span><span class="kw-2">mut </span>devices: Vec&lt;InputDevice&gt; = find_and_init_inputs();
-<a href=#112 id=112 data-nosnippet>112</a>    <span class="kw">if </span>!devices.is_empty() {
-<a href=#113 id=113 data-nosnippet>113</a>        println(<span class="string">"[input] VirtIO input device claimed; polling virtqueue directly"</span>);
-<a href=#114 id=114 data-nosnippet>114</a>    } <span class="kw">else </span>{
-<a href=#115 id=115 data-nosnippet>115</a>        println(<span class="string">"[input] No VirtIO input device; relying on kernel push"</span>);
-<a href=#116 id=116 data-nosnippet>116</a>    }
+<a href=#105 id=105 data-nosnippet>105</a>    <span class="kw">let </span><span class="kw-2">mut </span>modifiers = ModifierState::new();
+<a href=#106 id=106 data-nosnippet>106</a>    <span class="kw">let </span><span class="kw-2">mut </span>mouse = MouseState::new();
+<a href=#107 id=107 data-nosnippet>107</a>    <span class="kw">let </span><span class="kw-2">mut </span>dispatcher = Dispatcher::new();
+<a href=#108 id=108 data-nosnippet>108</a>    <span class="kw">let </span><span class="kw-2">mut </span>buf = [<span class="number">0u8</span>; IPC_BUF_SIZE];
+<a href=#109 id=109 data-nosnippet>109</a>    <span class="comment">// Last LED bitmap handed to the producers, so a lock key that is pressed and
+<a href=#110 id=110 data-nosnippet>110</a>    // released without changing a lock costs nothing.
+<a href=#111 id=111 data-nosnippet>111</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>leds_sent = modifiers.led_bitmap();
+<a href=#112 id=112 data-nosnippet>112</a>
+<a href=#113 id=113 data-nosnippet>113</a>    <span class="comment">// Renew the watchdog before the potentially slow VirtIO MMIO probe — the
+<a href=#114 id=114 data-nosnippet>114</a>    // cell is spawned with a default deadline and find_and_init_input can take
+<a href=#115 id=115 data-nosnippet>115</a>    // several scheduling cycles before we reach the loop's sys_heartbeat call.
+<a href=#116 id=116 data-nosnippet>116</a>    </span>sys_heartbeat(HEARTBEAT_TICKS);
 <a href=#117 id=117 data-nosnippet>117</a>
-<a href=#118 id=118 data-nosnippet>118</a>    <span class="kw">loop </span>{
-<a href=#119 id=119 data-nosnippet>119</a>        sys_heartbeat(HEARTBEAT_TICKS);
-<a href=#120 id=120 data-nosnippet>120</a>
-<a href=#121 id=121 data-nosnippet>121</a>        <span class="comment">// Drain every VirtIO virtqueue before blocking.  This catches events
-<a href=#122 id=122 data-nosnippet>122</a>        // that arrived since the last iteration without waiting for the timeout.
-<a href=#123 id=123 data-nosnippet>123</a>        </span><span class="kw">for </span>dev <span class="kw">in </span>devices.iter_mut() {
-<a href=#124 id=124 data-nosnippet>124</a>            drain_virtio(dev, <span class="kw-2">&amp;mut </span>buf, <span class="kw-2">&amp;mut </span>modifiers, <span class="kw-2">&amp;mut </span>mouse, <span class="kw-2">&amp;mut </span>dispatcher);
-<a href=#125 id=125 data-nosnippet>125</a>        }
-<a href=#126 id=126 data-nosnippet>126</a>
-<a href=#127 id=127 data-nosnippet>127</a>        <span class="comment">// Block for at most one scheduler tick (≈10ms), or until a kernel/IPC
-<a href=#128 id=128 data-nosnippet>128</a>        // message wakes us.
-<a href=#129 id=129 data-nosnippet>129</a>        //
-<a href=#130 id=130 data-nosnippet>130</a>        // Return value convention:
-<a href=#131 id=131 data-nosnippet>131</a>        //   Ok(0)                — real timeout; buffer not modified
-<a href=#132 id=132 data-nosnippet>132</a>        //   Ok(isize::MAX as _)  — kernel UART relay (EV_ASCII); buffer filled
-<a href=#133 id=133 data-nosnippet>133</a>        //   Ok(n)                — typed IPC from cell n; buffer filled
-<a href=#134 id=134 data-nosnippet>134</a>        //
-<a href=#135 id=135 data-nosnippet>135</a>        // The sentinel is isize::MAX (not usize::MAX) because syscall() returns
-<a href=#136 id=136 data-nosnippet>136</a>        // isize: usize::MAX == -1 as isize, which makes sys_recv_timeout return
-<a href=#137 id=137 data-nosnippet>137</a>        // Err and the match arm never fires. isize::MAX is positive → Ok branch.
-<a href=#138 id=138 data-nosnippet>138</a>        </span><span class="kw">match </span>sys_recv_timeout(<span class="number">0</span>, <span class="kw-2">&amp;mut </span>buf, POLL_SCHED_TICKS) {
-<a href=#139 id=139 data-nosnippet>139</a>            SyscallResult::Ok(<span class="number">0</span>) =&gt; {
-<a href=#140 id=140 data-nosnippet>140</a>                <span class="comment">// Real timeout — nothing from IPC; VirtIO drain already done above.
-<a href=#141 id=141 data-nosnippet>141</a>            </span>}
-<a href=#142 id=142 data-nosnippet>142</a>            SyscallResult::Ok(n) <span class="kw">if </span>n == isize::MAX <span class="kw">as </span>usize =&gt; {
-<a href=#143 id=143 data-nosnippet>143</a>                <span class="comment">// Kernel UART relay (sentinel sender_id = isize::MAX as usize).
-<a href=#144 id=144 data-nosnippet>144</a>                </span>handle_kernel_event(<span class="kw-2">&amp;</span>buf, <span class="kw-2">&amp;mut </span>modifiers, <span class="kw-2">&amp;mut </span>mouse, <span class="kw-2">&amp;mut </span>dispatcher);
-<a href=#145 id=145 data-nosnippet>145</a>            }
-<a href=#146 id=146 data-nosnippet>146</a>            SyscallResult::Ok(sender) =&gt; {
-<a href=#147 id=147 data-nosnippet>147</a>                handle_message(
-<a href=#148 id=148 data-nosnippet>148</a>                    <span class="kw-2">&amp;</span>buf,
-<a href=#149 id=149 data-nosnippet>149</a>                    sender,
-<a href=#150 id=150 data-nosnippet>150</a>                    <span class="kw-2">&amp;mut </span>modifiers,
-<a href=#151 id=151 data-nosnippet>151</a>                    <span class="kw-2">&amp;mut </span>mouse,
-<a href=#152 id=152 data-nosnippet>152</a>                    <span class="kw-2">&amp;mut </span>dispatcher,
-<a href=#153 id=153 data-nosnippet>153</a>                    <span class="kw-2">&amp;mut </span>sources,
-<a href=#154 id=154 data-nosnippet>154</a>                );
-<a href=#155 id=155 data-nosnippet>155</a>            }
-<a href=#156 id=156 data-nosnippet>156</a>            <span class="kw">_ </span>=&gt; {}
-<a href=#157 id=157 data-nosnippet>157</a>        }
-<a href=#158 id=158 data-nosnippet>158</a>    }
-<a href=#159 id=159 data-nosnippet>159</a>}
-<a href=#160 id=160 data-nosnippet>160</a>
-<a href=#161 id=161 data-nosnippet>161</a><span class="doccomment">/// Maximum concurrently registered raw event producers.
-<a href=#162 id=162 data-nosnippet>162</a></span><span class="kw">const </span>MAX_EVENT_SOURCES: usize = <span class="number">4</span>;
-<a href=#163 id=163 data-nosnippet>163</a>
-<a href=#164 id=164 data-nosnippet>164</a><span class="doccomment">/// TIDs allowed to push raw `[opcode][code][value]` events.
-<a href=#165 id=165 data-nosnippet>165</a>///
-<a href=#166 id=166 data-nosnippet>166</a>/// Sender 0 is the kernel and is implicit. A driver cell owning a physical
-<a href=#167 id=167 data-nosnippet>167</a>/// device the kernel cannot see (USB HID behind the DWC2 host controller)
-<a href=#168 id=168 data-nosnippet>168</a>/// announces itself through `InputRequest::RegisterEventSource`; the tid kept
-<a href=#169 id=169 data-nosnippet>169</a>/// is the one the kernel reported on receive, never one named in the payload,
-<a href=#170 id=170 data-nosnippet>170</a>/// so a cell cannot register as — or impersonate — another producer.
-<a href=#171 id=171 data-nosnippet>171</a>///
-<a href=#172 id=172 data-nosnippet>172</a>/// A registered tid stays valid because this kernel hands out fresh tids rather
-<a href=#173 id=173 data-nosnippet>173</a>/// than recycling them; if that ever changes, this list needs an exit watch.
-<a href=#174 id=174 data-nosnippet>174</a></span><span class="kw">struct </span>EventSources {
-<a href=#175 id=175 data-nosnippet>175</a>    tids: [usize; MAX_EVENT_SOURCES],
-<a href=#176 id=176 data-nosnippet>176</a>    len: usize,
-<a href=#177 id=177 data-nosnippet>177</a>}
-<a href=#178 id=178 data-nosnippet>178</a>
-<a href=#179 id=179 data-nosnippet>179</a><span class="kw">impl </span>EventSources {
-<a href=#180 id=180 data-nosnippet>180</a>    <span class="kw">const fn </span>new() -&gt; <span class="self">Self </span>{
-<a href=#181 id=181 data-nosnippet>181</a>        <span class="self">Self </span>{
-<a href=#182 id=182 data-nosnippet>182</a>            tids: [<span class="number">0</span>; MAX_EVENT_SOURCES],
-<a href=#183 id=183 data-nosnippet>183</a>            len: <span class="number">0</span>,
-<a href=#184 id=184 data-nosnippet>184</a>        }
-<a href=#185 id=185 data-nosnippet>185</a>    }
+<a href=#118 id=118 data-nosnippet>118</a>    <span class="comment">// Probe and claim ALL VirtIO input devices (QEMU exposes keyboard, tablet,
+<a href=#119 id=119 data-nosnippet>119</a>    // mouse as separate virtio-input MMIO slots).  After sys_request_mmio
+<a href=#120 id=120 data-nosnippet>120</a>    // succeeds inside find_and_init_inputs, the kernel migration guard in
+<a href=#121 id=121 data-nosnippet>121</a>    // virtio_input.rs sees the MMIO owner and stops pushing events via
+<a href=#122 id=122 data-nosnippet>122</a>    // dispatch_pending — so every unclaimed device would be polled by nobody.
+<a href=#123 id=123 data-nosnippet>123</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>sources = EventSources::new();
+<a href=#124 id=124 data-nosnippet>124</a>    <span class="kw">let </span><span class="kw-2">mut </span>hid_devices = HidDeviceStates::new();
+<a href=#125 id=125 data-nosnippet>125</a>    <span class="kw">let </span><span class="kw-2">mut </span>devices: Vec&lt;InputDevice&gt; = find_and_init_inputs();
+<a href=#126 id=126 data-nosnippet>126</a>    <span class="kw">if </span>!devices.is_empty() {
+<a href=#127 id=127 data-nosnippet>127</a>        println(<span class="string">"[input] VirtIO input device claimed; polling virtqueue directly"</span>);
+<a href=#128 id=128 data-nosnippet>128</a>    } <span class="kw">else </span>{
+<a href=#129 id=129 data-nosnippet>129</a>        println(<span class="string">"[input] No VirtIO input device; relying on kernel push"</span>);
+<a href=#130 id=130 data-nosnippet>130</a>    }
+<a href=#131 id=131 data-nosnippet>131</a>
+<a href=#132 id=132 data-nosnippet>132</a>    <span class="kw">loop </span>{
+<a href=#133 id=133 data-nosnippet>133</a>        sys_heartbeat(HEARTBEAT_TICKS);
+<a href=#134 id=134 data-nosnippet>134</a>
+<a href=#135 id=135 data-nosnippet>135</a>        <span class="comment">// Drain every VirtIO virtqueue before blocking.  This catches events
+<a href=#136 id=136 data-nosnippet>136</a>        // that arrived since the last iteration without waiting for the timeout.
+<a href=#137 id=137 data-nosnippet>137</a>        </span><span class="kw">for </span>dev <span class="kw">in </span>devices.iter_mut() {
+<a href=#138 id=138 data-nosnippet>138</a>            drain_virtio(
+<a href=#139 id=139 data-nosnippet>139</a>                dev,
+<a href=#140 id=140 data-nosnippet>140</a>                <span class="kw-2">&amp;mut </span>buf,
+<a href=#141 id=141 data-nosnippet>141</a>                <span class="kw-2">&amp;mut </span>modifiers,
+<a href=#142 id=142 data-nosnippet>142</a>                <span class="kw-2">&amp;mut </span>mouse,
+<a href=#143 id=143 data-nosnippet>143</a>                <span class="kw-2">&amp;mut </span>dispatcher,
+<a href=#144 id=144 data-nosnippet>144</a>                <span class="kw-2">&amp;mut </span>hid_devices,
+<a href=#145 id=145 data-nosnippet>145</a>            );
+<a href=#146 id=146 data-nosnippet>146</a>        }
+<a href=#147 id=147 data-nosnippet>147</a>
+<a href=#148 id=148 data-nosnippet>148</a>        <span class="comment">// Block for at most one scheduler tick (≈10ms), or until a kernel/IPC
+<a href=#149 id=149 data-nosnippet>149</a>        // message wakes us.
+<a href=#150 id=150 data-nosnippet>150</a>        //
+<a href=#151 id=151 data-nosnippet>151</a>        // Return value convention:
+<a href=#152 id=152 data-nosnippet>152</a>        //   Ok(0)                — real timeout; buffer not modified
+<a href=#153 id=153 data-nosnippet>153</a>        //   Ok(isize::MAX as _)  — kernel UART relay (EV_ASCII); buffer filled
+<a href=#154 id=154 data-nosnippet>154</a>        //   Ok(n)                — typed IPC from cell n; buffer filled
+<a href=#155 id=155 data-nosnippet>155</a>        //
+<a href=#156 id=156 data-nosnippet>156</a>        // The sentinel is isize::MAX (not usize::MAX) because syscall() returns
+<a href=#157 id=157 data-nosnippet>157</a>        // isize: usize::MAX == -1 as isize, which makes sys_recv_timeout return
+<a href=#158 id=158 data-nosnippet>158</a>        // Err and the match arm never fires. isize::MAX is positive → Ok branch.
+<a href=#159 id=159 data-nosnippet>159</a>        </span><span class="kw">match </span>sys_recv_timeout(<span class="number">0</span>, <span class="kw-2">&amp;mut </span>buf, POLL_SCHED_TICKS) {
+<a href=#160 id=160 data-nosnippet>160</a>            SyscallResult::Ok(<span class="number">0</span>) =&gt; {
+<a href=#161 id=161 data-nosnippet>161</a>                <span class="comment">// Real timeout — nothing from IPC; VirtIO drain already done above.
+<a href=#162 id=162 data-nosnippet>162</a>            </span>}
+<a href=#163 id=163 data-nosnippet>163</a>            SyscallResult::Ok(n) <span class="kw">if </span>n == isize::MAX <span class="kw">as </span>usize =&gt; {
+<a href=#164 id=164 data-nosnippet>164</a>                <span class="comment">// Kernel UART relay (sentinel sender_id = isize::MAX as usize).
+<a href=#165 id=165 data-nosnippet>165</a>                </span>handle_kernel_event(
+<a href=#166 id=166 data-nosnippet>166</a>                    <span class="kw-2">&amp;</span>buf,
+<a href=#167 id=167 data-nosnippet>167</a>                    <span class="kw-2">&amp;mut </span>modifiers,
+<a href=#168 id=168 data-nosnippet>168</a>                    <span class="kw-2">&amp;mut </span>mouse,
+<a href=#169 id=169 data-nosnippet>169</a>                    <span class="kw-2">&amp;mut </span>dispatcher,
+<a href=#170 id=170 data-nosnippet>170</a>                    <span class="kw-2">&amp;mut </span>hid_devices,
+<a href=#171 id=171 data-nosnippet>171</a>                );
+<a href=#172 id=172 data-nosnippet>172</a>            }
+<a href=#173 id=173 data-nosnippet>173</a>            SyscallResult::Ok(sender) =&gt; {
+<a href=#174 id=174 data-nosnippet>174</a>                handle_message(
+<a href=#175 id=175 data-nosnippet>175</a>                    <span class="kw-2">&amp;</span>buf,
+<a href=#176 id=176 data-nosnippet>176</a>                    sender,
+<a href=#177 id=177 data-nosnippet>177</a>                    <span class="kw-2">&amp;mut </span>modifiers,
+<a href=#178 id=178 data-nosnippet>178</a>                    <span class="kw-2">&amp;mut </span>mouse,
+<a href=#179 id=179 data-nosnippet>179</a>                    <span class="kw-2">&amp;mut </span>dispatcher,
+<a href=#180 id=180 data-nosnippet>180</a>                    <span class="kw-2">&amp;mut </span>sources,
+<a href=#181 id=181 data-nosnippet>181</a>                    <span class="kw-2">&amp;mut </span>hid_devices,
+<a href=#182 id=182 data-nosnippet>182</a>                );
+<a href=#183 id=183 data-nosnippet>183</a>            }
+<a href=#184 id=184 data-nosnippet>184</a>            <span class="kw">_ </span>=&gt; {}
+<a href=#185 id=185 data-nosnippet>185</a>        }
 <a href=#186 id=186 data-nosnippet>186</a>
-<a href=#187 id=187 data-nosnippet>187</a>    <span class="kw">fn </span>is_source(<span class="kw-2">&amp;</span><span class="self">self</span>, tid: usize) -&gt; bool {
-<a href=#188 id=188 data-nosnippet>188</a>        tid != <span class="number">0 </span>&amp;&amp; <span class="self">self</span>.tids[..<span class="self">self</span>.len].contains(<span class="kw-2">&amp;</span>tid)
-<a href=#189 id=189 data-nosnippet>189</a>    }
-<a href=#190 id=190 data-nosnippet>190</a>
-<a href=#191 id=191 data-nosnippet>191</a>    <span class="doccomment">/// Record `tid` as a producer. Returns false when it already is one, when
-<a href=#192 id=192 data-nosnippet>192</a>    /// the table is full, or for the kernel's reserved sender id.
-<a href=#193 id=193 data-nosnippet>193</a>    </span><span class="kw">fn </span>register(<span class="kw-2">&amp;mut </span><span class="self">self</span>, tid: usize) -&gt; bool {
-<a href=#194 id=194 data-nosnippet>194</a>        <span class="kw">if </span>tid == <span class="number">0 </span>|| <span class="self">self</span>.is_source(tid) || <span class="self">self</span>.len == MAX_EVENT_SOURCES {
-<a href=#195 id=195 data-nosnippet>195</a>            <span class="kw">return </span><span class="bool-val">false</span>;
-<a href=#196 id=196 data-nosnippet>196</a>        }
-<a href=#197 id=197 data-nosnippet>197</a>        <span class="self">self</span>.tids[<span class="self">self</span>.len] = tid;
-<a href=#198 id=198 data-nosnippet>198</a>        <span class="self">self</span>.len += <span class="number">1</span>;
-<a href=#199 id=199 data-nosnippet>199</a>        <span class="bool-val">true
-<a href=#200 id=200 data-nosnippet>200</a>    </span>}
-<a href=#201 id=201 data-nosnippet>201</a>}
-<a href=#202 id=202 data-nosnippet>202</a>
-<a href=#203 id=203 data-nosnippet>203</a><span class="doccomment">/// Drain all pending events from the VirtIO virtqueue and dispatch them.
-<a href=#204 id=204 data-nosnippet>204</a></span><span class="kw">fn </span>drain_virtio(
-<a href=#205 id=205 data-nosnippet>205</a>    dev: <span class="kw-2">&amp;mut </span>InputDevice,
-<a href=#206 id=206 data-nosnippet>206</a>    buf: <span class="kw-2">&amp;mut </span>[u8; IPC_BUF_SIZE],
-<a href=#207 id=207 data-nosnippet>207</a>    modifiers: <span class="kw-2">&amp;mut </span>ModifierState,
-<a href=#208 id=208 data-nosnippet>208</a>    mouse: <span class="kw-2">&amp;mut </span>MouseState,
-<a href=#209 id=209 data-nosnippet>209</a>    dispatcher: <span class="kw-2">&amp;mut </span>Dispatcher,
-<a href=#210 id=210 data-nosnippet>210</a>) {
-<a href=#211 id=211 data-nosnippet>211</a>    <span class="kw">while let </span><span class="prelude-val">Some</span>(ev) = dev.try_get_event() {
-<a href=#212 id=212 data-nosnippet>212</a>        <span class="comment">// Map Linux evdev event types → the same opcode encoding the kernel uses
-<a href=#213 id=213 data-nosnippet>213</a>        // in dispatch_pending, so handle_kernel_event processes them identically.
-<a href=#214 id=214 data-nosnippet>214</a>        </span><span class="kw">let </span>opcode: u8 = <span class="kw">match </span>ev.event_type {
-<a href=#215 id=215 data-nosnippet>215</a>            EVDEV_KEY =&gt; <span class="number">0</span>, <span class="comment">// EV_KEY
-<a href=#216 id=216 data-nosnippet>216</a>            </span>EVDEV_REL =&gt; <span class="number">1</span>, <span class="comment">// EV_REL
-<a href=#217 id=217 data-nosnippet>217</a>            </span>EVDEV_ABS =&gt; <span class="number">2</span>, <span class="comment">// EV_ABS
-<a href=#218 id=218 data-nosnippet>218</a>            </span><span class="kw">_ </span>=&gt; <span class="kw">continue</span>,  <span class="comment">// unknown type (EV_SYN, EV_MSC, etc.) — drop
-<a href=#219 id=219 data-nosnippet>219</a>        </span>};
-<a href=#220 id=220 data-nosnippet>220</a>        buf[<span class="number">0</span>] = opcode;
-<a href=#221 id=221 data-nosnippet>221</a>        buf[<span class="number">1</span>..<span class="number">5</span>].copy_from_slice(<span class="kw-2">&amp;</span>(ev.code <span class="kw">as </span>u32).to_le_bytes());
-<a href=#222 id=222 data-nosnippet>222</a>        buf[<span class="number">5</span>..<span class="number">9</span>].copy_from_slice(<span class="kw-2">&amp;</span>ev.value.to_le_bytes());
-<a href=#223 id=223 data-nosnippet>223</a>        handle_kernel_event(buf, modifiers, mouse, dispatcher);
-<a href=#224 id=224 data-nosnippet>224</a>    }
-<a href=#225 id=225 data-nosnippet>225</a>}
-<a href=#226 id=226 data-nosnippet>226</a>
-<a href=#227 id=227 data-nosnippet>227</a><span class="doccomment">/// Process one incoming IPC message.
-<a href=#228 id=228 data-nosnippet>228</a>///
-<a href=#229 id=229 data-nosnippet>229</a>/// Discrimination is by `sender`, not opcode, to avoid collisions with postcard
-<a href=#230 id=230 data-nosnippet>230</a>/// discriminants: kernel pushes arrive with sender=0; typed requests sender&gt;0.
-<a href=#231 id=231 data-nosnippet>231</a></span><span class="kw">fn </span>handle_message(
-<a href=#232 id=232 data-nosnippet>232</a>    buf: <span class="kw-2">&amp;</span>[u8; IPC_BUF_SIZE],
-<a href=#233 id=233 data-nosnippet>233</a>    sender: usize,
-<a href=#234 id=234 data-nosnippet>234</a>    modifiers: <span class="kw-2">&amp;mut </span>ModifierState,
-<a href=#235 id=235 data-nosnippet>235</a>    mouse: <span class="kw-2">&amp;mut </span>MouseState,
-<a href=#236 id=236 data-nosnippet>236</a>    dispatcher: <span class="kw-2">&amp;mut </span>Dispatcher,
-<a href=#237 id=237 data-nosnippet>237</a>    sources: <span class="kw-2">&amp;mut </span>EventSources,
-<a href=#238 id=238 data-nosnippet>238</a>) {
-<a href=#239 id=239 data-nosnippet>239</a>    <span class="comment">// A registered producer's messages are events, never requests — the check
-<a href=#240 id=240 data-nosnippet>240</a>    // precedes decoding so an event can never be misread as a `InputRequest`.
-<a href=#241 id=241 data-nosnippet>241</a>    </span><span class="kw">if </span>sender == <span class="number">0 </span>|| sources.is_source(sender) {
-<a href=#242 id=242 data-nosnippet>242</a>        handle_kernel_event(buf, modifiers, mouse, dispatcher);
-<a href=#243 id=243 data-nosnippet>243</a>    } <span class="kw">else </span>{
-<a href=#244 id=244 data-nosnippet>244</a>        handle_typed_request(buf, sender, modifiers, dispatcher, sources);
-<a href=#245 id=245 data-nosnippet>245</a>    }
-<a href=#246 id=246 data-nosnippet>246</a>}
-<a href=#247 id=247 data-nosnippet>247</a>
-<a href=#248 id=248 data-nosnippet>248</a><span class="doccomment">/// Handle a raw VirtIO event pushed by the kernel (sender == 0).
-<a href=#249 id=249 data-nosnippet>249</a>///
-<a href=#250 id=250 data-nosnippet>250</a>/// Wire format: `[opcode:1][code:4 LE][value:4 LE]`
-<a href=#251 id=251 data-nosnippet>251</a>/// opcode 0 = EV_KEY (keyboard key or mouse button via BTN_* scancode ≥ 0x110)
-<a href=#252 id=252 data-nosnippet>252</a>/// opcode 1 = EV_REL (relative mouse: REL_X/Y/WHEEL)
-<a href=#253 id=253 data-nosnippet>253</a>/// opcode 2 = EV_ABS (absolute mouse: ABS_X/Y)
-<a href=#254 id=254 data-nosnippet>254</a></span><span class="kw">fn </span>handle_kernel_event(
-<a href=#255 id=255 data-nosnippet>255</a>    buf: <span class="kw-2">&amp;</span>[u8; IPC_BUF_SIZE],
-<a href=#256 id=256 data-nosnippet>256</a>    modifiers: <span class="kw-2">&amp;mut </span>ModifierState,
-<a href=#257 id=257 data-nosnippet>257</a>    mouse: <span class="kw-2">&amp;mut </span>MouseState,
-<a href=#258 id=258 data-nosnippet>258</a>    dispatcher: <span class="kw-2">&amp;mut </span>Dispatcher,
-<a href=#259 id=259 data-nosnippet>259</a>) {
-<a href=#260 id=260 data-nosnippet>260</a>    <span class="kw">if </span>buf.len() &lt; <span class="number">9 </span>{
-<a href=#261 id=261 data-nosnippet>261</a>        <span class="kw">return</span>;
-<a href=#262 id=262 data-nosnippet>262</a>    }
-<a href=#263 id=263 data-nosnippet>263</a>    <span class="kw">let </span>code = u32::from_le_bytes([buf[<span class="number">1</span>], buf[<span class="number">2</span>], buf[<span class="number">3</span>], buf[<span class="number">4</span>]]);
-<a href=#264 id=264 data-nosnippet>264</a>    <span class="kw">let </span>value = u32::from_le_bytes([buf[<span class="number">5</span>], buf[<span class="number">6</span>], buf[<span class="number">7</span>], buf[<span class="number">8</span>]]);
+<a href=#187 id=187 data-nosnippet>187</a>        <span class="comment">// Lock keys change what the keyboard's own LEDs show, and the device is
+<a href=#188 id=188 data-nosnippet>188</a>        // the only place a user can see that state. Producers hear about it once
+<a href=#189 id=189 data-nosnippet>189</a>        // per change rather than once per key, and a producer that comes up
+<a href=#190 id=190 data-nosnippet>190</a>        // later is told at registration.
+<a href=#191 id=191 data-nosnippet>191</a>        </span><span class="kw">let </span>leds = modifiers.led_bitmap();
+<a href=#192 id=192 data-nosnippet>192</a>        <span class="kw">if </span>leds != leds_sent {
+<a href=#193 id=193 data-nosnippet>193</a>            sources.broadcast_leds(leds);
+<a href=#194 id=194 data-nosnippet>194</a>            leds_sent = leds;
+<a href=#195 id=195 data-nosnippet>195</a>        }
+<a href=#196 id=196 data-nosnippet>196</a>    }
+<a href=#197 id=197 data-nosnippet>197</a>}
+<a href=#198 id=198 data-nosnippet>198</a>
+<a href=#199 id=199 data-nosnippet>199</a><span class="doccomment">/// Registered raw-event producers. The DWC2 host is the sole USB producer:
+<a href=#200 id=200 data-nosnippet>200</a>/// isolated HID workers return decoded frames to that host instead of acquiring
+<a href=#201 id=201 data-nosnippet>201</a>/// a second input-service identity.
+<a href=#202 id=202 data-nosnippet>202</a></span><span class="kw">const </span>MAX_EVENT_SOURCES: usize = <span class="number">16</span>;
+<a href=#203 id=203 data-nosnippet>203</a>
+<a href=#204 id=204 data-nosnippet>204</a><span class="doccomment">/// TIDs allowed to push raw `[opcode][code][value]` events.
+<a href=#205 id=205 data-nosnippet>205</a>///
+<a href=#206 id=206 data-nosnippet>206</a>/// Sender 0 is the kernel and is implicit. For DWC2, Input accepts only the
+<a href=#207 id=207 data-nosnippet>207</a>/// kernel's current NIC-driver endpoint. The recorded identity always comes
+<a href=#208 id=208 data-nosnippet>208</a>/// from receive metadata, never from a payload.
+<a href=#209 id=209 data-nosnippet>209</a></span><span class="kw">struct </span>EventSources {
+<a href=#210 id=210 data-nosnippet>210</a>    tids: [usize; MAX_EVENT_SOURCES],
+<a href=#211 id=211 data-nosnippet>211</a>    kinds: [u8; MAX_EVENT_SOURCES],
+<a href=#212 id=212 data-nosnippet>212</a>    len: usize,
+<a href=#213 id=213 data-nosnippet>213</a>}
+<a href=#214 id=214 data-nosnippet>214</a>
+<a href=#215 id=215 data-nosnippet>215</a><span class="kw">impl </span>EventSources {
+<a href=#216 id=216 data-nosnippet>216</a>    <span class="kw">const fn </span>new() -&gt; <span class="self">Self </span>{
+<a href=#217 id=217 data-nosnippet>217</a>        <span class="self">Self </span>{
+<a href=#218 id=218 data-nosnippet>218</a>            tids: [<span class="number">0</span>; MAX_EVENT_SOURCES],
+<a href=#219 id=219 data-nosnippet>219</a>            kinds: [<span class="number">0</span>; MAX_EVENT_SOURCES],
+<a href=#220 id=220 data-nosnippet>220</a>            len: <span class="number">0</span>,
+<a href=#221 id=221 data-nosnippet>221</a>        }
+<a href=#222 id=222 data-nosnippet>222</a>    }
+<a href=#223 id=223 data-nosnippet>223</a>
+<a href=#224 id=224 data-nosnippet>224</a>    <span class="kw">fn </span>is_source(<span class="kw-2">&amp;</span><span class="self">self</span>, tid: usize) -&gt; bool {
+<a href=#225 id=225 data-nosnippet>225</a>        tid != <span class="number">0 </span>&amp;&amp; <span class="self">self</span>.tids[..<span class="self">self</span>.len].contains(<span class="kw-2">&amp;</span>tid)
+<a href=#226 id=226 data-nosnippet>226</a>    }
+<a href=#227 id=227 data-nosnippet>227</a>
+<a href=#228 id=228 data-nosnippet>228</a>    <span class="kw">fn </span>is_hid_host(<span class="kw-2">&amp;</span><span class="self">self</span>, tid: usize) -&gt; bool {
+<a href=#229 id=229 data-nosnippet>229</a>        <span class="self">self</span>.tids[..<span class="self">self</span>.len]
+<a href=#230 id=230 data-nosnippet>230</a>            .iter()
+<a href=#231 id=231 data-nosnippet>231</a>            .zip(<span class="self">self</span>.kinds[..<span class="self">self</span>.len].iter())
+<a href=#232 id=232 data-nosnippet>232</a>            .any(|(<span class="kw-2">&amp;</span>source, <span class="kw-2">&amp;</span>kind)| source == tid &amp;&amp; kind == api::ipc::input_source::USB_HID_HOST)
+<a href=#233 id=233 data-nosnippet>233</a>    }
+<a href=#234 id=234 data-nosnippet>234</a>
+<a href=#235 id=235 data-nosnippet>235</a>    <span class="doccomment">/// Record the kernel-verified DWC2 host as the USB producer.
+<a href=#236 id=236 data-nosnippet>236</a>    </span><span class="kw">fn </span>register(<span class="kw-2">&amp;mut </span><span class="self">self</span>, tid: usize, kind: u8) -&gt; bool {
+<a href=#237 id=237 data-nosnippet>237</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(index) = <span class="self">self</span>.tids[..<span class="self">self</span>.len]
+<a href=#238 id=238 data-nosnippet>238</a>            .iter()
+<a href=#239 id=239 data-nosnippet>239</a>            .position(|<span class="kw-2">&amp;</span>source| source == tid)
+<a href=#240 id=240 data-nosnippet>240</a>        {
+<a href=#241 id=241 data-nosnippet>241</a>            <span class="kw">return </span><span class="self">self</span>.kinds[index] == kind;
+<a href=#242 id=242 data-nosnippet>242</a>        }
+<a href=#243 id=243 data-nosnippet>243</a>        <span class="kw">if </span>tid == <span class="number">0
+<a href=#244 id=244 data-nosnippet>244</a>            </span>|| kind != api::ipc::input_source::USB_HID_HOST
+<a href=#245 id=245 data-nosnippet>245</a>            || sys_lookup_service(service::NIC_DRIVER) != <span class="prelude-val">Some</span>(tid)
+<a href=#246 id=246 data-nosnippet>246</a>            || <span class="self">self</span>.len == MAX_EVENT_SOURCES
+<a href=#247 id=247 data-nosnippet>247</a>        {
+<a href=#248 id=248 data-nosnippet>248</a>            <span class="kw">return </span><span class="bool-val">false</span>;
+<a href=#249 id=249 data-nosnippet>249</a>        }
+<a href=#250 id=250 data-nosnippet>250</a>        <span class="self">self</span>.tids[<span class="self">self</span>.len] = tid;
+<a href=#251 id=251 data-nosnippet>251</a>        <span class="self">self</span>.kinds[<span class="self">self</span>.len] = kind;
+<a href=#252 id=252 data-nosnippet>252</a>        <span class="self">self</span>.len += <span class="number">1</span>;
+<a href=#253 id=253 data-nosnippet>253</a>        <span class="bool-val">true
+<a href=#254 id=254 data-nosnippet>254</a>    </span>}
+<a href=#255 id=255 data-nosnippet>255</a>
+<a href=#256 id=256 data-nosnippet>256</a>    <span class="doccomment">/// Tell one producer what the lock LEDs should show.
+<a href=#257 id=257 data-nosnippet>257</a>    </span><span class="kw">fn </span>send_leds(<span class="kw-2">&amp;</span><span class="self">self</span>, tid: usize, leds: u8) {
+<a href=#258 id=258 data-nosnippet>258</a>        <span class="kw">let </span>frame = [api::ipc::OP_SET_LEDS, leds];
+<a href=#259 id=259 data-nosnippet>259</a>        <span class="kw">if </span>!<span class="macro">matches!</span>(sys_try_send(tid, <span class="kw-2">&amp;</span>frame), SyscallResult::Ok(<span class="number">0</span>)) {
+<a href=#260 id=260 data-nosnippet>260</a>            print(<span class="string">"[input] WARN: lock LED state not delivered to source tid="</span>);
+<a href=#261 id=261 data-nosnippet>261</a>            print_usize(tid);
+<a href=#262 id=262 data-nosnippet>262</a>            println(<span class="string">""</span>);
+<a href=#263 id=263 data-nosnippet>263</a>        }
+<a href=#264 id=264 data-nosnippet>264</a>    }
 <a href=#265 id=265 data-nosnippet>265</a>
-<a href=#266 id=266 data-nosnippet>266</a>    <span class="kw">match </span>buf[<span class="number">0</span>] {
-<a href=#267 id=267 data-nosnippet>267</a>        EV_KEY =&gt; {
-<a href=#268 id=268 data-nosnippet>268</a>            <span class="kw">let </span>state = key_state_from_evdev(value);
-<a href=#269 id=269 data-nosnippet>269</a>            <span class="comment">// BTN_* codes (≥ 0x110) are mouse buttons, not keyboard keys.
-<a href=#270 id=270 data-nosnippet>270</a>            // Pointer events route to the compositor (cursor + Z-order owner),
-<a href=#271 id=271 data-nosnippet>271</a>            // not the keyboard-focused cell — see Dispatcher::dispatch_mouse.
-<a href=#272 id=272 data-nosnippet>272</a>            </span><span class="kw">if </span>code &gt;= BTN_LEFT {
-<a href=#273 id=273 data-nosnippet>273</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(button) = btn_to_mouse_button(code) {
-<a href=#274 id=274 data-nosnippet>274</a>                    dispatcher.dispatch_mouse(<span class="kw-2">&amp;</span>InputEvent::MouseButton { button, state });
-<a href=#275 id=275 data-nosnippet>275</a>                }
-<a href=#276 id=276 data-nosnippet>276</a>                <span class="kw">return</span>;
-<a href=#277 id=277 data-nosnippet>277</a>            }
-<a href=#278 id=278 data-nosnippet>278</a>            <span class="kw">if </span>modifiers.update(code, state) {
-<a href=#279 id=279 data-nosnippet>279</a>                <span class="kw">return</span>;
-<a href=#280 id=280 data-nosnippet>280</a>            }
-<a href=#281 id=281 data-nosnippet>281</a>            <span class="kw">let </span>(keysym, character) = translate(code, modifiers.snapshot());
-<a href=#282 id=282 data-nosnippet>282</a>            <span class="kw">if </span>!dispatcher.dispatch(<span class="kw-2">&amp;</span>InputEvent::Key(KeyEvent {
-<a href=#283 id=283 data-nosnippet>283</a>                timestamp_ticks: sys_get_time(),
-<a href=#284 id=284 data-nosnippet>284</a>                scancode: code,
-<a href=#285 id=285 data-nosnippet>285</a>                keysym,
-<a href=#286 id=286 data-nosnippet>286</a>                character,
-<a href=#287 id=287 data-nosnippet>287</a>                modifiers: modifiers.snapshot(),
-<a href=#288 id=288 data-nosnippet>288</a>                state,
-<a href=#289 id=289 data-nosnippet>289</a>                _pad: [<span class="number">0</span>; <span class="number">2</span>],
-<a href=#290 id=290 data-nosnippet>290</a>            })) {
-<a href=#291 id=291 data-nosnippet>291</a>                println(<span class="string">"[input] WARNING: clearing failed keyboard focus"</span>);
-<a href=#292 id=292 data-nosnippet>292</a>            }
-<a href=#293 id=293 data-nosnippet>293</a>        }
-<a href=#294 id=294 data-nosnippet>294</a>        <span class="number">1 </span>=&gt; {
-<a href=#295 id=295 data-nosnippet>295</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(ev) = mouse.apply_rel(code, value) {
-<a href=#296 id=296 data-nosnippet>296</a>                dispatcher.dispatch_mouse(<span class="kw-2">&amp;</span>ev);
-<a href=#297 id=297 data-nosnippet>297</a>            }
-<a href=#298 id=298 data-nosnippet>298</a>        }
-<a href=#299 id=299 data-nosnippet>299</a>        <span class="number">2 </span>=&gt; {
-<a href=#300 id=300 data-nosnippet>300</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(ev) = mouse.apply_abs(code, value) {
-<a href=#301 id=301 data-nosnippet>301</a>                dispatcher.dispatch_mouse(<span class="kw-2">&amp;</span>ev);
-<a href=#302 id=302 data-nosnippet>302</a>            }
-<a href=#303 id=303 data-nosnippet>303</a>        }
-<a href=#304 id=304 data-nosnippet>304</a>        EV_ASCII =&gt; {
-<a href=#305 id=305 data-nosnippet>305</a>            <span class="comment">// UART byte relayed by the kernel console driver.
-<a href=#306 id=306 data-nosnippet>306</a>            // `code` carries the raw ASCII code point; skip scancode translation.
-<a href=#307 id=307 data-nosnippet>307</a>            // Map C0 control chars to semantic KeySyms so GUI apps get proper events
-<a href=#308 id=308 data-nosnippet>308</a>            // regardless of whether input originates from VirtIO or UART terminal.
-<a href=#309 id=309 data-nosnippet>309</a>            </span><span class="kw">let </span>state = <span class="kw">if </span>value &gt; <span class="number">0 </span>{
-<a href=#310 id=310 data-nosnippet>310</a>                KeyState::Pressed
-<a href=#311 id=311 data-nosnippet>311</a>            } <span class="kw">else </span>{
-<a href=#312 id=312 data-nosnippet>312</a>                KeyState::Released
-<a href=#313 id=313 data-nosnippet>313</a>            };
-<a href=#314 id=314 data-nosnippet>314</a>            <span class="kw">let </span>(keysym, character) = <span class="kw">match </span>code {
-<a href=#315 id=315 data-nosnippet>315</a>                <span class="number">0x1B </span>=&gt; (KeySym::Escape, <span class="number">0</span>),
-<a href=#316 id=316 data-nosnippet>316</a>                <span class="number">0x0D </span>| <span class="number">0x0A </span>=&gt; (KeySym::Return, code),
-<a href=#317 id=317 data-nosnippet>317</a>                <span class="number">0x08 </span>| <span class="number">0x7F </span>=&gt; (KeySym::Backspace, code),
-<a href=#318 id=318 data-nosnippet>318</a>                <span class="number">0x09 </span>=&gt; (KeySym::Tab, code),
-<a href=#319 id=319 data-nosnippet>319</a>                <span class="kw">_ </span>=&gt; (KeySym::Printable, code),
-<a href=#320 id=320 data-nosnippet>320</a>            };
-<a href=#321 id=321 data-nosnippet>321</a>            <span class="kw">if </span>!dispatcher.dispatch(<span class="kw-2">&amp;</span>InputEvent::Key(KeyEvent {
-<a href=#322 id=322 data-nosnippet>322</a>                timestamp_ticks: sys_get_time(),
-<a href=#323 id=323 data-nosnippet>323</a>                scancode: <span class="number">0</span>,
-<a href=#324 id=324 data-nosnippet>324</a>                keysym,
-<a href=#325 id=325 data-nosnippet>325</a>                character,
-<a href=#326 id=326 data-nosnippet>326</a>                modifiers: modifiers.snapshot(),
-<a href=#327 id=327 data-nosnippet>327</a>                state,
-<a href=#328 id=328 data-nosnippet>328</a>                _pad: [<span class="number">0</span>; <span class="number">2</span>],
-<a href=#329 id=329 data-nosnippet>329</a>            })) {
-<a href=#330 id=330 data-nosnippet>330</a>                println(<span class="string">"[input] WARNING: clearing failed keyboard focus"</span>);
-<a href=#331 id=331 data-nosnippet>331</a>            }
-<a href=#332 id=332 data-nosnippet>332</a>        }
-<a href=#333 id=333 data-nosnippet>333</a>        <span class="kw">_ </span>=&gt; {} <span class="comment">// unknown opcode — drop silently
-<a href=#334 id=334 data-nosnippet>334</a>    </span>}
-<a href=#335 id=335 data-nosnippet>335</a>}
-<a href=#336 id=336 data-nosnippet>336</a>
-<a href=#337 id=337 data-nosnippet>337</a><span class="doccomment">/// Handle a typed `InputRequest` from a compositor or shell cell (sender &gt; 0).
-<a href=#338 id=338 data-nosnippet>338</a></span><span class="kw">fn </span>handle_typed_request(
-<a href=#339 id=339 data-nosnippet>339</a>    buf: <span class="kw-2">&amp;</span>[u8; IPC_BUF_SIZE],
-<a href=#340 id=340 data-nosnippet>340</a>    sender: usize,
-<a href=#341 id=341 data-nosnippet>341</a>    modifiers: <span class="kw-2">&amp;mut </span>ModifierState,
-<a href=#342 id=342 data-nosnippet>342</a>    dispatcher: <span class="kw-2">&amp;mut </span>Dispatcher,
-<a href=#343 id=343 data-nosnippet>343</a>    sources: <span class="kw-2">&amp;mut </span>EventSources,
-<a href=#344 id=344 data-nosnippet>344</a>) {
-<a href=#345 id=345 data-nosnippet>345</a>    <span class="kw">let </span><span class="kw-2">mut </span>resp_buf = [<span class="number">0u8</span>; <span class="number">64</span>];
-<a href=#346 id=346 data-nosnippet>346</a>    <span class="kw">match </span>api::ipc::decode::&lt;InputRequest&gt;(buf) {
-<a href=#347 id=347 data-nosnippet>347</a>        <span class="prelude-val">Ok</span>(InputRequest::SetFocus { cell_tid: <span class="kw">_ </span>}) =&gt; {
-<a href=#348 id=348 data-nosnippet>348</a>            modifiers.reset_transient();
-<a href=#349 id=349 data-nosnippet>349</a>            <span class="comment">// Use kernel-verified sender TID instead of the cell_tid field to
-<a href=#350 id=350 data-nosnippet>350</a>            // prevent a cell from redirecting focus to an arbitrary TID.
-<a href=#351 id=351 data-nosnippet>351</a>            </span>dispatcher.set_focus(sender);
-<a href=#352 id=352 data-nosnippet>352</a>            <span class="comment">// Fire-and-forget: no reply. Focus is set atomically on receipt.
-<a href=#353 id=353 data-nosnippet>353</a>            // A blocking reply would deadlock when the focused cell is not yet
-<a href=#354 id=354 data-nosnippet>354</a>            // in sys_recv (startup race — G18 deadlock fix).
-<a href=#355 id=355 data-nosnippet>355</a>        </span>}
-<a href=#356 id=356 data-nosnippet>356</a>        <span class="prelude-val">Ok</span>(InputRequest::GetFocus) =&gt; {
-<a href=#357 id=357 data-nosnippet>357</a>            <span class="kw">let </span>focused = dispatcher.focus() <span class="kw">as </span>u32;
-<a href=#358 id=358 data-nosnippet>358</a>            <span class="kw">if let </span><span class="prelude-val">Ok</span>(encoded) = api::ipc::encode(<span class="kw-2">&amp;</span>InputResponse::Focus(focused), <span class="kw-2">&amp;mut </span>resp_buf) {
-<a href=#359 id=359 data-nosnippet>359</a>                <span class="comment">// GetFocus is only called by compositor (never during startup race).
-<a href=#360 id=360 data-nosnippet>360</a>                // Use sys_try_send to be safe — compositor is in recv waiting for this.
-<a href=#361 id=361 data-nosnippet>361</a>                </span><span class="kw">let _ </span>= sys_try_send(sender, encoded);
-<a href=#362 id=362 data-nosnippet>362</a>            }
-<a href=#363 id=363 data-nosnippet>363</a>        }
-<a href=#364 id=364 data-nosnippet>364</a>        <span class="prelude-val">Ok</span>(InputRequest::ClearFocus { cell_tid: <span class="kw">_ </span>}) =&gt; {
-<a href=#365 id=365 data-nosnippet>365</a>            <span class="comment">// Use kernel-verified sender TID (same as SetFocus) — prevents a cell
-<a href=#366 id=366 data-nosnippet>366</a>            // from clearing another cell's focus. When sender == focused, drop focus.
-<a href=#367 id=367 data-nosnippet>367</a>            </span><span class="kw">if </span>dispatcher.focus() == sender {
-<a href=#368 id=368 data-nosnippet>368</a>                dispatcher.set_focus(<span class="number">0</span>);
-<a href=#369 id=369 data-nosnippet>369</a>            }
-<a href=#370 id=370 data-nosnippet>370</a>            <span class="comment">// Fire-and-forget: no reply. Same rationale as SetFocus.
-<a href=#371 id=371 data-nosnippet>371</a>        </span>}
-<a href=#372 id=372 data-nosnippet>372</a>        <span class="prelude-val">Ok</span>(InputRequest::RegisterEventSource { kind }) =&gt; {
-<a href=#373 id=373 data-nosnippet>373</a>            <span class="kw">if </span>sources.register(sender) {
-<a href=#374 id=374 data-nosnippet>374</a>                print(<span class="string">"[input] registered raw event source kind="</span>);
-<a href=#375 id=375 data-nosnippet>375</a>                print_usize(kind <span class="kw">as </span>usize);
-<a href=#376 id=376 data-nosnippet>376</a>                println(<span class="string">""</span>);
-<a href=#377 id=377 data-nosnippet>377</a>            } <span class="kw">else </span>{
-<a href=#378 id=378 data-nosnippet>378</a>                println(<span class="string">"[input] WARN: event-source registration refused"</span>);
-<a href=#379 id=379 data-nosnippet>379</a>            }
-<a href=#380 id=380 data-nosnippet>380</a>        }
-<a href=#381 id=381 data-nosnippet>381</a>        <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; {} <span class="comment">// unknown message — drop silently
-<a href=#382 id=382 data-nosnippet>382</a>    </span>}
-<a href=#383 id=383 data-nosnippet>383</a>}
+<a href=#266 id=266 data-nosnippet>266</a>    <span class="doccomment">/// Tell every registered producer what the lock LEDs should show.
+<a href=#267 id=267 data-nosnippet>267</a>    </span><span class="kw">fn </span>broadcast_leds(<span class="kw-2">&amp;</span><span class="self">self</span>, leds: u8) {
+<a href=#268 id=268 data-nosnippet>268</a>        <span class="kw">for </span><span class="kw-2">&amp;</span>tid <span class="kw">in </span><span class="kw-2">&amp;</span><span class="self">self</span>.tids[..<span class="self">self</span>.len] {
+<a href=#269 id=269 data-nosnippet>269</a>            <span class="self">self</span>.send_leds(tid, leds);
+<a href=#270 id=270 data-nosnippet>270</a>        }
+<a href=#271 id=271 data-nosnippet>271</a>    }
+<a href=#272 id=272 data-nosnippet>272</a>}
+<a href=#273 id=273 data-nosnippet>273</a>
+<a href=#274 id=274 data-nosnippet>274</a><span class="doccomment">/// Pressed-key ownership for isolated HID interfaces.
+<a href=#275 id=275 data-nosnippet>275</a>///
+<a href=#276 id=276 data-nosnippet>276</a>/// This is deliberately bounded: an untrusted descriptor/report cannot grow
+<a href=#277 id=277 data-nosnippet>277</a>/// input-service state without limit, and disconnect cleanup only touches the
+<a href=#278 id=278 data-nosnippet>278</a>/// keys that one device actually contributed.
+<a href=#279 id=279 data-nosnippet>279</a></span><span class="kw">const </span>MAX_HID_DEVICES: usize = <span class="number">16</span>;
+<a href=#280 id=280 data-nosnippet>280</a><span class="kw">const </span>MAX_KEYS_PER_HID_DEVICE: usize = <span class="number">128</span>;
+<a href=#281 id=281 data-nosnippet>281</a>
+<a href=#282 id=282 data-nosnippet>282</a><span class="kw">struct </span>HidDeviceState {
+<a href=#283 id=283 data-nosnippet>283</a>    id: u32,
+<a href=#284 id=284 data-nosnippet>284</a>    pressed: Vec&lt;u32&gt;,
+<a href=#285 id=285 data-nosnippet>285</a>}
+<a href=#286 id=286 data-nosnippet>286</a>
+<a href=#287 id=287 data-nosnippet>287</a><span class="kw">struct </span>HidDeviceStates {
+<a href=#288 id=288 data-nosnippet>288</a>    devices: Vec&lt;HidDeviceState&gt;,
+<a href=#289 id=289 data-nosnippet>289</a>}
+<a href=#290 id=290 data-nosnippet>290</a>
+<a href=#291 id=291 data-nosnippet>291</a><span class="kw">impl </span>HidDeviceStates {
+<a href=#292 id=292 data-nosnippet>292</a>    <span class="kw">const fn </span>new() -&gt; <span class="self">Self </span>{
+<a href=#293 id=293 data-nosnippet>293</a>        <span class="self">Self </span>{
+<a href=#294 id=294 data-nosnippet>294</a>            devices: Vec::new(),
+<a href=#295 id=295 data-nosnippet>295</a>        }
+<a href=#296 id=296 data-nosnippet>296</a>    }
+<a href=#297 id=297 data-nosnippet>297</a>
+<a href=#298 id=298 data-nosnippet>298</a>    <span class="kw">fn </span>record_key(<span class="kw-2">&amp;mut </span><span class="self">self</span>, id: u32, code: u32, state: KeyState) {
+<a href=#299 id=299 data-nosnippet>299</a>        <span class="kw">let </span>index = <span class="kw">match </span><span class="self">self</span>.devices.iter().position(|device| device.id == id) {
+<a href=#300 id=300 data-nosnippet>300</a>            <span class="prelude-val">Some</span>(index) =&gt; index,
+<a href=#301 id=301 data-nosnippet>301</a>            <span class="prelude-val">None </span><span class="kw">if </span><span class="self">self</span>.devices.len() &lt; MAX_HID_DEVICES =&gt; {
+<a href=#302 id=302 data-nosnippet>302</a>                <span class="self">self</span>.devices.push(HidDeviceState {
+<a href=#303 id=303 data-nosnippet>303</a>                    id,
+<a href=#304 id=304 data-nosnippet>304</a>                    pressed: Vec::new(),
+<a href=#305 id=305 data-nosnippet>305</a>                });
+<a href=#306 id=306 data-nosnippet>306</a>                <span class="self">self</span>.devices.len() - <span class="number">1
+<a href=#307 id=307 data-nosnippet>307</a>            </span>}
+<a href=#308 id=308 data-nosnippet>308</a>            <span class="prelude-val">None </span>=&gt; <span class="kw">return</span>,
+<a href=#309 id=309 data-nosnippet>309</a>        };
+<a href=#310 id=310 data-nosnippet>310</a>        <span class="kw">let </span>pressed = <span class="kw-2">&amp;mut </span><span class="self">self</span>.devices[index].pressed;
+<a href=#311 id=311 data-nosnippet>311</a>        <span class="kw">match </span>state {
+<a href=#312 id=312 data-nosnippet>312</a>            KeyState::Pressed | KeyState::Repeated =&gt; {
+<a href=#313 id=313 data-nosnippet>313</a>                <span class="kw">if </span>!pressed.contains(<span class="kw-2">&amp;</span>code) &amp;&amp; pressed.len() &lt; MAX_KEYS_PER_HID_DEVICE {
+<a href=#314 id=314 data-nosnippet>314</a>                    pressed.push(code);
+<a href=#315 id=315 data-nosnippet>315</a>                }
+<a href=#316 id=316 data-nosnippet>316</a>            }
+<a href=#317 id=317 data-nosnippet>317</a>            KeyState::Released =&gt; pressed.retain(|<span class="kw-2">&amp;</span>held| held != code),
+<a href=#318 id=318 data-nosnippet>318</a>        }
+<a href=#319 id=319 data-nosnippet>319</a>    }
+<a href=#320 id=320 data-nosnippet>320</a>
+<a href=#321 id=321 data-nosnippet>321</a>    <span class="kw">fn </span>take_pressed(<span class="kw-2">&amp;mut </span><span class="self">self</span>, id: u32) -&gt; Vec&lt;u32&gt; {
+<a href=#322 id=322 data-nosnippet>322</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(index) = <span class="self">self</span>.devices.iter().position(|device| device.id == id) <span class="kw">else </span>{
+<a href=#323 id=323 data-nosnippet>323</a>            <span class="kw">return </span>Vec::new();
+<a href=#324 id=324 data-nosnippet>324</a>        };
+<a href=#325 id=325 data-nosnippet>325</a>        <span class="self">self</span>.devices.swap_remove(index).pressed
+<a href=#326 id=326 data-nosnippet>326</a>    }
+<a href=#327 id=327 data-nosnippet>327</a>
+<a href=#328 id=328 data-nosnippet>328</a>    <span class="kw">fn </span>has_transient_modifier(<span class="kw-2">&amp;</span><span class="self">self</span>, code: u32) -&gt; bool {
+<a href=#329 id=329 data-nosnippet>329</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(modifier) = modifier_for_scancode(code) <span class="kw">else </span>{
+<a href=#330 id=330 data-nosnippet>330</a>            <span class="kw">return </span><span class="bool-val">false</span>;
+<a href=#331 id=331 data-nosnippet>331</a>        };
+<a href=#332 id=332 data-nosnippet>332</a>        <span class="self">self</span>.devices.iter().any(|device| {
+<a href=#333 id=333 data-nosnippet>333</a>            device
+<a href=#334 id=334 data-nosnippet>334</a>                .pressed
+<a href=#335 id=335 data-nosnippet>335</a>                .iter()
+<a href=#336 id=336 data-nosnippet>336</a>                .copied()
+<a href=#337 id=337 data-nosnippet>337</a>                .any(|held| modifier_for_scancode(held) == <span class="prelude-val">Some</span>(modifier))
+<a href=#338 id=338 data-nosnippet>338</a>        })
+<a href=#339 id=339 data-nosnippet>339</a>    }
+<a href=#340 id=340 data-nosnippet>340</a>}
+<a href=#341 id=341 data-nosnippet>341</a>
+<a href=#342 id=342 data-nosnippet>342</a><span class="kw">fn </span>release_hid_device(
+<a href=#343 id=343 data-nosnippet>343</a>    device: u32,
+<a href=#344 id=344 data-nosnippet>344</a>    modifiers: <span class="kw-2">&amp;mut </span>ModifierState,
+<a href=#345 id=345 data-nosnippet>345</a>    mouse: <span class="kw-2">&amp;mut </span>MouseState,
+<a href=#346 id=346 data-nosnippet>346</a>    dispatcher: <span class="kw-2">&amp;mut </span>Dispatcher,
+<a href=#347 id=347 data-nosnippet>347</a>    hid_devices: <span class="kw-2">&amp;mut </span>HidDeviceStates,
+<a href=#348 id=348 data-nosnippet>348</a>) {
+<a href=#349 id=349 data-nosnippet>349</a>    <span class="kw">for </span>code <span class="kw">in </span>hid_devices.take_pressed(device) {
+<a href=#350 id=350 data-nosnippet>350</a>        <span class="comment">// A second keyboard can keep the same logical modifier held (including
+<a href=#351 id=351 data-nosnippet>351</a>        // left/right variants). Do not clear its aggregate state on this
+<a href=#352 id=352 data-nosnippet>352</a>        // worker's teardown.
+<a href=#353 id=353 data-nosnippet>353</a>        </span><span class="kw">if </span>hid_devices.has_transient_modifier(code) {
+<a href=#354 id=354 data-nosnippet>354</a>            <span class="kw">continue</span>;
+<a href=#355 id=355 data-nosnippet>355</a>        }
+<a href=#356 id=356 data-nosnippet>356</a>        <span class="kw">let </span><span class="kw-2">mut </span>release = [<span class="number">0u8</span>; IPC_BUF_SIZE];
+<a href=#357 id=357 data-nosnippet>357</a>        release[<span class="number">0</span>] = EV_KEY;
+<a href=#358 id=358 data-nosnippet>358</a>        release[<span class="number">1</span>..<span class="number">5</span>].copy_from_slice(<span class="kw-2">&amp;</span>code.to_le_bytes());
+<a href=#359 id=359 data-nosnippet>359</a>        <span class="comment">// value remains zero: EV_KEY release.
+<a href=#360 id=360 data-nosnippet>360</a>        </span>handle_kernel_event(<span class="kw-2">&amp;</span>release, modifiers, mouse, dispatcher, hid_devices);
+<a href=#361 id=361 data-nosnippet>361</a>    }
+<a href=#362 id=362 data-nosnippet>362</a>}
+<a href=#363 id=363 data-nosnippet>363</a>
+<a href=#364 id=364 data-nosnippet>364</a><span class="doccomment">/// Drain all pending events from the VirtIO virtqueue and dispatch them.
+<a href=#365 id=365 data-nosnippet>365</a></span><span class="kw">fn </span>drain_virtio(
+<a href=#366 id=366 data-nosnippet>366</a>    dev: <span class="kw-2">&amp;mut </span>InputDevice,
+<a href=#367 id=367 data-nosnippet>367</a>    buf: <span class="kw-2">&amp;mut </span>[u8; IPC_BUF_SIZE],
+<a href=#368 id=368 data-nosnippet>368</a>    modifiers: <span class="kw-2">&amp;mut </span>ModifierState,
+<a href=#369 id=369 data-nosnippet>369</a>    mouse: <span class="kw-2">&amp;mut </span>MouseState,
+<a href=#370 id=370 data-nosnippet>370</a>    dispatcher: <span class="kw-2">&amp;mut </span>Dispatcher,
+<a href=#371 id=371 data-nosnippet>371</a>    hid_devices: <span class="kw-2">&amp;mut </span>HidDeviceStates,
+<a href=#372 id=372 data-nosnippet>372</a>) {
+<a href=#373 id=373 data-nosnippet>373</a>    <span class="kw">while let </span><span class="prelude-val">Some</span>(ev) = dev.try_get_event() {
+<a href=#374 id=374 data-nosnippet>374</a>        <span class="comment">// Map Linux evdev event types → the same opcode encoding the kernel uses
+<a href=#375 id=375 data-nosnippet>375</a>        // in dispatch_pending, so handle_kernel_event processes them identically.
+<a href=#376 id=376 data-nosnippet>376</a>        </span><span class="kw">let </span>opcode: u8 = <span class="kw">match </span>ev.event_type {
+<a href=#377 id=377 data-nosnippet>377</a>            EVDEV_KEY =&gt; <span class="number">0</span>, <span class="comment">// EV_KEY
+<a href=#378 id=378 data-nosnippet>378</a>            </span>EVDEV_REL =&gt; <span class="number">1</span>, <span class="comment">// EV_REL
+<a href=#379 id=379 data-nosnippet>379</a>            </span>EVDEV_ABS =&gt; <span class="number">2</span>, <span class="comment">// EV_ABS
+<a href=#380 id=380 data-nosnippet>380</a>            </span><span class="kw">_ </span>=&gt; <span class="kw">continue</span>,  <span class="comment">// unknown type (EV_SYN, EV_MSC, etc.) — drop
+<a href=#381 id=381 data-nosnippet>381</a>        </span>};
+<a href=#382 id=382 data-nosnippet>382</a>        buf[<span class="number">0</span>] = opcode;
+<a href=#383 id=383 data-nosnippet>383</a>        buf[<span class="number">1</span>..<span class="number">5</span>].copy_from_slice(<span class="kw-2">&amp;</span>(ev.code <span class="kw">as </span>u32).to_le_bytes());
+<a href=#384 id=384 data-nosnippet>384</a>        buf[<span class="number">5</span>..<span class="number">9</span>].copy_from_slice(<span class="kw-2">&amp;</span>ev.value.to_le_bytes());
+<a href=#385 id=385 data-nosnippet>385</a>        handle_kernel_event(buf, modifiers, mouse, dispatcher, hid_devices);
+<a href=#386 id=386 data-nosnippet>386</a>    }
+<a href=#387 id=387 data-nosnippet>387</a>}
+<a href=#388 id=388 data-nosnippet>388</a>
+<a href=#389 id=389 data-nosnippet>389</a><span class="doccomment">/// Process one incoming IPC message.
+<a href=#390 id=390 data-nosnippet>390</a>///
+<a href=#391 id=391 data-nosnippet>391</a>/// Discrimination is by `sender`, not opcode, to avoid collisions with postcard
+<a href=#392 id=392 data-nosnippet>392</a>/// discriminants: kernel pushes arrive with sender=0; typed requests sender&gt;0.
+<a href=#393 id=393 data-nosnippet>393</a></span><span class="kw">fn </span>handle_message(
+<a href=#394 id=394 data-nosnippet>394</a>    buf: <span class="kw-2">&amp;</span>[u8; IPC_BUF_SIZE],
+<a href=#395 id=395 data-nosnippet>395</a>    sender: usize,
+<a href=#396 id=396 data-nosnippet>396</a>    modifiers: <span class="kw-2">&amp;mut </span>ModifierState,
+<a href=#397 id=397 data-nosnippet>397</a>    mouse: <span class="kw-2">&amp;mut </span>MouseState,
+<a href=#398 id=398 data-nosnippet>398</a>    dispatcher: <span class="kw-2">&amp;mut </span>Dispatcher,
+<a href=#399 id=399 data-nosnippet>399</a>    sources: <span class="kw-2">&amp;mut </span>EventSources,
+<a href=#400 id=400 data-nosnippet>400</a>    hid_devices: <span class="kw-2">&amp;mut </span>HidDeviceStates,
+<a href=#401 id=401 data-nosnippet>401</a>) {
+<a href=#402 id=402 data-nosnippet>402</a>    <span class="comment">// Registered producers speak raw frames; all other senders are typed IPC.
+<a href=#403 id=403 data-nosnippet>403</a>    </span><span class="kw">if </span>sender == <span class="number">0 </span>{
+<a href=#404 id=404 data-nosnippet>404</a>        handle_kernel_event(buf, modifiers, mouse, dispatcher, hid_devices);
+<a href=#405 id=405 data-nosnippet>405</a>    } <span class="kw">else if </span>sources.is_source(sender) {
+<a href=#406 id=406 data-nosnippet>406</a>        <span class="kw">if </span>buf[<span class="number">0</span>] == OP_HID_DEVICE_REMOVED &amp;&amp; sources.is_hid_host(sender) {
+<a href=#407 id=407 data-nosnippet>407</a>            <span class="kw">let </span>device = u32::from_le_bytes([buf[<span class="number">1</span>], buf[<span class="number">2</span>], buf[<span class="number">3</span>], buf[<span class="number">4</span>]]);
+<a href=#408 id=408 data-nosnippet>408</a>            release_hid_device(device, modifiers, mouse, dispatcher, hid_devices);
+<a href=#409 id=409 data-nosnippet>409</a>            <span class="kw">return</span>;
+<a href=#410 id=410 data-nosnippet>410</a>        }
+<a href=#411 id=411 data-nosnippet>411</a>        handle_kernel_event(buf, modifiers, mouse, dispatcher, hid_devices);
+<a href=#412 id=412 data-nosnippet>412</a>    } <span class="kw">else </span>{
+<a href=#413 id=413 data-nosnippet>413</a>        handle_typed_request(buf, sender, modifiers, dispatcher, sources);
+<a href=#414 id=414 data-nosnippet>414</a>    }
+<a href=#415 id=415 data-nosnippet>415</a>}
+<a href=#416 id=416 data-nosnippet>416</a>
+<a href=#417 id=417 data-nosnippet>417</a><span class="doccomment">/// Handle a raw VirtIO event pushed by the kernel (sender == 0).
+<a href=#418 id=418 data-nosnippet>418</a>///
+<a href=#419 id=419 data-nosnippet>419</a>/// Wire format: `[opcode:1][code:4 LE][value:4 LE]`
+<a href=#420 id=420 data-nosnippet>420</a>/// opcode 0 = EV_KEY (keyboard key or mouse button via BTN_* scancode ≥ 0x110)
+<a href=#421 id=421 data-nosnippet>421</a>/// opcode 1 = EV_REL (relative mouse: REL_X/Y/WHEEL)
+<a href=#422 id=422 data-nosnippet>422</a>/// opcode 2 = EV_ABS (absolute mouse: ABS_X/Y)
+<a href=#423 id=423 data-nosnippet>423</a></span><span class="kw">fn </span>handle_kernel_event(
+<a href=#424 id=424 data-nosnippet>424</a>    buf: <span class="kw-2">&amp;</span>[u8; IPC_BUF_SIZE],
+<a href=#425 id=425 data-nosnippet>425</a>    modifiers: <span class="kw-2">&amp;mut </span>ModifierState,
+<a href=#426 id=426 data-nosnippet>426</a>    mouse: <span class="kw-2">&amp;mut </span>MouseState,
+<a href=#427 id=427 data-nosnippet>427</a>    dispatcher: <span class="kw-2">&amp;mut </span>Dispatcher,
+<a href=#428 id=428 data-nosnippet>428</a>    hid_devices: <span class="kw-2">&amp;mut </span>HidDeviceStates,
+<a href=#429 id=429 data-nosnippet>429</a>) {
+<a href=#430 id=430 data-nosnippet>430</a>    <span class="kw">let </span>(device, opcode, code, value) = <span class="kw">if </span>buf[<span class="number">0</span>] == EV_DEVICE {
+<a href=#431 id=431 data-nosnippet>431</a>        <span class="kw">if </span>buf.len() &lt; <span class="number">14 </span>{
+<a href=#432 id=432 data-nosnippet>432</a>            <span class="kw">return</span>;
+<a href=#433 id=433 data-nosnippet>433</a>        }
+<a href=#434 id=434 data-nosnippet>434</a>        (
+<a href=#435 id=435 data-nosnippet>435</a>            <span class="prelude-val">Some</span>(u32::from_le_bytes([buf[<span class="number">1</span>], buf[<span class="number">2</span>], buf[<span class="number">3</span>], buf[<span class="number">4</span>]])),
+<a href=#436 id=436 data-nosnippet>436</a>            buf[<span class="number">5</span>],
+<a href=#437 id=437 data-nosnippet>437</a>            u32::from_le_bytes([buf[<span class="number">6</span>], buf[<span class="number">7</span>], buf[<span class="number">8</span>], buf[<span class="number">9</span>]]),
+<a href=#438 id=438 data-nosnippet>438</a>            u32::from_le_bytes([buf[<span class="number">10</span>], buf[<span class="number">11</span>], buf[<span class="number">12</span>], buf[<span class="number">13</span>]]),
+<a href=#439 id=439 data-nosnippet>439</a>        )
+<a href=#440 id=440 data-nosnippet>440</a>    } <span class="kw">else </span>{
+<a href=#441 id=441 data-nosnippet>441</a>        <span class="kw">if </span>buf.len() &lt; <span class="number">9 </span>{
+<a href=#442 id=442 data-nosnippet>442</a>            <span class="kw">return</span>;
+<a href=#443 id=443 data-nosnippet>443</a>        }
+<a href=#444 id=444 data-nosnippet>444</a>        (
+<a href=#445 id=445 data-nosnippet>445</a>            <span class="prelude-val">None</span>,
+<a href=#446 id=446 data-nosnippet>446</a>            buf[<span class="number">0</span>],
+<a href=#447 id=447 data-nosnippet>447</a>            u32::from_le_bytes([buf[<span class="number">1</span>], buf[<span class="number">2</span>], buf[<span class="number">3</span>], buf[<span class="number">4</span>]]),
+<a href=#448 id=448 data-nosnippet>448</a>            u32::from_le_bytes([buf[<span class="number">5</span>], buf[<span class="number">6</span>], buf[<span class="number">7</span>], buf[<span class="number">8</span>]]),
+<a href=#449 id=449 data-nosnippet>449</a>        )
+<a href=#450 id=450 data-nosnippet>450</a>    };
+<a href=#451 id=451 data-nosnippet>451</a>
+<a href=#452 id=452 data-nosnippet>452</a>    <span class="kw">match </span>opcode {
+<a href=#453 id=453 data-nosnippet>453</a>        EV_KEY =&gt; {
+<a href=#454 id=454 data-nosnippet>454</a>            <span class="kw">let </span>state = key_state_from_evdev(value);
+<a href=#455 id=455 data-nosnippet>455</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(device) = device {
+<a href=#456 id=456 data-nosnippet>456</a>                hid_devices.record_key(device, code, state);
+<a href=#457 id=457 data-nosnippet>457</a>            }
+<a href=#458 id=458 data-nosnippet>458</a>            <span class="comment">// BTN_* codes (≥ 0x110) are mouse buttons, not keyboard keys.
+<a href=#459 id=459 data-nosnippet>459</a>            // Pointer events route to the compositor (cursor + Z-order owner),
+<a href=#460 id=460 data-nosnippet>460</a>            // not the keyboard-focused cell — see Dispatcher::dispatch_mouse.
+<a href=#461 id=461 data-nosnippet>461</a>            </span><span class="kw">if </span>code &gt;= BTN_LEFT {
+<a href=#462 id=462 data-nosnippet>462</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(button) = btn_to_mouse_button(code) {
+<a href=#463 id=463 data-nosnippet>463</a>                    dispatcher.dispatch_mouse(<span class="kw-2">&amp;</span>InputEvent::MouseButton { button, state });
+<a href=#464 id=464 data-nosnippet>464</a>                }
+<a href=#465 id=465 data-nosnippet>465</a>                <span class="kw">return</span>;
+<a href=#466 id=466 data-nosnippet>466</a>            }
+<a href=#467 id=467 data-nosnippet>467</a>            <span class="kw">if </span>modifiers.update(code, state) {
+<a href=#468 id=468 data-nosnippet>468</a>                <span class="kw">return</span>;
+<a href=#469 id=469 data-nosnippet>469</a>            }
+<a href=#470 id=470 data-nosnippet>470</a>            <span class="kw">let </span>(keysym, character) = translate(code, modifiers.snapshot());
+<a href=#471 id=471 data-nosnippet>471</a>            <span class="kw">if </span>!dispatcher.dispatch(<span class="kw-2">&amp;</span>InputEvent::Key(KeyEvent {
+<a href=#472 id=472 data-nosnippet>472</a>                timestamp_ticks: sys_get_time(),
+<a href=#473 id=473 data-nosnippet>473</a>                scancode: code,
+<a href=#474 id=474 data-nosnippet>474</a>                keysym,
+<a href=#475 id=475 data-nosnippet>475</a>                character,
+<a href=#476 id=476 data-nosnippet>476</a>                modifiers: modifiers.snapshot(),
+<a href=#477 id=477 data-nosnippet>477</a>                state,
+<a href=#478 id=478 data-nosnippet>478</a>                _pad: [<span class="number">0</span>; <span class="number">2</span>],
+<a href=#479 id=479 data-nosnippet>479</a>            })) {
+<a href=#480 id=480 data-nosnippet>480</a>                println(<span class="string">"[input] WARNING: clearing failed keyboard focus"</span>);
+<a href=#481 id=481 data-nosnippet>481</a>            }
+<a href=#482 id=482 data-nosnippet>482</a>        }
+<a href=#483 id=483 data-nosnippet>483</a>        <span class="number">1 </span>=&gt; {
+<a href=#484 id=484 data-nosnippet>484</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(ev) = mouse.apply_rel(code, value) {
+<a href=#485 id=485 data-nosnippet>485</a>                dispatcher.dispatch_mouse(<span class="kw-2">&amp;</span>ev);
+<a href=#486 id=486 data-nosnippet>486</a>            }
+<a href=#487 id=487 data-nosnippet>487</a>        }
+<a href=#488 id=488 data-nosnippet>488</a>        <span class="number">2 </span>=&gt; {
+<a href=#489 id=489 data-nosnippet>489</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(ev) = mouse.apply_abs(code, value) {
+<a href=#490 id=490 data-nosnippet>490</a>                dispatcher.dispatch_mouse(<span class="kw-2">&amp;</span>ev);
+<a href=#491 id=491 data-nosnippet>491</a>            }
+<a href=#492 id=492 data-nosnippet>492</a>        }
+<a href=#493 id=493 data-nosnippet>493</a>        EV_ASCII =&gt; {
+<a href=#494 id=494 data-nosnippet>494</a>            <span class="comment">// UART byte relayed by the kernel console driver.
+<a href=#495 id=495 data-nosnippet>495</a>            // `code` carries the raw ASCII code point; skip scancode translation.
+<a href=#496 id=496 data-nosnippet>496</a>            // Map C0 control chars to semantic KeySyms so GUI apps get proper events
+<a href=#497 id=497 data-nosnippet>497</a>            // regardless of whether input originates from VirtIO or UART terminal.
+<a href=#498 id=498 data-nosnippet>498</a>            </span><span class="kw">let </span>state = <span class="kw">if </span>value &gt; <span class="number">0 </span>{
+<a href=#499 id=499 data-nosnippet>499</a>                KeyState::Pressed
+<a href=#500 id=500 data-nosnippet>500</a>            } <span class="kw">else </span>{
+<a href=#501 id=501 data-nosnippet>501</a>                KeyState::Released
+<a href=#502 id=502 data-nosnippet>502</a>            };
+<a href=#503 id=503 data-nosnippet>503</a>            <span class="kw">let </span>(keysym, character) = <span class="kw">match </span>code {
+<a href=#504 id=504 data-nosnippet>504</a>                <span class="number">0x1B </span>=&gt; (KeySym::Escape, <span class="number">0</span>),
+<a href=#505 id=505 data-nosnippet>505</a>                <span class="number">0x0D </span>| <span class="number">0x0A </span>=&gt; (KeySym::Return, code),
+<a href=#506 id=506 data-nosnippet>506</a>                <span class="number">0x08 </span>| <span class="number">0x7F </span>=&gt; (KeySym::Backspace, code),
+<a href=#507 id=507 data-nosnippet>507</a>                <span class="number">0x09 </span>=&gt; (KeySym::Tab, code),
+<a href=#508 id=508 data-nosnippet>508</a>                <span class="kw">_ </span>=&gt; (KeySym::Printable, code),
+<a href=#509 id=509 data-nosnippet>509</a>            };
+<a href=#510 id=510 data-nosnippet>510</a>            <span class="kw">if </span>!dispatcher.dispatch(<span class="kw-2">&amp;</span>InputEvent::Key(KeyEvent {
+<a href=#511 id=511 data-nosnippet>511</a>                timestamp_ticks: sys_get_time(),
+<a href=#512 id=512 data-nosnippet>512</a>                scancode: <span class="number">0</span>,
+<a href=#513 id=513 data-nosnippet>513</a>                keysym,
+<a href=#514 id=514 data-nosnippet>514</a>                character,
+<a href=#515 id=515 data-nosnippet>515</a>                modifiers: modifiers.snapshot(),
+<a href=#516 id=516 data-nosnippet>516</a>                state,
+<a href=#517 id=517 data-nosnippet>517</a>                _pad: [<span class="number">0</span>; <span class="number">2</span>],
+<a href=#518 id=518 data-nosnippet>518</a>            })) {
+<a href=#519 id=519 data-nosnippet>519</a>                println(<span class="string">"[input] WARNING: clearing failed keyboard focus"</span>);
+<a href=#520 id=520 data-nosnippet>520</a>            }
+<a href=#521 id=521 data-nosnippet>521</a>        }
+<a href=#522 id=522 data-nosnippet>522</a>        <span class="kw">_ </span>=&gt; {} <span class="comment">// unknown opcode — drop silently
+<a href=#523 id=523 data-nosnippet>523</a>    </span>}
+<a href=#524 id=524 data-nosnippet>524</a>}
+<a href=#525 id=525 data-nosnippet>525</a>
+<a href=#526 id=526 data-nosnippet>526</a><span class="doccomment">/// Handle a typed `InputRequest` from a compositor or shell cell (sender &gt; 0).
+<a href=#527 id=527 data-nosnippet>527</a></span><span class="kw">fn </span>handle_typed_request(
+<a href=#528 id=528 data-nosnippet>528</a>    buf: <span class="kw-2">&amp;</span>[u8; IPC_BUF_SIZE],
+<a href=#529 id=529 data-nosnippet>529</a>    sender: usize,
+<a href=#530 id=530 data-nosnippet>530</a>    modifiers: <span class="kw-2">&amp;mut </span>ModifierState,
+<a href=#531 id=531 data-nosnippet>531</a>    dispatcher: <span class="kw-2">&amp;mut </span>Dispatcher,
+<a href=#532 id=532 data-nosnippet>532</a>    sources: <span class="kw-2">&amp;mut </span>EventSources,
+<a href=#533 id=533 data-nosnippet>533</a>) {
+<a href=#534 id=534 data-nosnippet>534</a>    <span class="kw">let </span><span class="kw-2">mut </span>resp_buf = [<span class="number">0u8</span>; <span class="number">64</span>];
+<a href=#535 id=535 data-nosnippet>535</a>    <span class="kw">match </span>api::ipc::decode::&lt;InputRequest&gt;(buf) {
+<a href=#536 id=536 data-nosnippet>536</a>        <span class="prelude-val">Ok</span>(InputRequest::SetFocus { cell_tid: <span class="kw">_ </span>}) =&gt; {
+<a href=#537 id=537 data-nosnippet>537</a>            modifiers.reset_transient();
+<a href=#538 id=538 data-nosnippet>538</a>            <span class="comment">// Use kernel-verified sender TID instead of the cell_tid field to
+<a href=#539 id=539 data-nosnippet>539</a>            // prevent a cell from redirecting focus to an arbitrary TID.
+<a href=#540 id=540 data-nosnippet>540</a>            </span>dispatcher.set_focus(sender);
+<a href=#541 id=541 data-nosnippet>541</a>            <span class="comment">// Fire-and-forget: no reply. Focus is set atomically on receipt.
+<a href=#542 id=542 data-nosnippet>542</a>            // A blocking reply would deadlock when the focused cell is not yet
+<a href=#543 id=543 data-nosnippet>543</a>            // in sys_recv (startup race — G18 deadlock fix).
+<a href=#544 id=544 data-nosnippet>544</a>        </span>}
+<a href=#545 id=545 data-nosnippet>545</a>        <span class="prelude-val">Ok</span>(InputRequest::GetFocus) =&gt; {
+<a href=#546 id=546 data-nosnippet>546</a>            <span class="kw">let </span>focused = dispatcher.focus() <span class="kw">as </span>u32;
+<a href=#547 id=547 data-nosnippet>547</a>            <span class="kw">if let </span><span class="prelude-val">Ok</span>(encoded) = api::ipc::encode(<span class="kw-2">&amp;</span>InputResponse::Focus(focused), <span class="kw-2">&amp;mut </span>resp_buf) {
+<a href=#548 id=548 data-nosnippet>548</a>                <span class="comment">// GetFocus is only called by compositor (never during startup race).
+<a href=#549 id=549 data-nosnippet>549</a>                // Use sys_try_send to be safe — compositor is in recv waiting for this.
+<a href=#550 id=550 data-nosnippet>550</a>                </span><span class="kw">let _ </span>= sys_try_send(sender, encoded);
+<a href=#551 id=551 data-nosnippet>551</a>            }
+<a href=#552 id=552 data-nosnippet>552</a>        }
+<a href=#553 id=553 data-nosnippet>553</a>        <span class="prelude-val">Ok</span>(InputRequest::ClearFocus { cell_tid: <span class="kw">_ </span>}) =&gt; {
+<a href=#554 id=554 data-nosnippet>554</a>            <span class="comment">// Use kernel-verified sender TID (same as SetFocus) — prevents a cell
+<a href=#555 id=555 data-nosnippet>555</a>            // from clearing another cell's focus. When sender == focused, drop focus.
+<a href=#556 id=556 data-nosnippet>556</a>            </span><span class="kw">if </span>dispatcher.focus() == sender {
+<a href=#557 id=557 data-nosnippet>557</a>                dispatcher.set_focus(<span class="number">0</span>);
+<a href=#558 id=558 data-nosnippet>558</a>            }
+<a href=#559 id=559 data-nosnippet>559</a>            <span class="comment">// Fire-and-forget: no reply. Same rationale as SetFocus.
+<a href=#560 id=560 data-nosnippet>560</a>        </span>}
+<a href=#561 id=561 data-nosnippet>561</a>        <span class="prelude-val">Ok</span>(InputRequest::RegisterEventSource { kind }) =&gt; {
+<a href=#562 id=562 data-nosnippet>562</a>            <span class="kw">if </span>sources.register(sender, kind) {
+<a href=#563 id=563 data-nosnippet>563</a>                print(<span class="string">"[input] registered raw event source kind="</span>);
+<a href=#564 id=564 data-nosnippet>564</a>                print_usize(kind <span class="kw">as </span>usize);
+<a href=#565 id=565 data-nosnippet>565</a>                println(<span class="string">""</span>);
+<a href=#566 id=566 data-nosnippet>566</a>                <span class="comment">// A producer that just came up does not know what the locks are
+<a href=#567 id=567 data-nosnippet>567</a>                // set to, and its keyboard would otherwise show stale state.
+<a href=#568 id=568 data-nosnippet>568</a>                </span>sources.send_leds(sender, modifiers.led_bitmap());
+<a href=#569 id=569 data-nosnippet>569</a>            } <span class="kw">else </span>{
+<a href=#570 id=570 data-nosnippet>570</a>                println(<span class="string">"[input] WARN: event-source registration refused"</span>);
+<a href=#571 id=571 data-nosnippet>571</a>            }
+<a href=#572 id=572 data-nosnippet>572</a>        }
+<a href=#573 id=573 data-nosnippet>573</a>        <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; {} <span class="comment">// unknown message — drop silently
+<a href=#574 id=574 data-nosnippet>574</a>    </span>}
+<a href=#575 id=575 data-nosnippet>575</a>}
+<a href=#576 id=576 data-nosnippet>576</a>
+<a href=#577 id=577 data-nosnippet>577</a><span class="attr">#[cfg(test)]
+<a href=#578 id=578 data-nosnippet>578</a></span><span class="kw">mod </span>hid_device_tests {
+<a href=#579 id=579 data-nosnippet>579</a>    <span class="kw">use </span><span class="kw">super</span>::HidDeviceStates;
+<a href=#580 id=580 data-nosnippet>580</a>    <span class="kw">use </span>api::input::KeyState;
+<a href=#581 id=581 data-nosnippet>581</a>
+<a href=#582 id=582 data-nosnippet>582</a>    <span class="attr">#[test]
+<a href=#583 id=583 data-nosnippet>583</a>    </span><span class="kw">fn </span>disconnect_releases_only_its_own_pressed_keys() {
+<a href=#584 id=584 data-nosnippet>584</a>        <span class="kw">let </span><span class="kw-2">mut </span>devices = HidDeviceStates::new();
+<a href=#585 id=585 data-nosnippet>585</a>        devices.record_key(<span class="number">1</span>, <span class="number">0x1E</span>, KeyState::Pressed);
+<a href=#586 id=586 data-nosnippet>586</a>        devices.record_key(<span class="number">2</span>, <span class="number">0x30</span>, KeyState::Pressed);
+<a href=#587 id=587 data-nosnippet>587</a>        devices.record_key(<span class="number">1</span>, <span class="number">0x1E</span>, KeyState::Released);
+<a href=#588 id=588 data-nosnippet>588</a>        devices.record_key(<span class="number">1</span>, <span class="number">0x2E</span>, KeyState::Pressed);
+<a href=#589 id=589 data-nosnippet>589</a>
+<a href=#590 id=590 data-nosnippet>590</a>        <span class="macro">assert_eq!</span>(devices.take_pressed(<span class="number">1</span>), [<span class="number">0x2E</span>]);
+<a href=#591 id=591 data-nosnippet>591</a>        <span class="macro">assert_eq!</span>(devices.take_pressed(<span class="number">2</span>), [<span class="number">0x30</span>]);
+<a href=#592 id=592 data-nosnippet>592</a>    }
+<a href=#593 id=593 data-nosnippet>593</a>}
 </code></pre></div></section></main></body></html>

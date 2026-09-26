@@ -15,7 +15,7 @@
 <a href=#15 id=15 data-nosnippet>15</a>
 <a href=#16 id=16 data-nosnippet>16</a><span class="macro">ostd::cell_main!</span>(cell_main);
 <a href=#17 id=17 data-nosnippet>17</a>
-<a href=#18 id=18 data-nosnippet>18</a><span class="doccomment">/// nc &lt;host_ip&gt; &lt;port&gt;  |  nc -l &lt;port&gt;
+<a href=#18 id=18 data-nosnippet>18</a><span class="doccomment">/// nc &lt;host&gt; &lt;port&gt;  |  nc -l &lt;port&gt;
 <a href=#19 id=19 data-nosnippet>19</a></span><span class="kw">fn </span>cell_main() {
 <a href=#20 id=20 data-nosnippet>20</a>    <span class="comment">// ── Parse argv ───────────────────────────────────────────────────────────
 <a href=#21 id=21 data-nosnippet>21</a>    </span><span class="kw">let </span>argv = ostd::args();
@@ -61,10 +61,10 @@
 <a href=#61 id=61 data-nosnippet>61</a>            <span class="kw">return</span>;
 <a href=#62 id=62 data-nosnippet>62</a>        }
 <a href=#63 id=63 data-nosnippet>63</a>    };
-<a href=#64 id=64 data-nosnippet>64</a>    <span class="kw">let </span>addr = <span class="kw">match </span>resolve_host(host) {
+<a href=#64 id=64 data-nosnippet>64</a>    <span class="kw">let </span>addr = <span class="kw">match </span>resolve_host(host, net_ep) {
 <a href=#65 id=65 data-nosnippet>65</a>        <span class="prelude-val">Some</span>(a) =&gt; a,
 <a href=#66 id=66 data-nosnippet>66</a>        <span class="prelude-val">None </span>=&gt; {
-<a href=#67 id=67 data-nosnippet>67</a>            println(<span class="string">"nc: invalid host"</span>);
+<a href=#67 id=67 data-nosnippet>67</a>            println(<span class="string">"nc: cannot resolve host"</span>);
 <a href=#68 id=68 data-nosnippet>68</a>            <span class="kw">return</span>;
 <a href=#69 id=69 data-nosnippet>69</a>        }
 <a href=#70 id=70 data-nosnippet>70</a>    };
@@ -321,29 +321,29 @@
 <a href=#321 id=321 data-nosnippet>321</a>    <span class="kw">let _ </span>= sys_recv(<span class="number">0</span>, <span class="kw-2">&amp;mut </span>resp_buf);
 <a href=#322 id=322 data-nosnippet>322</a>}
 <a href=#323 id=323 data-nosnippet>323</a>
-<a href=#324 id=324 data-nosnippet>324</a><span class="kw">fn </span>resolve_host(s: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Option</span>&lt;[u8; <span class="number">4</span>]&gt; {
-<a href=#325 id=325 data-nosnippet>325</a>    <span class="kw">match </span>s {
-<a href=#326 id=326 data-nosnippet>326</a>        <span class="string">"gateway" </span>| <span class="string">"host" </span>=&gt; <span class="prelude-val">Some</span>([<span class="number">10</span>, <span class="number">0</span>, <span class="number">2</span>, <span class="number">2</span>]),
-<a href=#327 id=327 data-nosnippet>327</a>        <span class="string">"dns" </span>=&gt; <span class="prelude-val">Some</span>([<span class="number">10</span>, <span class="number">0</span>, <span class="number">2</span>, <span class="number">3</span>]),
-<a href=#328 id=328 data-nosnippet>328</a>        <span class="string">"localhost" </span>=&gt; <span class="prelude-val">Some</span>([<span class="number">127</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">1</span>]),
-<a href=#329 id=329 data-nosnippet>329</a>        <span class="kw">_ </span>=&gt; parse_ipv4(s),
-<a href=#330 id=330 data-nosnippet>330</a>    }
-<a href=#331 id=331 data-nosnippet>331</a>}
-<a href=#332 id=332 data-nosnippet>332</a>
-<a href=#333 id=333 data-nosnippet>333</a><span class="kw">fn </span>parse_ipv4(s: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Option</span>&lt;[u8; <span class="number">4</span>]&gt; {
-<a href=#334 id=334 data-nosnippet>334</a>    <span class="kw">let </span><span class="kw-2">mut </span>it = s.splitn(<span class="number">5</span>, <span class="string">'.'</span>);
-<a href=#335 id=335 data-nosnippet>335</a>    <span class="kw">let </span>a = parse_octet(it.next()<span class="question-mark">?</span>)<span class="question-mark">?</span>;
-<a href=#336 id=336 data-nosnippet>336</a>    <span class="kw">let </span>b = parse_octet(it.next()<span class="question-mark">?</span>)<span class="question-mark">?</span>;
-<a href=#337 id=337 data-nosnippet>337</a>    <span class="kw">let </span>c = parse_octet(it.next()<span class="question-mark">?</span>)<span class="question-mark">?</span>;
-<a href=#338 id=338 data-nosnippet>338</a>    <span class="kw">let </span>d = parse_octet(it.next()<span class="question-mark">?</span>)<span class="question-mark">?</span>;
-<a href=#339 id=339 data-nosnippet>339</a>    <span class="kw">if </span>it.next().is_some() {
-<a href=#340 id=340 data-nosnippet>340</a>        <span class="kw">return </span><span class="prelude-val">None</span>;
-<a href=#341 id=341 data-nosnippet>341</a>    }
-<a href=#342 id=342 data-nosnippet>342</a>    <span class="prelude-val">Some</span>([a, b, c, d])
+<a href=#324 id=324 data-nosnippet>324</a><span class="doccomment">/// Resolve `host` through the net service (`NetRequest::Resolve`).
+<a href=#325 id=325 data-nosnippet>325</a>///
+<a href=#326 id=326 data-nosnippet>326</a>/// The service owns the whole resolution order — IPv4 literal, SLIRP alias
+<a href=#327 id=327 data-nosnippet>327</a>/// (`gateway`, `host`, `dns`, `localhost`), then a UDP A-record query — so the
+<a href=#328 id=328 data-nosnippet>328</a>/// tools never carry a second, drifting copy of it.
+<a href=#329 id=329 data-nosnippet>329</a></span><span class="kw">fn </span>resolve_host(host: <span class="kw-2">&amp;</span>str, net_ep: usize) -&gt; <span class="prelude-ty">Option</span>&lt;[u8; <span class="number">4</span>]&gt; {
+<a href=#330 id=330 data-nosnippet>330</a>    <span class="kw">let </span><span class="kw-2">mut </span>req_buf = [<span class="number">0u8</span>; IPC_BUF_SIZE];
+<a href=#331 id=331 data-nosnippet>331</a>    <span class="kw">let </span>len = api::ipc::encode(<span class="kw-2">&amp;</span>NetRequest::Resolve { hostname: host }, <span class="kw-2">&amp;mut </span>req_buf)
+<a href=#332 id=332 data-nosnippet>332</a>        .ok()<span class="question-mark">?
+<a href=#333 id=333 data-nosnippet>333</a>        </span>.len();
+<a href=#334 id=334 data-nosnippet>334</a>    sys_send(net_ep, <span class="kw-2">&amp;</span>req_buf[..len]);
+<a href=#335 id=335 data-nosnippet>335</a>    <span class="kw">let </span><span class="kw-2">mut </span>resp_buf = [<span class="number">0u8</span>; IPC_BUF_SIZE];
+<a href=#336 id=336 data-nosnippet>336</a>    <span class="kw">match </span>sys_recv(<span class="number">0</span>, <span class="kw-2">&amp;mut </span>resp_buf) {
+<a href=#337 id=337 data-nosnippet>337</a>        SyscallResult::Ok(<span class="kw">_</span>) =&gt; <span class="kw">match </span>api::ipc::decode::&lt;NetResponse&gt;(<span class="kw-2">&amp;</span>resp_buf) {
+<a href=#338 id=338 data-nosnippet>338</a>            <span class="prelude-val">Ok</span>(NetResponse::Addr(addr)) =&gt; <span class="prelude-val">Some</span>(addr),
+<a href=#339 id=339 data-nosnippet>339</a>            <span class="kw">_ </span>=&gt; <span class="prelude-val">None</span>,
+<a href=#340 id=340 data-nosnippet>340</a>        },
+<a href=#341 id=341 data-nosnippet>341</a>        <span class="kw">_ </span>=&gt; <span class="prelude-val">None</span>,
+<a href=#342 id=342 data-nosnippet>342</a>    }
 <a href=#343 id=343 data-nosnippet>343</a>}
 <a href=#344 id=344 data-nosnippet>344</a>
-<a href=#345 id=345 data-nosnippet>345</a><span class="kw">fn </span>parse_octet(s: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Option</span>&lt;u8&gt; {
-<a href=#346 id=346 data-nosnippet>346</a>    <span class="kw">let </span><span class="kw-2">mut </span>n: u16 = <span class="number">0</span>;
+<a href=#345 id=345 data-nosnippet>345</a><span class="kw">fn </span>parse_u16(s: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Option</span>&lt;u16&gt; {
+<a href=#346 id=346 data-nosnippet>346</a>    <span class="kw">let </span><span class="kw-2">mut </span>n: u32 = <span class="number">0</span>;
 <a href=#347 id=347 data-nosnippet>347</a>    <span class="kw">if </span>s.is_empty() {
 <a href=#348 id=348 data-nosnippet>348</a>        <span class="kw">return </span><span class="prelude-val">None</span>;
 <a href=#349 id=349 data-nosnippet>349</a>    }
@@ -351,28 +351,11 @@
 <a href=#351 id=351 data-nosnippet>351</a>        <span class="kw">if </span>!ch.is_ascii_digit() {
 <a href=#352 id=352 data-nosnippet>352</a>            <span class="kw">return </span><span class="prelude-val">None</span>;
 <a href=#353 id=353 data-nosnippet>353</a>        }
-<a href=#354 id=354 data-nosnippet>354</a>        n = n * <span class="number">10 </span>+ (ch - <span class="string">b'0'</span>) <span class="kw">as </span>u16;
-<a href=#355 id=355 data-nosnippet>355</a>        <span class="kw">if </span>n &gt; <span class="number">255 </span>{
+<a href=#354 id=354 data-nosnippet>354</a>        n = n * <span class="number">10 </span>+ (ch - <span class="string">b'0'</span>) <span class="kw">as </span>u32;
+<a href=#355 id=355 data-nosnippet>355</a>        <span class="kw">if </span>n &gt; <span class="number">65535 </span>{
 <a href=#356 id=356 data-nosnippet>356</a>            <span class="kw">return </span><span class="prelude-val">None</span>;
 <a href=#357 id=357 data-nosnippet>357</a>        }
 <a href=#358 id=358 data-nosnippet>358</a>    }
-<a href=#359 id=359 data-nosnippet>359</a>    <span class="prelude-val">Some</span>(n <span class="kw">as </span>u8)
+<a href=#359 id=359 data-nosnippet>359</a>    <span class="prelude-val">Some</span>(n <span class="kw">as </span>u16)
 <a href=#360 id=360 data-nosnippet>360</a>}
-<a href=#361 id=361 data-nosnippet>361</a>
-<a href=#362 id=362 data-nosnippet>362</a><span class="kw">fn </span>parse_u16(s: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Option</span>&lt;u16&gt; {
-<a href=#363 id=363 data-nosnippet>363</a>    <span class="kw">let </span><span class="kw-2">mut </span>n: u32 = <span class="number">0</span>;
-<a href=#364 id=364 data-nosnippet>364</a>    <span class="kw">if </span>s.is_empty() {
-<a href=#365 id=365 data-nosnippet>365</a>        <span class="kw">return </span><span class="prelude-val">None</span>;
-<a href=#366 id=366 data-nosnippet>366</a>    }
-<a href=#367 id=367 data-nosnippet>367</a>    <span class="kw">for </span>ch <span class="kw">in </span>s.bytes() {
-<a href=#368 id=368 data-nosnippet>368</a>        <span class="kw">if </span>!ch.is_ascii_digit() {
-<a href=#369 id=369 data-nosnippet>369</a>            <span class="kw">return </span><span class="prelude-val">None</span>;
-<a href=#370 id=370 data-nosnippet>370</a>        }
-<a href=#371 id=371 data-nosnippet>371</a>        n = n * <span class="number">10 </span>+ (ch - <span class="string">b'0'</span>) <span class="kw">as </span>u32;
-<a href=#372 id=372 data-nosnippet>372</a>        <span class="kw">if </span>n &gt; <span class="number">65535 </span>{
-<a href=#373 id=373 data-nosnippet>373</a>            <span class="kw">return </span><span class="prelude-val">None</span>;
-<a href=#374 id=374 data-nosnippet>374</a>        }
-<a href=#375 id=375 data-nosnippet>375</a>    }
-<a href=#376 id=376 data-nosnippet>376</a>    <span class="prelude-val">Some</span>(n <span class="kw">as </span>u16)
-<a href=#377 id=377 data-nosnippet>377</a>}
 </code></pre></div></section></main></body></html>

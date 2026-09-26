@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["delay_ms"],"mod":["dispatch","dwc2","hid","hub","lan9514","regs","usb_channel","usb_desc","usb_hid"]};
+window.SIDEBAR_ITEMS = {"fn":["delay_ms"],"mod":["dispatch","dwc2","hid","hub","lan9514","lan_ipc","regs","usb_channel","usb_desc","usb_hid"]};

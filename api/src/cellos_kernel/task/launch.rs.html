@@ -148,100 +148,110 @@
 <a href=#148 id=148 data-nosnippet>148</a>    <span class="kw">let </span>inherited_dirs = <span class="kw">super</span>::dir_inherit::take_for_launch(sched, state.inherit_from);
 <a href=#149 id=149 data-nosnippet>149</a>    <span class="kw">let </span>(<span class="kw-2">mut </span>task, load_base) = prepared.into_task(tid, cell_id);
 <a href=#150 id=150 data-nosnippet>150</a>    task.inherited_dirs = inherited_dirs;
-<a href=#151 id=151 data-nosnippet>151</a>    task.syscall_allowlist = state.syscall_allowlist;
-<a href=#152 id=152 data-nosnippet>152</a>    task.cluster_mode = state.cluster_mode;
-<a href=#153 id=153 data-nosnippet>153</a>    task.cluster_id = state.cluster_id;
-<a href=#154 id=154 data-nosnippet>154</a>    task.priority = state.priority;
-<a href=#155 id=155 data-nosnippet>155</a>    task.pku_key = state.pku_key;
-<a href=#156 id=156 data-nosnippet>156</a>    task.pku_value = state.pku_value;
-<a href=#157 id=157 data-nosnippet>157</a>    task.is_critical = state.is_critical;
-<a href=#158 id=158 data-nosnippet>158</a>    task.root_tid = tid;
-<a href=#159 id=159 data-nosnippet>159</a>    <span class="kw">let </span>owner = api::cell_owner::CellOwner::new(cell_id.<span class="number">0</span>, task.cell_generation, tid <span class="kw">as </span>u64);
-<a href=#160 id=160 data-nosnippet>160</a>    state.granted.apply_to(<span class="kw-2">&amp;mut </span>task);
-<a href=#161 id=161 data-nosnippet>161</a>    <span class="attr">#[cfg(feature = <span class="string">"test-hooks"</span>)]
-<a href=#162 id=162 data-nosnippet>162</a>    </span>{
-<a href=#163 id=163 data-nosnippet>163</a>        task.development_silo_registration_cap = state
-<a href=#164 id=164 data-nosnippet>164</a>            .routes
-<a href=#165 id=165 data-nosnippet>165</a>            .development_silo
-<a href=#166 id=166 data-nosnippet>166</a>            .then(<span class="kw">super</span>::cap::DevelopmentSiloRegistrationCap::new);
-<a href=#167 id=167 data-nosnippet>167</a>    }
-<a href=#168 id=168 data-nosnippet>168</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(platform) = state.platform.take() {
-<a href=#169 id=169 data-nosnippet>169</a>        platform.commit_into(<span class="kw-2">&amp;mut </span>task);
-<a href=#170 id=170 data-nosnippet>170</a>    }
-<a href=#171 id=171 data-nosnippet>171</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(replacement) = state.replacement.take() {
-<a href=#172 id=172 data-nosnippet>172</a>        replacement.commit_into(<span class="kw-2">&amp;mut </span>task);
-<a href=#173 id=173 data-nosnippet>173</a>    }
-<a href=#174 id=174 data-nosnippet>174</a>    <span class="attr">#[cfg(all(
-<a href=#175 id=175 data-nosnippet>175</a>        feature = <span class="string">"native-domains"</span>,
-<a href=#176 id=176 data-nosnippet>176</a>        any(
-<a href=#177 id=177 data-nosnippet>177</a>            target_arch = <span class="string">"riscv64"</span>,
-<a href=#178 id=178 data-nosnippet>178</a>            target_arch = <span class="string">"aarch64"</span>,
-<a href=#179 id=179 data-nosnippet>179</a>            target_arch = <span class="string">"x86_64"
-<a href=#180 id=180 data-nosnippet>180</a>        </span>)
-<a href=#181 id=181 data-nosnippet>181</a>    ))]
-<a href=#182 id=182 data-nosnippet>182</a>    </span><span class="kw">if </span>state.is_domain {
-<a href=#183 id=183 data-nosnippet>183</a>        <span class="kw">if let </span>(<span class="prelude-val">Some</span>(ks), <span class="prelude-val">Some</span>(us), <span class="prelude-val">Some</span>(seg)) =
-<a href=#184 id=184 data-nosnippet>184</a>            (<span class="kw-2">&amp;</span>task.kernel_stack, <span class="kw-2">&amp;</span>task.user_stack, <span class="kw-2">&amp;</span>task.segment_mem)
-<a href=#185 id=185 data-nosnippet>185</a>        {
-<a href=#186 id=186 data-nosnippet>186</a>            <span class="kw">let </span>domain = <span class="kw">crate</span>::memory::address_space::create_cell_domain(ks, us, seg)
-<a href=#187 id=187 data-nosnippet>187</a>                .map_err(|<span class="kw">_</span>| ViError::OutOfMemory)<span class="question-mark">?</span>;
-<a href=#188 id=188 data-nosnippet>188</a>            <span class="attr">#[cfg(target_arch = <span class="string">"riscv64"</span>)]
-<a href=#189 id=189 data-nosnippet>189</a>            </span><span class="kw">let </span>arch_tag = <span class="string">"SATP"</span>;
-<a href=#190 id=190 data-nosnippet>190</a>            <span class="attr">#[cfg(target_arch = <span class="string">"aarch64"</span>)]
-<a href=#191 id=191 data-nosnippet>191</a>            </span><span class="kw">let </span>arch_tag = <span class="string">"TTBR0"</span>;
-<a href=#192 id=192 data-nosnippet>192</a>            <span class="attr">#[cfg(target_arch = <span class="string">"x86_64"</span>)]
-<a href=#193 id=193 data-nosnippet>193</a>            </span><span class="kw">let </span>arch_tag = <span class="string">"CR3"</span>;
-<a href=#194 id=194 data-nosnippet>194</a>            <span class="macro">log::warn!</span>(
-<a href=#195 id=195 data-nosnippet>195</a>                <span class="string">"[domain] admitted cell '{}' to Tier 2 Paged Domain ({} isolation)"</span>,
-<a href=#196 id=196 data-nosnippet>196</a>                task.name,
-<a href=#197 id=197 data-nosnippet>197</a>                arch_tag
-<a href=#198 id=198 data-nosnippet>198</a>            );
-<a href=#199 id=199 data-nosnippet>199</a>            task.bind_address_space(domain);
-<a href=#200 id=200 data-nosnippet>200</a>        } <span class="kw">else </span>{
-<a href=#201 id=201 data-nosnippet>201</a>            <span class="macro">log::error!</span>(
-<a href=#202 id=202 data-nosnippet>202</a>                <span class="string">"[domain] cannot create Tier 2 domain for '{}': missing stacks or segments"</span>,
-<a href=#203 id=203 data-nosnippet>203</a>                task.name
-<a href=#204 id=204 data-nosnippet>204</a>            );
-<a href=#205 id=205 data-nosnippet>205</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(ViError::InvalidInput);
-<a href=#206 id=206 data-nosnippet>206</a>        }
-<a href=#207 id=207 data-nosnippet>207</a>    }
-<a href=#208 id=208 data-nosnippet>208</a>    <span class="attr">#[cfg(not(all(
-<a href=#209 id=209 data-nosnippet>209</a>        feature = <span class="string">"native-domains"</span>,
-<a href=#210 id=210 data-nosnippet>210</a>        any(
-<a href=#211 id=211 data-nosnippet>211</a>            target_arch = <span class="string">"riscv64"</span>,
-<a href=#212 id=212 data-nosnippet>212</a>            target_arch = <span class="string">"aarch64"</span>,
-<a href=#213 id=213 data-nosnippet>213</a>            target_arch = <span class="string">"x86_64"
-<a href=#214 id=214 data-nosnippet>214</a>        </span>)
-<a href=#215 id=215 data-nosnippet>215</a>    )))]
-<a href=#216 id=216 data-nosnippet>216</a>    </span><span class="kw">if </span>state.is_domain {
-<a href=#217 id=217 data-nosnippet>217</a>        <span class="macro">log::error!</span>(
-<a href=#218 id=218 data-nosnippet>218</a>            <span class="string">"[domain] Tier 2 Native Domain requested for '{}' but unsupported on this architecture/configuration"</span>,
-<a href=#219 id=219 data-nosnippet>219</a>            task.name
-<a href=#220 id=220 data-nosnippet>220</a>        );
-<a href=#221 id=221 data-nosnippet>221</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(ViError::NotSupported);
-<a href=#222 id=222 data-nosnippet>222</a>    }
-<a href=#223 id=223 data-nosnippet>223</a>
-<a href=#224 id=224 data-nosnippet>224</a>    sched.tasks.insert(tid, task);
-<a href=#225 id=225 data-nosnippet>225</a>    <span class="macro">assert!</span>(
-<a href=#226 id=226 data-nosnippet>226</a>        sched.publish_live_cell_owner(owner),
-<a href=#227 id=227 data-nosnippet>227</a>        <span class="string">"reserved CellId owner slot must be empty"
-<a href=#228 id=228 data-nosnippet>228</a>    </span>);
-<a href=#229 id=229 data-nosnippet>229</a>    sched.next_task_id = tid.checked_add(<span class="number">1</span>).expect(<span class="string">"task id space exhausted"</span>);
-<a href=#230 id=230 data-nosnippet>230</a>    quota.commit();
-<a href=#231 id=231 data-nosnippet>231</a>    <span class="kw">crate</span>::loader::commit_launch_routes(tid, cell_id, state.routes);
-<a href=#232 id=232 data-nosnippet>232</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(argv) = state.argv.take() {
-<a href=#233 id=233 data-nosnippet>233</a>        <span class="kw">crate</span>::cell::state_stash::install_spawn_argv(tid, argv);
-<a href=#234 id=234 data-nosnippet>234</a>    }
-<a href=#235 id=235 data-nosnippet>235</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(measurement) = state.measurement.take() {
-<a href=#236 id=236 data-nosnippet>236</a>        <span class="kw">crate</span>::measurement_log::commit_staged(tid, measurement.path, measurement.digest);
-<a href=#237 id=237 data-nosnippet>237</a>    }
-<a href=#238 id=238 data-nosnippet>238</a>    <span class="kw">crate</span>::audit::log_event(
-<a href=#239 id=239 data-nosnippet>239</a>        <span class="kw">crate</span>::audit::AuditEvent::CellSpawn,
-<a href=#240 id=240 data-nosnippet>240</a>        <span class="kw-2">&amp;</span><span class="kw">crate</span>::audit::encode_u32x2(tid <span class="kw">as </span>u32, <span class="number">0</span>),
-<a href=#241 id=241 data-nosnippet>241</a>    );
-<a href=#242 id=242 data-nosnippet>242</a>    <span class="kw">super</span>::hart_local::set_current_cell_id(accounting_cell);
-<a href=#243 id=243 data-nosnippet>243</a>    <span class="kw">crate</span>::loader::observe_pre_ready(sched, tid);
-<a href=#244 id=244 data-nosnippet>244</a>    sched.push_ready(tid);
-<a href=#245 id=245 data-nosnippet>245</a>    <span class="prelude-val">Ok</span>((tid, load_base))
-<a href=#246 id=246 data-nosnippet>246</a>}
+<a href=#151 id=151 data-nosnippet>151</a>    <span class="comment">// The command line lives on the task record itself, so it is reachable by
+<a href=#152 id=152 data-nosnippet>152</a>    // this task's own `StateRestore` and by nothing else, and it is installed
+<a href=#153 id=153 data-nosnippet>153</a>    // before the task can ever be selected.
+<a href=#154 id=154 data-nosnippet>154</a>    </span>task.inherited_argv = state.argv.take();
+<a href=#155 id=155 data-nosnippet>155</a>    task.syscall_allowlist = state.syscall_allowlist;
+<a href=#156 id=156 data-nosnippet>156</a>    task.cluster_mode = state.cluster_mode;
+<a href=#157 id=157 data-nosnippet>157</a>    task.cluster_id = state.cluster_id;
+<a href=#158 id=158 data-nosnippet>158</a>    task.priority = state.priority;
+<a href=#159 id=159 data-nosnippet>159</a>    task.pku_key = state.pku_key;
+<a href=#160 id=160 data-nosnippet>160</a>    task.pku_value = state.pku_value;
+<a href=#161 id=161 data-nosnippet>161</a>    task.is_critical = state.is_critical;
+<a href=#162 id=162 data-nosnippet>162</a>    task.root_tid = tid;
+<a href=#163 id=163 data-nosnippet>163</a>    <span class="kw">let </span>owner = api::cell_owner::CellOwner::new(cell_id.<span class="number">0</span>, task.cell_generation, tid <span class="kw">as </span>u64);
+<a href=#164 id=164 data-nosnippet>164</a>    state.granted.apply_to(<span class="kw-2">&amp;mut </span>task);
+<a href=#165 id=165 data-nosnippet>165</a>    <span class="attr">#[cfg(feature = <span class="string">"test-hooks"</span>)]
+<a href=#166 id=166 data-nosnippet>166</a>    </span>{
+<a href=#167 id=167 data-nosnippet>167</a>        task.development_silo_registration_cap = state
+<a href=#168 id=168 data-nosnippet>168</a>            .routes
+<a href=#169 id=169 data-nosnippet>169</a>            .development_silo
+<a href=#170 id=170 data-nosnippet>170</a>            .then(<span class="kw">super</span>::cap::DevelopmentSiloRegistrationCap::new);
+<a href=#171 id=171 data-nosnippet>171</a>    }
+<a href=#172 id=172 data-nosnippet>172</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(platform) = state.platform.take() {
+<a href=#173 id=173 data-nosnippet>173</a>        platform.commit_into(<span class="kw-2">&amp;mut </span>task);
+<a href=#174 id=174 data-nosnippet>174</a>    }
+<a href=#175 id=175 data-nosnippet>175</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(replacement) = state.replacement.take() {
+<a href=#176 id=176 data-nosnippet>176</a>        replacement.commit_into(<span class="kw-2">&amp;mut </span>task);
+<a href=#177 id=177 data-nosnippet>177</a>    }
+<a href=#178 id=178 data-nosnippet>178</a>    <span class="attr">#[cfg(all(
+<a href=#179 id=179 data-nosnippet>179</a>        feature = <span class="string">"native-domains"</span>,
+<a href=#180 id=180 data-nosnippet>180</a>        any(
+<a href=#181 id=181 data-nosnippet>181</a>            target_arch = <span class="string">"riscv64"</span>,
+<a href=#182 id=182 data-nosnippet>182</a>            target_arch = <span class="string">"aarch64"</span>,
+<a href=#183 id=183 data-nosnippet>183</a>            target_arch = <span class="string">"x86_64"
+<a href=#184 id=184 data-nosnippet>184</a>        </span>)
+<a href=#185 id=185 data-nosnippet>185</a>    ))]
+<a href=#186 id=186 data-nosnippet>186</a>    </span><span class="kw">if </span>state.is_domain {
+<a href=#187 id=187 data-nosnippet>187</a>        <span class="comment">// ADR-0019 §2.1 — the single on-path admission control. The lease is
+<a href=#188 id=188 data-nosnippet>188</a>        // taken before anything is created and re-checked immediately before the
+<a href=#189 id=189 data-nosnippet>189</a>        // task becomes runnable, so a concurrent drain either linearizes before
+<a href=#190 id=190 data-nosnippet>190</a>        // this admission or is observed by it. A denial is final: no task, no
+<a href=#191 id=191 data-nosnippet>191</a>        // domain, and no SAS fallback.
+<a href=#192 id=192 data-nosnippet>192</a>        </span><span class="kw">let </span>lease = <span class="kw">crate</span>::loader::domain_admission::admit_for_launch(state.granted)<span class="question-mark">?</span>;
+<a href=#193 id=193 data-nosnippet>193</a>        <span class="kw">if let </span>(<span class="prelude-val">Some</span>(ks), <span class="prelude-val">Some</span>(us), <span class="prelude-val">Some</span>(seg)) =
+<a href=#194 id=194 data-nosnippet>194</a>            (<span class="kw-2">&amp;</span>task.kernel_stack, <span class="kw-2">&amp;</span>task.user_stack, <span class="kw-2">&amp;</span>task.segment_mem)
+<a href=#195 id=195 data-nosnippet>195</a>        {
+<a href=#196 id=196 data-nosnippet>196</a>            <span class="kw">let </span>domain = <span class="kw">crate</span>::memory::address_space::create_cell_domain(ks, us, seg)
+<a href=#197 id=197 data-nosnippet>197</a>                .map_err(|<span class="kw">_</span>| ViError::OutOfMemory)<span class="question-mark">?</span>;
+<a href=#198 id=198 data-nosnippet>198</a>            <span class="kw">if </span>!lease.remains_enabled() {
+<a href=#199 id=199 data-nosnippet>199</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="kw">crate</span>::loader::domain_admission::drain_refusal());
+<a href=#200 id=200 data-nosnippet>200</a>            }
+<a href=#201 id=201 data-nosnippet>201</a>            <span class="attr">#[cfg(target_arch = <span class="string">"riscv64"</span>)]
+<a href=#202 id=202 data-nosnippet>202</a>            </span><span class="kw">let </span>arch_tag = <span class="string">"SATP"</span>;
+<a href=#203 id=203 data-nosnippet>203</a>            <span class="attr">#[cfg(target_arch = <span class="string">"aarch64"</span>)]
+<a href=#204 id=204 data-nosnippet>204</a>            </span><span class="kw">let </span>arch_tag = <span class="string">"TTBR0"</span>;
+<a href=#205 id=205 data-nosnippet>205</a>            <span class="attr">#[cfg(target_arch = <span class="string">"x86_64"</span>)]
+<a href=#206 id=206 data-nosnippet>206</a>            </span><span class="kw">let </span>arch_tag = <span class="string">"CR3"</span>;
+<a href=#207 id=207 data-nosnippet>207</a>            <span class="macro">log::warn!</span>(
+<a href=#208 id=208 data-nosnippet>208</a>                <span class="string">"[domain] admitted cell '{}' to Tier 2 Paged Domain ({} isolation)"</span>,
+<a href=#209 id=209 data-nosnippet>209</a>                task.name,
+<a href=#210 id=210 data-nosnippet>210</a>                arch_tag
+<a href=#211 id=211 data-nosnippet>211</a>            );
+<a href=#212 id=212 data-nosnippet>212</a>            task.bind_address_space(domain);
+<a href=#213 id=213 data-nosnippet>213</a>        } <span class="kw">else </span>{
+<a href=#214 id=214 data-nosnippet>214</a>            <span class="macro">log::error!</span>(
+<a href=#215 id=215 data-nosnippet>215</a>                <span class="string">"[domain] cannot create Tier 2 domain for '{}': missing stacks or segments"</span>,
+<a href=#216 id=216 data-nosnippet>216</a>                task.name
+<a href=#217 id=217 data-nosnippet>217</a>            );
+<a href=#218 id=218 data-nosnippet>218</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(ViError::InvalidInput);
+<a href=#219 id=219 data-nosnippet>219</a>        }
+<a href=#220 id=220 data-nosnippet>220</a>    }
+<a href=#221 id=221 data-nosnippet>221</a>    <span class="attr">#[cfg(not(all(
+<a href=#222 id=222 data-nosnippet>222</a>        feature = <span class="string">"native-domains"</span>,
+<a href=#223 id=223 data-nosnippet>223</a>        any(
+<a href=#224 id=224 data-nosnippet>224</a>            target_arch = <span class="string">"riscv64"</span>,
+<a href=#225 id=225 data-nosnippet>225</a>            target_arch = <span class="string">"aarch64"</span>,
+<a href=#226 id=226 data-nosnippet>226</a>            target_arch = <span class="string">"x86_64"
+<a href=#227 id=227 data-nosnippet>227</a>        </span>)
+<a href=#228 id=228 data-nosnippet>228</a>    )))]
+<a href=#229 id=229 data-nosnippet>229</a>    </span><span class="kw">if </span>state.is_domain {
+<a href=#230 id=230 data-nosnippet>230</a>        <span class="macro">log::error!</span>(
+<a href=#231 id=231 data-nosnippet>231</a>            <span class="string">"[domain] Tier 2 Native Domain requested for '{}' but unsupported on this architecture/configuration"</span>,
+<a href=#232 id=232 data-nosnippet>232</a>            task.name
+<a href=#233 id=233 data-nosnippet>233</a>        );
+<a href=#234 id=234 data-nosnippet>234</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(ViError::NotSupported);
+<a href=#235 id=235 data-nosnippet>235</a>    }
+<a href=#236 id=236 data-nosnippet>236</a>
+<a href=#237 id=237 data-nosnippet>237</a>    sched.tasks.insert(tid, task);
+<a href=#238 id=238 data-nosnippet>238</a>    <span class="macro">assert!</span>(
+<a href=#239 id=239 data-nosnippet>239</a>        sched.publish_live_cell_owner(owner),
+<a href=#240 id=240 data-nosnippet>240</a>        <span class="string">"reserved CellId owner slot must be empty"
+<a href=#241 id=241 data-nosnippet>241</a>    </span>);
+<a href=#242 id=242 data-nosnippet>242</a>    sched.next_task_id = tid.checked_add(<span class="number">1</span>).expect(<span class="string">"task id space exhausted"</span>);
+<a href=#243 id=243 data-nosnippet>243</a>    quota.commit();
+<a href=#244 id=244 data-nosnippet>244</a>    <span class="kw">crate</span>::loader::commit_launch_routes(tid, cell_id, state.routes);
+<a href=#245 id=245 data-nosnippet>245</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(measurement) = state.measurement.take() {
+<a href=#246 id=246 data-nosnippet>246</a>        <span class="kw">crate</span>::measurement_log::commit_staged(tid, measurement.path, measurement.digest);
+<a href=#247 id=247 data-nosnippet>247</a>    }
+<a href=#248 id=248 data-nosnippet>248</a>    <span class="kw">crate</span>::audit::log_event(
+<a href=#249 id=249 data-nosnippet>249</a>        <span class="kw">crate</span>::audit::AuditEvent::CellSpawn,
+<a href=#250 id=250 data-nosnippet>250</a>        <span class="kw-2">&amp;</span><span class="kw">crate</span>::audit::encode_u32x2(tid <span class="kw">as </span>u32, <span class="number">0</span>),
+<a href=#251 id=251 data-nosnippet>251</a>    );
+<a href=#252 id=252 data-nosnippet>252</a>    <span class="kw">super</span>::hart_local::set_current_cell_id(accounting_cell);
+<a href=#253 id=253 data-nosnippet>253</a>    <span class="kw">crate</span>::loader::observe_pre_ready(sched, tid);
+<a href=#254 id=254 data-nosnippet>254</a>    sched.push_ready(tid);
+<a href=#255 id=255 data-nosnippet>255</a>    <span class="prelude-val">Ok</span>((tid, load_base))
+<a href=#256 id=256 data-nosnippet>256</a>}
 </code></pre></div></section></main></body></html>

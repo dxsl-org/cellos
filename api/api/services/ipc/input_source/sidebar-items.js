@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["USB_HID"]};
+window.SIDEBAR_ITEMS = {"constant":["USB_HID_HOST"]};

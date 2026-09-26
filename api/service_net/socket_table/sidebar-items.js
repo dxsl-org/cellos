@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["MAX_SOCKETS"],"struct":["SocketOwner","SocketTable"]};
+window.SIDEBAR_ITEMS = {"constant":["MAX_SOCKETS","SOCKET_SET_STORAGE"],"struct":["SocketOwner","SocketTable"]};

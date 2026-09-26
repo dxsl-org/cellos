@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["CAPACITY","PAYLOAD","PEER_CLOSED","PEER_FILLED_RING","PEER_PATH","WAIT_TICKS"],"fn":["cell_main","fail","main","payload_byte"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS"]};

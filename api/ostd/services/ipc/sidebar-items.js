@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["IPC_BUF_SIZE","NET_TCP_INLINE_DATA_MAX"],"enum":["ConfigRequest","ConfigResponse","InputRequest","InputResponse","NetRequest","NetResponse","VfsRequest","VfsResponse"],"fn":["decode","encode"],"mod":["input_source"]};
+window.SIDEBAR_ITEMS = {"constant":["IPC_BUF_SIZE","NET_TCP_INLINE_DATA_MAX","OP_HID_DEVICE_REMOVED","OP_SET_LEDS"],"enum":["ConfigRequest","ConfigResponse","InputRequest","InputResponse","NetRequest","NetResponse","VfsRequest","VfsResponse"],"fn":["decode","encode"],"mod":["input_source","led_bits"]};

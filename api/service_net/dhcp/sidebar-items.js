@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["DhcpState"],"fn":["add_dhcp_socket","poll_dhcp"]};
+window.SIDEBAR_ITEMS = {"enum":["DhcpState"],"fn":["add_dhcp_socket","poll_dhcp"],"struct":["DhcpPoll"]};

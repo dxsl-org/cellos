@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["apply_on_resume","inherit_from","install_published_base","set_base","write_frame_tp"]};

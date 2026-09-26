@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["ITERATIONS","PING_PONG_ROUNDS","TIMEOUT_PROBE_TICKS","WAIT_TIMEOUT_TICKS"],"fn":["cell_main","counter_worker","fail","lock","main","ping_pong","unlock","wait_for_completion","word_addr"],"static":["COUNTER","DONE","FAILURES","LOCK_WORD","MUTEX_TIMEOUTS","PING_TIMEOUTS","PING_WORD","QUIET_WORD","VICELL_MANIFEST","VICELL_SYSCALLS"]};

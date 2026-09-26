@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["ACTOR_TICK_TICKS"],"fn":["exit_reason","run"],"mod":["supervisor"],"struct":["ActorCtx"],"trait":["Actor"]};

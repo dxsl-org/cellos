@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["CAPS_LOCK","NUM_LOCK","SCROLL_LOCK"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["GRANTEE_CELL","GRANTEE_TID","GRANT_SIZE","OTHER_CELL","OTHER_TID","OWNER_CELL","OWNER_TID","PAGE_SIZE"],"fn":["free_frames","grant_alloc","probe","report","self_test","share","still_owned"]};

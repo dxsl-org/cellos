@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["yield_now"]};
+window.SIDEBAR_ITEMS = {"fn":["spawn","yield_now"]};

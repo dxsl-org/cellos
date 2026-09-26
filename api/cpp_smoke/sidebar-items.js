@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["BIN_INIT_NUL","ELF_MAGIC","HEAP_ITERATIONS","PAYLOAD","STATIC_CTOR_SENTINEL","VFS_PATH"],"fn":["cell_main","expect_eq","expected_heap_checksum","fail","main"],"mod":["cpp"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS"]};

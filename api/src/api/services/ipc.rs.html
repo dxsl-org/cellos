@@ -412,77 +412,107 @@
 <a href=#412 id=412 data-nosnippet>412</a>    /// producer, and it treats that sender's later messages as raw events
 <a href=#413 id=413 data-nosnippet>413</a>    /// rather than as requests.
 <a href=#414 id=414 data-nosnippet>414</a>    ///
-<a href=#415 id=415 data-nosnippet>415</a>    /// `kind` is informational ([`input_source`]); the service accepts any
-<a href=#416 id=416 data-nosnippet>416</a>    /// registered producer because the authorization that matters is that a
-<a href=#417 id=417 data-nosnippet>417</a>    /// cell reached this request at all.
-<a href=#418 id=418 data-nosnippet>418</a>    </span>RegisterEventSource { kind: u8 },
-<a href=#419 id=419 data-nosnippet>419</a>}
-<a href=#420 id=420 data-nosnippet>420</a>
-<a href=#421 id=421 data-nosnippet>421</a><span class="doccomment">/// `RegisterEventSource` producer classes. Informational — logged, not enforced.
-<a href=#422 id=422 data-nosnippet>422</a></span><span class="kw">pub mod </span>input_source {
-<a href=#423 id=423 data-nosnippet>423</a>    <span class="doccomment">/// A USB HID keyboard/mouse driver cell.
-<a href=#424 id=424 data-nosnippet>424</a>    </span><span class="kw">pub const </span>USB_HID: u8 = <span class="number">1</span>;
-<a href=#425 id=425 data-nosnippet>425</a>}
-<a href=#426 id=426 data-nosnippet>426</a>
-<a href=#427 id=427 data-nosnippet>427</a><span class="doccomment">/// Responses from the input service.
-<a href=#428 id=428 data-nosnippet>428</a></span><span class="attr">#[derive(Debug, Serialize, Deserialize)]
-<a href=#429 id=429 data-nosnippet>429</a></span><span class="kw">pub enum </span>InputResponse {
-<a href=#430 id=430 data-nosnippet>430</a>    <span class="doccomment">/// Currently focused cell tid (0 = none).
-<a href=#431 id=431 data-nosnippet>431</a>    </span>Focus(u32),
-<a href=#432 id=432 data-nosnippet>432</a>    <span class="prelude-val">Ok</span>,
-<a href=#433 id=433 data-nosnippet>433</a>    <span class="prelude-val">Err</span>(u8),
-<a href=#434 id=434 data-nosnippet>434</a>}
-<a href=#435 id=435 data-nosnippet>435</a>
-<a href=#436 id=436 data-nosnippet>436</a><span class="comment">// ── Config service ────────────────────────────────────────────────────────────
-<a href=#437 id=437 data-nosnippet>437</a>
-<a href=#438 id=438 data-nosnippet>438</a></span><span class="doccomment">/// Requests sent to the config service (`/bin/config`).
-<a href=#439 id=439 data-nosnippet>439</a></span><span class="attr">#[derive(Debug, Serialize, Deserialize)]
-<a href=#440 id=440 data-nosnippet>440</a></span><span class="kw">pub enum </span>ConfigRequest&lt;<span class="lifetime">'a</span>&gt; {
-<a href=#441 id=441 data-nosnippet>441</a>    <span class="doccomment">/// Read the value for `key`.  Returns `ConfigResponse::Value` or `NotFound`.
-<a href=#442 id=442 data-nosnippet>442</a>    </span>Get(<span class="kw-2">&amp;</span><span class="lifetime">'a </span>str),
-<a href=#443 id=443 data-nosnippet>443</a>    <span class="doccomment">/// Write `value` for `key` (insert or overwrite).  Returns `Ok`.
-<a href=#444 id=444 data-nosnippet>444</a>    </span>Set { key: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>str, value: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>str },
-<a href=#445 id=445 data-nosnippet>445</a>    <span class="doccomment">/// Remove `key`.  Returns `Ok` even if absent (idempotent).
-<a href=#446 id=446 data-nosnippet>446</a>    </span>Delete(<span class="kw-2">&amp;</span><span class="lifetime">'a </span>str),
-<a href=#447 id=447 data-nosnippet>447</a>    <span class="doccomment">/// List all registered keys as a newline-separated string.
-<a href=#448 id=448 data-nosnippet>448</a>    </span>List,
-<a href=#449 id=449 data-nosnippet>449</a>}
-<a href=#450 id=450 data-nosnippet>450</a>
-<a href=#451 id=451 data-nosnippet>451</a><span class="doccomment">/// Responses from the config service.
-<a href=#452 id=452 data-nosnippet>452</a></span><span class="attr">#[derive(Debug, Serialize, Deserialize)]
-<a href=#453 id=453 data-nosnippet>453</a></span><span class="kw">pub enum </span>ConfigResponse&lt;<span class="lifetime">'a</span>&gt; {
-<a href=#454 id=454 data-nosnippet>454</a>    <span class="doccomment">/// Value associated with a key.
-<a href=#455 id=455 data-nosnippet>455</a>    </span>Value(<span class="kw-2">&amp;</span><span class="lifetime">'a </span>str),
-<a href=#456 id=456 data-nosnippet>456</a>    <span class="doccomment">/// Newline-separated list of all keys.
-<a href=#457 id=457 data-nosnippet>457</a>    </span>Keys(<span class="kw-2">&amp;</span><span class="lifetime">'a </span>str),
-<a href=#458 id=458 data-nosnippet>458</a>    <span class="prelude-val">Ok</span>,
-<a href=#459 id=459 data-nosnippet>459</a>    NotFound,
-<a href=#460 id=460 data-nosnippet>460</a>    <span class="prelude-val">Err</span>(u8),
-<a href=#461 id=461 data-nosnippet>461</a>}
-<a href=#462 id=462 data-nosnippet>462</a>
-<a href=#463 id=463 data-nosnippet>463</a><span class="comment">// ── Serialization helpers ─────────────────────────────────────────────────────
-<a href=#464 id=464 data-nosnippet>464</a>
-<a href=#465 id=465 data-nosnippet>465</a></span><span class="doccomment">/// Serialize `msg` into `buf`.
-<a href=#466 id=466 data-nosnippet>466</a>///
-<a href=#467 id=467 data-nosnippet>467</a>/// Returns a slice of the bytes actually written.
-<a href=#468 id=468 data-nosnippet>468</a>///
-<a href=#469 id=469 data-nosnippet>469</a>/// # Errors
-<a href=#470 id=470 data-nosnippet>470</a>/// Returns `postcard::Error` if the encoded message exceeds `buf.len()`.
-<a href=#471 id=471 data-nosnippet>471</a></span><span class="kw">pub fn </span>encode&lt;<span class="lifetime">'a</span>, T: Serialize&gt;(msg: <span class="kw-2">&amp;</span>T, buf: <span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="kw-2">mut </span>[u8]) -&gt; postcard::Result&lt;<span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="kw-2">mut </span>[u8]&gt; {
-<a href=#472 id=472 data-nosnippet>472</a>    postcard::to_slice(msg, buf)
-<a href=#473 id=473 data-nosnippet>473</a>}
-<a href=#474 id=474 data-nosnippet>474</a>
-<a href=#475 id=475 data-nosnippet>475</a><span class="doccomment">/// Deserialize a typed message from the START of `buf`, tolerating trailing bytes.
-<a href=#476 id=476 data-nosnippet>476</a>///
-<a href=#477 id=477 data-nosnippet>477</a>/// The IPC receive buffer is fixed at 512 bytes; the sender may have encoded a
-<a href=#478 id=478 data-nosnippet>478</a>/// shorter message.  `take_from_bytes` reads exactly what the message needs and
-<a href=#479 id=479 data-nosnippet>479</a>/// ignores the rest — unlike `from_bytes` which requires the entire slice to be
-<a href=#480 id=480 data-nosnippet>480</a>/// consumed.
-<a href=#481 id=481 data-nosnippet>481</a>///
-<a href=#482 id=482 data-nosnippet>482</a>/// For types with borrowed fields (`&amp;str`, `&amp;[u8]`), the returned value borrows
-<a href=#483 id=483 data-nosnippet>483</a>/// from `buf` — it must be consumed before `buf` is reused or overwritten.
-<a href=#484 id=484 data-nosnippet>484</a></span><span class="kw">pub fn </span>decode&lt;<span class="lifetime">'de</span>, T: Deserialize&lt;<span class="lifetime">'de</span>&gt;&gt;(buf: <span class="kw-2">&amp;</span><span class="lifetime">'de </span>[u8]) -&gt; postcard::Result&lt;T&gt; {
-<a href=#485 id=485 data-nosnippet>485</a>    <span class="kw">let </span>(msg, _remaining) = postcard::take_from_bytes(buf)<span class="question-mark">?</span>;
-<a href=#486 id=486 data-nosnippet>486</a>    <span class="prelude-val">Ok</span>(msg)
-<a href=#487 id=487 data-nosnippet>487</a>}
+<a href=#415 id=415 data-nosnippet>415</a>    /// `kind` identifies the producer class ([`input_source`]); Input validates
+<a href=#416 id=416 data-nosnippet>416</a>    /// the caller against the kernel service identity for that class.
+<a href=#417 id=417 data-nosnippet>417</a>    </span>RegisterEventSource { kind: u8 },
+<a href=#418 id=418 data-nosnippet>418</a>}
+<a href=#419 id=419 data-nosnippet>419</a>
+<a href=#420 id=420 data-nosnippet>420</a><span class="doccomment">/// `RegisterEventSource` producer classes.
+<a href=#421 id=421 data-nosnippet>421</a></span><span class="kw">pub mod </span>input_source {
+<a href=#422 id=422 data-nosnippet>422</a>    <span class="doccomment">/// The privileged DWC2 transport and HID driver for the embedded profile.
+<a href=#423 id=423 data-nosnippet>423</a>    </span><span class="kw">pub const </span>USB_HID_HOST: u8 = <span class="number">2</span>;
+<a href=#424 id=424 data-nosnippet>424</a>}
+<a href=#425 id=425 data-nosnippet>425</a>
+<a href=#426 id=426 data-nosnippet>426</a><span class="doccomment">/// Raw frame a USB host sends when one logical HID interface is removed.
+<a href=#427 id=427 data-nosnippet>427</a>///
+<a href=#428 id=428 data-nosnippet>428</a>/// Layout: `[OP_HID_DEVICE_REMOVED][device:u32 LE]`. Input releases only that
+<a href=#429 id=429 data-nosnippet>429</a>/// interface's held keys.
+<a href=#430 id=430 data-nosnippet>430</a></span><span class="kw">pub const </span>OP_HID_DEVICE_REMOVED: u8 = <span class="number">0x07</span>;
+<a href=#431 id=431 data-nosnippet>431</a>
+<a href=#432 id=432 data-nosnippet>432</a><span class="doccomment">/// Raw frame the input service sends **to** a registered producer to program the
+<a href=#433 id=433 data-nosnippet>433</a>/// keyboard's lock-key LEDs.
+<a href=#434 id=434 data-nosnippet>434</a>///
+<a href=#435 id=435 data-nosnippet>435</a>/// Layout: `[OP_SET_LEDS][leds]`, where `leds` is a [`led_bits`] bitmap. The
+<a href=#436 id=436 data-nosnippet>436</a>/// service owns lock state — it is the cell that sees the lock keys — and the
+<a href=#437 id=437 data-nosnippet>437</a>/// device is the only place that state is visible to a user, so the producer is
+<a href=#438 id=438 data-nosnippet>438</a>/// told whenever it changes and once when it registers.
+<a href=#439 id=439 data-nosnippet>439</a>///
+<a href=#440 id=440 data-nosnippet>440</a>/// Fire-and-forget: the service has nothing to do with an answer, and a producer
+<a href=#441 id=441 data-nosnippet>441</a>/// that is restarting drops the frame and gets the current state again when it
+<a href=#442 id=442 data-nosnippet>442</a>/// re-registers. The opcode lives above the producer's own protocol space, so a
+<a href=#443 id=443 data-nosnippet>443</a>/// driver can tell this frame from its other traffic by its first byte.
+<a href=#444 id=444 data-nosnippet>444</a></span><span class="kw">pub const </span>OP_SET_LEDS: u8 = <span class="number">0x03</span>;
+<a href=#445 id=445 data-nosnippet>445</a>
+<a href=#446 id=446 data-nosnippet>446</a><span class="doccomment">/// Lock-key bits as they travel on the wire, in HID LED page usage order
+<a href=#447 id=447 data-nosnippet>447</a>/// (HID 1.11 Appendix B.1 — Num Lock 0x01, Caps Lock 0x02, Scroll Lock 0x03).
+<a href=#448 id=448 data-nosnippet>448</a>///
+<a href=#449 id=449 data-nosnippet>449</a>/// This is the order a boot-protocol keyboard's LED byte uses, and the order
+<a href=#450 id=450 data-nosnippet>450</a>/// [`OP_SET_LEDS`] carries, so a producer never has to translate between the two.
+<a href=#451 id=451 data-nosnippet>451</a></span><span class="kw">pub mod </span>led_bits {
+<a href=#452 id=452 data-nosnippet>452</a>    <span class="kw">pub const </span>NUM_LOCK: u8 = <span class="number">1 </span>&lt;&lt; <span class="number">0</span>;
+<a href=#453 id=453 data-nosnippet>453</a>    <span class="kw">pub const </span>CAPS_LOCK: u8 = <span class="number">1 </span>&lt;&lt; <span class="number">1</span>;
+<a href=#454 id=454 data-nosnippet>454</a>    <span class="kw">pub const </span>SCROLL_LOCK: u8 = <span class="number">1 </span>&lt;&lt; <span class="number">2</span>;
+<a href=#455 id=455 data-nosnippet>455</a>}
+<a href=#456 id=456 data-nosnippet>456</a>
+<a href=#457 id=457 data-nosnippet>457</a><span class="doccomment">/// Responses from the input service.
+<a href=#458 id=458 data-nosnippet>458</a></span><span class="attr">#[derive(Debug, Serialize, Deserialize)]
+<a href=#459 id=459 data-nosnippet>459</a></span><span class="kw">pub enum </span>InputResponse {
+<a href=#460 id=460 data-nosnippet>460</a>    <span class="doccomment">/// Currently focused cell tid (0 = none).
+<a href=#461 id=461 data-nosnippet>461</a>    </span>Focus(u32),
+<a href=#462 id=462 data-nosnippet>462</a>    <span class="prelude-val">Ok</span>,
+<a href=#463 id=463 data-nosnippet>463</a>    <span class="prelude-val">Err</span>(u8),
+<a href=#464 id=464 data-nosnippet>464</a>}
+<a href=#465 id=465 data-nosnippet>465</a>
+<a href=#466 id=466 data-nosnippet>466</a><span class="comment">// ── Config service ────────────────────────────────────────────────────────────
+<a href=#467 id=467 data-nosnippet>467</a>
+<a href=#468 id=468 data-nosnippet>468</a></span><span class="doccomment">/// Requests sent to the config service (`/bin/config`).
+<a href=#469 id=469 data-nosnippet>469</a></span><span class="attr">#[derive(Debug, Serialize, Deserialize)]
+<a href=#470 id=470 data-nosnippet>470</a></span><span class="kw">pub enum </span>ConfigRequest&lt;<span class="lifetime">'a</span>&gt; {
+<a href=#471 id=471 data-nosnippet>471</a>    <span class="doccomment">/// Read the value for `key`.  Returns `ConfigResponse::Value` or `NotFound`.
+<a href=#472 id=472 data-nosnippet>472</a>    </span>Get(<span class="kw-2">&amp;</span><span class="lifetime">'a </span>str),
+<a href=#473 id=473 data-nosnippet>473</a>    <span class="doccomment">/// Write `value` for `key` (insert or overwrite).  Returns `Ok`.
+<a href=#474 id=474 data-nosnippet>474</a>    </span>Set { key: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>str, value: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>str },
+<a href=#475 id=475 data-nosnippet>475</a>    <span class="doccomment">/// Remove `key`.  Returns `Ok` even if absent (idempotent).
+<a href=#476 id=476 data-nosnippet>476</a>    </span>Delete(<span class="kw-2">&amp;</span><span class="lifetime">'a </span>str),
+<a href=#477 id=477 data-nosnippet>477</a>    <span class="doccomment">/// List all registered keys as a newline-separated string.
+<a href=#478 id=478 data-nosnippet>478</a>    </span>List,
+<a href=#479 id=479 data-nosnippet>479</a>}
+<a href=#480 id=480 data-nosnippet>480</a>
+<a href=#481 id=481 data-nosnippet>481</a><span class="doccomment">/// Responses from the config service.
+<a href=#482 id=482 data-nosnippet>482</a></span><span class="attr">#[derive(Debug, Serialize, Deserialize)]
+<a href=#483 id=483 data-nosnippet>483</a></span><span class="kw">pub enum </span>ConfigResponse&lt;<span class="lifetime">'a</span>&gt; {
+<a href=#484 id=484 data-nosnippet>484</a>    <span class="doccomment">/// Value associated with a key.
+<a href=#485 id=485 data-nosnippet>485</a>    </span>Value(<span class="kw-2">&amp;</span><span class="lifetime">'a </span>str),
+<a href=#486 id=486 data-nosnippet>486</a>    <span class="doccomment">/// Newline-separated list of all keys.
+<a href=#487 id=487 data-nosnippet>487</a>    </span>Keys(<span class="kw-2">&amp;</span><span class="lifetime">'a </span>str),
+<a href=#488 id=488 data-nosnippet>488</a>    <span class="prelude-val">Ok</span>,
+<a href=#489 id=489 data-nosnippet>489</a>    NotFound,
+<a href=#490 id=490 data-nosnippet>490</a>    <span class="prelude-val">Err</span>(u8),
+<a href=#491 id=491 data-nosnippet>491</a>}
+<a href=#492 id=492 data-nosnippet>492</a>
+<a href=#493 id=493 data-nosnippet>493</a><span class="comment">// ── Serialization helpers ─────────────────────────────────────────────────────
+<a href=#494 id=494 data-nosnippet>494</a>
+<a href=#495 id=495 data-nosnippet>495</a></span><span class="doccomment">/// Serialize `msg` into `buf`.
+<a href=#496 id=496 data-nosnippet>496</a>///
+<a href=#497 id=497 data-nosnippet>497</a>/// Returns a slice of the bytes actually written.
+<a href=#498 id=498 data-nosnippet>498</a>///
+<a href=#499 id=499 data-nosnippet>499</a>/// # Errors
+<a href=#500 id=500 data-nosnippet>500</a>/// Returns `postcard::Error` if the encoded message exceeds `buf.len()`.
+<a href=#501 id=501 data-nosnippet>501</a></span><span class="kw">pub fn </span>encode&lt;<span class="lifetime">'a</span>, T: Serialize&gt;(msg: <span class="kw-2">&amp;</span>T, buf: <span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="kw-2">mut </span>[u8]) -&gt; postcard::Result&lt;<span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="kw-2">mut </span>[u8]&gt; {
+<a href=#502 id=502 data-nosnippet>502</a>    postcard::to_slice(msg, buf)
+<a href=#503 id=503 data-nosnippet>503</a>}
+<a href=#504 id=504 data-nosnippet>504</a>
+<a href=#505 id=505 data-nosnippet>505</a><span class="doccomment">/// Deserialize a typed message from the START of `buf`, tolerating trailing bytes.
+<a href=#506 id=506 data-nosnippet>506</a>///
+<a href=#507 id=507 data-nosnippet>507</a>/// The IPC receive buffer is fixed at 512 bytes; the sender may have encoded a
+<a href=#508 id=508 data-nosnippet>508</a>/// shorter message.  `take_from_bytes` reads exactly what the message needs and
+<a href=#509 id=509 data-nosnippet>509</a>/// ignores the rest — unlike `from_bytes` which requires the entire slice to be
+<a href=#510 id=510 data-nosnippet>510</a>/// consumed.
+<a href=#511 id=511 data-nosnippet>511</a>///
+<a href=#512 id=512 data-nosnippet>512</a>/// For types with borrowed fields (`&amp;str`, `&amp;[u8]`), the returned value borrows
+<a href=#513 id=513 data-nosnippet>513</a>/// from `buf` — it must be consumed before `buf` is reused or overwritten.
+<a href=#514 id=514 data-nosnippet>514</a></span><span class="kw">pub fn </span>decode&lt;<span class="lifetime">'de</span>, T: Deserialize&lt;<span class="lifetime">'de</span>&gt;&gt;(buf: <span class="kw-2">&amp;</span><span class="lifetime">'de </span>[u8]) -&gt; postcard::Result&lt;T&gt; {
+<a href=#515 id=515 data-nosnippet>515</a>    <span class="kw">let </span>(msg, _remaining) = postcard::take_from_bytes(buf)<span class="question-mark">?</span>;
+<a href=#516 id=516 data-nosnippet>516</a>    <span class="prelude-val">Ok</span>(msg)
+<a href=#517 id=517 data-nosnippet>517</a>}
 </code></pre></div></section></main></body></html>
