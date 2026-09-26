@@ -168,6 +168,46 @@ pub unsafe extern "C" fn connect(fd: c_int, addr: *const c_void, addrlen: c_int)
     }
 }
 
+/// smoltcp `State::Closed` as `NetRequest::SocketState` reports it.
+const TCP_STATE_CLOSED: u8 = 0x00;
+
+/// One `SocketState` round-trip; `None` when the service cannot answer.
+fn socket_state(cap: u32, net: usize) -> Option<u8> {
+    let mut req_buf = [0u8; IPC_BUF_SIZE];
+    let req = NetRequest::SocketState { cap_id: cap };
+    let encoded = encode(&req, &mut req_buf).ok()?;
+    // SAFETY: `encoded` is a live, initialized buffer and `net` is a task id
+    // returned by LookupService; the syscall only reads those bytes.
+    unsafe {
+        raw_syscall(
+            ViSyscall::Send,
+            net,
+            encoded.as_ptr() as usize,
+            encoded.len(),
+            0,
+        );
+    }
+    let mut resp_buf = [0u8; IPC_BUF_SIZE];
+    // SAFETY: `resp_buf` is a live, writable buffer; the kernel writes at most
+    // `resp_buf.len()` bytes and reports how many.
+    let n = unsafe {
+        raw_syscall(
+            ViSyscall::Recv,
+            0,
+            resp_buf.as_mut_ptr() as usize,
+            resp_buf.len(),
+            0,
+        )
+    };
+    if n <= 0 {
+        return None;
+    }
+    match decode::<NetResponse>(&resp_buf[..n as usize]) {
+        Ok(NetResponse::State(state)) => Some(state),
+        _ => None,
+    }
+}
+
 /// Send up to 495 bytes per call (IPC payload ceiling after postcard framing).
 ///
 /// # Safety
@@ -226,6 +266,13 @@ pub unsafe extern "C" fn send(fd: c_int, buf: *const c_void, len: usize, _flags:
                 let accepted = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
                 if accepted > 0 || capped == 0 {
                     return (accepted as i32).min(capped as i32);
+                }
+                // A socket the peer refused (RST lands in Closed) never becomes
+                // writable again: report the failure now instead of burning the
+                // handshake budget, which is what a caller without a listener
+                // would otherwise pay for a full 5 s per call.
+                if socket_state(cap, net) == Some(TCP_STATE_CLOSED) {
+                    return -1;
                 }
                 if clock_available {
                     let now_ms = raw_syscall(ViSyscall::GetTime, 1, 0, 0, 0);

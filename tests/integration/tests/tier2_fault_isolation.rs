@@ -354,6 +354,27 @@ fn tier2_posix_ffi_execution_runs_in_paged_domain() {
         });
 
     // 3. Verify shell survivability
+    //
+    // The cell is still running at this point, and the shell owns its input until
+    // the foreground cell exits — the input path has no queue, so a command typed
+    // mid-cell is dropped. Wait for the cell's own end marker and the prompt it
+    // returns to before typing anything.
+    let after_cell_markers = qemu.output_checkpoint();
+    qemu.wait_for_after("PORTING-SMOKE: OK", after_cell_markers, FAULT_TIMEOUT)
+        .unwrap_or_else(|e| {
+            panic!(
+                "posix-shim-test did not finish under private SATP: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
+    qemu.wait_for_after("Cellos >", after_cell_markers, FAULT_TIMEOUT)
+        .unwrap_or_else(|e| {
+            panic!(
+                "shell prompt did not return after posix-shim-test: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
+
     std::thread::sleep(std::time::Duration::from_millis(500));
     send_command(&mut qemu, "echo tier2-ffi-ok");
     qemu.wait_for("tier2-ffi-ok", FAULT_TIMEOUT)
