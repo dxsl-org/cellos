@@ -1418,7 +1418,7 @@ jobs:
             console_long_line_with_backspace_no_stall \
             input_service_registered_at_boot compositor_input_routing_active \
             bench_all_pass input_keyboard_e2e input_bare_cell \
-            posix_shim_getentropy posix_shim_net \
+            posix_shim_getentropy posix_shim_net init_gives_up_after_a_crash_storm \
             2>&1 | tee "$GITHUB_WORKSPACE/software-evidence/boot-suite.log"
 
       - name: Run compositor window-policy evidence

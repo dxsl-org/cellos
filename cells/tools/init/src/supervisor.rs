@@ -1,10 +1,8 @@
 use api::syscall::service;
 use ostd::io::println;
-use ostd::syscall::{
-    sys_get_time, sys_lookup_service, sys_notify_on_exit, sys_recv, sys_send, SyscallResult,
-};
+use ostd::syscall::{sys_lookup_service, sys_notify_on_exit, sys_recv, sys_send, SyscallResult};
 
-use crate::service_table::{self, RestartPolicy, Service};
+use crate::service_table::{self, now_ticks, RestartPolicy, Service};
 
 const MAX_RESTARTS_PER_WINDOW: u32 = 5;
 const RESTART_WINDOW_TICKS: u64 = 1000;
@@ -26,7 +24,7 @@ pub(crate) fn run(services: &mut [Service], mut hypervisor_tid: Option<usize>) -
 
         if hypervisor_tid == Some(dead) {
             relay_hypervisor_exit(dead);
-            let now = sys_get_time();
+            let now = now_ticks();
             if now.wrapping_sub(hypervisor_window_start) > RESTART_WINDOW_TICKS {
                 hypervisor_window_start = now;
                 hypervisor_restarts = 0;
@@ -86,7 +84,7 @@ pub(crate) fn run(services: &mut [Service], mut hypervisor_tid: Option<usize>) -
             continue;
         }
 
-        let now = sys_get_time();
+        let now = now_ticks();
         if now.wrapping_sub(service.window_start) > RESTART_WINDOW_TICKS {
             service.window_start = now;
             service.restart_count = 0;

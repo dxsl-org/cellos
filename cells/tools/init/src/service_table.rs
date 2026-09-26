@@ -155,14 +155,24 @@ pub(crate) fn spawn(service: &mut Service) -> Option<usize> {
     }
     Some(tid)
 }
+/// Scheduler ticks (10 ms slices) — the clock the kernel itself uses for `RecvTimeout`
+/// deadlines, and the one every `*_TICKS` constant in this crate assumes.
+///
+/// `sys_get_time()` is `GetTime` **op 0**, the raw architected counter (10 MHz `mtime` on
+/// RV64), so a window compared against it is a thousand times too small: the restart
+/// budget rolled on every exit and `init` never gave up on a crash-looping service.
+pub(crate) fn now_ticks() -> u64 {
+    ostd::syscall::sys_get_scheduler_ticks().unwrap_or(0)
+}
+
 #[cfg(feature = "development-silo-provider")]
 pub(crate) fn wait_for_exact_registration(service_id: u16, expected_tid: usize) -> bool {
     const READY_TIMEOUT_TICKS: u64 = 5_000;
-    let started = ostd::syscall::sys_get_time();
+    let started = now_ticks();
     loop {
         match ostd::syscall::sys_lookup_service(service_id) {
             Some(tid) => return tid == expected_tid,
-            None if ostd::syscall::sys_get_time().wrapping_sub(started) >= READY_TIMEOUT_TICKS => {
+            None if now_ticks().wrapping_sub(started) >= READY_TIMEOUT_TICKS => {
                 return false;
             }
             None => ostd::task::yield_now(),

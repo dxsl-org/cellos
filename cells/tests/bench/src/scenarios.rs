@@ -14,6 +14,7 @@ pub mod context_switch;
 pub mod control_loop;
 pub mod hotswap_cli_probe;
 pub mod hotswap_supervisor;
+pub mod init_giveup;
 pub mod ipc_fastpath;
 pub mod ipc_send_recv;
 pub mod lab_carrier_transfer;

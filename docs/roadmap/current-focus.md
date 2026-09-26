@@ -230,8 +230,10 @@ Recorded, not hidden: `rest_for_one` and the capped backoff are library-complete
 but not driven end to end in QEMU; the library is single-threaded until B1's reactor, so there is no
 intra-cell concurrency and no fire-and-forget send; B1 (in-cell concurrency/cancellation) and B2
 (per-request cell cost, which keeps D5 WIP-limited) remain open. While building B0, `init`'s own
-restart-storm give-up was found to be inert — it compares its 1 000-unit window against `GetTime`
-op 0 (raw counter, ~0.1 ms) instead of scheduler ticks — and is left for its own lane.
+restart-storm give-up was found to be inert (window compared against `GetTime` op 0, ~0.1 ms instead
+of scheduler ticks) and is now fixed and witnessed: `bench init-giveup` force-exits `/bin/config`
+six times and requires that `init` leaves it down (`init_gives_up_after_a_crash_storm`), which fails
+against the old clock and passes against the new one.
 
 ## Cell scale profiles (D5)
 

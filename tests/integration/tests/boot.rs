@@ -2272,3 +2272,28 @@ fn posix_shim_net() {
             )
         });
 }
+
+/// `init`'s crash-storm budget ends the restarts (Spec 12 §4.3).
+///
+/// The window is a scheduler-tick count. Comparing it against `GetTime` op 0 — the raw
+/// architected counter, 10 MHz `mtime` on RV64 — made it ~0.1 ms wide, so the budget rolled
+/// on every exit and a crash-looping service was restarted forever. `bench init-giveup`
+/// delivers six abnormal exits to `/bin/config` and requires that `init` leaves it down.
+#[test]
+fn init_gives_up_after_a_crash_storm() {
+    if !prerequisites_ok() {
+        return;
+    }
+
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("shell not reached: {e}\n{}", qemu.dump()));
+
+    qemu.send_line("bench init-giveup");
+    qemu.wait_for("[init-giveup] PASS", 120).unwrap_or_else(|e| {
+        panic!(
+            "init did not give up on the crash-storming service: {e}\n--- output ---\n{}",
+            qemu.dump()
+        )
+    });
+}

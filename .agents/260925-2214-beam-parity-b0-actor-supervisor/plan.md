@@ -116,19 +116,19 @@ nothing else.
    reports a pre-existing `manual_is_multiple_of` lint in `kernel/src/task/futex.rs:116` (untouched by
    this change); every file this programme added is clippy-clean for the `app-backend` crate on all
    three cell targets.
-6. **`init`'s restart-storm give-up is inert, and B0 nearly inherited the bug.**
-   `cells/tools/init/src/supervisor.rs` compares its 1 000-unit window against
-   `ostd::syscall::sys_get_time()`, which is `GetTime` **op 0** — the raw architected counter
-   (10 MHz `mtime` on QEMU RV64), *not* scheduler ticks (`op 4`, `kernel/src/task/syscall.rs:5456`).
-   The window is therefore ~0.1 ms, it rolls on every exit, and `restart_count` never reaches
-   `MAX_RESTARTS_PER_WINDOW`: a crash-looping service is respawned forever, so Spec 12 §4.3's
-   "≤5 / ~10 s, give up on that one service" is not in force in the shipped boot supervisor. The
-   first B0 witness run reproduced exactly this pattern — its watchdog fired on the very first tick
-   because `now - started_at` was measured in `mtime` units — which is how the defect was found in
-   `ActorCtx::now_ticks` too. The library now uses op 4 (the same clock the kernel uses for
-   `RecvTimeout` deadlines) and its budget is covered by the host tests and the QEMU witness. **`init`
-   itself is deliberately left unchanged**: it is a different lane, and changing the boot
-   supervisor's restart behaviour deserves its own review.
+6. **FIXED — `init`'s restart-storm budget never engaged.** `cells/tools/init/src/supervisor.rs`
+   compared its 1 000-unit window against `sys_get_time()` — `GetTime` **op 0**, the raw architected
+   counter (10 MHz `mtime` on RV64) — instead of scheduler ticks (op 4), so the window was ~0.1 ms
+   wide and rolled on every exit: `restart_count` never reached `MAX_RESTARTS_PER_WINDOW` and a
+   crash-looping service was restarted forever, i.e. Spec 12 §4.3's "≤5 restarts / ~10 s, then give
+   up on that service" was not in force. The same units error sat in `service_table.rs`'s
+   `READY_TIMEOUT_TICKS` (a 5 000-unit registration wait that was really 0.5 ms). Both now use a
+   shared `now_ticks()` — op 4, the clock the kernel itself uses for `RecvTimeout` deadlines.
+   Verified by witness rather than by argument: `bench init-giveup` force-exits `/bin/config` six
+   times and requires that `init` leaves it down, with `init_gives_up_after_a_crash_storm` in the
+   boot suite (and in the CI allowlist). With the fix the scenario reports `PASS` in ~12 s; with the
+   fix stashed and the image rebuilt it fails precisely as the bug predicts — `kill 6/6 tid=25`
+   followed by `restart 6: tid=26` and `FAIL — the crash-storm budget never engaged`.
 
 7. **`hotswap-smoke` fails 4 of its 15 cases in this WSL environment with or without the B0 kernel
    change** — `hotswap_cli_preserves_demo_state`, `peer_death_guardrail_is_bounded`,

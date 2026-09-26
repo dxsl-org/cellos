@@ -440,6 +440,7 @@ fn cell_main() {
         "hotswap-supervisor" => scenarios::hotswap_supervisor::run(),
         "hotswap-unauthorized" => scenarios::hotswap_supervisor::run_unauthorized_probe(),
         "snapshot-authority" => scenarios::snapshot_authority::run(),
+        "init-giveup" => scenarios::init_giveup::run(),
         "native-stateful" => scenarios::native_stateful::run(),
         "lab-carrier-transfer" => scenarios::lab_carrier_transfer::run(),
         "base-tray-handoff" => scenarios::base_tray_handoff::run(),

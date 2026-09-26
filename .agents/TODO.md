@@ -143,12 +143,14 @@ Manifest v2 và tooling tương thích đã [done]. Việc đổi field vật l�
       các pin trong `kernel/src/loader/launch_profile/tests.rs` chỉ là tài liệu; `libs/ostd/src/console.rs`
       là file chết (`print!`/`println!` không được declare; cell log qua `ostd::io::println`); bật host
       harness cho `ostd` làm lộ 6 test cũ đã mục ở `clients::vfs::read_file::tests::bounds::*`.
-    - **Phát hiện cần xử lý ở lane khác:** give-up chống crash-storm của `init` **không bao giờ kích hoạt**
+    - **[đã sửa]** give-up chống crash-storm của `init` trước đây **không bao giờ kích hoạt**
       — `cells/tools/init/src/supervisor.rs` so cửa sổ 1 000 đơn vị với `sys_get_time()` = `GetTime` **op 0**
       (counter thô, 10 MHz `mtime` trên QEMU RV64), không phải scheduler tick (`op 4`), nên cửa sổ thực chất
       ~0,1 ms và bị roll mỗi lần exit → `restart_count` không bao giờ đạt 5 → service crash-loop được respawn
       mãi mãi (Spec 12 §4.3 "≤5/~10 s rồi bỏ mặc" không có hiệu lực trong thực tế). Thư viện B0 đã dùng đúng
-      op 4 (`ActorCtx::now_ticks`); `init` cố ý để nguyên vì đổi hành vi boot supervisor cần review riêng.
+      op 4 (`ActorCtx::now_ticks`). Nay `init` cũng dùng `now_ticks()` (op 4) ở cả ba chỗ (2 window +
+      readiness timeout), kèm witness mới `bench init-giveup` + test `init_gives_up_after_a_crash_storm`
+      trong boot suite và CI allowlist: PASS với fix (~12 s), FAIL đúng như bug khi stash fix.
     - B1 (concurrency trong cell + cancellation, cần ADR cancellation) và B2 (cost/scale per-request,
       đang WIP-limited cùng D5) là các phase kế tiếp theo `docs/roadmap/beam-parity-backend-roadmap.md`.
     - **Regression đang sống (cần lane riêng): argv của shell không tới cell.** `network_httpd_serves_file`

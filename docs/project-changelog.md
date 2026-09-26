@@ -4,6 +4,16 @@
 
 ## [Unreleased] Development-first hardware-constrained execution
 
+- **`init`'s crash-storm budget actually engages now.** `cells/tools/init/src/supervisor.rs` compared
+  its 1 000-unit restart window against `GetTime` op 0 — the raw architected counter, 10 MHz `mtime`
+  on RV64 — instead of scheduler ticks, so the window was ~0.1 ms wide, rolled on every exit, and a
+  crash-looping service was restarted forever (`Spec 12 §4.3`'s "≤5 restarts / ~10 s, then give up"
+  was not in force). `service_table.rs`'s `READY_TIMEOUT_TICKS` had the same units error. Both use a
+  shared `now_ticks()` (op 4) now, and the behaviour is pinned by a new witness: `bench init-giveup`
+  force-exits `/bin/config` six times and requires that `init` leaves it down, with
+  `init_gives_up_after_a_crash_storm` added to the boot suite and its CI allowlist. The witness fails
+  against the old clock (`kill 6/6` then `restart 6`) and passes against the new one.
+
 - **Command lines reach cells again (two independent defects on one path).** Cells launched from
   the shell started with default arguments: `httpd 9091 /tmp/resp.txt` listened on :8080,
   `tier2-exploit peer` ran its NULL-write mode, and `bench peer-death-guard` ran the default
