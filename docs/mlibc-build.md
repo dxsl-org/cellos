@@ -140,8 +140,8 @@ mlibc-shim = { path = "../../../libs/mlibc-shim" }
 ### Rust source
 
 ```rust
-#![no_std]
-#![no_main]
+#![cfg_attr(target_os = "none", no_std)]
+#![cfg_attr(target_os = "none", no_main)]
 extern crate mlibc_shim; // pulls in libc.a via build.rs link directives
 
 extern "C" {

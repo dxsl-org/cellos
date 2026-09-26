@@ -5,14 +5,23 @@
 > modules for trusted Tier 1 native Cells and future Tier 2 native Cells.
 
 ---
+> **Gate `no_std`/`no_main` on the target, not on `cfg(test)`** (and never leave
+> them ungated). `target_os = "none"` is what a cell really is; a hosted test
+> build (`cargo test -p <cell> --target x86_64-unknown-linux-gnu`) then keeps
+> `std` and lets libtest own the entry. An ungated `#[no_mangle] pub fn main`
+> hands the C runtime the cell's own entry instead, so the harness runs the app
+> and hangs before it lists a single test — `ostd`'s entry macros (`cell_main!`,
+> `run_app!`, `app_entry!`, `service_entry!`) already gate their `#[no_mangle]`
+> on the target for the same reason. Everything the image needs for the guest is
+> unchanged: a cell's `.text` and `.rodata` are byte-identical under both forms.
 
 ## AppContext: The Entry Point
 
 Instead of raw syscalls, use the context:
 
 ```rust
-#![no_std]
-#![no_main]
+#![cfg_attr(target_os = "none", no_std)]
+#![cfg_attr(target_os = "none", no_main)]
 
 extern crate alloc;
 

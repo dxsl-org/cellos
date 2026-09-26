@@ -6,11 +6,16 @@
 
 ## Entry Point: `ostd::app_entry!`
 
+> Gate `no_std`/`no_main` on the target (`#![cfg_attr(target_os = "none", …)]`). `ostd`'s entry
+> macros already gate their `#[no_mangle]` the same way, so a hosted test build keeps `std` and
+> gets libtest's entry; leaving them ungated hands the C runtime the cell's own `main` and the
+> harness hangs before it lists a test. Guest output is unchanged.
+
 Instead of `#[no_mangle] fn main()`, use the zero-boilerplate macro:
 
 ```rust
-#![no_std]
-#![no_main]
+#![cfg_attr(target_os = "none", no_std)]
+#![cfg_attr(target_os = "none", no_main)]
 
 use ostd::app::{AppContext, AppEvent};
 use ostd::io::println;
@@ -110,8 +115,8 @@ See [api-reference.md](../api-reference.md) for the full list.
 ## Minimal Example
 
 ```rust
-#![no_std]
-#![no_main]
+#![cfg_attr(target_os = "none", no_std)]
+#![cfg_attr(target_os = "none", no_main)]
 
 use ostd::io::println;
 
