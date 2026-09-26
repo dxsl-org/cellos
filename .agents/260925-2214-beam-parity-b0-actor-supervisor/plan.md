@@ -185,13 +185,15 @@ nothing else.
    `Network Data-Path Integration (riscv64)` went from `45 passed / 9 failed` to **`54 passed / 0
    failed`**, and `C2C Broker Oracle` passed. For `6c54642f7` the run is 18/23 completed with a
    single failure, `C2C Broker Oracle`, and five long jobs still in flight.
-   Two intermittent gates are recorded rather than smoothed over: `C2C Broker Oracle`'s idle-IPC
-   drain reports `INCONCLUSIVE` when it lands above the `900000`-tick proof ceiling — observed at
-   `1452030` and `1057678` ticks in the two failing runs and passing in another — and
-   `network_wget_downloads_to_vfs` failed once and passed twice in a row with the same image. Both
-   are timing-sensitive under QEMU TCG; neither is a logic failure, and the oracle's own rule
-   ("a drain at or above the ceiling is neutral INCONCLUSIVE") exists because the gate is marginal
-   by construction.
+   Two intermittent gates are recorded rather than smoothed over. `C2C Broker Oracle`'s idle-IPC
+   drain reports `INCONCLUSIVE` when it lands above the `900000`-tick proof ceiling: `1452030` and
+   `1057678` ticks in the two failing CI runs, one CI run passing, and — with the same kernel this
+   programme ships — **`684549` ticks and a PASS when run locally**, i.e. 24% of headroom on a host
+   that is not competing for the runner's CPU. The kernel change therefore leaves the path
+   comfortably fast; the CI failures are runner-speed marginality, not a logic regression. The
+   second gate, `network_wget_downloads_to_vfs`, failed once and passed twice in a row with the same
+   image. The oracle's own rule ("a drain at or above the ceiling is neutral INCONCLUSIVE") exists
+   because its gate is marginal by construction.
 
 9. **FIXED (two bugs) — the shell's command line never reached the cell.**
    Symptom: every cell launched from the shell started with default arguments
