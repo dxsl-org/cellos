@@ -16,7 +16,7 @@ The POSIX-shim tier is static-only. Symbols absent below are unsupported and mus
 | `__cxa_guard_acquire` | POSIX shim | `cxxabi.rs` | Freestanding C++ ABI support; not hosted C++. |
 | `__cxa_guard_release` | POSIX shim | `cxxabi.rs` | Freestanding C++ ABI support; not hosted C++. |
 | `__cxa_pure_virtual` | POSIX shim | `cxxabi.rs` | Freestanding C++ ABI support; not hosted C++. |
-| `_close` | POSIX shim | `net.rs` | TCP-only Net IPC wrapper; invalid arguments return `-1`. |
+| `_close` | POSIX shim | `net.rs` | TCP-only Net IPC wrapper, plus `gethostbyname` name resolution through the net service; invalid arguments return `-1`. |
 | `_execve` | POSIX shim | `sysio.rs` | Unsupported; returns `-1` and performs no operation. |
 | `_exit` | POSIX shim | `sysio.rs` | POSIX-shim syscall/VFS/time/process wrapper; see source preconditions. |
 | `_fcntl` | POSIX shim | `sysio.rs` | Unsupported; returns `-1` and performs no operation. |
@@ -64,8 +64,8 @@ The POSIX-shim tier is static-only. Symbols absent below are unsupported and mus
 | `ceil` | POSIX shim | `math.rs` | C99 math bridge backed by Rust `libm`. |
 | `ceilf` | POSIX shim | `math.rs` | C99 math bridge backed by Rust `libm`. |
 | `clearerr` | POSIX shim | `stdio.rs` | Unbuffered shim stdio over Cellos descriptors. |
-| `close` | POSIX shim | `net.rs` | TCP-only Net IPC wrapper; invalid arguments return `-1`. |
-| `connect` | POSIX shim | `net.rs` | TCP-only Net IPC wrapper; invalid arguments return `-1`. |
+| `close` | POSIX shim | `net.rs` | TCP-only Net IPC wrapper, plus `gethostbyname` name resolution through the net service; invalid arguments return `-1`. |
+| `connect` | POSIX shim | `net.rs` | TCP-only Net IPC wrapper, plus `gethostbyname` name resolution through the net service; invalid arguments return `-1`. |
 | `copysign` | POSIX shim | `math.rs` | C99 math bridge backed by Rust `libm`. |
 | `copysignf` | POSIX shim | `math.rs` | C99 math bridge backed by Rust `libm`. |
 | `cos` | POSIX shim | `math.rs` | C99 math bridge backed by Rust `libm`. |
@@ -112,6 +112,7 @@ The POSIX-shim tier is static-only. Symbols absent below are unsupported and mus
 | `ftell` | POSIX shim | `stdio.rs` | Unbuffered shim stdio over Cellos descriptors. |
 | `fwrite` | POSIX shim | `stdio.rs` | Unbuffered shim stdio over Cellos descriptors. |
 | `getentropy` | POSIX shim | `entropy.rs` | Kernel random service; invalid buffer/length returns `-1`. |
+| `gethostbyname` | POSIX shim | `net.rs` | TCP-only Net IPC wrapper, plus `gethostbyname` name resolution through the net service; invalid arguments return `-1`. |
 | `hypot` | POSIX shim | `math.rs` | C99 math bridge backed by Rust `libm`. |
 | `hypotf` | POSIX shim | `math.rs` | C99 math bridge backed by Rust `libm`. |
 | `ilogb` | POSIX shim | `math.rs` | C99 math bridge backed by Rust `libm`. |
@@ -153,7 +154,7 @@ The POSIX-shim tier is static-only. Symbols absent below are unsupported and mus
 | `puts` | POSIX shim | `stdio.rs` | Unbuffered shim stdio over Cellos descriptors. |
 | `read` | POSIX shim | `sysio.rs` | POSIX-shim syscall/VFS/time/process wrapper; see source preconditions. |
 | `realloc` | POSIX shim | `alloc.rs` | Cell heap allocation or C++ ABI allocation support. |
-| `recv` | POSIX shim | `net.rs` | TCP-only Net IPC wrapper; invalid arguments return `-1`. |
+| `recv` | POSIX shim | `net.rs` | TCP-only Net IPC wrapper, plus `gethostbyname` name resolution through the net service; invalid arguments return `-1`. |
 | `remainder` | POSIX shim | `math.rs` | C99 math bridge backed by Rust `libm`. |
 | `remainderf` | POSIX shim | `math.rs` | C99 math bridge backed by Rust `libm`. |
 | `rename` | POSIX shim | `sysio.rs` | POSIX-shim syscall/VFS/time/process wrapper; see source preconditions. |
@@ -165,14 +166,14 @@ The POSIX-shim tier is static-only. Symbols absent below are unsupported and mus
 | `roundf` | POSIX shim | `math.rs` | C99 math bridge backed by Rust `libm`. |
 | `scalbn` | POSIX shim | `math.rs` | C99 math bridge backed by Rust `libm`. |
 | `scalbnf` | POSIX shim | `math.rs` | C99 math bridge backed by Rust `libm`. |
-| `send` | POSIX shim | `net.rs` | TCP-only Net IPC wrapper; invalid arguments return `-1`. |
+| `send` | POSIX shim | `net.rs` | TCP-only Net IPC wrapper, plus `gethostbyname` name resolution through the net service; invalid arguments return `-1`. |
 | `setjmp` | POSIX shim | `setjmp.rs` | Architecture-specific non-local jump primitive. |
 | `sin` | POSIX shim | `math.rs` | C99 math bridge backed by Rust `libm`. |
 | `sinf` | POSIX shim | `math.rs` | C99 math bridge backed by Rust `libm`. |
 | `sinh` | POSIX shim | `math.rs` | C99 math bridge backed by Rust `libm`. |
 | `sinhf` | POSIX shim | `math.rs` | C99 math bridge backed by Rust `libm`. |
 | `snprintf` | POSIX shim | `stdio.rs` | Unbuffered shim stdio over Cellos descriptors. |
-| `socket` | POSIX shim | `net.rs` | TCP-only Net IPC wrapper; invalid arguments return `-1`. |
+| `socket` | POSIX shim | `net.rs` | TCP-only Net IPC wrapper, plus `gethostbyname` name resolution through the net service; invalid arguments return `-1`. |
 | `sprintf` | POSIX shim | `stdio.rs` | Unbuffered shim stdio over Cellos descriptors. |
 | `sqrt` | POSIX shim | `math.rs` | C99 math bridge backed by Rust `libm`. |
 | `sqrtf` | POSIX shim | `math.rs` | C99 math bridge backed by Rust `libm`. |

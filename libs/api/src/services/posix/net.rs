@@ -12,7 +12,8 @@
 use super::sysio::raw_syscall;
 use crate::ipc::{decode, encode, NetRequest, NetResponse, IPC_BUF_SIZE};
 use crate::syscall::ViSyscall;
-use core::ffi::{c_int, c_void};
+use core::cell::UnsafeCell;
+use core::ffi::{c_char, c_int, c_void};
 use core::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 
 pub(super) const SOCK_BASE_FD: c_int = 10;
@@ -20,6 +21,12 @@ const MAX_SOCKETS: usize = 8;
 
 const AF_INET: c_int = 2;
 const SOCK_STREAM: c_int = 1;
+
+/// Ceiling on one blocking `send` while the socket is still connecting.
+const SEND_BUDGET_MS: u64 = 5_000;
+/// Backstop when the cell cannot read `GetTime`: two IPC round-trips plus a
+/// yield per attempt, so this is a wall-clock bound in practice too.
+const SEND_ATTEMPT_CEILING: usize = 100_000;
 
 static NET_TID_CACHE: AtomicUsize = AtomicUsize::new(0);
 
@@ -187,7 +194,15 @@ pub unsafe extern "C" fn send(fd: c_int, buf: *const c_void, len: usize, _flags:
         return -1;
     };
 
-    for _attempt in 0..20 {
+    // smoltcp accepts nothing until the socket reaches Established, so a
+    // `send()` straight after `connect()` waits on the handshake — a wait the
+    // network owns, not the scheduler. Bound it with the wall clock (POSIX
+    // blocking-send semantics) and keep the iteration count as the backstop for
+    // a cell that cannot read `GetTime`.
+    let start_ms = raw_syscall(ViSyscall::GetTime, 1, 0, 0, 0);
+    let clock_available = start_ms >= 0;
+
+    for _attempt in 0..SEND_ATTEMPT_CEILING {
         raw_syscall(
             ViSyscall::Send,
             net,
@@ -211,6 +226,14 @@ pub unsafe extern "C" fn send(fd: c_int, buf: *const c_void, len: usize, _flags:
                 let accepted = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
                 if accepted > 0 || capped == 0 {
                     return (accepted as i32).min(capped as i32);
+                }
+                if clock_available {
+                    let now_ms = raw_syscall(ViSyscall::GetTime, 1, 0, 0, 0);
+                    if now_ms >= 0
+                        && (now_ms as u64).saturating_sub(start_ms as u64) > SEND_BUDGET_MS
+                    {
+                        return -1;
+                    }
                 }
                 raw_syscall(ViSyscall::Yield, 0, 0, 0, 0);
             }
@@ -324,4 +347,158 @@ unsafe fn socket_close(fd: c_int) -> c_int {
     }
     SOCK_CAPS[idx].store(0, Ordering::Release);
     0
+}
+
+// ── Name resolution ──────────────────────────────────────────────────────────
+
+/// `struct hostent` in the mlibc `netdb.h` layout.
+#[repr(C)]
+pub struct hostent {
+    pub h_name: *mut c_char,
+    pub h_aliases: *mut *mut c_char,
+    pub h_addrtype: c_int,
+    pub h_length: c_int,
+    pub h_addr_list: *mut *mut c_char,
+}
+
+/// Static storage for the one result `gethostbyname` may hand out.
+///
+/// POSIX defines the return as static storage that the next lookup overwrites —
+/// no allocation, nothing for the caller to free. Single-hart shim, so the
+/// result is deliberately not thread-safe, exactly like mlibc's own
+/// implementation under the same contract.
+struct HostResult {
+    ent: UnsafeCell<hostent>,
+    name: UnsafeCell<[u8; 64]>,
+    addr: UnsafeCell<[u8; 4]>,
+    aliases: UnsafeCell<[*mut c_char; 1]>,
+    addr_list: UnsafeCell<[*mut c_char; 2]>,
+}
+
+// SAFETY: the buffers are only written and read inside `gethostbyname`, which
+// runs on the cell's single thread; the shared pointer is the POSIX-mandated
+// static result.
+unsafe impl Sync for HostResult {}
+
+static HOST_RESULT: HostResult = HostResult {
+    ent: UnsafeCell::new(hostent {
+        h_name: core::ptr::null_mut(),
+        h_aliases: core::ptr::null_mut(),
+        h_addrtype: 0,
+        h_length: 0,
+        h_addr_list: core::ptr::null_mut(),
+    }),
+    name: UnsafeCell::new([0u8; 64]),
+    addr: UnsafeCell::new([0u8; 4]),
+    aliases: UnsafeCell::new([core::ptr::null_mut()]),
+    addr_list: UnsafeCell::new([core::ptr::null_mut(); 2]),
+};
+
+/// Longest name the shim will scan for a terminator.
+const MAX_NAME_SCAN: usize = 255;
+
+/// Resolve `name` through the net service: the service owns the whole order
+/// (IPv4 literal, SLIRP alias, UDP A-record query to the DHCP-leased server),
+/// so the C surface carries no resolver of its own.
+fn resolve_name(name: &str) -> Option<[u8; 4]> {
+    let net = net_tid();
+    if net == 0 {
+        return None;
+    }
+    let mut req_buf = [0u8; IPC_BUF_SIZE];
+    let req = NetRequest::Resolve { hostname: name };
+    let Ok(encoded) = encode(&req, &mut req_buf) else {
+        return None;
+    };
+    // SAFETY: `encoded` is a live, initialized buffer and `net` is a task id
+    // returned by LookupService; the syscall only reads those bytes.
+    unsafe {
+        raw_syscall(
+            ViSyscall::Send,
+            net,
+            encoded.as_ptr() as usize,
+            encoded.len(),
+            0,
+        );
+    }
+
+    let mut resp_buf = [0u8; IPC_BUF_SIZE];
+    // SAFETY: `resp_buf` is a live, writable buffer; the kernel writes at most
+    // `resp_buf.len()` bytes and reports how many.
+    let n = unsafe {
+        raw_syscall(
+            ViSyscall::Recv,
+            0,
+            resp_buf.as_mut_ptr() as usize,
+            resp_buf.len(),
+            0,
+        )
+    };
+    if n <= 0 {
+        return None;
+    }
+    match decode::<NetResponse>(&resp_buf[..n as usize]) {
+        Ok(NetResponse::Addr(addr)) => Some(addr),
+        _ => None,
+    }
+}
+
+/// Resolve a hostname to an IPv4 address (`struct hostent` form).
+///
+/// Returns `NULL` for a null/empty/unterminated name, an unresolvable name, or
+/// an unreachable net service. `h_name` echoes the queried name, `h_aliases` is
+/// empty, and `h_addr_list` holds exactly one address followed by `NULL`.
+///
+/// # Safety
+/// `name` must be null or point to a NUL-terminated string whose terminator is
+/// within 255 bytes; the returned pointer aliases static storage that the next
+/// call in this module overwrites.
+#[no_mangle]
+pub unsafe extern "C" fn gethostbyname(name: *const c_char) -> *mut hostent {
+    if name.is_null() {
+        return core::ptr::null_mut();
+    }
+    let mut len = 0usize;
+    // Bounded scan: a missing terminator must not walk off the mapping.
+    while len < MAX_NAME_SCAN && *name.add(len) != 0 {
+        len += 1;
+    }
+    if len == 0 || len == MAX_NAME_SCAN {
+        return core::ptr::null_mut();
+    }
+    let bytes = core::slice::from_raw_parts(name.cast::<u8>(), len);
+    let Ok(text) = core::str::from_utf8(bytes) else {
+        return core::ptr::null_mut();
+    };
+    // Everything goes to the service, literals included: resolution policy
+    // lives there, and a second parser here would only drift from it.
+    let Some(ip) = resolve_name(text) else {
+        return core::ptr::null_mut();
+    };
+
+    // SAFETY: single-threaded shim; each buffer is a distinct cell.
+    unsafe {
+        let name_buf = &mut *HOST_RESULT.name.get();
+        let copy = len.min(name_buf.len() - 1);
+        name_buf[..copy].copy_from_slice(&bytes[..copy]);
+        name_buf[copy] = 0;
+
+        let addr = &mut *HOST_RESULT.addr.get();
+        *addr = ip;
+
+        let aliases = &mut *HOST_RESULT.aliases.get();
+        aliases[0] = core::ptr::null_mut();
+
+        let addr_list = &mut *HOST_RESULT.addr_list.get();
+        addr_list[0] = addr.as_mut_ptr() as *mut c_char;
+        addr_list[1] = core::ptr::null_mut();
+
+        let ent = &mut *HOST_RESULT.ent.get();
+        ent.h_name = name_buf.as_mut_ptr() as *mut c_char;
+        ent.h_aliases = aliases.as_mut_ptr();
+        ent.h_addrtype = AF_INET;
+        ent.h_length = 4;
+        ent.h_addr_list = addr_list.as_mut_ptr();
+        ent as *mut hostent
+    }
 }

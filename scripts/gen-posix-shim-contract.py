@@ -33,7 +33,7 @@ def semantics(name, source):
     if source == "alloc.rs":
         return "Cell heap allocation or C++ ABI allocation support."
     if source == "net.rs":
-        return "TCP-only Net IPC wrapper; invalid arguments return `-1`."
+        return "TCP-only Net IPC wrapper, plus `gethostbyname` name resolution through the net service; invalid arguments return `-1`."
     if source == "entropy.rs":
         return "Kernel random service; invalid buffer/length returns `-1`."
     if source == "stdio.rs":
