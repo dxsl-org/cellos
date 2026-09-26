@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["ABSENT_TICKS","KILLS","RESTART_WAIT_TICKS","TARGET_NAME","TARGET_SERVICE","WINDOW_TICKS"],"fn":["fail","now","run"]};
+window.SIDEBAR_ITEMS = {"constant":["ABSENT_TICKS","KILLS","RESTART_WAIT_TICKS","TARGET_NAME","TARGET_SERVICE","WINDOW_TICKS"],"fn":["fail","force_exit_and_await_restart","now","run"]};
