@@ -1186,6 +1186,22 @@ jobs:
           # tests had drifted from the session — they predate the stat that
           # reserves the buffer — and nothing noticed while they were unreachable.
           cargo test -p ostd --target x86_64-unknown-linux-gnu
+          # Suites that already passed but that no job ran: pure-logic crates
+          # whose tests need neither the host environment (no temp files, clocks,
+          # sockets or RNG — checked) nor a bare-metal target. They were one
+          # forgotten flag away from the same rot as the two above.
+          # `service-net-broker` documents --lib for exactly this reason: its
+          # `main.rs` modules are bare-metal only.
+          cargo test -p ai-tokenizer -p attestation -p authority-protocol \
+            --target x86_64-unknown-linux-gnu
+          cargo test -p cellos-fs -p http-core -p gguf-rs \
+            --target x86_64-unknown-linux-gnu
+          cargo test -p viui -p service-kms -p service-net \
+            --target x86_64-unknown-linux-gnu
+          cargo test -p cellos-boards -p app-wasm --target x86_64-unknown-linux-gnu
+          cargo test -p service-silo -p driver-dwc2-usb -p driver-bcm-display \
+            --lib --target x86_64-unknown-linux-gnu
+          cargo test -p service-net-broker --lib --target x86_64-unknown-linux-gnu
 
   f1-admission:
     # Tier-1 admission gate (Spec 18 §2.1): the same `cellos-sign --check` that

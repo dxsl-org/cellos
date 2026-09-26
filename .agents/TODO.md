@@ -18,6 +18,15 @@ không phải bởi dòng chữ ở đây.
   vừa được bật lại và đã vào job host unit tests (xem mục "Đã đóng"); đừng để drift lại — một import
   cũ đủ để cả harness `cellos-kernel` không build, và 6 test chunking của `ostd` đã lệch khỏi session
   mà không ai thấy trong lúc chúng không chạy.
+- **[2026-09-26] ~230 `#[test]` trong `cells/` vẫn không chạy ở đâu.** Sau khi 474 suite host-test được
+  nối vào CI, phần còn lại gồm các crate chỉ có target bin (không có lib) nên `cargo test --target
+  x86_64-unknown-linux-gnu` chết ở dep bare-metal — ví dụ `service-vfs` (57 test) cần `driver-disk`
+  host-build được (`no global memory allocator`, `#[panic_handler]`, unwinding), `service-httpd` (15)
+  cần `ai-sdk/ostd-transport` vốn chỉ có ở `target_os = "none"`, `app-shell` (18), `service-hypervisor`
+  (14). Trong toàn bộ `cells/` chỉ có **2** module cầu selftest chạy trong guest (`file_handles::selftest`,
+  `access::selftest` của `service-vfs`). Hai hướng, chọn theo từng module: (a) cho các dep bare-metal một
+  shim `#[cfg(test)]` (std + allocator + panic handler) để crate host-test được, hoặc (b) chuyển tính chất
+  cần kiểm vào mẫu in-guest selftest đã có. Số đo: `grep -rn "#\[test\]" cells/ | wc -l` = 438.
 - [in-progress] **RPi3**: SD storage + HDMI [done]; I2C/SPI BSC1 + SPI0 loopback [done trên board
   thật] nhưng cần sensor vật lý (SHT3x/MPU6050) để đọc dữ liệu cảm biến; USB DWC2 & LAN9514 (Phase
   05) đã gỡ nghẽn 100% trong mã nguồn (USB Policy v3, cấp DWC2 MMIO, one-shot level IRQ 9) — chờ
