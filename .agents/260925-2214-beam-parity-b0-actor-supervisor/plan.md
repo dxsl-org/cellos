@@ -177,15 +177,21 @@ nothing else.
    The same lint job also warns `fatal: No url found for submodule path
    'cells/demos/doom/src/c/doomgeneric' in .gitmodules` — the orphan gitlink reported earlier.
 
-   **End state of that repair, verified on run `36163927858` (commit `1aab7cf82`)**: 21 of 23 jobs
-   completed, **all 21 green** — including every job that was red at the baseline (`Lint`,
-   `Build` rv64/aarch64/x86_64, `Clippy` aarch64/x86_64, `Host unit tests`, `Security Scan`,
-   `CellosFS /srv`, the three `QEMU Boot Test`s and `QEMU Hypervisor Machinery Smoke`). The two
-   remaining failures belong to other lanes and are recorded below: `Network Data-Path
-   Integration (riscv64)` (`45 passed / 9 failed`, all of them the argv regression in finding 9) and
-   `C2C Broker Oracle` (its idle-IPC wake drain came out `INCONCLUSIVE` at
-   `elapsed_ticks=1452030` against a `900000` proof ceiling, and an INCONCLUSIVE-only run cannot
-   pass by the gate's own rule).
+   **End state of that repair.** For commit `1aab7cf82`: 21 of 23 jobs completed, all 21 green —
+   including every job that was red at the baseline (`Lint`, `Build` rv64/aarch64/x86_64, `Clippy`
+   aarch64/x86_64, `Host unit tests`, `Security Scan`, `CellosFS /srv`, the three `QEMU Boot Test`s
+   and `QEMU Hypervisor Machinery Smoke`).
+   After the argv fixes (finding 9): for `5e2f50ff7` the same set is green and the boot step of
+   `Network Data-Path Integration (riscv64)` went from `45 passed / 9 failed` to **`54 passed / 0
+   failed`**, and `C2C Broker Oracle` passed. For `6c54642f7` the run is 18/23 completed with a
+   single failure, `C2C Broker Oracle`, and five long jobs still in flight.
+   Two intermittent gates are recorded rather than smoothed over: `C2C Broker Oracle`'s idle-IPC
+   drain reports `INCONCLUSIVE` when it lands above the `900000`-tick proof ceiling — observed at
+   `1452030` and `1057678` ticks in the two failing runs and passing in another — and
+   `network_wget_downloads_to_vfs` failed once and passed twice in a row with the same image. Both
+   are timing-sensitive under QEMU TCG; neither is a logic failure, and the oracle's own rule
+   ("a drain at or above the ceiling is neutral INCONCLUSIVE") exists because the gate is marginal
+   by construction.
 
 9. **FIXED (two bugs) — the shell's command line never reached the cell.**
    Symptom: every cell launched from the shell started with default arguments
