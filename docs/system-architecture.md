@@ -1987,7 +1987,7 @@ Same foundation, **opposite coordination semantics** → two separate problems:
   - **TCP client**: SOCKET_TCP, CONNECT, SEND, RECV, CLOSE
   - **TCP server**: LISTEN (0x17), ACCEPT (0x18) opcodes
   - **UDP**: SOCKET_UDP, SENDTO (0x21), RECVFROM (0x22), BIND
-  - **DNS resolver**: static table → IPv4 literal → UDP A-record query
+  - **DNS resolver**: service-level (`NetRequest::Resolve`) — IPv4 literal → SLIRP alias → UDP A-record query to the DHCP-leased server; shared by curl/wget/nc/mqtt, Ocel and Lua's `vnet.resolve`
   - **net-tools binaries** (6 total): ping, curl (HTTP/1.0), wget, nc (multi-conn relay), httpd, mqtt (skeleton)
 - **GPU framebuffer** (opt-in, basic compositor)
 - **Tier 3 VirtIO-GPU host stack** (legacy: Tier 3b) — host device model, resource/scanout Grant lifecycle, and compositor bridge are implemented; strict guest verification stays hardware-gated (`TIER3B_GPU_E2E=1` on ARM64 KVM / real hardware).

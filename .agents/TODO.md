@@ -153,13 +153,22 @@ Manifest v2 và tooling tương thích đã [done]. Việc đổi field vật l�
       trong boot suite và CI allowlist: PASS với fix (~12 s), FAIL đúng như bug khi stash fix.
     - B1 (concurrency trong cell + cancellation, cần ADR cancellation) và B2 (cost/scale per-request,
       đang WIP-limited cùng D5) là các phase kế tiếp theo `docs/roadmap/beam-parity-backend-roadmap.md`.
-    - **Regression đang sống (cần lane riêng): argv của shell không tới cell.** `network_httpd_serves_file`
-      gửi `httpd 9091 /tmp/resp.txt &` nhưng cell log `httpd: listening on :8080` (không nhận tham số) →
-      response rỗng. Cùng một gốc giải thích `network_tcp_*`, `network_wget_*`, `posix_shim_getentropy`,
-      tier2 (`tier2-exploit peer` chạy mode NULL mặc định) và 4 case `hotswap-smoke`. Repro local 13 s:
-      `cd tests/integration && cargo test --target x86_64-unknown-linux-gnu --test boot network_httpd_serves_file -- --test-threads=1 --nocapture`.
-      Đã falsify: fail y hệt khi stash thay đổi kernel của B0 ⇒ không phải do B0; nghi lane rework argv
-      (23–25/09) trong `kernel/src/task/{launch,tcb}.rs` + `kernel/src/cell/state_stash.rs`.
+    - **[đã đóng 2026-09-26 — lane mạng xanh]** Hai fix argv đã lên HEAD: `982ccfd94` (kernel không xoá
+      command line đã stage ở syscall không liên quan) và `6b311e44e` (ostd/shell giữ command line qua cả
+      hai lần launch). Bằng chứng local hôm nay: boot lane mạng 12/12 PASS trong ~120 s với `--test-threads=1`
+      — `network_dhcp_acquires_ip`, `network_tcp_send_recv`, `network_curl_http_get`,
+      `network_tcp_listen_accept`, `network_httpd_serves_file`, `network_httpd_dynamic_content`,
+      `network_wget_downloads_to_vfs`, `mqtt_publish`, `mqtt_subscribe`, `posix_shim_net`, cộng hai test mới
+      `network_resolve_answers_hostname_through_the_service` (hostname qua service Resolve, deterministic) và
+      `network_reaches_the_internet_by_name` (DNS + download thật từ internet, gate theo internet của host).
+      Hai test mới chưa vào allowlist CI theo luật 2/2.
+    - Ghi chú cũ (giữ để tra cứu): `network_httpd_serves_file` gửi `httpd 9091 /tmp/resp.txt &` nhưng cell log
+      `httpd: listening on :8080` (không nhận tham số) → response rỗng; cùng gốc ảnh hưởng `network_tcp_*`,
+      `network_wget_*`, `posix_shim_getentropy`, tier2 và 4 case `hotswap-smoke`.
+    - **Resolver mạng (2026-09-26):** `NetRequest::Resolve` nay chạy thật trong `service-net` — literal → alias
+      SLIRP → A-record UDP tới DNS server do DHCP cấp (`cells/services/net/src/dns.rs`); `curl`/`wget`/`nc`/`mqtt`/Ocel
+      dùng chung resolver này, và hai vòng gửi/nhận của `curl`/`wget` nay bound theo đồng hồ (`GetTime` op 1, 30 s)
+      thay vì 500 vòng lặp. Chi tiết: `docs/network-api.md` §DNS Resolver.
 
 ### App Layers
 1. **Tier 1** - Trusted Native SAS Cell

@@ -105,8 +105,9 @@ All requests use a common envelope:
 ```
 
 **Note:** The socket, TCP, and UDP opcodes in the table are implemented. The
-higher-level `NetRequest::Resolve` service request is not: it currently returns
-`0xFF` from `handlers.rs`.
+higher-level `NetRequest::Resolve` is implemented too — see
+[DNS Resolver](#dns-resolver) — and is the single resolution path for every
+consumer (shell tools, Ocel, Lua's `vnet.resolve`, `ostd::clients::net`).
 
 ---
 
@@ -150,7 +151,10 @@ SOCKET_UDP → CapId (N)
      └─ CLOSE(N)                → ok
 ```
 
-**CapId Allocation**: CapId 0 is reserved for errors. Maximum 16 concurrent user sockets (+ 1 DHCP + 1 ARP management socket = 18 total).
+**CapId Allocation**: CapId 0 is reserved for errors. Maximum 16 concurrent user
+sockets; the socket set additionally holds the DHCP and DNS management sockets
+(`SOCKET_SET_STORAGE = MAX_SOCKETS + 2`), so a full CapId table can never run
+the smoltcp `SocketSet` out of slots.
 
 **Opcode-Specific Buffer Minimums**:
 - CONNECT request: minimum 15 bytes (1 opcode + 8 cap + 4 addr + 2 port)
@@ -170,17 +174,47 @@ The kernel driver reads the actual MAC from VirtIO config space at init time.
 
 ## DNS Resolver
 
-The Lua `vnet` binding implements a client-side resolver on top of net-service
-UDP sockets. It uses this fallback chain:
+Resolution lives in the Net Cell (`cells/services/net/src/dns.rs`) and is
+reached with `NetRequest::Resolve { hostname }` → `NetResponse::Addr([u8; 4])`
+(`Err(0xFF)` when the name does not resolve). Every consumer goes through it:
+the shell tools (`curl`, `wget`, `nc`, `mqtt`), Ocel, the POSIX shim's
+`gethostbyname` (so C cells resolve the same names), and
+`ostd::clients::net::NetClient::dns_lookup`.
 
-1. **Static Hostname Table**: gateway → 10.0.2.2, dns → 10.0.2.3, localhost → 127.0.0.1
-2. **IPv4 Literal**: If hostname is dotted-quad (e.g., 192.168.1.1), return as-is
-3. **UDP A-Record Query**: Send DNS query to 10.0.2.3:53, parse answer section
+The order is fixed in one place:
 
-This behavior lives in `cells/runtimes/lua/src/bindings_net.rs`; it must not be
-confused with the unimplemented service-level `NetRequest::Resolve` request.
+1. **IPv4 literal** — returned without touching the wire.
+2. **SLIRP alias** — `gateway`/`host` → 10.0.2.2, `dns` → the DNS server in
+   force, `localhost` → 127.0.0.1.
+3. **UDP A-record query** — to the DNS server from the DHCP lease (option 6),
+   falling back to SLIRP's 10.0.2.3 when the lease carries none. The Net Cell
+   owns one smoltcp `dns::Socket`, so retransmit/backoff (1 s, 2 s, …) and
+   CNAME following are smoltcp's; the service bounds the whole lookup at 3 s and
+   answers `Err` after that. The query is synchronous — the service is a
+   single-threaded message loop, and the wait loop polls the interface, so
+   other sockets keep progressing while a lookup is in flight.
+
+A lease that carries option 6 replaces the built-in default and is logged as
+`[net] DNS server: <addr>`.
+
+Names that fail to parse as IPv4 (including malformed quads such as
+`10.0.2.01` or `256.0.2.1`) are treated as hostnames and go to the resolver —
+never silently read as an address.
+
+**Lua**: the `vnet.*` binding (`cells/runtimes/lua/src/bindings_net.rs`) resolves
+through the same `NetRequest::Resolve` instead of its own client-side resolver
+(static table + hardcoded 10.0.2.3 + UDP query). That binding is **not** in the Lua
+cell's module tree today — `runtimes/lua/src/main.rs` declares no `mod bindings_net;`
+— so no script reaches it yet; re-enabling it keeps it on the service resolver.
 
 **Python status**: native MicroPython network bindings are historical only; Python workloads belong in the Tier 3 Linux VM path.
+
+### HTTPS
+
+`NetRequest::Resolve` is HTTP/DNS only. HTTPS from a Cell goes over the TLS
+path (`0x30–0x32` raw opcodes, `cells/services/net/src/tls_handler.rs`), which
+requires authenticated certificate time — still gated by the protected-time /
+KMS program, so `curl`/`wget` here are HTTP/1.0 clients.
 
 ---
 
@@ -191,7 +225,7 @@ confused with the unimplemented service-level `NetRequest::Resolve` request.
 | TCP throughput | ≥ 50 Mbps in QEMU user-mode |
 | UDP throughput | ≥ 100 Mbps (datagram-based) |
 | Loopback RTT | < 10 ms |
-| DNS lookup (static table) | < 1 ms |
+| DNS lookup (literal / SLIRP alias) | < 1 ms |
 | DNS lookup (UDP A-record) | < 100 ms |
 | Max simultaneous sockets | ≥ 16 |
 
@@ -207,8 +241,11 @@ confused with the unimplemented service-level `NetRequest::Resolve` request.
 | `cells/services/net/src/main.rs` | Cell entry point + IPC receive loop |
 | `cells/services/net/src/interface.rs` | smoltcp Device adapter (RX queue, TX via IPC) |
 | `cells/services/net/src/socket_table.rs` | CapId → smoltcp SocketHandle mapping |
-| `cells/services/net/src/dhcp.rs` | DHCPv4 boot client |
+| `cells/services/net/src/dns.rs` | Service-level resolver (smoltcp `dns::Socket`, aliases, literals) |
+| `cells/services/net/src/dhcp.rs` | DHCPv4 boot client (also captures lease option 6) |
 | `cells/services/net/src/poll_driver.rs` | IPC opcode constants + message decoder |
+| `cells/tools/net-tools/src/bin/{curl,wget,nc,mqtt}.rs` | Consumer tools; all resolve through the service |
+| `libs/api/src/services/posix/net.rs` | C ABI: BSD sockets + `gethostbyname` on the same resolver |
 | `tests/integration/tests/boot.rs` | RISC-V boot and network integration scenarios |
 | `tests/integration/tests/nic-riscv.rs` | RISC-V VirtIO NIC scenarios |
 | `tests/integration/tests/nic-x86.rs` | q35 e1000 DHCP and VT-d data-plane gates |
