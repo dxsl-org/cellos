@@ -2,7 +2,6 @@
 
 extern crate alloc;
 use ai_proto::MAX_PROMPT_BYTES;
-use ai_sdk::AiClient;
 use alloc::{format, string::String, vec::Vec};
 use api::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
 use ostd::clients::VfsClient;
@@ -259,7 +258,14 @@ pub fn api_files(cap: u32, net_ep: usize, vfs_ep: usize, path: &str) -> bool {
 /// The prompt is bounded by the AI wire limit and the generated text is capped at 64 tokens, so the
 /// JSON reply remains a bounded one-shot response. Callers that need streaming use the service's
 /// poll API directly (`ai_sdk::AiClient`) rather than this front door.
+/// The inference front door needs `ai_sdk::ostd_transport`, which exists only for the
+/// bare-metal target: the client resolves the AI service through this cell's own IPC.
+/// A hosted build therefore has every other route and not this one — which is what the
+/// fifteen host tests in this crate exercise.
+#[cfg(target_os = "none")]
 pub fn api_infer(cap: u32, net_ep: usize, request: &[u8], path: &str) -> bool {
+    use ai_sdk::AiClient;
+
     let prompt = match request_body(request) {
         Some(body) if !body.is_empty() => {
             if body.len() > MAX_PROMPT_BYTES {

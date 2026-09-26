@@ -18,15 +18,13 @@ không phải bởi dòng chữ ở đây.
   vừa được bật lại và đã vào job host unit tests (xem mục "Đã đóng"); đừng để drift lại — một import
   cũ đủ để cả harness `cellos-kernel` không build, và 6 test chunking của `ostd` đã lệch khỏi session
   mà không ai thấy trong lúc chúng không chạy.
-- **[2026-09-26] 15 `#[test]` trong `cells/` vẫn không chạy ở đâu** (438 tổng, **423 đã vào CI**; số còn lại
-  chỉ là `service-httpd`). Chặn: handler AI của httpd dựng `AiClient` từ `ai_sdk::ostd_transport`, mà module đó
-  chỉ tồn tại ở `target_os = "none"`; muốn host-test thì phải tách transport khỏi handler (hoặc một trait trung
-  gian) — đó là thay đổi thiết kế của cell, không phải một dòng gate. Công thức đã dùng bốn lần, ghi ở đây để
-  lần sau khỏi dò: gate `no_std`/`no_main`/entry/heap-macro theo **target** (mọi macro emit `#[no_mangle]` trong
-  `ostd`: `cell_main!`, `run_app!`, `app_entry!`, `service_entry!`), host shim cho dep ship staticlib, rồi sửa
-  drift trong test module.- **[2026-09-26] `cargo test -p app-wasm` (không `--lib`) abort.** Bin target là entry bare-metal gọi
-  `sys_exit`, nên test harness thoát process trước khi libtest báo cáo; CI phải gọi `--lib` (3 test ở lib).
-  Muốn `cargo test` mặc định chạy được thì bin cần tách cổng vào khỏi entry.
+- **[đã đóng 2026-09-26] Toàn bộ 438 `#[test]` trong `cells/` nay chạy trong CI.** Công thức dùng năm lần,
+  ghi lại để tra cứu: (1) gate `no_std`/`no_main`/entry/heap-macro theo **target** — mọi macro emit
+  `#[no_mangle]` trong `ostd` đều phải gate (`cell_main!`, `run_app!`, `app_entry!`, `service_entry!`), nếu
+  không thì CRT gọi entry của cell trong test binary và harness treo trước khi list test; (2) dep ship
+  `staticlib` cần `std` trên host (gate `no_std` theo target); (3) export của `ostd::heap` chỉ có ở target;
+  (4) tính năng chỉ tồn tại ở target (`ai_sdk::ostd_transport`) thì gate chính handler + nhánh route của nó;
+  (5) sau đó sửa drift trong test module (import thiếu, chữ ký đổi) — phần này mới là phần "test cũ đã mục".
 - [in-progress] **RPi3**: SD storage + HDMI [done]; I2C/SPI BSC1 + SPI0 loopback [done trên board
   thật] nhưng cần sensor vật lý (SHT3x/MPU6050) để đọc dữ liệu cảm biến; USB DWC2 & LAN9514 (Phase
   05) đã gỡ nghẽn 100% trong mã nguồn (USB Policy v3, cấp DWC2 MMIO, one-shot level IRQ 9) — chờ

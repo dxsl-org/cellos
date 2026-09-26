@@ -49,6 +49,7 @@ pub fn handle_connection(
         }
 
         // POST /api/infer — body carries the prompt (see `handlers::api_infer`).
+        #[cfg(target_os = "none")]
         ("POST", "/api/infer") => handlers::api_infer(cap, net_ep, &raw, path),
 
         // POST /api/cells/<name>/restart
