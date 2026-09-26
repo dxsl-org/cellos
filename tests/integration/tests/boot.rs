@@ -1111,6 +1111,109 @@ fn network_wget_downloads_to_vfs() {
         .unwrap_or_else(|e| panic!("vcat after wget: {e}\n{}", qemu.dump()));
 }
 
+/// Hostnames resolve through the net service, not through a per-tool table.
+///
+/// The mock server is reachable only as `10.0.2.2`, and `gateway` is SLIRP's
+/// alias for it. `curl http://gateway:<port>/` therefore exercises the tool's
+/// `NetRequest::Resolve` round-trip — the alias table now lives in the service —
+/// over the real socket path. Deterministic: no upstream DNS is involved.
+#[test]
+fn network_resolve_answers_hostname_through_the_service() {
+    if !prerequisites_ok() {
+        return;
+    }
+
+    let (port, _server) = spawn_http_server();
+
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("shell: {e}\n{}", qemu.dump()));
+    qemu.wait_for("DHCP acquired", 40)
+        .unwrap_or_else(|e| panic!("DHCP: {e}\n{}", qemu.dump()));
+
+    std::thread::sleep(Duration::from_millis(500));
+    let checkpoint = qemu.output_checkpoint();
+    qemu.send_line(&format!("curl http://gateway:{port}/"));
+    qemu.wait_for_after("HTTP/1.0 200 OK", checkpoint, 20)
+        .unwrap_or_else(|e| {
+            panic!(
+                "hostname did not resolve through the net service: {e}\n{}",
+                qemu.dump()
+            )
+        });
+    qemu.wait_for_after("HELLO", checkpoint, 10)
+        .unwrap_or_else(|e| panic!("no body after resolving: {e}\n{}", qemu.dump()));
+}
+
+/// The guest reaches the public internet by name: SLIRP's DNS server answers
+/// the A record, HTTP fetches the page, and the bytes survive a VFS round trip.
+///
+/// Assertions are scoped with `wait_for_after` checkpoints: with a shared
+/// transcript a bare `wait_for("200")` matches boot addresses and a
+/// `wait_for("Cellos >")` matches the first prompt ever printed, so the test
+/// would race ahead of the guest (measured: the follow-up command was typed
+/// into a busy shell and dropped).
+///
+/// Gated on the HOST having outbound DNS + HTTP, because SLIRP forwards the
+/// guest's queries to the host's own resolver and its TCP to the host's
+/// network: offline, this test would measure the sandbox, not CellOS.
+#[test]
+fn network_reaches_the_internet_by_name() {
+    if !prerequisites_ok() {
+        return;
+    }
+    if !host_has_outbound_internet() {
+        eprintln!(
+            "SKIP network_reaches_the_internet_by_name: host cannot resolve and \
+             connect to example.com:80 (SLIRP forwards the guest's DNS and TCP to the host)"
+        );
+        return;
+    }
+
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("shell: {e}\n{}", qemu.dump()));
+    qemu.wait_for("DHCP acquired", 40)
+        .unwrap_or_else(|e| panic!("DHCP: {e}\n{}", qemu.dump()));
+
+    // 1. Download by name into the VFS. Every byte depends on the net service's
+    //    A-record query: there is no literal address in the command line.
+    std::thread::sleep(Duration::from_millis(500));
+    let after_wget = qemu.output_checkpoint();
+    qemu.send_line("wget http://example.com/ /tmp/internet.txt");
+    qemu.wait_for_after("wget: saved", after_wget, 30)
+        .unwrap_or_else(|e| panic!("download by hostname failed: {e}\n{}", qemu.dump()));
+
+    // 2. Read the downloaded bytes back out of the VFS. "Example Domain" enters
+    //    the transcript here and nowhere earlier, so the match is the file.
+    std::thread::sleep(Duration::from_millis(500));
+    let after_vcat = qemu.output_checkpoint();
+    qemu.send_line("vcat /tmp/internet.txt");
+    qemu.wait_for_after("Example Domain", after_vcat, CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("downloaded body not readable: {e}\n{}", qemu.dump()));
+
+    // 3. curl answers the same question through a second consumer, and the body
+    //    it prints is fresh output — not the text step 2 already put there.
+    std::thread::sleep(Duration::from_millis(500));
+    let after_curl = qemu.output_checkpoint();
+    qemu.send_line("curl http://example.com/");
+    qemu.wait_for_after("HTTP/1.1 200 OK", after_curl, 30)
+        .unwrap_or_else(|e| panic!("curl got no status line by hostname: {e}\n{}", qemu.dump()));
+    qemu.wait_for_after("Example Domain", after_curl, CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("curl printed no body by hostname: {e}\n{}", qemu.dump()));
+}
+
+/// The host can resolve and reach the same name SLIRP is asked to resolve.
+fn host_has_outbound_internet() -> bool {
+    use std::net::ToSocketAddrs;
+    match ("example.com", 80u16).to_socket_addrs() {
+        Ok(addrs) => addrs
+            .take(2)
+            .any(|addr| TcpStream::connect_timeout(&addr, Duration::from_secs(5)).is_ok()),
+        Err(_) => false,
+    }
+}
+
 /// Phase X-5: `mqtt publish` sends CONNECT + PUBLISH to a mock broker.
 ///
 /// The mock broker sends CONNACK and captures the PUBLISH payload so the test
@@ -2221,7 +2324,9 @@ fn posix_shim_getentropy() {
 ///
 /// Starts a TCP echo server on host port 10009 (matches `ECHO_PORT` hardcoded in
 /// `cells/tests/posix-shim-test/src/main.rs`). QEMU SLIRP routes guest→10.0.2.2:10009
-/// to host→127.0.0.1:10009. Expects "[posix-shim] POSIX-NET: OK".
+/// to host→127.0.0.1:10009. Expects "[posix-shim] POSIX-NET: OK", and
+/// "[posix-shim] POSIX-DNS: OK" for the `gethostbyname` leg, which connects to
+/// the same server through the address the net service resolved.
 #[test]
 fn posix_shim_net() {
     use std::io::Read;
@@ -2234,6 +2339,7 @@ fn posix_shim_net() {
     // Bind the fixed port the cell expects. Skip if already in use (another test
     // run or CI parallel shard occupying the port).
     const POSIX_SHIM_ECHO_PORT: u16 = 10009;
+    const CONNECTIONS: usize = 2; // literal-address leg, then resolved-address leg
     let listener = match TcpListener::bind(("127.0.0.1", POSIX_SHIM_ECHO_PORT)) {
         Ok(l) => l,
         Err(e) => {
@@ -2242,14 +2348,33 @@ fn posix_shim_net() {
         }
     };
     std::thread::spawn(move || {
-        if let Ok((mut stream, _)) = listener.accept() {
-            let mut buf = [0u8; 256];
-            loop {
-                match stream.read(&mut buf) {
-                    Ok(0) | Err(_) => break,
-                    Ok(n) => {
-                        let _ = stream.write_all(&buf[..n]);
-                    }
+        let mut served = 0usize;
+        while served < CONNECTIONS {
+            match listener.accept() {
+                Ok((mut stream, _)) => {
+                    served += 1;
+                    let id = served;
+                    // Echo in its own thread: a stream the guest has not fully
+                    // closed must not stall the accept of the next connection.
+                    std::thread::spawn(move || {
+                        let mut total = 0usize;
+                        let mut buf = [0u8; 256];
+                        loop {
+                            match stream.read(&mut buf) {
+                                Ok(0) | Err(_) => break,
+                                Ok(n) => {
+                                    total += n;
+                                    let _ = stream.write_all(&buf[..n]);
+                                }
+                            }
+                        }
+                        eprintln!("posix_shim_net: connection {id} echoed {total} bytes");
+                    });
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+                Err(e) => {
+                    eprintln!("posix_shim_net: accept failed after {served}: {e}");
+                    return;
                 }
             }
         }
@@ -2268,6 +2393,15 @@ fn posix_shim_net() {
         .unwrap_or_else(|e| {
             panic!(
                 "posix net shim failed: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
+    // The gethostbyname leg runs right after the literal-address leg and reuses
+    // the same echo server; its marker is the C-ABI side of the service resolver.
+    qemu.wait_for("POSIX-DNS: OK", CMD_TIMEOUT)
+        .unwrap_or_else(|e| {
+            panic!(
+                "posix gethostbyname shim failed: {e}\n--- output ---\n{}",
                 qemu.dump()
             )
         });
