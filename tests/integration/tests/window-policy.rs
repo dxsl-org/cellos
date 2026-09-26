@@ -50,6 +50,30 @@ fn color_at(path: &str, x: usize, y: usize) -> [u8; 3] {
     [pixel[0], pixel[1], pixel[2]]
 }
 
+/// Capture the screen only once the compositor has stopped changing it.
+///
+/// Every screen assertion in this test follows a probe marker, and the marker
+/// is the *window manager's* decision: the compositor still has to blend that
+/// state and flush the frame, while `capture_qemu_screen` is a screendump of
+/// whatever the GPU has scanned out at that instant. One capture raced the
+/// flush on CI (`clicking_exposed_surface_raises_and_focuses_its_owner` read
+/// the active titlebar colour where the maximize had just placed the surface at
+/// 10,30). Two identical consecutive frames mean the flush landed, so the
+/// assertions below keep their expectation and lose the race.
+fn capture_settled(qemu: &mut QemuRunner, path: &str) {
+    let mut previous: Option<Vec<u8>> = None;
+    for _ in 0..40 {
+        assert!(qemu.capture_qemu_screen(path), "screen capture failed: {path}");
+        let frame = std::fs::read(path).expect("captured frame");
+        if previous.as_deref() == Some(frame.as_slice()) {
+            return;
+        }
+        previous = Some(frame);
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    panic!("screen never settled: {path}");
+}
+
 #[test]
 fn clicking_exposed_surface_raises_and_focuses_its_owner() {
     if !prerequisites_ok() {
@@ -84,7 +108,7 @@ fn clicking_exposed_surface_raises_and_focuses_its_owner() {
     qemu.wait_for("[window-policy-probe wm-close] ready", 20)
         .unwrap_or_else(|error| panic!("close probe did not start: {error}\n{}", qemu.dump()));
 
-    assert!(qemu.capture_qemu_screen("/tmp/cellos-window-policy-front.ppm"));
+    capture_settled(&mut qemu, "/tmp/cellos-window-policy-front.ppm");
     assert_eq!(
         overlap_color("/tmp/cellos-window-policy-front.ppm"),
         FRONT,
@@ -100,7 +124,7 @@ fn clicking_exposed_surface_raises_and_focuses_its_owner() {
     qemu.send_qemu_mouse_button(true);
     qemu.wait_for("[window-policy-probe back] press", 15)
         .unwrap_or_else(|error| panic!("back press not delivered: {error}\n{}", qemu.dump()));
-    assert!(qemu.capture_qemu_screen("/tmp/cellos-window-policy-back.ppm"));
+    capture_settled(&mut qemu, "/tmp/cellos-window-policy-back.ppm");
     assert_eq!(
         overlap_color("/tmp/cellos-window-policy-back.ppm"),
         BACK,
@@ -132,7 +156,7 @@ fn clicking_exposed_surface_raises_and_focuses_its_owner() {
     qemu.send_qemu_mouse_abs(20, 20);
     qemu.send_qemu_mouse_click();
     std::thread::sleep(Duration::from_millis(100));
-    assert!(qemu.capture_qemu_screen("/tmp/cellos-window-policy-background.ppm"));
+    capture_settled(&mut qemu, "/tmp/cellos-window-policy-background.ppm");
     assert_eq!(
         overlap_color("/tmp/cellos-window-policy-background.ppm"),
         BACK,
@@ -162,7 +186,7 @@ fn clicking_exposed_surface_raises_and_focuses_its_owner() {
         .unwrap_or_else(|error| panic!("front press not delivered: {error}\n{}", qemu.dump()));
     qemu.wait_for("[window-policy-probe front] release", 15)
         .unwrap_or_else(|error| panic!("front release not delivered: {error}\n{}", qemu.dump()));
-    assert!(qemu.capture_qemu_screen("/tmp/cellos-window-policy-front-selected.ppm"));
+    capture_settled(&mut qemu, "/tmp/cellos-window-policy-front-selected.ppm");
     assert_eq!(
         color_at("/tmp/cellos-window-policy-front-selected.ppm", 100, 70),
         TITLE_INACTIVE,
@@ -174,7 +198,7 @@ fn clicking_exposed_surface_raises_and_focuses_its_owner() {
         "selected front surface must receive an active compositor titlebar"
     );
 
-    assert!(qemu.capture_qemu_screen("/tmp/cellos-window-policy-decor.ppm"));
+    capture_settled(&mut qemu, "/tmp/cellos-window-policy-decor.ppm");
     assert_eq!(
         color_at("/tmp/cellos-window-policy-decor.ppm", 397, 110),
         FRAME
@@ -205,7 +229,7 @@ fn clicking_exposed_surface_raises_and_focuses_its_owner() {
     qemu.send_qemu_mouse_abs(460, 130);
     qemu.send_qemu_mouse_button(false);
     std::thread::sleep(Duration::from_millis(100));
-    assert!(qemu.capture_qemu_screen("/tmp/cellos-window-policy-drag.ppm"));
+    capture_settled(&mut qemu, "/tmp/cellos-window-policy-drag.ppm");
     assert_eq!(
         color_at("/tmp/cellos-window-policy-drag.ppm", 450, 150),
         PRIMARY
@@ -254,7 +278,7 @@ fn clicking_exposed_surface_raises_and_focuses_its_owner() {
         .unwrap_or_else(|error| panic!("maximize configure missing: {error}\n{}", qemu.dump()));
     qemu.wait_for("[window-policy-probe wm-primary] state Maximized", 15)
         .unwrap_or_else(|error| panic!("maximize state missing: {error}\n{}", qemu.dump()));
-    assert!(qemu.capture_qemu_screen("/tmp/cellos-window-policy-maximize.ppm"));
+    capture_settled(&mut qemu, "/tmp/cellos-window-policy-maximize.ppm");
     assert_eq!(
         color_at("/tmp/cellos-window-policy-maximize.ppm", 10, 30),
         PRIMARY
@@ -276,7 +300,7 @@ fn clicking_exposed_surface_raises_and_focuses_its_owner() {
             panic!("primary did not request restore: {error}\n{}", qemu.dump())
         });
     std::thread::sleep(Duration::from_millis(100));
-    assert!(qemu.capture_qemu_screen("/tmp/cellos-window-policy-minimize-restore.ppm"));
+    capture_settled(&mut qemu, "/tmp/cellos-window-policy-minimize-restore.ppm");
     assert_eq!(
         color_at("/tmp/cellos-window-policy-minimize-restore.ppm", 450, 150),
         PRIMARY
@@ -288,7 +312,7 @@ fn clicking_exposed_surface_raises_and_focuses_its_owner() {
     qemu.send_qemu_mouse_button(false);
     qemu.wait_for("[window-policy-probe wm-silent] configure Resize", 15)
         .unwrap_or_else(|error| panic!("silent configure missing: {error}\n{}", qemu.dump()));
-    assert!(qemu.capture_qemu_screen("/tmp/cellos-window-policy-silent.ppm"));
+    capture_settled(&mut qemu, "/tmp/cellos-window-policy-silent.ppm");
     assert_eq!(
         color_at("/tmp/cellos-window-policy-silent.ppm", 550, 450),
         SILENT
