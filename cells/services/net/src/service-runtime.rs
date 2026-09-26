@@ -22,9 +22,10 @@ use smoltcp::{
 
 use crate::{
     dhcp::{add_dhcp_socket, poll_dhcp, DhcpState},
+    dns::Resolver,
     handlers,
     interface::VirtioNetDevice,
-    socket_table::{SocketOwner, SocketTable, MAX_SOCKETS},
+    socket_table::{SocketOwner, SocketTable, SOCKET_SET_STORAGE},
     tls::socket::TlsSocketEntry,
 };
 
@@ -85,6 +86,31 @@ pub(crate) fn now_instant() -> Instant {
     Instant::from_micros((sys_get_time() / 10) as i64)
 }
 
+/// Dotted-quad text for log lines (`10.0.2.15`).
+pub(crate) fn dotted_ipv4(ip: [u8; 4]) -> String {
+    let mut text = String::new();
+    for (index, octet) in ip.iter().enumerate() {
+        if index > 0 {
+            text.push('.');
+        }
+        let mut number = *octet as u32;
+        let mut digits = [0u8; 3];
+        let mut digit_index = 3;
+        loop {
+            digit_index -= 1;
+            digits[digit_index] = b'0' + (number % 10) as u8;
+            number /= 10;
+            if number == 0 {
+                break;
+            }
+        }
+        for digit in &digits[digit_index..] {
+            text.push(*digit as char);
+        }
+    }
+    text
+}
+
 fn consume_ipc_burst_grace(remaining: &mut u8) -> bool {
     if *remaining == 0 {
         return false;
@@ -104,10 +130,13 @@ pub(crate) fn run() {
         let _ = addresses.push(IpCidr::new(IpAddress::v4(0, 0, 0, 0), 0));
     });
 
-    let mut socket_storage = [SocketStorage::EMPTY; MAX_SOCKETS];
+    let mut socket_storage = [SocketStorage::EMPTY; SOCKET_SET_STORAGE];
     let mut sockets = SocketSet::new(&mut socket_storage[..]);
     let mut table = SocketTable::new();
     let mut tls_table: BTreeMap<u64, TlsSocketEntry> = BTreeMap::new();
+    // One DNS socket serves every `NetRequest::Resolve`; the server starts as
+    // SLIRP's and is replaced by whatever the DHCP lease names.
+    let mut resolver = Resolver::install(&mut sockets);
 
     #[cfg(not(feature = "hypervisor-bridge"))]
     let dhcp_handle = add_dhcp_socket(&mut sockets);
@@ -144,13 +173,14 @@ pub(crate) fn run() {
             }
 
             if dhcp_state == DhcpState::Pending {
-                dhcp_state = poll_dhcp(
+                let lease = poll_dhcp(
                     dhcp_handle,
                     &mut iface,
                     &mut sockets,
                     &mut device,
                     now_instant(),
                 );
+                dhcp_state = lease.state;
                 if dhcp_state == DhcpState::Acquired {
                     if let Some(IpCidr::Ipv4(cidr)) = iface
                         .ip_addrs()
@@ -158,28 +188,20 @@ pub(crate) fn run() {
                         .find(|address| matches!(address, IpCidr::Ipv4(_)))
                     {
                         local_ip.copy_from_slice(cidr.address().as_bytes());
-                        let mut message = String::from("[net] IP address: ");
-                        for (index, octet) in local_ip.iter().enumerate() {
-                            if index > 0 {
-                                message.push('.');
-                            }
-                            let mut number = *octet as u32;
-                            let mut digits = [0u8; 3];
-                            let mut digit_index = 3;
-                            loop {
-                                digit_index -= 1;
-                                digits[digit_index] = b'0' + (number % 10) as u8;
-                                number /= 10;
-                                if number == 0 {
-                                    break;
-                                }
-                            }
-                            for digit in &digits[digit_index..] {
-                                message.push(*digit as char);
-                            }
-                        }
-                        println(&message);
+                        println(&alloc::format!(
+                            "[net] IP address: {}",
+                            crate::service_runtime::dotted_ipv4(local_ip)
+                        ));
                     }
+                }
+                // The lease names the resolver to use from here on (option 6);
+                // without it the DNS socket keeps SLIRP's built-in default.
+                if let Some(server) = lease.dns_server {
+                    resolver.set_server(&mut sockets, server);
+                    println(&alloc::format!(
+                        "[net] DNS server: {}",
+                        crate::service_runtime::dotted_ipv4(server)
+                    ));
                 }
             }
 
@@ -226,6 +248,7 @@ pub(crate) fn run() {
                     &mut sockets,
                     &mut table,
                     &mut tls_table,
+                    &resolver,
                     &local_ip,
                 );
                 #[cfg(not(feature = "hypervisor-bridge"))]

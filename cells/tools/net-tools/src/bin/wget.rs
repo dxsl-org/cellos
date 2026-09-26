@@ -1,6 +1,6 @@
 //! wget — HTTP/1.0 file downloader for ViCell.
 //!
-//! Usage: wget http://IP[:PORT][/path] <vfs_path>
+//! Usage: wget http://HOST[:PORT][/path] <vfs_path>
 //!
 //! Downloads the URL body and writes it to `<vfs_path>` via typed VFS Write IPC.
 
@@ -12,18 +12,38 @@ extern crate ostd;
 use api::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE};
 use api::syscall::service;
 use ostd::io::println;
-use ostd::syscall::{sys_lookup_service, sys_recv, sys_send, sys_yield, SyscallResult};
+use ostd::syscall::{
+    sys_get_time_ms, sys_lookup_service, sys_recv, sys_send, sys_yield, SyscallResult,
+};
 
 const RESP_BUF: usize = 4096;
 
-api::declare_syscalls![Send, Recv, Log, StateRestore, LookupService, VfsMutate];
+/// Wall-clock ceiling for the send + receive phases of one download.
+///
+/// The loopback mocks answer within microseconds, but a public-internet round
+/// trip (ARP, SYN, handshake, server think time) is orders of magnitude slower
+/// while every poll costs one IPC round-trip with the net service. A fixed
+/// iteration count therefore races the network; this budget does not.
+const EXCHANGE_BUDGET_MS: u64 = 30_000;
+/// Hard stop when the wall clock is unavailable or never advances.
+const EXCHANGE_POLL_CEILING: usize = 200_000;
+
+api::declare_syscalls![
+    Send,
+    Recv,
+    Log,
+    StateRestore,
+    LookupService,
+    VfsMutate,
+    GetTime
+];
 
 ostd::cell_main!(cell_main);
 
 fn cell_main() {
     let argv = ostd::args();
     if argv.is_empty() {
-        println("Usage: wget http://IP[:PORT][/path] <vfs_path>");
+        println("Usage: wget http://HOST[:PORT][/path] <vfs_path>");
         return;
     }
     let url = match argv.first() {
@@ -44,14 +64,7 @@ fn cell_main() {
     let (host, port, path) = match parse_url(url) {
         Some(t) => t,
         None => {
-            println("wget: invalid URL — expected http://IP[:PORT][/path]");
-            return;
-        }
-    };
-    let addr = match resolve_host(host) {
-        Some(a) => a,
-        None => {
-            println("wget: invalid host");
+            println("wget: invalid URL — expected http://HOST[:PORT][/path]");
             return;
         }
     };
@@ -68,6 +81,17 @@ fn cell_main() {
         Some(ep) => ep,
         None => {
             println("wget: no vfs service");
+            return;
+        }
+    };
+
+    // ── Resolve the host through the service ─────────────────────────────────
+    // IPv4 literals and the SLIRP aliases are answered service-side, DNS names
+    // by its A-record resolver: the tools carry no resolver of their own.
+    let addr = match resolve_host(host, net_ep) {
+        Some(a) => a,
+        None => {
+            println("wget: cannot resolve host");
             return;
         }
     };
@@ -110,9 +134,10 @@ fn cell_main() {
     pos = wb(&mut request_data, pos, b"\r\nConnection: close\r\n\r\n");
     let request_len = pos;
 
+    let started_ms = sys_get_time_ms().unwrap_or(0);
     let mut sent_bytes = 0usize;
-    for _ in 0..500 {
-        if sent_bytes >= request_len {
+    for _ in 0..EXCHANGE_POLL_CEILING {
+        if sent_bytes >= request_len || exchange_expired(started_ms) {
             break;
         }
         let rem = &request_data[sent_bytes..request_len];
@@ -161,7 +186,7 @@ fn cell_main() {
     .map(|b| b.len())
     .unwrap_or(0);
 
-    'recv: for _ in 0..500 {
+    'recv: for _ in 0..EXCHANGE_POLL_CEILING {
         sys_send(net_ep, &recv_req_buf[..recv_req_len]);
         let mut data_buf = [0u8; IPC_BUF_SIZE];
         match sys_recv(0, &mut data_buf) {
@@ -186,6 +211,9 @@ fn cell_main() {
                                 resp_len += n;
                             }
                         }
+                        break 'recv;
+                    }
+                    if exchange_expired(started_ms) {
                         break 'recv;
                     }
                     sys_yield();
@@ -242,6 +270,15 @@ fn cell_main() {
     }
 }
 
+/// Has the download exceeded its wall-clock budget?
+///
+/// A missing clock (`GetTime` unavailable) reports "not expired" so the
+/// iteration ceiling stays the only bound rather than cutting the download off
+/// at the first poll.
+fn exchange_expired(started_ms: u64) -> bool {
+    sys_get_time_ms().is_some_and(|now| now.saturating_sub(started_ms) > EXCHANGE_BUDGET_MS)
+}
+
 fn query_state(cap_id: u32, net_ep: usize) -> u8 {
     let mut req_buf = [0u8; IPC_BUF_SIZE];
     let len = api::ipc::encode(&NetRequest::SocketState { cap_id }, &mut req_buf)
@@ -292,42 +329,25 @@ fn parse_url(s: &str) -> Option<(&str, u16, &str)> {
     Some((host, port, path))
 }
 
-fn resolve_host(s: &str) -> Option<[u8; 4]> {
-    match s {
-        "gateway" | "host" => Some([10, 0, 2, 2]),
-        "dns" => Some([10, 0, 2, 3]),
-        "localhost" => Some([127, 0, 0, 1]),
-        _ => parse_ipv4(s),
+/// Resolve `host` through the net service (`NetRequest::Resolve`).
+///
+/// The service owns the whole resolution order — IPv4 literal, SLIRP alias
+/// (`gateway`, `host`, `dns`, `localhost`), then a UDP A-record query — so the
+/// tools never carry a second, drifting copy of it.
+fn resolve_host(host: &str, net_ep: usize) -> Option<[u8; 4]> {
+    let mut req_buf = [0u8; IPC_BUF_SIZE];
+    let len = api::ipc::encode(&NetRequest::Resolve { hostname: host }, &mut req_buf)
+        .ok()?
+        .len();
+    sys_send(net_ep, &req_buf[..len]);
+    let mut resp_buf = [0u8; IPC_BUF_SIZE];
+    match sys_recv(0, &mut resp_buf) {
+        SyscallResult::Ok(_) => match api::ipc::decode::<NetResponse>(&resp_buf) {
+            Ok(NetResponse::Addr(addr)) => Some(addr),
+            _ => None,
+        },
+        _ => None,
     }
-}
-
-fn parse_ipv4(s: &str) -> Option<[u8; 4]> {
-    let mut it = s.splitn(5, '.');
-    let a = po(it.next()?)?;
-    let b = po(it.next()?)?;
-    let c = po(it.next()?)?;
-    let d = po(it.next()?)?;
-    if it.next().is_some() {
-        return None;
-    }
-    Some([a, b, c, d])
-}
-
-fn po(s: &str) -> Option<u8> {
-    let mut n: u16 = 0;
-    if s.is_empty() {
-        return None;
-    }
-    for ch in s.bytes() {
-        if !ch.is_ascii_digit() {
-            return None;
-        }
-        n = n * 10 + (ch - b'0') as u16;
-        if n > 255 {
-            return None;
-        }
-    }
-    Some(n as u8)
 }
 
 fn parse_u16(s: &str) -> Option<u16> {

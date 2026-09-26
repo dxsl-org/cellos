@@ -17,6 +17,7 @@ use smoltcp::{
 };
 
 use crate::{
+    dns::Resolver,
     interface::VirtioNetDevice,
     service_runtime::now_instant,
     socket_state::SocketState,
@@ -93,13 +94,14 @@ pub fn handle_request(
     sockets: &mut SocketSet<'_>,
     table: &mut SocketTable,
     tls_table: &mut BTreeMap<u64, TlsSocketEntry>,
+    resolver: &Resolver,
     local_ip: &[u8; 4],
 ) {
     match ipc::decode::<NetRequest<'_>>(buf) {
         Ok(req) => {
             iface.poll(now_instant(), device, sockets);
             handle_typed(
-                req, sender, owner, iface, device, sockets, table, tls_table, local_ip,
+                req, sender, owner, iface, device, sockets, table, tls_table, resolver, local_ip,
             );
             iface.poll(now_instant(), device, sockets);
         }
@@ -122,6 +124,7 @@ pub(crate) fn handle_typed(
     sockets: &mut SocketSet<'_>,
     table: &mut SocketTable,
     tls_table: &mut BTreeMap<u64, TlsSocketEntry>,
+    resolver: &Resolver,
     local_ip: &[u8; 4],
 ) {
     use NetResponse as R;
@@ -146,7 +149,16 @@ pub(crate) fn handle_typed(
                 .is_ok();
             send_typed(sender, if ok { R::Ok } else { R::Err(0xFF) });
         }
-        NetRequest::Resolve { .. } => send_typed(sender, R::Err(0xFF)),
+        NetRequest::Resolve { hostname } => {
+            // Literals and the SLIRP aliases answer off the wire; everything
+            // else is a bounded synchronous A-record query (see `crate::dns`).
+            let answer = crate::dns::static_lookup(hostname, resolver.server())
+                .or_else(|| resolver.resolve(hostname, iface, device, sockets));
+            match answer {
+                Some(addr) => send_typed(sender, R::Addr(addr)),
+                None => send_typed(sender, R::Err(0xFF)),
+            }
+        }
         NetRequest::L2Send { data } => {
             let response = if device.send_l2(data) {
                 R::Ok

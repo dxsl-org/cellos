@@ -25,6 +25,15 @@ pub enum DhcpState {
     Failed,
 }
 
+/// Outcome of one DHCP poll.
+#[derive(Debug)]
+pub struct DhcpPoll {
+    pub state: DhcpState,
+    /// Option 6 from the lease, when the server sent one. The caller adopts it
+    /// into the resolver; `None` keeps the built-in SLIRP default.
+    pub dns_server: Option<[u8; 4]>,
+}
+
 /// Add a `Dhcpv4Socket` to `sockets` and return its handle.
 pub fn add_dhcp_socket(sockets: &mut SocketSet<'_>) -> smoltcp::iface::SocketHandle {
     sockets.add(dhcpv4::Socket::new())
@@ -32,14 +41,15 @@ pub fn add_dhcp_socket(sockets: &mut SocketSet<'_>) -> smoltcp::iface::SocketHan
 
 /// Poll the DHCP socket and apply a lease when one arrives.
 ///
-/// Returns `DhcpState::Acquired` once an IP address is configured on `iface`.
+/// Returns the state-machine step plus the DNS server the lease carried, so a
+/// lease that names its own resolver overrides the built-in default.
 pub fn poll_dhcp(
     handle: smoltcp::iface::SocketHandle,
     iface: &mut Interface,
     sockets: &mut SocketSet<'_>,
     device: &mut VirtioNetDevice,
     now: Instant,
-) -> DhcpState {
+) -> DhcpPoll {
     iface.poll(now, device, sockets);
 
     let socket = sockets.get_mut::<dhcpv4::Socket>(handle);
@@ -57,12 +67,18 @@ pub fn poll_dhcp(
                     iface.routes_mut().add_default_ipv4_route(gw).ok();
                 }
                 println("[net] DHCP acquired — IP configured");
-                return DhcpState::Acquired;
+                return DhcpPoll {
+                    state: DhcpState::Acquired,
+                    dns_server: config.dns_servers.first().map(|server| server.0),
+                };
             }
             dhcpv4::Event::Deconfigured => {
                 println("[net] DHCP: deconfigured");
             }
         }
     }
-    DhcpState::Pending
+    DhcpPoll {
+        state: DhcpState::Pending,
+        dns_server: None,
+    }
 }

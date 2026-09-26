@@ -56,19 +56,23 @@ fn cell_main() {
         ),
         None => (hostport, 1883u16),
     };
-    let addr = match resolve_host(host) {
-        Some(a) => a,
-        None => {
-            println("mqtt: invalid host");
-            return;
-        }
-    };
 
     // ── Resolve net service endpoint ──────────────────────────────────────────
     let net_ep = match sys_lookup_service(service::NET) {
         Some(ep) => ep,
         None => {
             println("mqtt: no net service");
+            return;
+        }
+    };
+
+    // ── Resolve the host through the service ─────────────────────────────────
+    // IPv4 literals and the SLIRP aliases are answered service-side, DNS names
+    // by its A-record resolver: the tools carry no resolver of their own.
+    let addr = match resolve_host(host, net_ep) {
+        Some(a) => a,
+        None => {
+            println("mqtt: cannot resolve host");
             return;
         }
     };
@@ -421,42 +425,25 @@ fn encode_remaining_len(mut n: usize, out: &mut [u8; 4]) -> usize {
     i
 }
 
-fn resolve_host(s: &str) -> Option<[u8; 4]> {
-    match s {
-        "gateway" | "host" => Some([10, 0, 2, 2]),
-        "dns" => Some([10, 0, 2, 3]),
-        "localhost" => Some([127, 0, 0, 1]),
-        _ => parse_ipv4(s),
+/// Resolve `host` through the net service (`NetRequest::Resolve`).
+///
+/// The service owns the whole resolution order — IPv4 literal, SLIRP alias
+/// (`gateway`, `host`, `dns`, `localhost`), then a UDP A-record query — so the
+/// tools never carry a second, drifting copy of it.
+fn resolve_host(host: &str, net_ep: usize) -> Option<[u8; 4]> {
+    let mut req_buf = [0u8; IPC_BUF_SIZE];
+    let len = api::ipc::encode(&NetRequest::Resolve { hostname: host }, &mut req_buf)
+        .ok()?
+        .len();
+    sys_send(net_ep, &req_buf[..len]);
+    let mut resp_buf = [0u8; IPC_BUF_SIZE];
+    match sys_recv(0, &mut resp_buf) {
+        SyscallResult::Ok(_) => match api::ipc::decode::<NetResponse>(&resp_buf) {
+            Ok(NetResponse::Addr(addr)) => Some(addr),
+            _ => None,
+        },
+        _ => None,
     }
-}
-
-fn parse_ipv4(s: &str) -> Option<[u8; 4]> {
-    let mut it = s.splitn(5, '.');
-    let a = parse_octet(it.next()?)?;
-    let b = parse_octet(it.next()?)?;
-    let c = parse_octet(it.next()?)?;
-    let d = parse_octet(it.next()?)?;
-    if it.next().is_some() {
-        return None;
-    }
-    Some([a, b, c, d])
-}
-
-fn parse_octet(s: &str) -> Option<u8> {
-    let mut n: u16 = 0;
-    if s.is_empty() {
-        return None;
-    }
-    for ch in s.bytes() {
-        if !ch.is_ascii_digit() {
-            return None;
-        }
-        n = n * 10 + (ch - b'0') as u16;
-        if n > 255 {
-            return None;
-        }
-    }
-    Some(n as u8)
 }
 
 fn parse_u16(s: &str) -> Option<u16> {

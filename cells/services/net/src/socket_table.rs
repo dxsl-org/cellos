@@ -14,6 +14,11 @@ use types::ViError;
 /// Maximum simultaneous sockets (including the DHCP management socket).
 pub const MAX_SOCKETS: usize = 18; // 16 user + 1 DHCP + 1 ARP
 
+/// Socket-set storage: one slot per consumer cap the table may hand out, plus
+/// the DHCP and DNS management sockets, which are driven directly and never
+/// receive a CapId.
+pub const SOCKET_SET_STORAGE: usize = MAX_SOCKETS + 2;
+
 /// Attested owner of a socket capability: bound to CellId and cell generation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SocketOwner {

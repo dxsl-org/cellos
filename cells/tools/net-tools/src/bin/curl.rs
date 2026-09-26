@@ -6,12 +6,24 @@ extern crate ostd;
 use api::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE};
 use api::syscall::service;
 use ostd::io::{print, println};
-use ostd::syscall::{sys_lookup_service, sys_recv, sys_send, sys_yield, SyscallResult};
+use ostd::syscall::{
+    sys_get_time_ms, sys_lookup_service, sys_recv, sys_send, sys_yield, SyscallResult,
+};
 
 /// Maximum accumulated response size (stack-allocated; avoids the 4 MB alloc BSS).
 const RESP_BUF: usize = 4096;
 
-api::declare_syscalls![Send, Recv, Log, StateRestore, LookupService];
+/// Wall-clock ceiling for the send + receive phases of one request.
+///
+/// The loopback mocks answer within microseconds, but a public-internet round
+/// trip (ARP, SYN, handshake, server think time) is orders of magnitude slower
+/// while every poll costs one IPC round-trip with the net service. A fixed
+/// iteration count therefore races the network; this budget does not.
+const EXCHANGE_BUDGET_MS: u64 = 30_000;
+/// Hard stop when the wall clock is unavailable or never advances.
+const EXCHANGE_POLL_CEILING: usize = 200_000;
+
+api::declare_syscalls![Send, Recv, Log, StateRestore, LookupService, GetTime];
 
 ostd::cell_main!(cell_main);
 
@@ -19,7 +31,7 @@ fn cell_main() {
     // ── Parse argv ───────────────────────────────────────────────────────────
     let argv = ostd::args();
     if argv.is_empty() {
-        println("Usage: curl http://IP[:PORT][/path]");
+        println("Usage: curl http://HOST[:PORT][/path]");
         return;
     }
     let url = argv.first().map(|arg| arg.as_str()).unwrap_or("");
@@ -28,14 +40,27 @@ fn cell_main() {
     let (host, port, path) = match parse_url(url) {
         Some(t) => t,
         None => {
-            println("curl: invalid URL — expected http://IP[:PORT][/path]");
+            println("curl: invalid URL — expected http://HOST[:PORT][/path]");
             return;
         }
     };
-    let addr = match resolve_host(host) {
+
+    // ── Resolve net service endpoint ──────────────────────────────────────────
+    let net_ep = match sys_lookup_service(service::NET) {
+        Some(ep) => ep,
+        None => {
+            println("curl: no net service");
+            return;
+        }
+    };
+
+    // ── Resolve the host through the service ─────────────────────────────────
+    // IPv4 literals and the SLIRP aliases are answered service-side, DNS names
+    // by its A-record resolver: the tools carry no resolver of their own.
+    let addr = match resolve_host(host, net_ep) {
         Some(a) => a,
         None => {
-            println("curl: invalid host");
+            println("curl: cannot resolve host");
             return;
         }
     };
@@ -47,15 +72,6 @@ fn cell_main() {
         println("curl: URL too long");
         return;
     }
-
-    // ── Resolve net service endpoint ──────────────────────────────────────────
-    let net_ep = match sys_lookup_service(service::NET) {
-        Some(ep) => ep,
-        None => {
-            println("curl: no net service");
-            return;
-        }
-    };
 
     // ── TcpConnect (atomic create + connect) ─────────────────────────────────
     let mut req_buf = [0u8; IPC_BUF_SIZE];
@@ -89,9 +105,10 @@ fn cell_main() {
     let request_len = pos;
 
     // ── Send HTTP request via TcpSend with retry ──────────────────────────────
+    let started_ms = sys_get_time_ms().unwrap_or(0);
     let mut sent_bytes = 0usize;
-    for _ in 0..500 {
-        if sent_bytes >= request_len {
+    for _ in 0..EXCHANGE_POLL_CEILING {
+        if sent_bytes >= request_len || exchange_expired(started_ms) {
             break;
         }
         let rem = &request_data[sent_bytes..request_len];
@@ -141,7 +158,7 @@ fn cell_main() {
     .map(|b| b.len())
     .unwrap_or(0);
 
-    'recv: for _ in 0..500 {
+    'recv: for _ in 0..EXCHANGE_POLL_CEILING {
         sys_send(net_ep, &recv_req_buf[..recv_req_len]);
         let mut data_buf = [0u8; IPC_BUF_SIZE];
         match sys_recv(0, &mut data_buf) {
@@ -173,6 +190,9 @@ fn cell_main() {
                             }
                             break 'recv;
                         }
+                        if exchange_expired(started_ms) {
+                            break 'recv;
+                        }
                         sys_yield();
                     }
                     _ => break,
@@ -202,6 +222,15 @@ fn cell_main() {
     }
 
     close_socket(cap_id, net_ep);
+}
+
+/// Has the request/response exchange exceeded its wall-clock budget?
+///
+/// A missing clock (`GetTime` unavailable) reports "not expired" so the
+/// iteration ceiling stays the only bound rather than cutting the exchange off
+/// at the first poll.
+fn exchange_expired(started_ms: u64) -> bool {
+    sys_get_time_ms().is_some_and(|now| now.saturating_sub(started_ms) > EXCHANGE_BUDGET_MS)
 }
 
 /// Send `NetRequest::SocketState` and return the 1-byte smoltcp state code.
@@ -257,42 +286,25 @@ fn parse_url(s: &str) -> Option<(&str, u16, &str)> {
     Some((host, port, path))
 }
 
-fn resolve_host(s: &str) -> Option<[u8; 4]> {
-    match s {
-        "gateway" | "host" => Some([10, 0, 2, 2]),
-        "dns" => Some([10, 0, 2, 3]),
-        "localhost" => Some([127, 0, 0, 1]),
-        _ => parse_ipv4(s),
+/// Resolve `host` through the net service (`NetRequest::Resolve`).
+///
+/// The service owns the whole resolution order — IPv4 literal, SLIRP alias
+/// (`gateway`, `host`, `dns`, `localhost`), then a UDP A-record query — so the
+/// tools never carry a second, drifting copy of it.
+fn resolve_host(host: &str, net_ep: usize) -> Option<[u8; 4]> {
+    let mut req_buf = [0u8; IPC_BUF_SIZE];
+    let len = api::ipc::encode(&NetRequest::Resolve { hostname: host }, &mut req_buf)
+        .ok()?
+        .len();
+    sys_send(net_ep, &req_buf[..len]);
+    let mut resp_buf = [0u8; IPC_BUF_SIZE];
+    match sys_recv(0, &mut resp_buf) {
+        SyscallResult::Ok(_) => match api::ipc::decode::<NetResponse>(&resp_buf) {
+            Ok(NetResponse::Addr(addr)) => Some(addr),
+            _ => None,
+        },
+        _ => None,
     }
-}
-
-fn parse_ipv4(s: &str) -> Option<[u8; 4]> {
-    let mut it = s.splitn(5, '.');
-    let a = parse_octet(it.next()?)?;
-    let b = parse_octet(it.next()?)?;
-    let c = parse_octet(it.next()?)?;
-    let d = parse_octet(it.next()?)?;
-    if it.next().is_some() {
-        return None;
-    }
-    Some([a, b, c, d])
-}
-
-fn parse_octet(s: &str) -> Option<u8> {
-    let mut n: u16 = 0;
-    if s.is_empty() {
-        return None;
-    }
-    for ch in s.bytes() {
-        if !ch.is_ascii_digit() {
-            return None;
-        }
-        n = n * 10 + (ch - b'0') as u16;
-        if n > 255 {
-            return None;
-        }
-    }
-    Some(n as u8)
 }
 
 fn parse_u16(s: &str) -> Option<u16> {

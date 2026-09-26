@@ -26,9 +26,6 @@ const BIND_OP:     u8 = 0x16;
 const SENDTO_OP:   u8 = 0x21;
 const RECVFROM_OP: u8 = 0x22;
 
-/// QEMU SLIRP DNS server.
-const DNS_SERVER: [u8; 4] = [10, 0, 2, 3];
-
 /// Upper bound for a single SEND payload copied off the Lua stack.
 const MAX_SEND: usize = 512;
 /// Upper bound for a RECV request (matches net cell's 4096 recv cap).
@@ -313,10 +310,10 @@ pub unsafe extern "C" fn vnet_udp_recv(L: *mut LuaState) -> c_int {
 
 /// `vnet.resolve(hostname)` → ip_str | nil
 ///
-/// Resolution priority:
-/// 1. Static SLIRP aliases (gateway/host/dns/localhost) — no IPC.
-/// 2. IPv4 literal — returned unchanged.
-/// 3. DNS A-record query to 10.0.2.3:53 via UDP.
+/// One `NetRequest::Resolve` round-trip: the net service owns the whole
+/// resolution order (IPv4 literal, SLIRP alias, UDP A-record query to the
+/// server the DHCP lease named), so Lua inherits the same answers as the
+/// shell tools instead of running a second resolver.
 #[no_mangle]
 pub unsafe extern "C" fn vnet_resolve(L: *mut LuaState) -> c_int {
     // SAFETY: L valid; arg 1 is the hostname string.
@@ -335,158 +332,29 @@ pub unsafe extern "C" fn vnet_resolve(L: *mut LuaState) -> c_int {
         }
     };
 
-    // 1. Static table.
-    let static_ip: Option<[u8; 4]> = match hostname {
-        "gateway" | "host" => Some([10, 0, 2, 2]),
-        "dns"              => Some([10, 0, 2, 3]),
-        "localhost"        => Some([127, 0, 0, 1]),
-        _                  => None,
-    };
-    if let Some(ip) = static_ip {
-        push_ip(L, ip);
-        return 1;
-    }
-
-    // 2. IPv4 literal.
-    if let Some(ip) = parse_ipv4(raw) {
-        push_ip(L, ip);
-        return 1;
-    }
-
-    // Guard: hostname must be ≤ 253 chars and not contain empty labels.
-    if hostname.len() > 253 || hostname.is_empty() {
-        unsafe { crate::ffi::lua_pushnil(L) };
-        return 1;
-    }
-
-    // 3. DNS A-record lookup.
-    // SOCKET_UDP → cap
-    let socket_msg = [SOCKET_UDP, 0, 0, 0, 0, 0, 0, 0, 0];
-    sys_send(NET_ENDPOINT, &socket_msg);
-    let mut cap_reply = [0u8; 8];
-    let cap = match sys_recv(0, &mut cap_reply) {
-        SyscallResult::Ok(_) => u64::from_le_bytes(cap_reply),
-        _ => 0,
-    };
-    if cap == 0 {
-        unsafe { crate::ffi::lua_pushnil(L) };
-        return 1;
-    }
-
-    // BIND(cap, 0) → ephemeral port
-    let mut bind_msg = [0u8; 11];
-    bind_msg[0] = BIND_OP;
-    bind_msg[1..9].copy_from_slice(&cap.to_le_bytes());
-    // port = 0 → net cell auto-assigns
-    sys_send(NET_ENDPOINT, &bind_msg);
-    let mut port_reply = [0u8; 2];
-    match sys_recv(0, &mut port_reply) {
-        SyscallResult::Ok(_) if port_reply != [0xFF, 0xFF] => {}
-        _ => { close_cap(cap); unsafe { crate::ffi::lua_pushnil(L) }; return 1; }
-    }
-
-    // Build DNS query.
-    let mut query = [0u8; 300];
-    let qlen = build_dns_query(hostname, &mut query);
-
-    // SENDTO: [SENDTO_OP][cap:8][dns_server:4][53:2 LE][query:*]
-    let mut sendto = alloc::vec![0u8; 9 + 6 + qlen];
-    sendto[0] = SENDTO_OP;
-    sendto[1..9].copy_from_slice(&cap.to_le_bytes());
-    sendto[9..13].copy_from_slice(&DNS_SERVER);
-    sendto[13..15].copy_from_slice(&53u16.to_le_bytes());
-    sendto[15..15 + qlen].copy_from_slice(&query[..qlen]);
-    sys_send(NET_ENDPOINT, &sendto);
-    let mut cnt = [0u8; 4];
-    let _ = sys_recv(0, &mut cnt);
-
-    // RECVFROM: poll until reply arrives (≤500 retries).
-    let mut recvfrom_msg = [0u8; 13];
-    recvfrom_msg[0] = RECVFROM_OP;
-    recvfrom_msg[1..9].copy_from_slice(&cap.to_le_bytes());
-    recvfrom_msg[9..13].copy_from_slice(&512u32.to_le_bytes());
-
-    let mut reply_buf = alloc::vec![0u8; 6 + 512];
-    let mut found_ip: Option<[u8; 4]> = None;
-    for _ in 0..500 {
-        for b in reply_buf.iter_mut() { *b = 0; }
-        sys_send(NET_ENDPOINT, &recvfrom_msg);
-        match sys_recv(0, &mut reply_buf) {
-            SyscallResult::Ok(_) if reply_buf[0] != 0 => {
-                // DNS message starts at byte 6 of the reply (after src addr+port).
-                found_ip = parse_dns_a(&reply_buf[6..]);
-                break;
-            }
-            _ => sys_yield(),
+    let mut request = [0u8; api::ipc::IPC_BUF_SIZE];
+    let len = match api::ipc::encode(&api::ipc::NetRequest::Resolve { hostname }, &mut request) {
+        Ok(bytes) => bytes.len(),
+        Err(_) => {
+            unsafe { crate::ffi::lua_pushnil(L) };
+            return 1;
         }
-    }
+    };
+    sys_send(NET_ENDPOINT, &request[..len]);
 
-    close_cap(cap); // always close — RAII discipline
+    let mut reply = [0u8; api::ipc::IPC_BUF_SIZE];
+    let ip = match sys_recv(0, &mut reply) {
+        SyscallResult::Ok(_) => match api::ipc::decode::<api::ipc::NetResponse>(&reply) {
+            Ok(api::ipc::NetResponse::Addr(addr)) => Some(addr),
+            _ => None,
+        },
+        _ => None,
+    };
 
-    match found_ip {
+    match ip {
         Some(ip) => { push_ip(L, ip); 1 }
         None     => { unsafe { crate::ffi::lua_pushnil(L) }; 1 }
     }
-}
-
-// ── DNS helpers ───────────────────────────────────────────────────────────────
-
-/// Build a minimal DNS A-record query for `hostname` into `buf`. Returns byte count.
-///
-/// Caller must ensure `buf.len() >= 17 + hostname.len()`.
-fn build_dns_query(hostname: &str, buf: &mut [u8]) -> usize {
-    // Fixed 12-byte header: ID=0x1234, QR=0 RD=1, QDCOUNT=1, rest 0.
-    buf[0..12].copy_from_slice(&[0x12, 0x34, 0x01, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0]);
-    let mut pos = 12;
-    for label in hostname.split('.') {
-        if label.is_empty() { continue; }
-        buf[pos] = label.len() as u8; pos += 1;
-        buf[pos..pos + label.len()].copy_from_slice(label.as_bytes());
-        pos += label.len();
-    }
-    buf[pos] = 0; pos += 1; // root null label
-    // QTYPE=A (1), QCLASS=IN (1)
-    buf[pos..pos + 4].copy_from_slice(&[0x00, 0x01, 0x00, 0x01]);
-    pos + 4
-}
-
-/// Skip a DNS encoded name (label sequence or compression pointer) starting at `pos`.
-/// Returns the position of the first byte AFTER the name.
-fn skip_dns_name(buf: &[u8], mut pos: usize) -> Option<usize> {
-    loop {
-        if pos >= buf.len() { return None; }
-        let len = buf[pos];
-        if len == 0 { return Some(pos + 1); }
-        if len & 0xC0 == 0xC0 { return Some(pos + 2); } // 2-byte compression pointer
-        pos += 1 + len as usize;
-    }
-}
-
-/// Parse the first A record from a DNS response message.
-///
-/// `buf` must be the raw DNS message (starting from byte 0 = transaction ID).
-/// Returns the IPv4 address bytes or `None` if not found or malformed.
-fn parse_dns_a(buf: &[u8]) -> Option<[u8; 4]> {
-    if buf.len() < 12 { return None; }
-    if buf[2] & 0x80 == 0 { return None; } // QR bit must be 1 (response)
-    let ancount = u16::from_be_bytes([buf[6], buf[7]]) as usize;
-    if ancount == 0 { return None; }
-    // Skip question section: header (12) + QNAME + QTYPE + QCLASS.
-    let mut pos = skip_dns_name(buf, 12)?;
-    pos += 4; // QTYPE (2) + QCLASS (2)
-    // Walk answer records.
-    for _ in 0..ancount {
-        pos = skip_dns_name(buf, pos)?;
-        if pos + 10 > buf.len() { return None; }
-        let rtype  = u16::from_be_bytes([buf[pos],     buf[pos + 1]]);
-        let rdlen  = u16::from_be_bytes([buf[pos + 8], buf[pos + 9]]) as usize;
-        pos += 10; // type(2) + class(2) + ttl(4) + rdlength(2)
-        if rtype == 1 && rdlen == 4 && pos + 4 <= buf.len() {
-            return Some([buf[pos], buf[pos + 1], buf[pos + 2], buf[pos + 3]]);
-        }
-        pos += rdlen;
-    }
-    None
 }
 
 /// Format a 4-byte IPv4 address into dotted-decimal in `buf`. Returns byte count.
