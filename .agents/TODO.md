@@ -27,6 +27,9 @@ không phải bởi dòng chữ ở đây.
   `access::selftest` của `service-vfs`). Hai hướng, chọn theo từng module: (a) cho các dep bare-metal một
   shim `#[cfg(test)]` (std + allocator + panic handler) để crate host-test được, hoặc (b) chuyển tính chất
   cần kiểm vào mẫu in-guest selftest đã có. Số đo: `grep -rn "#\[test\]" cells/ | wc -l` = 438.
+- **[2026-09-26] `cargo test -p app-wasm` (không `--lib`) abort.** Bin target là entry bare-metal gọi
+  `sys_exit`, nên test harness thoát process trước khi libtest báo cáo; CI phải gọi `--lib` (3 test ở lib).
+  Muốn `cargo test` mặc định chạy được thì bin cần tách cổng vào khỏi entry.
 - [in-progress] **RPi3**: SD storage + HDMI [done]; I2C/SPI BSC1 + SPI0 loopback [done trên board
   thật] nhưng cần sensor vật lý (SHT3x/MPU6050) để đọc dữ liệu cảm biến; USB DWC2 & LAN9514 (Phase
   05) đã gỡ nghẽn 100% trong mã nguồn (USB Policy v3, cấp DWC2 MMIO, one-shot level IRQ 9) — chờ

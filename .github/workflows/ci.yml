@@ -1198,7 +1198,10 @@ jobs:
             --target x86_64-unknown-linux-gnu
           cargo test -p viui -p service-kms -p service-net \
             --target x86_64-unknown-linux-gnu
-          cargo test -p cellos-boards -p app-wasm --target x86_64-unknown-linux-gnu
+          cargo test -p cellos-boards --target x86_64-unknown-linux-gnu
+          # `app-wasm`'s lib only: its bin is a bare-metal entry that exits the
+          # process, so the default test target aborts before libtest reports.
+          cargo test -p app-wasm --lib --target x86_64-unknown-linux-gnu
           cargo test -p service-silo -p driver-dwc2-usb -p driver-bcm-display \
             --lib --target x86_64-unknown-linux-gnu
           cargo test -p service-net-broker --lib --target x86_64-unknown-linux-gnu
