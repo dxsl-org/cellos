@@ -195,10 +195,12 @@ nothing else.
    single failure, `C2C Broker Oracle`, and five long jobs still in flight.
    Two intermittent gates are recorded rather than smoothed over. `C2C Broker Oracle`'s idle-IPC
    drain reports `INCONCLUSIVE` when it lands above the `900000`-tick proof ceiling: `1452030` and
-   `1057678` ticks in the two failing CI runs, one CI run passing, and — with the same kernel this
-   programme ships — **`684549` ticks and a PASS when run locally**, i.e. 24% of headroom on a host
-   that is not competing for the runner's CPU. The kernel change therefore leaves the path
-   comfortably fast; the CI failures are runner-speed marginality, not a logic regression. The
+   `1057678` ticks in the two failing CI runs and one CI run passing. That gate measures the exact
+   receive path this programme touched, so it was A/B'd rather than assumed: the same oracle on this
+   workstation reports **`736421` ticks on the pre-B0 kernel** and `685000`–`763000` across three runs
+   of the shipped kernel — the change costs nothing measurable and sits inside the run-to-run spread,
+   while the CI failures are 30–70% slower than any local run. Runner-speed marginality, not a
+   regression. The
    second gate, `network_wget_downloads_to_vfs`, failed once and passed twice in a row with the same
    image, and repeating it three more times characterised it: the failing runs print
    `wget: empty response body` from the cell and time out at ~26 s instead of ~8 s, so the client
