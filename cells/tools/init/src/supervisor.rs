@@ -85,7 +85,21 @@ pub(crate) fn run(services: &mut [Service], mut hypervisor_tid: Option<usize>) -
         }
 
         let now = now_ticks();
-        if now.wrapping_sub(service.window_start) > RESTART_WINDOW_TICKS {
+        let window_age = now.wrapping_sub(service.window_start);
+        // The only place that can explain the budget's decision: how many
+        // restarts it has already paid for and how far into its window it is.
+        // `init_gives_up_after_a_crash_storm` failed once in CI (2026-09-26)
+        // with six restarts in ~150 ticks and no give-up, and the guest log had
+        // no way to say whether a window roll or a missing count caused it.
+        ostd::io::print("Init: storm state — death tid=");
+        ostd::io::print_usize(dead);
+        ostd::io::print(" count=");
+        ostd::io::print_usize(service.restart_count as usize);
+        ostd::io::print(" window_age=");
+        ostd::io::print_usize(window_age as usize);
+        println("/1000 ticks");
+
+        if window_age > RESTART_WINDOW_TICKS {
             service.window_start = now;
             service.restart_count = 0;
         }
