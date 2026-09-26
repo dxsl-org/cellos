@@ -18,6 +18,12 @@
 
 /// Export `$entry` as the cell's `main` symbol.
 ///
+/// The attribute is gated on the *target*, not on the test profile: a hosted
+/// build (unit tests) must not hand the C runtime a `main` to call, or it runs
+/// the cell's entry instead of libtest and the harness dies before reporting a
+/// single test. The function itself stays, so the cell body is still compiled
+/// and no `cfg`-only stub exists.
+///
 /// ```ignore
 /// ostd::cell_main!(cell_main);              // Rust ABI
 /// ostd::cell_main!(extern "C" cell_main);   // C ABI
@@ -27,13 +33,13 @@
 #[macro_export]
 macro_rules! cell_main {
     (extern "C" $entry:ident) => {
-        #[no_mangle]
+        #[cfg_attr(target_os = "none", no_mangle)]
         pub extern "C" fn main() {
             $entry()
         }
     };
     ($entry:ident) => {
-        #[no_mangle]
+        #[cfg_attr(target_os = "none", no_mangle)]
         pub fn main() {
             $entry()
         }

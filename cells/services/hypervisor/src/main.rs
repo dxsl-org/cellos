@@ -1,5 +1,5 @@
-#![cfg_attr(not(test), no_std)]
-#![cfg_attr(not(test), no_main)]
+#![cfg_attr(target_os = "none", no_std)]
+#![cfg_attr(target_os = "none", no_main)]
 
 //! Hypervisor Service Cell — boots an ARM64 Linux guest via EL2 Stage-2 MMU.
 //!
@@ -129,10 +129,12 @@ mod pit_8253;
 mod run_loop_x86;
 #[cfg(target_arch = "x86_64")]
 mod uart_16550;
+#[cfg(target_os = "none")]
 ostd::declare_custom_heap!(10 * 1024 * 1024);
 
 /// Entry: dispatch to the arch personality that has a VMM backend.
 #[cfg(not(test))]
+#[cfg(target_os = "none")]
 #[no_mangle]
 pub fn main() -> ! {
     init_custom_heap();

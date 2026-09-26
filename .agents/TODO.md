@@ -18,15 +18,11 @@ không phải bởi dòng chữ ở đây.
   vừa được bật lại và đã vào job host unit tests (xem mục "Đã đóng"); đừng để drift lại — một import
   cũ đủ để cả harness `cellos-kernel` không build, và 6 test chunking của `ostd` đã lệch khỏi session
   mà không ai thấy trong lúc chúng không chạy.
-- **[2026-09-26] ~170 `#[test]` trong `cells/` vẫn không chạy ở đâu** (đã gỡ được `service-vfs` 57 test — xem mục "Đã đóng"; gốc của nhóm này: crate bin không có lib + entry không được gate theo target). Sau khi 474 suite host-test được
-  nối vào CI, phần còn lại gồm các crate chỉ có target bin (không có lib) nên `cargo test --target
-  x86_64-unknown-linux-gnu` chết ở dep bare-metal — ví dụ `service-vfs` (57 test) cần `driver-disk`
-  host-build được (`no global memory allocator`, `#[panic_handler]`, unwinding), `service-httpd` (15)
-  cần `ai-sdk/ostd-transport` vốn chỉ có ở `target_os = "none"`, `app-shell` (18), `service-hypervisor`
-  (14). Trong toàn bộ `cells/` chỉ có **2** module cầu selftest chạy trong guest (`file_handles::selftest`,
-  `access::selftest` của `service-vfs`). Hai hướng, chọn theo từng module: (a) cho các dep bare-metal một
-  shim `#[cfg(test)]` (std + allocator + panic handler) để crate host-test được, hoặc (b) chuyển tính chất
-  cần kiểm vào mẫu in-guest selftest đã có. Số đo: `grep -rn "#\[test\]" cells/ | wc -l` = 438.
+- **[2026-09-26] 43 `#[test]` trong `cells/` vẫn không chạy ở đâu** (số đo: 438 tổng, 395 đã vào CI). Ba
+  nhóm chính: `service-httpd` 15 (handler dùng `ai-sdk/ostd-transport` chỉ tồn tại ở `target_os = "none"` —
+  cần tách transport khỏi handler mới host-test được), `service-supervisor` 9, `app-hypha` 9. Công thức đã
+  kiểm hai lần: gate `no_std`/`no_main`/entry/heap-macro theo **target** (không theo `cfg(test)`), cho dep
+  bare-metal một host shim nếu nó ship staticlib, rồi sửa drift trong test module (import thiếu, chữ ký đổi).
 - **[2026-09-26] `cargo test -p app-wasm` (không `--lib`) abort.** Bin target là entry bare-metal gọi
   `sys_exit`, nên test harness thoát process trước khi libtest báo cáo; CI phải gọi `--lib` (3 test ở lib).
   Muốn `cargo test` mặc định chạy được thì bin cần tách cổng vào khỏi entry.

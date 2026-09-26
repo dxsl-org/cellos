@@ -3,8 +3,8 @@
 //! Usage: spawn `/bin/wasm` with the `.wasm` file path as argv.
 //! The shell sets this via `sys_set_spawn_args("/data/apps/app.wasm")`.
 
-#![no_std]
-#![no_main]
+#![cfg_attr(target_os = "none", no_std)]
+#![cfg_attr(target_os = "none", no_main)]
 #![forbid(unsafe_code)]
 extern crate alloc;
 

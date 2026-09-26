@@ -4,8 +4,8 @@
 //!
 //! Downloads the URL body and writes it to `<vfs_path>` via typed VFS Write IPC.
 
-#![no_std]
-#![no_main]
+#![cfg_attr(target_os = "none", no_std)]
+#![cfg_attr(target_os = "none", no_main)]
 #![forbid(unsafe_code)]
 extern crate ostd;
 

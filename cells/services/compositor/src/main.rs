@@ -1,5 +1,5 @@
-#![no_std]
-#![cfg_attr(not(test), no_main)]
+#![cfg_attr(target_os = "none", no_std)]
+#![cfg_attr(target_os = "none", no_main)]
 // #[no_mangle] on main() requires removing global forbid — all submodules stay unsafe-free.
 
 //! Compositor Service Cell.
@@ -56,9 +56,11 @@ fn build_hw_cursor_sprite() -> [u8; 64 * 64 * 4] {
     }
     buf
 }
+#[cfg(target_os = "none")]
 ostd::declare_custom_heap!(10 * 1024 * 1024);
 
 #[cfg(not(test))]
+#[cfg(target_os = "none")]
 #[no_mangle]
 pub fn main() {
     init_custom_heap();

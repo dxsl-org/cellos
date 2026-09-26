@@ -9,8 +9,8 @@
 //! empty body when the file exists but has zero length. Loops forever,
 //! serving one connection at a time.
 
-#![no_std]
-#![no_main]
+#![cfg_attr(target_os = "none", no_std)]
+#![cfg_attr(target_os = "none", no_main)]
 #![forbid(unsafe_code)]
 extern crate alloc;
 extern crate ostd;
