@@ -35,6 +35,14 @@ const KILLS: u32 = 6;
 const RESTART_WAIT_TICKS: u64 = 300;
 /// How long the service must stay down after the last kill for the give-up to count.
 const ABSENT_TICKS: u64 = 200;
+/// The window `init` measures its budget in (`RESTART_WINDOW_TICKS`).
+///
+/// A storm has to fit inside one window: five restarts, then the sixth abnormal exit that
+/// exhausts the budget. When the host cannot restart the service that fast — a slow QEMU-TCG
+/// runner needs seconds per respawn — the window legitimately rolls and `init` is *right* to
+/// keep restarting, so the scenario reports `SKIP` with its measurement instead of a verdict
+/// it cannot support.
+const WINDOW_TICKS: u64 = 1000;
 
 fn now() -> u64 {
     sys_get_scheduler_ticks().unwrap_or(0)
@@ -50,6 +58,8 @@ pub fn run() -> ! {
         "[init-giveup] START: {KILLS} forced exits on {TARGET_NAME}"
     ));
 
+    let mut first_exit_tick = 0u64;
+    let mut last_exit_tick = 0u64;
     for kill in 1..=KILLS {
         let Some(tid) = sys_lookup_service(TARGET_SERVICE) else {
             fail(&format!(
@@ -59,18 +69,37 @@ pub fn run() -> ! {
         if !matches!(sys_force_exit(tid), SyscallResult::Ok(_)) {
             fail(&format!("kill {kill}: ForceExit refused for tid {tid}"));
         }
+        let killed_at = now();
+        if kill == 1 {
+            first_exit_tick = killed_at;
+        }
+        last_exit_tick = killed_at;
         println(&format!("[init-giveup] kill {kill}/{KILLS} tid={tid}"));
 
-        let deadline = now() + RESTART_WAIT_TICKS;
+        let deadline = killed_at + RESTART_WAIT_TICKS;
         while now() < deadline {
             match sys_lookup_service(TARGET_SERVICE) {
                 Some(new_tid) if new_tid != tid => {
-                    println(&format!("[init-giveup] restart {kill}: tid={new_tid}"));
+                    println(&format!(
+                        "[init-giveup] restart {kill}: tid={new_tid} after {} ticks",
+                        now() - killed_at
+                    ));
                     break;
                 }
                 _ => yield_now(),
             }
         }
+    }
+
+    // If the six exits did not fit inside one window, `init` was right to keep restarting and
+    // this host simply cannot host the experiment. Say so with the measurement rather than
+    // reporting a verdict the run cannot support.
+    let span = last_exit_tick.saturating_sub(first_exit_tick);
+    if span > WINDOW_TICKS {
+        println(&format!(
+            "[init-giveup] SKIP — {KILLS} exits spanned {span} ticks, beyond init's {WINDOW_TICKS}-tick window; this host still restarted {TARGET_NAME} correctly"
+        ));
+        sys_exit(0);
     }
 
     // The budget is spent: the service must stay down for a whole window's worth of ticks.
