@@ -5,9 +5,8 @@ Việc **chưa xong** và con trỏ tới bằng chứng. Nội dung đã đóng
 không phải bởi dòng chữ ở đây.
 
 ## Đang mở — làm được ngay, không cần gì thêm
-- **[2026-09-26] `libs/ostd/src/console.rs` là file chết.** Không có `mod console` trong
-  `libs/ostd/src/lib.rs`; `print!`/`println!` trong đó không được declare và cell log qua
-  `ostd::io::println`. Hoặc xoá, hoặc declare tử tế — không để file "trông như API".
+- **[đã đóng 2026-09-26] `libs/ostd/src/console.rs`** — file chết (không được declare, không ai tham chiếu)
+  đã xoá; chọn xoá thay vì declare vì declare sẽ dựng quy ước log thứ hai cạnh `ostd::io::println`.
 - **[2026-09-26] `network_reaches_the_internet_by_name` chưa vào allowlist boot suite** — cố ý:
   test cần internet thật của host (SLIRP chuyển DNS/TCP của guest ra host) nên nó `SKIP` khi host
   không có mạng, và luật allowlist ("pass 2/2 lần chạy đầy đủ, không retry tới xanh") không nhận
