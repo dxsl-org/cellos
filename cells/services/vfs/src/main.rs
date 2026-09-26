@@ -1,8 +1,15 @@
-#![no_std]
-#![no_main]
+#![cfg_attr(target_os = "none", no_std)]
+#![cfg_attr(target_os = "none", no_main)]
 
 extern crate alloc;
 extern crate driver_disk;
+
+// Host test harness: this is a bare-metal binary target, so a hosted build
+// must not compile the cell entry. Everything image-shaped is gated on the
+// *target*, not on `cfg(test)` — `service-net` is the module that got this
+// right first: a `no_std`-only gate left `#[no_mangle] pub fn main` in the
+// test binary, where the C runtime called it instead of libtest and the
+// harness hung before it could list a single one of the tests below.
 
 mod access;
 mod backend;
@@ -90,9 +97,13 @@ api::declare_syscalls![
     // turns that corruption into an unbounded sleep that hangs the boot.
 ];
 
+// `ostd::heap` (and therefore the macro) exists only for the bare-metal target;
+// the host test build has no image-provided heap to declare.
+#[cfg(target_os = "none")]
 ostd::declare_custom_heap!(4 * 1024 * 1024);
 
 #[no_mangle]
+#[cfg(target_os = "none")]
 pub fn main() {
     init_custom_heap();
     println("VFS Service v0.2: RamFS + mkdir/rmdir/unlink IPC (typed postcard)");

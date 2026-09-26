@@ -1,7 +1,13 @@
-#![no_std]
+#![cfg_attr(target_os = "none", no_std)]
 #![forbid(unsafe_code)]
 
 extern crate alloc;
+
+// The crate ships an `rlib` *and* a `staticlib`, so a hosted build links the
+// staticlib and needs the allocator and panic runtime the bare-metal image
+// otherwise supplies. Gating `no_std` on the target (not on `cfg(test)` — a
+// dependency build never sees it) lets `std` provide both, and the guest keeps
+// `no_std` unchanged.
 
 use alloc::vec;
 use alloc::vec::Vec;

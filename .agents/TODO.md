@@ -18,7 +18,7 @@ không phải bởi dòng chữ ở đây.
   vừa được bật lại và đã vào job host unit tests (xem mục "Đã đóng"); đừng để drift lại — một import
   cũ đủ để cả harness `cellos-kernel` không build, và 6 test chunking của `ostd` đã lệch khỏi session
   mà không ai thấy trong lúc chúng không chạy.
-- **[2026-09-26] ~230 `#[test]` trong `cells/` vẫn không chạy ở đâu.** Sau khi 474 suite host-test được
+- **[2026-09-26] ~170 `#[test]` trong `cells/` vẫn không chạy ở đâu** (đã gỡ được `service-vfs` 57 test — xem mục "Đã đóng"; gốc của nhóm này: crate bin không có lib + entry không được gate theo target). Sau khi 474 suite host-test được
   nối vào CI, phần còn lại gồm các crate chỉ có target bin (không có lib) nên `cargo test --target
   x86_64-unknown-linux-gnu` chết ở dep bare-metal — ví dụ `service-vfs` (57 test) cần `driver-disk`
   host-build được (`no global memory allocator`, `#[panic_handler]`, unwinding), `service-httpd` (15)

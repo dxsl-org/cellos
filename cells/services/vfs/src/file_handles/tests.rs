@@ -1,4 +1,6 @@
 use super::*;
+use crate::caller::Caller;
+use api::vfs_file_handles::ViVfsFileHandle;
 use types::CellId;
 
 const CELL_A: Caller = Caller::principal(CellId(11), 1);
@@ -19,13 +21,13 @@ fn begin_and_finish_sync_read_restore_the_open_state() {
     let mut table = FileHandleTable::new();
     let handle = table.insert(CELL_A, "/tmp/a", 3).expect("file handle");
     assert_eq!(
-        table.begin_sync_read(CELL_A, handle).as_deref(),
-        Some("/tmp/a")
+        table.begin_sync_read(CELL_A, handle),
+        Ok("/tmp/a".to_string())
     );
     assert!(table.finish_sync_read(CELL_A, handle));
     assert_eq!(
-        table.begin_sync_read(CELL_A, handle).as_deref(),
-        Some("/tmp/a")
+        table.begin_sync_read(CELL_A, handle),
+        Ok("/tmp/a".to_string())
     );
 }
 

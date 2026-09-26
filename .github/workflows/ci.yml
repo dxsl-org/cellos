@@ -1205,6 +1205,10 @@ jobs:
           cargo test -p service-silo -p driver-dwc2-usb -p driver-bcm-display \
             --lib --target x86_64-unknown-linux-gnu
           cargo test -p service-net-broker --lib --target x86_64-unknown-linux-gnu
+          # The VFS cell's own tests live in its bin target, so this one needs
+          # the entry gated on the target (see the cell's header) rather than a
+          # --lib flag; `driver-disk` ships a staticlib and links std on hosts.
+          cargo test -p service-vfs --target x86_64-unknown-linux-gnu
 
   f1-admission:
     # Tier-1 admission gate (Spec 18 §2.1): the same `cellos-sign --check` that
