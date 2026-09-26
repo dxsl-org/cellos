@@ -7736,8 +7736,8 @@ const _: crate::hal::SyscallDispatch = ViCell_syscall_dispatch;
 mod tests {
     use super::{
         check_allowlist, consumes_staged_spawn_argv, encode_syscall_result, map_syscall,
-        page_grant_authorizes_dma, reg_grant_authorizes_dma, supports_typed_spawn_oom,
-        syscall_to_vi, withhold_or_free, PageGrant, RegGrant, StagedSpawnArgvCleanup, Syscall,
+        page_grant_authorizes_dma, reg_grant_authorizes_dma, staged_spawn_argv_cleanup,
+        supports_typed_spawn_oom, syscall_to_vi, withhold_or_free, PageGrant, RegGrant, Syscall,
         SyscallError,
     };
     use crate::task::{scheduler::Scheduler, tcb::Task, SCHEDULER};
@@ -7770,21 +7770,51 @@ mod tests {
         *restore = saved;
     }
 
+    /// A staged command line belongs to the caller: it survives every syscall
+    /// that is not a launch, and a launch attempt always clears it — including a
+    /// refusal that never reaches the launch boundary.
+    ///
+    /// Both halves are load-bearing. The shell stages an argv, reads the cell
+    /// through VFS, and only then spawns; a syscall that clears the staging on
+    /// the way loses the command line (`httpd 9091 /tmp/resp.txt` listened on
+    /// :8080). And a refused attempt must not leave a command line behind for a
+    /// later child.
     #[test]
-    fn rejected_external_spawn_discards_staged_argv() {
-        const TID: usize = 0x1235;
-        crate::cell::state_stash::discard_spawn_argv(TID);
-        assert_eq!(crate::cell::state_stash::stage_spawn_argv(TID, b"argv"), 4);
+    fn staged_argv_outlives_other_syscalls_and_a_launch_attempt_clears_it() {
+        with_scheduler_task(0, |tid| {
+            let non_spawn = Syscall::GetTime { op: 0 };
+            let spawn = Syscall::SpawnFromPath {
+                path_ptr: 0,
+                path_len: 0,
+            };
 
-        let syscall = Syscall::SpawnFromPath {
-            path_ptr: 0,
-            path_len: 0,
-        };
-        assert!(consumes_staged_spawn_argv(&syscall));
-        {
-            let _cleanup = StagedSpawnArgvCleanup { caller_id: TID };
-        }
-        assert_eq!(crate::cell::state_stash::take_spawn_argv(TID), None);
+            crate::cell::state_stash::discard_spawn_argv(tid);
+            assert_eq!(crate::cell::state_stash::stage_spawn_argv(tid, b"argv"), 4);
+            assert!(!consumes_staged_spawn_argv(&non_spawn));
+            assert!(staged_spawn_argv_cleanup(&non_spawn, tid).is_none());
+            assert_eq!(
+                crate::cell::state_stash::take_spawn_argv(tid),
+                Some(b"argv".to_vec())
+            );
+
+            assert_eq!(crate::cell::state_stash::stage_spawn_argv(tid, b"argv"), 4);
+            assert!(consumes_staged_spawn_argv(&spawn));
+            drop(staged_spawn_argv_cleanup(&spawn, tid));
+            assert_eq!(crate::cell::state_stash::take_spawn_argv(tid), None);
+        });
+    }
+
+    /// Staging is task-local, so it reaches no live record but its own: a task
+    /// id with no task behind it stores nothing.
+    #[test]
+    fn staging_an_argv_without_a_live_task_stores_nothing() {
+        const ABSENT_TID: usize = 0xDEAD_0BEE;
+        crate::cell::state_stash::discard_spawn_argv(ABSENT_TID);
+        assert_eq!(
+            crate::cell::state_stash::stage_spawn_argv(ABSENT_TID, b"argv"),
+            0
+        );
+        assert_eq!(crate::cell::state_stash::take_spawn_argv(ABSENT_TID), None);
     }
 
     #[test]

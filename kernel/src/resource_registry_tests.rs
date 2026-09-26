@@ -1,5 +1,5 @@
 use super::{
-    checked_mmio_end, claim_bdf_owner, owner_of_bdf, release_bdfs_for, static_range_allowed,
+    checked_mmio_end, claim_bdf_owner, owner_of_bdf, release_bdfs_for, static_range_class,
     valid_pcie_bar_window, DEV_GPIO, DEV_I2C, DEV_SPI,
 };
 use types::ViError;
@@ -19,46 +19,34 @@ fn mmio_ranges_reject_zero_length_and_overflow() {
 
 #[test]
 fn controller_classes_only_authorize_their_own_window() {
-    assert!(static_range_allowed(
-        BCM_WINDOWS,
-        0x3F80_4000,
-        0x3F80_5000,
-        DEV_I2C
-    ));
-    assert!(static_range_allowed(
-        BCM_WINDOWS,
-        0x3F20_4000,
-        0x3F20_5000,
-        DEV_SPI
-    ));
-    assert!(!static_range_allowed(
-        BCM_WINDOWS,
-        0x3F20_4000,
-        0x3F20_5000,
-        DEV_I2C
-    ));
-    assert!(!static_range_allowed(
-        BCM_WINDOWS,
-        0x3F80_4000,
-        0x3F80_5000,
-        DEV_SPI
-    ));
+    assert_eq!(
+        static_range_class(BCM_WINDOWS, 0x3F80_4000, 0x3F80_5000, DEV_I2C),
+        Some(DEV_I2C)
+    );
+    assert_eq!(
+        static_range_class(BCM_WINDOWS, 0x3F20_4000, 0x3F20_5000, DEV_SPI),
+        Some(DEV_SPI)
+    );
+    assert_eq!(
+        static_range_class(BCM_WINDOWS, 0x3F20_4000, 0x3F20_5000, DEV_I2C),
+        None
+    );
+    assert_eq!(
+        static_range_class(BCM_WINDOWS, 0x3F80_4000, 0x3F80_5000, DEV_SPI),
+        None
+    );
 }
 
 #[test]
 fn controller_grants_cannot_escape_or_reuse_gpio_authority() {
-    assert!(!static_range_allowed(
-        BCM_WINDOWS,
-        0x3F80_4000,
-        0x3F80_5001,
-        DEV_I2C
-    ));
-    assert!(!static_range_allowed(
-        BCM_WINDOWS,
-        0x3F20_4000,
-        0x3F20_5000,
-        DEV_GPIO
-    ));
+    assert_eq!(
+        static_range_class(BCM_WINDOWS, 0x3F80_4000, 0x3F80_5001, DEV_I2C),
+        None
+    );
+    assert_eq!(
+        static_range_class(BCM_WINDOWS, 0x3F20_4000, 0x3F20_5000, DEV_GPIO),
+        None
+    );
 }
 
 #[test]
@@ -74,7 +62,7 @@ fn pcie_bar_windows_reject_unbounded_or_misaligned_authority() {
 
 #[test]
 fn bdf_claim_preserves_live_owner_until_reap() {
-    const BDF: u32 = 0x00FE_ED;
+    const BDF: u32 = 0x00_FE_ED;
     const FIRST_TID: usize = 0xA001;
     const COMPETING_TID: usize = 0xA002;
 

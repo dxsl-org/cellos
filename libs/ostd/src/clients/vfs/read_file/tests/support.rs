@@ -11,6 +11,7 @@ use api::vfs_file_handles::ViVfsFileHandle;
 pub(super) enum MockReply {
     Dir(u64),
     File(u64),
+    Stat { size: u64, is_dir: bool },
     DataLen(usize, u8),
     Data(Vec<u8>),
     Ok,
@@ -45,6 +46,7 @@ impl VfsReadOps for MockOps {
         Ok(match self.next() {
             MockReply::Dir(handle) => VfsResponse::DirHandle(ViDirHandle(handle)),
             MockReply::File(handle) => VfsResponse::FileHandle(ViVfsFileHandle(handle)),
+            MockReply::Stat { size, is_dir } => VfsResponse::Stat { size, is_dir },
             MockReply::DataLen(len, fill) => {
                 resp_buf[..len].fill(fill);
                 VfsResponse::Data(&resp_buf[..len])

@@ -1173,6 +1173,19 @@ jobs:
             --target x86_64-unknown-linux-gnu
           cargo test -p tensor-math -p ai-engine --target x86_64-unknown-linux-gnu
           cargo bench -p ai-engine --target x86_64-unknown-linux-gnu --no-run
+          # cellos-kernel's own `#[cfg(test)]` modules: the launch-profile pins,
+          # the resource-registry allowlist, syscall arg mapping and user-copy
+          # bounds. They compile for the host like the crates above, but one
+          # stale import (`static_range_allowed`, renamed to `static_range_class`)
+          # was enough to keep the whole harness from building, so the file
+          # describing the fix in `.agents/TODO.md` could not be verified by
+          # running it. Keep them running: a pin that cannot execute is prose.
+          cargo test -p cellos-kernel --target x86_64-unknown-linux-gnu
+          # `ostd`'s VFS read session is host-testable for the same reason (its
+          # `ostd`-only items are cfg'd out under test). Six of its chunking
+          # tests had drifted from the session — they predate the stat that
+          # reserves the buffer — and nothing noticed while they were unreachable.
+          cargo test -p ostd --target x86_64-unknown-linux-gnu
 
   f1-admission:
     # Tier-1 admission gate (Spec 18 §2.1): the same `cellos-sign --check` that
