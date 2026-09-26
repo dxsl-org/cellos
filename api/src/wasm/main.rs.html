@@ -3,8 +3,8 @@
 <a href=#3 id=3 data-nosnippet>3</a>//! Usage: spawn `/bin/wasm` with the `.wasm` file path as argv.
 <a href=#4 id=4 data-nosnippet>4</a>//! The shell sets this via `sys_set_spawn_args("/data/apps/app.wasm")`.
 <a href=#5 id=5 data-nosnippet>5</a>
-<a href=#6 id=6 data-nosnippet>6</a></span><span class="attr">#![no_std]
-<a href=#7 id=7 data-nosnippet>7</a>#![no_main]
+<a href=#6 id=6 data-nosnippet>6</a></span><span class="attr">#![cfg_attr(target_os = <span class="string">"none"</span>, no_std)]
+<a href=#7 id=7 data-nosnippet>7</a>#![cfg_attr(target_os = <span class="string">"none"</span>, no_main)]
 <a href=#8 id=8 data-nosnippet>8</a>#![forbid(unsafe_code)]
 <a href=#9 id=9 data-nosnippet>9</a></span><span class="kw">extern crate </span>alloc;
 <a href=#10 id=10 data-nosnippet>10</a>
