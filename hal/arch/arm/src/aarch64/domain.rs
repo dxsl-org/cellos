@@ -55,6 +55,17 @@ pub const fn root_register_value(root_baddr: usize, asid: usize) -> usize {
     ((asid & 0xffff) << 48) | (root_baddr & 0x0000_ffff_ffff_f000)
 }
 
+/// The live TTBR0_EL1 value, including its ASID bits.
+#[inline]
+pub fn current_root() -> usize {
+    let ttbr0: usize;
+    // SAFETY: reading TTBR0_EL1 from EL1 has no side effects.
+    unsafe {
+        core::arch::asm!("mrs {}, ttbr0_el1", out(reg) ttbr0, options(nomem, nostack, preserves_flags));
+    }
+    ttbr0
+}
+
 /// Invalidate local translations tagged with `asid`.
 #[inline]
 pub fn flush_asid(asid: usize) {
