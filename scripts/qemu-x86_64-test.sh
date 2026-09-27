@@ -13,6 +13,30 @@ set -euo pipefail
 ISO="${1:-build/vicell-x86.iso}"
 BOOT_WINDOW="${BOOT_WINDOW:-90}"
 X86_NIC_MODEL="${X86_NIC_MODEL:-}"
+# CPU model decides whether the guest has PCID at all: `qemu64` does not, `max`
+# does. The lane asserts the kernel's own decision when X86_EXPECT_PCID is set,
+# so the PCID-off and PCID-on paths are both witnessed rather than assumed.
+X86_CPU_MODEL="${X86_CPU_MODEL:-qemu64,+pdpe1gb}"
+X86_EXPECT_PCID="${X86_EXPECT_PCID:-}"
+# TCG cannot emulate PCID (QEMU clears the feature with a warning), so the
+# PCID-on path needs hardware acceleration: X86_ACCEL=kvm X86_CPU_MODEL=host.
+X86_ACCEL="${X86_ACCEL:-}"
+
+case "$X86_ACCEL" in
+    ""|tcg|kvm) ;;
+    *)
+        echo "FAIL: X86_ACCEL must be empty, tcg, or kvm" >&2
+        exit 1
+        ;;
+esac
+
+case "$X86_EXPECT_PCID" in
+    ""|0|1) ;;
+    *)
+        echo "FAIL: X86_EXPECT_PCID must be empty, 0, or 1" >&2
+        exit 1
+        ;;
+esac
 
 case "$X86_NIC_MODEL" in
     "") NIC_ARGS=() ;;
@@ -36,9 +60,15 @@ fi
 
 echo "[qemu-x86_64-test] Booting ISO=$ISO (window=${BOOT_WINDOW}s)"
 
+ACCEL_ARGS=()
+if [[ -n "$X86_ACCEL" ]]; then
+    ACCEL_ARGS=(-accel "$X86_ACCEL")
+fi
+
 timeout "$BOOT_WINDOW" qemu-system-x86_64 \
     -machine q35 \
-    -cpu qemu64,+pdpe1gb \
+    "${ACCEL_ARGS[@]}" \
+    -cpu "$X86_CPU_MODEL" \
     -m 256M \
     -nographic \
     -cdrom "$ISO" \
@@ -59,6 +89,21 @@ fi
 if [[ "$X86_NIC_MODEL" == "e1000e" ]] \
     && ! grep -q "\[e1000\] unsupported Ethernet 8086:10d3; driver gate closed" qemu-x86_64.log; then
     echo "FAIL: e1000e endpoint was not rejected by vendor/device ID" >&2
+    exit 1
+fi
+
+# The PCID decision is the kernel's, read from CPUID and CR4 at boot: assert it
+# in both directions so "PCID on" and "PCID off" are each a real observation.
+if [[ "$X86_EXPECT_PCID" == "1" ]] \
+    && ! grep -q "x86_64 paging: PCID enabled" qemu-x86_64.log; then
+    echo "FAIL: expected PCID to be enabled on cpu '$X86_CPU_MODEL'" >&2
+    grep -ai "paging:" qemu-x86_64.log | head -3
+    exit 1
+fi
+if [[ "$X86_EXPECT_PCID" == "0" ]] \
+    && ! grep -q "x86_64 paging: PCID disabled" qemu-x86_64.log; then
+    echo "FAIL: expected PCID to be disabled on cpu '$X86_CPU_MODEL'" >&2
+    grep -ai "paging:" qemu-x86_64.log | head -3
     exit 1
 fi
 

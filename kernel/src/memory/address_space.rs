@@ -1131,3 +1131,46 @@ pub(crate) fn fail_next_map() {
 #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
 #[path = "address_space_tests.rs"]
 pub(crate) mod address_space_tests;
+
+/// Tag-width and CR3-composition policy. These run in the kernel's host lane on
+/// x86_64, where the same `hal::domain::cr3_for` the boot path calls is compiled
+/// — so the policy is executed, not merely inspected.
+#[cfg(all(test, target_arch = "x86_64"))]
+mod tag_policy_tests {
+    use super::asid_width;
+
+    const ROOT: usize = 0x1_0000_0000;
+
+    #[test]
+    fn x86_tag_width_is_the_pcid_width() {
+        assert_eq!(asid_width(), 12);
+    }
+
+    #[test]
+    fn a_tag_is_dropped_rather_than_faulted_when_pcid_is_unusable() {
+        // CR4.PCIDE=0 with a nonzero PCID in CR3 is #GP, so the fail-closed value
+        // is the untagged root.
+        assert_eq!(hal::domain::cr3_for(ROOT, 0x5A5, false), ROOT);
+        assert_eq!(hal::domain::cr3_for(ROOT, 0x5A5, false) & 0xFFF, 0);
+    }
+
+    #[test]
+    fn a_tag_is_carried_and_masked_when_pcid_is_usable() {
+        assert_eq!(hal::domain::cr3_for(ROOT, 7, true), ROOT | 7);
+        assert_eq!(hal::domain::cr3_for(ROOT, 0x1234, true), ROOT | 0x234);
+    }
+
+    #[test]
+    fn root_address_bits_are_preserved_and_low_bits_belong_to_the_tag() {
+        assert_eq!(hal::domain::cr3_for(ROOT | 0xABC, 3, true), ROOT | 3);
+        assert_eq!(hal::domain::cr3_for(ROOT | 0xABC, 3, false), ROOT);
+    }
+
+    #[test]
+    fn tag_zero_is_identical_in_both_modes() {
+        assert_eq!(
+            hal::domain::cr3_for(ROOT, 0, true),
+            hal::domain::cr3_for(ROOT, 0, false)
+        );
+    }
+}

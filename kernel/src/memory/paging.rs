@@ -630,8 +630,13 @@ pub fn init_kernel_paging_x86(
 /// An invalid mapping causes a triple-fault.
 #[cfg(target_arch = "x86_64")]
 pub unsafe fn activate_paging(root_phys: PhysAddr) {
+    // PCID is decided here, before the first CR3 write: the tag policy depends on
+    // CR4.PCIDE, and a nonzero PCID programmed while it is clear is a #GP. When
+    // the CPU cannot carry a tag, domains use tag 0 and a full CR3 flush. The
+    // decision is cached; main.rs reports it once the logger is live.
+    let _ = hal::domain::init_pcid();
     // SAFETY: caller guarantees root_phys is a valid, fully populated PML4 that
-    // keeps the kernel alive after the CR3 switch.
+    // keeps the kernel alive after the CR3 switch. Page-aligned, so tag 0.
     unsafe {
         hal::paging::write_cr3(root_phys as u64);
     }
