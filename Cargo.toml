@@ -169,6 +169,8 @@ members = [
     "cells/tests/wx-test",
     "cells/tests/tier2-exploit",
     "cells/tests/tier2-smoke",
+    "cells/tests/tier2-grant-owner",
+    "cells/tests/tier2-grant-receiver",
     "cells/tests/ai-test",
     "cells/tests/cpp-smoke",
     "cells/tests/tls-test",

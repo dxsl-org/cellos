@@ -7,6 +7,10 @@ use super::tcb::TaskState;
 use crate::sync::Spinlock;
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::string::String;
+/// Only the RV64 private-root lifecycle helpers below name `Arc`; every other
+/// target/feature combination has nothing to import.
+#[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 use api::syscall::ViSpawnArgs;
 // use log::info;
@@ -138,6 +142,11 @@ struct PageGrant {
     #[allow(dead_code)]
     owner_generation: u64,
     shared_to: Option<(usize, GrantPerm)>,
+    /// One kernel-owned lifecycle record, present only while the owner is a
+    /// private-root domain. It carries the owner/receiver roots, the exact
+    /// receiver mapping tuple and the `Live → Revoking → Revoked` state; a SAS
+    /// owner keeps today's zero-copy path and leaves this `None`.
+    domain: Option<DomainRecord>,
 }
 
 static PAGE_GRANT_TABLE: Spinlock<Option<BTreeMap<usize, PageGrant>>> = Spinlock::new(None);
@@ -216,14 +225,246 @@ fn domain_grant_task(_tid: usize) -> bool {
     false
 }
 
-/// Does any live grant record name a domain owner or a domain receiver?
+/// Is the domain grant lifecycle implemented for this target tuple?
 ///
-/// Such a record can pre-date this gate — an image update on a system that had
-/// already granted one — and the containment gate cannot drain it, because the
-/// receiver PTE lives in a private root reachable only through the caller's own
-/// ledger. Domain admission therefore refuses while one exists. Lock order is the
-/// documented `*_GRANT_TABLE → SCHEDULER`, and the two tables are not held at the
-/// same time.
+/// Phase 03 ratifies the private-root lifecycle on RV64 only. AArch64 and
+/// x86_64 keep the phase-01 denial byte-for-byte: the ordered-switch completion
+/// those targets need is not proven, so no entry point may publish a domain
+/// record there.
+#[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+const fn domain_grant_lifecycle_supported() -> bool {
+    true
+}
+#[cfg(not(all(feature = "native-domains", target_arch = "riscv64")))]
+const fn domain_grant_lifecycle_supported() -> bool {
+    false
+}
+
+/// A private root, on the targets that have one.
+///
+/// The `memory::address_space` module exists only behind `native-domains` on a
+/// private-root target, so the helpers below name this alias and every disabled
+/// variant stays compilable without the feature.
+#[cfg(all(
+    feature = "native-domains",
+    any(
+        target_arch = "riscv64",
+        target_arch = "aarch64",
+        target_arch = "x86_64"
+    )
+))]
+type DomainRoot = alloc::sync::Arc<crate::memory::address_space::AddressSpace>;
+#[cfg(not(all(
+    feature = "native-domains",
+    any(
+        target_arch = "riscv64",
+        target_arch = "aarch64",
+        target_arch = "x86_64"
+    )
+)))]
+type DomainRoot = ();
+
+/// The live private root of `tid`, if it is a domain right now.
+#[cfg(all(
+    feature = "native-domains",
+    any(
+        target_arch = "riscv64",
+        target_arch = "aarch64",
+        target_arch = "x86_64"
+    )
+))]
+fn live_domain_space(tid: usize) -> Option<DomainRoot> {
+    task_domain_space(tid).filter(|space| space.is_live())
+}
+
+#[cfg(not(all(
+    feature = "native-domains",
+    any(
+        target_arch = "riscv64",
+        target_arch = "aarch64",
+        target_arch = "x86_64"
+    )
+)))]
+fn live_domain_space(_tid: usize) -> Option<DomainRoot> {
+    None
+}
+
+/// The phase-01 gate as a capability check: may `tid` take part in the
+/// private-root grant lifecycle?
+///
+/// Exactly one shape passes — a live task whose address space is a private root
+/// that is still `Live`, on the one architecture whose lifecycle is
+/// implemented. Every other shape keeps the denial sentinel: a non-RV64 target,
+/// an unknown or retired tid, and a root already marked dying.
+fn domain_grant_capable(tid: usize) -> bool {
+    domain_grant_lifecycle_supported() && live_domain_space(tid).is_some()
+}
+
+/// Map a domain owner's freshly allocated backing into its own root, RW+NX,
+/// undoing every page already mapped if one fails.
+///
+/// The frames stay supervisor-only in the SAS/global root: this path never
+/// publishes USER access there, so a SAS cell cannot reach a domain owner's
+/// backing even if the grant later collapses.
+#[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+fn map_domain_owner_pages(
+    space: &DomainRoot,
+    base: usize,
+    n_pages: usize,
+) -> Result<(), crate::memory::address_space::AddressSpaceError> {
+    const PAGE_SIZE: usize = 4096;
+    let rights = crate::memory::paging::Flags::from_bits(
+        crate::memory::paging::Flags::READ | crate::memory::paging::Flags::WRITE,
+    );
+    let mut mapped = 0usize;
+    for index in 0..n_pages {
+        let va = base + index * PAGE_SIZE;
+        match space.map_grant_page(va, va, rights) {
+            Ok(()) => {
+                // The owner's own hart writes this PTE and then uses the
+                // pointer, so it must invalidate the page locally first.
+                crate::hal::paging::flush_tlb_page(va);
+                mapped += 1;
+            }
+            Err(error) => {
+                for undo in 0..mapped {
+                    let _ = space.unmap_grant_page(base + undo * PAGE_SIZE);
+                }
+                let _ = crate::memory::tlb_shootdown::flush_asid_and_await(space.asid());
+                return Err(error);
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Allocate `n_pages` contiguous frames, zero them through the supervisor
+/// identity map, and leave the SAS/global root untouched.
+///
+/// Domain owners must not have their backing published USER in the shared root
+/// (the phase-01 leak). The boot identity map already covers every usable
+/// frame supervisor RWX, so zeroing needs no remap at all; the caller then maps
+/// the owner's own private root over the returned base.
+#[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+fn alloc_grant_pages_supervisor_only(n_pages: usize) -> Option<usize> {
+    use crate::memory::frame::FRAME_ALLOCATOR;
+    const PAGE_SIZE: usize = 4096;
+    let paddr = {
+        let mut guard = FRAME_ALLOCATOR.lock();
+        guard.as_mut().and_then(|alloc| alloc.allocate_contiguous(n_pages))?
+    };
+    // SAFETY: every usable frame is identity-mapped supervisor RWX in the
+    // current (kernel) root, and the syscall runs on that root.
+    unsafe {
+        core::ptr::write_bytes(paddr as *mut u8, 0, n_pages * PAGE_SIZE);
+    }
+    Some(paddr)
+}
+
+/// The lifecycle record behind a table row, where this target can hold one.
+#[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+type DomainRecord = Arc<super::domain_grant::DomainGrant>;
+
+/// On every other target a row can never carry a lifecycle record:
+/// [`clone_domain_record`] is the only producer and always yields `None`, so the
+/// stubs below are unreachable rather than a second implementation.
+#[cfg(not(all(feature = "native-domains", target_arch = "riscv64")))]
+type DomainRecord = ();
+
+/// Clone the lifecycle record a row carries, if any.
+///
+/// The lifecycle exists on one target tuple only; on every other target the
+/// record type has no inhabitants, so this is the sole producer of `None`.
+#[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+fn clone_domain_record(domain: &Option<DomainRecord>) -> Option<DomainRecord> {
+    domain.clone()
+}
+#[cfg(not(all(feature = "native-domains", target_arch = "riscv64")))]
+fn clone_domain_record(_domain: &Option<DomainRecord>) -> Option<DomainRecord> {
+    None
+}
+
+/// Build the lifecycle record for a domain owner that has just published its
+/// own mapping. Absent — `None` — wherever the lifecycle does not exist.
+#[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+fn new_domain_record(space: &DomainRoot, base: usize, size: usize) -> Option<DomainRecord> {
+    Some(Arc::new(super::domain_grant::DomainGrant::new(
+        space, base, size,
+    )))
+}
+#[cfg(not(all(feature = "native-domains", target_arch = "riscv64")))]
+fn new_domain_record(_space: &DomainRoot, _base: usize, _size: usize) -> Option<DomainRecord> {
+    None
+}
+
+/// Advance a row's domain lifecycle to `Revoked` outside every table lock.
+///
+/// Returns `false` when the receiver or owner invalidation is not acknowledged:
+/// the caller must keep the row (so a retry is idempotent) and must not release
+/// a single frame.
+#[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+fn revoke_domain_record(record: &DomainRecord, id: usize, kind: &str) -> bool {
+    match record.revoke() {
+        Ok(()) => true,
+        Err(error) => {
+            log::warn!(
+                "[grant] {kind} {id:#x}: domain revoke deferred ({error:?}); frames retained and \
+                 record kept Revoking for idempotent retry"
+            );
+            false
+        }
+    }
+}
+#[cfg(not(all(feature = "native-domains", target_arch = "riscv64")))]
+fn revoke_domain_record(_record: &DomainRecord, _id: usize, _kind: &str) -> bool {
+    false
+}
+
+/// Drop the receiver half of a record left unshared by receiver death.
+#[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+fn drain_domain_receiver(record: &DomainRecord) {
+    if record.drain_receiver().is_err() {
+        log::warn!(
+            "[grant] receiver exit: domain receiver PTE invalidation unacknowledged; record keeps \
+             the receiver mapping until the next share or teardown retries"
+        );
+    }
+}
+#[cfg(not(all(feature = "native-domains", target_arch = "riscv64")))]
+fn drain_domain_receiver(_record: &DomainRecord) {}
+
+/// A record the lifecycle cannot drain: it names a private-root endpoint but is
+/// not carried by a managed domain record. Pre-gate residue, or a target where
+/// the lifecycle is not implemented at all.
+#[cfg(all(
+    feature = "native-domains",
+    any(
+        target_arch = "riscv64",
+        target_arch = "aarch64",
+        target_arch = "x86_64"
+    )
+))]
+fn residual_domain_record(
+    owner: usize,
+    shared_to: Option<(usize, GrantPerm)>,
+    managed: bool,
+) -> bool {
+    if managed && domain_grant_lifecycle_supported() {
+        return false;
+    }
+    domain_grant_task(owner) || shared_to.is_some_and(|(tid, _)| domain_grant_task(tid))
+}
+
+/// Does any live grant record name a domain endpoint the lifecycle cannot drain?
+///
+/// Such a record can pre-date the gate — an image update on a system that had
+/// already granted one — and cannot be revoked, because the receiver PTE lives
+/// in a private root reachable only through the caller's own ledger. Domain
+/// admission therefore refuses while one exists. A record carried by a managed
+/// domain record is revocable and does **not** block admission: the pair lane
+/// must be able to admit its second cell while the first cell's grant is live.
+/// Lock order is the documented `*_GRANT_TABLE → SCHEDULER`, and the two tables
+/// are not held at the same time.
 #[cfg(all(
     feature = "native-domains",
     any(
@@ -237,10 +478,7 @@ pub(crate) fn domain_grant_records_live() -> bool {
         let table = grant_table_lock().lock();
         table.as_ref().is_some_and(|grants| {
             grants.values().any(|grant| {
-                domain_grant_task(grant.owner)
-                    || grant
-                        .shared_to
-                        .is_some_and(|(tid, _)| domain_grant_task(tid))
+                residual_domain_record(grant.owner, grant.shared_to, grant.domain.is_some())
             })
         })
     };
@@ -250,10 +488,7 @@ pub(crate) fn domain_grant_records_live() -> bool {
     let table = reg_grant_table_lock().lock();
     table.as_ref().is_some_and(|grants| {
         grants.values().any(|grant| {
-            domain_grant_task(grant.owner)
-                || grant
-                    .shared_to
-                    .is_some_and(|(tid, _)| domain_grant_task(tid))
+            residual_domain_record(grant.owner, grant.shared_to, grant.domain.is_some())
         })
     })
 }
@@ -418,6 +653,9 @@ struct RegGrant {
     owner_cell: CellId,
     owner_generation: u64,
     shared_to: Option<(usize, GrantPerm)>,
+    /// See [`PageGrant::domain`]: the same single lifecycle record behind the
+    /// registered-grant table.
+    domain: Option<DomainRecord>,
 }
 
 static REG_GRANT_TABLE: Spinlock<Option<BTreeMap<usize, RegGrant>>> = Spinlock::new(None);
@@ -566,13 +804,13 @@ fn refuse_if_pinned(kind: &str, id: usize, base: usize, size: usize) -> Result<(
 /// synchronization point: the final GetRandom output lease uses the same lock
 /// to serialize validation, write, and teardown.
 fn unregister_registered_grant(caller_id: usize, reg_id: usize) -> Result<(), SyscallError> {
-    // Phase-01 containment: a private-root owner's registered buffer is mapped in
-    // a domain root this path cannot revoke for a receiver. Refuse before the
-    // record leaves the table, so the frames stay quarantined rather than reused.
-    if domain_grant_task(caller_id) {
+    // A private root whose lifecycle is not available (non-RV64, retired, or
+    // already dying) keeps the phase-01 denial: this path cannot revoke a
+    // receiver PTE for it, so the record must not leave the table.
+    if domain_grant_task(caller_id) && !domain_grant_capable(caller_id) {
         log::warn!(
-            "[grant] GrantUnregister denied: task {caller_id} is a private-root domain \
-             (phase-01 containment)"
+            "[grant] GrantUnregister denied: task {caller_id} is not a live private root \
+             (phase-01 denial)"
         );
         return Err(SyscallError::PermissionDenied);
     }
@@ -582,33 +820,32 @@ fn unregister_registered_grant(caller_id: usize, reg_id: usize) -> Result<(), Sy
             .as_ref()
             .and_then(|grants| grants.get(&reg_id))
             .filter(|grant| grant.owner == caller_id)
-            .map(|grant| (grant.base, grant.size));
+            .map(|grant| (grant.base, grant.size, grant.domain.clone()));
         match owned {
-            Some((base, size)) => {
+            Some((base, size, domain)) => {
                 refuse_if_pinned("GrantUnregister", reg_id, base, size)?;
-                table.as_mut().and_then(|grants| grants.remove(&reg_id))
+                if domain.is_some() {
+                    Some((base, size, domain))
+                } else {
+                    table
+                        .as_mut()
+                        .and_then(|grants| grants.remove(&reg_id))
+                        .map(|grant| (grant.base, grant.size, None))
+                }
             }
             None => None,
         }
     }
     .ok_or(SyscallError::PermissionDenied)?;
-    let n_pages = grant_pages_for_size(entry.size);
-    #[cfg(all(
-        feature = "native-domains",
-        any(
-            target_arch = "riscv64",
-            target_arch = "aarch64",
-            target_arch = "x86_64"
-        )
-    ))]
-    if let Some(space) = task_domain_space(caller_id) {
-        const PAGE_SIZE: usize = 4096;
-        for i in 0..n_pages {
-            let v = entry.base + i * PAGE_SIZE;
-            let _ = space.unmap_grant_page(v);
+    let n_pages = grant_pages_for_size(entry.1);
+    if let Some(record) = &entry.2 {
+        if !revoke_domain_record(record, reg_id, "GrantUnregister") {
+            return Err(SyscallError::PermissionDenied);
         }
+        let mut table = reg_grant_table_lock().lock();
+        table.as_mut().and_then(|grants| grants.remove(&reg_id));
     }
-    free_grant_pages(entry.base, n_pages);
+    free_grant_pages(entry.0, n_pages);
     Ok(())
 }
 
@@ -684,6 +921,7 @@ pub(crate) fn test_reregister_registered_grant_for_race(caller_id: usize, base: 
                                 owner_cell,
                                 owner_generation,
                                 shared_to: None,
+                                domain: None,
                             },
                         )
                         .is_none()
@@ -728,6 +966,7 @@ pub(crate) fn reap_grants_for_task(dead_tid: usize) {
 
     clear_grantee_refs(dead_tid);
     reclaim_owned_grants(dead_tid);
+    sweep_deferred_domain_grants();
     sweep_orphan_reg_grants();
 }
 
@@ -736,13 +975,22 @@ pub(crate) fn reap_grants_for_task(dead_tid: usize) {
 ///
 /// Death only. A runtime revoke must not touch the target's received grants —
 /// those are governed by the granter's authority, not by the target's.
+///
+/// A domain receiver's PTE lives in the dying cell's private root and its record
+/// retains that root, so the receiver half is drained here (PTE removal plus
+/// acknowledgement) before the record is left unshared. The drain runs outside
+/// every table lock: it awaits an invalidation the table lock must not hold.
 fn clear_grantee_refs(tid: usize) {
+    let mut drained: Vec<DomainRecord> = Vec::new();
     {
         let mut tbl = grant_table_lock().lock();
         if let Some(map) = tbl.as_mut() {
             for grant in map.values_mut() {
                 if grant.shared_to.is_some_and(|(grantee, _)| grantee == tid) {
                     grant.shared_to = None;
+                    if let Some(record) = clone_domain_record(&grant.domain) {
+                        drained.push(record);
+                    }
                 }
             }
         }
@@ -754,10 +1002,17 @@ fn clear_grantee_refs(tid: usize) {
             for grant in map.values_mut() {
                 if grant.shared_to.is_some_and(|(grantee, _)| grantee == tid) {
                     grant.shared_to = None;
+                    if let Some(record) = clone_domain_record(&grant.domain) {
+                        drained.push(record);
+                    }
                 }
             }
         }
     } // REG_GRANT_TABLE lock released
+
+    for record in drained {
+        drain_domain_receiver(&record);
+    }
 }
 
 /// Remove and release every grant `tid` **owns**, in both tables.
@@ -777,6 +1032,11 @@ fn clear_grantee_refs(tid: usize) {
 /// holds FRAME_ALLOCATOR while calling `free_grant_pages`.
 pub(crate) fn reclaim_owned_grants(tid: usize) {
     // ── PAGE_GRANT_TABLE pass ─────────────────────────────────────────────────
+    // A domain row's record is cloned out and revoked after the table lock is
+    // released: revocation awaits the receiver root's tag invalidation, which
+    // must never hold this lock in the meantime.
+    let mut page_deferred: Vec<(usize, DomainRecord, usize, usize)> =
+        Vec::new();
     let owned: alloc::vec::Vec<PageGrant> = {
         let mut tbl = grant_table_lock().lock();
         let mut owned = alloc::vec::Vec::new();
@@ -786,7 +1046,24 @@ pub(crate) fn reclaim_owned_grants(tid: usize) {
                 .filter(|(_, g)| g.owner == tid)
                 .map(|(k, _)| *k)
                 .collect();
-            owned = owned_keys.iter().filter_map(|k| map.remove(k)).collect();
+            for key in owned_keys {
+                match map.get(&key) {
+                    Some(grant) if grant.domain.is_some() => {
+                        page_deferred.push((
+                            key,
+                            clone_domain_record(&grant.domain).expect("checked above"),
+                            grant.base,
+                            grant.size,
+                        ));
+                    }
+                    Some(_) => {
+                        if let Some(grant) = map.remove(&key) {
+                            owned.push(grant);
+                        }
+                    }
+                    None => {}
+                }
+            }
         }
         owned
     }; // PAGE_GRANT_TABLE lock released
@@ -798,7 +1075,13 @@ pub(crate) fn reclaim_owned_grants(tid: usize) {
         free_grant_pages(grant.base, grant_pages_for_size(grant.size));
     }
 
+    for (key, record, base, size) in page_deferred {
+        release_deferred_domain_row(key, record, base, size, false);
+    }
+
     // ── REG_GRANT_TABLE pass ──────────────────────────────────────────────────
+    let mut reg_deferred: Vec<(usize, DomainRecord, usize, usize)> =
+        Vec::new();
     let reg_owned: alloc::vec::Vec<RegGrant> = {
         let mut tbl = reg_grant_table_lock().lock();
         let mut removed = alloc::vec::Vec::new();
@@ -806,6 +1089,15 @@ pub(crate) fn reclaim_owned_grants(tid: usize) {
             let mut owned_keys = alloc::vec::Vec::new();
             for (&key, grant) in map.iter_mut() {
                 if grant.owner != tid {
+                    continue;
+                }
+                if grant.domain.is_some() {
+                    reg_deferred.push((
+                        key,
+                        clone_domain_record(&grant.domain).expect("checked above"),
+                        grant.base,
+                        grant.size,
+                    ));
                     continue;
                 }
                 if let Some((grantee, _)) = grant.shared_to {
@@ -849,6 +1141,129 @@ pub(crate) fn reclaim_owned_grants(tid: usize) {
         }
         free_grant_pages(reg.base, grant_pages_for_size(reg.size));
     }
+
+    for (key, record, base, size) in reg_deferred {
+        release_deferred_domain_row(key, record, base, size, true);
+    }
+}
+
+/// Complete one owner-reclaimed domain row: revoke, then either release the
+/// frames or leave an ownerless `Revoking` row for [`sweep_deferred_domain_grants`].
+///
+/// An unacknowledged invalidation never frees a frame. The row loses its owner
+/// so no caller can free it out from under the retry.
+#[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+fn release_deferred_domain_row(
+    key: usize,
+    record: DomainRecord,
+    base: usize,
+    size: usize,
+    registered: bool,
+) {
+    let pages = grant_pages_for_size(size);
+    if revoke_domain_record(&record, base, "task-exit") {
+        if registered {
+            let mut tbl = reg_grant_table_lock().lock();
+            tbl.as_mut().and_then(|map| map.remove(&key));
+        } else {
+            let mut tbl = grant_table_lock().lock();
+            tbl.as_mut().and_then(|map| map.remove(&key));
+        }
+        if !withhold_or_free(base, pages) {
+            free_grant_pages(base, pages);
+        }
+        return;
+    }
+    if registered {
+        let mut tbl = reg_grant_table_lock().lock();
+        if let Some(grant) = tbl.as_mut().and_then(|map| map.get_mut(&key)) {
+            grant.owner = 0;
+            grant.owner_cell = CellId(0);
+            grant.owner_generation = 0;
+            grant.shared_to = None;
+        }
+    } else {
+        let mut tbl = grant_table_lock().lock();
+        if let Some(grant) = tbl.as_mut().and_then(|map| map.get_mut(&key)) {
+            grant.owner = 0;
+            grant.owner_cell = CellId(0);
+            grant.owner_generation = 0;
+            grant.shared_to = None;
+        }
+    }
+}
+
+#[cfg(not(all(feature = "native-domains", target_arch = "riscv64")))]
+fn release_deferred_domain_row(
+    _key: usize,
+    _record: DomainRecord,
+    _base: usize,
+    _size: usize,
+    _registered: bool,
+) {
+}
+
+/// Retry owner-reclaimed domain rows whose invalidation was unacknowledged.
+///
+/// Every task exit runs this for both tables. Completing the revoke is what
+/// finally releases the retained frames; until then they stay quarantined with
+/// the record so nothing reuses memory a stale translation could still reach.
+fn sweep_deferred_domain_grants() {
+    let mut page_retry: Vec<(usize, DomainRecord, usize, usize)> =
+        Vec::new();
+    {
+        let tbl = grant_table_lock().lock();
+        if let Some(map) = tbl.as_ref() {
+            for (&key, grant) in map.iter() {
+                if grant.owner == 0 {
+                    if let Some(record) = clone_domain_record(&grant.domain) {
+                        page_retry.push((key, record, grant.base, grant.size));
+                    }
+                }
+            }
+        }
+    }
+    for (key, record, base, size) in page_retry {
+        if !revoke_domain_record(&record, base, "deferred-sweep") {
+            continue;
+        }
+        let pages = grant_pages_for_size(size);
+        {
+            let mut tbl = grant_table_lock().lock();
+            tbl.as_mut().and_then(|map| map.remove(&key));
+        }
+        if !withhold_or_free(base, pages) {
+            free_grant_pages(base, pages);
+        }
+    }
+
+    let mut reg_retry: Vec<(usize, DomainRecord, usize, usize)> =
+        Vec::new();
+    {
+        let tbl = reg_grant_table_lock().lock();
+        if let Some(map) = tbl.as_ref() {
+            for (&key, grant) in map.iter() {
+                if grant.owner == 0 {
+                    if let Some(record) = clone_domain_record(&grant.domain) {
+                        reg_retry.push((key, record, grant.base, grant.size));
+                    }
+                }
+            }
+        }
+    }
+    for (key, record, base, size) in reg_retry {
+        if !revoke_domain_record(&record, base, "deferred-sweep") {
+            continue;
+        }
+        let pages = grant_pages_for_size(size);
+        {
+            let mut tbl = reg_grant_table_lock().lock();
+            tbl.as_mut().and_then(|map| map.remove(&key));
+        }
+        if !withhold_or_free(base, pages) {
+            free_grant_pages(base, pages);
+        }
+    }
 }
 
 /// Release registered grants with neither owner nor grantee: the residue of a
@@ -863,7 +1278,7 @@ fn sweep_orphan_reg_grants() {
         if let Some(map) = tbl.as_mut() {
             let orphan_keys: alloc::vec::Vec<usize> = map
                 .iter()
-                .filter(|(_, g)| g.owner == 0 && g.shared_to.is_none())
+                .filter(|(_, g)| g.owner == 0 && g.shared_to.is_none() && g.domain.is_none())
                 .map(|(k, _)| *k)
                 .collect();
             removed = orphan_keys.iter().filter_map(|k| map.remove(k)).collect();
@@ -2117,16 +2532,19 @@ fn authorize_grant_slice_locked(
     shared_to_tid: Option<usize>,
     base: usize,
     size: usize,
+    domain_owned: bool,
 ) -> Result<Option<GrantSliceAccess>, SyscallError> {
-    // Phase-01 containment: a record owned by a private root is not sliceable for
-    // anyone. A pre-existing (pre-gate) record must not hand a raw mapping to a
-    // SAS receiver whose writes the private-root owner cannot see, and its
-    // receiver PTE could not be revoked. The caller sees the established
-    // `usize::MAX` "not authorized" result.
-    if domain_grant_task(grant_owner) {
+    // A record owned by a private root is not sliceable for a SAS receiver: the
+    // owner's backing lives in a root the SAS path cannot see, and a SAS receiver
+    // would receive a raw mapping the private-root owner cannot audit. A managed
+    // domain record reaches this path only for a SAS caller (a capable domain
+    // receiver is routed to the lifecycle-aware resolver) and is denied here; a
+    // pre-gate record that names a domain endpoint keeps its phase-01 denial for
+    // every caller. The caller sees the established `usize::MAX` sentinel.
+    if domain_owned || domain_grant_task(grant_owner) {
         log::warn!(
             "[grant] GrantSlice denied: grant owner {grant_owner} is a private-root domain \
-             (phase-01 containment)"
+             (no domain lifecycle for the receiver)"
         );
         return Ok(None);
     }
@@ -2148,27 +2566,6 @@ fn authorize_grant_slice_locked(
         !install_vfs_lease_if_context_live(request.caller_id, context, base, size, request.grant_id)
     }) {
         return Ok(None);
-    }
-    #[cfg(all(
-        feature = "native-domains",
-        any(
-            target_arch = "riscv64",
-            target_arch = "aarch64",
-            target_arch = "x86_64"
-        )
-    ))]
-    if request.caller_id != grant_owner {
-        if let Some(space) = task_domain_space(request.caller_id) {
-            const PAGE_SIZE: usize = 4096;
-            let n_pages = grant_pages_for_size(size);
-            let user_rw = crate::memory::paging::Flags::from_bits(
-                crate::memory::paging::Flags::READ | crate::memory::paging::Flags::WRITE,
-            );
-            for i in 0..n_pages {
-                let v = base + i * PAGE_SIZE;
-                let _ = space.map_grant_page(v, v, user_rw);
-            }
-        }
     }
     Ok(Some(GrantSliceAccess {
         base,
@@ -2204,6 +2601,7 @@ fn resolve_and_lease_grant(
                 grant.shared_to.as_ref().map(|(tid, _)| *tid),
                 grant.base,
                 grant.size,
+                grant.domain.is_some(),
             );
         }
     }
@@ -2217,6 +2615,154 @@ fn resolve_and_lease_grant(
         grant.shared_to.as_ref().map(|(tid, _)| *tid),
         grant.base,
         grant.size,
+        grant.domain.is_some(),
+    )
+}
+
+/// GrantShare for a private-root pair: publish the exact
+/// `(target identity, generation, root, rights)` tuple into the receiver root,
+/// then record `shared_to`.
+///
+/// A redundant share of the same tuple is a no-op; any change republishes after
+/// revoking the old receiver PTE and shooting it down. Unsupported rights
+/// (write-only) and a non-live or non-domain target are refused with the
+/// established share failure.
+#[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+fn domain_grant_share_row(
+    owner: usize,
+    base: usize,
+    domain: Option<&Arc<super::domain_grant::DomainGrant>>,
+    shared_to: &mut Option<(usize, GrantPerm)>,
+    caller_id: usize,
+    target_tid: usize,
+    target_root: &Arc<crate::memory::address_space::AddressSpace>,
+    perm: GrantPerm,
+) -> Result<(), SyscallError> {
+    let Some(record) = domain else {
+        return Err(SyscallError::PermissionDenied);
+    };
+    if caller_id != owner || record.state() != super::domain_grant::DomainGrantState::Live {
+        return Err(SyscallError::PermissionDenied);
+    }
+    let Some(rights) = super::domain_grant::rights_for(perm) else {
+        log::warn!(
+            "[grant] GrantShare {base:#x} refused: write-only has no domain page representation"
+        );
+        return Err(SyscallError::PermissionDenied);
+    };
+    let Some((cell, generation)) = live_task_binding(target_tid) else {
+        return Err(SyscallError::PermissionDenied);
+    };
+    if !record.receiver_matches(cell, generation, target_root, rights) {
+        record
+            .publish(target_root, cell, generation, rights)
+            .map_err(|error| {
+                log::warn!("[grant] GrantShare {base:#x} receiver publish refused: {error:?}");
+                SyscallError::PermissionDenied
+            })?;
+    }
+    *shared_to = Some((target_tid, perm));
+    Ok(())
+}
+
+/// Resolve one grant row for a capable domain receiver.
+///
+/// Returns the resolved base on success and the established `usize::MAX`
+/// "not authorized" sentinel for every refusal: an unresolvable or non-domain
+/// receiver, a SAS-owned record, an unresolvable or dying owner, a record that
+/// is not `Live`, missing or unsupported rights, a partial receiver mapping, or
+/// an unacknowledged rollback invalidation.
+#[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+#[allow(clippy::too_many_arguments)]
+fn domain_grant_slice_row(
+    owner: usize,
+    base: usize,
+    size: usize,
+    shared_to: Option<(usize, GrantPerm)>,
+    domain: Option<&Arc<super::domain_grant::DomainGrant>>,
+    caller_id: usize,
+    receiver: &Arc<crate::memory::address_space::AddressSpace>,
+    size_out: Option<*mut usize>,
+) -> Result<usize, SyscallError> {
+    let Some(record) = domain else {
+        // A SAS-owned record's frames are not mapped in a private root, and a
+        // mapping made here could not be revoked from the SAS side.
+        return Ok(usize::MAX);
+    };
+    if !record.owner_is_live() || record.state() != super::domain_grant::DomainGrantState::Live {
+        return Ok(usize::MAX);
+    }
+    // The owner resolves its own backing without a second mapping: the owner
+    // domain page was published with the record.
+    if caller_id == owner {
+        super::user_out::write_resolved_optional_usize(size_out, size);
+        return Ok(base);
+    }
+    let Some((shared_tid, perm)) = shared_to else {
+        return Ok(usize::MAX);
+    };
+    if shared_tid != caller_id {
+        return Ok(usize::MAX);
+    }
+    let Some(rights) = super::domain_grant::rights_for(perm) else {
+        return Ok(usize::MAX);
+    };
+    let Some((cell, generation)) = live_task_binding(caller_id) else {
+        return Ok(usize::MAX);
+    };
+    match record.publish(receiver, cell, generation, rights) {
+        Ok(()) => {
+            super::user_out::write_resolved_optional_usize(size_out, size);
+            Ok(base)
+        }
+        Err(error) => {
+            log::warn!(
+                "[grant] GrantSlice {base:#x} refused for domain task {caller_id}: {error:?}"
+            );
+            Ok(usize::MAX)
+        }
+    }
+}
+
+/// GrantSlice entry point for a capable domain receiver: resolve the row in
+/// either table and apply the lifecycle-aware resolver under the same lock that
+/// linearizes teardown.
+#[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+fn resolve_domain_grant_slice(
+    caller_id: usize,
+    grant_id: usize,
+    size_out_ptr: usize,
+    receiver: &Arc<crate::memory::address_space::AddressSpace>,
+) -> Result<usize, SyscallError> {
+    let size_out = super::user_out::resolve_optional_usize_slot(caller_id, size_out_ptr)?;
+    {
+        let tbl = grant_table_lock().lock();
+        if let Some(grant) = tbl.as_ref().and_then(|map| map.get(&grant_id)) {
+            return domain_grant_slice_row(
+                grant.owner,
+                grant.base,
+                grant.size,
+                grant.shared_to,
+                grant.domain.as_ref(),
+                caller_id,
+                receiver,
+                size_out,
+            );
+        }
+    }
+    let tbl = reg_grant_table_lock().lock();
+    let Some(grant) = tbl.as_ref().and_then(|map| map.get(&grant_id)) else {
+        return Ok(usize::MAX);
+    };
+    domain_grant_slice_row(
+        grant.owner,
+        grant.base,
+        grant.size,
+        grant.shared_to,
+        grant.domain.as_ref(),
+        caller_id,
+        receiver,
+        size_out,
     )
 }
 
@@ -6444,23 +6990,48 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             if size == 0 || size > MAX_GRANT_PAGES * PAGE_SIZE {
                 return Ok(0);
             }
-            // Phase-01 containment: a private-root owner's backing cannot be
-            // mapped for it or revoked from it, and the ungated path publishes the
-            // frames USER in the shared root. Refuse before allocating a frame.
-            // `Ok(0)` is the alloc-safe sentinel: a cell-side wrapper reads any
-            // nonzero return as a grant id.
-            if domain_grant_task(caller_id) {
+            // A private root whose lifecycle is unavailable (non-RV64, unknown or
+            // retired tid, a root already dying) keeps the phase-01 denial before
+            // a frame exists. `Ok(0)` is the alloc-safe sentinel: a cell-side
+            // wrapper reads any nonzero return as a grant id.
+            if domain_grant_task(caller_id) && !domain_grant_capable(caller_id) {
                 log::warn!(
-                    "[grant] GrantAlloc denied: task {caller_id} is a private-root domain \
-                     (phase-01 containment)"
+                    "[grant] GrantAlloc denied: task {caller_id} is not a live private root \
+                     (phase-01 denial)"
                 );
                 return Ok(0);
             }
+            let owner_space = live_domain_space(caller_id);
             let n_pages = size.div_ceil(PAGE_SIZE);
-            let paddr = match alloc_grant_pages(n_pages) {
-                Some(paddr) => paddr,
-                None => return Ok(0),
+            let paddr = match &owner_space {
+                #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+                Some(_) => match alloc_grant_pages_supervisor_only(n_pages) {
+                    Some(paddr) => paddr,
+                    None => return Ok(0),
+                },
+                #[cfg(not(all(feature = "native-domains", target_arch = "riscv64")))]
+                Some(_) => return Ok(0),
+                None => match alloc_grant_pages(n_pages) {
+                    Some(paddr) => paddr,
+                    None => return Ok(0),
+                },
             };
+            // A domain owner's backing is mapped only in its own root, RW+NX, and
+            // stays supervisor-only in the SAS root. Every page is undone if any
+            // one fails, so no raw pointer is ever published for a partial map.
+            #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+            if let Some(space) = &owner_space {
+                if let Err(error) = map_domain_owner_pages(space, paddr, n_pages) {
+                    log::warn!(
+                        "[grant] GrantAlloc owner mapping failed for task {caller_id}: {error:?}"
+                    );
+                    free_grant_pages(paddr, n_pages);
+                    return Ok(0);
+                }
+            }
+            let domain = owner_space
+                .as_ref()
+                .and_then(|space| new_domain_record(space, paddr, size));
             let mut table = grant_table_lock().lock();
             let (owner_cell, owner_generation) = match live_task_binding(caller_id) {
                 Some(binding) => binding,
@@ -6482,6 +7053,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     owner_cell,
                     owner_generation,
                     shared_to: None,
+                    domain,
                 },
             );
             Ok(paddr)
@@ -6491,21 +7063,63 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             target_cell,
             perm,
         } => {
-            // Phase-01 containment: neither side of a domain-backed share may be
-            // published while the receiver mapping is neither permission-accurate
-            // nor synchronously revocable. Target identity is the live task's, so
-            // a recycled tid cannot inherit a grant.
-            if domain_grant_task(caller_id) || domain_grant_task(target_cell) {
-                log::warn!(
-                    "[grant] GrantShare denied: caller {caller_id} or target {target_cell} is a \
-                     private-root domain (phase-01 containment)"
-                );
-                return Err(SyscallError::PermissionDenied);
-            }
             let perm = match GrantPerm::try_from(perm as u8) {
                 Ok(p) => p,
                 Err(_) => return Err(SyscallError::InvalidInput),
             };
+            // A private-root pair is the only shape the lifecycle can publish:
+            // both endpoints must be live private roots on the one architecture
+            // whose lifecycle is implemented. SAS-only shares keep today's path;
+            // a mixed pair, a non-RV64 target and a dead or unknown peer keep the
+            // phase-01 denial.
+            let owner_is_domain = domain_grant_task(caller_id);
+            let target_is_domain = domain_grant_task(target_cell);
+            #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+            if owner_is_domain || target_is_domain {
+                let owner_space = live_domain_space(caller_id);
+                let target_space = live_domain_space(target_cell);
+                let (Some(_owner_space), Some(target_space)) = (owner_space, target_space) else {
+                    log::warn!(
+                        "[grant] GrantShare denied: caller {caller_id} or target {target_cell} is \
+                         not a live private root"
+                    );
+                    return Err(SyscallError::PermissionDenied);
+                };
+                {
+                    let mut tbl = grant_table_lock().lock();
+                    if let Some(grant) = tbl.as_mut().and_then(|m| m.get_mut(&grant_id)) {
+                        return domain_grant_share_row(
+                            grant.owner,
+                            grant.base,
+                            grant.domain.as_ref(),
+                            &mut grant.shared_to,
+                            caller_id,
+                            target_cell,
+                            &target_space,
+                            perm,
+                        )
+                        .map(|()| 0);
+                    }
+                }
+                let mut rtbl = reg_grant_table_lock().lock();
+                return match rtbl.as_mut().and_then(|m| m.get_mut(&grant_id)) {
+                    None => Err(SyscallError::InvalidInput),
+                    Some(grant) => domain_grant_share_row(
+                        grant.owner,
+                        grant.base,
+                        grant.domain.as_ref(),
+                        &mut grant.shared_to,
+                        caller_id,
+                        target_cell,
+                        &target_space,
+                        perm,
+                    )
+                    .map(|()| 0),
+                };
+            }
+            // Without a private-root backend no task is a domain, so the residual
+            // branch below is the SAS-only path.
+            let _ = (owner_is_domain, target_is_domain);
             // Check PAGE_GRANT_TABLE first, then fall back to REG_GRANT_TABLE.
             {
                 let mut tbl = grant_table_lock().lock();
@@ -6536,15 +7150,22 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             grant_id,
             size_out_ptr,
         } => {
-            // Phase-01 containment: a private-root caller must not receive a raw
-            // mapping; the ungated path maps it RW regardless of `shared_to` and
-            // nothing revokes it. `usize::MAX` is the established slice sentinel.
-            if domain_grant_task(caller_id) {
+            // A caller that is not a live private root keeps the phase-01 denial
+            // (`usize::MAX`): a private root that is retired, unknown or on an
+            // unsupported target has no root this path could map into.
+            if domain_grant_task(caller_id) && !domain_grant_capable(caller_id) {
                 log::warn!(
-                    "[grant] GrantSlice denied: task {caller_id} is a private-root domain \
-                     (phase-01 containment)"
+                    "[grant] GrantSlice denied: task {caller_id} is not a live private root \
+                     (phase-01 denial)"
                 );
                 return Ok(usize::MAX);
+            }
+            #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+            if let Some(receiver) = live_domain_space(caller_id) {
+                // A private-root receiver resolves the owner's exact rights and
+                // publishes the receiver mapping transactionally; a VFS context
+                // cannot exist for it, and no SAS record may be resolved.
+                return resolve_domain_grant_slice(caller_id, grant_id, size_out_ptr, &receiver);
             }
             let vfs_context = match current_vfs_grant_lookup(caller_id) {
                 VfsGrantLookup::NotVfs => None,
@@ -6562,14 +7183,13 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         }
 
         Syscall::GrantFree { grant_id } => {
-            // Phase-01 containment: releasing a private-root owner's record would
-            // return frames whose receiver PTE this path cannot revoke. Refuse
-            // before the entry leaves the table (a pre-existing record stays
-            // quarantined until the phase-03 lifecycle drains it).
-            if domain_grant_task(caller_id) {
+            // A private root whose lifecycle is unavailable keeps the phase-01
+            // denial: releasing its record would return frames whose receiver PTE
+            // this path cannot revoke.
+            if domain_grant_task(caller_id) && !domain_grant_capable(caller_id) {
                 log::warn!(
-                    "[grant] GrantFree denied: task {caller_id} is a private-root domain \
-                     (phase-01 containment)"
+                    "[grant] GrantFree denied: task {caller_id} is not a live private root \
+                     (phase-01 denial)"
                 );
                 return Err(SyscallError::PermissionDenied);
             }
@@ -6583,20 +7203,36 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     .as_ref()
                     .and_then(|m| m.get(&grant_id))
                     .filter(|g| g.owner == caller_id)
-                    .map(|g| (g.base, g.size));
+                    .map(|g| (g.base, g.size, g.domain.clone()));
                 match owned {
                     None => None,
-                    Some((base, size)) => {
+                    Some((base, size, domain)) => {
                         refuse_if_pinned("GrantFree", grant_id, base, size)?;
-                        tbl.as_mut().and_then(|m| m.remove(&grant_id))
+                        if domain.is_some() {
+                            // The row stays while the revoke drains so a retry is
+                            // idempotent; a `Revoking` row refuses new slices.
+                            Some((base, size, domain))
+                        } else {
+                            tbl.as_mut()
+                                .and_then(|m| m.remove(&grant_id))
+                                .map(|g| (g.base, g.size, None))
+                        }
                     }
                 }
             };
-            let entry = match entry {
-                Some(e) => e,
-                None => return Err(SyscallError::PermissionDenied),
+            let Some((base, size, domain)) = entry else {
+                return Err(SyscallError::PermissionDenied);
             };
-            free_grant_pages(entry.base, grant_pages_for_size(entry.size));
+            if let Some(record) = &domain {
+                if !revoke_domain_record(record, grant_id, "GrantFree") {
+                    // Bounded existing error: the frames stay retained and the
+                    // record stays `Revoking` for an idempotent retry.
+                    return Err(SyscallError::PermissionDenied);
+                }
+                let mut tbl = grant_table_lock().lock();
+                tbl.as_mut().and_then(|m| m.remove(&grant_id));
+            }
+            free_grant_pages(base, grant_pages_for_size(size));
             Ok(0)
         }
 
@@ -6773,22 +7409,44 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             if size == 0 || size > MAX_GRANT_PAGES * PAGE_SIZE {
                 return Ok(0);
             }
-            // Phase-01 containment: the ungated path maps this buffer into the
-            // caller's private root, and `unmap_grant_page` on unregister is the
-            // only revoke — no receiver PTE, pin or reader is considered. Refuse
-            // before a frame or PTE exists, with the alloc-safe sentinel.
-            if domain_grant_task(caller_id) {
+            // A private root whose lifecycle is unavailable keeps the phase-01
+            // denial: its buffer would be mapped into a root this path cannot
+            // revoke a receiver from, so no frame or PTE may exist.
+            if domain_grant_task(caller_id) && !domain_grant_capable(caller_id) {
                 log::warn!(
-                    "[grant] GrantRegister denied: task {caller_id} is a private-root domain \
-                     (phase-01 containment)"
+                    "[grant] GrantRegister denied: task {caller_id} is not a live private root \
+                     (phase-01 denial)"
                 );
                 return Ok(0);
             }
+            let owner_space = live_domain_space(caller_id);
             let n_pages = size.div_ceil(PAGE_SIZE);
-            let paddr = match alloc_grant_pages(n_pages) {
-                Some(paddr) => paddr,
-                None => return Ok(0),
+            let paddr = match &owner_space {
+                #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+                Some(_) => match alloc_grant_pages_supervisor_only(n_pages) {
+                    Some(paddr) => paddr,
+                    None => return Ok(0),
+                },
+                #[cfg(not(all(feature = "native-domains", target_arch = "riscv64")))]
+                Some(_) => return Ok(0),
+                None => match alloc_grant_pages(n_pages) {
+                    Some(paddr) => paddr,
+                    None => return Ok(0),
+                },
             };
+            #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+            if let Some(space) = &owner_space {
+                if let Err(error) = map_domain_owner_pages(space, paddr, n_pages) {
+                    log::warn!(
+                        "[grant] GrantRegister owner mapping failed for task {caller_id}: {error:?}"
+                    );
+                    free_grant_pages(paddr, n_pages);
+                    return Ok(0);
+                }
+            }
+            let domain = owner_space
+                .as_ref()
+                .and_then(|space| new_domain_record(space, paddr, size));
             let mut table = reg_grant_table_lock().lock();
             let (owner_cell, owner_generation) = match live_task_binding(caller_id) {
                 Some(binding) => binding,
@@ -6798,30 +7456,6 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     return Err(SyscallError::PermissionDenied);
                 }
             };
-            #[cfg(all(
-                feature = "native-domains",
-                any(
-                    target_arch = "riscv64",
-                    target_arch = "aarch64",
-                    target_arch = "x86_64"
-                )
-            ))]
-            if let Some(space) = task_domain_space(caller_id) {
-                let user_rw = crate::memory::paging::Flags::from_bits(
-                    crate::memory::paging::Flags::READ | crate::memory::paging::Flags::WRITE,
-                );
-                for i in 0..n_pages {
-                    let v = paddr + i * PAGE_SIZE;
-                    if space.map_grant_page(v, v, user_rw).is_err() {
-                        for j in 0..i {
-                            let _ = space.unmap_grant_page(paddr + j * PAGE_SIZE);
-                        }
-                        drop(table);
-                        free_grant_pages(paddr, n_pages);
-                        return Ok(0);
-                    }
-                }
-            }
             if table.is_none() {
                 *table = Some(BTreeMap::new());
             }
@@ -6834,6 +7468,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     owner_cell,
                     owner_generation,
                     shared_to: None,
+                    domain,
                 },
             );
             Ok(paddr)
@@ -8205,6 +8840,7 @@ mod tests {
             owner_cell: binding.0,
             owner_generation: binding.1,
             shared_to: None,
+            domain: None,
         };
         assert!(page_grant_authorizes_dma(
             &page_grant,
@@ -8242,6 +8878,7 @@ mod tests {
             owner_cell: binding.0,
             owner_generation: binding.1,
             shared_to: None,
+            domain: None,
         };
         assert!(reg_grant_authorizes_dma(
             &reg_grant, OWNER, binding, BASE, SIZE
