@@ -329,7 +329,9 @@ pub(crate) fn run_root_switch_witness() -> bool {
     // routine is the only writer.
     unsafe impl Sync for ContextSlot {}
 
-    static CTX_SAS: ContextSlot =
+    static CTX_FIXTURE: ContextSlot =
+        ContextSlot(UnsafeCell::new(crate::hal::arch::Context::zeroed()));
+    static CTX_SCRATCH: ContextSlot =
         ContextSlot(UnsafeCell::new(crate::hal::arch::Context::zeroed()));
     static CTX_B: ContextSlot = ContextSlot(UnsafeCell::new(crate::hal::arch::Context::zeroed()));
     static CTX_C: ContextSlot = ContextSlot(UnsafeCell::new(crate::hal::arch::Context::zeroed()));
@@ -343,6 +345,8 @@ pub(crate) fn run_root_switch_witness() -> bool {
     static B_ENTERED: AtomicBool = AtomicBool::new(false);
     static C_ENTERED: AtomicBool = AtomicBool::new(false);
     static B_RESUMED: AtomicBool = AtomicBool::new(false);
+    static SCRATCH_ENTERED: AtomicBool = AtomicBool::new(false);
+    static SCRATCH_RESUMED: AtomicBool = AtomicBool::new(false);
 
     /// Runs on root C's stack, under root C.
     extern "C" fn entry_c() {
@@ -376,12 +380,45 @@ pub(crate) fn run_root_switch_witness() -> bool {
             );
         }
         B_RESUMED.store(true, Ordering::Release);
-        // Back to the boot context: the kernel root, ASID 0.
+        // Back to the scratch stack under the kernel root, ASID 0. That stack is
+        // a plain allocation, mapped by no private root, which is what makes the
+        // next step discriminate the ordering.
         unsafe {
             crate::hal::arch::Context::switch_with_root(
                 CTX_B.0.get(),
-                CTX_SAS.0.get(),
+                CTX_SCRATCH.0.get(),
                 KERNEL_BASE.load(Ordering::Acquire),
+                0,
+            );
+        }
+        loop {
+            core::hint::spin_loop();
+        }
+    }
+
+    /// Runs on the scratch stack under the kernel root.
+    ///
+    /// This is the discriminating step: the SAS-to-domain switch below saves its
+    /// outgoing context onto this stack, and no private root maps it. The shape
+    /// phase 02 fixed — programming the incoming root before that save — would
+    /// fault here instead of returning.
+    extern "C" fn entry_scratch() {
+        SCRATCH_ENTERED.store(true, Ordering::Release);
+        unsafe {
+            crate::hal::arch::Context::switch_with_root(
+                CTX_SCRATCH.0.get(),
+                CTX_B.0.get(),
+                BASE_B.load(Ordering::Acquire),
+                ASID_B.load(Ordering::Acquire),
+            );
+        }
+        SCRATCH_RESUMED.store(true, Ordering::Release);
+        // No root write: B returned to the kernel root already.
+        unsafe {
+            crate::hal::arch::Context::switch_with_root(
+                CTX_SCRATCH.0.get(),
+                CTX_FIXTURE.0.get(),
+                0,
                 0,
             );
         }
@@ -401,7 +438,13 @@ pub(crate) fn run_root_switch_witness() -> bool {
         log::error!("S22-{}-ROOT-SWITCH: FAIL kernel root not recorded", ARCH_TAG);
         return false;
     }
-    let (Ok(stack_b), Ok(stack_c)) = (Stack::new_kernel(2), Stack::new_kernel(2)) else {
+    let (Ok(stack_b), Ok(stack_c), Ok(stack_scratch)) = (
+        Stack::new_kernel(2),
+        Stack::new_kernel(2),
+        // Deliberately NOT registered with either root: the ordering witness
+        // depends on the outgoing stack being unreachable under the incoming root.
+        Stack::new_kernel(2),
+    ) else {
         log::error!("S22-{}-ROOT-SWITCH: FAIL stack", ARCH_TAG);
         return false;
     };
@@ -425,15 +468,20 @@ pub(crate) fn run_root_switch_witness() -> bool {
         ctx_c.sp = stack_c.top as u64;
         ctx_c.x30 = entry_c as *const () as usize as u64;
         ctx_c.daif = saved_daif as u64;
+        let ctx_scratch = &mut *CTX_SCRATCH.0.get();
+        ctx_scratch.sp = stack_scratch.top as u64;
+        ctx_scratch.x30 = entry_scratch as *const () as usize as u64;
+        ctx_scratch.daif = saved_daif as u64;
     }
 
-    // SAS -> B -> C -> B -> SAS.
+    // Boot context -> scratch stack (no root write), then the whole chain runs
+    // with its SAS side on memory no private root maps.
     unsafe {
         crate::hal::arch::Context::switch_with_root(
-            CTX_SAS.0.get(),
-            CTX_B.0.get(),
-            BASE_B.load(Ordering::Acquire),
-            ASID_B.load(Ordering::Acquire),
+            CTX_FIXTURE.0.get(),
+            CTX_SCRATCH.0.get(),
+            0,
+            0,
         );
     }
 
@@ -450,12 +498,14 @@ pub(crate) fn run_root_switch_witness() -> bool {
     // mapped in the incoming root: the switch's save phase runs on it. Report the
     // fact rather than assume it, so a future change to the shared ranges cannot
     // quietly turn this into a test that would pass either way.
-    let boot_stack_probe = &saved_daif as *const usize as usize;
+    let boot_stack_probe = stack_scratch.usable_start();
     let boot_stack_shared = crate::memory::domain_supervisor_registry::shared_snapshot()
         .iter()
         .any(|range| boot_stack_probe >= range.start && boot_stack_probe < range.end);
 
-    let ok = B_ENTERED.load(Ordering::Acquire)
+    let ok = SCRATCH_ENTERED.load(Ordering::Acquire)
+        && SCRATCH_RESUMED.load(Ordering::Acquire)
+        && B_ENTERED.load(Ordering::Acquire)
         && C_ENTERED.load(Ordering::Acquire)
         && B_RESUMED.load(Ordering::Acquire)
         && OBSERVED_B.load(Ordering::Acquire) == expected_b
