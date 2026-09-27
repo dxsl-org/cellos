@@ -126,6 +126,17 @@ pub fn kernel_cr3() -> usize {
     VI_KERNEL_CR3.load(Ordering::Acquire)
 }
 
+/// The live CR3 value, including its tag bits.
+#[inline]
+pub fn read_cr3() -> usize {
+    let cr3: usize;
+    // SAFETY: reading CR3 has no side effects.
+    unsafe {
+        core::arch::asm!("mov {}, cr3", out(reg) cr3, options(nomem, nostack, preserves_flags));
+    }
+    cr3
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DomainPagingError {
     Unsupported,

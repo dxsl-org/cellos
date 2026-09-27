@@ -632,15 +632,70 @@ pub fn init_kernel_paging_x86(
 pub unsafe fn activate_paging(root_phys: PhysAddr) {
     // PCID is decided here, before the first CR3 write: the tag policy depends on
     // CR4.PCIDE, and a nonzero PCID programmed while it is clear is a #GP. When
-    // the CPU cannot carry a tag, domains use tag 0 and a full CR3 flush. The
-    // decision is cached; main.rs reports it once the logger is live.
+    // the CPU cannot carry a tag, domains use tag 0 and a full CR3 flush.
     let _ = hal::domain::init_pcid();
     // SAFETY: caller guarantees root_phys is a valid, fully populated PML4 that
     // keeps the kernel alive after the CR3 switch. Page-aligned, so tag 0.
     unsafe {
         hal::paging::write_cr3(root_phys as u64);
     }
+    // Report the decision here, on the raw UART, and not through the logger: the
+    // logger is not live yet, and later boot stages (Tier-3 VMM bring-up) can
+    // hang on a given accelerator, which would hide a witness for a decision that
+    // was already made. The 'Q' probe just above proves this path writes.
+    emit_pcid_decision();
     log::info!("[kernel] paging activated");
+}
+
+/// Emit the PCID decision as one line on the early UART, without allocating —
+/// the heap may not exist yet. Also prints the live CR3 so the tag bits that the
+/// policy produced are visible, not inferred.
+#[cfg(target_arch = "x86_64")]
+fn emit_pcid_decision() {
+    fn put(byte: u8) {
+        hal::uart_16550::putchar(byte);
+    }
+    fn text(s: &str) {
+        for byte in s.bytes() {
+            put(byte);
+        }
+    }
+    fn flag(value: bool) {
+        text(if value { "true" } else { "false" });
+    }
+    fn hex(value: usize) {
+        text("0x");
+        let mut started = false;
+        for nibble_index in (0..(core::mem::size_of::<usize>() * 2)).rev() {
+            let nibble = ((value >> (nibble_index * 4)) & 0xf) as u8;
+            if nibble != 0 {
+                started = true;
+            }
+            if started || nibble_index == 0 {
+                put(if nibble < 10 {
+                    b'0' + nibble
+                } else {
+                    b'a' + nibble - 10
+                });
+            }
+        }
+    }
+
+    let usable = hal::domain::pcid_usable();
+    text("\n[kernel] x86_64 paging: PCID ");
+    text(if usable { "enabled" } else { "disabled" });
+    text(" (CPUID pcid=");
+    flag(hal::domain::pcid_supported());
+    text(" invpcid=");
+    flag(hal::domain::invpcid_supported());
+    text(", CR4.PCIDE=");
+    put(if hal::domain::pcide_set() { b'1' } else { b'0' });
+    text(", CR3=");
+    hex(hal::domain::read_cr3());
+    if !usable {
+        text(" — domain roots use tag 0 with a full CR3 flush");
+    }
+    text(")\n");
 }
 
 /// Map a 4KB page (x86_64).

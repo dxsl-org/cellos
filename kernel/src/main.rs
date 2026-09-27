@@ -1039,26 +1039,6 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         not(any(feature = "policy-required", feature = "production-relay-image"))
     ))]
     {
-        // x86_64 paging reports its tag capability here rather than at the CR3
-        // write, where the logger is not yet live. The decision itself was made
-        // before the first CR3 write (see `paging::activate_paging`).
-        #[cfg(target_arch = "x86_64")]
-        {
-            let usable = crate::hal::domain::pcid_usable();
-            let line = alloc::format!(
-                "x86_64 paging: PCID {} (CPUID pcid={} invpcid={}, CR4.PCIDE={}){}",
-                if usable { "enabled" } else { "disabled" },
-                crate::hal::domain::pcid_supported(),
-                crate::hal::domain::invpcid_supported(),
-                u8::from(crate::hal::domain::pcide_set()),
-                if usable {
-                    ""
-                } else {
-                    " — domain roots use tag 0 with a full CR3 flush"
-                },
-            );
-            log_info(&line);
-        }
         if crate::loader::domain_admission::enable_for_boot() {
             log_info("Tier 2 admission: ENABLED (development profile)");
         } else {
