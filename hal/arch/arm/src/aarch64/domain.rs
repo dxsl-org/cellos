@@ -47,22 +47,12 @@ pub enum DomainPagingError {
     Unsupported,
 }
 
-/// Activate private address space on AArch64.
-///
-/// `root_baddr`: physical base address of L1 page table (4KB aligned).
-/// `asid`: 16-bit address space ID.
+/// The TTBR0_EL1 value for a private root: ASID in the top bits, table base in
+/// bits 47:12. One definition, used by the switch routine and by any caller that
+/// programs the register directly — the encoding must not be duplicated.
 #[inline]
-pub fn activate_address_space(root_baddr: usize, asid: usize) {
-    let ttbr0 = ((asid as u64 & 0xffff) << 48) | (root_baddr as u64 & 0x0000_ffff_ffff_f000);
-    unsafe {
-        core::arch::asm!(
-            "dsb ishst",
-            "msr ttbr0_el1, {ttbr0}",
-            "isb",
-            ttbr0 = in(reg) ttbr0,
-            options(nostack),
-        );
-    }
+pub const fn root_register_value(root_baddr: usize, asid: usize) -> usize {
+    ((asid & 0xffff) << 48) | (root_baddr & 0x0000_ffff_ffff_f000)
 }
 
 /// Invalidate local translations tagged with `asid`.
@@ -110,7 +100,7 @@ pub fn flush_all() {
 /// Called from `SwitchPlan::root_switch` for every transition that programs
 /// `TTBR0_EL1` — activation, same-domain resume, and the safe-root handoff —
 /// so the counter names plans, not instructions; the instruction itself is
-/// issued later at the raw-switch boundary by `activate_address_space`.
+/// issued by the switch routine itself, between the outgoing save and the incoming load.
 #[inline]
 pub fn observe_switch_activation() {
     #[cfg(feature = "test-hooks")]

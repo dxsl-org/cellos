@@ -47,7 +47,7 @@ pub(crate) struct SwitchPlan {
     transition: DomainTransition,
 }
 
-/// The tuple `activate_address_space` consumes for `space` on this architecture.
+/// The root tuple the switch routine programs for `space` on this architecture.
 ///
 /// RV64 takes a page number; the others take the byte address the tables start
 /// at. The encoding lives here so a plan, the assembly boundary, and the

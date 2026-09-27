@@ -87,15 +87,43 @@ impl CpuContext {
     /// # Safety
     /// Both pointers must point to valid, aligned `CpuContext` structs.
     pub unsafe fn switch(old: *mut CpuContext, new: *const CpuContext) {
+        // SAFETY: caller's contract; no root transition.
+        unsafe { Self::switch_with_root(old, new, 0, 0) }
+    }
+
+    /// Switch contexts, programming a private root between the save and the load.
+    ///
+    /// `root_baddr == 0` selects the no-write path (SAS to SAS). Otherwise the
+    /// incoming root is live only after the outgoing context is stored, and the
+    /// incoming stack is adopted before any stack access — the ordering the
+    /// private-root transition requires.
+    ///
+    /// # Safety
+    /// Both pointers must point to valid, aligned `CpuContext` structs, and
+    /// `root_baddr`/`asid` must describe a completed root this hart may run.
+    pub unsafe fn switch_with_root(
+        old: *mut CpuContext,
+        new: *const CpuContext,
+        root_baddr: usize,
+        asid: usize,
+    ) {
         if super::el2::is_el2() {
+            // EL2 switches are host-context only: no private roots exist there,
+            // and the EL2 stub has no root argument.
+            debug_assert_eq!(root_baddr, 0, "private root requested at EL2");
             // SAFETY: same preconditions as __switch_el1; uses EL2 sysregs.
             unsafe {
                 __switch_el2(old, new);
             }
         } else {
+            let root = if root_baddr == 0 {
+                0
+            } else {
+                super::domain::root_register_value(root_baddr, asid)
+            };
             // SAFETY: delegated to the assembly stub below.
             unsafe {
-                __switch_el1(old, new);
+                __switch_el1(old, new, root);
             }
         }
     }
@@ -106,22 +134,17 @@ impl CpuContext {
 /// # Safety
 /// Both pointers must point to valid, aligned `CpuContext` structs.
 pub unsafe fn switch(old: *mut CpuContext, new: *const CpuContext) {
-    if super::el2::is_el2() {
-        // SAFETY: same preconditions; uses EL2 sysregs.
-        unsafe {
-            __switch_el2(old, new);
-        }
-    } else {
-        // SAFETY: delegated to the assembly stub below.
-        unsafe {
-            __switch_el1(old, new);
-        }
-    }
+    // SAFETY: caller's contract; no root transition.
+    unsafe { CpuContext::switch_with_root(old, new, 0, 0) }
 }
 
 extern "C" {
     /// EL1 context switch — defined in the global_asm! block below.
-    fn __switch_el1(old: *mut CpuContext, new: *const CpuContext);
+    ///
+    /// `root` is the TTBR0_EL1 value to program after the outgoing context is
+    /// saved and before the incoming context is loaded; zero leaves the register
+    /// alone (SAS to SAS, where the kernel root is already live).
+    fn __switch_el1(old: *mut CpuContext, new: *const CpuContext, root: usize);
     /// EL2 context switch — defined in el2.rs global_asm! block.
     fn __switch_el2(old: *mut CpuContext, new: *const CpuContext);
 }
@@ -154,6 +177,17 @@ __switch_el1:
     // context restores the idle loop's IRQ-enabled DAIF, keeping WFI functional.
     mrs  x9,  daif
     str  x9,       [x0, #128]
+
+    // Root transition, if the caller asked for one (x2 = TTBR0_EL1 value; zero
+    // means "no write", the SAS path). It sits between the save and the load on
+    // purpose: the outgoing context is already stored, and the only memory this
+    // sequence touches afterwards is the *incoming* context and its stack. The
+    // outgoing stack is not mapped in the incoming root, so nothing here may
+    // touch it — no calls, no spills, registers only.
+    cbz  x2,  1f
+    msr  ttbr0_el1, x2
+    isb
+1:
 
     // Restore new context.
     ldp  x19, x20, [x1, #0]

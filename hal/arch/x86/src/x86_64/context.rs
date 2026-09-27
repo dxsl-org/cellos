@@ -59,8 +59,28 @@ impl CpuContext {
     /// Both pointers must point to valid, aligned `CpuContext` structs.
     #[inline(always)]
     pub unsafe fn switch(old: *mut CpuContext, new: *const CpuContext) {
+        // SAFETY: invariant upheld by caller; no root transition.
+        unsafe { switch_with_root(old, new, 0, 0) }
+    }
+
+    /// Switch contexts, programming a private root between the save and the load.
+    ///
+    /// `root_pml4 == 0` selects the no-write path (SAS to SAS). Otherwise the CR3
+    /// value is composed by the backend — including the PCID decision, so a tag
+    /// is only carried when `CR4.PCIDE` makes it legal — and written after the
+    /// outgoing context is stored and before the incoming stack is adopted.
+    ///
+    /// # Safety
+    /// Both pointers must point to valid, aligned `CpuContext` structs, and
+    /// `root_pml4`/`pcid` must describe a completed root this CPU may run.
+    pub unsafe fn switch_with_root(
+        old: *mut CpuContext,
+        new: *const CpuContext,
+        root_pml4: usize,
+        pcid: usize,
+    ) {
         // SAFETY: invariant upheld by caller.
-        unsafe { switch(old, new) }
+        unsafe { switch_with_root(old, new, root_pml4, pcid) }
     }
 }
 
@@ -69,6 +89,32 @@ impl CpuContext {
 /// # Safety
 /// Both pointers must point to valid, aligned `CpuContext` structs.
 pub unsafe fn switch(old: *mut CpuContext, new: *const CpuContext) {
+    // SAFETY: caller guarantees valid, aligned CpuContext pointers.
+    unsafe { switch_with_root(old, new, 0, 0) }
+}
+
+/// Cooperative context switch with a root transition.
+///
+/// `root_pml4 == 0` means "no write" (SAS to SAS, kernel CR3 already live).
+/// Otherwise CR3 is composed by the backend — which drops the PCID when
+/// `CR4.PCIDE` is clear — and written between the outgoing save and the incoming
+/// load: the outgoing stack is not mapped in the incoming root, so the sequence
+/// between them must not touch it (registers only).
+///
+/// # Safety
+/// Both pointers must point to valid, aligned `CpuContext` structs, and
+/// `root_pml4`/`pcid` must name a root this CPU may run.
+pub unsafe fn switch_with_root(
+    old: *mut CpuContext,
+    new: *const CpuContext,
+    root_pml4: usize,
+    pcid: usize,
+) {
+    let cr3 = if root_pml4 == 0 {
+        0
+    } else {
+        super::domain::cr3_for(root_pml4, pcid, super::domain::pcid_usable())
+    };
     // SAFETY: caller guarantees valid, aligned CpuContext pointers.
     //
     // Register discipline: pin `old` → rdi and `new` → rsi (SysV argument
@@ -84,13 +130,19 @@ pub unsafe fn switch(old: *mut CpuContext, new: *const CpuContext) {
             "mov [rdi+4*8], rbx",  "mov [rdi+5*8], rbp",
             "mov [rdi+6*8], rsp",
             "lea rax, [rip+99f]",   "mov [rdi+7*8], rax",
+            // Root transition (rdx = CR3, zero = no write). Registers only:
+            // after this point the outgoing stack is unreachable.
+            "test rdx, rdx",
+            "jz 98f",
+            "mov cr3, rdx",
+            "98:",
             "mov r15, [rsi+0*8]",  "mov r14, [rsi+1*8]",
             "mov r13, [rsi+2*8]",  "mov r12, [rsi+3*8]",
             "mov rbx, [rsi+4*8]",  "mov rbp, [rsi+5*8]",
             "mov rsp, [rsi+6*8]",
             "jmp [rsi+7*8]",
             "99:",
-            in("rdi") old, in("rsi") new,
+            in("rdi") old, in("rsi") new, in("rdx") cr3,
             out("rax") _,
         );
     }

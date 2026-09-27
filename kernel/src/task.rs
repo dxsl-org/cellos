@@ -1370,10 +1370,17 @@ pub fn yield_cpu() {
             #[cfg(not(target_arch = "riscv64"))]
             {
                 let (root_addr, asid) = plan.root_switch();
-                if root_addr != 0 {
-                    crate::hal::domain::activate_address_space(root_addr, asid);
-                }
-                crate::hal::arch::Context::switch(final_curr, final_next);
+                // The root is programmed *inside* the switch, after the outgoing
+                // context is saved and before the incoming stack is adopted.
+                // Programming it here instead would leave the incoming root live
+                // while the outgoing context is still being saved on a stack the
+                // new root does not map.
+                crate::hal::arch::Context::switch_with_root(
+                    final_curr,
+                    final_next,
+                    root_addr,
+                    asid,
+                );
                 let (cur_id, _) = hart_local::current_domain();
                 if cur_id == 0 {
                     hart_local::acknowledge_safe_root();

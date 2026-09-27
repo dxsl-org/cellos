@@ -142,24 +142,6 @@ pub enum DomainPagingError {
     Unsupported,
 }
 
-/// Activate private address space on x86_64.
-///
-/// `root_pml4`: physical base address of PML4 (4KB aligned).
-/// `pcid`: 12-bit PCID, honored only when [`pcid_usable`].
-#[inline]
-pub fn activate_address_space(root_pml4: usize, pcid: usize) {
-    let cr3 = cr3_for(root_pml4, pcid, pcid_usable());
-    // SAFETY: `cr3` names a completed PML4 (or the kernel root) with a tag the
-    // hardware can carry; the tag decision was made once at boot.
-    unsafe {
-        core::arch::asm!(
-            "mov cr3, {cr3}",
-            cr3 = in(reg) cr3,
-            options(nostack),
-        );
-    }
-}
-
 /// Invalidate local translations tagged with `pcid`.
 ///
 /// With `INVPCID` the invalidation names the tag; without it (or without PCID)

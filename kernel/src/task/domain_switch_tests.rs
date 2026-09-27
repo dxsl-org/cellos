@@ -117,12 +117,25 @@ pub(crate) fn run_primary() -> bool {
         };
     let (roots, flushes) = crate::hal::domain::switch_counters();
     let (domain_id, domain_generation) = hart_local::current_domain();
+    // The switch routine programs the root register from this pair, and the
+    // encoding has one definition: it must name THIS root and THIS tag, or the
+    // Cell would resume under a different address space than the plan selected.
+    #[cfg(target_arch = "aarch64")]
+    let encoding_ok = {
+        let register = crate::hal::domain::root_register_value(root, asid);
+        register != 0
+            && register & 0x0000_ffff_ffff_f000 == root
+            && (register >> 48) & 0xffff == asid
+    };
+    #[cfg(not(target_arch = "aarch64"))]
+    let encoding_ok = true;
     let plan_ok = root != 0
         && asid != 0
         && roots == 1
         && flushes == FLUSHES_PER_ACTIVATION
         && domain_id != 0
         && domain_generation != 0
+        && encoding_ok
         && hart_local::domain_ack_generation_for(hart_local::current_hart_id()) == 0;
     if plan_ok {
         log::info!(
