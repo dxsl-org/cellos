@@ -40,7 +40,8 @@ Repair **all** findings of the 2026-09-27 audit: domain grant revoke/permission/
 | 02 | Domain root and TLB correctness | in progress — slices 1–2 done, AArch64 lane repaired | `phase-02-domain-root-lifetime.md` § Progress — tag leases (`h1-asid-lease-mvFocf`) and unmap invalidation order (`h1-unmap-order-HDEPLP`) each red before / green after; AArch64 test-hooks lane builds and boots again; non-RV64 switch, invalidation ack and x86 PCID remain |
 | 06 | RT sender wake | completed 2026-09-27 (decision-level) | `phase-06-rt-wake.md` § Progress — `S22-RV64-RT-WAKE` red with the wake call reverted (`h2-rt-wake-xiIlSU`: `pended=false`) and with both hunks reverted (`h2-rt-wake-3qm6mA`), green after (`h2-rt-wake-jDuHmU`); latency P99 stays hardware-gated |
 | 04 | Boot heap contiguity | completed 2026-09-27 | `phase-04-boot-heap.md` § Progress — host lane 113/113 (fragmented map red before the fix at frame 50), RV64 + AArch64 + RV64-production boots green; x86_64 lane unavailable |
-| 03, 05, 07, 08 | | pending | — |
+| 05 | Multi-region frames | completed 2026-09-27 (algorithm; capacity claim board-gated) | `phase-05-multiregion-frames.md` § Progress — host lane 118/118 (multi-range plan red before the fix), RV64 + AArch64 + RV64-production boots green |
+| 03, 07, 08 | | pending | — |
 
 ## Dependency / release policy
 

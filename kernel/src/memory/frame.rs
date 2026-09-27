@@ -27,18 +27,52 @@ pub fn phys_to_virt(phys: usize) -> usize {
     phys + PHYS_OFFSET.load(Ordering::Relaxed)
 }
 
+/// Where the allocation bitmap lives.
+pub enum BitmapStorage {
+    /// Boot: the bitmap occupies the first frames of the largest managed range, so
+    /// the allocator must not hand those frames out. The address is `'static`
+    /// because the range is never released.
+    Borrowed(&'static mut [u64]),
+    /// Tests: the allocator owns the bitmap, so a fixture needs no leaked allocation.
+    #[cfg(test)]
+    Owned(alloc::boxed::Box<[u64]>),
+}
+
+impl BitmapStorage {
+    #[inline]
+    fn slice(&self) -> &[u64] {
+        match self {
+            Self::Borrowed(words) => words,
+            #[cfg(test)]
+            Self::Owned(words) => words,
+        }
+    }
+
+    #[inline]
+    fn slice_mut(&mut self) -> &mut [u64] {
+        match self {
+            Self::Borrowed(words) => words,
+            #[cfg(test)]
+            Self::Owned(words) => words,
+        }
+    }
+}
+
 /// Bitmap Frame Allocator
+///
+/// The index space is the concatenation of the managed ranges, so a hole in the
+/// physical map costs no bitmap bits and cannot be allocated: index `i` maps to
+/// `ranges[k].start + (i - index_base(k)) * PAGE_SIZE` for the range holding `i`.
 pub struct FrameAllocator {
-    /// Start of usable memory managed by this allocator
-    memory_start: PhysAddr,
-    /// End of usable memory
-    memory_end: PhysAddr,
+    /// Usable ranges, in address order.
+    ranges: [Option<ManagedRange>; MAX_MANAGED_RANGES],
+    range_count: usize,
     /// Total frames managed
     total_frames: usize,
     /// Frames whose bitmap bit is currently set.
     used_frames: usize,
-    /// Bitmap storage (borrowed from reserved memory)
-    bitmap: &'static mut [u64],
+    /// Bitmap storage
+    bitmap: BitmapStorage,
     /// Index of the last allocated frame (for next-fit search)
     last_alloc_index: usize,
 }
@@ -46,77 +80,70 @@ pub struct FrameAllocator {
 impl FrameAllocator {
     /// Initialize allocator from memory map
     ///
-    /// This function finds the largest usable memory region, reserves space for the bitmap
-    /// at the beginning of that region, and initializes the allocator.
+    /// Every usable range the map describes is managed (see [`plan_managed_ranges`]);
+    /// the bitmap is placed at the start of the largest range and its own frames are
+    /// marked used.
     pub fn new_from_map(entries: &[MemoryMapEntry]) -> Self {
-        let mut best_start = 0;
-        let mut best_end = 0;
-        let mut max_len = 0;
+        let plan = plan_managed_ranges(entries);
+        let bitmap_start = plan.bitmap_start();
+        let bitmap_u64_count = plan.total_frames().div_ceil(64);
 
-        // 1. Find largest usable region
-        for entry in entries {
-            if entry.ty == crate::boot::MemoryType::Usable && entry.length > max_len {
-                max_len = entry.length;
-                best_start = entry.base;
-                best_end = entry.base + entry.length;
-            }
-        }
-
-        // Align start to 4KB
-        let aligned_start = (best_start + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
-        let aligned_end = best_end & !(PAGE_SIZE - 1);
-        let available_size = aligned_end - aligned_start;
-        let total_frames = available_size / PAGE_SIZE;
-
-        // 2. Calculate bitmap size
-        // We need 1 bit per frame.
-        // 1 u64 = 64 bits = 64 frames.
-        // Bitmap size in u64s = (total_frames + 63) / 64
-        let bitmap_u64_count = total_frames.div_ceil(64);
-        let bitmap_size_bytes = bitmap_u64_count * 8;
-
-        // 3. Place bitmap at the beginning of the region
-        // We need to reserve enough *pages* for the bitmap
-        let bitmap_pages = bitmap_size_bytes.div_ceil(PAGE_SIZE);
-        let bitmap_phys_addr = aligned_start;
-
-        // 4. Create the bitmap slice.
-        // On RISC-V, phys == virt (SATP disabled). On x86_64, Limine maps RAM
-        // at HHDM_BASE+phys — physical addresses are NOT identity-mapped.
-        // SAFETY: We own this memory region and we are single-threaded at init.
+        // SAFETY: the plan guarantees the largest range can hold the bitmap, and the
+        // allocator is constructed once during single-threaded boot.
         let bitmap = unsafe {
             core::slice::from_raw_parts_mut(
-                phys_to_virt(bitmap_phys_addr) as *mut u64,
+                phys_to_virt(bitmap_start) as *mut u64,
                 bitmap_u64_count,
             )
         };
-
-        // 5. Initialize bitmap
-        // Initially, we mark ALL frames as FREE (0).
-        // Then we mark the frames used by the bitmap itself as USED (1).
         for slot in bitmap.iter_mut() {
             *slot = 0;
         }
 
-        // 6. Adjust allocator start to after the bitmap
-        // But wait, the bitmap index 0 corresponds to `aligned_start`.
-        // So we just need to mark the first `bitmap_pages` frames as used.
-
         let mut allocator = Self {
-            memory_start: aligned_start,
-            memory_end: aligned_end,
-            total_frames,
+            ranges: plan.ranges,
+            range_count: plan.range_count(),
+            total_frames: plan.total_frames(),
             used_frames: 0,
-            bitmap,
+            bitmap: BitmapStorage::Borrowed(bitmap),
             last_alloc_index: 0,
         };
 
-        // Mark bitmap pages as used
-        for i in 0..bitmap_pages {
-            allocator.mark_used(i);
+        // The bitmap lives inside managed memory, so its own frames are reserved.
+        let bitmap_pages = (bitmap_u64_count * 8).div_ceil(PAGE_SIZE);
+        if let Some(index) = allocator.index_of_addr(bitmap_start) {
+            for offset in 0..bitmap_pages {
+                allocator.mark_used(index + offset);
+            }
         }
 
         allocator
+    }
+
+    /// Index of the managed frame at `addr`, or `None` when the address is not managed.
+    fn index_of_addr(&self, addr: PhysAddr) -> Option<usize> {
+        self.ranges[..self.range_count]
+            .iter()
+            .filter_map(|range| *range)
+            .find(|range| {
+                addr >= range.start && addr < range.start + range.frames * PAGE_SIZE
+            })
+            .map(|range| range.index_base + (addr - range.start) / PAGE_SIZE)
+    }
+
+    /// Does this allocator manage the frame containing `addr`?
+    ///
+    /// Callers that must not touch firmware/reserved/MMIO memory — the framebuffer
+    /// guard, DMA range checks — ask this instead of comparing against one end.
+    pub fn manages(&self, addr: PhysAddr) -> bool {
+        self.index_of_addr(addr).is_some()
+    }
+
+    /// The managed ranges, in address order.
+    pub fn managed_ranges(&self) -> impl Iterator<Item = ManagedRange> + '_ {
+        self.ranges[..self.range_count]
+            .iter()
+            .filter_map(|range| *range)
     }
 
     /// Allocate a physical frame
@@ -178,7 +205,7 @@ impl FrameAllocator {
             let u64_idx = bit_idx / 64;
             let bit_offset = bit_idx % 64;
 
-            let block = self.bitmap[u64_idx];
+            let block = self.bitmap.slice()[u64_idx];
 
             // Optimization: Skip full blocks
             if block == !0 {
@@ -200,10 +227,10 @@ impl FrameAllocator {
         let u64_idx = idx / 64;
         let bit_offset = idx % 64;
         let mask = 1u64 << bit_offset;
-        if self.bitmap[u64_idx] & mask != 0 {
+        if self.bitmap.slice()[u64_idx] & mask != 0 {
             return false;
         }
-        self.bitmap[u64_idx] |= mask;
+        self.bitmap.slice_mut()[u64_idx] |= mask;
         self.used_frames += 1;
         true
     }
@@ -212,23 +239,29 @@ impl FrameAllocator {
         let u64_idx = idx / 64;
         let bit_offset = idx % 64;
         let mask = 1u64 << bit_offset;
-        if self.bitmap[u64_idx] & mask == 0 {
+        if self.bitmap.slice()[u64_idx] & mask == 0 {
             return false;
         }
-        self.bitmap[u64_idx] &= !mask;
+        self.bitmap.slice_mut()[u64_idx] &= !mask;
         self.used_frames -= 1;
         true
     }
 
     fn frame_index_to_addr(&self, idx: usize) -> PhysAddr {
-        self.memory_start + (idx * PAGE_SIZE)
+        for range in self.ranges[..self.range_count]
+            .iter()
+            .filter_map(|range| *range)
+        {
+            if idx >= range.index_base && idx < range.index_base + range.frames {
+                return range.start + (idx - range.index_base) * PAGE_SIZE;
+            }
+        }
+        // Callers only pass indices below `total_frames`, which the ranges cover.
+        panic!("frame index {idx} is outside the managed ranges");
     }
 
     fn addr_to_frame_index(&self, addr: PhysAddr) -> Option<usize> {
-        if addr < self.memory_start || addr >= self.memory_end {
-            return None;
-        }
-        Some((addr - self.memory_start) / PAGE_SIZE)
+        self.index_of_addr(addr)
     }
 
     /// Get total available memory in bytes
@@ -243,14 +276,28 @@ impl FrameAllocator {
 
     // ── Snapshot serialization accessors ──────────────────────────────────────
 
-    /// Physical start address of the allocator's managed region.
+    /// Physical start address of the **first** managed range.
+    ///
+    /// The allocator's memory is a list of ranges: callers that walk physical memory
+    /// (the snapshot serializer) must iterate [`Self::managed_ranges`] instead of
+    /// assuming `start..end` is contiguous.
     pub fn memory_start(&self) -> PhysAddr {
-        self.memory_start
+        self.managed_ranges()
+            .next()
+            .map(|range| range.start)
+            .unwrap_or(0)
     }
 
     /// Physical end address (exclusive) of the allocator's managed region.
+    /// Physical end address of the **last** managed range.
+    ///
+    /// `memory_start()..memory_end()` is only a complete description of managed
+    /// memory when there is a single range; with a hole it spans unmanaged memory.
     pub fn memory_end(&self) -> PhysAddr {
-        self.memory_end
+        self.managed_ranges()
+            .last()
+            .map(|range| range.start + range.frames * PAGE_SIZE)
+            .unwrap_or(0)
     }
 
     /// Total number of 4096-byte frames managed by this allocator.
@@ -274,8 +321,8 @@ impl FrameAllocator {
     }
     /// Byte range (start, end) occupied by the frame allocator bitmap storage.
     pub fn bitmap_range(&self) -> (usize, usize) {
-        let start = self.bitmap.as_ptr() as usize;
-        let end = start + core::mem::size_of_val(self.bitmap);
+        let start = self.bitmap.slice().as_ptr() as usize;
+        let end = start + core::mem::size_of_val(self.bitmap.slice());
         (start, (end + PAGE_SIZE - 1) & !(PAGE_SIZE - 1))
     }
     /// Returns `true` if frame `idx` is currently allocated (in use).
@@ -288,7 +335,7 @@ impl FrameAllocator {
         }
         let u64_idx = idx / 64;
         let bit_offset = idx % 64;
-        (self.bitmap[u64_idx] >> bit_offset) & 1 != 0
+        (self.bitmap.slice()[u64_idx] >> bit_offset) & 1 != 0
     }
 
     /// Physical address of frame `idx`.
@@ -313,27 +360,37 @@ impl FrameAllocator {
         }
     }
 
-    /// Find `n` consecutive free frames and mark them all allocated.
+    /// Find `n` consecutive free frames inside **one** managed range and mark them
+    /// all allocated.
     ///
-    /// Returns the physical address of the first frame, or `None` when no
-    /// contiguous run of `n` frames is available.  Linear O(frames × n) scan
-    /// — acceptable for startup-time Grant allocations with n ≤ 16.
+    /// Returns the physical address of the first frame, or `None` when no range has
+    /// a free run of `n` frames. A run never straddles a hole between two ranges —
+    /// the frames it would cover are not managed by this allocator.
     pub fn allocate_contiguous(&mut self, n: usize) -> Option<PhysAddr> {
         if n == 1 {
             return self.allocate_frame();
         }
-        let limit = self.total_frames.saturating_sub(n);
-        'outer: for start in 0..=limit {
-            for i in 0..n {
-                if self.is_frame_allocated(start + i) {
-                    continue 'outer;
+        // No allocation here: this runs during boot (the heap reservation) before the
+        // global allocator exists.
+        for range_index in 0..self.range_count {
+            let Some(range) = self.ranges[range_index] else {
+                continue;
+            };
+            if range.frames < n {
+                continue;
+            }
+            let limit = range.index_base + range.frames - n;
+            'outer: for start in range.index_base..=limit {
+                for i in 0..n {
+                    if self.is_frame_allocated(start + i) {
+                        continue 'outer;
+                    }
                 }
+                for i in 0..n {
+                    self.mark_used(start + i);
+                }
+                return Some(self.frame_index_to_addr(start));
             }
-            // Found n consecutive free frames.
-            for i in 0..n {
-                self.mark_used(start + i);
-            }
-            return Some(self.frame_index_to_addr(start));
         }
         None
     }
@@ -353,20 +410,29 @@ impl FrameAllocator {
         align_bytes: usize,
     ) -> Option<PhysAddr> {
         debug_assert!(align_bytes.is_power_of_two() && align_bytes >= PAGE_SIZE);
-        let limit = self.total_frames.saturating_sub(n);
-        'outer: for start in 0..=limit {
-            if !self.frame_index_to_addr(start).is_multiple_of(align_bytes) {
+        // No allocation here: see `allocate_contiguous`.
+        for range_index in 0..self.range_count {
+            let Some(range) = self.ranges[range_index] else {
+                continue;
+            };
+            if range.frames < n {
                 continue;
             }
-            for i in 0..n {
-                if self.is_frame_allocated(start + i) {
-                    continue 'outer;
+            let limit = range.index_base + range.frames - n;
+            'outer: for start in range.index_base..=limit {
+                if !self.frame_index_to_addr(start).is_multiple_of(align_bytes) {
+                    continue;
                 }
+                for i in 0..n {
+                    if self.is_frame_allocated(start + i) {
+                        continue 'outer;
+                    }
+                }
+                for i in 0..n {
+                    self.mark_used(start + i);
+                }
+                return Some(self.frame_index_to_addr(start));
             }
-            for i in 0..n {
-                self.mark_used(start + i);
-            }
-            return Some(self.frame_index_to_addr(start));
         }
         None
     }
@@ -410,20 +476,311 @@ pub fn reserve_contiguous_run(allocator: &mut FrameAllocator, frames: usize) -> 
     allocator.allocate_contiguous(frames)
 }
 
+/// Largest number of disjoint usable ranges the allocator tracks.
+///
+/// Firmware maps in the supported targets describe at most a handful (QEMU virt
+/// and the supported boards report one; a Limine map with a reserved hole reports
+/// two). More than this halts rather than silently dropping memory.
+pub const MAX_MANAGED_RANGES: usize = 8;
+
+/// One contiguous, page-aligned run of usable physical memory.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ManagedRange {
+    /// First frame address of the run.
+    pub start: PhysAddr,
+    /// Frames in the run (always ≥ 1).
+    pub frames: usize,
+    /// Global index of this run's first frame (prefix sum of the earlier runs).
+    index_base: usize,
+}
+
+/// Normalized view of the memory map: every usable frame the allocator manages.
+///
+/// The allocator's index space is the concatenation of `ranges`, so a hole between
+/// two ranges costs no bitmap bits and no allocation can land in it — the reason
+/// the managed range is *not* simply widened to the highest address.
+pub struct ManagedPlan {
+    ranges: [Option<ManagedRange>; MAX_MANAGED_RANGES],
+    count: usize,
+    bitmap_range: usize,
+    total_frames: usize,
+}
+
+impl ManagedPlan {
+    /// The ranges, in address order.
+    pub fn ranges(&self) -> impl Iterator<Item = ManagedRange> + '_ {
+        self.ranges[..self.count].iter().filter_map(|range| *range)
+    }
+
+    pub fn range_count(&self) -> usize {
+        self.count
+    }
+
+    pub fn total_frames(&self) -> usize {
+        self.total_frames
+    }
+
+    /// Physical address of the range that hosts the bitmap.
+    pub fn bitmap_start(&self) -> PhysAddr {
+        self.ranges[self.bitmap_range]
+            .expect("the bitmap range is always present")
+            .start
+    }
+}
+
+/// Normalize a memory map into the set of usable ranges the allocator manages.
+///
+/// Malformed authoritative input (an entry that overlaps another, a usable entry
+/// smaller than a page, or more ranges than [`MAX_MANAGED_RANGES`]) **halts**: a
+/// wrong guess here is memory corruption, not a degraded boot.
+pub fn plan_managed_ranges(entries: &[MemoryMapEntry]) -> ManagedPlan {
+    let mut ranges: [Option<ManagedRange>; MAX_MANAGED_RANGES] = [None; MAX_MANAGED_RANGES];
+    let mut count = 0usize;
+    let mut total_frames = 0usize;
+
+    // This runs before the heap exists, so the plan is built without allocating:
+    // repeatedly select the lowest usable run at or after `cursor`.
+    let mut cursor: PhysAddr = 0;
+    loop {
+        let mut best: Option<(PhysAddr, PhysAddr)> = None;
+        for entry in entries {
+            if entry.ty != crate::boot::MemoryType::Usable || entry.length == 0 {
+                continue;
+            }
+            let start = (entry.base + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
+            let end = (entry.base + entry.length) & !(PAGE_SIZE - 1);
+            if end <= start || start < cursor {
+                continue;
+            }
+            if best.is_none_or(|(best_start, _)| start < best_start) {
+                best = Some((start, end));
+            }
+        }
+        let Some((start, end)) = best else {
+            break;
+        };
+        let frames = (end - start) / PAGE_SIZE;
+        let previous = ranges[..count]
+            .iter_mut()
+            .filter_map(|range| range.as_mut())
+            .next_back();
+        match previous {
+            // Adjacent usable entries are one range.
+            Some(last) if start == last.start + last.frames * PAGE_SIZE => {
+                last.frames += frames;
+            }
+            _ => {
+                assert!(
+                    count < MAX_MANAGED_RANGES,
+                    "memory map has more usable ranges than the allocator tracks \
+                     ({} > {MAX_MANAGED_RANGES})",
+                    count + 1
+                );
+                ranges[count] = Some(ManagedRange {
+                    start,
+                    frames,
+                    index_base: total_frames,
+                });
+                count += 1;
+            }
+        }
+        total_frames += frames;
+        cursor = end;
+    }
+
+    // Every usable entry must be fully inside exactly one selected range: an entry
+    // that overlaps another cannot be resolved by guessing which claim wins.
+    for entry in entries {
+        if entry.ty != crate::boot::MemoryType::Usable || entry.length == 0 {
+            continue;
+        }
+        let start = (entry.base + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
+        let end = (entry.base + entry.length) & !(PAGE_SIZE - 1);
+        if end <= start {
+            // Smaller than one page: it contributes no frame.
+            continue;
+        }
+        let contained = ranges[..count]
+            .iter()
+            .filter_map(|range| *range)
+            .any(|range| {
+                let range_end = range.start + range.frames * PAGE_SIZE;
+                start >= range.start && end <= range_end
+            });
+        if !contained {
+            panic!(
+                "overlapping usable memory map entries: {start:#x}..{end:#x} is not \
+                 contained in any managed range"
+            );
+        }
+    }
+
+    // The bitmap lives in the largest range: it needs `total_frames / 512` bytes and
+    // any range holding at least one frame is at least one page, so the largest range
+    // always has room.
+    let bitmap_range = ranges[..count]
+        .iter()
+        .filter_map(|range| *range)
+        .enumerate()
+        .max_by_key(|(_, range)| range.frames)
+        .map(|(index, _)| index)
+        .unwrap_or(0);
+
+    ManagedPlan {
+        ranges,
+        count,
+        bitmap_range,
+        total_frames,
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{reserve_contiguous_run, FrameAllocator, PAGE_SIZE};
+    use super::{plan_managed_ranges, reserve_contiguous_run, FrameAllocator, PAGE_SIZE};
+    use crate::boot::{MemoryMapEntry, MemoryType};
+
+    fn map_entry(base: usize, length: usize, ty: MemoryType) -> MemoryMapEntry {
+        MemoryMapEntry {
+            base,
+            length,
+            ty,
+        }
+    }
+
+    #[test]
+    fn every_usable_range_is_managed() {
+        // 256 MiB usable, a 16 MiB reserved hole, 128 MiB usable.
+        let entries = [
+            map_entry(0x8000_0000, 0x1000_0000, MemoryType::Usable),
+            map_entry(0x9000_0000, 0x0100_0000, MemoryType::Reserved),
+            map_entry(0xA000_0000, 0x0800_0000, MemoryType::Usable),
+        ];
+        let plan = plan_managed_ranges(&entries);
+        assert_eq!(plan.range_count(), 2, "both usable ranges must be managed");
+        assert_eq!(
+            plan.total_frames(),
+            (0x1000_0000 + 0x0800_0000) / PAGE_SIZE,
+            "every usable frame contributes exactly once"
+        );
+        let ranges: alloc::vec::Vec<_> = plan.ranges().collect();
+        assert_eq!(ranges[0].start, 0x8000_0000);
+        assert_eq!(ranges[0].frames, 0x1000_0000 / PAGE_SIZE);
+        assert_eq!(ranges[1].start, 0xA000_0000);
+        assert_eq!(ranges[1].frames, 0x0800_0000 / PAGE_SIZE);
+        // No managed frame may sit inside the reserved hole.
+        for range in &ranges {
+            assert!(
+                range.start + range.frames * PAGE_SIZE <= 0x9000_0000
+                    || range.start >= 0x9100_0000,
+                "range {range:?} overlaps the reserved hole"
+            );
+        }
+    }
+
+    #[test]
+    fn adjacent_usable_ranges_are_merged() {
+        let entries = [
+            map_entry(0x8000_0000, 0x0100_0000, MemoryType::Usable),
+            map_entry(0x8100_0000, 0x0100_0000, MemoryType::Usable),
+        ];
+        let plan = plan_managed_ranges(&entries);
+        assert_eq!(plan.range_count(), 1, "adjacent usable entries are one range");
+        assert_eq!(plan.total_frames(), 0x0200_0000 / PAGE_SIZE);
+    }
+
+    #[test]
+    #[should_panic(expected = "overlapping usable memory map entries")]
+    fn overlapping_usable_ranges_halt() {
+        let entries = [
+            map_entry(0x8000_0000, 0x0100_0000, MemoryType::Usable),
+            map_entry(0x8080_0000, 0x0100_0000, MemoryType::Usable),
+        ];
+        let _ = plan_managed_ranges(&entries);
+    }
+
+    #[test]
+    #[should_panic(expected = "more usable ranges than")]
+    fn too_many_ranges_halt() {
+        let entries: alloc::vec::Vec<_> = (0..9)
+            .map(|i| map_entry(0x8000_0000 + i * 0x0200_0000, 0x0100_0000, MemoryType::Usable))
+            .collect();
+        let _ = plan_managed_ranges(&entries);
+    }
+
+    fn multi_range_allocator(ranges: &[(usize, usize)]) -> FrameAllocator {
+        let mut slots: [Option<super::ManagedRange>; super::MAX_MANAGED_RANGES] =
+            [None; super::MAX_MANAGED_RANGES];
+        let mut total = 0usize;
+        for (index, (start, frames)) in ranges.iter().enumerate() {
+            slots[index] = Some(super::ManagedRange {
+                start: *start,
+                frames: *frames,
+                index_base: total,
+            });
+            total += *frames;
+        }
+        FrameAllocator {
+            ranges: slots,
+            range_count: ranges.len(),
+            total_frames: total,
+            used_frames: 0,
+            bitmap: super::BitmapStorage::Owned(
+                alloc::vec![0u64; total.div_ceil(64)].into_boxed_slice(),
+            ),
+            last_alloc_index: 0,
+        }
+    }
+
+    #[test]
+    fn allocations_stay_inside_their_range() {
+        // 8 frames at 0x1000 (0x1000..0x9000), a hole, 8 frames at 0x20000.
+        let mut allocator = multi_range_allocator(&[(0x1000, 8), (0x20000, 8)]);
+        assert_eq!(allocator.total_frames(), 16);
+        assert!(allocator.manages(0x1000) && allocator.manages(0x20000));
+        assert!(
+            !allocator.manages(0x10000),
+            "a hole is not managed; ranges={:?}",
+            allocator.managed_ranges().collect::<alloc::vec::Vec<_>>()
+        );
+
+        let mut allocated = alloc::vec::Vec::new();
+        while let Some(frame) = allocator.allocate_frame() {
+            assert!(
+                !(0x9000..0x20000).contains(&frame),
+                "allocated a frame inside the hole: {frame:#x}"
+            );
+            allocated.push(frame);
+        }
+        assert_eq!(allocated.len(), 16, "every managed frame is allocatable");
+
+        // Free everything, then ask for a run longer than any single range holds:
+        // 16 frames are free, but they are 8 + 8 across a hole, so the request must
+        // fail rather than span it.
+        for frame in &allocated {
+            allocator.deallocate_frame(*frame);
+        }
+        assert_eq!(allocator.free_frames(), 16);
+        assert_eq!(allocator.allocate_contiguous(16), None);
+        assert_eq!(allocator.allocate_contiguous(8), Some(0x1000));
+        assert_eq!(allocator.allocate_contiguous(8), Some(0x20000));
+    }
 
     fn allocator(total_frames: usize) -> FrameAllocator {
-        let bitmap = alloc::boxed::Box::leak(
-            alloc::vec![0u64; total_frames.div_ceil(64)].into_boxed_slice(),
-        );
+        let mut ranges: [Option<super::ManagedRange>; super::MAX_MANAGED_RANGES] =
+            [None; super::MAX_MANAGED_RANGES];
+        ranges[0] = Some(super::ManagedRange {
+            start: PAGE_SIZE,
+            frames: total_frames,
+            index_base: 0,
+        });
         FrameAllocator {
-            memory_start: PAGE_SIZE,
-            memory_end: PAGE_SIZE * (total_frames + 1),
+            ranges,
+            range_count: 1,
             total_frames,
             used_frames: 0,
-            bitmap,
+            bitmap: super::BitmapStorage::Owned(
+                alloc::vec![0u64; total_frames.div_ceil(64)].into_boxed_slice(),
+            ),
             last_alloc_index: 0,
         }
     }

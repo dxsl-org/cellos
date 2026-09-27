@@ -273,14 +273,22 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // Get memory map from Boot Info (Converted to Cellos format)
     let mmap_entries = boot_info.memory_map();
 
-    // Initialize frame allocator with the largest usable region
+    // Initialize the frame allocator with every usable range in the map.
     let frame_allocator = memory::frame::FrameAllocator::new_from_map(mmap_entries);
     log::info!(
-        "[boot] allocator range {:#x}..{:#x} ({} bytes)",
-        frame_allocator.memory_start(),
-        frame_allocator.memory_end(),
-        frame_allocator.total_frames() * 4096
+        "[boot] allocator: {} usable range(s), {} frames ({} MiB)",
+        frame_allocator.managed_ranges().count(),
+        frame_allocator.total_frames(),
+        frame_allocator.total_frames() * 4096 / (1024 * 1024)
     );
+    for range in frame_allocator.managed_ranges() {
+        log::info!(
+            "[boot]   range {:#x}..{:#x} ({} MiB)",
+            range.start,
+            range.start + range.frames * 4096,
+            range.frames * 4096 / (1024 * 1024)
+        );
+    }
 
     // Targets that already have usable memory attributes (or intentionally run
     // without an MMU) can publish the allocator immediately. AArch64 must keep

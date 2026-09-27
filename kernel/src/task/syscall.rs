@@ -6700,12 +6700,17 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 if covered > size || end > mmio.peripheral_base {
                     return Err(SyscallError::InvalidInput);
                 }
-                let allocator_end = crate::memory::frame::FRAME_ALLOCATOR
-                    .lock()
-                    .as_ref()
-                    .map(|allocator| allocator.memory_end())
-                    .ok_or(SyscallError::Unknown)?;
-                if base < allocator_end {
+                // The framebuffer is MMIO: it must not overlap *any* managed frame,
+                // not merely sit above one end of the allocator's memory.
+                let overlaps_managed = {
+                    let guard = crate::memory::frame::FRAME_ALLOCATOR.lock();
+                    let allocator = guard.as_ref().ok_or(SyscallError::Unknown)?;
+                    allocator.managed_ranges().any(|range| {
+                        let range_end = range.start + range.frames * PAGE_SIZE;
+                        base < range_end && range.start < end
+                    })
+                };
+                if overlaps_managed {
                     return Err(SyscallError::InvalidInput);
                 }
                 let rounded = size
