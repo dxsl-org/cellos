@@ -1905,7 +1905,9 @@ impl Scheduler {
             if let Some(task) = self.tasks.get_mut(id) {
                 task.state = TaskState::Retiring;
             }
-            #[cfg(feature = "test-hooks")]
+            // RV64-only evidence: the hart count comes from the SBI SMP bring-up,
+            // which no other backend implements.
+            #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
             log::info!(
                 "S22-RV64-DYING-NONSCHEDULABLE: PASS harts={}",
                 super::smp::online_hart_count()

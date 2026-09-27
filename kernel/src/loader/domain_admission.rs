@@ -100,7 +100,11 @@ pub(crate) struct DomainAdmissionRequest {
 }
 
 impl DomainAdmissionRequest {
-    #[cfg(feature = "test-hooks")]
+    #[cfg(all(
+        feature = "native-domains",
+        feature = "test-hooks",
+        target_arch = "riscv64"
+    ))]
     pub(crate) const fn fixture() -> Self {
         Self {
             resource_quota_available: true,
@@ -284,7 +288,11 @@ pub(crate) fn begin_domain_drain() -> bool {
         .is_ok()
 }
 
-#[cfg(feature = "test-hooks")]
+#[cfg(all(
+    feature = "native-domains",
+    feature = "test-hooks",
+    target_arch = "riscv64"
+))]
 pub(crate) fn policy_is_enabled() -> bool {
     POLICY.load(Ordering::Acquire) == ENABLED
 }
@@ -293,7 +301,11 @@ pub(crate) fn policy_is_enabled() -> bool {
 /// evidence for ADR-0019: the policy denies when disabled or draining, an
 /// outstanding lease dies with a drain, and the *publication path* refuses a
 /// domain-class launch with nothing published and no SAS fallback.
-#[cfg(feature = "test-hooks")]
+#[cfg(all(
+    feature = "native-domains",
+    feature = "test-hooks",
+    target_arch = "riscv64"
+))]
 pub(crate) fn run_selftest() {
     // The boot posture is part of the contract: a domain-class cell only runs
     // because boot enabled admission, not because a default feature admitted it.
@@ -355,7 +367,11 @@ pub(crate) fn run_selftest() {
 
 /// Drive the real publication path with a domain-class launch while the policy
 /// is draining and observe that nothing is published.
-#[cfg(feature = "test-hooks")]
+#[cfg(all(
+    feature = "native-domains",
+    feature = "test-hooks",
+    target_arch = "riscv64"
+))]
 fn publication_is_refused_while_draining() -> bool {
     use crate::task::{LaunchRoutes, TaskLaunchState};
 

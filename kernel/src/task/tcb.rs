@@ -647,7 +647,7 @@ impl Task {
             target_arch = "x86_64"
         )
     ))]
-    #[cfg(feature = "test-hooks")]
+    #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
     pub(crate) fn bind_address_space_for_test(
         &mut self,
         address_space: Arc<crate::memory::address_space::AddressSpace>,

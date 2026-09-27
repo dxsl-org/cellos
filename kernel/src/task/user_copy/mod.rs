@@ -41,12 +41,27 @@ mod sv39_probe;
 pub(crate) use copy::{copy_from_user, copy_to_user, probe_writable};
 #[allow(unused_imports)]
 pub(crate) use guard::clear_guard_for_context_switch;
-#[cfg(feature = "test-hooks")]
+// These three exist for the RV64 fault-injection fixtures (`task::user_copy_tests`),
+// so they carry that fixture's cfg: importing them elsewhere would fail on
+// AArch64/x86_64, where the fixtures do not exist.
+#[cfg(all(
+    feature = "native-domains",
+    feature = "test-hooks",
+    target_arch = "riscv64"
+))]
 pub(crate) use guard::forced_guard_fault_recovers_for_test;
-#[cfg(feature = "test-hooks")]
+#[cfg(all(
+    feature = "native-domains",
+    feature = "test-hooks",
+    target_arch = "riscv64"
+))]
 pub(crate) use range::CopyError;
 pub(crate) use range::{CopyView, UserReadSlice, UserWriteSlice};
 pub(crate) use scatter::copy_to_user_scatter;
-#[cfg(feature = "test-hooks")]
+#[cfg(all(
+    feature = "native-domains",
+    feature = "test-hooks",
+    target_arch = "riscv64"
+))]
 pub(crate) use sv39_probe::stage_domain_for_test;
 pub(crate) use sv39_probe::{current_satp_root, sv39_leaf};

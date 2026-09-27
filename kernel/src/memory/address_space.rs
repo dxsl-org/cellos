@@ -28,7 +28,11 @@ pub(crate) const fn asid_width() -> usize {
 
 /// Test-hooks view of how many domain identities have been issued. The admission
 /// selftest uses it to prove a refused launch creates no domain at all.
-#[cfg(feature = "test-hooks")]
+#[cfg(all(
+    feature = "native-domains",
+    feature = "test-hooks",
+    target_arch = "riscv64"
+))]
 pub(crate) fn domain_identity_counter() -> u64 {
     NEXT_DOMAIN.load(Ordering::Relaxed)
 }
@@ -94,7 +98,11 @@ pub(crate) struct SupervisorMapping {
     flags: Flags,
 }
 impl SupervisorMapping {
-    #[cfg(feature = "test-hooks")]
+    #[cfg(all(
+        feature = "native-domains",
+        feature = "test-hooks",
+        target_arch = "riscv64"
+    ))]
     pub(crate) fn identity_page(
         physical_address: PhysAddr,
         flags: Flags,
@@ -886,7 +894,11 @@ static LIVE_ASIDS: Spinlock<[Option<AsidTagOwner>; MAX_LIVE_ASIDS]> =
 /// Test-hooks view: which domain currently holds tag `value`, or `None` when the
 /// tag is free. The lease contract test uses it to prove a released tag is
 /// reissued to its new owner rather than aliasing the previous one.
-#[cfg(feature = "test-hooks")]
+#[cfg(all(
+    feature = "native-domains",
+    feature = "test-hooks",
+    target_arch = "riscv64"
+))]
 pub(crate) fn live_tag_owner(value: usize) -> Option<u64> {
     if value == 0 || value > MAX_LIVE_ASIDS {
         return None;
@@ -1100,11 +1112,19 @@ fn unmap_existing_page(
     });
 }
 
-#[cfg(feature = "test-hooks")]
+#[cfg(all(
+    feature = "native-domains",
+    feature = "test-hooks",
+    target_arch = "riscv64"
+))]
 pub(crate) fn fail_allocation_after(count: usize) {
     FAIL_ALLOCATION_AFTER.store(count, Ordering::Release);
 }
-#[cfg(feature = "test-hooks")]
+#[cfg(all(
+    feature = "native-domains",
+    feature = "test-hooks",
+    target_arch = "riscv64"
+))]
 pub(crate) fn fail_next_map() {
     FAIL_NEXT_MAP.store(1, Ordering::Release);
 }

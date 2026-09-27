@@ -141,7 +141,11 @@ impl SwitchPlan {
     /// True only for the plan that writes no root: SAS to SAS, where the kernel
     /// root is already live. Every private-root transition — activate *and*
     /// same-domain resume — programs SATP.
-    #[cfg(feature = "test-hooks")]
+    #[cfg(all(
+        feature = "native-domains",
+        feature = "test-hooks",
+        target_arch = "riscv64"
+    ))]
     pub(crate) fn writes_no_root(&self) -> bool {
         matches!(self.transition, DomainTransition::SasToSas)
     }

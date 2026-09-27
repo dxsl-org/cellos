@@ -228,7 +228,11 @@ pub(crate) fn wake(
 /// address) needs two cooperating cells; this proves the same property at the
 /// queue: a waiter enqueued under one address space is invisible to a wake from
 /// another, and to a later generation of the same space.
-#[cfg(feature = "test-hooks")]
+#[cfg(all(
+    feature = "native-domains",
+    feature = "test-hooks",
+    target_arch = "riscv64"
+))]
 pub(crate) fn run_selftest() {
     let addr = 0x1000usize;
     let owner = FutexKey {

@@ -85,6 +85,20 @@ TLB entry of one could resolve inside the other.
   `grant-revoke` (the private-root grant revoke fixture, which drives `unmap_grant_page`) and
   `admission` re-run in the same image.
 
+### Slice 3 prerequisite — AArch64 test-hooks lane repaired (2026-09-27) — done
+
+The lane could not compile (pre-existing; reproduced with phase 01's changes stashed), so it
+could not host a non-RV64 switch witness. Every RV64-only test helper now carries the cfg of
+the fixture that uses it, `mapping_state` compares the leaf word in `u64` on both arches, and
+the RV64-only scheduler marker keeps its arch gate. Verified: the kernel builds and
+`scripts/qemu-aarch64-test-hooks.sh` boots to `[vfs-test] Results: 96 PASS, 0 FAIL` with all
+required markers and a clean semihosting exit, while the RV64 lane still passes
+`switch,admission,asid-lease,unmap-order`. What this does **not** provide yet is a domain
+fixture on AArch64: the switch fixtures (`domain_switch_tests`, `context_handoff_selftest`)
+remain riscv64-gated, so slice 3 still needs an AArch64 one-PE fixture that creates two private
+roots and switches between them before the ordered-switch change can be executed rather than
+merely compiled.
+
 ### Slices still open (gates stay closed)
 
 3. **Non-RV64 safe-root switch ordering** — save the outgoing context before activating the

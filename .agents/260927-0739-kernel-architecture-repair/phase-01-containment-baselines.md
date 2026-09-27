@@ -100,10 +100,13 @@ remote-TLB witnesses remain hardware-gated, so those profiles stay disabled.
   updated `tier2-smoke` cell is packaged for the integration lane. In this WSL environment two
   *optional* cells fail to build and were omitted (`doom`, `tetris-lua`); the previous image is
   backed up at `/tmp/disk_v3.img.pre-phase01`. A CI rebuild produces the canonical set.
-- **Pre-existing break found while verifying, not fixed here.** The AArch64 test-hooks kernel lane
-  (`scripts/build-aarch64-test-hooks-ci.sh`, `test-hooks` without `native-domains`) does not compile:
-  8 errors in `task/scheduler.rs`, `task/user_copy/mod.rs` and `memory/paging.rs`
-  (riscv64-gated items used unconditionally, unused imports under `-D warnings`, two
-  `u64 & usize` mismatches). Reproduced with this phase's kernel changes stashed — identical
-  8 errors — so it is not caused by the containment work, and no CI workflow references the
-  script. The AArch64 *admission* evidence above comes from the production image instead.
+- **Pre-existing break found while verifying.** The AArch64 test-hooks kernel lane
+  (`scripts/build-aarch64-test-hooks-ci.sh`, `test-hooks` without narrowing the RV64-only
+  scaffolding) did not compile: 8 errors in `task/scheduler.rs`, `task/user_copy/mod.rs` and
+  `memory/paging.rs` (riscv64-gated items used unconditionally, unused imports under
+  `-D warnings`, two `u64 & usize` mismatches), and 14 more once the imports were narrowed.
+  Reproduced with this phase's kernel changes stashed — identical errors — so it is not caused
+  by the containment work. **Repaired in the phase-02 session** (each helper now carries the
+  cfg of the fixture that uses it; the lane builds and boots green — see
+  `phase-02-domain-root-lifetime.md` § Progress). The AArch64 *admission* evidence above still
+  comes from the production image.

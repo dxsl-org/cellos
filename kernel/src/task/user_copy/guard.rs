@@ -218,7 +218,11 @@ pub(crate) fn clear_guard_for_context_switch() {
 /// rewind — by loading from a kernel-linear alias of an unmapped physical
 /// hole inside an armed window. Returns whether the landing pad reported the
 /// recovered fault and cleared its own resume slot.
-#[cfg(feature = "test-hooks")]
+#[cfg(all(
+    feature = "native-domains",
+    feature = "test-hooks",
+    target_arch = "riscv64"
+))]
 pub(crate) fn forced_guard_fault_recovers_for_test(hole_pa: usize) -> bool {
     use crate::memory::paging::PAGE_SIZE;
     let hole_va = crate::memory::frame::phys_to_virt(hole_pa);

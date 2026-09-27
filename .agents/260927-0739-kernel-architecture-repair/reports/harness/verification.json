@@ -55,6 +55,27 @@
       "exitCode": 0,
       "timestamp": "2026-09-27T11:10:00+07:00",
       "summary": "Phase 02 slice 2: S22-RV64-UNMAP-ORDER PASS in h1-unmap-order-HDEPLP (the unmapped page was invalidated and its frames released afterwards), with ASID-LEASE, GRANT-REVOKE (the private-root grant revoke fixture that drives unmap_grant_page) and ADMISSION-DENY PASS in the same image."
+    },
+    {
+      "command": "bash scripts/build-aarch64-test-hooks-ci.sh && BOOT_WINDOW=60 bash scripts/qemu-aarch64-test-hooks.sh",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-09-27T11:20:00+07:00",
+      "summary": "AArch64 test-hooks lane repaired (pre-existing break: RV64-only scaffolding gated only on test-hooks). Kernel builds, boots, and every required marker passes — the guest reaches [vfs-test] Results: 96 PASS, 0 FAIL and exits 0 via semihosting."
+    },
+    {
+      "command": "cargo test -p cellos-kernel --target x86_64-unknown-linux-gnu",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-09-27T11:26:00+07:00",
+      "summary": "Kernel host unit lane: 111 passed, 0 failed — the syscall-result encoding, grant/quota bookkeeping, argv staging, user-slot validation and snapshot-header tests all still pass with the phase-01/02 kernel changes."
+    },
+    {
+      "command": "scripts/qemu-native-domain-test.sh --harts 1 --case switch,admission,asid-lease,unmap-order",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-09-27T11:25:00+07:00",
+      "summary": "RV64 regression after the AArch64 cfg narrowing: 4/4 cases PASS; every boot log carries SWITCH, ADMISSION-DENY, FUTEX-KEY, ASID-LEASE and UNMAP-ORDER PASS."
     }
   ],
   "beforeAfter": {

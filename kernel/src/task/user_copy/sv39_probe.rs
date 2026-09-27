@@ -240,7 +240,11 @@ pub(super) fn probe_sas(ptr: usize, len: usize, direction: Direction) -> Result<
 
 /// TEST HOOK: stage (probe + pin) a domain copy without committing it, so a
 /// fixture can inject a protocol violation between the two passes.
-#[cfg(feature = "test-hooks")]
+#[cfg(all(
+    feature = "native-domains",
+    feature = "test-hooks",
+    target_arch = "riscv64"
+))]
 pub(crate) fn stage_domain_for_test<'a>(
     arc: &'a AddressSpace,
     ptr: usize,

@@ -880,12 +880,14 @@ pub fn mapping_state(vaddr: VAddr) -> (bool, bool) {
     {
         use hal::PageTable;
         // The bits `hal` programs from `Flags::USER`: RISC-V leaf U = bit 4,
-        // AArch64 leaf AP_EL0 = bit 6. Both keep V/VALID = bit 0.
-        const LEAF_VALID: usize = 1 << 0;
+        // AArch64 leaf AP_EL0 = bit 6. Both keep V/VALID = bit 0. `leaf_entry`
+        // returns the architecture's raw leaf word — `usize` on RV64, `u64` on
+        // AArch64 — so compare in `u64` and let one body serve both.
+        const LEAF_VALID: u64 = 1 << 0;
         #[cfg(target_arch = "riscv64")]
-        const LEAF_USER: usize = 1 << 4;
+        const LEAF_USER: u64 = 1 << 4;
         #[cfg(target_arch = "aarch64")]
-        const LEAF_USER: usize = 1 << 6;
+        const LEAF_USER: u64 = 1 << 6;
 
         let Some(root_phys) = *KERNEL_ROOT.lock() else {
             return (false, false);
@@ -896,6 +898,7 @@ pub fn mapping_state(vaddr: VAddr) -> (bool, bool) {
         let Some(leaf) = root.leaf_entry(vaddr) else {
             return (false, false);
         };
+        let leaf = leaf as u64;
         (leaf & LEAF_VALID != 0, leaf & LEAF_USER != 0)
     }
     #[cfg(not(any(
