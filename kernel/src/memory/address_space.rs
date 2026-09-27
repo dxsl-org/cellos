@@ -659,6 +659,11 @@ impl AddressSpace {
         }
         let mut table_frames = self.table_frames.lock();
         let mut frames = self.frames.lock();
+        // Detached frames must not return to the allocator until the invalidation
+        // below completes: a hart that still holds this translation can walk the
+        // pruned table chain and read the leaf. Held in locals until after the
+        // flush, exactly as `unmap_existing_task_stacks` holds its pruned tables.
+        let mut detached_tables = Vec::new();
         // SAFETY: only this address space owns and mutates its root.
         let table =
             unsafe { &mut *(phys_to_virt(self.root.physical_address()) as *mut hal::PageTable) };
@@ -670,14 +675,19 @@ impl AddressSpace {
                 .iter()
                 .position(|frame| frame.physical_address() == physical_address)
             {
-                table_frames.remove(index);
+                detached_tables.push(table_frames.remove(index));
             }
         });
         let index = frames
             .iter()
             .position(|frame| frame.physical_address() == entry.physical_address)
             .ok_or(AddressSpaceError::NotFound)?;
-        frames.remove(index);
+        let leaf = frames.remove(index);
+        drop(table_frames);
+        drop(frames);
+        crate::memory::tlb_shootdown::flush_page(virtual_address);
+        drop(detached_tables);
+        drop(leaf);
         Ok(())
     }
     /// TEST-ONLY protocol-violation injection for the user-copy fixtures.
@@ -772,6 +782,10 @@ impl AddressSpace {
             core::hint::spin_loop();
         }
         let mut table_frames = self.table_frames.lock();
+        // Pruned tables are detached, not freed: the invalidate below has to
+        // complete before a table frame can be handed to another root, or a remote
+        // walker could read a table that has already been reused.
+        let mut detached_tables = Vec::new();
         let table =
             unsafe { &mut *(phys_to_virt(self.root.physical_address()) as *mut hal::PageTable) };
         table
@@ -782,11 +796,12 @@ impl AddressSpace {
                 .iter()
                 .position(|frame| frame.physical_address() == physical_address)
             {
-                table_frames.remove(index);
+                detached_tables.push(table_frames.remove(index));
             }
         });
         drop(table_frames);
         crate::memory::tlb_shootdown::flush_page(virtual_address);
+        drop(detached_tables);
         let _ = entry;
         Ok(())
     }

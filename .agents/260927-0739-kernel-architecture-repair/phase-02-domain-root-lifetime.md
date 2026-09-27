@@ -68,12 +68,25 @@ TLB entry of one could resolve inside the other.
   riscv64gc-unknown-none-elf`), which is what keeps `asid_width()`'s guard honest rather
   than a debug-only assertion.
 
+### Slice 2 — invalidate before releasing frames (2026-09-27) — done
+
+- `kernel/src/memory/address_space.rs`: `unmap_private_page` invalidated nothing at all —
+  it removed the ledger entry, drained copy readers, pruned the table chain (freeing those
+  frames inline) and released the owned leaf. It now detaches the pruned tables and the leaf
+  into locals, drops both locks, runs `tlb_shootdown::flush_page` (local sfence plus remote
+  RFENCE on RV64) and releases the frames only afterwards. `unmap_grant_page` had the same
+  ordering bug for its pruned tables and is fixed the same way. The order matches the in-tree
+  exemplar `unmap_existing_task_stacks`, which already retained its pruned tables across the
+  flush.
+- Witness `S22-RV64-UNMAP-ORDER` (`address_space_tests`): build a private mapping, unmaps it
+  with flush observation armed, and requires that the unmapped page was invalidated *and* that
+  the frame count dropped afterwards. Red before the fix — `.logs/native-domain-qemu/h1-admission-7j4HaI/qemu.raw.log`:
+  `S22-RV64-UNMAP-ORDER: FAIL` — green after (`h1-unmap-order-*`), with `asid-lease`,
+  `grant-revoke` (the private-root grant revoke fixture, which drives `unmap_grant_page`) and
+  `admission` re-run in the same image.
+
 ### Slices still open (gates stay closed)
 
-2. **PTE and table-frame release ordering** — `unmap_grant_page` prunes (and frees) table
-   frames *before* the flush, and `unmap_private_page` releases the owned leaf with no flush
-   at all. Both must retain detached table/leaf frames until the target root's local and
-   remote invalidation completes, and quarantine them when an ack is missing.
 3. **Non-RV64 safe-root switch ordering** — save the outgoing context before activating the
    incoming root, add the incoming completion hook (generation-tagged ack, pin and
    user-copy-guard reset) and audit trap/syscall root entry/exit. Admission stays closed on
@@ -84,15 +97,21 @@ TLB entry of one could resolve inside the other.
    to 12 bits, but the x86 backend does not yet decide at runtime whether a tag may be
    programmed.
 
+Still unqualified after slices 1–2, and deliberately so: an invalidation *acknowledgement*
+from remote harts. RV64's `flush_range` issues the RFENCE and panics on transport failure, but
+no per-hart completion is collected, so "await target-root invalidation" is currently "the
+firmware call returned". Phase 03's revoke path needs the ack before it can call a revoke
+complete; slice 3 owns the generation-tagged acknowledgement that makes it possible.
+
 ## Assumptions / risk / rollback
 - [UNVERIFIED] Non-RV64 context-switch implementation supplies a point equivalent to RV64 incoming saved-context callback; inspect assembly and prove before selecting hook placement. Rollback: disable Tier-2 admission and cold reboot; leaving a stale TLB mapping or an already recycled frame cannot be reversed by reverting binaries. Stop deployment and retire any compromised dev workload. Preserve test evidence, no production qualification from QEMU alone.
 
 ## Deviation Log
 
-- **Slice 1 only.** Phase 02 is not complete: the lease half of the tag criteria is done and
-  witnessed, the PTE-reclaim ordering, the non-RV64 switch and the x86 PCID runtime gate are
-  not. Their lanes stay closed (AArch64/x86_64 Tier-2 admission refused; the AArch64
-  test-hooks lane is pre-existing broken, see phase 01's log).
+- **Slices 1–2 only.** Phase 02 is not complete: the tag lease and the unmap invalidation
+  order are done and witnessed; the non-RV64 switch, the remote invalidation acknowledgement
+  and the x86 PCID runtime gate are not. Their lanes stay closed (AArch64/x86_64 Tier-2
+  admission refused; the AArch64 test-hooks lane is pre-existing broken, see phase 01's log).
 - **Assumption checked while working here.** The phase assumed a point equivalent to RV64's
   incoming saved-context callback exists on AArch64/x86_64; the HAL switch paths have not been
   read to the level that proves it yet, so slice 3 was not started rather than half-built.

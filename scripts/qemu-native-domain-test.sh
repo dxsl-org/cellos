@@ -19,7 +19,7 @@ usage() {
 Usage: scripts/qemu-native-domain-test.sh --harts {1|2} --case <csv>
 
 Cases: switch, resume-root, sas-fastpath, migration, user-copy, user-copy-race,
-admission, rollback, grant-revoke, grant-gate, asid-lease
+admission, rollback, grant-revoke, grant-gate, asid-lease, unmap-order
 
 Each requested case gets a separate fresh QEMU log directory. `migration`
 requires two harts; it asserts the domain-switch terminal from the cross-hart
@@ -61,7 +61,7 @@ declare -A seen=()
 for case_id in "${REQUESTED_CASES[@]}"; do
     [[ -n "$case_id" ]] || { echo "FAIL: empty case in --case" >&2; exit 2; }
     case "$case_id" in
-        switch|resume-root|sas-fastpath|migration|user-copy|user-copy-race|ipc-copy|ipc-copy-race|admission|admission-enabled|admission-publication|admission-ceiling|futex-key|rollback|grant-revoke|grant-gate|asid-lease) ;;
+        switch|resume-root|sas-fastpath|migration|user-copy|user-copy-race|ipc-copy|ipc-copy-race|admission|admission-enabled|admission-publication|admission-ceiling|futex-key|rollback|grant-revoke|grant-gate|asid-lease|unmap-order) ;;
         *) echo "FAIL: unknown native-domain case: $case_id" >&2; exit 2 ;;
     esac
     [[ -z "${seen[$case_id]:-}" ]] || { echo "FAIL: duplicate native-domain case: $case_id" >&2; exit 2; }
@@ -108,6 +108,7 @@ marker_for() {
         grant-revoke) printf 'S22-RV64-GRANT-REVOKE: PASS' ;;
         grant-gate) printf 'S22-RV64-GRANT-GATE: PASS' ;;
         asid-lease) printf 'S22-RV64-ASID-LEASE: PASS' ;;
+        unmap-order) printf 'S22-RV64-UNMAP-ORDER: PASS' ;;
     esac
 }
 terminal_pattern_for() {
@@ -129,6 +130,7 @@ terminal_pattern_for() {
         grant-revoke) printf '(^|\\] )S22-RV64-GRANT-REVOKE: PASS$' ;;
         grant-gate) printf '(^|\\] )S22-RV64-GRANT-GATE: PASS$' ;;
         asid-lease) printf '(^|\\] )S22-RV64-ASID-LEASE: PASS$' ;;
+        unmap-order) printf '(^|\\] )S22-RV64-UNMAP-ORDER: PASS$' ;;
     esac
 }
 assert_runtime_hart_count() {

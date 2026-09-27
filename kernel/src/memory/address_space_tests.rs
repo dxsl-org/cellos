@@ -110,6 +110,38 @@ pub(crate) fn run_primary() {
         log::error!("S22-RV64-ASPACE: FAIL");
     }
 
+    // ── Unmap invalidation order ─────────────────────────────────────────────
+    //
+    // A page that is being unmapped must be invalidated before its frame can
+    // return to the allocator: a hart that still holds the translation may read
+    // the leaf and walk the table chain. `unmap_private_page` released the owned
+    // leaf and pruned its tables without invalidating anything.
+    let unmap_order = {
+        let mut builder = AddressSpaceBuilder::new();
+        let built = builder
+            .map_user_page(PRIVATE_PAGE, MappingKind::Private, flags())
+            .and_then(|()| builder.build());
+        match built {
+            Ok(space) => {
+                let before = used_frames();
+                crate::memory::tlb_shootdown::begin_test_flush_observation();
+                let unmapped = space.unmap_private_page(PRIVATE_PAGE).is_ok();
+                let flushed = crate::memory::tlb_shootdown::test_flush_observed(PRIVATE_PAGE);
+                crate::memory::tlb_shootdown::finish_test_flush_observation();
+                let released = used_frames().is_some_and(|after| {
+                    before.is_some_and(|before| after < before)
+                });
+                unmapped && flushed && released
+            }
+            Err(_) => false,
+        }
+    };
+    if unmap_order {
+        log::info!("S22-RV64-UNMAP-ORDER: PASS");
+    } else {
+        log::error!("S22-RV64-UNMAP-ORDER: FAIL");
+    }
+
     // ── ASID lease contract ──────────────────────────────────────────────────
     //
     // Two live roots must never carry the same architectural tag, and a released

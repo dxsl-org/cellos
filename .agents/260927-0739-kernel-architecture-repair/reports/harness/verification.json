@@ -48,6 +48,13 @@
       "exitCode": 0,
       "timestamp": "2026-09-27T10:50:00+07:00",
       "summary": "Phase 02 slice 1: S22-RV64-ASID-LEASE PASS in h1-asid-lease-mvFocf (distinct live tags, owner tracking, exhaustion refused, released tag reissued to its new owner) with S22-RV64-ASPACE, ADMISSION-DENY and GRANT-GATE all still PASS in the same image."
+    },
+    {
+      "command": "scripts/qemu-native-domain-test.sh --harts 1 --case unmap-order,asid-lease,grant-revoke,admission",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-09-27T11:10:00+07:00",
+      "summary": "Phase 02 slice 2: S22-RV64-UNMAP-ORDER PASS in h1-unmap-order-HDEPLP (the unmapped page was invalidated and its frames released afterwards), with ASID-LEASE, GRANT-REVOKE (the private-root grant revoke fixture that drives unmap_grant_page) and ADMISSION-DENY PASS in the same image."
     }
   ],
   "beforeAfter": {
