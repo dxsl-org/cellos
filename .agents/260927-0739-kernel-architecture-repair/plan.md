@@ -55,6 +55,16 @@ Recorded so the next session starts from evidence rather than from the phase tit
 | 07 — warm snapshot | Blocked by 03 (settled accounting/layout) and by the phase-01 qualification gate (feature `snapshot-qualified`; `kernel/src/snapshot.rs:415-431` invalidates a stale header and disables capture/restore). The **functional** witness is available here: `scripts/qemu-boot-test.sh` attaches a raw `virtio-blk` disk and `snapshot.rs` drives `block::read_sector`/`write_sector` at `PART_SNAPSHOT_BASE_LBA`, so save→reset→restore→resume can be exercised in QEMU. What stays hardware-gated is the *claim*: device-backed monotonic freshness, MMC behaviour and measured RT latency need the physical board. |
 | 08 — cross-architecture qualification | Depends on 02–07; its matrix also needs the x86 lane and the physical-board witnesses. |
 
+- **The x86 KVM lane now boots** (`a2951b38a`). Under KVM the boot died in `vmxon` with
+  CPUID advertising VMX and `IA32_FEATURE_CONTROL` reading locked-with-VMXON-enabled: a
+  hypervisor may grant the bits and still refuse nested root operation, and VMXON *faults*
+  rather than reporting failure, so an optional capability was taking the whole boot down.
+  The attempt is now gated on `hypervisor_present()` (capability stays closed with a visible
+  reason; bare metal unchanged), `enter_root` reads `IA32_FEATURE_CONTROL` back after locking
+  it, and the preconditions are printed on the early console before the attempt. Both x86
+  modes now reach the shell: TCG `PCID disabled`, KVM `PCID enabled (CPUID pcid=true
+  invpcid=true, CR4.PCIDE=1, CR3=0x59000)`. Not witnessed: root operation on bare metal.
+
 Two smaller items are recorded but deliberately not "fixed while passing":
 
 - `scripts/build-aarch64-test-hooks-ci.sh`'s `admission-core` marker: the selftest runs after the
