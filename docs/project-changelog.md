@@ -4,6 +4,30 @@
 
 ## [Unreleased] Development-first hardware-constrained execution
 
+- **A domain-owned zero-copy grant is permission-accurate, owner-mapped and synchronously
+  revocable on RV64.** The phase-01 blanket refusal of every `Grant*` entry point that named a
+  private-root task is now a capability check: it admits exactly one shape — a live task whose
+  address space is a live private root, on `native-domains` + `riscv64` — and keeps the
+  byte-for-byte sentinel for every other shape (AArch64/x86_64, unknown or retired tids, a root
+  already dying, a mixed SAS↔private-root pair, unsupported rights). One kernel-owned record
+  (`kernel/src/task/domain_grant.rs`, embedded as `PageGrant::domain`/`RegGrant::domain`) carries
+  the owner and receiver roots, the receiver cell identity/generation, the page-aligned range, the
+  rights copied into the receiver PTE, and `Live → Revoking → Revoked`. A private-root owner's
+  backing is allocated supervisor-only (never published USER in the SAS root), zeroed, and mapped
+  RW+NX into its own root, undoing every page on failure; `GrantSlice` resolves `ReadOnly → R+NX`
+  and `ReadWrite → RW+NX`, refuses genuine write-only, and maps transactionally;
+  `GrantFree`/`GrantUnregister`/re-share/either peer's exit mark `Revoking`, release the table
+  locks, drain the receiver PTE and await its invalidation, then unmap the owner PTE and only then
+  release frames, keeping a `Revoking` record (and a task-retirement retry sweep) when the
+  invalidation is unacknowledged. SAS-only grants, the VFS lease path, copied IPC and `GrantDma`
+  (still denied to a private-root caller) are unchanged. Verified: `--case grant-pair` exits 0 with
+  the full positive matrix (`OWNER-MAPPED: OK`, `RECEIVER-RW: OK`, `RECEIVER-SLICE-RO: OK (read
+  0xa5)`, `RECEIVER-RO-WRITE`/`REVOKE-FAULT`/`UNREGISTER-FAULT`/`EXIT-FAULT: FAULT-EXPECTED`, each
+  classified as a `cause=0xf` store at the exact grant address, `FRAME-REUSE: REFUSED`, and the
+  surviving denials), and the boot witnesses `S22-RV64-GRANT-REVOKE: PASS` /
+  `S22-RV64-GRANT-GATE: PASS` including the owner-mapping, no-SAS-USER-exposure, partial-map undo
+  and frame-reuse properties.
+
 - **`init`'s crash-storm budget actually engages now.** `cells/tools/init/src/supervisor.rs` compared
   its 1 000-unit restart window against `GetTime` op 0 — the raw architected counter, 10 MHz `mtime`
   on RV64 — instead of scheduler ticks, so the window was ~0.1 ms wide, rolled on every exit, and a
@@ -95,6 +119,15 @@
   DWC2 Ethernet TX active. Prior physical evidence covers lock LEDs and all
   three mouse buttons. Runtime HID reconnect, controller-reset recovery, and
   arbitrary/hostile hot-plug remain unclaimed.
+
+## [2026-09-28] Kernel architecture repair: switch completion, PCID gate, snapshot v2, grant-pair lane
+- **Non-RV64 switch completion:** `task::complete_incoming_switch` (`kernel/src/task.rs:918-928`) runs in the incoming context after `Context::switch_with_root` returns and consumes the plan's `safe_root_pending` flag — acknowledging the safe root, clearing the hart's domain identity, releasing the displaced root's execution pin and resetting the user-copy guard. The previous inference from `current_domain() == 0` was false exactly when it was needed, because a safe-root transition does not clear the id until `acknowledge_safe_root` runs. Witness on the AArch64 one-PE lane (exit 0, `[vfs-test] Results: 96 PASS, 0 FAIL`): `S22-AARCH64-ROOT-SWITCH: PASS … safe_root_consumed=true`.
+- **Tag-targeted acknowledged frame release:** `unmap_private_page`/`unmap_grant_page` reserve the VA in `AddressSpace::invalidation_pending`, flush the root's own tag (not the active kernel root) and release the leaf and pruned tables only after `flush_asid_and_await` succeeds; a missing acknowledgement quarantines them and returns `InvalidationUnacknowledged`, and `AddressSpace::drop` releases the tag before any frame. Host lane 145/145. Because AArch64 private-root leaves are global (`PTE_nG` is never set), that arm uses a full `vmalle1is` stopgap and AArch64 admission stays refused.
+- **x86 PCID/INVPCID gate:** the probe read `CPUID.01H:ECX[12]` (FMA) and therefore reported INVPCID present almost everywhere; it now reads `CPUID.07H:EBX[10]`, requires INVPCID before any nonzero PCID, sets `CR4.PCIDE` only with an untagged boot CR3, and clears a firmware-set PCIDE after selecting tag 0; `flush_asid` uses type-1 INVPCID, `flush_all` type 3. Witnesses: TCG `X86_EXPECT_PCID=0` → shell + `PCID disabled …`; KVM `X86_EXPECT_PCID=1` → shell + `PCID enabled …`; `hal-x86` host lane 12/12.
+- **Snapshot internal format v2:** `kernel/src/snapshot.rs` is one format, one checksum and one durable state machine — a 512-byte header in MBR partition P3, an explicit `SnapshotRun { pa, frame_count, flags }` inventory, payload in inventory order (no dense `pa_base + index * 4096` reconstruction), `crc32(header.canonical_bytes() || inventory || payload)` with the CRC field zeroed, and `EMPTY → WRITING → COMMITTED → CONSUMING → CONSUMED` with flush ordering around every transition. A reboot that sees WRITING/CONSUMING/CONSUMED refuses and erases; a failure after replay began returns `RestoreOutcome::FatalMixedRam` and resets (`halt_mixed_ram`) instead of continuing a cold boot on mixed RAM. Verified with a test-only in-memory fake block device (write-back cache, per-ordinal write/read/flush faults, torn sectors, crash-after-flush, sparse RAM model): **145 passed** on `cargo test -p cellos-kernel --target x86_64-unknown-linux-gnu` (26 new snapshot tests), with a red witness from a throwaway transcription of the legacy pair. `QUALIFICATION_ENABLED` is untouched, so capture/restore still refuse.
+- **RV64 two-Cell grant pair:** `scripts/qemu-native-domain-test.sh --case grant-pair` boots a fresh throwaway image whose VIFS1 store carries `cells/tests/tier2-grant-owner` and `tier2-grant-receiver`, both real `TaskAddressSpace::Domain` tasks, and drives the owner through the public `GrantAlloc`/`GrantRegister`/`GrantSlice`/`GrantShare`/`GrantFree`/`GrantUnregister` path before handing the observed sentinel to a second, distinct domain. Every phase-01 containment denial is asserted verbatim (`h1-grant-pair-WpVt7F`); the 1-hart regression `admission`, `asid-lease`, `unmap-order`, `grant-revoke`, `grant-gate` all PASS.
+- **Docs:** `docs/specs/03-runtime.md` §4 now documents the internal v2 contract in place of the retired 40-byte `system.img`/FAT16 layout, the relocation table and the unwitnessed sub-100 ms claim; `docs/system-architecture.md` drops the single-largest-usable-region allocator statement and the 64 MB heap figure, and states the RV64-only Tier-2 admission posture and the closed `snapshot-qualified` gate; `docs/specs/22-native-domain-cell-implementation-gate.md` §2.2 records RV64 as the only admitted architecture and the AArch64 non-global private-leaf blocker. No new performance, production or qualification claim is made without a witness.
+- **Not claimed:** no non-RV64 Tier-2 admission (no AArch64/x86_64 image has entered a real domain task), the x86 `INVPCID` instruction path is unexecuted, the grant lifecycle is unproven (the pair lane is red on the deny contract), and warm snapshot remains disabled and unmeasured with no board witness.
 
 ## [2026-09-25] Cell-native C pthread runtime (portability follow-on P1)
 - **Runtime:** added the narrow `libs/port-platform/include/cellos_pthread.h` and C implementation for in-cell `pthread_create`, one-shot `pthread_join`, non-recursive mutexes, and condition variables. `pthread_join` consumes the userspace result only after kernel `Wait` has crossed the target task's terminal lifecycle; the slot cannot be reused while its worker remains live.

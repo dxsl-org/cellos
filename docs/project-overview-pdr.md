@@ -24,9 +24,17 @@ Cellos is a next-generation operating system designed for the **Edge-to-Cloud er
 
 ## Key Differentiator Opportunity
 
-The architecture spec (03-runtime.md) describes **Heap Snapshotting (Instant On)**: after first boot, serialize the full memory state to `system.img`. Subsequent boots load the snapshot directly, bypassing ELF parsing and re-linking — sub-100 ms cold boot for a full OS stack.
+The architecture spec (03-runtime.md §4) designs **Heap Snapshotting**: after first boot, serialize
+a versioned address inventory and frame payload into the reserved P3 region of the disk image, and on
+a later boot replay those exact physical frames before resuming. The internal format v2, its canonical
+checksum and the `EMPTY → WRITING → COMMITTED → CONSUMING → CONSUMED` state machine are implemented
+and unit-tested, but **capture and restore are disabled in every shipping image** until all-hart
+quiescence, closure, coherent staging and a real save→reset→restore→resume witness on a block-capable
+board exist. No warm-boot timing is claimed — there is no measurement and no board witness.
 
-No production OS offers this. If implemented, this becomes Cellos's primary competitive differentiator over Linux, Fuchsia, and unikernels. Delivered in Phase 29 (Heap Snapshotting / Instant On) — ✅ COMPLETE (2026-06-07).
+No production OS offers this. If qualified, this becomes Cellos's primary competitive differentiator
+over Linux, Fuchsia, and unikernels. It is **not shipped**: the earlier "Phase 29 — COMPLETE
+(2026-06-07)" status and its sub-100 ms figure had no witness behind them and are withdrawn.
 
 ---
 

@@ -4,11 +4,16 @@
 > gated off** (phase-01 containment, 2026-09-27).
 > RV64 Tier-2 launch, copied IPC and hardware Page-Fault containment are verified
 > (`tests/integration/tests/tier2_fault_isolation.rs`, `scripts/qemu-native-domain-test.sh`
-> including the new `--case grant-gate` witness). Since 2026-09-27 the kernel refuses every
+> including the new `--case grant-gate` and `--case grant-pair` witnesses). Since 2026-09-27 the kernel refuses every
 > `Grant*` call that names a private-root task (§2.5), keeps AArch64/x86_64 Tier-2 admission
-> closed until the ordered context switch is proven on one CPU (§2.2), and refuses warm
-> snapshot capture/restore until its format, quiescence and restart story are qualified.
-> §2.2's multi-arch rows are feasibility statements, not enablement claims.
+> closed (§2.2): no non-RV64 image has entered a real domain task, the ordered switch is
+> structural hardening rather than a demonstrated fix, and AArch64 private-root leaves are
+> global (no `PTE_nG`) so ASID-targeted invalidation cannot reach them. It also refuses warm
+> snapshot capture/restore: the internal format v2 and its state machine are implemented and
+> unit-tested, but quiescence, closure and the board witness are not, and the
+> `snapshot-qualified` gate is off in every shipping image (see `docs/specs/03-runtime.md` §4).
+> RV64 is therefore the only architecture with Tier-2 admission today; §2.2's other rows are
+> feasibility statements with their current disposition, not enablement claims.
 ## 1. Context and current truth
 
 Tier 1 Cells share the SAS page-table view and rely on Rust LBI. The native loader has
@@ -75,9 +80,9 @@ user mapping ledger. The system must fail closed on a mapping request it cannot 
 
 | Architecture | Feasible control | Required implementation proof | Limitation / disposition |
 |---|---|---|---|
-| RISC-V RV64 | Write `satp` with an Sv39 root PPN and allocated ASID; execute the architecture-required `sfence.vma` sequence. | ASID allocator with wrap generation, remote invalidation protocol, and a test that stale translations cannot cross a recycled ASID. | Viable on the supported paged RV64 lanes. RV32 bare-physical targets cannot implement Tier 2. |
-| AArch64 | Write `TTBR0_EL1` with a private root and nonzero ASID; use `TLBI` plus required DSB/ISB ordering. | ASID generation/reuse protocol, multi-PE shootdown witness, and MAIR/TCR compatibility with the root. | Viable on the Armv8.2 deployment lane; MTE is not required. |
-| x86_64 | Write `CR3` with a private PML4 and PCID when CPUID supports PCID; invalidate with `INVPCID`/CR3 semantics as appropriate. | CPUID-gated PCID allocation/reuse and a correct non-PCID full-flush fallback. | Feasible, but PCID is an optimization, not a prerequisite; no-PCID mode must remain correct. |
+| RISC-V RV64 | Write `satp` with an Sv39 root PPN and allocated ASID; execute the architecture-required `sfence.vma` sequence. | ASID allocator with wrap generation, remote invalidation protocol, and a test that stale translations cannot cross a recycled ASID. | **The only architecture with admission today**: a real Tier-2 Cell is admitted into a private `satp` root, with copied IPC and hardware page-fault containment verified. RV32 bare-physical targets cannot implement Tier 2. |
+| AArch64 | Write `TTBR0_EL1` with a private root and nonzero ASID; use `TLBI` plus required DSB/ISB ordering. | ASID generation/reuse protocol, multi-PE shootdown witness, and MAIR/TCR compatibility with the root. | **Admission refused.** No AArch64 image has entered a real domain task, and private-root leaves are composed without `PTE_nG` (`hal/arch/arm/src/aarch64/paging.rs`), so they are global: ASID-targeted `tlbi aside1is` cannot reach them and a stale entry of one private root stays usable under another ASID. Release currently uses a full `vmalle1is` stopgap. |
+| x86_64 | Write `CR3` with a private PML4 and PCID when CPUID supports PCID; invalidate with `INVPCID`/CR3 semantics as appropriate. | CPUID-gated PCID allocation/reuse and a correct non-PCID full-flush fallback. | **Admission refused.** No x86_64 image has entered a real domain task, so the switch/admission path is unproven and the `INVPCID` instruction path stays unexecuted. The runtime gate now probes `CPUID.07H:EBX[10]` and requires INVPCID before any nonzero PCID (TCG boots PCID-off, KVM PCID-on). PCID is an optimization, not a prerequisite; no-PCID mode must remain correct. |
 
 An architecture backend that lacks a safe private-root activation and invalidation protocol
 does not advertise Tier 2. It must retain Tier-1/Tier-3 behaviour; it may not label an
@@ -144,19 +149,78 @@ Pinned DMA frames remain quarantined until the device/IOMMU teardown acknowledge
 revoke does not authorize recycling DMA-visible memory. The initial implementation should
 prefer copied IPC and defer grants until this state machine and its race tests pass.
 
-**Containment gate (2026-09-27, phase 01).** That state machine is not implemented for the
-public ABI yet, so the kernel refuses every grant entry point that names a private-root task
-— `GrantAlloc`, `GrantRegister`, `GrantShare`, `GrantSlice`, `GrantFree`, `GrantUnregister`,
-`GrantDma` — at the common syscall gate, before any table row, PTE, pin or frame exists. The
-refusal uses the per-operation alloc-safe sentinel: `GrantAlloc`/`GrantRegister` return `0`,
-`GrantSlice` returns `usize::MAX`, and share/free/unregister return the established nonzero
-failure — `libs/ostd/src/syscall.rs` decodes *any* nonzero `GrantAlloc`/`GrantRegister`
-return as a grant id, so a generic error sentinel would be published as a grant. SAS→SAS
-Tier-1 grants and copied IPC keep their exact behaviour. A live grant record naming a
-private-root owner or receiver — an image update over a system that already granted one —
-blocks domain admission until it is drained. Tier-2 admission itself stays closed on AArch64
+**Containment gate (2026-09-27, phase 01) — superseded on RV64 by the phase-03
+lifecycle below.** While the state machine was unimplemented the kernel refused every grant
+entry point that named a private-root task — `GrantAlloc`, `GrantRegister`, `GrantShare`,
+`GrantSlice`, `GrantFree`, `GrantUnregister`, `GrantDma` — at the common syscall gate,
+before any table row, PTE, pin or frame existed. The refusal used the per-operation
+alloc-safe sentinel: `GrantAlloc`/`GrantRegister` return `0`, `GrantSlice` returns
+`usize::MAX`, and share/free/unregister return the established nonzero failure —
+`libs/ostd/src/syscall.rs` decodes *any* nonzero `GrantAlloc`/`GrantRegister` return as a
+grant id, so a generic error sentinel would be published as a grant. SAS→SAS Tier-1 grants
+and copied IPC keep their exact behaviour. Tier-2 admission itself stays closed on AArch64
 and x86_64 until §2.2's ordered switch completion is proven on one CPU; RV64 keeps launch,
 copied IPC and fault containment.
+
+**Private-root grant lifecycle (2026-09-28, phase 03 — RV64 only).** The gate above is now a
+capability check rather than a blanket refusal, on exactly one target tuple:
+`native-domains` on `riscv64`. It admits exactly one shape — a **live** task whose address
+space is a **live** private root — and every other shape keeps the phase-01 sentinel
+byte-for-byte: AArch64 and x86_64, an unknown or retired tid, a root already marked dying,
+a mixed `SAS↔private-root` pair, and an unsupported permission. The contract is:
+
+1. **One kernel-owned record.** `kernel/src/task/domain_grant.rs`'s `DomainGrant` is the
+   single record behind both grant tables (`kernel/src/task/syscall.rs`
+   `PageGrant::domain` / `RegGrant::domain`). It carries the owner root, the receiver root
+   (`Arc<AddressSpace>`, retained while the receiver PTE is published), the receiver's cell
+   identity and generation, the page-aligned owner/receiver range, the rights copied into
+   the receiver PTE, and a `Live → Revoking → Revoked` state. `Live` records are revocable
+   and therefore **do not** block domain admission; only a record the lifecycle cannot drain
+   (pre-gate residue, or any record on a target where the lifecycle is absent) still does.
+2. **Owner mapping.** For a private-root owner, `GrantAlloc`/`GrantRegister` allocate
+   contiguous frames, zero them through the supervisor identity map, and map them RW+NX into
+   the owner's own root. They are **never** published USER in the SAS/global root, so a SAS
+   cell cannot reach a domain owner's backing. Any failed page is undone (unmap with
+   acknowledgement) and the frames are released before the alloc-safe `0` is returned, so a
+   partially mapped pointer is never published.
+3. **Receiver mapping.** `GrantSlice` resolves rights from the owner's `shared_to`:
+   `ReadOnly` → R+NX, `ReadWrite` → RW+NX. Genuine write-only is refused for a domain pair
+   (no ordinary-page representation exists on any supported target) instead of being widened
+   to RW. Every page is mapped transactionally; on any failure the pages already mapped are
+   unmapped and the established `usize::MAX` sentinel is returned. `GrantShare` publishes the
+   exact `(target identity, generation, root, rights)` tuple: a redundant share is a no-op,
+   and any change — including same-recipient RW→RO — revokes the old receiver PTE and shoots
+   it down before the new tuple is published.
+4. **Synchronous revoke.** `GrantFree`, `GrantUnregister`, re-share/downgrade, and either
+   peer's exit all mark `Revoking`, release every table lock, drain copy readers, unmap the
+   receiver PTE and await invalidation, then unmap the owner PTE, and only then release
+   frames. An unacknowledged invalidation (the SBI remote-fence transport, or a receiver root
+   still current on a hart) returns the bounded existing error, retains the frames, and keeps
+   the record `Revoking` for an idempotent retry — a caller-exit retry sweep runs on every
+   task retirement. New slices and shares refuse while `Revoking`. Receiver death drains only
+   the receiver half: the owner keeps the record and its frames and may re-share. A DMA pin
+   cannot exist on a domain grant because `GrantDma` remains denied for a private-root
+   caller; SAS-only grant clients, the VFS lease path and copied IPC are untouched.
+5. **Virtual identity.** The receiver VA is the grant's physical base. A collision with an
+   existing mapping in the receiver root (or a base at or above `USER_LIMIT`) makes the
+   share/slice fail before anything is published; there is no alternate-VA fallback.
+
+**Paired public-syscall witness (2026-09-28, phase 03).**
+`scripts/qemu-native-domain-test.sh --case grant-pair` boots a fresh throwaway RV64 image
+whose VIFS1 store carries a two-cell Tier-2 pair (`cells/tests/tier2-grant-owner`,
+`cells/tests/tier2-grant-receiver`, installed on the two reviewed Tier-2 launch paths the
+shell edge already admits) and drives it from the guest shell. The owner is backgrounded and
+traverses `GrantAlloc`/`GrantRegister`/`GrantSlice`/`GrantShare`/`GrantFree`/
+`GrantUnregister` as a real `TaskAddressSpace::Domain`, proves its own pointer writable, and
+publishes the grant bases in `S22-RV64-GRANT-PAIR-HANDOFF`; the runner spawns one receiver
+generation per property, each ending in a deliberate store to the exact grant address. The
+runner asserts `OWNER-MAPPED: OK`, `RECEIVER-RW: OK`, `RECEIVER-RO-WRITE: FAULT-EXPECTED`,
+`RECEIVER-REVOKE-FAULT`/`UNREGISTER-FAULT`/`EXIT-FAULT: FAULT-EXPECTED`,
+`RECEIVER-FRAME-REUSE: REFUSED`, and the surviving denials (`OWNER-SHARE-FOREIGN: DENY`,
+`OWNER-SHARE-WO: DENY`, `RECEIVER-SLICE-UNKNOWN: DENY`), and classifies each fault line as
+`cause=0xf` at the expected `addr=`. The boot-time kernel witnesses are
+`S22-RV64-GRANT-REVOKE: PASS` (the lifecycle matrix) and `S22-RV64-GRANT-GATE: PASS` (the
+capability/denial matrix).
 
 ### 2.6 MMIO, DMA, and IOMMU confinement
 

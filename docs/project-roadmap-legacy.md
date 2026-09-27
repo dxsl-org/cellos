@@ -14,6 +14,15 @@
 > absent signatures, the dev seed is public, no production public-key provisioning path
 > exists, and secure boot remains open. See Spec 18 and the fleet-admission item below.
 
+> **Phase-29 snapshot correction (2026-09-28):** the "✅ COMPLETE (2026-06-07)" status and the
+> sub-100 ms / ~270 ms timing table in "Phase 29 — Heap Snapshotting / Instant On" below are
+> **withdrawn**. The old writer and reader disagreed by construction (checksum definition and
+> layout), the format is now internal v2 with an explicit `(pa, frame_count)` inventory, one
+> canonical `crc32(header.canonical_bytes() || inventory || payload)` and the
+> `EMPTY → WRITING → COMMITTED → CONSUMING → CONSUMED` state machine, and capture/restore stay
+> disabled in every shipping image behind the `snapshot-qualified` gate with no board witness
+> and no measured warm-boot time. See `docs/specs/03-runtime.md` §4.
+
 > **Plan-portfolio WIP limit (D34-D39, 2026-08-01):**
 > [`.agents/plan-portfolio.md`](../.agents/plan-portfolio.md) is the scheduling source of
 > truth. Midori is the sole active feature program until phases 07/08 close; package

@@ -498,3 +498,46 @@ does not approve a new Law-1 ABI by itself.
    - Khi giải phóng grant qua `Syscall::GrantUnregister`, kernel thu hồi ánh xạ khỏi bảng trang domain qua `space.unmap_grant_page(va)` trước khi hoàn trả khung trang vật lý về `FRAME_ALLOCATOR`.
 2. **Grantee Domain Slicing**:
    - Khi một Domain cell là người thụ hưởng (grantee) gọi `Syscall::GrantSlice` đối với grant được cấp quyền, kernel ánh xạ các trang nhớ của grant vào bảng trang domain của grantee.
+
+### 12.3 Private-root grant lifecycle — Ratified 2026-09-28
+
+Normative cutover contract for `Grant*` between two Tier-2 private roots. Public syscall
+numbers and result conventions are unchanged (`libs/api`, `libs/types` are frozen); the
+alloc-safe sentinel for `GrantAlloc`/`GrantRegister` stays `0` and the "not authorized"
+sentinel for `GrantSlice` stays `usize::MAX`.
+
+1. **Endpoint identity.** The `target_cell` field of `GrantShare` names the receiving task
+   (tid), exactly as the SAS path uses it. The kernel re-resolves the receiving *cell id and
+   cell generation* at share time and stores them in the one grant record, so a recycled tid
+   cannot inherit a grant and a stale `(cell, generation)` cannot be re-shared. Endpoints are
+   task-scoped; the cell-wide root is reached only through the caller's own live task.
+2. **Pairing.** Only `private-root owner → private-root receiver` is representable. A
+   mixed `SAS ↔ private-root` pair is refused in both directions: the SAS receiver has no
+   mapping of the domain owner's frames, and the domain receiver's PTE could not be revoked
+   from the SAS side. SAS→SAS keeps today's zero-copy behaviour untouched and does not use
+   the lifecycle record.
+3. **Virtual identity and collision.** The receiver VA is the grant's physical base. A base
+   at or above `USER_LIMIT` (`1 << 38`) or already present in the receiver root's ledger
+   fails the operation before anything is published — there is no alternate-VA fallback and
+   no silent widening.
+4. **Permission and NX policy.** `ReadOnly` → `R+NX`, `ReadWrite` → `RW+NX`. Both are
+   published USER in the receiver's root only. Genuine write-only is refused for a domain
+   pair until it has a ratified representation. The owner's own mapping is `RW+NX`, and the
+   backing is never published USER in the SAS/global root.
+5. **Page count.** One record covers `size.div_ceil(4096)` pages of a single contiguous
+   allocation (capped by `MAX_GRANT_PAGES`). The owner maps the whole range at allocation;
+   the receiver maps the whole range at share/slice. Every page is transactional: a failure
+   undoes the pages already mapped (with acknowledgement) and releases the frames instead of
+   publishing a partial raw pointer.
+6. **State and failure semantics.** The record is `Live → Revoking → Revoked`. `Revoking`
+   refuses new slices and shares. Revoke is synchronous with respect to security: mark
+   `Revoking`, release every table lock, drain copy readers, unmap the receiver PTE, await
+   the local-and-remote invalidation, unmap the owner PTE, then release the frames. An
+   unacknowledged invalidation is never treated as success: the frames stay retained with the
+   record and the caller receives the bounded existing error, so the operation is idempotent
+   and a retry (including a task-retirement sweep) completes it. Receiver death drains only
+   the receiver half and leaves the owner's ownership and frames intact.
+7. **DMA.** `GrantDma` remains denied for a private-root caller, so no pin or IOMMU
+   publication can exist on a domain grant. DMA-visible memory therefore never takes part in
+   this lifecycle; a domain grant's frames become reusable as soon as its revoke is
+   acknowledged.

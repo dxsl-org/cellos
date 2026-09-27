@@ -34,74 +34,125 @@ Cellos hỗ trợ nâng cấp phần mềm mà không cần ngừng hệ thống
     3. Nạp `NewCell` và gọi `deserialize_state(blob)`.
     4. Tráo đổi con trỏ hàm (Symbol Re-linking) và giải phóng `OldCell`.
 
-## 4. Boot Optimization (Instant On)
-Để robot khởi động < 1 giây, Cellos sử dụng cơ chế **Heap Snapshotting**.
+## 4. Boot Optimization (Snapshot)
+
+> **Trạng thái (2026-09-28)**: warm boot qua snapshot **chưa được bật trên bất kỳ ảnh nào**.
+> Cổng qualify là một feature build, `QUALIFICATION_ENABLED = cfg!(feature = "snapshot-qualified")`,
+> mặc định tắt trong mọi ảnh shipping: capture và restore đều từ chối trước khi chạm đĩa hoặc
+> RAM, và hợp đồng shell/Supervisor giữ nguyên (`snapshot: unavailable on this platform`).
+> **Chưa có phép đo warm-boot nào và chưa có witness trên board** — con số `<100 ms` trước đây
+> không có witness đứng sau. Định dạng v2 ở §4.3 là hợp đồng **nội bộ** đã có code + unit test
+> (nửa thiết bị-độc-lập của phase 07), không phải một tuyên bố sẵn sàng.
 
 ### 4.1 Mục tiêu
-- **Cold boot** (lần đầu hoặc sau update): parse ELF + link + init cells → ~2–5 giây
-- **Warm boot** (snapshot valid): load `system.img` trực tiếp vào RAM → **< 100 ms**
+- **Cold boot** (lần đầu, sau update, hoặc khi ảnh snapshot bị từ chối): parse ELF + link +
+  init cells — đây là đường khởi động duy nhất hiện đang chạy.
+- **Warm boot** (snapshot `COMMITTED` hợp lệ): replay đúng các frame vật lý đã lưu rồi resume
+  scheduler. Thời gian **chưa được đo**; chỉ chạy khi một profile đã qualify bật feature này.
 
 ### 4.2 Cơ chế hoạt động
 
-```
-Cold Boot:
-  Limine → Kernel init → ELF parse cells → Link vtables → Init all cells
-                                                              ↓
-                                                   serialize_snapshot()
-                                                              ↓
-                                                   ghi system.img ra FAT16
-
-Warm Boot:
-  Limine → Kernel init → kiểm tra system.img header
-                              ↓ valid
-                        mmap system.img → physical RAM
-                              ↓
-                        restore vtable pointers (PA-relative patch)
-                              ↓
-                        reinit VirtIO devices (MMIO không snapshot)
-                              ↓
-                        resume cells từ saved entry point
-```
-
-### 4.3 Snapshot Format (`system.img`)
+Ảnh snapshot nằm trong partition **P3** dành riêng của ảnh đĩa MBR (`disk_v3.img`), **không**
+phải một file `system.img` trên FAT16: sector 0 là header, sector 1 trở đi là inventory rồi
+payload. Kernel chỉ ghi/đọc vùng P3 đó.
 
 ```
-Offset  Size   Field
-0x00    8      Magic: b"Cellos_SNP"
-0x08    4      Version: u32 (LE)
-0x0C    4      CRC32 of entire image (field = 0 during calculation)
-0x10    8      Kernel build hash (SHA256 first 8 bytes)
-0x18    8      Cell table hash (SHA256 of /bin/ contents)
-0x20    8      Physical load address of snapshot region
-0x28    8      Total snapshot size in bytes
-0x30    N      Page frames: raw physical memory content
-0x30+N  M      Relocation table: [(va_offset: u32, pa_base: u32)] for vtable patches
+Capture (chỉ khi feature bật):
+  freeze/park mọi task + hart           ← phase 07 step 3, CHƯA có
+        ↓
+  ghi header WRITING + flush            (vô hiệu hoá ảnh cũ trước khi ghi payload)
+        ↓
+  ghi inventory (pa, frame_count) → payload → flush
+        ↓
+  ghi header COMMITTED + flush
+
+Restore (chỉ khi feature bật):
+  đọc + kiểm tra toàn bộ ảnh            (chưa ghi một byte RAM nào)
+        ↓
+  ghi CONSUMING + flush                 (bền vững; reboot từ đây từ chối ảnh)
+        ↓
+  replay chính xác từng PA trong inventory
+        ↓
+  ghi CONSUMED
 ```
 
-**Invalidation**: Snapshot stale (fallback to cold boot) nếu:
-- Kernel build hash thay đổi (recompile kernel)
-- Cell table hash thay đổi (bất kỳ cell nào trong /bin/ bị cập nhật)
-- CRC32 mismatch (corruption)
+### 4.3 Snapshot Format (internal v2)
+
+Header đúng một sector 512 byte tại sector đầu của P3. Mọi trường little-endian.
+
+```
+Offset  Size  Field
+0x00    4     magic = 0x5543_4956 ("VICU" khi đọc byte)
+0x04    2     version = 2  (header v1 bị từ chối → cold boot, không migration)
+0x06    1     state: EMPTY=0, WRITING=1, COMMITTED=2, CONSUMING=3, CONSUMED=4
+0x07    1     flags (phải bằng 0)
+0x08    8     kernel_hash (8 hex đầu của git SHA lúc build)
+0x10    8     ram_base   ┐ bố cục RAM managed tại thời điểm capture
+0x18    8     ram_end    ┘
+0x20    4     sector_size
+0x24    4     run_count
+0x28    4     frame_count (tổng số frame 4096 byte)
+0x2C    4     inventory_sectors
+0x30    4     image_sectors (header + inventory + payload)
+0x34    4     padding
+0x38    8     payload_lba
+0x40    4     crc32   ← 4 byte này bị đặt về 0 khi tính checksum
+0x44    4     reserved
+0x48  440     reserved (zero)
+```
+
+**Inventory** (`run_count` entry, mỗi entry 16 byte, zero-pad hết sector):
+
+```
+Offset  Size  Field
+0x00    8     pa (physical address, căn 4096)
+0x08    4     frame_count (≥ 1)
+0x0C    4     flags (phải bằng 0)
+```
+
+Mỗi run là `frame_count` frame 4096 byte **liền nhau** bắt đầu tại PA tường minh `pa`. Frame
+không thuộc run nào thì không có trong ảnh — reader replay đúng `runs[*].frame_pa(i)` và
+**không** bao giờ dựng lại một dải dense kiểu `pa_base + index * 4096`.
+
+**Payload**: các frame của từng run, ghi tại đúng PA của chúng, theo thứ tự inventory.
+
+**Checksum** — một định nghĩa duy nhất dùng chung cho writer và reader:
+`crc32(header.canonical_bytes() || inventory_sectors || payload_sectors)`, trong đó
+`canonical_bytes()` là 512 byte header với 4 byte `crc32` (offset `0x40`) đặt về 0.
+
+**Invalidation / từ chối** (fallback cold boot, không migration):
+- magic sai, version không phải 2, hoặc `state` không đọc được;
+- `kernel_hash` đổi (kernel được build lại) hoặc bố cục RAM (`ram_base`/`ram_end`) đổi;
+- geometry/identity sai: run rỗng, lệch căn, ngoài RAM, trùng hoặc chồng lấn; ảnh vượt P3;
+  `sector_size ≠ 512`; tổng frame trong inventory khác header;
+- checksum mismatch (corruption);
+- state `WRITING` / `CONSUMING` / `CONSUMED` gặp lại sau reboot.
 
 ### 4.4 Ràng buộc triển khai
 
 | Ràng buộc | Lý do |
 |-----------|-------|
-| VirtIO devices **không** được snapshot | MMIO registers reset sau power cycle; phải reinit |
-| MMIO regions bị exclude khỏi page frame dump | Ghi vào MMIO có side effect (gửi packet, eject disk) |
-| Snapshot dùng **physical addresses** (PA) | VA có thể thay đổi nếu KASLR kích hoạt; PA stable |
-| KASLR + Snapshotting: tương thích qua PA-relative reloc table | Kernel áp dụng VA randomization *sau* khi load snapshot |
-| Stack của mỗi Cell **không** được snapshot | Stack chứa return addresses VA; bị invalidate sau KASLR |
-| Heap và global data: snapshot đầy đủ | Owned buffers, vtables, static config — safe để restore |
+| VirtIO/thiết bị **không** được snapshot | MMIO register reset sau power cycle; phải reinit, và transport MMC còn phải bị loại trừ khi capture |
+| MMIO region bị loại khỏi inventory | Chỉ frame thuộc managed RAM vào inventory; ghi vào MMIO có side effect (gửi packet, eject disk) |
+| Snapshot dùng **physical address** tường minh (PA trong inventory) | VA không được lưu; reader replay theo PA, nên bố cục RAM lúc restore phải trùng lúc capture |
+| **Không** có relocation table | Layout/identity mismatch bị **từ chối** ở preflight, không được patch; thay đổi layout/KASLR ⇒ cold boot |
+| Mọi lần đổi state đều `flush` bền vững | Header `WRITING`/`COMMITTED`/`CONSUMING`/`CONSUMED` là thứ tự durable; reboot giữa chừng phải thấy ảnh chưa-commit hoặc đã-consume |
+| Replay đã bắt đầu ⇒ không quay lại cold boot | Lỗi giữa chừng trả `RestoreOutcome::FatalMixedRam` và reset (`halt_mixed_ram`), không chạy tiếp trên RAM hỗn hợp |
+| Closure chưa được chứng minh | Inventory từ frame allocator **không** chứng minh phủ hết `.data`/`.bss` của kernel, allocator metadata/lock, page table, task record và hart-local (phase 07 step 2) |
 
-### 4.5 Prerequisites trước khi triển khai (Phase 29)
+### 4.5 Prerequisites trước khi bật
 
-- [ ] Typed snapshot inventory từ từng subsystem owner; MMIO/resource ranges lấy từ
-      resource registry, không từ pointer scanning
-- [ ] **Direct IPC vtable** (Phase 27) — snapshot cần capture vtable layout, không phải syscall table
-- [ ] **FAT16 write path** ổn định — ghi `system.img` sau cold boot
-- [ ] **Fixed physical layout** đã confirmed (no physical ASLR)
-- [ ] Snapshot size estimate: ~4–8 MB cho kernel + 6 base cells (tùy heap usage)
+- [x] Định dạng nội bộ v2: inventory PA tường minh, một checksum canonical, state machine
+      `EMPTY → WRITING → COMMITTED → CONSUMING → CONSUMED` với thứ tự flush bền vững,
+      preflight capacity/identity, và `FatalMixedRam` + reset thay vì cold boot trên RAM hỗn hợp
+- [x] Fake block device trong bộ test (`#[cfg(test)]`) cùng ma trận corruption/reset
+      (26 test snapshot; `cargo test -p cellos-kernel --target x86_64-unknown-linux-gnu` → 145 passed)
+- [ ] All-hart quiescence + acknowledged safe-root freeze trước capture
+- [ ] Coherent staging (COW hoặc write-protection) để byte không đổi giữa lúc đọc và lúc ghi
+- [ ] Closure đầy đủ (mutable kernel-image root, allocator metadata/lock, page table, task record, hart-local)
+- [ ] Authenticated monotonic epoch / freshness lấy từ thiết bị lưu trữ tin cậy
+- [ ] Witness thật `save → reset → restore → resume` trên board có block device, kèm loại trừ transport MMC
+- [ ] Phép đo warm boot trên đúng thiết bị — không con số nào được claim trước khi đo
 
 ## 5. Tooling: `ostd` & `cargo-Cellos`
 * **`ostd`**: Thư viện chuẩn thay thế `std`, cung cấp các interface cho Allocator, Async Runtime và Logging.

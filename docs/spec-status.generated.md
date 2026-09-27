@@ -6,12 +6,12 @@ Layer 3 of [Spec 21](specs/21-documentation-architecture.md). `Anchor:` lines in
 
 | Metric | Value |
 |---|---:|
-| Sections scanned | 398 |
+| Sections scanned | 399 |
 | Sections with an anchor | 19 |
-| Ratified/Accepted sections | 276 |
+| Ratified/Accepted sections | 288 |
 | …of those, anchored | 18 |
 | Anchor violations | 0 |
-| Coverage gaps (ratified, unanchored) | 258 |
+| Coverage gaps (ratified, unanchored) | 270 |
 | Status-prose hits | 80 |
 
 ## Anchored sections
@@ -70,13 +70,13 @@ Layer 3 of [Spec 21](specs/21-documentation-architecture.md). `Anchor:` lines in
 - `docs/specs/03-runtime.md:17` — Quy tắc "Owned Buffers ONLY"
 - `docs/specs/03-runtime.md:22` — Async Pinning Registry (Lá chắn Unload)
 - `docs/specs/03-runtime.md:27` — 3. Hot-Swap & State Transfer
-- `docs/specs/03-runtime.md:37` — 4. Boot Optimization (Instant On)
-- `docs/specs/03-runtime.md:40` — 4.1 Mục tiêu
-- `docs/specs/03-runtime.md:44` — 4.2 Cơ chế hoạt động
-- `docs/specs/03-runtime.md:66` — 4.3 Snapshot Format (`system.img`)
-- `docs/specs/03-runtime.md:86` — 4.4 Ràng buộc triển khai
-- `docs/specs/03-runtime.md:97` — 4.5 Prerequisites trước khi triển khai (Phase 29)
-- `docs/specs/03-runtime.md:106` — 5. Tooling: `ostd` & `cargo-Cellos`
+- `docs/specs/03-runtime.md:37` — 4. Boot Optimization (Snapshot)
+- `docs/specs/03-runtime.md:47` — 4.1 Mục tiêu
+- `docs/specs/03-runtime.md:53` — 4.2 Cơ chế hoạt động
+- `docs/specs/03-runtime.md:79` — 4.3 Snapshot Format (internal v2)
+- `docs/specs/03-runtime.md:131` — 4.4 Ràng buộc triển khai
+- `docs/specs/03-runtime.md:143` — 4.5 Prerequisites trước khi bật
+- `docs/specs/03-runtime.md:157` — 5. Tooling: `ostd` & `cargo-Cellos`
 - `docs/specs/04-hardware.md:7` — 1. Multi-Architecture Strategy (The "Trait" Contract)
 - `docs/specs/04-hardware.md:10` — Trait-Based Abstraction
 - `docs/specs/04-hardware.md:17` — 2. Platform HAL vs. Device Driver Cells
@@ -271,6 +271,18 @@ Layer 3 of [Spec 21](specs/21-documentation-architecture.md). `Anchor:` lines in
 - `docs/specs/18c-publisher-provenance-envelope.md:70` — Consumer sequence and rejection rules
 - `docs/specs/18c-publisher-provenance-envelope.md:82` — Required evidence
 - `docs/specs/18c-publisher-provenance-envelope.md:88` — Approval Record (2026-09-16)
+- `docs/specs/20-unified-ipc-contract.md:8` — 1. Context and implementation ceiling
+- `docs/specs/20-unified-ipc-contract.md:22` — 2. Proposed contract (not an approved public ABI)
+- `docs/specs/20-unified-ipc-contract.md:24` — 2.1 Address and tier are separate decisions
+- `docs/specs/20-unified-ipc-contract.md:37` — 2.2 Principal, ingress and export
+- `docs/specs/20-unified-ipc-contract.md:47` — 2.3 Frames, bounds and capacity
+- `docs/specs/20-unified-ipc-contract.md:59` — 2.4 Submission and outcome matrix
+- `docs/specs/20-unified-ipc-contract.md:77` — 2.5 Liveness and safety boundaries
+- `docs/specs/20-unified-ipc-contract.md:81` — 3. Boundedness and runtime constraints
+- `docs/specs/20-unified-ipc-contract.md:90` — 4. ABI and caller inventory (proposal, no additions)
+- `docs/specs/20-unified-ipc-contract.md:101` — 5. Behavioral proof matrix (required before promotion, not a passing test report)
+- `docs/specs/20-unified-ipc-contract.md:113` — 6. Open gates and ratification checklist
+- `docs/specs/20-unified-ipc-contract.md:128` — 7. Revision record
 - `docs/specs/23-native-sdk-contract.md:14` — 1. Scope and non-claims
 - `docs/specs/23-native-sdk-contract.md:37` — 2. Vocabulary and evidence rule
 - `docs/specs/23-native-sdk-contract.md:39` — 2.1 Stability
