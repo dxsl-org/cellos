@@ -166,21 +166,48 @@ pub(crate) fn run_primary() {
         .all(|lease| live_tag_owner(lease.value) == Some(1));
     let refused_at_exhaustion = AsidLease::acquire(1).is_none();
 
+    // Releasing a tag now waits for every online hart to confirm its own
+    // invalidation, so the recycle below is also the witness that the wait
+    // completed: if an ack never arrived the slot is retained (fail closed) and
+    // the released value does not come back.
+    let me = crate::task::hart_local::current_hart_id();
+    let remote_acks_before: alloc::vec::Vec<(usize, usize)> = crate::task::smp::online_harts()
+        .filter(|hart| *hart != me)
+        .map(|hart| (hart, crate::task::smp::tlb_flush_complete_epoch(hart)))
+        .collect();
+
     let released = live.pop();
     let released_value = released.as_ref().map(|lease| lease.value);
     drop(released);
+    let remote_ack_advanced = remote_acks_before
+        .iter()
+        .all(|(hart, before)| crate::task::smp::tlb_flush_complete_epoch(*hart) > *before);
     let recycled = AsidLease::acquire(2).is_some_and(|again| {
         Some(again.value) == released_value && live_tag_owner(again.value) == Some(2)
     });
     drop(live);
 
-    if exhausted && distinct_live && width_ok && owner_tracked && refused_at_exhaustion && recycled {
+    if exhausted
+        && distinct_live
+        && width_ok
+        && owner_tracked
+        && refused_at_exhaustion
+        && remote_ack_advanced
+        && recycled
+    {
+        // Detail first, terminal last and unadorned: the lane anchors its
+        // pattern to the end of the line.
+        log::info!(
+            "[asid] lease release confirmed: remote_acks={} harts={}",
+            remote_acks_before.len(),
+            crate::task::smp::online_hart_count()
+        );
         log::info!("S22-RV64-ASID-LEASE: PASS");
     } else {
         log::error!(
             "S22-RV64-ASID-LEASE: FAIL exhausted={exhausted} distinct={distinct_live} \
              width={width_ok} owner={owner_tracked} refused_at_exhaustion={refused_at_exhaustion} \
-             recycled={recycled}"
+             remote_ack_advanced={remote_ack_advanced} recycled={recycled}"
         );
     }
 }

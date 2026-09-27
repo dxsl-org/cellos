@@ -857,6 +857,20 @@ pub extern "Rust" fn vi_timer_tick() {
     #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
     retirement_selftest::observe_forced_ssip_trap();
 
+    // A hart that was asked to invalidate its TLB does so here and publishes the
+    // epoch the requester waits on. This is the trap path, not the switch path:
+    // an idle hart parked in WFI takes the IPI's trap and returns to its loop
+    // without ever switching, so a switch-boundary hook would never run and the
+    // requester would wait for an acknowledgement that could not arrive.
+    #[cfg(target_arch = "riscv64")]
+    {
+        let hart = hart_local::current_hart_id();
+        if smp::tlb_flush_pending(hart) {
+            crate::memory::paging::tlb_flush_all();
+            smp::complete_tlb_flush(hart);
+        }
+    }
+
     tick();
 
     #[cfg(feature = "test-hooks")]

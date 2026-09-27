@@ -942,11 +942,20 @@ impl AsidLease {
 
 impl Drop for AsidLease {
     fn drop(&mut self) {
-        // Order is the contract: local and remote invalidation complete before the
-        // value can be handed to another root, so no stale entry of this root can
-        // resolve inside its successor.
-        hal::domain::flush_asid(self.value);
-        let _ = hal::domain::flush_asid_remote(usize::MAX, self.value);
+        // Order is the contract: local invalidation and every online hart's
+        // acknowledgement complete before the value can be handed to another root,
+        // so no stale entry of this root can resolve inside its successor.
+        if let Err(error) = crate::memory::tlb_shootdown::flush_asid_and_await(self.value) {
+            // Fail closed: the tag stays reserved. Leaking one slot is safe;
+            // reissuing a tag another hart can still resolve is not.
+            log::error!(
+                "[asid] tag {} for domain {} not recycled: invalidation unacknowledged ({:?})",
+                self.value,
+                self.domain,
+                error
+            );
+            return;
+        }
         let mut tags = LIVE_ASIDS.lock();
         match tags[self.slot] {
             Some(owner) if owner.domain == self.domain => tags[self.slot] = None,

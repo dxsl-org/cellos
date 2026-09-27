@@ -43,6 +43,77 @@ pub(crate) fn set_test_skip_remote_rfence(enabled: bool) {
     TEST_SKIP_REMOTE_RFENCE.store(enabled, Ordering::Release);
 }
 
+/// Why an invalidation could not be confirmed complete.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum FlushAckError {
+    /// A hart did not publish its completion before the deadline.
+    Timeout { hart: usize, epoch: usize },
+}
+
+/// Invalidate one ASID everywhere and **wait for every online hart to confirm**.
+///
+/// This is the release-side contract: a tag (and the frames behind it) may only
+/// be recycled once no hart can still resolve a translation under it. A firmware
+/// call returning is not that evidence — the target performs its own flush on the
+/// way through the switch boundary and publishes an epoch this waits on.
+///
+/// On failure the caller must keep the tag and the frames: a stale entry
+/// resolving inside a successor root is exactly the failure this prevents.
+pub fn flush_asid_and_await(asid: usize) -> Result<(), FlushAckError> {
+    // Local first: this hart must stop using the tag before it asks anyone else.
+    hal::domain::flush_asid(asid);
+
+    #[cfg(target_arch = "riscv64")]
+    {
+        use crate::task::smp;
+        let me = crate::task::hart_local::current_hart_id();
+        let remotes: alloc::vec::Vec<usize> = smp::online_harts().filter(|hart| *hart != me).collect();
+        for hart in remotes {
+            // A delivered IPI can still be late: the target may be in a long
+            // non-interruptible stretch. Retry with a fresh epoch and a fresh
+            // interrupt before failing closed, because failing closed leaks a tag
+            // and a retry costs one IPI.
+            let mut attempt = 0;
+            loop {
+                attempt += 1;
+                let epoch = smp::request_tlb_flush(hart);
+                let deadline = hal::common::timer::read_mtime() + TLB_ACK_TIMEOUT_TICKS;
+                while !smp::tlb_flush_completed(hart, epoch) {
+                    if hal::common::timer::read_mtime() > deadline {
+                        break;
+                    }
+                    core::hint::spin_loop();
+                }
+                if smp::tlb_flush_completed(hart, epoch) {
+                    break;
+                }
+                #[cfg(feature = "test-hooks")]
+                log::warn!(
+                    "[tlb] flush ack for asid {} late on hart {} (attempt {})",
+                    asid,
+                    hart,
+                    attempt
+                );
+                if attempt >= TLB_ACK_ATTEMPTS {
+                    return Err(FlushAckError::Timeout { hart, epoch });
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// How long one [`flush_asid_and_await`] attempt waits before re-issuing the
+/// request. Generous on purpose: a slow ack costs latency, a missing one costs
+/// isolation, so the retry loop — not the deadline — is what bounds the wait.
+#[cfg(target_arch = "riscv64")]
+const TLB_ACK_TIMEOUT_TICKS: u64 = 20 * hal::common::timer::TICKS_PER_10MS;
+
+/// How many times a request is re-issued before the release fails closed.
+#[cfg(target_arch = "riscv64")]
+const TLB_ACK_ATTEMPTS: usize = 3;
+
 /// Invalidate the translation for one changed page before its memory can run or reuse.
 #[inline]
 pub fn flush_page(vaddr: VAddr) {

@@ -26,6 +26,79 @@ pub static HART_ONLINE: [AtomicBool; MAX_HARTS] = [AtomicBool::new(false), Atomi
 /// Monotonic switch-completion epochs for root-retirement quiescence. A retiring
 /// generation cannot release its CellId slot until every requested hart has
 /// switched to a different context and published that completion.
+/// Per-hart invalidation epochs: a requester publishes a target, the target
+/// performs the local flush on its way through the trap path and publishes
+/// completion. Only then may the requester recycle a tag or release frames — a
+/// firmware call returning is not evidence that another hart stopped using the
+/// translation (phase 02 slice 3).
+static TLB_FLUSH_REQUEST: [AtomicUsize; MAX_HARTS] = [AtomicUsize::new(0), AtomicUsize::new(0)];
+static TLB_FLUSH_COMPLETE: [AtomicUsize; MAX_HARTS] = [AtomicUsize::new(0), AtomicUsize::new(0)];
+
+/// Ask `hart_id` to invalidate its local TLB and return the epoch it must publish.
+pub fn request_tlb_flush(hart_id: usize) -> usize {
+    if hart_id >= MAX_HARTS {
+        return 0;
+    }
+    let epoch = TLB_FLUSH_REQUEST[hart_id].fetch_add(1, Ordering::AcqRel) + 1;
+    #[cfg(target_arch = "riscv64")]
+    if hart_id != crate::task::hart_local::current_hart_id() {
+        if let Some((mask, base)) = logical_sbi_target(hart_id) {
+            let _ = hal::common::sbi::sbi_send_ipi(mask, base);
+        }
+    }
+    epoch
+}
+
+/// Is `epoch` known complete on `hart_id`? Epoch 0 means "nothing requested".
+pub fn tlb_flush_completed(hart_id: usize, epoch: usize) -> bool {
+    epoch == 0
+        || TLB_FLUSH_COMPLETE
+            .get(hart_id)
+            .is_some_and(|complete| complete.load(Ordering::Acquire) >= epoch)
+}
+
+/// Complete the outstanding invalidation for this hart, if any.
+///
+/// Returns the epoch that was completed, so the caller can log or assert it.
+/// Called from the trap path (the requester sends an IPI, so a trap is
+/// guaranteed) *after* the local flush has been issued.
+pub fn complete_tlb_flush(hart_id: usize) -> usize {
+    if hart_id >= MAX_HARTS {
+        return 0;
+    }
+    let epoch = TLB_FLUSH_REQUEST[hart_id].load(Ordering::Acquire);
+    if TLB_FLUSH_COMPLETE[hart_id].load(Ordering::Acquire) < epoch {
+        TLB_FLUSH_COMPLETE[hart_id].store(epoch, Ordering::Release);
+        #[cfg(feature = "test-hooks")]
+        log::info!(
+            "[selftest] TLB-ACK: stage=remote-flush-completed hart={} epoch={}",
+            hart_id,
+            epoch
+        );
+    }
+    epoch
+}
+
+/// Test view of the last invalidation epoch `hart_id` confirmed.
+#[cfg(feature = "test-hooks")]
+pub fn tlb_flush_complete_epoch(hart_id: usize) -> usize {
+    TLB_FLUSH_COMPLETE
+        .get(hart_id)
+        .map_or(0, |complete| complete.load(Ordering::Acquire))
+}
+
+/// Does this hart owe the requester an invalidation completion?
+pub fn tlb_flush_pending(hart_id: usize) -> bool {
+    hart_id < MAX_HARTS
+        && TLB_FLUSH_REQUEST[hart_id].load(Ordering::Acquire)
+            > TLB_FLUSH_COMPLETE[hart_id].load(Ordering::Acquire)
+}
+
+/// The logical harts that completed kernel bring-up.
+pub fn online_harts() -> impl Iterator<Item = usize> {
+    (0..MAX_HARTS).filter(|hart| HART_ONLINE[*hart].load(Ordering::Acquire))
+}
+
 static RETIRE_SWITCH_REQUEST: [AtomicUsize; MAX_HARTS] = [AtomicUsize::new(0), AtomicUsize::new(0)];
 static RETIRE_SWITCH_COMPLETE: [AtomicUsize; MAX_HARTS] =
     [AtomicUsize::new(0), AtomicUsize::new(0)];
