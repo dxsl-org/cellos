@@ -31,8 +31,70 @@ tier: thinking
 - [ ] PCID disabled/unsupported x86 never writes a nonzero low CR3 tag; tag 1 never duplicates a live owner on RV64/AArch64/x86, exhaustion fails closed, and PCID-enabled reuse has completed invalidate. Non-RV64 Tier-2 SMP stays disabled without per-CPU remote ack.
 - [ ] Tier-1 SAS→SAS fast path unchanged and fault containment remains live on each architecture.
 
+## Progress
+
+### Slice 1 — architectural tag leases (2026-09-27) — done
+
+`AsidLease` no longer masks a monotonic counter into the tag space. That counter
+returned tag 1 after a wrap *without checking whether tag 1 was still live*, and the
+acquisition after that returned tag 1 again, so two live roots shared one tag and a stale
+TLB entry of one could resolve inside the other.
+
+- `kernel/src/memory/address_space.rs`: a bounded pool (`MAX_LIVE_ASIDS`, 256 slots) issues
+  `slot + 1` as the tag, so tag 0 stays reserved for "no architectural tag" and every value
+  is inside the narrowest supported width; `asid_width()` records 12-bit x86 PCID vs 16-bit
+  RV64/AArch64, and the allocator asserts the value fits.
+- `AsidLease::drop` performs local **and** remote invalidation for the value, and only then
+  releases the slot — a value can never be reissued to a new root while a hart might still
+  hold a translation for it. A slot whose owner does not match is retained with a warning
+  instead of being freed.
+- Exhaustion returns `None`; `AddressSpaceBuilder::build` refuses the domain with
+  `OutOfMemory` before allocating anything. There is no wrap path left to reuse a live tag
+  into, and no SAS fallback.
+- Witness (`kernel/src/memory/address_space_tests.rs`, case `asid-lease`): claim the whole
+  pool, prove the values are distinct, inside the width and owned by their claimant, prove
+  exhaustion refuses, then release one and prove exactly that value is reissued to its new
+  owner.
+- Evidence: red on the wrap allocator —
+  `.logs/native-domain-qemu/h1-admission-SKd2ze/qemu.log`:
+  `S22-RV64-ASID-LEASE: FAIL distinct=false width=true first=1 second=1`; green after the
+  pool (`h1-asid-lease-mvFocf`), with `admission` and `grant-gate` re-run in the same image.
+- Production path re-verified with the lease in place: `cargo build --release --target
+  riscv64gc-unknown-none-elf -p cellos-kernel` exit 0; `cargo test --test launch-profile`
+  1/1 (9.52 s); `cargo test --test tier2-fault-isolation` 5/5 (49.80 s) — domain creation
+  and teardown now run entirely through the pool.
+- The `--release`, no-test-hooks kernel also compiles warning-free
+  (`RUSTFLAGS="-D warnings" cargo check -p cellos-kernel --release --target
+  riscv64gc-unknown-none-elf`), which is what keeps `asid_width()`'s guard honest rather
+  than a debug-only assertion.
+
+### Slices still open (gates stay closed)
+
+2. **PTE and table-frame release ordering** — `unmap_grant_page` prunes (and frees) table
+   frames *before* the flush, and `unmap_private_page` releases the owned leaf with no flush
+   at all. Both must retain detached table/leaf frames until the target root's local and
+   remote invalidation completes, and quarantine them when an ack is missing.
+3. **Non-RV64 safe-root switch ordering** — save the outgoing context before activating the
+   incoming root, add the incoming completion hook (generation-tagged ack, pin and
+   user-copy-guard reset) and audit trap/syscall root entry/exit. Admission stays closed on
+   AArch64/x86_64 until this is proven on one CPU; SMP additionally needs per-CPU
+   `hart_local`, IPI and remote ack (`task/hart_local.rs` hard-codes slot 0 off RV64).
+4. **x86 PCID/INVPCID** — CPUID/`CR4.PCIDE` gating, 12-bit tag programming, `INVPCID`
+   targeted invalidation and the full-flush fallback. The shared lease already bounds values
+   to 12 bits, but the x86 backend does not yet decide at runtime whether a tag may be
+   programmed.
+
 ## Assumptions / risk / rollback
 - [UNVERIFIED] Non-RV64 context-switch implementation supplies a point equivalent to RV64 incoming saved-context callback; inspect assembly and prove before selecting hook placement. Rollback: disable Tier-2 admission and cold reboot; leaving a stale TLB mapping or an already recycled frame cannot be reversed by reverting binaries. Stop deployment and retire any compromised dev workload. Preserve test evidence, no production qualification from QEMU alone.
 
 ## Deviation Log
-None.
+
+- **Slice 1 only.** Phase 02 is not complete: the lease half of the tag criteria is done and
+  witnessed, the PTE-reclaim ordering, the non-RV64 switch and the x86 PCID runtime gate are
+  not. Their lanes stay closed (AArch64/x86_64 Tier-2 admission refused; the AArch64
+  test-hooks lane is pre-existing broken, see phase 01's log).
+- **Assumption checked while working here.** The phase assumed a point equivalent to RV64's
+  incoming saved-context callback exists on AArch64/x86_64; the HAL switch paths have not been
+  read to the level that proves it yet, so slice 3 was not started rather than half-built.
+- **Subagent delegation remains unavailable** (Codex provider quota), so this slice's review
+  was a session self-review.

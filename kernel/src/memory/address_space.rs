@@ -8,10 +8,23 @@ use alloc::{sync::Arc, vec::Vec};
 use core::sync::atomic::{AtomicU64, AtomicU8, AtomicUsize, Ordering};
 use hal::PageTableTrait;
 const USER_LIMIT: usize = 1usize << 38;
-const ASID_MASK: usize = 0xffff;
 static NEXT_DOMAIN: AtomicU64 = AtomicU64::new(1);
-static NEXT_ASID: AtomicUsize = AtomicUsize::new(1);
-static ASID_EPOCH: AtomicU64 = AtomicU64::new(0);
+
+/// Width of the architectural tag a root register can carry on this target.
+///
+/// RV64 `satp` and AArch64 `TTBR0` carry 16-bit ASIDs; x86 PCID is 12-bit. A tag
+/// is only ever programmed after the backend has decided the register is usable
+/// (x86 needs CPUID `PCID`/`INVPCID` and `CR4.PCIDE`, and a root that cannot carry
+/// a tag must use tag 0 with a full flush — never a nonzero value the hardware
+/// would ignore or alias).
+#[inline]
+pub(crate) const fn asid_width() -> usize {
+    if cfg!(target_arch = "x86_64") {
+        12
+    } else {
+        16
+    }
+}
 
 /// Test-hooks view of how many domain identities have been issued. The admission
 /// selftest uses it to prove a refused launch creates no domain at all.
@@ -243,6 +256,10 @@ impl AddressSpaceBuilder {
             requests,
             existing_user,
         } = self;
+        // Claim the architectural tag before anything is allocated: when every tag
+        // is held by a live root the builder must refuse the domain (no reuse of a
+        // live tag, no SAS fallback), and a refused build leaves no frame behind.
+        let asid = AsidLease::acquire(identity.raw()).ok_or(AddressSpaceError::OutOfMemory)?;
         let root = allocate_owned_frame()?;
         // SAFETY: root is a zeroed private page frame and PageTable has the same page layout.
         unsafe {
@@ -311,7 +328,7 @@ impl AddressSpaceBuilder {
         Ok(Arc::new(AddressSpace {
             identity,
             generation: NEXT_DOMAIN.fetch_add(1, Ordering::Relaxed),
-            asid: AsidLease::acquire(),
+            asid,
             state: AtomicU8::new(AddressSpaceState::Live as u8),
             ledger: Spinlock::new(ledger),
             copy_readers: AtomicUsize::new(0),
@@ -821,11 +838,10 @@ pub fn create_cell_domain(
 
 impl Drop for AddressSpace {
     fn drop(&mut self) {
-        // Invalidate all translations tagged with this domain's ASID across
-        // local and remote harts so no stale TLB entry survives past domain teardown.
-        hal::domain::flush_asid(self.asid.value);
-        let _ = hal::domain::flush_asid_remote(usize::MAX, self.asid.value);
-
+        // Invalidation belongs to `AsidLease::drop`: it runs local and remote
+        // invalidation for this root's tag and only then returns the value to the
+        // pool, so no stale entry survives teardown and no later root can inherit
+        // this one's translations. Frames are released by the fields below.
         #[cfg(feature = "test-hooks")]
         for id in self.supervisor_registrations.drain(..) {
             let unregistered = crate::memory::domain_supervisor_registry::unregister(id);
@@ -834,24 +850,89 @@ impl Drop for AddressSpace {
     }
 }
 
+/// Largest number of private roots that may hold an architectural tag at once.
+///
+/// A fixed pool makes exhaustion a bounded, checkable condition instead of a
+/// counter wrap that reissues a live tag. Every value handed out is `slot + 1`, so
+/// tag 0 stays reserved for "no architectural tag" (full-flush mode) and no value
+/// can exceed the narrowest supported width.
+const MAX_LIVE_ASIDS: usize = 256;
+
+/// The identity holding one live tag, for diagnostics and for the generation-tagged
+/// acknowledgement the non-RV64 switch still owes phase 02.
+#[derive(Clone, Copy)]
+struct AsidTagOwner {
+    domain: u64,
+}
+
+static LIVE_ASIDS: Spinlock<[Option<AsidTagOwner>; MAX_LIVE_ASIDS]> =
+    Spinlock::new([None; MAX_LIVE_ASIDS]);
+
+/// Test-hooks view: which domain currently holds tag `value`, or `None` when the
+/// tag is free. The lease contract test uses it to prove a released tag is
+/// reissued to its new owner rather than aliasing the previous one.
+#[cfg(feature = "test-hooks")]
+pub(crate) fn live_tag_owner(value: usize) -> Option<u64> {
+    if value == 0 || value > MAX_LIVE_ASIDS {
+        return None;
+    }
+    LIVE_ASIDS.lock()[value - 1].map(|owner| owner.domain)
+}
+
+/// An architectural tag owned by exactly one live private root.
+///
+/// The value is never reissued while another root holds it, and a released value
+/// returns to the pool only after this hart and every online remote hart have
+/// dropped translations carrying it — the invalidation happens in [`Drop`], before
+/// the slot is freed. Exhaustion returns `None`, which a caller must treat as a
+/// refusal: never as a reason to reuse a live tag.
 struct AsidLease {
     value: usize,
-    _epoch: u64,
+    slot: usize,
+    domain: u64,
 }
+
 impl AsidLease {
-    fn acquire() -> Self {
-        let next = NEXT_ASID.fetch_add(1, Ordering::AcqRel) & ASID_MASK;
-        if next == 0 {
-            hal::domain::flush_all();
-            let _ = hal::domain::flush_asid_remote(usize::MAX, 0);
-            return Self {
-                value: 1,
-                _epoch: ASID_EPOCH.fetch_add(1, Ordering::AcqRel) + 1,
-            };
+    fn acquire(domain: u64) -> Option<Self> {
+        let mut tags = LIVE_ASIDS.lock();
+        let slot = tags.iter().position(Option::is_none)?;
+        let value = slot + 1;
+        // Never hand out a tag the root register cannot carry. The pool is sized so
+        // this cannot trigger today (256 < 2^12), and the guard is what keeps that
+        // true if the pool grows: a value outside the width would be truncated or
+        // ignored by hardware, which is aliasing under another name.
+        if value >= 1usize << asid_width() {
+            return None;
         }
-        Self {
-            value: next,
-            _epoch: ASID_EPOCH.load(Ordering::Acquire),
+        tags[slot] = Some(AsidTagOwner { domain });
+        Some(Self {
+            value,
+            slot,
+            domain,
+        })
+    }
+}
+
+impl Drop for AsidLease {
+    fn drop(&mut self) {
+        // Order is the contract: local and remote invalidation complete before the
+        // value can be handed to another root, so no stale entry of this root can
+        // resolve inside its successor.
+        hal::domain::flush_asid(self.value);
+        let _ = hal::domain::flush_asid_remote(usize::MAX, self.value);
+        let mut tags = LIVE_ASIDS.lock();
+        match tags[self.slot] {
+            Some(owner) if owner.domain == self.domain => tags[self.slot] = None,
+            // A slot claimed by anyone else is never freed: the pool would then
+            // hold two live roots on one tag, which is the failure this pool exists
+            // to make impossible. Leak it loudly instead.
+            other => log::warn!(
+                "[asid] tag {} slot {} released by domain {} but held by {:?} — slot retained",
+                self.value,
+                self.slot,
+                self.domain,
+                other.map(|owner| owner.domain)
+            ),
         }
     }
 }

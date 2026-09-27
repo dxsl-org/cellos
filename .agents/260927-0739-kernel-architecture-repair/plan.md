@@ -37,7 +37,8 @@ Repair **all** findings of the 2026-09-27 audit: domain grant revoke/permission/
 | # | Phase | Status | Evidence |
 |---|---|---|---|
 | 01 | Containment baselines | completed 2026-09-27 | `phase-01-containment-baselines.md` § Evidence — failing-before witness red (`h1-grant-gate-6j4WCL`) → green (`h1-grant-gate-MbNs8s`), 7/7 RV64 regression cases, AArch64 denial lane 2/2, `launch-profile` snapshot contract 1/1, off-feature build clean |
-| 02–08 | | pending | — |
+| 02 | Domain root and TLB correctness | in progress — slice 1 (tag leases) done | `phase-02-domain-root-lifetime.md` § Progress — `S22-RV64-ASID-LEASE` red on the wrap allocator (`h1-admission-SKd2ze`) → green on the pool (`h1-asid-lease-*`); PTE-reclaim ordering, non-RV64 switch and x86 PCID remain |
+| 03–08 | | pending | — |
 
 ## Dependency / release policy
 

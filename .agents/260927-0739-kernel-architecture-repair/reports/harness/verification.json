@@ -41,10 +41,18 @@
       "exitCode": 0,
       "timestamp": "2026-09-27T10:30:00+07:00",
       "summary": "5/5 passed in 49.95s on a disk rebuilt with the updated tier2-smoke: admission, heap, fail-closed grant denial, NULL/peer/kernel fault containment, and the posix-shim-test Tier-2 FFI domain leg remains positively admitted."
+    },
+    {
+      "command": "scripts/qemu-native-domain-test.sh --harts 1 --case asid-lease,admission,grant-gate",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-09-27T10:50:00+07:00",
+      "summary": "Phase 02 slice 1: S22-RV64-ASID-LEASE PASS in h1-asid-lease-mvFocf (distinct live tags, owner tracking, exhaustion refused, released tag reissued to its new owner) with S22-RV64-ASPACE, ADMISSION-DENY and GRANT-GATE all still PASS in the same image."
     }
   ],
   "beforeAfter": {
     "before": "Ungated kernel (same tree, fixture present, gate absent): a real TaskAddressSpace::Domain task through handle_syscall could allocate a grant (domain-owned frames published USER in the SAS root), receive a raw receiver mapping with shared_to's rights ignored, and the run leaked frames — S22-RV64-GRANT-GATE-{ALLOC,REGISTER,SHARE,SLICE,FRAMES}: FAIL, exit 1 (.logs/native-domain-qemu/h1-grant-gate-6j4WCL). AArch64/x86_64 Tier-2 admission was enabled in development images, and snapshot capture/restore was reachable with a writer/reader checksum and layout mismatch and no all-hart quiescence.",
-    "after": "Every grant entry point that names a private-root task refuses at the common syscall gate with the per-op alloc-safe sentinel (0 / usize::MAX / PermissionDenied) before any table row, PTE, pin or frame exists; SAS→SAS Tier-1 grants and copied IPC are proven unchanged. Non-RV64 Tier-2 admission and warm snapshot are fail-closed by policy, with the posture logged at boot and stale snapshot headers invalidated on a gated image."
+    "after": "Every grant entry point that names a private-root task refuses at the common syscall gate with the per-op alloc-safe sentinel (0 / usize::MAX / PermissionDenied) before any table row, PTE, pin or frame exists; SAS→SAS Tier-1 grants and copied IPC are proven unchanged. Non-RV64 Tier-2 admission and warm snapshot are fail-closed by policy, with the posture logged at boot and stale snapshot headers invalidated on a gated image. Architectural tags come from a bounded live pool: two live roots can never share a tag, exhaustion refuses the domain, and a released tag is reissued only after its invalidation completed.",
+    "phase02RedWitness": "Ungated (counter-masked) tag allocator: .logs/native-domain-qemu/h1-admission-SKd2ze/qemu.log — S22-RV64-ASID-LEASE: FAIL distinct=false width=true first=1 second=1 (two live roots on tag 1 after the wrap)."
   }
 }
