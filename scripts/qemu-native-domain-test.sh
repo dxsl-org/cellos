@@ -19,7 +19,7 @@ usage() {
 Usage: scripts/qemu-native-domain-test.sh --harts {1|2} --case <csv>
 
 Cases: switch, resume-root, sas-fastpath, migration, user-copy, user-copy-race,
-admission, rollback, grant-revoke, grant-gate, asid-lease, unmap-order
+admission, rollback, grant-revoke, grant-gate, asid-lease, unmap-order, rt-wake
 
 Each requested case gets a separate fresh QEMU log directory. `migration`
 requires two harts; it asserts the domain-switch terminal from the cross-hart
@@ -61,13 +61,17 @@ declare -A seen=()
 for case_id in "${REQUESTED_CASES[@]}"; do
     [[ -n "$case_id" ]] || { echo "FAIL: empty case in --case" >&2; exit 2; }
     case "$case_id" in
-        switch|resume-root|sas-fastpath|migration|user-copy|user-copy-race|ipc-copy|ipc-copy-race|admission|admission-enabled|admission-publication|admission-ceiling|futex-key|rollback|grant-revoke|grant-gate|asid-lease|unmap-order) ;;
+        switch|resume-root|sas-fastpath|migration|user-copy|user-copy-race|ipc-copy|ipc-copy-race|admission|admission-enabled|admission-publication|admission-ceiling|futex-key|rollback|grant-revoke|grant-gate|asid-lease|unmap-order|rt-wake) ;;
         *) echo "FAIL: unknown native-domain case: $case_id" >&2; exit 2 ;;
     esac
     [[ -z "${seen[$case_id]:-}" ]] || { echo "FAIL: duplicate native-domain case: $case_id" >&2; exit 2; }
     seen[$case_id]=1
     if [[ "$case_id" == "migration" && "$HARTS" != "2" ]]; then
         echo "FAIL: migration requires --harts 2" >&2
+        exit 2
+    fi
+    if [[ "$case_id" == "rt-wake" && "$HARTS" != "2" ]]; then
+        echo "FAIL: rt-wake requires --harts 2 (the RT hart must be online)" >&2
         exit 2
     fi
     if [[ "$case_id" == "user-copy-race" && "$HARTS" != "2" ]]; then
@@ -109,6 +113,7 @@ marker_for() {
         grant-gate) printf 'S22-RV64-GRANT-GATE: PASS' ;;
         asid-lease) printf 'S22-RV64-ASID-LEASE: PASS' ;;
         unmap-order) printf 'S22-RV64-UNMAP-ORDER: PASS' ;;
+        rt-wake) printf 'S22-RV64-RT-WAKE: PASS harts=2' ;;
     esac
 }
 terminal_pattern_for() {
@@ -131,6 +136,7 @@ terminal_pattern_for() {
         grant-gate) printf '(^|\\] )S22-RV64-GRANT-GATE: PASS$' ;;
         asid-lease) printf '(^|\\] )S22-RV64-ASID-LEASE: PASS$' ;;
         unmap-order) printf '(^|\\] )S22-RV64-UNMAP-ORDER: PASS$' ;;
+        rt-wake) printf '(^|\\] )S22-RV64-RT-WAKE: PASS harts=2$' ;;
     esac
 }
 assert_runtime_hart_count() {

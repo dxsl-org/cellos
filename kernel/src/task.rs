@@ -38,6 +38,13 @@ pub(crate) mod futex;
     target_arch = "riscv64"
 ))]
 pub(crate) mod grant_gate_selftest;
+/// Phase-06 witness: an RT sender woken by a consume preempts its target hart.
+#[cfg(all(
+    feature = "native-domains",
+    feature = "test-hooks",
+    target_arch = "riscv64"
+))]
+pub(crate) mod rt_wake_selftest;
 pub mod grant_reclaim_selftest;
 pub mod hart_local;
 pub mod manifest_v2_selftest;
@@ -2323,8 +2330,13 @@ pub(crate) fn wake_sender_token(
     if identity_matches && token_matches {
         if let Some(sender_task) = sched.tasks.get_mut(&sender_id) {
             sender_task.state = TaskState::Ready;
-            sched.push_ready(sender_id);
         }
+        // The sender may be a RealTime cell: consuming its message has to request
+        // preemption for the sender's actual target hart, exactly as the other wake
+        // paths do. Dropping `push_ready`'s priority here left an RT sender waiting
+        // for the next timer tick.
+        let priority = sched.push_ready(sender_id);
+        sched.pend_preempt_if_needed(priority);
     }
 }
 fn is_trusted_input_sender(caller_id: usize) -> bool {

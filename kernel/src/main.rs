@@ -1080,6 +1080,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         task::futex::run_selftest();
         task::domain_grant::run_selftest();
         task::grant_gate_selftest::run_primary();
+        task::rt_wake_selftest::self_test();
     }
 
     // Page-table teardown primitives behind runtime cap revoke (`.agents/260712-1901`

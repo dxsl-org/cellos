@@ -513,46 +513,53 @@ impl Scheduler {
         priority
     }
 
-    /// Pend an S-mode software interrupt if `new_priority` exceeds the current
-    /// running task's priority.
+    /// Pend an S-mode software interrupt if `new_priority` exceeds the priority of
+    /// the task running on the **target** hart.
     ///
     /// Call this after any syscall that transitions a task from blocked → Ready
     /// so that a newly-runnable RealTime cell preempts a Normal/Background cell
     /// within the same syscall return, rather than waiting for the next timer tick.
+    ///
+    /// The comparison deliberately reads the target hart's running priority, not
+    /// the calling hart's: an RT task always lands on `HART_RT`, so a wake handled
+    /// on a busy hart would otherwise swallow the interrupt and a wake handled on
+    /// an idle hart would send a pointless IPI.
     ///
     /// The interrupt fires when the trap handler returns via `sret` and
     /// `sstatus.SIE` is restored by hardware.
     #[cfg(target_arch = "riscv64")]
     pub fn pend_preempt_if_needed(&self, new_priority: u8) {
         let hart_id = super::hart_local::current_hart_id();
-        let current_tid = super::hart_local::ready::current_task_id_for(hart_id);
-        let current_priority = if current_tid > 0 {
+        // RT tasks land on HART_RT when online; fall back to current hart on single-hart systems.
+        let target_hart = if new_priority >= api::TaskPriority::RealTime as u8
+            && crate::task::smp::is_rt_hart_online()
+        {
+            crate::task::smp::HART_RT
+        } else {
+            hart_id
+        };
+        let target_tid = super::hart_local::ready::current_task_id_for(target_hart);
+        let target_priority = if target_tid > 0 {
             self.tasks
-                .get(&current_tid)
+                .get(&target_tid)
                 .map(|t| t.priority)
                 .unwrap_or(0)
         } else {
             0
         };
-
-        if new_priority > current_priority {
-            // RT tasks land on HART_RT when online; fall back to current hart on single-hart systems.
-            let target_hart = if new_priority >= api::TaskPriority::RealTime as u8
-                && crate::task::smp::is_rt_hart_online()
-            {
-                crate::task::smp::HART_RT
-            } else {
-                hart_id
-            };
-            if target_hart == hart_id {
-                // SAFETY: csrsi on sip.SSIP is permitted from S-mode (RISC-V priv spec §4.1.3).
-                // The interrupt fires after sret restores sstatus.SIE.
-                unsafe { core::arch::asm!("csrsi sip, 0x2") };
-            } else {
-                // Cross-hart IPI: SSIP fires on the target hart's next interrupt check.
-                if let Some((mask, base)) = crate::task::smp::logical_sbi_target(target_hart) {
-                    let _ = hal::common::sbi::sbi_send_ipi(mask, base);
-                }
+        if new_priority <= target_priority {
+            return;
+        }
+        #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+        crate::task::smp::note_preempt_pend(target_hart);
+        if target_hart == hart_id {
+            // SAFETY: csrsi on sip.SSIP is permitted from S-mode (RISC-V priv spec §4.1.3).
+            // The interrupt fires after sret restores sstatus.SIE.
+            unsafe { core::arch::asm!("csrsi sip, 0x2") };
+        } else {
+            // Cross-hart IPI: SSIP fires on the target hart's next interrupt check.
+            if let Some((mask, base)) = crate::task::smp::logical_sbi_target(target_hart) {
+                let _ = hal::common::sbi::sbi_send_ipi(mask, base);
             }
         }
     }

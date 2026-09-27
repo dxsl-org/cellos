@@ -37,8 +37,9 @@ Repair **all** findings of the 2026-09-27 audit: domain grant revoke/permission/
 | # | Phase | Status | Evidence |
 |---|---|---|---|
 | 01 | Containment baselines | completed 2026-09-27 | `phase-01-containment-baselines.md` § Evidence — failing-before witness red (`h1-grant-gate-6j4WCL`) → green (`h1-grant-gate-MbNs8s`), 7/7 RV64 regression cases, AArch64 denial lane 2/2, `launch-profile` snapshot contract 1/1, off-feature build clean |
-| 02 | Domain root and TLB correctness | in progress — slice 1 (tag leases) done | `phase-02-domain-root-lifetime.md` § Progress — `S22-RV64-ASID-LEASE` red on the wrap allocator (`h1-admission-SKd2ze`) → green on the pool (`h1-asid-lease-*`); PTE-reclaim ordering, non-RV64 switch and x86 PCID remain |
-| 03–08 | | pending | — |
+| 02 | Domain root and TLB correctness | in progress — slices 1–2 done, AArch64 lane repaired | `phase-02-domain-root-lifetime.md` § Progress — tag leases (`h1-asid-lease-mvFocf`) and unmap invalidation order (`h1-unmap-order-HDEPLP`) each red before / green after; AArch64 test-hooks lane builds and boots again; non-RV64 switch, invalidation ack and x86 PCID remain |
+| 06 | RT sender wake | completed 2026-09-27 (decision-level) | `phase-06-rt-wake.md` § Progress — `S22-RV64-RT-WAKE` red with the wake call reverted (`h2-rt-wake-xiIlSU`: `pended=false`) and with both hunks reverted (`h2-rt-wake-3qm6mA`), green after (`h2-rt-wake-jDuHmU`); latency P99 stays hardware-gated |
+| 03–05, 07–08 | | pending | — |
 
 ## Dependency / release policy
 

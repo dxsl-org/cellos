@@ -76,6 +76,13 @@
       "exitCode": 0,
       "timestamp": "2026-09-27T11:25:00+07:00",
       "summary": "RV64 regression after the AArch64 cfg narrowing: 4/4 cases PASS; every boot log carries SWITCH, ADMISSION-DENY, FUTEX-KEY, ASID-LEASE and UNMAP-ORDER PASS."
+    },
+    {
+      "command": "scripts/qemu-native-domain-test.sh --harts 2 --case rt-wake,migration,ipc-copy-race",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-09-27T11:39:00+07:00",
+      "summary": "Phase 06: S22-RV64-RT-WAKE PASS harts=2 in h2-rt-wake-jDuHmU — the sender lands on hart 1 (the RT hart) with exactly one pended preemption for that hart; migration and ipc-copy-race PASS in the same image. Red with the consume wake reverted (h2-rt-wake-xiIlSU: pended=false, target_hart_decides=true) and with both hunks reverted (h2-rt-wake-3qm6mA: pended=false, target_hart_decides=false)."
     }
   ],
   "beforeAfter": {

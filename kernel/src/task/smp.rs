@@ -30,6 +30,39 @@ static RETIRE_SWITCH_REQUEST: [AtomicUsize; MAX_HARTS] = [AtomicUsize::new(0), A
 static RETIRE_SWITCH_COMPLETE: [AtomicUsize; MAX_HARTS] =
     [AtomicUsize::new(0), AtomicUsize::new(0)];
 
+/// Test-hooks: how many preemption requests were pended for each logical hart.
+///
+/// The RT-wake fixture needs the *decision* observable, not the interrupt: it
+/// asserts that consuming a message pends exactly one for the sender's target
+/// hart, that a stale delivery token pends none, and that the decision follows the
+/// target hart's running priority rather than the waking hart's.
+#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+static PREEMPT_PENDS: [AtomicUsize; MAX_HARTS] = [AtomicUsize::new(0), AtomicUsize::new(0)];
+
+#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+#[inline]
+pub(crate) fn note_preempt_pend(hart_id: usize) {
+    if hart_id < MAX_HARTS {
+        PREEMPT_PENDS[hart_id].fetch_add(1, Ordering::AcqRel);
+    }
+}
+
+#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+#[inline]
+pub(crate) fn preempt_pends_for(hart_id: usize) -> usize {
+    PREEMPT_PENDS
+        .get(hart_id)
+        .map(|count| count.load(Ordering::Acquire))
+        .unwrap_or(0)
+}
+
+#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+pub(crate) fn reset_preempt_pends() {
+    for count in PREEMPT_PENDS.iter() {
+        count.store(0, Ordering::Release);
+    }
+}
+
 /// Request that `hart_id` schedules through a retirement boundary and return
 /// the epoch that its incoming context must complete.
 pub fn request_retirement_switch(hart_id: usize) -> usize {
