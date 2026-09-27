@@ -6,6 +6,34 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 #[no_mangle]
 pub static VI_KERNEL_TTBR0: AtomicUsize = AtomicUsize::new(0);
 
+/// Test-only: root programmings the scheduler has proven, never an admission signal.
+#[cfg(feature = "test-hooks")]
+static ROOT_PROGRAMMINGS: AtomicUsize = AtomicUsize::new(0);
+/// Test-only: local `tlbi` operations issued through this module.
+#[cfg(feature = "test-hooks")]
+static ASID_FLUSHES: AtomicUsize = AtomicUsize::new(0);
+
+/// Test-only view of `(root programmings, invalidations issued)`.
+///
+/// AArch64 carries the ASID in `TTBR0_EL1`, so a switch to an ASID whose
+/// translations are still valid issues no `tlbi`: a domain activation is one
+/// root programming and zero flushes here, unlike RV64 where the switch itself
+/// must fence. Invalidations are counted where they are issued — `flush_asid`
+/// and `flush_all` — so a fixture can prove the counter is live.
+#[cfg(feature = "test-hooks")]
+pub fn switch_counters() -> (usize, usize) {
+    (
+        ROOT_PROGRAMMINGS.load(Ordering::Acquire),
+        ASID_FLUSHES.load(Ordering::Acquire),
+    )
+}
+
+#[cfg(feature = "test-hooks")]
+pub fn reset_switch_counters() {
+    ROOT_PROGRAMMINGS.store(0, Ordering::Release);
+    ASID_FLUSHES.store(0, Ordering::Release);
+}
+
 pub fn record_kernel_ttbr0(ttbr0: usize) {
     VI_KERNEL_TTBR0.store(ttbr0, Ordering::Release);
 }
@@ -51,6 +79,8 @@ pub fn flush_asid(asid: usize) {
             options(nostack),
         );
     }
+    #[cfg(feature = "test-hooks")]
+    ASID_FLUSHES.fetch_add(1, Ordering::Relaxed);
 }
 
 pub fn flush_asid_remote(_hart_mask: usize, asid: usize) -> Result<(), DomainPagingError> {
@@ -71,6 +101,18 @@ pub fn flush_all() {
             options(nostack),
         );
     }
+    #[cfg(feature = "test-hooks")]
+    ASID_FLUSHES.fetch_add(1, Ordering::Relaxed);
 }
 
-pub fn observe_switch_activation() {}
+/// Records a scheduler-proven root programming for test fixtures.
+///
+/// Called from `SwitchPlan::root_switch` for every transition that programs
+/// `TTBR0_EL1` — activation, same-domain resume, and the safe-root handoff —
+/// so the counter names plans, not instructions; the instruction itself is
+/// issued later at the raw-switch boundary by `activate_address_space`.
+#[inline]
+pub fn observe_switch_activation() {
+    #[cfg(feature = "test-hooks")]
+    ROOT_PROGRAMMINGS.fetch_add(1, Ordering::Relaxed);
+}

@@ -729,7 +729,7 @@ pub(crate) fn take_safe_root_pending() -> bool {
 #[cfg(all(
     feature = "native-domains",
     feature = "test-hooks",
-    target_arch = "riscv64"
+    any(target_arch = "riscv64", target_arch = "aarch64")
 ))]
 pub(crate) fn domain_ack_generation_for(hart_id: usize) -> u64 {
     HART_LOCALS

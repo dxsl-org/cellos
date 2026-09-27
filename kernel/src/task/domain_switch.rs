@@ -1,4 +1,6 @@
-//! Scheduler-owned root transition plan.  This module is RV64-only by construction.
+//! Scheduler-owned root transition plan. Compiled for every architecture that
+//! can carry a private root; the tuple encoding is arch-specific and lives in
+//! [`root_tuple`].
 use super::{
     hart_local,
     tcb::{Task, TaskAddressSpace},
@@ -43,6 +45,37 @@ pub(crate) struct SwitchPlan {
     pub outgoing: *mut Context,
     pub incoming: *const Context,
     transition: DomainTransition,
+}
+
+/// The tuple `activate_address_space` consumes for `space` on this architecture.
+///
+/// RV64 takes a page number; the others take the byte address the tables start
+/// at. The encoding lives here so a plan, the assembly boundary, and the
+/// fixtures cannot disagree about it.
+pub(crate) fn root_tuple(space: &AddressSpace) -> (usize, usize) {
+    #[cfg(target_arch = "riscv64")]
+    {
+        (space.root_ppn(), space.asid())
+    }
+    #[cfg(not(target_arch = "riscv64"))]
+    {
+        (space.root_ppn() << 12, space.asid())
+    }
+}
+
+/// The kernel root in the same encoding, ASID 0 (untagged).
+fn kernel_root_tuple() -> (usize, usize) {
+    let root = crate::memory::paging::KERNEL_ROOT
+        .lock()
+        .expect("native domain requires SAS root");
+    #[cfg(target_arch = "riscv64")]
+    {
+        (root >> 12, 0)
+    }
+    #[cfg(not(target_arch = "riscv64"))]
+    {
+        (root, 0)
+    }
 }
 
 #[derive(Clone)]
@@ -94,10 +127,7 @@ impl SwitchPlan {
         match &self.transition {
             DomainTransition::Activate(domain) => {
                 let (id, generation) = domain.tuple();
-                #[cfg(target_arch = "riscv64")]
-                let root = (domain.0.root_ppn(), domain.0.asid());
-                #[cfg(not(target_arch = "riscv64"))]
-                let root = (domain.0.root_ppn() << 12, domain.0.asid());
+                let root = root_tuple(&domain.0);
                 // The execution pin was acquired at selection time under
                 // scheduler-stable state; programming the dead root's SATP here
                 // is exactly what begin_execution's recheck prevents.
@@ -117,36 +147,14 @@ impl SwitchPlan {
                 // Cell under the kernel root with the kernel's mappings visible
                 // to its S-mode code — a silent isolation failure.
                 crate::hal::domain::observe_switch_activation();
-                #[cfg(target_arch = "riscv64")]
-                let root = (domain.0.root_ppn(), domain.0.asid());
-                #[cfg(not(target_arch = "riscv64"))]
-                let root = (domain.0.root_ppn() << 12, domain.0.asid());
-                root
+                root_tuple(&domain.0)
             }
             DomainTransition::ToSafeRoot => {
-                let root = crate::memory::paging::KERNEL_ROOT
-                    .lock()
-                    .expect("native domain requires SAS root");
                 hart_local::mark_safe_root_pending();
                 crate::hal::domain::observe_switch_activation();
-                #[cfg(target_arch = "riscv64")]
-                let res = (root >> 12, 0);
-                #[cfg(not(target_arch = "riscv64"))]
-                let res = (root, 0);
-                res
+                kernel_root_tuple()
             }
             DomainTransition::SasToSas => (0, 0),
         }
-    }
-    /// True only for the plan that writes no root: SAS to SAS, where the kernel
-    /// root is already live. Every private-root transition — activate *and*
-    /// same-domain resume — programs SATP.
-    #[cfg(all(
-        feature = "native-domains",
-        feature = "test-hooks",
-        target_arch = "riscv64"
-    ))]
-    pub(crate) fn writes_no_root(&self) -> bool {
-        matches!(self.transition, DomainTransition::SasToSas)
     }
 }

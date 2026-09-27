@@ -23,7 +23,7 @@ pub(crate) mod domain_switch;
 #[cfg(all(
     feature = "native-domains",
     feature = "test-hooks",
-    target_arch = "riscv64"
+    any(target_arch = "riscv64", target_arch = "aarch64")
 ))]
 pub(crate) mod domain_switch_tests;
 mod elf_prepare;

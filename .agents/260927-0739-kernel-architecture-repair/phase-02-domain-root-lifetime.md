@@ -135,12 +135,35 @@ complete; slice 3 owns the generation-tagged acknowledgement that makes it possi
 
 ## Deviation Log
 
-- **Slices 1–2 only.** Phase 02 is not complete: the tag lease and the unmap invalidation
-  order are done and witnessed; the non-RV64 switch, the remote invalidation acknowledgement
-  and the x86 PCID runtime gate are not. Their lanes stay closed (AArch64/x86_64 Tier-2
-  admission refused; the AArch64 test-hooks lane is pre-existing broken, see phase 01's log).
-- **Assumption checked while working here.** The phase assumed a point equivalent to RV64's
-  incoming saved-context callback exists on AArch64/x86_64; the HAL switch paths have not been
-  read to the level that proves it yet, so slice 3 was not started rather than half-built.
+- **Slices 1–2 only, plus the AArch64 execution vehicle.** Phase 02 is not complete: the tag
+  lease and the unmap invalidation order are done and witnessed; the non-RV64 switch, the
+  remote invalidation acknowledgement and the x86 PCID runtime gate are not. Their lanes stay
+  closed (AArch64/x86_64 Tier-2 admission refused).
+- **Slice 3's prerequisite now exists.** `domain_switch_tests` was RV64-gated because nothing on
+  AArch64 could execute a `SwitchPlan`; it now runs on both, with architecture-honest
+  expectations, and the AArch64 test-hooks lane asserts its markers
+  (`S22-AARCH64-SAS-FASTPATH`, `-PLAN`, `-RESUME-ROOT`, `-PIN-DYING`). What it proves: on
+  AArch64 a SAS plan writes no root and touches no counter; a private root derives a non-zero
+  `(TTBR0 baddr, ASID)` tuple, publishes the hart-local domain identity and acknowledges no
+  safe root; activation issues **zero** invalidations (ASID-tagged translations survive), with
+  a live-counter control (`flush_asid` moves it by exactly one) so "zero" cannot be vacuous;
+  same-domain resume re-programs the root; and a root retired inside the pin→plan window still
+  programs its own root rather than the safe root. What it does not prove: a *real* switch
+  between two private roots (no domain task has been entered on AArch64 yet), the save/load
+  ordering inside `Context::switch`, or the invalidation ack.
+- **Assumption now checked.** The phase assumed a point equivalent to RV64's incoming
+  saved-context callback exists on AArch64/x86_64. It does not: `Context::switch` is a single
+  assembly routine per architecture (`hal/arch/arm/src/aarch64/context.rs:129` `__switch_el1`,
+  same shape on x86), so "save outgoing before programming the incoming root" requires
+  splitting it into save and load halves — a change to every switch on the target, which is why
+  the witness above had to come first.
+- **The AArch64 test-hooks lane is no longer pre-existing broken.** It now builds, boots and
+  exits 0. Two independent defects were fixed: the RV64-only scaffolding that made it
+  unbuildable (phase 01's log) and the owner-slot selftest that had asserted production
+  admission with only slot A installed since 2026-09-16, while `decide` has required an
+  authenticated committed partner since 2026-08-21 — so it failed closed on every boot and
+  every architecture. The fixture now installs a signed committed partner slot (and asserts the
+  partner's own admission list is not authority), which is the model in
+  `docs/system-architecture.md:60`.
 - **Subagent delegation remains unavailable** (Codex provider quota), so this slice's review
   was a session self-review.

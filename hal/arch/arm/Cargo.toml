@@ -19,6 +19,7 @@ hal-soc-bcm27xx = { path = "../../soc/bcm27xx", version = "0.2.0", optional = tr
 
 [features]
 default = []
+test-hooks = []
 critical-section-impl = ["dep:critical-section"]
 # Enable BTI landing-pad enforcement in SCTLR_EL1 (requires -C target-feature=+bti).
 cfi-bti = []

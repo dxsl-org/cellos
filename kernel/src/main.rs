@@ -1064,7 +1064,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         log_info("Tier 2 admission: DISABLED (fleet profile) — domain-class artifacts are denied");
     }
     #[cfg(all(
-        target_arch = "riscv64",
+        any(target_arch = "riscv64", target_arch = "aarch64"),
         feature = "native-domains",
         feature = "test-hooks"
     ))]
