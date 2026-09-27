@@ -1,29 +1,14 @@
 # TODO
 
-Việc **chưa xong** và con trỏ tới bằng chứng. Nội dung đã đóng nằm ở `CHANGELOG.md` và
-`.agents/<plan>/` — file này không chép lại chúng. Trạng thái thật do source/test quyết định,
+Việc **chưa xong** và con trỏ tới bằng chứng. Trạng thái thật do source/test quyết định,
 không phải bởi dòng chữ ở đây.
 
+Mục nào đã đóng thì **xoá khỏi file này** — không để lại dòng "đã đóng": lịch sử ở
+`CHANGELOG.md` / `docs/project-changelog.md`, quyết định ở `docs/decisions/`, kế hoạch +
+báo cáo ở `.agents/<plan>/`, cách làm ở `docs/guides/`. Chuỗi tiền lệ: các mục đã đóng
+2026-09-19 → 2026-09-27 đã được gỡ, nội dung của chúng nằm ở bốn chỗ trên.
+
 ## Đang mở — làm được ngay, không cần gì thêm
-- **[đã đóng 2026-09-26] `libs/ostd/src/console.rs`** — file chết (không được declare, không ai tham chiếu)
-  đã xoá; chọn xoá thay vì declare vì declare sẽ dựng quy ước log thứ hai cạnh `ostd::io::println`.
-- **[2026-09-26] `network_reaches_the_internet_by_name` chưa vào allowlist boot suite** — cố ý:
-  test cần internet thật của host (SLIRP chuyển DNS/TCP của guest ra host) nên nó `SKIP` khi host
-  không có mạng, và luật allowlist ("pass 2/2 lần chạy đầy đủ, không retry tới xanh") không nhận
-  SKIP làm bằng chứng. Nếu muốn có coverage thật ở CI: chạy 2 lần liên tiếp và xác nhận nó *chạy*
-  chứ không skip, rồi mới thêm. (`network_resolve_answers_hostname_through_the_service` đã vào
-  allowlist và đang xanh.)
-- **[2026-09-26] Host harness của `ostd`/`cellos-kernel` chỉ có giá trị nếu tiếp tục chạy.** Hai harness
-  vừa được bật lại và đã vào job host unit tests (xem mục "Đã đóng"); đừng để drift lại — một import
-  cũ đủ để cả harness `cellos-kernel` không build, và 6 test chunking của `ostd` đã lệch khỏi session
-  mà không ai thấy trong lúc chúng không chạy.
-- **[đã đóng 2026-09-26] Toàn bộ 438 `#[test]` trong `cells/` nay chạy trong CI.** Công thức dùng năm lần,
-  ghi lại để tra cứu: (1) gate `no_std`/`no_main`/entry/heap-macro theo **target** — mọi macro emit
-  `#[no_mangle]` trong `ostd` đều phải gate (`cell_main!`, `run_app!`, `app_entry!`, `service_entry!`), nếu
-  không thì CRT gọi entry của cell trong test binary và harness treo trước khi list test; (2) dep ship
-  `staticlib` cần `std` trên host (gate `no_std` theo target); (3) export của `ostd::heap` chỉ có ở target;
-  (4) tính năng chỉ tồn tại ở target (`ai_sdk::ostd_transport`) thì gate chính handler + nhánh route của nó;
-  (5) sau đó sửa drift trong test module (import thiếu, chữ ký đổi) — phần này mới là phần "test cũ đã mục".
 - [in-progress] **RPi3**: SD storage + HDMI [done]; I2C/SPI BSC1 + SPI0 loopback [done trên board
   thật] nhưng cần sensor vật lý (SHT3x/MPU6050) để đọc dữ liệu cảm biến; USB DWC2 & LAN9514 (Phase
   05) đã gỡ nghẽn 100% trong mã nguồn (USB Policy v3, cấp DWC2 MMIO, one-shot level IRQ 9) — chờ
@@ -82,18 +67,6 @@ không phải bởi dòng chữ ở đây.
   Infineon OPTIGA TPM 2.0 SLB9672, và AWS DEV account/region.
 - [blocked] **Port Drivers / floor**: x86 Platform Cell discovery [done], kernel-owned x86 paging
   [done], per-vector IDT stubs [done], production trust keys [chưa].
-
-## Đã đóng — con trỏ, không phải việc còn lại
-Desktop environment (2026-09-19) · CI gate restoration (2026-09-15, `.agents/260914-ci-gate-restoration/`) ·
-Phase 07 authenticated software evidence (`.agents/` + run `33251921677:1`) · Phase 10 x86 Tier 3 VirtIO
-27 hostile scenarios · Tier 1 Rust `std` PAL (2026-09-18) · Tier 2 fail-closed containment (2026-09-18) ·
-Tier 3 hypervisor signing + vCPU preemption (2026-09-18) · App-tier acceptance ledger schema v5
-(`.agents/logs/260915-app-tier-ledger-schema-v5.md`) · B0 actor/supervisor
-(`.agents/260925-2214-beam-parity-b0-actor-supervisor/`, `docs/evidence/actor-supervisor-harts1-qemu.*`) ·
-Compositor & ViUI + QEMU evidence (2026-09-18) · Acceptance matrix (item 19) · Cell-native portability
-phase 01–07 + follow-on C thread/spawn ABI (`.agents/260922-1549-cell-native-portability-program/`) ·
-Lane mạng + hai gate CI `init-giveup`/`idle_ipc_wake` (2026-09-26) · kernel host test harness sống lại
-(2026-09-26: 111 test chạy được, `ostd` 60 test) — tất cả có chi tiết trong `CHANGELOG.md`.
 
 ## Reference
 

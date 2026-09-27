@@ -158,6 +158,29 @@ See [cells/demos/hello-cell/src/main.rs](../../cells/demos/hello-cell/src/main.r
 
 ---
 
+## Host-testing a cell (why CI runs your `#[test]`s)
+
+A cell's tests run in the host `x86_64-unknown-linux-gnu` harness, not in the guest. The
+five things that make that work — the same recipe applied five times in 2026-09:
+
+1. **Gate `no_std` / `no_main` / entry / heap by target.** `#![cfg_attr(target_os = "none", …)]`
+   for the first two, and note every `ostd` macro that emits `#[no_mangle]` (`cell_main!`,
+   `run_app!`, `app_entry!`, `service_entry!`) already gates it. Ungated, the C runtime calls
+   the cell's entry in the test binary and the harness runs your app and hangs before it lists
+   a test.
+2. **A `staticlib` dependency needs `std` on the host** — gate its `no_std` by target too.
+3. **`ostd::heap` exports exist only on the target** — a test that reaches them needs the same gate.
+4. **Target-only features gate their own handler** (`ai_sdk::ostd_transport` is the example):
+   gate the handler and the route branch, not the whole module.
+5. **Then fix what the tests find.** Re-enabling a suite surfaces drift — missing imports and
+   changed signatures in test modules — and that drift is the part worth the exercise.
+
+Wire the suite into the host-unit job in `.github/workflows/ci.yml` when it is green; the boot
+suite is a separate, **allowlisted** job (a new test stays excluded until it passes 2/2
+consecutive full runs — see the comment on `boot-suite`).
+
+---
+
 ## Next Steps
 
 - Need services (VFS, network)? → [Tier 1 + SDK service clients](tier1-rust-sdk.md)

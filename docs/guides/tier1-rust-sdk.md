@@ -14,6 +14,8 @@
 > `run_app!`, `app_entry!`, `service_entry!`) already gate their `#[no_mangle]`
 > on the target for the same reason. Everything the image needs for the guest is
 > unchanged: a cell's `.text` and `.rodata` are byte-identical under both forms.
+> The rest of the recipe for running a cell's `#[test]`s on the host is in
+> [Tier 1 `rust-no-std`](tier1-rust-bare.md#host-testing-a-cell-why-ci-runs-your-tests).
 
 ## AppContext: The Entry Point
 
