@@ -1,0 +1,62 @@
+{
+  "decision": "PASS",
+  "reviewedBy": "session self-review (no subagent provider available: scout/sonic/reviewer all failed with Codex quota errors on 2026-09-27)",
+  "disprovenClaims": [],
+  "unverifiedClaims": [
+    "x86_64 QEMU behaviour: the updated x86_64-boot assertions were not executed (no Limine ISO built by the available tooling).",
+    "Physical board behaviour: MMC snapshot save/restore and remote TLB completion have no witness here; their profiles stay disabled.",
+    "Pre-existing snapshot staleness on a real block device: the invalidation path is exercised only through code review plus the QEMU lane where the block device is absent."
+  ],
+  "missingProof": [
+    "A domain-class launch under an actual live domain-grant record (the preflight predicate is unreachable by construction after the gate, so its denial branch has no runtime witness)."
+  ],
+  "reachableRegressions": [],
+  "findings": [
+    {
+      "id": "R1",
+      "severity": "critical",
+      "status": "fixed-before-delivery",
+      "finding": "The live-domain-grant preflight was first placed inside evaluate_domain_admission, which task::launch::publish_prepared calls while holding SCHEDULER. The scan takes the grant tables and re-reads SCHEDULER, so any domain-class launch would self-deadlock (spinlock, single-hart hang).",
+      "evidence": "kernel/src/task/launch.rs:123 (scheduler lock) vs kernel/src/task/syscall.rs domain_grant_records_live → task_domain_space → SCHEDULER.lock()",
+      "fix": "Moved to domain_admission::refuse_while_domain_grant_live, called before the scheduler lock is taken; the scan keeps the documented *_GRANT_TABLE → SCHEDULER order."
+    },
+    {
+      "id": "R2",
+      "severity": "high",
+      "status": "fixed-before-delivery",
+      "finding": "The off-feature build (no native-domains) failed: an unconditional call into the feature-gated loader::domain_admission module, and the domain_grant_records_live stub was dead code in that configuration.",
+      "evidence": "RUSTFLAGS=\"-D warnings\" cargo check -p cellos-kernel --target riscv64gc-unknown-none-elf --no-default-features -Z build-std=core,alloc → E0433 + dead_code; fixed build exits 0",
+      "fix": "Call site gated on the module's own feature; the stub's cfg narrowed to the only configuration where the module exists without an arch backend."
+    },
+    {
+      "id": "R3",
+      "severity": "medium",
+      "status": "accepted-documented",
+      "finding": "GrantFree/GrantUnregister refuse for a private-root owner, so a record created before this gate cannot be released by its owner; the frames stay quarantined until the phase-03 lifecycle drains them.",
+      "fix": "Intentional fail-closed behaviour, documented in the phase deviation log and in Spec 22 §2.5; the alternative (freeing frames whose receiver PTEs cannot be revoked) is the bug being contained."
+    },
+    {
+      "id": "R4",
+      "severity": "medium",
+      "status": "accepted-documented",
+      "finding": "Non-RV64 Tier-2 is denied by policy, not repaired; a deployment that re-enables the policy flag on AArch64/x86_64 without phase 02 would still hit the ordering hazard.",
+      "fix": "enable_for_boot() itself refuses an unqualified backend, so re-enabling requires a code change, and the boot log states the posture explicitly."
+    },
+    {
+      "id": "R5",
+      "severity": "low",
+      "status": "verified-safe",
+      "finding": "GrantShare's target argument is a task id, and a tid that is not live is not treated as a domain, which could let a share target a tid that is later recycled by a domain task.",
+      "evidence": "The slice path re-checks the live caller identity (domain_grant_task(caller_id) in the GrantSlice arm and in authorize_grant_slice_locked), so a recycled domain receiver is refused at the point that would publish its PTE.",
+      "fix": "None needed; the gate is at the publishing operation, not only at share time."
+    },
+    {
+      "id": "R6",
+      "severity": "low",
+      "status": "verified-safe",
+      "finding": "Snapshot invalidation performs a disk write while the qualification gate is off.",
+      "evidence": "invalidate_stale_snapshot_header reads sector 0 first and writes only when the header carries SNAPSHOT_MAGIC; on a board without the region nothing is written, and the write is one header sector, never payload.",
+      "fix": "None needed."
+    }
+  ]
+}

@@ -356,10 +356,13 @@ fn aarch64_httpd_web_server_serves_requests() {
     );
 }
 
-/// The tier2-smoke cell must be admitted to Tier 2 Paged Domain (TTBR0 isolation)
-/// and execute safely on AArch64.
+/// Phase-01 containment: on AArch64 the raw switch activates the incoming root
+/// before `Context::switch` saves the outgoing context, so Tier-2 admission stays
+/// closed until phase 02 proves the ordered transition on one CPU. A
+/// domain-class cell must be refused, must never be published as a domain, and
+/// must never execute — and the refusal must leave the shell alive.
 #[test]
-fn aarch64_tier2_smoke_positive_execution() {
+fn aarch64_tier2_admission_is_refused_until_switch_is_qualified() {
     if !prerequisites_ok() {
         return;
     }
@@ -368,43 +371,32 @@ fn aarch64_tier2_smoke_positive_execution() {
         .unwrap_or_else(|e| panic!("shell prompt: {e}\n{}", qemu.dump()));
 
     std::thread::sleep(std::time::Duration::from_millis(500));
+    let checkpoint = qemu.output_checkpoint();
     qemu.send_line("tier2-smoke &");
 
     let timeout = 30;
-    // 1. Verify admission to Tier 2 Paged Domain under TTBR0 isolation
-    qemu.wait_for(
-        "[domain] admitted cell 'tier2-smoke' to Tier 2 Paged Domain (TTBR0 isolation)",
-        timeout,
-    )
-    .unwrap_or_else(|e| {
-        panic!(
-            "tier2-smoke was not admitted to Tier 2 Paged Domain on AArch64: {e}\n--- output ---\n{}",
-            qemu.dump()
-        )
-    });
-
-    // 2. Verify heap allocation
-    qemu.wait_for("[tier2-smoke] Heap allocation verified", timeout)
+    // 1. The shell must come back after the refusal.
+    qemu.wait_for_after("Cellos >", checkpoint, timeout)
         .unwrap_or_else(|e| {
             panic!(
-                "tier2-smoke heap allocation failed on AArch64: {e}\n--- output ---\n{}",
+                "shell did not return after a refused Tier-2 spawn on AArch64: {e}\n--- output ---\n{}",
                 qemu.dump()
             )
         });
 
-    // 3. Verify PASS
-    qemu.wait_for(
-        "[tier2-smoke] PASS: All Tier 2 runtime invariants verified successfully!",
-        timeout,
-    )
-    .unwrap_or_else(|e| {
-        panic!(
-            "tier2-smoke did not complete PASS on AArch64: {e}\n--- output ---\n{}",
-            qemu.dump()
-        )
-    });
+    // 2. No domain was published and no cell code ran.
+    let output = qemu.dump();
+    let after = output.get(checkpoint..).unwrap_or("");
+    assert!(
+        !after.contains("[domain] admitted cell"),
+        "AArch64 Tier-2 admission must stay closed in the phase-01 posture\n--- output ---\n{after}"
+    );
+    assert!(
+        !after.contains("[tier2-smoke]"),
+        "a refused domain-class cell must not execute\n--- output ---\n{after}"
+    );
 
-    // 4. Verify shell interactive
+    // 3. Verify shell interactive
     std::thread::sleep(std::time::Duration::from_millis(500));
     for b in b"echo aarch64-tier2-ok\n" {
         qemu.send_bytes(&[*b]);
@@ -413,14 +405,17 @@ fn aarch64_tier2_smoke_positive_execution() {
     qemu.wait_for("aarch64-tier2-ok", timeout)
         .unwrap_or_else(|e| {
             panic!(
-                "shell not responding after tier2-smoke exit on AArch64: {e}\n--- output ---\n{}",
+                "shell not responding after refused Tier-2 spawn on AArch64: {e}\n--- output ---\n{}",
                 qemu.dump()
             )
         });
 }
 
+/// Phase-01 containment: the fault-containment fixture is a domain-class cell, so
+/// on AArch64 it must be refused at admission before it can run at all. The
+/// kernel must stay alive and keep serving the shell.
 #[test]
-fn aarch64_tier2_fault_isolation() {
+fn aarch64_tier2_fault_isolation_fixture_is_refused() {
     if !prerequisites_ok() {
         return;
     }
@@ -429,46 +424,38 @@ fn aarch64_tier2_fault_isolation() {
         .unwrap_or_else(|e| panic!("shell prompt: {e}\n{}", qemu.dump()));
 
     std::thread::sleep(std::time::Duration::from_millis(500));
+    let checkpoint = qemu.output_checkpoint();
     qemu.send_line("tier2-exploit");
 
     let timeout = 30;
-    // 1. Verify admission to Tier 2 Paged Domain
-    qemu.wait_for(
-        "[domain] admitted cell 'tier2-exploit' to Tier 2 Paged Domain (TTBR0 isolation)",
-        timeout,
-    )
-    .unwrap_or_else(|e| {
-        panic!(
-            "tier2-exploit was not admitted to Tier 2 Paged Domain on AArch64: {e}\n--- output ---\n{}",
-            qemu.dump()
-        )
-    });
-
-    // 2. Verify exploit attempts NULL write
-    qemu.wait_for("[tier2-exploit] deliberately writing to NULL", timeout)
+    // 1. The shell must come back after the refusal.
+    qemu.wait_for_after("Cellos >", checkpoint, timeout)
         .unwrap_or_else(|e| {
             panic!(
-                "tier2-exploit never reached NULL write on AArch64: {e}\n--- output ---\n{}",
+                "shell did not return after a refused Tier-2 spawn on AArch64: {e}\n--- output ---\n{}",
                 qemu.dump()
             )
         });
 
-    // 3. Verify CPU generated page fault and kernel terminated the cell
-    qemu.wait_for("[fault] Cell", timeout)
-        .unwrap_or_else(|e| {
-            panic!(
-                "kernel did not catch page fault or terminate cell on AArch64: {e}\n--- output ---\n{}",
-                qemu.dump()
-            )
-        });
+    // 2. Nothing was published and no cell code ran.
+    let output = qemu.dump();
+    let after = output.get(checkpoint..).unwrap_or("");
+    assert!(
+        !after.contains("[domain] admitted cell"),
+        "AArch64 Tier-2 admission must stay closed in the phase-01 posture\n--- output ---\n{after}"
+    );
+    assert!(
+        !after.contains("[tier2-exploit]"),
+        "a refused domain-class cell must not execute\n--- output ---\n{after}"
+    );
 
-    // 4. Verify kernel survivability: shell returns
+    // 3. Verify kernel survivability: shell returns
     std::thread::sleep(std::time::Duration::from_millis(500));
     qemu.send_line("echo tier2-aarch64-alive");
     qemu.wait_for("tier2-aarch64-alive", timeout)
         .unwrap_or_else(|e| {
             panic!(
-                "kernel crashed or shell hung after fault on AArch64: {e}\n--- output ---\n{}",
+                "kernel crashed or shell hung after a refused Tier-2 spawn on AArch64: {e}\n--- output ---\n{}",
                 qemu.dump()
             )
         });

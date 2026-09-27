@@ -1,0 +1,50 @@
+{
+  "commands": [
+    {
+      "command": "scripts/qemu-native-domain-test.sh --harts 1 --case admission,ipc-copy,grant-revoke,grant-gate",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-09-27T10:13:00+07:00",
+      "summary": "4/4 cases PASS on the frozen tree: h1-admission-L13omf, h1-ipc-copy-A02hX3, h1-grant-revoke-pUFEXn, h1-grant-gate-MbNs8s. Every boot log also carries S22-RV64-SAS-FASTPATH: PASS roots=0 flushes=0 and S22-RV64-GRANT-GATE: PASS (all six properties)."
+    },
+    {
+      "command": "scripts/qemu-native-domain-test.sh --harts 2 --case migration,user-copy-race,ipc-copy-race",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-09-27T10:02:00+07:00",
+      "summary": "3/3 cases PASS: h2-migration-xQlSZg, h2-user-copy-race-9n6WfT, h2-ipc-copy-race-AjwneD; SAS fast path roots=0 flushes=0 harts=2."
+    },
+    {
+      "command": "RUSTFLAGS=\"-D warnings\" cargo check -p cellos-kernel --target riscv64gc-unknown-none-elf --no-default-features -Z build-std=core,alloc",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-09-27T10:05:00+07:00",
+      "summary": "Off-feature build (no native-domains) compiles warning-free: the containment gate collapses to inert constants and the build cannot reach a domain class at all."
+    },
+    {
+      "command": "cd tests/integration && CARGO_BUILD_TARGET=x86_64-unknown-linux-gnu cargo test --test launch-profile -- --test-threads=1",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-09-27T10:07:00+07:00",
+      "summary": "shell_launch_profile_allows_vfs_test_and_routes_snapshot_via_supervisor ok in 9.56s: with the qualification gate off, `snapshot` still logs [snapshot] unavailable, the shell prints `snapshot: unavailable on this platform`, a caller without SupervisorCap is still denied, and no frame is written."
+    },
+    {
+      "command": "cd tests/integration && CARGO_BUILD_TARGET=x86_64-unknown-linux-gnu cargo test --test aarch64-boot tier2 -- --test-threads=1",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-09-27T10:08:00+07:00",
+      "summary": "2/2 updated tests pass on the AArch64 production image: aarch64_tier2_admission_is_refused_until_switch_is_qualified and aarch64_tier2_fault_isolation_fixture_is_refused — neither cell is published or executed, the refusal leaves the shell answering."
+    },
+    {
+      "command": "cd tests/integration && CARGO_BUILD_TARGET=x86_64-unknown-linux-gnu cargo test --test tier2-fault-isolation -- --test-threads=1",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-09-27T10:30:00+07:00",
+      "summary": "5/5 passed in 49.95s on a disk rebuilt with the updated tier2-smoke: admission, heap, fail-closed grant denial, NULL/peer/kernel fault containment, and the posix-shim-test Tier-2 FFI domain leg remains positively admitted."
+    }
+  ],
+  "beforeAfter": {
+    "before": "Ungated kernel (same tree, fixture present, gate absent): a real TaskAddressSpace::Domain task through handle_syscall could allocate a grant (domain-owned frames published USER in the SAS root), receive a raw receiver mapping with shared_to's rights ignored, and the run leaked frames — S22-RV64-GRANT-GATE-{ALLOC,REGISTER,SHARE,SLICE,FRAMES}: FAIL, exit 1 (.logs/native-domain-qemu/h1-grant-gate-6j4WCL). AArch64/x86_64 Tier-2 admission was enabled in development images, and snapshot capture/restore was reachable with a writer/reader checksum and layout mismatch and no all-hart quiescence.",
+    "after": "Every grant entry point that names a private-root task refuses at the common syscall gate with the per-op alloc-safe sentinel (0 / usize::MAX / PermissionDenied) before any table row, PTE, pin or frame exists; SAS→SAS Tier-1 grants and copied IPC are proven unchanged. Non-RV64 Tier-2 admission and warm snapshot are fail-closed by policy, with the posture logged at boot and stale snapshot headers invalidated on a gated image."
+  }
+}

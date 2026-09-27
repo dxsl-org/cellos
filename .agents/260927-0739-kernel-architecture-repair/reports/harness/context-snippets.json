@@ -1,0 +1,38 @@
+{
+  "skill": "hc-cook",
+  "mode": "interactive",
+  "phase": "phase-01-containment-baselines",
+  "task": "Phase 01 of the kernel architecture repair plan: contain unsafe paths (domain-class zero-copy grants, non-RV64 Tier-2 admission, warm snapshot) and capture behavioural baselines without changing the public ABI.",
+  "acceptanceCriteria": [
+    "RV64 Tier-2 native launch and copied IPC still work; every domain-backed grant attempt fails closed before a PTE/frame is published; AArch64/x86_64 Tier-2 admission denies until phase 02 proves the ordered switch; Tier-1 SAS grants remain functional.",
+    "Snapshot reports unavailable with no disk write and no restore; cold boot and the shell/Supervisor snapshot contract are unchanged.",
+    "Pre-patch baseline identifies the exact feature/architecture image, and the unsafe behaviour fails before the patch instead of being relabelled as a pass."
+  ],
+  "evidence": "expected",
+  "touchpoints": [
+    "kernel/src/task/syscall.rs",
+    "kernel/src/task/grant_gate_selftest.rs",
+    "kernel/src/loader/domain_admission.rs",
+    "kernel/src/snapshot.rs",
+    "kernel/src/main.rs",
+    "kernel/src/task.rs",
+    "kernel/Cargo.toml",
+    "scripts/qemu-native-domain-test.sh",
+    "cells/tests/tier2-smoke/src/main.rs",
+    "tests/integration/tests/tier2_fault_isolation.rs",
+    "docs/specs/22-native-domain-cell-implementation-gate.md",
+    "CHANGELOG.md"
+  ],
+  "publicContracts": [
+    "libs/api and libs/types are untouched (Law 1): no new syscall, opcode, error or struct field.",
+    "Grant* result conventions preserved per operation: GrantAlloc/GrantRegister denial = Ok(0) (the cell wrapper decodes any nonzero return as a grant id), GrantSlice denial = Ok(usize::MAX), share/free/unregister denial = the established nonzero failure.",
+    "Syscall::Snapshot keeps SupervisorCap + SyscallError::Unknown and the shell/Supervisor 'unavailable' reply."
+  ],
+  "blastRadius": [
+    "Tier-1 SAS grant, VFS lease and DMA paths (must be byte-for-byte behaviourally unchanged; proved by the grant-gate fixture's SAS leg)",
+    "Tier-2 admission on all three architectures (AArch64/x86_64 now deny by policy)",
+    "Snapshot capture/restore on every block-capable board (now gated by feature `snapshot-qualified`)",
+    "cells/tests/tier2-smoke + tier2_fault_isolation integration expectations (grant leg becomes a denial assertion)"
+  ],
+  "scoutSummary": "Domain grants reach the shared repo through six syscall arms plus GrantDma; the ungated path publishes USER PTEs in the SAS root for domain owners, maps receiver pages RW regardless of shared_to rights, and revokes only through the caller's own root. Non-RV64 Tier-2 admission is enabled by the development profile cfg in main.rs; the raw switch activates the incoming root before Context::switch saves the outgoing context on AArch64/x86_64. Snapshot capture/restore is ungated, writer/reader disagree on checksum + layout, and no all-hart quiescence exists."
+}

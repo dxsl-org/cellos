@@ -592,6 +592,23 @@ pub(crate) fn current_domain() -> (u64, u64) {
     )
 }
 
+/// Without a private-root backend every task shares the SAS root, so a futex key
+/// carries the documented SAS identity — `space = 0` (see `task::futex::FutexKey`)
+/// — and no domain generation. The off-feature build previously failed to compile
+/// here because the caller is ungated.
+#[cfg(not(all(
+    feature = "native-domains",
+    any(
+        target_arch = "riscv64",
+        target_arch = "aarch64",
+        target_arch = "x86_64"
+    )
+)))]
+#[inline(always)]
+pub(crate) fn current_domain() -> (u64, u64) {
+    (0, 0)
+}
+
 /// Clear a domain only after the incoming safe-root context has completed.
 #[cfg(all(
     feature = "native-domains",

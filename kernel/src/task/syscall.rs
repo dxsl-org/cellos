@@ -181,6 +181,99 @@ fn task_domain_space(
     })
 }
 
+/// Phase-01 containment: is `tid` a live task whose address space is a private
+/// domain root?
+///
+/// A domain-backed zero-copy grant cannot yet complete an owner/grantee mapping
+/// or a synchronous revoke: `authorize_grant_slice_locked` publishes the receiver
+/// PTE without copying `shared_to`'s rights into it, and no path unmaps that PTE
+/// when the record is freed. Every grant entry point that could publish such a
+/// record therefore refuses, at the common syscall gate, before any table row,
+/// PTE, pin or frame exists. A retired or unknown tid is not a domain here, and
+/// the SAS/Tier-1 paths keep their exact current behaviour.
+#[cfg(all(
+    feature = "native-domains",
+    any(
+        target_arch = "riscv64",
+        target_arch = "aarch64",
+        target_arch = "x86_64"
+    )
+))]
+fn domain_grant_task(tid: usize) -> bool {
+    task_domain_space(tid).is_some()
+}
+
+/// Without a private-root backend no task can be a domain.
+#[cfg(not(all(
+    feature = "native-domains",
+    any(
+        target_arch = "riscv64",
+        target_arch = "aarch64",
+        target_arch = "x86_64"
+    )
+)))]
+fn domain_grant_task(_tid: usize) -> bool {
+    false
+}
+
+/// Does any live grant record name a domain owner or a domain receiver?
+///
+/// Such a record can pre-date this gate — an image update on a system that had
+/// already granted one — and the containment gate cannot drain it, because the
+/// receiver PTE lives in a private root reachable only through the caller's own
+/// ledger. Domain admission therefore refuses while one exists. Lock order is the
+/// documented `*_GRANT_TABLE → SCHEDULER`, and the two tables are not held at the
+/// same time.
+#[cfg(all(
+    feature = "native-domains",
+    any(
+        target_arch = "riscv64",
+        target_arch = "aarch64",
+        target_arch = "x86_64"
+    )
+))]
+pub(crate) fn domain_grant_records_live() -> bool {
+    let page_hit = {
+        let table = grant_table_lock().lock();
+        table.as_ref().is_some_and(|grants| {
+            grants.values().any(|grant| {
+                domain_grant_task(grant.owner)
+                    || grant
+                        .shared_to
+                        .is_some_and(|(tid, _)| domain_grant_task(tid))
+            })
+        })
+    };
+    if page_hit {
+        return true;
+    }
+    let table = reg_grant_table_lock().lock();
+    table.as_ref().is_some_and(|grants| {
+        grants.values().any(|grant| {
+            domain_grant_task(grant.owner)
+                || grant
+                    .shared_to
+                    .is_some_and(|(tid, _)| domain_grant_task(tid))
+        })
+    })
+}
+
+/// No record can be domain-backed on an architecture without a private-root
+/// backend. Compiled only for the configuration where the admission module exists
+/// but the grant backend does not (`native-domains` on an uncovered target); a
+/// build without the feature never calls this.
+#[cfg(all(
+    feature = "native-domains",
+    not(any(
+        target_arch = "riscv64",
+        target_arch = "aarch64",
+        target_arch = "x86_64"
+    ))
+))]
+pub(crate) fn domain_grant_records_live() -> bool {
+    false
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum DmaGrantError {
     NotOwned,
@@ -473,6 +566,16 @@ fn refuse_if_pinned(kind: &str, id: usize, base: usize, size: usize) -> Result<(
 /// synchronization point: the final GetRandom output lease uses the same lock
 /// to serialize validation, write, and teardown.
 fn unregister_registered_grant(caller_id: usize, reg_id: usize) -> Result<(), SyscallError> {
+    // Phase-01 containment: a private-root owner's registered buffer is mapped in
+    // a domain root this path cannot revoke for a receiver. Refuse before the
+    // record leaves the table, so the frames stay quarantined rather than reused.
+    if domain_grant_task(caller_id) {
+        log::warn!(
+            "[grant] GrantUnregister denied: task {caller_id} is a private-root domain \
+             (phase-01 containment)"
+        );
+        return Err(SyscallError::PermissionDenied);
+    }
     let entry = {
         let mut table = reg_grant_table_lock().lock();
         let owned = table
@@ -2015,6 +2118,18 @@ fn authorize_grant_slice_locked(
     base: usize,
     size: usize,
 ) -> Result<Option<GrantSliceAccess>, SyscallError> {
+    // Phase-01 containment: a record owned by a private root is not sliceable for
+    // anyone. A pre-existing (pre-gate) record must not hand a raw mapping to a
+    // SAS receiver whose writes the private-root owner cannot see, and its
+    // receiver PTE could not be revoked. The caller sees the established
+    // `usize::MAX` "not authorized" result.
+    if domain_grant_task(grant_owner) {
+        log::warn!(
+            "[grant] GrantSlice denied: grant owner {grant_owner} is a private-root domain \
+             (phase-01 containment)"
+        );
+        return Ok(None);
+    }
     let authorized = if let Some(context) = request.vfs_context {
         grant_owner == context.grant_owner && shared_to_tid == Some(request.caller_id)
     } else {
@@ -5260,6 +5375,17 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         }
 
         Syscall::GrantDma { bdf, phys, size } => {
+            // Phase-01 containment: DMA authority is bounded at admission for
+            // domain-class cells, so this is the second lock on the same door —
+            // a private-root caller must not publish an IOMMU mapping for a
+            // record whose receiver PTEs this kernel does not revoke.
+            if domain_grant_task(caller_id) {
+                log::warn!(
+                    "[iommu] Cell {caller_id} DMA grant denied: private-root domain \
+                     (phase-01 containment)"
+                );
+                return Err(SyscallError::PermissionDenied);
+            }
             if phys & 0xFFF != 0 || size & 0xFFF != 0 || size == 0 {
                 return Err(SyscallError::InvalidInput);
             }
@@ -6318,6 +6444,18 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             if size == 0 || size > MAX_GRANT_PAGES * PAGE_SIZE {
                 return Ok(0);
             }
+            // Phase-01 containment: a private-root owner's backing cannot be
+            // mapped for it or revoked from it, and the ungated path publishes the
+            // frames USER in the shared root. Refuse before allocating a frame.
+            // `Ok(0)` is the alloc-safe sentinel: a cell-side wrapper reads any
+            // nonzero return as a grant id.
+            if domain_grant_task(caller_id) {
+                log::warn!(
+                    "[grant] GrantAlloc denied: task {caller_id} is a private-root domain \
+                     (phase-01 containment)"
+                );
+                return Ok(0);
+            }
             let n_pages = size.div_ceil(PAGE_SIZE);
             let paddr = match alloc_grant_pages(n_pages) {
                 Some(paddr) => paddr,
@@ -6353,6 +6491,17 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             target_cell,
             perm,
         } => {
+            // Phase-01 containment: neither side of a domain-backed share may be
+            // published while the receiver mapping is neither permission-accurate
+            // nor synchronously revocable. Target identity is the live task's, so
+            // a recycled tid cannot inherit a grant.
+            if domain_grant_task(caller_id) || domain_grant_task(target_cell) {
+                log::warn!(
+                    "[grant] GrantShare denied: caller {caller_id} or target {target_cell} is a \
+                     private-root domain (phase-01 containment)"
+                );
+                return Err(SyscallError::PermissionDenied);
+            }
             let perm = match GrantPerm::try_from(perm as u8) {
                 Ok(p) => p,
                 Err(_) => return Err(SyscallError::InvalidInput),
@@ -6387,6 +6536,16 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             grant_id,
             size_out_ptr,
         } => {
+            // Phase-01 containment: a private-root caller must not receive a raw
+            // mapping; the ungated path maps it RW regardless of `shared_to` and
+            // nothing revokes it. `usize::MAX` is the established slice sentinel.
+            if domain_grant_task(caller_id) {
+                log::warn!(
+                    "[grant] GrantSlice denied: task {caller_id} is a private-root domain \
+                     (phase-01 containment)"
+                );
+                return Ok(usize::MAX);
+            }
             let vfs_context = match current_vfs_grant_lookup(caller_id) {
                 VfsGrantLookup::NotVfs => None,
                 VfsGrantLookup::MissingContext => return Ok(usize::MAX),
@@ -6403,6 +6562,17 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         }
 
         Syscall::GrantFree { grant_id } => {
+            // Phase-01 containment: releasing a private-root owner's record would
+            // return frames whose receiver PTE this path cannot revoke. Refuse
+            // before the entry leaves the table (a pre-existing record stays
+            // quarantined until the phase-03 lifecycle drains it).
+            if domain_grant_task(caller_id) {
+                log::warn!(
+                    "[grant] GrantFree denied: task {caller_id} is a private-root domain \
+                     (phase-01 containment)"
+                );
+                return Err(SyscallError::PermissionDenied);
+            }
             // Owner-only, and only while no in-flight operation holds the region.
             // The pin check runs inside the table lock (order: PAGE_GRANT_TABLE →
             // pin REGISTRY, a leaf), so a concurrent VFS GrantSlice or GrantDma
@@ -6596,6 +6766,17 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         Syscall::GrantRegister { size } => {
             const PAGE_SIZE: usize = 4096;
             if size == 0 || size > MAX_GRANT_PAGES * PAGE_SIZE {
+                return Ok(0);
+            }
+            // Phase-01 containment: the ungated path maps this buffer into the
+            // caller's private root, and `unmap_grant_page` on unregister is the
+            // only revoke — no receiver PTE, pin or reader is considered. Refuse
+            // before a frame or PTE exists, with the alloc-safe sentinel.
+            if domain_grant_task(caller_id) {
+                log::warn!(
+                    "[grant] GrantRegister denied: task {caller_id} is a private-root domain \
+                     (phase-01 containment)"
+                );
                 return Ok(0);
             }
             let n_pages = size.div_ceil(PAGE_SIZE);

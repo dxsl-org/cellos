@@ -1,0 +1,29 @@
+{
+  "decision": "PASS_WITH_RISK",
+  "score": 8.6,
+  "criticalCount": 0,
+  "acceptanceCoverage": [
+    "AC-1 domain-backed grants fail closed before PTE/frame publication → tests/integration + S22-RV64-GRANT-GATE fixture: ALLOC/REGISTER/SHARE/SLICE/FRAMES PASS on the patched kernel, FAIL on the same tree without the gate (h1-grant-gate-6j4WCL vs -MbNs8s)",
+    "AC-2 RV64 Tier-2 launch + copied IPC still work → 7/7 RV64 native-domain cases PASS (h1-*-L13omf/A02hX3/pUFEXn/MbNs8s, h2-*-xQlSZg/9n6WfT/AjwneD)",
+    "AC-3 Tier-1 SAS grants unchanged → S22-RV64-GRANT-GATE-SAS PASS and S22-RV64-SAS-FASTPATH … roots=0 flushes=0 in every case log",
+    "AC-4 AArch64/x86_64 Tier-2 admission denies → cd tests/integration && cargo test --test aarch64-boot tier2 (2 passed); x86_64 assertions updated but its ISO lane is not buildable here",
+    "AC-5 snapshot unavailable, no write, contract intact → cargo test --test launch-profile (1 passed, [snapshot] unavailable + shell 'unavailable on this platform' + SupervisorCap denial)",
+    "AC-6 pre-patch baseline + unsafe behaviour fails before the patch → 6/6 baseline cases PASS with run.env digests; red witness exit 1",
+    "AC-7 no public ABI change → git diff libs/api libs/types is empty; per-op denial sentinels match the cell-side decoders"
+  ],
+  "regressionProof": [
+    "RV64 1-hart suite 4/4 and 2-hart suite 3/3 PASS on the frozen tree, exit 0",
+    "Every boot log retains the Tier-1 fast path line roots=0 flushes=0",
+    "Off-feature build (--no-default-features, -D warnings) exit 0",
+    "launch-profile shell/Supervisor snapshot contract unchanged"
+  ],
+  "contractStatus": "OK",
+  "blockingReasons": [],
+  "notes": [
+    "Review was executed by the session model: every subagent type failed with a Codex provider quota error, so no independent reviewer signature exists for this phase.",
+    "Risk carried: AArch64/x86_64 Tier-2 is denied by policy, not by a fixed switch; the underlying ordering hazard is phase 02's deliverable.",
+    "Risk carried: a pre-existing record owned by a private root cannot be freed through GrantFree/GrantUnregister until phase 03's lifecycle drains it — the frames stay quarantined rather than reused.",
+    "Risk carried: x86_64 QEMU lane and all physical-board (MMC, remote TLB, RT latency) witnesses remain unexecuted; their claim gates stay closed.",
+    "Pre-existing, not introduced: scripts/build-aarch64-test-hooks-ci.sh does not compile (8 errors) with this phase's changes stashed as well; the script is not referenced by any CI workflow."
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "phase": "phase-01-containment-baselines",
+  "criteria": [
+    {
+      "criterion": "RV64 Tier-2 native launch and copied IPC still work",
+      "command": "scripts/qemu-native-domain-test.sh --harts 1 --case admission,ipc-copy,grant-revoke,grant-gate; --harts 2 --case migration,user-copy-race,ipc-copy-race",
+      "evidenceRef": "7/7 cases PASS with S22-RV64-IPC-COPY / IPC-COPY-RACE / MIGRATION terminals; .logs/native-domain-qemu/h1-*-L13omf,A02hX3,pUFEXn,MbNs8s and h2-*-xQlSZg,9n6WfT,AjwneD",
+      "pass": true
+    },
+    {
+      "criterion": "Domain-backed grant attempts fail closed before a PTE/frame is published",
+      "command": "scripts/qemu-native-domain-test.sh --harts 1 --case grant-gate",
+      "evidenceRef": "S22-RV64-GRANT-GATE-{ALLOC,REGISTER,SHARE,SLICE,FRAMES}: PASS + terminal PASS (h1-grant-gate-MbNs8s); the same fixture is FAIL on the ungated kernel (h1-grant-gate-6j4WCL)",
+      "pass": true
+    },
+    {
+      "criterion": "Tier-1 SAS grants remain functional",
+      "command": "same lane, plus the fixture's SAS leg",
+      "evidenceRef": "S22-RV64-GRANT-GATE-SAS: PASS and S22-RV64-SAS-FASTPATH: PASS roots=0 flushes=0 in all 7 case logs",
+      "pass": true
+    },
+    {
+      "criterion": "AArch64/x86_64 Tier-2 launch denies until phase 02 qualifies the switch",
+      "command": "cd tests/integration && cargo test --test aarch64-boot tier2 (AArch64 production image, disk_arm_virt.img)",
+      "evidenceRef": "2/2 tests pass: no `[domain] admitted cell`, no cell output, shell answers after the refusal. The x86_64 leg carries the same assertions but its Limine ISO lane is not buildable in this environment.",
+      "pass": true
+    },
+    {
+      "criterion": "Snapshot reports unavailable with no disk write and no restore",
+      "command": "cd tests/integration && cargo test --test launch-profile (canonical disk_v3.img + patched RV64 kernel)",
+      "evidenceRef": "shell_launch_profile_allows_vfs_test_and_routes_snapshot_via_supervisor ok (9.56s): `[snapshot] unavailable` + `snapshot: unavailable on this platform` + SupervisorCap denial, and the test asserts no \"[snapshot] wrote\" line",
+      "pass": true
+    },
+    {
+      "criterion": "Pre-patch baseline identifies the exact image; unsafe behaviour fails before the patch",
+      "command": "scripts/qemu-native-domain-test.sh --harts {1,2} baseline, then --case grant-gate with the gate absent",
+      "evidenceRef": "baseline 6/6 PASS (pre-patch dirs h1-admission-9WwwG1 ... h2-ipc-copy-race-2MQoFZ), red witness exit 1 in h1-grant-gate-6j4WCL; each case dir's run.env records feature tuple, firmware, QEMU version and the ELF sha256",
+      "pass": true
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 {
-  "artifactDir": ".agents/260827-0948-desktop-compositor-viui-managed-surface/reports/harness",
-  "planPath": ".agents/260827-0948-desktop-compositor-viui-managed-surface",
+  "artifactDir": ".agents/260927-0739-kernel-architecture-repair/reports/harness",
+  "planPath": ".agents/260927-0739-kernel-architecture-repair",
   "skill": "hc-cook",
-  "mode": "auto",
-  "updatedAt": "2026-08-27T11:00:00+07:00"
+  "mode": "interactive",
+  "updatedAt": "2026-09-27T10:10:00+07:00"
 }

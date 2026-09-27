@@ -34,6 +34,12 @@ pub(crate) enum DomainAdmissionDenial {
     ArtifactIneligible,
     CopiedIpcUnavailable,
     UnenforceableCapability,
+    /// This architecture's raw context switch activates the incoming root before
+    /// the outgoing context is saved (phase-02 gate).
+    SwitchOrderingUnqualified,
+    /// A grant record owned by, or shared to, a private-root task is live, so the
+    /// containment gate cannot guarantee its receiver PTEs are revoked.
+    LiveDomainGrant,
 }
 
 impl DomainAdmissionDenial {
@@ -48,6 +54,8 @@ impl DomainAdmissionDenial {
             Self::ArtifactIneligible => 6,
             Self::CopiedIpcUnavailable => 7,
             Self::UnenforceableCapability => 8,
+            Self::SwitchOrderingUnqualified => 9,
+            Self::LiveDomainGrant => 10,
         }
     }
 
@@ -55,13 +63,16 @@ impl DomainAdmissionDenial {
     /// SAS, and it never publishes a partial task or domain.
     pub(crate) fn error(self) -> ViError {
         match self {
-            Self::FeatureDisabled | Self::UnsupportedArchitecture => ViError::NotSupported,
+            Self::FeatureDisabled | Self::UnsupportedArchitecture | Self::SwitchOrderingUnqualified => {
+                ViError::NotSupported
+            }
             Self::ResourceQuota => ViError::OutOfMemory,
             Self::PolicyDisabled
             | Self::PolicyDraining
             | Self::ArtifactIneligible
             | Self::CopiedIpcUnavailable
-            | Self::UnenforceableCapability => ViError::PermissionDenied,
+            | Self::UnenforceableCapability
+            | Self::LiveDomainGrant => ViError::PermissionDenied,
         }
     }
 }
@@ -99,6 +110,19 @@ impl DomainAdmissionRequest {
             requests_dma: false,
         }
     }
+}
+
+/// Is this architecture's domain switch ordering qualified?
+///
+/// Phase-01 gate: `task.rs` calls `hal::domain::activate_address_space` before
+/// `Context::switch` saves the outgoing context on AArch64/x86_64, so a private
+/// root can go live with unsaved outgoing state; the incoming-side
+/// `current_domain()` check also runs before the method that clears the id. RV64
+/// carries the saved-context callback inside its switch
+/// (`switch_with_saved_sstatus`) and stays available. Phase 02 reopens each
+/// architecture only after it proves the ordered transition on one CPU.
+pub(crate) const fn switch_ordering_qualified() -> bool {
+    cfg!(target_arch = "riscv64")
 }
 
 /// Does this build contain a domain backend for this architecture?
@@ -171,6 +195,28 @@ pub(crate) fn admit_for_launch(granted: CapSet) -> Result<DomainAdmissionLease, 
     })
 }
 
+/// Refuse a domain-class publication while a domain-backed grant record is live.
+///
+/// Deliberately **not** part of [`evaluate_domain_admission`]: the caller
+/// (`task::launch::publish_prepared`) holds the scheduler lock across that
+/// evaluation, and the grant tables must only ever be taken in the documented
+/// `*_GRANT_TABLE → SCHEDULER` order — never underneath `SCHEDULER`. The
+/// publication path calls this first, before taking that lock, so the preflight
+/// keeps its on-path position without the inversion.
+///
+/// A denial is final and audited: no task, no domain, and no SAS fallback.
+pub(crate) fn refuse_while_domain_grant_live() -> Result<(), ViError> {
+    if !crate::task::syscall::domain_grant_records_live() {
+        return Ok(());
+    }
+    let denial = DomainAdmissionDenial::LiveDomainGrant;
+    crate::audit::log_event(
+        crate::audit::AuditEvent::CellSpawnDenied,
+        &crate::audit::encode_u32x2(0, denial.audit_code()),
+    );
+    Err(denial.error())
+}
+
 /// Refuse a launch whose lease died between creation and publication.
 pub(crate) fn drain_refusal() -> ViError {
     let denial = DomainAdmissionDenial::PolicyDraining;
@@ -190,6 +236,9 @@ pub(crate) fn evaluate_domain_admission(
     }
     if !architecture_covered() {
         return Err(DomainAdmissionDenial::UnsupportedArchitecture);
+    }
+    if !switch_ordering_qualified() {
+        return Err(DomainAdmissionDenial::SwitchOrderingUnqualified);
     }
     match POLICY.load(Ordering::Acquire) {
         ENABLED => {}
@@ -215,6 +264,12 @@ pub(crate) fn evaluate_domain_admission(
 /// that runs domain-class cells; a build that never calls it denies them
 /// (fail-closed), which is the fleet posture.
 pub(crate) fn enable_for_boot() -> bool {
+    // Phase-01 posture: a build whose raw switch ordering is unqualified stays
+    // fail-closed instead of entering the enabled posture, because the admission
+    // control must never be stronger than the mechanism it guards.
+    if !switch_ordering_qualified() {
+        return false;
+    }
     POLICY
         .compare_exchange(DISABLED, ENABLED, Ordering::AcqRel, Ordering::Acquire)
         .is_ok()

@@ -1,0 +1,11 @@
+{
+  "highRisk": true,
+  "reasons": [
+    "kernel authorization/containment change: grant syscall gate, Tier-2 admission policy, snapshot authority",
+    "security-sensitive surface (grants, DMA, domain roots) touched",
+    "production config posture changed (snapshot feature gate, non-RV64 admission)"
+  ],
+  "autoStopRequired": true,
+  "humanApproved": false,
+  "largeDiff": false
+}

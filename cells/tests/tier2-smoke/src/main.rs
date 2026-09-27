@@ -5,7 +5,10 @@
 //! 2. Execute user code safely behind hardware MMU boundaries.
 //! 3. Perform dynamic memory allocations on its private heap.
 //! 4. Invoke system calls (Log, Time, Yield).
-//! 5. Exit cleanly with code 0.
+//! 5. Be refused a zero-copy grant fail-closed: the private-root grant lifecycle
+//!    is not qualified (no revocable receiver mapping, no permission-accurate
+//!    slice), so the kernel denies before publishing a frame or PTE.
+//! 6. Exit cleanly with code 0.
 
 #![no_std]
 #![no_main]
@@ -15,10 +18,7 @@ extern crate alloc;
 
 use alloc::vec::Vec;
 use ostd::io::println;
-use ostd::syscall::{
-    sys_exit, sys_grant_copy_from_slice, sys_grant_copy_to_slice, sys_grant_register,
-    sys_grant_unregister,
-};
+use ostd::syscall::{sys_exit, sys_grant_register};
 
 api::declare_manifest!(
     block_io = false,
@@ -27,15 +27,7 @@ api::declare_manifest!(
     tier = api::manifest::PROTECTION_CLASS_UNTRUSTED
 );
 
-api::declare_syscalls![
-    Log,
-    Yield,
-    GetTime,
-    Exit,
-    GrantRegister,
-    GrantSlice,
-    GrantUnregister
-];
+api::declare_syscalls![Log, Yield, GetTime, Exit, GrantRegister];
 
 ostd::cell_main!(cell_main);
 
@@ -60,26 +52,17 @@ fn cell_main() {
     ostd::task::yield_now();
     println("[tier2-smoke] Scheduler yield completed in Tier 2 domain");
 
-    // 4. Grant allocation, private SATP mapping, write, read, and unregister
+    // 4. Fail-closed containment (phase 01): a private-root cell must not be able
+    //    to publish a zero-copy grant. The private-root grant lifecycle cannot yet
+    //    complete an owner mapping or a synchronous receiver revoke, so the kernel
+    //    refuses before any frame or PTE is published, and the refusal is the
+    //    alloc-safe sentinel (`Ok(0)`) — never a plausible address.
     let grant_size = 4096;
-    let reg_id = sys_grant_register(grant_size).expect("GrantRegister failed in Tier 2 domain");
-    let test_payload = b"Tier 2 Domain Grant Zero-Copy Buffer Content!";
-    let copied_in =
-        sys_grant_copy_from_slice(reg_id, test_payload).expect("sys_grant_copy_from_slice failed");
-    assert_eq!(copied_in, test_payload.len());
-
-    let mut read_buf = [0u8; 45];
-    let copied_out =
-        sys_grant_copy_to_slice(reg_id, &mut read_buf).expect("sys_grant_copy_to_slice failed");
-    assert_eq!(copied_out, test_payload.len());
-    assert_eq!(&read_buf, test_payload);
-    println(
-        "[tier2-smoke] Grant allocation, private SATP mapping, and RW verified in Tier 2 domain",
+    assert!(
+        sys_grant_register(grant_size).is_none(),
+        "domain GrantRegister must be denied fail-closed, not published"
     );
-
-    let unregistered = sys_grant_unregister(reg_id);
-    assert!(unregistered, "GrantUnregister failed in Tier 2 domain");
-    println("[tier2-smoke] Grant unregister and unmapping verified in Tier 2 domain");
+    println("[tier2-smoke] Grant registration denied fail-closed (phase-01 gate)");
 
     println("[tier2-smoke] PASS: All Tier 2 runtime invariants verified successfully!");
     sys_exit(0);

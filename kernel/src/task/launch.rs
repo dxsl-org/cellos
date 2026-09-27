@@ -104,6 +104,15 @@ pub fn publish_prepared(
     prepared: super::PreparedElfTask,
     mut state: TaskLaunchState,
 ) -> Result<(usize, usize), ViError> {
+    // Phase-01 containment preflight (ADR-0019 §2.1): a live grant record that
+    // names a private-root owner or receiver cannot be drained by this kernel, so
+    // a domain-class publication is refused while one exists. This runs before the
+    // scheduler lock is taken because the grant tables are only ever acquired in
+    // the documented `*_GRANT_TABLE → SCHEDULER` order.
+    #[cfg(feature = "native-domains")]
+    if state.is_domain {
+        crate::loader::domain_admission::refuse_while_domain_grant_live()?;
+    }
     let mut scheduler = super::SCHEDULER.lock();
     let sched = scheduler.as_mut().ok_or(ViError::Unknown)?;
     let tid = sched.next_task_id;

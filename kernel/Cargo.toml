@@ -109,6 +109,12 @@ board-rpi4 = ["hal/board-rpi4"]
 board-rpi3 = ["hal/board-rpi3"]
 # Enables the unpublished RV64 private-root substrate. Admission remains policy-off.
 native-domains = []
+# Phase-07 gate for warm snapshot capture/restore. The writer/reader format,
+# all-hart quiescence and restart story are unqualified today, so this stays out
+# of every default feature set: `serialize_snapshot` refuses before its first
+# write and `try_restore` clears a stale header and cold-boots. Phase 07 turns
+# this on only for a board/profile with a real save→reset→restore witness.
+snapshot-qualified = []
 # Enable in-kernel test harnesses (smoke tests, integration probes). Never in release builds.
 test-hooks = ["dep:qemu-exit", "hal/test-hooks"]
 # Terminal x86 per-vector IDT CPL3 oracle; never enable in generic test images.

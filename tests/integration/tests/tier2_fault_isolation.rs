@@ -265,25 +265,16 @@ fn tier2_positive_execution_runs_cleanly() {
             )
         });
 
-    // 3. Verify zero-copy grant allocation, private SATP mapping, write, read, and unmapping
+    // 3. Verify the fail-closed grant containment (phase 01): a private-root cell
+    // must not be able to publish a zero-copy grant before the domain grant
+    // lifecycle is qualified.
     qemu.wait_for(
-        "[tier2-smoke] Grant allocation, private SATP mapping, and RW verified in Tier 2 domain",
+        "[tier2-smoke] Grant registration denied fail-closed (phase-01 gate)",
         FAULT_TIMEOUT,
     )
     .unwrap_or_else(|e| {
         panic!(
-            "tier2-smoke grant allocation/mapping failed: {e}\n--- output ---\n{}",
-            qemu.dump()
-        )
-    });
-
-    qemu.wait_for(
-        "[tier2-smoke] Grant unregister and unmapping verified in Tier 2 domain",
-        FAULT_TIMEOUT,
-    )
-    .unwrap_or_else(|e| {
-        panic!(
-            "tier2-smoke grant unregister/unmapping failed: {e}\n--- output ---\n{}",
+            "tier2-smoke did not observe the fail-closed domain grant denial: {e}\n--- output ---\n{}",
             qemu.dump()
         )
     });

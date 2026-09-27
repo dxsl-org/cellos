@@ -39,6 +39,20 @@ pub const SNAPSHOT_FORMAT_VERSION: u16 = 1;
 /// Magic bytes identifying a ViCell snapshot image (little-endian `VICU`).
 pub const SNAPSHOT_MAGIC: u32 = 0x5543_4956; // 'U','C','I','V' as bytes on disk
 
+/// Qualification gate for warm snapshot capture and restore.
+///
+/// Phase-01 containment: the writer hashes payload bytes only while the reader
+/// hashes header + payload, the reader reconstructs a dense
+/// `pa_base + index * 4096` run from a write that skips free frames, there is no
+/// all-hart quiescence check, and the restore replays frames over its own live
+/// stack and kernel globals. Until phase 07 proves save → reset → restore →
+/// resume on a block-capable board with an explicit per-run address inventory and
+/// a durable commit/consume ordering, the path stays disabled in every shipping
+/// image: a capture cannot touch the snapshot region and a restore cannot mutate
+/// RAM. `snapshot-qualified` is the single build gate phase 07 turns on for that
+/// verified profile.
+pub const QUALIFICATION_ENABLED: bool = cfg!(feature = "snapshot-qualified");
+
 /// Git SHA short hash baked in at compile time.  Snapshot is invalid if this
 /// changes (i.e., the kernel was recompiled since the snapshot was taken).
 const KERNEL_GIT_SHA: &str = env!("VERGEN_GIT_SHA");
@@ -89,6 +103,12 @@ const _: () = assert!(core::mem::size_of::<SnapshotHeader>() == 40);
 /// Must be called with all cells quiesced (at a `yield_cpu()` point) so no
 /// task stack is mid-function-call when the memory image is frozen.
 pub fn serialize_snapshot() -> Result<u32, &'static str> {
+    if !QUALIFICATION_ENABLED {
+        return Err(
+            "capture unqualified (phase-01 gate: no all-hart quiescence, writer/reader format \
+             mismatch)",
+        );
+    }
     #[cfg(target_arch = "riscv64")]
     let t0 = hal::common::timer::read_mtime();
     #[cfg(not(target_arch = "riscv64"))]
@@ -193,6 +213,13 @@ pub fn serialize_snapshot() -> Result<u32, &'static str> {
 /// and BEFORE `EarlyLoader::probe()` or `task::init()` (cells are about to be
 /// replaced by the restored task set).
 pub fn try_restore() -> bool {
+    if !QUALIFICATION_ENABLED {
+        // Cold boot only. An image that predates this gate would still replay a
+        // header it finds here, so clear one if present — one header sector,
+        // before any other snapshot I/O, never a payload write.
+        invalidate_stale_snapshot_header();
+        return false;
+    }
     // Read snapshot header.
     let mut header_sector = [0u8; 512];
     if block::read_sector(SNAPSHOT_BASE_LBA, &mut header_sector).is_err() {
@@ -377,6 +404,29 @@ pub fn invalidate_snapshot() {
     let buf = [0u8; 512];
     let _ = block::write_sector(SNAPSHOT_BASE_LBA, &buf);
     log::info!("[snapshot] snapshot invalidated");
+}
+
+/// Clear a snapshot header written by an image that predates the qualification
+/// gate, so that image cannot replay it after a downgrade.
+///
+/// Reads the header sector first and writes only when it carries the snapshot
+/// magic, so a cold boot on a board without a snapshot region performs no stray
+/// write. Failures are non-fatal: the gate already refuses every read and write
+/// of the region on this image.
+fn invalidate_stale_snapshot_header() {
+    let mut sector = [0u8; 512];
+    if block::read_sector(SNAPSHOT_BASE_LBA, &mut sector).is_err() {
+        return;
+    }
+    let magic = u32::from_le_bytes([sector[0], sector[1], sector[2], sector[3]]);
+    if magic != SNAPSHOT_MAGIC {
+        return;
+    }
+    invalidate_snapshot();
+    log::warn!(
+        "[snapshot] stale header invalidated: capture/restore disabled by the phase-01 \
+         qualification gate (feature `snapshot-qualified`)"
+    );
 }
 
 // ── Header validation (pure, no VirtIO) ──────────────────────────────────────

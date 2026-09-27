@@ -1,9 +1,14 @@
 # Spec 22 — Tier 2 Native Domain Cell Implementation Gate (ADR)
 
-> **Status**: Implemented & Verified (ADR-0015 Phase 02; Multi-Arch extended 2026-09-19).
-> Tier 2 Paged Domain Engine is active in production under the `native-domains` feature;
-> verified by negative hardware Page Fault containment test suite and positive execution suite
-> across RISC-V 64, AArch64, and x86_64 (`tests/integration/tests/tier2_fault_isolation.rs`).
+> **Status**: Implemented; **domain grants, non-RV64 admission and warm snapshot are
+> gated off** (phase-01 containment, 2026-09-27).
+> RV64 Tier-2 launch, copied IPC and hardware Page-Fault containment are verified
+> (`tests/integration/tests/tier2_fault_isolation.rs`, `scripts/qemu-native-domain-test.sh`
+> including the new `--case grant-gate` witness). Since 2026-09-27 the kernel refuses every
+> `Grant*` call that names a private-root task (§2.5), keeps AArch64/x86_64 Tier-2 admission
+> closed until the ordered context switch is proven on one CPU (§2.2), and refuses warm
+> snapshot capture/restore until its format, quiescence and restart story are qualified.
+> §2.2's multi-arch rows are feasibility statements, not enablement claims.
 ## 1. Context and current truth
 
 Tier 1 Cells share the SAS page-table view and rely on Rust LBI. The native loader has
@@ -138,6 +143,20 @@ return success. Owner/grantee death follows the same protocol before frames are 
 Pinned DMA frames remain quarantined until the device/IOMMU teardown acknowledgement; CPU
 revoke does not authorize recycling DMA-visible memory. The initial implementation should
 prefer copied IPC and defer grants until this state machine and its race tests pass.
+
+**Containment gate (2026-09-27, phase 01).** That state machine is not implemented for the
+public ABI yet, so the kernel refuses every grant entry point that names a private-root task
+— `GrantAlloc`, `GrantRegister`, `GrantShare`, `GrantSlice`, `GrantFree`, `GrantUnregister`,
+`GrantDma` — at the common syscall gate, before any table row, PTE, pin or frame exists. The
+refusal uses the per-operation alloc-safe sentinel: `GrantAlloc`/`GrantRegister` return `0`,
+`GrantSlice` returns `usize::MAX`, and share/free/unregister return the established nonzero
+failure — `libs/ostd/src/syscall.rs` decodes *any* nonzero `GrantAlloc`/`GrantRegister`
+return as a grant id, so a generic error sentinel would be published as a grant. SAS→SAS
+Tier-1 grants and copied IPC keep their exact behaviour. A live grant record naming a
+private-root owner or receiver — an image update over a system that already granted one —
+blocks domain admission until it is drained. Tier-2 admission itself stays closed on AArch64
+and x86_64 until §2.2's ordered switch completion is proven on one CPU; RV64 keeps launch,
+copied IPC and fault containment.
 
 ### 2.6 MMIO, DMA, and IOMMU confinement
 

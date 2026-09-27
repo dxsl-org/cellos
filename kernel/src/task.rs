@@ -31,6 +31,13 @@ mod elf_prepare;
 pub mod fstat_selftest;
 /// Futex wait queues — wait-on-address for cell threads (ADR-0018 §2.1).
 pub(crate) mod futex;
+/// Phase-01 containment witness for domain-backed zero-copy grants.
+#[cfg(all(
+    feature = "native-domains",
+    feature = "test-hooks",
+    target_arch = "riscv64"
+))]
+pub(crate) mod grant_gate_selftest;
 pub mod grant_reclaim_selftest;
 pub mod hart_local;
 pub mod manifest_v2_selftest;

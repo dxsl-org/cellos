@@ -1030,6 +1030,14 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     {
         if crate::loader::domain_admission::enable_for_boot() {
             log_info("Tier 2 admission: ENABLED (development profile)");
+        } else {
+            // Phase-01: an unqualified raw switch ordering keeps the development
+            // profile closed, and the posture has to be visible — the alternative
+            // is a silently disabled feature that reads as verified.
+            log_info(
+                "Tier 2 admission: DISABLED (development profile, phase-02 switch-ordering gate) \
+                 — domain-class artifacts are denied",
+            );
         }
     }
     #[cfg(all(
@@ -1071,6 +1079,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         crate::loader::domain_admission::run_selftest();
         task::futex::run_selftest();
         task::domain_grant::run_selftest();
+        task::grant_gate_selftest::run_primary();
     }
 
     // Page-table teardown primitives behind runtime cap revoke (`.agents/260712-1901`
