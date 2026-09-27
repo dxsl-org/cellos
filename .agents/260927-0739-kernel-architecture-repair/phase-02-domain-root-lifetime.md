@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: "Repair PTE lifetime and private-root switch completion"
-status: pending
+status: in-progress
 priority: P1
 effort: "split by architecture; 2–3 reviewable changes"
 dependencies: [1]
@@ -112,33 +112,155 @@ remain riscv64-gated, so slice 3 still needs an AArch64 one-PE fixture that crea
 roots and switches between them before the ordered-switch change can be executed rather than
 merely compiled.
 
+### Slice 3 — incoming completion hook and tag-targeted frame release (2026-09-28) — done
+
+Non-RV64 switch completion is now an explicit hook, not an inference:
+
+- `kernel/src/task.rs:918-928` (`complete_incoming_switch`) runs in the **incoming**
+  context after `Context::switch_with_root` returns: it consumes the plan's
+  `safe_root_pending` flag, acknowledges the safe root (clearing the hart's domain
+  identity), releases the displaced root's execution pin, and resets the user-copy
+  guard. Inferring the ack from `current_domain() == 0` could not work — a safe-root
+  transition does not clear the id until `acknowledge_safe_root` runs, so the
+  inference was false exactly when it was needed.
+- Witness, AArch64 one-PE lane (`scripts/qemu-aarch64-test-hooks.sh`, exit 0, all
+  markers, `[vfs-test] Results: 96 PASS, 0 FAIL`):
+  `S22-AARCH64-ROOT-SWITCH: PASS b=0x2000040cf1000 c=0x3000040d04000 back=0x40802000
+  outgoing_stack_shared=false safe_root_consumed=true` — the fixture stages the
+  safe-root completion the way `SwitchPlan::root_switch` does for a transition to the
+  kernel root, and the real incoming path consumes it and clears the identity.
+- Frame release is now **tag-targeted and acknowledged on every architecture**:
+  `unmap_private_page`/`unmap_grant_page` reserve the VA in
+  `AddressSpace::invalidation_pending`, flush the **root's own tag** (not the currently
+  active kernel root — a private root is normally inactive on the caller), and release
+  the leaf and pruned tables only after `flush_asid_and_await` succeeds. A missing ack
+  quarantines them, keeps the VA reserved and returns
+  `AddressSpaceError::InvalidationUnacknowledged`. `AddressSpace::drop` releases the tag
+  before any frame and quarantines root, tables and leaves if that release is
+  unacknowledged (`AsidLease::release`), so a retired root cannot return frames while a
+  hart can still resolve them. Host lane 145/145; AArch64 lane exit 0.
+- x86 PCID is gated on a **correct** INVPCID probe: `CPUID.07H:EBX[10]`, not
+  `CPUID.01H:ECX[12]` (which is FMA — the previous probe therefore reported INVPCID
+  present on almost every CPU, including ones without it). A nonzero PCID additionally
+  requires INVPCID, because a CR3 reload only invalidates the current tag; so
+  `init_pcid()` keeps tag 0 unless both are present, refuses to set `CR4.PCIDE` when the
+  boot CR3 has nonzero low bits, and clears a firmware-set PCIDE after selecting tag 0.
+  `flush_asid` uses type-1 INVPCID for the named context and `flush_all` uses type 3.
+  Witnesses on the current tree: TCG `X86_EXPECT_PCID=0` → shell +
+  `PCID disabled (CPUID pcid=false invpcid=false, CR4.PCIDE=0, CR3=0x59000 …)`; KVM
+  `sg kvm -c 'X86_ACCEL=kvm X86_CPU_MODEL=host X86_EXPECT_PCID=1 …'` → shell +
+  `PCID enabled (CPUID pcid=true invpcid=true, CR4.PCIDE=1, CR3=0x59000)`;
+  `cargo test -p hal-x86 --target x86_64-unknown-linux-gnu` 12/12, including the three
+  new policy tests over `cr3_for`, `pcid_enable_allowed`, `invpcid_descriptor` and the
+  leaf-7 probe.
+
+### Finding — AArch64 private-root leaves are global, so ASID-targeted invalidation cannot reach them
+
+`hal/arch/arm/src/aarch64/paging.rs:182` composes every leaf as
+`phys | PTE_VALID | PTE_PAGE | PTE_AF | SH | attr` and never sets `PTE_nG` (bit 11).
+Two consequences, both material for private roots:
+
+1. `tlbi aside1is` — the ASID-targeted invalidation at
+   `hal/arch/arm/src/aarch64/domain.rs:71` — does not invalidate global entries, so the
+   tag-release contract cannot be met by ASID invalidation alone. The release path
+   therefore uses `tlbi vmalle1is` (`flush_all`) on AArch64 for now; that is correct for
+   tag recycling (it clears global entries too) and is why `flush_asid_and_await` is
+   architecture-branched in `kernel/src/memory/tlb_shootdown.rs`.
+2. Global entries are **root-independent**: a translation installed for one private root
+   stays usable after `TTBR0_EL1` is reprogrammed to a different root, so a stale entry of
+   one domain can resolve inside another. Flushing at release does not remove that window
+   while both roots are live.
+
+Required before AArch64 Tier-2 admission is reopened: mark private-root leaves non-global
+(a `PageFlags` bit translated to `PTE_nG` for the domain builder's mappings, keeping the
+shared kernel ranges global) so targeted `aside1is` is sufficient, then re-run this
+phase's witnesses. This is the concrete blocker behind `switch_ordering_qualified()`
+returning false off RV64 (`kernel/src/loader/domain_admission.rs:107`).
+
 ### Slices still open (gates stay closed)
 
-3. **Non-RV64 safe-root switch ordering** — save the outgoing context before activating the
-   incoming root, add the incoming completion hook (generation-tagged ack, pin and
-   user-copy-guard reset) and audit trap/syscall root entry/exit. Admission stays closed on
-   AArch64/x86_64 until this is proven on one CPU; SMP additionally needs per-CPU
-   `hart_local`, IPI and remote ack (`task/hart_local.rs` hard-codes slot 0 off RV64).
-4. **x86 PCID/INVPCID** — CPUID/`CR4.PCIDE` gating, 12-bit tag programming, `INVPCID`
-   targeted invalidation and the full-flush fallback. The shared lease already bounds values
-   to 12 bits, but the x86 backend does not yet decide at runtime whether a tag may be
-   programmed.
-
-Still unqualified after slices 1–2, and deliberately so: an invalidation *acknowledgement*
-from remote harts. RV64's `flush_range` issues the RFENCE and panics on transport failure, but
-no per-hart completion is collected, so "await target-root invalidation" is currently "the
-firmware call returned". Phase 03's revoke path needs the ack before it can call a revoke
-complete; slice 3 owns the generation-tagged acknowledgement that makes it possible.
+- **Non-RV64 Tier-2 admission stays refused.** The ordering change is structural
+  hardening, not a demonstrated fix (the A/B in `a77545341` refuted the inherited
+  premise), and while the incoming hook and the invalidation ack are now in place, two
+  blockers remain: the AArch64 global-leaf finding above, and the absence of any real
+  domain-task entry on AArch64/x86_64 (the fixtures switch raw contexts; no non-RV64
+  image has admitted a Tier-2 cell yet).
+- **x86 `INVPCID` instruction path is unexecuted**: no x86 image can admit a domain while
+  admission is closed, so only the CPUID/CR4 policy and the PCID-off/on boot paths are
+  witnessed. It becomes live with the reopening above.
+- **AArch64 `flush_all` on release is a stopgap**, not the target design — see the
+  finding above.
+- **SMP off RV64** still needs per-CPU `hart_local`, IPI and remote acknowledgement
+  (`kernel/src/task/hart_local.rs:293-356` hard-codes slot 0), so non-RV64 multi-CPU
+  admission remains a separate named blocker.
 
 ## Assumptions / risk / rollback
 - [UNVERIFIED] Non-RV64 context-switch implementation supplies a point equivalent to RV64 incoming saved-context callback; inspect assembly and prove before selecting hook placement. Rollback: disable Tier-2 admission and cold reboot; leaving a stale TLB mapping or an already recycled frame cannot be reversed by reverting binaries. Stop deployment and retire any compromised dev workload. Preserve test evidence, no production qualification from QEMU alone.
 
 ## Deviation Log
 
-- **Slices 1–2 only, plus the AArch64 execution vehicle.** Phase 02 is not complete: the tag
-  lease and the unmap invalidation order are done and witnessed; the non-RV64 switch, the
-  remote invalidation acknowledgement and the x86 PCID runtime gate are not. Their lanes stay
-  closed (AArch64/x86_64 Tier-2 admission refused).
+- **Slices 1–3 plus the x86 runtime gate are now done and witnessed; phase 02 is still not
+  complete, and its gate is still closed.** Done: the tag lease (slice 1), the unmap
+  invalidation order (slice 2), the incoming completion hook, the tag-targeted acknowledged
+  frame release and the x86 PCID/INVPCID runtime gate (slice 3, § Progress). Not done, and
+  therefore not claimed: any non-RV64 Tier-2 admission (no AArch64/x86_64 image has admitted a
+  domain task), the x86 `INVPCID` instruction path (unreachable while admission is closed), the
+  AArch64 non-global private-leaf requirement recorded above, and SMP off RV64. The admission
+  gate (`kernel/src/loader/domain_admission.rs:107`, `switch_ordering_qualified()`) therefore
+  still returns false off RV64 and the phase-01 deny sentinels stay exactly as they are.
+- **The inherited ordering premise was refuted and the change kept as hardening.** `a77545341`
+  inverted the ordering with the chain running on a stack no private root maps, and the
+  fixture still passed: on AArch64 the outgoing save writes only to the context struct (kernel
+  data, shared into every root) and reads no stack memory. The change stands as structural
+  hardening and RV64 parity — the switch owns its root transition — not as a fix for a
+  demonstrated fault. Recorded rather than quietly dropped.
+- **Finding — the awaited flush is now on every unmap, and its budget is a load limit.** The
+  RV64 2-hart multi-case boot `--harts 2 --case migration,user-copy-race,ipc-copy-race,
+  unmap-order,asid-lease` produced, inside the `user-copy-race` boot:
+  `[tlb] asid invalidation unacknowledged on hart 1 (attempt 25)` →
+  `[asid] tag 4 for domain 32 not recycled: invalidation unacknowledged (Timeout { hart: 1,
+  epoch: 372 })` → `[aspace] quarantining 1 frame(s): root teardown leaves` →
+  `S22-RV64-GRANT-REVOKE: FAIL` (`.logs/native-domain-qemu/h2-user-copy-race-p7nYhU`), while the
+  same case passes when run alone (`.logs/native-domain-qemu/h2-user-copy-race-1q7beX`). The
+  behaviour is fail-closed and correct — frames were retained, not reused — but a 25 × 200 ms
+  budget is exceeded when a remote hart sits in a long non-preemptible stretch, and every unmap
+  now pays it instead of only tag release. Phase 03's revoke must **defer** release to a reaper
+  rather than widen this bound (the comment in `kernel/src/memory/tlb_shootdown.rs` already says
+  so); until then, heavy 2-hart boots can show a red fixture marker on this path. Related risk:
+  the stack-teardown paths (`map_existing_task_stacks` rollback and `unmap_existing_task_stacks`)
+  **panic** on a missing ack instead of returning, because the stack backing belongs to the
+  caller and would be freed after an ordinary `Err`. That is fail-closed, but combined with the
+  budget above it means a long enough remote stall halts the kernel rather than failing one
+  fixture — another reason the release must become deferred.
+- **Finding — a remote hart can stop acknowledging mid-boot, and the waiter then burns the whole
+  budget on every later flush.** Reproduced on the current tree with
+  `--harts 2 --case migration,user-copy-race,ipc-copy-race,unmap-order,asid-lease`
+  (`.logs/native-domain-qemu/h2-user-copy-race-jCsMA8`): 272 successful
+  `[selftest] TLB-ACK: stage=remote-flush-completed hart=1` lines, then 267 consecutive
+  `[tlb] asid invalidation unacknowledged on hart 1 (attempt …)` warnings, including for the
+  pre-existing tag teardown (`tag 2 for domain 28 not recycled … Timeout { hart: 1, epoch: 297 }`).
+  Hart 1 stops publishing acks and never resumes, so every subsequent awaited flush pays the full
+  25 × 200 ms budget and the case fails. The ack is published in the trap path
+  (`vi_timer_tick`), which cannot run while that hart is inside a non-preemptible stretch or
+  spinning on a lock — i.e. the synchronous wait is unsound whenever the peer's progress depends
+  on the waiter. **Design consequence, required in phase 03:** release must never wait
+  synchronously from an arbitrary path; the waiter records the pending invalidation and a reaper
+  completes the release later (bounded error, frames retained, record kept `Revoking`). Widening
+  the budget is explicitly not the fix. Until that lands, the awaited flush is fail-closed but can
+  turn one stalled peer into a cascade of failed fixtures.
+- **Finding — `--harts 2 --case asid-lease` hit a pre-existing-looking panic at the trusted-init
+  publication stage**: `ATOMIC_PUBLICATION_AP-15: FAIL` →
+  `panicked at kernel/src/loader/atomic_publication_tests/cases.rs:149:5: atomic-publication
+  trusted-init success contract failed` in two of three boots in
+  `.logs/native-domain-qemu/h2-asid-lease-xoLVBw` (the third passed), with
+  `SMP-RETIREMENT: stage=rv64-switch-boundary hart=1 selected=9 executing=9` immediately before.
+  42 older logs under `.logs/native-domain-qemu/` already contain `[KERNEL PANIC]`, so this is
+  recorded as an unresolved 2-hart flake, not as a phase-02 result; attribution is open and the
+  reproducing command is named here.
+- **AArch64 tag release currently uses a full `vmalle1is` flush**, because private-root leaves
+  are global (§ Finding). This is correct for the release contract and is a stopgap for the
+  targeted design; it does not close the cross-root window while two private roots are live,
+  which is why AArch64 admission stays refused.
 - **Slice 3's prerequisite now exists.** `domain_switch_tests` was RV64-gated because nothing on
   AArch64 could execute a `SwitchPlan`; it now runs on both, with architecture-honest
   expectations, and the AArch64 test-hooks lane asserts its markers

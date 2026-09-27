@@ -1,7 +1,7 @@
 ---
 phase: 7
 title: "Implement a restorable, crash-safe kernel snapshot"
-status: pending
+status: in-progress
 priority: P1
 effort: "split into format, capture, restore, hardware qualification"
 dependencies: [3, 5, 6]
@@ -29,8 +29,92 @@ Current capture hashes frame bytes only and writes allocated frames in ascending
 - [ ] Any mid-restore read/write failure cannot resume from mixed state; unsupported/unsafe storage profile remains unavailable.
 - [ ] Snapshot authority/ABI and existing QEMU unavailable result unchanged; no claimed <100ms until measured on exact device.
 
+## Progress
+
+### Slice 1 — internal format v2, writer/reader agreement, crash-safe state machine (2026-09-28) — done (device-independent half)
+
+The old pair disagreed by construction: the writer hashed frame bytes only and wrote
+allocated frames in ascending frame index, while the reader hashed header + payload and
+reconstructed a dense `pa_base + index * 4096` run. `kernel/src/snapshot.rs` is now one
+format, one checksum definition and one order:
+
+- `SNAPSHOT_FORMAT_VERSION = 2` (`kernel/src/snapshot.rs:92`). A v1 header is rejected by the
+  version check and cold boots; there is no migration path.
+- Layout (`:286`, `:364`): `base+0` is the 512-byte header; `base+1..+1+N` is the inventory
+  `SnapshotRun { pa: u64, frame_count: u32, flags: u32 }`; then each run's frames at their own
+  physical addresses, in inventory order. The reader replays exactly `runs[*].frame_pa(i)` and
+  never reconstructs a dense run (`runs_from_frames` `:451`, `frames_in_runs` `:501`).
+- One canonical checksum: `crc32(header.canonical_bytes() || inventory || payload)` with the
+  CRC field zeroed, produced by a single shared helper (`canonical_hasher` `:405`) that both
+  sides call.
+- Explicit on-disk state machine `EMPTY → WRITING → COMMITTED → CONSUMING → CONSUMED`
+  (`:224`). Capture ordering (`:653`): WRITING header + flush (this invalidates the previous
+  image) → inventory → payload → flush → COMMITTED header + flush. Restore ordering (`:785`):
+  full validation → durable CONSUMING flush → RAM replay → CONSUMED. A reboot that sees
+  WRITING/CONSUMING/CONSUMED refuses and erases the image; a failure after replay began returns
+  `RestoreOutcome::FatalMixedRam` and the entry point resets instead of continuing a cold boot
+  on mixed RAM (`halt_mixed_ram` `:1115`).
+- Preflight (`:969`): sector size, canonical P3 partition presence, image fits the partition,
+  version/kernel identity, live RAM layout, inventory geometry — all before any RAM mutation,
+  with the inventory buffer bounded before it is allocated.
+- A test-only in-memory fake device (`mod fake` `:1186`, `#[cfg(test)]` only): volatile
+  write-back cache, per-ordinal write/read/flush fault injection, torn sectors,
+  crash-after-flush, and a sparse RAM model that records every written PA.
+
+Evidence:
+
+- `cargo test -p cellos-kernel --target x86_64-unknown-linux-gnu` → **145 passed, 0 failed**
+  (26 new snapshot tests: torn writes at every ordinal, flush and write failure, reset after
+  every flush, stale/torn header, checksum mismatch, wrong identity, wrong capacity,
+  duplicate/overlapping/descending runs, sparse round-trip, consuming/consumed refusal, fatal
+  mixed RAM, gate closed).
+- Red witness (throwaway crate `/tmp/snapshot-witness`, legacy loops transcribed from
+  `git show HEAD:kernel/src/snapshot.rs`): the new round-trip scenario against the old pair
+  fails — `[A] legacy restore outcome = Err("crc")` with an empty restored frame set; and with
+  the reader's CRC expectation forced to the writer's value the old reader reports success
+  while writing the four frames densely (`{base+0, +1, +2, +3}`) instead of
+  `{base+0, +3, +4, +10}` — `address-inventory-exact = false`.
+- Boot path unchanged with the gate closed: AArch64 test-hooks lane exit 0 with
+  `[vfs-test] Results: 96 PASS, 0 FAIL` and every `S22-AARCH64-*` marker; the x86 TCG lane
+  reaches the shell prompt.
+
+Not done, and deliberately still gated — the feature stays disabled
+(`QUALIFICATION_ENABLED = cfg!(feature = "snapshot-qualified")` is untouched, so no shipping
+image can capture or replay):
+
+- all-hart quiescence / acknowledged safe-root freeze before capture (step 3);
+- coherent staging of frame bytes under capture (COW or write protection): the format cannot
+  detect bytes that change between the read and the write;
+- closure completeness (step 2): mutable kernel-image `.data`/`.bss` roots, allocator metadata
+  and locks, page tables, task records and hart-local state are not proven to be in the
+  inventory — the reader refuses out-of-RAM/overlapping runs but cannot prove closure;
+- authenticated monotonic epoch / external freshness (step 5's second half) — needs trusted
+  persistent storage;
+- the real save → reset → restore → resume witness on a block-capable board, and the MMC
+  transport exclusion of step 3;
+- code/spec reconciliation: `docs/specs/03-runtime.md` still describes the old 40-byte
+  `system.img`/FAT16 layout and the sub-100 ms claim.
+
 ## Assumptions / risk / rollback
 - [UNVERIFIED] A block-capable board/test image and protected persistent volume are available; if not, finish format/negative tests but **leave feature disabled** and report exact physical gate, not a claimed complete warm-boot fix. Raw memory capture persists sensitive bytes; enforce storage trust/erase/retention per threat model. Rollback uses cold boot with restore disabled and snapshot area invalidated on a **throwaway** disk; prior snapshot bytes, leaked secrets or already corrupted external state cannot be undone by code rollback.
 
 ## Deviation Log
-None.
+
+- **Format half only, and the feature stays disabled.** Step 1 (internal format, canonical
+  checksum, address inventory, crash-safe state machine) and the device-independent half of
+  step 5 (fake-block roundtrip, corruption and reset matrices) are done; steps 2–4 and the
+  board witness are not. The phase-01 qualification gate is untouched, so no shipping image can
+  capture or replay a snapshot and the shell/Supervisor contract is unchanged.
+- **The red witness is a throwaway transcription, not an in-tree run.** `try_restore` is gated
+  off and the kernel block device is `NullBlock`, so the pre-fix pair cannot be driven inside
+  the kernel; the legacy writer/reader loops were transcribed from `git show
+  HEAD:kernel/src/snapshot.rs` into `/tmp/snapshot-witness` over the same fake-device model. The
+  transcribed code was checked against the committed source, and the observed failures are the
+  two defects the plan names (checksum disagreement, dense reconstruction).
+- **Lean Pass skipped deliberately.** `kernel/src/snapshot.rs` grows past the configured
+  complexity thresholds (≈2.4k insertions, single file > 200 LOC). A behavior-preserving
+  refactor of a freshly written crash-safety state machine and its 26 tests would risk the
+  exact invariants the slice exists to establish; the file is instead kept as one reviewed unit.
+- **Left to the parent / other phases:** `kernel/src/task/syscall.rs:6299-6306` still has no
+  all-hart quiescence check before capture, and `docs/specs/03-runtime.md` still carries the
+  stale format and timing claims (phase 08's documentation pass).

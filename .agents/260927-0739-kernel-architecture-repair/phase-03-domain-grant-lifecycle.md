@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "Make domain grants permission-accurate and synchronously revocable"
-status: pending
+status: in-progress
 priority: P1
 effort: "split into owner mapping, publish, revoke and death changes"
 dependencies: [2]
@@ -32,8 +32,113 @@ tier: thinking
 - [ ] After `GrantFree`, `GrantUnregister`, re-share or either peer's exit, old receiver address faults and reused frame bytes stay private even across 2 harts.
 - [ ] VFS/DMA pin and copy lease prevent premature reuse; SAS-only grant clients and normal copied IPC keep working.
 
+## Progress
+
+### Slice 0 — real two-cell public-syscall lane (2026-09-28) — done (red on the deny contract)
+
+`scripts/qemu-native-domain-test.sh --case grant-pair` now drives a **real** Tier-2 owner cell
+and receiver cell through the public syscall path — `GrantAlloc`, `GrantRegister`, `GrantSlice`,
+`GrantShare`, `GrantFree`, `GrantUnregister` — instead of the private one-page `domain_grant`
+fixture the phase file calls out as insufficient:
+
+- New cells `cells/tests/tier2-grant-owner` and `cells/tests/tier2-grant-receiver` (workspace
+  members; UNTRUSTED manifests, so `governed_spawn` classifies them as Tier-2 domains), built
+  and signed by `scripts/build-native-domain-test-ci.sh` into the lane's own throwaway image
+  (`target/native-domain-test/embedded/kernel_fs.img`, `EMBEDDED_OVERRIDE`), installed on the two
+  already-reviewed Tier-2 launch paths only.
+- The runner waits for the shell, spawns the owner, parses its
+  `S22-RV64-GRANT-PAIR-HANDOFF id=… mode=… target=…` line, spawns the receiver with that tuple,
+  and requires every deny marker verbatim; a missing marker or any `S22-RV64-…: FAIL` exits 1.
+- Red witness against the current phase-01 containment gate (`.logs/native-domain-qemu/
+  h1-grant-pair-WpVt7F`, suite `S22-RV64-QEMU-SUITE: PASS HARTS=1
+  CASES=grant-pair,grant-gate`, exit 0): `OWNER-ALLOC: DENY`, `OWNER-REGISTER: DENY`,
+  `OWNER-MAPPED: SKIP-DENIED`, `OWNER-SLICE0: DENY`, `OWNER-SHARE-RO: DENY target=0`,
+  `OWNER-FREE: DENY`, `OWNER-RESLICE: DENY`, `OWNER-UNREGISTER: DENY`,
+  `OWNER-EXIT-CLEANUP: PASS`, `RECEIVER-ALLOC: DENY`, `RECEIVER-SLICE-RO: DENY id=0`,
+  `RECEIVER-RO-WRITE: SKIP-DENIED`, `RECEIVER-RW: SKIP-DENIED`,
+  `RECEIVER-REVOKE-FAULT: SKIP-DENIED`, `RECEIVER-FRAME-REUSE: REFUSED`, both cells `PASS`.
+  Both cells are real `TaskAddressSpace::Domain` tasks (admission log
+  `[domain] admitted cell 'tier2-smoke'/'tier2-exploit' to Tier 2 Paged Domain (SATP isolation)`).
+- 1-hart regression in the same session: `admission`, `asid-lease`, `unmap-order`, `grant-revoke`,
+  `grant-gate` all PASS.
+
+**Not claimed:** the positive branches (`OWNER-MAPPED: OK`, `RECEIVER-RW: OK`,
+`RECEIVER-RO-WRITE: FAULT-EXPECTED`) are unreachable while containment denies allocation, so the
+lifecycle is unproven; no gate is lifted and no production or qualification claim is made.
+
+### Slices 1–4 — the lifecycle itself, RV64 only (2026-09-28) — implemented, with named gaps
+
+One kernel-owned record per grant (`kernel/src/task/domain_grant.rs`): owner root, owner
+range, receiver `{root: Arc<AddressSpace>, cell, generation, base, size, rights, drained}`,
+`Live → Revoking → Revoked`, plus `rights_for()` (ReadOnly → R+NX, ReadWrite → RW+NX,
+WriteOnly refused). `publish()` compares the `(cell, generation, root, rights)` tuple first and
+drains before republishing on any change, maps every page transactionally and undoes the pages
+already mapped on failure. `revoke()` is idempotent and retryable; an unacknowledged
+invalidation leaves the record `Revoking` with its frames retained.
+
+`kernel/src/task/syscall.rs` carries the record on `PageGrant`/`RegGrant` and replaces the
+blanket phase-01 deny with a capability check: `domain_grant_task(tid) && !domain_grant_capable(tid)`
+still returns the exact sentinels (`Ok(0)` / `usize::MAX` / `Err(PermissionDenied)`) for every
+shape that is not a live private root on the one architecture with a lifecycle — non-RV64,
+unknown or retired tid, and a root already dying. `GrantAlloc`/`GrantRegister` allocate
+supervisor-only, zero, and map the owner's own pages RW+NX with undo; `GrantShare` publishes
+the exact tuple and refuses WriteOnly and mixed pairs; `GrantSlice` resolves the owner's rights
+and maps the receiver transactionally, returning `usize::MAX` on every failure; `GrantFree` /
+`GrantUnregister` revoke outside every table lock, and an unacked invalidation returns the
+bounded `PermissionDenied` with the row kept `Revoking` for the retirement sweep
+(`release_deferred_domain_row`, `sweep_deferred_domain_grants`). Lock order
+`*_GRANT_TABLE → SCHEDULER → pin REGISTRY` is unchanged, and every awaited invalidation runs
+with no table lock held.
+
+Evidence (this session, on the frozen tree):
+
+| Item | Command | Result |
+|---|---|---|
+| Acceptance suite, 1 hart | `scripts/build-native-domain-test-ci.sh` then `scripts/qemu-native-domain-test.sh --harts 1 --case admission,asid-lease,unmap-order,grant-revoke,grant-gate,grant-pair` | exit 0, 6/6 PASS — `.logs/native-domain-qemu/h1-grant-pair-6kWaA7`: `S22-RV64-GRANT-PAIR-HANDOFF-OBSERVED id1=… id2=… id3=… faults=1:2:1`, terminal `S22-RV64-GRANT-PAIR-OWNER: PASS` |
+| Pair positive path | same lane | owner `ALLOC: OK`, `REGISTER: OK`, `MAPPED: OK`, `REG-MAPPED: OK`; receiver `SLICE-RO: OK (read 0xa5)`, `SLICE-RW: OK`; `RO-WRITE: FAULT-EXPECTED` and `REVOKE-FAULT`/`UNREGISTER-FAULT`/`EXIT-FAULT: FAULT-EXPECTED` each attributed to the exact revoked address by the runner's fault classifier; `FRAME-REUSE: REFUSED`; `SHARE-WO: DENY`, `SHARE-FOREIGN: DENY`, `SLICE-UNKNOWN: DENY` |
+| Boot fixtures | `grant-revoke`, `grant-gate` | `S22-RV64-GRANT-REVOKE-{OWNER-MAPPED,OWNER-SLICE,SLICE-RO,SLICE-RW,WO-REFUSED,FOREIGN-PEER,REVOKE,FRAME-REUSE,PARTIAL-MAP,DEAD-ROOT}: PASS`, `S22-RV64-GRANT-GATE-{ALLOC,REGISTER,WO,SHARE,SLICE,RETIRED,SAS,FRAMES}: PASS`, `GRANT-RECLAIM-{OWNED,RECEIVED,PINNED}: PASS` |
+| Host lane | `cargo test -p cellos-kernel --target x86_64-unknown-linux-gnu` | 145 passed / 0 failed |
+| Builds | RV64 production, RV64 `test-hooks,native-domains`, RV64 `--no-default-features`, AArch64 test-hooks, x86_64 — all with `-D warnings` | clean |
+| Non-RV64 lanes | AArch64 test-hooks lane, x86 TCG lane | AArch64 exit 0 with `[vfs-test] Results: 96 PASS, 0 FAIL` and every `S22-AARCH64-*` marker; x86 reaches the shell with `PCID disabled` |
+
+Named gaps, not claimed as done:
+
+- **2-hart shootdown of the pair path was not run** (`grant-pair` was executed at `--harts 1`).
+- **Deferred-ack tolerance is not reflected in the boot fixture.** `S22-RV64-GRANT-REVOKE-SLICE-RW`
+  /`-REVOKE` assert first-attempt completion, so on a 2-hart boot where a remote hart stops
+  acknowledging they report `FAIL` even though the lifecycle did the correct fail-closed thing
+  (frames retained, record `Revoking`, nothing widened). The planned invariant-form assertion was
+  not applied. See the phase-02 finding on the stalled-ack cascade.
+- **Same-recipient RW→RO downgrade** is exercised only indirectly (the same `publish()` tuple-change
+  path as the lane's target-change re-share); no dedicated assertion.
+- **DMA pins and the VFS lease are not exercised for domain receivers.** `GrantDma` still denies a
+  private-root caller by design, so no pin can exist on a domain grant; a VFS holder is SAS-only in
+  this tree, so the lease/reader-drain path is unreachable for a domain grant.
+- **Non-RV64 lifecycle is not implemented** — AArch64/x86_64 keep the phase-01 sentinels exactly
+  (verified by construction, not executed as a positive path).
+
 ## Assumptions / risk / rollback
 - [UNVERIFIED] Physical identity is a usable receiver VA under all supported domain layouts; verify against `USER_LIMIT` and occupied mappings before deciding whether ABI-compatible alternate VA exists. No public ABI change without the two Law-1 owner checkpoints. Rollback: phase-01 deny gate plus cold reboot; leaked contents or prior DMA writes cannot be undone. Missing remote completion blocks release; retain quarantined frames rather than treating timeout as success.
 
 ## Deviation Log
-None.
+
+- **RV64 only, and the phase is not complete.** The lifecycle is implemented and witnessed on
+  RV64 (`§ Progress`, Slices 0–1/4). The phase's own step 5 asks for per-architecture images and
+  for the positive path to be proven for the exact pair/architecture before the containment gate
+  is lifted for it; only RV64 satisfies that, so AArch64 and x86_64 keep the phase-01 sentinels.
+- **`domain_grant_records_live()` became residual-only.** A *managed* domain grant no longer
+  blocks domain admission, because the pair lane must admit the receiver while the owner's grant
+  is live. A record that no lifecycle owns (a pre-gate record) still blocks admission exactly as
+  in phase 01.
+- **WriteOnly is refused rather than widened.** `rights_for()` returns `None` for `GrantPerm::WriteOnly`
+  on a domain pair, so `GrantShare` denies it; the plan's step 1 asked for the VFS/hypervisor
+  callers that pass `WriteOnly` while reading to be migrated first — that migration was **not**
+  done, and the refusal is the conservative substitute.
+- **The boot fixture still asserts first-attempt completion.** `S22-RV64-GRANT-REVOKE-SLICE-RW`
+  and `-REVOKE` fail on a 2-hart boot where a remote hart stops acknowledging, even though the
+  lifecycle behaves correctly (fail-closed, frames retained, record `Revoking`). Recorded as a
+  named gap rather than silently re-labelled.
+- **Lean Pass skipped deliberately.** `kernel/src/task/syscall.rs` (+934/−313) and
+  `kernel/src/task/domain_grant.rs` (+598) exceed the configured complexity thresholds; a
+  behavior-preserving refactor of a fresh revoke state machine was judged riskier than the
+  duplication it would remove.
