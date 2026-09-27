@@ -42,6 +42,8 @@ pub mod audit;
 mod board;
 pub mod boot;
 pub mod cell;
+#[cfg(target_arch = "x86_64")]
+pub mod early_uart; // Allocation-free boot console (logger not live yet)
 pub mod ed25519; // Ed25519 verify (no_std) for signed operator policy (P5 spike)
 pub mod fast_ipc; // Kernel-owned fast-IPC dispatch table (canonical instance)
 pub mod fs; // Filesystem
@@ -518,6 +520,15 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         // SVM first (TCG-testable); VMX only on genuine Intel (KVM/HW lane).
         // Failure is non-fatal — the kernel runs fine without virt; the
         // HypervisorCap gate simply stays closed (has_x86_virt() == false).
+        // Root operation is optional, and nested operation is not guaranteed: a
+        // hypervisor may advertise SVM/VMX while refusing the root-operation
+        // instruction, which **faults** instead of reporting failure. Never
+        // attempt it under a hypervisor — the capability stays closed, and the
+        // boot continues (a fault here would take the whole boot down for an
+        // optional feature).
+        if cpu_features::hypervisor_present() {
+            log_info("x86 virt: hypervisor present; root operation not attempted (cap closed)");
+        } else {
         match cpu_features::x86_virt_kind() {
             Some(cpu_features::X86Virt::Svm) => {
                 let hsave_pa = {
@@ -542,6 +553,16 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
                 }
             }
             Some(cpu_features::X86Virt::Vmx) => {
+                // VMXON faults (#GP) rather than reporting failure when a
+                // precondition is unmet, so the preconditions are printed before
+                // the attempt: a fault here is otherwise unattributable.
+                crate::early_uart::text("\n[kernel] x86 virt: VMX preconditions CPUID=");
+                crate::early_uart::flag(hal::vmx::supported());
+                crate::early_uart::text(" FEATURE_CONTROL=");
+                crate::early_uart::hex(hal::vmx::feature_control() as usize);
+                crate::early_uart::text(" VMX_BASIC_revid=");
+                crate::early_uart::hex(hal::vmx::vmxon_revision() as usize);
+                crate::early_uart::text("\n");
                 let vmxon_pa = {
                     let mut guard = memory::frame::FRAME_ALLOCATOR.lock();
                     guard
@@ -566,6 +587,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
                 }
             }
             None => log_info("x86 virt: not supported by CPU; cap closed"),
+        }
         }
     }
     // Bare physical: RV32 Nano (SATP=0), x86_32 (CR0.PG=0), AArch32 (MMU off).

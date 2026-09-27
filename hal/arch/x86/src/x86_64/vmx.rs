@@ -25,6 +25,18 @@ pub fn supported() -> bool {
     leaf.ecx & (1 << 5) != 0
 }
 
+/// The live `IA32_FEATURE_CONTROL` value, for diagnostics and read-back checks.
+pub fn feature_control() -> u64 {
+    // SAFETY: the MSR exists on any CPU that advertises VMX.
+    unsafe { rdmsr(MSR_IA32_FEATURE_CONTROL) }
+}
+
+/// The VMCS/VMXON revision identifier this CPU requires (`IA32_VMX_BASIC[30:0]`).
+pub fn vmxon_revision() -> u32 {
+    // SAFETY: the MSR exists on any CPU that advertises VMX.
+    unsafe { (rdmsr(MSR_IA32_VMX_BASIC) & 0x7FFF_FFFF) as u32 }
+}
+
 /// Returns `true` if firmware locked `IA32_FEATURE_CONTROL` with VMXON
 /// disallowed — VMXON would #GP with no recovery until a BIOS change.
 pub fn disabled_by_firmware() -> bool {
@@ -72,8 +84,12 @@ pub unsafe fn enter_root(vmxon_pa: u64, vmxon_va: *mut u32) -> ViResult<()> {
         return Err(ViError::NotSupported);
     }
     // If the MSR is unlocked, lock it ourselves with VMXON-outside-SMX allowed
-    // (what BIOSes normally do; required before VMXON).
-    // SAFETY: VMX advertised; FEATURE_CONTROL exists and is unlocked (checked).
+    // (what BIOSes normally do; required before VMXON). The result is then
+    // **read back**: firmware and hypervisors are free to ignore the write, and
+    // an unverified write leaves VMXON illegal — where it faults (#GP) instead
+    // of reporting failure, taking the boot with it. A write that did not take
+    // effect closes the capability instead.
+    // SAFETY: VMX advertised; FEATURE_CONTROL exists and was unlocked.
     unsafe {
         let fc = rdmsr(MSR_IA32_FEATURE_CONTROL);
         if fc & FC_LOCK == 0 {
@@ -81,6 +97,10 @@ pub unsafe fn enter_root(vmxon_pa: u64, vmxon_va: *mut u32) -> ViResult<()> {
                 MSR_IA32_FEATURE_CONTROL,
                 fc | FC_LOCK | FC_VMXON_OUTSIDE_SMX,
             );
+            let after = rdmsr(MSR_IA32_FEATURE_CONTROL);
+            if after & FC_LOCK == 0 || after & FC_VMXON_OUTSIDE_SMX == 0 {
+                return Err(ViError::NotSupported);
+            }
         }
     }
     // Stamp the revision ID (IA32_VMX_BASIC[30:0]) into the region's first dword.

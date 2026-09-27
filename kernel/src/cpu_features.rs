@@ -58,6 +58,17 @@ pub(crate) fn detect(dtb: usize) {
     }
 }
 
+/// Is this kernel running under a hypervisor? (`CPUID.1:ECX[31]`)
+///
+/// Nested SVM/VMX is not guaranteed even when the vendor bits are advertised:
+/// `VMXON` under a hypervisor that does not grant nested operation **faults**
+/// (`#GP`) rather than reporting failure, and root operation is an optional
+/// capability. The boot path consults this before attempting it.
+#[cfg(target_arch = "x86_64")]
+pub(crate) fn hypervisor_present() -> bool {
+    core::arch::x86_64::__cpuid(1).ecx & (1 << 31) != 0
+}
+
 /// The x86 virt vendor CPUID advertised, if any.  `None` before `detect()`.
 #[cfg(target_arch = "x86_64")]
 pub(crate) fn x86_virt_kind() -> Option<X86Virt> {

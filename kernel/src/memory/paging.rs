@@ -652,34 +652,7 @@ pub unsafe fn activate_paging(root_phys: PhysAddr) {
 /// policy produced are visible, not inferred.
 #[cfg(target_arch = "x86_64")]
 fn emit_pcid_decision() {
-    fn put(byte: u8) {
-        hal::uart_16550::putchar(byte);
-    }
-    fn text(s: &str) {
-        for byte in s.bytes() {
-            put(byte);
-        }
-    }
-    fn flag(value: bool) {
-        text(if value { "true" } else { "false" });
-    }
-    fn hex(value: usize) {
-        text("0x");
-        let mut started = false;
-        for nibble_index in (0..(core::mem::size_of::<usize>() * 2)).rev() {
-            let nibble = ((value >> (nibble_index * 4)) & 0xf) as u8;
-            if nibble != 0 {
-                started = true;
-            }
-            if started || nibble_index == 0 {
-                put(if nibble < 10 {
-                    b'0' + nibble
-                } else {
-                    b'a' + nibble - 10
-                });
-            }
-        }
-    }
+    use crate::early_uart::{flag, hex, put, text};
 
     let usable = hal::domain::pcid_usable();
     text("\n[kernel] x86_64 paging: PCID ");
