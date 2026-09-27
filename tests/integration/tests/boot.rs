@@ -18,6 +18,15 @@ use vicell_integration_tests::{
 const BOOT_TIMEOUT: u64 = 40;
 /// Timeout for individual shell command round-trips after boot.
 const CMD_TIMEOUT: u64 = 10;
+/// Timeout for a network leg that leaves the guest (SLIRP round trip).
+///
+/// The other network witnesses in this file already wait 30-40 s for their
+/// round trips; the posix shim legs were waiting `CMD_TIMEOUT` (10 s) for a
+/// resolve-then-connect-then-echo sequence over the same SLIRP path. Measured
+/// 2026-09-27 on an otherwise idle workstation: run 1 passed in 446 s and run 2
+/// missed `POSIX-DNS: OK` by that 10 s window in 450 s of suite time. The budget
+/// now matches the work the leg actually does.
+const NETWORK_LEG_TIMEOUT: u64 = 30;
 
 /// Repo root = tests/integration/.. /..
 fn repo_root() -> PathBuf {
@@ -2389,7 +2398,7 @@ fn posix_shim_net() {
         .unwrap_or_else(|e| panic!("DHCP failed: {e}\n{}", qemu.dump()));
     std::thread::sleep(Duration::from_millis(500));
     qemu.send_line("posix-shim-test");
-    qemu.wait_for("POSIX-NET: OK", CMD_TIMEOUT)
+    qemu.wait_for("POSIX-NET: OK", NETWORK_LEG_TIMEOUT)
         .unwrap_or_else(|e| {
             panic!(
                 "posix net shim failed: {e}\n--- output ---\n{}",
@@ -2398,7 +2407,7 @@ fn posix_shim_net() {
         });
     // The gethostbyname leg runs right after the literal-address leg and reuses
     // the same echo server; its marker is the C-ABI side of the service resolver.
-    qemu.wait_for("POSIX-DNS: OK", CMD_TIMEOUT)
+    qemu.wait_for("POSIX-DNS: OK", NETWORK_LEG_TIMEOUT)
         .unwrap_or_else(|e| {
             panic!(
                 "posix gethostbyname shim failed: {e}\n--- output ---\n{}",

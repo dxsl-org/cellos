@@ -1316,6 +1316,18 @@ jobs:
   # evidence. Hosted Ubuntu 24.04 run 33486590595:1 passed all 54 allowlisted
   # serially and uploaded software-evidence-33486590595-1. Any NEW test remains
   # excluded until it passes 2/2 consecutive full runs; never retry to green.
+  # UPDATE (2026-09-27): `network_reaches_the_internet_by_name` met that rule on
+  # two consecutive full local runs of this same allowlisted list plus itself
+  # (57 passed / 0 failed, 441 s and ~440 s serial), and both runs really ran the
+  # test - the SKIP line it prints when the host cannot resolve example.com:80
+  # never appeared. The first attempt at that pair is what exposed the neighbour:
+  # `posix_shim_net` was waiting CMD_TIMEOUT (10 s) for a SLIRP round trip and
+  # missed it in run 2, so its two network legs now use the 30 s budget the rest
+  # of this file's network waits already use. Hosted runners have outbound
+  # internet, so the test executes there; if one ever cannot reach it, the test
+  # reports its SKIP loudly and the other 56 still run. It is the only gate that
+  # exercises DNS + HTTP + a file download from the guest over the real internet
+  # rather than SLIRP's host mock.
   boot-suite:
     name: Network Data-Path Integration (riscv64)
     outputs:
@@ -1466,6 +1478,7 @@ jobs:
             hot_migration_state_transfer_works gpu_framebuffer_initialises \
             network_dhcp_acquires_ip network_tcp_send_recv network_curl_http_get \
             network_tcp_listen_accept network_resolve_answers_hostname_through_the_service \
+            network_reaches_the_internet_by_name \
             vfs_write_echo_redirect vfs_fat16_write_read vfs_fat16_reboot_persistence \
             vfs_write_large_content vfs_fat16_unlink vfs_fat16_subdir \
             block_io_denied_non_vfs vfs_fat16_subdir_persistence vfs_fat16_recursive_rmdir \
