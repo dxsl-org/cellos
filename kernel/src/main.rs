@@ -576,11 +576,14 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         let allocator = allocator_guard
             .as_mut()
             .expect("Frame allocator not initialized");
-        let start = allocator.allocate_frame().expect("OOM: Heap start");
-        for _ in 1..HEAP_FRAMES {
-            allocator.allocate_frame().expect("OOM: Heap continuation");
-        }
-        start
+        // One contiguous reservation: the heap below is initialized over
+        // `HEAP_FRAMES * 4096` bytes starting at this frame, so a scattered
+        // allocation would write over frames this kernel does not own. Refusing
+        // here is the only safe outcome — never a smaller or fragmented heap.
+        memory::frame::reserve_contiguous_run(allocator, HEAP_FRAMES).expect(
+            "OOM: no contiguous 4 MiB run for the boot heap — refusing to boot with a \
+             fragmented heap",
+        )
     };
     let heap_size = HEAP_FRAMES * 4096;
     // On x86_64, phys_to_virt adds HHDM offset (Limine maps RAM at HHDM+phys).

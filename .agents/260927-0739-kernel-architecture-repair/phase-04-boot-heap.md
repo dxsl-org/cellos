@@ -22,11 +22,47 @@ tier: medium
 3. Run fresh RV64, AArch64 and x86 boot-to-shell smoke on normal and fragmented boot maps (emulated map fixture as needed). Verify adjacent frame addresses and heap length via a test-only readout, not a textual assertion on source code.
 
 ## Success criteria
-- [ ] Heap span is exactly a reserved consecutive 4 MiB run; fragmented map without a run fails before `init_heap` without corrupting unrelated memory.
-- [ ] All supported paged targets boot normal image; heap accounting and frame total stay exact.
+- [x] Heap span is exactly a reserved consecutive 4 MiB run; fragmented map without a run fails before `init_heap` without corrupting unrelated memory.
+- [x] All supported paged targets boot normal image; heap accounting and frame total stay exact. *(RV64 and AArch64 verified; the x86_64 lane is unavailable here — see Deviation Log.)*
+
+## Progress
+
+### Slice 1 — the boot heap is one reserved run (2026-09-27) — done
+
+`main.rs` reserved the 4 MiB heap by calling `allocate_frame()` 1,024 times and then
+initializing the heap at the *first* frame's address as if all of them were adjacent. That
+only holds while the allocator's next-fit cursor walks free memory linearly: on a fragmented
+map the reservation spans frames the kernel does not own, and `init_heap` then writes a 4 MiB
+heap over them.
+
+- `memory::frame::reserve_contiguous_run(allocator, frames)` is the boot path now — one
+  `allocate_contiguous` transaction, so either the whole run is reserved and marked, or
+  nothing is marked at all.
+- `main.rs` calls it for `HEAP_FRAMES` and panics with an explicit message when no run exists,
+  **before** `init_heap`: a smaller or scattered heap is never a fallback.
+- Host tests (`cargo test -p cellos-kernel --target x86_64-unknown-linux-gnu`): a map with
+  more free frames than the run needs but no run at all (every 100th frame taken) must either
+  reserve exactly the contiguous span or mark nothing — red before the fix at frame 50, where
+  the old body's scattered reservation covered a frame that was already taken; and a run after
+  a 64-frame gap is reserved whole from the first free frame with exact accounting.
+
+Verified: host lane 113 passed / 0 failed; RV64 test-hooks boot (`admission`, `asid-lease`)
+green; AArch64 test-hooks boot reaches `[vfs-test] Results: 96 PASS, 0 FAIL` and exits cleanly
+(the lane's `admission-core` marker is red for a pre-existing quota interaction documented in
+`phase-02-domain-root-lifetime.md` § Progress — it is not a boot failure and not caused by this
+change); RV64 production `launch-profile` green. The x86_64 boot smoke is not runnable in this
+environment (no Limine ISO tooling), so that target's lane stays unexecuted rather than claimed.
 
 ## Assumptions / risk / rollback
 - [UNVERIFIED] Boot allocator may have other early frame consumers before heap creation; inspect the 570-line boot ordering and inject a fragmented bitmap. Rollback: restore previous image only if its boot memory map is proven contiguous, otherwise stop boot; an overwritten frame cannot be restored by image rollback. Heap perf improvement is not claimed until measured.
 
 ## Deviation Log
-None.
+
+- **Fragmented map proved on the host, not in a boot image.** The plan allows "an emulated map
+  fixture as needed": the reservation contract (exactly the run, or nothing marked) is proved
+  by the host tests, and the boot path itself is proved on the two runnable targets. A boot
+  image with a deliberately fragmented firmware map would need its own lane and is not claimed.
+- **x86_64 boot smoke not run** (no Limine ISO tooling in this environment). Its heap path is
+  the same `reserve_contiguous_run` call, but that is an argument, not a witness.
+- **Subagent delegation remains unavailable** (Codex provider quota), so this slice's review
+  was a session self-review.

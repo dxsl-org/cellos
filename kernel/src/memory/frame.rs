@@ -397,9 +397,22 @@ impl Drop for OwnedFrame {
     }
 }
 
+/// Reserve the boot heap as **one contiguous run** of `frames` 4 KiB frames.
+///
+/// The heap is initialized at the first frame's physical address and covers
+/// `frames * 4096` bytes, so the frames must actually be adjacent. Allocating them
+/// one at a time and trusting the allocator's next-fit cursor only works while the
+/// free frames happen to be linear: on a fragmented map it reserves scattered
+/// frames and then writes a heap over memory it does not own. `None` means no run of
+/// that length exists, and the caller must fail boot rather than continue with a
+/// smaller or scattered heap.
+pub fn reserve_contiguous_run(allocator: &mut FrameAllocator, frames: usize) -> Option<PhysAddr> {
+    allocator.allocate_contiguous(frames)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{FrameAllocator, PAGE_SIZE};
+    use super::{reserve_contiguous_run, FrameAllocator, PAGE_SIZE};
 
     fn allocator(total_frames: usize) -> FrameAllocator {
         let bitmap = alloc::boxed::Box::leak(
@@ -433,6 +446,71 @@ mod tests {
         allocator.deallocate_frame(frame);
         assert_eq!(allocator.used_frames(), 0, "double free must not underflow");
         assert_eq!(allocator.total_frames(), allocator.free_frames());
+    }
+
+    #[test]
+    fn boot_heap_run_must_be_contiguous_or_refused() {
+        // Plenty of free frames, but no 1,024-frame run: every 100th frame is taken.
+        let mut allocator = allocator(2_048);
+        for hole in (50..2_048).step_by(100) {
+            allocator.mark_range_used(hole, 1);
+        }
+        let before = allocator.used_frames();
+        let marked_before: alloc::vec::Vec<bool> =
+            (0..2_048).map(|i| allocator.is_frame_allocated(i)).collect();
+        assert!(
+            allocator.free_frames() > 1_024,
+            "fixture must leave more free frames than the run needs"
+        );
+
+        match reserve_contiguous_run(&mut allocator, 1_024) {
+            Some(start) => {
+                // The heap is initialized over `start .. start + 1024`, so the
+                // reservation must allocate exactly that span — not the same number
+                // of scattered frames that happen to cover it.
+                let first = ((start - PAGE_SIZE) / PAGE_SIZE) as usize;
+                for index in 0..2_048 {
+                    let newly_marked = !marked_before[index] && allocator.is_frame_allocated(index);
+                    let inside_run = index >= first && index < first + 1_024;
+                    assert_eq!(
+                        newly_marked, inside_run,
+                        "frame {index}: the reservation must allocate exactly the run \
+                         {first}..{}",
+                        first + 1_024
+                    );
+                }
+                assert_eq!(allocator.used_frames(), before + 1_024);
+            }
+            None => assert_eq!(
+                allocator.used_frames(),
+                before,
+                "a refused heap reservation must not mark any frame"
+            ),
+        }
+    }
+
+    #[test]
+    fn boot_heap_run_after_a_gap_is_reserved_whole() {
+        let mut allocator = allocator(2_048);
+        allocator.mark_range_used(0, 64);
+        let before = allocator.used_frames();
+        let expected_first = (0..2_048)
+            .find(|index| !allocator.is_frame_allocated(*index))
+            .expect("the map has free frames");
+
+        let start = reserve_contiguous_run(&mut allocator, 1_024).expect("a 1,024-frame run exists");
+        assert_eq!(
+            start,
+            PAGE_SIZE * (expected_first + 1),
+            "the run starts at the first free frame"
+        );
+        for index in expected_first..expected_first + 1_024 {
+            assert!(
+                allocator.is_frame_allocated(index),
+                "frame {index} must be part of the reserved run"
+            );
+        }
+        assert_eq!(allocator.used_frames(), before + 1_024);
     }
 
     #[test]

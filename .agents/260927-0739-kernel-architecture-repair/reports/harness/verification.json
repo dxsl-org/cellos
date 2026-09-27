@@ -83,6 +83,20 @@
       "exitCode": 0,
       "timestamp": "2026-09-27T11:39:00+07:00",
       "summary": "Phase 06: S22-RV64-RT-WAKE PASS harts=2 in h2-rt-wake-jDuHmU — the sender lands on hart 1 (the RT hart) with exactly one pended preemption for that hart; migration and ipc-copy-race PASS in the same image. Red with the consume wake reverted (h2-rt-wake-xiIlSU: pended=false, target_hart_decides=true) and with both hunks reverted (h2-rt-wake-3qm6mA: pended=false, target_hart_decides=false)."
+    },
+    {
+      "command": "cargo test -p cellos-kernel --target x86_64-unknown-linux-gnu",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-09-27T11:57:00+07:00",
+      "summary": "Phase 04: 113 passed, 0 failed. The new boot-heap tests fail against the old per-frame reservation (frame 50: a scattered reservation covering an already-taken frame) and pass against reserve_contiguous_run."
+    },
+    {
+      "command": "scripts/qemu-native-domain-test.sh --harts 1 --case admission,asid-lease; scripts/build-aarch64-test-hooks-ci.sh && BOOT_WINDOW=60 scripts/qemu-aarch64-test-hooks.sh; cargo build --release --target riscv64gc-unknown-none-elf -p cellos-kernel && cargo test --test launch-profile",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-09-27T11:53:00+07:00",
+      "summary": "Phase 04 boot smoke with the new heap path: RV64 test-hooks (admission, asid-lease) exit 0; RV64 production launch-profile 1/1; AArch64 test-hooks boots to [vfs-test] Results: 96 PASS, 0 FAIL and exits cleanly. The AArch64 lane's admission-core marker is red for a pre-existing quota-table interaction (see phase-02 § Progress), not for a boot failure."
     }
   ],
   "beforeAfter": {

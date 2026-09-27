@@ -90,10 +90,23 @@ TLB entry of one could resolve inside the other.
 The lane could not compile (pre-existing; reproduced with phase 01's changes stashed), so it
 could not host a non-RV64 switch witness. Every RV64-only test helper now carries the cfg of
 the fixture that uses it, `mapping_state` compares the leaf word in `u64` on both arches, and
-the RV64-only scheduler marker keeps its arch gate. Verified: the kernel builds and
-`scripts/qemu-aarch64-test-hooks.sh` boots to `[vfs-test] Results: 96 PASS, 0 FAIL` with all
-required markers and a clean semihosting exit, while the RV64 lane still passes
-`switch,admission,asid-lease,unmap-order`. What this does **not** provide yet is a domain
+the RV64-only scheduler marker keeps its arch gate. Verified: the kernel builds, boots to
+`[vfs-test] Results: 96 PASS, 0 FAIL` and exits cleanly via semihosting, while the RV64 lane
+still passes `switch,admission,asid-lease,unmap-order`.
+
+**Finding — the lane's marker gate is still red, for an unrelated pre-existing reason.** The
+boot script's `admission-core self-test PASS` marker fails deterministically (3/3 runs) because
+`crate::admission::slot_selftest`'s "admitted ELF must succeed in production mode" step runs
+after the earlier fixtures have filled the 64-slot cell-quota table (`Stack alloc failed: cell
+quota table exhausted (max=64)` immediately precedes it), and admission needs a free slot. This
+is *not* caused by this session's kernel changes: reverting the boot-heap reservation to the old
+per-frame body reproduces it, and reverting phase 06's `wake_sender_token` hunk (the only
+phase-06 change that compiles on AArch64) reproduces it as well. The lane was un-buildable
+before the repair, so nobody had observed this interaction; it is a test-harness fix (make the
+admission selftest independent of ambient quota occupancy, or drain the quota the
+quota/atomic-publication fixtures fill), not a kernel fix, and it is not claimed as done.
+
+What this does **not** provide yet is a domain
 fixture on AArch64: the switch fixtures (`domain_switch_tests`, `context_handoff_selftest`)
 remain riscv64-gated, so slice 3 still needs an AArch64 one-PE fixture that creates two private
 roots and switches between them before the ordered-switch change can be executed rather than
