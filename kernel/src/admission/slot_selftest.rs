@@ -43,6 +43,51 @@ fn build_valid_test_slot_a() -> Vec<u8> {
     v
 }
 
+/// A committed partner slot B, one generation behind the floor.
+///
+/// The A/B model requires *both* slots to be authenticated and committed before
+/// any admission is possible (`decide` returns `RecoveryRequired` for a missing
+/// partner), so the production-mode cases need a real signed partner — not an
+/// absent one. Signature regenerated with the dev owner key (seed `[0x4F; 32]`)
+/// over exactly these bytes.
+#[cfg(feature = "dev-signing-key")]
+fn build_valid_test_slot_b() -> Vec<u8> {
+    let mut v = Vec::with_capacity(248);
+    // Header (144 bytes)
+    v.extend_from_slice(SLOT_MAGIC);
+    v.extend_from_slice(&1u16.to_le_bytes()); // version 1
+    v.extend_from_slice(&FLAG_COMMITTED.to_le_bytes()); // committed
+    v.push(1); // Slot B
+    v.extend_from_slice(&[0u8; 3]); // reserved
+    v.extend_from_slice(&1u64.to_le_bytes()); // generation 1 — behind the floor
+    v.extend_from_slice(&0u64.to_le_bytes()); // expected generation 0
+    v.extend_from_slice(&[2u8; 16]); // tx_id
+    v.extend_from_slice(&[1u8; 16]); // backend_id — same backend as the floor
+    v.extend_from_slice(&[2u8; 32]); // intent_digest
+    v.extend_from_slice(&[3u8; 32]); // provenance_envelope_digest
+    v.extend_from_slice(&1u32.to_le_bytes()); // admission count = 1
+    v.extend_from_slice(&0u32.to_le_bytes()); // reserved
+    assert_eq!(v.len(), 144);
+
+    // Entry 0 (40 bytes) — this slot's own admitted ELF, which must NOT be
+    // authorized while slot A is the admitted one.
+    v.extend_from_slice(&[0xCCu8; 32]);
+    v.extend_from_slice(&0u32.to_le_bytes()); // flags
+    v.extend_from_slice(&0u32.to_le_bytes()); // reserved
+    assert_eq!(v.len(), 184);
+
+    const SIG: [u8; 64] = [
+        0xa9, 0xa4, 0x67, 0x9d, 0xc4, 0x2b, 0xe1, 0x87, 0xe3, 0xea, 0x51, 0xf1, 0x36, 0xe0, 0x65,
+        0x2a, 0xd3, 0x36, 0x20, 0x16, 0x02, 0x62, 0x3f, 0x4f, 0x3e, 0x28, 0x09, 0xc8, 0x81, 0xb2,
+        0xe4, 0x0b, 0xbe, 0x25, 0x3d, 0xe9, 0xcb, 0xa6, 0xd8, 0xe6, 0xa0, 0xcd, 0x4f, 0x9c, 0x4b,
+        0x84, 0x58, 0x86, 0x36, 0x37, 0xb2, 0x99, 0x51, 0x31, 0x5f, 0x3e, 0x6f, 0x65, 0x70, 0x25,
+        0x8e, 0x97, 0xd6, 0x09,
+    ];
+    v.extend_from_slice(&SIG);
+    assert_eq!(v.len(), 248);
+    v
+}
+
 #[cfg(feature = "dev-signing-key")]
 pub(super) fn run() -> bool {
     let mut ok = true;
@@ -130,10 +175,18 @@ pub(super) fn run() -> bool {
             ok = false;
         }
 
-        // Enforce production admission with Slot A active
+        let slot_b = match parse_slot(&build_valid_test_slot_b()) {
+            Ok(parsed) => parsed,
+            Err(e) => {
+                log::error!("[selftest] OWNER-SLOT: failed to parse partner slot: {:?}", e);
+                return false;
+            }
+        };
+
+        // Enforce production admission with Slot A active and a committed partner
         {
             let mut registry = ADMISSION_REGISTRY.lock();
-            registry.update(floor_outcome, Some(slot_a), None);
+            registry.update(floor_outcome, Some(slot_a), Some(slot_b));
             registry.set_production_enforced(true);
         }
 
@@ -146,6 +199,16 @@ pub(super) fn run() -> bool {
         // Unadmitted ELF (0xBB) must be denied
         if evaluate_owner_admission(&[0xBBu8; 32]) != Err(ViError::PermissionDenied) {
             log::error!("[selftest] OWNER-SLOT: unadmitted ELF was not denied in production mode");
+            ok = false;
+        }
+
+        // The partner slot's own admission list is not authority while slot A is
+        // the admitted one: production admission must consult the active slot,
+        // not the union of installed slots.
+        if evaluate_owner_admission(&[0xCCu8; 32]) != Err(ViError::PermissionDenied) {
+            log::error!(
+                "[selftest] OWNER-SLOT: partner slot's admitted ELF was authorized in production mode"
+            );
             ok = false;
         }
 
