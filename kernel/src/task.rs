@@ -902,6 +902,31 @@ pub extern "Rust" fn vi_timer_tick() {
     yield_cpu();
 }
 
+/// Incoming side of a raw switch on the architectures without the RV64
+/// `vi_context_switch_complete` callback: it runs after the switch has changed
+/// stacks, i.e. in the incoming context.
+///
+/// The plan's own flag decides the safe-root acknowledgement. Inferring it from
+/// `current_domain() == 0` cannot work: a safe-root transition does not clear the
+/// hart's domain id — `acknowledge_safe_root` is what clears it — so the
+/// inference is false exactly when it is needed, and the acknowledgement, the
+/// root's release and the user-copy guard reset never happen.
+#[cfg(all(
+    feature = "native-domains",
+    any(target_arch = "aarch64", target_arch = "x86_64")
+))]
+pub(crate) fn complete_incoming_switch(hart: usize) {
+    if hart_local::take_safe_root_pending() {
+        hart_local::acknowledge_safe_root();
+    }
+    // The displaced root's execution pin is released here on every architecture;
+    // the RV64 callback does the same after its own bookkeeping.
+    if let Some(space) = hart_local::take_staged_execution_release() {
+        let _ = space.set_current_hart(hart, false);
+    }
+    user_copy::clear_guard_for_context_switch();
+}
+
 /// Retire a remote-root switch only from the incoming context, after the raw
 /// context switch has changed stacks. Trap entry is intentionally not an ACK:
 /// the interrupted retiring task can still execute its outgoing kernel path.
@@ -1395,10 +1420,7 @@ pub fn yield_cpu() {
                     root_addr,
                     asid,
                 );
-                let (cur_id, _) = hart_local::current_domain();
-                if cur_id == 0 {
-                    hart_local::acknowledge_safe_root();
-                }
+                complete_incoming_switch(hart_id);
             }
         }
     }

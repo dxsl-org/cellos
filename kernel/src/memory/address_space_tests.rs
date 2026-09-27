@@ -116,7 +116,7 @@ pub(crate) fn run_primary() {
     // return to the allocator: a hart that still holds the translation may read
     // the leaf and walk the table chain. `unmap_private_page` released the owned
     // leaf and pruned its tables without invalidating anything.
-    let mut unmap_order_detail = (false, false, false, false);
+    let mut unmap_order_detail = (false, false, false, false, false);
     let unmap_order = {
         let mut builder = AddressSpaceBuilder::new();
         let built = builder
@@ -124,23 +124,26 @@ pub(crate) fn run_primary() {
             .and_then(|()| builder.build());
         match built {
             Ok(space) => {
-                // Count this space's own ledger, not the global allocator: the
-                // invalidation now sleeps while it waits, which lets other tasks
-                // allocate and free, and a global count cannot distinguish that
-                // from the frame this unmap released.
+                // Count this space's own frames, not unrelated allocations
+                // made by other tasks while the remote ack is outstanding.
                 let before = space.frames.lock().len();
+                let tag = space.asid();
+                let remote_acks_before: Vec<(usize, usize)> =
+                    crate::task::smp::online_harts()
+                        .filter(|hart| *hart != crate::task::hart_local::current_hart_id())
+                        .map(|hart| (hart, crate::task::smp::tlb_flush_complete_epoch(hart)))
+                        .collect();
                 crate::memory::tlb_shootdown::begin_test_flush_observation();
                 let unmapped = space.unmap_private_page(PRIVATE_PAGE).is_ok();
-                let flushed = crate::memory::tlb_shootdown::test_flush_observed(PRIVATE_PAGE);
+                let tagged = crate::memory::tlb_shootdown::test_tag_flush_observed(tag);
                 crate::memory::tlb_shootdown::finish_test_flush_observation();
+                let remote_acked = remote_acks_before.iter().all(|(hart, before)| {
+                    crate::task::smp::tlb_flush_complete_epoch(*hart) > *before
+                });
                 let released = space.frames.lock().len() < before;
-                // The frame was released, not quarantined: an acknowledged
-                // invalidation is what makes the release legal, and the quarantine
-                // counter is how "released" and "retained because unacknowledged"
-                // stay distinguishable.
                 let not_quarantined = quarantined_frame_count() == 0;
-                unmap_order_detail = (unmapped, flushed, released, not_quarantined);
-                unmapped && flushed && released && not_quarantined
+                unmap_order_detail = (unmapped, tagged, remote_acked, released, not_quarantined);
+                unmapped && tagged && remote_acked && released && not_quarantined
             }
             Err(_) => false,
         }
@@ -160,11 +163,66 @@ pub(crate) fn run_primary() {
         log::info!("S22-RV64-UNMAP-ORDER: PASS");
     } else {
         log::error!(
-            "S22-RV64-UNMAP-ORDER: FAIL unmapped={} flushed={} released={} not_quarantined={}",
+            "S22-RV64-UNMAP-ORDER: FAIL unmapped={} tagged={} remote_acked={} released={} not_quarantined={}",
             unmap_order_detail.0,
             unmap_order_detail.1,
             unmap_order_detail.2,
-            unmap_order_detail.3
+            unmap_order_detail.3,
+            unmap_order_detail.4
+        );
+    }
+
+    // The final grant leaf detaches table frames too. Its backing page remains
+    // externally owned; only acknowledged tag invalidation permits reclaiming
+    // the tables. An unowned "private" leaf must fail without losing its ledger.
+    let grant_last_leaf = (|| {
+        let backing = allocate_owned_frame().ok()?;
+        let space = AddressSpaceBuilder::new().build().ok()?;
+        space
+            .map_grant_page(ABI_PAGE, backing.physical_address(), flags())
+            .ok()?;
+        let before = space.table_frames.lock().len();
+        let tag = space.asid();
+        crate::memory::tlb_shootdown::begin_test_flush_observation();
+        let unmapped = space.unmap_grant_page(ABI_PAGE).is_ok();
+        let tagged = crate::memory::tlb_shootdown::test_tag_flush_observed(tag);
+        crate::memory::tlb_shootdown::finish_test_flush_observation();
+        Some(
+            before > 0
+                && unmapped
+                && tagged
+                && space.table_frames.lock().len() < before
+                && space.page_proof_for(ABI_PAGE).is_none()
+                && quarantined_frame_count() == 0,
+        )
+    })()
+    .unwrap_or(false);
+    let unowned_error_restores_ledger = (|| {
+        let backing = allocate_owned_frame().ok()?;
+        let mut builder = AddressSpaceBuilder::new();
+        builder
+            .map_existing_user_page(
+                ABI_PAGE,
+                backing.physical_address(),
+                MappingKind::Private,
+                flags(),
+            )
+            .ok()?;
+        let space = builder.build().ok()?;
+        Some(
+            space.unmap_private_page(ABI_PAGE) == Err(AddressSpaceError::NotFound)
+                && space.page_proof_for(ABI_PAGE).is_some()
+                && space.table_frames.lock().len() > 0,
+        )
+    })()
+    .unwrap_or(false);
+    if grant_last_leaf && unowned_error_restores_ledger {
+        log::info!("S22-RV64-ROOT-UNMAP: PASS");
+    } else {
+        log::error!(
+            "S22-RV64-ROOT-UNMAP: FAIL grant_last_leaf={} error_ledger={}",
+            grant_last_leaf,
+            unowned_error_restores_ledger
         );
     }
 

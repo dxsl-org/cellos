@@ -1,8 +1,8 @@
 //! Private completion boundary for permission-lowering and unmap TLB maintenance.
 //!
-//! No caller may execute newly restricted code or recycle a retired VA/frame
-//! until this function returns. RV64 uses SBI RFENCE for every online remote
-//! hart; other targets retain their established local or broadcast HAL paths.
+//! A frame is released only after its private tag is invalidated locally and
+//! every online RV64 hart has acknowledged its own all-ASID flush. Non-RV64
+//! Tier-2 remains single-CPU until per-CPU shootdown is implemented.
 
 use crate::memory::paging::PAGE_SIZE;
 use types::VAddr;
@@ -19,10 +19,14 @@ static TEST_FLUSH_TRACKING: AtomicBool = AtomicBool::new(false);
 #[cfg(feature = "test-hooks")]
 static TEST_FLUSHED_PAGES: crate::sync::Spinlock<alloc::vec::Vec<VAddr>> =
     crate::sync::Spinlock::new(alloc::vec::Vec::new());
+#[cfg(feature = "test-hooks")]
+static TEST_FLUSHED_TAGS: crate::sync::Spinlock<alloc::vec::Vec<usize>> =
+    crate::sync::Spinlock::new(alloc::vec::Vec::new());
 
 #[cfg(feature = "test-hooks")]
 pub(crate) fn begin_test_flush_observation() {
     TEST_FLUSHED_PAGES.lock().clear();
+    TEST_FLUSHED_TAGS.lock().clear();
     TEST_FLUSH_TRACKING.store(true, Ordering::Release);
 }
 
@@ -30,6 +34,10 @@ pub(crate) fn begin_test_flush_observation() {
 pub(crate) fn test_flush_observed(vaddr: VAddr) -> bool {
     let page = vaddr & !(PAGE_SIZE - 1);
     TEST_FLUSHED_PAGES.lock().contains(&page)
+}
+#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+pub(crate) fn test_tag_flush_observed(asid: usize) -> bool {
+    TEST_FLUSHED_TAGS.lock().contains(&asid)
 }
 
 #[cfg(feature = "test-hooks")]
@@ -50,46 +58,32 @@ pub enum FlushAckError {
     Timeout { hart: usize, epoch: usize },
 }
 
-/// Invalidate one ASID everywhere and **wait for every online hart to confirm**.
+/// Invalidate one private root's tag locally and wait for every online hart.
 ///
-/// This is the release-side contract: a tag (and the frames behind it) may only
-/// be recycled once no hart can still resolve a translation under it. A firmware
-/// call returning is not that evidence — the target performs its own flush on the
-/// way through the switch boundary and publishes an epoch this waits on.
-///
-/// On failure the caller must keep the tag and the frames: a stale entry
-/// resolving inside a successor root is exactly the failure this prevents.
+/// Unlike a current-root page flush this covers a root that is inactive on the
+/// caller (notably a non-current x86 PCID). RV64 remote harts acknowledge their
+/// local all-ASID flush before any frame behind this tag may be released.
 pub fn flush_asid_and_await(asid: usize) -> Result<(), FlushAckError> {
-    // Local first: this hart must stop using the tag before it asks anyone else.
+    // Publish PTE stores before requesting an invalidation on another hart.
+    #[cfg(target_arch = "riscv64")]
+    {
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::Release);
+        // SAFETY: an S-mode fence orders prior page-table stores.
+        unsafe { core::arch::asm!("fence rw, rw", options(nostack)) };
+    }
+    #[cfg(feature = "test-hooks")]
+    if TEST_FLUSH_TRACKING.load(Ordering::Acquire) {
+        TEST_FLUSHED_TAGS.lock().push(asid);
+    }
+    // AArch64's private-root PTE encoder does not set nG, so ASID-only TLBI
+    // would leave global leaves live. Flush all EL1 contexts instead.
+    #[cfg(target_arch = "aarch64")]
+    hal::domain::flush_all();
+    #[cfg(not(target_arch = "aarch64"))]
     hal::domain::flush_asid(asid);
     await_remote_invalidation("asid")
 }
 
-/// Invalidate a page-aligned range everywhere and **wait for every online hart**.
-///
-/// The frame-release contract for unmapping: the leaf and any pruned table frames
-/// may only return to the allocator once no hart can still walk the translation
-/// that pointed at them. `flush_range` remains the broadcast-and-hope variant for
-/// callers that release nothing.
-pub fn flush_range_and_await(start: VAddr, size: usize) -> Result<(), FlushAckError> {
-    debug_assert!(start & (PAGE_SIZE - 1) == 0);
-    debug_assert!(size & (PAGE_SIZE - 1) == 0);
-    let end = start
-        .checked_add(size)
-        .expect("TLB flush range must not wrap the address space");
-    for page in (start..end).step_by(PAGE_SIZE) {
-        // The observation window must see every invalidation path, not just the
-        // one that happens to be named `flush_page`: a fixture that asserts "the
-        // page was flushed before the frame was released" would otherwise pass or
-        // fail on which function the caller used.
-        #[cfg(feature = "test-hooks")]
-        if TEST_FLUSH_TRACKING.load(Ordering::Acquire) {
-            TEST_FLUSHED_PAGES.lock().push(page);
-        }
-        hal::paging::flush_tlb_page(page);
-    }
-    await_remote_invalidation("range")
-}
 
 /// Ask every online remote hart to invalidate locally and wait for each one.
 ///
@@ -98,6 +92,8 @@ pub fn flush_range_and_await(start: VAddr, size: usize) -> Result<(), FlushAckEr
 /// costs a leaked tag or retained frames while a retry costs one IPI.
 #[cfg(target_arch = "riscv64")]
 fn await_remote_invalidation(what: &str) -> Result<(), FlushAckError> {
+    #[cfg(not(feature = "test-hooks"))]
+    let _ = what;
     use crate::task::smp;
     let me = crate::task::hart_local::current_hart_id();
     for hart in smp::online_harts().filter(|hart| *hart != me) {

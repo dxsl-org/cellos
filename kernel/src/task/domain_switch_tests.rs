@@ -413,6 +413,10 @@ pub(crate) fn run_root_switch_witness() -> bool {
             );
         }
         SCRATCH_RESUMED.store(true, Ordering::Release);
+        // Stage a safe-root completion the way `SwitchPlan::root_switch` does for a
+        // transition to the kernel root, so the incoming-side completion below has
+        // real work to do.
+        hart_local::mark_safe_root_pending();
         // No root write: B returned to the kernel root already.
         unsafe {
             crate::hal::arch::Context::switch_with_root(
@@ -485,6 +489,10 @@ pub(crate) fn run_root_switch_witness() -> bool {
         );
     }
 
+    // The incoming side of the last switch: the same steps the scheduler path runs.
+    crate::task::complete_incoming_switch(hart_local::current_hart_id());
+    let safe_root_consumed = !hart_local::take_safe_root_pending();
+    let identity_cleared = hart_local::current_domain() == (0, 0);
     let observed_kernel = crate::hal::domain::current_root();
     let expected_b = crate::hal::domain::root_register_value(
         BASE_B.load(Ordering::Acquire),
@@ -503,7 +511,9 @@ pub(crate) fn run_root_switch_witness() -> bool {
         .iter()
         .any(|range| boot_stack_probe >= range.start && boot_stack_probe < range.end);
 
-    let ok = SCRATCH_ENTERED.load(Ordering::Acquire)
+    let ok = safe_root_consumed
+        && identity_cleared
+        && SCRATCH_ENTERED.load(Ordering::Acquire)
         && SCRATCH_RESUMED.load(Ordering::Acquire)
         && B_ENTERED.load(Ordering::Acquire)
         && C_ENTERED.load(Ordering::Acquire)
@@ -516,12 +526,13 @@ pub(crate) fn run_root_switch_witness() -> bool {
     }
     if ok {
         log::info!(
-            "S22-{}-ROOT-SWITCH: PASS b={:#x} c={:#x} back={:#x} outgoing_stack_shared={}",
+            "S22-{}-ROOT-SWITCH: PASS b={:#x} c={:#x} back={:#x} outgoing_stack_shared={} safe_root_consumed={}",
             ARCH_TAG,
             expected_b,
             expected_c,
             observed_kernel,
-            boot_stack_shared
+            boot_stack_shared,
+            safe_root_consumed
         );
     } else {
         log::error!(

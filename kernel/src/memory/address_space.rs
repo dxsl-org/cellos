@@ -100,6 +100,7 @@ pub enum AddressSpaceError {
     WriteExecute,
     NotFound,
     Dying,
+    InvalidationUnacknowledged,
 }
 /// A copy lease counted until its guard is dropped; Phase 03 will wait for these before revoking pages.
 pub struct CopyReader<'a> {
@@ -369,6 +370,7 @@ impl AddressSpaceBuilder {
             generation: NEXT_DOMAIN.fetch_add(1, Ordering::Relaxed),
             asid,
             state: AtomicU8::new(AddressSpaceState::Live as u8),
+            invalidation_pending: Spinlock::new(Vec::new()),
             ledger: Spinlock::new(ledger),
             copy_readers: AtomicUsize::new(0),
             current_harts: AtomicUsize::new(0),
@@ -376,17 +378,20 @@ impl AddressSpaceBuilder {
             frames: Spinlock::new(frames),
             #[cfg(feature = "test-hooks")]
             supervisor_registrations,
-            root,
+            root: core::mem::ManuallyDrop::new(root),
         }))
     }
 }
 
-/// A published private root. The root field is declared last so table/page frames drop first.
+/// A published private root. Its root frame is manually released only after
+/// the tag's completion boundary; an unacknowledged teardown quarantines it.
 pub struct AddressSpace {
     identity: DomainId,
     generation: u64,
     asid: AsidLease,
     state: AtomicU8,
+    /// VAs removed from the ledger but not yet safe to remap under this tag.
+    invalidation_pending: Spinlock<Vec<VAddr>>,
     ledger: Spinlock<Vec<MappingEntry>>,
     copy_readers: AtomicUsize,
     current_harts: AtomicUsize,
@@ -396,7 +401,7 @@ pub struct AddressSpace {
     /// Registry tokens retire before the root/page tables return to the allocator.
     #[cfg(feature = "test-hooks")]
     supervisor_registrations: Vec<crate::memory::domain_supervisor_registry::SupervisorRangeId>,
-    root: OwnedFrame,
+    root: core::mem::ManuallyDrop<OwnedFrame>,
 }
 
 impl AddressSpace {
@@ -496,6 +501,42 @@ impl AddressSpace {
     pub fn current_harts(&self) -> usize {
         self.current_harts.load(Ordering::Acquire)
     }
+    /// Reserve a retired VA until the old translation has been invalidated.
+    /// Lock order for mutations is pending -> ledger -> table_frames -> frames;
+    /// copy proofs use only ledger, so draining readers never holds that lock.
+    fn begin_unmap(
+        &self,
+        virtual_address: VAddr,
+        kind: Option<MappingKind>,
+    ) -> Result<MappingEntry, AddressSpaceError> {
+        let mut pending = self.invalidation_pending.lock();
+        if pending.contains(&virtual_address) {
+            return Err(AddressSpaceError::NotFound);
+        }
+        let mut ledger = self.ledger.lock();
+        let position = ledger
+            .iter()
+            .position(|entry| {
+                entry.virtual_address == virtual_address
+                    && kind.is_none_or(|kind| entry.kind == kind)
+            })
+            .ok_or(AddressSpaceError::NotFound)?;
+        pending.push(virtual_address);
+        Ok(ledger.remove(position))
+    }
+
+    fn abort_unmap(&self, entry: MappingEntry) {
+        let mut pending = self.invalidation_pending.lock();
+        self.ledger.lock().push(entry);
+        pending.retain(|address| *address != entry.virtual_address);
+    }
+
+    fn finish_unmap(&self, virtual_address: VAddr) {
+        self.invalidation_pending
+            .lock()
+            .retain(|address| *address != virtual_address);
+    }
+
     pub fn map_private_page(
         &self,
         virtual_address: VAddr,
@@ -503,7 +544,12 @@ impl AddressSpace {
         flags: Flags,
     ) -> Result<(), AddressSpaceError> {
         validate_user_mapping(virtual_address, flags)?;
+        let pending = self.invalidation_pending.lock();
+        if pending.contains(&virtual_address) {
+            return Err(AddressSpaceError::InvalidMapping);
+        }
         let mut ledger = self.ledger.lock();
+        drop(pending);
         if self.state.load(Ordering::Acquire) != AddressSpaceState::Live as u8
             || ledger
                 .iter()
@@ -514,13 +560,25 @@ impl AddressSpace {
         let page = allocate_owned_frame()?;
         let mut table_frames = self.table_frames.lock();
         let mut frames = self.frames.lock();
-        map_page(
+        let mut pruned_tables = Vec::new();
+        let result = map_page_retaining_pruned_tables(
             self.root.physical_address(),
             &mut table_frames,
+            &mut pruned_tables,
             virtual_address,
             page.physical_address(),
             user_flags(flags),
-        )?;
+        );
+        if let Err(error) = result {
+            // Allocation can publish an intermediate table before failing.
+            if crate::memory::tlb_shootdown::flush_asid_and_await(self.asid()).is_err() {
+                quarantine_frames(pruned_tables, "private map rollback invalidation unacknowledged");
+                quarantine_frames(alloc::vec![page], "private map rollback leaf retained");
+                return Err(AddressSpaceError::InvalidationUnacknowledged);
+            }
+            return Err(error);
+        }
+        drop(pruned_tables);
         ledger.push(MappingEntry {
             virtual_address,
             physical_address: page.physical_address(),
@@ -554,7 +612,15 @@ impl AddressSpace {
             .try_reserve_exact(kernel_stack.pages + user_stack.pages)
             .map_err(|_| AddressSpaceError::OutOfMemory)?;
 
+        let pending = self.invalidation_pending.lock();
         let mut ledger = self.ledger.lock();
+        if pending.iter().any(|address| {
+            (kernel_stack.usable_start()..kernel_stack.top).contains(address)
+                || (user_stack.usable_start()..user_stack.top).contains(address)
+        }) {
+            return Err(AddressSpaceError::InvalidMapping);
+        }
+        drop(pending);
         if self.state.load(Ordering::Acquire) != AddressSpaceState::Live as u8 {
             return Err(AddressSpaceError::Dying);
         }
@@ -616,30 +682,19 @@ impl AddressSpace {
                 entry.virtual_address < user_stack.usable_start()
                     || entry.virtual_address >= user_stack.top
             });
-            // This address space can already be active on sibling threads.
-            // Invalidate both reserved stack ranges before freeing any table or
-            // backing frame from a partially published map operation.
-            let kernel_acked = crate::memory::tlb_shootdown::flush_range_and_await(
-                kernel_stack.usable_start(),
-                kernel_stack.top - kernel_stack.usable_start(),
-            )
-            .is_ok();
-            let user_acked = crate::memory::tlb_shootdown::flush_range_and_await(
-                user_stack.usable_start(),
-                user_stack.top - user_stack.usable_start(),
-            )
-            .is_ok();
-            if !(kernel_acked && user_acked) {
+            // Both stack ranges belong to this private tag. A current-root
+            // page flush cannot invalidate an inactive private root.
+            if crate::memory::tlb_shootdown::flush_asid_and_await(self.asid()).is_err() {
                 unacked = true;
             }
         }
-        // Pruned tables are only released once the invalidations above are
-        // confirmed; on failure they are quarantined rather than dropped.
+        // The stack backing belongs to the caller and would be freed after an
+        // ordinary Err. Without an ack there is no safe return to that caller.
         if unacked {
             quarantine_frames(pruned_table_frames, "stack unmap invalidation unacknowledged");
-        } else {
-            drop(pruned_table_frames);
+            panic!("[aspace] stack map rollback could not invalidate its private tag");
         }
+        drop(pruned_table_frames);
         result
     }
 
@@ -676,11 +731,7 @@ impl AddressSpace {
                 address,
             );
         }
-        let kernel_acked = crate::memory::tlb_shootdown::flush_range_and_await(
-            kernel_stack.usable_start(),
-            kernel_stack.top - kernel_stack.usable_start(),
-        )
-        .is_ok();
+        // Keep detached tables until both ranges have been removed.
         for address in (user_stack.usable_start()..user_stack.top).step_by(PAGE_SIZE) {
             unmap_existing_page(
                 self.root.physical_address(),
@@ -689,47 +740,49 @@ impl AddressSpace {
                 address,
             );
         }
-        let user_acked = crate::memory::tlb_shootdown::flush_range_and_await(
-            user_stack.usable_start(),
-            user_stack.top - user_stack.usable_start(),
-        )
-        .is_ok();
-        if kernel_acked && user_acked {
+        drop(table_frames);
+        if crate::memory::tlb_shootdown::flush_asid_and_await(self.asid()).is_ok() {
             drop(pruned_table_frames);
         } else {
             quarantine_frames(
                 pruned_table_frames,
                 "task-stack unmap invalidation unacknowledged",
             );
+            // This API cannot take ownership of the external stack backing
+            // frames. Prevent the caller from freeing them after a missing ack.
+            panic!("[aspace] task stack teardown could not invalidate its private tag");
         }
     }
 
     pub fn unmap_private_page(&self, virtual_address: VAddr) -> Result<(), AddressSpaceError> {
-        let entry = {
-            let mut ledger = self.ledger.lock();
-            let position = ledger
-                .iter()
-                .position(|entry| entry.virtual_address == virtual_address)
-                .ok_or(AddressSpaceError::NotFound)?;
-            ledger.remove(position)
-        };
+        let entry = self.begin_unmap(virtual_address, None)?;
         // Wait for all in-flight copy readers to drain before unmapping PTE and reclaiming frame.
         while self.copy_readers.load(Ordering::Acquire) > 0 {
             core::hint::spin_loop();
         }
         let mut table_frames = self.table_frames.lock();
         let mut frames = self.frames.lock();
-        // Detached frames must not return to the allocator until the invalidation
-        // below completes: a hart that still holds this translation can walk the
-        // pruned table chain and read the leaf. Held in locals until after the
-        // flush, exactly as `unmap_existing_task_stacks` holds its pruned tables.
+        // An existing (non-owned) page must not be torn down by this API.
+        let Some(index) = frames
+            .iter()
+            .position(|frame| frame.physical_address() == entry.physical_address)
+        else {
+            drop(frames);
+            drop(table_frames);
+            self.abort_unmap(entry);
+            return Err(AddressSpaceError::NotFound);
+        };
+        // Detached frames and the leaf stay owned until the tag flush completes.
         let mut detached_tables = Vec::new();
-        // SAFETY: only this address space owns and mutates its root.
+        // SAFETY: the table_frames lock serializes mutations of this private root.
         let table =
             unsafe { &mut *(phys_to_virt(self.root.physical_address()) as *mut hal::PageTable) };
-        table
-            .unmap(virtual_address)
-            .map_err(|_| AddressSpaceError::NotFound)?;
+        if table.unmap(virtual_address).is_err() {
+            drop(frames);
+            drop(table_frames);
+            self.abort_unmap(entry);
+            return Err(AddressSpaceError::NotFound);
+        }
         table.prune_empty(virtual_address, &mut |physical_address| {
             if let Some(index) = table_frames
                 .iter()
@@ -738,25 +791,22 @@ impl AddressSpace {
                 detached_tables.push(table_frames.remove(index));
             }
         });
-        let index = frames
-            .iter()
-            .position(|frame| frame.physical_address() == entry.physical_address)
-            .ok_or(AddressSpaceError::NotFound)?;
         let leaf = frames.remove(index);
-        drop(table_frames);
         drop(frames);
-        if crate::memory::tlb_shootdown::flush_range_and_await(virtual_address, PAGE_SIZE).is_ok() {
-            drop(detached_tables);
-            drop(leaf);
-        } else {
-            // The leaf and the pruned tables stay out of the allocator: a hart that
-            // still holds the translation could walk into either.
+        drop(table_frames);
+        if crate::memory::tlb_shootdown::flush_asid_and_await(self.asid()).is_err() {
+            // Keep the VA reserved: remapping it under this tag would revive a
+            // stale translation even though its original frames are retained.
             quarantine_frames(detached_tables, "private-page unmap invalidation unacknowledged");
             quarantine_frames(
                 alloc::vec![leaf],
                 "private-page leaf invalidation unacknowledged",
             );
+            return Err(AddressSpaceError::InvalidationUnacknowledged);
         }
+        drop(detached_tables);
+        drop(leaf);
+        self.finish_unmap(virtual_address);
         Ok(())
     }
     /// TEST-ONLY protocol-violation injection for the user-copy fixtures.
@@ -811,7 +861,12 @@ impl AddressSpace {
         flags: Flags,
     ) -> Result<(), AddressSpaceError> {
         validate_user_mapping(virtual_address, flags)?;
+        let pending = self.invalidation_pending.lock();
+        if pending.contains(&virtual_address) {
+            return Err(AddressSpaceError::InvalidMapping);
+        }
         let mut ledger = self.ledger.lock();
+        drop(pending);
         if self.state.load(Ordering::Acquire) != AddressSpaceState::Live as u8
             || ledger
                 .iter()
@@ -820,13 +875,23 @@ impl AddressSpace {
             return Err(AddressSpaceError::Dying);
         }
         let mut table_frames = self.table_frames.lock();
-        map_page(
+        let mut pruned_tables = Vec::new();
+        let result = map_page_retaining_pruned_tables(
             self.root.physical_address(),
             &mut table_frames,
+            &mut pruned_tables,
             virtual_address,
             physical_address,
             user_flags(flags),
-        )?;
+        );
+        if let Err(error) = result {
+            if crate::memory::tlb_shootdown::flush_asid_and_await(self.asid()).is_err() {
+                quarantine_frames(pruned_tables, "grant map rollback invalidation unacknowledged");
+                return Err(AddressSpaceError::InvalidationUnacknowledged);
+            }
+            return Err(error);
+        }
+        drop(pruned_tables);
         ledger.push(MappingEntry {
             virtual_address,
             physical_address,
@@ -837,16 +902,7 @@ impl AddressSpace {
     }
 
     pub fn unmap_grant_page(&self, virtual_address: VAddr) -> Result<(), AddressSpaceError> {
-        let entry = {
-            let mut ledger = self.ledger.lock();
-            let position = ledger
-                .iter()
-                .position(|entry| {
-                    entry.virtual_address == virtual_address && entry.kind == MappingKind::Grant
-                })
-                .ok_or(AddressSpaceError::NotFound)?;
-            ledger.remove(position)
-        };
+        let entry = self.begin_unmap(virtual_address, Some(MappingKind::Grant))?;
         while self.copy_readers.load(Ordering::Acquire) > 0 {
             core::hint::spin_loop();
         }
@@ -857,9 +913,11 @@ impl AddressSpace {
         let mut detached_tables = Vec::new();
         let table =
             unsafe { &mut *(phys_to_virt(self.root.physical_address()) as *mut hal::PageTable) };
-        table
-            .unmap(virtual_address)
-            .map_err(|_| AddressSpaceError::NotFound)?;
+        if table.unmap(virtual_address).is_err() {
+            drop(table_frames);
+            self.abort_unmap(entry);
+            return Err(AddressSpaceError::NotFound);
+        }
         table.prune_empty(virtual_address, &mut |physical_address| {
             if let Some(index) = table_frames
                 .iter()
@@ -869,12 +927,12 @@ impl AddressSpace {
             }
         });
         drop(table_frames);
-        if crate::memory::tlb_shootdown::flush_range_and_await(virtual_address, PAGE_SIZE).is_ok() {
-            drop(detached_tables);
-        } else {
+        if crate::memory::tlb_shootdown::flush_asid_and_await(self.asid()).is_err() {
             quarantine_frames(detached_tables, "grant-page unmap invalidation unacknowledged");
+            return Err(AddressSpaceError::InvalidationUnacknowledged);
         }
-        let _ = entry;
+        drop(detached_tables);
+        self.finish_unmap(virtual_address);
         Ok(())
     }
 
@@ -925,14 +983,23 @@ pub fn create_cell_domain(
 
 impl Drop for AddressSpace {
     fn drop(&mut self) {
-        // Invalidation belongs to `AsidLease::drop`: it runs local and remote
-        // invalidation for this root's tag and only then returns the value to the
-        // pool, so no stale entry survives teardown and no later root can inherit
-        // this one's translations. Frames are released by the fields below.
+        let acked = self.asid.release().is_ok();
         #[cfg(feature = "test-hooks")]
         for id in self.supervisor_registrations.drain(..) {
             let unregistered = crate::memory::domain_supervisor_registry::unregister(id);
             assert!(unregistered);
+        }
+        // SAFETY: Drop runs once and ManuallyDrop suppresses the field destructor.
+        let root = unsafe { core::mem::ManuallyDrop::take(&mut self.root) };
+        if acked {
+            drop(root);
+        } else {
+            quarantine_frames(self.frames.lock().drain(..).collect(), "root teardown leaves");
+            quarantine_frames(
+                self.table_frames.lock().drain(..).collect(),
+                "root teardown tables",
+            );
+            quarantine_frames(alloc::vec![root], "root teardown root");
         }
     }
 }
@@ -972,15 +1039,14 @@ pub(crate) fn live_tag_owner(value: usize) -> Option<u64> {
 
 /// An architectural tag owned by exactly one live private root.
 ///
-/// The value is never reissued while another root holds it, and a released value
-/// returns to the pool only after this hart and every online remote hart have
-/// dropped translations carrying it — the invalidation happens in [`Drop`], before
-/// the slot is freed. Exhaustion returns `None`, which a caller must treat as a
-/// refusal: never as a reason to reuse a live tag.
+/// The value is never reissued while another root holds it. A published root
+/// releases its tag before its frames; a standalone lease releases it on Drop.
+/// Both wait for local/remote invalidation, retaining the slot on failure.
 struct AsidLease {
     value: usize,
     slot: usize,
     domain: u64,
+    released: bool,
 }
 
 impl AsidLease {
@@ -1000,32 +1066,29 @@ impl AsidLease {
             value,
             slot,
             domain,
+            released: false,
         })
     }
-}
-
-impl Drop for AsidLease {
-    fn drop(&mut self) {
-        // Order is the contract: local invalidation and every online hart's
-        // acknowledgement complete before the value can be handed to another root,
-        // so no stale entry of this root can resolve inside its successor.
+    /// Release the tag once, preserving its reservation on an unacknowledged
+    /// flush. AddressSpace calls this before dropping any owned page-table frame;
+    /// standalone leases use Drop for the same tag-reuse ordering.
+    fn release(&mut self) -> Result<(), crate::memory::tlb_shootdown::FlushAckError> {
+        if self.released {
+            return Ok(());
+        }
+        self.released = true;
         if let Err(error) = crate::memory::tlb_shootdown::flush_asid_and_await(self.value) {
-            // Fail closed: the tag stays reserved. Leaking one slot is safe;
-            // reissuing a tag another hart can still resolve is not.
             log::error!(
                 "[asid] tag {} for domain {} not recycled: invalidation unacknowledged ({:?})",
                 self.value,
                 self.domain,
                 error
             );
-            return;
+            return Err(error);
         }
         let mut tags = LIVE_ASIDS.lock();
         match tags[self.slot] {
             Some(owner) if owner.domain == self.domain => tags[self.slot] = None,
-            // A slot claimed by anyone else is never freed: the pool would then
-            // hold two live roots on one tag, which is the failure this pool exists
-            // to make impossible. Leak it loudly instead.
             other => log::warn!(
                 "[asid] tag {} slot {} released by domain {} but held by {:?} — slot retained",
                 self.value,
@@ -1034,6 +1097,13 @@ impl Drop for AsidLease {
                 other.map(|owner| owner.domain)
             ),
         }
+        Ok(())
+    }
+}
+
+impl Drop for AsidLease {
+    fn drop(&mut self) {
+        let _ = self.release();
     }
 }
 
