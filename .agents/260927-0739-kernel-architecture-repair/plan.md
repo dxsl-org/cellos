@@ -43,6 +43,28 @@ Repair **all** findings of the 2026-09-27 audit: domain grant revoke/permission/
 | 05 | Multi-region frames | completed 2026-09-27 (algorithm; capacity claim board-gated) | `phase-05-multiregion-frames.md` § Progress — host lane 118/118 (multi-range plan red before the fix), RV64 + AArch64 + RV64-production boots green |
 | 03, 07, 08 | | pending | — |
 
+## Remaining work and its prerequisites
+
+Recorded so the next session starts from evidence rather than from the phase titles.
+
+| Item | Prerequisite that does not exist yet |
+|---|---|
+| 02 slice 3 — non-RV64 ordered switch + invalidation ack | (a) AArch64/x86 `Context::switch` is a **single assembly routine** (`hal/arch/arm/src/aarch64/context.rs:129` `__switch_el1`, same shape on x86): saving the outgoing context before activating the incoming root means splitting it into save/load halves, which changes every switch on the target. (b) The plan requires a domain-level witness *before* such a change can be trusted ("build/pack signed and unsigned Tier-2 smoke/fault Cells into fresh AArch64 one-PE and x86 one-CPU images"), and no AArch64 domain fixture exists: `domain_switch_tests`/`context_handoff_selftest` are riscv64-gated. (c) `flush_range` issues the RFENCE and panics on transport failure but collects no per-hart completion, so "await invalidation" is still "the firmware call returned"; the generation-tagged ack is what phase 03's revoke path needs. |
+| 02 slice 4 — x86 PCID/INVPCID runtime gate | No x86 QEMU lane in this environment (the Limine ISO tooling is PowerShell-only). The shared tag lease already bounds values to the 12-bit width; the CPUID/`CR4.PCIDE` decision and `INVPCID` path cannot be executed here. |
+| 03 — grant lifecycle | Blocked by slice 3 per the plan's own dependency: the revoke path needs a synchronous invalidation acknowledgement and a proven safe-root transition before frames may be released. |
+| 07 — warm snapshot | Blocked by 03 (settled accounting/layout) and by hardware: save→reset→restore→resume needs a block-capable board. The format work (explicit `(PA, length)` runs, durable `EMPTY→WRITING→COMMITTED→CONSUMING→CONSUMED` ordering, CRC agreement) is implementable and host-testable against a fake block device, but the feature stays disabled and no readiness claim is possible without the board. |
+| 08 — cross-architecture qualification | Depends on 02–07; its matrix also needs the x86 lane and the physical-board witnesses. |
+
+Two smaller items are recorded but deliberately not "fixed while passing":
+
+- `scripts/build-aarch64-test-hooks-ci.sh`'s `admission-core` marker: the selftest runs after the
+  earlier fixtures fill the 64-slot cell-quota table, so its "admitted ELF must succeed" step has
+  no slot. Test-harness fix (make the selftest independent of ambient quota, or drain what the
+  quota fixtures fill), proved not caused by this session's changes.
+- `FALLBACK_MEMORY_MAP` (x86, `kernel/src/boot.rs`): the plan's phase-05 step 3 requires the
+  fallback to prove it excludes the live kernel image; today it marks that range usable. Needs
+  the x86 lane.
+
 ## Dependency / release policy
 
 Phases 02 and 04 can run independently after 01; 06 is independent after 01. Phase 03 needs safe PTE reclamation and switch completion first; snapshot must use settled memory accounting/layout from 05, final RT sender wake behavior from 06, and a safe all-hart quiescence protocol from 02–03. Serialize scheduler/SMP edits in phases 06/07; test sender-consume wake racing freeze. Complete and verify each phase on its own image before merging or enabling its path. A failed high-risk gate returns to phase-01 fail-closed posture, **not** SAS fallback; software rollback cannot undo frames/data already exposed or a corrupt snapshot already restored. A fresh disk/cold boot and security incident review are required if that happened.
