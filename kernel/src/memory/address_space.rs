@@ -10,6 +10,37 @@ use hal::PageTableTrait;
 const USER_LIMIT: usize = 1usize << 38;
 static NEXT_DOMAIN: AtomicU64 = AtomicU64::new(1);
 
+/// Frames whose invalidation could not be confirmed. They never return to the
+/// allocator: a hart that still resolves the retired translation could walk into
+/// them, and "leaked" is the only safe end state for that. Drained only by an
+/// explicit audit, and counted so the leak is visible rather than silent.
+static QUARANTINED_FRAMES: Spinlock<Vec<OwnedFrame>> = Spinlock::new(Vec::new());
+
+/// Retain frames whose invalidation was not acknowledged.
+fn quarantine_frames(frames: Vec<OwnedFrame>, reason: &str) {
+    let count = frames.len();
+    if count == 0 {
+        return;
+    }
+    log::error!(
+        "[aspace] quarantining {} frame(s): {} — they will not be reused",
+        count,
+        reason
+    );
+    QUARANTINED_FRAMES.lock().extend(frames);
+}
+
+/// Test-hooks view of the quarantine: frames retained after an unacknowledged
+/// invalidation. A non-zero value is a leak by design, never a silent one.
+#[cfg(feature = "test-hooks")]
+#[cfg_attr(
+    not(target_arch = "riscv64"),
+    allow(dead_code) // reason: the fixture that asserts on it is RV64-only today
+)]
+pub(crate) fn quarantined_frame_count() -> usize {
+    QUARANTINED_FRAMES.lock().len()
+}
+
 /// Width of the architectural tag a root register can carry on this target.
 ///
 /// RV64 `satp` and AArch64 `TTBR0` carry 16-bit ASIDs; x86 PCID is 12-bit. A tag
@@ -536,6 +567,7 @@ impl AddressSpace {
 
         let mut table_frames = self.table_frames.lock();
         let mut pruned_table_frames = Vec::new();
+        let mut unacked = false;
         let result = (|| {
             for address in (kernel_stack.usable_start()..kernel_stack.top).step_by(PAGE_SIZE) {
                 let physical_address = crate::memory::paging::virt_to_phys(address)
@@ -587,16 +619,27 @@ impl AddressSpace {
             // This address space can already be active on sibling threads.
             // Invalidate both reserved stack ranges before freeing any table or
             // backing frame from a partially published map operation.
-            crate::memory::tlb_shootdown::flush_range(
+            let kernel_acked = crate::memory::tlb_shootdown::flush_range_and_await(
                 kernel_stack.usable_start(),
                 kernel_stack.top - kernel_stack.usable_start(),
-            );
-            crate::memory::tlb_shootdown::flush_range(
+            )
+            .is_ok();
+            let user_acked = crate::memory::tlb_shootdown::flush_range_and_await(
                 user_stack.usable_start(),
                 user_stack.top - user_stack.usable_start(),
-            );
+            )
+            .is_ok();
+            if !(kernel_acked && user_acked) {
+                unacked = true;
+            }
         }
-        drop(pruned_table_frames);
+        // Pruned tables are only released once the invalidations above are
+        // confirmed; on failure they are quarantined rather than dropped.
+        if unacked {
+            quarantine_frames(pruned_table_frames, "stack unmap invalidation unacknowledged");
+        } else {
+            drop(pruned_table_frames);
+        }
         result
     }
 
@@ -633,10 +676,11 @@ impl AddressSpace {
                 address,
             );
         }
-        crate::memory::tlb_shootdown::flush_range(
+        let kernel_acked = crate::memory::tlb_shootdown::flush_range_and_await(
             kernel_stack.usable_start(),
             kernel_stack.top - kernel_stack.usable_start(),
-        );
+        )
+        .is_ok();
         for address in (user_stack.usable_start()..user_stack.top).step_by(PAGE_SIZE) {
             unmap_existing_page(
                 self.root.physical_address(),
@@ -645,11 +689,19 @@ impl AddressSpace {
                 address,
             );
         }
-        crate::memory::tlb_shootdown::flush_range(
+        let user_acked = crate::memory::tlb_shootdown::flush_range_and_await(
             user_stack.usable_start(),
             user_stack.top - user_stack.usable_start(),
-        );
-        drop(pruned_table_frames);
+        )
+        .is_ok();
+        if kernel_acked && user_acked {
+            drop(pruned_table_frames);
+        } else {
+            quarantine_frames(
+                pruned_table_frames,
+                "task-stack unmap invalidation unacknowledged",
+            );
+        }
     }
 
     pub fn unmap_private_page(&self, virtual_address: VAddr) -> Result<(), AddressSpaceError> {
@@ -693,9 +745,18 @@ impl AddressSpace {
         let leaf = frames.remove(index);
         drop(table_frames);
         drop(frames);
-        crate::memory::tlb_shootdown::flush_page(virtual_address);
-        drop(detached_tables);
-        drop(leaf);
+        if crate::memory::tlb_shootdown::flush_range_and_await(virtual_address, PAGE_SIZE).is_ok() {
+            drop(detached_tables);
+            drop(leaf);
+        } else {
+            // The leaf and the pruned tables stay out of the allocator: a hart that
+            // still holds the translation could walk into either.
+            quarantine_frames(detached_tables, "private-page unmap invalidation unacknowledged");
+            quarantine_frames(
+                alloc::vec![leaf],
+                "private-page leaf invalidation unacknowledged",
+            );
+        }
         Ok(())
     }
     /// TEST-ONLY protocol-violation injection for the user-copy fixtures.
@@ -808,8 +869,11 @@ impl AddressSpace {
             }
         });
         drop(table_frames);
-        crate::memory::tlb_shootdown::flush_page(virtual_address);
-        drop(detached_tables);
+        if crate::memory::tlb_shootdown::flush_range_and_await(virtual_address, PAGE_SIZE).is_ok() {
+            drop(detached_tables);
+        } else {
+            quarantine_frames(detached_tables, "grant-page unmap invalidation unacknowledged");
+        }
         let _ = entry;
         Ok(())
     }

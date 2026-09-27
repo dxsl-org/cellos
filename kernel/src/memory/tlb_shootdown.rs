@@ -62,45 +62,87 @@ pub enum FlushAckError {
 pub fn flush_asid_and_await(asid: usize) -> Result<(), FlushAckError> {
     // Local first: this hart must stop using the tag before it asks anyone else.
     hal::domain::flush_asid(asid);
+    await_remote_invalidation("asid")
+}
 
-    #[cfg(target_arch = "riscv64")]
-    {
-        use crate::task::smp;
-        let me = crate::task::hart_local::current_hart_id();
-        let remotes: alloc::vec::Vec<usize> = smp::online_harts().filter(|hart| *hart != me).collect();
-        for hart in remotes {
-            // A delivered IPI can still be late: the target may be in a long
-            // non-interruptible stretch. Retry with a fresh epoch and a fresh
-            // interrupt before failing closed, because failing closed leaks a tag
-            // and a retry costs one IPI.
-            let mut attempt = 0;
-            loop {
-                attempt += 1;
-                let epoch = smp::request_tlb_flush(hart);
-                let deadline = hal::common::timer::read_mtime() + TLB_ACK_TIMEOUT_TICKS;
-                while !smp::tlb_flush_completed(hart, epoch) {
-                    if hal::common::timer::read_mtime() > deadline {
-                        break;
-                    }
-                    core::hint::spin_loop();
-                }
-                if smp::tlb_flush_completed(hart, epoch) {
+/// Invalidate a page-aligned range everywhere and **wait for every online hart**.
+///
+/// The frame-release contract for unmapping: the leaf and any pruned table frames
+/// may only return to the allocator once no hart can still walk the translation
+/// that pointed at them. `flush_range` remains the broadcast-and-hope variant for
+/// callers that release nothing.
+pub fn flush_range_and_await(start: VAddr, size: usize) -> Result<(), FlushAckError> {
+    debug_assert!(start & (PAGE_SIZE - 1) == 0);
+    debug_assert!(size & (PAGE_SIZE - 1) == 0);
+    let end = start
+        .checked_add(size)
+        .expect("TLB flush range must not wrap the address space");
+    for page in (start..end).step_by(PAGE_SIZE) {
+        // The observation window must see every invalidation path, not just the
+        // one that happens to be named `flush_page`: a fixture that asserts "the
+        // page was flushed before the frame was released" would otherwise pass or
+        // fail on which function the caller used.
+        #[cfg(feature = "test-hooks")]
+        if TEST_FLUSH_TRACKING.load(Ordering::Acquire) {
+            TEST_FLUSHED_PAGES.lock().push(page);
+        }
+        hal::paging::flush_tlb_page(page);
+    }
+    await_remote_invalidation("range")
+}
+
+/// Ask every online remote hart to invalidate locally and wait for each one.
+///
+/// One request per hart, retried with a fresh epoch: a delivered IPI can still be
+/// late (the target may be in a long non-interruptible stretch), and failing closed
+/// costs a leaked tag or retained frames while a retry costs one IPI.
+#[cfg(target_arch = "riscv64")]
+fn await_remote_invalidation(what: &str) -> Result<(), FlushAckError> {
+    use crate::task::smp;
+    let me = crate::task::hart_local::current_hart_id();
+    for hart in smp::online_harts().filter(|hart| *hart != me) {
+        let mut attempt = 0;
+        loop {
+            attempt += 1;
+            let epoch = smp::request_tlb_flush(hart);
+            let deadline = hal::common::timer::read_mtime() + TLB_ACK_TIMEOUT_TICKS;
+            let mut spins = 0usize;
+            let _ = &mut spins;
+            while !smp::tlb_flush_completed(hart, epoch) {
+                if hal::common::timer::read_mtime() > deadline {
                     break;
                 }
-                #[cfg(feature = "test-hooks")]
-                log::warn!(
-                    "[tlb] flush ack for asid {} late on hart {} (attempt {})",
-                    asid,
-                    hart,
-                    attempt
-                );
-                if attempt >= TLB_ACK_ATTEMPTS {
-                    return Err(FlushAckError::Timeout { hart, epoch });
-                }
+                // Spin, and only spin: this runs in whatever context the release
+                // happens to be in, where widening the interrupt window can admit a
+                // timer ISR into the middle of a teardown (observed as a hang in
+                // the admission fixture). A remote hart makes progress anyway —
+                // the emulator interleaves vCPUs — so the wait needs a budget, not
+                // a yield.
+                spins = spins.wrapping_add(1);
+                core::hint::spin_loop();
+            }
+            if smp::tlb_flush_completed(hart, epoch) {
+                break;
+            }
+            #[cfg(feature = "test-hooks")]
+            log::warn!(
+                "[tlb] {} invalidation unacknowledged on hart {} (attempt {})",
+                what,
+                hart,
+                attempt
+            );
+            if attempt >= TLB_ACK_ATTEMPTS {
+                return Err(FlushAckError::Timeout { hart, epoch });
             }
         }
     }
+    Ok(())
+}
 
+/// Non-RV64: the backends are single-CPU, so the local flush above is the whole
+/// contract and there is no remote to confirm.
+#[cfg(not(target_arch = "riscv64"))]
+fn await_remote_invalidation(_what: &str) -> Result<(), FlushAckError> {
     Ok(())
 }
 
@@ -111,8 +153,14 @@ pub fn flush_asid_and_await(asid: usize) -> Result<(), FlushAckError> {
 const TLB_ACK_TIMEOUT_TICKS: u64 = 20 * hal::common::timer::TICKS_PER_10MS;
 
 /// How many times a request is re-issued before the release fails closed.
+///
+/// Twenty-five attempts at ~200 ms is a five-second bound. It has to cover a remote hart
+/// that is in a long non-preemptible stretch — at boot that is the secondary's
+/// own selftest, which demonstrably outlasted a three-attempt budget — while still
+/// being finite. Phase 03's revoke should *defer* the release to a reaper instead
+/// of widening this bound further.
 #[cfg(target_arch = "riscv64")]
-const TLB_ACK_ATTEMPTS: usize = 3;
+const TLB_ACK_ATTEMPTS: usize = 25;
 
 /// Invalidate the translation for one changed page before its memory can run or reuse.
 #[inline]

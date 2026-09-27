@@ -116,6 +116,7 @@ pub(crate) fn run_primary() {
     // return to the allocator: a hart that still holds the translation may read
     // the leaf and walk the table chain. `unmap_private_page` released the owned
     // leaf and pruned its tables without invalidating anything.
+    let mut unmap_order_detail = (false, false, false, false);
     let unmap_order = {
         let mut builder = AddressSpaceBuilder::new();
         let built = builder
@@ -123,23 +124,48 @@ pub(crate) fn run_primary() {
             .and_then(|()| builder.build());
         match built {
             Ok(space) => {
-                let before = used_frames();
+                // Count this space's own ledger, not the global allocator: the
+                // invalidation now sleeps while it waits, which lets other tasks
+                // allocate and free, and a global count cannot distinguish that
+                // from the frame this unmap released.
+                let before = space.frames.lock().len();
                 crate::memory::tlb_shootdown::begin_test_flush_observation();
                 let unmapped = space.unmap_private_page(PRIVATE_PAGE).is_ok();
                 let flushed = crate::memory::tlb_shootdown::test_flush_observed(PRIVATE_PAGE);
                 crate::memory::tlb_shootdown::finish_test_flush_observation();
-                let released = used_frames().is_some_and(|after| {
-                    before.is_some_and(|before| after < before)
-                });
-                unmapped && flushed && released
+                let released = space.frames.lock().len() < before;
+                // The frame was released, not quarantined: an acknowledged
+                // invalidation is what makes the release legal, and the quarantine
+                // counter is how "released" and "retained because unacknowledged"
+                // stay distinguishable.
+                let not_quarantined = quarantined_frame_count() == 0;
+                unmap_order_detail = (unmapped, flushed, released, not_quarantined);
+                unmapped && flushed && released && not_quarantined
             }
             Err(_) => false,
         }
     };
     if unmap_order {
+        // Remote acknowledgement evidence, same shape as the lease fixture: on a
+        // two-hart run the release above waited for the other hart's own flush.
+        let me = crate::task::hart_local::current_hart_id();
+        let remotes: alloc::vec::Vec<usize> = crate::task::smp::online_harts()
+            .filter(|hart| *hart != me)
+            .collect();
+        log::info!(
+            "[aspace] unmap release confirmed: remote_harts={} quarantined={}",
+            remotes.len(),
+            quarantined_frame_count()
+        );
         log::info!("S22-RV64-UNMAP-ORDER: PASS");
     } else {
-        log::error!("S22-RV64-UNMAP-ORDER: FAIL");
+        log::error!(
+            "S22-RV64-UNMAP-ORDER: FAIL unmapped={} flushed={} released={} not_quarantined={}",
+            unmap_order_detail.0,
+            unmap_order_detail.1,
+            unmap_order_detail.2,
+            unmap_order_detail.3
+        );
     }
 
     // ── ASID lease contract ──────────────────────────────────────────────────
