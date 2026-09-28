@@ -154,7 +154,58 @@ Non-RV64 switch completion is now an explicit hook, not an inference:
   new policy tests over `cr3_for`, `pcid_enable_allowed`, `invpcid_descriptor` and the
   leaf-7 probe.
 
-### Finding — AArch64 private-root leaves are global, so ASID-targeted invalidation cannot reach them
+### Slice 4 — AArch64 non-global private leaves (2026-09-28) — done; behavioural discrimination unproven in QEMU
+
+- `PageFlags::NON_GLOBAL` (bit 9) in `hal/traits/paging/src/lib.rs:22-38`. AArch64 translates it to
+  `PTE_nG` (bit 11) in the single leaf-composition function
+  (`hal/arch/arm/src/aarch64/paging.rs:47-101`); RV64 **masks** it
+  (`hal/arch/riscv/src/rv64/paging.rs:25-41`) so the Sv39 leaf word stays byte-identical (the generic
+  namespace maps onto the leaf bit-for-bit, and bit 9 would otherwise become RSW[1]); x86 composes
+  only P/RW/US/NX and never reads it.
+- Set at the `user_flags` choke point (`kernel/src/memory/address_space.rs:1207-1217`), so the user
+  stack, the ELF segments, `map_private_page` and `map_grant_page` all get it, plus the cell's own
+  kernel stack in the private root (`:248-261`, `:615-624`). The shared supervisor ranges stay
+  **global** on purpose: trap entry reprograms `TTBR0_EL1` to the kernel root while still running on
+  the cell's kernel stack, so the SAS root's own leaf must stay valid — the fixture asserts it is
+  present (`kernel_root_kstack=present`).
+- The release path drops the `vmalle1is` stopgap and issues the targeted `tlbi aside1is` again
+  (`kernel/src/memory/tlb_shootdown.rs:78-86`).
+- Witnesses, AArch64 lane exit 0 with every pre-existing marker plus three new ones and
+  `[vfs-test] Results: 96 PASS, 0 FAIL`:
+  - `S22-AARCH64-LEAF-NONG: PASS user=… private=… grant=… kstack=… thread_kstack=… thread_ustack=…
+    shared=… kernel_root_kstack=present` — real walker leaf words from a built private root.
+  - `S22-AARCH64-RELEASE-FLUSH: PASS targeted=5 full=0 targeted_delta=1 full_delta=0
+    control_live=true` — dropping a real `AddressSpace` issues exactly one ASID-targeted
+    invalidation and zero all-context ones, with a live control so "zero" cannot be vacuous.
+  - `S22-AARCH64-ASID-INVALIDATION: UNPROVEN witnessed=… after_foreign=… control=…
+    environment_asid_flush_unscoped=true` — the behavioural test (cache VA→PA1, rewrite the leaf to
+    PA2, flush a foreign tag, read, then flush its own tag) is implemented, but **QEMU 8.2.2's
+    `aside1is` retires unrelated ASIDs**, which the fixture's own control proves, so the emulator
+    cannot discriminate global from non-global. Recorded as UNPROVEN, not as a pass; it needs
+    hardware or an ASID-faithful emulator.
+- Admission is unchanged: `switch_ordering_qualified()` is still `cfg!(target_arch = "riscv64")`
+  (`kernel/src/loader/domain_admission.rs:128-130`), so AArch64 Tier-2 stays refused. This slice
+  makes the invalidation correct; it does not reopen admission.
+
+### Finding — a cell's segments and stacks stay EL0-reachable in the SAS root
+
+`kernel/src/loader/elf.rs:241` (`wx::page_flags`, USER in `kernel/src/loader/wx.rs:52`) and
+`kernel/src/task/stack.rs:207-215` map a cell's ELF segments and user stack into the SAS/kernel root
+**with EL0 access**. Non-global private leaves remove the TLB-survival path, but not those copies:
+any SAS cell can still reach a domain cell's pages through the kernel root. That is the SAS
+single-address-space design and is not fixable inside this phase, but it is a prerequisite finding
+for any future isolation claim — and part of why the phase-01 containment posture is correct.
+
+### Finding — the test-hooks lanes share one embedded-artifact directory
+
+`scripts/build-test-hooks-ci.sh:31`, `scripts/build-native-domain-test-ci.sh:31`,
+`scripts/qemu-getrandom-sas-test.sh` and `scripts/build-aarch64-test-hooks-ci.sh:80` all write
+`kernel/src/embedded-test-hooks`. Concurrent lanes overwrite each other: a running AArch64 lane had
+its `init` replaced by a RISC-V ELF and booted RISC-V code, which surfaces as a false
+`[fault] Cell 1 … terminated` signature rather than as a lane error. Fix: give each architecture's
+lane its own embedded directory (or assert the embedded image's architecture before boot).
+
+### Superseded finding (2026-09-27) — AArch64 private-root leaves were global
 
 `hal/arch/arm/src/aarch64/paging.rs:182` composes every leaf as
 `phys | PTE_VALID | PTE_PAGE | PTE_AF | SH | attr` and never sets `PTE_nG` (bit 11).
@@ -179,20 +230,19 @@ returning false off RV64 (`kernel/src/loader/domain_admission.rs:107`).
 
 ### Slices still open (gates stay closed)
 
-- **Non-RV64 Tier-2 admission stays refused.** The ordering change is structural
-  hardening, not a demonstrated fix (the A/B in `a77545341` refuted the inherited
-  premise), and while the incoming hook and the invalidation ack are now in place, two
-  blockers remain: the AArch64 global-leaf finding above, and the absence of any real
-  domain-task entry on AArch64/x86_64 (the fixtures switch raw contexts; no non-RV64
-  image has admitted a Tier-2 cell yet).
-- **x86 `INVPCID` instruction path is unexecuted**: no x86 image can admit a domain while
-  admission is closed, so only the CPUID/CR4 policy and the PCID-off/on boot paths are
-  witnessed. It becomes live with the reopening above.
-- **AArch64 `flush_all` on release is a stopgap**, not the target design — see the
-  finding above.
-- **SMP off RV64** still needs per-CPU `hart_local`, IPI and remote acknowledgement
-  (`kernel/src/task/hart_local.rs:293-356` hard-codes slot 0), so non-RV64 multi-CPU
-  admission remains a separate named blocker.
+- **Non-RV64 Tier-2 admission stays refused**, now for narrower and better-named reasons:
+  1. no AArch64/x86_64 image has entered a **real domain task** (the fixtures switch raw contexts
+     and build private roots; nothing has run a cell inside one on those targets);
+  2. the ASID-scoped invalidation that the non-global leaves make possible is **unproven** — the
+     in-tree behavioural witness reports `UNPROVEN` because QEMU does not scope `aside1is`;
+  3. SMP off RV64 still needs per-CPU `hart_local`, IPI and remote acknowledgement
+     (`kernel/src/task/hart_local.rs:293-356` hard-codes slot 0).
+- **x86 `INVPCID` instruction path is unexecuted**: no x86 image can admit a domain while admission
+  is closed, so only the CPUID/CR4 policy and the PCID-off/on boot paths are witnessed.
+- **The SAS-root EL0 copies** (Finding above) are a prerequisite for any isolation claim beyond the
+  private-root mapping itself; they are outside this phase.
+- **The shared embedded-artifact directory** (Finding above) is a test-harness hazard, not a kernel
+  defect; until it is fixed, run one lane at a time or pin `EMBEDDED_OVERRIDE` per lane.
 
 ## Assumptions / risk / rollback
 - [UNVERIFIED] Non-RV64 context-switch implementation supplies a point equivalent to RV64 incoming saved-context callback; inspect assembly and prove before selecting hook placement. Rollback: disable Tier-2 admission and cold reboot; leaving a stale TLB mapping or an already recycled frame cannot be reversed by reverting binaries. Stop deployment and retire any compromised dev workload. Preserve test evidence, no production qualification from QEMU alone.
@@ -232,22 +282,47 @@ returning false off RV64 (`kernel/src/loader/domain_admission.rs:107`).
   caller and would be freed after an ordinary `Err`. That is fail-closed, but combined with the
   budget above it means a long enough remote stall halts the kernel rather than failing one
   fixture — another reason the release must become deferred.
-- **Finding — a remote hart can stop acknowledging mid-boot, and the waiter then burns the whole
-  budget on every later flush.** Reproduced on the current tree with
-  `--harts 2 --case migration,user-copy-race,ipc-copy-race,unmap-order,asid-lease`
-  (`.logs/native-domain-qemu/h2-user-copy-race-jCsMA8`): 272 successful
-  `[selftest] TLB-ACK: stage=remote-flush-completed hart=1` lines, then 267 consecutive
-  `[tlb] asid invalidation unacknowledged on hart 1 (attempt …)` warnings, including for the
-  pre-existing tag teardown (`tag 2 for domain 28 not recycled … Timeout { hart: 1, epoch: 297 }`).
-  Hart 1 stops publishing acks and never resumes, so every subsequent awaited flush pays the full
-  25 × 200 ms budget and the case fails. The ack is published in the trap path
-  (`vi_timer_tick`), which cannot run while that hart is inside a non-preemptible stretch or
-  spinning on a lock — i.e. the synchronous wait is unsound whenever the peer's progress depends
-  on the waiter. **Design consequence, required in phase 03:** release must never wait
-  synchronously from an arbitrary path; the waiter records the pending invalidation and a reaper
-  completes the release later (bounded error, frames retained, record kept `Revoking`). Widening
-  the budget is explicitly not the fix. Until that lands, the awaited flush is fail-closed but can
-  turn one stalled peer into a cascade of failed fixtures.
+- **Root cause 1 of the stall (fixed 2026-09-28) — a fixture-built root without the kernel
+  mapping.** The bounded copied-IPC fixture built its synthetic endpoints' private roots with
+  `map_user_page` only, so they carried no shared supervisor mapping
+  (`kernel/src/task/ipc_wire_selftest/mod.rs:32`). `ipc_send` wakes the receiver through the
+  production path (`kernel/src/task.rs:2081-2083` → `push_ready`), an idle hart work-steals it,
+  `SwitchPlan` derives `Activate`, and the switch writes `satp` for a root that does not map the
+  kernel: the next instruction fetch faults, the trap vector sits in the same unmapped region,
+  and the hart loops in M-mode (`info registers`: `pc=stvec=sepc=stval=0x802001c4`,
+  `scause=0xc`, `mip` SSIP+STIP pending and never taken — `.logs/stalled-ack-rootcause/
+  qemu-info-registers-stalled.txt`). The acknowledgement lives in the trap path
+  (`kernel/src/task.rs:865-872`), so that hart can never acknowledge again. Fixed at the
+  construction point instead of per fixture: `AddressSpaceBuilder::build` now adds the shared
+  supervisor ranges to **every** root (`kernel/src/memory/address_space.rs:333`, with
+  `map_shared_supervisor` as the shared half of `map_registered_execution`), so a fixture root
+  cannot be published without them, and `ipc_wire_selftest::cleanup_task` clears the tid from the
+  run queues (`:104`).
+- **Root cause 2 of the flaky 2-hart reds (fixed 2026-09-28) — two fixture contracts that were
+  not properties of a two-hart boot.** `ATOMIC_PUBLICATION_AP-15` demanded an exact 36-byte audit
+  delta while the ring carries records of mixed length from a competing producer on the other
+  hart — the same defect the same file already documented and fixed for its other cases
+  (`kernel/src/loader/atomic_publication_tests/success.rs:28-44`); and its success contract
+  required the published task to still be *queued*, which a second hart can invalidate by
+  stealing and running it (`dispatchable`, `:35`). With both fixed, the 2-hart set
+  `migration,user-copy-race,ipc-copy-race,unmap-order,asid-lease` passed twice in a row
+  (`.logs/native-domain-qemu/h2-migration-*`, `h2-user-copy-race-*`, `h2-ipc-copy-race-*`,
+  `h2-unmap-order-*`, `h2-asid-lease-*` for the two runs) and `--harts 2 --case grant-pair`
+  passed twice, where before each of those runs panicked or stalled.
+- **Remaining stall (open) — hart 1 stops acknowledging right after the SMP-retirement
+  switch-boundary stage.** `.logs/native-domain-qemu/h2-grant-revoke-iAtQ1S/qemu.log` and
+  `h2-unmap-order-hwFzIY/qemu.log`: the last successful acknowledgement is
+  `TLB-ACK: stage=remote-flush-completed hart=1 epoch=296`, immediately followed by
+  `SMP-RETIREMENT: stage=rv64-switch-boundary hart=1 selected=0 executing=0`, and from then on
+  every awaited flush fails its retries until the boot window closes (`attempt 1..17` at the
+  tail). Two candidate causes remain open and are *not* distinguished yet: the retirement fixture
+  leaves hart 1 in a non-preemptible state (its stages deliberately defer the SSIP), or hart 1 is
+  waiting on progress only hart 0 can make while hart 0 waits for the ack. Consequence: 2-hart
+  boots whose fixtures need a synchronous acknowledgement (`grant-revoke`, and any boot that
+  reaches it) end truncated, and the runner now reports that as
+  `NOTE: grant-revoke fixture truncated by a stalled remote acknowledgement` instead of blaming
+  the revoke fixture. The design answer is the same as above: no synchronous waits — defer the
+  release and let a reaper complete it.
 - **Finding — `--harts 2 --case asid-lease` hit a pre-existing-looking panic at the trusted-init
   publication stage**: `ATOMIC_PUBLICATION_AP-15: FAIL` →
   `panicked at kernel/src/loader/atomic_publication_tests/cases.rs:149:5: atomic-publication

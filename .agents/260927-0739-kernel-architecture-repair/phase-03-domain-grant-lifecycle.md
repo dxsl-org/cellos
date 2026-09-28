@@ -117,6 +117,52 @@ Named gaps, not claimed as done:
 - **Non-RV64 lifecycle is not implemented** — AArch64/x86_64 keep the phase-01 sentinels exactly
   (verified by construction, not executed as a positive path).
 
+### Slice 5 — the three named gaps closed (2026-09-28)
+
+- **Deferred-ack tolerance.** `scripts/qemu-native-domain-test.sh:398-536`
+  (`assert_grant_revoke_outcome`) accepts the boot fixture's `-SLICE-RW`/`-REVOKE` first-attempt
+  markers only in invariant form: the eight properties that hold in either outcome must PASS and
+  no other `S22-RV64-…: FAIL` may appear; an accepted failure must carry its own evidence chain
+  from the same log (`receiver publish refused: AwaitingSafeRoot` plus the grant-page quarantine
+  for `-SLICE-RW`; `domain revoke deferred … record kept Revoking` for `-REVOKE`; the exhausted
+  retry budget as the cause; both naming the same grant id). A new unconditional property,
+  `S22-RV64-GRANT-GATE-RETIRE-REFUSAL: PASS` (`kernel/src/task/grant_gate_selftest.rs:145-185`,
+  `:281-320`), asserts that after the revoke attempt — completed **or** deferred — the record
+  refuses a receiver slice, an owner slice and a re-share, and the receiver mapping is gone.
+  Red-proved by replaying the archived stalled boot through the runner's `--assert-log` seam with
+  one mutant per piece of evidence (each mutant exits 1 with its own message).
+- **Same-recipient RW→RO downgrade.** The owner publishes ReadWrite, then re-shares the *same*
+  grant to the *same* recipient as ReadOnly (fourth grant id, so every deliberate fault stays
+  attributable); the receiver proves the writable mapping first, re-slices, reads the original
+  byte and then stores — which must fault, classified at the exact handoff address
+  (`faults=1:2:1:1`). Red-proved by temporarily re-sharing `PERM_RW` instead of `PERM_RO`: the
+  store succeeded and the runner failed with
+  `missing store fault at the downgraded grant address` (`.logs/native-domain-qemu/h1-grant-pair-3YyvIh`),
+  then the tree was restored byte-identically (`sha256sum -c`).
+- **Two-hart pair.** `--harts 2 --case grant-pair` runs and is asserted non-skipping (the 2-hart
+  gate requires `[smp] hart 1 online, parked`); terminal
+  `PASS: native-domain case=grant-pair harts=2 terminal=S22-RV64-GRANT-PAIR-OWNER: PASS`
+  (`.logs/native-domain-qemu/h2-grant-pair-xWohEM`, and twice more after the fixture-contract
+  fixes in phase 02).
+
+Two side findings from the same work:
+
+- **The lane was unbuildable at HEAD.** The pair cells became tracked in `28325dff1` without F1
+  (`scripts/cellos-sign --check`) entries, so the sign gate refused them. Added reviewed
+  `[[file]]`/`[[crate]]` entries to `scripts/unsafe-allowlist.toml:40-52` and `:603-615`
+  (`class = test-harness`/`test-violation`, the raw-pointer dereference being the property under
+  test, approver `dmin` matching the existing `tier2-exploit` precedent) — **this is a security-gate
+  allowlist change and the approver field asserts human approval**; it is called out here so it can
+  be reviewed or reverted deliberately.
+- **The lane's build directory is shared.** Two concurrent invocations of the same lane collide in
+  `target/native-domain-test` and `kernel/src/embedded-test-hooks/kernel_fs.img` (`failed to build
+  archive from rlib … No such file or directory`); run one lane at a time until that is isolated.
+
+**Still not closed:** the positive branches are proven on RV64 only; AArch64/x86_64 keep the
+phase-01 sentinels; DMA pins and the VFS lease remain unreachable for domain receivers; and a
+2-hart boot that reaches the revoke fixture can still be truncated by the stall recorded in
+phase 02 (the runner now reports that as a stall instead of a property failure).
+
 ## Assumptions / risk / rollback
 - [UNVERIFIED] Physical identity is a usable receiver VA under all supported domain layouts; verify against `USER_LIMIT` and occupied mappings before deciding whether ABI-compatible alternate VA exists. No public ABI change without the two Law-1 owner checkpoints. Rollback: phase-01 deny gate plus cold reboot; leaked contents or prior DMA writes cannot be undone. Missing remote completion blocks release; retain quarantined frames rather than treating timeout as success.
 
