@@ -691,33 +691,6 @@ pub fn is_rt_hart_online() -> bool {
     HART_ONLINE[HART_RT].load(core::sync::atomic::Ordering::Relaxed)
 }
 
-/// May the scheduler hand a runnable task to `hart`?
-///
-/// Bringing a hart online and dispatching *tasks* on it are two capabilities.
-/// A secondary holds everything it needs to do kernel work on its own stack —
-/// its identity, vectors, banked interrupt interface, timer — which is what the
-/// cross-hart maintenance paths (remote invalidation, retirement switching)
-/// require of it. Handing it runnable tasks exercises the per-hart dispatch
-/// path as well, and that is only qualified where it has been run: on AArch64
-/// the first task dispatched to hart 1 faults in kernel mode at `PC=0`
-/// (`ec=0x21 elr=0x0`, an instruction abort on the current EL), so dispatch
-/// stays on hart 0 until that path is fixed. Maintenance requests still reach
-/// hart 1 — it is online and it answers them.
-#[inline]
-pub fn accepts_task_dispatch(hart: usize) -> bool {
-    if hart != HART_RT {
-        return true;
-    }
-    #[cfg(target_arch = "aarch64")]
-    {
-        false
-    }
-    #[cfg(not(target_arch = "aarch64"))]
-    {
-        is_rt_hart_online()
-    }
-}
-
 /// Entry point for secondary harts, called from `_secondary_entry` asm.
 ///
 /// a0 = hart_id (set by OpenSBI per SBI HSM §9.1.1).

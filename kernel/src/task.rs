@@ -514,8 +514,15 @@ static mut BOOT_CONTEXTS: [crate::hal::arch::Context; smp::MAX_HARTS] =
         tp: 0,
         sscratch: 0,
     }; smp::MAX_HARTS];
+/// The context a hart that has never run a task saves itself into.
+///
+/// One slot per hart, like RV64's `BOOT_CONTEXTS`: a *shared* slot means the
+/// second hart's incoming switch loads whatever the first hart last saved there.
+/// Measured on a two-hart boot before this was per-hart: the incoming `eret`
+/// took `elr_el1 = 0` and the kernel died on an instruction abort at `PC=0`
+/// (`ec=0x21 elr=0x0 spsr=0x3C5`).
 #[cfg(target_arch = "aarch64")]
-static mut BOOT_CONTEXT: crate::hal::arch::Context = crate::hal::arch::Context {
+const IDLE_CONTEXT: crate::hal::arch::Context = crate::hal::arch::Context {
     x19: 0,
     x20: 0,
     x21: 0,
@@ -534,6 +541,10 @@ static mut BOOT_CONTEXT: crate::hal::arch::Context = crate::hal::arch::Context {
     sp_el0: 0,
     daif: 0, // saved/restored by __switch_el1; 0 = no DAIF masking (IRQs enabled)
 };
+
+#[cfg(target_arch = "aarch64")]
+static mut BOOT_CONTEXTS: [crate::hal::arch::Context; smp::MAX_HARTS] =
+    [IDLE_CONTEXT; smp::MAX_HARTS];
 #[cfg(target_arch = "riscv32")]
 static mut BOOT_CONTEXT: crate::hal::arch::Context = crate::hal::arch::Context {
     ra: 0,
@@ -1123,6 +1134,39 @@ pub(crate) fn terminate_current_cell_on_user_trap_fault(
     );
 }
 
+/// The boot/idle context slot a switch from `hart_id` saves into.
+///
+/// AArch64 has one per hart; the other non-RV64 targets still have a single
+/// idle context (they do not start secondaries).
+#[cfg(target_arch = "aarch64")]
+#[inline]
+unsafe fn boot_context_for(hart_id: usize) -> *mut crate::hal::arch::Context {
+    // SAFETY: `hart_id < MAX_HARTS` — it comes from `current_hart_id()`.
+    unsafe { &raw mut BOOT_CONTEXTS[hart_id] }
+}
+
+#[cfg(all(not(target_arch = "riscv64"), not(target_arch = "aarch64")))]
+#[inline]
+unsafe fn boot_context_for(_hart_id: usize) -> *mut crate::hal::arch::Context {
+    &raw mut BOOT_CONTEXT
+}
+
+/// Report, once per hart, that the scheduler handed this hart a task.
+///
+/// A secondary that only takes interrupts and never runs a task is
+/// indistinguishable from one that schedules; this is the line that tells them
+/// apart, and it is bounded so a long boot cannot flood the console.
+#[cfg(target_arch = "aarch64")]
+fn note_task_dispatch(hart_id: usize) {
+    use core::sync::atomic::{AtomicU8, Ordering};
+    static REPORTED: [AtomicU8; smp::MAX_HARTS] = [const { AtomicU8::new(0) }; smp::MAX_HARTS];
+    if let Some(slot) = REPORTED.get(hart_id) {
+        if slot.swap(1, Ordering::AcqRel) == 0 {
+            log::info!("[sched] hart {} dispatched a task", hart_id);
+        }
+    }
+}
+
 /// Core scheduling logic: picks next task and performs switch OUTSIDE of the lock.
 pub fn yield_cpu() {
     // RV64 cooperative yields can enter with SIE set (not only from trap
@@ -1415,7 +1459,7 @@ pub fn yield_cpu() {
                 }
                 #[cfg(not(target_arch = "riscv64"))]
                 {
-                    &raw mut BOOT_CONTEXT
+                    boot_context_for(hart_id)
                 }
             } else {
                 plan.outgoing
@@ -1427,12 +1471,14 @@ pub fn yield_cpu() {
                 }
                 #[cfg(not(target_arch = "riscv64"))]
                 {
-                    &raw const BOOT_CONTEXT
+                    boot_context_for(hart_id) as *const crate::hal::arch::Context
                 }
             } else {
                 plan.incoming
             };
             if !plan.incoming.is_null() {
+                #[cfg(target_arch = "aarch64")]
+                note_task_dispatch(hart_id);
                 #[cfg(target_arch = "riscv64")]
                 crate::hal::arch::set_kernel_stack((&*plan.incoming).sp);
                 #[cfg(target_arch = "aarch64")]
@@ -1490,7 +1536,7 @@ pub fn yield_cpu() {
                 }
                 #[cfg(not(target_arch = "riscv64"))]
                 {
-                    &raw mut BOOT_CONTEXT
+                    boot_context_for(hart_id)
                 }
             } else {
                 curr
@@ -1503,7 +1549,7 @@ pub fn yield_cpu() {
                 }
                 #[cfg(not(target_arch = "riscv64"))]
                 {
-                    &raw const BOOT_CONTEXT
+                    boot_context_for(hart_id) as *const crate::hal::arch::Context
                 }
             } else {
                 next
