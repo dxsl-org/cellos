@@ -293,6 +293,42 @@ acknowledging can no longer burn a boot's budget.
   grant-pair` **passed twice in a row with zero stall-truncations**, where before every such run
   ended on the grant-revoke fixture being truncated by an unacknowledged flush.
 
+### Slice 7 — a real Tier-2 domain entry on x86_64, test images only (2026-09-28) — done
+
+The x86 half of phase 02's step 2, and the first execution of the PCID/INVPCID path with a domain
+live.
+
+- `switch_ordering_qualified()` is now `riscv64 || (aarch64 && test-hooks) || (x86_64 &&
+  test-hooks)` (`kernel/src/loader/domain_admission.rs:149`), and the production pin is widened to
+  `any(aarch64, x86_64) && not(test-hooks)` as a const-assert, so a production x86_64 build that
+  qualified would fail to compile. `enable_for_boot` refuses the posture on x86_64 when
+  `hal::domain::kernel_cr3() == 0` — the x86 counterpart of the AArch64 EL2 refusal, because trap
+  entry can only install a *known* kernel root.
+- New lane: `scripts/build-x86_64-domain-test-ci.sh` (its own embedded ramdisk under
+  `target/x86-domain-test-embedded`, isolated `CARGO_TARGET_DIR`, `-D warnings`) and
+  `scripts/x86/qemu-domain-test.sh` (builds the ISO, boots q35, asserts admission, the live CR3,
+  exactly one contained NULL-store fault, frame release, teardown and shell recovery by typing `ps`
+  after the fault and requiring a second prompt). `scripts/qemu-x86_64-test.sh` — the *production*
+  lane — now asserts the disabled posture and the absence of `ENABLED`, so the two x86 lanes must
+  keep disagreeing.
+- Witnesses, TCG (`BOOT_WINDOW=60 bash scripts/x86/qemu-domain-test.sh`, exit 0):
+  `S22-X86-DOMAIN-LIVE: PASS cr3=0x1290000 root=0x1290000 pcid=0 pcid_usable=false
+  kernel_cr3=0x59000 domain=5 generation=6`;
+  `[selftest] DOMAIN-FRAME-RELEASE: PASS tag=1 frames=5 quarantined=0`;
+  `S22-X86-DOMAIN-TEARDOWN: PASS releases=1 quarantined=0 ack_generation=6`;
+  `[domain] admitted cell 'tier2-smoke'/'tier2-exploit' to Tier 2 Paged Domain (CR3 isolation)`;
+  exactly one `[fault] Cell 6 … addr=0x0`, then `Cellos > ps` answered with a second prompt.
+- Witnesses, KVM with PCID on — `sg kvm -c 'X86_ACCEL=kvm X86_CPU_MODEL=host BOOT_WINDOW=60 bash
+  scripts/x86/qemu-domain-test.sh'`, exit 0:
+  `PCID enabled (CPUID pcid=true invpcid=true, CR4.PCIDE=1, CR3=0x59000)` and
+  `S22-X86-DOMAIN-LIVE: PASS cr3=0x11c9001 root=0x11c9000 pcid=1 pcid_usable=true
+  kernel_cr3=0x59000 domain=5 generation=6` — a live domain with a **nonzero PCID in CR3** (tag 1)
+  on a CPU where INVPCID is real, so the type-1 INVPCID invalidation path is now executed rather
+  than merely compiled (`S22-X86-DOMAIN-TEARDOWN: PASS releases=1 quarantined=0`).
+- Not proven, named: the production x86 denial is asserted by the lane script's posture check, not
+  by a domain-class artifact in the production image (none exists), and non-RV64 SMP remains out of
+  scope for both architectures.
+
 ### Slices still open (gates stay closed)
 
 - **Non-RV64 Tier-2 admission stays refused**, now for narrower and better-named reasons:

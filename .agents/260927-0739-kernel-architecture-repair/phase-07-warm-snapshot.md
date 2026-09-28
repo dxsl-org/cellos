@@ -121,6 +121,36 @@ Still open, and stated as such: the **real** park hook (scheduler trap-path coop
 board witness. Until both exist, `HartsNotQuiesced`/`Unsupported` is what a multi-hart capture would
 return — and the gate keeps capture off in every shipping image.
 
+### Slice 3 — mutable kernel-image state in the inventory (2026-09-28) — device-independent half
+
+`FrameAllocator::new_from_map` excludes `MemoryType::Kernel`, so `.data`/`.bss` frames holding
+mutable globals could not be in an inventory built from allocated frames alone. The inventory now
+carries a second run kind: `RUN_FLAG_IMAGE` (`kernel/src/snapshot.rs:181`), whose runs are bounded
+by a trusted linker span (`ImageRegion`, `:490`) derived from
+`__domain_text_start`/`__domain_writable_start`/`__domain_writable_end` (`kernel/linker.ld:47,77`,
+`kernel/linker-aarch64.ld:35,54`). The span is not stored in the header — the kernel hash pins the
+build — and the reader validates image runs against its own live span, so an on-disk inventory
+naming image frames this build does not own is refused before RAM is written.
+
+Refusal rules, all before any block I/O: an empty or misaligned span
+(`ImageRegionUnavailable`), a span outside the trusted image (`ImageRangeOutsideImage`), an image
+run overlapping or duplicating an allocated run in either direction (`ImageRangeConflict`, never
+coalesced across kinds), and the existing capacity bound, which the image half is not exempt from.
+A build without the writable-span symbols (x86-64's higher-half link, riscv32/aarch32/x86-32) takes
+the `None` arm and **refuses capture** rather than claiming there is no image state.
+
+Evidence: `cargo test -p cellos-kernel --target x86_64-unknown-linux-gnu` → **160 passed** (5 new:
+an 18-byte `.bss` marker straddling a sector boundary plus a tail marker round-trip byte-exactly,
+with a red witness showing the same fixture captured from allocator-owned frames alone replays no
+image frame and loses the marker; three overlap shapes refused in both directions with 0 I/O; out-
+of-span/empty/misaligned/reserved-flag refusals; a foreign image run refused by the reader with 0
+RAM writes; a 31 000-frame image run refused `CapacityExceeded`).
+
+Still open, and stated as such: allocator metadata that lives inside those ranges is *rebuilt*, not
+restored, so the inventory covering the frames is not a claim that the state in them is
+reconstructible; coherent capture staging, authenticated freshness, the real park hook and the
+board witness remain out of scope here, and `QUALIFICATION_ENABLED` is untouched.
+
 ## Assumptions / risk / rollback
 - [UNVERIFIED] A block-capable board/test image and protected persistent volume are available; if not, finish format/negative tests but **leave feature disabled** and report exact physical gate, not a claimed complete warm-boot fix. Raw memory capture persists sensitive bytes; enforce storage trust/erase/retention per threat model. Rollback uses cold boot with restore disabled and snapshot area invalidated on a **throwaway** disk; prior snapshot bytes, leaked secrets or already corrupted external state cannot be undone by code rollback.
 

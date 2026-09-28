@@ -163,6 +163,36 @@ phase-01 sentinels; DMA pins and the VFS lease remain unreachable for domain rec
 2-hart boot that reaches the revoke fixture can still be truncated by the stall recorded in
 phase 02 (the runner now reports that as a stall instead of a property failure).
 
+### Slice 6 — the lifecycle on AArch64 test images (2026-09-28) — done
+
+`domain_grant_lifecycle_supported()` (`kernel/src/task/syscall.rs:241`) is now
+`native-domains && (riscv64 || (aarch64 && test-hooks))`, and all 27 `riscv64`-only cfg sites in
+that file were widened to the same predicate. No arch-specific step was needed in the state
+machine: AArch64 already has non-global private leaves with deferred release (phase 02), and the
+switch ordering the lifecycle relies on is the same gate. A const-assert pins a production AArch64
+build to the phase-01 sentinels and to their exact values
+(`kernel/src/task/syscall.rs:265-286`: `GRANT_DENY_ALLOC == 0`, `GRANT_DENY_SLICE == usize::MAX`,
+`GRANT_DENY_ERROR = PermissionDenied`), and inverting that assert fails the build with
+`error[E0080]` — red-proved, then restored byte-identically.
+
+The kernel-side fixtures now run on AArch64 from a **new additive** dispatch block
+(`kernel/src/main.rs:1126-1148`, test-hooks only, skipped at EL2 with a named log line); the RV64
+block is untouched. `domain_grant.rs` owns `ARCH_TAG` so the markers are
+`S22-AARCH64-GRANT-*` there and byte-identical to before on RV64.
+
+Witnesses: AArch64 test-hooks lane exit 0 with **22/22** `S22-AARCH64-GRANT-*` markers in its
+required list, `[vfs-test] Results: 96 PASS, 0 FAIL`, and a real Tier-2 cell driving
+register → copy-in → copy-out → unregister → refused through the EL0 syscall path
+(`cells/tests/tier2-smoke/src/main.rs`). That cell's grant posture is now architecture-honest
+(compile-time: published-grant branch on RV64/AArch64, phase-01 deny branch elsewhere), because the
+x86 domain lane also packs it and x86_64 deliberately keeps the lifecycle closed. RV64 1-hart case
+set unchanged and green.
+
+Named gaps: the two-cell public handoff and the address-classified store faults remain RV64-lane
+evidence only — the AArch64 lane drives the kernel-side fixture, not the pair; `GrantShare` has no
+sentinel branch on a closed target (unchanged from phase 01, and unreachable there because no
+domain can be admitted); DMA pins and the VFS lease are still unreachable for domain receivers.
+
 ## Assumptions / risk / rollback
 - [UNVERIFIED] Physical identity is a usable receiver VA under all supported domain layouts; verify against `USER_LIMIT` and occupied mappings before deciding whether ABI-compatible alternate VA exists. No public ABI change without the two Law-1 owner checkpoints. Rollback: phase-01 deny gate plus cold reboot; leaked contents or prior DMA writes cannot be undone. Missing remote completion blocks release; retain quarantined frames rather than treating timeout as success.
 

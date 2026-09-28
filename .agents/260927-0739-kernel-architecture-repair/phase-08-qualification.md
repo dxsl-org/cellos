@@ -27,6 +27,44 @@ Make the tested software posture and the documented product claim agree. `docs/s
 - [ ] Tier-1 SAS, Tier-3 VM, Supervisor snapshot authority, signed spawn, boot and driver regression paths still work.
 - [ ] Evidence links and docs do not say production-ready, physical qualified or warm-boot performant without the exact witness; no test-only code ships in production.
 
+## Progress
+
+### Matrix as executed on this machine (2026-09-28, HEAD `7ff668dfd` + the lanes' own images)
+
+Everything below was run here; each row names the command and the terminal that decides it. The
+rows marked hardware-gated cannot be produced in this environment and are named rather than
+approximated.
+
+| # | Lane | Command | Result |
+|---|---|---|---|
+| 1 | Host kernel units | `cargo test -p cellos-kernel --target x86_64-unknown-linux-gnu` | 155 passed / 0 failed |
+| 2 | Host HAL units | `cargo test -p hal-x86 --lib --target x86_64-unknown-linux-gnu` | 12 passed / 0 failed |
+| 3 | RV64 native-domain, 1 hart | `scripts/build-native-domain-test-ci.sh` then `scripts/qemu-native-domain-test.sh --harts 1 --case admission,asid-lease,unmap-order,grant-revoke,grant-gate,grant-pair` | exit 0; `S22-RV64-QEMU-SUITE: PASS HARTS=1 …` (6/6) |
+| 4 | RV64 native-domain, 2 harts | same, `--harts 2 --case migration,user-copy-race,ipc-copy-race,unmap-order,asid-lease,grant-pair` | exit 0 twice in a row; `S22-RV64-QEMU-SUITE: PASS HARTS=2 …` |
+| 5 | RV64 production build | `RUSTFLAGS="-D warnings" cargo check -p cellos-kernel --release --target riscv64gc-unknown-none-elf -Z build-std=core,alloc` | clean |
+| 6 | RV64 off-feature build | same with `--no-default-features` | clean |
+| 7 | RV64 test-hooks build | same with `--features test-hooks` | clean |
+| 8 | AArch64 test-hooks lane | `scripts/build-aarch64-test-hooks-ci.sh` then `scripts/qemu-aarch64-test-hooks.sh` | exit 0; every required marker incl. `S22-AARCH64-DOMAIN-LIVE`/`-DOMAIN-TEARDOWN`/`-LEAF-NONG`/`-RELEASE-FLUSH`; `[vfs-test] Results: 96 PASS, 0 FAIL` |
+| 9 | AArch64 production build | `RUSTFLAGS="-D warnings" cargo check -p cellos-kernel --release --target aarch64-unknown-none-softfloat -Z build-std=core,alloc` | clean — which is the compile-time proof that the Tier-2 gate stays closed there |
+| 10 | x86_64 TCG lane (PCID off) | `X86_EXPECT_PCID=0 bash scripts/qemu-x86_64-test.sh` | shell prompt; `PCID disabled (CPUID pcid=false invpcid=false, CR4.PCIDE=0, CR3=0x59000 …)` |
+| 11 | x86_64 KVM lane (PCID on) | `sg kvm -c 'X86_ACCEL=kvm X86_CPU_MODEL=host X86_EXPECT_PCID=1 bash scripts/qemu-x86_64-test.sh'` | shell prompt; `PCID enabled (CPUID pcid=true invpcid=true, CR4.PCIDE=1, CR3=0x59000)` |
+| 12 | x86_64 build | `RUSTFLAGS="-D warnings" cargo check -p cellos-kernel --release --target x86_64-unknown-none -Z build-std=core,alloc` | clean |
+| 13 | HAL boundary check | `scripts/check-hal-boundaries.sh` | `PASS: HAL/SoC/board boundaries are intact` |
+| 14 | Spec anchors | `python3 scripts/check-spec-anchors.py` | 0 violations (19/400 anchored, 271 coverage gaps) |
+| 15 | Snapshot contract | snapshot stays unavailable; AArch64/RV64 lanes boot with the gate closed and `QUALIFICATION_ENABLED` untouched | consistent with phase 01 |
+
+Hardware-gated, and therefore **not** claimed by any row above: device-backed snapshot freshness
+and a real save→reset→restore→resume on MMC, measured RT latency (phase 06's P99), remote-TLB
+completion on a physical board, and the ASID-scoping behaviour of `tlbi aside1is`
+(`S22-AARCH64-ASID-INVALIDATION: UNPROVEN` — QEMU 8.2.2 retires unrelated ASIDs, proved by the
+fixture's own control).
+
+Not executed here at all: `tests/integration` lanes that need `disk_v3.img` with its cell-table
+bootstrap section (`launch-profile`, `tier2-fault-isolation`, `aarch64-boot`, `x86_64-boot`). In
+this checkout `disk_v3.img` has no `ViCell_CEL` section, so those two AArch64 denial tests are
+vacuous even when they pass — that is why phase 02's production-denial claim rests on the
+compile-time assert instead.
+
 ## Assumptions / risk / rollback
 - [UNVERIFIED] All required emulators/physical boards are accessible to CI; where not, mark named qualification gate unresolved and retain disabled profile, not a passing placeholder. Rollback to known-safe image with domain admission and snapshot disabled; reimage development storage if a corrupted snapshot was ever replayed. Security exposure or overwritten external data cannot be rolled back by a binary revert.
 
