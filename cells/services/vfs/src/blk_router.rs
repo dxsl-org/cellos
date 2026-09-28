@@ -101,8 +101,14 @@ pub fn blk_flush() -> bool {
             return false;
         }
         let mut reply = [0u8; 1];
-        if let ostd::syscall::SyscallResult::Err(_) = ostd::syscall::sys_recv(tid, &mut reply) {
+        if let ostd::syscall::SyscallResult::Err(e) = ostd::syscall::sys_recv(tid, &mut reply) {
+            // Either the driver cell never answered (it spins on a command while
+            // this waits) or the message failed; both used to be invisible here.
+            ostd::io::println(&alloc::format!("[blk-router] flush recv failed: {:?}", e));
             return false;
+        }
+        if reply[0] != 0 {
+            ostd::io::println("[blk-router] flush rejected by block driver");
         }
         reply[0] == 0
     } else {
