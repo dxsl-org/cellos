@@ -65,8 +65,61 @@
 //! parked at an acknowledged safe point ([`crate::task::quiesce`]) — a no-op on
 //! a single-hart system, a refusal on several, because the per-hart park hook
 //! is not implemented yet.  Coherent staging of the frames under capture and
-//! confirmation that the whole mutable kernel-image closure is in the inventory
-//! are the remaining hardware-side halves of phase 07; see the phase doc.
+//! the hardware witness remain the hardware-side halves of phase 07; see the
+//! phase doc.
+//!
+//! # Image-kind runs: what they close, and what they do not
+//!
+//! A survey of the allocator bitmap alone cannot describe a resumable image:
+//! [`crate::memory::frame::FrameAllocator::new_from_map`] manages only
+//! `MemoryType::Usable` ranges, so `MemoryType::Kernel` frames — the kernel's
+//! own `.data`/`.bss`, which hold `SCHEDULER`, the allocator's bitmap and
+//! metadata, page-table roots and hart-local state — are never in the
+//! allocator's owned set and can never appear in an inventory built from
+//! allocated frames alone.
+//!
+//! Those frames are added as a second, explicit run kind.  An inventory entry
+//! with [`RUN_FLAG_IMAGE`] set covers trusted kernel-image frames; an entry with
+//! flags `0` covers allocator-owned frames.  The mutable span is derived from
+//! the linker (`__domain_writable_start` … `__domain_writable_end`) by
+//! [`kernel_image`], and every image-kind run is validated against the *live*
+//! trusted span ([`ImageRegion`]) on both sides of the format:
+//!
+//! - the writer derives the span, refuses when it is empty, misaligned or not
+//!   inside the trusted image ([`image_runs`]), and merges it with the allocated
+//!   runs without ever coalescing one kind into the other ([`merge_runs`]);
+//! - an image-kind run that overlaps or duplicates an allocator-owned run is
+//!   refused ([`SnapshotError::ImageRangeConflict`]) rather than silently
+//!   merged: the allocator must not own image frames, and image frames must not
+//!   be described as allocator-owned;
+//! - the reader re-checks every image-kind run against *its own* trusted span
+//!   ([`frames_in_runs`]), so an inventory naming image frames that this build
+//!   does not own is refused before a byte of RAM is written.  The span is not
+//!   stored in the header: [`kernel_hash`] pins the build, and the span is a
+//!   function of that build.
+//!
+//! What this does **not** prove — stated, not claimed closed:
+//!
+//! - **Byte coverage is not semantic closure.**  The allocator's state is now
+//!   byte-covered but not proven resumable.  The `FrameAllocator` static itself
+//!   (range plan, counters, next-fit cursor, bitmap handle) sits in the writable
+//!   image span, so its bytes are in the inventory; but by the time a capture or
+//!   restore can run, the boot path has *already rebuilt* it with
+//!   `FrameAllocator::new_from_map`, and its lock is live — replaying old bytes
+//!   over that is a different thing from rebuilding it, and which fields are
+//!   restored and which re-derived is not decided here.  The bitmap *words* live
+//!   in the first frames of the largest managed range, i.e. in allocator-owned
+//!   frames, so they are covered as an ordinary allocated run.  Byte coverage is
+//!   the precondition for closure, not the closure.
+//! - Pointer relinking, lock re-initialization and the exclusion of changing
+//!   driver/MMC transport state are phase 07 steps 3 and 4.
+//! - Coherent staging: the format cannot detect a byte that changed between the
+//!   frame read and the block write.
+//! - On x86-64 the kernel is linked into the higher half and riscv32/aarch32/
+//!   x86-32 do not delimit the writable span, so [`kernel_image`] returns `None`
+//!   and every capture preflight refuses with
+//!   [`SnapshotError::ImageRegionUnavailable`] — fail-closed, not a claim that
+//!   those targets have no mutable image state.
 //!
 //! # Test surface
 //!
@@ -122,6 +175,11 @@ pub const INVENTORY_FIRST_LBA: u64 = SNAPSHOT_BASE_LBA + 1;
 /// One inventory entry: a run of contiguous frames at an explicit start PA.
 pub const RUN_BYTES: usize = 16;
 
+/// Inventory entry flag: this run covers trusted kernel-image frames
+/// (the mutable `.data`/`.bss`/stack/GOT span), not allocator-owned frames.
+/// Flags `0` means "allocator-owned"; every other bit is reserved and refused.
+pub const RUN_FLAG_IMAGE: u32 = 0b1;
+
 /// Qualification gate for warm snapshot capture and restore.
 ///
 /// Phase-01 containment: the writer hashes payload bytes only while the reader
@@ -175,6 +233,13 @@ pub enum SnapshotError {
     DeviceFlush,
     /// No runs supplied / no inventory to write.
     NoRuns,
+    /// The mutable kernel-image span could not be derived or represented as
+    /// frame runs (not delimited on this target, empty, misaligned).
+    ImageRegionUnavailable,
+    /// An image-kind run lies outside this boot's trusted kernel-image span.
+    ImageRangeOutsideImage,
+    /// An image-kind run overlaps or duplicates an allocator-owned run.
+    ImageRangeConflict,
     /// A run is empty, unaligned, out of RAM, out of order, duplicate or overlapping.
     BadRun,
     /// More runs than the format can address.
@@ -208,6 +273,13 @@ impl SnapshotError {
             Self::DeviceWrite => "block write failed",
             Self::DeviceFlush => "block flush failed",
             Self::NoRuns => "no allocated frames to snapshot",
+            Self::ImageRegionUnavailable => {
+                "the mutable kernel-image span cannot be represented as frame runs"
+            }
+            Self::ImageRangeOutsideImage => {
+                "image-kind run outside the trusted kernel-image span"
+            }
+            Self::ImageRangeConflict => "image-kind run overlaps or duplicates an allocated run",
             Self::BadRun => "invalid run: empty, unaligned, out of RAM, duplicate or overlapping",
             Self::TooManyRuns => "too many inventory runs",
             Self::RunCountMismatch => "inventory run count does not match the header",
@@ -402,6 +474,97 @@ pub struct RamLayout {
     pub base: u64,
     /// Physical end (exclusive) of managed RAM.
     pub end: u64,
+    /// Trusted kernel-image span of this boot.  An image-kind run must lie
+    /// inside it, and this is the only bound image runs are checked against:
+    /// the kernel image is `MemoryType::Kernel`, so the allocator's managed
+    /// window may not contain it.  [`ImageRegion::EMPTY`] means this build
+    /// cannot derive the span, and any image-kind run is then refused.
+    ///
+    /// Not part of the on-disk identity: [`kernel_hash`] pins the build, and the
+    /// span is a function of that build.
+    pub image: ImageRegion,
+}
+
+/// A physical, 4096-aligned span of the kernel image.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct ImageRegion {
+    /// Physical start (inclusive).
+    pub base: u64,
+    /// Physical end (exclusive).
+    pub end: u64,
+}
+
+impl ImageRegion {
+    /// The "no span" sentinel.  A real kernel image is never empty.
+    pub const EMPTY: Self = Self { base: 0, end: 0 };
+
+    /// No address is covered.
+    pub const fn is_empty(&self) -> bool {
+        self.base >= self.end
+    }
+
+    /// Is `[base, end)` entirely inside this span?
+    pub const fn contains_span(&self, base: u64, end: u64) -> bool {
+        base >= self.base && end <= self.end
+    }
+
+    /// Is every frame of `run` inside this span?
+    pub fn contains_run(&self, run: &SnapshotRun) -> bool {
+        self.contains_span(run.pa, run.end_pa())
+    }
+}
+
+/// The kernel image of the running build, as physical spans.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct KernelImage {
+    /// The whole image (`.text` … writable end).  Image-kind runs must lie here.
+    pub trusted: ImageRegion,
+    /// The mutable part: `.data`, `.bss`, the kernel stack and the GOT.  This is
+    /// what [`crate::memory::frame::FrameAllocator`] cannot describe, because
+    /// `new_from_map` excludes `MemoryType::Kernel`.
+    pub mutable: ImageRegion,
+}
+
+/// Physical image spans of this build, from the linker script.
+///
+/// riscv64 (0x8020_0000), aarch64 QEMU-virt (0x4008_0000) and RPi3 (0x8_0000)
+/// link the kernel at the address it is loaded at, so `__domain_text_start` /
+/// `__domain_writable_start` / `__domain_writable_end` are physical addresses.
+///
+/// `None` where that is not true (x86-64 links into the higher half) or where
+/// the linker script does not delimit the writable span (riscv32, aarch32,
+/// x86-32): the capture preflight then refuses rather than guess.
+#[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
+pub fn kernel_image() -> Option<KernelImage> {
+    unsafe extern "C" {
+        static __domain_text_start: u8;
+        static __domain_writable_start: u8;
+        static __domain_writable_end: u8;
+    }
+    // `addr_of!` takes the linker-assigned address without reading the object.
+    let mutable = ImageRegion {
+        base: core::ptr::addr_of!(__domain_writable_start) as u64,
+        end: core::ptr::addr_of!(__domain_writable_end) as u64,
+    };
+    let trusted = ImageRegion {
+        base: core::ptr::addr_of!(__domain_text_start) as u64,
+        end: mutable.end,
+    };
+    if trusted.is_empty()
+        || mutable.is_empty()
+        || !trusted.contains_span(mutable.base, mutable.end)
+    {
+        return None;
+    }
+    Some(KernelImage { trusted, mutable })
+}
+
+/// See the riscv64/aarch64 definition: no physical image span can be derived
+/// from the linker here, so capture refuses instead of describing the wrong
+/// frames.
+#[cfg(not(any(target_arch = "riscv64", target_arch = "aarch64")))]
+pub fn kernel_image() -> Option<KernelImage> {
+    None
 }
 
 /// Sectors needed to hold `run_count` inventory entries.
@@ -507,16 +670,18 @@ pub fn runs_from_frames(pas: &[u64], layout: RamLayout) -> Result<Vec<SnapshotRu
 }
 
 /// Structural validation shared by writer and reader: every run is non-empty,
-/// aligned, inside RAM, ascending, non-overlapping and unflagged.  Returns the
-/// total frame count.
+/// aligned, ascending, non-overlapping, carries a known run kind, and lies
+/// inside the bound that kind is accountable to — allocator-owned runs inside
+/// the managed RAM window, image-kind runs inside the trusted kernel-image span.
+/// Returns the total frame count.
 pub fn frames_in_runs(runs: &[SnapshotRun], layout: RamLayout) -> Result<u32, SnapshotError> {
     if runs.is_empty() {
         return Err(SnapshotError::NoRuns);
     }
     let mut total: u64 = 0;
-    let mut prev_end: Option<u64> = None;
+    let mut prev: Option<SnapshotRun> = None;
     for run in runs {
-        if run.flags != 0 || run.frame_count == 0 {
+        if run.flags & !RUN_FLAG_IMAGE != 0 || run.frame_count == 0 {
             return Err(SnapshotError::BadRun);
         }
         if run.pa % FRAME_SIZE as u64 != 0 {
@@ -530,23 +695,110 @@ pub fn frames_in_runs(runs: &[SnapshotRun], layout: RamLayout) -> Result<u32, Sn
                     .ok_or(SnapshotError::BadRun)?,
             )
             .ok_or(SnapshotError::BadRun)?;
-        if run.pa < layout.base || end > layout.end {
+        if run.flags & RUN_FLAG_IMAGE != 0 {
+            // Image frames are `MemoryType::Kernel`: the allocator's managed
+            // window does not have to contain them, so the trusted linker-
+            // delimited image span is the bound — and it is checked against the
+            // *live* span, so an inventory from another image is refused here.
+            if !layout.image.contains_span(run.pa, end) {
+                return Err(SnapshotError::ImageRangeOutsideImage);
+            }
+        } else if run.pa < layout.base || end > layout.end {
             return Err(SnapshotError::BadRun);
         }
-        if let Some(pe) = prev_end {
+        if let Some(p) = prev {
             // `<` rejects overlap, duplicates and descending order; adjacency
-            // (`==`) is harmless and is what the writer merges anyway.
-            if run.pa < pe {
-                return Err(SnapshotError::BadRun);
+            // (`==`) is harmless and is what `runs_from_frames` merges anyway.
+            if run.pa < p.end_pa() {
+                return Err(if run.flags != p.flags {
+                    SnapshotError::ImageRangeConflict
+                } else {
+                    SnapshotError::BadRun
+                });
             }
         }
-        prev_end = Some(end);
+        prev = Some(*run);
         total += run.frame_count as u64;
         if total > u32::MAX as u64 {
             return Err(SnapshotError::TooManyRuns);
         }
     }
     Ok(total as u32)
+}
+
+/// The image-kind inventory for a mutable image span: its frames at their own
+/// physical addresses.
+///
+/// The kernel image is contiguous, so this is one run.  Refuses a span that
+/// cannot be represented as frame runs (empty, not 4096-aligned, more frames
+/// than the inventory can address) with [`SnapshotError::ImageRegionUnavailable`],
+/// and a span outside this boot's trusted image with
+/// [`SnapshotError::ImageRangeOutsideImage`].
+pub fn image_runs(
+    mutable: ImageRegion,
+    layout: RamLayout,
+) -> Result<Vec<SnapshotRun>, SnapshotError> {
+    if mutable.is_empty()
+        || mutable.base % FRAME_SIZE as u64 != 0
+        || mutable.end % FRAME_SIZE as u64 != 0
+    {
+        return Err(SnapshotError::ImageRegionUnavailable);
+    }
+    if !layout.image.contains_span(mutable.base, mutable.end) {
+        return Err(SnapshotError::ImageRangeOutsideImage);
+    }
+    let frames = (mutable.end - mutable.base) / FRAME_SIZE as u64;
+    if frames > u32::MAX as u64 {
+        return Err(SnapshotError::ImageRegionUnavailable);
+    }
+    Ok(alloc::vec![SnapshotRun {
+        pa: mutable.base,
+        frame_count: frames as u32,
+        flags: RUN_FLAG_IMAGE,
+    }])
+}
+
+/// Merge allocator-owned runs and image-kind runs into one ascending inventory,
+/// preserving each run's kind.
+///
+/// Each input must already be a valid inventory of its kind.  An image run that
+/// overlaps or duplicates an allocator-owned run is refused with
+/// [`SnapshotError::ImageRangeConflict`] — never silently merged: the allocator
+/// must not own image frames, and image frames must not be described as
+/// allocator-owned.  Adjacent runs of different kinds are kept separate; they
+/// are never coalesced, so the kind survives the merge.
+pub fn merge_runs(
+    allocated: &[SnapshotRun],
+    image: &[SnapshotRun],
+    layout: RamLayout,
+) -> Result<Vec<SnapshotRun>, SnapshotError> {
+    if !allocated.is_empty() {
+        frames_in_runs(allocated, layout)?;
+    }
+    if !image.is_empty() {
+        frames_in_runs(image, layout)?;
+    }
+    let mut merged = Vec::with_capacity(allocated.len() + image.len());
+    merged.extend_from_slice(allocated);
+    merged.extend_from_slice(image);
+    merged.sort_by_key(|run| run.pa);
+    let mut prev: Option<SnapshotRun> = None;
+    for run in &merged {
+        if let Some(p) = prev {
+            if run.pa < p.end_pa() {
+                return Err(if run.flags != p.flags {
+                    SnapshotError::ImageRangeConflict
+                } else {
+                    SnapshotError::BadRun
+                });
+            }
+        }
+        prev = Some(*run);
+    }
+    if merged.is_empty() {
+        return Err(SnapshotError::NoRuns);
+    }
+    Ok(merged)
 }
 
 // ── Device / memory traits ───────────────────────────────────────────────────
@@ -905,7 +1157,7 @@ pub fn restore_image(
         Err(_) => {
             invalidate_on(dev);
             return RestoreOutcome::ColdBoot(
-                "inventory outside RAM, empty, unaligned, duplicate or overlapping",
+                "inventory outside RAM or the kernel image, empty, unaligned, conflicting or overlapping",
             );
         }
     };
@@ -962,27 +1214,58 @@ pub fn restore_image(
 
 // ── Kernel entry points ──────────────────────────────────────────────────────
 
-/// The live managed RAM layout, or `None` before the allocator exists.
+/// The live managed RAM layout and this build's trusted image span, or `None`
+/// when either cannot be established (allocator not ready, or the target does
+/// not delimit the kernel image — see [`kernel_image`]).
 fn live_layout() -> Option<RamLayout> {
+    let image = kernel_image()?;
     let guard = FRAME_ALLOCATOR.lock();
     let allocator = guard.as_ref()?;
     Some(RamLayout {
         base: allocator.memory_start() as u64,
         end: allocator.memory_end() as u64,
+        image: image.trusted,
     })
 }
 
-/// Build the capture inventory from the allocator bitmap.
+/// Build the capture inventory from an image span and an explicit allocated
+/// frame list: allocator-owned runs plus the image-kind run for `mutable`.
 ///
-/// Enumerates allocated, in-RAM frames in ascending order and groups them into
-/// contiguous runs.  The allocator lock is held only for this enumeration — no
-/// block I/O happens under it.
+/// Split out of [`plan_inventory`] so the host lane can drive the exact
+/// planning the capture path runs, with a simulated image and a simulated
+/// allocated set.  `layout.image` must be the trusted span of the same image
+/// `mutable` came from; the image run is refused when it is not inside it.
+///
+/// An image frame that the allocator also owns is [`SnapshotError::ImageRangeConflict`],
+/// not something to merge.
+fn plan_runs(
+    mutable: ImageRegion,
+    layout: RamLayout,
+    allocated_pas: &[u64],
+) -> Result<Vec<SnapshotRun>, SnapshotError> {
+    let allocated = runs_from_frames(allocated_pas, layout)?;
+    let image_part = image_runs(mutable, layout)?;
+    merge_runs(&allocated, &image_part, layout)
+}
+
+/// Build the capture inventory: allocator-owned frames plus the trusted
+/// mutable kernel-image span.
+///
+/// Enumerates allocated, in-RAM frames in ascending order, derives the mutable
+/// image span from the linker and hands both to [`plan_runs`].  The allocator
+/// lock is held only for this enumeration — no block I/O happens under it.
+///
+/// Refuses with [`SnapshotError::ImageRegionUnavailable`] when this target does
+/// not delimit the kernel image, because an inventory of allocated frames alone
+/// cannot describe a resumable image.
 fn plan_inventory() -> Result<(RamLayout, Vec<SnapshotRun>), SnapshotError> {
+    let image = kernel_image().ok_or(SnapshotError::ImageRegionUnavailable)?;
     let guard = FRAME_ALLOCATOR.lock();
     let allocator = guard.as_ref().ok_or(SnapshotError::MemoryFault)?;
     let layout = RamLayout {
         base: allocator.memory_start() as u64,
         end: allocator.memory_end() as u64,
+        image: image.trusted,
     };
     let mut pas: Vec<u64> = Vec::new();
     for index in 0..allocator.total_frames() {
@@ -1000,7 +1283,13 @@ fn plan_inventory() -> Result<(RamLayout, Vec<SnapshotRun>), SnapshotError> {
             log::warn!("[snapshot] skipping allocated frame outside RAM: 0x{pa:X}");
         }
     }
-    let runs = runs_from_frames(&pas, layout)?;
+    let runs = plan_runs(image.mutable, layout, &pas)?;
+    log::info!(
+        "[snapshot] inventory: {} run(s) spanning image 0x{:X}..0x{:X}",
+        runs.len(),
+        image.mutable.base,
+        image.mutable.end
+    );
     Ok((layout, runs))
 }
 
@@ -1105,7 +1394,7 @@ pub fn try_restore() -> bool {
     let live = match live_layout() {
         Some(layout) => layout,
         None => {
-            log::warn!("[snapshot] frame allocator not ready → cold boot");
+            log::warn!("[snapshot] allocator or kernel-image span unavailable → cold boot");
             return false;
         }
     };
@@ -1483,6 +1772,13 @@ mod fake {
         pub fn put(&self, pa: u64, fill: u8) {
             self.frames.borrow_mut().insert(pa, [fill; FRAME_SIZE]);
         }
+        /// Write raw bytes into a mapped frame without touching the counters, so
+        /// a test can plant a byte-exact marker (e.g. inside a simulated `.bss`).
+        pub fn put_bytes(&self, pa: u64, offset: usize, bytes: &[u8]) {
+            let mut frames = self.frames.borrow_mut();
+            let slot = frames.entry(pa).or_insert([0u8; FRAME_SIZE]);
+            slot[offset..offset + bytes.len()].copy_from_slice(bytes);
+        }
         pub fn key_set(&self) -> Vec<u64> {
             self.frames.borrow().keys().copied().collect()
         }
@@ -1536,16 +1832,77 @@ mod tests {
     const BASE: u64 = 0x8020_0000;
     const FRAMES: u64 = 64;
 
+    /// Simulated kernel image inside the fake RAM window, standing in for the
+    /// linker-delimited spans a real build gets from [`kernel_image`]: an
+    /// immutable text/rodata half at frame 24 and a mutable `.data`/`.bss` half
+    /// at frames 32..40.  No sparse allocated frame is inside either span, so
+    /// the two halves are cleanly separable (and a test that wants a conflict
+    /// has to construct one).
+    const IMAGE_TRUSTED_START: u64 = BASE + 24 * FRAME_SIZE as u64;
+    const IMAGE_MUTABLE_START: u64 = BASE + 32 * FRAME_SIZE as u64;
+    const IMAGE_MUTABLE_END: u64 = BASE + 40 * FRAME_SIZE as u64;
+    const IMAGE_MUTABLE_FRAMES: u32 = 8;
+
+    fn trusted_image() -> ImageRegion {
+        ImageRegion {
+            base: IMAGE_TRUSTED_START,
+            end: IMAGE_MUTABLE_END,
+        }
+    }
+
+    fn mutable_image() -> ImageRegion {
+        ImageRegion {
+            base: IMAGE_MUTABLE_START,
+            end: IMAGE_MUTABLE_END,
+        }
+    }
+
+    /// The simulated mutable image as image-kind runs.
+    fn mutable_runs() -> Vec<SnapshotRun> {
+        image_runs(mutable_image(), layout()).expect("image inventory")
+    }
+
+    /// Allocator-owned runs plus the image-kind run, as the capture planner
+    /// emits them — through the planner's own entry point.
+    fn planned_runs() -> Vec<SnapshotRun> {
+        plan_runs(mutable_image(), layout(), &sparse_pas()).expect("planned inventory")
+    }
+
     fn layout() -> RamLayout {
         RamLayout {
             base: BASE,
             end: BASE + FRAMES * FRAME_SIZE as u64,
+            image: trusted_image(),
         }
+    }
+
+    /// Sparse allocated frames plus a distinct filler byte for every frame of
+    /// the simulated mutable image, so an image run can be captured.
+    fn ram_with_image() -> FakeRam {
+        let ram = sparse_ram();
+        for i in 0..IMAGE_MUTABLE_FRAMES {
+            ram.put(IMAGE_MUTABLE_START + i as u64 * FRAME_SIZE as u64, 0xB0 + i as u8);
+        }
+        ram
+    }
+
+    /// The inventory as it stands on the device.
+    fn inventory_of(disk: &FakeDisk) -> Vec<SnapshotRun> {
+        let header = disk.header();
+        decode_inventory(
+            &(0..header.inventory_sectors)
+                .flat_map(|i| disk.durable_sector(INVENTORY_FIRST_LBA + i as u64))
+                .collect::<Vec<u8>>(),
+            header.run_count as usize,
+        )
+        .expect("inventory decodes")
     }
 
     /// Sparse allocated frame set: two adjacent frames, a lone frame, a pair,
     /// and a frame far away — the shape that broke dense reconstruction.
     const SPARSE: [u64; 6] = [0, 1, 3, 7, 8, 20];
+    /// Runs `SPARSE` groups into: `(0,1)`, `(3)`, `(7,8)`, `(20)`.
+    const SPARSE_RUNS: usize = 4;
 
     fn sparse_pas() -> Vec<u64> {
         SPARSE
@@ -1762,16 +2119,7 @@ mod tests {
 
         // Payload order follows the inventory, not ascending frame index from
         // ram_base: the payload frames must be exactly the sparse PAs.
-        let header = disk.header();
-        let first_payload_pa = decode_inventory(
-            &(0..header.inventory_sectors)
-                .flat_map(|i| disk.durable_sector(INVENTORY_FIRST_LBA + i as u64))
-                .collect::<Vec<u8>>(),
-            header.run_count as usize,
-        )
-        .unwrap()[0]
-            .pa;
-        assert_eq!(first_payload_pa, BASE);
+        assert_eq!(inventory_of(&disk)[0].pa, BASE);
 
         let target = FakeRam::default();
         assert_eq!(
@@ -1806,6 +2154,280 @@ mod tests {
             ..INVENTORY_FIRST_LBA + 1 + SPARSE.len() as u64 * SECTORS_PER_FRAME as u64)
             .collect();
         assert_eq!(payload_lbas, expected);
+    }
+
+    // ── image-kind runs (the mutable kernel-image half) ──────────────────────
+
+    #[test]
+    fn snapshot_image_span_round_trips_a_bss_marker_byte_exactly() {
+        let disk = FakeDisk::new();
+        let source = ram_with_image();
+        // A marker in the simulated `.bss`, straddling a sector boundary, plus
+        // one in the last sector of the span.
+        let marker = b"cellos-bss-marker";
+        let marker_pa = IMAGE_MUTABLE_START + 2 * FRAME_SIZE as u64;
+        source.put_bytes(marker_pa, 508, marker);
+        let tail_pa = IMAGE_MUTABLE_END - FRAME_SIZE as u64;
+        source.put_bytes(tail_pa, FRAME_SIZE - 2, &[0xC0, 0xDE]);
+
+        let report =
+            capture_image(&disk, &source, layout(), &planned_runs()).expect("capture succeeds");
+        assert_eq!(report.frames, SPARSE.len() as u32 + IMAGE_MUTABLE_FRAMES);
+        assert_eq!(report.runs, SPARSE_RUNS as u32 + 1, "image run is its own run");
+
+        // The on-disk inventory is exactly what the planner produced, it carries
+        // the kind, and only the image run does.
+        let inventory = inventory_of(&disk);
+        assert_eq!(inventory, planned_runs());
+        assert_eq!(inventory.len(), SPARSE_RUNS + 1);
+        let image = *inventory.last().expect("image run");
+        assert_eq!(image.flags, RUN_FLAG_IMAGE);
+        assert_eq!(image.pa, IMAGE_MUTABLE_START);
+        assert_eq!(image.frame_count, IMAGE_MUTABLE_FRAMES);
+        assert!(
+            inventory[..inventory.len() - 1].iter().all(|r| r.flags == 0),
+            "allocator-owned runs stay unflagged"
+        );
+        assert!(frames_in_runs(&inventory, layout()).is_ok());
+        assert!(layout().image.contains_run(&image));
+
+        // Byte-exact round trip of the whole image, marker included.
+        let target = FakeRam::default();
+        assert_eq!(
+            restore_image(&disk, &target, layout()),
+            RestoreOutcome::Resumed
+        );
+        assert_eq!(target.map(), source.map());
+        assert_eq!(
+            &target.bytes(marker_pa).expect("marker frame")[508..508 + marker.len()],
+            marker,
+            "the `.bss` marker must survive capture and restore byte-exactly"
+        );
+        assert_eq!(
+            &target.bytes(tail_pa).expect("tail frame")[FRAME_SIZE - 2..],
+            &[0xC0, 0xDE]
+        );
+        // Payload order: allocated runs first, then the image run last, at its
+        // own physical addresses.
+        let writes = target.writes.borrow().clone();
+        let expected: Vec<u64> = sparse_pas()
+            .into_iter()
+            .chain((0..IMAGE_MUTABLE_FRAMES as u64).map(|i| IMAGE_MUTABLE_START + i * FRAME_SIZE as u64))
+            .collect();
+        assert_eq!(writes, expected);
+
+        // Red witness for the hole this closes: the same fixture captured from
+        // the allocator's owned frames alone replays no image frame at all, so
+        // the `.bss` marker does not come back.
+        let allocated_only = FakeDisk::new();
+        capture_image(&allocated_only, &source, layout(), &sparse_runs()).unwrap();
+        let blind = FakeRam::default();
+        assert_eq!(
+            restore_image(&allocated_only, &blind, layout()),
+            RestoreOutcome::Resumed
+        );
+        assert!(
+            blind.bytes(marker_pa).is_none(),
+            "allocated frames alone cannot carry the kernel image's `.bss`"
+        );
+        assert_eq!(blind.key_set(), sparse_pas());
+    }
+
+    #[test]
+    fn snapshot_image_range_overlapping_an_allocated_run_is_refused() {
+        let image = mutable_runs();
+        // Three shapes of the same defect: the allocator owns a frame, or two,
+        // inside the mutable image; overlap must never be merged, whatever the
+        // order the two runs are supplied in.
+        for passed in [
+            &[IMAGE_MUTABLE_START + 2 * FRAME_SIZE as u64][..],
+            &[IMAGE_MUTABLE_START][..],
+            &[IMAGE_MUTABLE_START + FRAME_SIZE as u64, IMAGE_MUTABLE_START + 2 * FRAME_SIZE as u64][..],
+        ] {
+            let allocated = runs_from_frames(passed, layout()).expect("allocated runs");
+            assert_eq!(
+                merge_runs(&allocated, &image, layout()),
+                Err(SnapshotError::ImageRangeConflict),
+                "image range overlapping 0x{:X} must be refused",
+                passed[0]
+            );
+        }
+        // Two overlapping *image* runs are a plain structural failure.
+        let mut doubled = image.clone();
+        doubled.extend_from_slice(&image);
+        assert_eq!(merge_runs(&[], &doubled, layout()), Err(SnapshotError::BadRun));
+
+        // The planner's own entry point refuses the conflict too — the shape the
+        // live capture path would hit if the allocator ever owned an image frame.
+        assert_eq!(
+            plan_runs(
+                mutable_image(),
+                layout(),
+                &[IMAGE_MUTABLE_START + 2 * FRAME_SIZE as u64]
+            ),
+            Err(SnapshotError::ImageRangeConflict)
+        );
+
+        // And the capture preflight refuses the same conflict with no block I/O:
+        // a hand-built inventory cannot smuggle an image-kind run over an
+        // allocator-owned frame.
+        let conflicting = alloc::vec![
+            SnapshotRun {
+                pa: IMAGE_MUTABLE_START,
+                frame_count: 2,
+                flags: 0,
+            },
+            SnapshotRun {
+                pa: IMAGE_MUTABLE_START + FRAME_SIZE as u64,
+                frame_count: 2,
+                flags: RUN_FLAG_IMAGE,
+            },
+        ];
+        let disk = FakeDisk::new();
+        assert_eq!(
+            capture_image(&disk, &ram_with_image(), layout(), &conflicting),
+            Err(SnapshotError::ImageRangeConflict)
+        );
+        assert_eq!(disk.writes(), 0, "capacity/structure precede any write");
+        assert_eq!(disk.reads(), 0);
+    }
+
+    #[test]
+    fn snapshot_image_range_outside_the_trusted_image_is_refused() {
+        let layout = layout();
+        // Below and past the trusted span.
+        assert_eq!(
+            image_runs(
+                ImageRegion {
+                    base: IMAGE_TRUSTED_START - FRAME_SIZE as u64,
+                    end: IMAGE_MUTABLE_END,
+                },
+                layout
+            ),
+            Err(SnapshotError::ImageRangeOutsideImage)
+        );
+        assert_eq!(
+            image_runs(
+                ImageRegion {
+                    base: IMAGE_MUTABLE_START,
+                    end: IMAGE_MUTABLE_END + FRAME_SIZE as u64,
+                },
+                layout
+            ),
+            Err(SnapshotError::ImageRangeOutsideImage)
+        );
+        // Unrepresentable spans: empty, and not frame-aligned.
+        assert_eq!(
+            image_runs(ImageRegion::EMPTY, layout),
+            Err(SnapshotError::ImageRegionUnavailable)
+        );
+        assert_eq!(
+            image_runs(
+                ImageRegion {
+                    base: IMAGE_MUTABLE_START,
+                    end: IMAGE_MUTABLE_END - 1,
+                },
+                layout
+            ),
+            Err(SnapshotError::ImageRegionUnavailable)
+        );
+        // A live boot that cannot delimit its image refuses every image-kind
+        // run: `kernel_image() == None` is exactly this shape (x86-64,
+        // riscv32/aarch32/x86-32), and it must not be read as "no image state".
+        let blind = RamLayout {
+            image: ImageRegion::EMPTY,
+            ..layout
+        };
+        assert_eq!(
+            image_runs(mutable_image(), blind),
+            Err(SnapshotError::ImageRangeOutsideImage)
+        );
+        assert_eq!(
+            frames_in_runs(&mutable_runs(), blind),
+            Err(SnapshotError::ImageRangeOutsideImage)
+        );
+        // The capture preflight refuses it too, before any block I/O.
+        let disk = FakeDisk::new();
+        assert_eq!(
+            capture_image(&disk, &ram_with_image(), blind, &mutable_runs()),
+            Err(SnapshotError::ImageRangeOutsideImage)
+        );
+        assert_eq!(disk.writes(), 0);
+        assert_eq!(disk.reads(), 0);
+
+        // A run with a reserved flag bit is malformed, not an image run.
+        let unknown = alloc::vec![SnapshotRun {
+            pa: IMAGE_MUTABLE_START,
+            frame_count: 1,
+            flags: 0b10,
+        }];
+        assert_eq!(
+            frames_in_runs(&unknown, layout),
+            Err(SnapshotError::BadRun)
+        );
+    }
+
+    #[test]
+    fn snapshot_read_is_refused_when_the_image_run_is_not_this_boot_s_image() {
+        // A committed image whose inventory names an image-kind frame outside
+        // this boot's trusted span must be refused by the *reader*, before a
+        // byte of RAM is written — the region check is not writer-only.
+        let disk = captured();
+        let outside = BASE + 50 * FRAME_SIZE as u64;
+        let mut run = [0u8; RUN_BYTES];
+        run[0..8].copy_from_slice(&outside.to_le_bytes());
+        run[8..12].copy_from_slice(&1u32.to_le_bytes());
+        run[12..16].copy_from_slice(&RUN_FLAG_IMAGE.to_le_bytes());
+        disk.patch(INVENTORY_FIRST_LBA, SPARSE_RUNS * RUN_BYTES, &run);
+        disk.patch(SNAPSHOT_BASE_LBA, 36, &(SPARSE_RUNS as u32 + 1).to_le_bytes());
+        disk.patch(SNAPSHOT_BASE_LBA, 40, &(SPARSE.len() as u32 + 1).to_le_bytes());
+        let image_sectors = 1 + 1 + (SPARSE.len() as u32 + 1) * SECTORS_PER_FRAME as u32;
+        disk.patch(SNAPSHOT_BASE_LBA, 48, &image_sectors.to_le_bytes());
+        disk.fixup_crc();
+        assert_eq!(inventory_of(&disk).last().expect("added run").flags, RUN_FLAG_IMAGE);
+
+        let target = FakeRam::default();
+        assert_eq!(
+            restore_image(&disk, &target, layout()),
+            RestoreOutcome::ColdBoot(
+                "inventory outside RAM or the kernel image, empty, unaligned, conflicting or overlapping"
+            )
+        );
+        assert_eq!(target.write_count(), 0, "no RAM replay before the region check");
+        assert_eq!(disk.state_byte(), 0, "an image run we do not own is corruption");
+    }
+
+    #[test]
+    fn snapshot_image_span_is_subject_to_the_capacity_bound() {
+        // The image half is not exempt from the P3 capacity bound: an image span
+        // larger than the partition is refused with no block I/O at all.
+        let huge = RamLayout {
+            base: BASE,
+            end: BASE + 40_000 * FRAME_SIZE as u64,
+            image: ImageRegion {
+                base: BASE,
+                end: BASE + 40_000 * FRAME_SIZE as u64,
+            },
+        };
+        let image = image_runs(
+            ImageRegion {
+                base: BASE,
+                end: BASE + 31_000 * FRAME_SIZE as u64,
+            },
+            huge,
+        )
+        .expect("one image run");
+        assert_eq!(image[0].frame_count, 31_000);
+        let allocated =
+            runs_from_frames(&[BASE + 39_000 * FRAME_SIZE as u64], huge).expect("allocated run");
+        let runs = merge_runs(&allocated, &image, huge).expect("merged");
+
+        let disk = FakeDisk::new();
+        assert_eq!(
+            capture_image(&disk, &FakeRam::default(), huge, &runs),
+            Err(SnapshotError::CapacityExceeded)
+        );
+        assert_eq!(disk.writes(), 0, "capacity is checked before any write");
     }
 
     // ── state machine / reset matrix ─────────────────────────────────────────
@@ -2317,6 +2939,7 @@ mod tests {
         let big = RamLayout {
             base: BASE,
             end: BASE + 40_000 * FRAME_SIZE as u64,
+            image: trusted_image(),
         };
         let runs = runs_from_frames(&[BASE], big).unwrap();
         let mut runs = runs;
@@ -2423,9 +3046,19 @@ mod tests {
                 runs: 4,
             },
             Case {
-                name: "flagged run",
+                name: "reserved run flag bit",
                 overwrite: |d| {
-                    d.patch(INVENTORY_FIRST_LBA, 12, &1u32.to_le_bytes());
+                    d.patch(INVENTORY_FIRST_LBA, 12, &0b10u32.to_le_bytes());
+                },
+                frames: 6,
+                runs: 4,
+            },
+            Case {
+                // The image kind is a known flag, but run 0 is at `BASE`, far
+                // outside the trusted image span of this boot.
+                name: "image-kind run outside the image",
+                overwrite: |d| {
+                    d.patch(INVENTORY_FIRST_LBA, 12, &RUN_FLAG_IMAGE.to_le_bytes());
                 },
                 frames: 6,
                 runs: 4,
