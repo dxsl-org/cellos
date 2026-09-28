@@ -31,21 +31,23 @@
 //! next capture is the retry boundary, and a hart that cannot reach a safe
 //! point is a condition to report, not to spin on.
 //!
-//! # The missing per-hart park hook
+//! # The per-hart park hook
 //!
 //! A hart can only acknowledge a park request if something on that hart
 //! observes the request, reaches a safe point and publishes the
-//! acknowledgement. That hook needs the scheduler and the trap path, and this
-//! slice deliberately does not touch either. The hook is therefore modelled
-//! behind [`QuiesceHarts`] — the seam that a scheduler-side implementation must
-//! fill — and [`KernelHarts::park_hook_available`] reports `false`, which makes
-//! `acquire` refuse any multi-hart request *before* it waits for an
-//! acknowledgement no hart can produce. A single-hart system needs no hook: the
-//! protocol is then a no-op, because the requester is the only hart that could
-//! mutate the image.
+//! acknowledgement. On RV64 that observation point is the trap path
+//! ([`park_here_if_requested`], called from `task::vi_timer_tick`): a hart that
+//! is idle in `wfi` still takes the requester's IPI, and a hart that is running
+//! can be brought to a trap by it, so no hart has to be *already* cooperating to
+//! be parked. [`KernelHarts::park_hook_available`] reports `true` there and only
+//! there — a target whose trap path does not call the hook would silently never
+//! acknowledge, and the protocol must refuse such a hart set outright rather than
+//! wait out a request that cannot be answered. A single-hart system needs no
+//! hook: the protocol is then a no-op, because the requester is the only hart
+//! that could mutate the image.
 
 use core::fmt;
-use core::sync::atomic::{AtomicBool, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 /// Upper bound on the harts this protocol tracks. The kernel's own bound is
 /// `task::smp::MAX_HARTS`; the protocol keeps headroom so a host test can model
@@ -344,6 +346,242 @@ impl Drop for Guard<'_> {
     }
 }
 
+// ── The live park state and the trap-path hook ───────────────────────────────
+
+/// Park state is kept for every hart id the protocol can name ([`HartSet`]'s
+/// bound, which the kernel's own `smp::MAX_HARTS` sits under), so no id a hart
+/// set can carry is left without state.
+const PARK_HARTS: usize = MAX_QUIESCE_HARTS;
+
+/// The epoch of the latest park request for each hart. `0` means "no request".
+static PARK_REQUEST: [AtomicUsize; PARK_HARTS] = [const { AtomicUsize::new(0) }; PARK_HARTS];
+
+/// The latest epoch each hart has stopped for, published by the target hart at
+/// the safe point itself. Read by the requester's predicate, so it is monotone
+/// and never cleared: the epoch space is what makes a stale entry harmless — a
+/// later request has a strictly greater epoch and is not covered by it.
+static PARK_ACK: [AtomicUsize; PARK_HARTS] = [const { AtomicUsize::new(0) }; PARK_HARTS];
+
+/// The latest epoch released by a requester. A target parks for request `E` only
+/// while `PARK_RELEASE < E`, so this single store is both "resume" and "cancel a
+/// request that was never satisfied". It is monotone (`fetch_max`), which is what
+/// makes [`release_park`] idempotent and safe for a hart that never acknowledged.
+static PARK_RELEASE: [AtomicUsize; PARK_HARTS] = [const { AtomicUsize::new(0) }; PARK_HARTS];
+
+/// How long a parked hart stays parked with no release: 2 s of `mtime`. A
+/// requester that dies between parking a hart and releasing it never runs the
+/// guard's `Drop` (the kernel is built `panic = "abort"`), so the parked loop
+/// has to be able to give up on its own; the capture path commits nothing before
+/// it finishes, so resuming is consistent — the alternative is a permanent hang.
+#[cfg(target_arch = "riscv64")]
+const PARK_ABANDON_TICKS: u64 = 200 * hal::common::timer::TICKS_PER_10MS;
+
+/// Clock-independent backstop on the parked loop, for a build whose clock cannot
+/// move. The RV64 value is deliberately far above `PARK_ABANDON_TICKS` — the
+/// deadline is the real bound — and the host value is small so a unit test that
+/// parks without a release terminates in constant time instead of hanging.
+#[cfg(target_arch = "riscv64")]
+const PARK_SPIN_LIMIT: usize = 1 << 34;
+#[cfg(not(target_arch = "riscv64"))]
+const PARK_SPIN_LIMIT: usize = 1 << 10;
+
+/// What the trap path did with the park request it observed.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ParkOutcome {
+    /// No park request was outstanding for this hart.
+    Idle,
+    /// The hart stopped, published its acknowledgement, and the requester
+    /// released it.
+    Parked { epoch: usize },
+    /// A request existed but had already been released when this hart reached a
+    /// safe point, so nothing was parked and no acknowledgement was published.
+    AlreadyReleased { epoch: usize },
+    /// The park loop gave up waiting for a release (`PARK_ABANDON_TICKS` or
+    /// `PARK_SPIN_LIMIT`): the requester is gone. The acknowledgement, if one
+    /// was published, is not withdrawn — the epoch has moved on by then.
+    Abandoned { epoch: usize },
+    /// Test-hooks only: this hart was told to withhold its acknowledgement, to
+    /// reach the requester's fail-closed path without a real stall.
+    Withheld { epoch: usize },
+}
+
+/// Ask `hart` to park at its next safe point, and return the epoch it must
+/// acknowledge. Also delivers the IPI that brings the request to a hart that is
+/// already idle in `wfi`.
+fn request_park(hart: usize) -> usize {
+    let Some(request) = PARK_REQUEST.get(hart) else {
+        return 0;
+    };
+    let epoch = request.fetch_add(1, Ordering::AcqRel) + 1;
+    #[cfg(target_arch = "riscv64")]
+    {
+        // A hart cannot interrupt itself, and the protocol never makes the
+        // requester a target. Sending to a self-mapped id would be harmless but
+        // pointless; skip it rather than depend on the SBI call tolerating it.
+        if hart != crate::task::hart_local::current_hart_id() {
+            if let Some((mask, base)) = crate::task::smp::logical_sbi_target(hart) {
+                let _ = hal::common::sbi::sbi_send_ipi(mask, base);
+            }
+        }
+    }
+    epoch
+}
+
+/// Has `hart` stopped for `epoch`?
+fn park_acknowledged(hart: usize, epoch: usize) -> bool {
+    epoch != 0
+        && PARK_ACK
+            .get(hart)
+            .is_some_and(|ack| ack.load(Ordering::Acquire) >= epoch)
+}
+
+/// Cancel `hart`'s outstanding request and resume it if it parked for it.
+///
+/// Idempotent by construction: the release epoch only ever moves forward, and a
+/// hart that never acknowledged simply finds its request already released when it
+/// reaches a safe point (see [`ParkOutcome::AlreadyReleased`]).
+fn release_park(hart: usize) {
+    let Some(request) = PARK_REQUEST.get(hart) else {
+        return;
+    };
+    let Some(release) = PARK_RELEASE.get(hart) else {
+        return;
+    };
+    release.fetch_max(request.load(Ordering::Acquire), Ordering::AcqRel);
+}
+
+/// Observe an outstanding park request on `hart` and, if there is one, stop this
+/// hart at the trap path until the requester releases it.
+///
+/// This is the target half of [`QuiesceHarts`] on RV64. It is called from
+/// `task::vi_timer_tick`, i.e. from the S-mode trap handler, for every trap —
+/// the timer tick that every online hart already takes every 10 ms, and the
+/// requester's IPI, which is what reaches a hart that is otherwise idle in `wfi`.
+///
+/// # Why the trap path is the safe point
+///
+/// 1. **Every hart passes it.** The timer is armed on every hart and an IPI is
+///    taken by a hart in `wfi` (interrupts are enabled there), so a request
+///    cannot be answered only by an already-cooperating hart.
+/// 2. **No kernel lock is held.** A trap is only taken with `sstatus.SIE` set,
+///    and `crate::sync::Spinlock` clears `SIE` for the whole life of its guard —
+///    so the interrupted context cannot be inside `SCHEDULER`,
+///    `FRAME_ALLOCATOR` or any other kernel spin lock, and those locks (which
+///    the requester's own path needs) are guaranteed free. The trap handler takes
+///    no lock before this call: it is placed ahead of `tick()`, the console poll
+///    and `yield_cpu()`.
+/// 3. **No frame allocation is in flight**, for the same reason —
+///    `FRAME_ALLOCATOR` is a `crate::sync::Spinlock`, so an interrupted context
+///    cannot be inside it.
+/// 4. **Able to resume.** The vector's trap frame already holds the interrupted
+///    context in full; leaving the loop returns through the handler and `sret`
+///    restores the same registers, stack and privilege level. Nothing in the
+///    scheduler moved, so no switch bookkeeping has to be repaired.
+/// 5. **It stays stopped.** `SIE` is clear for the whole trap, so a parked hart
+///    takes no further trap and cannot run any code but this loop until it is
+///    released.
+///
+/// The residual is stated rather than papered over: `SIE`-set kernel code that
+/// *allocates* holds the heap's `spinning_top` lock, which does **not** mask
+/// interrupts, so a park can land on a hart holding that lock (the reachable RV64
+/// cases are the boot path and a cooperative `yield_cpu` caller). The requester
+/// must therefore not allocate while it holds the guard, and the requester's own
+/// bounded wait is what keeps a mistake here from becoming a hang.
+///
+/// # The acknowledgement
+///
+/// The hart publishes [`PARK_ACK`] *before* it stops and with a release store,
+/// and it cannot take a trap between that store and the loop, so a requester that
+/// observes the acknowledgement knows the hart is not running anything else.
+/// Publishing after the loop instead would claim a park that had already been
+/// missed — the epoch could be released before the store landed.
+///
+/// The loop exits when [`PARK_RELEASE`] reaches the parked epoch. It is bounded
+/// twice over (`PARK_ABANDON_TICKS`, `PARK_SPIN_LIMIT`) because the requester
+/// may be gone; an abandoned park is logged rather than left as a hang.
+#[inline]
+pub fn park_here_if_requested(hart: usize) -> ParkOutcome {
+    let Some(request) = PARK_REQUEST.get(hart) else {
+        return ParkOutcome::Idle;
+    };
+    #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+    lane::note_trap(hart);
+
+    let epoch = request.load(Ordering::Acquire);
+    if epoch == 0 {
+        return ParkOutcome::Idle;
+    }
+    let released = || {
+        PARK_RELEASE
+            .get(hart)
+            .is_some_and(|release| release.load(Ordering::Acquire) >= epoch)
+    };
+    if released() {
+        #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+        lane::note_release_seen(hart, epoch);
+        return ParkOutcome::AlreadyReleased { epoch };
+    }
+    #[cfg(any(feature = "test-hooks", test))]
+    if park_ack_withheld(hart) {
+        #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+        lane::note_withheld(hart, epoch);
+        return ParkOutcome::Withheld { epoch };
+    }
+
+    // I am stopping: publish that, with everything that must not change while I
+    // am parked already committed.
+    PARK_ACK[hart].store(epoch, Ordering::Release);
+    #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+    lane::note_stopped(hart, epoch);
+
+    #[cfg(target_arch = "riscv64")]
+    let deadline = hal::common::timer::read_mtime().saturating_add(PARK_ABANDON_TICKS);
+    let mut spins = 0usize;
+    loop {
+        if released() {
+            #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+            lane::note_resumed(hart, epoch);
+            return ParkOutcome::Parked { epoch };
+        }
+        #[cfg(target_arch = "riscv64")]
+        if hal::common::timer::read_mtime() > deadline {
+            break;
+        }
+        spins += 1;
+        if spins >= PARK_SPIN_LIMIT {
+            break;
+        }
+        core::hint::spin_loop();
+    }
+    #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+    lane::note_abandoned(hart, epoch);
+    log::warn!(
+        "[quiesce] hart {hart} left the parked loop without a release at epoch {epoch}: \
+         the requester is gone; resuming"
+    );
+    ParkOutcome::Abandoned { epoch }
+}
+
+#[cfg(any(feature = "test-hooks", test))]
+static PARK_ACK_WITHHELD: [AtomicBool; PARK_HARTS] = [const { AtomicBool::new(false) }; PARK_HARTS];
+
+/// Test-hooks: make `hart` observe park requests without ever acknowledging one,
+/// so the requester's fail-closed path (bounded wait, release, no park) is
+/// reachable without waiting for a real hart to stall.
+#[cfg(any(feature = "test-hooks", test))]
+pub fn set_park_ack_withheld(hart: usize, withheld: bool) {
+    if let Some(flag) = PARK_ACK_WITHHELD.get(hart) {
+        flag.store(withheld, Ordering::Release);
+    }
+}
+
+#[cfg(any(feature = "test-hooks", test))]
+fn park_ack_withheld(hart: usize) -> bool {
+    PARK_ACK_WITHHELD
+        .get(hart)
+        .is_some_and(|flag| flag.load(Ordering::Acquire))
+}
+
 // ── The live kernel hart set ─────────────────────────────────────────────────
 
 /// The kernel's own hart set.
@@ -355,34 +593,29 @@ impl QuiesceHarts for KernelHarts {
     }
 
     fn online_harts(&self, out: &mut HartSet) -> Result<(), QuiesceError> {
-        out.insert(self.requester())?;
-        for hart in crate::task::smp::online_harts() {
-            out.insert(hart)?;
-        }
-        Ok(())
+        online_hart_ids(self.requester(), out)
     }
 
-    /// The per-hart park hook does not exist yet: it needs a scheduler-side
-    /// observation point and an acknowledgement published from a safe point,
-    /// neither of which this slice may add. Reporting `false` makes `acquire`
-    /// refuse a multi-hart request before it waits, instead of burning a budget
-    /// on harts that can never answer.
+    /// Present on RV64, where the trap path calls [`park_here_if_requested`] on
+    /// every trap: a target then answers a request by itself, and the requester's
+    /// bounded wait is a real wait for a real acknowledgement. Anywhere else no
+    /// hart observes a request, so a multi-hart request must be refused outright
+    /// instead of burning a budget on an acknowledgement that cannot arrive.
     fn park_hook_available(&self) -> bool {
-        false
+        cfg!(target_arch = "riscv64")
     }
 
-    /// Unreachable while [`QuiesceHarts::park_hook_available`] is `false`; the
-    /// stubs answer "never acknowledged" rather than panicking so a future
-    /// mis-wiring still fails closed with a bounded timeout.
-    fn request_park(&self, _hart: usize) -> usize {
-        0
+    fn request_park(&self, hart: usize) -> usize {
+        request_park(hart)
     }
 
-    fn park_acked(&self, _hart: usize, _epoch: usize) -> bool {
-        false
+    fn park_acked(&self, hart: usize, epoch: usize) -> bool {
+        park_acknowledged(hart, epoch)
     }
 
-    fn release_park(&self, _hart: usize) {}
+    fn release_park(&self, hart: usize) {
+        release_park(hart);
+    }
 
     fn ack_budget_ticks(&self) -> u64 {
         #[cfg(target_arch = "riscv64")]
@@ -416,11 +649,344 @@ impl QuiesceHarts for KernelHarts {
 #[cfg(target_arch = "riscv64")]
 const KERNEL_ACK_BUDGET_TICKS: u64 = 10 * hal::common::timer::TICKS_PER_10MS;
 
+/// The logical id of the hart that runs `kmain`. It never publishes
+/// `smp::HART_ONLINE` (`task::init` installs it as hart 0 before there is an SMP
+/// layer to publish into), so the online set has to name it explicitly.
+const BOOT_HART: usize = 0;
+
+/// Record every hart that can run kernel code for a request issued by
+/// `requester`, including the boot hart.
+///
+/// The boot hart never publishes `smp::HART_ONLINE` — it is running before there
+/// is anything to publish into — so the published secondary list alone is an
+/// incomplete online set. The requester used to be unioned in to cover that,
+/// which is only enough while the requester *is* the boot hart: a capture
+/// requested from hart 1 would leave hart 0 out of the target set, and a hart
+/// executing kernel code that can mutate the image would never be asked to stop.
+fn online_hart_ids(requester: usize, out: &mut HartSet) -> Result<(), QuiesceError> {
+    out.insert(BOOT_HART)?;
+    out.insert(requester)?;
+    for hart in crate::task::smp::online_harts() {
+        out.insert(hart)?;
+    }
+    Ok(())
+}
+
 /// The kernel's single-flight protocol instance.
 pub static KERNEL_STATE: QuiesceState = QuiesceState::new();
 
 /// The kernel's hart set.
 pub static KERNEL_HARTS: KernelHarts = KernelHarts;
+
+// ── The RV64 lane fixture for the park hook ──────────────────────────────────
+
+#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+pub mod lane {
+    //! Boot fixture for the RV64 lane: the park hook, driven end to end on real
+    //! harts, plus its fail-closed path.
+    //!
+    //! The requester half runs here on the boot hart — the only hart that can
+    //! drive a fixture synchronously before the shell exists — and the target half
+    //! is whatever real hart the request reaches through the trap path. Nothing in
+    //! this module is a model of the mechanism: it calls the same
+    //! [`KernelHarts`](super::KernelHarts)/[`QuiesceState`](super::QuiesceState)
+    //! protocol the capture preflight calls, over the same IPI and the same
+    //! trap-path hook.
+    //!
+    //! Witness shape. Each hart says what *it* did, so no line has to be trusted
+    //! as a summary of another hart:
+    //!
+    //! * `hart=1 state=withheld epoch=E` — the target saw the request and was made
+    //!   not to acknowledge it, which is the negative case's precondition;
+    //! * `hart=0 state=refused pending=1` — the requester's bounded wait expired
+    //!   and it refused: fail-closed, no success, no disk commit;
+    //! * `hart=1 state=release-observed epoch=E` — the release reached a hart that
+    //!   never acknowledged, i.e. the cancelled request left nothing behind;
+    //! * `hart=1 state=parked epoch=E` / `hart=0 state=all-parked pending=0` —
+    //!   target and requester agree the hart stopped;
+    //! * `hart=0 state=proceed frozen_ticks=A->B` — the requester kept running
+    //!   while the target's own trap counter stayed frozen, so "parked" is
+    //!   observed, not asserted;
+    //! * `hart=1 state=resumed epoch=E` and the counter moving again — the hart
+    //!   went back to running its own code.
+    //!
+    //! The fixture takes `&mut` nothing and allocates nothing: it runs in `kmain`
+    //! before the shell exists.
+
+    use super::*;
+
+    /// One 10 ms tick of `mtime`, in `mtime` units.
+    const TICK: u64 = hal::common::timer::TICKS_PER_10MS;
+
+    /// Traps observed on each hart: the frozen-window witness. A parked hart
+    /// takes no trap, so this counter cannot move while it is parked, and it moves
+    /// again the moment the hart is released.
+    static TRAP_TICKS: [AtomicUsize; PARK_HARTS] = [const { AtomicUsize::new(0) }; PARK_HARTS];
+    static STOPPED: [AtomicUsize; PARK_HARTS] = [const { AtomicUsize::new(0) }; PARK_HARTS];
+    static RESUMED: [AtomicUsize; PARK_HARTS] = [const { AtomicUsize::new(0) }; PARK_HARTS];
+    static ABANDONED: [AtomicUsize; PARK_HARTS] = [const { AtomicUsize::new(0) }; PARK_HARTS];
+    static WITHHELD: [AtomicUsize; PARK_HARTS] = [const { AtomicUsize::new(0) }; PARK_HARTS];
+    static RELEASE_SEEN: [AtomicUsize; PARK_HARTS] = [const { AtomicUsize::new(0) }; PARK_HARTS];
+    /// Last epoch each one-shot marker was logged for, so a request that stays
+    /// outstanding across several 10 ms traps logs its observation once. One entry
+    /// per hart *and* per event: the two events can name the same epoch (a request
+    /// is withheld and then cancelled), and a shared key would drop the second.
+    static LOGGED_WITHHELD: [AtomicUsize; PARK_HARTS] = [const { AtomicUsize::new(0) }; PARK_HARTS];
+    static LOGGED_RELEASE: [AtomicUsize; PARK_HARTS] = [const { AtomicUsize::new(0) }; PARK_HARTS];
+
+    fn bump(counters: &[AtomicUsize; PARK_HARTS], hart: usize) {
+        if let Some(counter) = counters.get(hart) {
+            counter.fetch_add(1, Ordering::AcqRel);
+        }
+    }
+
+    fn count(counters: &[AtomicUsize; PARK_HARTS], hart: usize) -> usize {
+        counters.get(hart).map_or(0, |c| c.load(Ordering::Acquire))
+    }
+
+    pub(super) fn note_trap(hart: usize) {
+        bump(&TRAP_TICKS, hart);
+    }
+
+    pub(super) fn note_stopped(hart: usize, epoch: usize) {
+        bump(&STOPPED, hart);
+        log::warn!("[selftest] S22-RV64-PARK: hart={hart} state=parked epoch={epoch}");
+    }
+
+    pub(super) fn note_resumed(hart: usize, epoch: usize) {
+        bump(&RESUMED, hart);
+        log::warn!("[selftest] S22-RV64-PARK: hart={hart} state=resumed epoch={epoch}");
+    }
+
+    pub(super) fn note_abandoned(hart: usize, epoch: usize) {
+        bump(&ABANDONED, hart);
+        log::warn!("[selftest] S22-RV64-PARK: hart={hart} state=abandoned epoch={epoch}");
+    }
+
+    pub(super) fn note_withheld(hart: usize, epoch: usize) {
+        bump(&WITHHELD, hart);
+        log_once(&LOGGED_WITHHELD, hart, epoch, "withheld");
+    }
+
+    pub(super) fn note_release_seen(hart: usize, epoch: usize) {
+        if let Some(seen) = RELEASE_SEEN.get(hart) {
+            // The release is observed on every later trap too; the counter records
+            // the last release this hart noticed, the marker fires once per epoch.
+            seen.fetch_max(epoch, Ordering::AcqRel);
+        }
+        log_once(&LOGGED_RELEASE, hart, epoch, "release-observed");
+    }
+
+    fn log_once(logged_for: &[AtomicUsize; PARK_HARTS], hart: usize, epoch: usize, state: &str) {
+        let Some(logged) = logged_for.get(hart) else {
+            return;
+        };
+        if logged.swap(epoch, Ordering::AcqRel) != epoch {
+            log::warn!("[selftest] S22-RV64-PARK: hart={hart} state={state} epoch={epoch}");
+        }
+    }
+
+    /// Spin until `predicate` holds or `ticks` of `mtime` have passed.
+    fn wait_for(ticks: u64, mut predicate: impl FnMut() -> bool) -> bool {
+        let deadline = hal::common::timer::read_mtime() + ticks;
+        loop {
+            if predicate() {
+                return true;
+            }
+            if hal::common::timer::read_mtime() > deadline {
+                return false;
+            }
+            core::hint::spin_loop();
+        }
+    }
+
+    /// Let `ticks` of `mtime` pass without taking any lock or allocating — the
+    /// requester's side of the frozen window.
+    fn spin_ticks(ticks: u64) {
+        let deadline = hal::common::timer::read_mtime() + ticks;
+        while hal::common::timer::read_mtime() <= deadline {
+            core::hint::spin_loop();
+        }
+    }
+
+    fn terminal(ok: bool, harts: usize, parked: usize, resumed: usize, refused: usize) -> bool {
+        log::warn!(
+            "[selftest] S22-RV64-PARK: hart=0 state=summary harts={harts} parked={parked} \
+             resumed={resumed} refused={refused}"
+        );
+        if ok {
+            // The terminal stays exactly `... PASS harts=N` so the lane's
+            // exact-match terminal assertion cannot be satisfied by a partial run;
+            // the counts above are detail, not the verdict.
+            log::warn!("S22-RV64-PARK: PASS harts={harts}");
+        } else {
+            log::warn!("S22-RV64-PARK: FAIL harts={harts}");
+        }
+        ok
+    }
+
+    /// Drive the park hook on the harts this boot actually has, and report whether
+    /// every step held.
+    ///
+    /// Returns `false` after emitting its own verdict marker: `UNAVAILABLE` when
+    /// the readiness gate found the target not taking traps before any request was
+    /// made (no park was witnessed in this boot), or `FAIL` when a step of the
+    /// witness itself did not hold. The caller only has to keep that marker
+    /// visible; the lane decides on the markers, not on this value.
+    pub fn run_primary() -> bool {
+        if crate::task::hart_local::current_hart_id() != BOOT_HART {
+            return true;
+        }
+        let target = match crate::task::smp::online_harts().find(|hart| *hart != BOOT_HART) {
+            Some(hart) => hart,
+            None => {
+                // One hart: no target, no request, no wait — the protocol's no-op
+                // arm, taken through the live state and the live hart set. It must
+                // succeed with the single-flight claim and must never ask the
+                // requester to park itself, or a single-hart capture would deadlock
+                // on its own acknowledgement.
+                let ok = match super::KERNEL_STATE.acquire(&super::KERNEL_HARTS) {
+                    Ok(guard) => guard.all_parked() && guard.pending_count() == 0,
+                    Err(_) => false,
+                };
+                let asked = PARK_REQUEST[BOOT_HART].load(Ordering::Acquire) != 0
+                    || count(&STOPPED, BOOT_HART) != 0;
+                if !ok || asked {
+                    log::warn!(
+                        "[selftest] S22-RV64-PARK: hart=0 state=single-hart-arm-failed \
+                         noop_ok={ok} requester_asked={asked}"
+                    );
+                    return terminal(false, 1, 0, 0, 0);
+                }
+                log::warn!(
+                    "[selftest] S22-RV64-PARK: hart=0 state=no-targets (single-hart no-op)"
+                );
+                return terminal(true, 1, 0, 0, 0);
+            }
+        };
+
+        // ── 0. Readiness gate, *before* this fixture asks the target for
+        // anything. A boot in which the second hart has already stopped taking
+        // traps is the known mid-boot condition the rest of this lane tolerates
+        // (phase-02's "a remote hart can stop acknowledging mid-boot": a hart can
+        // be held non-preemptible for seconds, and in one observed boot hart 0 and
+        // then hart 1 were both reported silent before this fixture ran). It is
+        // not a statement about the park hook, and it cannot be one: no park
+        // request has been issued yet — `PARK_REQUEST[target]` is still 0 — so the
+        // hook has had nothing to answer and nothing it could have broken. What a
+        // *post*-request silence means is the opposite, and stays a hard failure
+        // below, which is what keeps this gate from hiding a hook that parks a hart
+        // and never releases it.
+        let baseline = count(&TRAP_TICKS, target);
+        if !wait_for(30 * TICK, || count(&TRAP_TICKS, target) > baseline + 1) {
+            log::warn!(
+                "[selftest] S22-RV64-PARK: hart={target} state=not-taking-traps \
+                 ticks={baseline} (before any request)"
+            );
+            log::warn!("S22-RV64-PARK: UNAVAILABLE harts=2 reason=target-not-taking-traps");
+            return false;
+        }
+
+        // ── 1. The negative case: the target observes the request and withholds
+        // its acknowledgement, so the requester must fail closed.
+        super::set_park_ack_withheld(target, true);
+        let refused = match super::KERNEL_STATE.acquire(&super::KERNEL_HARTS) {
+            Ok(guard) => {
+                let pending = guard.pending_count();
+                drop(guard);
+                log::warn!(
+                    "[selftest] S22-RV64-PARK: hart=0 state=unexpected-park pending={pending}"
+                );
+                None
+            }
+            Err(err) => Some(err),
+        };
+        super::set_park_ack_withheld(target, false);
+        let cancelled = PARK_REQUEST[target].load(Ordering::Acquire);
+        let refused_ok = matches!(refused, Some(QuiesceError::Timeout { pending: 1 }));
+        if !refused_ok {
+            log::warn!(
+                "[selftest] S22-RV64-PARK: hart=0 state=refused-shape-unknown \
+                 error={:?}",
+                refused
+            );
+            return terminal(false, 2, 0, 0, 0);
+        }
+        log::warn!(
+            "[selftest] S22-RV64-PARK: hart=0 state=refused pending=1 epoch={cancelled} \
+             fail-closed"
+        );
+        if count(&WITHHELD, target) == 0 {
+            log::warn!("[selftest] S22-RV64-PARK: hart={target} state=never-observed-request");
+            return terminal(false, 2, 0, 0, 1);
+        }
+
+        // ── 2. The release reaches a hart that never acknowledged: the cancelled
+        // request leaves no park behind, and the target is running its own code.
+        let observed = wait_for(50 * TICK, || {
+            count(&RELEASE_SEEN, target) >= cancelled
+        });
+        if !observed {
+            log::warn!(
+                "[selftest] S22-RV64-PARK: hart={target} state=release-not-observed \
+                 epoch={cancelled}"
+            );
+            return terminal(false, 2, 0, 0, 1);
+        }
+
+        // ── 3. The positive case: a request the target answers.
+        let want_resumed = count(&RESUMED, target) + 1;
+        let guard = match super::KERNEL_STATE.acquire(&super::KERNEL_HARTS) {
+            Ok(guard) => guard,
+            Err(err) => {
+                log::warn!("[selftest] S22-RV64-PARK: hart=0 state=park-refused error={err}");
+                return terminal(false, 2, 0, 0, 1);
+            }
+        };
+        let epoch = PARK_REQUEST[target].load(Ordering::Acquire);
+        if !guard.all_parked() || count(&STOPPED, target) == 0 {
+            let pending = guard.pending_count();
+            drop(guard);
+            log::warn!(
+                "[selftest] S22-RV64-PARK: hart=0 state=not-all-parked pending={pending} \
+                 epoch={epoch}"
+            );
+            return terminal(false, 2, count(&STOPPED, target), 0, 1);
+        }
+        log::warn!(
+            "[selftest] S22-RV64-PARK: hart=0 state=all-parked pending=0 epoch={epoch}"
+        );
+
+        // The requester proceeds while the target is parked, and proves the park
+        // was real: the target's own trap counter cannot move while it is stopped.
+        let before = count(&TRAP_TICKS, target);
+        spin_ticks(4 * TICK);
+        let after = count(&TRAP_TICKS, target);
+        let frozen = before == after;
+        log::warn!(
+            "[selftest] S22-RV64-PARK: hart=0 state=proceed frozen_ticks={before}->{after} \
+             window_ticks=4"
+        );
+
+        drop(guard);
+        log::warn!("[selftest] S22-RV64-PARK: hart=0 state=released epoch={epoch}");
+
+        // ── 4. The target resumes: the release is observed and the same hart takes
+        // traps again, which is what "resumed" means.
+        let resumed = wait_for(50 * TICK, || {
+            count(&RESUMED, target) >= want_resumed && count(&TRAP_TICKS, target) > after
+        });
+        if !resumed {
+            log::warn!(
+                "[selftest] S22-RV64-PARK: hart={target} state=not-resumed restored={} ticks={}",
+                count(&RESUMED, target),
+                count(&TRAP_TICKS, target)
+            );
+        }
+        let ok = frozen && resumed && count(&ABANDONED, target) == 0;
+        terminal(ok, 2, count(&STOPPED, target), count(&RESUMED, target), 1)
+    }
+}
 
 // ── Host tests ───────────────────────────────────────────────────────────────
 
@@ -765,5 +1331,119 @@ mod tests {
         assert!(harts.releases().is_empty());
         // The claim was released with the refusal.
         assert_eq!(acquire_err(&state, &harts), QuiesceError::TooManyHarts);
+    }
+
+    // ── The live park state machine ──────────────────────────────────────────
+    //
+    // `FakeHarts` covers the protocol over a programmable hart set; these cases
+    // cover the state machine the kernel actually runs — `request_park`,
+    // `park_here_if_requested`, `release_park`, `park_acknowledged` over the live
+    // per-hart epochs — on the host, where the only arch-specific parts (the IPI
+    // and the clock) are compiled out. Each case owns hart ids above the kernel's
+    // own `smp::MAX_HARTS` so the parallel test threads cannot see each other's
+    // state; the host build has no clock, so a park that is never released ends at
+    // the clock-independent backstop instead of hanging.
+
+    #[test]
+    fn live_request_is_not_an_acknowledgement_and_an_abandoned_park_has_stopped() {
+        let hart = 3;
+        let epoch = request_park(hart);
+        assert_ne!(epoch, 0);
+        assert!(
+            !park_acknowledged(hart, epoch),
+            "asking a hart to park is not evidence that it parked"
+        );
+
+        let outcome = park_here_if_requested(hart);
+        assert_eq!(
+            outcome,
+            ParkOutcome::Abandoned { epoch },
+            "with no release and no host clock the parked loop must end at its backstop"
+        );
+        assert!(
+            park_acknowledged(hart, epoch),
+            "the acknowledgement is published before the hart stops, so it is already visible"
+        );
+
+        // The release is idempotent, and the cancelled epoch is what the hart now
+        // observes: it is resumed, and it does not park for that epoch again.
+        release_park(hart);
+        release_park(hart);
+        assert_eq!(
+            park_here_if_requested(hart),
+            ParkOutcome::AlreadyReleased { epoch }
+        );
+        assert!(
+            park_acknowledged(hart, epoch),
+            "the epoch was parked for; a release resumes the hart, it does not un-park history"
+        );
+    }
+
+    #[test]
+    fn live_release_cancels_a_request_the_hart_never_satisfied() {
+        let hart = 4;
+        let epoch = request_park(hart);
+        release_park(hart);
+        assert_eq!(
+            park_here_if_requested(hart),
+            ParkOutcome::AlreadyReleased { epoch },
+            "a hart that reaches a safe point after the release must not park"
+        );
+        assert!(
+            !park_acknowledged(hart, epoch),
+            "no acknowledgement may be published for a cancelled request"
+        );
+
+        // The next request is a new epoch, so it is not covered by the old release.
+        let next = request_park(hart);
+        assert_eq!(next, epoch + 1);
+        assert!(!park_acknowledged(hart, next), "a new epoch needs a new park");
+        assert_eq!(
+            park_here_if_requested(hart),
+            ParkOutcome::Abandoned { epoch: next }
+        );
+    }
+
+    #[test]
+    fn live_withheld_hart_observes_the_request_and_never_acknowledges() {
+        let hart = 5;
+        set_park_ack_withheld(hart, true);
+        let epoch = request_park(hart);
+        assert_eq!(
+            park_here_if_requested(hart),
+            ParkOutcome::Withheld { epoch },
+            "the request is observed, and the withholding is what stops the park"
+        );
+        assert!(
+            !park_acknowledged(hart, epoch),
+            "the negative control must not acknowledge, or the requester's fail-closed \
+             path would never be reached"
+        );
+
+        set_park_ack_withheld(hart, false);
+        release_park(hart);
+        assert_eq!(
+            park_here_if_requested(hart),
+            ParkOutcome::AlreadyReleased { epoch },
+            "clearing the control leaves the hart restored, not parked"
+        );
+    }
+
+    #[test]
+    fn live_online_set_names_the_boot_hart_for_any_requester() {
+        // The host cannot make `current_hart_id()` return a secondary hart, so the
+        // requester is named explicitly here — which is the whole point of the
+        // case: hart 0 runs kernel code without ever publishing `HART_ONLINE`, so a
+        // request issued from hart 1 has to name it from outside the published
+        // set. Before that, a capture requested from hart 1 would have left hart 0
+        // running and reported success on a set it never froze.
+        let mut set = HartSet::new();
+        online_hart_ids(1, &mut set).expect("ids are bounded");
+        let ids: Vec<usize> = set.iter().collect();
+        assert!(
+            ids.contains(&0),
+            "the boot hart must be in the online set for a request from hart 1: {ids:?}"
+        );
+        assert!(ids.contains(&1), "the requester itself is online: {ids:?}");
     }
 }

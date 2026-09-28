@@ -21,7 +21,21 @@ Usage: scripts/qemu-native-domain-test.sh --harts {1|2} --case <csv>
 
 Cases: switch, resume-root, sas-fastpath, migration, user-copy, user-copy-race,
 admission, rollback, grant-revoke, grant-gate, grant-pair, asid-lease,
-unmap-order, rt-wake
+unmap-order, rt-wake, park
+
+`park` drives the phase-07 step-3 all-hart park hook on the real harts: the boot
+fixture requests a park over the live protocol and the live RV64 trap-path hook,
+proves the target really stopped (the requester keeps running while the target's
+own trap counter is frozen), proves it resumed, and — in the negative case — makes
+the target withhold its acknowledgement and requires the request to fail closed
+with the machine still healthy. It has no per-hart requirement: `--harts 1` runs
+the protocol's single-hart no-op arm, which is why its terminal carries the hart
+count. A two-hart boot whose second hart had already stopped taking traps *before*
+the fixture made any request is reported as `UNAVAILABLE` (never as PASS): that is
+the same pre-existing mid-boot condition the release paths tolerate, the park block
+requires the fixture's pre-request record plus an independent silent-remote line
+from the same boot before accepting it, and any silence *after* a request is a hard
+failure.
 
 `grant-pair` drives the phase-03 step-5 Tier-2 grant pair: it background-spawns
 the owner cell, reads the owner's `S22-RV64-GRANT-PAIR-HANDOFF` line, then spawns
@@ -41,7 +55,11 @@ Test-only flags and knobs (not part of any qualification claim):
                         existing *normalized* log instead of booting QEMU, so
                         the assertion itself can be shown to have teeth (delete
                         the evidence it requires and it must go red). Supports
-                        --case grant-revoke only; --harts must match the log.
+                        --case grant-revoke and --case park; --harts must match
+                        the log. The park case is replayable on purpose: its
+                        accepted UNAVAILABLE reading depends on a boot condition
+                        that only some boots produce, so the branch that accepts it
+                        has to be auditable from a log without waiting for one.
   GRANT_REVOKE_BOOT_WINDOW (env, seconds, default 150)
                         boot window for `grant-revoke`. Its fail-closed path now
                         *retains* frames and queues the unconfirmed invalidation
@@ -90,7 +108,7 @@ declare -A seen=()
 for case_id in "${REQUESTED_CASES[@]}"; do
     [[ -n "$case_id" ]] || { echo "FAIL: empty case in --case" >&2; exit 2; }
     case "$case_id" in
-        switch|resume-root|sas-fastpath|migration|user-copy|user-copy-race|ipc-copy|ipc-copy-race|admission|admission-enabled|admission-publication|admission-ceiling|futex-key|rollback|grant-revoke|grant-gate|grant-pair|asid-lease|unmap-order|rt-wake) ;;
+        switch|resume-root|sas-fastpath|migration|user-copy|user-copy-race|ipc-copy|ipc-copy-race|admission|admission-enabled|admission-publication|admission-ceiling|futex-key|rollback|grant-revoke|grant-gate|grant-pair|asid-lease|unmap-order|rt-wake|park) ;;
         *) echo "FAIL: unknown native-domain case: $case_id" >&2; exit 2 ;;
     esac
     [[ -z "${seen[$case_id]:-}" ]] || { echo "FAIL: duplicate native-domain case: $case_id" >&2; exit 2; }
@@ -118,8 +136,8 @@ done
 # it is refused for anything but the one case whose assertion has an
 # invariant form to audit.
 if [[ -n "$ASSERT_LOG" ]]; then
-    [[ "$CASES" == "grant-revoke" ]] || {
-        echo "FAIL: --assert-log is defined for --case grant-revoke only" >&2; exit 2; }
+    [[ "$CASES" == "grant-revoke" || "$CASES" == "park" ]] || {
+        echo "FAIL: --assert-log is defined for --case grant-revoke and --case park only" >&2; exit 2; }
     [[ -f "$ASSERT_LOG" ]] || { echo "FAIL: --assert-log: no such file: $ASSERT_LOG" >&2; exit 2; }
 fi
 
@@ -161,6 +179,7 @@ marker_for() {
         asid-lease) printf 'S22-RV64-ASID-LEASE: PASS' ;;
         unmap-order) printf 'S22-RV64-UNMAP-ORDER: PASS' ;;
         rt-wake) printf 'S22-RV64-RT-WAKE: PASS harts=2' ;;
+        park) printf 'S22-RV64-PARK: PASS harts=%s' "$HARTS" ;;
     esac
 }
 terminal_pattern_for() {
@@ -190,6 +209,7 @@ terminal_pattern_for() {
         asid-lease) printf '(^|\\] )S22-RV64-ASID-LEASE: PASS$' ;;
         unmap-order) printf '(^|\\] )S22-RV64-UNMAP-ORDER: PASS$' ;;
         rt-wake) printf '(^|\\] )S22-RV64-RT-WAKE: PASS harts=2$' ;;
+        park) printf '(^|\\] )S22-RV64-PARK: PASS harts=%s$' "$HARTS" ;;
     esac
 }
 assert_runtime_hart_count() {
@@ -660,6 +680,10 @@ assert_grant_revoke_outcome() {
     # and the accepted deferred outcome is reported as DEFERRED, never as PASS.
     GRANT_REVOKE_OUTCOME=""
     assert_grant_revoke_outcome "$normalized_log"
+    # The park case's accepted outcome: empty when its terminal is the witness,
+    # `unavailable` when the readiness gate found the second hart not taking traps
+    # before any request was made, and the park block above is what sets it.
+    PARK_OUTCOME=""
     unexpected="$(grep -aoE 'S22-RV64-[A-Z0-9-]+: FAIL' "$normalized_log" \
         | grep -vEx 'S22-RV64-GRANT-REVOKE(-SLICE-RW|-REVOKE)?: FAIL' | sort -u || true)"
     if [[ -n "$unexpected" ]]; then
@@ -718,6 +742,13 @@ assert_grant_revoke_outcome() {
             echo "FAIL: expected at least $terminal_min terminal for case=$case_id: $marker; found $terminal_count; see $normalized_log" >&2
             exit 1
         fi
+    elif [[ "$case_id" == "park" && "$HARTS" == "2" \
+        && "$(grep -Fc 'S22-RV64-PARK: UNAVAILABLE harts=2' "$normalized_log" || true)" == "1" ]]; then
+        # Zero terminals is the accepted *unavailable* outcome for this case: the
+        # second hart was not taking traps before the fixture asked it for
+        # anything. The park block below requires the evidence for that reading,
+        # and reports it as UNAVAILABLE rather than relabelling it as a pass.
+        :
     elif [[ "$terminal_count" != "1" ]]; then
         echo "FAIL: expected exactly one terminal for case=$case_id: $marker; found $terminal_count; see $normalized_log" >&2
         exit 1
@@ -805,11 +836,118 @@ assert_grant_revoke_outcome() {
         fi
     fi
 
+    # The all-hart park hook is asserted from the harts' own markers, never from a
+    # summary: the target says it observed the request and withheld it, the
+    # requester says it refused, the target says the release reached it, then both
+    # sides say it parked, the requester says it kept running while the target's
+    # trap counter was frozen, and the target says it resumed. A fixture that
+    # stopped running, or a call site that stopped being reached, emits neither
+    # these markers nor a terminal, so the case cannot pass vacuously.
+    #
+    # Two outcomes are accepted for a two-hart boot, and the second is not a pass:
+    #
+    #   * the full witness (`S22-RV64-PARK: PASS harts=2` plus every per-hart
+    #     marker), or
+    #   * `UNAVAILABLE`, when the *readiness gate that runs before the fixture
+    #     issues any request* found the second hart not taking traps. That is the
+    #     same pre-existing mid-boot condition this lane already tolerates for the
+    #     release paths (phase-02 § Deviation Log: a remote hart can be held
+    #     non-preemptible for seconds, and one observed two-hart boot reported both
+    #     hart 0 and hart 1 silent before this fixture ran), and no park request
+    #     had been issued when it was observed. Accepted only together with the
+    #     fixture's own pre-request record *and* the memory layer's independent
+    #     record of a silent remote hart in the same boot — so a hook that parked a
+    #     hart and never released it cannot hide behind it: that would be silence
+    #     *after* the request, which is asserted as a failure above and is reported
+    #     below as unavailability only when a silent-remote line is present too.
+    if [[ "$case_id" == "park" ]]; then
+        park_unavailable="$(grep -Fc 'S22-RV64-PARK: UNAVAILABLE harts=2' "$normalized_log" || true)"
+        if [[ "$HARTS" == "1" ]]; then
+            park_required=(
+                'S22-RV64-PARK: hart=0 state=no-targets (single-hart no-op)'
+            )
+        elif [[ "$park_unavailable" == "1" ]]; then
+            park_required=(
+                'S22-RV64-PARK: hart=1 state=not-taking-traps'
+                'S22-RV64-PARK: UNAVAILABLE harts=2 reason=target-not-taking-traps'
+            )
+            for required_marker in "${park_required[@]}"; do
+                if ! grep -Fq -- "$required_marker" "$normalized_log"; then
+                    echo "FAIL: park unavailable outcome without its evidence: $required_marker; see $normalized_log" >&2
+                    exit 1
+                fi
+            done
+            # The fixture's own record is not enough: the memory layer must
+            # independently report the same silent remote hart, or this boot is
+            # just a fixture that stopped working.
+            if ! grep -aqE '\[tlb\] tag [0-9]+ invalidation unconfirmed: hart [0-9]+ silent through the' "$normalized_log" \
+                && ! grep -aqF '[aspace] deferred release abandoned after' "$normalized_log"; then
+                echo "FAIL: park reported UNAVAILABLE but no release path in this boot recorded" >&2
+                echo "      a silent remote hart, so the unavailability has no independent cause; see $normalized_log" >&2
+                exit 1
+            fi
+            if grep -Fq 'S22-RV64-PARK: PASS' "$normalized_log" \
+                || grep -Fq 'S22-RV64-PARK: FAIL' "$normalized_log"; then
+                echo "FAIL: park reported UNAVAILABLE together with a terminal; see $normalized_log" >&2
+                exit 1
+            fi
+            PARK_OUTCOME="unavailable"
+        else
+            park_required=(
+                'S22-RV64-PARK: hart=1 state=withheld epoch='
+                'S22-RV64-PARK: hart=0 state=refused pending=1 epoch='
+                'S22-RV64-PARK: hart=1 state=release-observed epoch='
+                'S22-RV64-PARK: hart=1 state=parked epoch='
+                'S22-RV64-PARK: hart=0 state=all-parked pending=0 epoch='
+                'S22-RV64-PARK: hart=0 state=proceed frozen_ticks='
+                'S22-RV64-PARK: hart=1 state=resumed epoch='
+                'S22-RV64-PARK: hart=0 state=released epoch='
+            )
+        fi
+        if [[ "$HARTS" == "1" || "$park_unavailable" != "1" ]]; then
+            for required_marker in "${park_required[@]}"; do
+                if ! grep -Fq -- "$required_marker" "$normalized_log"; then
+                    echo "FAIL: park missing park-hook marker: $required_marker; see $normalized_log" >&2
+                    exit 1
+                fi
+            done
+        fi
+        if [[ "$HARTS" == "2" && "$park_unavailable" != "1" ]]; then
+            # A parked hart that had to release itself means a requester died while
+            # harts were parked: the fixture's own bounded loop saved the machine,
+            # which is a failure of the park, not a tolerated outcome.
+            if grep -Fq 'S22-RV64-PARK: hart=' "$normalized_log" \
+                && grep -Fq 'state=abandoned' "$normalized_log"; then
+                echo "FAIL: park: a parked hart had to release itself (state=abandoned), so a" >&2
+                echo "      requester died while harts were parked; see $normalized_log" >&2
+                exit 1
+            fi
+            # The frozen window is the difference between "parked" asserted and
+            # "parked" observed: the target's own trap counter must not move while
+            # the requester proceeds.
+            frozen_line="$(grep -aoE 'S22-RV64-PARK: hart=0 state=proceed frozen_ticks=[0-9]+->[0-9]+' "$normalized_log" | tail -n 1 || true)"
+            frozen_before="$(printf '%s' "$frozen_line" | sed -n 's/.*frozen_ticks=\([0-9]\+\)->[0-9]\+/\1/p')"
+            frozen_after="$(printf '%s' "$frozen_line" | sed -n 's/.*frozen_ticks=[0-9]\+->\([0-9]\+\).*/\1/p')"
+            if [[ -z "$frozen_before" || "$frozen_before" != "$frozen_after" ]]; then
+                echo "FAIL: park: the target hart's trap counter moved while it was parked" >&2
+                echo "      ('$frozen_line'), so the hart was not actually stopped; see $normalized_log" >&2
+                exit 1
+            fi
+        fi
+    fi
+
     if [[ "$case_id" == "grant-revoke" && "$GRANT_REVOKE_OUTCOME" == "deferred" ]]; then
         # Distinct from PASS by construction: the fixture's own terminal said a
         # property failed on its first attempt, and this line reports which
         # outcome was accepted and why, with the log that proves it.
         printf 'DEFERRED: native-domain case=grant-revoke harts=%s terminal=S22-RV64-GRANT-REVOKE: FAIL (first-attempt -SLICE-RW/-REVOKE deferred by an unacknowledged remote invalidation; fail-closed invariants asserted) log=%s\n' \
+            "$HARTS" "$normalized_log"
+    elif [[ "$case_id" == "park" && "$PARK_OUTCOME" == "unavailable" ]]; then
+        # Also distinct from PASS: no park was requested in this boot, so the hook
+        # itself was not witnessed here. The gate ran *before* the request and the
+        # same boot's release paths independently recorded the silent remote hart,
+        # so this reports a boot condition, not an outcome of the park.
+        printf 'UNAVAILABLE: native-domain case=park harts=%s reason=target-hart-not-taking-traps (readiness gate failed before any park request; a release path in the same boot recorded a silent remote hart) log=%s\n' \
             "$HARTS" "$normalized_log"
     else
         printf 'PASS: native-domain case=%s harts=%s terminal=%s\n' "$case_id" "$HARTS" "$marker"

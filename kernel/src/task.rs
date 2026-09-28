@@ -876,6 +876,15 @@ pub extern "Rust" fn vi_timer_tick() {
             crate::memory::paging::tlb_flush_all();
             smp::complete_tlb_flush(hart);
         }
+
+        // Same observation point, same reason, for the capture preflight's park
+        // request: a hart can only stop where it is already taking the trap that
+        // brings the request in. Placed after the TLB acknowledgement so a remote
+        // invalidation's deadline is never extended by a park, and before `tick()`,
+        // the console poll and `yield_cpu()` so the hart is parked holding no lock
+        // and with no scheduler state half-changed — see
+        // `quiesce::park_here_if_requested` for the full safe-point argument.
+        quiesce::park_here_if_requested(hart);
     }
 
     // Complete frame releases whose tag invalidation a release path could not

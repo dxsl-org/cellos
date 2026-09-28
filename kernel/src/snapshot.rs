@@ -61,12 +61,13 @@
 //! `QUALIFICATION_ENABLED` (feature `snapshot-qualified`) gates the shipping
 //! path: capture and restore stay refused until an actual save → reset →
 //! restore → resume has been proven on a block-capable board.  The capture
-//! preflight now refuses **without any block I/O** unless every online hart is
+//! preflight refuses **without any block I/O** unless every online hart is
 //! parked at an acknowledged safe point ([`crate::task::quiesce`]) — a no-op on
-//! a single-hart system, a refusal on several, because the per-hart park hook
-//! is not implemented yet.  Coherent staging of the frames under capture and
-//! the hardware witness remain the hardware-side halves of phase 07; see the
-//! phase doc.
+//! a single-hart system, and on RV64 a real request answered by each hart's trap
+//! path.  Coherent staging of the frames under capture and the hardware witness
+//! remain the hardware-side halves of phase 07; the park hook is present, but a
+//! hart can be parked while holding the heap's non-masking spin lock, so the
+//! requester must not allocate while the guard lives; see the phase doc.
 //!
 //! # Image-kind runs: what they close, and what they do not
 //!
@@ -182,18 +183,21 @@ pub const RUN_FLAG_IMAGE: u32 = 0b1;
 
 /// Qualification gate for warm snapshot capture and restore.
 ///
-/// Phase-01 containment: the writer hashes payload bytes only while the reader
-/// hashes header + payload, the reader reconstructs a dense
-/// `pa_base + index * 4096` run from a write that skips free frames, there is no
-/// all-hart park hook (the preflight can only prove quiescence on one hart),
-/// and the restore replays frames over its own live
-/// stack and kernel globals. The format, inventory, checksum and states are now
-/// specified and unit-tested (phase 07 step 1 + the device-independent half of
-/// step 5), but until phase 07 proves save → reset → restore → resume on a
-/// block-capable board the path stays disabled in every shipping image: a
-/// capture cannot touch the snapshot region and a restore cannot mutate RAM.
-/// `snapshot-qualified` is the single build gate phase 07 turns on for that
-/// verified profile.
+/// Phase-01 containment: the writer hashed payload bytes only while the reader
+/// hashed header + payload, the reader reconstructed a dense
+/// `pa_base + index * 4096` run from a write that skips free frames, and the
+/// restore replays frames over its own live stack and kernel globals. The
+/// format, inventory, checksum and states are specified and unit-tested (phase
+/// 07 step 1 + the device-independent half of step 5), the mutable image span is
+/// in the inventory (step 3's first half), and the all-hart park hook now exists
+/// on RV64 (step 3's second half). What still keeps this gate closed is the
+/// hardware side: no save → reset → restore → resume has been proven on a
+/// block-capable board, coherent staging of the frames under capture is not
+/// implemented (the format cannot detect bytes that change between the read and
+/// the block write), and closure completeness is not proven. Until then every
+/// shipping image keeps the path disabled: a capture cannot touch the snapshot
+/// region and a restore cannot mutate RAM. `snapshot-qualified` is the single
+/// build gate phase 07 turns on for that verified profile.
 pub const QUALIFICATION_ENABLED: bool = cfg!(feature = "snapshot-qualified");
 
 /// Git SHA short hash baked in at compile time.  Snapshot is invalid if this
@@ -1301,14 +1305,21 @@ fn plan_inventory() -> Result<(RamLayout, Vec<SnapshotRun>), SnapshotError> {
 /// The capture refuses — before it reads a single frame and before any block
 /// I/O — unless every online hart other than this one is parked at an
 /// acknowledged safe point ([`quiesce`]). On a single-hart system that is
-/// trivially true; on a multi-hart system the per-hart park hook does not exist
-/// yet, so the refusal is the current outcome and the qualification gate stays
-/// closed.
+/// trivially true; on a multi-hart RV64 system each target stops in its own trap
+/// path and the requester waits a bounded time for the acknowledgements. A
+/// refusal is reported as [`SnapshotError::HartsNotQuiesced`] and leaves nothing
+/// parked and nothing written.
 ///
 /// # Safety constraints
 /// Once quiescence is acquired no other hart may run kernel code that mutates
 /// the captured frames: the format cannot detect bytes that changed between the
-/// read and the block write.
+/// read and the block write. The requester must therefore also not allocate while
+/// it holds the guard: a parked hart can be holding the heap's non-masking
+/// `spinning_top` lock, and an allocation here would spin on it forever. Nothing
+/// in the frozen window does — `plan_inventory` takes `FRAME_ALLOCATOR` (a
+/// `crate::sync::Spinlock`, so a hart holding it can never have been interrupted
+/// into a park) and the inventory vector itself is the one heap allocation the
+/// window still makes; the rest of the capture reads `mem` and writes `dev`.
 pub fn serialize_snapshot() -> Result<u32, SnapshotError> {
     if !QUALIFICATION_ENABLED {
         return Err(SnapshotError::GateClosed);

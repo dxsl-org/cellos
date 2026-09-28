@@ -1157,6 +1157,24 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     #[cfg(feature = "test-hooks")]
     crate::task::drivers::iommu_pt::run_selftest();
 
+    // Phase 07 step 3: the all-hart park hook, driven on the real harts of this
+    // boot. The fixture requests, verifies and releases a park through the same
+    // protocol and the same trap-path hook the capture preflight uses, and emits
+    // `S22-RV64-PARK: PASS harts=<n>` (or `FAIL`) itself — the native-domain lane
+    // requires that terminal, so a fixture that stops running, or a call site that
+    // stops being reached, turns the lane red instead of silently disappearing.
+    // Placed with the other boot fixtures: after every fixture that needs the
+    // second hart (the park is a bounded stop, not a background stall) and before
+    // init exists, so it has the machine to itself.
+    #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+    if !task::quiesce::lane::run_primary() {
+        // The fixture's own marker is the verdict: either `S22-RV64-PARK: FAIL`
+        // (a step of the witness did not hold) or `S22-RV64-PARK: UNAVAILABLE`
+        // (the readiness gate found the second hart not taking traps before any
+        // request was made, so this boot could not witness the hook at all).
+        log::error!("park-hook fixture did not witness the park hook; see its marker");
+    }
+
     // 8. Spawn Embedded Init
     // RV32 Nano bring-up: no init binary — boot to idle loop.
     #[cfg(any(
