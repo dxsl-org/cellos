@@ -195,6 +195,10 @@ fn probe(
     retired_space: &Arc<AddressSpace>,
 ) -> GateProbe {
     let baseline = free_frames();
+    let owned_baseline: usize = [domain_space, receiver_space, retired_space]
+        .into_iter()
+        .map(|space| space.owned_frame_count())
+        .sum();
 
     // 1. A live private root owns its backing: the alloc succeeds, the owner's
     //    own root gains an RW+NX grant page, and the SAS/global root never gains
@@ -298,19 +302,72 @@ fn probe(
     };
     // A revoke that could not be acknowledged retains its frames *by design*: an
     // unacknowledged remote invalidation must never put a page back in the free
-    // pool. The leak check is therefore taken against the two rows the probe
-    // itself may still hold, before the retirement sweep retries them — a flat
-    // `== baseline` would call the deferred path a leak.
+    // pool. Every frame the probe allocated is now in exactly one of three
+    // places, and only the first of them is visible through the allocator's free
+    // count, so all three have to be counted or a correct deferral reads as a
+    // leak:
+    //
+    //   * owned by one of the probe's own roots (`owned_frame_count`);
+    //   * queued for a deferred release — the page-table frames a deferred unmap
+    //     pruned, held until a hart acknowledges the tag (`deferred_release`);
+    //   * retained by a `Revoking` grant record, i.e. the backings of the two rows
+    //     whose revoke deferred.
+    //
+    // The leak check is taken before the retirement sweep retries the deferred
+    // rows — a flat `== baseline` would call the deferred path a leak.
     let pages = GRANT_SIZE.div_ceil(PAGE_SIZE);
     let retained_by_design =
         pages * (usize::from(retire.deferred) + usize::from(reg_deferred));
+    let retained_tables: usize = [domain_space, receiver_space, retired_space]
+        .into_iter()
+        .map(|space| {
+            crate::memory::deferred_release::deferred_release_frames_for(space.asid())
+        })
+        .sum();
+    let owned_now: usize = [domain_space, receiver_space, retired_space]
+        .into_iter()
+        .map(|space| space.owned_frame_count())
+        .sum();
     let before_sweep = free_frames();
-    let accounted = before_sweep + retained_by_design == baseline;
+    // A frame the probe allocated is now either owned by one of its roots, queued
+    // for a deferred release, or still held by a deferred revoke's record. Only
+    // the first of those is visible through the allocator's free count, so a
+    // correct deferral has to be counted in all three places for the deficit to
+    // add up.
+    let deficit = baseline - before_sweep;
+    let accounted =
+        deficit == (owned_now - owned_baseline) + retained_tables + retained_by_design;
     super::syscall::reclaim_owned_grants(DOMAIN_TID);
     let after_sweep = free_frames();
     // The sweep may complete a deferred revoke (returning frames) but can never
     // retain more than the attempt already did, nor push the pool above baseline.
     let frames = accounted && after_sweep >= before_sweep && after_sweep <= baseline;
+    log::info!(
+        "[grant-gate] frame accounting: baseline={} before_sweep={} after_sweep={} deficit={} owned_delta={} backings={} queued_tables={} deferred={} reg_deferred={} quarantined={} leaked_stacks={}",
+        baseline,
+        before_sweep,
+        after_sweep,
+        deficit,
+        owned_now - owned_baseline,
+        retained_by_design,
+        retained_tables,
+        retire.deferred,
+        reg_deferred,
+        crate::memory::address_space::quarantined_frame_count(),
+        crate::memory::deferred_release::leaked_stack_frames()
+    );
+    if !frames {
+        // The terms above may not add up because of a frame withheld by an owner
+        // this fixture cannot see; name every retention the queue holds so the
+        // unaccounted frame can be attributed instead of guessed at.
+        for (tag, frames, attempts, reason) in
+            crate::memory::deferred_release::deferred_release_snapshot()
+        {
+            log::error!(
+                "[grant-gate]   withheld: tag={tag} frames={frames} attempts={attempts} reason={reason}"
+            );
+        }
+    }
 
     GateProbe {
         alloc,

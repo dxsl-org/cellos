@@ -294,6 +294,127 @@ pub(crate) fn run_primary() {
              remote_ack_advanced={remote_ack_advanced} recycled={recycled}"
         );
     }
+
+    // ── Deferred release of unconfirmed frames ────────────────────────────────
+    //
+    // A release path must not wait for an acknowledgement that may never arrive.
+    // This is the unconfirmed window (`set_test_withhold_tag_ack`): the tag's
+    // invalidation is reported unconfirmed, so `unmap_private_page` has to retain
+    // its frames and record the tag while returning its error. Proven here:
+    //
+    //   * the frames are retained, not freed and not quarantined;
+    //   * the queue entry is pending and the tag reads unconfirmed;
+    //   * the reaper cannot release anything while the window lasts;
+    //   * once the acknowledgement resumes, the reaper releases exactly those
+    //     frames — no more, no fewer — and the tag reads confirmed again.
+    //
+    // The seam reports the invalidation unconfirmed rather than a real remote hart
+    // stalling: the deferred branch must be reachable on a one-hart boot, where no
+    // remote exists to stall at all.
+    let mut deferred_detail = (0usize, 0usize, 0usize, false, false, false, false, false);
+    let deferred_release = (|| {
+        use crate::memory::deferred_release as queue;
+        let mut builder = AddressSpaceBuilder::new();
+        let space = builder
+            .map_user_page(PRIVATE_PAGE, MappingKind::Private, flags())
+            .and_then(|()| builder.build())
+            .ok()?;
+        let tag = space.asid();
+        let frames_before = used_frames()?;
+        let depth_before = queue::deferred_release_depth();
+        let queued_frames_before = queue::deferred_release_frames();
+        let attempts_before = queue::deferred_release_attempts();
+
+        crate::memory::tlb_shootdown::set_test_withhold_tag_ack(true);
+        let unconfirmed_error =
+            space.unmap_private_page(PRIVATE_PAGE) == Err(AddressSpaceError::InvalidationUnacknowledged);
+        let depth_after = queue::deferred_release_depth();
+        let retained = queue::deferred_release_frames() - queued_frames_before;
+        let queued = depth_after == depth_before + 1 && retained > 0;
+        let unconfirmed = queue::tag_invalidation_unconfirmed(tag);
+        let retained_not_freed = used_frames() == Some(frames_before);
+        let not_quarantined = quarantined_frame_count() == 0;
+
+        // The reaper may not release it while the acknowledgement is missing. Two
+        // full reissue cycles: the reissue branch must not confirm the tag either.
+        for _ in 0..64 {
+            queue::reap_deferred_releases();
+        }
+        let still_pending = queue::deferred_release_depth() == depth_after;
+        let attempted = queue::deferred_release_attempts() > attempts_before;
+        let reaper_released_nothing = used_frames() == Some(frames_before);
+
+        // Acknowledgement resumes.
+        crate::memory::tlb_shootdown::set_test_withhold_tag_ack(false);
+        let mut released = false;
+        let deadline = hal::common::timer::read_mtime() + 40 * hal::common::timer::TICKS_PER_10MS;
+        while hal::common::timer::read_mtime() < deadline {
+            queue::reap_deferred_releases();
+            if queue::deferred_release_depth() == depth_before {
+                released = true;
+                break;
+            }
+            let slice = hal::common::timer::read_mtime() + hal::common::timer::TICKS_PER_10MS;
+            while hal::common::timer::read_mtime() < slice {
+                core::hint::spin_loop();
+            }
+        }
+        let released_exactly = used_frames().and_then(|now| frames_before.checked_sub(now))
+            == Some(retained);
+        let tag_confirmed = !queue::tag_invalidation_unconfirmed(tag);
+        let quiet = quarantined_frame_count() == 0
+            && queue::deferred_release_abandoned() == 0
+            && queue::deferred_release_abandoned_frames() == 0
+            && queue::leaked_stack_frames() == 0;
+        deferred_detail = (
+            retained,
+            depth_after,
+            queue::deferred_release_attempts() - attempts_before,
+            unconfirmed_error,
+            queued && unconfirmed,
+            still_pending && attempted && reaper_released_nothing,
+            released && released_exactly && tag_confirmed,
+            quiet,
+        );
+        Some(
+            unconfirmed_error
+                && queued
+                && unconfirmed
+                && retained_not_freed
+                && not_quarantined
+                && still_pending
+                && attempted
+                && reaper_released_nothing
+                && released
+                && released_exactly
+                && tag_confirmed
+                && quiet,
+        )
+    })()
+    .unwrap_or(false);
+    if deferred_release {
+        log::info!(
+            "[aspace] deferred release confirmed: retained={} frames depth={} attempts={} released=true quarantined={}",
+            deferred_detail.0,
+            deferred_detail.1,
+            deferred_detail.2,
+            quarantined_frame_count()
+        );
+        log::info!("S22-RV64-DEFERRED-RELEASE: PASS");
+    } else {
+        log::error!(
+            "S22-RV64-DEFERRED-RELEASE: FAIL retained={} depth={} attempts={} withheld_error={} \
+             queued={} pending_through_window={} released={} quiet={}",
+            deferred_detail.0,
+            deferred_detail.1,
+            deferred_detail.2,
+            deferred_detail.3,
+            deferred_detail.4,
+            deferred_detail.5,
+            deferred_detail.6,
+            deferred_detail.7
+        );
+    }
 }
 
 #[cfg(test)]

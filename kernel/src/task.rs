@@ -55,6 +55,8 @@ pub mod net_rx_selftest;
 pub mod p_trust_selftest;
 /// Kernel-owned pipes — one-way byte streams between tasks (ADR-0018 §2.1).
 pub(crate) mod pipe;
+/// All-hart quiescence for the snapshot capture preflight (phase 07 step 3).
+pub mod quiesce;
 pub mod smp;
 pub mod syscall;
 pub mod tcb;
@@ -871,6 +873,18 @@ pub extern "Rust" fn vi_timer_tick() {
         }
     }
 
+    // Complete frame releases whose tag invalidation a release path could not
+    // confirm. Hart 0 owns the global sweeps, this is the trap path where the
+    // acknowledgements are published, no lock is held here, and the drain never
+    // waits — so it cannot widen the interrupt window the trap already closed nor
+    // block the slice. Before the second hart is online there is no remote to
+    // survey and an empty queue makes the call a no-op, so it is also safe on the
+    // way up.
+    #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+    if hart_local::current_hart_id() == 0 {
+        crate::memory::deferred_release::reap_deferred_releases();
+    }
+
     tick();
 
     #[cfg(feature = "test-hooks")]
@@ -925,6 +939,23 @@ pub(crate) fn complete_incoming_switch(hart: usize) {
         let _ = space.set_current_hart(hart, false);
     }
     user_copy::clear_guard_for_context_switch();
+    // Phase 02: read the register this (already-resumed) context is translating
+    // through. Placed after the safe-root acknowledge on purpose — that call is
+    // what makes a stale published domain id unreadable here.
+    #[cfg(all(
+        feature = "native-domains",
+        feature = "test-hooks",
+        target_arch = "aarch64"
+    ))]
+    crate::task::domain_switch_tests::observe_incoming_live_root();
+    // Same point, opposite edge: this is where the displaced root's release was
+    // attempted, so a domain teardown is observable here.
+    #[cfg(all(
+        feature = "native-domains",
+        feature = "test-hooks",
+        target_arch = "aarch64"
+    ))]
+    crate::task::domain_switch_tests::observe_domain_teardown(hart);
 }
 
 /// Retire a remote-root switch only from the incoming context, after the raw

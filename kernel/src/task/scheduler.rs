@@ -828,6 +828,26 @@ impl Scheduler {
                 );
                 crate::memory::cell_quota::refund(cell_id.0 as usize, stack_bytes);
                 task.stack_quota_charge = 0;
+                if matches!(
+                    error,
+                    crate::memory::address_space::AddressSpaceError::InvalidationUnacknowledged
+                ) {
+                    // The rollback could not confirm the tag's invalidation, so a
+                    // remote hart may still resolve these stack addresses: handing
+                    // the backing to the allocator now would let it be reused
+                    // under a live translation. The memory layer retained the
+                    // tables it owns; these frames are this caller's, and leaking
+                    // them loudly is the counted half of the fail-closed contract.
+                    let pages = kstack.pages + ustack.pages;
+                    crate::memory::deferred_release::note_leaked_stack_frames(pages);
+                    log::error!(
+                        "[sched] cell {:?} thread stacks withheld from the allocator: {} frame(s) stay unreleased until the tag's invalidation is confirmed",
+                        cell_id,
+                        pages
+                    );
+                    core::mem::forget(kstack);
+                    core::mem::forget(ustack);
+                }
                 return Err(ViError::OutOfMemory);
             }
         }

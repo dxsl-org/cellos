@@ -16,8 +16,14 @@ static NEXT_DOMAIN: AtomicU64 = AtomicU64::new(1);
 /// explicit audit, and counted so the leak is visible rather than silent.
 static QUARANTINED_FRAMES: Spinlock<Vec<OwnedFrame>> = Spinlock::new(Vec::new());
 
-/// Retain frames whose invalidation was not acknowledged.
-fn quarantine_frames(frames: Vec<OwnedFrame>, reason: &str) {
+/// Retain frames whose invalidation was not acknowledged and that no deferred
+/// release can complete — the loud, counted end state for a leak by design.
+///
+/// Called by the release paths only through [`super::deferred_release`]: a
+/// deferral that finds no room, and a deferred entry whose bounded retry budget
+/// is exhausted. The reason string is preserved verbatim so a reader can tell
+/// which release path leaked.
+pub(crate) fn quarantine_frames(frames: Vec<OwnedFrame>, reason: &str) {
     let count = frames.len();
     if count == 0 {
         return;
@@ -195,9 +201,9 @@ pub struct AddressSpaceBuilder {
     ///
     /// A published private root that lacks them is not a slow root, it is a dead
     /// one: a hart that switches to it cannot fetch its own trap vector, so it
-    /// never reaches the handler that acknowledges an invalidation and every
-    /// later awaited flush burns its whole retry budget. `build` therefore adds
-    /// them for every root that did not already ask for them.
+    /// never reaches the handler that publishes a tag invalidation — which leaves
+    /// every later release of that tag unconfirmed and therefore retained. `build`
+    /// therefore adds them for every root that did not already ask for them.
     shared_supervisor: bool,
 }
 impl Default for AddressSpaceBuilder {
@@ -426,8 +432,10 @@ impl AddressSpaceBuilder {
     }
 }
 
-/// A published private root. Its root frame is manually released only after
-/// the tag's completion boundary; an unacknowledged teardown quarantines it.
+/// A published private root. Its root frame is manually released only after the
+/// tag's completion boundary; an unacknowledged teardown hands it — and every
+/// frame behind the tag — to the deferred-release reaper, which quarantines them
+/// only after its own bounded retry budget is spent.
 pub struct AddressSpace {
     identity: DomainId,
     generation: u64,
@@ -553,6 +561,7 @@ impl AddressSpace {
         kind: Option<MappingKind>,
     ) -> Result<MappingEntry, AddressSpaceError> {
         let mut pending = self.invalidation_pending.lock();
+        self.forget_confirmed_reservations(&mut pending);
         if pending.contains(&virtual_address) {
             return Err(AddressSpaceError::NotFound);
         }
@@ -580,6 +589,53 @@ impl AddressSpace {
             .retain(|address| *address != virtual_address);
     }
 
+    /// Drop VA reservations whose tag invalidation the deferred reaper has since
+    /// confirmed.
+    ///
+    /// A reservation exists only while the tag's invalidation is unconfirmed: it
+    /// is what keeps a retired address from being published again under a tag a
+    /// remote hart can still resolve. Clearing it on the first mutation after the
+    /// acknowledgement lands is what makes a deferred release *recoverable* — with
+    /// the reservation left in place the address would stay refused for the
+    /// lifetime of the space even though its frames are gone, and a failed release
+    /// would never become a completed one.
+    fn forget_confirmed_reservations(&self, pending: &mut Vec<VAddr>) {
+        if !pending.is_empty()
+            && !crate::memory::deferred_release::tag_invalidation_unconfirmed(self.asid())
+        {
+            pending.clear();
+        }
+    }
+
+    /// Test-hooks: frames this root still owns — its user leaves, its page-table
+    /// frames and its root frame.
+    ///
+    /// A fixture accounting for a deferred release needs this because a frame can
+    /// be owned by a root, queued for the deferred release of a *detached* table,
+    /// or held by a grant record, and only the middle one is visible through the
+    /// allocator's free count.
+    #[cfg(feature = "test-hooks")]
+    #[cfg_attr(
+        not(target_arch = "riscv64"),
+        allow(dead_code) // reason: the fixture that uses it is RV64-only today
+    )]
+    pub(crate) fn owned_frame_count(&self) -> usize {
+        1 + self.frames.lock().len() + self.table_frames.lock().len()
+    }
+
+    /// Release one retired address whose tag invalidation has been confirmed.
+    ///
+    /// The grant lifecycle owns the addresses it revoked and asks for this once
+    /// the deferred release reports the tag confirmed; a no-op address (never
+    /// reserved, or already released) is harmless.
+    #[cfg_attr(
+        not(target_arch = "riscv64"),
+        allow(dead_code) // reason: the grant lifecycle that calls it is RV64-only today
+    )]
+    pub(crate) fn release_reserved_address(&self, virtual_address: VAddr) {
+        self.finish_unmap(virtual_address);
+    }
+
     pub fn map_private_page(
         &self,
         virtual_address: VAddr,
@@ -587,7 +643,8 @@ impl AddressSpace {
         flags: Flags,
     ) -> Result<(), AddressSpaceError> {
         validate_user_mapping(virtual_address, flags)?;
-        let pending = self.invalidation_pending.lock();
+        let mut pending = self.invalidation_pending.lock();
+        self.forget_confirmed_reservations(&mut pending);
         if pending.contains(&virtual_address) {
             return Err(AddressSpaceError::InvalidMapping);
         }
@@ -613,10 +670,18 @@ impl AddressSpace {
             user_flags(flags),
         );
         if let Err(error) = result {
-            // Allocation can publish an intermediate table before failing.
-            if crate::memory::tlb_shootdown::flush_asid_and_await(self.asid()).is_err() {
-                quarantine_frames(pruned_tables, "private map rollback invalidation unacknowledged");
-                quarantine_frames(alloc::vec![page], "private map rollback leaf retained");
+            // Allocation can publish an intermediate table before failing. The
+            // rollback detached that table, and the tag's invalidation is what
+            // makes releasing it safe; unconfirmed, both it and the leaf it was
+            // to carry are retained for the reaper instead of leaking here.
+            if crate::memory::tlb_shootdown::confirm_tag_invalidation(self.asid()).is_err() {
+                pruned_tables.push(page);
+                crate::memory::deferred_release::defer_frames(
+                    self.asid(),
+                    self.identity.raw(),
+                    pruned_tables,
+                    "private map rollback invalidation unacknowledged",
+                );
                 return Err(AddressSpaceError::InvalidationUnacknowledged);
             }
             return Err(error);
@@ -635,6 +700,13 @@ impl AddressSpace {
     /// Map a newly allocated task's existing stack frames into this live domain
     /// before that task becomes runnable. Kernel stacks remain supervisor-only;
     /// user stacks receive the normal private writable user mapping.
+    ///
+    /// A failed map rolls its own PTEs back. When the tag's invalidation cannot be
+    /// confirmed the rollback retains the tables it owns and returns
+    /// `InvalidationUnacknowledged`: the caller's stack backing is then still
+    /// reachable through this tag on another hart, so the caller must keep those
+    /// frames out of the allocator — the same rule
+    /// [`Self::unmap_existing_task_stacks`] states.
     pub(crate) fn map_existing_task_stacks(
         &self,
         kernel_stack: &crate::task::stack::Stack,
@@ -662,7 +734,8 @@ impl AddressSpace {
             .try_reserve_exact(kernel_stack.pages + user_stack.pages)
             .map_err(|_| AddressSpaceError::OutOfMemory)?;
 
-        let pending = self.invalidation_pending.lock();
+        let mut pending = self.invalidation_pending.lock();
+        self.forget_confirmed_reservations(&mut pending);
         let mut ledger = self.ledger.lock();
         if pending.iter().any(|address| {
             (kernel_stack.usable_start()..kernel_stack.top).contains(address)
@@ -734,15 +807,23 @@ impl AddressSpace {
             });
             // Both stack ranges belong to this private tag. A current-root
             // page flush cannot invalidate an inactive private root.
-            if crate::memory::tlb_shootdown::flush_asid_and_await(self.asid()).is_err() {
+            if crate::memory::tlb_shootdown::confirm_tag_invalidation(self.asid()).is_err() {
                 unacked = true;
             }
         }
-        // The stack backing belongs to the caller and would be freed after an
-        // ordinary Err. Without an ack there is no safe return to that caller.
+        // The stack backing belongs to the caller, who frees it as soon as this
+        // returns Err, and it is not this space's to retain. The tables this
+        // rollback did own are deferred; the caller is told, through
+        // `InvalidationUnacknowledged`, that it must keep the backing out of the
+        // allocator until the tag is confirmed.
         if unacked {
-            quarantine_frames(pruned_table_frames, "stack unmap invalidation unacknowledged");
-            panic!("[aspace] stack map rollback could not invalidate its private tag");
+            crate::memory::deferred_release::defer_frames(
+                self.asid(),
+                self.identity.raw(),
+                pruned_table_frames,
+                "stack map rollback invalidation unacknowledged",
+            );
+            return Err(AddressSpaceError::InvalidationUnacknowledged);
         }
         drop(pruned_table_frames);
         result
@@ -754,11 +835,19 @@ impl AddressSpace {
     /// Close new user-copy proofs for a reaped worker's stack mappings, drain
     /// proofs already in flight, then remove the PTEs before the frames return
     /// to the global allocator.
+    ///
+    /// Returns `Err(InvalidationUnacknowledged)` when the tag's invalidation could
+    /// not be confirmed: the detached table frames are then retained by
+    /// [`crate::memory::deferred_release`], but the stack backing itself belongs to
+    /// the caller, so **the caller must keep those frames out of the allocator**
+    /// until the tag is confirmed. It is not this method's call to make, because
+    /// the backing is not its to hold and the caller is the only owner that can
+    /// leak it loudly.
     pub(crate) fn unmap_existing_task_stacks(
         &self,
         kernel_stack: &crate::task::stack::Stack,
         user_stack: &crate::task::stack::Stack,
-    ) {
+    ) -> Result<(), AddressSpaceError> {
         // User-copy takes its mapping proof from this ledger while holding a
         // CopyReader. Removing the entries first prevents a reader admitted
         // after this point from reaching the PTE; a reader that already proved
@@ -791,17 +880,17 @@ impl AddressSpace {
             );
         }
         drop(table_frames);
-        if crate::memory::tlb_shootdown::flush_asid_and_await(self.asid()).is_ok() {
-            drop(pruned_table_frames);
-        } else {
-            quarantine_frames(
+        if crate::memory::tlb_shootdown::confirm_tag_invalidation(self.asid()).is_err() {
+            crate::memory::deferred_release::defer_frames(
+                self.asid(),
+                self.identity.raw(),
                 pruned_table_frames,
                 "task-stack unmap invalidation unacknowledged",
             );
-            // This API cannot take ownership of the external stack backing
-            // frames. Prevent the caller from freeing them after a missing ack.
-            panic!("[aspace] task stack teardown could not invalidate its private tag");
+            return Err(AddressSpaceError::InvalidationUnacknowledged);
         }
+        drop(pruned_table_frames);
+        Ok(())
     }
 
     pub fn unmap_private_page(&self, virtual_address: VAddr) -> Result<(), AddressSpaceError> {
@@ -844,13 +933,17 @@ impl AddressSpace {
         let leaf = frames.remove(index);
         drop(frames);
         drop(table_frames);
-        if crate::memory::tlb_shootdown::flush_asid_and_await(self.asid()).is_err() {
-            // Keep the VA reserved: remapping it under this tag would revive a
-            // stale translation even though its original frames are retained.
-            quarantine_frames(detached_tables, "private-page unmap invalidation unacknowledged");
-            quarantine_frames(
-                alloc::vec![leaf],
-                "private-page leaf invalidation unacknowledged",
+        if crate::memory::tlb_shootdown::confirm_tag_invalidation(self.asid()).is_err() {
+            // The VA stays reserved: remapping it under a tag whose invalidation is
+            // unconfirmed would revive a stale translation. The reserved address is
+            // released by the next mutation once the reaper confirms the tag, and
+            // the frames go with it — retained, never leaked silently.
+            detached_tables.push(leaf);
+            crate::memory::deferred_release::defer_frames(
+                self.asid(),
+                self.identity.raw(),
+                detached_tables,
+                "private-page unmap invalidation unacknowledged",
             );
             return Err(AddressSpaceError::InvalidationUnacknowledged);
         }
@@ -911,7 +1004,8 @@ impl AddressSpace {
         flags: Flags,
     ) -> Result<(), AddressSpaceError> {
         validate_user_mapping(virtual_address, flags)?;
-        let pending = self.invalidation_pending.lock();
+        let mut pending = self.invalidation_pending.lock();
+        self.forget_confirmed_reservations(&mut pending);
         if pending.contains(&virtual_address) {
             return Err(AddressSpaceError::InvalidMapping);
         }
@@ -935,8 +1029,13 @@ impl AddressSpace {
             user_flags(flags),
         );
         if let Err(error) = result {
-            if crate::memory::tlb_shootdown::flush_asid_and_await(self.asid()).is_err() {
-                quarantine_frames(pruned_tables, "grant map rollback invalidation unacknowledged");
+            if crate::memory::tlb_shootdown::confirm_tag_invalidation(self.asid()).is_err() {
+                crate::memory::deferred_release::defer_frames(
+                    self.asid(),
+                    self.identity.raw(),
+                    pruned_tables,
+                    "grant map rollback invalidation unacknowledged",
+                );
                 return Err(AddressSpaceError::InvalidationUnacknowledged);
             }
             return Err(error);
@@ -977,8 +1076,16 @@ impl AddressSpace {
             }
         });
         drop(table_frames);
-        if crate::memory::tlb_shootdown::flush_asid_and_await(self.asid()).is_err() {
-            quarantine_frames(detached_tables, "grant-page unmap invalidation unacknowledged");
+        if crate::memory::tlb_shootdown::confirm_tag_invalidation(self.asid()).is_err() {
+            // Only the pruned tables are this space's: the grant backing belongs to
+            // the record, which stays `Revoking` until the tag is confirmed, so it
+            // cannot be freed behind an unconfirmed invalidation either.
+            crate::memory::deferred_release::defer_frames(
+                self.asid(),
+                self.identity.raw(),
+                detached_tables,
+                "grant-page unmap invalidation unacknowledged",
+            );
             return Err(AddressSpaceError::InvalidationUnacknowledged);
         }
         drop(detached_tables);
@@ -1041,15 +1148,37 @@ impl Drop for AddressSpace {
         }
         // SAFETY: Drop runs once and ManuallyDrop suppresses the field destructor.
         let root = unsafe { core::mem::ManuallyDrop::take(&mut self.root) };
+        let mut frames: Vec<OwnedFrame> = self.frames.lock().drain(..).collect();
+        frames.extend(self.table_frames.lock().drain(..));
+        let tag = self.asid.value;
         if acked {
+            #[cfg(feature = "test-hooks")]
+            log::info!(
+                "[selftest] DOMAIN-FRAME-RELEASE: PASS tag={} frames={} quarantined={}",
+                tag,
+                frames.len(),
+                quarantined_frame_count()
+            );
+            drop(frames);
             drop(root);
         } else {
-            quarantine_frames(self.frames.lock().drain(..).collect(), "root teardown leaves");
-            quarantine_frames(
-                self.table_frames.lock().drain(..).collect(),
-                "root teardown tables",
+            // The invalidation is unconfirmed, so the root and every frame behind
+            // it are retained — including the tag slot, which `release` kept
+            // reserved. A reaper completes the release once a hart acknowledges;
+            // until then nothing here can be reached through the old tag.
+            #[cfg(feature = "test-hooks")]
+            log::info!(
+                "[selftest] DOMAIN-FRAME-RELEASE: DEFERRED tag={} frames={}",
+                tag,
+                frames.len() + 1
             );
-            quarantine_frames(alloc::vec![root], "root teardown root");
+            frames.push(root);
+            crate::memory::deferred_release::defer_frames_and_tag(
+                tag,
+                self.asid.domain,
+                frames,
+                "root teardown invalidation unacknowledged",
+            );
         }
     }
 }
@@ -1094,7 +1223,6 @@ pub(crate) fn live_tag_owner(value: usize) -> Option<u64> {
 /// Both wait for local/remote invalidation, retaining the slot on failure.
 struct AsidLease {
     value: usize,
-    slot: usize,
     domain: u64,
     released: bool,
 }
@@ -1114,7 +1242,6 @@ impl AsidLease {
         tags[slot] = Some(AsidTagOwner { domain });
         Some(Self {
             value,
-            slot,
             domain,
             released: false,
         })
@@ -1127,33 +1254,70 @@ impl AsidLease {
             return Ok(());
         }
         self.released = true;
-        if let Err(error) = crate::memory::tlb_shootdown::flush_asid_and_await(self.value) {
+        if let Err(error) = crate::memory::tlb_shootdown::confirm_tag_invalidation(self.value) {
             log::error!(
-                "[asid] tag {} for domain {} not recycled: invalidation unacknowledged ({:?})",
+                "[asid] tag {} for domain {} not recycled: invalidation unconfirmed ({:?})",
                 self.value,
                 self.domain,
                 error
             );
             return Err(error);
         }
-        let mut tags = LIVE_ASIDS.lock();
-        match tags[self.slot] {
-            Some(owner) if owner.domain == self.domain => tags[self.slot] = None,
-            other => log::warn!(
-                "[asid] tag {} slot {} released by domain {} but held by {:?} — slot retained",
-                self.value,
-                self.slot,
-                self.domain,
-                other.map(|owner| owner.domain)
-            ),
-        }
+        release_tag_slot(self.value, self.domain);
         Ok(())
     }
 }
 
 impl Drop for AsidLease {
     fn drop(&mut self) {
-        let _ = self.release();
+        if self.release().is_err() {
+            // The slot stays reserved, so the tag cannot alias a new root. Whoever
+            // owns the tag's frames hands them to the same entry; for a standalone
+            // lease there are none, and the entry only carries the slot handover.
+            crate::memory::deferred_release::defer_frames_and_tag(
+                self.value,
+                self.domain,
+                Vec::new(),
+                "asid lease release invalidation unacknowledged",
+            );
+        }
+    }
+}
+
+/// Return a tag slot whose root teardown could not confirm its invalidation.
+///
+/// Called by the deferred-release reaper once the acknowledgement lands: the slot
+/// must not be reissued while a hart might still hold a translation for the tag,
+/// which is exactly the state the entry waited in.
+pub(crate) fn release_tag_slot_after_invalidation(value: usize, domain: u64) {
+    release_tag_slot(value, domain);
+}
+
+/// Clear the pool slot of `value` when `domain` still owns it. A slot held by
+/// someone else is retained with a warning: handing it to a second owner would
+/// alias two live roots under one tag.
+fn release_tag_slot(value: usize, domain: u64) {
+    if value == 0 {
+        return;
+    }
+    let mut tags = LIVE_ASIDS.lock();
+    let Some(slot) = value.checked_sub(1).filter(|slot| *slot < MAX_LIVE_ASIDS) else {
+        log::warn!(
+            "[asid] tag {} released by domain {} is outside the pool — slot retained",
+            value,
+            domain
+        );
+        return;
+    };
+    match tags[slot] {
+        Some(owner) if owner.domain == domain => tags[slot] = None,
+        other => log::warn!(
+            "[asid] tag {} slot {} released by domain {} but held by {:?} — slot retained",
+            value,
+            slot,
+            domain,
+            other.map(|owner| owner.domain)
+        ),
     }
 }
 

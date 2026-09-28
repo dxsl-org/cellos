@@ -817,10 +817,33 @@ impl Drop for Task {
             )
         ))]
         if self.has_dynamic_stack_mapping {
-            if let (TaskAddressSpace::Domain(space), Some(kernel_stack), Some(user_stack)) =
-                (&self.address_space, &self.kernel_stack, &self.user_stack)
-            {
-                space.unmap_existing_task_stacks(kernel_stack, user_stack);
+            if let (
+                TaskAddressSpace::Domain(space),
+                Some(kernel_stack),
+                Some(user_stack),
+            ) = (
+                &self.address_space,
+                self.kernel_stack.take(),
+                self.user_stack.take(),
+            ) {
+                if let Err(error) = space.unmap_existing_task_stacks(&kernel_stack, &user_stack) {
+                    // The tag's invalidation is unconfirmed, so a remote hart may
+                    // still resolve these stack addresses and walk into the
+                    // backing frames. The unmap retained the tables it owns; the
+                    // backing is this Task's, and the one thing it must not do is
+                    // hand it to the allocator now. Leaking it here is the loud,
+                    // counted half of the fail-closed contract: the frames are
+                    // never reused, and the log says which teardown did it.
+                    let pages = kernel_stack.pages + user_stack.pages;
+                    crate::memory::deferred_release::note_leaked_stack_frames(pages);
+                    log::error!(
+                        "[aspace] task stack teardown deferred ({:?}): {} frame(s) withheld from the allocator until the tag's invalidation is confirmed",
+                        error,
+                        pages
+                    );
+                    core::mem::forget(kernel_stack);
+                    core::mem::forget(user_stack);
+                }
             }
         }
     }

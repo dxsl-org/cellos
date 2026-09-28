@@ -177,7 +177,10 @@ impl DomainGrant {
                     for undo in 0..mapped {
                         let _ = root.unmap_grant_page(base + undo * PAGE_SIZE);
                     }
-                    let _ = crate::memory::tlb_shootdown::flush_asid_and_await(root.asid());
+                    // The pages above already queued their tag invalidation if it
+                    // could not be confirmed; a second blocking wait here would buy
+                    // nothing, so the rollback only re-probes once.
+                    let _ = crate::memory::tlb_shootdown::confirm_tag_invalidation(root.asid());
                     return Err(DomainGrantError::Mapping(error));
                 }
             }
@@ -216,8 +219,18 @@ impl DomainGrant {
                 Err(_) => return Err(DomainGrantError::AwaitingSafeRoot),
             }
         }
-        if crate::memory::tlb_shootdown::flush_asid_and_await(root.asid()).is_err() {
+        // The memory layer recorded the tag invalidation it could not confirm
+        // synchronously; its reaper completes it without blocking anyone, so this
+        // path asks whether it is confirmed instead of waiting for it. `Err` keeps
+        // exactly its old meaning — the receiver half is not drained and the
+        // record stays retryable — it just no longer costs a retry budget.
+        if crate::memory::deferred_release::tag_invalidation_unconfirmed(root.asid()) {
             return Err(DomainGrantError::AwaitingSafeRoot);
+        }
+        // Confirmed: the addresses the failed attempts reserved may be published
+        // again, and the frames behind them are already released.
+        for index in 0..n_pages {
+            root.release_reserved_address(base + index * PAGE_SIZE);
         }
         if let Some(receiver) = self.receiver.lock().as_mut() {
             receiver.drained = true;
@@ -238,8 +251,11 @@ impl DomainGrant {
                 Err(_) => return Err(DomainGrantError::AwaitingSafeRoot),
             }
         }
-        if crate::memory::tlb_shootdown::flush_asid_and_await(root.asid()).is_err() {
+        if crate::memory::deferred_release::tag_invalidation_unconfirmed(root.asid()) {
             return Err(DomainGrantError::AwaitingSafeRoot);
+        }
+        for index in 0..n_pages {
+            root.release_reserved_address(self.owner_base + index * PAGE_SIZE);
         }
         self.owner_drained.store(true, Ordering::Release);
         Ok(())

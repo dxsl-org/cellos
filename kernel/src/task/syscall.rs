@@ -330,7 +330,10 @@ fn map_domain_owner_pages(
                 for undo in 0..mapped {
                     let _ = space.unmap_grant_page(base + undo * PAGE_SIZE);
                 }
-                let _ = crate::memory::tlb_shootdown::flush_asid_and_await(space.asid());
+                // The unmaps above queued this tag's invalidation if it could not
+                // be confirmed; the deferred-release reaper completes it, so the
+                // rollback only re-probes once instead of waiting a budget.
+                let _ = crate::memory::tlb_shootdown::confirm_tag_invalidation(space.asid());
                 return Err(error);
             }
         }

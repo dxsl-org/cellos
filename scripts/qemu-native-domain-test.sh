@@ -43,10 +43,11 @@ Test-only flags and knobs (not part of any qualification claim):
                         the evidence it requires and it must go red). Supports
                         --case grant-revoke only; --harts must match the log.
   GRANT_REVOKE_BOOT_WINDOW (env, seconds, default 150)
-                        boot window for `grant-revoke`. Its fail-closed path pays
-                        a full remote-invalidation retry budget (25 x 200 ms) per
-                        awaited flush, so the flat window would otherwise decide
-                        the verdict instead of the state machine.
+                        boot window for `grant-revoke`. Its fail-closed path now
+                        *retains* frames and queues the unconfirmed invalidation
+                        for the memory layer's reaper instead of waiting for it,
+                        so the window is a season for the deferred lifecycle to
+                        finish rather than the thing that decides the verdict.
 USAGE
 }
 
@@ -498,13 +499,14 @@ assert_grant_revoke_outcome() {
     if [[ "$slice_rw_fail" == 0 && "$revoke_fail" == 0 ]]; then
         if [[ "$terminal_pass" != 1 || "$terminal_fail" != 0 ]]; then
             # Properties without a terminal means the fixture was truncated
-            # mid-run. When the same boot shows an exhausted retry budget, that
-            # is a *stall* (a remote hart that stopped acknowledging), not a
-            # property failure: the fixture was still paying 25 x 200 ms per
-            # awaited invalidation when the boot window closed. Report it as
-            # truncated and let the case's own markers decide the verdict —
-            # inventing a failure here blames the wrong fixture.
-            if grep -aqE '\[tlb\] asid invalidation unacknowledged on hart [0-9]+ \(attempt' "$log"; then
+            # mid-run. When the same boot shows release paths reporting a tag
+            # invalidation they could not confirm, that is a *stall* (a remote
+            # hart that stopped acknowledging), not a property failure: the
+            # fixture was still inside the deferred-release path when the boot
+            # window closed. Report it as truncated and let the case's own
+            # markers decide the verdict — inventing a failure here blames the
+            # wrong fixture.
+            if grep -aqE '\[tlb\] tag [0-9]+ invalidation unconfirmed' "$log"; then
                 echo "NOTE: grant-revoke fixture truncated by a stalled remote acknowledgement" >&2
                 echo "      (properties present, no terminal, retries still failing); see $log" >&2
                 GRANT_REVOKE_OUTCOME="truncated"
@@ -521,9 +523,9 @@ assert_grant_revoke_outcome() {
     # first attempt — and every failure needs its fail-closed evidence chain.
     if [[ "$terminal_fail" != 1 || "$terminal_pass" != 0 ]]; then
         # Same truncation rule as above: a property FAIL with no terminal is a
-        # boot that was still inside a stalled acknowledgement when the window
+        # boot that was still inside the deferred-release path when the window
         # closed, not a property failure without its evidence.
-        if grep -aqE '\[tlb\] asid invalidation unacknowledged on hart [0-9]+ \(attempt' "$log"; then
+        if grep -aqE '\[tlb\] tag [0-9]+ invalidation unconfirmed' "$log"; then
             echo "NOTE: grant-revoke fixture truncated mid-deferral by a stalled remote acknowledgement" >&2
             echo "      (property FAIL present, no terminal, retries still failing); see $log" >&2
             GRANT_REVOKE_OUTCOME="truncated"
@@ -533,9 +535,19 @@ assert_grant_revoke_outcome() {
         echo "      (PASS=$terminal_pass FAIL=$terminal_fail); see $log" >&2
         exit 1
     fi
-    if ! grep -aqE '\[tlb\] asid invalidation unacknowledged on hart [0-9]+ \(attempt 25\)' "$log"; then
-        echo "FAIL: grant-revoke accepted-deferral cause missing: no awaited invalidation" >&2
-        echo "      exhausted its retry budget (no '(attempt 25)' line); see $log" >&2
+    # The deferral cause is the memory layer's own record: a release path probed
+    # for the acknowledgement, did not get it, and retained the frames for its
+    # reaper instead of waiting. Both halves are required: a retained frame
+    # without a failed probe would mean a release path blocked again — the exact
+    # regression this lane exists to catch.
+    if ! grep -aqE '\[tlb\] tag [0-9]+ invalidation unconfirmed' "$log"; then
+        echo "FAIL: grant-revoke accepted-deferral cause missing: no release path reported" >&2
+        echo "      an unconfirmed tag invalidation; see $log" >&2
+        exit 1
+    fi
+    if ! grep -aqF '[aspace] deferred release queued: tag=' "$log"; then
+        echo "FAIL: grant-revoke accepted-deferral cause missing: no frames were retained" >&2
+        echo "      for the deferred-release reaper; see $log" >&2
         exit 1
     fi
     local refused_ids deferred_ids shared_ids
@@ -616,10 +628,11 @@ assert_grant_revoke_outcome() {
     elif [[ "$case_id" == "grant-pair" ]]; then
         run_grant_pair_interactive
     else
-        # A boot whose awaited invalidation is unacknowledged pays a full retry
-        # budget (25 x 200 ms) for every one, so the grant-revoke case gets a
-        # window that covers the fail-closed path rather than a flat boot window —
-        # otherwise the window alone would decide the verdict.
+        # A boot whose invalidation is unacknowledged keeps its frames in the
+        # deferred queue until the reaper's bounded retry budget is spent, so the
+        # grant-revoke case gets a window that covers that fail-closed path rather
+        # than a flat boot window — otherwise the window alone would decide the
+        # verdict.
         window="$BOOT_WINDOW"
         [[ "$case_id" == "grant-revoke" ]] && window="${GRANT_REVOKE_BOOT_WINDOW:-150}"
         timeout "$window" "$QEMU" "${qemu_args[@]}" < /dev/null > "$raw_log" 2>&1 || qemu_status=$?
@@ -709,6 +722,22 @@ assert_grant_revoke_outcome() {
         echo "FAIL: expected exactly one terminal for case=$case_id: $marker; found $terminal_count; see $normalized_log" >&2
         exit 1
     fi
+
+    # The memory layer's own deferred-release witness runs in every boot that
+    # compiles native domains: it forces an unconfirmed tag invalidation, proves
+    # the frames are retained rather than freed or quarantined, and proves the
+    # reaper releases exactly those frames once the acknowledgement resumes. It is
+    # required for the cases that assert on the release paths, so a lane cannot go
+    # green while that path silently releases, quarantines or blocks again.
+    case "$case_id" in
+        asid-lease|unmap-order|grant-revoke|grant-gate)
+            if ! grep -Fq 'S22-RV64-DEFERRED-RELEASE: PASS' "$normalized_log"; then
+                echo "FAIL: case=$case_id missing the deferred-release witness" >&2
+                echo "      (expected 'S22-RV64-DEFERRED-RELEASE: PASS'); see $normalized_log" >&2
+                exit 1
+            fi
+            ;;
+    esac
 
     # The phase-03 step-5 pair is asserted against the *positive* lifecycle
     # contract: both real Tier-2 domains must be admitted, the owner must prove

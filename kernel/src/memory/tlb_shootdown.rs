@@ -3,6 +3,14 @@
 //! A frame is released only after its private tag is invalidated locally and
 //! every online RV64 hart has acknowledged its own all-ASID flush. Non-RV64
 //! Tier-2 remains single-CPU until per-CPU shootdown is implemented.
+//!
+//! Confirming that acknowledgement is a **probe**, never a wait:
+//! [`confirm_tag_invalidation`] spends one bounded deadline, and a caller that
+//! does not get an acknowledgement hands its frames to
+//! [`crate::memory::deferred_release`], whose reaper confirms the tag later from
+//! the timer path. A release path that keeps waiting instead either eats the
+//! boot's time budget or — if it gave up sooner — frees a frame a remote hart can
+//! still resolve.
 
 use crate::memory::paging::PAGE_SIZE;
 use types::VAddr;
@@ -10,9 +18,32 @@ use types::VAddr;
 #[cfg(feature = "test-hooks")]
 use core::sync::atomic::{AtomicBool, Ordering};
 
-/// Test-only negative-control switch. It is absent from production kernels.
+/// Test-only negative control: pretend the peer's acknowledgement never arrives.
 #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
 static TEST_SKIP_REMOTE_RFENCE: AtomicBool = AtomicBool::new(false);
+
+/// Test-only silent-peer window: while armed, every tag invalidation is reported
+/// unconfirmed even though the request was still delivered and, on a two-hart
+/// boot, genuinely flushed.
+///
+/// The deferred-release fixture needs the *unconfirmed* state reachable without
+/// waiting for a real remote hart to stall mid-boot, and on a one-hart boot no
+/// remote exists to stall at all. Arming it exercises exactly the release-path
+/// branch that must retain frames instead of freeing or quarantining them;
+/// disarming it is what "the acknowledgement resumes" means for the reaper.
+#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+static TEST_WITHHOLD_TAG_ACK: AtomicBool = AtomicBool::new(false);
+
+/// Arm or disarm [`TEST_WITHHOLD_TAG_ACK`].
+#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+pub(crate) fn set_test_withhold_tag_ack(enabled: bool) {
+    TEST_WITHHOLD_TAG_ACK.store(enabled, Ordering::Release);
+}
+
+#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+fn test_tag_ack_withheld() -> bool {
+    TEST_WITHHOLD_TAG_ACK.load(Ordering::Acquire)
+}
 
 #[cfg(feature = "test-hooks")]
 static TEST_FLUSH_TRACKING: AtomicBool = AtomicBool::new(false);
@@ -58,12 +89,88 @@ pub enum FlushAckError {
     Timeout { hart: usize, epoch: usize },
 }
 
-/// Invalidate one private root's tag locally and wait for every online hart.
+/// Invalidate one private root's tag locally and confirm every online hart with
+/// **one** bounded attempt.
 ///
 /// Unlike a current-root page flush this covers a root that is inactive on the
 /// caller (notably a non-current x86 PCID). RV64 remote harts acknowledge their
 /// local all-ASID flush before any frame behind this tag may be released.
-pub fn flush_asid_and_await(asid: usize) -> Result<(), FlushAckError> {
+///
+/// A caller that gets `Err` must **not** widen the wait: a peer hart can be held
+/// non-preemptible for seconds, and a release path that keeps waiting either
+/// burns the boot's time budget (the 25 x 200 ms budget this replaces truncated
+/// two-hart boots) or — if it gave up sooner — would free a frame a remote hart
+/// can still resolve. Hand the frames to
+/// [`crate::memory::deferred_release`] instead and let its reaper confirm the
+/// invalidation from the timer path.
+pub fn confirm_tag_invalidation(asid: usize) -> Result<(), FlushAckError> {
+    local_tag_flush(asid);
+    let result = match await_remote_invalidation(TAG_PROBE_TICKS) {
+        Err(error) => Err(error),
+        Ok(()) => {
+            // Test-only: the acknowledgement is withheld for a bounded window, so
+            // the release paths' unconfirmed branch is reachable without a real
+            // hart stalling mid-boot (and on a one-hart boot, where no remote
+            // exists to stall).
+            #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+            if test_tag_ack_withheld() {
+                Err(FlushAckError::Timeout {
+                    hart: crate::task::hart_local::current_hart_id(),
+                    epoch: 0,
+                })
+            } else {
+                Ok(())
+            }
+            #[cfg(not(all(feature = "test-hooks", target_arch = "riscv64")))]
+            Ok(())
+        }
+    };
+    #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+    if let Err(error) = &result {
+        log::warn!(
+            "[tlb] tag {} invalidation unconfirmed: hart {} silent through the {} tick probe",
+            asid,
+            match error {
+                FlushAckError::Timeout { hart, .. } => hart,
+            },
+            TAG_PROBE_TICKS
+        );
+    }
+    result
+}
+
+/// One non-blocking step of a deferred tag release: flush the tag locally and
+/// ask every online remote hart again.
+///
+/// It is the reaper's companion to [`confirm_tag_invalidation`]. A peer that took
+/// the IPI but never published its completion (or whose request was lost) only
+/// finishes when it is asked again, so entries alternate between re-issuing and
+/// checking. It never waits on a remote hart and costs one IPI per remote hart,
+/// which is what lets the timer ISR call it. The local tag flush is repeated on
+/// purpose: it is the cheapest half of the boundary, and repeating it keeps an
+/// entry safe even while the remote answer is missing.
+pub fn reissue_tag_invalidation(asid: usize) {
+    local_tag_flush(asid);
+    issue_remote_tag_flushes();
+}
+
+/// The first online remote hart that still owes an invalidation it was asked
+/// for, if any — a pure read of the acknowledgement machinery, no wait and no
+/// flush. `None` means every remote hart has published a completion at least as
+/// new as the last request, so a tag flushed before that request is safe.
+pub fn tag_invalidation_outstanding() -> Option<usize> {
+    // Test-only: inside the withheld window the tag reads unconfirmed even on a
+    // one-hart boot, where nothing remote can be outstanding.
+    #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+    if test_tag_ack_withheld() {
+        return Some(crate::task::hart_local::current_hart_id());
+    }
+    remote_tag_flushes_outstanding()
+}
+
+/// Flush one private root's tag locally and publish the PTE stores before any
+/// remote hart is asked to do the same.
+fn local_tag_flush(asid: usize) {
     // Publish PTE stores before requesting an invalidation on another hart.
     #[cfg(target_arch = "riscv64")]
     {
@@ -81,55 +188,33 @@ pub fn flush_asid_and_await(asid: usize) -> Result<(), FlushAckError> {
     // ranges and the RAM identity entries the kernel root owns — are identical
     // in every root, so a surviving entry of theirs resolves the same way.
     hal::domain::flush_asid(asid);
-    await_remote_invalidation("asid")
 }
 
-
-/// Ask every online remote hart to invalidate locally and wait for each one.
+/// Ask every online remote hart to invalidate locally and wait for that answer
+/// for at most `ticks`.
 ///
-/// One request per hart, retried with a fresh epoch: a delivered IPI can still be
-/// late (the target may be in a long non-interruptible stretch), and failing closed
-/// costs a leaked tag or retained frames while a retry costs one IPI.
+/// One request per hart with a fresh epoch: a delivered IPI can still be late
+/// (the target may be in a long non-interruptible stretch), so the epoch — not
+/// the firmware's return — is what proves the remote hart stopped using the
+/// translation.
 #[cfg(target_arch = "riscv64")]
-fn await_remote_invalidation(what: &str) -> Result<(), FlushAckError> {
-    #[cfg(not(feature = "test-hooks"))]
-    let _ = what;
+fn await_remote_invalidation(ticks: u64) -> Result<(), FlushAckError> {
     use crate::task::smp;
     let me = crate::task::hart_local::current_hart_id();
     for hart in smp::online_harts().filter(|hart| *hart != me) {
-        let mut attempt = 0;
-        loop {
-            attempt += 1;
-            let epoch = smp::request_tlb_flush(hart);
-            let deadline = hal::common::timer::read_mtime() + TLB_ACK_TIMEOUT_TICKS;
-            let mut spins = 0usize;
-            let _ = &mut spins;
-            while !smp::tlb_flush_completed(hart, epoch) {
-                if hal::common::timer::read_mtime() > deadline {
-                    break;
-                }
-                // Spin, and only spin: this runs in whatever context the release
-                // happens to be in, where widening the interrupt window can admit a
-                // timer ISR into the middle of a teardown (observed as a hang in
-                // the admission fixture). A remote hart makes progress anyway —
-                // the emulator interleaves vCPUs — so the wait needs a budget, not
-                // a yield.
-                spins = spins.wrapping_add(1);
-                core::hint::spin_loop();
-            }
-            if smp::tlb_flush_completed(hart, epoch) {
-                break;
-            }
-            #[cfg(feature = "test-hooks")]
-            log::warn!(
-                "[tlb] {} invalidation unacknowledged on hart {} (attempt {})",
-                what,
-                hart,
-                attempt
-            );
-            if attempt >= TLB_ACK_ATTEMPTS {
+        let epoch = smp::request_tlb_flush(hart);
+        let deadline = hal::common::timer::read_mtime() + ticks;
+        while !smp::tlb_flush_completed(hart, epoch) {
+            if hal::common::timer::read_mtime() > deadline {
                 return Err(FlushAckError::Timeout { hart, epoch });
             }
+            // Spin, and only spin: this runs in whatever context the release
+            // happens to be in, where widening the interrupt window can admit a
+            // timer ISR into the middle of a teardown (observed as a hang in
+            // the admission fixture). A remote hart makes progress anyway —
+            // the emulator interleaves vCPUs — so the wait needs a budget, not
+            // a yield.
+            core::hint::spin_loop();
         }
     }
     Ok(())
@@ -138,25 +223,47 @@ fn await_remote_invalidation(what: &str) -> Result<(), FlushAckError> {
 /// Non-RV64: the backends are single-CPU, so the local flush above is the whole
 /// contract and there is no remote to confirm.
 #[cfg(not(target_arch = "riscv64"))]
-fn await_remote_invalidation(_what: &str) -> Result<(), FlushAckError> {
+fn await_remote_invalidation(_ticks: u64) -> Result<(), FlushAckError> {
     Ok(())
 }
 
-/// How long one [`flush_asid_and_await`] attempt waits before re-issuing the
-/// request. Generous on purpose: a slow ack costs latency, a missing one costs
-/// isolation, so the retry loop — not the deadline — is what bounds the wait.
 #[cfg(target_arch = "riscv64")]
-const TLB_ACK_TIMEOUT_TICKS: u64 = 20 * hal::common::timer::TICKS_PER_10MS;
+fn issue_remote_tag_flushes() {
+    let me = crate::task::hart_local::current_hart_id();
+    for hart in crate::task::smp::online_harts().filter(|hart| *hart != me) {
+        let _ = crate::task::smp::request_tlb_flush(hart);
+    }
+}
 
-/// How many times a request is re-issued before the release fails closed.
-///
-/// Twenty-five attempts at ~200 ms is a five-second bound. It has to cover a remote hart
-/// that is in a long non-preemptible stretch — at boot that is the secondary's
-/// own selftest, which demonstrably outlasted a three-attempt budget — while still
-/// being finite. Phase 03's revoke should *defer* the release to a reaper instead
-/// of widening this bound further.
+/// Non-RV64: no remote hart can owe this hart's tag invalidation.
+#[cfg(not(target_arch = "riscv64"))]
+fn issue_remote_tag_flushes() {}
+
+/// The first online remote hart that still owes an invalidation, if any.
 #[cfg(target_arch = "riscv64")]
-const TLB_ACK_ATTEMPTS: usize = 25;
+fn remote_tag_flushes_outstanding() -> Option<usize> {
+    let me = crate::task::hart_local::current_hart_id();
+    crate::task::smp::online_harts()
+        .filter(|hart| *hart != me)
+        .find(|hart| crate::task::smp::tlb_flush_pending(*hart))
+}
+
+#[cfg(not(target_arch = "riscv64"))]
+fn remote_tag_flushes_outstanding() -> Option<usize> {
+    None
+}
+
+/// How long [`confirm_tag_invalidation`] waits for a remote acknowledgement
+/// before the caller defers its frames. Generous on purpose: a slow ack costs
+/// one probe latency, a missing one costs isolation, and the probe is now the
+/// *only* wait — the reaper's retries happen without blocking anyone.
+#[cfg(target_arch = "riscv64")]
+const TAG_PROBE_TICKS: u64 = 20 * hal::common::timer::TICKS_PER_10MS;
+
+/// Non-RV64: the backends are single-CPU, so the probe's own local flush already
+/// satisfies the contract and there is no deadline to observe.
+#[cfg(not(target_arch = "riscv64"))]
+const TAG_PROBE_TICKS: u64 = 0;
 
 /// Invalidate the translation for one changed page before its memory can run or reuse.
 #[inline]

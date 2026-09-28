@@ -12,6 +12,17 @@ use crate::*;
 ))]
 pub mod address_space;
 pub mod cell_quota;
+/// Bounded deferred release of page-table frames whose tag invalidation was not
+/// confirmed synchronously, plus the reaper that completes them.
+#[cfg(all(
+    feature = "native-domains",
+    any(
+        target_arch = "riscv64",
+        target_arch = "aarch64",
+        target_arch = "x86_64"
+    )
+))]
+pub mod deferred_release;
 #[cfg(all(
     feature = "native-domains",
     any(

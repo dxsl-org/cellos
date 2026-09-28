@@ -60,20 +60,26 @@
 //!
 //! `QUALIFICATION_ENABLED` (feature `snapshot-qualified`) gates the shipping
 //! path: capture and restore stay refused until an actual save → reset →
-//! restore → resume has been proven on a block-capable board.  All-hart
-//! quiescence, coherent staging of the frames under capture, and confirmation
-//! that the whole mutable kernel-image closure is in the inventory are the
-//! hardware-side halves of phase 07 and are still open; see the phase doc.
+//! restore → resume has been proven on a block-capable board.  The capture
+//! preflight now refuses **without any block I/O** unless every online hart is
+//! parked at an acknowledged safe point ([`crate::task::quiesce`]) — a no-op on
+//! a single-hart system, a refusal on several, because the per-hart park hook
+//! is not implemented yet.  Coherent staging of the frames under capture and
+//! confirmation that the whole mutable kernel-image closure is in the inventory
+//! are the remaining hardware-side halves of phase 07; see the phase doc.
 //!
 //! # Test surface
 //!
 //! The format, the state machine and the corruption matrix are exercised with
 //! an in-memory fake sector device (volatile write-back cache + fault
-//! injection) and a sparse frame map.  That fake lives in `#[cfg(test)]`
-//! (host lane only) and is never linked into a kernel image.
+//! injection) and a sparse frame map.  The quiescence preflight is exercised
+//! with the fake hart set in `task::quiesce` (a clock that advances one tick per
+//! poll, programmed acknowledgements, logged requests).  Both fakes live in
+//! `#[cfg(test)]` (host lane only) and are never linked into a kernel image.
 
 use crate::memory::frame::FRAME_ALLOCATOR;
 use crate::task::drivers::block;
+use crate::task::quiesce;
 use alloc::vec::Vec;
 use core::fmt;
 
@@ -121,7 +127,8 @@ pub const RUN_BYTES: usize = 16;
 /// Phase-01 containment: the writer hashes payload bytes only while the reader
 /// hashes header + payload, the reader reconstructs a dense
 /// `pa_base + index * 4096` run from a write that skips free frames, there is no
-/// all-hart quiescence check, and the restore replays frames over its own live
+/// all-hart park hook (the preflight can only prove quiescence on one hart),
+/// and the restore replays frames over its own live
 /// stack and kernel globals. The format, inventory, checksum and states are now
 /// specified and unit-tested (phase 07 step 1 + the device-independent half of
 /// step 5), but until phase 07 proves save → reset → restore → resume on a
@@ -151,6 +158,9 @@ fn kernel_hash() -> u64 {
 pub enum SnapshotError {
     /// `snapshot-qualified` is off — the phase-01 gate.
     GateClosed,
+    /// Not every online hart could be parked at an acknowledged safe point, so
+    /// the memory image cannot be frozen. Nothing was written.
+    HartsNotQuiesced,
     /// Device sector size is not 512 bytes.
     UnsupportedSectorSize,
     /// Device is smaller than the reserved snapshot partition.
@@ -190,6 +200,7 @@ impl SnapshotError {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::GateClosed => "capture unqualified (phase-01 gate: feature `snapshot-qualified`)",
+            Self::HartsNotQuiesced => "online harts are not parked at an acknowledged safe point",
             Self::UnsupportedSectorSize => "unsupported block sector size",
             Self::DeviceTooSmall => "block device smaller than the snapshot partition",
             Self::CapacityExceeded => "snapshot image exceeds the reserved P3 partition",
@@ -997,20 +1008,65 @@ fn plan_inventory() -> Result<(RamLayout, Vec<SnapshotRun>), SnapshotError> {
 ///
 /// Returns the number of frames written on success.
 ///
+/// # Preflight
+/// The capture refuses — before it reads a single frame and before any block
+/// I/O — unless every online hart other than this one is parked at an
+/// acknowledged safe point ([`quiesce`]). On a single-hart system that is
+/// trivially true; on a multi-hart system the per-hart park hook does not exist
+/// yet, so the refusal is the current outcome and the qualification gate stays
+/// closed.
+///
 /// # Safety constraints
-/// Must be called with all cells quiesced (at a `yield_cpu()` point) so no
-/// task stack is mid-function-call when the memory image is frozen, and with no
-/// affinity operation racing: the format cannot detect bytes that changed
-/// between the read and the write.
+/// Once quiescence is acquired no other hart may run kernel code that mutates
+/// the captured frames: the format cannot detect bytes that changed between the
+/// read and the block write.
 pub fn serialize_snapshot() -> Result<u32, SnapshotError> {
     if !QUALIFICATION_ENABLED {
         return Err(SnapshotError::GateClosed);
     }
+    capture_record(
+        &quiesce::KERNEL_STATE,
+        &quiesce::KERNEL_HARTS,
+        &KERNEL_DEVICE,
+        &KERNEL_MEMORY,
+    )
+}
+
+/// Prove that no hart but the requester can mutate the memory image, or refuse.
+///
+/// The returned guard releases the harts when it drops, so quiescence covers
+/// exactly the caller's capture.
+fn capture_preflight<'a>(
+    state: &'a quiesce::QuiesceState,
+    harts: &'a dyn quiesce::QuiesceHarts,
+) -> Result<quiesce::Guard<'a>, SnapshotError> {
+    match state.acquire(harts) {
+        Ok(guard) => Ok(guard),
+        Err(err) => {
+            log::warn!("[snapshot] capture refused: {err}");
+            Err(SnapshotError::HartsNotQuiesced)
+        }
+    }
+}
+
+/// The capture path with every collaborator injected, so a host test can prove
+/// the preflight ordering — quiescence first, block I/O last — without a live
+/// allocator or a block device. [`serialize_snapshot`] is this with the live
+/// collaborators.
+fn capture_record<'a>(
+    state: &'a quiesce::QuiesceState,
+    harts: &'a dyn quiesce::QuiesceHarts,
+    dev: &dyn SnapshotDevice,
+    mem: &dyn FrameMemory,
+) -> Result<u32, SnapshotError> {
+    // Preflight: nothing touches the disk until the image is frozen.
+    let _quiesced = capture_preflight(state, harts)?;
+
     #[cfg(target_arch = "riscv64")]
     let t0 = hal::common::timer::read_mtime();
 
     let (layout, runs) = plan_inventory()?;
-    let report = capture_image(&KERNEL_DEVICE, &KERNEL_MEMORY, layout, &runs)?;
+    let report = capture_image(dev, mem, layout, &runs)?;
 
     #[cfg(target_arch = "riscv64")]
     let elapsed_ms = (hal::common::timer::read_mtime().wrapping_sub(t0)) / 10_000;
@@ -1474,6 +1530,7 @@ mod fake {
 mod tests {
     use super::fake::{FakeDisk, FakeRam, Fault};
     use super::*;
+    use crate::task::quiesce;
 
     /// 64 frames of RAM at the RV64 RAM base.
     const BASE: u64 = 0x8020_0000;
@@ -2550,5 +2607,50 @@ mod tests {
         );
         assert_eq!(target.write_count(), 0);
         assert_eq!(disk.writes(), 0, "an empty region is never written");
+    }
+
+    // ── capture preflight: all-hart quiescence ───────────────────────────────
+
+    #[test]
+    fn snapshot_capture_preflight_is_a_no_op_with_one_hart() {
+        // One hart: the requester is the only hart that could mutate the image,
+        // so the preflight succeeds with no park hook, no request and no wait.
+        let harts = quiesce::fake::FakeHarts::new(&[0], 0).with_hook(false);
+        let state = quiesce::QuiesceState::new();
+        let guard = capture_preflight(&state, &harts).expect("one hart is a no-op");
+        assert!(guard.all_parked());
+        assert!(harts.requests().is_empty(), "no hart may be asked to park");
+        assert_eq!(harts.clock_ticks(), 0, "no wait may be entered");
+        drop(guard);
+        assert!(harts.releases().is_empty(), "nothing was parked to release");
+    }
+
+    #[test]
+    fn snapshot_capture_writes_nothing_when_memory_cannot_be_frozen() {
+        // Two harts, one of them silent: the capture must refuse with the
+        // unavailable result, leave the disk (and the frames) untouched, and
+        // restore the hart that did park.
+        let disk = FakeDisk::new();
+        let ram = sparse_ram();
+        let harts = quiesce::fake::FakeHarts::new(&[0, 1], 0).with_budget(4);
+        let state = quiesce::QuiesceState::new();
+        assert_eq!(
+            capture_record(&state, &harts, &disk, &ram),
+            Err(SnapshotError::HartsNotQuiesced)
+        );
+        assert_eq!(disk.writes(), 0, "no sector may be written");
+        assert_eq!(disk.reads(), 0, "not even the header is read");
+        assert_eq!(disk.flushes(), 0);
+        assert_eq!(ram.reads.get(), 0, "no frame is read from memory");
+        assert_eq!(harts.releases(), vec![1], "the parked hart is restored");
+        assert!(harts.outstanding().is_empty());
+
+        // The refusal released the claim and the park: a retry where every hart
+        // acknowledges gets past the preflight.
+        harts.ack_on_request(&[1]);
+        let guard = capture_preflight(&state, &harts).expect("retry after a refusal");
+        assert!(guard.all_parked());
+        assert_eq!(harts.parked(), vec![1]);
+        drop(guard);
     }
 }
