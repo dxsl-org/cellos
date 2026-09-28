@@ -61,13 +61,60 @@
 //! `QUALIFICATION_ENABLED` (feature `snapshot-qualified`) gates the shipping
 //! path: capture and restore stay refused until an actual save → reset →
 //! restore → resume has been proven on a block-capable board.  The capture
-//! preflight refuses **without any block I/O** unless every online hart is
-//! parked at an acknowledged safe point ([`crate::task::quiesce`]) — a no-op on
-//! a single-hart system, and on RV64 a real request answered by each hart's trap
-//! path.  Coherent staging of the frames under capture and the hardware witness
-//! remain the hardware-side halves of phase 07; the park hook is present, but a
-//! hart can be parked while holding the heap's non-masking spin lock, so the
-//! requester must not allocate while the guard lives; see the phase doc.
+//! preflight refuses **without any block I/O** unless
+//!
+//! - the capture can name its own scratch storage and that storage is outside
+//!   every planned run ([`CaptureScratch`], [`assert_scratch_outside_runs`]) —
+//!   [`serialize_snapshot`] declares none today, so a qualified build refuses;
+//! - every online hart is parked at an acknowledged safe point
+//!   ([`crate::task::quiesce`]) — a no-op on a single-hart system, and on RV64 a
+//!   real request answered by each hart's trap path;
+//! - the device has a trusted monotonic epoch source and the image can be
+//!   authenticated ([`SnapshotDevice::current_epoch`], [`SNAPSHOT_TRUST_KEY`]).
+//!
+//! Every pre-freeze allocation is done by the caller before the park
+//! ([`FrozenScratch`]); inside the frozen window the buffers are capacity-bounded
+//! ([`BoundedVec`]) and a shortage is refused rather than allocated, because a
+//! parked hart may be holding the heap's non-masking spin lock.  The hardware
+//! witness and the reserved scratch region remain the hardware-side halves of
+//! phase 07; see the phase doc.
+//!
+//! # Authenticated freshness
+//!
+//! The format is authenticated by a keyed MAC over the header, and the header
+//! carries a monotonic `epoch`:
+//!
+//! - the tag is HMAC-SHA256 (RFC 2104, [`hmac_sha256`]) over
+//!   [`SnapshotHeader::signed_bytes`] (only the tag's own field zeroed), built
+//!   on the kernel's own [`crate::sha256`] — the same construction the workspace
+//!   already carries in `libs/attestation/src/hkdf.rs:14`, no new crypto and no
+//!   new dependency;
+//! - through the header the tag binds the epoch, the identity, the geometry and
+//!   the payload/inventory digest (the header's CRC, which the tag includes);
+//!   a deliberate re-CRC of a tampered payload is then a MAC mismatch too, though
+//!   a crafted CRC-32 collision would defeat that binding;
+//! - capture writes `epoch = device.current_epoch() + 1`; a reader refuses an
+//!   image whose epoch is **not strictly newer** than the value the device
+//!   reports as current, and then durably advances the device epoch to the
+//!   consumed image's, so a replay of a consumed (or older) image is refused
+//!   even though its tag is genuine;
+//! - a device with no monotonic source, or a build with no provisioned key,
+//!   refuses capture and restore rather than assuming either.
+//!
+//! The key is a dev/test key under `dev-signing-key` and *absent* otherwise, so
+//! a production build fails closed until a key is provisioned.  The device half
+//! is real only for the in-memory fake: on hardware the monotonic source must be
+//! an MMC/eMMC counter the host cannot roll back, which is not modelled here.
+//!
+//! # Capture staging and the frozen window
+//!
+//! The capture's own code, stack and buffers must not be inside the captured
+//! runs, or it would save a span it is still writing (its own in-flight stack or
+//! inventory buffer).  [`CaptureScratch`] declares those spans as physical
+//! addresses; [`assert_scratch_outside_runs`] refuses the capture before any
+//! block I/O when a declared span intersects a planned run.  The park hook makes
+//! the complementary claim — nothing *else* can write a frame while it is read —
+//! true for the rest of the machine.
 //!
 //! # Image-kind runs: what they close, and what they do not
 //!
@@ -114,8 +161,26 @@
 //!   the precondition for closure, not the closure.
 //! - Pointer relinking, lock re-initialization and the exclusion of changing
 //!   driver/MMC transport state are phase 07 steps 3 and 4.
-//! - Coherent staging: the format cannot detect a byte that changed between the
-//!   frame read and the block write.
+//! - Capture staging is enforced as a *refusal*, not yet as a working layout:
+//!   no target has a reserved scratch region outside the image span, so
+//!   [`serialize_snapshot`] cannot pass its own staging check.  The check itself
+//!   (declared scratch spans versus planned runs) is exercised on the host.
+//! - The format still cannot detect a byte that changed between the frame read
+//!   and the block write; that is what the park hook and the staging check
+//!   together are for, and neither is proven on a board.
+//! - Freshness is modelled against a fake monotonic device.  Nothing here proves
+//!   a real MMC/eMMC monotonic source exists, that it cannot be rolled back, or
+//!   that a build has a provisioned key: those are the hardware/provisioning
+//!   gates.  The MAC is over the header (payload bound through the CRC); a
+//!   strong keyed digest over the payload bytes would need a streaming SHA-256,
+//!   which the kernel's one-shot [`crate::sha256::sha256`] does not expose.
+//! - The device exposes one monotonic value ("what a restore has consumed"), and
+//!   capture takes `value + 1` without advancing it.  Two captures with no
+//!   consume in between therefore carry the same epoch: the region holds one
+//!   image, but an attacker who archived the first one could replay it before any
+//!   consume and it would look fresh.  Closing that needs a second, durable
+//!   "issued" watermark on the device; with a single value the strictly-newer
+//!   rule the format requires cannot both admit a fresh capture and refuse it.
 //! - On x86-64 the kernel is linked into the higher half and riscv32/aarch32/
 //!   x86-32 do not delimit the writable span, so [`kernel_image`] returns `None`
 //!   and every capture preflight refuses with
@@ -128,14 +193,20 @@
 //! an in-memory fake sector device (volatile write-back cache + fault
 //! injection) and a sparse frame map.  The quiescence preflight is exercised
 //! with the fake hart set in `task::quiesce` (a clock that advances one tick per
-//! poll, programmed acknowledgements, logged requests).  Both fakes live in
-//! `#[cfg(test)]` (host lane only) and are never linked into a kernel image.
+//! poll, programmed acknowledgements, logged requests).  The frozen window, the
+//! staging check and the freshness matrix are exercised through
+//! [`capture_frozen_with_allocated`] (an explicit allocated set and image span,
+//! since a host build has neither) and a fake device whose monotonic epoch
+//! survives `power_cycle`.  Every fake lives in `#[cfg(test)]` (host lane only)
+//! and is never linked into a kernel image.
 
 use crate::memory::frame::FRAME_ALLOCATOR;
 use crate::task::drivers::block;
 use crate::task::quiesce;
 use alloc::vec::Vec;
 use core::fmt;
+#[cfg(any(feature = "test-hooks", test))]
+use core::sync::atomic::{AtomicU64, Ordering};
 
 /// Reserved LBA range for snapshot storage in `disk_v3.img` — MBR partition P3.
 /// Sector 0 = header; sector 1+ = address inventory then frame payload.
@@ -170,6 +241,22 @@ pub const HEADER_BYTES: usize = SECTOR_SIZE;
 /// checksum definition zeroes these four bytes before hashing the header.
 pub const CRC_FIELD_OFFSET: usize = 64;
 
+/// Bytes of the header's keyed-MAC tag (HMAC-SHA256).
+pub const AUTH_BYTES: usize = 32;
+
+/// Byte offset of the `auth` field inside the header sector.  Like the CRC
+/// field, it is zeroed by [`SnapshotHeader::canonical_bytes`]: the tag is
+/// computed over the header that carries it.
+pub const AUTH_FIELD_OFFSET: usize = 80;
+
+/// Byte offset of the authenticated `epoch` field inside the header sector.
+pub const EPOCH_FIELD_OFFSET: usize = 72;
+
+/// Maximum number of inventory runs the kernel-image half can contribute.  The
+/// image span is contiguous, so it is one run; the bound is a capacity
+/// reservation, so it is stated explicitly rather than derived.
+pub const IMAGE_RUNS_MAX: usize = 1;
+
 /// First LBA of the address inventory (immediately after the header).
 pub const INVENTORY_FIRST_LBA: u64 = SNAPSHOT_BASE_LBA + 1;
 
@@ -187,17 +274,17 @@ pub const RUN_FLAG_IMAGE: u32 = 0b1;
 /// hashed header + payload, the reader reconstructed a dense
 /// `pa_base + index * 4096` run from a write that skips free frames, and the
 /// restore replays frames over its own live stack and kernel globals. The
-/// format, inventory, checksum and states are specified and unit-tested (phase
-/// 07 step 1 + the device-independent half of step 5), the mutable image span is
-/// in the inventory (step 3's first half), and the all-hart park hook now exists
-/// on RV64 (step 3's second half). What still keeps this gate closed is the
-/// hardware side: no save → reset → restore → resume has been proven on a
-/// block-capable board, coherent staging of the frames under capture is not
-/// implemented (the format cannot detect bytes that change between the read and
-/// the block write), and closure completeness is not proven. Until then every
-/// shipping image keeps the path disabled: a capture cannot touch the snapshot
-/// region and a restore cannot mutate RAM. `snapshot-qualified` is the single
-/// build gate phase 07 turns on for that verified profile.
+/// format, inventory, checksum, states, authenticated epoch and staging checks
+/// are specified and unit-tested (phase 07 steps 1, 3 and the device-independent
+/// half of step 5), and the all-hart park hook now exists on RV64. What still
+/// keeps this gate closed is the hardware side: no save → reset → restore →
+/// resume has been proven on a block-capable board, no target has a reserved
+/// scratch region outside the captured runs (so the staging check refuses the
+/// shipping capture), a real device has no modelled monotonic epoch source, and
+/// closure completeness is not proven. Until then every shipping image keeps the
+/// path disabled: a capture cannot touch the snapshot region and a restore
+/// cannot mutate RAM. `snapshot-qualified` is the single build gate phase 07
+/// turns on for that verified profile.
 pub const QUALIFICATION_ENABLED: bool = cfg!(feature = "snapshot-qualified");
 
 /// Git SHA short hash baked in at compile time.  Snapshot is invalid if this
@@ -223,6 +310,26 @@ pub enum SnapshotError {
     /// Not every online hart could be parked at an acknowledged safe point, so
     /// the memory image cannot be frozen. Nothing was written.
     HartsNotQuiesced,
+    /// No reserved capture storage: the capture cannot name its own code, stack
+    /// and buffers as physical spans, so it cannot prove it is not about to
+    /// save its own in-flight stack or buffer.
+    NoReservedScratch,
+    /// A reserved capture-scratch span intersects a planned run: the capture
+    /// would save a buffer (or stack) that it is still writing.
+    ScratchOverlapsRun,
+    /// No provisioned keyed-MAC key, so the header's epoch cannot be
+    /// authenticated. Refused rather than assumed.
+    NoTrustKey,
+    /// The device has no trusted monotonic epoch source, so an image's freshness
+    /// cannot be checked. Refused rather than assumed.
+    NoFreshnessSource,
+    /// The image's authenticated epoch is not strictly newer than the epoch the
+    /// device reports: a replay of an image this device has already consumed
+    /// (or an older one).
+    StaleEpoch,
+    /// The header's keyed MAC does not verify: the header (epoch included) was
+    /// tampered with, or was written by a different trust key.
+    AuthenticationFailed,
     /// Device sector size is not 512 bytes.
     UnsupportedSectorSize,
     /// Device is smaller than the reserved snapshot partition.
@@ -270,6 +377,14 @@ impl SnapshotError {
         match self {
             Self::GateClosed => "capture unqualified (phase-01 gate: feature `snapshot-qualified`)",
             Self::HartsNotQuiesced => "online harts are not parked at an acknowledged safe point",
+            Self::NoReservedScratch => {
+                "no reserved capture storage outside the captured runs"
+            }
+            Self::ScratchOverlapsRun => "capture scratch intersects a planned run",
+            Self::NoTrustKey => "no provisioned key for the authenticated epoch",
+            Self::NoFreshnessSource => "the device has no trusted monotonic epoch source",
+            Self::StaleEpoch => "image epoch is not newer than the device epoch (replay)",
+            Self::AuthenticationFailed => "header keyed MAC does not verify",
             Self::UnsupportedSectorSize => "unsupported block sector size",
             Self::DeviceTooSmall => "block device smaller than the snapshot partition",
             Self::CapacityExceeded => "snapshot image exceeds the reserved P3 partition",
@@ -403,13 +518,24 @@ pub struct SnapshotHeader {
     pub crc32: u32,
     /// Reserved (zero).
     pub _reserved0: u32,
+    /// Authenticated monotonic epoch: the value of the device's trusted
+    /// monotonic source at capture time, plus one.  Covered by `auth`, so it
+    /// cannot be raised by rewriting the sector.
+    pub epoch: u64,
+    /// Keyed MAC (HMAC-SHA256) over [`SnapshotHeader::canonical_bytes`].  The
+    /// writer computes it after the CRC is final; a reader refuses the image
+    /// unless it verifies.
+    pub auth: [u8; AUTH_BYTES],
     /// Reserved padding to fill the header sector (zero).
-    pub _reserved: [u8; 440],
+    pub _reserved: [u8; 400],
 }
 
 // Compile-time layout guarantee — the header is exactly one sector, and the
-// CRC field sits at the offset the canonical checksum definition zeroes.
+// CRC/auth fields sit at the offsets the canonical checksum zeroes.
 const _: () = assert!(core::mem::size_of::<SnapshotHeader>() == HEADER_BYTES);
+const _: () = assert!(core::mem::offset_of!(SnapshotHeader, crc32) == CRC_FIELD_OFFSET);
+const _: () = assert!(core::mem::offset_of!(SnapshotHeader, auth) == AUTH_FIELD_OFFSET);
+const _: () = assert!(core::mem::offset_of!(SnapshotHeader, epoch) == EPOCH_FIELD_OFFSET);
 
 impl SnapshotHeader {
     /// Bytes as stored on disk (CRC field as-is).
@@ -428,10 +554,21 @@ impl SnapshotHeader {
         out
     }
 
-    /// Bytes as hashed by the canonical checksum (CRC field zeroed).
+    /// Bytes as hashed by the canonical checksum (CRC and MAC fields zeroed).
     pub fn canonical_bytes(&self) -> [u8; HEADER_BYTES] {
         let mut out = self.write_bytes();
         out[CRC_FIELD_OFFSET..CRC_FIELD_OFFSET + 4].copy_from_slice(&[0u8; 4]);
+        out[AUTH_FIELD_OFFSET..AUTH_FIELD_OFFSET + AUTH_BYTES].copy_from_slice(&[0u8; AUTH_BYTES]);
+        out
+    }
+
+    /// Bytes as signed by the keyed MAC: only the MAC's own field is zeroed.
+    ///
+    /// The CRC stays in the input, so the tag binds the payload and inventory
+    /// digest the CRC covers as well as the epoch, identity and geometry.
+    pub fn signed_bytes(&self) -> [u8; HEADER_BYTES] {
+        let mut out = self.write_bytes();
+        out[AUTH_FIELD_OFFSET..AUTH_FIELD_OFFSET + AUTH_BYTES].copy_from_slice(&[0u8; AUTH_BYTES]);
         out
     }
 
@@ -586,18 +723,109 @@ fn canonical_hasher(header: &SnapshotHeader) -> crc32fast::Hasher {
     hasher
 }
 
-/// Serialize the inventory into zero-padded sectors (little-endian per field).
-fn encode_inventory(runs: &[SnapshotRun]) -> Vec<u8> {
+// ── Authenticated epoch ──────────────────────────────────────────────────────
+
+/// The keyed-MAC key that authenticates the header (and therefore the epoch).
+///
+/// The kernel has one hash primitive, [`crate::sha256::sha256`], and the
+/// workspace's HMAC-SHA256 construction over it lives in
+/// `libs/attestation/src/hkdf.rs:14` — written there precisely because the
+/// kernel and its neighbours must not take a crypto dependency.  This mirrors
+/// that RFC 2104 construction over the kernel's own SHA-256: a standard
+/// construction, no new algorithm, no new crate.
+///
+/// Trust material is provisioned, not invented: with the dev posture
+/// (`dev-signing-key`, the same switch [`crate::signing`] uses for the cell
+/// trust anchor) a reproducible dev key is compiled in; without it there is no
+/// key at all and every authenticated-freshness check refuses, so a production
+/// build cannot silently fall back to an unauthenticated epoch.
+#[cfg(feature = "dev-signing-key")]
+const SNAPSHOT_TRUST_KEY: Option<[u8; 32]> = Some(*b"ViCell-snapshot-epoch-mac-key--1");
+
+#[cfg(not(feature = "dev-signing-key"))]
+const SNAPSHOT_TRUST_KEY: Option<[u8; 32]> = None;
+
+const SHA256_BLOCK: usize = 64;
+const SHA256_LEN: usize = 32;
+
+// The tag is a SHA-256 output; the format stores exactly that many bytes.
+const _: () = assert!(AUTH_BYTES == SHA256_LEN);
+
+/// HMAC-SHA256 (RFC 2104) over `msg`, which must be one header sector — the
+/// only thing ever authenticated.  Bounded stack buffers, no allocation, so
+/// this is safe inside the frozen window.
+fn hmac_sha256(key: &[u8], msg: &[u8], out: &mut [u8; SHA256_LEN]) {
+    debug_assert!(msg.len() <= HEADER_BYTES);
+    let mut key_block = [0u8; SHA256_BLOCK];
+    if key.len() > SHA256_BLOCK {
+        key_block[..SHA256_LEN].copy_from_slice(&crate::sha256::sha256(key));
+    } else {
+        key_block[..key.len()].copy_from_slice(key);
+    }
+
+    let mut ipad = [0x36u8; SHA256_BLOCK];
+    let mut opad = [0x5cu8; SHA256_BLOCK];
+    for i in 0..SHA256_BLOCK {
+        ipad[i] ^= key_block[i];
+        opad[i] ^= key_block[i];
+    }
+
+    let mut inner = [0u8; SHA256_BLOCK + HEADER_BYTES];
+    inner[..SHA256_BLOCK].copy_from_slice(&ipad);
+    inner[SHA256_BLOCK..SHA256_BLOCK + msg.len()].copy_from_slice(msg);
+    let inner_hash = crate::sha256::sha256(&inner[..SHA256_BLOCK + msg.len()]);
+
+    let mut outer = [0u8; SHA256_BLOCK + SHA256_LEN];
+    outer[..SHA256_BLOCK].copy_from_slice(&opad);
+    outer[SHA256_BLOCK..].copy_from_slice(&inner_hash);
+    *out = crate::sha256::sha256(&outer);
+}
+
+/// The header's keyed MAC tag.  Covers [`SnapshotHeader::signed_bytes`]: the
+/// CRC field is included, so the tag binds the payload and inventory the CRC
+/// covers as well as the epoch, identity and geometry.  Rewriting the epoch
+/// upward (the replay-forgery attack) cannot survive this.
+fn header_mac(key: &[u8; 32], header: &SnapshotHeader) -> [u8; AUTH_BYTES] {
+    let msg = header.signed_bytes();
+    let mut tag = [0u8; AUTH_BYTES];
+    hmac_sha256(key, &msg, &mut tag);
+    tag
+}
+
+/// Constant-time equality for MAC tags (no early exit on the first difference).
+fn mac_eq(a: &[u8; AUTH_BYTES], b: &[u8; AUTH_BYTES]) -> bool {
+    let mut diff = 0u8;
+    for i in 0..AUTH_BYTES {
+        diff |= a[i] ^ b[i];
+    }
+    diff == 0
+}
+
+/// Serialize the inventory into `out` (zero-padded sectors, little-endian per
+/// field), never growing it past the capacity its caller reserved.
+fn encode_inventory_into(
+    runs: &[SnapshotRun],
+    out: &mut BoundedVec<u8>,
+) -> Result<(), SnapshotError> {
     let sectors = inventory_sectors(runs.len() as u64) as usize;
-    let mut out = Vec::new();
-    out.resize(sectors * SECTOR_SIZE, 0u8);
+    let needed = sectors * SECTOR_SIZE;
+    out.resize_zeroed(needed)?;
+    let out = &mut out.items;
     for (i, run) in runs.iter().enumerate() {
         let o = i * RUN_BYTES;
         out[o..o + 8].copy_from_slice(&run.pa.to_le_bytes());
         out[o + 8..o + 12].copy_from_slice(&run.frame_count.to_le_bytes());
         out[o + 12..o + 16].copy_from_slice(&run.flags.to_le_bytes());
     }
-    out
+    Ok(())
+}
+
+/// Allocation-owning wrapper: reserve exactly what the inventory needs.
+fn encode_inventory(runs: &[SnapshotRun]) -> Vec<u8> {
+    let sectors = inventory_sectors(runs.len() as u64) as usize;
+    let mut out = BoundedVec::reserved(sectors * SECTOR_SIZE);
+    encode_inventory_into(runs, &mut out).expect("reserved exactly");
+    out.into_vec()
 }
 
 /// Decode `run_count` inventory entries; trailing padding is ignored.
@@ -620,17 +848,22 @@ fn decode_inventory(bytes: &[u8], run_count: usize) -> Result<Vec<SnapshotRun>, 
     Ok(runs)
 }
 
-/// Group explicit frame addresses into an address inventory.
+/// Group explicit frame addresses into an address inventory, writing into
+/// `out` without ever growing it past its reserved capacity.
 ///
 /// Input must be ascending and strictly unique (as the allocator enumerates
 /// allocated frames); contiguous addresses are merged into one run.  A gap in
-/// the input starts a new run — the returned inventory covers **exactly** the
-/// supplied addresses and nothing else.
-pub fn runs_from_frames(pas: &[u64], layout: RamLayout) -> Result<Vec<SnapshotRun>, SnapshotError> {
+/// the input starts a new run — the inventory covers **exactly** the supplied
+/// addresses and nothing else.
+fn runs_from_frames_into(
+    pas: &[u64],
+    layout: RamLayout,
+    out: &mut BoundedVec<SnapshotRun>,
+) -> Result<(), SnapshotError> {
+    out.clear();
     if pas.is_empty() {
         return Err(SnapshotError::NoRuns);
     }
-    let mut runs: Vec<SnapshotRun> = Vec::new();
     let mut prev: Option<u64> = None;
     for &pa in pas {
         if pa % FRAME_SIZE as u64 != 0 {
@@ -648,29 +881,39 @@ pub fn runs_from_frames(pas: &[u64], layout: RamLayout) -> Result<Vec<SnapshotRu
                 // Duplicate or descending — the writer must not emit either.
                 return Err(SnapshotError::BadRun);
             }
-            let last = runs.last_mut().expect("non-empty");
+            let last = out.items.last_mut().expect("non-empty");
             if p + FRAME_SIZE as u64 == pa {
                 last.frame_count = last
                     .frame_count
                     .checked_add(1)
                     .ok_or(SnapshotError::BadRun)?;
             } else {
-                runs.push(SnapshotRun {
+                out.try_push(SnapshotRun {
                     pa,
                     frame_count: 1,
                     flags: 0,
-                });
+                })?;
             }
         } else {
-            runs.push(SnapshotRun {
+            out.try_push(SnapshotRun {
                 pa,
                 frame_count: 1,
                 flags: 0,
-            });
+            })?;
         }
         prev = Some(pa);
     }
-    Ok(runs)
+    Ok(())
+}
+
+/// Allocation-owning wrapper: reserve one run per input address (the worst case).
+pub fn runs_from_frames(
+    pas: &[u64],
+    layout: RamLayout,
+) -> Result<Vec<SnapshotRun>, SnapshotError> {
+    let mut out = BoundedVec::reserved(pas.len());
+    runs_from_frames_into(pas, layout, &mut out)?;
+    Ok(out.into_vec())
 }
 
 /// Structural validation shared by writer and reader: every run is non-empty,
@@ -730,18 +973,20 @@ pub fn frames_in_runs(runs: &[SnapshotRun], layout: RamLayout) -> Result<u32, Sn
     Ok(total as u32)
 }
 
-/// The image-kind inventory for a mutable image span: its frames at their own
-/// physical addresses.
+/// The image-kind inventory for a mutable image span, written into `out`
+/// without growing it past its reserved capacity.
 ///
 /// The kernel image is contiguous, so this is one run.  Refuses a span that
 /// cannot be represented as frame runs (empty, not 4096-aligned, more frames
 /// than the inventory can address) with [`SnapshotError::ImageRegionUnavailable`],
 /// and a span outside this boot's trusted image with
 /// [`SnapshotError::ImageRangeOutsideImage`].
-pub fn image_runs(
+fn image_runs_into(
     mutable: ImageRegion,
     layout: RamLayout,
-) -> Result<Vec<SnapshotRun>, SnapshotError> {
+    out: &mut BoundedVec<SnapshotRun>,
+) -> Result<(), SnapshotError> {
+    out.clear();
     if mutable.is_empty()
         || mutable.base % FRAME_SIZE as u64 != 0
         || mutable.end % FRAME_SIZE as u64 != 0
@@ -755,39 +1000,50 @@ pub fn image_runs(
     if frames > u32::MAX as u64 {
         return Err(SnapshotError::ImageRegionUnavailable);
     }
-    Ok(alloc::vec![SnapshotRun {
+    out.try_push(SnapshotRun {
         pa: mutable.base,
         frame_count: frames as u32,
         flags: RUN_FLAG_IMAGE,
-    }])
+    })
 }
 
-/// Merge allocator-owned runs and image-kind runs into one ascending inventory,
-/// preserving each run's kind.
+/// Allocation-owning wrapper: reserve the one run the contiguous span yields.
+pub fn image_runs(
+    mutable: ImageRegion,
+    layout: RamLayout,
+) -> Result<Vec<SnapshotRun>, SnapshotError> {
+    let mut out = BoundedVec::reserved(IMAGE_RUNS_MAX);
+    image_runs_into(mutable, layout, &mut out)?;
+    Ok(out.into_vec())
+}
+
+/// Merge image-kind runs into an already-built allocator-owned inventory,
+/// in place, preserving each run's kind.
 ///
-/// Each input must already be a valid inventory of its kind.  An image run that
-/// overlaps or duplicates an allocator-owned run is refused with
+/// `allocated` must already be a valid allocator-owned inventory and must have
+/// room reserved for `image.len()` more entries.  An image run that overlaps or
+/// duplicates an allocator-owned run is refused with
 /// [`SnapshotError::ImageRangeConflict`] — never silently merged: the allocator
 /// must not own image frames, and image frames must not be described as
 /// allocator-owned.  Adjacent runs of different kinds are kept separate; they
 /// are never coalesced, so the kind survives the merge.
-pub fn merge_runs(
-    allocated: &[SnapshotRun],
+fn merge_runs_into(
+    allocated: &mut BoundedVec<SnapshotRun>,
     image: &[SnapshotRun],
     layout: RamLayout,
-) -> Result<Vec<SnapshotRun>, SnapshotError> {
-    if !allocated.is_empty() {
-        frames_in_runs(allocated, layout)?;
+) -> Result<(), SnapshotError> {
+    if !allocated.items.is_empty() {
+        frames_in_runs(&allocated.items, layout)?;
     }
     if !image.is_empty() {
         frames_in_runs(image, layout)?;
     }
-    let mut merged = Vec::with_capacity(allocated.len() + image.len());
-    merged.extend_from_slice(allocated);
-    merged.extend_from_slice(image);
-    merged.sort_by_key(|run| run.pa);
+    for run in image {
+        allocated.try_push(*run)?;
+    }
+    allocated.items.sort_by_key(|run| run.pa);
     let mut prev: Option<SnapshotRun> = None;
-    for run in &merged {
+    for run in allocated.items.iter() {
         if let Some(p) = prev {
             if run.pa < p.end_pa() {
                 return Err(if run.flags != p.flags {
@@ -799,10 +1055,329 @@ pub fn merge_runs(
         }
         prev = Some(*run);
     }
-    if merged.is_empty() {
+    if allocated.items.is_empty() {
         return Err(SnapshotError::NoRuns);
     }
-    Ok(merged)
+    Ok(())
+}
+
+/// Allocation-owning wrapper: reserve the two inputs' total run count.
+pub fn merge_runs(
+    allocated: &[SnapshotRun],
+    image: &[SnapshotRun],
+    layout: RamLayout,
+) -> Result<Vec<SnapshotRun>, SnapshotError> {
+    let mut merged = BoundedVec::reserved(allocated.len() + image.len());
+    merged.items.extend_from_slice(allocated);
+    merge_runs_into(&mut merged, image, layout)?;
+    Ok(merged.into_vec())
+}
+
+// ── Capture staging ──────────────────────────────────────────────────────────
+
+/// A physical span the capture itself occupies — its code, stack or a buffer.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct ScratchSpan {
+    /// Physical start (inclusive).
+    pub base: u64,
+    /// Physical end (exclusive).
+    pub end: u64,
+}
+
+impl ScratchSpan {
+    /// A scratch span.
+    pub const fn new(base: u64, end: u64) -> Self {
+        Self { base, end }
+    }
+
+    /// No address is covered.
+    pub const fn is_empty(&self) -> bool {
+        self.base >= self.end
+    }
+
+    /// Does this span intersect `[base, end)`?
+    pub const fn overlaps(&self, base: u64, end: u64) -> bool {
+        self.base < end && base < self.end
+    }
+}
+
+/// Where the capture's own code, stack and buffers live, as physical spans.
+///
+/// A capture may not save a span it is still writing: the frame read would
+/// race the capture's own stack or the buffer it is filling.  The park hook
+/// makes "nothing else writes it" true for the *rest* of the machine; the
+/// capture's own scratch has to be outside the captured runs by construction.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum CaptureScratch {
+    /// Reserved capture storage outside every captured run, at these physical
+    /// spans.  Must be non-empty.
+    Reserved(&'static [ScratchSpan]),
+    /// This build/boot has no reserved capture storage.  The capture cannot
+    /// name its own spans, so it cannot prove it is not about to save its own
+    /// in-flight stack or buffer: it must refuse rather than guess.
+    None,
+}
+
+impl CaptureScratch {
+    /// The declared spans, or `None` when the capture cannot name them.
+    pub const fn spans(self) -> Option<&'static [ScratchSpan]> {
+        match self {
+            Self::Reserved(spans) => Some(spans),
+            Self::None => None,
+        }
+    }
+}
+
+/// Prove that the capture can name its own scratch storage, or refuse.
+///
+/// A missing, empty or zero-length declaration means the capture cannot say
+/// where its own code/stack/buffers are, so it cannot prove it will not save an
+/// in-flight buffer.
+fn require_capture_scratch(scratch: CaptureScratch) -> Result<(), SnapshotError> {
+    match scratch.spans() {
+        Some(spans) if !spans.is_empty() && spans.iter().all(|span| !span.is_empty()) => Ok(()),
+        _ => Err(SnapshotError::NoReservedScratch),
+    }
+}
+
+/// Prove that no declared capture-scratch span intersects a planned run.
+///
+/// Checked before any block I/O.  A missing or empty declaration is
+/// [`SnapshotError::NoReservedScratch`] and an intersection is
+/// [`SnapshotError::ScratchOverlapsRun`]; both refuse the capture, so it never
+/// snapshots its own in-flight buffer.
+fn assert_scratch_outside_runs(
+    scratch: CaptureScratch,
+    runs: &[SnapshotRun],
+) -> Result<(), SnapshotError> {
+    require_capture_scratch(scratch)?;
+    let spans = scratch.spans().expect("checked above");
+    for span in spans {
+        for run in runs {
+            if span.overlaps(run.pa, run.end_pa()) {
+                return Err(SnapshotError::ScratchOverlapsRun);
+            }
+        }
+    }
+    Ok(())
+}
+
+// ── Capacity-bounded buffers ─────────────────────────────────────────────────
+
+/// Test-hooks: how many times the capture would have reached the heap with the
+/// pre-freeze reservation already exhausted — i.e. how many bounds were wrong.
+///
+/// Must be zero.  Incremented only by a [`BoundedVec::reserved`] buffer meeting
+/// a shortage, so no ordinary (growable) buffer ever perturbs it.
+#[cfg(any(feature = "test-hooks", test))]
+pub static FROZEN_WINDOW_ALLOC_ATTEMPTS: AtomicU64 = AtomicU64::new(0);
+
+/// Test-hooks: read the frozen-window allocation-attempt counter.
+#[cfg(any(feature = "test-hooks", test))]
+pub fn frozen_window_alloc_attempts() -> u64 {
+    FROZEN_WINDOW_ALLOC_ATTEMPTS.load(Ordering::SeqCst)
+}
+
+/// Test-hooks: zero the frozen-window allocation-attempt counter.
+#[cfg(any(feature = "test-hooks", test))]
+pub fn reset_frozen_window_alloc_attempts() {
+    FROZEN_WINDOW_ALLOC_ATTEMPTS.store(0, Ordering::SeqCst);
+}
+
+/// Count a refused heap access from a reserved buffer.
+#[inline]
+fn frozen_alloc_attempt() {
+    #[cfg(any(feature = "test-hooks", test))]
+    FROZEN_WINDOW_ALLOC_ATTEMPTS.fetch_add(1, Ordering::SeqCst);
+}
+
+/// A buffer whose backing store is reserved up front by its caller.
+///
+/// It never grows: a push or resize past the reservation is refused (and
+/// counted), so the capture's frozen window cannot reach the heap — a parked
+/// hart may be holding the heap's non-masking lock.  Every caller reserves its
+/// worst case, so a refusal means a bound was wrong, not that a capture was
+/// denied a legitimate buffer.
+struct BoundedVec<T> {
+    items: Vec<T>,
+}
+
+impl<T> BoundedVec<T> {
+    /// Reserve exactly `capacity` slots and never grow past them.
+    fn reserved(capacity: usize) -> Self {
+        Self {
+            items: Vec::with_capacity(capacity),
+        }
+    }
+
+    fn len(&self) -> usize {
+        self.items.len()
+    }
+
+    fn clear(&mut self) {
+        self.items.clear();
+    }
+
+    fn into_vec(self) -> Vec<T> {
+        self.items
+    }
+
+    fn try_push(&mut self, value: T) -> Result<(), SnapshotError> {
+        if self.items.len() == self.items.capacity() {
+            frozen_alloc_attempt();
+            return Err(SnapshotError::CapacityExceeded);
+        }
+        self.items.push(value);
+        Ok(())
+    }
+}
+
+impl BoundedVec<u8> {
+    /// Clear and resize to `needed` zero bytes, refusing a shortage rather than
+    /// growing.
+    fn resize_zeroed(&mut self, needed: usize) -> Result<(), SnapshotError> {
+        if self.items.capacity() < needed {
+            frozen_alloc_attempt();
+            return Err(SnapshotError::CapacityExceeded);
+        }
+        self.items.clear();
+        self.items.resize(needed, 0u8);
+        Ok(())
+    }
+}
+
+/// Pre-allocated storage for one capture's frozen window.
+///
+/// Built **before** the machine is frozen, from a bound derived from the live
+/// allocator and the partition capacity; after the park it is only filled, so
+/// nothing in the window touches the heap (and therefore the heap lock, which
+/// a parked hart may be holding).
+struct FrozenScratch {
+    frame_bound: u64,
+    pas: BoundedVec<u64>,
+    runs: BoundedVec<SnapshotRun>,
+    image: BoundedVec<SnapshotRun>,
+    inventory: BoundedVec<u8>,
+}
+
+/// The largest frame count whose image can fit the reserved partition, using
+/// the same geometry the writer emits (worst case: one run per frame).
+fn capacity_frame_bound() -> u64 {
+    let mut frames = SNAPSHOT_SECTOR_COUNT / SECTORS_PER_FRAME as u64;
+    loop {
+        let inv = inventory_sectors(frames + IMAGE_RUNS_MAX as u64);
+        if 1 + inv + frames * SECTORS_PER_FRAME as u64 <= SNAPSHOT_SECTOR_COUNT {
+            return frames;
+        }
+        frames -= 1;
+    }
+}
+
+/// Bytes to reserve for an inventory of at most `run_bound` runs.
+fn inventory_byte_bound(run_bound: u64) -> usize {
+    inventory_sectors(run_bound) as usize * SECTOR_SIZE
+}
+
+impl FrozenScratch {
+    /// Reserve every buffer the frozen window will fill.  Refuses when the
+    /// bound cannot be computed at all.
+    fn new() -> Result<Self, SnapshotError> {
+        let cap = capacity_frame_bound();
+        let total = {
+            let guard = FRAME_ALLOCATOR.lock();
+            let allocator = guard.as_ref().ok_or(SnapshotError::MemoryFault)?;
+            allocator.total_frames() as u64
+        };
+        let frame_bound = core::cmp::min(total, cap);
+        if frame_bound == 0 {
+            return Err(SnapshotError::NoRuns);
+        }
+        let run_bound = frame_bound + IMAGE_RUNS_MAX as u64;
+        Ok(Self::with_bounds(frame_bound, run_bound))
+    }
+
+    /// Storage reserved for `frame_bound` frames and `run_bound` runs.  Used by
+    /// `new` and, deliberately under-sized, by the counter's positive control.
+    fn with_bounds(frame_bound: u64, run_bound: u64) -> Self {
+        Self {
+            frame_bound,
+            pas: BoundedVec::reserved(frame_bound as usize),
+            runs: BoundedVec::reserved(run_bound as usize),
+            image: BoundedVec::reserved(IMAGE_RUNS_MAX),
+            inventory: BoundedVec::reserved(inventory_byte_bound(run_bound)),
+        }
+    }
+
+    /// Enumerate the live allocated frames into `pas` and return the live RAM
+    /// layout.  The allocator lock is held only for the enumeration (a masking
+    /// [`crate::sync::Spinlock`], so a hart interrupted into a park can never
+    /// be holding it); no block I/O, and no allocation.
+    fn enumerate(&mut self) -> Result<RamLayout, SnapshotError> {
+        let image = kernel_image().ok_or(SnapshotError::ImageRegionUnavailable)?;
+        let guard = FRAME_ALLOCATOR.lock();
+        let allocator = guard.as_ref().ok_or(SnapshotError::MemoryFault)?;
+        self.pas.clear();
+        for index in 0..allocator.total_frames() {
+            if !allocator.is_frame_allocated(index) {
+                continue;
+            }
+            let pa = allocator.frame_addr(index) as u64;
+            // Defensive: never describe a frame outside managed RAM (MMIO
+            // holes, allocator bookkeeping drift).  The bounds check in
+            // `runs_from_frames` would refuse the whole capture instead;
+            // skipping matches the old behaviour and keeps a stray bitmap bit
+            // from blocking every capture.
+            if pa >= allocator.memory_start() as u64
+                && pa + FRAME_SIZE as u64 <= allocator.memory_end() as u64
+            {
+                self.pas.try_push(pa)?;
+            } else {
+                log::warn!("[snapshot] skipping allocated frame outside RAM: 0x{pa:X}");
+            }
+        }
+        Ok(RamLayout {
+            base: allocator.memory_start() as u64,
+            end: allocator.memory_end() as u64,
+            image: image.trusted,
+        })
+    }
+
+    /// Build the runs and the encoded inventory from `pas` (already filled) and
+    /// an explicit image span.  Pure reserve-and-fill: no allocation when the
+    /// reservation was sized from the pre-freeze bound.
+    fn plan_from(
+        &mut self,
+        mutable: ImageRegion,
+        layout: RamLayout,
+    ) -> Result<(), SnapshotError> {
+        if self.pas.len() as u64 > self.frame_bound {
+            return Err(SnapshotError::CapacityExceeded);
+        }
+        plan_runs_into(
+            mutable,
+            layout,
+            &self.pas.items,
+            &mut self.runs,
+            &mut self.image,
+        )?;
+        encode_inventory_into(&self.runs.items, &mut self.inventory)?;
+        log::info!(
+            "[snapshot] inventory: {} run(s) spanning image 0x{:X}..0x{:X}",
+            self.runs.len(),
+            mutable.base,
+            mutable.end
+        );
+        Ok(())
+    }
+
+    /// The live frozen-window plan: enumerate the allocator, then build the
+    /// runs and inventory.
+    fn plan(&mut self) -> Result<RamLayout, SnapshotError> {
+        let image = kernel_image().ok_or(SnapshotError::ImageRegionUnavailable)?;
+        let layout = self.enumerate()?;
+        self.plan_from(image.mutable, layout)?;
+        Ok(layout)
+    }
 }
 
 // ── Device / memory traits ───────────────────────────────────────────────────
@@ -820,6 +1395,22 @@ pub trait SnapshotDevice {
     fn sector_size(&self) -> usize;
     /// Device capacity in sectors.
     fn sector_count(&self) -> u64;
+
+    /// The device's trusted monotonic epoch: the highest epoch a restore has
+    /// already consumed.  `None` means this device has no monotonic source, and
+    /// authenticated freshness must refuse rather than assume.
+    ///
+    /// Default: no source.  Real boards must supply it from a monotonic source
+    /// the host cannot roll back (an MMC/eMMC RPMB write counter or equivalent).
+    fn current_epoch(&self) -> Option<u64> {
+        None
+    }
+
+    /// Durably advance the device's monotonic epoch to at least `epoch`.  Must
+    /// never move it backwards; a device that cannot do so must return an error.
+    fn commit_epoch(&self, _epoch: u64) -> Result<(), SnapshotError> {
+        Err(SnapshotError::NoFreshnessSource)
+    }
 }
 
 /// Physical frame access, so the format never touches raw pointers itself.
@@ -915,13 +1506,30 @@ fn write_state(
 /// Capture `runs` from `mem` to `dev`, with the durable commit ordering
 /// documented in the module header.
 ///
-/// On any error before the commit flush the image is left `WRITING`, which no
-/// restore will ever replay.
+/// Allocating wrapper: encodes the inventory into a freshly reserved buffer and
+/// delegates to [`capture_image_prepared`].  The frozen path calls the core
+/// directly with a buffer reserved before the park.
 pub fn capture_image(
     dev: &dyn SnapshotDevice,
     mem: &dyn FrameMemory,
     layout: RamLayout,
     runs: &[SnapshotRun],
+) -> Result<CaptureReport, SnapshotError> {
+    let inventory = encode_inventory(runs);
+    capture_image_prepared(dev, mem, layout, runs, &inventory)
+}
+
+/// Capture `runs`, hashing and writing the caller's already-encoded
+/// `inventory`.
+///
+/// On any error before the commit flush the image is left `WRITING`, which no
+/// restore will ever replay.
+pub fn capture_image_prepared(
+    dev: &dyn SnapshotDevice,
+    mem: &dyn FrameMemory,
+    layout: RamLayout,
+    runs: &[SnapshotRun],
+    inventory: &[u8],
 ) -> Result<CaptureReport, SnapshotError> {
     // ── preflight: structure, then capacity, then identity ───────────────────
     if runs.len() as u64 > u32::MAX as u64 {
@@ -930,6 +1538,9 @@ pub fn capture_image(
     let frame_count = frames_in_runs(runs, layout)?;
     let run_count = runs.len() as u64;
     let inv_sectors = inventory_sectors(run_count);
+    if inventory.len() != inv_sectors as usize * SECTOR_SIZE {
+        return Err(SnapshotError::RunCountMismatch);
+    }
     let payload_lba = INVENTORY_FIRST_LBA + inv_sectors;
     let payload_sectors = frame_count as u64 * SECTORS_PER_FRAME as u64;
     let image_sectors = 1 + inv_sectors + payload_sectors;
@@ -945,6 +1556,15 @@ pub fn capture_image(
     if image_sectors > SNAPSHOT_SECTOR_COUNT || payload_lba + payload_sectors > SNAPSHOT_END_LBA {
         return Err(SnapshotError::CapacityExceeded);
     }
+
+    // ── authenticated freshness: refuse before any block I/O ─────────────────
+    // No keyed-MAC key, no monotonic device epoch, or an epoch that cannot be
+    // advanced: refuse rather than write an image whose freshness is assumed.
+    let trust_key = SNAPSHOT_TRUST_KEY.ok_or(SnapshotError::NoTrustKey)?;
+    let device_epoch = dev.current_epoch().ok_or(SnapshotError::NoFreshnessSource)?;
+    let epoch = device_epoch
+        .checked_add(1)
+        .ok_or(SnapshotError::NoFreshnessSource)?;
 
     // ── state machine: EMPTY/predecessor → WRITING ───────────────────────────
     let current = read_on_disk_state(dev)?;
@@ -969,19 +1589,20 @@ pub fn capture_image(
         payload_lba,
         crc32: 0,
         _reserved0: 0,
-        _reserved: [0u8; 440],
+        epoch,
+        auth: [0u8; AUTH_BYTES],
+        _reserved: [0u8; 400],
     };
 
     // (1) Invalidate any previously committed image and record WRITING.
     write_state(dev, &committed, SnapshotState::Writing)?;
 
-    // The canonical stream is defined over the COMMITTED header (CRC field
-    // zero), so the hash is independent of the state byte on disk.
+    // The canonical stream is defined over the COMMITTED header (CRC and MAC
+    // fields zero), so the hash is independent of the state byte on disk.
     let mut hasher = canonical_hasher(&committed);
 
     // (2) Inventory, then payload, in the order they will be hashed and read.
-    let inventory = encode_inventory(runs);
-    hasher.update(&inventory);
+    hasher.update(inventory);
     for (i, chunk) in inventory.chunks(SECTOR_SIZE).enumerate() {
         dev.write_sector(INVENTORY_FIRST_LBA + i as u64, chunk)?;
     }
@@ -1004,10 +1625,12 @@ pub fn capture_image(
     dev.flush()?;
 
     // (3) COMMITTED header — the commit point.  Only this flush makes the image
-    // replayable.
+    // replayable.  The MAC is computed last, over the header that carries the
+    // final CRC (and so binds the payload digest the reader will check).
     let crc32 = hasher.finalize();
     let mut committed = committed;
     committed.crc32 = crc32;
+    committed.auth = header_mac(&trust_key, &committed);
     write_state(dev, &committed, SnapshotState::Committed)?;
 
     Ok(CaptureReport {
@@ -1134,6 +1757,35 @@ pub fn restore_image(
     // No separate "device smaller than the image" check: the partition bound
     // above, plus `sector_count() >= SNAPSHOT_END_LBA`, already implies it.
 
+    // ── authenticated header ─────────────────────────────────────────────────
+    // The MAC binds the epoch, identity and geometry; through the header's CRC
+    // it also binds the payload digest the checksum step will verify.  A header
+    // whose epoch was rewritten to forge freshness fails here.
+    let Some(trust_key) = SNAPSHOT_TRUST_KEY else {
+        // No provisioned key: we cannot judge the image.  Unsupported, not
+        // proven bad — leave the region alone.
+        return RestoreOutcome::ColdBoot("no provisioned key for the authenticated epoch");
+    };
+    if !mac_eq(&header.auth, &header_mac(&trust_key, &header)) {
+        invalidate_on(dev);
+        return RestoreOutcome::ColdBoot("header authentication failed");
+    }
+
+    // ── freshness ────────────────────────────────────────────────────────────
+    // A replay of an older (or already consumed) image carries an epoch that is
+    // not strictly newer than the device's monotonic source, and is refused.
+    let device_epoch = match dev.current_epoch() {
+        Some(epoch) => epoch,
+        None => {
+            // Unsupported device, not proven-bad image: leave the region alone.
+            return RestoreOutcome::ColdBoot("device has no trusted monotonic epoch source");
+        }
+    };
+    if header.epoch <= device_epoch {
+        invalidate_on(dev);
+        return RestoreOutcome::ColdBoot("stale epoch: image is not newer than the device's");
+    }
+
     // ── inventory ────────────────────────────────────────────────────────────
     let mut inventory = Vec::new();
     inventory.resize(inv_sectors as usize * SECTOR_SIZE, 0u8);
@@ -1190,6 +1842,15 @@ pub fn restore_image(
         return RestoreOutcome::ColdBoot("could not durably mark CONSUMING; RAM untouched");
     }
 
+    // The device's monotonic epoch advances with the decision to replay, so an
+    // interrupted replay cannot re-accept this image even if the on-disk
+    // CONSUMING marker were lost.  A device that cannot advance refuses.
+    if dev.commit_epoch(header.epoch).is_err() {
+        return RestoreOutcome::ColdBoot(
+            "could not durably advance the device epoch; RAM untouched",
+        );
+    }
+
     // ── replay exactly what the inventory says, in payload order ─────────────
     let mut lba = payload_lba;
     let mut frame = [0u8; FRAME_SIZE];
@@ -1235,66 +1896,39 @@ fn live_layout() -> Option<RamLayout> {
 /// Build the capture inventory from an image span and an explicit allocated
 /// frame list: allocator-owned runs plus the image-kind run for `mutable`.
 ///
-/// Split out of [`plan_inventory`] so the host lane can drive the exact
+/// Split out of the capture planner so the host lane can drive the exact
 /// planning the capture path runs, with a simulated image and a simulated
 /// allocated set.  `layout.image` must be the trusted span of the same image
 /// `mutable` came from; the image run is refused when it is not inside it.
 ///
 /// An image frame that the allocator also owns is [`SnapshotError::ImageRangeConflict`],
 /// not something to merge.
+///
+/// `allocated_out` must have room for `allocated_pas.len() + image.len()` runs;
+/// the merged inventory is returned in it.
+fn plan_runs_into(
+    mutable: ImageRegion,
+    layout: RamLayout,
+    allocated_pas: &[u64],
+    allocated_out: &mut BoundedVec<SnapshotRun>,
+    image_out: &mut BoundedVec<SnapshotRun>,
+) -> Result<(), SnapshotError> {
+    runs_from_frames_into(allocated_pas, layout, allocated_out)?;
+    image_runs_into(mutable, layout, image_out)?;
+    merge_runs_into(allocated_out, &image_out.items, layout)
+}
+
+/// Allocation-owning wrapper for [`plan_runs_into`], for the host lane.
+#[cfg(test)]
 fn plan_runs(
     mutable: ImageRegion,
     layout: RamLayout,
     allocated_pas: &[u64],
 ) -> Result<Vec<SnapshotRun>, SnapshotError> {
-    let allocated = runs_from_frames(allocated_pas, layout)?;
-    let image_part = image_runs(mutable, layout)?;
-    merge_runs(&allocated, &image_part, layout)
-}
-
-/// Build the capture inventory: allocator-owned frames plus the trusted
-/// mutable kernel-image span.
-///
-/// Enumerates allocated, in-RAM frames in ascending order, derives the mutable
-/// image span from the linker and hands both to [`plan_runs`].  The allocator
-/// lock is held only for this enumeration — no block I/O happens under it.
-///
-/// Refuses with [`SnapshotError::ImageRegionUnavailable`] when this target does
-/// not delimit the kernel image, because an inventory of allocated frames alone
-/// cannot describe a resumable image.
-fn plan_inventory() -> Result<(RamLayout, Vec<SnapshotRun>), SnapshotError> {
-    let image = kernel_image().ok_or(SnapshotError::ImageRegionUnavailable)?;
-    let guard = FRAME_ALLOCATOR.lock();
-    let allocator = guard.as_ref().ok_or(SnapshotError::MemoryFault)?;
-    let layout = RamLayout {
-        base: allocator.memory_start() as u64,
-        end: allocator.memory_end() as u64,
-        image: image.trusted,
-    };
-    let mut pas: Vec<u64> = Vec::new();
-    for index in 0..allocator.total_frames() {
-        if !allocator.is_frame_allocated(index) {
-            continue;
-        }
-        let pa = allocator.frame_addr(index) as u64;
-        // Defensive: never describe a frame outside managed RAM (MMIO holes,
-        // allocator bookkeeping drift).  The bounds check in `runs_from_frames`
-        // would refuse the whole capture instead; skipping matches the old
-        // behaviour and keeps a stray bitmap bit from blocking every capture.
-        if pa >= layout.base && pa + FRAME_SIZE as u64 <= layout.end {
-            pas.push(pa);
-        } else {
-            log::warn!("[snapshot] skipping allocated frame outside RAM: 0x{pa:X}");
-        }
-    }
-    let runs = plan_runs(image.mutable, layout, &pas)?;
-    log::info!(
-        "[snapshot] inventory: {} run(s) spanning image 0x{:X}..0x{:X}",
-        runs.len(),
-        image.mutable.base,
-        image.mutable.end
-    );
-    Ok((layout, runs))
+    let mut allocated = BoundedVec::reserved(allocated_pas.len() + IMAGE_RUNS_MAX);
+    let mut image = BoundedVec::reserved(IMAGE_RUNS_MAX);
+    plan_runs_into(mutable, layout, allocated_pas, &mut allocated, &mut image)?;
+    Ok(allocated.into_vec())
 }
 
 /// Serialize all allocated physical frames to the reserved disk sector range.
@@ -1303,32 +1937,39 @@ fn plan_inventory() -> Result<(RamLayout, Vec<SnapshotRun>), SnapshotError> {
 ///
 /// # Preflight
 /// The capture refuses — before it reads a single frame and before any block
-/// I/O — unless every online hart other than this one is parked at an
-/// acknowledged safe point ([`quiesce`]). On a single-hart system that is
-/// trivially true; on a multi-hart RV64 system each target stops in its own trap
-/// path and the requester waits a bounded time for the acknowledgements. A
-/// refusal is reported as [`SnapshotError::HartsNotQuiesced`] and leaves nothing
-/// parked and nothing written.
+/// I/O — when it cannot stage its own storage, when every online hart other
+/// than this one is not parked at an acknowledged safe point ([`quiesce`]), when
+/// the device has no trusted monotonic epoch source, or when the image cannot be
+/// authenticated.  A refusal leaves nothing parked and nothing written.
 ///
 /// # Safety constraints
 /// Once quiescence is acquired no other hart may run kernel code that mutates
 /// the captured frames: the format cannot detect bytes that changed between the
-/// read and the block write. The requester must therefore also not allocate while
-/// it holds the guard: a parked hart can be holding the heap's non-masking
-/// `spinning_top` lock, and an allocation here would spin on it forever. Nothing
-/// in the frozen window does — `plan_inventory` takes `FRAME_ALLOCATOR` (a
-/// `crate::sync::Spinlock`, so a hart holding it can never have been interrupted
-/// into a park) and the inventory vector itself is the one heap allocation the
-/// window still makes; the rest of the capture reads `mem` and writes `dev`.
+/// read and the block write.  The requester must therefore also not allocate
+/// while it holds the guard: a parked hart can be holding the heap's non-masking
+/// `spinning_top` lock, and an allocation here would spin on it forever.  Every
+/// buffer the frozen window touches is therefore reserved before the park
+/// ([`FrozenScratch`]), and the capture refuses unless its own scratch spans are
+/// declared outside the planned runs ([`CaptureScratch`]).
 pub fn serialize_snapshot() -> Result<u32, SnapshotError> {
     if !QUALIFICATION_ENABLED {
         return Err(SnapshotError::GateClosed);
     }
+    // No reserved capture storage exists yet on any target: the capture's own
+    // stack and code live inside the linker-delimited image span, which is part
+    // of the inventory, so it cannot prove it is not about to save its own
+    // in-flight stack.  A qualified build therefore refuses here (fail-closed)
+    // until a reserved scratch region outside the image span is provisioned.
+    let capture_scratch = CaptureScratch::None;
+    require_capture_scratch(capture_scratch)?;
+    let mut scratch = FrozenScratch::new()?;
     capture_record(
         &quiesce::KERNEL_STATE,
         &quiesce::KERNEL_HARTS,
         &KERNEL_DEVICE,
         &KERNEL_MEMORY,
+        capture_scratch,
+        &mut scratch,
     )
 }
 
@@ -1350,23 +1991,63 @@ fn capture_preflight<'a>(
 }
 
 /// The capture path with every collaborator injected, so a host test can prove
-/// the preflight ordering — quiescence first, block I/O last — without a live
-/// allocator or a block device. [`serialize_snapshot`] is this with the live
-/// collaborators.
+/// the preflight ordering — staging and quiescence first, block I/O last —
+/// without a live allocator or a block device.  [`serialize_snapshot`] is this
+/// with the live collaborators.
 fn capture_record<'a>(
     state: &'a quiesce::QuiesceState,
     harts: &'a dyn quiesce::QuiesceHarts,
     dev: &dyn SnapshotDevice,
     mem: &dyn FrameMemory,
+    capture_scratch: CaptureScratch,
+    scratch: &mut FrozenScratch,
 ) -> Result<u32, SnapshotError> {
-    // Preflight: nothing touches the disk until the image is frozen.
+    // A capture that cannot name its own storage refuses before it freezes
+    // anything: there is nothing to prove later, and no reason to park harts.
+    require_capture_scratch(capture_scratch)?;
+
+    // `scratch` was reserved by the caller before this point — after the park
+    // nothing in the capture may touch the heap (a parked hart can be holding
+    // the heap's non-masking lock).
     let _quiesced = capture_preflight(state, harts)?;
 
+    capture_frozen(dev, mem, capture_scratch, scratch)
+}
+
+/// The frozen window itself, split out so a test can hand it deliberately
+/// under-sized scratch and watch the allocation-attempt counter fire.
+fn capture_frozen(
+    dev: &dyn SnapshotDevice,
+    mem: &dyn FrameMemory,
+    capture_scratch: CaptureScratch,
+    scratch: &mut FrozenScratch,
+) -> Result<u32, SnapshotError> {
+    let layout = scratch.plan()?;
+    capture_planned(dev, mem, capture_scratch, scratch, layout)
+}
+
+/// The frozen window with the plan already built: stage-check, then write.
+fn capture_planned(
+    dev: &dyn SnapshotDevice,
+    mem: &dyn FrameMemory,
+    capture_scratch: CaptureScratch,
+    scratch: &mut FrozenScratch,
+    layout: RamLayout,
+) -> Result<u32, SnapshotError> {
     #[cfg(target_arch = "riscv64")]
     let t0 = hal::common::timer::read_mtime();
 
-    let (layout, runs) = plan_inventory()?;
-    let report = capture_image(dev, mem, layout, &runs)?;
+    // The capture's own scratch must be outside every planned run: refuse rather
+    // than save an in-flight stack or buffer.  Checked before any block I/O.
+    assert_scratch_outside_runs(capture_scratch, &scratch.runs.items)?;
+
+    let report = capture_image_prepared(
+        dev,
+        mem,
+        layout,
+        &scratch.runs.items,
+        &scratch.inventory.items,
+    )?;
 
     #[cfg(target_arch = "riscv64")]
     let elapsed_ms = (hal::common::timer::read_mtime().wrapping_sub(t0)) / 10_000;
@@ -1383,6 +2064,29 @@ fn capture_record<'a>(
         SNAPSHOT_BASE_LBA
     );
     Ok(report.frames)
+}
+
+/// Host-test seam: the frozen window driven from an explicit allocated set and
+/// image span instead of the live allocator/linker (which a host build has no
+/// access to).  It fills the pre-reserved buffers through the same
+/// `try_push`/`plan_from`/`capture_planned` the live path uses, and writes
+/// through the same `capture_image_prepared`.
+#[cfg(test)]
+fn capture_frozen_with_allocated(
+    dev: &dyn SnapshotDevice,
+    mem: &dyn FrameMemory,
+    capture_scratch: CaptureScratch,
+    scratch: &mut FrozenScratch,
+    allocated_pas: &[u64],
+    mutable: ImageRegion,
+    layout: RamLayout,
+) -> Result<u32, SnapshotError> {
+    scratch.pas.clear();
+    for &pa in allocated_pas {
+        scratch.pas.try_push(pa)?;
+    }
+    scratch.plan_from(mutable, layout)?;
+    capture_planned(dev, mem, capture_scratch, scratch, layout)
 }
 
 /// Attempt to restore the kernel from a previously written snapshot.
@@ -1574,6 +2278,12 @@ mod fake {
         write_log: Vec<(u64, u64)>,
         read_log: Vec<u64>,
         flush_log: Vec<u64>,
+        /// The fake device's trusted monotonic epoch.  Deliberately *outside*
+        /// `pending`: `power_cycle` drops unflushed sectors, not the device's
+        /// own monotonic state — that is the whole point of a monotonic source.
+        epoch: u64,
+        /// Whether this fake models a device that has one at all.
+        epoch_supported: bool,
     }
 
     /// In-memory sector device with a volatile write-back cache: a reset
@@ -1587,8 +2297,10 @@ mod fake {
 
     impl FakeDisk {
         pub fn new() -> Self {
+            let mut state = State::default();
+            state.epoch_supported = true;
             Self {
-                inner: RefCell::new(State::default()),
+                inner: RefCell::new(state),
                 capacity: SNAPSHOT_END_LBA + 4096,
                 sector_size: SECTOR_SIZE,
                 fault: Cell::new(Fault::None),
@@ -1599,6 +2311,31 @@ mod fake {
             let disk = Self::new();
             disk.fault.set(fault);
             disk
+        }
+
+        /// Model a device with no trusted monotonic epoch source at all.
+        pub fn without_freshness(mut self) -> Self {
+            self.inner.get_mut().epoch_supported = false;
+            self
+        }
+
+        /// Start the device's monotonic epoch at `epoch` (e.g. "already consumed
+        /// a newer image" or "a fresh device").
+        pub fn with_epoch(mut self, epoch: u64) -> Self {
+            self.inner.get_mut().epoch = epoch;
+            self
+        }
+
+        /// The device's current monotonic epoch, as it would report it.
+        pub fn epoch(&self) -> u64 {
+            self.inner.borrow().epoch
+        }
+
+        /// Move the device's monotonic epoch forward (never backwards), as a
+        /// later capture/restore on the same device would.
+        pub fn set_epoch(&self, epoch: u64) {
+            let mut state = self.inner.borrow_mut();
+            state.epoch = state.epoch.max(epoch);
         }
 
         /// A device with a non-default capacity (identity/capacity tests).
@@ -1654,16 +2391,14 @@ mod fake {
         pub fn state_byte(&self) -> u8 {
             self.durable_sector(SNAPSHOT_BASE_LBA)[6]
         }
-        /// Recompute and store the canonical checksum over the durable image,
-        /// so that a crafted image is rejected by structure, not by the CRC.
-        /// A crafted header may claim an absurd geometry; anything beyond the
-        /// partition capacity is left alone (the reader rejects it structurally).
-        pub fn fixup_crc(&self) {
+        /// The canonical CRC over the durable image, or `None` when the header
+        /// claims a geometry beyond the partition (nothing to recompute).
+        fn image_crc(&self) -> Option<u32> {
             let header = self.header();
             let inv_sectors = header.inventory_sectors as u64;
             let payload_sectors = header.frame_count as u64 * SECTORS_PER_FRAME as u64;
             if inv_sectors > SNAPSHOT_SECTOR_COUNT || payload_sectors > SNAPSHOT_SECTOR_COUNT {
-                return;
+                return None;
             }
             let mut hasher = canonical_hasher(&header);
             for i in 0..inv_sectors {
@@ -1672,8 +2407,34 @@ mod fake {
             for i in 0..payload_sectors {
                 hasher.update(&self.durable_sector(header.payload_lba + i));
             }
-            let crc = hasher.finalize();
-            self.patch(SNAPSHOT_BASE_LBA, CRC_FIELD_OFFSET, &crc.to_le_bytes());
+            Some(hasher.finalize())
+        }
+
+        /// Does the stored CRC match a recomputation over the durable image?
+        pub fn crc_is_consistent(&self) -> bool {
+            self.image_crc() == Some(self.header().crc32)
+        }
+
+        /// Recompute and store only the canonical checksum — exactly what an
+        /// attacker without the MAC key can do.  The tag is left stale.
+        pub fn fixup_crc_no_mac(&self) {
+            if let Some(crc) = self.image_crc() {
+                self.patch(SNAPSHOT_BASE_LBA, CRC_FIELD_OFFSET, &crc.to_le_bytes());
+            }
+        }
+
+        /// Recompute and store the canonical checksum over the durable image,
+        /// so that a crafted image is rejected by structure, not by the CRC —
+        /// and re-sign the header, so it is rejected by structure rather than
+        /// by the MAC either.  A crafted header may claim an absurd geometry;
+        /// anything beyond the partition capacity is left alone (the reader
+        /// rejects it structurally, before it looks at the MAC).
+        pub fn fixup_crc(&self) {
+            self.fixup_crc_no_mac();
+            if let Some(key) = SNAPSHOT_TRUST_KEY {
+                let tag = header_mac(&key, &self.header());
+                self.patch(SNAPSHOT_BASE_LBA, AUTH_FIELD_OFFSET, &tag);
+            }
         }
 
         /// Zero the operation counters and logs, so a test can inject a fault at
@@ -1766,6 +2527,21 @@ mod fake {
 
         fn sector_count(&self) -> u64 {
             self.capacity
+        }
+
+        fn current_epoch(&self) -> Option<u64> {
+            let state = self.inner.borrow();
+            state.epoch_supported.then_some(state.epoch)
+        }
+
+        fn commit_epoch(&self, epoch: u64) -> Result<(), SnapshotError> {
+            let mut state = self.inner.borrow_mut();
+            if !state.epoch_supported {
+                return Err(SnapshotError::NoFreshnessSource);
+            }
+            // Monotonic: never move backwards.
+            state.epoch = state.epoch.max(epoch);
+            Ok(())
         }
     }
 
@@ -1934,6 +2710,28 @@ mod tests {
         runs_from_frames(&sparse_pas(), layout()).expect("sparse inventory")
     }
 
+    /// A capture-scratch span that covers no planned run: frame 50 of the fake
+    /// RAM window is neither an allocated sparse frame nor inside the image.
+    const OUTSIDE_RUNS: &[ScratchSpan] = &[ScratchSpan::new(
+        BASE + 50 * FRAME_SIZE as u64,
+        BASE + 51 * FRAME_SIZE as u64,
+    )];
+
+    /// A capture-scratch span that intersects an allocated run (frame 3).
+    const INSIDE_ALLOCATED_RUN: &[ScratchSpan] = &[ScratchSpan::new(
+        BASE + 3 * FRAME_SIZE as u64,
+        BASE + 4 * FRAME_SIZE as u64,
+    )];
+
+    /// A capture-scratch span that intersects the mutable image run (frame 34).
+    const INSIDE_IMAGE_RUN: &[ScratchSpan] = &[ScratchSpan::new(
+        BASE + 34 * FRAME_SIZE as u64,
+        BASE + 35 * FRAME_SIZE as u64,
+    )];
+
+    /// A zero-length declaration: still "the capture cannot name its storage".
+    const EMPTY_SCRATCH: &[ScratchSpan] = &[ScratchSpan::new(0x1000, 0x1000)];
+
     fn valid_header() -> SnapshotHeader {
         SnapshotHeader {
             magic: SNAPSHOT_MAGIC,
@@ -1952,7 +2750,9 @@ mod tests {
             payload_lba: INVENTORY_FIRST_LBA + 1,
             crc32: 0xDEAD_BEEF,
             _reserved0: 0,
-            _reserved: [0u8; 440],
+            epoch: 1,
+            auth: [0xA5u8; AUTH_BYTES],
+            _reserved: [0u8; 400],
         }
     }
 
@@ -1974,6 +2774,7 @@ mod tests {
         assert_eq!(core::mem::size_of::<SnapshotHeader>(), SECTOR_SIZE);
         assert_eq!(core::mem::size_of::<SnapshotRun>(), RUN_BYTES);
         assert_eq!(CRC_FIELD_OFFSET, 64);
+        assert_eq!(AUTH_FIELD_OFFSET, 80);
         let bytes = valid_header().write_bytes();
         assert_eq!(&bytes[0..4], b"VICU");
         assert_eq!(
@@ -1985,11 +2786,19 @@ mod tests {
             &canonical[CRC_FIELD_OFFSET..CRC_FIELD_OFFSET + 4],
             &[0u8; 4]
         );
-        // Everything else is untouched by zeroing the CRC field.
+        assert_eq!(
+            &canonical[AUTH_FIELD_OFFSET..AUTH_FIELD_OFFSET + AUTH_BYTES],
+            &[0u8; AUTH_BYTES]
+        );
+        // Everything outside the zeroed CRC and MAC fields is untouched.
         assert_eq!(bytes[..CRC_FIELD_OFFSET], canonical[..CRC_FIELD_OFFSET]);
         assert_eq!(
-            bytes[CRC_FIELD_OFFSET + 4..],
-            canonical[CRC_FIELD_OFFSET + 4..]
+            bytes[CRC_FIELD_OFFSET + 4..AUTH_FIELD_OFFSET],
+            canonical[CRC_FIELD_OFFSET + 4..AUTH_FIELD_OFFSET]
+        );
+        assert_eq!(
+            bytes[AUTH_FIELD_OFFSET + AUTH_BYTES..],
+            canonical[AUTH_FIELD_OFFSET + AUTH_BYTES..]
         );
     }
 
@@ -3278,8 +4087,16 @@ mod tests {
         let ram = sparse_ram();
         let harts = quiesce::fake::FakeHarts::new(&[0, 1], 0).with_budget(4);
         let state = quiesce::QuiesceState::new();
+        let mut scratch = FrozenScratch::with_bounds(FRAMES, SPARSE_RUNS as u64 + 1);
         assert_eq!(
-            capture_record(&state, &harts, &disk, &ram),
+            capture_record(
+                &state,
+                &harts,
+                &disk,
+                &ram,
+                CaptureScratch::Reserved(OUTSIDE_RUNS),
+                &mut scratch,
+            ),
             Err(SnapshotError::HartsNotQuiesced)
         );
         assert_eq!(disk.writes(), 0, "no sector may be written");
@@ -3296,5 +4113,347 @@ mod tests {
         assert!(guard.all_parked());
         assert_eq!(harts.parked(), vec![1]);
         drop(guard);
+    }
+
+    // ── frozen window: no allocation between park and release ────────────────
+
+    /// A run bound that covers the fake allocated set and the image run.
+    fn fake_run_bound() -> u64 {
+        (SPARSE.len() + SPARSE_RUNS + IMAGE_RUNS_MAX) as u64
+    }
+
+    /// Drive the frozen window over the fake allocated set and image span.
+    fn frozen_capture(
+        disk: &FakeDisk,
+        ram: &FakeRam,
+        capture_scratch: CaptureScratch,
+        scratch: &mut FrozenScratch,
+    ) -> Result<u32, SnapshotError> {
+        capture_frozen_with_allocated(
+            disk,
+            ram,
+            capture_scratch,
+            scratch,
+            &sparse_pas(),
+            mutable_image(),
+            layout(),
+        )
+    }
+
+    #[test]
+    fn snapshot_frozen_capture_never_reaches_the_heap() {
+        // The allocation-attempt counter is process-global, so a successful
+        // capture and the positive control that increments it must live in one
+        // test: no other test overruns a reservation, so the zero reading is
+        // not racing anything.
+        reset_frozen_window_alloc_attempts();
+        let disk = FakeDisk::new();
+        let ram = ram_with_image();
+        let mut scratch = FrozenScratch::with_bounds(FRAMES, fake_run_bound());
+        let frames = frozen_capture(
+            &disk,
+            &ram,
+            CaptureScratch::Reserved(OUTSIDE_RUNS),
+            &mut scratch,
+        )
+        .expect("frozen capture succeeds");
+        assert_eq!(frames, SPARSE.len() as u32 + IMAGE_MUTABLE_FRAMES);
+        assert_eq!(
+            frozen_window_alloc_attempts(),
+            0,
+            "the frozen window must never reach the heap"
+        );
+        // The buffers the window filled are the ones reserved before it.
+        assert_eq!(scratch.pas.items.capacity(), FRAMES as usize);
+
+        // The image it wrote round-trips.
+        disk.power_cycle();
+        let target = FakeRam::default();
+        assert_eq!(
+            restore_image(&disk, &target, layout()),
+            RestoreOutcome::Resumed
+        );
+        assert_eq!(target.map(), ram.map());
+
+        // Positive control: an under-sized reservation is refused and counted,
+        // never grown.
+        reset_frozen_window_alloc_attempts();
+
+        // (a) the allocated frame list does not fit the reserved `pas`.
+        let disk = FakeDisk::new();
+        let mut small_pas = FrozenScratch::with_bounds(2, fake_run_bound());
+        assert_eq!(
+            frozen_capture(
+                &disk,
+                &ram,
+                CaptureScratch::Reserved(OUTSIDE_RUNS),
+                &mut small_pas,
+            ),
+            Err(SnapshotError::CapacityExceeded)
+        );
+        assert!(
+            frozen_window_alloc_attempts() > 0,
+            "an exceeded bound must be counted, not allocated"
+        );
+        assert_eq!(disk.writes(), 0, "refused before any block I/O");
+        assert_eq!(disk.reads(), 0);
+
+        // (b) the run list does not fit the reserved `runs`.
+        reset_frozen_window_alloc_attempts();
+        let mut small_runs = FrozenScratch::with_bounds(FRAMES, SPARSE_RUNS as u64);
+        assert_eq!(
+            frozen_capture(
+                &disk,
+                &ram,
+                CaptureScratch::Reserved(OUTSIDE_RUNS),
+                &mut small_runs,
+            ),
+            Err(SnapshotError::CapacityExceeded)
+        );
+        assert!(
+            frozen_window_alloc_attempts() > 0,
+            "an exceeded bound is counted"
+        );
+        assert_eq!(disk.writes(), 0);
+    }
+
+    // ── capture staging: the capture's own storage is outside the runs ───────
+
+    #[test]
+    fn snapshot_capture_refuses_scratch_inside_a_planned_run() {
+        for (name, spans) in [
+            ("allocated run", INSIDE_ALLOCATED_RUN),
+            ("image run", INSIDE_IMAGE_RUN),
+        ] {
+            let disk = FakeDisk::new();
+            let ram = ram_with_image();
+            let mut scratch = FrozenScratch::with_bounds(FRAMES, fake_run_bound());
+            assert_eq!(
+                frozen_capture(&disk, &ram, CaptureScratch::Reserved(spans), &mut scratch),
+                Err(SnapshotError::ScratchOverlapsRun),
+                "{name}: scratch inside a run must refuse rather than be saved"
+            );
+            assert_eq!(disk.writes(), 0, "{name}: refused before any block I/O");
+            assert_eq!(disk.reads(), 0, "{name}: not even the header is read");
+        }
+    }
+
+    #[test]
+    fn snapshot_capture_refuses_when_its_storage_is_not_reserved() {
+        let disk = FakeDisk::new();
+        let ram = sparse_ram();
+        // Two harts: if the scratch check did not run first, the preflight
+        // would park one and only fail after its budget.
+        let harts = quiesce::fake::FakeHarts::new(&[0, 1], 0)
+            .with_hook(true)
+            .with_budget(4);
+        let state = quiesce::QuiesceState::new();
+        let mut scratch = FrozenScratch::with_bounds(FRAMES, fake_run_bound());
+        assert_eq!(
+            capture_record(
+                &state,
+                &harts,
+                &disk,
+                &ram,
+                CaptureScratch::None,
+                &mut scratch,
+            ),
+            Err(SnapshotError::NoReservedScratch)
+        );
+        assert!(harts.requests().is_empty(), "no hart may be parked");
+        assert_eq!(disk.writes(), 0);
+        assert_eq!(disk.reads(), 0);
+
+        // An empty or zero-length declaration is the same refusal.
+        assert_eq!(
+            require_capture_scratch(CaptureScratch::Reserved(&[])),
+            Err(SnapshotError::NoReservedScratch)
+        );
+        assert_eq!(
+            require_capture_scratch(CaptureScratch::Reserved(EMPTY_SCRATCH)),
+            Err(SnapshotError::NoReservedScratch)
+        );
+    }
+
+    // ── authenticated freshness ──────────────────────────────────────────────
+
+    fn capture_authentic(disk: &FakeDisk) {
+        let source = sparse_ram();
+        capture_image(disk, &source, layout(), &sparse_runs())
+            .expect("authentic capture");
+    }
+
+    /// The attacker's saved copy of a `Committed` image: put the state byte back
+    /// and re-fix the (unkeyed) CRC.  The MAC cannot be forged, and the epoch
+    /// has not moved, so freshness is what refuses this.
+    fn recommit(disk: &FakeDisk) {
+        disk.patch(SNAPSHOT_BASE_LBA, 6, &[SnapshotState::Committed as u8]);
+        disk.fixup_crc();
+    }
+
+    fn copy_image(from: &FakeDisk, to: &FakeDisk) {
+        let sectors = from.header().image_sectors as u64;
+        for lba in SNAPSHOT_BASE_LBA..SNAPSHOT_BASE_LBA + sectors {
+            to.patch(lba, 0, &from.durable_sector(lba));
+        }
+    }
+
+    #[test]
+    fn snapshot_newer_epoch_restores_and_advances_the_device() {
+        let disk = FakeDisk::new().with_epoch(7);
+        capture_authentic(&disk);
+        assert_eq!(disk.header().epoch, 8, "capture records device epoch + 1");
+        disk.power_cycle();
+        let target = FakeRam::default();
+        assert_eq!(
+            restore_image(&disk, &target, layout()),
+            RestoreOutcome::Resumed
+        );
+        assert_eq!(disk.epoch(), 8, "the replay decision advances the device epoch");
+    }
+
+    #[test]
+    fn snapshot_equal_epoch_is_refused() {
+        let disk = FakeDisk::new();
+        capture_authentic(&disk);
+        disk.power_cycle();
+        let first = FakeRam::default();
+        assert_eq!(
+            restore_image(&disk, &first, layout()),
+            RestoreOutcome::Resumed
+        );
+        assert_eq!(disk.epoch(), 1);
+
+        // The attacker replays the saved `Committed` header: its epoch now
+        // equals what the device reports, and strictly-newer is required.
+        recommit(&disk);
+        let replay = FakeRam::default();
+        assert_eq!(
+            restore_image(&disk, &replay, layout()),
+            RestoreOutcome::ColdBoot("stale epoch: image is not newer than the device's")
+        );
+        assert_eq!(replay.write_count(), 0, "no RAM replay");
+        assert_eq!(disk.state_byte(), 0, "the replayed image is erased");
+    }
+
+    #[test]
+    fn snapshot_older_epoch_is_refused() {
+        let disk = FakeDisk::new();
+        capture_authentic(&disk); // image epoch 1
+        disk.set_epoch(5); // the device has consumed newer images since
+        let target = FakeRam::default();
+        assert_eq!(
+            restore_image(&disk, &target, layout()),
+            RestoreOutcome::ColdBoot("stale epoch: image is not newer than the device's")
+        );
+        assert_eq!(target.write_count(), 0);
+        assert_eq!(disk.state_byte(), 0);
+    }
+
+    #[test]
+    fn snapshot_tampered_epoch_is_refused() {
+        let disk = FakeDisk::new();
+        capture_authentic(&disk);
+        // Forge a fresher epoch: the MAC covers it, so the header stops
+        // authenticating even though the attacker can re-fix the CRC.
+        disk.patch(SNAPSHOT_BASE_LBA, EPOCH_FIELD_OFFSET, &9999u64.to_le_bytes());
+        let target = FakeRam::default();
+        assert_eq!(
+            restore_image(&disk, &target, layout()),
+            RestoreOutcome::ColdBoot("header authentication failed")
+        );
+        assert_eq!(target.write_count(), 0);
+        assert_eq!(disk.state_byte(), 0, "a forged header is erased");
+    }
+
+    #[test]
+    fn snapshot_payload_tamper_with_a_refixed_crc_is_refused() {
+        let disk = FakeDisk::new();
+        capture_authentic(&disk);
+        // The attacker tampers a payload byte and re-fixes the (unkeyed) CRC.
+        // The accidental checksum is now self-consistent, so only the MAC
+        // stands between the tampered image and a replay.
+        disk.patch(INVENTORY_FIRST_LBA + 1, 0, &[0xA5]);
+        disk.fixup_crc_no_mac();
+        assert!(
+            disk.crc_is_consistent(),
+            "the attacker's re-fixed CRC must be self-consistent"
+        );
+        let target = FakeRam::default();
+        assert_eq!(
+            restore_image(&disk, &target, layout()),
+            RestoreOutcome::ColdBoot("header authentication failed")
+        );
+        assert_eq!(target.write_count(), 0, "no RAM replay");
+        assert_eq!(disk.state_byte(), 0, "a tampered image is erased");
+    }
+
+    #[test]
+    fn snapshot_device_without_a_monotonic_source_refuses() {
+        // Capture: refused before any block I/O when there is no epoch source.
+        let blind = FakeDisk::new().without_freshness();
+        let source = sparse_ram();
+        assert_eq!(
+            capture_image(&blind, &source, layout(), &sparse_runs()),
+            Err(SnapshotError::NoFreshnessSource)
+        );
+        assert_eq!(blind.writes(), 0, "no write may precede the freshness check");
+
+        // Restore: an otherwise-valid image is refused, and the region is left
+        // alone — a device we cannot judge is not proven bad.
+        let good = FakeDisk::new();
+        capture_authentic(&good);
+        let blind2 = FakeDisk::new().without_freshness();
+        copy_image(&good, &blind2);
+        let target = FakeRam::default();
+        assert_eq!(
+            restore_image(&blind2, &target, layout()),
+            RestoreOutcome::ColdBoot("device has no trusted monotonic epoch source")
+        );
+        assert_eq!(target.write_count(), 0);
+        assert_eq!(
+            blind2.state_byte(),
+            SnapshotState::Committed as u8,
+            "an unsupported device is not written to"
+        );
+    }
+
+    #[test]
+    fn snapshot_header_mac_binds_every_covered_field() {
+        let key = SNAPSHOT_TRUST_KEY.expect("dev trust key");
+        let base = valid_header();
+        let tag = header_mac(&key, &base);
+        let cases: [(&str, fn(&mut SnapshotHeader)); 16] = [
+            ("magic", |h| h.magic ^= 1),
+            ("version", |h| h.version ^= 1),
+            ("state", |h| h.state ^= 1),
+            ("flags", |h| h.flags ^= 1),
+            ("kernel hash", |h| h.kernel_hash ^= 1),
+            ("ram base", |h| h.ram_base ^= 1),
+            ("ram end", |h| h.ram_end ^= 1),
+            ("sector size", |h| h.sector_size ^= 1),
+            ("run count", |h| h.run_count ^= 1),
+            ("frame count", |h| h.frame_count ^= 1),
+            ("inventory sectors", |h| h.inventory_sectors ^= 1),
+            ("image sectors", |h| h.image_sectors ^= 1),
+            ("payload lba", |h| h.payload_lba ^= 1),
+            ("crc (payload digest)", |h| h.crc32 ^= 1),
+            ("epoch", |h| h.epoch ^= 1),
+            ("reserved tail", |h| h._reserved[0] ^= 1),
+        ];
+        for (name, mutate) in cases {
+            let mut h = base;
+            mutate(&mut h);
+            assert!(
+                !mac_eq(&tag, &header_mac(&key, &h)),
+                "{name} must be covered by the MAC"
+            );
+        }
+        // The MAC's own field is excluded by definition (the tag is computed
+        // over the header with it zeroed).
+        let mut excluded = base;
+        excluded.auth = [0x11u8; AUTH_BYTES];
+        assert!(mac_eq(&tag, &header_mac(&key, &excluded)));
+        assert_eq!(excluded.signed_bytes()[AUTH_FIELD_OFFSET], 0);
     }
 }
