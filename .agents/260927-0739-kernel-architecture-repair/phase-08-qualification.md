@@ -86,6 +86,34 @@ per-path digests before it replaces `disk_v3.img`. The two x86-only integration 
 (`x86_64-boot`) still need their own disk/ISO route, and `aarch64-boot` still boots an image whose
 refusal tests are vacuous because no production AArch64 image carries a domain-class cell.
 
+### Spec 22 §3 negative matrix — tri-state against the evidence that exists
+
+`docs/specs/22-native-domain-cell-implementation-gate.md:271-293` asks for each case to become an
+automated target-architecture test or to carry a hardware-gated reason and a release block. This
+is that mapping, as of 2026-09-28. `PASS` means an executed lane or host test decides it; anything
+else says so.
+
+| Spec 22 case | State | Evidence / reason |
+|---|---|---|
+| Tier-2 reads/writes/executes an unmapped *peer* page | PASS (RV64) | `tier2_peer_memory_isolation_terminates_cell_cleanly` in `tests/integration/tests/tier2_fault_isolation.rs` (5/5 lane, runnable here since `scripts/gen-disk-ci.sh`); the AArch64/x86 lanes show the same class with a deliberate NULL store contained as one `[fault]` |
+| Tier-2 probes kernel-only RAM, page tables, HHDM, unassigned MMIO | PASS (RV64) | `tier2_kernel_memory_isolation_terminates_cell_cleanly` in the same lane |
+| Syscall pointer null/overflowing/unmapped/cross-page/kernel/peer/concurrently-unmapped | PASS | host kernel lane (`task::user_out`, `copy_*` bounds) plus the 2-hart `user-copy-race` case |
+| SAS → SAS schedule loop writes no root and flushes nothing | PASS (all three arches) | `S22-{RV64,AARCH64,X86}-SAS-FASTPATH: PASS roots=0 flushes=0` |
+| Domain transition and same-domain switch | PASS (all three) | `S22-AARCH64-PLAN`/`-RESUME-ROOT`, `S22-X86-PLAN`/`-RESUME-ROOT`, RV64 `switch`/`resume-root` cases |
+| ASID/PCID reuse after domain exit | **Split** | The *allocator* contract is PASS and was red-proved on the wrap bug (`asid-lease`); the *targeted invalidation* half is HARDWARE-GATED — `S22-AARCH64-ASID-INVALIDATION: UNPROVEN` because QEMU does not scope `aside1is`. Release is fail-closed meanwhile (`S22-AARCH64-RELEASE-FLUSH: PASS targeted=5 full=0`) |
+| Grant map/revoke racing receiver execution on another hart | PASS (RV64 2-hart) | `grant-revoke`, `grant-pair` (address-classified store faults) and the deferred-release witness `S22-RV64-DEFERRED-RELEASE: PASS`; non-RV64 is single-CPU by policy, so the race cannot arise there yet |
+| Owner/grantee kill with grant and pinned DMA | PASS for the pin path, **domain-DMA by design** | `GRANT-RECLAIM-{OWNED,RECEIVED,PINNED}: PASS` and the pin quarantine/release path; `GrantDma` still refuses a private-root caller, so no IOMMU mapping can exist on a domain grant (recorded rather than exercised) |
+| Forced exit during syscall or cross-hart migration | PASS (RV64 2-hart) | `S22-RV64-MIGRATION: PASS harts=2`, `PIN-DYING`, the SMP retirement fixtures |
+| Invalid signature, no signature, malformed ELF, unsupported arch, exhausted tag/table/quota | PASS | `S22-{RV64,AARCH64,X86}-ADMISSION-{ENABLED,DENY,DRAIN,PUBLICATION-DENY,CEILING}`, the `tier2-exploit` fixture, host admission tests, and the RV64 `admission` case |
+| Tier-2 requests unauthorized MMIO / PCIe DMA / virtio-MMIO DMA | PASS by policy, not executed | `domain_admission::unenforceable_authority` denies a cell that requests device or DMA authority, so such a domain cannot be admitted; there is no executed lane that asks for one |
+| Feature disabled or rollback boot | PASS | The production x86 lane asserts the *disabled* posture, the production AArch64 build is pinned closed by a const-assert, and the RV64 `admission` case asserts the deny path with no SAS fallback |
+
+Spec 22 also demands that "at least one hostile native test must demonstrate that a private root
+cannot reach peer SAS memory". That is the peer-memory row above for domain↔domain; the
+domain→*SAS* direction is by construction (a private root maps only its own leaves plus the
+shared supervisor ranges, so another cell's user pages are not in it) and is **not separately
+asserted** — flagged here rather than counted as covered.
+
 ## Assumptions / risk / rollback
 - [UNVERIFIED] All required emulators/physical boards are accessible to CI; where not, mark named qualification gate unresolved and retain disabled profile, not a passing placeholder. Rollback to known-safe image with domain admission and snapshot disabled; reimage development storage if a corrupted snapshot was ever replayed. Security exposure or overwritten external data cannot be rolled back by a binary revert.
 
