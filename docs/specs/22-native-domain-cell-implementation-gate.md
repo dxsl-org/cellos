@@ -218,9 +218,20 @@ runner asserts `OWNER-MAPPED: OK`, `RECEIVER-RW: OK`, `RECEIVER-RO-WRITE: FAULT-
 `RECEIVER-REVOKE-FAULT`/`UNREGISTER-FAULT`/`EXIT-FAULT: FAULT-EXPECTED`,
 `RECEIVER-FRAME-REUSE: REFUSED`, and the surviving denials (`OWNER-SHARE-FOREIGN: DENY`,
 `OWNER-SHARE-WO: DENY`, `RECEIVER-SLICE-UNKNOWN: DENY`), and classifies each fault line as
-`cause=0xf` at the expected `addr=`. The boot-time kernel witnesses are
-`S22-RV64-GRANT-REVOKE: PASS` (the lifecycle matrix) and `S22-RV64-GRANT-GATE: PASS` (the
-capability/denial matrix).
+`cause=0xf` at the expected `addr=`. One generation is the **same-recipient
+ReadWrite→ReadOnly downgrade**: the receiver proves a writable mapping, the owner re-shares
+the same grant ReadOnly to that same recipient (`OWNER-DOWNGRADE-RESHARE: OK`), and the
+receiver then proves the address still resolves and still reads the byte the writable half
+wrote (`RECEIVER-DOWNGRADE-READ: OK (read 0xa5)`) while its store now faults
+(`RECEIVER-DOWNGRADE-WRITE: FAULT-EXPECTED` plus a classified fault at that exact address) —
+i.e. the old writable PTE is gone and the re-share widened nothing. The boot-time kernel
+witnesses are `S22-RV64-GRANT-REVOKE: PASS` (the lifecycle matrix), `S22-RV64-GRANT-GATE:
+PASS` and its `S22-RV64-GRANT-GATE-RETIRE-REFUSAL` property (the capability/denial matrix
+plus the post-revoke refusal invariant, which holds whether the revoke completed or
+deferred). `scripts/qemu-native-domain-test.sh` accepts the first-attempt `-SLICE-RW` /
+`-REVOKE` `FAIL` markers only in the deferred-ack form, with that invariant evidence and the
+explicit deferral log line in the same boot; the deferred outcome is reported as `DEFERRED`,
+never relabelled `PASS`.
 
 ### 2.6 MMIO, DMA, and IOMMU confinement
 

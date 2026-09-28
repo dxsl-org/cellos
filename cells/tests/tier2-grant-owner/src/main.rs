@@ -7,14 +7,19 @@
 //!
 //! The owner allocates an identity-mapped RW owner page through both
 //! `GrantAlloc` and `GrantRegister` and proves the returned pointer is writable
-//! by the owner. It then serves four receiver generations over IPC, one per
+//! by the owner. It then serves five receiver generations over IPC, one per
 //! property the phase must witness:
 //!
 //!   1. `rw`         — the receiver writes the ReadWrite mapping, the owner
 //!                     `GrantFree`s it, the receiver's old address faults;
 //!   2. `ro`         — a ReadOnly mapping; the receiver's deliberate write faults;
-//!   3. `unregister` — the owner `GrantUnregister`s, the receiver's address faults;
-//!   4. `exit`       — the owner exits, its reaper revokes, the receiver faults.
+//!   3. `downgrade`  — the receiver takes a ReadWrite mapping of a third grant,
+//!                     then the owner re-shares the *same* grant ReadOnly to the
+//!                     *same* recipient; the receiver's old writable PTE must be
+//!                     gone (its store faults) while a read of the address still
+//!                     returns the byte the ReadWrite phase wrote;
+//!   4. `unregister` — the owner `GrantUnregister`s, the receiver's address faults;
+//!   5. `exit`       — the owner exits, its reaper revokes, the receiver faults.
 //!
 //! Denials that stay denials are asserted here too: a non-private-root peer and
 //! a WriteOnly domain pair both keep the phase-01 sentinel.
@@ -28,8 +33,9 @@
 //!   S22-RV64-GRANT-PAIR-OWNER-SHARE-WO: DENY|ALLOWED
 //!   S22-RV64-GRANT-PAIR-OWNER-FREE: OK|FAIL
 //!   S22-RV64-GRANT-PAIR-OWNER-UNREGISTER: OK|FAIL
+//!   S22-RV64-GRANT-PAIR-OWNER-DOWNGRADE-RESHARE: OK|FAIL
 //!   S22-RV64-GRANT-PAIR-OWNER-EXIT: OK
-//!   S22-RV64-GRANT-PAIR-HANDOFF id1=<n> id2=<n> id3=<n>
+//!   S22-RV64-GRANT-PAIR-HANDOFF id1=<n> id2=<n> id3=<n> id4=<n>
 //!   S22-RV64-GRANT-PAIR-OWNER: PASS|FAIL
 
 #![no_std]
@@ -83,6 +89,9 @@ const WANT_EXIT: u8 = 4;
 const REQ_FREE: u8 = 5;
 const REQ_UNREGISTER: u8 = 6;
 const REQ_EXIT: u8 = 7;
+/// Same-recipient downgrade: publish ReadWrite, then re-share ReadOnly.
+const WANT_DOWNGRADE_RW: u8 = 8;
+const WANT_DOWNGRADE_RO: u8 = 9;
 const ACK: u8 = 0x80;
 
 /// One page of the owner's own WA is enough to prove the owner mapping works.
@@ -159,8 +168,11 @@ fn cell_main() {
         }
     }
     // A third page for the exit-revoke phase, since phase 1 frees the first and
-    // phase 3 unregisters the second.
+    // phase 4 unregisters the second, and a fourth for the same-recipient
+    // downgrade phase, which must be its own grant so each deliberate fault
+    // stays attributable to one address.
     let exit_grant = sys_grant_alloc(PAGE);
+    let down_grant = sys_grant_alloc(PAGE);
 
     // 2. The owner's own pointer must be writable, from the allocation itself.
     match alloc.map(sys_grant_slice) {
@@ -194,17 +206,18 @@ fn cell_main() {
     }
 
     println(&format!(
-        "S22-RV64-GRANT-PAIR-HANDOFF id1={} id2={} id3={}",
+        "S22-RV64-GRANT-PAIR-HANDOFF id1={} id2={} id3={} id4={}",
         alloc.unwrap_or(0),
         reg.unwrap_or(0),
-        exit_grant.unwrap_or(0)
+        exit_grant.unwrap_or(0),
+        down_grant.unwrap_or(0)
     ));
 
     // 4. Serve one receiver generation per phase. Each generation asks for the
     //    rights it needs, then asks for the teardown its mode witnesses.
     let mut served = 0usize;
     let mut wo_reported = false;
-    while served < 4 {
+    while served < 5 {
         let (sender, request) = recv_byte();
         match request {
             WANT_RW => {
@@ -241,6 +254,27 @@ fn cell_main() {
             WANT_EXIT => {
                 if let Some(grant_id) = exit_grant {
                     let shared = sys_grant_share(grant_id, sender, PERM_RW);
+                    ack(sender, u8::from(shared));
+                }
+            }
+            WANT_DOWNGRADE_RW => {
+                if let Some(grant_id) = down_grant {
+                    let shared = sys_grant_share(grant_id, sender, PERM_RW);
+                    ack(sender, u8::from(shared));
+                }
+            }
+            WANT_DOWNGRADE_RO => {
+                if let Some(grant_id) = down_grant {
+                    // Same grant, same recipient, stricter rights. The kernel
+                    // must replace the receiver's writable PTE, not keep it:
+                    // `shared` here only says the republish was accepted, so the
+                    // runner's witness is the receiver's store fault below.
+                    let shared = sys_grant_share(grant_id, sender, PERM_RO);
+                    println(&format!(
+                        "S22-RV64-GRANT-PAIR-OWNER-DOWNGRADE-RESHARE: {}",
+                        if shared { "OK" } else { "FAIL" }
+                    ));
+                    ok &= shared;
                     ack(sender, u8::from(shared));
                 }
             }

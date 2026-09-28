@@ -6,23 +6,34 @@
 //! domain caller.
 //!
 //! Command line (staged by the shell):
-//!   argv[0] = `rw` | `ro` | `unregister` | `exit`
+//!   argv[0] = `rw` | `ro` | `downgrade` | `unregister` | `exit`
 //!   argv[1] = the owner's GrantAlloc id
 //!   argv[2] = the owner's GrantRegister id
 //!   argv[3] = the owner's exit-phase GrantAlloc id
+//!   argv[4] = the owner's same-recipient downgrade GrantAlloc id
 //!
 //! Each mode ends in a store to the address the kernel handed back, which must
 //! fault *after* the owner revoked the mapping — the deliberate fault is the
 //! witness the runner classifies. The owner is discovered through the public
 //! `GetProcs` surface rather than by a private handshake.
 //!
+//! `downgrade` is the one mode that keeps its mapping across the owner's action:
+//! it proves a ReadWrite mapping first (a store reads back), then the owner
+//! re-shares the same grant ReadOnly to this same recipient, and the mode proves
+//! both halves of the downgrade — the byte written before the re-share is still
+//! readable through the address afterwards (so the page was not merely unmapped)
+//! and the store to it now faults (so the old writable PTE is gone).
+//!
 //! Marker grammar:
-//!   S22-RV64-GRANT-PAIR-RECEIVER-BEGIN: mode=<m> ids=<a>,<b>,<c>
+//!   S22-RV64-GRANT-PAIR-RECEIVER-BEGIN: mode=<m> ids=<a>,<b>,<c>,<d>
 //!   S22-RV64-GRANT-PAIR-RECEIVER-ALLOC: OK id=<n>|DENY
 //!   S22-RV64-GRANT-PAIR-RECEIVER-SLICE-UNKNOWN: DENY|MAPPED
 //!   S22-RV64-GRANT-PAIR-RECEIVER-SLICE-RO: OK|FAIL
 //!   S22-RV64-GRANT-PAIR-RECEIVER-SLICE-RW: OK|FAIL
 //!   S22-RV64-GRANT-PAIR-RECEIVER-RW: OK|MISMATCH
+//!   S22-RV64-GRANT-PAIR-RECEIVER-DOWNGRADE-RW: OK|FAIL
+//!   S22-RV64-GRANT-PAIR-RECEIVER-DOWNGRADE-READ: OK (read 0xa5)|MISMATCH|MISSING
+//!   S22-RV64-GRANT-PAIR-RECEIVER-DOWNGRADE-WRITE: FAULT-EXPECTED
 //!   S22-RV64-GRANT-PAIR-RECEIVER-FRAME-REUSE: REFUSED|REUSED
 //!   S22-RV64-GRANT-PAIR-RECEIVER-RO-WRITE: FAULT-EXPECTED
 //!   S22-RV64-GRANT-PAIR-RECEIVER-REVOKE-FAULT: FAULT-EXPECTED
@@ -71,7 +82,13 @@ const WANT_EXIT: u8 = 4;
 const REQ_FREE: u8 = 5;
 const REQ_UNREGISTER: u8 = 6;
 const REQ_EXIT: u8 = 7;
+/// Same-recipient downgrade: publish ReadWrite, then re-share ReadOnly.
+const WANT_DOWNGRADE_RW: u8 = 8;
+const WANT_DOWNGRADE_RO: u8 = 9;
 const ACK: u8 = 0x80;
+/// The byte this cell writes through the ReadWrite mapping and must still read
+/// back after the owner re-shares the same grant ReadOnly.
+const DOWNGRADE_BYTE: u8 = 0xA5;
 /// An address no grant record can occupy: the allocator only hands out frames
 /// from RAM, far above page 1.
 const IMPOSSIBLE_ID: usize = 0x1000;
@@ -146,10 +163,10 @@ fn cell_main() {
             .and_then(|value| value.parse().ok())
             .unwrap_or(0)
     };
-    let (id_alloc, id_reg, id_exit) = (parsed(1), parsed(2), parsed(3));
+    let (id_alloc, id_reg, id_exit, id_down) = (parsed(1), parsed(2), parsed(3), parsed(4));
 
     println(&format!(
-        "S22-RV64-GRANT-PAIR-RECEIVER-BEGIN: mode={mode} ids={id_alloc},{id_reg},{id_exit}"
+        "S22-RV64-GRANT-PAIR-RECEIVER-BEGIN: mode={mode} ids={id_alloc},{id_reg},{id_exit},{id_down}"
     ));
 
     // A second private root allocates independently: the capability rule is
@@ -167,6 +184,7 @@ fn cell_main() {
     let want = match mode.as_str() {
         "rw" => Some(WANT_RW),
         "ro" => Some(WANT_RO),
+        "downgrade" => Some(WANT_DOWNGRADE_RW),
         "unregister" => Some(WANT_UNREGISTER),
         "exit" => Some(WANT_EXIT),
         _ => None,
@@ -239,6 +257,56 @@ fn cell_main() {
             println("S22-RV64-GRANT-PAIR-RECEIVER-RO-WRITE: FAULT-EXPECTED");
             deliberate_store(pointer);
             println("S22-RV64-GRANT-PAIR-RECEIVER-RO-WRITE: WROTE");
+        }
+        "downgrade" => {
+            // ReadWrite first: this proves the mapping is writable and fixes the
+            // byte that must survive the downgrade.
+            let Some(rw_pointer) = sys_grant_slice(id_down) else {
+                println("S22-RV64-GRANT-PAIR-RECEIVER-DOWNGRADE-RW: FAIL");
+                sys_exit(1);
+            };
+            let rw_address = rw_pointer as usize;
+            let wrote = unsafe {
+                core::ptr::write_volatile(rw_pointer, DOWNGRADE_BYTE);
+                core::ptr::read_volatile(rw_pointer) == DOWNGRADE_BYTE
+            };
+            println(&format!(
+                "S22-RV64-GRANT-PAIR-RECEIVER-DOWNGRADE-RW: {}",
+                if wrote { "OK" } else { "FAIL" }
+            ));
+            if !wrote {
+                sys_exit(1);
+            }
+            // Same grant, same recipient, stricter rights.
+            send_byte(owner, WANT_DOWNGRADE_RO);
+            if recv_byte_from(owner).is_none() {
+                println("S22-RV64-GRANT-PAIR-RECEIVER-DOWNGRADE-RESHARE: NO-ACK");
+                sys_exit(1);
+            }
+            // The address must still resolve, still hold the byte written above
+            // (a dropped mapping would fault on the load instead), and refuse the
+            // store (the old writable PTE is what the re-share had to remove).
+            let Some(ro_pointer) = sys_grant_slice(id_down) else {
+                println("S22-RV64-GRANT-PAIR-RECEIVER-DOWNGRADE-READ: MISSING");
+                sys_exit(1);
+            };
+            if ro_pointer as usize != rw_address {
+                println("S22-RV64-GRANT-PAIR-RECEIVER-DOWNGRADE-READ: MOVED");
+                sys_exit(1);
+            }
+            let observed = unsafe { core::ptr::read_volatile(ro_pointer) };
+            if observed != DOWNGRADE_BYTE {
+                println(&format!(
+                    "S22-RV64-GRANT-PAIR-RECEIVER-DOWNGRADE-READ: MISMATCH {observed:#x}"
+                ));
+                sys_exit(1);
+            }
+            println(&format!(
+                "S22-RV64-GRANT-PAIR-RECEIVER-DOWNGRADE-READ: OK (read {observed:#x})"
+            ));
+            println("S22-RV64-GRANT-PAIR-RECEIVER-DOWNGRADE-WRITE: FAULT-EXPECTED");
+            deliberate_store(ro_pointer);
+            println("S22-RV64-GRANT-PAIR-RECEIVER-DOWNGRADE-WRITE: WROTE");
         }
         "unregister" => {
             let Some(pointer) = sys_grant_slice(id_reg) else {

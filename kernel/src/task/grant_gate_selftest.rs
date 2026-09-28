@@ -18,6 +18,9 @@
 //!   * a retired private root is not a capability: it gets the alloc-safe `0` and
 //!     the `usize::MAX` slice sentinel;
 //!   * Tier-1 SAS→SAS grants keep their exact behaviour;
+//!   * a revoked domain record refuses a new receiver slice, a new owner slice and
+//!     a new share whether its revoke completed or deferred, and its receiver
+//!     mapping is gone either way;
 //!   * the denies themselves consume and leak no frame.
 //!
 //! Emits one marker per property, plus a single terminal:
@@ -83,6 +86,9 @@ struct GateProbe {
     retired: bool,
     sas: bool,
     frames: bool,
+    /// The post-revoke refusal invariant, and whether the revoke deferred.
+    retire_refusal: bool,
+    retire_deferred: bool,
 }
 
 impl GateProbe {
@@ -95,6 +101,7 @@ impl GateProbe {
             && self.retired
             && self.sas
             && self.frames
+            && self.retire_refusal
     }
 }
 
@@ -133,6 +140,48 @@ fn ledger_has(space: &Arc<AddressSpace>, va: usize, bits: usize) -> bool {
     space.ledger().into_iter().any(|entry| {
         entry.virtual_address == va && entry.kind == MappingKind::Grant && entry.flags.bits() & bits == bits
     })
+}
+
+/// Revoke `grant_id` and assert the post-revoke refusal invariant.
+///
+/// `GrantFree` may complete or defer: an unacknowledged remote invalidation — the
+/// fail-closed outcome when a peer hart stops acknowledging mid-boot — leaves the
+/// record `Revoking` with its frames retained. `RetireProbe` covers both, because
+/// *both* outcomes must refuse a new receiver slice, a new owner slice and a new
+/// share of the record, and must have removed the receiver mapping.
+///
+/// Positive control: property 3 published a live `ReadOnly` mapping of this same
+/// grant into `receiver_space` and resolved it, so every refusal below is a state
+/// change rather than the absence of one. A revoke that silently did nothing
+/// leaves the record `Live` and the re-share succeeds — the probe is then false.
+struct RetireProbe {
+    invariant: bool,
+    /// The revoke could not be acknowledged and was left for the retry sweep.
+    deferred: bool,
+}
+
+fn retire_probe(grant_id: usize, receiver_space: &Arc<AddressSpace>) -> RetireProbe {
+    let deferred = handle_syscall(DOMAIN_TID, Syscall::GrantFree { grant_id }).is_err();
+    let receiver_slice_refused =
+        matches!(grant_slice(DOMAIN_RECEIVER_TID, grant_id), Ok(usize::MAX));
+    let owner_slice_refused = matches!(grant_slice(DOMAIN_TID, grant_id), Ok(usize::MAX));
+    let share_refused = !grant_share(
+        DOMAIN_TID,
+        grant_id,
+        DOMAIN_RECEIVER_TID,
+        GrantPerm::ReadWrite,
+    );
+    let receiver_mapping_gone = receiver_space
+        .ledger()
+        .into_iter()
+        .all(|entry| entry.virtual_address != grant_id);
+    RetireProbe {
+        invariant: receiver_slice_refused
+            && owner_slice_refused
+            && share_refused
+            && receiver_mapping_gone,
+        deferred,
+    }
 }
 
 /// Drive every grant entry point and return what the ABI observed.
@@ -230,18 +279,38 @@ fn probe(
     };
 
     // Teardown: release whatever the probe published, then prove the denies
-    // themselves did not consume or leak a frame.
+    // themselves did not consume or leak a frame. The domain owner's own
+    // `GrantFree` is also the post-revoke refusal invariant (see `retire_probe`),
+    // so it is attempted exactly once here.
     if let Some(grant_id) = sas_grant {
         let _ = handle_syscall(SAS_OWNER_TID, Syscall::GrantFree { grant_id });
     }
-    if let Some(grant_id) = domain_grant {
-        let _ = handle_syscall(DOMAIN_TID, Syscall::GrantFree { grant_id });
-    }
-    if let Some(reg_id) = domain_reg {
-        let _ = handle_syscall(DOMAIN_TID, Syscall::GrantUnregister { reg_id });
-    }
+    let retire = match domain_grant {
+        Some(grant_id) => retire_probe(grant_id, receiver_space),
+        None => RetireProbe {
+            invariant: false,
+            deferred: false,
+        },
+    };
+    let reg_deferred = match domain_reg {
+        Some(reg_id) => handle_syscall(DOMAIN_TID, Syscall::GrantUnregister { reg_id }).is_err(),
+        None => false,
+    };
+    // A revoke that could not be acknowledged retains its frames *by design*: an
+    // unacknowledged remote invalidation must never put a page back in the free
+    // pool. The leak check is therefore taken against the two rows the probe
+    // itself may still hold, before the retirement sweep retries them — a flat
+    // `== baseline` would call the deferred path a leak.
+    let pages = GRANT_SIZE.div_ceil(PAGE_SIZE);
+    let retained_by_design =
+        pages * (usize::from(retire.deferred) + usize::from(reg_deferred));
+    let before_sweep = free_frames();
+    let accounted = before_sweep + retained_by_design == baseline;
     super::syscall::reclaim_owned_grants(DOMAIN_TID);
-    let frames = free_frames() == baseline;
+    let after_sweep = free_frames();
+    // The sweep may complete a deferred revoke (returning frames) but can never
+    // retain more than the attempt already did, nor push the pool above baseline.
+    let frames = accounted && after_sweep >= before_sweep && after_sweep <= baseline;
 
     GateProbe {
         alloc,
@@ -252,6 +321,8 @@ fn probe(
         retired,
         sas,
         frames,
+        retire_refusal: retire.invariant,
+        retire_deferred: retire.deferred,
     }
 }
 
@@ -302,7 +373,15 @@ pub(crate) fn run_primary() {
     report("S22-RV64-GRANT-GATE-SLICE", probe.slice);
     report("S22-RV64-GRANT-GATE-RETIRED", probe.retired);
     report("S22-RV64-GRANT-GATE-SAS", probe.sas);
+    report("S22-RV64-GRANT-GATE-RETIRE-REFUSAL", probe.retire_refusal);
     report("S22-RV64-GRANT-GATE-FRAMES", probe.frames);
+    // Which outcome the revoke took is reported rather than asserted: the
+    // invariant above must hold for both, and a two-hart boot whose peer stops
+    // acknowledging legitimately takes the deferred one.
+    log::info!(
+        "S22-RV64-GRANT-GATE-RETIRE-OUTCOME: {}",
+        if probe.retire_deferred { "DEFERRED" } else { "COMPLETED" }
+    );
 
     if probe.all() {
         log::info!("S22-RV64-GRANT-GATE: PASS");

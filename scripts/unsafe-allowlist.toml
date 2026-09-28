@@ -38,6 +38,20 @@ approver = "dmin"
 date = "2026-09-06"
 
 [[file]]
+path = "cells/tests/tier2-grant-owner/src/main.rs"
+class = "test-harness"
+reason = "Phase-03 Tier-2 grant owner: volatile read/write of the owner mapping GrantAlloc/GrantSlice return is the property under test (the returned pointer must be writable by its owner)."
+approver = "dmin"
+date = "2026-09-28"
+
+[[file]]
+path = "cells/tests/tier2-grant-receiver/src/main.rs"
+class = "test-harness"
+reason = "Phase-03 Tier-2 grant receiver: reads and deliberately stores through the receiver mapping GrantSlice returns, so a revoked or read-only receiver PTE faults in the cell where the runner can attribute it."
+approver = "dmin"
+date = "2026-09-28"
+
+[[file]]
 path = "cells/demos/doom/src/main.rs"
 class = "c-ffi"
 reason = "C FFI (Tier 1b): extern \"C\" calls across the mlibc boundary are unsafe by construction; the C side is outside the Rust type system entirely."
@@ -585,6 +599,20 @@ class = "test-violation"
 reason = "Owns deliberate NULL write in cells/tests/tier2-exploit/ to prove Tier 2 hardware Page Fault containment"
 approver = "dmin"
 date = "2026-09-06"
+
+[[crate]]
+name = "tier2-grant-owner"
+class = "test-violation"
+reason = "Phase-03 Tier-2 grant pair producer: the crate root must dereference the raw pointer GrantAlloc/GrantSlice return to prove the owner mapping is writable; see its [[file]] entry."
+approver = "dmin"
+date = "2026-09-28"
+
+[[crate]]
+name = "tier2-grant-receiver"
+class = "test-violation"
+reason = "Phase-03 Tier-2 grant pair consumer: the crate root must store through the raw pointer GrantSlice returns, since that store is the fault witness; see its [[file]] entry."
+approver = "dmin"
+date = "2026-09-28"
 
 [[crate]]
 name = "service-compositor"
