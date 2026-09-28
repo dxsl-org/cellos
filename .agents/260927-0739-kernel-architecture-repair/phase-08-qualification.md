@@ -215,10 +215,27 @@ reached) — suite **11 passed / 0 failed**; host lane 184 passed; `-D warnings`
 board-configuration gate exit 0; AArch64 test-hooks lane exit 0 (single-hart, unchanged); RV64 1-hart
 and 2-hart case sets exit 0.
 
-Still missing on this axis: EL2 secondary bring-up, the AArch64 retirement/root-switch argument that
-domains need before a second hart can run cells (a two-hart test-hooks boot defers every release whose
-peer is busy: 25 acknowledged epochs, then `AwaitingSafeRoot`), and the BCM2836 SGI path for
-`board-rpi3`.
+### Domains on two harts: measured, still not qualified (2026-09-29)
+
+With the idle-context fix in, a two-hart *test-hooks* boot runs the whole domain suite and the
+kernel-side record paths stay clean (`scripts/qemu-aarch64-test-hooks.sh` with `QEMU_SMP=2`): hart 1
+online, the cross-hart IPI answered, a task dispatched to hart 1, no panic, no deferred-record
+integrity error, `[vfs-test] Results: 96 PASS, 0 FAIL` — and 25 acknowledged invalidation epochs
+followed by a small residue of `invalidation unacknowledged` / `AwaitingSafeRoot` entries that the
+deferred machinery retains and retries by design.
+
+What is *not* qualified is the fixtures' fault pattern. The grant pair requires four deliberate
+receiver faults and the two-hart boot produces `id1=1 id2=2 id3=0 id4=1` where the single-hart boot
+produces `id1=1 id2=2 id3=1 id4=1` (same log, same image, `QEMU_SMP` is the only difference): the
+receiver's access at `0x426fe000` **succeeds** on two harts where the single-hart boot takes the fault
+that proves the unregister revoked its mapping. The shape is a receiver that kept running across an
+invalidation this kernel could not confirm on its peer (the same `unacknowledged` residue above) —
+i.e. domain teardown still needs the retirement/root-switch argument for a second hart before domain
+cells can be scheduled on it. The lane therefore keeps `QEMU_SMP=1` as its default and the knob
+records the reproduction.
+
+Still missing on this axis: that retirement/root-switch argument, EL2 secondary bring-up, and the
+BCM2836 SGI path for `board-rpi3`.
 
 ## Assumptions / risk / rollback
 - [UNVERIFIED] All required emulators/physical boards are accessible to CI; where not, mark named qualification gate unresolved and retain disabled profile, not a passing placeholder. Rollback to known-safe image with domain admission and snapshot disabled; reimage development storage if a corrupted snapshot was ever replayed. Security exposure or overwritten external data cannot be rolled back by a binary revert.

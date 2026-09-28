@@ -10,6 +10,19 @@ set -euo pipefail
 KERNEL="${1:-target/aarch64-unknown-none-softfloat/release/cellos-kernel-test-hooks}"
 DISK="${2:-disk_arm_virt.img}"
 BOOT_WINDOW="${BOOT_WINDOW:-35}"
+# CPUs to boot with. The kernel-side SMP path is exercised explicitly with
+# `QEMU_SMP=2`, which turns on the markers below; the domain fixtures stay on one
+# CPU by default because their fault *pattern* is a single-hart expectation.
+#
+# Measured at `QEMU_SMP=2` (2026-09-29): every kernel-side marker holds — hart 1
+# online, the cross-hart IPI answered, a task dispatched to hart 1, no panic, no
+# deferred-record integrity error, vfs-test 96/0 — but the grant pair's fault
+# counts come out `id1=1 id2=2 id3=0 id4=1` where it requires `id3=1`: the
+# receiver's access at 0x426fe000 *succeeded* where the single-hart boot faults
+# it. A receiver that ran ahead of an unconfirmed remote invalidation is the
+# likely shape, i.e. this is the retirement/root-switch argument the plan lists
+# as the blocker for domains on more than one hart — not a fixture regression.
+QEMU_SMP="${QEMU_SMP:-1}"
 DEVELOPMENT_SILO="${CELLOS_AARCH64_TEST_HOOKS_DEVELOPMENT_SILO:-0}"
 if [[ "$DEVELOPMENT_SILO" != "0" && "$DEVELOPMENT_SILO" != "1" ]]; then
     echo "FAIL: CELLOS_AARCH64_TEST_HOOKS_DEVELOPMENT_SILO must be exactly 0 or 1" >&2
@@ -46,6 +59,7 @@ QEMU_ARGS=(
     -machine "$MACHINE"
     -cpu cortex-a57
     -m 256M
+    -smp "$QEMU_SMP"
     -nographic
     -kernel "$KERNEL"
     -no-reboot
@@ -79,6 +93,21 @@ if grep -qia "KERNEL PANIC\|panicked" "$LOG"; then
     echo "FAIL: kernel panic detected during aarch64 test-hooks boot" >&2
     grep -ai "PANIC\|panic" "$LOG" | head -20
     exit 1
+fi
+
+# ── SMP ──────────────────────────────────────────────────────────────────────
+# A second hart has to be *started*, has to answer the kernel's cross-hart IPI,
+# and has to be handed a task — a hart that is online but deaf, or online but
+# never scheduling, looks exactly like a healthy single-hart boot. Only asserted
+# when the machine was actually given more than one CPU.
+if [[ "$QEMU_SMP" -gt 1 ]]; then
+    for marker in "[smp] hart 1 online, parked" "[selftest] SMP-IPI: PASS hart=1" "[sched] hart 1 dispatched a task"; do
+        if ! grep -qaF "$marker" "$LOG"; then
+            echo "FAIL: missing SMP marker with -smp $QEMU_SMP: $marker" >&2
+            grep -a "\[smp\]\|\[sched\]" "$LOG" | head -20
+            exit 1
+        fi
+    done
 fi
 
 # Fault containment is an asserted outcome, not a forbidden one. Every cell fault

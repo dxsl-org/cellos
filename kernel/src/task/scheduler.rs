@@ -383,6 +383,23 @@ impl Scheduler {
         self.resolve_live_cell_owner(cell_id, owner.generation)
     }
 
+    /// Is `generation` still the live generation of `cell_id`?
+    ///
+    /// A deferred terminal record (a fault or an `Exit` captured in trap context)
+    /// is consumed later by the hart that published it. In between, a *root*
+    /// exit on another hart can retire the whole generation — including that
+    /// member — and drop its zombie. Such a record is a duplicate of work the
+    /// retirement already did, because retirement is generation-scoped; it is
+    /// terminal, not an integrity error. A record for a generation that is still
+    /// live must match a task or a zombie, and anything else still panics.
+    fn generation_is_live(&self, cell_id: usize, generation: u64) -> bool {
+        matches!(
+            self.cell_owners.get(cell_id),
+            Some(CellOwnerSlot::Live(owner))
+                if owner.cell_id as usize == cell_id && owner.generation == generation
+        )
+    }
+
     fn begin_root_retirement(&mut self, owner: api::cell_owner::CellOwner) {
         if let Some(slot) = self.cell_owners.get_mut(owner.cell_id as usize) {
             *slot = CellOwnerSlot::Retiring(owner);
@@ -941,6 +958,15 @@ impl Scheduler {
                 // not an invalid cross-generation handoff.
                 return;
             }
+            if !self.generation_is_live(fault.cell_id, fault.generation) {
+                log::info!(
+                    "[fault] cell {} generation {} is already retired; deferred fault for task {} dropped",
+                    fault.cell_id,
+                    fault.generation,
+                    fault.tid,
+                );
+                return;
+            }
             panic!(
                 "[fault] invalid deferred handoff: cell={} generation={} task={} cause={:#x} pc={:#x} addr={:#x}",
                 fault.cell_id,
@@ -986,6 +1012,15 @@ impl Scheduler {
                     && task.cell_generation == exit.generation
             });
             if already_retired {
+                return;
+            }
+            if !self.generation_is_live(exit.cell_id, exit.generation) {
+                log::info!(
+                    "[task] cell {} generation {} is already retired; deferred Exit for task {} dropped",
+                    exit.cell_id,
+                    exit.generation,
+                    exit.tid,
+                );
                 return;
             }
             panic!(
