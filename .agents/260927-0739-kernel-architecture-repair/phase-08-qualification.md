@@ -198,13 +198,16 @@ Delivered (all on the production AArch64 image):
   for the epoch: `[selftest] SMP-IPI: PASS hart=1 epoch=1`. Without it a hart that is online but deaf
   to the IPI looks identical to a healthy one.
 
-**The second hart is online but accepts no task dispatch yet.** With hart 1 scheduling, the first
+**Multi-CPU admission: root-caused and fixed in the same round.** With hart 1 scheduling, the first
 task it picked — including by work stealing from hart 0 — faulted in kernel mode at `PC=0`
-(`ec=0x21 elr=0x0 spsr=0x3C5`, an instruction abort on the current EL); three of three `-smp 2` boots
-died that way. `smp::accepts_task_dispatch()` now returns false for `HART_RT` on AArch64 and both
-`push_ready` and `pick_next_local` consult it, so the hart takes ticks and maintenance IPIs and runs
-no tasks. After that gate: **3/3 `-smp 2` production boots reach the shell with no panic** and the IPI
-self-check passing.
+(`ec=0x21 elr=0x0 spsr=0x3C5`), in three of three `-smp 2` boots. The cause was the *idle* context:
+AArch64 had a single `BOOT_CONTEXT` static — the slot a hart that has never run a task saves itself
+into — while RV64 has one per hart. Hart 1's incoming switch therefore restored whatever hart 0 had
+last saved there, `elr_el1 = 0` included, and `eret` took the kernel to address zero.
+`BOOT_CONTEXTS[hart]` (one slot per hart) replaces it, and with dispatch enabled **3/3 `-smp 2`
+production boots reach the shell, answer the IPI, and log `[sched] hart 1 dispatched a task`** — the
+once-per-hart line that distinguishes a hart that schedules from one that merely takes interrupts. The
+temporary `accepts_task_dispatch` gate is gone.
 
 Evidence: `aarch64_smp_second_hart_online` (new row: `-smp 2`, hart online, IPI answered, shell
 reached) — suite **11 passed / 0 failed**; host lane 184 passed; `-D warnings` clean for RV64
@@ -212,9 +215,10 @@ reached) — suite **11 passed / 0 failed**; host lane 184 passed; `-D warnings`
 board-configuration gate exit 0; AArch64 test-hooks lane exit 0 (single-hart, unchanged); RV64 1-hart
 and 2-hart case sets exit 0.
 
-Still missing on this axis: task dispatch to hart 1 (the fault above), EL2 secondary bring-up, the
-AArch64 retirement/root-switch argument that domains need before a second hart can run cells, and the
-BCM2836 SGI path for `board-rpi3`.
+Still missing on this axis: EL2 secondary bring-up, the AArch64 retirement/root-switch argument that
+domains need before a second hart can run cells (a two-hart test-hooks boot defers every release whose
+peer is busy: 25 acknowledged epochs, then `AwaitingSafeRoot`), and the BCM2836 SGI path for
+`board-rpi3`.
 
 ## Assumptions / risk / rollback
 - [UNVERIFIED] All required emulators/physical boards are accessible to CI; where not, mark named qualification gate unresolved and retain disabled profile, not a passing placeholder. Rollback to known-safe image with domain admission and snapshot disabled; reimage development storage if a corrupted snapshot was ever replayed. Security exposure or overwritten external data cannot be rolled back by a binary revert.

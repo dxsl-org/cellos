@@ -342,9 +342,10 @@ fn aarch64_periph_demo_gpio() {
 /// bring-up — hart 1 online with its own trap vector and interrupts enabled, and
 /// the cross-hart IPI answered *by that hart* (the request is delivered as a GIC
 /// SGI and the acknowledgement comes out of hart 1's trap path; a hart that is
-/// online but deaf would otherwise look perfectly healthy). The machine is then
-/// required to finish booting: the shell prompt is the proof that bringing a
-/// second hart up did not cost the system the rest of its boot.
+/// online but deaf would otherwise look perfectly healthy), the scheduler
+/// handing that hart a task, and the machine finishing its boot: the shell
+/// prompt is the proof that bringing a second hart up did not cost the system
+/// the rest of its boot.
 #[test]
 fn aarch64_smp_second_hart_online() {
     if !prerequisites_ok() {
@@ -362,6 +363,17 @@ fn aarch64_smp_second_hart_online() {
         .unwrap_or_else(|e| {
             panic!(
                 "hart 1 never acknowledged the cross-hart IPI: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
+    // A hart that takes interrupts but is never handed a task is
+    // indistinguishable from one that schedules, so the dispatch itself is
+    // required too — it is emitted once per hart, the first time one is given
+    // work.
+    qemu.wait_for("[sched] hart 1 dispatched a task", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| {
+            panic!(
+                "hart 1 never ran a task: {e}\n--- output ---\n{}",
                 qemu.dump()
             )
         });
