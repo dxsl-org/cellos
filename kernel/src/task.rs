@@ -9,7 +9,7 @@ pub mod completion_selftest;
 pub mod completion_wait;
 pub(crate) mod copy_glue;
 pub mod dir_inherit;
-#[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+#[cfg(all(feature = "native-domains", any(target_arch = "riscv64", all(target_arch = "aarch64", feature = "test-hooks"))))]
 pub(crate) mod domain_grant;
 #[cfg(all(
     feature = "native-domains",
@@ -23,7 +23,11 @@ pub(crate) mod domain_switch;
 #[cfg(all(
     feature = "native-domains",
     feature = "test-hooks",
-    any(target_arch = "riscv64", target_arch = "aarch64")
+    any(
+        target_arch = "riscv64",
+        target_arch = "aarch64",
+        target_arch = "x86_64"
+    )
 ))]
 pub(crate) mod domain_switch_tests;
 mod elf_prepare;
@@ -31,11 +35,12 @@ mod elf_prepare;
 pub mod fstat_selftest;
 /// Futex wait queues — wait-on-address for cell threads (ADR-0018 §2.1).
 pub(crate) mod futex;
-/// Phase-01 containment witness for domain-backed zero-copy grants.
+/// Phase-01 containment witness for domain-backed zero-copy grants, and the
+/// phase-03 capability witness on every architecture whose lifecycle is open.
 #[cfg(all(
     feature = "native-domains",
     feature = "test-hooks",
-    target_arch = "riscv64"
+    any(target_arch = "riscv64", target_arch = "aarch64")
 ))]
 pub(crate) mod grant_gate_selftest;
 /// Phase-06 witness: an RT sender woken by a consume preempts its target hart.
@@ -945,7 +950,7 @@ pub(crate) fn complete_incoming_switch(hart: usize) {
     #[cfg(all(
         feature = "native-domains",
         feature = "test-hooks",
-        target_arch = "aarch64"
+        any(target_arch = "aarch64", target_arch = "x86_64")
     ))]
     crate::task::domain_switch_tests::observe_incoming_live_root();
     // Same point, opposite edge: this is where the displaced root's release was
@@ -953,7 +958,7 @@ pub(crate) fn complete_incoming_switch(hart: usize) {
     #[cfg(all(
         feature = "native-domains",
         feature = "test-hooks",
-        target_arch = "aarch64"
+        any(target_arch = "aarch64", target_arch = "x86_64")
     ))]
     crate::task::domain_switch_tests::observe_domain_teardown(hart);
 }

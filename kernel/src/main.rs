@@ -1093,7 +1093,11 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         log_info("Tier 2 admission: DISABLED (fleet profile) — domain-class artifacts are denied");
     }
     #[cfg(all(
-        any(target_arch = "riscv64", target_arch = "aarch64"),
+        any(
+            target_arch = "riscv64",
+            target_arch = "aarch64",
+            target_arch = "x86_64"
+        ),
         feature = "native-domains",
         feature = "test-hooks"
     ))]
@@ -1121,6 +1125,30 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         task::domain_grant::run_selftest();
         task::grant_gate_selftest::run_primary();
         task::rt_wake_selftest::self_test();
+    }
+
+    // Phase 03 domain grant lifecycle on AArch64 test images. The same
+    // kernel-side fixtures the RV64 lane runs drive the production
+    // `handle_syscall` entry points with real `TaskAddressSpace::Domain` tasks:
+    // rights, transactional publish, revoke and the deferred outcome. They are
+    // not the two-cell public handoff, which stays RV64-only (`grant-pair`,
+    // `cells/tests/tier2-grant-*`).
+    //
+    // Skipped at EL2 for the same reason `enable_for_boot` refuses there: the
+    // EL2 switch has no root argument, so the machine cannot enter a private
+    // root and the fixture would report against a root it cannot run.
+    #[cfg(all(
+        target_arch = "aarch64",
+        feature = "native-domains",
+        feature = "test-hooks"
+    ))]
+    if crate::hal::aarch64::el2::is_el2() {
+        log::info!(
+            "[grant] AArch64 EL2 (development-Silo machine): domain grant fixtures skipped"
+        );
+    } else {
+        task::domain_grant::run_selftest();
+        task::grant_gate_selftest::run_primary();
     }
 
     // Page-table teardown primitives behind runtime cap revoke (`.agents/260712-1901`
@@ -1350,6 +1378,27 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     #[cfg(any(target_arch = "x86_64", target_arch = "x86", target_arch = "arm"))]
     crate::hal::ARCH.enable_interrupts();
 
+    // Test images keep kernel Info live.
+    //
+    // The quieting above exists for the interactive console, and production keeps
+    // it. A test image cannot: the witnesses a domain-entry lane reads are emitted
+    // *after* init and the cells are running, which is the point of the lane. On
+    // AArch64 the boot happens to never reach this line with a task pending (the
+    // interrupt enable just above drops straight into the scheduler), so its lane
+    // has always read Info-level witnesses (`S22-AARCH64-DOMAIN-LIVE`,
+    // `DOMAIN-FRAME-RELEASE`). On x86_64 the boot does continue into the idle loop,
+    // so the same class of witnesses (`S22-X86-DOMAIN-LIVE`,
+    // `S22-X86-DOMAIN-TEARDOWN`, `[selftest] DOMAIN-FRAME-RELEASE`) would be
+    // silenced here. `test-hooks` only — no production image is affected.
+    //
+    // It *replaces* the quieting rather than undoing it afterwards: which of the
+    // two statements ran first used to be a race — kmain's tail executes only
+    // after the scheduler hands the boot context back — and a witness emitted
+    // before the quieting landed was dropped, so the same image could lose or keep
+    // a marker between runs.
+    #[cfg(all(feature = "test-hooks", target_arch = "x86_64"))]
+    log::set_max_level(log::LevelFilter::Info);
+    #[cfg(not(all(feature = "test-hooks", target_arch = "x86_64")))]
     log::set_max_level(log::LevelFilter::Warn);
 
     // Probe 'Q': fires ONLY if no IRQ preempted the code between daifclr and here.

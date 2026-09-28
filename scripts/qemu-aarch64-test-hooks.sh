@@ -233,7 +233,53 @@ if [[ "$DEVELOPMENT_SILO" != "1" ]]; then
         # a domain was switched away from.
         "[selftest] DOMAIN-FRAME-RELEASE: PASS"
         "S22-AARCH64-DOMAIN-TEARDOWN: PASS releases="
+        # Phase 03 domain grant lifecycle on this architecture. The kernel-side
+        # fixtures drive the production `handle_syscall` entry points with two
+        # real `TaskAddressSpace::Domain` tasks, so every property below is an
+        # ABI observation: the owner's backing is supervisor-only in the SAS root
+        # and RW+NX in its own root; ReadOnly resolves R+NX and ReadWrite RW+NX;
+        # write-only and foreign peers are refused; revoke removes both PTEs and
+        # refuses a re-slice; a failed second page undoes the first; a retired
+        # root keeps the alloc/slice sentinels; and the post-revoke record
+        # refuses a receiver slice, an owner slice and a re-share.
+        #
+        # This is one PE, so a deferred invalidation is not a legitimate outcome
+        # here (no remote hart can be unacknowledged) — the lane already fails a
+        # deferred domain release above, so `-SLICE-RW`/`-REVOKE` are required in
+        # their first-attempt form rather than the RV64 lane's invariant form.
+        "S22-AARCH64-GRANT-REVOKE-OWNER-MAPPED: PASS"
+        "S22-AARCH64-GRANT-REVOKE-OWNER-SLICE: PASS"
+        "S22-AARCH64-GRANT-REVOKE-SLICE-RO: PASS"
+        "S22-AARCH64-GRANT-REVOKE-SLICE-RW: PASS"
+        "S22-AARCH64-GRANT-REVOKE-WO-REFUSED: PASS"
+        "S22-AARCH64-GRANT-REVOKE-FOREIGN-PEER: PASS"
+        "S22-AARCH64-GRANT-REVOKE-REVOKE: PASS"
+        "S22-AARCH64-GRANT-REVOKE-FRAME-REUSE: PASS"
+        "S22-AARCH64-GRANT-REVOKE-PARTIAL-MAP: PASS"
+        "S22-AARCH64-GRANT-REVOKE-DEAD-ROOT: PASS"
+        "S22-AARCH64-GRANT-REVOKE: PASS"
+        "S22-AARCH64-GRANT-GATE-ALLOC: PASS"
+        "S22-AARCH64-GRANT-GATE-REGISTER: PASS"
+        "S22-AARCH64-GRANT-GATE-WO: PASS"
+        "S22-AARCH64-GRANT-GATE-SHARE: PASS"
+        "S22-AARCH64-GRANT-GATE-SLICE: PASS"
+        "S22-AARCH64-GRANT-GATE-RETIRED: PASS"
+        "S22-AARCH64-GRANT-GATE-SAS: PASS"
+        "S22-AARCH64-GRANT-GATE-RETIRE-REFUSAL: PASS"
+        "S22-AARCH64-GRANT-GATE-FRAMES: PASS"
+        "S22-AARCH64-GRANT-GATE: PASS"
+        # One PE: the revoke must be acknowledged on its first attempt, so the
+        # recorded outcome is part of the requirement rather than informational.
+        "S22-AARCH64-GRANT-GATE-RETIRE-OUTCOME: COMPLETED"
     )
+    # The marker prefix is architecture-honest: an AArch64 boot that emitted an
+    # RV64-tagged grant marker would satisfy a lane's requirement with another
+    # architecture's evidence, so it is refused outright.
+    if grep -qaE 'S22-RV64-GRANT' "$LOG"; then
+        echo "FAIL: an AArch64 boot emitted an RV64-tagged grant marker:" >&2
+        grep -aE 'S22-RV64-GRANT' "$LOG" | head -5 >&2
+        exit 1
+    fi
 fi
 if [[ "$DEVELOPMENT_SILO" == "1" ]]; then
     REQUIRED_MARKERS+=(

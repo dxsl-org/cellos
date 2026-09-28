@@ -252,12 +252,16 @@ cp "$REL/app-init" "$TH_DIR/init"
 echo "   init: $(du -sh "$TH_DIR/init" | cut -f1)"
 
 echo "==> Building test-hooks kernel (aarch64, PIC)..."
+# `native-domains` is in the crate's default features, but the phase-02 Tier-2
+# entry and the phase-03 domain grant fixtures are gated on it, so it is named
+# here: a default-feature change must not silently turn this lane's domain
+# assertions into no-ops.
 EMBEDDED_OVERRIDE="$TH_DIR" \
 RUSTFLAGS="-D warnings -C relocation-model=pic" \
 cargo build --release \
     --target aarch64-unknown-none-softfloat \
     -Z build-std=core,alloc \
-    --features test-hooks \
+    --features test-hooks,native-domains \
     -p cellos-kernel
 
 cp "$REL/cellos-kernel" "$REL/cellos-kernel-test-hooks"

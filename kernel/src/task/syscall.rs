@@ -7,9 +7,9 @@ use super::tcb::TaskState;
 use crate::sync::Spinlock;
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::string::String;
-/// Only the RV64 private-root lifecycle helpers below name `Arc`; every other
+/// Only the private-root lifecycle helpers below name `Arc`; every other
 /// target/feature combination has nothing to import.
-#[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+#[cfg(all(feature = "native-domains", any(target_arch = "riscv64", all(target_arch = "aarch64", feature = "test-hooks"))))]
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use api::syscall::ViSpawnArgs;
@@ -227,18 +227,63 @@ fn domain_grant_task(_tid: usize) -> bool {
 
 /// Is the domain grant lifecycle implemented for this target tuple?
 ///
-/// Phase 03 ratifies the private-root lifecycle on RV64 only. AArch64 and
-/// x86_64 keep the phase-01 denial byte-for-byte: the ordered-switch completion
-/// those targets need is not proven, so no entry point may publish a domain
-/// record there.
-#[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+/// Phase 03 ratified the private-root lifecycle on RV64. Phase 02's AArch64
+/// reopen (`loader::domain_admission::switch_ordering_qualified`) makes the same
+/// lifecycle executable on AArch64 **test images**: that entry writes the
+/// incoming root inside `Context::switch` (`switch_with_root` programs
+/// `TTBR0_EL1` after the outgoing context is stored), and AArch64 invalidation
+/// already uses non-global private leaves plus deferred release, so the state
+/// machine needs no architecture-specific step beyond this cfg.
+///
+/// x86_64 stays closed: it grew the same in-switch root write but has no
+/// root-switch witness, so no entry point may publish a domain record there.
+/// AArch64 production builds are pinned below.
 const fn domain_grant_lifecycle_supported() -> bool {
-    true
+    cfg!(all(
+        feature = "native-domains",
+        any(
+            target_arch = "riscv64",
+            all(target_arch = "aarch64", feature = "test-hooks")
+        )
+    ))
 }
-#[cfg(not(all(feature = "native-domains", target_arch = "riscv64")))]
-const fn domain_grant_lifecycle_supported() -> bool {
-    false
-}
+
+/// The phase-01 denial sentinels, named so the production pin below asserts the
+/// exact values the entry points return rather than restating literals.
+///
+/// * `GrantAlloc`/`GrantRegister` deny with `Ok(0)` — a cell-side wrapper reads
+///   any nonzero return as a grant id, so `0` is the alloc-safe refusal.
+/// * `GrantSlice` denies with `usize::MAX` — the established "not authorized"
+///   resolution sentinel.
+/// * `GrantFree`/`GrantUnregister` deny with `Err(PermissionDenied)`.
+const GRANT_DENY_ALLOC: usize = 0;
+const GRANT_DENY_SLICE: usize = usize::MAX;
+const GRANT_DENY_ERROR: SyscallError = SyscallError::PermissionDenied;
+
+/// The phase-03 AArch64 reopen is confined to test images, and the shapes that
+/// stay denied keep the phase-01 sentinels byte-for-byte.
+///
+/// A production AArch64 build (no `test-hooks`) has no domain grant lifecycle,
+/// so [`domain_grant_capable`] is always `false` and every domain shape takes
+/// the sentinel branch ahead of the lifecycle: `Ok(0)` for allocation, `usize::MAX`
+/// for a slice, `Err(PermissionDenied)` for free/unregister. Const-evaluated, so
+/// a build that widened the cfg by accident fails to compile rather than booting
+/// a domain grant path.
+///
+/// `GrantShare` has no sentinel branch — its gate lives in the lifecycle-only
+/// block, so on a closed target it is reachable only for a domain task, and no
+/// domain can be admitted on a closed target (`switch_ordering_qualified`).
+#[cfg(all(
+    feature = "native-domains",
+    target_arch = "aarch64",
+    not(feature = "test-hooks")
+))]
+const _: () = {
+    assert!(!domain_grant_lifecycle_supported());
+    assert!(GRANT_DENY_ALLOC == 0);
+    assert!(GRANT_DENY_SLICE == usize::MAX);
+    assert!(matches!(GRANT_DENY_ERROR, SyscallError::PermissionDenied));
+};
 
 /// A private root, on the targets that have one.
 ///
@@ -306,7 +351,7 @@ fn domain_grant_capable(tid: usize) -> bool {
 /// The frames stay supervisor-only in the SAS/global root: this path never
 /// publishes USER access there, so a SAS cell cannot reach a domain owner's
 /// backing even if the grant later collapses.
-#[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+#[cfg(all(feature = "native-domains", any(target_arch = "riscv64", all(target_arch = "aarch64", feature = "test-hooks"))))]
 fn map_domain_owner_pages(
     space: &DomainRoot,
     base: usize,
@@ -348,7 +393,7 @@ fn map_domain_owner_pages(
 /// (the phase-01 leak). The boot identity map already covers every usable
 /// frame supervisor RWX, so zeroing needs no remap at all; the caller then maps
 /// the owner's own private root over the returned base.
-#[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+#[cfg(all(feature = "native-domains", any(target_arch = "riscv64", all(target_arch = "aarch64", feature = "test-hooks"))))]
 fn alloc_grant_pages_supervisor_only(n_pages: usize) -> Option<usize> {
     use crate::memory::frame::FRAME_ALLOCATOR;
     const PAGE_SIZE: usize = 4096;
@@ -365,37 +410,37 @@ fn alloc_grant_pages_supervisor_only(n_pages: usize) -> Option<usize> {
 }
 
 /// The lifecycle record behind a table row, where this target can hold one.
-#[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+#[cfg(all(feature = "native-domains", any(target_arch = "riscv64", all(target_arch = "aarch64", feature = "test-hooks"))))]
 type DomainRecord = Arc<super::domain_grant::DomainGrant>;
 
 /// On every other target a row can never carry a lifecycle record:
 /// [`clone_domain_record`] is the only producer and always yields `None`, so the
 /// stubs below are unreachable rather than a second implementation.
-#[cfg(not(all(feature = "native-domains", target_arch = "riscv64")))]
+#[cfg(not(all(feature = "native-domains", any(target_arch = "riscv64", all(target_arch = "aarch64", feature = "test-hooks")))))]
 type DomainRecord = ();
 
 /// Clone the lifecycle record a row carries, if any.
 ///
 /// The lifecycle exists on one target tuple only; on every other target the
 /// record type has no inhabitants, so this is the sole producer of `None`.
-#[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+#[cfg(all(feature = "native-domains", any(target_arch = "riscv64", all(target_arch = "aarch64", feature = "test-hooks"))))]
 fn clone_domain_record(domain: &Option<DomainRecord>) -> Option<DomainRecord> {
     domain.clone()
 }
-#[cfg(not(all(feature = "native-domains", target_arch = "riscv64")))]
+#[cfg(not(all(feature = "native-domains", any(target_arch = "riscv64", all(target_arch = "aarch64", feature = "test-hooks")))))]
 fn clone_domain_record(_domain: &Option<DomainRecord>) -> Option<DomainRecord> {
     None
 }
 
 /// Build the lifecycle record for a domain owner that has just published its
 /// own mapping. Absent — `None` — wherever the lifecycle does not exist.
-#[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+#[cfg(all(feature = "native-domains", any(target_arch = "riscv64", all(target_arch = "aarch64", feature = "test-hooks"))))]
 fn new_domain_record(space: &DomainRoot, base: usize, size: usize) -> Option<DomainRecord> {
     Some(Arc::new(super::domain_grant::DomainGrant::new(
         space, base, size,
     )))
 }
-#[cfg(not(all(feature = "native-domains", target_arch = "riscv64")))]
+#[cfg(not(all(feature = "native-domains", any(target_arch = "riscv64", all(target_arch = "aarch64", feature = "test-hooks")))))]
 fn new_domain_record(_space: &DomainRoot, _base: usize, _size: usize) -> Option<DomainRecord> {
     None
 }
@@ -405,7 +450,7 @@ fn new_domain_record(_space: &DomainRoot, _base: usize, _size: usize) -> Option<
 /// Returns `false` when the receiver or owner invalidation is not acknowledged:
 /// the caller must keep the row (so a retry is idempotent) and must not release
 /// a single frame.
-#[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+#[cfg(all(feature = "native-domains", any(target_arch = "riscv64", all(target_arch = "aarch64", feature = "test-hooks"))))]
 fn revoke_domain_record(record: &DomainRecord, id: usize, kind: &str) -> bool {
     match record.revoke() {
         Ok(()) => true,
@@ -418,13 +463,13 @@ fn revoke_domain_record(record: &DomainRecord, id: usize, kind: &str) -> bool {
         }
     }
 }
-#[cfg(not(all(feature = "native-domains", target_arch = "riscv64")))]
+#[cfg(not(all(feature = "native-domains", any(target_arch = "riscv64", all(target_arch = "aarch64", feature = "test-hooks")))))]
 fn revoke_domain_record(_record: &DomainRecord, _id: usize, _kind: &str) -> bool {
     false
 }
 
 /// Drop the receiver half of a record left unshared by receiver death.
-#[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+#[cfg(all(feature = "native-domains", any(target_arch = "riscv64", all(target_arch = "aarch64", feature = "test-hooks"))))]
 fn drain_domain_receiver(record: &DomainRecord) {
     if record.drain_receiver().is_err() {
         log::warn!(
@@ -433,7 +478,7 @@ fn drain_domain_receiver(record: &DomainRecord) {
         );
     }
 }
-#[cfg(not(all(feature = "native-domains", target_arch = "riscv64")))]
+#[cfg(not(all(feature = "native-domains", any(target_arch = "riscv64", all(target_arch = "aarch64", feature = "test-hooks")))))]
 fn drain_domain_receiver(_record: &DomainRecord) {}
 
 /// A record the lifecycle cannot drain: it names a private-root endpoint but is
@@ -815,7 +860,7 @@ fn unregister_registered_grant(caller_id: usize, reg_id: usize) -> Result<(), Sy
             "[grant] GrantUnregister denied: task {caller_id} is not a live private root \
              (phase-01 denial)"
         );
-        return Err(SyscallError::PermissionDenied);
+        return Err(GRANT_DENY_ERROR);
     }
     let entry = {
         let mut table = reg_grant_table_lock().lock();
@@ -1155,7 +1200,7 @@ pub(crate) fn reclaim_owned_grants(tid: usize) {
 ///
 /// An unacknowledged invalidation never frees a frame. The row loses its owner
 /// so no caller can free it out from under the retry.
-#[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+#[cfg(all(feature = "native-domains", any(target_arch = "riscv64", all(target_arch = "aarch64", feature = "test-hooks"))))]
 fn release_deferred_domain_row(
     key: usize,
     record: DomainRecord,
@@ -1196,7 +1241,7 @@ fn release_deferred_domain_row(
     }
 }
 
-#[cfg(not(all(feature = "native-domains", target_arch = "riscv64")))]
+#[cfg(not(all(feature = "native-domains", any(target_arch = "riscv64", all(target_arch = "aarch64", feature = "test-hooks")))))]
 fn release_deferred_domain_row(
     _key: usize,
     _record: DomainRecord,
@@ -2630,7 +2675,7 @@ fn resolve_and_lease_grant(
 /// revoking the old receiver PTE and shooting it down. Unsupported rights
 /// (write-only) and a non-live or non-domain target are refused with the
 /// established share failure.
-#[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+#[cfg(all(feature = "native-domains", any(target_arch = "riscv64", all(target_arch = "aarch64", feature = "test-hooks"))))]
 fn domain_grant_share_row(
     owner: usize,
     base: usize,
@@ -2675,7 +2720,7 @@ fn domain_grant_share_row(
 /// receiver, a SAS-owned record, an unresolvable or dying owner, a record that
 /// is not `Live`, missing or unsupported rights, a partial receiver mapping, or
 /// an unacknowledged rollback invalidation.
-#[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+#[cfg(all(feature = "native-domains", any(target_arch = "riscv64", all(target_arch = "aarch64", feature = "test-hooks"))))]
 #[allow(clippy::too_many_arguments)]
 fn domain_grant_slice_row(
     owner: usize,
@@ -2730,7 +2775,7 @@ fn domain_grant_slice_row(
 /// GrantSlice entry point for a capable domain receiver: resolve the row in
 /// either table and apply the lifecycle-aware resolver under the same lock that
 /// linearizes teardown.
-#[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+#[cfg(all(feature = "native-domains", any(target_arch = "riscv64", all(target_arch = "aarch64", feature = "test-hooks"))))]
 fn resolve_domain_grant_slice(
     caller_id: usize,
     grant_id: usize,
@@ -7002,17 +7047,17 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     "[grant] GrantAlloc denied: task {caller_id} is not a live private root \
                      (phase-01 denial)"
                 );
-                return Ok(0);
+                return Ok(GRANT_DENY_ALLOC);
             }
             let owner_space = live_domain_space(caller_id);
             let n_pages = size.div_ceil(PAGE_SIZE);
             let paddr = match &owner_space {
-                #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+                #[cfg(all(feature = "native-domains", any(target_arch = "riscv64", all(target_arch = "aarch64", feature = "test-hooks"))))]
                 Some(_) => match alloc_grant_pages_supervisor_only(n_pages) {
                     Some(paddr) => paddr,
                     None => return Ok(0),
                 },
-                #[cfg(not(all(feature = "native-domains", target_arch = "riscv64")))]
+                #[cfg(not(all(feature = "native-domains", any(target_arch = "riscv64", all(target_arch = "aarch64", feature = "test-hooks")))))]
                 Some(_) => return Ok(0),
                 None => match alloc_grant_pages(n_pages) {
                     Some(paddr) => paddr,
@@ -7022,7 +7067,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             // A domain owner's backing is mapped only in its own root, RW+NX, and
             // stays supervisor-only in the SAS root. Every page is undone if any
             // one fails, so no raw pointer is ever published for a partial map.
-            #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+            #[cfg(all(feature = "native-domains", any(target_arch = "riscv64", all(target_arch = "aarch64", feature = "test-hooks"))))]
             if let Some(space) = &owner_space {
                 if let Err(error) = map_domain_owner_pages(space, paddr, n_pages) {
                     log::warn!(
@@ -7077,7 +7122,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             // phase-01 denial.
             let owner_is_domain = domain_grant_task(caller_id);
             let target_is_domain = domain_grant_task(target_cell);
-            #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+            #[cfg(all(feature = "native-domains", any(target_arch = "riscv64", all(target_arch = "aarch64", feature = "test-hooks"))))]
             if owner_is_domain || target_is_domain {
                 let owner_space = live_domain_space(caller_id);
                 let target_space = live_domain_space(target_cell);
@@ -7161,9 +7206,9 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     "[grant] GrantSlice denied: task {caller_id} is not a live private root \
                      (phase-01 denial)"
                 );
-                return Ok(usize::MAX);
+                return Ok(GRANT_DENY_SLICE);
             }
-            #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+            #[cfg(all(feature = "native-domains", any(target_arch = "riscv64", all(target_arch = "aarch64", feature = "test-hooks"))))]
             if let Some(receiver) = live_domain_space(caller_id) {
                 // A private-root receiver resolves the owner's exact rights and
                 // publishes the receiver mapping transactionally; a VFS context
@@ -7194,7 +7239,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     "[grant] GrantFree denied: task {caller_id} is not a live private root \
                      (phase-01 denial)"
                 );
-                return Err(SyscallError::PermissionDenied);
+                return Err(GRANT_DENY_ERROR);
             }
             // Owner-only, and only while no in-flight operation holds the region.
             // The pin check runs inside the table lock (order: PAGE_GRANT_TABLE →
@@ -7420,24 +7465,24 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     "[grant] GrantRegister denied: task {caller_id} is not a live private root \
                      (phase-01 denial)"
                 );
-                return Ok(0);
+                return Ok(GRANT_DENY_ALLOC);
             }
             let owner_space = live_domain_space(caller_id);
             let n_pages = size.div_ceil(PAGE_SIZE);
             let paddr = match &owner_space {
-                #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+                #[cfg(all(feature = "native-domains", any(target_arch = "riscv64", all(target_arch = "aarch64", feature = "test-hooks"))))]
                 Some(_) => match alloc_grant_pages_supervisor_only(n_pages) {
                     Some(paddr) => paddr,
                     None => return Ok(0),
                 },
-                #[cfg(not(all(feature = "native-domains", target_arch = "riscv64")))]
+                #[cfg(not(all(feature = "native-domains", any(target_arch = "riscv64", all(target_arch = "aarch64", feature = "test-hooks")))))]
                 Some(_) => return Ok(0),
                 None => match alloc_grant_pages(n_pages) {
                     Some(paddr) => paddr,
                     None => return Ok(0),
                 },
             };
-            #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+            #[cfg(all(feature = "native-domains", any(target_arch = "riscv64", all(target_arch = "aarch64", feature = "test-hooks"))))]
             if let Some(space) = &owner_space {
                 if let Err(error) = map_domain_owner_pages(space, paddr, n_pages) {
                     log::warn!(

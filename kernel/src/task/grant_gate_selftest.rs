@@ -24,8 +24,9 @@
 //!   * the denies themselves consume and leak no frame.
 //!
 //! Emits one marker per property, plus a single terminal:
-//!   `S22-RV64-GRANT-GATE: PASS` — every property held.
+//!   `S22-<arch>-GRANT-GATE: PASS` — every property held.
 
+use super::domain_grant::ARCH_TAG;
 use super::syscall::{handle_syscall, Syscall, SyscallError};
 use super::tcb::TaskAddressSpace;
 use super::thread_cap_selftest::{insert, mk_task, remove};
@@ -385,9 +386,9 @@ fn probe(
 
 fn report(marker: &str, ok: bool) {
     if ok {
-        log::info!("{marker}: PASS");
+        log::info!("{ARCH_TAG}-GRANT-GATE-{marker}: PASS");
     } else {
-        log::error!("{marker}: FAIL");
+        log::error!("{ARCH_TAG}-GRANT-GATE-{marker}: FAIL");
     }
 }
 
@@ -399,7 +400,7 @@ pub(crate) fn run_primary() {
         build_domain_space(DOMAIN_RECEIVER_VA),
         build_domain_space(RETIRED_VA),
     ) else {
-        log::error!("S22-RV64-GRANT-GATE: FAIL fixture-setup");
+        log::error!("{ARCH_TAG}-GRANT-GATE: FAIL fixture-setup");
         return;
     };
 
@@ -423,26 +424,26 @@ pub(crate) fn run_primary() {
     remove(SAS_OWNER_TID);
     remove(SAS_GRANTEE_TID);
 
-    report("S22-RV64-GRANT-GATE-ALLOC", probe.alloc);
-    report("S22-RV64-GRANT-GATE-REGISTER", probe.register);
-    report("S22-RV64-GRANT-GATE-WO", probe.unsupported_rights);
-    report("S22-RV64-GRANT-GATE-SHARE", probe.share);
-    report("S22-RV64-GRANT-GATE-SLICE", probe.slice);
-    report("S22-RV64-GRANT-GATE-RETIRED", probe.retired);
-    report("S22-RV64-GRANT-GATE-SAS", probe.sas);
-    report("S22-RV64-GRANT-GATE-RETIRE-REFUSAL", probe.retire_refusal);
-    report("S22-RV64-GRANT-GATE-FRAMES", probe.frames);
+    report("ALLOC", probe.alloc);
+    report("REGISTER", probe.register);
+    report("WO", probe.unsupported_rights);
+    report("SHARE", probe.share);
+    report("SLICE", probe.slice);
+    report("RETIRED", probe.retired);
+    report("SAS", probe.sas);
+    report("RETIRE-REFUSAL", probe.retire_refusal);
+    report("FRAMES", probe.frames);
     // Which outcome the revoke took is reported rather than asserted: the
     // invariant above must hold for both, and a two-hart boot whose peer stops
     // acknowledging legitimately takes the deferred one.
     log::info!(
-        "S22-RV64-GRANT-GATE-RETIRE-OUTCOME: {}",
+        "{ARCH_TAG}-GRANT-GATE-RETIRE-OUTCOME: {}",
         if probe.retire_deferred { "DEFERRED" } else { "COMPLETED" }
     );
 
     if probe.all() {
-        log::info!("S22-RV64-GRANT-GATE: PASS");
+        log::info!("{ARCH_TAG}-GRANT-GATE: PASS");
     } else {
-        log::error!("S22-RV64-GRANT-GATE: FAIL");
+        log::error!("{ARCH_TAG}-GRANT-GATE: FAIL");
     }
 }

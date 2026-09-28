@@ -1,4 +1,4 @@
-//! CPU-only domain grants between two private RV64 roots.
+//! CPU-only domain grants between two private roots.
 //!
 //! One kernel-owned record per grant carries the owner root, the receiver root
 //! (`Arc<AddressSpace>`, retained while the receiver PTE is published), the
@@ -9,9 +9,15 @@
 //! frames leave the grant table.
 //!
 //! A grant that cannot observe safe-root quiescence (the receiver root still
-//! current on a hart, or the SBI remote-fence transport unacknowledged) stays
+//! current on a hart, or the remote-fence transport unacknowledged) stays
 //! `Revoking`: its frames are retained and no entry point may publish a new
 //! mapping over the old one.
+//!
+//! The state machine is architecture-independent: the owner/receiver invalidation
+//! goes through `AddressSpace`, whose private-root leaves are non-global on both
+//! RV64 and AArch64, so no step here is target-specific. The module is compiled
+//! on the targets whose lifecycle is open (`native-domains` on RV64, and AArch64
+//! test images — see `super::syscall::domain_grant_lifecycle_supported`).
 //!
 //! The record is owned by the `PAGE_GRANT_TABLE`/`REG_GRANT_TABLE` rows in
 //! `super::syscall`; this module is the state machine they embed.
@@ -23,6 +29,17 @@ use crate::sync::Spinlock;
 use alloc::sync::Arc;
 use core::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use types::{CellId, GrantPerm, PhysAddr, VAddr};
+
+/// Marker prefix for the boot fixture.
+///
+/// The same assertions run on every architecture whose lifecycle is open, and
+/// the marker names the architecture so one lane can never satisfy a
+/// requirement with another architecture's evidence. Shared with
+/// `super::grant_gate_selftest`, which runs on the same gate set.
+#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+pub(crate) const ARCH_TAG: &str = "S22-RV64";
+#[cfg(all(feature = "test-hooks", target_arch = "aarch64"))]
+pub(crate) const ARCH_TAG: &str = "S22-AARCH64";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum DomainGrantState {
@@ -292,13 +309,18 @@ impl DomainGrant {
 /// the production `handle_syscall` entry points with two real
 /// `TaskAddressSpace::Domain` tasks and observes the ABI result of each step.
 ///
-/// Emits the established `S22-RV64-GRANT-REVOKE` terminal plus a
-/// property marker per assertion. Every synthetic task and grant is torn down
-/// before it returns.
+/// Emits the established `{ARCH_TAG}-GRANT-REVOKE` terminal plus a property
+/// marker per assertion. Every synthetic task and grant is torn down before it
+/// returns.
+///
+/// It witnesses rights, transactional publish, revoke and the deferred outcome
+/// on the arch whose lane runs it; it does **not** witness the two-cell public
+/// handoff or an address-classified receiver store fault — those belong to the
+/// RV64 `grant-pair` lane (`cells/tests/tier2-grant-*`).
 #[cfg(all(
     feature = "test-hooks",
     feature = "native-domains",
-    target_arch = "riscv64"
+    any(target_arch = "riscv64", target_arch = "aarch64")
 ))]
 pub(crate) fn run_selftest() {
     use super::syscall::{handle_syscall, Syscall};
@@ -354,7 +376,7 @@ pub(crate) fn run_selftest() {
     }
 
     let (Some(owner_space), Some(receiver_space)) = (space(OWNER_VA), space(RECEIVER_VA)) else {
-        log::error!("S22-RV64-GRANT-REVOKE: FAIL fixture-setup");
+        log::error!("{ARCH_TAG}-GRANT-REVOKE: FAIL fixture-setup");
         return;
     };
 
@@ -368,9 +390,9 @@ pub(crate) fn run_selftest() {
     let mut ok = true;
     let mut report = |marker: &str, property: bool| {
         if property {
-            log::info!("S22-RV64-GRANT-REVOKE-{marker}: PASS");
+            log::info!("{ARCH_TAG}-GRANT-REVOKE-{marker}: PASS");
         } else {
-            log::error!("S22-RV64-GRANT-REVOKE-{marker}: FAIL");
+            log::error!("{ARCH_TAG}-GRANT-REVOKE-{marker}: FAIL");
             ok = false;
         }
     };
@@ -553,9 +575,9 @@ pub(crate) fn run_selftest() {
     remove(RECEIVER_TID);
 
     if ok {
-        log::info!("S22-RV64-GRANT-REVOKE: PASS");
-        log::info!("S22-RV64-DMA-QUARANTINE: DENY");
+        log::info!("{ARCH_TAG}-GRANT-REVOKE: PASS");
+        log::info!("{ARCH_TAG}-DMA-QUARANTINE: DENY");
     } else {
-        log::error!("S22-RV64-GRANT-REVOKE: FAIL");
+        log::error!("{ARCH_TAG}-GRANT-REVOKE: FAIL");
     }
 }

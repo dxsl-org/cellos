@@ -265,16 +265,20 @@ fn tier2_positive_execution_runs_cleanly() {
             )
         });
 
-    // 3. Verify the fail-closed grant containment (phase 01): a private-root cell
-    // must not be able to publish a zero-copy grant before the domain grant
-    // lifecycle is qualified.
+    // 3. Verify the zero-copy grant lifecycle through the real syscall path
+    // (phase 03): the private-root cell publishes its own registered backing,
+    // round-trips bytes through it, unregisters, and the id is then refused.
+    // (The phase-01 containment gate this used to assert is lifted for the
+    // architectures whose lifecycle is open, so the refusal it named is no
+    // longer the expected outcome; a closed image refuses at registration and
+    // never reaches this marker.)
     qemu.wait_for(
-        "[tier2-smoke] Grant registration denied fail-closed (phase-01 gate)",
+        "[tier2-smoke] Grant unregistered and the id refused",
         FAULT_TIMEOUT,
     )
     .unwrap_or_else(|e| {
         panic!(
-            "tier2-smoke did not observe the fail-closed domain grant denial: {e}\n--- output ---\n{}",
+            "tier2-smoke did not complete the domain grant lifecycle: {e}\n--- output ---\n{}",
             qemu.dump()
         )
     });
