@@ -520,15 +520,18 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         // SVM first (TCG-testable); VMX only on genuine Intel (KVM/HW lane).
         // Failure is non-fatal — the kernel runs fine without virt; the
         // HypervisorCap gate simply stays closed (has_x86_virt() == false).
-        // Root operation is optional, and nested operation is not guaranteed: a
-        // hypervisor may advertise SVM/VMX while refusing the root-operation
-        // instruction, which **faults** instead of reporting failure. Never
-        // attempt it under a hypervisor — the capability stays closed, and the
-        // boot continues (a fault here would take the whole boot down for an
-        // optional feature).
-        if cpu_features::hypervisor_present() {
-            log_info("x86 virt: hypervisor present; root operation not attempted (cap closed)");
-        } else {
+        // The two backends differ in how a refusal surfaces, and that decides
+        // what may be attempted under a hypervisor:
+        //   * VMXON **faults** (#GP) when the host grants the bits but refuses
+        //     nested operation, so VMX is never attempted under a hypervisor —
+        //     an optional capability must not take the boot down.
+        //   * SVM's enable path only writes EFER.SVME and VM_HSAVE_PA, both
+        //     gated on the CPUID bit, and reports failure instead of faulting.
+        //     QEMU advertises CPUID.1:ECX[31] on every builtin CPU model while
+        //     still emulating SVM root operation under TCG, so gating SVM on
+        //     the hypervisor bit would close the capability on the only lane
+        //     that can exercise it (the x86 hypervisor smoke lane).
+        let under_hypervisor = cpu_features::hypervisor_present();
         match cpu_features::x86_virt_kind() {
             Some(cpu_features::X86Virt::Svm) => {
                 let hsave_pa = {
@@ -552,7 +555,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
                     None => log_info("x86 virt: OOM allocating HSAVE frame; cap closed"),
                 }
             }
-            Some(cpu_features::X86Virt::Vmx) => {
+            Some(cpu_features::X86Virt::Vmx) if !under_hypervisor => {
                 // VMXON faults (#GP) rather than reporting failure when a
                 // precondition is unmet, so the preconditions are printed before
                 // the attempt: a fault here is otherwise unattributable.
@@ -586,8 +589,12 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
                     None => log_info("x86 virt: OOM allocating VMXON frame; cap closed"),
                 }
             }
+            Some(cpu_features::X86Virt::Vmx) => {
+                log_info(
+                    "x86 virt: hypervisor present; VMX root operation not attempted (cap closed)",
+                );
+            }
             None => log_info("x86 virt: not supported by CPU; cap closed"),
-        }
         }
     }
     // Bare physical: RV32 Nano (SATP=0), x86_32 (CR0.PG=0), AArch32 (MMU off).
