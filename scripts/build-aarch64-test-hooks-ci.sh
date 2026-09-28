@@ -118,7 +118,7 @@ else
     cargo build --release \
         --target aarch64-unknown-none-softfloat \
         -Z build-std=core,alloc \
-        --features tier2-entry \
+        --features tier2-entry,tier2-grant-pair \
         -p app-init
     cargo build --release \
         --target aarch64-unknown-none-softfloat \
@@ -153,6 +153,26 @@ cargo build --release \
     --target aarch64-unknown-none-softfloat \
     -Z build-std=core,alloc \
     -p tier2-smoke -p tier2-exploit
+
+# Phase-03 step-5 grant pair. It needs two reviewed init-launch edges, and the two
+# domain-class paths above are already taken by the real fixtures this image must
+# also run, so the pair is installed on the two reviewed init edges whose services
+# are not built into this image (`development-silo-provider` and `c2c-broker` are
+# off): `/bin/silo` (owner) and `/bin/net-broker` (receiver). A brand-new
+# `/bin/<name>` would need a kernel launch-profile row and a boot-ceiling row,
+# which this lane does not own. `app-init`'s `tier2-grant-pair` compile_error
+# guards refuse the combination that would make init launch the real services
+# there, and the pair namespaces every marker `S22-AARCH64-GRANT-PAIR-*`.
+#
+# Built and baked only on this (non-development-Silo) image: the development-Silo
+# lane bakes the real `/bin/silo` and does not enable `tier2-grant-pair`.
+if [[ "$DEVELOPMENT_SILO" != "1" ]]; then
+    echo "==> Building the phase-03 grant pair (tier2-grant-owner, tier2-grant-receiver)..."
+    cargo build --release \
+        --target aarch64-unknown-none-softfloat \
+        -Z build-std=core,alloc \
+        -p tier2-grant-owner -p tier2-grant-receiver
+fi
 
 echo "==> Building stack-sizing paths (service-net, driver-virtio-net, service-input)..."
 cargo build --release \
@@ -189,6 +209,15 @@ CELL_IMAGE_PATHS=(
 if [[ "$DEVELOPMENT_SILO" == "1" ]]; then
     CELL_BINARIES+=("$REL/silo" "$REL/service-kms" "$REL/silo-test")
     CELL_IMAGE_PATHS+=(/bin/silo /bin/kms /bin/silo-test)
+else
+    # Phase-03 grant pair, baked onto the two reviewed init-launch edges whose
+    # services this image does not build (see the build step above): `/bin/silo`
+    # and `/bin/net-broker`. The development-Silo lane launches the *real*
+    # `/bin/silo` and so keeps this branch to itself — `app-init`'s
+    # `tier2-grant-pair` and `development-silo-provider` features are a compile
+    # error together, and a duplicate `/bin/silo` in one image is never built.
+    CELL_BINARIES+=("$REL/tier2-grant-owner" "$REL/tier2-grant-receiver")
+    CELL_IMAGE_PATHS+=(/bin/silo /bin/net-broker)
 fi
 
 echo "==> Verifying ${#CELL_BINARIES[@]} cell binaries..."

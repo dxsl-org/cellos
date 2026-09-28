@@ -5,6 +5,7 @@
 #[cfg(all(feature = "hostile-backend-recovery", not(feature = "hypervisor-min")))]
 compile_error!("hostile-backend-recovery requires hypervisor-min");
 
+extern crate alloc;
 extern crate ostd;
 
 api::declare_manifest!(block_io = false, network = false, spawn = true);
@@ -22,6 +23,11 @@ api::declare_syscalls![
     GetTime,
     SetTimer,
     GrantAlloc,
+    // The boot-order grant-pair launcher publishes each generation's command line
+    // (`StateStash`) and waits for that generation's terminal fault by sampling
+    // the process table (`GetProcs`).
+    StateStash,
+    GetProcs,
 ];
 
 mod boot;

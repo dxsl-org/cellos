@@ -81,18 +81,20 @@ if grep -qia "KERNEL PANIC\|panicked" "$LOG"; then
     exit 1
 fi
 
-# Fault containment is an asserted outcome, not a forbidden one: exactly one
-# cell fault, it must be the announced NULL store `tier2-exploit` performs, and
-# the boot must carry on past it. Any other `[fault] Cell` line — a second one,
-# another address, an unannounced fault — still fails the lane. The EL2
-# development-Silo machine witnesses no Tier-2 entry at all, so there it stays a
-# blanket prohibition.
+# Fault containment is an asserted outcome, not a forbidden one. Every cell fault
+# in the boot must be deliberate, announced, and classified: `tier2-exploit`'s
+# NULL store (exactly one, at `addr=0x0`) and the phase-03 grant pair's five
+# receiver-generation store faults, each at the exact grant address the owner
+# handed over. A fault line that is not one of those — a second NULL store,
+# another cell, another address, an unannounced fault — still fails the lane. The
+# EL2 development-Silo machine witnesses no Tier-2 entry at all, so there it stays
+# a blanket prohibition.
 #
 # The cells are launched from the boot order (init), not typed at the shell: this
 # image's shell sleeps ~2 s before its first prompt and its own test root exits
 # the VM at ~4.5 s, so a prompt-driven sequence cannot run at all. Containment is
-# therefore read off the boot instead: the deliberate fault must be announced by
-# its launcher first, and the boot's terminal marker must come *after* it — the
+# therefore read off the boot instead: each deliberate fault must be announced by
+# its launcher first, and the boot's terminal marker must come *after* them — the
 # kernel, init and the remaining test root all survived a domain cell's fault.
 if [[ "$DEVELOPMENT_SILO" == "1" ]]; then
     if grep -qaiE '\[fault\] Cell' "$LOG"; then
@@ -101,19 +103,80 @@ if [[ "$DEVELOPMENT_SILO" == "1" ]]; then
         exit 1
     fi
 else
+    # Fault containment is asserted, not merely tolerated: every `[fault] Cell`
+    # line in the boot must be one of the deliberate, announced, address-classified
+    # faults, and nothing else. Two fixtures produce them:
+    #
+    #   * `tier2-exploit`'s NULL store — the phase-02 containment witness, exactly
+    #     one line, at `addr=0x0`, announced before it;
+    #   * the phase-03 pair's five receiver generations (see below) — each ends in
+    #     the store its phase exists to witness, classified to the exact grant
+    #     address the owner handed over.
+    #
+    # The total is therefore fixed, and any other fault — a second NULL store,
+    # another cell, another address — still fails the lane.
     FAULT_LINES="$(grep -aiE '\[fault\] Cell' "$LOG" || true)"
     FAULT_COUNT="$(printf '%s\n' "$FAULT_LINES" | grep -c . || true)"
-    if [[ "$FAULT_COUNT" != "1" ]]; then
-        echo "FAIL: expected exactly one contained cell fault, found $FAULT_COUNT:" >&2
+
+    # The pair's fault addresses are the grant ids the owner published, so the
+    # classification is read from the boot's own handoff line. Without it there is
+    # no way to attribute a receiver fault to its phase.
+    HANDOFF_LINE="$(grep -aoE 'S22-AARCH64-GRANT-PAIR-HANDOFF id1=[0-9]+ id2=[0-9]+ id3=[0-9]+ id4=[0-9]+' "$LOG" | tail -1 || true)"
+    if [[ -z "$HANDOFF_LINE" ]]; then
+        echo "FAIL: the grant pair published no handoff line, so no deliberate receiver fault can be classified" >&2
+        exit 1
+    fi
+    handoff_id() { printf '%s' "$HANDOFF_LINE" | sed -n "s/.*$1=\([0-9]\+\).*/\1/p"; }
+    A1="$(printf '0x%x' "$(handoff_id id1)")"
+    A2="$(printf '0x%x' "$(handoff_id id2)")"
+    A3="$(printf '0x%x' "$(handoff_id id3)")"
+    A4="$(printf '0x%x' "$(handoff_id id4)")"
+    if [[ "$A1" == "0x" || "$A2" == "0x" || "$A3" == "0x" || "$A4" == "0x" ]]; then
+        echo "FAIL: unparsable handoff line: '$HANDOFF_LINE'" >&2
+        exit 1
+    fi
+    # Count the faults classified to one exact address.
+    faults_at() {
+        grep -aciE "\[fault\] Cell [0-9]+ \(task [0-9]+ generation [0-9]+\) terminated: cause=0x[0-9a-f]+ pc=0x[0-9a-f]+ addr=$1\$" "$LOG" || true
+    }
+    # Byte offset of the Nth fault at one exact address (1-based); empty when absent.
+    fault_offset_at() {
+        grep -aboE "\[fault\] Cell [0-9]+ \(task [0-9]+ generation [0-9]+\) terminated: cause=0x[0-9a-f]+ pc=0x[0-9a-f]+ addr=$1\$" "$LOG" \
+            | sed -n "$2p" | cut -d: -f1 || true
+    }
+
+    if [[ "$(faults_at 0x0)" != "1" ]]; then
+        echo "FAIL: expected exactly one contained NULL-store fault, found $(faults_at 0x0):" >&2
         printf '%s\n' "$FAULT_LINES" >&2
         exit 1
     fi
     if ! printf '%s\n' "$FAULT_LINES" | grep -aqE 'terminated: cause=0x[0-9a-f]+ pc=0x[0-9a-f]+ addr=0x0$'; then
-        echo "FAIL: the single cell fault was not the announced NULL store: $FAULT_LINES" >&2
+        echo "FAIL: the contained NULL-store fault is not present: $FAULT_LINES" >&2
         exit 1
     fi
     if ! grep -aqF "[tier2-exploit] deliberately writing to NULL (0x0) — expect Page Fault termination" "$LOG"; then
         echo "FAIL: the contained fault was not preceded by tier2-exploit's announcement" >&2
+        exit 1
+    fi
+    # The pair's five deliberate faults: one at the freed grant (phase 1), one on
+    # the ReadOnly mapping (phase 2) and a second at the same address once
+    # `GrantUnregister` revoked it (phase 4), one at the downgraded grant (phase
+    # 3), and one at the address the owner's exit revoked (phase 5). The counts
+    # are exact: a phase that did not fault, or faulted twice, is a different
+    # lifetime from the one this lane asserts.
+    PAIR_FAULTS=$(( $(faults_at "$A1") + $(faults_at "$A2") + $(faults_at "$A3") + $(faults_at "$A4") ))
+    if [[ "$(faults_at "$A1")" != "1" || "$(faults_at "$A2")" != "2" \
+        || "$(faults_at "$A3")" != "1" || "$(faults_at "$A4")" != "1" ]]; then
+        echo "FAIL: the pair's deliberate fault counts are wrong (want id1:$A1=1 id2:$A2=2 id3:$A3=1 id4:$A4=1," >&2
+        echo "      found id1=$(faults_at "$A1") id2=$(faults_at "$A2") id3=$(faults_at "$A3") id4=$(faults_at "$A4")):" >&2
+        printf '%s\n' "$FAULT_LINES" >&2
+        exit 1
+    fi
+    EXPECTED_FAULTS=$(( 1 + PAIR_FAULTS ))
+    if [[ "$FAULT_COUNT" != "$EXPECTED_FAULTS" ]]; then
+        echo "FAIL: expected exactly $EXPECTED_FAULTS accounted cell faults (the announced NULL store plus the" >&2
+        echo "      pair's five classified store faults), found $FAULT_COUNT:" >&2
+        printf '%s\n' "$FAULT_LINES" >&2
         exit 1
     fi
     # Byte offsets make the ordering a property of the boot, not of the grep. The
@@ -123,12 +186,35 @@ else
     # fault before it: measured, 174 bytes earlier.)
     offset_of() { grep -aboF -- "$1" "$LOG" | head -1 | cut -d: -f1 || true; }
     ADMIT_OFFSET="$(offset_of "[domain] admitted cell 'tier2-exploit' to Tier 2 Paged Domain")"
-    FAULT_OFFSET="$(offset_of '[fault] Cell')"
+    FAULT_OFFSET="$(fault_offset_at 0x0 1)"
     TERMINAL_OFFSET="$(offset_of '[vfs-test] ALL TESTS PASSED')"
     if [[ -z "$ADMIT_OFFSET" || -z "$FAULT_OFFSET" || -z "$TERMINAL_OFFSET" ]]; then
         echo "FAIL: missing admission/fault/terminal line (admit=$ADMIT_OFFSET fault=$FAULT_OFFSET terminal=$TERMINAL_OFFSET)" >&2
         exit 1
     fi
+    # Each pair fault must follow the announcement that names it, so a fault can
+    # never be attributed to a phase whose store had not been announced yet. The
+    # unregister phase's fault is the *second* one at `id2`, so its announcement is
+    # checked against that one.
+    assert_announced_before() {
+        local announcement="$1" address="$2" nth="$3" description="$4"
+        local announced_at faulted_at
+        announced_at="$(offset_of "$announcement")"
+        faulted_at="$(fault_offset_at "$address" "$nth")"
+        if [[ -z "$announced_at" || -z "$faulted_at" ]]; then
+            echo "FAIL: pair phase '$description' has no announcement or no classified fault at $address" >&2
+            exit 1
+        fi
+        if [[ "$announced_at" -ge "$faulted_at" ]]; then
+            echo "FAIL: pair phase '$description' faulted at $address before its announcement (announced=$announced_at faulted=$faulted_at)" >&2
+            exit 1
+        fi
+    }
+    assert_announced_before "S22-AARCH64-GRANT-PAIR-RECEIVER-REVOKE-FAULT: FAULT-EXPECTED" "$A1" 1 "GrantFree revoke"
+    assert_announced_before "S22-AARCH64-GRANT-PAIR-RECEIVER-RO-WRITE: FAULT-EXPECTED" "$A2" 1 "ReadOnly write"
+    assert_announced_before "S22-AARCH64-GRANT-PAIR-RECEIVER-UNREGISTER-FAULT: FAULT-EXPECTED" "$A2" 2 "GrantUnregister"
+    assert_announced_before "S22-AARCH64-GRANT-PAIR-RECEIVER-DOWNGRADE-WRITE: FAULT-EXPECTED" "$A4" 1 "same-recipient downgrade"
+    assert_announced_before "S22-AARCH64-GRANT-PAIR-RECEIVER-EXIT-FAULT: FAULT-EXPECTED" "$A3" 1 "owner exit"
     if [[ "$ADMIT_OFFSET" -ge "$FAULT_OFFSET" ]]; then
         echo "FAIL: the faulted cell was not admitted before it faulted (admit=$ADMIT_OFFSET fault=$FAULT_OFFSET)" >&2
         exit 1
@@ -271,6 +357,69 @@ if [[ "$DEVELOPMENT_SILO" != "1" ]]; then
         # One PE: the revoke must be acknowledged on its first attempt, so the
         # recorded outcome is part of the requirement rather than informational.
         "S22-AARCH64-GRANT-GATE-RETIRE-OUTCOME: COMPLETED"
+        # Phase 03 step-5: the *pair*, end-to-end on this architecture. The
+        # kernel-side fixtures above drive the production `handle_syscall` entry
+        # points with synthetic domain tasks; these two cells are real
+        # `PROTECTION_CLASS_UNTRUSTED` private roots launched through the real
+        # `SpawnFromPath` edge, so what follows is the same lifecycle observed from
+        # the outside: the owner allocates through both entry points and proves its
+        # own mapping; a foreign peer and a WriteOnly domain share are refused; it
+        # publishes the handoff; five receiver generations take a ReadWrite and a
+        # ReadOnly slice, are downgraded in place, and are revoked by `GrantFree`,
+        # `GrantUnregister` and the owner's exit. Each generation ends in a store to
+        # the address the owner handed over, which must fault — those five faults
+        # are classified to the handoff ids above, and their announcements are
+        # asserted to precede them.
+        #
+        # There is no interactive window on this image (its own test root exits the
+        # VM long before a shell prompt could be typed at), so the pair is launched
+        # from the boot order by init and takes the grant ids in band: the receiver
+        # asks the owner for them over the pair's own IPC protocol, because they are
+        # kernel-assigned after the owner starts and no command line can carry them.
+        # `app-init` launches the pair on the two reviewed init edges whose services
+        # are not built into this image (`/bin/silo`, `/bin/net-broker`); the
+        # compile-error guards there refuse the feature combinations that would make
+        # init launch the real services at those paths.
+        "Init: tier2-grant-pair owner admitted."
+        "Init: tier2-grant-pair complete."
+        "[domain] admitted cell 'silo' to Tier 2 Paged Domain (TTBR0 isolation)"
+        "[domain] admitted cell 'net-broker' to Tier 2 Paged Domain (TTBR0 isolation)"
+        "S22-AARCH64-GRANT-PAIR-OWNER-BEGIN: public Grant* owner path"
+        "S22-AARCH64-GRANT-PAIR-OWNER-ALLOC: OK id="
+        "S22-AARCH64-GRANT-PAIR-OWNER-REGISTER: OK id="
+        "S22-AARCH64-GRANT-PAIR-OWNER-MAPPED: OK"
+        "S22-AARCH64-GRANT-PAIR-OWNER-REG-MAPPED: OK"
+        "S22-AARCH64-GRANT-PAIR-OWNER-SHARE-FOREIGN: DENY"
+        "S22-AARCH64-GRANT-PAIR-HANDOFF id1="
+        "S22-AARCH64-GRANT-PAIR-RECEIVER-BEGIN: mode=rw"
+        "S22-AARCH64-GRANT-PAIR-RECEIVER-BEGIN: mode=ro"
+        "S22-AARCH64-GRANT-PAIR-RECEIVER-BEGIN: mode=downgrade"
+        "S22-AARCH64-GRANT-PAIR-RECEIVER-BEGIN: mode=unregister"
+        "S22-AARCH64-GRANT-PAIR-RECEIVER-BEGIN: mode=exit"
+        "S22-AARCH64-GRANT-PAIR-RECEIVER-ALLOC: OK id="
+        "S22-AARCH64-GRANT-PAIR-RECEIVER-SLICE-UNKNOWN: DENY"
+        "S22-AARCH64-GRANT-PAIR-OWNER-SHARE-WO: DENY"
+        "S22-AARCH64-GRANT-PAIR-RECEIVER-SLICE-RW: OK"
+        "S22-AARCH64-GRANT-PAIR-RECEIVER-RW: OK"
+        "S22-AARCH64-GRANT-PAIR-OWNER-FREE: OK"
+        # The revoked id must not resolve again: the frames the free returned stay
+        # private to the owner rather than being handed to another receiver.
+        "S22-AARCH64-GRANT-PAIR-RECEIVER-FRAME-REUSE: REFUSED"
+        # Phase 2: a ReadOnly slice is readable and its store must fault.
+        "S22-AARCH64-GRANT-PAIR-RECEIVER-SLICE-RO: OK (read "
+        # Phase 3: the same recipient is downgraded ReadWrite → ReadOnly in place.
+        # `DOWNGRADE-READ` is the "not merely unmapped" half — the byte written
+        # through the writable mapping is still readable afterwards.
+        "S22-AARCH64-GRANT-PAIR-RECEIVER-DOWNGRADE-RW: OK"
+        "S22-AARCH64-GRANT-PAIR-OWNER-DOWNGRADE-RESHARE: OK"
+        "S22-AARCH64-GRANT-PAIR-RECEIVER-DOWNGRADE-READ: OK (read 0xa5)"
+        # Phase 4: `GrantUnregister` revokes the persistent buffer.
+        "S22-AARCH64-GRANT-PAIR-OWNER-UNREGISTER: OK"
+        # Phase 5: the owner's exit revokes the mapping the receiver still holds.
+        "S22-AARCH64-GRANT-PAIR-OWNER-EXIT: OK"
+        # The pair's terminal: the owner is the only half that survives its phase,
+        # so it is the marker the lane treats as the pair's verdict.
+        "S22-AARCH64-GRANT-PAIR-OWNER: PASS"
     )
     # The marker prefix is architecture-honest: an AArch64 boot that emitted an
     # RV64-tagged grant marker would satisfy a lane's requirement with another

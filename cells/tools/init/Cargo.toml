@@ -19,6 +19,14 @@ test-hooks = []
 # one whose boot ends before its shell becomes interactive, so the fixtures have
 # to be scheduled from the boot order rather than typed at a prompt.
 tier2-entry = []
+# When enabled, init launches the phase-03 step-5 Tier-2 grant pair
+# (/bin/silo = owner, /bin/net-broker = receiver) from the boot order and drives
+# its five receiver generations to their deliberate store faults, so the pair runs
+# end-to-end on an image whose shell never becomes interactive. Opted into only by
+# scripts/build-aarch64-test-hooks-ci.sh. The two paths are reviewed init-launch
+# edges whose real services are not built into that image; enabling this together
+# with development-silo-provider or c2c-broker is a compile error.
+tier2-grant-pair = []
 # When enabled, init brings up only VFS + Net before hypervisor — the Tier-3 VM
 # boot profile used by the hypervisor filesystem images and smoke lanes.
 hypervisor-min = []
