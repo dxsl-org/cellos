@@ -127,7 +127,7 @@ Network traffic is routed through Cellos's kernel; no direct hardware access.
 
 | Device | Status | Notes |
 |--------|--------|-------|
-| Block (disk) | ✅ (volatile) | 16 MiB in-memory Vec; writes work but are not persisted; no image loaded |
+| Block (disk) | ✅ | In-memory buffer (volatile profile) or a persistent image the VFS serves at `/mnt/sd/guest_disk.img`; the `x86 VirtIO e2e + persistence` lane proves two-boot durability |
 | Network | ✅ | Full NIC; routed via Cellos net cell |
 | Console | ✅ | Serial output to kernel log |
 | Entropy (RNG) | 🚧 Planned | No virtio-rng device model exists yet (`cells/services/hypervisor/src/`); planned in the glibc-guest track since glibc TLS blocks on entropy |
@@ -138,18 +138,23 @@ Network traffic is routed through Cellos's kernel; no direct hardware access.
 ## Example: Boot Alpine Linux
 
 ```bash
-# Prerequisites
-scripts/build-kernel-alpine.sh  # one-time, downloads/builds Alpine rootfs
+# One-time: fetch the pinned Alpine artifacts, build the cells, assemble the
+# guest filesystem the hypervisor cell boots (/vmlinuz + /initrd.gz inside it)
+bash scripts/make-hypervisor-fs.sh
 
-# Start Cellos
-./run-arm64.ps1
+# Build the ARM64 hypervisor kernel with that filesystem embedded
+RUSTFLAGS="-C relocation-model=pic -C target-feature=+bti,+paca,+pacg" \
+  EMBEDDED_OVERRIDE=kernel/src/embedded-hv \
+  cargo build --release -p cellos-kernel --features qemu-virt-1g \
+  --target aarch64-unknown-none-softfloat -Z build-std=core,alloc
 
-# From shell
-vm create --arch arm64 --mem 64M --rootfs /alpine.squashfs
-vm run 1
-    # Alpine login prompt appears
-login: root
+# Boot it. The guest is already wired to the console, so Alpine's own shell is
+# what you type into (Windows: .\run-hypervisor-arm.ps1):
+HV_SMOKE_MODE=boot bash scripts/qemu-hypervisor-smoke.sh   # needs KVM/real ARM64
 ```
+
+The x86 walkthrough is the same shape with `scripts/make-hypervisor-fs-x86.sh` /
+`scripts/qemu-hypervisor-smoke-x86.sh` and `--target x86_64-unknown-none`.
 
 Inside the VM, you have a full Linux shell:
 
@@ -214,12 +219,32 @@ For details, see [system-architecture.md](../system-architecture.md) § Tier 3 H
 ## Building a Custom Alpine Rootfs
 
 ```bash
-cd scripts
-./build-kernel-alpine.sh  # ~30 min, downloads+cross-compiles
+# ARM64: fetch Alpine netboot artifacts + assemble kernel/src/embedded-hv/kernel_fs.img
+bash scripts/make-hypervisor-fs.sh            # add --skip-fetch to reuse .alpine-cache/
 
-# Output: alpine.img (FAT32 with /bin, /etc, /lib, /usr)
-# Loaded as VirtIO block device by hypervisor
+# x86_64: same, into kernel/src/embedded-hv-x86 (HV_EMBEDDED_DIR moves the staging dir)
+bash scripts/make-hypervisor-fs-x86.sh
+
+# The image carries the guest kernel/initramfs plus the boot cells; the kernel
+# build embeds it through EMBEDDED_OVERRIDE (see the example above).
 ```
+
+---
+
+## Evidence Lanes (what runs, and where)
+
+Each lane builds its own guest image, boots it under the pinned QEMU-TCG 10.2.0
+(`scripts/install-qemu-x86-ci.sh`), and asserts markers printed by the guest or by the
+hypervisor cell. Passing is emulator evidence — it does not qualify physical hardware.
+
+| Lane | Command | Asserts | CI job |
+|------|---------|---------|--------|
+| ARM64 machinery | `HV_SMOKE_MODE=machinery bash scripts/qemu-hypervisor-smoke.sh` | `[hv] vCPU ready`; tolerates only the documented TCG address-size fault | `qemu-hypervisor-machinery` |
+| ARM64 boot-to-shell | `HV_SMOKE_MODE=boot bash scripts/qemu-hypervisor-smoke.sh` | Alpine `/ #` prompt (switches to KVM — needs real hardware) | `qemu-hypervisor-boot-kvm` (gated on a self-hosted runner) |
+| x86 boot-to-shell | `HV_SMOKE_MODE=boot bash scripts/qemu-hypervisor-smoke-x86.sh` | Alpine `/ #` prompt | `qemu-x86-hypervisor-boot` |
+| x86 in-guest nginx | `bash scripts/qemu-x86-nginx-gate.sh` | `apk add nginx` from the pinned repository, master + worker (fork), an in-guest HTTP fetch of the served body | `qemu-x86-tier3-nginx` |
+| x86 VirtIO e2e + persistence | `bash scripts/qemu-x86-virtio-e2e.sh` | block/network discovery, IRQ5/IRQ6 completion, and a two-boot persistent marker read back on the host | `qemu-x86-tier3-virtio-e2e` |
+| x86 hostile corpus | `BUILD_HOSTILE_ISO=1 bash scripts/qemu-tier3-hostile-runner-x86.sh` | 27 bounded malformed-input scenarios plus a host-read post-reset recovery write | `qemu-x86-tier3-hostile` |
 
 ---
 
@@ -242,7 +267,8 @@ cd scripts
 
 See [cells/guests/silo-guest/](../../cells/guests/silo-guest/) — the Silo guest firmware is also a micro-VM example (much smaller, ~5 KiB).
 
-For a full Alpine Linux VM, see kernel build logs (`scripts/build-kernel-alpine.sh` output).
+For a full Alpine Linux VM, use the lanes above: `scripts/make-hypervisor-fs.sh` (ARM64) or
+`scripts/make-hypervisor-fs-x86.sh` (x86_64) build the guest image, and the matching smoke lane boots it.
 
 ---
 
@@ -252,7 +278,10 @@ For a full Alpine Linux VM, see kernel build logs (`scripts/build-kernel-alpine.
 → Check guest ELF load address matches hypervisor's page table setup. Kernel messages usually print; check serial output.
 
 **Disk writes don't persist?**
-→ Rootfs is read-only FAT32 (mounted via VirtIO). Write to `/tmp` (tmpfs) or request writable partition.
+→ The guest's VirtIO block device is backed by an image on the Cellos side: x86 opens `/mnt/sd/guest_disk.img`
+and the ARM64 lane uses a fixed persistent image. If writes vanish, check that the backing file exists and
+mounted — the `x86 VirtIO e2e + persistence` lane above is the worked example (write + flush on the first
+boot, read back on the second).
 
 **Network unreachable?**
 → Cellos net cell may not be running. Check `net-tools` in `/bin/`. Guest IP should be 10.0.2.15, Cellos host at 10.0.2.2.
@@ -265,6 +294,9 @@ For a full Alpine Linux VM, see kernel build logs (`scripts/build-kernel-alpine.
 ## Next Steps
 
 - See [system-architecture.md](../system-architecture.md) § Tier 3 for hypervisor design.
-- For ARM64 EL2 MMU setup: see kernel/arch/arm64/ (Stage-2 paging).
-- For x86 VMX: see kernel/arch/x86_64/ (EPT).
-- Build Alpine: `scripts/build-kernel-alpine.sh`.
+- For ARM64 EL2 MMU setup: `kernel/src/memory/stage2.rs` (Stage-2 builder) and `hal/arch/arm/src/aarch64/`.
+- For x86: SVM-first world-switch (stage-2 NPT) in `kernel/src/hypervisor/svm_registry.rs` and
+  `hal/arch/x86/src/x86_64/svm.rs`, with the device models in `cells/services/hypervisor/`. Intel VT-x
+  root operation is not implemented and is deliberately not attempted under a hypervisor (VMXON faults).
+- Build the guest image: `bash scripts/make-hypervisor-fs.sh` (ARM64) or `bash scripts/make-hypervisor-fs-x86.sh` (x86_64);
+  `scripts/fetch-alpine-artifacts.sh` / `scripts/fetch-alpine-x86.sh` pull the pinned netboot artifacts.
