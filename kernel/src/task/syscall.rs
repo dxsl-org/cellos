@@ -7386,13 +7386,19 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 }
                 // The framebuffer is MMIO: it must not overlap *any* managed frame,
                 // not merely sit above one end of the allocator's memory.
+                //
+                // `match` rather than `?`: the early return has to happen outside the
+                // `guard` borrow, or the RPi3 build refuses the guard's lifetime
+                // (E0597) with the borrowed allocator still in scope.
                 let overlaps_managed = {
                     let guard = crate::memory::frame::FRAME_ALLOCATOR.lock();
-                    let allocator = guard.as_ref().ok_or(SyscallError::Unknown)?;
-                    allocator.managed_ranges().any(|range| {
-                        let range_end = range.start + range.frames * PAGE_SIZE;
-                        base < range_end && range.start < end
-                    })
+                    match guard.as_ref() {
+                        Some(allocator) => allocator.managed_ranges().any(|range| {
+                            let range_end = range.start + range.frames * PAGE_SIZE;
+                            base < range_end && range.start < end
+                        }),
+                        None => return Err(SyscallError::Unknown),
+                    }
                 };
                 if overlaps_managed {
                     return Err(SyscallError::InvalidInput);
