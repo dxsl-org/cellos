@@ -77,7 +77,12 @@ export PYTHON_BIN
 export OBJCOPY="${OBJCOPY:-aarch64-linux-gnu-objcopy}"
 
 REL="target/aarch64-unknown-none-softfloat/release"
-TH_DIR="kernel/src/embedded-test-hooks"
+# This lane owns its embedded-artifact directory. `kernel/src/embedded-test-hooks`
+# is shared by the RV64 test-hooks lane (`build-test-hooks-ci.sh`), the native-domain
+# lane and the getrandom-sas lane; a concurrent RV64 build rewrites its `init` as a
+# RISC-V ELF, and an AArch64 kernel built from that image boots RISC-V code — which
+# surfaces as a bogus `[fault] Cell 1 ... terminated`, not as a build error.
+TH_DIR="target/aarch64-test-hooks-embedded"
 
 # Invalidate every final/staged output before invoking Cargo. A failed rebuild
 # must never leave a bootable kernel that embeds cells from the opposite mode.
