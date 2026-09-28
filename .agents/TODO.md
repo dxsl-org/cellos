@@ -78,8 +78,18 @@ báo cáo ở `.agents/<plan>/`, cách làm ở `docs/guides/`. Chuỗi tiền l
   (C) **flush ngắt quãng thất bại ở tầng raw**: `[hv-blk] VFS flush failed: Ok(Err(1))` — VFS *trả lời*
   `Err(1)` (không phải timeout), tức `FatBackend::sync` → `blk_router::blk_flush()` phía ngoài trả false, kèm
   `[hv-blk-host] request failed type=4 … status=1`; guest `dd … conv=fsync` báo `block-write` dù dữ liệu đã
-  nằm trên đĩa (host-side marker check sau run1 vẫn PASS). Bước kế: instrument `flush()` của NVMe driver cell
-  (mã lỗi NVM_OPC_FLUSH / timeout completion) — đây là nguyên nhân flaky còn lại của lane e2e.
+  nằm trên đĩa (host-side marker check sau run1 vẫn PASS). Đã instrument completion loop của NVMe cell
+  (`[nvme] io error opc=…`): **5 lần chạy lane không tái hiện** (4 xanh, 1 đỏ vì lý do khác — xem (D)), nên cơ
+  chế còn là giả thuyết: `blk_flush()` xếp sau một block driver cell đang bận trả các read ngoài phạm vi
+  (mỗi cái bị retry 3 lần, ~1500–4000 vòng poll) nên VFS chờ quá lâu. Bước kế: log ở `blk_router::blk_flush`
+  (send/recv lỗi hay cell trả khác 0) rồi chạy tới khi tái hiện; nếu là timeout thì retry có biên cho flush.
+
+  (D) **flaky boot phía Cellos**: 1/5 run đỏ với `FAIL: evidence rdinit was not selected in run 1` — guest
+  evidence chưa được chọn, tức boot Cellos không đi tới bước đó (khác hẳn A/B/C). Chưa điều tra.
+
+  Ghi chú: các `[nvme] io error opc=2 lba=800000…1062144 status=16512` xuất hiện đều đặn là **đúng** — read
+  vượt quá namespace 256 MiB (do probe volume + chuỗi cluster đi lạc); log giới hạn 3 dòng mỗi boot, timeout
+  luôn log.
 
   Bằng chứng + lý do khoá feature nằm tại `cells/services/hypervisor/src/virtio_blk.rs` (`config_read`).
   Fixture e2e nay đọc marker với page cache đã xoá (`drop_caches`), để device trả sai không bị cache che.
