@@ -1069,6 +1069,11 @@ jobs:
   # (scripts/qemu-x86-virtio-e2e.sh). Separate job from the boot gate because
   # the lane builds the cells with its own feature set (hypervisor-min + the
   # e2e fixture initramfs) and provisions a partitioned outer disk.
+  # NOTE: this lane occasionally fails on a run whose device model logged no
+  # error at all — the guest reports an I/O error on the marker write, or reads
+  # back zeros for a sector the host image holds correctly. Those signatures are
+  # pre-existing defects in the persistent I/O path, tracked with their evidence
+  # in .agents/TODO.md (`seg_max`), not a problem with this job's wiring.
   qemu-x86-tier3-virtio-e2e:
     name: Tier 3 x86 VirtIO E2E + Persistence (x86_64)
     runs-on: ubuntu-24.04
