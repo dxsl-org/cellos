@@ -29,6 +29,19 @@ pub fn effective_dtb(entry_dtb: usize) -> usize {
     limine::get_dtb_ptr().unwrap_or(entry_dtb)
 }
 
+/// Reserve the warm-snapshot capture's scratch workspace.
+///
+/// The capture stages its own stack and buffers there, so they can never be
+/// inside a captured run: the region is taken from the frame allocator, stays
+/// allocated for the kernel's lifetime and is excluded from every inventory.
+/// Call it once the frame allocator exists and before any capture can run.  It
+/// is a no-op unless the build is `snapshot-qualified`, never panics, and
+/// refuses (leaving no region, so every capture then refuses) rather than
+/// degrading.
+pub fn reserve_snapshot_scratch() {
+    crate::snapshot::reserve_scratch_region_at_boot();
+}
+
 // OpenSBI boot entry point is provided by HAL
 // See hal/arch/riscv/src/rv64/boot.rs
 

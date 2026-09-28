@@ -634,6 +634,33 @@ pub fn plan_managed_ranges(entries: &[MemoryMapEntry]) -> ManagedPlan {
     }
 }
 
+/// A `FrameAllocator` over synthetic managed ranges, for host tests that need
+/// the real allocation path without a boot memory map.
+///
+/// Test-only: the boot path constructs the allocator from the firmware map
+/// ([`FrameAllocator::new_from_map`]).
+#[cfg(test)]
+pub(crate) fn allocator_for_tests(ranges: &[(usize, usize)]) -> FrameAllocator {
+    let mut slots: [Option<ManagedRange>; MAX_MANAGED_RANGES] = [None; MAX_MANAGED_RANGES];
+    let mut total = 0usize;
+    for (index, (start, frames)) in ranges.iter().enumerate() {
+        slots[index] = Some(ManagedRange {
+            start: *start,
+            frames: *frames,
+            index_base: total,
+        });
+        total += *frames;
+    }
+    FrameAllocator {
+        ranges: slots,
+        range_count: ranges.len(),
+        total_frames: total,
+        used_frames: 0,
+        bitmap: BitmapStorage::Owned(alloc::vec![0u64; total.div_ceil(64)].into_boxed_slice()),
+        last_alloc_index: 0,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{plan_managed_ranges, reserve_contiguous_run, FrameAllocator, PAGE_SIZE};
@@ -708,27 +735,7 @@ mod tests {
     }
 
     fn multi_range_allocator(ranges: &[(usize, usize)]) -> FrameAllocator {
-        let mut slots: [Option<super::ManagedRange>; super::MAX_MANAGED_RANGES] =
-            [None; super::MAX_MANAGED_RANGES];
-        let mut total = 0usize;
-        for (index, (start, frames)) in ranges.iter().enumerate() {
-            slots[index] = Some(super::ManagedRange {
-                start: *start,
-                frames: *frames,
-                index_base: total,
-            });
-            total += *frames;
-        }
-        FrameAllocator {
-            ranges: slots,
-            range_count: ranges.len(),
-            total_frames: total,
-            used_frames: 0,
-            bitmap: super::BitmapStorage::Owned(
-                alloc::vec![0u64; total.div_ceil(64)].into_boxed_slice(),
-            ),
-            last_alloc_index: 0,
-        }
+        super::allocator_for_tests(ranges)
     }
 
     #[test]

@@ -650,6 +650,14 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
 
     // 6. Logger & Drivers & FS
     task::drivers::uart::init(); // registers log backend on all arches
+
+    // Phase 07: reserve the warm-snapshot capture's scratch workspace from the
+    // frame allocator — the capture stages its own stack and buffers there, so
+    // they can never be inside a captured run.  After the frame allocator and
+    // the heap (and now the log backend), before any cell or capture can run.
+    // A no-op unless the build is `snapshot-qualified`; a build without a
+    // workspace refuses every capture.
+    boot::reserve_snapshot_scratch();
     #[cfg(all(
         target_arch = "aarch64",
         not(feature = "board-rpi3"),

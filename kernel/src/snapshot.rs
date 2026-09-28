@@ -63,21 +63,26 @@
 //! restore → resume has been proven on a block-capable board.  The capture
 //! preflight refuses **without any block I/O** unless
 //!
-//! - the capture can name its own scratch storage and that storage is outside
-//!   every planned run ([`CaptureScratch`], [`assert_scratch_outside_runs`]) —
-//!   [`serialize_snapshot`] declares none today, so a qualified build refuses;
+//! - the boot reserved a scratch workspace the capture can stage in, and that
+//!   workspace is outside every planned run ([`ScratchRegion`],
+//!   [`CaptureScratch`], [`assert_scratch_outside_runs`]) — the region is taken
+//!   from the frame allocator by [`reserve_scratch_region_at_boot`] and a build
+//!   without one refuses with [`SnapshotError::NoReservedScratch`];
 //! - every online hart is parked at an acknowledged safe point
 //!   ([`crate::task::quiesce`]) — a no-op on a single-hart system, and on RV64 a
 //!   real request answered by each hart's trap path;
 //! - the device has a trusted monotonic epoch source and the image can be
 //!   authenticated ([`SnapshotDevice::current_epoch`], [`SNAPSHOT_TRUST_KEY`]).
 //!
-//! Every pre-freeze allocation is done by the caller before the park
-//! ([`FrozenScratch`]); inside the frozen window the buffers are capacity-bounded
-//! ([`BoundedVec`]) and a shortage is refused rather than allocated, because a
-//! parked hart may be holding the heap's non-masking spin lock.  The hardware
-//! witness and the reserved scratch region remain the hardware-side halves of
-//! phase 07; see the phase doc.
+//! Every buffer the frozen window fills is carved from that workspace before the
+//! park ([`FrozenScratch`]), and the window then *runs there*: its stack, its
+//! sector buffers and the staging frame are all in the region, which is what
+//! makes the staging check honest.  Inside the frozen window the buffers are
+//! capacity-bounded ([`BoundedVec`], [`ScratchVec`]) and a shortage is refused
+//! rather than allocated, because a parked hart may be holding the heap's
+//! non-masking spin lock.  The hardware witness (a save → reset → restore →
+//! resume on a board) remains the hardware-side half of phase 07; see the phase
+//! doc.
 //!
 //! # Authenticated freshness
 //!
@@ -115,6 +120,30 @@
 //! block I/O when a declared span intersects a planned run.  The park hook makes
 //! the complementary claim — nothing *else* can write a frame while it is read —
 //! true for the rest of the machine.
+//!
+//! The declaration is not a claim, it is enforced.  The boot reserves one bounded
+//! workspace ([`ScratchRegion`]) from the frame allocator
+//! ([`reserve_scratch_region_at_boot`], called from the boot path once the
+//! allocator exists), and:
+//!
+//! - its frames are **excluded** from the inventory ([`take_allocated_frame`]):
+//!   they are the capture's workspace, so a restored image can never replay the
+//!   capture's own stack or buffers over live scratch.  The exclusion is proven,
+//!   not assumed — a workspace frame that reaches the plan anyway is refused by
+//!   [`assert_scratch_outside_runs`];
+//! - the frozen window's buffers and its stack are carved from it
+//!   ([`FrozenScratch`], [`ScratchArena`]), and the pre-freeze bound is derived
+//!   from the region's size rather than from the whole allocator, capped by the
+//!   partition geometry;
+//! - the window runs on the region's stack ([`run_on_stack`]) and refuses unless
+//!   the stack pointer it observes is inside that region — the boot stack lives
+//!   in the captured image span, so a window that ran on it would save its own
+//!   frame;
+//! - a missing workspace, one too small for the computed bound, or one
+//!   overlapping a planned run all refuse with the existing error vocabulary
+//!   ([`SnapshotError::NoReservedScratch`], [`SnapshotError::CapacityExceeded`],
+//!   [`SnapshotError::ScratchOverlapsRun`]) before any park and before any block
+//!   I/O.
 //!
 //! # Image-kind runs: what they close, and what they do not
 //!
@@ -161,10 +190,19 @@
 //!   the precondition for closure, not the closure.
 //! - Pointer relinking, lock re-initialization and the exclusion of changing
 //!   driver/MMC transport state are phase 07 steps 3 and 4.
-//! - Capture staging is enforced as a *refusal*, not yet as a working layout:
-//!   no target has a reserved scratch region outside the image span, so
-//!   [`serialize_snapshot`] cannot pass its own staging check.  The check itself
-//!   (declared scratch spans versus planned runs) is exercised on the host.
+//! - Capture staging is enforced as a *refusal* on a build without a workspace,
+//!   and as a *layout* on one with it: the boot-reserved region is excluded from
+//!   the inventory, the window's buffers and stack live in it, and the window
+//!   refuses unless it observes its own stack pointer inside it.  The host lane
+//!   drives the reservation against a synthetic allocator and the staged
+//!   capture against the fake device; **no board has run either**, so the
+//!   reservation's interaction with a real memory map, the live `enumerate`
+//!   exclusion and the stack switch on RV64/AArch64 are unexecuted.
+//! - The requester can still take an interrupt while the window runs: the park
+//!   protocol covers the *other* harts, and nothing in the window masks
+//!   interrupts, so a timer tick can still write kernel state (a trap stack in
+//!   the image span) between two frame reads.  Step 3's drain is what closes
+//!   that, not this slice.
 //! - The format still cannot detect a byte that changed between the frame read
 //!   and the block write; that is what the park hook and the staging check
 //!   together are for, and neither is proven on a board.
@@ -197,14 +235,21 @@
 //! staging check and the freshness matrix are exercised through
 //! [`capture_frozen_with_allocated`] (an explicit allocated set and image span,
 //! since a host build has neither) and a fake device whose monotonic epoch
-//! survives `power_cycle`.  Every fake lives in `#[cfg(test)]` (host lane only)
-//! and is never linked into a kernel image.
+//! survives `power_cycle`.  The scratch workspace is exercised too: the
+//! reservation runs against a synthetic allocator
+//! ([`crate::memory::frame::allocator_for_tests`]) and the frozen window against
+//! a host-lane buffer standing in for the reserved region (`host_scratch`), so
+//! the exclusion, the derived bound, the stack switch and the three refusals are
+//! all host-observable.  Every fake lives in `#[cfg(test)]` (host lane only) and
+//! is never linked into a kernel image.
 
-use crate::memory::frame::FRAME_ALLOCATOR;
+use crate::memory::frame::{phys_to_virt, FrameAllocator, FRAME_ALLOCATOR};
+use crate::sync::Spinlock;
 use crate::task::drivers::block;
 use crate::task::quiesce;
 use alloc::vec::Vec;
 use core::fmt;
+use core::mem::MaybeUninit;
 #[cfg(any(feature = "test-hooks", test))]
 use core::sync::atomic::{AtomicU64, Ordering};
 
@@ -709,9 +754,9 @@ pub fn kernel_image() -> Option<KernelImage> {
 }
 
 /// Sectors needed to hold `run_count` inventory entries.
-fn inventory_sectors(run_count: u64) -> u64 {
-    let bytes = run_count.saturating_mul(RUN_BYTES as u64);
-    bytes.div_ceil(SECTOR_SIZE as u64)
+const fn inventory_sectors(run_count: u64) -> u64 {
+    let bytes = run_count * RUN_BYTES as u64;
+    (bytes + SECTOR_SIZE as u64 - 1) / SECTOR_SIZE as u64
 }
 
 /// The single canonical checksum definition, shared by writer and reader:
@@ -805,12 +850,12 @@ fn mac_eq(a: &[u8; AUTH_BYTES], b: &[u8; AUTH_BYTES]) -> bool {
 /// field), never growing it past the capacity its caller reserved.
 fn encode_inventory_into(
     runs: &[SnapshotRun],
-    out: &mut BoundedVec<u8>,
+    out: &mut impl ZeroedSink,
 ) -> Result<(), SnapshotError> {
     let sectors = inventory_sectors(runs.len() as u64) as usize;
     let needed = sectors * SECTOR_SIZE;
-    out.resize_zeroed(needed)?;
-    let out = &mut out.items;
+    out.sink_resize_zeroed(needed)?;
+    let out = out.sink_slice_mut();
     for (i, run) in runs.iter().enumerate() {
         let o = i * RUN_BYTES;
         out[o..o + 8].copy_from_slice(&run.pa.to_le_bytes());
@@ -858,9 +903,9 @@ fn decode_inventory(bytes: &[u8], run_count: usize) -> Result<Vec<SnapshotRun>, 
 fn runs_from_frames_into(
     pas: &[u64],
     layout: RamLayout,
-    out: &mut BoundedVec<SnapshotRun>,
+    out: &mut impl BoundedSink<SnapshotRun>,
 ) -> Result<(), SnapshotError> {
-    out.clear();
+    out.sink_clear();
     if pas.is_empty() {
         return Err(SnapshotError::NoRuns);
     }
@@ -881,21 +926,21 @@ fn runs_from_frames_into(
                 // Duplicate or descending — the writer must not emit either.
                 return Err(SnapshotError::BadRun);
             }
-            let last = out.items.last_mut().expect("non-empty");
+            let last = out.sink_slice_mut().last_mut().expect("non-empty");
             if p + FRAME_SIZE as u64 == pa {
                 last.frame_count = last
                     .frame_count
                     .checked_add(1)
                     .ok_or(SnapshotError::BadRun)?;
             } else {
-                out.try_push(SnapshotRun {
+                out.sink_push(SnapshotRun {
                     pa,
                     frame_count: 1,
                     flags: 0,
                 })?;
             }
         } else {
-            out.try_push(SnapshotRun {
+            out.sink_push(SnapshotRun {
                 pa,
                 frame_count: 1,
                 flags: 0,
@@ -984,9 +1029,9 @@ pub fn frames_in_runs(runs: &[SnapshotRun], layout: RamLayout) -> Result<u32, Sn
 fn image_runs_into(
     mutable: ImageRegion,
     layout: RamLayout,
-    out: &mut BoundedVec<SnapshotRun>,
+    out: &mut impl BoundedSink<SnapshotRun>,
 ) -> Result<(), SnapshotError> {
-    out.clear();
+    out.sink_clear();
     if mutable.is_empty()
         || mutable.base % FRAME_SIZE as u64 != 0
         || mutable.end % FRAME_SIZE as u64 != 0
@@ -1000,7 +1045,7 @@ fn image_runs_into(
     if frames > u32::MAX as u64 {
         return Err(SnapshotError::ImageRegionUnavailable);
     }
-    out.try_push(SnapshotRun {
+    out.sink_push(SnapshotRun {
         pa: mutable.base,
         frame_count: frames as u32,
         flags: RUN_FLAG_IMAGE,
@@ -1028,22 +1073,22 @@ pub fn image_runs(
 /// allocator-owned.  Adjacent runs of different kinds are kept separate; they
 /// are never coalesced, so the kind survives the merge.
 fn merge_runs_into(
-    allocated: &mut BoundedVec<SnapshotRun>,
+    allocated: &mut impl BoundedSink<SnapshotRun>,
     image: &[SnapshotRun],
     layout: RamLayout,
 ) -> Result<(), SnapshotError> {
-    if !allocated.items.is_empty() {
-        frames_in_runs(&allocated.items, layout)?;
+    if !allocated.sink_slice().is_empty() {
+        frames_in_runs(allocated.sink_slice(), layout)?;
     }
     if !image.is_empty() {
         frames_in_runs(image, layout)?;
     }
     for run in image {
-        allocated.try_push(*run)?;
+        allocated.sink_push(*run)?;
     }
-    allocated.items.sort_by_key(|run| run.pa);
+    allocated.sink_slice_mut().sort_by_key(|run| run.pa);
     let mut prev: Option<SnapshotRun> = None;
-    for run in allocated.items.iter() {
+    for run in allocated.sink_slice().iter() {
         if let Some(p) = prev {
             if run.pa < p.end_pa() {
                 return Err(if run.flags != p.flags {
@@ -1055,7 +1100,7 @@ fn merge_runs_into(
         }
         prev = Some(*run);
     }
-    if allocated.items.is_empty() {
+    if allocated.sink_slice().is_empty() {
         return Err(SnapshotError::NoRuns);
     }
     Ok(())
@@ -1068,7 +1113,7 @@ pub fn merge_runs(
     layout: RamLayout,
 ) -> Result<Vec<SnapshotRun>, SnapshotError> {
     let mut merged = BoundedVec::reserved(allocated.len() + image.len());
-    merged.items.extend_from_slice(allocated);
+    merged.sink_extend(allocated)?;
     merge_runs_into(&mut merged, image, layout)?;
     Ok(merged.into_vec())
 }
@@ -1101,6 +1146,81 @@ impl ScratchSpan {
     }
 }
 
+/// Bytes of scratch stack the frozen window runs on.
+///
+/// The window holds one 4096-byte staging frame plus a few 512-byte sector and
+/// header buffers, so this matches the kernel's own 64 KiB kernel stack
+/// (`kernel/linker.ld`) rather than being tightened to the current usage.
+pub const SCRATCH_STACK_BYTES: usize = 64 * 1024;
+
+/// A bounded physical workspace the capture owns, reserved at boot.
+///
+/// It is the capture's *workspace*, not machine state: every frame in it is
+/// excluded from the inventory ([`take_allocated_frame`]), so a restored image
+/// can never replay the capture's own stack or buffers over live scratch, and
+/// the region is what [`assert_scratch_outside_runs`] proves the planned runs do
+/// not touch.  The frozen window's stack and every buffer it fills live inside
+/// it, which is what makes that proof honest rather than a claim about a span
+/// the capture is not actually using.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct ScratchRegion {
+    /// Physical base (4096-aligned, inside the allocator's managed RAM).
+    pub base: u64,
+    /// Reserved size in bytes (a whole number of frames).
+    pub bytes: usize,
+}
+
+impl ScratchRegion {
+    /// Physical end (exclusive).
+    pub const fn end(&self) -> u64 {
+        self.base + self.bytes as u64
+    }
+
+    /// Does this region own the frame at physical address `pa`?
+    pub const fn contains_frame(&self, pa: u64) -> bool {
+        pa >= self.base && pa < self.end()
+    }
+
+    /// Frames reserved.
+    pub const fn frames(&self) -> usize {
+        self.bytes / FRAME_SIZE
+    }
+
+    /// The region as a declared capture-scratch span.
+    pub const fn span(&self) -> ScratchSpan {
+        ScratchSpan::new(self.base, self.end())
+    }
+
+    /// The virtual span the region is accessed through.
+    pub fn virt(&self) -> (usize, usize) {
+        let base = phys_to_virt(self.base as usize);
+        (base, base + self.bytes)
+    }
+
+    /// Bytes the frozen window's buffers may use: everything but the stack tail.
+    pub const fn buffer_bytes(&self) -> usize {
+        self.bytes.saturating_sub(SCRATCH_STACK_BYTES)
+    }
+
+    /// The stack the frozen window runs on — the region's last
+    /// [`SCRATCH_STACK_BYTES`], 16-byte aligned at the top.
+    pub fn stack_top(&self) -> usize {
+        let (_, end) = self.virt();
+        end & !0xF
+    }
+
+    /// Is `sp` a stack pointer inside this region's stack span?
+    ///
+    /// Read from *inside* the frozen window, this is the proof that the staging
+    /// really runs in the declared region and not on the boot stack (which is
+    /// inside the captured image span).
+    pub fn owns_stack(&self, sp: usize) -> bool {
+        let (_, end) = self.virt();
+        let stack_base = end.saturating_sub(SCRATCH_STACK_BYTES);
+        sp >= stack_base && sp < end
+    }
+}
+
 /// Where the capture's own code, stack and buffers live, as physical spans.
 ///
 /// A capture may not save a span it is still writing: the frame read would
@@ -1109,6 +1229,9 @@ impl ScratchSpan {
 /// capture's own scratch has to be outside the captured runs by construction.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum CaptureScratch {
+    /// The scratch region this boot reserved from the frame allocator
+    /// ([`reserve_scratch_region_at_boot`]).  The frozen window runs inside it.
+    Region(ScratchRegion),
     /// Reserved capture storage outside every captured run, at these physical
     /// spans.  Must be non-empty.
     Reserved(&'static [ScratchSpan]),
@@ -1123,7 +1246,32 @@ impl CaptureScratch {
     pub const fn spans(self) -> Option<&'static [ScratchSpan]> {
         match self {
             Self::Reserved(spans) => Some(spans),
-            Self::None => None,
+            Self::Region(_) | Self::None => None,
+        }
+    }
+
+    /// The reserved region, when the declaration is the live boot reservation.
+    pub const fn region(self) -> Option<ScratchRegion> {
+        match self {
+            Self::Region(region) => Some(region),
+            Self::Reserved(_) | Self::None => None,
+        }
+    }
+
+    /// Visit every declared span, returning how many were visited.
+    fn for_each_span(self, mut visit: impl FnMut(ScratchSpan)) -> usize {
+        match self {
+            Self::Region(region) => {
+                visit(region.span());
+                1
+            }
+            Self::Reserved(spans) => {
+                for span in spans {
+                    visit(*span);
+                }
+                spans.len()
+            }
+            Self::None => 0,
         }
     }
 }
@@ -1134,9 +1282,18 @@ impl CaptureScratch {
 /// where its own code/stack/buffers are, so it cannot prove it will not save an
 /// in-flight buffer.
 fn require_capture_scratch(scratch: CaptureScratch) -> Result<(), SnapshotError> {
-    match scratch.spans() {
-        Some(spans) if !spans.is_empty() && spans.iter().all(|span| !span.is_empty()) => Ok(()),
-        _ => Err(SnapshotError::NoReservedScratch),
+    let mut declared = 0usize;
+    let mut degenerate = 0usize;
+    scratch.for_each_span(|span| {
+        declared += 1;
+        if span.is_empty() {
+            degenerate += 1;
+        }
+    });
+    if declared > 0 && degenerate == 0 {
+        Ok(())
+    } else {
+        Err(SnapshotError::NoReservedScratch)
     }
 }
 
@@ -1151,15 +1308,284 @@ fn assert_scratch_outside_runs(
     runs: &[SnapshotRun],
 ) -> Result<(), SnapshotError> {
     require_capture_scratch(scratch)?;
-    let spans = scratch.spans().expect("checked above");
-    for span in spans {
+    let mut overlaps = false;
+    scratch.for_each_span(|span| {
         for run in runs {
             if span.overlaps(run.pa, run.end_pa()) {
-                return Err(SnapshotError::ScratchOverlapsRun);
+                overlaps = true;
             }
         }
+    });
+    if overlaps {
+        Err(SnapshotError::ScratchOverlapsRun)
+    } else {
+        Ok(())
     }
-    Ok(())
+}
+
+// ── The reserved capture workspace ───────────────────────────────────────────
+
+/// The capture's reserved scratch region, published by the boot reservation.
+static SNAPSHOT_SCRATCH: Spinlock<Option<ScratchRegion>> = Spinlock::new(None);
+
+/// The scratch region this boot reserved, if any.
+pub fn scratch_region() -> Option<ScratchRegion> {
+    *SNAPSHOT_SCRATCH.lock()
+}
+
+/// Take the capture's scratch workspace from `allocator`.
+///
+/// One contiguous run of [`SCRATCH_FRAMES`] frames, sized from the format
+/// geometry — the buffers for the partition capacity bound plus a kernel-sized
+/// stack — and never from the allocator's own size.  The frames stay allocated
+/// for the kernel's lifetime: the region is the capture's workspace, never
+/// freed and never part of an inventory.
+///
+/// Refuses (never degrades) when no such contiguous run exists, and when the
+/// run would intersect `image` — the trusted kernel-image span, which the plan
+/// saves, so a workspace there would make the capture's own declaration a lie.
+/// Pure: it does not publish into [`SNAPSHOT_SCRATCH`], so the host lane can
+/// exercise the real allocation against a synthetic allocator.
+pub fn take_scratch_region(
+    allocator: &mut FrameAllocator,
+    image: Option<ImageRegion>,
+) -> Result<ScratchRegion, SnapshotError> {
+    let base = crate::memory::frame::reserve_contiguous_run(allocator, SCRATCH_FRAMES)
+        .ok_or(SnapshotError::NoReservedScratch)?;
+    let region = ScratchRegion {
+        base: base as u64,
+        bytes: SCRATCH_FRAMES * FRAME_SIZE,
+    };
+    // Where the image span is not derivable (x86-64's higher half, the 32-bit
+    // targets) capture refuses with `ImageRegionUnavailable` before it stages,
+    // so there is nothing to check and `image` is `None`.
+    if let Some(image) = image {
+        if region_intersects_image(region, image) {
+            // Give the frames back: an unusable region is not a workspace.
+            for frame in 0..SCRATCH_FRAMES {
+                allocator.deallocate_frame(base + frame * FRAME_SIZE);
+            }
+            log::error!(
+                "[snapshot] scratch {:#x}..{:#x} intersects the kernel image {:#x}..{:#x}",
+                region.base,
+                region.end(),
+                image.base,
+                image.end
+            );
+            return Err(SnapshotError::ScratchOverlapsRun);
+        }
+    }
+    Ok(region)
+}
+
+/// Does a candidate workspace intersect the frames the plan saves?
+fn region_intersects_image(region: ScratchRegion, image: ImageRegion) -> bool {
+    region.base < image.end && image.base < region.end()
+}
+
+/// Reserve and publish the capture's scratch workspace, once.
+///
+/// Called from the boot path ([`crate::boot::reserve_snapshot_scratch`]) once
+/// the frame allocator exists and before any capture can run, so a capture never
+/// has to take its own workspace with a live machine.  Never panics and never
+/// degrades: a failure logs and leaves no region, and every capture then refuses
+/// with [`SnapshotError::NoReservedScratch`].  A no-op unless the build is
+/// `snapshot-qualified`, so no shipping image pays for a workspace it cannot use.
+pub fn reserve_scratch_region_at_boot() {
+    if !QUALIFICATION_ENABLED {
+        return;
+    }
+    if scratch_region().is_some() {
+        return;
+    }
+    let mut guard = FRAME_ALLOCATOR.lock();
+    let Some(allocator) = guard.as_mut() else {
+        log::warn!("[snapshot] no frame allocator at boot → no capture scratch");
+        return;
+    };
+    match take_scratch_region(allocator, kernel_image().map(|image| image.trusted)) {
+        Ok(region) => {
+            *SNAPSHOT_SCRATCH.lock() = Some(region);
+            log::info!(
+                "[snapshot] reserved {} bytes ({} frames) of capture scratch at {:#x}..{:#x}",
+                region.bytes,
+                region.frames(),
+                region.base,
+                region.end()
+            );
+        }
+        Err(err) => log::error!("[snapshot] no capture scratch: {err}"),
+    }
+}
+
+// ── The frozen window's stack ────────────────────────────────────────────────
+
+/// The frozen window runs on the region's stack, inside the frames the plan
+/// never saves, or it refuses.
+const SCRATCH_STACK_SUPPORTED: bool = cfg!(any(
+    target_arch = "riscv64",
+    target_arch = "aarch64",
+    target_arch = "x86_64"
+));
+
+/// The stack pointer of the running frame, as a virtual address.
+#[cfg(target_arch = "riscv64")]
+fn stack_pointer() -> usize {
+    let sp: usize;
+    // SAFETY: reading `sp` has no effect on memory or the control flow.
+    unsafe { core::arch::asm!("mv {}, sp", out(reg) sp, options(nomem, nostack)) };
+    sp
+}
+
+/// The stack pointer of the running frame, as a virtual address.
+#[cfg(target_arch = "aarch64")]
+fn stack_pointer() -> usize {
+    let sp: usize;
+    // SAFETY: reading `sp` has no effect on memory or the control flow.
+    unsafe { core::arch::asm!("mov {}, sp", out(reg) sp, options(nomem, nostack)) };
+    sp
+}
+
+/// The stack pointer of the running frame, as a virtual address.
+#[cfg(target_arch = "x86_64")]
+fn stack_pointer() -> usize {
+    let sp: usize;
+    // SAFETY: reading `rsp` has no effect on memory or the control flow.
+    unsafe { core::arch::asm!("mov {}, rsp", out(reg) sp, options(nomem, nostack)) };
+    sp
+}
+
+/// No stack switch exists here, so [`run_on_stack`] cannot stage outside the
+/// in-flight stack; the caller's stack-pointer proof refuses the capture.
+#[cfg(not(any(
+    target_arch = "riscv64",
+    target_arch = "aarch64",
+    target_arch = "x86_64"
+)))]
+fn stack_pointer() -> usize {
+    0
+}
+
+// The switch itself: `__cellos_snapshot_stack_run(new_sp, run, arg)` keeps the
+// old stack pointer in a callee-saved register, moves `sp` to the reserved
+// region, calls `run(arg)`, then restores `sp` — so the caller returns normally
+// while everything `run` does (its frame, its buffers) is in the region.
+
+#[cfg(target_arch = "riscv64")]
+core::arch::global_asm!(
+    ".globl __cellos_snapshot_stack_run",
+    "__cellos_snapshot_stack_run:",
+    "addi sp, sp, -32",
+    "sd ra, 0(sp)",
+    "sd s0, 8(sp)",
+    "mv s0, sp",
+    "mv sp, a0",
+    "mv t0, a1",
+    "mv a0, a2",
+    "jalr t0",
+    "mv sp, s0",
+    "ld s0, 8(sp)",
+    "ld ra, 0(sp)",
+    "addi sp, sp, 32",
+    "ret",
+);
+
+#[cfg(target_arch = "aarch64")]
+core::arch::global_asm!(
+    ".globl __cellos_snapshot_stack_run",
+    "__cellos_snapshot_stack_run:",
+    "stp x29, x30, [sp, #-32]!",
+    "str x19, [sp, #16]",
+    "mov x29, sp",
+    "mov sp, x0",
+    "mov x19, x1",
+    "mov x0, x2",
+    "blr x19",
+    "mov sp, x29",
+    "ldr x19, [sp, #16]",
+    "ldp x29, x30, [sp], #32",
+    "ret",
+);
+
+#[cfg(target_arch = "x86_64")]
+core::arch::global_asm!(
+    ".text",
+    ".globl __cellos_snapshot_stack_run",
+    "__cellos_snapshot_stack_run:",
+    "push rbp",
+    "mov rbp, rsp",
+    "mov rsp, rdi",
+    "mov rax, rsi",
+    "mov rdi, rdx",
+    "call rax",
+    "mov rsp, rbp",
+    "pop rbp",
+    "ret",
+);
+
+#[cfg(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64"))]
+unsafe extern "C" {
+    /// Switch to `new_sp` and run `run(arg)` there, then switch back.
+    fn __cellos_snapshot_stack_run(new_sp: usize, run: extern "C" fn(*mut u8), arg: *mut u8);
+}
+
+/// Run `f` on the reserved scratch stack whose top is `stack_top`.
+///
+/// `F` and its result stay on the caller's stack; only the execution moves, so
+/// the closure's captured state is untouched and the return value is copied back
+/// after the switch.
+///
+/// # Safety
+/// `stack_top` must be a 16-byte-aligned address with [`SCRATCH_STACK_BYTES`] of
+/// writable, mapped space below it inside the capture's reserved region, and `f`
+/// must not unwind (the kernel is `panic = "abort"`; the host lane's fixtures
+/// depend on neither panicking).
+unsafe fn run_on_stack<F, R>(stack_top: usize, f: F) -> R
+where
+    F: FnOnce() -> R,
+{
+    struct Job<F, R> {
+        run: Option<F>,
+        out: *mut Option<R>,
+    }
+
+    extern "C" fn trampoline<F: FnOnce() -> R, R>(arg: *mut u8) {
+        // SAFETY: `arg` is the `&mut Job` passed below, which outlives the call.
+        let job = unsafe { &mut *(arg as *mut Job<F, R>) };
+        let run = job.run.take().expect("the scratch stack runs the job once");
+        let value = run();
+        // SAFETY: as above; `out` points at the caller's slot, on the old stack.
+        unsafe { *job.out = Some(value) };
+    }
+
+    let mut out: Option<R> = None;
+    let mut job = Job {
+        run: Some(f),
+        out: &mut out,
+    };
+    #[cfg(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64"))]
+    // SAFETY: the caller guarantees `stack_top` addresses the reserved region's
+    // stack; `trampoline` never unwinds.
+    unsafe {
+        __cellos_snapshot_stack_run(
+            stack_top,
+            trampoline::<F, R>,
+            &mut job as *mut Job<F, R> as *mut u8,
+        );
+    }
+    #[cfg(not(any(
+        target_arch = "riscv64",
+        target_arch = "aarch64",
+        target_arch = "x86_64"
+    )))]
+    {
+        // No switch exists on this target: run the job in place, through the
+        // same trampoline.  The stack-pointer proof in `capture_window` then
+        // refuses, because `stack_pointer` reports 0.
+        let _ = stack_top;
+        trampoline::<F, R>(&mut job as *mut Job<F, R> as *mut u8);
+    }
+    out.expect("the scratch stack ran the job")
 }
 
 // ── Capacity-bounded buffers ─────────────────────────────────────────────────
@@ -1210,10 +1636,6 @@ impl<T> BoundedVec<T> {
         }
     }
 
-    fn len(&self) -> usize {
-        self.items.len()
-    }
-
     fn clear(&mut self) {
         self.items.clear();
     }
@@ -1246,23 +1668,217 @@ impl BoundedVec<u8> {
     }
 }
 
+/// A capacity-bounded destination for the inventory builders.
+///
+/// One planner serves both backings: [`BoundedVec`] (heap, reserved before the
+/// park) and [`ScratchVec`] (the capture's reserved region, used inside the
+/// frozen window).  Neither can grow past its reservation, so a shortage is a
+/// refusal — and on [`ScratchVec`] it is also counted, so a bound that was
+/// wrong is observable.
+trait BoundedSink<T: Copy> {
+    fn sink_clear(&mut self);
+    fn sink_push(&mut self, value: T) -> Result<(), SnapshotError>;
+    fn sink_extend(&mut self, values: &[T]) -> Result<(), SnapshotError>;
+    fn sink_slice(&self) -> &[T];
+    fn sink_slice_mut(&mut self) -> &mut [T];
+}
+
+/// A byte sink that can be zero-filled to an exact length.
+trait ZeroedSink: BoundedSink<u8> {
+    fn sink_resize_zeroed(&mut self, needed: usize) -> Result<(), SnapshotError>;
+}
+
+impl<T: Copy> BoundedSink<T> for BoundedVec<T> {
+    fn sink_clear(&mut self) {
+        self.clear();
+    }
+    fn sink_push(&mut self, value: T) -> Result<(), SnapshotError> {
+        self.try_push(value)
+    }
+    fn sink_extend(&mut self, values: &[T]) -> Result<(), SnapshotError> {
+        for &value in values {
+            self.try_push(value)?;
+        }
+        Ok(())
+    }
+    fn sink_slice(&self) -> &[T] {
+        &self.items
+    }
+    fn sink_slice_mut(&mut self) -> &mut [T] {
+        &mut self.items
+    }
+}
+
+impl ZeroedSink for BoundedVec<u8> {
+    fn sink_resize_zeroed(&mut self, needed: usize) -> Result<(), SnapshotError> {
+        self.resize_zeroed(needed)
+    }
+}
+
+/// Bump allocator over the capture's reserved scratch region.
+///
+/// Buffers grow up from the region's base; the stack is the region's tail, so
+/// the two can never collide.  Every buffer the frozen window fills is carved
+/// from here, which is what keeps the window's working set inside the region:
+/// it never touches the heap (whose lock a parked hart may hold) and never
+/// writes a frame the plan saves.
+struct ScratchArena {
+    cursor: usize,
+    limit: usize,
+}
+
+impl ScratchArena {
+    fn new(region: ScratchRegion) -> Self {
+        let (base, end) = region.virt();
+        Self {
+            cursor: base,
+            limit: end - SCRATCH_STACK_BYTES,
+        }
+    }
+
+    /// Carve `count` slots of `T`, or `None` when they do not fit.
+    fn take<T: 'static>(&mut self, count: usize) -> Option<&'static mut [MaybeUninit<T>]> {
+        let align = core::mem::align_of::<T>().max(1);
+        let start = (self.cursor + align - 1) & !(align - 1);
+        let end = start.checked_add(count.checked_mul(core::mem::size_of::<T>())?)?;
+        if end > self.limit {
+            return None;
+        }
+        self.cursor = end;
+        // SAFETY: `start..end` lies inside the region the capture reserved at
+        // boot.  The frames are allocator-owned and excluded from every
+        // inventory, so no other owner can hand them out or replay over them;
+        // the region is mapped for the kernel's lifetime; and the bump cursor
+        // never returns the same bytes twice, so the slice is exclusive.
+        Some(unsafe { core::slice::from_raw_parts_mut(start as *mut MaybeUninit<T>, count) })
+    }
+
+    /// Bytes still available for buffers.
+    fn remaining(&self) -> usize {
+        self.limit.saturating_sub(self.cursor)
+    }
+}
+
+/// A capacity-bounded buffer carved from the capture's reserved region.
+///
+/// The frozen-window counterpart of [`BoundedVec`]: the same never-grow
+/// contract, but the bytes live in the scratch region instead of on the heap.
+struct ScratchVec<T: 'static> {
+    slots: &'static mut [MaybeUninit<T>],
+    len: usize,
+}
+
+impl<T: Copy + 'static> ScratchVec<T> {
+    fn new(slots: &'static mut [MaybeUninit<T>]) -> Self {
+        Self { slots, len: 0 }
+    }
+
+    /// Slots reserved.  Host-lane only: the live path never asks (a shortage
+    /// is a refusal, not something to measure against).
+    #[cfg(test)]
+    fn capacity(&self) -> usize {
+        self.slots.len()
+    }
+
+    fn len(&self) -> usize {
+        self.len
+    }
+
+    fn clear(&mut self) {
+        self.len = 0;
+    }
+
+    fn as_slice(&self) -> &[T] {
+        // SAFETY: the first `len` slots were initialized by `sink_push`.
+        unsafe { &*(&self.slots[..self.len] as *const [MaybeUninit<T>] as *const [T]) }
+    }
+
+    fn as_mut_slice(&mut self) -> &mut [T] {
+        // SAFETY: as `as_slice`, with exclusive access to the slots.
+        unsafe { &mut *(&mut self.slots[..self.len] as *mut [MaybeUninit<T>] as *mut [T]) }
+    }
+
+    fn try_push(&mut self, value: T) -> Result<(), SnapshotError> {
+        if self.len == self.slots.len() {
+            frozen_alloc_attempt();
+            return Err(SnapshotError::CapacityExceeded);
+        }
+        self.slots[self.len].write(value);
+        self.len += 1;
+        Ok(())
+    }
+}
+
+impl<T: Copy + 'static> BoundedSink<T> for ScratchVec<T> {
+    fn sink_clear(&mut self) {
+        self.clear();
+    }
+    fn sink_push(&mut self, value: T) -> Result<(), SnapshotError> {
+        self.try_push(value)
+    }
+    fn sink_extend(&mut self, values: &[T]) -> Result<(), SnapshotError> {
+        for &value in values {
+            self.try_push(value)?;
+        }
+        Ok(())
+    }
+    fn sink_slice(&self) -> &[T] {
+        self.as_slice()
+    }
+    fn sink_slice_mut(&mut self) -> &mut [T] {
+        self.as_mut_slice()
+    }
+}
+
+impl ScratchVec<u8> {
+    fn resize_zeroed(&mut self, needed: usize) -> Result<(), SnapshotError> {
+        if self.slots.len() < needed {
+            frozen_alloc_attempt();
+            return Err(SnapshotError::CapacityExceeded);
+        }
+        for slot in &mut self.slots[..needed] {
+            slot.write(0);
+        }
+        self.len = needed;
+        Ok(())
+    }
+}
+
+impl ZeroedSink for ScratchVec<u8> {
+    fn sink_resize_zeroed(&mut self, needed: usize) -> Result<(), SnapshotError> {
+        self.resize_zeroed(needed)
+    }
+}
+
 /// Pre-allocated storage for one capture's frozen window.
 ///
-/// Built **before** the machine is frozen, from a bound derived from the live
-/// allocator and the partition capacity; after the park it is only filled, so
-/// nothing in the window touches the heap (and therefore the heap lock, which
-/// a parked hart may be holding).
+/// Carved from the scratch region the boot reserved, **before** the machine is
+/// frozen: the frame list, the runs, the encoded inventory and the stack the
+/// window runs on all live in that region, so nothing in the window touches the
+/// heap (and therefore the heap lock, which a parked hart may be holding) and
+/// nothing it writes is a frame the plan saves.  The pre-freeze bound comes from
+/// the region's own size — never from the whole allocator — and the region is
+/// required to cover the partition capacity bound.
 struct FrozenScratch {
+    region: ScratchRegion,
     frame_bound: u64,
-    pas: BoundedVec<u64>,
-    runs: BoundedVec<SnapshotRun>,
-    image: BoundedVec<SnapshotRun>,
-    inventory: BoundedVec<u8>,
+    pas: ScratchVec<u64>,
+    runs: ScratchVec<SnapshotRun>,
+    image: ScratchVec<SnapshotRun>,
+    inventory: ScratchVec<u8>,
+    /// The stack pointer this window proved it ran on (0 before it runs).
+    ///
+    /// Host-lane only, and per-window rather than a process-global so a test can
+    /// read its own window's proof while other tests run windows in parallel.
+    /// The live path records nothing: the window refuses unless the pointer it
+    /// observes is inside the declared workspace, so the proof is in-band.
+    #[cfg(test)]
+    window_stack: core::cell::Cell<u64>,
 }
 
 /// The largest frame count whose image can fit the reserved partition, using
 /// the same geometry the writer emits (worst case: one run per frame).
-fn capacity_frame_bound() -> u64 {
+const fn capacity_frame_bound() -> u64 {
     let mut frames = SNAPSHOT_SECTOR_COUNT / SECTORS_PER_FRAME as u64;
     loop {
         let inv = inventory_sectors(frames + IMAGE_RUNS_MAX as u64);
@@ -1274,49 +1890,214 @@ fn capacity_frame_bound() -> u64 {
 }
 
 /// Bytes to reserve for an inventory of at most `run_bound` runs.
-fn inventory_byte_bound(run_bound: u64) -> usize {
+const fn inventory_byte_bound(run_bound: u64) -> usize {
     inventory_sectors(run_bound) as usize * SECTOR_SIZE
 }
 
-impl FrozenScratch {
-    /// Reserve every buffer the frozen window will fill.  Refuses when the
-    /// bound cannot be computed at all.
-    fn new() -> Result<Self, SnapshotError> {
-        let cap = capacity_frame_bound();
-        let total = {
-            let guard = FRAME_ALLOCATOR.lock();
-            let allocator = guard.as_ref().ok_or(SnapshotError::MemoryFault)?;
-            allocator.total_frames() as u64
-        };
-        let frame_bound = core::cmp::min(total, cap);
-        if frame_bound == 0 {
-            return Err(SnapshotError::NoRuns);
-        }
-        let run_bound = frame_bound + IMAGE_RUNS_MAX as u64;
-        Ok(Self::with_bounds(frame_bound, run_bound))
+/// Bytes the frozen window's buffers need for `frame_bound` frame addresses and
+/// `run_bound` runs (worst case: one run per frame).
+const fn scratch_bytes_for_bounds(frame_bound: u64, run_bound: u64) -> usize {
+    frame_bound as usize * core::mem::size_of::<u64>()
+        + run_bound as usize * core::mem::size_of::<SnapshotRun>()
+        + IMAGE_RUNS_MAX * core::mem::size_of::<SnapshotRun>()
+        + inventory_byte_bound(run_bound)
+}
+
+/// Bytes the buffers need for the worst-case run bound of `frame_bound` frames.
+const fn scratch_bytes_for(frame_bound: u64) -> usize {
+    scratch_bytes_for_bounds(frame_bound, frame_bound + IMAGE_RUNS_MAX as u64)
+}
+
+/// The largest frame bound whose buffers fit in `bytes`.
+///
+/// Derived from the region's size — 24 bytes per frame (an 8-byte address plus
+/// a 16-byte worst-case run) plus the inventory — not from the allocator's
+/// frame count.  Capped by the partition capacity bound, since no image can be
+/// larger than the reserved P3 partition.
+fn frame_bound_for_scratch(bytes: usize) -> u64 {
+    /// PA plus worst-case run per frame.
+    const BYTES_PER_FRAME: usize = 24;
+    let cap = capacity_frame_bound();
+    let mut bound = core::cmp::min((bytes / BYTES_PER_FRAME) as u64, cap);
+    while bound > 0 && scratch_bytes_for(bound) > bytes {
+        bound -= 1;
+    }
+    while bound < cap && scratch_bytes_for(bound + 1) <= bytes {
+        bound += 1;
+    }
+    bound
+}
+
+/// Frames the boot reserves for the capture's scratch region: the buffers for
+/// the partition capacity bound plus the frozen window's stack.
+const SCRATCH_BYTES: usize = scratch_bytes_for(capacity_frame_bound()) + SCRATCH_STACK_BYTES;
+const SCRATCH_FRAMES: usize = (SCRATCH_BYTES + FRAME_SIZE - 1) / FRAME_SIZE;
+
+/// Host-lane backing for the frozen window.
+///
+/// A host build has no boot path and no frame allocator, so it cannot reserve a
+/// physical region; these fixtures own a process-lifetime static buffer that
+/// stands in for one.  Everything downstream — the arena, the bound arithmetic,
+/// the exclusion and the stack switch — is the same code the live path runs.
+#[cfg(test)]
+mod host_scratch {
+    use super::{MaybeUninit, ScratchRegion, FRAME_SIZE, SCRATCH_BYTES};
+    use core::sync::atomic::{AtomicUsize, Ordering};
+
+    /// Bytes in one host region: enough for a capacity-sized window, so
+    /// [`super::FrozenScratch::new`] is exercised exactly as the live path runs
+    /// it.
+    pub const REGION_BYTES: usize = SCRATCH_BYTES + FRAME_SIZE;
+
+    /// Regions handed out per test process (one per test that carves a window).
+    const REGIONS: usize = 24;
+
+    /// One slot per region, plus a frame of slack so a slot's base can be
+    /// rounded up to a frame boundary and still hold [`REGION_BYTES`].
+    const SLOT_BYTES: usize = REGION_BYTES + FRAME_SIZE;
+
+    struct Pool {
+        bytes: [MaybeUninit<u8>; REGIONS * SLOT_BYTES],
     }
 
-    /// Storage reserved for `frame_bound` frames and `run_bound` runs.  Used by
-    /// `new` and, deliberately under-sized, by the counter's positive control.
-    fn with_bounds(frame_bound: u64, run_bound: u64) -> Self {
-        Self {
-            frame_bound,
-            pas: BoundedVec::reserved(frame_bound as usize),
-            runs: BoundedVec::reserved(run_bound as usize),
-            image: BoundedVec::reserved(IMAGE_RUNS_MAX),
-            inventory: BoundedVec::reserved(inventory_byte_bound(run_bound)),
+    static mut POOL: Pool = Pool {
+        bytes: [const { MaybeUninit::uninit() }; REGIONS * SLOT_BYTES],
+    };
+    static NEXT: AtomicUsize = AtomicUsize::new(0);
+
+    /// The next host region, `bytes` long (rounded up to whole frames).
+    pub fn region(bytes: usize) -> ScratchRegion {
+        assert!(bytes <= REGION_BYTES, "host scratch region too small");
+        let slot = NEXT.fetch_add(1, Ordering::SeqCst);
+        assert!(slot < REGIONS, "host scratch pool exhausted");
+        // A raw pointer, never a `&mut POOL` reference: a static-mut reference
+        // would be UB-adjacent and the pool is handed out by slot, not borrowed.
+        let pool = unsafe { core::ptr::addr_of_mut!(POOL.bytes) } as usize;
+        let slot_base = pool + slot * SLOT_BYTES;
+        // Whole frames, so a host region can stand in for an allocator-owned run
+        // and the exclusion (`contains_frame`) has real frame addresses to work
+        // with.
+        let base = (slot_base + FRAME_SIZE - 1) & !(FRAME_SIZE - 1);
+        debug_assert!(base + REGION_BYTES <= slot_base + SLOT_BYTES);
+        // The host lane has no physical offset, so `phys_to_virt` is the
+        // identity and this buffer *is* the region the arena carves.
+        debug_assert_eq!(super::phys_to_virt(base), base);
+        ScratchRegion {
+            base: base as u64,
+            bytes: (bytes + FRAME_SIZE - 1) / FRAME_SIZE * FRAME_SIZE,
         }
+    }
+}
+
+/// Take one allocator-owned frame into the capture's frame list, unless it
+/// belongs to the capture's own scratch region.
+///
+/// The region is the capture's *workspace*, not machine state: an inventory must
+/// never name its frames, or a restore would replay the capture's own stack and
+/// buffers over live scratch.  Returning `false` for an excluded frame is the
+/// single definition of that exclusion — the live enumeration and the host
+/// lane's fixture both go through here, and `assert_scratch_outside_runs`
+/// refuses the capture if a region frame reaches the plan anyway.
+fn take_allocated_frame(
+    pas: &mut ScratchVec<u64>,
+    region: ScratchRegion,
+    pa: u64,
+) -> Result<bool, SnapshotError> {
+    if region.contains_frame(pa) {
+        return Ok(false);
+    }
+    pas.try_push(pa)?;
+    Ok(true)
+}
+
+impl FrozenScratch {
+    /// Carve the frozen window's working set out of the boot-reserved region.
+    ///
+    /// Refuses ([`SnapshotError::CapacityExceeded`]) rather than degrading when
+    /// the region cannot hold the buffers for [`capacity_frame_bound`] frames:
+    /// a smaller bound would silently refuse a capture on a busy machine, which
+    /// is the same failure discovered later and after a park.
+    fn new(region: ScratchRegion) -> Result<Self, SnapshotError> {
+        let frame_bound = frame_bound_for_scratch(region.buffer_bytes());
+        if frame_bound < capacity_frame_bound() {
+            return Err(SnapshotError::CapacityExceeded);
+        }
+        Self::carve(region, frame_bound, frame_bound + IMAGE_RUNS_MAX as u64, true)
+    }
+
+    /// Carve `region` for an explicit `(frame_bound, run_bound)`.
+    ///
+    /// `require_capacity` is the live rule (the bound must cover the partition
+    /// capacity); the host lane's counter fixture passes `false` to build a
+    /// deliberately under-sized window and watch the bounded buffers refuse
+    /// instead of growing.
+    fn carve(
+        region: ScratchRegion,
+        frame_bound: u64,
+        run_bound: u64,
+        require_capacity: bool,
+    ) -> Result<Self, SnapshotError> {
+        if frame_bound == 0 || (require_capacity && frame_bound < capacity_frame_bound()) {
+            return Err(SnapshotError::CapacityExceeded);
+        }
+        let mut arena = ScratchArena::new(region);
+        if scratch_bytes_for_bounds(frame_bound, run_bound) > arena.remaining() {
+            return Err(SnapshotError::CapacityExceeded);
+        }
+        let pas = arena
+            .take::<u64>(frame_bound as usize)
+            .ok_or(SnapshotError::CapacityExceeded)?;
+        let runs = arena
+            .take::<SnapshotRun>(run_bound as usize)
+            .ok_or(SnapshotError::CapacityExceeded)?;
+        let image = arena
+            .take::<SnapshotRun>(IMAGE_RUNS_MAX)
+            .ok_or(SnapshotError::CapacityExceeded)?;
+        let inventory = arena
+            .take::<u8>(inventory_byte_bound(run_bound))
+            .ok_or(SnapshotError::CapacityExceeded)?;
+        log::info!(
+            "[snapshot] frozen window carved from scratch 0x{:X}..0x{:X} ({} bytes left)",
+            region.base,
+            region.end(),
+            arena.remaining()
+        );
+        Ok(Self {
+            region,
+            frame_bound,
+            pas: ScratchVec::new(pas),
+            runs: ScratchVec::new(runs),
+            image: ScratchVec::new(image),
+            inventory: ScratchVec::new(inventory),
+            #[cfg(test)]
+            window_stack: core::cell::Cell::new(0),
+        })
+    }
+
+    /// Storage reserved for `frame_bound` frames and `run_bound` runs, sized
+    /// from the bound itself.  Host lane only: a host build has no boot path,
+    /// so it has no reserved region to carve.
+    #[cfg(test)]
+    fn with_bounds(frame_bound: u64, run_bound: u64) -> Self {
+        let bytes = scratch_bytes_for_bounds(frame_bound, run_bound) + SCRATCH_STACK_BYTES;
+        let region = host_scratch::region(bytes);
+        Self::carve(region, frame_bound, run_bound, false).expect("region sized for the bound")
     }
 
     /// Enumerate the live allocated frames into `pas` and return the live RAM
     /// layout.  The allocator lock is held only for the enumeration (a masking
     /// [`crate::sync::Spinlock`], so a hart interrupted into a park can never
     /// be holding it); no block I/O, and no allocation.
+    ///
+    /// The capture's own scratch region is **excluded**: those frames are the
+    /// capture's workspace, not machine state, so an inventory must never name
+    /// them (see [`take_allocated_frame`]).
     fn enumerate(&mut self) -> Result<RamLayout, SnapshotError> {
         let image = kernel_image().ok_or(SnapshotError::ImageRegionUnavailable)?;
         let guard = FRAME_ALLOCATOR.lock();
         let allocator = guard.as_ref().ok_or(SnapshotError::MemoryFault)?;
         self.pas.clear();
+        let mut excluded = 0u32;
         for index in 0..allocator.total_frames() {
             if !allocator.is_frame_allocated(index) {
                 continue;
@@ -1330,10 +2111,17 @@ impl FrozenScratch {
             if pa >= allocator.memory_start() as u64
                 && pa + FRAME_SIZE as u64 <= allocator.memory_end() as u64
             {
-                self.pas.try_push(pa)?;
+                if !take_allocated_frame(&mut self.pas, self.region, pa)? {
+                    excluded += 1;
+                }
             } else {
                 log::warn!("[snapshot] skipping allocated frame outside RAM: 0x{pa:X}");
             }
+        }
+        if excluded > 0 {
+            log::info!(
+                "[snapshot] excluded {excluded} capture-scratch frame(s) from the inventory"
+            );
         }
         Ok(RamLayout {
             base: allocator.memory_start() as u64,
@@ -1356,11 +2144,11 @@ impl FrozenScratch {
         plan_runs_into(
             mutable,
             layout,
-            &self.pas.items,
+            self.pas.as_slice(),
             &mut self.runs,
             &mut self.image,
         )?;
-        encode_inventory_into(&self.runs.items, &mut self.inventory)?;
+        encode_inventory_into(self.runs.as_slice(), &mut self.inventory)?;
         log::info!(
             "[snapshot] inventory: {} run(s) spanning image 0x{:X}..0x{:X}",
             self.runs.len(),
@@ -1910,12 +2698,12 @@ fn plan_runs_into(
     mutable: ImageRegion,
     layout: RamLayout,
     allocated_pas: &[u64],
-    allocated_out: &mut BoundedVec<SnapshotRun>,
-    image_out: &mut BoundedVec<SnapshotRun>,
+    allocated_out: &mut impl BoundedSink<SnapshotRun>,
+    image_out: &mut impl BoundedSink<SnapshotRun>,
 ) -> Result<(), SnapshotError> {
     runs_from_frames_into(allocated_pas, layout, allocated_out)?;
     image_runs_into(mutable, layout, image_out)?;
-    merge_runs_into(allocated_out, &image_out.items, layout)
+    merge_runs_into(allocated_out, image_out.sink_slice(), layout)
 }
 
 /// Allocation-owning wrapper for [`plan_runs_into`], for the host lane.
@@ -1955,22 +2743,33 @@ pub fn serialize_snapshot() -> Result<u32, SnapshotError> {
     if !QUALIFICATION_ENABLED {
         return Err(SnapshotError::GateClosed);
     }
-    // No reserved capture storage exists yet on any target: the capture's own
-    // stack and code live inside the linker-delimited image span, which is part
-    // of the inventory, so it cannot prove it is not about to save its own
-    // in-flight stack.  A qualified build therefore refuses here (fail-closed)
-    // until a reserved scratch region outside the image span is provisioned.
-    let capture_scratch = CaptureScratch::None;
-    require_capture_scratch(capture_scratch)?;
-    let mut scratch = FrozenScratch::new()?;
-    capture_record(
+    // The workspace the capture stages its own stack and buffers in, reserved at
+    // boot from the frame allocator.  A boot that never reserved one (or whose
+    // reservation failed) refuses rather than guessing a region.
+    let region = scratch_region().ok_or(SnapshotError::NoReservedScratch)?;
+    capture_staged(
         &quiesce::KERNEL_STATE,
         &quiesce::KERNEL_HARTS,
         &KERNEL_DEVICE,
         &KERNEL_MEMORY,
-        capture_scratch,
-        &mut scratch,
+        region,
     )
+}
+
+/// The capture path with the reserved region injected, in the order
+/// [`serialize_snapshot`] runs it: declare the workspace, carve the frozen
+/// window out of it, and only then park harts and touch the device.
+fn capture_staged<'a>(
+    state: &'a quiesce::QuiesceState,
+    harts: &'a dyn quiesce::QuiesceHarts,
+    dev: &dyn SnapshotDevice,
+    mem: &dyn FrameMemory,
+    region: ScratchRegion,
+) -> Result<u32, SnapshotError> {
+    let capture_scratch = CaptureScratch::Region(region);
+    require_capture_scratch(capture_scratch)?;
+    let mut scratch = FrozenScratch::new(region)?;
+    capture_record(state, harts, dev, mem, capture_scratch, &mut scratch)
 }
 
 /// Prove that no hart but the requester can mutate the memory image, or refuse.
@@ -2026,7 +2825,8 @@ fn capture_frozen(
     capture_planned(dev, mem, capture_scratch, scratch, layout)
 }
 
-/// The frozen window with the plan already built: stage-check, then write.
+/// The frozen window with the plan already built: stage-check, switch to the
+/// region's stack, then write.
 fn capture_planned(
     dev: &dyn SnapshotDevice,
     mem: &dyn FrameMemory,
@@ -2034,19 +2834,48 @@ fn capture_planned(
     scratch: &mut FrozenScratch,
     layout: RamLayout,
 ) -> Result<u32, SnapshotError> {
-    #[cfg(target_arch = "riscv64")]
-    let t0 = hal::common::timer::read_mtime();
-
     // The capture's own scratch must be outside every planned run: refuse rather
     // than save an in-flight stack or buffer.  Checked before any block I/O.
-    assert_scratch_outside_runs(capture_scratch, &scratch.runs.items)?;
+    assert_scratch_outside_runs(capture_scratch, scratch.runs.as_slice())?;
+
+    // ...and the window must actually run inside that scratch.  Staging on the
+    // region's stack is what makes the declaration above true: the boot stack
+    // lives in the captured image span, so a window that ran on it would save its
+    // own in-flight frame.
+    let stack_top = scratch.region.stack_top();
+    // SAFETY: `stack_top` is the reserved region's stack top — 16-byte aligned
+    // with SCRATCH_STACK_BYTES of mapped writable space below it — and the
+    // window body cannot unwind (`panic = "abort"`).
+    unsafe { run_on_stack(stack_top, || capture_window(dev, mem, scratch, layout)) }
+}
+
+/// The frozen window body.  Runs on the reserved scratch stack, so its frame,
+/// its sector buffers and the staging frame inside [`capture_image_prepared`]
+/// are all inside the region the stage-check just approved.
+fn capture_window(
+    dev: &dyn SnapshotDevice,
+    mem: &dyn FrameMemory,
+    scratch: &mut FrozenScratch,
+    layout: RamLayout,
+) -> Result<u32, SnapshotError> {
+    let sp = stack_pointer();
+    if !SCRATCH_STACK_SUPPORTED || !scratch.region.owns_stack(sp) {
+        // Not running on the workspace the stage-check approved: refuse rather
+        // than save the caller's own in-flight stack.
+        return Err(SnapshotError::NoReservedScratch);
+    }
+    #[cfg(test)]
+    scratch.window_stack.set(sp as u64);
+
+    #[cfg(target_arch = "riscv64")]
+    let t0 = hal::common::timer::read_mtime();
 
     let report = capture_image_prepared(
         dev,
         mem,
         layout,
-        &scratch.runs.items,
-        &scratch.inventory.items,
+        scratch.runs.as_slice(),
+        scratch.inventory.as_slice(),
     )?;
 
     #[cfg(target_arch = "riscv64")]
@@ -2055,13 +2884,14 @@ fn capture_planned(
     let elapsed_ms = 0u64;
 
     log::info!(
-        "[snapshot] wrote {} frames in {} runs ({} sectors, crc {:08X}) in {} ms to LBA {}",
+        "[snapshot] wrote {} frames in {} runs ({} sectors, crc {:08X}) in {} ms to LBA {} from scratch stack 0x{:X}",
         report.frames,
         report.runs,
         report.image_sectors,
         report.crc32,
         elapsed_ms,
-        SNAPSHOT_BASE_LBA
+        SNAPSHOT_BASE_LBA,
+        sp
     );
     Ok(report.frames)
 }
@@ -2069,8 +2899,8 @@ fn capture_planned(
 /// Host-test seam: the frozen window driven from an explicit allocated set and
 /// image span instead of the live allocator/linker (which a host build has no
 /// access to).  It fills the pre-reserved buffers through the same
-/// `try_push`/`plan_from`/`capture_planned` the live path uses, and writes
-/// through the same `capture_image_prepared`.
+/// `take_allocated_frame`/`plan_from`/`capture_planned` the live path uses, and
+/// writes through the same `capture_image_prepared`.
 #[cfg(test)]
 fn capture_frozen_with_allocated(
     dev: &dyn SnapshotDevice,
@@ -2083,7 +2913,9 @@ fn capture_frozen_with_allocated(
 ) -> Result<u32, SnapshotError> {
     scratch.pas.clear();
     for &pa in allocated_pas {
-        scratch.pas.try_push(pa)?;
+        // The same exclusion the live enumeration applies: the capture's own
+        // scratch frames are its workspace, not inventory.
+        let _ = take_allocated_frame(&mut scratch.pas, scratch.region, pa)?;
     }
     scratch.plan_from(mutable, layout)?;
     capture_planned(dev, mem, capture_scratch, scratch, layout)
@@ -4164,7 +4996,7 @@ mod tests {
             "the frozen window must never reach the heap"
         );
         // The buffers the window filled are the ones reserved before it.
-        assert_eq!(scratch.pas.items.capacity(), FRAMES as usize);
+        assert_eq!(scratch.pas.capacity(), FRAMES as usize);
 
         // The image it wrote round-trips.
         disk.power_cycle();
@@ -4174,6 +5006,29 @@ mod tests {
             RestoreOutcome::Resumed
         );
         assert_eq!(target.map(), ram.map());
+
+        // The same window staged through its own reserved workspace: the buffers
+        // and the stack are the region's, and the counter is still zero.
+        let region = scratch.region;
+        let disk = FakeDisk::new();
+        let ram = ram_with_image();
+        let frames = frozen_capture(
+            &disk,
+            &ram,
+            CaptureScratch::Region(region),
+            &mut scratch,
+        )
+        .expect("a capture declaring the workspace it stages in succeeds");
+        assert_eq!(frames, SPARSE.len() as u32 + IMAGE_MUTABLE_FRAMES);
+        assert_eq!(
+            frozen_window_alloc_attempts(),
+            0,
+            "staging through the reserved workspace must not reach the heap"
+        );
+        assert!(
+            region.owns_stack(scratch.window_stack.get() as usize),
+            "the window must run on the workspace's stack"
+        );
 
         // Positive control: an under-sized reservation is refused and counted,
         // never grown.
@@ -4272,6 +5127,424 @@ mod tests {
         assert_eq!(
             require_capture_scratch(CaptureScratch::Reserved(EMPTY_SCRATCH)),
             Err(SnapshotError::NoReservedScratch)
+        );
+    }
+
+    // ── the reserved capture workspace ───────────────────────────────────────
+
+    /// A synthetic managed range for the reservation tests: 16 MiB, far more
+    /// than the workspace needs, so a contiguous run always exists.
+    const RESERVE_BASE: usize = 0x8000_0000;
+    const RESERVE_FRAMES: usize = 4096;
+
+    fn reserve_allocator() -> crate::memory::frame::FrameAllocator {
+        crate::memory::frame::allocator_for_tests(&[(RESERVE_BASE, RESERVE_FRAMES)])
+    }
+
+    #[test]
+    fn snapshot_scratch_reservation_takes_a_contiguous_run_from_the_allocator() {
+        let mut allocator = reserve_allocator();
+        let owned = allocator.used_frames();
+        let region =
+            take_scratch_region(&mut allocator, None).expect("a fresh allocator has a run");
+
+        // One contiguous, frame-aligned run of exactly the computed size.
+        assert_eq!(region.bytes, SCRATCH_FRAMES * FRAME_SIZE);
+        assert_eq!(region.frames(), SCRATCH_FRAMES);
+        assert_eq!(region.base % FRAME_SIZE as u64, 0, "frame-aligned");
+        assert!(region.base >= RESERVE_BASE as u64);
+        assert!(region.end() <= (RESERVE_BASE + RESERVE_FRAMES * FRAME_SIZE) as u64);
+        assert_eq!(
+            allocator.used_frames() - owned,
+            SCRATCH_FRAMES,
+            "the whole workspace is allocator-owned (and so excluded from the inventory)"
+        );
+        for frame in 0..SCRATCH_FRAMES {
+            let pa = region.base as usize + frame * FRAME_SIZE;
+            let index = (pa - RESERVE_BASE) / FRAME_SIZE;
+            assert!(
+                allocator.is_frame_allocated(index),
+                "scratch frame {frame} must be marked used"
+            );
+        }
+        // Every frame the workspace covers is managed RAM, so the capture can
+        // name its frames as physical addresses.
+        assert!(allocator.manages(region.base as usize));
+        assert!(allocator.manages(region.end() as usize - 1));
+
+        // The bound the region yields is the partition capacity bound: the
+        // workspace is sized from the format geometry, not from the allocator.
+        assert_eq!(
+            frame_bound_for_scratch(region.buffer_bytes()),
+            capacity_frame_bound()
+        );
+        let scratch = FrozenScratch::new(region).expect("a capacity-sized workspace carves");
+        assert_eq!(scratch.frame_bound, capacity_frame_bound());
+        assert_eq!(scratch.pas.capacity(), capacity_frame_bound() as usize);
+    }
+
+    #[test]
+    fn snapshot_pre_freeze_bound_is_derived_from_the_region_size() {
+        // The bound is a function of the region's size alone...
+        assert_eq!(frame_bound_for_scratch(0), 0);
+        assert_eq!(frame_bound_for_scratch(scratch_bytes_for(64)), 64);
+        assert_eq!(frame_bound_for_scratch(scratch_bytes_for(4096)), 4096);
+        assert!(frame_bound_for_scratch(scratch_bytes_for(64)) < 4096);
+        // ...and the partition geometry caps it, not the machine's frame count.
+        assert_eq!(
+            frame_bound_for_scratch(scratch_bytes_for(capacity_frame_bound() * 2)),
+            capacity_frame_bound()
+        );
+    }
+
+    #[test]
+    fn snapshot_reservation_refuses_a_workspace_inside_the_kernel_image() {
+        let mut allocator = reserve_allocator();
+        let owned = allocator.used_frames();
+        // The kernel owns the frames the allocator would hand out first.
+        let image = ImageRegion {
+            base: RESERVE_BASE as u64,
+            end: RESERVE_BASE as u64 + 512 * FRAME_SIZE as u64,
+        };
+        assert_eq!(
+            take_scratch_region(&mut allocator, Some(image)),
+            Err(SnapshotError::ScratchOverlapsRun)
+        );
+        assert_eq!(
+            allocator.used_frames(),
+            owned,
+            "a refused workspace gives its frames back"
+        );
+
+        // A trusted span that does not touch the run is fine.
+        let elsewhere = ImageRegion {
+            base: RESERVE_BASE as u64 - 0x1000_0000,
+            end: RESERVE_BASE as u64 - 0x0FFF_F000,
+        };
+        let region =
+            take_scratch_region(&mut allocator, Some(elsewhere)).expect("disjoint image span");
+        assert!(!region_intersects_image(region, elsewhere));
+        assert!(
+            allocator.manages(region.base as usize),
+            "the workspace is managed RAM"
+        );
+    }
+
+    #[test]
+    fn snapshot_workspace_intersection_is_span_exact() {
+        let image = ImageRegion {
+            base: 0x8020_0000,
+            end: 0x8040_0000,
+        };
+        for (name, region, expected) in [
+            (
+                "inside",
+                ScratchRegion {
+                    base: 0x8030_0000,
+                    bytes: FRAME_SIZE,
+                },
+                true,
+            ),
+            (
+                "straddling the base",
+                ScratchRegion {
+                    base: 0x801F_F000,
+                    bytes: 4 * FRAME_SIZE,
+                },
+                true,
+            ),
+            (
+                "straddling the end",
+                ScratchRegion {
+                    base: 0x803F_F000,
+                    bytes: 4 * FRAME_SIZE,
+                },
+                true,
+            ),
+            (
+                "containing",
+                ScratchRegion {
+                    base: 0x8000_0000,
+                    bytes: 0x0080_0000,
+                },
+                true,
+            ),
+            (
+                "ending at the base",
+                ScratchRegion {
+                    base: 0x801F_F000,
+                    bytes: FRAME_SIZE,
+                },
+                false,
+            ),
+            (
+                "starting at the end",
+                ScratchRegion {
+                    base: 0x8040_0000,
+                    bytes: FRAME_SIZE,
+                },
+                false,
+            ),
+        ] {
+            assert_eq!(
+                region_intersects_image(region, image),
+                expected,
+                "{name}"
+            );
+        }
+    }
+
+    #[test]
+    fn snapshot_frozen_window_runs_on_the_reserved_scratch_stack() {
+        let here = stack_pointer();
+        let disk = FakeDisk::new();
+        let ram = ram_with_image();
+        let mut scratch = FrozenScratch::with_bounds(FRAMES, fake_run_bound());
+        let region = scratch.region;
+        assert!(
+            !region.owns_stack(here),
+            "the test's own stack is not the workspace"
+        );
+
+        let frames = frozen_capture(
+            &disk,
+            &ram,
+            CaptureScratch::Region(region),
+            &mut scratch,
+        )
+        .expect("a capture declaring the workspace it stages in succeeds");
+        assert_eq!(frames, SPARSE.len() as u32 + IMAGE_MUTABLE_FRAMES);
+
+        // The window recorded the stack it proved it was running on: the
+        // workspace's, not the caller's.
+        let sp = scratch.window_stack.get();
+        assert_ne!(sp, 0, "the frozen window must record where it ran");
+        assert!(
+            region.owns_stack(sp as usize),
+            "the window must run on the workspace's stack, not the boot stack: sp={sp:#x}"
+        );
+        assert!(
+            !region.owns_stack(here),
+            "the caller keeps running on its own stack"
+        );
+        assert!(disk.writes() > 0, "the capture wrote an image");
+
+        // The image round-trips, and the stack switch left no trace in it.
+        disk.power_cycle();
+        let target = FakeRam::default();
+        assert_eq!(
+            restore_image(&disk, &target, layout()),
+            RestoreOutcome::Resumed
+        );
+        assert_eq!(target.map(), ram.map());
+    }
+
+    #[test]
+    fn snapshot_stack_switch_returns_to_the_caller() {
+        let region = host_scratch::region(SCRATCH_STACK_BYTES);
+        let caller_sp = stack_pointer();
+        // The closure's own state stays on the caller's stack; only execution
+        // moves.
+        let observed = unsafe { run_on_stack(region.stack_top(), stack_pointer) };
+        assert!(
+            region.owns_stack(observed),
+            "the switched frame must run in the workspace: sp={observed:#x}"
+        );
+        assert!(!region.owns_stack(caller_sp));
+        assert_eq!(
+            stack_pointer(),
+            caller_sp,
+            "the caller's stack must be restored"
+        );
+    }
+
+    #[test]
+    fn snapshot_scratch_frames_never_appear_in_the_inventory() {
+        let disk = FakeDisk::new();
+        let ram = FakeRam::default();
+        let mut scratch = FrozenScratch::with_bounds(FRAMES, fake_run_bound());
+        let region = scratch.region;
+
+        // The workspace's frames, presented as if the allocator owned them —
+        // exactly what `enumerate` sees.
+        let scratch_pas: Vec<u64> = (0..region.frames() as u64)
+            .map(|i| region.base + i * FRAME_SIZE as u64)
+            .collect();
+        let mut allocated = sparse_pas();
+        allocated.extend_from_slice(&scratch_pas);
+        allocated.sort_unstable();
+        assert!(allocated.windows(2).all(|w| w[0] < w[1]), "ascending");
+        assert!(
+            allocated.iter().any(|pa| region.contains_frame(*pa)),
+            "the input must contain frames the exclusion has to drop"
+        );
+
+        // A mutable image span above the workspace, inside the same layout.
+        let mutable = ImageRegion {
+            base: region.end(),
+            end: region.end() + IMAGE_MUTABLE_FRAMES as u64 * FRAME_SIZE as u64,
+        };
+        // The layout spans the fake RAM window and wherever the host pool
+        // landed, so the planner's own bounds describe both.
+        let layout = RamLayout {
+            base: core::cmp::min(BASE, region.base),
+            end: mutable.end,
+            image: mutable,
+        };
+
+        // Map every frame the capture *should* read, and the workspace's frames
+        // too: if the exclusion were skipped they would be read and saved.
+        for pa in sparse_pas() {
+            ram.put(pa, 0xA0);
+        }
+        for pa in scratch_pas.iter().copied() {
+            ram.put(pa, 0x5C);
+        }
+        for i in 0..IMAGE_MUTABLE_FRAMES as u64 {
+            ram.put(mutable.base + i * FRAME_SIZE as u64, 0xB0);
+        }
+
+        let frames = capture_frozen_with_allocated(
+            &disk,
+            &ram,
+            CaptureScratch::Region(region),
+            &mut scratch,
+            &allocated,
+            mutable,
+            layout,
+        )
+        .expect("the workspace frames are excluded, so nothing overlaps the declaration");
+
+        // Nothing the capture saved is in the workspace...
+        let runs = inventory_of(&disk);
+        for run in &runs {
+            assert!(
+                run.end_pa() <= region.base || run.pa >= region.end(),
+                "run {run:?} covers the capture's own workspace"
+            );
+        }
+        assert_eq!(
+            frames,
+            (allocated.len() - scratch_pas.len()) as u32 + IMAGE_MUTABLE_FRAMES
+        );
+        // ...and nothing in the workspace was read.
+        assert_eq!(
+            ram.reads.get(),
+            (allocated.len() - scratch_pas.len()) as u64 + IMAGE_MUTABLE_FRAMES as u64,
+            "the capture read exactly the frames it saved"
+        );
+
+        // Red witness: the same plan *without* the exclusion does contain the
+        // workspace, and the stage-check refuses it rather than saving it.
+        let unexcluded = plan_runs(mutable, layout, &allocated).expect("plan builds");
+        assert!(
+            unexcluded
+                .iter()
+                .any(|run| run.pa < region.end() && region.base < run.end_pa()),
+            "the unexcluded plan must cover the workspace"
+        );
+        assert_eq!(
+            assert_scratch_outside_runs(CaptureScratch::Region(region), &unexcluded),
+            Err(SnapshotError::ScratchOverlapsRun),
+            "a workspace frame in the plan must be refused, not saved"
+        );
+    }
+
+    #[test]
+    fn snapshot_capture_refuses_when_the_workspace_cannot_hold_the_bound() {
+        let disk = FakeDisk::new();
+        let ram = sparse_ram();
+        // Two harts, a working hook, a short budget: a refusal that parked a
+        // hart would show up as a request.
+        let harts = quiesce::fake::FakeHarts::new(&[0, 1], 0)
+            .with_hook(true)
+            .with_budget(4);
+        let state = quiesce::QuiesceState::new();
+
+        // Enough for a small window, far short of the partition capacity bound.
+        let small = host_scratch::region(SCRATCH_STACK_BYTES + FRAME_SIZE);
+        assert_eq!(
+            capture_staged(&state, &harts, &disk, &ram, small),
+            Err(SnapshotError::CapacityExceeded)
+        );
+        assert!(
+            harts.requests().is_empty(),
+            "no hart may be parked for a refusal"
+        );
+        assert_eq!(disk.writes(), 0, "refused before any block I/O");
+        assert_eq!(disk.reads(), 0);
+        assert_eq!(disk.flushes(), 0);
+        assert_eq!(ram.reads.get(), 0, "no frame may be read");
+
+        // Smaller than the stack alone, and empty, are the same refusal.
+        assert_eq!(
+            FrozenScratch::new(host_scratch::region(FRAME_SIZE)).err(),
+            Some(SnapshotError::CapacityExceeded)
+        );
+        assert_eq!(
+            FrozenScratch::new(ScratchRegion { base: 0, bytes: 0 }).err(),
+            Some(SnapshotError::CapacityExceeded)
+        );
+    }
+
+    #[test]
+    fn snapshot_capture_refuses_a_workspace_overlapping_a_planned_run() {
+        let disk = FakeDisk::new();
+        let ram = FakeRam::default();
+        let mut scratch = FrozenScratch::with_bounds(FRAMES, fake_run_bound());
+        let region = scratch.region;
+
+        // The build's mutable image span lies *inside* the workspace: the plan
+        // would save the frames the window runs in and buffers from.  The boot
+        // reservation refuses such a region (`region_intersects_image`), so
+        // reaching the stage-check means the reservation was bypassed — and the
+        // check still refuses rather than saving its own stack.
+        let mutable = ImageRegion {
+            base: region.base + FRAME_SIZE as u64,
+            end: region.base + 2 * FRAME_SIZE as u64,
+        };
+        let layout = RamLayout {
+            base: region.base,
+            end: region.end() + FRAME_SIZE as u64,
+            image: mutable,
+        };
+        let allocated = [region.end()];
+
+        assert_eq!(
+            capture_frozen_with_allocated(
+                &disk,
+                &ram,
+                CaptureScratch::Region(region),
+                &mut scratch,
+                &allocated,
+                mutable,
+                layout,
+            ),
+            Err(SnapshotError::ScratchOverlapsRun)
+        );
+        assert_eq!(disk.writes(), 0, "refused before any block I/O");
+        assert_eq!(disk.reads(), 0);
+        assert_eq!(ram.reads.get(), 0);
+    }
+
+    #[test]
+    fn snapshot_boot_reservation_publishes_nothing_without_an_allocator() {
+        // The host lane has no frame allocator and never runs the boot path: the
+        // boot entry point must leave no workspace rather than invent one, which
+        // is what makes the live entry point's refusal deterministic.
+        reserve_scratch_region_at_boot();
+        assert!(scratch_region().is_none());
+    }
+
+    #[cfg(feature = "snapshot-qualified")]
+    #[test]
+    fn snapshot_qualified_build_without_a_reserved_workspace_refuses() {
+        assert!(QUALIFICATION_ENABLED);
+        assert!(scratch_region().is_none(), "no host test publishes a workspace");
+        assert_eq!(
+            serialize_snapshot(),
+            Err(SnapshotError::NoReservedScratch),
+            "a qualified capture without a reserved workspace must refuse, not guess"
         );
     }
 
