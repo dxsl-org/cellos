@@ -4,10 +4,13 @@
 //!
 //! Prerequisites:
 //!   - `qemu-system-aarch64` on PATH (or in the Windows default install path)
-//!   - Kernel built: `RUSTFLAGS="-C relocation-model=pic" cargo build --release
-//!                    --target aarch64-unknown-none-softfloat -p cellos-kernel`
-//!   - Disk image: `disk_arm_virt.img` at repo root (built by `format-disk-arm.ps1`
-//!                 or by `tools/mkfat32.py`)
+//!   - A production-feature image: `bash scripts/gen-disk-aarch64-ci.sh` builds the
+//!     kernel (`target/aarch64-prod-ci/aarch64-unknown-none-softfloat/release/
+//!     cellos-kernel`), its embedded VIFS1 and `target/aarch64-prod-ci/
+//!     disk_arm_virt.img` on Linux, with the cells these tests launch
+//!     (`periph-demo`, `input-test`, `httpd`, `virtio-net`, …). On Windows
+//!     `build-aarch64-cells.ps1` + `format-disk-arm.ps1` write the legacy in-tree
+//!     paths, which are still honoured when the CI image is absent.
 //!   - For the two Tier-2 refusal tests: `bash scripts/build-aarch64-prod-refusal-ci.sh`,
 //!     which builds the production-feature witness image whose embedded VIFS1
 //!     carries the domain-class fixtures. Those tests skip loudly (and hard-fail
@@ -31,14 +34,53 @@ fn repo_root() -> PathBuf {
         .expect("repo root resolves")
 }
 
+/// Path to the production-feature kernel the boot tests drive.
+///
+/// Resolution order:
+///   1. `CELLOS_AARCH64_KERNEL` — explicit override, for a witness built elsewhere.
+///   2. `target/aarch64-prod-ci/aarch64-unknown-none-softfloat/release/cellos-kernel`
+///      — what `scripts/gen-disk-aarch64-ci.sh` builds on Linux, in its own
+///      `CARGO_TARGET_DIR` with its own `EMBEDDED_OVERRIDE`, so no other lane can
+///      clobber it and it is guaranteed to be a *production* (no `test-hooks`)
+///      kernel whose VIFS1 carries the cells this suite launches.
+///   3. `target/aarch64-unknown-none-softfloat/release/cellos-kernel` — the legacy
+///      in-tree path written by the Windows recipes. It is written by both the
+///      production lane and the test-hooks lane (`build-aarch64-test-hooks-ci.sh`
+///      builds there and only then copies aside), so it is only a fallback: a
+///      test-hooks kernel on that path enables Tier-2 admission and would make the
+///      refusal tests below vacuous, and its VIFS1 does not carry the demo cells.
 fn kernel_path() -> String {
+    if let Ok(path) = std::env::var("CELLOS_AARCH64_KERNEL") {
+        if !path.is_empty() {
+            return path;
+        }
+    }
+    let isolated = repo_root()
+        .join("target/aarch64-prod-ci/aarch64-unknown-none-softfloat/release/cellos-kernel");
+    if isolated.exists() {
+        return isolated.to_string_lossy().into_owned();
+    }
     repo_root()
         .join("target/aarch64-unknown-none-softfloat/release/cellos-kernel")
         .to_string_lossy()
         .into_owned()
 }
 
+/// Path to the VirtIO disk the boot tests attach.
+///
+/// Resolution order: `CELLOS_AARCH64_DISK` → the disk
+/// `scripts/gen-disk-aarch64-ci.sh` builds beside its kernel → the repo-root
+/// `disk_arm_virt.img` the Windows recipes leave behind.
 fn disk_path() -> String {
+    if let Ok(path) = std::env::var("CELLOS_AARCH64_DISK") {
+        if !path.is_empty() {
+            return path;
+        }
+    }
+    let isolated = repo_root().join("target/aarch64-prod-ci/disk_arm_virt.img");
+    if isolated.exists() {
+        return isolated.to_string_lossy().into_owned();
+    }
     repo_root()
         .join("disk_arm_virt.img")
         .to_string_lossy()
