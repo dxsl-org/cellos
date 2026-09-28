@@ -49,10 +49,18 @@ báo cáo ở `.agents/<plan>/`, cách làm ở `docs/guides/`. Chuỗi tiền l
   descriptor ngay sau scatter thấy đúng byte; không request nào kết thúc bằng `VIRTIO_BLK_S_IOERR`; ảnh
   đĩa trên host vẫn còn dữ liệu). Nghi vấn còn lại: cách công bố completion của chain nhiều descriptor.
   Đã thử và **không** phải nguyên nhân: `used.len` — báo `payload + 1` theo spec (đã giữ, lane vẫn xanh với
-  `seg_max` tắt) cũng không cứu được trường hợp nhiều segment. Hướng còn lại: với feature bật, Linux probe đĩa
-  *sớm hơn* trong boot và lần boot hỏng ghi lỗi I/O ở logical block 0 trước khi có request nào dị dạng —
-  nghi thứ tự "đọc đầu tiên trước khi VFS sẵn sàng" (`ensure_persistent_connected` trả false → status 1) chứ
-  không phải bản thân chain. Bằng chứng + lý do khoá feature nằm tại
+  `seg_max` tắt) cũng không cứu được trường hợp nhiều segment.
+
+  Hai dạng hỏng đã tách được, cả hai chỉ xuất hiện khi request lớn hơn 4 KiB:
+  (A) **VFS trả short read**: `[hv-blk] VFS read response: GrantDone { bytes: 15360 }` cho một request 64 KiB
+  (offset 901120) ⇒ cell báo `status=1` ⇒ guest "I/O error, dev vda, sector 96". Đây là lỗi có sẵn của
+  `FatBackend::read_at` (vòng `file.read` dừng sớm ở ~30 sector); request 4 KiB không bao giờ chạm tới. Sửa
+  `read_at` là hết dạng A.
+  (B) **device báo mọi request thành công nhưng guest đọc ra zero**: probe trong guest đọc sector 0..5 (cả cold
+  lẫn warm) đều ra zero, không có dòng `vfs-dbg` EOF/ERR nào, không request nào `status≠0`; ở lần chạy có
+  instrument, `read_guest_memory` đọc lại *frame của descriptor* ngay sau scatter thấy đúng byte (marker).
+  Tức page mà guest nhìn thấy khác frame mà device đã ghi — chưa giải thích được; nghi phần biên dịch
+  IPA→PA/bản đồ stage-2 mà đường đọc của guest đi qua, không phải đường di chuyển dữ liệu. Bằng chứng + lý do khoá feature nằm tại
   `cells/services/hypervisor/src/virtio_blk.rs` (`config_read`).
   Lane tái hiện: `scripts/qemu-x86-virtio-e2e.sh` (đỏ khi bật, xanh khi tắt).
 
