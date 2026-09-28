@@ -113,6 +113,14 @@ curl -v http://10.0.2.2:8080/
 
 Network traffic is routed through Cellos's kernel; no direct hardware access.
 
+> **Boot-time caveat (measured):** the guest kernel seeds its CRNG only after boot and `/dev/random`
+> blocks until it does. A TLS client started immediately after the network comes up can sit inside its
+> first handshake long enough — in host time — for the peer to close the connection: the capture shows
+> the TCP handshake completing, then no ClientHello for ~60 s, then the peer's FIN, which the guest
+> reports as `SSL routines::unexpected eof while reading`. The retry succeeds because the pool is then
+> ready. Read from `/dev/random` once before the first TLS connection;
+> `scripts/qemu-x86-nginx-gate.sh` does exactly that (marker `NGINX_IN_VM_CRNG_READY`).
+
 ---
 
 ## VirtIO Devices (What's Emulated)

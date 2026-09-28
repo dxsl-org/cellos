@@ -38,6 +38,19 @@ date -u -s '@BUILD_UTC@' >/dev/null 2>&1 \
     || say "CLOCK_SET_FAIL"
 echo "guest clock: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
 
+# The guest CRNG is not seeded at boot, and /dev/random blocks until it is.
+# Generating the first TLS ClientHello needs those bytes: measured with a
+# packet capture, the connection completed its handshake and then sat idle for
+# ~60 s of host time before the ClientHello appeared — long enough for the
+# SLIRP peer's idle timeout to close it (`SSL routines::unexpected eof while
+# reading`), while the second attempt succeeded immediately. Wait for the pool
+# instead of racing it.
+if timeout 240 head -c 32 /dev/random >/dev/null 2>&1; then
+    say "CRNG_READY"
+else
+    say "CRNG_WAIT_TIMEOUT"
+fi
+
 # ── Guest network: the repository install path needs it ────────────────────
 net_if=""
 i=0

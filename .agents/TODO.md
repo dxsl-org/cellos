@@ -38,10 +38,6 @@ báo cáo ở `.agents/<plan>/`, cách làm ở `docs/guides/`. Chuỗi tiền l
   TLS runtime (loader expose `PT_TLS` + block per-thread + offset `initial-exec`).
 - [open gap] **mlibc** chưa hoàn tất: checkout không có `third_party/mlibc/build*/libc.a`; thiếu
   `malloc`, `printf`, `free`, `clock_gettime`.
-- [open gap] **TLS trong guest Tier 3 chập chờn**: fetch HTTPS đầu tiên từ Alpine guest qua net bridge
-  có lúc đứt (`SSL routines::unexpected eof while reading`) rồi phải rơi xuống HTTP; đo 3/5 lần trong
-  lane `scripts/qemu-x86-nginx-gate.sh` (2/5 lần HTTPS PASS, `nginx install path: repo-https`). Chưa
-  rõ thủ phạm (bridge TCP/TLS, SLIRP, hay CDN) — lane hiện chấp nhận cả hai nhánh nên không chặn gate.
 - [open gap] **Tier 3**: Intel VMX chưa có
   VMCS/world-switch hoàn chỉnh. Boot-to-shell ARM64 nghiêm ngặt cần KVM/phần cứng thật — QEMU-TCG
   chỉ là machinery evidence.

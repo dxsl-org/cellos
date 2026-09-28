@@ -150,6 +150,7 @@ fi
 required_markers=(
     '[hv-x86] vCPU ready'
     'NGINX_IN_VM_GUEST_INIT_START'
+    'NGINX_IN_VM_CRNG_READY'
     'nginx version: nginx/'
     'nginx: configuration file /etc/nginx/nginx.conf test is successful'
     'NGINX_IN_VM_FORK_MASTER_WORKER_PASS'
