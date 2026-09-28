@@ -1,8 +1,9 @@
 //! Private completion boundary for permission-lowering and unmap TLB maintenance.
 //!
 //! A frame is released only after its private tag is invalidated locally and
-//! every online RV64 hart has acknowledged its own all-ASID flush. Non-RV64
-//! Tier-2 remains single-CPU until per-CPU shootdown is implemented.
+//! every online hart (RISC-V via RFENCE/IPI, AArch64 via the GIC SGI) has
+//! acknowledged its own all-ASID flush. Targets with a single CPU have no
+//! remote to confirm and rely on the local flush alone.
 //!
 //! Confirming that acknowledgement is a **probe**, never a wait:
 //! [`confirm_tag_invalidation`] spends one bounded deadline, and a caller that
@@ -105,7 +106,7 @@ pub enum FlushAckError {
 /// invalidation from the timer path.
 pub fn confirm_tag_invalidation(asid: usize) -> Result<(), FlushAckError> {
     local_tag_flush(asid);
-    let result = match await_remote_invalidation(TAG_PROBE_TICKS) {
+    let result = match await_remote_invalidation(tag_probe_ticks()) {
         Err(error) => Err(error),
         Ok(()) => {
             // Test-only: the acknowledgement is withheld for a bounded window, so
@@ -133,7 +134,7 @@ pub fn confirm_tag_invalidation(asid: usize) -> Result<(), FlushAckError> {
             match error {
                 FlushAckError::Timeout { hart, .. } => hart,
             },
-            TAG_PROBE_TICKS
+            tag_probe_ticks()
         );
     }
     result
@@ -178,6 +179,13 @@ fn local_tag_flush(asid: usize) {
         // SAFETY: an S-mode fence orders prior page-table stores.
         unsafe { core::arch::asm!("fence rw, rw", options(nostack)) };
     }
+    #[cfg(target_arch = "aarch64")]
+    {
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::Release);
+        // SAFETY: `dsb ishst` orders prior page-table stores before the IPI that
+        // asks a remote hart to invalidate them.
+        unsafe { core::arch::asm!("dsb ishst", options(nostack)) };
+    }
     #[cfg(feature = "test-hooks")]
     if TEST_FLUSH_TRACKING.load(Ordering::Acquire) {
         TEST_FLUSHED_TAGS.lock().push(asid);
@@ -197,15 +205,15 @@ fn local_tag_flush(asid: usize) {
 /// (the target may be in a long non-interruptible stretch), so the epoch — not
 /// the firmware's return — is what proves the remote hart stopped using the
 /// translation.
-#[cfg(target_arch = "riscv64")]
+#[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
 fn await_remote_invalidation(ticks: u64) -> Result<(), FlushAckError> {
     use crate::task::smp;
     let me = crate::task::hart_local::current_hart_id();
     for hart in smp::online_harts().filter(|hart| *hart != me) {
         let epoch = smp::request_tlb_flush(hart);
-        let deadline = hal::common::timer::read_mtime() + ticks;
+        let deadline = counter_now() + ticks;
         while !smp::tlb_flush_completed(hart, epoch) {
-            if hal::common::timer::read_mtime() > deadline {
+            if counter_now() > deadline {
                 return Err(FlushAckError::Timeout { hart, epoch });
             }
             // Spin, and only spin: this runs in whatever context the release
@@ -220,14 +228,31 @@ fn await_remote_invalidation(ticks: u64) -> Result<(), FlushAckError> {
     Ok(())
 }
 
-/// Non-RV64: the backends are single-CPU, so the local flush above is the whole
-/// contract and there is no remote to confirm.
-#[cfg(not(target_arch = "riscv64"))]
+/// Targets without a second hart: the local flush above is the whole contract
+/// and there is no remote to confirm.
+#[cfg(not(any(target_arch = "riscv64", target_arch = "aarch64")))]
 fn await_remote_invalidation(_ticks: u64) -> Result<(), FlushAckError> {
     Ok(())
 }
 
-#[cfg(target_arch = "riscv64")]
+/// Free-running counter used for bounded probes.
+///
+/// It advances whether or not the caller's context takes interrupts, which is
+/// what a probe that must not wait needs.
+#[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
+#[inline]
+fn counter_now() -> u64 {
+    #[cfg(target_arch = "riscv64")]
+    {
+        hal::common::timer::read_mtime()
+    }
+    #[cfg(target_arch = "aarch64")]
+    {
+        hal::aarch64::timer::counter_now()
+    }
+}
+
+#[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
 fn issue_remote_tag_flushes() {
     let me = crate::task::hart_local::current_hart_id();
     for hart in crate::task::smp::online_harts().filter(|hart| *hart != me) {
@@ -235,12 +260,12 @@ fn issue_remote_tag_flushes() {
     }
 }
 
-/// Non-RV64: no remote hart can owe this hart's tag invalidation.
-#[cfg(not(target_arch = "riscv64"))]
+/// No second hart: nothing can owe this hart's tag invalidation.
+#[cfg(not(any(target_arch = "riscv64", target_arch = "aarch64")))]
 fn issue_remote_tag_flushes() {}
 
 /// The first online remote hart that still owes an invalidation, if any.
-#[cfg(target_arch = "riscv64")]
+#[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
 fn remote_tag_flushes_outstanding() -> Option<usize> {
     let me = crate::task::hart_local::current_hart_id();
     crate::task::smp::online_harts()
@@ -248,7 +273,7 @@ fn remote_tag_flushes_outstanding() -> Option<usize> {
         .find(|hart| crate::task::smp::tlb_flush_pending(*hart))
 }
 
-#[cfg(not(target_arch = "riscv64"))]
+#[cfg(not(any(target_arch = "riscv64", target_arch = "aarch64")))]
 fn remote_tag_flushes_outstanding() -> Option<usize> {
     None
 }
@@ -258,12 +283,20 @@ fn remote_tag_flushes_outstanding() -> Option<usize> {
 /// one probe latency, a missing one costs isolation, and the probe is now the
 /// *only* wait — the reaper's retries happen without blocking anyone.
 #[cfg(target_arch = "riscv64")]
-const TAG_PROBE_TICKS: u64 = 20 * hal::common::timer::TICKS_PER_10MS;
+const fn tag_probe_ticks() -> u64 {
+    20 * hal::common::timer::TICKS_PER_10MS
+}
 
-/// Non-RV64: the backends are single-CPU, so the probe's own local flush already
-/// satisfies the contract and there is no deadline to observe.
-#[cfg(not(target_arch = "riscv64"))]
-const TAG_PROBE_TICKS: u64 = 0;
+/// 200 ms in this platform's counter units — the budget for one probe.
+#[cfg(target_arch = "aarch64")]
+fn tag_probe_ticks() -> u64 {
+    hal::aarch64::timer::counter_frequency_hz() / 5
+}
+
+#[cfg(not(any(target_arch = "riscv64", target_arch = "aarch64")))]
+const fn tag_probe_ticks() -> u64 {
+    0
+}
 
 /// Invalidate the translation for one changed page before its memory can run or reuse.
 #[inline]

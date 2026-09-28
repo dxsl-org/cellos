@@ -479,6 +479,64 @@ pub fn fallback_dtb_ram_range() -> (usize, usize) {
 /// # Panics
 /// Never — falls back to a 32 MB span only if `__stack_top` resolves below the
 /// RAM base (impossible with the current linker script).
+/// Firmware SMP facts, read once from the device tree during boot.
+///
+/// The kernel starts secondary cores through firmware (`PSCI_CPU_ON` over the
+/// conduit the tree declares) and must not guess either fact later: the tree is
+/// only reliably readable while boot code is still running, and an SMC on a
+/// machine whose firmware never asked for one is an undefined instruction.
+#[cfg(target_arch = "aarch64")]
+pub mod firmware_smp {
+    use core::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
+
+    /// The instruction the firmware expects for PSCI calls (`/psci/method`).
+    ///
+    /// The hal's own type: this module only reports what the tree said, and a
+    /// second enum with the same two variants would be a second source of truth
+    /// for the caller that has to pick an instruction.
+    pub use hal::aarch64::psci::Conduit;
+
+    const UNREAD: u8 = 0;
+    const NO_PSCI: u8 = 1;
+    const SMC: u8 = 2;
+    const HVC: u8 = 3;
+
+    static CONDUIT: AtomicU8 = AtomicU8::new(UNREAD);
+    static CPUS: AtomicUsize = AtomicUsize::new(0);
+
+    /// Read `/psci` and the `/cpus` population from the firmware tree.
+    pub fn note(tree: &fdt::Fdt) {
+        let conduit = tree.find_node("/psci").map_or(NO_PSCI, |node| {
+            match node.property("method").and_then(|method| method.as_str()) {
+                Some("smc") => SMC,
+                Some("hvc") => HVC,
+                _ => NO_PSCI,
+            }
+        });
+        CONDUIT.store(conduit, Ordering::Relaxed);
+        CPUS.store(tree.cpus().count(), Ordering::Relaxed);
+    }
+
+    /// The PSCI conduit, or `None` when the tree declares no PSCI.
+    pub fn psci_conduit() -> Option<Conduit> {
+        match CONDUIT.load(Ordering::Relaxed) {
+            SMC => Some(Conduit::Smc),
+            HVC => Some(Conduit::Hvc),
+            _ => None,
+        }
+    }
+
+    /// CPUs the firmware tree describes (0 when the tree was never read).
+    pub fn cpu_count() -> usize {
+        CPUS.load(Ordering::Relaxed)
+    }
+
+    /// Was a firmware tree read at all? (`/psci` only means anything if one was.)
+    pub fn tree_available() -> bool {
+        CONDUIT.load(Ordering::Relaxed) != UNREAD
+    }
+}
+
 #[cfg(all(
     target_arch = "aarch64",
     not(feature = "board-rpi3"),
@@ -504,6 +562,9 @@ pub fn fallback_boot_info(dtb: usize) -> &'static SimpleBootInfo {
         unsafe { fdt::Fdt::from_ptr(dtb as *const u8) }
             .ok()
             .and_then(|tree| {
+                // The tree is only reliably readable here — record what the
+                // firmware says about PSCI and the CPU population now.
+                firmware_smp::note(&tree);
                 tree.memory().regions().find_map(|region| {
                     let start = region.starting_address as usize;
                     region

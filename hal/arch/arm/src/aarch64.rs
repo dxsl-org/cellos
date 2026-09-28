@@ -33,6 +33,8 @@ pub mod mte;
 #[cfg(target_arch = "aarch64")]
 pub mod paging;
 #[cfg(target_arch = "aarch64")]
+pub mod psci;
+#[cfg(target_arch = "aarch64")]
 pub mod rtc;
 pub mod stage2_regs; // non-AArch64 builds get ENOSYS stubs; no cfg gate needed
 #[cfg(target_arch = "aarch64")]
@@ -140,6 +142,35 @@ impl Arch for AArch64Arch {
         }
         (daif & (1 << 7)) == 0
     }
+}
+
+/// Bring up one secondary core.
+///
+/// Everything here is per-PE state that a freshly started core does not
+/// inherit: its exception vectors, its banked interrupt-controller interface,
+/// and its own timer. The steps mirror the order `Arch::init()` uses on the
+/// boot core (controller, then timer, then vectors) and must run with
+/// interrupts masked — the caller unmasks only once this returns.
+///
+/// Not reproduced here: `CFI`/`MTE` re-initialisation. Both are per-PE, and the
+/// secondary receives the boot core's live `SCTLR_EL1` (including the enable
+/// bits they set) through its boot context; the PAC keys themselves are not
+/// copied, which is a limitation only for a PAuth-capable board — none of the
+/// boards this kernel targets has one (A53/A55/A57 have no PAuth, and CFI
+/// reports itself unavailable on QEMU virt).
+#[cfg(target_arch = "aarch64")]
+pub fn init_secondary_hart() {
+    #[cfg(feature = "board-rpi3")]
+    {
+        // BCM2836 local controller + BCM2835 legacy bank: the RPi3 has no GIC.
+        bcm2836_irq::init();
+        bcm2835_legacy_irq::init();
+    }
+    #[cfg(not(feature = "board-rpi3"))]
+    gic::init_cpu();
+
+    timer::init();
+    trap::init();
 }
 
 /// Store the kernel-stack top in TPIDR_EL1 (AArch64 only).

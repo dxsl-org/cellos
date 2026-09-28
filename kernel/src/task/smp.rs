@@ -34,18 +34,37 @@ pub static HART_ONLINE: [AtomicBool; MAX_HARTS] = [AtomicBool::new(false), Atomi
 static TLB_FLUSH_REQUEST: [AtomicUsize; MAX_HARTS] = [AtomicUsize::new(0), AtomicUsize::new(0)];
 static TLB_FLUSH_COMPLETE: [AtomicUsize; MAX_HARTS] = [AtomicUsize::new(0), AtomicUsize::new(0)];
 
+/// Deliver the kernel's cross-hart IPI to `hart_id`.
+///
+/// The requester only records an epoch; what makes the target *act* is this
+/// interrupt. Every path that needs a remote hart to do work (invalidate its
+/// TLB, switch out of a retiring context) goes through here so the delivery
+/// mechanism has one definition per architecture.
+#[inline]
+fn send_ipi(hart_id: usize) {
+    if hart_id >= MAX_HARTS || hart_id == crate::task::hart_local::current_hart_id() {
+        return;
+    }
+    #[cfg(target_arch = "riscv64")]
+    if let Some((mask, base)) = logical_sbi_target(hart_id) {
+        let _ = hal::common::sbi::sbi_send_ipi(mask, base);
+    }
+    // AArch64: the BCM2836 (RPi3) local controller has no software-interrupt
+    // path in this kernel, and that board starts no secondary, so the GIC SGI
+    // is the only delivery mechanism that exists.
+    #[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]
+    if let Some(cpu) = crate::task::hart_local::physical_cpu_for(hart_id) {
+        hal::aarch64::gic::send_sgi(cpu as u32, hal::aarch64::gic::SGI_IPI);
+    }
+}
+
 /// Ask `hart_id` to invalidate its local TLB and return the epoch it must publish.
 pub fn request_tlb_flush(hart_id: usize) -> usize {
     if hart_id >= MAX_HARTS {
         return 0;
     }
     let epoch = TLB_FLUSH_REQUEST[hart_id].fetch_add(1, Ordering::AcqRel) + 1;
-    #[cfg(target_arch = "riscv64")]
-    if hart_id != crate::task::hart_local::current_hart_id() {
-        if let Some((mask, base)) = logical_sbi_target(hart_id) {
-            let _ = hal::common::sbi::sbi_send_ipi(mask, base);
-        }
-    }
+    send_ipi(hart_id);
     epoch
 }
 
@@ -149,12 +168,7 @@ pub fn request_retirement_switch(hart_id: usize) -> usize {
         hart_id,
         epoch
     );
-    #[cfg(target_arch = "riscv64")]
-    if hart_id != crate::task::hart_local::current_hart_id() {
-        if let Some((mask, base)) = logical_sbi_target(hart_id) {
-            let _ = hal::common::sbi::sbi_send_ipi(mask, base);
-        }
-    }
+    send_ipi(hart_id);
     epoch
 }
 
@@ -262,10 +276,9 @@ pub(crate) fn online_hart_count() -> usize {
 }
 
 /// How many 10 ms ticks hart 0 waits for each secondary to come online before
-/// logging a warning and continuing single-hart.  500 ms is generous for QEMU.
-/// Only consumed by `start_secondaries`, which is riscv64-only (SBI HSM). Gated
-/// to avoid a dead-code warning on aarch64/x86_64.
-#[cfg(target_arch = "riscv64")]
+/// logging a warning and continuing single-hart.  500 ms is generous for QEMU
+/// and for a firmware PSCI call that has to power a core up.
+#[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
 const SECONDARY_BOOT_TIMEOUT_TICKS: usize = 50;
 
 /// Called by hart 0 **after** `task::init()` to bring secondary harts online.
@@ -379,9 +392,295 @@ pub fn start_secondaries() {
     }
 }
 
-/// No-op on non-riscv64 targets.
-#[cfg(not(target_arch = "riscv64"))]
+/// Boot state for one secondary core, published before `PSCI_CPU_ON`.
+///
+/// Written once by the boot hart and read by a core whose caches are off, so
+/// the write is followed by a clean to the point of coherency. `static mut`
+/// with a single writer and no reader until the core is started is the whole
+/// synchronisation argument.
+#[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]
+static mut SECONDARY_CONTEXT: [hal::aarch64::boot::SecondaryContext; MAX_HARTS] =
+    [hal::aarch64::boot::SecondaryContext {
+        hart_id: 0,
+        stack_top: 0,
+        mair: 0,
+        tcr: 0,
+        ttbr0: 0,
+        sctlr: 0,
+    }; MAX_HARTS];
+
+/// Called by hart 0 **after** `task::init()` to bring secondary cores online.
+///
+/// AArch64 starts a core through firmware (`PSCI_CPU_ON` over the conduit the
+/// device tree declares). Everything the new core needs — its stack, the boot
+/// core's live translation regime, the hardening bits in `SCTLR_EL1` — travels
+/// in one context block it reads with the MMU still off; `_secondary_entry`
+/// installs the regime and calls [`smp_aarch64_secondary_main`].
+///
+/// Bounded wait, graceful degradation, never a panic: a core that does not come
+/// online within the deadline leaves the system single-hart with a warning.
+#[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]
+pub fn start_secondaries() {
+    use crate::boot::firmware_smp;
+    use crate::task::stack::Stack;
+    use crate::task::STACK_PAGES;
+
+    let at_el2 = hal::aarch64::el2::is_el2();
+    // Which instruction carries a PSCI call: the firmware tree's answer when
+    // there is one, otherwise what the architecture allows — with EL3 the
+    // conduit is EL3 firmware's (`smc`); without EL3 an `smc` is undefined and
+    // the only conduit that can exist is the hypervisor's (`hvc`).
+    let conduit = match firmware_smp::psci_conduit() {
+        Some(declared) => declared,
+        None => {
+            let inferred = hal::aarch64::psci::inferred_conduit();
+            log::info!(
+                "[smp] no firmware tree declares PSCI; EL3 {} — inferring conduit {:?}",
+                if hal::aarch64::psci::el3_implemented() {
+                    "implemented"
+                } else {
+                    "absent"
+                },
+                inferred
+            );
+            inferred
+        }
+    };
+    // A conduit that cannot work is reported, never attempted: `smc` without EL3
+    // and `hvc` from EL2 both trap as undefined instructions.
+    let usable = match (conduit, at_el2) {
+        // EL3 firmware answers an SMC from either exception level.
+        (hal::aarch64::psci::Conduit::Smc, _) => true,
+        // An HVC from EL1 traps to EL2, where the PSCI implementation lives; an
+        // HVC from EL2 would target EL3, which by construction has no PSCI here.
+        (hal::aarch64::psci::Conduit::Hvc, false) => true,
+        (hal::aarch64::psci::Conduit::Hvc, true) => false,
+    };
+    if !usable {
+        log::warn!(
+            "[smp] the kernel runs at EL2 and its conduit is HVC, which would target EL3 — \
+             keeping Cellos single-hart"
+        );
+        return;
+    }
+    log::info!(
+        "[smp] PSCI conduit {:?}, kernel at {}",
+        conduit,
+        if at_el2 { "EL2" } else { "EL1" }
+    );
+    // The logical hart equals the physical CPU index on every AArch64 platform
+    // this kernel supports, so the boot core has to *be* CPU 0 for the mapping
+    // to hold; anything else is reported rather than half-applied.
+    let boot_cpu = crate::task::hart_local::physical_cpu_index();
+    if boot_cpu != 0 {
+        log::warn!(
+            "[smp] boot core reports CPU index {} (expected 0) — keeping Cellos single-hart",
+            boot_cpu
+        );
+        return;
+    }
+    // How many cores to try. The tree is authoritative when it says anything;
+    // with no tree the firmware's own answer to `CPU_ON` is what tells us
+    // whether a core exists, so every hart this kernel models is attempted and
+    // a refusal ends the search.
+    let described = firmware_smp::cpu_count();
+    if described == 1 {
+        log::info!("[smp] firmware tree describes 1 CPU — single-hart");
+        return;
+    }
+    let attempt = if described == 0 {
+        MAX_HARTS
+    } else {
+        MAX_HARTS.min(described)
+    };
+    match hal::aarch64::psci::version(conduit) {
+        Some(version) => log::info!(
+            "[smp] PSCI {}.{} over {:?}, {} CPU(s) described",
+            version >> 16,
+            version & 0xFFFF,
+            conduit,
+            described
+        ),
+        None => {
+            log::warn!("[smp] firmware does not answer PSCI_VERSION — keeping Cellos single-hart");
+            return;
+        }
+    }
+
+    extern "C" {
+        /// Physical entry point defined in hal/arch/arm/src/aarch64/boot.rs.
+        /// Runs with the MMU off; installs the boot core's translation regime.
+        fn _secondary_entry();
+    }
+    let entry = _secondary_entry as *const () as usize;
+    let kernel_root = match *crate::memory::paging::KERNEL_ROOT.lock() {
+        Some(root) => root,
+        None => {
+            log::warn!("[smp] kernel page tables are not published — keeping Cellos single-hart");
+            return;
+        }
+    };
+
+    for hart_id in 1..attempt {
+        // The core is still off: this mapping has to exist before it reads it.
+        crate::task::hart_local::publish_physical_cpu(hart_id, hart_id);
+        let stack = match Stack::new_kernel(STACK_PAGES) {
+            Ok(stack) => stack,
+            Err(error) => {
+                log::warn!("[smp] hart {} stack alloc failed: {:?}", hart_id, error);
+                continue;
+            }
+        };
+        let stack_top = stack.top;
+        // Leaked on purpose: a hart's stack lives as long as the hart does.
+        core::mem::forget(stack);
+
+        let context = hal::aarch64::boot::SecondaryContext::for_hart(
+            hart_id as u64,
+            stack_top as u64,
+            kernel_root as u64,
+        );
+        // SAFETY: single writer (hart 0, before the core exists), and no reader
+        // until `PSCI_CPU_ON` succeeds.
+        let context_addr = unsafe {
+            let slot = core::ptr::addr_of_mut!(SECONDARY_CONTEXT[hart_id]);
+            slot.write(context);
+            slot as usize
+        };
+        // The core reads this with caches off: publish it to the point of
+        // coherency, and order that before the firmware call.
+        hal::aarch64::cache::clean_data_cache_range(
+            context_addr,
+            core::mem::size_of::<hal::aarch64::boot::SecondaryContext>(),
+        );
+        core::sync::atomic::fence(Ordering::SeqCst);
+
+        // Aff0 is the CPU index on every supported platform; the firmware call
+        // takes the full MPIDR, which those platforms build from it alone.
+        let mpidr = hart_id as u64;
+        match hal::aarch64::psci::cpu_on(conduit, mpidr, entry, context_addr as u64) {
+            Ok(()) => log::info!(
+                "[smp] hart {} start requested (cpu={} entry={:#x})",
+                hart_id,
+                hart_id,
+                entry
+            ),
+            Err(status) => {
+                // With nothing describing the CPU population, "no such core" is
+                // the expected answer on a smaller machine — and it also ends the
+                // search, because cores are numbered from zero.
+                // PSCI 1.0: -2 INVALID_PARAMETERS, -7 NOT_PRESENT.
+                let missing = described == 0 && (status == -2 || status == -7);
+                if missing {
+                    log::info!(
+                        "[smp] hart {}: firmware reports no such core — single-hart",
+                        hart_id
+                    );
+                    break;
+                }
+                log::warn!(
+                    "[smp] hart {} PSCI CPU_ON refused: {} ({})",
+                    hart_id,
+                    hal::aarch64::psci::status_name(status),
+                    status
+                );
+                continue;
+            }
+        }
+
+        let deadline = crate::task::system_ticks() + SECONDARY_BOOT_TIMEOUT_TICKS;
+        loop {
+            if HART_ONLINE[hart_id].load(Ordering::Acquire) {
+                log::info!("[smp] hart {} online, parked", hart_id);
+                break;
+            }
+            if crate::task::system_ticks() >= deadline {
+                log::warn!(
+                    "[smp] hart {} did not come online in time — continuing single-hart",
+                    hart_id
+                );
+                break;
+            }
+            core::hint::spin_loop();
+        }
+    }
+}
+
+/// Prove the hart that just came online actually takes the kernel's IPI.
+///
+/// The one cross-hart path a boot log cannot witness on its own: the request is
+/// delivered by a GIC SGI, the target answers from *its* trap path, and this
+/// hart's bounded wait ends only when that epoch lands. Without it, a hart that
+/// came online but is deaf to the IPI looks exactly like a healthy one — and
+/// every later remote invalidation would silently fall back to the retained-frame
+/// path. Bounded and non-fatal: a failed probe is reported, it does not stop the
+/// boot.
+#[cfg(target_arch = "aarch64")]
+pub fn run_ipi_selftest() {
+    let Some(remote) = online_harts().find(|hart| *hart != 0) else {
+        log::info!("[selftest] SMP-IPI: skipped, no remote hart online");
+        return;
+    };
+    let epoch = request_tlb_flush(remote);
+    let deadline = crate::task::system_ticks() + SECONDARY_BOOT_TIMEOUT_TICKS;
+    let mut acknowledged = false;
+    while crate::task::system_ticks() < deadline {
+        if tlb_flush_completed(remote, epoch) {
+            acknowledged = true;
+            break;
+        }
+        core::hint::spin_loop();
+    }
+    if acknowledged {
+        log::info!("[selftest] SMP-IPI: PASS hart={} epoch={}", remote, epoch);
+    } else {
+        log::error!(
+            "[selftest] SMP-IPI: FAIL hart={} epoch={} (no acknowledgement)",
+            remote,
+            epoch
+        );
+    }
+}
+
+/// RPi3: the BCM2836 local controller has no software-interrupt path here, and
+/// the board's secondaries are parked by firmware, so it stays single-hart.
+#[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+pub fn start_secondaries() {
+    log::info!("[smp] BCM2836 has no SGI path in this kernel — keeping Cellos single-hart");
+}
+
+/// No-op on targets with one CPU.
+#[cfg(not(any(target_arch = "riscv64", target_arch = "aarch64")))]
 pub fn start_secondaries() {}
+
+/// Rust entry point of a secondary core started by `PSCI_CPU_ON`.
+///
+/// Reached from `_secondary_entry` with the boot core's translation regime
+/// installed, this hart's stack in place, interrupts masked, and `hart_id` in
+/// x0. Returns only by never returning: the hart parks and lives out its life
+/// in the timer/IPI trap path, which is where its scheduler round runs.
+#[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]
+#[no_mangle]
+pub extern "C" fn smp_aarch64_secondary_main(hart_id: usize) -> ! {
+    crate::task::hart_local::install(hart_id);
+    hal::aarch64::init_secondary_hart();
+    {
+        use hal::Arch;
+        hal::ARCH.enable_interrupts();
+        if !hal::ARCH.interrupts_enabled() {
+            panic!("[smp] hart {} could not enable interrupts", hart_id);
+        }
+    }
+    if hart_id < MAX_HARTS {
+        log::info!("[smp] hart {} trap-ready, interrupts-enabled", hart_id);
+        HART_ONLINE[hart_id].store(true, Ordering::Release);
+    }
+    loop {
+        // SAFETY: WFI suspends until the next interrupt; no state changes.
+        unsafe { core::arch::asm!("wfi", options(nomem, nostack)) };
+        core::hint::spin_loop();
+    }
+}
 
 /// Returns `true` when the RT hart (hart 1) successfully came online.
 ///
@@ -390,6 +689,33 @@ pub fn start_secondaries() {}
 #[inline]
 pub fn is_rt_hart_online() -> bool {
     HART_ONLINE[HART_RT].load(core::sync::atomic::Ordering::Relaxed)
+}
+
+/// May the scheduler hand a runnable task to `hart`?
+///
+/// Bringing a hart online and dispatching *tasks* on it are two capabilities.
+/// A secondary holds everything it needs to do kernel work on its own stack —
+/// its identity, vectors, banked interrupt interface, timer — which is what the
+/// cross-hart maintenance paths (remote invalidation, retirement switching)
+/// require of it. Handing it runnable tasks exercises the per-hart dispatch
+/// path as well, and that is only qualified where it has been run: on AArch64
+/// the first task dispatched to hart 1 faults in kernel mode at `PC=0`
+/// (`ec=0x21 elr=0x0`, an instruction abort on the current EL), so dispatch
+/// stays on hart 0 until that path is fixed. Maintenance requests still reach
+/// hart 1 — it is online and it answers them.
+#[inline]
+pub fn accepts_task_dispatch(hart: usize) -> bool {
+    if hart != HART_RT {
+        return true;
+    }
+    #[cfg(target_arch = "aarch64")]
+    {
+        false
+    }
+    #[cfg(not(target_arch = "aarch64"))]
+    {
+        is_rt_hart_online()
+    }
 }
 
 /// Entry point for secondary harts, called from `_secondary_entry` asm.

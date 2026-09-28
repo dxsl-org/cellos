@@ -16,6 +16,76 @@ use core::arch::global_asm;
 
 const BOARD_BCM: usize = cfg!(any(feature = "board-rpi3", feature = "board-rpi4")) as usize;
 
+/// Boot state a secondary core needs, published by the boot core before
+/// `PSCI_CPU_ON` and read by `_secondary_entry` with the MMU **still off**.
+///
+/// The translation and cache-control registers are copied from the boot core's
+/// live values rather than recomputed: a secondary must run with exactly the
+/// configuration the running kernel was built for (T0SZ, MAIR indexes, and the
+/// `SCTLR_EL1` bits `CFI`/`MTE`/`Arch::init()` set), and re-deriving them here
+/// would be a second source of truth for the same page tables.
+///
+/// Written once by the boot core, cleaned to the point of coherency, and read
+/// by a core whose caches are off — hence the fixed offsets, which the assembly
+/// consumes through `const` operands so they cannot drift from this layout.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct SecondaryContext {
+    /// Logical hart id to run as (delivered to the Rust entry point in x0).
+    pub hart_id: u64,
+    /// Top of this hart's kernel stack (16-byte aligned).
+    pub stack_top: u64,
+    /// `MAIR_EL1` — memory attribute indirection.
+    pub mair: u64,
+    /// `TCR_EL1` — translation control.
+    pub tcr: u64,
+    /// `TTBR0_EL1` — the kernel's root table (physical) with its ASID.
+    pub ttbr0: u64,
+    /// `SCTLR_EL1` — the boot core's live system control (M/C/I + hardening).
+    pub sctlr: u64,
+}
+
+impl SecondaryContext {
+    /// Capture the boot core's live translation and cache configuration for
+    /// `hart_id`, whose kernel stack top is `stack_top`.
+    ///
+    /// `kernel_root` is passed in rather than read from `TTBR0_EL1`: a Cell's
+    /// root may be installed on the calling core, and no secondary may start
+    /// under a Cell's translation regime.
+    pub fn for_hart(hart_id: u64, stack_top: u64, kernel_root: u64) -> Self {
+        let mair: u64;
+        let tcr: u64;
+        let sctlr: u64;
+        // SAFETY: MAIR/TCR/SCTLR_EL1 are EL1-private and read-only here.
+        unsafe {
+            core::arch::asm!(
+                "mrs {mair}, mair_el1",
+                "mrs {tcr},  tcr_el1",
+                "mrs {sctlr}, sctlr_el1",
+                mair = out(reg) mair,
+                tcr = out(reg) tcr,
+                sctlr = out(reg) sctlr,
+                options(nomem, nostack)
+            );
+        }
+        Self {
+            hart_id,
+            stack_top,
+            mair,
+            tcr,
+            ttbr0: kernel_root,
+            sctlr,
+        }
+    }
+}
+
+const CTX_HART_ID: usize = core::mem::offset_of!(SecondaryContext, hart_id);
+const CTX_STACK_TOP: usize = core::mem::offset_of!(SecondaryContext, stack_top);
+const CTX_MAIR: usize = core::mem::offset_of!(SecondaryContext, mair);
+const CTX_TCR: usize = core::mem::offset_of!(SecondaryContext, tcr);
+const CTX_TTBR0: usize = core::mem::offset_of!(SecondaryContext, ttbr0);
+const CTX_SCTLR: usize = core::mem::offset_of!(SecondaryContext, sctlr);
+
 global_asm!(
     r#"
     .section .text.boot
@@ -155,12 +225,55 @@ _start:
 
     // Secondary CPU park: interrupts masked, loop on WFI forever.
     // QEMU raspi3b boots cores 1–3 here; they yield the CPU and never interfere
-    // with core 0's boot sequence.  Future SMP bringup can replace this with a
-    // spin-table or PSCI-based wake loop.
+    // with core 0's boot sequence.  Firmware that holds its secondaries off
+    // (QEMU virt, which starts them only on PSCI_CPU_ON) never reaches this.
 .Lsecondary_park:
     msr  daifset, #0xf          // mask all interrupts (prevent spurious wake)
     wfi
     b    .Lsecondary_park
+
+    // ── Secondary core entry (PSCI_CPU_ON) ───────────────────────────────────
+    // x0 = &SecondaryContext, a *physical* address: firmware starts the core
+    // with the MMU off, caches off, at EL1, interrupts masked. This runs from
+    // the identity-mapped image, so control can flow straight into Rust once
+    // the boot core's translation regime is installed.
+    .global _secondary_entry
+    .balign 4
+_secondary_entry:
+    msr  daifset, #0xf
+    // Exceptions to EL1 use SP_EL1; set that before touching SP.
+    msr  spsel, #1
+    isb
+    mov  x9, #(3 << 20)         // CPACR_EL1.FPEN: FP/SIMD at EL1 and EL0
+    msr  cpacr_el1, x9
+    isb
+    ldr  x9, [x0, #{ctx_stack}]
+    mov  sp, x9
+    ldr  x9, [x0, #{ctx_mair}]
+    msr  mair_el1, x9
+    ldr  x9, [x0, #{ctx_tcr}]
+    msr  tcr_el1, x9
+    ldr  x9, [x0, #{ctx_ttbr0}]
+    msr  ttbr0_el1, x9
+    dsb  sy
+    isb
+    tlbi vmalle1                // this PE only: no other hart's entries
+    dsb  nsh
+    isb
+    ldr  x9, [x0, #{ctx_sctlr}]
+    msr  sctlr_el1, x9          // enables MMU/caches exactly as the boot core runs
+    dsb  sy
+    isb
+    // Identity-mapped, so the context is still readable here; hand the logical
+    // hart id to the Rust entry point and never return.
+    ldr  x0, [x0, #{ctx_hart}]
+    b    smp_aarch64_secondary_main
     "#,
     board_bcm = const BOARD_BCM,
+    ctx_hart = const CTX_HART_ID,
+    ctx_stack = const CTX_STACK_TOP,
+    ctx_mair = const CTX_MAIR,
+    ctx_tcr = const CTX_TCR,
+    ctx_ttbr0 = const CTX_TTBR0,
+    ctx_sctlr = const CTX_SCTLR,
 );

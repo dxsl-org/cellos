@@ -35,6 +35,38 @@ const GICC_CTLR: usize = 0x000;
 const GICC_PMR: usize = 0x004;
 const GICC_IAR: usize = 0x00C;
 const GICC_EOIR: usize = 0x010;
+const GICD_SGIR: usize = 0xF00;
+
+/// Software-generated interrupt used as the kernel's cross-hart IPI.
+///
+/// SGIs are private to each CPU and never routed through the distributor's
+/// configuration, which is exactly what a "flush your local TLB and publish the
+/// epoch" request needs: it must reach a hart parked in WFI, and it must not be
+/// maskable by the sender's own priority state.
+pub const SGI_IPI: u32 = 0;
+
+/// Enable this CPU's banked interface and its private interrupts.
+///
+/// The distributor (`init()`) is global, but `GICC_*` and the enable bits for
+/// SGIs/PPIs are banked per CPU: a secondary hart that skips this never takes a
+/// timer tick or an IPI, and its pending SGIs stay unacknowledged forever.
+pub fn init_cpu() {
+    wr(gicc(GICC_PMR), 0xFF);
+    wr(gicc(GICC_CTLR), 1);
+    enable_irq(SGI_IPI);
+}
+
+/// Send SGI `id` to the CPU at `target_cpu` (GICv2 `GICD_SGIR`, target list).
+///
+/// Only *remote* CPUs are addressed: the target list is relative to the writing
+/// CPU's cluster, and every platform this kernel supports keeps its CPUs in one
+/// cluster (Aff0 = CPU index).
+pub fn send_sgi(target_cpu: u32, id: u32) {
+    if target_cpu >= 8 {
+        return;
+    }
+    wr(gicd(GICD_SGIR), (1 << (16 + target_cpu)) | (id & 0xF));
+}
 
 /// Initialise GIC distributor and CPU interface.
 pub fn init() {

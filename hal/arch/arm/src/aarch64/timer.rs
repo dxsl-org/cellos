@@ -21,9 +21,42 @@ const RPI3_LEGACY_IRQ_BASE: usize = hal_soc_bcm27xx::BCM2837.mmio.legacy_irq_bas
 #[cfg(feature = "board-rpi3")]
 const RPI3_SYSTIMER_IRQ: u32 = hal_soc_bcm27xx::BCM2837.irq.system_timer_c1;
 
+/// The system counter (`CNTPCT_EL0`), in its own units.
+///
+/// Used by bounded probes that must not wait on an interrupt — it advances
+/// whether or not IRQs are unmasked in the caller's context. `CNTFRQ_EL0`
+/// gives the units-per-second.
+pub fn counter_now() -> u64 {
+    let value: u64;
+    // SAFETY: CNTPCT_EL0 is readable from EL1 and modifies nothing.
+    unsafe {
+        core::arch::asm!("mrs {}, cntpct_el0", out(reg) value, options(nomem, nostack));
+    }
+    value
+}
+
+/// The system counter's frequency in Hz (`CNTFRQ_EL0`).
+///
+/// Absent firmware that reports a frequency (0) falls back to QEMU virt's
+/// 62.5 MHz: the callers turn this into a *bounded* budget, never an exact
+/// interval, so a wrong frequency shortens or lengthens a probe rather than
+/// changing what is correct.
+pub fn counter_frequency_hz() -> u64 {
+    let freq: u64;
+    // SAFETY: CNTFRQ_EL0 is a read-only system register at every exception level.
+    unsafe {
+        core::arch::asm!("mrs {}, cntfrq_el0", out(reg) freq, options(nomem, nostack));
+    }
+    if freq == 0 {
+        62_500_000
+    } else {
+        freq
+    }
+}
+
 #[cfg(not(feature = "board-rpi3"))]
 /// Compute 10 ms quantum by reading the actual timer frequency from CNTFRQ_EL0.
-fn ticks_per_quantum() -> u64 {
+pub fn ticks_per_quantum() -> u64 {
     let freq: u64;
     // SAFETY: CNTFRQ_EL0 is read-only from EL1/EL2; no state modified.
     unsafe {

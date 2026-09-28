@@ -869,7 +869,7 @@ pub extern "Rust" fn vi_timer_tick() {
     // an idle hart parked in WFI takes the IPI's trap and returns to its loop
     // without ever switching, so a switch-boundary hook would never run and the
     // requester would wait for an acknowledgement that could not arrive.
-    #[cfg(target_arch = "riscv64")]
+    #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
     {
         let hart = hart_local::current_hart_id();
         if smp::tlb_flush_pending(hart) {
@@ -884,6 +884,7 @@ pub extern "Rust" fn vi_timer_tick() {
         // the console poll and `yield_cpu()` so the hart is parked holding no lock
         // and with no scheduler state half-changed — see
         // `quiesce::park_here_if_requested` for the full safe-point argument.
+        #[cfg(target_arch = "riscv64")]
         quiesce::park_here_if_requested(hart);
     }
 
@@ -894,7 +895,10 @@ pub extern "Rust" fn vi_timer_tick() {
     // block the slice. Before the second hart is online there is no remote to
     // survey and an empty queue makes the call a no-op, so it is also safe on the
     // way up.
-    #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+    #[cfg(all(
+        feature = "native-domains",
+        any(target_arch = "riscv64", target_arch = "aarch64")
+    ))]
     if hart_local::current_hart_id() == 0 {
         crate::memory::deferred_release::reap_deferred_releases();
     }

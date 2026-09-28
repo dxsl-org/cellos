@@ -906,11 +906,16 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         }
     }
 
-    // 7b. Bring secondary harts online (riscv64 only; no-op on other arches).
-    // Must run AFTER task::init() so the heap and scheduler are live before
-    // any secondary hart starts running kernel code.
-    #[cfg(target_arch = "riscv64")]
+    // 7b. Bring secondary harts online (RISC-V via SBI HSM, AArch64 via firmware
+    // PSCI; a no-op elsewhere). Must run AFTER task::init() so the heap and
+    // scheduler are live before any secondary starts running kernel code.
+    #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
     task::smp::start_secondaries();
+    // AArch64 has no equivalent of the RV64 shootdown fixture at boot, so the
+    // SGI delivery path is exercised here: a hart that is online but deaf to the
+    // kernel's cross-hart IPI would otherwise look perfectly healthy.
+    #[cfg(target_arch = "aarch64")]
+    task::smp::run_ipi_selftest();
 
     #[cfg(all(target_arch = "riscv64", feature = "test-hooks"))]
     crate::memory::tlb_shootdown_selftest::run_primary();

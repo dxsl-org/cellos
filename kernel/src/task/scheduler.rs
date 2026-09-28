@@ -503,7 +503,7 @@ impl Scheduler {
         // RT tasks target the dedicated RT hart when it is online; fall back to
         // the current hart on single-hart systems (e.g. QEMU without -smp 2).
         let target_hart = if priority >= api::TaskPriority::RealTime as u8
-            && crate::task::smp::is_rt_hart_online()
+            && crate::task::smp::accepts_task_dispatch(crate::task::smp::HART_RT)
         {
             crate::task::smp::HART_RT
         } else {
@@ -532,7 +532,7 @@ impl Scheduler {
         let hart_id = super::hart_local::current_hart_id();
         // RT tasks land on HART_RT when online; fall back to current hart on single-hart systems.
         let target_hart = if new_priority >= api::TaskPriority::RealTime as u8
-            && crate::task::smp::is_rt_hart_online()
+            && crate::task::smp::accepts_task_dispatch(crate::task::smp::HART_RT)
         {
             crate::task::smp::HART_RT
         } else {
@@ -1833,6 +1833,16 @@ impl Scheduler {
         *const crate::hal::arch::Context,
     )> {
         use super::hart_local::ready as rl;
+
+        // A hart that accepts no task dispatch still takes its timer tick and its
+        // maintenance IPIs — that is what keeps the clock, the remote
+        // acknowledgements and the retirement protocol honest — but it never
+        // selects a task: no local pick and, crucially, no work stealing from a
+        // hart that does. Returning `None` leaves the tick to its other work and
+        // keeps this hart on its own stack. See `smp::accepts_task_dispatch`.
+        if !crate::task::smp::accepts_task_dispatch(hart_id) {
+            return None;
+        }
 
         // 3. Decide if the current task yields, and run the CPU-monopoly watchdog.
         let current_id_raw = rl::current_task_id_for(hart_id);

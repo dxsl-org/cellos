@@ -9,6 +9,14 @@
 //! Phase 02 replaces the single global `CURRENT_CELL_ID` with a per-hart
 //! `current_cell_id` field inside `ViHartLocal`.  Phase 03 adds per-hart
 //! ready queues and the work-stealing scheduler.
+//!
+//! AArch64 has no `tp` register to spare — `TPIDR_EL1` carries the kernel stack
+//! top the trap path needs — so the calling CPU is derived from
+//! `MPIDR_EL1.Aff0` (the CPU index on every platform this kernel supports:
+//! QEMU `virt` and the BCM2711/BCM2837 clusters) through a table published
+//! before a secondary is started.  A hart therefore only ever reads a mapping
+//! that already exists, and an unpublished CPU resolves to slot 0 — the same
+//! answer as "before `install()`" on RISC-V.
 
 pub mod ready;
 
@@ -19,6 +27,74 @@ use core::sync::atomic::AtomicU64;
 use core::sync::atomic::{AtomicUsize, Ordering};
 #[cfg(target_arch = "riscv32")]
 use portable_atomic::AtomicU64;
+
+/// `CPU_TO_LOGICAL` entry meaning "this CPU index has no logical hart yet".
+#[cfg(target_arch = "aarch64")]
+const CPU_UNPUBLISHED: usize = usize::MAX;
+
+/// AArch64 CPU index (`MPIDR_EL1.Aff0`) → logical hart.
+///
+/// Written once per secondary by `publish_physical_cpu()` before the core is
+/// started, and once for the boot CPU by `install()`. Readers are the harts
+/// themselves, so a plain relaxed load is enough: the value is either the
+/// mapping this hart was started with or "not mine".
+#[cfg(target_arch = "aarch64")]
+const CPU_SLOT_UNPUBLISHED: AtomicUsize = AtomicUsize::new(CPU_UNPUBLISHED);
+
+#[cfg(target_arch = "aarch64")]
+static CPU_TO_LOGICAL: [AtomicUsize; MAX_HARTS] = [CPU_SLOT_UNPUBLISHED; MAX_HARTS];
+
+/// The physical CPU index this hart is running on (`MPIDR_EL1.Aff0`).
+#[cfg(target_arch = "aarch64")]
+#[inline(always)]
+pub fn physical_cpu_index() -> usize {
+    let mpidr: usize;
+    // SAFETY: `MPIDR_EL1` is readable from EL1 and modifies nothing.
+    unsafe {
+        core::arch::asm!("mrs {}, mpidr_el1", out(reg) mpidr, options(nomem, nostack));
+    }
+    mpidr & 0xFF
+}
+
+/// Publish `cpu_index -> logical_hart` before `cpu_index` starts executing.
+#[cfg(target_arch = "aarch64")]
+pub fn publish_physical_cpu(cpu_index: usize, logical_hart: usize) {
+    if let Some(slot) = CPU_TO_LOGICAL.get(cpu_index) {
+        slot.store(logical_hart, Ordering::Relaxed);
+    }
+}
+
+/// The CPU index a logical hart runs on, if it was published.
+#[cfg(target_arch = "aarch64")]
+pub fn physical_cpu_for(logical_hart: usize) -> Option<usize> {
+    (0..MAX_HARTS).find(|cpu| {
+        CPU_TO_LOGICAL[*cpu].load(Ordering::Relaxed) == logical_hart
+    })
+}
+
+/// Slot owned by the calling CPU on targets without a `tp` register.
+#[cfg(not(any(target_arch = "riscv64", target_arch = "riscv32")))]
+#[inline(always)]
+fn owned_slot_index() -> usize {
+    #[cfg(target_arch = "aarch64")]
+    {
+        match CPU_TO_LOGICAL.get(physical_cpu_index()) {
+            Some(slot) => {
+                let logical = slot.load(Ordering::Relaxed);
+                if logical == CPU_UNPUBLISHED {
+                    0
+                } else {
+                    logical
+                }
+            }
+            None => 0,
+        }
+    }
+    #[cfg(not(target_arch = "aarch64"))]
+    {
+        0
+    }
+}
 
 /// Per-hart local state.
 ///
@@ -284,6 +360,9 @@ pub fn install(hart_id: usize) {
     // cells receive `kernel_tp_for_cells` (not this pointer) on context switch.
     unsafe { write_tp(hl_addr) };
 
+    #[cfg(target_arch = "aarch64")]
+    publish_physical_cpu(physical_cpu_index(), hart_id);
+
     #[cfg(target_arch = "riscv64")]
     crate::hal::trap::init_for_hart(hart_id);
 }
@@ -305,7 +384,7 @@ pub unsafe fn current_hart() -> &'static ViHartLocal {
     }
     #[cfg(not(any(target_arch = "riscv64", target_arch = "riscv32")))]
     {
-        &HART_LOCALS[0]
+        &HART_LOCALS[owned_slot_index()]
     }
 }
 
@@ -327,7 +406,7 @@ pub fn current_hart_id() -> usize {
     }
     #[cfg(not(any(target_arch = "riscv64", target_arch = "riscv32")))]
     {
-        0
+        owned_slot_index()
     }
 }
 
@@ -353,7 +432,9 @@ pub fn current_cell_id() -> usize {
     }
     #[cfg(not(any(target_arch = "riscv64", target_arch = "riscv32")))]
     {
-        HART_LOCALS[0].current_cell_id.load(Ordering::Relaxed)
+        HART_LOCALS[owned_slot_index()]
+            .current_cell_id
+            .load(Ordering::Relaxed)
     }
 }
 

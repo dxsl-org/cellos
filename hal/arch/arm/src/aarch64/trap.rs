@@ -400,6 +400,20 @@ pub extern "C" fn vi_aarch64_irq_handler(_frame: &mut TrapFrame) {
     {
         let irq = super::gic::claim();
         let timer_irq = if super::el2::is_el2() { 26 } else { 30 };
+        if irq == super::gic::SGI_IPI {
+            // The kernel's cross-hart IPI: a remote hart asked this one to
+            // invalidate its TLB and publish the epoch, or to switch contexts for
+            // a retiring generation. It enters the same path as a timer tick —
+            // that is where the flush acknowledgement and the preemption decision
+            // live, and a hart parked in WFI must take it without ever running a
+            // task (a switch-boundary hook would never fire for it).
+            // SAFETY: vi_timer_tick is `#[no_mangle]` in kernel::task.
+            unsafe {
+                vi_timer_tick();
+            }
+            super::gic::complete(irq);
+            return;
+        }
         if irq == timer_irq {
             // Rearm the hardware countdown first.
             super::timer::reset();
