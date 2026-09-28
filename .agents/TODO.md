@@ -70,9 +70,11 @@ báo cáo ở `.agents/<plan>/`, cách làm ở `docs/guides/`. Chuỗi tiền l
   đã bị **rút lại**: trace từng lần gọi trong `scatter_to_guest` (`[hv-sc] gpa=… take=4096 got=4096`) và
   `ReadGuestMemory` ngay sau đó cho thấy mọi write đều thành công vào đúng frame; các frame "toàn zero" ở
   buffer 2..4 thực ra là **dữ liệu đúng** (file chỉ có marker 32 byte, phần còn lại zero). Bằng chứng phía
-  device: fixture nay `drop_caches` trước khi đọc marker, và trong lần chạy đó boot thứ hai đọc đúng marker
-  (`VIRTIO_E2E_BLOCK_READBACK_PASS` + `SECOND_RUN_PASS`) ngay cả khi `seg_max` bật; nếu không có cold read thì
-  cùng cấu hình đọc ra zero. Tầng block của VFS cũng đã loại: raw read trả "CELLOSE2" ở sector cluster đầu
+  device: fixture nay `drop_caches` trước khi đọc marker. Với bản ship (không `seg_max`) cold read làm lane
+  xanh ổn định; nhưng **với `seg_max` bật thì cold read KHÔNG cứu được** — 2/2 run vẫn đỏ ở boot thứ hai và
+  không có dòng `[vfs] short read` nào, tức đó là chữ ký khác: device thật sự trả zero cho *một số* request
+  ngoài mẫu 12 request đã trace. Bước kế: trace **mọi** read của boot hỏng (một dòng/request, không giới hạn
+  budget) để tìm request có grant đúng marker mà guest vẫn thấy zero. Tầng block của VFS cũng đã loại: raw read trả "CELLOSE2" ở sector cluster đầu
   (10114) và zero ở đuôi (đúng, đĩa rỗng), cache hit nhất quán.
 
   (C) **flush ngắt quãng thất bại ở tầng raw**: `[hv-blk] VFS flush failed: Ok(Err(1))` — VFS *trả lời*
