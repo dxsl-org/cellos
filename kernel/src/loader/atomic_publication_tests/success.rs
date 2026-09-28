@@ -25,28 +25,38 @@ fn ready_contains(state: &StateSnapshot, tid: usize) -> bool {
         .any(|queue| queue.contains(&tid))
 }
 
+/// Is the published task dispatchable right now?
+///
+/// The contract is "the publication made the task runnable", not "the task is
+/// still sitting in a queue": on two harts the other hart can steal and run it
+/// between the arm and the check, and demanding queue membership then turns a
+/// healthy kernel red (observed intermittently on 2026-09-28 for AP-15, which
+/// was the last case still using the queue-only form).
+fn dispatchable(state: &StateSnapshot, tid: usize) -> bool {
+    ready_contains(state, tid) || state.current.iter().any(|entry| entry.1 == tid)
+}
+
 fn observed_success(cases: &[&str], before: &StateSnapshot, tid: usize) -> bool {
     let after = snapshot();
     let audit_delta = after.audit.0.wrapping_sub(before.audit.0);
     // The ring is a byte cursor over records of *mixed* length (18 bytes for the
     // `encode_u32x2` payloads this corpus emits, 10 bytes for an empty payload,
     // and anything between). On one hart every record in the window is 18 bytes,
-    // so the delta is a multiple of 18 and AP-15 can demand exactly two records.
-    // On two harts the competing producer appends its own records, which are not
-    // necessarily 18 bytes, so the multiple-of-18 test is not a property of the
-    // ring at all — it failed intermittently (2026-09-18 and 2026-09-25) with a
-    // healthy kernel. What the contract can assert on both hart counts is that
-    // the publication appended at least two records' worth of evidence and that
-    // nothing was dropped while it did so.
-    let expected_evidence = if cases.contains(&"AP-15") {
-        audit_delta == 36
-    } else {
-        audit_delta >= 36 && after.audit.2 == before.audit.2
-    };
+    // so the delta is a multiple of 18 and the contract can demand exactly two
+    // records. On two harts the competing producer appends its own records, which
+    // are not necessarily 18 bytes, so the multiple-of-18 test is not a property
+    // of the ring at all — it failed intermittently (2026-09-18 and 2026-09-25,
+    // and again on 2026-09-28 for AP-15) with a healthy kernel. What the contract
+    // can assert on both hart counts is that the publication appended at least
+    // two records' worth of evidence and that nothing was dropped while it did
+    // so. AP-15 used to keep the exact form and was therefore the remaining
+    // flake: any unrelated audit event landing in its window (a cell spawn, a
+    // fault, an RT overrun — all of which the SMP fixtures emit) turned it red.
+    let expected_evidence = audit_delta >= 36 && after.audit.2 == before.audit.2;
     cases.iter().all(|case| observation_complete(case))
         && after.tasks.iter().any(|task| task.id == tid)
         && after.next_task_id == before.next_task_id + 1
-        && ready_contains(&after, tid)
+        && dispatchable(&after, tid)
         && after.quota != before.quota
         && after.measurements.0 == before.measurements.0 + 1
         && expected_evidence

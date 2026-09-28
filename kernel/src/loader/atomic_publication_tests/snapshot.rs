@@ -28,7 +28,7 @@ pub(super) struct StateSnapshot {
     pub(super) zombies: alloc::vec::Vec<(usize, u64, crate::task::tcb::TaskState)>,
     pub(super) next_task_id: usize,
     scheduler_counters: (usize, usize, usize, usize),
-    current: alloc::vec::Vec<(usize, usize, usize)>,
+    pub(super) current: alloc::vec::Vec<(usize, usize, usize)>,
     pub(super) ready:
         alloc::vec::Vec<alloc::collections::BTreeMap<u8, alloc::collections::VecDeque<usize>>>,
     free_frames: Option<usize>,
