@@ -48,7 +48,12 @@ báo cáo ở `.agents/<plan>/`, cách làm ở `docs/guides/`. Chuỗi tiền l
   indirect descriptor (feature không được quảng cáo), và đường di chuyển dữ liệu (đọc lại frame của
   descriptor ngay sau scatter thấy đúng byte; không request nào kết thúc bằng `VIRTIO_BLK_S_IOERR`; ảnh
   đĩa trên host vẫn còn dữ liệu). Nghi vấn còn lại: cách công bố completion của chain nhiều descriptor.
-  Bằng chứng + lý do khoá feature nằm tại `cells/services/hypervisor/src/virtio_blk.rs` (`config_read`).
+  Đã thử và **không** phải nguyên nhân: `used.len` — báo `payload + 1` theo spec (đã giữ, lane vẫn xanh với
+  `seg_max` tắt) cũng không cứu được trường hợp nhiều segment. Hướng còn lại: với feature bật, Linux probe đĩa
+  *sớm hơn* trong boot và lần boot hỏng ghi lỗi I/O ở logical block 0 trước khi có request nào dị dạng —
+  nghi thứ tự "đọc đầu tiên trước khi VFS sẵn sàng" (`ensure_persistent_connected` trả false → status 1) chứ
+  không phải bản thân chain. Bằng chứng + lý do khoá feature nằm tại
+  `cells/services/hypervisor/src/virtio_blk.rs` (`config_read`).
   Lane tái hiện: `scripts/qemu-x86-virtio-e2e.sh` (đỏ khi bật, xanh khi tắt).
 
 ## Blocked (chờ phần cứng hoặc governance)

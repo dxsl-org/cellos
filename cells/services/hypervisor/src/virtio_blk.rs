@@ -111,10 +111,13 @@ impl VirtioDevice for BlkDisk {
     /// the write), no request ends in `VIRTIO_BLK_S_IOERR`, the chain is never
     /// rejected by the guard (`[hv-virtio-host] reject descriptor-chain` never
     /// fires), `VIRTIO_RING_F_INDIRECT_DESC` is not advertised so Linux cannot
-    /// be hiding segments in an indirect table, and the host image still holds
-    /// the data after the failure. The advertisement waits for whoever finds the
-    /// missing piece — most likely in how a multi-descriptor completion is
-    /// published to the guest rather than in the data movement itself.
+    /// be hiding segments in an indirect table, the host image still holds the
+    /// data after the failure, and reporting the spec's used-ring length
+    /// (payload + status byte, see below) changes nothing.
+    ///
+    /// The remaining difference is *when* the guest reads: with the feature on,
+    /// Linux probes the disk earlier in boot, and the failing boot logs an I/O
+    /// error on logical block 0 before any request could have been malformed.
     fn config_read(&self, offset: usize) -> u32 {
         match offset {
             0 => (self.num_sectors & 0xFFFF_FFFF) as u32,
@@ -294,7 +297,18 @@ fn handle_blk_request(backend: &mut Backend, bufs: &[DescBuf], vm_id: usize) -> 
         ));
     }
     write_status(vm_id, bufs[status_idx].gpa, status);
-    1 // bytes placed in used ring (status byte)
+
+    // Used-ring length: the bytes the device wrote into the chain's
+    // device-writable part. A successful read writes the data *and* the status
+    // byte; every other outcome (write request, flush, failure) writes only the
+    // status byte. Reported as 1 for reads too until now, which is short by the
+    // payload.
+    let payload: u32 = if req_type == BLK_T_IN && status == 0 {
+        data_bufs.iter().map(|buf| buf.len).sum()
+    } else {
+        0
+    };
+    1 + payload
 }
 fn blk_flush(backend: &mut Backend) -> u8 {
     if !ensure_persistent_connected(backend) {
