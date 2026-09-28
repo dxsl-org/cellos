@@ -287,9 +287,25 @@ impl FsBackend for FatBackend {
         let mut total = 0;
         while total < buf.len() {
             match file.read(&mut buf[total..]) {
-                Ok(0) => break,
+                Ok(0) => {
+                    // A short read is never normal for a file this size: the
+                    // device model has to fail the request, so say what fatfs
+                    // thought the file held.
+                    let end = file.seek(fatfs::SeekFrom::End(0)).unwrap_or(u64::MAX);
+                    println(&alloc::format!(
+                        "[vfs] short read path={} offset={} got={} want={} fatfs_size={}",
+                        rel, offset, total, buf.len(), end
+                    ));
+                    break;
+                }
                 Ok(n) => total += n,
-                Err(_) => break,
+                Err(_) => {
+                    println(&alloc::format!(
+                        "[vfs] read error path={} offset={} got={} want={}",
+                        rel, offset, total, buf.len()
+                    ));
+                    break;
+                }
             }
         }
         total
