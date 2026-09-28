@@ -7577,7 +7577,20 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             fn user_map(base: usize, len: usize) {
                 crate::memory::paging::map_mmio_user_x86(base, len);
             }
-            #[cfg(not(target_arch = "x86_64"))]
+            // RISC-V/AArch64 make an allowlisted window reachable from EL0 with the
+            // *boot* identity map, so a window whose access was revoked earlier —
+            // by a capability revoke, or by the self-test that exercises one — stays
+            // kernel-only unless the grant re-arms it. This is the non-x86 half of
+            // the same rule: a granted window is a reachable window.
+            #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
+            fn user_map(base: usize, len: usize) {
+                let _ = crate::memory::paging::grant_mmio_user(base, len);
+            }
+            #[cfg(not(any(
+                target_arch = "riscv64",
+                target_arch = "aarch64",
+                target_arch = "x86_64"
+            )))]
             fn user_map(_base: usize, _len: usize) {}
 
             if caller_has_platform(caller_id) {

@@ -30,7 +30,10 @@ declare_manifest!(
 
 const SELF_PATH: &str = "/bin/periph-demo";
 const PINNED_WORKER_ARG: &str = "--pinned-worker";
-const POLL_PRIORITY: u8 = 200;
+/// Priority of the pinned poll worker. The spawn contract bounds this by
+/// `api::TaskPriority::RealTime`; a raw `200` was refused (silently, as
+/// `spawn_pinned unavailable`) because the gate denies anything above that.
+const POLL_PRIORITY: u8 = api::TaskPriority::RealTime as u8;
 
 ostd::cell_main!(cell_main);
 

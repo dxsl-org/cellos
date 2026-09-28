@@ -867,6 +867,59 @@ pub fn clear_mmio_user(base: usize, len: usize) -> PagingResult<usize> {
     Ok(cleared)
 }
 
+/// Re-establish user accessibility for `[base, base+len)` on RISC-V/AArch64.
+///
+/// The counterpart of [`clear_mmio_user`]. On these targets the boot identity
+/// map is what makes an allowlisted window reachable from EL0, so a revocation
+/// is otherwise permanent: a Cell that legitimately requests the window again
+/// gets the registry grant while the leaf stays kernel-only, and it dies on its
+/// first access. Called by the capability self-test (which must not leave the
+/// machine disarmed) and by `RequestMmio`, mirroring what x86 does when it maps
+/// a claimed window on demand.
+#[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
+pub fn grant_mmio_user(base: usize, len: usize) -> PagingResult<usize> {
+    let Some(end) = checked_page_end(base, len) else {
+        return Ok(0);
+    };
+    let mut granted = 0;
+    let mut va = base & !(PAGE_SIZE - 1);
+    while va < end {
+        match protect_page(va, mmio_user_flags()) {
+            Ok(()) => granted += 1,
+            // Not mapped: nothing to grant.
+            Err(PageTableError::InvalidAddress) => {}
+            Err(e) => {
+                log::error!("[paging] grant_mmio_user: {va:#x} not user-reachable ({e:?})");
+                return Err(e);
+            }
+        }
+        va += PAGE_SIZE;
+    }
+    Ok(granted)
+}
+
+/// Boot MMIO mapping flags *with* `USER` — what an allowlisted window carries
+/// while a Cell may reach it.
+#[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
+fn mmio_user_flags() -> Flags {
+    #[cfg(target_arch = "riscv64")]
+    let bits = Flags::VALID
+        | Flags::READ
+        | Flags::WRITE
+        | Flags::USER
+        | Flags::ACCESSED
+        | Flags::DIRTY;
+    #[cfg(target_arch = "aarch64")]
+    let bits = Flags::VALID
+        | Flags::READ
+        | Flags::WRITE
+        | Flags::USER
+        | Flags::DEVICE
+        | Flags::ACCESSED
+        | Flags::DIRTY;
+    Flags::from_bits(bits)
+}
+
 /// Boot MMIO mapping flags with `USER` removed — what the kernel keeps after a
 /// Cell's access to the window is revoked.
 #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
