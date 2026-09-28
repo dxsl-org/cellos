@@ -226,6 +226,40 @@ Evidence: host lane **174 passed** (10 new); `-D warnings` clean for RV64 (defau
 Still hardware-gated: a real monotonic source (MMC/eMMC), and the save→reset→restore→resume
 witness on a board. `QUALIFICATION_ENABLED` is untouched, so no shipping image can capture.
 
+### Slice 6 — a reserved scratch workspace, so a qualified build can stage (2026-09-28)
+
+The previous slice refused every capture because no target declared scratch storage outside the
+captured runs. The capture now owns one:
+
+- **Reserved at boot, sized from the format, not the machine.** `SCRATCH_FRAMES`/`SCRATCH_BYTES`
+  (`kernel/src/snapshot.rs:1933-1934`) are derived from the partition's capacity bound (29 883
+  frames) plus a 64 KiB stack: **308 frames (1 261 568 bytes)**. `take_scratch_region` (`:1349`)
+  takes one contiguous run from the live allocator, refuses if it would intersect the trusted
+  kernel-image span (`region_intersects_image`, `:1382`, returning the frames), and
+  `reserve_scratch_region_at_boot` (`:1394`) publishes it into `static SNAPSHOT_SCRATCH`. Called
+  once from `boot::reserve_snapshot_scratch` (`kernel/src/boot.rs:41`) at
+  `kernel/src/main.rs:660` — after the allocator, heap and log backend, before any cell. It is a
+  **no-op unless `snapshot-qualified`**, so no shipping image pays for a workspace it cannot use.
+- **Declared and actually used.** `CaptureScratch::Region` is what `serialize_snapshot` declares,
+  the frozen window's buffers are carved from the region (`ScratchArena`/`ScratchVec`) instead of
+  the heap, and the window itself runs on the region's own stack
+  (`capture_planned` → `run_on_stack`, per-arch assembly). The pre-freeze bound now comes from the
+  region's size (capped by the partition bound), never from the allocator's total.
+- **Refuse, never degrade.** A missing workspace is `NoReservedScratch`, a workspace too small for
+  the carve is `CapacityExceeded`, and a planned run intersecting it is `ScratchOverlapsRun` — all
+  three before any park and before any block I/O.
+- Evidence: host lane **184 passed** (the new cases include the workspace exclusion proof, the
+  carve-fit refusal and the staged capture running on the region's stack); QEMU RV64 reserved
+  `0x83017000..0x8314b000` inside `0x82b8b000..0x90000000` with no image-intersection refusal;
+  RV64 1-hart and 2-hart sets exit 0; AArch64 test-hooks lane exit 0; the AArch64 production suite
+  10/10; x86 production and domain lanes green; `-D warnings` clean for RV64 (default,
+  `--no-default-features`, `test-hooks`, `snapshot-qualified`), AArch64 and x86_64; the
+  board-configuration gate exits 0.
+
+What is still missing before a capture could run on real hardware: the device epoch has no real
+monotonic source (MMC/eMMC), and the save→reset→restore→resume witness on a board. The gate stays
+closed (`QUALIFICATION_ENABLED` untouched), so no shipping image can capture.
+
 ## Assumptions / risk / rollback
 - [UNVERIFIED] A block-capable board/test image and protected persistent volume are available; if not, finish format/negative tests but **leave feature disabled** and report exact physical gate, not a claimed complete warm-boot fix. Raw memory capture persists sensitive bytes; enforce storage trust/erase/retention per threat model. Rollback uses cold boot with restore disabled and snapshot area invalidated on a **throwaway** disk; prior snapshot bytes, leaked secrets or already corrupted external state cannot be undone by code rollback.
 

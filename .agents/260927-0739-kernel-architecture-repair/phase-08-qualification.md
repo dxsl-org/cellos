@@ -131,6 +131,31 @@ note: `target/aarch64-unknown-none-softfloat/release/cellos-kernel` must be rebu
 current tree before that suite — a stale production ELF there produced five spurious boot panics
 that disappeared after `cargo build --release --target aarch64-unknown-none-softfloat`.
 
+
+### Making the AArch64 suite runnable exposed a production regression (2026-09-28)
+
+The AArch64 integration suite could not be trusted: it booted whatever image happened to sit at
+a shared path, so one run produced five spurious boot panics after a test-hooks kernel had been
+left there. `scripts/gen-disk-aarch64-ci.sh` now assembles the production image natively (CI's
+cell list plus the two cells the httpd row needs; VIFS1 + P1/P2/P6; per-path digest checks and a
+production-feature assertion on the kernel), and the suite resolves its image through
+`CELLOS_AARCH64_KERNEL`/`CELLOS_AARCH64_DISK`, then that build, then the legacy paths.
+
+With the suite actually running its rows, `aarch64_periph_demo_gpio` failed and the cause was a
+**production regression**: `thread_cap_selftest` claims the board's first allowlist window (PL011
+on QEMU arm-virt) and revokes its MMIO class, so every production AArch64 boot left that window
+kernel-only from then on — a Cell that legitimately re-requested it died on its first access
+(`cause=0x9200004f`, a write to UARTCR), while the self-test still reported PASS because its
+release check is registry-only. Root-caused with a controlled probe (throwaway worktree at HEAD:
+unpatched reproduces, with the window claim disabled the same image completes). Fixed by
+`memory::paging::grant_mmio_user` (the counterpart of `clear_mmio_user`), by re-arming in the
+self-test, and by making `RequestMmio`'s non-x86 path re-arm a granted window. The cell also asked
+for priority `200` where the pinned-spawn contract bounds it by `TaskPriority::RealTime`.
+
+Result: `--test aarch64-boot` **10 passed / 0 failed** (was 9/1 with rows that could not be
+reproduced), and the test-hooks lane logs
+`[selftest] REVOKE-MMIO: window 0x9000000 re-armed for EL0 (1 page(s))`.
+
 ## Assumptions / risk / rollback
 - [UNVERIFIED] All required emulators/physical boards are accessible to CI; where not, mark named qualification gate unresolved and retain disabled profile, not a passing placeholder. Rollback to known-safe image with domain admission and snapshot disabled; reimage development storage if a corrupted snapshot was ever replayed. Security exposure or overwritten external data cannot be rolled back by a binary revert.
 
