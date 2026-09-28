@@ -95,15 +95,26 @@ impl VirtioDevice for BlkDisk {
     /// virtio-blk config: capacity at bytes 0-7 (little-endian u64 of sectors).
     ///
     /// `seg_max` (byte 12, `VIRTIO_BLK_F_SEG_MAX`) is deliberately NOT advertised
-    /// yet. With it on, Linux packs a whole bio into one request — which is the
-    /// request shape the batching below is built for — but on this lane the
-    /// gues's later reads of the same sectors then come back as zeros: the
-    /// device writes the correct bytes into the descriptor's guest frame (read
-    /// back through `ReadGuestMemory` right after the scatter), no request ends
-    /// in `VIRTIO_BLK_S_IOERR`, and the disk image on the host still holds the
-    /// data, yet `dd if=/dev/vda` in the next boot returns zeros. Every other
-    /// lane and the two-boot persistence marker pass with multi-segment requests
-    /// off, so the advertisement waits for whoever fixes that interaction.
+    /// yet. **Any** multi-segment request — one bio split across two or more data
+    /// descriptors — breaks the guest's view of the disk on this device model:
+    /// the next read of an affected sector comes back as zeros (or as a plain
+    /// I/O error), while the device itself reported success. The isolated
+    /// experiments, each a full two-boot lane run:
+    ///
+    /// - retired batching code + `seg_max` advertised → run 1 fails at the first
+    ///   block read, so this is not an artefact of the batching in this file;
+    /// - this code + `seg_max: 2` → same failure, so it is not chain *length*;
+    /// - either code with the feature off → both boots pass.
+    ///
+    /// What is already ruled out: the scatter writes the right bytes into the
+    /// descriptor's frame (read back through `ReadGuestMemory` immediately after
+    /// the write), no request ends in `VIRTIO_BLK_S_IOERR`, the chain is never
+    /// rejected by the guard (`[hv-virtio-host] reject descriptor-chain` never
+    /// fires), `VIRTIO_RING_F_INDIRECT_DESC` is not advertised so Linux cannot
+    /// be hiding segments in an indirect table, and the host image still holds
+    /// the data after the failure. The advertisement waits for whoever finds the
+    /// missing piece — most likely in how a multi-descriptor completion is
+    /// published to the guest rather than in the data movement itself.
     fn config_read(&self, offset: usize) -> u32 {
         match offset {
             0 => (self.num_sectors & 0xFFFF_FFFF) as u32,

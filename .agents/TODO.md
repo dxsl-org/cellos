@@ -41,6 +41,15 @@ báo cáo ở `.agents/<plan>/`, cách làm ở `docs/guides/`. Chuỗi tiền l
 - [open gap] **Tier 3**: Intel VMX chưa có
   VMCS/world-switch hoàn chỉnh. Boot-to-shell ARM64 nghiêm ngặt cần KVM/phần cứng thật — QEMU-TCG
   chỉ là machinery evidence.
+- [open bug] **Tier 3 x86 virtio-blk: request nhiều segment hỏng, nên `seg_max` chưa được quảng cáo.**
+  Bật `VIRTIO_BLK_F_SEG_MAX` (bất kỳ giá trị ≥ 2) làm guest đọc lại chính sector đó ra **zero** hoặc lỗi
+  I/O, trong khi device báo thành công. Đã loại trừ: batching của P1 (code cũ + `seg_max` cũng hỏng), độ
+  dài chain (`seg_max: 2` cũng hỏng), chain bị guard từ chối (không có dòng `reject descriptor-chain`),
+  indirect descriptor (feature không được quảng cáo), và đường di chuyển dữ liệu (đọc lại frame của
+  descriptor ngay sau scatter thấy đúng byte; không request nào kết thúc bằng `VIRTIO_BLK_S_IOERR`; ảnh
+  đĩa trên host vẫn còn dữ liệu). Nghi vấn còn lại: cách công bố completion của chain nhiều descriptor.
+  Bằng chứng + lý do khoá feature nằm tại `cells/services/hypervisor/src/virtio_blk.rs` (`config_read`).
+  Lane tái hiện: `scripts/qemu-x86-virtio-e2e.sh` (đỏ khi bật, xanh khi tắt).
 
 ## Blocked (chờ phần cứng hoặc governance)
 - [blocked] **SDK relay client mutual TLS**: chỉ đường relay hai real-broker này bị chặn bởi các entry
