@@ -65,6 +65,27 @@ this checkout `disk_v3.img` has no `ViCell_CEL` section, so those two AArch64 de
 vacuous even when they pass — that is why phase 02's production-denial claim rests on the
 compile-time assert instead.
 
+
+### Additions after the first matrix (same day)
+
+| # | Lane | Command | Result |
+|---|---|---|---|
+| 16 | RV64 park (quiescence) | `scripts/qemu-native-domain-test.sh --harts 1 --case admission,asid-lease,unmap-order,grant-revoke,grant-gate,grant-pair,park` and `--harts 2 --case migration,user-copy-race,ipc-copy-race,unmap-order,asid-lease,grant-pair,park` | exit 0; `S22-RV64-PARK: PASS harts=1` and `harts=2` |
+| 17 | **RV64 integration lanes, now runnable on Linux** | `bash scripts/gen-disk-ci.sh` then `CARGO_BUILD_TARGET=x86_64-unknown-linux-gnu cargo test --manifest-path tests/integration/Cargo.toml --test launch-profile -- --test-threads=1` | 1 passed (9.50 s) — shell, `vfs-test`, `[snapshot] unavailable`, Supervisor routing |
+| 18 | RV64 Tier-2 fault isolation | same, `--test tier2-fault-isolation -- --test-threads=1` | 5 passed (49.53 s): fail-closed grant denial, NULL/peer/kernel fault containment, positive Tier-2 execution, `posix-shim-test` FFI domain |
+| 19 | AArch64 two-cell grant pair | `scripts/build-aarch64-test-hooks-ci.sh` then `scripts/qemu-aarch64-test-hooks.sh` | exit 0; `S22-AARCH64-GRANT-PAIR-OWNER: PASS` (and receiver), vfs 96/96 |
+| 20 | Host kernel units (after the park hook) | `cargo test -p cellos-kernel --target x86_64-unknown-linux-gnu` | 164 passed / 0 failed |
+
+Rows 17–18 were previously listed as not executable here. `scripts/gen-disk-ci.sh` is a
+Linux-native replacement for the RV64 half of `gen_disk.ps1` (same cell list, the same
+production/test-hooks flavour rule — `service-vfs` and `app-vfs-test` are production builds, the
+`test-hooks` flavour belongs to `scripts/build-test-hooks-ci.sh` — signing via
+`scripts/lib-sign-cells.sh`, the same VIFS1 `$kfs_args`, the same 61-row cell table, and the P6
+FAT cell-store), and it verifies the assembled image by re-reading the table and comparing
+per-path digests before it replaces `disk_v3.img`. The two x86-only integration lanes
+(`x86_64-boot`) still need their own disk/ISO route, and `aarch64-boot` still boots an image whose
+refusal tests are vacuous because no production AArch64 image carries a domain-class cell.
+
 ## Assumptions / risk / rollback
 - [UNVERIFIED] All required emulators/physical boards are accessible to CI; where not, mark named qualification gate unresolved and retain disabled profile, not a passing placeholder. Rollback to known-safe image with domain admission and snapshot disabled; reimage development storage if a corrupted snapshot was ever replayed. Security exposure or overwritten external data cannot be rolled back by a binary revert.
 

@@ -193,6 +193,35 @@ evidence only — the AArch64 lane drives the kernel-side fixture, not the pair;
 sentinel branch on a closed target (unchanged from phase 01, and unreachable there because no
 domain can be admitted); DMA pins and the VFS lease are still unreachable for domain receivers.
 
+### Slice 7 — the two-cell pair on AArch64, in-band handoff (2026-09-28) — done
+
+The pair now runs end-to-end on the AArch64 test image, which closes the "AArch64 lane drives the
+kernel-side fixture only" gap recorded above.
+
+- **No ABI change.** The grant ids are kernel-assigned *after* the owner starts, so no launcher can
+  put them on the receiver's command line, and this image has no interactive window (its own test
+  root exits the VM before the shell's first prompt). The pair therefore hands them over **in band**
+  on the IPC channel it already uses: a new `WANT_IDS` byte
+  (`cells/tests/tier2-grant-owner/src/main.rs:112-118`,
+  `cells/tests/tier2-grant-receiver/src/main.rs:102-107`) — the receiver asks, the owner answers
+  with four little-endian u64 ids. The mode and the peer name still travel through the
+  already-reviewed staged-argv surface, so nothing is hard-coded in the cells.
+- **Launch from the boot order.** `app-init` gained an opt-in `tier2-grant-pair` feature that
+  launches the pair on the two reviewed init edges whose services this image does not build
+  (`/bin/silo` = owner, `/bin/net-broker` = receiver; both leave the granted `CapSet` EMPTY, like
+  the RV64 lane's tier2 rows). `compile_error!` guards refuse the feature together with
+  `development-silo-provider` or `c2c-broker`, which would put the real services on those paths,
+  and init waits (bounded) for each generation's terminal fault before starting the next.
+- Markers are tagged per architecture (`S22-RV64` / `S22-AARCH64` / `S22-X86`), mirroring the
+  kernel's `ADMISSION_TAG`; the RV64 lane's output is byte-identical.
+- Witness: AArch64 test-hooks lane exit 0 with the pair's markers required and present
+  (`S22-AARCH64-GRANT-PAIR-OWNER: PASS`, receiver PASS, `[vfs-test] Results: 96 PASS, 0 FAIL`),
+  and every cell fault in the boot accounted for and classified.
+
+**Caveat worth keeping:** the pair occupies `/bin/silo` and `/bin/net-broker` on that image, which
+is only safe because that image does not build those services and the feature is guarded against
+the configurations that do.
+
 ## Assumptions / risk / rollback
 - [UNVERIFIED] Physical identity is a usable receiver VA under all supported domain layouts; verify against `USER_LIMIT` and occupied mappings before deciding whether ABI-compatible alternate VA exists. No public ABI change without the two Law-1 owner checkpoints. Rollback: phase-01 deny gate plus cold reboot; leaked contents or prior DMA writes cannot be undone. Missing remote completion blocks release; retain quarantined frames rather than treating timeout as success.
 

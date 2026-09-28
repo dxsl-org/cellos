@@ -151,6 +151,41 @@ restored, so the inventory covering the frames is not a claim that the state in 
 reconstructible; coherent capture staging, authenticated freshness, the real park hook and the
 board witness remain out of scope here, and `QUALIFICATION_ENABLED` is untouched.
 
+### Slice 4 — the real park hook (2026-09-28) — RV64
+
+The quiescence protocol now freezes a machine instead of refusing: `park_hook_available()` is true
+on RV64, where the trap path actually calls the hook.
+
+- Live per-hart `PARK_REQUEST`/`PARK_ACK`/`PARK_RELEASE` state
+  (`kernel/src/task/quiesce.rs:354-369`), `request_park` (epoch + IPI to the target's logical id,
+  never to self, `:411`), `release_park` (`fetch_max`, so release is idempotent and cancels an
+  unsatisfied request, `:443`), `park_acknowledged` (`:431`) and the target half
+  `park_here_if_requested` (`:503`). The hook is called from `vi_timer_tick`
+  (`kernel/src/task.rs:887`) after the existing TLB acknowledgement, before `tick()`, the console
+  lock and `yield_cpu`.
+- Why the trap path is a safe point, argued rather than asserted: a trap is only taken with
+  `sstatus.SIE` set and the kernel's `Spinlock` clears SIE for the life of its guard, so the
+  interrupted context cannot be inside `SCHEDULER`, the frame allocator or any other kernel spin
+  lock; the trap frame preserves the interrupted context in full, so the parked hart resumes
+  exactly where it stopped; and SIE stays clear for the whole park, so nothing else can run.
+- The acknowledgement is published with a release store **before** the park loop, so observing it
+  means the hart is no longer running anything else.
+- **Soundness fix found by the work:** `online_hart_ids()` only unioned the requester in, so a
+  request from hart 1 left hart 0 unparked while the protocol reported success. The online set now
+  always names the boot hart.
+- Bounded on both sides: the requester waits 100 ms (mtime) with a clock-independent poll limit and
+  then releases; the target's park is bounded at ~2 s because `panic = "abort"` means a requester
+  that dies never runs the guard's `Drop`.
+- Witness: lane case `park` — `S22-RV64-PARK: PASS harts=1` and `... harts=2`, with per-hart
+  required markers, a no-abandoned rule and a frozen-window equality check; RV64 1-hart set
+  (7 cases) and 2-hart set (7 cases) both exit 0.
+- **Residual risk, stated not papered over:** an SIE-set kernel path that *allocates* holds the
+  heap's `spinning_top` lock, which does not mask interrupts, so a park can land on a hart holding
+  it. The requester must therefore not allocate while the guard lives; `snapshot::capture_record`
+  documents (`kernel/src/snapshot.rs:1313-1322`) that `plan_inventory` still allocates the
+  inventory vector inside the frozen window, and why it was not moved before the freeze.
+  `QUALIFICATION_ENABLED` is still untouched, so no shipping image can capture.
+
 ## Assumptions / risk / rollback
 - [UNVERIFIED] A block-capable board/test image and protected persistent volume are available; if not, finish format/negative tests but **leave feature disabled** and report exact physical gate, not a claimed complete warm-boot fix. Raw memory capture persists sensitive bytes; enforce storage trust/erase/retention per threat model. Rollback uses cold boot with restore disabled and snapshot area invalidated on a **throwaway** disk; prior snapshot bytes, leaked secrets or already corrupted external state cannot be undone by code rollback.
 
