@@ -66,18 +66,23 @@ báo cáo ở `.agents/<plan>/`, cách làm ở `docs/guides/`. Chuỗi tiền l
   directory entry sai sau các lần ghi in-place của `write_at`). Request 4 KiB không bao giờ đọc tới vùng đó
   nên lane vẫn xanh; sửa chỗ hạ kích thước là hết dạng A. Bước kế: log kích thước fatfs thấy ngay sau mount
   và sau mỗi `write_at` để bắt thời điểm nó tụt.
-  (B) **dữ liệu nguồn không nhất quán giữa hai cell**: dump `ReadGuestMemory` ngay sau scatter cho 12 request
-  đọc đầu của lần boot thứ hai thấy *cùng* sector 0 (off=0) có request nhận đúng marker
-  (`[67,69,76,76,79,83,95,88]`) và có request nhận **zero** ở frame của descriptor. Vậy zero đến từ *nguồn dữ
-  liệu* (grant/VFS/đường block ngoài), không phải từ cách guest nhìn page — framing cũ "guest thấy page khác
-  frame" đã bị số liệu này sửa. Không request nào `status≠0`, không EOF/ERR ở `read_at`, không dòng `VFS read
-  response` bất thường. **Đã loại tiếp tầng block của VFS**: trace `read_raw_sector` + `PageCache` trong lần
-  boot hỏng cho thấy raw read trả đúng marker ở sector của cluster đầu file (10114 = "CELLOSE2") và zero ở các
-  sector đuôi (đúng, vì ngoài marker đĩa rỗng), cache hit nhất quán, không dòng zero bất thường nào ở tầng này.
-  Vậy zero được tạo ra **phía trên** tầng block: đường grant → cell → frame của guest (scatter hoặc
-  `WriteGuestMemory`), không phải thiết bị/cache. Bước kế: instrument phía cell, đối chiếu nội dung grant *và*
-  frame trang cho cùng request, rồi tới phía guest. Bằng chứng + lý do khoá feature nằm tại
-  `cells/services/hypervisor/src/virtio_blk.rs` (`config_read`).
+  (B) **guest đọc phải một trang cache cũ, không phải device trả sai** — giả thuyết "nguồn dữ liệu/grant sai"
+  đã bị **rút lại**: trace từng lần gọi trong `scatter_to_guest` (`[hv-sc] gpa=… take=4096 got=4096`) và
+  `ReadGuestMemory` ngay sau đó cho thấy mọi write đều thành công vào đúng frame; các frame "toàn zero" ở
+  buffer 2..4 thực ra là **dữ liệu đúng** (file chỉ có marker 32 byte, phần còn lại zero). Bằng chứng phía
+  device: fixture nay `drop_caches` trước khi đọc marker, và trong lần chạy đó boot thứ hai đọc đúng marker
+  (`VIRTIO_E2E_BLOCK_READBACK_PASS` + `SECOND_RUN_PASS`) ngay cả khi `seg_max` bật; nếu không có cold read thì
+  cùng cấu hình đọc ra zero. Tầng block của VFS cũng đã loại: raw read trả "CELLOSE2" ở sector cluster đầu
+  (10114) và zero ở đuôi (đúng, đĩa rỗng), cache hit nhất quán.
+
+  (C) **flush ngắt quãng thất bại ở tầng raw**: `[hv-blk] VFS flush failed: Ok(Err(1))` — VFS *trả lời*
+  `Err(1)` (không phải timeout), tức `FatBackend::sync` → `blk_router::blk_flush()` phía ngoài trả false, kèm
+  `[hv-blk-host] request failed type=4 … status=1`; guest `dd … conv=fsync` báo `block-write` dù dữ liệu đã
+  nằm trên đĩa (host-side marker check sau run1 vẫn PASS). Bước kế: instrument `flush()` của NVMe driver cell
+  (mã lỗi NVM_OPC_FLUSH / timeout completion) — đây là nguyên nhân flaky còn lại của lane e2e.
+
+  Bằng chứng + lý do khoá feature nằm tại `cells/services/hypervisor/src/virtio_blk.rs` (`config_read`).
+  Fixture e2e nay đọc marker với page cache đã xoá (`drop_caches`), để device trả sai không bị cache che.
   Lane tái hiện: `scripts/qemu-x86-virtio-e2e.sh` (đỏ khi bật, xanh khi tắt).
 
 ## Blocked (chờ phần cứng hoặc governance)

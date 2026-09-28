@@ -47,6 +47,11 @@ printf %s "$persistence_marker" > /tmp/expected
 marker_len=${#persistence_marker}
 irq5_before=$(irq_count 5)
 [ "$irq5_before" -ge 0 ] || fail irq5-not-registered
+# Force the marker read to reach the device instead of whatever the page cache
+# picked up during boot: a cached page would mask a device that answers short or
+# with zeros, which is exactly what this lane is here to catch.
+sync
+echo 3 > /proc/sys/vm/drop_caches 2>/dev/null || true
 dd if=/dev/vda of=/tmp/actual bs=1 count="$marker_len" 2>/dev/null || fail block-read
 
 if cmp -s /tmp/expected /tmp/actual; then
