@@ -48,6 +48,10 @@ const NVM_OPC_FLUSH: u8 = 0x00;
 
 const POLL_WARN_ITERS: u64 = 1_000_000;
 
+/// How many expected io rejections (reads past the namespace end) to log.
+static IO_ERR_LOG: core::sync::atomic::AtomicUsize =
+    core::sync::atomic::AtomicUsize::new(3);
+
 pub struct NvmeController {
     mmio: MmioRegion,
     admin: Queue,
@@ -307,12 +311,20 @@ impl NvmeController {
                 self.admin.cq_head = new_head as u16;
                 self.ring_cq_head(0, self.admin.cq_head);
                 if status != 0 {
+                    ostd::io::println(&alloc::format!(
+                        "[nvme] admin error status={} after {} polls",
+                        status, iters
+                    ));
                     return Err(ViError::IO);
                 }
                 return Ok(());
             }
             iters += 1;
             if iters == POLL_WARN_ITERS {
+                ostd::io::println(&alloc::format!(
+                    "[nvme] admin timeout after {} polls",
+                    iters
+                ));
                 return Err(ViError::IO);
             }
             fence(Ordering::Acquire);
@@ -356,12 +368,27 @@ impl NvmeController {
                 self.io.cq_head = new_head as u16;
                 self.ring_cq_head(1, self.io.cq_head);
                 if status != 0 {
+                    // Reads past the end of the namespace are expected (volume
+                    // probes and a wandering cluster chain both produce them) and
+                    // the caller retries; log the first few so a real error is
+                    // still visible without flooding the console.
+                    if IO_ERR_LOG.fetch_sub(1, Ordering::Relaxed) > 0 {
+                        ostd::io::println(&alloc::format!(
+                            "[nvme] io error opc={} lba={} nlb={} status={}",
+                            opc, lba, nlb, status
+                        ));
+                    }
                     return Err(ViError::IO);
                 }
                 return Ok(());
             }
             iters += 1;
             if iters == POLL_WARN_ITERS {
+                // Never expected: an unanswered command is always worth a line.
+                ostd::io::println(&alloc::format!(
+                    "[nvme] io timeout opc={} lba={} after {} polls",
+                    opc, lba, iters
+                ));
                 return Err(ViError::IO);
             }
             fence(Ordering::Acquire);
