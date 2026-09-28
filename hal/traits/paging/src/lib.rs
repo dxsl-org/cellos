@@ -19,6 +19,23 @@ impl PageFlags {
     /// Device MMIO mapping — use non-cacheable Device-nGnRnE attributes (AArch64 MAIR index 0).
     /// On RISC-V and x86_64 this flag is ignored (all MMIO uses the same PTE path).
     pub const DEVICE: usize = 1 << 8;
+    /// Address-space-scoped (non-global) mapping: the leaf belongs to the
+    /// architectural tag in use, not to every root.
+    ///
+    /// AArch64 translates this to `PTE_nG` (bit 11). Without it the leaf is
+    /// **global**, which has two consequences that matter for private roots:
+    /// an ASID-targeted invalidation (`tlbi aside1is`) never clears it, and the
+    /// translation stays usable after `TTBR0_EL1` is reprogrammed to a different
+    /// root. Private-root-only leaves therefore carry this bit so the tag-release
+    /// contract can be satisfied by targeted invalidation alone.
+    ///
+    /// RISC-V and x86_64 ignore it. Bit 9 is free in both: the x86_64 leaf
+    /// translator composes only `PTE_P`/`PTE_RW`/`PTE_US`/`PTE_NX` and never
+    /// reads any other bit, and on RISC-V the software bitfield is copied
+    /// verbatim into the Sv39 leaf where bit 9 is `RSW[1]` — reserved for
+    /// supervisor software, ignored by the hardware for permission checks and
+    /// never consulted by `translate`/`unmap` (which mask the output address).
+    pub const NON_GLOBAL: usize = 1 << 9;
 
     pub const R_W_X: usize = Self::READ | Self::WRITE | Self::EXECUTE;
 

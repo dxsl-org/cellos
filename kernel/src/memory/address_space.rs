@@ -191,6 +191,14 @@ pub struct AddressSpaceBuilder {
     supervisor: Vec<SupervisorMapping>,
     requests: Vec<RequestedMapping>,
     existing_user: Vec<ExistingUserMapping>,
+    /// Whether the shared supervisor ranges are already in `supervisor`.
+    ///
+    /// A published private root that lacks them is not a slow root, it is a dead
+    /// one: a hart that switches to it cannot fetch its own trap vector, so it
+    /// never reaches the handler that acknowledges an invalidation and every
+    /// later awaited flush burns its whole retry budget. `build` therefore adds
+    /// them for every root that did not already ask for them.
+    shared_supervisor: bool,
 }
 impl Default for AddressSpaceBuilder {
     fn default() -> Self {
@@ -204,6 +212,7 @@ impl AddressSpaceBuilder {
             supervisor: Vec::new(),
             requests: Vec::new(),
             existing_user: Vec::new(),
+            shared_supervisor: false,
         }
     }
 
@@ -212,7 +221,45 @@ impl AddressSpaceBuilder {
     }
 
     pub(crate) fn map_registered_execution(&mut self, kernel_stack: &crate::task::stack::Stack) {
+        self.map_shared_supervisor();
+        // The cell's own kernel stack is a leaf of THIS root. It stays
+        // supervisor-only, but it must be non-global: the trap path reprograms
+        // `TTBR0_EL1` to the kernel root while still running on this stack, and
+        // the kernel root's own identity leaf for the same address — not a
+        // surviving global entry of this root — is what must carry the handler.
+        // Task teardown then retires it with an ASID-targeted flush.
+        let flags = Flags::from_bits(
+            Flags::VALID
+                | Flags::READ
+                | Flags::WRITE
+                | Flags::ACCESSED
+                | Flags::DIRTY
+                | Flags::NON_GLOBAL,
+        );
+        for address in (kernel_stack.usable_start()..kernel_stack.top).step_by(PAGE_SIZE) {
+            self.allow_supervisor(SupervisorMapping {
+                virtual_address: address,
+                physical_address: address,
+                flags,
+            });
+        }
+    }
+
+    /// Map the shared kernel/supervisor ranges into this root.
+    ///
+    /// Every published private root needs these: a hart that switches to a root
+    /// without them cannot fetch its own trap vector, so it never reaches the
+    /// handler that acknowledges an invalidation — an unacknowledged remote hart
+    /// is what that produces, not a slow one. `map_registered_execution` calls
+    /// this first; a fixture that builds a root for a task the scheduler may
+    /// dispatch must call it too.
+    pub(crate) fn map_shared_supervisor(&mut self) {
         use crate::memory::domain_supervisor_registry::{shared_snapshot, SupervisorRangeKind};
+
+        if self.shared_supervisor {
+            return;
+        }
+        self.shared_supervisor = true;
 
         for range in shared_snapshot() {
             let flags = match range.kind {
@@ -244,16 +291,6 @@ impl AddressSpaceBuilder {
                     flags,
                 });
             }
-        }
-        let flags = Flags::from_bits(
-            Flags::VALID | Flags::READ | Flags::WRITE | Flags::ACCESSED | Flags::DIRTY,
-        );
-        for address in (kernel_stack.usable_start()..kernel_stack.top).step_by(PAGE_SIZE) {
-            self.allow_supervisor(SupervisorMapping {
-                virtual_address: address,
-                physical_address: address,
-                flags,
-            });
         }
     }
 
@@ -288,13 +325,19 @@ impl AddressSpaceBuilder {
         });
         Ok(())
     }
-    pub fn build(self) -> Result<Arc<AddressSpace>, AddressSpaceError> {
+    pub fn build(mut self) -> Result<Arc<AddressSpace>, AddressSpaceError> {
+        // Every published private root carries the shared supervisor ranges.
+        // Production callers ask for them through `map_registered_execution`;
+        // a fixture that only wants a private mapping gets them here, because
+        // the scheduler may dispatch any task that owns the root.
+        self.map_shared_supervisor();
         let AddressSpaceBuilder {
             identity,
             #[allow(unused_variables)]
             supervisor,
             requests,
             existing_user,
+            shared_supervisor: _,
         } = self;
         // Claim the architectural tag before anything is allocated: when every tag
         // is held by a live root the builder must refuse the domain (no reuse of a
@@ -601,8 +644,15 @@ impl AddressSpace {
             return Err(AddressSpaceError::Dying);
         }
 
+        // Same class as `map_registered_execution`'s kernel-stack leaves: a leaf
+        // of THIS root only, retired with an ASID-targeted flush.
         let supervisor_flags = Flags::from_bits(
-            Flags::VALID | Flags::READ | Flags::WRITE | Flags::ACCESSED | Flags::DIRTY,
+            Flags::VALID
+                | Flags::READ
+                | Flags::WRITE
+                | Flags::ACCESSED
+                | Flags::DIRTY
+                | Flags::NON_GLOBAL,
         );
         let user_stack_flags = Flags::from_bits(
             Flags::VALID | Flags::READ | Flags::WRITE | Flags::ACCESSED | Flags::DIRTY,
@@ -1107,6 +1157,33 @@ impl Drop for AsidLease {
     }
 }
 
+/// Test-hooks: a real tag for a fixture-owned root that is not published as an
+/// `AddressSpace`.
+///
+/// The AArch64 private-root invalidation witness builds its own page tables (it
+/// must reach and rewrite a leaf from inside the root under test), so it needs
+/// an architectural tag without a builder. Taking it from the same pool keeps
+/// the fixture from aliasing a live domain's tag, and dropping it runs the real
+/// release path — ASID-targeted invalidation, then the slot — before the
+/// fixture's frames go back to the allocator.
+#[cfg(all(feature = "test-hooks", target_arch = "aarch64"))]
+pub(crate) struct FixtureAsidLease {
+    lease: AsidLease,
+}
+
+#[cfg(all(feature = "test-hooks", target_arch = "aarch64"))]
+impl FixtureAsidLease {
+    pub(crate) fn acquire(domain: u64) -> Option<Self> {
+        Some(Self {
+            lease: AsidLease::acquire(domain)?,
+        })
+    }
+
+    pub(crate) fn value(&self) -> usize {
+        self.lease.value
+    }
+}
+
 fn validate_user_mapping(virtual_address: VAddr, flags: Flags) -> Result<(), AddressSpaceError> {
     if virtual_address >= USER_LIMIT || !virtual_address.is_multiple_of(PAGE_SIZE) {
         return Err(AddressSpaceError::InvalidMapping);
@@ -1152,8 +1229,24 @@ fn register_private_table_frames(
     Ok(registrations)
 }
 
+/// The flags for a leaf of a **private** root.
+///
+/// Every user leaf a private root installs — a cell's user stack, its ELF
+/// segments, its `map_private_page` and its grant pages — is non-global. These
+/// leaves exist only in that root, so an ASID-targeted invalidation
+/// (`tlbi aside1is` on AArch64) has to reach them; a global leaf would survive
+/// it *and* stay usable after `TTBR0_EL1` is reprogrammed to another root,
+/// which is a cross-domain read at EL0 rather than a stale-frame bug. RV64 and
+/// x86_64 ignore the bit (see `PageFlags::NON_GLOBAL`).
 fn user_flags(flags: Flags) -> Flags {
-    Flags::from_bits(flags.bits() | Flags::VALID | Flags::USER | Flags::ACCESSED | Flags::DIRTY)
+    Flags::from_bits(
+        flags.bits()
+            | Flags::VALID
+            | Flags::USER
+            | Flags::ACCESSED
+            | Flags::DIRTY
+            | Flags::NON_GLOBAL,
+    )
 }
 fn map_page(
     root: PhysAddr,

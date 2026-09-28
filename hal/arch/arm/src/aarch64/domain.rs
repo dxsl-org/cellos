@@ -12,6 +12,12 @@ static ROOT_PROGRAMMINGS: AtomicUsize = AtomicUsize::new(0);
 /// Test-only: local `tlbi` operations issued through this module.
 #[cfg(feature = "test-hooks")]
 static ASID_FLUSHES: AtomicUsize = AtomicUsize::new(0);
+/// Test-only: the subset of those operations that invalidated a single ASID.
+#[cfg(feature = "test-hooks")]
+static TARGETED_FLUSHES: AtomicUsize = AtomicUsize::new(0);
+/// Test-only: the subset that invalidated every EL1 context.
+#[cfg(feature = "test-hooks")]
+static FULL_FLUSHES: AtomicUsize = AtomicUsize::new(0);
 
 /// Test-only view of `(root programmings, invalidations issued)`.
 ///
@@ -28,10 +34,27 @@ pub fn switch_counters() -> (usize, usize) {
     )
 }
 
+/// Test-only view of `(ASID-targeted invalidations, all-context invalidations)`.
+///
+/// The release path must invalidate the retiring root's **tag**, not every
+/// context: `flush_asid` moves the first counter, `flush_all` the second. A
+/// fixture asserts a release moves the first by one and leaves the second
+/// alone — "zero full flushes" cannot be vacuous because the second counter is
+/// proven live by an explicit `flush_all`.
+#[cfg(feature = "test-hooks")]
+pub fn flush_kind_counters() -> (usize, usize) {
+    (
+        TARGETED_FLUSHES.load(Ordering::Acquire),
+        FULL_FLUSHES.load(Ordering::Acquire),
+    )
+}
+
 #[cfg(feature = "test-hooks")]
 pub fn reset_switch_counters() {
     ROOT_PROGRAMMINGS.store(0, Ordering::Release);
     ASID_FLUSHES.store(0, Ordering::Release);
+    TARGETED_FLUSHES.store(0, Ordering::Release);
+    FULL_FLUSHES.store(0, Ordering::Release);
 }
 
 pub fn record_kernel_ttbr0(ttbr0: usize) {
@@ -81,7 +104,10 @@ pub fn flush_asid(asid: usize) {
         );
     }
     #[cfg(feature = "test-hooks")]
-    ASID_FLUSHES.fetch_add(1, Ordering::Relaxed);
+    {
+        ASID_FLUSHES.fetch_add(1, Ordering::Relaxed);
+        TARGETED_FLUSHES.fetch_add(1, Ordering::Relaxed);
+    }
 }
 
 pub fn flush_asid_remote(_hart_mask: usize, asid: usize) -> Result<(), DomainPagingError> {
@@ -103,7 +129,10 @@ pub fn flush_all() {
         );
     }
     #[cfg(feature = "test-hooks")]
-    ASID_FLUSHES.fetch_add(1, Ordering::Relaxed);
+    {
+        ASID_FLUSHES.fetch_add(1, Ordering::Relaxed);
+        FULL_FLUSHES.fetch_add(1, Ordering::Relaxed);
+    }
 }
 
 /// Records a scheduler-proven root programming for test fixtures.

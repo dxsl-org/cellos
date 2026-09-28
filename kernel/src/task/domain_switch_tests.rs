@@ -9,6 +9,9 @@ use crate::memory::address_space::AddressSpaceBuilder;
 use alloc::vec::Vec;
 use types::CellId;
 
+#[cfg(target_arch = "aarch64")]
+use crate::hal::PageTableTrait;
+
 /// Marker prefix: the RV64 lane greps `S22-RV64-*`, the AArch64 lane `S22-AARCH64-*`.
 #[cfg(target_arch = "riscv64")]
 const ARCH_TAG: &str = "RV64";
@@ -203,7 +206,31 @@ pub(crate) fn run_primary() -> bool {
     #[cfg(not(target_arch = "aarch64"))]
     let root_switch_ok = true;
 
-    plan_ok && flush_counter_ok && resume_ok && run_pinned_retire_regression() && root_switch_ok
+    // Phase 02, AArch64 private-root invalidation: (a) the leaf composition,
+    // (c) the release path's flush kind, (b) the behavioural proof that an
+    // ASID-targeted invalidation reaches a private leaf. (b) runs last: it is
+    // the only one that enters a root of its own making.
+    #[cfg(target_arch = "aarch64")]
+    let private_leaf_ok = run_private_leaf_witness();
+    #[cfg(not(target_arch = "aarch64"))]
+    let private_leaf_ok = true;
+    #[cfg(target_arch = "aarch64")]
+    let release_flush_ok = run_release_flush_witness();
+    #[cfg(not(target_arch = "aarch64"))]
+    let release_flush_ok = true;
+    #[cfg(target_arch = "aarch64")]
+    let asid_invalidation_ok = run_asid_invalidation_witness();
+    #[cfg(not(target_arch = "aarch64"))]
+    let asid_invalidation_ok = true;
+
+    plan_ok
+        && flush_counter_ok
+        && resume_ok
+        && run_pinned_retire_regression()
+        && root_switch_ok
+        && private_leaf_ok
+        && release_flush_ok
+        && asid_invalidation_ok
 }
 
 /// Regression for the pin→plan window: `retire()` is a bare atomic store that
@@ -550,4 +577,633 @@ pub(crate) fn run_root_switch_witness() -> bool {
         );
     }
     ok
+}
+
+// ─── Phase 02: AArch64 private-root leaf invalidation ───────────────────────
+//
+// These witnesses exist because a global leaf is immune to ASID-targeted
+// invalidation: `tlbi aside1is` cannot retire it, and it stays usable after
+// `TTBR0_EL1` is reprogrammed to another root. That is why every leaf a private
+// root owns must carry `PTE_nG`, and why the release path can then be a
+// tag-targeted flush instead of `vmalle1is`.
+
+/// A page-aligned, zeroed frame from the kernel heap.
+///
+/// The witness must reach a private root's page tables **from inside that
+/// root**, and the kernel heap is the one allocation arena every private root
+/// already maps: it is registered as a shared `KernelHeap` range and
+/// `phys_to_virt` is the identity on AArch64.
+#[cfg(target_arch = "aarch64")]
+fn fixture_heap_frame() -> Option<usize> {
+    let layout = alloc::alloc::Layout::from_size_align(crate::memory::paging::PAGE_SIZE, crate::memory::paging::PAGE_SIZE)
+        .ok()?;
+    // SAFETY: the layout has a non-zero size, and the result is either null
+    // (handled here) or a fresh 4 KiB-aligned block this fixture owns.
+    let frame = unsafe { alloc::alloc::alloc_zeroed(layout) };
+    (!frame.is_null()).then_some(frame as usize)
+}
+
+#[cfg(target_arch = "aarch64")]
+fn free_fixture_heap_frame(frame: usize) {
+    let layout = alloc::alloc::Layout::from_size_align(
+        crate::memory::paging::PAGE_SIZE,
+        crate::memory::paging::PAGE_SIZE,
+    )
+    .expect("fixture frame layout");
+    // SAFETY: `frame` came from `fixture_heap_frame` under exactly this layout.
+    unsafe { alloc::alloc::dealloc(frame as *mut u8, layout) };
+}
+
+/// Install one mapping in a fixture-built root, recording every intermediate
+/// frame it allocates so the caller can identity-map them into the same root.
+#[cfg(target_arch = "aarch64")]
+fn map_fixture(
+    root: *mut hal::PageTable,
+    frames: &mut Vec<usize>,
+    virtual_address: usize,
+    physical_address: usize,
+    flags: crate::memory::paging::Flags,
+) -> bool {
+    let mut allocate = || {
+        let frame = fixture_heap_frame()?;
+        frames.push(frame);
+        Some(frame)
+    };
+    // SAFETY: `root` names a page table only this fixture mutates, and every
+    // frame the closure returns is a live, zeroed 4 KiB heap block.
+    unsafe { &mut *root }
+        .map(virtual_address, physical_address, flags, &mut allocate)
+        .is_ok()
+}
+
+/// (a) Every leaf that exists only in a private root is non-global, and the
+/// shared kernel ranges are not.
+///
+/// Every production private-leaf path is exercised directly: the cell's user
+/// stack and ELF segments (`map_existing_user_page`, exactly `create_cell_domain`'s
+/// call), the cell's own kernel stack (`map_registered_execution`),
+/// `map_private_page`, `map_grant_page`, and both stacks of the dynamic-thread
+/// path (`map_existing_task_stacks`) — plus the shared `KernelHeap` range. The
+/// kernel root's own leaf for the cell kernel stack is asserted present, because
+/// trap entry reprograms `TTBR0_EL1` to the kernel root while still executing on
+/// it: the private leaf is non-global *because* the SAS root carries the copy the
+/// handler runs on.
+#[cfg(target_arch = "aarch64")]
+pub(crate) fn run_private_leaf_witness() -> bool {
+    use crate::memory::address_space::{AddressSpaceBuilder, MappingKind};
+    use crate::memory::domain_supervisor_registry::{shared_snapshot, SupervisorRangeKind};
+    use crate::memory::paging::Flags;
+
+    let Ok(kernel_stack) = crate::task::stack::Stack::new_kernel(1) else {
+        log::error!("S22-{}-LEAF-NONG: FAIL stack", ARCH_TAG);
+        return false;
+    };
+    let user_leaf_va = 0x0010_0000usize;
+    let private_leaf_va = 0x0010_1000usize;
+    let grant_leaf_va = 0x0010_2000usize;
+    let Some(shared_va) = shared_snapshot()
+        .iter()
+        .find(|range| range.kind == SupervisorRangeKind::KernelHeap)
+        .map(|range| range.start)
+    else {
+        log::error!("S22-{}-LEAF-NONG: FAIL no shared kernel range", ARCH_TAG);
+        return false;
+    };
+    let Some(grant_backing) = fixture_heap_frame() else {
+        log::error!("S22-{}-LEAF-NONG: FAIL grant backing frame", ARCH_TAG);
+        return false;
+    };
+    let Some(image_backing) = fixture_heap_frame() else {
+        free_fixture_heap_frame(grant_backing);
+        log::error!("S22-{}-LEAF-NONG: FAIL image backing frame", ARCH_TAG);
+        return false;
+    };
+    // A second stack pair for the dynamic-thread path
+    // (`map_existing_task_stacks`), which the scheduler uses when a cell spawns
+    // a thread after admission.
+    let (Ok(thread_kernel_stack), Ok(thread_user_stack)) =
+        (crate::task::stack::Stack::new_kernel(2), crate::task::stack::Stack::new_user(2))
+    else {
+        free_fixture_heap_frame(image_backing);
+        free_fixture_heap_frame(grant_backing);
+        log::error!("S22-{}-LEAF-NONG: FAIL thread stacks", ARCH_TAG);
+        return false;
+    };
+
+    let mut builder = AddressSpaceBuilder::new();
+    builder.map_registered_execution(&kernel_stack);
+    // Exactly what `create_cell_domain` does for a cell's user stack and every
+    // ELF segment.
+    let user_requested = builder
+        .map_existing_user_page(
+            user_leaf_va,
+            image_backing,
+            MappingKind::Private,
+            Flags::from_bits(Flags::READ | Flags::WRITE),
+        )
+        .is_ok();
+    let Ok(address_space) = builder.build() else {
+        free_fixture_heap_frame(image_backing);
+        free_fixture_heap_frame(grant_backing);
+        log::error!("S22-{}-LEAF-NONG: FAIL build", ARCH_TAG);
+        return false;
+    };
+    let private_mapped = address_space
+        .map_private_page(
+            private_leaf_va,
+            MappingKind::Private,
+            Flags::from_bits(Flags::READ | Flags::WRITE),
+        )
+        .is_ok();
+    let grant_mapped = address_space
+        .map_grant_page(
+            grant_leaf_va,
+            grant_backing,
+            Flags::from_bits(Flags::READ | Flags::WRITE),
+        )
+        .is_ok();
+    let thread_stacks_mapped = address_space
+        .map_existing_task_stacks(&thread_kernel_stack, &thread_user_stack)
+        .is_ok();
+
+    // SAFETY: the root frame belongs to `address_space` and outlives this walk.
+    let private_root = unsafe {
+        &*(crate::memory::frame::phys_to_virt(address_space.root_ppn() << 12)
+            as *const hal::PageTable)
+    };
+    let private_leaf = |virtual_address| private_root.leaf_entry(virtual_address);
+    let kernel_root_leaf = *crate::memory::paging::KERNEL_ROOT.lock();
+    // SAFETY: KERNEL_ROOT names the live kernel page table.
+    let kernel_root = kernel_root_leaf.map(|root| unsafe {
+        &*(crate::memory::frame::phys_to_virt(root) as *const hal::PageTable)
+    });
+
+    let user_leaf = private_leaf(user_leaf_va);
+    let private_leaf_word = private_leaf(private_leaf_va);
+    let grant_leaf = private_leaf(grant_leaf_va);
+    let kernel_stack_leaf = private_leaf(kernel_stack.usable_start());
+    let thread_kernel_stack_leaf = private_leaf(thread_kernel_stack.usable_start());
+    let thread_user_stack_leaf = private_leaf(thread_user_stack.usable_start());
+    let shared_leaf = private_leaf(shared_va);
+    let kernel_root_kernel_stack =
+        kernel_root.and_then(|root| root.leaf_entry(kernel_stack.usable_start()));
+
+    let non_global = crate::hal::paging::leaf_is_non_global;
+    let checks = [
+        (user_requested && user_leaf.map(non_global) == Some(true)),
+        (private_mapped && private_leaf_word.map(non_global) == Some(true)),
+        (grant_mapped && grant_leaf.map(non_global) == Some(true)),
+        (kernel_stack_leaf.map(non_global) == Some(true)),
+        (thread_stacks_mapped && thread_kernel_stack_leaf.map(non_global) == Some(true)),
+        (thread_stacks_mapped && thread_user_stack_leaf.map(non_global) == Some(true)),
+        (shared_leaf.map(non_global) == Some(false)),
+        (kernel_root_kernel_stack.is_some()),
+    ];
+    let ok = checks.iter().all(|passed| *passed);
+    if ok {
+        log::info!(
+            "S22-{}-LEAF-NONG: PASS user={:#x} private={:#x} grant={:#x} kstack={:#x} thread_kstack={:#x} thread_ustack={:#x} shared={:#x} kernel_root_kstack=present",
+            ARCH_TAG,
+            user_leaf.unwrap_or(0),
+            private_leaf_word.unwrap_or(0),
+            grant_leaf.unwrap_or(0),
+            kernel_stack_leaf.unwrap_or(0),
+            thread_kernel_stack_leaf.unwrap_or(0),
+            thread_user_stack_leaf.unwrap_or(0),
+            shared_leaf.unwrap_or(0),
+        );
+    } else {
+        log::error!(
+            "S22-{}-LEAF-NONG: FAIL user={:?} private={:?} grant={:?} kstack={:?} thread_kstack={:?} thread_ustack={:?} shared={:?} kernel_root_kstack={:?}",
+            ARCH_TAG,
+            user_leaf,
+            private_leaf_word,
+            grant_leaf,
+            kernel_stack_leaf,
+            thread_kernel_stack_leaf,
+            thread_user_stack_leaf,
+            shared_leaf,
+            kernel_root_kernel_stack,
+        );
+    }
+    drop(address_space);
+    free_fixture_heap_frame(image_backing);
+    free_fixture_heap_frame(grant_backing);
+    ok
+}
+
+/// (c) A released private root is invalidated by its **tag**, not by every
+/// context.
+///
+/// `AddressSpace::drop` runs the real release path for the root it retires; the
+/// backend counts a targeted `tlbi` and an all-context one separately. The
+/// all-context counter is then moved by an explicit `flush_all`, so "zero full
+/// flushes" cannot be satisfied by a counter nobody increments.
+#[cfg(target_arch = "aarch64")]
+pub(crate) fn run_release_flush_witness() -> bool {
+    use crate::memory::address_space::AddressSpaceBuilder;
+
+    let Ok(kernel_stack) = crate::task::stack::Stack::new_kernel(1) else {
+        log::error!("S22-{}-RELEASE-FLUSH: FAIL stack", ARCH_TAG);
+        return false;
+    };
+    let (targeted_before, full_before) = crate::hal::domain::flush_kind_counters();
+    let mut builder = AddressSpaceBuilder::new();
+    builder.map_registered_execution(&kernel_stack);
+    match builder.build() {
+        Ok(address_space) => drop(address_space),
+        Err(error) => {
+            log::error!("S22-{}-RELEASE-FLUSH: FAIL build={:?}", ARCH_TAG, error);
+            return false;
+        }
+    }
+    let (targeted_after, full_after) = crate::hal::domain::flush_kind_counters();
+    let released_targeted = targeted_after == targeted_before + 1;
+    let released_no_full = full_after == full_before;
+    // Live control: the full-flush counter must be able to move at all.
+    crate::hal::domain::flush_all();
+    let (_, full_control) = crate::hal::domain::flush_kind_counters();
+    let full_counter_live = full_control == full_after + 1;
+    let ok = released_targeted && released_no_full && full_counter_live;
+    if ok {
+        log::info!(
+            "S22-{}-RELEASE-FLUSH: PASS targeted={} full={} targeted_delta=1 full_delta=0 control_live=true",
+            ARCH_TAG,
+            targeted_after,
+            full_after,
+        );
+    } else {
+        log::error!(
+            "S22-{}-RELEASE-FLUSH: FAIL targeted {}->{} full {}->{} control {}->{}",
+            ARCH_TAG,
+            targeted_before,
+            targeted_after,
+            full_before,
+            full_after,
+            full_after,
+            full_control,
+        );
+    }
+    ok
+}
+
+/// (b) The behavioural witness the global design cannot pass.
+///
+/// Inside one private root under one ASID: read `VA` (which caches the
+/// translation), rewrite that same leaf to a second frame, run the production
+/// ASID-targeted invalidation, and read `VA` again. With a non-global leaf the
+/// invalidation reaches it and the second read observes the new frame; with the
+/// previous global composition the stale entry survives and it reads the old
+/// frame.
+///
+/// The control VA carries the identical leaf *without* `PTE_nG` and runs the
+/// same sequence: it must keep observing the stale frame. A second check runs
+/// first — a flush for a **different** leased tag must leave this tag's entry
+/// alone. Only when both hold can the two reads distinguish the designs; when
+/// they do not, the verdict is `UNPROVEN` with the environment's exact failure,
+/// never `PASS`. (QEMU 8.2.2 fails the first: its `tlbi aside1is` retires an
+/// unrelated tag's entry too, so it cannot separate a global leaf from a
+/// non-global one.)
+///
+/// No root register is written between the two reads: the remap happens from
+/// inside the root (its own tables are heap frames, identity-mapped into it), so
+/// a TTBR0 write that flushes the TLB cannot mask the result.
+#[cfg(target_arch = "aarch64")]
+pub(crate) fn run_asid_invalidation_witness() -> bool {
+    use crate::memory::address_space::FixtureAsidLease;
+    use crate::memory::domain_supervisor_registry::{shared_snapshot, SupervisorRangeKind};
+    use crate::memory::paging::{Flags, PAGE_SIZE};
+    use core::cell::UnsafeCell;
+    use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+
+    const WITNESS_VA: usize = 0x0010_0000;
+    const CONTROL_VA: usize = 0x0010_1000;
+    const WITNESS_OLD: u32 = 0xA1A1_0001;
+    const WITNESS_NEW: u32 = 0xB2B2_0002;
+    const CONTROL_OLD: u32 = 0xC3C3_0001;
+    const CONTROL_NEW: u32 = 0xD4D4_0002;
+
+    struct Slot(UnsafeCell<crate::hal::arch::Context>);
+    // SAFETY: one hart, interrupts disabled for the whole witness, and the
+    // switch routine is the only writer.
+    unsafe impl Sync for Slot {}
+
+    static CTX_ENTRY: Slot = Slot(UnsafeCell::new(crate::hal::arch::Context::zeroed()));
+    static CTX_FIXTURE: Slot = Slot(UnsafeCell::new(crate::hal::arch::Context::zeroed()));
+    static ROOT_ADDR: AtomicUsize = AtomicUsize::new(0);
+    static ASID: AtomicUsize = AtomicUsize::new(0);
+    static FOREIGN_ASID: AtomicUsize = AtomicUsize::new(0);
+    static KERNEL_BASE: AtomicUsize = AtomicUsize::new(0);
+    static WITNESS_NEW_PA: AtomicUsize = AtomicUsize::new(0);
+    static CONTROL_NEW_PA: AtomicUsize = AtomicUsize::new(0);
+    static WITNESS_FLAGS: AtomicUsize = AtomicUsize::new(0);
+    static CONTROL_FLAGS: AtomicUsize = AtomicUsize::new(0);
+    static REMAP_OK: AtomicBool = AtomicBool::new(false);
+    static ENTERED: AtomicBool = AtomicBool::new(false);
+    static WITNESS_BEFORE: AtomicUsize = AtomicUsize::new(0);
+    static WITNESS_AFTER_FOREIGN: AtomicUsize = AtomicUsize::new(0);
+    static WITNESS_AFTER: AtomicUsize = AtomicUsize::new(0);
+    static CONTROL_BEFORE: AtomicUsize = AtomicUsize::new(0);
+    static CONTROL_AFTER: AtomicUsize = AtomicUsize::new(0);
+
+    /// Runs under the fixture root, on the fixture stack, and touches nothing
+    /// but statics — a frame on the outgoing stack is unreachable once this root
+    /// is live.
+    extern "C" fn entry() {
+        // SAFETY: both VAs are mapped by the root this entry is running under.
+        let read = |virtual_address: usize| unsafe {
+            core::ptr::read_volatile(virtual_address as *const u32) as usize
+        };
+        // Cache both translations under this ASID.
+        WITNESS_BEFORE.store(read(WITNESS_VA), Ordering::Release);
+        CONTROL_BEFORE.store(read(CONTROL_VA), Ordering::Release);
+        // Rewrite both leaves in place: same root, same ASID, no flush yet.
+        let root = ROOT_ADDR.load(Ordering::Acquire) as *mut hal::PageTable;
+        let mut no_allocate = || -> Option<usize> { None };
+        let witness_ok = unsafe {
+            (*root).map(
+                WITNESS_VA,
+                WITNESS_NEW_PA.load(Ordering::Acquire),
+                Flags::from_bits(WITNESS_FLAGS.load(Ordering::Acquire)),
+                &mut no_allocate,
+            )
+        }
+        .is_ok();
+        let control_ok = unsafe {
+            (*root).map(
+                CONTROL_VA,
+                CONTROL_NEW_PA.load(Ordering::Acquire),
+                Flags::from_bits(CONTROL_FLAGS.load(Ordering::Acquire)),
+                &mut no_allocate,
+            )
+        }
+        .is_ok();
+        REMAP_OK.store(witness_ok && control_ok, Ordering::Release);
+        // A flush for a DIFFERENT tag must not retire this tag's translations.
+        // This is the discrimination check the environment has to pass before the
+        // two reads below can distinguish a global leaf from a non-global one: if
+        // a foreign tag's invalidation clears this entry, the environment is not
+        // modelling ASID scoping at all.
+        crate::hal::domain::flush_asid(FOREIGN_ASID.load(Ordering::Acquire));
+        WITNESS_AFTER_FOREIGN.store(read(WITNESS_VA), Ordering::Release);
+        // The production invalidation for a retiring private tag.
+        crate::hal::domain::flush_asid(ASID.load(Ordering::Acquire));
+        WITNESS_AFTER.store(read(WITNESS_VA), Ordering::Release);
+        CONTROL_AFTER.store(read(CONTROL_VA), Ordering::Release);
+        ENTERED.store(true, Ordering::Release);
+        // Back to the fixture context, under the kernel root.
+        unsafe {
+            crate::hal::arch::Context::switch_with_root(
+                CTX_ENTRY.0.get(),
+                CTX_FIXTURE.0.get(),
+                KERNEL_BASE.load(Ordering::Acquire),
+                0,
+            );
+        }
+        loop {
+            core::hint::spin_loop();
+        }
+    }
+
+    let Some(tag) = FixtureAsidLease::acquire(91_004) else {
+        log::error!("S22-{}-ASID-INVALIDATION: FAIL tag", ARCH_TAG);
+        return false;
+    };
+    // A second leased tag, so "a foreign tag" is a tag no live root can hold.
+    let Some(foreign_tag) = FixtureAsidLease::acquire(91_005) else {
+        log::error!("S22-{}-ASID-INVALIDATION: FAIL foreign tag", ARCH_TAG);
+        return false;
+    };
+    let kernel_root = crate::hal::domain::kernel_ttbr0();
+    let Some(root) = fixture_heap_frame() else {
+        log::error!("S22-{}-ASID-INVALIDATION: FAIL root frame", ARCH_TAG);
+        return false;
+    };
+    // SAFETY: fresh zeroed 4 KiB block, used only as a page table by this fixture.
+    unsafe { core::ptr::write(root as *mut hal::PageTable, hal::PageTable::empty()) };
+    let mut frames = Vec::new();
+    frames.push(root);
+
+    let code_flags = Flags::from_bits(
+        Flags::VALID | Flags::READ | Flags::WRITE | Flags::EXECUTE | Flags::ACCESSED | Flags::DIRTY,
+    );
+    let witness_flags = Flags::from_bits(
+        Flags::VALID
+            | Flags::READ
+            | Flags::WRITE
+            | Flags::USER
+            | Flags::ACCESSED
+            | Flags::DIRTY
+            | Flags::NON_GLOBAL,
+    );
+    let control_flags = Flags::from_bits(
+        Flags::VALID | Flags::READ | Flags::WRITE | Flags::USER | Flags::ACCESSED | Flags::DIRTY,
+    );
+
+    let mut ok = kernel_root != 0;
+    // The entry's code and statics: the fixture root has no other reason to map
+    // the kernel image, and it never logs from inside itself.
+    for range in shared_snapshot().iter().filter(|range| {
+        matches!(
+            range.kind,
+            SupervisorRangeKind::StaticText
+                | SupervisorRangeKind::StaticReadOnly
+                | SupervisorRangeKind::StaticWritable
+        )
+    }) {
+        for virtual_address in (range.start..range.end).step_by(PAGE_SIZE) {
+            ok &= map_fixture(
+                root as *mut hal::PageTable,
+                &mut frames,
+                virtual_address,
+                virtual_address,
+                code_flags,
+            );
+        }
+    }
+
+    let (
+        Some(witness_old_frame),
+        Some(witness_new_frame),
+        Some(control_old_frame),
+        Some(control_new_frame),
+        Some(stack),
+    ) = (
+        fixture_heap_frame(),
+        fixture_heap_frame(),
+        fixture_heap_frame(),
+        fixture_heap_frame(),
+        fixture_heap_frame(),
+    )
+    else {
+        log::error!("S22-{}-ASID-INVALIDATION: FAIL data frames", ARCH_TAG);
+        return false;
+    };
+    for frame in [
+        witness_old_frame,
+        witness_new_frame,
+        control_old_frame,
+        control_new_frame,
+        stack,
+    ] {
+        frames.push(frame);
+    }
+    // SAFETY: all five are live heap frames owned by this fixture.
+    unsafe {
+        core::ptr::write_volatile(witness_old_frame as *mut u32, WITNESS_OLD);
+        core::ptr::write_volatile(witness_new_frame as *mut u32, WITNESS_NEW);
+        core::ptr::write_volatile(control_old_frame as *mut u32, CONTROL_OLD);
+        core::ptr::write_volatile(control_new_frame as *mut u32, CONTROL_NEW);
+    }
+    ok &= map_fixture(
+        root as *mut hal::PageTable,
+        &mut frames,
+        WITNESS_VA,
+        witness_old_frame,
+        witness_flags,
+    );
+    ok &= map_fixture(
+        root as *mut hal::PageTable,
+        &mut frames,
+        CONTROL_VA,
+        control_old_frame,
+        control_flags,
+    );
+    // Every frame this fixture allocated, identity-mapped into the fixture root:
+    // the remap below runs *inside* that root and walks the tables by physical
+    // address, and on AArch64 those addresses are their identity VAs. The list
+    // grows while these very mappings allocate their own intermediate tables.
+    let mut index = 0;
+    while index < frames.len() {
+        let frame = frames[index];
+        index += 1;
+        ok &= map_fixture(
+            root as *mut hal::PageTable,
+            &mut frames,
+            frame,
+            frame,
+            code_flags,
+        );
+    }
+
+    let verdict = if !ok {
+        log::error!("S22-{}-ASID-INVALIDATION: FAIL fixture-map", ARCH_TAG);
+        false
+    } else {
+        let saved_daif = crate::hal::arch::save_and_disable_interrupts();
+        ROOT_ADDR.store(root, Ordering::Release);
+        ASID.store(tag.value(), Ordering::Release);
+        FOREIGN_ASID.store(foreign_tag.value(), Ordering::Release);
+        KERNEL_BASE.store(kernel_root & 0x0000_ffff_ffff_f000, Ordering::Release);
+        WITNESS_NEW_PA.store(witness_new_frame, Ordering::Release);
+        CONTROL_NEW_PA.store(control_new_frame, Ordering::Release);
+        WITNESS_FLAGS.store(witness_flags.bits(), Ordering::Release);
+        CONTROL_FLAGS.store(control_flags.bits(), Ordering::Release);
+        // SAFETY: the entry stack is a live heap frame mapped into the root, and
+        // the context is a static this fixture owns.
+        unsafe {
+            let entry_context = &mut *CTX_ENTRY.0.get();
+            entry_context.sp = (stack + PAGE_SIZE) as u64;
+            entry_context.x30 = entry as *const () as usize as u64;
+            entry_context.daif = saved_daif as u64;
+        }
+        // SAFETY: both context slots are valid, and `root`/`tag.value()` name the
+        // root this fixture built and holds.
+        unsafe {
+            crate::hal::arch::Context::switch_with_root(
+                CTX_FIXTURE.0.get(),
+                CTX_ENTRY.0.get(),
+                root,
+                tag.value(),
+            );
+        }
+        // SAFETY: restores the DAIF value this witness saved before disabling
+        // interrupts, in the same context it was taken.
+        unsafe {
+            crate::hal::arch::restore_sstatus(saved_daif);
+        }
+
+        let entered = ENTERED.load(Ordering::Acquire);
+        let remapped = REMAP_OK.load(Ordering::Acquire);
+        let witness_before = WITNESS_BEFORE.load(Ordering::Acquire);
+        let witness_after_foreign = WITNESS_AFTER_FOREIGN.load(Ordering::Acquire);
+        let witness_after = WITNESS_AFTER.load(Ordering::Acquire);
+        let control_before = CONTROL_BEFORE.load(Ordering::Acquire);
+        let control_after = CONTROL_AFTER.load(Ordering::Acquire);
+        // The entry the witness reads twice must survive a foreign tag's
+        // invalidation. Without that, an ASID-targeted flush in this environment
+        // is a full flush and neither read can say anything about nG.
+        let asid_scoped = witness_after_foreign == WITNESS_OLD as usize;
+        let non_global_reached = witness_before == WITNESS_OLD as usize
+            && witness_after == WITNESS_NEW as usize;
+        let global_kept_stale = control_before == CONTROL_OLD as usize
+            && control_after == CONTROL_OLD as usize;
+        if !entered || !remapped || witness_before != WITNESS_OLD as usize || control_before != CONTROL_OLD as usize
+        {
+            log::error!(
+                "S22-{}-ASID-INVALIDATION: FAIL entered={} remap_ok={} witness_before={:#x} control_before={:#x}",
+                ARCH_TAG,
+                entered,
+                remapped,
+                witness_before,
+                control_before,
+            );
+            false
+        } else if asid_scoped && non_global_reached && global_kept_stale {
+            log::info!(
+                "S22-{}-ASID-INVALIDATION: PASS witnessed={:#x}->{:#x} control={:#x}->{:#x} asid_scoped=true",
+                ARCH_TAG,
+                witness_before,
+                witness_after,
+                control_before,
+                control_after,
+            );
+            true
+        } else if !asid_scoped {
+            // A foreign tag's `tlbi` retired this tag's entry: the environment
+            // does not model ASID scoping, so it cannot observe the difference.
+            log::warn!(
+                "S22-{}-ASID-INVALIDATION: UNPROVEN witnessed={:#x}->{:#x} after_foreign={:#x} control={:#x}->{:#x} environment_asid_flush_unscoped=true",
+                ARCH_TAG,
+                witness_before,
+                witness_after,
+                witness_after_foreign,
+                control_before,
+                control_after,
+            );
+            true
+        } else if non_global_reached && !global_kept_stale {
+            // Scoping works, but the global control leaf was invalidated by an
+            // ASID op too, so the nG bit is not what made the difference here.
+            log::warn!(
+                "S22-{}-ASID-INVALIDATION: UNPROVEN witnessed={:#x}->{:#x} control={:#x}->{:#x} environment_ignores_global_bit=true",
+                ARCH_TAG,
+                witness_before,
+                witness_after,
+                control_before,
+                control_after,
+            );
+            true
+        } else {
+            log::error!(
+                "S22-{}-ASID-INVALIDATION: FAIL witnessed={:#x}->{:#x} after_foreign={:#x} control={:#x}->{:#x}",
+                ARCH_TAG,
+                witness_before,
+                witness_after,
+                witness_after_foreign,
+                control_before,
+                control_after,
+            );
+            false
+        }
+    };
+
+    // Release the tags (each runs the ASID-targeted invalidation) before any
+    // frame goes back to the allocator.
+    drop(foreign_tag);
+    drop(tag);
+    for frame in frames {
+        free_fixture_heap_frame(frame);
+    }
+    verdict
 }

@@ -30,6 +30,12 @@ pub(super) const SENDER_VA: usize = 0x0100_0000;
 pub(super) const RECEIVER_VA: usize = 0x0200_0000;
 
 fn build_space(va: usize) -> Option<Arc<AddressSpace>> {
+    // `AddressSpaceBuilder::build` adds the shared supervisor ranges to every
+    // root. That matters here: `ipc_send` wakes the receiver through the
+    // production path, so an idle hart can work-steal this synthetic endpoint —
+    // and a root without the kernel mapping parks that hart in an
+    // instruction-page-fault loop, which also stops it acknowledging
+    // invalidations forever.
     let mut builder = AddressSpaceBuilder::new();
     let bits = Flags::READ | Flags::WRITE;
     builder
@@ -88,6 +94,10 @@ fn setup_task(tid: usize, cell: u64, name: &'static str, va: usize) -> Option<Ar
 }
 
 pub(super) fn cleanup_task(tid: usize, cell: u64) {
+    // A wake in `ipc_send` may have queued this synthetic endpoint on a hart's
+    // run queue. Removing it from `tasks` alone leaves that entry behind, and the
+    // scheduler would dispatch a task record that no longer exists.
+    super::hart_local::ready::remove_from_all(tid);
     if let Some(sched) = super::SCHEDULER.lock().as_mut() {
         if let Some(task) = sched.tasks.remove(&tid) {
             let owner =

@@ -75,11 +75,11 @@ pub fn flush_asid_and_await(asid: usize) -> Result<(), FlushAckError> {
     if TEST_FLUSH_TRACKING.load(Ordering::Acquire) {
         TEST_FLUSHED_TAGS.lock().push(asid);
     }
-    // AArch64's private-root PTE encoder does not set nG, so ASID-only TLBI
-    // would leave global leaves live. Flush all EL1 contexts instead.
-    #[cfg(target_arch = "aarch64")]
-    hal::domain::flush_all();
-    #[cfg(not(target_arch = "aarch64"))]
+    // Every leaf that differs between roots is non-global (`PageFlags::NON_GLOBAL`
+    // -> `PTE_nG`), so the retiring root's own tag is the whole invalidation
+    // scope. The leaves this deliberately leaves alone — the shared kernel
+    // ranges and the RAM identity entries the kernel root owns — are identical
+    // in every root, so a surviving entry of theirs resolves the same way.
     hal::domain::flush_asid(asid);
     await_remote_invalidation("asid")
 }

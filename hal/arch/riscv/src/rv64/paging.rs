@@ -23,8 +23,14 @@ pub fn flush_tlb_page(virt: VAddr) {
 }
 
 /// Helper to map Generic Flags to RISC-V Flags
+///
+/// The generic namespace maps onto the Sv39 leaf bit-for-bit, so bits this
+/// backend has no meaning for must be cleared or they land in `RSW`:
+/// `PageFlags::NON_GLOBAL` is an AArch64 `PTE_nG` request, and on RISC-V the
+/// leaf is already address-space-scoped, so it is dropped here rather than
+/// written into a software-reserved bit no other code expects to be set.
 fn to_riscv_flags(flags: PageFlags) -> usize {
-    let mut bits = flags.bits();
+    let mut bits = flags.bits() & !PageFlags::NON_GLOBAL;
 
     // Ensure VALID is set if any other bit is set (safeguard)
     if bits != 0 {

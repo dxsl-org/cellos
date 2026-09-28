@@ -99,6 +99,19 @@ REQUIRED_MARKERS=(
     "S22-AARCH64-RESUME-ROOT: PASS"
     "S22-AARCH64-PIN-DYING: PASS"
     "S22-AARCH64-ROOT-SWITCH: PASS"
+    # Phase 02 private-root invalidation. `LEAF-NONG` and `RELEASE-FLUSH` are
+    # positive assertions (every private-root leaf carries PTE_nG; releasing a
+    # root invalidates its tag and not every context, with a live counter
+    # control). `ASID-INVALIDATION` asserts the behavioural witness *ran* and
+    # reported a verdict: it prints `PASS` only in an environment that scopes
+    # `tlbi aside1is` to the named ASID and honours the global bit, and
+    # `UNPROVEN` (with the environment's exact failure) otherwise — QEMU 8.2.2
+    # retires an unrelated tag's entry on `aside1is`, so it prints `UNPROVEN`.
+    # A regression to the old global-leaf composition would print `FAIL` and
+    # lose the marker.
+    "S22-AARCH64-LEAF-NONG: PASS"
+    "S22-AARCH64-RELEASE-FLUSH: PASS"
+    "S22-AARCH64-ASID-INVALIDATION:"
 )
 if [[ "$DEVELOPMENT_SILO" == "1" ]]; then
     REQUIRED_MARKERS+=(

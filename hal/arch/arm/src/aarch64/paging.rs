@@ -13,6 +13,16 @@ const PTE_TABLE: u64 = 1 << 1;
 const PTE_PAGE: u64 = 1 << 1;
 const PTE_AF: u64 = 1 << 10;
 const PTE_SH_IS: u64 = 3 << 8;
+/// nG (bit 11) — the leaf is tagged with the active ASID instead of being shared
+/// by every root.
+///
+/// Global leaves are immune to ASID-targeted invalidation (`tlbi aside1is`) and
+/// stay usable after `TTBR0_EL1` is reprogrammed to another root, so a private
+/// root that installs them cannot retire a translation — or a frame — with a
+/// targeted flush. Set from `PageFlags::NON_GLOBAL`; the shared kernel ranges
+/// leave it clear because the trap path reprograms `TTBR0_EL1` to the kernel
+/// root while still running on the cell's own kernel stack.
+const PTE_NG: u64 = 1 << 11;
 /// AP[1] — grant EL0 access. AP[2:1] = 0b?1.
 const PTE_AP_EL0: u64 = 1 << 6;
 /// AP[2] — read-only at BOTH exception levels. AP[2:1] = 0b1? .
@@ -32,6 +42,62 @@ const ATTR_DEVICE: u64 = 0;
 
 fn phys_to_pte_addr(phys: PhysAddr) -> u64 {
     ((phys as u64) >> 12) << 12
+}
+
+/// The exact L3 leaf descriptor this backend installs for `phys` with `flags`.
+///
+/// One definition: `map` writes this word, and the phase-02 private-root
+/// invalidation witness rewrites a leaf in place with it, so "what the walker
+/// sees" and "what a fixture believes it wrote" cannot diverge.
+fn leaf_word(phys: PhysAddr, flags: PageFlags) -> u64 {
+    // Device MMIO: Device-nGnRnE (MAIR index 0, no SH).
+    // Normal RAM:  Normal WB-WA-RA (MAIR index 1, Inner-shareable).
+    let is_device = flags.bits() & PageFlags::DEVICE != 0;
+    let (attr, sh) = if is_device {
+        (ATTR_DEVICE, 0u64)
+    } else {
+        (ATTR_NORMAL, PTE_SH_IS)
+    };
+    let mut entry = phys_to_pte_addr(phys) | PTE_VALID | PTE_PAGE | PTE_AF | sh | attr;
+
+    // Bit 54 is UXN in the EL1&0 regime but the ONLY XN bit in the EL2
+    // (non-VHE) regime — the same table is live in both when the kernel
+    // runs as EL2 host (virtualization=on / raspi3b). Kernel pages must
+    // therefore leave bit 54 clear or EL2 instruction fetch aborts the
+    // moment SCTLR_EL2.M is set. Nothing is lost at EL1: non-USER pages
+    // have AP[1]=0, so EL0 cannot fetch from them regardless of UXN.
+    if flags.bits() & PageFlags::USER != 0 {
+        entry |= PTE_AP_EL0 | PTE_PXN;
+    }
+    // AP[2]: without it the WRITE flag has no effect on this arch and every
+    // page is read/write, which would make the loader's W^X pass a silent
+    // no-op on AArch64 while riscv64/x86_64 enforced it.
+    if flags.bits() & PageFlags::WRITE == 0 {
+        entry |= PTE_AP_RO;
+    }
+    if flags.bits() & PageFlags::EXECUTE == 0 {
+        entry |= PTE_UXN | PTE_PXN;
+    }
+    if flags.bits() & PageFlags::NON_GLOBAL != 0 {
+        entry |= PTE_NG;
+    }
+    entry
+}
+
+/// Test-only: the word `map` installs for `phys`/`flags`.
+///
+/// The private-root invalidation witness rewrites one existing leaf in place
+/// from inside the root under test, where a full `map` walk is not available
+/// (its intermediate tables are only reachable via the kernel root).
+#[cfg(feature = "test-hooks")]
+pub fn leaf_descriptor(phys: PhysAddr, flags: PageFlags) -> u64 {
+    leaf_word(phys, flags)
+}
+
+/// Test-only: whether a leaf word carries the non-global bit.
+#[cfg(feature = "test-hooks")]
+pub const fn leaf_is_non_global(leaf: u64) -> bool {
+    leaf & PTE_NG != 0
 }
 
 /// Invalidate the TLB entry for a single virtual address in every translation
@@ -171,34 +237,7 @@ impl PageTableTrait for PageTable {
         let l2_table = self.get_or_alloc(l1_idx, alloc_fn)?;
         let l3_table = l2_table.get_or_alloc(l2_idx, alloc_fn)?;
 
-        // Device MMIO: Device-nGnRnE (MAIR index 0, no SH).
-        // Normal RAM:  Normal WB-WA-RA (MAIR index 1, Inner-shareable).
-        let is_device = flags.bits() & PageFlags::DEVICE != 0;
-        let (attr, sh) = if is_device {
-            (ATTR_DEVICE, 0u64)
-        } else {
-            (ATTR_NORMAL, PTE_SH_IS)
-        };
-        let mut entry = phys_to_pte_addr(phys) | PTE_VALID | PTE_PAGE | PTE_AF | sh | attr;
-
-        // Bit 54 is UXN in the EL1&0 regime but the ONLY XN bit in the EL2
-        // (non-VHE) regime — the same table is live in both when the kernel
-        // runs as EL2 host (virtualization=on / raspi3b). Kernel pages must
-        // therefore leave bit 54 clear or EL2 instruction fetch aborts the
-        // moment SCTLR_EL2.M is set. Nothing is lost at EL1: non-USER pages
-        // have AP[1]=0, so EL0 cannot fetch from them regardless of UXN.
-        if flags.bits() & PageFlags::USER != 0 {
-            entry |= PTE_AP_EL0 | PTE_PXN;
-        }
-        // AP[2]: without it the WRITE flag has no effect on this arch and every
-        // page is read/write, which would make the loader's W^X pass a silent
-        // no-op on AArch64 while riscv64/x86_64 enforced it.
-        if flags.bits() & PageFlags::WRITE == 0 {
-            entry |= PTE_AP_RO;
-        }
-        if flags.bits() & PageFlags::EXECUTE == 0 {
-            entry |= PTE_UXN | PTE_PXN;
-        }
+        let entry = leaf_word(phys, flags);
 
         // SAFETY: l3_table is a valid page table frame; l3_idx is in [0..512).
         unsafe {
