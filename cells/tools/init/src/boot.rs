@@ -68,6 +68,26 @@ pub(crate) fn spawn_hypervisor() -> Option<usize> {
 }
 
 pub(crate) fn spawn_optional_services() -> Option<usize> {
+    // Tier-2 entry fixtures (phase 02). Only the AArch64 test-hooks image can
+    // admit a domain-class cell, and it is also the one image whose boot ends
+    // before its shell becomes interactive: the shell sleeps ~2 s before its
+    // first prompt, and the image's own test root exits the VM at ~4.5 s. So the
+    // fixtures are launched here, first, where the boot order schedules them —
+    // and tears them down — before that terminal exit. `tier2-entry` is opted
+    // into by `scripts/build-aarch64-test-hooks-ci.sh` alone; no other image
+    // builds init with it, so no other lane changes.
+    #[cfg(feature = "tier2-entry")]
+    {
+        match sys_spawn_from_path("/bin/tier2-smoke") {
+            SyscallResult::Ok(_) => ostd::io::println("Init: tier2-smoke admitted."),
+            SyscallResult::Err(_) => ostd::io::println("Init: tier2-smoke spawn failed."),
+        }
+        match sys_spawn_from_path("/bin/tier2-exploit") {
+            SyscallResult::Ok(_) => ostd::io::println("Init: tier2-exploit admitted."),
+            SyscallResult::Err(_) => ostd::io::println("Init: tier2-exploit spawn failed."),
+        }
+    }
+
     // fb-console mirrors the kernel user log to the display, so it stays on for
     // RPi3: a board whose only console is the serial header shows nothing on
     // HDMI otherwise. Bitmap text on a compositor surface, not a TTY.

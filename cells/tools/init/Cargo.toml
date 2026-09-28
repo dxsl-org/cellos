@@ -13,6 +13,12 @@ default = []
 # When enabled, init spawns /bin/vfs-test after the main service stack is up.
 # Only used in CI test-hooks kernel builds — never in production.
 test-hooks = []
+# When enabled, init launches the phase-02 Tier-2 entry fixtures
+# (/bin/tier2-smoke, /bin/tier2-exploit) first in the optional-service list.
+# Opted into only by scripts/build-aarch64-test-hooks-ci.sh: that image is the
+# one whose boot ends before its shell becomes interactive, so the fixtures have
+# to be scheduled from the boot order rather than typed at a prompt.
+tier2-entry = []
 # When enabled, init brings up only VFS + Net before hypervisor — the Tier-3 VM
 # boot profile used by the hypervisor filesystem images and smoke lanes.
 hypervisor-min = []

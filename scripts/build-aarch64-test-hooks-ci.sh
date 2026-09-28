@@ -113,10 +113,17 @@ if [[ "$DEVELOPMENT_SILO" == "1" ]]; then
         -p app-silo-test
 else
     echo "==> Building base cells (init, shell, config)..."
+    # `tier2-entry` is init-only: a multi-package `--features` would have to exist
+    # on every selected package, so init is built on its own.
     cargo build --release \
         --target aarch64-unknown-none-softfloat \
         -Z build-std=core,alloc \
-        -p app-init -p app-shell -p service-config
+        --features tier2-entry \
+        -p app-init
+    cargo build --release \
+        --target aarch64-unknown-none-softfloat \
+        -Z build-std=core,alloc \
+        -p app-shell -p service-config
 fi
 
 echo "==> Building test-hooks cells (service-vfs, app-vfs-test, atomic-publication-probe)..."
@@ -137,6 +144,16 @@ cargo build --release \
     -Z build-std=core,alloc \
     -p atomic-publication-probe
 
+# Phase 02 Tier-2 entry fixtures. Both carry a `PROTECTION_CLASS_UNTRUSTED`
+# manifest, which is what makes the loader classify them domain-class; they are
+# the only cells in this image the admission policy can admit to a private root,
+# and the lane asserts the production image still refuses the same artifacts.
+echo "==> Building Tier-2 domain cells (tier2-smoke, tier2-exploit)..."
+cargo build --release \
+    --target aarch64-unknown-none-softfloat \
+    -Z build-std=core,alloc \
+    -p tier2-smoke -p tier2-exploit
+
 echo "==> Building stack-sizing paths (service-net, driver-virtio-net, service-input)..."
 cargo build --release \
     --target aarch64-unknown-none-softfloat \
@@ -153,6 +170,8 @@ CELL_BINARIES=(
     "$REL/driver-virtio-net"
     "$REL/atomic-publication-probe"
     "$REL/service-input"
+    "$REL/tier2-smoke"
+    "$REL/tier2-exploit"
 )
 CELL_IMAGE_PATHS=(
     /bin/init
@@ -164,6 +183,8 @@ CELL_IMAGE_PATHS=(
     /bin/virtio-net
     /bin/atomic-probe
     /bin/input
+    /bin/tier2-smoke
+    /bin/tier2-exploit
 )
 if [[ "$DEVELOPMENT_SILO" == "1" ]]; then
     CELL_BINARIES+=("$REL/silo" "$REL/service-kms" "$REL/silo-test")

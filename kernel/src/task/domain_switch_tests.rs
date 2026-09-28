@@ -223,6 +223,25 @@ pub(crate) fn run_primary() -> bool {
     #[cfg(not(target_arch = "aarch64"))]
     let asid_invalidation_ok = true;
 
+    // The admission posture and its denial cases. RV64 asserts these from `kmain`
+    // (`main.rs` owns that call site); AArch64 gets them from this fixture so the
+    // architecture whose switch-ordering gate just reopened also re-asserts, on
+    // the same code path, that the *disabled* posture still denies and that the
+    // single publication point refuses a domain-class launch while draining.
+    // `ENABLED` is a real assertion here: `enable_for_boot` has already run.
+    //
+    // The EL2 host is excluded: it cannot program a private root at all, so
+    // `enable_for_boot` refuses the posture there by design and an `ENABLED`
+    // assertion would be asserting against the machine rather than the code.
+    #[cfg(target_arch = "aarch64")]
+    let admission_ok = if crate::hal::aarch64::el2::is_el2() {
+        true
+    } else {
+        crate::loader::domain_admission::run_selftest()
+    };
+    #[cfg(not(target_arch = "aarch64"))]
+    let admission_ok = true;
+
     plan_ok
         && flush_counter_ok
         && resume_ok
@@ -231,7 +250,148 @@ pub(crate) fn run_primary() -> bool {
         && private_leaf_ok
         && release_flush_ok
         && asid_invalidation_ok
+        && admission_ok
 }
+
+/// Whether a private root has been observed live in this boot.
+///
+/// The teardown verdict is gated on it, so a boot that never admitted a domain
+/// cannot satisfy "frames accounted for on teardown" vacuously.
+#[cfg(target_arch = "aarch64")]
+static CPU_SEEN_PRIVATE_ROOT: core::sync::atomic::AtomicBool =
+    core::sync::atomic::AtomicBool::new(false);
+
+/// The domain's **live** `TTBR0_EL1`, read from inside the domain's own kernel
+/// context.
+///
+/// Called from `task::complete_incoming_switch`, which runs on the incoming side
+/// of a raw switch. For a resumed private-root task that is the task's own kernel
+/// stack under its own root — the one point where "what the plan programmed" and
+/// "what the PE is translating through" can be compared with no trap in between.
+///
+/// A *fresh* task's first entry is not one of those points: the switch routine
+/// returns into `x30`, so the code after the call belongs to the outgoing task
+/// and is reached only when that task is resumed. The observation therefore
+/// lands on the domain's first *resume*, which a `Yield` (or a peer cell running
+/// alongside it) guarantees — and a self-reselection still executes the
+/// post-switch code, because the routine saves and restores the same context.
+///
+/// The safe-root handoff is excluded by construction: the caller invokes this
+/// after `acknowledge_safe_root`, which clears the published domain identity, so
+/// the kernel root live at that instant cannot be misread as a private root.
+#[cfg(target_arch = "aarch64")]
+pub(crate) fn observe_incoming_live_root() {
+    use core::sync::atomic::{AtomicBool, Ordering};
+
+    /// One report per boot: the first resumed private-root context is the fact
+    /// under test, and every later switch would only repeat it.
+    static REPORTED: AtomicBool = AtomicBool::new(false);
+
+    let (id, generation) = hart_local::current_domain();
+    if id == 0 {
+        return;
+    }
+    let live = crate::hal::domain::current_root();
+    let asid = (live >> 48) & 0xffff;
+    let base = live & 0x0000_ffff_ffff_f000;
+    if REPORTED.swap(true, Ordering::AcqRel) {
+        return;
+    }
+    if asid != 0 && base != 0 {
+        CPU_SEEN_PRIVATE_ROOT.store(true, Ordering::Release);
+        log::info!(
+            "S22-{}-DOMAIN-LIVE: PASS asid={} root={:#x} ttbr0={:#x} domain={} generation={}",
+            ARCH_TAG,
+            asid,
+            base,
+            live,
+            id,
+            generation
+        );
+    } else {
+        log::error!(
+            "S22-{}-DOMAIN-LIVE: FAIL asid={} ttbr0={:#x} domain={} generation={}",
+            ARCH_TAG,
+            asid,
+            live,
+            id,
+            generation
+        );
+    }
+}
+
+/// The frames a torn-down domain held are accounted for, not withheld forever.
+///
+/// Called from `task::complete_incoming_switch` after the displaced root's staged
+/// release and the safe-root acknowledge. That acknowledge is the trigger:
+/// `domain_ack_generation` becoming non-zero is the published proof that this hart
+/// *left* a private root, and it is set on the same path that releases the
+/// outgoing root's pin.
+///
+/// A departure is not a teardown — a preempted domain still holds its root — so
+/// the verdict waits for the release itself to be observable. The witness is the
+/// ASID-targeted invalidation counter: retiring a root issues exactly one of them
+/// (that is what `S22-AARCH64-RELEASE-FLUSH` asserts, with the all-context
+/// counter as its live control), and no other post-boot path on this lane issues
+/// one. The first departure after a private root was seen live records the
+/// counter; the reading is taken at the first later departure that sees it move,
+/// which is therefore after `AddressSpace::drop` ran.
+///
+/// `quarantine_frames` is the kernel's only sink for frames whose invalidation
+/// was never acknowledged, so a zero count at that point is the fail-closed half
+/// of the release contract: no frame was silently dropped and none was retained
+/// forever. The liveness half — frames returning to the allocator, counted — is
+/// the release path's own `DOMAIN-FRAME-RELEASE: PASS tag=… frames=… quarantined=…`
+/// line, emitted from inside `AddressSpace::drop`.
+#[cfg(target_arch = "aarch64")]
+pub(crate) fn observe_domain_teardown(hart: usize) {
+    use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+
+    /// Targeted invalidations seen at the first departure after a live root.
+    const UNSET: usize = usize::MAX;
+    static BASELINE: AtomicUsize = AtomicUsize::new(UNSET);
+    static REPORTED: AtomicBool = AtomicBool::new(false);
+
+    if !CPU_SEEN_PRIVATE_ROOT.load(Ordering::Acquire) {
+        return;
+    }
+    let ack_generation = hart_local::domain_ack_generation_for(hart);
+    if ack_generation == 0 {
+        return;
+    }
+    let (targeted, _) = crate::hal::domain::flush_kind_counters();
+    let baseline = BASELINE.load(Ordering::Acquire);
+    if baseline == UNSET {
+        BASELINE.store(targeted, Ordering::Release);
+        return;
+    }
+    let releases = targeted.wrapping_sub(baseline);
+    if releases == 0 {
+        return;
+    }
+    let quarantined = crate::memory::address_space::quarantined_frame_count();
+    if REPORTED.swap(true, Ordering::AcqRel) {
+        return;
+    }
+    if quarantined == 0 {
+        log::info!(
+            "S22-{}-DOMAIN-TEARDOWN: PASS releases={} quarantined={} ack_generation={}",
+            ARCH_TAG,
+            releases,
+            quarantined,
+            ack_generation
+        );
+    } else {
+        log::error!(
+            "S22-{}-DOMAIN-TEARDOWN: FAIL releases={} quarantined={} ack_generation={}",
+            ARCH_TAG,
+            releases,
+            quarantined,
+            ack_generation
+        );
+    }
+}
+
 
 /// Regression for the pin→plan window: `retire()` is a bare atomic store that
 /// takes no lock, so it can land between the execution pin (pick_next_local

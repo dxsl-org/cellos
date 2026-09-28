@@ -20,7 +20,14 @@ pub(super) fn init_profile(route: LaunchRoute, target: &str) -> Option<LaunchPro
         | "/bin/kms" | "/bin/net" | "/bin/net-broker" | "/bin/nvme" | "/bin/shell"
         | "/bin/silo" | "/bin/ai-test" | "/bin/silo-test" | "/bin/srv-test" | "/bin/supervisor"
         | "/bin/vfs" | "/bin/vfs-test" | "/bin/virtio-gpu" | "/bin/virtio-net"
-        | "/bin/std-smoke" | "/bin/desktop" => Some(LaunchProfile::new(
+        | "/bin/std-smoke" | "/bin/desktop"
+        // Phase-02 Tier-2 entry fixtures. Both carry `PROTECTION_CLASS_UNTRUSTED`
+        // manifests and `boot_ceiling` already gives them `CapSet::EMPTY`, so this
+        // row grants init nothing beyond the ability to launch them: the
+        // admission policy is still the only thing that decides whether they may
+        // run as domains, and a production image (which has no such cells and no
+        // qualified switch ordering) refuses them there.
+        | "/bin/tier2-smoke" | "/bin/tier2-exploit" => Some(LaunchProfile::new(
             boot_ceiling::boot_ceiling(target),
             "init-launch-edge",
             true,

@@ -356,9 +356,13 @@ fn aarch64_httpd_web_server_serves_requests() {
     );
 }
 
-/// Phase-01 containment: on AArch64 the raw switch activates the incoming root
-/// before `Context::switch` saves the outgoing context, so Tier-2 admission stays
-/// closed until phase 02 proves the ordered transition on one CPU. A
+/// Phase-01 containment, updated by phase 02: Tier-2 admission stays closed on
+/// every production AArch64 image. Phase 02 moved the root write inside
+/// `Context::switch_with_root` and proved the root-writing path plus a real
+/// domain entry on one CPU *in the test-hooks image*
+/// (`domain_admission.rs::switch_ordering_qualified` is `aarch64 && test-hooks`,
+/// const-asserted false for a production build), so the refusal here is now a
+/// deliberate production policy rather than an unqualified mechanism. A
 /// domain-class cell must be refused, must never be published as a domain, and
 /// must never execute — and the refusal must leave the shell alive.
 #[test]
