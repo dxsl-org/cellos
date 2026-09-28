@@ -22,6 +22,15 @@ pub const IPC_BUF_SIZE: usize = 4096;
 /// Maximum inline TCP data that leaves conservative postcard framing headroom.
 pub const NET_TCP_INLINE_DATA_MAX: usize = IPC_BUF_SIZE - 256;
 
+/// Largest single grant chunk a `ReadHandleGrant` / `WriteHandleGrant` may move.
+///
+/// Both sides must agree: the caller (hypervisor cell) batches one guest block
+/// request into chunks of at most this size, and the VFS rejects anything
+/// larger. Grants are backed by *contiguous* frames, so the cap trades round
+/// trips against the allocator's ability to find a contiguous run — 16 pages,
+/// with callers free to fall back to smaller chunks when allocation fails.
+pub const VFS_GRANT_CHUNK: usize = 64 * 1024;
+
 // ── VFS service ───────────────────────────────────────────────────────────────
 
 /// Requests sent to the VFS service (`/bin/vfs`).

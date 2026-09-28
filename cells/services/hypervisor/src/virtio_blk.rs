@@ -23,7 +23,21 @@ const NUM_SECTORS: u64 = (DISK_SIZE / SECTOR_SIZE) as u64;
 const BLK_T_IN: u32 = 0; // read  — device → driver
 const BLK_T_OUT: u32 = 1; // write — driver → device
 const BLK_T_FLUSH: u32 = 4;
+/// IPC budget for a single VFS round trip, in scheduler ticks.
+///
+/// Sized for a 4 KiB block request — the unit this device used to move. A
+/// batched chunk moves up to `VFS_GRANT_CHUNK` in one call, and the VFS side of
+/// that call performs one FAT sector operation per 512 bytes, so the budget
+/// scales with the chunk (see `chunk_timeout_ticks`). A budget that only covers
+/// the round trip turns a slow-but-correct VFS into a poisoned connection.
 const BACKEND_TIMEOUT_TICKS: u64 = 200;
+/// Extra IPC budget per 4 KiB of a batched chunk.
+const BACKEND_TICKS_PER_4K: u64 = 200;
+
+/// IPC budget for a chunk of `bytes`, never below the base request budget.
+fn chunk_timeout_ticks(bytes: usize) -> u64 {
+    BACKEND_TIMEOUT_TICKS + (bytes.div_ceil(4096) as u64) * BACKEND_TICKS_PER_4K
+}
 
 pub enum Backend {
     Volatile(alloc::vec::Vec<u8>),
@@ -79,6 +93,17 @@ impl VirtioDevice for BlkDisk {
     }
 
     /// virtio-blk config: capacity at bytes 0-7 (little-endian u64 of sectors).
+    ///
+    /// `seg_max` (byte 12, `VIRTIO_BLK_F_SEG_MAX`) is deliberately NOT advertised
+    /// yet. With it on, Linux packs a whole bio into one request — which is the
+    /// request shape the batching below is built for — but on this lane the
+    /// gues's later reads of the same sectors then come back as zeros: the
+    /// device writes the correct bytes into the descriptor's guest frame (read
+    /// back through `ReadGuestMemory` right after the scatter), no request ends
+    /// in `VIRTIO_BLK_S_IOERR`, and the disk image on the host still holds the
+    /// data, yet `dd if=/dev/vda` in the next boot returns zeros. Every other
+    /// lane and the two-boot persistence marker pass with multi-segment requests
+    /// off, so the advertisement waits for whoever fixes that interaction.
     fn config_read(&self, offset: usize) -> u32 {
         match offset {
             0 => (self.num_sectors & 0xFFFF_FFFF) as u32,
@@ -334,21 +359,32 @@ fn blk_read(backend: &mut Backend, sector: u64, bufs: &[DescBuf], vm_id: usize) 
                 file,
                 ..
             } => {
-                let mut n = buf.len as usize;
-                let mut chunk_off = 0;
-                while n > 0 {
-                    let chunk = n.min(4096);
-                    let grant_id = ostd::syscall::sys_grant_alloc(chunk).unwrap_or(0);
-                    if grant_id == 0 {
+                // One grant (and one VFS round trip) per chunk of the whole
+                // request, scattered across the chain's guest buffers. The
+                // guest does not care whether a request arrived as one
+                // descriptor or sixty-four.
+                let mut done = 0usize;
+                let mut chunks = 0usize;
+                while done < total_len as usize {
+                    let want = total_len as usize - done;
+                    let Some((mut grant, chunk)) = alloc_chunk_grant(want) else {
+                        println("[hv-blk] grant allocation failed");
+                        return 1;
+                    };
+                    if !ostd::syscall::sys_grant_share(
+                        grant.id(),
+                        *vfs_tid,
+                        2, // ReadWrite — the VFS fills the grant
+                    ) {
+                        println("[hv-blk] grant share failed");
                         return 1;
                     }
-                    ostd::syscall::sys_grant_share(grant_id, *vfs_tid, 2 /* ReadWrite */);
 
                     let req = api::ipc::VfsRequest::ReadHandleGrant {
                         file: *file,
-                        offset: off + chunk_off as u64,
+                        offset: off + done as u64,
                         size: chunk,
-                        grant: grant_id,
+                        grant: grant.id(),
                     };
                     let mut resp_buf = [0u8; 512];
                     let mut send_buf = [0u8; 512];
@@ -357,24 +393,46 @@ fn blk_read(backend: &mut Backend, sector: u64, bufs: &[DescBuf], vm_id: usize) 
                         &req,
                         &mut send_buf,
                         &mut resp_buf,
-                        BACKEND_TIMEOUT_TICKS,
+                        chunk_timeout_ticks(chunk),
                     );
                     let poison = matches!(&result, Err(ostd::ipc::IpcError::Recv));
-                    let ok = if let Ok(api::ipc::VfsResponse::GrantDone { bytes }) = result {
-                        let mut tmp = alloc::vec![0u8; chunk];
-                        bytes == chunk
-                            && ostd::syscall::sys_grant_copy_to_slice(grant_id, &mut tmp)
-                                == Some(chunk)
-                            && crate::vmm::write_guest_memory(
-                                vm_id,
-                                buf.gpa + chunk_off as u64,
-                                &tmp,
-                            ) == chunk
-                    } else {
-                        false
+                    let ok = match result {
+                        Ok(api::ipc::VfsResponse::GrantDone { bytes }) if bytes == chunk => {
+                            // The safe accessor carries the exclusivity proof: the
+                            // handle is the region's only owner wrapper.
+                            let scattered = grant.with_bytes(|data| {
+                                scatter_to_guest(vm_id, bufs, done, &data[..chunk])
+                            });
+                            if !scattered {
+                                println(&alloc::format!(
+                                    "[hv-blk] read scatter failed off={} bytes={}",
+                                    off + done as u64,
+                                    chunk
+                                ));
+                            }
+                            scattered
+                        }
+                        Ok(response) => {
+                            println(&alloc::format!(
+                                "[hv-blk] VFS read response: {:?} off={} bytes={}",
+                                response,
+                                off + done as u64,
+                                chunk
+                            ));
+                            false
+                        }
+                        Err(error) => {
+                            println(&alloc::format!(
+                                "[hv-blk] VFS read failed: {:?} off={} bytes={}",
+                                error,
+                                off + done as u64,
+                                chunk
+                            ));
+                            false
+                        }
                     };
 
-                    ostd::syscall::sys_grant_free(grant_id);
+                    drop(grant);
                     if !ok {
                         if poison {
                             *poisoned_tid = *vfs_tid;
@@ -382,10 +440,17 @@ fn blk_read(backend: &mut Backend, sector: u64, bufs: &[DescBuf], vm_id: usize) 
                         *vfs_tid = 0;
                         return 1;
                     }
-                    chunk_off += chunk;
-                    n -= chunk;
+                    done += chunk;
+                    chunks += 1;
                 }
-                off += buf.len as u64;
+                if total_len >= 65536 {
+                    println(&alloc::format!(
+                        "[hv-blk] read bytes={} chunks={}",
+                        total_len,
+                        chunks
+                    ));
+                }
+                off += total_len;
             }
         }
     }
@@ -420,12 +485,10 @@ fn blk_write(backend: &mut Backend, sector: u64, bufs: &[DescBuf], vm_id: usize)
             Backend::Volatile(disk) => {
                 let off_usize = off as usize;
                 let n = buf.len as usize;
-                let mut tmp = alloc::vec![0u8; n];
-                let got = crate::vmm::read_guest_memory(vm_id, buf.gpa, &mut tmp);
+                let got = crate::vmm::read_guest_memory(vm_id, buf.gpa, &mut disk[off_usize..off_usize + n]);
                 if got != n {
                     return 1;
                 }
-                disk[off_usize..off_usize + n].copy_from_slice(&tmp[..n]);
                 off += n as u64;
             }
             Backend::Persistent {
@@ -434,25 +497,25 @@ fn blk_write(backend: &mut Backend, sector: u64, bufs: &[DescBuf], vm_id: usize)
                 file,
                 ..
             } => {
-                let mut n = buf.len as usize;
-                let mut chunk_off = 0;
-                while n > 0 {
-                    let chunk = n.min(4096);
-                    let mut tmp = alloc::vec![0u8; chunk];
-                    let got =
-                        crate::vmm::read_guest_memory(vm_id, buf.gpa + chunk_off as u64, &mut tmp);
-                    if got != chunk {
+                // Gather the request's guest buffers into one grant per chunk,
+                // then hand the VFS that chunk in a single round trip.
+                let mut done = 0usize;
+                let mut chunks = 0usize;
+                while done < total_len as usize {
+                    let want = total_len as usize - done;
+                    let Some((mut grant, chunk)) = alloc_chunk_grant(want) else {
+                        println("[hv-blk] grant allocation failed");
+                        return 1;
+                    };
+                    // The safe accessor carries the exclusivity proof; the grant
+                    // is shared only after the request's bytes are in place.
+                    let filled = grant
+                        .with_bytes_mut(|data| gather_from_guest(vm_id, bufs, done, &mut data[..chunk]));
+                    if !filled {
                         println("[hv-blk] guest-memory read failed");
                         return 1;
                     }
-
-                    let Some(grant_handle) =
-                        ostd::grant::GrantHandle::<u8>::alloc_copy_from_slice(&tmp)
-                    else {
-                        println("[hv-blk] grant allocation/initialization failed");
-                        return 1;
-                    };
-                    let grant_id = grant_handle.id();
+                    let grant_id = grant.id();
                     if !ostd::syscall::sys_grant_share(grant_id, *vfs_tid, 1 /* WriteOnly */) {
                         println("[hv-blk] grant share failed");
                         return 1;
@@ -460,7 +523,7 @@ fn blk_write(backend: &mut Backend, sector: u64, bufs: &[DescBuf], vm_id: usize)
 
                     let req = api::ipc::VfsRequest::WriteHandleGrant {
                         file: *file,
-                        offset: off + chunk_off as u64,
+                        offset: off + done as u64,
                         bytes: chunk,
                         grant: grant_id,
                     };
@@ -471,7 +534,7 @@ fn blk_write(backend: &mut Backend, sector: u64, bufs: &[DescBuf], vm_id: usize)
                         &req,
                         &mut send_buf,
                         &mut resp_buf,
-                        BACKEND_TIMEOUT_TICKS,
+                        chunk_timeout_ticks(chunk),
                     );
                     let poison = matches!(&result, Err(ostd::ipc::IpcError::Recv));
                     let ok = match result {
@@ -489,7 +552,7 @@ fn blk_write(backend: &mut Backend, sector: u64, bufs: &[DescBuf], vm_id: usize)
                         }
                     };
 
-                    drop(grant_handle);
+                    drop(grant);
                     if !ok {
                         if poison {
                             *poisoned_tid = *vfs_tid;
@@ -497,14 +560,99 @@ fn blk_write(backend: &mut Backend, sector: u64, bufs: &[DescBuf], vm_id: usize)
                         *vfs_tid = 0;
                         return 1;
                     }
-                    chunk_off += chunk;
-                    n -= chunk;
+                    done += chunk;
+                    chunks += 1;
                 }
-                off += buf.len as u64;
+                if total_len >= 65536 {
+                    println(&alloc::format!(
+                        "[hv-blk] write bytes={} chunks={}",
+                        total_len,
+                        chunks
+                    ));
+                }
+                off += total_len;
             }
         }
     }
     0
+}
+
+/// Allocate the largest usable grant chunk for `want` bytes.
+///
+/// Grants come from contiguous frames, so a large chunk can fail once the
+/// allocator is fragmented. Halving down to one page keeps bulk I/O working
+/// (more round trips) instead of failing the request.
+fn alloc_chunk_grant(want: usize) -> Option<(ostd::grant::GrantHandle<u8>, usize)> {
+    // A request can be smaller than the chunk cap — a single sector, or the
+    // tail of a chain — so the halving floor is one byte: refusing a small
+    // request outright would fail writes the device is supposed to serve.
+    let mut chunk = want.min(api::ipc::VFS_GRANT_CHUNK);
+    loop {
+        if let Some(handle) = ostd::grant::GrantHandle::<u8>::alloc(chunk) {
+            return Some((handle, chunk));
+        }
+        if chunk <= 1 {
+            return None;
+        }
+        chunk = (chunk / 2).max(1);
+    }
+}
+
+/// Copy `src` into the guest buffers of `bufs`, starting at request offset `start`.
+///
+/// `bufs` are the request's data descriptors in chain order; their lengths
+/// concatenate into the request's byte range.
+fn scatter_to_guest(vm_id: usize, bufs: &[DescBuf], start: usize, src: &[u8]) -> bool {
+    let mut written = 0usize;
+    let mut cursor = 0usize;
+    for buf in bufs {
+        let len = buf.len as usize;
+        if cursor + len > start {
+            let local = start.saturating_sub(cursor);
+            let take = (len - local).min(src.len() - written);
+            if crate::vmm::write_guest_memory(
+                vm_id,
+                buf.gpa + local as u64,
+                &src[written..written + take],
+            ) != take
+            {
+                return false;
+            }
+            written += take;
+            if written == src.len() {
+                break;
+            }
+        }
+        cursor += len;
+    }
+    written == src.len()
+}
+
+/// Copy the guest bytes of `bufs` at request offset `start` into `dst`.
+fn gather_from_guest(vm_id: usize, bufs: &[DescBuf], start: usize, dst: &mut [u8]) -> bool {
+    let mut read = 0usize;
+    let mut cursor = 0usize;
+    for buf in bufs {
+        let len = buf.len as usize;
+        if cursor + len > start {
+            let local = start.saturating_sub(cursor);
+            let take = (len - local).min(dst.len() - read);
+            if crate::vmm::read_guest_memory(
+                vm_id,
+                buf.gpa + local as u64,
+                &mut dst[read..read + take],
+            ) != take
+            {
+                return false;
+            }
+            read += take;
+            if read == dst.len() {
+                break;
+            }
+        }
+        cursor += len;
+    }
+    read == dst.len()
 }
 
 fn write_status(vm_id: usize, gpa: u64, status: u8) {

@@ -1,26 +1,40 @@
 //! LRU sector cache for the VFS block stream.
 //!
 //! Lives entirely inside the VFS cell — one owner, no lock contention.
-//! Cache budget is a compile-time constant; change and recompile for G2.
+//! Cache budget is derived from the cell's heap; see `MAX_CACHE_BYTES`.
 
 use crate::block_stream::BlockStream;
 use alloc::collections::{BTreeMap, VecDeque};
 
-/// Sector cache budget — 4 MB = 8192 512-byte sectors.
-/// G2 deployments: change this const and recompile. No feature flag needed.
-const MAX_CACHE_BYTES: usize = 4 * 1024 * 1024;
+/// Sector cache budget: a quarter of the cell's heap.
+///
+/// Each entry costs 512 B of payload plus BTreeMap/VecDeque bookkeeping, so the
+/// resident cost is ~15% above `total_bytes`; the rest of the heap has to hold
+/// the fatfs `FileSystem`, per-request buffers, and the mount table. The budget
+/// used to be a flat 4 MiB — exactly the whole heap — so the cache filled the
+/// arena before eviction could start and the cell died with
+/// `OOM: cell heap exhausted` after ~1 MiB of distinct sectors (a guest write
+/// burst longer than the boot's own I/O). Deriving it from the heap keeps the
+/// two in step.
+const MAX_CACHE_BYTES: usize = crate::VFS_HEAP_BYTES / 4;
+
+/// Eviction watermark: entries are dropped once the cache reaches this fraction
+/// of its budget, which leaves headroom instead of thrashing on the boundary.
+const EVICT_NUMERATOR: usize = 9;
+const EVICT_DENOMINATOR: usize = 10;
 
 struct CachedSector {
     data: [u8; 512],
-    dirty: bool,
 }
 
 /// LRU sector cache keyed by sector number.
 ///
-/// Write policy: write-through while the mounted backend has no journal —
-/// every `write_sector` flushes dirty entries to disk immediately. A future
-/// journaling backend, if selected by the Spec09 MountTable policy, can relax
-/// this to write-back.
+/// Write policy: write-through, and specifically *device first* — a cache entry
+/// only ever holds bytes that are already on the device, so eviction can never
+/// discard an unwritten sector. The earlier ordering (insert dirty, then flush,
+/// and on flush failure leave the entry dirty) made eviction of unflushed data
+/// possible; the `debug_assert` that was supposed to catch it is a no-op in
+/// release builds, and a persisted guest marker did go missing that way.
 pub struct PageCache {
     entries: BTreeMap<u64, CachedSector>,
     lru_order: VecDeque<u64>,
@@ -51,64 +65,47 @@ impl PageCache {
         if !dev.read_raw_sector(sector, buf) {
             return false;
         }
-        self.insert(sector, buf, false);
+        self.insert(sector, buf);
         true
     }
 
-    /// Write `data` to cache (marked dirty) and flush synchronously.
+    /// Write a full sector: device first, cache second.
     ///
-    /// Write-through for FAT32: durability on every write avoids silent data
-    /// loss since FAT has no journal to recover from a torn write.
+    /// FAT32 has no journal, so write-through is the durability model — and the
+    /// order matters as much as the policy: writing the device before the cache
+    /// keeps every resident entry clean, which is what makes eviction safe.
     pub fn write_sector(&mut self, dev: &mut BlockStream, sector: u64, data: &[u8; 512]) -> bool {
-        self.insert(sector, data, true);
-        self.flush_dirty(dev)
-    }
-
-    /// Write all dirty entries to disk and clear their dirty flags.
-    pub fn flush_dirty(&mut self, dev: &mut BlockStream) -> bool {
-        for (&sector, entry) in self.entries.iter_mut() {
-            if entry.dirty {
-                if !dev.write_raw_sector(sector, &entry.data) {
-                    return false;
-                }
-                entry.dirty = false;
-            }
+        if !dev.write_raw_sector(sector, data) {
+            return false;
         }
+        self.insert(sector, data);
         true
     }
 
-    fn insert(&mut self, sector: u64, data: &[u8; 512], dirty: bool) {
-        if self.entries.contains_key(&sector) {
+    fn insert(&mut self, sector: u64, data: &[u8; 512]) {
+        if let Some(entry) = self.entries.get_mut(&sector) {
             // Update in-place: no eviction, no total_bytes change.
-            let e = self.entries.get_mut(&sector).unwrap();
-            e.data.copy_from_slice(data);
-            e.dirty |= dirty;
+            entry.data.copy_from_slice(data);
             self.touch(sector);
             return;
         }
-        // Evict LRU entries until we have room. Eviction kicks in at 90% capacity
-        // (max_bytes * 9/10 ≈ 3.6MB for the default 4MB cache); this leaves headroom
-        // to avoid thrashing on the boundary. Effective live size = ~3.6MB, not 4MB.
-        while self.total_bytes + 512 > self.max_bytes * 9 / 10 {
-            if let Some(lru) = self.lru_order.pop_back() {
-                if let Some(e) = self.entries.remove(&lru) {
-                    // Write-through invariant: dirty entries are always flushed
-                    // in write_sector before we can hit capacity here.
-                    debug_assert!(!e.dirty, "dirty eviction without prior flush");
-                    self.total_bytes -= 512;
-                }
-            } else {
+        while self.total_bytes + 512
+            > self.max_bytes * EVICT_NUMERATOR / EVICT_DENOMINATOR
+        {
+            let Some(lru) = self.lru_order.pop_back() else {
                 break;
+            };
+            if self.entries.remove(&lru).is_some() {
+                self.total_bytes -= 512;
             }
         }
-        self.entries
-            .insert(sector, CachedSector { data: *data, dirty });
+        self.entries.insert(sector, CachedSector { data: *data });
         self.lru_order.push_front(sector);
         self.total_bytes += 512;
     }
 
     fn touch(&mut self, sector: u64) {
-        // O(n) scan — acceptable for ≤8192 entries (~32 KB of sector numbers).
+        // O(n) scan — acceptable while the cache holds a few thousand sectors.
         self.lru_order.retain(|&s| s != sector);
         self.lru_order.push_front(sector);
     }

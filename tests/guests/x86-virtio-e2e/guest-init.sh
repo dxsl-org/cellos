@@ -54,6 +54,9 @@ if cmp -s /tmp/expected /tmp/actual; then
     echo VIRTIO_E2E_BLOCK_READBACK_PASS
 else
     run_mode=first
+    # What the disk actually held: the second boot's verdict turns on this,
+    # and "mismatch" without the bytes is not diagnosable from a log.
+    echo "marker readback mismatch, got: $(od -An -tx1 -N"$marker_len" /tmp/actual 2>/dev/null | tr -d '\n')"
     dd if=/tmp/expected of=/dev/vda bs=1 count="$marker_len" conv=fsync 2>/dev/null \
         || fail block-write
     blockdev --flushbufs /dev/vda || fail block-flush

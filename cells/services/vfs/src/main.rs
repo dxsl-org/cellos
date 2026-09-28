@@ -99,8 +99,14 @@ api::declare_syscalls![
 
 // `ostd::heap` (and therefore the macro) exists only for the bare-metal target;
 // the host test build has no image-provided heap to declare.
+//
+// The size is named because the sector cache in `page_cache` has to fit inside
+// it: the cache declares its budget as a fraction of this, and a cache that
+// cannot fit kills the cell as soon as it fills (`OOM: cell heap exhausted`).
+pub(crate) const VFS_HEAP_BYTES: usize = 4 * 1024 * 1024;
+
 #[cfg(target_os = "none")]
-ostd::declare_custom_heap!(4 * 1024 * 1024);
+ostd::declare_custom_heap!(VFS_HEAP_BYTES);
 
 #[no_mangle]
 #[cfg(target_os = "none")]

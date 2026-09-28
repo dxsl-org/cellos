@@ -17,6 +17,9 @@ use crate::page_cache::PageCache;
 
 const SECTOR_SIZE: u64 = 512;
 
+/// Attempts per raw sector operation before the block path is called failed.
+const RAW_IO_ATTEMPTS: usize = 3;
+
 pub struct BlockStream {
     /// Byte position within the volume (partition-relative; LBA 0 = byte 0).
     pos: u64,
@@ -118,14 +121,32 @@ impl fatfs::Seek for BlockStream {
 impl BlockStream {
     /// Read one 512-byte sector directly from disk, bypassing the page cache.
     /// Called by `PageCache` on a cache miss. `sector` is partition-relative.
+    ///
+    /// Retried: a single transient failure in the block path used to surface as
+    /// a *short read* (fatfs breaks its loop and `read_at` reports fewer bytes),
+    /// which the requesting device model then had to fail — a guest I/O error
+    /// out of nowhere. Sector reads are idempotent, so absorbing the blip here
+    /// is both safe and the narrowest place to do it.
     pub fn read_raw_sector(&mut self, sector: u64, buf: &mut [u8; 512]) -> bool {
-        blk_read(self.base_lba + sector, buf)
+        for _ in 0..RAW_IO_ATTEMPTS {
+            if blk_read(self.base_lba + sector, buf) {
+                return true;
+            }
+        }
+        false
     }
 
     /// Write one 512-byte sector directly to disk, bypassing the page cache.
-    /// Called by `PageCache::flush_dirty`. `sector` is partition-relative.
+    /// Called by `PageCache::write_sector`, which writes through device-first.
+    /// `sector` is partition-relative. Retried for the same reason as
+    /// [`BlockStream::read_raw_sector`]; a re-write of identical bytes is safe.
     pub fn write_raw_sector(&mut self, sector: u64, data: &[u8; 512]) -> bool {
-        blk_write(self.base_lba + sector, data)
+        for _ in 0..RAW_IO_ATTEMPTS {
+            if blk_write(self.base_lba + sector, data) {
+                return true;
+            }
+        }
+        false
     }
 }
 

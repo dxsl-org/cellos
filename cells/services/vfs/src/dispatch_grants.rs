@@ -25,15 +25,16 @@ pub(crate) fn read_handle_grant<'a>(
     if !vfs.access.can_read(caller, &path) {
         return VfsResponse::Err(ERR_DENIED);
     }
-    let max_read = size.min(4096);
-    let mut chunk = alloc::vec![0u8; max_read];
-    let n = if max_read == 0 {
-        0
-    } else {
-        vfs.read_at(&path, offset, &mut chunk)
-    };
-    match ostd::syscall::sys_grant_copy_from_slice(grant, &chunk[..n]) {
-        Some(copied) => VfsResponse::GrantDone { bytes: copied },
+    let max_read = size.min(api::ipc::VFS_GRANT_CHUNK);
+    match ostd::grant::with_shared_bytes_mut(grant, |buf| {
+        let n = max_read.min(buf.len());
+        if n == 0 {
+            0
+        } else {
+            vfs.read_at(&path, offset, &mut buf[..n])
+        }
+    }) {
+        Some(bytes) => VfsResponse::GrantDone { bytes },
         None => VfsResponse::Err(ERR_IO),
     }
 }
@@ -56,7 +57,7 @@ pub(crate) fn write_handle_grant<'a>(
     if bytes == 0 {
         return VfsResponse::GrantDone { bytes: 0 };
     }
-    if bytes > 4096 {
+    if bytes > api::ipc::VFS_GRANT_CHUNK {
         return VfsResponse::Err(ERR_IO);
     }
     let file_len = match vfs.stat(&path) {
@@ -86,20 +87,18 @@ pub(crate) fn write_handle_grant<'a>(
         return VfsResponse::Err(ERR_QUOTA);
     }
 
-    let mut chunk = alloc::vec![0u8; bytes];
-    if ostd::syscall::sys_grant_copy_to_slice(grant, &mut chunk) != Some(bytes) {
+    let written = ostd::grant::with_shared_bytes(grant, |buf| {
+        buf.len() >= bytes && vfs.write_at(&path, offset, &buf[..bytes])
+    });
+    if written != Some(true) {
         return VfsResponse::Err(ERR_IO);
     }
-    if vfs.write_at(&path, offset, &chunk) {
-        if !is_guest_disk {
-            vfs.quota.release_path(&path, file_len);
-            let _ = vfs.quota.charge(caller.cell, new_len);
-            vfs.quota.set_writer(&path, caller.cell);
-        }
-        VfsResponse::GrantDone { bytes }
-    } else {
-        VfsResponse::Err(ERR_IO)
+    if !is_guest_disk {
+        vfs.quota.release_path(&path, file_len);
+        let _ = vfs.quota.charge(caller.cell, new_len);
+        vfs.quota.set_writer(&path, caller.cell);
     }
+    VfsResponse::GrantDone { bytes }
 }
 
 pub(crate) fn sync_handle<'a>(

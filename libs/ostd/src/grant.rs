@@ -23,6 +23,7 @@
 use core::marker::PhantomData;
 
 use crate::syscall::{sys_grant_alloc, sys_grant_free, sys_grant_slice};
+use crate::syscall;
 
 /// A typed, linear handle to a kernel-managed grant region.
 ///
@@ -145,6 +146,64 @@ impl GrantHandle<u8> {
         }
         Some(handle)
     }
+
+    /// Run `f` over the grant's bytes.
+    ///
+    /// Safe for the caller by construction: `&mut self` proves this task holds
+    /// the region's only owner wrapper, so no other reference to it can exist
+    /// while `f` runs.
+    pub fn with_bytes<R>(&mut self, f: impl FnOnce(&[u8]) -> R) -> R {
+        let ptr = sys_grant_slice(self.id)
+            .expect("GrantHandle::with_bytes: grant not found or permission denied");
+        // SAFETY: `self` is the live owner wrapper for a grant of `self.len`
+        // bytes; `&mut self` excludes any other live reference on this task.
+        let bytes = unsafe { core::slice::from_raw_parts(ptr, self.len) };
+        f(bytes)
+    }
+
+    /// Run `f` over the grant's bytes with write access.
+    ///
+    /// Safe for the caller by the same argument as [`Self::with_bytes`].
+    pub fn with_bytes_mut<R>(&mut self, f: impl FnOnce(&mut [u8]) -> R) -> R {
+        let ptr = sys_grant_slice(self.id)
+            .expect("GrantHandle::with_bytes_mut: grant not found or permission denied");
+        // SAFETY: as above; `&mut self` gives exclusive access for the closure.
+        let bytes = unsafe { core::slice::from_raw_parts_mut(ptr, self.len) };
+        f(bytes)
+    }
+}
+
+/// Run `f` over the bytes of a grant region shared to the calling task.
+///
+/// `grant_id` names a live grant this task owns or was shared
+/// (`sys_grant_share`); the kernel validates that and returns the mapping, so a
+/// cell never dereferences an address it was not granted.
+///
+/// # Protocol precondition
+/// The peer that owns the grant must not touch it while `f` runs. Callers hold
+/// this by construction: a sharing cell is blocked in its IPC request/response
+/// call for the whole window, which is the same contract the grant copy
+/// syscalls rely on.
+///
+/// Returns `None` when the kernel denies access or the grant does not exist.
+pub fn with_shared_bytes<R>(grant_id: usize, f: impl FnOnce(&[u8]) -> R) -> Option<R> {
+    let (ptr, len) = syscall::sys_grant_slice_with_len(grant_id)?;
+    // SAFETY: the kernel validated this task's access to `grant_id` and returned
+    // a mapping of `len` bytes; the protocol precondition above excludes
+    // concurrent access while `f` runs.
+    let bytes = unsafe { core::slice::from_raw_parts(ptr, len) };
+    Some(f(bytes))
+}
+
+/// Run `f` over the bytes of a shared grant region with write access.
+///
+/// See [`with_shared_bytes`] for the access and protocol contract.
+pub fn with_shared_bytes_mut<R>(grant_id: usize, f: impl FnOnce(&mut [u8]) -> R) -> Option<R> {
+    let (ptr, len) = syscall::sys_grant_slice_with_len(grant_id)?;
+    // SAFETY: as in `with_shared_bytes`; the share was granted with write
+    // authority (ReadWrite), which the kernel checked before returning `ptr`.
+    let bytes = unsafe { core::slice::from_raw_parts_mut(ptr, len) };
+    Some(f(bytes))
 }
 
 impl<T: Copy> GrantHandle<T> {
