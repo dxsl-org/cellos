@@ -8,6 +8,11 @@
 //!   - ISO built: `cargo build --release --target x86_64-unknown-none -p cellos-kernel`
 //!                followed by `.\run-x86.ps1 -NoBuild -NoQemu`
 //!                → produces `build/vicell-x86.iso`
+//!   - For the two Tier-2 refusal tests: `bash scripts/build-x86_64-prod-refusal-ci.sh`,
+//!     which builds the production-feature witness ISO whose embedded VIFS1
+//!     carries the domain-class fixtures. Those tests skip loudly (and hard-fail
+//!     under `CI=`) when it is absent, because the assertions they make are only
+//!     meaningful against an image that carries such a cell.
 //!
 //! Tests skip gracefully when any prerequisite is absent — CI behaviour is
 //! identical to the AArch64 suite.
@@ -47,6 +52,57 @@ fn prerequisites_ok() -> bool {
     }
     if !qemu_ok {
         eprintln!("SKIP x86_64: qemu-system-x86_64 not found (PATH or C:\\Program Files\\qemu\\)");
+    }
+    vicell_integration_tests::ci_guard(iso_exists && qemu_ok)
+}
+
+/// Path to the *production-feature refusal witness* ISO.
+///
+/// The two Tier-2 refusal tests below must be driven against an image that
+/// (a) carries a domain-class cell and (b) has the production feature set, so
+/// that the on-path admission control — not a missing file, and not a
+/// `test-hooks` qualification — is what refuses the launch:
+///
+/// * a bare-name spawn prints `shell: command not found` for a *refusal* and for
+///   an *absent* file alike, so "no `[domain] admitted cell` in the log" is true
+///   for the wrong reason against an image with no such cell;
+/// * `build/vicell-x86.iso` is the shipping image, which carries no domain-class
+///   cell at all, and `build/vicell-x86-domain-test.iso` is built with
+///   `test-hooks`, which *enables* admission, so neither can witness a refusal.
+///
+/// `scripts/build-x86_64-prod-refusal-ci.sh` builds the witness with its own
+/// `CARGO_TARGET_DIR`, `EMBEDDED_OVERRIDE` and ISO root, so neither collision can
+/// reach it. Override with `CELLOS_X86_PROD_REFUSAL_ISO`.
+fn prod_refusal_iso_path() -> String {
+    if let Ok(path) = std::env::var("CELLOS_X86_PROD_REFUSAL_ISO") {
+        if !path.is_empty() {
+            return path;
+        }
+    }
+    repo_root()
+        .join("build/vicell-x86-prod-refusal.iso")
+        .to_string_lossy()
+        .into_owned()
+}
+
+/// Prerequisite gate for the refusal tests.
+///
+/// Announced by name when the witness is absent: a skip that prints nothing is
+/// indistinguishable from a pass, and these assertions are only meaningful
+/// against that image.
+fn prod_refusal_prerequisites_ok() -> bool {
+    let iso = prod_refusal_iso_path();
+    let iso_exists = PathBuf::from(&iso).exists();
+    let qemu_ok = std::process::Command::new(qemu_binary_x86())
+        .arg("--version")
+        .output()
+        .is_ok();
+    if !iso_exists {
+        eprintln!("SKIP x86_64 domain-class refusal: witness ISO not built ({iso})");
+        eprintln!("  Run: bash scripts/build-x86_64-prod-refusal-ci.sh");
+    }
+    if !qemu_ok {
+        eprintln!("SKIP x86_64 domain-class refusal: qemu-system-x86_64 not found (PATH or C:\\Program Files\\qemu\\)");
     }
     vicell_integration_tests::ci_guard(iso_exists && qemu_ok)
 }
@@ -208,25 +264,69 @@ fn x86_ps_command() {
     });
 }
 
-/// Phase-01 containment: on x86_64 the raw switch writes CR3 before
-/// `Context::switch` saves the outgoing context, so Tier-2 admission stays closed
-/// until phase 02 proves the ordered transition on one CPU. A domain-class cell
-/// must be refused, never published, never executed — and the shell must survive.
+/// Phase-01 containment, made a *runtime* witness by phase 02: on x86_64 the
+/// ordered root transition is proven only in the `test-hooks` image
+/// (`domain_admission.rs::switch_ordering_qualified` is `x86_64 && test-hooks`,
+/// const-asserted false for a production build), so a domain-class cell must be
+/// refused, never published, never executed — and the shell must survive.
+///
+/// The image is the one `scripts/build-x86_64-prod-refusal-ci.sh` builds: no
+/// `test-hooks`, and its embedded VIFS1 carries `/bin/tier2-smoke` — the same
+/// signed, `PROTECTION_CLASS_UNTRUSTED` fixture the domain-test image admits to a
+/// private root (`S22-X86-DOMAIN-LIVE`). What is asserted is therefore the whole
+/// chain: the artifact is present and the loader reads and evaluates it, the
+/// on-path admission control refuses the launch (`error=NotSupported`, the error
+/// for `SwitchOrderingUnqualified`), no domain is published, no cell code runs,
+/// and the shell survives.
 #[test]
 fn x86_tier2_admission_is_refused_until_switch_is_qualified() {
-    if !prerequisites_ok() {
+    if !prod_refusal_prerequisites_ok() {
         return;
     }
-    let mut qemu = QemuRunner::boot_x86_bios(&iso_path());
+    let mut qemu = QemuRunner::boot_x86_bios(&prod_refusal_iso_path());
     qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("shell prompt: {e}\n{}", qemu.dump()));
+
+    // 0. The boot posture is part of the witness: the phase-02 switch-ordering
+    //    gate is what keeps this build closed, which is why the denial below is
+    //    `SwitchOrderingUnqualified` (→ `NotSupported`) and not a fleet-profile
+    //    or missing-feature refusal. A test-hooks image would print ENABLED here
+    //    and admit the cell, so this also pins that the image is a production one.
+    let boot = qemu.dump();
+    assert!(
+        boot.contains(
+            "Tier 2 admission: DISABLED (development profile, phase-02 switch-ordering gate)"
+        ),
+        "the refusal witness must be a production-feature x86_64 image\n--- boot output ---\n{boot}"
+    );
+    assert!(
+        !boot.contains("Tier 2 admission: ENABLED"),
+        "a test-hooks image enables Tier-2 admission and cannot witness a refusal\n--- boot output ---\n{boot}"
+    );
 
     std::thread::sleep(std::time::Duration::from_millis(500));
     let checkpoint = qemu.output_checkpoint();
     qemu.send_line("tier2-smoke &");
 
     let timeout = 30;
-    // 1. The shell must come back after the refusal.
+    // 1. The *loader* saw the artifact and refused the launch. This is the
+    //    assertion that cannot be satisfied by an image which merely lacks the
+    //    cell: an absent file takes the same shell route and reports
+    //    `error=NotFound` (`shell: command not found`), never `NotSupported`.
+    qemu.wait_for_after(
+        "path=/bin/tier2-smoke error=NotSupported",
+        checkpoint,
+        timeout,
+    )
+    .unwrap_or_else(|e| {
+        panic!(
+            "the loader must read /bin/tier2-smoke and refuse the launch with the \
+             domain-admission denial (NotSupported): {e}\n--- output ---\n{}",
+            qemu.dump()
+        )
+    });
+
+    // 2. The shell must come back after the refusal.
     qemu.wait_for_after("Cellos >", checkpoint, timeout)
         .unwrap_or_else(|e| {
             panic!(
@@ -235,9 +335,18 @@ fn x86_tier2_admission_is_refused_until_switch_is_qualified() {
             )
         });
 
-    // 2. Nothing was published and no cell code ran.
+    // 3. Nothing was published and no cell code ran.
     let output = qemu.dump();
     let after = output.get(checkpoint..).unwrap_or("");
+    assert!(
+        after.contains("[loader] SpawnFromPath refused: caller="),
+        "the refusal must be the loader's, not the shell's file lookup\n--- output ---\n{after}"
+    );
+    assert!(
+        !after.contains("[domain] Tier 2 Native Domain requested for"),
+        "the build must carry the domain backend: a refusal from the `not(native-domains)` \
+         cfg branch is not an admission decision\n--- output ---\n{after}"
+    );
     assert!(
         !after.contains("[domain] admitted cell"),
         "x86_64 Tier-2 admission must stay closed in the phase-01 posture\n--- output ---\n{after}"
@@ -247,27 +356,33 @@ fn x86_tier2_admission_is_refused_until_switch_is_qualified() {
         "a refused domain-class cell must not execute\n--- output ---\n{after}"
     );
 
-    // 3. Verify shell interactive
+    // 4. Verify shell interactive
     std::thread::sleep(std::time::Duration::from_millis(500));
     qemu.send_line("echo x86-tier2-ok");
     qemu.wait_for("x86-tier2-ok", timeout)
         .unwrap_or_else(|e| {
             panic!(
-                "shell not responding after refused Tier-2 spawn on x86_64: {e}\n--- output ---\n{}",
+                "shell not responding after a refused Tier-2 spawn on x86_64: {e}\n--- output ---\n{}",
                 qemu.dump()
             )
         });
 }
 
-/// Phase-01 containment: the fault-containment fixture is a domain-class cell, so
-/// on x86_64 it must be refused at admission before it can run at all. The kernel
-/// must stay alive and keep serving the shell.
+/// The fault-containment fixture is a domain-class cell, so on x86_64 it must be
+/// refused at admission before it can run at all; the kernel must stay alive and
+/// keep serving the shell.
+///
+/// This one drives `/bin/tier2-exploit`, which the witness image deliberately
+/// leaves **unsigned** (no `__ViCell_sig`), so the second of the two class rules
+/// in `kernel/src/loader/governed_spawn.rs:60-82` is exercised as well: an
+/// unsigned artifact is domain-class, and a domain-class artifact is refused on
+/// this build. Same denial marker as the signed/untrusted case above.
 #[test]
 fn x86_tier2_fault_isolation_fixture_is_refused() {
-    if !prerequisites_ok() {
+    if !prod_refusal_prerequisites_ok() {
         return;
     }
-    let mut qemu = QemuRunner::boot_x86_bios(&iso_path());
+    let mut qemu = QemuRunner::boot_x86_bios(&prod_refusal_iso_path());
     qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("shell prompt: {e}\n{}", qemu.dump()));
 
@@ -276,7 +391,21 @@ fn x86_tier2_fault_isolation_fixture_is_refused() {
     qemu.send_line("tier2-exploit");
 
     let timeout = 30;
-    // 1. The shell must come back after the refusal.
+    // 1. The loader refused the *launch* of an artifact it read.
+    qemu.wait_for_after(
+        "path=/bin/tier2-exploit error=NotSupported",
+        checkpoint,
+        timeout,
+    )
+    .unwrap_or_else(|e| {
+        panic!(
+            "the loader must read /bin/tier2-exploit and refuse the launch with the \
+             domain-admission denial (NotSupported): {e}\n--- output ---\n{}",
+            qemu.dump()
+        )
+    });
+
+    // 2. The shell must come back after the refusal.
     qemu.wait_for_after("Cellos >", checkpoint, timeout)
         .unwrap_or_else(|e| {
             panic!(
@@ -285,9 +414,18 @@ fn x86_tier2_fault_isolation_fixture_is_refused() {
             )
         });
 
-    // 2. Nothing was published and no cell code ran.
+    // 3. Nothing was published and no cell code ran.
     let output = qemu.dump();
     let after = output.get(checkpoint..).unwrap_or("");
+    assert!(
+        after.contains("[loader] SpawnFromPath refused: caller="),
+        "the refusal must be the loader's, not the shell's file lookup\n--- output ---\n{after}"
+    );
+    assert!(
+        !after.contains("[domain] Tier 2 Native Domain requested for"),
+        "the build must carry the domain backend: a refusal from the `not(native-domains)` \
+         cfg branch is not an admission decision\n--- output ---\n{after}"
+    );
     assert!(
         !after.contains("[domain] admitted cell"),
         "x86_64 Tier-2 admission must stay closed in the phase-01 posture\n--- output ---\n{after}"
@@ -297,7 +435,7 @@ fn x86_tier2_fault_isolation_fixture_is_refused() {
         "a refused domain-class cell must not execute\n--- output ---\n{after}"
     );
 
-    // 3. Verify kernel survivability: shell returns
+    // 4. Verify kernel survivability: shell returns
     std::thread::sleep(std::time::Duration::from_millis(500));
     qemu.send_line("echo x86-tier2-alive");
     qemu.wait_for("x86-tier2-alive", timeout)

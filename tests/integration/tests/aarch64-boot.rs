@@ -8,6 +8,11 @@
 //!                    --target aarch64-unknown-none-softfloat -p cellos-kernel`
 //!   - Disk image: `disk_arm_virt.img` at repo root (built by `format-disk-arm.ps1`
 //!                 or by `tools/mkfat32.py`)
+//!   - For the two Tier-2 refusal tests: `bash scripts/build-aarch64-prod-refusal-ci.sh`,
+//!     which builds the production-feature witness image whose embedded VIFS1
+//!     carries the domain-class fixtures. Those tests skip loudly (and hard-fail
+//!     under `CI=`) when it is absent, because the assertions they make are only
+//!     meaningful against an image that carries such a cell.
 //!
 //! Tests skip gracefully when any prerequisite is absent — CI behaviour is
 //! identical to the RISC-V suite.
@@ -55,6 +60,61 @@ fn prerequisites_ok() -> bool {
     }
     if !qemu_ok {
         eprintln!("SKIP aarch64: qemu-system-aarch64 not on PATH");
+    }
+    vicell_integration_tests::ci_guard(kernel_exists && disk_exists && qemu_ok)
+}
+
+/// Path to the *production-feature refusal witness* image.
+///
+/// The two Tier-2 refusal tests below must be driven against an image that
+/// (a) carries a domain-class cell and (b) has the production feature set, so
+/// that the on-path admission control — not a missing file, and not a
+/// `test-hooks` qualification — is what refuses the launch:
+///
+/// * a bare-name spawn prints `shell: command not found` for a *refusal* and for
+///   an *absent* file alike, so "no `[domain] admitted cell` in the log" is true
+///   for the wrong reason against an image with no such cell;
+/// * `target/aarch64-unknown-none-softfloat/release/cellos-kernel` is written by
+///   both the production lane and the test-hooks lane, and the test-hooks kernel
+///   *enables* admission, so that path cannot witness a refusal either.
+///
+/// `scripts/build-aarch64-prod-refusal-ci.sh` builds the witness into its own
+/// `CARGO_TARGET_DIR` with its own `EMBEDDED_OVERRIDE`, which is why neither
+/// collision can reach it. Override with `CELLOS_AARCH64_PROD_REFUSAL_KERNEL`.
+fn prod_refusal_kernel_path() -> String {
+    if let Ok(path) = std::env::var("CELLOS_AARCH64_PROD_REFUSAL_KERNEL") {
+        if !path.is_empty() {
+            return path;
+        }
+    }
+    repo_root()
+        .join("target/aarch64-prod-refusal/aarch64-unknown-none-softfloat/release/cellos-kernel")
+        .to_string_lossy()
+        .into_owned()
+}
+
+/// Prerequisite gate for the refusal tests.
+///
+/// Announced by name when the witness is absent: a skip that prints nothing is
+/// indistinguishable from a pass, and these assertions are only meaningful
+/// against that image.
+fn prod_refusal_prerequisites_ok() -> bool {
+    let kernel_path = prod_refusal_kernel_path();
+    let kernel_exists = PathBuf::from(&kernel_path).exists();
+    let disk_exists = PathBuf::from(disk_path()).exists();
+    let qemu_ok = std::process::Command::new(qemu_binary_aarch64())
+        .arg("--version")
+        .output()
+        .is_ok();
+    if !kernel_exists {
+        eprintln!("SKIP aarch64 domain-class refusal: witness kernel not built ({kernel_path})");
+        eprintln!("  Run: bash scripts/build-aarch64-prod-refusal-ci.sh");
+    }
+    if !disk_exists {
+        eprintln!("SKIP aarch64 domain-class refusal: disk_arm_virt.img missing — run .\\format-disk-arm.ps1");
+    }
+    if !qemu_ok {
+        eprintln!("SKIP aarch64 domain-class refusal: qemu-system-aarch64 not on PATH");
     }
     vicell_integration_tests::ci_guard(kernel_exists && disk_exists && qemu_ok)
 }
@@ -356,30 +416,74 @@ fn aarch64_httpd_web_server_serves_requests() {
     );
 }
 
-/// Phase-01 containment, updated by phase 02: Tier-2 admission stays closed on
-/// every production AArch64 image. Phase 02 moved the root write inside
-/// `Context::switch_with_root` and proved the root-writing path plus a real
-/// domain entry on one CPU *in the test-hooks image*
-/// (`domain_admission.rs::switch_ordering_qualified` is `aarch64 && test-hooks`,
-/// const-asserted false for a production build), so the refusal here is now a
-/// deliberate production policy rather than an unqualified mechanism. A
-/// domain-class cell must be refused, must never be published as a domain, and
-/// must never execute — and the refusal must leave the shell alive.
+/// Phase-01 containment, made a *runtime* witness by phase 02: Tier-2 admission
+/// stays closed on every production AArch64 image, and the refusal is observed
+/// against a production-feature image that really carries a domain-class cell.
+///
+/// Phase 02 moved the root write inside `Context::switch_with_root` and proved
+/// the root-writing path plus a real domain entry on one CPU *in the test-hooks
+/// image* (`domain_admission.rs::switch_ordering_qualified` is `aarch64 &&
+/// test-hooks`, const-asserted false for a production build), so a production
+/// refusal is a deliberate policy decision rather than an unqualified mechanism.
+///
+/// The image is the one `scripts/build-aarch64-prod-refusal-ci.sh` builds: no
+/// `test-hooks`, and its embedded VIFS1 carries `/bin/tier2-smoke` — the same
+/// signed, `PROTECTION_CLASS_UNTRUSTED` fixture the test-hooks lane admits to a
+/// private root. What this test asserts is therefore the whole chain: the
+/// artifact is present and the loader reads and evaluates it, the on-path
+/// admission control refuses the launch (`error=NotSupported`, the error for
+/// `SwitchOrderingUnqualified`), no domain is published, no cell code runs, and
+/// the shell survives.
 #[test]
 fn aarch64_tier2_admission_is_refused_until_switch_is_qualified() {
-    if !prerequisites_ok() {
+    if !prod_refusal_prerequisites_ok() {
         return;
     }
-    let mut qemu = QemuRunner::boot_aarch64_with_disk(&kernel_path(), &disk_path());
+    let mut qemu =
+        QemuRunner::boot_aarch64_with_disk(&prod_refusal_kernel_path(), &disk_path());
     qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("shell prompt: {e}\n{}", qemu.dump()));
+
+    // 0. The boot posture is part of the witness: the phase-02 switch-ordering
+    //    gate is what keeps this build closed, which is why the denial below is
+    //    `SwitchOrderingUnqualified` (→ `NotSupported`) and not a fleet-profile
+    //    or missing-feature refusal. A test-hooks image would print ENABLED here
+    //    and admit the cell, so this also pins that the image is a production one.
+    let boot = qemu.dump();
+    assert!(
+        boot.contains(
+            "Tier 2 admission: DISABLED (development profile, phase-02 switch-ordering gate)"
+        ),
+        "the refusal witness must be a production-feature AArch64 image\n--- boot output ---\n{boot}"
+    );
+    assert!(
+        !boot.contains("Tier 2 admission: ENABLED"),
+        "a test-hooks image enables Tier-2 admission and cannot witness a refusal\n--- boot output ---\n{boot}"
+    );
 
     std::thread::sleep(std::time::Duration::from_millis(500));
     let checkpoint = qemu.output_checkpoint();
     qemu.send_line("tier2-smoke &");
 
     let timeout = 30;
-    // 1. The shell must come back after the refusal.
+    // 1. The *loader* saw the artifact and refused the launch. This is the
+    //    assertion that cannot be satisfied by an image which merely lacks the
+    //    cell: an absent file takes the same shell route and reports
+    //    `error=NotFound` (`shell: command not found`), never `NotSupported`.
+    qemu.wait_for_after(
+        "path=/bin/tier2-smoke error=NotSupported",
+        checkpoint,
+        timeout,
+    )
+    .unwrap_or_else(|e| {
+        panic!(
+            "the loader must read /bin/tier2-smoke and refuse the launch with the \
+             domain-admission denial (NotSupported): {e}\n--- output ---\n{}",
+            qemu.dump()
+        )
+    });
+
+    // 2. The shell must come back after the refusal.
     qemu.wait_for_after("Cellos >", checkpoint, timeout)
         .unwrap_or_else(|e| {
             panic!(
@@ -388,9 +492,18 @@ fn aarch64_tier2_admission_is_refused_until_switch_is_qualified() {
             )
         });
 
-    // 2. No domain was published and no cell code ran.
+    // 3. No domain was published and no cell code ran.
     let output = qemu.dump();
     let after = output.get(checkpoint..).unwrap_or("");
+    assert!(
+        after.contains("[loader] SpawnFromPath refused: caller="),
+        "the refusal must be the loader's, not the shell's file lookup\n--- output ---\n{after}"
+    );
+    assert!(
+        !after.contains("[domain] Tier 2 Native Domain requested for"),
+        "the build must carry the domain backend: a refusal from the `not(native-domains)` \
+         cfg branch is not an admission decision\n--- output ---\n{after}"
+    );
     assert!(
         !after.contains("[domain] admitted cell"),
         "AArch64 Tier-2 admission must stay closed in the phase-01 posture\n--- output ---\n{after}"
@@ -400,7 +513,7 @@ fn aarch64_tier2_admission_is_refused_until_switch_is_qualified() {
         "a refused domain-class cell must not execute\n--- output ---\n{after}"
     );
 
-    // 3. Verify shell interactive
+    // 4. Verify shell interactive
     std::thread::sleep(std::time::Duration::from_millis(500));
     for b in b"echo aarch64-tier2-ok\n" {
         qemu.send_bytes(&[*b]);
@@ -415,15 +528,22 @@ fn aarch64_tier2_admission_is_refused_until_switch_is_qualified() {
         });
 }
 
-/// Phase-01 containment: the fault-containment fixture is a domain-class cell, so
-/// on AArch64 it must be refused at admission before it can run at all. The
-/// kernel must stay alive and keep serving the shell.
+/// The fault-containment fixture is a domain-class cell, so on AArch64 it must be
+/// refused at admission before it can run at all; the kernel must stay alive and
+/// keep serving the shell.
+///
+/// This one drives `/bin/tier2-exploit`, which the witness image deliberately
+/// leaves **unsigned** (no `__ViCell_sig`), so the second of the two class rules
+/// in `kernel/src/loader/governed_spawn.rs:60-82` is exercised as well: an
+/// unsigned artifact is domain-class, and a domain-class artifact is refused on
+/// this build. Same denial marker as the signed/untrusted case above.
 #[test]
 fn aarch64_tier2_fault_isolation_fixture_is_refused() {
-    if !prerequisites_ok() {
+    if !prod_refusal_prerequisites_ok() {
         return;
     }
-    let mut qemu = QemuRunner::boot_aarch64_with_disk(&kernel_path(), &disk_path());
+    let mut qemu =
+        QemuRunner::boot_aarch64_with_disk(&prod_refusal_kernel_path(), &disk_path());
     qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("shell prompt: {e}\n{}", qemu.dump()));
 
@@ -432,7 +552,21 @@ fn aarch64_tier2_fault_isolation_fixture_is_refused() {
     qemu.send_line("tier2-exploit");
 
     let timeout = 30;
-    // 1. The shell must come back after the refusal.
+    // 1. The loader refused the *launch* of an artifact it read.
+    qemu.wait_for_after(
+        "path=/bin/tier2-exploit error=NotSupported",
+        checkpoint,
+        timeout,
+    )
+    .unwrap_or_else(|e| {
+        panic!(
+            "the loader must read /bin/tier2-exploit and refuse the launch with the \
+             domain-admission denial (NotSupported): {e}\n--- output ---\n{}",
+            qemu.dump()
+        )
+    });
+
+    // 2. The shell must come back after the refusal.
     qemu.wait_for_after("Cellos >", checkpoint, timeout)
         .unwrap_or_else(|e| {
             panic!(
@@ -441,9 +575,18 @@ fn aarch64_tier2_fault_isolation_fixture_is_refused() {
             )
         });
 
-    // 2. Nothing was published and no cell code ran.
+    // 3. Nothing was published and no cell code ran.
     let output = qemu.dump();
     let after = output.get(checkpoint..).unwrap_or("");
+    assert!(
+        after.contains("[loader] SpawnFromPath refused: caller="),
+        "the refusal must be the loader's, not the shell's file lookup\n--- output ---\n{after}"
+    );
+    assert!(
+        !after.contains("[domain] Tier 2 Native Domain requested for"),
+        "the build must carry the domain backend: a refusal from the `not(native-domains)` \
+         cfg branch is not an admission decision\n--- output ---\n{after}"
+    );
     assert!(
         !after.contains("[domain] admitted cell"),
         "AArch64 Tier-2 admission must stay closed in the phase-01 posture\n--- output ---\n{after}"
@@ -453,7 +596,7 @@ fn aarch64_tier2_fault_isolation_fixture_is_refused() {
         "a refused domain-class cell must not execute\n--- output ---\n{after}"
     );
 
-    // 3. Verify kernel survivability: shell returns
+    // 4. Verify kernel survivability: shell returns
     std::thread::sleep(std::time::Duration::from_millis(500));
     qemu.send_line("echo tier2-aarch64-alive");
     qemu.wait_for("tier2-aarch64-alive", timeout)
