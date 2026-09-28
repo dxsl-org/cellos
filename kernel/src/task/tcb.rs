@@ -649,7 +649,11 @@ impl Task {
     ))]
     #[cfg(all(
         feature = "test-hooks",
-        any(target_arch = "riscv64", target_arch = "aarch64")
+        any(
+            target_arch = "riscv64",
+            target_arch = "aarch64",
+            target_arch = "x86_64"
+        )
     ))]
     pub(crate) fn bind_address_space_for_test(
         &mut self,

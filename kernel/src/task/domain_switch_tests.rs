@@ -12,11 +12,14 @@ use types::CellId;
 #[cfg(target_arch = "aarch64")]
 use crate::hal::PageTableTrait;
 
-/// Marker prefix: the RV64 lane greps `S22-RV64-*`, the AArch64 lane `S22-AARCH64-*`.
+/// Marker prefix: the RV64 lane greps `S22-RV64-*`, the AArch64 lane `S22-AARCH64-*`,
+/// the x86_64 lane `S22-X86-*`.
 #[cfg(target_arch = "riscv64")]
 const ARCH_TAG: &str = "RV64";
 #[cfg(target_arch = "aarch64")]
 const ARCH_TAG: &str = "AARCH64";
+#[cfg(target_arch = "x86_64")]
+const ARCH_TAG: &str = "X86";
 
 /// Invalidations one domain activation must issue on this architecture. RV64
 /// fences for the incoming ASID as part of installing it; AArch64 carries the
@@ -130,7 +133,21 @@ pub(crate) fn run_primary() -> bool {
             && register & 0x0000_ffff_ffff_f000 == root
             && (register >> 48) & 0xffff == asid
     };
-    #[cfg(not(target_arch = "aarch64"))]
+    // x86_64 composes CR3 from the same pair through `domain::cr3_for`. The tag
+    // is dropped, not shifted, when the machine cannot carry one, so the check is
+    // against the *composed* value: it must name this root, and it must carry the
+    // leased tag exactly when PCID is usable.
+    #[cfg(target_arch = "x86_64")]
+    let encoding_ok = {
+        let usable = crate::hal::domain::pcid_usable();
+        let composed = crate::hal::domain::cr3_for(root, asid, usable);
+        let width = crate::hal::domain::PCID_WIDTH_BITS;
+        let tag_mask = (1usize << width) - 1;
+        composed != 0
+            && composed & !tag_mask == root & !tag_mask
+            && composed & tag_mask == if usable { asid & tag_mask } else { 0 }
+    };
+    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
     let encoding_ok = true;
     let plan_ok = root != 0
         && asid != 0
@@ -224,11 +241,12 @@ pub(crate) fn run_primary() -> bool {
     let asid_invalidation_ok = true;
 
     // The admission posture and its denial cases. RV64 asserts these from `kmain`
-    // (`main.rs` owns that call site); AArch64 gets them from this fixture so the
-    // architecture whose switch-ordering gate just reopened also re-asserts, on
-    // the same code path, that the *disabled* posture still denies and that the
-    // single publication point refuses a domain-class launch while draining.
-    // `ENABLED` is a real assertion here: `enable_for_boot` has already run.
+    // (`main.rs` owns that call site); AArch64 and x86_64 get them from this
+    // fixture so the architecture whose switch-ordering gate just reopened also
+    // re-asserts, on the same code path, that the *disabled* posture still denies
+    // and that the single publication point refuses a domain-class launch while
+    // draining. `ENABLED` is a real assertion here: `enable_for_boot` has already
+    // run.
     //
     // The EL2 host is excluded: it cannot program a private root at all, so
     // `enable_for_boot` refuses the posture there by design and an `ENABLED`
@@ -239,7 +257,14 @@ pub(crate) fn run_primary() -> bool {
     } else {
         crate::loader::domain_admission::run_selftest()
     };
-    #[cfg(not(target_arch = "aarch64"))]
+    // x86_64 has no EL2 analogue: the boot either published its kernel CR3
+    // before the admission posture ran (`memory::paging::init_kernel_paging_x86`,
+    // which `enable_for_boot` now requires on this target) or it did not, and a
+    // postured boot that did not is a defect, not a machine property. `ENABLED`
+    // is therefore asserted unconditionally here.
+    #[cfg(target_arch = "x86_64")]
+    let admission_ok = crate::loader::domain_admission::run_selftest();
+    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
     let admission_ok = true;
 
     plan_ok
@@ -257,7 +282,7 @@ pub(crate) fn run_primary() -> bool {
 ///
 /// The teardown verdict is gated on it, so a boot that never admitted a domain
 /// cannot satisfy "frames accounted for on teardown" vacuously.
-#[cfg(target_arch = "aarch64")]
+#[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
 static CPU_SEEN_PRIVATE_ROOT: core::sync::atomic::AtomicBool =
     core::sync::atomic::AtomicBool::new(false);
 
@@ -366,6 +391,143 @@ pub(crate) fn observe_domain_teardown(hart: usize) {
         return;
     }
     let releases = targeted.wrapping_sub(baseline);
+    if releases == 0 {
+        return;
+    }
+    let quarantined = crate::memory::address_space::quarantined_frame_count();
+    if REPORTED.swap(true, Ordering::AcqRel) {
+        return;
+    }
+    if quarantined == 0 {
+        log::info!(
+            "S22-{}-DOMAIN-TEARDOWN: PASS releases={} quarantined={} ack_generation={}",
+            ARCH_TAG,
+            releases,
+            quarantined,
+            ack_generation
+        );
+    } else {
+        log::error!(
+            "S22-{}-DOMAIN-TEARDOWN: FAIL releases={} quarantined={} ack_generation={}",
+            ARCH_TAG,
+            releases,
+            quarantined,
+            ack_generation
+        );
+    }
+}
+
+/// The domain's **live** CR3, read from inside the domain's own kernel context.
+///
+/// x86_64 twin of [`observe_incoming_live_root`]: same call site, same argument.
+/// `Context::switch_with_root` composes CR3 through `domain::cr3_for` and
+/// programs it between the outgoing save and the incoming stack adopt, so this
+/// hook — running after the switch, on the resumed context's own kernel stack —
+/// is the point where "what the plan programmed" and "what the PE is translating
+/// through" are compared with no trap in between. Trap entry installs the kernel
+/// CR3 (`VI_KERNEL_CR3`) and restores the interrupted CR3 on return, which is why
+/// the value is read here and not from a trap handler.
+///
+/// The safe-root handoff is excluded by the same mechanism as on AArch64: the
+/// caller invokes this after `acknowledge_safe_root`, which clears the published
+/// domain identity, so the kernel CR3 live at that instant cannot be misread as a
+/// private root.
+///
+/// A CPU without PCID/INVPCID runs every root untagged on purpose — `cr3_for`
+/// **drops** the tag rather than masking it at the instruction — so the tag half
+/// is asserted only where the machine can carry one. `pcid_usable()` is the
+/// kernel's own boot decision, reported in the marker either way; `root` is
+/// asserted against the recorded kernel CR3 in both modes, because "a private
+/// root is live" must never be satisfied by the kernel root.
+#[cfg(target_arch = "x86_64")]
+pub(crate) fn observe_incoming_live_root() {
+    use core::sync::atomic::{AtomicBool, Ordering};
+
+    static REPORTED: AtomicBool = AtomicBool::new(false);
+
+    let (id, generation) = hart_local::current_domain();
+    if id == 0 {
+        return;
+    }
+    let live = crate::hal::domain::read_cr3();
+    let width = crate::hal::domain::PCID_WIDTH_BITS;
+    let tag_mask = (1usize << width) - 1;
+    let pcid = live & tag_mask;
+    let base = live & !tag_mask;
+    let pcid_usable = crate::hal::domain::pcid_usable();
+    let kernel_base = crate::hal::domain::kernel_cr3() & !tag_mask;
+    if REPORTED.swap(true, Ordering::AcqRel) {
+        return;
+    }
+    let root_ok = base != 0 && base != kernel_base;
+    let tag_ok = !pcid_usable || pcid != 0;
+    if root_ok && tag_ok {
+        CPU_SEEN_PRIVATE_ROOT.store(true, Ordering::Release);
+        log::info!(
+            "S22-{}-DOMAIN-LIVE: PASS cr3={:#x} root={:#x} pcid={} pcid_usable={} kernel_cr3={:#x} domain={} generation={}",
+            ARCH_TAG,
+            live,
+            base,
+            pcid,
+            pcid_usable,
+            kernel_base,
+            id,
+            generation
+        );
+    } else {
+        log::error!(
+            "S22-{}-DOMAIN-LIVE: FAIL cr3={:#x} root={:#x} pcid={} pcid_usable={} kernel_cr3={:#x} domain={} generation={}",
+            ARCH_TAG,
+            live,
+            base,
+            pcid,
+            pcid_usable,
+            kernel_base,
+            id,
+            generation
+        );
+    }
+}
+
+/// The frames a torn-down domain held are accounted for, not withheld forever.
+///
+/// x86_64 twin of the AArch64 witness: same trigger (a departure after a private
+/// root was seen live, proven by a non-zero `domain_ack_generation`), same
+/// gating, same `quarantined == 0` verdict.
+///
+/// The release observable here is the invalidation counter, not a flush *kind*:
+/// on x86_64 the release path's tag invalidation is a type-1 `INVPCID` when the
+/// machine carries PCID and an untagged CR3 reload when it does not
+/// (`domain::flush_asid` picks per `pcid_usable`), so both are the same
+/// operation from the release path's point of view. The counter is proven live in
+/// the same boot by `S22-X86-FLUSH-COUNTER`'s explicit `flush_asid` control, and
+/// no other post-boot path on this lane issues one, so a non-zero delta is a root
+/// release. The liveness half — frames returning to the allocator — is the
+/// release path's own `DOMAIN-FRAME-RELEASE: PASS tag=… frames=… quarantined=…`
+/// line, emitted from inside `AddressSpace::drop`.
+#[cfg(target_arch = "x86_64")]
+pub(crate) fn observe_domain_teardown(hart: usize) {
+    use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+
+    /// Invalidations seen at the first departure after a live root.
+    const UNSET: usize = usize::MAX;
+    static BASELINE: AtomicUsize = AtomicUsize::new(UNSET);
+    static REPORTED: AtomicBool = AtomicBool::new(false);
+
+    if !CPU_SEEN_PRIVATE_ROOT.load(Ordering::Acquire) {
+        return;
+    }
+    let ack_generation = hart_local::domain_ack_generation_for(hart);
+    if ack_generation == 0 {
+        return;
+    }
+    let (_, invalidations) = crate::hal::domain::switch_counters();
+    let baseline = BASELINE.load(Ordering::Acquire);
+    if baseline == UNSET {
+        BASELINE.store(invalidations, Ordering::Release);
+        return;
+    }
+    let releases = invalidations.wrapping_sub(baseline);
     if releases == 0 {
         return;
     }

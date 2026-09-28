@@ -92,6 +92,23 @@ if [[ "$X86_NIC_MODEL" == "e1000e" ]] \
     exit 1
 fi
 
+# Phase 02, the other half of the x86 domain gate. This is the *production* image
+# (`native-domains` on, `test-hooks` off), so `switch_ordering_qualified()` is
+# false, the boot must say so, and a domain-class artifact must be denied rather
+# than silently downgraded to the shared address space. The test image that does
+# admit a real Tier-2 cell is scripts/x86/qemu-domain-test.sh; the two lanes must
+# keep disagreeing about this build.
+if ! grep -qa "Tier 2 admission: DISABLED" qemu-x86_64.log; then
+    echo "FAIL: production x86_64 image did not report a disabled Tier 2 admission posture" >&2
+    grep -ai "Tier 2 admission" qemu-x86_64.log | head -3
+    tail -40 qemu-x86_64.log
+    exit 1
+fi
+if grep -qa "Tier 2 admission: ENABLED" qemu-x86_64.log; then
+    echo "FAIL: production x86_64 image enabled Tier 2 admission" >&2
+    exit 1
+fi
+
 # The PCID decision is the kernel's, read from CPUID and CR4 at boot: assert it
 # in both directions so "PCID on" and "PCID off" are each a real observation.
 if [[ "$X86_EXPECT_PCID" == "1" ]] \

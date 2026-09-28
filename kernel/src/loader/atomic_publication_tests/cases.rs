@@ -34,6 +34,28 @@ fn unaligned_elf_preparation_restores_state() -> bool {
     if (unaligned.as_ptr() as usize).is_multiple_of(8) {
         return false;
     }
+
+    // x86_64 starts the ledger one preparation later. There the ELF's segments
+    // are mapped into the **kernel root's** PML4 (a prepared-but-unpublished task
+    // has no root of its own), so the first preparation materializes that root's
+    // page tables for the cell's VA range: they are the SAS root's tables, not the
+    // task's, and they outlive the task by design. The measured cycle is therefore
+    // the second one — the first is the warm-up that reaches the ledger's fixed
+    // point — which is what makes a *per-preparation* leak still visible: it would
+    // move the ledger again on every later cycle.
+    #[cfg(target_arch = "x86_64")]
+    {
+        let Ok(warmup) = crate::task::prepare_elf_task(
+            unaligned,
+            "atomic-unaligned",
+            types::CellId(0),
+            alloc::vec::Vec::new(),
+        ) else {
+            return false;
+        };
+        drop(warmup);
+    }
+
     let before = snapshot();
 
     let Ok(prepared) = crate::task::prepare_elf_task(
@@ -45,7 +67,11 @@ fn unaligned_elf_preparation_restores_state() -> bool {
         return false;
     };
     drop(prepared);
-    snapshot() == before
+    // Reported field-by-field rather than as a bare `==`: this case is the only
+    // one in the corpus that does not go through `snapshot_matches`, and an
+    // architecture whose first test-hooks boot runs it (x86_64, phase 02) has no
+    // other way to name the field that moved.
+    super::snapshot::snapshot_matches("ALIGNMENT", "unaligned-prepare", &before, &snapshot())
 }
 
 pub(super) fn run_all() {

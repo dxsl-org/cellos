@@ -103,7 +103,11 @@ impl DomainAdmissionRequest {
     #[cfg(all(
         feature = "native-domains",
         feature = "test-hooks",
-        any(target_arch = "riscv64", target_arch = "aarch64")
+        any(
+            target_arch = "riscv64",
+            target_arch = "aarch64",
+            target_arch = "x86_64"
+        )
     ))]
     pub(crate) const fn fixture() -> Self {
         Self {
@@ -135,26 +139,32 @@ impl DomainAdmissionRequest {
 /// What the reopen rests on is therefore the executed root-writing path plus the
 /// per-root isolation witnesses, not a discriminating ordering test.
 ///
-/// The AArch64 reopen is **test-images only**. A production AArch64 build (no
-/// `test-hooks`) keeps refusing, which is the phase-01 posture the fleet profile
-/// depends on, and the compile-time pin below makes that structural rather than
-/// a matter of reading the cfg. x86_64 stays closed: it grew the same in-switch
-/// root write, but it has no root-switch witness yet, and this gate only reopens
-/// an architecture that has proved the transition.
+/// x86_64 grew the same in-switch root write — `switch_with_root` composes CR3
+/// with `domain::cr3_for` and programs it between the outgoing save and the
+/// incoming stack adopt — and the phase-02 x86 test image now enters a real
+/// domain cell through it, reading the live CR3 from inside the domain's own
+/// kernel context (`S22-X86-DOMAIN-LIVE`) and tearing the root down with every
+/// frame returned and nothing quarantined.
+///
+/// Every reopen is **test-images only**. A production AArch64 or x86_64 build
+/// (no `test-hooks`) keeps refusing, which is the phase-01 posture the fleet
+/// profile depends on, and the compile-time pin below makes that structural
+/// rather than a matter of reading the cfg.
 pub(crate) const fn switch_ordering_qualified() -> bool {
     cfg!(target_arch = "riscv64")
         || cfg!(all(target_arch = "aarch64", feature = "test-hooks"))
+        || cfg!(all(target_arch = "x86_64", feature = "test-hooks"))
 }
 
 /// Phase-02 reopen is confined to test images.
 ///
 /// `enable_for_boot` returns `false` (and the boot stays `PolicyDisabled`) on
-/// every build this const-asserts about, so a production AArch64 image cannot
-/// admit a domain-class cell by accident. Const-evaluated, so it fails the build
-/// rather than a boot.
+/// every build this const-asserts about, so a production AArch64 or x86_64 image
+/// cannot admit a domain-class cell by accident. Const-evaluated, so it fails the
+/// build rather than a boot.
 #[cfg(all(
     feature = "native-domains",
-    target_arch = "aarch64",
+    any(target_arch = "aarch64", target_arch = "x86_64"),
     not(feature = "test-hooks")
 ))]
 const _: () = assert!(!switch_ordering_qualified());
@@ -314,6 +324,17 @@ pub(crate) fn enable_for_boot() -> bool {
     if crate::hal::aarch64::el2::is_el2() {
         return false;
     }
+    // The x86_64 analogue: a PE that never recorded its own kernel CR3 cannot
+    // run a private root either. Admission runs after `init_kernel_paging_x86`
+    // published the kernel PML4 in this boot, but the switch composes the
+    // domain CR3 against a *known* kernel root, and trap entry only knows to
+    // install it from `VI_KERNEL_CR3`. With that unset a "qualified" ordering
+    // would be a claim about a mechanism this boot does not have — the same
+    // refusal, for the same reason, as the EL2 branch above.
+    #[cfg(target_arch = "x86_64")]
+    if crate::hal::domain::kernel_cr3() == 0 {
+        return false;
+    }
     POLICY
         .compare_exchange(DISABLED, ENABLED, Ordering::AcqRel, Ordering::Acquire)
         .is_ok()
@@ -331,15 +352,20 @@ pub(crate) fn begin_domain_drain() -> bool {
 #[cfg(all(
     feature = "native-domains",
     feature = "test-hooks",
-    any(target_arch = "riscv64", target_arch = "aarch64")
+    any(
+        target_arch = "riscv64",
+        target_arch = "aarch64",
+        target_arch = "x86_64"
+    )
 ))]
 pub(crate) fn policy_is_enabled() -> bool {
     POLICY.load(Ordering::Acquire) == ENABLED
 }
 
 /// Marker prefix for the boot selftest: the RV64 lane greps `S22-RV64-ADMISSION-*`,
-/// the AArch64 lane `S22-AARCH64-ADMISSION-*`. The rendered marker text on RV64
-/// is byte-identical to the pre-phase-02 literals, so no existing assertion moved.
+/// the AArch64 lane `S22-AARCH64-ADMISSION-*`, the x86_64 lane `S22-X86-ADMISSION-*`.
+/// The rendered marker text on RV64 is byte-identical to the pre-phase-02 literals,
+/// so no existing assertion moved.
 #[cfg(all(
     feature = "native-domains",
     feature = "test-hooks",
@@ -352,6 +378,12 @@ const ADMISSION_TAG: &str = "RV64";
     target_arch = "aarch64"
 ))]
 const ADMISSION_TAG: &str = "AARCH64";
+#[cfg(all(
+    feature = "native-domains",
+    feature = "test-hooks",
+    target_arch = "x86_64"
+))]
+const ADMISSION_TAG: &str = "X86";
 
 /// Boot-time assertions for the admission control. The posture cases are the
 /// evidence for ADR-0019: the policy denies when disabled or draining, an
@@ -364,7 +396,11 @@ const ADMISSION_TAG: &str = "AARCH64";
 #[cfg(all(
     feature = "native-domains",
     feature = "test-hooks",
-    any(target_arch = "riscv64", target_arch = "aarch64")
+    any(
+        target_arch = "riscv64",
+        target_arch = "aarch64",
+        target_arch = "x86_64"
+    )
 ))]
 pub(crate) fn run_selftest() -> bool {
     let mut all_ok = true;
@@ -443,20 +479,25 @@ pub(crate) fn run_selftest() -> bool {
 #[cfg(all(
     feature = "native-domains",
     feature = "test-hooks",
-    any(target_arch = "riscv64", target_arch = "aarch64")
+    any(
+        target_arch = "riscv64",
+        target_arch = "aarch64",
+        target_arch = "x86_64"
+    )
 ))]
 fn publication_is_refused_while_draining() -> bool {
     use crate::task::{LaunchRoutes, TaskLaunchState};
 
-    // AArch64 has no `domain_identity_counter`, so the "no domain was created"
-    // half of this proof is carried by the ledger a private root is made of: the
+    // AArch64 and x86_64 have no `domain_identity_counter`, so the "no domain was
+    // created" half of this proof is carried by the ledger a private root is
+    // made of: the
     // snapshot is taken *before* the ELF is prepared, so a refusal that publishes
     // nothing must return the ledger to exactly this value — the task's own
     // stacks and segments are allocated and released inside the call, and a
     // private root and its tables are frames too. (Taken after preparation the
     // comparison is one-sided and meaningless: the refusal's release of the
     // task's own frames reads as a decrease.)
-    #[cfg(target_arch = "aarch64")]
+    #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
     let frames_before = frames_in_use();
     let Ok(prepared) = crate::task::prepare_elf_task(
         crate::INIT_ELF,
@@ -495,7 +536,7 @@ fn publication_is_refused_while_draining() -> bool {
     let domains_before = crate::memory::address_space::domain_identity_counter();
     let outcome = crate::task::publish_prepared(prepared, state);
     let tasks_after = crate::task::scheduler_stats().0;
-    #[cfg(target_arch = "aarch64")]
+    #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
     let frames_after = frames_in_use();
     // `domain_identity_counter` is RV64-only, but the claim it carries — a refused
     // launch creates no domain — is arch-neutral and is the one that matters: a
@@ -503,7 +544,7 @@ fn publication_is_refused_while_draining() -> bool {
     // frame ledger would mean a domain was built and retained for a launch that
     // never published. `create_cell_domain` is the only allocator on this path,
     // and the drain refusal precedes it.
-    #[cfg(target_arch = "aarch64")]
+    #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
     let domains_unchanged = frames_before.is_some() && frames_after == frames_before;
     #[cfg(target_arch = "riscv64")]
     let domains_unchanged =
@@ -522,7 +563,7 @@ fn publication_is_refused_while_draining() -> bool {
             tasks_after,
             outcome
         );
-        #[cfg(target_arch = "aarch64")]
+        #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
         log::error!(
             "S22-{}-ADMISSION-PUBLICATION-DENY detail: frames {:?} -> {:?}",
             ADMISSION_TAG,
@@ -536,14 +577,15 @@ fn publication_is_refused_while_draining() -> bool {
 
 /// Frames the frame allocator has handed out, or `None` before it is published.
 ///
-/// AArch64 has no domain-identity counter, so the refusal proof above is carried
-/// by the ledger a private root is actually made of. Its only caller is the
-/// test-hooks publication probe, so it carries that caller's cfg — a production
-/// AArch64 build has no use for it and `-D warnings` refuses dead code.
+/// AArch64 and x86_64 have no domain-identity counter, so the refusal proof above
+/// is carried by the ledger a private root is actually made of. Its only caller is
+/// the test-hooks publication probe, so it carries that caller's cfg — a
+/// production AArch64 or x86_64 build has no use for it and `-D warnings` refuses
+/// dead code.
 #[cfg(all(
     feature = "native-domains",
     feature = "test-hooks",
-    target_arch = "aarch64"
+    any(target_arch = "aarch64", target_arch = "x86_64")
 ))]
 fn frames_in_use() -> Option<usize> {
     crate::memory::frame::FRAME_ALLOCATOR
