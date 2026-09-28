@@ -71,9 +71,12 @@ báo cáo ở `.agents/<plan>/`, cách làm ở `docs/guides/`. Chuỗi tiền l
   (`[67,69,76,76,79,83,95,88]`) và có request nhận **zero** ở frame của descriptor. Vậy zero đến từ *nguồn dữ
   liệu* (grant/VFS/đường block ngoài), không phải từ cách guest nhìn page — framing cũ "guest thấy page khác
   frame" đã bị số liệu này sửa. Không request nào `status≠0`, không EOF/ERR ở `read_at`, không dòng `VFS read
-  response` bất thường. Bước kế: instrument `CachedBlockStream::read`/`PageCache::read_sector` in 8 byte đầu
-  của mỗi sector đọc để biết zero đến từ thiết bị ngoài hay từ cache của VFS (NVMe driver cell không có cache
-  sector — đã kiểm). Bằng chứng + lý do khoá feature nằm tại
+  response` bất thường. **Đã loại tiếp tầng block của VFS**: trace `read_raw_sector` + `PageCache` trong lần
+  boot hỏng cho thấy raw read trả đúng marker ở sector của cluster đầu file (10114 = "CELLOSE2") và zero ở các
+  sector đuôi (đúng, vì ngoài marker đĩa rỗng), cache hit nhất quán, không dòng zero bất thường nào ở tầng này.
+  Vậy zero được tạo ra **phía trên** tầng block: đường grant → cell → frame của guest (scatter hoặc
+  `WriteGuestMemory`), không phải thiết bị/cache. Bước kế: instrument phía cell, đối chiếu nội dung grant *và*
+  frame trang cho cùng request, rồi tới phía guest. Bằng chứng + lý do khoá feature nằm tại
   `cells/services/hypervisor/src/virtio_blk.rs` (`config_read`).
   Lane tái hiện: `scripts/qemu-x86-virtio-e2e.sh` (đỏ khi bật, xanh khi tắt).
 
