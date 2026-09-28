@@ -119,13 +119,19 @@ echo "[nginx-gate] $qemu_version iso=$ISO memory=$QEMU_MEMORY window=${BOOT_WIND
     < /dev/null > "$raw_log" 2>&1 &
 ACTIVE_QEMU_PID=$!
 
+qemu_status=""
 deadline=$((SECONDS + BOOT_WINDOW))
-while kill -0 "$ACTIVE_QEMU_PID" 2>/dev/null && (( SECONDS < deadline )); do
+while (( SECONDS < deadline )); do
     if grep -qF "$success_marker" "$raw_log" 2>/dev/null; then
         break
     fi
     if grep -Eqi "$fatal_pattern" "$raw_log" 2>/dev/null; then
         sleep 5  # let the guest print the surrounding context
+        break
+    fi
+    if ! kill -0 "$ACTIVE_QEMU_PID" 2>/dev/null; then
+        qemu_status=0
+        wait "$ACTIVE_QEMU_PID" 2>/dev/null || qemu_status=$?
         break
     fi
     sleep 2
@@ -134,6 +140,15 @@ cleanup
 ACTIVE_QEMU_PID=""
 
 tr -d '\000\r' < "$raw_log" | sed -e 's/\x1b\[[0-9;]*m//g' > "$log"
+
+# An emulator that dies before writing anything is a different failure from a
+# guest that never reaches its markers: say so, or the missing-marker message
+# sends the reader looking for a hypervisor bug that is not there.
+if [[ ! -s "$log" ]]; then
+    echo "FAIL: QEMU produced no output${qemu_status:+ (exit status $qemu_status)} — the emulator died before the guest console" >&2
+    echo "  iso=$ISO memory=$QEMU_MEMORY qemu=$QEMU_X86_BIN" >&2
+    exit 1
+fi
 
 dump_log() {
     echo "--- $log, last 120 of $(wc -l < "$log") lines ---" >&2
