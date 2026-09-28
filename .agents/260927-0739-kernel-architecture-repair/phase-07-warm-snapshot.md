@@ -95,6 +95,32 @@ image can capture or replay):
 - code/spec reconciliation: `docs/specs/03-runtime.md` still describes the old 40-byte
   `system.img`/FAT16 layout and the sub-100 ms claim.
 
+### Slice 2 — all-hart quiescence before any capture I/O (2026-09-28) — device-independent half
+
+`kernel/src/task/quiesce.rs` (new) is a self-contained protocol: a request per online hart with an
+epoch, per-hart acknowledgements, a predicate that is **re-derived from the hart set** (so it is
+both the wait condition and the final verification), a bounded wait with a clock-independent poll
+limit, a single-flight claim, and an idempotent release (also on `Drop`) that restores every
+requested hart — including one that never acknowledged. The requester is never in its own target
+set, and a one-hart system is a no-op before any clock read.
+
+`serialize_snapshot` keeps the qualification gate first, then acquires quiescence in a new
+`capture_preflight` before the inventory and the block device are ever touched; a refusal maps to
+the new `SnapshotError::HartsNotQuiesced`. The park hook is a trait seam
+(`QuiesceHarts::park_hook_available()`) that is deliberately **false** in the kernel today: a
+multi-hart request is refused with `Unsupported` *before* waiting, so no budget is burned on an
+acknowledgement no hart can produce, and nothing in the scheduler or trap path was edited.
+
+Evidence: `cargo test -p cellos-kernel --target x86_64-unknown-linux-gnu` → 155 passed (10 new:
+eight quiescence cases — single-hart no-op, all-acked predicate, partial-ack timeout with restore,
+release idempotence, requester exclusion, second-request refusal, missing-hook refusal, hart-count
+refusal — and two snapshot cases, including "capture writes nothing when memory cannot be
+frozen"). RV64 production/off-feature and x86_64-none checks clean; AArch64 lane exit 0.
+
+Still open, and stated as such: the **real** park hook (scheduler trap-path cooperation) and the
+board witness. Until both exist, `HartsNotQuiesced`/`Unsupported` is what a multi-hart capture would
+return — and the gate keeps capture off in every shipping image.
+
 ## Assumptions / risk / rollback
 - [UNVERIFIED] A block-capable board/test image and protected persistent volume are available; if not, finish format/negative tests but **leave feature disabled** and report exact physical gate, not a claimed complete warm-boot fix. Raw memory capture persists sensitive bytes; enforce storage trust/erase/retention per threat model. Rollback uses cold boot with restore disabled and snapshot area invalidated on a **throwaway** disk; prior snapshot bytes, leaked secrets or already corrupted external state cannot be undone by code rollback.
 

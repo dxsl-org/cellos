@@ -228,6 +228,71 @@ shared kernel ranges global) so targeted `aside1is` is sufficient, then re-run t
 phase's witnesses. This is the concrete blocker behind `switch_ordering_qualified()`
 returning false off RV64 (`kernel/src/loader/domain_admission.rs:107`).
 
+### Slice 5 — a real Tier-2 domain entry on AArch64, test images only (2026-09-28) — done
+
+The gate phase 02 existed for: a domain-class cell now runs at EL0 under its own private root on
+one AArch64 PE, in the test-hooks image, with production admission still refused.
+
+- `switch_ordering_qualified()` is `cfg!(target_arch = "riscv64") || cfg!(all(target_arch =
+  "aarch64", feature = "test-hooks"))` (`kernel/src/loader/domain_admission.rs:137`), and a
+  const-assert (`:142-153`) makes a production AArch64 build fail to compile if that ever becomes
+  true there. `enable_for_boot` additionally refuses the posture at EL2, where the AArch64 switch
+  has no root argument (`:301-309`).
+- The AArch64 test-hooks image now packs `tier2-smoke`/`tier2-exploit` for aarch64
+  (`scripts/build-aarch64-test-hooks-ci.sh:140-188`) and `cells/tools/init` gains an opt-in
+  `tier2-entry` feature that launches them from the boot order (`cells/tools/init/src/boot.rs:69-89`);
+  only that image enables it. Their launch edge is a reviewed row in
+  `kernel/src/loader/launch_profile/profiles.rs:24-30` and `boot_ceiling` still returns
+  `CapSet::EMPTY` for both, so init gains no authority.
+- Witnesses, AArch64 test-hooks lane exit 0 with every pre-existing marker, the new required ones,
+  and `[vfs-test] Results: 96 PASS, 0 FAIL`:
+  - `S22-AARCH64-ADMISSION-{ENABLED,DENY,DRAIN,PUBLICATION-DENY,CEILING}: PASS`, plus
+    `Tier 2 admission: ENABLED (development profile)`;
+  - `[domain] admitted cell 'tier2-smoke' to Tier 2 Paged Domain (TTBR0 isolation)`;
+  - `S22-AARCH64-DOMAIN-LIVE: PASS asid=1 root=0x418cd000 ttbr0=0x10000418cd000 domain=13
+    generation=14` — the live `TTBR0_EL1` read from inside the domain's own kernel context;
+  - `[tier2-smoke] PASS: All Tier 2 runtime invariants verified successfully!`;
+  - `[selftest] DOMAIN-FRAME-RELEASE: PASS tag=1 frames=22 quarantined=0` and
+    `S22-AARCH64-DOMAIN-TEARDOWN: PASS releases=1 quarantined=0 ack_generation=14`;
+  - a deliberate NULL store from the second domain cell is contained —
+    `[fault] Cell 6 (task 8 generation 135) terminated: cause=0x92000046 pc=0x10a0008a4 addr=0x0`,
+    exactly one such line, the boot continues to the vfs terminal and exits 0.
+- **Not proven, named:** *production* AArch64 runtime denial of a real domain-class artifact is not
+  executed — it is pinned by the compile-time assert, by the closed-posture cases above, and by the
+  pre-existing `tests/integration/tests/aarch64-boot.rs` refusal tests, but those two tests are
+  vacuous here because neither the production AArch64 image nor `disk_arm_virt.img` carries a
+  domain-class cell. The requested "fault with shell recovery" is delivered as **fault with boot
+  survival**: that image has no interactive window (the shell's first prompt needs ~2 s while the
+  image's own test root exits the VM at ~4.5 s; `Cellos >` appears in no log from any run), which
+  was measured rather than assumed.
+
+### Slice 6 — no synchronous wait on a remote acknowledgement (2026-09-28) — done
+
+The stall class is gone: the release paths no longer wait for a peer hart, so a hart that stops
+acknowledging can no longer burn a boot's budget.
+
+- `kernel/src/memory/deferred_release.rs` (new): a bounded queue (32 entries, merged per tag) holds
+  the frames — root, tables, leaves — together with the tag whose invalidation must land first, and
+  `reap_deferred_releases` completes the release from hart 0's timer path
+  (`kernel/src/task.rs:945-958`, after the existing acknowledgement block, no lock held across a
+  wait, nothing widened). The 25 × 200 ms synchronous budget is **deleted**, not widened: a release
+  path now probes once (200 ms) and defers.
+- Fail-closed order preserved: a frame is released only after its invalidation is acknowledged;
+  after 512 reaper attempts (~5 s of grace, unbounded in caller time) the entry is quarantined
+  loudly and its tag is recorded as unconfirmed for the rest of the boot; a full queue quarantines
+  immediately. `Task::drop` and the scheduler's stack-map rollback now withhold a stack's backing
+  (counted and logged) instead of panicking when the ack is missing.
+- Witness: `S22-RV64-DEFERRED-RELEASE: PASS` — a test-hooks seam withholds tag acknowledgements for
+  a bounded window; the fixture proves `Err(InvalidationUnacknowledged)`, `used_frames()` unchanged,
+  the queue entry created, `quarantined == 0`, the reaper releasing nothing while unconfirmed
+  (attempts advancing), and after disarming a release of exactly the retained frames with
+  `[aspace] deferred release confirmed: retained=3 frames depth=1 attempts=65 released=true
+  quarantined=0`.
+- Evidence: `--harts 1 --case admission,asid-lease,unmap-order,grant-revoke,grant-gate,grant-pair`
+  exit 0, 6/6; `--harts 2 --case migration,user-copy-race,ipc-copy-race,unmap-order,asid-lease,
+  grant-pair` **passed twice in a row with zero stall-truncations**, where before every such run
+  ended on the grant-revoke fixture being truncated by an unacknowledged flush.
+
 ### Slices still open (gates stay closed)
 
 - **Non-RV64 Tier-2 admission stays refused**, now for narrower and better-named reasons:

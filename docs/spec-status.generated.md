@@ -6,13 +6,13 @@ Layer 3 of [Spec 21](specs/21-documentation-architecture.md). `Anchor:` lines in
 
 | Metric | Value |
 |---|---:|
-| Sections scanned | 399 |
+| Sections scanned | 400 |
 | Sections with an anchor | 19 |
-| Ratified/Accepted sections | 288 |
+| Ratified/Accepted sections | 289 |
 | …of those, anchored | 18 |
 | Anchor violations | 0 |
-| Coverage gaps (ratified, unanchored) | 270 |
-| Status-prose hits | 80 |
+| Coverage gaps (ratified, unanchored) | 271 |
+| Status-prose hits | 79 |
 
 ## Anchored sections
 
@@ -255,6 +255,7 @@ Layer 3 of [Spec 21](specs/21-documentation-architecture.md). `Anchor:` lines in
 - `docs/specs/17-ipc-wire-contract.md:481` — 12. Addendum: Tier 2 Native Domain IPC & Boundary Contracts
 - `docs/specs/17-ipc-wire-contract.md:485` — 12.1 Copied IPC across Domain Boundaries
 - `docs/specs/17-ipc-wire-contract.md:495` — 12.2 Inter-Domain Zero-Copy Grants
+- `docs/specs/17-ipc-wire-contract.md:502` — 12.3 Private-root grant lifecycle — Ratified 2026-09-28
 - `docs/specs/18-cell-trust-tiers.md:9` — 1. Context
 - `docs/specs/18-cell-trust-tiers.md:32` — 2. Decision
 - `docs/specs/18-cell-trust-tiers.md:89` — 2.1 Tier 1 admission — `cellos-sign`
@@ -378,4 +379,4 @@ Layer 3 of [Spec 21](specs/21-documentation-architecture.md). `Anchor:` lines in
 - `docs/specs/13-peripherals.md:170` — `✅` in: 9. ✅ Integration test `tests/integration/tests/periph-i2c-spi.rs` — asserts SPI TX probe + I2C banner.
 - `docs/specs/13-peripherals.md:171` — `✅` in: 10. ✅ **PWM bit-bang** (`hal/traits/pwm`, `cells/drivers/pwm-gpio`, `cells/apps/pwm-demo`) — gated by `gpio` manifest ca
 - `docs/specs/13-peripherals.md:172` — `✅` in: 11. ✅ **ADC simulation** (`hal/traits/adc`, `cells/drivers/adc-sim`, `cells/apps/adc-demo`) — no MMIO, no cap; triangle-
-- … 20 more
+- … 19 more
