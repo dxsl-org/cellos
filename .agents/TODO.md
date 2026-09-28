@@ -52,10 +52,15 @@ báo cáo ở `.agents/<plan>/`, cách làm ở `docs/guides/`. Chuỗi tiền l
   `seg_max` tắt) cũng không cứu được trường hợp nhiều segment.
 
   Hai dạng hỏng đã tách được, cả hai chỉ xuất hiện khi request lớn hơn 4 KiB:
-  (A) **VFS trả short read**: `[hv-blk] VFS read response: GrantDone { bytes: 15360 }` cho một request 64 KiB
-  (offset 901120) ⇒ cell báo `status=1` ⇒ guest "I/O error, dev vda, sector 96". Đây là lỗi có sẵn của
-  `FatBackend::read_at` (vòng `file.read` dừng sớm ở ~30 sector); request 4 KiB không bao giờ chạm tới. Sửa
-  `read_at` là hết dạng A.
+  (A) **VFS trả short read, và đã tìm ra vì sao**: `[hv-blk] VFS read response: GrantDone { bytes: 15360 }` cho
+  một request 64 KiB (offset 901120) ⇒ cell báo `status=1` ⇒ guest "I/O error, dev vda, sector 96". Truy vết
+  trong VFS cho thấy fatfs **tưởng `guest_disk.img` chỉ còn 850944 byte** trong khi file thật trên host là
+  16 777 216 byte: `[vfs-dbg] read_at EOF path=guest_disk.img offset=835584 total=15360 want=65536
+  believed_len=850944` — và `believed_len` đúng bằng `offset + total` của lần đọc, tức kích thước mà fatfs
+  thấy bị hạ theo vị trí (nghi đường `write`/`append` với "remove-then-create", hoặc fatfs cập nhật
+  directory entry sai sau các lần ghi in-place của `write_at`). Request 4 KiB không bao giờ đọc tới vùng đó
+  nên lane vẫn xanh; sửa chỗ hạ kích thước là hết dạng A. Bước kế: log kích thước fatfs thấy ngay sau mount
+  và sau mỗi `write_at` để bắt thời điểm nó tụt.
   (B) **device báo mọi request thành công nhưng guest đọc ra zero**: probe trong guest đọc sector 0..5 (cả cold
   lẫn warm) đều ra zero, không có dòng `vfs-dbg` EOF/ERR nào, không request nào `status≠0`; ở lần chạy có
   instrument, `read_guest_memory` đọc lại *frame của descriptor* ngay sau scatter thấy đúng byte (marker).
