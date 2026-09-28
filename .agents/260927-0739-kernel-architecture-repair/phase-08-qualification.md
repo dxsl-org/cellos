@@ -114,6 +114,23 @@ domain→*SAS* direction is by construction (a private root maps only its own le
 shared supervisor ranges, so another cell's user pages are not in it) and is **not separately
 asserted** — flagged here rather than counted as covered.
 
+
+### Additions after the second matrix (same day, later)
+
+| # | Lane | Command | Result |
+|---|---|---|---|
+| 21 | Host kernel units | `cargo test -p cellos-kernel --target x86_64-unknown-linux-gnu` | **174 passed** / 0 failed |
+| 22 | AArch64 production-refusal witness | `bash scripts/build-aarch64-prod-refusal-ci.sh` then `cargo test --test aarch64-boot -- --test-threads=1` | 9 passed, 1 failed: both refusal tests pass; `aarch64_periph_demo_gpio` fails because the local AArch64 image lacks the `periph-demo` cell the CI-assembled production image carries (environmental, classified, not a defect) |
+| 23 | x86_64 production-refusal witness | `bash scripts/build-x86_64-prod-refusal-ci.sh` then `cargo test --test x86_64-boot -- --test-threads=1` | **9 passed** / 0 failed, including both refusal tests |
+| 24 | Snapshot staging/freshness | host lane (rows 21) plus the RV64 lanes | covered by row 21 and rows 3–4 |
+
+The refusal witnesses carry production-feature kernels (no `test-hooks`) and images that actually
+contain a signed+`UNTRUSTED` cell and an unsigned one, so the refusal comes from policy rather than
+from an absent artifact; a no-cell variant of each image makes the same tests fail. Environment
+note: `target/aarch64-unknown-none-softfloat/release/cellos-kernel` must be rebuilt from the
+current tree before that suite — a stale production ELF there produced five spurious boot panics
+that disappeared after `cargo build --release --target aarch64-unknown-none-softfloat`.
+
 ## Assumptions / risk / rollback
 - [UNVERIFIED] All required emulators/physical boards are accessible to CI; where not, mark named qualification gate unresolved and retain disabled profile, not a passing placeholder. Rollback to known-safe image with domain admission and snapshot disabled; reimage development storage if a corrupted snapshot was ever replayed. Security exposure or overwritten external data cannot be rolled back by a binary revert.
 

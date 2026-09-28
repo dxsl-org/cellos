@@ -186,6 +186,46 @@ on RV64, where the trap path actually calls the hook.
   inventory vector inside the frozen window, and why it was not moved before the freeze.
   `QUALIFICATION_ENABLED` is still untouched, so no shipping image can capture.
 
+### Slice 5 — freeze-stable staging and authenticated freshness (2026-09-28) — device-independent halves
+
+- **Nothing allocates while the machine is frozen.** Every buffer the frozen window fills is
+  reserved *before* the park by `FrozenScratch` (`kernel/src/snapshot.rs:1255`), sized from a
+  pre-freeze bound (`:1265`), and filled through a `BoundedVec` (`:1201`) that refuses to grow
+  instead of allocating. `capture_image` is split so the window takes an already-encoded
+  inventory (`capture_image_prepared`, `:1527`). A test-hooks counter
+  (`FROZEN_WINDOW_ALLOC_ATTEMPTS`, `:1173`) proves zero allocation attempts for a full frozen
+  capture, and a deliberately under-sized bound makes the counter non-zero and the capture refuse
+  with zero block I/O — the positive control.
+- **Capture staging is declared, and refused when it cannot be proven.** `CaptureScratch`
+  (`:1111`) declares the capture's own code/stack/buffer spans; `assert_scratch_outside_runs`
+  (`:1149`) refuses with `ScratchOverlapsRun` before any block I/O when a declared span intersects
+  a planned run, and with `NoReservedScratch` when the declaration is missing or empty. No target
+  currently has a reserved scratch region outside the image span, so `serialize_snapshot`
+  declares `CaptureScratch::None` and a qualified build **refuses** rather than snapshotting its
+  own in-flight stack — fail-closed, not silently wrong.
+- **Authenticated freshness.** The header carries an `epoch` (offset 72) and a 32-byte keyed MAC
+  (offset 80), with compile-time offset assertions keeping the struct at 512 bytes. The tag is
+  HMAC-SHA256 (RFC 2104) over the header's signed bytes — which bind the CRC and therefore the
+  payload and inventory digests — built on the kernel's own `crate::sha256`, construction
+  mirroring `libs/attestation/src/hkdf.rs:14`: no new crypto, no new dependency. The key is
+  provisioned (`SNAPSHOT_TRUST_KEY`, dev key only under the existing `dev-signing-key` feature;
+  capture refuses `NoTrustKey` otherwise). `SnapshotDevice` gains `current_epoch`/`commit_epoch`
+  (`:1405`) whose default is "unsupported", so the real kernel device refuses
+  `NoFreshnessSource`; only the fake implements them. Restore verifies the MAC before trusting the
+  epoch, refuses a tampered header with `AuthenticationFailed`, refuses a non-strictly-newer epoch
+  with `StaleEpoch` (and erases the image), and advances the device epoch before replay.
+- Matrix tested with the fake device (whose epoch survives `power_cycle`): newer accepted and the
+  device advances; equal (a replayed header) refused and erased; older refused and erased;
+  tampered epoch refused by MAC; payload tamper with a re-computed CRC still refused (the MAC
+  binds the CRC); missing monotonic source refuses capture with zero writes and leaves restore
+  alone; plus a unit test that the MAC covers every covered field.
+
+Evidence: host lane **174 passed** (10 new); `-D warnings` clean for RV64 (default,
+`--no-default-features`, `test-hooks`), AArch64 and x86_64; RV64 1-hart and 2-hart case sets exit 0.
+
+Still hardware-gated: a real monotonic source (MMC/eMMC), and the save→reset→restore→resume
+witness on a board. `QUALIFICATION_ENABLED` is untouched, so no shipping image can capture.
+
 ## Assumptions / risk / rollback
 - [UNVERIFIED] A block-capable board/test image and protected persistent volume are available; if not, finish format/negative tests but **leave feature disabled** and report exact physical gate, not a claimed complete warm-boot fix. Raw memory capture persists sensitive bytes; enforce storage trust/erase/retention per threat model. Rollback uses cold boot with restore disabled and snapshot area invalidated on a **throwaway** disk; prior snapshot bytes, leaked secrets or already corrupted external state cannot be undone by code rollback.
 

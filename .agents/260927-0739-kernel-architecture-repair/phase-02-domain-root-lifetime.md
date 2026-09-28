@@ -259,9 +259,17 @@ one AArch64 PE, in the test-hooks image, with production admission still refused
     exactly one such line, the boot continues to the vfs terminal and exits 0.
 - **Not proven, named:** *production* AArch64 runtime denial of a real domain-class artifact is not
   executed — it is pinned by the compile-time assert, by the closed-posture cases above, and by the
-  pre-existing `tests/integration/tests/aarch64-boot.rs` refusal tests, but those two tests are
-  vacuous here because neither the production AArch64 image nor `disk_arm_virt.img` carries a
-  domain-class cell. The requested "fault with shell recovery" is delivered as **fault with boot
+  pre-existing `tests/integration/tests/aarch64-boot.rs` refusal tests. **Corrected 2026-09-28:**
+  those AArch64 tests *were* vacuous (no image on that path carried a domain-class cell, and the
+  bare-name route prints `command not found` for a refusal and for an absent file alike), while
+  the x86_64 pair was already genuine — the tracked shipping ISO embeds the fixture, so that
+  assertion held for the right reason. Both are now real witnesses against dedicated
+  production-feature images (`scripts/build-{aarch64,x86_64}-prod-refusal-ci.sh`) that carry a
+  signed+UNTRUSTED cell and an unsigned one: 4/4 of those tests pass, and a no-cell variant of
+  each image makes them fail, so they are not vacuous. The denial marker is
+  `[loader] SpawnFromPath refused: caller=… path=/bin/tier2-smoke error=NotSupported` —
+  `NotSupported` is the switch-ordering gate's error, not `PolicyDisabled`'s
+  `PermissionDenied` (`kernel/src/loader/domain_admission.rs:63-69`). The requested "fault with shell recovery" is delivered as **fault with boot
   survival**: that image has no interactive window (the shell's first prompt needs ~2 s while the
   image's own test root exits the VM at ~4.5 s; `Cellos >` appears in no log from any run), which
   was measured rather than assumed.
