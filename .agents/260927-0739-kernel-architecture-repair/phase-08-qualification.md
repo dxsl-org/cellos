@@ -156,6 +156,66 @@ Result: `--test aarch64-boot` **10 passed / 0 failed** (was 9/1 with rows that c
 reproduced), and the test-hooks lane logs
 `[selftest] REVOKE-MMIO: window 0x9000000 re-armed for EL0 (1 page(s))`.
 
+
+### AArch64 SMP bring-up (2026-09-29)
+
+The RV64 path starts secondaries through SBI HSM; AArch64 had `start_secondaries()` as a no-op and a
+park loop for cores firmware started. What the machine actually does was measured before anything was
+written, because every wrong answer here traps as an undefined instruction:
+
+* QEMU `virt` holds secondary cores **off** until firmware starts them: an instrumented
+  `.Lsecondary_park` never printed with `-smp 2`/`-smp 4`, on either the EL1 or the EL2 machine.
+* An `smc #0` from EL1 is **undefined** on this machine (`ID_AA64PFR0_EL1.EL3 = 0` — no EL3 monitor);
+  the probe took `ec=0x0` at the `smc` instruction.
+* `hvc #0` from **EL1** reaches the PSCI implementation (`PSCI_VERSION` = `0x00010001`), while
+  `hvc #0` from **EL2** faults (`ec=0x16`, an HVC taken back at EL2 — it would target EL3).
+* No firmware tree reaches the kernel in this boot (`x0 = 0`), so the conduit cannot be read from
+  `/psci`; it is inferred instead: the tree when there is one, otherwise EL3 presence
+  (`smc` with EL3, `hvc` without).
+
+Delivered (all on the production AArch64 image):
+
+* **Per-CPU identity** — `hart_local` maps `MPIDR_EL1.Aff0` to a logical hart through a table
+  published before a core is started, so `current_hart_id()`/`current_hart()`/`current_cell_id()`
+  are correct on any hart (previously every non-RV64 answer was slot 0).
+* **PSCI client** (`hal/arch/arm/src/aarch64/psci.rs`) — `PSCI_VERSION`/`PSCI_CPU_ON` over SMC with
+  the SMCCC clobbers declared, and a documented refusal path for a conduit that cannot work.
+* **Secondary entry** — `_secondary_entry` reads a published context with the MMU off (boot core's
+  live `MAIR`/`TCR`/`TTBR0`/`SCTLR`, this hart's stack, its logical id), cleans it to the point of
+  coherency before `CPU_ON`, and installs the same translation regime the boot core runs under rather
+  than a second derivation of the page tables.
+* **Per-CPU bring-up** — banked GIC interface plus SGI enable, this hart's timer, this hart's
+  vectors, then interrupts on; AArch64 SMP is refused at EL2 (HVC would target EL3) and on
+  `board-rpi3` (no SGI path in the BCM2836 controller here).
+* **Cross-hart IPI** — GICv2 SGI 0 delivered by `send_ipi()` (one definition per architecture, used by
+  both the flush and the retirement requests) and taken by the SGI branch of the AArch64 IRQ handler,
+  which enters the same tick path as the timer: that is where the flush acknowledgement and the
+  preemption decision already live.
+* **Remote confirmation** — the tag-invalidation probe, the deferred re-issuer and the outstanding
+  check now cover AArch64 (they were RV64-only), with a `dsb ishst` publishing page-table stores
+  before the IPI and a probe budget derived from `CNTFRQ_EL0` (200 ms).
+* **Boot self-check** — after a secondary comes online, hart 0 asks it to invalidate its TLB and waits
+  for the epoch: `[selftest] SMP-IPI: PASS hart=1 epoch=1`. Without it a hart that is online but deaf
+  to the IPI looks identical to a healthy one.
+
+**The second hart is online but accepts no task dispatch yet.** With hart 1 scheduling, the first
+task it picked — including by work stealing from hart 0 — faulted in kernel mode at `PC=0`
+(`ec=0x21 elr=0x0 spsr=0x3C5`, an instruction abort on the current EL); three of three `-smp 2` boots
+died that way. `smp::accepts_task_dispatch()` now returns false for `HART_RT` on AArch64 and both
+`push_ready` and `pick_next_local` consult it, so the hart takes ticks and maintenance IPIs and runs
+no tasks. After that gate: **3/3 `-smp 2` production boots reach the shell with no panic** and the IPI
+self-check passing.
+
+Evidence: `aarch64_smp_second_hart_online` (new row: `-smp 2`, hart online, IPI answered, shell
+reached) — suite **11 passed / 0 failed**; host lane 184 passed; `-D warnings` clean for RV64
+(default, `--no-default-features`, `test-hooks`, `snapshot-qualified`), AArch64 and x86_64;
+board-configuration gate exit 0; AArch64 test-hooks lane exit 0 (single-hart, unchanged); RV64 1-hart
+and 2-hart case sets exit 0.
+
+Still missing on this axis: task dispatch to hart 1 (the fault above), EL2 secondary bring-up, the
+AArch64 retirement/root-switch argument that domains need before a second hart can run cells, and the
+BCM2836 SGI path for `board-rpi3`.
+
 ## Assumptions / risk / rollback
 - [UNVERIFIED] All required emulators/physical boards are accessible to CI; where not, mark named qualification gate unresolved and retain disabled profile, not a passing placeholder. Rollback to known-safe image with domain admission and snapshot disabled; reimage development storage if a corrupted snapshot was ever replayed. Security exposure or overwritten external data cannot be rolled back by a binary revert.
 

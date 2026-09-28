@@ -335,6 +335,44 @@ fn aarch64_periph_demo_gpio() {
 ///
 /// Prerequisites: `/bin/input` + `/bin/input-test` in the aarch64 embedded
 /// ramdisk (scripts/build-aarch64-cells.ps1).
+/// The kernel must start its second core through firmware, and survive it.
+///
+/// A single-CPU boot cannot witness this: the kernel starts a secondary only
+/// when the machine has one, so the row boots `-smp 2` and requires the whole
+/// bring-up — hart 1 online with its own trap vector and interrupts enabled, and
+/// the cross-hart IPI answered *by that hart* (the request is delivered as a GIC
+/// SGI and the acknowledgement comes out of hart 1's trap path; a hart that is
+/// online but deaf would otherwise look perfectly healthy). The machine is then
+/// required to finish booting: the shell prompt is the proof that bringing a
+/// second hart up did not cost the system the rest of its boot.
+#[test]
+fn aarch64_smp_second_hart_online() {
+    if !prerequisites_ok() {
+        return;
+    }
+    let mut qemu = QemuRunner::boot_aarch64_with_disk_smp(&kernel_path(), &disk_path(), 2);
+    qemu.wait_for("[smp] hart 1 online, parked", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| {
+            panic!(
+                "hart 1 did not come online: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
+    qemu.wait_for("[selftest] SMP-IPI: PASS hart=1", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| {
+            panic!(
+                "hart 1 never acknowledged the cross-hart IPI: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT).unwrap_or_else(|e| {
+        panic!(
+            "the two-hart boot did not reach the shell: {e}\n--- output ---\n{}",
+            qemu.dump()
+        )
+    });
+}
+
 #[test]
 fn aarch64_uart_input_delivery() {
     if !prerequisites_ok() {

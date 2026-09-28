@@ -606,6 +606,16 @@ impl QemuRunner {
         Self::boot_aarch64_with_disk_and_netdev(kernel, disk, "user,id=net0")
     }
 
+    /// Boot the AArch64 image with an explicit CPU count.
+    ///
+    /// Cross-CPU rows must use this named path: the single-CPU default cannot
+    /// witness a secondary core, and a kernel that starts one only when the
+    /// machine has more than one CPU is exactly the code a `-smp 1` boot never
+    /// runs.
+    pub fn boot_aarch64_with_disk_smp(kernel: &str, disk: &str, cpus: usize) -> Self {
+        Self::boot_aarch64_smp_and_netdev(kernel, disk, "user,id=net0", cpus)
+    }
+
     pub fn boot_aarch64_with_hostfwd(kernel: &str, disk: &str, guest_port: u16) -> (Self, u16) {
         let probe = TcpListener::bind("127.0.0.1:0").expect("probe bind");
         let host_port = probe.local_addr().unwrap().port();
@@ -616,6 +626,15 @@ impl QemuRunner {
     }
 
     pub fn boot_aarch64_with_disk_and_netdev(kernel: &str, disk: &str, netdev: &str) -> Self {
+        Self::boot_aarch64_smp_and_netdev(kernel, disk, netdev, 1)
+    }
+
+    fn boot_aarch64_smp_and_netdev(
+        kernel: &str,
+        disk: &str,
+        netdev: &str,
+        cpus: usize,
+    ) -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind serial socket");
         let port = listener.local_addr().unwrap().port();
 
@@ -627,6 +646,8 @@ impl QemuRunner {
                 "cortex-a57",
                 "-m",
                 "256M",
+                "-smp",
+                &cpus.to_string(),
                 "-nographic",
                 "-kernel",
                 kernel,
