@@ -23,11 +23,11 @@ Tier 3 lets you run a full Linux kernel (e.g., Alpine, Busybox) inside a lightwe
 
 | Platform | Status | Hypervisor | Notes |
 |----------|--------|-----------|-------|
-| **ARM64** | ✅ Working (G2) | EL2 (non-VHE) | Cortex-A72+; boots Alpine (musl) to a shell; virtio-blk/net/console |
-| **x86_64** | 🚧 **Planned — not implemented** | SVM (AMD, TCG-testable) then VT-x (Intel) | Design plan only (`.agents/260711-1917-tier3b-x86-vtx/`); **no code yet** |
+| **ARM64** | ✅ Working (G2) | EL2 (non-VHE) | Cortex-A72+; boots Alpine (musl) to a shell; virtio-blk/net/console. Under QEMU-TCG only the machinery half is asserted (`[hv] vCPU ready`); the strict `/ #` boot needs KVM/real hardware |
+| **x86_64** | ✅ Working in QEMU (G2) | SVM (AMD, TCG-testable) | Boots Alpine to a shell under QEMU-TCG 10.2.0 (`scripts/qemu-hypervisor-smoke-x86.sh boot`); the Tier 3 workload gate `scripts/qemu-x86-nginx-gate.sh` installs nginx with `apk` inside the guest and serves a page. Intel VT-x root operation is not implemented and is deliberately not attempted under a hypervisor (VMXON faults) |
 | **RISC-V** | ❌ Not implemented | H-ext (too new) | Deferred beyond G1 |
 
-**G2-only**: requires real hardware or advanced QEMU (not basic RISC-V). Only the ARM64 path currently boots a guest.
+**G2-only**: requires real hardware or advanced QEMU (not basic RISC-V). Both the ARM64 and x86_64 paths boot a Linux guest; RISC-V has no hypervisor.
 
 ---
 

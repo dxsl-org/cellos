@@ -14,6 +14,10 @@ Environment:
   HV_VOLATILE_DISK       0 (default) or 1; Ubuntu requires 0
   HV_INIT_MIN            0 (default) or 1
   HV_HOSTILE_BACKEND_RECOVERY  0 (default) or 1
+  HV_EMBEDDED_DIR        staging dir for kernel_fs.img/init
+                         (default kernel/src/embedded-hv-x86 — tracked). Evidence
+                         lanes should point this at their own work dir so a lane
+                         build cannot rewrite the tracked boot image.
 
 For Ubuntu, build the root-owned artifacts first with
   sudo bash scripts/build-ubuntu-wide-guest-x86.sh
@@ -38,7 +42,7 @@ parse_and_validate_args() {
     UBUNTU_ARTIFACT_DIR="${UBUNTU_ARTIFACT_DIR:-build/ubuntu-wide-guest-x86}"
     VMLINUX_SOURCE="$ALPINE_CACHE/vmlinux"
     INITRD_SOURCE="${INITRD_OVERRIDE:-$ALPINE_CACHE/initramfs-virt}"
-    EMBEDDED_HV="kernel/src/embedded-hv-x86"
+    EMBEDDED_HV="${HV_EMBEDDED_DIR:-kernel/src/embedded-hv-x86}"
 
     HV_INIT_MIN_VALUE="${HV_INIT_MIN:-0}"
     HV_HOSTILE_BACKEND_RECOVERY_VALUE="${HV_HOSTILE_BACKEND_RECOVERY:-0}"

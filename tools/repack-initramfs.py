@@ -73,6 +73,23 @@ def write_archive(path: Path, entries: list[Entry]) -> None:
     path.write_bytes(gzip.compress(bytes(output), compresslevel=9, mtime=0))
 
 
+def prune_modules(entries: list[Entry], keep_suffixes: tuple[str, ...]) -> list[Entry]:
+    """Drop module payloads outside `keep_suffixes`, keeping directories and
+    `lib/modules/<version>/<metadata>` files (modprobe needs modules.dep & co)."""
+
+    def keep(entry: Entry) -> bool:
+        name = entry.name
+        if not name.startswith("lib/modules/"):
+            return True
+        if entry.fields[1] & 0o170000 == 0o040000:
+            return True  # directory
+        if name.endswith(tuple(keep_suffixes)):
+            return True
+        return len(name.split("/")) == 4  # modules.dep / modules.alias.bin / ...
+
+    return [entry for entry in entries if keep(entry)]
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("source", type=Path)
@@ -84,8 +101,19 @@ def main() -> None:
         metavar=("ARCHIVE_PATH", "HOST_FILE", "MODE"),
         default=[],
     )
+    parser.add_argument(
+        "--prune-modules-to",
+        nargs="+",
+        metavar="SUFFIX",
+        default=None,
+        help="Keep only module payloads whose archive path ends with one of these "
+        "suffixes; directories and the lib/modules/<version>/ metadata files stay. "
+        "Needed when the guest RAM cannot hold the whole module tree.",
+    )
     args = parser.parse_args()
     entries = read_archive(args.source)
+    if args.prune_modules_to is not None:
+        entries = prune_modules(entries, args.prune_modules_to)
     by_name = {entry.name: entry for entry in entries}
     next_inode = max((entry.fields[0] for entry in entries), default=0) + 1
     for archive_path, host_file, mode in args.add:

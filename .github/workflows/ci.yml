@@ -976,6 +976,95 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  # Tier 3 gate: nginx runs inside the Alpine guest (`.agents/TODO.md` names this
+  # as "nginx chạy thật trong Linux VM"). Builds the guest fixture, installs
+  # nginx with apk from the pinned repository, and asserts the in-guest HTTP
+  # serve. QEMU-TCG evidence only — no physical-x86 claim.
+  qemu-x86-tier3-nginx:
+    name: Tier 3 nginx In-Guest Gate (x86_64)
+    runs-on: ubuntu-24.04
+    needs: build
+    timeout-minutes: 60
+    env:
+      QEMU_X86_PREFIX: ${{ github.workspace }}/.ci-cache/qemu-10.2.0
+      # make-hypervisor-fs-x86.sh compiles the littlefs C core for the bare
+      # target; the same trio the x86 hypervisor job uses.
+      CC_x86_64_unknown_none: cc
+      CFLAGS_x86_64_unknown_none: -ffreestanding -fno-stack-protector -mno-red-zone -mno-sse -mno-mmx -DLFS_NO_INTRINSICS -I${{ github.workspace }}/third_party/freestanding-include
+      BINDGEN_EXTRA_CLANG_ARGS_x86_64_unknown_none: --target=x86_64-linux-gnu
+    steps:
+      - name: Initialize nginx gate evidence
+        run: |
+          mkdir -p "$RUNNER_TEMP/x86-nginx-evidence"
+          printf '[gate] Tier 3 nginx in-guest gate started\n' > "$RUNNER_TEMP/x86-nginx-evidence/gate.log"
+
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-05-01
+          components: rust-src
+          targets: x86_64-unknown-none
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+          key: x86-tier3-nginx
+
+      - name: Install QEMU build and image dependencies
+        timeout-minutes: 10
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q \
+            binutils build-essential curl gzip libglib2.0-dev libpixman-1-dev \
+            libslirp-dev ninja-build pkg-config python3-venv xorriso xz-utils zstd
+
+      - name: Restore QEMU 10.2.0
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.QEMU_X86_PREFIX }}
+          key: qemu-x86_64-10.2.0-${{ runner.os }}-${{ runner.arch }}
+
+      - name: Install pinned QEMU 10.2.0
+        timeout-minutes: 25
+        run: bash scripts/install-qemu-x86-ci.sh
+
+      # Builds the fixture initramfs, the kernel_fs.img (own staging dir via
+      # HV_EMBEDDED_DIR), the kernel and the ISO, then boots and asserts every
+      # guest marker. No `-hypervisor` workaround: the SVM root gate is the
+      # product path this lane covers.
+      - name: Run Tier 3 nginx in-guest gate
+        id: nginx-gate
+        timeout-minutes: 45
+        env:
+          QEMU_X86_BIN: ${{ env.QEMU_X86_PREFIX }}/bin/qemu-system-x86_64
+          QEMU_MEMORY: 2G
+          BOOT_WINDOW: "1200"
+        run: bash scripts/qemu-x86-nginx-gate.sh build/vicell-x86-nginx.iso
+
+      - name: Collect nginx gate evidence
+        if: always()
+        run: |
+          printf '[gate] job_status=%s gate_outcome=%s\n' \
+            "${{ job.status }}" "${{ steps.nginx-gate.outcome }}" \
+            >> "$RUNNER_TEMP/x86-nginx-evidence/gate.log"
+          for log in build/x86-nginx-gate/qemu-nginx-gate.log \
+                     build/x86-nginx-gate/qemu-nginx-gate.raw.log; do
+            if [ -f "$log" ]; then
+              cp "$log" "$RUNNER_TEMP/x86-nginx-evidence/"
+            fi
+          done
+
+      - name: Upload nginx gate logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: x86-tier3-nginx-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/x86-nginx-evidence
+          if-no-files-found: error
+          retention-days: 14
+
   vfs-quota:
     name: VFS Quota Integration Test
     runs-on: ubuntu-24.04
