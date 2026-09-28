@@ -1396,6 +1396,61 @@ jobs:
         # raw partition the guest formats itself (scripts/mksrv-img.sh).
         run: cd tests/integration && cargo test --test srv-cellosfs
 
+  rv64-tier2-disk:
+    # The two RV64 integration lanes that boot a real disk image: the launch
+    # profile (shell + vfs-test + the snapshot-unavailable contract) and Tier-2
+    # fault isolation (fail-closed grant denial, NULL/peer/kernel containment,
+    # a positive Tier-2 domain and the posix-shim FFI domain). They were written
+    # against a `disk_v3.img` assembled on Windows by gen_disk.ps1, so they never
+    # ran here; `scripts/gen-disk-ci.sh` reproduces the RV64 half natively
+    # (same cell list, same production/test-hooks flavour rule, signing, VIFS1
+    # args, 61-row cell table and P6 cell-store, digest-verified before it
+    # replaces the image).
+    name: RV64 integration disk (launch profile + Tier-2 fault isolation)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-05-01
+          components: rust-src
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+          key: rv64-tier2-disk
+
+      - name: Install dependencies
+        timeout-minutes: 20
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q \
+            qemu-system-misc gcc-riscv64-unknown-elf libclang-dev
+
+      # Own step: cell and policy signing needs it, and a timeout in the apt step
+      # above must not read as a signing failure.
+      - name: Install Python cryptography (cell + policy signing)
+        timeout-minutes: 5
+        run: python3 -m pip install --user --quiet cryptography
+
+      - name: Build the RV64 integration disk
+        run: |
+          chmod +x scripts/gen-disk-ci.sh
+          bash scripts/gen-disk-ci.sh
+
+      - name: Run the integration lanes
+        env:
+          CARGO_BUILD_TARGET: x86_64-unknown-linux-gnu
+        # --test-threads=1: the lanes boot a guest each and share disk_v3.img.
+        run: |
+          cargo test --manifest-path tests/integration/Cargo.toml --test launch-profile -- --test-threads=1
+          cargo test --manifest-path tests/integration/Cargo.toml --test tier2-fault-isolation -- --test-threads=1
+
   unit-tests:
     name: Host unit tests (types + api)
     runs-on: ubuntu-24.04
