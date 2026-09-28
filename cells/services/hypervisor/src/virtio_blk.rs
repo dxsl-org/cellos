@@ -325,17 +325,24 @@ fn blk_flush(backend: &mut Backend) -> u8 {
             let req = api::ipc::VfsRequest::SyncHandle { file: *file };
             let mut send_buf = [0u8; 512];
             let mut resp_buf = [0u8; 512];
+            // A flush is not a 4 KiB round trip: the VFS walks its dirty state
+            // and pushes it through the block device, so it gets the budget a
+            // full chunk does. With the flat base budget a slow-but-correct
+            // flush timed out (`[hv-blk-host] request failed type=4 ... status=1`),
+            // and the guest's `conv=fsync` write then failed on it.
             let result = ostd::ipc::service_call_typed_bounded(
                 *vfs_tid,
                 &req,
                 &mut send_buf,
                 &mut resp_buf,
-                BACKEND_TIMEOUT_TICKS,
+                chunk_timeout_ticks(api::ipc::VFS_GRANT_CHUNK),
             );
+            let poison = matches!(&result, Err(ostd::ipc::IpcError::Recv));
             if matches!(&result, Ok(api::ipc::VfsResponse::Ok)) {
                 0
             } else {
-                if matches!(&result, Err(ostd::ipc::IpcError::Recv)) {
+                println(&alloc::format!("[hv-blk] VFS flush failed: {:?}", result));
+                if poison {
                     *poisoned_tid = *vfs_tid;
                 }
                 *vfs_tid = 0;

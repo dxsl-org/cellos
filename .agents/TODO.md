@@ -51,6 +51,11 @@ báo cáo ở `.agents/<plan>/`, cách làm ở `docs/guides/`. Chuỗi tiền l
   Đã thử và **không** phải nguyên nhân: `used.len` — báo `payload + 1` theo spec (đã giữ, lane vẫn xanh với
   `seg_max` tắt) cũng không cứu được trường hợp nhiều segment.
 
+  Bug tách riêng đã sửa trong lúc truy: **ngân sách IPC của FLUSH** dùng chung mức cơ sở 200 tick vốn chỉ đủ
+  cho một round trip 4 KiB, nên một flush chậm-mà-đúng bị timeout và guest nhận `[hv-blk-host] request failed
+  type=4 sector=0 buffers=2 status=1` (dd `conv=fsync` báo `block-write`). Nay flush dùng
+  `chunk_timeout_ticks(VFS_GRANT_CHUNK)` và in lý do khi hỏng.
+
   Hai dạng hỏng đã tách được, cả hai chỉ xuất hiện khi request lớn hơn 4 KiB:
   (A) **VFS trả short read, và đã tìm ra vì sao**: `[hv-blk] VFS read response: GrantDone { bytes: 15360 }` cho
   một request 64 KiB (offset 901120) ⇒ cell báo `status=1` ⇒ guest "I/O error, dev vda, sector 96". Truy vết
@@ -61,11 +66,14 @@ báo cáo ở `.agents/<plan>/`, cách làm ở `docs/guides/`. Chuỗi tiền l
   directory entry sai sau các lần ghi in-place của `write_at`). Request 4 KiB không bao giờ đọc tới vùng đó
   nên lane vẫn xanh; sửa chỗ hạ kích thước là hết dạng A. Bước kế: log kích thước fatfs thấy ngay sau mount
   và sau mỗi `write_at` để bắt thời điểm nó tụt.
-  (B) **device báo mọi request thành công nhưng guest đọc ra zero**: probe trong guest đọc sector 0..5 (cả cold
-  lẫn warm) đều ra zero, không có dòng `vfs-dbg` EOF/ERR nào, không request nào `status≠0`; ở lần chạy có
-  instrument, `read_guest_memory` đọc lại *frame của descriptor* ngay sau scatter thấy đúng byte (marker).
-  Tức page mà guest nhìn thấy khác frame mà device đã ghi — chưa giải thích được; nghi phần biên dịch
-  IPA→PA/bản đồ stage-2 mà đường đọc của guest đi qua, không phải đường di chuyển dữ liệu. Bằng chứng + lý do khoá feature nằm tại
+  (B) **dữ liệu nguồn không nhất quán giữa hai cell**: dump `ReadGuestMemory` ngay sau scatter cho 12 request
+  đọc đầu của lần boot thứ hai thấy *cùng* sector 0 (off=0) có request nhận đúng marker
+  (`[67,69,76,76,79,83,95,88]`) và có request nhận **zero** ở frame của descriptor. Vậy zero đến từ *nguồn dữ
+  liệu* (grant/VFS/đường block ngoài), không phải từ cách guest nhìn page — framing cũ "guest thấy page khác
+  frame" đã bị số liệu này sửa. Không request nào `status≠0`, không EOF/ERR ở `read_at`, không dòng `VFS read
+  response` bất thường. Bước kế: instrument `CachedBlockStream::read`/`PageCache::read_sector` in 8 byte đầu
+  của mỗi sector đọc để biết zero đến từ thiết bị ngoài hay từ cache của VFS (NVMe driver cell không có cache
+  sector — đã kiểm). Bằng chứng + lý do khoá feature nằm tại
   `cells/services/hypervisor/src/virtio_blk.rs` (`config_read`).
   Lane tái hiện: `scripts/qemu-x86-virtio-e2e.sh` (đỏ khi bật, xanh khi tắt).
 
