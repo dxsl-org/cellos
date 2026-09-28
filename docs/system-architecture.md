@@ -3,7 +3,7 @@
 **Audience**: Developers new to Cellos
 **Level**: High-level (conceptual + key components)
 **Version**: 0.2.1-dev (Mycelium Era)
-**Last Updated**: 2026-09-06 (ADR-0015 Dual-Mode Hybrid Architecture settled as definitive baseline.)
+**Last Updated**: 2026-09-28 (kernel architecture repair: snapshot internal format v2, PCID/INVPCID runtime gate, RV64-only Tier-2 admission. ADR-0015 Dual-Mode Hybrid Architecture remains the definitive baseline.)
 
 > **Status refresh 2026-09-06 — ADR-0015 DUAL-MODE HYBRID ARCHITECTURE SETTLED:**
 > [ADR-0015](decisions/0015-dual-mode-hybrid-architecture.md) settles the long-standing
@@ -17,6 +17,44 @@
 >    and **all** C-FFI, Lua runtimes, and POSIX shims. Memory violations trigger CPU page faults
 >    and safe cell reaping without corrupting the SAS. Microkernel IPC bridge with bounded copies.
 > 3. **Tier 3 (Hardware VM Guest)**: Stage-2 paging / hardware hypervisor for unmodified Linux guests.
+>
+> **Status refresh 2026-09-28 — KERNEL ARCHITECTURE REPAIR (SWITCH COMPLETION, PCID, SNAPSHOT v2):**
+> The tested posture narrows the claim above; the mechanism is real on RV64, and on AArch64 in
+> **test images only**.
+> - **Tier-2 admission.** RV64 admits a real Tier-2 Cell into a private `satp` root, with copied
+>   IPC and hardware page-fault containment verified (`tests/integration/tests/tier2_fault_isolation.rs`,
+>   `scripts/qemu-native-domain-test.sh`). AArch64 admits one in the test-hooks image only: a
+>   domain cell runs at EL0 under its own `TTBR0_EL1` root (`S22-AARCH64-DOMAIN-LIVE`), a deliberate
+>   fault is contained, and its root is retired with frames released and nothing quarantined; every
+>   **production** AArch64 build is pinned closed by a compile-time assert
+>   (`kernel/src/loader/domain_admission.rs`), so the shipped refusal is deliberate policy, not an
+>   unqualified mechanism. **x86_64 admission is refused** for the same reason it still has no
+>   root-switch witness. Non-RV64 SMP (per-CPU `hart_local`, IPI, remote acknowledgement) is a
+>   separate open blocker. AArch64 private-root leaves are now non-global (`PTE_nG`), so the
+>   release path issues the targeted `tlbi aside1is` again; the ASID-scoping behaviour itself is
+>   unproven in emulation (QEMU does not scope `aside1is`), so that witness awaits hardware.
+>   On x86_64 the PCID/INVPCID runtime gate probes `CPUID.07H:EBX[10]` (the previous probe read
+>   `CPUID.01H:ECX[12]`, which is FMA) and requires INVPCID before using a nonzero PCID; the x86
+>   TCG lane boots with PCID disabled and the KVM lane with PCID enabled, both to the shell.
+>   The `INVPCID` instruction path itself stays unexecuted while no x86 domain can be admitted.
+> - **Domain-class zero-copy grants are implemented for RV64 and still denied everywhere else.**
+>   A real two-cell Tier-2 owner/receiver lane (`scripts/qemu-native-domain-test.sh --case grant-pair`)
+>   drives `GrantAlloc`/`GrantRegister`/`GrantSlice`/`GrantFree`/`GrantUnregister` through the public
+>   syscall path with rights-accurate, transactionally published, synchronously revocable mappings;
+>   every shape that is not a live private root on an architecture with a lifecycle (AArch64 and
+>   x86_64 builds, retired or unknown roots, unsupported rights) keeps the phase-01 sentinels
+>   byte-for-byte at the common syscall gate. SAS→SAS Tier-1 grants and copied IPC are unchanged.
+> - **Warm snapshot is disabled and unqualified.** The storage format is now internal v2 (see
+>   [`docs/specs/03-runtime.md`](specs/03-runtime.md) §4) with the
+>   `EMPTY → WRITING → COMMITTED → CONSUMING → CONSUMED` state machine and a `FatalMixedRam`
+>   reset; `QUALIFICATION_ENABLED = cfg!(feature = "snapshot-qualified")` is off in every
+>   shipping image, so capture and restore refuse and the shell/Supervisor
+>   `snapshot: unavailable` contract is unchanged. There is **no measured warm-boot time and no
+>   board witness**; the older sub-100 ms figure had no witness behind it.
+> - **No measured latency figure either.** The `P99 <= 10µs` Tier-1 line above is not a
+>   measured result: the RT-wake repair proves only that consuming a message requests
+>   preemption on the sender's *target* hart (decision-level, `S22-RV64-RT-WAKE`), and
+>   wake-to-schedule latency remains hardware-gated with no number claimed.
 >
 > **Status refresh 2026-09-02 — X86_64 PER-VECTOR IDT REAL-CPL3 GATE
 > PASSED:** Hardware IDT entry changes neither GS nor PKRU. The common path now
@@ -147,8 +185,9 @@
 > It covers private page-table ownership and switching, recoverable
 > domain-aware syscall copies, fault/teardown recovery, revocable IPC grants,
 > DMA fencing, adversarial tests, and separate build-capability/runtime-
-> admission rollback. No Tier 2 runtime mechanism exists; current unsigned
-> native cells remain in the shared SAS and are not contained.
+> admission rollback. At that date no Tier 2 runtime mechanism existed and current unsigned
+> native cells remained in the shared SAS, uncontained; the 2026-09-28 refresh above records
+> the RV64-only admission that now exists and the AArch64/x86_64 refusal.
 
 > **Status refresh 2026-08-20**: the HAL split covers all seven current
 > board selections. Root `boards/` descriptors contain integration data only;
@@ -618,7 +657,13 @@ The kernel is **tiny** by design, handling only:
 **Frame Allocator**:
 - Bitmap-based allocation (O(1) free, O(n) scan for allocate)
 - RV64 capacity follows the firmware DTB rather than a fixed 190 MiB usable window
-- Selects the largest page-aligned usable interval; multi-region allocation is not implemented
+- Manages **every** page-aligned `Usable` interval of the firmware map, not just the largest.
+  Adjacent entries merge; overlapping entries or more than eight ranges halt the boot instead of
+  guessing, and a range the kernel does not own can never be allocated. The index space is the
+  concatenation of the ranges, so a hole costs no bitmap bits and a contiguous request never
+  straddles one; the framebuffer guard and `MemInfo` totals test/sum the whole range list.
+  Reclaimed frame capacity on a physical board is still board-gated — host fixtures prove the
+  algorithm only.
 - Tracks allocated vs. free pages (4KB each) with an exact counter updated only on bitmap
   transitions, so repeated reservation and double-free paths do not skew the snapshot
 - Exposes aggregate telemetry through opt-in `MemInfo=243` (allowlist bit 56), returning the
@@ -629,7 +674,9 @@ The kernel is **tiny** by design, handling only:
 - **User VA**: < 0x8000_0000 (per-task isolation via page tables)
 - **Guard Hole**: 0x8000_0000–0x8020_0000 (unmapped, prevents overflow)
 - **Kernel VA**: 0x8020_0000+ (identity-mapped)
-- **Heap**: 64 MB kernel heap (linked-list allocator)
+- **Heap**: 4 MiB kernel heap (linked-list allocator), reserved at boot as exactly one
+  contiguous run of 1 024 frames — if the map has no such run the boot refuses before heap
+  initialization instead of initializing over frames the kernel does not own
 
 **Paging Structure** (RV39):
 ```
@@ -720,8 +767,16 @@ struct Task {
 > Kernel dispatch still requires `SupervisorCap` before `serialize_snapshot()` runs, so an
 > allowlisted but non-supervisor caller is denied. QEMU proves the two failure modes honestly:
 > `NullBlock` reports snapshot unavailability on the emulated path, and real MMC save/restore
-> remains host-gated. The snapshot format, kernel serializer, and warm-boot restore code are
-> otherwise unchanged.
+> remains host-gated. Beyond the contract above, the storage format is now **internal v2** —
+> a 512-byte header in the reserved MBR partition P3, an explicit inventory of
+> `(pa, frame_count)` runs, the payload in inventory order, and one canonical
+> `crc32(header.canonical_bytes() || inventory || payload)` — with the on-disk state machine
+> `EMPTY → WRITING → COMMITTED → CONSUMING → CONSUMED` and a `FatalMixedRam` reset instead of a
+> cold boot on mixed RAM (see `docs/specs/03-runtime.md` §4). The feature stays **disabled in
+> every shipping image** (`QUALIFICATION_ENABLED = cfg!(feature = "snapshot-qualified")`), so no
+> image can capture or replay; all-hart quiescence, closure, coherent staging, authenticated
+> freshness and the real save→reset→restore→resume board witness remain open, and no warm-boot
+> timing is claimed.
 
 > **Grant lookup/lease linearization**: `GrantSlice` resolves a PAGE or REG
 > grant and publishes the exact VFS lease while the matching grant-table lock is
@@ -744,7 +799,7 @@ struct Task {
 | `Exec(binary, argv)` | Replace self with new Cell |
 | `SpawnFromMem(ptr, size)` | Load Cell from memory buffer; no active launch-profile route |
 | `MemInfo(out, len)` | Opt-in aggregate frame totals (`ViMemInfoV1`, 32 bytes) |
-| `Snapshot()` | Serialize allocated physical frames to the P3 snapshot region; `SupervisorCap`-gated |
+| `Snapshot()` | Serialize allocated physical frames to the P3 snapshot region; `SupervisorCap`-gated, and refuses in every shipping image while the `snapshot-qualified` gate is closed |
 | `Exit(code)` | Terminate self |
 | `Yield()` | Voluntarily yield CPU |
 | `Log(msg)` | Print to kernel log |
@@ -1411,7 +1466,7 @@ workspace; this section is the repository-owned architectural summary.
 │ kernel/src/main.rs: _km_start()                 │
 │ 4. Frame allocator (bitmap)                     │
 │ 5. Virtual memory (SV39 paging)                 │
-│ 6. Heap allocator (64 MB)                       │
+│ 6. Heap allocator (4 MiB, one run)              │
 │ 7. PLIC (interrupt controller)                  │
 └──────────────┬──────────────────────────────────┘
                ↓
@@ -2038,7 +2093,8 @@ Same foundation, **opposite coordination semantics** → two separate problems:
 
 > ⚠️ **Per-Cell SATP isolation at Tier 1 is explicitly NOT pursued** (decided 2026-06-05).
 > Hardware isolation belongs to Tier 2 native domains and Tier 3 VM guests, not to
-> every Tier-1 Cell. Tier 2 is the future native private-MMU-domain class, not just
+> every Tier-1 Cell. Tier 2 is the native private-MMU-domain class — admitted on RV64
+> today and refused off RV64, not just
 > "unsigned Tier 1" — see
 > `docs/specs/18-cell-trust-tiers.md`. See *Key Design Decisions* below
 > and [specs/05-application.md §6](specs/05-application.md).
@@ -2052,7 +2108,7 @@ Same foundation, **opposite coordination semantics** → two separate problems:
 | Single Address Space | Reduce context-switch overhead, simplify memory management |
 | Language-Based Isolation | Rust's type system enforces isolation better than hardware |
 | **No per-Cell SATP (Tier 1)** | Per-cell page tables would break Tier 1 zero-copy IPC and add `sfence.vma` cost on every switch (ASID broken on most RV silicon). Untrusted code is confined to the **Tier 3 Linux VM** (Stage-2/EPT). Decided 2026-06-05. |
-| Tiered isolation (1 / 2 / 3) | Tier 1 trusted SAS cells and runtime profiles · Tier 2 native domains in a private MMU protection domain once implemented — see `docs/specs/18-cell-trust-tiers.md` · Tier 3 VM guests (legacy: Tier 3b Linux VM). |
+| Tiered isolation (1 / 2 / 3) | Tier 1 trusted SAS cells and runtime profiles · Tier 2 native domains in a private MMU protection domain — admitted on RV64 only today; AArch64/x86_64 admission refused pending the ordered-switch and non-global-leaf proof — see `docs/specs/18-cell-trust-tiers.md` and `docs/specs/22-native-domain-cell-implementation-gate.md` · Tier 3 VM guests (legacy: Tier 3b Linux VM). |
 | Native SDK contract | One named-module SDK family shared by Tier 1 and the future Tier 2; availability is evidence-gated by Spec 23 and the Phase 02 acceptance ledger. |
 | Fixed-Priority Scheduler | Three tiers, FIFO within tier, RT-hart routing on RV64 |
 | Capability-Based Access | Fine-grained control, no global permissions |
