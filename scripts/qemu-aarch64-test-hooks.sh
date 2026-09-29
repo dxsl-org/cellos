@@ -149,7 +149,13 @@ else
     #
     # The total is therefore fixed, and any other fault — a second NULL store,
     # another cell, another address — still fails the lane.
-    FAULT_LINES="$(grep -aiE '\[fault\] Cell' "$LOG" || true)"
+    # Termination records only. A deliberate fault can also produce a
+    # bookkeeping note ("cell N generation G is already retired; deferred fault
+    # for task T dropped") for the *same* task and generation, and counting both
+    # reports one fault twice — measured in 2 runs of 40: the pair's five faults
+    # were all present and the NULL store had terminated, yet the note made the
+    # total 7 against an expected 6.
+    FAULT_LINES="$(grep -aiE '\[fault\] Cell [0-9]+ \(task [0-9]+ generation [0-9]+\) terminated:' "$LOG" || true)"
     FAULT_COUNT="$(printf '%s\n' "$FAULT_LINES" | grep -c . || true)"
 
     # The pair's fault addresses are the grant ids the owner published, so the
