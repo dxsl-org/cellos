@@ -237,24 +237,38 @@ the failing runs are not one shape:
   `GRANT-PAIR-OWNER-FREE: OK` marker went missing.
 * One run of eight never finished booting inside the lane's 35 s window.
 
-The fixture itself was made asynchronous-correct while measuring: `tier2-grant-receiver`'s exit phase
-used to assert "the record is gone ⇒ my store faults", but a reaper revokes asynchronously, so the
-phase now stores until the revocation traps (bounded, the trap is the witness). That removed a
-fixture false-negative and left the kernel-side intermittency above, which is the retirement/quiescence
-path with a busy peer — the same `AwaitingSafeRoot` / `invalidation unacknowledged` residue the passing
-runs do not show. Domain teardown therefore still needs the retirement/root-switch argument before
-domain cells can be scheduled on a second hart.
+**Root cause found and fixed.** The intermittency had one mechanism, and it is a hole in the
+retirement protocol rather than a latency accident: a retirement epoch requested *from* a hart was
+published only by the incoming side of `Context::switch`, so a hart with nothing to switch to left the
+request outstanding for ever. Measured with a temporary probe on a two-hart boot: 531 consecutive
+`no switch while a retirement is pending` ticks on hart 0, zero `remote-switch-completed` lines, and
+then the whole cascade — the retired generation kept its CellId, so the pair's owner could not even
+`GrantFree`, the receiver's revoked mapping never faulted, and markers went missing.
+
+The fix is the argument the invalidation acknowledgement already rests on: a hart that is running *no*
+task cannot be executing any member of a retiring generation, so the boundary it is asked for is
+already satisfied where the request is taken. `vi_timer_tick` now publishes the epoch in that case
+(the tick path, next to the TLB acknowledgement); a hart that *is* running a task still proves it by
+switching. After it: **5 of 6 runs pass the whole lane at `QEMU_SMP=2`** (was 1 to 3 of 6), with the
+one failure being the exit-phase further into the boot than the fixture's bounded retry — a single
+residual, not a cascade.
+
+The fixture was made asynchronous-correct while measuring: `tier2-grant-receiver`'s exit phase used to
+assert "the record is gone ⇒ my store faults", but a reaper revokes asynchronously, so the phase now
+stores until the revocation traps (bounded; the trap is the witness). That removed a fixture
+false-negative of its own.
 
 Also fixed while measuring: AArch64 **test images** silently lost their `S22-AARCH64-DOMAIN-*` Info
 witnesses the moment a second hart was online — the boot then reaches the quieting line that the
 one-CPU boot happens to jump over, so the witnesses were being emitted by luck. Test-hooks AArch64
 images now keep Info live, exactly as x86_64 test images already did.
 
-The lane therefore keeps `QEMU_SMP=1` as its default; `QEMU_SMP=2` is the reproduction, with its SMP
-markers asserted so a hart-level regression cannot hide behind the fixture intermittency.
+The lane therefore keeps `QEMU_SMP=1` as its default (deterministic) and `QEMU_SMP=2` as the
+reproduction, with its SMP markers asserted so a hart-level regression cannot hide behind the
+fixture's remaining flake.
 
-Still missing on this axis: that retirement/root-switch argument, EL2 secondary bring-up, and the
-BCM2836 SGI path for `board-rpi3`.
+Still missing on this axis: the residual exit-phase race above (one run in six), EL2 secondary
+bring-up, and the BCM2836 SGI path for `board-rpi3`.
 
 ## Assumptions / risk / rollback
 - [UNVERIFIED] All required emulators/physical boards are accessible to CI; where not, mark named qualification gate unresolved and retain disabled profile, not a passing placeholder. Rollback to known-safe image with domain admission and snapshot disabled; reimage development storage if a corrupted snapshot was ever replayed. Security exposure or overwritten external data cannot be rolled back by a binary revert.

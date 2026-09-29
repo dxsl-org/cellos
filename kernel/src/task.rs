@@ -897,6 +897,25 @@ pub extern "Rust" fn vi_timer_tick() {
         // `quiesce::park_here_if_requested` for the full safe-point argument.
         #[cfg(target_arch = "riscv64")]
         quiesce::park_here_if_requested(hart);
+
+        // A retirement asks this hart to prove that the context it was executing
+        // has been re-entered through a switch boundary. A hart that is running
+        // *no* task cannot be executing any member of the retiring generation, so
+        // the request is already satisfied where it is taken — the same argument
+        // the invalidation acknowledgement above rests on. A hart that *is*
+        // running a task proves it by switching: the incoming side of
+        // `Context::switch` publishes that epoch.
+        //
+        // Without this an idle hart leaves the request outstanding for ever. It
+        // was measured on a two-hart boot: 531 `no switch while a retirement is
+        // pending` ticks, no `remote-switch-completed`, and then the retired
+        // generation's CellId blocked every later cell (the grant pair's owner
+        // could not even `GrantFree`, and the receiver's revoked mapping never
+        // faulted).
+        if smp::retirement_switch_pending(hart) && hart_local::ready::current_task_id_for(hart) == 0
+        {
+            smp::complete_retirement_switch(hart);
+        }
     }
 
     // Complete frame releases whose tag invalidation a release path could not

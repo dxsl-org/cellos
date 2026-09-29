@@ -193,6 +193,13 @@ pub fn complete_retirement_switch(hart_id: usize) {
     }
 }
 
+/// Does `hart_id` still owe a completion for a requested retirement switch?
+pub fn retirement_switch_pending(hart_id: usize) -> bool {
+    hart_id < MAX_HARTS
+        && RETIRE_SWITCH_REQUEST[hart_id].load(Ordering::Acquire)
+            > RETIRE_SWITCH_COMPLETE[hart_id].load(Ordering::Acquire)
+}
+
 pub fn retirement_switch_completed(hart_id: usize, epoch: usize) -> bool {
     epoch == 0
         || RETIRE_SWITCH_COMPLETE

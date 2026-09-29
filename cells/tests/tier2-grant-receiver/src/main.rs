@@ -126,6 +126,14 @@ const IMPOSSIBLE_ID: usize = 0x1000;
 /// Bounded retries for a poll that must observe a kernel-side state change.
 const POLL_LIMIT: usize = 4_000_000;
 
+/// Store attempts allowed while waiting for the *asynchronous* revocation of the
+/// owner's exit to reach this CPU. Yields are cheap and the reaper is not
+/// (measured ~235 ticks, and a peer can be non-preemptible for seconds), so this
+/// is far above the observed latency — but it is still a bound: the lane's boot
+/// window is 35 s, and a cell that spins it out hides the very stall the retry is
+/// meant to expose.
+const EXIT_RETRY_LIMIT: usize = 8_000_000;
+
 fn name_eq(row: &[u8; 32], want: &[u8]) -> bool {
     let len = row.iter().position(|byte| *byte == 0).unwrap_or(row.len());
     &row[..len] == want
@@ -439,8 +447,13 @@ fn cell_main() {
             // store that *lands* means "not revoked yet on this CPU", not
             // "revocation is broken". Store until the revocation traps — bounded,
             // and the trap is what the lane reads as the witness.
+            //
+            // The bound is generous because the reaper is asynchronous by design:
+            // a peer hart can be non-preemptible for seconds, and the measured
+            // confirmation latency on a two-hart boot reached ~235 reaper ticks
+            // (~2.3 s) before the invalidation landed.
             println(&format!("{TAG}-GRANT-PAIR-RECEIVER-EXIT-FAULT: FAULT-EXPECTED"));
-            for _ in 0..POLL_LIMIT {
+            for _ in 0..EXIT_RETRY_LIMIT {
                 deliberate_store(pointer);
                 sys_yield();
             }

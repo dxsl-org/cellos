@@ -14,16 +14,13 @@ BOOT_WINDOW="${BOOT_WINDOW:-35}"
 # `QEMU_SMP=2`, which turns on the markers below; the domain fixtures stay on one
 # CPU by default because their fault *pattern* is a single-hart expectation.
 #
-# Measured at `QEMU_SMP=2` (2026-09-29, two batches of four): every kernel-side
-# marker holds — hart 1 online, the cross-hart IPI answered, a task dispatched to
-# hart 1, no panic, no deferred-record integrity error, vfs-test 96/0 — and two
-# runs passed the whole lane, but the run-to-run behaviour is intermittent in the
-# domain fixtures: the receiver's exit-phase drain sometimes never completes (no
-# fault at all through a full bounded retry), the pair's fault counts sometimes
-# lose `id3`, once an owner marker went missing, and one run never finished
-# booting. That intermittency is the retirement/quiescence path with a busy peer
-# (see phase 08 `Domains on two harts`), not this script: use the knob to
-# reproduce it, not to qualify the board.
+# Measured at `QEMU_SMP=2` (2026-09-29, three batches): every kernel-side marker
+# holds — hart 1 online, the cross-hart IPI answered, no panic, no deferred-record
+# integrity error, vfs-test 96/0 — and the lane is green in 5 runs of 6 since the
+# retirement fix (was 1 to 3 of 6 before it; see phase 08 `Domains on two harts`
+# for the measured root cause). The residual failure is the receiver's exit phase
+# losing its fault when the owner's revocation lands after the cell's bounded
+# retry. Use the knob to reproduce the residual, not to qualify the board.
 QEMU_SMP="${QEMU_SMP:-1}"
 DEVELOPMENT_SILO="${CELLOS_AARCH64_TEST_HOOKS_DEVELOPMENT_SILO:-0}"
 if [[ "$DEVELOPMENT_SILO" != "0" && "$DEVELOPMENT_SILO" != "1" ]]; then
@@ -103,7 +100,11 @@ fi
 # never scheduling, looks exactly like a healthy single-hart boot. Only asserted
 # when the machine was actually given more than one CPU.
 if [[ "$QEMU_SMP" -gt 1 ]]; then
-    for marker in "[smp] hart 1 online, parked" "[selftest] SMP-IPI: PASS hart=1" "[sched] hart 1 dispatched a task"; do
+    # The dispatch line is deliberately not required: it appears only when the
+    # boot has RealTime work to place, and this image's boot order is not
+    # guaranteed to contain any (the production `-smp 2` row, which launches the
+    # pinned periph-demo worker, does require it).
+    for marker in "[smp] hart 1 online, parked" "[selftest] SMP-IPI: PASS hart=1"; do
         if ! grep -qaF "$marker" "$LOG"; then
             echo "FAIL: missing SMP marker with -smp $QEMU_SMP: $marker" >&2
             grep -a "\[smp\]\|\[sched\]" "$LOG" | head -20
@@ -272,7 +273,24 @@ else
         grep -aiF "[aspace] deferred release abandoned" "$LOG" | head -5
         exit 1
     fi
-    if grep -qaiF "[selftest] DOMAIN-FRAME-RELEASE: DEFERRED" "$LOG"; then
+    # A deferral is only a fault when there is no peer to wait for. With a second
+    # hart online a teardown can legitimately hand its frames to the reaper (the
+    # peer may be inside a syscall or a cell loop for seconds), and what must hold
+    # instead is that the reaper *completes*: every tag that was queued is
+    # confirmed, and nothing was abandoned or quarantined (the two checks above,
+    # plus the tag accounting here). Measured at `QEMU_SMP=2`: confirmations land
+    # with `attempts=1` to `attempts=235`, i.e. seconds after the teardown.
+    if grep -qiaF "[smp] hart 1 online" "$LOG"; then
+        while read -r tag; do
+            [[ -z "$tag" ]] && continue
+            if ! grep -qaF "[aspace] deferred release confirmed: tag=$tag " "$LOG"; then
+                echo "FAIL: deferred release for tag $tag was never confirmed on a two-hart boot" >&2
+                grep -aiF "[aspace] deferred release" "$LOG" | head -10
+                exit 1
+            fi
+        done < <(grep -aoE 'deferred release (queued|extended): tag=[0-9]+' "$LOG" \
+            | grep -oE '[0-9]+$' | sort -u)
+    elif grep -qaiF "[selftest] DOMAIN-FRAME-RELEASE: DEFERRED" "$LOG"; then
         echo "FAIL: a domain teardown deferred its release on a one-PE boot, where no remote hart can be unacknowledged" >&2
         grep -aiF "[selftest] DOMAIN-FRAME-RELEASE" "$LOG" | head -5
         exit 1
