@@ -13,6 +13,16 @@ Audited prior kernel findings against live code and wrote the eight-phase repair
 - Private one-page `DomainGrant` selftest cannot qualify public multi-page, SAS/domain, VFS/DMA grant flows.
 - The same ASID wrap fault affects all three backends, not just x86 PCID; tests must force live-tag rollover.
 
+- A second defect fell out of the same reading: the AArch64 catch-all trap arm inferred a trap's origin
+  from `spsr_el1 & 0xF == 0`, which cannot work on QEMU virt (the host runs at EL2 with TGE=1, so that
+  field holds the host's own `SPSR_EL2` and reads zero exactly when the host was about to `eret` to EL0).
+  One run in thirty killed an innocent cell for a host exception inside `__trap_exit`. The arm now
+  requires the lower-EL vector marker. Open: why a host exception with EC 0 happens there at all — the
+  next one is reported as a kernel trap with the marker instead of as a cell fault.
+- Two of forty runs also failed on a lane bug, not a kernel one: counting every `[fault] Cell` line made
+  a deliberate fault's termination record and its "already retired; deferred fault dropped" note read as
+  two faults. Terminations only now: 40 of 40.
+
 ## Next steps
 Implement phase 01 fail-closed gates, then phase 02 targeted TLB/switch correctness. Keep exact-board and SMP qualification gates closed until proven; continue phases in `plan.md` dependency order.
 

@@ -286,8 +286,8 @@ ways inside a single tick path. All four are one cause: an AArch64 SGI was route
 `vi_ipi_service` now carries only what an IPI means — flush the local TLB and publish the epoch, and
 answer a retirement request when the hart holds no task ("no task" being the same proof a switch gives,
 and the only one a parked hart can offer) — and `vi_timer_tick` keeps the timer duties. Measured after:
-**14 of 14** runs at `QEMU_SMP=2` (and the earlier batches put it at roughly half), with zero
-unconfirmed-invalidation probes and no `retirement pending` backlog.
+**26 consecutive passes**, then 20 of 20, then **40 of 40** at `QEMU_SMP=2` (the earlier batches put it
+at roughly half), with zero unconfirmed-invalidation probes and no `retirement pending` backlog.
 
 Fixed along the way, same investigation: a root retirement off RV64 was waiting for a *switch* proof that
 the non-RV64 switch path never published (`complete_incoming_switch` does the safe-root, pin and
@@ -317,6 +317,12 @@ through the lower-EL vector and still terminates the cell. **Still open: why a h
 EC 0 happens there at all** (one occurrence in ~34 runs, unchanged by today's other fixes; the next
 one will now be reported as a kernel trap instead of killing a cell). Measured after: 20 of 20
 two-hart runs green, no kernel-trap reports.
+
+The last two failures in the following forty-run batch were neither of the above: the lane counted every
+`[fault] Cell` line, so a deliberate fault's termination record and the "already retired; deferred fault
+… dropped" note for the same task and generation read as two faults — 7 against an expected 6, with all
+five pair faults present and the NULL store terminated. The extraction takes termination records only
+now (which is what the per-address counts already did), and the batch after that was 40 of 40.
 
 Also measured, deliberately not shipped: `reap_deferred_releases` documents that it touches
 `REAPER_ENTRIES_PER_CALL` entries per call, but `next_step()` always returned the queue *head* and the
