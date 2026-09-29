@@ -63,17 +63,17 @@ mkdir -p "$WORK_DIR"
 if [[ ! -f "$ISO" || "$BUILD_HOSTILE_ISO" == 1 ]]; then
     VIRTIO_E2E_MODE=hostile VIRTIO_E2E_INITRAMFS="$INITRAMFS" \
         bash scripts/prepare-x86-virtio-e2e-initramfs.sh
-    HV_INIT_MIN=1 HV_HOSTILE_BACKEND_RECOVERY=1 INITRD_OVERRIDE="$INITRAMFS" \
-        bash scripts/make-hypervisor-fs-x86.sh --skip-fetch
     rm -rf "$EVIDENCE_FS"
     mkdir -p "$EVIDENCE_FS"
-    cp -a kernel/src/embedded-hv-x86/. "$EVIDENCE_FS/"
+    HV_INIT_MIN=1 HV_HOSTILE_BACKEND_RECOVERY=1 INITRD_OVERRIDE="$INITRAMFS" \
+        HV_EMBEDDED_DIR="$EVIDENCE_FS" \
+        bash scripts/make-hypervisor-fs-x86.sh --skip-fetch
     printf 'rdinit=/bin/virtio-e2e-init\n' > "$WORK_DIR/selector"
     mcopy -o -i "$EVIDENCE_FS/kernel_fs.img" "$WORK_DIR/selector" ::/virtio-e2e
     RUSTFLAGS="-C relocation-model=static -C code-model=kernel -C no-redzone=yes -Z cf-protection=full" \
         EMBEDDED_OVERRIDE="$EVIDENCE_FS" \
         cargo build --release -p cellos-kernel --target x86_64-unknown-none
-    bash scripts/x86/make-iso-ci.sh "$ISO"
+    X86_ISO_ROOT="$WORK_DIR/iso-root" bash scripts/x86/make-iso-ci.sh "$ISO"
 fi
 [[ -f "$ISO" ]] || { echo "BLOCKED_ENVIRONMENT: hostile ISO not found: $ISO" >&2; exit 1; }
 
