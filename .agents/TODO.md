@@ -89,6 +89,13 @@ báo cáo ở `.agents/<plan>/`, cách làm ở `docs/guides/`. Chuỗi tiền l
   (D) **flaky boot phía Cellos**: 1/5 run đỏ với `FAIL: evidence rdinit was not selected in run 1` — guest
   evidence chưa được chọn, tức boot Cellos không đi tới bước đó (khác hẳn A/B/C). Chưa điều tra.
 
+  (B, chốt phía nào) **Đã trace MỌI read tại offset 0 của boot hỏng** (5 lần giao, gồm cả request 16 KiB
+  nhiều descriptor): `[hv-r0] bufs=4 total=16384 chunk=16384 grant=[67,…] frame0=[67,…] got=8` — device giao
+  **đúng marker** vào frame của descriptor ở mọi lần, kể cả khi guest đọc với page cache đã xoá. ⇒ Điểm lệch
+  nằm **trong guest**, không phải phía VMM: page mà guest đọc không phải page mà descriptor trỏ tới (hoặc
+  guest zero nó sau khi nhận completion). Bước kế: instrument phía guest — in địa chỉ vật lý của page mà
+  bio/page-cache dùng, đối chiếu với `gpa` trong descriptor.
+
   Ghi chú: các `[nvme] io error opc=2 lba=800000…1062144 status=16512` xuất hiện đều đặn là **đúng** — read
   vượt quá namespace 256 MiB (do probe volume + chuỗi cluster đi lạc); log giới hạn 3 dòng mỗi boot, timeout
   luôn log.
