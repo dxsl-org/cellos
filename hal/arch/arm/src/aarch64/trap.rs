@@ -258,8 +258,19 @@ pub extern "C" fn vi_aarch64_trap_handler(frame: &mut TrapFrame) {
             // SAFETY: both are #[no_mangle] in kernel::task and linked via
             // extern "Rust"; see the 0x20 | 0x24 arm for the teardown contract.
             let cell_id = unsafe { vi_current_cell_id() };
-            let from_el0 = (frame.spsr_el1 & 0xF) == 0;
-            if from_el0 && cell_id != 0 {
+            // Which EL raised this is *not* readable from `spsr_el1` here. On QEMU
+            // virt the host runs at EL2 with HCR_EL2.TGE=1, so this field holds
+            // SPSR_EL2 — the host's own resume state — and it reads 0 whenever the
+            // host was about to `eret` to EL0, which is indistinguishable from a
+            // genuine EL0 trap's SPSR. A host trap was read that way and killed an
+            // innocent cell: `ec=0x0 esr=0x2000000 elr=0x400823a4 far=0 spsr=0`
+            // (ELR inside `__trap_exit`) terminated the current cell instead of
+            // reporting a kernel bug, which is what this arm's own contract asks
+            // for. The lower-EL wrapper's marker is the proof that a cell raised
+            // the trap — it is zero for every host vector, and nonzero (1..4) for
+            // the EL0 ones — so it is what decides here.
+            let from_lower_el = vector_kind != 0;
+            if from_lower_el && cell_id != 0 {
                 // SAFETY: as above — switches away from this (now dead) cell.
                 unsafe {
                     vi_terminate_on_fault_aarch64(
@@ -272,8 +283,8 @@ pub extern "C" fn vi_aarch64_trap_handler(frame: &mut TrapFrame) {
                 }
             } else {
                 panic!(
-                    "[aarch64] kernel trap ec=0x{:X} esr=0x{:X} elr=0x{:X} far=0x{:X} spsr=0x{:X}",
-                    ec, esr, frame.elr_el1, frame.far_el1, frame.spsr_el1
+                    "[aarch64] kernel trap ec=0x{:X} esr=0x{:X} elr=0x{:X} far=0x{:X} spsr=0x{:X} vector={}",
+                    ec, esr, frame.elr_el1, frame.far_el1, frame.spsr_el1, vector_kind
                 );
             }
         }
