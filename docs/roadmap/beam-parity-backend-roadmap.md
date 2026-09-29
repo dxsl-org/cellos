@@ -242,7 +242,7 @@ BEAM cũng mất state process, nhưng Cellos **không** có `Drop` glue đảm 
 | UDP recv | ≤512 B/lần, kèm 6 B header nguồn | `.agents/260624-cell-to-cell-anywhere/plan.md` (Known constraints) |
 | Địa chỉ mạng | IPv4-only (`TcpConnect { addr: [u8; 4] }`), **không DNS resolver** (stub) | `libs/api/src/services/ipc.rs:315-318`; C2C plan |
 | HTTP server | **một kết nối một lúc** | `cells/services/httpd/src/main.rs:4` |
-| Remote call | blocking, **1 in-flight/peer** | `.agents/260624-cell-to-cell-anywhere/phase-00-remote-call-api-contract.md` |
+| Remote call | Chưa có remote runtime; giới hạn **1 in-flight/peer** thuộc hợp đồng cũ, không phải đo đạc triển khai | `.agents/260624-cell-to-cell-anywhere/phase-00-remote-call-api-contract.md` (superseded); [plan mới](../../.agents/260927-1100-c2c-anywhere-tier-aware/plan.md) |
 
 ---
 
@@ -425,7 +425,7 @@ Một backend trên Cellos chỉ nên gọi là *nhẹ, bền, không giới h�
 | Lớp cell siêu nhẹ: đo năng lực + thứ tự việc | `.agents/reports/d5-cell-scale-measurement-260731.md`, `.agents/reports/d5-cell-scale-profile-ruling-analysis-260801.md`, `.agents/260801-d1b-d3-d5-closure/phase-04-cell-scale-profile.md` |
 | Kiến trúc 3 tier | `docs/decisions/0015-dual-mode-hybrid-architecture.md` |
 | Reactor/async còn thiếu gì | `.agents/260727-2101-midori-lessons-cellos/phase-07-async-reactor.md` |
-| C2C anywhere (envelope, gate, trạng thái) | `.agents/260624-cell-to-cell-anywhere/plan.md` |
+| C2C anywhere (hợp đồng đề xuất, thứ tự gate) | `.agents/260927-1100-c2c-anywhere-tier-aware/plan.md` (current queued); `.agents/260624-cell-to-cell-anywhere/plan.md` (historical foundation only) |
 | Lane & promotion rule | `.agents/plan-portfolio.md`, `docs/roadmap/current-focus.md` |
 | Số đo hiệu năng + trần evidence | `docs/performance-report.md` |
 | Supervisor thật | `cells/tools/init/src/supervisor.rs`, `cells/tools/init/src/service_table.rs` |
