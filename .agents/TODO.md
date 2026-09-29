@@ -9,6 +9,10 @@ báo cáo ở `.agents/<plan>/`, cách làm ở `docs/guides/`. Chuỗi tiền l
 2026-09-19 → 2026-09-27 đã được gỡ, nội dung của chúng nằm ở bốn chỗ trên.
 
 ## Đang mở — làm được ngay, không cần gì thêm
+- [in-progress] **std cell trên x86_64 chưa có witness runtime**: `scripts/run-std-smoke-qemu.sh` nay phủ
+  `riscv64` + `aarch64` (cả hai boot tới marker PASS, lane CI chạy cả hai). Target `x86_64-unknown-cellos` mới chỉ
+  được compile/link; muốn boot phải đi đường ISO Limine (`scripts/x86/make-iso-ci.sh`) với bộ cell
+  `driver-nvme`/`driver-e1000` thay `driver-virtio-blk` và QEMU `-machine q35`.
 - [in-progress] **RPi3**: SD storage + HDMI [done]; I2C/SPI BSC1 + SPI0 loopback [done trên board
   thật] nhưng cần sensor vật lý (SHT3x/MPU6050) để đọc dữ liệu cảm biến; USB DWC2 & LAN9514 (Phase
   05) đã gỡ nghẽn 100% trong mã nguồn (USB Policy v3, cấp DWC2 MMIO, one-shot level IRQ 9) — chờ

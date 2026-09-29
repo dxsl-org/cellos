@@ -151,3 +151,17 @@ Also landed: the CI lane's first run was red at the promotion-test step because 
 maintainer's absolute rust-src path from the pinned artifacts; `tests/rust-std-promotion/rust_src.py`
 now resolves it through the installed pinned toolchain (never a skip) and the two pinned test inputs
 were re-pinned. The Phase 06 plan/doc edits needed a third re-pin of the same manifest.
+
+## Multi-arch std boot (follow-up)
+
+`scripts/run-std-smoke-qemu.sh` now switches per architecture instead of hardcoding riscv64, and the
+`rust-std-lane` CI job boots both `riscv64` and `aarch64`:
+
+- aarch64: target spec `aarch64-unknown-cellos`, bootstrap cells on
+  `aarch64-unknown-none-softfloat`, `-machine virt -cpu cortex-a57`, and the
+  `binutils-aarch64-linux-gnu` objcopy that `lib-sign-cells.sh` probes for.
+- Verified locally: both arches print `[std-smoke] PASS: All Rust std PAL invariants verified
+  successfully!` (aarch64 witnesses the over-aligned allocations and a 3.80 ms yield), so the
+  aarch64 asm paths in the PAL are exercised end to end rather than only compiled.
+- x86_64 stays out of the runner: that cell set boots through the Limine ISO lane with nvme/e1000
+  instead of virtio-blk. Recorded as the next step in `.agents/TODO.md`.

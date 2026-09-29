@@ -8,7 +8,26 @@ cd "$ROOT"
 
 ARCH="${1:-riscv64}"
 BOOT_TIMEOUT="${BOOT_TIMEOUT:-45}"
-QEMU_BIN="${ViCell_QEMU:-qemu-system-riscv64}"
+
+# Only riscv64 and aarch64 publish a CellOS target spec; each keeps its own
+# bare-metal bootstrap target and QEMU machine recipe.
+case "$ARCH" in
+    riscv64)
+        SYSROOT_TARGET="riscv64gc-unknown-cellos"
+        TARGET_BOOTSTRAP="riscv64gc-unknown-none-elf"
+        QEMU_BIN="${ViCell_QEMU:-qemu-system-riscv64}"
+        ;;
+    aarch64)
+        SYSROOT_TARGET="aarch64-unknown-cellos"
+        TARGET_BOOTSTRAP="aarch64-unknown-none-softfloat"
+        QEMU_BIN="${ViCell_QEMU:-qemu-system-aarch64}"
+        ;;
+    *)
+        echo "FAIL: unsupported arch: $ARCH (supported: riscv64, aarch64)" >&2
+        exit 2
+        ;;
+esac
+TARGET_CELL="targets/${SYSROOT_TARGET}.json"
 
 echo "==> Tier 1 Rust std QEMU Runner ($ARCH)"
 
@@ -36,11 +55,8 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-TARGET_CELL="targets/riscv64gc-unknown-cellos.json"
-TARGET_BOOTSTRAP="riscv64gc-unknown-none-elf"
-
 echo "==> Step 1: Building sysroot overlay and std-smoke cell..."
-bash scripts/build-cellos-sysroot.sh riscv64gc-unknown-cellos
+bash scripts/build-cellos-sysroot.sh "$SYSROOT_TARGET"
 
 STAGING_DIR="$(pwd)/target/cellos-rust-src/library"
 export __CARGO_TESTS_ONLY_SRC_ROOT="$STAGING_DIR"
@@ -52,16 +68,25 @@ cargo +nightly-2026-05-01 build --release \
     -Z json-target-spec \
     --target "$TARGET_CELL"
 
-STD_SMOKE_BIN="cells/demos/std-smoke/target/riscv64gc-unknown-cellos/release/std-smoke"
+STD_SMOKE_BIN="cells/demos/std-smoke/target/${SYSROOT_TARGET}/release/std-smoke"
 if [[ ! -s "$STD_SMOKE_BIN" ]]; then
     echo "FAIL: std-smoke binary not found at $STD_SMOKE_BIN" >&2
     exit 1
 fi
 
 echo "==> Step 2: Building bootstrap cells..."
-export CC_riscv64gc_unknown_none_elf="${CC_riscv64gc_unknown_none_elf:-riscv64-unknown-elf-gcc}"
-export CFLAGS_riscv64gc_unknown_none_elf="${CFLAGS_riscv64gc_unknown_none_elf:--march=rv64gc -mabi=lp64d -mcmodel=medany -ffreestanding -DLFS_NO_INTRINSICS -I$ROOT/third_party/freestanding-include}"
-export CARGO_TARGET_RISCV64GC_UNKNOWN_NONE_ELF_RUSTFLAGS="-C relocation-model=pic"
+case "$ARCH" in
+    riscv64)
+        export CC_riscv64gc_unknown_none_elf="${CC_riscv64gc_unknown_none_elf:-riscv64-unknown-elf-gcc}"
+        export CFLAGS_riscv64gc_unknown_none_elf="${CFLAGS_riscv64gc_unknown_none_elf:--march=rv64gc -mabi=lp64d -mcmodel=medany -ffreestanding -DLFS_NO_INTRINSICS -I$ROOT/third_party/freestanding-include}"
+        export CARGO_TARGET_RISCV64GC_UNKNOWN_NONE_ELF_RUSTFLAGS="-C relocation-model=pic"
+        ;;
+    aarch64)
+        export CC_aarch64_unknown_none_softfloat="${CC_aarch64_unknown_none_softfloat:-clang}"
+        export CFLAGS_aarch64_unknown_none_softfloat="${CFLAGS_aarch64_unknown_none_softfloat:---target=aarch64-unknown-none-elf -ffreestanding -mgeneral-regs-only -DLFS_NO_INTRINSICS -I$ROOT/third_party/freestanding-include}"
+        export CARGO_TARGET_AARCH64_UNKNOWN_NONE_SOFTFLOAT_RUSTFLAGS="-C relocation-model=pic -C target-feature=+bti,+paca,+pacg"
+        ;;
+esac
 
 cargo build --release --target "$TARGET_BOOTSTRAP" \
     -Z build-std=core,alloc \
@@ -132,12 +157,19 @@ QEMU_ARGS=(
     -smp 1
     -nographic
     -monitor none
-    -bios default
     -kernel "$KERNEL"
     -drive "file=$DISK,format=raw,if=none,id=hd0"
     -device virtio-blk-device,drive=hd0
     -device virtio-rng-device
 )
+case "$ARCH" in
+    # riscv64 boots the ELF through the bundled OpenSBI (the kernel is a direct
+    # -kernel payload); aarch64 enters the kernel ELF directly. Both use the
+    # generic `virt` machine, and neither needs semihosting: the runner stops
+    # QEMU on the cell's PASS marker.
+    riscv64) QEMU_ARGS+=(-bios default) ;;
+    aarch64) QEMU_ARGS+=(-cpu cortex-a57) ;;
+esac
 
 timeout --foreground "$BOOT_TIMEOUT" "$QEMU_BIN" "${QEMU_ARGS[@]}" > "$LOG" 2>&1 &
 QEMU_PID=$!

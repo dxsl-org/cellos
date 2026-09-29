@@ -379,12 +379,16 @@ jobs:
           cache-on-failure: true
           key: rust-std-lane
 
-      # QEMU boots the cell; gcc-riscv64-unknown-elf provides both the C cross
-      # compiler the bootstrap cells' build scripts probe for and the objcopy
-      # lib-sign-cells.sh signs with (a host objcopy cannot read a RISC-V ELF).
-      - name: Install QEMU and the RISC-V C toolchain
+      # QEMU boots the cells: qemu-system-misc carries qemu-system-riscv64,
+      # qemu-system-arm carries qemu-system-aarch64. gcc-riscv64-unknown-elf and
+      # binutils-aarch64-linux-gnu provide the per-arch objcopy lib-sign-cells.sh
+      # signs with (a host objcopy cannot read either cell ELF), plus the RISC-V
+      # C cross compiler the bootstrap cells' build scripts probe for.
+      - name: Install QEMU and the cell cross toolchains
         timeout-minutes: 10
-        run: sudo apt-get update -q && sudo apt-get install -y -q qemu-system-misc gcc-riscv64-unknown-elf
+        run: >
+          sudo apt-get update -q && sudo apt-get install -y -q
+          qemu-system-misc qemu-system-arm gcc-riscv64-unknown-elf binutils-aarch64-linux-gnu
 
       # scripts/sign-policy.py builds the Ed25519 POLICY.BIN the ramdisk carries.
       - name: Install Python cryptography (policy signing)
@@ -405,11 +409,15 @@ jobs:
             bash scripts/build-cellos-sysroot.sh "$TARGET"
           done
 
-      # Boots the std cell and waits for its PASS marker: allocator (including
-      # over-aligned layouts), Instant, yield, parallelism, argv, and the
-      # fail-closed fs/net/process arms.
-      - name: Boot the Tier 1 rust-std cell (QEMU riscv64)
-        run: BOOT_TIMEOUT=90 bash scripts/run-std-smoke-qemu.sh riscv64
+      # Boots the std cell on the two architectures that publish a CellOS target
+      # spec and waits for the PASS marker: allocator (including over-aligned
+      # layouts), Instant, yield, parallelism, argv, and the fail-closed
+      # fs/net/process arms. x86_64 is not here yet - that cell set boots through
+      # the Limine ISO lane with nvme/e1000 drivers instead of virtio-blk.
+      - name: Boot the Tier 1 rust-std cell (QEMU riscv64 + aarch64)
+        run: |
+          BOOT_TIMEOUT=90 bash scripts/run-std-smoke-qemu.sh riscv64
+          BOOT_TIMEOUT=90 bash scripts/run-std-smoke-qemu.sh aarch64
 
   c2c-broker-oracle-single-guest-local-runtime:
     name: C2C Broker Oracle (single-guest local-runtime QEMU)
