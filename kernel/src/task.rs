@@ -865,6 +865,42 @@ pub extern "Rust" fn vi_current_cell_id() -> usize {
 ))]
 const _: crate::hal::CurrentCellId = vi_current_cell_id;
 
+/// Service a cross-hart IPI: the duties a remote hart asked of this one, and
+/// nothing else.
+///
+/// An SGI is not a preemption request, and routing it through [`vi_timer_tick`]
+/// was wrong in two ways that were both measured on a two-hart AArch64 boot:
+///
+/// * a hart parked in `wfi` (the whole life of `smp_aarch64_secondary_main`) has
+///   no boot context and takes no part in scheduling, so the tick path's
+///   `yield_cpu` could select a switch for a hart that cannot survive one — hart
+///   1 published 33 acknowledgements and then went deaf (`TLB-ACK … epoch=35`,
+///   requested epochs 36-38 never answered, the grant pair stalling on an
+///   unconfirmed invalidation with 233 reaper attempts);
+/// * on a hart that *is* running a task, a preemption inside the IPI re-enters the
+///   scheduler between a reader's load and its use — which is how
+///   `current_task_id` came to read three different ways inside a single tick
+///   path.
+///
+/// The invalidation and the retirement request are the two things an IPI carries.
+/// The local flush is issued here and its epoch published immediately; the
+/// retirement is published when this hart holds no task, because "no task" is the
+/// same proof a switch gives (nothing of the retiring generation is executing
+/// here) and it is the only proof a parked hart can offer.
+#[cfg(target_arch = "aarch64")]
+#[no_mangle]
+pub extern "Rust" fn vi_ipi_service() {
+    let hart = hart_local::current_hart_id();
+    if smp::tlb_flush_pending(hart) {
+        crate::memory::paging::tlb_flush_all();
+        smp::complete_tlb_flush(hart);
+    }
+    #[cfg(feature = "native-domains")]
+    if smp::retirement_switch_pending(hart) && hart_local::ready::current_task_id_for(hart) == 0 {
+        smp::complete_retirement_switch(hart);
+    }
+}
+
 /// Called from the S-mode timer ISR via `extern "Rust"` linkage.
 ///
 /// Increments the global tick counter, rearmed the timer for the next

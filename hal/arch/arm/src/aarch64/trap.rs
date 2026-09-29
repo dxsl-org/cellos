@@ -12,7 +12,8 @@ use hal_arch_trait::vi_handle_virtio_irq;
 #[cfg(feature = "board-rpi3")]
 use hal_arch_trait::vi_signal_usb_irq;
 use hal_arch_trait::{
-    vi_current_cell_id, vi_gpio_notify_irq, vi_terminate_on_fault_aarch64, vi_timer_tick,
+    vi_current_cell_id, vi_gpio_notify_irq, vi_ipi_service, vi_terminate_on_fault_aarch64,
+    vi_timer_tick,
     ViCell_syscall_dispatch, ViTrapFrame,
 };
 
@@ -402,14 +403,15 @@ pub extern "C" fn vi_aarch64_irq_handler(_frame: &mut TrapFrame) {
         let timer_irq = if super::el2::is_el2() { 26 } else { 30 };
         if irq == super::gic::SGI_IPI {
             // The kernel's cross-hart IPI: a remote hart asked this one to
-            // invalidate its TLB and publish the epoch, or to switch contexts for
-            // a retiring generation. It enters the same path as a timer tick —
-            // that is where the flush acknowledgement and the preemption decision
-            // live, and a hart parked in WFI must take it without ever running a
-            // task (a switch-boundary hook would never fire for it).
-            // SAFETY: vi_timer_tick is `#[no_mangle]` in kernel::task.
+            // invalidate its TLB and publish the epoch, or to answer a retiring
+            // generation's request. It is *not* a preemption request, so it does
+            // not enter the timer path: a hart parked in WFI takes its whole life
+            // in `smp_aarch64_secondary_main`'s loop and has no boot context to be
+            // switched to, and a hart running a task must not re-enter the
+            // scheduler between a reader's load and its use.
+            // SAFETY: vi_ipi_service is `#[no_mangle]` in kernel::task.
             unsafe {
-                vi_timer_tick();
+                vi_ipi_service();
             }
             super::gic::complete(irq);
             return;
