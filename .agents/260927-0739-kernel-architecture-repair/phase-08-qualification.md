@@ -266,17 +266,33 @@ requested under per hart, completion is "every asked hart published that epoch",
 answer gates `tag_invalidation_unconfirmed`, so a drain no longer waits on traffic that has nothing to
 do with its tag. Measured effect: that tag now confirms with `attempts=1`.
 
-**What is left, measured on the current image.** Batching the two-hart lane after the per-tag work gives
-42 passes in 74 runs (~6 in 10), and the failures are timing-sensitive fixture orderings rather than a
-cascade. Two probes were added and removed while chasing it, and they narrowed the residual to one
-hart's `current_task_id` reading three ways inside a single tick path: the retirement-pending check sees
-a *nonzero* current (1, 2, 7, so `vi_timer_tick` does not publish), `pick_next_local` then sees **zero**
-and takes its idle path, and the post-lock diagnostic in `yield_cpu` sees the nonzero value again. The
-only writers of a hart's `current_task_id` are that hart's own selection in `pick_next_local`,
-`prepare_task_to_boot_switch`'s clear on the task→boot path, and the switch-completion hooks — so the
-next step is to trace which of them runs between those three reads (a nested scheduler entry on the same
-hart would do it, and so would a task→boot switch completing in between it). The probes are gone; their
-readings are here.
+**The two-hart residual, and its cause.** Batching the two-hart lane gave 42 passes in 74 runs (~6 in
+10). The failures were one class: a deliberate store fault that never happened (the receiver's exit phase
+reporting `id3=0`), a `deferred release … attempts=233 reason=grant-page unmap invalidation
+unacknowledged`, 598 `retirement pending` ticks on a hart that was switching the whole time
+(`set hart=0 value=14/4/16 from_hart=0`, so no cross-hart writer), and `current_task_id` reading three
+ways inside a single tick path. All four are one cause: an AArch64 SGI was routed into
+`vi_timer_tick()`, the *preemption* path.
+
+* A hart parked in `wfi` — which is the whole life of `smp_aarch64_secondary_main` — has no boot context
+  and takes no part in scheduling, so taking a preemption decision there loses it. Measured: hart 1
+  published 33 `TLB-ACK … remote-flush-completed hart=1` records ending at `epoch=35` and then went
+  deaf, and the epochs 36-38 the grant pair asked for were never answered (the ack probe showed
+  `online=[1] want=[0, 38] have=[0, 35]` on every attempt). The pair's next phase then stalled on
+  `tag_invalidation_unconfirmed`, which is the missing fault and the extra unaccounted one.
+* On a hart *running* a task, the IPI's `yield_cpu` re-entered the scheduler between a reader's load and
+  its use, which is what wrote the identity between the three reads.
+
+`vi_ipi_service` now carries only what an IPI means — flush the local TLB and publish the epoch, and
+answer a retirement request when the hart holds no task ("no task" being the same proof a switch gives,
+and the only one a parked hart can offer) — and `vi_timer_tick` keeps the timer duties. Measured after:
+**14 of 14** runs at `QEMU_SMP=2` (and the earlier batches put it at roughly half), with zero
+unconfirmed-invalidation probes and no `retirement pending` backlog.
+
+Fixed along the way, same investigation: a root retirement off RV64 was waiting for a *switch* proof that
+the non-RV64 switch path never published (`complete_incoming_switch` does the safe-root, pin and
+user-copy-guard work but nothing called `complete_retirement_switch`; RV64 publishes it from its
+assembly boundary) — so a busy hart answered retirements only when it happened to go idle.
 
 Also measured, deliberately not shipped: `reap_deferred_releases` documents that it touches
 `REAPER_ENTRIES_PER_CALL` entries per call, but `next_step()` always returned the queue *head* and the
