@@ -268,14 +268,15 @@ do with its tag. Measured effect: that tag now confirms with `attempts=1`.
 
 **What is left, measured on the current image.** Batching the two-hart lane after the per-tag work gives
 42 passes in 74 runs (~6 in 10), and the failures are timing-sensitive fixture orderings rather than a
-cascade. Two probes were added and removed while chasing it, and they narrowed the residual without
-closing it: `pick_next_local` returns `None` for a hart whose identity is *zero* (a genuinely idle
-hart — the trap-path completion above covers that case), while the `no switch while a retirement
-pending` probe still fires with a *nonzero* current (1, 2, 7) in the same runs. The two readings
-disagree about the same hart, which points at the tick ISR re-entering the scheduler on that hart and
-assigning the identity between selection and the diagnostic — i.e. the next step is the nested-re-entry
-path and who publishes the retirement epoch from it, not another fixture retry. The probes are gone;
-their readings are here.
+cascade. Two probes were added and removed while chasing it, and they narrowed the residual to one
+hart's `current_task_id` reading three ways inside a single tick path: the retirement-pending check sees
+a *nonzero* current (1, 2, 7, so `vi_timer_tick` does not publish), `pick_next_local` then sees **zero**
+and takes its idle path, and the post-lock diagnostic in `yield_cpu` sees the nonzero value again. The
+only writers of a hart's `current_task_id` are that hart's own selection in `pick_next_local`,
+`prepare_task_to_boot_switch`'s clear on the task→boot path, and the switch-completion hooks — so the
+next step is to trace which of them runs between those three reads (a nested scheduler entry on the same
+hart would do it, and so would a task→boot switch completing in between it). The probes are gone; their
+readings are here.
 
 Also measured, deliberately not shipped: `reap_deferred_releases` documents that it touches
 `REAPER_ENTRIES_PER_CALL` entries per call, but `next_step()` always returned the queue *head* and the
