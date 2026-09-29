@@ -68,6 +68,22 @@ else
     echo VIRTIO_E2E_BLOCK_WRITE_FLUSH_PASS
 fi
 
+# Separate multi-page write from the sector-zero marker. Check its exact bytes
+# after a flush and on the next boot, not just whether the request succeeded.
+dd if=/bin/busybox of=/tmp/bulk-expected bs=4096 count=4 2>/dev/null || fail bulk-source
+if [ "$run_mode" = first ]; then
+    dd if=/tmp/bulk-expected of=/dev/vda bs=4096 count=4 seek=16 conv=fsync 2>/dev/null \
+        || fail bulk-write
+    blockdev --flushbufs /dev/vda || fail bulk-flush
+fi
+dd if=/dev/vda of=/tmp/bulk-actual bs=4096 count=4 skip=16 2>/dev/null || fail bulk-read
+cmp -s /tmp/bulk-expected /tmp/bulk-actual || fail bulk-mismatch
+dd if=/dev/vda of=/tmp/bulk-neighbor bs=4096 count=4 skip=20 2>/dev/null \
+    || fail bulk-neighbor-read
+dd if=/dev/zero of=/tmp/bulk-zeros bs=4096 count=4 2>/dev/null || fail bulk-zero-source
+cmp -s /tmp/bulk-zeros /tmp/bulk-neighbor || fail bulk-neighbor-overwritten
+echo VIRTIO_E2E_BULK_READBACK_PASS
+
 irq5_after=$(irq_count 5)
 [ "$irq5_after" -gt "$irq5_before" ] || fail irq5-no-completion
 echo VIRTIO_E2E_IRQ5_PASS

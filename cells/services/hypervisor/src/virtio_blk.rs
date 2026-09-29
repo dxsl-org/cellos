@@ -89,39 +89,16 @@ impl VirtioDevice for BlkDisk {
         2
     }
     fn device_features_lo(&self) -> u32 {
-        1 << 9 // VIRTIO_BLK_F_FLUSH
+        (1 << 9) | (1 << 2) // VIRTIO_BLK_F_FLUSH | VIRTIO_BLK_F_SEG_MAX
     }
 
-    /// virtio-blk config: capacity at bytes 0-7 (little-endian u64 of sectors).
-    ///
-    /// `seg_max` (byte 12, `VIRTIO_BLK_F_SEG_MAX`) is deliberately NOT advertised
-    /// yet. **Any** multi-segment request — one bio split across two or more data
-    /// descriptors — breaks the guest's view of the disk on this device model:
-    /// the next read of an affected sector comes back as zeros (or as a plain
-    /// I/O error), while the device itself reported success. The isolated
-    /// experiments, each a full two-boot lane run:
-    ///
-    /// - retired batching code + `seg_max` advertised → run 1 fails at the first
-    ///   block read, so this is not an artefact of the batching in this file;
-    /// - this code + `seg_max: 2` → same failure, so it is not chain *length*;
-    /// - either code with the feature off → both boots pass.
-    ///
-    /// What is already ruled out: the scatter writes the right bytes into the
-    /// descriptor's frame (read back through `ReadGuestMemory` immediately after
-    /// the write), no request ends in `VIRTIO_BLK_S_IOERR`, the chain is never
-    /// rejected by the guard (`[hv-virtio-host] reject descriptor-chain` never
-    /// fires), `VIRTIO_RING_F_INDIRECT_DESC` is not advertised so Linux cannot
-    /// be hiding segments in an indirect table, the host image still holds the
-    /// data after the failure, and reporting the spec's used-ring length
-    /// (payload + status byte, see below) changes nothing.
-    ///
-    /// The remaining difference is *when* the guest reads: with the feature on,
-    /// Linux probes the disk earlier in boot, and the failing boot logs an I/O
-    /// error on logical block 0 before any request could have been malformed.
+    /// virtio-blk config: capacity in sectors at bytes 0-7; maximum number
+    /// of data descriptors per request at byte 12 (`VIRTIO_BLK_F_SEG_MAX`).
     fn config_read(&self, offset: usize) -> u32 {
         match offset {
             0 => (self.num_sectors & 0xFFFF_FFFF) as u32,
             4 => (self.num_sectors >> 32) as u32,
+            12 => 2,
             _ => 0,
         }
     }
@@ -482,7 +459,9 @@ fn blk_read(backend: &mut Backend, sector: u64, bufs: &[DescBuf], vm_id: usize) 
                         chunks
                     ));
                 }
-                off += total_len;
+                // The whole descriptor chain was scattered in the loop above.
+                // Only the volatile backend processes one buffer at a time.
+                break;
             }
         }
     }
@@ -517,7 +496,11 @@ fn blk_write(backend: &mut Backend, sector: u64, bufs: &[DescBuf], vm_id: usize)
             Backend::Volatile(disk) => {
                 let off_usize = off as usize;
                 let n = buf.len as usize;
-                let got = crate::vmm::read_guest_memory(vm_id, buf.gpa, &mut disk[off_usize..off_usize + n]);
+                let got = crate::vmm::read_guest_memory(
+                    vm_id,
+                    buf.gpa,
+                    &mut disk[off_usize..off_usize + n],
+                );
                 if got != n {
                     return 1;
                 }
@@ -541,8 +524,9 @@ fn blk_write(backend: &mut Backend, sector: u64, bufs: &[DescBuf], vm_id: usize)
                     };
                     // The safe accessor carries the exclusivity proof; the grant
                     // is shared only after the request's bytes are in place.
-                    let filled = grant
-                        .with_bytes_mut(|data| gather_from_guest(vm_id, bufs, done, &mut data[..chunk]));
+                    let filled = grant.with_bytes_mut(|data| {
+                        gather_from_guest(vm_id, bufs, done, &mut data[..chunk])
+                    });
                     if !filled {
                         println("[hv-blk] guest-memory read failed");
                         return 1;
@@ -602,7 +586,8 @@ fn blk_write(backend: &mut Backend, sector: u64, bufs: &[DescBuf], vm_id: usize)
                         chunks
                     ));
                 }
-                off += total_len;
+                // The whole descriptor chain was gathered in the loop above.
+                break;
             }
         }
     }

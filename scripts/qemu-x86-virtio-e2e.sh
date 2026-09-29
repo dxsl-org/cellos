@@ -49,18 +49,17 @@ fi
 mkdir -p "$WORK_DIR"
 if [[ "$BUILD_EVIDENCE_IMAGE" == 1 ]]; then
     VIRTIO_E2E_INITRAMFS="$INITRAMFS" bash scripts/prepare-x86-virtio-e2e-initramfs.sh
-    HV_INIT_MIN=1 INITRD_OVERRIDE="$INITRAMFS" \
-        bash scripts/make-hypervisor-fs-x86.sh --skip-fetch
     rm -rf "$EVIDENCE_FS"
     mkdir -p "$EVIDENCE_FS"
-    cp -a kernel/src/embedded-hv-x86/. "$EVIDENCE_FS/"
+    HV_INIT_MIN=1 INITRD_OVERRIDE="$INITRAMFS" HV_EMBEDDED_DIR="$EVIDENCE_FS" \
+        bash scripts/make-hypervisor-fs-x86.sh --skip-fetch
     selector="$WORK_DIR/virtio-e2e-selector"
     printf 'rdinit=/bin/virtio-e2e-init\n' > "$selector"
     mcopy -o -i "$EVIDENCE_FS/kernel_fs.img" "$selector" ::/virtio-e2e
     RUSTFLAGS="-C relocation-model=static -C code-model=kernel -C no-redzone=yes -Z cf-protection=full" \
         EMBEDDED_OVERRIDE="$EVIDENCE_FS" \
         cargo build --release -p cellos-kernel --target x86_64-unknown-none
-    bash scripts/x86/make-iso-ci.sh "$ISO"
+    X86_ISO_ROOT="$WORK_DIR/iso-root" bash scripts/x86/make-iso-ci.sh "$ISO"
 elif [[ "$BUILD_EVIDENCE_IMAGE" != 0 ]]; then
     echo "FAIL: BUILD_EVIDENCE_IMAGE must be 0 or 1" >&2
     exit 1
@@ -95,7 +94,8 @@ fi
 fatal_pattern='KERNEL PANIC|\[fault\] Cell|\[hv-x86\].*(fail|error|unexpected|unsupported|unknown vmexit|unhandled|guest (exited|shutdown)|triple-fault)|\[hv-x86\] volatile disk fallback|Init: hypervisor exited|VIRTIO_E2E_FAIL:|corrupt(ion|ed)?'
 common_markers=(
     VIRTIO_E2E_BLOCK_DISCOVERY_PASS VIRTIO_E2E_NET_DISCOVERY_PASS
-    VIRTIO_E2E_NET_TX_RX_PASS VIRTIO_E2E_IRQ5_PASS VIRTIO_E2E_IRQ6_PASS
+    VIRTIO_E2E_BULK_READBACK_PASS VIRTIO_E2E_NET_TX_RX_PASS
+    VIRTIO_E2E_IRQ5_PASS VIRTIO_E2E_IRQ6_PASS
 )
 
 run_outer() {
