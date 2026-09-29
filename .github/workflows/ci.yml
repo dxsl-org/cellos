@@ -354,6 +354,63 @@ jobs:
         # Checks for FAT32 mount (always present) or full shell prompt.
         run: bash scripts/qemu-boot-test.sh target/riscv64gc-unknown-none-elf/release/cellos-kernel
 
+  # Until this job existed, nothing in CI built the overlay patch or booted the
+  # Tier 1 rust-std cell: a hand-edited patch that no longer applied
+  # (2026-09-18) and an entry-point gate that dropped `main` on the JSON targets
+  # (2026-09-27) both lived in the tree unnoticed until a manual run.
+  rust-std-lane:
+    name: Tier 1 rust-std lane (sysroot overlay + QEMU smoke)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      # The lane patches `library/` of the *pinned* toolchain, so it needs
+      # rust-src for exactly that nightly (rust-toolchain.toml and the sysroot
+      # contract pin `nightly-2026-05-01`, rustc f53b654a8).
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-05-01
+          components: rust-src
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+          key: rust-std-lane
+
+      # QEMU boots the cell; gcc-riscv64-unknown-elf provides both the C cross
+      # compiler the bootstrap cells' build scripts probe for and the objcopy
+      # lib-sign-cells.sh signs with (a host objcopy cannot read a RISC-V ELF).
+      - name: Install QEMU and the RISC-V C toolchain
+        timeout-minutes: 10
+        run: sudo apt-get update -q && sudo apt-get install -y -q qemu-system-misc gcc-riscv64-unknown-elf
+
+      # scripts/sign-policy.py builds the Ed25519 POLICY.BIN the ramdisk carries.
+      - name: Install Python cryptography (policy signing)
+        timeout-minutes: 5
+        run: python3 -m pip install --user --quiet cryptography
+
+      # The validator and both approval artifacts are digest-pinned; these tests
+      # are the only thing that notices when a covered input drifts.
+      - name: Promotion validator contract tests
+        run: python3 -m unittest discover -s tests/rust-std-promotion -p 'test_*.py'
+
+      # The overlay must apply to a pristine rust-src and compile std for every
+      # published target spec: the patch and the three target JSONs are exactly
+      # what this job exists to keep honest.
+      - name: Build CellOS std sysroot overlays (3 targets)
+        run: |
+          for TARGET in riscv64gc-unknown-cellos aarch64-unknown-cellos x86_64-unknown-cellos; do
+            bash scripts/build-cellos-sysroot.sh "$TARGET"
+          done
+
+      # Boots the std cell and waits for its PASS marker: allocator (including
+      # over-aligned layouts), Instant, yield, parallelism, argv, and the
+      # fail-closed fs/net/process arms.
+      - name: Boot the Tier 1 rust-std cell (QEMU riscv64)
+        run: BOOT_TIMEOUT=90 bash scripts/run-std-smoke-qemu.sh riscv64
+
   c2c-broker-oracle-single-guest-local-runtime:
     name: C2C Broker Oracle (single-guest local-runtime QEMU)
     runs-on: ubuntu-24.04
