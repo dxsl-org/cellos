@@ -313,17 +313,20 @@ origin from `spsr_el1 & 0xF == 0`, which cannot work on QEMU virt: the host runs
 about to `eret` to EL0. The lower-EL wrapper's vector marker (0 for host vectors, 1..4 for EL0 ones,
 consumed once per dispatch) is the proof that works; the arm now requires it and the kernel-trap
 report names the marker. Cell traps are unaffected — a cell's EC-0 unallocated instruction arrives
-through the lower-EL vector and still terminates the cell. **Still open, but now decoded: a task is occasionally entered at a kernel address.** The frame
+through the lower-EL vector and still terminates the cell. **Closed: the rare `ec=0x0` trap was an entry state the TGE host does not have.** The frame
 `ec=0x0 esr=0x2000000 elr=0x400823a4 far=0 spsr=0` reads as a trap *from EL0* (`spsr` = the cell's own
 EL0 state) whose `elr` is inside the kernel's `__trap_exit` — i.e. the cell was *entered* there and the
 first instruction it met, `msr spsr_el1, x9`, is undefined at EL0, which is exactly an `EC=0`/`IL=1`
 "unknown reason". So the entry frame's `sepc` was a kernel address, not the cell's entry point. It is
 SMP-only (the one-CPU lane is deterministic), about 1 run in 30, and it did not reproduce in 60 runs with
-a logging probe in the path — a timing-dependent race. Two mechanisms fit and one instrument
-discriminates them: `prime_user_mode_entry` now logs `[entry-frame] task=… tf=… entry=… sepc=…` under
-test-hooks, so the next occurrence shows whether the entry was already wrong when primed or the frame was
-corrupted before `__trap_exit` consumed it. No blind fix was shipped: the SPSR=0 experiment below was
-tested and reverted.
+a logging probe in the path — a timing-dependent race. What it was: this lane boots
+`virt,virtualization=on` with cortex-a57, so the kernel runs at EL2 with `HCR_EL2.TGE=1`, and
+`__trap_exit`'s EL2 path entered cells with `spsr_el2 = 0` — AArch32 USR in `SPSR.M[4:0]`, a state this
+host does not have, tolerated by the emulator until it isn't. With TGE=1 the PE treats EL1 as EL0, so
+the entry state is EL1t (`0x14`). Two experiments pinned the encoding instead of guessing: EL1t's
+sibling `0x10` (plain EL0t) hung **60 of 60** boots at the first task entry, and `0x14` is green —
+**90 of 90** two-hart runs with zero `ec=0x0` traps, production suite 11 of 11, one-CPU lane exit 0.
+The EL1 path keeps `#0`, which is the non-TGE configuration this machine cannot exercise.
 
 **An earlier hypothesis for the same frame, tested and refuted.** `__trap_exit` writes
 `spsr_el1 = 0` with the comment "EL0t", and in `SPSR.M[4:0]` that is AArch32 USR rather than AArch64
