@@ -24,10 +24,48 @@ Tier 3 lets you run a full Linux kernel (e.g., Alpine, Busybox) inside a lightwe
 | Platform | Status | Hypervisor | Notes |
 |----------|--------|-----------|-------|
 | **ARM64** | ✅ Working (G2) | EL2 (non-VHE) | Cortex-A72+; boots Alpine (musl) to a shell; virtio-blk/net/console. Under QEMU-TCG only the machinery half is asserted (`[hv] vCPU ready`); the strict `/ #` boot needs KVM/real hardware |
-| **x86_64** | ✅ Working in QEMU (G2) | SVM (AMD, TCG-testable) | Boots Alpine to a shell under QEMU-TCG 10.2.0 (`scripts/qemu-hypervisor-smoke-x86.sh boot`); the Tier 3 workload gate `scripts/qemu-x86-nginx-gate.sh` installs nginx with `apk` inside the guest and serves a page. Intel VT-x root operation is not implemented and is deliberately not attempted under a hypervisor (VMXON faults) |
+| **x86_64** | ✅ Working in QEMU (G2) | SVM (AMD, TCG-testable) | Boots Alpine to a shell under QEMU-TCG 10.2.0 (`scripts/qemu-hypervisor-smoke-x86.sh boot`); the primary application gate `scripts/qemu-x86-python-gate.sh` installs CPython in a 256 MiB Alpine guest and processes JSON into CSV in separate Linux processes. Nginx remains a secondary regression in the same CI job. Intel VT-x guest execution is not implemented |
 | **RISC-V** | ❌ Not implemented | H-ext (too new) | Deferred beyond G1 |
 
 **G2-only**: requires real hardware or advanced QEMU (not basic RISC-V). Both the ARM64 and x86_64 paths boot a Linux guest; RISC-V has no hypervisor.
+
+### Raspberry Pi 3 (Cortex-A53, QEMU-first)
+
+`board-rpi3` now retains EL2 as a narrow monitor and runs the Cellos host
+at EL1, Cells at EL0 and one 128 MiB ARM64 Linux guest at EL1 with Stage-2
+isolation. BCM2836 has no GICH/GICV: the hypervisor cell models GICD/GICC in
+software, delivers guest IRQs via `HCR_EL2.VI`, and the physical host timer
+preempts a non-yielding guest. The boot-time capability gate runs a real
+HVC/Stage-2 MMIO/virtual-IRQ/preemption smoke before admitting any VM.
+
+```bash
+# Fetch the pinned Alpine artifacts if .alpine-cache is empty; omit
+# --skip-fetch on that first build.
+bash scripts/make-hypervisor-fs-rpi3.sh --skip-fetch --volatile-disk
+RPI3_GATE=machinery BOOT_WINDOW=90 bash scripts/qemu-rpi3-tier3.sh \
+  target/rpi3-hv-embedded/kernel8.img
+
+# Strict gate: only PASS when the Alpine guest reaches its own shell.
+RPI3_GATE=boot BOOT_WINDOW=900 bash scripts/qemu-rpi3-tier3.sh \
+  target/rpi3-hv-embedded/kernel8.img
+```
+
+Use the **raw** `kernel8.img`, not the linked ELF: QEMU `raspi3b` loads
+these at different exception levels. The mini UART is serial1, so the runner
+uses `-serial null -serial stdio`. The volatile profile has no persistent SD
+disk; guest writes disappear on restart. The default builder packages an
+ext4 `guest_disk.img` on the first FAT partition of `disk_rpi3_hv.img`, but
+that SD-backed profile must pass its own QEMU boot/persistence gate before
+it can be called qualified. See
+[the Pi board instructions](../baremetal/load-cellos.md#8-tier-3-direct-firmware-boot).
+
+**Observed here:** QEMU `raspi3b` passed the machinery gate: host
+initialization, monitor smoke, VM creation, guest kernel/initrd streaming and
+vCPU entry. Alpine Linux 6.12.13 printed its PSCI, CPU and early memory
+initialization. The strict guest-shell gate did **not** pass in a 900-second
+TCG run (last output: `software IO TLB`); do not equate Linux boot messages
+or `[hv] vCPU ready` with a usable guest shell. No physical-board Tier 3 VM
+execution has been observed yet.
 
 ---
 
@@ -242,9 +280,39 @@ hypervisor cell. Passing is emulator evidence — it does not qualify physical h
 | ARM64 machinery | `HV_SMOKE_MODE=machinery bash scripts/qemu-hypervisor-smoke.sh` | `[hv] vCPU ready`; tolerates only the documented TCG address-size fault | `qemu-hypervisor-machinery` |
 | ARM64 boot-to-shell | `HV_SMOKE_MODE=boot bash scripts/qemu-hypervisor-smoke.sh` | Alpine `/ #` prompt (switches to KVM — needs real hardware) | `qemu-hypervisor-boot-kvm` (gated on a self-hosted runner) |
 | x86 boot-to-shell | `HV_SMOKE_MODE=boot bash scripts/qemu-hypervisor-smoke-x86.sh` | Alpine `/ #` prompt | `qemu-x86-hypervisor-boot` |
-| x86 in-guest nginx | `bash scripts/qemu-x86-nginx-gate.sh` | `apk add nginx` from the pinned repository, master + worker (fork), an in-guest HTTP fetch of the served body | `qemu-x86-tier3-nginx` |
+| x86 in-guest CPython (primary application) | `bash scripts/qemu-x86-python-gate.sh` | 256 MiB Alpine profile, `apk add python3` via HTTPS from Alpine v3.21, exact JSON→CSV aggregation and a separate Python consumer process | `qemu-x86-tier3-python` |
+| x86 in-guest nginx (secondary regression) | `bash scripts/qemu-x86-nginx-gate.sh` | `apk add nginx`, forked master + worker and in-guest HTTP fetch | `qemu-x86-tier3-python` (second step) |
 | x86 VirtIO e2e + persistence | `bash scripts/qemu-x86-virtio-e2e.sh` | block/network discovery, IRQ5/IRQ6 completion, and a two-boot persistent marker read back on the host | `qemu-x86-tier3-virtio-e2e` |
 | x86 hostile corpus | `BUILD_HOSTILE_ISO=1 bash scripts/qemu-tier3-hostile-runner-x86.sh` | 27 bounded malformed-input scenarios plus a host-read post-reset recovery write | `qemu-x86-tier3-hostile` |
+
+CPython is the first useful application gate because its batch-processing result
+can be checked without a display bridge. A browser is a separate, later gate:
+the existing virtio-gpu/input device models do not by themselves prove usable
+guest scanout, keyboard/mouse interaction, or enough RAM for Chromium/Firefox.
+The Python gate runs on the volatile Alpine profile; its CSV is deliberately
+not a persistence claim. Use the two-boot VirtIO lane for persistent block I/O.
+
+The x86 persistence and hostile runners stage their embedded filesystem and ISO
+root in their own work directories; a fresh evidence build does not replace
+`kernel/src/embedded-hv-x86/init`. Ten fresh two-boot persistence runs passed
+before `seg_max` was enabled. With `VIRTIO_BLK_F_SEG_MAX` advertising a maximum
+of two data segments, the two-boot lane now checks the marker and a flushed
+16 KiB payload and the adjacent unwritten region across reboot. Its fresh-build
+run and 15 additional fresh-disk two-boot runs passed with `seg_max=2`, as did
+all 27 hostile scenarios under QEMU-TCG 10.2.0. The persistent backend
+previously handled a whole chain once *per data descriptor*, overwriting the
+first read with bytes from the next offset. It now handles each whole chain
+once. Larger advertised segment counts and physical boards remain unqualified;
+bounded emulator runs cannot rule out unrelated intermittent short reads,
+flush failures or boot flakes.
+
+The Python lane still depends on live HTTPS. One run with a shortened
+`BOOT_WINDOW=1000` passed DNS but did not reach `PYTHON_IN_VM_APK_PASS` before
+the outer deadline; four runs with a 1200-second window passed. The failure had no
+packet trace, so its cause is undetermined. The guest now streams `apk` progress
+to the serial log; set `QEMU_NET_CAPTURE=build/<workdir>/traffic.pcap` to record
+QEMU's guest-network traffic when investigating another timeout. A successful
+capture received about 20 MiB over TLS. Hosted CI remains unobserved.
 
 ---
 

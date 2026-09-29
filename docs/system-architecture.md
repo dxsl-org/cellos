@@ -1638,18 +1638,20 @@ Layer A/B/C ownership or turn MTE/MPK into a side-channel guarantee.
 
 ## Cross-Machine Communication & Clustering (proposed contract — see Spec 20)
 
-> Designed 2026-06-23. Stable summary: cross-machine IPC belongs in the userspace
-> `net-broker`; the proposed contract is owned by [Spec 20](specs/20-unified-ipc-contract.md).
-> Until Layer-3 generation exists, Spec 20 carries an explicitly transitional snapshot:
-> broker boot and NodeId generation are wired, transport/relay modules compile, typed
-> forwarding remains a stub, and no two-node runtime is proven. Once generated,
-> `docs/spec-status.generated.md` is the sole owner of volatile implementation status.
-> Research and historical design input remains in the local, gitignored
-> `.agents/260623-remote-cell-ipc-research/` workspace.
+> The proposed [Spec 20 Draft v3](specs/20-unified-ipc-contract.md) now separates
+> Tier-1 SAS copied/default IPC, private-root Tier-2 copied IPC, authenticated
+> remote NodeId RPC and a separately gated Tier-3 VM guest bridge. Kernel owns
+> local IPC and admission; userspace `net-broker` would own remote policy/dispatch
+> after the protected authority's relay TLS gate. Broker boot, authenticated
+> beacons and the local single-guest oracle exist; `RemoteEndpoint::call` still
+> returns `NotSupported` and no two-node runtime is proven. Spec 20 is **not
+> ratified** and is not an implementation status oracle; source and retained
+> evidence govern present capability. Once generated, `docs/spec-status.generated.md`
+> owns the volatile aggregate implementation status.
 
 ### Foundational principle: LBI stops at the machine boundary
 
-Language-Based Isolation is the Rust type system within **one** compiler's address space (SAS). It proves nothing about a remote machine. Therefore **every remote machine is untrusted**, cross-machine messages must be explicitly authenticated, and the kernel only ever sees *local* IPC. All cross-machine logic lives in a **userspace `net-broker` Cell** — zero kernel changes to the transport/auth substrate. Intra-machine zero-copy IPC (Grant) degrades to **one-copy** across machines; every other Cell guarantee (supervisor restart, capability gating, owned buffers) survives.
+Within one machine, a Tier-1 SAS Cell may share pages only under an authorized lifetime; ordinary IPC and any private-root Tier-2 boundary use bounded kernel-owned copies. Rust language isolation within one trusted build proves nothing about a remote machine or a Tier-3 guest. Cross-node calls require an authenticated peer NodeId, explicit export policy and end-to-end Noise; the protected authority owns relay TLS, while the kernel supplies only local IPC and caller attestation. Remote latency, failure, grant, watch and safety guarantees are **not** inherited from the local path.
 
 Phase 02A adds a boot-provisioned, non-secret export registry at `/etc/cellos/c2c-exports.cfg` inside `net-broker`. The registry is policy input, not a secret store: the broker can validate and count exported endpoints, but it still keeps remote/public delivery disabled unless the protected KMS identity is ready and every later transport/governance gate passes. Readable `/etc/cellos` state is never authorization.
 
@@ -1704,11 +1706,12 @@ floors. It compares the current epoch before dedup or local delivery.
 Authenticated session incarnation state must still invalidate endpoints learned
 from an older broker before remote enablement. A shared nonzero
 `RelativeDeadline` is mandatory in both the envelope and remote-call API;
-absolute monotonic conversion fails on overflow and distinguishes definite
-pre-dispatch `Timeout` from post-dispatch `Indeterminate`. `LocalEndpoint<M>`
-performs direct sender-masked IPC. `RemoteEndpoint<M>` retains authenticated
-route metadata and the frozen typed error taxonomy, but its Phase 04 `call`
-requires the deadline and returns `NotSupported` without broker contact.
+absolute monotonic conversion fails on overflow and classifies `Timeout` only
+when non-dispatch is proved; uncertainty after submission/possible dispatch
+remains `Indeterminate`. `LocalEndpoint<M>` performs direct sender-masked IPC.
+`RemoteEndpoint<M>` currently accepts nonzero *caller-supplied* route metadata,
+not authenticated binding; its typed error enum exists, but `call` still
+requires a deadline and returns `NotSupported` without broker contact.
 `CellEndpoint<M>` requires an explicit locality branch. Provider qualification
 still gates remote dispatch, relay, and direct LAN.
 

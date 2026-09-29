@@ -137,3 +137,36 @@ scheduler `N`, or context-switch `A` bring-up markers. A real-board boot and
 interactive `help` gate reduced `T15` from `14,596` to `0` and `ANM` to `0`,
 while retaining fault-only `FS0`-`FS3` diagnostics and bounded one-shot boot
 markers.
+
+## 8. Tier 3 Direct Firmware Boot
+
+The U-Boot/TFTP lane in Section 7 proves host shell operation, **not** an
+EL2 handoff. Tier 3 requires `CurrentEL=2` on entry so Cellos can retain its
+EL2 monitor and run the host at EL1. Build and test on QEMU `raspi3b` before
+flashing the card:
+
+```bash
+bash scripts/make-hypervisor-fs-rpi3.sh --skip-fetch --volatile-disk
+RPI3_GATE=machinery BOOT_WINDOW=90 bash scripts/qemu-rpi3-tier3.sh \
+  target/rpi3-hv-embedded/kernel8.img
+# For an SD-backed image, omit --volatile-disk and pass disk_rpi3_hv.img as
+# the runner's second argument. Do not flash until that profile is verified.
+```
+
+The builder emits raw `target/rpi3-hv-embedded/kernel8.img`, an embedded
+signed VIFS1 with the Alpine kernel/initrd, and (by default) a 1 GiB
+`disk_rpi3_hv.img`. The SD image's P1 has `bootcode.bin`, `start.elf`,
+`fixup.dat`, `config.txt` (`arm_64bit=1`, `kernel=kernel8.img`) and
+`guest_disk.img`; it is a *direct firmware* image, not a U-Boot image.
+The Pi's mini UART is 115200 baud. Verify the startup log says
+`[pi-monitor] entry EL=2 host EL=1 HVC ready=true` and the monitor smoke
+opens `HypervisorCap`; an EL1 firmware/U-Boot handoff deliberately keeps it
+closed. Use the strict `RPI3_GATE=boot` gate for a guest shell — neither the
+monitor smoke nor guest Linux boot messages establish that result.
+
+QEMU machinery was observed with the volatile profile; a 900-second TCG
+run did not reach the guest shell. Physical EL2 handoff, SD-backed guest
+storage, boot persistence and real-board VM execution remain unverified.
+Keep the existing Section 7 TFTP card for recovery; flashing the new SD
+image replaces that bootstrap and requires explicit selection of the
+target card.
