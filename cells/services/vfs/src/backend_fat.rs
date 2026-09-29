@@ -294,7 +294,11 @@ impl FsBackend for FatBackend {
                     let end = file.seek(fatfs::SeekFrom::End(0)).unwrap_or(u64::MAX);
                     println(&alloc::format!(
                         "[vfs] short read path={} offset={} got={} want={} fatfs_size={}",
-                        rel, offset, total, buf.len(), end
+                        rel,
+                        offset,
+                        total,
+                        buf.len(),
+                        end
                     ));
                     break;
                 }
@@ -302,7 +306,10 @@ impl FsBackend for FatBackend {
                 Err(_) => {
                     println(&alloc::format!(
                         "[vfs] read error path={} offset={} got={} want={}",
-                        rel, offset, total, buf.len()
+                        rel,
+                        offset,
+                        total,
+                        buf.len()
                     ));
                     break;
                 }

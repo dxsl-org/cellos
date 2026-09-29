@@ -67,9 +67,10 @@ pub(crate) fn self_test() -> bool {
 
     // Occupants pin each hart's running priority: the target hart runs a Normal
     // task, the waking hart a RealTime one.
-    sched
-        .tasks
-        .insert(SENDER_TID, fixture_task(SENDER_TID, SENDER_CELL, TaskPriority::RealTime));
+    sched.tasks.insert(
+        SENDER_TID,
+        fixture_task(SENDER_TID, SENDER_CELL, TaskPriority::RealTime),
+    );
     sched.tasks.insert(
         RECEIVER_TID,
         fixture_task(RECEIVER_TID, RECEIVER_CELL, TaskPriority::Normal),
@@ -126,15 +127,19 @@ pub(crate) fn self_test() -> bool {
     super::smp::reset_preempt_pends();
     sched.pend_preempt_if_needed(TaskPriority::RealTime as u8);
     let target_hart_decides = !cross_hart || super::smp::preempt_pends_for(target_hart) == 1;
-    let waking_hart_quiet =
-        !cross_hart || super::smp::preempt_pends_for(waking_hart) == 0;
+    let waking_hart_quiet = !cross_hart || super::smp::preempt_pends_for(waking_hart) == 0;
 
     // Teardown happens before `SCHEDULER` is released, so the target hart can never
     // observe the synthetic sender in its queue.
     for tid in [SENDER_TID, TARGET_OCCUPANT_TID, WAKING_OCCUPANT_TID] {
         super::hart_local::ready::remove_from_all(tid);
     }
-    for tid in [SENDER_TID, RECEIVER_TID, TARGET_OCCUPANT_TID, WAKING_OCCUPANT_TID] {
+    for tid in [
+        SENDER_TID,
+        RECEIVER_TID,
+        TARGET_OCCUPANT_TID,
+        WAKING_OCCUPANT_TID,
+    ] {
         sched.tasks.remove(&tid);
     }
     super::hart_local::ready::set_current_task_id(target_hart, target_was);

@@ -821,11 +821,7 @@ impl Drop for Task {
             )
         ))]
         if self.has_dynamic_stack_mapping {
-            if let (
-                TaskAddressSpace::Domain(space),
-                Some(kernel_stack),
-                Some(user_stack),
-            ) = (
+            if let (TaskAddressSpace::Domain(space), Some(kernel_stack), Some(user_stack)) = (
                 &self.address_space,
                 self.kernel_stack.take(),
                 self.user_stack.take(),

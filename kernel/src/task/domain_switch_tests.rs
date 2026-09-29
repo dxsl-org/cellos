@@ -158,11 +158,7 @@ pub(crate) fn run_primary() -> bool {
         && encoding_ok
         && hart_local::domain_ack_generation_for(hart_local::current_hart_id()) == 0;
     if plan_ok {
-        log::info!(
-            "S22-{}-PLAN: PASS harts={}",
-            ARCH_TAG,
-            observed_harts()
-        );
+        log::info!("S22-{}-PLAN: PASS harts={}", ARCH_TAG, observed_harts());
     } else {
         log::error!(
             "S22-{}-PLAN: FAIL root={:#x} asid={:#x} roots={} flushes={} domain=({},{})",
@@ -554,7 +550,6 @@ pub(crate) fn observe_domain_teardown(hart: usize) {
     }
 }
 
-
 /// Regression for the pin→plan window: `retire()` is a bare atomic store that
 /// takes no lock, so it can land between the execution pin (pick_next_local
 /// filter) and `SwitchPlan::new`. A successfully pinned task must still derive
@@ -788,7 +783,10 @@ pub(crate) fn run_root_switch_witness() -> bool {
 
     let kernel_root = crate::hal::domain::kernel_ttbr0();
     if kernel_root == 0 {
-        log::error!("S22-{}-ROOT-SWITCH: FAIL kernel root not recorded", ARCH_TAG);
+        log::error!(
+            "S22-{}-ROOT-SWITCH: FAIL kernel root not recorded",
+            ARCH_TAG
+        );
         return false;
     }
     let (Ok(stack_b), Ok(stack_c), Ok(stack_scratch)) = (
@@ -830,12 +828,7 @@ pub(crate) fn run_root_switch_witness() -> bool {
     // Boot context -> scratch stack (no root write), then the whole chain runs
     // with its SAS side on memory no private root maps.
     unsafe {
-        crate::hal::arch::Context::switch_with_root(
-            CTX_FIXTURE.0.get(),
-            CTX_SCRATCH.0.get(),
-            0,
-            0,
-        );
+        crate::hal::arch::Context::switch_with_root(CTX_FIXTURE.0.get(), CTX_SCRATCH.0.get(), 0, 0);
     }
 
     // The incoming side of the last switch: the same steps the scheduler path runs.
@@ -917,8 +910,11 @@ pub(crate) fn run_root_switch_witness() -> bool {
 /// `phys_to_virt` is the identity on AArch64.
 #[cfg(target_arch = "aarch64")]
 fn fixture_heap_frame() -> Option<usize> {
-    let layout = alloc::alloc::Layout::from_size_align(crate::memory::paging::PAGE_SIZE, crate::memory::paging::PAGE_SIZE)
-        .ok()?;
+    let layout = alloc::alloc::Layout::from_size_align(
+        crate::memory::paging::PAGE_SIZE,
+        crate::memory::paging::PAGE_SIZE,
+    )
+    .ok()?;
     // SAFETY: the layout has a non-zero size, and the result is either null
     // (handled here) or a fresh 4 KiB-aligned block this fixture owns.
     let frame = unsafe { alloc::alloc::alloc_zeroed(layout) };
@@ -1003,9 +999,10 @@ pub(crate) fn run_private_leaf_witness() -> bool {
     // A second stack pair for the dynamic-thread path
     // (`map_existing_task_stacks`), which the scheduler uses when a cell spawns
     // a thread after admission.
-    let (Ok(thread_kernel_stack), Ok(thread_user_stack)) =
-        (crate::task::stack::Stack::new_kernel(2), crate::task::stack::Stack::new_user(2))
-    else {
+    let (Ok(thread_kernel_stack), Ok(thread_user_stack)) = (
+        crate::task::stack::Stack::new_kernel(2),
+        crate::task::stack::Stack::new_user(2),
+    ) else {
         free_fixture_heap_frame(image_backing);
         free_fixture_heap_frame(grant_backing);
         log::error!("S22-{}-LEAF-NONG: FAIL thread stacks", ARCH_TAG);
@@ -1456,11 +1453,14 @@ pub(crate) fn run_asid_invalidation_witness() -> bool {
         // invalidation. Without that, an ASID-targeted flush in this environment
         // is a full flush and neither read can say anything about nG.
         let asid_scoped = witness_after_foreign == WITNESS_OLD as usize;
-        let non_global_reached = witness_before == WITNESS_OLD as usize
-            && witness_after == WITNESS_NEW as usize;
-        let global_kept_stale = control_before == CONTROL_OLD as usize
-            && control_after == CONTROL_OLD as usize;
-        if !entered || !remapped || witness_before != WITNESS_OLD as usize || control_before != CONTROL_OLD as usize
+        let non_global_reached =
+            witness_before == WITNESS_OLD as usize && witness_after == WITNESS_NEW as usize;
+        let global_kept_stale =
+            control_before == CONTROL_OLD as usize && control_after == CONTROL_OLD as usize;
+        if !entered
+            || !remapped
+            || witness_before != WITNESS_OLD as usize
+            || control_before != CONTROL_OLD as usize
         {
             log::error!(
                 "S22-{}-ASID-INVALIDATION: FAIL entered={} remap_ok={} witness_before={:#x} control_before={:#x}",

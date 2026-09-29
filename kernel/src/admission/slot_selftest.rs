@@ -178,7 +178,10 @@ pub(super) fn run() -> bool {
         let slot_b = match parse_slot(&build_valid_test_slot_b()) {
             Ok(parsed) => parsed,
             Err(e) => {
-                log::error!("[selftest] OWNER-SLOT: failed to parse partner slot: {:?}", e);
+                log::error!(
+                    "[selftest] OWNER-SLOT: failed to parse partner slot: {:?}",
+                    e
+                );
                 return false;
             }
         };

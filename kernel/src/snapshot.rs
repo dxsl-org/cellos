@@ -422,9 +422,7 @@ impl SnapshotError {
         match self {
             Self::GateClosed => "capture unqualified (phase-01 gate: feature `snapshot-qualified`)",
             Self::HartsNotQuiesced => "online harts are not parked at an acknowledged safe point",
-            Self::NoReservedScratch => {
-                "no reserved capture storage outside the captured runs"
-            }
+            Self::NoReservedScratch => "no reserved capture storage outside the captured runs",
             Self::ScratchOverlapsRun => "capture scratch intersects a planned run",
             Self::NoTrustKey => "no provisioned key for the authenticated epoch",
             Self::NoFreshnessSource => "the device has no trusted monotonic epoch source",
@@ -440,9 +438,7 @@ impl SnapshotError {
             Self::ImageRegionUnavailable => {
                 "the mutable kernel-image span cannot be represented as frame runs"
             }
-            Self::ImageRangeOutsideImage => {
-                "image-kind run outside the trusted kernel-image span"
-            }
+            Self::ImageRangeOutsideImage => "image-kind run outside the trusted kernel-image span",
             Self::ImageRangeConflict => "image-kind run overlaps or duplicates an allocated run",
             Self::BadRun => "invalid run: empty, unaligned, out of RAM, duplicate or overlapping",
             Self::TooManyRuns => "too many inventory runs",
@@ -736,9 +732,7 @@ pub fn kernel_image() -> Option<KernelImage> {
         base: core::ptr::addr_of!(__domain_text_start) as u64,
         end: mutable.end,
     };
-    if trusted.is_empty()
-        || mutable.is_empty()
-        || !trusted.contains_span(mutable.base, mutable.end)
+    if trusted.is_empty() || mutable.is_empty() || !trusted.contains_span(mutable.base, mutable.end)
     {
         return None;
     }
@@ -952,10 +946,7 @@ fn runs_from_frames_into(
 }
 
 /// Allocation-owning wrapper: reserve one run per input address (the worst case).
-pub fn runs_from_frames(
-    pas: &[u64],
-    layout: RamLayout,
-) -> Result<Vec<SnapshotRun>, SnapshotError> {
+pub fn runs_from_frames(pas: &[u64], layout: RamLayout) -> Result<Vec<SnapshotRun>, SnapshotError> {
     let mut out = BoundedVec::reserved(pas.len());
     runs_from_frames_into(pas, layout, &mut out)?;
     Ok(out.into_vec())
@@ -1523,7 +1514,11 @@ core::arch::global_asm!(
     "ret",
 );
 
-#[cfg(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64"))]
+#[cfg(any(
+    target_arch = "riscv64",
+    target_arch = "aarch64",
+    target_arch = "x86_64"
+))]
 unsafe extern "C" {
     /// Switch to `new_sp` and run `run(arg)` there, then switch back.
     fn __cellos_snapshot_stack_run(new_sp: usize, run: extern "C" fn(*mut u8), arg: *mut u8);
@@ -1563,7 +1558,11 @@ where
         run: Some(f),
         out: &mut out,
     };
-    #[cfg(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64"))]
+    #[cfg(any(
+        target_arch = "riscv64",
+        target_arch = "aarch64",
+        target_arch = "x86_64"
+    ))]
     // SAFETY: the caller guarantees `stack_top` addresses the reserved region's
     // stack; `trampoline` never unwinds.
     unsafe {
@@ -2022,7 +2021,12 @@ impl FrozenScratch {
         if frame_bound < capacity_frame_bound() {
             return Err(SnapshotError::CapacityExceeded);
         }
-        Self::carve(region, frame_bound, frame_bound + IMAGE_RUNS_MAX as u64, true)
+        Self::carve(
+            region,
+            frame_bound,
+            frame_bound + IMAGE_RUNS_MAX as u64,
+            true,
+        )
     }
 
     /// Carve `region` for an explicit `(frame_bound, run_bound)`.
@@ -2133,11 +2137,7 @@ impl FrozenScratch {
     /// Build the runs and the encoded inventory from `pas` (already filled) and
     /// an explicit image span.  Pure reserve-and-fill: no allocation when the
     /// reservation was sized from the pre-freeze bound.
-    fn plan_from(
-        &mut self,
-        mutable: ImageRegion,
-        layout: RamLayout,
-    ) -> Result<(), SnapshotError> {
+    fn plan_from(&mut self, mutable: ImageRegion, layout: RamLayout) -> Result<(), SnapshotError> {
         if self.pas.len() as u64 > self.frame_bound {
             return Err(SnapshotError::CapacityExceeded);
         }
@@ -2349,7 +2349,9 @@ pub fn capture_image_prepared(
     // No keyed-MAC key, no monotonic device epoch, or an epoch that cannot be
     // advanced: refuse rather than write an image whose freshness is assumed.
     let trust_key = SNAPSHOT_TRUST_KEY.ok_or(SnapshotError::NoTrustKey)?;
-    let device_epoch = dev.current_epoch().ok_or(SnapshotError::NoFreshnessSource)?;
+    let device_epoch = dev
+        .current_epoch()
+        .ok_or(SnapshotError::NoFreshnessSource)?;
     let epoch = device_epoch
         .checked_add(1)
         .ok_or(SnapshotError::NoFreshnessSource)?;
@@ -3500,7 +3502,10 @@ mod tests {
     fn ram_with_image() -> FakeRam {
         let ram = sparse_ram();
         for i in 0..IMAGE_MUTABLE_FRAMES {
-            ram.put(IMAGE_MUTABLE_START + i as u64 * FRAME_SIZE as u64, 0xB0 + i as u8);
+            ram.put(
+                IMAGE_MUTABLE_START + i as u64 * FRAME_SIZE as u64,
+                0xB0 + i as u8,
+            );
         }
         ram
     }
@@ -3825,7 +3830,11 @@ mod tests {
         let report =
             capture_image(&disk, &source, layout(), &planned_runs()).expect("capture succeeds");
         assert_eq!(report.frames, SPARSE.len() as u32 + IMAGE_MUTABLE_FRAMES);
-        assert_eq!(report.runs, SPARSE_RUNS as u32 + 1, "image run is its own run");
+        assert_eq!(
+            report.runs,
+            SPARSE_RUNS as u32 + 1,
+            "image run is its own run"
+        );
 
         // The on-disk inventory is exactly what the planner produced, it carries
         // the kind, and only the image run does.
@@ -3837,7 +3846,9 @@ mod tests {
         assert_eq!(image.pa, IMAGE_MUTABLE_START);
         assert_eq!(image.frame_count, IMAGE_MUTABLE_FRAMES);
         assert!(
-            inventory[..inventory.len() - 1].iter().all(|r| r.flags == 0),
+            inventory[..inventory.len() - 1]
+                .iter()
+                .all(|r| r.flags == 0),
             "allocator-owned runs stay unflagged"
         );
         assert!(frames_in_runs(&inventory, layout()).is_ok());
@@ -3864,7 +3875,10 @@ mod tests {
         let writes = target.writes.borrow().clone();
         let expected: Vec<u64> = sparse_pas()
             .into_iter()
-            .chain((0..IMAGE_MUTABLE_FRAMES as u64).map(|i| IMAGE_MUTABLE_START + i * FRAME_SIZE as u64))
+            .chain(
+                (0..IMAGE_MUTABLE_FRAMES as u64)
+                    .map(|i| IMAGE_MUTABLE_START + i * FRAME_SIZE as u64),
+            )
             .collect();
         assert_eq!(writes, expected);
 
@@ -3894,7 +3908,10 @@ mod tests {
         for passed in [
             &[IMAGE_MUTABLE_START + 2 * FRAME_SIZE as u64][..],
             &[IMAGE_MUTABLE_START][..],
-            &[IMAGE_MUTABLE_START + FRAME_SIZE as u64, IMAGE_MUTABLE_START + 2 * FRAME_SIZE as u64][..],
+            &[
+                IMAGE_MUTABLE_START + FRAME_SIZE as u64,
+                IMAGE_MUTABLE_START + 2 * FRAME_SIZE as u64,
+            ][..],
         ] {
             let allocated = runs_from_frames(passed, layout()).expect("allocated runs");
             assert_eq!(
@@ -3907,7 +3924,10 @@ mod tests {
         // Two overlapping *image* runs are a plain structural failure.
         let mut doubled = image.clone();
         doubled.extend_from_slice(&image);
-        assert_eq!(merge_runs(&[], &doubled, layout()), Err(SnapshotError::BadRun));
+        assert_eq!(
+            merge_runs(&[], &doubled, layout()),
+            Err(SnapshotError::BadRun)
+        );
 
         // The planner's own entry point refuses the conflict too — the shape the
         // live capture path would hit if the allocator ever owned an image frame.
@@ -4013,10 +4033,7 @@ mod tests {
             frame_count: 1,
             flags: 0b10,
         }];
-        assert_eq!(
-            frames_in_runs(&unknown, layout),
-            Err(SnapshotError::BadRun)
-        );
+        assert_eq!(frames_in_runs(&unknown, layout), Err(SnapshotError::BadRun));
     }
 
     #[test]
@@ -4031,12 +4048,23 @@ mod tests {
         run[8..12].copy_from_slice(&1u32.to_le_bytes());
         run[12..16].copy_from_slice(&RUN_FLAG_IMAGE.to_le_bytes());
         disk.patch(INVENTORY_FIRST_LBA, SPARSE_RUNS * RUN_BYTES, &run);
-        disk.patch(SNAPSHOT_BASE_LBA, 36, &(SPARSE_RUNS as u32 + 1).to_le_bytes());
-        disk.patch(SNAPSHOT_BASE_LBA, 40, &(SPARSE.len() as u32 + 1).to_le_bytes());
+        disk.patch(
+            SNAPSHOT_BASE_LBA,
+            36,
+            &(SPARSE_RUNS as u32 + 1).to_le_bytes(),
+        );
+        disk.patch(
+            SNAPSHOT_BASE_LBA,
+            40,
+            &(SPARSE.len() as u32 + 1).to_le_bytes(),
+        );
         let image_sectors = 1 + 1 + (SPARSE.len() as u32 + 1) * SECTORS_PER_FRAME as u32;
         disk.patch(SNAPSHOT_BASE_LBA, 48, &image_sectors.to_le_bytes());
         disk.fixup_crc();
-        assert_eq!(inventory_of(&disk).last().expect("added run").flags, RUN_FLAG_IMAGE);
+        assert_eq!(
+            inventory_of(&disk).last().expect("added run").flags,
+            RUN_FLAG_IMAGE
+        );
 
         let target = FakeRam::default();
         assert_eq!(
@@ -4045,8 +4073,16 @@ mod tests {
                 "inventory outside RAM or the kernel image, empty, unaligned, conflicting or overlapping"
             )
         );
-        assert_eq!(target.write_count(), 0, "no RAM replay before the region check");
-        assert_eq!(disk.state_byte(), 0, "an image run we do not own is corruption");
+        assert_eq!(
+            target.write_count(),
+            0,
+            "no RAM replay before the region check"
+        );
+        assert_eq!(
+            disk.state_byte(),
+            0,
+            "an image run we do not own is corruption"
+        );
     }
 
     #[test]
@@ -5012,13 +5048,8 @@ mod tests {
         let region = scratch.region;
         let disk = FakeDisk::new();
         let ram = ram_with_image();
-        let frames = frozen_capture(
-            &disk,
-            &ram,
-            CaptureScratch::Region(region),
-            &mut scratch,
-        )
-        .expect("a capture declaring the workspace it stages in succeeds");
+        let frames = frozen_capture(&disk, &ram, CaptureScratch::Region(region), &mut scratch)
+            .expect("a capture declaring the workspace it stages in succeeds");
         assert_eq!(frames, SPARSE.len() as u32 + IMAGE_MUTABLE_FRAMES);
         assert_eq!(
             frozen_window_alloc_attempts(),
@@ -5286,11 +5317,7 @@ mod tests {
                 false,
             ),
         ] {
-            assert_eq!(
-                region_intersects_image(region, image),
-                expected,
-                "{name}"
-            );
+            assert_eq!(region_intersects_image(region, image), expected, "{name}");
         }
     }
 
@@ -5306,13 +5333,8 @@ mod tests {
             "the test's own stack is not the workspace"
         );
 
-        let frames = frozen_capture(
-            &disk,
-            &ram,
-            CaptureScratch::Region(region),
-            &mut scratch,
-        )
-        .expect("a capture declaring the workspace it stages in succeeds");
+        let frames = frozen_capture(&disk, &ram, CaptureScratch::Region(region), &mut scratch)
+            .expect("a capture declaring the workspace it stages in succeeds");
         assert_eq!(frames, SPARSE.len() as u32 + IMAGE_MUTABLE_FRAMES);
 
         // The window recorded the stack it proved it was running on: the
@@ -5540,7 +5562,10 @@ mod tests {
     #[test]
     fn snapshot_qualified_build_without_a_reserved_workspace_refuses() {
         assert!(QUALIFICATION_ENABLED);
-        assert!(scratch_region().is_none(), "no host test publishes a workspace");
+        assert!(
+            scratch_region().is_none(),
+            "no host test publishes a workspace"
+        );
         assert_eq!(
             serialize_snapshot(),
             Err(SnapshotError::NoReservedScratch),
@@ -5552,8 +5577,7 @@ mod tests {
 
     fn capture_authentic(disk: &FakeDisk) {
         let source = sparse_ram();
-        capture_image(disk, &source, layout(), &sparse_runs())
-            .expect("authentic capture");
+        capture_image(disk, &source, layout(), &sparse_runs()).expect("authentic capture");
     }
 
     /// The attacker's saved copy of a `Committed` image: put the state byte back
@@ -5582,7 +5606,11 @@ mod tests {
             restore_image(&disk, &target, layout()),
             RestoreOutcome::Resumed
         );
-        assert_eq!(disk.epoch(), 8, "the replay decision advances the device epoch");
+        assert_eq!(
+            disk.epoch(),
+            8,
+            "the replay decision advances the device epoch"
+        );
     }
 
     #[test]
@@ -5629,7 +5657,11 @@ mod tests {
         capture_authentic(&disk);
         // Forge a fresher epoch: the MAC covers it, so the header stops
         // authenticating even though the attacker can re-fix the CRC.
-        disk.patch(SNAPSHOT_BASE_LBA, EPOCH_FIELD_OFFSET, &9999u64.to_le_bytes());
+        disk.patch(
+            SNAPSHOT_BASE_LBA,
+            EPOCH_FIELD_OFFSET,
+            &9999u64.to_le_bytes(),
+        );
         let target = FakeRam::default();
         assert_eq!(
             restore_image(&disk, &target, layout()),
@@ -5670,7 +5702,11 @@ mod tests {
             capture_image(&blind, &source, layout(), &sparse_runs()),
             Err(SnapshotError::NoFreshnessSource)
         );
-        assert_eq!(blind.writes(), 0, "no write may precede the freshness check");
+        assert_eq!(
+            blind.writes(),
+            0,
+            "no write may precede the freshness check"
+        );
 
         // Restore: an otherwise-valid image is refused, and the region is left
         // alone — a device we cannot judge is not proven bad.

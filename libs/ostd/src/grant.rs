@@ -22,8 +22,8 @@
 
 use core::marker::PhantomData;
 
-use crate::syscall::{sys_grant_alloc, sys_grant_free, sys_grant_slice};
 use crate::syscall;
+use crate::syscall::{sys_grant_alloc, sys_grant_free, sys_grant_slice};
 
 /// A typed, linear handle to a kernel-managed grant region.
 ///

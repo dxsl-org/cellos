@@ -63,9 +63,9 @@ impl DomainAdmissionDenial {
     /// SAS, and it never publishes a partial task or domain.
     pub(crate) fn error(self) -> ViError {
         match self {
-            Self::FeatureDisabled | Self::UnsupportedArchitecture | Self::SwitchOrderingUnqualified => {
-                ViError::NotSupported
-            }
+            Self::FeatureDisabled
+            | Self::UnsupportedArchitecture
+            | Self::SwitchOrderingUnqualified => ViError::NotSupported,
             Self::ResourceQuota => ViError::OutOfMemory,
             Self::PolicyDisabled
             | Self::PolicyDraining

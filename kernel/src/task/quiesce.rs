@@ -83,7 +83,9 @@ impl QuiesceError {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::AlreadyRequested => "another request already owns the quiescence protocol",
-            Self::Unsupported => "no per-hart park hook: a multi-hart request cannot be acknowledged",
+            Self::Unsupported => {
+                "no per-hart park hook: a multi-hart request cannot be acknowledged"
+            }
             Self::TooManyHarts => "more online harts than the quiescence protocol tracks",
             Self::Timeout { .. } => "harts did not acknowledge the park request within the budget",
         }
@@ -858,9 +860,7 @@ pub mod lane {
                     );
                     return terminal(false, 1, 0, 0, 0);
                 }
-                log::warn!(
-                    "[selftest] S22-RV64-PARK: hart=0 state=no-targets (single-hart no-op)"
-                );
+                log::warn!("[selftest] S22-RV64-PARK: hart=0 state=no-targets (single-hart no-op)");
                 return terminal(true, 1, 0, 0, 0);
             }
         };
@@ -923,9 +923,7 @@ pub mod lane {
 
         // ── 2. The release reaches a hart that never acknowledged: the cancelled
         // request leaves no park behind, and the target is running its own code.
-        let observed = wait_for(50 * TICK, || {
-            count(&RELEASE_SEEN, target) >= cancelled
-        });
+        let observed = wait_for(50 * TICK, || count(&RELEASE_SEEN, target) >= cancelled);
         if !observed {
             log::warn!(
                 "[selftest] S22-RV64-PARK: hart={target} state=release-not-observed \
@@ -953,9 +951,7 @@ pub mod lane {
             );
             return terminal(false, 2, count(&STOPPED, target), 0, 1);
         }
-        log::warn!(
-            "[selftest] S22-RV64-PARK: hart=0 state=all-parked pending=0 epoch={epoch}"
-        );
+        log::warn!("[selftest] S22-RV64-PARK: hart=0 state=all-parked pending=0 epoch={epoch}");
 
         // The requester proceeds while the target is parked, and proves the park
         // was real: the target's own trap counter cannot move while it is stopped.
@@ -1178,7 +1174,10 @@ mod tests {
         let harts = FakeHarts::new(&[0], 0).with_hook(false);
         let state = QuiesceState::new();
         let guard = state.acquire(&harts).expect("one hart is a no-op");
-        assert!(guard.all_parked(), "vacuous predicate holds with no targets");
+        assert!(
+            guard.all_parked(),
+            "vacuous predicate holds with no targets"
+        );
         assert_eq!(guard.pending_count(), 0);
         assert!(harts.requests().is_empty(), "no hart may be asked to park");
         assert_eq!(harts.clock_ticks(), 0, "no wait may be entered");
@@ -1397,7 +1396,10 @@ mod tests {
         // The next request is a new epoch, so it is not covered by the old release.
         let next = request_park(hart);
         assert_eq!(next, epoch + 1);
-        assert!(!park_acknowledged(hart, next), "a new epoch needs a new park");
+        assert!(
+            !park_acknowledged(hart, next),
+            "a new epoch needs a new park"
+        );
         assert_eq!(
             park_here_if_requested(hart),
             ParkOutcome::Abandoned { epoch: next }

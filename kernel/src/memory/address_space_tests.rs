@@ -128,11 +128,10 @@ pub(crate) fn run_primary() {
                 // made by other tasks while the remote ack is outstanding.
                 let before = space.frames.lock().len();
                 let tag = space.asid();
-                let remote_acks_before: Vec<(usize, usize)> =
-                    crate::task::smp::online_harts()
-                        .filter(|hart| *hart != crate::task::hart_local::current_hart_id())
-                        .map(|hart| (hart, crate::task::smp::tlb_flush_complete_epoch(hart)))
-                        .collect();
+                let remote_acks_before: Vec<(usize, usize)> = crate::task::smp::online_harts()
+                    .filter(|hart| *hart != crate::task::hart_local::current_hart_id())
+                    .map(|hart| (hart, crate::task::smp::tlb_flush_complete_epoch(hart)))
+                    .collect();
                 crate::memory::tlb_shootdown::begin_test_flush_observation();
                 let unmapped = space.unmap_private_page(PRIVATE_PAGE).is_ok();
                 let tagged = crate::memory::tlb_shootdown::test_tag_flush_observed(tag);
@@ -326,8 +325,8 @@ pub(crate) fn run_primary() {
         let attempts_before = queue::deferred_release_attempts();
 
         crate::memory::tlb_shootdown::set_test_withhold_tag_ack(true);
-        let unconfirmed_error =
-            space.unmap_private_page(PRIVATE_PAGE) == Err(AddressSpaceError::InvalidationUnacknowledged);
+        let unconfirmed_error = space.unmap_private_page(PRIVATE_PAGE)
+            == Err(AddressSpaceError::InvalidationUnacknowledged);
         let depth_after = queue::deferred_release_depth();
         let retained = queue::deferred_release_frames() - queued_frames_before;
         let queued = depth_after == depth_before + 1 && retained > 0;
@@ -359,8 +358,8 @@ pub(crate) fn run_primary() {
                 core::hint::spin_loop();
             }
         }
-        let released_exactly = used_frames().and_then(|now| frames_before.checked_sub(now))
-            == Some(retained);
+        let released_exactly =
+            used_frames().and_then(|now| frames_before.checked_sub(now)) == Some(retained);
         let tag_confirmed = !queue::tag_invalidation_unconfirmed(tag);
         let quiet = quarantined_frame_count() == 0
             && queue::deferred_release_abandoned() == 0

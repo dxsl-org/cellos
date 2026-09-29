@@ -125,9 +125,7 @@ impl FrameAllocator {
         self.ranges[..self.range_count]
             .iter()
             .filter_map(|range| *range)
-            .find(|range| {
-                addr >= range.start && addr < range.start + range.frames * PAGE_SIZE
-            })
+            .find(|range| addr >= range.start && addr < range.start + range.frames * PAGE_SIZE)
             .map(|range| range.index_base + (addr - range.start) / PAGE_SIZE)
     }
 
@@ -667,11 +665,7 @@ mod tests {
     use crate::boot::{MemoryMapEntry, MemoryType};
 
     fn map_entry(base: usize, length: usize, ty: MemoryType) -> MemoryMapEntry {
-        MemoryMapEntry {
-            base,
-            length,
-            ty,
-        }
+        MemoryMapEntry { base, length, ty }
     }
 
     #[test]
@@ -697,8 +691,7 @@ mod tests {
         // No managed frame may sit inside the reserved hole.
         for range in &ranges {
             assert!(
-                range.start + range.frames * PAGE_SIZE <= 0x9000_0000
-                    || range.start >= 0x9100_0000,
+                range.start + range.frames * PAGE_SIZE <= 0x9000_0000 || range.start >= 0x9100_0000,
                 "range {range:?} overlaps the reserved hole"
             );
         }
@@ -711,7 +704,11 @@ mod tests {
             map_entry(0x8100_0000, 0x0100_0000, MemoryType::Usable),
         ];
         let plan = plan_managed_ranges(&entries);
-        assert_eq!(plan.range_count(), 1, "adjacent usable entries are one range");
+        assert_eq!(
+            plan.range_count(),
+            1,
+            "adjacent usable entries are one range"
+        );
         assert_eq!(plan.total_frames(), 0x0200_0000 / PAGE_SIZE);
     }
 
@@ -729,7 +726,13 @@ mod tests {
     #[should_panic(expected = "more usable ranges than")]
     fn too_many_ranges_halt() {
         let entries: alloc::vec::Vec<_> = (0..9)
-            .map(|i| map_entry(0x8000_0000 + i * 0x0200_0000, 0x0100_0000, MemoryType::Usable))
+            .map(|i| {
+                map_entry(
+                    0x8000_0000 + i * 0x0200_0000,
+                    0x0100_0000,
+                    MemoryType::Usable,
+                )
+            })
             .collect();
         let _ = plan_managed_ranges(&entries);
     }
@@ -820,8 +823,9 @@ mod tests {
             allocator.mark_range_used(hole, 1);
         }
         let before = allocator.used_frames();
-        let marked_before: alloc::vec::Vec<bool> =
-            (0..2_048).map(|i| allocator.is_frame_allocated(i)).collect();
+        let marked_before: alloc::vec::Vec<bool> = (0..2_048)
+            .map(|i| allocator.is_frame_allocated(i))
+            .collect();
         assert!(
             allocator.free_frames() > 1_024,
             "fixture must leave more free frames than the run needs"
@@ -837,7 +841,8 @@ mod tests {
                     let newly_marked = !marked_before[index] && allocator.is_frame_allocated(index);
                     let inside_run = index >= first && index < first + 1_024;
                     assert_eq!(
-                        newly_marked, inside_run,
+                        newly_marked,
+                        inside_run,
                         "frame {index}: the reservation must allocate exactly the run \
                          {first}..{}",
                         first + 1_024
@@ -862,7 +867,8 @@ mod tests {
             .find(|index| !allocator.is_frame_allocated(*index))
             .expect("the map has free frames");
 
-        let start = reserve_contiguous_run(&mut allocator, 1_024).expect("a 1,024-frame run exists");
+        let start =
+            reserve_contiguous_run(&mut allocator, 1_024).expect("a 1,024-frame run exists");
         assert_eq!(
             start,
             PAGE_SIZE * (expected_first + 1),

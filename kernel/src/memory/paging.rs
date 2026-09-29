@@ -903,12 +903,8 @@ pub fn grant_mmio_user(base: usize, len: usize) -> PagingResult<usize> {
 #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
 fn mmio_user_flags() -> Flags {
     #[cfg(target_arch = "riscv64")]
-    let bits = Flags::VALID
-        | Flags::READ
-        | Flags::WRITE
-        | Flags::USER
-        | Flags::ACCESSED
-        | Flags::DIRTY;
+    let bits =
+        Flags::VALID | Flags::READ | Flags::WRITE | Flags::USER | Flags::ACCESSED | Flags::DIRTY;
     #[cfg(target_arch = "aarch64")]
     let bits = Flags::VALID
         | Flags::READ

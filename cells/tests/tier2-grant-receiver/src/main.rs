@@ -334,7 +334,9 @@ fn cell_main() {
                     sys_exit(1);
                 }
             }
-            println(&format!("{TAG}-GRANT-PAIR-RECEIVER-REVOKE-FAULT: FAULT-EXPECTED"));
+            println(&format!(
+                "{TAG}-GRANT-PAIR-RECEIVER-REVOKE-FAULT: FAULT-EXPECTED"
+            ));
             deliberate_store(pointer);
             println(&format!("{TAG}-GRANT-PAIR-RECEIVER-REVOKE-FAULT: WROTE"));
         }
@@ -349,7 +351,9 @@ fn cell_main() {
             println(&format!(
                 "{TAG}-GRANT-PAIR-RECEIVER-SLICE-RO: OK (read {observed:#x})"
             ));
-            println(&format!("{TAG}-GRANT-PAIR-RECEIVER-RO-WRITE: FAULT-EXPECTED"));
+            println(&format!(
+                "{TAG}-GRANT-PAIR-RECEIVER-RO-WRITE: FAULT-EXPECTED"
+            ));
             deliberate_store(pointer);
             println(&format!("{TAG}-GRANT-PAIR-RECEIVER-RO-WRITE: WROTE"));
         }
@@ -375,14 +379,18 @@ fn cell_main() {
             // Same grant, same recipient, stricter rights.
             send_byte(owner, WANT_DOWNGRADE_RO);
             if recv_byte_from(owner).is_none() {
-                println(&format!("{TAG}-GRANT-PAIR-RECEIVER-DOWNGRADE-RESHARE: NO-ACK"));
+                println(&format!(
+                    "{TAG}-GRANT-PAIR-RECEIVER-DOWNGRADE-RESHARE: NO-ACK"
+                ));
                 sys_exit(1);
             }
             // The address must still resolve, still hold the byte written above
             // (a dropped mapping would fault on the load instead), and refuse the
             // store (the old writable PTE is what the re-share had to remove).
             let Some(ro_pointer) = sys_grant_slice(id_down) else {
-                println(&format!("{TAG}-GRANT-PAIR-RECEIVER-DOWNGRADE-READ: MISSING"));
+                println(&format!(
+                    "{TAG}-GRANT-PAIR-RECEIVER-DOWNGRADE-READ: MISSING"
+                ));
                 sys_exit(1);
             };
             if ro_pointer as usize != rw_address {
@@ -399,7 +407,9 @@ fn cell_main() {
             println(&format!(
                 "{TAG}-GRANT-PAIR-RECEIVER-DOWNGRADE-READ: OK (read {observed:#x})"
             ));
-            println(&format!("{TAG}-GRANT-PAIR-RECEIVER-DOWNGRADE-WRITE: FAULT-EXPECTED"));
+            println(&format!(
+                "{TAG}-GRANT-PAIR-RECEIVER-DOWNGRADE-WRITE: FAULT-EXPECTED"
+            ));
             deliberate_store(ro_pointer);
             println(&format!("{TAG}-GRANT-PAIR-RECEIVER-DOWNGRADE-WRITE: WROTE"));
         }
@@ -424,12 +434,16 @@ fn cell_main() {
             // but a hart that has not published its epoch yet can still be running
             // this cell — so the first store may land. Store until the revocation
             // traps (bounded; the trap is the witness).
-            println(&format!("{TAG}-GRANT-PAIR-RECEIVER-UNREGISTER-FAULT: FAULT-EXPECTED"));
+            println(&format!(
+                "{TAG}-GRANT-PAIR-RECEIVER-UNREGISTER-FAULT: FAULT-EXPECTED"
+            ));
             for _ in 0..EXIT_RETRY_LIMIT {
                 deliberate_store(pointer);
                 sys_yield();
             }
-            println(&format!("{TAG}-GRANT-PAIR-RECEIVER-UNREGISTER-FAULT: WROTE"));
+            println(&format!(
+                "{TAG}-GRANT-PAIR-RECEIVER-UNREGISTER-FAULT: WROTE"
+            ));
         }
         "exit" => {
             let Some(pointer) = sys_grant_slice(id_exit) else {
@@ -448,7 +462,9 @@ fn cell_main() {
             // the receiver mapping before this cell can write the old address.
             send_byte(owner, REQ_EXIT);
             if !wait_until_revoked(id_exit) {
-                println(&format!("{TAG}-GRANT-PAIR-RECEIVER-EXIT-FAULT: STILL-MAPPED"));
+                println(&format!(
+                    "{TAG}-GRANT-PAIR-RECEIVER-EXIT-FAULT: STILL-MAPPED"
+                ));
                 sys_exit(1);
             }
             // A reaper revokes asynchronously: on more than one CPU the record
@@ -461,7 +477,9 @@ fn cell_main() {
             // a peer hart can be non-preemptible for seconds, and the measured
             // confirmation latency on a two-hart boot reached ~235 reaper ticks
             // (~2.3 s) before the invalidation landed.
-            println(&format!("{TAG}-GRANT-PAIR-RECEIVER-EXIT-FAULT: FAULT-EXPECTED"));
+            println(&format!(
+                "{TAG}-GRANT-PAIR-RECEIVER-EXIT-FAULT: FAULT-EXPECTED"
+            ));
             for _ in 0..EXIT_RETRY_LIMIT {
                 deliberate_store(pointer);
                 sys_yield();

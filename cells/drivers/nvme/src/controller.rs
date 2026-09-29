@@ -49,8 +49,7 @@ const NVM_OPC_FLUSH: u8 = 0x00;
 const POLL_WARN_ITERS: u64 = 1_000_000;
 
 /// How many expected io rejections (reads past the namespace end) to log.
-static IO_ERR_LOG: core::sync::atomic::AtomicUsize =
-    core::sync::atomic::AtomicUsize::new(3);
+static IO_ERR_LOG: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(3);
 
 pub struct NvmeController {
     mmio: MmioRegion,
@@ -313,7 +312,8 @@ impl NvmeController {
                 if status != 0 {
                     ostd::io::println(&alloc::format!(
                         "[nvme] admin error status={} after {} polls",
-                        status, iters
+                        status,
+                        iters
                     ));
                     return Err(ViError::IO);
                 }
@@ -375,7 +375,10 @@ impl NvmeController {
                     if IO_ERR_LOG.fetch_sub(1, Ordering::Relaxed) > 0 {
                         ostd::io::println(&alloc::format!(
                             "[nvme] io error opc={} lba={} nlb={} status={}",
-                            opc, lba, nlb, status
+                            opc,
+                            lba,
+                            nlb,
+                            status
                         ));
                     }
                     return Err(ViError::IO);
@@ -387,7 +390,9 @@ impl NvmeController {
                 // Never expected: an unanswered command is always worth a line.
                 ostd::io::println(&alloc::format!(
                     "[nvme] io timeout opc={} lba={} after {} polls",
-                    opc, lba, iters
+                    opc,
+                    lba,
+                    iters
                 ));
                 return Err(ViError::IO);
             }

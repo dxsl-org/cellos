@@ -67,9 +67,7 @@ pub fn publish_physical_cpu(cpu_index: usize, logical_hart: usize) {
 /// The CPU index a logical hart runs on, if it was published.
 #[cfg(target_arch = "aarch64")]
 pub fn physical_cpu_for(logical_hart: usize) -> Option<usize> {
-    (0..MAX_HARTS).find(|cpu| {
-        CPU_TO_LOGICAL[*cpu].load(Ordering::Relaxed) == logical_hart
-    })
+    (0..MAX_HARTS).find(|cpu| CPU_TO_LOGICAL[*cpu].load(Ordering::Relaxed) == logical_hart)
 }
 
 /// Slot owned by the calling CPU on targets without a `tp` register.

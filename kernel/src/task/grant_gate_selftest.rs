@@ -133,13 +133,21 @@ fn grant_share(owner: usize, grant_id: usize, target: usize, perm: GrantPerm) ->
 }
 
 fn grant_slice(tid: usize, grant_id: usize) -> Result<usize, SyscallError> {
-    handle_syscall(tid, Syscall::GrantSlice { grant_id, size_out_ptr: 0 })
+    handle_syscall(
+        tid,
+        Syscall::GrantSlice {
+            grant_id,
+            size_out_ptr: 0,
+        },
+    )
 }
 
 /// Does `space` hold a `Grant` mapping at `va` whose rights are exactly `bits`?
 fn ledger_has(space: &Arc<AddressSpace>, va: usize, bits: usize) -> bool {
     space.ledger().into_iter().any(|entry| {
-        entry.virtual_address == va && entry.kind == MappingKind::Grant && entry.flags.bits() & bits == bits
+        entry.virtual_address == va
+            && entry.kind == MappingKind::Grant
+            && entry.flags.bits() & bits == bits
     })
 }
 
@@ -209,11 +217,7 @@ fn probe(
         let (present, user) = crate::memory::paging::mapping_state(base);
         present
             && !user
-            && ledger_has(
-                domain_space,
-                base,
-                Flags::READ | Flags::WRITE,
-            )
+            && ledger_has(domain_space, base, Flags::READ | Flags::WRITE)
             && !ledger_has(domain_space, base, Flags::EXECUTE)
     });
 
@@ -261,22 +265,27 @@ fn probe(
 
     // 5. …and without that share the private root must not be able to resolve a
     //    raw mapping for it, at any rights.
-    let slice = sas_grant.is_some_and(|grant_id| {
-        matches!(grant_slice(DOMAIN_TID, grant_id), Ok(usize::MAX))
-    });
+    let slice = sas_grant
+        .is_some_and(|grant_id| matches!(grant_slice(DOMAIN_TID, grant_id), Ok(usize::MAX)));
 
     // 6. A retired private root is not a capability: the alloc-safe sentinel for
     //    allocation and the slice sentinel for any id.
     retired_space.retire();
-    let retired = grant_alloc(RETIRED_TID).is_none()
-        && matches!(grant_slice(RETIRED_TID, 0), Ok(usize::MAX));
+    let retired =
+        grant_alloc(RETIRED_TID).is_none() && matches!(grant_slice(RETIRED_TID, 0), Ok(usize::MAX));
 
     // 7. Tier-1 regression: a SAS→SAS grant still shares, slices to the
     //    identity-mapped base and frees (the copied-IPC/VFS path).
     let sas = match grant_alloc(SAS_OWNER_TID) {
         Some(grant_id) => {
-            let shared = grant_share(SAS_OWNER_TID, grant_id, SAS_GRANTEE_TID, GrantPerm::ReadOnly);
-            let sliced = matches!(grant_slice(SAS_GRANTEE_TID, grant_id), Ok(base) if base == grant_id);
+            let shared = grant_share(
+                SAS_OWNER_TID,
+                grant_id,
+                SAS_GRANTEE_TID,
+                GrantPerm::ReadOnly,
+            );
+            let sliced =
+                matches!(grant_slice(SAS_GRANTEE_TID, grant_id), Ok(base) if base == grant_id);
             let freed = handle_syscall(SAS_OWNER_TID, Syscall::GrantFree { grant_id }).is_ok();
             shared && sliced && freed
         }
@@ -317,13 +326,10 @@ fn probe(
     // The leak check is taken before the retirement sweep retries the deferred
     // rows — a flat `== baseline` would call the deferred path a leak.
     let pages = GRANT_SIZE.div_ceil(PAGE_SIZE);
-    let retained_by_design =
-        pages * (usize::from(retire.deferred) + usize::from(reg_deferred));
+    let retained_by_design = pages * (usize::from(retire.deferred) + usize::from(reg_deferred));
     let retained_tables: usize = [domain_space, receiver_space, retired_space]
         .into_iter()
-        .map(|space| {
-            crate::memory::deferred_release::deferred_release_frames_for(space.asid())
-        })
+        .map(|space| crate::memory::deferred_release::deferred_release_frames_for(space.asid()))
         .sum();
     let owned_now: usize = [domain_space, receiver_space, retired_space]
         .into_iter()
@@ -336,8 +342,7 @@ fn probe(
     // correct deferral has to be counted in all three places for the deficit to
     // add up.
     let deficit = baseline - before_sweep;
-    let accounted =
-        deficit == (owned_now - owned_baseline) + retained_tables + retained_by_design;
+    let accounted = deficit == (owned_now - owned_baseline) + retained_tables + retained_by_design;
     super::syscall::reclaim_owned_grants(DOMAIN_TID);
     let after_sweep = free_frames();
     // The sweep may complete a deferred revoke (returning frames) but can never
@@ -438,7 +443,11 @@ pub(crate) fn run_primary() {
     // acknowledging legitimately takes the deferred one.
     log::info!(
         "{ARCH_TAG}-GRANT-GATE-RETIRE-OUTCOME: {}",
-        if probe.retire_deferred { "DEFERRED" } else { "COMPLETED" }
+        if probe.retire_deferred {
+            "DEFERRED"
+        } else {
+            "COMPLETED"
+        }
     );
 
     if probe.all() {

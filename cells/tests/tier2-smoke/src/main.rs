@@ -102,7 +102,11 @@ fn cell_main() {
         let wrote = sys_grant_copy_from_slice(grant_id, &pattern);
         let mut readback = [0u8; 8];
         let read = sys_grant_copy_to_slice(grant_id, &mut readback);
-        assert_eq!(wrote, Some(pattern.len()), "owner write into its grant failed");
+        assert_eq!(
+            wrote,
+            Some(pattern.len()),
+            "owner write into its grant failed"
+        );
         assert_eq!(read, Some(pattern.len()), "owner read of its grant failed");
         assert_eq!(readback, pattern, "grant round-trip returned other bytes");
         println("[tier2-smoke] Grant backing written and read back (owner mapping live)");

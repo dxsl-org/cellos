@@ -216,7 +216,9 @@ fn ack(target: usize, byte: u8) {
 }
 
 fn cell_main() {
-    println(&format!("{TAG}-GRANT-PAIR-OWNER-BEGIN: public Grant* owner path"));
+    println(&format!(
+        "{TAG}-GRANT-PAIR-OWNER-BEGIN: public Grant* owner path"
+    ));
     let mut ok = true;
     let receiver_name = peer_arg().unwrap_or_else(|| String::from(INTERACTIVE_RECEIVER_NAME));
     let receiver_name = receiver_name.as_bytes();

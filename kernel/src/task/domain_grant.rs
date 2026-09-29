@@ -219,13 +219,10 @@ impl DomainGrant {
     pub(crate) fn drain_receiver(&self) -> Result<(), DomainGrantError> {
         let Some((root, base, size)) = ({
             let guard = self.receiver.lock();
-            guard.as_ref().filter(|receiver| !receiver.drained).map(|receiver| {
-                (
-                    Arc::clone(&receiver.root),
-                    receiver.base,
-                    receiver.size,
-                )
-            })
+            guard
+                .as_ref()
+                .filter(|receiver| !receiver.drained)
+                .map(|receiver| (Arc::clone(&receiver.root), receiver.base, receiver.size))
         }) else {
             return Ok(());
         };
@@ -324,8 +321,8 @@ impl DomainGrant {
 ))]
 pub(crate) fn run_selftest() {
     use super::syscall::{handle_syscall, Syscall};
-    use super::thread_cap_selftest::{insert, mk_task, remove};
     use super::tcb::TaskAddressSpace;
+    use super::thread_cap_selftest::{insert, mk_task, remove};
     use crate::memory::address_space::{AddressSpaceBuilder, MappingKind};
 
     const OWNER_TID: usize = 9601;
@@ -509,9 +506,8 @@ pub(crate) fn run_selftest() {
     //    it can be published, so no byte of the revoked grant survives.
     let reuse_private = grant_alloc(OWNER_TID).is_some_and(|base| {
         // SAFETY: the frame is identity-mapped supervisor in the current root.
-        let zeroed = (0..GRANT_SIZE).all(|offset| {
-            (unsafe { core::ptr::read_volatile((base + offset) as *const u8) }) == 0
-        });
+        let zeroed = (0..GRANT_SIZE)
+            .all(|offset| (unsafe { core::ptr::read_volatile((base + offset) as *const u8) }) == 0);
         let _ = handle_syscall(OWNER_TID, Syscall::GrantFree { grant_id: base });
         zeroed
     });

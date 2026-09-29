@@ -557,10 +557,7 @@ impl Scheduler {
         };
         let target_tid = super::hart_local::ready::current_task_id_for(target_hart);
         let target_priority = if target_tid > 0 {
-            self.tasks
-                .get(&target_tid)
-                .map(|t| t.priority)
-                .unwrap_or(0)
+            self.tasks.get(&target_tid).map(|t| t.priority).unwrap_or(0)
         } else {
             0
         };

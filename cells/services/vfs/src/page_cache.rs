@@ -89,9 +89,7 @@ impl PageCache {
             self.touch(sector);
             return;
         }
-        while self.total_bytes + 512
-            > self.max_bytes * EVICT_NUMERATOR / EVICT_DENOMINATOR
-        {
+        while self.total_bytes + 512 > self.max_bytes * EVICT_NUMERATOR / EVICT_DENOMINATOR {
             let Some(lru) = self.lru_order.pop_back() else {
                 break;
             };

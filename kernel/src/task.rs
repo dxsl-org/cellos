@@ -9,7 +9,13 @@ pub mod completion_selftest;
 pub mod completion_wait;
 pub(crate) mod copy_glue;
 pub mod dir_inherit;
-#[cfg(all(feature = "native-domains", any(target_arch = "riscv64", all(target_arch = "aarch64", feature = "test-hooks"))))]
+#[cfg(all(
+    feature = "native-domains",
+    any(
+        target_arch = "riscv64",
+        all(target_arch = "aarch64", feature = "test-hooks")
+    )
+))]
 pub(crate) mod domain_grant;
 #[cfg(all(
     feature = "native-domains",
@@ -43,13 +49,6 @@ pub(crate) mod futex;
     any(target_arch = "riscv64", target_arch = "aarch64")
 ))]
 pub(crate) mod grant_gate_selftest;
-/// Phase-06 witness: an RT sender woken by a consume preempts its target hart.
-#[cfg(all(
-    feature = "native-domains",
-    feature = "test-hooks",
-    target_arch = "riscv64"
-))]
-pub(crate) mod rt_wake_selftest;
 pub mod grant_reclaim_selftest;
 pub mod hart_local;
 pub mod manifest_v2_selftest;
@@ -62,6 +61,13 @@ pub mod p_trust_selftest;
 pub(crate) mod pipe;
 /// All-hart quiescence for the snapshot capture preflight (phase 07 step 3).
 pub mod quiesce;
+/// Phase-06 witness: an RT sender woken by a consume preempts its target hart.
+#[cfg(all(
+    feature = "native-domains",
+    feature = "test-hooks",
+    target_arch = "riscv64"
+))]
+pub(crate) mod rt_wake_selftest;
 pub mod smp;
 pub mod syscall;
 pub mod tcb;
@@ -1565,10 +1571,7 @@ pub fn yield_cpu() {
                 // while the outgoing context is still being saved on a stack the
                 // new root does not map.
                 crate::hal::arch::Context::switch_with_root(
-                    final_curr,
-                    final_next,
-                    root_addr,
-                    asid,
+                    final_curr, final_next, root_addr, asid,
                 );
                 complete_incoming_switch(hart_id);
                 // The incoming side of a completed switch is the proof a

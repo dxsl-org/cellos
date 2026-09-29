@@ -75,8 +75,7 @@ const fn cpuid_has_invpcid(max_leaf: u32, leaf7_ebx: u32) -> bool {
 
 pub fn invpcid_supported() -> bool {
     let max_leaf = core::arch::x86_64::__cpuid(0).eax;
-    max_leaf >= 7
-        && cpuid_has_invpcid(max_leaf, core::arch::x86_64::__cpuid_count(7, 0).ebx)
+    max_leaf >= 7 && cpuid_has_invpcid(max_leaf, core::arch::x86_64::__cpuid_count(7, 0).ebx)
 }
 
 /// Is a nonzero PCID in CR3 meaningful right now?
