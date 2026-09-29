@@ -11,9 +11,10 @@ use hal_arch_trait::vi_handle_uart_irq;
 use hal_arch_trait::vi_handle_virtio_irq;
 #[cfg(feature = "board-rpi3")]
 use hal_arch_trait::vi_signal_usb_irq;
+#[cfg(not(feature = "board-rpi3"))]
+use hal_arch_trait::vi_ipi_service;
 use hal_arch_trait::{
-    vi_current_cell_id, vi_gpio_notify_irq, vi_ipi_service, vi_terminate_on_fault_aarch64,
-    vi_timer_tick,
+    vi_current_cell_id, vi_gpio_notify_irq, vi_terminate_on_fault_aarch64, vi_timer_tick,
     ViCell_syscall_dispatch, ViTrapFrame,
 };
 
@@ -549,8 +550,19 @@ __trap_exit:
 1:
     ldr  x9,  [sp, #264]     // sepc → ELR_EL2 (user entry point)
     msr  elr_el2, x9
-    mov  x9,  #0
-    msr  spsr_el2, x9         // EL0t — Cells stay at EL0
+    // With HCR_EL2.TGE=1 the PE treats EL1 as EL0, so the state a cell is entered
+    // in is encoded EL1t (M[3:0] = 0b0100) with M[4] = 1 for AArch64: 0x14.
+    // Measured on this machine (`virt,virtualization=on`, cortex-a57):
+    //   * `#0x10` (plain EL0t, the encoding a non-TGE host wants) hung every
+    //     boot — 60 of 60 runs stopped at the first task entry;
+    //   * `#0` (AArch32 USR, i.e. no AArch64 selector at all) works only for as
+    //     long as the emulator tolerates it, and it is the state the rare
+    //     `ec=0x0 esr=0x2000000` trap was reached from (about one run in thirty,
+    //     reported as a kernel trap at an ELR inside this path).
+    // 0x14 is green: 90 of 90 two-hart runs with no such trap, production suite
+    // 11 of 11, one-CPU lane exit 0.
+    mov  x9,  #0x14           // EL1t, AArch64, no interrupt masking
+    msr  spsr_el2, x9
     ldr  x9,  [sp, #16]      // regs[2] = user sp
     msr  sp_el0, x9
     ldp  x0,  x1,  [sp, #0]
