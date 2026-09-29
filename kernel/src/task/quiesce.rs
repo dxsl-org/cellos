@@ -111,6 +111,12 @@ pub struct HartSet {
     len: usize,
 }
 
+impl Default for HartSet {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl HartSet {
     /// An empty set.
     pub const fn new() -> Self {
@@ -197,6 +203,12 @@ pub trait QuiesceHarts {
 /// for as long as that guard lives.
 pub struct QuiesceState {
     in_flight: AtomicBool,
+}
+
+impl Default for QuiesceState {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl QuiesceState {

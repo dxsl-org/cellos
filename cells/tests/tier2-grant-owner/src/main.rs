@@ -11,13 +11,13 @@
 //! property the phase must witness:
 //!
 //!   1. `rw`         — the receiver writes the ReadWrite mapping, the owner
-//!                     `GrantFree`s it, the receiver's old address faults;
+//!      `GrantFree`s it, the receiver's old address faults;
 //!   2. `ro`         — a ReadOnly mapping; the receiver's deliberate write faults;
 //!   3. `downgrade`  — the receiver takes a ReadWrite mapping of a third grant,
-//!                     then the owner re-shares the *same* grant ReadOnly to the
-//!                     *same* recipient; the receiver's old writable PTE must be
-//!                     gone (its store faults) while a read of the address still
-//!                     returns the byte the ReadWrite phase wrote;
+//!      then the owner re-shares the *same* grant ReadOnly to the
+//!      *same* recipient; the receiver's old writable PTE must be
+//!      gone (its store faults) while a read of the address still
+//!      returns the byte the ReadWrite phase wrote;
 //!   4. `unregister` — the owner `GrantUnregister`s, the receiver's address faults;
 //!   5. `exit`       — the owner exits, its reaper revokes, the receiver faults.
 //!
@@ -358,7 +358,7 @@ fn cell_main() {
                 }
             }
             REQ_FREE => {
-                let freed = alloc.is_some_and(|grant_id| sys_grant_free(grant_id));
+                let freed = alloc.is_some_and(sys_grant_free);
                 println(&format!(
                     "{TAG}-GRANT-PAIR-OWNER-FREE: {}",
                     if freed { "OK" } else { "FAIL" }
@@ -376,7 +376,7 @@ fn cell_main() {
                 // bounded: a refusal that never clears still prints FAIL.
                 let mut freed = false;
                 for _ in 0..UNREGISTER_RETRY_LIMIT {
-                    freed = reg.is_some_and(|grant_id| sys_grant_unregister(grant_id));
+                    freed = reg.is_some_and(sys_grant_unregister);
                     if freed {
                         break;
                     }

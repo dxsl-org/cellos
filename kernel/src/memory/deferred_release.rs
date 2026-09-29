@@ -252,10 +252,10 @@ fn request_tag_epochs(asid: usize) {
     }
     let mut queue = DEFERRED.lock();
     if let Some(entry) = queue.iter_mut().find(|entry| entry.asid == asid) {
-        for hart in 0..crate::task::smp::MAX_HARTS {
-            if requested[hart] != 0 {
+        for (hart, epoch) in requested.iter().enumerate() {
+            if *epoch != 0 {
                 // Monotonic per hart, so the newest request subsumes older ones.
-                entry.epochs[hart] = requested[hart];
+                entry.epochs[hart] = *epoch;
             }
         }
     }

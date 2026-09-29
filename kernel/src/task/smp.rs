@@ -42,20 +42,33 @@ static TLB_FLUSH_COMPLETE: [AtomicUsize; MAX_HARTS] = [AtomicUsize::new(0), Atom
 /// mechanism has one definition per architecture.
 #[inline]
 fn send_ipi(hart_id: usize) {
-    if hart_id >= MAX_HARTS || hart_id == crate::task::hart_local::current_hart_id() {
-        return;
+    #[cfg(any(
+        target_arch = "riscv64",
+        all(target_arch = "aarch64", not(feature = "board-rpi3"))
+    ))]
+    {
+        if hart_id >= MAX_HARTS || hart_id == crate::task::hart_local::current_hart_id() {
+            return;
+        }
+        #[cfg(target_arch = "riscv64")]
+        if let Some((mask, base)) = logical_sbi_target(hart_id) {
+            let _ = hal::common::sbi::sbi_send_ipi(mask, base);
+        }
+        // AArch64: the BCM2836 (RPi3) local controller has no software-interrupt
+        // path in this kernel, and that board starts no secondary, so the GIC SGI
+        // is the only delivery mechanism that exists.
+        #[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]
+        if let Some(cpu) = crate::task::hart_local::physical_cpu_for(hart_id) {
+            hal::aarch64::gic::send_sgi(cpu as u32, hal::aarch64::gic::SGI_IPI);
+        }
     }
-    #[cfg(target_arch = "riscv64")]
-    if let Some((mask, base)) = logical_sbi_target(hart_id) {
-        let _ = hal::common::sbi::sbi_send_ipi(mask, base);
-    }
-    // AArch64: the BCM2836 (RPi3) local controller has no software-interrupt
-    // path in this kernel, and that board starts no secondary, so the GIC SGI
-    // is the only delivery mechanism that exists.
-    #[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]
-    if let Some(cpu) = crate::task::hart_local::physical_cpu_for(hart_id) {
-        hal::aarch64::gic::send_sgi(cpu as u32, hal::aarch64::gic::SGI_IPI);
-    }
+    // x86_64, and the Pi monitor board whose local controller has no SGI path:
+    // a request stays a recorded epoch, exactly as before.
+    #[cfg(not(any(
+        target_arch = "riscv64",
+        all(target_arch = "aarch64", not(feature = "board-rpi3"))
+    )))]
+    let _ = hart_id;
 }
 
 /// Ask `hart_id` to invalidate its local TLB and return the epoch it must publish.

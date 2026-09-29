@@ -39,10 +39,8 @@ const CPU_UNPUBLISHED: usize = usize::MAX;
 /// themselves, so a plain relaxed load is enough: the value is either the
 /// mapping this hart was started with or "not mine".
 #[cfg(target_arch = "aarch64")]
-const CPU_SLOT_UNPUBLISHED: AtomicUsize = AtomicUsize::new(CPU_UNPUBLISHED);
-
-#[cfg(target_arch = "aarch64")]
-static CPU_TO_LOGICAL: [AtomicUsize; MAX_HARTS] = [CPU_SLOT_UNPUBLISHED; MAX_HARTS];
+static CPU_TO_LOGICAL: [AtomicUsize; MAX_HARTS] =
+    [const { AtomicUsize::new(CPU_UNPUBLISHED) }; MAX_HARTS];
 
 /// The physical CPU index this hart is running on (`MPIDR_EL1.Aff0`).
 #[cfg(target_arch = "aarch64")]

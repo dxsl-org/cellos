@@ -146,6 +146,12 @@ pub unsafe fn monitor_s2_tlb_flush_ipa(ipa: u64) {
 }
 
 /// Bind an S2 root through the private Pi HVC gateway or directly at an EL2 host.
+///
+/// # Safety
+/// Must be called with an active EL2 host, or after the Pi EL1 monitor
+/// initialized. `root_pa` must be 8 KB-aligned, `vmid` must be ≥ 1 (VMID 0 is
+/// reserved for the EL2 host), the Stage-2 page table must be fully populated
+/// and flushed to RAM, and no vCPU may be running (VTTBR race).
 #[cfg(target_arch = "aarch64")]
 pub unsafe fn enable_stage2(vmid: u16, root_pa: u64) {
     #[cfg(feature = "board-rpi3")]
@@ -159,6 +165,12 @@ pub unsafe fn enable_stage2(vmid: u16, root_pa: u64) {
     }
 }
 
+/// Unbind the S2 root through the private Pi HVC gateway or directly at an EL2 host.
+///
+/// # Safety
+/// Must be called with an active EL2 host, or after the Pi EL1 monitor
+/// initialized, and with no vCPU running (clearing `HCR_EL2.VM` under a live
+/// guest would drop its translation).
 #[cfg(target_arch = "aarch64")]
 pub unsafe fn disable_stage2() {
     #[cfg(feature = "board-rpi3")]
@@ -172,6 +184,12 @@ pub unsafe fn disable_stage2() {
     }
 }
 
+/// Invalidate every Stage-2 entry through the private Pi HVC gateway or
+/// directly at an EL2 host.
+///
+/// # Safety
+/// Must be called with an active EL2 host, or after the Pi EL1 monitor
+/// initialized.
 #[cfg(target_arch = "aarch64")]
 pub unsafe fn s2_tlb_flush_all() {
     #[cfg(feature = "board-rpi3")]
@@ -185,6 +203,12 @@ pub unsafe fn s2_tlb_flush_all() {
     }
 }
 
+/// Invalidate the Stage-2 entry for one guest IPA through the private Pi HVC
+/// gateway or directly at an EL2 host.
+///
+/// # Safety
+/// Must be called with an active EL2 host, or after the Pi EL1 monitor
+/// initialized, after updating the Stage-2 descriptor for `ipa`.
 #[cfg(target_arch = "aarch64")]
 pub unsafe fn s2_tlb_flush_ipa(ipa: u64) {
     #[cfg(feature = "board-rpi3")]

@@ -750,7 +750,7 @@ pub fn kernel_image() -> Option<KernelImage> {
 /// Sectors needed to hold `run_count` inventory entries.
 const fn inventory_sectors(run_count: u64) -> u64 {
     let bytes = run_count * RUN_BYTES as u64;
-    (bytes + SECTOR_SIZE as u64 - 1) / SECTOR_SIZE as u64
+    bytes.div_ceil(SECTOR_SIZE as u64)
 }
 
 /// The single canonical checksum definition, shared by writer and reader:
@@ -1024,8 +1024,8 @@ fn image_runs_into(
 ) -> Result<(), SnapshotError> {
     out.sink_clear();
     if mutable.is_empty()
-        || mutable.base % FRAME_SIZE as u64 != 0
-        || mutable.end % FRAME_SIZE as u64 != 0
+        || !mutable.base.is_multiple_of(FRAME_SIZE as u64)
+        || !mutable.end.is_multiple_of(FRAME_SIZE as u64)
     {
         return Err(SnapshotError::ImageRegionUnavailable);
     }
@@ -1930,7 +1930,7 @@ fn frame_bound_for_scratch(bytes: usize) -> u64 {
 /// Frames the boot reserves for the capture's scratch region: the buffers for
 /// the partition capacity bound plus the frozen window's stack.
 const SCRATCH_BYTES: usize = scratch_bytes_for(capacity_frame_bound()) + SCRATCH_STACK_BYTES;
-const SCRATCH_FRAMES: usize = (SCRATCH_BYTES + FRAME_SIZE - 1) / FRAME_SIZE;
+const SCRATCH_FRAMES: usize = SCRATCH_BYTES.div_ceil(FRAME_SIZE);
 
 /// Host-lane backing for the frozen window.
 ///
@@ -2577,8 +2577,7 @@ pub fn restore_image(
     }
 
     // ── inventory ────────────────────────────────────────────────────────────
-    let mut inventory = Vec::new();
-    inventory.resize(inv_sectors as usize * SECTOR_SIZE, 0u8);
+    let mut inventory = alloc::vec![0u8; inv_sectors as usize * SECTOR_SIZE];
     for i in 0..inv_sectors {
         let at = i as usize * SECTOR_SIZE;
         if dev

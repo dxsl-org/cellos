@@ -948,7 +948,7 @@ fn unregister_registered_grant(caller_id: usize, reg_id: usize) -> Result<(), Sy
             .as_ref()
             .and_then(|grants| grants.get(&reg_id))
             .filter(|grant| grant.owner == caller_id)
-            .map(|grant| (grant.base, grant.size, grant.domain.clone()));
+            .map(|grant| (grant.base, grant.size, clone_domain_record(&grant.domain)));
         match owned {
             Some((base, size, domain)) => {
                 refuse_if_pinned("GrantUnregister", reg_id, base, size)?;
@@ -2763,6 +2763,10 @@ fn resolve_and_lease_grant(
 /// revoking the old receiver PTE and shooting it down. Unsupported rights
 /// (write-only) and a non-live or non-domain target are refused with the
 /// established share failure.
+// reason: the eight values are the share's exact inputs — row identity (owner,
+// base, domain, shared_to) plus the receiver binding (caller, target tid/root,
+// perm). Grouping them into a struct would only move the same list.
+#[allow(clippy::too_many_arguments)]
 #[cfg(all(
     feature = "native-domains",
     any(
@@ -7388,7 +7392,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     .as_ref()
                     .and_then(|m| m.get(&grant_id))
                     .filter(|g| g.owner == caller_id)
-                    .map(|g| (g.base, g.size, g.domain.clone()));
+                    .map(|g| (g.base, g.size, clone_domain_record(&g.domain)));
                 match owned {
                     None => None,
                     Some((base, size, domain)) => {
