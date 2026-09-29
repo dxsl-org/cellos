@@ -4,7 +4,7 @@
 
 | Metric | Definition | Value |
 |---|---|---:|
-| Kernel nLOC | Non-blank, non-comment Rust lines under `kernel/src`; excludes files matching `*test*.rs` | **46,963** |
+| Kernel nLOC | Non-blank, non-comment Rust lines under `kernel/src`; excludes files matching `*test*.rs` | **46,951** |
 | Core kernel nLOC | Kernel nLOC excluding `kernel/src/task/drivers/**` and `kernel/src/hypervisor/**` | **41,070** |
 
 The first row is the canonical moving kernel-size metric. The second is the boundary-migration
