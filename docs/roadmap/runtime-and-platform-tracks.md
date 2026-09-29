@@ -95,10 +95,11 @@ The in-tree implementation exists and is exercised. `patches/rust-std-cellos.pat
 applies to the pinned `rust-src` (`nightly-2026-05-01`, `f53b654a8`) and carries
 the Cellos PAL; `targets/{riscv64gc,aarch64,x86_64}-unknown-cellos.json` are the
 private target specs; `scripts/build-cellos-sysroot.sh` builds the private
-sysroot overlay for all three, and `scripts/run-std-smoke-qemu.sh riscv64` boots
-the std cell in QEMU, asserting the PAL invariants (freeing and over-aligned
-allocator paths, `Instant`, `yield_now`, `available_parallelism = 1`, argv, and
-the fail-closed fs/net/process arms). The `rust-std-lane` CI job keeps the patch,
+sysroot overlay for all three, and `scripts/run-std-smoke-qemu.sh` boots the std
+cell in QEMU on each of them — riscv64 and aarch64 on the `virt` machine with
+virtio-blk, x86_64 through the Limine ISO with nvme/e1000 — asserting the PAL
+invariants (freeing and over-aligned allocator paths, `Instant`, `yield_now`,
+`available_parallelism = 1`, argv, and the fail-closed fs/net/process arms). The `rust-std-lane` CI job keeps the patch,
 the three target specs, and those contract tests honest.
 
 That is a host/QEMU software witness, not qualification: no triple is published,

@@ -22,9 +22,30 @@ case "$ARCH" in
         TARGET_BOOTSTRAP="aarch64-unknown-none-softfloat"
         QEMU_BIN="${ViCell_QEMU:-qemu-system-aarch64}"
         ;;
+    x86_64)
+        SYSROOT_TARGET="x86_64-unknown-cellos"
+        TARGET_BOOTSTRAP="x86_64-unknown-none"
+        QEMU_BIN="${ViCell_QEMU:-qemu-system-x86_64}"
+        ;;
     *)
-        echo "FAIL: unsupported arch: $ARCH (supported: riscv64, aarch64)" >&2
+        echo "FAIL: unsupported arch: $ARCH (supported: riscv64, aarch64, x86_64)" >&2
         exit 2
+        ;;
+esac
+
+# The bootstrap cell set follows the machine's drivers: riscv64/aarch64 boot the
+# generic `virt` machine with virtio-blk, x86_64 the q35 machine with nvme/e1000
+# (the same set the x86 image lanes stage).
+case "$ARCH" in
+    x86_64)
+        BOOTSTRAP_PKGS=(app-init app-shell service-vfs service-config service-platform driver-nvme driver-e1000)
+        BOOTSTRAP_BINS=(app-init app-shell service-vfs service-config platform driver-nvme driver-e1000)
+        FAT_DRIVERS=("_REL_/driver-nvme" /bin/nvme "_REL_/driver-e1000" /bin/e1000)
+        ;;
+    *)
+        BOOTSTRAP_PKGS=(app-init app-shell service-vfs service-config service-platform driver-virtio-blk)
+        BOOTSTRAP_BINS=(app-init app-shell service-vfs service-config platform driver-virtio-blk)
+        FAT_DRIVERS=("_REL_/driver-virtio-blk" /bin/block)
         ;;
 esac
 TARGET_CELL="targets/${SYSROOT_TARGET}.json"
@@ -86,21 +107,32 @@ case "$ARCH" in
         export CFLAGS_aarch64_unknown_none_softfloat="${CFLAGS_aarch64_unknown_none_softfloat:---target=aarch64-unknown-none-elf -ffreestanding -mgeneral-regs-only -DLFS_NO_INTRINSICS -I$ROOT/third_party/freestanding-include}"
         export CARGO_TARGET_AARCH64_UNKNOWN_NONE_SOFTFLOAT_RUSTFLAGS="-C relocation-model=pic -C target-feature=+bti,+paca,+pacg"
         ;;
+    x86_64)
+        export CC_x86_64_unknown_none="${CC_x86_64_unknown_none:-cc}"
+        export CFLAGS_x86_64_unknown_none="${CFLAGS_x86_64_unknown_none:--ffreestanding -fno-stack-protector -mno-red-zone -mno-sse -mno-mmx -DLFS_NO_INTRINSICS -I$ROOT/third_party/freestanding-include}"
+        # x86_64 cells are position-independent; only the kernel is static.
+        export CARGO_TARGET_X86_64_UNKNOWN_NONE_RUSTFLAGS="-C relocation-model=pic"
+        ;;
 esac
+
+PKG_ARGS=()
+for pkg in "${BOOTSTRAP_PKGS[@]}"; do
+    PKG_ARGS+=(-p "$pkg")
+done
 
 cargo build --release --target "$TARGET_BOOTSTRAP" \
     -Z build-std=core,alloc \
-    -p app-init -p app-shell -p service-vfs -p service-config -p service-platform -p driver-virtio-blk
+    "${PKG_ARGS[@]}"
 
 REL="target/$TARGET_BOOTSTRAP/release"
-BOOTSTRAP_CELLS=(
-    "$REL/app-init"
-    "$REL/app-shell"
-    "$REL/service-vfs"
-    "$REL/service-config"
-    "$REL/platform"
-    "$REL/driver-virtio-blk"
-)
+BOOTSTRAP_CELLS=()
+for bin in "${BOOTSTRAP_BINS[@]}"; do
+    BOOTSTRAP_CELLS+=("$REL/$bin")
+done
+FAT_DRIVER_ARGS=()
+for entry in "${FAT_DRIVERS[@]}"; do
+    FAT_DRIVER_ARGS+=("${entry/_REL_/$REL}")
+done
 for bin in "${BOOTSTRAP_CELLS[@]}"; do
     [[ -s "$bin" ]] || { echo "FAIL: bootstrap cell missing: $bin" >&2; exit 1; }
 done
@@ -124,7 +156,7 @@ printf 'Cellos Tier 1 Rust std runtime verification\n' > "$WORK/readme.txt"
     "$REL/service-vfs"       /bin/vfs \
     "$REL/service-config"    /bin/config \
     "$REL/platform"          /bin/platform \
-    "$REL/driver-virtio-blk" /bin/block \
+    "${FAT_DRIVER_ARGS[@]}" \
     "$STD_SMOKE_BIN"         /bin/std-smoke \
     "$WORK/hostname"         /etc/hostname \
     "$WORK/readme.txt"       /readme.txt \
@@ -151,25 +183,49 @@ LOG="$WORK/serial.log"
 DISK="$WORK/disk.img"
 truncate -s 16M "$DISK"
 
-QEMU_ARGS=(
-    -machine virt
-    -m 256M
-    -smp 1
-    -nographic
-    -monitor none
-    -kernel "$KERNEL"
-    -drive "file=$DISK,format=raw,if=none,id=hd0"
-    -device virtio-blk-device,drive=hd0
-    -device virtio-rng-device
-)
-case "$ARCH" in
-    # riscv64 boots the ELF through the bundled OpenSBI (the kernel is a direct
-    # -kernel payload); aarch64 enters the kernel ELF directly. Both use the
-    # generic `virt` machine, and neither needs semihosting: the runner stops
-    # QEMU on the cell's PASS marker.
-    riscv64) QEMU_ARGS+=(-bios default) ;;
-    aarch64) QEMU_ARGS+=(-cpu cortex-a57) ;;
-esac
+if [[ "$ARCH" == "x86_64" ]]; then
+    # x86_64 has no direct -kernel entry: Limine loads the kernel from a
+    # dual-firmware ISO, and the machine provides the nvme disk and e1000 NIC
+    # that this cell set's drivers probe for.
+    ISO="$WORK/std-smoke.iso"
+    X86_KERNEL="$KERNEL" X86_ISO_ROOT="$WORK/iso-root" \
+        bash scripts/x86/make-iso-ci.sh "$ISO" >/dev/null
+    QEMU_ARGS=(
+        -machine q35
+        -cpu "${X86_CPU_MODEL:-qemu64,+pdpe1gb}"
+        -m 256M
+        -smp 1
+        -nographic
+        -monitor none
+        -cdrom "$ISO"
+        -boot d
+        -no-reboot
+        -drive "file=$DISK,format=raw,if=none,id=nvme0"
+        -device nvme,drive=nvme0,serial=CELLOSSTD
+        -netdev user,id=net0
+        -device e1000,netdev=net0,mac=52:54:00:12:34:56
+    )
+else
+    QEMU_ARGS=(
+        -machine virt
+        -m 256M
+        -smp 1
+        -nographic
+        -monitor none
+        -kernel "$KERNEL"
+        -drive "file=$DISK,format=raw,if=none,id=hd0"
+        -device virtio-blk-device,drive=hd0
+        -device virtio-rng-device
+    )
+    case "$ARCH" in
+        # riscv64 boots the ELF through the bundled OpenSBI (the kernel is a
+        # direct -kernel payload); aarch64 enters the kernel ELF directly. Both
+        # use the generic `virt` machine, and neither needs semihosting: the
+        # runner stops QEMU on the cell's PASS marker.
+        riscv64) QEMU_ARGS+=(-bios default) ;;
+        aarch64) QEMU_ARGS+=(-cpu cortex-a57) ;;
+    esac
+fi
 
 timeout --foreground "$BOOT_TIMEOUT" "$QEMU_BIN" "${QEMU_ARGS[@]}" > "$LOG" 2>&1 &
 QEMU_PID=$!

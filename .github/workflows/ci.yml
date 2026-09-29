@@ -380,15 +380,18 @@ jobs:
           key: rust-std-lane
 
       # QEMU boots the cells: qemu-system-misc carries qemu-system-riscv64,
-      # qemu-system-arm carries qemu-system-aarch64. gcc-riscv64-unknown-elf and
-      # binutils-aarch64-linux-gnu provide the per-arch objcopy lib-sign-cells.sh
-      # signs with (a host objcopy cannot read either cell ELF), plus the RISC-V
-      # C cross compiler the bootstrap cells' build scripts probe for.
-      - name: Install QEMU and the cell cross toolchains
+      # qemu-system-arm carries qemu-system-aarch64, qemu-system-x86 carries
+      # qemu-system-x86_64 (that lane also needs xorriso for the Limine ISO).
+      # gcc-riscv64-unknown-elf and binutils-aarch64-linux-gnu provide the
+      # per-arch objcopy lib-sign-cells.sh signs with (a host objcopy cannot read
+      # a RISC-V or AArch64 cell ELF), plus the RISC-V C cross compiler the
+      # bootstrap cells' build scripts probe for.
+      - name: Install QEMU, xorriso and the cell cross toolchains
         timeout-minutes: 10
         run: >
           sudo apt-get update -q && sudo apt-get install -y -q
-          qemu-system-misc qemu-system-arm gcc-riscv64-unknown-elf binutils-aarch64-linux-gnu
+          qemu-system-misc qemu-system-arm qemu-system-x86 xorriso
+          gcc-riscv64-unknown-elf binutils-aarch64-linux-gnu
 
       # scripts/sign-policy.py builds the Ed25519 POLICY.BIN the ramdisk carries.
       - name: Install Python cryptography (policy signing)
@@ -409,15 +412,17 @@ jobs:
             bash scripts/build-cellos-sysroot.sh "$TARGET"
           done
 
-      # Boots the std cell on the two architectures that publish a CellOS target
+      # Boots the std cell on every architecture that publishes a CellOS target
       # spec and waits for the PASS marker: allocator (including over-aligned
       # layouts), Instant, yield, parallelism, argv, and the fail-closed
-      # fs/net/process arms. x86_64 is not here yet - that cell set boots through
-      # the Limine ISO lane with nvme/e1000 drivers instead of virtio-blk.
-      - name: Boot the Tier 1 rust-std cell (QEMU riscv64 + aarch64)
+      # fs/net/process arms. Each arch keeps its own machine recipe (virt +
+      # virtio-blk for riscv64/aarch64, the Limine ISO with nvme/e1000 for
+      # x86_64), so all three targets have a runtime witness, not just a link.
+      - name: Boot the Tier 1 rust-std cell (QEMU riscv64 + aarch64 + x86_64)
         run: |
           BOOT_TIMEOUT=90 bash scripts/run-std-smoke-qemu.sh riscv64
           BOOT_TIMEOUT=90 bash scripts/run-std-smoke-qemu.sh aarch64
+          BOOT_TIMEOUT=90 bash scripts/run-std-smoke-qemu.sh x86_64
 
   c2c-broker-oracle-single-guest-local-runtime:
     name: C2C Broker Oracle (single-guest local-runtime QEMU)

@@ -163,5 +163,7 @@ were re-pinned. The Phase 06 plan/doc edits needed a third re-pin of the same ma
 - Verified locally: both arches print `[std-smoke] PASS: All Rust std PAL invariants verified
   successfully!` (aarch64 witnesses the over-aligned allocations and a 3.80 ms yield), so the
   aarch64 asm paths in the PAL are exercised end to end rather than only compiled.
-- x86_64 stays out of the runner: that cell set boots through the Limine ISO lane with nvme/e1000
-  instead of virtio-blk. Recorded as the next step in `.agents/TODO.md`.
+- x86_64 boots the same cell through the Limine ISO lane (`-machine q35`, nvme + e1000 drivers, the
+  `driver-nvme`/`driver-e1000` set instead of `driver-virtio-blk`) and prints the same PASS marker
+  (over-aligned witnesses intact, 34.89 ms yield). All three published target specs therefore have a
+  runtime witness, and the x86_64 `syscall`-based PAL paths are exercised for the first time.
