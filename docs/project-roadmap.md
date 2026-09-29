@@ -3,7 +3,7 @@
 **Project**: Cellos (Jarvis Hybrid OS)
 **Current version**: 0.2.1-dev (Mycelium Era)
 **Current phase**: Phase 1 - Core Stability; active product stage G1 Robot & Embedded
-**Last updated**: 2026-09-22 (BEAM/OTP parity analysis linked from this index)
+**Last updated**: 2026-09-30 (Tier 1 `rust-std` implementation and lane status)
 This file is the roadmap entrypoint. The previous all-in-one roadmap is
 preserved as a read-only content snapshot at
 [project-roadmap-legacy.md](project-roadmap-legacy.md). Use it only when a
@@ -295,8 +295,9 @@ Cellos is being shaped around product stages, not only phase numbers:
   with the host baseline unchanged at 101 passed, 0 failed, and 4 ignored. The
   rejected local capture/writer and its generated bundle were removed; local
   runs are verification only, non-admissible, and retain no Phase 04 evidence.
-  Production admission remains disabled, Phase 03 remains `PLANNED`, and Phase
-  04 remains `BLOCKED` pending a signed CI or secure measured runner, a qualified
+  Production admission remains disabled: Phase 03 and Phase 04 are both
+  `IMPLEMENTED` at their bounded ledger boundaries (2026-09-15/16), and their
+  production gates remain blocked pending a signed CI or secure measured runner, a qualified
   authenticated rollback-resistant floor, persistent slot/evidence recovery,
   physical hostile evidence, provisioned owner/publisher anchors, production
   loader/task/audit wiring with no-task-on-denial evidence, both required human
@@ -312,10 +313,14 @@ Cellos is being shaped around product stages, not only phase numbers:
   QEMU hostile/final-write race evidence. The authoritative support map keeps
   both hooks Deferred pending every named approval. This runtime evidence does
   not grant PAL approval, real entropy, or any remaining qualification gate.
-  There is no PAL, target, sysroot, runtime,
-  live capture, approval, or promotion. All six approval rows remain `NOT
-  GRANTED`, the implementation checkpoint remains `BLOCKED`, and umbrella
-  Phase 06 remains pending and dependency-blocked on Phase 03. Maintained
+  The implementation is in-tree: the private target specs
+  (`targets/*-unknown-cellos.json`), the pure-Rust PAL, the sysroot overlay and
+  the QEMU witness lane all exist, and the `rust-std-lane` CI job boots the std
+  cell on riscv64, aarch64 and x86_64. The acceptance ledger records Phase 06 as
+  `IMPLEMENTED` (2026-09-29) at exactly that bounded boundary; what remains open
+  is qualification — no live capture, published triple, promotion or readiness,
+  `PAL-019`/`PAL-031` still `Deferred`, and the qualification-blocking approval
+  rows still `NOT GRANTED`. Maintained
   detail is in
   [runtime-and-platform-tracks.md](roadmap/runtime-and-platform-tracks.md).
 - [Spec 18c Publisher Provenance Envelope](specs/18c-publisher-provenance-envelope.md)
