@@ -314,9 +314,17 @@ about to `eret` to EL0. The lower-EL wrapper's vector marker (0 for host vectors
 consumed once per dispatch) is the proof that works; the arm now requires it and the kernel-trap
 report names the marker. Cell traps are unaffected — a cell's EC-0 unallocated instruction arrives
 through the lower-EL vector and still terminates the cell. **Still open: why a host exception with
-EC 0 happens there at all** (one occurrence in ~34 runs, unchanged by today's other fixes; the next
-one will now be reported as a kernel trap instead of killing a cell). Measured after: 20 of 20
-two-hart runs green, no kernel-trap reports.
+EC 0 happens there at all.** One hypothesis was tested and refuted: `__trap_exit` writes
+`spsr_el1 = 0` with the comment "EL0t", and in `SPSR.M[4:0]` that is AArch32 USR rather than AArch64
+EL0t (`0x10`), which would leave the core in Illegal Execution state — whose next instruction raises
+exactly `EC=0`/`ESR=0x2000000` with `SPSR=0`. Changing both `__trap_exit` paths to `0x10` (and the idle
+context's `0x305` to `0x315`) **hung every boot** — 60 of 60 runs stopped at "spawned init … dispatched
+a task" with the task's user-stack baseline at 0 bytes — so the zero is load-bearing for how this image
+enters its tasks and was reverted. The report itself is live and was observed doing its job: one run in
+~30 now panics with `[aarch64] kernel trap …` instead of terminating a cell (24 further runs were
+clean), which is the outcome this arm's contract asks for. Next instrument if it matters: identify the
+*host* vector (sync/IRQ/SError) that raises it. Measured after the dispatcher fix: 20 of 20 two-hart
+runs green, no kernel-trap reports; 60 of 60 with the SPSR experiment, reverted.
 
 The last two failures in the following forty-run batch were neither of the above: the lane counted every
 `[fault] Cell` line, so a deliberate fault's termination record and the "already retired; deferred fault

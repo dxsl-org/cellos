@@ -19,6 +19,10 @@ Audited prior kernel findings against live code and wrote the eight-phase repair
   One run in thirty killed an innocent cell for a host exception inside `__trap_exit`. The arm now
   requires the lower-EL vector marker. Open: why a host exception with EC 0 happens there at all — the
   next one is reported as a kernel trap with the marker instead of as a cell fault.
+- Tested and refuted: `__trap_exit` writes `spsr_el1 = 0` (comment says "EL0t", architecture reads
+  AArch32 USR), which would explain the EC=0/IL signature — changing it to `0x10` hung 60 of 60 boots at
+  the first task entry, so the zero is load-bearing here. Reverted; the host exception with EC 0 stays
+  open, now reported as a kernel trap with the frame instead of killing a cell.
 - Two of forty runs also failed on a lane bug, not a kernel one: counting every `[fault] Cell` line made
   a deliberate fault's termination record and its "already retired; deferred fault dropped" note read as
   two faults. Terminations only now: 40 of 40.
