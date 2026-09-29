@@ -401,8 +401,11 @@ pub enum ViSyscall {
     /// World-switch into vCPU until exit or `budget_ns` ns expire; write `ViVmExit`.
     /// ABI: a0 = vm_id, a1 = vcpu_id, a2 = budget_ns, a3 = out_ptr (*mut ViVmExit) → 0.
     RunVcpu = 223,
-    /// Read (write=0) or write (write=1) vCPU registers x0-x30 + sp + pc (32×u64).
-    /// ABI: a0 = vm_id, a1 = vcpu_id, a2 = buf_ptr, a3 = write:bool → 0.
+    /// Read (mode=0) or write (mode=1) 32 vCPU GP words (x0-x30, PC).
+    /// Raspberry Pi 3 mode=2 reads a timer snapshot: CNTV_CTL_EL0 and
+    /// CNTV_CVAL_EL0 in words 0 and 1, with words 2..31 zeroed. All modes
+    /// require a writable 256-byte buffer owned by the calling Hypervisor Cell.
+    /// ABI: a0 = vm_id, a1 = vcpu_id, a2 = buf_ptr, a3 = mode → 0.
     VcpuRegs = 224,
     /// Inject a GICv2 virtual interrupt into vCPU (0 ≤ intid ≤ 1019).
     /// ABI: a0 = vm_id, a1 = vcpu_id, a2 = intid → 0.

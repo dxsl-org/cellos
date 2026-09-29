@@ -36,9 +36,8 @@
 //! 520 .. 528  exit_is_irq   set by the lower-EL IRQ vector, cleared by the sync one
 //! ```
 //!
-//! # FP handling
-//! MVP: eager save/restore is NOT implemented for Phase 03 smoke tests.
-//! The smoke guest uses no SIMD.  Phase 05 adds lazy CPTR_EL2.TFP management.
+//! Pi EL1 host: eager Q0–Q31/FPCR/FPSR bank switch keeps guest FP and Cell FP
+//! isolated across every EL2 transition. QEMU virt's existing path is unchanged.
 
 use core::arch::global_asm;
 use hal_hypervisor::ViVmExit;
@@ -115,6 +114,28 @@ pub struct AArch64Vcpu {
     /// `exit_*` fields so every byte offset already hard-coded in the `global_asm!`
     /// trampolines below stays valid.
     pub exit_is_irq: u64, // 520
+    /// Guest SP_EL0 is banked across EL2 but shared with the host's EL0 Cells.
+    /// Appended to preserve the assembly ABI offsets above.
+    pub g_sp_el0: u64,
+    // Pi-only FP bank, appended after every legacy assembly offset.
+    #[cfg(feature = "board-rpi3")]
+    pub g_fp_regs: [u128; 32],
+    #[cfg(feature = "board-rpi3")]
+    pub g_fpcr: u64,
+    #[cfg(feature = "board-rpi3")]
+    pub g_fpsr: u64,
+    #[cfg(feature = "board-rpi3")]
+    pub h_fp_regs: [u128; 32],
+    #[cfg(feature = "board-rpi3")]
+    pub h_fpcr: u64,
+    #[cfg(feature = "board-rpi3")]
+    pub h_fpsr: u64,
+    #[cfg(feature = "board-rpi3")]
+    pub g_cpacr_el1: u64,
+    #[cfg(feature = "board-rpi3")]
+    pub g_cntkctl_el1: u64,
+    #[cfg(feature = "board-rpi3")]
+    pub g_tpidrro_el0: u64,
 }
 
 // Verify critical struct offsets match the asm constants at compile time.
@@ -132,6 +153,15 @@ const _: () = {
     assert!(core::mem::offset_of!(AArch64Vcpu, h_x30) == 504);
     assert!(core::mem::offset_of!(AArch64Vcpu, h_sp) == 512);
     assert!(core::mem::offset_of!(AArch64Vcpu, exit_is_irq) == 520);
+    assert!(core::mem::offset_of!(AArch64Vcpu, g_sp_el0) == 528);
+    #[cfg(feature = "board-rpi3")]
+    assert!(core::mem::offset_of!(AArch64Vcpu, g_fp_regs) == 544);
+    #[cfg(feature = "board-rpi3")]
+    assert!(core::mem::offset_of!(AArch64Vcpu, g_fpcr) == 1056);
+    #[cfg(feature = "board-rpi3")]
+    assert!(core::mem::offset_of!(AArch64Vcpu, h_fp_regs) == 1072);
+    #[cfg(feature = "board-rpi3")]
+    assert!(core::mem::offset_of!(AArch64Vcpu, h_fpcr) == 1584);
 };
 
 // SAFETY: AArch64Vcpu is only accessed from single-CPU kernel context in Phase 03.
@@ -194,6 +224,13 @@ struct HostEl1Bank {
     spsr_el1: u64,
     elr_el1: u64,
     sp_el1: u64,
+    sp_el0: u64,
+    #[cfg(feature = "board-rpi3")]
+    cpacr_el1: u64,
+    #[cfg(feature = "board-rpi3")]
+    cntkctl_el1: u64,
+    #[cfg(feature = "board-rpi3")]
+    tpidrro_el0: u64,
 }
 
 // ── run_vcpu_impl ─────────────────────────────────────────────────────────────
@@ -230,6 +267,25 @@ pub unsafe fn run_vcpu_impl(vcpu: &mut AArch64Vcpu) -> ViVmExit {
             out(reg) h.cntv_ctl, out(reg) h.cntv_cval,
             out(reg) h.spsr_el1, out(reg) h.elr_el1,
             out(reg) h.sp_el1,
+            options(nomem, nostack),
+        );
+    }
+    // SP_EL0 is shared between the blocked Cell (EL0) and the guest's EL0
+    // bank. It must be saved and replaced on every lane: a guest that sets
+    // SP_EL0 (any Linux user task) otherwise leaves the Cell running on the
+    // guest's stack, which faults the moment the Cell touches its frame.
+    unsafe {
+        core::arch::asm!("mrs {sp}, sp_el0", sp = out(reg) h.sp_el0, options(nomem, nostack));
+    }
+    #[cfg(feature = "board-rpi3")]
+    unsafe {
+        core::arch::asm!(
+            "mrs {cpacr}, cpacr_el1",
+            "mrs {cntkctl}, cntkctl_el1",
+            "mrs {tpidrro}, tpidrro_el0",
+            cpacr = out(reg) h.cpacr_el1,
+            cntkctl = out(reg) h.cntkctl_el1,
+            tpidrro = out(reg) h.tpidrro_el0,
             options(nomem, nostack),
         );
     }
@@ -306,6 +362,17 @@ pub unsafe fn run_vcpu_impl(vcpu: &mut AArch64Vcpu) -> ViVmExit {
             in(reg) vcpu.g_spsr_el2,
             options(nomem, nostack),
         );
+        core::arch::asm!("msr sp_el0, {sp}", sp = in(reg) vcpu.g_sp_el0, options(nomem, nostack));
+        #[cfg(feature = "board-rpi3")]
+        core::arch::asm!(
+            "msr cpacr_el1, {cpacr}",
+            "msr cntkctl_el1, {cntkctl}",
+            "msr tpidrro_el0, {tpidrro}",
+            cpacr = in(reg) vcpu.g_cpacr_el1,
+            cntkctl = in(reg) vcpu.g_cntkctl_el1,
+            tpidrro = in(reg) vcpu.g_tpidrro_el0,
+            options(nomem, nostack),
+        );
     }
 
     // ── 3. Enter guest + wait for trap ───────────────────────────────────────
@@ -353,6 +420,17 @@ pub unsafe fn run_vcpu_impl(vcpu: &mut AArch64Vcpu) -> ViVmExit {
             out(reg) vcpu.g_esr_el1,  out(reg) vcpu.g_far_el1,
             options(nomem, nostack),
         );
+        core::arch::asm!("mrs {sp}, sp_el0", sp = out(reg) vcpu.g_sp_el0, options(nomem, nostack));
+        #[cfg(feature = "board-rpi3")]
+        core::arch::asm!(
+            "mrs {cpacr}, cpacr_el1",
+            "mrs {cntkctl}, cntkctl_el1",
+            "mrs {tpidrro}, tpidrro_el0",
+            cpacr = out(reg) vcpu.g_cpacr_el1,
+            cntkctl = out(reg) vcpu.g_cntkctl_el1,
+            tpidrro = out(reg) vcpu.g_tpidrro_el0,
+            options(nomem, nostack),
+        );
     }
 
     // ── 4. Restore host EL1 sysregs ─────────────────────────────────────────
@@ -378,26 +456,45 @@ pub unsafe fn run_vcpu_impl(vcpu: &mut AArch64Vcpu) -> ViVmExit {
             in(reg) h.sp_el1,
             options(nomem, nostack),
         );
+        core::arch::asm!("msr sp_el0, {sp}", sp = in(reg) h.sp_el0, options(nomem, nostack));
+        #[cfg(feature = "board-rpi3")]
+        core::arch::asm!(
+            "msr cpacr_el1, {cpacr}",
+            "msr cntkctl_el1, {cntkctl}",
+            "msr tpidrro_el0, {tpidrro}",
+            cpacr = in(reg) h.cpacr_el1,
+            cntkctl = in(reg) h.cntkctl_el1,
+            tpidrro = in(reg) h.tpidrro_el0,
+            options(nomem, nostack),
+        );
     }
 
     // ── 5. Decode VM exit ────────────────────────────────────────────────────
     let exit = vcpu.decode_exit();
 
     // ── 6. Advance guest PC for exits that consumed the trapping instruction ─
-    // ELR_EL2 (saved as exit_elr) points AT the trapping instruction.
-    // For HVC and WFI the guest must not re-execute on re-entry; advance by 4.
-    // For MMIO (data abort) the hypervisor cell handles register injection and
-    // sets g_elr_el2 explicitly before re-entering.
+    // The two exits differ in what ELR_EL2 (saved as exit_elr) points at:
+    //
+    // - HVC executes natively (HCR_EL2.HCD is clear), so the AArch64 preferred
+    //   return address is already the instruction AFTER the HVC. Measured on
+    //   QEMU raspi3b: HVC at 0x40000004 reports ELR_EL2 0x40000008. Advancing
+    //   here skips one guest instruction — it silently swallowed a guest WFI.
+    // - A trapped WFI is emulated by the emulator/hardware rewinding PC before
+    //   raising the trap (QEMU `HELPER(wfi)`: `env->pc -= insn_len`), so ELR_EL2
+    //   points AT the WFI and the guest must be advanced past it.
+    //
+    // MMIO (data abort) is restartable: the caller injects the register value
+    // and decides how far to advance.
     match exit {
-        ViVmExit::Hvc { .. } | ViVmExit::Wfi => {
+        ViVmExit::Wfi => {
             vcpu.g_elr_el2 = vcpu.exit_elr.wrapping_add(4);
         }
         _ => {
-            // Unknown / MMIO: caller decides whether and by how much to advance.
             vcpu.g_elr_el2 = vcpu.exit_elr;
         }
     }
 
+    // Pi's EL1 host consumes the bank after its monitor HVC returns.
     exit
 }
 
@@ -462,15 +559,65 @@ vcpu_enter_guest:
     stp  x29, x30, [x0, #496]  // h_x29=FP, h_x30=return-addr-to-run_vcpu_impl
     mov  x9,  sp
     str  x9,       [x0, #512]  // h_sp = current SP_EL2
+    .if {pi}
+    // The kernel target is softfloat; these explicit guest save/restore
+    // instructions still require the architectural FP extension in LLVM MC.
+    .arch_extension fp
+    // Save all host SIMD state before loading guest Q regs.
+    mrs x9, fpcr
+    str x9, [x0, #1584]
+    mrs x9, fpsr
+    str x9, [x0, #1592]
+    add x9, x0, #1072
+    stp q0, q1, [x9, #0]
+    stp q2, q3, [x9, #32]
+    stp q4, q5, [x9, #64]
+    stp q6, q7, [x9, #96]
+    stp q8, q9, [x9, #128]
+    stp q10, q11, [x9, #160]
+    stp q12, q13, [x9, #192]
+    stp q14, q15, [x9, #224]
+    stp q16, q17, [x9, #256]
+    stp q18, q19, [x9, #288]
+    stp q20, q21, [x9, #320]
+    stp q22, q23, [x9, #352]
+    stp q24, q25, [x9, #384]
+    stp q26, q27, [x9, #416]
+    stp q28, q29, [x9, #448]
+    stp q30, q31, [x9, #480]
+    ldr x9, [x0, #1056]
+    msr fpcr, x9
+    ldr x9, [x0, #1064]
+    msr fpsr, x9
+    add x9, x0, #544
+    ldp q0, q1, [x9, #0]
+    ldp q2, q3, [x9, #32]
+    ldp q4, q5, [x9, #64]
+    ldp q6, q7, [x9, #96]
+    ldp q8, q9, [x9, #128]
+    ldp q10, q11, [x9, #160]
+    ldp q12, q13, [x9, #192]
+    ldp q14, q15, [x9, #224]
+    ldp q16, q17, [x9, #256]
+    ldp q18, q19, [x9, #288]
+    ldp q20, q21, [x9, #320]
+    ldp q22, q23, [x9, #352]
+    ldp q24, q25, [x9, #384]
+    ldp q26, q27, [x9, #416]
+    ldp q28, q29, [x9, #448]
+    ldp q30, q31, [x9, #480]
+    .endif
 
     // Store vcpu ptr in TPIDR_EL2 so vt_vcpu_trap can save guest state.
     // SAFETY: TPIDR_EL2 is EL2-private; the guest cannot read or write it.
     msr  tpidr_el2, x0
 
-    // Set HCR_EL2 guest bits: RW|VM|SWIO|AMO|IMO|FMO|TWI|TWE|TSC|TID3.
-    // RW(31)=AArch64 EL1, VM(0)=enable Stage-2, SWIO(1)=SW IRQ override,
-    // AMO(3)/IMO(4)/FMO(5)=route physical async exceptions, TWI(12)/TWE(13)=trap
-    // WFI/WFE to EL2 (lets us emulate them), TSC(19)=trap SMC to EL2,
+    // HCR_EL2 guest bits: RW|VM|SWIO|FMO|IMO|AMO|TWI|TWE|TSC|TID3.
+    // RW(31)=AArch64 EL1, VM(0)=Stage-2, SWIO(1)=SW IRQ override,
+    // FMO(3)/IMO(4)/AMO(5)=route physical exceptions to EL2.
+    // TWI(13)/TWE(14)=trap WFI/WFE if the instruction would actually wait;
+    // a pending interrupt can make WFI a NOP without trapping. TSC(19)=trap
+    // SMC to EL2. In particular DC(12) must stay clear on a Stage-2 guest.
     // TID3(18)=trap guest reads of the AArch64 ID-register group (Op0=3,Op1=0,
     // CRn=0,CRm=1..7) to EL2 so the un-virtualized host PARange/feature bits
     // are never handed to the guest raw — see `id_regs::read_trapped_id_reg`.
@@ -478,13 +625,21 @@ vcpu_enter_guest:
     mov  x9,  #(1 << 31)       // RW
     orr  x9,  x9,  #(1 << 0)   // VM
     orr  x9,  x9,  #(1 << 1)   // SWIO
-    orr  x9,  x9,  #(1 << 3)   // AMO
+    orr  x9,  x9,  #(1 << 3)   // FMO
     orr  x9,  x9,  #(1 << 4)   // IMO
-    orr  x9,  x9,  #(1 << 5)   // FMO
-    orr  x9,  x9,  #(1 << 12)  // TWI
-    orr  x9,  x9,  #(1 << 13)  // TWE
+    orr  x9,  x9,  #(1 << 5)   // AMO
+    orr  x9,  x9,  #(1 << 13)  // TWI: trap WFI if it would block
+    orr  x9,  x9,  #(1 << 14)  // TWE: trap WFE
     orr  x9,  x9,  #(1 << 18)  // TID3
     orr  x9,  x9,  #(1 << 19)  // TSC
+    .if {pi}
+    adrp x10, PI_GUEST_VI
+    add x10, x10, :lo12:PI_GUEST_VI
+    ldr x10, [x10]
+    cbz x10, 1f
+    orr x9, x9, #(1 << 7)   // HCR_EL2.VI: software virtual IRQ
+1:
+    .endif
     msr  hcr_el2, x9
     isb
 
@@ -559,12 +714,65 @@ vt_vcpu_trap:
     mrs  x4, hpfar_el2
     stp  x1, x2, [x0, #248]    // exit_esr, exit_elr
     stp  x3, x4, [x0, #264]    // exit_far, exit_hpfar
+    // Preserve the guest's live PSTATE (not merely its initial DAIF mask).
+    // Without this, re-entry masks IRQs again after the first WFI/MMIO exit.
+    mrs  x1, spsr_el2
+    str  x1, [x0, #408]        // g_spsr_el2
+    .if {pi}
+    // Guest SIMD bank is live now. Save it before any EL2 Rust executes.
+    mrs x1, fpcr
+    str x1, [x0, #1056]
+    mrs x1, fpsr
+    str x1, [x0, #1064]
+    add x9, x0, #544
+    stp q0, q1, [x9, #0]
+    stp q2, q3, [x9, #32]
+    stp q4, q5, [x9, #64]
+    stp q6, q7, [x9, #96]
+    stp q8, q9, [x9, #128]
+    stp q10, q11, [x9, #160]
+    stp q12, q13, [x9, #192]
+    stp q14, q15, [x9, #224]
+    stp q16, q17, [x9, #256]
+    stp q18, q19, [x9, #288]
+    stp q20, q21, [x9, #320]
+    stp q22, q23, [x9, #352]
+    stp q24, q25, [x9, #384]
+    stp q26, q27, [x9, #416]
+    stp q28, q29, [x9, #448]
+    stp q30, q31, [x9, #480]
+    ldr x1, [x0, #1584]
+    msr fpcr, x1
+    ldr x1, [x0, #1592]
+    msr fpsr, x1
+    add x9, x0, #1072
+    ldp q0, q1, [x9, #0]
+    ldp q2, q3, [x9, #32]
+    ldp q4, q5, [x9, #64]
+    ldp q6, q7, [x9, #96]
+    ldp q8, q9, [x9, #128]
+    ldp q10, q11, [x9, #160]
+    ldp q12, q13, [x9, #192]
+    ldp q14, q15, [x9, #224]
+    ldp q16, q17, [x9, #256]
+    ldp q18, q19, [x9, #288]
+    ldp q20, q21, [x9, #320]
+    ldp q22, q23, [x9, #352]
+    ldp q24, q25, [x9, #384]
+    ldp q26, q27, [x9, #416]
+    ldp q28, q29, [x9, #448]
+    ldp q30, q31, [x9, #480]
+    .endif
 
-    // Restore host HCR_EL2 = RW|TGE (no VM bit).
+    // Restore host HCR_EL2 (Pi: RW only; virt: RW|TGE). Clear VM and VI.
     // CRITICAL: must clear VM before Cell EL0 accesses run through Stage-2.
     // SAFETY: HCR_EL2 is EL2-private.
     mov  x1, #(1 << 31)
+    .if {pi}
+    // EL1 host: never set TGE, VM or VI on return.
+    .else
     orr  x1, x1, #(1 << 27)
+    .endif
     msr  hcr_el2, x1
     isb
 
@@ -582,5 +790,6 @@ vt_vcpu_trap:
     mov  sp, x9
 
     ret     // returns to run_vcpu_impl via restored h_x30
-"#
+"#,
+    pi = const (cfg!(feature = "board-rpi3") as usize),
 );

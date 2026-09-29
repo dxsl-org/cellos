@@ -9,8 +9,8 @@ use core::sync::atomic::{AtomicBool, Ordering};
 
 static HAS_H_EXT: AtomicBool = AtomicBool::new(false);
 
-/// Latched at boot by `detect()` if the kernel entered at EL2 (ARM64,
-/// QEMU `virtualization=on`).  Always `false` on non-aarch64 targets.
+/// QEMU virt EL2-host is latched by detect(); Pi's EL1-host monitor becomes
+/// capable only after its HVC init AND boot-time guest smoke succeed.
 static HAS_EL2: AtomicBool = AtomicBool::new(false);
 
 /// x86 hardware-virtualization vendor detected via CPUID (Tier 3 x86 VMM).
@@ -96,10 +96,15 @@ pub(crate) fn has_x86_virt() -> bool {
     HAS_X86_VIRT.load(Ordering::Relaxed)
 }
 
-/// Returns `true` if the kernel booted at EL2 (ARM64, QEMU `virtualization=on`).
-///
-/// Always `false` on non-aarch64 targets.
+/// True only after entering actual EL2 host mode or validating the Pi monitor
+/// with an HVC/WFI/MMIO/virtual IRQ guest. Firmware that starts Pi at EL1 fails
+/// closed even if the CPU advertises EL2 in its ID registers.
 pub(crate) fn has_el2() -> bool {
+    #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+    {
+        return hal::aarch64::monitor::is_verified();
+    }
+    #[cfg(not(all(target_arch = "aarch64", feature = "board-rpi3")))]
     HAS_EL2.load(Ordering::Relaxed)
 }
 

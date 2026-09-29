@@ -51,18 +51,39 @@ pub fn init() {
     wr(IRQ_ENABLE1, 1 << TIMER_IRQ);
 }
 
-/// Acknowledge C1 match and re-arm for the next period.
-///
-/// Call from the IRQ handler after detecting a C1 match.
-/// Advances the compare register relative to the PREVIOUS fire time
-/// so drift does not accumulate.
-pub fn ack_and_rearm() {
-    // Read the compare value that just fired (not CLO, to avoid drift).
-    let prev = rd(SYSTIMER_C1);
-    // Clear C1 match flag (w1c).
+/// Boot-time guest monitor smoke only: defer C1 to a bounded 100 ms window.
+/// The host keeps the IRQ routed, so a stuck guest still preempts. Once the
+/// smoke completes, normal `init()` restores the 10 ms scheduler interval.
+pub fn arm_smoke_window() {
+    arm_smoke_window_ticks(100_000);
+}
+
+/// Arms C1 `ticks` (1 MHz) into the future after clearing any stale match.
+/// Used by the boot-time guest smoke window and its preemption step.
+pub fn arm_smoke_window_ticks(ticks: u32) {
     wr(SYSTIMER_CS, 1 << 1);
-    // Set next compare = previous fire time + PERIOD.
-    wr(SYSTIMER_C1, prev.wrapping_add(PERIOD));
+    let now = rd(SYSTIMER_CLO);
+    wr(SYSTIMER_C1, now.wrapping_add(ticks));
+}
+
+/// Acknowledge C1 match and re-arm for the next period. Preserve the prior
+/// deadline for a timely IRQ; if boot kept DAIF masked past that deadline,
+/// re-arm from now instead. C1 fires on equality, not a "counter >= compare"
+/// condition, so programming a compare in the past would stop host ticks for
+/// a full 32-bit counter wrap.
+pub fn ack_and_rearm() {
+    let prev = rd(SYSTIMER_C1);
+    wr(SYSTIMER_CS, 1 << 1);
+    let now = rd(SYSTIMER_CLO);
+    let next = prev.wrapping_add(PERIOD);
+    // Unsigned wrap-safe comparison as long as IRQ service was not delayed
+    // by half the 32-bit timer range (~36 minutes).
+    let next = if now.wrapping_sub(next) < (1u32 << 31) {
+        now.wrapping_add(PERIOD)
+    } else {
+        next
+    };
+    wr(SYSTIMER_C1, next);
 }
 
 /// Check whether the C1 compare match IRQ is pending.

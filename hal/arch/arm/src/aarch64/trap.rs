@@ -9,10 +9,10 @@ use core::arch::global_asm;
 use hal_arch_trait::vi_handle_uart_irq;
 #[cfg(all(not(feature = "board-rpi3"), not(feature = "board-rpi4")))]
 use hal_arch_trait::vi_handle_virtio_irq;
-#[cfg(feature = "board-rpi3")]
-use hal_arch_trait::vi_signal_usb_irq;
 #[cfg(not(feature = "board-rpi3"))]
 use hal_arch_trait::vi_ipi_service;
+#[cfg(feature = "board-rpi3")]
+use hal_arch_trait::vi_signal_usb_irq;
 use hal_arch_trait::{
     vi_current_cell_id, vi_gpio_notify_irq, vi_terminate_on_fault_aarch64, vi_timer_tick,
     ViCell_syscall_dispatch, ViTrapFrame,

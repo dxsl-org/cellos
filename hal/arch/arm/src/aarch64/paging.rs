@@ -350,6 +350,8 @@ impl PageTableTrait for PageTable {
                 options(nostack),
             );
         }
+        #[cfg(feature = "board-rpi3")]
+        super::monitor::init();
     }
 }
 

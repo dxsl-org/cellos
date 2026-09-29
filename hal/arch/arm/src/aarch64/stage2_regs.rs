@@ -1,8 +1,6 @@
-//! ARM64 Stage-2 EL2 system-register helpers.
-//!
-//! All functions require the kernel to be running at EL2 (`el2::is_el2()` == true)
-//! and must NOT be called before the Stage-2 page table is fully built and visible
-//! to the CPU (all writes flushed to memory before the `isb`).
+//! ARM64 Stage-2 EL2 system-register helpers. Pi's EL1 host invokes the
+//! retained EL2 monitor via HVC; QEMU virt's EL2 host writes registers directly.
+//! A page-table update must be visible before any TLBI or guest entry.
 //!
 //! # Register layout
 //!
@@ -46,14 +44,14 @@ const VTCR_VALUE: u64 = 0x8002_3558;
 /// and `vt_vcpu_trap` clears it on every guest exit (vcpu.rs "CRITICAL" note).
 ///
 /// # Safety
-/// - Must only be called from EL2 (after `el2::el2_mark_active()`).
+/// - Must be called with an active EL2 host, or the Pi EL1 monitor initialized.
 /// - `root_pa` must be 8 KB-aligned (concatenated 2 × L1 tables, VTCR.SL0=1).
 /// - The Stage-2 page table must be fully populated and all writes flushed to
 ///   RAM before this function is called.
 /// - `vmid` must be ≥ 1 (VMID 0 is reserved for the EL2 host).
 /// - This function must NOT be called while a vCPU is running (VTTBR races).
 #[cfg(target_arch = "aarch64")]
-pub unsafe fn enable_stage2(vmid: u16, root_pa: u64) {
+pub unsafe fn monitor_enable_stage2(vmid: u16, root_pa: u64) {
     debug_assert_eq!(root_pa % (2 * 4096), 0, "S2 root must be 8 KB-aligned");
     debug_assert!(vmid >= 1, "VMID 0 is reserved for the EL2 host");
 
@@ -86,7 +84,7 @@ pub unsafe fn enable_stage2(vmid: u16, root_pa: u64) {
 /// # Safety
 /// Must be called from EL2 with no vCPU currently running.
 #[cfg(target_arch = "aarch64")]
-pub unsafe fn disable_stage2() {
+pub unsafe fn monitor_disable_stage2() {
     // SAFETY: EL2 context; clearing HCR_EL2.VM disables guest translation.
     unsafe {
         core::arch::asm!(
@@ -110,7 +108,7 @@ pub unsafe fn disable_stage2() {
 /// # Safety
 /// Must be called from EL2.
 #[cfg(target_arch = "aarch64")]
-pub unsafe fn s2_tlb_flush_all() {
+pub unsafe fn monitor_s2_tlb_flush_all() {
     // SAFETY: EL2 broadcast TLB invalidation; no memory mutation.
     unsafe {
         core::arch::asm!(
@@ -131,7 +129,7 @@ pub unsafe fn s2_tlb_flush_all() {
 /// # Safety
 /// Must be called from EL2 after updating the Stage-2 descriptor for `ipa`.
 #[cfg(target_arch = "aarch64")]
-pub unsafe fn s2_tlb_flush_ipa(ipa: u64) {
+pub unsafe fn monitor_s2_tlb_flush_ipa(ipa: u64) {
     let encoded = ipa >> 12; // TLBI IPAS2E1IS encodes IPA[47:12] in Xt
                              // SAFETY: EL2 TLB maintenance; encoded IPA operand is correct per ARM DDI.
     unsafe {
@@ -144,6 +142,59 @@ pub unsafe fn s2_tlb_flush_ipa(ipa: u64) {
             x = in(reg) encoded,
             options(nomem, nostack),
         );
+    }
+}
+
+/// Bind an S2 root through the private Pi HVC gateway or directly at an EL2 host.
+#[cfg(target_arch = "aarch64")]
+pub unsafe fn enable_stage2(vmid: u16, root_pa: u64) {
+    #[cfg(feature = "board-rpi3")]
+    {
+        assert!(super::monitor::is_ready(), "EL2 monitor unavailable");
+        assert_eq!(super::monitor::gateway(1, vmid as u64, root_pa, 0, 0), 0);
+    }
+    #[cfg(not(feature = "board-rpi3"))]
+    unsafe {
+        monitor_enable_stage2(vmid, root_pa);
+    }
+}
+
+#[cfg(target_arch = "aarch64")]
+pub unsafe fn disable_stage2() {
+    #[cfg(feature = "board-rpi3")]
+    {
+        assert!(super::monitor::is_ready(), "EL2 monitor unavailable");
+        assert_eq!(super::monitor::gateway(2, 0, 0, 0, 0), 0);
+    }
+    #[cfg(not(feature = "board-rpi3"))]
+    unsafe {
+        monitor_disable_stage2();
+    }
+}
+
+#[cfg(target_arch = "aarch64")]
+pub unsafe fn s2_tlb_flush_all() {
+    #[cfg(feature = "board-rpi3")]
+    {
+        assert!(super::monitor::is_ready(), "EL2 monitor unavailable");
+        assert_eq!(super::monitor::gateway(3, 0, 0, 0, 0), 0);
+    }
+    #[cfg(not(feature = "board-rpi3"))]
+    unsafe {
+        monitor_s2_tlb_flush_all();
+    }
+}
+
+#[cfg(target_arch = "aarch64")]
+pub unsafe fn s2_tlb_flush_ipa(ipa: u64) {
+    #[cfg(feature = "board-rpi3")]
+    {
+        assert!(super::monitor::is_ready(), "EL2 monitor unavailable");
+        assert_eq!(super::monitor::gateway(4, ipa, 0, 0, 0), 0);
+    }
+    #[cfg(not(feature = "board-rpi3"))]
+    unsafe {
+        monitor_s2_tlb_flush_ipa(ipa);
     }
 }
 

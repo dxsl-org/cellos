@@ -86,8 +86,23 @@ impl CpuContext {
     /// leave zero.
     pub const fn zeroed() -> Self {
         Self {
-            x19: 0, x20: 0, x21: 0, x22: 0, x23: 0, x24: 0, x25: 0, x26: 0, x27: 0, x28: 0,
-            x29: 0, x30: 0, sp: 0, elr_el1: 0, spsr_el1: 0, sp_el0: 0, daif: 0,
+            x19: 0,
+            x20: 0,
+            x21: 0,
+            x22: 0,
+            x23: 0,
+            x24: 0,
+            x25: 0,
+            x26: 0,
+            x27: 0,
+            x28: 0,
+            x29: 0,
+            x30: 0,
+            sp: 0,
+            elr_el1: 0,
+            spsr_el1: 0,
+            sp_el0: 0,
+            daif: 0,
         }
     }
 

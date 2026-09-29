@@ -28,6 +28,11 @@ pub mod el2;
 pub mod gic;
 #[cfg(target_arch = "aarch64")]
 pub mod id_regs;
+#[cfg(all(
+    target_arch = "aarch64",
+    any(feature = "board-rpi3", feature = "board-rpi4")
+))]
+pub mod monitor;
 #[cfg(target_arch = "aarch64")]
 pub mod mte;
 #[cfg(target_arch = "aarch64")]

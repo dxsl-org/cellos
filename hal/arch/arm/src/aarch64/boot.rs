@@ -1,16 +1,8 @@
 //! AArch64 boot entry point.
 //!
-//! Two EL paths share a single entry:
-//!   - EL2 (QEMU `virtualization=on`): `.el2_init` stays at EL2, sets HCR_EL2,
-//!     calls `el2_mark_active`, then `kmain`.
-//!   - EL2 (`board-rpi3` firmware): `.el2_init` drops to EL1h, then reuses the
-//!     normal `.el1_entry` path. Cortex-A53 has no VHE, so it cannot run the
-//!     kernel at EL2 with Cells at EL0 under `HCR_EL2.TGE=1`.
-//!   - EL1 (default QEMU without `-machine virt,virtualization=on`): `.el1_entry`
-//!     runs the existing EL1 setup and calls `kmain` without marking EL2.
-//!
-//! Both paths share BSS clearing and stack setup; the EL1 path does those steps
-//! itself while the EL2 path folds them into `.el2_init`.
+//! QEMU virt remains an EL2 host. On BCM the boot CPU retains an EL2 monitor,
+//! enters EL1h for the kernel and EL0 Cells, and returns to EL2 only via the
+//! private HVC gateway. Firmware starting us at EL1 cannot provide that gateway.
 
 use core::arch::global_asm;
 
@@ -108,19 +100,43 @@ _start:
     // is clobbered by the BSS-clear loop and stack setup.
     mov  x19, x0  // DTB physical address
 
-    // Determine current exception level.
+    // QEMU's `-kernel` ELF loader can enter at EL3 whereas its raw Linux
+    // image loader normally enters EL2. Preserve this actual provenance.
     mrs x0, CurrentEL
-    lsr x0, x0, #2          // CurrentEL[3:2]
+    lsr x0, x0, #2
+    mov x21, x0
+    mov x20, #0               // EL1-only firmware: no retained monitor
+    cmp x0, #3
+    b.eq .el3_to_el2
     cmp x0, #2
     b.eq .el2_init
-    b .el1_entry             // Already in EL1
+    b .el1_entry
+
+.el3_to_el2:
+    // EL3 direct ELF boot: enter non-secure AArch64 EL2 before touching any
+    // EL2-private register. SCR.HCE enables the EL1 host's HVC conduit.
+    mov x0, #0x501           // SCR_EL3.RW | HCE | NS
+    msr scr_el3, x0
+    msr cptr_el3, xzr        // do not trap lower-level FP/SIMD into EL3
+    mov x0, #0x3c9           // EL2h, DAIF masked
+    msr spsr_el3, x0
+    adr x0, .el2_init
+    msr elr_el3, x0
+    isb
+    eret
 
 .el2_init:
-    // A non-VHE core cannot use the EL2-host/EL0-app translation regime. TGE=1
-    // makes SCTLR_EL1.M effectively zero, so a Cell fetch bypasses TTBR0_EL1.
-    // Enter EL1h before any Rust state is initialized and let all existing EL1
-    // paging, vector, timer, and context-switch paths remain authoritative.
+    // Non-VHE EL0 Cells require the host at EL1. Keep EL2 as a private
+    // monitor for Stage-2 and guest world switches.
     .if {board_bcm}
+    mov x20, #1               // preserve EL2 boot provenance across ERET
+    adrp x0, __pi_monitor_stack_top
+    add  x0, x0, :lo12:__pi_monitor_stack_top
+    mov sp, x0                // dedicated SP_EL2, separate from EL1 host
+    adrp x0, __pi_monitor_vectors
+    add  x0, x0, :lo12:__pi_monitor_vectors
+    msr vbar_el2, x0
+    msr tpidr_el2, xzr
     mov x0, #(1 << 31)       // HCR_EL2.RW=1, TGE=0: EL1 is AArch64
     msr hcr_el2, x0
     mov x0, #0x33ff          // CPTR_EL2 RES1 bits; no FP/SIMD traps to EL2
@@ -188,6 +204,17 @@ _start:
     msr cpacr_el1, x0
     isb
 
+    // Pi host: let EL0 Cells read the architected counters
+    // (CNTKCTL_EL1.EL0PCTEN | .EL0VTEN). Without these the BCM host timer
+    // service's `MRS CNTPCT_EL0` faults from EL0 into the EL1 kernel vector
+    // and panics the kernel; the guest world-switch saves and restores this
+    // register, so a Cell's access keeps working after a Tier 3 guest runs.
+    .if {board_bcm}
+    mov x0, #0x101
+    msr cntkctl_el1, x0
+    isb
+    .endif
+
     // Force EL1h mode: exceptions taken to EL1 use SP_EL1 (not SP_EL0).
     // QEMU raspi3b boots at EL1 and may leave PSTATE.SPSEL=0 (EL1t), meaning
     // SP_EL1 stays at the unknown reset value.  Any EL0→EL1 exception would
@@ -213,6 +240,12 @@ _start:
     str  xzr, [x0], #8
     b    4b
 5:
+    .if {board_bcm}
+    cbz x20, 7f
+    mov x0, x21              // original exception level passed to Rust
+    bl el2_mark_monitor_boot
+7:
+    .endif
     // Jump to Rust kmain(hartid=0, dtb=x19).
     mov  x0, #0             // hartid (CPU 0)
     mov  x1, x19            // DTB pointer stashed from entry x0
@@ -232,6 +265,7 @@ _start:
     wfi
     b    .Lsecondary_park
 
+    .if {secondary_psci}
     // ── Secondary core entry (PSCI_CPU_ON) ───────────────────────────────────
     // x0 = &SecondaryContext, a *physical* address: firmware starts the core
     // with the MMU off, caches off, at EL1, interrupts masked. This runs from
@@ -268,8 +302,10 @@ _secondary_entry:
     // hart id to the Rust entry point and never return.
     ldr  x0, [x0, #{ctx_hart}]
     b    smp_aarch64_secondary_main
+    .endif
     "#,
     board_bcm = const BOARD_BCM,
+    secondary_psci = const (!cfg!(feature = "board-rpi3") as usize),
     ctx_hart = const CTX_HART_ID,
     ctx_stack = const CTX_STACK_TOP,
     ctx_mair = const CTX_MAIR,

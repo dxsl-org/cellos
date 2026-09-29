@@ -1,13 +1,10 @@
-//! AArch64 EL2 host mode support.
+//! QEMU virt EL2-host support. Pi's non-VHE kernel lives at EL1 and uses the
+//! separate `monitor` module for private EL2 guest world switches; `is_el2()`
+//! deliberately remains false on Pi so paging, timers, traps and scheduling
+//! continue to use their EL1-host implementations.
 //!
-//! This module is compiled only for the `aarch64` target; all public symbols
-//! that need to be visible from assembly are `#[no_mangle]`.
-//!
-//! Boot sequence (EL2 path):
-//!   boot.rs: .el2_init → bl el2_mark_active → bl kmain
-//!   kmain: paging::activate() → el2_mmu_init()
-//!          trap::init()       → msr vbar_el2, __vectors_el2
-//!          timer::init()      → CNTHP_* + enable_irq(26)
+//! QEMU virt boot: boot.rs `.el2_init` -> `el2_mark_active` -> kmain ->
+//! paging activation -> `el2_mmu_init` -> EL2 vectors and hypervisor timer.
 
 use core::arch::global_asm;
 use core::sync::atomic::{AtomicBool, AtomicU8, Ordering};
@@ -32,7 +29,7 @@ pub fn take_lower_vector_kind() -> u8 {
     AARCH64_EL2_VECTOR_KIND.swap(0, Ordering::Relaxed)
 }
 
-/// Returns `true` if the kernel booted at EL2 (QEMU `virtualization=on`).
+/// True only when the *host* kernel executes at EL2 (QEMU virt); not Pi monitor.
 #[inline]
 pub fn is_el2() -> bool {
     EL2_ACTIVE.load(Ordering::Relaxed)

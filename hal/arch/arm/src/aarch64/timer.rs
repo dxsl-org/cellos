@@ -279,6 +279,54 @@ pub fn reset() {
     }
 }
 
+/// Keep the host tick bounded while checking a tiny guest's WFI.
+///
+/// QEMU's `HELPER(wfi)` returns before the HCR_EL2.TWI trap whenever
+/// `cpu_has_work()` is true (target/arm/tcg/op_helper.c), so the guest WFI is
+/// only a trap when no physical interrupt is pending. Boot runs with DAIF
+/// masked, so any IRQ source left asserted by an earlier guest preemption
+/// would turn the smoke's WFI into a NOP forever. Deassert C1 and disable the
+/// CNTP source here; `bcm2835_systimer::init()` + `timer::reset()` restore the
+/// ordinary 10 ms cadence once the smoke completes.
+#[cfg(feature = "board-rpi3")]
+pub fn prepare_monitor_smoke_window() {
+    super::bcm2835_systimer::arm_smoke_window();
+    let freq: u64;
+    unsafe {
+        core::arch::asm!("mrs {freq}, cntfrq_el0", freq = out(reg) freq,
+                         options(nomem, nostack));
+        if freq != 0 {
+            core::arch::asm!("msr cntp_tval_el0, {ticks}",
+                             ticks = in(reg) freq / 10, options(nomem, nostack));
+        }
+        // CTL = 0: disabled and masked, so CNTP cannot assert the core IRQ
+        // line while the smoke checks WFI. `timer::reset()` re-enables it.
+        core::arch::asm!("msr cntp_ctl_el0, xzr", options(nomem, nostack));
+    }
+}
+
+/// Arm both host tick sources ~1 ms out so the smoke can prove that a guest
+/// which never yields is still preempted by the host timer.
+#[cfg(feature = "board-rpi3")]
+pub fn arm_monitor_smoke_preemption() {
+    super::bcm2835_systimer::arm_smoke_window_ticks(1_000);
+    let freq: u64;
+    unsafe {
+        core::arch::asm!("mrs {freq}, cntfrq_el0", freq = out(reg) freq,
+                         options(nomem, nostack));
+        if freq != 0 {
+            core::arch::asm!(
+                "msr cntp_tval_el0, {ticks}",
+                "mov {ctl}, #1",           // ENABLE=1, IMASK=0
+                "msr cntp_ctl_el0,  {ctl}",
+                ticks = in(reg) freq / 1_000,
+                ctl = out(reg) _,
+                options(nomem, nostack),
+            );
+        }
+    }
+}
+
 /// Read the current cycle counter (CNTPCT_EL0).
 pub fn read_ticks() -> u64 {
     let val: u64;

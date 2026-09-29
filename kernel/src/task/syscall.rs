@@ -9,7 +9,13 @@ use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::string::String;
 /// Only the private-root lifecycle helpers below name `Arc`; every other
 /// target/feature combination has nothing to import.
-#[cfg(all(feature = "native-domains", any(target_arch = "riscv64", all(target_arch = "aarch64", feature = "test-hooks"))))]
+#[cfg(all(
+    feature = "native-domains",
+    any(
+        target_arch = "riscv64",
+        all(target_arch = "aarch64", feature = "test-hooks")
+    )
+))]
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use api::syscall::ViSpawnArgs;
@@ -351,7 +357,13 @@ fn domain_grant_capable(tid: usize) -> bool {
 /// The frames stay supervisor-only in the SAS/global root: this path never
 /// publishes USER access there, so a SAS cell cannot reach a domain owner's
 /// backing even if the grant later collapses.
-#[cfg(all(feature = "native-domains", any(target_arch = "riscv64", all(target_arch = "aarch64", feature = "test-hooks"))))]
+#[cfg(all(
+    feature = "native-domains",
+    any(
+        target_arch = "riscv64",
+        all(target_arch = "aarch64", feature = "test-hooks")
+    )
+))]
 fn map_domain_owner_pages(
     space: &DomainRoot,
     base: usize,
@@ -393,13 +405,21 @@ fn map_domain_owner_pages(
 /// (the phase-01 leak). The boot identity map already covers every usable
 /// frame supervisor RWX, so zeroing needs no remap at all; the caller then maps
 /// the owner's own private root over the returned base.
-#[cfg(all(feature = "native-domains", any(target_arch = "riscv64", all(target_arch = "aarch64", feature = "test-hooks"))))]
+#[cfg(all(
+    feature = "native-domains",
+    any(
+        target_arch = "riscv64",
+        all(target_arch = "aarch64", feature = "test-hooks")
+    )
+))]
 fn alloc_grant_pages_supervisor_only(n_pages: usize) -> Option<usize> {
     use crate::memory::frame::FRAME_ALLOCATOR;
     const PAGE_SIZE: usize = 4096;
     let paddr = {
         let mut guard = FRAME_ALLOCATOR.lock();
-        guard.as_mut().and_then(|alloc| alloc.allocate_contiguous(n_pages))?
+        guard
+            .as_mut()
+            .and_then(|alloc| alloc.allocate_contiguous(n_pages))?
     };
     // SAFETY: every usable frame is identity-mapped supervisor RWX in the
     // current (kernel) root, and the syscall runs on that root.
@@ -410,37 +430,73 @@ fn alloc_grant_pages_supervisor_only(n_pages: usize) -> Option<usize> {
 }
 
 /// The lifecycle record behind a table row, where this target can hold one.
-#[cfg(all(feature = "native-domains", any(target_arch = "riscv64", all(target_arch = "aarch64", feature = "test-hooks"))))]
+#[cfg(all(
+    feature = "native-domains",
+    any(
+        target_arch = "riscv64",
+        all(target_arch = "aarch64", feature = "test-hooks")
+    )
+))]
 type DomainRecord = Arc<super::domain_grant::DomainGrant>;
 
 /// On every other target a row can never carry a lifecycle record:
 /// [`clone_domain_record`] is the only producer and always yields `None`, so the
 /// stubs below are unreachable rather than a second implementation.
-#[cfg(not(all(feature = "native-domains", any(target_arch = "riscv64", all(target_arch = "aarch64", feature = "test-hooks")))))]
+#[cfg(not(all(
+    feature = "native-domains",
+    any(
+        target_arch = "riscv64",
+        all(target_arch = "aarch64", feature = "test-hooks")
+    )
+)))]
 type DomainRecord = ();
 
 /// Clone the lifecycle record a row carries, if any.
 ///
 /// The lifecycle exists on one target tuple only; on every other target the
 /// record type has no inhabitants, so this is the sole producer of `None`.
-#[cfg(all(feature = "native-domains", any(target_arch = "riscv64", all(target_arch = "aarch64", feature = "test-hooks"))))]
+#[cfg(all(
+    feature = "native-domains",
+    any(
+        target_arch = "riscv64",
+        all(target_arch = "aarch64", feature = "test-hooks")
+    )
+))]
 fn clone_domain_record(domain: &Option<DomainRecord>) -> Option<DomainRecord> {
     domain.clone()
 }
-#[cfg(not(all(feature = "native-domains", any(target_arch = "riscv64", all(target_arch = "aarch64", feature = "test-hooks")))))]
+#[cfg(not(all(
+    feature = "native-domains",
+    any(
+        target_arch = "riscv64",
+        all(target_arch = "aarch64", feature = "test-hooks")
+    )
+)))]
 fn clone_domain_record(_domain: &Option<DomainRecord>) -> Option<DomainRecord> {
     None
 }
 
 /// Build the lifecycle record for a domain owner that has just published its
 /// own mapping. Absent — `None` — wherever the lifecycle does not exist.
-#[cfg(all(feature = "native-domains", any(target_arch = "riscv64", all(target_arch = "aarch64", feature = "test-hooks"))))]
+#[cfg(all(
+    feature = "native-domains",
+    any(
+        target_arch = "riscv64",
+        all(target_arch = "aarch64", feature = "test-hooks")
+    )
+))]
 fn new_domain_record(space: &DomainRoot, base: usize, size: usize) -> Option<DomainRecord> {
     Some(Arc::new(super::domain_grant::DomainGrant::new(
         space, base, size,
     )))
 }
-#[cfg(not(all(feature = "native-domains", any(target_arch = "riscv64", all(target_arch = "aarch64", feature = "test-hooks")))))]
+#[cfg(not(all(
+    feature = "native-domains",
+    any(
+        target_arch = "riscv64",
+        all(target_arch = "aarch64", feature = "test-hooks")
+    )
+)))]
 fn new_domain_record(_space: &DomainRoot, _base: usize, _size: usize) -> Option<DomainRecord> {
     None
 }
@@ -450,7 +506,13 @@ fn new_domain_record(_space: &DomainRoot, _base: usize, _size: usize) -> Option<
 /// Returns `false` when the receiver or owner invalidation is not acknowledged:
 /// the caller must keep the row (so a retry is idempotent) and must not release
 /// a single frame.
-#[cfg(all(feature = "native-domains", any(target_arch = "riscv64", all(target_arch = "aarch64", feature = "test-hooks"))))]
+#[cfg(all(
+    feature = "native-domains",
+    any(
+        target_arch = "riscv64",
+        all(target_arch = "aarch64", feature = "test-hooks")
+    )
+))]
 fn revoke_domain_record(record: &DomainRecord, id: usize, kind: &str) -> bool {
     match record.revoke() {
         Ok(()) => true,
@@ -463,13 +525,25 @@ fn revoke_domain_record(record: &DomainRecord, id: usize, kind: &str) -> bool {
         }
     }
 }
-#[cfg(not(all(feature = "native-domains", any(target_arch = "riscv64", all(target_arch = "aarch64", feature = "test-hooks")))))]
+#[cfg(not(all(
+    feature = "native-domains",
+    any(
+        target_arch = "riscv64",
+        all(target_arch = "aarch64", feature = "test-hooks")
+    )
+)))]
 fn revoke_domain_record(_record: &DomainRecord, _id: usize, _kind: &str) -> bool {
     false
 }
 
 /// Drop the receiver half of a record left unshared by receiver death.
-#[cfg(all(feature = "native-domains", any(target_arch = "riscv64", all(target_arch = "aarch64", feature = "test-hooks"))))]
+#[cfg(all(
+    feature = "native-domains",
+    any(
+        target_arch = "riscv64",
+        all(target_arch = "aarch64", feature = "test-hooks")
+    )
+))]
 fn drain_domain_receiver(record: &DomainRecord) {
     if record.drain_receiver().is_err() {
         log::warn!(
@@ -478,7 +552,13 @@ fn drain_domain_receiver(record: &DomainRecord) {
         );
     }
 }
-#[cfg(not(all(feature = "native-domains", any(target_arch = "riscv64", all(target_arch = "aarch64", feature = "test-hooks")))))]
+#[cfg(not(all(
+    feature = "native-domains",
+    any(
+        target_arch = "riscv64",
+        all(target_arch = "aarch64", feature = "test-hooks")
+    )
+)))]
 fn drain_domain_receiver(_record: &DomainRecord) {}
 
 /// A record the lifecycle cannot drain: it names a private-root endpoint but is
@@ -1083,8 +1163,7 @@ pub(crate) fn reclaim_owned_grants(tid: usize) {
     // A domain row's record is cloned out and revoked after the table lock is
     // released: revocation awaits the receiver root's tag invalidation, which
     // must never hold this lock in the meantime.
-    let mut page_deferred: Vec<(usize, DomainRecord, usize, usize)> =
-        Vec::new();
+    let mut page_deferred: Vec<(usize, DomainRecord, usize, usize)> = Vec::new();
     let owned: alloc::vec::Vec<PageGrant> = {
         let mut tbl = grant_table_lock().lock();
         let mut owned = alloc::vec::Vec::new();
@@ -1128,8 +1207,7 @@ pub(crate) fn reclaim_owned_grants(tid: usize) {
     }
 
     // ── REG_GRANT_TABLE pass ──────────────────────────────────────────────────
-    let mut reg_deferred: Vec<(usize, DomainRecord, usize, usize)> =
-        Vec::new();
+    let mut reg_deferred: Vec<(usize, DomainRecord, usize, usize)> = Vec::new();
     let reg_owned: alloc::vec::Vec<RegGrant> = {
         let mut tbl = reg_grant_table_lock().lock();
         let mut removed = alloc::vec::Vec::new();
@@ -1200,7 +1278,13 @@ pub(crate) fn reclaim_owned_grants(tid: usize) {
 ///
 /// An unacknowledged invalidation never frees a frame. The row loses its owner
 /// so no caller can free it out from under the retry.
-#[cfg(all(feature = "native-domains", any(target_arch = "riscv64", all(target_arch = "aarch64", feature = "test-hooks"))))]
+#[cfg(all(
+    feature = "native-domains",
+    any(
+        target_arch = "riscv64",
+        all(target_arch = "aarch64", feature = "test-hooks")
+    )
+))]
 fn release_deferred_domain_row(
     key: usize,
     record: DomainRecord,
@@ -1241,7 +1325,13 @@ fn release_deferred_domain_row(
     }
 }
 
-#[cfg(not(all(feature = "native-domains", any(target_arch = "riscv64", all(target_arch = "aarch64", feature = "test-hooks")))))]
+#[cfg(not(all(
+    feature = "native-domains",
+    any(
+        target_arch = "riscv64",
+        all(target_arch = "aarch64", feature = "test-hooks")
+    )
+)))]
 fn release_deferred_domain_row(
     _key: usize,
     _record: DomainRecord,
@@ -1257,8 +1347,7 @@ fn release_deferred_domain_row(
 /// finally releases the retained frames; until then they stay quarantined with
 /// the record so nothing reuses memory a stale translation could still reach.
 fn sweep_deferred_domain_grants() {
-    let mut page_retry: Vec<(usize, DomainRecord, usize, usize)> =
-        Vec::new();
+    let mut page_retry: Vec<(usize, DomainRecord, usize, usize)> = Vec::new();
     {
         let tbl = grant_table_lock().lock();
         if let Some(map) = tbl.as_ref() {
@@ -1285,8 +1374,7 @@ fn sweep_deferred_domain_grants() {
         }
     }
 
-    let mut reg_retry: Vec<(usize, DomainRecord, usize, usize)> =
-        Vec::new();
+    let mut reg_retry: Vec<(usize, DomainRecord, usize, usize)> = Vec::new();
     {
         let tbl = reg_grant_table_lock().lock();
         if let Some(map) = tbl.as_ref() {
@@ -2675,7 +2763,13 @@ fn resolve_and_lease_grant(
 /// revoking the old receiver PTE and shooting it down. Unsupported rights
 /// (write-only) and a non-live or non-domain target are refused with the
 /// established share failure.
-#[cfg(all(feature = "native-domains", any(target_arch = "riscv64", all(target_arch = "aarch64", feature = "test-hooks"))))]
+#[cfg(all(
+    feature = "native-domains",
+    any(
+        target_arch = "riscv64",
+        all(target_arch = "aarch64", feature = "test-hooks")
+    )
+))]
 fn domain_grant_share_row(
     owner: usize,
     base: usize,
@@ -2720,7 +2814,13 @@ fn domain_grant_share_row(
 /// receiver, a SAS-owned record, an unresolvable or dying owner, a record that
 /// is not `Live`, missing or unsupported rights, a partial receiver mapping, or
 /// an unacknowledged rollback invalidation.
-#[cfg(all(feature = "native-domains", any(target_arch = "riscv64", all(target_arch = "aarch64", feature = "test-hooks"))))]
+#[cfg(all(
+    feature = "native-domains",
+    any(
+        target_arch = "riscv64",
+        all(target_arch = "aarch64", feature = "test-hooks")
+    )
+))]
 #[allow(clippy::too_many_arguments)]
 fn domain_grant_slice_row(
     owner: usize,
@@ -2775,7 +2875,13 @@ fn domain_grant_slice_row(
 /// GrantSlice entry point for a capable domain receiver: resolve the row in
 /// either table and apply the lifecycle-aware resolver under the same lock that
 /// linearizes teardown.
-#[cfg(all(feature = "native-domains", any(target_arch = "riscv64", all(target_arch = "aarch64", feature = "test-hooks"))))]
+#[cfg(all(
+    feature = "native-domains",
+    any(
+        target_arch = "riscv64",
+        all(target_arch = "aarch64", feature = "test-hooks")
+    )
+))]
 fn resolve_domain_grant_slice(
     caller_id: usize,
     grant_id: usize,
@@ -3397,12 +3503,13 @@ pub enum Syscall {
         budget_ns: u64,
         out_ptr: usize,
     },
-    /// 224: VcpuRegs — read (write=false) or write (write=true) GP registers.
+    /// 224: VcpuRegs — mode 0 reads and 1 writes 32 GP words; Pi mode 2
+    /// reads CNTV_CTL_EL0/CNTV_CVAL_EL0 in words 0/1 and zeroes words 2..31.
     VcpuRegs {
         vm_id: usize,
         vcpu_id: usize,
         buf_ptr: usize,
-        write: bool,
+        mode: usize,
     },
     /// 225: InjectIrq — inject GICv2 virtual interrupt (0 ≤ intid ≤ 1019).
     InjectIrq {
@@ -7052,12 +7159,24 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             let owner_space = live_domain_space(caller_id);
             let n_pages = size.div_ceil(PAGE_SIZE);
             let paddr = match &owner_space {
-                #[cfg(all(feature = "native-domains", any(target_arch = "riscv64", all(target_arch = "aarch64", feature = "test-hooks"))))]
+                #[cfg(all(
+                    feature = "native-domains",
+                    any(
+                        target_arch = "riscv64",
+                        all(target_arch = "aarch64", feature = "test-hooks")
+                    )
+                ))]
                 Some(_) => match alloc_grant_pages_supervisor_only(n_pages) {
                     Some(paddr) => paddr,
                     None => return Ok(0),
                 },
-                #[cfg(not(all(feature = "native-domains", any(target_arch = "riscv64", all(target_arch = "aarch64", feature = "test-hooks")))))]
+                #[cfg(not(all(
+                    feature = "native-domains",
+                    any(
+                        target_arch = "riscv64",
+                        all(target_arch = "aarch64", feature = "test-hooks")
+                    )
+                )))]
                 Some(_) => return Ok(0),
                 None => match alloc_grant_pages(n_pages) {
                     Some(paddr) => paddr,
@@ -7067,7 +7186,13 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             // A domain owner's backing is mapped only in its own root, RW+NX, and
             // stays supervisor-only in the SAS root. Every page is undone if any
             // one fails, so no raw pointer is ever published for a partial map.
-            #[cfg(all(feature = "native-domains", any(target_arch = "riscv64", all(target_arch = "aarch64", feature = "test-hooks"))))]
+            #[cfg(all(
+                feature = "native-domains",
+                any(
+                    target_arch = "riscv64",
+                    all(target_arch = "aarch64", feature = "test-hooks")
+                )
+            ))]
             if let Some(space) = &owner_space {
                 if let Err(error) = map_domain_owner_pages(space, paddr, n_pages) {
                     log::warn!(
@@ -7122,7 +7247,13 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             // phase-01 denial.
             let owner_is_domain = domain_grant_task(caller_id);
             let target_is_domain = domain_grant_task(target_cell);
-            #[cfg(all(feature = "native-domains", any(target_arch = "riscv64", all(target_arch = "aarch64", feature = "test-hooks"))))]
+            #[cfg(all(
+                feature = "native-domains",
+                any(
+                    target_arch = "riscv64",
+                    all(target_arch = "aarch64", feature = "test-hooks")
+                )
+            ))]
             if owner_is_domain || target_is_domain {
                 let owner_space = live_domain_space(caller_id);
                 let target_space = live_domain_space(target_cell);
@@ -7208,7 +7339,13 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 );
                 return Ok(GRANT_DENY_SLICE);
             }
-            #[cfg(all(feature = "native-domains", any(target_arch = "riscv64", all(target_arch = "aarch64", feature = "test-hooks"))))]
+            #[cfg(all(
+                feature = "native-domains",
+                any(
+                    target_arch = "riscv64",
+                    all(target_arch = "aarch64", feature = "test-hooks")
+                )
+            ))]
             if let Some(receiver) = live_domain_space(caller_id) {
                 // A private-root receiver resolves the owner's exact rights and
                 // publishes the receiver mapping transactionally; a VFS context
@@ -7476,19 +7613,37 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             let owner_space = live_domain_space(caller_id);
             let n_pages = size.div_ceil(PAGE_SIZE);
             let paddr = match &owner_space {
-                #[cfg(all(feature = "native-domains", any(target_arch = "riscv64", all(target_arch = "aarch64", feature = "test-hooks"))))]
+                #[cfg(all(
+                    feature = "native-domains",
+                    any(
+                        target_arch = "riscv64",
+                        all(target_arch = "aarch64", feature = "test-hooks")
+                    )
+                ))]
                 Some(_) => match alloc_grant_pages_supervisor_only(n_pages) {
                     Some(paddr) => paddr,
                     None => return Ok(0),
                 },
-                #[cfg(not(all(feature = "native-domains", any(target_arch = "riscv64", all(target_arch = "aarch64", feature = "test-hooks")))))]
+                #[cfg(not(all(
+                    feature = "native-domains",
+                    any(
+                        target_arch = "riscv64",
+                        all(target_arch = "aarch64", feature = "test-hooks")
+                    )
+                )))]
                 Some(_) => return Ok(0),
                 None => match alloc_grant_pages(n_pages) {
                     Some(paddr) => paddr,
                     None => return Ok(0),
                 },
             };
-            #[cfg(all(feature = "native-domains", any(target_arch = "riscv64", all(target_arch = "aarch64", feature = "test-hooks"))))]
+            #[cfg(all(
+                feature = "native-domains",
+                any(
+                    target_arch = "riscv64",
+                    all(target_arch = "aarch64", feature = "test-hooks")
+                )
+            ))]
             if let Some(space) = &owner_space {
                 if let Err(error) = map_domain_owner_pages(space, paddr, n_pages) {
                     log::warn!(
@@ -7817,14 +7972,22 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             vm_id,
             vcpu_id,
             buf_ptr,
-            write,
+            mode,
         } => {
             if !caller_has_hypervisor(caller_id) {
                 return Err(SyscallError::PermissionDenied);
             }
-            // 32 registers × 8 bytes = 256 bytes.
+            // All modes access the full 32-word (256-byte) user buffer.
+            // Mode 2 is Pi-only, read-only, and clears unused words.
+            #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+            let max_mode = 2;
+            #[cfg(not(all(target_arch = "aarch64", feature = "board-rpi3")))]
+            let max_mode = 1;
+            if mode > max_mode {
+                return Err(SyscallError::InvalidInput);
+            }
             validate_user_buf(buf_ptr, 256, MAX_USER_BUF)?;
-            crate::hypervisor::registry::vcpu_regs(caller_id, vm_id, vcpu_id, buf_ptr, write)
+            crate::hypervisor::registry::vcpu_regs(caller_id, vm_id, vcpu_id, buf_ptr, mode)
                 .map_err(|_| SyscallError::NotSupported)
         }
 
@@ -8290,7 +8453,7 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
             vm_id: a0,
             vcpu_id: a1,
             buf_ptr: a2,
-            write: a3 != 0,
+            mode: a3,
         },
         ViSyscall::InjectIrq => Syscall::InjectIrq {
             vm_id: a0,

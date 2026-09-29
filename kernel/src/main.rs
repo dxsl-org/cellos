@@ -650,6 +650,22 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
 
     // 6. Logger & Drivers & FS
     task::drivers::uart::init(); // registers log backend on all arches
+    #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+    {
+        let current_el: u64;
+        unsafe {
+            core::arch::asm!("mrs {el}, CurrentEL", el = out(reg) current_el,
+                             options(nomem, nostack));
+        }
+        log::info!(
+            "[pi-monitor] entry EL={} host EL={} HVC ready={}",
+            crate::hal::aarch64::monitor::entry_el(),
+            current_el >> 2,
+            crate::hal::aarch64::monitor::is_ready()
+        );
+    }
+    #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+    crate::hypervisor::registry::pi_monitor_smoke();
 
     // Phase 07: reserve the warm-snapshot capture's scratch workspace from the
     // frame allocator — the capture stages its own stack and buffers there, so
@@ -1156,9 +1172,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         feature = "test-hooks"
     ))]
     if crate::hal::aarch64::el2::is_el2() {
-        log::info!(
-            "[grant] AArch64 EL2 (development-Silo machine): domain grant fixtures skipped"
-        );
+        log::info!("[grant] AArch64 EL2 (development-Silo machine): domain grant fixtures skipped");
     } else {
         task::domain_grant::run_selftest();
         task::grant_gate_selftest::run_primary();
