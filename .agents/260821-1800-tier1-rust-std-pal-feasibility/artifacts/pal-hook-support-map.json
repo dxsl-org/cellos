@@ -1379,7 +1379,7 @@
     "closure": "exact-set",
     "digest_algorithm": "sha256(canonical-json(entries))",
     "entry_count": 6,
-    "inventory_digest": "8072176363ec085cf8f6fb64097a3fe16484926a3cb644c00d19b2f52056b153",
+    "inventory_digest": "da119cd4536b8afa8c3b830b30ba904e153160a6303f85a88a0f40f4512eb744",
     "entries": [
       {
         "path": "kernel/Cargo.toml",
@@ -1387,7 +1387,7 @@
           "kernel feature defaults",
           "production dev-weak-rng exclusion"
         ],
-        "sha256": "9f412ad52bbba55759825383f28a3f9706570d284f522c98449a40d34541a7e5"
+        "sha256": "057c83cdef0b0d862c6fa1f7085fafaeda18dfd1aff0b8be800ac5d64142772f"
       },
       {
         "path": "kernel/src/task/drivers.rs",
@@ -1413,7 +1413,7 @@
           "GetRandom handler",
           "user-buffer validation primitives"
         ],
-        "sha256": "2022f769374306ce73cfa6a6e838e67ec564e9e9aa3cbafd82f393b738b8e081"
+        "sha256": "7e7f8d6c8a8bd507889b6ee1fd13646b117dc2d0a6003c94fd77ddf7f4976986"
       },
       {
         "path": "libs/api/src/abi/syscall.rs",
@@ -1421,14 +1421,14 @@
           "frozen syscall opcode decoder",
           "GetRandom allowlist-bit mapping"
         ],
-        "sha256": "bc203ac476ef9472df0e64c0a734238ebd0052a1af290f06e63f8af1dd846dc4"
+        "sha256": "d44616336fb2a18b7320586b7edf85b726cf157b8e2af19861e4fbac74c7d474"
       },
       {
         "path": "libs/ostd/src/syscall.rs",
         "roles": [
           "typed GetRandom caller wrapper"
         ],
-        "sha256": "38fee2ffafea83eb91fda651f916a82dd6cd51b2465999d8e61d0cac9a370fde"
+        "sha256": "2765ff2c5b14c4d7d46ddeca0ce0b16b55f37d9a5b718fa6e4cb42df3acf2a0a"
       }
     ],
     "required_paths": [

@@ -7,11 +7,11 @@ Recommendation: **CONDITIONAL GO — PAL-IMPLEMENTATION-CHECKPOINT is unblocked 
 
 | Input manifest | SHA-256 | Inputs | State |
 |---|---|---:|---|
-| `artifacts/approval-input-manifest.json` | `99cf7d24cd14c3b862959d17b499053735bbefded850202fa72b9eb8509129b3` | 106 | package, GetRandom technical backing, and PAL approvals verified; checkpoint unblocked |
+| `artifacts/approval-input-manifest.json` | `e30a38266146c443744d515631a7f823a6818b2995223827eec44ceffc5e9d0c` | 106 | package, GetRandom technical backing, and PAL approvals verified; checkpoint unblocked |
 
 The canonical manifest binds all six package plans, three upstream plans, six contracts including the hook/source map and governed GetRandom hostile-evidence report, 46 pinned Rust sources, nine other cited Cellos backing sources, the exact six-file kernel security-backing inventory, three hostile-evidence fixture sources, the hostile-evidence runner, eight benchmark sources, six tools, both tests, all eight fixtures, and both expected reports. It explicitly excludes itself, this decision record, and all approval/checkpoint records so those records can embed the manifest digest without a hash cycle. No individual digest substitution outside that manifest is an approval input.
 
-Pinned source identity is nightly `2026-05-01`, rustc `1.97.0-nightly (f53b654a8)`. The support map's 46-file source-manifest digest is `b984d50da89e342974ada8822321edd6b1d091d1da3dcf8ec1819a8986a4b105`; its six-entry kernel security-backing inventory digest is `8072176363ec085cf8f6fb64097a3fe16484926a3cb644c00d19b2f52056b153`; and the support-map file digest bound by the canonical manifest is `4f9be4139916ab7eccdc10ec9f0548c2b7e099eeac8bb1603656fd5d7fbbd412`.
+Pinned source identity is nightly `2026-05-01`, rustc `1.97.0-nightly (f53b654a8)`. The support map's 46-file source-manifest digest is `b984d50da89e342974ada8822321edd6b1d091d1da3dcf8ec1819a8986a4b105`; its six-entry kernel security-backing inventory digest is `da119cd4536b8afa8c3b830b30ba904e153160a6303f85a88a0f40f4512eb744`; and the support-map file digest bound by the canonical manifest is `ec4d5de627b873999d8483424b00b7290de033b599e9ab4ee5a3c1cd156b8c60`.
 
 ## Reconciliation
 
@@ -36,7 +36,7 @@ Final verification passed 33/33 feasibility tests, 57/57 validator adversarial a
 | `BENCHMARK-CONTRACT-APPROVAL` | performance owner; independent measurement reviewer | GRANTED (APPROVED_FOR_LATER_IMPLEMENTATION_CHECKPOINT 2026-09-16) |
 | `PAL-IMPLEMENTATION-CHECKPOINT` | all six roles above plus umbrella Phase 03 production-gate owner | UNBLOCKED / CONDITIONAL GO (2026-09-16) |
 
-All six approval rows and the implementation checkpoint are ratified and bound to approval-input-manifest digest `99cf7d24cd14c3b862959d17b499053735bbefded850202fa72b9eb8509129b3` as of 2026-09-16.
+All six approval rows and the implementation checkpoint are ratified and bound to approval-input-manifest digest `e30a38266146c443744d515631a7f823a6818b2995223827eec44ceffc5e9d0c` as of 2026-09-16.
 
 ## Non-Waivable Blockers and Risks
 
@@ -45,3 +45,5 @@ Umbrella Phase 03 design, external-floor, provenance, production integration, ho
 ## Explicit Non-Claims
 
 There is no PAL, target, runtime, private or published sysroot, target JSON, published triple, vendored Rust source, mlibc, live benchmark capture, authenticated evidence, promotion evidence, ledger entry, or Phase 06 completion. Synthetic fixture results cannot approve promotion.
+
+Digest re-bound 2026-09-29 under `PAL-IMPLEMENTATION-CHECKPOINT` condition 6: covered inputs `kernel/Cargo.toml`, `kernel/src/task/syscall.rs`, `libs/api/src/abi/syscall.rs`, `libs/ostd/src/syscall.rs`, `libs/ostd/src/startup.rs` changed after the 2026-09-16 binding. This line records only the digest re-bind; it is not a new signer decision.
