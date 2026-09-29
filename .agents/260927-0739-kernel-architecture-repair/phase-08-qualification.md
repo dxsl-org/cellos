@@ -324,7 +324,10 @@ enters its tasks and was reverted. The report itself is live and was observed do
 ~30 now panics with `[aarch64] kernel trap …` instead of terminating a cell (24 further runs were
 clean), which is the outcome this arm's contract asks for. Next instrument if it matters: identify the
 *host* vector (sync/IRQ/SError) that raises it. Measured after the dispatcher fix: 20 of 20 two-hart
-runs green, no kernel-trap reports; 60 of 60 with the SPSR experiment, reverted.
+runs green, no kernel-trap reports; 60 of 60 with the SPSR experiment, reverted. The production side was
+re-checked against the fix as well, since the arm it changes also covers a cell's alignment fault
+(EC 0x21/0x25): AArch64 production suite **11 of 11** (including the `-smp 2` row and the Tier-2
+domain-entry lanes) and the one-CPU test-hooks lane exit 0.
 
 The last two failures in the following forty-run batch were neither of the above: the lane counted every
 `[fault] Cell` line, so a deliberate fault's termination record and the "already retired; deferred fault
