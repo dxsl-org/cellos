@@ -591,6 +591,11 @@ jobs:
       # kernel_fs.img is a gitignored build artifact; assemble it from the
       # cells built above so the kernel embeds a real VIFS1 (build.rs would
       # otherwise stub it and the boot test could never reach the shell).
+      # cellos_sign verifies the F1/F5 policy through `cryptography`'s Ed25519.
+      - name: Install Python cryptography (cell signing)
+        timeout-minutes: 5
+        run: python3 -m pip install --user --quiet cryptography
+
       - name: Assemble aarch64 kernel_fs.img
         # The cell list must match scripts/build-aarch64-cells.ps1, which is the
         # source of truth for what an aarch64 image carries. It had four entries
@@ -601,8 +606,22 @@ jobs:
         # format-disk-arm.sh writes a plain FAT volume, not the cell-store layout
         # the loader's block-table fallback reads, so on this architecture a cell
         # is reachable only from here.
+        #
+        # Every cell the loader spawns must carry the dev-key signature. A cell
+        # with no `__ViCell_sig` section is classified domain-class (ADR-0015), and
+        # a production aarch64 kernel refuses a domain launch with `NotSupported`
+        # (`domain_admission`, switch-ordering unqualified) - the boot then dies at
+        # "Init: shell spawn failed" after loading the ELF. `init` takes the
+        # explicit embedded path instead and is not signed.
         run: |
           REL=target/aarch64-unknown-none-softfloat/release
+          PYTHON_BIN=python3
+          # shellcheck source=scripts/lib-sign-cells.sh
+          source scripts/lib-sign-cells.sh
+          sign_cells \
+            "$REL/app-shell" "$REL/service-vfs" "$REL/service-config" \
+            "$REL/service-input" "$REL/input-test" "$REL/periph-demo" \
+            "$REL/ls" "$REL/cat" "$REL/echo" "$REL/ps" "$REL/kill"
           python3 tools/mkfat32.py \
             kernel/src/embedded-aarch64/kernel_fs.img \
             "$REL/app-shell"      /bin/shell \
@@ -911,9 +930,26 @@ jobs:
       # kernel_fs.img is a gitignored build artifact; the committed copy goes
       # stale against the kernel ABI — assemble a fresh one (mirrors
       # scripts/build-x86_64-cells.ps1's image layout).
+      # cellos_sign verifies the F1/F5 policy through `cryptography`'s Ed25519.
+      - name: Install Python cryptography (cell signing)
+        timeout-minutes: 5
+        run: python3 -m pip install --user --quiet cryptography
+
       - name: Assemble x86_64 kernel_fs.img
+        # Every cell the loader spawns must carry the dev-key signature: an
+        # unsigned cell is classified domain-class (ADR-0015) and a production
+        # x86_64 kernel refuses a domain launch with `NotSupported`, which shows up
+        # as "Init: shell spawn failed" after the ELF loads. `init` takes the
+        # explicit embedded path instead and is not signed.
         run: |
           REL=target/x86_64-unknown-none/release
+          PYTHON_BIN=python3
+          # shellcheck source=scripts/lib-sign-cells.sh
+          source scripts/lib-sign-cells.sh
+          sign_cells \
+            "$REL/app-shell" "$REL/service-vfs" "$REL/service-config" \
+            "$REL/platform" "$REL/driver-nvme" "$REL/driver-e1000" \
+            "$REL/ls" "$REL/cat" "$REL/echo" "$REL/ps"
           python3 tools/mkfat32.py \
             kernel/src/embedded-x86_64/kernel_fs.img \
             "$REL/app-shell"      /bin/shell \
