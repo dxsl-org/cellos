@@ -16,11 +16,12 @@ BOOT_WINDOW="${BOOT_WINDOW:-35}"
 #
 # Measured at `QEMU_SMP=2` (2026-09-29, three batches): every kernel-side marker
 # holds — hart 1 online, the cross-hart IPI answered, no panic, no deferred-record
-# integrity error, vfs-test 96/0 — and the lane is green in 5 runs of 6 since the
-# retirement fix (was 1 to 3 of 6 before it; see phase 08 `Domains on two harts`
-# for the measured root cause). The residual failure is the receiver's exit phase
-# losing its fault when the owner's revocation lands after the cell's bounded
-# retry. Use the knob to reproduce the residual, not to qualify the board.
+# integrity error, vfs-test 96/0 — and the lane passes in 13 runs of 21 since the
+# retirement fix (batches of six to eight on one image; before it the lane stalled
+# on the first run more often than not — see phase 08 `Domains on two harts` for
+# the measured root cause). The residual is the receiver's exit phase losing its
+# fault when the owner's revocation lands after the cell's bounded retry. Use the
+# knob to reproduce the residual, not to qualify the board.
 QEMU_SMP="${QEMU_SMP:-1}"
 DEVELOPMENT_SILO="${CELLOS_AARCH64_TEST_HOOKS_DEVELOPMENT_SILO:-0}"
 if [[ "$DEVELOPMENT_SILO" != "0" && "$DEVELOPMENT_SILO" != "1" ]]; then
