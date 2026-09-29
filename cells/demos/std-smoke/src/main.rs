@@ -17,8 +17,8 @@ api::declare_manifest!(
 api::declare_syscalls![Log, Yield, GetTime, GetRandom, StateRestore];
 
 ostd::cell_main!(extern "C" cell_main);
-use std::collections::{BTreeMap, HashMap};
 use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, HashMap};
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 struct SensorTelemetry {
@@ -70,7 +70,10 @@ fn cell_main() {
     println!("[std-smoke] Serialized JSON: {}", json_str);
     let parsed: SensorTelemetry = serde_json::from_str(&json_str).expect("deserialize json");
     assert_eq!(parsed, tele);
-    println!("[std-smoke] serde_json round-trip PASS (device={})", parsed.device_id);
+    println!(
+        "[std-smoke] serde_json round-trip PASS (device={})",
+        parsed.device_id
+    );
     // 1d. Freeing allocator test: repeated allocate & free cycles
     for cycle in 0..1000 {
         let mut temp = Vec::with_capacity(512);
@@ -81,6 +84,53 @@ fn cell_main() {
         // temp drops here, deallocating back to free list!
     }
     println!("[std-smoke] Freeing allocator cycle test (1000 iter x 2KB) PASS");
+    // 1e. Over-aligned allocation: `Layout::align` > 16 must be honoured.
+    // Rust's GlobalAlloc contract requires the returned pointer to satisfy
+    // `layout.align()`; a cell using a `#[repr(align(N))]` type, SIMD or an
+    // over-aligned slice would otherwise get a misaligned (UB) pointer.
+    #[repr(align(64))]
+    struct Aligned64([u8; 64]);
+    #[repr(align(256))]
+    struct Aligned256([u8; 256]);
+    let mut over_aligned_64 = Vec::new();
+    println!(
+        "[std-smoke] align_of(Aligned64) = {}, align_of(Aligned256) = {}",
+        core::mem::align_of::<Aligned64>(),
+        core::mem::align_of::<Aligned256>()
+    );
+    for i in 0..4u8 {
+        let boxed = Box::new(Aligned64([i; 64]));
+        let addr = core::hint::black_box(&*boxed as *const Aligned64 as usize);
+        println!(
+            "[std-smoke]   Aligned64 #{i} at {addr:#x} (mod 64 = {})",
+            addr % 64
+        );
+        assert_eq!(addr % 64, 0, "64-byte alignment violated at {:#x}", addr);
+        assert_eq!(boxed.0, [i; 64], "over-aligned 64 B payload is not intact");
+        over_aligned_64.push(boxed);
+    }
+    let mut over_aligned_256 = Vec::new();
+    for i in 0..2u8 {
+        let boxed = Box::new(Aligned256([i; 256]));
+        let addr = core::hint::black_box(&*boxed as *const Aligned256 as usize);
+        println!(
+            "[std-smoke]   Aligned256 #{i} at {addr:#x} (mod 256 = {})",
+            addr % 256
+        );
+        assert_eq!(addr % 256, 0, "256-byte alignment violated at {:#x}", addr);
+        assert_eq!(
+            boxed.0, [i; 256],
+            "over-aligned 256 B payload is not intact"
+        );
+        over_aligned_256.push(boxed);
+    }
+    println!(
+        "[std-smoke] Over-aligned allocations PASS ({} x 64 B, {} x 256 B)",
+        over_aligned_64.len(),
+        over_aligned_256.len()
+    );
+    drop(over_aligned_64);
+    drop(over_aligned_256);
     // 2. Monotonic time test
     let t0 = std::time::Instant::now();
 

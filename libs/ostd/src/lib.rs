@@ -168,7 +168,7 @@ macro_rules! run_app {
     ($handler:expr) => {
         // The attribute belongs to the bare-metal target only: a hosted test
         // build must get libtest's entry, not this one (see ostd::cell_main!).
-        #[cfg_attr(target_os = "none", no_mangle)]
+        #[cfg_attr(not(any(test, unix, windows, target_family = "wasm")), no_mangle)]
         pub fn main() {
             // run_with_lifecycle (not run) so AppEvent::Init fires once before the
             // first sys_recv — Driver Cells (virtio-net/gpu, nvme, e1000) do all

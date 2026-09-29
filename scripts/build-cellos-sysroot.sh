@@ -36,14 +36,19 @@ if [ ! -f "$PATCH_FILE" ]; then
     exit 1
 fi
 
+PATCH_DIGEST="$(sha256sum "$PATCH_FILE" | awk '{print $1}')"
+STAMP_FILE="target/cellos-rust-src/.patch.sha256"
+
 mkdir -p "target/cellos-rust-src"
-if [ ! -d "$STAGING_DIR" ]; then
+if [ ! -d "$STAGING_DIR" ] || [ "$(cat "$STAMP_FILE" 2>/dev/null || true)" != "$PATCH_DIGEST" ]; then
     echo "==> Staging rust-src library from $RUST_SRC..."
+    rm -rf "$STAGING_DIR"
     cp -a "$RUST_SRC" "$STAGING_DIR"
     echo "==> Applying CellOS PAL patch ($PATCH_FILE)..."
     (cd "$STAGING_DIR/.." && patch -p1 < "$PATCH_FILE")
+    printf '%s\n' "$PATCH_DIGEST" > "$STAMP_FILE"
 else
-    echo "==> Staging directory already exists: $STAGING_DIR"
+    echo "==> Staging directory up to date: $STAGING_DIR"
 fi
 
 echo "==> Building CellOS std sysroot for target $TARGET..."

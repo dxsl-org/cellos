@@ -24,6 +24,12 @@
 /// single test. The function itself stays, so the cell body is still compiled
 /// and no `cfg`-only stub exists.
 ///
+/// "Bare metal" is spelled as *no hosted family* (`unix`/`windows`/`wasm`)
+/// rather than `target_os = "none"` plus `"cellos"`: the macro expands into
+/// every cell crate, and `cellos` is an unknown `target_os` value for them —
+/// `unexpected_cfgs` under `clippy -D warnings`, which no single destination
+/// crate can declare away.
+///
 /// ```ignore
 /// ostd::cell_main!(cell_main);              // Rust ABI
 /// ostd::cell_main!(extern "C" cell_main);   // C ABI
@@ -33,13 +39,13 @@
 #[macro_export]
 macro_rules! cell_main {
     (extern "C" $entry:ident) => {
-        #[cfg_attr(target_os = "none", no_mangle)]
+        #[cfg_attr(not(any(test, unix, windows, target_family = "wasm")), no_mangle)]
         pub extern "C" fn main() {
             $entry()
         }
     };
     ($entry:ident) => {
-        #[cfg_attr(target_os = "none", no_mangle)]
+        #[cfg_attr(not(any(test, unix, windows, target_family = "wasm")), no_mangle)]
         pub fn main() {
             $entry()
         }

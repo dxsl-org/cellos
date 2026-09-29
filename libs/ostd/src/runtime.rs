@@ -254,7 +254,7 @@ macro_rules! app_entry {
 
         // The attribute belongs to the bare-metal target only: a hosted test
         // build must get libtest's entry, not this one (see ostd::cell_main!).
-        #[cfg_attr(target_os = "none", no_mangle)]
+        #[cfg_attr(not(any(test, unix, windows, target_family = "wasm")), no_mangle)]
         pub fn main() {
             $crate::runtime::CellRuntime::new().run($handler);
         }
@@ -275,7 +275,7 @@ macro_rules! app_entry {
 
         // The attribute belongs to the bare-metal target only: a hosted test
         // build must get libtest's entry, not this one (see ostd::cell_main!).
-        #[cfg_attr(target_os = "none", no_mangle)]
+        #[cfg_attr(not(any(test, unix, windows, target_family = "wasm")), no_mangle)]
         pub fn main() {
             $crate::runtime::CellRuntime::new()
                 .help($help)
@@ -306,7 +306,7 @@ macro_rules! app_entry {
 
         // The attribute belongs to the bare-metal target only: a hosted test
         // build must get libtest's entry, not this one (see ostd::cell_main!).
-        #[cfg_attr(target_os = "none", no_mangle)]
+        #[cfg_attr(not(any(test, unix, windows, target_family = "wasm")), no_mangle)]
         pub fn main() {
             $crate::runtime::CellRuntime::new().run($handler);
         }
@@ -422,7 +422,7 @@ macro_rules! service_entry {
 
         // The attribute belongs to the bare-metal target only: a hosted test
         // build must get libtest's entry, not this one (see ostd::cell_main!).
-        #[cfg_attr(target_os = "none", no_mangle)]
+        #[cfg_attr(not(any(test, unix, windows, target_family = "wasm")), no_mangle)]
         pub fn main() {
             $crate::runtime::CellRuntime::new().run($handler);
         }
