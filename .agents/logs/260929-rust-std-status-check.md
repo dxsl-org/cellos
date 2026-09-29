@@ -185,3 +185,24 @@ Verified end to end on this repository: appending a line to the patch and runnin
 validator against the pushed baseline returns `PASS: C9=NOT_COMPLETE`; rewriting event 13's
 artifact digest to `abab...` returns `FAIL: artifact digest or kind is invalid`. Four unit tests
 (`tests/app-tier-acceptance/test_evidence_history.py`) pin the rule and the suite is 85/85.
+
+## Two red CI boot lanes root-caused and fixed (2026-09-30)
+
+The `QEMU Boot Test (aarch64)` and `(x86_64)` lanes had been red since before this session
+(same failure at `a614f9481`). Both assembled their embedded VIFS1 with `tools/mkfat32.py`
+and no signing, unlike the riscv64 lane whose `scripts/build-boot-ramdisk-ci.sh` calls
+`sign_cells`. A cell with no `__ViCell_sig` section is classified domain-class
+(`governed_spawn`: `None => true`, ADR-0015), and a production aarch64/x86_64 kernel refuses a
+domain launch (`domain_admission` maps `SwitchOrderingUnqualified` to `NotSupported`). The
+serial log shows it directly: `[loader] SpawnFromPath refused: caller=1 path=/bin/shell
+error=NotSupported` right after the ELF maps and W^X is applied, then `Init: shell spawn
+failed.` riscv64 stayed green only because its production pin qualifies domain switching.
+
+Both jobs now sign every cell they place in the image and install `cryptography` for
+`cellos_sign`'s F1/F5 check. Reproduced and verified locally with the lanes' own scripts:
+the unsigned image fails; the signed image prints `PASS: aarch64 shell prompt reached — full
+boot successful` and `PASS: x86_64 shell prompt reached — full boot successful`.
+
+Still red in CI, not touched here: `Network Data-Path Integration (riscv64)` (its
+`--test window-policy` fails) and `QEMU Hypervisor Machinery Smoke (TCG)` (guest disk without a
+bootstrap cell table, then a panic at `hal/arch/arm/src/aarch64/trap.rs:286`).
