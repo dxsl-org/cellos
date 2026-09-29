@@ -62,3 +62,51 @@ Phase-29 "COMPLETE" snapshot status and its sub-100 ms figure).
 - Phase 07: all-hart quiescence and closure, then the two-boot witness on a block-capable board.
 - `docs/system-architecture.md` corrections remain uncommitted (the file also carries unrelated
   in-flight edits); commit them with that work.
+
+## 2026-09-29 — phase 08 residual closed: an IPI is not a timer tick
+
+## What happened
+Chased the AArch64 two-hart lane's ~5-in-10 flakiness to a single cause and fixed it, then verified
+every runnable lane again. Also started the second AArch64 hart properly enough that the lanes assert
+it (PSCI over HVC) and corrected the plan bullets that still described the pre-work tree.
+
+## Decisions
+- An SGI must not enter `vi_timer_tick()`. It carried an invalidation or a retirement request, and the
+  tick path adds a scheduler decision the requester never asked for. On a hart parked in `wfi` — the
+  whole life of `smp_aarch64_secondary_main` — that loses the hart (measured: 33 acknowledgements, last
+  at `epoch=35`, then deaf while the pair asked for 36-38); on a hart running a task it re-enters the
+  scheduler between a reader's load and its use. `vi_ipi_service` now does only the IPI's duties:
+  flush the local TLB and publish the epoch, and answer a retirement request when the hart holds no task
+  ("no task" is the proof a switch gives, and the only one a parked hart can offer).
+- A root retirement off RV64 must publish from the switch path: `complete_incoming_switch` never called
+  `complete_retirement_switch`, so a busy hart only answered when it happened to go idle. RV64 has
+  published this from its assembly boundary all along.
+- A deferred release is decided by its own tag's acknowledgement, not by "does any hart owe any
+  invalidation" — the global question kept an already-acknowledged tag waiting behind unrelated
+  teardowns (measured 235 attempts ≈ 2.3 s; now `attempts=1`).
+- Fixture-side, an asynchronous revocation may not be asserted synchronously: both grant-pair fixtures
+  retry their store until the revocation traps, bounded.
+
+## Lessons
+- "The hart answered 33 IPIs and then stopped" is a *state* bug, not a timing bug: look at what the
+  handler does to the hart, not at how long the requester waits.
+- A reader that sees three different values of one slot inside one path is telling you a writer ran
+  between two of its loads. The writer was a nested `yield_cpu`.
+- Debug output that changes the pass rate (here 12 of 12 with a probe, about half without) is a signal
+  that the bug is a race with a window, not that the probe "fixed" anything.
+
+## Next steps
+- Regenerate the bootstrap `disk_v3.img`: with one present, `launch-profile` fails on
+  `snapshot: supervisor unavailable` and `tier2-fault-isolation` on loader cap refusals
+  (`spawn: true` against a ceiling of `false`). Both reproduce with a kernel built outside these
+  commits, so they are artifact staleness, not kernel behaviour.
+- Phase 02's remaining items are hardware-gated and named: ASID-faithful invalidation witness (QEMU
+  8.2.2 retires unrelated ASIDs), the x86 `INVPCID` instruction path (KVM only), and x86_64 second-hart
+  bring-up.
+- Phase 07's board witness and Phase 08's MMC/remote-TLB/latency rows stay hardware-gated.
+
+## Environment notes for whoever runs the lanes next
+- Another session had `hal/arch/arm` mid-edit (uncommitted; a stray `\` in an asm block breaks the
+  AArch64 image). Verification was run from a clean worktree of these commits instead.
+- `.cargo/config.toml` is untracked: a fresh worktree needs it copied, or cell linking fails with
+  `R_AARCH64_ABS64 cannot be used against local symbol`.
