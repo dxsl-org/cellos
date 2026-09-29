@@ -204,4 +204,4 @@ Acceptance evidence must prove:
 - [ADR-0007](./0007-development-first-hardware-constrained-execution.md) — DEV_REFERENCE implementation does not satisfy production admission.
 - [ADR-0009](./0009-correlate-relay-packet-failures.md) — request-scoped relay failures use transport-local correlation without exposing C2C request IDs or changing TLS ownership.
 - [Service-net mutual TLS plan](../../.agents/260825-1726-kms-silo-production-root/phase-04-service-net-mutual-tls-integration.md) — implementation owner and blocked entry gates.
-- [Relay-first C2C plan](../../.agents/260819-1409-cell-to-cell-anywhere-core/phase-05-relay-first-remote-correctness-oracle.md) — relay oracle and no-client status.
+- [Tier-aware C2C plan](../../.agents/260927-1100-c2c-anywhere-tier-aware/plan.md) — Phase 04 authority entry and Phases 05–06 broker integration/relay oracle; [earlier relay-first record](../../.agents/260819-1409-cell-to-cell-anywhere-core/phase-05-relay-first-remote-correctness-oracle.md) is historical.

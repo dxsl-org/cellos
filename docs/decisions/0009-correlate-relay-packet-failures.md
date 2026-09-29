@@ -182,4 +182,4 @@ malformed input. Authority/client lifecycle evidence remains Phase 4 work.
 
 - [ADR-0005](./0005-mutual-tls-relay-identity.md) — relay mTLS identity and NodeId admission.
 - [ADR-0008](./0008-protected-relay-tls-endpoint-ownership.md) — protected TLS endpoint ownership remains unchanged.
-- [Relay-first C2C plan](../../.agents/260819-1409-cell-to-cell-anywhere-core/phase-05-relay-first-remote-correctness-oracle.md) — implementation and isolated oracle owner.
+- [Tier-aware C2C plan](../../.agents/260927-1100-c2c-anywhere-tier-aware/plan.md) — Phase 05 request-scoped broker integration and Phase 06 isolated oracle; [earlier relay-first record](../../.agents/260819-1409-cell-to-cell-anywhere-core/phase-05-relay-first-remote-correctness-oracle.md) is historical.

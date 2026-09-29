@@ -1,228 +1,132 @@
-# Spec 20 — Unified IPC Contract: One Backbone at Three Ranges (DRAFT v2)
+# Spec 20 — Tier-aware Cell-to-Cell IPC Contract (DRAFT v3)
 
-> **Status**: Draft v2 2026-07-30 — revised after two adversarial reviews (security
-> adversary + distributed-systems failure analyst). **Not normative until ratified.**
-> D24 approves **zero Law-1/ABI additions** from this draft; every public type, syscall,
-> discriminant, and broker-watch primitive remains subject to the checklist and two
-> explicit confirmations.
-> Extends Spec 17 (IPC wire contract) and Spec 14 (distributed); depends on midori-lessons
-> phase 02 (kernel-attested sender) and the Cell-to-Cell Anywhere stack
-> (`.agents/260624-cell-to-cell-anywhere/plan.md`).
->
-> **v1→v2 changes**: remote identity demoted to node granularity (was: per-cell path
-> "verbatim" into local ACL — refuted); §2.4 death-watch split by safety class and moved
-> off the Noise-session layer (was: one collapsed handling shape — refuted, breaks Spec 14
-> physical-safety); respawn epoch added; partition handling forced into the return type;
-> fleet claim gated to G2; foundation status corrected (remote forwarder is a stub today).
+> **Status:** Draft v3, 2026-09-27 — contract proposal and code inventory only; **not ratified**. [Spec 17](17-ipc-wire-contract.md) remains the normative local wire/attestation contract. ADR-0015, ADR-0008 and ADR-0009 remain accepted decisions; this draft cannot amend them.
+> No public syscall, byte-0 discriminant, enum variant, broker watch authority or remote export is approved by this text. Each actual Law-1/ABI change requires its own two explicit confirmations and a Spec-17 §9 amendment where relevant.
+> Execution owner: [tier-aware C2C plan](../../.agents/260927-1100-c2c-anywhere-tier-aware/plan.md). Its Phase 01 contract drafting may overlap kernel repair, but kernel and shared ABI work may not. [June](../../.agents/260624-cell-to-cell-anywhere/plan.md) and [August](../../.agents/260819-1409-cell-to-cell-anywhere-core/plan.md) plans are historical, not implementation authority.
+> v2's `CellAddr`/raw `path_hint`, UDP-sized universal payload, remote watch and one-error-for-all-ranges sketches are **not** approved interfaces. The concrete existing endpoint and transport types below are the starting point; proposed behavior is labelled.
 
-## 1. Context — why Cellos needs a declared backbone
+## 1. Context and implementation ceiling
 
-Linux's de-facto service backbone (D-Bus) is four things: a name system, a typed message
-protocol, lifecycle signals, and a who-may-call-whom policy. Cellos has all four — twice,
-in two disconnected worlds (local SAS vs remote federation). A cell calls the local VFS
-with `sys_send(tid, …)` and a remote sensor with `call_remote(CellNetId, service, method,
-…)` — two address schemes, two identity models, two failure vocabularies. The backbone is
-the single **contract** that removes that split.
+One typed `CellMethod` may describe an operation on a same-node Cell or an authenticated remote node; *locality* and *isolation tier* are independent axes. A Tier-3 VM guest is not a native Cell. The same request/response schema does not make local and remote identities, errors, latency or physical-safety decisions interchangeable. This is a contract, not a kernel bus or a promise of transparent RPC.
 
-It is a *contract*, not a component: no bus daemon (the D-Bus daemon is a bottleneck and a
-CVE magnet). Kernel keeps mechanism, cells keep policy, this spec is the shared shape.
-
-**Foundation status (transitional, verified code reality):**
-
-> No generated `docs/spec-status.generated.md` exists yet, so this is a hand-written
-> transitional snapshot, not the authoritative Layer-3 status file.
-
-The runtime reality splits into four states:
-
-1. Broker boot and NodeId generation are wired.
-2. Transport, relay, gossip, lease, and enrollment modules compile, but most of them are not wired into the dispatch loop.
-3. Typed remote forwarding is a stub.
-4. Remote call/watch has no working runtime yet.
-
-| Piece | Local (SAS) | Remote |
+| Component | Observed implementation (2026-09-27) | Proposed next gate |
 |---|---|---|
-| Transport / NodeId / relay / Noise KKpsk0 | n/a | ⚠️ code present (`net-broker/src/{transport,relay,identity}.rs`); runtime wiring incomplete |
-| Typed request/response forwarding | ✅ Spec 17 | ⚠️ **stub** — `main.rs:153` `dispatch()` is TODO, `routing.rs:158` returns `self_tid` ("forward via Noise" deferred) |
-| Kernel-attested sender | ⚠️ **phase 02 not landed** | — |
+| Local typed IPC | `LocalEndpoint::call` invokes `ipc::service_call_typed` on a nonzero TID; sender-masked request/reply, copied 4 KiB Spec-17 wire (`libs/ostd/src/cluster_endpoint.rs:51-95`). `LocalEndpoint::new` checks nonzero only, not a live generation. | Phase 02 binds service lookup to live kernel/registry identity and recipient generation; retain direct local path. |
+| Tier-2 native | RV64 private-root copied IPC is available; [Spec 22](22-native-domain-cell-implementation-gate.md) denies public grant entry points naming a private root until kernel repair proves revoke/map/TLB ownership. AArch64/x86 Tier-2 admission is gated on safe root switching. | Phase 02 proves a real cross-tier request/reply on an admitted profile; no private-root `DomainGrant`. |
+| Broker / remote | `net-broker` boots with K1, an opaque KMS identity if available, authenticated beacons and bounded local oracle roles. `local_runtime/request_dispatch.rs` serves Echo/Snapshot/Hold; other work returns `NotSupported`. `RemoteEndpoint::call` always returns `NotSupported` without broker contact; `RemoteEndpoint::new` checks nonzero metadata, **not** authentication (`libs/ostd/src/cluster_endpoint.rs:98-143`). | Protected relay entry and two-node call are Phases 04–06, blocked by independent protected authority/AC-012 evidence. |
+| Remote foundation | V1 112-byte envelope, 3,712-byte max payload, bounded receive/dedup and boot-local server epoch have focused host tests; no authenticated broker-to-broker runtime or two-node oracle. Relay server codec evidence is server-only. | No remote/export enablement from compiled modules or a single-guest benchmark. |
+| Fastpath / guest | Tier-1 SPSC ring copies message bytes (zero-trap, not general zero-copy); raw-address handle is not a general capability. Tier-3 guest has no C2C guest bridge. | Separate, opt-in Phases 08 and 09 with ownership/VM-boundary proof. |
 
-The remote `call`/`watch` paths in §2 therefore have **no runtime today**. This spec
-designs the contract the forwarder must satisfy; the §6 prototype gate builds against it,
-not against a claim that it already works.
+Evidence ceiling: existing single-guest broker QEMU oracle proves local roles only. Development K1/`DEV_REFERENCE` cannot satisfy production identity; remote/private/public, physical and production claims remain distinct.
 
-## 2. Decision (proposed)
+## 2. Proposed contract (not an approved public ABI)
 
-### 2.1 One address: `CellAddr` — range pinned at construction
+### 2.1 Address and tier are separate decisions
 
-```
-CellAddr        = Local(LocalAddr) | Remote(RemoteAddr)
-LocalAddr       = service: ServiceName
-RemoteAddr      = node: CellNetId, service: ServiceName, epoch-aware
-ServiceName     = the cell's install path (e.g. "/bin/vfs"), NOT a tid
-```
+`CellMethod` already supplies typed request/response, `SERVICE_ID`, `EXPORT_ID` and `RetryClass`. `CellEndpoint<M>` is explicitly `Local(LocalEndpoint<M>) | Remote(RemoteEndpoint<M>)`; callers must branch on locality. The current local descriptor contains a TID and the current remote descriptor contains `CellNetId`, `ClusterId` and boot-local `ServerEpoch`. Neither constructor authenticates its arguments. A future live binding **must** be established against the kernel-owned service registry / caller attestation or an authenticated peer session, never by trusting a caller-supplied TID, `path_hint`, tier, remote epoch or address. Retain these existing names pending an approved interface change; the v2 `CellAddr` sketch is retired.
 
-- **Range is part of the type, not a runtime `is_local()` probe.** A local-only cell holds
-  a `LocalAddr` that *cannot silently become remote*. This is the primary defense against
-  code that is correct in test (resolves local) and broken in the field (resolves remote).
-- **tid never appears in the contract.** Tids are unstable across respawn and forgeable as
-  names (the `path_hint` hole). Path is the durable key.
-- **Resolution binds to the kernel/registry entry, never the caller-supplied `path_hint`**
-  (`loader.rs:177` is attacker-influenced). `RegisterService` is SpawnCap-gated
-  (`syscall.rs:1903-1908`), so a non-privileged cell cannot register under a victim's name;
-  the resolver trusts that registry, not the spawn-time hint.
-- **Respawn epoch (required).** A resolved binding carries an incarnation epoch (init's
-  restart count for that path). Replies and death notices carry the epoch. This is the same
-  field that serves replay-dedup (§2.4). "Valid across respawns" means *the name resolves*,
-  **not** that instance N−1 and N are interchangeable — they are distinguishable by epoch,
-  and a mismatched-epoch reply is `Err(Respawned)`, never silently accepted.
-
-### 2.2 Identity — node-granular across the trust boundary
-
-Local and remote identity are **different principal types and do not share an ACL
-namespace.**
-
-```
-local principal:  (SELF_NODE, path)   — kernel-attested (phase 02); trustworthy
-remote principal: (peer NodeId)       — Noise-authenticated machine identity
-                                         (prologue binds NodeId: transport.rs:144-147)
-```
-
-- The Noise prologue authenticates **only the machine**. A remote peer's broker is, by the
-  trust model (Spec 18: remote ≤ Tier-2), potentially adversarial — it can assert any
-  per-cell origin path it likes. Therefore **a remote origin authorizes at NodeId
-  granularity.** Any per-cell path a peer reports is an *advisory label*, usable by a rule
-  only after that rule explicitly declares it trusts that node to self-report — never fed
-  "verbatim" into the local per-path ACL. (v1's verbatim-reuse claim is withdrawn.)
-- `machine_id` (Spec 14 split-brain tiebreak) MUST be derived from the NodeId
-  (truncated hash of the static X25519 public key) and checked against the
-  Noise-authenticated `remote_node_id` — never accepted from the wire
-  (`enrollment.rs:48,68-76` currently decodes it unbound → spoofable to win Primary).
-
-### 2.3 One API — range in the type, partition in the return
-
-```rust
-// libs/ostd — sketch; names to bikeshed at implementation
-fn call<Req, Resp>(addr: &RemoteAddr, req: Req, t: Timeout) -> Result<Resp, RemoteErr>;
-fn call_local<Req, Resp>(addr: &LocalAddr, req: Req)         -> Result<Resp, LocalErr>;
-fn send(addr: &CellAddr, msg: impl Serialize)               -> ViResult<()>;
-
-enum RemoteErr { Timeout, Unreachable, Respawned, NoService, Remote(u8) }
-```
-
-- **The caller of a remote `call` MUST match `Timeout | Unreachable | Respawned`** — the
-  paper Waldo 1994 warns against a single call signature that hides the range; v2 answers by
-  making the *failure modes that only exist remotely* unrepresentable in the local path and
-  unignorable in the remote path.
-- A mandatory `timeout` converts partition into a typed error, **not** into a silent retry.
-  Automatic retry is not in the contract (it double-executes non-idempotent methods — see
-  §2.4 dedup).
-- Same postcard-typed messages both ranges; Spec 17's byte-0 discriminant registry is the
-  **single** schema registry (remote `method_id` allocated from the same governed table).
-  Local fast path keeps today's rendezvous cost — this spec adds **zero** overhead to
-  SAS-local IPC.
-- Payload size across the range boundary is normatively capped at the UDP-safe size
-  (≈480 B, matching VFS in Spec 17 §5) **unless** the relay-TCP path is guaranteed; there is
-  no implicit fragmentation layer (none exists). A near-4 KiB local request has no automatic
-  remote form.
-
-### 2.4 Failure vocabulary — two liveness sources, safety class in the signal
-
-`watch(addr) -> WatchHandle` gains a remote sibling, but liveness is sourced by **class**,
-not by one collapsed mechanism:
-
-```
-WatchFired { addr, epoch, seq, reason }
-reason ∈ {
-  peer_confirmed_dead,   // peer's own local NotifyOnExit fired for that service
-  peer_indeterminate,    // lease/beacon loss or session death — MIGHT be a partition
-  transport_evicted,     // LOCAL session eviction (K exhaustion) — NOT a peer statement
-}
-```
-
-- **A `WatchFired` never authorizes actuation.** Restart-local vs failover vs safe-stop is
-  the supervisor's decision, and the Spec 14 §PHYSICAL-SAFETY local interlock
-  (`14-distributed.md:76-90`) is the only thing that authorizes driving an actuator.
-  `peer_indeterminate` maps to SAFE/STOP (the unreachable peer may still be self-granting its
-  role for up to `PEER_LOSS_MS = 9000`); only `peer_confirmed_dead` permits failover, and
-  only after the local interlock re-checks. "Identical handling shape" from v1 applies to
-  *plumbing* (cleanup/reconnect) exclusively — the safety decision is exactly the
-  distinction v1 wrongly erased.
-- **Machine-reachability watches ride the beacon/lease layer**
-  (`BEACON_INTERVAL_MS = 1000`, `PEER_LOSS_MS`), which is **not** bounded by the K≤4 Noise
-  pool. Only per-service `peer_confirmed_dead` needs a session. This decouples watch count
-  from K (see §3) and supplies `peer_indeterminate` for free.
-- `WatchFired` carries a per-watch monotonic `seq`. Session-pool exhaustion
-  returns explicit `Busy`/`WouldBlock` pressure without displacing live state;
-  capacity pressure is never delivered as peer death.
-- **Remote watch requires a broker-scoped, non-SpawnCap kernel primitive** that can observe
-  only services the broker itself brokers — not arbitrary tids. Granting the broker full
-  SpawnCap `NotifyOnExit` (syscall 204, gated at `syscall.rs:1866-1873`) would make it a
-  confused-deputy supervisor and violate §2.5. This primitive is a Law-1 addition and a hard
-  prerequisite; §2.4 does not work without it.
-
-### 2.5 Explicit non-goals
-
-- No transparent RPC that hides the range (§2.1/§2.3 pin it in the type).
-- No bus daemon; no broker in the kernel. Kernel's new duties are exactly two, both bounded:
-  phase-02 sender attestation (local) and the broker-scoped watch primitive (§2.4).
-- No automatic retry, no exactly-once, no cross-node time/order/consensus (Spec 14 leases
-  stay optimistic hints).
-- No change to Spec 17's local framing, recv-mask rule, or blocking discipline.
-
-## 3. Constraints the design must survive (verified)
-
-IPC buffer 4096 B; `UdpRecv` 512 B + 6 B header; `MAX_SOCKETS = 18` (shared DHCP/ARP/user);
-Noise `MAX_SESSIONS = 4` with fail-closed admission and no occupied-slot
-replacement (`session_pool.rs`); broker is NORMAL priority under a ~500 ms RT
-watchdog (`main.rs:91`) on a **single dispatch thread** (`main.rs:126`).
-
-**Two structural ceilings the "fleet backbone" claim must respect:**
-
-1. **K≤4 caps live remote peers at ~4.** Full-mesh watch-all survives only **N≤5**; the G1
-   plan itself gates N>10 behind raising `MAX_SOCKETS` + K (`plan.md:434`), and Spec 14 scope
-   is 2 nodes. → The contract claims a **backbone at ranges**, not a **fleet at scale**;
-   fleets beyond K are explicitly deferred to G2 gossip. A new watch at K-exhaustion returns
-   `Err(Busy)` (fail-loud, Spec 17 §7) — it MUST NOT evict a session with an in-flight
-   request or an active watch.
-2. **Single-thread blocking connect trips the watchdog.** A blocking multi-second
-   `TcpConnect` on the dispatch thread misses the 500 ms heartbeat → watchdog kills the
-   broker → every session drops at once → correlated fleet-wide false death. Connect/
-   handshake MUST be a bounded state machine that yields and re-arms `sys_heartbeat` inside
-   the watchdog window. Broker death must be distinguishable by watchers from peer death
-   (local-synthesis source vs remote).
-
-## 4. Resolved questions (were open in v1)
-
-| # | v1 question | v2 answer |
+| Target | Proposed transport and receiver authorization | Excluded implicit fallback |
 |---|---|---|
-| 1 | respawn epoch | **Required.** Epoch in binding + reply + WatchFired; mismatch → `Err(Respawned)` (§2.1/§2.4). |
-| 2 | remote per-cell origin meaningful? | **No** at cell granularity across an untrusted machine — node-granular only; per-cell path is an advisory label (§2.2). |
-| 3 | backpressure across ranges | Payload capped UDP-safe unless relay-TCP guaranteed; no implicit fragmentation; first thing dropped under fan-out is an in-flight reply via session eviction — forbidden, returns `Err(Busy)` (§2.3/§3). |
-| 4 | watch scalability | Reachability on beacon/lease (unbounded by K); per-service death on session (≤K); fleet >K → G2 (§2.4/§3). |
-| 5 | replay/nonce | **Required.** Caller-scoped request id (shares the epoch field); ingress dedups in a bounded window — otherwise "at-most-once" is false for retried calls (§2.4). |
-| 6 | registry governance | One method_id table (Spec 17 registry); allocation governed there; version skew → typed `NoService`/`Remote(err)`, never silent. |
-| 7 | ingress quota | Charged to the local receiving service's quota; remote caller cannot spend a local cell's budget beyond its own rate limit — **open for prototype measurement**. |
+| Local Tier 1 → Tier 1 | Direct copied request/reply by default; kernel-attested `(cell_id, generation, sender_tid)` and live service binding. Negotiated ring/shared buffer only after Phase-08 pair/grant/revocation proof. | No raw pointer promoted into a capability; no remote broker on local failure. |
+| Local Tier 1 ↔ Tier 2 or Tier 2 ↔ Tier 2 | Kernel-validated bounded copied IPC, including `copy_from_user`/`copy_to_user` for private roots; only an admitted architecture/profile. The receiver authorizes the attested caller, not a declared tier. | No SAS identity mapping, `DomainGrant` or silent admission to Tier 1. |
+| Other node, relay or direct | Same typed service/export on an **authenticated peer NodeId**; route selection is mutable session state. Receiving broker admits the peer NodeId and current export, then applies its destination's local tier policy. Protected mTLS carries opaque end-to-end Noise records for relay; direct must authenticate that same peer. | No relay certificate → local Cell authority, unencrypted TCP, public export by default or automatic local resolution. |
+| Tier-3 VM guest | Separate opt-in bounded guest→host copied bridge, with guest instance identity, validated descriptors and host export policy (Phase 09); not a native `CellEndpoint::Local`. | No host CellId, SAS mapping, DomainGrant or guest-origin remote authority by implication. |
 
-## 5. Relationship to existing work
+Binding lifetime: local recipient lookup returns current provider TID only (`LookupService = 206`); proposed generation pinning and stale-response rejection still need a design/ABI review. Remote `ServerEpoch` is boot-local to one broker (`server_epoch.rs:10-49`), **not durable**; session/broker generation must invalidate a descriptor learned before restart. A known stale request is rejected before dedup/delivery. No old reply may satisfy a new caller/recipient generation.
 
-| Depends on | Why |
+### 2.2 Principal, ingress and export
+
+Local request authorization uses the kernel-written Spec-17 §11 `CallerIdentity(cell_id, generation, sender_tid)` attestation, not `CellId(sender_tid)` or `path_hint`. Its absence denies authorization. `RecvTimeout`/`TryRecv` do not attest. Across nodes, Noise authenticates the **node** (static key/ordered prologue); a peer-supplied Cell name, tier or local TID is advisory only, never fed into the local Cell ACL. ClusterId and a beacon/machine ID are routing hints, not credentials; beacon identity must be bound to configured NodeId. Public KMS opcodes 9–14 remain frozen.
+
+**Proposed receive order:** typed protected authority event / authenticated direct session → verify peer NodeId and Noise identity/prologue → decrypt and validate exact V1 envelope version, source NodeId, destination NodeId, cluster and lengths → check live export `(service_id, export_id, version, scope, retry class)` and peer allowlist → check current destination server/broker epoch and deadline → bounded ingress quota and per-source replay state → dedup → kernel-attested local service dispatch. Code today has only *local-only* `ReceiveGate` (epoch-before-dedup); an export registry can parse config but reports remote disabled. Neither component authenticates a peer when called alone. `Public` scope is separately governed, not implied by a config record or secure-looking NodeId.
+
+**Current export-policy ceiling:** `export_registry.rs:82-89,144-189` parses at most 16 boot-provisioned records containing only `(service_id, export_id, version, retry_class, scope)`. It exposes no peer-NodeId allowlist or live destination-generation binding, and every parsed registry remains `NoSecureIdentity`/remote-disabled. A `scope=remote` line therefore authorizes **nothing** by itself. Proposed private admission must intersect an authenticated peer with an independently provisioned allowlist, the matching typed method/retry class, and a live registered destination; absence of any one factor denies dispatch. Do not turn `scope=public` on as a substitute for missing peer policy.
+
+Relay TLS endpoint and outer framing belong solely to the protected authority ([ADR-0008](../decisions/0008-protected-relay-tls-endpoint-ownership.md)); `service-net` is a fixed-target byte carrier. [ADR-0009](../decisions/0009-correlate-relay-packet-failures.md) retires `0x08`; authority alone produces correlated `0x0d` and parses `0x0a` errors. `{session_generation, correlation}` is a bounded **transport-local** key, never the Noise-inside application request ID or an identity token. Success of TLS write/relay drain is not proof that a service executed.
+
+### 2.3 Frames, bounds and capacity
+
+Spec 17's 4,096-byte copied IPC, masked reply receive, byte-0 registry and 32-byte attested tail remain intact. The broker-local benchmark oracle's 10-byte request starts with an **unrestricted 8-byte `client_sequence`**, not a protocol tag; its `0x7f` reply tag is not a global remote syscall or the relay's `FT_ERROR`. `receive_once()` feeds every attested sender into that parser (`local_runtime.rs:160-175`). Choosing a new byte-0 tag while that parser is live on the same receiver would collide.
+
+**Proposed clean cutover:** retain the existing `service::NET_BROKER = 8` and one receive owner. A dedicated, isolated *development image profile* may select either the legacy local-oracle parser **or** a versioned, strictly bounded typed-RPC parser, never both on that TID; no runtime auto-detection or decode fallback. The default image keeps legacy/local-only behavior while Phase 05 tests the remote parser disabled outside the development profile. The Phase-06 two-node oracle must use the typed profile and prove that no legacy oracle caller is packaged there; legacy single-node regression runs in its own profile. Promotion migrates/removes benchmark-only consumers and the legacy parser in one governed cutover, with a replacement behavioral oracle. If both protocols must coexist in a single image, stop for a separately registered receiver TID/service-ID and Law-1 review rather than guessing a discriminator. No profile, service-ID or byte-0 ABI is approved or implemented by this draft.
+
+Remote V1 envelope is already canonical: 112-byte header + up to **3,712 payload bytes** (`MAX_C2C_PAYLOAD = min(local attested ingress cap, NET_TCP_INLINE_DATA_MAX - 16 Noise tag - 112 header)`); max plaintext frame 3,824 bytes. It carries source/destination NodeIds, source boot epoch, destination server epoch, cluster, service/export IDs, nonzero request ID, relative deadline, retry class and payload. No universal ~480-byte UDP cap, implicit fragmentation, stream or UDP RPC path: currently scoped relay-TCP/direct-TCP transports must enforce the same bounded record limit. A valid local 4 KiB request need not fit remotely; reject it before submission, never truncate.
+
+The existing response cache has 16 entries, 16 per-source replay-floor slots and 30-second completed-entry retention (`c2c_dedup/types.rs`). In-flight entries are never evicted. Duplicate in-flight requests report `Busy`; completed duplicates replay only while retained. An expired `Never`/`Conditional` request is `Indeterminate`, not automatically rerun; an explicitly idempotent method may be redispatched only under the validated replay-floor rule. Full cache/session pool rejects admission (`Busy`). `source_window.rs` orders each peer's `src_boot_epoch` numerically and rejects older epochs; `BrokerNetworkState` currently seeds its **beacon** `boot_epoch` from `sys_get_time_ms()` (`local_runtime.rs:65-86`), which is not an authenticated monotonic cross-reboot C2C epoch. Do not reuse that uptime value for a remote replay floor. Phase 04/05 must prove a non-rollback source epoch bound to protected peer identity and session generation, or propose and separately ratify a changed replay model; remote ingress stays off until then. These volatile bounds are **not** exactly-once across partition/restart/retention.
+
+**Relative deadline ownership:** V1 carries only a `u32` *duration* (`c2c_envelope.rs:108-112`), not a sender timestamp or a globally comparable absolute expiry. `RequestDeadline::from_relative(now_ms, ...)` (`c2c_deadline.rs:27-55`) is valid in the clock domain where it is constructed. At origin, establish the caller's local deadline on admission and send no more than its remaining budget; relay acceptance cannot reset that local deadline. At the destination, a received duration may bound **new local work** from its own arrival, but cannot prove the origin has not already expired during transit. After possibly submitted transport work, origin expiry without an authenticated completion remains `Indeterminate`, even if the destination's independent budget has time left. A stronger cross-node expiry guarantee would require a separately reviewed time/protocol proof, not comparing local monotonic clocks or treating each hop's fresh duration as the caller's original deadline.
+
+### 2.4 Submission and outcome matrix
+
+The proposed operation state is `NotSubmitted → Submitted → {AuthenticatedCompleted | DefiniteFailed | Unresolved}`; receiver work may also be `Accepted → Dispatched → Completed`. These are **different boundaries**: `Submitted` begins when the protected authority accepts a typed outbound send, or acceptance becomes uncertain. A local queue slot being accepted does not prove remote submission; an outbound accepted request does not prove peer dispatch. An authority *explicit rejection with ownership returned unchanged* leaves `NotSubmitted` (ADR-0009 §10). Request identity binds the origin caller generation, nonzero request ID, peer NodeId, broker session and target server epoch; transport correlation remains separate. No silent retry, especially for non-idempotent effects.
+
+| Observed evidence at resolution | Proposed caller-visible result | Proof obligation |
+|---|---|---|
+| Local request rejected before admission (oversize, full bounded queue, missing live binding) | Existing local typed error / `Busy`; no remote submission | Ownership stays local; no target dispatch. Current `LocalEndpoint::call` still maps send/receive/decode errors to `ViError::IO` and does **not** implement these proposed finer local outcomes. |
+| Remote path disabled or missing protected admission | Existing `RemoteCallError::NotSupported` | No broker contact or export attempt; current behavior. |
+| Queue/session full before authority accepts | `Busy` | Admission fails with owned request unchanged; no in-flight eviction. |
+| Authentication / export check fails before dispatch | `AuthFailed` / `NoService` only where the receiver can authenticate and prove rejection | Do not claim service absence from a bare timeout or unauthenticated response. |
+| Protected authority explicitly rejects unchanged request; relay proves destination absent before any destination write (`0x0a/0x01`) | `Unreachable` (definite) | Match live session generation and active correlation; no possible target delivery. |
+| Relative deadline expires with **proof no dispatch was possible** | `Timeout` | A timer alone is insufficient once submission/destination write is uncertain. |
+| Remote dispatch may have occurred; relay `0x0a/0x04`, disconnect, lost reply, cancellation without acknowledged non-execution, or expired post-dispatch deadline | `Indeterminate` | Never infer non-execution from a partition; reconcile by request ID/application policy, not blind replay. |
+| Authenticated response matches live caller/request/peer/server epoch | Typed method response | Exact source/epoch/correlation and local return owner agree. |
+| Target incarnation differs (boot-local epoch mismatch, peer or caller restart) | Reject stale delivery; use existing `Indeterminate` if an old submitted request may have executed | First bounded remote API adds **no `Respawned` variant**; do not report definite `NoService` merely because an old epoch vanished. A never-submitted, independently authenticated rejection may instead use a truthful definite existing result. |
+
+`RemoteCallError` currently declares `NoService | Unreachable | Timeout | Busy | Indeterminate | AuthFailed | ProtocolError | NotSupported` but runtime returns only `NotSupported`. This table does not change that enum or claim that all outcomes are implemented. Generic async submit/await in Phase 03 is independent of first deadline-bounded synchronous remote call; `WaitCompletion` v1 accepts only `NET_RX` and `TIMER`. A `Future` that wraps blocking `sys_send` is not nonblocking IPC. Dropping an awaiter abandons waiting, not necessarily the underlying remote effect.
+
+### 2.5 Liveness and safety boundaries
+
+Local death may be confirmed against kernel-owned live generation. A remote beacon, lease, TLS or Noise disconnect indicates **suspected loss/partition**, not confirmed remote Cell death, and cannot authorize physical actuation or automatic failover; [Spec 14](14-distributed.md) retains the local interlock rule. `watch(remote)` and a broker-scoped death-notification syscall from v2 are **deferred** beyond unary RPC; no SpawnCap `NotifyOnExit` grant to broker. Session capacity pressure is `Busy`, not a death event. Public/fleet-scale exports, distributed leases, hole punching, promise pipelining and Tier-3 host service access each require a separate gate.
+
+## 3. Boundedness and runtime constraints
+
+- The network cell shares an 18-socket budget (including DHCP/ARP/other clients); existing Noise pool caps sessions at four and must not evict in-flight work to fit another peer. Return `Busy` and retain current session state; four peers are **not** a fleet-scale guarantee.
+- Current broker uses bounded local ingress/worker/reply roles under a watchdog. A future relay or direct handshake must yield, re-arm heartbeat and enforce exact frame/deadline limits rather than block the broker's receive loop. CPU, socket and queue pressure must not starve safety-critical local work.
+- Existing **local benchmark** state has `LOCAL_REQUEST_QUEUE_CAP = 16`, `LOCAL_REPLY_QUEUE_CAP = 16`, `IN_FLIGHT_CAP = 32` and `PER_CALLER_WINDOW = 4` (`local_queue/state/types.rs:4-8`). These are caller-Cell/TID quotas, **not** a remote peer quota. First authenticated remote ingress needs separate bounded per-NodeId charging and a measured fairness/bytes budget; do not let a peer spend unlimited capacity in a local exported service.
+- `UdpRecv`'s 512-byte packet limit and encrypted LAN beacon do not define a working UDP remote-call transport. First remote RPC is relay-only under the protected authority; direct TCP is an optimization after the isolated relay oracle. No STUN/ICE or multicast identity promotion in baseline scope.
+- Local sender attestation reserves 32 bytes in its 4 KiB recv buffer. The V1 envelope max 3,712 bytes already accounts for the conservative inline TCP and Noise-tag bounds; a reply must be checked against its own local response framing too. No operation may silently truncate, drop a completion or exceed the fixed dedup/source capacity.
+- Async IPC is a separate capability. `TrySend` succeeds only for a receiver already ready in matching `Recv`; `WaitCompletion` source bits are currently `NET_RX` and `TIMER`. A general IPC completion source or new syscall must not be assumed implemented or borrowed from a private kernel helper.
+
+## 4. ABI and caller inventory (proposal, no additions)
+
+| Existing symbol / caller | Current guarantee | Review needed before a behavioral change |
+|---|---|---|
+| `ViSyscall::{Send=0, Recv=1, TrySend=4, RegisterService=205, LookupService=206}`; `ostd::ipc::service_call_typed` | Spec-17 masked request/reply, per-receiver byte-0 namespace and existing live-provider TID lookup. `Recv` flag `RECV_ATTEST_CALLER` is already ratified; `RecvTimeout` is not attested. | Live recipient-generation pin and broker request type may need a governed representation. Keep old discriminants/allowlist; inventory all callers before any change. |
+| `ostd::cluster_endpoint::{CellMethod, LocalEndpoint, RemoteEndpoint, CellEndpoint, RemoteCallError}` | Local direct copied call and remote explicit `NotSupported`. Only `libs/ostd/tests/cluster-endpoint.rs` currently exercises remote endpoint construction/call; no native app uses it for real remote delivery. | Authentication-bound remote descriptors, definite/uncertain result mapping and any proposed `Respawned` variant must be reviewed against exported SDK consumers; no silent alias or new enum variant now. |
+| `types::c2c::{RetryClass, ServerEpoch, RelativeDeadline}` and `api::services::cluster::{CellNetId, ClusterId, PeerTicket}` | V1 RetryClass wire IDs 1/2/3, nonzero volatile ServerEpoch, nonzero relative milliseconds; peer ticket lists IPv4/relay hints. | Do not change wire values or assume ticket implies authority. Tie remote descriptor to the authenticated session and incarnation before enabling. |
+| `ViSyscall::WaitCompletion=242`; `api::abi::completion::{source::NET_RX, source::TIMER}` | These two event sources only; no generic RPC completion. | Phase 03 must prototype bounded ownership/wakeup before asking for a new public ABI and two Law-1 confirmations. Bounded synchronous remote call may precede it. |
+| Spec-17 §3 byte-0 registry and §9 amendments | Receiver-disambiguated postcard protocol; the legacy broker oracle's first eight request bytes are unrestricted, so **no byte-0 value is collision-free while its parser shares a receiver with RPC**. | Prefer one protocol per broker image profile on existing `service::NET_BROKER = 8`, then remove the legacy-only parser and callers at cutover. Prove mutually exclusive packaging and no decode fallback. If simultaneous protocols are required, review a second registered receiver/service ID through Law-1; remote `(service_id, export_id)` are **not** byte-0 values. |
+| `Grant*`, Tier-2 admission, SAS ring and Tier-3 virtio | Spec 22 containment denies private-root grants; kernel repair owns its root/revoke work. Ring copies words, guest device I/O is not C2C RPC. | C2C Phase 02 consumes proved copied IPC, not grant cutover. Phase 08/09 need separate issuer/revocation and VM-guest identity gates; no change to these kernel paths during Phase-01 preparation. |
+
+## 5. Behavioral proof matrix (required before promotion, not a passing test report)
+
+| Scenario | Proof / phase |
 |---|---|
-| midori-lessons phase 02 | kernel-attested local sender — the *only* trustworthy half of §2.2 |
-| midori-lessons phase 07 | async reactor — `call`+timeout wants completion queues, not thread-block (and §3 constraint 2) |
-| CTC-Anywhere stack | transport/NodeId/relay code present; **forwarder still a stub** (§1) |
-| Spec 18 tiers | remote caller ≤ Tier-2; domain cells use this same contract |
-| Spec 14 | §2.4 safety classes are the missing per-service signal; physical-safety mandate is load-bearing, not decoration |
+| Local Tier-1 typed request/reply and masked receive amid queued input; attested thread belongs to parent Cell | Existing Spec-17 consumers plus Phase-02 live-service QEMU witness; wrong sender/missing attestation denied. |
+| Tier-1→Tier-2 and Tier-2→Tier-1 request/reply, invalid buffer, peer respawn | Phase-02 RV64 admitted-profile two-Cell witness after kernel-repair safe-root proof; verify no DomainGrant, SAS fallback or stale response. |
+| Relative deadline on queued local work vs possibly submitted/remote dispatched work | Host state tests for exact `Timeout` versus `Indeterminate`; confirm authority ownership and receiver execution counter in Phase-06 two-node oracle. |
+| Wrong peer, mismatched NodeId/cluster, unregistered or disallowed export, config-only `scope=remote` without peer policy/live target, replay, boot/server restart | Phase-05 authenticated broker-state tests, then Phase-06 relay-only isolated two-node negative oracle; reject before dedup/local dispatch. |
+| Correlated destination absence vs ambiguous relay write, two concurrent outstanding requests, stale correlation | ADR-0009 host codec tests are **server-only** evidence; authority AC-012 and Phase-06 client+broker oracle must prove live end-to-end correlation. |
+| Cache full, duplicate in-flight, completed replay, expired non-idempotent request | Existing `c2c_dedup` host tests cover bounded local state, not remote delivery; Phase-06 exercises actual application execution and post-retention ambiguity. |
+| Direct path, Tier-1 shared bulk, guest bridge, async completion | Separate Phase-07/08/09/03 witnesses respectively; none is implied by relay-only pass or by this contract proposal. |
 
-Amends **Spec 17** (becomes the local profile; registry shared) and **Spec 14** (adds the
-per-service failure signal; doctrine unchanged).
+## 6. Open gates and ratification checklist
 
-## 6. Ratification checklist
+- [x] Inventory current exported endpoint/identity/ABI types, current callers and V1 framing/capacity, with implemented-vs-proposed table above; **no code/ABI changed**.
+- [x] Retire obsolete v2 assumptions in this draft: `CellAddr` sketch, unimplemented watch as unary-RPC prerequisite, per-cell remote authority, global UDP payload cap, `Respawned` claimed as an existing enum, and claim that async is mandatory before a bounded synchronous remote RPC.
+- [ ] Review the exact live local binding/recipient-generation representation with kernel repair owner; no edits to kernel/syscall/Spec-17 ratified clauses while ownership overlaps.
+- [ ] Review the proposed mutually exclusive broker image profiles against actual `tests/bench` oracle consumers, boot packaging, callback masks and the eventual clean cutover; prove one parser per TID, fail-closed unknown frames and no legacy caller in the typed profile. No runtime profile is added until portfolio promotion.
+- [ ] Resolve how independently provisioned peer policy and live destination binding are joined to the boot-only five-field export registry; config presence alone is never remote admission. Prove no private export or `Public` promotion bypasses the missing factor.
+- [ ] Measure per-peer ingress quotas before assigning a local service budget. Resolve the source-boot replay floor: uptime-derived beacon epoch is not a protected monotonic C2C epoch; require an authority-bound nonrollback incarnation or review a new replay model. Keep relay ingress disabled in either case.
+- [ ] For the first bounded remote API, prefer existing `RemoteCallError::Indeterminate` for possible old-epoch execution; do not add a speculative `Respawned` variant. Before submission, only a separately authenticated definite rejection may use a definite result. Review old broker-session invalidation, per-peer export allowlist and results against consumers before ratification.
+- [ ] Prove local origin deadline is not reset by relay queueing and that a received relative duration does not imply synchronized clocks or global expiry; classify origin timeout after ambiguous submission as `Indeterminate`.
+- [ ] Record separate, explicit Law-1 confirmation #1 and #2 **for each** required exported ABI/enum/syscall/discriminant change; amend Spec 17 §9 only for actual ratified wire/ABI changes. No confirmation is inferred from accepting this plan or draft.
+- [ ] Ratify this spec with the owners after conflict and negative-test review. Advance the [C2C portfolio](../../.agents/plan-portfolio.md) only after kernel file ownership is handed off; Phase 04 requires the KMS/Silo protected identity/time/persistence GO and post-Build AC-012 before any relay route, Phase 06 requires retained isolated two-node evidence before development remote enablement. Physical/production admission is separately gated.
 
-- [ ] Fold red-team v2 (done in this draft) — remaining: §4 Q7 quota needs measurement
-- [ ] Law 1 inventory: `CellAddr` types, `RemoteErr`, the broker-scoped watch primitive,
-      `machine_id`-from-NodeId — each with a 2× confirmation plan
-- [ ] Land phase 02 first (identity root) — this spec cannot be prototyped honestly without it
-- [ ] Prototype gate on 2-node QEMU: `CellAddr` resolution + epoch + `watch` safety classes,
-      **before** any cell migrates off raw-tid addressing, and **before** the fleet claim is
-      made for N>K
-- [ ] Convert broker connect/handshake to a yielding state machine (§3 constraint 2) as a
-      prerequisite, not a follow-up
+**Stop line (2026-09-27):** Document-only Phase-01 inventory/draft may continue alongside [kernel architecture repair](../../.agents/260927-0739-kernel-architecture-repair/plan.md); no C2C implementation that touches `kernel/src/task.rs`, `kernel/src/task/syscall.rs`, `kernel/src/memory/address_space.rs`, grant/pin/scheduler, public ABI or Tier-2 admission begins before the corresponding kernel-repair proof and explicit owner handoff. A draft is not Phase-01 completion.
+
+## 7. Revision record
+
+- **v3 (2026-09-27, draft):** Rebased on ADR-0015's tiers, local-only broker/typed endpoint, ADR-0008 protected TLS and ADR-0009 correlated failures. Replaced the obsolete `CellAddr`/remote-watch-as-prerequisite and UDP-size assumptions with locality, identity, submission and evidence matrices. Source audit found an unrestricted legacy first-byte sequence; proposed mutually exclusive broker image profiles on the existing service ID rather than two colliding parsers. The beacon uptime epoch is not a protected cross-reboot C2C replay source; the static export registry has no peer allowlist or live binding; the V1 duration cannot establish a cross-node deadline. No ratification, new ABI, image profile or remote implementation is claimed.
+- **v2 (2026-07-30, historical draft):** Node-level remote principal and partition-aware safety review; previous sketches were never ratified.
+
