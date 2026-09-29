@@ -109,6 +109,10 @@ báo cáo ở `.agents/<plan>/`, cách làm ở `docs/guides/`. Chuỗi tiền l
   sau flush và reboot. Lane: `scripts/qemu-x86-virtio-e2e.sh`.
 
 ## Blocked (chờ phần cứng hoặc governance)
+- [blocked] **`cohort.dirty_bundle` còn worktree-sensitive** (cùng họ với lỗi evidence đóng băng file vừa sửa,
+  nhưng khác ngữ nghĩa): nó so bytes của `patch.path` với `git diff --binary <revision>` của *worktree hiện tại*,
+  nên một claim `dirty: true` sẽ đỏ ngay khi có commit sau đó. Ledger thật hiện chỉ có 1 claim và claim đó không
+  có `dirty`/`dirty_bundle`, nên chưa bị ảnh hưởng; đổi ngữ nghĩa (nếu muốn) là quyết định thiết kế của owner.
 - [blocked] **SDK relay client mutual TLS**: chỉ đường relay hai real-broker này bị chặn bởi các entry
   gate protected-persistence, authenticated-time và reviewed pending-key-binding dưới KMS opcodes
   9–14 đã freeze trong `.agents/260825-1726-kms-silo-production-root/phase-04-service-net-mutual-tls-integration.md`;
