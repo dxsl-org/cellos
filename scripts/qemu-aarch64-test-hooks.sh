@@ -17,6 +17,7 @@ BOOT_WINDOW="${BOOT_WINDOW:-35}"
 # Measured at `QEMU_SMP=2` (2026-09-29, five batches): every kernel-side marker
 # holds — hart 1 online, the cross-hart IPI answered, no panic, no deferred-record
 # integrity error, vfs-test 96/0 — and the lane passes in about six runs of ten
+# (42 of 74 across five batches)
 # since the retirement fix (before it the lane stalled on the first run more often
 # than not; see phase 08 `Domains on two harts`). What is left is the fixtures'
 # ordering: which of the four grants the owner's reaper revokes first decides which

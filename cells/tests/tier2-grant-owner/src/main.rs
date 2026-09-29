@@ -108,6 +108,10 @@ const TAG: &str = "S22-UNKNOWN";
 
 /// One page keeps the fixture inside the smallest supported grant quota.
 const PAGE: usize = 4096;
+/// Yields allowed while a `GrantUnregister` reports itself not-yet-drained. The
+/// drain waits on a remote acknowledgement and the reaper completes it on the
+/// next ticks, so this is generous rather than tight.
+const UNREGISTER_RETRY_LIMIT: usize = 100_000;
 /// `GrantPerm` encoding: 0 = ReadOnly, 1 = WriteOnly, 2 = ReadWrite.
 const PERM_RO: u8 = 0;
 const PERM_WO: u8 = 1;
@@ -362,7 +366,20 @@ fn cell_main() {
                 served += 1;
             }
             REQ_UNREGISTER => {
-                let freed = reg.is_some_and(|grant_id| sys_grant_unregister(grant_id));
+                // `GrantUnregister` removes the mapping and then waits for every
+                // hart to acknowledge the invalidation. On more than one CPU the
+                // peer may not have answered yet, and the call reports that as a
+                // refusal while keeping the record `Revoking` for an idempotent
+                // retry — so a refusal here is "not yet", not "denied". Retry,
+                // bounded: a refusal that never clears still prints FAIL.
+                let mut freed = false;
+                for _ in 0..UNREGISTER_RETRY_LIMIT {
+                    freed = reg.is_some_and(|grant_id| sys_grant_unregister(grant_id));
+                    if freed {
+                        break;
+                    }
+                    sys_yield();
+                }
                 println(&format!(
                     "{TAG}-GRANT-PAIR-OWNER-UNREGISTER: {}",
                     if freed { "OK" } else { "FAIL" }

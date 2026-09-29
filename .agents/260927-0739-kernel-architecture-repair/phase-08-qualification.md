@@ -266,6 +266,17 @@ requested under per hart, completion is "every asked hart published that epoch",
 answer gates `tag_invalidation_unconfirmed`, so a drain no longer waits on traffic that has nothing to
 do with its tag. Measured effect: that tag now confirms with `attempts=1`.
 
+**What is left, measured on the current image.** Batching the two-hart lane after the per-tag work gives
+42 passes in 74 runs (~6 in 10), and the failures are timing-sensitive fixture orderings rather than a
+cascade. Two probes were added and removed while chasing it, and they narrowed the residual without
+closing it: `pick_next_local` returns `None` for a hart whose identity is *zero* (a genuinely idle
+hart — the trap-path completion above covers that case), while the `no switch while a retirement
+pending` probe still fires with a *nonzero* current (1, 2, 7) in the same runs. The two readings
+disagree about the same hart, which points at the tick ISR re-entering the scheduler on that hart and
+assigning the identity between selection and the diagnostic — i.e. the next step is the nested-re-entry
+path and who publishes the retirement epoch from it, not another fixture retry. The probes are gone;
+their readings are here.
+
 Also measured, deliberately not shipped: `reap_deferred_releases` documents that it touches
 `REAPER_ENTRIES_PER_CALL` entries per call, but `next_step()` always returned the queue *head* and the
 loop's duplicate guard returned immediately, so it stepped exactly one entry per tick — a head waiting
