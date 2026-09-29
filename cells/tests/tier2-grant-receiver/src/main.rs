@@ -434,8 +434,16 @@ fn cell_main() {
                 println(&format!("{TAG}-GRANT-PAIR-RECEIVER-EXIT-FAULT: STILL-MAPPED"));
                 sys_exit(1);
             }
+            // A reaper revokes asynchronously: on more than one CPU the record
+            // above can be gone while this hart's translation is still live, so a
+            // store that *lands* means "not revoked yet on this CPU", not
+            // "revocation is broken". Store until the revocation traps — bounded,
+            // and the trap is what the lane reads as the witness.
             println(&format!("{TAG}-GRANT-PAIR-RECEIVER-EXIT-FAULT: FAULT-EXPECTED"));
-            deliberate_store(pointer);
+            for _ in 0..POLL_LIMIT {
+                deliberate_store(pointer);
+                sys_yield();
+            }
             println(&format!("{TAG}-GRANT-PAIR-RECEIVER-EXIT-FAULT: WROTE"));
         }
         _ => {}

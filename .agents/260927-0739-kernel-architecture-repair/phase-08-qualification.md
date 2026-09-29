@@ -224,15 +224,34 @@ integrity error, `[vfs-test] Results: 96 PASS, 0 FAIL` — and 25 acknowledged i
 followed by a small residue of `invalidation unacknowledged` / `AwaitingSafeRoot` entries that the
 deferred machinery retains and retries by design.
 
-What is *not* qualified is the fixtures' fault pattern. The grant pair requires four deliberate
-receiver faults and the two-hart boot produces `id1=1 id2=2 id3=0 id4=1` where the single-hart boot
-produces `id1=1 id2=2 id3=1 id4=1` (same log, same image, `QEMU_SMP` is the only difference): the
-receiver's access at `0x426fe000` **succeeds** on two harts where the single-hart boot takes the fault
-that proves the unregister revoked its mapping. The shape is a receiver that kept running across an
-invalidation this kernel could not confirm on its peer (the same `unacknowledged` residue above) —
-i.e. domain teardown still needs the retirement/root-switch argument for a second hart before domain
-cells can be scheduled on it. The lane therefore keeps `QEMU_SMP=1` as its default and the knob
-records the reproduction.
+Two rounds of measurement, four runs each, and the two-hart domain lane is **intermittent**: it
+passes sometimes (the whole lane, including the pair's exact fault counts) and fails sometimes, and
+the failing runs are not one shape:
+
+* The receiver's exit-phase drain does not complete: the phase that asserts "the owner's exit revoked
+  this address" produces no fault at all, and the fixture (now retrying the store instead of
+  reporting success on the first landing one — see below) spins its full budget without one. A
+  revocation that never lands during an unbounded retry on the peer hart is not fixture timing.
+* The pair's fault counts come out `id1=1 id2=2 id3=0 id4=1` where the single-hart boot produces
+  `id1=1 id2=2 id3=1 id4=1` (same image, `QEMU_SMP` the only difference), and once a plain
+  `GRANT-PAIR-OWNER-FREE: OK` marker went missing.
+* One run of eight never finished booting inside the lane's 35 s window.
+
+The fixture itself was made asynchronous-correct while measuring: `tier2-grant-receiver`'s exit phase
+used to assert "the record is gone ⇒ my store faults", but a reaper revokes asynchronously, so the
+phase now stores until the revocation traps (bounded, the trap is the witness). That removed a
+fixture false-negative and left the kernel-side intermittency above, which is the retirement/quiescence
+path with a busy peer — the same `AwaitingSafeRoot` / `invalidation unacknowledged` residue the passing
+runs do not show. Domain teardown therefore still needs the retirement/root-switch argument before
+domain cells can be scheduled on a second hart.
+
+Also fixed while measuring: AArch64 **test images** silently lost their `S22-AARCH64-DOMAIN-*` Info
+witnesses the moment a second hart was online — the boot then reaches the quieting line that the
+one-CPU boot happens to jump over, so the witnesses were being emitted by luck. Test-hooks AArch64
+images now keep Info live, exactly as x86_64 test images already did.
+
+The lane therefore keeps `QEMU_SMP=1` as its default; `QEMU_SMP=2` is the reproduction, with its SMP
+markers asserted so a hart-level regression cannot hide behind the fixture intermittency.
 
 Still missing on this axis: that retirement/root-switch argument, EL2 secondary bring-up, and the
 BCM2836 SGI path for `board-rpi3`.

@@ -1427,9 +1427,22 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // after the scheduler hands the boot context back — and a witness emitted
     // before the quieting landed was dropped, so the same image could lose or keep
     // a marker between runs.
-    #[cfg(all(feature = "test-hooks", target_arch = "x86_64"))]
+    // AArch64 test images are in the same position as x86_64's, and for a
+    // sharper reason: on one CPU the boot happens to never reach this line with a
+    // task pending, so the witnesses were emitted *before* the quieting by luck.
+    // The moment a second hart is online the boot does reach it and the
+    // `S22-AARCH64-DOMAIN-*` witnesses disappear — a lane reading them fails on
+    // an image that is working. Quieting is a console policy for interactive and
+    // production boots; a test image is read by its own lane.
+    #[cfg(all(
+        feature = "test-hooks",
+        any(target_arch = "x86_64", target_arch = "aarch64")
+    ))]
     log::set_max_level(log::LevelFilter::Info);
-    #[cfg(not(all(feature = "test-hooks", target_arch = "x86_64")))]
+    #[cfg(not(all(
+        feature = "test-hooks",
+        any(target_arch = "x86_64", target_arch = "aarch64")
+    )))]
     log::set_max_level(log::LevelFilter::Warn);
 
     // Probe 'Q': fires ONLY if no IRQ preempted the code between daifclr and here.

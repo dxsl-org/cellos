@@ -14,14 +14,16 @@ BOOT_WINDOW="${BOOT_WINDOW:-35}"
 # `QEMU_SMP=2`, which turns on the markers below; the domain fixtures stay on one
 # CPU by default because their fault *pattern* is a single-hart expectation.
 #
-# Measured at `QEMU_SMP=2` (2026-09-29): every kernel-side marker holds — hart 1
-# online, the cross-hart IPI answered, a task dispatched to hart 1, no panic, no
-# deferred-record integrity error, vfs-test 96/0 — but the grant pair's fault
-# counts come out `id1=1 id2=2 id3=0 id4=1` where it requires `id3=1`: the
-# receiver's access at 0x426fe000 *succeeded* where the single-hart boot faults
-# it. A receiver that ran ahead of an unconfirmed remote invalidation is the
-# likely shape, i.e. this is the retirement/root-switch argument the plan lists
-# as the blocker for domains on more than one hart — not a fixture regression.
+# Measured at `QEMU_SMP=2` (2026-09-29, two batches of four): every kernel-side
+# marker holds — hart 1 online, the cross-hart IPI answered, a task dispatched to
+# hart 1, no panic, no deferred-record integrity error, vfs-test 96/0 — and two
+# runs passed the whole lane, but the run-to-run behaviour is intermittent in the
+# domain fixtures: the receiver's exit-phase drain sometimes never completes (no
+# fault at all through a full bounded retry), the pair's fault counts sometimes
+# lose `id3`, once an owner marker went missing, and one run never finished
+# booting. That intermittency is the retirement/quiescence path with a busy peer
+# (see phase 08 `Domains on two harts`), not this script: use the knob to
+# reproduce it, not to qualify the board.
 QEMU_SMP="${QEMU_SMP:-1}"
 DEVELOPMENT_SILO="${CELLOS_AARCH64_TEST_HOOKS_DEVELOPMENT_SILO:-0}"
 if [[ "$DEVELOPMENT_SILO" != "0" && "$DEVELOPMENT_SILO" != "1" ]]; then
