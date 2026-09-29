@@ -42,7 +42,7 @@ pub(crate) fn set_test_withhold_tag_ack(enabled: bool) {
 }
 
 #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
-fn test_tag_ack_withheld() -> bool {
+pub(crate) fn test_tag_ack_withheld() -> bool {
     TEST_WITHHOLD_TAG_ACK.load(Ordering::Acquire)
 }
 
@@ -153,6 +153,16 @@ pub fn confirm_tag_invalidation(asid: usize) -> Result<(), FlushAckError> {
 pub fn reissue_tag_invalidation(asid: usize) {
     local_tag_flush(asid);
     issue_remote_tag_flushes();
+}
+
+/// The local half of a tag invalidation, on its own.
+///
+/// The deferred reaper issues the remote half itself: it records the epoch each
+/// remote hart was asked for *per tag*, so completion is decided by that tag's
+/// own acknowledgement rather than by whether any hart owes any invalidation at
+/// all (which stays true for as long as unrelated teardowns keep asking).
+pub fn flush_tag_local(asid: usize) {
+    local_tag_flush(asid);
 }
 
 /// The first online remote hart that still owes an invalidation it was asked

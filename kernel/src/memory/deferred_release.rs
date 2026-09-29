@@ -61,6 +61,13 @@ const REAPER_MAX_ATTEMPTS: usize = 512;
 struct DeferredRelease {
     asid: usize,
     domain: u64,
+    /// The invalidation epoch this tag was last requested under, per hart
+    /// (0 = this hart was never asked). Completion is "every asked hart has
+    /// published that epoch", which is a statement about *this* tag — the
+    /// earlier "does any hart owe any invalidation" test stayed true for as long
+    /// as unrelated teardowns kept asking, and delayed every confirmation behind
+    /// them.
+    epochs: [usize; crate::task::smp::MAX_HARTS],
     /// Why the frames were retained. Kept verbatim so the quarantine it may end
     /// in names the same cause the release path would have.
     reason: &'static str,
@@ -127,7 +134,12 @@ fn defer(
     // The decision and the log are separated so the console lock never nests
     // inside the queue lock: the queue is taken from release paths and from the
     // timer ISR, and neither should wait on a UART.
-    match place(asid, domain, reason, frames, release_tag_slot) {
+    // The entry is what makes the tag read unconfirmed, so it must carry the
+    // epochs it is waiting for from the moment it exists: an entry with no
+    // request behind it would read as confirmed vacuously.
+    let placement = place(asid, domain, reason, frames, release_tag_slot);
+    request_tag_epochs(asid);
+    match placement {
         Placement::Merged(total) => log::warn!(
             "[aspace] deferred release extended: tag={} total_frames={} reason={}",
             asid,
@@ -180,6 +192,7 @@ fn place(
         queue.push(DeferredRelease {
             asid,
             domain,
+            epochs: [0; crate::task::smp::MAX_HARTS],
             reason,
             frames,
             attempts: 0,
@@ -204,7 +217,48 @@ pub fn tag_invalidation_unconfirmed(asid: usize) -> bool {
     if ABANDONED_TAGS.lock().contains(&asid) {
         return true;
     }
-    DEFERRED.lock().iter().any(|entry| entry.asid == asid)
+    DEFERRED
+        .lock()
+        .iter()
+        .any(|entry| entry.asid == asid && !tag_epochs_confirmed(entry))
+}
+
+/// Has every hart this tag was requested from published that epoch?
+fn tag_epochs_confirmed(entry: &DeferredRelease) -> bool {
+    // Test-only: the withheld window reports every tag unconfirmed, which is how
+    // the release-path fixture reaches the retained-frames branch on a one-hart
+    // boot where nothing remote can be outstanding.
+    #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+    if crate::memory::tlb_shootdown::test_tag_ack_withheld() {
+        return false;
+    }
+    (0..crate::task::smp::MAX_HARTS)
+        .all(|hart| crate::task::smp::tlb_flush_completed(hart, entry.epochs[hart]))
+}
+
+/// Ask every online remote hart to invalidate `asid` and remember the epochs.
+///
+/// The IPI is sent before the queue lock is taken: the answering hart does its
+/// flush in its own trap path, and nothing in that path may be waiting on this
+/// queue.
+fn request_tag_epochs(asid: usize) {
+    let me = crate::task::hart_local::current_hart_id();
+    let mut requested = [0usize; crate::task::smp::MAX_HARTS];
+    for hart in crate::task::smp::online_harts().filter(|hart| *hart != me) {
+        requested[hart] = crate::task::smp::request_tlb_flush(hart);
+    }
+    if requested.iter().all(|epoch| *epoch == 0) {
+        return;
+    }
+    let mut queue = DEFERRED.lock();
+    if let Some(entry) = queue.iter_mut().find(|entry| entry.asid == asid) {
+        for hart in 0..crate::task::smp::MAX_HARTS {
+            if requested[hart] != 0 {
+                // Monotonic per hart, so the newest request subsumes older ones.
+                entry.epochs[hart] = requested[hart];
+            }
+        }
+    }
 }
 
 /// Bounded drain for the timer path on hart 0.
@@ -229,13 +283,20 @@ pub fn reap_deferred_releases() {
         }
         stepped = Some(asid);
         if reissue {
-            crate::memory::tlb_shootdown::reissue_tag_invalidation(asid);
+            crate::memory::tlb_shootdown::flush_tag_local(asid);
+            request_tag_epochs(asid);
             note_attempt(asid);
             continue;
         }
-        match crate::memory::tlb_shootdown::tag_invalidation_outstanding() {
-            Some(_) => note_attempt(asid),
-            None => complete(asid),
+        let confirmed = DEFERRED
+            .lock()
+            .iter()
+            .find(|entry| entry.asid == asid)
+            .is_some_and(tag_epochs_confirmed);
+        if confirmed {
+            complete(asid);
+        } else {
+            note_attempt(asid);
         }
     }
 }

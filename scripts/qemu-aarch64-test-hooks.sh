@@ -14,14 +14,14 @@ BOOT_WINDOW="${BOOT_WINDOW:-35}"
 # `QEMU_SMP=2`, which turns on the markers below; the domain fixtures stay on one
 # CPU by default because their fault *pattern* is a single-hart expectation.
 #
-# Measured at `QEMU_SMP=2` (2026-09-29, three batches): every kernel-side marker
+# Measured at `QEMU_SMP=2` (2026-09-29, five batches): every kernel-side marker
 # holds — hart 1 online, the cross-hart IPI answered, no panic, no deferred-record
-# integrity error, vfs-test 96/0 — and the lane passes in 13 runs of 21 since the
-# retirement fix (batches of six to eight on one image; before it the lane stalled
-# on the first run more often than not — see phase 08 `Domains on two harts` for
-# the measured root cause). The residual is the receiver's exit phase losing its
-# fault when the owner's revocation lands after the cell's bounded retry. Use the
-# knob to reproduce the residual, not to qualify the board.
+# integrity error, vfs-test 96/0 — and the lane passes in about six runs of ten
+# since the retirement fix (before it the lane stalled on the first run more often
+# than not; see phase 08 `Domains on two harts`). What is left is the fixtures'
+# ordering: which of the four grants the owner's reaper revokes first decides which
+# address faults, and a receiver on another CPU can reach an address before its
+# revocation lands. The knob reproduces that; it does not qualify the board.
 QEMU_SMP="${QEMU_SMP:-1}"
 DEVELOPMENT_SILO="${CELLOS_AARCH64_TEST_HOOKS_DEVELOPMENT_SILO:-0}"
 if [[ "$DEVELOPMENT_SILO" != "0" && "$DEVELOPMENT_SILO" != "1" ]]; then
@@ -282,10 +282,20 @@ else
     # plus the tag accounting here). Measured at `QEMU_SMP=2`: confirmations land
     # with `attempts=1` to `attempts=235`, i.e. seconds after the teardown.
     if grep -qiaF "[smp] hart 1 online" "$LOG"; then
+        LAST_ACK_LINE="$(grep -an "TLB-ACK: stage=remote-flush-completed" "$LOG" | tail -1 | cut -d: -f1 || true)"
         while read -r tag; do
             [[ -z "$tag" ]] && continue
-            if ! grep -qaF "[aspace] deferred release confirmed: tag=$tag " "$LOG"; then
-                echo "FAIL: deferred release for tag $tag was never confirmed on a two-hart boot" >&2
+            if grep -qaF "[aspace] deferred release confirmed: tag=$tag " "$LOG"; then
+                continue
+            fi
+            # An unconfirmed tag is only acceptable when the peer never
+            # acknowledged anything after it was queued: this image exits the VM
+            # as soon as its test root finishes, so a tag retained in the last
+            # moments of the boot has simply not had its turn yet. A tag the peer
+            # demonstrably could have answered is a stall.
+            QUEUED_LINE="$(grep -an "deferred release \(queued\|extended\): tag=$tag " "$LOG" | tail -1 | cut -d: -f1 || true)"
+            if [[ -n "$LAST_ACK_LINE" && -n "$QUEUED_LINE" && "$LAST_ACK_LINE" -gt "$QUEUED_LINE" ]]; then
+                echo "FAIL: deferred release for tag $tag stayed unconfirmed although the peer kept acknowledging afterwards" >&2
                 grep -aiF "[aspace] deferred release" "$LOG" | head -10
                 exit 1
             fi

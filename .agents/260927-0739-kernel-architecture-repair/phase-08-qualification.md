@@ -249,18 +249,29 @@ The fix is the argument the invalidation acknowledgement already rests on: a har
 task cannot be executing any member of a retiring generation, so the boundary it is asked for is
 already satisfied where the request is taken. `vi_timer_tick` now publishes the epoch in that case
 (the tick path, next to the TLB acknowledgement); a hart that *is* running a task still proves it by
-switching. After it: **13 of 21 lane runs pass at `QEMU_SMP=2`** (batches of six to eight, same image;
-before the fix the lane stalled on the first run more often than not), and the failures are a single
-residual rather than a cascade: the receiver's exit phase loses its fault when the owner's revocation
-lands after the fixture's bounded retry.
+switching. After it: **about six lane runs in ten pass at `QEMU_SMP=2`** (batches of six to eight, same image;
+before the fix the lane stalled on the first run more often than not), and the failures are no longer
+a cascade but the *fixtures' ordering*: which of the four grants the owner's reaper revokes first
+decides which address faults, and a receiver on another CPU can reach an address before its revocation
+lands. The evidence for that reading: the failing runs differ in *which* phase loses its fault
+(receiver exit, same-recipient downgrade, or the owner's `GrantUnregister` marker) rather than all
+failing together, and the kernel-side machinery — acknowledgements, deferred confirmations, record
+integrity — is clean in every one of them.
 
-One more finding, measured but deliberately not shipped: `reap_deferred_releases` documents that it
-touches `REAPER_ENTRIES_PER_CALL` entries per call, but `next_step()` always returned the queue *head*
-and the loop's duplicate guard then returned, so it stepped exactly one entry per tick — a head waiting
-on a slow peer delayed every tag behind it. Making it step distinct entries measured 3 of 6 green,
-inside the noise of the 13-of-21 baseline above, and it also halves the wall-clock budget of
-`REAPER_MAX_ATTEMPTS` (the attempt count is per stepped call). Reverted rather than shipped on a coin
-flip; the starvation is real and wants its own pacing decision.
+**Deferred-release evidence is now per tag.** The reaper used to decide completion with "does any
+online hart owe any invalidation", a global question: in a busy boot unrelated teardowns keep asking,
+so the answer stayed `Some(_)` and a tag that had *already* been acknowledged waited behind them —
+measured as 235 attempts (~2.3 s) before one tag confirmed. Each entry now records the epoch it was
+requested under per hart, completion is "every asked hart published that epoch", and the same per-tag
+answer gates `tag_invalidation_unconfirmed`, so a drain no longer waits on traffic that has nothing to
+do with its tag. Measured effect: that tag now confirms with `attempts=1`.
+
+Also measured, deliberately not shipped: `reap_deferred_releases` documents that it touches
+`REAPER_ENTRIES_PER_CALL` entries per call, but `next_step()` always returned the queue *head* and the
+loop's duplicate guard returned immediately, so it stepped exactly one entry per tick — a head waiting
+on a slow peer delays every tag behind it. Stepping distinct entries measured 3 of 6, inside the noise
+of the ~6-in-10 baseline, and it halves the wall-clock budget of `REAPER_MAX_ATTEMPTS`. Reverted rather
+than shipped on a coin flip; the starvation is real and wants its own pacing decision.
 
 The fixture was made asynchronous-correct while measuring: `tier2-grant-receiver`'s exit phase used to
 assert "the record is gone ⇒ my store faults", but a reaper revokes asynchronously, so the phase now
