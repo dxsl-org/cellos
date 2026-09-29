@@ -16,7 +16,7 @@ báo cáo ở `.agents/<plan>/`, cách làm ở `docs/guides/`. Chuỗi tiền l
 - [in-progress] **Bringup board thật**: RISC-V (StarFive VisionFive 2, Pioneer) và mini PC x86 (Dell).
   Qualification AMD/Intel thật là gate độc lập; không suy diễn từ QEMU.
 - [in-progress] **Manifest & tooling phía developer** (item 18): Manifest v2 + tooling tương thích
-  [done]; đổi field vật lý [blocked] chờ Manifest v3 + phê duyệt ABI riêng. Đích: tách rõ
+  [done] (ledger: Phase 05 `IMPLEMENTED` từ 2026-09-29, `85df7fc0f`); đổi field vật lý [blocked] chờ Manifest v3 + phê duyệt ABI riêng. Đích: tách rõ
   `execution_tier`, `runtime_profile`, `protection_class`, `capabilities`, `admission evidence`.
 - [in-progress] **Cổng hoàn tất App tiers** (item 20): không còn dùng Tier 1b/3b/SDK L1/L2 ngoài
   compatibility; terminology manifest không đụng application tier; Tier 1 có baseline + production

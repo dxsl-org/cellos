@@ -922,8 +922,8 @@
     },
     {
       "phase": 5,
-      "status": "PLANNED",
-      "event_id": null
+      "status": "IMPLEMENTED",
+      "event_id": "phase-05-implemented"
     },
     {
       "phase": 6,
@@ -1390,16 +1390,71 @@
       },
       "state_digest": "256fd83c955b1021900592e0932882382b3c2addcc77c8d21adc0a03049d808c",
       "hash": "01705e25ca2e76cd884c803f87345314846ee5d0bb4aeea183d051d69decccf4"
+    },
+    {
+      "sequence": 12,
+      "event_id": "phase-05-implemented",
+      "previous_hash": "01705e25ca2e76cd884c803f87345314846ee5d0bb4aeea183d051d69decccf4",
+      "steward": "lungmat8",
+      "reviewer": "datgausaigon",
+      "recorded_at": "2026-09-29T11:43:41Z",
+      "action": {
+        "kind": "lifecycle_transition",
+        "phase": 5,
+        "from_status": "PLANNED",
+        "to_status": "IMPLEMENTED",
+        "changes": [
+          {
+            "section": "source_binding",
+            "before_sha256": "b7c20f2f256e7504d1ccf2ebad63de613bcffc28fa55de5bce44695d54142a3d",
+            "after_sha256": "1d3ef507a927404f3def7fc6595040c983e7944eaaa35763229da91d29b92c0a"
+          },
+          {
+            "section": "phase_lifecycle",
+            "before_sha256": "cf23dc24de9e6b81e70e67075c2ec1be5242f71d3c29456f73dba31ee891df30",
+            "after_sha256": "0ac5e03fc21d3a41f82f559ef974ecc579edf5fed543ab79289b3f04f4a6214f"
+          }
+        ],
+        "evidence": [
+          {
+            "path": "docs/evidence/app-tier-phase05-implementation.log",
+            "sha256": "237d659937f438b38752768d4250142aa1d114156d858e8905ec4d296937bba1",
+            "size_bytes": 3149,
+            "kind": "log"
+          },
+          {
+            "path": "docs/specs/05-application.md",
+            "sha256": "9f7418d44038c79273d91470809648b7a82d2675bc6cdfdb3722d64003e66a4e",
+            "size_bytes": 30883,
+            "kind": "artifact"
+          }
+        ],
+        "implementation": {
+          "revision": "85df7fc0f40cf48a8836f942b8734bc31a25f4e3",
+          "base_tree": "6d20bf3087e2c1aa1f73be8ee5c6bb071c35c1be",
+          "command": "cargo test -p api --target x86_64-unknown-linux-gnu manifest && cargo test -p cellos-kernel --target x86_64-unknown-linux-gnu && python3 -m unittest discover -s tools -p 'test_check_elf.py' && cargo clippy -p api --target riscv64gc-unknown-none-elf -Z build-std=core,alloc -- -D warnings",
+          "target": "tier1-manifest-v2-tooling",
+          "result": "PASS",
+          "artifact": {
+            "path": "docs/specs/05-application.md",
+            "sha256": "9f7418d44038c79273d91470809648b7a82d2675bc6cdfdb3722d64003e66a4e",
+            "size_bytes": 30883,
+            "kind": "artifact"
+          }
+        }
+      },
+      "state_digest": "3c931a6b07e13ae269966bc5e58802ec359305fe189a197c3130f9135352582d",
+      "hash": "991cfa35b61198fdea9dabd6ca8346e18af1494e8286be0005a06dfea95b8633"
     }
   ],
   "baseline_prefix": {
-    "event_count": 11,
-    "tip_hash": "01705e25ca2e76cd884c803f87345314846ee5d0bb4aeea183d051d69decccf4"
+    "event_count": 12,
+    "tip_hash": "991cfa35b61198fdea9dabd6ca8346e18af1494e8286be0005a06dfea95b8633"
   },
   "source_binding": {
     "path": "docs/specs/23-native-sdk-contract.md",
-    "sha256": "99146be984d6d12ca3112b59ae2d8102824165566592247aa3f74c4bf8121f96",
+    "sha256": "9265afc81b1537d7fec26636f1471f532c30c0d58f1f6bda6b1ce7e50cb22299",
     "matrix_sha256": "f742a6ec1f5a0110bbe4882028ac32fbdd9c884307d207171519919704ca7ece",
-    "ratified_revision": "81dbb81ce7036411f4aa5df1617a6973ca3fccaf"
+    "ratified_revision": "fd3d12aebb1d114f9787debac5bdeb42c6595e11"
   }
 }

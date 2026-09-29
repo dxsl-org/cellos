@@ -1,6 +1,6 @@
 # Runtime and Platform Tracks
 
-**Last updated**: 2026-08-22
+**Last updated**: 2026-09-29
 
 This page groups the runtime and higher-level platform overlays that sit next
 to the physical hardware tracks.
@@ -80,7 +80,7 @@ synthetic runs can verify deterministic schema, parity, ordering, interference,
 and closed-linker-input behavior; they are not live captures or authenticated
 promotion evidence.
 
-Implementation remains blocked. PAL-019 technical backing binds a production
+Production promotion remains blocked. PAL-019 technical backing binds a production
 release tuple built without defaults and a source-equivalent no-default QEMU
 companion that returns zero without synthetic success. PAL-031 technical
 backing binds caller-owned validation and isolated RV64 QEMU hostile evidence,
@@ -91,7 +91,27 @@ PAL-031 `Deferred` pending every named approval. This grants neither PAL
 support nor real production entropy; the implementation checkpoint and
 umbrella Phase 03 production gates remain blocked.
 
-There is currently no Cellos PAL, target JSON, private or published sysroot,
-published triple, or Tier 1 `rust-std` runtime. No live benchmark was captured,
-no approval is granted, no promotion is authorized, and umbrella Phase 06
-remains pending and dependency-blocked on Phase 03.
+The in-tree implementation exists and is exercised. `patches/rust-std-cellos.patch`
+applies to the pinned `rust-src` (`nightly-2026-05-01`, `f53b654a8`) and carries
+the Cellos PAL; `targets/{riscv64gc,aarch64,x86_64}-unknown-cellos.json` are the
+private target specs; `scripts/build-cellos-sysroot.sh` builds the private
+sysroot overlay for all three, and `scripts/run-std-smoke-qemu.sh riscv64` boots
+the std cell in QEMU, asserting the PAL invariants (freeing and over-aligned
+allocator paths, `Instant`, `yield_now`, `available_parallelism = 1`, argv, and
+the fail-closed fs/net/process arms). The `rust-std-lane` CI job keeps the patch,
+the three target specs, and those contract tests honest.
+
+That is a host/QEMU software witness, not qualification: no triple is published,
+no live benchmark was captured, the parity evidence stays fixture-only, PAL-019
+and PAL-031 remain `Deferred`, no approval is granted, no promotion is
+authorized, and umbrella Phase 06 remains pending and dependency-blocked on
+Phase 03. The approval records are re-bound to the manifest digest re-pinned
+2026-09-29 under `PAL-IMPLEMENTATION-CHECKPOINT` condition 6.
+
+Spec 23's C2-RST row and its closing "Known gaps" sentence now state this
+correctly: the amendment landed at revision `fd3d12ae`, archived as
+`docs/evidence/spec23-native-sdk-contract-9265afc81b15.md`, and the acceptance
+ledger's `source_binding` was re-based onto it together with the Phase 05
+(Manifest-v2 tooling) `IMPLEMENTED` transition — the only carrier
+`scripts/app_tier_acceptance/ledger.py::baseline` allows. The amendment is prose
+only, so the ratified matrix digest is unchanged.

@@ -18,9 +18,16 @@ ledger is schema v5: every `source` witness resolves against the archived
 contract revision named by its digest (`docs/evidence/spec23-native-sdk-contract-<sha12>.md`),
 never against the amendable working file, and the live binding was re-based onto
 the amended contract at revision `81dbb81c` — the amendment changed the C2-MID
-witness and gap prose only, so the ratified matrix digest is unchanged. Phase 03
+witness and gap prose only, so the ratified matrix digest is unchanged — and
+again onto the contract as amended at revision `fd3d12ae`, where the `rust-std`
+row and its "Known gaps" sentence were corrected to the in-tree PAL, target
+specs and QEMU lane. That amendment is prose only as well: the ratified matrix
+digest is still unchanged. Phase 03
 is `IMPLEMENTED` with its provenance and admission gate core; its external-floor physical qualification remains blocked. Phase 04
-is `IMPLEMENTED`. These lifecycle
+is `IMPLEMENTED`. Phase 05 (Manifest-v2 tooling) is `IMPLEMENTED`; its record
+is the same event that carried the second re-base, because
+`scripts/app_tier_acceptance/ledger.py::baseline` permits `source_binding` to
+move only with a lifecycle transition. These lifecycle
 statuses do not change the qualification aggregate or C9 result.
 
 All current source availability and exact cell text remain in the JSON ledger.
