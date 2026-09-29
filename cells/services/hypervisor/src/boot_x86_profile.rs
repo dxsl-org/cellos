@@ -2,8 +2,10 @@
 
 use ostd::io::println;
 
-#[cfg(not(feature = "ubuntu-wide-guest"))]
+#[cfg(all(not(feature = "ubuntu-wide-guest"), not(feature = "alpine-wide-guest")))]
 pub const GUEST_RAM_SIZE: u64 = 128 * 1024 * 1024;
+#[cfg(all(not(feature = "ubuntu-wide-guest"), feature = "alpine-wide-guest"))]
+pub const GUEST_RAM_SIZE: u64 = 256 * 1024 * 1024;
 #[cfg(feature = "ubuntu-wide-guest")]
 pub const GUEST_RAM_SIZE: u64 = 512 * 1024 * 1024;
 pub const GUEST_RAM_PAGES: usize = (GUEST_RAM_SIZE / 4096) as usize;

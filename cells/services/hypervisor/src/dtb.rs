@@ -5,7 +5,7 @@
 //!
 //! Node list (from phase-05 Key Insights):
 //! 1. /memory@40000000  — guest RAM
-//! 2. /cpus/cpu@0       — cortex-a72, enable-method = "psci"
+//! 2. /cpus/cpu@0       — one guest CPU (Cortex-A53 on Pi, Cortex-A72 on virt)
 //! 3. /psci             — method = "hvc", compatible = "arm,psci-1.0"
 //! 4. /intc             — GICv2 (arm,cortex-a15-gic), GICD@0x08000000 GICC@0x08010000
 //! 5. /timer            — armv8-timer PPIs 13/14/11/10, level-low
@@ -18,6 +18,12 @@ use alloc::vec::Vec;
 use vm_fdt::{FdtWriter, FdtWriterResult};
 
 /// Boot arguments passed to the Linux kernel command line.
+/// Each printed character traps through Stage-2 MMIO on Pi, so keep the
+/// release board profile quiet; warnings and errors remain on the console.
+#[cfg(feature = "board-rpi3")]
+pub const BOOTARGS: &str =
+    "console=ttyAMA0 earlycon=pl011,0x9000000 rdinit=/bin/sh panic=1 loglevel=3 quiet";
+#[cfg(not(feature = "board-rpi3"))]
 pub const BOOTARGS: &str =
     "console=hvc0 console=ttyAMA0 earlycon=pl011,0x9000000 rdinit=/bin/sh panic=1 loglevel=8";
 
@@ -63,6 +69,9 @@ pub fn build_dtb(
 
     let cpu0 = fdt.begin_node("cpu@0")?;
     fdt.property_string("device_type", "cpu")?;
+    #[cfg(feature = "board-rpi3")]
+    fdt.property_string("compatible", "arm,cortex-a53")?;
+    #[cfg(not(feature = "board-rpi3"))]
     fdt.property_string("compatible", "arm,cortex-a72")?;
     fdt.property_string("enable-method", "psci")?;
     fdt.property_u32("reg", 0)?;
@@ -145,6 +154,15 @@ pub fn build_dtb(
     fdt.property_u64("linux,initrd-end", initrd_end)?;
     fdt.end_node(chosen)?;
 
+    // Linux's AMBA/PL011 probe requires a clock provider, not just a
+    // clock-frequency property on the UART (as in QEMU virt's DTB).
+    let clock = fdt.begin_node("apb-pclk")?;
+    fdt.property_string("compatible", "fixed-clock")?;
+    fdt.property_u32("#clock-cells", 0)?;
+    fdt.property_u32("clock-frequency", 24_000_000)?;
+    fdt.property_phandle(2)?;
+    fdt.end_node(clock)?;
+
     // ── 7. /pl011@9000000 ────────────────────────────────────────────────────
     let uart = fdt.begin_node("pl011@9000000")?;
     fdt.property_string_list(
@@ -158,7 +176,15 @@ pub fn build_dtb(
     // UART0 SPI 1 level-high = <0 1 4> (GIC_SPI=0, irq=1, IRQ_TYPE_LEVEL_HIGH=4).
     fdt.property_array_u32("interrupts", &[0, 1, 4])?;
     fdt.property_array_u32("reg", &[0x0, 0x0900_0000, 0x0, 0x1000])?;
-    fdt.property_u32("clock-frequency", 0x16E360)?; // 1.5 MHz (QEMU default)
+    fdt.property_array_u32("clocks", &[2, 2])?;
+    fdt.property_string_list(
+        "clock-names",
+        vec![
+            alloc::string::String::from("uartclk"),
+            alloc::string::String::from("apb_pclk"),
+        ],
+    )?;
+    fdt.property_u32("clock-frequency", 24_000_000)?;
     fdt.end_node(uart)?;
 
     // ── 8. /virtio_mmio@a000000 — console (slot 0, SPI 16) ──────────────────

@@ -239,9 +239,11 @@ pub(crate) fn spawn_optional_services() -> Option<usize> {
         SyscallResult::Err(_) => ostd::io::println("Init: desktop spawn failed."),
     }
 
-    #[cfg(not(feature = "board-rpi3"))]
+    // The normal Pi desktop image does not launch a VM. The dedicated
+    // hypervisor-min Pi guest image does, just like the QEMU virt profile.
+    #[cfg(any(not(feature = "board-rpi3"), feature = "hypervisor-min"))]
     let hypervisor_tid = spawn_hypervisor();
-    #[cfg(feature = "board-rpi3")]
+    #[cfg(all(feature = "board-rpi3", not(feature = "hypervisor-min")))]
     let hypervisor_tid = None;
 
     #[cfg(all(not(feature = "hypervisor-min"), not(feature = "board-rpi3")))]

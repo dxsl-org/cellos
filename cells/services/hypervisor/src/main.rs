@@ -11,6 +11,10 @@ compile_error!("volatile-disk cannot provide hostile backend recovery");
 compile_error!("ubuntu-wide-guest requires the persistent /mnt/sd/guest_disk.img backend");
 #[cfg(all(feature = "ubuntu-wide-guest", not(target_arch = "x86_64")))]
 compile_error!("ubuntu-wide-guest is qualified only on the x86_64 PVH path");
+#[cfg(all(feature = "alpine-wide-guest", feature = "ubuntu-wide-guest"))]
+compile_error!("choose one wide guest profile: Alpine or Ubuntu");
+#[cfg(all(feature = "alpine-wide-guest", not(target_arch = "x86_64")))]
+compile_error!("alpine-wide-guest is supported only on the x86_64 PVH path");
 
 extern crate alloc;
 
@@ -38,7 +42,7 @@ api::declare_syscalls![
     ReadCap,
     CloseCap,
     // Guest console input: drain the kernel UART RX ring (fd 0) into the
-    // emulated 16550 RX FIFO (x86) / future PL011 RX (aarch64)
+    // emulated 16550 (x86) or PL011 (Pi) RX FIFO.
     Read,
     // Timer emulation
     GetTime,
@@ -77,6 +81,8 @@ mod vmm;
 mod boot_arm;
 #[cfg(target_arch = "aarch64")]
 mod dtb;
+#[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+mod gicc;
 #[cfg(target_arch = "aarch64")]
 mod gicd;
 #[cfg(target_arch = "aarch64")]

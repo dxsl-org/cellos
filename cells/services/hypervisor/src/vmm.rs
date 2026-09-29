@@ -107,8 +107,38 @@ pub fn vcpu_regs(vm_id: usize, vcpu_id: usize, regs: &mut [u64; 32], write: bool
         )
     }
 }
+/// Pi-only VcpuRegs mode 2: read the guest's saved CNTV_CTL/CNTV_CVAL
+/// in words 0 and 1. Kernel validates the full 32-word buffer and initializes
+/// the remaining words as zero.
+#[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+pub fn guest_timer_regs(vm_id: usize, vcpu_id: usize, regs: &mut [u64; 32]) -> usize {
+    unsafe {
+        syscall4(
+            ViSyscall::VcpuRegs,
+            vm_id,
+            vcpu_id,
+            regs.as_mut_ptr() as usize,
+            2,
+        )
+    }
+}
 
-/// Inject GICv2 virtual IRQ (0 ≤ intid ≤ 1019) into vCPU; returns 0 or ERR.
+/// Signal a device interrupt. On Pi the software GIC owns the pending state;
+/// the run loop requests HCR_EL2.VI only for a deliverable interrupt.
 pub fn inject_irq(vm_id: usize, vcpu_id: usize, intid: u32) -> usize {
+    #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+    {
+        let _ = (vm_id, vcpu_id);
+        crate::gicd::queue_device_irq(intid);
+        0
+    }
+    #[cfg(not(all(target_arch = "aarch64", feature = "board-rpi3")))]
+    unsafe {
+        syscall4(ViSyscall::InjectIrq, vm_id, vcpu_id, intid as usize, 0)
+    }
+}
+
+#[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+pub fn request_virtual_irq(vm_id: usize, vcpu_id: usize, intid: u32) -> usize {
     unsafe { syscall4(ViSyscall::InjectIrq, vm_id, vcpu_id, intid as usize, 0) }
 }

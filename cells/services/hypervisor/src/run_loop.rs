@@ -5,6 +5,8 @@
 
 extern crate alloc;
 
+#[cfg(feature = "board-rpi3")]
+use crate::gicc::Gicc;
 use crate::{
     gicd::Gicd,
     net_backend,
@@ -38,6 +40,10 @@ pub fn run(
 
     let mut pl011 = Pl011::new();
     let mut gicd = Gicd::new();
+    #[cfg(feature = "board-rpi3")]
+    let mut gicc = Gicc::new();
+    #[cfg(feature = "board-rpi3")]
+    let mut timer_regs = [0u64; 32];
     let mut console = Console::new();
     let mut vmio = VirtioMmio::default();
     let mut blk = BlkDisk::new(disk_file, Some(17));
@@ -54,9 +60,32 @@ pub fn run(
     let mut input_vmio = VirtioMmio::default();
     gpu.bring_up();
     let mut exit = ViVmExit::Unknown { ec: 0, iss: 0 };
+    #[cfg(feature = "board-rpi3")]
+    let mut diag = [0u64; 3]; // total exits, timer preemptions, WFI
 
     loop {
         gpu.poll_damage();
+        #[cfg(feature = "board-rpi3")]
+        {
+            gicd.collect_device_irqs();
+            if vmm::guest_timer_regs(vm_id, vcpu_id, &mut timer_regs) == usize::MAX {
+                println("[hv] guest timer snapshot failed");
+                gpu.shutdown();
+                return RunOutcome::Shutdown;
+            }
+            gicd.set_level(
+                timer::VIRT_TIMER_PPI,
+                timer::guest_timer_asserted(timer_regs[0], timer_regs[1]),
+            );
+            gicd.set_level(crate::pl011::PL011_SPI, pl011.irq_pending());
+            if let Some(intid) = gicc.pending_irq(&gicd) {
+                if vmm::request_virtual_irq(vm_id, vcpu_id, intid) == usize::MAX {
+                    println("[hv] InjectIrq failed");
+                    gpu.shutdown();
+                    return RunOutcome::Shutdown;
+                }
+            }
+        }
         let ret = vmm::run_vcpu(vm_id, vcpu_id, &mut exit);
         if ret == usize::MAX {
             println("[hv] run_vcpu kernel error — aborting");
@@ -64,6 +93,24 @@ pub fn run(
             return RunOutcome::Shutdown;
         }
 
+        #[cfg(feature = "board-rpi3")]
+        {
+            diag[0] += 1;
+            if matches!(exit, ViVmExit::Preempted) {
+                diag[1] += 1;
+            }
+            if matches!(exit, ViVmExit::Wfi) {
+                diag[2] += 1;
+            }
+            if diag[0] <= 8 || diag[0] % 128 == 0 {
+                let mut rb = [0u64; 32];
+                vmm::vcpu_regs(vm_id, vcpu_id, &mut rb, false);
+                println(&alloc::format!(
+                    "[hv-diag] exits={} preempt={} wfi={} pc={:#x} lr={:#x} x0={:#x} x19={:#x} x20={:#x} ctl={:#x} cval={:#x} last={:?}",
+                    diag[0], diag[1], diag[2], rb[31], rb[30], rb[0], rb[19], rb[20], timer_regs[0], timer_regs[1], exit
+                ));
+            }
+        }
         match exit {
             // ── HVC (PSCI + unknown) ──────────────────────────────────────────
             ViVmExit::Hvc { imm: 0, mut regs } => match psci::dispatch(&mut regs) {
@@ -80,7 +127,7 @@ pub fn run(
                 }
             },
             ViVmExit::Hvc { imm, regs: _ } => {
-                // Non-PSCI HVC — return NOT_SUPPORTED in x0 and advance past it.
+                // HVC returns NOT_SUPPORTED; ELR_EL2 already points past HVC.
                 println(&alloc::format!("[hv] unknown HVC imm={}", imm));
                 let mut rb = [0u64; 32];
                 vmm::vcpu_regs(vm_id, vcpu_id, &mut rb, false);
@@ -95,7 +142,8 @@ pub fn run(
                 } else if Gicd::owns_gicd(ipa) {
                     gicd.write(ipa - crate::gicd::GICD_BASE_IPA, val, size);
                 } else if Gicd::owns_gicc(ipa) {
-                    // GICC writes: EOI / priority drop — safe to ignore with VI model.
+                    #[cfg(feature = "board-rpi3")]
+                    gicc.write(&mut gicd, ipa - crate::gicd::GICC_BASE_IPA, val);
                 } else if virtio_mmio::owns(ipa) {
                     let (slot, off) = virtio_mmio::slot_and_offset(ipa);
                     match slot {
@@ -123,7 +171,14 @@ pub fn run(
                 } else if Gicd::owns_gicd(ipa) {
                     gicd.read(ipa - crate::gicd::GICD_BASE_IPA, size)
                 } else if Gicd::owns_gicc(ipa) {
-                    0u64
+                    #[cfg(feature = "board-rpi3")]
+                    {
+                        gicc.read(&mut gicd, ipa - crate::gicd::GICC_BASE_IPA)
+                    }
+                    #[cfg(not(feature = "board-rpi3"))]
+                    {
+                        0u64
+                    } // QEMU virt uses hardware GICV.
                 } else if virtio_mmio::owns(ipa) {
                     let (slot, off) = virtio_mmio::slot_and_offset(ipa);
                     match slot {
@@ -147,8 +202,9 @@ pub fn run(
                 advance_pc(vm_id, vcpu_id);
             }
 
-            // ── WFI — inject virtual timer; poll for guest RX frames ─────────
+            // ── WFI — poll guest RX; Pi timer IRQ follows its deadline ───────
             ViVmExit::Wfi => {
+                #[cfg(not(feature = "board-rpi3"))]
                 timer::inject_timer_irq(vm_id, vcpu_id);
                 gpu.reconnect_compositor(sys_lookup_service(service::COMPOSITOR).unwrap_or(0));
                 if let Some(frame) = net_backend::try_receive(&mut net.backend) {
@@ -157,6 +213,10 @@ pub fn run(
                     }
                 }
                 forward_input_events(&mut input, &mut input_vmio, vm_id, vcpu_id);
+                #[cfg(feature = "board-rpi3")]
+                drain_host_serial(&mut pl011);
+                #[cfg(feature = "board-rpi3")]
+                ostd::task::yield_now();
             }
 
             // ── Preemption budget expired (C2 yield) — poll RX before re-enter
@@ -168,6 +228,8 @@ pub fn run(
                     }
                 }
                 forward_input_events(&mut input, &mut input_vmio, vm_id, vcpu_id);
+                #[cfg(feature = "board-rpi3")]
+                drain_host_serial(&mut pl011);
                 ostd::task::yield_now();
             }
 
@@ -178,7 +240,7 @@ pub fn run(
                 return RunOutcome::Shutdown;
             }
 
-            // ── Sysreg trap — return 0 for reads, ignore writes ──────────────
+            // ── Sysreg trap — guest timer is physical on Cortex-A53 ─────────
             ViVmExit::SysReg { rt, is_write, .. } => {
                 if !is_write && (rt as usize) < 31 {
                     let mut rb = [0u64; 32];
@@ -217,6 +279,22 @@ pub fn run(
                 gpu.shutdown();
                 return RunOutcome::Shutdown;
             }
+        }
+    }
+}
+
+#[cfg(feature = "board-rpi3")]
+fn drain_host_serial(pl011: &mut Pl011) {
+    let mut buf = [0u8; 32];
+    while let Ok(n) = ostd::syscall::sys_read(0, &mut buf) {
+        if n == 0 {
+            break;
+        }
+        for &byte in &buf[..n] {
+            pl011.push_rx(byte);
+        }
+        if n < buf.len() {
+            break;
         }
     }
 }
