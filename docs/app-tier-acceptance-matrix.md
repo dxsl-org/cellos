@@ -16,7 +16,11 @@ Phase 02 lifecycle status is `LEDGER_RECORDED`, ratified at revision
 `798e8b04` with lifecycle commits `92340d05`, `635600c8`, and `c538df84`. The
 ledger is schema v5: every `source` witness resolves against the archived
 contract revision named by its digest (`docs/evidence/spec23-native-sdk-contract-<sha12>.md`),
-never against the amendable working file, and the live binding was re-based onto
+never against the amendable working file. The same principle now covers the other evidence
+kinds: a recorded `log` or `artifact` resolves against the working copy, and when an ordinary
+later edit has moved that copy on, against any commit still holding the recorded bytes
+(`scripts/app_tier_acceptance/checks.py::in_history`) — recording evidence must never freeze
+the file it was taken from, and a digest no commit holds is still refused. The live binding was re-based onto
 the amended contract at revision `81dbb81c` — the amendment changed the C2-MID
 witness and gap prose only, so the ratified matrix digest is unchanged — and
 again onto the contract as amended at revision `fd3d12ae`, where the `rust-std`

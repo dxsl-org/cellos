@@ -167,3 +167,21 @@ were re-pinned. The Phase 06 plan/doc edits needed a third re-pin of the same ma
   `driver-nvme`/`driver-e1000` set instead of `driver-virtio-blk`) and prints the same PASS marker
   (over-aligned witnesses intact, 34.89 ms yield). All three published target specs therefore have a
   runtime witness, and the x86_64 `syscall`-based PAL paths are exercised for the first time.
+
+## Evidence no longer freezes the file it was taken from (2026-09-29)
+
+The Phase 06 event binds `patches/rust-std-cellos.patch` as its implementation artifact, and
+`checks.safe_file` compared that digest against the *working copy only*. That made the PAL patch
+byte-frozen: any later fix would break ledger validation, with no legal carrier to repair it
+(events are append-only; `ledger.py::baseline` allows `source_binding` to move only with a
+lifecycle transition).
+
+`safe_file` now resolves a recorded `log`/`artifact` against the working copy first, and when an
+ordinary later edit has moved that copy on, against any commit still holding the recorded bytes
+(`checks.in_history`, bounded to the newest 100 commits touching the path). A digest no commit
+holds is refused exactly as before, and `kind="source"` keeps its content-addressed mirror.
+
+Verified end to end on this repository: appending a line to the patch and running the ledger
+validator against the pushed baseline returns `PASS: C9=NOT_COMPLETE`; rewriting event 13's
+artifact digest to `abab...` returns `FAIL: artifact digest or kind is invalid`. Four unit tests
+(`tests/app-tier-acceptance/test_evidence_history.py`) pin the rule and the suite is 85/85.

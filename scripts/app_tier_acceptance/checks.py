@@ -9,12 +9,16 @@ import hashlib
 import json
 import os
 import re
+import subprocess
 from pathlib import Path
 from contextvars import ContextVar
 
 UTC = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 HEX = re.compile(r"^[0-9a-f]{64}$")
 GIT = re.compile(r"^[0-9a-f]{40}$")
+# Bound the history walk used when a working copy has moved on: evidence paths
+# are rewritten rarely, so the newest 100 commits that touch one are plenty.
+HISTORY_LIMIT = 100
 _CACHE: ContextVar[dict | None] = ContextVar("app_tier_acceptance_cache", default=None)
 
 from . import source as sdk_source
@@ -88,6 +92,32 @@ def preserve(root: Path, rel: str, digest: object) -> Path:
     return root / sdk_source.SOURCE_MIRROR / rel
 
 
+def in_history(root: Path, rel: str, digest: str, size: int) -> bool:
+    """True when a commit reachable from HEAD still holds those exact bytes.
+
+    A recorded log or artifact is evidence of a moment, not a licence to freeze
+    the working file forever. The file may legitimately move on - a log is
+    appended to, a patch is revised - and the recorded bytes stay verifiable
+    because history keeps them. This is the working-tree counterpart of the
+    content-addressed mirror that `kind = "source"` evidence resolves against:
+    neither class of evidence can be invalidated by an ordinary later edit, and
+    a digest that no commit holds is still refused.
+    """
+    log = subprocess.run(
+        ["git", "log", f"--max-count={HISTORY_LIMIT}", "--format=%H", "--", rel],
+        cwd=root,
+        capture_output=True,
+        text=True,
+    )
+    if log.returncode != 0:
+        return False
+    for revision in log.stdout.split():
+        blob = subprocess.run(["git", "show", f"{revision}:{rel}"], cwd=root, capture_output=True)
+        if blob.returncode == 0 and len(blob.stdout) == size and hashlib.sha256(blob.stdout).hexdigest() == digest:
+            return True
+    return False
+
+
 def safe_file(root: Path, path: object, digest: object, size: object, kind: object) -> None:
     """Verify a repository-contained regular evidence file and its exact digest."""
     rel = text(path, "artifact.path")
@@ -109,9 +139,14 @@ def safe_file(root: Path, path: object, digest: object, size: object, kind: obje
             raise ValueError("preserved source revision is missing")
     if target.is_symlink() or not target.is_file() or root not in target.resolve().parents:
         raise ValueError("artifact path is missing, outside root, or a symlink")
-    if int_size != target.stat().st_size:
+    size_matches = int_size == target.stat().st_size
+    digest_matches = size_matches and hashlib.sha256(target.read_bytes()).hexdigest() == digest
+    if not digest_matches and kind != "source" and in_history(root, rel, digest, int_size):
+        # The working copy moved on, but the recorded revision is preserved.
+        size_matches = digest_matches = True
+    if not size_matches:
         raise ValueError("artifact size or digest schema is invalid")
-    if hashlib.sha256(target.read_bytes()).hexdigest() != digest:
+    if not digest_matches:
         raise ValueError("artifact digest or kind is invalid")
     if cache is not None:
         cache["files"][key] = True
