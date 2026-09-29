@@ -1,21 +1,14 @@
 #!/usr/bin/env bash
-# Build the Tier 3 nginx-gate initramfs from the cached Alpine one.
+# Repack the cached Alpine initramfs with a Tier 3 in-guest application fixture.
+# Set the guest clock in the fixture: this emulated guest has no useful RTC,
+# and TLS certificates cannot be verified until its clock is initialized.
+# Prune unused modules to leave memory for apk and the application in the
+# bounded Alpine guest RAM profiles.
 #
-# Two things happen here:
-#   1. The guest fixture replaces `/bin/virtio-e2e-init` (the x86 E2E profile's
-#      guest slot) and gets the build-time UTC stamp substituted in — the
-#      emulated guest RTC reads back no time, so TLS chain verification fails
-#      without it.
-#   2. The module tree is pruned to the VirtIO set the guest needs. The full
-#      Alpine tree is ~16.5 MiB and the guest carve is 128 MiB; leaving it in
-#      pushed apk into the guest OOM killer (`Out of memory: Killed process …
-#      (apk)`) before nginx could be installed.
-#
-# Usage: bash scripts/prepare-x86-nginx-initramfs.sh
-# Environment (defaults match the other x86 lanes):
-#   ALPINE_X86_INITRAMFS  source initramfs (default .alpine-cache-x86/initramfs-virt)
-#   NGINX_GATE_INITRAMFS  output (default build/x86-nginx-initramfs.cpio.gz)
-#   NGINX_GATE_FIXTURE    guest fixture (default tests/guests/x86-nginx/guest-init.sh)
+# Environment:
+#   ALPINE_X86_INITRAMFS  cached source (default .alpine-cache-x86/initramfs-virt)
+#   APP_GATE_INITRAMFS    output path (required)
+#   APP_GATE_FIXTURE      guest init script (required)
 
 set -euo pipefail
 
@@ -23,8 +16,8 @@ REPO_ROOT="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
 SOURCE="${ALPINE_X86_INITRAMFS:-.alpine-cache-x86/initramfs-virt}"
-OUTPUT="${NGINX_GATE_INITRAMFS:-build/x86-nginx-initramfs.cpio.gz}"
-FIXTURE="${NGINX_GATE_FIXTURE:-tests/guests/x86-nginx/guest-init.sh}"
+OUTPUT="${APP_GATE_INITRAMFS:?APP_GATE_INITRAMFS output path required}"
+FIXTURE="${APP_GATE_FIXTURE:?APP_GATE_FIXTURE guest fixture required}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 
 if [[ ! -f "$SOURCE" ]]; then
@@ -65,5 +58,5 @@ mkdir -p "$(dirname "$OUTPUT")"
 
 [[ "$(sha256sum "$SOURCE" | cut -d ' ' -f 1)" == "$source_sha" ]] \
     || { echo "FAIL: cached Alpine initramfs changed during repack" >&2; exit 1; }
-echo "NGINX_GATE_INITRAMFS_READY=$OUTPUT"
+echo "APP_GATE_INITRAMFS_READY=$OUTPUT"
 sha256sum "$OUTPUT"

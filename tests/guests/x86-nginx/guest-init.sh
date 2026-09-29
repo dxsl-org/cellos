@@ -7,7 +7,7 @@
 # repository, starts it, and fetches a page from inside the guest.
 #
 # @BUILD_UTC@ / @BUILD_UTC_STR@ are substituted at repack time
-# (scripts/prepare-x86-nginx-initramfs.sh): the emulated guest RTC reads back no
+# (scripts/prepare-x86-app-initramfs.sh): the emulated guest RTC reads back no
 # time, so without this the CDN's TLS chain fails verification and the install
 # silently falls back to plain HTTP (which v3.21 still serves, but the gate
 # should exercise the verified path).

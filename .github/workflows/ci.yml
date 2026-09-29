@@ -976,15 +976,15 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  # Tier 3 gate: nginx runs inside the Alpine guest (`.agents/TODO.md` names this
-  # as "nginx chạy thật trong Linux VM"). Builds the guest fixture, installs
-  # nginx with apk from the pinned repository, and asserts the in-guest HTTP
-  # serve. QEMU-TCG evidence only — no physical-x86 claim.
-  qemu-x86-tier3-nginx:
-    name: Tier 3 nginx In-Guest Gate (x86_64)
+  # Primary Tier 3 application gate: real CPython 3 inside the Alpine guest.
+  # Installs from Alpine v3.21 over HTTPS and processes JSON into CSV in a
+  # subprocess-backed workload. Nginx remains a separate manual regression,
+  # not the application-acceptance oracle. QEMU evidence is not physical evidence.
+  qemu-x86-tier3-python:
+    name: Tier 3 CPython In-Guest Gate (x86_64)
     runs-on: ubuntu-24.04
     needs: build
-    timeout-minutes: 60
+    timeout-minutes: 100
     env:
       QEMU_X86_PREFIX: ${{ github.workspace }}/.ci-cache/qemu-10.2.0
       # make-hypervisor-fs-x86.sh compiles the littlefs C core for the bare
@@ -993,10 +993,10 @@ jobs:
       CFLAGS_x86_64_unknown_none: -ffreestanding -fno-stack-protector -mno-red-zone -mno-sse -mno-mmx -DLFS_NO_INTRINSICS -I${{ github.workspace }}/third_party/freestanding-include
       BINDGEN_EXTRA_CLANG_ARGS_x86_64_unknown_none: --target=x86_64-linux-gnu
     steps:
-      - name: Initialize nginx gate evidence
+      - name: Initialize Python gate evidence
         run: |
-          mkdir -p "$RUNNER_TEMP/x86-nginx-evidence"
-          printf '[gate] Tier 3 nginx in-guest gate started\n' > "$RUNNER_TEMP/x86-nginx-evidence/gate.log"
+          mkdir -p "$RUNNER_TEMP/x86-python-evidence"
+          printf '[gate] Tier 3 CPython in-guest gate started\n' > "$RUNNER_TEMP/x86-python-evidence/gate.log"
 
       - uses: actions/checkout@v4
 
@@ -1010,7 +1010,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
-          key: x86-tier3-nginx
+          key: x86-tier3-python
 
       - name: Install QEMU build and image dependencies
         timeout-minutes: 10
@@ -1018,7 +1018,7 @@ jobs:
           sudo apt-get update -q
           sudo apt-get install -y -q \
             binutils build-essential curl gzip libglib2.0-dev libpixman-1-dev \
-            libslirp-dev ninja-build pkg-config python3-venv xorriso xz-utils zstd
+            libslirp-dev mtools ninja-build pkg-config python3-venv xorriso xz-utils zstd
 
       - name: Restore QEMU 10.2.0
         uses: actions/cache@v4
@@ -1034,34 +1034,48 @@ jobs:
       # HV_EMBEDDED_DIR), the kernel and the ISO, then boots and asserts every
       # guest marker. No `-hypervisor` workaround: the SVM root gate is the
       # product path this lane covers.
-      - name: Run Tier 3 nginx in-guest gate
-        id: nginx-gate
+      - name: Run Tier 3 CPython in-guest gate
+        id: python-gate
         timeout-minutes: 45
+        env:
+          QEMU_X86_BIN: ${{ env.QEMU_X86_PREFIX }}/bin/qemu-system-x86_64
+          QEMU_MEMORY: 2G
+          BOOT_WINDOW: "1200"
+        run: bash scripts/qemu-x86-python-gate.sh build/vicell-x86-python.iso
+
+      # Retain the older process/network oracle as a secondary regression;
+      # Python is the primary application gate and runs first.
+      - name: Run nginx in-guest regression
+        id: nginx-regression
+        timeout-minutes: 25
         env:
           QEMU_X86_BIN: ${{ env.QEMU_X86_PREFIX }}/bin/qemu-system-x86_64
           QEMU_MEMORY: 2G
           BOOT_WINDOW: "1200"
         run: bash scripts/qemu-x86-nginx-gate.sh build/vicell-x86-nginx.iso
 
-      - name: Collect nginx gate evidence
+      - name: Collect Python gate evidence
         if: always()
         run: |
-          printf '[gate] job_status=%s gate_outcome=%s\n' \
-            "${{ job.status }}" "${{ steps.nginx-gate.outcome }}" \
-            >> "$RUNNER_TEMP/x86-nginx-evidence/gate.log"
-          for log in build/x86-nginx-gate/qemu-nginx-gate.log \
+          printf '[gate] job_status=%s python_outcome=%s nginx_outcome=%s\n' \
+            "${{ job.status }}" "${{ steps.python-gate.outcome }}" \
+            "${{ steps.nginx-regression.outcome }}" \
+            >> "$RUNNER_TEMP/x86-python-evidence/gate.log"
+          for log in build/x86-python-gate/qemu-python-gate.log \
+                     build/x86-python-gate/qemu-python-gate.raw.log \
+                     build/x86-nginx-gate/qemu-nginx-gate.log \
                      build/x86-nginx-gate/qemu-nginx-gate.raw.log; do
             if [ -f "$log" ]; then
-              cp "$log" "$RUNNER_TEMP/x86-nginx-evidence/"
+              cp "$log" "$RUNNER_TEMP/x86-python-evidence/"
             fi
           done
 
-      - name: Upload nginx gate logs
+      - name: Upload Python gate logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: x86-tier3-nginx-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/x86-nginx-evidence
+          name: x86-tier3-python-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/x86-python-evidence
           if-no-files-found: error
           retention-days: 14
 

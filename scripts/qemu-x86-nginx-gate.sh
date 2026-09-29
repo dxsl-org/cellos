@@ -9,7 +9,7 @@
 # This is the gate `.agents/TODO.md` names as "nginx chạy thật trong Linux VM".
 #
 # The guest carve is 128 MiB, so the prepared initramfs is pruned to the VirtIO
-# modules it needs (scripts/prepare-x86-nginx-initramfs.sh).
+# modules it needs (scripts/prepare-x86-app-initramfs.sh).
 #
 # Evidence scope: QEMU-TCG only. Passing proves the guest workload, not physical
 # x86 qualification and not nested-virtualization fidelity.
@@ -69,7 +69,9 @@ fi
 
 mkdir -p "$WORK_DIR"
 if [[ "$BUILD_EVIDENCE_IMAGE" == 1 ]]; then
-    NGINX_GATE_INITRAMFS="$INITRAMFS" bash scripts/prepare-x86-nginx-initramfs.sh
+    APP_GATE_INITRAMFS="$INITRAMFS" \
+        APP_GATE_FIXTURE=tests/guests/x86-nginx/guest-init.sh \
+        bash scripts/prepare-x86-app-initramfs.sh
     rm -rf "$STAGE"
     mkdir -p "$STAGE"
     HV_VOLATILE_DISK=1 HV_INIT_MIN=1 INITRD_OVERRIDE="$INITRAMFS" \

@@ -9,7 +9,7 @@ usage() {
 Usage: bash scripts/make-hypervisor-fs-x86.sh [--skip-fetch]
 
 Environment:
-  HV_GUEST_PROFILE       alpine (default) or ubuntu
+  HV_GUEST_PROFILE       alpine (default), alpine-wide (256 MiB), or ubuntu
   UBUNTU_ARTIFACT_DIR    Ubuntu profile artifacts (default build/ubuntu-wide-guest-x86)
   HV_VOLATILE_DISK       0 (default) or 1; Ubuntu requires 0
   HV_INIT_MIN            0 (default) or 1
@@ -49,7 +49,7 @@ parse_and_validate_args() {
     HV_VOLATILE_DISK_VALUE="${HV_VOLATILE_DISK:-0}"
 
     case "$GUEST_PROFILE" in
-        alpine) ;;
+        alpine|alpine-wide) ;;
         ubuntu)
             if [[ -n "${INITRD_OVERRIDE:-}" ]]; then
                 echo "ERROR: INITRD_OVERRIDE is not permitted for the pinned Ubuntu profile" >&2
@@ -67,7 +67,7 @@ parse_and_validate_args() {
             INITRD_SOURCE="$UBUNTU_ARTIFACT_DIR/initrd.gz"
             ;;
         *)
-            echo "ERROR: HV_GUEST_PROFILE must be 'alpine' or 'ubuntu' (got '$GUEST_PROFILE')" >&2
+            echo "ERROR: HV_GUEST_PROFILE must be 'alpine', 'alpine-wide', or 'ubuntu' (got '$GUEST_PROFILE')" >&2
             exit 1
             ;;
     esac

@@ -42,6 +42,9 @@ fi
 if [[ "$GUEST_PROFILE" == "ubuntu" ]]; then
     INIT_FEATURES+=",service-hypervisor/ubuntu-wide-guest"
 fi
+if [[ "$GUEST_PROFILE" == "alpine-wide" ]]; then
+    INIT_FEATURES+=",service-hypervisor/alpine-wide-guest"
+fi
 if [[ "$HV_HOSTILE_BACKEND_RECOVERY_VALUE" == "1" ]]; then
     INIT_FEATURES+=",app-init/hypervisor-min,app-init/hostile-backend-recovery"
     INIT_FEATURES+=",service-net/hypervisor-bridge,supervisor/hostile-backend-recovery"
