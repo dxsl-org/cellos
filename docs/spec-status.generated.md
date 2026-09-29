@@ -298,7 +298,7 @@ Layer 3 of [Spec 21](specs/21-documentation-architecture.md). `Anchor:` lines in
 - `docs/specs/23-native-sdk-contract.md:238` — 7. Security and tier behavior
 - `docs/specs/23-native-sdk-contract.md:252` — 8. Conformance and release gates
 - `docs/specs/23-native-sdk-contract.md:273` — 9. Evidence ledger and known gaps
-- `docs/specs/23-native-sdk-contract.md:295` — 10. Cross-references
+- `docs/specs/23-native-sdk-contract.md:297` — 10. Cross-references
 - `docs/specs/24-ai-inference-architecture.md:23` — 1. Context & Motivation
 - `docs/specs/24-ai-inference-architecture.md:32` — Rejected Alternatives
 - `docs/specs/24-ai-inference-architecture.md:41` — 2. Unified Native AI Architecture (`libs/ai-sdk`)

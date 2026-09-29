@@ -57,6 +57,7 @@
 - [ADR-0020 — Stage USB HID isolation behind a reliable transport](docs/decisions/0020-staged-usb-hid-isolation.md)
 - [ADR-0021 — Give applications an actor/supervisor library in userspace, not a supervision ABI](docs/decisions/0021-actor-supervisor-library-in-userspace.md)
 - [Spec 23 — Native SDK Contract](docs/evidence/spec23-native-sdk-contract-027e1a2bbfb1.md)
+- [Spec 23 — Native SDK Contract](docs/evidence/spec23-native-sdk-contract-9265afc81b15.md)
 - [Spec 23 — Native SDK Contract](docs/evidence/spec23-native-sdk-contract-99146be984d6.md)
 - [Porting C applications to Cellos](docs/guides/porting-c-apps.md)
 - [POSIX shim export contract (generated)](docs/guides/posix-shim-contract.generated.md)

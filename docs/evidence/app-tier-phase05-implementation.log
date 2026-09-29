@@ -1,0 +1,56 @@
+# Phase 05 implementation — Manifest-v2 tooling and the frozen v2 compatibility baseline
+# captured: 2026-09-29T11:41:59Z on Linux 6.18.40.1-microsoft-standard-WSL2
+# revision: 85df7fc0f40cf48a8836f942b8734bc31a25f4e3 (feat(app-tier): complete Manifest v2 tooling)
+# tree: 6d20bf3087e2c1aa1f73be8ee5c6bb071c35c1be
+$ git show --stat --format='%H %ad %s' 85df7fc0f40cf48a8836f942b8734bc31a25f4e3
+85df7fc0f40cf48a8836f942b8734bc31a25f4e3 Fri Aug 21 20:17:45 2026 +0700 feat(app-tier): complete Manifest v2 tooling
+
+ .../phase-03-tier1-baseline-admission.md           |   5 +-
+ .agents/260821-0642-app-tiers-completion/plan.md   |  19 +-
+ docs/code-standards.md                             |  30 ++-
+ docs/guides/tier1-rust-bare.md                     |  18 ++
+ docs/project-changelog.md                          |  53 +++--
+ docs/roadmap/current-focus.md                      |  20 +-
+ docs/roadmap/open-risk-register.md                 |  28 +++
+ docs/system-architecture.md                        |  46 +++-
+ kernel/src/loader.rs                               |  36 ++--
+ kernel/src/loader/elf_tests.rs                     |   3 +-
+ kernel/src/loader/manifest_section.rs              | 204 ++++++++++++++++++
+ kernel/src/loader/manifest_section_tests.rs        | 239 +++++++++++++++++++++
+ kernel/src/main.rs                                 |   7 +
+ libs/api/src/abi.rs                                |   2 +
+ libs/api/src/abi/manifest.rs                       |   7 +-
+ libs/api/src/abi/manifest_compat_tests.rs          | 132 ++++++++++++
+ libs/api/src/abi/manifest_flags.rs                 |   6 +-
+ libs/api/src/abi/manifest_parse.rs                 |  26 +--
+ tools/check_elf.py                                 |  81 ++++---
+ tools/elf_manifest.py                              | 184 ++++++++++++++++
+ tools/test_check_elf.py                            | 177 +++++++++++++++
+ 21 files changed, 1229 insertions(+), 94 deletions(-)
+# exit: 0
+
+$ cargo test -p api --target x86_64-unknown-linux-gnu manifest | grep -E 'Running unittests|test result'
+Running unittests src/lib.rs (target/x86_64-unknown-linux-gnu/debug/deps/api-6a8538955cb114fe)
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 93 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+# exit: 0
+
+$ cargo test -p cellos-kernel --target x86_64-unknown-linux-gnu | grep -E 'test result'
+test result: ok. 184 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+# exit: 0
+
+$ python3 -m unittest discover -s tools -p 'test_check_elf.py'
+......
+----------------------------------------------------------------------
+Ran 6 tests in 0.281s
+
+OK
+# exit: 0
+
+$ cargo clippy -p api --target riscv64gc-unknown-none-elf -Z build-std=core,alloc -- -D warnings
+Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.08s
+# exit: 0
+
+# Not re-run in this capture: the QEMU spawn_gated malformed-manifest corpus and the
+# two production-shaped builds. Their recorded results stay with the Phase 05 plan
+# (.agents/260821-0642-app-tiers-completion/plan.md, "Phase 05 Evidence and Status").
