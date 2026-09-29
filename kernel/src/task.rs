@@ -189,6 +189,22 @@ pub(crate) fn prime_user_mode_entry(task: &mut Task, entry: usize, arg: usize) {
         *tf_dest = task.trap_frame;
     }
 
+    // Test-hooks: record what the first entry was primed with, so a fault that
+    // lands at an impossible ELR can be checked against it. Measured once in ~30
+    // two-hart runs: a cell trapped at EL0 with `elr` inside the kernel's own
+    // `__trap_exit` and `spsr` = 0 (its EL0 state), which reads as a task entered
+    // at a kernel address — either the `entry` handed in was already wrong, or the
+    // frame was corrupted between here and `__trap_exit`.
+    #[cfg(all(feature = "test-hooks", target_arch = "aarch64"))]
+    log::info!(
+        "[entry-frame] task={} hart={} tf=0x{:x} entry=0x{:x} sepc=0x{:x}",
+        task.id,
+        crate::task::hart_local::current_hart_id(),
+        tf_ptr,
+        entry,
+        task.trap_frame.sepc
+    );
+
     task.context.sp = tf_ptr as _;
     #[cfg(target_arch = "riscv64")]
     {

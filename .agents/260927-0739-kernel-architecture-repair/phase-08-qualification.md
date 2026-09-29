@@ -313,8 +313,19 @@ origin from `spsr_el1 & 0xF == 0`, which cannot work on QEMU virt: the host runs
 about to `eret` to EL0. The lower-EL wrapper's vector marker (0 for host vectors, 1..4 for EL0 ones,
 consumed once per dispatch) is the proof that works; the arm now requires it and the kernel-trap
 report names the marker. Cell traps are unaffected — a cell's EC-0 unallocated instruction arrives
-through the lower-EL vector and still terminates the cell. **Still open: why a host exception with
-EC 0 happens there at all.** One hypothesis was tested and refuted: `__trap_exit` writes
+through the lower-EL vector and still terminates the cell. **Still open, but now decoded: a task is occasionally entered at a kernel address.** The frame
+`ec=0x0 esr=0x2000000 elr=0x400823a4 far=0 spsr=0` reads as a trap *from EL0* (`spsr` = the cell's own
+EL0 state) whose `elr` is inside the kernel's `__trap_exit` — i.e. the cell was *entered* there and the
+first instruction it met, `msr spsr_el1, x9`, is undefined at EL0, which is exactly an `EC=0`/`IL=1`
+"unknown reason". So the entry frame's `sepc` was a kernel address, not the cell's entry point. It is
+SMP-only (the one-CPU lane is deterministic), about 1 run in 30, and it did not reproduce in 60 runs with
+a logging probe in the path — a timing-dependent race. Two mechanisms fit and one instrument
+discriminates them: `prime_user_mode_entry` now logs `[entry-frame] task=… tf=… entry=… sepc=…` under
+test-hooks, so the next occurrence shows whether the entry was already wrong when primed or the frame was
+corrupted before `__trap_exit` consumed it. No blind fix was shipped: the SPSR=0 experiment below was
+tested and reverted.
+
+**An earlier hypothesis for the same frame, tested and refuted.** One hypothesis was tested and refuted: `__trap_exit` writes
 `spsr_el1 = 0` with the comment "EL0t", and in `SPSR.M[4:0]` that is AArch32 USR rather than AArch64
 EL0t (`0x10`), which would leave the core in Illegal Execution state — whose next instruction raises
 exactly `EC=0`/`ESR=0x2000000` with `SPSR=0`. Changing both `__trap_exit` paths to `0x10` (and the idle

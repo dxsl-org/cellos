@@ -19,6 +19,11 @@ Audited prior kernel findings against live code and wrote the eight-phase repair
   One run in thirty killed an innocent cell for a host exception inside `__trap_exit`. The arm now
   requires the lower-EL vector marker. Open: why a host exception with EC 0 happens there at all — the
   next one is reported as a kernel trap with the marker instead of as a cell fault.
+- Decoded the EC=0 frame properly: `spsr` = the cell's own EL0 state and `elr` inside `__trap_exit` means
+  the cell was *entered* at a kernel address (the first instruction there, `msr spsr_el1`, is undefined at
+  EL0). SMP-only, ~1 in 30, and it stops reproducing when a logging probe is in the path. Instrument in
+  the tree: `[entry-frame]` under test-hooks, so the next one says whether the entry was already wrong at
+  prime time or the frame was corrupted before `__trap_exit` read it.
 - Tested and refuted: `__trap_exit` writes `spsr_el1 = 0` (comment says "EL0t", architecture reads
   AArch32 USR), which would explain the EC=0/IL signature — changing it to `0x10` hung 60 of 60 boots at
   the first task entry, so the zero is load-bearing here. Reverted; the host exception with EC 0 stays
