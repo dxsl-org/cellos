@@ -304,6 +304,20 @@ these two lanes, and whose header says a hand-built disk fails "for image reason
 resolves both: `launch-profile` 1 passed / 0 failed and `tier2-fault-isolation` **5 passed / 0 failed**
 on the current tree.
 
+**A second, rarer defect found while reading those runs.** In about one run of thirty the AArch64
+catch-all trap arm terminated an *innocent* cell: `ec=0x0 esr=0x2000000 elr=0x400823a4 far=0 spsr=0`,
+i.e. an exception taken inside `__trap_exit` (`msr spsr_el1, x9`, the instruction a switch completes
+through) with an empty syndrome, attributed to whichever cell was current. The arm inferred the
+origin from `spsr_el1 & 0xF == 0`, which cannot work on QEMU virt: the host runs at EL2 with
+`HCR_EL2.TGE=1`, so that field holds the *host's* `SPSR_EL2` and reads zero exactly when the host was
+about to `eret` to EL0. The lower-EL wrapper's vector marker (0 for host vectors, 1..4 for EL0 ones,
+consumed once per dispatch) is the proof that works; the arm now requires it and the kernel-trap
+report names the marker. Cell traps are unaffected — a cell's EC-0 unallocated instruction arrives
+through the lower-EL vector and still terminates the cell. **Still open: why a host exception with
+EC 0 happens there at all** (one occurrence in ~34 runs, unchanged by today's other fixes; the next
+one will now be reported as a kernel trap instead of killing a cell). Measured after: 20 of 20
+two-hart runs green, no kernel-trap reports.
+
 Also measured, deliberately not shipped: `reap_deferred_releases` documents that it touches
 `REAPER_ENTRIES_PER_CALL` entries per call, but `next_step()` always returned the queue *head* and the
 loop's duplicate guard returned immediately, so it stepped exactly one entry per tick — a head waiting
