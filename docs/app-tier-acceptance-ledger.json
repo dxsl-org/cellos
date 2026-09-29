@@ -927,8 +927,8 @@
     },
     {
       "phase": 6,
-      "status": "PLANNED",
-      "event_id": null
+      "status": "IMPLEMENTED",
+      "event_id": "phase-06-implemented"
     },
     {
       "phase": 7,
@@ -1445,11 +1445,61 @@
       },
       "state_digest": "3c931a6b07e13ae269966bc5e58802ec359305fe189a197c3130f9135352582d",
       "hash": "991cfa35b61198fdea9dabd6ca8346e18af1494e8286be0005a06dfea95b8633"
+    },
+    {
+      "sequence": 13,
+      "event_id": "phase-06-implemented",
+      "previous_hash": "991cfa35b61198fdea9dabd6ca8346e18af1494e8286be0005a06dfea95b8633",
+      "steward": "lungmat8",
+      "reviewer": "datgausaigon",
+      "recorded_at": "2026-09-29T12:49:11Z",
+      "action": {
+        "kind": "lifecycle_transition",
+        "phase": 6,
+        "from_status": "PLANNED",
+        "to_status": "IMPLEMENTED",
+        "changes": [
+          {
+            "section": "phase_lifecycle",
+            "before_sha256": "0ac5e03fc21d3a41f82f559ef974ecc579edf5fed543ab79289b3f04f4a6214f",
+            "after_sha256": "57fad01e3756b7b1dd127e16bea71dfae30742360643374e318ba44b45fea669"
+          }
+        ],
+        "evidence": [
+          {
+            "path": "docs/evidence/app-tier-phase06-implementation.log",
+            "sha256": "e6c6724c726ebd5606826f3158abdf17aa6af9243567307994bbebd5a9978f98",
+            "size_bytes": 3656,
+            "kind": "log"
+          },
+          {
+            "path": "patches/rust-std-cellos.patch",
+            "sha256": "1c1f27895ae0f36ec9c772a7ef9cda2a5aea501a2c7fbad8338879b35cb7e8bb",
+            "size_bytes": 24196,
+            "kind": "artifact"
+          }
+        ],
+        "implementation": {
+          "revision": "2a67570b861cab5a26fad60a5d76d307418337e8",
+          "base_tree": "8a092a7aa616f3e818a1820b24dae70834e62f9e",
+          "command": "bash scripts/build-cellos-sysroot.sh riscv64gc-unknown-cellos && bash scripts/build-cellos-sysroot.sh aarch64-unknown-cellos && bash scripts/build-cellos-sysroot.sh x86_64-unknown-cellos && BOOT_TIMEOUT=90 bash scripts/run-std-smoke-qemu.sh riscv64",
+          "target": "tier1-rust-std-pal",
+          "result": "PASS",
+          "artifact": {
+            "path": "patches/rust-std-cellos.patch",
+            "sha256": "1c1f27895ae0f36ec9c772a7ef9cda2a5aea501a2c7fbad8338879b35cb7e8bb",
+            "size_bytes": 24196,
+            "kind": "artifact"
+          }
+        }
+      },
+      "state_digest": "e6b7475ffc775b1d25f72c67d6bdfbb21bb008c46a3e1e9f996e849e9d9a7470",
+      "hash": "666bcd99a5b4b9ee2642543774a32ba18aac9e286accbec016ba6b4c198eaec1"
     }
   ],
   "baseline_prefix": {
-    "event_count": 12,
-    "tip_hash": "991cfa35b61198fdea9dabd6ca8346e18af1494e8286be0005a06dfea95b8633"
+    "event_count": 13,
+    "tip_hash": "666bcd99a5b4b9ee2642543774a32ba18aac9e286accbec016ba6b4c198eaec1"
   },
   "source_binding": {
     "path": "docs/specs/23-native-sdk-contract.md",

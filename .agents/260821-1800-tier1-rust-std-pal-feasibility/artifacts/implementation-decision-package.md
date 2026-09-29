@@ -7,7 +7,7 @@ Recommendation: **CONDITIONAL GO — PAL-IMPLEMENTATION-CHECKPOINT is unblocked 
 
 | Input manifest | SHA-256 | Inputs | State |
 |---|---|---:|---|
-| `artifacts/approval-input-manifest.json` | `ce30af20c1a7fea1a6533fd2c0cd1ae0dde89ed3c5d440a327f8cf03906ea594` | 106 | package, GetRandom technical backing, and PAL approvals verified; checkpoint unblocked |
+| `artifacts/approval-input-manifest.json` | `f33b902c0e38a19782d9d8d7785feda829e46fc2a91dbde8cf02e510b4a6a405` | 106 | package, GetRandom technical backing, and PAL approvals verified; checkpoint unblocked |
 
 The canonical manifest binds all six package plans, three upstream plans, six contracts including the hook/source map and governed GetRandom hostile-evidence report, 46 pinned Rust sources, nine other cited Cellos backing sources, the exact six-file kernel security-backing inventory, three hostile-evidence fixture sources, the hostile-evidence runner, eight benchmark sources, six tools, both tests, all eight fixtures, and both expected reports. It explicitly excludes itself, this decision record, and all approval/checkpoint records so those records can embed the manifest digest without a hash cycle. No individual digest substitution outside that manifest is an approval input.
 
@@ -36,7 +36,7 @@ Final verification passed 33/33 feasibility tests, 57/57 validator adversarial a
 | `BENCHMARK-CONTRACT-APPROVAL` | performance owner; independent measurement reviewer | GRANTED (APPROVED_FOR_LATER_IMPLEMENTATION_CHECKPOINT 2026-09-16) |
 | `PAL-IMPLEMENTATION-CHECKPOINT` | all six roles above plus umbrella Phase 03 production-gate owner | UNBLOCKED / CONDITIONAL GO (2026-09-16) |
 
-All six approval rows and the implementation checkpoint are ratified and bound to approval-input-manifest digest `ce30af20c1a7fea1a6533fd2c0cd1ae0dde89ed3c5d440a327f8cf03906ea594` as of 2026-09-16.
+All six approval rows and the implementation checkpoint are ratified and bound to approval-input-manifest digest `f33b902c0e38a19782d9d8d7785feda829e46fc2a91dbde8cf02e510b4a6a405` as of 2026-09-16.
 
 ## Non-Waivable Blockers and Risks
 
@@ -46,4 +46,4 @@ Umbrella Phase 03 design, external-floor, provenance, production integration, ho
 
 There is no PAL, target, runtime, private or published sysroot, target JSON, published triple, vendored Rust source, mlibc, live benchmark capture, authenticated evidence, promotion evidence, ledger entry, or Phase 06 completion. Synthetic fixture results cannot approve promotion.
 
-Digest re-bound 2026-09-29 under `PAL-IMPLEMENTATION-CHECKPOINT` condition 6: covered inputs `kernel/Cargo.toml`, `kernel/src/task/syscall.rs`, `libs/api/src/abi/syscall.rs`, `libs/ostd/src/syscall.rs`, `libs/ostd/src/startup.rs` changed after the 2026-09-16 binding. This line records only the digest re-bind; it is not a new signer decision. Re-bound again the same day for `tests/rust-std-promotion/test_validator.py` and `test_validator_rejections.py`, which now resolve the pinned rust-src through the installed toolchain instead of the maintainer's absolute path (both files are pinned approval inputs).
+Digest re-bound 2026-09-29 under `PAL-IMPLEMENTATION-CHECKPOINT` condition 6: covered inputs `kernel/Cargo.toml`, `kernel/src/task/syscall.rs`, `libs/api/src/abi/syscall.rs`, `libs/ostd/src/syscall.rs`, `libs/ostd/src/startup.rs` changed after the 2026-09-16 binding. This line records only the digest re-bind; it is not a new signer decision. Re-bound a third time the same day for `.agents/260821-0642-app-tiers-completion/plan.md` and `phase-06-tier1-rust-std-pal.md`, whose Phase 06 text now records the bounded implementation (PAL, target specs, sysroot overlay, QEMU lane) while promotion and approvals stay blocked. Re-bound again the same day for `tests/rust-std-promotion/test_validator.py` and `test_validator_rejections.py`, which now resolve the pinned rust-src through the installed toolchain instead of the maintainer's absolute path (both files are pinned approval inputs).

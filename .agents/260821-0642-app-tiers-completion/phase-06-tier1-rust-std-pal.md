@@ -5,7 +5,7 @@
 
 ## Status
 
-**Pending — dependency-blocked on umbrella Phase 03.** The child feasibility sub-slice at [`../260821-1800-tier1-rust-std-pal-feasibility/plan.md`](../260821-1800-tier1-rust-std-pal-feasibility/plan.md) reached **FEASIBILITY PACKAGE VERIFIED / SECURITY BACKING AND HUMAN APPROVAL BLOCKED**. This verifies the inventory, contracts, compiler strategy, and synthetic-fixture validator only; it does not complete this phase or establish PAL, target, runtime, live-capture, readiness, promotion, or publication.
+**Implementation landed (bounded); qualification blocked.** The private target specs, the pure-Rust PAL, the sysroot overlay and the QEMU witness lane are in-tree (`targets/*-unknown-cellos.json`, `patches/rust-std-cellos.patch`, `scripts/build-cellos-sysroot.sh`, `scripts/run-std-smoke-qemu.sh riscv64`, plus the `rust-std-lane` CI job), and the acceptance ledger records Phase 06 as `IMPLEMENTED` on 2026-09-29 at exactly that boundary. Qualification is not established: the child feasibility sub-slice at [`../260821-1800-tier1-rust-std-pal-feasibility/plan.md`](../260821-1800-tier1-rust-std-pal-feasibility/plan.md) is fixture-only and non-promotional, `PAL-019`/`PAL-031` remain Deferred, the named human approval rows remain `NOT GRANTED`, and there is no live capture, published triple, readiness, promotion or publication.
 
 ## Overview
 Design G4 `rust-std` as pure-Rust PAL/custom target, not a new tier.
@@ -30,7 +30,7 @@ Inventory hooks; classify support; define identical syscall/IPC workloads; pin e
 
 ## Todo List
 - [ ] PAL/Unsupported map approved — the 27/27-module, 36-hook map is package-verified, but both applicable human approval rows remain `NOT GRANTED`.
-- [ ] Target feasible for implementation — the private in-tree PAL/source-overlay strategy is package-verified and conditionally recommended, but security backing, all named human approvals, and the implementation checkpoint remain blocked.
+- [ ] Target promoted — the private in-tree PAL/source-overlay strategy is implemented and exercised by the QEMU lane, but promotion still requires both security backings, every named human approval, and the umbrella Phase 03 production gates.
 - [ ] Compatibility matrix accepted — the fixture-only contract is package-verified and non-promotional; human benchmark approval remains `NOT GRANTED`, with no authenticated live capture.
 
 ## Success Criteria

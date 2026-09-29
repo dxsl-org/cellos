@@ -119,7 +119,7 @@ báo cáo ở `.agents/<plan>/`, cách làm ở `docs/guides/`. Chuỗi tiền l
 - [blocked] **Phase 06 trên ARM64**: synchronous TCG fault xảy ra trước guest probe; không hạ gate
   và không suy diễn PASS từ kết quả x86.
 - [blocked] **App Tiers completion** (item 17): cần phần cứng (RPi4b + secure controller riêng, hoặc
-  secure boot + remote CAS service). Tier 1 baseline [done], Tier 1 rust std [done]; Tier 3 [blocked].
+  secure boot + remote CAS service). Tier 1 baseline [done], Tier 1 rust std [done] (ledger: Phase 06 `IMPLEMENTED` 2026-09-29, promotion/approvals vẫn blocked); Tier 3 [blocked].
 - [blocked] **AI inference server demo = G2 Level A** (item 21): đường CPU [done] (`/bin/ai`,
   `service::AI = 15`, engine GGUF/Q8_0, oracle QEMU PASS, model 30 layer chạy trên host 3,97 tok/s);
   NPU RK3588 + P99 bound + front HTTP chờ board; **[owed]** Law 1 xác nhận 2 lần cho interface AI

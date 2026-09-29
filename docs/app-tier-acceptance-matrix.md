@@ -27,8 +27,12 @@ is `IMPLEMENTED` with its provenance and admission gate core; its external-floor
 is `IMPLEMENTED`. Phase 05 (Manifest-v2 tooling) is `IMPLEMENTED`; its record
 is the same event that carried the second re-base, because
 `scripts/app_tier_acceptance/ledger.py::baseline` permits `source_binding` to
-move only with a lifecycle transition. These lifecycle
-statuses do not change the qualification aggregate or C9 result.
+move only with a lifecycle transition. Phase 06 (Tier 1 rust-std PAL) is
+`IMPLEMENTED` at its bounded implementation boundary — the private target
+specs, PAL and sysroot overlay are exercised by the QEMU lane — while live
+benchmark evidence, `PAL-019`/`PAL-031` approval, promotion and publication
+remain blocked. These lifecycle statuses do not change the qualification
+aggregate or C9 result.
 
 All current source availability and exact cell text remain in the JSON ledger.
 No `PASS` capability is seeded: physical RPi3 qualification, Tier-2 admission,

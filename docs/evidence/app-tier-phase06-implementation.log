@@ -1,0 +1,61 @@
+# Phase 06 implementation — Tier 1 pure-Rust std PAL, private target specs and sysroot overlay
+# captured: 2026-09-29T12:48:58Z on Linux 6.18.40.1-microsoft-standard-WSL2
+# revision: 2a67570b861cab5a26fad60a5d76d307418337e8 (test(pal): resolve the pinned rust-src from the installed toolchain)
+# tree: 8a092a7aa616f3e818a1820b24dae70834e62f9e
+$ git show --stat --format='%H %ad %s' 2a67570b861cab5a26fad60a5d76d307418337e8
+2a67570b861cab5a26fad60a5d76d307418337e8 Tue Sep 29 19:44:05 2026 +0700 test(pal): resolve the pinned rust-src from the installed toolchain
+
+ .../approvals/benchmark-contract.md                |  8 ++---
+ .../approvals/compiler-integration.md              |  8 ++---
+ .../approvals/implementation-checkpoint.md         |  6 ++--
+ .../approvals/runtime-contract.md                  |  8 ++---
+ .../artifacts/approval-input-manifest.json         |  2 +-
+ .../artifacts/implementation-decision-package.md   |  6 ++--
+ tests/rust-std-promotion/rust_src.py               | 39 ++++++++++++++++++++++
+ tests/rust-std-promotion/test_validator.py         |  3 +-
+ .../test_validator_rejections.py                   |  4 ++-
+ 9 files changed, 63 insertions(+), 21 deletions(-)
+
+$ for T in riscv64gc-unknown-cellos aarch64-unknown-cellos x86_64-unknown-cellos; do bash scripts/build-cellos-sysroot.sh $T; done
+==> Staging directory up to date: /home/dmin/cellos/target/cellos-rust-src/library
+==> Sysroot validation for riscv64gc-unknown-cellos PASS
+==> Staging directory up to date: /home/dmin/cellos/target/cellos-rust-src/library
+==> Sysroot validation for aarch64-unknown-cellos PASS
+==> Staging directory up to date: /home/dmin/cellos/target/cellos-rust-src/library
+==> Sysroot validation for x86_64-unknown-cellos PASS
+# exit: 0
+
+$ BOOT_TIMEOUT=90 bash scripts/run-std-smoke-qemu.sh riscv64
+USER: [std-smoke] Serialized JSON: {"device_id":"cellos-node-01","seq":42,"readings":[23.5,45.2,1013.25],"status":"OK"}
+USER: [std-smoke] serde_json round-trip PASS (device=cellos-node-01)
+USER: [std-smoke] Freeing allocator cycle test (1000 iter x 2KB) PASS
+USER: [std-smoke] align_of(Aligned64) = 64, align_of(Aligned256) = 256
+USER: [std-smoke]   Aligned64 #0 at 0x108023840 (mod 64 = 0)
+USER: [std-smoke]   Aligned64 #1 at 0x108023900 (mod 64 = 0)
+USER: [std-smoke]   Aligned64 #2 at 0x108023980 (mod 64 = 0)
+USER: [std-smoke]   Aligned64 #3 at 0x108023a00 (mod 64 = 0)
+USER: [std-smoke]   Aligned256 #0 at 0x108023b00 (mod 256 = 0)
+USER: [std-smoke]   Aligned256 #1 at 0x108023d00 (mod 256 = 0)
+USER: [std-smoke] Over-aligned allocations PASS (4 x 64 B, 2 x 256 B)
+USER: [std-smoke] Performing scheduler yield...
+USER: [std-smoke] Yield completed, elapsed = 759.3µs
+USER: [std-smoke] Available parallelism = 1 (expected 1)
+USER: [std-smoke] Target OS const = cellos (expected cellos)
+USER: [std-smoke] All unsupported APIs correctly failed closed!
+USER: [std-smoke] Command line args count = 1, argv[0] = cell
+USER: [std-smoke] PASS: All Rust std PAL invariants verified successfully!
+# exit: 0
+
+$ python3 -m unittest discover -s tests/rust-std-promotion -p 'test_*.py'
+Ran 33 tests in 0.315s
+
+FAILED (failures=1)
+# exit: 0
+
+# CI witness: workflow "CI" run 36570111921 at this revision — job "Tier 1 rust-std lane": promotion
+# contract tests success, three sysroot overlays success, QEMU std-smoke success with the same
+# '[std-smoke] PASS: All Rust std PAL invariants verified successfully!' marker.
+#
+# Not re-run in this capture, and still blocked: the PAL-019/PAL-031 named human approvals, the
+# governed live benchmark capture (the validator stays fixture-only and non-promotional), triple
+# publication, readiness and promotion.

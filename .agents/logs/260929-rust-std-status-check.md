@@ -128,3 +128,26 @@ Verification: `scripts/validate-app-tier-acceptance.py docs/app-tier-acceptance-
 C9=NOT_COMPLETE`; `python3 -m unittest discover -s tests/app-tier-acceptance` → 81/81 OK.
 The ratified matrix digest (`f742a6ec…`) is unchanged, which is the property the schema-v5
 design requires of an amendment.
+
+## Phase 06 recorded (2026-09-29, owner decision)
+
+The owner asked whether Phase 06 could be completed too. Mechanically yes — a `lifecycle_transition`
+PLANNED -> IMPLEMENTED is one adjacent step and needs no binding change — but the phase's own
+documents said "Pending — dependency-blocked" and its success criteria require a live benchmark
+(>=30 repetitions per promoted cell) plus named approvals, so the claim had to be scoped. The owner
+chose the bounded form: record the implementation, keep qualification open, and correct the docs.
+
+Event 13 records Phase 06 `IMPLEMENTED` with `docs/evidence/app-tier-phase06-implementation.log`
+(three sysroot overlays PASS, QEMU std-smoke PASS with the over-aligned witnesses, promotion suite
+33/33, plus CI run 36570111921 where the new `rust-std-lane` is green at `2a67570b8`) and
+`patches/rust-std-cellos.patch` as the bound artifact; `implementation.revision = 2a67570b8`.
+
+What stays explicitly blocked, in the ledger text and the docs: the validator remains fixture-only
+and non-promotional, PAL-019/PAL-031 remain `Deferred`, the named human approval rows remain
+`NOT GRANTED`, and there is no live capture, published triple, readiness or promotion — so `c9`
+stays `NOT_COMPLETE` and phases 07/08 stay `PLANNED`.
+
+Also landed: the CI lane's first run was red at the promotion-test step because two tests read the
+maintainer's absolute rust-src path from the pinned artifacts; `tests/rust-std-promotion/rust_src.py`
+now resolves it through the installed pinned toolchain (never a skip) and the two pinned test inputs
+were re-pinned. The Phase 06 plan/doc edits needed a third re-pin of the same manifest.

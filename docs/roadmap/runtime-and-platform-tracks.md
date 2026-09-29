@@ -114,4 +114,7 @@ correctly: the amendment landed at revision `fd3d12ae`, archived as
 ledger's `source_binding` was re-based onto it together with the Phase 05
 (Manifest-v2 tooling) `IMPLEMENTED` transition — the only carrier
 `scripts/app_tier_acceptance/ledger.py::baseline` allows. The amendment is prose
-only, so the ratified matrix digest is unchanged.
+only, so the ratified matrix digest is unchanged. The acceptance ledger records
+Phase 06 (Tier 1 rust-std PAL) as `IMPLEMENTED` on 2026-09-29 at the bounded
+implementation boundary; live benchmark evidence, `PAL-019`/`PAL-031` approval,
+promotion and publication remain blocked.
