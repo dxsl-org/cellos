@@ -325,7 +325,7 @@ test-hooks, so the next occurrence shows whether the entry was already wrong whe
 corrupted before `__trap_exit` consumed it. No blind fix was shipped: the SPSR=0 experiment below was
 tested and reverted.
 
-**An earlier hypothesis for the same frame, tested and refuted.** One hypothesis was tested and refuted: `__trap_exit` writes
+**An earlier hypothesis for the same frame, tested and refuted.** `__trap_exit` writes
 `spsr_el1 = 0` with the comment "EL0t", and in `SPSR.M[4:0]` that is AArch32 USR rather than AArch64
 EL0t (`0x10`), which would leave the core in Illegal Execution state — whose next instruction raises
 exactly `EC=0`/`ESR=0x2000000` with `SPSR=0`. Changing both `__trap_exit` paths to `0x10` (and the idle
@@ -333,9 +333,9 @@ context's `0x305` to `0x315`) **hung every boot** — 60 of 60 runs stopped at "
 a task" with the task's user-stack baseline at 0 bytes — so the zero is load-bearing for how this image
 enters its tasks and was reverted. The report itself is live and was observed doing its job: one run in
 ~30 now panics with `[aarch64] kernel trap …` instead of terminating a cell (24 further runs were
-clean), which is the outcome this arm's contract asks for. Next instrument if it matters: identify the
-*host* vector (sync/IRQ/SError) that raises it. Measured after the dispatcher fix: 20 of 20 two-hart
-runs green, no kernel-trap reports; 60 of 60 with the SPSR experiment, reverted. The production side was
+clean), which is the outcome this arm's contract asks for. Measured after the dispatcher fix: 20 of 20 two-hart
+runs green with no kernel-trap reports, then one occurrence reported as a kernel trap, then 24 clean;
+60 of 60 with the SPSR experiment, reverted. The production side was
 re-checked against the fix as well, since the arm it changes also covers a cell's alignment fault
 (EC 0x21/0x25): AArch64 production suite **11 of 11** (including the `-smp 2` row and the Tier-2
 domain-entry lanes) and the one-CPU test-hooks lane exit 0.
