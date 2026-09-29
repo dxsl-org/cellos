@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: "Account for all usable physical-memory regions"
-status: pending
+status: completed
 priority: P2
 effort: "split into map canonicalization and allocator migration"
 dependencies: [4]

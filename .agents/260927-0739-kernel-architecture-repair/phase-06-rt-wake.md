@@ -1,7 +1,7 @@
 ---
 phase: 6
 title: "Preempt promptly when IPC wakes an RT sender"
-status: pending
+status: completed
 priority: P2
 effort: "1 day"
 dependencies: [1]

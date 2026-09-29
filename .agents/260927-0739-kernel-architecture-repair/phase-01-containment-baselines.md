@@ -1,7 +1,7 @@
 ---
 phase: 1
 title: "Contain unsafe paths and establish behavioral baselines"
-status: pending
+status: completed
 priority: P1
 effort: "1 day"
 dependencies: []

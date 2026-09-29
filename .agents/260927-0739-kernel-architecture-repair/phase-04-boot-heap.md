@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "Reserve a proven contiguous boot heap"
-status: pending
+status: completed
 priority: P1
 effort: "1 day"
 dependencies: [1]

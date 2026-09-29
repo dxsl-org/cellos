@@ -1,7 +1,7 @@
 ---
 phase: 8
 title: "Run cross-architecture acceptance and correct architecture claims"
-status: pending
+status: in-progress
 priority: P1
 effort: "1 day plus hardware availability"
 dependencies: [2, 3, 4, 5, 6, 7]
