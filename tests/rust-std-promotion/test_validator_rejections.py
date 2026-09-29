@@ -14,6 +14,7 @@ from typing import Any, Callable
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
+import rust_src  # noqa: E402
 from rust_std_promotion import validator  # noqa: E402
 
 FIXTURES = ROOT / "tests/rust-std-promotion/fixtures"
@@ -168,8 +169,9 @@ class SchemaRejectionTests(unittest.TestCase):
         required_kernel_paths = set(support_map["kernel_security_backing_inventory"]["required_paths"])
         approval_kernel_paths = {entry["path"] for entry in manifest["inputs"] if entry["role"] == "kernel-security-backing-source"}
         self.assertEqual(approval_kernel_paths, required_kernel_paths)
+        rust_root = rust_src.resolve(manifest["source_roots"]["rust-src"])
         for entry in manifest["inputs"]:
-            path = Path(manifest["source_roots"]["rust-src"]) / entry["path"][11:] if entry["path"].startswith("rust-src://") else ROOT / entry["path"]
+            path = rust_root / entry["path"][11:] if entry["path"].startswith("rust-src://") else ROOT / entry["path"]
             self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(), entry["sha256"])
         digest = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
         for record in manifest["excluded_self_referential_records"][1:]:

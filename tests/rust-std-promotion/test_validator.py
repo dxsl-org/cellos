@@ -11,6 +11,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
+import rust_src  # noqa: E402
 from rust_std_promotion import validator  # noqa: E402
 
 FIXTURES = ROOT / "tests/rust-std-promotion/fixtures"
@@ -169,7 +170,7 @@ class ValidatorTests(unittest.TestCase):
     def test_hook_map_covers_every_pinned_sys_module(self) -> None:
         path = ROOT / ".agents/260821-1800-tier1-rust-std-pal-feasibility/artifacts/pal-hook-support-map.json"
         support_map = json.loads(path.read_text())
-        source_root = Path(support_map["toolchain"]["rust_src_root"])
+        source_root = rust_src.resolve(support_map["toolchain"]["rust_src_root"])
         lines = (source_root / "library/std/src/sys/mod.rs").read_text().splitlines()[2:30]
         declared = [line.strip().removeprefix("pub ").removeprefix("mod ").removesuffix(";") for line in lines if line.strip()]
         scoped = support_map["scope"]["sys_module_manifest"]
