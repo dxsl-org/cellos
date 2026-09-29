@@ -1535,6 +1535,17 @@ pub fn yield_cpu() {
                     asid,
                 );
                 complete_incoming_switch(hart_id);
+                // The incoming side of a completed switch is the proof a
+                // retirement asks for: the generation it is waiting on cannot be
+                // executing here any more, because this hart's outgoing context
+                // was saved before the switch. RV64 publishes this from its
+                // assembly switch boundary (`vi_context_switch_complete`); off
+                // RV64 this call is that publication, and without it a switching
+                // hart never answers the request — measured on a two-hart
+                // AArch64 boot: 598 `retirement pending` ticks with the hart
+                // switching between tasks (14 -> 4 -> 16) the whole time, and the
+                // retired generation's CellId blocking the grant pair.
+                smp::complete_retirement_switch(hart_id);
             }
         }
     }
