@@ -1,11 +1,8 @@
 # Cell-to-Cell Anywhere — Implementation Plan (v2, post red-team)
 
-**Portfolio status:** PARTIAL — foundation complete, integration blocked (D38, 2026-08-01)
+**Portfolio status:** SUPERSEDED (2026-09-27) — historical partial foundation; unfinished integration transferred to the [tier-aware plan](../260927-1100-c2c-anywhere-tier-aware/plan.md).
 
-> P00-P03 delivered contract and foundation modules, not an end-to-end remote runtime.
-> `dispatch`/remote forwarding and remote lookup remain incomplete. COMPLETE requires a
-> two-node oracle proving a remote call reaches the peer and returns without local fallback.
-> Spec 20 remains the Draft contract owner.
+> P00-P03 delivered foundation work at its recorded ceiling, **not** an end-to-end remote runtime. `dispatch`/remote forwarding and remote lookup were unfinished. Keep the prior tests and findings as history; no outstanding phase in this plan remains scheduled. Spec 20 is still a draft; the new Phase 01 owns its ratification gate. ADR-0008/0009 govern protected relay ownership and framing, rather than the legacy public-relay assumptions below.
 
 > **Red-team status:** REVISED 2026-06-24 — plan v1 blocked (4 STOP + 5 FATAL).
 > Full findings: `redteam-report.md`

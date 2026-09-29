@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "Reconcile and Complete Local Cell-to-Cell Runtime"
-status: blocked
+status: superseded
 priority: P1
 effort: "5d"
 dependencies: [1]
@@ -9,6 +9,8 @@ tier: thinking
 ---
 
 # Phase 04: Reconcile and Complete Local Cell-to-Cell Runtime
+
+> **Execution closure (2026-09-27):** Local fixture, single-guest and protocol-foundation evidence below remains at its recorded ceiling. The unfinished two-node relay/direct-LAN and restart criteria now belong to the [tier-aware C2C plan](../260927-1100-c2c-anywhere-tier-aware/plan.md), Phases 04–07; Tier-1/Tier-2 and guest boundaries belong to its Phases 01–02/09. This Phase 04 is no longer separately executable. The 2026-08-27 authority decision below is retained as history, not a second active owner.
 
 > **Required — deviation-log:** Record every decision, deviation, or surprise when it occurs. Escalate irreversible or public-contract changes.
 

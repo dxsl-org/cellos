@@ -294,14 +294,15 @@ the non-RV64 switch path never published (`complete_incoming_switch` does the sa
 user-copy-guard work but nothing called `complete_retirement_switch`; RV64 publishes it from its
 assembly boundary) — so a busy hart answered retirements only when it happened to go idle.
 
-**The two `tests/integration` lanes, now that a `disk_v3.img` exists in this checkout** (they used to skip
-for a missing artifact): both boot and fail for guest-artifact reasons, not kernel ones.
-`launch-profile` reports `snapshot: supervisor unavailable` from the guest shell, and
-`tier2-fault-isolation`'s five rows fail on the loader's capability check — the guest cells request
-`spawn: true` against a ceiling of `spawn: false` (`[loader] requested/ceiling/granted` in the log) — i.e.
-the disk's `POLICY.BIN`/cell set is stale against the current manifests. Reproduced with a kernel built
-from another working tree (not these commits), so it is not this plan's change; the lanes need the
-bootstrap disk regenerated.
+**The two `tests/integration` lanes.** With the hand-built `disk_v3.img` this checkout had, both booted
+and failed for guest-artifact reasons, not kernel ones: `launch-profile` reported `snapshot: supervisor
+unavailable` from the guest shell, and `tier2-fault-isolation`'s five rows were refused by the loader's
+capability check (`spawn: true` against a ceiling of `spawn: false`) — a stale `POLICY.BIN`/cell set.
+Both failures reproduced with a kernel built from another working tree, so neither was this plan's
+change. Regenerating the artifact with `scripts/gen-disk-ci.sh` (the script that exists for exactly
+these two lanes, and whose header says a hand-built disk fails "for image reasons, not code reasons")
+resolves both: `launch-profile` 1 passed / 0 failed and `tier2-fault-isolation` **5 passed / 0 failed**
+on the current tree.
 
 Also measured, deliberately not shipped: `reap_deferred_releases` documents that it touches
 `REAPER_ENTRIES_PER_CALL` entries per call, but `next_step()` always returned the queue *head* and the

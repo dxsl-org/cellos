@@ -96,10 +96,10 @@ it (PSCI over HVC) and corrected the plan bullets that still described the pre-w
   that the bug is a race with a window, not that the probe "fixed" anything.
 
 ## Next steps
-- Regenerate the bootstrap `disk_v3.img`: with one present, `launch-profile` fails on
-  `snapshot: supervisor unavailable` and `tier2-fault-isolation` on loader cap refusals
-  (`spawn: true` against a ceiling of `false`). Both reproduce with a kernel built outside these
-  commits, so they are artifact staleness, not kernel behaviour.
+- Done in this session: the bootstrap `disk_v3.img` is regenerated with `scripts/gen-disk-ci.sh`
+  (not built by hand — that was the whole problem: `launch-profile` saw `snapshot: supervisor
+  unavailable` and `tier2-fault-isolation` hit loader cap refusals). Both lanes are green on the
+  fresh disk: 1/1 and 5/5.
 - Phase 02's remaining items are hardware-gated and named: ASID-faithful invalidation witness (QEMU
   8.2.2 retires unrelated ASIDs), the x86 `INVPCID` instruction path (KVM only), and x86_64 second-hart
   bring-up.

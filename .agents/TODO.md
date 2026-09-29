@@ -38,71 +38,75 @@ báo cáo ở `.agents/<plan>/`, cách làm ở `docs/guides/`. Chuỗi tiền l
   TLS runtime (loader expose `PT_TLS` + block per-thread + offset `initial-exec`).
 - [open gap] **mlibc** chưa hoàn tất: checkout không có `third_party/mlibc/build*/libc.a`; thiếu
   `malloc`, `printf`, `free`, `clock_gettime`.
-- [open gap] **Tier 3**: Intel VMX chưa có
-  VMCS/world-switch hoàn chỉnh. Boot-to-shell ARM64 nghiêm ngặt cần KVM/phần cứng thật — QEMU-TCG
-  chỉ là machinery evidence.
-- [open bug] **Tier 3 x86 virtio-blk: request nhiều segment hỏng, nên `seg_max` chưa được quảng cáo.**
-  Bật `VIRTIO_BLK_F_SEG_MAX` (bất kỳ giá trị ≥ 2) làm guest đọc lại chính sector đó ra **zero** hoặc lỗi
-  I/O, trong khi device báo thành công. Đã loại trừ: batching của P1 (code cũ + `seg_max` cũng hỏng), độ
-  dài chain (`seg_max: 2` cũng hỏng), chain bị guard từ chối (không có dòng `reject descriptor-chain`),
-  indirect descriptor (feature không được quảng cáo), và đường di chuyển dữ liệu (đọc lại frame của
-  descriptor ngay sau scatter thấy đúng byte; không request nào kết thúc bằng `VIRTIO_BLK_S_IOERR`; ảnh
-  đĩa trên host vẫn còn dữ liệu). Nghi vấn còn lại: cách công bố completion của chain nhiều descriptor.
-  Đã thử và **không** phải nguyên nhân: `used.len` — báo `payload + 1` theo spec (đã giữ, lane vẫn xanh với
-  `seg_max` tắt) cũng không cứu được trường hợp nhiều segment.
-
-  Bug tách riêng đã sửa trong lúc truy: **ngân sách IPC của FLUSH** dùng chung mức cơ sở 200 tick vốn chỉ đủ
-  cho một round trip 4 KiB, nên một flush chậm-mà-đúng bị timeout và guest nhận `[hv-blk-host] request failed
-  type=4 sector=0 buffers=2 status=1` (dd `conv=fsync` báo `block-write`). Nay flush dùng
-  `chunk_timeout_ticks(VFS_GRANT_CHUNK)` và in lý do khi hỏng.
-
-  Hai dạng hỏng đã tách được, cả hai chỉ xuất hiện khi request lớn hơn 4 KiB:
-  (A) **VFS trả short read, và đã tìm ra vì sao**: `[hv-blk] VFS read response: GrantDone { bytes: 15360 }` cho
-  một request 64 KiB (offset 901120) ⇒ cell báo `status=1` ⇒ guest "I/O error, dev vda, sector 96". Truy vết
-  trong VFS cho thấy fatfs **tưởng `guest_disk.img` chỉ còn 850944 byte** trong khi file thật trên host là
-  16 777 216 byte: `[vfs-dbg] read_at EOF path=guest_disk.img offset=835584 total=15360 want=65536
-  believed_len=850944` — và `believed_len` đúng bằng `offset + total` của lần đọc, tức kích thước mà fatfs
-  thấy bị hạ theo vị trí (nghi đường `write`/`append` với "remove-then-create", hoặc fatfs cập nhật
-  directory entry sai sau các lần ghi in-place của `write_at`). Request 4 KiB không bao giờ đọc tới vùng đó
-  nên lane vẫn xanh; sửa chỗ hạ kích thước là hết dạng A. Bước kế: log kích thước fatfs thấy ngay sau mount
-  và sau mỗi `write_at` để bắt thời điểm nó tụt.
-  (B) **guest đọc phải một trang cache cũ, không phải device trả sai** — giả thuyết "nguồn dữ liệu/grant sai"
-  đã bị **rút lại**: trace từng lần gọi trong `scatter_to_guest` (`[hv-sc] gpa=… take=4096 got=4096`) và
-  `ReadGuestMemory` ngay sau đó cho thấy mọi write đều thành công vào đúng frame; các frame "toàn zero" ở
-  buffer 2..4 thực ra là **dữ liệu đúng** (file chỉ có marker 32 byte, phần còn lại zero). Bằng chứng phía
-  device: fixture nay `drop_caches` trước khi đọc marker. Với bản ship (không `seg_max`) cold read làm lane
-  xanh ổn định; nhưng **với `seg_max` bật thì cold read KHÔNG cứu được** — 2/2 run vẫn đỏ ở boot thứ hai và
-  không có dòng `[vfs] short read` nào, tức đó là chữ ký khác: device thật sự trả zero cho *một số* request
-  ngoài mẫu 12 request đã trace. Bước kế: trace **mọi** read của boot hỏng (một dòng/request, không giới hạn
-  budget) để tìm request có grant đúng marker mà guest vẫn thấy zero. Tầng block của VFS cũng đã loại: raw read trả "CELLOSE2" ở sector cluster đầu
-  (10114) và zero ở đuôi (đúng, đĩa rỗng), cache hit nhất quán.
+- [open gap] **Tier 3 hardware gate**: Intel VMX chưa có VMCS/world-switch hoàn chỉnh.
+  Boot-to-shell ARM64 nghiêm ngặt cần KVM/phần cứng thật — QEMU-TCG chỉ là machinery evidence.
+  RPi3 hiện **không** là đích Tier 3: `board-rpi3` vào EL2 thì chủ động `eret` xuống EL1 trước
+  `kmain`; `HypervisorCap` ARM chỉ mở khi `el2::is_el2()` và vCPU hiện chạy trực tiếp ở EL2.
+  Cortex-A53 có EL2 về mặt kiến trúc nhưng không thể dùng nguyên EL2-host/TGE path của repo;
+  không nâng quyền bằng cách bỏ EL1 handoff. Sau cổng QEMU, chọn board AMD SVM (backend x86 đã
+  có) hoặc thiết kế riêng đường ARM EL1-host + EL2 trampoline và kiểm chứng board ARM phù hợp.
+- [in-progress] **Tier 3 application evidence (Python trước, browser sau).** CPython 3 trong Alpine
+  256 MiB đã PASS 3/3 lượt QEMU-TCG 10.2.0: `scripts/qemu-x86-python-gate.sh` cài qua `apk` HTTPS,
+  chuyển JSON → CSV bằng `decimal`/`csv`, đối chiếu output và cho tiến trình Python thứ hai đọc nó.
+  128 MiB OOM tại bước cài package (apk bị kill); profile 256 MiB mới qua đúng đường lỗi này.
+  Job `qemu-x86-tier3-python` đã nối CI, nhưng chưa có kết quả hosted; nginx giữ làm regression
+  thứ hai trong cùng job, không làm cổng ứng dụng chính. Cổng **browser** còn mở: cần xác minh RAM,
+  virtio-gpu scanout, virtio-input và tương tác thực qua compositor, không suy từ việc device
+  model đã tồn tại. Python gate dùng đĩa volatile; độ bền qua reboot do lane VirtIO riêng chứng
+  minh, không phải do CSV tạm trong `/tmp`.
+  Sau khi bật `seg_max=2`, một ISO Python mới hết `BOOT_WINDOW=1000` sau DNS
+  mà chưa có `APK_PASS` (`build/tier3-python-segmax/`); bản này giấu log apk,
+  nên chưa biết download hay cài đặt dừng ở đâu, **không** quy cho block (guest
+  Python không hề probe virtio-blk). Bốn lượt sau với cửa sổ 1200 s PASS
+  (`build/tier3-python-segmax-retry/`, `build/tier3-python-nettrace{,-2,-3}/`);
+  hai pcap đầu ghi ~20 MiB TLS trả về trong 181/411 s, không chứa lần lỗi.
+  Fixture nay in tiến trình `apk` ra UART, runner hỗ trợ `QEMU_NET_CAPTURE`;
+  lần lỗi kế tiếp cần capture cùng thời điểm mới phân biệt CDN/SLIRP/guest.
+  Nginx secondary rebuild trên cây mới PASS (`build/tier3-nginx-segmax/`).
+  Lane persistence `scripts/qemu-x86-virtio-e2e.sh` PASS 5/5 trước profile mới
+  (`build/tier3-qemu-stability-1790640945358/`) và 10/10 trên cây hiện tại
+  (`build/tier3-stability-current-1790644936314/attempt-{1..10}/`): mỗi lượt dựng
+  đĩa 256 MiB mới, ghi + FLUSH guest, boot lại, đọc marker ở guest và host. Batch này
+  chạy trước khi bật `seg_max`; không tái hiện A/C/D, cũng không kiểm chứng B lúc đó.
+  Không coi 10/10 là chứng minh xác suất lỗi bằng zero hay là qualification board.
+  Dựng lại ISO persistence trong workdir riêng rồi chạy hai boot PASS
+  (`build/tier3-persistence-isolated/`); dựng ISO hostile riêng, 27/27 tình huống
+  + ghi recovery bền qua reset PASS (`build/tier3-hostile-current/`). Cả hai runner
+  không ghi đè `kernel/src/embedded-hv-x86/init` tracked; CI hosted chưa quan sát.
+  Sau khi bật `seg_max=2` và sửa vòng xử lý whole-chain, fixture mới kiểm thêm
+  payload 16 KiB cùng các sector kế bên phải giữ zero: fresh-build PASS và
+  15/15 lượt fresh-disk/two-boot PASS (`build/tier3-segmax-neighbor/`,
+  `build/tier3-segmax-soak-{1..15}/`); hostile 27/27 PASS (`build/tier3-hostile-segmax/`).
+- [open bug] **Tier 3 x86 persistent backend: A/C/D vẫn cần bằng chứng khi tái hiện.**
+  Lỗi `seg_max` (B) đã được tái hiện và sửa riêng, có trace đỏ/xanh trong `CHANGELOG.md`;
+  hai boot với marker và payload 16 KiB nay PASS khi quảng cáo tối đa hai data segment.
+  Những trường hợp dưới đây **không** được quy cho cùng nguyên nhân nếu không có trace.
+  (A) **VFS trả short read; nguồn sai kích thước chưa xác định**: `[hv-blk] VFS read response:
+  GrantDone { bytes: 15360 }` cho request 64 KiB ⇒ guest thấy I/O error. Lần trace trước, fatfs
+  thấy `guest_disk.img` dài 850944 byte ở offset 835584, trong khi file trên host là 16 777 216
+  byte. Log `[vfs] short read ... fatfs_size=...` nay ghi kích thước fatfs thấy khi lỗi xảy ra;
+  chưa chứng minh metadata trên đĩa, cache hay handle nào đã tạo ra sự khác biệt. Bước kế: đối
+  chiếu kích thước ở mount và sau `write_at` với directory entry trên host ở cùng boot.
 
   (C) **flush ngắt quãng thất bại ở tầng raw**: `[hv-blk] VFS flush failed: Ok(Err(1))` — VFS *trả lời*
   `Err(1)` (không phải timeout), tức `FatBackend::sync` → `blk_router::blk_flush()` phía ngoài trả false, kèm
   `[hv-blk-host] request failed type=4 … status=1`; guest `dd … conv=fsync` báo `block-write` dù dữ liệu đã
-  nằm trên đĩa (host-side marker check sau run1 vẫn PASS). Đã instrument completion loop của NVMe cell
-  (`[nvme] io error opc=…`): **5 lần chạy lane không tái hiện** (4 xanh, 1 đỏ vì lý do khác — xem (D)), nên cơ
-  chế còn là giả thuyết: `blk_flush()` xếp sau một block driver cell đang bận trả các read ngoài phạm vi
-  (mỗi cái bị retry 3 lần, ~1500–4000 vòng poll) nên VFS chờ quá lâu. Bước kế: log ở `blk_router::blk_flush`
-  (send/recv lỗi hay cell trả khác 0) rồi chạy tới khi tái hiện; nếu là timeout thì retry có biên cho flush.
+  nằm trên đĩa (host-side marker check sau run1 vẫn PASS). NVMe cell đã log lỗi completion; VFS
+  `blk_router::blk_flush` đã phân biệt lỗi recv với cell trả khác 0. Trong batch 5 lượt trước lỗi
+  flush không tái hiện (4 xanh, 1 đỏ vì (D)); batch mới 5/5 xanh. Cơ chế "driver bận retry các
+  read ngoài phạm vi" vẫn chỉ là giả thuyết. Bước kế: thu log cả hai tầng ngay khi tái hiện rồi
+  sửa đúng nhánh thất bại; không thêm retry khi chưa phân loại được nguyên nhân.
 
   (D) **flaky boot phía Cellos**: 1/5 run đỏ với `FAIL: evidence rdinit was not selected in run 1` — guest
-  evidence chưa được chọn, tức boot Cellos không đi tới bước đó (khác hẳn A/B/C). Chưa điều tra.
+  evidence chưa được chọn, tức boot Cellos không đi tới bước đó (khác A/C). Chưa điều tra.
 
-  (B, chốt phía nào) **Đã trace MỌI read tại offset 0 của boot hỏng** (5 lần giao, gồm cả request 16 KiB
-  nhiều descriptor): `[hv-r0] bufs=4 total=16384 chunk=16384 grant=[67,…] frame0=[67,…] got=8` — device giao
-  **đúng marker** vào frame của descriptor ở mọi lần, kể cả khi guest đọc với page cache đã xoá. ⇒ Điểm lệch
-  nằm **trong guest**, không phải phía VMM: page mà guest đọc không phải page mà descriptor trỏ tới (hoặc
-  guest zero nó sau khi nhận completion). Bước kế: instrument phía guest — in địa chỉ vật lý của page mà
-  bio/page-cache dùng, đối chiếu với `gpa` trong descriptor.
 
   Ghi chú: các `[nvme] io error opc=2 lba=800000…1062144 status=16512` xuất hiện đều đặn là **đúng** — read
   vượt quá namespace 256 MiB (do probe volume + chuỗi cluster đi lạc); log giới hạn 3 dòng mỗi boot, timeout
   luôn log.
 
-  Bằng chứng + lý do khoá feature nằm tại `cells/services/hypervisor/src/virtio_blk.rs` (`config_read`).
-  Fixture e2e nay đọc marker với page cache đã xoá (`drop_caches`), để device trả sai không bị cache che.
-  Lane tái hiện: `scripts/qemu-x86-virtio-e2e.sh` (đỏ khi bật, xanh khi tắt).
+  Fixture e2e xoá page cache trước khi đọc marker; bản mới kiểm cả payload 16 KiB
+  sau flush và reboot. Lane: `scripts/qemu-x86-virtio-e2e.sh`.
 
 ## Blocked (chờ phần cứng hoặc governance)
 - [blocked] **SDK relay client mutual TLS**: chỉ đường relay hai real-broker này bị chặn bởi các entry

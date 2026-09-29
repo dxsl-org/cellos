@@ -1,7 +1,7 @@
 # Cellos plan portfolio
 
 **Status:** Canonical scheduling index
-**Updated:** 2026-09-25 (B0 actor/supervisor program promoted; cap-revocation and portability closures recorded)
+**Updated:** 2026-09-27 (kernel-repair/C2C concurrency boundary recorded; C2C implementation remains queued)
 
 This file owns scheduling intent. Source/tests own implementation truth; individual plan
 files preserve detailed scope and provenance. Untouched checkboxes are not proof that code
@@ -34,8 +34,9 @@ verification-only closure that opens no new feature program.
 - **Trust & Identity program** (one portfolio group, separate child plans):
   - `260712-1900-manifest-v2` — P00-P02 complete; P03 deferred.
   - `260712-1902-dice-attestation-identity` — P00 complete; P01-P05 queued.
-- `260624-cell-to-cell-anywhere` — partial; foundation complete, integration blocked.
-  Promotion requires a two-node remote-call oracle and Spec 20 ratification gates.
+- `260927-1100-c2c-anywhere-tier-aware` — [queued implementation plan](260927-1100-c2c-anywhere-tier-aware/plan.md); Phase 01 contract ratification and Law-1 approvals before ABI work, with relay Phases 04–06 blocked on independent protected authority evidence. Native local/remote, async, Tier-1 fastpath and Tier-3 guest have distinct capability gates. WIP promotion requires this portfolio rule; no remote route is enabled by queuing the plan.
+
+  Scheduling agreement (2026-09-27): C2C Phase 01 may proceed in parallel **only as contract inventory, drafting, review and non-activating evidence preparation**. Inventory and [Spec 20 Draft v3](../docs/specs/20-unified-ipc-contract.md) are prepared; Phase 01 waits for kernel-owner review of local binding and contract/ABI decisions. Its replay design also requires a protected nonrollback source incarnation or a separately ratified alternative: current beacon uptime is not such a source. This does not promote C2C implementation, ratify Spec 20, approve an ABI or enable remote operation. Kernel architecture repair retains sole ownership of overlapping kernel/syscall/domain/grant/scheduler files until its applicable gates pass and ownership is handed off. Promote C2C implementation through the rule below in the same portfolio change; serialize overlapping edits and verification.
 - `260605-1406-phase28-wasm-cells-epmp` — partial/suspect: WASM crates are present but
   retain-vs-remove and runtime qualification are unresolved; ePMP is M-mode-blocked.
 - Per-request server scale (D5) — accepted goal, WIP-limited behind Midori. Promotion requires
@@ -88,6 +89,9 @@ verification-only closure that opens no new feature program.
   `260801-d26-d33-rulings` — decision/documentation records complete.
 
 ## Superseded / retired
+
+- `260624-cell-to-cell-anywhere` — superseded 2026-09-27; P00–P03 historical partial foundation only, integration not delivered.
+- `260819-1409-cell-to-cell-anywhere-core` — superseded 2026-09-27; completed local-only evidence retained, remaining phases replaced by `260927-1100-c2c-anywhere-tier-aware`.
 
 - `260608-1451-viui-next-phases`, `260609-0601-viui-g2`, and
   `260608-1227-viui-embedded-robot-readiness` — superseded by the closed ViUI record and

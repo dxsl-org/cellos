@@ -1,7 +1,7 @@
 ---
 title: "Cell-to-Cell Anywhere Core Recovery Plan"
 description: "Supersede the blocked 260624 plan with a relay-first, typed endpoint architecture across local, LAN, and remote."
-status: blocked
+status: superseded
 priority: P1
 effort: 33
 branch: main
@@ -10,6 +10,8 @@ created: 2026-08-19
 ---
 
 # Cell-to-Cell Anywhere Core Recovery Plan
+
+> **Portfolio closure (2026-09-27):** Superseded by the [tier-aware staged plan](../260927-1100-c2c-anywhere-tier-aware/plan.md). Completed P01/P03/P04 and the local-only Phase-05 evidence remain historical at their original ceilings. Unfinished P02/P05/P06-P09 execution is transferred to the new gates; this is **not** a remote-oracle, hardware or production completion claim. Existing phase checkboxes and external blockers are retained for provenance, not active scheduling.
 
 Recovery plan: supersedes `.agents/260624-cell-to-cell-anywhere/` without editing it. The required `c2c-broker-oracle-single-guest-local-runtime` CI job records only a single-guest local-runtime QEMU oracle; this plan makes no two-node relay, direct-LAN, remote in-flight restart/failover, hardware, production, or completion claim.
 

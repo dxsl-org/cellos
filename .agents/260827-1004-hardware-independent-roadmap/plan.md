@@ -30,7 +30,7 @@ Estimated implementation total is 36.5d for one pass through every phase, includ
 | 01 | [Cut over roadmap dependency model](./phase-01-roadmap-dependency-cutover.md) | ready | contract | — |
 | 02 | [Close hardware-independent security defects](./phase-02-security-prerequisite-closure.md) | governance-gated | host | 01 |
 | 03 | [Define the next QEMU desktop and SDK slice](./phase-03-desktop-sdk-qemu-lane.md) | scope-gated | qemu | 01 |
-| 04 | [Reconcile and complete local Cell-to-Cell runtime](./phase-04-local-c2c-runtime.md) | scope-gated | host | 01 |
+| 04 | [Historical local C2C slice — unfinished remote execution superseded](./phase-04-local-c2c-runtime.md) by [tier-aware C2C plan](../260927-1100-c2c-anywhere-tier-aware/plan.md) | superseded; no parallel implementation owner | single-guest local QEMU evidence only | — |
 | 05 | [RPi3 HDMI software boundary — completed](./phase-05-rpi3-hdmi-software-gate.md) | ready | host | 01 |
 | 06 | [Build Tier 3 hostile QEMU runners](./phase-06-tier3-qemu-evidence.md) | scope-gated | qemu | 01 |
 | 07 | [Authenticate software evidence pipeline](./phase-07-authenticated-evidence-pipeline.md) | ready | host | 01 |
@@ -42,7 +42,7 @@ Canonical axes: `execution_class ∈ {ready, scope-gated, contract-gated, govern
 
 ## Dependency Graph
 
-`01 → {02,03,04,05,06,07,08}; {01,06} → 09; {01,06,09} → 10`. Phase 05 completed its `kernel/src/task/syscall.rs` work and handed ownership to Phase 02. Phase 06 first freezes scenario matrices, guest probes, and runners without production edits. Phase 09 then owns the shared persistent block backend and must pass those scenarios; Phase 10 owns x86 transport integration and must pass the same runners. Phase 07 owns evidence schema; Phase 08 owns roll-up status. No all-lanes join gate exists.
+`01 → {02,03,05,06,07,08}; {01,06} → 09; {01,06,09} → 10`. Phase 04's historical local C2C evidence remains here, but its unfinished execution was superseded by the tier-aware C2C plan and is not an active edge. Phase 05 completed its `kernel/src/task/syscall.rs` work and handed ownership to Phase 02. Phase 06 first freezes scenario matrices, guest probes, and runners without production edits. Phase 09 then owns the shared persistent block backend and must pass those scenarios; Phase 10 owns x86 transport integration and must pass the same runners. Phase 07 owns evidence schema; Phase 08 owns roll-up status. No all-lanes join gate exists.
 
 ## Ownership Matrix
 
