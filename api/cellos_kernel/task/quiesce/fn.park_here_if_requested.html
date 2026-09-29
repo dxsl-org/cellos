@@ -1,0 +1,45 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Observe an outstanding park request on `hart` and, if there is one, stop this hart at the trap path until the requester releases it."><title>park_here_if_requested in cellos_kernel::task::quiesce - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="cellos_kernel" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.0-nightly (f53b654a8 2026-04-30)" data-channel="nightly" data-search-js="search-b5634cc7.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../static.files/storage-41dd4d93.js"></script><script defer src="sidebar-items.js"></script><script defer src="../../../static.files/main-aa4d37ac.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"></head><body class="rustdoc fn"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">park_here_if_requested</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../cellos_kernel/index.html">cellos_<wbr>kernel</a><span class="version">0.2.1</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">park_<wbr>here_<wbr>if_<wbr>requested</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#why-the-trap-path-is-the-safe-point" title="Why the trap path is the safe point">Why the trap path is the safe point</a></li><li><a href="#the-acknowledgement" title="The acknowledgement">The acknowledgement</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="index.html">In cellos_<wbr>kernel::<wbr>task::<wbr>quiesce</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../index.html">cellos_kernel</a>::<wbr><a href="../index.html">task</a>::<wbr><a href="index.html">quiesce</a></div><h1>Function <span class="fn">park_<wbr>here_<wbr>if_<wbr>requested</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../src/cellos_kernel/task/quiesce.rs.html#505-565">Source</a> </span></div><pre class="rust item-decl"><code>pub fn park_here_if_requested(hart: usize) -&gt; <a class="enum" href="enum.ParkOutcome.html" title="enum cellos_kernel::task::quiesce::ParkOutcome">ParkOutcome</a></code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Observe an outstanding park request on <code>hart</code> and, if there is one, stop this
+hart at the trap path until the requester releases it.</p>
+<p>This is the target half of <a href="trait.QuiesceHarts.html" title="trait cellos_kernel::task::quiesce::QuiesceHarts"><code>QuiesceHarts</code></a> on RV64. It is called from
+<code>task::vi_timer_tick</code>, i.e. from the S-mode trap handler, for every trap —
+the timer tick that every online hart already takes every 10 ms, and the
+requester’s IPI, which is what reaches a hart that is otherwise idle in <code>wfi</code>.</p>
+<h2 id="why-the-trap-path-is-the-safe-point"><a class="doc-anchor" href="#why-the-trap-path-is-the-safe-point">§</a>Why the trap path is the safe point</h2>
+<ol>
+<li><strong>Every hart passes it.</strong> The timer is armed on every hart and an IPI is
+taken by a hart in <code>wfi</code> (interrupts are enabled there), so a request
+cannot be answered only by an already-cooperating hart.</li>
+<li><strong>No kernel lock is held.</strong> A trap is only taken with <code>sstatus.SIE</code> set,
+and <code>crate::sync::Spinlock</code> clears <code>SIE</code> for the whole life of its guard —
+so the interrupted context cannot be inside <code>SCHEDULER</code>,
+<code>FRAME_ALLOCATOR</code> or any other kernel spin lock, and those locks (which
+the requester’s own path needs) are guaranteed free. The trap handler takes
+no lock before this call: it is placed ahead of <code>tick()</code>, the console poll
+and <code>yield_cpu()</code>.</li>
+<li><strong>No frame allocation is in flight</strong>, for the same reason —
+<code>FRAME_ALLOCATOR</code> is a <code>crate::sync::Spinlock</code>, so an interrupted context
+cannot be inside it.</li>
+<li><strong>Able to resume.</strong> The vector’s trap frame already holds the interrupted
+context in full; leaving the loop returns through the handler and <code>sret</code>
+restores the same registers, stack and privilege level. Nothing in the
+scheduler moved, so no switch bookkeeping has to be repaired.</li>
+<li><strong>It stays stopped.</strong> <code>SIE</code> is clear for the whole trap, so a parked hart
+takes no further trap and cannot run any code but this loop until it is
+released.</li>
+</ol>
+<p>The residual is stated rather than papered over: <code>SIE</code>-set kernel code that
+<em>allocates</em> holds the heap’s <code>spinning_top</code> lock, which does <strong>not</strong> mask
+interrupts, so a park can land on a hart holding that lock (the reachable RV64
+cases are the boot path and a cooperative <code>yield_cpu</code> caller). The requester
+must therefore not allocate while it holds the guard, and the requester’s own
+bounded wait is what keeps a mistake here from becoming a hang.</p>
+<h2 id="the-acknowledgement"><a class="doc-anchor" href="#the-acknowledgement">§</a>The acknowledgement</h2>
+<p>The hart publishes <a href="static.PARK_ACK.html" title="static cellos_kernel::task::quiesce::PARK_ACK"><code>PARK_ACK</code></a> <em>before</em> it stops and with a release store,
+and it cannot take a trap between that store and the loop, so a requester that
+observes the acknowledgement knows the hart is not running anything else.
+Publishing after the loop instead would claim a park that had already been
+missed — the epoch could be released before the store landed.</p>
+<p>The loop exits when <a href="static.PARK_RELEASE.html" title="static cellos_kernel::task::quiesce::PARK_RELEASE"><code>PARK_RELEASE</code></a> reaches the parked epoch. It is bounded
+twice over (<code>PARK_ABANDON_TICKS</code>, <code>PARK_SPIN_LIMIT</code>) because the requester
+may be gone; an abandoned park is logged rather than left as a hang.</p>
+</div></details></section></div></main></body></html>

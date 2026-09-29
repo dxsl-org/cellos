@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["flush_page","flush_range"]};
+window.SIDEBAR_ITEMS = {"enum":["FlushAckError"],"fn":["await_remote_invalidation","confirm_tag_invalidation","counter_now","flush_page","flush_range","flush_tag_local","issue_remote_tag_flushes","local_tag_flush","reissue_tag_invalidation","remote_tag_flushes_outstanding","tag_invalidation_outstanding","tag_probe_ticks"]};

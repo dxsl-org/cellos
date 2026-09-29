@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["DomainTransition"],"struct":["DomainRef","SwitchPlan"]};
+window.SIDEBAR_ITEMS = {"enum":["DomainTransition"],"fn":["kernel_root_tuple","root_tuple"],"struct":["DomainRef","SwitchPlan"]};

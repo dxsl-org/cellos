@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["SECTOR_SIZE"],"struct":["BlockStream","CachedBlockStream"]};
+window.SIDEBAR_ITEMS = {"constant":["RAW_IO_ATTEMPTS","SECTOR_SIZE"],"struct":["BlockStream","CachedBlockStream"]};

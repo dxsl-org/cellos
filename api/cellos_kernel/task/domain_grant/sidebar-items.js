@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["DomainGrantError","DomainGrantState"],"struct":["DomainGrant"]};
+window.SIDEBAR_ITEMS = {"enum":["DomainGrantError","DomainGrantState"],"fn":["rights_for"],"struct":["DomainGrant","DomainReceiver"]};

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["MAX_CACHE_BYTES"],"struct":["CachedSector","PageCache"]};
+window.SIDEBAR_ITEMS = {"constant":["EVICT_DENOMINATOR","EVICT_NUMERATOR","MAX_CACHE_BYTES"],"struct":["CachedSector","PageCache"]};

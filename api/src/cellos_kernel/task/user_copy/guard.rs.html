@@ -218,18 +218,22 @@
 <a href=#218 id=218 data-nosnippet>218</a>/// rewind — by loading from a kernel-linear alias of an unmapped physical
 <a href=#219 id=219 data-nosnippet>219</a>/// hole inside an armed window. Returns whether the landing pad reported the
 <a href=#220 id=220 data-nosnippet>220</a>/// recovered fault and cleared its own resume slot.
-<a href=#221 id=221 data-nosnippet>221</a></span><span class="attr">#[cfg(feature = <span class="string">"test-hooks"</span>)]
-<a href=#222 id=222 data-nosnippet>222</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>forced_guard_fault_recovers_for_test(hole_pa: usize) -&gt; bool {
-<a href=#223 id=223 data-nosnippet>223</a>    <span class="kw">use </span><span class="kw">crate</span>::memory::paging::PAGE_SIZE;
-<a href=#224 id=224 data-nosnippet>224</a>    <span class="kw">let </span>hole_va = <span class="kw">crate</span>::memory::frame::phys_to_virt(hole_pa);
-<a href=#225 id=225 data-nosnippet>225</a>    <span class="kw">let </span><span class="kw-2">mut </span>sink = [<span class="number">0u8</span>; <span class="number">8</span>];
-<a href=#226 id=226 data-nosnippet>226</a>    <span class="kw">let </span>window = GuardWindow::arm(hole_va, hole_va + PAGE_SIZE);
-<a href=#227 id=227 data-nosnippet>227</a>    <span class="kw">let </span>hart = <span class="kw">unsafe </span>{ hart_local::current_hart() };
-<a href=#228 id=228 data-nosnippet>228</a>    <span class="kw">let </span>slot = <span class="macro">core::ptr::addr_of!</span>(hart.user_copy_guard_resume_pc) <span class="kw">as </span><span class="kw-2">*mut </span>usize;
-<a href=#229 id=229 data-nosnippet>229</a>    <span class="comment">// SAFETY: the window is armed around the call; the load faults on purpose
-<a href=#230 id=230 data-nosnippet>230</a>    // and recovery resumes at the landing pad without writing `sink`.
-<a href=#231 id=231 data-nosnippet>231</a>    </span><span class="kw">let </span>failed = <span class="kw">unsafe </span>{ guarded_byte_copy(hole_va <span class="kw">as </span><span class="kw-2">*const </span>u8, sink.as_mut_ptr(), <span class="number">8</span>, slot) };
-<a href=#232 id=232 data-nosnippet>232</a>    drop(window);
-<a href=#233 id=233 data-nosnippet>233</a>    failed == <span class="number">1 </span>&amp;&amp; hart.user_copy_guard_resume_pc.load(Ordering::Acquire) == <span class="number">0
-<a href=#234 id=234 data-nosnippet>234</a></span>}
+<a href=#221 id=221 data-nosnippet>221</a></span><span class="attr">#[cfg(all(
+<a href=#222 id=222 data-nosnippet>222</a>    feature = <span class="string">"native-domains"</span>,
+<a href=#223 id=223 data-nosnippet>223</a>    feature = <span class="string">"test-hooks"</span>,
+<a href=#224 id=224 data-nosnippet>224</a>    target_arch = <span class="string">"riscv64"
+<a href=#225 id=225 data-nosnippet>225</a></span>))]
+<a href=#226 id=226 data-nosnippet>226</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>forced_guard_fault_recovers_for_test(hole_pa: usize) -&gt; bool {
+<a href=#227 id=227 data-nosnippet>227</a>    <span class="kw">use </span><span class="kw">crate</span>::memory::paging::PAGE_SIZE;
+<a href=#228 id=228 data-nosnippet>228</a>    <span class="kw">let </span>hole_va = <span class="kw">crate</span>::memory::frame::phys_to_virt(hole_pa);
+<a href=#229 id=229 data-nosnippet>229</a>    <span class="kw">let </span><span class="kw-2">mut </span>sink = [<span class="number">0u8</span>; <span class="number">8</span>];
+<a href=#230 id=230 data-nosnippet>230</a>    <span class="kw">let </span>window = GuardWindow::arm(hole_va, hole_va + PAGE_SIZE);
+<a href=#231 id=231 data-nosnippet>231</a>    <span class="kw">let </span>hart = <span class="kw">unsafe </span>{ hart_local::current_hart() };
+<a href=#232 id=232 data-nosnippet>232</a>    <span class="kw">let </span>slot = <span class="macro">core::ptr::addr_of!</span>(hart.user_copy_guard_resume_pc) <span class="kw">as </span><span class="kw-2">*mut </span>usize;
+<a href=#233 id=233 data-nosnippet>233</a>    <span class="comment">// SAFETY: the window is armed around the call; the load faults on purpose
+<a href=#234 id=234 data-nosnippet>234</a>    // and recovery resumes at the landing pad without writing `sink`.
+<a href=#235 id=235 data-nosnippet>235</a>    </span><span class="kw">let </span>failed = <span class="kw">unsafe </span>{ guarded_byte_copy(hole_va <span class="kw">as </span><span class="kw-2">*const </span>u8, sink.as_mut_ptr(), <span class="number">8</span>, slot) };
+<a href=#236 id=236 data-nosnippet>236</a>    drop(window);
+<a href=#237 id=237 data-nosnippet>237</a>    failed == <span class="number">1 </span>&amp;&amp; hart.user_copy_guard_resume_pc.load(Ordering::Acquire) == <span class="number">0
+<a href=#238 id=238 data-nosnippet>238</a></span>}
 </code></pre></div></section></main></body></html>

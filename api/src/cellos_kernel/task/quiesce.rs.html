@@ -1,0 +1,1452 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `kernel/src/task/quiesce.rs`."><title>quiesce.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="cellos_kernel" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.0-nightly (f53b654a8 2026-04-30)" data-channel="nightly" data-search-js="search-b5634cc7.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../static.files/storage-41dd4d93.js"></script><script defer src="../../../static.files/src-script-813739b1.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-aa4d37ac.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">cellos_kernel/task/</div>quiesce.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-4"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! All-hart quiescence for the snapshot capture preflight.
+<a href=#2 id=2 data-nosnippet>2</a>//!
+<a href=#3 id=3 data-nosnippet>3</a>//! A capture reads the *whole* memory image and writes it to the block device,
+<a href=#4 id=4 data-nosnippet>4</a>//! so no other hart may run kernel code that mutates that image while it is
+<a href=#5 id=5 data-nosnippet>5</a>//! staged: the format cannot detect bytes that changed between the read and the
+<a href=#6 id=6 data-nosnippet>6</a>//! block write (phase 07 step 3). This module is the device-independent half of
+<a href=#7 id=7 data-nosnippet>7</a>//! the protocol — request every online hart to park at a safe point, collect a
+<a href=#8 id=8 data-nosnippet>8</a>//! per-hart acknowledgement, wait a *bounded* time, verify the all-parked
+<a href=#9 id=9 data-nosnippet>9</a>//! predicate, and release the harts again.
+<a href=#10 id=10 data-nosnippet>10</a>//!
+<a href=#11 id=11 data-nosnippet>11</a>//! # Fail-closed contract
+<a href=#12 id=12 data-nosnippet>12</a>//!
+<a href=#13 id=13 data-nosnippet>13</a>//! [`QuiesceState::acquire`] returns `Ok` only when every online hart other
+<a href=#14 id=14 data-nosnippet>14</a>//! than the requester has acknowledged the request *and* the predicate
+<a href=#15 id=15 data-nosnippet>15</a>//! re-verifies at that instant. It never reports success on a timeout, never
+<a href=#16 id=16 data-nosnippet>16</a>//! releases a hart it did not park, and never blocks the requester on itself
+<a href=#17 id=17 data-nosnippet>17</a>//! (the requester is excluded from the target set, so its own
+<a href=#18 id=18 data-nosnippet>18</a>//! acknowledgement can never be required). Every failure path calls the
+<a href=#19 id=19 data-nosnippet>19</a>//! idempotent [`Guard::release`], which restores the pre-request state — each
+<a href=#20 id=20 data-nosnippet>20</a>//! requested hart is released, including one that never acknowledged, whose
+<a href=#21 id=21 data-nosnippet>21</a>//! outstanding request is cancelled — and frees the single-flight claim so a
+<a href=#22 id=22 data-nosnippet>22</a>//! later capture can try again. A `Drop` impl runs the same release on the
+<a href=#23 id=23 data-nosnippet>23</a>//! unwind and on the success path, so the harts are unparked after the capture
+<a href=#24 id=24 data-nosnippet>24</a>//! finishes.
+<a href=#25 id=25 data-nosnippet>25</a>//!
+<a href=#26 id=26 data-nosnippet>26</a>//! The wait is bounded twice over: by [`QuiesceHarts::ack_budget_ticks`] in the
+<a href=#27 id=27 data-nosnippet>27</a>//! hart set's own clock units, and by a clock-independent poll limit so a tick
+<a href=#28 id=28 data-nosnippet>28</a>//! source that never advances cannot hang the caller. A previous phase burned a
+<a href=#29 id=29 data-nosnippet>29</a>//! full retry budget on every awaited invalidation (`memory::tlb_shootdown`);
+<a href=#30 id=30 data-nosnippet>30</a>//! this protocol does not retry inside the preflight for the same reason — the
+<a href=#31 id=31 data-nosnippet>31</a>//! next capture is the retry boundary, and a hart that cannot reach a safe
+<a href=#32 id=32 data-nosnippet>32</a>//! point is a condition to report, not to spin on.
+<a href=#33 id=33 data-nosnippet>33</a>//!
+<a href=#34 id=34 data-nosnippet>34</a>//! # The per-hart park hook
+<a href=#35 id=35 data-nosnippet>35</a>//!
+<a href=#36 id=36 data-nosnippet>36</a>//! A hart can only acknowledge a park request if something on that hart
+<a href=#37 id=37 data-nosnippet>37</a>//! observes the request, reaches a safe point and publishes the
+<a href=#38 id=38 data-nosnippet>38</a>//! acknowledgement. On RV64 that observation point is the trap path
+<a href=#39 id=39 data-nosnippet>39</a>//! ([`park_here_if_requested`], called from `task::vi_timer_tick`): a hart that
+<a href=#40 id=40 data-nosnippet>40</a>//! is idle in `wfi` still takes the requester's IPI, and a hart that is running
+<a href=#41 id=41 data-nosnippet>41</a>//! can be brought to a trap by it, so no hart has to be *already* cooperating to
+<a href=#42 id=42 data-nosnippet>42</a>//! be parked. [`KernelHarts::park_hook_available`] reports `true` there and only
+<a href=#43 id=43 data-nosnippet>43</a>//! there — a target whose trap path does not call the hook would silently never
+<a href=#44 id=44 data-nosnippet>44</a>//! acknowledge, and the protocol must refuse such a hart set outright rather than
+<a href=#45 id=45 data-nosnippet>45</a>//! wait out a request that cannot be answered. A single-hart system needs no
+<a href=#46 id=46 data-nosnippet>46</a>//! hook: the protocol is then a no-op, because the requester is the only hart
+<a href=#47 id=47 data-nosnippet>47</a>//! that could mutate the image.
+<a href=#48 id=48 data-nosnippet>48</a>
+<a href=#49 id=49 data-nosnippet>49</a></span><span class="kw">use </span>core::fmt;
+<a href=#50 id=50 data-nosnippet>50</a><span class="kw">use </span>core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+<a href=#51 id=51 data-nosnippet>51</a>
+<a href=#52 id=52 data-nosnippet>52</a><span class="doccomment">/// Upper bound on the harts this protocol tracks. The kernel's own bound is
+<a href=#53 id=53 data-nosnippet>53</a>/// `task::smp::MAX_HARTS`; the protocol keeps headroom so a host test can model
+<a href=#54 id=54 data-nosnippet>54</a>/// a partial acknowledgement (two targets, one of them silent).
+<a href=#55 id=55 data-nosnippet>55</a></span><span class="kw">pub const </span>MAX_QUIESCE_HARTS: usize = <span class="number">8</span>;
+<a href=#56 id=56 data-nosnippet>56</a>
+<a href=#57 id=57 data-nosnippet>57</a><span class="doccomment">/// Clock-independent backstop on the bounded wait: a hart set whose
+<a href=#58 id=58 data-nosnippet>58</a>/// [`QuiesceHarts::now_ticks`] never advances (no cross-arch tick source is
+<a href=#59 id=59 data-nosnippet>59</a>/// wired into the kernel yet) still terminates instead of spinning forever.
+<a href=#60 id=60 data-nosnippet>60</a>/// The tick budget is the primary bound and trips first whenever the clock
+<a href=#61 id=61 data-nosnippet>61</a>/// moves.
+<a href=#62 id=62 data-nosnippet>62</a></span><span class="kw">const </span>WAIT_POLL_LIMIT: usize = <span class="number">1 </span>&lt;&lt; <span class="number">28</span>;
+<a href=#63 id=63 data-nosnippet>63</a>
+<a href=#64 id=64 data-nosnippet>64</a><span class="doccomment">/// Why quiescence could not be established.
+<a href=#65 id=65 data-nosnippet>65</a></span><span class="attr">#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+<a href=#66 id=66 data-nosnippet>66</a></span><span class="kw">pub enum </span>QuiesceError {
+<a href=#67 id=67 data-nosnippet>67</a>    <span class="doccomment">/// Another request owns the protocol right now. Only one capture may hold
+<a href=#68 id=68 data-nosnippet>68</a>    /// the memory image frozen.
+<a href=#69 id=69 data-nosnippet>69</a>    </span>AlreadyRequested,
+<a href=#70 id=70 data-nosnippet>70</a>    <span class="doccomment">/// The hart set has no per-hart park hook, so a multi-hart request could
+<a href=#71 id=71 data-nosnippet>71</a>    /// never be acknowledged. Refused immediately — never waited out.
+<a href=#72 id=72 data-nosnippet>72</a>    </span>Unsupported,
+<a href=#73 id=73 data-nosnippet>73</a>    <span class="doccomment">/// More online harts than [`MAX_QUIESCE_HARTS`], or a hart id outside that
+<a href=#74 id=74 data-nosnippet>74</a>    /// bound. Fail closed rather than track an unbounded set.
+<a href=#75 id=75 data-nosnippet>75</a>    </span>TooManyHarts,
+<a href=#76 id=76 data-nosnippet>76</a>    <span class="doccomment">/// The bounded wait expired with `pending` harts still un-acknowledged.
+<a href=#77 id=77 data-nosnippet>77</a>    /// Every requested hart has already been released when this is returned.
+<a href=#78 id=78 data-nosnippet>78</a>    </span>Timeout { pending: usize },
+<a href=#79 id=79 data-nosnippet>79</a>}
+<a href=#80 id=80 data-nosnippet>80</a>
+<a href=#81 id=81 data-nosnippet>81</a><span class="kw">impl </span>QuiesceError {
+<a href=#82 id=82 data-nosnippet>82</a>    <span class="doccomment">/// Stable short description for logs.
+<a href=#83 id=83 data-nosnippet>83</a>    </span><span class="kw">pub const fn </span>as_str(<span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str {
+<a href=#84 id=84 data-nosnippet>84</a>        <span class="kw">match </span><span class="self">self </span>{
+<a href=#85 id=85 data-nosnippet>85</a>            <span class="self">Self</span>::AlreadyRequested =&gt; <span class="string">"another request already owns the quiescence protocol"</span>,
+<a href=#86 id=86 data-nosnippet>86</a>            <span class="self">Self</span>::Unsupported =&gt; {
+<a href=#87 id=87 data-nosnippet>87</a>                <span class="string">"no per-hart park hook: a multi-hart request cannot be acknowledged"
+<a href=#88 id=88 data-nosnippet>88</a>            </span>}
+<a href=#89 id=89 data-nosnippet>89</a>            <span class="self">Self</span>::TooManyHarts =&gt; <span class="string">"more online harts than the quiescence protocol tracks"</span>,
+<a href=#90 id=90 data-nosnippet>90</a>            <span class="self">Self</span>::Timeout { .. } =&gt; <span class="string">"harts did not acknowledge the park request within the budget"</span>,
+<a href=#91 id=91 data-nosnippet>91</a>        }
+<a href=#92 id=92 data-nosnippet>92</a>    }
+<a href=#93 id=93 data-nosnippet>93</a>}
+<a href=#94 id=94 data-nosnippet>94</a>
+<a href=#95 id=95 data-nosnippet>95</a><span class="kw">impl </span>fmt::Display <span class="kw">for </span>QuiesceError {
+<a href=#96 id=96 data-nosnippet>96</a>    <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; fmt::Result {
+<a href=#97 id=97 data-nosnippet>97</a>        <span class="kw">match </span><span class="self">self </span>{
+<a href=#98 id=98 data-nosnippet>98</a>            <span class="self">Self</span>::Timeout { pending } =&gt; <span class="macro">write!</span>(f, <span class="string">"{} ({pending} pending)"</span>, <span class="self">self</span>.as_str()),
+<a href=#99 id=99 data-nosnippet>99</a>            <span class="kw">_ </span>=&gt; f.write_str(<span class="self">self</span>.as_str()),
+<a href=#100 id=100 data-nosnippet>100</a>        }
+<a href=#101 id=101 data-nosnippet>101</a>    }
+<a href=#102 id=102 data-nosnippet>102</a>}
+<a href=#103 id=103 data-nosnippet>103</a>
+<a href=#104 id=104 data-nosnippet>104</a><span class="doccomment">/// A bounded set of hart ids.
+<a href=#105 id=105 data-nosnippet>105</a>///
+<a href=#106 id=106 data-nosnippet>106</a>/// The bound is the *id* space: an id at or above [`MAX_QUIESCE_HARTS`] is
+<a href=#107 id=107 data-nosnippet>107</a>/// refused, which also makes an overflow of the backing array impossible.
+<a href=#108 id=108 data-nosnippet>108</a></span><span class="attr">#[derive(Clone, Copy)]
+<a href=#109 id=109 data-nosnippet>109</a></span><span class="kw">pub struct </span>HartSet {
+<a href=#110 id=110 data-nosnippet>110</a>    ids: [usize; MAX_QUIESCE_HARTS],
+<a href=#111 id=111 data-nosnippet>111</a>    len: usize,
+<a href=#112 id=112 data-nosnippet>112</a>}
+<a href=#113 id=113 data-nosnippet>113</a>
+<a href=#114 id=114 data-nosnippet>114</a><span class="kw">impl </span>HartSet {
+<a href=#115 id=115 data-nosnippet>115</a>    <span class="doccomment">/// An empty set.
+<a href=#116 id=116 data-nosnippet>116</a>    </span><span class="kw">pub const fn </span>new() -&gt; <span class="self">Self </span>{
+<a href=#117 id=117 data-nosnippet>117</a>        <span class="self">Self </span>{
+<a href=#118 id=118 data-nosnippet>118</a>            ids: [<span class="number">0</span>; MAX_QUIESCE_HARTS],
+<a href=#119 id=119 data-nosnippet>119</a>            len: <span class="number">0</span>,
+<a href=#120 id=120 data-nosnippet>120</a>        }
+<a href=#121 id=121 data-nosnippet>121</a>    }
+<a href=#122 id=122 data-nosnippet>122</a>
+<a href=#123 id=123 data-nosnippet>123</a>    <span class="doccomment">/// Add `hart`. Returns `Ok(false)` if it is already present, and
+<a href=#124 id=124 data-nosnippet>124</a>    /// [`QuiesceError::TooManyHarts`] if the id does not fit the bound.
+<a href=#125 id=125 data-nosnippet>125</a>    </span><span class="kw">pub fn </span>insert(<span class="kw-2">&amp;mut </span><span class="self">self</span>, hart: usize) -&gt; <span class="prelude-ty">Result</span>&lt;bool, QuiesceError&gt; {
+<a href=#126 id=126 data-nosnippet>126</a>        <span class="kw">if </span>hart &gt;= MAX_QUIESCE_HARTS {
+<a href=#127 id=127 data-nosnippet>127</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(QuiesceError::TooManyHarts);
+<a href=#128 id=128 data-nosnippet>128</a>        }
+<a href=#129 id=129 data-nosnippet>129</a>        <span class="kw">if </span><span class="self">self</span>.contains(hart) {
+<a href=#130 id=130 data-nosnippet>130</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="bool-val">false</span>);
+<a href=#131 id=131 data-nosnippet>131</a>        }
+<a href=#132 id=132 data-nosnippet>132</a>        <span class="self">self</span>.ids[<span class="self">self</span>.len] = hart;
+<a href=#133 id=133 data-nosnippet>133</a>        <span class="self">self</span>.len += <span class="number">1</span>;
+<a href=#134 id=134 data-nosnippet>134</a>        <span class="prelude-val">Ok</span>(<span class="bool-val">true</span>)
+<a href=#135 id=135 data-nosnippet>135</a>    }
+<a href=#136 id=136 data-nosnippet>136</a>
+<a href=#137 id=137 data-nosnippet>137</a>    <span class="doccomment">/// Is `hart` in the set?
+<a href=#138 id=138 data-nosnippet>138</a>    </span><span class="kw">fn </span>contains(<span class="kw-2">&amp;</span><span class="self">self</span>, hart: usize) -&gt; bool {
+<a href=#139 id=139 data-nosnippet>139</a>        <span class="self">self</span>.ids[..<span class="self">self</span>.len].contains(<span class="kw-2">&amp;</span>hart)
+<a href=#140 id=140 data-nosnippet>140</a>    }
+<a href=#141 id=141 data-nosnippet>141</a>
+<a href=#142 id=142 data-nosnippet>142</a>    <span class="doccomment">/// Is the set empty?
+<a href=#143 id=143 data-nosnippet>143</a>    </span><span class="kw">pub fn </span>is_empty(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
+<a href=#144 id=144 data-nosnippet>144</a>        <span class="self">self</span>.len == <span class="number">0
+<a href=#145 id=145 data-nosnippet>145</a>    </span>}
+<a href=#146 id=146 data-nosnippet>146</a>
+<a href=#147 id=147 data-nosnippet>147</a>    <span class="doccomment">/// The ids in insertion order.
+<a href=#148 id=148 data-nosnippet>148</a>    </span><span class="kw">pub fn </span>iter(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw">impl </span>Iterator&lt;Item = usize&gt; + <span class="lifetime">'_ </span>{
+<a href=#149 id=149 data-nosnippet>149</a>        <span class="self">self</span>.ids[..<span class="self">self</span>.len].iter().copied()
+<a href=#150 id=150 data-nosnippet>150</a>    }
+<a href=#151 id=151 data-nosnippet>151</a>}
+<a href=#152 id=152 data-nosnippet>152</a>
+<a href=#153 id=153 data-nosnippet>153</a><span class="doccomment">/// The board/hart side of the protocol.
+<a href=#154 id=154 data-nosnippet>154</a>///
+<a href=#155 id=155 data-nosnippet>155</a>/// This is the park-hook seam: `fake::FakeHarts` (host tests) and the live
+<a href=#156 id=156 data-nosnippet>156</a>/// kernel hart set both implement it, so the protocol's state machine has no
+<a href=#157 id=157 data-nosnippet>157</a>/// dependency on the scheduler or the trap path. A future phase fills the hook
+<a href=#158 id=158 data-nosnippet>158</a>/// in by making [`QuiesceHarts::park_hook_available`] return `true` and having
+<a href=#159 id=159 data-nosnippet>159</a>/// each hart publish its acknowledgement from a safe point.
+<a href=#160 id=160 data-nosnippet>160</a></span><span class="kw">pub trait </span>QuiesceHarts {
+<a href=#161 id=161 data-nosnippet>161</a>    <span class="doccomment">/// The hart executing this request. It is never asked to park: waiting on
+<a href=#162 id=162 data-nosnippet>162</a>    /// the requester's own acknowledgement would deadlock the capture.
+<a href=#163 id=163 data-nosnippet>163</a>    </span><span class="kw">fn </span>requester(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize;
+<a href=#164 id=164 data-nosnippet>164</a>
+<a href=#165 id=165 data-nosnippet>165</a>    <span class="doccomment">/// Record every online hart, including the requester, into `out`.
+<a href=#166 id=166 data-nosnippet>166</a>    </span><span class="kw">fn </span>online_harts(<span class="kw-2">&amp;</span><span class="self">self</span>, out: <span class="kw-2">&amp;mut </span>HartSet) -&gt; <span class="prelude-ty">Result</span>&lt;(), QuiesceError&gt;;
+<a href=#167 id=167 data-nosnippet>167</a>
+<a href=#168 id=168 data-nosnippet>168</a>    <span class="doccomment">/// Is a per-hart park hook implemented for this hart set?
+<a href=#169 id=169 data-nosnippet>169</a>    </span><span class="kw">fn </span>park_hook_available(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool;
+<a href=#170 id=170 data-nosnippet>170</a>
+<a href=#171 id=171 data-nosnippet>171</a>    <span class="doccomment">/// Ask `hart` to park at its next safe point and return the epoch it must
+<a href=#172 id=172 data-nosnippet>172</a>    /// publish when it has parked.
+<a href=#173 id=173 data-nosnippet>173</a>    </span><span class="kw">fn </span>request_park(<span class="kw-2">&amp;</span><span class="self">self</span>, hart: usize) -&gt; usize;
+<a href=#174 id=174 data-nosnippet>174</a>
+<a href=#175 id=175 data-nosnippet>175</a>    <span class="doccomment">/// Has `hart` acknowledged `epoch`?
+<a href=#176 id=176 data-nosnippet>176</a>    </span><span class="kw">fn </span>park_acked(<span class="kw-2">&amp;</span><span class="self">self</span>, hart: usize, epoch: usize) -&gt; bool;
+<a href=#177 id=177 data-nosnippet>177</a>
+<a href=#178 id=178 data-nosnippet>178</a>    <span class="doccomment">/// Cancel `hart`'s outstanding park request and unpark it if parked.
+<a href=#179 id=179 data-nosnippet>179</a>    ///
+<a href=#180 id=180 data-nosnippet>180</a>    /// Must be idempotent and must accept a hart that never acknowledged: a
+<a href=#181 id=181 data-nosnippet>181</a>    /// release after a timeout has to restore the pre-request state, which
+<a href=#182 id=182 data-nosnippet>182</a>    /// means cancelling the request the hart may still be about to satisfy.
+<a href=#183 id=183 data-nosnippet>183</a>    </span><span class="kw">fn </span>release_park(<span class="kw-2">&amp;</span><span class="self">self</span>, hart: usize);
+<a href=#184 id=184 data-nosnippet>184</a>
+<a href=#185 id=185 data-nosnippet>185</a>    <span class="doccomment">/// How many [`QuiesceHarts::now_ticks`] units a request waits before it is
+<a href=#186 id=186 data-nosnippet>186</a>    /// declared unacknowledged.
+<a href=#187 id=187 data-nosnippet>187</a>    </span><span class="kw">fn </span>ack_budget_ticks(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u64;
+<a href=#188 id=188 data-nosnippet>188</a>
+<a href=#189 id=189 data-nosnippet>189</a>    <span class="doccomment">/// Monotonic counter used only to bound the wait.
+<a href=#190 id=190 data-nosnippet>190</a>    </span><span class="kw">fn </span>now_ticks(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u64;
+<a href=#191 id=191 data-nosnippet>191</a>}
+<a href=#192 id=192 data-nosnippet>192</a>
+<a href=#193 id=193 data-nosnippet>193</a><span class="doccomment">/// Single-flight protocol state.
+<a href=#194 id=194 data-nosnippet>194</a>///
+<a href=#195 id=195 data-nosnippet>195</a>/// One instance guards one memory image: the capture preflight holds a [`Guard`]
+<a href=#196 id=196 data-nosnippet>196</a>/// across the whole read-and-write, and a second concurrent request is refused
+<a href=#197 id=197 data-nosnippet>197</a>/// for as long as that guard lives.
+<a href=#198 id=198 data-nosnippet>198</a></span><span class="kw">pub struct </span>QuiesceState {
+<a href=#199 id=199 data-nosnippet>199</a>    in_flight: AtomicBool,
+<a href=#200 id=200 data-nosnippet>200</a>}
+<a href=#201 id=201 data-nosnippet>201</a>
+<a href=#202 id=202 data-nosnippet>202</a><span class="kw">impl </span>QuiesceState {
+<a href=#203 id=203 data-nosnippet>203</a>    <span class="doccomment">/// A state with no request outstanding.
+<a href=#204 id=204 data-nosnippet>204</a>    </span><span class="kw">pub const fn </span>new() -&gt; <span class="self">Self </span>{
+<a href=#205 id=205 data-nosnippet>205</a>        <span class="self">Self </span>{
+<a href=#206 id=206 data-nosnippet>206</a>            in_flight: AtomicBool::new(<span class="bool-val">false</span>),
+<a href=#207 id=207 data-nosnippet>207</a>        }
+<a href=#208 id=208 data-nosnippet>208</a>    }
+<a href=#209 id=209 data-nosnippet>209</a>
+<a href=#210 id=210 data-nosnippet>210</a>    <span class="doccomment">/// Request that every online hart other than the requester park at an
+<a href=#211 id=211 data-nosnippet>211</a>    /// acknowledged safe point, and hold that state for as long as the returned
+<a href=#212 id=212 data-nosnippet>212</a>    /// guard lives.
+<a href=#213 id=213 data-nosnippet>213</a>    ///
+<a href=#214 id=214 data-nosnippet>214</a>    /// The guard releases the harts when it drops, so a successful acquisition
+<a href=#215 id=215 data-nosnippet>215</a>    /// covers exactly the capture and no longer. A refusal never leaves a hart
+<a href=#216 id=216 data-nosnippet>216</a>    /// parked: see the module docs for the fail-closed contract.
+<a href=#217 id=217 data-nosnippet>217</a>    </span><span class="attr">#[must_use = <span class="string">"the harts are released as soon as the guard drops"</span>]
+<a href=#218 id=218 data-nosnippet>218</a>    </span><span class="kw">pub fn </span>acquire&lt;<span class="lifetime">'a</span>&gt;(<span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="self">self</span>, harts: <span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="kw">dyn </span>QuiesceHarts) -&gt; <span class="prelude-ty">Result</span>&lt;Guard&lt;<span class="lifetime">'a</span>&gt;, QuiesceError&gt; {
+<a href=#219 id=219 data-nosnippet>219</a>        <span class="kw">if </span><span class="self">self
+<a href=#220 id=220 data-nosnippet>220</a>            </span>.in_flight
+<a href=#221 id=221 data-nosnippet>221</a>            .compare_exchange(<span class="bool-val">false</span>, <span class="bool-val">true</span>, Ordering::AcqRel, Ordering::Acquire)
+<a href=#222 id=222 data-nosnippet>222</a>            .is_err()
+<a href=#223 id=223 data-nosnippet>223</a>        {
+<a href=#224 id=224 data-nosnippet>224</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(QuiesceError::AlreadyRequested);
+<a href=#225 id=225 data-nosnippet>225</a>        }
+<a href=#226 id=226 data-nosnippet>226</a>        <span class="self">self</span>.request(harts)
+<a href=#227 id=227 data-nosnippet>227</a>    }
+<a href=#228 id=228 data-nosnippet>228</a>
+<a href=#229 id=229 data-nosnippet>229</a>    <span class="kw">fn </span>request&lt;<span class="lifetime">'a</span>&gt;(<span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="self">self</span>, harts: <span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="kw">dyn </span>QuiesceHarts) -&gt; <span class="prelude-ty">Result</span>&lt;Guard&lt;<span class="lifetime">'a</span>&gt;, QuiesceError&gt; {
+<a href=#230 id=230 data-nosnippet>230</a>        <span class="kw">let </span>targets = <span class="kw">match </span>target_harts(harts) {
+<a href=#231 id=231 data-nosnippet>231</a>            <span class="prelude-val">Ok</span>(targets) =&gt; targets,
+<a href=#232 id=232 data-nosnippet>232</a>            <span class="prelude-val">Err</span>(err) =&gt; {
+<a href=#233 id=233 data-nosnippet>233</a>                <span class="self">self</span>.in_flight.store(<span class="bool-val">false</span>, Ordering::Release);
+<a href=#234 id=234 data-nosnippet>234</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(err);
+<a href=#235 id=235 data-nosnippet>235</a>            }
+<a href=#236 id=236 data-nosnippet>236</a>        };
+<a href=#237 id=237 data-nosnippet>237</a>        <span class="kw">let </span><span class="kw-2">mut </span>guard = Guard {
+<a href=#238 id=238 data-nosnippet>238</a>            state: <span class="self">self</span>,
+<a href=#239 id=239 data-nosnippet>239</a>            harts,
+<a href=#240 id=240 data-nosnippet>240</a>            requested: HartSet::new(),
+<a href=#241 id=241 data-nosnippet>241</a>            epochs: [<span class="number">0</span>; MAX_QUIESCE_HARTS],
+<a href=#242 id=242 data-nosnippet>242</a>            released: <span class="bool-val">false</span>,
+<a href=#243 id=243 data-nosnippet>243</a>        };
+<a href=#244 id=244 data-nosnippet>244</a>
+<a href=#245 id=245 data-nosnippet>245</a>        <span class="comment">// One hart, no target: nothing can mutate the image, so there is no
+<a href=#246 id=246 data-nosnippet>246</a>        // request to make and no hook to need.
+<a href=#247 id=247 data-nosnippet>247</a>        </span><span class="kw">if </span>targets.is_empty() {
+<a href=#248 id=248 data-nosnippet>248</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(guard);
+<a href=#249 id=249 data-nosnippet>249</a>        }
+<a href=#250 id=250 data-nosnippet>250</a>        <span class="comment">// A request no hart can acknowledge must be refused, not waited out.
+<a href=#251 id=251 data-nosnippet>251</a>        </span><span class="kw">if </span>!harts.park_hook_available() {
+<a href=#252 id=252 data-nosnippet>252</a>            guard.release();
+<a href=#253 id=253 data-nosnippet>253</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(QuiesceError::Unsupported);
+<a href=#254 id=254 data-nosnippet>254</a>        }
+<a href=#255 id=255 data-nosnippet>255</a>
+<a href=#256 id=256 data-nosnippet>256</a>        <span class="kw">for </span>hart <span class="kw">in </span>targets.iter() {
+<a href=#257 id=257 data-nosnippet>257</a>            guard.epochs[hart] = harts.request_park(hart);
+<a href=#258 id=258 data-nosnippet>258</a>        }
+<a href=#259 id=259 data-nosnippet>259</a>        guard.requested = targets;
+<a href=#260 id=260 data-nosnippet>260</a>
+<a href=#261 id=261 data-nosnippet>261</a>        <span class="comment">// Bounded wait: the tick budget is the primary bound, the poll limit
+<a href=#262 id=262 data-nosnippet>262</a>        // only guarantees termination when the clock does not move.
+<a href=#263 id=263 data-nosnippet>263</a>        </span><span class="kw">let </span>deadline = harts.now_ticks().saturating_add(harts.ack_budget_ticks());
+<a href=#264 id=264 data-nosnippet>264</a>        <span class="kw">let </span><span class="kw-2">mut </span>polls = <span class="number">0usize</span>;
+<a href=#265 id=265 data-nosnippet>265</a>        <span class="kw">while </span>!guard.all_parked() {
+<a href=#266 id=266 data-nosnippet>266</a>            <span class="kw">if </span>polls &gt;= WAIT_POLL_LIMIT || harts.now_ticks() &gt; deadline {
+<a href=#267 id=267 data-nosnippet>267</a>                <span class="kw">break</span>;
+<a href=#268 id=268 data-nosnippet>268</a>            }
+<a href=#269 id=269 data-nosnippet>269</a>            polls += <span class="number">1</span>;
+<a href=#270 id=270 data-nosnippet>270</a>            core::hint::spin_loop();
+<a href=#271 id=271 data-nosnippet>271</a>        }
+<a href=#272 id=272 data-nosnippet>272</a>
+<a href=#273 id=273 data-nosnippet>273</a>        <span class="comment">// Verified predicate, not a remembered one: re-derive from the hart set
+<a href=#274 id=274 data-nosnippet>274</a>        // so an acknowledgement that lapsed while waiting cannot pass.
+<a href=#275 id=275 data-nosnippet>275</a>        </span><span class="kw">if </span>guard.all_parked() {
+<a href=#276 id=276 data-nosnippet>276</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(guard);
+<a href=#277 id=277 data-nosnippet>277</a>        }
+<a href=#278 id=278 data-nosnippet>278</a>
+<a href=#279 id=279 data-nosnippet>279</a>        <span class="kw">let </span>pending = guard.pending_count();
+<a href=#280 id=280 data-nosnippet>280</a>        guard.release();
+<a href=#281 id=281 data-nosnippet>281</a>        <span class="prelude-val">Err</span>(QuiesceError::Timeout { pending })
+<a href=#282 id=282 data-nosnippet>282</a>    }
+<a href=#283 id=283 data-nosnippet>283</a>}
+<a href=#284 id=284 data-nosnippet>284</a>
+<a href=#285 id=285 data-nosnippet>285</a><span class="doccomment">/// Every online hart except the requester: the set that must park.
+<a href=#286 id=286 data-nosnippet>286</a></span><span class="kw">fn </span>target_harts(harts: <span class="kw-2">&amp;</span><span class="kw">dyn </span>QuiesceHarts) -&gt; <span class="prelude-ty">Result</span>&lt;HartSet, QuiesceError&gt; {
+<a href=#287 id=287 data-nosnippet>287</a>    <span class="kw">let </span>requester = harts.requester();
+<a href=#288 id=288 data-nosnippet>288</a>    <span class="kw">let </span><span class="kw-2">mut </span>online = HartSet::new();
+<a href=#289 id=289 data-nosnippet>289</a>    harts.online_harts(<span class="kw-2">&amp;mut </span>online)<span class="question-mark">?</span>;
+<a href=#290 id=290 data-nosnippet>290</a>    <span class="comment">// The boot hart runs without publishing itself as "online" on RV64, so the
+<a href=#291 id=291 data-nosnippet>291</a>    // requester is unioned in rather than assumed present.
+<a href=#292 id=292 data-nosnippet>292</a>    </span>online.insert(requester)<span class="question-mark">?</span>;
+<a href=#293 id=293 data-nosnippet>293</a>    <span class="kw">let </span><span class="kw-2">mut </span>targets = HartSet::new();
+<a href=#294 id=294 data-nosnippet>294</a>    <span class="kw">for </span>hart <span class="kw">in </span>online.iter() {
+<a href=#295 id=295 data-nosnippet>295</a>        <span class="kw">if </span>hart != requester {
+<a href=#296 id=296 data-nosnippet>296</a>            targets.insert(hart)<span class="question-mark">?</span>;
+<a href=#297 id=297 data-nosnippet>297</a>        }
+<a href=#298 id=298 data-nosnippet>298</a>    }
+<a href=#299 id=299 data-nosnippet>299</a>    <span class="prelude-val">Ok</span>(targets)
+<a href=#300 id=300 data-nosnippet>300</a>}
+<a href=#301 id=301 data-nosnippet>301</a>
+<a href=#302 id=302 data-nosnippet>302</a><span class="doccomment">/// Proof that the harts were parked, releasing them when dropped.
+<a href=#303 id=303 data-nosnippet>303</a></span><span class="kw">pub struct </span>Guard&lt;<span class="lifetime">'a</span>&gt; {
+<a href=#304 id=304 data-nosnippet>304</a>    state: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>QuiesceState,
+<a href=#305 id=305 data-nosnippet>305</a>    harts: <span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="kw">dyn </span>QuiesceHarts,
+<a href=#306 id=306 data-nosnippet>306</a>    <span class="doccomment">/// The harts that were actually asked to park (empty on the no-op and the
+<a href=#307 id=307 data-nosnippet>307</a>    /// refusing paths, so `release` never touches a hart this protocol did not
+<a href=#308 id=308 data-nosnippet>308</a>    /// park).
+<a href=#309 id=309 data-nosnippet>309</a>    </span>requested: HartSet,
+<a href=#310 id=310 data-nosnippet>310</a>    <span class="doccomment">/// The epoch each requested hart must acknowledge, indexed by hart id.
+<a href=#311 id=311 data-nosnippet>311</a>    </span>epochs: [usize; MAX_QUIESCE_HARTS],
+<a href=#312 id=312 data-nosnippet>312</a>    released: bool,
+<a href=#313 id=313 data-nosnippet>313</a>}
+<a href=#314 id=314 data-nosnippet>314</a>
+<a href=#315 id=315 data-nosnippet>315</a><span class="kw">impl </span>Guard&lt;<span class="lifetime">'_</span>&gt; {
+<a href=#316 id=316 data-nosnippet>316</a>    <span class="doccomment">/// Re-derive the all-parked predicate from the hart set.
+<a href=#317 id=317 data-nosnippet>317</a>    </span><span class="kw">pub fn </span>all_parked(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
+<a href=#318 id=318 data-nosnippet>318</a>        <span class="self">self</span>.requested
+<a href=#319 id=319 data-nosnippet>319</a>            .iter()
+<a href=#320 id=320 data-nosnippet>320</a>            .all(|hart| <span class="self">self</span>.harts.park_acked(hart, <span class="self">self</span>.epochs[hart]))
+<a href=#321 id=321 data-nosnippet>321</a>    }
+<a href=#322 id=322 data-nosnippet>322</a>
+<a href=#323 id=323 data-nosnippet>323</a>    <span class="doccomment">/// How many requested harts have not acknowledged.
+<a href=#324 id=324 data-nosnippet>324</a>    </span><span class="kw">pub fn </span>pending_count(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize {
+<a href=#325 id=325 data-nosnippet>325</a>        <span class="self">self</span>.requested
+<a href=#326 id=326 data-nosnippet>326</a>            .iter()
+<a href=#327 id=327 data-nosnippet>327</a>            .filter(|hart| !<span class="self">self</span>.harts.park_acked(<span class="kw-2">*</span>hart, <span class="self">self</span>.epochs[<span class="kw-2">*</span>hart]))
+<a href=#328 id=328 data-nosnippet>328</a>            .count()
+<a href=#329 id=329 data-nosnippet>329</a>    }
+<a href=#330 id=330 data-nosnippet>330</a>
+<a href=#331 id=331 data-nosnippet>331</a>    <span class="doccomment">/// Restore the pre-request state: release every hart that was requested and
+<a href=#332 id=332 data-nosnippet>332</a>    /// free the single-flight claim. Idempotent.
+<a href=#333 id=333 data-nosnippet>333</a>    </span><span class="kw">pub fn </span>release(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
+<a href=#334 id=334 data-nosnippet>334</a>        <span class="kw">if </span><span class="self">self</span>.released {
+<a href=#335 id=335 data-nosnippet>335</a>            <span class="kw">return</span>;
+<a href=#336 id=336 data-nosnippet>336</a>        }
+<a href=#337 id=337 data-nosnippet>337</a>        <span class="self">self</span>.released = <span class="bool-val">true</span>;
+<a href=#338 id=338 data-nosnippet>338</a>        <span class="kw">for </span>hart <span class="kw">in </span><span class="self">self</span>.requested.iter() {
+<a href=#339 id=339 data-nosnippet>339</a>            <span class="self">self</span>.harts.release_park(hart);
+<a href=#340 id=340 data-nosnippet>340</a>        }
+<a href=#341 id=341 data-nosnippet>341</a>        <span class="self">self</span>.state.in_flight.store(<span class="bool-val">false</span>, Ordering::Release);
+<a href=#342 id=342 data-nosnippet>342</a>    }
+<a href=#343 id=343 data-nosnippet>343</a>}
+<a href=#344 id=344 data-nosnippet>344</a>
+<a href=#345 id=345 data-nosnippet>345</a><span class="kw">impl </span>Drop <span class="kw">for </span>Guard&lt;<span class="lifetime">'_</span>&gt; {
+<a href=#346 id=346 data-nosnippet>346</a>    <span class="kw">fn </span>drop(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
+<a href=#347 id=347 data-nosnippet>347</a>        <span class="self">self</span>.release();
+<a href=#348 id=348 data-nosnippet>348</a>    }
+<a href=#349 id=349 data-nosnippet>349</a>}
+<a href=#350 id=350 data-nosnippet>350</a>
+<a href=#351 id=351 data-nosnippet>351</a><span class="comment">// ── The live park state and the trap-path hook ───────────────────────────────
+<a href=#352 id=352 data-nosnippet>352</a>
+<a href=#353 id=353 data-nosnippet>353</a></span><span class="doccomment">/// Park state is kept for every hart id the protocol can name ([`HartSet`]'s
+<a href=#354 id=354 data-nosnippet>354</a>/// bound, which the kernel's own `smp::MAX_HARTS` sits under), so no id a hart
+<a href=#355 id=355 data-nosnippet>355</a>/// set can carry is left without state.
+<a href=#356 id=356 data-nosnippet>356</a></span><span class="kw">const </span>PARK_HARTS: usize = MAX_QUIESCE_HARTS;
+<a href=#357 id=357 data-nosnippet>357</a>
+<a href=#358 id=358 data-nosnippet>358</a><span class="doccomment">/// The epoch of the latest park request for each hart. `0` means "no request".
+<a href=#359 id=359 data-nosnippet>359</a></span><span class="kw">static </span>PARK_REQUEST: [AtomicUsize; PARK_HARTS] = [<span class="kw">const </span>{ AtomicUsize::new(<span class="number">0</span>) }; PARK_HARTS];
+<a href=#360 id=360 data-nosnippet>360</a>
+<a href=#361 id=361 data-nosnippet>361</a><span class="doccomment">/// The latest epoch each hart has stopped for, published by the target hart at
+<a href=#362 id=362 data-nosnippet>362</a>/// the safe point itself. Read by the requester's predicate, so it is monotone
+<a href=#363 id=363 data-nosnippet>363</a>/// and never cleared: the epoch space is what makes a stale entry harmless — a
+<a href=#364 id=364 data-nosnippet>364</a>/// later request has a strictly greater epoch and is not covered by it.
+<a href=#365 id=365 data-nosnippet>365</a></span><span class="kw">static </span>PARK_ACK: [AtomicUsize; PARK_HARTS] = [<span class="kw">const </span>{ AtomicUsize::new(<span class="number">0</span>) }; PARK_HARTS];
+<a href=#366 id=366 data-nosnippet>366</a>
+<a href=#367 id=367 data-nosnippet>367</a><span class="doccomment">/// The latest epoch released by a requester. A target parks for request `E` only
+<a href=#368 id=368 data-nosnippet>368</a>/// while `PARK_RELEASE &lt; E`, so this single store is both "resume" and "cancel a
+<a href=#369 id=369 data-nosnippet>369</a>/// request that was never satisfied". It is monotone (`fetch_max`), which is what
+<a href=#370 id=370 data-nosnippet>370</a>/// makes [`release_park`] idempotent and safe for a hart that never acknowledged.
+<a href=#371 id=371 data-nosnippet>371</a></span><span class="kw">static </span>PARK_RELEASE: [AtomicUsize; PARK_HARTS] = [<span class="kw">const </span>{ AtomicUsize::new(<span class="number">0</span>) }; PARK_HARTS];
+<a href=#372 id=372 data-nosnippet>372</a>
+<a href=#373 id=373 data-nosnippet>373</a><span class="doccomment">/// How long a parked hart stays parked with no release: 2 s of `mtime`. A
+<a href=#374 id=374 data-nosnippet>374</a>/// requester that dies between parking a hart and releasing it never runs the
+<a href=#375 id=375 data-nosnippet>375</a>/// guard's `Drop` (the kernel is built `panic = "abort"`), so the parked loop
+<a href=#376 id=376 data-nosnippet>376</a>/// has to be able to give up on its own; the capture path commits nothing before
+<a href=#377 id=377 data-nosnippet>377</a>/// it finishes, so resuming is consistent — the alternative is a permanent hang.
+<a href=#378 id=378 data-nosnippet>378</a></span><span class="attr">#[cfg(target_arch = <span class="string">"riscv64"</span>)]
+<a href=#379 id=379 data-nosnippet>379</a></span><span class="kw">const </span>PARK_ABANDON_TICKS: u64 = <span class="number">200 </span>* hal::common::timer::TICKS_PER_10MS;
+<a href=#380 id=380 data-nosnippet>380</a>
+<a href=#381 id=381 data-nosnippet>381</a><span class="doccomment">/// Clock-independent backstop on the parked loop, for a build whose clock cannot
+<a href=#382 id=382 data-nosnippet>382</a>/// move. The RV64 value is deliberately far above `PARK_ABANDON_TICKS` — the
+<a href=#383 id=383 data-nosnippet>383</a>/// deadline is the real bound — and the host value is small so a unit test that
+<a href=#384 id=384 data-nosnippet>384</a>/// parks without a release terminates in constant time instead of hanging.
+<a href=#385 id=385 data-nosnippet>385</a></span><span class="attr">#[cfg(target_arch = <span class="string">"riscv64"</span>)]
+<a href=#386 id=386 data-nosnippet>386</a></span><span class="kw">const </span>PARK_SPIN_LIMIT: usize = <span class="number">1 </span>&lt;&lt; <span class="number">34</span>;
+<a href=#387 id=387 data-nosnippet>387</a><span class="attr">#[cfg(not(target_arch = <span class="string">"riscv64"</span>))]
+<a href=#388 id=388 data-nosnippet>388</a></span><span class="kw">const </span>PARK_SPIN_LIMIT: usize = <span class="number">1 </span>&lt;&lt; <span class="number">10</span>;
+<a href=#389 id=389 data-nosnippet>389</a>
+<a href=#390 id=390 data-nosnippet>390</a><span class="doccomment">/// What the trap path did with the park request it observed.
+<a href=#391 id=391 data-nosnippet>391</a></span><span class="attr">#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+<a href=#392 id=392 data-nosnippet>392</a></span><span class="kw">pub enum </span>ParkOutcome {
+<a href=#393 id=393 data-nosnippet>393</a>    <span class="doccomment">/// No park request was outstanding for this hart.
+<a href=#394 id=394 data-nosnippet>394</a>    </span>Idle,
+<a href=#395 id=395 data-nosnippet>395</a>    <span class="doccomment">/// The hart stopped, published its acknowledgement, and the requester
+<a href=#396 id=396 data-nosnippet>396</a>    /// released it.
+<a href=#397 id=397 data-nosnippet>397</a>    </span>Parked { epoch: usize },
+<a href=#398 id=398 data-nosnippet>398</a>    <span class="doccomment">/// A request existed but had already been released when this hart reached a
+<a href=#399 id=399 data-nosnippet>399</a>    /// safe point, so nothing was parked and no acknowledgement was published.
+<a href=#400 id=400 data-nosnippet>400</a>    </span>AlreadyReleased { epoch: usize },
+<a href=#401 id=401 data-nosnippet>401</a>    <span class="doccomment">/// The park loop gave up waiting for a release (`PARK_ABANDON_TICKS` or
+<a href=#402 id=402 data-nosnippet>402</a>    /// `PARK_SPIN_LIMIT`): the requester is gone. The acknowledgement, if one
+<a href=#403 id=403 data-nosnippet>403</a>    /// was published, is not withdrawn — the epoch has moved on by then.
+<a href=#404 id=404 data-nosnippet>404</a>    </span>Abandoned { epoch: usize },
+<a href=#405 id=405 data-nosnippet>405</a>    <span class="doccomment">/// Test-hooks only: this hart was told to withhold its acknowledgement, to
+<a href=#406 id=406 data-nosnippet>406</a>    /// reach the requester's fail-closed path without a real stall.
+<a href=#407 id=407 data-nosnippet>407</a>    </span>Withheld { epoch: usize },
+<a href=#408 id=408 data-nosnippet>408</a>}
+<a href=#409 id=409 data-nosnippet>409</a>
+<a href=#410 id=410 data-nosnippet>410</a><span class="doccomment">/// Ask `hart` to park at its next safe point, and return the epoch it must
+<a href=#411 id=411 data-nosnippet>411</a>/// acknowledge. Also delivers the IPI that brings the request to a hart that is
+<a href=#412 id=412 data-nosnippet>412</a>/// already idle in `wfi`.
+<a href=#413 id=413 data-nosnippet>413</a></span><span class="kw">fn </span>request_park(hart: usize) -&gt; usize {
+<a href=#414 id=414 data-nosnippet>414</a>    <span class="kw">let </span><span class="prelude-val">Some</span>(request) = PARK_REQUEST.get(hart) <span class="kw">else </span>{
+<a href=#415 id=415 data-nosnippet>415</a>        <span class="kw">return </span><span class="number">0</span>;
+<a href=#416 id=416 data-nosnippet>416</a>    };
+<a href=#417 id=417 data-nosnippet>417</a>    <span class="kw">let </span>epoch = request.fetch_add(<span class="number">1</span>, Ordering::AcqRel) + <span class="number">1</span>;
+<a href=#418 id=418 data-nosnippet>418</a>    <span class="attr">#[cfg(target_arch = <span class="string">"riscv64"</span>)]
+<a href=#419 id=419 data-nosnippet>419</a>    </span>{
+<a href=#420 id=420 data-nosnippet>420</a>        <span class="comment">// A hart cannot interrupt itself, and the protocol never makes the
+<a href=#421 id=421 data-nosnippet>421</a>        // requester a target. Sending to a self-mapped id would be harmless but
+<a href=#422 id=422 data-nosnippet>422</a>        // pointless; skip it rather than depend on the SBI call tolerating it.
+<a href=#423 id=423 data-nosnippet>423</a>        </span><span class="kw">if </span>hart != <span class="kw">crate</span>::task::hart_local::current_hart_id() {
+<a href=#424 id=424 data-nosnippet>424</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>((mask, base)) = <span class="kw">crate</span>::task::smp::logical_sbi_target(hart) {
+<a href=#425 id=425 data-nosnippet>425</a>                <span class="kw">let _ </span>= hal::common::sbi::sbi_send_ipi(mask, base);
+<a href=#426 id=426 data-nosnippet>426</a>            }
+<a href=#427 id=427 data-nosnippet>427</a>        }
+<a href=#428 id=428 data-nosnippet>428</a>    }
+<a href=#429 id=429 data-nosnippet>429</a>    epoch
+<a href=#430 id=430 data-nosnippet>430</a>}
+<a href=#431 id=431 data-nosnippet>431</a>
+<a href=#432 id=432 data-nosnippet>432</a><span class="doccomment">/// Has `hart` stopped for `epoch`?
+<a href=#433 id=433 data-nosnippet>433</a></span><span class="kw">fn </span>park_acknowledged(hart: usize, epoch: usize) -&gt; bool {
+<a href=#434 id=434 data-nosnippet>434</a>    epoch != <span class="number">0
+<a href=#435 id=435 data-nosnippet>435</a>        </span>&amp;&amp; PARK_ACK
+<a href=#436 id=436 data-nosnippet>436</a>            .get(hart)
+<a href=#437 id=437 data-nosnippet>437</a>            .is_some_and(|ack| ack.load(Ordering::Acquire) &gt;= epoch)
+<a href=#438 id=438 data-nosnippet>438</a>}
+<a href=#439 id=439 data-nosnippet>439</a>
+<a href=#440 id=440 data-nosnippet>440</a><span class="doccomment">/// Cancel `hart`'s outstanding request and resume it if it parked for it.
+<a href=#441 id=441 data-nosnippet>441</a>///
+<a href=#442 id=442 data-nosnippet>442</a>/// Idempotent by construction: the release epoch only ever moves forward, and a
+<a href=#443 id=443 data-nosnippet>443</a>/// hart that never acknowledged simply finds its request already released when it
+<a href=#444 id=444 data-nosnippet>444</a>/// reaches a safe point (see [`ParkOutcome::AlreadyReleased`]).
+<a href=#445 id=445 data-nosnippet>445</a></span><span class="kw">fn </span>release_park(hart: usize) {
+<a href=#446 id=446 data-nosnippet>446</a>    <span class="kw">let </span><span class="prelude-val">Some</span>(request) = PARK_REQUEST.get(hart) <span class="kw">else </span>{
+<a href=#447 id=447 data-nosnippet>447</a>        <span class="kw">return</span>;
+<a href=#448 id=448 data-nosnippet>448</a>    };
+<a href=#449 id=449 data-nosnippet>449</a>    <span class="kw">let </span><span class="prelude-val">Some</span>(release) = PARK_RELEASE.get(hart) <span class="kw">else </span>{
+<a href=#450 id=450 data-nosnippet>450</a>        <span class="kw">return</span>;
+<a href=#451 id=451 data-nosnippet>451</a>    };
+<a href=#452 id=452 data-nosnippet>452</a>    release.fetch_max(request.load(Ordering::Acquire), Ordering::AcqRel);
+<a href=#453 id=453 data-nosnippet>453</a>}
+<a href=#454 id=454 data-nosnippet>454</a>
+<a href=#455 id=455 data-nosnippet>455</a><span class="doccomment">/// Observe an outstanding park request on `hart` and, if there is one, stop this
+<a href=#456 id=456 data-nosnippet>456</a>/// hart at the trap path until the requester releases it.
+<a href=#457 id=457 data-nosnippet>457</a>///
+<a href=#458 id=458 data-nosnippet>458</a>/// This is the target half of [`QuiesceHarts`] on RV64. It is called from
+<a href=#459 id=459 data-nosnippet>459</a>/// `task::vi_timer_tick`, i.e. from the S-mode trap handler, for every trap —
+<a href=#460 id=460 data-nosnippet>460</a>/// the timer tick that every online hart already takes every 10 ms, and the
+<a href=#461 id=461 data-nosnippet>461</a>/// requester's IPI, which is what reaches a hart that is otherwise idle in `wfi`.
+<a href=#462 id=462 data-nosnippet>462</a>///
+<a href=#463 id=463 data-nosnippet>463</a>/// # Why the trap path is the safe point
+<a href=#464 id=464 data-nosnippet>464</a>///
+<a href=#465 id=465 data-nosnippet>465</a>/// 1. **Every hart passes it.** The timer is armed on every hart and an IPI is
+<a href=#466 id=466 data-nosnippet>466</a>///    taken by a hart in `wfi` (interrupts are enabled there), so a request
+<a href=#467 id=467 data-nosnippet>467</a>///    cannot be answered only by an already-cooperating hart.
+<a href=#468 id=468 data-nosnippet>468</a>/// 2. **No kernel lock is held.** A trap is only taken with `sstatus.SIE` set,
+<a href=#469 id=469 data-nosnippet>469</a>///    and `crate::sync::Spinlock` clears `SIE` for the whole life of its guard —
+<a href=#470 id=470 data-nosnippet>470</a>///    so the interrupted context cannot be inside `SCHEDULER`,
+<a href=#471 id=471 data-nosnippet>471</a>///    `FRAME_ALLOCATOR` or any other kernel spin lock, and those locks (which
+<a href=#472 id=472 data-nosnippet>472</a>///    the requester's own path needs) are guaranteed free. The trap handler takes
+<a href=#473 id=473 data-nosnippet>473</a>///    no lock before this call: it is placed ahead of `tick()`, the console poll
+<a href=#474 id=474 data-nosnippet>474</a>///    and `yield_cpu()`.
+<a href=#475 id=475 data-nosnippet>475</a>/// 3. **No frame allocation is in flight**, for the same reason —
+<a href=#476 id=476 data-nosnippet>476</a>///    `FRAME_ALLOCATOR` is a `crate::sync::Spinlock`, so an interrupted context
+<a href=#477 id=477 data-nosnippet>477</a>///    cannot be inside it.
+<a href=#478 id=478 data-nosnippet>478</a>/// 4. **Able to resume.** The vector's trap frame already holds the interrupted
+<a href=#479 id=479 data-nosnippet>479</a>///    context in full; leaving the loop returns through the handler and `sret`
+<a href=#480 id=480 data-nosnippet>480</a>///    restores the same registers, stack and privilege level. Nothing in the
+<a href=#481 id=481 data-nosnippet>481</a>///    scheduler moved, so no switch bookkeeping has to be repaired.
+<a href=#482 id=482 data-nosnippet>482</a>/// 5. **It stays stopped.** `SIE` is clear for the whole trap, so a parked hart
+<a href=#483 id=483 data-nosnippet>483</a>///    takes no further trap and cannot run any code but this loop until it is
+<a href=#484 id=484 data-nosnippet>484</a>///    released.
+<a href=#485 id=485 data-nosnippet>485</a>///
+<a href=#486 id=486 data-nosnippet>486</a>/// The residual is stated rather than papered over: `SIE`-set kernel code that
+<a href=#487 id=487 data-nosnippet>487</a>/// *allocates* holds the heap's `spinning_top` lock, which does **not** mask
+<a href=#488 id=488 data-nosnippet>488</a>/// interrupts, so a park can land on a hart holding that lock (the reachable RV64
+<a href=#489 id=489 data-nosnippet>489</a>/// cases are the boot path and a cooperative `yield_cpu` caller). The requester
+<a href=#490 id=490 data-nosnippet>490</a>/// must therefore not allocate while it holds the guard, and the requester's own
+<a href=#491 id=491 data-nosnippet>491</a>/// bounded wait is what keeps a mistake here from becoming a hang.
+<a href=#492 id=492 data-nosnippet>492</a>///
+<a href=#493 id=493 data-nosnippet>493</a>/// # The acknowledgement
+<a href=#494 id=494 data-nosnippet>494</a>///
+<a href=#495 id=495 data-nosnippet>495</a>/// The hart publishes [`PARK_ACK`] *before* it stops and with a release store,
+<a href=#496 id=496 data-nosnippet>496</a>/// and it cannot take a trap between that store and the loop, so a requester that
+<a href=#497 id=497 data-nosnippet>497</a>/// observes the acknowledgement knows the hart is not running anything else.
+<a href=#498 id=498 data-nosnippet>498</a>/// Publishing after the loop instead would claim a park that had already been
+<a href=#499 id=499 data-nosnippet>499</a>/// missed — the epoch could be released before the store landed.
+<a href=#500 id=500 data-nosnippet>500</a>///
+<a href=#501 id=501 data-nosnippet>501</a>/// The loop exits when [`PARK_RELEASE`] reaches the parked epoch. It is bounded
+<a href=#502 id=502 data-nosnippet>502</a>/// twice over (`PARK_ABANDON_TICKS`, `PARK_SPIN_LIMIT`) because the requester
+<a href=#503 id=503 data-nosnippet>503</a>/// may be gone; an abandoned park is logged rather than left as a hang.
+<a href=#504 id=504 data-nosnippet>504</a></span><span class="attr">#[inline]
+<a href=#505 id=505 data-nosnippet>505</a></span><span class="kw">pub fn </span>park_here_if_requested(hart: usize) -&gt; ParkOutcome {
+<a href=#506 id=506 data-nosnippet>506</a>    <span class="kw">let </span><span class="prelude-val">Some</span>(request) = PARK_REQUEST.get(hart) <span class="kw">else </span>{
+<a href=#507 id=507 data-nosnippet>507</a>        <span class="kw">return </span>ParkOutcome::Idle;
+<a href=#508 id=508 data-nosnippet>508</a>    };
+<a href=#509 id=509 data-nosnippet>509</a>    <span class="attr">#[cfg(all(feature = <span class="string">"test-hooks"</span>, target_arch = <span class="string">"riscv64"</span>))]
+<a href=#510 id=510 data-nosnippet>510</a>    </span>lane::note_trap(hart);
+<a href=#511 id=511 data-nosnippet>511</a>
+<a href=#512 id=512 data-nosnippet>512</a>    <span class="kw">let </span>epoch = request.load(Ordering::Acquire);
+<a href=#513 id=513 data-nosnippet>513</a>    <span class="kw">if </span>epoch == <span class="number">0 </span>{
+<a href=#514 id=514 data-nosnippet>514</a>        <span class="kw">return </span>ParkOutcome::Idle;
+<a href=#515 id=515 data-nosnippet>515</a>    }
+<a href=#516 id=516 data-nosnippet>516</a>    <span class="kw">let </span>released = || {
+<a href=#517 id=517 data-nosnippet>517</a>        PARK_RELEASE
+<a href=#518 id=518 data-nosnippet>518</a>            .get(hart)
+<a href=#519 id=519 data-nosnippet>519</a>            .is_some_and(|release| release.load(Ordering::Acquire) &gt;= epoch)
+<a href=#520 id=520 data-nosnippet>520</a>    };
+<a href=#521 id=521 data-nosnippet>521</a>    <span class="kw">if </span>released() {
+<a href=#522 id=522 data-nosnippet>522</a>        <span class="attr">#[cfg(all(feature = <span class="string">"test-hooks"</span>, target_arch = <span class="string">"riscv64"</span>))]
+<a href=#523 id=523 data-nosnippet>523</a>        </span>lane::note_release_seen(hart, epoch);
+<a href=#524 id=524 data-nosnippet>524</a>        <span class="kw">return </span>ParkOutcome::AlreadyReleased { epoch };
+<a href=#525 id=525 data-nosnippet>525</a>    }
+<a href=#526 id=526 data-nosnippet>526</a>    <span class="attr">#[cfg(any(feature = <span class="string">"test-hooks"</span>, test))]
+<a href=#527 id=527 data-nosnippet>527</a>    </span><span class="kw">if </span>park_ack_withheld(hart) {
+<a href=#528 id=528 data-nosnippet>528</a>        <span class="attr">#[cfg(all(feature = <span class="string">"test-hooks"</span>, target_arch = <span class="string">"riscv64"</span>))]
+<a href=#529 id=529 data-nosnippet>529</a>        </span>lane::note_withheld(hart, epoch);
+<a href=#530 id=530 data-nosnippet>530</a>        <span class="kw">return </span>ParkOutcome::Withheld { epoch };
+<a href=#531 id=531 data-nosnippet>531</a>    }
+<a href=#532 id=532 data-nosnippet>532</a>
+<a href=#533 id=533 data-nosnippet>533</a>    <span class="comment">// I am stopping: publish that, with everything that must not change while I
+<a href=#534 id=534 data-nosnippet>534</a>    // am parked already committed.
+<a href=#535 id=535 data-nosnippet>535</a>    </span>PARK_ACK[hart].store(epoch, Ordering::Release);
+<a href=#536 id=536 data-nosnippet>536</a>    <span class="attr">#[cfg(all(feature = <span class="string">"test-hooks"</span>, target_arch = <span class="string">"riscv64"</span>))]
+<a href=#537 id=537 data-nosnippet>537</a>    </span>lane::note_stopped(hart, epoch);
+<a href=#538 id=538 data-nosnippet>538</a>
+<a href=#539 id=539 data-nosnippet>539</a>    <span class="attr">#[cfg(target_arch = <span class="string">"riscv64"</span>)]
+<a href=#540 id=540 data-nosnippet>540</a>    </span><span class="kw">let </span>deadline = hal::common::timer::read_mtime().saturating_add(PARK_ABANDON_TICKS);
+<a href=#541 id=541 data-nosnippet>541</a>    <span class="kw">let </span><span class="kw-2">mut </span>spins = <span class="number">0usize</span>;
+<a href=#542 id=542 data-nosnippet>542</a>    <span class="kw">loop </span>{
+<a href=#543 id=543 data-nosnippet>543</a>        <span class="kw">if </span>released() {
+<a href=#544 id=544 data-nosnippet>544</a>            <span class="attr">#[cfg(all(feature = <span class="string">"test-hooks"</span>, target_arch = <span class="string">"riscv64"</span>))]
+<a href=#545 id=545 data-nosnippet>545</a>            </span>lane::note_resumed(hart, epoch);
+<a href=#546 id=546 data-nosnippet>546</a>            <span class="kw">return </span>ParkOutcome::Parked { epoch };
+<a href=#547 id=547 data-nosnippet>547</a>        }
+<a href=#548 id=548 data-nosnippet>548</a>        <span class="attr">#[cfg(target_arch = <span class="string">"riscv64"</span>)]
+<a href=#549 id=549 data-nosnippet>549</a>        </span><span class="kw">if </span>hal::common::timer::read_mtime() &gt; deadline {
+<a href=#550 id=550 data-nosnippet>550</a>            <span class="kw">break</span>;
+<a href=#551 id=551 data-nosnippet>551</a>        }
+<a href=#552 id=552 data-nosnippet>552</a>        spins += <span class="number">1</span>;
+<a href=#553 id=553 data-nosnippet>553</a>        <span class="kw">if </span>spins &gt;= PARK_SPIN_LIMIT {
+<a href=#554 id=554 data-nosnippet>554</a>            <span class="kw">break</span>;
+<a href=#555 id=555 data-nosnippet>555</a>        }
+<a href=#556 id=556 data-nosnippet>556</a>        core::hint::spin_loop();
+<a href=#557 id=557 data-nosnippet>557</a>    }
+<a href=#558 id=558 data-nosnippet>558</a>    <span class="attr">#[cfg(all(feature = <span class="string">"test-hooks"</span>, target_arch = <span class="string">"riscv64"</span>))]
+<a href=#559 id=559 data-nosnippet>559</a>    </span>lane::note_abandoned(hart, epoch);
+<a href=#560 id=560 data-nosnippet>560</a>    <span class="macro">log::warn!</span>(
+<a href=#561 id=561 data-nosnippet>561</a>        <span class="string">"[quiesce] hart {hart} left the parked loop without a release at epoch {epoch}: \
+<a href=#562 id=562 data-nosnippet>562</a>         the requester is gone; resuming"
+<a href=#563 id=563 data-nosnippet>563</a>    </span>);
+<a href=#564 id=564 data-nosnippet>564</a>    ParkOutcome::Abandoned { epoch }
+<a href=#565 id=565 data-nosnippet>565</a>}
+<a href=#566 id=566 data-nosnippet>566</a>
+<a href=#567 id=567 data-nosnippet>567</a><span class="attr">#[cfg(any(feature = <span class="string">"test-hooks"</span>, test))]
+<a href=#568 id=568 data-nosnippet>568</a></span><span class="kw">static </span>PARK_ACK_WITHHELD: [AtomicBool; PARK_HARTS] = [<span class="kw">const </span>{ AtomicBool::new(<span class="bool-val">false</span>) }; PARK_HARTS];
+<a href=#569 id=569 data-nosnippet>569</a>
+<a href=#570 id=570 data-nosnippet>570</a><span class="doccomment">/// Test-hooks: make `hart` observe park requests without ever acknowledging one,
+<a href=#571 id=571 data-nosnippet>571</a>/// so the requester's fail-closed path (bounded wait, release, no park) is
+<a href=#572 id=572 data-nosnippet>572</a>/// reachable without waiting for a real hart to stall.
+<a href=#573 id=573 data-nosnippet>573</a></span><span class="attr">#[cfg(any(feature = <span class="string">"test-hooks"</span>, test))]
+<a href=#574 id=574 data-nosnippet>574</a></span><span class="kw">pub fn </span>set_park_ack_withheld(hart: usize, withheld: bool) {
+<a href=#575 id=575 data-nosnippet>575</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(flag) = PARK_ACK_WITHHELD.get(hart) {
+<a href=#576 id=576 data-nosnippet>576</a>        flag.store(withheld, Ordering::Release);
+<a href=#577 id=577 data-nosnippet>577</a>    }
+<a href=#578 id=578 data-nosnippet>578</a>}
+<a href=#579 id=579 data-nosnippet>579</a>
+<a href=#580 id=580 data-nosnippet>580</a><span class="attr">#[cfg(any(feature = <span class="string">"test-hooks"</span>, test))]
+<a href=#581 id=581 data-nosnippet>581</a></span><span class="kw">fn </span>park_ack_withheld(hart: usize) -&gt; bool {
+<a href=#582 id=582 data-nosnippet>582</a>    PARK_ACK_WITHHELD
+<a href=#583 id=583 data-nosnippet>583</a>        .get(hart)
+<a href=#584 id=584 data-nosnippet>584</a>        .is_some_and(|flag| flag.load(Ordering::Acquire))
+<a href=#585 id=585 data-nosnippet>585</a>}
+<a href=#586 id=586 data-nosnippet>586</a>
+<a href=#587 id=587 data-nosnippet>587</a><span class="comment">// ── The live kernel hart set ─────────────────────────────────────────────────
+<a href=#588 id=588 data-nosnippet>588</a>
+<a href=#589 id=589 data-nosnippet>589</a></span><span class="doccomment">/// The kernel's own hart set.
+<a href=#590 id=590 data-nosnippet>590</a></span><span class="kw">pub struct </span>KernelHarts;
+<a href=#591 id=591 data-nosnippet>591</a>
+<a href=#592 id=592 data-nosnippet>592</a><span class="kw">impl </span>QuiesceHarts <span class="kw">for </span>KernelHarts {
+<a href=#593 id=593 data-nosnippet>593</a>    <span class="kw">fn </span>requester(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize {
+<a href=#594 id=594 data-nosnippet>594</a>        <span class="kw">crate</span>::task::hart_local::current_hart_id()
+<a href=#595 id=595 data-nosnippet>595</a>    }
+<a href=#596 id=596 data-nosnippet>596</a>
+<a href=#597 id=597 data-nosnippet>597</a>    <span class="kw">fn </span>online_harts(<span class="kw-2">&amp;</span><span class="self">self</span>, out: <span class="kw-2">&amp;mut </span>HartSet) -&gt; <span class="prelude-ty">Result</span>&lt;(), QuiesceError&gt; {
+<a href=#598 id=598 data-nosnippet>598</a>        online_hart_ids(<span class="self">self</span>.requester(), out)
+<a href=#599 id=599 data-nosnippet>599</a>    }
+<a href=#600 id=600 data-nosnippet>600</a>
+<a href=#601 id=601 data-nosnippet>601</a>    <span class="doccomment">/// Present on RV64, where the trap path calls [`park_here_if_requested`] on
+<a href=#602 id=602 data-nosnippet>602</a>    /// every trap: a target then answers a request by itself, and the requester's
+<a href=#603 id=603 data-nosnippet>603</a>    /// bounded wait is a real wait for a real acknowledgement. Anywhere else no
+<a href=#604 id=604 data-nosnippet>604</a>    /// hart observes a request, so a multi-hart request must be refused outright
+<a href=#605 id=605 data-nosnippet>605</a>    /// instead of burning a budget on an acknowledgement that cannot arrive.
+<a href=#606 id=606 data-nosnippet>606</a>    </span><span class="kw">fn </span>park_hook_available(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
+<a href=#607 id=607 data-nosnippet>607</a>        <span class="macro">cfg!</span>(target_arch = <span class="string">"riscv64"</span>)
+<a href=#608 id=608 data-nosnippet>608</a>    }
+<a href=#609 id=609 data-nosnippet>609</a>
+<a href=#610 id=610 data-nosnippet>610</a>    <span class="kw">fn </span>request_park(<span class="kw-2">&amp;</span><span class="self">self</span>, hart: usize) -&gt; usize {
+<a href=#611 id=611 data-nosnippet>611</a>        request_park(hart)
+<a href=#612 id=612 data-nosnippet>612</a>    }
+<a href=#613 id=613 data-nosnippet>613</a>
+<a href=#614 id=614 data-nosnippet>614</a>    <span class="kw">fn </span>park_acked(<span class="kw-2">&amp;</span><span class="self">self</span>, hart: usize, epoch: usize) -&gt; bool {
+<a href=#615 id=615 data-nosnippet>615</a>        park_acknowledged(hart, epoch)
+<a href=#616 id=616 data-nosnippet>616</a>    }
+<a href=#617 id=617 data-nosnippet>617</a>
+<a href=#618 id=618 data-nosnippet>618</a>    <span class="kw">fn </span>release_park(<span class="kw-2">&amp;</span><span class="self">self</span>, hart: usize) {
+<a href=#619 id=619 data-nosnippet>619</a>        release_park(hart);
+<a href=#620 id=620 data-nosnippet>620</a>    }
+<a href=#621 id=621 data-nosnippet>621</a>
+<a href=#622 id=622 data-nosnippet>622</a>    <span class="kw">fn </span>ack_budget_ticks(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u64 {
+<a href=#623 id=623 data-nosnippet>623</a>        <span class="attr">#[cfg(target_arch = <span class="string">"riscv64"</span>)]
+<a href=#624 id=624 data-nosnippet>624</a>        </span>{
+<a href=#625 id=625 data-nosnippet>625</a>            KERNEL_ACK_BUDGET_TICKS
+<a href=#626 id=626 data-nosnippet>626</a>        }
+<a href=#627 id=627 data-nosnippet>627</a>        <span class="attr">#[cfg(not(target_arch = <span class="string">"riscv64"</span>))]
+<a href=#628 id=628 data-nosnippet>628</a>        </span>{
+<a href=#629 id=629 data-nosnippet>629</a>            <span class="number">0
+<a href=#630 id=630 data-nosnippet>630</a>        </span>}
+<a href=#631 id=631 data-nosnippet>631</a>    }
+<a href=#632 id=632 data-nosnippet>632</a>
+<a href=#633 id=633 data-nosnippet>633</a>    <span class="kw">fn </span>now_ticks(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u64 {
+<a href=#634 id=634 data-nosnippet>634</a>        <span class="comment">// RV64 has the 10 MHz `mtime`; the other backends have no cross-arch
+<a href=#635 id=635 data-nosnippet>635</a>        // tick source wired in and their SMP is single-hart, so the no-op path
+<a href=#636 id=636 data-nosnippet>636</a>        // never reads a clock there (the poll limit still bounds the wait).
+<a href=#637 id=637 data-nosnippet>637</a>        </span><span class="attr">#[cfg(target_arch = <span class="string">"riscv64"</span>)]
+<a href=#638 id=638 data-nosnippet>638</a>        </span>{
+<a href=#639 id=639 data-nosnippet>639</a>            hal::common::timer::read_mtime()
+<a href=#640 id=640 data-nosnippet>640</a>        }
+<a href=#641 id=641 data-nosnippet>641</a>        <span class="attr">#[cfg(not(target_arch = <span class="string">"riscv64"</span>))]
+<a href=#642 id=642 data-nosnippet>642</a>        </span>{
+<a href=#643 id=643 data-nosnippet>643</a>            <span class="number">0
+<a href=#644 id=644 data-nosnippet>644</a>        </span>}
+<a href=#645 id=645 data-nosnippet>645</a>    }
+<a href=#646 id=646 data-nosnippet>646</a>}
+<a href=#647 id=647 data-nosnippet>647</a>
+<a href=#648 id=648 data-nosnippet>648</a><span class="doccomment">/// How long the kernel waits for a park acknowledgement: 100 ms of `mtime`.
+<a href=#649 id=649 data-nosnippet>649</a>/// Not widened later — a hart that cannot reach a safe point is reported, and
+<a href=#650 id=650 data-nosnippet>650</a>/// the next capture is the retry boundary.
+<a href=#651 id=651 data-nosnippet>651</a></span><span class="attr">#[cfg(target_arch = <span class="string">"riscv64"</span>)]
+<a href=#652 id=652 data-nosnippet>652</a></span><span class="kw">const </span>KERNEL_ACK_BUDGET_TICKS: u64 = <span class="number">10 </span>* hal::common::timer::TICKS_PER_10MS;
+<a href=#653 id=653 data-nosnippet>653</a>
+<a href=#654 id=654 data-nosnippet>654</a><span class="doccomment">/// The logical id of the hart that runs `kmain`. It never publishes
+<a href=#655 id=655 data-nosnippet>655</a>/// `smp::HART_ONLINE` (`task::init` installs it as hart 0 before there is an SMP
+<a href=#656 id=656 data-nosnippet>656</a>/// layer to publish into), so the online set has to name it explicitly.
+<a href=#657 id=657 data-nosnippet>657</a></span><span class="kw">const </span>BOOT_HART: usize = <span class="number">0</span>;
+<a href=#658 id=658 data-nosnippet>658</a>
+<a href=#659 id=659 data-nosnippet>659</a><span class="doccomment">/// Record every hart that can run kernel code for a request issued by
+<a href=#660 id=660 data-nosnippet>660</a>/// `requester`, including the boot hart.
+<a href=#661 id=661 data-nosnippet>661</a>///
+<a href=#662 id=662 data-nosnippet>662</a>/// The boot hart never publishes `smp::HART_ONLINE` — it is running before there
+<a href=#663 id=663 data-nosnippet>663</a>/// is anything to publish into — so the published secondary list alone is an
+<a href=#664 id=664 data-nosnippet>664</a>/// incomplete online set. The requester used to be unioned in to cover that,
+<a href=#665 id=665 data-nosnippet>665</a>/// which is only enough while the requester *is* the boot hart: a capture
+<a href=#666 id=666 data-nosnippet>666</a>/// requested from hart 1 would leave hart 0 out of the target set, and a hart
+<a href=#667 id=667 data-nosnippet>667</a>/// executing kernel code that can mutate the image would never be asked to stop.
+<a href=#668 id=668 data-nosnippet>668</a></span><span class="kw">fn </span>online_hart_ids(requester: usize, out: <span class="kw-2">&amp;mut </span>HartSet) -&gt; <span class="prelude-ty">Result</span>&lt;(), QuiesceError&gt; {
+<a href=#669 id=669 data-nosnippet>669</a>    out.insert(BOOT_HART)<span class="question-mark">?</span>;
+<a href=#670 id=670 data-nosnippet>670</a>    out.insert(requester)<span class="question-mark">?</span>;
+<a href=#671 id=671 data-nosnippet>671</a>    <span class="kw">for </span>hart <span class="kw">in </span><span class="kw">crate</span>::task::smp::online_harts() {
+<a href=#672 id=672 data-nosnippet>672</a>        out.insert(hart)<span class="question-mark">?</span>;
+<a href=#673 id=673 data-nosnippet>673</a>    }
+<a href=#674 id=674 data-nosnippet>674</a>    <span class="prelude-val">Ok</span>(())
+<a href=#675 id=675 data-nosnippet>675</a>}
+<a href=#676 id=676 data-nosnippet>676</a>
+<a href=#677 id=677 data-nosnippet>677</a><span class="doccomment">/// The kernel's single-flight protocol instance.
+<a href=#678 id=678 data-nosnippet>678</a></span><span class="kw">pub static </span>KERNEL_STATE: QuiesceState = QuiesceState::new();
+<a href=#679 id=679 data-nosnippet>679</a>
+<a href=#680 id=680 data-nosnippet>680</a><span class="doccomment">/// The kernel's hart set.
+<a href=#681 id=681 data-nosnippet>681</a></span><span class="kw">pub static </span>KERNEL_HARTS: KernelHarts = KernelHarts;
+<a href=#682 id=682 data-nosnippet>682</a>
+<a href=#683 id=683 data-nosnippet>683</a><span class="comment">// ── The RV64 lane fixture for the park hook ──────────────────────────────────
+<a href=#684 id=684 data-nosnippet>684</a>
+<a href=#685 id=685 data-nosnippet>685</a></span><span class="attr">#[cfg(all(feature = <span class="string">"test-hooks"</span>, target_arch = <span class="string">"riscv64"</span>))]
+<a href=#686 id=686 data-nosnippet>686</a></span><span class="kw">pub mod </span>lane {
+<a href=#687 id=687 data-nosnippet>687</a>    <span class="doccomment">//! Boot fixture for the RV64 lane: the park hook, driven end to end on real
+<a href=#688 id=688 data-nosnippet>688</a>    //! harts, plus its fail-closed path.
+<a href=#689 id=689 data-nosnippet>689</a>    //!
+<a href=#690 id=690 data-nosnippet>690</a>    //! The requester half runs here on the boot hart — the only hart that can
+<a href=#691 id=691 data-nosnippet>691</a>    //! drive a fixture synchronously before the shell exists — and the target half
+<a href=#692 id=692 data-nosnippet>692</a>    //! is whatever real hart the request reaches through the trap path. Nothing in
+<a href=#693 id=693 data-nosnippet>693</a>    //! this module is a model of the mechanism: it calls the same
+<a href=#694 id=694 data-nosnippet>694</a>    //! [`KernelHarts`](super::KernelHarts)/[`QuiesceState`](super::QuiesceState)
+<a href=#695 id=695 data-nosnippet>695</a>    //! protocol the capture preflight calls, over the same IPI and the same
+<a href=#696 id=696 data-nosnippet>696</a>    //! trap-path hook.
+<a href=#697 id=697 data-nosnippet>697</a>    //!
+<a href=#698 id=698 data-nosnippet>698</a>    //! Witness shape. Each hart says what *it* did, so no line has to be trusted
+<a href=#699 id=699 data-nosnippet>699</a>    //! as a summary of another hart:
+<a href=#700 id=700 data-nosnippet>700</a>    //!
+<a href=#701 id=701 data-nosnippet>701</a>    //! * `hart=1 state=withheld epoch=E` — the target saw the request and was made
+<a href=#702 id=702 data-nosnippet>702</a>    //!   not to acknowledge it, which is the negative case's precondition;
+<a href=#703 id=703 data-nosnippet>703</a>    //! * `hart=0 state=refused pending=1` — the requester's bounded wait expired
+<a href=#704 id=704 data-nosnippet>704</a>    //!   and it refused: fail-closed, no success, no disk commit;
+<a href=#705 id=705 data-nosnippet>705</a>    //! * `hart=1 state=release-observed epoch=E` — the release reached a hart that
+<a href=#706 id=706 data-nosnippet>706</a>    //!   never acknowledged, i.e. the cancelled request left nothing behind;
+<a href=#707 id=707 data-nosnippet>707</a>    //! * `hart=1 state=parked epoch=E` / `hart=0 state=all-parked pending=0` —
+<a href=#708 id=708 data-nosnippet>708</a>    //!   target and requester agree the hart stopped;
+<a href=#709 id=709 data-nosnippet>709</a>    //! * `hart=0 state=proceed frozen_ticks=A-&gt;B` — the requester kept running
+<a href=#710 id=710 data-nosnippet>710</a>    //!   while the target's own trap counter stayed frozen, so "parked" is
+<a href=#711 id=711 data-nosnippet>711</a>    //!   observed, not asserted;
+<a href=#712 id=712 data-nosnippet>712</a>    //! * `hart=1 state=resumed epoch=E` and the counter moving again — the hart
+<a href=#713 id=713 data-nosnippet>713</a>    //!   went back to running its own code.
+<a href=#714 id=714 data-nosnippet>714</a>    //!
+<a href=#715 id=715 data-nosnippet>715</a>    //! The fixture takes `&amp;mut` nothing and allocates nothing: it runs in `kmain`
+<a href=#716 id=716 data-nosnippet>716</a>    //! before the shell exists.
+<a href=#717 id=717 data-nosnippet>717</a>
+<a href=#718 id=718 data-nosnippet>718</a>    </span><span class="kw">use </span>super::<span class="kw-2">*</span>;
+<a href=#719 id=719 data-nosnippet>719</a>
+<a href=#720 id=720 data-nosnippet>720</a>    <span class="doccomment">/// One 10 ms tick of `mtime`, in `mtime` units.
+<a href=#721 id=721 data-nosnippet>721</a>    </span><span class="kw">const </span>TICK: u64 = hal::common::timer::TICKS_PER_10MS;
+<a href=#722 id=722 data-nosnippet>722</a>
+<a href=#723 id=723 data-nosnippet>723</a>    <span class="doccomment">/// Traps observed on each hart: the frozen-window witness. A parked hart
+<a href=#724 id=724 data-nosnippet>724</a>    /// takes no trap, so this counter cannot move while it is parked, and it moves
+<a href=#725 id=725 data-nosnippet>725</a>    /// again the moment the hart is released.
+<a href=#726 id=726 data-nosnippet>726</a>    </span><span class="kw">static </span>TRAP_TICKS: [AtomicUsize; PARK_HARTS] = [<span class="kw">const </span>{ AtomicUsize::new(<span class="number">0</span>) }; PARK_HARTS];
+<a href=#727 id=727 data-nosnippet>727</a>    <span class="kw">static </span>STOPPED: [AtomicUsize; PARK_HARTS] = [<span class="kw">const </span>{ AtomicUsize::new(<span class="number">0</span>) }; PARK_HARTS];
+<a href=#728 id=728 data-nosnippet>728</a>    <span class="kw">static </span>RESUMED: [AtomicUsize; PARK_HARTS] = [<span class="kw">const </span>{ AtomicUsize::new(<span class="number">0</span>) }; PARK_HARTS];
+<a href=#729 id=729 data-nosnippet>729</a>    <span class="kw">static </span>ABANDONED: [AtomicUsize; PARK_HARTS] = [<span class="kw">const </span>{ AtomicUsize::new(<span class="number">0</span>) }; PARK_HARTS];
+<a href=#730 id=730 data-nosnippet>730</a>    <span class="kw">static </span>WITHHELD: [AtomicUsize; PARK_HARTS] = [<span class="kw">const </span>{ AtomicUsize::new(<span class="number">0</span>) }; PARK_HARTS];
+<a href=#731 id=731 data-nosnippet>731</a>    <span class="kw">static </span>RELEASE_SEEN: [AtomicUsize; PARK_HARTS] = [<span class="kw">const </span>{ AtomicUsize::new(<span class="number">0</span>) }; PARK_HARTS];
+<a href=#732 id=732 data-nosnippet>732</a>    <span class="doccomment">/// Last epoch each one-shot marker was logged for, so a request that stays
+<a href=#733 id=733 data-nosnippet>733</a>    /// outstanding across several 10 ms traps logs its observation once. One entry
+<a href=#734 id=734 data-nosnippet>734</a>    /// per hart *and* per event: the two events can name the same epoch (a request
+<a href=#735 id=735 data-nosnippet>735</a>    /// is withheld and then cancelled), and a shared key would drop the second.
+<a href=#736 id=736 data-nosnippet>736</a>    </span><span class="kw">static </span>LOGGED_WITHHELD: [AtomicUsize; PARK_HARTS] = [<span class="kw">const </span>{ AtomicUsize::new(<span class="number">0</span>) }; PARK_HARTS];
+<a href=#737 id=737 data-nosnippet>737</a>    <span class="kw">static </span>LOGGED_RELEASE: [AtomicUsize; PARK_HARTS] = [<span class="kw">const </span>{ AtomicUsize::new(<span class="number">0</span>) }; PARK_HARTS];
+<a href=#738 id=738 data-nosnippet>738</a>
+<a href=#739 id=739 data-nosnippet>739</a>    <span class="kw">fn </span>bump(counters: <span class="kw-2">&amp;</span>[AtomicUsize; PARK_HARTS], hart: usize) {
+<a href=#740 id=740 data-nosnippet>740</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(counter) = counters.get(hart) {
+<a href=#741 id=741 data-nosnippet>741</a>            counter.fetch_add(<span class="number">1</span>, Ordering::AcqRel);
+<a href=#742 id=742 data-nosnippet>742</a>        }
+<a href=#743 id=743 data-nosnippet>743</a>    }
+<a href=#744 id=744 data-nosnippet>744</a>
+<a href=#745 id=745 data-nosnippet>745</a>    <span class="kw">fn </span>count(counters: <span class="kw-2">&amp;</span>[AtomicUsize; PARK_HARTS], hart: usize) -&gt; usize {
+<a href=#746 id=746 data-nosnippet>746</a>        counters.get(hart).map_or(<span class="number">0</span>, |c| c.load(Ordering::Acquire))
+<a href=#747 id=747 data-nosnippet>747</a>    }
+<a href=#748 id=748 data-nosnippet>748</a>
+<a href=#749 id=749 data-nosnippet>749</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>note_trap(hart: usize) {
+<a href=#750 id=750 data-nosnippet>750</a>        bump(<span class="kw-2">&amp;</span>TRAP_TICKS, hart);
+<a href=#751 id=751 data-nosnippet>751</a>    }
+<a href=#752 id=752 data-nosnippet>752</a>
+<a href=#753 id=753 data-nosnippet>753</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>note_stopped(hart: usize, epoch: usize) {
+<a href=#754 id=754 data-nosnippet>754</a>        bump(<span class="kw-2">&amp;</span>STOPPED, hart);
+<a href=#755 id=755 data-nosnippet>755</a>        <span class="macro">log::warn!</span>(<span class="string">"[selftest] S22-RV64-PARK: hart={hart} state=parked epoch={epoch}"</span>);
+<a href=#756 id=756 data-nosnippet>756</a>    }
+<a href=#757 id=757 data-nosnippet>757</a>
+<a href=#758 id=758 data-nosnippet>758</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>note_resumed(hart: usize, epoch: usize) {
+<a href=#759 id=759 data-nosnippet>759</a>        bump(<span class="kw-2">&amp;</span>RESUMED, hart);
+<a href=#760 id=760 data-nosnippet>760</a>        <span class="macro">log::warn!</span>(<span class="string">"[selftest] S22-RV64-PARK: hart={hart} state=resumed epoch={epoch}"</span>);
+<a href=#761 id=761 data-nosnippet>761</a>    }
+<a href=#762 id=762 data-nosnippet>762</a>
+<a href=#763 id=763 data-nosnippet>763</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>note_abandoned(hart: usize, epoch: usize) {
+<a href=#764 id=764 data-nosnippet>764</a>        bump(<span class="kw-2">&amp;</span>ABANDONED, hart);
+<a href=#765 id=765 data-nosnippet>765</a>        <span class="macro">log::warn!</span>(<span class="string">"[selftest] S22-RV64-PARK: hart={hart} state=abandoned epoch={epoch}"</span>);
+<a href=#766 id=766 data-nosnippet>766</a>    }
+<a href=#767 id=767 data-nosnippet>767</a>
+<a href=#768 id=768 data-nosnippet>768</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>note_withheld(hart: usize, epoch: usize) {
+<a href=#769 id=769 data-nosnippet>769</a>        bump(<span class="kw-2">&amp;</span>WITHHELD, hart);
+<a href=#770 id=770 data-nosnippet>770</a>        log_once(<span class="kw-2">&amp;</span>LOGGED_WITHHELD, hart, epoch, <span class="string">"withheld"</span>);
+<a href=#771 id=771 data-nosnippet>771</a>    }
+<a href=#772 id=772 data-nosnippet>772</a>
+<a href=#773 id=773 data-nosnippet>773</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>note_release_seen(hart: usize, epoch: usize) {
+<a href=#774 id=774 data-nosnippet>774</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(seen) = RELEASE_SEEN.get(hart) {
+<a href=#775 id=775 data-nosnippet>775</a>            <span class="comment">// The release is observed on every later trap too; the counter records
+<a href=#776 id=776 data-nosnippet>776</a>            // the last release this hart noticed, the marker fires once per epoch.
+<a href=#777 id=777 data-nosnippet>777</a>            </span>seen.fetch_max(epoch, Ordering::AcqRel);
+<a href=#778 id=778 data-nosnippet>778</a>        }
+<a href=#779 id=779 data-nosnippet>779</a>        log_once(<span class="kw-2">&amp;</span>LOGGED_RELEASE, hart, epoch, <span class="string">"release-observed"</span>);
+<a href=#780 id=780 data-nosnippet>780</a>    }
+<a href=#781 id=781 data-nosnippet>781</a>
+<a href=#782 id=782 data-nosnippet>782</a>    <span class="kw">fn </span>log_once(logged_for: <span class="kw-2">&amp;</span>[AtomicUsize; PARK_HARTS], hart: usize, epoch: usize, state: <span class="kw-2">&amp;</span>str) {
+<a href=#783 id=783 data-nosnippet>783</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(logged) = logged_for.get(hart) <span class="kw">else </span>{
+<a href=#784 id=784 data-nosnippet>784</a>            <span class="kw">return</span>;
+<a href=#785 id=785 data-nosnippet>785</a>        };
+<a href=#786 id=786 data-nosnippet>786</a>        <span class="kw">if </span>logged.swap(epoch, Ordering::AcqRel) != epoch {
+<a href=#787 id=787 data-nosnippet>787</a>            <span class="macro">log::warn!</span>(<span class="string">"[selftest] S22-RV64-PARK: hart={hart} state={state} epoch={epoch}"</span>);
+<a href=#788 id=788 data-nosnippet>788</a>        }
+<a href=#789 id=789 data-nosnippet>789</a>    }
+<a href=#790 id=790 data-nosnippet>790</a>
+<a href=#791 id=791 data-nosnippet>791</a>    <span class="doccomment">/// Spin until `predicate` holds or `ticks` of `mtime` have passed.
+<a href=#792 id=792 data-nosnippet>792</a>    </span><span class="kw">fn </span>wait_for(ticks: u64, <span class="kw-2">mut </span>predicate: <span class="kw">impl </span>FnMut() -&gt; bool) -&gt; bool {
+<a href=#793 id=793 data-nosnippet>793</a>        <span class="kw">let </span>deadline = hal::common::timer::read_mtime() + ticks;
+<a href=#794 id=794 data-nosnippet>794</a>        <span class="kw">loop </span>{
+<a href=#795 id=795 data-nosnippet>795</a>            <span class="kw">if </span>predicate() {
+<a href=#796 id=796 data-nosnippet>796</a>                <span class="kw">return </span><span class="bool-val">true</span>;
+<a href=#797 id=797 data-nosnippet>797</a>            }
+<a href=#798 id=798 data-nosnippet>798</a>            <span class="kw">if </span>hal::common::timer::read_mtime() &gt; deadline {
+<a href=#799 id=799 data-nosnippet>799</a>                <span class="kw">return </span><span class="bool-val">false</span>;
+<a href=#800 id=800 data-nosnippet>800</a>            }
+<a href=#801 id=801 data-nosnippet>801</a>            core::hint::spin_loop();
+<a href=#802 id=802 data-nosnippet>802</a>        }
+<a href=#803 id=803 data-nosnippet>803</a>    }
+<a href=#804 id=804 data-nosnippet>804</a>
+<a href=#805 id=805 data-nosnippet>805</a>    <span class="doccomment">/// Let `ticks` of `mtime` pass without taking any lock or allocating — the
+<a href=#806 id=806 data-nosnippet>806</a>    /// requester's side of the frozen window.
+<a href=#807 id=807 data-nosnippet>807</a>    </span><span class="kw">fn </span>spin_ticks(ticks: u64) {
+<a href=#808 id=808 data-nosnippet>808</a>        <span class="kw">let </span>deadline = hal::common::timer::read_mtime() + ticks;
+<a href=#809 id=809 data-nosnippet>809</a>        <span class="kw">while </span>hal::common::timer::read_mtime() &lt;= deadline {
+<a href=#810 id=810 data-nosnippet>810</a>            core::hint::spin_loop();
+<a href=#811 id=811 data-nosnippet>811</a>        }
+<a href=#812 id=812 data-nosnippet>812</a>    }
+<a href=#813 id=813 data-nosnippet>813</a>
+<a href=#814 id=814 data-nosnippet>814</a>    <span class="kw">fn </span>terminal(ok: bool, harts: usize, parked: usize, resumed: usize, refused: usize) -&gt; bool {
+<a href=#815 id=815 data-nosnippet>815</a>        <span class="macro">log::warn!</span>(
+<a href=#816 id=816 data-nosnippet>816</a>            <span class="string">"[selftest] S22-RV64-PARK: hart=0 state=summary harts={harts} parked={parked} \
+<a href=#817 id=817 data-nosnippet>817</a>             resumed={resumed} refused={refused}"
+<a href=#818 id=818 data-nosnippet>818</a>        </span>);
+<a href=#819 id=819 data-nosnippet>819</a>        <span class="kw">if </span>ok {
+<a href=#820 id=820 data-nosnippet>820</a>            <span class="comment">// The terminal stays exactly `... PASS harts=N` so the lane's
+<a href=#821 id=821 data-nosnippet>821</a>            // exact-match terminal assertion cannot be satisfied by a partial run;
+<a href=#822 id=822 data-nosnippet>822</a>            // the counts above are detail, not the verdict.
+<a href=#823 id=823 data-nosnippet>823</a>            </span><span class="macro">log::warn!</span>(<span class="string">"S22-RV64-PARK: PASS harts={harts}"</span>);
+<a href=#824 id=824 data-nosnippet>824</a>        } <span class="kw">else </span>{
+<a href=#825 id=825 data-nosnippet>825</a>            <span class="macro">log::warn!</span>(<span class="string">"S22-RV64-PARK: FAIL harts={harts}"</span>);
+<a href=#826 id=826 data-nosnippet>826</a>        }
+<a href=#827 id=827 data-nosnippet>827</a>        ok
+<a href=#828 id=828 data-nosnippet>828</a>    }
+<a href=#829 id=829 data-nosnippet>829</a>
+<a href=#830 id=830 data-nosnippet>830</a>    <span class="doccomment">/// Drive the park hook on the harts this boot actually has, and report whether
+<a href=#831 id=831 data-nosnippet>831</a>    /// every step held.
+<a href=#832 id=832 data-nosnippet>832</a>    ///
+<a href=#833 id=833 data-nosnippet>833</a>    /// Returns `false` after emitting its own verdict marker: `UNAVAILABLE` when
+<a href=#834 id=834 data-nosnippet>834</a>    /// the readiness gate found the target not taking traps before any request was
+<a href=#835 id=835 data-nosnippet>835</a>    /// made (no park was witnessed in this boot), or `FAIL` when a step of the
+<a href=#836 id=836 data-nosnippet>836</a>    /// witness itself did not hold. The caller only has to keep that marker
+<a href=#837 id=837 data-nosnippet>837</a>    /// visible; the lane decides on the markers, not on this value.
+<a href=#838 id=838 data-nosnippet>838</a>    </span><span class="kw">pub fn </span>run_primary() -&gt; bool {
+<a href=#839 id=839 data-nosnippet>839</a>        <span class="kw">if </span><span class="kw">crate</span>::task::hart_local::current_hart_id() != BOOT_HART {
+<a href=#840 id=840 data-nosnippet>840</a>            <span class="kw">return </span><span class="bool-val">true</span>;
+<a href=#841 id=841 data-nosnippet>841</a>        }
+<a href=#842 id=842 data-nosnippet>842</a>        <span class="kw">let </span>target = <span class="kw">match </span><span class="kw">crate</span>::task::smp::online_harts().find(|hart| <span class="kw-2">*</span>hart != BOOT_HART) {
+<a href=#843 id=843 data-nosnippet>843</a>            <span class="prelude-val">Some</span>(hart) =&gt; hart,
+<a href=#844 id=844 data-nosnippet>844</a>            <span class="prelude-val">None </span>=&gt; {
+<a href=#845 id=845 data-nosnippet>845</a>                <span class="comment">// One hart: no target, no request, no wait — the protocol's no-op
+<a href=#846 id=846 data-nosnippet>846</a>                // arm, taken through the live state and the live hart set. It must
+<a href=#847 id=847 data-nosnippet>847</a>                // succeed with the single-flight claim and must never ask the
+<a href=#848 id=848 data-nosnippet>848</a>                // requester to park itself, or a single-hart capture would deadlock
+<a href=#849 id=849 data-nosnippet>849</a>                // on its own acknowledgement.
+<a href=#850 id=850 data-nosnippet>850</a>                </span><span class="kw">let </span>ok = <span class="kw">match </span><span class="kw">super</span>::KERNEL_STATE.acquire(<span class="kw-2">&amp;</span><span class="kw">super</span>::KERNEL_HARTS) {
+<a href=#851 id=851 data-nosnippet>851</a>                    <span class="prelude-val">Ok</span>(guard) =&gt; guard.all_parked() &amp;&amp; guard.pending_count() == <span class="number">0</span>,
+<a href=#852 id=852 data-nosnippet>852</a>                    <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; <span class="bool-val">false</span>,
+<a href=#853 id=853 data-nosnippet>853</a>                };
+<a href=#854 id=854 data-nosnippet>854</a>                <span class="kw">let </span>asked = PARK_REQUEST[BOOT_HART].load(Ordering::Acquire) != <span class="number">0
+<a href=#855 id=855 data-nosnippet>855</a>                    </span>|| count(<span class="kw-2">&amp;</span>STOPPED, BOOT_HART) != <span class="number">0</span>;
+<a href=#856 id=856 data-nosnippet>856</a>                <span class="kw">if </span>!ok || asked {
+<a href=#857 id=857 data-nosnippet>857</a>                    <span class="macro">log::warn!</span>(
+<a href=#858 id=858 data-nosnippet>858</a>                        <span class="string">"[selftest] S22-RV64-PARK: hart=0 state=single-hart-arm-failed \
+<a href=#859 id=859 data-nosnippet>859</a>                         noop_ok={ok} requester_asked={asked}"
+<a href=#860 id=860 data-nosnippet>860</a>                    </span>);
+<a href=#861 id=861 data-nosnippet>861</a>                    <span class="kw">return </span>terminal(<span class="bool-val">false</span>, <span class="number">1</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>);
+<a href=#862 id=862 data-nosnippet>862</a>                }
+<a href=#863 id=863 data-nosnippet>863</a>                <span class="macro">log::warn!</span>(<span class="string">"[selftest] S22-RV64-PARK: hart=0 state=no-targets (single-hart no-op)"</span>);
+<a href=#864 id=864 data-nosnippet>864</a>                <span class="kw">return </span>terminal(<span class="bool-val">true</span>, <span class="number">1</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>);
+<a href=#865 id=865 data-nosnippet>865</a>            }
+<a href=#866 id=866 data-nosnippet>866</a>        };
+<a href=#867 id=867 data-nosnippet>867</a>
+<a href=#868 id=868 data-nosnippet>868</a>        <span class="comment">// ── 0. Readiness gate, *before* this fixture asks the target for
+<a href=#869 id=869 data-nosnippet>869</a>        // anything. A boot in which the second hart has already stopped taking
+<a href=#870 id=870 data-nosnippet>870</a>        // traps is the known mid-boot condition the rest of this lane tolerates
+<a href=#871 id=871 data-nosnippet>871</a>        // (phase-02's "a remote hart can stop acknowledging mid-boot": a hart can
+<a href=#872 id=872 data-nosnippet>872</a>        // be held non-preemptible for seconds, and in one observed boot hart 0 and
+<a href=#873 id=873 data-nosnippet>873</a>        // then hart 1 were both reported silent before this fixture ran). It is
+<a href=#874 id=874 data-nosnippet>874</a>        // not a statement about the park hook, and it cannot be one: no park
+<a href=#875 id=875 data-nosnippet>875</a>        // request has been issued yet — `PARK_REQUEST[target]` is still 0 — so the
+<a href=#876 id=876 data-nosnippet>876</a>        // hook has had nothing to answer and nothing it could have broken. What a
+<a href=#877 id=877 data-nosnippet>877</a>        // *post*-request silence means is the opposite, and stays a hard failure
+<a href=#878 id=878 data-nosnippet>878</a>        // below, which is what keeps this gate from hiding a hook that parks a hart
+<a href=#879 id=879 data-nosnippet>879</a>        // and never releases it.
+<a href=#880 id=880 data-nosnippet>880</a>        </span><span class="kw">let </span>baseline = count(<span class="kw-2">&amp;</span>TRAP_TICKS, target);
+<a href=#881 id=881 data-nosnippet>881</a>        <span class="kw">if </span>!wait_for(<span class="number">30 </span>* TICK, || count(<span class="kw-2">&amp;</span>TRAP_TICKS, target) &gt; baseline + <span class="number">1</span>) {
+<a href=#882 id=882 data-nosnippet>882</a>            <span class="macro">log::warn!</span>(
+<a href=#883 id=883 data-nosnippet>883</a>                <span class="string">"[selftest] S22-RV64-PARK: hart={target} state=not-taking-traps \
+<a href=#884 id=884 data-nosnippet>884</a>                 ticks={baseline} (before any request)"
+<a href=#885 id=885 data-nosnippet>885</a>            </span>);
+<a href=#886 id=886 data-nosnippet>886</a>            <span class="macro">log::warn!</span>(<span class="string">"S22-RV64-PARK: UNAVAILABLE harts=2 reason=target-not-taking-traps"</span>);
+<a href=#887 id=887 data-nosnippet>887</a>            <span class="kw">return </span><span class="bool-val">false</span>;
+<a href=#888 id=888 data-nosnippet>888</a>        }
+<a href=#889 id=889 data-nosnippet>889</a>
+<a href=#890 id=890 data-nosnippet>890</a>        <span class="comment">// ── 1. The negative case: the target observes the request and withholds
+<a href=#891 id=891 data-nosnippet>891</a>        // its acknowledgement, so the requester must fail closed.
+<a href=#892 id=892 data-nosnippet>892</a>        </span><span class="kw">super</span>::set_park_ack_withheld(target, <span class="bool-val">true</span>);
+<a href=#893 id=893 data-nosnippet>893</a>        <span class="kw">let </span>refused = <span class="kw">match </span><span class="kw">super</span>::KERNEL_STATE.acquire(<span class="kw-2">&amp;</span><span class="kw">super</span>::KERNEL_HARTS) {
+<a href=#894 id=894 data-nosnippet>894</a>            <span class="prelude-val">Ok</span>(guard) =&gt; {
+<a href=#895 id=895 data-nosnippet>895</a>                <span class="kw">let </span>pending = guard.pending_count();
+<a href=#896 id=896 data-nosnippet>896</a>                drop(guard);
+<a href=#897 id=897 data-nosnippet>897</a>                <span class="macro">log::warn!</span>(
+<a href=#898 id=898 data-nosnippet>898</a>                    <span class="string">"[selftest] S22-RV64-PARK: hart=0 state=unexpected-park pending={pending}"
+<a href=#899 id=899 data-nosnippet>899</a>                </span>);
+<a href=#900 id=900 data-nosnippet>900</a>                <span class="prelude-val">None
+<a href=#901 id=901 data-nosnippet>901</a>            </span>}
+<a href=#902 id=902 data-nosnippet>902</a>            <span class="prelude-val">Err</span>(err) =&gt; <span class="prelude-val">Some</span>(err),
+<a href=#903 id=903 data-nosnippet>903</a>        };
+<a href=#904 id=904 data-nosnippet>904</a>        <span class="kw">super</span>::set_park_ack_withheld(target, <span class="bool-val">false</span>);
+<a href=#905 id=905 data-nosnippet>905</a>        <span class="kw">let </span>cancelled = PARK_REQUEST[target].load(Ordering::Acquire);
+<a href=#906 id=906 data-nosnippet>906</a>        <span class="kw">let </span>refused_ok = <span class="macro">matches!</span>(refused, <span class="prelude-val">Some</span>(QuiesceError::Timeout { pending: <span class="number">1 </span>}));
+<a href=#907 id=907 data-nosnippet>907</a>        <span class="kw">if </span>!refused_ok {
+<a href=#908 id=908 data-nosnippet>908</a>            <span class="macro">log::warn!</span>(
+<a href=#909 id=909 data-nosnippet>909</a>                <span class="string">"[selftest] S22-RV64-PARK: hart=0 state=refused-shape-unknown \
+<a href=#910 id=910 data-nosnippet>910</a>                 error={:?}"</span>,
+<a href=#911 id=911 data-nosnippet>911</a>                refused
+<a href=#912 id=912 data-nosnippet>912</a>            );
+<a href=#913 id=913 data-nosnippet>913</a>            <span class="kw">return </span>terminal(<span class="bool-val">false</span>, <span class="number">2</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>);
+<a href=#914 id=914 data-nosnippet>914</a>        }
+<a href=#915 id=915 data-nosnippet>915</a>        <span class="macro">log::warn!</span>(
+<a href=#916 id=916 data-nosnippet>916</a>            <span class="string">"[selftest] S22-RV64-PARK: hart=0 state=refused pending=1 epoch={cancelled} \
+<a href=#917 id=917 data-nosnippet>917</a>             fail-closed"
+<a href=#918 id=918 data-nosnippet>918</a>        </span>);
+<a href=#919 id=919 data-nosnippet>919</a>        <span class="kw">if </span>count(<span class="kw-2">&amp;</span>WITHHELD, target) == <span class="number">0 </span>{
+<a href=#920 id=920 data-nosnippet>920</a>            <span class="macro">log::warn!</span>(<span class="string">"[selftest] S22-RV64-PARK: hart={target} state=never-observed-request"</span>);
+<a href=#921 id=921 data-nosnippet>921</a>            <span class="kw">return </span>terminal(<span class="bool-val">false</span>, <span class="number">2</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">1</span>);
+<a href=#922 id=922 data-nosnippet>922</a>        }
+<a href=#923 id=923 data-nosnippet>923</a>
+<a href=#924 id=924 data-nosnippet>924</a>        <span class="comment">// ── 2. The release reaches a hart that never acknowledged: the cancelled
+<a href=#925 id=925 data-nosnippet>925</a>        // request leaves no park behind, and the target is running its own code.
+<a href=#926 id=926 data-nosnippet>926</a>        </span><span class="kw">let </span>observed = wait_for(<span class="number">50 </span>* TICK, || count(<span class="kw-2">&amp;</span>RELEASE_SEEN, target) &gt;= cancelled);
+<a href=#927 id=927 data-nosnippet>927</a>        <span class="kw">if </span>!observed {
+<a href=#928 id=928 data-nosnippet>928</a>            <span class="macro">log::warn!</span>(
+<a href=#929 id=929 data-nosnippet>929</a>                <span class="string">"[selftest] S22-RV64-PARK: hart={target} state=release-not-observed \
+<a href=#930 id=930 data-nosnippet>930</a>                 epoch={cancelled}"
+<a href=#931 id=931 data-nosnippet>931</a>            </span>);
+<a href=#932 id=932 data-nosnippet>932</a>            <span class="kw">return </span>terminal(<span class="bool-val">false</span>, <span class="number">2</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">1</span>);
+<a href=#933 id=933 data-nosnippet>933</a>        }
+<a href=#934 id=934 data-nosnippet>934</a>
+<a href=#935 id=935 data-nosnippet>935</a>        <span class="comment">// ── 3. The positive case: a request the target answers.
+<a href=#936 id=936 data-nosnippet>936</a>        </span><span class="kw">let </span>want_resumed = count(<span class="kw-2">&amp;</span>RESUMED, target) + <span class="number">1</span>;
+<a href=#937 id=937 data-nosnippet>937</a>        <span class="kw">let </span>guard = <span class="kw">match </span><span class="kw">super</span>::KERNEL_STATE.acquire(<span class="kw-2">&amp;</span><span class="kw">super</span>::KERNEL_HARTS) {
+<a href=#938 id=938 data-nosnippet>938</a>            <span class="prelude-val">Ok</span>(guard) =&gt; guard,
+<a href=#939 id=939 data-nosnippet>939</a>            <span class="prelude-val">Err</span>(err) =&gt; {
+<a href=#940 id=940 data-nosnippet>940</a>                <span class="macro">log::warn!</span>(<span class="string">"[selftest] S22-RV64-PARK: hart=0 state=park-refused error={err}"</span>);
+<a href=#941 id=941 data-nosnippet>941</a>                <span class="kw">return </span>terminal(<span class="bool-val">false</span>, <span class="number">2</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">1</span>);
+<a href=#942 id=942 data-nosnippet>942</a>            }
+<a href=#943 id=943 data-nosnippet>943</a>        };
+<a href=#944 id=944 data-nosnippet>944</a>        <span class="kw">let </span>epoch = PARK_REQUEST[target].load(Ordering::Acquire);
+<a href=#945 id=945 data-nosnippet>945</a>        <span class="kw">if </span>!guard.all_parked() || count(<span class="kw-2">&amp;</span>STOPPED, target) == <span class="number">0 </span>{
+<a href=#946 id=946 data-nosnippet>946</a>            <span class="kw">let </span>pending = guard.pending_count();
+<a href=#947 id=947 data-nosnippet>947</a>            drop(guard);
+<a href=#948 id=948 data-nosnippet>948</a>            <span class="macro">log::warn!</span>(
+<a href=#949 id=949 data-nosnippet>949</a>                <span class="string">"[selftest] S22-RV64-PARK: hart=0 state=not-all-parked pending={pending} \
+<a href=#950 id=950 data-nosnippet>950</a>                 epoch={epoch}"
+<a href=#951 id=951 data-nosnippet>951</a>            </span>);
+<a href=#952 id=952 data-nosnippet>952</a>            <span class="kw">return </span>terminal(<span class="bool-val">false</span>, <span class="number">2</span>, count(<span class="kw-2">&amp;</span>STOPPED, target), <span class="number">0</span>, <span class="number">1</span>);
+<a href=#953 id=953 data-nosnippet>953</a>        }
+<a href=#954 id=954 data-nosnippet>954</a>        <span class="macro">log::warn!</span>(<span class="string">"[selftest] S22-RV64-PARK: hart=0 state=all-parked pending=0 epoch={epoch}"</span>);
+<a href=#955 id=955 data-nosnippet>955</a>
+<a href=#956 id=956 data-nosnippet>956</a>        <span class="comment">// The requester proceeds while the target is parked, and proves the park
+<a href=#957 id=957 data-nosnippet>957</a>        // was real: the target's own trap counter cannot move while it is stopped.
+<a href=#958 id=958 data-nosnippet>958</a>        </span><span class="kw">let </span>before = count(<span class="kw-2">&amp;</span>TRAP_TICKS, target);
+<a href=#959 id=959 data-nosnippet>959</a>        spin_ticks(<span class="number">4 </span>* TICK);
+<a href=#960 id=960 data-nosnippet>960</a>        <span class="kw">let </span>after = count(<span class="kw-2">&amp;</span>TRAP_TICKS, target);
+<a href=#961 id=961 data-nosnippet>961</a>        <span class="kw">let </span>frozen = before == after;
+<a href=#962 id=962 data-nosnippet>962</a>        <span class="macro">log::warn!</span>(
+<a href=#963 id=963 data-nosnippet>963</a>            <span class="string">"[selftest] S22-RV64-PARK: hart=0 state=proceed frozen_ticks={before}-&gt;{after} \
+<a href=#964 id=964 data-nosnippet>964</a>             window_ticks=4"
+<a href=#965 id=965 data-nosnippet>965</a>        </span>);
+<a href=#966 id=966 data-nosnippet>966</a>
+<a href=#967 id=967 data-nosnippet>967</a>        drop(guard);
+<a href=#968 id=968 data-nosnippet>968</a>        <span class="macro">log::warn!</span>(<span class="string">"[selftest] S22-RV64-PARK: hart=0 state=released epoch={epoch}"</span>);
+<a href=#969 id=969 data-nosnippet>969</a>
+<a href=#970 id=970 data-nosnippet>970</a>        <span class="comment">// ── 4. The target resumes: the release is observed and the same hart takes
+<a href=#971 id=971 data-nosnippet>971</a>        // traps again, which is what "resumed" means.
+<a href=#972 id=972 data-nosnippet>972</a>        </span><span class="kw">let </span>resumed = wait_for(<span class="number">50 </span>* TICK, || {
+<a href=#973 id=973 data-nosnippet>973</a>            count(<span class="kw-2">&amp;</span>RESUMED, target) &gt;= want_resumed &amp;&amp; count(<span class="kw-2">&amp;</span>TRAP_TICKS, target) &gt; after
+<a href=#974 id=974 data-nosnippet>974</a>        });
+<a href=#975 id=975 data-nosnippet>975</a>        <span class="kw">if </span>!resumed {
+<a href=#976 id=976 data-nosnippet>976</a>            <span class="macro">log::warn!</span>(
+<a href=#977 id=977 data-nosnippet>977</a>                <span class="string">"[selftest] S22-RV64-PARK: hart={target} state=not-resumed restored={} ticks={}"</span>,
+<a href=#978 id=978 data-nosnippet>978</a>                count(<span class="kw-2">&amp;</span>RESUMED, target),
+<a href=#979 id=979 data-nosnippet>979</a>                count(<span class="kw-2">&amp;</span>TRAP_TICKS, target)
+<a href=#980 id=980 data-nosnippet>980</a>            );
+<a href=#981 id=981 data-nosnippet>981</a>        }
+<a href=#982 id=982 data-nosnippet>982</a>        <span class="kw">let </span>ok = frozen &amp;&amp; resumed &amp;&amp; count(<span class="kw-2">&amp;</span>ABANDONED, target) == <span class="number">0</span>;
+<a href=#983 id=983 data-nosnippet>983</a>        terminal(ok, <span class="number">2</span>, count(<span class="kw-2">&amp;</span>STOPPED, target), count(<span class="kw-2">&amp;</span>RESUMED, target), <span class="number">1</span>)
+<a href=#984 id=984 data-nosnippet>984</a>    }
+<a href=#985 id=985 data-nosnippet>985</a>}
+<a href=#986 id=986 data-nosnippet>986</a>
+<a href=#987 id=987 data-nosnippet>987</a><span class="comment">// ── Host tests ───────────────────────────────────────────────────────────────
+<a href=#988 id=988 data-nosnippet>988</a>
+<a href=#989 id=989 data-nosnippet>989</a></span><span class="attr">#[cfg(test)]
+<a href=#990 id=990 data-nosnippet>990</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">mod </span>fake {
+<a href=#991 id=991 data-nosnippet>991</a>    <span class="doccomment">//! Deterministic hart set for the host tests, the counterpart of
+<a href=#992 id=992 data-nosnippet>992</a>    //! `snapshot::fake::FakeDisk`: no clock, no IPI, no scheduler. The clock
+<a href=#993 id=993 data-nosnippet>993</a>    //! advances one tick per [`QuiesceHarts::now_ticks`] read, so a bounded wait
+<a href=#994 id=994 data-nosnippet>994</a>    //! terminates in a fixed number of polls; acknowledgements are programmed
+<a href=#995 id=995 data-nosnippet>995</a>    //! per hart; every request and release is logged.
+<a href=#996 id=996 data-nosnippet>996</a>
+<a href=#997 id=997 data-nosnippet>997</a>    </span><span class="kw">use </span>super::{HartSet, QuiesceError, QuiesceHarts};
+<a href=#998 id=998 data-nosnippet>998</a>    <span class="kw">use </span>alloc::collections::{BTreeMap, BTreeSet};
+<a href=#999 id=999 data-nosnippet>999</a>    <span class="kw">use </span>alloc::vec::Vec;
+<a href=#1000 id=1000 data-nosnippet>1000</a>    <span class="kw">use </span>core::cell::RefCell;
+<a href=#1001 id=1001 data-nosnippet>1001</a>
+<a href=#1002 id=1002 data-nosnippet>1002</a>    <span class="attr">#[derive(Default)]
+<a href=#1003 id=1003 data-nosnippet>1003</a>    </span><span class="kw">struct </span>State {
+<a href=#1004 id=1004 data-nosnippet>1004</a>        online: Vec&lt;usize&gt;,
+<a href=#1005 id=1005 data-nosnippet>1005</a>        <span class="doccomment">/// Harts that acknowledge a park request as soon as it is made.
+<a href=#1006 id=1006 data-nosnippet>1006</a>        </span>acking: BTreeSet&lt;usize&gt;,
+<a href=#1007 id=1007 data-nosnippet>1007</a>        <span class="doccomment">/// hart -&gt; epoch of the park request that is still outstanding.
+<a href=#1008 id=1008 data-nosnippet>1008</a>        </span>outstanding: BTreeMap&lt;usize, usize&gt;,
+<a href=#1009 id=1009 data-nosnippet>1009</a>        <span class="doccomment">/// hart -&gt; epoch the hart currently acknowledges.
+<a href=#1010 id=1010 data-nosnippet>1010</a>        </span>acked: BTreeMap&lt;usize, usize&gt;,
+<a href=#1011 id=1011 data-nosnippet>1011</a>        requests: Vec&lt;(usize, usize)&gt;,
+<a href=#1012 id=1012 data-nosnippet>1012</a>        releases: Vec&lt;usize&gt;,
+<a href=#1013 id=1013 data-nosnippet>1013</a>        <span class="doccomment">/// `now_ticks()` reads; the value returned is the read count, so the
+<a href=#1014 id=1014 data-nosnippet>1014</a>        /// clock is monotonic and advances exactly once per poll.
+<a href=#1015 id=1015 data-nosnippet>1015</a>        </span>clock: u64,
+<a href=#1016 id=1016 data-nosnippet>1016</a>        next_epoch: usize,
+<a href=#1017 id=1017 data-nosnippet>1017</a>    }
+<a href=#1018 id=1018 data-nosnippet>1018</a>
+<a href=#1019 id=1019 data-nosnippet>1019</a>    <span class="kw">pub struct </span>FakeHarts {
+<a href=#1020 id=1020 data-nosnippet>1020</a>        inner: RefCell&lt;State&gt;,
+<a href=#1021 id=1021 data-nosnippet>1021</a>        requester: usize,
+<a href=#1022 id=1022 data-nosnippet>1022</a>        hook: bool,
+<a href=#1023 id=1023 data-nosnippet>1023</a>        budget: u64,
+<a href=#1024 id=1024 data-nosnippet>1024</a>    }
+<a href=#1025 id=1025 data-nosnippet>1025</a>
+<a href=#1026 id=1026 data-nosnippet>1026</a>    <span class="kw">impl </span>FakeHarts {
+<a href=#1027 id=1027 data-nosnippet>1027</a>        <span class="doccomment">/// A hart set with `online` harts and `requester`, with a park hook and
+<a href=#1028 id=1028 data-nosnippet>1028</a>        /// an 8-tick budget. Nothing acknowledges until
+<a href=#1029 id=1029 data-nosnippet>1029</a>        /// [`FakeHarts::ack_on_request`].
+<a href=#1030 id=1030 data-nosnippet>1030</a>        </span><span class="kw">pub fn </span>new(online: <span class="kw-2">&amp;</span>[usize], requester: usize) -&gt; <span class="self">Self </span>{
+<a href=#1031 id=1031 data-nosnippet>1031</a>            <span class="self">Self </span>{
+<a href=#1032 id=1032 data-nosnippet>1032</a>                inner: RefCell::new(State {
+<a href=#1033 id=1033 data-nosnippet>1033</a>                    online: online.to_vec(),
+<a href=#1034 id=1034 data-nosnippet>1034</a>                    next_epoch: <span class="number">1</span>,
+<a href=#1035 id=1035 data-nosnippet>1035</a>                    ..State::default()
+<a href=#1036 id=1036 data-nosnippet>1036</a>                }),
+<a href=#1037 id=1037 data-nosnippet>1037</a>                requester,
+<a href=#1038 id=1038 data-nosnippet>1038</a>                hook: <span class="bool-val">true</span>,
+<a href=#1039 id=1039 data-nosnippet>1039</a>                budget: <span class="number">8</span>,
+<a href=#1040 id=1040 data-nosnippet>1040</a>            }
+<a href=#1041 id=1041 data-nosnippet>1041</a>        }
+<a href=#1042 id=1042 data-nosnippet>1042</a>
+<a href=#1043 id=1043 data-nosnippet>1043</a>        <span class="doccomment">/// Model a hart set with no per-hart park hook.
+<a href=#1044 id=1044 data-nosnippet>1044</a>        </span><span class="kw">pub fn </span>with_hook(<span class="kw-2">mut </span><span class="self">self</span>, hook: bool) -&gt; <span class="self">Self </span>{
+<a href=#1045 id=1045 data-nosnippet>1045</a>            <span class="self">self</span>.hook = hook;
+<a href=#1046 id=1046 data-nosnippet>1046</a>            <span class="self">self
+<a href=#1047 id=1047 data-nosnippet>1047</a>        </span>}
+<a href=#1048 id=1048 data-nosnippet>1048</a>
+<a href=#1049 id=1049 data-nosnippet>1049</a>        <span class="doccomment">/// Override the acknowledgement budget in clock ticks.
+<a href=#1050 id=1050 data-nosnippet>1050</a>        </span><span class="kw">pub fn </span>with_budget(<span class="kw-2">mut </span><span class="self">self</span>, budget: u64) -&gt; <span class="self">Self </span>{
+<a href=#1051 id=1051 data-nosnippet>1051</a>            <span class="self">self</span>.budget = budget;
+<a href=#1052 id=1052 data-nosnippet>1052</a>            <span class="self">self
+<a href=#1053 id=1053 data-nosnippet>1053</a>        </span>}
+<a href=#1054 id=1054 data-nosnippet>1054</a>
+<a href=#1055 id=1055 data-nosnippet>1055</a>        <span class="doccomment">/// These harts acknowledge a park request as soon as it is made.
+<a href=#1056 id=1056 data-nosnippet>1056</a>        </span><span class="kw">pub fn </span>ack_on_request(<span class="kw-2">&amp;</span><span class="self">self</span>, harts: <span class="kw-2">&amp;</span>[usize]) {
+<a href=#1057 id=1057 data-nosnippet>1057</a>            <span class="kw">let </span><span class="kw-2">mut </span>state = <span class="self">self</span>.inner.borrow_mut();
+<a href=#1058 id=1058 data-nosnippet>1058</a>            <span class="kw">for </span>hart <span class="kw">in </span>harts {
+<a href=#1059 id=1059 data-nosnippet>1059</a>                state.acking.insert(<span class="kw-2">*</span>hart);
+<a href=#1060 id=1060 data-nosnippet>1060</a>            }
+<a href=#1061 id=1061 data-nosnippet>1061</a>        }
+<a href=#1062 id=1062 data-nosnippet>1062</a>
+<a href=#1063 id=1063 data-nosnippet>1063</a>        <span class="doccomment">/// The hart leaves the parked state (an interrupt, a fault) without a
+<a href=#1064 id=1064 data-nosnippet>1064</a>        /// release, so the predicate must be re-derived rather than remembered.
+<a href=#1065 id=1065 data-nosnippet>1065</a>        </span><span class="kw">pub fn </span>unack(<span class="kw-2">&amp;</span><span class="self">self</span>, hart: usize) {
+<a href=#1066 id=1066 data-nosnippet>1066</a>            <span class="self">self</span>.inner.borrow_mut().acked.remove(<span class="kw-2">&amp;</span>hart);
+<a href=#1067 id=1067 data-nosnippet>1067</a>        }
+<a href=#1068 id=1068 data-nosnippet>1068</a>
+<a href=#1069 id=1069 data-nosnippet>1069</a>        <span class="doccomment">/// Every `(hart, epoch)` park request, in order.
+<a href=#1070 id=1070 data-nosnippet>1070</a>        </span><span class="kw">pub fn </span>requests(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;(usize, usize)&gt; {
+<a href=#1071 id=1071 data-nosnippet>1071</a>            <span class="self">self</span>.inner.borrow().requests.clone()
+<a href=#1072 id=1072 data-nosnippet>1072</a>        }
+<a href=#1073 id=1073 data-nosnippet>1073</a>
+<a href=#1074 id=1074 data-nosnippet>1074</a>        <span class="doccomment">/// Every hart passed to `release_park`, in order.
+<a href=#1075 id=1075 data-nosnippet>1075</a>        </span><span class="kw">pub fn </span>releases(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;usize&gt; {
+<a href=#1076 id=1076 data-nosnippet>1076</a>            <span class="self">self</span>.inner.borrow().releases.clone()
+<a href=#1077 id=1077 data-nosnippet>1077</a>        }
+<a href=#1078 id=1078 data-nosnippet>1078</a>
+<a href=#1079 id=1079 data-nosnippet>1079</a>        <span class="doccomment">/// Harts whose outstanding request is currently acknowledged.
+<a href=#1080 id=1080 data-nosnippet>1080</a>        </span><span class="kw">pub fn </span>parked(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;usize&gt; {
+<a href=#1081 id=1081 data-nosnippet>1081</a>            <span class="kw">let </span>state = <span class="self">self</span>.inner.borrow();
+<a href=#1082 id=1082 data-nosnippet>1082</a>            state
+<a href=#1083 id=1083 data-nosnippet>1083</a>                .outstanding
+<a href=#1084 id=1084 data-nosnippet>1084</a>                .keys()
+<a href=#1085 id=1085 data-nosnippet>1085</a>                .filter(|hart| state.acked.get(hart) == state.outstanding.get(hart))
+<a href=#1086 id=1086 data-nosnippet>1086</a>                .copied()
+<a href=#1087 id=1087 data-nosnippet>1087</a>                .collect()
+<a href=#1088 id=1088 data-nosnippet>1088</a>        }
+<a href=#1089 id=1089 data-nosnippet>1089</a>
+<a href=#1090 id=1090 data-nosnippet>1090</a>        <span class="doccomment">/// Harts with a park request that has not been released.
+<a href=#1091 id=1091 data-nosnippet>1091</a>        </span><span class="kw">pub fn </span>outstanding(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;usize&gt; {
+<a href=#1092 id=1092 data-nosnippet>1092</a>            <span class="self">self</span>.inner.borrow().outstanding.keys().copied().collect()
+<a href=#1093 id=1093 data-nosnippet>1093</a>        }
+<a href=#1094 id=1094 data-nosnippet>1094</a>
+<a href=#1095 id=1095 data-nosnippet>1095</a>        <span class="doccomment">/// How many times the clock was read (i.e. how many polls the bounded
+<a href=#1096 id=1096 data-nosnippet>1096</a>        /// wait took).
+<a href=#1097 id=1097 data-nosnippet>1097</a>        </span><span class="kw">pub fn </span>clock_ticks(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u64 {
+<a href=#1098 id=1098 data-nosnippet>1098</a>            <span class="self">self</span>.inner.borrow().clock
+<a href=#1099 id=1099 data-nosnippet>1099</a>        }
+<a href=#1100 id=1100 data-nosnippet>1100</a>    }
+<a href=#1101 id=1101 data-nosnippet>1101</a>
+<a href=#1102 id=1102 data-nosnippet>1102</a>    <span class="kw">impl </span>QuiesceHarts <span class="kw">for </span>FakeHarts {
+<a href=#1103 id=1103 data-nosnippet>1103</a>        <span class="kw">fn </span>requester(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize {
+<a href=#1104 id=1104 data-nosnippet>1104</a>            <span class="self">self</span>.requester
+<a href=#1105 id=1105 data-nosnippet>1105</a>        }
+<a href=#1106 id=1106 data-nosnippet>1106</a>
+<a href=#1107 id=1107 data-nosnippet>1107</a>        <span class="kw">fn </span>online_harts(<span class="kw-2">&amp;</span><span class="self">self</span>, out: <span class="kw-2">&amp;mut </span>HartSet) -&gt; <span class="prelude-ty">Result</span>&lt;(), QuiesceError&gt; {
+<a href=#1108 id=1108 data-nosnippet>1108</a>            <span class="kw">for </span>hart <span class="kw">in </span><span class="self">self</span>.inner.borrow().online.iter().copied() {
+<a href=#1109 id=1109 data-nosnippet>1109</a>                out.insert(hart)<span class="question-mark">?</span>;
+<a href=#1110 id=1110 data-nosnippet>1110</a>            }
+<a href=#1111 id=1111 data-nosnippet>1111</a>            <span class="prelude-val">Ok</span>(())
+<a href=#1112 id=1112 data-nosnippet>1112</a>        }
+<a href=#1113 id=1113 data-nosnippet>1113</a>
+<a href=#1114 id=1114 data-nosnippet>1114</a>        <span class="kw">fn </span>park_hook_available(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
+<a href=#1115 id=1115 data-nosnippet>1115</a>            <span class="self">self</span>.hook
+<a href=#1116 id=1116 data-nosnippet>1116</a>        }
+<a href=#1117 id=1117 data-nosnippet>1117</a>
+<a href=#1118 id=1118 data-nosnippet>1118</a>        <span class="kw">fn </span>request_park(<span class="kw-2">&amp;</span><span class="self">self</span>, hart: usize) -&gt; usize {
+<a href=#1119 id=1119 data-nosnippet>1119</a>            <span class="kw">let </span><span class="kw-2">mut </span>state = <span class="self">self</span>.inner.borrow_mut();
+<a href=#1120 id=1120 data-nosnippet>1120</a>            <span class="kw">let </span>epoch = state.next_epoch;
+<a href=#1121 id=1121 data-nosnippet>1121</a>            state.next_epoch += <span class="number">1</span>;
+<a href=#1122 id=1122 data-nosnippet>1122</a>            state.requests.push((hart, epoch));
+<a href=#1123 id=1123 data-nosnippet>1123</a>            state.outstanding.insert(hart, epoch);
+<a href=#1124 id=1124 data-nosnippet>1124</a>            <span class="kw">if </span>state.acking.contains(<span class="kw-2">&amp;</span>hart) {
+<a href=#1125 id=1125 data-nosnippet>1125</a>                state.acked.insert(hart, epoch);
+<a href=#1126 id=1126 data-nosnippet>1126</a>            }
+<a href=#1127 id=1127 data-nosnippet>1127</a>            epoch
+<a href=#1128 id=1128 data-nosnippet>1128</a>        }
+<a href=#1129 id=1129 data-nosnippet>1129</a>
+<a href=#1130 id=1130 data-nosnippet>1130</a>        <span class="kw">fn </span>park_acked(<span class="kw-2">&amp;</span><span class="self">self</span>, hart: usize, epoch: usize) -&gt; bool {
+<a href=#1131 id=1131 data-nosnippet>1131</a>            <span class="self">self</span>.inner.borrow().acked.get(<span class="kw-2">&amp;</span>hart) == <span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>epoch)
+<a href=#1132 id=1132 data-nosnippet>1132</a>        }
+<a href=#1133 id=1133 data-nosnippet>1133</a>
+<a href=#1134 id=1134 data-nosnippet>1134</a>        <span class="kw">fn </span>release_park(<span class="kw-2">&amp;</span><span class="self">self</span>, hart: usize) {
+<a href=#1135 id=1135 data-nosnippet>1135</a>            <span class="kw">let </span><span class="kw-2">mut </span>state = <span class="self">self</span>.inner.borrow_mut();
+<a href=#1136 id=1136 data-nosnippet>1136</a>            state.releases.push(hart);
+<a href=#1137 id=1137 data-nosnippet>1137</a>            state.outstanding.remove(<span class="kw-2">&amp;</span>hart);
+<a href=#1138 id=1138 data-nosnippet>1138</a>            state.acked.remove(<span class="kw-2">&amp;</span>hart);
+<a href=#1139 id=1139 data-nosnippet>1139</a>        }
+<a href=#1140 id=1140 data-nosnippet>1140</a>
+<a href=#1141 id=1141 data-nosnippet>1141</a>        <span class="kw">fn </span>ack_budget_ticks(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u64 {
+<a href=#1142 id=1142 data-nosnippet>1142</a>            <span class="self">self</span>.budget
+<a href=#1143 id=1143 data-nosnippet>1143</a>        }
+<a href=#1144 id=1144 data-nosnippet>1144</a>
+<a href=#1145 id=1145 data-nosnippet>1145</a>        <span class="kw">fn </span>now_ticks(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u64 {
+<a href=#1146 id=1146 data-nosnippet>1146</a>            <span class="kw">let </span><span class="kw-2">mut </span>state = <span class="self">self</span>.inner.borrow_mut();
+<a href=#1147 id=1147 data-nosnippet>1147</a>            state.clock += <span class="number">1</span>;
+<a href=#1148 id=1148 data-nosnippet>1148</a>            state.clock
+<a href=#1149 id=1149 data-nosnippet>1149</a>        }
+<a href=#1150 id=1150 data-nosnippet>1150</a>    }
+<a href=#1151 id=1151 data-nosnippet>1151</a>}
+<a href=#1152 id=1152 data-nosnippet>1152</a>
+<a href=#1153 id=1153 data-nosnippet>1153</a><span class="attr">#[cfg(test)]
+<a href=#1154 id=1154 data-nosnippet>1154</a></span><span class="kw">mod </span>tests {
+<a href=#1155 id=1155 data-nosnippet>1155</a>    <span class="kw">use </span><span class="kw">super</span>::fake::FakeHarts;
+<a href=#1156 id=1156 data-nosnippet>1156</a>    <span class="kw">use </span>super::<span class="kw-2">*</span>;
+<a href=#1157 id=1157 data-nosnippet>1157</a>
+<a href=#1158 id=1158 data-nosnippet>1158</a>    <span class="doccomment">/// Acquire, expecting a refusal. `Result&lt;Guard, _&gt;` has no `PartialEq`, so
+<a href=#1159 id=1159 data-nosnippet>1159</a>    /// the refusal is unwrapped here and compared as a `QuiesceError`.
+<a href=#1160 id=1160 data-nosnippet>1160</a>    </span><span class="kw">fn </span>acquire_err(state: <span class="kw-2">&amp;</span>QuiesceState, harts: <span class="kw-2">&amp;</span><span class="kw">dyn </span>QuiesceHarts) -&gt; QuiesceError {
+<a href=#1161 id=1161 data-nosnippet>1161</a>        <span class="kw">match </span>state.acquire(harts) {
+<a href=#1162 id=1162 data-nosnippet>1162</a>            <span class="prelude-val">Ok</span>(guard) =&gt; <span class="macro">panic!</span>(
+<a href=#1163 id=1163 data-nosnippet>1163</a>                <span class="string">"expected a refusal, got a guard (pending={})"</span>,
+<a href=#1164 id=1164 data-nosnippet>1164</a>                guard.pending_count()
+<a href=#1165 id=1165 data-nosnippet>1165</a>            ),
+<a href=#1166 id=1166 data-nosnippet>1166</a>            <span class="prelude-val">Err</span>(err) =&gt; err,
+<a href=#1167 id=1167 data-nosnippet>1167</a>        }
+<a href=#1168 id=1168 data-nosnippet>1168</a>    }
+<a href=#1169 id=1169 data-nosnippet>1169</a>
+<a href=#1170 id=1170 data-nosnippet>1170</a>    <span class="attr">#[test]
+<a href=#1171 id=1171 data-nosnippet>1171</a>    </span><span class="kw">fn </span>quiesce_single_hart_is_a_no_op() {
+<a href=#1172 id=1172 data-nosnippet>1172</a>        <span class="comment">// No hook at all: with one hart there is nothing to park, so the
+<a href=#1173 id=1173 data-nosnippet>1173</a>        // missing hook must not turn the no-op path into a refusal.
+<a href=#1174 id=1174 data-nosnippet>1174</a>        </span><span class="kw">let </span>harts = FakeHarts::new(<span class="kw-2">&amp;</span>[<span class="number">0</span>], <span class="number">0</span>).with_hook(<span class="bool-val">false</span>);
+<a href=#1175 id=1175 data-nosnippet>1175</a>        <span class="kw">let </span>state = QuiesceState::new();
+<a href=#1176 id=1176 data-nosnippet>1176</a>        <span class="kw">let </span>guard = state.acquire(<span class="kw-2">&amp;</span>harts).expect(<span class="string">"one hart is a no-op"</span>);
+<a href=#1177 id=1177 data-nosnippet>1177</a>        <span class="macro">assert!</span>(
+<a href=#1178 id=1178 data-nosnippet>1178</a>            guard.all_parked(),
+<a href=#1179 id=1179 data-nosnippet>1179</a>            <span class="string">"vacuous predicate holds with no targets"
+<a href=#1180 id=1180 data-nosnippet>1180</a>        </span>);
+<a href=#1181 id=1181 data-nosnippet>1181</a>        <span class="macro">assert_eq!</span>(guard.pending_count(), <span class="number">0</span>);
+<a href=#1182 id=1182 data-nosnippet>1182</a>        <span class="macro">assert!</span>(harts.requests().is_empty(), <span class="string">"no hart may be asked to park"</span>);
+<a href=#1183 id=1183 data-nosnippet>1183</a>        <span class="macro">assert_eq!</span>(harts.clock_ticks(), <span class="number">0</span>, <span class="string">"no wait may be entered"</span>);
+<a href=#1184 id=1184 data-nosnippet>1184</a>        drop(guard);
+<a href=#1185 id=1185 data-nosnippet>1185</a>        <span class="macro">assert!</span>(harts.releases().is_empty(), <span class="string">"nothing was parked to release"</span>);
+<a href=#1186 id=1186 data-nosnippet>1186</a>        <span class="macro">assert!</span>(harts.outstanding().is_empty());
+<a href=#1187 id=1187 data-nosnippet>1187</a>    }
+<a href=#1188 id=1188 data-nosnippet>1188</a>
+<a href=#1189 id=1189 data-nosnippet>1189</a>    <span class="attr">#[test]
+<a href=#1190 id=1190 data-nosnippet>1190</a>    </span><span class="kw">fn </span>quiesce_all_acknowledged_harts_park_and_the_predicate_is_verified() {
+<a href=#1191 id=1191 data-nosnippet>1191</a>        <span class="kw">let </span>harts = FakeHarts::new(<span class="kw-2">&amp;</span>[<span class="number">0</span>, <span class="number">1</span>, <span class="number">2</span>], <span class="number">0</span>);
+<a href=#1192 id=1192 data-nosnippet>1192</a>        harts.ack_on_request(<span class="kw-2">&amp;</span>[<span class="number">1</span>, <span class="number">2</span>]);
+<a href=#1193 id=1193 data-nosnippet>1193</a>        <span class="kw">let </span>state = QuiesceState::new();
+<a href=#1194 id=1194 data-nosnippet>1194</a>        <span class="kw">let </span><span class="kw-2">mut </span>guard = state.acquire(<span class="kw-2">&amp;</span>harts).expect(<span class="string">"both targets acknowledge"</span>);
+<a href=#1195 id=1195 data-nosnippet>1195</a>        <span class="macro">assert!</span>(guard.all_parked());
+<a href=#1196 id=1196 data-nosnippet>1196</a>        <span class="macro">assert_eq!</span>(guard.pending_count(), <span class="number">0</span>);
+<a href=#1197 id=1197 data-nosnippet>1197</a>        <span class="macro">assert_eq!</span>(harts.parked(), <span class="macro">vec!</span>[<span class="number">1</span>, <span class="number">2</span>]);
+<a href=#1198 id=1198 data-nosnippet>1198</a>        <span class="macro">assert_eq!</span>(
+<a href=#1199 id=1199 data-nosnippet>1199</a>            harts.requests().len(),
+<a href=#1200 id=1200 data-nosnippet>1200</a>            <span class="number">2</span>,
+<a href=#1201 id=1201 data-nosnippet>1201</a>            <span class="string">"exactly the two target harts are asked"
+<a href=#1202 id=1202 data-nosnippet>1202</a>        </span>);
+<a href=#1203 id=1203 data-nosnippet>1203</a>        <span class="macro">assert!</span>(harts.releases().is_empty(), <span class="string">"the guard holds the park"</span>);
+<a href=#1204 id=1204 data-nosnippet>1204</a>
+<a href=#1205 id=1205 data-nosnippet>1205</a>        <span class="comment">// A hart that leaves its safe point makes the predicate false: it is
+<a href=#1206 id=1206 data-nosnippet>1206</a>        // derived from the hart set, not remembered from the request.
+<a href=#1207 id=1207 data-nosnippet>1207</a>        </span>harts.unack(<span class="number">2</span>);
+<a href=#1208 id=1208 data-nosnippet>1208</a>        <span class="macro">assert!</span>(!guard.all_parked());
+<a href=#1209 id=1209 data-nosnippet>1209</a>        <span class="macro">assert_eq!</span>(guard.pending_count(), <span class="number">1</span>);
+<a href=#1210 id=1210 data-nosnippet>1210</a>        guard.release();
+<a href=#1211 id=1211 data-nosnippet>1211</a>        <span class="macro">assert_eq!</span>(harts.releases(), <span class="macro">vec!</span>[<span class="number">1</span>, <span class="number">2</span>]);
+<a href=#1212 id=1212 data-nosnippet>1212</a>        <span class="macro">assert!</span>(harts.parked().is_empty());
+<a href=#1213 id=1213 data-nosnippet>1213</a>        <span class="macro">assert!</span>(harts.outstanding().is_empty());
+<a href=#1214 id=1214 data-nosnippet>1214</a>    }
+<a href=#1215 id=1215 data-nosnippet>1215</a>
+<a href=#1216 id=1216 data-nosnippet>1216</a>    <span class="attr">#[test]
+<a href=#1217 id=1217 data-nosnippet>1217</a>    </span><span class="kw">fn </span>quiesce_partial_acknowledgement_times_out_and_restores_the_harts() {
+<a href=#1218 id=1218 data-nosnippet>1218</a>        <span class="kw">let </span>harts = FakeHarts::new(<span class="kw-2">&amp;</span>[<span class="number">0</span>, <span class="number">1</span>, <span class="number">2</span>], <span class="number">0</span>).with_budget(<span class="number">8</span>);
+<a href=#1219 id=1219 data-nosnippet>1219</a>        harts.ack_on_request(<span class="kw-2">&amp;</span>[<span class="number">1</span>]);
+<a href=#1220 id=1220 data-nosnippet>1220</a>        <span class="kw">let </span>state = QuiesceState::new();
+<a href=#1221 id=1221 data-nosnippet>1221</a>        <span class="macro">assert_eq!</span>(
+<a href=#1222 id=1222 data-nosnippet>1222</a>            acquire_err(<span class="kw-2">&amp;</span>state, <span class="kw-2">&amp;</span>harts),
+<a href=#1223 id=1223 data-nosnippet>1223</a>            QuiesceError::Timeout { pending: <span class="number">1 </span>}
+<a href=#1224 id=1224 data-nosnippet>1224</a>        );
+<a href=#1225 id=1225 data-nosnippet>1225</a>        <span class="macro">assert_eq!</span>(
+<a href=#1226 id=1226 data-nosnippet>1226</a>            harts.releases(),
+<a href=#1227 id=1227 data-nosnippet>1227</a>            <span class="macro">vec!</span>[<span class="number">1</span>, <span class="number">2</span>],
+<a href=#1228 id=1228 data-nosnippet>1228</a>            <span class="string">"the silent hart's request is cancelled too"
+<a href=#1229 id=1229 data-nosnippet>1229</a>        </span>);
+<a href=#1230 id=1230 data-nosnippet>1230</a>        <span class="macro">assert!</span>(harts.outstanding().is_empty(), <span class="string">"no request is left behind"</span>);
+<a href=#1231 id=1231 data-nosnippet>1231</a>        <span class="macro">assert!</span>(harts.parked().is_empty());
+<a href=#1232 id=1232 data-nosnippet>1232</a>        <span class="macro">assert!</span>(
+<a href=#1233 id=1233 data-nosnippet>1233</a>            harts.clock_ticks() &lt;= <span class="number">10</span>,
+<a href=#1234 id=1234 data-nosnippet>1234</a>            <span class="string">"the wait must be bounded by the budget: {}"</span>,
+<a href=#1235 id=1235 data-nosnippet>1235</a>            harts.clock_ticks()
+<a href=#1236 id=1236 data-nosnippet>1236</a>        );
+<a href=#1237 id=1237 data-nosnippet>1237</a>        <span class="macro">assert!</span>(
+<a href=#1238 id=1238 data-nosnippet>1238</a>            harts.clock_ticks() &gt;= <span class="number">2</span>,
+<a href=#1239 id=1239 data-nosnippet>1239</a>            <span class="string">"the wait must actually wait for the acknowledgement"
+<a href=#1240 id=1240 data-nosnippet>1240</a>        </span>);
+<a href=#1241 id=1241 data-nosnippet>1241</a>
+<a href=#1242 id=1242 data-nosnippet>1242</a>        <span class="comment">// The claim was freed with the release: a later capture can succeed.
+<a href=#1243 id=1243 data-nosnippet>1243</a>        </span>harts.ack_on_request(<span class="kw-2">&amp;</span>[<span class="number">2</span>]);
+<a href=#1244 id=1244 data-nosnippet>1244</a>        <span class="kw">let </span>guard = state
+<a href=#1245 id=1245 data-nosnippet>1245</a>            .acquire(<span class="kw-2">&amp;</span>harts)
+<a href=#1246 id=1246 data-nosnippet>1246</a>            .expect(<span class="string">"the failed attempt left no claim behind"</span>);
+<a href=#1247 id=1247 data-nosnippet>1247</a>        drop(guard);
+<a href=#1248 id=1248 data-nosnippet>1248</a>    }
+<a href=#1249 id=1249 data-nosnippet>1249</a>
+<a href=#1250 id=1250 data-nosnippet>1250</a>    <span class="attr">#[test]
+<a href=#1251 id=1251 data-nosnippet>1251</a>    </span><span class="kw">fn </span>quiesce_release_is_idempotent() {
+<a href=#1252 id=1252 data-nosnippet>1252</a>        <span class="kw">let </span>harts = FakeHarts::new(<span class="kw-2">&amp;</span>[<span class="number">0</span>, <span class="number">1</span>, <span class="number">2</span>], <span class="number">0</span>);
+<a href=#1253 id=1253 data-nosnippet>1253</a>        harts.ack_on_request(<span class="kw-2">&amp;</span>[<span class="number">1</span>, <span class="number">2</span>]);
+<a href=#1254 id=1254 data-nosnippet>1254</a>        <span class="kw">let </span>state = QuiesceState::new();
+<a href=#1255 id=1255 data-nosnippet>1255</a>        <span class="kw">let </span><span class="kw-2">mut </span>guard = state.acquire(<span class="kw-2">&amp;</span>harts).expect(<span class="string">"all acknowledge"</span>);
+<a href=#1256 id=1256 data-nosnippet>1256</a>        guard.release();
+<a href=#1257 id=1257 data-nosnippet>1257</a>        guard.release();
+<a href=#1258 id=1258 data-nosnippet>1258</a>        <span class="macro">assert_eq!</span>(
+<a href=#1259 id=1259 data-nosnippet>1259</a>            harts.releases(),
+<a href=#1260 id=1260 data-nosnippet>1260</a>            <span class="macro">vec!</span>[<span class="number">1</span>, <span class="number">2</span>],
+<a href=#1261 id=1261 data-nosnippet>1261</a>            <span class="string">"the second release must not touch the harts again"
+<a href=#1262 id=1262 data-nosnippet>1262</a>        </span>);
+<a href=#1263 id=1263 data-nosnippet>1263</a>        drop(guard);
+<a href=#1264 id=1264 data-nosnippet>1264</a>        <span class="macro">assert_eq!</span>(harts.releases(), <span class="macro">vec!</span>[<span class="number">1</span>, <span class="number">2</span>]);
+<a href=#1265 id=1265 data-nosnippet>1265</a>        <span class="comment">// And the claim stays free, so a later request is not refused.
+<a href=#1266 id=1266 data-nosnippet>1266</a>        </span><span class="macro">assert!</span>(state.acquire(<span class="kw-2">&amp;</span>harts).is_ok());
+<a href=#1267 id=1267 data-nosnippet>1267</a>    }
+<a href=#1268 id=1268 data-nosnippet>1268</a>
+<a href=#1269 id=1269 data-nosnippet>1269</a>    <span class="attr">#[test]
+<a href=#1270 id=1270 data-nosnippet>1270</a>    </span><span class="kw">fn </span>quiesce_never_requests_the_requester_hart() {
+<a href=#1271 id=1271 data-nosnippet>1271</a>        <span class="comment">// The requester is hart 1 and it is *not* in `online`; the request must
+<a href=#1272 id=1272 data-nosnippet>1272</a>        // still go to hart 0 only, and must succeed without hart 1 ever
+<a href=#1273 id=1273 data-nosnippet>1273</a>        // acknowledging anything.
+<a href=#1274 id=1274 data-nosnippet>1274</a>        </span><span class="kw">let </span>harts = FakeHarts::new(<span class="kw-2">&amp;</span>[<span class="number">0</span>], <span class="number">1</span>);
+<a href=#1275 id=1275 data-nosnippet>1275</a>        harts.ack_on_request(<span class="kw-2">&amp;</span>[<span class="number">0</span>]);
+<a href=#1276 id=1276 data-nosnippet>1276</a>        <span class="kw">let </span>state = QuiesceState::new();
+<a href=#1277 id=1277 data-nosnippet>1277</a>        <span class="kw">let </span><span class="kw-2">mut </span>guard = state.acquire(<span class="kw-2">&amp;</span>harts).expect(<span class="string">"target acknowledges"</span>);
+<a href=#1278 id=1278 data-nosnippet>1278</a>        <span class="macro">assert!</span>(guard.all_parked());
+<a href=#1279 id=1279 data-nosnippet>1279</a>        <span class="kw">let </span>requests = harts.requests();
+<a href=#1280 id=1280 data-nosnippet>1280</a>        <span class="macro">assert_eq!</span>(requests.len(), <span class="number">1</span>);
+<a href=#1281 id=1281 data-nosnippet>1281</a>        <span class="macro">assert_eq!</span>(requests[<span class="number">0</span>].<span class="number">0</span>, <span class="number">0</span>, <span class="string">"only the non-requester is asked"</span>);
+<a href=#1282 id=1282 data-nosnippet>1282</a>        <span class="macro">assert!</span>(harts.parked().iter().all(|hart| <span class="kw-2">*</span>hart != <span class="number">1</span>));
+<a href=#1283 id=1283 data-nosnippet>1283</a>        guard.release();
+<a href=#1284 id=1284 data-nosnippet>1284</a>        <span class="macro">assert_eq!</span>(harts.releases(), <span class="macro">vec!</span>[<span class="number">0</span>]);
+<a href=#1285 id=1285 data-nosnippet>1285</a>    }
+<a href=#1286 id=1286 data-nosnippet>1286</a>
+<a href=#1287 id=1287 data-nosnippet>1287</a>    <span class="attr">#[test]
+<a href=#1288 id=1288 data-nosnippet>1288</a>    </span><span class="kw">fn </span>quiesce_refuses_a_second_concurrent_request() {
+<a href=#1289 id=1289 data-nosnippet>1289</a>        <span class="kw">let </span>harts = FakeHarts::new(<span class="kw-2">&amp;</span>[<span class="number">0</span>, <span class="number">1</span>], <span class="number">0</span>);
+<a href=#1290 id=1290 data-nosnippet>1290</a>        harts.ack_on_request(<span class="kw-2">&amp;</span>[<span class="number">1</span>]);
+<a href=#1291 id=1291 data-nosnippet>1291</a>        <span class="kw">let </span>state = QuiesceState::new();
+<a href=#1292 id=1292 data-nosnippet>1292</a>        <span class="kw">let </span>guard = state.acquire(<span class="kw-2">&amp;</span>harts).expect(<span class="string">"target acknowledges"</span>);
+<a href=#1293 id=1293 data-nosnippet>1293</a>        <span class="macro">assert_eq!</span>(harts.requests().len(), <span class="number">1</span>);
+<a href=#1294 id=1294 data-nosnippet>1294</a>        <span class="macro">assert_eq!</span>(acquire_err(<span class="kw-2">&amp;</span>state, <span class="kw-2">&amp;</span>harts), QuiesceError::AlreadyRequested);
+<a href=#1295 id=1295 data-nosnippet>1295</a>        <span class="macro">assert_eq!</span>(
+<a href=#1296 id=1296 data-nosnippet>1296</a>            harts.requests().len(),
+<a href=#1297 id=1297 data-nosnippet>1297</a>            <span class="number">1</span>,
+<a href=#1298 id=1298 data-nosnippet>1298</a>            <span class="string">"the refused request must not reach the hart set"
+<a href=#1299 id=1299 data-nosnippet>1299</a>        </span>);
+<a href=#1300 id=1300 data-nosnippet>1300</a>        drop(guard);
+<a href=#1301 id=1301 data-nosnippet>1301</a>        <span class="kw">let </span>guard = state.acquire(<span class="kw-2">&amp;</span>harts).expect(<span class="string">"the claim is free again"</span>);
+<a href=#1302 id=1302 data-nosnippet>1302</a>        <span class="macro">assert_eq!</span>(harts.requests().len(), <span class="number">2</span>);
+<a href=#1303 id=1303 data-nosnippet>1303</a>        drop(guard);
+<a href=#1304 id=1304 data-nosnippet>1304</a>    }
+<a href=#1305 id=1305 data-nosnippet>1305</a>
+<a href=#1306 id=1306 data-nosnippet>1306</a>    <span class="attr">#[test]
+<a href=#1307 id=1307 data-nosnippet>1307</a>    </span><span class="kw">fn </span>quiesce_refuses_multi_hart_without_a_park_hook() {
+<a href=#1308 id=1308 data-nosnippet>1308</a>        <span class="kw">let </span>harts = FakeHarts::new(<span class="kw-2">&amp;</span>[<span class="number">0</span>, <span class="number">1</span>, <span class="number">2</span>], <span class="number">0</span>).with_hook(<span class="bool-val">false</span>);
+<a href=#1309 id=1309 data-nosnippet>1309</a>        harts.ack_on_request(<span class="kw-2">&amp;</span>[<span class="number">1</span>, <span class="number">2</span>]);
+<a href=#1310 id=1310 data-nosnippet>1310</a>        <span class="kw">let </span>state = QuiesceState::new();
+<a href=#1311 id=1311 data-nosnippet>1311</a>        <span class="macro">assert_eq!</span>(acquire_err(<span class="kw-2">&amp;</span>state, <span class="kw-2">&amp;</span>harts), QuiesceError::Unsupported);
+<a href=#1312 id=1312 data-nosnippet>1312</a>        <span class="macro">assert!</span>(
+<a href=#1313 id=1313 data-nosnippet>1313</a>            harts.requests().is_empty(),
+<a href=#1314 id=1314 data-nosnippet>1314</a>            <span class="string">"a request no hart can answer must not be issued at all"
+<a href=#1315 id=1315 data-nosnippet>1315</a>        </span>);
+<a href=#1316 id=1316 data-nosnippet>1316</a>        <span class="macro">assert_eq!</span>(harts.clock_ticks(), <span class="number">0</span>, <span class="string">"nothing may be waited out"</span>);
+<a href=#1317 id=1317 data-nosnippet>1317</a>        <span class="macro">assert!</span>(harts.releases().is_empty());
+<a href=#1318 id=1318 data-nosnippet>1318</a>        <span class="comment">// The claim was released, so the refusal is not sticky.
+<a href=#1319 id=1319 data-nosnippet>1319</a>        </span><span class="macro">assert_eq!</span>(acquire_err(<span class="kw-2">&amp;</span>state, <span class="kw-2">&amp;</span>harts), QuiesceError::Unsupported);
+<a href=#1320 id=1320 data-nosnippet>1320</a>    }
+<a href=#1321 id=1321 data-nosnippet>1321</a>
+<a href=#1322 id=1322 data-nosnippet>1322</a>    <span class="attr">#[test]
+<a href=#1323 id=1323 data-nosnippet>1323</a>    </span><span class="kw">fn </span>quiesce_refuses_more_harts_than_it_can_track() {
+<a href=#1324 id=1324 data-nosnippet>1324</a>        <span class="kw">let </span>online: Vec&lt;usize&gt; = (<span class="number">0</span>..=MAX_QUIESCE_HARTS).collect();
+<a href=#1325 id=1325 data-nosnippet>1325</a>        <span class="kw">let </span>harts = FakeHarts::new(<span class="kw-2">&amp;</span>online, <span class="number">0</span>);
+<a href=#1326 id=1326 data-nosnippet>1326</a>        harts.ack_on_request(<span class="kw-2">&amp;</span>online);
+<a href=#1327 id=1327 data-nosnippet>1327</a>        <span class="kw">let </span>state = QuiesceState::new();
+<a href=#1328 id=1328 data-nosnippet>1328</a>        <span class="macro">assert_eq!</span>(acquire_err(<span class="kw-2">&amp;</span>state, <span class="kw-2">&amp;</span>harts), QuiesceError::TooManyHarts);
+<a href=#1329 id=1329 data-nosnippet>1329</a>        <span class="macro">assert!</span>(harts.requests().is_empty());
+<a href=#1330 id=1330 data-nosnippet>1330</a>        <span class="macro">assert!</span>(harts.releases().is_empty());
+<a href=#1331 id=1331 data-nosnippet>1331</a>        <span class="comment">// The claim was released with the refusal.
+<a href=#1332 id=1332 data-nosnippet>1332</a>        </span><span class="macro">assert_eq!</span>(acquire_err(<span class="kw-2">&amp;</span>state, <span class="kw-2">&amp;</span>harts), QuiesceError::TooManyHarts);
+<a href=#1333 id=1333 data-nosnippet>1333</a>    }
+<a href=#1334 id=1334 data-nosnippet>1334</a>
+<a href=#1335 id=1335 data-nosnippet>1335</a>    <span class="comment">// ── The live park state machine ──────────────────────────────────────────
+<a href=#1336 id=1336 data-nosnippet>1336</a>    //
+<a href=#1337 id=1337 data-nosnippet>1337</a>    // `FakeHarts` covers the protocol over a programmable hart set; these cases
+<a href=#1338 id=1338 data-nosnippet>1338</a>    // cover the state machine the kernel actually runs — `request_park`,
+<a href=#1339 id=1339 data-nosnippet>1339</a>    // `park_here_if_requested`, `release_park`, `park_acknowledged` over the live
+<a href=#1340 id=1340 data-nosnippet>1340</a>    // per-hart epochs — on the host, where the only arch-specific parts (the IPI
+<a href=#1341 id=1341 data-nosnippet>1341</a>    // and the clock) are compiled out. Each case owns hart ids above the kernel's
+<a href=#1342 id=1342 data-nosnippet>1342</a>    // own `smp::MAX_HARTS` so the parallel test threads cannot see each other's
+<a href=#1343 id=1343 data-nosnippet>1343</a>    // state; the host build has no clock, so a park that is never released ends at
+<a href=#1344 id=1344 data-nosnippet>1344</a>    // the clock-independent backstop instead of hanging.
+<a href=#1345 id=1345 data-nosnippet>1345</a>
+<a href=#1346 id=1346 data-nosnippet>1346</a>    </span><span class="attr">#[test]
+<a href=#1347 id=1347 data-nosnippet>1347</a>    </span><span class="kw">fn </span>live_request_is_not_an_acknowledgement_and_an_abandoned_park_has_stopped() {
+<a href=#1348 id=1348 data-nosnippet>1348</a>        <span class="kw">let </span>hart = <span class="number">3</span>;
+<a href=#1349 id=1349 data-nosnippet>1349</a>        <span class="kw">let </span>epoch = request_park(hart);
+<a href=#1350 id=1350 data-nosnippet>1350</a>        <span class="macro">assert_ne!</span>(epoch, <span class="number">0</span>);
+<a href=#1351 id=1351 data-nosnippet>1351</a>        <span class="macro">assert!</span>(
+<a href=#1352 id=1352 data-nosnippet>1352</a>            !park_acknowledged(hart, epoch),
+<a href=#1353 id=1353 data-nosnippet>1353</a>            <span class="string">"asking a hart to park is not evidence that it parked"
+<a href=#1354 id=1354 data-nosnippet>1354</a>        </span>);
+<a href=#1355 id=1355 data-nosnippet>1355</a>
+<a href=#1356 id=1356 data-nosnippet>1356</a>        <span class="kw">let </span>outcome = park_here_if_requested(hart);
+<a href=#1357 id=1357 data-nosnippet>1357</a>        <span class="macro">assert_eq!</span>(
+<a href=#1358 id=1358 data-nosnippet>1358</a>            outcome,
+<a href=#1359 id=1359 data-nosnippet>1359</a>            ParkOutcome::Abandoned { epoch },
+<a href=#1360 id=1360 data-nosnippet>1360</a>            <span class="string">"with no release and no host clock the parked loop must end at its backstop"
+<a href=#1361 id=1361 data-nosnippet>1361</a>        </span>);
+<a href=#1362 id=1362 data-nosnippet>1362</a>        <span class="macro">assert!</span>(
+<a href=#1363 id=1363 data-nosnippet>1363</a>            park_acknowledged(hart, epoch),
+<a href=#1364 id=1364 data-nosnippet>1364</a>            <span class="string">"the acknowledgement is published before the hart stops, so it is already visible"
+<a href=#1365 id=1365 data-nosnippet>1365</a>        </span>);
+<a href=#1366 id=1366 data-nosnippet>1366</a>
+<a href=#1367 id=1367 data-nosnippet>1367</a>        <span class="comment">// The release is idempotent, and the cancelled epoch is what the hart now
+<a href=#1368 id=1368 data-nosnippet>1368</a>        // observes: it is resumed, and it does not park for that epoch again.
+<a href=#1369 id=1369 data-nosnippet>1369</a>        </span>release_park(hart);
+<a href=#1370 id=1370 data-nosnippet>1370</a>        release_park(hart);
+<a href=#1371 id=1371 data-nosnippet>1371</a>        <span class="macro">assert_eq!</span>(
+<a href=#1372 id=1372 data-nosnippet>1372</a>            park_here_if_requested(hart),
+<a href=#1373 id=1373 data-nosnippet>1373</a>            ParkOutcome::AlreadyReleased { epoch }
+<a href=#1374 id=1374 data-nosnippet>1374</a>        );
+<a href=#1375 id=1375 data-nosnippet>1375</a>        <span class="macro">assert!</span>(
+<a href=#1376 id=1376 data-nosnippet>1376</a>            park_acknowledged(hart, epoch),
+<a href=#1377 id=1377 data-nosnippet>1377</a>            <span class="string">"the epoch was parked for; a release resumes the hart, it does not un-park history"
+<a href=#1378 id=1378 data-nosnippet>1378</a>        </span>);
+<a href=#1379 id=1379 data-nosnippet>1379</a>    }
+<a href=#1380 id=1380 data-nosnippet>1380</a>
+<a href=#1381 id=1381 data-nosnippet>1381</a>    <span class="attr">#[test]
+<a href=#1382 id=1382 data-nosnippet>1382</a>    </span><span class="kw">fn </span>live_release_cancels_a_request_the_hart_never_satisfied() {
+<a href=#1383 id=1383 data-nosnippet>1383</a>        <span class="kw">let </span>hart = <span class="number">4</span>;
+<a href=#1384 id=1384 data-nosnippet>1384</a>        <span class="kw">let </span>epoch = request_park(hart);
+<a href=#1385 id=1385 data-nosnippet>1385</a>        release_park(hart);
+<a href=#1386 id=1386 data-nosnippet>1386</a>        <span class="macro">assert_eq!</span>(
+<a href=#1387 id=1387 data-nosnippet>1387</a>            park_here_if_requested(hart),
+<a href=#1388 id=1388 data-nosnippet>1388</a>            ParkOutcome::AlreadyReleased { epoch },
+<a href=#1389 id=1389 data-nosnippet>1389</a>            <span class="string">"a hart that reaches a safe point after the release must not park"
+<a href=#1390 id=1390 data-nosnippet>1390</a>        </span>);
+<a href=#1391 id=1391 data-nosnippet>1391</a>        <span class="macro">assert!</span>(
+<a href=#1392 id=1392 data-nosnippet>1392</a>            !park_acknowledged(hart, epoch),
+<a href=#1393 id=1393 data-nosnippet>1393</a>            <span class="string">"no acknowledgement may be published for a cancelled request"
+<a href=#1394 id=1394 data-nosnippet>1394</a>        </span>);
+<a href=#1395 id=1395 data-nosnippet>1395</a>
+<a href=#1396 id=1396 data-nosnippet>1396</a>        <span class="comment">// The next request is a new epoch, so it is not covered by the old release.
+<a href=#1397 id=1397 data-nosnippet>1397</a>        </span><span class="kw">let </span>next = request_park(hart);
+<a href=#1398 id=1398 data-nosnippet>1398</a>        <span class="macro">assert_eq!</span>(next, epoch + <span class="number">1</span>);
+<a href=#1399 id=1399 data-nosnippet>1399</a>        <span class="macro">assert!</span>(
+<a href=#1400 id=1400 data-nosnippet>1400</a>            !park_acknowledged(hart, next),
+<a href=#1401 id=1401 data-nosnippet>1401</a>            <span class="string">"a new epoch needs a new park"
+<a href=#1402 id=1402 data-nosnippet>1402</a>        </span>);
+<a href=#1403 id=1403 data-nosnippet>1403</a>        <span class="macro">assert_eq!</span>(
+<a href=#1404 id=1404 data-nosnippet>1404</a>            park_here_if_requested(hart),
+<a href=#1405 id=1405 data-nosnippet>1405</a>            ParkOutcome::Abandoned { epoch: next }
+<a href=#1406 id=1406 data-nosnippet>1406</a>        );
+<a href=#1407 id=1407 data-nosnippet>1407</a>    }
+<a href=#1408 id=1408 data-nosnippet>1408</a>
+<a href=#1409 id=1409 data-nosnippet>1409</a>    <span class="attr">#[test]
+<a href=#1410 id=1410 data-nosnippet>1410</a>    </span><span class="kw">fn </span>live_withheld_hart_observes_the_request_and_never_acknowledges() {
+<a href=#1411 id=1411 data-nosnippet>1411</a>        <span class="kw">let </span>hart = <span class="number">5</span>;
+<a href=#1412 id=1412 data-nosnippet>1412</a>        set_park_ack_withheld(hart, <span class="bool-val">true</span>);
+<a href=#1413 id=1413 data-nosnippet>1413</a>        <span class="kw">let </span>epoch = request_park(hart);
+<a href=#1414 id=1414 data-nosnippet>1414</a>        <span class="macro">assert_eq!</span>(
+<a href=#1415 id=1415 data-nosnippet>1415</a>            park_here_if_requested(hart),
+<a href=#1416 id=1416 data-nosnippet>1416</a>            ParkOutcome::Withheld { epoch },
+<a href=#1417 id=1417 data-nosnippet>1417</a>            <span class="string">"the request is observed, and the withholding is what stops the park"
+<a href=#1418 id=1418 data-nosnippet>1418</a>        </span>);
+<a href=#1419 id=1419 data-nosnippet>1419</a>        <span class="macro">assert!</span>(
+<a href=#1420 id=1420 data-nosnippet>1420</a>            !park_acknowledged(hart, epoch),
+<a href=#1421 id=1421 data-nosnippet>1421</a>            <span class="string">"the negative control must not acknowledge, or the requester's fail-closed \
+<a href=#1422 id=1422 data-nosnippet>1422</a>             path would never be reached"
+<a href=#1423 id=1423 data-nosnippet>1423</a>        </span>);
+<a href=#1424 id=1424 data-nosnippet>1424</a>
+<a href=#1425 id=1425 data-nosnippet>1425</a>        set_park_ack_withheld(hart, <span class="bool-val">false</span>);
+<a href=#1426 id=1426 data-nosnippet>1426</a>        release_park(hart);
+<a href=#1427 id=1427 data-nosnippet>1427</a>        <span class="macro">assert_eq!</span>(
+<a href=#1428 id=1428 data-nosnippet>1428</a>            park_here_if_requested(hart),
+<a href=#1429 id=1429 data-nosnippet>1429</a>            ParkOutcome::AlreadyReleased { epoch },
+<a href=#1430 id=1430 data-nosnippet>1430</a>            <span class="string">"clearing the control leaves the hart restored, not parked"
+<a href=#1431 id=1431 data-nosnippet>1431</a>        </span>);
+<a href=#1432 id=1432 data-nosnippet>1432</a>    }
+<a href=#1433 id=1433 data-nosnippet>1433</a>
+<a href=#1434 id=1434 data-nosnippet>1434</a>    <span class="attr">#[test]
+<a href=#1435 id=1435 data-nosnippet>1435</a>    </span><span class="kw">fn </span>live_online_set_names_the_boot_hart_for_any_requester() {
+<a href=#1436 id=1436 data-nosnippet>1436</a>        <span class="comment">// The host cannot make `current_hart_id()` return a secondary hart, so the
+<a href=#1437 id=1437 data-nosnippet>1437</a>        // requester is named explicitly here — which is the whole point of the
+<a href=#1438 id=1438 data-nosnippet>1438</a>        // case: hart 0 runs kernel code without ever publishing `HART_ONLINE`, so a
+<a href=#1439 id=1439 data-nosnippet>1439</a>        // request issued from hart 1 has to name it from outside the published
+<a href=#1440 id=1440 data-nosnippet>1440</a>        // set. Before that, a capture requested from hart 1 would have left hart 0
+<a href=#1441 id=1441 data-nosnippet>1441</a>        // running and reported success on a set it never froze.
+<a href=#1442 id=1442 data-nosnippet>1442</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>set = HartSet::new();
+<a href=#1443 id=1443 data-nosnippet>1443</a>        online_hart_ids(<span class="number">1</span>, <span class="kw-2">&amp;mut </span>set).expect(<span class="string">"ids are bounded"</span>);
+<a href=#1444 id=1444 data-nosnippet>1444</a>        <span class="kw">let </span>ids: Vec&lt;usize&gt; = set.iter().collect();
+<a href=#1445 id=1445 data-nosnippet>1445</a>        <span class="macro">assert!</span>(
+<a href=#1446 id=1446 data-nosnippet>1446</a>            ids.contains(<span class="kw-2">&amp;</span><span class="number">0</span>),
+<a href=#1447 id=1447 data-nosnippet>1447</a>            <span class="string">"the boot hart must be in the online set for a request from hart 1: {ids:?}"
+<a href=#1448 id=1448 data-nosnippet>1448</a>        </span>);
+<a href=#1449 id=1449 data-nosnippet>1449</a>        <span class="macro">assert!</span>(ids.contains(<span class="kw-2">&amp;</span><span class="number">1</span>), <span class="string">"the requester itself is online: {ids:?}"</span>);
+<a href=#1450 id=1450 data-nosnippet>1450</a>    }
+<a href=#1451 id=1451 data-nosnippet>1451</a>}
+</code></pre></div></section></main></body></html>

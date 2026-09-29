@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["PAGE_SIZE"],"fn":["allocate_guest_ram","phys_to_virt","set_phys_offset"],"static":["FRAME_ALLOCATOR","PHYS_OFFSET"],"struct":["FrameAllocator","OwnedFrame"]};
+window.SIDEBAR_ITEMS = {"constant":["MAX_MANAGED_RANGES","PAGE_SIZE"],"enum":["BitmapStorage"],"fn":["allocate_guest_ram","phys_to_virt","plan_managed_ranges","reserve_contiguous_run","set_phys_offset"],"static":["FRAME_ALLOCATOR","PHYS_OFFSET"],"struct":["FrameAllocator","ManagedPlan","ManagedRange","OwnedFrame"]};

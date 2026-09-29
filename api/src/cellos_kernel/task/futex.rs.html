@@ -228,82 +228,86 @@
 <a href=#228 id=228 data-nosnippet>228</a>/// address) needs two cooperating cells; this proves the same property at the
 <a href=#229 id=229 data-nosnippet>229</a>/// queue: a waiter enqueued under one address space is invisible to a wake from
 <a href=#230 id=230 data-nosnippet>230</a>/// another, and to a later generation of the same space.
-<a href=#231 id=231 data-nosnippet>231</a></span><span class="attr">#[cfg(feature = <span class="string">"test-hooks"</span>)]
-<a href=#232 id=232 data-nosnippet>232</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>run_selftest() {
-<a href=#233 id=233 data-nosnippet>233</a>    <span class="kw">let </span>addr = <span class="number">0x1000usize</span>;
-<a href=#234 id=234 data-nosnippet>234</a>    <span class="kw">let </span>owner = FutexKey {
-<a href=#235 id=235 data-nosnippet>235</a>        space: <span class="number">1</span>,
-<a href=#236 id=236 data-nosnippet>236</a>        generation: <span class="number">1</span>,
-<a href=#237 id=237 data-nosnippet>237</a>        addr,
-<a href=#238 id=238 data-nosnippet>238</a>    };
-<a href=#239 id=239 data-nosnippet>239</a>    <span class="kw">let </span>peer_space = FutexKey {
-<a href=#240 id=240 data-nosnippet>240</a>        space: <span class="number">2</span>,
-<a href=#241 id=241 data-nosnippet>241</a>        generation: <span class="number">1</span>,
-<a href=#242 id=242 data-nosnippet>242</a>        addr,
-<a href=#243 id=243 data-nosnippet>243</a>    };
-<a href=#244 id=244 data-nosnippet>244</a>    <span class="kw">let </span>later_generation = FutexKey {
-<a href=#245 id=245 data-nosnippet>245</a>        space: <span class="number">1</span>,
-<a href=#246 id=246 data-nosnippet>246</a>        generation: <span class="number">2</span>,
-<a href=#247 id=247 data-nosnippet>247</a>        addr,
-<a href=#248 id=248 data-nosnippet>248</a>    };
-<a href=#249 id=249 data-nosnippet>249</a>
-<a href=#250 id=250 data-nosnippet>250</a>    <span class="kw">const </span>TID: usize = <span class="number">7</span>;
-<a href=#251 id=251 data-nosnippet>251</a>    enqueue(owner, TID);
-<a href=#252 id=252 data-nosnippet>252</a>    enqueue(owner, TID + <span class="number">1</span>);
+<a href=#231 id=231 data-nosnippet>231</a></span><span class="attr">#[cfg(all(
+<a href=#232 id=232 data-nosnippet>232</a>    feature = <span class="string">"native-domains"</span>,
+<a href=#233 id=233 data-nosnippet>233</a>    feature = <span class="string">"test-hooks"</span>,
+<a href=#234 id=234 data-nosnippet>234</a>    target_arch = <span class="string">"riscv64"
+<a href=#235 id=235 data-nosnippet>235</a></span>))]
+<a href=#236 id=236 data-nosnippet>236</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>run_selftest() {
+<a href=#237 id=237 data-nosnippet>237</a>    <span class="kw">let </span>addr = <span class="number">0x1000usize</span>;
+<a href=#238 id=238 data-nosnippet>238</a>    <span class="kw">let </span>owner = FutexKey {
+<a href=#239 id=239 data-nosnippet>239</a>        space: <span class="number">1</span>,
+<a href=#240 id=240 data-nosnippet>240</a>        generation: <span class="number">1</span>,
+<a href=#241 id=241 data-nosnippet>241</a>        addr,
+<a href=#242 id=242 data-nosnippet>242</a>    };
+<a href=#243 id=243 data-nosnippet>243</a>    <span class="kw">let </span>peer_space = FutexKey {
+<a href=#244 id=244 data-nosnippet>244</a>        space: <span class="number">2</span>,
+<a href=#245 id=245 data-nosnippet>245</a>        generation: <span class="number">1</span>,
+<a href=#246 id=246 data-nosnippet>246</a>        addr,
+<a href=#247 id=247 data-nosnippet>247</a>    };
+<a href=#248 id=248 data-nosnippet>248</a>    <span class="kw">let </span>later_generation = FutexKey {
+<a href=#249 id=249 data-nosnippet>249</a>        space: <span class="number">1</span>,
+<a href=#250 id=250 data-nosnippet>250</a>        generation: <span class="number">2</span>,
+<a href=#251 id=251 data-nosnippet>251</a>        addr,
+<a href=#252 id=252 data-nosnippet>252</a>    };
 <a href=#253 id=253 data-nosnippet>253</a>
-<a href=#254 id=254 data-nosnippet>254</a>    <span class="kw">let </span><span class="kw-2">mut </span>out = VecDeque::new();
-<a href=#255 id=255 data-nosnippet>255</a>    take_waiters(peer_space, <span class="number">8</span>, <span class="kw-2">&amp;mut </span>out);
-<a href=#256 id=256 data-nosnippet>256</a>    <span class="kw">let </span>cross_space_invisible = out.is_empty();
+<a href=#254 id=254 data-nosnippet>254</a>    <span class="kw">const </span>TID: usize = <span class="number">7</span>;
+<a href=#255 id=255 data-nosnippet>255</a>    enqueue(owner, TID);
+<a href=#256 id=256 data-nosnippet>256</a>    enqueue(owner, TID + <span class="number">1</span>);
 <a href=#257 id=257 data-nosnippet>257</a>
-<a href=#258 id=258 data-nosnippet>258</a>    out.clear();
-<a href=#259 id=259 data-nosnippet>259</a>    take_waiters(later_generation, <span class="number">8</span>, <span class="kw-2">&amp;mut </span>out);
-<a href=#260 id=260 data-nosnippet>260</a>    <span class="kw">let </span>cross_generation_invisible = out.is_empty();
+<a href=#258 id=258 data-nosnippet>258</a>    <span class="kw">let </span><span class="kw-2">mut </span>out = VecDeque::new();
+<a href=#259 id=259 data-nosnippet>259</a>    take_waiters(peer_space, <span class="number">8</span>, <span class="kw-2">&amp;mut </span>out);
+<a href=#260 id=260 data-nosnippet>260</a>    <span class="kw">let </span>cross_space_invisible = out.is_empty();
 <a href=#261 id=261 data-nosnippet>261</a>
 <a href=#262 id=262 data-nosnippet>262</a>    out.clear();
-<a href=#263 id=263 data-nosnippet>263</a>    take_waiters(owner, <span class="number">0</span>, <span class="kw-2">&amp;mut </span>out);
-<a href=#264 id=264 data-nosnippet>264</a>    <span class="kw">let </span>owner_sees_broadcast = out.len() == <span class="number">2 </span>&amp;&amp; out[<span class="number">0</span>] == TID &amp;&amp; out[<span class="number">1</span>] == TID + <span class="number">1</span>;
+<a href=#263 id=263 data-nosnippet>263</a>    take_waiters(later_generation, <span class="number">8</span>, <span class="kw-2">&amp;mut </span>out);
+<a href=#264 id=264 data-nosnippet>264</a>    <span class="kw">let </span>cross_generation_invisible = out.is_empty();
 <a href=#265 id=265 data-nosnippet>265</a>
-<a href=#266 id=266 data-nosnippet>266</a>    <span class="comment">// Leave no residue for the rest of the boot.
-<a href=#267 id=267 data-nosnippet>267</a>    </span>out.clear();
-<a href=#268 id=268 data-nosnippet>268</a>    remove_waiter(owner, TID);
-<a href=#269 id=269 data-nosnippet>269</a>    remove_waiter(owner, TID + <span class="number">1</span>);
-<a href=#270 id=270 data-nosnippet>270</a>
-<a href=#271 id=271 data-nosnippet>271</a>    <span class="kw">if </span>cross_space_invisible &amp;&amp; cross_generation_invisible &amp;&amp; owner_sees_broadcast {
-<a href=#272 id=272 data-nosnippet>272</a>        <span class="macro">log::info!</span>(<span class="string">"S22-RV64-FUTEX-KEY: PASS"</span>);
-<a href=#273 id=273 data-nosnippet>273</a>    } <span class="kw">else </span>{
-<a href=#274 id=274 data-nosnippet>274</a>        <span class="macro">log::error!</span>(
-<a href=#275 id=275 data-nosnippet>275</a>            <span class="string">"S22-RV64-FUTEX-KEY: FAIL space={} generation={} broadcast={}"</span>,
-<a href=#276 id=276 data-nosnippet>276</a>            cross_space_invisible,
-<a href=#277 id=277 data-nosnippet>277</a>            cross_generation_invisible,
-<a href=#278 id=278 data-nosnippet>278</a>            owner_sees_broadcast
-<a href=#279 id=279 data-nosnippet>279</a>        );
-<a href=#280 id=280 data-nosnippet>280</a>    }
-<a href=#281 id=281 data-nosnippet>281</a>}
-<a href=#282 id=282 data-nosnippet>282</a>
-<a href=#283 id=283 data-nosnippet>283</a><span class="doccomment">/// Deadline sweep arm: a parked waiter whose deadline elapsed.
-<a href=#284 id=284 data-nosnippet>284</a>///
-<a href=#285 id=285 data-nosnippet>285</a>/// Called from the scheduler's global sweep, which already holds `SCHEDULER`.
-<a href=#286 id=286 data-nosnippet>286</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>on_deadline(task: <span class="kw-2">&amp;mut </span><span class="kw">super</span>::tcb::Task, tid: usize, key: FutexKey) {
-<a href=#287 id=287 data-nosnippet>287</a>    remove_waiter(key, tid);
-<a href=#288 id=288 data-nosnippet>288</a>    task.trap_frame.regs[<span class="number">10</span>] = OUTCOME_TIMED_OUT <span class="kw">as _</span>;
-<a href=#289 id=289 data-nosnippet>289</a>}
-<a href=#290 id=290 data-nosnippet>290</a>
-<a href=#291 id=291 data-nosnippet>291</a><span class="doccomment">/// Drop a waiter whose task is leaving the wait state for any other reason
-<a href=#292 id=292 data-nosnippet>292</a>/// (exit, forced exit, fault).
-<a href=#293 id=293 data-nosnippet>293</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>on_task_leaves_wait(tid: usize) {
-<a href=#294 id=294 data-nosnippet>294</a>    <span class="kw">let </span><span class="kw-2">mut </span>waiters = WAITERS.lock();
-<a href=#295 id=295 data-nosnippet>295</a>    <span class="kw">let </span>keys: alloc::vec::Vec&lt;FutexKey&gt; = waiters
-<a href=#296 id=296 data-nosnippet>296</a>        .iter()
-<a href=#297 id=297 data-nosnippet>297</a>        .filter(|(<span class="kw">_</span>, queue)| queue.contains(<span class="kw-2">&amp;</span>tid))
-<a href=#298 id=298 data-nosnippet>298</a>        .map(|(key, <span class="kw">_</span>)| <span class="kw-2">*</span>key)
-<a href=#299 id=299 data-nosnippet>299</a>        .collect();
-<a href=#300 id=300 data-nosnippet>300</a>    <span class="kw">for </span>key <span class="kw">in </span>keys {
-<a href=#301 id=301 data-nosnippet>301</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(queue) = waiters.get_mut(<span class="kw-2">&amp;</span>key) {
-<a href=#302 id=302 data-nosnippet>302</a>            queue.retain(|queued| <span class="kw-2">*</span>queued != tid);
-<a href=#303 id=303 data-nosnippet>303</a>            <span class="kw">if </span>queue.is_empty() {
-<a href=#304 id=304 data-nosnippet>304</a>                waiters.remove(<span class="kw-2">&amp;</span>key);
-<a href=#305 id=305 data-nosnippet>305</a>            }
-<a href=#306 id=306 data-nosnippet>306</a>        }
-<a href=#307 id=307 data-nosnippet>307</a>    }
-<a href=#308 id=308 data-nosnippet>308</a>}
+<a href=#266 id=266 data-nosnippet>266</a>    out.clear();
+<a href=#267 id=267 data-nosnippet>267</a>    take_waiters(owner, <span class="number">0</span>, <span class="kw-2">&amp;mut </span>out);
+<a href=#268 id=268 data-nosnippet>268</a>    <span class="kw">let </span>owner_sees_broadcast = out.len() == <span class="number">2 </span>&amp;&amp; out[<span class="number">0</span>] == TID &amp;&amp; out[<span class="number">1</span>] == TID + <span class="number">1</span>;
+<a href=#269 id=269 data-nosnippet>269</a>
+<a href=#270 id=270 data-nosnippet>270</a>    <span class="comment">// Leave no residue for the rest of the boot.
+<a href=#271 id=271 data-nosnippet>271</a>    </span>out.clear();
+<a href=#272 id=272 data-nosnippet>272</a>    remove_waiter(owner, TID);
+<a href=#273 id=273 data-nosnippet>273</a>    remove_waiter(owner, TID + <span class="number">1</span>);
+<a href=#274 id=274 data-nosnippet>274</a>
+<a href=#275 id=275 data-nosnippet>275</a>    <span class="kw">if </span>cross_space_invisible &amp;&amp; cross_generation_invisible &amp;&amp; owner_sees_broadcast {
+<a href=#276 id=276 data-nosnippet>276</a>        <span class="macro">log::info!</span>(<span class="string">"S22-RV64-FUTEX-KEY: PASS"</span>);
+<a href=#277 id=277 data-nosnippet>277</a>    } <span class="kw">else </span>{
+<a href=#278 id=278 data-nosnippet>278</a>        <span class="macro">log::error!</span>(
+<a href=#279 id=279 data-nosnippet>279</a>            <span class="string">"S22-RV64-FUTEX-KEY: FAIL space={} generation={} broadcast={}"</span>,
+<a href=#280 id=280 data-nosnippet>280</a>            cross_space_invisible,
+<a href=#281 id=281 data-nosnippet>281</a>            cross_generation_invisible,
+<a href=#282 id=282 data-nosnippet>282</a>            owner_sees_broadcast
+<a href=#283 id=283 data-nosnippet>283</a>        );
+<a href=#284 id=284 data-nosnippet>284</a>    }
+<a href=#285 id=285 data-nosnippet>285</a>}
+<a href=#286 id=286 data-nosnippet>286</a>
+<a href=#287 id=287 data-nosnippet>287</a><span class="doccomment">/// Deadline sweep arm: a parked waiter whose deadline elapsed.
+<a href=#288 id=288 data-nosnippet>288</a>///
+<a href=#289 id=289 data-nosnippet>289</a>/// Called from the scheduler's global sweep, which already holds `SCHEDULER`.
+<a href=#290 id=290 data-nosnippet>290</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>on_deadline(task: <span class="kw-2">&amp;mut </span><span class="kw">super</span>::tcb::Task, tid: usize, key: FutexKey) {
+<a href=#291 id=291 data-nosnippet>291</a>    remove_waiter(key, tid);
+<a href=#292 id=292 data-nosnippet>292</a>    task.trap_frame.regs[<span class="number">10</span>] = OUTCOME_TIMED_OUT <span class="kw">as _</span>;
+<a href=#293 id=293 data-nosnippet>293</a>}
+<a href=#294 id=294 data-nosnippet>294</a>
+<a href=#295 id=295 data-nosnippet>295</a><span class="doccomment">/// Drop a waiter whose task is leaving the wait state for any other reason
+<a href=#296 id=296 data-nosnippet>296</a>/// (exit, forced exit, fault).
+<a href=#297 id=297 data-nosnippet>297</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>on_task_leaves_wait(tid: usize) {
+<a href=#298 id=298 data-nosnippet>298</a>    <span class="kw">let </span><span class="kw-2">mut </span>waiters = WAITERS.lock();
+<a href=#299 id=299 data-nosnippet>299</a>    <span class="kw">let </span>keys: alloc::vec::Vec&lt;FutexKey&gt; = waiters
+<a href=#300 id=300 data-nosnippet>300</a>        .iter()
+<a href=#301 id=301 data-nosnippet>301</a>        .filter(|(<span class="kw">_</span>, queue)| queue.contains(<span class="kw-2">&amp;</span>tid))
+<a href=#302 id=302 data-nosnippet>302</a>        .map(|(key, <span class="kw">_</span>)| <span class="kw-2">*</span>key)
+<a href=#303 id=303 data-nosnippet>303</a>        .collect();
+<a href=#304 id=304 data-nosnippet>304</a>    <span class="kw">for </span>key <span class="kw">in </span>keys {
+<a href=#305 id=305 data-nosnippet>305</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(queue) = waiters.get_mut(<span class="kw-2">&amp;</span>key) {
+<a href=#306 id=306 data-nosnippet>306</a>            queue.retain(|queued| <span class="kw-2">*</span>queued != tid);
+<a href=#307 id=307 data-nosnippet>307</a>            <span class="kw">if </span>queue.is_empty() {
+<a href=#308 id=308 data-nosnippet>308</a>                waiters.remove(<span class="kw-2">&amp;</span>key);
+<a href=#309 id=309 data-nosnippet>309</a>            }
+<a href=#310 id=310 data-nosnippet>310</a>        }
+<a href=#311 id=311 data-nosnippet>311</a>    }
+<a href=#312 id=312 data-nosnippet>312</a>}
 </code></pre></div></section></main></body></html>

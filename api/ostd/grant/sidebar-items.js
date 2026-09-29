@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["GrantHandle"]};
+window.SIDEBAR_ITEMS = {"fn":["with_shared_bytes","with_shared_bytes_mut"],"struct":["GrantHandle"]};
