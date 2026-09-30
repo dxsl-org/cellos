@@ -68,37 +68,61 @@ pub fn open_for(vfs_tid: usize, poisoned: &mut bool) -> Option<PersistentDisk> {
         }};
     }
     let root_request = api::ipc::VfsRequest::OpenRootDir { path: "/" };
-    let api::ipc::VfsResponse::DirHandle(root) = call!("open-root", &root_request) else {
-        ostd::io::println("[hv-disk] open-root returned unexpected response");
-        return None;
+    let root = match call!("open-root", &root_request) {
+        api::ipc::VfsResponse::DirHandle(root) => root,
+        other => {
+            ostd::io::println(&alloc::format!(
+                "[hv-disk] open-root returned unexpected response: {:?}",
+                other
+            ));
+            return None;
+        }
     };
     cleanup_root = Some(root);
     let mnt_request = api::ipc::VfsRequest::OpenDir {
         dir: root,
         name: "mnt",
     };
-    let api::ipc::VfsResponse::DirHandle(mnt) = call!("open-mnt", &mnt_request) else {
-        ostd::io::println("[hv-disk] open-mnt returned unexpected response");
-        close_partial(vfs_tid, root, poisoned);
-        return None;
+    let mnt = match call!("open-mnt", &mnt_request) {
+        api::ipc::VfsResponse::DirHandle(mnt) => mnt,
+        other => {
+            ostd::io::println(&alloc::format!(
+                "[hv-disk] open-mnt returned unexpected response: {:?}",
+                other
+            ));
+            close_partial(vfs_tid, root, poisoned);
+            return None;
+        }
     };
     let sd_request = api::ipc::VfsRequest::OpenDir {
         dir: mnt,
         name: "sd",
     };
-    let api::ipc::VfsResponse::DirHandle(sd) = call!("open-sd", &sd_request) else {
-        ostd::io::println("[hv-disk] open-sd returned unexpected response");
-        close_partial(vfs_tid, root, poisoned);
-        return None;
+    let sd = match call!("open-sd", &sd_request) {
+        api::ipc::VfsResponse::DirHandle(sd) => sd,
+        other => {
+            ostd::io::println(&alloc::format!(
+                "[hv-disk] open-sd returned unexpected response: {:?}",
+                other
+            ));
+            close_partial(vfs_tid, root, poisoned);
+            return None;
+        }
     };
     let file_request = api::ipc::VfsRequest::OpenFileAt {
         dir: sd,
         name: "guest_disk.img",
     };
-    let api::ipc::VfsResponse::FileHandle(file) = call!("open-file", &file_request) else {
-        ostd::io::println("[hv-disk] open-file returned unexpected response");
-        close_partial(vfs_tid, root, poisoned);
-        return None;
+    let file = match call!("open-file", &file_request) {
+        api::ipc::VfsResponse::FileHandle(file) => file,
+        other => {
+            ostd::io::println(&alloc::format!(
+                "[hv-disk] open-file returned unexpected response: {:?}",
+                other
+            ));
+            close_partial(vfs_tid, root, poisoned);
+            return None;
+        }
     };
     let stat = api::ipc::VfsRequest::Stat("/mnt/sd/guest_disk.img");
     match call!("stat", &stat) {
@@ -106,8 +130,11 @@ pub fn open_for(vfs_tid: usize, poisoned: &mut bool) -> Option<PersistentDisk> {
             size,
             is_dir: false,
         } => Some((vfs_tid, file, size)),
-        _ => {
-            ostd::io::println("[hv-disk] stat returned unexpected response");
+        other => {
+            ostd::io::println(&alloc::format!(
+                "[hv-disk] stat returned unexpected response: {:?}",
+                other
+            ));
             close_partial(vfs_tid, root, poisoned);
             None
         }
