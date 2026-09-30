@@ -82,7 +82,19 @@ impl NvmeController {
         let dstrd = ((cap >> 32) & 0xF) as usize;
         let db_stride = 4 << dstrd;
 
-        // 2. Reset controller: CC.EN=0, wait CSTS.RDY=0.
+        // 2. Allocate admin queues.
+        //
+        // Deliberately *before* the reset: authorizing them is what installs this
+        // cell's IOMMU context for the device, and until that context exists the
+        // device's stale accesses (firmware leaves the controller enabled with
+        // its own admin queues) pass through untranslated. Once the context
+        // exists, one of those accesses faults, the controller latches fatal
+        // status, and every later command - including this driver's Identify -
+        // times out. Resetting after the context is installed clears that state
+        // instead of racing it.
+        let admin = Queue::new(bdf, ADMIN_QUEUE_DEPTH)?;
+
+        // 3. Reset controller: CC.EN=0, wait CSTS.RDY=0.
         Self::write32(&mmio, REG_CC, 0)?;
         let mut spin = 0u64;
         loop {
@@ -100,9 +112,6 @@ impl NvmeController {
             }
             fence(Ordering::SeqCst);
         }
-
-        // 3. Allocate admin queues.
-        let admin = Queue::new(bdf, ADMIN_QUEUE_DEPTH)?;
 
         // 4. Program AQA, ASQ, ACQ.
         let aqa = ((ADMIN_QUEUE_DEPTH as u32 - 1) << 16) | (ADMIN_QUEUE_DEPTH as u32 - 1);
