@@ -9,6 +9,10 @@ báo cáo ở `.agents/<plan>/`, cách làm ở `docs/guides/`. Chuỗi tiền l
 2026-09-19 → 2026-09-27 đã được gỡ, nội dung của chúng nằm ở bốn chỗ trên.
 
 ## Đang mở — làm được ngay, không cần gì thêm
+- [open] **Cùng lớp lỗi `sys_recv` còn ở các cell khác** — `sys_recv` luôn trả `Ok(x)`, với `x == tid` là reply thật còn `x == dead_tid` là
+  *thông báo chết* (kernel ghi lý do vào 8 byte đầu buffer) ⇒ mọi chỗ chỉ kiểm tra `Ok(_)`/bỏ qua kết quả đều có thể đọc cái chết thành thành công:
+  `cells/tools/shell/src/cmd_sys.rs:196`, `cmd_fs.rs:900`, `config_client.rs:98` (bỏ hẳn kết quả), `net-tools/src/bin/wget.rs:305`. Đường block của VFS
+  đã sửa (chỉ `Ok(tid)` mới tính là reply + quên tid để probe lại); nên có một helper chung trong `ostd::ipc` để không lặp lại.
 - [in-progress] **Lane `Tier 3 x86 VirtIO E2E + Persistence` flaky (~1/3 lượt CI)** — chuỗi nhân quả đọc được từ artifact
   `x86-tier3-virtio-e2e-1` của run đỏ: (1) `vtd_iova_to_slpte … slpte=0x0 (iova=0x7ffdd0c0, write=0)` cho `dev=00:02:00` (đúng BDF NVMe)
   → (2) `[nvme] admin timeout after 1000000 polls` → cell nvme thoát → init respawn (instance 2 in `DMA authorized`) → (3)
