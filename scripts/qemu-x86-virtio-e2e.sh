@@ -101,6 +101,15 @@ common_markers=(
 run_outer() {
     local run="$1" terminal="$2" forbidden="$3"
     local raw="$WORK_DIR/run${run}.raw.log" log="$WORK_DIR/run${run}.log"
+    # QEMU_TRACE_EVENTS=<event,...> records QEMU's own view of the device into
+    # qemu-trace-run<N>.log: which addresses the NVMe is asked to DMA to, which
+    # admin/io commands it runs, and what the IOMMU walks. A device fault that
+    # names an IOVA no driver authorized cannot be explained from the cell side;
+    # this is the side that can name the command behind it.
+    local trace_args=()
+    if [[ -n "${QEMU_TRACE_EVENTS:-}" ]]; then
+        trace_args=(-trace "enable=${QEMU_TRACE_EVENTS},file=${WORK_DIR}/qemu-trace-run${run}.log")
+    fi
     "$QEMU_X86_BIN" -machine q35 -device intel-iommu,intremap=on \
         -accel tcg -cpu qemu64,+pdpe1gb,+svm \
         -m "$QEMU_MEMORY" -nographic -cdrom "$QEMU_ISO" -boot d -no-reboot \
@@ -108,6 +117,7 @@ run_outer() {
         -device nvme,drive=nvme0,serial=CELLOSE2E \
         -netdev user,id=net0,net=10.0.2.0/24 \
         -device e1000,netdev=net0,mac=52:54:00:12:34:56 \
+        "${trace_args[@]}" \
         < /dev/null > "$raw" 2>&1 &
     ACTIVE_QEMU_PID=$!
     local deadline=$((SECONDS + BOOT_WINDOW))
