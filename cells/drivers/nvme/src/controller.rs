@@ -432,12 +432,22 @@ impl NvmeController {
             }
             iters += 1;
             if iters == POLL_WARN_ITERS {
-                // Never expected: an unanswered command is always worth a line.
+                // Never expected: an unanswered command is always worth a line,
+                // and the queue state is what says why the completion was never
+                // seen - a stale phase bit and a full CQ (head not advanced) look
+                // identical from the outside, and the raw status word tells them
+                // apart.
                 ostd::io::println(&alloc::format!(
-                    "[nvme] io timeout opc={} lba={} after {} polls",
+                    "[nvme] io timeout opc={} lba={} cid={} after {} polls (cq_head={} sq_tail={} phase={} raw_status=0x{:x} depth={})",
                     opc,
                     lba,
-                    iters
+                    cid,
+                    iters,
+                    cq_head,
+                    tail,
+                    expected_phase,
+                    phase_status,
+                    depth
                 ));
                 return Err(ViError::IO);
             }
