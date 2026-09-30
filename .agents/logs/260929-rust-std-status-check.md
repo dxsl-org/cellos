@@ -206,3 +206,29 @@ boot successful` and `PASS: x86_64 shell prompt reached — full boot successful
 Still red in CI, not touched here: `Network Data-Path Integration (riscv64)` (its
 `--test window-policy` fails) and `QEMU Hypervisor Machinery Smoke (TCG)` (guest disk without a
 bootstrap cell table, then a panic at `hal/arch/arm/src/aarch64/trap.rs:286`).
+
+## Hypervisor machinery lane root-caused (2026-09-30, continued)
+
+The last persistently red lane failed at the first cell dispatch on every boot with
+`[aarch64] kernel trap ec=0xE esr=0x3A000000 elr=0x100000000 far=0x0 spsr=0x100009 vector=0`
+(kernel panic in `hal/arch/arm/src/aarch64/trap.rs:286`).
+
+How it was pinned:
+
+- Reproduced locally from a clean HEAD worktree (3 of 3 runs) with the same signature, including
+  with the working tree's image and with its kernel swapped into the main tree - so the kernel
+  binary, not the image or the disk, decides the outcome.
+- QEMU's own exception trace (`-d int`) named the transition: `Taking exception 1 [Undefined
+  Instruction] ... from EL2 to EL2 ... with ESR 0xe/0x3a000000 ... with ELR 0x100000000`, i.e. an
+  exception return whose target state this host rejects.
+- Single-file swap bisect: HEAD + only the working tree's `trap.rs` passes. That file's EL2 path
+  wrote `SPSR.M = 0x14` (EL1t); with HCR_EL2.TGE=1 an ERET from EL2 to EL1t is illegal, while
+  `M = 0` (M[4]=0 AArch64, M[3:0]=0 EL0t) is the state this host returns to.
+- The alternative theory (the working tree's hypervisor/vcpu/registry edits fix it) was refuted:
+  those diffs are comments plus a Pi3-only log line, and HEAD + those files still failed.
+
+Landed as `a468b1f67` (the same three-line change the working tree already carried, with its
+explanation kept). The aarch64 test-hooks lane passes with it (vfs-test 96 PASS / 0 FAIL). Note
+the contradiction with `54b984f4e`, which chose `0x14` from a 90/90 measurement; the reproduction
+and CI agree on `0`, so the older claim needs its own re-measurement if the Pi lanes still need
+`0x14`.
