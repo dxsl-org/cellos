@@ -75,24 +75,39 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
             // 2. Claim exclusive MMIO access to BAR0.
             let mmio_region = match mmio::request_region(bar0_base, NVME_BAR0_LEN) {
                 Ok(r) => r,
-                Err(_) => ostd::syscall::sys_exit(1),
+                Err(error) => {
+                    let _ = print_fmt(format_args!("[nvme] BAR0 request failed: {:?}\n", error));
+                    ostd::syscall::sys_exit(1)
+                }
             };
 
             // 3. Initialise controller.
             let ctrl = match NvmeController::new(mmio_region, bdf) {
                 Ok(c) => c,
-                Err(_) => ostd::syscall::sys_exit(1),
+                Err(error) => {
+                    let _ = print_fmt(format_args!("[nvme] controller init failed: {:?}\n", error));
+                    ostd::syscall::sys_exit(1)
+                }
             };
 
             // Allocate a reusable 512-byte I/O DMA buffer and retain the
             // device-visible address returned by authorization.
             let io_buf = match DmaBuf::alloc(1) {
                 Some(b) => b,
-                None => ostd::syscall::sys_exit(1),
+                None => {
+                    let _ = print_fmt(format_args!("[nvme] io buffer allocation failed\n"));
+                    ostd::syscall::sys_exit(1)
+                }
             };
             let io_buf = match AuthorizedDma::authorize(io_buf, |buf| buf.authorize(bdf)) {
                 Ok(buf) => buf,
-                Err(_) => ostd::syscall::sys_exit(1),
+                Err(error) => {
+                    let _ = print_fmt(format_args!(
+                        "[nvme] io buffer authorization failed: {:?}\n",
+                        error
+                    ));
+                    ostd::syscall::sys_exit(1)
+                }
             };
             let _ = print_fmt(format_args!(
                 "[nvme] DMA authorized for bus {} device {} function {}\n",

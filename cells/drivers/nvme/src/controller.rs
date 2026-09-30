@@ -9,6 +9,7 @@
 use crate::dma::AuthorizedDma;
 use core::sync::atomic::{fence, Ordering};
 use ostd::dma::DmaBuf;
+use ostd::io::print_fmt;
 use ostd::mmio::MmioRegion;
 use types::{ViError, ViResult};
 
@@ -91,6 +92,10 @@ impl NvmeController {
             }
             spin += 1;
             if spin > POLL_WARN_ITERS {
+                let _ = print_fmt(format_args!(
+                    "[nvme] reset wait failed: CSTS=0x{:x} never dropped RDY in {} polls\n",
+                    csts, POLL_WARN_ITERS
+                ));
                 return Err(ViError::IO);
             }
             fence(Ordering::SeqCst);
@@ -114,6 +119,10 @@ impl NvmeController {
         loop {
             let csts = Self::read32(&mmio, REG_CSTS)?;
             if csts & CSTS_CFS != 0 {
+                let _ = print_fmt(format_args!(
+                    "[nvme] controller fatal status after enable: CSTS=0x{:x}\n",
+                    csts
+                ));
                 return Err(ViError::IO);
             }
             if csts & CSTS_RDY != 0 {
@@ -121,6 +130,10 @@ impl NvmeController {
             }
             spin += 1;
             if spin > POLL_WARN_ITERS {
+                let _ = print_fmt(format_args!(
+                    "[nvme] RDY wait failed: CSTS=0x{:x} never reached RDY in {} polls\n",
+                    csts, POLL_WARN_ITERS
+                ));
                 return Err(ViError::IO);
             }
             fence(Ordering::SeqCst);
