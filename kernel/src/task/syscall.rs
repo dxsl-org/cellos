@@ -6164,7 +6164,10 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 };
             super::drivers::pcie_ecam::enable_bus_master(bdf);
             publication.commit();
-            log::info!(
+            // warn, not info: the only record of what this device may DMA to
+            // (see the matching line in `iommu_x86.rs`); at info level it does
+            // not survive to the serial log on the Tier-3 x86 lane.
+            log::warn!(
                 "[iommu] Cell {} granted DMA BDF={:02x}:{:02x}.{} phys={:#x} size={}",
                 caller_id,
                 (bdf >> 8) & 0xFF,

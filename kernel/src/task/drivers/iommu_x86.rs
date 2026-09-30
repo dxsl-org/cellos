@@ -473,14 +473,20 @@ pub(super) fn map_range_for_cell(
         return super::iommu::DmaMapResult::PublishedUnconfirmed;
     }
 
-    log::info!(
-        "[vtd] Cell {} BDF {:02x}:{:02x}.{} DID={} SLPT={:#x}",
+    // warn, not info: this line and the syscall's grant line below are the only
+    // record of which ranges a device may DMA. Measured on the Tier-3 x86 lane:
+    // an info-level line at this exact site never reaches the serial log, and a
+    // silent DMA grant is what made a flaky `slpte=0x0` fault unreadable.
+    log::warn!(
+        "[vtd] Cell {} BDF {:02x}:{:02x}.{} DID={} SLPT={:#x} phys={:#x} size={:#x}",
         tid,
         bus,
         dev,
         func,
         did,
-        slpt_phys
+        slpt_phys,
+        phys,
+        size
     );
     super::iommu::DmaMapResult::Mapped(phys)
 }
