@@ -147,7 +147,7 @@ record_disconnected_generation() {
     mapfile -t records < <(sed -n "$((start_line + 1)),$((done_line - 1))p" "$RAW" \
         | grep -aE "^USER: HOSTILE_BACKEND_DISCONNECT service=${service} old_tid=[1-9][0-9]*$" || true)
     [[ "${#records[@]}" == 1 ]] \
-        || fail_live "expected one supervisor disconnect record for service=$service"
+        || fail_live "expected one supervisor disconnect record for service=$service (got ${#records[@]}: ${records[*]:-none})"
     printf -v "$variable" '%s' "${records[0]##*=}"
 }
 verify_recovered_generation() {
@@ -156,7 +156,7 @@ verify_recovered_generation() {
     mapfile -t records < <(sed -n "$((start_line + 1)),$((done_line - 1))p" "$RAW" \
         | grep -aE "^USER: \\[hv-backend-fault-host\\] recovered service=${service} new_tid=[1-9][0-9]*$" || true)
     [[ "${#records[@]}" == 1 ]] \
-        || fail_live "expected one numeric recovery record for service=$service"
+        || fail_live "expected one numeric recovery record for service=$service (got ${#records[@]}: ${records[*]:-none})"
     [[ -n "$old_tid" && "${records[0]##*=}" != "$old_tid" ]] \
         || fail_live "recovery reused killed generation for service=$service"
 }
