@@ -84,6 +84,18 @@ pub fn handle(
         }
     };
 
+    // A sector past the end of the namespace cannot be served, and the device
+    // only answers it with an opaque status - which is how the Tier-3 lane's
+    // persistence failures surface. Name the caller's sector and the namespace
+    // size instead, so a failing boot says whether the request or the size was
+    // wrong.
+    if matches!(op, DrvOp::Read | DrvOp::Write) && sector >= ctrl.n_sectors {
+        let _ = ostd::io::print_fmt(format_args!(
+            "[nvme] out-of-range request: op={:?} sector={} namespace_sectors={}\n",
+            op, sector, ctrl.n_sectors
+        ));
+    }
+
     match op {
         DrvOp::Read => {
             match ctrl.read_sector(sector, io_buf.iova()) {
