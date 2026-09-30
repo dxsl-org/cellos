@@ -17,6 +17,11 @@ báo cáo ở `.agents/<plan>/`, cách làm ở `docs/guides/`. Chuỗi tiền l
   (đường `unmap/revoke` mới của kernel) hoặc một địa chỉ cũ trong thiết bị. Observability đã push (`88df51b3f`): dòng grant DMA + map VT-d nay `warn!` kèm
   `DID/SLPT/phys/size` ⇒ lượt CI đỏ kế tiếp trả lời được IOVA lỗi có từng được grant cho thiết bị đó không. Local chưa repro: lane PASS 8/8, và 3 lane chạy
   song song cũng PASS, nên phải đọc từ CI (lane chạy local ~40 s/lượt nhờ QEMU 10.2.0 đã cache ở `~/.cache/cellos/qemu-10.2.0`).
+  **Repro local được** (không cần chờ CI): chạy 6 lượt lane trong lúc 8 vòng `while :; do :; done` chiếm CPU — 1/6 lượt đỏ, ~2 phút/lượt,
+  lane vẫn PASS 5/6 (nhanh hơn nhiều so với chờ CI). Lượt đỏ local cho: `VIRTIO_E2E_FAIL:bulk-neighbor-overwritten` + **đọc LBA 800000–1062144
+  (390–518 MiB) trên đĩa 256 MiB** với `[nvme] io error opc=2 … status=16512` rồi `[nvme] io timeout opc=0 lba=0`. Wire format là `[op][sector:u64]`
+  nên driver parse đúng sector của caller ⇒ **caller (VFS/FS) đã hỏi quá cuối thiết bị** — nghi chuỗi cluster FAT hỏng/lệch (bước 8 sector = 4 KiB/cluster).
+  Đã thêm log `[nvme] out-of-range request: op=… sector=… namespace_sectors=…` để lượt sau chỉ đích danh.
 - [in-progress] **RPi3**: SD storage + HDMI [done]; I2C/SPI BSC1 + SPI0 loopback [done trên board
   thật] nhưng cần sensor vật lý (SHT3x/MPU6050) để đọc dữ liệu cảm biến; USB DWC2 & LAN9514 (Phase
   05) đã gỡ nghẽn 100% trong mã nguồn (USB Policy v3, cấp DWC2 MMIO, one-shot level IRQ 9) — chờ
