@@ -106,10 +106,22 @@ impl Queue {
         })
     }
 
+    /// CPU-visible base address of the SQ (what the driver writes entries to).
+    #[inline]
+    pub fn sq_virt(&self) -> u64 {
+        self.sq_buf.inner().virt() as u64
+    }
+
     /// Device-visible base address of the SQ.
     #[inline]
     pub fn sq_iova(&self) -> u64 {
         self.sq_buf.iova()
+    }
+
+    /// CPU-visible base address of the CQ (what the driver polls).
+    #[inline]
+    pub fn cq_virt(&self) -> u64 {
+        self.cq_buf.inner().virt() as u64
     }
 
     /// Device-visible base address of the CQ.

@@ -109,6 +109,17 @@ impl NvmeController {
         Self::write32(&mmio, REG_AQA, aqa)?;
         Self::write64(&mmio, REG_ASQ, admin.sq_iova())?;
         Self::write64(&mmio, REG_ACQ, admin.cq_iova())?;
+        // What the controller is actually told to fetch, next to what the CPU
+        // writes and what the kernel mapped: a device that fetches from an
+        // address the driver never authorized shows up as a mismatch here.
+        let _ = print_fmt(format_args!(
+            "[nvme] regs: aqa=0x{:x} asq=0x{:x} acq=0x{:x} (sq_virt=0x{:x} cq_virt=0x{:x})\n",
+            aqa,
+            admin.sq_iova(),
+            admin.cq_iova(),
+            admin.sq_virt(),
+            admin.cq_virt()
+        ));
 
         // 5. Enable controller.
         let cc = CC_EN | CC_CSS_NVM | CC_MPS_4K | CC_AMS_RR | CC_IOSQES | CC_IOCQES;
@@ -150,11 +161,23 @@ impl NvmeController {
             bdf,
         };
 
+        // The device-visible addresses this instance programmed, next to the
+        // kernel's '[vtd] Cell … phys=0x…' lines: a mismatch there is what turns
+        // a correct request into a device that reads or writes somewhere else.
+        let _ = print_fmt(format_args!(
+            "[nvme] dma iovas: admin.sq=0x{:x} admin.cq=0x{:x} io.sq=0x{:x} io.cq=0x{:x}\n",
+            ctrl.admin.sq_iova(),
+            ctrl.admin.cq_iova(),
+            ctrl.io.sq_iova(),
+            ctrl.io.cq_iova()
+        ));
+
         // 7. Identify Controller → VWC flag.
         {
             let id_buf = DmaBuf::alloc(1).ok_or(ViError::OutOfMemory)?;
             let id_buf = AuthorizedDma::authorize(id_buf, |buf| buf.authorize(bdf))
                 .map_err(|_| ViError::PermissionDenied)?;
+            let _ = print_fmt(format_args!("[nvme] dma iovas: identify=0x{:x}\n", id_buf.iova()));
             ctrl.admin_cmd(
                 ADMIN_OPC_IDENTIFY,
                 0,
