@@ -550,18 +550,11 @@ __trap_exit:
 1:
     ldr  x9,  [sp, #264]     // sepc → ELR_EL2 (user entry point)
     msr  elr_el2, x9
-    // With HCR_EL2.TGE=1 the PE treats EL1 as EL0, so the state a cell is entered
-    // in is encoded EL1t (M[3:0] = 0b0100) with M[4] = 1 for AArch64: 0x14.
-    // Measured on this machine (`virt,virtualization=on`, cortex-a57):
-    //   * `#0x10` (plain EL0t, the encoding a non-TGE host wants) hung every
-    //     boot — 60 of 60 runs stopped at the first task entry;
-    //   * `#0` (AArch32 USR, i.e. no AArch64 selector at all) works only for as
-    //     long as the emulator tolerates it, and it is the state the rare
-    //     `ec=0x0 esr=0x2000000` trap was reached from (about one run in thirty,
-    //     reported as a kernel trap at an ELR inside this path).
-    // 0x14 is green: 90 of 90 two-hart runs with no such trap, production suite
-    // 11 of 11, one-CPU lane exit 0.
-    mov  x9,  #0x14           // EL1t, AArch64, no interrupt masking
+    // HCR_EL2.TGE routes EL0 exceptions to EL2; it does not change the
+    // exception level a Cell returns to. SPSR_EL2.M=0 is AArch64 EL0t.
+    // Bit 4 selects AArch32, so 0x14 is an illegal return state on an
+    // AArch64-only QEMU CPU (EC=0x0e at the first Cell entry).
+    mov  x9,  #0
     msr  spsr_el2, x9
     ldr  x9,  [sp, #16]      // regs[2] = user sp
     msr  sp_el0, x9
