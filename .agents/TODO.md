@@ -9,6 +9,14 @@ báo cáo ở `.agents/<plan>/`, cách làm ở `docs/guides/`. Chuỗi tiền l
 2026-09-19 → 2026-09-27 đã được gỡ, nội dung của chúng nằm ở bốn chỗ trên.
 
 ## Đang mở — làm được ngay, không cần gì thêm
+- [in-progress] **Lane `Tier 3 x86 VirtIO E2E + Persistence` flaky (~1/3 lượt CI)** — chuỗi nhân quả đọc được từ artifact
+  `x86-tier3-virtio-e2e-1` của run đỏ: (1) `vtd_iova_to_slpte … slpte=0x0 (iova=0x7ffdd0c0, write=0)` cho `dev=00:02:00` (đúng BDF NVMe)
+  → (2) `[nvme] admin timeout after 1000000 polls` → cell nvme thoát → init respawn (instance 2 in `DMA authorized`) → (3)
+  `[hv-x86] persistent disk open failed` — dòng này khớp `fatal_pattern` (`\[hv-x86\].*(fail|…)`) nên lane FAIL. `run1` (boot đầu) luôn xanh, 0 lỗi VT-d.
+  Cell nvme chỉ DMA vào buffer *của chính nó* (bounce 512 B, không có request kiểu grant), nên nghi vấn nằm ở **map VT-d không còn hiệu lực ngay sau grant**
+  (đường `unmap/revoke` mới của kernel) hoặc một địa chỉ cũ trong thiết bị. Observability đã push (`88df51b3f`): dòng grant DMA + map VT-d nay `warn!` kèm
+  `DID/SLPT/phys/size` ⇒ lượt CI đỏ kế tiếp trả lời được IOVA lỗi có từng được grant cho thiết bị đó không. Local chưa repro: lane PASS 8/8, và 3 lane chạy
+  song song cũng PASS, nên phải đọc từ CI (lane chạy local ~40 s/lượt nhờ QEMU 10.2.0 đã cache ở `~/.cache/cellos/qemu-10.2.0`).
 - [in-progress] **RPi3**: SD storage + HDMI [done]; I2C/SPI BSC1 + SPI0 loopback [done trên board
   thật] nhưng cần sensor vật lý (SHT3x/MPU6050) để đọc dữ liệu cảm biến; USB DWC2 & LAN9514 (Phase
   05) đã gỡ nghẽn 100% trong mã nguồn (USB Policy v3, cấp DWC2 MMIO, one-shot level IRQ 9) — chờ
