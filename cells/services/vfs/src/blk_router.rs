@@ -45,6 +45,17 @@ fn driver_tid() -> Option<usize> {
     }
 }
 
+/// Drop the cached driver TID after a failed exchange so the next request
+/// re-probes service discovery.
+///
+/// A block driver cell that dies and is restarted registers under a new tid;
+/// keeping the old one cached means every later request in that boot is sent to
+/// a cell that no longer answers. `compare_exchange` leaves a tid cached by
+/// another caller alone.
+fn forget_driver(tid: usize) {
+    let _ = DRIVER_TID.compare_exchange(tid, NOT_PROBED, Ordering::Relaxed, Ordering::Relaxed);
+}
+
 /// Read one 512-byte sector at absolute LBA `abs_lba`.
 ///
 /// Routes to the block Driver Cell (DrvRequest IPC) when registered, falling
@@ -56,12 +67,26 @@ pub fn blk_read(abs_lba: u64, buf: &mut [u8; SECTOR_SIZE]) -> bool {
         req[0..2].copy_from_slice(&0u16.to_le_bytes());
         req[2..10].copy_from_slice(&abs_lba.to_le_bytes());
         if let SyscallResult::Err(_) = sys_send(tid, &req) {
+            forget_driver(tid);
             return false;
         }
         // Reply: [status (1B)] [data (512B)] = 513 bytes. mask=tid so a message
         // from another cell (while we are blocked here) is never mistaken for it.
         let mut reply = [0u8; 1 + SECTOR_SIZE];
-        sys_recv(tid, &mut reply);
+        // This recv result used to be dropped, and dropping it is not harmless:
+        // the kernel delivers a driver cell's death as `Ok(dead_tid)` with the
+        // reason written into the first 8 bytes of the buffer, so a cell that
+        // died while this recv was parked left `reply[0] == 0` plus 512 bytes of
+        // zeros - a successful read of data that was never on the device, from
+        // which the filesystem then walked a FAT chain of zeros. Only `Ok(tid)`
+        // is a reply; anything else is a failure the caller's retry re-probes.
+        match sys_recv(tid, &mut reply) {
+            SyscallResult::Ok(from) if from == tid => {}
+            _ => {
+                forget_driver(tid);
+                return false;
+            }
+        }
         if reply[0] != 0 {
             return false;
         }
@@ -81,10 +106,21 @@ pub fn blk_write(abs_lba: u64, data: &[u8; SECTOR_SIZE]) -> bool {
         req[2..10].copy_from_slice(&abs_lba.to_le_bytes());
         req[10..10 + SECTOR_SIZE].copy_from_slice(data);
         if let SyscallResult::Err(_) = sys_send(tid, &req) {
+            forget_driver(tid);
             return false;
         }
         let mut reply = [0u8; 1];
-        sys_recv(tid, &mut reply);
+        // Same as blk_read: only `Ok(tid)` is a reply, and an unanswered write
+        // that reads as success is worse than an unanswered read - the page cache
+        // is write-through, so the filesystem believes a sector reached the
+        // device that never arrived.
+        match sys_recv(tid, &mut reply) {
+            SyscallResult::Ok(from) if from == tid => {}
+            _ => {
+                forget_driver(tid);
+                return false;
+            }
+        }
         reply[0] == 0
     } else {
         sys_blk_write(abs_lba, data)
@@ -101,11 +137,16 @@ pub fn blk_flush() -> bool {
             return false;
         }
         let mut reply = [0u8; 1];
-        if let ostd::syscall::SyscallResult::Err(e) = ostd::syscall::sys_recv(tid, &mut reply) {
-            // Either the driver cell never answered (it spins on a command while
-            // this waits) or the message failed; both used to be invisible here.
-            ostd::io::println(&alloc::format!("[blk-router] flush recv failed: {:?}", e));
-            return false;
+        // `sys_recv` returns Ok(tid) for a reply and Ok(dead_tid) when the driver
+        // cell died while this was parked - the Err arm that used to be checked
+        // here never fires, so a dead driver read as a rejected flush.
+        match ostd::syscall::sys_recv(tid, &mut reply) {
+            ostd::syscall::SyscallResult::Ok(from) if from == tid => {}
+            other => {
+                ostd::io::println(&alloc::format!("[blk-router] flush recv failed: {:?}", other));
+                forget_driver(tid);
+                return false;
+            }
         }
         if reply[0] != 0 {
             ostd::io::println("[blk-router] flush rejected by block driver");
