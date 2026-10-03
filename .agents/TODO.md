@@ -9,10 +9,11 @@ báo cáo ở `.agents/<plan>/`, cách làm ở `docs/guides/`. Chuỗi tiền l
 2026-09-19 → 2026-09-27 đã được gỡ, nội dung của chúng nằm ở bốn chỗ trên.
 
 ## Đang mở — làm được ngay, không cần gì thêm
-- [open] **Cùng lớp lỗi `sys_recv` còn ở các cell khác** — `sys_recv` luôn trả `Ok(x)`, với `x == tid` là reply thật còn `x == dead_tid` là
-  *thông báo chết* (kernel ghi lý do vào 8 byte đầu buffer) ⇒ mọi chỗ chỉ kiểm tra `Ok(_)`/bỏ qua kết quả đều có thể đọc cái chết thành thành công:
-  `cells/tools/shell/src/cmd_sys.rs:196`, `cmd_fs.rs:900`, `config_client.rs:98` (bỏ hẳn kết quả), `net-tools/src/bin/wget.rs:305`. Đường block của VFS
-  đã sửa (chỉ `Ok(tid)` mới tính là reply + quên tid để probe lại); nên có một helper chung trong `ostd::ipc` để không lặp lại.
+- [open] **`cells/runtimes/lua/src/bindings_net.rs` chưa wire nên còn 9 chỗ coi `Ok(_)` là reply** — file
+  **không** được khai báo trong `main.rs` (grep `bindings_net` không thấy) nên hiện không biên dịch; khi wire
+  `vnet.*` phải đi qua `ostd::ipc::recv_from(net_tid, …)` như các client khác (entry `ipc:` trong `CHANGELOG.md`).
+  Các witness trong `cells/tests/` (bench `smp`/`preempt_latency`, `pipe-test`, c2c oracle) đã tự so sender
+  hoặc retry-đến-khi-decode-được nên **không** nằm trong lớp lỗi này.
 - [resolved] **Lane `Tier 3 x86 VirtIO E2E + Persistence` flaky (~1/3 lượt CI)** — chuỗi nhân quả đọc được từ artifact
   `x86-tier3-virtio-e2e-1` của run đỏ: (1) `vtd_iova_to_slpte … slpte=0x0 (iova=0x7ffdd0c0, write=0)` cho `dev=00:02:00` (đúng BDF NVMe)
   → (2) `[nvme] admin timeout after 1000000 polls` → cell nvme thoát → init respawn (instance 2 in `DMA authorized`) → (3)
@@ -33,7 +34,67 @@ báo cáo ở `.agents/<plan>/`, cách làm ở `docs/guides/`. Chuỗi tiền l
 - [in-progress] **RPi3**: SD storage + HDMI [done]; I2C/SPI BSC1 + SPI0 loopback [done trên board
   thật] nhưng cần sensor vật lý (SHT3x/MPU6050) để đọc dữ liệu cảm biến; USB DWC2 & LAN9514 (Phase
   05) đã gỡ nghẽn 100% trong mã nguồn (USB Policy v3, cấp DWC2 MMIO, one-shot level IRQ 9) — chờ
-  cắm cáp Ethernet để kiểm thử thực địa.
+  cắm cáp Ethernet để kiểm thử thực địa. EL2 monitor: bản coherent đã chạy trên board 2026-10-01 —
+  hai dòng `first-run` của EL1/EL2 khớp từng trường, `HVC/MMIO/VI/PREEMPT smoke PASS; HypervisorCap
+  open`, `[hv] vCPU ready — entering run loop` và Linux 6.12.13 khởi động trên Cortex-A53
+  (`[0x410fd034]`, earlycon PL011); trace dừng trước `~ #` nên **shell trên phần cứng chưa quan
+  sát**. Hai thiết bị low-speed ở cổng hub 3/5 hỏng vì mọi CSPLIT được phát trong đúng microframe
+  của SSPLIT (`hfnum=0000184A->0000184A->0000184A`, hcint `0x22` rồi `0x42`×2, "NYET exhausted (2
+  attempts)"): driver nay pace theo microframe (`wait_microframe`, cửa sổ 4 tick như U-Boot, 4
+  lượt, in số lượt thật) + test host cho cửa sổ qua wrap counter, đã deploy trong `cellos.uimg`
+  (SHA-256 `256f33df…`) — **đã kiểm chứng trên board 2026-10-01**: hai nửa cách nhau một microframe
+  (`ss hfnum=00001930->…` rồi `cs1 00001931->…->00001AC0`), thiết bị low-speed ở cổng 3 enumerate
+  (`10c4:0005`, interface class 3/subclass 1/protocol 2, `HID interface 0 class=3 boot=1`) và driver
+  kết thúc `driving 1 HID interface(s)` trong khi LAN9514 vẫn lên (`Hardware MAC: B8:27:EB:12:34:56`).
+  Còn mở, **không** claim: phím đi vào guest (chưa bấm phím nào và trace dừng trước `~ #`), thiết bị
+  cổng 5 (mọi CSPLIT trả NAK — thiết bị không trả lời, không phải lỗi lịch split), và LED lock (bàn
+  phím này STALL cả `SET_REPORT` LED lẫn đọc report descriptor — driver ghi nhận một lần rồi bỏ qua).
+  Cổng QEMU `raspi3b` strict **nhạy tải**: cùng
+  payload PASS 2026-09-30 nhưng treo 3 lượt 2026-10-01 (load average ~28/27 CPU), cả bản cũ chạy đối
+  chứng cũng treo, log phía Cellos giống hệt — timeout ở đây là *không kết luận*, không phải hồi quy.
+  Board 2026-10-02: guest **không tạo được** (`[hv] create_vm failed … 128 MiB guest RAM` rồi
+  `[hv] service quiesced`) nên không có chỗ cho phím; hub lúc đó cổng 2/3/4 trống (`status=0x0100`)
+  và thiết bị low-speed duy nhất ở cổng 5 trả NAK mọi CSPLIT. Nghi phạm của create_vm là bộ quét
+  carve cũ (nhả `FRAME_ALLOCATOR` mỗi 256 frame nên allocation của cell khác cắt ngang run đang đếm):
+  nay `allocate_guest_ram` giữ một lock, quét tuyến tính một lượt (`find_free_run`), thêm
+  `largest_free_run` vào dòng lỗi và log lý do khi từ chối (`create_vm refused: EL2 monitor not
+  verified`) — payload `8b4fa080…` đã deploy, chờ board chạy lại **kèm log kernel** (`[ ERROR]`/
+  `[ WARN]`), vì capture vừa rồi chỉ có phía cell. Chuẩn để khôi phục: bản driver trước đã được xác
+  minh vật lý với receiver `2a7a:8a53` trên profile **host-shell** (`a` vào shell, keypad Enter chạy
+  `ls`, LED lock đổi theo CAPS/NUM) — profile Tier-3 không có host shell nên guest phải chạy trước.
+  Board 2026-10-03: carve fix **đã kiểm chứng trên board** (`[hv] VM created vm_id=1` → `[hv] vCPU
+  ready` → Linux lên trên Cortex-A53); bàn phím ở cổng 4 khai low-speed nhưng **NAK** mọi
+  `GET_DESCRIPTOR` trong khi hai nửa split đúng nhịp (`ss 00001BB7` → `cs1 00001BB8 hcint=0x42`
+  (NYET) → `cs2 00001BB9 hcint=0x12` (NAK)) → thiết bị im lặng, không phải lỗi lịch; driver nay
+  re-reset port rồi thử lại 3 vòng (`enumeration failed; re-resetting hub port N`) và in `final
+  status=0x…`, payload `deab6f59…` đã deploy. Thiết bị đã từng enumerate (`10c4:0005`) và receiver
+  `2a7a:8a53` là mốc đối chiếu — cắm một trong hai vào cổng 1–4 trước khi kết luận.
+  Mô hình Tier 3 (chốt 2026-10-03): **Cellos là OS riêng, Tier 3 chỉ để chạy một app Linux** — mỗi VM
+  một app, VM chết theo app; không mở phiên Linux nhiều app. Profile Tier-3 nay boot tới dấu nhắc
+  (VFS+Input+Net+`/bin/shell`, init **không** tự start hypervisor) và `hv` trong shell mới start cell;
+  preload là tuỳ chọn cấp máy chủ (`app-init/hv-autostart`, `make-hypervisor-fs-rpi3.sh --autostart`).
+  Còn mở: app name đi từ shell (spawn argv) → cmdline guest → init trong guest exec app, kèm initramfs
+  riêng cho profile volatile (profile SD đã có `tools/prepare-rpi3-guest-initramfs.py`).
+  Mô hình build (chốt 2026-10-03, bỏ 3 profile tier-shaped): **embedded-first** — mọi ảnh đều có nền
+  `vfs + net + shell` (console UART) cộng các **option trực giao**: `input`, `ui`, `ai`, `supervisor`,
+  `tier3`, `tier3-autostart`; driver theo board descriptor. Tier 3 có ba mức: **không đóng gói**
+  (`--no-tier3`: không `/bin/hypervisor`/`vmlinuz`/`initrd.gz`, `hv` fail-closed; FAT 11→8 file, host
+  gate PASS), **có cell nhưng idle** (mặc định, `hv` bật), **preload** (`--autostart`). Front end:
+  `scripts/build-image.sh` (`--list`, `--dry-run`, `--board`, `--no-tier3`, `--autostart`, `--guest`,
+  `--out`). HDMI là option `ui`, không phải thuộc tính profile; Pi Tier-3 không có display driver nên
+  vẫn UART-only, và thứ HDMI nên hiện là framebuffer của guest (thuộc mốc một-app-một-VM).
+  Option `--drivers minimal` đã có: kernel dựng với `board-rpi3-bring-up` (feature `bring-up-drivers`
+  trong `cellos-boards` cắt còn console/IRQ/timer/SD), init bỏ `usb-host` nên không spawn cell USB, và
+  ảnh bỏ `/bin/dwc2-usb` + `/bin/lan9514` (FAT 11→9 file) — host gate PASS, log **không còn** dòng
+  `[dwc2]`/`[lan9514]`/`[usb-hid]`. Còn mở: trim driver cho các board khác (chưa có set bring-up).
+  Guest profile (chốt 2026-10-03): `--guest alpine|alpine-wide|alpine-gui`, **một guest mỗi ảnh**,
+  dùng lại khuôn x86 — `boot_arm_profile.rs` giữ carve/rdinit/cmdline, DTB nhận `bootargs` tham số,
+  cell log `[hv] guest profile: <tên> (<MiB>)`, hai profile wide cùng lúc là compile error.
+  `alpine-wide` (256 MiB) đã kiểm chứng end-to-end: machinery + boot gate PASS, guest Alpine tới `~ #`
+  (`build/rpi3-gate/wide-{machinery2,boot}/`). Browser **headless** dùng `alpine-wide` — không cần
+  display device, chỉ cần RAM (Chromium ~300–500 MiB nên sẽ cần lớp 512 MiB riêng); `alpine-gui` chỉ
+  cho cửa sổ hiển thị, còn phụ thuộc đường trình bày virtio-gpu → compositor → panel.
+  Còn mở: `--app` (stage app + `rdinit=/bin/<app>`) và lớp base cho browser.
 - [in-progress] **Bringup board thật**: RISC-V (StarFive VisionFive 2, Pioneer) và mini PC x86 (Dell).
   Qualification AMD/Intel thật là gate độc lập; không suy diễn từ QEMU.
 - [in-progress] **Manifest & tooling phía developer** (item 18): Manifest v2 + tooling tương thích
@@ -49,9 +110,65 @@ báo cáo ở `.agents/<plan>/`, cách làm ở `docs/guides/`. Chuỗi tiền l
   Items 3–6 và 10–13 [done 2026-09-16] (loader signature boundary, A/B slot record, owner anchor,
   task-creation wiring, umbrella/PAL approvals, ledger event, PAL-IMPLEMENTATION-CHECKPOINT) —
   chi tiết trong `docs/app-tier-acceptance-ledger.json` và `.agents/logs/260915-app-tier-ledger-schema-v5.md`.
-- [in-progress] **D5 scale profiles**: re-run baseline N=64/128/256/512 **có heavy cells resident**;
-  image sharing; demand stacks. Chi tiết + số đo n=8–9: `docs/roadmap/beam-parity-backend-roadmap.md`
-  §2.2–2.3.
+- [in-progress] **D5 scale profiles**: **đo sạch 2026-10-03: 295 cell rồi kernel từ chối có tên** —
+  `USER: [a2a3-probe] OOM_TYPED count=295` kèm `[loader] spawn OOM: op=SpawnPinned caller=20
+  path=/bin/bench-probe`, **giống hệt ở 2 GiB và 512 MiB**, 0 panic, 0 `allocation error`, mọi self-test PASS,
+  `bound=memory` ⇒ trần là **heap boot 4 MiB** (`HEAP_FRAMES=1024`, `kernel/src/main.rs:610`); spawn tính cho
+  caller ≈6,4 KB/cell (`caller_charged=1900996`/295), `Task` chỉ 1 440 B. ⇒ **N=256 đã đạt được** trong lượt
+  đồng nhất; **và đã đo với heavy cell thường trú**: lane `--heavy M` spawn M cell `/bin/heavy-probe` (nhị phân riêng:
+  arena heap 20 MiB khai báo + touch 16 MiB, cộng grant 16 MiB, rồi park) trước sweep ⇒ trần nhẹ
+  **295/280/265/234** ở **M=0/1/2/4** (mỗi heavy cell ≈**15** cell trần — giá kernel-side của arena 20 MiB:
+  5 120 trang × 32 B ledger ≈ 160 KiB) ⇒ **N=64/128/256 giữ được với M≤2 heavy, gãy ở M=4** (234 < 256). Runner
+  từ chối báo cáo lượt heavy nếu log thiếu `heap resident:`/`heavy resident: grant=` cho từng cell. Số đo +
+  cách đo (watchpoint gdbstub, backtrace trong allocator) + bước kế: `.agents/reports/d5-cell-scale-remeasure-261003.md`;
+  runner `scripts/qemu-cell-scale.sh` (dựng ảnh một lần với `CELLOS_INCLUDE_CAPACITY_PROBE=1`). **Số cũ 204/236 và
+  193/194 đều là giả**: 204/236 đo trên kernel tràn stack ở scheduler init (xoá bớt accounting), 193/194 bị
+  chặn bởi một allocation infallible. Xem mục audit bên dưới.
+  Nền: `docs/roadmap/beam-parity-backend-roadmap.md` §2.2–2.3.
+- [open] **Chi phí heap mỗi cell ≈9,7 KB — đo được, và đây là đòn bẩy của gate**: histogram size-class ở trần
+  M=0 (295 cell) cho thấy mỗi cell nhẹ giữ ~3,8 KB ở lớp ≤4 KB (≈2,8 allocation ~1,3 KB) + ~4,6 KB ở lớp
+  ≤16 KB (≈3,2 allocation) ⇒ **danh sách segment của ELF** (`CellSegments.pages`, 16 B/trang × ~267 trang ≈ 4,3 KB)
+  là phần lớn nhất; **ledger của address space KHÔNG per-page** (không lặp lại danh sách segment — ước lượng
+  "32 B/trang" trước đây sai). Muốn N=256 cùng M=4 heavy (hiện 234 < 256) thì phải giảm chi phí này hoặc tăng
+  heap kernel (`HEAP_FRAMES=1024` = 4 MiB, `kernel/src/main.rs:610`) — đo lại bằng `--heavy` sau mỗi thay đổi.
+  Hướng: chia sẻ trang immutable của ELF (bước (2) trong roadmap §2.2) hoặc nén danh sách segment.
+- [open] **Heap phía cell là arena tĩnh, chưa grow được**: `ostd::heap` cấp vùng `static` cố định (mặc định
+  1 MiB; cell khai báo thêm bằng `declare_custom_heap!` — `/bin/heavy-probe` dùng 20 MiB). Profile heavy §2.3
+  ("heap lớn + grant 16 MiB") nay **đã đủ** nhờ arena khai báo, nhưng cell sống lâu cần *lớn dần* (data cell,
+  VFS cache…) thì chưa có: cần syscall cấp thêm vùng (`brk`/`mmap`-style) + allocator phía `ostd` grow theo.
+  Đây cũng là điều kiện để N=512 khả thi.
+- [in-progress] **Fail-closed cho toàn bộ đường spawn (audit allocation infallible)**: đo tiếp trong ngày cho thấy
+  từ chối ở 193 là **lỗi liên tục (contiguity)** của một transient — `[signing] OOM: signed payload of 78760 bytes`
+  với 299 KiB còn trống mà không có lỗ hole 78 KiB; payload nay dùng lại `PAYLOAD_SCRATCH` (bỏ 78 KiB churn mỗi
+  spawn). Đã sửa thêm các allocation infallible: 3 `collect::<Vec<_>>()` trong `task/elf_prepare.rs` (4–12 KiB theo
+  số trang ELF), `Vec<LoadedPage>` trong `loader/elf.rs::load_segments` (512 entry = 12 288 B), `Vec` của
+  `measurement_log` (256 entry = 12 288 B), cùng bộ diagnostic giữ lại: tên stage cho mọi OOM (`[signing]/[fs]/[loader]/[mem]`),
+  lý do allocator từ chối (`null_from_quota` vs `null_from_heap`), heap dùng sau mỗi SpawnPinned, và histogram
+  **Trạng thái**: binder cuối cùng đã định danh và sửa — **`PendingMailbox::new()`** cấp sẵn
+  `Vec::with_capacity(HOTSWAP_MSG_QUEUE_DEPTH)` = **6 656 byte cho MỌI task** (kể cả cell chỉ park, không bao giờ
+  nhận message) bằng `Vec::with_capacity` infallible ⇒ vừa là allocation giết sweep ở ~150 cell, vừa là ~40% chi
+  phí heap mỗi cell. Nay container **lazy** (`Vec::new()`; `try_push` đã fallible sẵn, tính cho cell 0) ⇒ sweep
+  từ *halt ở ~150* thành **295 cell với `OOM_TYPED`** (giống nhau ở 2 GiB/512 MiB). Tìm ra nhờ **chụp call chain
+  ngay trong `QuotaAlloc::alloc`** (`alloc caller[0..8]`) — bản scan trong `alloc_error_handler` thấy frame cũ
+  (stale) nên chỉ vào nhầm `into_task`/`Stack::allocate`. Đã sửa kèm: `try_box` (fallible `Box`) cho
+  `into_task`/`scheduler`, `aligned_elf::bytes` (copy ELF khi lệch 8 byte), ledger `push` ở
+  `map_private_page`/`map_existing_task_stacks`/`map_grant_page` + builder reserve theo số mapping.
+  Còn lại (chưa bind, ghi để không quên): `BTreeMap::insert` (node ~200 B — `try_insert` còn unstable), `queue.clone()`
+  trong `scheduler::exit_task` (đường cell chết, hàm `void`), `Box::new` trong `spawn_with_stacks_configured`
+  (đổi chữ ký dây chuyền qua 4 caller, có đường x86 + test), và các `to_vec`/`clone` nhỏ khác trong test-hooks.
+  Đã sửa trong lượt này: `state_stash::stash` + `stage_spawn_argv` (copy fallible, trả 0 + warn — cùng sentinel với
+  nhánh "stash full"), `scheduler::spawn_thread` (clone `allowed_drivers` fallible), `address_space` (thôi
+  `Vec::with_capacity` cho `registrations`). Sweep vẫn **295** sau các sửa này. Chi tiết: `.agents/reports/d5-cell-scale-remeasure-261003.md`.
+- [open] **`Scheduler::cell_owners` nên là map thưa, không phải bảng đặc**: sau khi sửa tràn stack (inline
+  `[CellOwnerSlot; MAX_CELLS]` → `Vec`) bảng này chiếm **cố định 160 KiB heap** ở profile experiment
+  (4096 slot × 40 byte; production 2,5 KiB) — tức ~8 cell trong trần 193, và là chi phí *cố định* chứ không phải
+  per-cell. `Scheduler` đã dùng `BTreeMap` cho các map tương tự (`cell_owner_watches`), nên dạng đúng là
+  `BTreeMap<u32, CellOwnerSlot>` (~0 khi rỗng); đổi 12 call site `get`/`get_mut` sang khoá `&(id as u32)`.
+  Việc này làm con số gate D5 sạch hơn (bỏ 160 KiB chi phí cố định khỏi 4 MiB heap).
+- [open] **Cell không load được khi khách có ≥4 GiB RAM** (đo 2026-10-03, `-m 4G`): `[ERROR] ELF: load VA
+  0x100000000 already mapped — rejecting spawn` cho cả `/bin/platform` lẫn init ⇒ `Failed to spawn init`, không có shell.
+  VA base của cell (`0x1_0000_0000`) đụng mapping của kernel khi RAM chạm 4 GiB. Đây là lỗi riêng, không phải D5;
+  chặn mọi phép đo ở 4 GiB. Log: `build/cell-scale-*/qemu.log`.
 - [in-progress] **Beam-parity B1/B2** (B0 [done]): B1 concurrency trong cell + cancellation (cần ADR
   cancellation); B2 cost/scale per-request (WIP-limited cùng D5).
 - [in-progress] **Cell-native portability (ADR-0018/0019, phase 01–07 [done])**: blocker class D còn
@@ -108,6 +225,9 @@ báo cáo ở `.agents/<plan>/`, cách làm ở `docs/guides/`. Chuỗi tiền l
   byte. Log `[vfs] short read ... fatfs_size=...` nay ghi kích thước fatfs thấy khi lỗi xảy ra;
   chưa chứng minh metadata trên đĩa, cache hay handle nào đã tạo ra sự khác biệt. Bước kế: đối
   chiếu kích thước ở mount và sau `write_at` với directory entry trên host ở cùng boot.
+  **Cùng lớp, tái hiện được (2026-10-03)**: FAT **nhúng** (VIFS1) đọc `/bin/bench-probe` **78 760** byte trong khi
+  directory entry ghi **78 824** (short 64 byte, lặp lại mọi lượt); nguồn chưa chốt (mkfat32 hay `fatfs` read) —
+  chi tiết ở `.agents/reports/d5-cell-scale-remeasure-261003.md`.
 
   (C) **flush ngắt quãng thất bại ở tầng raw**: `[hv-blk] VFS flush failed: Ok(Err(1))` — VFS *trả lời*
   `Err(1)` (không phải timeout), tức `FatBackend::sync` → `blk_router::blk_flush()` phía ngoài trả false, kèm

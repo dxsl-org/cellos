@@ -66,7 +66,22 @@ impl ElfLoader {
         // Record each mapped page so the cell's segment frames can be reclaimed
         // when it dies (see task::stack::CellSegments) — otherwise they leak — and
         // so the post-relocation W^X pass knows each page's target permissions.
+        //
+        // Reserve the whole bound before mapping anything: pushing grows through
+        // the infallible allocator, and a growth that cannot be satisfied halts
+        // the kernel instead of failing the spawn (measured 2026-10-03: the growth
+        // to 512 entries / 12 288 bytes is what ended the capacity sweep). One
+        // entry per mapped page, so summing the PT_LOAD pages is exact.
+        let page_bound: usize = elf
+            .program_iter()
+            .filter(|ph| matches!(ph.get_type(), Ok(xmas_elf::program::Type::Load)))
+            .filter_map(|ph| usize::try_from(ph.mem_size()).ok())
+            .map(|mem_size| mem_size.div_ceil(crate::memory::paging::PAGE_SIZE))
+            .sum();
         let mut mapped: alloc::vec::Vec<LoadedPage> = alloc::vec::Vec::new();
+        mapped
+            .try_reserve_exact(page_bound)
+            .map_err(|_| ViError::OutOfMemory)?;
 
         for (seg_index, ph) in elf.program_iter().enumerate() {
             if let Ok(xmas_elf::program::Type::Load) = ph.get_type() {

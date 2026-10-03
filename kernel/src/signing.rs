@@ -14,6 +14,18 @@
 //! Verify-only: the kernel never signs (private key lives offline).
 
 use alloc::vec::Vec;
+use types::{ViError, ViResult};
+
+/// Reused buffer for the signed payload (the ELF minus its 64 signature bytes).
+///
+/// The message a verification hashes is a *transient*: it exists for one
+/// `verify_cell` call. Allocating it per spawn put two 78 KiB buffers in flight at
+/// once (the ELF read plus this copy), and at ~194 parked cells the payload's
+/// 78,760-byte request was the one that could no longer find a contiguous run
+/// (measured 2026-10-03: 289 KiB free, no 78 KiB hole — the refusal that ended the
+/// capacity sweep). One shared buffer, grown once and never shrunk, removes that
+/// per-spawn churn; verification itself is unchanged (same bytes, same order).
+static PAYLOAD_SCRATCH: crate::sync::Spinlock<Vec<u8>> = crate::sync::Spinlock::new(Vec::new());
 
 /// Dev Ed25519 **public** key — derived from the fixed dev seed in
 /// `scripts/sign-cell.py` (seed `[0x43]*32`, reproducible; never shipped in release).
@@ -54,10 +66,14 @@ pub fn extract_sig(elf_bytes: &[u8]) -> Option<[u8; 64]> {
 
 /// Verify the Ed25519 signature of a cell ELF binary.
 ///
-/// Returns `false` on any malformed input, missing section, or signature
+/// Returns `Ok(false)` on any malformed input, missing section, or signature
 /// mismatch — never panics. The signature covers every final ELF byte except
 /// its own 64-byte payload, including all relocation section headers and data.
-pub fn verify_cell(elf_bytes: &[u8], sig: &[u8; 64]) -> bool {
+///
+/// Returns `Err(ViError::OutOfMemory)` when the signed payload cannot be
+/// allocated: the caller must fail closed *and* report capacity, because a
+/// verification that never ran is not a signature mismatch.
+pub fn verify_cell(elf_bytes: &[u8], sig: &[u8; 64]) -> ViResult<bool> {
     verify_cell_with_key(elf_bytes, sig, &CELL_SIGNER_PUBKEY)
 }
 
@@ -88,22 +104,42 @@ fn signature_range(elf_bytes: &[u8]) -> Option<(usize, usize)> {
 
 /// Inner implementation; accepts an explicit key so `self_test` can use
 /// the precomputed test key without touching `CELL_SIGNER_PUBKEY`.
-fn verify_cell_with_key(elf_bytes: &[u8], sig: &[u8; 64], pubkey: &[u8; 32]) -> bool {
+fn verify_cell_with_key(elf_bytes: &[u8], sig: &[u8; 64], pubkey: &[u8; 32]) -> ViResult<bool> {
     let (signature_offset, signature_size) = match signature_range(elf_bytes) {
         Some(range @ (_, 64)) => range,
-        _ => return false,
+        _ => return Ok(false),
     };
     if extract_sig(elf_bytes).as_ref() != Some(sig) {
-        return false;
+        return Ok(false);
     }
 
     // The signature section itself is the only excluded interval. Its header
     // and placement stay in the signed byte stream, so no parser-selected
     // relocation data can move outside authenticated bytes.
-    let mut payload = Vec::with_capacity(elf_bytes.len() - signature_size);
+    //
+    // The payload is a full copy of the ELF minus its 64 signature bytes, so it
+    // must stay fallible: `Vec::with_capacity` reaches the infallible alloc error
+    // handler, which halts the kernel instead of refusing the spawn. It is built
+    // in `PAYLOAD_SCRATCH` rather than a fresh buffer because a per-spawn 78 KiB
+    // allocation interleaved with the retained per-cell state is what fragmented
+    // the heap: at 194 parked cells this exact request (78 760 bytes for
+    // `/bin/bench-probe`) was the one that no longer found a contiguous run
+    // (289 KiB free), and it ended the capacity sweep.
+    let mut scratch = PAYLOAD_SCRATCH.lock();
+    let payload = &mut *scratch;
+    payload.clear();
+    payload
+        .try_reserve_exact(elf_bytes.len() - signature_size)
+        .map_err(|_| {
+            log::error!(
+                "[signing] OOM: signed payload of {} bytes",
+                elf_bytes.len() - signature_size
+            );
+            ViError::OutOfMemory
+        })?;
     payload.extend_from_slice(&elf_bytes[..signature_offset]);
     payload.extend_from_slice(&elf_bytes[signature_offset + signature_size..]);
-    crate::ed25519::verify(pubkey, &payload, sig)
+    Ok(crate::ed25519::verify(pubkey, payload, sig))
 }
 
 /// Boot-time self-test using a precomputed RFC-style test vector.

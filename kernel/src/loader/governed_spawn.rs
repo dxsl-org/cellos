@@ -39,7 +39,7 @@ pub(super) fn spawn_gated(
     mut request: super::SpawnRequest,
 ) -> ViResult<usize> {
     use crate::task::cap::{CapSet, Spawner};
-    let aligned = super::aligned_elf::bytes(elf);
+    let aligned = super::aligned_elf::bytes(elf)?;
     let elf = aligned.as_ref();
     let elf_digest = crate::sha256::sha256(elf);
     let manifest = match super::manifest_section::classify(elf) {
@@ -58,23 +58,35 @@ pub(super) fn spawn_gated(
     // Signature extraction, byte coverage, and verification stay exactly at the
     // established boundary: structural classification first, task creation later.
     let is_domain = match crate::signing::extract_sig(elf) {
-        Some(sig) if !crate::signing::verify_cell(elf, &sig) => {
-            crate::audit::log_event(
-                crate::audit::AuditEvent::CellSignatureFailed,
-                &crate::audit::encode_u32x2(0, 0),
-            );
-            return Err(ViError::PermissionDenied);
-        }
-        Some(_) => {
-            crate::audit::log_event(
-                crate::audit::AuditEvent::CellSignatureVerified,
-                &crate::audit::encode_u32x2(0, 0),
-            );
-            manifest.as_ref().is_some_and(|m| {
-                m.protection_class() == api::manifest::PROTECTION_CLASS_FFI
-                    || m.protection_class() == api::manifest::PROTECTION_CLASS_UNTRUSTED
-            })
-        }
+        Some(sig) => match crate::signing::verify_cell(elf, &sig) {
+            Ok(true) => {
+                crate::audit::log_event(
+                    crate::audit::AuditEvent::CellSignatureVerified,
+                    &crate::audit::encode_u32x2(0, 0),
+                );
+                manifest.as_ref().is_some_and(|m| {
+                    m.protection_class() == api::manifest::PROTECTION_CLASS_FFI
+                        || m.protection_class() == api::manifest::PROTECTION_CLASS_UNTRUSTED
+                })
+            }
+            Ok(false) => {
+                crate::audit::log_event(
+                    crate::audit::AuditEvent::CellSignatureFailed,
+                    &crate::audit::encode_u32x2(0, 0),
+                );
+                return Err(ViError::PermissionDenied);
+            }
+            // Verification could not run (no room for the signed payload): refuse the
+            // cell and report capacity. An unperformed check must not read as a
+            // signature mismatch, and it must not halt the kernel either.
+            Err(err) => {
+                crate::audit::log_event(
+                    crate::audit::AuditEvent::CellSpawnDenied,
+                    &crate::audit::encode_u32x2(0, 3),
+                );
+                return Err(err);
+            }
+        },
         None => {
             // Unsigned cell. Under ADR-0015: Admitted to Tier 2 Paged Domain
             true

@@ -816,7 +816,7 @@ fn test_signing_metadata_tamper_rejected() {
     let elf = build_minimal_signed_elf(MINIMAL_ELF_DEV_SIG);
     let sig = crate::signing::extract_sig(&elf).expect("sig present");
     assert!(
-        crate::signing::verify_cell(&elf, &sig),
+        crate::signing::verify_cell(&elf, &sig).expect("verification must not run out of memory"),
         "unmodified minimal signed ELF must pass verification"
     );
 
@@ -824,7 +824,7 @@ fn test_signing_metadata_tamper_rejected() {
     let mut elf_bad = elf.clone();
     elf_bad[48] ^= 1;
     assert!(
-        !crate::signing::verify_cell(&elf_bad, &sig),
+        !crate::signing::verify_cell(&elf_bad, &sig).expect("verification must not run out of memory"),
         "CELLOS-LOADER-SIG-001: mutated e_flags must be rejected"
     );
 
@@ -832,7 +832,7 @@ fn test_signing_metadata_tamper_rejected() {
     let mut elf_bad = elf.clone();
     elf_bad[24] ^= 0x40;
     assert!(
-        !crate::signing::verify_cell(&elf_bad, &sig),
+        !crate::signing::verify_cell(&elf_bad, &sig).expect("verification must not run out of memory"),
         "CELLOS-LOADER-SIG-001: mutated e_entry must be rejected"
     );
 
@@ -840,7 +840,7 @@ fn test_signing_metadata_tamper_rejected() {
     let mut elf_bad = elf.clone();
     elf_bad[68] ^= 2;
     assert!(
-        !crate::signing::verify_cell(&elf_bad, &sig),
+        !crate::signing::verify_cell(&elf_bad, &sig).expect("verification must not run out of memory"),
         "CELLOS-LOADER-SIG-001: mutated Phdr p_flags must be rejected"
     );
 
@@ -848,7 +848,7 @@ fn test_signing_metadata_tamper_rejected() {
     let mut elf_bad = elf.clone();
     elf_bad[216] ^= 1;
     assert!(
-        !crate::signing::verify_cell(&elf_bad, &sig),
+        !crate::signing::verify_cell(&elf_bad, &sig).expect("verification must not run out of memory"),
         "CELLOS-LOADER-SIG-001: mutated sig sh_offset must be rejected"
     );
 
@@ -856,7 +856,7 @@ fn test_signing_metadata_tamper_rejected() {
     let mut elf_bad = elf.clone();
     elf_bad[280] ^= 1;
     assert!(
-        !crate::signing::verify_cell(&elf_bad, &sig),
+        !crate::signing::verify_cell(&elf_bad, &sig).expect("verification must not run out of memory"),
         "CELLOS-LOADER-SIG-001: mutated shstrtab sh_offset must be rejected"
     );
 
@@ -864,7 +864,7 @@ fn test_signing_metadata_tamper_rejected() {
     let mut elf_bad = elf.clone();
     elf_bad[385] ^= b'x';
     assert!(
-        !crate::signing::verify_cell(&elf_bad, &sig),
+        !crate::signing::verify_cell(&elf_bad, &sig).expect("verification must not run out of memory"),
         "CELLOS-LOADER-SIG-001: mutated section name must be rejected"
     );
 
@@ -872,7 +872,7 @@ fn test_signing_metadata_tamper_rejected() {
     let mut elf_bad = elf.clone();
     elf_bad[120] ^= 0xFF;
     assert!(
-        !crate::signing::verify_cell(&elf_bad, &sig),
+        !crate::signing::verify_cell(&elf_bad, &sig).expect("verification must not run out of memory"),
         "CELLOS-LOADER-SIG-001: mutated PT_LOAD code byte must be rejected"
     );
 

@@ -158,14 +158,37 @@ impl EarlyLoader {
         if size == 0 {
             return Err(ViError::InvalidInput);
         }
-        let sector_count = size.div_ceil(SECTOR_SIZE);
-        let mut buf = alloc::vec![0u8; sector_count * SECTOR_SIZE];
-        for i in 0..sector_count {
-            let lba = data_lba + i as u64;
+        // Fallible, exactly-sized allocation. The previous shape (`alloc::vec!` of the
+        // sector-rounded length, then `truncate` + `into_boxed_slice`) allocated
+        // infallibly and left `capacity != len`, so the box conversion reallocated —
+        // and an infallible allocation on a full kernel heap reaches the alloc error
+        // handler, which halts the kernel instead of failing the spawn.
+        let whole = size / SECTOR_SIZE;
+        let tail = size % SECTOR_SIZE;
+        let mut buf = Vec::new();
+        buf.try_reserve_exact(size).map_err(|_| {
+            log::error!(
+                "[loader] OOM: block-table read of {} bytes for {:?}",
+                size,
+                path
+            );
+            ViError::OutOfMemory
+        })?;
+        buf.resize(size, 0);
+        for i in 0..whole {
             let offset = i * SECTOR_SIZE;
-            crate::task::drivers::block::read_sector(lba, &mut buf[offset..offset + SECTOR_SIZE])?;
+            crate::task::drivers::block::read_sector(
+                data_lba + i as u64,
+                &mut buf[offset..offset + SECTOR_SIZE],
+            )?;
         }
-        buf.truncate(size);
+        if tail != 0 {
+            // Partial final sector: read it into a scratch buffer so the returned box
+            // stays exactly `size` bytes without a shrink realloc.
+            let mut sector = [0u8; SECTOR_SIZE];
+            crate::task::drivers::block::read_sector(data_lba + whole as u64, &mut sector)?;
+            buf[whole * SECTOR_SIZE..].copy_from_slice(&sector[..tail]);
+        }
         Ok(buf.into_boxed_slice())
     }
 

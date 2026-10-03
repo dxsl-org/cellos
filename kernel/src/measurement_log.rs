@@ -57,11 +57,25 @@ pub(crate) fn commit_staged(tid: usize, path: String, hash: [u8; 32]) {
         log.aggregate = crate::sha256::sha256(&buf);
 
         if log.entries.len() < MAX_ENTRIES {
-            log.entries.push(MeasureEntry {
-                tid: tid as u32,
-                hash,
-                path,
-            });
+            // Growth is fallible: `Vec::push` reallocates through the infallible
+            // allocator, and a capacity doubling that cannot be satisfied halts
+            // the kernel instead of dropping a measurement. Measured 2026-10-03:
+            // the growth to 256 entries (12 288 bytes, align 8) is what ended the
+            // capacity sweep once the spawn path's other transients stopped
+            // binding. Dropping the entry keeps the aggregate advancing, which is
+            // the property attestation depends on.
+            if log.entries.try_reserve(1).is_err() {
+                log::warn!(
+                    "[measure] no heap for entry {} — aggregate still advancing",
+                    log.entries.len()
+                );
+            } else {
+                log.entries.push(MeasureEntry {
+                    tid: tid as u32,
+                    hash,
+                    path,
+                });
+            }
         } else {
             log::warn!(
                 "[measure] log full ({} entries) — aggregate still advancing",

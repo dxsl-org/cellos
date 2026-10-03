@@ -89,6 +89,13 @@ production-relay-image = ["policy-required", "signing-required"]
 # Field-recovery: bypass policy narrowing entirely (trusted core always boots).
 # Gated build flag for a headless maintenance image.
 maintenance-mode = []
+# D5 per-request-server scale measurement: raise the cell ceilings so the refusal
+# comes from memory instead of from a constant (MAX_CELLS 64→4096, MAX_SLOTS
+# 512→4096). At 2 GiB and ~0.6 MiB per parked cell the memory ceiling is ~3400,
+# so 4096 keeps both constants out of the way. Measurement lane only —
+# scripts/qemu-cell-scale.sh. NEVER a shipped image: the raised ceilings are
+# unqualified, they exist to be measured.
+cell-scale-experiment = []
 # QEMU `virt -m 1G` direct-kernel lane. QEMU's ELF loader may omit x0/DTB,
 # so the fallback map cannot discover RAM size at runtime.
 qemu-virt-1g = []
@@ -107,6 +114,8 @@ board-rpi4 = ["hal/board-rpi4"]
 # Raspberry Pi 3 (BCM2837): load@0x80000, BCM mini UART, BCM2836 local IRQ,
 # SDHCI at 0x3F300000. Propagates to hal-arm for IRQ/timer/UART dispatch.
 board-rpi3 = ["hal/board-rpi3"]
+# The same board, trimmed to its bring-up drivers (see cellos-boards).
+board-rpi3-bring-up = ["board-rpi3", "cellos-boards/bring-up-drivers"]
 # Enables the unpublished RV64 private-root substrate. Admission remains policy-off.
 native-domains = []
 # Phase-07 gate for warm snapshot capture/restore. The writer/reader format,

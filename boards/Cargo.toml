@@ -3,3 +3,9 @@ name = "cellos-boards"
 version = "0.2.0"
 edition = "2021"
 license = "Apache-2.0 OR MIT"
+
+[features]
+# Trim every board to the drivers a bring-up image needs (console, interrupts,
+# timer, pinmux, and the boot medium where the board needs one). `has_driver`
+# gates real kernel init, so this produces a smaller kernel, not a label.
+bring-up-drivers = []

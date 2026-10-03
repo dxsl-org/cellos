@@ -42,24 +42,59 @@ pub fn read_file_from_vifs1(path: &str) -> ViResult<Box<[u8]>> {
         return Err(ViError::NotFound);
     }
     let mut buf = Vec::new();
-    buf.try_reserve_exact(size)
-        .map_err(|_| ViError::OutOfMemory)?;
+    buf.try_reserve_exact(size).map_err(|_| {
+        log::error!("[fs] OOM: VIFS1 read of {} bytes for {:?}", size, path);
+        ViError::OutOfMemory
+    })?;
     buf.resize(size, 0);
     let mut read = 0usize;
     while read < size {
         let end = read.saturating_add(4096).min(size);
+        let want = end - read;
         match file.read(&mut buf[read..end]) {
             Ok(0) => break,
-            Ok(n) => read += n,
+            Ok(n) => {
+                if n < want {
+                    log::error!(
+                        "[fs] {}: short FAT chunk at {}: {} of {} bytes",
+                        path,
+                        read,
+                        n,
+                        want
+                    );
+                }
+                read += n;
+            }
             Err(ViError::NotFound) => break, // EOF sentinel on some FAT impls
             Err(e) => return Err(e),
         }
     }
-    buf.truncate(read);
-    if buf.is_empty() {
+    if read == size {
+        // Capacity == len, so the box conversion is a pointer move: no allocation.
+        return Ok(buf.into_boxed_slice());
+    }
+    if read == 0 {
         return Err(ViError::NotFound);
     }
-    Ok(buf.into_boxed_slice())
+    // Short read: the FAT chain ended before the size the directory entry declares
+    // (measured 2026-10-03: 78 760 of 78 824 bytes for `/bin/bench-probe`). Keep the
+    // tolerant behaviour, but never let `Vec::into_boxed_slice` do the shrink: it
+    // reallocates when `capacity != len`, that allocation is infallible, and on a
+    // full kernel heap it reaches the alloc error handler, which halts the kernel —
+    // that is what killed the capacity sweep at 204 cells instead of returning a
+    // typed `OutOfMemory` to the spawner.
+    log::error!("[fs] {}: short read {} of {} bytes", path, read, size);
+    let mut exact = Vec::new();
+    exact.try_reserve_exact(read).map_err(|_| {
+        log::error!(
+            "[fs] OOM: short-read copy of {} bytes for {:?}",
+            read,
+            path
+        );
+        ViError::OutOfMemory
+    })?;
+    exact.extend_from_slice(&buf[..read]);
+    Ok(exact.into_boxed_slice())
 }
 
 pub fn init() {

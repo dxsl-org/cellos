@@ -5843,15 +5843,42 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             let task_id = spawned.map_err(|e| match e {
                 types::ViError::NotFound => SyscallError::FileNotFound,
                 types::ViError::OutOfMemory => {
+                    let (quota_nulls, heap_nulls) = crate::memory::heap::oom_sources();
+                    let (used, free) = crate::memory::heap::usage();
+                    let charged = crate::memory::cell_quota::in_use(types::CellId(
+                        crate::task::scheduler::current_cell_id() as u64,
+                    ));
                     log::warn!(
-                        "[loader] spawn OOM: op=SpawnPinned caller={} path={}",
+                        "[loader] spawn OOM: op=SpawnPinned caller={} path={} heap_used={} heap_free={} caller_charged={} task_size={} null_from_quota={} null_from_heap={}",
                         caller_id,
-                        path_str
+                        path_str,
+                        used,
+                        free,
+                        charged,
+                        core::mem::size_of::<crate::task::tcb::Task>(),
+                        quota_nulls,
+                        heap_nulls
                     );
+                    #[cfg(feature = "cell-scale-experiment")]
+                    log::warn!(
+                        "[heap] net per size class (bound, allocs, net_bytes): {:?}",
+                        crate::memory::heap::size_hist::snapshot()
+                    );
+                    // Sizes of the per-spawn structures are logged by the alloc
+                    // error handler when a layout cannot be satisfied at all.
                     SyscallError::OutOfMemory
                 }
                 _ => SyscallError::InvalidInput,
             })?;
+            // Retained-cost readout: successive spawns show what one parked cell
+            // costs the kernel heap (the number the D5 gate needs).
+            let (used, free) = crate::memory::heap::usage();
+            log::info!(
+                "[heap] used={} KiB free={} KiB after SpawnPinned path={}",
+                used / 1024,
+                free / 1024,
+                path_str
+            );
             Ok(task_id)
         }
 

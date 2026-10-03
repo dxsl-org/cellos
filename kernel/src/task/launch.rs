@@ -155,7 +155,7 @@ pub fn publish_prepared(
     super::hart_local::set_current_cell_id(0);
 
     let inherited_dirs = super::dir_inherit::take_for_launch(sched, state.inherit_from);
-    let (mut task, load_base) = prepared.into_task(tid, cell_id);
+    let (mut task, load_base) = prepared.into_task(tid, cell_id)?;
     task.inherited_dirs = inherited_dirs;
     // The command line lives on the task record itself, so it is reachable by
     // this task's own `StateRestore` and by nothing else, and it is installed

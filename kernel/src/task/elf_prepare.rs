@@ -21,23 +21,39 @@ impl PreparedElfTask {
         self,
         id: usize,
         cell_id: CellId,
-    ) -> (alloc::boxed::Box<super::Task>, usize) {
-        let mut task = alloc::boxed::Box::new(super::Task::new(
+    ) -> Result<(alloc::boxed::Box<super::Task>, usize), ViError> {
+        let mut task = crate::memory::heap::try_box(super::Task::new(
             id,
             cell_id,
             &self.name,
             self.allowed_drivers,
-        ));
+        ))?;
         task.kernel_stack = Some(self.kstack);
         task.user_stack = Some(self.ustack);
         task.segment_mem = Some(self.segments);
         super::prime_user_mode_entry(&mut task, self.entry, 0);
-        (task, self.load_base)
+        Ok((task, self.load_base))
     }
 
     pub(super) fn requested_cell_id(&self) -> CellId {
         self.requested_cell_id
     }
+}
+
+/// `Iterator::collect` allocates through the infallible allocator: a full heap
+/// halts the kernel instead of refusing the spawn. Every vector here is sized by
+/// the ELF's page count (4 KiB for `/bin/bench-probe`), so reserve fallibly and
+/// fill — the spawn then returns `ViError::OutOfMemory` like any other capacity
+/// refusal. Measured 2026-10-03: these collects were what ended the capacity
+/// sweep once the spawn path's larger transients stopped binding.
+fn collect_reserved<T>(iter: impl ExactSizeIterator<Item = T>) -> Result<Vec<T>, ViError> {
+    let mut out = Vec::new();
+    out.try_reserve_exact(iter.len())
+        .map_err(|_| ViError::OutOfMemory)?;
+    for item in iter {
+        out.push(item);
+    }
+    Ok(out)
 }
 
 /// Parse, map, relocate, protect, and stack an ELF without touching scheduler state.
@@ -52,7 +68,7 @@ pub fn prepare_elf_task(
     if data.len() < 4 || &data[..4] != b"\x7fELF" {
         return Err(ViError::InvalidInput);
     }
-    let aligned = crate::loader::aligned_elf::bytes(data);
+    let aligned = crate::loader::aligned_elf::bytes(data)?;
     let elf_data = aligned.as_ref();
 
     let loader = ElfLoader;
@@ -82,17 +98,22 @@ pub fn prepare_elf_task(
             }
         }
     };
-    let final_flags = seg_pages
-        .iter()
-        .map(|p| (p.va, p.final_flags))
-        .collect::<Vec<_>>();
+    let final_flags = collect_reserved(seg_pages.iter().map(|p| (p.va, p.final_flags)))?;
+    let mapped_pages = collect_reserved(seg_pages.iter().map(|p| (p.va, p.frame)))?;
+    // The filtered set has at most one entry per page, so the page count is an
+    // upper bound: reserving it means no growth, hence no infallible reallocation.
+    let mut writable_pages = Vec::new();
+    writable_pages
+        .try_reserve_exact(seg_pages.len())
+        .map_err(|_| ViError::OutOfMemory)?;
+    for page in seg_pages.iter() {
+        if page.final_flags.bits() & crate::memory::paging::Flags::WRITE != 0 {
+            writable_pages.push(page.va);
+        }
+    }
     let segments = super::stack::CellSegments::with_writable_pages(
-        seg_pages.iter().map(|p| (p.va, p.frame)).collect(),
-        seg_pages
-            .iter()
-            .filter(|p| p.final_flags.bits() & crate::memory::paging::Flags::WRITE != 0)
-            .map(|p| p.va)
-            .collect(),
+        mapped_pages,
+        writable_pages,
         load_base,
     );
     #[cfg(feature = "test-hooks")]

@@ -12,6 +12,15 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 use types::CellId;
 
 /// Maximum CellId tracked (index into IN_USE array).
+///
+/// 64 is the production ceiling: it sizes the per-cell counter array and the
+/// CellId space. The D5 per-request-server gate asks how many cells actually fit
+/// now that the boot memory map is read from the DTB, and at 64 this constant
+/// binds long before memory does — so `cell-scale-experiment` raises it for the
+/// measurement lane (scripts/qemu-cell-scale.sh) only.
+#[cfg(feature = "cell-scale-experiment")]
+pub const MAX_CELLS: usize = 4096;
+#[cfg(not(feature = "cell-scale-experiment"))]
 pub const MAX_CELLS: usize = 64;
 
 /// Default heap quota per Cell: 16 MiB.
@@ -270,24 +279,34 @@ pub fn record_dma_unmapped(cell_id_raw: usize, size: usize) {
 #[cfg(feature = "test-hooks")]
 #[derive(Debug, PartialEq)]
 pub(crate) struct QuotaSnapshot {
-    limits: [Option<usize>; MAX_CELLS],
-    heap: [usize; MAX_CELLS],
-    dma: [usize; MAX_CELLS],
+    limits: alloc::vec::Vec<Option<usize>>,
+    heap: alloc::vec::Vec<usize>,
+    dma: alloc::vec::Vec<usize>,
 }
 
 #[cfg(feature = "test-hooks")]
 /// Copies quota state into fixed-size cells so `QUOTA_LIMITS` is never held
 /// across an allocation that would re-enter `charge`.
+///
+/// Heap-backed, never stack-resident: under `cell-scale-experiment` `MAX_CELLS`
+/// is 4096, so these three arrays are 64 KiB + 32 KiB + 32 KiB = 128 KiB — twice
+/// the 64 KiB kernel stack (`__stack_bottom..__stack_top`, `kernel/linker.ld`).
+/// A stack copy wrote straight through every static below the stack — `PLATFORM`
+/// sits 5.5 KiB under `__stack_bottom` — so the boot self-tests ran on smashed
+/// state and the kernel panicked in `platform::with` ("platform::init not called
+/// before platform::with"); measured 2026-10-03. Returning by value moved the
+/// same 128 KiB through `StateSnapshot`, so the whole snapshot chain must stay
+/// heap-backed.
 pub(crate) fn snapshot() -> QuotaSnapshot {
-    let mut limits = [None; MAX_CELLS];
+    let mut limits = alloc::vec![None; MAX_CELLS];
     for (&cell_id, &limit) in QUOTA_LIMITS.lock().iter() {
         if cell_id < MAX_CELLS {
             limits[cell_id] = Some(limit);
         }
     }
 
-    let mut heap = [0; MAX_CELLS];
-    let mut dma = [0; MAX_CELLS];
+    let mut heap = alloc::vec![0; MAX_CELLS];
+    let mut dma = alloc::vec![0; MAX_CELLS];
     for cell_id in 0..MAX_CELLS {
         heap[cell_id] = IN_USE[cell_id].load(Ordering::Acquire);
         dma[cell_id] = DMA_IN_USE[cell_id].load(Ordering::Acquire);

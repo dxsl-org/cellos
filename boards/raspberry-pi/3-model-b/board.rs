@@ -4,6 +4,7 @@ use crate::{
 };
 
 const BOARD_COMPATIBLES: [&str; 2] = ["raspberrypi,3-model-b", "brcm,bcm2837"];
+#[cfg(not(feature = "bring-up-drivers"))]
 const ENABLED_DRIVERS: [DriverId; 11] = [
     DriverId::UartBcmMini,
     DriverId::IrqBcm2836Local,
@@ -16,6 +17,19 @@ const ENABLED_DRIVERS: [DriverId; 11] = [
     DriverId::DisplayBcmMailbox,
     DriverId::UsbDwc2,
     DriverId::EthernetLan9514,
+];
+
+/// Bring-up set: console, interrupts, timer, pinmux and the SD controller (the
+/// board's boot medium). No display, no USB, no Ethernet, no I2C/SPI — the
+/// drivers a headless test image has no use for, and which `has_driver` would
+/// otherwise initialise.
+#[cfg(feature = "bring-up-drivers")]
+const ENABLED_DRIVERS: [DriverId; 5] = [
+    DriverId::UartBcmMini,
+    DriverId::IrqBcm2836Local,
+    DriverId::IrqBcm2835Legacy,
+    DriverId::TimerBcm2835System,
+    DriverId::SdhciArasan,
 ];
 const PINMUX_GROUPS: [&str; 4] = [
     "uart-gpio14-15-alt5",

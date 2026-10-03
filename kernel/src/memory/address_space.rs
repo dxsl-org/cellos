@@ -368,6 +368,19 @@ impl AddressSpaceBuilder {
         let mut table_frames = Vec::new();
         let mut frames = Vec::new();
         let mut ledger = Vec::new();
+        // Every mapping below pushes one entry into `ledger` (32 bytes) and one
+        // into `frames` (8 bytes), and both counts are known here. `Vec::push`
+        // grows through the infallible allocator, so a growth that cannot be
+        // satisfied halts the kernel instead of failing the spawn — measured
+        // 2026-10-03: this ledger's growth to 208 entries / 6 656 bytes is what
+        // ended the capacity sweep at ~150 parked cells.
+        let mapping_count = supervisor.len() + requests.len() + existing_user.len();
+        ledger
+            .try_reserve_exact(mapping_count)
+            .map_err(|_| AddressSpaceError::OutOfMemory)?;
+        frames
+            .try_reserve_exact(mapping_count)
+            .map_err(|_| AddressSpaceError::OutOfMemory)?;
         for mapping in supervisor {
             if mapping.virtual_address < 0x0000_8000_0000_0000 {
                 map_page(
@@ -687,6 +700,13 @@ impl AddressSpace {
             return Err(error);
         }
         drop(pruned_tables);
+        // The ledger is one entry per mapped page; pushing grows through the
+        // infallible allocator, so a full heap would halt the kernel instead of
+        // failing the spawn (measured 2026-10-03: the growth to 208 entries /
+        // 6 656 bytes is what ended the capacity sweep).
+        ledger
+            .try_reserve(1)
+            .map_err(|_| AddressSpaceError::OutOfMemory)?;
         ledger.push(MappingEntry {
             virtual_address,
             physical_address: page.physical_address(),
@@ -732,7 +752,14 @@ impl AddressSpace {
         let mut mapped = Vec::new();
         mapped
             .try_reserve_exact(kernel_stack.pages + user_stack.pages)
-            .map_err(|_| AddressSpaceError::OutOfMemory)?;
+            .map_err(|_| {
+                log::error!(
+                    "[mem] OOM: cell stack pages ({} kernel + {} user)",
+                    kernel_stack.pages,
+                    user_stack.pages
+                );
+                AddressSpaceError::OutOfMemory
+            })?;
 
         let mut pending = self.invalidation_pending.lock();
         self.forget_confirmed_reservations(&mut pending);
@@ -782,6 +809,11 @@ impl AddressSpace {
                     physical_address,
                     user_flags(user_stack_flags),
                 )?;
+                // Same reason as `map_private_page`: a ledger push must be able to
+                // fail as a spawn error, not as a kernel halt.
+                ledger
+                    .try_reserve(1)
+                    .map_err(|_| AddressSpaceError::OutOfMemory)?;
                 ledger.push(MappingEntry {
                     virtual_address: address,
                     physical_address,
@@ -1041,6 +1073,11 @@ impl AddressSpace {
             return Err(error);
         }
         drop(pruned_tables);
+        // Same reason as `map_private_page`: a ledger push must fail as an
+        // operation error, never as a kernel halt.
+        ledger
+            .try_reserve(1)
+            .map_err(|_| AddressSpaceError::OutOfMemory)?;
         ledger.push(MappingEntry {
             virtual_address,
             physical_address,
@@ -1370,7 +1407,12 @@ fn register_private_table_frames(
     if !is_active() {
         return Ok(Vec::new());
     }
-    let mut registrations = Vec::with_capacity(table_frames.len() + 1);
+    // Fallible: `with_capacity` allocates through the infallible allocator, so a
+    // full heap would halt the kernel instead of failing the mapping.
+    let mut registrations = Vec::new();
+    registrations
+        .try_reserve_exact(table_frames.len() + 1)
+        .map_err(|_| AddressSpaceError::OutOfMemory)?;
     for physical_address in core::iter::once(root.physical_address())
         .chain(table_frames.iter().map(OwnedFrame::physical_address))
     {

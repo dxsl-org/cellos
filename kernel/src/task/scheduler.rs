@@ -276,7 +276,14 @@ pub struct Scheduler {
     pub zombies: Vec<Box<Task>>,
     /// Fixed CellId/generation → root-TID authority. A slot leaves `Live`
     /// before any root resources are released or its CellId is reusable.
-    cell_owners: [CellOwnerSlot; crate::memory::cell_quota::MAX_CELLS],
+    ///
+    /// Heap-backed, never inline: the table is `MAX_CELLS` entries, and
+    /// `cell-scale-experiment` raises `MAX_CELLS` to 4096 — an inline array made
+    /// `Scheduler` 164 064 bytes, so `Scheduler::new()` (built through the stack
+    /// for the `ptr::write` in `task::init`) overflowed the boot hart's stack and
+    /// zeroed the statics above it, `PLATFORM` included; measured 2026-10-03.
+    /// `get`/`get_mut` call sites are unchanged by the switch to `Vec`.
+    cell_owners: alloc::vec::Vec<CellOwnerSlot>,
     /// Token-indexed VFS-only root-death subscriptions.
     cell_owner_watches: BTreeMap<u64, CellOwnerWatch>,
     next_cell_owner_watch: u64,
@@ -320,7 +327,7 @@ impl Scheduler {
         Self {
             tasks: BTreeMap::new(),
             zombies: Vec::new(),
-            cell_owners: [CellOwnerSlot::Empty; crate::memory::cell_quota::MAX_CELLS],
+            cell_owners: alloc::vec![CellOwnerSlot::Empty; crate::memory::cell_quota::MAX_CELLS],
             cell_owner_watches: BTreeMap::new(),
             next_cell_owner_watch: 1,
             next_task_id: 1,
@@ -739,13 +746,23 @@ impl Scheduler {
                 .tasks
                 .get(&parent_id)
                 .ok_or(ViError::PermissionDenied)?;
+            // Fallible clone: `Vec::clone` allocates infallibly, so a full heap would
+            // halt the kernel instead of refusing the thread spawn.
+            let allowed_drivers = {
+                let mut drivers: Vec<usize> = Vec::new();
+                drivers
+                    .try_reserve_exact(parent.allowed_drivers.len())
+                    .map_err(|_| ViError::OutOfMemory)?;
+                drivers.extend_from_slice(&parent.allowed_drivers);
+                drivers
+            };
             (
                 parent.cell_id,
                 super::cap::CapSet::of_task(parent),
                 parent.syscall_allowlist,
                 (parent.pku_key, parent.pku_value),
                 parent.tls_base,
-                parent.allowed_drivers.clone(),
+                allowed_drivers,
             )
         };
         let owner = self
@@ -776,12 +793,12 @@ impl Scheduler {
             return Err(ViError::OutOfMemory);
         }
 
-        let mut task = Box::new(Task::new(
+        let mut task = crate::memory::heap::try_box(Task::new(
             self.next_task_id,
             cell_id,
             name,
             parent_allowed_drivers,
-        ));
+        ))?;
         task.state = TaskState::Ready;
         task.cell_generation = owner.generation;
         task.root_tid = owner.root_tid as usize;

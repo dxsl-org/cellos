@@ -46,7 +46,16 @@ pub(crate) fn stage_spawn_argv(task_id: usize, bytes: &[u8]) -> usize {
     let Some(task) = sched.tasks.get_mut(&task_id) else {
         return 0;
     };
-    task.staged_argv = Some(bytes.to_vec());
+    // Fallible copy: `to_vec` allocates infallibly, and a heap that cannot serve it
+    // would halt the kernel instead of refusing the restore (0, the same sentinel
+    // the other refusal paths return).
+    let mut owned: Vec<u8> = Vec::new();
+    if owned.try_reserve_exact(bytes.len()).is_err() {
+        log::warn!("[stash] no heap for {} byte argv — refused", bytes.len());
+        return 0;
+    }
+    owned.extend_from_slice(bytes);
+    task.staged_argv = Some(owned);
     bytes.len()
 }
 
@@ -104,7 +113,15 @@ pub fn stash(key: u64, bytes: &[u8]) -> usize {
         return 0;
     }
     let n = bytes.len().min(MAX_STASH_LEN);
-    map.insert(key, bytes[..n].to_vec());
+    // Fallible copy: an entry can be up to MAX_STASH_LEN, and `to_vec` allocates
+    // infallibly — a full heap would halt the kernel instead of refusing the stash.
+    let mut entry: Vec<u8> = Vec::new();
+    if entry.try_reserve_exact(n).is_err() {
+        log::warn!("[stash] no heap for {} byte entry — refused", n);
+        return 0;
+    }
+    entry.extend_from_slice(&bytes[..n]);
+    map.insert(key, entry);
     n
 }
 

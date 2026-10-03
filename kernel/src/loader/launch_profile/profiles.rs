@@ -170,6 +170,7 @@ pub(super) fn pinned_profile(
     }
     let ceiling = match (caller_name, target) {
         ("bench", "/bin/bench-probe") | ("capacity-probe", "/bin/bench-probe") => CapSet::EMPTY,
+        ("capacity-probe", "/bin/heavy-probe") => CapSet::EMPTY,
         ("periph-demo", "/bin/periph-demo") => CapSet {
             mmio_devices: CONSOLE_MMIO,
             ..CapSet::EMPTY

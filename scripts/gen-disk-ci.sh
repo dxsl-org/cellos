@@ -35,9 +35,10 @@
 #     times out on a marker that no current build emits.
 #
 # FLAVOUR RULE: only build-test-hooks-ci.sh may build service-vfs / app-vfs-test
-# with `--features test-hooks`; every image assembled here uses the production
-# flavour. The assertions below turn a violation into a build failure instead of a
-# mysterious lane failure.
+# with `--features test-hooks`, and only build-shell-test-ci.sh may build
+# app-shell with `--features shell_test`; every image assembled here uses the
+# production flavour. The assertions below turn a violation into a build failure
+# instead of a mysterious lane failure.
 #
 # OPTIONAL CELLS (omit, never ship a stale binary)
 # -----------------------------------------------
@@ -194,29 +195,46 @@ fi
 # `strings` markers, not sizes: the test-hooks flavour adds `access/selftest.rs`
 # to service-vfs and the `rdir-quota` / `quota:` scenarios to vfs-test, and both
 # are absent from the production binaries.
-assert_not_test_hooks() {
-    local bin=$1 marker=$2
+#
+# NB: never pipe `strings` into `grep -q` here. Under `set -o pipefail`, `grep -q`
+# exits at its first match, `strings` then dies on SIGPIPE (status 141), and the
+# pipeline's non-zero status makes the `if` false — the guard silently passes with
+# the marker present. Capture the dump first. (Measured 2026-10-02 while adding
+# the app-shell guard: it reported a clean shell on a `--no-cells` run that had
+# embedded the shell_test harness, and the two test-hooks guards above it were
+# disabled by the same flaw.)
+assert_absent_marker() {
+    local bin=$1 marker=$2 guidance=$3
     if [[ ! -f $bin ]]; then
         echo "FAIL: required cell missing: $bin" >&2
         exit 1
     fi
-    if strings -n 4 "$bin" | grep -qF -- "$marker"; then
-        echo "FAIL: $bin carries the test-hooks marker '$marker'." >&2
-        echo "      service-vfs/app-vfs-test must be built WITHOUT --features test-hooks" >&2
-        echo "      for a production disk (scripts/build-test-hooks-ci.sh owns that flavour)." >&2
+    local dump
+    dump=$(strings -n 8 "$bin" || true)
+    if grep -qF -- "$marker" <<<"$dump"; then
+        echo "FAIL: $bin carries the marker '$marker'." >&2
+        echo "      $guidance" >&2
         exit 1
     fi
 }
 
-assert_not_test_hooks "$REL/service-vfs" "access/selftest.rs"
-assert_not_test_hooks "$REL/vfs-test" "rdir-quota"
+assert_absent_marker "$REL/service-vfs" "access/selftest.rs" \
+    "service-vfs must be built WITHOUT --features test-hooks for a production disk (scripts/build-test-hooks-ci.sh owns that flavour)."
+assert_absent_marker "$REL/vfs-test" "rdir-quota" \
+    "app-vfs-test must be built WITHOUT --features test-hooks for a production disk (scripts/build-test-hooks-ci.sh owns that flavour)."
+
+# app-shell's `shell_test` flavour replaces the REPL with a deterministic scenario
+# harness. scripts/build-shell-test-ci.sh builds it at $REL/app-shell and copies
+# only the KERNEL to cellos-kernel-shell-test, so the harness binary outlives that
+# lane: a later `--no-cells` run embeds it as /bin/shell, the guest never prints
+# `Cellos >`, and every boot lane fails on a phantom cause.
+assert_absent_marker "$REL/app-shell" "[shell-test] COMPLETE" \
+    "app-shell must be built WITHOUT --features shell_test for a production disk (scripts/build-shell-test-ci.sh owns that flavour); re-run a full 'bash scripts/gen-disk-ci.sh' without --no-cells."
 
 # tier2-smoke must be a current build: the phase-01 sentinel only exists in the
 # closed-lifecycle branch, which RV64 no longer compiles in (dead-code eliminated).
-if strings -n 8 "$REL/tier2-smoke" | grep -qF -- "Grant registration denied fail-closed (phase-01 gate)"; then
-    echo "FAIL: $REL/tier2-smoke is a phase-01-era binary (closed-lifecycle branch present)." >&2
-    exit 1
-fi
+assert_absent_marker "$REL/tier2-smoke" "Grant registration denied fail-closed (phase-01 gate)" \
+    "tier2-smoke is a phase-01-era binary (closed-lifecycle branch present)."
 
 # Required artifacts: gen_disk.ps1's Add-RequiredCellToSign list.
 for required in app-init app-shell service-vfs service-config service-kms supervisor \
@@ -243,7 +261,7 @@ add_signable() { [[ -f $1 ]] && SIGNABLE+=("$1"); return 0; }
 for cell in app-init app-shell platform service-vfs service-config service-net service-kms \
             service-net-broker service-compositor supervisor driver-nvme driver-e1000 \
             driver-virtio-net driver-virtio-blk driver-virtio-gpu service-ai service-httpd \
-            ai-test service-input bench bench-probe capacity-probe app-net-tools app-sys-tools \
+            ai-test service-input bench bench-probe capacity-probe heavy-probe app-net-tools app-sys-tools \
             robot-demo robot-dashboard fb-console desktop ocel ocel-js hypha-llm-gateway \
             hypha-core hypha-tool-fs hypha-tool-sys hypha-tool-spawn input-test \
             window-policy-probe viui-demo audio-demo app-https-demo http-smoke cfi-test wx-test \
@@ -301,6 +319,9 @@ add_kfs "$REL/hypha-core"           "/bin/hypha"
 add_kfs "$REL/hypha-tool-spawn"     "/bin/tool-spawn"
 if [[ "${CELLOS_INCLUDE_CAPACITY_PROBE:-0}" == "1" ]]; then
     add_kfs "$REL/capacity-probe"   "/bin/capacity-probe"
+    # Heavy cells for the D5 gate's M-resident baselines; same guard as the probe
+    # because only that lane spawns them.
+    add_kfs "$REL/heavy-probe"      "/bin/heavy-probe"
 fi
 
 "$PYTHON_BIN" tools/mkfat32.py "${kfs_args[@]}"
@@ -385,6 +406,7 @@ add_row "$REL/bench"                  "/bin/bench"
 add_row "$REL/bench-probe"            "/bin/bench-probe"
 if [[ "${CELLOS_INCLUDE_CAPACITY_PROBE:-0}" == "1" ]]; then
     add_row "$REL/capacity-probe"     "/bin/capacity-probe"
+    add_row "$REL/heavy-probe"        "/bin/heavy-probe"
 fi
 add_row "$REL/service-input"          "/bin/input"
 add_row "$REL/service-net"            "/bin/net"

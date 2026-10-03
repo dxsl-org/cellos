@@ -104,7 +104,7 @@ cho tới khi kernel từ chối, QEMU 2 GiB, `MAX_CELLS` nâng 512, `MAX_SLOTS=
 | (2) Shared immutable frames | ❌ chưa — loader vẫn copy toàn bộ ELF mỗi spawn (`kernel/src/loader/elf.rs`) |
 | (3) Demand-paged stacks | ❌ chưa — vẫn cấp sẵn (Spec 19 §3, `docs/specs/12-reliability.md` §4.1) |
 | (4) Nâng `MAX_CELLS`/`MAX_SLOTS` | ❌ chưa (và đo lường đã chứng minh nâng suông là vô ích) |
-| Gate N=64/128/256/512 | ❌ **chưa đo lại** sau khi DTB land — `plan-portfolio.md:33-35` vẫn ghi promotion cần baseline này |
+| Gate N=64/128/256/512 | ✅ **N=256 đạt được, và đã đo với heavy cell thường trú (2026-10-03)**: lane `--heavy M` spawn M cell `/bin/heavy-probe` (nhị phân riêng: arena heap 20 MiB khai báo + touch 16 MiB, cộng grant 16 MiB, rồi park) **trước** sweep nhẹ ⇒ trần nhẹ **295/280/265/234** ở **M=0/1/2/4** (mỗi heavy cell ≈**15** cell trần — giá kernel-side của arena 20 MiB: 5 120 trang × 32 B ledger ≈ 160 KiB trên heap 4 MiB). **Đọc gate**: N=64/128/256 giữ được với **M≤2** heavy (280/265 ≥ 256), **gãy ở M=4** (234 < 256) ⇒ muốn N=256 với 4 data cell phải giảm giá per-cell hoặc tăng heap. Mọi lượt vẫn từ chối **có tên** (`OOM_TYPED`), 0 panic; runner từ chối báo cáo lượt heavy nếu thiếu dòng `heap resident:`/`heavy resident: grant=`. Số cũ 204/236 và 193/194 đều là giả (tràn stack ở scheduler init; rồi `PendingMailbox::new()` cấp sẵn 6 656 byte mọi task, nay lazy). Lane `scripts/qemu-cell-scale.sh`; báo cáo `.agents/reports/d5-cell-scale-remeasure-261003.md`. |
 
 **Doc drift — đã đóng (2026-09-22)**: báo cáo đo đề nghị sửa Spec 19 §3 để đưa DTB lên đầu
 ("it should be amended to put the memory map first"). Amendment đã được ghi vào
