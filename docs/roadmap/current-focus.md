@@ -404,6 +404,24 @@ This remains `qemu`-ceiling work.
   result retains its own evidence ceiling, and no physical, secure-root, cloud,
   approval, admission, or production status changes.
 
+- x86 PC/server enablement has its contract but no qualified machine. A generic
+  `pc/x86_64-pc` descriptor and the HCL model landed in phase 01 (2026-10-04,
+  `--features board-x86-pc`); there is still no machine-specific descriptor and
+  no HCL row, no AHCI driver in the Cellos source, xHCI frozen out of the G1–G3
+  driver plan by decision, the e1000 cell fail-closing every Ethernet binding
+  other than 82540EM (`kernel/src/task/drivers/pcie_ecam.rs:894`), no ACPI DMAR
+  discovery (`kernel/src/task/drivers/iommu_x86.rs:59-60`), and no Intel VMX
+  backend. What is **witnessed** is the q35 software lane: Cellos boots there to
+  a COM1 shell from the embedded VIFS1 and runs a Tier 3 guest from the
+  hypervisor cell's filesystem. A SATA-only industrial PC is *expected* to do
+  the same, but that is unqualified — no physical capture exists — and it would
+  still have no persistent `/data`, no persistent guest disk, no real NIC, and
+  no USB input. The COM1/16550 path (`0x3F8`, IRQ 4) is the only
+  working x86 log and input channel and is a must-have HCL row. Prerequisites
+  X86-PC-0..7 and the evidence rules are in
+  [hardware-tracks.md](hardware-tracks.md); this bullet authorizes no
+  implementation.
+
 ## Work classification
 
 - **Current executable work:** the QEMU, two-Model-B+ non-HDMI peripheral,
@@ -582,3 +600,17 @@ events are maintained in
    or HAL ABI hook declarations change.
 9. Use [project-roadmap.md](../project-roadmap.md#capability-lanes) for
    cross-lane routing and the topic pages for evidence details.
+10. Before acquiring or promising any x86 PC/server, verify and record the boot
+   channel: a 16550-compatible COM1 at `0x3F8`/IRQ 4 must be enabled in
+   firmware, the SATA controller must expose AHCI mode (not RST/RAID-only), and
+   the board should expose VT-x, preferably with VT-d, and firmware **must**
+   allow disabling Secure Boot (Cellos has no signed/measured x86 boot path, so
+   a board with Secure Boot locked on is not compatible). No machine-specific x86
+   descriptor and no HCL row exist yet — a generic `x86_64-pc` descriptor and the
+   HCL model landed in phase 01 — and the PC-class prerequisites (AHCI,
+   xHCI, real NIC, ACPI DMAR, Intel VMX) remain open —
+   [hardware-tracks.md](hardware-tracks.md) and the HCL skeleton
+   [../hardware-compatibility-list.md](../hardware-compatibility-list.md); the
+   owning plan is `.agents/261004-1957-x86-pc-lane/`. This is a
+   hardware-selection checklist, not authorization to implement or to promote
+   QEMU evidence.

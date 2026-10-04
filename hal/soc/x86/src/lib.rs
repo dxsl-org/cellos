@@ -98,5 +98,29 @@ pub const QEMU_Q35: X86PlatformProfile = X86PlatformProfile {
     },
 };
 
+/// Generic x86_64 PC/server compatibility baseline.
+///
+/// Pins the console wiring a machine must expose to be listed in
+/// `docs/hardware-compatibility-list.md` (R1: standard COM1 port address and
+/// IRQ) together with the standard legacy firmware windows. A machine that
+/// exposes a different console address is not covered by this profile — it needs
+/// its own facts — and per-machine capture fields (BIOS version, exact
+/// storage/NIC controller, Secure Boot state) live in that document, not here.
+pub const GENERIC_X86_PC: X86PlatformProfile = X86PlatformProfile {
+    slug: "x86_64-pc",
+    com1: PortIoDevice {
+        base: 0x03F8,
+        irq: 4,
+    },
+    legacy_bios_window: AddressRange {
+        base: 0x0008_0000,
+        size: 0x0008_0000,
+    },
+    legacy_rsdp_window: AddressRange {
+        base: 0,
+        size: 0x0010_0000,
+    },
+};
+
 #[cfg(test)]
 mod tests;

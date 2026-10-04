@@ -83,6 +83,23 @@ Current posture:
   application-compatibility or performance qualification result; NPU and GPU
   backends remain gated, and no organization cohort has been activated.
 
+- x86_64 hardware prerequisites for this cohort are recorded in
+  [hardware-tracks.md](hardware-tracks.md): a generic `x86_64-pc` descriptor and
+  the HCL model landed in phase 01, but there is no machine-specific descriptor
+  and no HCL machine row; no AHCI driver in the Cellos source; xHCI frozen out
+  of the G1–G3 driver plan by decision; e1000 binding 82540EM only and
+  fail-closing all other Ethernet classes; no ACPI DMAR discovery; and no Intel
+  VMX backend. What is witnessed is the q35 software lane reaching a COM1 shell;
+  a SATA-only industrial PC is expected to do the same but is unqualified, and
+  would still have no persistent storage, no real NIC, and no USB input.
+- A 16550-compatible COM1 (`0x3F8`, IRQ 4) is currently the only working x86
+  log and input path, so it is a must-have row for any PC/server HCL, including
+  BMC serial-over-LAN on servers.
+- Firmware must allow disabling Secure Boot. Cellos has no signed or measured
+  x86 boot path (secure/measured boot is a production-release-gate requirement;
+  code-signing/secure-boot belongs to the Security track), so a board whose
+  firmware locks Secure Boot on is not compatible and cannot be worked around.
+
 ## G3 - NPU-native Compute OS
 
 Parked until hardware exists and the team has vendor API experience. The

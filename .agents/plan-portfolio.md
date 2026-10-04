@@ -23,6 +23,21 @@ promoted through this index.
   concurrency and cancellation) and B2 (per-request cell cost/scale, which keeps D5 WIP-limited)
   stay queued behind their own triggers; this promotion opens no ABI and touches no
   capability-scheduling boundary.
+- `261004-1957-x86-pc-lane` — x86_64 PC lane, controller-family bring-up with
+  QEMU-first gates ([plan](261004-1957-x86-pc-lane/plan.md)).
+  **Authorized scope: phases 01–06** — 01 `x86_64-pc` descriptor + HCL model
+  (**completed 2026-10-04**, `qemu` ceiling; independent review produced 8
+  consistency findings, all fixed), 02a/02b AHCI/SATA, 03 xHCI + HID, 04a/04b
+  igb (i210/i211), 05 ACPI DMAR →
+  IOMMU, 06 multi-port COM/RS232-485. **Phase 07 (physical lane + first HCL rows)
+  is not authorized**: it starts only after 02b/03/04b/05 are green on QEMU and
+  hardware is bought. Validate completed 2026-10-04 (36/36 claims verified,
+  0 failed; interview: igb first, 02/04 split into sub-phases, sequential
+  execution, hardware after QEMU). WIP limit: **one family at a time**.
+  Boundaries: Intel VMX stays in `260711-1917-tier3b-x86-vtx` (P09); x86 AVX2
+  kernels stay with `260914-cpu-engine-optimization`; Secure Boot belongs to the
+  Security track. This promotion opens no ABI, claims no physical machine, and
+  changes no evidence ceiling — QEMU results remain regression evidence only.
 Allowed side work is limited to P0 security fixes, broken-build/CI repairs, and
 verification-only closure that opens no new feature program.
 

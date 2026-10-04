@@ -88,6 +88,32 @@ the prevention layer.
 
 > Not planned: Mellanox mlx5 (100K+ LOC), Bluetooth/WiFi, USB xHCI before G2, full ACPI, audio.
 
+### x86_64 PC class driver priority (planned — no physical qualification)
+
+Nothing below is implemented or qualified, it does not change the RISC-V G2
+order above, and `q35-x86_64` remains the only **qualified** x86 target — a
+generic `x86_64-pc` descriptor exists (phase 01) but no machine is qualified. It
+records the prerequisites for the x86_64 PC/server lane
+([hardware-tracks.md](../roadmap/hardware-tracks.md)).
+
+```
+1. AHCI/SATA storage cell     — no implementation exists anywhere in the tree
+2. xHCI + HID                 — previously frozen out by decision (item 5 of the G1-G3 driver plan phase 01)
+3. Intel igb NIC (i210/i211)  — first real NIC family; e1000 today binds 82540EM only and fail-closes all others
+4. ACPI DMAR discovery        — replaces the hardcoded q35 IOMMU base
+5. Multi-port COM / RS232-485 — industrial peripherals, scheduled only after the boot path
+```
+
+> Prerequisite before any of the above is scheduled: an `x86_64-pc` board
+> descriptor plus a published HCL, and an exact Intel/AMD board pair. On x86 the
+> only working log and input path is a 16550-compatible UART at COM1 (`0x3F8`,
+> IRQ 4) — `hal/soc/x86/src/lib.rs`, `kernel/src/main.rs:157` — so treat it as a
+> must-have HCL row, including BMC serial-over-LAN on servers. Boards whose
+> firmware offers no way to disable Secure Boot are **not compatible**: there is
+> no signed/measured x86 boot path today and code-signing/secure-boot belongs to
+> the Security track. Reopening the
+> frozen USB xHCI row requires a scope decision, not an implementation patch.
+
 ---
 
 ## 8. G2: PCIe ECAM + RISC-V IOMMU Strategy

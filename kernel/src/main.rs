@@ -156,6 +156,14 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         let soc = crate::board::selected_x86_64_soc();
         crate::hal::uart_16550::configure(soc.com1.base, soc.com1.irq);
         crate::hal::uart_16550::init();
+        // Name the selected contract once: a captured log must prove which board
+        // descriptor the image was built with (q35 vs the generic PC lane).
+        // Emitted only after `init()`: `putchar` asserts a configured port.
+        crate::hal::uart_16550::puts("[x86-gate] board=");
+        crate::hal::uart_16550::puts(board.slug);
+        crate::hal::uart_16550::puts(" soc-profile=");
+        crate::hal::uart_16550::puts(soc.slug);
+        crate::hal::uart_16550::puts("\n");
         crate::hal::uart_16550::puts(
             "[x86-gate] configured 16550 ready: TX + polled RX; IRQ pending MADT\n",
         );

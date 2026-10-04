@@ -1,4 +1,5 @@
 use crate::milk_v_pioneer::MILK_V_PIONEER;
+use crate::pc_x86_64::X86_64_PC;
 use crate::qemu_q35_x86_64::QEMU_Q35_X86_64;
 use crate::qemu_virt_aarch64::QEMU_VIRT_AARCH64;
 use crate::qemu_virt_riscv64::QEMU_VIRT_RISCV64;
@@ -42,6 +43,29 @@ fn rpi3_descriptor_matches_current_fallback_contract() {
 }
 
 #[test]
+fn generic_pc_descriptor_declares_only_shipped_drivers() {
+    let board = X86_64_PC;
+
+    assert_eq!(board.architecture, Architecture::X86_64);
+    assert_eq!(board.soc, SocId::GenericX86Pc);
+    assert_eq!(board.boot.firmware, FirmwareInterface::BiosOrUefi);
+    assert_eq!(
+        board.boot.boot_protocol,
+        crate::BootProtocol::LimineMemoryMapAndAcpi
+    );
+    assert!(board.fallback_memory.is_empty());
+    assert!(board.has_driver(DriverId::Uart16550PortIo));
+    assert!(board.has_driver(DriverId::Hpet));
+    // A driver family may only be listed once its cell exists: listing it early
+    // would make `has_driver` claim an initialisation that cannot happen.
+    assert!(!board.has_driver(DriverId::StorageAhci));
+    assert!(!board.has_driver(DriverId::UsbXhci));
+    assert!(!board.has_driver(DriverId::EthernetIgb));
+    assert!(!board.has_driver(DriverId::Uart16550Multi));
+    assert_eq!(board.validate_for(Architecture::X86_64), Ok(()));
+}
+
+#[test]
 fn catalog_covers_every_current_board_selection() {
     let boards = [
         QEMU_VIRT_RISCV64,
@@ -51,6 +75,7 @@ fn catalog_covers_every_current_board_selection() {
         RASPBERRY_PI_3_MODEL_B,
         RASPBERRY_PI_4_MODEL_B,
         QEMU_Q35_X86_64,
+        X86_64_PC,
     ];
     for board in boards {
         assert_eq!(board.validate(), Ok(()), "{}", board.slug);

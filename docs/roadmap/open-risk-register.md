@@ -120,7 +120,55 @@ those remain fail-closed production gates.
   or a separately approved, explicitly test-only clock/provider harness that
   cannot weaken the default image.
 
+- **`CELLOS-X86-PC-001` — High, owner: x86_64 PC/server lane
+  (`.agents/261004-1957-x86-pc-lane/`).** Every x86 evidence row carries a `qemu`
+  ceiling and no physical machine is qualified: `boards/` carries the generic
+  `pc/x86_64-pc` descriptor (phase 01, 2026-10-04) alongside `qemu/q35-x86_64`,
+  but there is no machine-specific descriptor and no HCL machine row. The
+  PC-class driver path is absent as well — no AHCI driver in the Cellos source
+  (`cells/drivers/` ships `nvme`, `virtio-blk`, and `disk` only), xHCI was
+  deliberately frozen out
+  of the G1–G3 common-driver plan
+  (`.agents/260819-1416-port-common-drivers-g1-g2-g3/phase-01-evidence-and-provenance-gate.md`
+  item 5, `reports/driver-source-license-bom.md:32`), and `cells/drivers/e1000`
+  binds 82540EM only, with `kernel/src/task/drivers/pcie_ecam.rs:894`
+  fail-closing every other Ethernet-class binding. Consequence: the q35 software
+  lane boots Cellos to a COM1 shell from the embedded VIFS1 and runs a Tier 3
+  guest from the hypervisor cell's filesystem; a SATA-only industrial PC is
+  expected to do the same but is **unqualified** (no physical capture), and it
+  would still have no persistent `/data`, no persistent guest disk, no real NIC,
+  and no USB input. This is a
+  capability gap, not a regression: it blocks no current QEMU, RPi3, or
+  local-runtime lane. Prerequisite inventory X86-PC-0..7 is in
+  [hardware-tracks.md](hardware-tracks.md). Any HCL claim requires an
+  exact board pair (one Intel, one AMD) with a 16550-compatible COM1 and a
+  separately activated implementation lane; QEMU results must not be promoted.
+  A board whose firmware offers no way to disable Secure Boot is additionally
+  incompatible until a signed or measured x86 boot path exists — code-signing/
+  secure-boot belongs to the Security track and secure/measured boot is a
+  production-release-gate requirement, so there is no exemption path today.
+
 ## Medium
+
+- **`CELLOS-X86-DMAR-002` — Medium, owner: x86 IOMMU/PCIe lane.** The x86 IOMMU
+  base is hardcoded to the q35 model (`kernel/src/task/drivers/iommu_x86.rs:59-60`),
+  so ACPI DMAR discovery is unexercised and per-Cell DMA isolation cannot be
+  programmed on real hardware. The q35 VT-d TX/Rx/DHCP gate is QEMU evidence
+  only (`.agents/260903-x86-e1000-dhcp/`, status completed). A real PC/server
+  lane needs DMAR parsing plus a fail-closed gate for boards without VT-d
+  (absent on Haswell-ULT U-series; present on Whiskey-Lake-class parts).
+- **`CELLOS-X86-VMX-003` — Medium, owner: Tier 3 x86 VM lane.** Intel VT-x guest
+  execution is unimplemented: `hal/arch/x86/src/hypervisor.rs` returns
+  `NotSupported`, the kernel x86_64 dispatch routes only to
+  `svm_registry`, `hal/arch/x86/src/x86_64/svm.rs:29-36` requires
+  `CPUID.8000_0001H:ECX[2]`, and VMCS/VMLAUNCH/VMRESUME have no implementation
+  anywhere in the tree. `.agents/260711-1917-tier3b-x86-vtx/phase-09-vtx-backend-apic.md`
+  (VMX backend bring-up) is pending and gated on a real-Intel/KVM lane that does
+  not exist in CI (TCG emulates SVM only). Consequence: x86 Tier 3 is AMD
+  SVM-only, and even that backend is QEMU-qualified only. Reopening the VMX arm
+  requires the P09 lane plus M1→M4 evidence on real Intel hardware; the EPT/NPT
+  builder (`kernel/src/memory/ept.rs`) and vendor dispatch
+  (`kernel/src/cpu_features.rs:74-78`) already exist.
 
 - **`CELLOS-HV-X86-TCG-001` — Medium, owner: Tier 3 x86 VM lane.** The
   qualified QEMU-TCG 10.2.0 runtime boots the pinned Alpine 3.21.7 guest at
@@ -236,3 +284,10 @@ those remain fail-closed production gates.
 
 - POSIX and Lua libc stubs are intentionally fail-closed or unsupported, but
   docs must avoid implying full POSIX compatibility for Tier 1 native cells.
+- **`CELLOS-AI-SIMD-004` — Low, owner: CPU inference engine lane.** AVX2/FMA
+  kernels stay out of the default AI profile by design
+  (`.agents/260914-cpu-engine-optimization/plan.md:51-53`): a Cell also runs on
+  CPUs without those features and on a kernel that does not save vector state,
+  so enabling them needs a per-target build and vector-state decision. Spec 24
+  and that plan own the item; no x86 SIMD path or speedup is claimed today, and
+  the measured levers remain `-O2` and integer Q8_0 quantization.

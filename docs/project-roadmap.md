@@ -113,6 +113,7 @@ proposal, commit, and evidence.
 | LAB-01 / BASE-01 / ASSEMBLY-01 software contracts | Current executable work | `ready` | `contract`; host/QEMU only after the named milestone evidence | SAS/LBI 06A LAB-01 and 07A BASE-01 bounded private contracts pass independent host plants at the model-only ceiling; ASSEMBLY-01 is the next slice | Consume the reviewed shared identity/dispatch/observation/reconciliation contract for 08A; native QEMU roles wait for the real Phase05 backend/oracles |
 | Robot physical workflow acceptance | External-gated prerequisite | `external-gated` | `physical` development target, unexercised | SAS/LBI plan 06C/07C/08C | Exact mechanism/controller/fixture/observation/metrology/safety package and applicable activation approvals; no procurement or motion authorization from the plan alone |
 | Organizational server and office profiles | Future capability | `scope-gated` | `contract` | ORG-SRV-01 / ORG-PC-01 profile document | Actual application/hardware inventory, compatibility/disposition matrix and separately activated implementation/qualification lane; no prerequisite on physical robot completion |
+| x86_64 PC/server enablement (physical) | Future capability | `external-gated` | `contract` | `.agents/261004-1957-x86-pc-lane/` owns phases 01–07 (QEMU-first, phase 07 hardware-gated); [hardware-tracks.md](roadmap/hardware-tracks.md) is the gate inventory and [hardware-compatibility-list.md](hardware-compatibility-list.md) the machine list: phase 01 landed a **generic** `pc/x86_64-pc` compatibility descriptor (`--features board-x86-pc`) plus the HCL model, but there is still no machine-specific descriptor or HCL row, no AHCI driver in the Cellos source, xHCI frozen out of the G1–G3 driver plan by decision, the e1000 cell fail-closing every Ethernet binding other than 82540EM, no ACPI DMAR discovery, and Intel VMX still pending P09 | An exact x86 board pair (one Intel, one AMD) exposing a 16550-compatible COM1, HPET, AHCI-mode storage and disable-able Secure Boot, a published HCL row per machine, and phases 02–06 green on QEMU; neither QEMU evidence nor this row authorizes implementation |
 | RPi3 HDMI software and exact-device boundary | Completed / regression-only | `scope-gated` | `physical` development evidence on the prior captured revision `a22082` / Model B / serial `000000003d042795` device; mapping to current inventory unresolved | Phases 04 and 05 completed; no active HDMI slice | Reopen only for a regression: the exact mailbox unsafe island is approved by `lungmat8`, strict F1/F5 passes, and the separately recorded TFTP deployment, later UART boot block, and user visual observation close the reviewed exact-device gate |
 | RPi3 peripheral hardware integration | Current executable work | `ready` | `host` now; `physical` development evidence after exact-device exercise | G1 board/peripheral lane using the two available Raspberry Pi 3 Model B+ boards; HDMI external-display work is completed and regression-only | Reconcile each current board's exact serial, revision, and condition before attributing evidence; stop before any production-security qualification claim |
 | Camera and other sensor integration | Current executable work | `deferred` | `contract` until resumed; then exact-device `physical` development evidence | Deferred in the current session order; the available camera must be identified before use | Resume the sensor lane in a later session and record the exact sensor/interface before exercise |
@@ -265,6 +266,22 @@ Cellos is being shaped around product stages, not only phase numbers:
   and the acquired IP; the VT-d case requires isolation first. This closes
   only the q35 software Tx/Rx/DHCP gate. Physical x86 NIC qualification and
   ACPI DMAR discovery remain hardware-gated.
+- Physical x86 has no qualified target and no PC-class driver path yet. A
+  **generic** `pc/x86_64-pc` descriptor plus the HCL model landed in phase 01
+  (`--features board-x86-pc`, `docs/hardware-compatibility-list.md`), but there
+  is still no machine-specific descriptor and no HCL row; AHCI has no
+  implementation anywhere in the tree, xHCI was
+  explicitly frozen out of the G1–G3 common-driver plan by decision, the e1000
+  cell fail-closes every Ethernet binding other than 82540EM
+  (`kernel/src/task/drivers/pcie_ecam.rs:894`), and the x86 IOMMU base is
+  hardcoded to q35 (`kernel/src/task/drivers/iommu_x86.rs:59-60`). Intel Tier 3
+  (VMX) guest execution is also unimplemented, so the x86 guest path remains AMD
+  SVM-only. Prerequisites X86-PC-0..7, the COM1/16550 must-have (the only
+  working x86 log and input path), and the requirement that firmware allow
+  disabling Secure Boot (no signed/measured x86 boot path exists, so a board
+  that locks it on is not compatible) are recorded in
+  [hardware-tracks.md](roadmap/hardware-tracks.md); this bullet authorizes no
+  implementation.
 - AArch64 test-hooks runtime evidence remains host-gated where the existing
   `qemu_exit::AArch64Semihosting` issue blocks the lane.
 - RV32 release compilation is verified, but RV32 runtime cannot run on this

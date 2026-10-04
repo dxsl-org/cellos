@@ -12,6 +12,9 @@ pub enum SocId {
     Sg2042,
     QemuArmVirt,
     QemuX86Q35,
+    /// Generic x86_64 PC/server: the COM1-required compatibility baseline
+    /// (HCL R1–R7), not a claim that every PC exposes that wiring.
+    GenericX86Pc,
     Bcm2837,
     Bcm2711,
 }
@@ -47,6 +50,16 @@ pub enum DriverId {
     DisplayBcmMailbox,
     UsbDwc2,
     EthernetLan9514,
+    /// AHCI/SATA storage controller family (phase 02a/02b of the x86 PC lane).
+    /// Declared here so the driver phase and the descriptor do not edit the same
+    /// file; a board may only list it once its driver cell exists.
+    StorageAhci,
+    /// xHCI USB host controller family (phase 03).
+    UsbXhci,
+    /// Intel `igb` (i210/i211) NIC family (phase 04a/04b).
+    EthernetIgb,
+    /// Additional 16550 ports beyond the COM1 console (phase 06).
+    Uart16550Multi,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

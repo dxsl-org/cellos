@@ -70,6 +70,7 @@ board_dirs=(
     "boards/raspberry-pi/3-model-b"
     "boards/raspberry-pi/4-model-b"
     "boards/qemu/q35-x86_64"
+    "boards/pc/x86_64-pc"
 )
 
 for dir in "${board_dirs[@]}"; do
@@ -127,6 +128,9 @@ check_readme_command \
 check_readme_command \
     "boards/qemu/q35-x86_64/README.md" \
     'cargo build -p cellos-kernel --release --target x86_64-unknown-none'
+check_readme_command \
+    "boards/pc/x86_64-pc/README.md" \
+    'cargo build -p cellos-kernel --release --target x86_64-unknown-none --features board-x86-pc'
 
 run bash scripts/check-hal-boundaries.sh
 
@@ -146,6 +150,8 @@ record_run rpi4 \
     run cargo check -p cellos-kernel --target aarch64-unknown-none-softfloat --features board-rpi4
 record_run qemu-q35-x86-64 \
     run cargo check -p cellos-kernel --target x86_64-unknown-none
+record_run x86-pc \
+    run cargo check -p cellos-kernel --target x86_64-unknown-none --features board-x86-pc
 
 expect_compile_error \
     riscv-conflict \

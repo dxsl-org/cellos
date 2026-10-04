@@ -6,12 +6,12 @@ Layer 3 of [Spec 21](specs/21-documentation-architecture.md). `Anchor:` lines in
 
 | Metric | Value |
 |---|---:|
-| Sections scanned | 400 |
+| Sections scanned | 401 |
 | Sections with an anchor | 19 |
-| Ratified/Accepted sections | 289 |
+| Ratified/Accepted sections | 290 |
 | …of those, anchored | 18 |
-| Anchor violations | 0 |
-| Coverage gaps (ratified, unanchored) | 271 |
+| Anchor violations | 2 |
+| Coverage gaps (ratified, unanchored) | 272 |
 | Status-prose hits | 79 |
 
 ## Anchored sections
@@ -24,8 +24,8 @@ Layer 3 of [Spec 21](specs/21-documentation-architecture.md). `Anchor:` lines in
 | `docs/specs/19-hardware-isolation-layers.md` | Layer A — Software W^X after relocation (all arches) | `test tests/integration/tests/wx-text-write.rs::text_write_faults_and_terminates_cell` | OK |
 | `docs/specs/19-hardware-isolation-layers.md` | Layer B — Per-domain page tables (Tier-2 mechanism, next plan) | `planned .agents/260906-dual-mode-kernel-evolution/phase-02-tier2-paged-domain-engine.md` | OK |
 | `docs/specs/19-hardware-isolation-layers.md` | Layer C — Per-arch hardening (opportunistic, G2+) | `design` | OK |
-| `docs/specs/19-hardware-isolation-layers.md` | 3. Concurrency scale model — two profiles, not one number | `const kernel/src/memory/cell_quota.rs::MAX_CELLS=64` | OK |
-| `docs/specs/19-hardware-isolation-layers.md` | 3. Concurrency scale model — two profiles, not one number | `const kernel/src/loader/va_alloc.rs::MAX_SLOTS=512` | OK |
+| `docs/specs/19-hardware-isolation-layers.md` | 3. Concurrency scale model — two profiles, not one number | `const kernel/src/memory/cell_quota.rs::MAX_CELLS=64` | DRIFTED: spec 64 vs tree 4096 |
+| `docs/specs/19-hardware-isolation-layers.md` | 3. Concurrency scale model — two profiles, not one number | `const kernel/src/loader/va_alloc.rs::MAX_SLOTS=512` | DRIFTED: spec 512 vs tree 4096 |
 | `docs/specs/19-hardware-isolation-layers.md` | 3. Concurrency scale model — two profiles, not one number | `const kernel/src/loader/va_alloc.rs::CELL_VA_STRIDE=0x200_0000` | OK |
 | `docs/specs/19-hardware-isolation-layers.md` | 4. Rejected alternatives | `design` | OK |
 | `docs/specs/19-hardware-isolation-layers.md` | 5. Cross-references | `design` | OK |
@@ -42,6 +42,11 @@ Layer 3 of [Spec 21](specs/21-documentation-architecture.md). `Anchor:` lines in
 | `docs/specs/21-documentation-architecture.md` | 6. Cross-references | `design` | OK |
 
 ## Open findings
+
+### Anchor violations
+
+- `docs/specs/19-hardware-isolation-layers.md:104` — const kernel/src/memory/cell_quota.rs::MAX_CELLS=64: spec 64 vs tree 4096
+- `docs/specs/19-hardware-isolation-layers.md:104` — const kernel/src/loader/va_alloc.rs::MAX_SLOTS=512: spec 512 vs tree 4096
 
 ### Coverage gaps (Spec 21 rollout step 2 backfill)
 
@@ -89,14 +94,15 @@ Layer 3 of [Spec 21](specs/21-documentation-architecture.md). `Anchor:` lines in
 - `docs/specs/04-hardware.md:54` — Target platforms
 - `docs/specs/04-hardware.md:67` — G1 peripheral driver priority (cells/drivers/)
 - `docs/specs/04-hardware.md:79` — G2 server driver priority (strict order — each prerequisite for next)
-- `docs/specs/04-hardware.md:93` — 8. G2: PCIe ECAM + RISC-V IOMMU Strategy
-- `docs/specs/04-hardware.md:95` — PCIe ECAM host controller
-- `docs/specs/04-hardware.md:108` — RISC-V IOMMU (non-optional before NIC)
-- `docs/specs/04-hardware.md:118` — 9. G3: NPU Driver Path
-- `docs/specs/04-hardware.md:123` — Level A — Tier 1 `ffi-posix` profile (G2 work, no kernel change)
-- `docs/specs/04-hardware.md:129` — Level B — Kernel NPU scheduler (G3)
-- `docs/specs/04-hardware.md:137` — Level B+ — SiFive X390 VCIX (second impl)
-- `docs/specs/04-hardware.md:145` — Level C — Zero-copy tensor pipeline (G3, after sys_grant_pages)
+- `docs/specs/04-hardware.md:91` — x86_64 PC class driver priority (planned — no physical qualification)
+- `docs/specs/04-hardware.md:119` — 8. G2: PCIe ECAM + RISC-V IOMMU Strategy
+- `docs/specs/04-hardware.md:121` — PCIe ECAM host controller
+- `docs/specs/04-hardware.md:134` — RISC-V IOMMU (non-optional before NIC)
+- `docs/specs/04-hardware.md:144` — 9. G3: NPU Driver Path
+- `docs/specs/04-hardware.md:149` — Level A — Tier 1 `ffi-posix` profile (G2 work, no kernel change)
+- `docs/specs/04-hardware.md:155` — Level B — Kernel NPU scheduler (G3)
+- `docs/specs/04-hardware.md:163` — Level B+ — SiFive X390 VCIX (second impl)
+- `docs/specs/04-hardware.md:171` — Level C — Zero-copy tensor pipeline (G3, after sys_grant_pages)
 - `docs/specs/05-application.md:7` — 1. Application tier taxonomy
 - `docs/specs/05-application.md:35` — 2. Tier 1: Trusted SAS Cells
 - `docs/specs/05-application.md:46` — 2.1 Hardware-Assisted Infrastructure Used by Tier 1 Services

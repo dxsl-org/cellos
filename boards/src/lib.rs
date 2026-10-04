@@ -27,6 +27,10 @@ pub mod raspberry_pi_4_model_b;
 #[path = "../qemu/q35-x86_64/board.rs"]
 pub mod qemu_q35_x86_64;
 
+/// Generic x86_64 PC/server descriptor (no machine-specific facts).
+#[path = "../pc/x86_64-pc/board.rs"]
+pub mod pc_x86_64;
+
 pub use descriptor::*;
 
 pub fn qemu_virt_riscv64() -> &'static BoardDescriptor {
@@ -56,4 +60,9 @@ pub fn raspberry_pi_4_model_b() -> &'static BoardDescriptor {
 
 pub fn qemu_q35_x86_64() -> &'static BoardDescriptor {
     &qemu_q35_x86_64::QEMU_Q35_X86_64
+}
+
+/// Returns the generic x86_64 PC/server descriptor.
+pub fn pc_x86_64() -> &'static BoardDescriptor {
+    &pc_x86_64::X86_64_PC
 }

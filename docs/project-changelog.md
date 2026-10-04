@@ -4,6 +4,70 @@
 
 ## [Unreleased] Development-first hardware-constrained execution
 
+- **x86 PC lane phase 01: generic `x86_64-pc` descriptor + HCL model landed
+  (`qemu` ceiling).** `boards/pc/x86_64-pc/` declares the PC-class compatibility
+  baseline (standard COM1 `0x3F8`/IRQ 4 wiring, standard legacy firmware windows,
+  Limine ACPI boot — HCL R1–R7) and only drivers whose cells exist — the new
+  `DriverId` variants `StorageAhci`,
+  `UsbXhci`, `EthernetIgb` and `Uart16550Multi` are declared in
+  `boards/src/descriptor.rs` for later phases but are deliberately **not** listed
+  by the descriptor yet, pinned by
+  `catalog_tests::generic_pc_descriptor_declares_only_shipped_drivers`. Kernel:
+  `SocId::GenericX86Pc` + `hal_soc_x86::GENERIC_X86_PC` profile, feature-gated
+  selection `--features board-x86-pc`, and a boot-time identity line
+  `[x86-gate] board=… soc-profile=…`. `scripts/check-board-configs.sh` now
+  requires `boards/pc/x86_64-pc/README.md` + `board.rs` (README build command
+  pinned verbatim) and runs the `x86-pc` `cargo check` matrix entry. Evidence:
+  the PC-descriptor ISO boots to `Cellos >` with
+  `[x86-gate] board=x86_64-pc soc-profile=x86_64-pc`, and the same tree built
+  without the feature still reports `board=qemu-q35-x86_64`; board/HAL tests are
+  13/13 + 3/3 (baseline 12/2). The gate also caught and fixed a real defect: the
+  first build hung silently because the new diagnostic `puts` ran before
+  `uart_16550::configure()`, and `putchar` asserts a configured port. No physical
+  x86 machine is claimed; the HCL machine table stays empty. Known pre-existing
+  failure, **not** from this phase: `scripts/check-board-configs.sh` still fails
+  its `rpi4` entry because uncommitted WIP in `hal/arch/arm/src/aarch64/`
+  (`monitor.rs` calls `pi_monitor_mmu_init`, gated behind `board-rpi3` in
+  `el2.rs`).
+
+- **Roadmap: x86_64 PC/server prerequisites recorded (docs only).** The missing
+  PC-class items are now written in one place instead of being implied: no
+  machine-specific x86 descriptor and no HCL machine row (the generic
+  `x86_64-pc` descriptor and the HCL model landed in phase 01, see the entry
+  above); no AHCI driver in the Cellos source; xHCI frozen out of the G1–G3
+  driver plan by decision; e1000 binding 82540EM only and fail-closing other
+  Ethernet classes
+  (`kernel/src/task/drivers/pcie_ecam.rs:894`); the x86 IOMMU base hardcoded to
+  q35 (`kernel/src/task/drivers/iommu_x86.rs:59-60`); and Intel VMX guest
+  execution pending P09. Recorded as X86-PC-0..7 in
+  `docs/roadmap/hardware-tracks.md`, a Capability Lane row plus an Immediate
+  Open Gate bullet in `docs/project-roadmap.md`, risks `CELLOS-X86-PC-001`,
+  `CELLOS-X86-DMAR-002`, and `CELLOS-X86-VMX-003` in
+  `docs/roadmap/open-risk-register.md`, the x86 PC driver order in
+  `docs/specs/04-hardware.md` §7, G2 posture in `docs/roadmap/product-stages.md`,
+  and current-work/next-session notes in `docs/roadmap/current-focus.md`. The
+  COM1/16550 path (`0x3F8`, IRQ 4) and the requirement that firmware allow
+  disabling Secure Boot (no signed/measured x86 boot path exists, so a board
+  that locks it on is not compatible and has no exemption path) are recorded as
+  must-have HCL rows. No implementation, qualification, or evidence-ceiling
+  change is claimed.
+
+- **x86_64 PC lane plan + HCL skeleton added (docs only).**
+  `.agents/261004-1957-x86-pc-lane/` splits roadmap X86-PC-0..7 into
+  controller-family phases — descriptor + HCL model, AHCI/SATA, xHCI + HID,
+  igb NIC (i210/i211), ACPI DMAR discovery, multi-port COM/RS232-485, and a
+  hardware-only physical lane — with a QEMU-first gate for phases 01–06 and a
+  phase-07 gate that accepts no QEMU substitute. Intel VMX stays in P09
+  (`.agents/260711-1917-tier3b-x86-vtx/`) and x86 AVX2 kernels stay with
+  `.agents/260914-cpu-engine-optimization/`. `docs/hardware-compatibility-list.md`
+  records the mandatory requirements (R1 COM1/16550 `0x3F8`/IRQ 4, R2 HPET,
+  R3 Secure Boot disable-able, R4 AHCI mode or NVMe, R5 BIOS/UEFI ISO boot,
+  R6 a shipped NIC family, R7 board facts), the evidence levels (`S1` qemu /
+  `S2` physical-development / `S3` qualified), an intentionally empty machine
+  table, the pre-purchase checklist, and the rejected-machine register. The plan
+  is queued in `.agents/plan-portfolio.md`; no implementation, hardware
+  qualification, or evidence-ceiling change is claimed.
+
 - **A domain-owned zero-copy grant is permission-accurate, owner-mapped and synchronously
   revocable on RV64.** The phase-01 blanket refusal of every `Grant*` entry point that named a
   private-root task is now a capability check: it admits exactly one shape — a live task whose

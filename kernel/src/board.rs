@@ -64,14 +64,20 @@ fn invalid_descriptor(error: ValidationError) -> ! {
     panic!("[board] invalid descriptor: {:?}", error)
 }
 
-#[cfg(target_arch = "x86_64")]
-const QEMU_Q35_X86_64: &BoardDescriptor = &cellos_boards::qemu_q35_x86_64::QEMU_Q35_X86_64;
+#[cfg(all(target_arch = "x86_64", not(feature = "board-x86-pc")))]
+const SELECTED_X86_64_BOARD: &BoardDescriptor = &cellos_boards::qemu_q35_x86_64::QEMU_Q35_X86_64;
+
+/// Generic PC descriptor (phase 01 of the x86 PC lane). Selected by
+/// `board-x86-pc`; the machine-level qualification list lives in
+/// `docs/hardware-compatibility-list.md`.
+#[cfg(all(target_arch = "x86_64", feature = "board-x86-pc"))]
+const SELECTED_X86_64_BOARD: &BoardDescriptor = &cellos_boards::pc_x86_64::X86_64_PC;
 
 #[cfg(target_arch = "x86_64")]
 /// Validates the board contract before early boot consumes platform facts.
 pub(crate) fn selected() -> &'static BoardDescriptor {
-    match QEMU_Q35_X86_64.validate_for(Architecture::X86_64) {
-        Ok(()) => QEMU_Q35_X86_64,
+    match SELECTED_X86_64_BOARD.validate_for(Architecture::X86_64) {
+        Ok(()) => SELECTED_X86_64_BOARD,
         Err(error) => invalid_descriptor(error),
     }
 }
@@ -82,11 +88,20 @@ pub(crate) fn selected_x86_64_soc() -> &'static hal_soc_x86::X86PlatformProfile 
     use cellos_boards::SocId;
 
     match selected().soc {
-        SocId::QemuX86Q35 => match hal_soc_x86::QEMU_Q35.validate() {
-            Ok(()) => &hal_soc_x86::QEMU_Q35,
-            Err(error) => panic!("[board] invalid x86 SoC profile: {:?}", error),
-        },
+        SocId::QemuX86Q35 => validated_x86_profile(&hal_soc_x86::QEMU_Q35),
+        SocId::GenericX86Pc => validated_x86_profile(&hal_soc_x86::GENERIC_X86_PC),
         _ => panic!("[board] x86 descriptor has incompatible SoC identity"),
+    }
+}
+
+/// Validates an x86 platform profile before early boot consumes its facts.
+#[cfg(target_arch = "x86_64")]
+fn validated_x86_profile(
+    profile: &'static hal_soc_x86::X86PlatformProfile,
+) -> &'static hal_soc_x86::X86PlatformProfile {
+    match profile.validate() {
+        Ok(()) => profile,
+        Err(error) => panic!("[board] invalid x86 SoC profile: {:?}", error),
     }
 }
 

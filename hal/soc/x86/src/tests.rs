@@ -11,6 +11,17 @@ fn qemu_q35_preserves_the_verified_legacy_contract() {
 }
 
 #[test]
+fn generic_pc_profile_reuses_the_standard_legacy_wiring() {
+    assert_eq!(GENERIC_X86_PC.validate(), Ok(()));
+    assert_eq!(GENERIC_X86_PC.slug, "x86_64-pc");
+    assert_eq!(GENERIC_X86_PC.com1.base, 0x03F8);
+    assert_eq!(GENERIC_X86_PC.com1.irq, 4);
+    assert!(GENERIC_X86_PC.legacy_bios_window.contains(0x0008_0000, 16));
+    assert!(GENERIC_X86_PC.legacy_rsdp_window.contains(0x000E_0000, 36));
+    assert_ne!(GENERIC_X86_PC.slug, QEMU_Q35.slug);
+}
+
+#[test]
 fn firmware_windows_reject_overflow_and_out_of_range_access() {
     let overflowing = AddressRange {
         base: usize::MAX - 1,
