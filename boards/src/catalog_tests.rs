@@ -56,9 +56,10 @@ fn generic_pc_descriptor_declares_only_shipped_drivers() {
     assert!(board.fallback_memory.is_empty());
     assert!(board.has_driver(DriverId::Uart16550PortIo));
     assert!(board.has_driver(DriverId::Hpet));
-    // A driver family may only be listed once its cell exists: listing it early
+    // Phase 02a ships the AHCI storage Driver Cell, so the descriptor may now
+    // claim it. The remaining families are still unshipped: listing one early
     // would make `has_driver` claim an initialisation that cannot happen.
-    assert!(!board.has_driver(DriverId::StorageAhci));
+    assert!(board.has_driver(DriverId::StorageAhci));
     assert!(!board.has_driver(DriverId::UsbXhci));
     assert!(!board.has_driver(DriverId::EthernetIgb));
     assert!(!board.has_driver(DriverId::Uart16550Multi));

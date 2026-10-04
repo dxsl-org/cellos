@@ -108,7 +108,7 @@ pub fn lookup(path: &str) -> Option<CapSet> {
         // `pcie_driver` + `DEV_DISPLAY` are set here; `with_path_caps` adds them
         // to the request before the ceiling intersection.
         "/bin/block" | "/bin/nvme" | "/bin/e1000" | "/bin/virtio-net" | "/bin/virtio-gpu"
-        | "/bin/input" => CapSet {
+        | "/bin/input" | "/bin/ahci" => CapSet {
             pcie_driver: true,
             mmio_devices: DEV_DISPLAY,
             ..CapSet::EMPTY

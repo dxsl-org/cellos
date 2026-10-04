@@ -6927,20 +6927,53 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                         crate::task::drivers::pcie_ecam::Bar::Memory64 { size, .. } => size,
                         _ => 0x4000, // fallback 16 KiB
                     };
+                    // NOTE (phase 02a evidence): this reads the kernel's own ECAM
+                    // scan (`dev.bars`), which retains every BAR. The
+                    // Platform-Cell registration path stores only BAR0 today, so
+                    // a device whose MMIO lives at a later BAR (ICH9 AHCI's
+                    // ABAR is BAR5) would report `bar_mem_base = 0` through that
+                    // path; extending that registration belongs to the Platform
+                    // Cell's owner, and the AHCI cell fails closed meanwhile.
+                    // First *memory* BAR with a non-zero base, for devices whose
+                    // BAR0 is I/O or empty (ICH9 AHCI keeps its ABAR at BAR5).
+                    // Empty BARs decode as `Memory32 { addr: 0, .. }`, so the
+                    // base must be checked or the first absent slot wins.
+                    // `bar0_*` above keep their existing first-BAR meaning;
+                    // NVMe/e1000 are unaffected because their BAR0 is memory.
+                    let (bar_mem_base, bar_mem_len): (u64, u64) = dev
+                        .bars
+                        .iter()
+                        .find_map(|bar| match bar {
+                            crate::task::drivers::pcie_ecam::Bar::Memory32 { addr, size }
+                                if *addr != 0 =>
+                            {
+                                Some((*addr as u64, *size as u64))
+                            }
+                            crate::task::drivers::pcie_ecam::Bar::Memory64 { addr, size }
+                                if *addr != 0 =>
+                            {
+                                Some((*addr, *size))
+                            }
+                            _ => None,
+                        })
+                        .map(|(base, size)| (base, if size == 0 { 0x4000 } else { size }))
+                        .unwrap_or((bar0_base, bar0_len));
                     // Claim without displacing a live Driver Cell. A competing
                     // instance observes "not found" and may retry after reap.
                     if !crate::resource_registry::claim_bdf_owner(bdf, caller_id) {
                         return Ok(0);
                     }
-                    // Write the 20-byte PcieDeviceInfo to the cell's out_ptr.
+                    // Write the 40-byte PcieDeviceInfo to the cell's out_ptr.
                     // SAFETY: SAS — caller's virtual address == kernel's virtual address.
                     // The cell is responsible for passing a valid, writeable pointer.
                     if out_ptr != 0 {
-                        let mut dev_bytes = [0u8; 24];
+                        let mut dev_bytes = [0u8; 40];
                         dev_bytes[0..4].copy_from_slice(&bdf.to_ne_bytes());
                         dev_bytes[4..8].copy_from_slice(&1u32.to_ne_bytes());
                         dev_bytes[8..16].copy_from_slice(&bar0_base.to_ne_bytes());
                         dev_bytes[16..24].copy_from_slice(&bar0_len.to_ne_bytes());
+                        dev_bytes[24..32].copy_from_slice(&bar_mem_base.to_ne_bytes());
+                        dev_bytes[32..40].copy_from_slice(&bar_mem_len.to_ne_bytes());
                         write_user_slice(caller_id, out_ptr, &dev_bytes, MAX_USER_BUF)?;
                     }
                     Ok(1)

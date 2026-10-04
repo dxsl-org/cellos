@@ -897,6 +897,69 @@ impl QemuRunner {
         }
     }
 
+    /// Boot x86_64 q35 from a Limine ISO with the built-in ICH9 AHCI controller
+    /// backed by a raw SATA image (`-device ide-hd`).
+    ///
+    /// Same boot path as `boot_x86_bios`, plus the q35 SATA controller that
+    /// enumerates as `8086:2922` class `01:06:01`. This is the lane for the AHCI
+    /// storage Driver Cell (phase 02a).
+    pub fn boot_x86_bios_with_sata(iso: &str, sata_disk: &str) -> Self {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind serial socket");
+        let port = listener.local_addr().unwrap().port();
+
+        let mut child = Command::new(qemu_binary_x86())
+            .args([
+                "-machine",
+                "q35",
+                "-cpu",
+                "qemu64,+pdpe1gb",
+                "-m",
+                "256M",
+                "-nographic",
+                "-cdrom",
+                iso,
+                "-boot",
+                "d",
+                "-no-reboot",
+                "-monitor",
+                "none",
+                "-drive",
+                &format!("file={sata_disk},format=raw,if=none,id=sata0"),
+                "-device",
+                "ide-hd,drive=sata0",
+                "-serial",
+                &format!("tcp:127.0.0.1:{port}"),
+            ])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("qemu-system-x86_64 must be on PATH");
+
+        let stream = accept_qemu_serial(&listener, &mut child);
+        let writer = stream.try_clone().expect("clone serial stream");
+
+        let output = Arc::new(Mutex::new(String::new()));
+        let buf = Arc::clone(&output);
+        thread::spawn(move || {
+            let mut reader = BufReader::new(stream);
+            let mut byte = [0u8; 1];
+            loop {
+                match reader.read(&mut byte) {
+                    Ok(0) | Err(_) => break,
+                    Ok(_) => buf.lock().unwrap().push(byte[0] as char),
+                }
+            }
+        });
+        Self {
+            child,
+            writer: Some(writer),
+            output,
+            temp_disk: None,
+            monitor: None,
+        }
+    }
+
     /// Boot x86_64 q35 from a Limine ISO with NVMe + e1000 NIC.
     ///
     /// Same as `boot_x86_bios_with_nvme` plus `-device e1000,netdev=net0`.

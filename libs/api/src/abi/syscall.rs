@@ -463,6 +463,9 @@ pub enum ViSyscall {
     /// 418: Find the first PCIe device matching (class, subclass, prog_if).
     /// ABI: a0=class(u8), a1=subclass(u8), a2=prog_if(u8), a3=out_ptr(*mut PcieDeviceInfo)
     /// → 1 if found (out_ptr written), 0 if not found. Requires PcieDriverCap.
+    /// `PcieDeviceInfo` is 40 bytes: `bdf`, `found`, first-BAR `bar0_base`/`bar0_len`,
+    /// and the appended first-**memory**-BAR `bar_mem_base`/`bar_mem_len` (the
+    /// window a driver whose BAR0 is I/O — e.g. ICH9 AHCI at BAR5 — must map).
     FindPcieDevice = 418,
     /// 419: Query whether a cell has called sys_hotswap_ready(). Requires SupervisorCap.
     /// ABI: a0 = target_tid → 1 if ready, 0 if not yet, usize::MAX on unknown tid.

@@ -2352,17 +2352,30 @@ pub fn sys_register_gpu_driver() -> Result<(), SyscallError> {
 /// PCIe device descriptor written by `sys_find_pcie_device`.
 ///
 /// Layout is `#[repr(C)]` to match the kernel's `write_volatile` sequence:
-/// `bdf(u32) + found(u32) + bar0_base(u64) + bar0_len(u64)` = 24 bytes.
+/// `bdf(u32) + found(u32) + bar0_base(u64) + bar0_len(u64) + bar_mem_base(u64)
+/// + bar_mem_len(u64)` = 40 bytes.
+///
+/// `bar_mem_*` were **appended** so the first-BAR fields keep their exact
+/// meaning: a device whose BAR0 is I/O (ICH9 AHCI, whose ABAR is BAR5) reports
+/// zero `bar0_base` and its MMIO window in `bar_mem_base`. Every cell that
+/// reads this record is rebuilt by the same packaging pass, so no stale 24-byte
+/// reader survives a rebuild.
 #[repr(C)]
 pub struct PcieDeviceInfo {
     /// PCIe Requester ID: `bus<<8 | dev<<3 | fn`. Zero means not populated.
     pub bdf: u32,
     /// 1 if the device was found, 0 otherwise.
     pub found: u32,
-    /// BAR0 physical base address (= virtual address in SAS).
+    /// BAR0 physical base address (= virtual address in SAS); 0 when BAR0 is I/O.
     pub bar0_base: u64,
     /// BAR0 size in bytes.  At least 0x4000 (16 KiB) for NVMe controllers.
     pub bar0_len: u64,
+    /// First *memory* BAR physical base address; equals `bar0_base` when BAR0 is
+    /// memory. ICH9 AHCI exposes its ABAR at BAR5, so this is the only field a
+    /// SATA driver can use for MMIO.
+    pub bar_mem_base: u64,
+    /// First memory BAR size in bytes (0x4000 fallback when the size is unknown).
+    pub bar_mem_len: u64,
 }
 
 impl PcieDeviceInfo {
@@ -2373,6 +2386,8 @@ impl PcieDeviceInfo {
             found: 0,
             bar0_base: 0,
             bar0_len: 0,
+            bar_mem_base: 0,
+            bar_mem_len: 0,
         }
     }
 }

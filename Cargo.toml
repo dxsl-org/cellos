@@ -73,6 +73,7 @@ members = [
     "cells/drivers/gpio",
     "cells/drivers/gpio-bcm",
     "cells/drivers/nvme",
+    "cells/drivers/ahci",
     "cells/drivers/gpu",
     "cells/drivers/i2c-gpio",
     "cells/drivers/i2c-bcm",

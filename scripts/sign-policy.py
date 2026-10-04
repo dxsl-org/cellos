@@ -98,6 +98,7 @@ DEV_POLICY = [
     # ── driver cells (pcie_driver comes from CapSet::with_path_caps) ───────────
     ("/bin/block",       0, 0, 0, 0, 0, 0,     1, 0, 0),
     ("/bin/nvme",        0, 0, 0, 0, 0, 0,     1, 0, 0),
+    ("/bin/ahci",        0, 0, 0, 0, 0, 0,     1, 0, 0),
     ("/bin/input",       0, 0, 0, 0, 0, 0,     1, 0, 0),
     ("/bin/virtio-net",  0, 0, 0, 0, 0, 0,     1, 0, 0),
     ("/bin/e1000",       0, 0, 0, 0, 0, 0,     1, 0, 0),

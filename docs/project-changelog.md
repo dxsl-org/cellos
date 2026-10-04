@@ -4,6 +4,40 @@
 
 ## [Unreleased] Development-first hardware-constrained execution
 
+- **x86 PC lane phase 02a: AHCI/SATA part A — PCI binding, HBA init, IDENTIFY
+  (`qemu` ceiling).** New Driver Cell `cells/drivers/ahci/` (759 lines) finds the
+  SATA controller through `sys_find_pcie_device(0x01/0x06/0x01)`, claims its ABAR,
+  resets the HBA, starts the port carrying an ATA disk and completes one polled
+  IDENTIFY DEVICE; a non-AHCI prog-if (RST/RAID firmware) fails closed with a log
+  line naming it, and a machine with no SATA device leaves the cell idle instead
+  of erroring. Out of scope by design: READ/WRITE, block registration,
+  persistence (phase 02b) — the cell never calls `sys_register_block_driver`.
+  Boot evidence (independently re-run after the implementer): `[ahci] ABAR claim
+  ok base=0xfebd5000 len=0x1000`, `controller bound bdf=00:1f.2 … pi=0x0000003f`,
+  `HBA reset complete (AE enabled)`, `port 5 link up`, `IDENTIFY DEVICE ok port=5
+  sectors=131072 model="QEMU HARDDISK"`, `[driver_cell] ahci storage driver ready`
+  → `Cellos >`; diskless boot logs `no SATA disk attached; driver cell idle`. New
+  `ahci-x86` integration suite 2/2; `cellos-boards` 13/13 with the `StorageAhci`
+  assertion flipped; `check-hal-boundaries.sh` pass.
+  Interface changes this required, recorded rather than incidental:
+  `PcieDeviceInfo` **appended** `bar_mem_base`/`bar_mem_len` (24 → 40 bytes; the
+  first-BAR fields keep their meaning, and ICH9's ABAR is BAR5, so a SATA driver
+  needs the memory-BAR fields — safe because every cell is rebuilt by the same
+  packaging pass); `/bin/ahci` wired through the launch profile, boot ceiling,
+  `with_path_caps`, the init block-driver spawn (one surgical hunk in a file that
+  also carries the user's WIP), the dev policy and the CI build/sign/fat32 lists
+  plus a new CI step running the lane. Two boot-time races were found and fixed
+  during bring-up (Platform Cell BAR probe clearing memory decode; `PxSIG` only
+  valid after the port is started). An independent review then found gaps that
+  q35 tolerates but real hardware need not — `GHC.AE` now precedes any register
+  access and the reset keeps AE set, the port waits for the initial D2H FIS
+  (task-file idle → known `PxSIG`) before starting the engine, IDENTIFY
+  validates PRDBC/word 0 before reporting success, COMRESET is held ≥1 ms against
+  the monotonic clock, the test image is RAII-owned, and the test requires an ISO
+  that actually carries `/bin/ahci` — all fixed and re-verified
+  (`ahci-x86` 2/2; markers unchanged). No physical machine is claimed; the HCL
+  machine table stays empty.
+
 - **x86 PC lane phase 01: generic `x86_64-pc` descriptor + HCL model landed
   (`qemu` ceiling).** `boards/pc/x86_64-pc/` declares the PC-class compatibility
   baseline (standard COM1 `0x3F8`/IRQ 4 wiring, standard legacy firmware windows,

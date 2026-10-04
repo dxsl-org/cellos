@@ -26,7 +26,9 @@ plan's ledger rather than silently starting work.
 
 ## Change
 
-- New Driver Cell `cells/drivers/xhci/` (Tier 1, `#![forbid(unsafe_code)]`):
+- New Driver Cell `cells/drivers/xhci/` (Tier 1; DMA/MMIO under the documented
+  Law-4 unsafe exception like the NVMe/e1000 cells, with `// SAFETY:` comments and
+  the F1 unsafe ratchet green):
   PCI class `0x0C`/`0x03` (USB controller, xHCI prog-if `0x30`), capability
   register parsing, BAR MMIO via `request_mmio`, HCRST reset, command ring and
   event ring, port reset/enable, slot/endpoint contexts, transfer rings,

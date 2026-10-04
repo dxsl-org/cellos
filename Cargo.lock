@@ -977,6 +977,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "driver-ahci"
+version = "0.1.0"
+dependencies = [
+ "api",
+ "cell-build",
+ "ostd",
+ "types",
+]
+
+[[package]]
 name = "driver-bcm-display"
 version = "0.1.0"
 dependencies = [

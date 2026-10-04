@@ -925,7 +925,7 @@ jobs:
           --target x86_64-unknown-none
           -Z build-std=core,alloc
           -p app-init -p app-shell -p service-vfs -p service-config
-          -p service-platform -p driver-nvme -p driver-e1000 -p app-sys-tools
+          -p service-platform -p driver-nvme -p driver-e1000 -p driver-ahci -p app-sys-tools
 
       # kernel_fs.img is a gitignored build artifact; the committed copy goes
       # stale against the kernel ABI — assemble a fresh one (mirrors
@@ -949,6 +949,7 @@ jobs:
           sign_cells \
             "$REL/app-shell" "$REL/service-vfs" "$REL/service-config" \
             "$REL/platform" "$REL/driver-nvme" "$REL/driver-e1000" \
+            "$REL/driver-ahci" \
             "$REL/ls" "$REL/cat" "$REL/echo" "$REL/ps"
           python3 tools/mkfat32.py \
             kernel/src/embedded-x86_64/kernel_fs.img \
@@ -958,6 +959,7 @@ jobs:
             "$REL/platform"       /bin/platform \
             "$REL/driver-nvme"    /bin/nvme \
             "$REL/driver-e1000"   /bin/e1000 \
+            "$REL/driver-ahci"    /bin/ahci \
             "$REL/ls"             /bin/ls \
             "$REL/cat"            /bin/cat \
             "$REL/echo"           /bin/echo \
@@ -978,6 +980,20 @@ jobs:
         run: |
           chmod +x scripts/qemu-x86_64-test.sh
           BOOT_WINDOW=90 bash scripts/qemu-x86_64-test.sh build/vicell-x86.iso
+
+      # Phase 02a: the AHCI storage cell's bring-up lane, with a raw SATA image
+      # attached to q35's ICH9 controller (`-device ide-hd`). Same QEMU shape as
+      # `QemuRunner::boot_x86_bios_with_sata`. `VICELL_AHCI_ISO` pins the ISO the
+      # job just built (which now carries /bin/ahci).
+      - name: AHCI integration test (x86_64, SATA attached)
+        env:
+          VICELL_AHCI_ISO: ${{ github.workspace }}/build/vicell-x86.iso
+        run: >
+          cargo test
+          --manifest-path tests/integration/Cargo.toml
+          --test ahci-x86
+          --target x86_64-unknown-linux-gnu
+          -- --nocapture
 
   qemu-x86-hypervisor-boot:
     name: QEMU Hypervisor Boot-to-Shell (x86_64)

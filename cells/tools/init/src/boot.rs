@@ -149,6 +149,11 @@ pub(crate) fn start_block_drivers() {
     #[cfg(not(feature = "board-rpi3"))]
     let _ = sys_spawn_from_path(VIRTIO_BLOCK_DRIVER);
     let _ = sys_spawn_from_path("/bin/nvme");
+    // x86_64 PC lane (phase 02a): the SATA/AHCI cell. Absent from non-x86
+    // images and idles when the machine has no AHCI controller, so this spawn
+    // is inert everywhere else.
+    #[cfg(target_arch = "x86_64")]
+    let _ = sys_spawn_from_path("/bin/ahci");
     for _ in 0..400 {
         if sys_lookup_service(service::BLOCK_DRIVER).is_some() {
             break;

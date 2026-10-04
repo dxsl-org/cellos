@@ -9,16 +9,17 @@ const COMPATIBLES: [&str; 1] = ["cellos,x86_64-pc"];
 ///
 /// Only mechanisms that exist in this tree are listed: `has_driver` gates real
 /// kernel init, so listing a driver whose cell has not landed would claim an
-/// initialisation that cannot happen. The storage (`StorageAhci`), USB
-/// (`UsbXhci`), NIC (`EthernetIgb`) and extra-serial (`Uart16550Multi`) variants
-/// are declared in `boards/src/descriptor.rs` and are added to this list by the
-/// phase that ships their driver cell.
-const DRIVERS: [DriverId; 6] = [
+/// initialisation that cannot happen. The USB (`UsbXhci`), NIC (`EthernetIgb`)
+/// and extra-serial (`Uart16550Multi`) variants are declared in
+/// `boards/src/descriptor.rs` and are added to this list by the phase that ships
+/// their driver cell.
+const DRIVERS: [DriverId; 7] = [
     DriverId::Uart16550PortIo,
     DriverId::IoApic,
     DriverId::Hpet,
     DriverId::PcieEcam,
     DriverId::NvmePci,
+    DriverId::StorageAhci,
     DriverId::EthernetE1000,
 ];
 

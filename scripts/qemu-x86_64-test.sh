@@ -13,6 +13,10 @@ set -euo pipefail
 ISO="${1:-build/vicell-x86.iso}"
 BOOT_WINDOW="${BOOT_WINDOW:-90}"
 X86_NIC_MODEL="${X86_NIC_MODEL:-}"
+# Optional raw SATA image for the q35 ICH9 AHCI controller (phase 02a). When
+# set, the same file is attached as `-device ide-hd`, which is how the AHCI
+# Driver Cell gets a disk to IDENTIFY. Unset keeps the pre-AHCI device set.
+X86_SATA_IMAGE="${X86_SATA_IMAGE:-}"
 # CPU model decides whether the guest has PCID at all: `qemu64` does not, `max`
 # does. The lane asserts the kernel's own decision when X86_EXPECT_PCID is set,
 # so the PCID-off and PCID-on paths are both witnessed rather than assumed.
@@ -47,6 +51,16 @@ case "$X86_NIC_MODEL" in
         ;;
 esac
 
+if [[ -n "$X86_SATA_IMAGE" ]]; then
+    if [[ ! -f "$X86_SATA_IMAGE" ]]; then
+        echo "FAIL: X86_SATA_IMAGE not found: $X86_SATA_IMAGE" >&2
+        exit 1
+    fi
+    SATA_ARGS=(-drive "file=$X86_SATA_IMAGE,if=none,id=sata0,format=raw" -device "ide-hd,drive=sata0")
+else
+    SATA_ARGS=()
+fi
+
 if ! command -v qemu-system-x86_64 &>/dev/null; then
     echo "FAIL: qemu-system-x86_64 not found on PATH" >&2
     exit 1
@@ -75,6 +89,7 @@ timeout "$BOOT_WINDOW" qemu-system-x86_64 \
     -boot d \
     -no-reboot \
     "${NIC_ARGS[@]}" \
+    "${SATA_ARGS[@]}" \
     < /dev/null > qemu-x86_64.raw.log 2>&1 || true
 
 # Strip NULs and ANSI escape sequences so patterns match cleanly.
@@ -90,6 +105,25 @@ if [[ "$X86_NIC_MODEL" == "e1000e" ]] \
     && ! grep -q "\[e1000\] unsupported Ethernet 8086:10d3; driver gate closed" qemu-x86_64.log; then
     echo "FAIL: e1000e endpoint was not rejected by vendor/device ID" >&2
     exit 1
+fi
+
+# Phase 02a: with a SATA image attached, the AHCI Driver Cell must bind the ICH9
+# controller, bring a port up, and complete IDENTIFY DEVICE before the shell.
+if [[ -n "$X86_SATA_IMAGE" ]]; then
+    if ! grep -qa "\[ahci\] controller bound" qemu-x86_64.log; then
+        echo "FAIL: AHCI Driver Cell did not bind the SATA controller" >&2
+        grep -ai "ahci" qemu-x86_64.log | head -5
+        exit 1
+    fi
+    if ! grep -qa "\[ahci\] IDENTIFY DEVICE ok" qemu-x86_64.log; then
+        echo "FAIL: AHCI Driver Cell did not complete IDENTIFY DEVICE" >&2
+        grep -ai "ahci" qemu-x86_64.log | head -10
+        exit 1
+    fi
+    if ! grep -qa "\[driver_cell\] ahci storage driver ready" qemu-x86_64.log; then
+        echo "FAIL: AHCI Driver Cell did not report ready" >&2
+        exit 1
+    fi
 fi
 
 # Phase 02, the other half of the x86 domain gate. This is the *production* image

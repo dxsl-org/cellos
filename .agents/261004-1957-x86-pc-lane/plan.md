@@ -55,7 +55,7 @@ never qualify a board. QEMU-first is what makes the phases cheap to iterate:
 | # | Phase | Family | QEMU-first gate | Status |
 |---|---|---|---|---|
 | 01 | [x86_64-pc board descriptor + HCL model](phase-01-descriptor-and-hcl.md) | board facts | ISO boots on `q35` with the new descriptor; `x86_64-boot` stays 7/7 | **completed** (2026-10-04, `qemu` ceiling) |
-| 02a | [AHCI part A — PCI binding, HBA init, IDENTIFY](phase-02a-ahci-hba-init.md) | storage | `ahci-x86` binds controller, HBA/port up, IDENTIFY ok; `x86_64-boot` 7/7 | pending |
+| 02a | [AHCI part A — PCI binding, HBA init, IDENTIFY](phase-02a-ahci-hba-init.md) | storage | `ahci-x86` binds controller, HBA/port up, IDENTIFY ok; `x86_64-boot` 7/7 | **completed** (2026-10-05, `qemu` ceiling) |
 | 02b | [AHCI part B — data path, block registration, persistence](phase-02b-ahci-block-persistence.md) | storage | `ahci-x86` two-boot persistence on the same raw image | pending |
 | 03 | [xHCI + HID family](phase-03-xhci-hid.md) | USB | new `xhci-x86` suite: controller init, HID boot keyboard report reaches the input path | pending |
 | 04a | [igb part A — identity, registration, Tx/Rx](phase-04a-igb-identity-txrx.md) | network | `igb-x86`: `8086:10c9` no longer rejected, registration, first Tx/Rx | pending |
@@ -98,6 +98,14 @@ never qualify a board. QEMU-first is what makes the phases cheap to iterate:
   promotes it.
 - Fail-closed is the default for unknown device IDs, absent DMAR, absent HPET,
   and locked Secure Boot.
+- **CI wiring is part of a phase, not an afterthought.** The x86 lane lives in
+  the `qemu-x86_64-boot` job (`.github/workflows/ci.yml:892`), which builds a
+  fixed cell subset, signs it, assembles `kernel/src/embedded-x86_64/kernel_fs.img`
+  through explicit `tools/mkfat32.py` mappings, then boots the ISO. A phase that
+  adds a cell or a lane updates that job in the same change: the `cargo build -p …`
+  list, the `sign_cells` argument list, the `mkfat32.py` mapping, and a step that
+  runs the new integration test. A lane that only runs locally is reported as
+  local, never as a gated lane.
 - Removing the q35 IOMMU hardcode (05) must keep the existing QEMU VT-d lanes
   green; a regression there is a stop-the-line event for that phase.
 
@@ -139,6 +147,7 @@ never qualify a board. QEMU-first is what makes the phases cheap to iterate:
 | Driver lands before the descriptor/HCL model exists | 01 ships first and defines the HCL file the other phases write into |
 | Touching kernel PCIe/IOMMU code destabilizes QEMU VT-d lanes | 05 keeps the q35 base as a fallback path until DMAR discovery passes both QEMU and hardware gates |
 | No hardware is ever bought, so the lane stalls at `qemu` | 07 is explicitly the only hardware-gated phase; 02–06 stay useful as regression coverage and as the prerequisite inventory for a purchase decision |
+| `bar_mem_*` depends on the kernel's early ECAM scan retaining every BAR | The kernel's own scan retains all BARs (that is why phase 02a passes), but the Platform-Cell registration path stores only BAR0 (`register_device`), so a device registered through that path with an I/O BAR0 and MMIO at BAR5 would report `bar_mem_base = 0` and the AHCI cell would fail closed with a named error. Extending PCI registration to retain per-BAR index/base/size belongs to the Platform-Cell cutover owner, not to this lane; the syscall site carries a note and the AHCI cell fails closed meanwhile |
 
 ## Validation log
 
@@ -184,6 +193,19 @@ artifact set. Eight consistency findings fixed in this same change:
    register, not a row; row-level gaps are optional-only and live in `Notes`.
 8. Descriptor/HAL/README/changelog reframed as a **COM1-required compatibility
    contract**, not a universal claim about every PC.
+
+### Phase 02a review (2026-10-05, independent reviewer)
+
+Verdict: part-A scope and the part-A/part-B boundary are respected; no scope
+leak (no READ/WRITE, no block registration). The findings were spec-conformance
+and robustness gaps that q35 tolerates but real hardware need not — AHCI mode
+enabled before register access and reset with AE held (§10.1.2), waiting for the
+initial D2H FIS before starting the command engine (§3.3.9), validating the
+IDENTIFY payload (PRDBC + word 0), measuring the COMRESET hold against a clock
+rather than an iteration count, test-image RAII, and ISO provenance. All fixed
+before shipping (phase file, "Review fixes"). The one open point is the recorded
+`bar_mem_*` dependency on the kernel's own ECAM scan retaining every BAR — a
+Platform-Cell registration gap owned elsewhere, with the cell failing closed.
 
 ### Phase 01 evidence (2026-10-04, `qemu` ceiling)
 

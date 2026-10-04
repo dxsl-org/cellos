@@ -2,7 +2,7 @@
 phase: 2
 sub: a
 title: "AHCI part A — PCI binding, HBA init, IDENTIFY"
-status: pending
+status: completed
 priority: P1
 effort: M (sub-phase of the AHCI family)
 dependencies: [1]
@@ -11,6 +11,79 @@ ceiling: qemu
 ---
 
 # Phase 02a — AHCI part A: PCI binding, HBA init, IDENTIFY
+
+## Evidence (2026-10-04/05, `qemu` ceiling)
+
+- New cell `cells/drivers/ahci/` (759 lines: `main.rs`, `controller.rs`, `dma.rs`,
+  `build.rs`) — PCI binding on `0x01/0x06/0x01`, ABAR via `PcieDeviceInfo::bar_mem_base`,
+  HBA reset, port selection, one polled IDENTIFY DEVICE. No READ/WRITE, no block
+  registration (`main.rs` documents the part-A/part-B boundary).
+- With a 64 MiB raw image on q35's ICH9 AHCI, independently re-verified by me after
+  the implementer's run: `[ahci] ABAR claim ok base=0xfebd5000 len=0x1000`,
+  `controller bound bdf=00:1f.2 cap=0xc0141f05 version=0x00010000 pi=0x0000003f`,
+  `HBA reset complete (AE enabled)`, `port 2 is not an ATA disk (SSTS=0x113
+  SIG=0xeb140101); skipping` (the ATAPI CD-ROM), `port 5 link up`, `IDENTIFY DEVICE
+  ok port=5 sectors=131072 model="QEMU HARDDISK" fw="2.5+"`,
+  `[driver_cell] ahci storage driver ready`, then `Cellos >`.
+- Diskless boot (the CI shape): shell reached, `[ahci] no SATA disk attached;
+  driver cell idle` — the cell is inert on a machine with no disk instead of
+  erroring.
+- `cargo test --test ahci-x86` 2/2 (not a skip); `cargo test -p cellos-boards`
+  13/13 with the `StorageAhci` assertion flipped; `check-hal-boundaries.sh` pass;
+  kernel `cargo check` (q35 default) clean.
+- Re-verified after the review fixes (same day): the `board-x86-pc` ISO still
+  boots to `Cellos >` with the identical marker set (`ABAR claim ok` → … →
+  `IDENTIFY DEVICE ok` → `storage driver ready`), the diskless boot still logs
+  `no SATA disk attached; driver cell idle`, and `ahci-x86` is 2/2 with no leaked
+  temp image (`/tmp/vicell_sata_x86_*` = 0 after the run).
+- Evidence log: `evidence/phase-02a-ahci-identify.log`.
+
+## Interface changes this phase had to make (recorded, not incidental)
+
+1. **ABI append**: `PcieDeviceInfo` (24 → 40 bytes) gained `bar_mem_base` /
+   `bar_mem_len` (first *memory* BAR). `bar0_base`/`bar0_len` keep their exact
+   meaning; ICH9's ABAR is BAR5, so a SATA driver needs the appended fields. Safe
+   only because every cell is rebuilt by the same packaging pass — there is no
+   stale 24-byte reader in-tree; the `ostd` doc comment states this.
+2. **Boot wiring**: `/bin/ahci` joined the launch-profile target list, the
+   boot_ceiling PCIe row, `with_path_caps`, the init `start_block_drivers()` spawn
+   (one surgical hunk; the file's other hunks are the user's WIP), the dev policy
+   and the CI sign/fat32 lists.
+3. **Two boot-time races found and fixed during bring-up**: the Platform Cell's
+   BAR-size probe temporarily clears memory decode (the cell now waits for a sane
+   CAP/PI before touching ABAR), and `PxSIG` is only valid after the port is
+   started (QEMU returns `0xffffffff` before), so port selection starts the engine
+   before reading the signature.
+4. **Unsafe policy corrected in the plan**: Driver Cells use the documented Law-4
+   exception (as NVMe/e1000 do), not `#![forbid(unsafe_code)]`; the F1 unsafe
+   ratchet stays green.
+
+## Review fixes (2026-10-05, independent reviewer)
+
+The reviewer confirmed part-A scope and the part-A/part-B boundary, and raised
+gaps that q35 tolerates but real hardware need not. Fixed before shipping:
+
+1. `GHC.AE` is enabled before any register other than `GHC` is touched, and
+   `GHC.HR` is now requested with AE held (writing HR alone cleared AHCI mode) —
+   AHCI 1.3.1 §10.1.2, which only matters on a controller whose `CAP.SAM` is 0.
+2. Port bring-up waits for the initial D2H FIS: FIS receive on → `PxSERR`
+   cleared → `PxTFD` BSY/DRQ idle (bounded) → `PxSIG` polled for a *known*
+   signature, and only then `PxCMD.ST`. QEMU's ICH9 model publishes `PxSIG` only
+   after ST, so the code falls back to the started-engine read and the existing
+   markers are unchanged.
+3. IDENTIFY validates the transfer before emitting either success marker
+   (command-header PRDBC == 512 and a non-degenerate word 0), so a
+   completed-but-empty DMA cannot be reported as a good disk.
+4. COMRESET is held for ≥1 ms against the monotonic clock
+   (`ostd::syscall::sys_get_time_ms`), not an iteration count whose duration
+   depends on CPU frequency and scheduler state.
+5. The temp SATA image is owned by a `Drop` guard, so a panic inside the runner
+   constructor cannot leak a 64 MiB file.
+6. The test requires the ISO to actually carry `/bin/ahci` (the kernel's
+   launch-path literal) instead of passing on a stale shared ISO.
+7. The `bar_mem_*` dependency on the kernel's own ECAM scan is recorded as a plan
+   risk: the Platform-Cell registration path stores only BAR0, so extending it
+   belongs to that owner; the cell fails closed with a named error meanwhile.
 
 ## Target
 
@@ -21,9 +94,13 @@ industrial SATA-only PC has no persistent `/data` and no persistent guest disk.
 
 ## Change
 
-- New Driver Cell `cells/drivers/ahci/` on the `nvme`/`e1000` pattern: Tier 1
-  `#![forbid(unsafe_code)]`, `request_mmio` BAR handoff, every DMA buffer through
+- New Driver Cell `cells/drivers/ahci/` on the `nvme`/`e1000` pattern (Tier 1
+  driver cell): `request_mmio` BAR handoff, every DMA buffer through
   `DmaBuf::authorize` so phase 05's IOMMU work applies without rework.
+- Unsafe policy: Driver Cells use the documented **Law-4 exception** (as the
+  NVMe/e1000 cells do) — every `unsafe` block carries a `// SAFETY:` comment,
+  MMIO goes through the bounds-checked `MmioRegion`, and the F1 unsafe ratchet
+  must stay green.
 - PCI binding: class `0x01`/`0x06`, prog-if `0x01` (AHCI). Any other prog-if
   (RST/RAID-only firmware mode) **fails closed** with a log line naming the
   prog-if — this is what gives the HCL "SATA in AHCI mode" row teeth.
