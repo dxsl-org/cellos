@@ -74,6 +74,7 @@ members = [
     "cells/drivers/gpio-bcm",
     "cells/drivers/nvme",
     "cells/drivers/ahci",
+    "cells/drivers/xhci",
     "cells/drivers/gpu",
     "cells/drivers/i2c-gpio",
     "cells/drivers/i2c-bcm",
@@ -92,6 +93,7 @@ members = [
     "cells/drivers/display-ssd1306",
     "cells/drivers/bcm-display",
     "cells/drivers/dwc2-usb",
+    "cells/drivers/hid",
     
     # Cells - Services
     "cells/services/platform",

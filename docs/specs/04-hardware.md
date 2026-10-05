@@ -97,8 +97,8 @@ records the prerequisites for the x86_64 PC/server lane
 ([hardware-tracks.md](../roadmap/hardware-tracks.md)).
 
 ```
-1. AHCI/SATA storage cell     — no implementation exists anywhere in the tree
-2. xHCI + HID                 — previously frozen out by decision (item 5 of the G1-G3 driver plan phase 01)
+1. AHCI/SATA storage cell     — **landed** (`.agents/261004-1957-x86-pc-lane/` 02a/02b; `ahci-x86` 5/5, two-boot persistence)
+2. xHCI + HID                 — **reopened 2026-10-05** for the x86_64 PC lane (phase 03); previously frozen out by decision (item 5 of the G1-G3 driver plan phase 01)
 3. Intel igb NIC (i210/i211)  — first real NIC family; e1000 today binds 82540EM only and fail-closes all others
 4. ACPI DMAR discovery        — replaces the hardcoded q35 IOMMU base
 5. Multi-port COM / RS232-485 — industrial peripherals, scheduled only after the boot path

@@ -99,6 +99,10 @@ DEV_POLICY = [
     ("/bin/block",       0, 0, 0, 0, 0, 0,     1, 0, 0),
     ("/bin/nvme",        0, 0, 0, 0, 0, 0,     1, 0, 0),
     ("/bin/ahci",        0, 0, 0, 0, 0, 0,     1, 0, 0),
+    # xHCI USB host: pcie_driver for the 0C:03:30 BAR claim, usb_driver for the
+    # kernel-verified input-producer identity (sys_register_nic_driver), same
+    # split as /bin/dwc2-usb + the PCIe cells.
+    ("/bin/xhci",        0, 0, 0, 0, 0, 0,     1, 0, 0, 1),
     ("/bin/input",       0, 0, 0, 0, 0, 0,     1, 0, 0),
     ("/bin/virtio-net",  0, 0, 0, 0, 0, 0,     1, 0, 0),
     ("/bin/e1000",       0, 0, 0, 0, 0, 0,     1, 0, 0),

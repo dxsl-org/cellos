@@ -113,6 +113,17 @@ pub fn lookup(path: &str) -> Option<CapSet> {
             mmio_devices: DEV_DISPLAY,
             ..CapSet::EMPTY
         },
+        // USB host controller (xHCI) Driver Cell: `pcie_driver` locates the
+        // controller through `sys_find_pcie_device` (0C:03:30) and claims its
+        // BAR; `usb_driver` is the USB-host authority the input service's
+        // producer gate verifies before it accepts raw key events, the same
+        // mechanism `/bin/dwc2-usb` uses. `with_path_caps` requests both.
+        "/bin/xhci" => CapSet {
+            pcie_driver: true,
+            usb_driver: true,
+            mmio_devices: DEV_DISPLAY,
+            ..CapSet::EMPTY
+        },
         // BCM uses the statically allowlisted VideoCore mailbox, never PCIe.
         "/bin/bcm-display" => CapSet {
             mmio_devices: DEV_DISPLAY,

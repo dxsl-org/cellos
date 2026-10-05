@@ -480,6 +480,24 @@ pub enum ViSyscall {
     /// Success also means cached-TID ingress is blocked and accepted ingress drained.
     /// ABI: a0 = service_id, a1 = expected_tid → 0 on success.
     PauseService = 422,
+    /// 423: Announce caller as the kernel-verified USB HID event producer.
+    /// ABI: (no args) → 0 on success. Requires `UsbDriverCap` (the `usb_driver`
+    /// launch ceiling) — the same authority `/bin/dwc2-usb` and `/bin/xhci` hold.
+    ///
+    /// Publishes the caller's TID under [`service::USB_HID_PRODUCER`] so the
+    /// input service can verify a USB HID producer *without* consulting the
+    /// singleton [`service::NIC_DRIVER`]. On a PC that already has
+    /// e1000/virtio-net, claiming the NIC role would steal the network route;
+    /// this role is deliberately distinct and never overwrites the NIC owner.
+    ///
+    /// Allowlist: shares the DriverRegistration bit (50) with
+    /// `RegisterBlockDriver`/`RegisterNicDriver`/`FindPcieDevice`, exactly as
+    /// `WaitCompletion` shares bit 42. The `u64` allowlist is full (bits 0–62 are
+    /// assigned to syscalls; bit 63 is the VFS-mutate declaration), so a fresh bit
+    /// would require widening the ABI or reclaiming 63 — neither is append-only,
+    /// and neither is needed: the `usb_driver` capability check at dispatch is
+    /// the real authority gate.
+    RegisterUsbHidProducer = 423,
 
     // === Unknown ===
     Unknown = 9999,
@@ -921,8 +939,15 @@ impl ViSyscall {
             | Self::QueryHotswapReady
             | Self::PauseService => Some(49),
             // DriverRegistration (bit 50): announce as the active block/NIC driver,
-            // and discover PCIe device BARs. All gated by PcieDriverCap.
-            Self::RegisterBlockDriver | Self::RegisterNicDriver | Self::FindPcieDevice => Some(50),
+            // discover PCIe device BARs, and announce the separate USB HID event
+            // producer role. RegisterUsbHidProducer shares this bit deliberately:
+            // the u64 allowlist is full (bits 0–62 assigned, 63 is the VFS-mutate
+            // declaration) and the role carries exactly the same usb_driver
+            // authority as RegisterNicDriver.
+            Self::RegisterBlockDriver
+            | Self::RegisterNicDriver
+            | Self::RegisterUsbHidProducer
+            | Self::FindPcieDevice => Some(50),
             // WaitIrq (bit 51): block a Driver Cell until a hardware IRQ fires.
             // Gated by PcieDriverCap or PlatformCap — only Driver Cells may wait on IRQs.
             Self::WaitIrq => Some(51),
@@ -1124,6 +1149,7 @@ impl From<usize> for ViSyscall {
             419 => ViSyscall::QueryHotswapReady,
             421 => ViSyscall::SpawnReplacement,
             422 => ViSyscall::PauseService,
+            423 => ViSyscall::RegisterUsbHidProducer,
             _ => ViSyscall::Unknown,
         }
     }
@@ -1195,6 +1221,19 @@ pub mod service {
     /// Ocel Tier 2 JavaScript engine service (`/bin/ocel-js`).
     /// Executes untrusted web scripts in a hardware MMU-isolated domain.
     pub const OCEL_JS: u16 = 16;
+    /// USB HID event producer role — the TID that the kernel verified via
+    /// `RegisterUsbHidProducer` (syscall 423) and that the input service accepts
+    /// raw `USB_HID_HOST` frames from.
+    ///
+    /// Deliberately separate from [`NIC_DRIVER`]: on a PC with e1000/virtio-net,
+    /// a USB host cell that claimed the NIC role would redirect and drop network
+    /// IPC. `/bin/xhci` registers only this role; `/bin/dwc2-usb` registers both
+    /// because on RPi3 the LAN9514 is also the NIC.
+    ///
+    /// Next free id: 1–13 are the services above, 14 is
+    /// [`crate::hypervisor::HYPERVISOR_SERVICE_ID`], 15 `AI` and 16 `OCEL_JS`;
+    /// 17 is the first unassigned value.
+    pub const USB_HID_PRODUCER: u16 = 17;
 }
 
 /// Arguments for `SpawnFromMem`.

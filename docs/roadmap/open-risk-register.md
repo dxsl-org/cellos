@@ -125,12 +125,13 @@ those remain fail-closed production gates.
   ceiling and no physical machine is qualified: `boards/` carries the generic
   `pc/x86_64-pc` descriptor (phase 01, 2026-10-04) alongside `qemu/q35-x86_64`,
   but there is no machine-specific descriptor and no HCL machine row. The
-  PC-class driver path is absent as well — no AHCI driver in the Cellos source
-  (`cells/drivers/` ships `nvme`, `virtio-blk`, and `disk` only), xHCI was
-  deliberately frozen out
-  of the G1–G3 common-driver plan
-  (`.agents/260819-1416-port-common-drivers-g1-g2-g3/phase-01-evidence-and-provenance-gate.md`
-  item 5, `reports/driver-source-license-bom.md:32`), and `cells/drivers/e1000`
+  PC-class driver path is largely absent as well — the AHCI/SATA storage family
+  shipped in phases 02a/02b (`cells/drivers/ahci/`, QEMU-gated with a two-boot
+  persistence oracle) but there is still no real NIC (no driver in the Cellos
+  source for the other families), xHCI is only now being reopened for this lane
+  by the owner's 2026-10-05 decision, recorded in
+  `.agents/260819-1416-port-common-drivers-g1-g2-g3/phase-01-evidence-and-provenance-gate.md`
+  item 5 and `reports/driver-source-license-bom.md:32`; and `cells/drivers/e1000`
   binds 82540EM only, with `kernel/src/task/drivers/pcie_ecam.rs:894`
   fail-closing every other Ethernet-class binding. Consequence: the q35 software
   lane boots Cellos to a COM1 shell from the embedded VIFS1 and runs a Tier 3

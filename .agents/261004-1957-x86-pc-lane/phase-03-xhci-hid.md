@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "xHCI + HID family"
-status: pending
+status: completed
 priority: P2
 effort: M (driver cell + HID decode reuse)
 dependencies: [1]
@@ -10,6 +10,46 @@ ceiling: qemu
 ---
 
 # Phase 03 — xHCI + HID family
+
+## Evidence (2026-10-05, `qemu` ceiling)
+
+- New cell `cells/drivers/xhci/` (1472 lines: `main.rs`, `controller.rs`,
+  `regs.rs`, `dma.rs`, `input.rs`) plus a shared HID crate `cells/drivers/hid/`
+  (`driver-hid`) that `dwc2-usb` now re-exports — decode is single-copy, and the
+  ARM checks confirm the BCM lane still builds.
+- Standard-path rebuild (`build-x86_64-cells.ps1` → kernel `board-x86-pc` → ISO)
+  and `xhci-x86` **4/4**, re-verified by me after the implementer's run:
+  `controller init ok caplen=0x40 slots=64 ports=8 intrs=16` → `port 5 reset
+  speed=3` → `slot 1 addressed` → `enumerated device vid=0x0627 pid=0x0001` →
+  `HID boot keyboard interface=0 endpoint=0x81 mps=8 interval=7` → `USB HID
+  keyboard ready` → `key down code=0x10` / `key up code=0x10`.
+- Regressions on the same image: `x86_64-boot` 9/9, `ahci-x86` 5/5,
+  `nvme-x86` 3/3, `pcie-multibus-x86` 2/2, `driver-registration-contract` 3/3,
+  `cellos-boards` 13/13, `cellos-kernel` 187/187, HAL boundaries; ARM:
+  `driver-dwc2-usb` and the `board-rpi3` kernel check build.
+- Evidence log: `evidence/phase-03-xhci-hid.log`.
+
+## Review (2026-10-05, independent reviewer) — fixed here
+
+The reviewer traced the Enable Slot timeout to one root cause and found five more
+defects; all fixed: (1) **operational-register base** — every
+`USBCMD`/`USBSTS`/`CRCR`/`DCBAAP`/`CONFIG` access omitted `CAPLENGTH`, so the
+controller never received the command-ring base or Run/Stop while the polls read
+capability fields and "succeeded"; (2) **slot ID** missing from control bits
+31:24 of the slot-scoped commands; (3) **DCI** for an IN endpoint is `2n + 1`
+(the keyboard's EP1 IN is 3, not 2); (4) **HID interface descriptor** — class /
+subclass / protocol are bytes 5/6/7, and the code compared byte 5 against the
+boot subclass, so the keyboard was always rejected; (5) **scratchpad count** —
+HCSPARAMS2's high/low fields were swapped; (6) **NIC role** — using
+`sys_register_nic_driver()` as an input-producer proof either steals the network
+route or is refused, so the call is removed here and the proper role is 03b.
+
+## Scope note
+
+Key **delivery** to the input service is phase 03b (a distinct kernel-verified
+USB HID producer role), on the owner's decision, because the existing producer
+gate is built on the singleton NIC role. This phase stops at "decoded in the
+cell", which is what its oracle asserts.
 
 ## Target
 

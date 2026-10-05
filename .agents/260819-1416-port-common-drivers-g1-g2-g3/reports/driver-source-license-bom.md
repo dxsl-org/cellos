@@ -29,7 +29,7 @@ Rule: `adaptable` = permissive code may be ported with retained notices; `concep
 | Vendor NPU SDKs / blobs | blocked | Not present in `D:\Cellos\.references`; no license review or hardware yet. |
 | Local `D:\Cellos\.references\Redox` as driver source | blocked | It is the build-system cookbook checkout, not the driver repositories. |
 | Mellanox `mlx5` / large Linux-class NIC ports | blocked by scope | Explicitly out of scope in hardware spec. |
-| USB xHCI / WiFi / Bluetooth / audio | blocked by scope | Phase 01 freezes them out. |
+| USB xHCI / WiFi / Bluetooth / audio | **xHCI reopened 2026-10-05** for the x86_64 PC lane (`.agents/261004-1957-x86-pc-lane/` phase 03); the rest blocked by scope | Phase 01 froze them out; the reopening is recorded in `phase-01-evidence-and-provenance-gate.md` item 5 with the owner's decision. |
 
 ## Notice checklist for future ports
 

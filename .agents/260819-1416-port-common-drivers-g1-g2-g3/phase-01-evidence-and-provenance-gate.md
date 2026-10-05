@@ -41,6 +41,13 @@ Data flow: roadmap/spec/code inventory/reference tree -> provenance classifier -
 4. Record evidence labels: compile, QEMU, synthetic/fallback, real controller, physical board.
 5. Mark out of scope: USB xHCI, WiFi/Bluetooth, audio, Mellanox mlx5, detailed G3 kernel scheduler.
 
+> **Reopened 2026-10-05 (repository owner), for the x86_64 PC lane only:**
+> USB **xHCI + HID** is no longer frozen out. `.agents/261004-1957-x86-pc-lane/`
+> phase 03 owns it, because on x86 the console is the only input path and a real
+> PC's keyboard arrives over xHCI. The rest of this item stays frozen
+> (WiFi/Bluetooth, audio, mlx5, G3 scheduler). Recorded here rather than silently
+> starting work, as this gate requires.
+
 ## Todo List
 
 - [x] Inventory every `cells/drivers/*` crate and kernel fallback driver.

@@ -235,3 +235,35 @@ api::declare_manifest!(
     uart = false,
     hypervisor = false
 );
+
+// ── Syscall allowlist ─────────────────────────────────────────────────────────
+// `run_app!` emits a manifest but NOT a `VICELL_SYSCALLS` section (see
+// libs/ostd/src/lib.rs), so without this the kernel leaves the cell at its TCB's
+// `u64::MAX` allowlist (kernel/src/task/syscall.rs). List exactly what the cell
+// calls: the AppContext base set (its `run()` loop uses Recv), the PCIe device
+// path, block-driver registration, request replies, the timeout polling in
+// controller.rs (`GetTime`), the exit path, and the DMA calls behind
+// `DmaBuf::alloc`/`authorize`. `Exit`/`Yield` carry no allowlist bit and are
+// always permitted; naming them documents the intent (the macro skips them).
+api::declare_syscalls![
+    // AppContext event-loop base set.
+    Send,
+    Recv,
+    TryRecv,
+    Reply,
+    Log,
+    Heartbeat,
+    LookupService,
+    GetTime,
+    RecvTimeout,
+    // PCIe device path.
+    FindPcieDevice,
+    RequestMmio,
+    // System block-driver role.
+    RegisterBlockDriver,
+    // Clean shutdown returns through the exit path.
+    Exit,
+    // DMA: `DmaBuf::alloc` -> GrantAlloc, `DmaBuf::authorize` -> GrantDma.
+    GrantAlloc,
+    GrantDma
+];

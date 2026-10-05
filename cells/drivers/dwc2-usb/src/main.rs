@@ -17,7 +17,8 @@ use driver_dwc2_usb::Dwc2Controller;
 use ostd::io::{print, println};
 use ostd::syscall::{
     sys_force_exit, sys_lookup_service, sys_notify_on_exit, sys_recv_timeout,
-    sys_register_nic_driver, sys_spawn_from_path, sys_try_send, sys_yield, SyscallResult,
+    sys_register_nic_driver, sys_register_usb_hid_producer, sys_spawn_from_path, sys_try_send,
+    sys_yield, SyscallResult,
 };
 
 declare_manifest!(
@@ -44,6 +45,7 @@ declare_syscalls![
     SpawnFromPath,
     LookupService,
     RegisterNicDriver,
+    RegisterUsbHidProducer,
     NotifyOnExit,
     ForceExit,
     // DMA payload slots: the core reads and writes them directly.
@@ -311,6 +313,12 @@ fn cell_main() {
     // event stream into Input.
     if sys_register_nic_driver().is_err() {
         println("[dwc2-usb] ERROR: failed to register DWC2 NIC endpoint");
+    }
+    // The input service's producer gate verifies service::USB_HID_PRODUCER, a
+    // role distinct from the singleton NIC owner, so the HID event stream is
+    // authorized in addition to — never instead of — the NIC registration.
+    if sys_register_usb_hid_producer().is_err() {
+        println("[dwc2-usb] ERROR: failed to register USB HID producer role");
     }
     let mut lan_worker_tid = if lan_present { spawn_lan_worker() } else { 0 };
     let mut lan_attach_pending = lan_worker_tid != 0;

@@ -960,6 +960,114 @@ impl QemuRunner {
         }
     }
 
+    /// Boot x86_64 q35 from a Limine ISO with a USB xHCI controller and a USB
+    /// keyboard, plus a QMP monitor for keystroke injection.
+    ///
+    /// Same boot path as `boot_x86_bios`, plus `-device qemu-xhci,id=xhci` and
+    /// `-device usb-kbd,bus=xhci.0`. `-display none` (not `-nographic`) is used
+    /// so QEMU creates the graphical console `input-send-event` needs to route
+    /// keys to the USB keyboard (see `boot_with_netdev`). This is the lane for
+    /// the xHCI USB host Driver Cell (phase 03).
+    pub fn boot_x86_bios_with_xhci(iso: &str) -> Self {
+        Self::boot_x86_xhci_inner(iso, true)
+    }
+
+    /// Boot the same q35 + xHCI lane **without** a USB keyboard attached.
+    ///
+    /// The xHCI cell must observe "controller present, no device" and leave
+    /// itself idle, and the boot must still reach the shell — the xHCI gate's
+    /// no-keyboard oracle.
+    pub fn boot_x86_bios_with_xhci_no_keyboard(iso: &str) -> Self {
+        Self::boot_x86_xhci_inner(iso, false)
+    }
+
+    fn boot_x86_xhci_inner(iso: &str, keyboard: bool) -> Self {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind serial socket");
+        let port = listener.local_addr().unwrap().port();
+
+        // QMP port: pick an ephemeral port, release the listener, and let QEMU
+        // bind it as a server (`-qmp ...,server,nowait`), then connect.
+        let qmp_listener = TcpListener::bind("127.0.0.1:0").expect("probe qmp port");
+        let qmp_port = qmp_listener.local_addr().unwrap().port();
+        drop(qmp_listener);
+
+        let mut cmd = Command::new(qemu_binary_x86());
+        cmd.args([
+            "-machine",
+            "q35",
+            "-cpu",
+            "qemu64,+pdpe1gb",
+            "-m",
+            "256M",
+            "-display",
+            "none",
+            "-cdrom",
+            iso,
+            "-boot",
+            "d",
+            "-no-reboot",
+            "-device",
+            "qemu-xhci,id=xhci",
+        ]);
+        if keyboard {
+            cmd.args(["-device", "usb-kbd,bus=xhci.0"]);
+        }
+        let qmp_arg = format!("tcp:127.0.0.1:{qmp_port},server,nowait");
+        let serial_arg = format!("tcp:127.0.0.1:{port}");
+        cmd.args(["-qmp", &qmp_arg, "-serial", &serial_arg]);
+        let mut child = cmd
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("qemu-system-x86_64 must be on PATH");
+
+        let stream = accept_qemu_serial(&listener, &mut child);
+        let writer = stream.try_clone().expect("clone serial stream");
+
+        // Connect to QEMU's QMP server, retrying while it finishes starting.
+        let monitor_stream = {
+            let (tx, rx) = std::sync::mpsc::channel::<TcpStream>();
+            thread::spawn(move || {
+                for _ in 0..20 {
+                    if let Ok(s) = TcpStream::connect(format!("127.0.0.1:{qmp_port}")) {
+                        let _ = tx.send(s);
+                        return;
+                    }
+                    thread::sleep(Duration::from_millis(200));
+                }
+            });
+            rx.recv_timeout(Duration::from_secs(10)).ok()
+        };
+
+        let output = Arc::new(Mutex::new(String::new()));
+        let buf = Arc::clone(&output);
+        thread::spawn(move || {
+            let mut reader = BufReader::new(stream);
+            let mut byte = [0u8; 1];
+            loop {
+                match reader.read(&mut byte) {
+                    Ok(0) | Err(_) => break,
+                    Ok(_) => {
+                        // A poisoned lock means a previous reader panicked; drop
+                        // the byte rather than panicking this thread too.
+                        if let Ok(mut captured) = buf.lock() {
+                            captured.push(byte[0] as char);
+                        }
+                    }
+                }
+            }
+        });
+
+        Self {
+            child,
+            writer: Some(writer),
+            output,
+            temp_disk: None,
+            monitor: monitor_stream,
+        }
+    }
+
     /// Boot x86_64 q35 from a Limine ISO with BOTH an NVMe controller and the
     /// built-in ICH9 AHCI controller carrying a raw SATA image.
     ///

@@ -1,13 +1,17 @@
-//! Driver Cell registration — tracks which cells own the block, NIC, and GPU roles.
+//! Driver Cell registration — tracks which cells own the block, NIC, GPU, and
+//! USB HID producer roles.
 //!
 //! When a Tier-1 Driver Cell calls `sys_register_block_driver`,
-//! `sys_register_nic_driver`, or `sys_register_gpu_driver`, the kernel records
-//! its TID here. These registrations support service routing and interrupt
-//! ownership checks until the owning Cell exits.
+//! `sys_register_nic_driver`, `sys_register_gpu_driver`, or
+//! `sys_register_usb_hid_producer`, the kernel records its TID here. These
+//! registrations support service routing and interrupt ownership checks until the
+//! owning Cell exits.
 //!
 //! `0` means "no driver cell registered". Block can fall back to kernel-resident
 //! virtio-blk or MMC; NIC has no kernel fallback and is always a Driver Cell.
 //! GPU has no kernel fallback; compositor refuses to init until a GPU Cell registers.
+//! The USB HID producer role exists so a USB host cell can authorize raw HID
+//! events into the input service without overwriting the singleton NIC owner.
 
 use crate::sync::Spinlock;
 use core::sync::atomic::{AtomicUsize, Ordering};
@@ -35,6 +39,15 @@ static NIC_DRIVER_STATE: Spinlock<NicDriverState> = Spinlock::new(NicDriverState
 
 /// TID of the registered GPU Driver Cell (0 = none; no kernel GPU fallback).
 pub static GPU_DRIVER_CELL: AtomicUsize = AtomicUsize::new(0);
+
+/// TID of the registered USB HID event producer (0 = none).
+///
+/// Distinct from `NIC_DRIVER_STATE` on purpose: a USB host controller cell
+/// (`/bin/xhci` on a PC, `/bin/dwc2-usb` on RPi3) publishes this role to
+/// authorize raw HID events into the input service **without** taking over the
+/// singleton NIC route. The input service's producer gate resolves
+/// `service::USB_HID_PRODUCER` to this TID.
+pub static USB_HID_PRODUCER_CELL: AtomicUsize = AtomicUsize::new(0);
 /// Serializes role state with its matching service-registry publication.
 static ROLE_PUBLICATION: Spinlock<()> = Spinlock::new(());
 
@@ -140,6 +153,25 @@ pub fn deregister_gpu_driver(tid: usize) {
         .ok();
 }
 
+/// Record `tid` as the active USB HID event producer.
+///
+/// This never touches [`NIC_DRIVER_STATE`]: on a PC that already has
+/// e1000/virtio-net, a USB cell claiming the NIC role would steal the network
+/// route. `warn!` — see `register_block_driver`; this is the boot-integrity
+/// marker the xhci integration test asserts and the identity the input
+/// service's producer gate verifies.
+pub fn register_usb_hid_producer(tid: usize) {
+    USB_HID_PRODUCER_CELL.store(tid, Ordering::Release);
+    log::warn!("[driver_cell] USB HID producer registered: tid={}", tid);
+}
+
+/// Clear the USB HID producer registration (called on cell exit/kill).
+pub fn deregister_usb_hid_producer(tid: usize) {
+    USB_HID_PRODUCER_CELL
+        .compare_exchange(tid, 0, Ordering::AcqRel, Ordering::Relaxed)
+        .ok();
+}
+
 /// TID of the registered input service Cell (0 = unregistered).
 /// Set by the loader after spawning `/bin/input`; cleared on its death.
 pub static INPUT_CELL_TID: AtomicUsize = AtomicUsize::new(0);
@@ -179,12 +211,13 @@ pub fn deregister_all_for(tid: usize) {
     deregister_block_driver(tid);
     deregister_nic_driver(tid);
     deregister_gpu_driver(tid);
+    deregister_usb_hid_producer(tid);
 }
 #[cfg(test)]
 mod tests {
     use super::{
         deregister_all_for, publish_role_or_rollback, NicDriverState, BLOCK_DRIVER_CELL,
-        GPU_DRIVER_CELL, INPUT_CELL_TID, NIC_DRIVER_STATE,
+        GPU_DRIVER_CELL, INPUT_CELL_TID, NIC_DRIVER_STATE, USB_HID_PRODUCER_CELL,
     };
     use core::sync::atomic::{AtomicUsize, Ordering};
 
@@ -196,6 +229,7 @@ mod tests {
         };
         GPU_DRIVER_CELL.store(owner_tid, Ordering::Release);
         INPUT_CELL_TID.store(owner_tid, Ordering::Release);
+        USB_HID_PRODUCER_CELL.store(owner_tid, Ordering::Release);
     }
 
     fn reset_roles() {
@@ -215,6 +249,7 @@ mod tests {
         assert_eq!(state.virtio_irq, 29);
         assert_eq!(GPU_DRIVER_CELL.load(Ordering::Acquire), 41);
         assert_eq!(INPUT_CELL_TID.load(Ordering::Acquire), 41);
+        assert_eq!(USB_HID_PRODUCER_CELL.load(Ordering::Acquire), 41);
 
         deregister_all_for(41);
 
@@ -224,6 +259,7 @@ mod tests {
         assert_eq!(state.virtio_irq, 0);
         assert_eq!(GPU_DRIVER_CELL.load(Ordering::Acquire), 0);
         assert_eq!(INPUT_CELL_TID.load(Ordering::Acquire), 0);
+        assert_eq!(USB_HID_PRODUCER_CELL.load(Ordering::Acquire), 0);
 
         seed_roles(22, 0);
 

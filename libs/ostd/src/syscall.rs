@@ -2325,6 +2325,25 @@ pub fn sys_register_nic_driver() -> Result<(), SyscallError> {
     }
 }
 
+/// Register the calling cell as the USB HID event producer.
+///
+/// Publishes the caller's TID under `service::USB_HID_PRODUCER`, the identity the
+/// input service's producer gate verifies before accepting raw `USB_HID_HOST`
+/// events. Requires `UsbDriverCap` (the `usb_driver` launch ceiling).
+///
+/// This is deliberately **not** `sys_register_nic_driver()`: the NIC role is a
+/// singleton, and a USB host cell (e.g. `/bin/xhci` on a PC that already has
+/// e1000/virtio-net) must not overwrite it or it would steal the network route.
+pub fn sys_register_usb_hid_producer() -> Result<(), SyscallError> {
+    // SAFETY: pure register syscall; kernel validates UsbDriverCap at dispatch.
+    let ret = unsafe { syscall(ViSyscall::RegisterUsbHidProducer, 0, 0, 0, 0) };
+    if ret == 0 {
+        Ok(())
+    } else {
+        Err(SyscallError::PermissionDenied)
+    }
+}
+
 /// Register the calling cell as the active GPU driver.
 ///
 /// Uses `RegisterService` with `service::GPU_DRIVER` + `tid=0` (self-registration).

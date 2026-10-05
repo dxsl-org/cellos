@@ -349,6 +349,16 @@ impl CapSet {
         if path == "/bin/bcm-display" {
             self.mmio_devices |= crate::resource_registry::DEV_DISPLAY;
         }
+        // The xHCI USB host controller cell: PCIe BAR claim (sys_find_pcie_device
+        // / sys_request_mmio) plus USB-host authority, which the input service
+        // verifies via `sys_lookup_service(service::NIC_DRIVER)` before accepting
+        // this cell's raw key events — the same producer mechanism /bin/dwc2-usb
+        // uses.
+        if path == "/bin/xhci" {
+            self.pcie_driver = true;
+            self.usb_driver = true;
+            self.mmio_devices |= crate::resource_registry::DEV_DISPLAY;
+        }
         if path == "/bin/dwc2-usb" {
             self.usb_driver = true;
         }

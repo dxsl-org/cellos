@@ -407,8 +407,9 @@ This remains `qemu`-ceiling work.
 - x86 PC/server enablement has its contract but no qualified machine. A generic
   `pc/x86_64-pc` descriptor and the HCL model landed in phase 01 (2026-10-04,
   `--features board-x86-pc`); there is still no machine-specific descriptor and
-  no HCL row, no AHCI driver in the Cellos source, xHCI frozen out of the G1–G3
-  driver plan by decision, the e1000 cell fail-closing every Ethernet binding
+  no HCL row, the AHCI/SATA storage family shipped in phases 02a/02b (`ahci-x86`
+  5/5 with a two-boot persistence oracle), xHCI is being reopened for this lane
+  by the owner's 2026-10-05 decision, the e1000 cell fail-closing every Ethernet binding
   other than 82540EM (`kernel/src/task/drivers/pcie_ecam.rs:894`), no ACPI DMAR
   discovery (`kernel/src/task/drivers/iommu_x86.rs:59-60`), and no Intel VMX
   backend. What is **witnessed** is the q35 software lane: Cellos boots there to

@@ -7,7 +7,9 @@ use ostd::syscall::{sys_get_time_ms, sys_yield};
 
 pub mod dispatch;
 pub mod dwc2;
-pub mod hid;
+/// HID decode is single-copy in `driver-hid` (shared with the xHCI cell); this
+/// crate keeps the BCM controller and transfer engine only.
+pub use driver_hid as hid;
 pub mod hub;
 pub mod lan9514;
 pub mod lan_ipc;

@@ -196,16 +196,19 @@ pub fn main() {
     }
 }
 
-/// Registered raw-event producers. The DWC2 host is the sole USB producer:
+/// Registered raw-event producers. The USB host is the sole USB producer:
 /// isolated HID workers return decoded frames to that host instead of acquiring
 /// a second input-service identity.
 const MAX_EVENT_SOURCES: usize = 16;
 
 /// TIDs allowed to push raw `[opcode][code][value]` events.
 ///
-/// Sender 0 is the kernel and is implicit. For DWC2, Input accepts only the
-/// kernel's current NIC-driver endpoint. The recorded identity always comes
-/// from receive metadata, never from a payload.
+/// Sender 0 is the kernel and is implicit. Input accepts only the tid the kernel
+/// has published as `service::USB_HID_PRODUCER` (via `sys_register_usb_hid_producer`,
+/// syscall 423) — the singleton `service::NIC_DRIVER` role is deliberately not
+/// consulted, so a USB host cell on a PC with e1000/virtio-net cannot steal the
+/// network route. The recorded identity always comes from receive metadata,
+/// never from a payload.
 struct EventSources {
     tids: [usize; MAX_EVENT_SOURCES],
     kinds: [u8; MAX_EVENT_SOURCES],
@@ -232,7 +235,7 @@ impl EventSources {
             .any(|(&source, &kind)| source == tid && kind == api::ipc::input_source::USB_HID_HOST)
     }
 
-    /// Record the kernel-verified DWC2 host as the USB producer.
+    /// Record the kernel-verified USB HID producer.
     fn register(&mut self, tid: usize, kind: u8) -> bool {
         if let Some(index) = self.tids[..self.len]
             .iter()
@@ -242,7 +245,7 @@ impl EventSources {
         }
         if tid == 0
             || kind != api::ipc::input_source::USB_HID_HOST
-            || sys_lookup_service(service::NIC_DRIVER) != Some(tid)
+            || sys_lookup_service(service::USB_HID_PRODUCER) != Some(tid)
             || self.len == MAX_EVENT_SOURCES
         {
             return false;

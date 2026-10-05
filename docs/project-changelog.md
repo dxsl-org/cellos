@@ -4,6 +4,56 @@
 
 ## [Unreleased] Development-first hardware-constrained execution
 
+- **x86 PC lane phase 03b: a kernel-verified USB HID producer role
+  (`qemu` ceiling).** Decoded xHCI keystrokes now reach the shell without
+  touching the singleton NIC role: append-only syscall `RegisterUsbHidProducer`
+  (423) with `service::USB_HID_PRODUCER` (17), dispatch-gated on the `usb_driver`
+  cap and — because the u64 allowlist bitmap is full (0–62 assigned, 63 is the
+  VFS-mutate declaration) — **sharing allowlist bit 50** with the
+  driver-registration family (owner-approved; the cap gate is what actually
+  authorizes it). `cells/services/input` accepts `USB_HID_HOST` from that role
+  instead of the NIC role, `driver-xhci` never claims the NIC role, and
+  `driver-dwc2-usb` publishes both because on RPi3 the LAN9514 *is* the NIC. The
+  x86 image now packages `/bin/input` and builds init with `--features input`
+  (source untouched), and the `qemu-x86_64-boot` CI job mirrors that composition.
+  Evidence: `xhci-x86` 4/4 with the injected key echoed by the shell
+  (`shell: command not found: q`) and zero `[kernel] syscall denied` lines in the
+  xhci lane and a production SATA boot; regressions against a rebuilt production
+  ISO — `x86_64-boot` 9/9, `ahci-x86` 5/5, `nvme-x86` 3/3, `pcie-multibus-x86`
+  2/2, `driver-registration-contract` 3/3, `cellos-kernel` 187/187,
+  `cellos-boards` 13/13, HAL boundaries, both ARM checks. Review closed four
+  items: the CI mirror, an explicit `declare_syscalls!` for `/bin/xhci` **and**
+  `/bin/ahci` (both had been running at the kernel's `u64::MAX` default; the
+  section is now present and narrow), and re-resolving a dead input-service route
+  on forward failure. `nvme`/`e1000` still run undeclared — pre-existing, recorded
+  as follow-up hygiene.
+
+- **x86 PC lane phase 03: xHCI + HID — controller, enumeration, in-cell decode
+  (`qemu` ceiling).** New Driver Cell `cells/drivers/xhci/` (1472 lines) brings
+  the controller up (BAR claim, HCRST, command/event rings, port reset), addresses
+  a slot, enumerates the device, parses the HID boot-keyboard interface and
+  completes one interrupt-IN transfer; a machine with no controller leaves the
+  cell idle. The HID decode path was factored into a shared crate (`driver-hid`)
+  that `dwc2-usb` now re-exports, so the BCM lane keeps one implementation (ARM
+  builds verified). `/bin/xhci` was granted `pcie_driver` + `usb_driver` +
+  `DEV_DISPLAY` in the three launch rows and the dev policy. Evidence through the
+  standard packaging path: `xhci-x86` 4/4 with `controller init ok caplen=0x40
+  slots=64 ports=8 intrs=16` → `port 5 reset speed=3` → `slot 1 addressed` →
+  `enumerated device vid=0x0627 pid=0x0001` → `HID boot keyboard interface=0
+  endpoint=0x81` → `key down code=0x10`; regressions `x86_64-boot` 9/9 (COM1 input
+  still works), `ahci-x86` 5/5, `nvme-x86` 3/3, `pcie-multibus-x86` 2/2,
+  `driver-registration-contract` 3/3, `cellos-boards` 13/13, `cellos-kernel`
+  187/187, HAL boundaries, both ARM checks. An independent review found the root
+  cause of the initial Enable Slot timeout — every operational-register access
+  omitted `CAPLENGTH`, so HCRST/RS/CRCR wrote into capability space while the polls
+  read capability fields and reported success — plus five follow-on defects (slot
+  ID bits, IN-endpoint DCI, the HID subclass descriptor offset, HCSPARAMS2's
+  scratchpad fields, and the fact that `sys_register_nic_driver()` is the
+  **singleton NIC owner**). All fixed. The NIC collision is why key *delivery* is
+  phase 03b, a distinct kernel-verified USB HID producer role chosen by the
+  repository owner instead of letting xHCI steal the network route. No physical
+  machine is claimed; the HCL machine table stays empty.
+
 - **x86 PC lane phase 02b: AHCI part B — data path, block registration,
   persistence (`qemu` ceiling).** `cells/drivers/ahci/` gained READ/WRITE DMA EXT
   (48-bit LBA, PRDT transfers, capacity from IDENTIFY), a new `dispatch.rs`, and

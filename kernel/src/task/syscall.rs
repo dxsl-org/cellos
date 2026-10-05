@@ -1825,6 +1825,48 @@ fn caller_has_mmio_device(caller_id: usize, device: u8) -> bool {
     caller_has_cap(caller_id, |t| t.mmio_devices & device != 0)
 }
 
+/// 423: authorize and publish the USB HID event producer role.
+///
+/// Deliberately separate from [`register_driver_service`]: that helper accepts
+/// either `PcieDriverCap` or `UsbDriverCap` and publishes the singleton NIC
+/// role. A USB host cell on a PC that already has e1000/virtio-net must hold
+/// only `UsbDriverCap` and must never overwrite `service::NIC_DRIVER`, so this
+/// path checks `usb_driver_cap` alone and publishes `service::USB_HID_PRODUCER`.
+fn register_usb_hid_producer_role(caller_id: usize) -> Result<usize, SyscallError> {
+    let scheduler = crate::task::SCHEDULER.lock();
+    let authorized = scheduler
+        .as_ref()
+        .and_then(|scheduler| scheduler.tasks.get(&caller_id))
+        .is_some_and(|task| {
+            task.usb_driver_cap.is_some()
+                && !matches!(
+                    &task.state,
+                    crate::task::tcb::TaskState::Retiring | crate::task::tcb::TaskState::Terminated
+                )
+        });
+    if !authorized {
+        return Err(SyscallError::PermissionDenied);
+    }
+
+    let published = crate::task::drivers::driver_cell::publish_role_or_rollback(
+        caller_id,
+        crate::task::drivers::driver_cell::register_usb_hid_producer,
+        || {
+            crate::cell::service_registry::register(
+                api::syscall::service::USB_HID_PRODUCER,
+                caller_id,
+            )
+        },
+        crate::task::drivers::driver_cell::deregister_usb_hid_producer,
+    );
+    drop(scheduler);
+    if published {
+        Ok(0)
+    } else {
+        Err(SyscallError::InvalidInput)
+    }
+}
+
 fn caller_has_platform(caller_id: usize) -> bool {
     caller_has_cap(caller_id, |t| t.platform_cap.is_some())
 }
@@ -3397,6 +3439,8 @@ pub enum Syscall {
     RegisterBlockDriver,
     /// 417: RegisterNicDriver — announce caller as the active NIC driver.
     RegisterNicDriver,
+    /// 423: RegisterUsbHidProducer — announce caller as the USB HID event producer.
+    RegisterUsbHidProducer,
     /// 418: FindPcieDevice — locate a PCIe device by class/subclass/prog_if.
     FindPcieDevice {
         class: u8,
@@ -3683,6 +3727,7 @@ fn syscall_to_vi(syscall: &Syscall) -> Option<api::syscall::ViSyscall> {
         Syscall::PauseService { .. } => V::PauseService,
         Syscall::RegisterBlockDriver => V::RegisterBlockDriver,
         Syscall::RegisterNicDriver => V::RegisterNicDriver,
+        Syscall::RegisterUsbHidProducer => V::RegisterUsbHidProducer,
         Syscall::FindPcieDevice { .. } => V::FindPcieDevice,
         Syscall::Exec { .. } => V::Exec,
         Syscall::LookupService { .. } => V::LookupService,
@@ -6904,6 +6949,13 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             crate::task::drivers::driver_cell::deregister_nic_driver,
         ),
 
+        // 423: RegisterUsbHidProducer — announce caller as the USB HID event
+        // producer, publishing service::USB_HID_PRODUCER for the input service's
+        // producer gate. Requires UsbDriverCap and never touches the singleton
+        // NIC role, so an xHCI cell on a PC with e1000/virtio-net cannot steal
+        // the network route.
+        Syscall::RegisterUsbHidProducer => register_usb_hid_producer_role(caller_id),
+
         // 418: FindPcieDevice — query ECAM table for a device by class triple.
         // Writes a `PcieDeviceInfo` record to `out_ptr` and returns 1 if found.
         // Requires PcieDriverCap; also records BDF ownership in resource_registry.
@@ -8419,6 +8471,7 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
         },
         ViSyscall::RegisterBlockDriver => Syscall::RegisterBlockDriver,
         ViSyscall::RegisterNicDriver => Syscall::RegisterNicDriver,
+        ViSyscall::RegisterUsbHidProducer => Syscall::RegisterUsbHidProducer,
         ViSyscall::FindPcieDevice => Syscall::FindPcieDevice {
             class: a0 as u8,
             subclass: a1 as u8,

@@ -82,6 +82,16 @@ $cmd = "cargo build --release -p service-config --target $target $buildStd 2>&1"
 Invoke-Expression $cmd | Select-Object -Last 10
 if ($LASTEXITCODE -ne 0) { Write-Warning "service-config build failed (exit $LASTEXITCODE)" }
 
+# Build the input service: keyboard/mouse event routing. The xHCI USB host cell
+# delivers decoded HID keys through it (producer role service::USB_HID_PRODUCER)
+# and the kernel console driver relays COM1 bytes to it as EV_ASCII, so the lane
+# needs it in the image. init must also be built with the `input` feature below
+# for its service table to spawn /bin/input.
+Write-Host "Building service-input..."
+$cmd = "cargo build --release -p service-input --target $target $buildStd 2>&1"
+Invoke-Expression $cmd | Select-Object -Last 10
+if ($LASTEXITCODE -ne 0) { Write-Warning "service-input build failed (exit $LASTEXITCODE)" }
+
 # The e1000 data-plane gate requires a freshly built /bin/net. Invalidate both
 # the prior net binary and packaged image first: no failed build may leave a
 # stale image available to the subsequent kernel/ISO steps.
@@ -106,7 +116,7 @@ if ($LASTEXITCODE -ne 0 -or -not (Test-Path $netSrc)) {
 # nvme/e1000 = PCIe Driver Cells (init spawns them; PcieDriverCap is
 # path-granted by the kernel loader). Each exits cleanly when its device
 # is absent, so diskless/NIC-less boots are unaffected.
-foreach ($pkg in "service-platform", "driver-nvme", "driver-e1000", "driver-ahci") {
+foreach ($pkg in "service-platform", "driver-nvme", "driver-e1000", "driver-ahci", "driver-xhci") {
     Write-Host "Building $pkg..."
     $cmd = "cargo build --release -p $pkg --target $target $buildStd 2>&1"
     Invoke-Expression $cmd | Select-Object -Last 10
@@ -126,9 +136,11 @@ $env:RUSTFLAGS = ""
 # Build init and refresh the separately-embedded init ELF (kernel spawns it from
 # embedded bytes at boot). Rebuilding here keeps init in lockstep with the other
 # cells' ostd (G2 spawn_from_path routing) instead of a stale committed binary.
+# `input` enables /bin/input in init's service table so the xHCI HID producer and
+# the kernel's COM1 EV_ASCII relay have an input service to deliver to.
 Write-Host "Building app-init..."
 $env:RUSTFLAGS = $rustflags
-$cmd = "cargo build --release -p app-init --target $target $buildStd 2>&1"
+$cmd = "cargo build --release -p app-init --features input --target $target $buildStd 2>&1"
 Invoke-Expression $cmd | Select-Object -Last 5
 if ($LASTEXITCODE -ne 0) { Write-Warning "app-init build failed" }
 $env:RUSTFLAGS = ""
@@ -148,10 +160,12 @@ $cells = @(
     @{ Bin = "service-vfs";    Dst = "/bin/vfs"    },
     @{ Bin = "service-config"; Dst = "/bin/config" },
     @{ Bin = "service-net";    Dst = "/bin/net"    },
+    @{ Bin = "service-input";  Dst = "/bin/input"  },
     @{ Bin = "platform";       Dst = "/bin/platform" },
     @{ Bin = "driver-nvme";    Dst = "/bin/nvme"   },
     @{ Bin = "driver-e1000";   Dst = "/bin/e1000"  },
     @{ Bin = "driver-ahci";    Dst = "/bin/ahci"   },
+    @{ Bin = "driver-xhci";    Dst = "/bin/xhci"   },
     @{ Bin = "ls";             Dst = "/bin/ls"     },
     @{ Bin = "cat";            Dst = "/bin/cat"    },
     @{ Bin = "echo";           Dst = "/bin/echo"   },
@@ -206,7 +220,7 @@ foreach ($c in $cells) {
     }
 }
 
-foreach ($required in @('app-shell', 'service-vfs', 'service-config', 'service-net', 'platform', 'driver-nvme', 'driver-e1000', 'driver-ahci')) {
+foreach ($required in @('app-shell', 'service-vfs', 'service-config', 'service-net', 'service-input', 'platform', 'driver-nvme', 'driver-e1000', 'driver-ahci', 'driver-xhci')) {
     if ($required -notin $found) {
         throw "Required x86_64 cell missing from image inputs: $required"
     }

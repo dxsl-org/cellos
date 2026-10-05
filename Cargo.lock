@@ -1035,6 +1035,7 @@ version = "0.1.0"
 dependencies = [
  "api",
  "cell-build",
+ "driver-hid",
  "hal-soc-bcm27xx",
  "ostd",
  "types",
@@ -1091,6 +1092,13 @@ dependencies = [
  "cell-build",
  "ostd",
  "types",
+]
+
+[[package]]
+name = "driver-hid"
+version = "0.1.0"
+dependencies = [
+ "api",
 ]
 
 [[package]]
@@ -1217,6 +1225,17 @@ dependencies = [
  "ostd",
  "types",
  "wasmi",
+]
+
+[[package]]
+name = "driver-xhci"
+version = "0.1.0"
+dependencies = [
+ "api",
+ "cell-build",
+ "driver-hid",
+ "ostd",
+ "types",
 ]
 
 [[package]]

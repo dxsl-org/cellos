@@ -57,7 +57,8 @@ never qualify a board. QEMU-first is what makes the phases cheap to iterate:
 | 01 | [x86_64-pc board descriptor + HCL model](phase-01-descriptor-and-hcl.md) | board facts | ISO boots on `q35` with the new descriptor; `x86_64-boot` stays 7/7 | **completed** (2026-10-04, `qemu` ceiling) |
 | 02a | [AHCI part A — PCI binding, HBA init, IDENTIFY](phase-02a-ahci-hba-init.md) | storage | `ahci-x86` binds controller, HBA/port up, IDENTIFY ok; `x86_64-boot` 7/7 | **completed** (2026-10-05, `qemu` ceiling) |
 | 02b | [AHCI part B — data path, block registration, persistence](phase-02b-ahci-block-persistence.md) | storage | `ahci-x86` two-boot persistence on the same raw image | **completed** (2026-10-05, `qemu` ceiling) |
-| 03 | [xHCI + HID family](phase-03-xhci-hid.md) | USB | new `xhci-x86` suite: controller init, HID boot keyboard report reaches the input path | pending |
+| 03 | [xHCI + HID family](phase-03-xhci-hid.md) | USB | `xhci-x86` 4/4: controller init, port reset, enumeration (0627:0001), HID boot keyboard, injected key decoded in-cell | **completed** (2026-10-05, `qemu` ceiling; key *delivery* split to 03b by owner decision) |
+| 03b | [USB HID producer role — key delivery](phase-03b-usb-hid-producer.md) | USB input | injected key echoed by the shell; xHCI never registers as NIC owner; all lanes + ARM checks green | **completed** (2026-10-05, `qemu` ceiling; ABI 423 + shared allowlist bit 50 approved by the owner) |
 | 04a | [igb part A — identity, registration, Tx/Rx](phase-04a-igb-identity-txrx.md) | network | `igb-x86`: `8086:10c9` no longer rejected, registration, first Tx/Rx | pending |
 | 04b | [igb part B — DHCP data plane and VT-d variant](phase-04b-igb-dhcp-vtd.md) | network | `igb-x86`: DHCP ordinary + VT-d (isolation active before DMA) | pending |
 | 05 | [ACPI DMAR discovery → real IOMMU](phase-05-acpi-dmar.md) | IOMMU | DMAR-less boot stays fail-closed; `intel-iommu` boot programs per-device domains; q35 hardcode removed | pending |
@@ -195,6 +196,44 @@ artifact set. Eight consistency findings fixed in this same change:
 8. Descriptor/HAL/README/changelog reframed as a **COM1-required compatibility
    contract**, not a universal claim about every PC.
 
+### Phase 03b (2026-10-05, `qemu` ceiling)
+
+New append-only syscall `RegisterUsbHidProducer = 423` (next free after 422) with
+`service::USB_HID_PRODUCER = 17` (next free id) and — because the u64 allowlist
+bitmap is full (0–62 assigned, 63 is the VFS-mutate declaration) — **sharing
+allowlist bit 50** with the driver-registration family, gated in dispatch on the
+`usb_driver` cap. Approved by the repository owner together with the `/bin/xhci`
+capability grant, the `unsafe` allowlist entries and the image composition change.
+`cells/services/input` now accepts `USB_HID_HOST` from the producer role instead
+of the singleton NIC role; `driver-xhci` uses it and never the NIC one;
+`driver-dwc2-usb` publishes both (on RPi3 the LAN9514 *is* the NIC).
+
+Gate: `xhci-x86` 4/4 with the injected keystroke echoed by the shell
+(`shell: command not found: q`), zero `[kernel] syscall denied` in the xhci lane
+and in a production SATA boot; the x86 image now packages `/bin/input` and builds
+init with `--features input`, and the `qemu-x86_64-boot` CI job mirrors that
+composition. Review of 03b found four items, all closed: the CI mirror, an
+explicit `declare_syscalls!` for **both** `/bin/xhci` and `/bin/ahci` (both ran at
+`u64::MAX`; the section is now present and narrow — mask `0x000501e02200040f`),
+and re-resolving a dead input-service route on forward failure. Regressions
+against a rebuilt production ISO: `x86_64-boot` 9/9, `ahci-x86` 5/5, `nvme-x86`
+3/3, `pcie-multibus-x86` 2/2, `driver-registration-contract` 3/3, `cellos-kernel`
+187/187, `cellos-boards` 13/13, HAL boundaries, both ARM checks.
+Note: `nvme`/`e1000` still run without a declaration (`u64::MAX`) — pre-existing,
+out of this lane's scope, recorded as follow-up hygiene.
+
+### Phase 03 review (2026-10-05, independent reviewer)
+
+Verdict: the wire-up, the capability grant and the shared-HID move were sound; the
+controller did not work. One root cause — every operational-register access
+omitted `CAPLENGTH`, so HCRST/RS/CRCR wrote into capability space while the HCH/CNR
+polls read capability fields and reported success — plus five follow-on defects
+(slot ID missing from the slot-scoped commands, IN-endpoint DCI off by one, the
+HID subclass read from the wrong descriptor byte, HCSPARAMS2's scratchpad fields
+swapped, and the singleton-NIC producer collision). All fixed. The NIC collision
+was escalated to the repository owner, who chose a distinct kernel-verified USB
+HID producer role (phase 03b) rather than letting xHCI steal the network route.
+
 ### Phase 02b review (2026-10-05, independent reviewer)
 
 Verdict: the data path is genuinely exercised (a two-boot oracle, not a boot
@@ -290,3 +329,31 @@ Tier: Full (7 phases)
   no implementation, board qualification, or evidence-ceiling change.
 - 2026-10-04 — plan created from `docs/roadmap/hardware-tracks.md` X86-PC-0..7
   (roadmap entries added the same day). No code or hardware claim.
+
+### Phase 03b — USB HID producer role (2026-10-05, `qemu` ceiling)
+
+Append-only ABI addition (Law-1): `ViSyscall::RegisterUsbHidProducer = 423`,
+`service::USB_HID_PRODUCER = 17`. Both are the next free values: 423 is the first
+opcode after `PauseService = 422`; 17 is the first service id after 16 (1–13 are
+the shipped services, 14 is `HYPERVISOR_SERVICE_ID`, 15 `AI`, 16 `OCEL_JS`). The
+allowlist **bit** reuses the DriverRegistration bit 50 rather than taking a fresh
+one, because the `u64` syscall allowlist is full — bits 0–62 are assigned to
+syscalls and 63 is the VFS-mutate declaration — and the new opcode carries exactly
+the `usb_driver` authority `RegisterNicDriver` does; a distinct bit would be
+neither append-only nor necessary (the `usb_driver` cap check at dispatch is the
+real gate). This follows the recorded convention for `WaitCompletion` (shares 42),
+`StateStashClear` (shares 34) and `SpawnFromElf` (shares 7).
+
+**Law-1 confirmation required before merge:** the new syscall number and service
+id are an ABI change; the repository owner confirms them before this lands. The
+implementation is append-only and reversible by deleting the variant, its
+`From<usize>` mapping, the service constant, and the three call sites.
+
+Also delivered: the x86 image now packages `/bin/input` and builds init with the
+`input` feature (`scripts/build-x86_64-cells.ps1`), because the phase-03b oracle
+requires the shell to receive the injected key through the input service; the
+kernel's COM1 `EV_ASCII` relay and the xHCI `USB_HID_PRODUCER` producer both feed
+that service. Networking is untouched: neither `/bin/e1000` nor `/bin/virtio-net`
+changes, and `/bin/xhci` never calls `sys_register_nic_driver()`.
+
+Evidence: `evidence/phase-03b-usb-hid-producer.log`.

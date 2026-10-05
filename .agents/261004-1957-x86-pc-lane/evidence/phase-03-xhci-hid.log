@@ -1,0 +1,41 @@
+# Phase 03 — xHCI + HID — QEMU gate transcript (2026-10-05)
+
+## Gate commands
+RUSTFLAGS="-C relocation-model=pic" cargo build -p driver-xhci --target x86_64-unknown-none
+pwsh -NoProfile -File scripts/build-x86_64-cells.ps1
+cargo build --release -p cellos-kernel --target x86_64-unknown-none --features board-x86-pc
+X86_ISO_ROOT=build/x86-pc-lane/iso-root bash scripts/x86/make-iso-ci.sh build/x86-pc-lane/vicell-x86-xhci.iso
+VICELL_XHCI_ISO=build/x86-pc-lane/vicell-x86-xhci.iso cargo test --test xhci-x86 --target x86_64-unknown-linux-gnu -- --nocapture
+
+## Packaging (F1/F5)
+Building driver-xhci...
+   Compiling driver-xhci v0.1.0 (/home/dmin/cellos/cells/drivers/xhci)
+NOTE: [[crate]] driver-xhci is no longer needed — tighten the allowlist
+OK:   F5 — rustc f53b654a8882 is the pinned nightly-2026-05-01
+OK:   F1 — 106 crates and 676 files scanned; unsafe confined to 57 allowlisted files
+OK:   signed 15 cell(s) with the dev key after a passing F1/F5 check
+  Found: driver-xhci (47 KB) -> /bin/xhci
+  kernel_fs.img created: 4096 KB
+
+## xhci-x86 suite — 4/4 PASS (final)
+test xhci_boot_without_keyboard_reaches_shell_x86 ... ok
+test xhci_com1_input_still_works_x86 ... ok
+test xhci_driver_cell_enumerates_usb_keyboard_x86 ... ok
+test xhci_injected_key_decodes_in_cell_x86 ... [test] QMP input-send-event key="q"
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 16.57s
+
+## Enumeration + injected-key transcript (from the preceding run, same code)
+USER: [xhci] BAR claim ok base=0xfebd4000 len=0x4000
+USER: [xhci] controller init ok caplen=0x40 version=0x0100 slots=64 ports=8 intrs=16
+USER: [xhci] port 5 reset speed=3
+USER: [xhci] slot 1 addressed
+USER: [xhci] enumerated device vid=0x0627 pid=0x0001
+USER: [xhci] HID boot keyboard interface=0 endpoint=0x81 mps=8 interval=7
+USER: [xhci] USB HID keyboard ready vid=0x0627 pid=0x0001
+USER: Cellos > [xhci] key down code=0x10
+USER: [xhci] key up code=0x10
+USER: [xhci] key down code=0x10
+USER: [xhci] key up code=0x10
+
+## Pending: shell echo
+The injected key reaches the cell's HID decode ([xhci] key down/up code=0x10). Delivery to the shell needs the input service to accept this cell as a raw producer; that gate today accepts only the singleton service::NIC_DRIVER tid, which this cell must not claim. Key delivery is therefore pending the owner's kernel-verified USB-input-producer role.

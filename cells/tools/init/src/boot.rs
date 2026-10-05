@@ -167,7 +167,13 @@ pub(crate) fn prepare_service(path: &str) {
         #[cfg(not(feature = "board-rpi3"))]
         let _ = sys_spawn_from_path(VIRTIO_NET_DRIVER);
         let _ = sys_spawn_from_path("/bin/e1000");
+        #[cfg(feature = "usb-host")]
         let _ = sys_spawn_from_path("/bin/dwc2-usb");
+        // x86_64 PC lane (phase 03): the xHCI USB host cell, on the same USB
+        // edge. It idles when the machine has no xHCI controller, so this spawn
+        // is inert on every other profile.
+        #[cfg(target_arch = "x86_64")]
+        let _ = sys_spawn_from_path("/bin/xhci");
         if sys_lookup_service(service::BLOCK_DRIVER).is_none() {
             let _ = sys_spawn_from_path("/bin/nvme");
         }

@@ -924,8 +924,13 @@ jobs:
           cargo build --release
           --target x86_64-unknown-none
           -Z build-std=core,alloc
-          -p app-init -p app-shell -p service-vfs -p service-config
-          -p service-platform -p driver-nvme -p driver-e1000 -p driver-ahci -p app-sys-tools
+          -p app-shell -p service-vfs -p service-config
+          -p service-input
+          -p service-platform -p driver-nvme -p driver-e1000 -p driver-ahci -p driver-xhci -p app-sys-tools
+          && cargo build --release
+          --target x86_64-unknown-none
+          -Z build-std=core,alloc
+          -p app-init --features input
 
       # kernel_fs.img is a gitignored build artifact; the committed copy goes
       # stale against the kernel ABI — assemble a fresh one (mirrors
@@ -948,18 +953,21 @@ jobs:
           source scripts/lib-sign-cells.sh
           sign_cells \
             "$REL/app-shell" "$REL/service-vfs" "$REL/service-config" \
+            "$REL/service-input" \
             "$REL/platform" "$REL/driver-nvme" "$REL/driver-e1000" \
-            "$REL/driver-ahci" \
+            "$REL/driver-ahci" "$REL/driver-xhci" \
             "$REL/ls" "$REL/cat" "$REL/echo" "$REL/ps"
           python3 tools/mkfat32.py \
             kernel/src/embedded-x86_64/kernel_fs.img \
             "$REL/app-shell"      /bin/shell \
             "$REL/service-vfs"    /bin/vfs \
             "$REL/service-config" /bin/config \
+            "$REL/service-input"  /bin/input \
             "$REL/platform"       /bin/platform \
             "$REL/driver-nvme"    /bin/nvme \
             "$REL/driver-e1000"   /bin/e1000 \
             "$REL/driver-ahci"    /bin/ahci \
+            "$REL/driver-xhci"    /bin/xhci \
             "$REL/ls"             /bin/ls \
             "$REL/cat"            /bin/cat \
             "$REL/echo"           /bin/echo \
@@ -992,6 +1000,20 @@ jobs:
           cargo test
           --manifest-path tests/integration/Cargo.toml
           --test ahci-x86
+          --target x86_64-unknown-linux-gnu
+          -- --nocapture
+
+      # Phase 03: the xHCI USB host cell's lane — q35 with `qemu-xhci` + a
+      # `usb-kbd`, a QMP monitor injecting one keystroke, plus the no-keyboard
+      # boot. `VICELL_XHCI_ISO` pins the ISO the job just built (which now
+      # carries /bin/xhci).
+      - name: xHCI integration test (x86_64, USB keyboard attached)
+        env:
+          VICELL_XHCI_ISO: ${{ github.workspace }}/build/vicell-x86.iso
+        run: >
+          cargo test
+          --manifest-path tests/integration/Cargo.toml
+          --test xhci-x86
           --target x86_64-unknown-linux-gnu
           -- --nocapture
 

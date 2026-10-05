@@ -1,0 +1,17 @@
+[package]
+name = "driver-hid"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+
+# Single-copy HID decode shared by every USB host controller cell
+# (`driver-dwc2-usb`, `driver-xhci`). Controller-agnostic: descriptors,
+# boot-protocol reports, evdev translation and LED output reports only — no
+# MMIO, no DMA, no `unsafe`. `api` supplies the input-service wire opcodes and
+# LED bit map.
+[lib]
+name = "driver_hid"
+path = "src/lib.rs"
+
+[dependencies]
+api = { path = "../../../libs/api", version = "0.1.0" }

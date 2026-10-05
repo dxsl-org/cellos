@@ -1,0 +1,154 @@
+# phase 03b — USB HID producer role — gate transcript (2026-10-05)
+# tree: 295720ea9
+
+### CMD: bash -c cd /home/dmin/cellos && RUSTFLAGS="-C relocation-model=pic" cargo build -p driver-xhci -p driver-dwc2-usb --target x86_64-unknown-none 2>&1 | tail -4
+   Compiling driver-dwc2-usb v0.1.0 (/home/dmin/cellos/cells/drivers/dwc2-usb)
+   Compiling driver-xhci v0.1.0 (/home/dmin/cellos/cells/drivers/xhci)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.16s
+### EXIT: 0
+
+### CMD: bash -c cd /home/dmin/cellos && pwsh -NoProfile -File scripts/build-x86_64-cells.ps1 2>&1 | tail -32
+Signing x86_64 cell binaries (16 cells)...
+NOTE: [[file]] cells/drivers/xhci/src/dma.rs no longer contains unsafe — tighten the allowlist
+NOTE: [[crate]] driver-xhci is no longer needed — tighten the allowlist
+OK:   F5 — rustc f53b654a8882 is the pinned nightly-2026-05-01
+OK:   F1 — 106 crates and 676 files scanned; unsafe confined to 57 allowlisted files
+OK:   signed 16 cell(s) with the dev key after a passing F1/F5 check
+  Refreshed kernel/src/embedded-x86_64/init
+  Found: app-shell (846 KB) -> /bin/shell
+  Found: service-vfs (395 KB) -> /bin/vfs
+  Found: service-config (46 KB) -> /bin/config
+  Found: service-net (232 KB) -> /bin/net
+  Found: service-input (37 KB) -> /bin/input
+  Found: platform (38 KB) -> /bin/platform
+  Found: driver-nvme (35 KB) -> /bin/nvme
+  Found: driver-e1000 (29 KB) -> /bin/e1000
+  Found: driver-ahci (40 KB) -> /bin/ahci
+  Found: driver-xhci (47 KB) -> /bin/xhci
+  Found: ls (21 KB) -> /bin/ls
+  Found: cat (21 KB) -> /bin/cat
+  Found: echo (21 KB) -> /bin/echo
+  Found: ps (15 KB) -> /bin/ps
+  Found: kill (21 KB) -> /bin/kill
+  Found: tier2-smoke (34 KB) -> /bin/tier2-smoke
+  Found: tier2-exploit (28 KB) -> /bin/tier2-exploit
+wrote 1198 bytes to target/ViCell_x86_POLICY.BIN
+
+=== Creating x86_64 kernel_fs.img ===
+Created FAT16 image at kernel/src/embedded-x86_64/kernel_fs.img: 18 file(s), 1 director(ies), 8031 clusters.
+  kernel_fs.img created: 4096 KB
+
+Done. Rebuild kernel to embed the new x86_64 cells:
+  cargo build --release -p cellos-kernel --target x86_64-unknown-none -Z build-std=core,alloc
+### EXIT: 0
+
+### CMD: bash -c cd /home/dmin/cellos && cargo build --release -p cellos-kernel --target x86_64-unknown-none --features board-x86-pc 2>&1 | tail -4
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: `cellos-kernel` (bin "cellos-kernel") generated 1 warning (run `cargo fix --bin "cellos-kernel" -p cellos-kernel` to apply 1 suggestion)
+    Finished `release` profile [optimized] target(s) in 8.26s
+### EXIT: 0
+
+### CMD: bash -c cd /home/dmin/cellos && X86_ISO_ROOT=build/x86-pc-lane/iso-root bash scripts/x86/make-iso-ci.sh build/x86-pc-lane/vicell-x86-xhci-b.iso 2>&1 | tail -4
+Writing to 'stdio:build/x86-pc-lane/vicell-x86-xhci-b.iso' completed successfully.
+
+ISO_SIZE=10029056 bytes
+ISO_READY=build/x86-pc-lane/vicell-x86-xhci-b.iso
+### EXIT: 0
+
+### CMD: bash -c cd /home/dmin/cellos/tests/integration && VICELL_XHCI_ISO=/home/dmin/cellos/build/x86-pc-lane/vicell-x86-xhci-b.iso cargo test --test xhci-x86 --target x86_64-unknown-linux-gnu 2>&1 | tail -8
+running 4 tests
+test xhci_boot_without_keyboard_reaches_shell_x86 ... ok
+test xhci_driver_cell_enumerates_usb_keyboard_x86 ... ok
+test xhci_com1_input_still_works_x86 ... ok
+test xhci_injected_key_decodes_in_cell_x86 ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 8.19s
+
+### EXIT: 0
+
+### CMD: bash -c cd /home/dmin/cellos/tests/integration && cargo test --test x86_64-boot --target x86_64-unknown-linux-gnu 2>&1 | grep -E 'Running|test result'
+     Running tests/x86_64-boot.rs (target/x86_64-unknown-linux-gnu/debug/deps/x86_64_boot-4ca83b64a52db9af)
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.68s
+### EXIT: 0
+
+### CMD: bash -c cd /home/dmin/cellos/tests/integration && cargo test --test ahci-x86 --target x86_64-unknown-linux-gnu 2>&1 | grep -E 'Running|test result'
+     Running tests/ahci-x86.rs (target/x86_64-unknown-linux-gnu/debug/deps/ahci_x86-a4f3533cca529f6a)
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 8.06s
+### EXIT: 0
+
+### CMD: bash -c cd /home/dmin/cellos/tests/integration && cargo test --test nvme-x86 --target x86_64-unknown-linux-gnu 2>&1 | grep -E 'Running|test result'
+     Running tests/nvme-x86.rs (target/x86_64-unknown-linux-gnu/debug/deps/nvme_x86-b611b92432193b34)
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.70s
+### EXIT: 0
+
+### CMD: bash -c cd /home/dmin/cellos/tests/integration && cargo test --test pcie-multibus-x86 --target x86_64-unknown-linux-gnu 2>&1 | grep -E 'Running|test result'
+     Running tests/pcie-multibus-x86.rs (target/x86_64-unknown-linux-gnu/debug/deps/pcie_multibus_x86-ab1dcfe337132c6c)
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.78s
+### EXIT: 0
+
+### CMD: bash -c cd /home/dmin/cellos/tests/integration && cargo test --test driver-registration-contract --target x86_64-unknown-linux-gnu 2>&1 | grep -E 'Running|test result'
+     Running tests/driver-registration-contract.rs (target/x86_64-unknown-linux-gnu/debug/deps/driver_registration_contract-9b15c81d284940f4)
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+### EXIT: 0
+
+### CMD: bash -c cd /home/dmin/cellos && cargo test -p cellos-kernel --target x86_64-unknown-linux-gnu 2>&1 | grep -E "test result"
+test result: ok. 187 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+### EXIT: 0
+
+### CMD: bash -c cd /home/dmin/cellos && cargo test -p cellos-boards --target x86_64-unknown-linux-gnu 2>&1 | grep -E "test result"
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+### EXIT: 0
+
+### CMD: bash -c cd /home/dmin/cellos && bash scripts/check-hal-boundaries.sh 2>&1 | tail -2
+PASS: HAL/SoC/board boundaries are intact
+### EXIT: 0
+
+### CMD: bash -c cd /home/dmin/cellos && cargo check -p driver-dwc2-usb --target aarch64-unknown-none-softfloat 2>&1 | tail -2
+   Compiling driver-dwc2-usb v0.1.0 (/home/dmin/cellos/cells/drivers/dwc2-usb)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.09s
+### EXIT: 0
+
+### CMD: bash -c cd /home/dmin/cellos && cargo check -p cellos-kernel --target aarch64-unknown-none-softfloat --features board-rpi3 2>&1 | tail -2
+warning: `cellos-kernel` (bin "cellos-kernel") generated 1 warning (run `cargo fix --bin "cellos-kernel" -p cellos-kernel` to apply 1 suggestion)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.37s
+### EXIT: 0
+
+### CMD: bash -c cd /home/dmin/cellos && cargo check -p cellos-kernel --target x86_64-unknown-none 2>&1 | tail -2
+warning: `cellos-kernel` (bin "cellos-kernel") generated 1 warning (run `cargo fix --bin "cellos-kernel" -p cellos-kernel` to apply 1 suggestion)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.36s
+### EXIT: 0
+### DONE
+
+### CMD: (focused rerun, --nocapture) VICELL_XHCI_ISO=... cargo test --test xhci-x86 xhci_injected -- --nocapture
+   Compiling vicell-integration-tests v0.1.0 (/home/dmin/cellos/tests/integration)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.24s
+     Running tests/xhci-x86.rs (target/x86_64-unknown-linux-gnu/debug/deps/xhci_x86-d95aa84a333e67ae)
+
+running 1 test
+[test] QMP input-send-event key="q"
+[test] QMP response: "{\"return\": {}}\r\n"
+[test] QMP input-send-event key="q"
+[test] QMP response: "{\"return\": {}}\r\n"
+[test] QMP input-send-event key="ret"
+[test] QMP response: "{\"return\": {}}\r\n"
+[test] shell receipt confirmed: injected 'q' + 'ret' → "shell: command not found: q"
+test xhci_injected_key_decodes_in_cell_x86 ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 7.86s
+
+### EXIT: 0
+### DONE
+
+### CMD (extra, ABI unit tests): cargo test -p api --target x86_64-unknown-linux-gnu
+test result: ok. 102 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 4 ignored; 0 measured; 0 filtered out; finished in 0.00s
+### EXIT: 0
+
+### ABI additions
+- syscall RegisterUsbHidProducer = 423 (next free after PauseService = 422; 423 was asserted Unknown before this change)
+- service::USB_HID_PRODUCER = 17 (1-13 shipped services, 14 HYPERVISOR_SERVICE_ID, 15 AI, 16 OCEL_JS -> 17 first free)
+- allowlist bit: shares DriverRegistration bit 50 (bits 0-62 all assigned to syscalls, 63 is the VFS-mutate declaration: no free bit exists; same usb_driver authority as RegisterNicDriver)
+- policy: scripts/sign-policy.py already carries usb_driver=1 for /bin/xhci and /bin/dwc2-usb; the syscall allowlist lives in the cell ELF, so no policy edit was required.

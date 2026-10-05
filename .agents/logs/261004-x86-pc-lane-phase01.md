@@ -94,6 +94,36 @@ myself. Shipped as `fadcb51c9` (28 files).
   registration path stores only BAR0 — is recorded as a plan risk with the syscall
   site annotated; it belongs to the Platform-Cell cutover owner.
 
+## Phase 02b (same session) — AHCI part B shipped
+
+Delegated, verified, fixed, shipped as `295720ea9` (17 files).
+
+- READ/WRITE DMA EXT, FLUSH CACHE EXT, a new `dispatch.rs` and block registration
+  along the NVMe path; the cell registers only when it found a usable disk and
+  idles otherwise, so a diskless machine spawns it harmlessly.
+- Verified through the standard packaging path — this time correctly. The phase
+  carries a self-correction: my earlier 02a "re-verify" rebuilt the cell binary
+  but booted an embedded FS image assembled earlier, so it exercised the old
+  cell. Rebuilding a cell does **not** update `kernel/src/embedded-x86_64/`;
+  only the packaging script (or `EMBEDDED_OVERRIDE`) does. That is how a part-A
+  source/binary mismatch stayed hidden until 02b rebuilt the image: the committed
+  part-A source read the IDENTIFY PRDBC from command-header offset 12 instead of
+  DWORD1 at offset 4. Fixed, and the 02a record now says so.
+- Review found three defects QEMU tolerates — the command-header write flag was
+  bit 5 (ATAPI) instead of bit 6 (W), completion ignored the fatal
+  `HBFS`/`HBDS`/`IFS`/`OFS` conditions, and a poll timeout left tag 0 owned by the
+  HBA — plus two test-honesty gaps (a cached VFS provider TID claimed as routing,
+  and a persistence oracle that could skip silently in CI). All fixed and
+  re-verified: `ahci-x86` 5/5 with the two-boot FAT32 oracle, regressions
+  `nvme-x86` 3/3, `pcie-multibus-x86` 2/2, `x86_64-boot` 9/9,
+  `driver-registration-contract` 3/3.
+- Recorded risk, not fixed here: registration is single-slot/last-wins while the
+  consumer caches its provider TID, so on a two-storage-device machine which
+  drive serves I/O is scheduling-dependent. Owner-side arbitration (Platform/VFS)
+  is the fix; every lane attaches one storage device meanwhile.
+- The `unsafe` allowlist entries the F1 gate requires were approved by the
+  repository owner (field records `dmin`).
+
 ## Next
 
 Phase 02b (AHCI part B: READ/WRITE data path, block registration, two-boot

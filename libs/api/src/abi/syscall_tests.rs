@@ -72,6 +72,7 @@ mod tests {
         (420, ViSyscall::Snapshot),
         (421, ViSyscall::SpawnReplacement),
         (422, ViSyscall::PauseService),
+        (423, ViSyscall::RegisterUsbHidProducer),
         (237, ViSyscall::ReadLog),
         (238, ViSyscall::SpawnFromElf),
         (310, ViSyscall::NetTx),
@@ -124,6 +125,7 @@ mod tests {
         assert_eq!(ViSyscall::Snapshot as usize, 420);
         assert_eq!(ViSyscall::SpawnReplacement as usize, 421);
         assert_eq!(ViSyscall::PauseService as usize, 422);
+        assert_eq!(ViSyscall::RegisterUsbHidProducer as usize, 423);
         assert_eq!(ViSyscall::Chdir as usize, 252);
         assert_eq!(ViSyscall::Getcwd as usize, 253);
         assert_eq!(ViSyscall::Fstat as usize, 254);
@@ -149,6 +151,7 @@ mod tests {
                     | ViSyscall::WatchCellOwnerRecord
                     | ViSyscall::SpawnReplacement
                     | ViSyscall::PauseService
+                    | ViSyscall::RegisterUsbHidProducer
                     | ViSyscall::Chdir
                     | ViSyscall::Getcwd
                     | ViSyscall::Fstat
@@ -176,7 +179,8 @@ mod tests {
         assert_eq!(ViSyscall::GrantCacheSyncComplete as usize, 250);
         assert_eq!(ViSyscall::RegisterDisplayFramebuffer as usize, 251);
         assert_eq!(ViSyscall::from(400), ViSyscall::Unknown);
-        assert_eq!(ViSyscall::from(423), ViSyscall::Unknown);
+        assert_eq!(ViSyscall::from(423), ViSyscall::RegisterUsbHidProducer);
+        assert_eq!(ViSyscall::from(424), ViSyscall::Unknown);
     }
 
     #[test]
@@ -240,6 +244,19 @@ mod tests {
         assert_eq!(ViSyscall::WaitCompletion.allowlist_bit(), Some(42));
         let legacy = SyscallSet::EMPTY.with(ViSyscall::WaitForEvent);
         assert!(legacy.permits(ViSyscall::WaitCompletion));
+    }
+
+    /// `RegisterUsbHidProducer` shares the DriverRegistration bit with the other
+    /// driver-registration opcodes: the u64 allowlist is full, and the role
+    /// carries exactly the `usb_driver` authority `RegisterNicDriver` does.
+    #[test]
+    fn usb_hid_producer_shares_driver_registration_authority() {
+        assert_eq!(ViSyscall::RegisterNicDriver.allowlist_bit(), Some(50));
+        assert_eq!(ViSyscall::RegisterUsbHidProducer.allowlist_bit(), Some(50));
+        let legacy = SyscallSet::EMPTY.with(ViSyscall::RegisterNicDriver);
+        assert!(legacy.permits(ViSyscall::RegisterUsbHidProducer));
+        assert_eq!(ViSyscall::RegisterUsbHidProducer as usize, 423);
+        assert_eq!(crate::syscall::service::USB_HID_PRODUCER, 17);
     }
 
     #[test]

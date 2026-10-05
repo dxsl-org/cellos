@@ -86,8 +86,9 @@ Current posture:
 - x86_64 hardware prerequisites for this cohort are recorded in
   [hardware-tracks.md](hardware-tracks.md): a generic `x86_64-pc` descriptor and
   the HCL model landed in phase 01, but there is no machine-specific descriptor
-  and no HCL machine row; no AHCI driver in the Cellos source; xHCI frozen out
-  of the G1–G3 driver plan by decision; e1000 binding 82540EM only and
+  and no HCL machine row; the AHCI/SATA storage family landed in phases 02a/02b
+  (`ahci-x86` 5/5 with a two-boot persistence oracle); xHCI is being reopened for
+  this lane by the owner's 2026-10-05 decision; e1000 binding 82540EM only and
   fail-closing all other Ethernet classes; no ACPI DMAR discovery; and no Intel
   VMX backend. What is witnessed is the q35 software lane reaching a COM1 shell;
   a SATA-only industrial PC is expected to do the same but is unqualified, and
