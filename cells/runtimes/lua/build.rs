@@ -133,8 +133,9 @@ fn compile_lua_c(target: &str) {
     }
     build.define("LUA_USE_C89", None); // Disables POSIX-only features
     build.define("l_signalT", "int");
-    build.flag_if_supported("-include");
-    build.flag_if_supported("lua_vios_config.h");
+    // `-include` and its filename must be passed together. Probing either flag
+    // in isolation rejects both, leaving Lua's default fwrite(stdout) path.
+    build.flag("-include").flag("lua_vios_config.h");
     for file in &lua_src {
         build.file(format!("{src_dir}/{file}"));
     }

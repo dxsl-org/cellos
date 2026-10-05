@@ -1,382 +1,243 @@
-//! Rust-side TCP socket bindings exposed to Lua via C FFI (`vnet.*`).
-// `L` is the universal Lua C API convention for `lua_State*`.
-#![allow(non_snake_case)] // reason: L is the Lua C API convention for lua_State pointers
-//!
-//! Mirrors the verified IPC wire format used by `nc.rs`: every message is
-//! `[opcode:1][cap:8 LE][payload:*]` sent to the net service (endpoint 6).
-//! Replies are read with `sys_recv`, which returns the SENDER id, not a byte
-//! count — reply length is bounded by the buffer we pass.
-
-extern crate alloc;
+//! Lua `vnet` bindings. All socket ownership and DNS resolution live in `/bin/net`.
+#![allow(non_snake_case)] // Lua C API convention
 
 use core::ffi::{c_char, c_int};
 use crate::ffi::LuaState;
-use ostd::syscall::{sys_recv, sys_send, sys_yield, SyscallResult};
+use api::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE, NET_TCP_INLINE_DATA_MAX};
+use ostd::service::NetRef;
 
-/// Net service cell task ID (init spawn order: vfs=3, config=4, input=5, net=6).
-const NET_ENDPOINT: usize = 6;
+const MAX_RECV: usize = 512;
+const RETRIES: usize = 500;
+const POLL_TIMEOUT_MS: u64 = 3000;
 
-const SOCKET_TCP:  u8 = 0x10;
-const SOCKET_UDP:  u8 = 0x11;
-const CONNECT:     u8 = 0x12;
-const SEND_OP:     u8 = 0x13;
-const RECV_OP:     u8 = 0x14;
-const CLOSE_OP:    u8 = 0x15;
-const BIND_OP:     u8 = 0x16;
-const SENDTO_OP:   u8 = 0x21;
-const RECVFROM_OP: u8 = 0x22;
+fn poll_pending(start: Option<u64>, attempts: usize) -> bool {
+    match start {
+        Some(start) => ostd::syscall::sys_get_time_ms()
+            .is_some_and(|now| now.saturating_sub(start) < POLL_TIMEOUT_MS),
+        None => attempts < RETRIES,
+    }
+}
 
-/// Upper bound for a single SEND payload copied off the Lua stack.
-const MAX_SEND: usize = 512;
-/// Upper bound for a RECV request (matches net cell's 4096 recv cap).
-const MAX_RECV: usize = 4096;
+// NetRef resolves the live provider and uses service_call_typed -> recv_from,
+// which rejects a death notification or input event from another sender.
+fn call<'a>(req: &NetRequest<'_>, reply: &'a mut [u8; IPC_BUF_SIZE]) -> Option<NetResponse<'a>> {
+    NetRef::new().call(req, reply).ok()
+}
 
-/// Read the string arg at stack `idx` as a byte slice borrowed from Lua.
-///
 /// # Safety
-/// `L` must be valid; the returned slice lives only while the value stays on
-/// the Lua stack (caller must not pop before use).
-unsafe fn lua_arg_bytes<'a>(L: *mut LuaState, idx: c_int) -> Option<&'a [u8]> {
-    let mut len: usize = 0;
-    // SAFETY: L valid; idx is a checked stack position.
-    let ptr = unsafe { crate::ffi::lua_tolstring(L, idx, &mut len as *mut _) };
-    if ptr.is_null() { return None; }
-    // SAFETY: Lua guarantees `len` valid bytes at `ptr`.
-    Some(unsafe { core::slice::from_raw_parts(ptr as *const u8, len) })
+/// `L` is a live Lua state; the stack value at `idx` remains present while borrowed.
+unsafe fn arg_bytes<'a>(L: *mut LuaState, idx: c_int) -> Option<&'a [u8]> {
+    let mut len = 0;
+    let ptr = unsafe { crate::ffi::lua_tolstring(L, idx, &mut len) };
+    if ptr.is_null() { None } else { Some(unsafe { core::slice::from_raw_parts(ptr.cast::<u8>(), len) }) }
 }
 
-/// Parse "a.b.c.d" into 4 octets.
-fn parse_ipv4(s: &[u8]) -> Option<[u8; 4]> {
-    let s = core::str::from_utf8(s).ok()?;
-    let mut it = s.splitn(5, '.');
-    let mut out = [0u8; 4];
-    for slot in out.iter_mut() {
-        let part = it.next()?;
-        let mut n: u16 = 0;
-        if part.is_empty() { return None; }
-        for ch in part.bytes() {
-            if !(b'0'..=b'9').contains(&ch) { return None; }
-            n = n * 10 + (ch - b'0') as u16;
-            if n > 255 { return None; }
-        }
-        *slot = n as u8;
+fn parse_ip(bytes: &[u8]) -> Option<[u8; 4]> {
+    let s = core::str::from_utf8(bytes).ok()?;
+    let mut parts = s.split('.');
+    let mut ip = [0; 4];
+    for octet in &mut ip {
+        let part = parts.next()?;
+        if part.is_empty() || !part.bytes().all(|b| b.is_ascii_digit()) { return None; }
+        *octet = part.parse().ok()?;
     }
-    if it.next().is_some() { return None; }
-    Some(out)
+    if parts.next().is_some() { return None; }
+    Some(ip)
 }
 
-/// `vnet.connect(ip_str, port_int)` → cap_id | nil, errmsg
-#[no_mangle]
+fn socket_id(L: *mut LuaState, idx: c_int) -> Option<u32> {
+    let mut valid = 0;
+    let id = unsafe { crate::ffi::lua_tointegerx(L, idx, &mut valid) };
+    if valid == 0 || id <= 0 || id > u32::MAX as i64 { None } else { Some(id as u32) }
+}
+
+fn port(L: *mut LuaState, idx: c_int) -> Option<u16> {
+    let mut valid = 0;
+    let n = unsafe { crate::ffi::lua_tointegerx(L, idx, &mut valid) };
+    if valid == 0 || !(1..=u16::MAX as i64).contains(&n) { None } else { Some(n as u16) }
+}
+
+fn recv_len(L: *mut LuaState, idx: c_int) -> u32 {
+    let mut valid = 0;
+    let n = unsafe { crate::ffi::lua_tointegerx(L, idx, &mut valid) };
+    if valid == 0 { MAX_RECV as u32 } else { n.clamp(1, MAX_RECV as i64) as u32 }
+}
+
+fn push_bytes(L: *mut LuaState, bytes: &[u8]) {
+    unsafe { crate::ffi::lua_pushlstring(L, bytes.as_ptr().cast::<c_char>(), bytes.len()); }
+}
+fn push_nil(L: *mut LuaState) -> c_int {
+    unsafe { crate::ffi::lua_pushnil(L); }
+    1
+}
+fn push_count(L: *mut LuaState, n: usize) -> c_int {
+    unsafe { crate::ffi::lua_pushinteger(L, n as i64); }
+    1
+}
+fn push_ip(L: *mut LuaState, ip: [u8; 4]) {
+    let mut text = [0u8; 15];
+    let mut pos = 0;
+    for (idx, octet) in ip.iter().enumerate() {
+        if idx != 0 { text[pos] = b'.'; pos += 1; }
+        let mut digits = [0u8; 3];
+        let mut n = *octet;
+        let mut len = 0;
+        loop {
+            digits[len] = b'0' + n % 10;
+            len += 1;
+            n /= 10;
+            if n == 0 { break; }
+        }
+        for digit in digits[..len].iter().rev() { text[pos] = *digit; pos += 1; }
+    }
+    push_bytes(L, &text[..pos]);
+}
+fn count(reply: Option<NetResponse<'_>>, limit: usize) -> Option<usize> {
+    match reply {
+        Some(NetResponse::Data(b)) if b.len() == 4 => {
+            let n = u32::from_le_bytes(b.try_into().ok()?) as usize;
+            (n <= limit).then_some(n)
+        }
+        _ => None,
+    }
+}
+fn close(id: u32) {
+    let mut buf = [0; IPC_BUF_SIZE];
+    let _ = call(&NetRequest::TcpClose { cap_id: id }, &mut buf);
+}
+
+/// `vnet.connect(ip, port)` -> cap | nil, error.
 pub unsafe extern "C" fn vnet_connect(L: *mut LuaState) -> c_int {
-    // SAFETY: L valid; arg 1 is the ip string, arg 2 the port integer.
-    let ip = match unsafe { lua_arg_bytes(L, 1) }.and_then(parse_ipv4) {
-        Some(a) => a,
-        None => {
-            unsafe { crate::ffi::lua_pushnil(L) };
-            unsafe { crate::ffi::lua_pushstring(L, c"invalid ip".as_ptr()) };
-            return 2;
-        }
-    };
-    let port = unsafe { crate::ffi::lua_tointegerx(L, 2, core::ptr::null_mut()) } as u16;
-
-    // SOCKET_TCP → cap
-    let socket_msg = [SOCKET_TCP, 0, 0, 0, 0, 0, 0, 0, 0];
-    sys_send(NET_ENDPOINT, &socket_msg);
-    let mut cap_reply = [0u8; 8];
-    let cap = match sys_recv(0, &mut cap_reply) {
-        SyscallResult::Ok(_) => u64::from_le_bytes(cap_reply),
-        _ => 0,
-    };
-    if cap == 0 {
-        unsafe { crate::ffi::lua_pushnil(L) };
-        unsafe { crate::ffi::lua_pushstring(L, c"socket failed".as_ptr()) };
+    let ip = unsafe { arg_bytes(L, 1) }.and_then(parse_ip);
+    let Some((ip, port)) = ip.zip(port(L, 2)) else {
+        unsafe { crate::ffi::lua_pushnil(L); crate::ffi::lua_pushstring(L, c"invalid address".as_ptr()); }
         return 2;
-    }
-
-    // CONNECT [0x12][cap:8][addr:4][port:2 LE]
-    let mut conn = [0u8; 15];
-    conn[0] = CONNECT;
-    conn[1..9].copy_from_slice(&cap.to_le_bytes());
-    conn[9..13].copy_from_slice(&ip);
-    conn[13..15].copy_from_slice(&port.to_le_bytes());
-    sys_send(NET_ENDPOINT, &conn);
-    let mut ack = [0u8; 1];
-    match sys_recv(0, &mut ack) {
-        SyscallResult::Ok(_) if ack[0] == 0x00 => {
-            // SAFETY: L valid; cap fits in i64.
-            unsafe { crate::ffi::lua_pushinteger(L, cap as i64) };
-            1
-        }
+    };
+    let mut buf = [0; IPC_BUF_SIZE];
+    match call(&NetRequest::TcpConnect { addr: ip, port }, &mut buf) {
+        Some(NetResponse::CapId(id)) if id != 0 => push_count(L, id as usize),
         _ => {
-            unsafe { crate::ffi::lua_pushnil(L) };
-            unsafe { crate::ffi::lua_pushstring(L, c"connect failed".as_ptr()) };
+            unsafe { crate::ffi::lua_pushnil(L); crate::ffi::lua_pushstring(L, c"connect failed".as_ptr()); }
             2
         }
     }
 }
 
-/// `vnet.send(cap_id, data_str)` → bytes_written
-#[no_mangle]
+/// `vnet.send(cap, bytes)` -> bytes accepted, including partial writes.
 pub unsafe extern "C" fn vnet_send(L: *mut LuaState) -> c_int {
-    let cap = unsafe { crate::ffi::lua_tointegerx(L, 1, core::ptr::null_mut()) } as u64;
-    // SAFETY: L valid; arg 2 is the data string.
-    let raw = unsafe { lua_arg_bytes(L, 2) }.unwrap_or(&[]);
-    let data = &raw[..raw.len().min(MAX_SEND)];
-
-    // Retry until all bytes buffered (mirrors nc.rs). Each retry forwards only
-    // the unsent suffix so a partial write never duplicates a prefix.
-    let mut sent = 0usize;
-    for _ in 0..500 {
-        if sent >= data.len() { break; }
-        let rem = &data[sent..];
-        let mut msg = alloc::vec![0u8; 9 + rem.len()];
-        msg[0] = SEND_OP;
-        msg[1..9].copy_from_slice(&cap.to_le_bytes());
-        msg[9..9 + rem.len()].copy_from_slice(rem);
-        sys_send(NET_ENDPOINT, &msg);
-        let mut cnt = [0u8; 4];
-        match sys_recv(0, &mut cnt) {
-            SyscallResult::Ok(_) => {
-                let n = u32::from_le_bytes(cnt) as usize;
-                sent += n;
-                if n == 0 { sys_yield(); }
-            }
-            _ => break,
+    let Some(id) = socket_id(L, 1) else { return push_count(L, 0); };
+    let data = unsafe { arg_bytes(L, 2) }.unwrap_or(&[]);
+    let mut sent = 0;
+    let mut stalls = 0;
+    let start = ostd::syscall::sys_get_time_ms();
+    while sent < data.len() && poll_pending(start, stalls) {
+        let end = (sent + NET_TCP_INLINE_DATA_MAX).min(data.len());
+        let mut buf = [0; IPC_BUF_SIZE];
+        match count(call(&NetRequest::TcpSend { cap_id: id, data: &data[sent..end] }, &mut buf), end - sent) {
+            Some(0) => { stalls += 1; ostd::task::yield_now(); }
+            Some(n) => { sent += n; stalls = 0; }
+            None => break,
         }
     }
-    // SAFETY: L valid.
-    unsafe { crate::ffi::lua_pushinteger(L, sent as i64) };
-    1
+    push_count(L, sent)
 }
 
-/// `vnet.recv(cap_id [, buf_len])` → data_str | nil
-///
-/// Polls until data arrives (up to 500 retries). Trims at the first NUL byte
-/// because `sys_recv` returns sender_id, not byte count — ASCII-only payloads.
-#[no_mangle]
+/// `vnet.recv(cap [, len])` -> binary-safe data | nil after bounded polling.
 pub unsafe extern "C" fn vnet_recv(L: *mut LuaState) -> c_int {
-    let cap = unsafe { crate::ffi::lua_tointegerx(L, 1, core::ptr::null_mut()) } as u64;
-    let mut isnum: c_int = 0;
-    let req = unsafe { crate::ffi::lua_tointegerx(L, 2, &mut isnum as *mut _) };
-    let buf_len = if isnum != 0 { (req as usize).min(MAX_RECV) } else { 512 };
-
-    let mut recv_msg = [0u8; 13];
-    recv_msg[0] = RECV_OP;
-    recv_msg[1..9].copy_from_slice(&cap.to_le_bytes());
-    recv_msg[9..13].copy_from_slice(&(buf_len as u32).to_le_bytes());
-
-    let mut data = alloc::vec![0u8; buf_len];
-    for _ in 0..500 {
-        // Zero before each receive so a short reply leaves no stale tail.
-        for b in data.iter_mut() { *b = 0; }
-        sys_send(NET_ENDPOINT, &recv_msg);
-        match sys_recv(0, &mut data) {
-            SyscallResult::Ok(_) if data[0] != 0 => {
-                // Trim at first NUL — sys_recv length unknown (returns sender_id).
-                let end = data.iter().position(|&b| b == 0).unwrap_or(buf_len);
-                // SAFETY: L valid; data[..end] is initialised bytes.
-                unsafe {
-                    crate::ffi::lua_pushlstring(L, data.as_ptr() as *const c_char, end);
-                }
-                return 1;
-            }
-            _ => sys_yield(),
+    let Some(id) = socket_id(L, 1) else { return push_nil(L); };
+    let len = recv_len(L, 2);
+    let start = ostd::syscall::sys_get_time_ms();
+    let mut attempts = 0;
+    while poll_pending(start, attempts) {
+        attempts += 1;
+        let mut buf = [0; IPC_BUF_SIZE];
+        match call(&NetRequest::TcpRecv { cap_id: id, buf_len: len }, &mut buf) {
+            Some(NetResponse::Data(bytes)) if !bytes.is_empty() => { push_bytes(L, bytes); return 1; }
+            Some(NetResponse::Data(_)) => ostd::task::yield_now(),
+            _ => return push_nil(L),
         }
     }
-    // SAFETY: L valid.
-    unsafe { crate::ffi::lua_pushnil(L) };
-    1
+    push_nil(L)
 }
 
-/// `vnet.close(cap_id)` — no return value.
-#[no_mangle]
+/// `vnet.close(cap)`.
 pub unsafe extern "C" fn vnet_close(L: *mut LuaState) -> c_int {
-    let cap = unsafe { crate::ffi::lua_tointegerx(L, 1, core::ptr::null_mut()) } as u64;
-    let mut msg = [0u8; 9];
-    msg[0] = CLOSE_OP;
-    msg[1..9].copy_from_slice(&cap.to_le_bytes());
-    sys_send(NET_ENDPOINT, &msg);
-    let mut r = [0u8; 1];
-    let _ = sys_recv(0, &mut r);
-    let _ = L; // no values pushed
+    if let Some(id) = socket_id(L, 1) { close(id); }
     0
 }
 
-// ── UDP socket bindings ───────────────────────────────────────────────────────
-
-/// Close a socket cap (internal helper, not exported to Lua).
-fn close_cap(cap: u64) {
-    let mut msg = [0u8; 9];
-    msg[0] = CLOSE_OP;
-    msg[1..9].copy_from_slice(&cap.to_le_bytes());
-    sys_send(NET_ENDPOINT, &msg);
-    let mut r = [0u8; 1];
-    let _ = sys_recv(0, &mut r);
+/// `vnet.udp_socket()` -> cap | nil.
+pub unsafe extern "C" fn vnet_udp_socket(L: *mut LuaState) -> c_int {
+    let mut buf = [0; IPC_BUF_SIZE];
+    match call(&NetRequest::UdpCreate, &mut buf) {
+        Some(NetResponse::CapId(id)) if id != 0 => push_count(L, id as usize),
+        _ => push_nil(L),
+    }
 }
 
-/// `vnet.udp_send(cap_id, ip_str, port_int, data_str)` → bytes_sent
-///
-/// Sends one UDP datagram to the specified remote endpoint. Retries only when
-/// the TX ring is full (n==0 reply). UDP datagrams are atomic — no offset tracking.
-#[no_mangle]
-pub unsafe extern "C" fn vnet_udp_send(L: *mut LuaState) -> c_int {
-    let cap = unsafe { crate::ffi::lua_tointegerx(L, 1, core::ptr::null_mut()) } as u64;
-    // SAFETY: L valid; arg 2 is the destination IP string.
-    let ip = match unsafe { lua_arg_bytes(L, 2) }.and_then(parse_ipv4) {
-        Some(a) => a,
-        None => {
-            unsafe { crate::ffi::lua_pushinteger(L, 0) };
-            return 1;
-        }
-    };
-    let port = unsafe { crate::ffi::lua_tointegerx(L, 3, core::ptr::null_mut()) } as u16;
-    // SAFETY: L valid; arg 4 is the data string.
-    let raw = unsafe { lua_arg_bytes(L, 4) }.unwrap_or(&[]);
-    let data = &raw[..raw.len().min(MAX_SEND)];
-
-    // Build: [SENDTO_OP][cap:8][addr:4][port:2 LE][data:*]
-    let mut msg = alloc::vec![0u8; 9 + 6 + data.len()];
-    msg[0] = SENDTO_OP;
-    msg[1..9].copy_from_slice(&cap.to_le_bytes());
-    msg[9..13].copy_from_slice(&ip);
-    msg[13..15].copy_from_slice(&port.to_le_bytes());
-    msg[15..15 + data.len()].copy_from_slice(data);
-
-    let mut sent = 0usize;
-    for _ in 0..500 {
-        sys_send(NET_ENDPOINT, &msg);
-        let mut cnt = [0u8; 4];
-        match sys_recv(0, &mut cnt) {
-            SyscallResult::Ok(_) => {
-                let n = u32::from_le_bytes(cnt) as usize;
-                if n > 0 { sent = n; break; }
-                sys_yield(); // TX buffer full — retry
-            }
-            _ => break,
-        }
-    }
-    // SAFETY: L valid.
-    unsafe { crate::ffi::lua_pushinteger(L, sent as i64) };
+/// `vnet.udp_bind(cap, port)` -> boolean.
+pub unsafe extern "C" fn vnet_udp_bind(L: *mut LuaState) -> c_int {
+    let id = socket_id(L, 1);
+    let bind_port = port(L, 2);
+    let ok = if let Some((id, bind_port)) = id.zip(bind_port) {
+        let mut buf = [0; IPC_BUF_SIZE];
+        matches!(call(&NetRequest::UdpBind { cap_id: id, port: bind_port }, &mut buf), Some(NetResponse::Ok))
+    } else { false };
+    unsafe { crate::ffi::lua_pushboolean(L, ok as c_int); }
     1
 }
 
-/// `vnet.udp_recv(cap_id [, buf_len])` → (src_ip, src_port, data) | nil
-///
-/// Polls for one UDP datagram. On arrival returns 3 values: source IP string,
-/// source port integer, and data string. Returns nil on timeout.
-#[no_mangle]
+/// `vnet.udp_send(cap, ip, port, bytes)` -> datagram length or zero.
+pub unsafe extern "C" fn vnet_udp_send(L: *mut LuaState) -> c_int {
+    let id = socket_id(L, 1);
+    let ip = unsafe { arg_bytes(L, 2) }.and_then(parse_ip);
+    let destination = port(L, 3);
+    let Some(((id, ip), destination)) = id.zip(ip).zip(destination) else { return push_count(L, 0); };
+    let data = unsafe { arg_bytes(L, 4) }.unwrap_or(&[]);
+    if data.len() > MAX_RECV { return push_count(L, 0); }
+    let start = ostd::syscall::sys_get_time_ms();
+    let mut attempts = 0;
+    while poll_pending(start, attempts) {
+        attempts += 1;
+        let mut buf = [0; IPC_BUF_SIZE];
+        match count(call(&NetRequest::UdpSend { cap_id: id, addr: ip, port: destination, data }, &mut buf), data.len()) {
+            Some(0) => ostd::task::yield_now(),
+            Some(n) => return push_count(L, n),
+            None => break,
+        }
+    }
+    push_count(L, 0)
+}
+
+/// `vnet.udp_recv(cap [, len])` -> ip, port, binary-safe datagram | nil.
 pub unsafe extern "C" fn vnet_udp_recv(L: *mut LuaState) -> c_int {
-    let cap = unsafe { crate::ffi::lua_tointegerx(L, 1, core::ptr::null_mut()) } as u64;
-    let mut isnum: c_int = 0;
-    let req = unsafe { crate::ffi::lua_tointegerx(L, 2, &mut isnum as *mut _) };
-    let buf_len = if isnum != 0 { (req as usize).min(512) } else { 512 };
-
-    let mut recv_msg = [0u8; 13];
-    recv_msg[0] = RECVFROM_OP;
-    recv_msg[1..9].copy_from_slice(&cap.to_le_bytes());
-    recv_msg[9..13].copy_from_slice(&(buf_len as u32).to_le_bytes());
-
-    // 6-byte header + payload; pre-zero so empty-reply detection is reliable.
-    let mut buf = alloc::vec![0u8; 6 + buf_len];
-    for _ in 0..500 {
-        for b in buf.iter_mut() { *b = 0; }
-        sys_send(NET_ENDPOINT, &recv_msg);
-        match sys_recv(0, &mut buf) {
-            // buf[0] != 0 means a datagram arrived (src IP first byte is non-zero
-            // for any real remote, e.g. 10.x = 0x0A).
-            SyscallResult::Ok(_) if buf[0] != 0 => {
-                let src_ip = [buf[0], buf[1], buf[2], buf[3]];
-                let src_port = u16::from_le_bytes([buf[4], buf[5]]);
-                // Data starts at byte 6; find end by first NUL (ASCII-safe).
-                let data_end = 6 + buf[6..].iter().position(|&b| b == 0)
-                    .unwrap_or(buf.len() - 6);
-                let mut ip_str = [0u8; 16];
-                let ip_len = format_ip(src_ip, &mut ip_str);
-                // SAFETY: L valid; ip_str / buf slices are initialised.
-                unsafe {
-                    crate::ffi::lua_pushlstring(L, ip_str.as_ptr() as *const c_char, ip_len);
-                    crate::ffi::lua_pushinteger(L, src_port as i64);
-                    crate::ffi::lua_pushlstring(L, buf[6..].as_ptr() as *const c_char, data_end - 6);
-                }
+    let Some(id) = socket_id(L, 1) else { return push_nil(L); };
+    let len = recv_len(L, 2);
+    let start = ostd::syscall::sys_get_time_ms();
+    let mut attempts = 0;
+    while poll_pending(start, attempts) {
+        attempts += 1;
+        let mut buf = [0; IPC_BUF_SIZE];
+        match call(&NetRequest::UdpRecv { cap_id: id, buf_len: len }, &mut buf) {
+            Some(NetResponse::Data(bytes)) if bytes.len() >= 6 => {
+                push_ip(L, [bytes[0], bytes[1], bytes[2], bytes[3]]);
+                push_count(L, u16::from_le_bytes([bytes[4], bytes[5]]) as usize);
+                push_bytes(L, &bytes[6..]);
                 return 3;
             }
-            _ => sys_yield(),
+            Some(NetResponse::Data(_)) => ostd::task::yield_now(),
+            _ => return push_nil(L),
         }
     }
-    // SAFETY: L valid.
-    unsafe { crate::ffi::lua_pushnil(L) };
-    1
+    push_nil(L)
 }
 
-/// `vnet.resolve(hostname)` → ip_str | nil
-///
-/// One `NetRequest::Resolve` round-trip: the net service owns the whole
-/// resolution order (IPv4 literal, SLIRP alias, UDP A-record query to the
-/// server the DHCP lease named), so Lua inherits the same answers as the
-/// shell tools instead of running a second resolver.
-#[no_mangle]
+/// `vnet.resolve(name)` -> dotted IPv4 | nil. DNS lives in the net service.
 pub unsafe extern "C" fn vnet_resolve(L: *mut LuaState) -> c_int {
-    // SAFETY: L valid; arg 1 is the hostname string.
-    let raw = match unsafe { lua_arg_bytes(L, 1) } {
-        Some(b) => b,
-        None => {
-            unsafe { crate::ffi::lua_pushnil(L) };
-            return 1;
-        }
-    };
-    let hostname = match core::str::from_utf8(raw) {
-        Ok(s) => s,
-        Err(_) => {
-            unsafe { crate::ffi::lua_pushnil(L) };
-            return 1;
-        }
-    };
-
-    let mut request = [0u8; api::ipc::IPC_BUF_SIZE];
-    let len = match api::ipc::encode(&api::ipc::NetRequest::Resolve { hostname }, &mut request) {
-        Ok(bytes) => bytes.len(),
-        Err(_) => {
-            unsafe { crate::ffi::lua_pushnil(L) };
-            return 1;
-        }
-    };
-    sys_send(NET_ENDPOINT, &request[..len]);
-
-    let mut reply = [0u8; api::ipc::IPC_BUF_SIZE];
-    let ip = match sys_recv(0, &mut reply) {
-        SyscallResult::Ok(_) => match api::ipc::decode::<api::ipc::NetResponse>(&reply) {
-            Ok(api::ipc::NetResponse::Addr(addr)) => Some(addr),
-            _ => None,
-        },
-        _ => None,
-    };
-
-    match ip {
-        Some(ip) => { push_ip(L, ip); 1 }
-        None     => { unsafe { crate::ffi::lua_pushnil(L) }; 1 }
+    let Some(host) = unsafe { arg_bytes(L, 1) }.and_then(|b| core::str::from_utf8(b).ok()) else { return push_nil(L); };
+    let mut buf = [0; IPC_BUF_SIZE];
+    match call(&NetRequest::Resolve { hostname: host }, &mut buf) {
+        Some(NetResponse::Addr(ip)) => { push_ip(L, ip); 1 }
+        _ => push_nil(L),
     }
-}
-
-/// Format a 4-byte IPv4 address into dotted-decimal in `buf`. Returns byte count.
-fn format_ip(ip: [u8; 4], buf: &mut [u8]) -> usize {
-    let mut pos = 0;
-    for (i, &octet) in ip.iter().enumerate() {
-        if i > 0 { buf[pos] = b'.'; pos += 1; }
-        let mut n = octet as u32;
-        let mut tmp = [0u8; 3];
-        let mut di = 3;
-        loop { di -= 1; tmp[di] = b'0' + (n % 10) as u8; n /= 10; if n == 0 { break; } }
-        let digits = &tmp[di..];
-        buf[pos..pos + digits.len()].copy_from_slice(digits);
-        pos += digits.len();
-    }
-    pos
-}
-
-/// Push a dotted-decimal IPv4 string onto the Lua stack.
-fn push_ip(L: *mut LuaState, ip: [u8; 4]) {
-    let mut buf = [0u8; 16];
-    let len = format_ip(ip, &mut buf);
-    // SAFETY: L valid; buf[..len] is ASCII, no NUL.
-    unsafe { crate::ffi::lua_pushlstring(L, buf.as_ptr() as *const c_char, len); }
 }

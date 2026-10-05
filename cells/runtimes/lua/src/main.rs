@@ -5,7 +5,7 @@ extern crate alloc;
 extern crate api;
 extern crate ostd;
 
-// Lua Cell: no direct network access — net data goes via IPC to the net Cell.
+// Lua Cell has no direct network device access; vnet delegates via net service IPC.
 // Scripts load from VFS only; io.popen/os.execute/debug are stripped at init.
 api::declare_manifest!(block_io = false, network = false, spawn = false);
 api::declare_syscalls![
@@ -14,6 +14,7 @@ api::declare_syscalls![
     Log,
     Heartbeat,
     LookupService,
+    GetTime,
     StateRestore,
     VfsMutate
 ];
@@ -32,6 +33,8 @@ extern "C" fn main() -> usize {
 
 #[cfg(not(lua_c_unavailable))]
 mod bindings_io;
+#[cfg(not(lua_c_unavailable))]
+mod bindings_net;
 #[cfg(not(lua_c_unavailable))]
 mod bindings_vfs;
 #[cfg(not(lua_c_unavailable))]
@@ -75,7 +78,7 @@ fn vfs_read_to_vec(path: &str) -> alloc::vec::Vec<u8> {
 /// Inject Lua-level `io.open` and `io.write` wrappers, then strip dangerous stdlib.
 ///
 /// `ViCell_io_write` (C primitive) and `vfs.*` must already be registered.
-/// Removes io.popen, os.execute, and debug to enforce the no-network policy.
+/// Removes io.popen, os.execute, and debug; network is exposed only via vnet IPC.
 ///
 /// # Safety
 /// `L` must be a valid, non-null Lua state with `vfs` and `ViCell_io_write`
@@ -225,6 +228,30 @@ extern "C" fn main() -> usize {
         ffi::lua_setglobal(L, c"vfs".as_ptr());
     }
 
+    // Network access is delegated to the net service; no direct socket syscalls.
+    unsafe {
+        ffi::lua_createtable(L, 0, 9);
+        ffi::lua_pushcclosure(L, bindings_net::vnet_connect, 0);
+        ffi::lua_setfield(L, -2, c"connect".as_ptr());
+        ffi::lua_pushcclosure(L, bindings_net::vnet_send, 0);
+        ffi::lua_setfield(L, -2, c"send".as_ptr());
+        ffi::lua_pushcclosure(L, bindings_net::vnet_recv, 0);
+        ffi::lua_setfield(L, -2, c"recv".as_ptr());
+        ffi::lua_pushcclosure(L, bindings_net::vnet_close, 0);
+        ffi::lua_setfield(L, -2, c"close".as_ptr());
+        ffi::lua_pushcclosure(L, bindings_net::vnet_udp_socket, 0);
+        ffi::lua_setfield(L, -2, c"udp_socket".as_ptr());
+        ffi::lua_pushcclosure(L, bindings_net::vnet_udp_bind, 0);
+        ffi::lua_setfield(L, -2, c"udp_bind".as_ptr());
+        ffi::lua_pushcclosure(L, bindings_net::vnet_udp_send, 0);
+        ffi::lua_setfield(L, -2, c"udp_send".as_ptr());
+        ffi::lua_pushcclosure(L, bindings_net::vnet_udp_recv, 0);
+        ffi::lua_setfield(L, -2, c"udp_recv".as_ptr());
+        ffi::lua_pushcclosure(L, bindings_net::vnet_resolve, 0);
+        ffi::lua_setfield(L, -2, c"resolve".as_ptr());
+        ffi::lua_setglobal(L, c"vnet".as_ptr());
+    }
+
     // Register ViCell_io_write, then inject io.open/io.write wrappers and
     // strip dangerous stdlib (io.popen, os.execute, debug).
     // SAFETY: L is non-null; binding fns uphold the lua_CFunction contract.
@@ -275,22 +302,15 @@ extern "C" fn main() -> usize {
                     core::ptr::null(),
                 )
             };
-            if rc == ffi::LUA_OK {
-                let _ =
-                    unsafe { ffi::lua_pcallk(L, 0, ffi::LUA_MULTRET, 0, 0, core::ptr::null_mut()) };
+            let rc = if rc == ffi::LUA_OK {
+                // SAFETY: compiled chunk is at the top of a valid Lua state.
+                unsafe { ffi::lua_pcallk(L, 0, ffi::LUA_MULTRET, 0, 0, core::ptr::null_mut()) }
             } else {
-                let mut len = 0usize;
-                // SAFETY: L is valid; -1 is the error string at stack top.
-                let ptr = unsafe { ffi::lua_tolstring(L, -1, &mut len as *mut _) };
-                if !ptr.is_null() {
-                    // SAFETY: Lua guarantees `len` valid bytes at `ptr`.
-                    let bytes = unsafe { core::slice::from_raw_parts(ptr, len) };
-                    if let Ok(s) = core::str::from_utf8(bytes) {
-                        ostd::io::println(s);
-                    }
-                }
-                // SAFETY: L is valid; pops the error string.
-                unsafe { ffi::lua_settop(L, -2) };
+                rc
+            };
+            if rc != ffi::LUA_OK {
+                // Load errors and runtime exceptions leave a message on the stack.
+                unsafe { repl_session::print_error(L) };
             }
         }
         loop {

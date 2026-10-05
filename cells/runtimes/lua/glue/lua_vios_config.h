@@ -7,6 +7,8 @@
  */
 #pragma once
 
+#include <stddef.h>
+
 /* Use the C89-compatible code paths inside Lua. */
 #define LUA_USE_C89
 

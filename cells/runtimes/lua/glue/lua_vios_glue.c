@@ -2,7 +2,7 @@
 /* ViOS Lua 5.4 glue layer.
  *
  * Provides the bare minimum that Lua needs beyond pure C89:
- *   - vios_write: serial output via the POSIX shim _write syscall
+ *   - vios_write: serial output via the Rust Log-only bridge
  *   - abort:       terminate the current cell
  *   - system/getenv/tmpnam/tmpfile: safe stubs returning failure
  *
@@ -14,13 +14,13 @@
 
 /* -- Output ---------------------------------------------------------------- */
 
-/* Write 'n' bytes from 's' to stdout (fd 1) via the POSIX shim.
- * Declared extern so Lua's config header can define lua_writestring etc. */
-extern int _write(int fd, const void *buf, unsigned int count);
+/* Lua has Log authority, not ambient file-descriptor Write.
+ * Keep C output on the same console path as the Rust bindings. */
+extern void lua_console_write(const char *s, size_t n);
 
 void vios_write(const char *s, size_t n) {
     if (s && n > 0) {
-        _write(1, s, (unsigned int)n);
+        lua_console_write(s, n);
     }
 }
 

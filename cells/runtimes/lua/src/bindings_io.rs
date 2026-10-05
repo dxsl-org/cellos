@@ -11,6 +11,31 @@
 use crate::ffi::LuaState;
 use core::ffi::c_int;
 
+/// Console output for Lua's C library. `Log` is the only output authority of
+/// this cell; `_write` would require the unrelated filesystem Write syscall.
+///
+/// # Safety
+/// `ptr` points to `len` readable bytes for the duration of the call.
+#[no_mangle]
+pub unsafe extern "C" fn lua_console_write(ptr: *const core::ffi::c_char, len: usize) {
+    if ptr.is_null() || len == 0 { return; }
+    let mut bytes = unsafe { core::slice::from_raw_parts(ptr.cast::<u8>(), len) };
+    while !bytes.is_empty() {
+        match core::str::from_utf8(bytes) {
+            Ok(text) => { ostd::io::print(text); break; }
+            Err(err) => {
+                let good = err.valid_up_to();
+                if good != 0 {
+                    // SAFETY: `valid_up_to` covers only valid UTF-8.
+                    ostd::io::print(unsafe { core::str::from_utf8_unchecked(&bytes[..good]) });
+                }
+                ostd::io::print("\u{fffd}");
+                bytes = &bytes[(good + err.error_len().unwrap_or(bytes.len() - good))..];
+            }
+        }
+    }
+}
+
 // ─── io.write primitive ───────────────────────────────────────────────────────
 
 /// `ViCell_io_write(str)` — write a string to the serial console.
@@ -24,7 +49,7 @@ pub unsafe extern "C" fn ViCell_io_write(L: *mut LuaState) -> c_int {
     let ptr = unsafe { crate::ffi::lua_tolstring(L, 1, &mut len as *mut _) };
     if !ptr.is_null() && len > 0 {
         // SAFETY: Lua guarantees `len` valid bytes at `ptr`.
-        let bytes = unsafe { core::slice::from_raw_parts(ptr, len) };
+        let bytes = unsafe { core::slice::from_raw_parts(ptr.cast::<u8>(), len) };
         if let Ok(s) = core::str::from_utf8(bytes) {
             ostd::io::print(s);
         }
@@ -52,7 +77,7 @@ pub unsafe extern "C" fn ViCell_os_execute(L: *mut LuaState) -> c_int {
     }
     len = len.min(511);
     // SAFETY: Lua guarantees `len` valid bytes at `ptr`.
-    let bytes = unsafe { core::slice::from_raw_parts(ptr, len) };
+    let bytes = unsafe { core::slice::from_raw_parts(ptr.cast::<u8>(), len) };
     path_buf[..len].copy_from_slice(bytes);
     let cmd = core::str::from_utf8(&path_buf[..len]).unwrap_or("");
 
