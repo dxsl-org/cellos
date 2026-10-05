@@ -1,7 +1,7 @@
-//! AHCI Driver Cell — Tier-1 Privileged Driver Cell (x86_64 PC lane, phase 02a).
+//! AHCI Driver Cell — Tier-1 Privileged Driver Cell (x86_64 PC lane).
 //!
-//! Owns the SATA controller in AHCI mode exclusively and performs the bring-up
-//! half of the AHCI family:
+//! Owns the SATA controller in AHCI mode exclusively and performs the whole
+//! AHCI family:
 //!   1. `sys_find_pcie_device(0x01/0x06/0x01)` locates the controller. A SATA
 //!      controller whose prog-if is not AHCI (vendor/RAID firmware) **fails
 //!      closed** with a log line naming the prog-if.
@@ -11,9 +11,10 @@
 //!   3. Resets the HBA, starts the first port carrying an ATA disk, and completes
 //!      one polled IDENTIFY DEVICE. All DMA structures go through `DmaBuf` +
 //!      `authorize` so the phase-05 IOMMU path applies without rework.
-//!
-//! Out of scope (phase 02b): READ/WRITE data path, block registration,
-//! persistence. This cell never calls `sys_register_block_driver`.
+//!   4. Registers as the system block driver via `sys_register_block_driver` and
+//!      serves the DrvRequest IPC (512-byte sector read/write/flush) — the same
+//!      registration surface NVMe and virtio-blk use, so VFS and littlefs `/data`
+//!      need no device-specific path.
 //!
 //! Law 4 exception: this cell uses `unsafe` for DMA memory access; MMIO goes
 //! through the bounds-checked `ostd::mmio::MmioRegion`.
@@ -26,14 +27,19 @@
 extern crate alloc;
 
 mod controller;
+mod dispatch;
 mod dma;
 
+use crate::dma::AuthorizedDma;
 use controller::AhciController;
 use ostd::app::{AppContext, AppEvent};
+use ostd::dma::DmaBuf;
 use ostd::io::print_fmt;
 use ostd::mmio;
 use ostd::sync::Mutex;
-use ostd::syscall::{sys_find_pcie_device, sys_send, PcieDeviceInfo};
+use ostd::syscall::{
+    sys_find_pcie_device, sys_register_block_driver, sys_send, PcieDeviceInfo,
+};
 use types::ViError;
 
 /// SATA controller class triple.
@@ -51,7 +57,15 @@ const AHCI_BAR_LEN: usize = 0x2000;
 /// first port register block.
 const AHCI_BAR_MIN: usize = 0x400;
 
-static STATE: Mutex<Option<AhciController>> = Mutex::new(None);
+/// The live controller plus its reusable sector-I/O DMA buffer.
+struct AhciState {
+    ctrl: AhciController,
+    /// One authorized 512-byte sector buffer shared by every DrvRequest, so no
+    /// per-request allocation happens on the block path.
+    io_buf: AuthorizedDma<DmaBuf>,
+}
+
+static STATE: Mutex<Option<AhciState>> = Mutex::new(None);
 
 fn handler(_ctx: &mut AppContext, event: AppEvent) {
     match event {
@@ -111,12 +125,45 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
 
             match AhciController::new(region, info.bdf) {
                 Ok(ctrl) => {
+                    // Reusable DMA buffer for sector transfers, authorized through
+                    // the same `DmaBuf::authorize` path as the HBA structures so
+                    // phase-05's IOMMU work applies without rework.
+                    let io_buf = match DmaBuf::alloc(1) {
+                        Some(buf) => buf,
+                        None => {
+                            let _ = print_fmt(format_args!(
+                                "[ahci] sector I/O buffer allocation failed\n"
+                            ));
+                            ostd::syscall::sys_exit(1)
+                        }
+                    };
+                    let io_buf = match AuthorizedDma::authorize(io_buf, |b| b.authorize(info.bdf))
+                    {
+                        Ok(buf) => buf,
+                        Err(_) => {
+                            let _ = print_fmt(format_args!(
+                                "[ahci] sector I/O buffer authorization failed\n"
+                            ));
+                            ostd::syscall::sys_exit(1);
+                        }
+                    };
+                    let port = ctrl.port();
+                    let sectors = ctrl.capacity_sectors();
+                    // Publish state before registration: VFS may route requests
+                    // as soon as the syscall succeeds.
+                    *STATE.lock() = Some(AhciState { ctrl, io_buf });
+                    if let Err(error) = sys_register_block_driver() {
+                        *STATE.lock() = None;
+                        let _ = print_fmt(format_args!(
+                            "[ahci] block driver registration failed: {:?}\n",
+                            error
+                        ));
+                        ostd::syscall::sys_exit(1);
+                    }
                     let _ = print_fmt(format_args!(
                         "[driver_cell] ahci storage driver ready (port={} sectors={} identify ok)\n",
-                        ctrl.port(),
-                        ctrl.sectors()
+                        port, sectors
                     ));
-                    *STATE.lock() = Some(ctrl);
                 }
                 // A controller with no ATA disk attached (q35 always exposes
                 // ICH9 AHCI, even with no `-device ide-hd`) is an idle machine,
@@ -138,12 +185,19 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
             }
         }
 
-        // Phase 02a has no data path or block registration; answer any request
-        // with an error byte rather than leaving a peer blocked.
-        AppEvent::Message { sender_tid, .. } | AppEvent::RawMessage { sender_tid, .. } => {
-            if STATE.lock().is_some() {
-                let _ = sys_send(sender_tid, &[1u8]);
-            }
+        // VFS speaks the raw DrvRequest protocol (no 0xAC App-SDK envelope), so
+        // requests arrive as RawMessage; accept Message too — layout is identical.
+        // Without the RawMessage arm the request falls into `_ => {}` and VFS
+        // blocks forever in its reply recv (the x86 FAT-on-NVMe boot hang).
+        AppEvent::Message { sender_tid, data } | AppEvent::RawMessage { sender_tid, data } => {
+            let mut reply = [0u8; dispatch::REPLY_SIZE];
+            let len = if let Some(state) = STATE.lock().as_mut() {
+                dispatch::handle(&mut state.ctrl, &state.io_buf, data.as_ref(), &mut reply)
+            } else {
+                reply[0] = 1;
+                1 // not initialised
+            };
+            let _ = sys_send(sender_tid, &reply[..len]);
         }
 
         AppEvent::Shutdown | AppEvent::ShutdownWith { .. } => {

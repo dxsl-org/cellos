@@ -4,6 +4,31 @@
 
 ## [Unreleased] Development-first hardware-constrained execution
 
+- **x86 PC lane phase 02b: AHCI part B — data path, block registration,
+  persistence (`qemu` ceiling).** `cells/drivers/ahci/` gained READ/WRITE DMA EXT
+  (48-bit LBA, PRDT transfers, capacity from IDENTIFY), a new `dispatch.rs`, and
+  block registration along the NVMe path; the cell registers only when it has a
+  usable disk and idles otherwise. The `ahci-x86` suite is now 5/5, including a
+  two-boot persistence oracle (a marker written through the shell survives a
+  reboot on the same raw image) and a combined NVMe+SATA lane that asserts what
+  two registrations actually do. Evidence through the standard packaging path
+  (`build-x86_64-cells.ps1` → kernel `board-x86-pc` → ISO): boots to `Cellos >`
+  with the part-A markers unchanged plus `[driver_cell] block driver registered:
+  tid=4`; regressions `nvme-x86` 3/3, `pcie-multibus-x86` 2/2, `x86_64-boot` 9/9,
+  `driver-registration-contract` 3/3. An independent review found three defects
+  QEMU does not punish — the command-header write flag was bit 5 (ATAPI) instead
+  of bit 6 (W), completion ignored the fatal `HBFS`/`HBDS`/`IFS`/`OFS`
+  conditions, and a poll timeout left tag 0 owned by the HBA (now stop → restart,
+  else poison) — plus two test-honesty gaps (the cached VFS provider TID, and a
+  persistence oracle that could skip silently in CI); all fixed and re-verified.
+  It also fixed a part-A source/binary mismatch: the IDENTIFY PRDBC was read from
+  command-header offset 12 instead of DWORD1 at offset 4, and the phase-02a
+  record is corrected accordingly. Block registration is single-slot/last-wins
+  while the consumer caches its provider, so a machine with two storage devices
+  makes the serving drive scheduling-dependent — recorded as a plan risk with
+  owner-side arbitration as the fix. No physical machine is claimed; the HCL
+  machine table stays empty.
+
 - **x86 PC lane phase 02a: AHCI/SATA part A — PCI binding, HBA init, IDENTIFY
   (`qemu` ceiling).** New Driver Cell `cells/drivers/ahci/` (759 lines) finds the
   SATA controller through `sys_find_pcie_device(0x01/0x06/0x01)`, claims its ABAR,

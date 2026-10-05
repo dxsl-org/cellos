@@ -31,11 +31,15 @@ ceiling: qemu
 - `cargo test --test ahci-x86` 2/2 (not a skip); `cargo test -p cellos-boards`
   13/13 with the `StorageAhci` assertion flipped; `check-hal-boundaries.sh` pass;
   kernel `cargo check` (q35 default) clean.
-- Re-verified after the review fixes (same day): the `board-x86-pc` ISO still
-  boots to `Cellos >` with the identical marker set (`ABAR claim ok` → … →
-  `IDENTIFY DEVICE ok` → `storage driver ready`), the diskless boot still logs
-  `no SATA disk attached; driver cell idle`, and `ahci-x86` is 2/2 with no leaked
-  temp image (`/tmp/vicell_sata_x86_*` = 0 after the run).
+- Re-run after the review fixes — **corrected 2026-10-05**: that rerun rebuilt the
+  cell binary but booted the *embedded* `kernel/src/embedded-x86_64/kernel_fs.img`
+  that had been assembled **before** the fixes, so it exercised the old cell, not
+  the fixed one. The fixes were actually validated only when phase 02b rebuilt
+  the image through `scripts/build-x86_64-cells.ps1` (see phase-02b evidence);
+  that run also surfaced a real part-A defect the older binary had hidden (the
+  IDENTIFY PRDBC was read from command-header offset 12 instead of 4). Lesson
+  recorded: rebuilding a cell does **not** update the embedded FS image — only
+  the packaging script (or `EMBEDDED_OVERRIDE`) does.
 - Evidence log: `evidence/phase-02a-ahci-identify.log`.
 
 ## Interface changes this phase had to make (recorded, not incidental)

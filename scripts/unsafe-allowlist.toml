@@ -199,6 +199,20 @@ approver = "cellos-maintainers"
 date = "2026-07-14"
 
 [[file]]
+path = "cells/drivers/ahci/src/controller.rs"
+class = "driver-mmio"
+reason = "Driver Cell: bounds-checked MMIO register access via MmioRegion plus volatile DMA structure access. The Kernel Boundary Law moved drivers out of the kernel, so the wall around this unsafe is the IOMMU, not LBI."
+approver = "dmin"
+date = "2026-10-05"
+
+[[file]]
+path = "cells/drivers/ahci/src/dispatch.rs"
+class = "driver-mmio"
+reason = "Driver Cell: copies one sector between the DrvRequest IPC buffer and the authorized DMA buffer. The wall around this unsafe is the DMA authorization, not LBI."
+approver = "dmin"
+date = "2026-10-05"
+
+[[file]]
 path = "cells/drivers/virtio-blk/src/device.rs"
 class = "driver-mmio"
 reason = "Driver Cell: volatile MMIO register access and DMA descriptor setup. The Kernel Boundary Law moved drivers out of the kernel, so the wall around this unsafe is the IOMMU, not LBI."
@@ -507,6 +521,13 @@ class = "driver-mmio"
 reason = "Owns allowlisted unsafe under cells/drivers/nvme/ — see the [[file]] entries of class \"driver-mmio\" for the justification."
 approver = "cellos-maintainers"
 date = "2026-07-14"
+
+[[crate]]
+name = "driver-ahci"
+class = "driver-mmio"
+reason = "Owns allowlisted unsafe under cells/drivers/ahci/ — see the [[file]] entries of class \"driver-mmio\" for the justification."
+approver = "dmin"
+date = "2026-10-05"
 
 [[crate]]
 name = "driver-virtio-blk"

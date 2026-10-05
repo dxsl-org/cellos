@@ -960,6 +960,80 @@ impl QemuRunner {
         }
     }
 
+    /// Boot x86_64 q35 from a Limine ISO with BOTH an NVMe controller and the
+    /// built-in ICH9 AHCI controller carrying a raw SATA image.
+    ///
+    /// The two block Driver Cells (`/bin/nvme`, `/bin/ahci`) are spawned
+    /// together by init, so this lane witnesses what the kernel does when two
+    /// drivers call `sys_register_block_driver` in one boot. Registration is
+    /// last-wins at both the role (`driver_cell::register_block_driver`) and the
+    /// service-registry layer, so both calls succeed and the later TID becomes
+    /// the route VFS resolves (no LIST, no refusal).
+    pub fn boot_x86_bios_with_sata_and_nvme(
+        iso: &str,
+        sata_disk: &str,
+        nvme_disk: &str,
+    ) -> Self {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind serial socket");
+        let port = listener.local_addr().unwrap().port();
+
+        let mut child = Command::new(qemu_binary_x86())
+            .args([
+                "-machine",
+                "q35",
+                "-cpu",
+                "qemu64,+pdpe1gb",
+                "-m",
+                "256M",
+                "-nographic",
+                "-cdrom",
+                iso,
+                "-boot",
+                "d",
+                "-no-reboot",
+                "-monitor",
+                "none",
+                "-drive",
+                &format!("file={nvme_disk},format=raw,if=none,id=nvme0"),
+                "-device",
+                "nvme,drive=nvme0,serial=deadbeef01",
+                "-drive",
+                &format!("file={sata_disk},format=raw,if=none,id=sata0"),
+                "-device",
+                "ide-hd,drive=sata0",
+                "-serial",
+                &format!("tcp:127.0.0.1:{port}"),
+            ])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("qemu-system-x86_64 must be on PATH");
+
+        let stream = accept_qemu_serial(&listener, &mut child);
+        let writer = stream.try_clone().expect("clone serial stream");
+
+        let output = Arc::new(Mutex::new(String::new()));
+        let buf = Arc::clone(&output);
+        thread::spawn(move || {
+            let mut reader = BufReader::new(stream);
+            let mut byte = [0u8; 1];
+            loop {
+                match reader.read(&mut byte) {
+                    Ok(0) | Err(_) => break,
+                    Ok(_) => buf.lock().unwrap().push(byte[0] as char),
+                }
+            }
+        });
+        Self {
+            child,
+            writer: Some(writer),
+            output,
+            temp_disk: None,
+            monitor: None,
+        }
+    }
+
     /// Boot x86_64 q35 from a Limine ISO with NVMe + e1000 NIC.
     ///
     /// Same as `boot_x86_bios_with_nvme` plus `-device e1000,netdev=net0`.

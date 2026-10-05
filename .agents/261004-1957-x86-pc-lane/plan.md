@@ -56,7 +56,7 @@ never qualify a board. QEMU-first is what makes the phases cheap to iterate:
 |---|---|---|---|---|
 | 01 | [x86_64-pc board descriptor + HCL model](phase-01-descriptor-and-hcl.md) | board facts | ISO boots on `q35` with the new descriptor; `x86_64-boot` stays 7/7 | **completed** (2026-10-04, `qemu` ceiling) |
 | 02a | [AHCI part A — PCI binding, HBA init, IDENTIFY](phase-02a-ahci-hba-init.md) | storage | `ahci-x86` binds controller, HBA/port up, IDENTIFY ok; `x86_64-boot` 7/7 | **completed** (2026-10-05, `qemu` ceiling) |
-| 02b | [AHCI part B — data path, block registration, persistence](phase-02b-ahci-block-persistence.md) | storage | `ahci-x86` two-boot persistence on the same raw image | pending |
+| 02b | [AHCI part B — data path, block registration, persistence](phase-02b-ahci-block-persistence.md) | storage | `ahci-x86` two-boot persistence on the same raw image | **completed** (2026-10-05, `qemu` ceiling) |
 | 03 | [xHCI + HID family](phase-03-xhci-hid.md) | USB | new `xhci-x86` suite: controller init, HID boot keyboard report reaches the input path | pending |
 | 04a | [igb part A — identity, registration, Tx/Rx](phase-04a-igb-identity-txrx.md) | network | `igb-x86`: `8086:10c9` no longer rejected, registration, first Tx/Rx | pending |
 | 04b | [igb part B — DHCP data plane and VT-d variant](phase-04b-igb-dhcp-vtd.md) | network | `igb-x86`: DHCP ordinary + VT-d (isolation active before DMA) | pending |
@@ -148,6 +148,7 @@ never qualify a board. QEMU-first is what makes the phases cheap to iterate:
 | Touching kernel PCIe/IOMMU code destabilizes QEMU VT-d lanes | 05 keeps the q35 base as a fallback path until DMAR discovery passes both QEMU and hardware gates |
 | No hardware is ever bought, so the lane stalls at `qemu` | 07 is explicitly the only hardware-gated phase; 02–06 stay useful as regression coverage and as the prerequisite inventory for a purchase decision |
 | `bar_mem_*` depends on the kernel's early ECAM scan retaining every BAR | The kernel's own scan retains all BARs (that is why phase 02a passes), but the Platform-Cell registration path stores only BAR0 (`register_device`), so a device registered through that path with an I/O BAR0 and MMIO at BAR5 would report `bar_mem_base = 0` and the AHCI cell would fail closed with a named error. Extending PCI registration to retain per-BAR index/base/size belongs to the Platform-Cell cutover owner, not to this lane; the syscall site carries a note and the AHCI cell fails closed meanwhile |
+| Two storage drivers on one machine: registration is single-slot and last-wins, but the *consumer* caches its provider | Both `/bin/nvme` and `/bin/ahci` register successfully and the later TID replaces the earlier one (`driver_cell.rs:84-91`, registry `insert`); however `service-vfs` resolves the block driver through a cached TID, so if it looks up before the second registration, the replacement does not redirect I/O — and the observed registration order varied between runs. Consequence: which drive serves `/mnt/sd` on a machine with two storage devices is scheduling-dependent. This lane's lanes each attach exactly one storage device, and `ahci_and_nvme_both_register_x86` asserts only the registration contract; deterministic storage selection needs owner-side arbitration (Platform/VFS) and is recorded here rather than assumed |
 
 ## Validation log
 
@@ -193,6 +194,19 @@ artifact set. Eight consistency findings fixed in this same change:
    register, not a row; row-level gaps are optional-only and live in `Notes`.
 8. Descriptor/HAL/README/changelog reframed as a **COM1-required compatibility
    contract**, not a universal claim about every PC.
+
+### Phase 02b review (2026-10-05, independent reviewer)
+
+Verdict: the data path is genuinely exercised (a two-boot oracle, not a boot
+echo) and part-A behaviour is preserved. Findings were three wire/robustness
+defects and two test-honesty gaps, all fixed (phase file, "Review fixes"). The
+reviewer also concluded that the repeated `READ DMA EXT rejected: LBA …` lines
+are benign probes of absent fixed partition offsets — the capacity bound doing
+its job — and that the PRDBC correction supersedes the older part-A evidence
+without needing a further retraction. One item is recorded rather than fixed
+here: with two storage drivers present, registration is single-slot/last-wins
+while the consumer caches its provider TID, so which drive serves I/O is
+scheduling-dependent; owner-side arbitration (Platform/VFS) is the fix.
 
 ### Phase 02a review (2026-10-05, independent reviewer)
 
