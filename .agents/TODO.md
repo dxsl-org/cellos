@@ -9,11 +9,6 @@ báo cáo ở `.agents/<plan>/`, cách làm ở `docs/guides/`. Chuỗi tiền l
 2026-09-19 → 2026-09-27 đã được gỡ, nội dung của chúng nằm ở bốn chỗ trên.
 
 ## Đang mở — làm được ngay, không cần gì thêm
-- [open] **`cells/runtimes/lua/src/bindings_net.rs` chưa wire nên còn 9 chỗ coi `Ok(_)` là reply** — file
-  **không** được khai báo trong `main.rs` (grep `bindings_net` không thấy) nên hiện không biên dịch; khi wire
-  `vnet.*` phải đi qua `ostd::ipc::recv_from(net_tid, …)` như các client khác (entry `ipc:` trong `CHANGELOG.md`).
-  Các witness trong `cells/tests/` (bench `smp`/`preempt_latency`, `pipe-test`, c2c oracle) đã tự so sender
-  hoặc retry-đến-khi-decode-được nên **không** nằm trong lớp lỗi này.
 - [resolved] **Lane `Tier 3 x86 VirtIO E2E + Persistence` flaky (~1/3 lượt CI)** — chuỗi nhân quả đọc được từ artifact
   `x86-tier3-virtio-e2e-1` của run đỏ: (1) `vtd_iova_to_slpte … slpte=0x0 (iova=0x7ffdd0c0, write=0)` cho `dev=00:02:00` (đúng BDF NVMe)
   → (2) `[nvme] admin timeout after 1000000 polls` → cell nvme thoát → init respawn (instance 2 in `DMA authorized`) → (3)

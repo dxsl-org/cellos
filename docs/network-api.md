@@ -201,11 +201,11 @@ Names that fail to parse as IPv4 (including malformed quads such as
 `10.0.2.01` or `256.0.2.1`) are treated as hostnames and go to the resolver —
 never silently read as an address.
 
-**Lua**: the `vnet.*` binding (`cells/runtimes/lua/src/bindings_net.rs`) resolves
-through the same `NetRequest::Resolve` instead of its own client-side resolver
-(static table + hardcoded 10.0.2.3 + UDP query). That binding is **not** in the Lua
-cell's module tree today — `runtimes/lua/src/main.rs` declares no `mod bindings_net;`
-— so no script reaches it yet; re-enabling it keeps it on the service resolver.
+**Lua**: `vnet.resolve` uses `NetRequest::Resolve` in the live Lua module tree.
+`vnet.connect/send/recv/close` and `vnet.udp_socket/udp_bind/udp_send/udp_recv`
+also use typed net-service IPC. Replies are sender-checked by `NetRef`, and
+TCP/UDP receive data is binary-safe (no NUL scanning). Lua has no direct
+network device access.
 
 **Python status**: native MicroPython network bindings are historical only; Python workloads belong in the Tier 3 Linux VM path.
 

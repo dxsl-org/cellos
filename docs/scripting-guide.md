@@ -21,18 +21,19 @@ Lua 5.4 on Cellos  (Ctrl+D to exit)
 Use `Ctrl+D` on an empty line to exit.  `Ctrl+C` cancels the current input line.
 Arrow-up/down navigates command history (session-local; persistence added in Phase 17a).
 
-### Running a Script
-
 ```
-Cellos> exec /bin/lua /scripts/hello.lua
+Cellos> lua /scripts/hello.lua
+Cellos> lua -e 'print(vnet.resolve("gateway"))'
 ```
 
-(Phase 17a will make `lua script.lua` work directly once arg-passing is wired.)
+Lua runs the supplied VFS script or inline chunk; without arguments it starts
+the REPL.
 
 ### Built-in Libraries
 
-All standard Lua 5.4 libraries are available: `string`, `table`, `math`,
-`io`, `os`, `coroutine`, `debug`, `package`.
+Lua 5.4 ships `string`, `table`, `math`, `coroutine`, and `package` with
+VFS-backed `io.open`. The sandbox removes `io.popen`, `os.execute`,
+`package.loadlib`, and `debug`.
 
 ```lua
 -- String operations
@@ -68,6 +69,27 @@ end
 ```
 
 Writes are committed through `vfs.write` or `vfs.append` when the handle closes.
+
+### Network IPC
+
+`vnet` delegates to `/bin/net`; Lua has no direct network device authority.
+`vnet.connect(ip, port)` returns a TCP socket ID or `nil, error`.
+`vnet.send(id, bytes)` returns the number of bytes accepted (possibly partial);
+`vnet.recv(id[, max_bytes])` returns binary-safe bytes or `nil` after bounded
+polling; close with `vnet.close(id)`. For UDP, use `vnet.udp_socket()`,
+`vnet.udp_bind(id, port)`, `vnet.udp_send(id, ip, port, bytes)` and
+`vnet.udp_recv(id[, max_bytes])` (returns source IP, source port, bytes).
+`vnet.resolve(host)` returns a dotted IPv4 address through the net service.
+Ports must be 1–65535, including the UDP bind port. The receive limit defaults
+to 512 bytes; a UDP datagram sent from Lua is at most 512 bytes. Pending sends
+and receives poll for up to 3 seconds (500 attempts if the clock is unavailable);
+errors and timeouts return `nil` or zero as appropriate.
+
+For an isolated RV64 end-to-end check, build the Lua cell with a compatible
+RISC-V C/newlib toolchain, then run
+`python3 scripts/qemu-lua-vnet.py --lua /path/to/release/lua`.
+The runner signs a private copy and boots a private copy of `disk_v3.img`;
+it checks DNS and binary-safe TCP/UDP against local host sockets.
 
 ### os.execute
 
