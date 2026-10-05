@@ -4,6 +4,32 @@
 
 ## [Unreleased] Development-first hardware-constrained execution
 
+- **x86 PC lane phase 04b: Intel `igb` NIC part B — DHCP data plane and the VT-d
+  variant (`qemu` ceiling).** The igb lane now proves the whole chain end to end
+  instead of bring-up only: `igb-x86` carries two bounded variants, both untraced
+  on the production q35 image — ordinary (`igb_x86_dhcp`: bind `8086:10c9` →
+  registration → first bridge Tx `accepted=true` → first Rx → `[net] DHCP
+  acquired` → `[net] IP address: 10.0.2.15`) and VT-d (`igb_x86_vtd_dhcp`:
+  `-device intel-iommu` precedes the igb controller, so
+  `[vtd] Intel VT-d: DMA isolation ACTIVE` must precede the bind line and the same
+  DHCP sequence completes through the IOMMU). Both keep 04a's identity assertions,
+  including that no `[e1000]` line appears at all. No product defect was
+  reproduced, so per the phase's acceptance no DHCP state-machine or net-IPC code
+  changed: the net service owns DHCP and the igb cell only carries frames. The one
+  defect found was in the test — the DHCP completion marker was written with the
+  full line's em dash, which the byte-at-a-time serial reader never reassembles
+  (the ASCII prefix is used instead, the shape `nic-x86` already used). Regressions
+  green on the same image: `nic-x86` 2/2, `nvme-x86` 3/3, `x86_64-boot` 9/9,
+  `pcie-multibus-x86` 2/2, `ahci-x86` 5/5, `xhci-x86` 4/4,
+  `driver-registration-contract` 3/3. The standalone runner gate now attaches SLIRP
+  with the igb model (`restrict=on`) so it can assert the DHCP address actually
+  arrives — a bare `-device igb` has no link to observe — and the VT-d boot helper
+  is one private body shared by the e1000 and igb lanes. Scope note: the VT-d
+  variant is a **q35** gate; the `x86_64-pc` descriptor refuses the q35
+  register-base fallback by design until phase 05 discovers the base from ACPI
+  DMAR, and QEMU's vIOMMU tables are QEMU-generated, so the firmware DMAR path is
+  only exercised in phase 07. No physical machine is claimed.
+
 - **x86 PC lane phase 04a: Intel `igb` NIC part A — identity, registration,
   Tx/Rx (`qemu` ceiling).** New Driver Cell `cells/drivers/igb/` asks for its
   controller by exact vendor:device, reads the MAC over EERD, restarts PHY

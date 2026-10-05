@@ -1278,6 +1278,22 @@ impl QemuRunner {
     /// Same as `boot_x86_bios_with_nic` but adds `-device intel-iommu` before
     /// the NIC so QEMU wires it up first.
     pub fn boot_x86_bios_with_vtd(iso: &str, nvme_disk: &str) -> Self {
+        Self::boot_x86_bios_with_vtd_nic(iso, nvme_disk, "e1000")
+    }
+
+    /// Boot x86_64 q35 from a Limine ISO with NVMe + Intel VT-d + QEMU's `igb`.
+    ///
+    /// The ordering invariant is identical to `boot_x86_bios_with_vtd`: QEMU's
+    /// `igb` model is 82576-class (`8086:10c9`), and `-device intel-iommu`
+    /// precedes every endpoint device, so the igb controller's descriptor and
+    /// buffer DMA must translate before a frame can move in either direction.
+    pub fn boot_x86_bios_with_vtd_igb_nic(iso: &str, nvme_disk: &str) -> Self {
+        Self::boot_x86_bios_with_vtd_nic(iso, nvme_disk, "igb")
+    }
+
+    /// Shared body of the VT-d lanes; `nic` is the QEMU NIC model, always placed
+    /// **after** `intel-iommu` so QEMU wires the IOMMU up first.
+    fn boot_x86_bios_with_vtd_nic(iso: &str, nvme_disk: &str, nic: &str) -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind serial socket");
         let port = listener.local_addr().unwrap().port();
 
@@ -1307,7 +1323,7 @@ impl QemuRunner {
                 "-netdev",
                 "user,id=net0,restrict=on",
                 "-device",
-                "e1000,netdev=net0",
+                &format!("{nic},netdev=net0"),
                 "-serial",
                 &format!("tcp:127.0.0.1:{port}"),
             ])

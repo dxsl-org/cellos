@@ -159,13 +159,70 @@ composition.
   allowlist bitmap is full, so new opcodes must share a family bit and rely on the
   capability gate.
 
+## Phase 04a (same session) — igb NIC, and a design fix that outlives it
+
+Two rounds, then shipped as `269239de9` (37 files).
+
+- **The first round was partial for a design reason, not a tuning reason.** The
+  lane bound the controller, read the MAC and completed a Tx, but Rx/DHCP only
+  happened with QEMU tracing on. Root cause: `FindPcieDevice` matched
+  `(class, subclass, prog_if)`, Ethernet `02:00:00` is one triple for both NIC
+  cells, so `/bin/e1000` claimed the igb device, declined and exited, and
+  `/bin/igb` only won it inside a retry window after the sibling's reap — which
+  pushed registration past the net service's first DHCP attempt. The workaround in
+  that round (a longer retry window in `e1000`) was the wrong layer and I reverted
+  it; the fix is append-only opcode **424 `FindPcieDeviceByVendor`**, so each cell
+  names its own device and the race does not exist.
+- **Review found the cell claimed more than it can drive**: flashless i210/i211
+  need an iNVM read path (this cell uses EERD/Shadow RAM) and fibre/SerDes/SGMII
+  need media-specific link setup. Narrowed the claim to `10C9` (QEMU's 82576 model)
+  + `1533` (i210 copper with external flash), with the kernel gate and unit test
+  narrowed together and the deferred IDs recorded as prerequisites rather than
+  claimed. The owner approved the ABI, the grant and the narrowing.
+- **Harness hazard found while verifying**: the xhci/ahci tests preferred a
+  `build/x86-pc-lane/*.iso` when present, which goes stale against the cell set and
+  the image composition — a lane ISO from before `/bin/input` produced a false red
+  on my own run. They now use the production ISO unless explicitly pinned.
+- Evidence: untraced `igb-x86` with the full chain to `DHCP acquired 10.0.2.15`,
+  all eight x86 lanes green on the rebuilt production ISO, kernel 189/189,
+  boards 13/13, api 103/103, HAL, F1/F5, ARM checks, both runner gates; committed
+  state compiled out-of-tree in a temporary worktree.
+
+## Phase 04b (same session) — the DHCP data plane, and the marker that never matched
+
+- 04b needed **no product change**: the net service already owns DHCP and the igb
+  cell carries frames, so per the phase's acceptance the work was the oracle —
+  two bounded variants in `igb-x86.rs`, ordinary and VT-d, both untraced on the
+  production q35 image. `igb-x86` 2/2; regressions `nic-x86` 2/2, `nvme-x86` 3/3,
+  `x86_64-boot` 9/9, `pcie-multibus-x86` 2/2, `ahci-x86` 5/5, `xhci-x86` 4/4,
+  `driver-registration-contract` 3/3.
+- **The first run failed for a test-only reason worth remembering**: I wrote the
+  DHCP completion marker with the full line (`[net] DHCP acquired — IP
+  configured`), but the serial reader is byte-at-a-time, so the em dash arrives as
+  UTF-8 fragments and the marker can never match. `nic-x86` had already solved
+  this by asserting the ASCII prefix `[net] DHCP acquired`. Fix the marker, not
+  the product.
+- **Correction to what I wrote in the 04a section below**: 04b's VT-d variant is
+  *not* gated on phase 05. It is a q35 gate and runs today. Phase 05 is what makes
+  the **`x86_64-pc` board** able to use VT-d at all (the descriptor refuses the q35
+  register-base fallback, `iommu_x86.rs`), i.e. it moves the same gate from the
+  q35 model to firmware-discovered hardware.
+- Runner gate honesty: `X86_NIC_MODEL=igb` previously attached a bare `-device
+  igb`, which has **no link**, so it could not have observed DHCP. It now attaches
+  SLIRP (`restrict=on`) and asserts the address arrives; `X86_NIC_MODEL=e1000e`
+  keeps its fail-closed check.
+
 ## Next
 
-Phase 04a (igb NIC part A: identity, registration, Tx/Rx — no scope decision
-needed, QEMU has an `igb` model verified as `8086:10c9`), then 04b (DHCP + VT-d),
-05 (ACPI DMAR → real IOMMU), 06 (multi-port COM/RS232-485). Hardware is bought
-only after 02b/03/04b/05 are green on QEMU, and phase 07 is the only phase with no
-QEMU gate. Follow-up hygiene recorded but not scheduled: `nvme`/`e1000` still run
-without a `declare_syscalls!` allowlist; the `bar_mem_*` fields depend on the
-kernel's own ECAM scan retaining every BAR; two storage drivers plus a caching
-consumer make storage selection scheduling-dependent.
+Phase 05 (ACPI DMAR → real IOMMU) is the next gate and the one that unblocks
+VT-d on the `x86_64-pc` board: parse DMAR next to MADT/HPET/MCFG, replace the
+hardcoded q35 base with the discovered unit(s) behind a named fallback, and keep
+the absent-DMAR path fail-closed with its own negative lane. Then 06 (multi-port
+COM/RS232-485) and 07 (physical lane + first HCL rows, hardware-gated; the
+purchase decision was "after 02b/03/04b/05 are green", and 02b/03/04a/04b are).
+
+Open follow-ups recorded but not scheduled: iNVM read path + media-specific link
+setup before claiming the remaining i210/i211 SKUs; owner-side NIC/storage
+arbitration (two providers + a caching consumer); `nvme`/`e1000` still run without
+a `declare_syscalls!` allowlist; the `bar_mem_*` dependency on the kernel's own
+ECAM scan retaining every BAR.

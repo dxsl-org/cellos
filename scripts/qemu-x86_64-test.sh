@@ -44,7 +44,11 @@ esac
 
 case "$X86_NIC_MODEL" in
     "") NIC_ARGS=() ;;
-    e1000|e1000e|igb) NIC_ARGS=(-device "$X86_NIC_MODEL") ;;
+    e1000|e1000e) NIC_ARGS=(-device "$X86_NIC_MODEL") ;;
+    # Phase 04b: the igb case also attaches SLIRP, so the gate can assert the
+    # DHCP data plane really moves through the igb cell — a bare `-device` has
+    # no link and no DHCP to observe. `restrict=on` keeps SLIRP isolated.
+    igb) NIC_ARGS=(-netdev user,id=net0,restrict=on -device "igb,netdev=net0") ;;
     *)
         echo "FAIL: X86_NIC_MODEL must be empty, e1000, e1000e, or igb" >&2
         exit 1
@@ -107,10 +111,12 @@ if [[ "$X86_NIC_MODEL" == "e1000e" ]] \
     exit 1
 fi
 
-# Phase 04a: the igb model (`8086:10c9`) must reach the igb Driver Cell, not the
-# fail-closed gate the pre-change kernel printed for every non-82540EM Ethernet
-# ID. Both directions are asserted, so a silent regression to the old gate is a
-# failure rather than a missing marker.
+# Phase 04a/04b: the igb model (`8086:10c9`) must reach the igb Driver Cell, not
+# the fail-closed gate the pre-change kernel printed for every non-82540EM
+# Ethernet ID — and the attachment must carry the net service's DHCP exchange,
+# because the bind line alone does not prove the data plane moves frames. Both
+# directions are asserted, so a silent regression to the old gate is a failure
+# rather than a missing marker.
 if [[ "$X86_NIC_MODEL" == "igb" ]]; then
     if ! grep -qa "\[igb\] controller bound 8086:10c9" qemu-x86_64.log; then
         echo "FAIL: igb Driver Cell did not bind the igb model controller" >&2
@@ -119,6 +125,11 @@ if [[ "$X86_NIC_MODEL" == "igb" ]]; then
     fi
     if grep -qa "\[e1000\] unsupported Ethernet 8086:10c9" qemu-x86_64.log; then
         echo "FAIL: igb model ID is still refused by the driver gate" >&2
+        exit 1
+    fi
+    if ! grep -qa "\[net\] IP address: 10.0.2.15" qemu-x86_64.log; then
+        echo "FAIL: the igb attachment did not carry DHCP to a configured address" >&2
+        grep -ai "\[net\]\|DHCP" qemu-x86_64.log | head -5
         exit 1
     fi
 fi

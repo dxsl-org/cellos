@@ -1,0 +1,82 @@
+=== phase 04b igb: DHCP data plane (ordinary + VT-d), untraced transcripts ===
+date:        2026-10-05
+iso:         /home/dmin/cellos/build/vicell-x86.iso  (production q35 image)
+iso sha256:  7a541f0fd7cb0a26f1c56366969ba4706a23ed84162cd943cb1f9ff077433b13
+qemu:        QEMU emulator version 8.2.2 (Debian 1:8.2.2+ds-0ubuntu1.17)
+tracing:     DISABLED (no -trace/-d arguments on any run)
+
+Both variants run the unmodified integration lane (tests/integration,
+--test igb-x86) against the production image, plus an equivalent raw QEMU
+serial capture for the ordering evidence. The net service owns DHCP; the igb
+cell only carries frames, so no product code changed in this phase.
+
+--------------------------------------------------------------------
+RUN 1 — cargo test --test igb-x86, untraced  (ordinary + VT-d)
+--------------------------------------------------------------------
+running 2 tests
+test igb_x86_dhcp ... ok
+test igb_x86_vtd_dhcp ... ok
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.23s
+
+--- RUN 1a raw serial: q35 + nvme + igb, NO intel-iommu (ordinary) ---
+USER: [igb] controller bound 8086:10c9 82576 (QEMU model) link_up=true mac=52:54:00:12:34:56
+[ WARN] [driver_cell] NIC driver registered: tid=8
+USER: [net-bridge] first e1000 TX len=304 accepted=true
+USER: [net-bridge] first e1000 RX len=590
+USER: [net] DHCP acquired — IP configured
+USER: [net] IP address: 10.0.2.15
+(no "[vtd]" line: 0 matches for "DMA isolation ACTIVE" in this run)
+
+--- RUN 1b raw serial: q35 + nvme + intel-iommu + igb (VT-d) ---
+ 69: [ WARN] [vtd] Intel VT-d: DMA isolation ACTIVE (per-Cell domains, Sv39 SLPT)
+154: [ WARN] [vtd] Cell 3 BDF 00:02.0 DID=1 SLPT=0x14a000 phys=0x833000 size=0x1000
+184: [ WARN] [vtd] Cell 4 BDF 00:1f.2 DID=2 SLPT=0x14e000 phys=0xfa5000 size=0x1000
+304: USER: [igb] controller bound 8086:10c9 82576 (QEMU model) link_up=true mac=52:54:00:12:34:56
+305: [ WARN] [driver_cell] NIC driver registered: tid=8
+306: USER: [net-bridge] first e1000 TX len=304 accepted=true
+308: USER: [net-bridge] first e1000 RX len=590
+314: USER: [net] DHCP acquired — IP configured
+315: USER: [net] IP address: 10.0.2.15
+
+Ordering asserted by the lane: isolation ACTIVE (69) precedes the igb bind (304)
+precedes registration (305) < Tx (306) < Rx (308) < DHCP (314) < leased address
+(315). Cell 3 is BDF 00:02.0 — the igb controller — so its descriptor and buffer
+DMA ran under a per-device domain (DID=1) with explicit SLPT mappings, not
+untranslated. Cell 4 is the NVMe endpoint (00:1f.2, DID=2).
+
+Identity assertions hold in both runs: the sibling `/bin/e1000` cell emits no
+`[e1000]` line at all (it no longer matches the shared Ethernet class triple),
+`[e1000] unsupported Ethernet 8086:10c9` is absent, and no syscall is denied for
+the igb cell.
+
+--------------------------------------------------------------------
+RUN 2 — regressions on the same image
+--------------------------------------------------------------------
+nic-x86                      2 passed
+nvme-x86                     3 passed
+x86_64-boot                  9 passed
+pcie-multibus-x86            2 passed
+ahci-x86                     5 passed
+xhci-x86                     4 passed
+driver-registration-contract 3 passed
+
+--------------------------------------------------------------------
+RUN 3 — standalone runner gate (scripts/qemu-x86_64-test.sh)
+--------------------------------------------------------------------
+X86_NIC_MODEL=igb   -> PASS: x86_64 shell prompt reached; [igb] controller bound
+                       8086:10c9; [net] IP address: 10.0.2.15; no [e1000] line.
+                       (the gate now attaches SLIRP with restrict=on; a bare
+                       `-device igb` has no link, so DHCP could not be observed)
+X86_NIC_MODEL=e1000e -> PASS: shell reached, and the fail-closed refusal
+                       `[e1000] unsupported Ethernet 8086:10d3; driver gate
+                       closed` is still asserted.
+
+--------------------------------------------------------------------
+Scope (A-01)
+--------------------------------------------------------------------
+The VT-d variant is a q35 gate. QEMU's vIOMMU tables are QEMU-generated, not
+firmware DMAR, so the parser's firmware path is only fully exercised in phase 07.
+The `x86_64-pc` descriptor refuses the q35 register-base fallback by design, so a
+GenericX86Pc lane image cannot serve this variant until phase 05 discovers the
+base from ACPI DMAR. QEMU's `igb` model is 82576-class; it does not model the
+i210/i211 iNVM or PHY, so nothing here is evidence for those parts.

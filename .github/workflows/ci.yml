@@ -1018,9 +1018,10 @@ jobs:
           --target x86_64-unknown-linux-gnu
           -- --nocapture
 
-      # Phase 04a: the igb NIC cell's bring-up lane. The ISO the job just built
-      # now carries /bin/igb, and the runner attaches QEMU's `igb` model to
-      # exercise the cell end to end. `VICELL_IGB_ISO` pins that ISO.
+      # Phase 04a/04b: the igb NIC cell's bring-up + DHCP lane. The ISO the job
+      # just built now carries /bin/igb, and the runner attaches QEMU's `igb`
+      # model to exercise the cell end to end. `VICELL_IGB_ISO` pins that ISO;
+      # the VT-d variant defaults to it as well (it is a q35 gate).
       - name: igb integration test (x86_64, igb NIC attached)
         env:
           VICELL_IGB_ISO: ${{ github.workspace }}/build/vicell-x86.iso

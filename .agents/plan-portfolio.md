@@ -26,9 +26,15 @@ promoted through this index.
 - `261004-1957-x86-pc-lane` — x86_64 PC lane, controller-family bring-up with
   QEMU-first gates ([plan](261004-1957-x86-pc-lane/plan.md)).
   **Authorized scope: phases 01–06** — 01 `x86_64-pc` descriptor + HCL model
-  (**completed 2026-10-04**, `qemu` ceiling; independent review produced 8
-  consistency findings, all fixed), 02a/02b AHCI/SATA, 03 xHCI + HID, 04a/04b
-  igb (i210/i211), 05 ACPI DMAR →
+  (**completed 2026-10-04**), 02a/02b AHCI/SATA (**completed 2026-10-05**,
+  two-boot persistence), 03 xHCI + HID (**completed 2026-10-05**, enumeration +
+  in-cell decode) and 03b USB HID producer role (**completed 2026-10-05**;
+  append-only syscall 423 + service id 17 sharing allowlist bit 50, approved by
+  the owner), 04a igb NIC part A (**completed 2026-10-05**; append-only opcode 424
+  `FindPcieDeviceByVendor` + 48-byte `PcieDeviceInfo`, approved by the owner; SKU
+  claim narrowed to `10C9`+`1533`), 04b igb DHCP data plane + VT-d variant
+  (**completed 2026-10-05**; no product change — the net service already owned
+  DHCP), 05 ACPI DMAR →
   IOMMU, 06 multi-port COM/RS232-485. **Phase 07 (physical lane + first HCL rows)
   is not authorized**: it starts only after 02b/03/04b/05 are green on QEMU and
   hardware is bought. Validate completed 2026-10-04 (36/36 claims verified,

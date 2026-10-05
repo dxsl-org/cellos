@@ -1,0 +1,101 @@
+=== phase 04a igb: untraced identity/bind/Tx/Rx lane transcripts ===
+date:        2026-10-05T07:35:07Z
+iso:         /home/dmin/cellos/build/x86-pc-lane/vicell-x86-igb-fix.iso
+iso sha256:  1391f435e09036620741b90800d17b95e787373d250ce521f239e195a47666b0
+qemu:        QEMU emulator version 8.2.2 (Debian 1:8.2.2+ds-0ubuntu1.17)
+tracing:     DISABLED (no -trace/-d arguments on any run)
+
+The driver selection now matches by exact vendor:device
+(sys_find_pcie_device_by_vendor / opcode 424), so /bin/igb does not depend
+on the sibling /bin/e1000 cell claiming the shared class triple, declining
+by ID and exiting. Each run below is the unmodified integration lane
+(VICELL_IGB_ISO) plus an equivalent raw QEMU serial capture.
+
+--------------------------------------------------------------------
+RUN 1 — cargo test igb-x86, untraced  (07:35:07Z)
+--------------------------------------------------------------------
+running 1 test
+test igb_x86_identity_registration_tx_rx ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.96s
+
+--- RUN 1 raw serial (q35 + nvme + igb, no tracing) ---
+USER: [platform] unsupported Ethernet identity — registration skipped
+USER: [net] Starting DHCP...
+USER: [net] DHCP: deconfigured
+USER: [igb] controller bound 8086:10c9 82576 (QEMU model) link_up=true mac=52:54:00:12:34:56
+[ WARN] [driver_cell] NIC driver registered: tid=8
+USER: [net-bridge] first e1000 TX len=304 accepted=true
+USER: [net-bridge] first e1000 TX accepted len=304
+USER: [net-bridge] first e1000 RX len=590
+USER: [net] DHCP acquired — IP configured
+USER: [net] IP address: 10.0.2.15
+USER: Cellos > qemu-system-x86_64: terminating on signal 15 from pid 3433646 (timeout)
+
+--------------------------------------------------------------------
+RUN 2 — cargo test igb-x86, untraced  (07:35:38Z)
+--------------------------------------------------------------------
+running 1 test
+test igb_x86_identity_registration_tx_rx ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.96s
+
+--- RUN 2 raw serial (q35 + nvme + igb, no tracing) ---
+USER: [platform] unsupported Ethernet identity — registration skipped
+USER: [net] Starting DHCP...
+USER: [net] DHCP: deconfigured
+USER: [igb] controller bound 8086:10c9 82576 (QEMU model) link_up=true mac=52:54:00:12:34:56
+[ WARN] [driver_cell] NIC driver registered: tid=8
+USER: [net-bridge] first e1000 TX len=304 accepted=true
+USER: [net-bridge] first e1000 TX accepted len=304
+USER: [net-bridge] first e1000 RX len=590
+USER: [net] DHCP acquired — IP configured
+USER: [net] IP address: 10.0.2.15
+USER: Cellos > qemu-system-x86_64: terminating on signal 15 from pid 3433964 (timeout)
+
+--------------------------------------------------------------------
+RUN 3 — cargo test igb-x86, untraced  (07:36:08Z)
+--------------------------------------------------------------------
+running 1 test
+test igb_x86_identity_registration_tx_rx ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.96s
+
+--- RUN 3 raw serial (q35 + nvme + igb, no tracing) ---
+USER: [platform] unsupported Ethernet identity — registration skipped
+USER: [net] Starting DHCP...
+USER: [net] DHCP: deconfigured
+USER: [igb] controller bound 8086:10c9 82576 (QEMU model) link_up=true mac=52:54:00:12:34:56
+[ WARN] [driver_cell] NIC driver registered: tid=8
+USER: [net-bridge] first e1000 TX len=304 accepted=true
+USER: [net-bridge] first e1000 TX accepted len=304
+USER: [net-bridge] first e1000 RX len=590
+USER: [net] DHCP acquired — IP configured
+USER: [net] IP address: 10.0.2.15
+USER: Cellos > qemu-system-x86_64: terminating on signal 15 from pid 3434482 (timeout)
+
+--------------------------------------------------------------------
+ASSERTIONS
+--------------------------------------------------------------------
+PASS run1: \[igb\] controller bound 8086:10c9
+PASS run1: \[driver_cell\] NIC driver registered
+PASS run1: \[net-bridge\] first e1000 TX
+PASS run1: \[net-bridge\] first e1000 RX
+PASS run1: \[net\] DHCP acquired
+PASS run1: igb bound with link_up=true
+PASS run1: no sibling e1000 claim/decline line
+PASS run1: no [kernel] syscall denied
+PASS run2: \[igb\] controller bound 8086:10c9
+PASS run2: \[driver_cell\] NIC driver registered
+PASS run2: \[net-bridge\] first e1000 TX
+PASS run2: \[net-bridge\] first e1000 RX
+PASS run2: \[net\] DHCP acquired
+PASS run2: igb bound with link_up=true
+PASS run2: no sibling e1000 claim/decline line
+PASS run2: no [kernel] syscall denied
+PASS run3: \[igb\] controller bound 8086:10c9
+PASS run3: \[driver_cell\] NIC driver registered
+PASS run3: \[net-bridge\] first e1000 TX
+PASS run3: \[net-bridge\] first e1000 RX
+PASS run3: \[net\] DHCP acquired
+PASS run3: igb bound with link_up=true
+PASS run3: no sibling e1000 claim/decline line
+PASS run3: no [kernel] syscall denied
+RESULT: PASS (3/3 untraced)
