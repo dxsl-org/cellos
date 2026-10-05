@@ -1,6 +1,6 @@
 use crate::{
-    Architecture, BoardDescriptor, BootContract, BootProtocol, DriverId, FirmwareInterface, SocId,
-    WiringLayout,
+    Architecture, BoardDescriptor, BootContract, BootProtocol, DmaIsolation, DriverId,
+    FirmwareInterface, SocId, WiringLayout,
 };
 
 const COMPATIBLES: [&str; 2] = ["cellos,qemu-q35-x86_64", "qemu,q35"];
@@ -34,4 +34,8 @@ pub const QEMU_Q35_X86_64: BoardDescriptor = BoardDescriptor {
         phy_links: &["legacy-com1", "q35-pcie-root"],
     },
     enabled_drivers: &DRIVERS,
+    // Intel VT-d exists on this model only when the machine is started with an
+    // IOMMU, so it cannot be required: without one, identity DMA is the contract
+    // and the kernel logs that condition instead of failing every driver.
+    dma_isolation: DmaIsolation::Optional,
 };

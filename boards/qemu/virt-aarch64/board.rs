@@ -1,6 +1,6 @@
 use crate::{
-    Architecture, BoardDescriptor, BootContract, BootProtocol, DriverId, FirmwareInterface,
-    MemoryRange, MemoryRangeKind, SocId, WiringLayout,
+    Architecture, BoardDescriptor, BootContract, BootProtocol, DmaIsolation, DriverId,
+    FirmwareInterface, MemoryRange, MemoryRangeKind, SocId, WiringLayout,
 };
 
 const COMPATIBLES: [&str; 1] = ["linux,dummy-virt"];
@@ -44,4 +44,6 @@ pub const QEMU_VIRT_AARCH64: BoardDescriptor = BoardDescriptor {
         phy_links: &[],
     },
     enabled_drivers: &DRIVERS,
+    // Cell isolation on this board is EL2 stage-2, not a DMA remapper.
+    dma_isolation: DmaIsolation::Optional,
 };

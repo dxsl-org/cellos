@@ -1032,6 +1032,30 @@ jobs:
           --target x86_64-unknown-linux-gnu
           -- --nocapture
 
+      # Phase 05: the VT-d register base must come from ACPI DMAR, and a profile
+      # that requires isolation must refuse untranslated DMA. The `x86_64-pc`
+      # descriptor is a separate kernel build, so it gets its own image; the
+      # kernel is copied out first so the q35 binary the steps above used is not
+      # silently replaced by the PC one.
+      - name: Build the x86_64-pc profile image (phase 05 lanes)
+        run: |
+          cargo build --release -p cellos-kernel --target x86_64-unknown-none --features board-x86-pc
+          cp target/x86_64-unknown-none/release/cellos-kernel "$RUNNER_TEMP/cellos-kernel-pc"
+          X86_KERNEL="$RUNNER_TEMP/cellos-kernel-pc" \
+            X86_ISO_ROOT="$RUNNER_TEMP/x86-pc-iso-root" \
+            bash scripts/x86/make-iso-ci.sh build/x86-pc-lane/vicell-x86-pc.iso
+
+      - name: VT-d DMAR discovery + fail-closed lanes (x86_64-pc)
+        env:
+          VICELL_PC_ISO: ${{ github.workspace }}/build/x86-pc-lane/vicell-x86-pc.iso
+          VICELL_IOMMU_ISO: ${{ github.workspace }}/build/vicell-x86.iso
+        run: >
+          cargo test
+          --manifest-path tests/integration/Cargo.toml
+          --test iommu-dmar-x86
+          --target x86_64-unknown-linux-gnu
+          -- --nocapture
+
   qemu-x86-hypervisor-boot:
     name: QEMU Hypervisor Boot-to-Shell (x86_64)
     runs-on: ubuntu-24.04

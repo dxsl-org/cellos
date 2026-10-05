@@ -212,17 +212,43 @@ Two rounds, then shipped as `269239de9` (37 files).
   SLIRP (`restrict=on`) and asserts the address arrives; `X86_NIC_MODEL=e1000e`
   keeps its fail-closed check.
 
+## Phase 05 (same session) — the base comes from firmware, and silence is not an option
+
+- The hardcode is gone from every path that has firmware data: `acpi.rs` parses
+  DMAR (DRHD units, `INCLUDE_PCI_ALL` preferred, segment 0 only, malformed record
+  stops the walk), `iommu_x86` programmes what it found through a runtime base,
+  and the q35 constant is only a named fallback for the QEMU model.
+- **The PC profile gained VT-d for the first time**: `x86_64-pc` used to refuse
+  the q35 fallback, so it could never have used a remapper — its only possible
+  base source was firmware data nothing parsed. Now the same image discovers
+  `0xfed90000` from DMAR and activates per-Cell domains.
+- **Fail-closed is now a profile contract, not an accident**: `BoardDescriptor`
+  gained `dma_isolation` (`Required`/`Optional`). On the PC profile a machine
+  without a remapper refuses DMA per requester by name and the shell still starts;
+  on the QEMU/ARM/RISC-V profiles the fallback base and the identity contract are
+  logged once, which removes the silence without breaking the lanes that boot
+  without an IOMMU. The decision is a pure function with a unit test.
+- QEMU's DMAR reports `include_pci_all=false` (its DRHD declares device scopes),
+  so the parser's preference rule is exercised by unit test rather than by this
+  machine — recorded rather than papered over.
+- **Two pre-existing working-tree breakages are not mine and are not touched**:
+  `cells/tests/bench/src/scenarios/base_tray_handoff.rs` fails to compile as an
+  integration test target (`use alloc::…` without `extern crate alloc`) at HEAD~1
+  and HEAD alike, and `hal/arch/arm/src/aarch64/{el2,monitor}.rs` (in-flight ARM
+  work) makes `board-rpi4` fail — `check-board-configs.sh` fails on rpi4 for that
+  reason. Both were confirmed by building the committed state in a scratch
+  worktree, where rpi4 succeeds.
+
 ## Next
 
-Phase 05 (ACPI DMAR → real IOMMU) is the next gate and the one that unblocks
-VT-d on the `x86_64-pc` board: parse DMAR next to MADT/HPET/MCFG, replace the
-hardcoded q35 base with the discovered unit(s) behind a named fallback, and keep
-the absent-DMAR path fail-closed with its own negative lane. Then 06 (multi-port
-COM/RS232-485) and 07 (physical lane + first HCL rows, hardware-gated; the
-purchase decision was "after 02b/03/04b/05 are green", and 02b/03/04a/04b are).
+Phase 06 (multi-port COM / RS232-485) is the last QEMU-gated phase in the plan:
+COM2..COMn must enumerate and echo, with RS485 explicitly not claimed. Phase 07
+(physical lane + first HCL rows) remains unauthorized until hardware is bought —
+its precondition was 02b/03/04b/05 green on QEMU, and all four now are.
 
 Open follow-ups recorded but not scheduled: iNVM read path + media-specific link
 setup before claiming the remaining i210/i211 SKUs; owner-side NIC/storage
 arbitration (two providers + a caching consumer); `nvme`/`e1000` still run without
 a `declare_syscalls!` allowlist; the `bar_mem_*` dependency on the kernel's own
-ECAM scan retaining every BAR.
+ECAM scan retaining every BAR; AMD-Vi (`IVRS`) and interrupt remapping as their
+own decision.

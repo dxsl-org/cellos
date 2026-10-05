@@ -4,6 +4,42 @@
 
 ## [Unreleased] Development-first hardware-constrained execution
 
+- **x86 PC lane phase 05: ACPI DMAR discovery → real IOMMU (`qemu` ceiling).** The
+  VT-d register page is no longer a compiled-in address: `kernel/src/acpi.rs`
+  parses DMAR next to MADT/MCFG/HPET and exposes `dmar_base` / `dmar_units` /
+  `dmar_include_pci_all` on `AcpiInfo` (zero = nothing validated), preferring the
+  first DRHD carrying `INCLUDE_PCI_ALL` and otherwise the first segment-0 unit
+  while recording that it is scope-limited. `iommu_x86` programmes the discovered
+  unit, and every register access now goes through a runtime base
+  (`VTD_REG_BASE`/`reg_base()`), so discovery is authoritative in probing,
+  activation and both invalidation paths. The q35 constant survives only as the
+  board-declared fallback for that QEMU model, and the chosen path is logged
+  either way — `[vtd] register base 0x… from ACPI DMAR (units=… include_pci_all=…)`,
+  `[vtd] no ACPI DMAR unit; using the board-declared q35 register base 0x…
+  (fallback)`, or `[vtd] no DMAR-discovered register base; refusing q35 fallback`.
+  The ACTIVE line names the programmed unit and each per-Cell mapping line reports
+  the live domain count, so "per-Cell domains" is checkable rather than asserted.
+  The `x86_64-pc` profile can use VT-d for the first time: it previously refused
+  the q35 fallback, so its only possible source of a base was firmware data that
+  nothing parsed. Absent DMAR is now fail-closed by profile and never silent —
+  `BoardDescriptor` gained `dma_isolation` (`Required`/`Optional`), the PC profile
+  is `Required`, so a machine with no remapper refuses DMA-capable drivers by name
+  (four refusals, zero `[driver_cell] … registered` lines, shell still reached)
+  instead of quietly running untranslated DMA, while the QEMU/ARM/RISC-V profiles
+  log the fallback base and the identity contract once. The decision is a pure
+  function (`dma_without_remapper`) with its own unit test, so policy cannot drift
+  from the log. Evidence: new `iommu-dmar-x86` **3/3** (discovery, with the
+  enforcing unit asserted equal to the discovered base; PC fail-closed; q35 named
+  fallback + identity), plus regressions `igb-x86` 2/2, `nic-x86` 2/2, `nvme-x86`
+  3/3, `x86_64-boot` 9/9, `pcie-multibus-x86` 2/2, `ahci-x86` 5/5, `xhci-x86` 4/4,
+  `driver-registration-contract` 3/3, `cellos-kernel` 193/193 (three DMAR parser
+  cases + the decision table), `cellos-boards` 13/13, HAL boundaries, F1/F5, and
+  both ARM/RISC-V targets building with zero errors. The PC-profile lanes are
+  wired into CI with their own image build. Not claimed: QEMU's vIOMMU tables are
+  QEMU-generated, so the parser runs against firmware-shaped data (the physical
+  path is phase 07); AMD-Vi (`IVRS`), interrupt remapping and RMRR handling stay
+  out of scope; no machine is qualified.
+
 - **x86 PC lane phase 04b: Intel `igb` NIC part B — DHCP data plane and the VT-d
   variant (`qemu` ceiling).** The igb lane now proves the whole chain end to end
   instead of bring-up only: `igb-x86` carries two bounded variants, both untraced

@@ -1,6 +1,6 @@
 use crate::{
-    Architecture, BoardDescriptor, BootContract, BootProtocol, DriverId, FirmwareInterface,
-    MemoryRange, MemoryRangeKind, SocId, WiringLayout,
+    Architecture, BoardDescriptor, BootContract, BootProtocol, DmaIsolation, DriverId,
+    FirmwareInterface, MemoryRange, MemoryRangeKind, SocId, WiringLayout,
 };
 
 const COMPATIBLES: [&str; 2] = ["starfive,visionfive-2-v1.3b", "starfive,jh7110"];
@@ -51,4 +51,6 @@ pub const STARFIVE_VISIONFIVE_2: BoardDescriptor = BoardDescriptor {
         phy_links: &["sdio1"],
     },
     enabled_drivers: &DRIVERS,
+    // RISC-V isolation is the H-extension/IOMMU path, not Intel VT-d.
+    dma_isolation: DmaIsolation::Optional,
 };

@@ -1,6 +1,6 @@
 use crate::{
-    Architecture, BoardDescriptor, BootContract, BootProtocol, DriverId, FirmwareInterface,
-    MemoryRange, MemoryRangeKind, SocId, ValidationError, WiringLayout,
+    Architecture, BoardDescriptor, BootContract, BootProtocol, DmaIsolation, DriverId,
+    FirmwareInterface, MemoryRange, MemoryRangeKind, SocId, ValidationError, WiringLayout,
 };
 
 static EMPTY: [&str; 0] = [];
@@ -32,6 +32,7 @@ fn descriptor(
         fallback_memory: memory,
         wiring: EMPTY_WIRING,
         enabled_drivers: &TEST_DRIVERS,
+        dma_isolation: DmaIsolation::Optional,
     }
 }
 

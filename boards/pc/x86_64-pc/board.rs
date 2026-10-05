@@ -1,6 +1,6 @@
 use crate::{
-    Architecture, BoardDescriptor, BootContract, BootProtocol, DriverId, FirmwareInterface, SocId,
-    WiringLayout,
+    Architecture, BoardDescriptor, BootContract, BootProtocol, DmaIsolation, DriverId,
+    FirmwareInterface, SocId, WiringLayout,
 };
 
 const COMPATIBLES: [&str; 1] = ["cellos,x86_64-pc"];
@@ -53,4 +53,10 @@ pub const X86_64_PC: BoardDescriptor = BoardDescriptor {
         phy_links: &["legacy-com1", "pcie-root"],
     },
     enabled_drivers: &DRIVERS,
+    // Real hardware, untrusted Cells: a machine with no DMA remapper must not run
+    // DMA-capable drivers untranslated. VT-d is present on some machines and absent
+    // on others (a hardware property, discovered from ACPI DMAR), so the kernel
+    // refuses rather than silently degrading — the isolation invariant this work
+    // exists to protect.
+    dma_isolation: DmaIsolation::Required,
 };

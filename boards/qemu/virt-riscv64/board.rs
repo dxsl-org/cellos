@@ -1,6 +1,6 @@
 use crate::{
-    Architecture, BoardDescriptor, BootContract, BootProtocol, DriverId, FirmwareInterface,
-    MemoryRange, MemoryRangeKind, SocId, WiringLayout,
+    Architecture, BoardDescriptor, BootContract, BootProtocol, DmaIsolation, DriverId,
+    FirmwareInterface, MemoryRange, MemoryRangeKind, SocId, WiringLayout,
 };
 
 const BOARD_COMPATIBLES: [&str; 2] = ["riscv-virtio", "qemu,virt"];
@@ -53,4 +53,7 @@ pub const QEMU_VIRT_RISCV64: BoardDescriptor = BoardDescriptor {
     fallback_memory: &FALLBACK_MEMORY,
     wiring: EMPTY_WIRING,
     enabled_drivers: &ENABLED_DRIVERS,
+    // RISC-V isolation is the H-extension/IOMMU path, not Intel VT-d; the
+    // remapper is optional on this model and identity DMA is its contract.
+    dma_isolation: DmaIsolation::Optional,
 };

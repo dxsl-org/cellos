@@ -1,0 +1,92 @@
+=== phase 05: ACPI DMAR -> VT-d register base + fail-closed DMA contract ===
+date:        2026-10-05
+iso (q35):   /home/dmin/cellos/build/vicell-x86.iso
+  sha256:    22f541eec1e68edabe83e7a3c12e9d25f0bc334109ed6dc1e49f12b1fcb5f7a7
+iso (pc):    /home/dmin/cellos/build/x86-pc-lane/vicell-x86-pc.iso   (--features board-x86-pc)
+  sha256:    273a3be0dda2d6f2aea25ad83a9ddd4b37709da4bbdf2cd5acbe84be41eb3dc8
+qemu:        QEMU emulator version 8.2.2 (Debian 1:8.2.2+ds-0ubuntu1.17)
+tracing:     DISABLED (no -trace/-d arguments on any run)
+
+The register base is no longer a compiled-in address on any path that has
+firmware data: the kernel parses DMAR out of the validated ACPI tables and
+programs the DRHD unit it found. The q35 value survives only as the
+board-declared fallback for the QEMU model, and the line that takes it says so.
+
+--------------------------------------------------------------------
+RUN 1 — q35 + `-device intel-iommu` (base from firmware)
+--------------------------------------------------------------------
+[ INFO] [vtd] register base 0xfed90000 from ACPI DMAR (units=1 include_pci_all=false)
+[ INFO] [vtd] Intel VT-d found GCAP=0x10 ND=0 max_did=2
+[ WARN] [vtd] Intel VT-d: DMA isolation ACTIVE (per-Cell domains, Sv39 SLPT) unit=0xfed90000
+[ WARN] [vtd] Cell 3 BDF 00:02.0 DID=1 SLPT=0x14a000 phys=0x833000 size=0x1000 domains=1
+[ WARN] [driver_cell] block driver registered: tid=3
+[ WARN] [driver_cell] NIC driver registered: tid=8
+USER: [net] IP address: 10.0.2.15
+
+The enforcing unit equals the discovered base (the lane asserts the two tokens
+are equal, so a fallback can never be mistaken for a discovery). Cell 3 is the
+igb controller at BDF 00:02.0: its descriptor and buffer DMA ran under per-device
+domain DID=1 with explicit SLPT mappings.
+
+--------------------------------------------------------------------
+RUN 2 — q35 WITHOUT `intel-iommu` (optional profile: named fallback + identity)
+--------------------------------------------------------------------
+[ WARN] [vtd] no ACPI DMAR unit; using the board-declared q35 register base 0xfed90000 (fallback)
+[ INFO] [vtd] Intel VT-d not present (GCAP=0x0)
+[ WARN] [iommu] board qemu-q35-x86_64 declares no DMA remapper; DMA is untranslated (identity addressing)
+[ WARN] [driver_cell] block driver registered: tid=3
+USER: [net] IP address: 10.0.2.15
+
+Both halves are named: which base was used, and that DMA is untranslated. No
+`[vtd] register base` line appears, so nothing claims a discovered unit.
+
+--------------------------------------------------------------------
+RUN 3 — x86_64-pc profile WITH `intel-iommu` (real-hardware profile)
+--------------------------------------------------------------------
+[ INFO] [vtd] register base 0xfed90000 from ACPI DMAR (units=1 include_pci_all=false)
+[ WARN] [vtd] Intel VT-d: DMA isolation ACTIVE (per-Cell domains, Sv39 SLPT) unit=0xfed90000
+[ WARN] [vtd] Cell 3 BDF 00:02.0 DID=1 SLPT=0x14a000 phys=0x833000 size=0x1000 domains=1
+[ WARN] [driver_cell] NIC driver registered: tid=8
+USER: [net] IP address: 10.0.2.15
+
+Before this phase the PC descriptor could not use VT-d at all: it refused the q35
+register-base fallback. With firmware discovery it programs the unit from DMAR,
+which is the point of the phase.
+
+--------------------------------------------------------------------
+RUN 4 — x86_64-pc profile WITHOUT `intel-iommu` (fail-closed)
+--------------------------------------------------------------------
+[ERROR] [iommu] DMA isolation REQUIRED by board x86_64-pc but no remapper was discovered — refusing untranslated DMA (tid=3 bdf=0x10 phys=0x833000 size=4096)
+[ERROR] [iommu] DMA isolation REQUIRED by board x86_64-pc but no remapper was discovered — refusing untranslated DMA (tid=4 bdf=0xfa phys=0x9c3000 size=4096)
+[ERROR] [iommu] DMA isolation REQUIRED by board x86_64-pc but no remapper was discovered — refusing untranslated DMA (tid=8 bdf=0x18 phys=0x1236000 size=4096)
+[ERROR] [iommu] DMA isolation REQUIRED by board x86_64-pc but no remapper was discovered — refusing untranslated DMA (tid=10 bdf=0x10 phys=0x146e000 size=4096)
+USER: Cellos >
+
+Four DMA requests refused by name; `[driver_cell] block driver registered` and
+`[driver_cell] NIC driver registered` appear **zero** times in this capture, so no
+DMA-capable driver activated without translation — and the machine still reached
+its shell instead of crashing.
+
+--------------------------------------------------------------------
+RUN 5 — gates
+--------------------------------------------------------------------
+cargo test --test iommu-dmar-x86            3 passed
+  x86_pc_discovers_the_vtd_base_from_acpi_dmar
+  x86_pc_without_a_remapper_refuses_untranslated_dma
+  q35_without_a_remapper_names_the_fallback_and_the_identity_contract
+
+Regressions on the same image: igb-x86 2/2, nic-x86 2/2, nvme-x86 3/3,
+x86_64-boot 9/9, pcie-multibus-x86 2/2, ahci-x86 5/5, xhci-x86 4/4,
+driver-registration-contract 3/3. Host-side: cellos-kernel 193/193 (4 new: three
+DMAR parser cases + the no-remapper decision), cellos-boards 13/13 (every
+descriptor carries the new field), HAL/SoC/board boundaries PASS, F1/F5 PASS.
+aarch64 board-rpi3 and riscv64gc build with zero errors.
+
+--------------------------------------------------------------------
+Scope
+--------------------------------------------------------------------
+QEMU's vIOMMU tables are QEMU-generated, so the parser is exercised against
+firmware-shaped data rather than a real BIOS: the physical firmware path is phase
+07. AMD-Vi (IVRS) is a different table and unit model and stays out of scope, as
+does interrupt remapping (RMRR/ATSR/SAT records are skipped by their own length
+and do not move the base).

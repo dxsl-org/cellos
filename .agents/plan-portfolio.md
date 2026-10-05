@@ -34,8 +34,9 @@ promoted through this index.
   `FindPcieDeviceByVendor` + 48-byte `PcieDeviceInfo`, approved by the owner; SKU
   claim narrowed to `10C9`+`1533`), 04b igb DHCP data plane + VT-d variant
   (**completed 2026-10-05**; no product change — the net service already owned
-  DHCP), 05 ACPI DMAR →
-  IOMMU, 06 multi-port COM/RS232-485. **Phase 07 (physical lane + first HCL rows)
+  DHCP), 05 ACPI DMAR → real IOMMU (**completed 2026-10-05**; DRHD base parsed
+  from DMAR, `DmaIsolation` profile contract makes absent-DMAR fail-closed), 06
+  multi-port COM/RS232-485. **Phase 07 (physical lane + first HCL rows)
   is not authorized**: it starts only after 02b/03/04b/05 are green on QEMU and
   hardware is bought. Validate completed 2026-10-04 (36/36 claims verified,
   0 failed; interview: igb first, 02/04 split into sub-phases, sequential

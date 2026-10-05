@@ -1,6 +1,6 @@
 use crate::{
-    Architecture, BoardDescriptor, BootContract, BootProtocol, DriverId, FirmwareInterface,
-    MemoryRange, MemoryRangeKind, SocId, WiringLayout,
+    Architecture, BoardDescriptor, BootContract, BootProtocol, DmaIsolation, DriverId,
+    FirmwareInterface, MemoryRange, MemoryRangeKind, SocId, WiringLayout,
 };
 
 const COMPATIBLES: [&str; 2] = ["sophgo,pioneer", "sophgo,sg2042"];
@@ -50,4 +50,6 @@ pub const MILK_V_PIONEER: BoardDescriptor = BoardDescriptor {
         phy_links: &[],
     },
     enabled_drivers: &DRIVERS,
+    // RISC-V isolation is the H-extension/IOMMU path, not Intel VT-d.
+    dma_isolation: DmaIsolation::Optional,
 };

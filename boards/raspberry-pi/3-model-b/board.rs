@@ -1,6 +1,6 @@
 use crate::{
-    Architecture, BoardDescriptor, BootContract, BootProtocol, DriverId, FirmwareInterface,
-    MemoryRange, MemoryRangeKind, SocId, WiringLayout,
+    Architecture, BoardDescriptor, BootContract, BootProtocol, DmaIsolation, DriverId,
+    FirmwareInterface, MemoryRange, MemoryRangeKind, SocId, WiringLayout,
 };
 
 const BOARD_COMPATIBLES: [&str; 2] = ["raspberrypi,3-model-b", "brcm,bcm2837"];
@@ -74,4 +74,6 @@ pub const RASPBERRY_PI_3_MODEL_B: BoardDescriptor = BoardDescriptor {
     fallback_memory: &FALLBACK_MEMORY,
     wiring: WIRING,
     enabled_drivers: &ENABLED_DRIVERS,
+    // Cell isolation on this board is EL2 stage-2, not a DMA remapper.
+    dma_isolation: DmaIsolation::Optional,
 };

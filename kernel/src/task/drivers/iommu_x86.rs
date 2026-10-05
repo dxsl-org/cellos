@@ -55,8 +55,20 @@ const CTX_AW_39BIT_HI: u64 = 0b001; // hi[2:0]
 const CTX_PRESENT: u64 = 1;
 
 // QEMU q35 hardcoded VT-d MMIO base (identity-mapped by init_kernel_paging_x86).
+// Kept only as the board-declared fallback for that QEMU model: real machines
+// must supply the base through ACPI DMAR.
 const VTD_BASE: usize = 0xFED9_0000;
 const POLL_MAX: u64 = 1_000_000;
+
+/// The register page actually in use: the ACPI DMAR-discovered base when one was
+/// validated, otherwise the board-declared q35 fallback. Every register access
+/// goes through this, so a discovered base is authoritative everywhere.
+static VTD_REG_BASE: AtomicUsize = AtomicUsize::new(VTD_BASE);
+
+#[inline]
+fn reg_base() -> usize {
+    VTD_REG_BASE.load(Ordering::Relaxed)
+}
 
 // ── Module-level state ────────────────────────────────────────────────────────
 
@@ -164,7 +176,7 @@ const fn iotlb_page_command(did: u16) -> u64 {
 fn wait_for_invalidation(off: usize, busy: u64) -> bool {
     for _ in 0..POLL_MAX {
         // SAFETY: the caller has initialized the identity-mapped VT-d MMIO page.
-        if unsafe { read64(VTD_BASE, off) } & busy == 0 {
+        if unsafe { read64(reg_base(), off) } & busy == 0 {
             return true;
         }
         core::hint::spin_loop();
@@ -177,9 +189,9 @@ fn issue_context_invalidation(cmd: u64) -> bool {
     if !wait_for_invalidation(VTD_CCMD, CCMD_ICC) {
         return false;
     }
-    // SAFETY: VTD_BASE + VTD_CCMD is identity-mapped VT-d MMIO and the
+    // SAFETY: reg_base() + VTD_CCMD is identity-mapped VT-d MMIO and the
     // serialized precheck proved no earlier command remains in flight.
-    unsafe { write64(VTD_BASE, VTD_CCMD, cmd) };
+    unsafe { write64(reg_base(), VTD_CCMD, cmd) };
     wait_for_invalidation(VTD_CCMD, CCMD_ICC)
 }
 
@@ -195,11 +207,11 @@ fn issue_iotlb_invalidation(cmd: u64, iva: Option<u64>) -> bool {
     }
     if let Some(iva) = iva {
         // SAFETY: IVA belongs to the same serialized IOTLB register bank.
-        unsafe { write64(VTD_BASE, iva_off, iva) };
+        unsafe { write64(reg_base(), iva_off, iva) };
     }
-    // SAFETY: VTD_BASE + iotlb_off is identity-mapped VT-d MMIO and the
+    // SAFETY: reg_base() + iotlb_off is identity-mapped VT-d MMIO and the
     // serialized precheck proved no earlier command remains in flight.
-    unsafe { write64(VTD_BASE, iotlb_off, cmd) };
+    unsafe { write64(reg_base(), iotlb_off, cmd) };
     wait_for_invalidation(iotlb_off, IOTLB_IVT)
 }
 
@@ -372,18 +384,36 @@ unsafe fn clear_ctx_slot(slot: usize) {
 
 /// Probe Intel VT-d; allocate the root table; compute the IOTLB register offset.
 /// Context tables are allocated per bus on demand. Translation stays disabled.
-pub(super) fn init_hw() {
-    if crate::board::selected().soc != cellos_boards::SocId::QemuX86Q35 {
+///
+/// The register base comes from firmware: a DRHD unit the boot path parsed out of
+/// the ACPI DMAR table. Only the board-declared q35 model may fall back to the
+/// compiled-in address, and the chosen path is logged either way, so a machine
+/// that reaches this driver without firmware data says so instead of silently
+/// touching an address that belongs to another machine.
+pub(super) fn init_hw(dma: super::iommu::DmaIsolationInput) {
+    let base = if dma.vtd_base != 0 {
+        log::info!(
+            "[vtd] register base {:#x} from ACPI DMAR (units={} include_pci_all={})",
+            dma.vtd_base,
+            dma.vtd_units,
+            dma.vtd_include_pci_all
+        );
+        dma.vtd_base as usize
+    } else if crate::board::selected().soc == cellos_boards::SocId::QemuX86Q35 {
+        log::warn!(
+            "[vtd] no ACPI DMAR unit; using the board-declared q35 register base {:#x} (fallback)",
+            VTD_BASE
+        );
+        VTD_BASE
+    } else {
         log::warn!("[vtd] no DMAR-discovered register base; refusing q35 fallback");
         return;
-    }
+    };
 
-    // q35 exposes a single 4 KiB VT-d register page at this fallback address.
-    // Map it only after validating the compiled board identity; other x86 boards
-    // must discover their register base from DMAR before reaching this driver.
-    crate::memory::paging::map_mmio_x86(VTD_BASE, 0x1000);
-    // SAFETY: the q35 VT-d register page was identity-mapped immediately above.
-    let gcap = unsafe { read64(VTD_BASE, VTD_GCAP) };
+    VTD_REG_BASE.store(base, Ordering::Relaxed);
+    crate::memory::paging::map_mmio_x86(base, 0x1000);
+    // SAFETY: the VT-d register page at `base` was identity-mapped immediately above.
+    let gcap = unsafe { read64(base, VTD_GCAP) };
     if gcap == 0 || gcap == u64::MAX {
         log::info!("[vtd] Intel VT-d not present (GCAP={:#x})", gcap);
         return;
@@ -404,8 +434,8 @@ pub(super) fn init_hw() {
     }
 
     // Compute IOTLB register base from ECAP.IRO (bits[17:8]).
-    // IOTLB_BASE = VTD_BASE + IRO * 16 (spec §10.4.8 IOTLB Invalidate Register).
-    let ecap = unsafe { read64(VTD_BASE, VTD_ECAP) };
+    // IOTLB_BASE = base + IRO * 16 (spec §10.4.8 IOTLB Invalidate Register).
+    let ecap = unsafe { read64(base, VTD_ECAP) };
     let iro = ((ecap >> 8) & 0x3FF) as usize;
     let iva_off = iro * 16;
     VTD_IVA_OFF.store(iva_off, Ordering::Relaxed);
@@ -460,6 +490,7 @@ pub(super) fn map_range_for_cell(
     entry.bdfs.insert(bdf);
     let did = entry.did;
     let slpt_phys = entry.slpt.root_phys();
+    let domain_count = domains.len();
 
     // SAFETY: ctx_virt is the 4 KiB context page selected by bdf.bus.
     unsafe { write_ctx_entry(ctx_virt, bdf, slpt_phys, did) };
@@ -476,9 +507,11 @@ pub(super) fn map_range_for_cell(
     // warn, not info: this line and the syscall's grant line below are the only
     // record of which ranges a device may DMA. Measured on the Tier-3 x86 lane:
     // an info-level line at this exact site never reaches the serial log, and a
-    // silent DMA grant is what made a flaky `slpte=0x0` fault unreadable.
+    // silent DMA grant is what made a flaky `slpte=0x0` fault unreadable. The
+    // trailing count is the live domain total, which is what makes the status
+    // line's "per-Cell domains" claim checkable in the evidence.
     log::warn!(
-        "[vtd] Cell {} BDF {:02x}:{:02x}.{} DID={} SLPT={:#x} phys={:#x} size={:#x}",
+        "[vtd] Cell {} BDF {:02x}:{:02x}.{} DID={} SLPT={:#x} phys={:#x} size={:#x} domains={}",
         tid,
         bus,
         dev,
@@ -486,7 +519,8 @@ pub(super) fn map_range_for_cell(
         did,
         slpt_phys,
         phys,
-        size
+        size,
+        domain_count
     );
     super::iommu::DmaMapResult::Mapped(phys)
 }
@@ -525,18 +559,18 @@ pub(super) fn activate() {
     }
 
     // Step 1: programme root table address.
-    // SAFETY: VTD_BASE is identity-mapped; root_phys is 4096-aligned.
+    // SAFETY: the register page is identity-mapped; root_phys is 4096-aligned.
     unsafe {
-        write64(VTD_BASE, VTD_RTADDR, root_phys);
+        write64(reg_base(), VTD_RTADDR, root_phys);
     }
 
     // Step 2: GCMD.SRTP → poll GSTS.RTPS.
     unsafe {
-        write32(VTD_BASE, VTD_GCMD, SRTP);
+        write32(reg_base(), VTD_GCMD, SRTP);
     }
     let mut n = 0u64;
     loop {
-        if unsafe { read32(VTD_BASE, VTD_GSTS) } & SRTP != 0 {
+        if unsafe { read32(reg_base(), VTD_GSTS) } & SRTP != 0 {
             break;
         }
         n += 1;
@@ -558,11 +592,11 @@ pub(super) fn activate() {
 
     // Step 4: GCMD.(TE|SRTP) → poll GSTS.TES.
     unsafe {
-        write32(VTD_BASE, VTD_GCMD, TE | SRTP);
+        write32(reg_base(), VTD_GCMD, TE | SRTP);
     }
     let mut n = 0u64;
     loop {
-        if unsafe { read32(VTD_BASE, VTD_GSTS) } & TE != 0 {
+        if unsafe { read32(reg_base(), VTD_GSTS) } & TE != 0 {
             break;
         }
         n += 1;
@@ -577,7 +611,14 @@ pub(super) fn activate() {
     // `warn!` — activation happens post-scheduler (deferred init fires from the
     // Platform Cell's RegisterPciDevice), after the kernel log level drops to
     // Warn. One-time boot-integrity event + the nic_x86_vtd_enabled test oracle.
-    log::warn!("[vtd] Intel VT-d: DMA isolation ACTIVE (per-Cell domains, Sv39 SLPT)");
+    // The line names the unit actually programmed, so the evidence says which
+    // register base is enforcing; the live domain count is reported where it
+    // changes (per-Cell domain allocation), because activation necessarily
+    // precedes the first driver DMA registration.
+    log::warn!(
+        "[vtd] Intel VT-d: DMA isolation ACTIVE (per-Cell domains, Sv39 SLPT) unit={:#x}",
+        reg_base()
+    );
 }
 
 // ── Cell exit: exact context cleanup, then cache drains ───────────────────────

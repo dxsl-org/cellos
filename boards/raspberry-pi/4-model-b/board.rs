@@ -1,6 +1,6 @@
 use crate::{
-    Architecture, BoardDescriptor, BootContract, BootProtocol, DriverId, FirmwareInterface,
-    MemoryRange, MemoryRangeKind, SocId, WiringLayout,
+    Architecture, BoardDescriptor, BootContract, BootProtocol, DmaIsolation, DriverId,
+    FirmwareInterface, MemoryRange, MemoryRangeKind, SocId, WiringLayout,
 };
 
 const COMPATIBLES: [&str; 2] = ["raspberrypi,4-model-b", "brcm,bcm2711"];
@@ -46,4 +46,6 @@ pub const RASPBERRY_PI_4_MODEL_B: BoardDescriptor = BoardDescriptor {
         phy_links: &["bcm54213pe-gigabit-ethernet"],
     },
     enabled_drivers: &DRIVERS,
+    // Cell isolation on this board is EL2 stage-2, not a DMA remapper.
+    dma_isolation: DmaIsolation::Optional,
 };

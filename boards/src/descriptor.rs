@@ -108,6 +108,22 @@ pub struct WiringLayout {
     pub phy_links: &'static [&'static str],
 }
 
+/// What the machine's DMA contract requires of the kernel.
+///
+/// This is a **profile** property, not a hardware probe: it decides what the
+/// kernel must do when no remapping hardware was found, which is exactly the case
+/// that must never resolve itself silently.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DmaIsolation {
+    /// No remapping hardware: DMA is untranslated (identity) and that is the
+    /// machine's declared contract. The kernel logs the condition once.
+    Optional,
+    /// DMA must be translated. If no remapper was discovered, DMA-capable drivers
+    /// are refused rather than quietly running untranslated — the isolation
+    /// invariant the VT-d work exists to protect.
+    Required,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct BoardDescriptor {
     pub slug: &'static str,
@@ -120,6 +136,8 @@ pub struct BoardDescriptor {
     pub fallback_memory: &'static [MemoryRange],
     pub wiring: WiringLayout,
     pub enabled_drivers: &'static [DriverId],
+    /// DMA contract this profile demands when no remapper is present.
+    pub dma_isolation: DmaIsolation,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

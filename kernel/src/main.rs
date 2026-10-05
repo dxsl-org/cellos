@@ -383,10 +383,11 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
 
         let info = crate::acpi::parse(rsdp, &mut map_physical);
         log::info!(
-            "[acpi] gates: madt={} hpet={} mcfg={}",
+            "[acpi] gates: madt={} hpet={} mcfg={} dmar={}",
             info.lapic_base != 0 && info.ioapic_base != 0,
             info.hpet_base != 0,
-            info.ecam_base != 0
+            info.ecam_base != 0,
+            info.dmar_base != 0
         );
         info
     };
@@ -734,7 +735,11 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             // Platform Cell receives the full validated MCFG range via argv
             // later and performs authoritative multi-bus enumeration.
             task::drivers::pcie_ecam::init();
-            task::drivers::iommu::init();
+            task::drivers::iommu::init(task::drivers::iommu::DmaIsolationInput {
+                vtd_base: acpi_info.dmar_base,
+                vtd_units: acpi_info.dmar_units,
+                vtd_include_pci_all: acpi_info.dmar_include_pci_all,
+            });
             task::drivers::iommu::activate_isolation();
         } else {
             log::error!("[x86-gate] PCIe CLOSED: validated MCFG required");

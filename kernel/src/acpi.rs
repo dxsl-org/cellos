@@ -31,6 +31,15 @@ pub struct AcpiInfo {
     /// ISA IRQ → GSI override table. Index = ISA IRQ (0–15); value = GSI.
     /// Entries not overridden by MADT type-2 keep identity mapping (IRQ N → GSI N).
     pub irq_overrides: [u32; 16],
+    /// Intel VT-d DRHD register base discovered from ACPI DMAR. Zero means no
+    /// DMAR table (or no usable unit) was validated, so no remapper address may
+    /// be assumed — the caller must decide fail-closed rather than guess.
+    pub dmar_base: u64,
+    /// DRHD unit count the DMAR table declared (0 = no DMAR table).
+    pub dmar_units: u8,
+    /// The selected DRHD carries INCLUDE_PCI_ALL, so it covers PCI devices that
+    /// declare no device scope of their own.
+    pub dmar_include_pci_all: bool,
 }
 
 impl Default for AcpiInfo {
@@ -48,6 +57,9 @@ impl Default for AcpiInfo {
             ecam_bus_start: 0,
             ecam_bus_end: 0,
             irq_overrides: overrides,
+            dmar_base: 0,
+            dmar_units: 0,
+            dmar_include_pci_all: false,
         }
     }
 }
@@ -342,6 +354,7 @@ fn dispatch_sdt(
         b"APIC" => parse_madt(virt, length, info),
         b"MCFG" => parse_mcfg(virt, length, info),
         b"HPET" => parse_hpet(virt, length, info),
+        b"DMAR" => parse_dmar(virt, length, info),
         _ => {
             // Skip unknown/unneeded tables silently.
         }
@@ -552,6 +565,108 @@ fn parse_hpet(virt: usize, length: usize, info: &mut AcpiInfo) {
     }
 }
 
+// ---------------------------------------------------------------------------
+// DMAR parser
+// ---------------------------------------------------------------------------
+
+/// Parse DMAR (DMA Remapping Reporting Table) for the DRHD register base.
+///
+/// DMAR layout (after the 36-byte SDT header):
+///   offset 36: host_address_width (u8)
+///   offset 37: flags (u8) — bit 0 = INTR_REMAP
+///   offset 38: reserved (10 bytes)
+///   offset 48: device-scope records
+///
+/// Each record: type (u16), length (u16), then type-specific payload.
+///   - Type 0 (DRHD): flags (u8 @4, bit 0 = INCLUDE_PCI_ALL), size (u8 @5),
+///     segment (u16 @6), register_base (u64 @8), device scopes after @16.
+///   - Types 1/2/3 (RMRR/ATSR/SAT): skipped by their own length. They do not
+///     move the register base; RMRR correctness matters only for the devices
+///     this kernel drives, which declare no RMRR in the exercised machines.
+///
+/// Selection: the first DRHD carrying INCLUDE_PCI_ALL covers every PCI device
+/// and is preferred; otherwise the first segment-0 DRHD is used and
+/// [`AcpiInfo::dmar_include_pci_all`] stays false so the caller can see the unit
+/// is scope-limited. Units on other segments are counted but not selected — the
+/// kernel drives segment 0. A malformed record stops the walk and leaves
+/// whatever was already validated, which keeps the caller's decision fail-closed
+/// instead of dereferencing past the table.
+fn parse_dmar(virt: usize, length: usize, info: &mut AcpiInfo) {
+    if length < 48 {
+        log::warn!("[acpi] DMAR too short ({} bytes) for any unit", length);
+        return;
+    }
+
+    let mut units: u8 = 0;
+    let mut selected: Option<(u64, bool)> = None;
+    let mut offset = 48usize;
+
+    while offset + 4 <= length {
+        // SAFETY: the record header is inside the validated DMAR body.
+        let record_type = unsafe { core::ptr::read_unaligned((virt + offset) as *const u16) };
+        // SAFETY: same record header.
+        let record_len = unsafe { core::ptr::read_unaligned((virt + offset + 2) as *const u16) }
+            as usize;
+        if record_len < 4 || offset + record_len > length {
+            log::warn!(
+                "[acpi] DMAR record type {} has invalid length {} — stopping the walk",
+                record_type,
+                record_len
+            );
+            break;
+        }
+
+        if record_type == 0 {
+            if record_len < 16 {
+                log::warn!("[acpi] DMAR DRHD shorter than its fixed fields — stopping");
+                break;
+            }
+            // SAFETY: fixed DRHD fields are within this validated record.
+            let flags = unsafe { core::ptr::read_volatile((virt + offset + 4) as *const u8) };
+            // SAFETY: as above.
+            let segment = unsafe { core::ptr::read_unaligned((virt + offset + 6) as *const u16) };
+            // SAFETY: as above.
+            let register_base =
+                unsafe { core::ptr::read_unaligned((virt + offset + 8) as *const u64) };
+            units = units.saturating_add(1);
+
+            if segment == 0 && register_base != 0 {
+                let include_all = flags & 1 != 0;
+                let better = match selected {
+                    None => true,
+                    // A scope-limited unit never displaces an all-inclusive one.
+                    Some((_, true)) => false,
+                    Some(_) => include_all,
+                };
+                if better {
+                    selected = Some((register_base, include_all));
+                }
+            }
+        }
+        offset += record_len;
+    }
+
+    info.dmar_units = units;
+    match selected {
+        Some((base, include_all)) => {
+            info.dmar_base = base;
+            info.dmar_include_pci_all = include_all;
+            log::info!(
+                "[acpi] DMAR: units={} selected base={:#x} include_pci_all={}",
+                units,
+                base,
+                include_all
+            );
+        }
+        None => {
+            log::warn!(
+                "[acpi] DMAR: units={} but no usable segment-0 DRHD — VT-d gate closed",
+                units
+            );
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -587,5 +702,83 @@ mod tests {
         let overflowing = mcfg_entry(u64::MAX & !0xF_FFFF, 0, 0, u8::MAX);
         parse_mcfg(overflowing.as_ptr() as usize, overflowing.len(), &mut info);
         assert_eq!(info.ecam_base, 0);
+    }
+
+    /// A DMAR body: 48-byte header (host_address_width, flags, reserved) then
+    /// the records.
+    fn dmar_table(records: &[Vec<u8>]) -> Vec<u8> {
+        let mut table = vec![0u8; 48];
+        for record in records {
+            table.extend_from_slice(record);
+        }
+        table
+    }
+
+    /// Type 0 DRHD with no device scopes (16 bytes).
+    fn drhd(flags: u8, segment: u16, base: u64) -> Vec<u8> {
+        let mut record = vec![0u8; 16];
+        record[0..2].copy_from_slice(&0u16.to_le_bytes());
+        record[2..4].copy_from_slice(&16u16.to_le_bytes());
+        record[4] = flags;
+        record[6..8].copy_from_slice(&segment.to_le_bytes());
+        record[8..16].copy_from_slice(&base.to_le_bytes());
+        record
+    }
+
+    /// Type 1 RMRR: opaque to the base decision, skipped by its own length.
+    fn rmrr() -> Vec<u8> {
+        let mut record = vec![0xAAu8; 24];
+        record[0..2].copy_from_slice(&1u16.to_le_bytes());
+        record[2..4].copy_from_slice(&24u16.to_le_bytes());
+        record
+    }
+
+    #[test]
+    fn dmar_prefers_the_all_inclusive_unit_and_skips_other_record_types() {
+        let table = dmar_table(&[
+            rmrr(),
+            drhd(0, 0, 0xAAAA_0000),
+            drhd(1, 0, 0xFED9_0000),
+        ]);
+        let mut info = AcpiInfo::default();
+        parse_dmar(table.as_ptr() as usize, table.len(), &mut info);
+        assert_eq!(info.dmar_base, 0xFED9_0000);
+        assert!(info.dmar_include_pci_all);
+        assert_eq!(info.dmar_units, 2);
+    }
+
+    #[test]
+    fn dmar_accepts_a_scope_limited_unit_without_claiming_full_coverage() {
+        let table = dmar_table(&[drhd(0, 0, 0xFED9_0000)]);
+        let mut info = AcpiInfo::default();
+        parse_dmar(table.as_ptr() as usize, table.len(), &mut info);
+        assert_eq!(info.dmar_base, 0xFED9_0000);
+        assert!(!info.dmar_include_pci_all);
+        assert_eq!(info.dmar_units, 1);
+    }
+
+    #[test]
+    fn dmar_ignores_other_segments_and_stops_at_a_malformed_record() {
+        // A unit on another segment is counted but never selected.
+        let other_segment = dmar_table(&[drhd(1, 2, 0xFED9_0000)]);
+        let mut info = AcpiInfo::default();
+        parse_dmar(other_segment.as_ptr() as usize, other_segment.len(), &mut info);
+        assert_eq!(info.dmar_base, 0);
+        assert_eq!(info.dmar_units, 1);
+
+        // A record whose length runs past the table stops the walk: the base from
+        // the valid record before it survives, and nothing is read out of bounds.
+        let mut truncated = dmar_table(&[drhd(1, 0, 0xFED9_0000)]);
+        truncated.extend_from_slice(&[0u8, 0, 0xFF, 0xFF]);
+        let mut info = AcpiInfo::default();
+        parse_dmar(truncated.as_ptr() as usize, truncated.len(), &mut info);
+        assert_eq!(info.dmar_base, 0xFED9_0000);
+
+        // An undersized DRHD stops the walk without a base.
+        let mut undersized = dmar_table(&[]);
+        undersized.extend_from_slice(&[0u8, 0, 8, 0]);
+        let mut info = AcpiInfo::default();
+        parse_dmar(undersized.as_ptr() as usize, undersized.len(), &mut info);
+        assert_eq!(info.dmar_base, 0);
     }
 }
