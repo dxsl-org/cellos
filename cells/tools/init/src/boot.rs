@@ -167,6 +167,11 @@ pub(crate) fn prepare_service(path: &str) {
         #[cfg(not(feature = "board-rpi3"))]
         let _ = sys_spawn_from_path(VIRTIO_NET_DRIVER);
         let _ = sys_spawn_from_path("/bin/e1000");
+        // x86_64 PC lane (phase 04a): the igb (i210/i211) NIC cell, on the same
+        // NIC edge as e1000. It confirms the PCI identity is its own family and
+        // idles when the machine has no igb, so this spawn is inert on every
+        // other profile and on an e1000-only machine.
+        let _ = sys_spawn_from_path("/bin/igb");
         #[cfg(feature = "usb-host")]
         let _ = sys_spawn_from_path("/bin/dwc2-usb");
         // x86_64 PC lane (phase 03): the xHCI USB host cell, on the same USB

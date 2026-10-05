@@ -44,10 +44,12 @@ fn iso_path() -> String {
     if let Ok(path) = std::env::var("VICELL_XHCI_ISO") {
         return path;
     }
-    let lane = repo_root().join("build/x86-pc-lane/vicell-x86-xhci.iso");
-    if lane.exists() {
-        return lane.to_string_lossy().into_owned();
-    }
+    // No lane-ISO preference: `build/x86-pc-lane/vicell-x86-*.iso` is a
+    // build-time artifact that goes stale against both the cell set and the image
+    // composition, and a stale one produced a false red here (a lane ISO from
+    // before the `/bin/input` composition carries the cell but no input service).
+    // The production ISO is the artifact CI assembles; pin a lane ISO explicitly
+    // through `VICELL_XHCI_ISO` when that is what you mean to test.
     repo_root()
         .join("build/vicell-x86.iso")
         .to_string_lossy()
@@ -55,13 +57,20 @@ fn iso_path() -> String {
 }
 
 /// Provenance check: the kernel embeds its launch-path table (and the cell FAT
-/// image), so a kernel built with the xHCI lane carries the literal `/bin/xhci`.
-/// An ISO without it cannot exercise the driver, and treating that as a pass
-/// would be a false green.
-fn iso_carries_xhci_cell() -> bool {
+/// image), so a kernel built with the xHCI lane carries the literal `/bin/xhci`,
+/// and a kernel built with the input service carries `/bin/input`. **Both** are
+/// required: the shell-receipt oracle needs the input service, and a lane ISO
+/// built before the composition change would otherwise pass a cell-only check and
+/// then fail on the delivery assertion — which is exactly how a stale
+/// `build/x86-pc-lane/vicell-x86-xhci.iso` produced a false red.
+fn iso_contains(needle: &[u8]) -> bool {
     std::fs::read(iso_path())
-        .map(|bytes| bytes.windows(9).any(|w| w == b"/bin/xhci"))
+        .map(|bytes| bytes.windows(needle.len()).any(|w| w == needle))
         .unwrap_or(false)
+}
+
+fn iso_carries_xhci_lane() -> bool {
+    iso_contains(b"/bin/xhci") && iso_contains(b"/bin/input")
 }
 
 fn prerequisites_ok() -> bool {
@@ -70,10 +79,15 @@ fn prerequisites_ok() -> bool {
         .arg("--version")
         .output()
         .is_ok();
-    let cell_ok = iso_ok && iso_carries_xhci_cell();
+    let cell_ok = iso_ok && iso_carries_xhci_lane();
     if iso_ok && !cell_ok {
         eprintln!(
-            "SKIP xhci-x86: ISO does not carry /bin/xhci ({})\n  Rebuild: pwsh scripts/build-x86_64-cells.ps1, then the board-x86-pc kernel + ISO",
+            "SKIP xhci-x86: ISO is missing {} ({})\n  Rebuild: pwsh scripts/build-x86_64-cells.ps1, then the board-x86-pc kernel + ISO",
+            if iso_contains(b"/bin/xhci") {
+                "/bin/input (input service not packaged)"
+            } else {
+                "/bin/xhci"
+            },
             iso_path()
         );
     }

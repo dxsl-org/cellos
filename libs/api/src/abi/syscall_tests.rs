@@ -73,6 +73,7 @@ mod tests {
         (421, ViSyscall::SpawnReplacement),
         (422, ViSyscall::PauseService),
         (423, ViSyscall::RegisterUsbHidProducer),
+        (424, ViSyscall::FindPcieDeviceByVendor),
         (237, ViSyscall::ReadLog),
         (238, ViSyscall::SpawnFromElf),
         (310, ViSyscall::NetTx),
@@ -126,6 +127,7 @@ mod tests {
         assert_eq!(ViSyscall::SpawnReplacement as usize, 421);
         assert_eq!(ViSyscall::PauseService as usize, 422);
         assert_eq!(ViSyscall::RegisterUsbHidProducer as usize, 423);
+        assert_eq!(ViSyscall::FindPcieDeviceByVendor as usize, 424);
         assert_eq!(ViSyscall::Chdir as usize, 252);
         assert_eq!(ViSyscall::Getcwd as usize, 253);
         assert_eq!(ViSyscall::Fstat as usize, 254);
@@ -152,6 +154,7 @@ mod tests {
                     | ViSyscall::SpawnReplacement
                     | ViSyscall::PauseService
                     | ViSyscall::RegisterUsbHidProducer
+                    | ViSyscall::FindPcieDeviceByVendor
                     | ViSyscall::Chdir
                     | ViSyscall::Getcwd
                     | ViSyscall::Fstat
@@ -180,7 +183,8 @@ mod tests {
         assert_eq!(ViSyscall::RegisterDisplayFramebuffer as usize, 251);
         assert_eq!(ViSyscall::from(400), ViSyscall::Unknown);
         assert_eq!(ViSyscall::from(423), ViSyscall::RegisterUsbHidProducer);
-        assert_eq!(ViSyscall::from(424), ViSyscall::Unknown);
+        assert_eq!(ViSyscall::from(424), ViSyscall::FindPcieDeviceByVendor);
+        assert_eq!(ViSyscall::from(425), ViSyscall::Unknown);
     }
 
     #[test]
@@ -257,6 +261,18 @@ mod tests {
         assert!(legacy.permits(ViSyscall::RegisterUsbHidProducer));
         assert_eq!(ViSyscall::RegisterUsbHidProducer as usize, 423);
         assert_eq!(crate::syscall::service::USB_HID_PRODUCER, 17);
+    }
+
+    /// `FindPcieDeviceByVendor` shares the DriverRegistration bit with the two
+    /// existing PCIe/NIC discovery opcodes, so an image whose `/bin/igb`
+    /// allowlist section was generated for `FindPcieDevice` keeps working.
+    #[test]
+    fn vendor_device_query_shares_pcie_driver_authority() {
+        assert_eq!(ViSyscall::FindPcieDevice.allowlist_bit(), Some(50));
+        assert_eq!(ViSyscall::FindPcieDeviceByVendor.allowlist_bit(), Some(50));
+        let legacy = SyscallSet::EMPTY.with(ViSyscall::FindPcieDevice);
+        assert!(legacy.permits(ViSyscall::FindPcieDeviceByVendor));
+        assert_eq!(ViSyscall::FindPcieDeviceByVendor as usize, 424);
     }
 
     #[test]

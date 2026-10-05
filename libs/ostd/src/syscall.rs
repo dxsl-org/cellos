@@ -2370,15 +2370,21 @@ pub fn sys_register_gpu_driver() -> Result<(), SyscallError> {
 
 /// PCIe device descriptor written by `sys_find_pcie_device`.
 ///
-/// Layout is `#[repr(C)]` to match the kernel's `write_volatile` sequence:
+/// Layout is `#[repr(C)]` to match the kernel's byte-wise write sequence:
 /// `bdf(u32) + found(u32) + bar0_base(u64) + bar0_len(u64) + bar_mem_base(u64)
-/// + bar_mem_len(u64)` = 40 bytes.
+/// + bar_mem_len(u64) + vendor_id(u16) + device_id(u16)` = 44 bytes padded to
+/// 48 by the trailing `u64` alignment.
 ///
 /// `bar_mem_*` were **appended** so the first-BAR fields keep their exact
 /// meaning: a device whose BAR0 is I/O (ICH9 AHCI, whose ABAR is BAR5) reports
 /// zero `bar0_base` and its MMIO window in `bar_mem_base`. Every cell that
 /// reads this record is rebuilt by the same packaging pass, so no stale 24-byte
 /// reader survives a rebuild.
+///
+/// `vendor_id`/`device_id` were appended the same way (phase 04a of the x86 PC
+/// lane) so a NIC cell can confirm the device the kernel matched by Ethernet
+/// class triple is actually its own family before it programs a register model.
+/// A device with no identity reads `0:0`, which matches no family.
 #[repr(C)]
 pub struct PcieDeviceInfo {
     /// PCIe Requester ID: `bus<<8 | dev<<3 | fn`. Zero means not populated.
@@ -2395,6 +2401,10 @@ pub struct PcieDeviceInfo {
     pub bar_mem_base: u64,
     /// First memory BAR size in bytes (0x4000 fallback when the size is unknown).
     pub bar_mem_len: u64,
+    /// PCI vendor ID (0 when the kernel could not read the identity).
+    pub vendor_id: u16,
+    /// PCI device ID (0 when the kernel could not read the identity).
+    pub device_id: u16,
 }
 
 impl PcieDeviceInfo {
@@ -2407,6 +2417,8 @@ impl PcieDeviceInfo {
             bar0_len: 0,
             bar_mem_base: 0,
             bar_mem_len: 0,
+            vendor_id: 0,
+            device_id: 0,
         }
     }
 }
@@ -2421,13 +2433,17 @@ impl PcieDeviceInfo {
 /// at spawn via direct TCB write, not via manifest).
 ///
 /// Returns `Ok(false)` if no matching device is present (VirtIO fallback case).
+///
+/// Two Driver Cells that share a class (the two Ethernet cells on `02:00:00`)
+/// cannot each name their controller through this query; they use
+/// [`sys_find_pcie_device_by_vendor`] instead.
 pub fn sys_find_pcie_device(
     class: u8,
     subclass: u8,
     prog_if: u8,
     info: &mut PcieDeviceInfo,
 ) -> Result<bool, SyscallError> {
-    // SAFETY: `info` is a valid mutable reference; kernel writes exactly 24 bytes.
+    // SAFETY: `info` is a valid mutable reference; kernel writes exactly 48 bytes.
     // In SAS the kernel's VA == the cell's VA, so the pointer is directly usable.
     let ret = unsafe {
         syscall(
@@ -2436,6 +2452,39 @@ pub fn sys_find_pcie_device(
             subclass as usize,
             prog_if as usize,
             info as *mut PcieDeviceInfo as usize,
+        )
+    };
+    match ret {
+        0 => Ok(false),
+        1 => Ok(true),
+        _ => Err(SyscallError::PermissionDenied),
+    }
+}
+
+/// Find the first PCIe device with an exact `(vendor_id, device_id)`.
+///
+/// Populates `info` exactly like [`sys_find_pcie_device`]; the difference is the
+/// match — an exact identity instead of a class triple. This is how a Driver
+/// Cell claims its controller when another cell drives a different family in the
+/// same class: each names its own vendor:device, so neither depends on the other
+/// releasing the device.
+///
+/// Requires `PcieDriverCap`. Returns `Ok(false)` when the device is absent or
+/// when no Driver Cell in this image drives that Ethernet ID (the family gate).
+pub fn sys_find_pcie_device_by_vendor(
+    vendor_id: u16,
+    device_id: u16,
+    info: &mut PcieDeviceInfo,
+) -> Result<bool, SyscallError> {
+    // SAFETY: `info` is a valid mutable reference; kernel writes exactly 48 bytes.
+    // In SAS the kernel's VA == the cell's VA, so the pointer is directly usable.
+    let ret = unsafe {
+        syscall(
+            ViSyscall::FindPcieDeviceByVendor,
+            vendor_id as usize,
+            device_id as usize,
+            info as *mut PcieDeviceInfo as usize,
+            0,
         )
     };
     match ret {

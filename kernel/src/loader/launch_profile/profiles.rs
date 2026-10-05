@@ -16,7 +16,7 @@ pub(super) fn init_profile(route: LaunchRoute, target: &str) -> Option<LaunchPro
     }
     match target {
         "/bin/ai" | "/bin/ahci" | "/bin/xhci" | "/bin/bcm-display" | "/bin/block" | "/bin/compositor" | "/bin/config"
-        | "/bin/dwc2-usb" | "/bin/e1000" | "/bin/fb-console" | "/bin/hypervisor" | "/bin/input"
+        | "/bin/dwc2-usb" | "/bin/e1000" | "/bin/igb" | "/bin/fb-console" | "/bin/hypervisor" | "/bin/input"
         | "/bin/kms" | "/bin/net" | "/bin/net-broker" | "/bin/nvme" | "/bin/shell"
         | "/bin/silo" | "/bin/ai-test" | "/bin/silo-test" | "/bin/srv-test" | "/bin/supervisor"
         | "/bin/vfs" | "/bin/vfs-test" | "/bin/virtio-gpu" | "/bin/virtio-net"

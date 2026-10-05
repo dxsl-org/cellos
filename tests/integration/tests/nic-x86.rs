@@ -26,7 +26,12 @@ fn repo_root() -> PathBuf {
         .expect("repo root resolves")
 }
 
+/// The ISO under test. `VICELL_NIC_ISO` overrides (the lane gate pins the image
+/// it just built); otherwise the shared production ISO is used.
 fn iso_path() -> String {
+    if let Ok(path) = std::env::var("VICELL_NIC_ISO") {
+        return path;
+    }
     repo_root()
         .join("build/vicell-x86.iso")
         .to_string_lossy()

@@ -106,6 +106,8 @@ DEV_POLICY = [
     ("/bin/input",       0, 0, 0, 0, 0, 0,     1, 0, 0),
     ("/bin/virtio-net",  0, 0, 0, 0, 0, 0,     1, 0, 0),
     ("/bin/e1000",       0, 0, 0, 0, 0, 0,     1, 0, 0),
+    # igb NIC family (i210/i211): same pcie_driver-only shape as /bin/e1000.
+    ("/bin/igb",         0, 0, 0, 0, 0, 0,     1, 0, 0),
     ("/bin/virtio-gpu",  0, 0, 0, 0, 0, 0,     1, 0, 0),
     ("/bin/bcm-display", 0, 0, 0, 0, DEV_DISPLAY, 0,     0, 0, 0),
     ("/bin/dwc2-usb",    0, 0, 1, 0, 0, 0,     0, 0, 0, 1),

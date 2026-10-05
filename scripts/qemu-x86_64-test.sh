@@ -44,9 +44,9 @@ esac
 
 case "$X86_NIC_MODEL" in
     "") NIC_ARGS=() ;;
-    e1000|e1000e) NIC_ARGS=(-device "$X86_NIC_MODEL") ;;
+    e1000|e1000e|igb) NIC_ARGS=(-device "$X86_NIC_MODEL") ;;
     *)
-        echo "FAIL: X86_NIC_MODEL must be empty, e1000, or e1000e" >&2
+        echo "FAIL: X86_NIC_MODEL must be empty, e1000, e1000e, or igb" >&2
         exit 1
         ;;
 esac
@@ -105,6 +105,22 @@ if [[ "$X86_NIC_MODEL" == "e1000e" ]] \
     && ! grep -q "\[e1000\] unsupported Ethernet 8086:10d3; driver gate closed" qemu-x86_64.log; then
     echo "FAIL: e1000e endpoint was not rejected by vendor/device ID" >&2
     exit 1
+fi
+
+# Phase 04a: the igb model (`8086:10c9`) must reach the igb Driver Cell, not the
+# fail-closed gate the pre-change kernel printed for every non-82540EM Ethernet
+# ID. Both directions are asserted, so a silent regression to the old gate is a
+# failure rather than a missing marker.
+if [[ "$X86_NIC_MODEL" == "igb" ]]; then
+    if ! grep -qa "\[igb\] controller bound 8086:10c9" qemu-x86_64.log; then
+        echo "FAIL: igb Driver Cell did not bind the igb model controller" >&2
+        grep -ai "igb\|unsupported Ethernet" qemu-x86_64.log | head -5
+        exit 1
+    fi
+    if grep -qa "\[e1000\] unsupported Ethernet 8086:10c9" qemu-x86_64.log; then
+        echo "FAIL: igb model ID is still refused by the driver gate" >&2
+        exit 1
+    fi
 fi
 
 # Phase 02a: with a SATA image attached, the AHCI Driver Cell must bind the ICH9

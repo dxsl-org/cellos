@@ -9,10 +9,11 @@ const COMPATIBLES: [&str; 1] = ["cellos,x86_64-pc"];
 ///
 /// Only mechanisms that exist in this tree are listed: `has_driver` gates real
 /// kernel init, so listing a driver whose cell has not landed would claim an
-/// initialisation that cannot happen. The NIC (`EthernetIgb`) and extra-serial
-/// (`Uart16550Multi`) variants are declared in `boards/src/descriptor.rs` and
-/// are added to this list by the phase that ships their driver cell.
-const DRIVERS: [DriverId; 8] = [
+/// initialisation that cannot happen. The NIC (`EthernetIgb`) is listed now
+/// that its driver cell exists (phase 04a); the extra-serial
+/// (`Uart16550Multi`) variant is declared in `boards/src/descriptor.rs` and is
+/// added to this list by the phase that ships its driver cell.
+const DRIVERS: [DriverId; 9] = [
     DriverId::Uart16550PortIo,
     DriverId::IoApic,
     DriverId::Hpet,
@@ -21,6 +22,7 @@ const DRIVERS: [DriverId; 8] = [
     DriverId::StorageAhci,
     DriverId::UsbXhci,
     DriverId::EthernetE1000,
+    DriverId::EthernetIgb,
 ];
 
 /// Generic x86_64 PC/server **compatibility contract** (HCL R1–R7).

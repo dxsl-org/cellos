@@ -50,12 +50,10 @@ fn iso_path() -> String {
     if let Ok(path) = std::env::var("VICELL_AHCI_ISO") {
         return path;
     }
-    for name in ["vicell-x86-ahci-b.iso", "vicell-x86-ahci.iso"] {
-        let lane = repo_root().join("build/x86-pc-lane").join(name);
-        if lane.exists() {
-            return lane.to_string_lossy().into_owned();
-        }
-    }
+    // No lane-ISO preference: `build/x86-pc-lane/vicell-x86-*.iso` is a
+    // build-time artifact that goes stale against the cell set (a part-A-only
+    // lane ISO silently lacked the part-B cell). The production ISO is what CI
+    // assembles; pin a lane ISO explicitly through `VICELL_AHCI_ISO`.
     repo_root()
         .join("build/vicell-x86.iso")
         .to_string_lossy()

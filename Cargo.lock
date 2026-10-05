@@ -1122,6 +1122,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "driver-igb"
+version = "0.1.0"
+dependencies = [
+ "api",
+ "cell-build",
+ "ostd",
+ "types",
+]
+
+[[package]]
 name = "driver-imu-mpu6050"
 version = "0.1.0"
 dependencies = [

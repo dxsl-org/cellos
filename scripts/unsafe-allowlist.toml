@@ -213,6 +213,20 @@ approver = "dmin"
 date = "2026-10-05"
 
 [[file]]
+path = "cells/drivers/igb/src/controller.rs"
+class = "driver-mmio"
+reason = "Driver Cell: bounds-checked MMIO register access via MmioRegion plus volatile access to the advanced-format TX/RX descriptor rings and DMA buffers the controller reads and writes. Every region is allocated through DmaBuf and authorized for the controller BDF before its IOVA is programmed; the wall around this unsafe is the DMA authorization, not LBI."
+approver = "dmin"
+date = "2026-10-05"
+
+[[file]]
+path = "cells/drivers/igb/src/dma_layout.rs"
+class = "driver-mmio"
+reason = "Driver Cell: MaybeUninit array construction for the fixed-size TX/RX DMA buffer tables, with a drop guard so a partial authorization releases only the constructed prefix."
+approver = "dmin"
+date = "2026-10-05"
+
+[[file]]
 path = "cells/drivers/xhci/src/dma.rs"
 class = "driver-mmio"
 reason = "Driver Cell: bounds-checked volatile access to the xHCI rings, contexts and payload buffers the controller fetches by DMA. Every region is allocated through DmaBuf and authorized for the controller BDF before its IOVA is programmed; the wall around this unsafe is the DMA authorization, not LBI."
@@ -540,6 +554,13 @@ date = "2026-10-05"
 name = "driver-xhci"
 class = "driver-mmio"
 reason = "Owns allowlisted unsafe under cells/drivers/xhci/ — see the [[file]] entries of class \"driver-mmio\" for the justification."
+approver = "dmin"
+date = "2026-10-05"
+
+[[crate]]
+name = "driver-igb"
+class = "driver-mmio"
+reason = "Owns allowlisted unsafe under cells/drivers/igb/ — see the [[file]] entries of class \"driver-mmio\" for the justification."
 approver = "dmin"
 date = "2026-10-05"
 

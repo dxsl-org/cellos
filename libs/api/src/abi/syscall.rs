@@ -463,9 +463,11 @@ pub enum ViSyscall {
     /// 418: Find the first PCIe device matching (class, subclass, prog_if).
     /// ABI: a0=class(u8), a1=subclass(u8), a2=prog_if(u8), a3=out_ptr(*mut PcieDeviceInfo)
     /// → 1 if found (out_ptr written), 0 if not found. Requires PcieDriverCap.
-    /// `PcieDeviceInfo` is 40 bytes: `bdf`, `found`, first-BAR `bar0_base`/`bar0_len`,
-    /// and the appended first-**memory**-BAR `bar_mem_base`/`bar_mem_len` (the
-    /// window a driver whose BAR0 is I/O — e.g. ICH9 AHCI at BAR5 — must map).
+    /// `PcieDeviceInfo` is 48 bytes: `bdf`, `found`, first-BAR `bar0_base`/`bar0_len`,
+    /// the appended first-**memory**-BAR `bar_mem_base`/`bar_mem_len` (the
+    /// window a driver whose BAR0 is I/O — e.g. ICH9 AHCI at BAR5 — must map), and
+    /// the appended `vendor_id`/`device_id` so a driver can confirm the device is
+    /// its own controller family before programming a register model.
     FindPcieDevice = 418,
     /// 419: Query whether a cell has called sys_hotswap_ready(). Requires SupervisorCap.
     /// ABI: a0 = target_tid → 1 if ready, 0 if not yet, usize::MAX on unknown tid.
@@ -498,6 +500,32 @@ pub enum ViSyscall {
     /// and neither is needed: the `usb_driver` capability check at dispatch is
     /// the real authority gate.
     RegisterUsbHidProducer = 423,
+    /// 424: Find the first PCIe device with an exact `(vendor_id, device_id)`.
+    ///
+    /// ABI: a0 = vendor_id (u16), a1 = device_id (u16),
+    /// a2 = out_ptr (*mut PcieDeviceInfo) → 1 if found (out_ptr written),
+    /// 0 if not found. Requires `PcieDriverCap`.
+    ///
+    /// `FindPcieDevice` (418) matches `(class, subclass, prog_if)` only, so two
+    /// Driver Cells in one class cannot each name their own controller:
+    /// Ethernet `0x02:00:00` is shared by `/bin/e1000` and `/bin/igb`, and the
+    /// class query has to hand the device to one of them while the other must
+    /// decline and release it before the first can retry. This query names the
+    /// device exactly, so each family cell claims its own controller with no
+    /// sibling-exit dependency. The legacy query is unchanged and keeps serving
+    /// the cell that has no competing family (the 82540EM `/bin/e1000`;
+    /// `/bin/nvme` uses it for NVMe).
+    ///
+    /// Append-only: 418 is untouched and 424 is the next free opcode after 423,
+    /// so an older caller that only knows 418 is unaffected. The Ethernet family
+    /// gate is unchanged: a vendor:device match in the Ethernet class is offered
+    /// only when a Driver Cell in this image drives that ID, and the kernel's
+    /// scan keeps rejecting every other Ethernet ID by name.
+    ///
+    /// Allowlist: shares the DriverRegistration bit (50) with
+    /// `FindPcieDevice`/`RegisterNicDriver`, exactly as `RegisterUsbHidProducer`
+    /// shares it; the `PcieDriverCap` check at dispatch is the authority gate.
+    FindPcieDeviceByVendor = 424,
 
     // === Unknown ===
     Unknown = 9999,
@@ -947,7 +975,8 @@ impl ViSyscall {
             Self::RegisterBlockDriver
             | Self::RegisterNicDriver
             | Self::RegisterUsbHidProducer
-            | Self::FindPcieDevice => Some(50),
+            | Self::FindPcieDevice
+            | Self::FindPcieDeviceByVendor => Some(50),
             // WaitIrq (bit 51): block a Driver Cell until a hardware IRQ fires.
             // Gated by PcieDriverCap or PlatformCap — only Driver Cells may wait on IRQs.
             Self::WaitIrq => Some(51),
@@ -1150,6 +1179,7 @@ impl From<usize> for ViSyscall {
             421 => ViSyscall::SpawnReplacement,
             422 => ViSyscall::PauseService,
             423 => ViSyscall::RegisterUsbHidProducer,
+            424 => ViSyscall::FindPcieDeviceByVendor,
             _ => ViSyscall::Unknown,
         }
     }

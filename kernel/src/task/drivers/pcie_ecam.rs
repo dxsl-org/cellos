@@ -19,6 +19,63 @@ use alloc::vec::Vec;
 use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::{AtomicBool, Ordering};
 
+/// Ethernet controller IDs that have a Driver Cell in this image.
+///
+/// This is the **family gate**: an Ethernet device is offered to a Driver Cell
+/// only when a cell drives its family, and every other Ethernet ID is still
+/// rejected **by name** at scan time (`[e1000] unsupported Ethernet
+/// vvvv:dddd; driver gate closed`). Widened in phase 04a of the x86 PC lane from
+/// "82540EM only" to "families that have a driver cell": the 82540EM
+/// (`/bin/e1000`) and the igb family (`/bin/igb`) — QEMU's 82576 model plus the
+/// datasheet i210/i211 SKUs the cell's `identity.rs` lists.
+///
+/// The table bounds what the *kernel* offers; the cell repeats the identity
+/// check before programming a register model, so neither can bind a foreign
+/// family by accident.
+pub const ETHERNET_DRIVER_IDS: [(u16, u16); 3] = [
+    (0x8086, 0x100E), // 82540EM — /bin/e1000
+    (0x8086, 0x10C9), // 82576 — QEMU's igb model, /bin/igb
+    (0x8086, 0x1533), // i210 copper with external flash — /bin/igb
+];
+
+// Deliberately refused until the cell implements their prerequisites: flashless
+// i210 (0x157B/0x157C) and i211 (0x1539) need an **iNVM** read path, and
+// fibre/SerDes/SGMII (0x1536/0x1537/0x1538) need media-specific link setup.
+// Widening this table without that work would hand a device to a cell that cannot
+// drive it, which is worse than refusing it by name.
+
+/// Ethernet IDs served by the **legacy class-triple** query (`FindPcieDevice`,
+/// opcode 418).
+///
+/// `02:00:00` is one triple for every Ethernet family, so once a second family
+/// has a Driver Cell the class query can no longer name a device uniquely: it
+/// would hand the igb controller to `/bin/e1000`, which must then decline and
+/// release it before `/bin/igb` can claim it — a scheduling-dependent race. The
+/// fix is [`find_vendor_device`] (opcode 424), which matches exactly. `find_class`
+/// therefore keeps serving only the family that predates the identity query, the
+/// 82540EM; a cell whose controller shares its class with another cell MUST use
+/// the vendor:device query. The family gate above is unchanged and still governs
+/// the scan warning and the vendor query.
+pub const ETHERNET_LEGACY_CLASS_IDS: [(u16, u16); 1] = [(0x8086, 0x100E)];
+
+/// Whether `(vendor_id, device_id)` is an Ethernet family some Driver Cell in
+/// this image implements. Everything else fails closed.
+pub fn ethernet_id_has_driver(vendor_id: u16, device_id: u16) -> bool {
+    ETHERNET_DRIVER_IDS
+        .iter()
+        .any(|&(vendor, device)| vendor == vendor_id && device == device_id)
+}
+
+/// Whether the legacy class-triple query may hand out `(vendor_id, device_id)`.
+///
+/// See [`ETHERNET_LEGACY_CLASS_IDS`]: only the pre-vendor-query family.
+#[cfg(target_arch = "x86_64")]
+fn ethernet_class_query_serves(vendor_id: u16, device_id: u16) -> bool {
+    ETHERNET_LEGACY_CLASS_IDS
+        .iter()
+        .any(|&(vendor, device)| vendor == vendor_id && device == device_id)
+}
+
 /// Runtime ECAM base for x86_64, set from ACPI MCFG parse before `init()`.
 ///
 /// Zero means the MCFG gate is closed.
@@ -602,7 +659,7 @@ unsafe fn scan(ecam_base: usize, config_bus: u8, reported_bus: u8) {
             if class == 0x02
                 && subclass == 0x00
                 && prog_if == 0x00
-                && (vid != 0x8086 || did != 0x100E)
+                && !ethernet_id_has_driver(vid, did)
             {
                 log::warn!(
                     "[e1000] unsupported Ethernet {:04x}:{:04x}; driver gate closed",
@@ -883,6 +940,11 @@ pub fn devices() -> Vec<PciDevice> {
 /// Find the first supported device matching (class, subclass, prog_if).
 ///
 /// Example: NVMe = `find_class(0x01, 0x08, 0x02)`.
+///
+/// The Ethernet class triple is one triple for every NIC family, so on x86 it is
+/// offered only for the family that still owns it (see
+/// [`ETHERNET_LEGACY_CLASS_IDS`]); a NIC cell whose controller shares the triple
+/// uses [`find_vendor_device`] instead.
 pub fn find_class(class: u8, subclass: u8, prog_if: u8) -> Option<PciDevice> {
     PCI_DEVICES
         .lock()
@@ -891,12 +953,40 @@ pub fn find_class(class: u8, subclass: u8, prog_if: u8) -> Option<PciDevice> {
             if d.class != class || d.subclass != subclass || d.prog_if != prog_if {
                 return false;
             }
-            // The current Driver Cell implements only Intel 82540EM. Binding
+            // Ethernet spans more than one Driver Cell (/bin/e1000 and /bin/igb),
+            // so the class triple can no longer name a device uniquely. It is
+            // served only for the legacy family; the igb family claims its own
+            // controller by exact vendor:device (`find_vendor_device`). Binding
             // an I219/e1000e-class endpoint by generic Ethernet class would
-            // program an incompatible register model.
+            // program an incompatible register model, so an ID with no cell
+            // stays refused here and is named in `scan`'s warning.
             #[cfg(target_arch = "x86_64")]
             if class == 0x02 && subclass == 0x00 && prog_if == 0x00 {
-                return d.vendor_id == 0x8086 && d.device_id == 0x100E;
+                return ethernet_class_query_serves(d.vendor_id, d.device_id);
+            }
+            true
+        })
+        .cloned()
+}
+
+/// Find the first device with an exact `(vendor_id, device_id)`.
+///
+/// This is how a Driver Cell whose controller family shares a class triple with
+/// another cell (the two Ethernet cells on `02:00:00`) claims *its* device: the
+/// match names the device, so no sibling has to decline and release it first.
+/// The Ethernet family gate still applies, so an Ethernet ID with no Driver Cell
+/// is never offered even when its vendor:device pair is queried verbatim.
+pub fn find_vendor_device(vendor_id: u16, device_id: u16) -> Option<PciDevice> {
+    PCI_DEVICES
+        .lock()
+        .iter()
+        .find(|d| {
+            if d.vendor_id != vendor_id || d.device_id != device_id {
+                return false;
+            }
+            #[cfg(target_arch = "x86_64")]
+            if d.class == 0x02 && d.subclass == 0x00 && d.prog_if == 0x00 {
+                return ethernet_id_has_driver(d.vendor_id, d.device_id);
             }
             true
         })
@@ -933,6 +1023,42 @@ mod tests {
         assert!(config_addr_in_range(base, 64, 65, 64, 0, 8, 0).is_none());
         assert!(config_addr_in_range(base, 64, 65, 64, 0, 0, 0x1000).is_none());
         assert!(config_addr_in_range(usize::MAX, 0, 0, 0, 0, 0, 1).is_none());
+    }
+
+    #[test]
+    fn ethernet_family_gate_covers_driver_cells_only() {
+        // Families with a Driver Cell are offered.
+        assert!(ethernet_id_has_driver(0x8086, 0x100E)); // 82540EM, /bin/e1000
+        assert!(ethernet_id_has_driver(0x8086, 0x10C9)); // QEMU igb model
+        assert!(ethernet_id_has_driver(0x8086, 0x1533)); // i210 copper, external flash
+        // Everything else stays refused by name — notably the recorded
+        // e1000e/I219 follow-up, a non-Intel Ethernet controller, and the igb
+        // SKUs whose prerequisites the cell does not implement yet (flashless
+        // i210 and i211 need iNVM; fibre/SerDes/SGMII need media link setup).
+        assert!(!ethernet_id_has_driver(0x8086, 0x10D3)); // e1000e/I219
+        assert!(!ethernet_id_has_driver(0x8086, 0x1539)); // i211 — needs iNVM
+        assert!(!ethernet_id_has_driver(0x8086, 0x157B)); // i210 flashless — needs iNVM
+        assert!(!ethernet_id_has_driver(0x8086, 0x1536)); // i210 fibre — needs media setup
+        assert!(!ethernet_id_has_driver(0x1AF4, 0x1000)); // virtio
+        assert!(!ethernet_id_has_driver(0x8086, 0x0));
+    }
+
+    #[test]
+    fn class_triple_serves_only_the_legacy_family() {
+        // Only the 82540EM keeps the class-triple query: every other family is
+        // reachable exclusively by `find_vendor_device`, so the two Ethernet
+        // Driver Cells cannot race for one class triple.
+        assert!(ethernet_class_query_serves(0x8086, 0x100E));
+        for &(vendor, device) in &ETHERNET_DRIVER_IDS {
+            if (vendor, device) != (0x8086, 0x100E) {
+                assert!(
+                    !ethernet_class_query_serves(vendor, device),
+                    "class query must not serve {vendor:04x}:{device:04x}"
+                );
+                // ... but the exact query still offers it, so no family is lost.
+                assert!(ethernet_id_has_driver(vendor, device));
+            }
+        }
     }
 
     #[test]

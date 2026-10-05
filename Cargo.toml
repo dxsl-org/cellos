@@ -70,6 +70,7 @@ members = [
     # Cells - Drivers
     "cells/drivers/disk",
     "cells/drivers/e1000",
+    "cells/drivers/igb",
     "cells/drivers/gpio",
     "cells/drivers/gpio-bcm",
     "cells/drivers/nvme",

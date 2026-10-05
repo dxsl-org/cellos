@@ -1871,6 +1871,70 @@ fn caller_has_platform(caller_id: usize) -> bool {
     caller_has_cap(caller_id, |t| t.platform_cap.is_some())
 }
 
+/// Serialize a matched PCIe device into the 48-byte `PcieDeviceInfo` wire record
+/// (padded from the 44 meaningful bytes by `vendor_id`/`device_id` alignment) and
+/// write it to the caller's `out_ptr`.
+///
+/// Shared by the class-triple (`FindPcieDevice`) and exact-identity
+/// (`FindPcieDeviceByVendor`) queries so the two hand-out paths cannot drift.
+/// Claims BDF ownership first and returns 0 without writing when a live Driver
+/// Cell already owns the device.
+fn offer_pcie_device(
+    caller_id: usize,
+    out_ptr: usize,
+    dev: crate::task::drivers::pcie_ecam::PciDevice,
+) -> Result<usize, SyscallError> {
+    let bdf: u32 = (dev.bdf.0 as u32) << 8 | (dev.bdf.1 as u32) << 3 | (dev.bdf.2 as u32);
+    let bar0_base = dev.bars[0].base_addr();
+    let bar0_len: u64 = match dev.bars[0] {
+        crate::task::drivers::pcie_ecam::Bar::Memory32 { size, .. } => size as u64,
+        crate::task::drivers::pcie_ecam::Bar::Memory64 { size, .. } => size,
+        _ => 0x4000, // fallback 16 KiB
+    };
+    // NOTE (phase 02a evidence): this reads the kernel's own ECAM scan
+    // (`dev.bars`), which retains every BAR. The Platform-Cell registration path
+    // stores only BAR0 today, so a device whose MMIO lives at a later BAR (ICH9
+    // AHCI's ABAR is BAR5) would report `bar_mem_base = 0` through that path;
+    // extending that registration belongs to the Platform Cell's owner, and the
+    // AHCI cell fails closed meanwhile. First *memory* BAR with a non-zero base,
+    // for devices whose BAR0 is I/O or empty. Empty BARs decode as
+    // `Memory32 { addr: 0, .. }`, so the base must be checked or the first
+    // absent slot wins. `bar0_*` keep their existing first-BAR meaning;
+    // NVMe/e1000 are unaffected because their BAR0 is memory.
+    let (bar_mem_base, bar_mem_len): (u64, u64) = dev
+        .bars
+        .iter()
+        .find_map(|bar| match bar {
+            crate::task::drivers::pcie_ecam::Bar::Memory32 { addr, size } if *addr != 0 => {
+                Some((*addr as u64, *size as u64))
+            }
+            crate::task::drivers::pcie_ecam::Bar::Memory64 { addr, size } if *addr != 0 => {
+                Some((*addr, *size))
+            }
+            _ => None,
+        })
+        .map(|(base, size)| (base, if size == 0 { 0x4000 } else { size }))
+        .unwrap_or((bar0_base, bar0_len));
+    // Claim without displacing a live Driver Cell. A competing instance observes
+    // "not found" and may retry after reap.
+    if !crate::resource_registry::claim_bdf_owner(bdf, caller_id) {
+        return Ok(0);
+    }
+    if out_ptr != 0 {
+        let mut dev_bytes = [0u8; 48];
+        dev_bytes[0..4].copy_from_slice(&bdf.to_ne_bytes());
+        dev_bytes[4..8].copy_from_slice(&1u32.to_ne_bytes());
+        dev_bytes[8..16].copy_from_slice(&bar0_base.to_ne_bytes());
+        dev_bytes[16..24].copy_from_slice(&bar0_len.to_ne_bytes());
+        dev_bytes[24..32].copy_from_slice(&bar_mem_base.to_ne_bytes());
+        dev_bytes[32..40].copy_from_slice(&bar_mem_len.to_ne_bytes());
+        dev_bytes[40..42].copy_from_slice(&dev.vendor_id.to_ne_bytes());
+        dev_bytes[42..44].copy_from_slice(&dev.device_id.to_ne_bytes());
+        write_user_slice(caller_id, out_ptr, &dev_bytes, MAX_USER_BUF)?;
+    }
+    Ok(1)
+}
+
 /// Validate a user-supplied (ptr, len) buffer descriptor.
 ///
 /// Rejects: NULL pointer, zero-length when expected non-empty, lengths above
@@ -3448,6 +3512,14 @@ pub enum Syscall {
         prog_if: u8,
         out_ptr: usize,
     },
+    /// 424: FindPcieDeviceByVendor — locate a PCIe device by exact
+    /// (vendor_id, device_id). The second half of the device-selection fix for
+    /// the two Ethernet Driver Cells that share class triple `02:00:00`.
+    FindPcieDeviceByVendor {
+        vendor_id: u16,
+        device_id: u16,
+        out_ptr: usize,
+    },
     /// 419: QueryHotswapReady — check whether `target_tid` has called sys_hotswap_ready().
     /// Returns 1 if ready, 0 if not yet, usize::MAX if tid is unknown.
     QueryHotswapReady { target_tid: usize },
@@ -3729,6 +3801,7 @@ fn syscall_to_vi(syscall: &Syscall) -> Option<api::syscall::ViSyscall> {
         Syscall::RegisterNicDriver => V::RegisterNicDriver,
         Syscall::RegisterUsbHidProducer => V::RegisterUsbHidProducer,
         Syscall::FindPcieDevice { .. } => V::FindPcieDevice,
+        Syscall::FindPcieDeviceByVendor { .. } => V::FindPcieDeviceByVendor,
         Syscall::Exec { .. } => V::Exec,
         Syscall::LookupService { .. } => V::LookupService,
         Syscall::Heartbeat { .. } => V::Heartbeat,
@@ -6959,6 +7032,11 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         // 418: FindPcieDevice — query ECAM table for a device by class triple.
         // Writes a `PcieDeviceInfo` record to `out_ptr` and returns 1 if found.
         // Requires PcieDriverCap; also records BDF ownership in resource_registry.
+        //
+        // On x86 the Ethernet class triple is served by `find_class` only for the
+        // family that still owns it (the 82540EM `/bin/e1000`); the other
+        // Ethernet family (`/bin/igb`) claims its controller through 424 instead,
+        // so neither cell depends on the other declining and releasing first.
         Syscall::FindPcieDevice {
             class,
             subclass,
@@ -6970,66 +7048,26 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             }
             match crate::task::drivers::pcie_ecam::find_class(class, subclass, prog_if) {
                 None => Ok(0), // device not present → VirtIO fallback
-                Some(dev) => {
-                    let bdf: u32 =
-                        (dev.bdf.0 as u32) << 8 | (dev.bdf.1 as u32) << 3 | (dev.bdf.2 as u32);
-                    let bar0_base = dev.bars[0].base_addr();
-                    let bar0_len: u64 = match dev.bars[0] {
-                        crate::task::drivers::pcie_ecam::Bar::Memory32 { size, .. } => size as u64,
-                        crate::task::drivers::pcie_ecam::Bar::Memory64 { size, .. } => size,
-                        _ => 0x4000, // fallback 16 KiB
-                    };
-                    // NOTE (phase 02a evidence): this reads the kernel's own ECAM
-                    // scan (`dev.bars`), which retains every BAR. The
-                    // Platform-Cell registration path stores only BAR0 today, so
-                    // a device whose MMIO lives at a later BAR (ICH9 AHCI's
-                    // ABAR is BAR5) would report `bar_mem_base = 0` through that
-                    // path; extending that registration belongs to the Platform
-                    // Cell's owner, and the AHCI cell fails closed meanwhile.
-                    // First *memory* BAR with a non-zero base, for devices whose
-                    // BAR0 is I/O or empty (ICH9 AHCI keeps its ABAR at BAR5).
-                    // Empty BARs decode as `Memory32 { addr: 0, .. }`, so the
-                    // base must be checked or the first absent slot wins.
-                    // `bar0_*` above keep their existing first-BAR meaning;
-                    // NVMe/e1000 are unaffected because their BAR0 is memory.
-                    let (bar_mem_base, bar_mem_len): (u64, u64) = dev
-                        .bars
-                        .iter()
-                        .find_map(|bar| match bar {
-                            crate::task::drivers::pcie_ecam::Bar::Memory32 { addr, size }
-                                if *addr != 0 =>
-                            {
-                                Some((*addr as u64, *size as u64))
-                            }
-                            crate::task::drivers::pcie_ecam::Bar::Memory64 { addr, size }
-                                if *addr != 0 =>
-                            {
-                                Some((*addr, *size))
-                            }
-                            _ => None,
-                        })
-                        .map(|(base, size)| (base, if size == 0 { 0x4000 } else { size }))
-                        .unwrap_or((bar0_base, bar0_len));
-                    // Claim without displacing a live Driver Cell. A competing
-                    // instance observes "not found" and may retry after reap.
-                    if !crate::resource_registry::claim_bdf_owner(bdf, caller_id) {
-                        return Ok(0);
-                    }
-                    // Write the 40-byte PcieDeviceInfo to the cell's out_ptr.
-                    // SAFETY: SAS — caller's virtual address == kernel's virtual address.
-                    // The cell is responsible for passing a valid, writeable pointer.
-                    if out_ptr != 0 {
-                        let mut dev_bytes = [0u8; 40];
-                        dev_bytes[0..4].copy_from_slice(&bdf.to_ne_bytes());
-                        dev_bytes[4..8].copy_from_slice(&1u32.to_ne_bytes());
-                        dev_bytes[8..16].copy_from_slice(&bar0_base.to_ne_bytes());
-                        dev_bytes[16..24].copy_from_slice(&bar0_len.to_ne_bytes());
-                        dev_bytes[24..32].copy_from_slice(&bar_mem_base.to_ne_bytes());
-                        dev_bytes[32..40].copy_from_slice(&bar_mem_len.to_ne_bytes());
-                        write_user_slice(caller_id, out_ptr, &dev_bytes, MAX_USER_BUF)?;
-                    }
-                    Ok(1)
-                }
+                Some(dev) => offer_pcie_device(caller_id, out_ptr, dev),
+            }
+        }
+
+        // 424: FindPcieDeviceByVendor — query ECAM table for an exact
+        // (vendor_id, device_id). Same hand-out semantics as 418 (PcieDriverCap,
+        // BDF ownership, 48-byte `PcieDeviceInfo`), but the match names the
+        // device, so two Driver Cells that share a class triple each claim their
+        // own controller without a sibling-exit race.
+        Syscall::FindPcieDeviceByVendor {
+            vendor_id,
+            device_id,
+            out_ptr,
+        } => {
+            if !caller_has_pcie_driver(caller_id) {
+                return Err(SyscallError::PermissionDenied);
+            }
+            match crate::task::drivers::pcie_ecam::find_vendor_device(vendor_id, device_id) {
+                None => Ok(0),
+                Some(dev) => offer_pcie_device(caller_id, out_ptr, dev),
             }
         }
 
@@ -8477,6 +8515,11 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
             subclass: a1 as u8,
             prog_if: a2 as u8,
             out_ptr: a3,
+        },
+        ViSyscall::FindPcieDeviceByVendor => Syscall::FindPcieDeviceByVendor {
+            vendor_id: a0 as u16,
+            device_id: a1 as u16,
+            out_ptr: a2,
         },
         ViSyscall::QueryHotswapReady => Syscall::QueryHotswapReady { target_tid: a0 },
         ViSyscall::SpawnReplacement => Syscall::SpawnReplacement {

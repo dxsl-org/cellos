@@ -4,6 +4,43 @@
 
 ## [Unreleased] Development-first hardware-constrained execution
 
+- **x86 PC lane phase 04a: Intel `igb` NIC part A — identity, registration,
+  Tx/Rx (`qemu` ceiling).** New Driver Cell `cells/drivers/igb/` asks for its
+  controller by exact vendor:device, reads the MAC over EERD, restarts PHY
+  autoneg, waits for link, brings up TX/RX rings and registers through the
+  existing NIC path only after a device was found; DHCP stays in the net service
+  (04b's gate). Two interface changes, both owner-approved: append-only opcode
+  **424 `FindPcieDeviceByVendor`** (gated on `PcieDriverCap`, sharing allowlist
+  bit 50 because the u64 bitmap is full) and `PcieDeviceInfo` 40 → 48 bytes
+  (`vendor_id`/`device_id`). Opcode 424 exists because the previous state was
+  wrong at the design layer, not merely slow: `FindPcieDevice` matched only
+  `(class, subclass, prog_if)`, Ethernet `02:00:00` is one triple for both NIC
+  cells, so `/bin/e1000` claimed the igb controller, declined and exited, and
+  `/bin/igb` only won it inside a retry window — which pushed registration past
+  the net service's first DHCP attempt and made the lane pass only with QEMU
+  tracing on. Evidence (untraced, rebuilt production ISO): `igb-x86` 1/1 with
+  `controller bound 8086:10c9 … link_up=true` → `first e1000 TX len=304
+  accepted=true` → `first e1000 RX len=590` → `DHCP acquired — IP configured` →
+  `10.0.2.15`, and zero `[e1000]` lines in the transcript; all eight x86 lanes
+  green (`xhci-x86` 4/4, `ahci-x86` 5/5, `x86_64-boot` 9/9, `nvme-x86` 3/3,
+  `pcie-multibus-x86` 2/2, `driver-registration-contract` 3/3, `nic-x86` 2/2),
+  plus `cellos-kernel` 189/189, `cellos-boards` 13/13, `api` 103/103, HAL
+  boundaries, F1/F5, both ARM checks and both runner gates. An independent review
+  confirmed the race is fixed at the root and the ABI adds no authority, and found
+  that the cell claimed SKUs it cannot drive: the claim is now **`10C9` (QEMU's
+  82576 model) + `1533` (i210 copper with external flash)**, with the kernel gate
+  and the cell's query list narrowed together and the kernel unit test asserting
+  the rest stay refused. Deferred with their prerequisites recorded rather than
+  the claim widened: flashless i210 (`157B`/`157C`) and i211 (`1539`) need an
+  **iNVM** read path; fibre/SerDes/SGMII (`1536`/`1537`/`1538`) need
+  media-specific link setup. Also recorded: on a host with one supported e1000 and
+  one supported igb, both register (singleton, last-wins) while the net service
+  caches its first provider, so interface selection is scheduling-dependent — an
+  owner-side arbitration problem, not a driver workaround. Harness fix: the
+  `xhci-x86`/`ahci-x86` tests no longer prefer a stale `build/x86-pc-lane/*.iso`
+  (a pre-`/bin/input` lane ISO produced a false red); they use the production ISO
+  unless pinned. No physical machine is claimed; the HCL machine table stays empty.
+
 - **x86 PC lane phase 03b: a kernel-verified USB HID producer role
   (`qemu` ceiling).** Decoded xHCI keystrokes now reach the shell without
   touching the singleton NIC role: append-only syscall `RegisterUsbHidProducer`

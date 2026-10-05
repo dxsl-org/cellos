@@ -59,7 +59,7 @@ never qualify a board. QEMU-first is what makes the phases cheap to iterate:
 | 02b | [AHCI part B — data path, block registration, persistence](phase-02b-ahci-block-persistence.md) | storage | `ahci-x86` two-boot persistence on the same raw image | **completed** (2026-10-05, `qemu` ceiling) |
 | 03 | [xHCI + HID family](phase-03-xhci-hid.md) | USB | `xhci-x86` 4/4: controller init, port reset, enumeration (0627:0001), HID boot keyboard, injected key decoded in-cell | **completed** (2026-10-05, `qemu` ceiling; key *delivery* split to 03b by owner decision) |
 | 03b | [USB HID producer role — key delivery](phase-03b-usb-hid-producer.md) | USB input | injected key echoed by the shell; xHCI never registers as NIC owner; all lanes + ARM checks green | **completed** (2026-10-05, `qemu` ceiling; ABI 423 + shared allowlist bit 50 approved by the owner) |
-| 04a | [igb part A — identity, registration, Tx/Rx](phase-04a-igb-identity-txrx.md) | network | `igb-x86`: `8086:10c9` no longer rejected, registration, first Tx/Rx | pending |
+| 04a | [igb part A — identity, registration, Tx/Rx](phase-04a-igb-identity-txrx.md) | network | `igb-x86` untraced: bind `8086:10c9` → link → first Tx → first Rx; sibling race removed by opcode 424 | **completed** (2026-10-05, `qemu` ceiling; ABI 424 + 48-byte `PcieDeviceInfo` owner-approved; SKU claim narrowed to `10C9`+`1533`) |
 | 04b | [igb part B — DHCP data plane and VT-d variant](phase-04b-igb-dhcp-vtd.md) | network | `igb-x86`: DHCP ordinary + VT-d (isolation active before DMA) | pending |
 | 05 | [ACPI DMAR discovery → real IOMMU](phase-05-acpi-dmar.md) | IOMMU | DMAR-less boot stays fail-closed; `intel-iommu` boot programs per-device domains; q35 hardcode removed | pending |
 | 06 | [Multi-port COM / RS232-485](phase-06-multiport-com-rs485.md) | serial | COM2..COMn enumerate and echo in QEMU; RS485 explicitly not claimed | pending |
@@ -148,6 +148,7 @@ never qualify a board. QEMU-first is what makes the phases cheap to iterate:
 | Driver lands before the descriptor/HCL model exists | 01 ships first and defines the HCL file the other phases write into |
 | Touching kernel PCIe/IOMMU code destabilizes QEMU VT-d lanes | 05 keeps the q35 base as a fallback path until DMAR discovery passes both QEMU and hardware gates |
 | No hardware is ever bought, so the lane stalls at `qemu` | 07 is explicitly the only hardware-gated phase; 02–06 stay useful as regression coverage and as the prerequisite inventory for a purchase decision |
+| Two NIC cells compete for one class triple | `FindPcieDevice` matches `(class, subclass, prog_if)` only, so e1000 and igb resolve to the same triple and the loser must decline and release before the winner's retry can claim it (phase 04a applied a retry-window workaround outside its own file list). Proper fix: match by vendor:device, or have the kernel hand out devices per driver family; until then the sibling-exit dependency is a real race, not a design |
 | `bar_mem_*` depends on the kernel's early ECAM scan retaining every BAR | The kernel's own scan retains all BARs (that is why phase 02a passes), but the Platform-Cell registration path stores only BAR0 (`register_device`), so a device registered through that path with an I/O BAR0 and MMIO at BAR5 would report `bar_mem_base = 0` and the AHCI cell would fail closed with a named error. Extending PCI registration to retain per-BAR index/base/size belongs to the Platform-Cell cutover owner, not to this lane; the syscall site carries a note and the AHCI cell fails closed meanwhile |
 | Two storage drivers on one machine: registration is single-slot and last-wins, but the *consumer* caches its provider | Both `/bin/nvme` and `/bin/ahci` register successfully and the later TID replaces the earlier one (`driver_cell.rs:84-91`, registry `insert`); however `service-vfs` resolves the block driver through a cached TID, so if it looks up before the second registration, the replacement does not redirect I/O — and the observed registration order varied between runs. Consequence: which drive serves `/mnt/sd` on a machine with two storage devices is scheduling-dependent. This lane's lanes each attach exactly one storage device, and `ahci_and_nvme_both_register_x86` asserts only the registration contract; deterministic storage selection needs owner-side arbitration (Platform/VFS) and is recorded here rather than assumed |
 
@@ -195,6 +196,36 @@ artifact set. Eight consistency findings fixed in this same change:
    register, not a row; row-level gaps are optional-only and live in `Notes`.
 8. Descriptor/HAL/README/changelog reframed as a **COM1-required compatibility
    contract**, not a universal claim about every PC.
+
+### Phase 04a (2026-10-05) — PARTIAL, not committed
+
+What is observed: the `igb` cell binds `8086:10c9` (QEMU's 82576 model), reads the
+MAC, and after the mandatory PHY autoneg restart (MDIC) reports `link_up=true`;
+the net bridge accepts the first Tx (`len=304 accepted=true`). What is **not**
+reproducible: the Rx/DHCP half. The identical untraced run (same ISO, 90 s) never
+sees `[net-bridge] first e1000 RX` nor a DHCP lease, while the same image with
+QEMU `igb` trace events enabled reaches `Rx len=590`, `[net] DHCP acquired — IP
+configured` and `10.0.2.15`. The suite is therefore **not** observed green, and
+the phase is not shippable as it stands.
+
+Two structural findings that outlive the bug:
+
+1. **Device selection is by class triple only.** `FindPcieDevice` returns the first
+   device matching `(class, subclass, prog_if)`, which is the same triple for
+   e1000 and igb, so on an igb-only machine the sibling `/bin/e1000` cell claims
+   the device first, declines by ID and exits, and the igb cell only wins it
+   inside a retry window. The workaround applied (e1000's retry window 200 → 1000,
+   an edit **outside** this phase's file list) is the wrong layer: the query should
+   match by vendor:device (or the kernel should hand out devices by driver
+   family), which removes the race instead of hiding it.
+2. **`PcieDeviceInfo` grew again, 40 → 48 bytes** (appended `vendor_id`/`device_id`)
+   so a cell can check identity without a second query. Same safety argument as the
+   earlier append (every cell is rebuilt by the packaging pass), but it is an ABI
+   change the phase ticket did not anticipate and it needs owner sign-off.
+
+Also unrun when the round ended: `nic-x86` (re-run since: 2/2), the six x86
+regression suites, the production-ISO rebuild and its regressions, both ARM
+checks, and the `X86_NIC_MODEL=igb` shell gate.
 
 ### Phase 03b (2026-10-05, `qemu` ceiling)
 

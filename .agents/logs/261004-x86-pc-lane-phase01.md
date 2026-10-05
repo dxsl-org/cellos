@@ -124,11 +124,48 @@ Delegated, verified, fixed, shipped as `295720ea9` (17 files).
 - The `unsafe` allowlist entries the F1 gate requires were approved by the
   repository owner (field records `dmin`).
 
+## Phase 03 + 03b (same session) — xHCI, HID, and the producer role
+
+Delegated, reviewed, fixed, shipped as `5506fc25b` (54 files). The owner reopened
+the xHCI scope for this lane (recorded in the G1–G3 driver plan's phase-01 gate
+and its license BOM) and approved three trust decisions: sharing allowlist bit 50
+for the new syscall, the `/bin/xhci` capability grant, and the new image
+composition.
+
+- **Phase 03**: `cells/drivers/xhci/` brings the controller up, addresses a slot,
+  enumerates `0627:0001`, parses the HID boot keyboard and completes an
+  interrupt-IN transfer. The HID decode path moved into a shared `driver-hid`
+  crate that `dwc2-usb` re-exports (single-copy; ARM builds verified).
+- **Phase 03b**: append-only `RegisterUsbHidProducer` (423) +
+  `service::USB_HID_PRODUCER` (17), gated on `usb_driver`; the input service's
+  producer gate now accepts that role, and `driver-dwc2-usb` publishes both roles
+  because on RPi3 the LAN9514 *is* the NIC. Result: the injected keystroke is
+  echoed by the shell (`shell: command not found: q`), with zero
+  `[kernel] syscall denied` lines.
+- **What the reviews caught** (two rounds, both material): the Enable Slot timeout
+  was every operational-register access missing `CAPLENGTH`; then five follow-on
+  defects (slot-ID bits, IN-endpoint DCI, HID subclass descriptor offset,
+  scratchpad field order, and the singleton-NIC collision that forced 03b); then,
+  on 03b, a CI job that did not mirror the new image, `/bin/xhci` **and**
+  `/bin/ahci` running at the kernel's `u64::MAX` allowlist default, and a cached
+  input-service route that would never recover from a service restart.
+- **Process notes worth keeping**: (a) rebuilding a cell does not update the
+  embedded FS image — only the packaging script (or `EMBEDDED_OVERRIDE`) does,
+  and I was bitten by that in 02a; (b) files carrying unrelated user WIP
+  (`cells/tools/init/src/boot.rs`, `cells/drivers/dwc2-usb/src/main.rs`,
+  `cells/services/input/src/dispatcher.rs`, `hal/arch/arm/**`, …) were staged
+  hunk-by-hunk, and the committed state was then compiled out-of-tree in a
+  temporary worktree to prove it is self-consistent; (c) the repo's u64 syscall
+  allowlist bitmap is full, so new opcodes must share a family bit and rely on the
+  capability gate.
+
 ## Next
 
-Phase 02b (AHCI part B: READ/WRITE data path, block registration, two-boot
-persistence) is the next sequential slice: it makes the SATA device usable as
-storage so `/data` and the guest disk can live on it. Then 03 (xHCI), 04a/04b
-(igb), 05 (DMAR), each with its own QEMU gate and CI wiring; hardware is bought
-only after 02b/03/04b/05 are green on QEMU, and phase 07 is the only phase with
-no QEMU gate.
+Phase 04a (igb NIC part A: identity, registration, Tx/Rx — no scope decision
+needed, QEMU has an `igb` model verified as `8086:10c9`), then 04b (DHCP + VT-d),
+05 (ACPI DMAR → real IOMMU), 06 (multi-port COM/RS232-485). Hardware is bought
+only after 02b/03/04b/05 are green on QEMU, and phase 07 is the only phase with no
+QEMU gate. Follow-up hygiene recorded but not scheduled: `nvme`/`e1000` still run
+without a `declare_syscalls!` allowlist; the `bar_mem_*` fields depend on the
+kernel's own ECAM scan retaining every BAR; two storage drivers plus a caching
+consumer make storage selection scheduling-dependent.

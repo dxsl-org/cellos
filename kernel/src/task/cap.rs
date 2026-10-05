@@ -94,7 +94,8 @@ impl SupervisorCap {
 
 /// Permits claiming PCIe BAR MMIO ranges and authorising DMA via `GrantDma`.
 ///
-/// Granted by exact path match in `loader.rs` (`/bin/nvme`, `/bin/e1000`).
+/// Granted by exact path match in `loader.rs` (`/bin/nvme`, `/bin/e1000`,
+/// `/bin/igb`).
 /// The v1 manifest has no free flag bits for this cap — it is NOT manifest-based.
 /// Required before `RequestMmio` can claim a PCIe BAR range.
 #[derive(Copy, Clone, Debug)]
@@ -337,6 +338,7 @@ impl CapSet {
             path,
             "/bin/nvme"
                 | "/bin/e1000"
+                | "/bin/igb"
                 | "/bin/virtio-net"
                 | "/bin/block"
                 | "/bin/input"

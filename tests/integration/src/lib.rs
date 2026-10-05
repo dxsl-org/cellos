@@ -1207,6 +1207,72 @@ impl QemuRunner {
         }
     }
 
+    /// Boot x86_64 q35 from a Limine ISO with NVMe + QEMU's `igb` NIC.
+    ///
+    /// Same as `boot_x86_bios_with_nic` with `-device igb,netdev=net0` instead of
+    /// `e1000`: QEMU's `igb` model is 82576-class (`8086:10c9`), which is the
+    /// only igb ID this lane can validate. `restrict=on` keeps SLIRP isolated.
+    pub fn boot_x86_bios_with_igb_nic(iso: &str, nvme_disk: &str) -> Self {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind serial socket");
+        let port = listener.local_addr().unwrap().port();
+
+        let mut child = Command::new(qemu_binary_x86())
+            .args([
+                "-machine",
+                "q35",
+                "-cpu",
+                "qemu64,+pdpe1gb",
+                "-m",
+                "256M",
+                "-nographic",
+                "-cdrom",
+                iso,
+                "-boot",
+                "d",
+                "-no-reboot",
+                "-monitor",
+                "none",
+                "-drive",
+                &format!("file={nvme_disk},format=raw,if=none,id=nvme0"),
+                "-device",
+                "nvme,drive=nvme0,serial=deadbeef01",
+                "-netdev",
+                "user,id=net0,restrict=on",
+                "-device",
+                "igb,netdev=net0",
+                "-serial",
+                &format!("tcp:127.0.0.1:{port}"),
+            ])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("qemu-system-x86_64 must be on PATH");
+
+        let stream = accept_qemu_serial(&listener, &mut child);
+        let writer = stream.try_clone().expect("clone serial stream");
+
+        let output = Arc::new(Mutex::new(String::new()));
+        let buf = Arc::clone(&output);
+        thread::spawn(move || {
+            let mut reader = BufReader::new(stream);
+            let mut byte = [0u8; 1];
+            loop {
+                match reader.read(&mut byte) {
+                    Ok(0) | Err(_) => break,
+                    Ok(_) => buf.lock().unwrap().push(byte[0] as char),
+                }
+            }
+        });
+        Self {
+            child,
+            writer: Some(writer),
+            output,
+            temp_disk: None,
+            monitor: None,
+        }
+    }
+
     /// Boot x86_64 q35 from a Limine ISO with NVMe + Intel VT-d + e1000 NIC.
     ///
     /// Same as `boot_x86_bios_with_nic` but adds `-device intel-iommu` before
