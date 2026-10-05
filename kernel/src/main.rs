@@ -156,6 +156,22 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         let soc = crate::board::selected_x86_64_soc();
         crate::hal::uart_16550::configure(soc.com1.base, soc.com1.irq);
         crate::hal::uart_16550::init();
+        // Register every port the profile declares: the console takes slot 0 and
+        // each extra port must answer a 16550 probe before it is offered, so a
+        // descriptor that names a port this machine does not have produces a
+        // refusal rather than a cell writing into empty port space.
+        {
+            use crate::hal::uart_16550::{SerialPortSpec, MAX_PORTS};
+            let mut specs = [SerialPortSpec { base: 0, irq: 0 }; MAX_PORTS];
+            let declared = soc.serial_ports.len().min(MAX_PORTS);
+            for (slot, port) in soc.serial_ports.iter().take(declared).enumerate() {
+                specs[slot] = SerialPortSpec {
+                    base: port.base,
+                    irq: port.irq,
+                };
+            }
+            crate::hal::uart_16550::configure_all(&specs[..declared]);
+        }
         // Name the selected contract once: a captured log must prove which board
         // descriptor the image was built with (q35 vs the generic PC lane).
         // Emitted only after `init()`: `putchar` asserts a configured port.
@@ -718,6 +734,35 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         }
         // Initialise the RX buffer that vi_handle_uart_irq() writes into.
         task::drivers::uart::init_input();
+        // Phase 06: name every declared serial port and whether the machine
+        // actually answered the 16550 probe. The console is slot 0; the extras
+        // are polled, so an absent one is a refusal, never a silent write.
+        {
+            let soc = crate::board::selected_x86_64_soc();
+            for (index, port) in soc.serial_ports.iter().enumerate() {
+                match crate::hal::uart_16550::port_base_at(index) {
+                    Some(base) => log::info!(
+                        "[x86-gate] serial port {} base={:#x} irq={} usable",
+                        index,
+                        base,
+                        port.irq
+                    ),
+                    None => log::warn!(
+                        "[x86-gate] serial port {} base={:#x} irq={} absent (16550 probe failed)",
+                        index,
+                        port.base,
+                        port.irq
+                    ),
+                }
+            }
+            if soc.serial_ports.len() > crate::hal::uart_16550::MAX_PORTS {
+                log::warn!(
+                    "[x86-gate] {} declared serial ports exceed the {} this kernel carries",
+                    soc.serial_ports.len(),
+                    crate::hal::uart_16550::MAX_PORTS
+                );
+            }
+        }
         log_info("x86_64: ramdisk + UART RX IRQ initialised");
     }
 

@@ -121,6 +121,23 @@ impl UsbDriverCap {
     }
 }
 
+/// Permits driving the x86 16550 serial ports the kernel probed.
+///
+/// Granted by exact path match to `/bin/serial` only, and installed through the
+/// same `∩ ceiling` intersection as every other cap. It authorises no DMA and no
+/// MMIO: the reachable set is exactly the ports the kernel registered after a
+/// successful probe, so it cannot be used to touch port space the machine did
+/// not prove it has.
+#[derive(Copy, Clone, Debug)]
+pub struct SerialPortCap(());
+
+impl SerialPortCap {
+    /// Create a `SerialPortCap` token. Only callable within the kernel crate.
+    pub(crate) fn new() -> Self {
+        Self(())
+    }
+}
+
 /// Permits PCIe ECAM enumeration and BAR registration via `sys_register_pcie_bar`.
 ///
 /// Granted by exact path match in `loader.rs` to `/bin/platform` ONLY, and is a
@@ -212,6 +229,10 @@ pub struct CapSet {
     pub platform: bool,
     pub supervisor: bool,
     pub usb_driver: bool,
+    /// Port-I/O serial authority: lets `/bin/serial` drive the 16550 ports the
+    /// kernel itself probed. No DMA and no MMIO — it reaches only the declared
+    /// ports, which is why it is its own cap rather than a reuse of `pcie_driver`.
+    pub serial_port: bool,
 }
 
 impl CapSet {
@@ -227,6 +248,7 @@ impl CapSet {
         platform: false,
         supervisor: false,
         usb_driver: false,
+        serial_port: false,
     };
 
     /// Every cap this kernel can express — a **reference upper bound for
@@ -255,6 +277,7 @@ impl CapSet {
         platform: true,
         supervisor: true,
         usb_driver: true,
+        serial_port: true,
     };
 
     /// Snapshot a (running) Task's current capabilities.
@@ -270,6 +293,7 @@ impl CapSet {
             platform: t.platform_cap.is_some(),
             supervisor: t.supervisor_cap.is_some(),
             usb_driver: t.usb_driver_cap.is_some(),
+            serial_port: t.serial_port_cap.is_some(),
         }
     }
 
@@ -317,6 +341,7 @@ impl CapSet {
             platform: false,
             supervisor: false,
             usb_driver: false,
+            serial_port: false,
         }
     }
 
@@ -364,6 +389,12 @@ impl CapSet {
         if path == "/bin/dwc2-usb" {
             self.usb_driver = true;
         }
+        // The x86 serial Driver Cell: port-I/O authority over the 16550 ports the
+        // kernel probed. It gets no PCIe/MMIO authority: the ports are legacy I/O
+        // space, and the kernel already proved each one answers.
+        if path == "/bin/serial" {
+            self.serial_port = true;
+        }
         if path == "/bin/platform" {
             self.platform = true;
         }
@@ -384,7 +415,11 @@ impl CapSet {
     /// so they must fail closed where an ordinary path may not.
     pub fn path_mints_ptrust(path: &str) -> bool {
         let requested = CapSet::EMPTY.with_path_caps(path);
-        requested.pcie_driver || requested.platform || requested.supervisor || requested.usb_driver
+        requested.pcie_driver
+            || requested.platform
+            || requested.supervisor
+            || requested.usb_driver
+            || requested.serial_port
     }
 
     /// Drop every privileged (P-TRUST) cap, keeping the ordinary ones.
@@ -398,6 +433,7 @@ impl CapSet {
             platform: false,
             supervisor: false,
             usb_driver: false,
+            serial_port: false,
             ..self
         }
     }
@@ -415,6 +451,7 @@ impl CapSet {
             platform: self.platform && o.platform,
             supervisor: self.supervisor && o.supervisor,
             usb_driver: self.usb_driver && o.usb_driver,
+            serial_port: self.serial_port && o.serial_port,
         }
     }
 
@@ -431,6 +468,7 @@ impl CapSet {
         t.pcie_driver_cap = self.pcie_driver.then(PcieDriverCap::new);
         t.supervisor_cap = self.supervisor.then(SupervisorCap::new);
         t.usb_driver_cap = self.usb_driver.then(UsbDriverCap::new);
+        t.serial_port_cap = self.serial_port.then(SerialPortCap::new);
         // `platform_cap` is transferred only from `PlatformCapReservation`.
         // Applying a plain capability snapshot must never bypass the singleton.
     }

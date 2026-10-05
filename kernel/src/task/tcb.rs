@@ -323,6 +323,8 @@ pub struct Task {
     /// PCIe Driver Cell: claim BAR MMIO + authorise DMA via GrantDma.
     /// Granted when manifest declares `pcie_driver = true`.
     pub pcie_driver_cap: Option<super::cap::PcieDriverCap>,
+    /// x86 serial-port authority (`/bin/serial`): drives only probed 16550 ports.
+    pub serial_port_cap: Option<super::cap::SerialPortCap>,
     /// Platform Cell: singleton capability gating `sys_register_pcie_bar`.
     /// Granted by path match `/bin/platform` in loader.rs; at most one holder ever.
     pub platform_cap: Option<super::cap::PlatformCap>,
@@ -593,6 +595,7 @@ impl Task {
             development_silo_registration_cap: None,
             supervisor_cap: None,
             pcie_driver_cap: None,
+            serial_port_cap: None,
             platform_cap: None,
             usb_driver_cap: None,
             mmio_devices: 0,

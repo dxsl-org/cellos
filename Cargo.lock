@@ -1174,6 +1174,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "driver-serial-x86"
+version = "0.1.0"
+dependencies = [
+ "api",
+ "cell-build",
+ "ostd",
+ "types",
+]
+
+[[package]]
 name = "driver-spi-bcm"
 version = "0.1.0"
 dependencies = [

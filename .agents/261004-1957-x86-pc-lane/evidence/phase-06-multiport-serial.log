@@ -1,0 +1,100 @@
+=== phase 06: multi-port 16550 serial + RS485 declaration ===
+date:        2026-10-05
+iso:         /home/dmin/cellos/build/vicell-x86.iso
+iso sha256:  ad9f56d90d265f3f21fa2ad791d7bd11f61ad8005154cbebe792bb7788b74397
+qemu:        QEMU emulator version 8.2.2 (Debian 1:8.2.2+ds-0ubuntu1.17)
+tracing:     DISABLED (no -trace/-d arguments on any run)
+
+The board profile declares the four standard PC COM ports; the kernel probes each
+one and offers only the ports that answer, and `/bin/serial` (holding the
+`serial_port` capability) drives exactly those. The console stays COM1 and the
+polled-RX fallback is untouched.
+
+--------------------------------------------------------------------
+RUN 1 — kernel probe, default q35 (only COM1 exists)
+--------------------------------------------------------------------
+[ INFO] [x86-gate] serial port 0 base=0x3f8 irq=4 usable
+[ WARN] [x86-gate] serial port 1 base=0x2f8 irq=3 absent (16550 probe failed)
+[ WARN] [x86-gate] serial port 2 base=0x3e8 irq=4 absent (16550 probe failed)
+[ WARN] [x86-gate] serial port 3 base=0x2e8 irq=3 absent (16550 probe failed)
+USER: Cellos >
+
+A declared port the machine does not have is refused **by name**; nothing assumes
+it exists, and the console is unaffected (the shell prompt still appears).
+
+--------------------------------------------------------------------
+RUN 2 — kernel probe with `-device isa-serial` on indices 1..3
+--------------------------------------------------------------------
+[ INFO] [x86-gate] serial port 0 base=0x3f8 irq=4 usable
+[ INFO] [x86-gate] serial port 1 base=0x2f8 irq=3 usable
+[ INFO] [x86-gate] serial port 2 base=0x3e8 irq=4 usable
+[ INFO] [x86-gate] serial port 3 base=0x2e8 irq=3 usable
+
+The probe accepts a real 16550 register set (scratch register + divisor latch
+read-back) and the same machine now offers all four ports.
+
+--------------------------------------------------------------------
+RUN 3 — `/bin/serial` on a machine with COM1+COM2 (COM2 behind a socket chardev)
+--------------------------------------------------------------------
+USER: [serial] port 0 base=0x03f8 irq=4 usable
+USER: [serial] port 1 base=0x02f8 irq=3 usable
+USER: [serial] port 2 base=0x03e8 irq=4 absent (kernel probe refused)
+USER: [serial] port 3 base=0x02e8 irq=3 absent (kernel probe refused)
+[serial] port 0 marker base=0x03f8
+USER: [serial] port 0 tx marker bytes=36
+USER: [serial] port 1 tx marker bytes=36
+USER: [serial] port 1 rx byte=0x5a echoed
+USER: Cellos > [serial] serial cell ready: usable=2 declared=4 echoed=1
+
+Host side, on the COM2 chardev socket (the test harness's view):
+
+TX (guest -> host):            b'[serial] port 1 marker base=0x02f8\r\n'
+RX + echo (host -> guest -> host): b'Z'
+
+So the transmit path carries cell bytes to the far end of the port, and a byte
+injected into the port comes back echoed by the cell — the port is usable **from a
+cell** in both directions, not just for kernel console output. The console is
+untouched in the same boot (`Cellos >` appears once, on COM1).
+
+--------------------------------------------------------------------
+RUN 4 — lane and regressions
+--------------------------------------------------------------------
+cargo test --test serial-x86           1 passed
+  serial_x86_multiport_tx_rx_and_console_unchanged
+    (q35 + 3 isa-serial on socket chardevs: usable=4 declared=4, COM2 marker
+     received, injected byte echoed, COM1 prompt unchanged)
+
+serial-x86 1/1, igb-x86 2/2, nic-x86 2/2, nvme-x86 3/3, x86_64-boot 9/9,
+pcie-multibus-x86 2/2, ahci-x86 5/5, xhci-x86 4/4, iommu-dmar-x86 3/3,
+driver-registration-contract 3/3. Host side: cellos-kernel 193/193,
+cellos-boards 13/13, hal-soc-x86 5/5, HAL/SoC/board boundaries PASS, F1/F5 PASS,
+sign-policy round-trip PASS (policy blob v4).
+
+--------------------------------------------------------------------
+RS485 — declared, not claimed
+--------------------------------------------------------------------
+`hal/soc/x86` now expresses an RS485 transceiver per port: `Rs485Direction`
+(`RtsAuto` or `Gpio { offset }`) plus the turnaround in nanoseconds, validated
+(port must exist, turnaround must be non-zero). **No machine declares one**:
+QEMU models no DE/RE line, so the direction-control timing this declaration
+implies cannot be exercised here, and phase 07's hardware capture is where it can
+be. The absence is deliberate and visible — `QEMU_Q35.rs485` and
+`GENERIC_X86_PC.rs485` are both empty, and the profile test asserts that.
+
+--------------------------------------------------------------------
+RE-VERIFICATION — after the arch-neutral shim
+--------------------------------------------------------------------
+iso sha256:  e29deedea3c78fdcf74545708d71fc79e4cfb4e2fde47086be55db9115162051
+date:        2026-10-05 (same session)
+
+The serial syscalls were made arch-neutral (a `serial_port` shim answers "no such
+port" off x86) after the runs above, so the kernel was rebuilt and every lane was
+re-run on the new image. Same markers, same results:
+
+serial-x86 1/1, igb-x86 2/2, nic-x86 2/2, nvme-x86 3/3, x86_64-boot 9/9,
+pcie-multibus-x86 2/2, ahci-x86 5/5, xhci-x86 4/4, iommu-dmar-x86 3/3,
+driver-registration-contract 3/3, cellos-kernel 193/193.
+
+The committed state was also compiled out-of-tree for every target this phase can
+affect: x86_64, aarch64 board-rpi3, aarch64 board-rpi4, riscv64gc, cellos-boards,
+hal-soc-x86 and the serial cell itself — zero errors.

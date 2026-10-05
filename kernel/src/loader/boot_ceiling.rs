@@ -68,6 +68,7 @@ pub fn lookup(path: &str) -> Option<CapSet> {
             platform: false,
             supervisor: true, // delegated to /bin/supervisor
             usb_driver: true, // delegated to /bin/dwc2-usb
+            serial_port: true, // delegated to /bin/serial
         },
         // PCIe ECAM enumeration + BAR registration. Kernel-spawned before init.
         // Its manifest declares nothing; `with_path_caps` is the request signal,
@@ -122,6 +123,13 @@ pub fn lookup(path: &str) -> Option<CapSet> {
             pcie_driver: true,
             usb_driver: true,
             mmio_devices: DEV_DISPLAY,
+            ..CapSet::EMPTY
+        },
+        // x86 serial Driver Cell: port-I/O authority over the 16550 ports the
+        // kernel probed. No PCIe, no MMIO, no DMA — legacy I/O space only, and
+        // only the ports that answered the probe.
+        "/bin/serial" => CapSet {
+            serial_port: true,
             ..CapSet::EMPTY
         },
         // BCM uses the statically allowlisted VideoCore mailbox, never PCIe.

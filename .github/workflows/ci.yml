@@ -1056,6 +1056,20 @@ jobs:
           --target x86_64-unknown-linux-gnu
           -- --nocapture
 
+      # Phase 06: N declared 16550 ports, driven from a cell. The lane attaches
+      # three extra `isa-serial` devices behind its own chardev sockets (the test
+      # creates them), so it proves both directions per port and that COM1 is
+      # unchanged. `VICELL_SERIAL_ISO` pins the ISO the job just built.
+      - name: multi-port serial integration test (x86_64, 3 extra COM ports)
+        env:
+          VICELL_SERIAL_ISO: ${{ github.workspace }}/build/vicell-x86.iso
+        run: >
+          cargo test
+          --manifest-path tests/integration/Cargo.toml
+          --test serial-x86
+          --target x86_64-unknown-linux-gnu
+          -- --nocapture
+
   qemu-x86-hypervisor-boot:
     name: QEMU Hypervisor Boot-to-Shell (x86_64)
     runs-on: ubuntu-24.04

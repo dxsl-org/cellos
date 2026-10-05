@@ -1786,6 +1786,67 @@ fn caller_has_usb_driver(caller_id: usize) -> bool {
     caller_has_cap(caller_id, |t| t.usb_driver_cap.is_some())
 }
 
+fn caller_has_serial_port(caller_id: usize) -> bool {
+    caller_has_cap(caller_id, |t| t.serial_port_cap.is_some())
+}
+
+/// The 16550 mechanism exists only where a 16550 exists.
+///
+/// These shims keep the serial syscalls compilable on every architecture while
+/// making them inert off x86: a machine with no port-I/O mechanism cannot offer a
+/// port, so the handlers fail closed instead of reaching for hardware that is not
+/// there.
+mod serial_port {
+    #[cfg(target_arch = "x86_64")]
+    pub(super) fn present(index: u32) -> bool {
+        crate::hal::uart_16550::port_base_at(index as usize).is_some()
+    }
+    #[cfg(not(target_arch = "x86_64"))]
+    pub(super) fn present(_index: u32) -> bool {
+        false
+    }
+
+    /// The declared port at `index` as `(base, irq)`, or `None` when the board
+    /// profile does not declare it. Off x86 there is no port profile to consult.
+    #[cfg(target_arch = "x86_64")]
+    pub(super) fn declared(index: u32) -> Option<(u16, u8)> {
+        crate::board::selected_x86_64_soc()
+            .serial_port(index as usize)
+            .map(|port| (port.base, port.irq))
+    }
+    #[cfg(not(target_arch = "x86_64"))]
+    pub(super) fn declared(_index: u32) -> Option<(u16, u8)> {
+        None
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    pub(super) fn write_byte(index: u32, byte: u8) -> bool {
+        crate::hal::uart_16550::write_to(index as usize, byte)
+    }
+    #[cfg(not(target_arch = "x86_64"))]
+    pub(super) fn write_byte(_index: u32, _byte: u8) -> bool {
+        false
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    pub(super) fn read_byte(index: u32) -> Option<u8> {
+        crate::hal::uart_16550::read_from(index as usize)
+    }
+    #[cfg(not(target_arch = "x86_64"))]
+    pub(super) fn read_byte(_index: u32) -> Option<u8> {
+        None
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    pub(super) fn configure_baud(index: u32, baud: u32) -> Result<(), ()> {
+        crate::hal::uart_16550::configure_baud(index as usize, baud)
+    }
+    #[cfg(not(target_arch = "x86_64"))]
+    pub(super) fn configure_baud(_index: u32, _baud: u32) -> Result<(), ()> {
+        Err(())
+    }
+}
+
 fn register_driver_service(
     caller_id: usize,
     service_id: u16,
@@ -3520,6 +3581,15 @@ pub enum Syscall {
         device_id: u16,
         out_ptr: usize,
     },
+    /// 425: SerialPortInfo — report one declared serial port's identity and
+    /// whether the kernel probed a 16550 register set there.
+    SerialPortInfo { index: u32, out_ptr: usize },
+    /// 426: SerialWrite — write bytes to a usable serial port.
+    SerialWrite { index: u32, ptr: usize, len: usize },
+    /// 427: SerialRead — poll bytes from a usable serial port.
+    SerialRead { index: u32, ptr: usize, len: usize },
+    /// 428: SerialConfigure — set a usable serial port's baud rate (8N1 kept).
+    SerialConfigure { index: u32, baud: u32 },
     /// 419: QueryHotswapReady — check whether `target_tid` has called sys_hotswap_ready().
     /// Returns 1 if ready, 0 if not yet, usize::MAX if tid is unknown.
     QueryHotswapReady { target_tid: usize },
@@ -3802,6 +3872,10 @@ fn syscall_to_vi(syscall: &Syscall) -> Option<api::syscall::ViSyscall> {
         Syscall::RegisterUsbHidProducer => V::RegisterUsbHidProducer,
         Syscall::FindPcieDevice { .. } => V::FindPcieDevice,
         Syscall::FindPcieDeviceByVendor { .. } => V::FindPcieDeviceByVendor,
+        Syscall::SerialPortInfo { .. } => V::SerialPortInfo,
+        Syscall::SerialWrite { .. } => V::SerialWrite,
+        Syscall::SerialRead { .. } => V::SerialRead,
+        Syscall::SerialConfigure { .. } => V::SerialConfigure,
         Syscall::Exec { .. } => V::Exec,
         Syscall::LookupService { .. } => V::LookupService,
         Syscall::Heartbeat { .. } => V::Heartbeat,
@@ -7071,6 +7145,88 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             }
         }
 
+        // 425-428: the serial-port surface. The kernel owns the 16550 mechanism
+        // (it probed and programmed every port at boot); a cell holding the
+        // `serial_port` capability drives only the ports that probe accepted, so
+        // there is no way to reach port space the machine did not prove it has.
+        // Index 0 is the console; the extras are polled, not interrupt-driven.
+        Syscall::SerialPortInfo { index, out_ptr } => {
+            if !caller_has_serial_port(caller_id) {
+                return Err(SyscallError::PermissionDenied);
+            }
+            let Some((base, irq)) = serial_port::declared(index) else {
+                return Ok(0);
+            };
+            let present = serial_port::present(index);
+            let info = [base.to_le_bytes(), [irq, present as u8]].concat();
+            write_user_slice(caller_id, out_ptr, &info, info.len())?;
+            Ok(present as usize)
+        }
+        Syscall::SerialWrite { index, ptr, len } => {
+            if !caller_has_serial_port(caller_id) {
+                return Err(SyscallError::PermissionDenied);
+            }
+            if !serial_port::present(index) {
+                return Ok(usize::MAX);
+            }
+            // Bound one call: a cell cannot hold the console path for an
+            // unbounded burst through a blocking port.
+            const SERIAL_BURST_MAX: usize = 4096;
+            let len = len.min(SERIAL_BURST_MAX);
+            if len == 0 {
+                return Ok(0);
+            }
+            let view = caller_copy_view(caller_id)?;
+            let mut buf = [0u8; SERIAL_BURST_MAX];
+            let buf = &mut buf[..len];
+            view.read_into(ptr, buf)
+                .map_err(|_| SyscallError::InvalidInput)?;
+            let mut written = 0usize;
+            for byte in buf.iter() {
+                if !serial_port::write_byte(index, *byte) {
+                    break;
+                }
+                written += 1;
+            }
+            Ok(written)
+        }
+        Syscall::SerialRead { index, ptr, len } => {
+            if !caller_has_serial_port(caller_id) {
+                return Err(SyscallError::PermissionDenied);
+            }
+            if !serial_port::present(index) {
+                return Ok(usize::MAX);
+            }
+            const SERIAL_BURST_MAX: usize = 4096;
+            let len = len.min(SERIAL_BURST_MAX);
+            if len == 0 {
+                return Ok(0);
+            }
+            let mut buf = [0u8; SERIAL_BURST_MAX];
+            let mut read = 0usize;
+            while read < len {
+                let Some(byte) = serial_port::read_byte(index) else {
+                    break;
+                };
+                buf[read] = byte;
+                read += 1;
+            }
+            write_user_slice(caller_id, ptr, &buf[..read], len)?;
+            Ok(read)
+        }
+        Syscall::SerialConfigure { index, baud } => {
+            if !caller_has_serial_port(caller_id) {
+                return Err(SyscallError::PermissionDenied);
+            }
+            if !serial_port::present(index) {
+                return Ok(2);
+            }
+            match serial_port::configure_baud(index, baud) {
+                Ok(()) => Ok(0),
+                Err(()) => Ok(3),
+            }
+        }
+
         // 234: WaitIrq — block until hardware IRQ fires (Driver Cell).
         // ISR calls irq_wait::signal_irq (atomic only; no lock, no scheduler access).
         // Scheduler sweep (pick_next) does the actual Ready transition.
@@ -8520,6 +8676,24 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
             vendor_id: a0 as u16,
             device_id: a1 as u16,
             out_ptr: a2,
+        },
+        ViSyscall::SerialPortInfo => Syscall::SerialPortInfo {
+            index: a0 as u32,
+            out_ptr: a1,
+        },
+        ViSyscall::SerialWrite => Syscall::SerialWrite {
+            index: a0 as u32,
+            ptr: a1,
+            len: a2,
+        },
+        ViSyscall::SerialRead => Syscall::SerialRead {
+            index: a0 as u32,
+            ptr: a1,
+            len: a2,
+        },
+        ViSyscall::SerialConfigure => Syscall::SerialConfigure {
+            index: a0 as u32,
+            baud: a1 as u32,
         },
         ViSyscall::QueryHotswapReady => Syscall::QueryHotswapReady { target_tid: a0 },
         ViSyscall::SpawnReplacement => Syscall::SpawnReplacement {

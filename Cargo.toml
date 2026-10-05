@@ -71,6 +71,7 @@ members = [
     "cells/drivers/disk",
     "cells/drivers/e1000",
     "cells/drivers/igb",
+    "cells/drivers/serial-x86",
     "cells/drivers/gpio",
     "cells/drivers/gpio-bcm",
     "cells/drivers/nvme",

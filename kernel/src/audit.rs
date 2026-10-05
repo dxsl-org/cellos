@@ -93,8 +93,9 @@ pub enum AuditEvent {
     CellSignatureFailed = 22,
     /// A cell was granted privileged path authority that survived policy narrowing.
     /// Payload: `encode_u32x2(tid, mask)` (bit0 pcie_driver, bit1 platform,
-    /// bit2 supervisor). These are the caps that can DMA anywhere or orchestrate
-    /// other cells, so the grant — not only its removal — is auditable.
+    /// bit2 supervisor, bit3 serial_port). These are the caps that can DMA
+    /// anywhere, orchestrate other cells, or reach hardware the kernel owns, so
+    /// the grant — not only its removal — is auditable.
     PrivilegedCapGranted = 23,
     /// The signed maintenance bypass was exercised: policy narrowing was skipped
     /// for this spawn. Requires BOTH the `maintenance-mode` build feature and the

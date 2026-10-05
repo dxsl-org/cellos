@@ -39,11 +39,14 @@ const VERSION_V1: u8 = 1;
 const VERSION_V2: u8 = 2;
 /// v3: 10 cap bytes; adds usb_driver for USB host authority.
 const VERSION_V3: u8 = 3;
+/// v4 appends `serial_port` (bit 10) — the x86 16550 port authority.
+const VERSION_V4: u8 = 4;
 const SIG_LEN: usize = 64;
 const HEADER_LEN: usize = 8; // magic(4) + version(1) + flags(1) + entry_count(2)
 const CAP_BYTES_V1: usize = 6; // block_io, network, spawn, hyp, mmio_devices, block_regions
 const CAP_BYTES_V2: usize = 9; // + pcie_driver, platform, supervisor
 const CAP_BYTES_V3: usize = 10; // + usb_driver
+const CAP_BYTES_V4: usize = 11; // + serial_port
 /// 8.3-safe, root-level path (VIFS1 uppercases + is FAT16 8.3).
 const POLICY_PATH: &str = "/POLICY.BIN";
 
@@ -58,6 +61,7 @@ const fn cap_bytes_for(version: u8) -> Option<usize> {
         VERSION_V1 => Some(CAP_BYTES_V1),
         VERSION_V2 => Some(CAP_BYTES_V2),
         VERSION_V3 => Some(CAP_BYTES_V3),
+        VERSION_V4 => Some(CAP_BYTES_V4),
         _ => None,
     }
 }
@@ -270,24 +274,35 @@ fn parse(body: &[u8]) -> Option<LoadedPolicy> {
         // rather than something to coerce with `!= 0`. The older bools keep
         // `!= 0` because tightening them could reject a v1 blob that boots today,
         // and a rejected blob is `DenyAll` — a brick, not a safe default.
-        let (pcie_driver, platform, supervisor, usb_driver) = if cap_bytes >= CAP_BYTES_V2 {
-            let (p, pl, s) = (caps_raw[6], caps_raw[7], caps_raw[8]);
-            if p > 1 || pl > 1 || s > 1 {
-                return None;
-            }
-            let u = if cap_bytes >= CAP_BYTES_V3 {
-                let u_val = caps_raw[9];
-                if u_val > 1 {
+        let (pcie_driver, platform, supervisor, usb_driver, serial_port) =
+            if cap_bytes >= CAP_BYTES_V2 {
+                let (p, pl, s) = (caps_raw[6], caps_raw[7], caps_raw[8]);
+                if p > 1 || pl > 1 || s > 1 {
                     return None;
                 }
-                u_val == 1
+                let u = if cap_bytes >= CAP_BYTES_V3 {
+                    let u_val = caps_raw[9];
+                    if u_val > 1 {
+                        return None;
+                    }
+                    u_val == 1
+                } else {
+                    false
+                };
+                // v4 only: an older blob grants no serial authority.
+                let sp = if cap_bytes >= CAP_BYTES_V4 {
+                    let sp_val = caps_raw[10];
+                    if sp_val > 1 {
+                        return None;
+                    }
+                    sp_val == 1
+                } else {
+                    false
+                };
+                (p == 1, pl == 1, s == 1, u, sp)
             } else {
-                false
+                (false, false, false, false, false)
             };
-            (p == 1, pl == 1, s == 1, u)
-        } else {
-            (false, false, false, false)
-        };
         entries.push(PolicyEntry {
             path: String::from(path),
             caps: CapSet {
@@ -298,6 +313,7 @@ fn parse(body: &[u8]) -> Option<LoadedPolicy> {
                 mmio_devices,
                 block_regions,
                 pcie_driver,
+                serial_port,
                 platform,
                 supervisor,
                 usb_driver,
@@ -739,7 +755,8 @@ pub fn apply(path: &str, tid: usize, caps: CapSet) -> CapSet {
     // these three is the security-relevant event, and until now it left no trace.
     let granted = narrowed.pcie_driver as u32
         | ((narrowed.platform as u32) << 1)
-        | ((narrowed.supervisor as u32) << 2);
+        | ((narrowed.supervisor as u32) << 2)
+        | ((narrowed.serial_port as u32) << 3);
     if granted != 0 {
         crate::audit::log_event(
             crate::audit::AuditEvent::PrivilegedCapGranted,

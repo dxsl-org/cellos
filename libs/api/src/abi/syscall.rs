@@ -527,6 +527,54 @@ pub enum ViSyscall {
     /// shares it; the `PcieDriverCap` check at dispatch is the authority gate.
     FindPcieDeviceByVendor = 424,
 
+    /// 425: Report one declared serial port's identity and whether it is usable.
+    ///
+    /// ABI: a0 = port index (u32), a1 = out_ptr (*mut SerialPortInfo) →
+    /// 1 when the port is registered and usable (out_ptr written), 0 when the
+    /// index is out of range or the machine did not answer the 16550 probe.
+    /// Requires the `serial_port` capability.
+    ///
+    /// Ports are declared by the board profile and probed by the kernel before
+    /// any cell can see them, so "usable" here means the kernel already proved a
+    /// 16550 register set answers at that base. Index 0 is the console.
+    SerialPortInfo = 425,
+    /// 426: Write bytes to a usable serial port.
+    ///
+    /// ABI: a0 = port index, a1 = ptr (*const u8), a2 = len → bytes written, or
+    /// `u64::MAX` when the index is not a usable port. Requires `serial_port`.
+    ///
+    /// Blocking on the transmit holding register, like the console path: a
+    /// bounded burst (the kernel caps `len`) cannot stall the cell indefinitely.
+    SerialWrite = 426,
+    /// 427: Poll bytes from a usable serial port without blocking.
+    ///
+    /// ABI: a0 = port index, a1 = ptr (*mut u8), a2 = len → bytes read
+    /// (0 when nothing is pending), or `u64::MAX` for an unusable index.
+    /// Requires `serial_port`.
+    ///
+    /// Polled, not interrupt-driven: each extra port would need its own IDT
+    /// vector and an IIR-based demultiplexer, which this phase does not add. The
+    /// console keeps its interrupt path.
+    SerialRead = 427,
+    /// 428: Set a usable serial port's baud rate, keeping 8N1.
+    ///
+    /// ABI: a0 = port index, a1 = baud (u32) → 0 on success, 1 for an unusable
+    /// index, 2 for an unsupported baud. Requires `serial_port`.
+    ///
+    /// Supported rates are the standard 16550 divisors from a 1.8432 MHz clock
+    /// (115200, 57600, 38400, 19200, 9600). Anything else is refused rather than
+    /// rounded to a rate the caller did not ask for.
+    SerialConfigure = 428,
+    ///
+    /// Allowlist: all four share the DriverRegistration bit (50) with
+    /// `RegisterBlockDriver`/`FindPcieDevice`/`FindPcieDeviceByVendor`, exactly
+    /// as `RegisterUsbHidProducer` does. The `u64` allowlist is full (bits 0–62
+    /// are syscalls; bit 63 is the VFS-mutate declaration), so a fresh bit would
+    /// require widening the ABI — not append-only, and unnecessary: the
+    /// `serial_port` capability check at dispatch is the authority gate, and it
+    /// is narrower than any allowlist bit (it reaches only ports the kernel
+    /// itself probed).
+
     // === Unknown ===
     Unknown = 9999,
 
@@ -976,7 +1024,11 @@ impl ViSyscall {
             | Self::RegisterNicDriver
             | Self::RegisterUsbHidProducer
             | Self::FindPcieDevice
-            | Self::FindPcieDeviceByVendor => Some(50),
+            | Self::FindPcieDeviceByVendor
+            | Self::SerialPortInfo
+            | Self::SerialWrite
+            | Self::SerialRead
+            | Self::SerialConfigure => Some(50),
             // WaitIrq (bit 51): block a Driver Cell until a hardware IRQ fires.
             // Gated by PcieDriverCap or PlatformCap — only Driver Cells may wait on IRQs.
             Self::WaitIrq => Some(51),
@@ -1180,6 +1232,10 @@ impl From<usize> for ViSyscall {
             422 => ViSyscall::PauseService,
             423 => ViSyscall::RegisterUsbHidProducer,
             424 => ViSyscall::FindPcieDeviceByVendor,
+            425 => ViSyscall::SerialPortInfo,
+            426 => ViSyscall::SerialWrite,
+            427 => ViSyscall::SerialRead,
+            428 => ViSyscall::SerialConfigure,
             _ => ViSyscall::Unknown,
         }
     }

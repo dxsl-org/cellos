@@ -36,7 +36,9 @@ promoted through this index.
   (**completed 2026-10-05**; no product change — the net service already owned
   DHCP), 05 ACPI DMAR → real IOMMU (**completed 2026-10-05**; DRHD base parsed
   from DMAR, `DmaIsolation` profile contract makes absent-DMAR fail-closed), 06
-  multi-port COM/RS232-485. **Phase 07 (physical lane + first HCL rows)
+  multi-port COM/RS232-485 (**completed 2026-10-05**; ABI 425–428 + `serial_port`
+  capability + policy blob v4, owner-approved; RS485 declared, not claimed).
+  **Phase 07 (physical lane + first HCL rows)
   is not authorized**: it starts only after 02b/03/04b/05 are green on QEMU and
   hardware is bought. Validate completed 2026-10-04 (36/36 claims verified,
   0 failed; interview: igb first, 02/04 split into sub-phases, sequential

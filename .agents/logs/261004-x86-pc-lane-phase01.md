@@ -239,15 +239,46 @@ Two rounds, then shipped as `269239de9` (37 files).
   reason. Both were confirmed by building the committed state in a scratch
   worktree, where rpi4 succeeds.
 
+## Phase 06 (same session) — N serial ports, and the ABI the tree could not do literally
+
+- **A design fork had to be decided, not assumed**: the phase text says the cell
+  should mirror the PL011 role, but x86 cells run at CPL3 with IOPL cleared and
+  there is no port-I/O grant, so a cell literally cannot touch a 16550 register.
+  The owner chose kernel-owned ports + a service cell; the port-I/O-grant design
+  (syscall + per-cell TSS I/O bitmap) is recorded in the phase as the follow-up,
+  with its cost named.
+- **The capability cost more than a flag**: `serial_port` needed policy blob v4
+  (one more cap byte) in both the signer and the kernel parser, because the
+  allowlist bitmap is genuinely full (0–62 syscalls, 63 VFS-mutate) and the
+  existing policy format had no spare byte. That is the kind of change that looks
+  like plumbing and is actually ABI — recorded as such.
+- **Probe-or-refuse is the phase's real safety property**: a declared port the
+  machine does not have is refused by name instead of being assumed, which is what
+  makes "the descriptor is the only place port facts live" safe on a machine that
+  exposes fewer ports than the profile declares.
+- **Two test-only lessons**: (a) QEMU's `server=on,wait=off` chardev socket
+  discards guest output while no client is attached, so the lane must connect
+  *before* the cell transmits or it will read an empty port and call a working
+  path broken; (b) my own profile-validation test asserted the wrong error first
+  because it used a profile whose console was not first — the fix was to make the
+  fixture valid for the rule under test.
+- One flaky observation, not reproduced in three consecutive re-runs: the first
+  full regression sweep showed `nic-x86` 1/2, then 2/2 three times. Recorded rather
+  than dismissed; if it recurs it is a timing assumption in that lane, not a
+  phase-06 behaviour.
+
 ## Next
 
-Phase 06 (multi-port COM / RS232-485) is the last QEMU-gated phase in the plan:
-COM2..COMn must enumerate and echo, with RS485 explicitly not claimed. Phase 07
-(physical lane + first HCL rows) remains unauthorized until hardware is bought —
-its precondition was 02b/03/04b/05 green on QEMU, and all four now are.
+**Phase 07 (physical lane + first HCL rows) is the only phase left in the plan,
+and it is hardware-gated**: its precondition was 02b/03/04b/05 green on QEMU, and
+those are, with 06 also green. It needs the machine bought and the operator
+authorisation the plan records; until then nothing in this lane may claim physical
+evidence.
 
-Open follow-ups recorded but not scheduled: iNVM read path + media-specific link
-setup before claiming the remaining i210/i211 SKUs; owner-side NIC/storage
+Open follow-ups recorded but not scheduled: a port-I/O grant (syscall + per-cell
+TSS I/O permission bitmap) if a cell is ever to own the 16550 register set; iNVM
+read path + media-specific link setup before claiming the remaining i210/i211
+SKUs; per-port interrupt RX for the extra serial ports; owner-side NIC/storage
 arbitration (two providers + a caching consumer); `nvme`/`e1000` still run without
 a `declare_syscalls!` allowlist; the `bar_mem_*` dependency on the kernel's own
 ECAM scan retaining every BAR; AMD-Vi (`IVRS`) and interrupt remapping as their

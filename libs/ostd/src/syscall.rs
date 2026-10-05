@@ -2423,6 +2423,122 @@ impl PcieDeviceInfo {
     }
 }
 
+/// One declared serial port, as reported by [`sys_serial_port_info`].
+///
+/// 4 bytes, `repr(C)`: the kernel writes exactly this much, and every field is
+/// filled even when the port is not usable (a caller can name the port it is
+/// missing instead of reporting a zeroed struct).
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct SerialPortInfo {
+    /// Port-I/O base the profile declares.
+    pub base: u16,
+    /// Legacy ISA IRQ the profile declares.
+    pub irq: u8,
+    /// 1 when the kernel probed a 16550 register set here and offers the port.
+    pub present: u8,
+}
+
+impl SerialPortInfo {
+    /// Returns a zeroed placeholder; pass `&mut info` to [`sys_serial_port_info`].
+    pub const fn zeroed() -> Self {
+        Self {
+            base: 0,
+            irq: 0,
+            present: 0,
+        }
+    }
+
+    /// Whether the kernel offers this port to cells.
+    pub const fn is_present(&self) -> bool {
+        self.present == 1
+    }
+}
+
+/// Report the serial port at `index` (index 0 is the console).
+///
+/// Returns `Ok(true)` when the port is registered and usable, `Ok(false)` when
+/// the index is out of range or the machine did not answer the 16550 probe —
+/// in both cases `info` carries what the profile declared, so a cell can log the
+/// port it could not open. Requires the `serial_port` capability.
+pub fn sys_serial_port_info(
+    index: u32,
+    info: &mut SerialPortInfo,
+) -> Result<bool, SyscallError> {
+    // SAFETY: `info` is a valid mutable reference; the kernel writes exactly 4 bytes.
+    // In SAS the kernel's VA == the cell's VA, so the pointer is directly usable.
+    let ret = unsafe {
+        syscall(
+            ViSyscall::SerialPortInfo,
+            index as usize,
+            info as *mut SerialPortInfo as usize,
+            0,
+            0,
+        )
+    };
+    match ret {
+        0 => Ok(false),
+        1 => Ok(true),
+        _ => Err(SyscallError::PermissionDenied),
+    }
+}
+
+/// Write `bytes` to the serial port at `index`.
+///
+/// Returns the number of bytes written. Requires the `serial_port` capability;
+/// an unusable index or a denied capability is an error, never a silent zero.
+pub fn sys_serial_write(index: u32, bytes: &[u8]) -> Result<usize, SyscallError> {
+    // SAFETY: `bytes` is a valid immutable slice for its whole length.
+    let ret = unsafe {
+        syscall(
+            ViSyscall::SerialWrite,
+            index as usize,
+            bytes.as_ptr() as usize,
+            bytes.len(),
+            0,
+        )
+    };
+    if ret < 0 {
+        return Err(SyscallError::PermissionDenied);
+    }
+    Ok(ret as usize)
+}
+
+/// Poll up to `buf.len()` bytes from the serial port at `index`.
+///
+/// Returns the number of bytes read (0 when nothing is pending). Polled by
+/// design: the extra ports carry no interrupt vector in this phase.
+pub fn sys_serial_read(index: u32, buf: &mut [u8]) -> Result<usize, SyscallError> {
+    // SAFETY: `buf` is a valid mutable slice for its whole length.
+    let ret = unsafe {
+        syscall(
+            ViSyscall::SerialRead,
+            index as usize,
+            buf.as_mut_ptr() as usize,
+            buf.len(),
+            0,
+        )
+    };
+    if ret < 0 {
+        return Err(SyscallError::PermissionDenied);
+    }
+    Ok(ret as usize)
+}
+
+/// Set the serial port's baud rate, keeping 8N1.
+///
+/// Requires the `serial_port` capability. An unsupported rate is refused rather
+/// than rounded to a rate the caller did not ask for.
+pub fn sys_serial_configure(index: u32, baud: u32) -> Result<(), SyscallError> {
+    let ret = unsafe { syscall(ViSyscall::SerialConfigure, index as usize, baud as usize, 0, 0) };
+    match ret {
+        0 => Ok(()),
+        // Unusable index or unsupported rate: the call did not apply.
+        -2 | -3 => Err(SyscallError::InvalidCommand),
+        _ => Err(SyscallError::PermissionDenied),
+    }
+}
+
 /// Find the first PCIe device matching `(class, subclass, prog_if)`.
 ///
 /// On success (`Ok(true)`), `info` is populated with the BDF and BAR0 address.

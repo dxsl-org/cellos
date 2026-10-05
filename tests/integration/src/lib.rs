@@ -1212,6 +1212,87 @@ impl QemuRunner {
     /// Same as `boot_x86_bios_with_nic` with `-device igb,netdev=net0` instead of
     /// `e1000`: QEMU's `igb` model is 82576-class (`8086:10c9`), which is the
     /// only igb ID this lane can validate. `restrict=on` keeps SLIRP isolated.
+    /// Boot x86_64 q35 with NVMe plus **N emulated 16550 ports**.
+    ///
+    /// `console` is the guest console (index 0) and `extra_sockets` are
+    /// `(index, unix-socket-path)` pairs for COM2..COMn: each extra port gets a
+    /// `-chardev socket` backend, which is what makes a test able to *read* what
+    /// a cell wrote to the port and *inject* a byte for it to read back. QEMU's
+    /// `isa-serial` maps index 1..3 to the standard 0x2F8/0x3E8/0x2E8 wiring, so
+    /// the indices here must match the board profile's port order.
+    ///
+    /// The extra `isa-serial` devices suppress QEMU's implicit stdio serial, so
+    /// the console is passed explicitly as `-serial tcp:` — the same shape every
+    /// other x86 lane uses.
+    pub fn boot_x86_bios_with_serial_ports(
+        iso: &str,
+        nvme_disk: &str,
+        extra_sockets: &[(u32, &str)],
+    ) -> Self {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind serial socket");
+        let port = listener.local_addr().unwrap().port();
+
+        let mut args: Vec<String> = vec![
+            "-machine".into(),
+            "q35".into(),
+            "-cpu".into(),
+            "qemu64,+pdpe1gb".into(),
+            "-m".into(),
+            "256M".into(),
+            "-nographic".into(),
+            "-monitor".into(),
+            "none".into(),
+            "-cdrom".into(),
+            iso.into(),
+            "-boot".into(),
+            "d".into(),
+            "-no-reboot".into(),
+            "-drive".into(),
+            format!("file={nvme_disk},format=raw,if=none,id=nvme0"),
+            "-device".into(),
+            "nvme,drive=nvme0,serial=deadbeef01".into(),
+        ];
+        for (index, path) in extra_sockets {
+            args.push("-chardev".into());
+            args.push(format!("socket,id=c{index},path={path},server=on,wait=off"));
+            args.push("-device".into());
+            args.push(format!("isa-serial,chardev=c{index},index={index}"));
+        }
+        args.push("-serial".into());
+        args.push(format!("tcp:127.0.0.1:{port}"));
+
+        let mut child = Command::new(qemu_binary_x86())
+            .args(&args)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("qemu-system-x86_64 must be on PATH");
+
+        let stream = accept_qemu_serial(&listener, &mut child);
+        let writer = stream.try_clone().expect("clone serial stream");
+
+        let output = Arc::new(Mutex::new(String::new()));
+        let buf = Arc::clone(&output);
+        thread::spawn(move || {
+            let mut reader = BufReader::new(stream);
+            let mut byte = [0u8; 1];
+            loop {
+                match reader.read(&mut byte) {
+                    Ok(0) | Err(_) => break,
+                    Ok(_) => buf.lock().unwrap().push(byte[0] as char),
+                }
+            }
+        });
+        Self {
+            child,
+            writer: Some(writer),
+            output,
+            temp_disk: None,
+            monitor: None,
+        }
+    }
+
     pub fn boot_x86_bios_with_igb_nic(iso: &str, nvme_disk: &str) -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind serial socket");
         let port = listener.local_addr().unwrap().port();

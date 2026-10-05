@@ -4,6 +4,45 @@
 
 ## [Unreleased] Development-first hardware-constrained execution
 
+- **x86 PC lane phase 06: multi-port 16550 serial, and RS485 declared but not
+  claimed (`qemu` ceiling).** `X86PlatformProfile` gained `serial_ports` (console
+  first) and `rs485` with validation — the console must *be* the first declared
+  port, bases must be distinct, IRQs must be ISA, an RS485 entry must name a
+  declared port and carry a non-zero turnaround. Both x86 profiles declare the
+  four standard COM ports, so port facts live in one place and no per-board code
+  decides anything. The kernel mechanism carries N ports: `configure_all`
+  registers every declared port, probing all but the console with two independent
+  tests (scratch register and divisor-latch read-back, each restored), and only
+  then programs it — a declared port the machine does not have is refused by name
+  (`[x86-gate] serial port 1 base=0x2f8 irq=3 absent (16550 probe failed)`) rather
+  than assumed. COM1 keeps its existing path including the OUT2 bit that gates
+  IOAPIC delivery, and the extra ports are polled, so no new IDT vector is needed.
+  The user-space surface is a cell over kernel-owned ports, because x86 cells run
+  at CPL3 with IOPL cleared and there is no port-I/O grant: `/bin/serial` drives
+  the port abstraction the kernel owns, which meets the acceptance (N>1 ports
+  usable from a cell) without inventing a hardware-privilege class; direct
+  port-I/O grants are recorded as the follow-up that would let a cell own the
+  register set, with the reason it is not free. ABI (owner-approved): opcodes
+  **425 `SerialPortInfo`**, **426 `SerialWrite`**, **427 `SerialRead`**,
+  **428 `SerialConfigure`** sharing allowlist bit 50 (the `u64` allowlist is full:
+  0–62 are syscalls, 63 is the VFS-mutate declaration), a 4-byte `SerialPortInfo`,
+  and the **`serial_port`** capability, which required policy blob **v4** in both
+  `scripts/sign-policy.py` and `kernel/src/policy.rs`. The capability goes through
+  the same ceiling intersection as every other cap, is audited on grant, and a
+  boot-ceiling self-test asserts `/bin/serial` holds it **only** — no PCIe, no
+  MMIO, no DMA. Evidence: new `serial-x86` 1/1 — q35 with three extra `isa-serial`
+  devices each behind its own chardev socket, so the test reads what the cell
+  transmitted (`usable=4 declared=4`, COM2 marker received) and injects a byte it
+  gets back echoed (`[serial] port 1 rx byte=0x5a echoed`), with **COM1 unchanged**
+  (shell prompt intact); regressions `igb-x86` 2/2, `nic-x86` 2/2, `nvme-x86` 3/3,
+  `x86_64-boot` 9/9, `pcie-multibus-x86` 2/2, `ahci-x86` 5/5, `xhci-x86` 4/4,
+  `iommu-dmar-x86` 3/3, `driver-registration-contract` 3/3, `cellos-kernel`
+  193/193, `cellos-boards` 13/13, `hal-soc-x86` 5/5, HAL boundaries, F1/F5,
+  sign-policy round-trip. RS485 is declared and validated but **no machine claims
+  one**: QEMU models no DE/RE line, so direction-control timing belongs to phase
+  07's hardware capture. Not claimed: physical ports, per-port interrupt RX (the
+  extras are polled), USB-serial, DMA serial cards, hardware flow control.
+
 - **x86 PC lane phase 05: ACPI DMAR discovery → real IOMMU (`qemu` ceiling).** The
   VT-d register page is no longer a compiled-in address: `kernel/src/acpi.rs`
   parses DMAR next to MADT/MCFG/HPET and exposes `dmar_base` / `dmar_units` /

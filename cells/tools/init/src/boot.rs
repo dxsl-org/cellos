@@ -172,6 +172,10 @@ pub(crate) fn prepare_service(path: &str) {
         // idles when the machine has no igb, so this spawn is inert on every
         // other profile and on an e1000-only machine.
         let _ = sys_spawn_from_path("/bin/igb");
+        // x86_64 PC lane (phase 06): the 16550 serial cell. The kernel owns the
+        // ports and probes them at boot; this cell drives only the ones that
+        // answered, so the spawn is inert on a machine with just a console.
+        let _ = sys_spawn_from_path("/bin/serial");
         #[cfg(feature = "usb-host")]
         let _ = sys_spawn_from_path("/bin/dwc2-usb");
         // x86_64 PC lane (phase 03): the xHCI USB host cell, on the same USB

@@ -131,6 +131,24 @@ pub fn run() -> bool {
             "[selftest] boot-ceiling: /bin/dwc2-usb must hold usb_driver only (no pcie or display)"
         );
     }
+    // Scope check: /bin/serial holds ONLY serial_port — port-I/O authority over
+    // the probed 16550 ports, never PCIe/MMIO/DMA.
+    let serial = CapSet::EMPTY
+        .with_path_caps("/bin/serial")
+        .intersect(boot_ceiling("/bin/serial"));
+    if !serial.serial_port
+        || serial.pcie_driver
+        || serial.platform
+        || serial.usb_driver
+        || serial.mmio_devices != 0
+        || serial.block_io
+        || serial.network
+    {
+        ok = false;
+        log::error!(
+            "[selftest] boot-ceiling: /bin/serial must hold serial_port only (no pcie/mmio/dma)"
+        );
+    }
     // /bin/lan9514 holds NO direct hardware authority (pure IPC client to dwc2-usb).
     let lan = CapSet::EMPTY
         .with_path_caps("/bin/lan9514")

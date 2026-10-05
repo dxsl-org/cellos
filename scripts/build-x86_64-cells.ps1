@@ -116,7 +116,7 @@ if ($LASTEXITCODE -ne 0 -or -not (Test-Path $netSrc)) {
 # nvme/e1000/igb = PCIe Driver Cells (init spawns them; PcieDriverCap is
 # path-granted by the kernel loader). Each exits cleanly when its device
 # is absent, so diskless/NIC-less boots are unaffected.
-foreach ($pkg in "service-platform", "driver-nvme", "driver-e1000", "driver-igb", "driver-ahci", "driver-xhci") {
+foreach ($pkg in "service-platform", "driver-nvme", "driver-e1000", "driver-igb", "driver-ahci", "driver-xhci", "driver-serial-x86") {
     Write-Host "Building $pkg..."
     $cmd = "cargo build --release -p $pkg --target $target $buildStd 2>&1"
     Invoke-Expression $cmd | Select-Object -Last 10
@@ -167,6 +167,7 @@ $cells = @(
     @{ Bin = "driver-igb";     Dst = "/bin/igb"    },
     @{ Bin = "driver-ahci";    Dst = "/bin/ahci"   },
     @{ Bin = "driver-xhci";    Dst = "/bin/xhci"   },
+    @{ Bin = "driver-serial-x86"; Dst = "/bin/serial" },
     @{ Bin = "ls";             Dst = "/bin/ls"     },
     @{ Bin = "cat";            Dst = "/bin/cat"    },
     @{ Bin = "echo";           Dst = "/bin/echo"   },
@@ -221,7 +222,7 @@ foreach ($c in $cells) {
     }
 }
 
-foreach ($required in @('app-shell', 'service-vfs', 'service-config', 'service-net', 'service-input', 'platform', 'driver-nvme', 'driver-e1000', 'driver-igb', 'driver-ahci', 'driver-xhci')) {
+foreach ($required in @('app-shell', 'service-vfs', 'service-config', 'service-net', 'service-input', 'platform', 'driver-nvme', 'driver-e1000', 'driver-igb', 'driver-ahci', 'driver-xhci', 'driver-serial-x86')) {
     if ($required -notin $found) {
         throw "Required x86_64 cell missing from image inputs: $required"
     }
