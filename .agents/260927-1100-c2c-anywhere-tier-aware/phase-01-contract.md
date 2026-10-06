@@ -51,6 +51,44 @@ Replace the draft's local-SAS-versus-remote simplification with a two-axis contr
 - **Policy/deadline audit:** `RemoteExports` parses five static fields and stays `NoSecureIdentity`; it contains no peer allowlist or live target binding. Draft v3 now requires the intersection of separately provisioned peer policy, authenticated NodeId, exact typed method/retry class and live destination **before** dedup. V1's `relative_deadline` is a `u32` duration, not a cross-node absolute time: an origin admission deadline survives authority queueing, while any destination-arrival budget is separately local. After possibly submitted work, origin expiry without completion is `Indeterminate`. Phase-05/06 negatives now cover config-only export and delayed delivery. These are design findings, not passing runtime evidence.
 - **Stop / blocker:** The draft now proposes ingress profiles and retains the existing remote error enum, but Phase-01 ratification still needs kernel-repair owner review of live local generation binding, a source-backed ingress/quota prototype under portfolio promotion, replay-epoch provenance with the protected authority, independent Law-1 confirmations for genuinely needed ABI changes, and contract-owner sign-off. Phase-02 Tier-2 runtime also waits for exact-profile safe-root proof and file-owner handoff. KMS/Silo relay Phase 04 remains `blocked` on its AC-001..AC-012 gates. No kernel/ABI work or remote enablement has started; the local oracle was **not** rerun for documentation-only edits.
 
+## Broker image / oracle consumer inventory (preparatory; not approval)
+
+| Boundary | Current source-backed fact | Typed-profile review condition |
+|---|---|---|
+| Registration | `app-init` includes `/bin/net-broker` as `Registration::Init(service::NET_BROKER)` only with `c2c-broker` (`cells/tools/init/src/service_table.rs:128-133`). The broker does not self-register (`cells/services/net-broker/src/main.rs:18-20`). | One registered receiver and one parser per TID; keep registration explicit. |
+| Existing receiver | `local_runtime::receive_once` enters the benchmark request path; `request_dispatch::process_request` parses `bench_oracle` commands (`cells/services/net-broker/src/local_runtime.rs`, `cells/services/net-broker/src/local_runtime/request_dispatch.rs:9-10`). | A typed image must not retain an oracle fallback or treat arbitrary sequence bytes as a type tag. |
+| Oracle image | `scripts/run-c2c-broker-oracle-qemu.sh:86-105,110-123,140-155` builds broker/bench with `restart-oracle`, builds init with `c2c-broker`, and packages `/bin/net-broker`, `/bin/bench`, `/bin/bench-probe`. | Keep this image and its local regression separate; do not swap its broker parser in place. |
+| Oracle activation | `tests/integration/tests/c2c-broker-oracle.rs:327-333` sends `bench c2c-broker-oracle` at the shell; `cells/tests/bench/src/main.rs:409-420` selects that role; `cells/tests/bench/src/scenarios/c2c_broker_oracle_orchestrator/support.rs:17-23` spawns `/bin/bench-probe` clients, which look up `NET_BROKER` (`.../c2c_broker_oracle_client/support.rs:54-58`). Packaging alone does not start that workload. | A typed image must neither start this role nor package a reachable oracle caller; retain the old runner as its own regression. |
+| Shared image builders | `scripts/gen-disk-ci.sh:154-157,261-265,413-414` builds/packages both broker and bench; `scripts/build-phase04-qemu-image.sh:33-35,57-58` also packages broker. | Audit each selected init feature and shell/bench launch path when defining a typed image; presence of a broker ELF does not prove it is registered or that an oracle caller executes. |
+
+This inventory establishes packaging and callsites, **not** mutually exclusive typed packaging or a passing negative oracle. Phase-01 checklist item for profile review remains open. No image, source, public ABI, Spec 17, or remote route changed.
+
+## Remote ingress review handoff (source inventory; no activation)
+
+| Required gate before dedup/dispatch | Current evidence | Unresolved review question |
+|---|---|---|
+| Authenticated peer and export policy | `RemoteExports::from_bytes` parses at most 16 records; each record has only service/export/version/retry/scope (`cells/services/net-broker/src/export_registry.rs:22-27,82-89,145-188`). Every parsed registry retains `NoSecureIdentity`; no peer allowlist or live destination identity is represented. | Which independently provisioned, authenticated NodeId allowlist and live service generation are intersected with the static record? A config record alone cannot grant remote access. |
+| Replay provenance | V1 includes `src_boot_epoch` (`cells/services/net-broker/src/c2c_envelope.rs:62-74`); `c2c_dedup/source_window.rs:7-29` compares epochs numerically. Current **beacon** epoch comes from `sys_get_time_ms()` (`cells/services/net-broker/src/local_runtime.rs:73-86`), not a durable cross-reboot source. | Obtain protected nonrollback C2C incarnation or approve a different replay rule; do not reuse beacon uptime as proof. |
+| Capacity/fairness | Local `BrokerState::handle_ingress` charges attested local caller identity at `PER_CALLER_WINDOW=4`, with request queue 16 and in-flight 32 (`cells/services/net-broker/src/local_queue/state/ops.rs:64-105`, `local_queue/state/types.rs:4-8`). | Define separate per-authenticated-NodeId byte/work quotas and reject-before-dispatch behavior; local Cell/TID quotas do not protect a remote peer budget. |
+
+Review ordering remains Spec 20 Draft v3 §2.2; this table identifies missing inputs, not an implemented remote ingress. No quota, identity, replay, ABI or transport change is authorized here.
+
+## Local binding review handoff (kernel-owner decision pending)
+
+`LookupService=206` returns only the current provider TID or zero (`kernel/src/task/syscall.rs:5500-5505`). The kernel registry stores `service_id → Active(tid) | Paused(tid)`, clears dead providers and replaces a service on respawn (`kernel/src/cell/service_registry.rs:1-11,25-33,43-71`); it does **not** return a provider generation. `LocalEndpoint::new(tid)` checks only nonzero and `call` sends to that stored TID (`libs/ostd/src/cluster_endpoint.rs:57-95`). Thus lookup followed by a send has no atomic live `(service_id, cell_id, generation, tid)` binding in the exported endpoint contract; lookup alone cannot prove a cached descriptor still names the same provider after a restart.
+
+Separate **caller** identity already exists on opt-in `Recv`: kernel-written `CallerIdentity(cell_id, generation, sender_tid)` (`libs/api/src/abi/caller_identity.rs:10-32,59-72`; `kernel/src/task/syscall.rs:2652-2669`). That trailer attests the sender to a receiver; it is not a recipient-generation token for the sender. Review with the kernel-repair owner whether service resolution plus IPC admission can provide a stable recipient binding and how an outstanding reply is rejected across provider/caller generations, without changing the ratified Spec-17 frame implicitly. No new syscall, registry field or ABI shape is proposed as approved by this inventory.
+
+### Local binding negative evidence to request at owner review
+
+| Transition | Current observable boundary | Required proof before claiming generation-safe endpoint |
+|---|---|---|
+| Provider dies between lookup and send | `clear_tid` removes future lookups (`kernel/src/cell/service_registry.rs:138-152`), but `LocalEndpoint` retains its earlier TID. | A send to the stale endpoint cannot reach a different service or be reported as a successful call; a fresh lookup selects the replacement only after registration. |
+| Provider is paused for hot-swap | Registry hides paused TID from new lookups and `is_paused_tid` supplies an IPC admission barrier (`kernel/src/cell/service_registry.rs:74-124`). | A previously cached endpoint cannot bypass the quiesce barrier; after commit only the replacement may receive new work. |
+| Reply arrives after caller timeout or provider restart | `service_call_typed` receives masked by sender TID, not by generation/request ID (`libs/ostd/src/ipc.rs:57-76,95-110`); the bounded helper explicitly requires poisoning the service generation after a receive error (`libs/ostd/src/ipc.rs:120-126`). | Demonstrate stale replies cannot satisfy a later request, including any TID reuse; otherwise classify the outcome as unresolved rather than attributing it to the new provider. |
+
+These are proposed behavioral witnesses, **not** tests added or results observed. The kernel owner must confirm the binding mechanism and the feasible negative oracle before Phase 01 can close.
+
 ## Assumptions
 
 None about implemented remote operation. Open design validation: whether generic local async submission needs a new syscall or can be provided safely without it; Phase 03 must prove this before choosing ABI. Do not claim a hardware p99 from ADR targets.
